@@ -7,6 +7,7 @@ import {
   shouldTriggerBackgroundReview,
   guardReviewWrite,
   BACKGROUND_REVIEW_SENTINEL_ENV,
+  BACKGROUND_REVIEW_ALLOW_USER_MEMORY_ENV,
   type BackgroundReviewClient,
   type ReviewChatMessage,
   type ReviewChatResponse,
@@ -48,16 +49,21 @@ function scriptedClient(turns: ReviewChatMessage[]): BackgroundReviewClient & {
 }
 
 let savedSentinel: string | undefined;
+let savedAllowUserMemory: string | undefined;
 
 describe('background review agent (S4)', () => {
   beforeEach(() => {
     savedSentinel = process.env[BACKGROUND_REVIEW_SENTINEL_ENV];
+    savedAllowUserMemory = process.env[BACKGROUND_REVIEW_ALLOW_USER_MEMORY_ENV];
     delete process.env[BACKGROUND_REVIEW_SENTINEL_ENV];
+    delete process.env[BACKGROUND_REVIEW_ALLOW_USER_MEMORY_ENV];
   });
 
   afterEach(() => {
     if (savedSentinel === undefined) delete process.env[BACKGROUND_REVIEW_SENTINEL_ENV];
     else process.env[BACKGROUND_REVIEW_SENTINEL_ENV] = savedSentinel;
+    if (savedAllowUserMemory === undefined) delete process.env[BACKGROUND_REVIEW_ALLOW_USER_MEMORY_ENV];
+    else process.env[BACKGROUND_REVIEW_ALLOW_USER_MEMORY_ENV] = savedAllowUserMemory;
   });
 
   it('exposes only the allowed tools to the model and blocks disallowed tool calls', async () => {
@@ -94,6 +100,71 @@ describe('background review agent (S4)', () => {
     expect(result.summary).toContain('Memory updated');
     expect(result.skipped).toBe(false);
     expect(result.rounds).toBe(2);
+  });
+
+  it('keeps autonomous remember calls project-scoped even if the model asks for user scope', async () => {
+    const client = scriptedClient([
+      {
+        role: 'assistant',
+        content: '',
+        tool_calls: [
+          {
+            id: 'c1',
+            function: {
+              name: 'remember',
+              arguments: '{"key":"team-pref","value":"prefers French","scope":"user"}',
+            },
+          },
+        ],
+      },
+      { role: 'assistant', content: 'done' },
+    ]);
+    const executeTool = vi.fn(async (): Promise<HeadlessToolResult> => ({ success: true }));
+
+    await runBackgroundReview({
+      client,
+      transcript: [{ role: 'user', content: 'please keep notes for this repo' }],
+      mode: 'memory',
+      tools: TOOLS,
+      executeTool,
+    });
+
+    expect(executeTool).toHaveBeenCalledTimes(1);
+    const args = JSON.parse(String(executeTool.mock.calls[0]?.[1]));
+    expect(args).toMatchObject({ key: 'team-pref', value: 'prefers French', scope: 'project' });
+  });
+
+  it('allows user-scope autonomous memory only behind the explicit operator flag', async () => {
+    process.env[BACKGROUND_REVIEW_ALLOW_USER_MEMORY_ENV] = 'true';
+    const client = scriptedClient([
+      {
+        role: 'assistant',
+        content: '',
+        tool_calls: [
+          {
+            id: 'c1',
+            function: {
+              name: 'remember',
+              arguments: '{"key":"global-pref","value":"prefers concise output","scope":"user"}',
+            },
+          },
+        ],
+      },
+      { role: 'assistant', content: 'done' },
+    ]);
+    const executeTool = vi.fn(async (): Promise<HeadlessToolResult> => ({ success: true }));
+
+    await runBackgroundReview({
+      client,
+      transcript: [{ role: 'user', content: 'please remember my style everywhere' }],
+      mode: 'memory',
+      tools: TOOLS,
+      executeTool,
+    });
+
+    expect(executeTool).toHaveBeenCalledTimes(1);
+    const args = JSON.parse(String(executeTool.mock.calls[0]?.[1]));
+    expect(args).toMatchObject({ key: 'global-pref', value: 'prefers concise output', scope: 'user' });
   });
 
   it('no-ops when a review is already in progress (recursion guard)', async () => {

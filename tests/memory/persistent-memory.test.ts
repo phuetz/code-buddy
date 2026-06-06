@@ -47,6 +47,37 @@ describe('PersistentMemoryManager', () => {
     expect(content).toContain('- **test-key**: test-value');
   });
 
+  it('creates the project memory parent directory on explicit writes in a headless virgin workspace', async () => {
+    const previousHeadless = process.env.CODEBUDDY_HEADLESS;
+    const previousReadonly = process.env.CODEBUDDY_PROJECT_RUNTIME_READONLY;
+    process.env.CODEBUDDY_HEADLESS = 'true';
+    delete process.env.CODEBUDDY_PROJECT_RUNTIME_READONLY;
+
+    const virginProjectPath = path.join(tmpDir, 'virgin-workspace', '.codebuddy', 'CODEBUDDY_MEMORY.md');
+    const virginUserPath = path.join(tmpDir, 'virgin-user-memory.md');
+    const virginManager = new PersistentMemoryManager({
+      projectMemoryPath: virginProjectPath,
+      userMemoryPath: virginUserPath,
+      autoCapture: false,
+    });
+
+    try {
+      await virginManager.initialize();
+      expect(await fs.pathExists(virginProjectPath)).toBe(false);
+
+      await virginManager.remember('first-note', 'created on demand', { scope: 'project' });
+
+      expect(await fs.pathExists(virginProjectPath)).toBe(true);
+      const content = await fs.readFile(virginProjectPath, 'utf-8');
+      expect(content).toContain('- **first-note**: created on demand');
+    } finally {
+      if (previousHeadless === undefined) delete process.env.CODEBUDDY_HEADLESS;
+      else process.env.CODEBUDDY_HEADLESS = previousHeadless;
+      if (previousReadonly === undefined) delete process.env.CODEBUDDY_PROJECT_RUNTIME_READONLY;
+      else process.env.CODEBUDDY_PROJECT_RUNTIME_READONLY = previousReadonly;
+    }
+  });
+
   it('should remember and recall a value in user scope', async () => {
     await manager.remember('user-pref', 'dark-mode', { scope: 'user', category: 'preferences' });
     

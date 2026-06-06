@@ -717,6 +717,31 @@ describe('CodeBuddyAgent', () => {
       await agent.processUserMessage('Hello');
       expect(clearCache).toHaveBeenCalled();
     });
+
+    it('should trigger the background review hook after sequential interactive processing', async () => {
+      agent = new CodeBuddyAgent('test-api-key');
+      await agent.systemPromptReady;
+      const assistantEntry: ChatEntry = {
+        type: 'assistant',
+        content: 'ok',
+        timestamp: new Date(),
+      };
+      (agent as any).executor = {
+        processUserMessage: jest.fn().mockResolvedValue([assistantEntry]),
+      };
+      const review = jest
+        .spyOn(agent as any, 'maybeRunBackgroundReview')
+        .mockResolvedValue(undefined);
+
+      const entries = await agent.processUserMessage('Test message');
+
+      expect((agent as any).executor.processUserMessage).toHaveBeenCalled();
+      expect(entries).toEqual([
+        expect.objectContaining({ type: 'user', content: 'Test message' }),
+        assistantEntry,
+      ]);
+      expect(review).toHaveBeenCalledTimes(1);
+    });
   });
 
   // =========================================================================
@@ -796,6 +821,28 @@ describe('CodeBuddyAgent', () => {
 
       const history = agent.getChatHistory();
       expect(history.some(e => e.type === 'user' && e.content === 'Stream test')).toBe(true);
+    });
+
+    it('should trigger the background review hook after streaming finishes', async () => {
+      agent = new CodeBuddyAgent('test-api-key');
+      await agent.systemPromptReady;
+      (agent as any).executor = {
+        processUserMessageStream: async function* () {
+          yield { type: 'content', content: 'ok' } satisfies StreamingChunk;
+          yield { type: 'done' } satisfies StreamingChunk;
+        },
+      };
+      const review = jest
+        .spyOn(agent as any, 'maybeRunBackgroundReview')
+        .mockResolvedValue(undefined);
+
+      const chunks: StreamingChunk[] = [];
+      for await (const chunk of agent.processUserMessageStream('Stream test')) {
+        chunks.push(chunk);
+      }
+
+      expect(chunks.map(chunk => chunk.type)).toEqual(['content', 'done']);
+      expect(review).toHaveBeenCalledTimes(1);
     });
 
     it('should handle abort during streaming', async () => {

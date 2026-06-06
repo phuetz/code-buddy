@@ -41,6 +41,14 @@ export const BACKGROUND_REVIEW_ALLOWED_TOOLS = [
 /** Env sentinel stamped for the duration of a review (anti-recursion). */
 export const BACKGROUND_REVIEW_SENTINEL_ENV = 'CODEBUDDY_BACKGROUND_REVIEW';
 
+/**
+ * Optional escape hatch for operators who intentionally want post-session review
+ * memories to enter the global user memory. Default is project-only so one
+ * workspace cannot silently teach every future workspace.
+ */
+export const BACKGROUND_REVIEW_ALLOW_USER_MEMORY_ENV =
+  'CODEBUDDY_LEARNING_BACKGROUND_REVIEW_ALLOW_USER_MEMORY';
+
 export type BackgroundReviewMode = 'memory' | 'skill' | 'combined';
 
 const TRUTHY_FLAG = new Set(['1', 'true', 'on', 'yes', 'enabled']);
@@ -226,7 +234,9 @@ export async function runBackgroundReview(
         // LIVE loop inherits the same net as the promotion path — skill mutations
         // require the explicit flag, and all written content is secret/omission
         // screened. Refused writes are NOT executed.
-        const args = safeParseToolArgs(call.function?.arguments);
+        const parsedArgs = safeParseToolArgs(call.function?.arguments);
+        const normalized = normalizeReviewToolArgs(name, parsedArgs);
+        const args = normalized.args;
         const guard = guardReviewWrite(name, args);
         if (!guard.allowed) {
           screenedWrites.push({ name, reason: guard.reason });
@@ -240,7 +250,11 @@ export async function runBackgroundReview(
 
         let result: HeadlessToolResult;
         try {
-          result = await executeTool(name, call.function?.arguments, options.abortSignal);
+          result = await executeTool(
+            name,
+            normalized.changed ? JSON.stringify(args) : call.function?.arguments,
+            options.abortSignal,
+          );
         } catch (err) {
           result = { success: false, error: err instanceof Error ? err.message : String(err) };
         }
@@ -295,6 +309,29 @@ function safeParseToolArgs(argsJson: string | undefined): Record<string, unknown
   } catch {
     return {};
   }
+}
+
+/**
+ * Keep autonomous post-session memories project-scoped by default. The normal
+ * `remember` tool still supports `scope:"user"` for explicit interactive use;
+ * this background path is narrower because it runs after the user stops typing.
+ */
+function normalizeReviewToolArgs(
+  name: string,
+  args: Record<string, unknown>,
+): { args: Record<string, unknown>; changed: boolean } {
+  if (name !== 'remember') return { args, changed: false };
+  if (args.scope !== 'user') return { args, changed: false };
+  if (TRUTHY_FLAG.has((process.env[BACKGROUND_REVIEW_ALLOW_USER_MEMORY_ENV] ?? '').trim().toLowerCase())) {
+    return { args, changed: false };
+  }
+  return {
+    args: {
+      ...args,
+      scope: 'project',
+    },
+    changed: true,
+  };
 }
 
 /** Collect every string field a write tool could persist, for screening. */
