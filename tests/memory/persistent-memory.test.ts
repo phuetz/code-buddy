@@ -47,6 +47,23 @@ describe('PersistentMemoryManager', () => {
     expect(content).toContain('- **test-key**: test-value');
   });
 
+  it('creates the project memory parent directory for a fresh workspace write', async () => {
+    const freshRoot = path.join(tmpDir, 'fresh-workspace');
+    const freshProjectMemoryPath = path.join(freshRoot, '.codebuddy', 'CODEBUDDY_MEMORY.md');
+    const freshManager = new PersistentMemoryManager({
+      projectMemoryPath: freshProjectMemoryPath,
+      userMemoryPath: path.join(tmpDir, 'fresh-user', '.codebuddy', 'memory.md'),
+      autoCapture: false,
+    });
+
+    await fs.ensureDir(freshRoot);
+    await freshManager.remember('workspace', 'fresh project', { scope: 'project' });
+
+    expect(await fs.pathExists(freshProjectMemoryPath)).toBe(true);
+    const content = await fs.readFile(freshProjectMemoryPath, 'utf-8');
+    expect(content).toContain('- **workspace**: fresh project');
+  });
+
   it('should remember and recall a value in user scope', async () => {
     await manager.remember('user-pref', 'dark-mode', { scope: 'user', category: 'preferences' });
     

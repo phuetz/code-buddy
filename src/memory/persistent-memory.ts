@@ -549,6 +549,7 @@ export class PersistentMemoryManager extends EventEmitter {
       // Ignored
     }
 
+    await fs.ensureDir(path.dirname(filePath));
     await fs.writeFile(filePath, content);
   }
 
