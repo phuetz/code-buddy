@@ -98,6 +98,11 @@ async function startSkillDiscoveryServer(): Promise<{ baseUrl: string; close: ()
       }));
       return;
     }
+    if (pathname === '/skills/docs-helper/SKILL.md') {
+      res.setHeader('content-type', 'text/markdown');
+      res.end(skillContent('docs-helper', '0.4.0', 'Real well-known discovery test skill.'));
+      return;
+    }
     res.statusCode = 404;
     res.end('not found');
   });
@@ -1045,6 +1050,24 @@ describe('buddy skills command with real SkillsHub state', () => {
       ]);
       const preservedSearch = await hub.search('docs');
       expect(preservedSearch.skills.map((skill) => skill.name)).toContain('docs-helper');
+
+      const installedTapSkill = await hub.install('deploy-runbook');
+      expect(installedTapSkill).toMatchObject({
+        name: 'deploy-runbook',
+        version: '1.2.3',
+        source: 'hub',
+      });
+      await expect(fs.readFile(installedTapSkill.path, 'utf8')).resolves.toContain('Real tap discovery test skill.');
+
+      const installedWellKnownSkill = await hub.install('docs-helper');
+      expect(installedWellKnownSkill).toMatchObject({
+        name: 'docs-helper',
+        version: '0.4.0',
+        source: 'hub',
+      });
+      await expect(fs.readFile(installedWellKnownSkill.path, 'utf8')).resolves.toContain(
+        'Real well-known discovery test skill.',
+      );
     } finally {
       await server.close();
     }

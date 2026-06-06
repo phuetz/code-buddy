@@ -224,6 +224,19 @@ Memory and lessons:
 /lessons search "verification"
 ```
 
+ClawHub-style skill marketplace proof:
+
+```bash
+npm test -- tests/commands/native-engine-commands.test.ts tests/commands/skills-command-real.test.ts
+```
+
+Expected result: `buddy hub search|list|install|sync --json` stays
+machine-readable, repository-backed taps can be added/refreshed through
+`buddy hub tap ...`, `buddy hub well-known <url>` can discover
+`/.well-known/skills/index.json`, and discovered `SKILL.md` content is cached so
+`buddy hub install <name>` can install from the decentralized source without a
+central registry.
+
 Skills:
 
 ```bash

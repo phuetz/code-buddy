@@ -706,7 +706,25 @@ export class SkillsHub extends EventEmitter {
     const skills: DiscoveredHubSkill[] = [];
     for (const entry of entries) {
       try {
-        skills.push(this.discoveredSkillFromWellKnownEntry(entry, indexUrl));
+        const skill = this.discoveredSkillFromWellKnownEntry(entry, indexUrl);
+        if (skill.contentUrl) {
+          try {
+            const content = await this.fetchUrlText(skill.contentUrl, 'text/markdown');
+            this.validateSkillContent(content, skill.name);
+            skills.push({
+              ...skill,
+              checksum: computeChecksum(content),
+              size: Buffer.byteLength(content, 'utf-8'),
+            });
+            this.writeCachedSkillContent(skill.name, skill.version, content);
+            continue;
+          } catch (err) {
+            errors.push(
+              `${skill.identifier}: ${err instanceof Error ? err.message : String(err)}`,
+            );
+          }
+        }
+        skills.push(skill);
       } catch (err) {
         errors.push(err instanceof Error ? err.message : String(err));
       }
@@ -833,6 +851,7 @@ export class SkillsHub extends EventEmitter {
         const description = skill.metadata.description || `${skill.metadata.name} from ${tap.repo}`;
         const version = skill.metadata.version || '0.0.0';
         const tags = skill.metadata.tags || [];
+        this.writeCachedSkillContent(skill.metadata.name, version, content);
         skills.push({
           name: skill.metadata.name,
           version,
@@ -896,6 +915,34 @@ export class SkillsHub extends EventEmitter {
       throw new Error(`GitHub file returned ${response.status}: ${response.statusText}`);
     }
     return await response.text();
+  }
+
+  private async fetchUrlText(url: string, accept: string): Promise<string> {
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'Accept': accept,
+        'User-Agent': 'codebuddy-hub/1.0',
+      },
+      signal: AbortSignal.timeout(10000),
+    });
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+    return await response.text();
+  }
+
+  private writeCachedSkillContent(skillName: string, version: string | undefined, content: string): void {
+    if (!/^[a-zA-Z0-9_-]+$/.test(skillName)) {
+      return;
+    }
+    const targets = [
+      path.join(this.config.cacheDir, `${skillName}.skill.md`),
+      version ? path.join(this.config.cacheDir, `${skillName}@${version}.skill.md`) : null,
+    ].filter((target): target is string => Boolean(target));
+    for (const target of targets) {
+      fs.writeFileSync(target, content, 'utf-8');
+    }
   }
 
   private encodeGitHubContentPath(filePath: string): string {

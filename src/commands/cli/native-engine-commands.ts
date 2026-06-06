@@ -107,13 +107,18 @@ export function registerHubCommands(program: Command): void {
     .description('Search for skills')
     .option('-t, --tags <tags>', 'filter by tags (comma-separated)')
     .option('-l, --limit <n>', 'max results', '20')
-    .action(async (query: string, opts: { tags?: string; limit: string }) => {
+    .option('--json', 'output JSON')
+    .action(async (query: string, opts: { tags?: string; limit: string; json?: boolean }) => {
       const { getSkillsHub } = await import('../../skills/hub.js');
       const skillsHub = getSkillsHub();
       const result = await skillsHub.search(query, {
         tags: opts.tags?.split(','),
         limit: parseInt(opts.limit),
       });
+      if (opts.json) {
+        console.log(JSON.stringify(result, null, 2));
+        return;
+      }
       if (result.skills.length === 0) {
         console.log('No skills found.');
         return;
@@ -133,14 +138,24 @@ export function registerHubCommands(program: Command): void {
     .command('install <name>')
     .description('Install a skill from the hub')
     .option('-v, --version <version>', 'specific version')
-    .action(async (name: string, opts: { version?: string }) => {
+    .option('--json', 'output JSON')
+    .action(async (name: string, opts: { version?: string; json?: boolean }) => {
       const { getSkillsHub } = await import('../../skills/hub.js');
       const skillsHub = getSkillsHub();
       try {
         const installed = await skillsHub.install(name, opts.version);
+        if (opts.json) {
+          console.log(JSON.stringify({ installed }, null, 2));
+          return;
+        }
         console.log(`Installed ${installed.name} v${installed.version}`);
       } catch (error) {
-        console.error(`Failed to install: ${error instanceof Error ? error.message : error}`);
+        const message = `Failed to install: ${error instanceof Error ? error.message : error}`;
+        if (opts.json) {
+          console.log(JSON.stringify({ error: message, installed: null, name }, null, 2));
+        } else {
+          console.error(message);
+        }
         process.exit(1);
       }
     });
@@ -179,10 +194,15 @@ export function registerHubCommands(program: Command): void {
   hub
     .command('list')
     .description('List installed skills')
-    .action(async () => {
+    .option('--json', 'output JSON')
+    .action(async (opts: { json?: boolean }) => {
       const { getSkillsHub } = await import('../../skills/hub.js');
       const skillsHub = getSkillsHub();
       const installed = skillsHub.list();
+      if (opts.json) {
+        console.log(JSON.stringify({ count: installed.length, skills: installed }, null, 2));
+        return;
+      }
       if (installed.length === 0) {
         console.log('No skills installed from the hub.');
         return;
@@ -261,10 +281,15 @@ export function registerHubCommands(program: Command): void {
   hub
     .command('sync')
     .description('Sync installed skills with lockfile')
-    .action(async () => {
+    .option('--json', 'output JSON')
+    .action(async (opts: { json?: boolean }) => {
       const { getSkillsHub } = await import('../../skills/hub.js');
       const skillsHub = getSkillsHub();
       const result = await skillsHub.sync();
+      if (opts.json) {
+        console.log(JSON.stringify(result, null, 2));
+        return;
+      }
       console.log(`Sync complete:`);
       if (result.removed.length) console.log(`  Removed: ${result.removed.join(', ')}`);
       if (result.mismatched.length) console.log(`  Mismatched: ${result.mismatched.join(', ')}`);
@@ -273,6 +298,132 @@ export function registerHubCommands(program: Command): void {
         console.log('  Everything in sync.');
       }
     });
+
+  const tap = hub
+    .command('tap')
+    .description('Manage repository-backed skill taps');
+
+  tap
+    .command('list')
+    .description('List configured skill taps')
+    .option('--json', 'output JSON')
+    .action(async (opts: { json?: boolean }) => {
+      const { getSkillsHub } = await import('../../skills/hub.js');
+      const skillsHub = getSkillsHub();
+      const result = {
+        count: skillsHub.listTaps().length,
+        taps: skillsHub.listTaps(),
+        tapsPath: skillsHub.getConfig().tapsPath,
+      };
+      if (opts.json) {
+        console.log(JSON.stringify(result, null, 2));
+        return;
+      }
+      if (result.taps.length === 0) {
+        console.log(`No skill taps configured. Tap registry: ${result.tapsPath}`);
+        return;
+      }
+      console.log(`\nSkill taps (${result.taps.length}):`);
+      for (const item of result.taps) {
+        console.log(`  ${item.repo}  path=${item.path}  trust=${item.trust}`);
+      }
+      console.log('');
+    });
+
+  tap
+    .command('add <repo>')
+    .description('Add or update a skill tap (owner/repo)')
+    .option('--path <path>', 'skill directory inside the tap repository', 'skills/')
+    .option('--trust <trust>', 'trust level: builtin, official, trusted, or community')
+    .option('--approved-by <reviewer>', 'reviewer/operator approving the tap')
+    .option('--json', 'output JSON')
+    .action(async (
+      repo: string,
+      opts: { approvedBy?: string; json?: boolean; path?: string; trust?: string },
+    ) => {
+      const { getSkillsHub } = await import('../../skills/hub.js');
+      const skillsHub = getSkillsHub();
+      const tap = skillsHub.addTap(repo, {
+        actor: opts.approvedBy,
+        path: opts.path,
+        trust: parseSkillTapTrust(opts.trust),
+      });
+      if (opts.json) {
+        console.log(JSON.stringify({ tap }, null, 2));
+        return;
+      }
+      console.log(`Skill tap configured: ${tap.repo} path=${tap.path} trust=${tap.trust}`);
+    });
+
+  tap
+    .command('remove <repo>')
+    .description('Remove a configured skill tap')
+    .option('--json', 'output JSON')
+    .action(async (repo: string, opts: { json?: boolean }) => {
+      const { getSkillsHub } = await import('../../skills/hub.js');
+      const removed = getSkillsHub().removeTap(repo);
+      if (opts.json) {
+        console.log(JSON.stringify({ removed, repo }, null, 2));
+        return;
+      }
+      console.log(removed ? `Skill tap removed: ${repo}` : `Skill tap not found: ${repo}`);
+    });
+
+  tap
+    .command('refresh [repo]')
+    .description('Refresh the local discovery cache from GitHub-backed taps')
+    .option('--json', 'output JSON')
+    .action(async (repo: string | undefined, opts: { json?: boolean }) => {
+      const { getSkillsHub } = await import('../../skills/hub.js');
+      const result = await getSkillsHub().refreshTapIndex(repo);
+      if (opts.json) {
+        console.log(JSON.stringify(result, null, 2));
+        return;
+      }
+      console.log(`Refreshed ${result.skillCount} skill(s) from ${result.taps.length} tap(s).`);
+      for (const skill of result.skills) {
+        console.log(`  ${skill.identifier}  ${skill.description}`);
+      }
+      for (const error of result.errors) {
+        console.log(`  ! ${error.repo}: ${error.error}`);
+      }
+    });
+
+  hub
+    .command('well-known <url>')
+    .description('Discover skills from a /.well-known/skills/index.json endpoint')
+    .option('--json', 'output JSON')
+    .action(async (url: string, opts: { json?: boolean }) => {
+      const { getSkillsHub } = await import('../../skills/hub.js');
+      const result = await getSkillsHub().discoverWellKnownSkills(url);
+      if (opts.json) {
+        console.log(JSON.stringify(result, null, 2));
+        return;
+      }
+      console.log(`Discovered ${result.skillCount} well-known skill(s) from ${result.indexUrl}.`);
+      for (const skill of result.skills) {
+        console.log(`  ${skill.identifier}  ${skill.description}`);
+      }
+      for (const error of result.errors) {
+        console.log(`  ! ${error}`);
+      }
+    });
+}
+
+function parseSkillTapTrust(value?: string): import('../../skills/hub.js').SkillTapTrust | undefined {
+  if (value === undefined || value.trim() === '') {
+    return undefined;
+  }
+  const normalized = value.trim().toLowerCase();
+  if (
+    normalized === 'builtin'
+    || normalized === 'official'
+    || normalized === 'trusted'
+    || normalized === 'community'
+  ) {
+    return normalized;
+  }
+  throw new Error(`Invalid trust level '${value}'. Use builtin, official, trusted, or community.`);
 }
 
 // ============================================================================

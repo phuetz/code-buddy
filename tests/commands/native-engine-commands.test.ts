@@ -47,6 +47,12 @@ const mockSkillsHub = {
   info: jest.fn(),
   publish: jest.fn(),
   sync: jest.fn(),
+  listTaps: jest.fn(),
+  getConfig: jest.fn(),
+  addTap: jest.fn(),
+  removeTap: jest.fn(),
+  refreshTapIndex: jest.fn(),
+  discoverWellKnownSkills: jest.fn(),
 };
 
 jest.mock('../../src/skills/hub.js', () => ({
@@ -500,6 +506,23 @@ describe('Native Engine CLI Commands', () => {
 
         expect(getLogOutput()).toContain('No skills found.');
       });
+
+      it('should output hub search JSON for machine-readable marketplace use', async () => {
+        mockSkillsHub.search.mockResolvedValue({
+          total: 1,
+          page: 1,
+          pageSize: 20,
+          skills: [
+            { name: 'docs-helper', version: '1.0.0', description: 'Docs', tags: ['docs'] },
+          ],
+        });
+
+        await program.parseAsync(['node', 'test', 'hub', 'search', 'docs', '--json']);
+
+        const output = JSON.parse(getLogOutput()) as { total: number; skills: Array<{ name: string }> };
+        expect(output.total).toBe(1);
+        expect(output.skills[0]?.name).toBe('docs-helper');
+      });
     });
 
     describe('hub install', () => {
@@ -616,6 +639,105 @@ describe('Native Engine CLI Commands', () => {
         await program.parseAsync(['node', 'test', 'hub', 'list']);
 
         expect(getLogOutput()).toContain('No skills installed from the hub.');
+      });
+
+      it('should output installed skills JSON', async () => {
+        mockSkillsHub.list.mockReturnValue([
+          { name: 'skill-x', version: '1.0.0', installedAt: Date.parse('2026-06-07T00:00:00Z') },
+        ]);
+
+        await program.parseAsync(['node', 'test', 'hub', 'list', '--json']);
+
+        const output = JSON.parse(getLogOutput()) as { count: number; skills: Array<{ name: string }> };
+        expect(output.count).toBe(1);
+        expect(output.skills[0]?.name).toBe('skill-x');
+      });
+    });
+
+    describe('hub tap and well-known discovery', () => {
+      it('should add repository-backed taps through the primary hub command', async () => {
+        mockSkillsHub.addTap.mockReturnValue({
+          repo: 'my-org/platform-skills',
+          path: 'internal/skills/',
+          trust: 'trusted',
+          addedAt: 1,
+          updatedAt: 1,
+          addedBy: 'Patrice',
+        });
+
+        await program.parseAsync([
+          'node',
+          'test',
+          'hub',
+          'tap',
+          'add',
+          'my-org/platform-skills',
+          '--path',
+          'internal/skills',
+          '--trust',
+          'trusted',
+          '--approved-by',
+          'Patrice',
+          '--json',
+        ]);
+
+        expect(mockSkillsHub.addTap).toHaveBeenCalledWith('my-org/platform-skills', {
+          actor: 'Patrice',
+          path: 'internal/skills',
+          trust: 'trusted',
+        });
+        const output = JSON.parse(getLogOutput()) as { tap: { repo: string; trust: string } };
+        expect(output.tap.repo).toBe('my-org/platform-skills');
+        expect(output.tap.trust).toBe('trusted');
+      });
+
+      it('should refresh tap discovery through the primary hub command', async () => {
+        mockSkillsHub.refreshTapIndex.mockResolvedValue({
+          errors: [],
+          refreshedAt: '2026-06-07T00:00:00.000Z',
+          skillCount: 1,
+          skills: [{ identifier: 'my-org/platform-skills/deploy-runbook', name: 'deploy-runbook' }],
+          taps: [{ repo: 'my-org/platform-skills', path: 'skills/', trust: 'community' }],
+        });
+
+        await program.parseAsync([
+          'node',
+          'test',
+          'hub',
+          'tap',
+          'refresh',
+          'my-org/platform-skills',
+          '--json',
+        ]);
+
+        expect(mockSkillsHub.refreshTapIndex).toHaveBeenCalledWith('my-org/platform-skills');
+        const output = JSON.parse(getLogOutput()) as { skillCount: number; skills: Array<{ name: string }> };
+        expect(output.skillCount).toBe(1);
+        expect(output.skills[0]?.name).toBe('deploy-runbook');
+      });
+
+      it('should discover well-known skills through the primary hub command', async () => {
+        mockSkillsHub.discoverWellKnownSkills.mockResolvedValue({
+          errors: [],
+          indexUrl: 'https://example.com/.well-known/skills/index.json',
+          refreshedAt: '2026-06-07T00:00:00.000Z',
+          skillCount: 1,
+          skills: [{ identifier: 'well-known:https://example.com/skills/docs-helper', name: 'docs-helper' }],
+        });
+
+        await program.parseAsync([
+          'node',
+          'test',
+          'hub',
+          'well-known',
+          'https://example.com',
+          '--json',
+        ]);
+
+        expect(mockSkillsHub.discoverWellKnownSkills).toHaveBeenCalledWith('https://example.com');
+        const output = JSON.parse(getLogOutput()) as { skillCount: number; indexUrl: string };
+        expect(output.skillCount).toBe(1);
+        expect(output.indexUrl).toBe('https://example.com/.well-known/skills/index.json');
       });
     });
 
