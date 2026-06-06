@@ -18,6 +18,9 @@ vi.mock('react-i18next', () => ({
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
+const generatedAt = '2026-06-06T06:45:00.000Z';
+const generatedAtMs = Date.parse(generatedAt);
+
 const snapshot: MissionControlSnapshot = {
   agents: [
     {
@@ -34,12 +37,13 @@ const snapshot: MissionControlSnapshot = {
       id: 'ministar-linux',
       kind: 'fleet-peer',
       label: 'MiniStar',
+      lastSeenAt: generatedAtMs - 30_000,
       machine: 'ministar-linux',
       status: 'error',
       statusDetail: 'health probe failed',
     },
   ],
-  generatedAt: '2026-06-06T06:45:00.000Z',
+  generatedAt,
   hostname: 'patrice-win',
   schemaVersion: 1,
   summary: {
@@ -86,10 +90,10 @@ const snapshot: MissionControlSnapshot = {
         totalTests: 2,
       },
       source: 'fleet',
-      startedAt: 1_780_000_000_000,
+      startedAt: generatedAtMs - 15 * 60_000,
       status: 'running',
       title: 'Review Fleet UI',
-      updatedAt: 1_780_000_000_000,
+      updatedAt: generatedAtMs - 60_000,
     },
   ],
 };
@@ -120,10 +124,12 @@ describe('MissionControlStrip', () => {
     expect(target.textContent).toContain('Review Fleet UI');
     expect(target.textContent).toContain('Now: Review Fleet UI');
     expect(target.textContent).toContain('MiniStar · fleet · passed 912ms npm test -- tests/cowork/proof.test.ts --run');
+    expect(target.textContent).toContain('ministar-linux · seen 30s ago · health probe failed');
     expect(target.textContent).toContain('proof proven');
     expect(target.textContent).toContain('2/2 tests');
     expect(target.textContent).toContain('1 cmd');
     expect(target.textContent).toContain('1 files');
+    expect(target.textContent).toContain('updated 1m ago');
     expect(target.textContent).toContain('npm test -- tests/cowork/proof.test.ts --run passed 912ms');
     expect(target.textContent).toContain('2 risks');
     expect(target.textContent).toContain('1 redaction');
@@ -152,6 +158,7 @@ describe('MissionControlStrip', () => {
         { label: '2/2 tests', tone: 'ok' },
         { label: '1 cmd' },
         { label: '1 files' },
+        { label: 'updated 1m ago' },
         { label: '2 risks', tone: undefined },
         { label: '1 redaction', tone: 'ok' },
       ],
@@ -187,6 +194,7 @@ describe('MissionControlStrip', () => {
           id: 'discovered-tailscale-100-64-0-10',
           kind: 'fleet-peer',
           label: 'claude-ministar',
+          lastSeenAt: generatedAtMs,
           machine: 'claude-ministar',
           status: 'unknown',
           statusDetail: 'discovered via Tailscale; not paired yet',
@@ -203,7 +211,7 @@ describe('MissionControlStrip', () => {
       },
       work: [],
     })).toEqual({
-      chips: [{ label: 'unknown' }],
+      chips: [{ label: 'unknown' }, { label: 'seen just now' }],
       detail: 'claude-ministar · discovered via Tailscale; not paired yet',
       headline: 'Agent discovered: claude-ministar',
       tone: 'neutral',

@@ -41,6 +41,7 @@ export const MissionControlStrip: React.FC<{
 }> = ({ error = null, onAction, refreshing = false, snapshot }) => {
   const { t } = useTranslation();
   const focus = snapshot ? buildMissionControlFocus(snapshot) : null;
+  const snapshotTime = snapshot ? missionSnapshotTime(snapshot) : undefined;
 
   return (
     <section
@@ -102,9 +103,11 @@ export const MissionControlStrip: React.FC<{
           <MissionAgentList
             agents={snapshot.agents.slice(0, 4)}
             onAction={onAction}
+            snapshotTime={snapshotTime}
           />
           <MissionWorkList
             onAction={onAction}
+            snapshotTime={snapshotTime}
             work={snapshot.work.slice(0, 4)}
           />
         </div>
@@ -116,6 +119,7 @@ export const MissionControlStrip: React.FC<{
 export function buildMissionControlFocus(
   snapshot: MissionControlSnapshot,
 ): MissionControlFocusLine | null {
+  const snapshotTime = missionSnapshotTime(snapshot);
   const sortedWork = [...snapshot.work].sort(
     (left, right) => (right.updatedAt ?? right.startedAt) - (left.updatedAt ?? left.startedAt),
   );
@@ -123,7 +127,7 @@ export function buildMissionControlFocus(
     sortedWork.find(isMissionWorkActive) ??
     sortedWork.find(isMissionWorkAttention) ??
     sortedWork[0];
-  if (workFocus) return buildMissionWorkFocus(snapshot, workFocus);
+  if (workFocus) return buildMissionWorkFocus(snapshot, workFocus, snapshotTime);
 
   const agentFocus =
     snapshot.agents.find((agent) => agent.status === 'error') ??
@@ -131,6 +135,7 @@ export function buildMissionControlFocus(
     snapshot.agents.find((agent) => agent.status === 'unknown') ??
     snapshot.agents[0];
   if (!agentFocus) return null;
+  const lastSeen = formatMissionRelativeAge(agentFocus.lastSeenAt, snapshotTime);
   const prefix = agentFocus.status === 'error'
     ? 'Agent attention'
     : agentFocus.status === 'busy'
@@ -141,6 +146,7 @@ export function buildMissionControlFocus(
   return {
     chips: [
       { label: agentFocus.status, tone: agentFocus.status === 'error' ? 'attention' : undefined },
+      ...(lastSeen ? [{ label: `seen ${lastSeen}` }] : []),
       ...(agentFocus.activeWork > 0 ? [{ label: `${agentFocus.activeWork} active` }] : []),
       ...(agentFocus.modelCount ? [{ label: `${agentFocus.modelCount} models` }] : []),
     ],
@@ -157,6 +163,7 @@ export function buildMissionControlFocus(
 function buildMissionWorkFocus(
   snapshot: MissionControlSnapshot,
   item: MissionControlWorkItem,
+  snapshotTime?: number,
 ): MissionControlFocusLine {
   const agentLabel = item.agentId
     ? snapshot.agents.find((agent) => agent.id === item.agentId)?.label ?? item.agentId
@@ -172,14 +179,18 @@ function buildMissionWorkFocus(
         ? 'Verified'
         : 'Latest';
   return {
-    chips: buildMissionWorkFocusChips(item),
+    chips: buildMissionWorkFocusChips(item, snapshotTime),
     ...(detail ? { detail } : {}),
     headline: `${prefix}: ${item.title}`,
     tone,
   };
 }
 
-function buildMissionWorkFocusChips(item: MissionControlWorkItem): MissionControlFocusChip[] {
+function buildMissionWorkFocusChips(
+  item: MissionControlWorkItem,
+  snapshotTime?: number,
+): MissionControlFocusChip[] {
+  const updatedAge = formatMissionRelativeAge(item.updatedAt ?? item.startedAt, snapshotTime);
   return [
     { label: item.kind },
     { label: item.status, tone: isMissionWorkAttention(item) ? 'attention' : undefined },
@@ -196,6 +207,7 @@ function buildMissionWorkFocusChips(item: MissionControlWorkItem): MissionContro
       : []),
     ...(item.proof.commandCount > 0 ? [{ label: `${item.proof.commandCount} cmd` }] : []),
     ...(item.filesChanged.length > 0 ? [{ label: `${item.filesChanged.length} files` }] : []),
+    ...(updatedAge ? [{ label: `updated ${updatedAge}` }] : []),
     ...(item.proof.riskCount > 0
       ? [
           {
@@ -292,7 +304,8 @@ const MissionMetric: React.FC<{
 const MissionAgentList: React.FC<{
   agents: MissionControlAgent[];
   onAction?: (action: MissionControlActionIntent) => void;
-}> = ({ agents, onAction }) => {
+  snapshotTime?: number;
+}> = ({ agents, onAction, snapshotTime }) => {
   const { t } = useTranslation();
   if (agents.length === 0) return null;
   return (
@@ -301,28 +314,36 @@ const MissionAgentList: React.FC<{
         {t('fleet.mission.agentsHeader', 'Agents')}
       </div>
       <ul className="space-y-1">
-        {agents.map((agent) => (
-          <li
-            key={agent.id}
-            className="flex min-h-[34px] items-center gap-2 rounded border border-border-muted bg-background/50 px-2 py-1"
-          >
-            <StatusIcon status={agent.status} />
-            <div className="min-w-0 flex-1">
-              <div className="truncate text-[11px] text-text-secondary">{agent.label}</div>
-              <div className="truncate text-[10px] text-text-muted">
-                {[agent.machine, agent.modelCount ? `${agent.modelCount} models` : null, agent.statusDetail]
-                  .filter(Boolean)
-                  .join(' · ')}
+        {agents.map((agent) => {
+          const lastSeen = formatMissionRelativeAge(agent.lastSeenAt, snapshotTime);
+          return (
+            <li
+              key={agent.id}
+              className="flex min-h-[34px] items-center gap-2 rounded border border-border-muted bg-background/50 px-2 py-1"
+            >
+              <StatusIcon status={agent.status} />
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-[11px] text-text-secondary">{agent.label}</div>
+                <div className="truncate text-[10px] text-text-muted">
+                  {[
+                    agent.machine,
+                    lastSeen ? `seen ${lastSeen}` : null,
+                    agent.modelCount ? `${agent.modelCount} models` : null,
+                    agent.statusDetail,
+                  ]
+                    .filter(Boolean)
+                    .join(' · ')}
+                </div>
               </div>
-            </div>
-            {agent.activeWork > 0 && (
-              <span className="shrink-0 rounded bg-accent/10 px-1.5 py-0.5 text-[10px] text-accent">
-                {agent.activeWork}
-              </span>
-            )}
-            <MissionActions actions={agent.actions} onAction={onAction} />
-          </li>
-        ))}
+              {agent.activeWork > 0 && (
+                <span className="shrink-0 rounded bg-accent/10 px-1.5 py-0.5 text-[10px] text-accent">
+                  {agent.activeWork}
+                </span>
+              )}
+              <MissionActions actions={agent.actions} onAction={onAction} />
+            </li>
+          );
+        })}
       </ul>
     </div>
   );
@@ -330,8 +351,9 @@ const MissionAgentList: React.FC<{
 
 const MissionWorkList: React.FC<{
   onAction?: (action: MissionControlActionIntent) => void;
+  snapshotTime?: number;
   work: MissionControlWorkItem[];
-}> = ({ onAction, work }) => {
+}> = ({ onAction, snapshotTime, work }) => {
   const { t } = useTranslation();
   return (
     <div>
@@ -347,6 +369,7 @@ const MissionWorkList: React.FC<{
           {work.map((item) => {
             const lastCommandDuration = formatMissionDuration(item.proof.lastCommandDurationMs);
             const lastCommandLabel = item.proof.lastCommandText ?? item.proof.lastCommandTool;
+            const updatedAge = formatMissionRelativeAge(item.updatedAt ?? item.startedAt, snapshotTime);
             return (
               <li
                 key={`${item.kind}:${item.id}`}
@@ -374,6 +397,9 @@ const MissionWorkList: React.FC<{
                     )}
                     {item.filesChanged.length > 0 && (
                       <MissionChip>{item.filesChanged.length} files</MissionChip>
+                    )}
+                    {updatedAge && (
+                      <MissionChip>updated {updatedAge}</MissionChip>
                     )}
                     {item.proof.riskCount > 0 && (
                       <MissionChip tone={item.proof.highRiskCount > 0 ? 'attention' : undefined}>
@@ -410,6 +436,21 @@ function formatMissionDuration(ms?: number): string | null {
   const minutes = Math.floor(seconds / 60);
   const remainingSeconds = Math.round(seconds - minutes * 60);
   return `${minutes}m ${remainingSeconds}s`;
+}
+
+function missionSnapshotTime(snapshot: MissionControlSnapshot): number | undefined {
+  const timestamp = Date.parse(snapshot.generatedAt);
+  return Number.isFinite(timestamp) ? timestamp : undefined;
+}
+
+function formatMissionRelativeAge(timestamp?: number, now?: number): string | null {
+  if (!timestamp || !Number.isFinite(timestamp) || !now || !Number.isFinite(now)) return null;
+  const elapsedMs = Math.max(0, now - timestamp);
+  if (elapsedMs < 10_000) return 'just now';
+  if (elapsedMs < 60_000) return `${Math.floor(elapsedMs / 1000)}s ago`;
+  if (elapsedMs < 3_600_000) return `${Math.floor(elapsedMs / 60_000)}m ago`;
+  if (elapsedMs < 86_400_000) return `${Math.floor(elapsedMs / 3_600_000)}h ago`;
+  return `${Math.floor(elapsedMs / 86_400_000)}d ago`;
 }
 
 function formatMissionCount(count: number, noun: string): string {
