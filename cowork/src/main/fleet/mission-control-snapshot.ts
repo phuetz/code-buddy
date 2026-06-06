@@ -49,6 +49,7 @@ export interface MissionControlProof {
 export interface MissionControlAgent {
   actions: MissionControlActionIntent[];
   activeWork: number;
+  discoverySource?: MissionControlDiscoverySource;
   id: string;
   kind: MissionControlAgentKind;
   label: string;
@@ -268,6 +269,7 @@ function buildDiscoveredAgent(peer: MissionControlDiscoveredPeer, now: Date): Mi
       }),
     ],
     activeWork: 0,
+    discoverySource: peer.source,
     id: discoveredAgentId(peer),
     kind: 'fleet-peer',
     label: peer.label,

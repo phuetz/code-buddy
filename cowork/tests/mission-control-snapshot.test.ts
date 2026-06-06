@@ -148,6 +148,7 @@ describe('buildMissionControlSnapshot', () => {
     const discoveredAgent = snapshot.agents.find((agent) => agent.label === 'claude-ministar');
     expect(discoveredAgent).toMatchObject({
       activeWork: 0,
+      discoverySource: 'tailscale',
       kind: 'fleet-peer',
       machine: 'claude-ministar',
       status: 'unknown',

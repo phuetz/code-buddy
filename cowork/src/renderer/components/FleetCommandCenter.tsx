@@ -268,7 +268,7 @@ function missionSnapshotDiscoveredPeers(
     .filter((agent) => agent.status === 'unknown' && agent.url && agent.id.startsWith('discovered-'))
     .map((agent) => ({
       label: agent.label,
-      source: agent.id.startsWith('discovered-manual-') ? 'manual' : 'tailscale',
+      source: agent.discoverySource ?? (agent.id.startsWith('discovered-manual-') ? 'manual' : 'tailscale'),
       url: agent.url as string,
     }));
 }
