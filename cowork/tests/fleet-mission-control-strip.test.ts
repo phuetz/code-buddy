@@ -4,7 +4,10 @@
 import React, { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { MissionControlStrip } from '../src/renderer/components/fleet-mission-control-strip';
+import {
+  MissionControlStrip,
+  buildMissionControlFocus,
+} from '../src/renderer/components/fleet-mission-control-strip';
 import type { MissionControlSnapshot } from '../src/main/fleet/mission-control-snapshot';
 
 vi.mock('react-i18next', () => ({
@@ -115,8 +118,12 @@ describe('MissionControlStrip', () => {
     expect(target.textContent).toContain('Mission Control');
     expect(target.textContent).toContain('MiniStar');
     expect(target.textContent).toContain('Review Fleet UI');
+    expect(target.textContent).toContain('Now: Review Fleet UI');
+    expect(target.textContent).toContain('MiniStar · fleet · passed 912ms npm test -- tests/cowork/proof.test.ts --run');
+    expect(target.textContent).toContain('proof proven');
     expect(target.textContent).toContain('2/2 tests');
     expect(target.textContent).toContain('1 cmd');
+    expect(target.textContent).toContain('1 files');
     expect(target.textContent).toContain('npm test -- tests/cowork/proof.test.ts --run passed 912ms');
     expect(target.textContent).toContain('attention');
 
@@ -132,5 +139,21 @@ describe('MissionControlStrip', () => {
 
     expect(onAction).toHaveBeenCalledWith(expect.objectContaining({ id: 'reconnect' }));
     expect(onAction).toHaveBeenCalledWith(expect.objectContaining({ id: 'audit' }));
+  });
+
+  it('builds a Codex-like focus line for the active work item', () => {
+    expect(buildMissionControlFocus(snapshot)).toEqual({
+      chips: [
+        { label: 'saga' },
+        { label: 'running' },
+        { label: 'proof proven', tone: 'ok' },
+        { label: '2/2 tests', tone: 'ok' },
+        { label: '1 cmd' },
+        { label: '1 files' },
+      ],
+      detail: 'MiniStar · fleet · passed 912ms npm test -- tests/cowork/proof.test.ts --run',
+      headline: 'Now: Review Fleet UI',
+      tone: 'running',
+    });
   });
 });

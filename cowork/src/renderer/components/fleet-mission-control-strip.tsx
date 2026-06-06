@@ -18,6 +18,20 @@ import type {
   MissionControlWorkItem,
 } from '../../main/fleet/mission-control-snapshot';
 
+type MissionFocusTone = 'attention' | 'neutral' | 'ok' | 'running';
+
+export interface MissionControlFocusChip {
+  label: string;
+  tone?: 'attention' | 'ok';
+}
+
+export interface MissionControlFocusLine {
+  chips: MissionControlFocusChip[];
+  detail?: string;
+  headline: string;
+  tone: MissionFocusTone;
+}
+
 export const MissionControlStrip: React.FC<{
   error?: string | null;
   onAction?: (action: MissionControlActionIntent) => void;
@@ -25,6 +39,7 @@ export const MissionControlStrip: React.FC<{
   snapshot: MissionControlSnapshot | null;
 }> = ({ error = null, onAction, refreshing = false, snapshot }) => {
   const { t } = useTranslation();
+  const focus = snapshot ? buildMissionControlFocus(snapshot) : null;
 
   return (
     <section
@@ -81,6 +96,8 @@ export const MissionControlStrip: React.FC<{
             />
           </div>
 
+          {focus && <MissionFocusLine focus={focus} />}
+
           <MissionAgentList
             agents={snapshot.agents.slice(0, 4)}
             onAction={onAction}
@@ -94,6 +111,149 @@ export const MissionControlStrip: React.FC<{
     </section>
   );
 };
+
+export function buildMissionControlFocus(
+  snapshot: MissionControlSnapshot,
+): MissionControlFocusLine | null {
+  const sortedWork = [...snapshot.work].sort(
+    (left, right) => (right.updatedAt ?? right.startedAt) - (left.updatedAt ?? left.startedAt),
+  );
+  const workFocus =
+    sortedWork.find(isMissionWorkActive) ??
+    sortedWork.find(isMissionWorkAttention) ??
+    sortedWork[0];
+  if (workFocus) return buildMissionWorkFocus(snapshot, workFocus);
+
+  const agentFocus =
+    snapshot.agents.find((agent) => agent.status === 'error') ??
+    snapshot.agents.find((agent) => agent.status === 'busy') ??
+    snapshot.agents[0];
+  if (!agentFocus) return null;
+  const prefix = agentFocus.status === 'error'
+    ? 'Agent attention'
+    : agentFocus.status === 'busy'
+      ? 'Agent busy'
+      : 'Agent ready';
+  return {
+    chips: [
+      { label: agentFocus.status, tone: agentFocus.status === 'error' ? 'attention' : undefined },
+      ...(agentFocus.activeWork > 0 ? [{ label: `${agentFocus.activeWork} active` }] : []),
+      ...(agentFocus.modelCount ? [{ label: `${agentFocus.modelCount} models` }] : []),
+    ],
+    detail: [agentFocus.machine, agentFocus.statusDetail].filter(Boolean).join(' · '),
+    headline: `${prefix}: ${agentFocus.label}`,
+    tone: agentFocus.status === 'error'
+      ? 'attention'
+      : agentFocus.status === 'busy'
+        ? 'running'
+        : 'neutral',
+  };
+}
+
+function buildMissionWorkFocus(
+  snapshot: MissionControlSnapshot,
+  item: MissionControlWorkItem,
+): MissionControlFocusLine {
+  const agentLabel = item.agentId
+    ? snapshot.agents.find((agent) => agent.id === item.agentId)?.label ?? item.agentId
+    : undefined;
+  const command = formatMissionCommand(item);
+  const detail = [agentLabel, item.source, command].filter(Boolean).join(' · ');
+  const tone = missionWorkFocusTone(item);
+  const prefix = tone === 'attention'
+    ? 'Needs attention'
+    : tone === 'running'
+      ? 'Now'
+      : tone === 'ok'
+        ? 'Verified'
+        : 'Latest';
+  return {
+    chips: buildMissionWorkFocusChips(item),
+    ...(detail ? { detail } : {}),
+    headline: `${prefix}: ${item.title}`,
+    tone,
+  };
+}
+
+function buildMissionWorkFocusChips(item: MissionControlWorkItem): MissionControlFocusChip[] {
+  return [
+    { label: item.kind },
+    { label: item.status, tone: isMissionWorkAttention(item) ? 'attention' : undefined },
+    {
+      label: `proof ${item.proof.status}`,
+      tone: item.proof.status === 'failed'
+        ? 'attention'
+        : item.proof.status === 'proven'
+          ? 'ok'
+          : undefined,
+    },
+    ...(item.proof.totalTests > 0
+      ? [{ label: `${item.proof.passedTests}/${item.proof.totalTests} tests`, tone: item.proof.failedTests > 0 ? 'attention' as const : 'ok' as const }]
+      : []),
+    ...(item.proof.commandCount > 0 ? [{ label: `${item.proof.commandCount} cmd` }] : []),
+    ...(item.filesChanged.length > 0 ? [{ label: `${item.filesChanged.length} files` }] : []),
+    ...(item.proof.highRiskCount > 0
+      ? [{ label: `${item.proof.highRiskCount} high risk`, tone: 'attention' as const }]
+      : []),
+  ];
+}
+
+function formatMissionCommand(item: MissionControlWorkItem): string | null {
+  const command = item.proof.lastCommandText ?? item.proof.lastCommandTool;
+  if (!command || !item.proof.lastCommandStatus) return null;
+  const duration = formatMissionDuration(item.proof.lastCommandDurationMs);
+  return `${item.proof.lastCommandStatus}${duration ? ` ${duration}` : ''} ${command}`;
+}
+
+function missionWorkFocusTone(item: MissionControlWorkItem): MissionFocusTone {
+  if (isMissionWorkAttention(item)) return 'attention';
+  if (isMissionWorkActive(item)) return 'running';
+  if (item.proof.status === 'proven') return 'ok';
+  return 'neutral';
+}
+
+function isMissionWorkActive(item: MissionControlWorkItem): boolean {
+  return item.status === 'running' || item.status === 'pending';
+}
+
+function isMissionWorkAttention(item: MissionControlWorkItem): boolean {
+  return (
+    item.status === 'failed' ||
+    item.proof.status === 'failed' ||
+    item.proof.failedTests > 0 ||
+    item.proof.highRiskCount > 0
+  );
+}
+
+const MissionFocusLine: React.FC<{ focus: MissionControlFocusLine }> = ({ focus }) => (
+  <div
+    className={`rounded border px-2 py-1.5 ${missionFocusClass(focus.tone)}`}
+    data-testid="fleet-mission-focus"
+  >
+    <div className="flex items-start gap-2">
+      <span className={`mt-1 h-1.5 w-1.5 shrink-0 rounded-full ${missionFocusDotClass(focus.tone)}`} />
+      <div className="min-w-0 flex-1">
+        <div className="truncate text-[11px] font-medium text-text-secondary">
+          {focus.headline}
+        </div>
+        {focus.detail && (
+          <div className="mt-0.5 truncate font-mono text-[10px] text-text-muted">
+            {focus.detail}
+          </div>
+        )}
+        {focus.chips.length > 0 && (
+          <div className="mt-1 flex flex-wrap gap-1">
+            {focus.chips.map((chip) => (
+              <MissionChip key={chip.label} tone={chip.tone}>
+                {chip.label}
+              </MissionChip>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  </div>
+);
 
 const MissionMetric: React.FC<{
   label: string;
@@ -227,15 +387,31 @@ function formatMissionDuration(ms?: number): string | null {
   return `${minutes}m ${remainingSeconds}s`;
 }
 
+function missionFocusClass(tone: MissionFocusTone): string {
+  if (tone === 'attention') return 'border-warning/40 bg-warning/10';
+  if (tone === 'running') return 'border-accent/30 bg-accent/10';
+  if (tone === 'ok') return 'border-success/30 bg-success/10';
+  return 'border-border-muted bg-background/60';
+}
+
+function missionFocusDotClass(tone: MissionFocusTone): string {
+  if (tone === 'attention') return 'bg-warning';
+  if (tone === 'running') return 'bg-accent';
+  if (tone === 'ok') return 'bg-success';
+  return 'bg-text-muted';
+}
+
 const MissionChip: React.FC<{
   children: React.ReactNode;
-  tone?: 'attention';
+  tone?: 'attention' | 'ok';
 }> = ({ children, tone }) => (
   <span
     className={`max-w-full truncate rounded border px-1.5 py-0.5 text-[9px] ${
       tone === 'attention'
         ? 'border-warning/40 bg-warning/10 text-warning'
-        : 'border-border-muted bg-surface/70 text-text-muted'
+        : tone === 'ok'
+          ? 'border-success/30 bg-success/10 text-success'
+          : 'border-border-muted bg-surface/70 text-text-muted'
     }`}
   >
     {children}
