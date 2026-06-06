@@ -833,6 +833,7 @@
     "webhookMode": "Webhook mode",
     "webhookDesc": "Feishu pushes messages to your server. A publicly reachable address is required.",
     "localWebhookUrl": "Local webhook URL",
+    "larkWebhookAlias": "Lark apps can use the same endpoint alias:",
     "useBuiltInNgrok": "Use built-in ngrok",
     "ngrokHelpPrefix": "Get one for free from",
     "ngrokHelpSuffix": "",

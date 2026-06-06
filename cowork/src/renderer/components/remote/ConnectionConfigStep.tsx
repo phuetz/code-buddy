@@ -141,6 +141,19 @@ export function ConnectionConfigStep({
                   <Copy className="w-4 h-4 text-text-muted" />
                 </button>
               </div>
+              <p className="mt-2 text-xs text-text-muted">
+                {t('remote.larkWebhookAlias')}{' '}
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onCopy(`http://127.0.0.1:${gatewayPort}/webhook/lark`);
+                  }}
+                  className="font-mono text-accent hover:underline"
+                >
+                  /webhook/lark
+                </button>
+              </p>
             </div>
 
             {/* Built-in ngrok tunnel */}

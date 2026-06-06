@@ -833,6 +833,7 @@
     "webhookMode": "Webhook 模式",
     "webhookDesc": "飞书主动推送消息到你的服务器，需要公网可访问的地址",
     "localWebhookUrl": "本地 Webhook 地址",
+    "larkWebhookAlias": "Lark 应用也可以使用同一个端点别名：",
     "useBuiltInNgrok": "使用内置 ngrok",
     "ngrokHelpPrefix": "从",
     "ngrokHelpSuffix": "免费获取",

@@ -38,6 +38,10 @@ interface WSMessage {
   requestId?: string;
 }
 
+function normalizeWebhookChannelType(channelType: string): ChannelType {
+  return (channelType === 'lark' ? 'feishu' : channelType) as ChannelType;
+}
+
 export class RemoteGateway extends EventEmitter {
   private config: GatewayConfig;
   private httpServer?: HttpServer;
@@ -581,10 +585,13 @@ export class RemoteGateway extends EventEmitter {
   }
 
   private handleWebhook(req: IncomingMessage, res: ServerResponse, url: string): void {
-    // Extract channel type from URL: /webhook/feishu, /webhook/telegram, etc.
-    const channelType = url.split('/')[2] as ChannelType;
+    // Extract channel type from URL: /webhook/feishu, /webhook/lark, /webhook/telegram, etc.
+    const requestedChannelType = url.split('/')[2] || '';
+    const channelType = normalizeWebhookChannelType(requestedChannelType);
 
-    log(`[Gateway] Received webhook for channel: ${channelType}, URL: ${url}`);
+    log(
+      `[Gateway] Received webhook for channel: ${requestedChannelType} -> ${channelType}, URL: ${url}`
+    );
 
     if (!this.channels.has(channelType)) {
       log(`[Gateway] Channel ${channelType} not found`);
