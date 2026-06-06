@@ -287,6 +287,7 @@ export const FleetCommandCenter: React.FC<Props> = ({ isOpen, onClose }) => {
   const fleetGoalDraft = useAppStore((s) => s.fleetGoalDraft);
   const setFleetGoalDraft = useAppStore((s) => s.setFleetGoalDraft);
   const setFleetDiscoveredPeers = useAppStore((s) => s.setFleetDiscoveredPeers);
+  const setShowFleetPanel = useAppStore((s) => s.setShowFleetPanel);
   const setShowLessonCandidatePanel = useAppStore((s) => s.setShowLessonCandidatePanel);
   const peers = useMemo(() => Object.values(fleetPeers), [fleetPeers]);
   const routablePeers = useMemo(
@@ -610,6 +611,11 @@ export const FleetCommandCenter: React.FC<Props> = ({ isOpen, onClose }) => {
   };
 
   const handleMissionAction = async (action: MissionControlActionIntent) => {
+    if (action.targetKind === 'fleet-peer' && action.id === 'pair') {
+      setShowFleetPanel(true);
+      return;
+    }
+
     if (action.targetKind === 'fleet-peer' && action.id === 'refresh') {
       await handleRefreshPeers(action.targetId);
       setMissionRefreshToken((value) => value + 1);

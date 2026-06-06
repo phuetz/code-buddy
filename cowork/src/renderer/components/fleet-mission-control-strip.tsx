@@ -6,6 +6,7 @@ import {
   CheckCircle2,
   GitMerge,
   Laptop2,
+  Plus,
   RefreshCw,
   RotateCcw,
   ShieldCheck,
@@ -466,6 +467,7 @@ function ProofIcon({ status }: { status: MissionControlWorkItem['proof']['status
 
 function actionIcon(actionId: MissionControlActionIntent['id']) {
   if (actionId === 'merge') return GitMerge;
+  if (actionId === 'pair') return Plus;
   if (actionId === 'reconnect' || actionId === 'resume') return RotateCcw;
   if (actionId === 'refresh') return RefreshCw;
   if (actionId === 'stop') return Square;

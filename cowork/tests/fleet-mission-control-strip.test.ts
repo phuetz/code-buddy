@@ -164,6 +164,13 @@ describe('MissionControlStrip', () => {
         {
           actions: [
             {
+              enabled: true,
+              id: 'pair',
+              label: 'Pair',
+              targetId: 'discovered-tailscale-100-64-0-10',
+              targetKind: 'fleet-peer',
+            },
+            {
               enabled: false,
               id: 'refresh',
               label: 'Refresh',

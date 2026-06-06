@@ -222,6 +222,8 @@ describe('FleetCommandCenter saga board', () => {
     expect(source).toContain('missionSnapshotDiscoveredPeers');
     expect(source).toContain('agent.discoverySource ??');
     expect(source).toContain('setFleetDiscoveredPeers(missionSnapshotDiscoveredPeers(snapshot))');
+    expect(source).toContain("action.id === 'pair'");
+    expect(source).toContain('setShowFleetPanel(true)');
     expect(source).toContain('LessonCandidateReviewStrip');
     expect(source).toContain('fleet-lesson-candidate-review');
     expect(source).toContain('lesson-candidate-open-review');

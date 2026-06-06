@@ -15,6 +15,7 @@ export type MissionControlProofStatus = 'proven' | 'incomplete' | 'failed' | 'un
 export type MissionControlActionId =
   | 'audit'
   | 'merge'
+  | 'pair'
   | 'reconnect'
   | 'refresh'
   | 'resume'
@@ -263,6 +264,7 @@ function buildDiscoveredAgent(peer: MissionControlDiscoveredPeer, now: Date): Mi
   const sourceLabel = peer.source === 'tailscale' ? 'Tailscale' : 'manual config';
   return {
     actions: [
+      actionIntent('pair', 'Pair', discoveredAgentId(peer), 'fleet-peer'),
       actionIntent('refresh', 'Refresh', discoveredAgentId(peer), 'fleet-peer', {
         enabled: false,
         reason: 'Pair this discovered peer from the Fleet panel before refreshing capabilities',

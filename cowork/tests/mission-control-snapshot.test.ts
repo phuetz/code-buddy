@@ -157,6 +157,12 @@ describe('buildMissionControlSnapshot', () => {
     });
     expect(discoveredAgent?.actions).toContainEqual(
       expect.objectContaining({
+        enabled: true,
+        id: 'pair',
+      }),
+    );
+    expect(discoveredAgent?.actions).toContainEqual(
+      expect.objectContaining({
         enabled: false,
         id: 'refresh',
       }),
