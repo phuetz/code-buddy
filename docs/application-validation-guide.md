@@ -398,6 +398,8 @@ cd cowork && npm test -- tests/hermes-openclaw-bridge.test.ts
 cd cowork && npm test -- tests/hermes-surfaces-ipc.test.ts
 cd cowork && npm test -- tests/companion-gateway-fleet-launch.test.ts
 cd cowork && npm run typecheck
+cd cowork && npm run build:e2e
+cd cowork && npx playwright test e2e/companion-openclaw-bridge.spec.ts --reporter=list
 npm run typecheck
 ```
 
@@ -424,8 +426,14 @@ stdout.
 
 Observed result: `12` companion gateway tests, `12` OpenClaw bridge tests, `13`
 Hermes/OpenClaw CLI migration tests, and `64` focused Cowork OpenClaw/gateway
-surface tests
-passed, including local inbox creation, urgent message priority,
+surface tests passed, plus the targeted Cowork Playwright OpenClaw bridge proof
+passed and wrote:
+
+```text
+docs/qa/code-buddy-studio/screenshots/111-companion-openclaw-bridge.png
+```
+
+These proofs cover local inbox creation, urgent message priority,
 disabled-channel audit, token redaction, no auto-dispatch, confirmed admin
 execution logging, dry-run OpenClaw compatibility handoffs, and guarded
 OpenClaw daemon attach/response send plus CLI dry-run access. The new draft
@@ -447,3 +455,7 @@ bridge test passed for core-loader integration, secret-safe status, dry-run
 attach/send previews, Fleet handoff drafts, and live attach/send refusal unless
 the UI supplies `approvedBy` plus `liveAttachConfirmed=true` or
 `liveSendConfirmed=true`.
+The Playwright screenshot proof opens the real Companion panel with synthetic
+IPC data, verifies `OpenClaw bridge`, `detected`, local gateway endpoint,
+token-present status and all five bridge actions, then crops only that section
+so no account, home path, repository path, prompt text or token is published.

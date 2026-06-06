@@ -83,6 +83,15 @@ action in the Executions tab.
 
 Reproduction and privacy rules: [Autonomous Coding And Cowork Progress](autonomous-coding-cowork-progress.md).
 
+### Bridge OpenClaw Safely
+
+The Companion panel includes an `OpenClaw bridge` section for optional
+external-channel interoperability. It shows secret-safe discovery status,
+dry-run preview actions, handoff draft creation, and separately confirmed live
+attach/send buttons.
+
+![Cowork OpenClaw bridge proof](qa/code-buddy-studio/screenshots/111-companion-openclaw-bridge.png)
+
 ### Check Hermes From Cowork
 
 Hermes rows in the test runner rebuild the CLI, run real local smoke checks,
@@ -260,6 +269,11 @@ Before committing or publishing a screenshot:
 This page deliberately embeds only screenshots that have passed a manual public
 review. Fresh screenshots from a private workstation should stay as QA evidence
 until they pass the same manual privacy review.
+
+Current reviewed OpenClaw bridge screenshot:
+`docs/qa/code-buddy-studio/screenshots/111-companion-openclaw-bridge.png`.
+It is a cropped Playwright fixture capture with a synthetic workspace, local
+loopback endpoint, and no gateway token value.
 
 ## Useful Entry Points
 

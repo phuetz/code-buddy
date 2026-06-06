@@ -1177,6 +1177,19 @@ approbateur, ouvrent une confirmation native, puis passent par les handlers
 statut/artifact retourné, mais ne persiste pas le texte complet saisi dans les
 prompts ni les tokens du gateway.
 
+Preuve GUI publique-safe :
+
+```bash
+cd cowork
+npm run build:e2e
+npx playwright test e2e/companion-openclaw-bridge.spec.ts --reporter=list
+```
+
+Ce test ouvre le vrai Companion panel avec des données IPC synthétiques, vérifie
+le statut `detected`, l'endpoint loopback, le statut token `present` et les cinq
+boutons du bridge, puis écrit la capture cropée
+`docs/qa/code-buddy-studio/screenshots/111-companion-openclaw-bridge.png`.
+
 ### Trois scénarios concrets
 
 **1. Tout local, sans OpenClaw** (état au 2026-05-09)
