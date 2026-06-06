@@ -145,12 +145,24 @@ describe('Learning Agent on real RunStore trajectories', () => {
     expect(candidateMarkdown).toContain('metadata:\n  hermes:');
     expect(candidateMarkdown).toContain('Status: not eligible yet');
     expect(candidateMarkdown).toContain('Proof-backed successful runs: 1/2.');
+    expect(candidateMarkdown).toContain('Proof command');
+    expect(candidateMarkdown).toContain('npm test -- tests/agent/learning-agent-real.test.ts --run');
+    expect(candidateMarkdown).toContain('Proof commands: 1');
     expect(candidateMarkdown).toContain('## Quick Reference');
     expect(JSON.parse(fs.readFileSync(reviewPath, 'utf8'))).toMatchObject({
       approvalRequired: true,
       eligible: false,
       evidenceRunIds: [runId],
       proofBackedSuccessCount: 1,
+      proofCommands: [
+        expect.objectContaining({
+          command: 'npm test -- tests/agent/learning-agent-real.test.ts --run',
+          isTest: true,
+          runId,
+          success: true,
+          toolName: 'bash',
+        }),
+      ],
       proofStatus: 'proven',
       skillName: 'learned-search-view-file-bash',
       sourceRunId: runId,
@@ -169,6 +181,13 @@ describe('Learning Agent on real RunStore trajectories', () => {
         evidenceRunIds: [runId],
         observationCount: 1,
         proofBackedSuccessCount: 1,
+        proofCommands: [
+          expect.objectContaining({
+            command: 'npm test -- tests/agent/learning-agent-real.test.ts --run',
+            runId,
+            success: true,
+          }),
+        ],
         status: 'observed',
       }),
     ]);
@@ -216,7 +235,8 @@ describe('Learning Agent on real RunStore trajectories', () => {
     });
 
     const reviewPath = path.join(tempDir, '.codebuddy', 'skill-candidates', 'learning', 'learned-search-view-file-bash', 'candidate-review.json');
-    expect(JSON.parse(fs.readFileSync(reviewPath, 'utf8'))).toMatchObject({
+    const promotedReview = JSON.parse(fs.readFileSync(reviewPath, 'utf8'));
+    expect(promotedReview).toMatchObject({
       eligible: true,
       evidenceRunIds: [firstRunId, secondRunId],
       proofBackedSuccessCount: 2,
@@ -225,6 +245,10 @@ describe('Learning Agent on real RunStore trajectories', () => {
       status: 'awaiting_human_approval',
       successfulRunCount: 2,
     });
+    expect(promotedReview.proofCommands).toEqual([
+      expect.objectContaining({ runId: firstRunId, command: 'npm test -- tests/agent/learning-agent-real.test.ts --run' }),
+      expect.objectContaining({ runId: secondRunId, command: 'npm test -- tests/agent/learning-agent-real.test.ts --run' }),
+    ]);
   });
 
   it('auto-runs after endRun when enabled and the run is complex', async () => {

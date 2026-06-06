@@ -99,6 +99,16 @@ type PatternStatus = 'observed' | 'reinforced' | 'deprecated';
 type LearningSkillRecommendation = 'observe' | 'reinforce' | 'improve' | 'deprecate';
 type LearningSkillProofStatus = 'proven' | 'incomplete' | 'failed' | 'missing';
 
+export interface LearningSkillProofCommand {
+  command?: string;
+  durationMs?: number;
+  isTest: boolean;
+  runId: string;
+  sequence: number;
+  success?: boolean;
+  toolName: string;
+}
+
 export interface LearningToolStat {
   averageDurationMs?: number;
   failureCount: number;
@@ -133,6 +143,7 @@ export interface LearningSkillCandidate {
   eligible: boolean;
   promotionThreshold: number;
   proofBackedSuccessCount: number;
+  proofCommands: LearningSkillProofCommand[];
   proofStatus: LearningSkillProofStatus;
   reason: string;
   reviewManifestPath?: string;
@@ -181,6 +192,7 @@ export interface LearningPatternRecord {
   lastProofStatus?: LearningSkillProofStatus;
   observationCount: number;
   proofBackedSuccessCount?: number;
+  proofCommands?: LearningSkillProofCommand[];
   status: PatternStatus;
   successCount: number;
   toolSequence: string[];
@@ -284,6 +296,7 @@ interface LearningSkillCandidateReviewManifest {
   generatedAt: string;
   promotionThreshold: number;
   proofBackedSuccessCount: number;
+  proofCommands: LearningSkillProofCommand[];
   proofStatus: LearningSkillProofStatus;
   schemaVersion: typeof LEARNING_SKILL_CANDIDATE_REVIEW_SCHEMA_VERSION;
   skillName: string;
@@ -291,6 +304,11 @@ interface LearningSkillCandidateReviewManifest {
   status: 'awaiting_human_approval' | 'not_eligible';
   successfulRunCount: number;
   toolSequence: string[];
+}
+
+interface LearningRunProofEvidence {
+  commands: LearningSkillProofCommand[];
+  status: LearningSkillProofStatus;
 }
 
 const LEARNING_DIR = path.join('.codebuddy', 'learning');
@@ -365,8 +383,8 @@ export async function runLearningRetrospective(
   const proposeLessons = options.proposeLessonCandidates !== false;
   const materializeSkills = options.materializeSkillCandidates !== false;
 
-  const proofStatus = readLearningRunProofStatus(store, runId);
-  const patternLibrary = updateLearningPatternLibrary(retrospective, workDir, proofStatus);
+  const proofEvidence = readLearningRunProofEvidence(store, runId);
+  const patternLibrary = updateLearningPatternLibrary(retrospective, workDir, proofEvidence);
   retrospective.skillCandidates = applyLearningSkillPromotionEvidence(retrospective.skillCandidates, patternLibrary);
   const skillUsageCount = recordSelectedSkillUsage(store, runId, workDir, retrospective);
   const patternLibraryPath = path.join(workDir, LEARNING_DIR, 'pattern-library.json');
@@ -851,6 +869,7 @@ function buildSkillCandidates(
       evidenceRunIds: [],
       promotionThreshold: LEARNING_SKILL_PROMOTION_THRESHOLD,
       proofBackedSuccessCount: 0,
+      proofCommands: [],
       proofStatus: 'missing',
       reason: `Observed in ${exported.run.runId}: ${pattern.detail}. Awaiting repeated proof-backed runs.`,
       reviewManifestPath,
@@ -866,11 +885,13 @@ function buildSkillCandidates(
 function updateLearningPatternLibrary(
   retrospective: LearningRetrospective,
   workDir: string,
-  proofStatus: LearningSkillProofStatus,
+  proofEvidence: LearningRunProofEvidence,
 ): LearningPatternLibrary {
   const filePath = path.join(workDir, LEARNING_DIR, 'pattern-library.json');
   const library = readPatternLibrary(filePath);
   const now = new Date().toISOString();
+  const proofStatus = proofEvidence.status;
+  const proofCommands = proofEvidence.commands;
 
   for (const candidate of retrospective.skillCandidates) {
     const key = patternKey(candidate.toolSequence);
@@ -878,9 +899,13 @@ function updateLearningPatternLibrary(
     const isProofBackedSuccess = retrospective.run.status === 'completed' && proofStatus === 'proven';
     if (existing) {
       const evidenceRunIds = Array.isArray(existing.evidenceRunIds) ? existing.evidenceRunIds : [];
+      const existingProofCommands = Array.isArray(existing.proofCommands) ? existing.proofCommands : [];
       if (isProofBackedSuccess && !evidenceRunIds.includes(retrospective.run.runId)) {
         evidenceRunIds.push(retrospective.run.runId);
         existing.proofBackedSuccessCount = (existing.proofBackedSuccessCount ?? 0) + 1;
+        existing.proofCommands = mergeLearningProofCommands(existingProofCommands, proofCommands);
+      } else {
+        existing.proofCommands = existingProofCommands.slice(-20);
       }
       existing.evidenceRunIds = evidenceRunIds.slice(-10);
       existing.observationCount += 1;
@@ -905,6 +930,7 @@ function updateLearningPatternLibrary(
         lastProofStatus: proofStatus,
         observationCount: 1,
         proofBackedSuccessCount: isProofBackedSuccess ? 1 : 0,
+        proofCommands: isProofBackedSuccess ? proofCommands.slice(-20) : [],
         status: 'observed',
         successCount: retrospective.run.status === 'completed' ? 1 : 0,
         toolSequence: candidate.toolSequence,
@@ -929,6 +955,7 @@ function applyLearningSkillPromotionEvidence(
     const proofBackedSuccessCount = record?.proofBackedSuccessCount ?? 0;
     const promotionThreshold = candidate.promotionThreshold || LEARNING_SKILL_PROMOTION_THRESHOLD;
     const evidenceRunIds = Array.isArray(record?.evidenceRunIds) ? record.evidenceRunIds : [];
+    const proofCommands = Array.isArray(record?.proofCommands) ? record.proofCommands : candidate.proofCommands;
     const proofStatus = record?.lastProofStatus ?? candidate.proofStatus ?? 'missing';
     const eligible = proofBackedSuccessCount >= promotionThreshold;
     const proofSummary = `${proofBackedSuccessCount}/${promotionThreshold} proof-backed successful run(s)`;
@@ -938,6 +965,7 @@ function applyLearningSkillPromotionEvidence(
       evidenceRunIds,
       promotionThreshold,
       proofBackedSuccessCount,
+      proofCommands,
       proofStatus,
       reason: eligible
         ? `${proofSummary} met the Learning Agent promotion threshold.`
@@ -977,6 +1005,7 @@ function materializeLearningSkillCandidates(
         generatedAt: retrospective.generatedAt,
         promotionThreshold: candidate.promotionThreshold,
         proofBackedSuccessCount: candidate.proofBackedSuccessCount,
+        proofCommands: candidate.proofCommands,
         proofStatus: candidate.proofStatus,
         schemaVersion: LEARNING_SKILL_CANDIDATE_REVIEW_SCHEMA_VERSION,
         skillName: candidate.skillName,
@@ -1053,18 +1082,80 @@ function recordSelectedSkillUsage(
   return selectedSkills.size;
 }
 
-function readLearningRunProofStatus(store: RunStore, runId: string): LearningSkillProofStatus {
+function readLearningRunProofEvidence(store: RunStore, runId: string): LearningRunProofEvidence {
   const raw = store.getArtifact(runId, PROOF_LEDGER_ARTIFACT);
-  if (!raw) return 'missing';
+  if (!raw) return { commands: [], status: 'missing' };
   try {
-    const parsed = JSON.parse(raw) as { status?: unknown };
-    if (parsed.status === 'proven' || parsed.status === 'incomplete' || parsed.status === 'failed') {
-      return parsed.status;
-    }
+    const parsed = JSON.parse(raw) as {
+      commands?: unknown;
+      status?: unknown;
+      tests?: { commands?: unknown };
+    };
+    const status = normalizeLearningProofStatus(parsed.status);
+    const testCommands = normalizeLearningProofCommands(parsed.tests?.commands, runId);
+    const commands = testCommands.length > 0
+      ? testCommands
+      : normalizeLearningProofCommands(parsed.commands, runId);
+    return { commands, status };
   } catch {
-    return 'missing';
+    return { commands: [], status: 'missing' };
+  }
+}
+
+function normalizeLearningProofStatus(status: unknown): LearningSkillProofStatus {
+  if (status === 'proven' || status === 'incomplete' || status === 'failed') {
+    return status;
   }
   return 'missing';
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function normalizeLearningProofCommands(commands: unknown, runId: string): LearningSkillProofCommand[] {
+  if (!Array.isArray(commands)) return [];
+  return commands
+    .map((command): LearningSkillProofCommand | null => {
+      if (!isRecord(command)) return null;
+      const sequence = typeof command.sequence === 'number' && Number.isFinite(command.sequence)
+        ? command.sequence
+        : undefined;
+      const toolName = typeof command.toolName === 'string' && command.toolName.trim()
+        ? command.toolName.trim()
+        : undefined;
+      if (sequence === undefined || !toolName) return null;
+      return {
+        command: typeof command.command === 'string' && command.command.trim()
+          ? command.command.trim()
+          : undefined,
+        durationMs: typeof command.durationMs === 'number' && Number.isFinite(command.durationMs)
+          ? command.durationMs
+          : undefined,
+        isTest: command.isTest === true,
+        runId,
+        sequence,
+        success: typeof command.success === 'boolean' ? command.success : undefined,
+        toolName,
+      };
+    })
+    .filter((command): command is LearningSkillProofCommand => command !== null)
+    .slice(-10);
+}
+
+function mergeLearningProofCommands(
+  existing: LearningSkillProofCommand[],
+  next: LearningSkillProofCommand[],
+): LearningSkillProofCommand[] {
+  const seen = new Set<string>();
+  const merged: LearningSkillProofCommand[] = [];
+  for (const command of [...existing, ...next]) {
+    const key = `${command.runId}|${command.sequence}|${command.toolName}|${command.command ?? ''}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    merged.push(command);
+  }
+  return merged.slice(-20);
 }
 
 function renderLearningSkillCandidateMarkdown(
@@ -1108,6 +1199,9 @@ function renderLearningSkillCandidateMarkdown(
     ...(candidate.evidenceRunIds.length > 0
       ? candidate.evidenceRunIds.map((runId) => `- Evidence run: ${runId}.`)
       : ['- Evidence run: none yet.']),
+    ...(candidate.proofCommands.length > 0
+      ? candidate.proofCommands.map((command) => `- ${formatLearningProofCommand(command)}`)
+      : ['- Proof command: none yet.']),
     '',
     '## Procedure',
     ...candidate.toolSequence.map((toolName, index) => `${index + 1}. Use \`${toolName}\` for the corresponding verified step from the trajectory; keep the same evidence boundary and real-path behavior.`),
@@ -1125,8 +1219,20 @@ function renderLearningSkillCandidateMarkdown(
     '',
     '## Quick Reference',
     `buddy tools skill-candidate inspect ${candidate.skillPath.replace(/\/SKILL\.md$/i, '')}`,
+    `Proof commands: ${candidate.proofCommands.length}`,
     '',
   ].join('\n');
+}
+
+function formatLearningProofCommand(command: LearningSkillProofCommand): string {
+  const result = command.success === undefined ? 'unknown' : command.success ? 'passed' : 'failed';
+  const duration = command.durationMs === undefined ? '' : ` in ${command.durationMs}ms`;
+  const commandText = escapeInlineMarkdownCode(command.command ?? command.toolName);
+  return `Proof command ${command.runId} #${command.sequence} ${result}${duration}: \`${commandText}\`.`;
+}
+
+function escapeInlineMarkdownCode(value: string): string {
+  return value.replace(/\s+/g, ' ').trim().replace(/`/g, '\\`');
 }
 
 function buildHermesTags(candidate: LearningSkillCandidate): string[] {
