@@ -185,10 +185,32 @@ describe('AuditLogViewer run recall', () => {
           redactionCount: 0,
         },
         tests: {
+          commands: [
+            {
+              command: 'npm test -- tests/observability/proof-ledger.test.ts --run',
+              durationMs: 812,
+              isTest: true,
+              sequence: 2,
+              success: true,
+              toolName: 'shell_exec',
+              ts: 1_779_132_000_100,
+            },
+          ],
           failed: 0,
           passed: 1,
           total: 1,
         },
+        commands: [
+          {
+            command: 'npm test -- tests/observability/proof-ledger.test.ts --run',
+            durationMs: 812,
+            isTest: true,
+            sequence: 2,
+            success: true,
+            toolName: 'shell_exec',
+            ts: 1_779_132_000_100,
+          },
+        ],
         artifacts: [{ kind: 'summary', name: 'summary.md' }],
         filesChanged: ['src/observability/proof-ledger.ts'],
         risks: [],
@@ -266,7 +288,12 @@ describe('AuditLogViewer run recall', () => {
     expect(target.textContent).toContain('Proof ledger');
     expect(target.textContent).toContain('proven');
     expect(target.textContent).toContain('Tests: 1 / 1');
+    expect(target.textContent).toContain('Command timeline');
+    expect(target.textContent).toContain('passed');
+    expect(target.textContent).toContain('shell_exec');
+    expect(target.textContent).toContain('npm test -- tests/observability/proof-ledger.test.ts --run');
     expect(target.textContent).toContain('src/observability/proof-ledger.ts');
+    expect(target.querySelectorAll('[data-testid="audit-proof-command-row"]')).toHaveLength(1);
 
     const copyButton = Array.from(target.querySelectorAll('button')).find((button) =>
       button.textContent?.includes('Copy trajectory')

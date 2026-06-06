@@ -49,12 +49,24 @@ export interface AuditRunEvent {
   data: Record<string, unknown>;
 }
 
+export interface AuditProofLedgerCommand {
+  command?: string;
+  durationMs?: number;
+  error?: unknown;
+  isTest: boolean;
+  sequence: number;
+  success?: boolean;
+  toolName: string;
+  ts: number;
+}
+
 export interface AuditProofLedgerEntry {
   schemaVersion: 1;
   generatedAt: string;
   kind: 'proof_ledger_entry';
   status: 'proven' | 'incomplete' | 'failed';
   summary: string;
+  commands?: AuditProofLedgerCommand[];
   run: {
     artifactCount: number;
     eventCount: number;
@@ -70,6 +82,7 @@ export interface AuditProofLedgerEntry {
     redactionCount: number;
   };
   tests: {
+    commands?: AuditProofLedgerCommand[];
     failed: number;
     passed: number;
     total: number;

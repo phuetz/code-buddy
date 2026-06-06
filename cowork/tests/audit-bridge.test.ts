@@ -93,10 +93,32 @@ describe('audit bridge run search', () => {
         redactionCount: 0,
       },
       tests: {
+        commands: [
+          {
+            command: 'npm test -- tests/observability/proof-ledger.test.ts --run',
+            durationMs: 450,
+            isTest: true,
+            sequence: 2,
+            success: true,
+            toolName: 'shell_exec',
+            ts: 1_779_129_500_100,
+          },
+        ],
         failed: 0,
         passed: 1,
         total: 1,
       },
+      commands: [
+        {
+          command: 'npm test -- tests/observability/proof-ledger.test.ts --run',
+          durationMs: 450,
+          isTest: true,
+          sequence: 2,
+          success: true,
+          toolName: 'shell_exec',
+          ts: 1_779_129_500_100,
+        },
+      ],
       artifacts: [{ kind: 'summary', name: 'summary.md' }],
       filesChanged: ['src/observability/proof-ledger.ts'],
       risks: [],
@@ -160,6 +182,13 @@ describe('audit bridge run search', () => {
         passed: 1,
         total: 1,
       },
+      commands: [
+        {
+          command: 'npm test -- tests/observability/proof-ledger.test.ts --run',
+          success: true,
+          toolName: 'shell_exec',
+        },
+      ],
     });
   });
 

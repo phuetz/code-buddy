@@ -55,18 +55,31 @@ interface AuditRunEvent {
   data: Record<string, unknown>;
 }
 
+interface AuditProofLedgerCommand {
+  command?: string;
+  durationMs?: number;
+  error?: unknown;
+  isTest: boolean;
+  sequence: number;
+  success?: boolean;
+  toolName: string;
+  ts: number;
+}
+
 interface AuditProofLedgerEntry {
   schemaVersion: 1;
   generatedAt: string;
   kind: 'proof_ledger_entry';
   status: 'proven' | 'incomplete' | 'failed';
   summary: string;
+  commands?: AuditProofLedgerCommand[];
   privacy: {
     artifactContentIncluded: false;
     redaction: 'secrets-redacted';
     redactionCount: number;
   };
   tests: {
+    commands?: AuditProofLedgerCommand[];
     failed: number;
     passed: number;
     total: number;
@@ -600,6 +613,28 @@ function proofStatusClass(status: AuditProofLedgerEntry['status']): string {
     default:
       return 'bg-warning/15 text-warning border-warning/30';
   }
+}
+
+function proofCommandStatusClass(success?: boolean): string {
+  if (success === true) return 'bg-success/15 text-success border-success/30';
+  if (success === false) return 'bg-error/15 text-error border-error/30';
+  return 'bg-surface border-border text-text-muted';
+}
+
+function proofCommandStatusLabel(success?: boolean): string {
+  if (success === true) return 'passed';
+  if (success === false) return 'failed';
+  return 'unknown';
+}
+
+function formatProofCommandText(command: AuditProofLedgerCommand): string {
+  return (command.command ?? command.toolName).replace(/\s+/g, ' ').trim();
+}
+
+function getProofCommandTimeline(entry: AuditProofLedgerEntry): AuditProofLedgerCommand[] {
+  const commands = entry.commands ?? [];
+  if (commands.length > 0) return commands;
+  return entry.tests.commands ?? [];
 }
 
 function getEvalReportSubjects(report: AuditEvalReportResponse): string[] {
@@ -2119,6 +2154,52 @@ export function AuditLogViewer() {
                             <div className="mt-1 text-text-secondary">
                               {detail.proofLedger.summary}
                             </div>
+                            {(() => {
+                              const commands = getProofCommandTimeline(detail.proofLedger);
+                              if (commands.length === 0) return null;
+                              return (
+                                <div className="mt-2 border-t border-border-muted pt-2">
+                                  <div className="mb-1 flex items-center justify-between gap-2 text-[10px] font-medium text-text-muted">
+                                    <span>{t('audit.proofCommandTimeline', 'Command timeline')}</span>
+                                    {commands.length > 5 && (
+                                      <span>+{formatAppNumber(commands.length - 5)}</span>
+                                    )}
+                                  </div>
+                                  <div className="space-y-1">
+                                    {commands.slice(0, 5).map((command) => {
+                                      const commandText = formatProofCommandText(command);
+                                      const result = proofCommandStatusLabel(command.success);
+                                      return (
+                                        <div
+                                          key={`${command.sequence}:${command.toolName}:${command.ts}`}
+                                          data-testid="audit-proof-command-row"
+                                          className="grid grid-cols-[68px_minmax(0,1fr)_56px] items-center gap-2 rounded-sm border border-border-muted bg-background/55 px-2 py-1"
+                                        >
+                                          <span
+                                            className={`rounded-full border px-1.5 py-0.5 text-center text-[10px] ${proofCommandStatusClass(command.success)}`}
+                                          >
+                                            {t(`audit.proofCommand.${result}`, result)}
+                                          </span>
+                                          <span className="min-w-0 truncate" title={commandText}>
+                                            <span className="font-mono text-text-muted">#{command.sequence}</span>
+                                            <span className="ml-1.5 font-medium text-text-primary">{command.toolName}</span>
+                                            {command.isTest && (
+                                              <span className="ml-1.5 rounded-full border border-border px-1.5 py-0 text-[10px] text-text-muted">
+                                                {t('audit.proofCommandTest', 'test')}
+                                              </span>
+                                            )}
+                                            <span className="ml-1.5 font-mono text-text-secondary">{commandText}</span>
+                                          </span>
+                                          <span className="text-right font-mono text-[10px] tabular-nums text-text-muted">
+                                            {fmtDuration(command.durationMs)}
+                                          </span>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              );
+                            })()}
                             {(detail.proofLedger.risks.length > 0 || detail.proofLedger.filesChanged.length > 0) && (
                               <div className="mt-2 flex flex-wrap gap-1.5">
                                 {detail.proofLedger.risks.slice(0, 4).map((risk) => (
