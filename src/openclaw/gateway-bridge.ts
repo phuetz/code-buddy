@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile } from 'fs/promises';
+import { appendFile, mkdir, readFile, writeFile } from 'fs/promises';
 import * as os from 'os';
 import * as path from 'path';
 import { randomUUID } from 'crypto';
@@ -146,6 +146,92 @@ export interface OpenClawBridgeOptions {
   createId?: () => string;
 }
 
+export interface OpenClawAttachTransportResponse {
+  ok: boolean;
+  status: number;
+  json?: unknown;
+  text?: string;
+}
+
+export type OpenClawAttachTransport = (
+  url: string,
+  init: {
+    method: 'POST';
+    headers: Record<string, string>;
+    body: string;
+    signal?: AbortSignal;
+  },
+) => Promise<OpenClawAttachTransportResponse>;
+
+export interface OpenClawGatewayAttachInput {
+  approvedBy?: string;
+  liveAttachConfirmed?: boolean;
+  dryRun?: boolean;
+  endpointPath?: string;
+  timeoutMs?: number;
+  descriptor?: OpenClawNodeDescriptor;
+}
+
+export interface OpenClawGatewayAttachOptions extends OpenClawGatewayDiscoveryOptions {
+  createId?: () => string;
+  transport?: OpenClawAttachTransport;
+  attachLogPath?: string;
+}
+
+export interface OpenClawGatewayAttachRecord {
+  id: string;
+  kind: 'openclaw_gateway_attach';
+  schemaVersion: 1;
+  createdAt: string;
+  cwd: string;
+  lockfilePath: string;
+  endpoint?: string;
+  endpointPath: string;
+  dryRun: boolean;
+  approvedBy?: string;
+  liveAttachConfirmed: boolean;
+  status: 'preview' | 'attached' | 'blocked' | 'failed';
+  request: {
+    method: 'POST';
+    nodeId: string;
+    role: 'codebuddy-fleet-bridge';
+    methods: string[];
+  };
+  response?: {
+    status: number;
+    ok: boolean;
+    accepted?: boolean;
+    nodeId?: string;
+    error?: string;
+  };
+  safety: {
+    secretsIncluded: false;
+    tokenPresent: boolean;
+    tokenSent: boolean;
+    rawMessageContentIncluded: false;
+    networkContacted: boolean;
+    requiresLocalApproval: true;
+  };
+}
+
+interface OpenClawGatewayAttachResponseSummary {
+  status: number;
+  ok: boolean;
+  accepted?: boolean;
+  nodeId?: string;
+  error?: string;
+}
+
+export interface OpenClawGatewayAttachResult {
+  kind: 'openclaw_gateway_attach_result';
+  ok: boolean;
+  attachLogPath: string;
+  record: OpenClawGatewayAttachRecord;
+  discovery: OpenClawGatewayDiscovery;
+  descriptor: OpenClawNodeDescriptor;
+  error?: string;
+}
+
 const OPENCLAW_BRIDGE_SCHEMA_VERSION = 1;
 const DEFAULT_OPENCLAW_HOME = path.join(os.homedir(), '.openclaw');
 const EXECUTION_METHODS = [
@@ -174,6 +260,10 @@ function getOpenClawBridgeDraftsDir(cwd: string): string {
   return path.join(cwd, '.codebuddy', 'openclaw', 'bridge');
 }
 
+export function getOpenClawGatewayAttachLogPath(cwd = process.cwd()): string {
+  return path.join(cwd, '.codebuddy', 'openclaw', 'bridge', 'attach-log.jsonl');
+}
+
 function compactRedactedText(text: string, max = 260): string {
   const redacted = text
     .replace(/\s+/g, ' ')
@@ -193,6 +283,87 @@ function normalizeMethods(value: unknown): string[] {
   return [...new Set(value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0))].sort();
 }
 
+async function readOpenClawLockfile(lockfilePath: string): Promise<OpenClawGatewayLockfile | null> {
+  try {
+    return JSON.parse(await readFile(lockfilePath, 'utf8')) as OpenClawGatewayLockfile;
+  } catch {
+    return null;
+  }
+}
+
+function resolveAttachEndpoint(lockfile: OpenClawGatewayLockfile | null, endpointPath: string): string | undefined {
+  const base = typeof lockfile?.rpcUrl === 'string'
+    ? lockfile.rpcUrl
+    : typeof lockfile?.httpUrl === 'string'
+      ? lockfile.httpUrl
+      : typeof lockfile?.endpoint === 'string'
+        ? lockfile.endpoint
+        : undefined;
+  if (!base) return undefined;
+  try {
+    return new URL(endpointPath, base.endsWith('/') ? base : `${base}/`).toString();
+  } catch {
+    return undefined;
+  }
+}
+
+function tokenFromLockfile(lockfile: OpenClawGatewayLockfile | null): string | undefined {
+  if (typeof lockfile?.token === 'string' && lockfile.token.trim()) return lockfile.token.trim();
+  if (typeof lockfile?.apiKey === 'string' && lockfile.apiKey.trim()) return lockfile.apiKey.trim();
+  if (typeof lockfile?.secret === 'string' && lockfile.secret.trim()) return lockfile.secret.trim();
+  return undefined;
+}
+
+async function defaultAttachTransport(
+  url: string,
+  init: {
+    method: 'POST';
+    headers: Record<string, string>;
+    body: string;
+    signal?: AbortSignal;
+  },
+): Promise<OpenClawAttachTransportResponse> {
+  const res = await fetch(url, init);
+  const contentType = res.headers.get('content-type') || '';
+  if (contentType.includes('application/json')) {
+    return {
+      ok: res.ok,
+      status: res.status,
+      json: await res.json() as unknown,
+    };
+  }
+  return {
+    ok: res.ok,
+    status: res.status,
+    text: await res.text(),
+  };
+}
+
+function responseSummary(response: OpenClawAttachTransportResponse): OpenClawGatewayAttachResponseSummary {
+  const body = response.json && typeof response.json === 'object'
+    ? response.json as Record<string, unknown>
+    : {};
+  const accepted = typeof body.accepted === 'boolean' ? body.accepted : undefined;
+  const nodeId = typeof body.nodeId === 'string' ? body.nodeId : undefined;
+  const error = typeof body.error === 'string'
+    ? body.error
+    : response.ok
+      ? undefined
+      : response.text || `OpenClaw attach failed with HTTP ${response.status}`;
+  return {
+    status: response.status,
+    ok: response.ok,
+    ...(accepted !== undefined ? { accepted } : {}),
+    ...(nodeId ? { nodeId } : {}),
+    ...(error ? { error } : {}),
+  };
+}
+
+async function appendAttachRecord(attachLogPath: string, record: OpenClawGatewayAttachRecord): Promise<void> {
+  await mkdir(path.dirname(attachLogPath), { recursive: true });
+  await appendFile(attachLogPath, `${JSON.stringify(record)}\n`, 'utf8');
+}
+
 export async function discoverOpenClawGateway(
   options: OpenClawGatewayDiscoveryOptions = {},
 ): Promise<OpenClawGatewayDiscovery> {
@@ -200,12 +371,7 @@ export async function discoverOpenClawGateway(
   const now = options.now || new Date();
   const home = resolveOpenClawHome(options);
   const lockfilePath = getOpenClawGatewayLockfilePath({ ...options, home });
-  let parsed: OpenClawGatewayLockfile | null = null;
-  try {
-    parsed = JSON.parse(await readFile(lockfilePath, 'utf8')) as OpenClawGatewayLockfile;
-  } catch {
-    parsed = null;
-  }
+  const parsed = await readOpenClawLockfile(lockfilePath);
   const tokenPresent = Boolean(parsed?.token || parsed?.apiKey || parsed?.secret);
   const recommendations: string[] = [];
   if (!parsed) {
@@ -240,6 +406,172 @@ export async function discoverOpenClawGateway(
     },
     recommendations,
   };
+}
+
+export async function attachOpenClawGateway(
+  input: OpenClawGatewayAttachInput = {},
+  options: OpenClawGatewayAttachOptions = {},
+): Promise<OpenClawGatewayAttachResult> {
+  const cwd = resolveCwd(options.cwd);
+  const now = options.now || new Date();
+  const discovery = await discoverOpenClawGateway({ ...options, cwd, now });
+  const lockfile = await readOpenClawLockfile(discovery.lockfilePath);
+  const descriptor = input.descriptor || buildOpenClawNodeDescriptor();
+  const endpointPath = input.endpointPath || 'nodes/register';
+  const endpoint = resolveAttachEndpoint(lockfile, endpointPath);
+  const token = tokenFromLockfile(lockfile);
+  const dryRun = input.dryRun !== false;
+  const liveAttachConfirmed = input.liveAttachConfirmed === true;
+  const attachLogPath = path.resolve(cwd, options.attachLogPath || getOpenClawGatewayAttachLogPath(cwd));
+  const baseRecord: Omit<OpenClawGatewayAttachRecord, 'status' | 'safety' | 'response'> = {
+    id: options.createId?.() || `openclaw_attach_${now.getTime()}`,
+    kind: 'openclaw_gateway_attach',
+    schemaVersion: OPENCLAW_BRIDGE_SCHEMA_VERSION,
+    createdAt: now.toISOString(),
+    cwd,
+    lockfilePath: discovery.lockfilePath,
+    ...(endpoint ? { endpoint } : {}),
+    endpointPath,
+    dryRun,
+    ...(input.approvedBy?.trim() ? { approvedBy: input.approvedBy.trim() } : {}),
+    liveAttachConfirmed,
+    request: {
+      method: 'POST',
+      nodeId: descriptor.nodeId,
+      role: descriptor.role,
+      methods: descriptor.methods,
+    },
+  };
+  const safetyBase = {
+    secretsIncluded: false as const,
+    tokenPresent: Boolean(token),
+    tokenSent: false,
+    rawMessageContentIncluded: false as const,
+    networkContacted: false,
+    requiresLocalApproval: true as const,
+  };
+
+  const blockedReason = !discovery.found
+    ? 'OpenClaw gateway lockfile was not found'
+    : !endpoint
+      ? 'OpenClaw gateway endpoint is missing or invalid'
+      : !dryRun && !input.approvedBy?.trim()
+        ? 'approvedBy is required for live OpenClaw gateway attach'
+        : !dryRun && !liveAttachConfirmed
+          ? 'liveAttachConfirmed is required for live OpenClaw gateway attach'
+          : undefined;
+
+  if (blockedReason) {
+    const record: OpenClawGatewayAttachRecord = {
+      ...baseRecord,
+      status: 'blocked',
+      response: {
+        status: 0,
+        ok: false,
+        error: blockedReason,
+      },
+      safety: safetyBase,
+    };
+    await appendAttachRecord(attachLogPath, record);
+    return {
+      kind: 'openclaw_gateway_attach_result',
+      ok: false,
+      attachLogPath,
+      record,
+      discovery,
+      descriptor,
+      error: blockedReason,
+    };
+  }
+
+  if (dryRun) {
+    const record: OpenClawGatewayAttachRecord = {
+      ...baseRecord,
+      status: 'preview',
+      safety: safetyBase,
+    };
+    await appendAttachRecord(attachLogPath, record);
+    return {
+      kind: 'openclaw_gateway_attach_result',
+      ok: true,
+      attachLogPath,
+      record,
+      discovery,
+      descriptor,
+    };
+  }
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), input.timeoutMs ?? 5_000);
+  try {
+    const transport = options.transport || defaultAttachTransport;
+    const headers: Record<string, string> = {
+      'content-type': 'application/json',
+    };
+    if (token) headers.authorization = `Bearer ${token}`;
+    const response = await transport(endpoint!, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        descriptor,
+        bridge: {
+          implementation: 'codebuddy',
+          schemaVersion: OPENCLAW_BRIDGE_SCHEMA_VERSION,
+          safety: descriptor.safety,
+        },
+      }),
+      signal: controller.signal,
+    });
+    const summarized = responseSummary(response);
+    const record: OpenClawGatewayAttachRecord = {
+      ...baseRecord,
+      status: response.ok ? 'attached' : 'failed',
+      response: summarized,
+      safety: {
+        ...safetyBase,
+        tokenSent: Boolean(token),
+        networkContacted: true,
+      },
+    };
+    await appendAttachRecord(attachLogPath, record);
+    return {
+      kind: 'openclaw_gateway_attach_result',
+      ok: response.ok,
+      attachLogPath,
+      record,
+      discovery,
+      descriptor,
+      ...(summarized.error ? { error: summarized.error } : {}),
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    const record: OpenClawGatewayAttachRecord = {
+      ...baseRecord,
+      status: 'failed',
+      response: {
+        status: 0,
+        ok: false,
+        error: message,
+      },
+      safety: {
+        ...safetyBase,
+        tokenSent: Boolean(token),
+        networkContacted: true,
+      },
+    };
+    await appendAttachRecord(attachLogPath, record);
+    return {
+      kind: 'openclaw_gateway_attach_result',
+      ok: false,
+      attachLogPath,
+      record,
+      discovery,
+      descriptor,
+      error: message,
+    };
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 export function buildOpenClawNodeDescriptor(input: {

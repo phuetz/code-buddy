@@ -1140,10 +1140,12 @@ Le module `src/openclaw/gateway-bridge.ts` pose désormais le contrat
 `openclaw-node` côté Code Buddy. Il sait lire
 `~/.openclaw/gateway.json` sans exposer les tokens, publier un descriptor
 `openclaw_node_descriptor`, transformer un message OpenClaw inbound en
-brouillon Fleet `dispatchProfile=safe` / `privacyTag=sensitive`, et préparer
-une réponse OpenClaw en preview dry-run. Il ne contacte pas encore le daemon et
-n'envoie pas de réponse live : la fleet Code Buddy reste le brain, OpenClaw
-reste l'add-on de canaux externes, et l'opérateur garde l'approbation locale.
+brouillon Fleet `dispatchProfile=safe` / `privacyTag=sensitive`, préparer
+une réponse OpenClaw en preview dry-run, et exécuter une attache live au daemon
+uniquement avec `approvedBy` + `liveAttachConfirmed=true`. L'attache écrit un
+`attach-log.jsonl` redacted et ne provoque toujours aucun envoi de réponse
+externe : la fleet Code Buddy reste le brain, OpenClaw reste l'add-on de canaux
+externes, et l'opérateur garde l'approbation locale.
 
 ### Trois scénarios concrets
 

@@ -2,6 +2,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from 'fs/promises';
 import * as os from 'os';
 import * as path from 'path';
 import {
+  attachOpenClawGateway,
   buildOpenClawNodeDescriptor,
   buildOpenClawResponsePreview,
   discoverOpenClawGateway,
@@ -170,5 +171,138 @@ describe('OpenClaw gateway bridge compatibility', () => {
     expect(mapOpenClawChannelToCodeBuddy('telegram')).toBe('telegram');
     expect(mapOpenClawChannelToCodeBuddy('email')).toBe('gmail');
     expect(mapOpenClawChannelToCodeBuddy('unknown-openclaw-channel')).toBe('webchat');
+  });
+
+  it('previews OpenClaw gateway attach without contacting the daemon', async () => {
+    await mkdir(openclawHome, { recursive: true });
+    await writeFile(path.join(openclawHome, 'gateway.json'), JSON.stringify({
+      nodeId: 'openclaw-node-attach',
+      httpUrl: 'http://127.0.0.1:4150/',
+      token: 'oc_attach_secret_fixture',
+    }, null, 2), 'utf8');
+    let contacted = false;
+
+    const result = await attachOpenClawGateway({
+      dryRun: true,
+    }, {
+      home: openclawHome,
+      cwd: workspace,
+      now: new Date('2026-06-07T12:15:00.000Z'),
+      createId: () => 'attach-preview-1',
+      transport: async () => {
+        contacted = true;
+        return { ok: true, status: 200 };
+      },
+    });
+
+    expect(result.ok).toBe(true);
+    expect(contacted).toBe(false);
+    expect(result.record).toMatchObject({
+      id: 'attach-preview-1',
+      status: 'preview',
+      dryRun: true,
+      endpoint: 'http://127.0.0.1:4150/nodes/register',
+      safety: {
+        tokenPresent: true,
+        tokenSent: false,
+        networkContacted: false,
+        secretsIncluded: false,
+      },
+    });
+    const rawLog = await readFile(result.attachLogPath, 'utf8');
+    expect(rawLog).toContain('attach-preview-1');
+    expect(rawLog).not.toContain('oc_attach_secret_fixture');
+  });
+
+  it('blocks live OpenClaw gateway attach without explicit confirmation', async () => {
+    await mkdir(openclawHome, { recursive: true });
+    await writeFile(path.join(openclawHome, 'gateway.json'), JSON.stringify({
+      httpUrl: 'http://127.0.0.1:4150/',
+    }, null, 2), 'utf8');
+
+    const result = await attachOpenClawGateway({
+      dryRun: false,
+      approvedBy: 'Patrice',
+      liveAttachConfirmed: false,
+    }, {
+      home: openclawHome,
+      cwd: workspace,
+      now: new Date('2026-06-07T12:20:00.000Z'),
+      createId: () => 'attach-blocked-1',
+      transport: async () => {
+        throw new Error('should not contact OpenClaw without confirmation');
+      },
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.record.status).toBe('blocked');
+    expect(result.error).toBe('liveAttachConfirmed is required for live OpenClaw gateway attach');
+  });
+
+  it('attaches to OpenClaw gateway through an injected transport without logging tokens', async () => {
+    await mkdir(openclawHome, { recursive: true });
+    await writeFile(path.join(openclawHome, 'gateway.json'), JSON.stringify({
+      rpcUrl: 'http://127.0.0.1:4150/rpc/',
+      token: 'oc_live_attach_secret_fixture',
+    }, null, 2), 'utf8');
+    const seen: Array<{ url: string; authorization?: string; body: string }> = [];
+
+    const result = await attachOpenClawGateway({
+      dryRun: false,
+      approvedBy: 'Patrice',
+      liveAttachConfirmed: true,
+      descriptor: buildOpenClawNodeDescriptor({ nodeId: 'codebuddy-live-node' }),
+    }, {
+      home: openclawHome,
+      cwd: workspace,
+      now: new Date('2026-06-07T12:25:00.000Z'),
+      createId: () => 'attach-live-1',
+      transport: async (url, init) => {
+        seen.push({
+          url,
+          authorization: init.headers.authorization,
+          body: init.body,
+        });
+        return {
+          ok: true,
+          status: 200,
+          json: {
+            accepted: true,
+            nodeId: 'codebuddy-live-node',
+            tokenEcho: 'oc_live_attach_secret_fixture',
+          },
+        };
+      },
+    });
+
+    expect(result.ok).toBe(true);
+    expect(seen).toHaveLength(1);
+    expect(seen[0]).toMatchObject({
+      url: 'http://127.0.0.1:4150/rpc/nodes/register',
+      authorization: 'Bearer oc_live_attach_secret_fixture',
+    });
+    expect(seen[0]?.body).toContain('codebuddy-live-node');
+    expect(result.record).toMatchObject({
+      id: 'attach-live-1',
+      status: 'attached',
+      approvedBy: 'Patrice',
+      liveAttachConfirmed: true,
+      safety: {
+        tokenPresent: true,
+        tokenSent: true,
+        networkContacted: true,
+        secretsIncluded: false,
+      },
+      response: {
+        status: 200,
+        ok: true,
+        accepted: true,
+        nodeId: 'codebuddy-live-node',
+      },
+    });
+    expect(JSON.stringify(result)).not.toContain('oc_live_attach_secret_fixture');
+    const rawLog = await readFile(result.attachLogPath, 'utf8');
+    expect(rawLog).toContain('attach-live-1');
+    expect(rawLog).not.toContain('oc_live_attach_secret_fixture');
   });
 });

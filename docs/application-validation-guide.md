@@ -390,11 +390,16 @@ secret-safe, the Code Buddy `openclaw-node` descriptor advertises only local
 approval-based capabilities, inbound OpenClaw messages become
 `dispatchProfile=safe` / `privacyTag=sensitive` Fleet handoff drafts, and
 outbound replies remain dry-run previews until an operator approves a real send.
+It also validates guarded daemon attach behavior: dry-run attach does not call
+the transport, live attach is blocked without `liveAttachConfirmed=true`, and a
+confirmed attach can send the bearer token to the transport while keeping the
+result and `attach-log.jsonl` redacted.
 
-Observed result: `12` companion gateway tests and `5` OpenClaw bridge tests
+Observed result: `12` companion gateway tests and `8` OpenClaw bridge tests
 passed, including local inbox creation, urgent message priority,
 disabled-channel audit, token redaction, no auto-dispatch, confirmed admin
-execution logging, and dry-run OpenClaw compatibility handoffs. The new draft
+execution logging, dry-run OpenClaw compatibility handoffs, and guarded
+OpenClaw daemon attach. The new draft
 proof verifies a `buddy autonomous-code
 --require-approval` task file, `drafted` inbox transition, and safe/sensitive
 Fleet handoff JSON without dispatch. The outbound reply proof verifies reviewer
