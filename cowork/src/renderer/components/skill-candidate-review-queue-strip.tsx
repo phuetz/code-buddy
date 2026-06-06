@@ -27,6 +27,20 @@ export interface SkillCandidateReviewQueueItem {
   installedIntegrityOk?: boolean;
   installedPath?: string;
   installedVersion?: string;
+  firewall?: {
+    capabilities: string[];
+    findingCounts: {
+      critical: number;
+      high: number;
+      info: number;
+      low: number;
+      medium: number;
+    };
+    quarantineRequired: boolean;
+    score: number;
+    summary: string;
+    verdict: 'allow' | 'review' | 'quarantine';
+  };
   kind?: string;
   reason: string;
   reviewCommands?: string[];
@@ -306,6 +320,9 @@ export const SkillCandidateReviewQueueStrip: React.FC<{
                   {candidate.installedIntegrityOk === false ? ' · integrity warning' : ''}
                 </div>
               ) : null}
+              {candidate.firewall ? (
+                <SkillCandidateFirewallPanel candidate={candidate} />
+              ) : null}
               {candidate.toolSequence?.length ? (
                 <div className="mt-0.5 truncate text-[9px] text-text-muted">
                   {t('fleet.skillCandidate.toolSequence', 'Tools')}: {candidate.toolSequence.join(' -> ')}
@@ -351,7 +368,11 @@ export const SkillCandidateReviewQueueStrip: React.FC<{
                   <button
                     className="flex items-center gap-1 rounded border border-accent/50 px-2 py-1 text-[10px] text-accent transition-colors hover:bg-accent/10 disabled:cursor-not-allowed disabled:opacity-50"
                     data-testid={`skill-candidate-install-${candidate.skillName}`}
-                    disabled={!reviewerName.trim() || installingSkillName !== null}
+                    disabled={
+                      !reviewerName.trim() ||
+                      installingSkillName !== null ||
+                      candidate.firewall?.quarantineRequired === true
+                    }
                     onClick={() => void handleInstallCandidate(candidate)}
                     type="button"
                   >
@@ -465,6 +486,44 @@ const SkillCandidateSideBySideDiff: React.FC<{
           </React.Fragment>
         ))}
       </div>
+    </div>
+  );
+};
+
+const SkillCandidateFirewallPanel: React.FC<{
+  candidate: SkillCandidateReviewQueueItem;
+}> = ({ candidate }) => {
+  const { t } = useTranslation();
+  const firewall = candidate.firewall;
+  if (!firewall) return null;
+  const toneClass = firewall.verdict === 'quarantine'
+    ? 'border-error/30 bg-error/10 text-error'
+    : firewall.verdict === 'review'
+      ? 'border-warning/30 bg-warning/10 text-warning'
+      : 'border-success/30 bg-success/10 text-success';
+
+  return (
+    <div
+      className={`mt-1 rounded border px-2 py-1 text-[9px] ${toneClass}`}
+      data-testid={`skill-candidate-firewall-${candidate.skillName}`}
+      title={firewall.summary}
+    >
+      <div className="flex min-w-0 items-center justify-between gap-2">
+        <span className="truncate">
+          {t('fleet.skillCandidate.firewallVerdict', 'Firewall')}: {firewall.verdict}
+        </span>
+        <span className="shrink-0 font-mono tabular-nums">{firewall.score}/100</span>
+      </div>
+      <div className="mt-0.5 truncate text-current/80">
+        {firewall.capabilities.length
+          ? firewall.capabilities.join(', ')
+          : t('fleet.skillCandidate.noCapabilities', 'no risky capability detected')}
+      </div>
+      {firewall.quarantineRequired ? (
+        <div className="mt-0.5 truncate font-medium">
+          {t('fleet.skillCandidate.quarantineRequired', 'Quarantine required before install')}
+        </div>
+      ) : null}
     </div>
   );
 };

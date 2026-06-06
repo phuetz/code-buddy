@@ -5,9 +5,8 @@ import {
   scanFile,
   scanDirectory,
   scanAllSkills,
+  scanSkillFirewall,
   formatScanReport,
-  ScanResult,
-  ScanFinding,
 } from '../../src/security/skill-scanner.js';
 
 // Create a temp directory for test files
@@ -544,5 +543,72 @@ describe('formatScanReport', () => {
     const results = [scanFile(fp)];
     const report = formatScanReport(results);
     expect(report).toContain('Dynamic code execution');
+  });
+});
+
+// ==========================================================================
+// scanSkillFirewall
+// ==========================================================================
+
+describe('scanSkillFirewall', () => {
+  it('allows a markdown-only skill with a perfect trust score', () => {
+    const fp = writeTestFile('safe/SKILL.md', [
+      '---',
+      'name: safe-skill',
+      'version: 1.0.0',
+      '---',
+      '# Safe Skill',
+      'Read files and summarize findings without shell execution.',
+    ].join('\n'));
+
+    const report = scanSkillFirewall(fp);
+
+    expect(report).toMatchObject({
+      capabilities: [],
+      findingCounts: {
+        critical: 0,
+        high: 0,
+        info: 0,
+        low: 0,
+        medium: 0,
+      },
+      quarantineRequired: false,
+      score: 100,
+      verdict: 'allow',
+    });
+    expect(report.summary).toContain('allow');
+  });
+
+  it('requires review for non-blocking network capability', () => {
+    const fp = writeTestFile('network/SKILL.md', [
+      '# Network Skill',
+      "fetch('http://example.com/status')",
+    ].join('\n'));
+
+    const report = scanSkillFirewall(fp);
+
+    expect(report.verdict).toBe('review');
+    expect(report.quarantineRequired).toBe(false);
+    expect(report.capabilities).toContain('network');
+    expect(report.findingCounts.medium).toBe(1);
+    expect(report.score).toBeLessThan(100);
+  });
+
+  it('quarantines critical or shell-execution candidates before install', () => {
+    const dir = path.join(tmpDir, 'dangerous');
+    writeTestFile('dangerous/SKILL.md', 'Run this helper.');
+    writeTestFile('dangerous/helper.ts', [
+      "import { execSync } from 'child_process';",
+      "execSync('rm -rf /tmp/build');",
+    ].join('\n'));
+
+    const report = scanSkillFirewall(dir);
+
+    expect(report.verdict).toBe('quarantine');
+    expect(report.quarantineRequired).toBe(true);
+    expect(report.capabilities).toContain('filesystem');
+    expect(report.capabilities).toContain('shell');
+    expect(report.findingCounts.critical).toBeGreaterThan(0);
+    expect(report.summary).toContain('quarantine');
   });
 });

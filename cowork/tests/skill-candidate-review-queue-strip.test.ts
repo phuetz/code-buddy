@@ -65,6 +65,20 @@ describe('SkillCandidateReviewQueueStrip', () => {
               installState: 'installed-different',
               installedIntegrityOk: true,
               installedVersion: '0.1.0',
+              firewall: {
+                capabilities: ['network'],
+                findingCounts: {
+                  critical: 0,
+                  high: 0,
+                  info: 0,
+                  low: 0,
+                  medium: 1,
+                },
+                quarantineRequired: false,
+                score: 90,
+                summary: 'Skill Firewall review: score 90/100; 1 medium; capabilities: network.',
+                verdict: 'review',
+              },
               kind: 'learning',
               reason: '2 successful runs met the promotion threshold.',
               reviewCommands: [
@@ -95,6 +109,9 @@ describe('SkillCandidateReviewQueueStrip', () => {
     expect(strip?.textContent).toContain('Learning Agent');
     expect(strip?.textContent).toContain('installed differs');
     expect(strip?.textContent).toContain('Installed: v0.1.0');
+    expect(strip?.textContent).toContain('Firewall: review');
+    expect(strip?.textContent).toContain('90/100');
+    expect(strip?.textContent).toContain('network');
     expect(strip?.textContent).toContain('Candidate changes learned-search-view-file-bash/SKILL.md');
     expect(strip?.textContent).toContain('- Old procedure');
     expect(strip?.textContent).toContain('+ New procedure');
@@ -196,6 +213,56 @@ describe('SkillCandidateReviewQueueStrip', () => {
     for (const command of commands.slice(0, 2)) {
       expect(goal).toContain(command);
     }
+  });
+
+  it('shows quarantined candidates and disables install', () => {
+    const target = container();
+    root = createRoot(target);
+
+    act(() => {
+      root?.render(
+        React.createElement(SkillCandidateReviewQueueStrip, {
+          candidates: [
+            {
+              eligible: true,
+              firewall: {
+                capabilities: ['filesystem', 'shell'],
+                findingCounts: {
+                  critical: 1,
+                  high: 1,
+                  info: 0,
+                  low: 0,
+                  medium: 0,
+                },
+                quarantineRequired: true,
+                score: 31,
+                summary: 'Skill Firewall quarantine: score 31/100; 1 critical, 1 high; capabilities: filesystem, shell.',
+                verdict: 'quarantine',
+              },
+              installState: 'not-installed',
+              kind: 'learning',
+              reason: '2 successful runs met the promotion threshold.',
+              skillName: 'danger-skill',
+              skillPath: '.codebuddy/skill-candidates/danger-skill/SKILL.md',
+              sourceJobId: '',
+              sourceRunId: 'run-danger',
+              successfulRunCount: 2,
+            },
+          ],
+        }),
+      );
+    });
+
+    const firewallPanel = target.querySelector('[data-testid="skill-candidate-firewall-danger-skill"]');
+    expect(firewallPanel?.textContent).toContain('Firewall: quarantine');
+    expect(firewallPanel?.textContent).toContain('31/100');
+    expect(firewallPanel?.textContent).toContain('filesystem, shell');
+    expect(firewallPanel?.textContent).toContain('Quarantine required before install');
+
+    const installButton = target.querySelector(
+      '[data-testid="skill-candidate-install-danger-skill"]',
+    ) as HTMLButtonElement;
+    expect(installButton.disabled).toBe(true);
   });
 
   it('parses unified diff previews into side-by-side rows', () => {

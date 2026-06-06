@@ -44,7 +44,18 @@ describe('skill candidate review bridge', () => {
         toolSequence: ['search', 'view_file', 'bash'],
       },
     ]);
-    mockedLoadCoreModule.mockResolvedValue({ listMaterializedResearchScriptSkillCandidates });
+    const scanSkillFirewall = vi.fn(() => ({
+      capabilities: [],
+      findingCounts: { critical: 0, high: 0, info: 0, low: 0, medium: 0 },
+      quarantineRequired: false,
+      score: 100,
+      summary: 'Skill Firewall allow: score 100/100',
+      verdict: 'allow',
+    }));
+    mockedLoadCoreModule.mockImplementation(async (moduleName: string) => {
+      if (moduleName === 'security/skill-scanner.js') return { scanSkillFirewall };
+      return { listMaterializedResearchScriptSkillCandidates };
+    });
 
     const rootDir = path.resolve('workspace');
     const candidates = await listSkillCandidatesForReview({
@@ -54,13 +65,25 @@ describe('skill candidate review bridge', () => {
     });
 
     expect(mockedLoadCoreModule).toHaveBeenCalledWith('agent/research-script-skill-candidate.js');
+    expect(mockedLoadCoreModule).toHaveBeenCalledWith('security/skill-scanner.js');
     expect(listMaterializedResearchScriptSkillCandidates).toHaveBeenCalledWith({
       rootDir,
       skillRoot: '.codebuddy/skill-candidates',
     });
+    expect(scanSkillFirewall).toHaveBeenCalledWith(
+      path.resolve(rootDir, '.codebuddy/skill-candidates/research-ready/SKILL.md'),
+    );
     expect(candidates).toEqual([
       {
         eligible: true,
+        firewall: {
+          capabilities: [],
+          findingCounts: { critical: 0, high: 0, info: 0, low: 0, medium: 0 },
+          quarantineRequired: false,
+          score: 100,
+          summary: 'Skill Firewall allow: score 100/100',
+          verdict: 'allow',
+        },
         id: 'candidate-ready',
         kind: 'learning',
         reason: '2 successful runs met the promotion threshold.',
@@ -105,9 +128,12 @@ describe('skill candidate review bridge', () => {
         title: 'Ready candidate',
       },
     ]);
-    mockedLoadCoreModule.mockResolvedValue({
-      listMaterializedResearchScriptSkillCandidates,
-      listMaterializedResearchScriptSkillCandidatesWithInstallState,
+    mockedLoadCoreModule.mockImplementation(async (moduleName: string) => {
+      if (moduleName === 'security/skill-scanner.js') return null;
+      return {
+        listMaterializedResearchScriptSkillCandidates,
+        listMaterializedResearchScriptSkillCandidatesWithInstallState,
+      };
     });
 
     const rootDir = path.resolve('workspace');
@@ -185,10 +211,21 @@ describe('skill candidate review bridge', () => {
       skillName: 'research-ready',
       sourceCandidatePath: '.codebuddy/skill-candidates/research-ready/SKILL.md',
     }));
-    mockedLoadCoreModule.mockResolvedValue({
-      installResearchScriptSkillCandidate,
-      readMaterializedResearchScriptSkillCandidate,
-      readMaterializedResearchScriptSkillCandidateWithInstallState,
+    const scanSkillFirewall = vi.fn(() => ({
+      capabilities: ['network'],
+      findingCounts: { critical: 0, high: 0, info: 0, low: 0, medium: 1 },
+      quarantineRequired: false,
+      score: 90,
+      summary: 'Skill Firewall review: score 90/100; 1 medium; capabilities: network.',
+      verdict: 'review',
+    }));
+    mockedLoadCoreModule.mockImplementation(async (moduleName: string) => {
+      if (moduleName === 'security/skill-scanner.js') return { scanSkillFirewall };
+      return {
+        installResearchScriptSkillCandidate,
+        readMaterializedResearchScriptSkillCandidate,
+        readMaterializedResearchScriptSkillCandidateWithInstallState,
+      };
     });
 
     const rootDir = path.resolve('workspace');
@@ -211,6 +248,12 @@ describe('skill candidate review bridge', () => {
     });
     expect(result).toMatchObject({
       candidate: {
+        firewall: {
+          capabilities: ['network'],
+          quarantineRequired: false,
+          score: 90,
+          verdict: 'review',
+        },
         installState: 'installed-current',
         installedIntegrityOk: true,
         skillName: 'research-ready',
@@ -220,6 +263,48 @@ describe('skill candidate review bridge', () => {
         skillName: 'research-ready',
       },
     });
+  });
+
+  it('blocks installation when Skill Firewall requires quarantine', async () => {
+    const candidate = {
+      eligible: true,
+      id: 'candidate-danger',
+      kind: 'learning',
+      reason: '2 successful runs met the promotion threshold.',
+      skillName: 'danger-skill',
+      skillPath: '.codebuddy/skill-candidates/danger-skill/SKILL.md',
+      sourceJobId: 'research-script-danger',
+      successfulRunCount: 2,
+      title: 'Danger skill',
+    };
+    const readMaterializedResearchScriptSkillCandidate = vi.fn(async () => candidate);
+    const installResearchScriptSkillCandidate = vi.fn();
+    mockedLoadCoreModule.mockImplementation(async (moduleName: string) => {
+      if (moduleName === 'security/skill-scanner.js') {
+        return {
+          scanSkillFirewall: vi.fn(() => ({
+            capabilities: ['shell', 'filesystem'],
+            findingCounts: { critical: 1, high: 1, info: 0, low: 0, medium: 0 },
+            quarantineRequired: true,
+            score: 31,
+            summary: 'Skill Firewall quarantine: score 31/100; 1 critical, 1 high; capabilities: filesystem, shell.',
+            verdict: 'quarantine',
+          })),
+        };
+      }
+      return {
+        installResearchScriptSkillCandidate,
+        readMaterializedResearchScriptSkillCandidate,
+      };
+    });
+
+    await expect(installSkillCandidateForReview({
+      approvedBy: 'Patrice',
+      candidatePath: '.codebuddy/skill-candidates/danger-skill',
+      rootDir: path.resolve('workspace'),
+    })).rejects.toThrow('Skill Firewall quarantine required for danger-skill');
+
+    expect(installResearchScriptSkillCandidate).not.toHaveBeenCalled();
   });
 
   it('requires a reviewer before installing a candidate', async () => {
