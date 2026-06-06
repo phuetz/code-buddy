@@ -27,6 +27,8 @@ import {
   listMaterializedResearchScriptSkillCandidates,
   readMaterializedResearchScriptSkillCandidate,
   type ResearchScriptSkillCandidate,
+  type ResearchScriptSkillGradedTask,
+  type ResearchScriptSkillProofCommand,
 } from '../../agent/research-script-skill-candidate.js';
 
 interface ToolsProfileOptions {
@@ -76,12 +78,23 @@ interface NormalizedToolsProfile {
 interface ResearchScriptSkillCandidateSummary {
   eligible: boolean;
   evidenceRunIds?: string[];
+  gradedTasks?: ResearchScriptSkillGradedTask[];
   id: string;
   kind: string;
   promotionThreshold?: number;
   proofBackedSuccessCount?: number;
+  proofCommands?: ResearchScriptSkillProofCommand[];
+  proofSummary?: {
+    expected: 'pass' | 'unknown';
+    gradedTaskCount: number;
+    latestReplayCommand?: string;
+    proofCommandCount: number;
+    replayCommandCount: number;
+    testCommandCount: number;
+  };
   proofStatus?: string;
   reason: string;
+  replayCommands?: string[];
   skillName: string;
   skillPath: string;
   sourceJobId: string;
@@ -109,15 +122,21 @@ function normalizeToolsProfile(profileArg: string): NormalizedToolsProfile {
 }
 
 function summarizeSkillCandidate(candidate: ResearchScriptSkillCandidate): ResearchScriptSkillCandidateSummary {
+  const replayCommands = buildCandidateReplayCommands(candidate);
+  const proofSummary = summarizeCandidateProof(candidate, replayCommands);
   return {
     eligible: candidate.eligible,
     evidenceRunIds: candidate.evidenceRunIds,
+    gradedTasks: candidate.gradedTasks,
     id: candidate.id,
     kind: candidate.kind,
     promotionThreshold: candidate.promotionThreshold,
     proofBackedSuccessCount: candidate.proofBackedSuccessCount,
+    proofCommands: candidate.proofCommands,
+    proofSummary,
     proofStatus: candidate.proofStatus,
     reason: candidate.reason,
+    replayCommands: replayCommands.length > 0 ? replayCommands : undefined,
     skillName: candidate.skillName,
     skillPath: candidate.skillPath,
     sourceJobId: candidate.sourceJobId,
@@ -125,6 +144,40 @@ function summarizeSkillCandidate(candidate: ResearchScriptSkillCandidate): Resea
     successfulRunCount: candidate.successfulRunCount,
     title: candidate.title,
     toolSequence: candidate.toolSequence,
+  };
+}
+
+function buildCandidateReplayCommands(candidate: Pick<
+  ResearchScriptSkillCandidate,
+  'gradedTasks' | 'proofCommands'
+>): string[] {
+  const commands = [
+    ...(candidate.gradedTasks ?? []).map((task) => task.command),
+    ...(candidate.proofCommands ?? []).map((command) => command.command ?? ''),
+  ]
+    .map((command) => command.trim())
+    .filter((command) => command.length > 0);
+
+  return [...new Set(commands)].slice(-10);
+}
+
+function summarizeCandidateProof(
+  candidate: Pick<ResearchScriptSkillCandidate, 'gradedTasks' | 'proofCommands'>,
+  replayCommands: string[],
+): ResearchScriptSkillCandidateSummary['proofSummary'] {
+  const gradedTasks = candidate.gradedTasks ?? [];
+  const proofCommands = candidate.proofCommands ?? [];
+  if (gradedTasks.length === 0 && proofCommands.length === 0 && replayCommands.length === 0) {
+    return undefined;
+  }
+
+  return {
+    expected: gradedTasks.length > 0 ? 'pass' : 'unknown',
+    gradedTaskCount: gradedTasks.length,
+    latestReplayCommand: replayCommands.at(-1),
+    proofCommandCount: proofCommands.length,
+    replayCommandCount: replayCommands.length,
+    testCommandCount: gradedTasks.filter((task) => task.isTest === true).length,
   };
 }
 
@@ -167,6 +220,7 @@ function normalizeInternetScoutIntent(value: string | undefined): InternetScoutI
 }
 
 function printSkillCandidate(candidate: ResearchScriptSkillCandidate): void {
+  const replayCommands = buildCandidateReplayCommands(candidate);
   console.log(`\n${formatCandidateKind(candidate)} skill candidate: ${candidate.skillName}`);
   console.log(`  Candidate id: ${candidate.id}`);
   if (candidate.sourceRunId) {
@@ -185,6 +239,9 @@ function printSkillCandidate(candidate: ResearchScriptSkillCandidate): void {
   if (candidate.toolSequence?.length) {
     console.log(`  Tool sequence: ${candidate.toolSequence.join(' -> ')}`);
   }
+  if (replayCommands.length > 0) {
+    console.log(`  Replay command: ${formatReplayCommandSummary(replayCommands)}`);
+  }
   console.log(`  Reason: ${candidate.reason}`);
   console.log(`  SKILL.md: ${candidate.skillPath}`);
   console.log(`  Review manifest: ${formatCandidateReviewPath(candidate)}`);
@@ -197,6 +254,7 @@ function printSkillCandidate(candidate: ResearchScriptSkillCandidate): void {
 function printSkillCandidateList(candidates: ResearchScriptSkillCandidate[]): void {
   console.log(`\nReview-gated skill candidates: ${candidates.length}`);
   for (const candidate of candidates) {
+    const replayCommands = buildCandidateReplayCommands(candidate);
     console.log(`  - ${candidate.skillName}: ${candidate.eligible ? 'eligible' : 'not eligible'} (${candidate.kind})`);
     if (candidate.sourceRunId) {
       console.log(`    Source run: ${candidate.sourceRunId}`);
@@ -210,10 +268,19 @@ function printSkillCandidateList(candidates: ResearchScriptSkillCandidate[]): vo
     if (candidate.toolSequence?.length) {
       console.log(`    Tool sequence: ${candidate.toolSequence.join(' -> ')}`);
     }
+    if (replayCommands.length > 0) {
+      console.log(`    Replay command: ${formatReplayCommandSummary(replayCommands)}`);
+    }
     console.log(`    Path: ${candidate.skillPath}`);
     console.log(`    Reason: ${candidate.reason}`);
   }
   console.log('');
+}
+
+function formatReplayCommandSummary(commands: string[]): string {
+  const latest = commands.at(-1);
+  if (!latest) return 'none';
+  return commands.length > 1 ? `${latest} (${commands.length} replay commands)` : latest;
 }
 
 function formatCandidateKind(candidate: ResearchScriptSkillCandidate): string {

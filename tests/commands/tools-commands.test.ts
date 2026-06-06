@@ -117,10 +117,36 @@ async function materializeLearningSkillCandidate(rootDir: string): Promise<strin
     `${JSON.stringify({
       approvalRequired: true,
       candidateId: 'learning-skill-real-review',
+      evidenceRunIds: ['run-real-review'],
       generatedAt: '2026-05-30T13:50:00.000Z',
+      gradedTasks: [
+        {
+          command: 'npm test -- tests/commands/tools-commands.test.ts --run',
+          expected: 'pass',
+          id: 'graded-real-review',
+          isTest: true,
+          sourceRunId: 'run-real-review',
+          timeoutMs: 30000,
+          toolName: 'bash',
+        },
+      ],
+      proofBackedSuccessCount: 1,
+      proofCommands: [
+        {
+          command: 'npm test -- tests/commands/tools-commands.test.ts --run',
+          durationMs: 120,
+          isTest: true,
+          runId: 'run-real-review',
+          sequence: 3,
+          success: true,
+          toolName: 'bash',
+        },
+      ],
+      proofStatus: 'proven',
       schemaVersion: 1,
       skillName: 'learned-real-review',
       sourceRunId: 'run-real-review',
+      successfulRunCount: 1,
       status: 'awaiting_human_approval',
       toolSequence: ['search', 'view_file', 'bash'],
     }, null, 2)}\n`,
@@ -306,6 +332,9 @@ describe('Tools CLI commands', () => {
       const output = JSON.parse(getLogOutput()) as {
         candidate: {
           eligible: boolean;
+          gradedTasks?: Array<{ command: string; expected: string }>;
+          proofSummary?: { latestReplayCommand?: string; replayCommandCount: number };
+          replayCommands?: string[];
           skillName: string;
           sourceJobId: string;
           successfulRunCount: number;
@@ -319,6 +348,17 @@ describe('Tools CLI commands', () => {
         sourceJobId: 'research-script-cli',
         successfulRunCount: 2,
       });
+      expect(output.candidate.gradedTasks).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          command: 'node script.js',
+          expected: 'pass',
+        }),
+      ]));
+      expect(output.candidate.proofSummary).toMatchObject({
+        latestReplayCommand: 'node script.js',
+        replayCommandCount: 1,
+      });
+      expect(output.candidate.replayCommands).toEqual(['node script.js']);
       expect(output.reviewManifestPath).toBe(
         '.codebuddy/skill-candidates/research-cli-reviewed-workflow/candidate-review.json',
       );
@@ -350,6 +390,8 @@ describe('Tools CLI commands', () => {
       const output = JSON.parse(getLogOutput()) as {
         candidates: Array<{
           eligible: boolean;
+          proofSummary?: { replayCommandCount: number };
+          replayCommands?: string[];
           skillName: string;
         }>;
         count: number;
@@ -359,6 +401,10 @@ describe('Tools CLI commands', () => {
       expect(output.candidates).toEqual([
         expect.objectContaining({
           eligible: true,
+          proofSummary: expect.objectContaining({
+            replayCommandCount: 1,
+          }),
+          replayCommands: ['node script.js'],
           skillName: 'research-cli-reviewed-workflow',
         }),
       ]);
@@ -431,6 +477,8 @@ describe('Tools CLI commands', () => {
       const listOutput = JSON.parse(getLogOutput()) as {
         candidates: Array<{
           kind: string;
+          proofSummary?: { latestReplayCommand?: string; replayCommandCount: number };
+          replayCommands?: string[];
           skillName: string;
           sourceRunId?: string;
           toolSequence?: string[];
@@ -442,6 +490,11 @@ describe('Tools CLI commands', () => {
       expect(listOutput.candidates).toEqual([
         expect.objectContaining({
           kind: 'learning',
+          proofSummary: expect.objectContaining({
+            latestReplayCommand: 'npm test -- tests/commands/tools-commands.test.ts --run',
+            replayCommandCount: 1,
+          }),
+          replayCommands: ['npm test -- tests/commands/tools-commands.test.ts --run'],
           skillName: 'learned-real-review',
           sourceRunId: 'run-real-review',
           toolSequence: ['search', 'view_file', 'bash'],
@@ -461,12 +514,18 @@ describe('Tools CLI commands', () => {
       const inspectOutput = JSON.parse(getLogOutput()) as {
         candidate: {
           kind: string;
+          proofSummary?: { replayCommandCount: number };
+          replayCommands?: string[];
           skillName: string;
           sourceRunId?: string;
         };
       };
       expect(inspectOutput.candidate).toMatchObject({
         kind: 'learning',
+        proofSummary: expect.objectContaining({
+          replayCommandCount: 1,
+        }),
+        replayCommands: ['npm test -- tests/commands/tools-commands.test.ts --run'],
         skillName: 'learned-real-review',
         sourceRunId: 'run-real-review',
       });
