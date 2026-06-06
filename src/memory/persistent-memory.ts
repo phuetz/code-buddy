@@ -765,6 +765,10 @@ export function getMemoryManager(config?: Partial<MemoryConfig>): PersistentMemo
   return memoryManagerInstance;
 }
 
+export function resetMemoryManagerForTests(): void {
+  memoryManagerInstance = null;
+}
+
 export async function initializeMemory(config?: Partial<MemoryConfig>): Promise<PersistentMemoryManager> {
   const manager = getMemoryManager(config);
   await manager.initialize();
