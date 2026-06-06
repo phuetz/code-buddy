@@ -1,5 +1,22 @@
-import { isAbsolute, resolve } from 'path';
+import { isAbsolute, resolve, sep } from 'path';
 import { loadCoreModule } from '../utils/core-loader';
+
+export type SkillCandidateFirewallVerdict = 'allow' | 'review' | 'quarantine';
+
+export interface SkillCandidateFirewallSummary {
+  capabilities: string[];
+  findingCounts: {
+    critical: number;
+    high: number;
+    info: number;
+    low: number;
+    medium: number;
+  };
+  quarantineRequired: boolean;
+  score: number;
+  summary: string;
+  verdict: SkillCandidateFirewallVerdict;
+}
 
 export interface SkillCandidateReviewSummary {
   candidateChecksum?: string;
@@ -17,6 +34,7 @@ export interface SkillCandidateReviewSummary {
   installedIntegrityOk?: boolean;
   installedPath?: string;
   installedVersion?: string;
+  firewall?: SkillCandidateFirewallSummary;
   kind: string;
   reason: string;
   reviewCommands?: string[];
@@ -115,6 +133,19 @@ interface ResearchScriptSkillCandidateModule {
   ) => Promise<ResearchScriptSkillCandidate>;
 }
 
+interface SkillFirewallReportLike {
+  capabilities?: unknown[];
+  findingCounts?: Partial<Record<'critical' | 'high' | 'info' | 'low' | 'medium', number>>;
+  quarantineRequired?: boolean;
+  score?: number;
+  summary?: string;
+  verdict?: SkillCandidateFirewallVerdict;
+}
+
+interface SkillFirewallModule {
+  scanSkillFirewall?: (targetPath: string) => SkillFirewallReportLike;
+}
+
 export async function listSkillCandidatesForReview(
   options: ListSkillCandidateReviewOptions,
 ): Promise<SkillCandidateReviewSummary[]> {
@@ -135,10 +166,14 @@ export async function listSkillCandidatesForReview(
   const visible = options.eligibleOnly
     ? candidates.filter((candidate) => candidate.eligible)
     : candidates;
+  const firewall = await loadSkillFirewallModule();
 
-  return visible
+  return Promise.all(visible
     .slice(0, normalizeLimit(options.limit))
-    .map(summarizeSkillCandidate);
+    .map((candidate) => summarizeSkillCandidate(candidate, {
+      firewall,
+      rootDir,
+    })));
 }
 
 export async function installSkillCandidateForReview(
@@ -167,6 +202,14 @@ export async function installSkillCandidateForReview(
   }
 
   const candidate = await mod.readMaterializedResearchScriptSkillCandidate(candidatePath, { rootDir });
+  const firewall = await loadSkillFirewallModule();
+  const firewallSummary = summarizeCandidateFirewall(candidate, {
+    firewall,
+    rootDir,
+  });
+  if (firewallSummary?.quarantineRequired) {
+    throw new Error(`Skill Firewall quarantine required for ${candidate.skillName}: ${firewallSummary.summary}`);
+  }
   const installed = await mod.installResearchScriptSkillCandidate(candidate, {
     approvedBy,
     overwrite: Boolean(options.overwrite),
@@ -178,13 +221,20 @@ export async function installSkillCandidateForReview(
     : candidate;
 
   return {
-    candidate: summarizeSkillCandidate(refreshed),
+    candidate: summarizeSkillCandidate(refreshed, {
+      firewall,
+      rootDir,
+    }),
     installed,
   };
 }
 
 function summarizeSkillCandidate(
   candidate: ResearchScriptSkillCandidate,
+  options: {
+    firewall: SkillFirewallModule | null;
+    rootDir: string;
+  },
 ): SkillCandidateReviewSummary {
   return {
     candidateChecksum: candidate.candidateChecksum,
@@ -196,6 +246,7 @@ function summarizeSkillCandidate(
     installedIntegrityOk: candidate.installedIntegrityOk,
     installedPath: candidate.installedPath,
     installedVersion: candidate.installedVersion,
+    firewall: summarizeCandidateFirewall(candidate, options),
     kind: candidate.kind ?? (candidate.sourceRunId ? 'learning' : 'research-script'),
     reason: candidate.reason,
     reviewCommands: candidate.reviewCommands,
@@ -207,6 +258,64 @@ function summarizeSkillCandidate(
     title: candidate.title,
     toolSequence: candidate.toolSequence,
   };
+}
+
+async function loadSkillFirewallModule(): Promise<SkillFirewallModule | null> {
+  try {
+    return await loadCoreModule<SkillFirewallModule>('security/skill-scanner.js');
+  } catch {
+    return null;
+  }
+}
+
+function summarizeCandidateFirewall(
+  candidate: ResearchScriptSkillCandidate,
+  options: {
+    firewall: SkillFirewallModule | null;
+    rootDir: string;
+  },
+): SkillCandidateFirewallSummary | undefined {
+  if (!options.firewall?.scanSkillFirewall) return undefined;
+  const candidateSkillPath = resolveCandidateSkillPath(options.rootDir, candidate.skillPath);
+  if (!candidateSkillPath) return undefined;
+  const report = options.firewall.scanSkillFirewall(candidateSkillPath);
+  return normalizeFirewallSummary(report);
+}
+
+function normalizeFirewallSummary(
+  report: SkillFirewallReportLike,
+): SkillCandidateFirewallSummary {
+  const counts = report.findingCounts ?? {};
+  const verdict = report.verdict === 'quarantine' || report.verdict === 'review'
+    ? report.verdict
+    : 'allow';
+  return {
+    capabilities: Array.isArray(report.capabilities)
+      ? report.capabilities.filter((item): item is string => typeof item === 'string')
+      : [],
+    findingCounts: {
+      critical: counts.critical ?? 0,
+      high: counts.high ?? 0,
+      info: counts.info ?? 0,
+      low: counts.low ?? 0,
+      medium: counts.medium ?? 0,
+    },
+    quarantineRequired: Boolean(report.quarantineRequired) || verdict === 'quarantine',
+    score: Number.isFinite(report.score) ? Math.max(0, Math.min(100, Math.trunc(report.score as number))) : 100,
+    summary: typeof report.summary === 'string' && report.summary.trim()
+      ? report.summary
+      : `Skill Firewall ${verdict}`,
+    verdict,
+  };
+}
+
+function resolveCandidateSkillPath(rootDir: string, skillPath: string): string | null {
+  const resolvedRoot = resolve(rootDir);
+  const resolvedPath = resolve(resolvedRoot, skillPath);
+  if (resolvedPath === resolvedRoot || resolvedPath.startsWith(`${resolvedRoot}${sep}`)) {
+    return resolvedPath;
+  }
+  return null;
 }
 
 function normalizeAbsoluteRoot(value: string | undefined): string | null {

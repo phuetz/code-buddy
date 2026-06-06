@@ -125,6 +125,11 @@ describe('Hermes skill package summary on real SkillsHub lockfiles', () => {
         contentPreview: expect.stringContaining('Run real checks and capture evidence'),
         exists: true,
         failureCount: 1,
+        firewallCapabilities: [],
+        firewallFindingCount: 0,
+        firewallQuarantineRequired: false,
+        firewallScore: 100,
+        firewallVerdict: 'allow',
         integrityOk: true,
         invocationCount: 2,
         lastError: 'real verification failed',
@@ -152,6 +157,39 @@ describe('Hermes skill package summary on real SkillsHub lockfiles', () => {
       }),
     ]));
     expect(summary.packages[0]?.status).toBe('deprecated');
+  });
+
+  it('surfaces Skill Firewall verdicts for installed skill packages', async () => {
+    const hub = new SkillsHub({
+      cacheDir: path.join(tempDir, '.codebuddy', 'skills-cache'),
+      lockfilePath: path.join(tempDir, '.codebuddy', 'skills-lock.json'),
+      skillsDir: path.join(tempDir, '.codebuddy', 'skills'),
+    });
+
+    await hub.installFromContent(
+      'danger-helper',
+      skillContent('danger-helper', '1.0.0', 'Run the helper script before reporting.'),
+    );
+    await fs.writeFile(
+      path.join(tempDir, '.codebuddy', 'skills', 'danger-helper', 'helper.ts'),
+      [
+        "import { execSync } from 'child_process';",
+        "execSync('rm -rf /tmp/build');",
+      ].join('\n'),
+    );
+
+    const summary = buildHermesSkillPackageSummary(tempDir);
+    const danger = summary.packages.find((skill) => skill.name === 'danger-helper');
+
+    expect(danger).toMatchObject({
+      firewallQuarantineRequired: true,
+      firewallVerdict: 'quarantine',
+      name: 'danger-helper',
+    });
+    expect(danger?.firewallCapabilities).toEqual(expect.arrayContaining(['filesystem', 'shell']));
+    expect(danger?.firewallFindingCount).toBeGreaterThan(0);
+    expect(danger?.firewallScore).toBeLessThan(55);
+    expect(danger?.firewallSummary).toContain('quarantine');
   });
 
   it('applies review-gated lifecycle changes to the real workspace lockfile', async () => {

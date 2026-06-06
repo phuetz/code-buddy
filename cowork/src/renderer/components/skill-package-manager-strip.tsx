@@ -21,6 +21,14 @@ import {
 import type { LucideIcon } from 'lucide-react';
 
 type SkillPackageStatus = 'active' | 'disabled' | 'deprecated';
+type SkillPackageFirewallCapability =
+  | 'dynamic-code'
+  | 'filesystem'
+  | 'network'
+  | 'prototype-pollution'
+  | 'secrets'
+  | 'shell';
+type SkillPackageFirewallVerdict = 'allow' | 'review' | 'quarantine';
 
 export interface SkillPackageManagerEntry {
   averageDurationMs?: number;
@@ -29,6 +37,12 @@ export interface SkillPackageManagerEntry {
   enabled: boolean;
   exists: boolean;
   failureCount?: number;
+  firewallCapabilities?: SkillPackageFirewallCapability[];
+  firewallFindingCount?: number;
+  firewallQuarantineRequired?: boolean;
+  firewallScore?: number;
+  firewallSummary?: string;
+  firewallVerdict?: SkillPackageFirewallVerdict;
   installedAt: number;
   integrityOk: boolean;
   invocationCount?: number;
@@ -152,7 +166,7 @@ interface SkillPackageManagerApi {
 export function buildSkillPackageManagerGoal(): string {
   return [
     'Review installed Code Buddy SKILL.md packages from Cowork.',
-    'Inspect status, usage, integrity, rollback history and Learning Agent recommendations before changing anything.',
+    'Inspect status, usage, integrity, Skill Firewall verdicts, rollback history and Learning Agent recommendations before changing anything.',
     '',
     'Use review-gated actions only:',
     '- buddy skills list --all --json',
@@ -497,6 +511,35 @@ export const SkillPackageManagerStrip: React.FC<{
                   ? ` - ${skill.invocationCount} run(s)`
                   : ''}
               </div>
+              {skill.firewallVerdict ? (
+                <div className="mt-1 flex flex-wrap gap-1 text-[9px]">
+                  <span
+                    className={`flex items-center gap-1 rounded px-1 py-0.5 ${firewallToneClass(skill.firewallVerdict)}`}
+                    title={skill.firewallSummary}
+                  >
+                    <ShieldCheck size={9} />
+                    {t('fleet.skillPackage.firewallVerdict', 'Firewall {{verdict}} {{score}}/100', {
+                      score: typeof skill.firewallScore === 'number' ? skill.firewallScore : '?',
+                      verdict: skill.firewallVerdict,
+                    })}
+                  </span>
+                  {typeof skill.firewallFindingCount === 'number' && skill.firewallFindingCount > 0 ? (
+                    <span className="rounded bg-warning/10 px-1 py-0.5 text-warning">
+                      {t('fleet.skillPackage.firewallFindings', '{{count}} findings', {
+                        count: skill.firewallFindingCount,
+                      })}
+                    </span>
+                  ) : null}
+                  {skill.firewallCapabilities && skill.firewallCapabilities.length > 0 ? (
+                    <span
+                      className="max-w-full truncate rounded bg-surface px-1 py-0.5 text-text-muted"
+                      title={skill.firewallCapabilities.join(', ')}
+                    >
+                      {formatFirewallCapabilities(skill.firewallCapabilities)}
+                    </span>
+                  ) : null}
+                </div>
+              ) : null}
               {skill.contentPreview ? (
                 <pre className="mt-1 max-h-16 overflow-hidden whitespace-pre-wrap rounded bg-surface px-2 py-1 text-[9px] leading-snug text-text-muted">
                   {skill.contentPreview}
@@ -670,6 +713,17 @@ export const SkillPackageManagerStrip: React.FC<{
     </section>
   );
 };
+
+function firewallToneClass(verdict: SkillPackageFirewallVerdict): string {
+  if (verdict === 'allow') return 'bg-success/10 text-success';
+  if (verdict === 'review') return 'bg-warning/10 text-warning';
+  return 'bg-warning/20 text-warning';
+}
+
+function formatFirewallCapabilities(capabilities: SkillPackageFirewallCapability[]): string {
+  return capabilities.slice(0, 3).join(', ')
+    + (capabilities.length > 3 ? ` +${capabilities.length - 3}` : '');
+}
 
 function getSkillPackageManagerApi(): SkillPackageManagerApi | undefined {
   return (

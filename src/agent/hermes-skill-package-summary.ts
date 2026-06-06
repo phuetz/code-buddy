@@ -7,6 +7,11 @@ import {
   type SkillHistoryResult,
   type SkillLifecycleState,
 } from '../skills/hub.js';
+import {
+  scanSkillFirewall,
+  type SkillFirewallCapability,
+  type SkillFirewallVerdict,
+} from '../security/skill-scanner.js';
 import { safeWorkspacePath } from './hermes-public-paths.js';
 
 const LEARNING_SKILL_CANDIDATE_MIN_SUCCESSFUL_RUNS = 2;
@@ -21,6 +26,12 @@ export interface HermesSkillPackageEntry {
   enabled: boolean;
   exists: boolean;
   failureCount?: number;
+  firewallCapabilities?: SkillFirewallCapability[];
+  firewallFindingCount?: number;
+  firewallQuarantineRequired?: boolean;
+  firewallScore?: number;
+  firewallSummary?: string;
+  firewallVerdict?: SkillFirewallVerdict;
   installedAt: number;
   integrityOk: boolean;
   invocationCount?: number;
@@ -600,6 +611,7 @@ function summarizeInstalledSkill(
   const enabled = skill.enabled !== false;
   const exists = history?.current.exists ?? false;
   const preview = buildContentPreview(content, previewChars);
+  const firewall = buildFirewallPreview(workDir, skill, history);
   const staleTempPath = !exists && isPathInside(os.tmpdir(), skill.path);
 
   return {
@@ -608,6 +620,7 @@ function summarizeInstalledSkill(
     enabled,
     exists,
     ...(typeof usage?.failureCount === 'number' ? { failureCount: usage.failureCount } : {}),
+    ...firewall,
     installedAt: skill.installedAt,
     integrityOk: history?.current.integrityOk ?? false,
     ...(typeof usage?.invocationCount === 'number' ? { invocationCount: usage.invocationCount } : {}),
@@ -632,6 +645,37 @@ function isPathInside(parentDir: string, childPath: string): boolean {
   const child = path.resolve(childPath);
   const relative = path.relative(parent, child);
   return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));
+}
+
+function buildFirewallPreview(
+  workDir: string,
+  skill: InstalledSkill,
+  history: SkillHistoryResult | null,
+): Pick<
+  HermesSkillPackageEntry,
+  | 'firewallCapabilities'
+  | 'firewallFindingCount'
+  | 'firewallQuarantineRequired'
+  | 'firewallScore'
+  | 'firewallSummary'
+  | 'firewallVerdict'
+> {
+  if (history?.current.exists !== true) return {};
+
+  try {
+    const skillPath = path.isAbsolute(skill.path) ? skill.path : path.resolve(workDir, skill.path);
+    const report = scanSkillFirewall(path.dirname(skillPath));
+    return {
+      firewallCapabilities: report.capabilities,
+      firewallFindingCount: report.findings.length,
+      firewallQuarantineRequired: report.quarantineRequired,
+      firewallScore: report.score,
+      firewallSummary: report.summary,
+      firewallVerdict: report.verdict,
+    };
+  } catch {
+    return {};
+  }
 }
 
 function buildWorkspaceSkillsHub(workDir: string): {
