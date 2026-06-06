@@ -16,6 +16,27 @@ export interface HeadlessToolResult {
 }
 
 /**
+ * In a fresh headless process (cloud task child, background review) the formal
+ * tool registry singleton starts EMPTY — nothing has called the registrar yet —
+ * so tools like `remember`/`skill_manage` resolve as "not found". Register the
+ * built-in tools once, lazily. Idempotent: the registrar skips already-present
+ * tools, and the flag avoids rebuilding factories on every call.
+ */
+let builtinsRegistered = false;
+async function ensureBuiltinToolsRegistered(): Promise<void> {
+  if (builtinsRegistered) return;
+  try {
+    const { getFormalToolRegistry, registerBuiltinTools } = await import('../tools/registry/index.js');
+    registerBuiltinTools(getFormalToolRegistry());
+    builtinsRegistered = true;
+  } catch (err) {
+    logger.debug('Failed to register builtin tools for headless execution', {
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+}
+
+/**
  * Execute a tool call in headless mode (no UI confirmation prompts).
  */
 export async function executeToolHeadless(
@@ -37,6 +58,9 @@ export async function executeToolHeadless(
   }
 
   try {
+    // Ensure the registry is populated (no-op after the first call).
+    await ensureBuiltinToolsRegistered();
+
     // Lazy-load the formal tool registry (has execute() method)
     const { getFormalToolRegistry } = await import('../tools/registry/index.js');
     const registry = getFormalToolRegistry();
