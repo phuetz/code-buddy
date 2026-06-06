@@ -43,6 +43,7 @@ import {
   ASK_USER_QUESTION_TOOLS,
   EXIT_PLAN_MODE_TOOLS,
   CODEBASE_REPLACE_TOOLS,
+  DOCUMENT_GENERATOR_TOOLS,
   SESSION_TOOLS,
 } from "./tool-definitions/index.js";
 import { FLEET_TOOLS } from "./fleet-tool-defs.js";
@@ -67,6 +68,7 @@ export {
   CORE_TOOLS, MORPH_EDIT_TOOL, isMorphEnabled,
   SEARCH_TOOLS, TODO_TOOLS, WEB_TOOLS, ADVANCED_TOOLS, MULTIMODAL_TOOLS,
   COMPUTER_CONTROL_TOOLS, BROWSER_TOOLS, CANVAS_TOOLS, REASON_TOOL,
+  DOCUMENT_GENERATOR_TOOLS,
 } from "./tool-definitions/index.js";
 
 // ============================================================================
@@ -141,6 +143,9 @@ export function initializeToolRegistry(): void {
 
   // Codebase replace tools
   registerGroup(CODEBASE_REPLACE_TOOLS);
+
+  // Document generation tools — PPTX, DOCX, XLSX, PDF.
+  registerGroup(DOCUMENT_GENERATOR_TOOLS);
 
   // Session tools — multi-agent coordination (Phase E wake of SessionToolExecutor).
   // Always available; the SessionRegistry is lazy-instantiated by getSessionRegistry()

@@ -116,7 +116,7 @@ export class GenerateDocumentExecuteTool implements ITool {
     return {
       name: this.name,
       description: this.description,
-      category: 'utility' as ToolCategoryType,
+      category: 'document' as ToolCategoryType,
       keywords: [
         'document', 'generate', 'pptx', 'powerpoint', 'presentation', 'slides',
         'docx', 'word', 'xlsx', 'excel', 'spreadsheet', 'pdf', 'report',

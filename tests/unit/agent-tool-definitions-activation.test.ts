@@ -10,6 +10,7 @@ import {
   BROWSER_TOOLS,
   CANVAS_TOOLS,
   AGENT_TOOLS,
+  DOCUMENT_GENERATOR_TOOLS,
 } from '../../src/codebuddy/tool-definitions/index.js';
 import { TOOL_METADATA } from '../../src/tools/metadata.js';
 
@@ -35,6 +36,7 @@ describe('Agent tool activation in LLM schemas', () => {
       ...BROWSER_TOOLS,
       ...CANVAS_TOOLS,
       ...AGENT_TOOLS,
+      ...DOCUMENT_GENERATOR_TOOLS,
     ];
 
     const definitionNames = new Set(allToolDefs.map((tool) => tool.function.name));
@@ -42,5 +44,11 @@ describe('Agent tool activation in LLM schemas', () => {
     const missing = Array.from(definitionNames).filter((name) => !metadataNames.has(name));
 
     expect(missing).toEqual([]);
+  });
+
+  it('exposes document generation schemas to the LLM tool list', () => {
+    const names = new Set(DOCUMENT_GENERATOR_TOOLS.map((tool) => tool.function.name));
+
+    expect(names.has('generate_document')).toBe(true);
   });
 });

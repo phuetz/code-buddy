@@ -174,6 +174,13 @@ export {
   resetMultimodalInstances,
 } from './multimodal-tools.js';
 
+// Tool Adapters - Document generation (generate_document)
+export {
+  GenerateDocumentExecuteTool,
+  createDocumentGeneratorTools,
+  resetDocumentGeneratorInstances,
+} from './document-generator-tools.js';
+
 // Tool Adapters - Advanced (JS REPL, Multi-Edit, CodebaseMap, SpawnSubagent)
 export {
   JSReplExecuteTool,
@@ -369,6 +376,7 @@ export async function createAllToolsAsync(): Promise<ITool[]> {
   const { createFleetTools } = await import('./fleet-tools.js');
   const { createAskUserQuestionTools } = await import('./ask-user-question-tools.js');
   const { createExitPlanModeTools } = await import('./exit-plan-mode-tools.js');
+  const { createDocumentGeneratorTools } = await import('./document-generator-tools.js');
   
   // Await MCP Manager initialization before registering its tools
   const { getMcpManager } = await import('../mcp/mcp-manager.js');
@@ -408,6 +416,7 @@ export async function createAllToolsAsync(): Promise<ITool[]> {
     ...createFleetTools(),
     ...createAskUserQuestionTools(),
     ...createExitPlanModeTools(),
+    ...createDocumentGeneratorTools(),
     ...createMcpTools(),
   ];
 
@@ -471,6 +480,7 @@ export function registerBuiltinTools(registry: FormalToolRegistry): number {
     ...createFleetTools(),
     ...createAskUserQuestionTools(),
     ...createExitPlanModeTools(),
+    ...createDocumentGeneratorTools(),
     ...createGuiTools(),
     ...createSessionTools(),
   ];
@@ -523,6 +533,7 @@ import { createAdvisorTools } from './advisor-tools.js';
 import { createFleetTools } from './fleet-tools.js';
 import { createAskUserQuestionTools } from './ask-user-question-tools.js';
 import { createExitPlanModeTools } from './exit-plan-mode-tools.js';
+import { createDocumentGeneratorTools } from './document-generator-tools.js';
 import { createGuiTools } from './gui-tools.js';
 import { createSessionTools } from './session-tools.js';
 import { createAliasTools } from './tool-aliases.js';

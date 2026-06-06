@@ -56,6 +56,7 @@ import {
   createFleetTools,
   createAskUserQuestionTools,
   createExitPlanModeTools,
+  createDocumentGeneratorTools,
   createGuiTools,
   createSessionTools,
 } from "../tools/registry/index.js";
@@ -238,6 +239,7 @@ export class ToolHandler {
       ...createFleetTools(),
       ...createAskUserQuestionTools(),
       ...createExitPlanModeTools(),
+      ...createDocumentGeneratorTools(),
       ...createGuiTools(),
       ...createSessionTools(),
     ];

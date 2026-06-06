@@ -298,6 +298,13 @@ export const TOOL_METADATA: ToolMetadata[] = [
     description: 'Read Office documents'
   },
   {
+    name: 'generate_document',
+    category: 'document',
+    keywords: ['generate', 'pptx', 'powerpoint', 'slides', 'docx', 'word', 'xlsx', 'excel', 'spreadsheet', 'pdf', 'report'],
+    priority: 7,
+    description: 'Generate PPTX, DOCX, XLSX, or PDF documents'
+  },
+  {
     name: 'archive',
     category: 'document',
     keywords: ['zip', 'tar', 'archive', 'compress', 'extract', 'unzip', 'rar', '7z'],
