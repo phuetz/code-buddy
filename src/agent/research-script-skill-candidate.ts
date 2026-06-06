@@ -13,6 +13,16 @@ const SKILL_CANDIDATE_DIFF_PREVIEW_LINES = 32;
 
 export type MaterializedSkillCandidateKind = 'research-script' | 'learning';
 
+export interface ResearchScriptSkillProofCommand {
+  command?: string;
+  durationMs?: number;
+  isTest: boolean;
+  runId: string;
+  sequence: number;
+  success?: boolean;
+  toolName: string;
+}
+
 export interface ResearchScriptSkillCandidate {
   eligible: boolean;
   evidenceRunIds?: string[];
@@ -20,6 +30,7 @@ export interface ResearchScriptSkillCandidate {
   kind: MaterializedSkillCandidateKind;
   promotionThreshold?: number;
   proofBackedSuccessCount?: number;
+  proofCommands?: ResearchScriptSkillProofCommand[];
   proofStatus?: string;
   reason: string;
   skillName: string;
@@ -46,6 +57,7 @@ export interface ResearchScriptSkillCandidateReviewManifest {
   kind?: MaterializedSkillCandidateKind;
   promotionThreshold?: number;
   proofBackedSuccessCount?: number;
+  proofCommands?: ResearchScriptSkillProofCommand[];
   proofStatus?: string;
   schemaVersion: typeof RESEARCH_SCRIPT_SKILL_CANDIDATE_REVIEW_SCHEMA_VERSION;
   skillName: string;
@@ -134,6 +146,7 @@ interface RawResearchScriptSkillCandidateReviewManifest {
   kind?: unknown;
   promotionThreshold?: unknown;
   proofBackedSuccessCount?: unknown;
+  proofCommands?: unknown;
   proofStatus?: unknown;
   schemaVersion?: unknown;
   skillName?: unknown;
@@ -240,6 +253,7 @@ export async function readMaterializedResearchScriptSkillCandidate(
     kind: manifest.kind ?? 'research-script',
     promotionThreshold: manifest.promotionThreshold,
     proofBackedSuccessCount: manifest.proofBackedSuccessCount,
+    proofCommands: manifest.proofCommands,
     proofStatus: manifest.proofStatus,
     reason: extractMarkdownField(markdown, 'Reason') || reviewStatusReason(manifest),
     skillName: manifest.skillName,
@@ -611,6 +625,7 @@ function parseReviewManifest(raw: string): ResearchScriptSkillCandidateReviewMan
       kind: 'learning',
       promotionThreshold: normalizeOptionalPositiveInteger(parsed.promotionThreshold),
       proofBackedSuccessCount: normalizeOptionalPositiveInteger(parsed.proofBackedSuccessCount),
+      proofCommands: normalizeProofCommands(parsed.proofCommands),
       proofStatus: typeof parsed.proofStatus === 'string' ? parsed.proofStatus.trim() : undefined,
       sourceJobId: '',
       sourceRunId: parsed.sourceRunId.trim(),
@@ -687,6 +702,43 @@ function normalizeStringArray(value: unknown): string[] | undefined {
     .map((item) => typeof item === 'string' ? item.trim() : '')
     .filter(Boolean);
   return strings.length > 0 ? strings : undefined;
+}
+
+function normalizeProofCommands(value: unknown): ResearchScriptSkillProofCommand[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const commands = value
+    .map((item): ResearchScriptSkillProofCommand | null => {
+      if (!isRecord(item)) return null;
+      const runId = typeof item.runId === 'string' && item.runId.trim()
+        ? item.runId.trim()
+        : undefined;
+      const toolName = typeof item.toolName === 'string' && item.toolName.trim()
+        ? item.toolName.trim()
+        : undefined;
+      const sequence = typeof item.sequence === 'number' && Number.isFinite(item.sequence)
+        ? Math.trunc(item.sequence)
+        : undefined;
+      if (!runId || !toolName || sequence === undefined) return null;
+      return {
+        command: typeof item.command === 'string' && item.command.trim()
+          ? item.command.trim()
+          : undefined,
+        durationMs: typeof item.durationMs === 'number' && Number.isFinite(item.durationMs)
+          ? Math.max(0, Math.trunc(item.durationMs))
+          : undefined,
+        isTest: item.isTest === true,
+        runId,
+        sequence,
+        success: typeof item.success === 'boolean' ? item.success : undefined,
+        toolName,
+      };
+    })
+    .filter((item): item is ResearchScriptSkillProofCommand => item !== null);
+  return commands.length > 0 ? commands.slice(-20) : undefined;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 function normalizeOptionalPositiveInteger(value: unknown): number | undefined {

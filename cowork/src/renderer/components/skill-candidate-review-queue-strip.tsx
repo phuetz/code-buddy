@@ -45,6 +45,7 @@ export interface SkillCandidateReviewQueueItem {
   kind?: string;
   promotionThreshold?: number;
   proofBackedSuccessCount?: number;
+  proofCommands?: SkillCandidateProofCommand[];
   proofStatus?: string;
   reason: string;
   reviewCommands?: string[];
@@ -54,6 +55,16 @@ export interface SkillCandidateReviewQueueItem {
   sourceRunId?: string;
   successfulRunCount: number;
   toolSequence?: string[];
+}
+
+export interface SkillCandidateProofCommand {
+  command?: string;
+  durationMs?: number;
+  isTest: boolean;
+  runId: string;
+  sequence: number;
+  success?: boolean;
+  toolName: string;
 }
 
 export interface SkillCandidateSideBySideDiffRow {
@@ -336,6 +347,18 @@ export const SkillCandidateReviewQueueStrip: React.FC<{
                     : ''}
                 </div>
               ) : null}
+              {formatLatestProofCommand(candidate) ? (
+                <div
+                  className="mt-0.5 flex min-w-0 items-center gap-1 text-[9px] text-text-muted"
+                  data-testid={`skill-candidate-proof-command-${candidate.skillName}`}
+                >
+                  <Terminal size={9} className="shrink-0 text-text-muted" />
+                  <span className="shrink-0">
+                    {t('fleet.skillCandidate.proofCommand', 'Proof command')}:
+                  </span>
+                  <code className="truncate">{formatLatestProofCommand(candidate)}</code>
+                </div>
+              ) : null}
               {candidate.installedVersion ? (
                 <div className="mt-0.5 truncate text-[9px] text-text-muted">
                   {t('fleet.skillCandidate.installedVersion', 'Installed')}: v{candidate.installedVersion}
@@ -602,6 +625,17 @@ function formatInstallState(
     case 'not-installed':
       return 'not installed';
   }
+}
+
+function formatLatestProofCommand(candidate: SkillCandidateReviewQueueItem): string | null {
+  const command = candidate.proofCommands?.at(-1);
+  if (!command) return null;
+  const status = command.success === undefined ? 'unknown' : command.success ? 'passed' : 'failed';
+  const duration = command.durationMs === undefined ? '' : ` ${command.durationMs}ms`;
+  const count = candidate.proofCommands && candidate.proofCommands.length > 1
+    ? ` (${candidate.proofCommands.length} proof commands)`
+    : '';
+  return `${status}${duration} ${command.command ?? command.toolName}${count}`;
 }
 
 function isCandidateInstallActionVisible(candidate: SkillCandidateReviewQueueItem): boolean {

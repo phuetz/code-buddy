@@ -178,6 +178,88 @@ describe('research script skill candidate', () => {
     }
   });
 
+  it('preserves Learning Agent proof commands when listing materialized candidates', async () => {
+    const rootDir = await fs.mkdtemp(path.join(os.tmpdir(), 'learning-skill-proof-commands-'));
+    try {
+      const candidateDir = path.join(
+        rootDir,
+        '.codebuddy',
+        'skill-candidates',
+        'learning',
+        'learned-search-view-file-bash',
+      );
+      await fs.mkdir(candidateDir, { recursive: true });
+      await fs.writeFile(
+        path.join(candidateDir, 'SKILL.md'),
+        [
+          '---',
+          'name: learned-search-view-file-bash',
+          'description: Learning Agent candidate.',
+          '---',
+          '',
+          '# Learned Search View File Bash',
+          '',
+          'Reason: 2/2 proof-backed successful run(s) met the Learning Agent promotion threshold.',
+        ].join('\n'),
+        'utf8',
+      );
+      await fs.writeFile(
+        path.join(candidateDir, 'candidate-review.json'),
+        `${JSON.stringify({
+          approvalRequired: true,
+          candidateId: 'learning-skill-proof',
+          eligible: true,
+          evidenceRunIds: ['run-one', 'run-two'],
+          generatedAt: '2026-06-06T12:00:00.000Z',
+          promotionThreshold: 2,
+          proofBackedSuccessCount: 2,
+          proofCommands: [
+            {
+              command: 'npm test -- tests/agent/learning-agent-real.test.ts --run',
+              durationMs: 100,
+              isTest: true,
+              runId: 'run-two',
+              sequence: 5,
+              success: true,
+              toolName: 'bash',
+            },
+          ],
+          proofStatus: 'proven',
+          schemaVersion: 1,
+          skillName: 'learned-search-view-file-bash',
+          sourceRunId: 'run-two',
+          status: 'awaiting_human_approval',
+          successfulRunCount: 2,
+          toolSequence: ['search', 'view_file', 'bash'],
+        }, null, 2)}\n`,
+        'utf8',
+      );
+
+      const candidates = await listMaterializedResearchScriptSkillCandidates({ rootDir });
+
+      expect(candidates).toEqual([
+        expect.objectContaining({
+          eligible: true,
+          kind: 'learning',
+          proofBackedSuccessCount: 2,
+          proofCommands: [
+            expect.objectContaining({
+              command: 'npm test -- tests/agent/learning-agent-real.test.ts --run',
+              durationMs: 100,
+              runId: 'run-two',
+              success: true,
+              toolName: 'bash',
+            }),
+          ],
+          proofStatus: 'proven',
+          skillName: 'learned-search-view-file-bash',
+        }),
+      ]);
+    } finally {
+      await fs.rm(rootDir, { recursive: true, force: true });
+    }
+  });
+
   it('requires explicit approval before installing an eligible candidate as a workspace skill', async () => {
     const rootDir = await fs.mkdtemp(path.join(os.tmpdir(), 'research-skill-install-'));
     try {

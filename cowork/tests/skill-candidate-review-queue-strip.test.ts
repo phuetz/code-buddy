@@ -83,6 +83,26 @@ describe('SkillCandidateReviewQueueStrip', () => {
               kind: 'learning',
               promotionThreshold: 2,
               proofBackedSuccessCount: 2,
+              proofCommands: [
+                {
+                  command: 'npm test -- tests/agent/learning-agent-real.test.ts --run',
+                  durationMs: 100,
+                  isTest: true,
+                  runId: 'run-learning-first',
+                  sequence: 5,
+                  success: true,
+                  toolName: 'bash',
+                },
+                {
+                  command: 'npm run typecheck',
+                  durationMs: 2200,
+                  isTest: true,
+                  runId: 'run-learning-architect',
+                  sequence: 6,
+                  success: true,
+                  toolName: 'bash',
+                },
+              ],
               proofStatus: 'proven',
               reason: '2 successful runs met the promotion threshold.',
               reviewCommands: [
@@ -115,6 +135,8 @@ describe('SkillCandidateReviewQueueStrip', () => {
     expect(strip?.textContent).toContain('installed differs');
     expect(strip?.textContent).toContain('Installed: v0.1.0');
     expect(strip?.textContent).toContain('Proof: proven');
+    expect(strip?.textContent).toContain('Proof command');
+    expect(strip?.textContent).toContain('passed 2200ms npm run typecheck (2 proof commands)');
     expect(strip?.textContent).toContain('run-learning-first, run-learning-architect');
     expect(strip?.textContent).toContain('Firewall: review');
     expect(strip?.textContent).toContain('90/100');
