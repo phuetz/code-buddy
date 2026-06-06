@@ -132,7 +132,12 @@ export class ImageTool {
     const base64 = buffer.toString('base64');
 
     // Try to determine media type from headers or URL
-    const contentType = response.headers['content-type'] || 'image/png';
+    const rawContentType = response.headers['content-type'];
+    const contentType = typeof rawContentType === 'string'
+      ? rawContentType
+      : Array.isArray(rawContentType)
+        ? rawContentType[0] || 'image/png'
+        : 'image/png';
     const mediaType = contentType.split(';')[0].trim();
 
     return {
