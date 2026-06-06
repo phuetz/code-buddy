@@ -219,6 +219,8 @@ describe('FleetCommandCenter saga board', () => {
     expect(source).toContain('fleet-skill-package-manager');
     expect(source).toContain('skillPackage?: SkillPackageManagerApi');
     expect(source).toContain('skill_manage action=enable|disable|deprecate|delete|patch|rollback|reset|update');
+    expect(source).toContain('missionSnapshotDiscoveredPeers');
+    expect(source).toContain('setFleetDiscoveredPeers(missionSnapshotDiscoveredPeers(snapshot))');
     expect(source).toContain('LessonCandidateReviewStrip');
     expect(source).toContain('fleet-lesson-candidate-review');
     expect(source).toContain('lesson-candidate-open-review');

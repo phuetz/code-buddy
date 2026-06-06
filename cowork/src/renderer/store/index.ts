@@ -1731,7 +1731,14 @@ export const useAppStore = create<AppState>((set) => ({
     set((state) => {
       const known = new Set(state.fleetDiscoveredPeers.map((p) => p.url));
       const merged = [...state.fleetDiscoveredPeers];
-      for (const p of peers) if (!known.has(p.url)) merged.push(p);
+      let changed = false;
+      for (const p of peers) {
+        if (known.has(p.url)) continue;
+        known.add(p.url);
+        merged.push(p);
+        changed = true;
+      }
+      if (!changed) return {};
       return { fleetDiscoveredPeers: merged };
     }),
   dismissFleetDiscoveredPeer: (url) =>

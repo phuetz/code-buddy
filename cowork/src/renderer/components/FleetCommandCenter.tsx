@@ -215,6 +215,12 @@ interface SkillCandidateApiBridge {
   }) => Promise<SkillCandidateReviewQueueItem[]>;
 }
 
+type MissionDiscoveredPeer = {
+  label: string;
+  source: 'tailscale' | 'manual';
+  url: string;
+};
+
 function getFleetApi(): FleetApiBridge | undefined {
   return (
     window as unknown as {
@@ -255,6 +261,18 @@ function getSkillCandidateApi(): SkillCandidateApiBridge | undefined {
   ).electronAPI?.tools?.skillCandidate;
 }
 
+function missionSnapshotDiscoveredPeers(
+  snapshot: MissionControlSnapshot,
+): MissionDiscoveredPeer[] {
+  return snapshot.agents
+    .filter((agent) => agent.status === 'unknown' && agent.url && agent.id.startsWith('discovered-'))
+    .map((agent) => ({
+      label: agent.label,
+      source: agent.id.startsWith('discovered-manual-') ? 'manual' : 'tailscale',
+      url: agent.url as string,
+    }));
+}
+
 export const FleetCommandCenter: React.FC<Props> = ({ isOpen, onClose }) => {
   const { t } = useTranslation();
   const sessions = useAppStore((s) => s.sessions);
@@ -268,6 +286,7 @@ export const FleetCommandCenter: React.FC<Props> = ({ isOpen, onClose }) => {
   const setScheduleDraft = useAppStore((s) => s.setScheduleDraft);
   const fleetGoalDraft = useAppStore((s) => s.fleetGoalDraft);
   const setFleetGoalDraft = useAppStore((s) => s.setFleetGoalDraft);
+  const setFleetDiscoveredPeers = useAppStore((s) => s.setFleetDiscoveredPeers);
   const setShowLessonCandidatePanel = useAppStore((s) => s.setShowLessonCandidatePanel);
   const peers = useMemo(() => Object.values(fleetPeers), [fleetPeers]);
   const routablePeers = useMemo(
@@ -427,6 +446,7 @@ export const FleetCommandCenter: React.FC<Props> = ({ isOpen, onClose }) => {
         const snapshot = await getFleetApi()?.missionControlSnapshot?.();
         if (!cancelled && snapshot) {
           setMissionSnapshot(snapshot);
+          setFleetDiscoveredPeers(missionSnapshotDiscoveredPeers(snapshot));
           setMissionSnapshotError(null);
         }
       } catch (err) {
@@ -441,7 +461,7 @@ export const FleetCommandCenter: React.FC<Props> = ({ isOpen, onClose }) => {
       cancelled = true;
       clearInterval(id);
     };
-  }, [isOpen, missionRefreshToken, sagaUpdateToken]);
+  }, [isOpen, missionRefreshToken, sagaUpdateToken, setFleetDiscoveredPeers]);
 
   // Refresh sagas every 3s while open.
   useEffect(() => {
