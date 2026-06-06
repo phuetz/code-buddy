@@ -260,7 +260,10 @@ redacted preview, `rawTextStored=false`, and `canAutoDispatch=false`.
 Disabled channels create ignored inbox items and safety events instead of
 silently disappearing. Cowork exposes the same queue in the Companion panel via
 `companion.gateway.inbox` without storing raw message text or enabling
-auto-dispatch.
+auto-dispatch. Preparing a queued item creates a local
+`.codebuddy/companion/gateway-drafts/*.task.json` draft for
+`buddy autonomous-code --require-approval`; it does not launch the run or send
+an outbound channel reply.
 
 Camera is explicit opt-in:
 
@@ -354,7 +357,9 @@ cd cowork && npm test -- tests/hermes-surfaces-ipc.test.ts
 npm run typecheck
 ```
 
-Observed result: `4` companion gateway tests passed, including local inbox
+Observed result: `5` companion gateway tests passed, including local inbox
 creation, urgent message priority, disabled-channel audit, token redaction and
-no auto-dispatch. The Cowork IPC surface test passed for the read-only gateway
-inbox bridge from the active workspace.
+no auto-dispatch. The new draft proof verifies a `buddy autonomous-code
+--require-approval` task file and `drafted` inbox transition. The Cowork IPC
+surface test passed for both the read-only gateway inbox bridge and draft
+preparation from the active workspace.

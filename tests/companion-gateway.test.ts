@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from 'fs/promises';
+import { mkdtemp, readFile, rm } from 'fs/promises';
 import * as os from 'os';
 import * as path from 'path';
 import {
@@ -9,7 +9,10 @@ import {
   recordCompanionGatewayMessage,
   updateCompanionGatewayChannel,
 } from '../src/companion/gateway.js';
-import { readCompanionGatewayInbox } from '../src/companion/gateway-inbox.js';
+import {
+  draftCompanionGatewayInboxItem,
+  readCompanionGatewayInbox,
+} from '../src/companion/gateway-inbox.js';
 import { readRecentCompanionPercepts } from '../src/companion/percepts.js';
 import { readRecentCompanionSafetyEvents } from '../src/companion/safety-ledger.js';
 
@@ -199,5 +202,83 @@ describe('companion gateway', () => {
     expect(inbox.items[0]?.content.preview.length).toBeLessThanOrEqual(220);
     expect(inbox.items[0]?.content.preview).toContain('[redacted-token]');
     expect(JSON.stringify(inbox)).not.toContain('sk-fixture-redaction-token');
+  });
+
+  it('drafts queued gateway inbox items into autonomous-code tasks without dispatching', async () => {
+    await updateCompanionGatewayChannel('slack', {
+      cwd: tempDir,
+      enabled: true,
+      mode: 'act',
+      allowOutbound: true,
+      now: new Date('2026-05-24T12:00:00.000Z'),
+    });
+
+    const result = await recordCompanionGatewayMessage({
+      channel: 'slack',
+      senderId: 'ops-user',
+      senderName: 'Ops',
+      threadId: 'incident-2',
+      messageId: 'm-draft',
+      text: 'Please investigate failing tests today. password=super-secret-fixture',
+      contentType: 'text',
+    }, {
+      cwd: tempDir,
+      now: new Date('2026-05-24T12:01:00.000Z'),
+    });
+
+    const draft = await draftCompanionGatewayInboxItem(result.inboxItem!.id, {
+      cwd: tempDir,
+      now: new Date('2026-05-24T12:02:00.000Z'),
+    });
+
+    expect(draft).toMatchObject({
+      sourceItemId: result.inboxItem!.id,
+      kind: 'autonomous_code_task',
+      autoDispatch: false,
+      requiresLocalApproval: true,
+      safety: {
+        rawTextStored: false,
+        previewOnly: true,
+        autoDispatch: false,
+      },
+    });
+    expect(draft.command).toEqual([
+      'buddy',
+      'autonomous-code',
+      '--task-file',
+      draft.taskFile,
+      '--require-approval',
+      '--json',
+    ]);
+    expect(draft.task).toMatchObject({
+      repo: tempDir,
+      allowedPaths: ['docs/...'],
+      verification: ['npm run typecheck'],
+      riskLevel: 'low',
+      fleetPolicy: 'none',
+    });
+    expect(draft.task.task).toContain('[redacted]');
+    expect(JSON.stringify(draft)).not.toContain('super-secret-fixture');
+
+    const taskFile = JSON.parse(await readFile(draft.taskFile, 'utf8')) as { task: string; repo: string };
+    expect(taskFile.repo).toBe(tempDir);
+    expect(taskFile.task).toContain('[redacted]');
+    expect(taskFile.task).not.toContain('super-secret-fixture');
+
+    const inbox = await readCompanionGatewayInbox({ cwd: tempDir });
+    expect(inbox.counts).toMatchObject({
+      queued: 0,
+      ignored: 0,
+      total: 1,
+    });
+    expect(inbox.items[0]).toMatchObject({
+      id: result.inboxItem!.id,
+      status: 'drafted',
+      draft: {
+        id: draft.id,
+        taskFile: draft.taskFile,
+        autoDispatch: false,
+      },
+    });
   });
 });

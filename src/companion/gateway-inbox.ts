@@ -47,7 +47,7 @@ export interface CompanionGatewayInboxItem {
   };
   mode: CompanionGatewayMode;
   priority: CompanionGatewayInboxPriority;
-  status: 'queued' | 'ignored';
+  status: 'queued' | 'ignored' | 'drafted';
   proposedAction: {
     type: CompanionGatewayInboxActionType;
     label: string;
@@ -62,6 +62,52 @@ export interface CompanionGatewayInboxItem {
   };
   tags: string[];
   reason: string;
+  draft?: CompanionGatewayInboxDraftSummary;
+}
+
+export interface CompanionGatewayAutonomousCodeTask {
+  repo: string;
+  task: string;
+  allowedPaths: string[];
+  verification: string[];
+  riskLevel: 'low';
+  output: 'json';
+  branchName: string;
+  maxFilesChanged: number;
+  maxToolRounds: number;
+  memoryPolicy: 'handoff';
+  fleetPolicy: 'none';
+  edits: [];
+}
+
+export interface CompanionGatewayInboxDraftSummary {
+  id: string;
+  createdAt: string;
+  kind: 'autonomous_code_task';
+  taskFile: string;
+  command: string[];
+  autoDispatch: false;
+  requiresLocalApproval: true;
+}
+
+export interface CompanionGatewayInboxDraft extends CompanionGatewayInboxDraftSummary {
+  schemaVersion: 1;
+  sourceItemId: string;
+  source: {
+    channel: ChannelType;
+    threadId: string;
+    senderId: string;
+    senderName?: string;
+    priority: CompanionGatewayInboxPriority;
+    proposedAction: CompanionGatewayInboxActionType;
+  };
+  task: CompanionGatewayAutonomousCodeTask;
+  safety: {
+    rawTextStored: false;
+    previewOnly: true;
+    autoDispatch: false;
+    requiresLocalApproval: true;
+  };
 }
 
 export interface CompanionGatewayInbox {
@@ -105,6 +151,45 @@ function resolveCwd(cwd?: string): string {
 function resolveStorePath(options: CompanionGatewayInboxOptions = {}): string {
   const cwd = resolveCwd(options.cwd);
   return path.resolve(cwd, options.storePath || getCompanionGatewayInboxPath(cwd));
+}
+
+function getCompanionGatewayDraftsDir(cwd = process.cwd()): string {
+  return path.join(cwd, '.codebuddy', 'companion', 'gateway-drafts');
+}
+
+function safeFileId(id: string): string {
+  return id.replace(/[^A-Za-z0-9._-]/g, '_').slice(0, 96);
+}
+
+function branchNameFor(item: CompanionGatewayInboxItem): string {
+  return `companion/gateway-${safeFileId(item.channel)}-${safeFileId(item.id).slice(0, 42)}`;
+}
+
+function buildDraftTask(item: CompanionGatewayInboxItem, cwd: string): CompanionGatewayAutonomousCodeTask {
+  const actor = item.sender.name || item.sender.id;
+  const task = [
+    `Review this supervised companion gateway request from ${actor} on ${item.channel}.`,
+    `Priority: ${item.priority}.`,
+    `Proposed action: ${item.proposedAction.type}.`,
+    `Preview: ${item.content.preview || '[empty preview]'}`,
+    'Do not contact the external sender and do not dispatch outbound messages.',
+    'Prepare any code or documentation changes only after local operator review.',
+  ].join('\n');
+
+  return {
+    repo: cwd,
+    task,
+    allowedPaths: ['docs/...'],
+    verification: ['npm run typecheck'],
+    riskLevel: 'low',
+    output: 'json',
+    branchName: branchNameFor(item),
+    maxFilesChanged: 5,
+    maxToolRounds: 25,
+    memoryPolicy: 'handoff',
+    fleetPolicy: 'none',
+    edits: [],
+  };
 }
 
 function emptyInbox(options: CompanionGatewayInboxOptions = {}): CompanionGatewayInbox {
@@ -311,6 +396,80 @@ export async function recordCompanionGatewayInboxItem(
   return item;
 }
 
+export async function draftCompanionGatewayInboxItem(
+  itemId: string,
+  options: CompanionGatewayInboxOptions = {},
+): Promise<CompanionGatewayInboxDraft> {
+  const now = options.now || new Date();
+  const inbox = await readCompanionGatewayInbox({ ...options, now });
+  const item = inbox.items.find(existing => existing.id === itemId);
+  if (!item) {
+    throw new Error(`Companion gateway inbox item not found: ${itemId}`);
+  }
+  if (item.status !== 'queued') {
+    throw new Error(`Companion gateway inbox item is not queued: ${itemId}`);
+  }
+  if (!item.proposedAction.requiresLocalApproval) {
+    throw new Error(`Companion gateway inbox item does not require local approval: ${itemId}`);
+  }
+
+  const cwd = resolveCwd(options.cwd);
+  const createdAt = now.toISOString();
+  const draftId = `draft_${safeFileId(item.id)}`;
+  const draftsDir = getCompanionGatewayDraftsDir(cwd);
+  const taskFile = path.join(draftsDir, `${draftId}.task.json`);
+  const draftFile = path.join(draftsDir, `${draftId}.json`);
+  const task = buildDraftTask(item, cwd);
+  const command = ['buddy', 'autonomous-code', '--task-file', taskFile, '--require-approval', '--json'];
+  const summary: CompanionGatewayInboxDraftSummary = {
+    id: draftId,
+    createdAt,
+    kind: 'autonomous_code_task',
+    taskFile,
+    command,
+    autoDispatch: false,
+    requiresLocalApproval: true,
+  };
+  const draft: CompanionGatewayInboxDraft = {
+    ...summary,
+    schemaVersion: COMPANION_GATEWAY_INBOX_SCHEMA_VERSION,
+    sourceItemId: item.id,
+    source: {
+      channel: item.channel,
+      threadId: item.threadId,
+      senderId: item.sender.id,
+      senderName: item.sender.name,
+      priority: item.priority,
+      proposedAction: item.proposedAction.type,
+    },
+    task,
+    safety: {
+      rawTextStored: false,
+      previewOnly: true,
+      autoDispatch: false,
+      requiresLocalApproval: true,
+    },
+  };
+
+  await mkdir(draftsDir, { recursive: true });
+  await writeFile(taskFile, `${JSON.stringify(task, null, 2)}\n`, 'utf8');
+  await writeFile(draftFile, `${JSON.stringify(draft, null, 2)}\n`, 'utf8');
+
+  await writeInbox({
+    ...inbox,
+    generatedAt: createdAt,
+    items: inbox.items.map(existing => existing.id === item.id
+      ? {
+        ...existing,
+        status: 'drafted',
+        draft: summary,
+      }
+      : existing),
+  });
+
+  return draft;
+}
+
 export function renderCompanionGatewayInbox(inbox: CompanionGatewayInbox): string {
   const lines = [
     'Companion gateway inbox',
@@ -324,6 +483,9 @@ export function renderCompanionGatewayInbox(inbox: CompanionGatewayInbox): strin
   for (const item of inbox.items.slice(0, 20)) {
     lines.push(`- ${item.priority}/${item.status}: ${item.channel} ${item.sender.name || item.sender.id}`);
     lines.push(`  ${item.proposedAction.type}: ${item.proposedAction.label}`);
+    if (item.draft) {
+      lines.push(`  draft: ${item.draft.command.join(' ')}`);
+    }
     lines.push(`  ${item.content.preview || '[empty message]'}`);
   }
 

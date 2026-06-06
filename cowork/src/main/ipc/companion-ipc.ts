@@ -616,7 +616,7 @@ type CompanionGatewayInboxItem = {
   };
   mode: CompanionGatewayMode;
   priority: CompanionGatewayInboxPriority;
-  status: 'queued' | 'ignored';
+  status: 'queued' | 'ignored' | 'drafted';
   proposedAction: {
     type: CompanionGatewayInboxActionType;
     label: string;
@@ -631,6 +631,52 @@ type CompanionGatewayInboxItem = {
   };
   tags: string[];
   reason: string;
+  draft?: CompanionGatewayInboxDraftSummary;
+};
+
+type CompanionGatewayAutonomousCodeTask = {
+  repo: string;
+  task: string;
+  allowedPaths: string[];
+  verification: string[];
+  riskLevel: 'low';
+  output: 'json';
+  branchName: string;
+  maxFilesChanged: number;
+  maxToolRounds: number;
+  memoryPolicy: 'handoff';
+  fleetPolicy: 'none';
+  edits: [];
+};
+
+type CompanionGatewayInboxDraftSummary = {
+  id: string;
+  createdAt: string;
+  kind: 'autonomous_code_task';
+  taskFile: string;
+  command: string[];
+  autoDispatch: false;
+  requiresLocalApproval: true;
+};
+
+type CompanionGatewayInboxDraft = CompanionGatewayInboxDraftSummary & {
+  schemaVersion: 1;
+  sourceItemId: string;
+  source: {
+    channel: string;
+    threadId: string;
+    senderId: string;
+    senderName?: string;
+    priority: CompanionGatewayInboxPriority;
+    proposedAction: CompanionGatewayInboxActionType;
+  };
+  task: CompanionGatewayAutonomousCodeTask;
+  safety: {
+    rawTextStored: false;
+    previewOnly: true;
+    autoDispatch: false;
+    requiresLocalApproval: true;
+  };
 };
 
 type CompanionGatewayInbox = {
@@ -656,6 +702,10 @@ type CompanionGatewayInbox = {
 
 type CompanionGatewayInboxMod = {
   readCompanionGatewayInbox: (options: { cwd?: string }) => Promise<CompanionGatewayInbox>;
+  draftCompanionGatewayInboxItem: (
+    itemId: string,
+    options: { cwd?: string },
+  ) => Promise<CompanionGatewayInboxDraft>;
 };
 
 type CompanionSkillCuratorMod = {
@@ -1250,6 +1300,30 @@ export function registerCompanionIpcHandlers(projectManagerSource: ProjectManage
       return { ok: false as const, error: errorMessage(err) };
     }
   });
+
+  ipcMain.handle(
+    'companion.gateway.draft',
+    async (_e, input?: { projectId?: string; itemId?: string }) => {
+      const { cwd, error } = await companionWorkDir(projectManagerSource, input?.projectId);
+      if (!cwd) return { ok: false as const, error };
+      if (!input?.itemId) return { ok: false as const, error: 'itemId is required' };
+      try {
+        const mod = await loadGatewayInbox();
+        if (!mod?.draftCompanionGatewayInboxItem || !mod.readCompanionGatewayInbox) {
+          return { ok: false as const, error: 'core companion gateway inbox module unavailable' };
+        }
+        const draft = await mod.draftCompanionGatewayInboxItem(input.itemId, { cwd });
+        return {
+          ok: true as const,
+          draft,
+          inbox: await mod.readCompanionGatewayInbox({ cwd }),
+        };
+      } catch (err) {
+        logError('[companion.gateway.draft] failed:', err);
+        return { ok: false as const, error: errorMessage(err) };
+      }
+    },
+  );
 
   ipcMain.handle(
     'companion.gateway.update',

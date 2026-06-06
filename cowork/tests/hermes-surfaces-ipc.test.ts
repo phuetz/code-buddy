@@ -417,6 +417,88 @@ describe('companion IPC', () => {
     expect(readCompanionGatewayInbox).toHaveBeenCalledWith({ cwd: '/tmp/proj' });
   });
 
+  it('drafts a companion gateway inbox item without dispatching it', async () => {
+    const draftCompanionGatewayInboxItem = vi.fn(async () => ({
+      schemaVersion: 1,
+      id: 'draft_gateway_telegram_1',
+      sourceItemId: 'gateway_telegram_1',
+      createdAt: '2026-06-07T10:01:00.000Z',
+      kind: 'autonomous_code_task',
+      taskFile: '/tmp/proj/.codebuddy/companion/gateway-drafts/draft_gateway_telegram_1.task.json',
+      command: [
+        'buddy',
+        'autonomous-code',
+        '--task-file',
+        '/tmp/proj/.codebuddy/companion/gateway-drafts/draft_gateway_telegram_1.task.json',
+        '--require-approval',
+        '--json',
+      ],
+      autoDispatch: false,
+      requiresLocalApproval: true,
+      source: {
+        channel: 'telegram',
+        threadId: 'thread-1',
+        senderId: 'user-1',
+        priority: 'high',
+        proposedAction: 'prepare_task',
+      },
+      task: {
+        repo: '/tmp/proj',
+        task: 'Review preview only.',
+        allowedPaths: ['docs/...'],
+        verification: ['npm run typecheck'],
+        riskLevel: 'low',
+        output: 'json',
+        branchName: 'companion/gateway-telegram-1',
+        maxFilesChanged: 5,
+        maxToolRounds: 25,
+        memoryPolicy: 'handoff',
+        fleetPolicy: 'none',
+        edits: [],
+      },
+      safety: {
+        rawTextStored: false,
+        previewOnly: true,
+        autoDispatch: false,
+        requiresLocalApproval: true,
+      },
+    }));
+    const readCompanionGatewayInbox = vi.fn(async () => ({
+      schemaVersion: 1,
+      kind: 'companion_gateway_inbox',
+      generatedAt: '2026-06-07T10:01:00.000Z',
+      cwd: '/tmp/proj',
+      storePath: '/tmp/proj/.codebuddy/companion/gateway-inbox.json',
+      counts: { queued: 0, ignored: 0, highPriority: 1, total: 1 },
+      safety: {
+        autoDispatch: false,
+        rawTextStored: false,
+        outboundDisabledByDefault: true,
+        localOnly: true,
+      },
+      items: [],
+    }));
+    coreLoaderMock.loadCoreModule.mockResolvedValue({
+      draftCompanionGatewayInboxItem,
+      readCompanionGatewayInbox,
+    });
+    registerCompanionIpcHandlers(projectSource('/tmp/proj'));
+
+    const handler = electronMock.handlers.get('companion.gateway.draft');
+    const res = (await handler?.({}, { itemId: 'gateway_telegram_1' })) as {
+      ok: boolean;
+      draft?: { autoDispatch: boolean; requiresLocalApproval: boolean; command: string[] };
+      inbox?: { counts: { queued: number } };
+    };
+    expect(res.ok).toBe(true);
+    expect(res.draft?.autoDispatch).toBe(false);
+    expect(res.draft?.requiresLocalApproval).toBe(true);
+    expect(res.draft?.command).toContain('--require-approval');
+    expect(res.inbox?.counts.queued).toBe(0);
+    expect(draftCompanionGatewayInboxItem).toHaveBeenCalledWith('gateway_telegram_1', { cwd: '/tmp/proj' });
+    expect(readCompanionGatewayInbox).toHaveBeenCalledWith({ cwd: '/tmp/proj' });
+  });
+
   it('syncs companion missions in the active workspace', async () => {
     const syncCompanionMissionBoard = vi.fn(async () => ({ radarId: 'radar-1', board: { missions: [] } }));
     coreLoaderMock.loadCoreModule.mockResolvedValue({ syncCompanionMissionBoard });

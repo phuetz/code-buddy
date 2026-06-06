@@ -545,7 +545,7 @@ export interface CompanionGatewayInboxItem {
   };
   mode: CompanionGatewayMode;
   priority: CompanionGatewayInboxPriority;
-  status: 'queued' | 'ignored';
+  status: 'queued' | 'ignored' | 'drafted';
   proposedAction: {
     type: CompanionGatewayInboxActionType;
     label: string;
@@ -560,6 +560,52 @@ export interface CompanionGatewayInboxItem {
   };
   tags: string[];
   reason: string;
+  draft?: CompanionGatewayInboxDraftSummary;
+}
+
+export interface CompanionGatewayAutonomousCodeTask {
+  repo: string;
+  task: string;
+  allowedPaths: string[];
+  verification: string[];
+  riskLevel: 'low';
+  output: 'json';
+  branchName: string;
+  maxFilesChanged: number;
+  maxToolRounds: number;
+  memoryPolicy: 'handoff';
+  fleetPolicy: 'none';
+  edits: [];
+}
+
+export interface CompanionGatewayInboxDraftSummary {
+  id: string;
+  createdAt: string;
+  kind: 'autonomous_code_task';
+  taskFile: string;
+  command: string[];
+  autoDispatch: false;
+  requiresLocalApproval: true;
+}
+
+export interface CompanionGatewayInboxDraft extends CompanionGatewayInboxDraftSummary {
+  schemaVersion: 1;
+  sourceItemId: string;
+  source: {
+    channel: string;
+    threadId: string;
+    senderId: string;
+    senderName?: string;
+    priority: CompanionGatewayInboxPriority;
+    proposedAction: CompanionGatewayInboxActionType;
+  };
+  task: CompanionGatewayAutonomousCodeTask;
+  safety: {
+    rawTextStored: false;
+    previewOnly: true;
+    autoDispatch: false;
+    requiresLocalApproval: true;
+  };
 }
 
 export interface CompanionGatewayInbox {
