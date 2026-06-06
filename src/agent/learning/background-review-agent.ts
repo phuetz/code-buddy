@@ -20,14 +20,35 @@
 import { logger } from '../../utils/logger.js';
 import { executeToolHeadless, type HeadlessToolResult } from '../../cloud/headless-tool-executor.js';
 import {
+  buildSkillWriteRollbackPlan,
   isBackgroundSkillWriteEnabled,
   recordSkillWriteAuditEntry,
   screenContentForSecrets,
   SKILL_BACKGROUND_WRITE_REVIEWER,
 } from './skill-background-writes.js';
 
-/** skill_manage actions that mutate an installed skill / its files. */
-const MUTATING_SKILL_ACTIONS = new Set(['create', 'edit', 'patch', 'write_file']);
+/** skill_manage actions that are safe to run in a background review without writes. */
+const READ_ONLY_SKILL_ACTIONS = new Set([
+  'list',
+  'view',
+  'history',
+  'preview_update',
+  'candidate_list',
+  'candidate_view',
+]);
+
+/**
+ * Background-allowed skill mutations. Destructive/lifecycle actions such as
+ * delete/reset/update/rollback/enable/disable/deprecate stay interactive-only.
+ */
+const MUTATING_SKILL_ACTIONS = new Set([
+  'create',
+  'edit',
+  'patch',
+  'write_file',
+  'remove_file',
+  'candidate_install',
+]);
 
 /** The only tools a background review may use. */
 export const BACKGROUND_REVIEW_ALLOWED_TOOLS = [
@@ -266,6 +287,11 @@ export async function runBackgroundReview(
             candidateId: `review-${String(args.action ?? '')}`,
             installedPath: String(args.name ?? ''),
             reviewer: SKILL_BACKGROUND_WRITE_REVIEWER,
+            rollbackPlan: buildSkillWriteRollbackPlan({
+              action: String(args.action ?? ''),
+              output: result.output,
+              skillName: String(args.name ?? ''),
+            }),
             skillName: String(args.name ?? ''),
             sourceCandidatePath: 'background-review',
             writtenAt: new Date().toISOString(),
@@ -354,7 +380,19 @@ export function guardReviewWrite(
   name: string,
   args: Record<string, unknown>,
 ): { allowed: true } | { allowed: false; reason: string } {
-  const isSkillMutation = name === 'skill_manage' && MUTATING_SKILL_ACTIONS.has(String(args.action ?? ''));
+  const action = String(args.action ?? '').trim();
+  const isSkillManage = name === 'skill_manage';
+  const isSkillMutation = isSkillManage && MUTATING_SKILL_ACTIONS.has(action);
+  if (
+    isSkillManage &&
+    !READ_ONLY_SKILL_ACTIONS.has(action) &&
+    !MUTATING_SKILL_ACTIONS.has(action)
+  ) {
+    return {
+      allowed: false,
+      reason: `skill_manage action "${action || 'missing'}" is not permitted in background review`,
+    };
+  }
   if (isSkillMutation && !isBackgroundSkillWriteEnabled()) {
     return {
       allowed: false,

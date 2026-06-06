@@ -10,6 +10,7 @@ import {
 } from '../../../src/agent/research-script-skill-candidate.js';
 import type { ResearchScriptJobRunResult } from '../../../src/agent/research-script-job-runner.js';
 import {
+  buildSkillWriteRollbackPlan,
   listSkillWriteAudit,
   promoteSkillCandidate,
   SKILL_BACKGROUND_WRITE_REVIEWER,
@@ -121,6 +122,10 @@ describe('skill background writes (S1 — sentinel auto-install gated by flag)',
     expect(audit).toHaveLength(1);
     expect(audit[0]).toMatchObject({
       reviewer: SKILL_BACKGROUND_WRITE_REVIEWER,
+      rollbackPlan: {
+        command: `buddy skills uninstall ${candidate.skillName} --json`,
+        kind: 'uninstall',
+      },
       skillName: candidate.skillName,
     });
 
@@ -211,5 +216,23 @@ describe('skill background writes (S1 — sentinel auto-install gated by flag)',
     expect(hub.info(candidate.skillName)).not.toBeNull();
     await hub.uninstall(candidate.skillName);
     expect(hub.info(candidate.skillName)).toBeNull();
+  });
+
+  it('builds a concrete snapshot rollback plan from skill_manage JSON output', () => {
+    const plan = buildSkillWriteRollbackPlan({
+      action: 'patch',
+      output: JSON.stringify({
+        action: 'skill_manage_patch',
+        snapshot: { id: 'snapshot-123' },
+      }),
+      skillName: 'patch-helper',
+    });
+
+    expect(plan).toEqual({
+      command: 'buddy skills rollback patch-helper --snapshot snapshot-123 --approved-by <reviewer> --json',
+      kind: 'rollback',
+      reason: 'snapshot snapshot-123 captured before the autonomous mutation',
+      snapshotId: 'snapshot-123',
+    });
   });
 });

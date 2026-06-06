@@ -94,9 +94,17 @@ export interface SkillWriteAuditEntry {
   candidateId: string;
   installedPath: string;
   reviewer: typeof SKILL_BACKGROUND_WRITE_REVIEWER;
+  rollbackPlan?: SkillWriteRollbackPlan;
   skillName: string;
   sourceCandidatePath: string;
   writtenAt: string;
+}
+
+export interface SkillWriteRollbackPlan {
+  command: string;
+  kind: 'uninstall' | 'rollback' | 'manual-review';
+  reason: string;
+  snapshotId?: string;
 }
 
 interface SkillWriteAuditFile {
@@ -177,6 +185,10 @@ export async function promoteSkillCandidate(
     candidateId: candidate.id,
     installedPath: installed.installedPath,
     reviewer: SKILL_BACKGROUND_WRITE_REVIEWER,
+    rollbackPlan: buildSkillWriteRollbackPlan({
+      action: 'create',
+      skillName,
+    }),
     skillName,
     sourceCandidatePath: installed.sourceCandidatePath,
     writtenAt: new Date().toISOString(),
@@ -226,6 +238,47 @@ export function recordSkillWriteAuditEntry(workDir: string, entry: SkillWriteAud
   recordSkillWriteAudit(workDir, entry);
 }
 
+export function buildSkillWriteRollbackPlan(input: {
+  action?: string;
+  output?: string;
+  skillName: string;
+}): SkillWriteRollbackPlan {
+  const action = (input.action ?? '').trim();
+  const skillName = input.skillName.trim();
+  const snapshotId = extractRollbackSnapshotId(input.output);
+
+  if (action === 'create' || action === 'candidate_install') {
+    return {
+      command: `buddy skills uninstall ${shellArg(skillName)} --json`,
+      kind: 'uninstall',
+      reason: 'brand-new background skill; uninstall removes the installed package',
+    };
+  }
+
+  if (snapshotId) {
+    return {
+      command: `buddy skills rollback ${shellArg(skillName)} --snapshot ${shellArg(snapshotId)} --approved-by <reviewer> --json`,
+      kind: 'rollback',
+      reason: `snapshot ${snapshotId} captured before the autonomous mutation`,
+      snapshotId,
+    };
+  }
+
+  if (['edit', 'patch', 'write_file', 'remove_file', 'reset', 'update', 'rollback'].includes(action)) {
+    return {
+      command: `buddy skills rollback ${shellArg(skillName)} --approved-by <reviewer> --json`,
+      kind: 'rollback',
+      reason: 'mutation should have a SkillsHub snapshot; use latest rollback if no snapshot id was captured',
+    };
+  }
+
+  return {
+    command: `buddy skills history ${shellArg(skillName)} --json`,
+    kind: 'manual-review',
+    reason: `no automatic rollback command is known for skill_manage action "${action || 'unknown'}"`,
+  };
+}
+
 /** Read the background skill-write audit trail (newest entries appended last). */
 export function listSkillWriteAudit(workDir: string = process.cwd()): SkillWriteAuditEntry[] {
   const filePath = path.join(path.resolve(workDir), AUDIT_DIR, AUDIT_FILE);
@@ -256,4 +309,49 @@ function readAuditFile(filePath: string): SkillWriteAuditFile {
     // Fall through to a fresh file.
   }
   return { schemaVersion: SKILL_WRITE_AUDIT_SCHEMA_VERSION, entries: [] };
+}
+
+function extractRollbackSnapshotId(output: string | undefined): string | undefined {
+  if (!output) return undefined;
+  try {
+    const parsed = JSON.parse(output) as unknown;
+    return findSnapshotId(parsed, 0);
+  } catch {
+    return undefined;
+  }
+}
+
+function findSnapshotId(value: unknown, depth: number): string | undefined {
+  if (depth > 6 || value === null || typeof value !== 'object') return undefined;
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const found = findSnapshotId(item, depth + 1);
+      if (found) return found;
+    }
+    return undefined;
+  }
+
+  const record = value as Record<string, unknown>;
+  for (const key of ['rollbackSnapshotId', 'snapshotId']) {
+    if (typeof record[key] === 'string' && record[key].trim()) {
+      return record[key].trim();
+    }
+  }
+  if (record.snapshot && typeof record.snapshot === 'object') {
+    const snapshot = record.snapshot as Record<string, unknown>;
+    if (typeof snapshot.id === 'string' && snapshot.id.trim()) {
+      return snapshot.id.trim();
+    }
+  }
+
+  for (const nested of Object.values(record)) {
+    const found = findSnapshotId(nested, depth + 1);
+    if (found) return found;
+  }
+  return undefined;
+}
+
+function shellArg(value: string): string {
+  if (/^[A-Za-z0-9._:/\\-]+$/.test(value)) return value;
+  return JSON.stringify(value);
 }

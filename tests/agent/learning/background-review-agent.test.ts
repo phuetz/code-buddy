@@ -255,6 +255,30 @@ describe('reversible-net guard on the live review loop (option A)', () => {
     expect(guardReviewWrite('skill_manage', call)).toMatchObject({ allowed: false });
     process.env[WRITE_SKILLS] = 'true';
     expect(guardReviewWrite('skill_manage', call)).toEqual({ allowed: true });
+    expect(
+      guardReviewWrite('skill_manage', {
+        action: 'remove_file',
+        approved_by: 'auto:gate-passed',
+        file_path: 'scripts/old.py',
+        name: 'demo',
+      }),
+    ).toEqual({ allowed: true });
+  });
+
+  it('refuses destructive or lifecycle skill actions in the autonomous review path', () => {
+    process.env[WRITE_SKILLS] = 'true';
+    for (const action of ['delete', 'reset', 'rollback', 'update', 'enable', 'disable', 'deprecate', 'discover']) {
+      expect(
+        guardReviewWrite('skill_manage', {
+          action,
+          approved_by: 'auto:gate-passed',
+          name: 'demo',
+        }),
+      ).toMatchObject({
+        allowed: false,
+        reason: expect.stringContaining('not permitted'),
+      });
+    }
   });
 
   it('screens any write (skill or memory) for secrets/omissions', () => {
@@ -294,6 +318,34 @@ describe('reversible-net guard on the live review loop (option A)', () => {
     ]);
   });
 
+  it('refuses destructive skill actions in the live loop even when autonomous writes are enabled', async () => {
+    process.env[WRITE_SKILLS] = 'true';
+    const client = scriptedClient([
+      {
+        role: 'assistant',
+        content: '',
+        tool_calls: [
+          { id: 'c1', function: { name: 'skill_manage', arguments: '{"action":"delete","name":"demo","approved_by":"auto:gate-passed"}' } },
+        ],
+      },
+      { role: 'assistant', content: 'done' },
+    ]);
+    const executeTool = vi.fn(async (): Promise<HeadlessToolResult> => ({ success: true, output: 'deleted' }));
+
+    const result = await runBackgroundReview({
+      client,
+      transcript: [{ role: 'user', content: 'do a thing' }],
+      mode: 'skill',
+      tools: TOOLS,
+      executeTool,
+    });
+
+    expect(executeTool).not.toHaveBeenCalled();
+    expect(result.screenedWrites).toEqual([
+      { name: 'skill_manage', reason: expect.stringContaining('not permitted') },
+    ]);
+  });
+
   it('executes and audits a gated, clean skill create in the live loop', async () => {
     process.env[WRITE_SKILLS] = 'true';
     const workDir = await fs.mkdtemp(path.join(os.tmpdir(), 'review-audit-'));
@@ -323,7 +375,14 @@ describe('reversible-net guard on the live review loop (option A)', () => {
       expect(result.screenedWrites).toEqual([]);
       const audit = listSkillWriteAudit(workDir);
       expect(audit).toHaveLength(1);
-      expect(audit[0]).toMatchObject({ skillName: 'demo-skill', reviewer: 'auto:gate-passed' });
+      expect(audit[0]).toMatchObject({
+        rollbackPlan: {
+          command: 'buddy skills uninstall demo-skill --json',
+          kind: 'uninstall',
+        },
+        skillName: 'demo-skill',
+        reviewer: 'auto:gate-passed',
+      });
     } finally {
       await fs.rm(workDir, { recursive: true, force: true });
     }
