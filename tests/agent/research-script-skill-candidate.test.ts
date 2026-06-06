@@ -71,6 +71,14 @@ describe('research script skill candidate', () => {
 
     expect(candidate).toMatchObject({
       eligible: true,
+      gradedTasks: expect.arrayContaining([
+        expect.objectContaining({
+          command: 'node script.js',
+          expected: 'pass',
+          sourceJobId: job.id,
+          toolName: 'research_script',
+        }),
+      ]),
       skillName: 'research-architect-public-enrichment',
       skillPath: '.codebuddy/skill-candidates/research-architect-public-enrichment/SKILL.md',
       sourceJobId: job.id,
@@ -167,10 +175,15 @@ describe('research script skill candidate', () => {
       );
       const reviewManifest = JSON.parse(
         await fs.readFile(materialized.absoluteReviewManifestPath, 'utf8'),
-      ) as { approvalRequired: boolean; status: string; generatedAt: string };
+      ) as { approvalRequired: boolean; gradedTasks?: Array<{ command: string }>; status: string; generatedAt: string };
       expect(reviewManifest).toMatchObject({
         approvalRequired: true,
         generatedAt: '2026-05-18T17:40:00.000Z',
+        gradedTasks: expect.arrayContaining([
+          expect.objectContaining({
+            command: 'node script.js',
+          }),
+        ]),
         status: 'awaiting_human_approval',
       });
     } finally {
@@ -211,6 +224,17 @@ describe('research script skill candidate', () => {
           eligible: true,
           evidenceRunIds: ['run-one', 'run-two'],
           generatedAt: '2026-06-06T12:00:00.000Z',
+          gradedTasks: [
+            {
+              command: 'npm test -- tests/agent/learning-agent-real.test.ts --run',
+              expected: 'pass',
+              id: 'graded-learning-proof',
+              isTest: true,
+              sourceRunId: 'run-two',
+              timeoutMs: 30000,
+              toolName: 'bash',
+            },
+          ],
           promotionThreshold: 2,
           proofBackedSuccessCount: 2,
           proofCommands: [
@@ -241,6 +265,14 @@ describe('research script skill candidate', () => {
         expect.objectContaining({
           eligible: true,
           kind: 'learning',
+          gradedTasks: [
+            expect.objectContaining({
+              command: 'npm test -- tests/agent/learning-agent-real.test.ts --run',
+              expected: 'pass',
+              sourceRunId: 'run-two',
+              toolName: 'bash',
+            }),
+          ],
           proofBackedSuccessCount: 2,
           proofCommands: [
             expect.objectContaining({

@@ -28,6 +28,7 @@ export interface SkillCandidateReviewQueueItem {
   installedIntegrityOk?: boolean;
   installedPath?: string;
   installedVersion?: string;
+  gradedTasks?: SkillCandidateGradedTask[];
   firewall?: {
     capabilities: string[];
     findingCounts: {
@@ -65,6 +66,17 @@ export interface SkillCandidateProofCommand {
   sequence: number;
   success?: boolean;
   toolName: string;
+}
+
+export interface SkillCandidateGradedTask {
+  command: string;
+  expected: 'pass';
+  id: string;
+  isTest?: boolean;
+  sourceJobId?: string;
+  sourceRunId?: string;
+  timeoutMs?: number;
+  toolName?: string;
 }
 
 export interface SkillCandidateSideBySideDiffRow {
@@ -359,6 +371,18 @@ export const SkillCandidateReviewQueueStrip: React.FC<{
                   <code className="truncate">{formatLatestProofCommand(candidate)}</code>
                 </div>
               ) : null}
+              {formatLatestGradedTask(candidate) ? (
+                <div
+                  className="mt-0.5 flex min-w-0 items-center gap-1 text-[9px] text-text-muted"
+                  data-testid={`skill-candidate-graded-task-${candidate.skillName}`}
+                >
+                  <ListChecks size={9} className="shrink-0 text-text-muted" />
+                  <span className="shrink-0">
+                    {t('fleet.skillCandidate.gradedTask', 'Graded task')}:
+                  </span>
+                  <code className="truncate">{formatLatestGradedTask(candidate)}</code>
+                </div>
+              ) : null}
               {candidate.installedVersion ? (
                 <div className="mt-0.5 truncate text-[9px] text-text-muted">
                   {t('fleet.skillCandidate.installedVersion', 'Installed')}: v{candidate.installedVersion}
@@ -636,6 +660,18 @@ function formatLatestProofCommand(candidate: SkillCandidateReviewQueueItem): str
     ? ` (${candidate.proofCommands.length} proof commands)`
     : '';
   return `${status}${duration} ${command.command ?? command.toolName}${count}`;
+}
+
+function formatLatestGradedTask(candidate: SkillCandidateReviewQueueItem): string | null {
+  const task = candidate.gradedTasks?.at(-1);
+  if (!task) return null;
+  const source = task.sourceRunId ?? task.sourceJobId;
+  const sourceText = source ? ` from ${source}` : '';
+  const timeout = task.timeoutMs === undefined ? '' : ` timeout ${task.timeoutMs}ms`;
+  const count = candidate.gradedTasks && candidate.gradedTasks.length > 1
+    ? ` (${candidate.gradedTasks.length} graded tasks)`
+    : '';
+  return `${task.command} must ${task.expected}${sourceText}${timeout}${count}`;
 }
 
 function isCandidateInstallActionVisible(candidate: SkillCandidateReviewQueueItem): boolean {

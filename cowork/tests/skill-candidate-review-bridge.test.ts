@@ -33,6 +33,17 @@ describe('skill candidate review bridge', () => {
       {
         eligible: true,
         evidenceRunIds: ['run-learning-first', 'run-learning-ready'],
+        gradedTasks: [
+          {
+            command: 'npm test -- tests/agent/learning-agent-real.test.ts --run',
+            expected: 'pass',
+            id: 'graded-learning-ready',
+            isTest: true,
+            sourceRunId: 'run-learning-ready',
+            timeoutMs: 30000,
+            toolName: 'bash',
+          },
+        ],
         id: 'candidate-ready',
         kind: 'learning',
         promotionThreshold: 2,
@@ -100,6 +111,17 @@ describe('skill candidate review bridge', () => {
           summary: 'Skill Firewall allow: score 100/100',
           verdict: 'allow',
         },
+        gradedTasks: [
+          {
+            command: 'npm test -- tests/agent/learning-agent-real.test.ts --run',
+            expected: 'pass',
+            id: 'graded-learning-ready',
+            isTest: true,
+            sourceRunId: 'run-learning-ready',
+            timeoutMs: 30000,
+            toolName: 'bash',
+          },
+        ],
         id: 'candidate-ready',
         kind: 'learning',
         promotionThreshold: 2,

@@ -66,6 +66,26 @@ describe('SkillCandidateReviewQueueStrip', () => {
               installState: 'installed-different',
               installedIntegrityOk: true,
               installedVersion: '0.1.0',
+              gradedTasks: [
+                {
+                  command: 'npm test -- tests/agent/learning-agent-real.test.ts --run',
+                  expected: 'pass',
+                  id: 'graded-run-learning-first',
+                  isTest: true,
+                  sourceRunId: 'run-learning-first',
+                  timeoutMs: 30000,
+                  toolName: 'bash',
+                },
+                {
+                  command: 'npm run typecheck',
+                  expected: 'pass',
+                  id: 'graded-run-learning-architect',
+                  isTest: true,
+                  sourceRunId: 'run-learning-architect',
+                  timeoutMs: 30000,
+                  toolName: 'bash',
+                },
+              ],
               firewall: {
                 capabilities: ['network'],
                 findingCounts: {
@@ -137,6 +157,8 @@ describe('SkillCandidateReviewQueueStrip', () => {
     expect(strip?.textContent).toContain('Proof: proven');
     expect(strip?.textContent).toContain('Proof command');
     expect(strip?.textContent).toContain('passed 2200ms npm run typecheck (2 proof commands)');
+    expect(strip?.textContent).toContain('Graded task');
+    expect(strip?.textContent).toContain('npm run typecheck must pass from run-learning-architect timeout 30000ms (2 graded tasks)');
     expect(strip?.textContent).toContain('run-learning-first, run-learning-architect');
     expect(strip?.textContent).toContain('Firewall: review');
     expect(strip?.textContent).toContain('90/100');

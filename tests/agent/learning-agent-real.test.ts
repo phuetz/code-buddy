@@ -148,11 +148,22 @@ describe('Learning Agent on real RunStore trajectories', () => {
     expect(candidateMarkdown).toContain('Proof command');
     expect(candidateMarkdown).toContain('npm test -- tests/agent/learning-agent-real.test.ts --run');
     expect(candidateMarkdown).toContain('Proof commands: 1');
+    expect(candidateMarkdown).toContain('## Graded Tasks');
+    expect(candidateMarkdown).toContain('Graded task');
     expect(candidateMarkdown).toContain('## Quick Reference');
     expect(JSON.parse(fs.readFileSync(reviewPath, 'utf8'))).toMatchObject({
       approvalRequired: true,
       eligible: false,
       evidenceRunIds: [runId],
+      gradedTasks: [
+        expect.objectContaining({
+          command: 'npm test -- tests/agent/learning-agent-real.test.ts --run',
+          expected: 'pass',
+          isTest: true,
+          sourceRunId: runId,
+          toolName: 'bash',
+        }),
+      ],
       proofBackedSuccessCount: 1,
       proofCommands: [
         expect.objectContaining({
@@ -248,6 +259,10 @@ describe('Learning Agent on real RunStore trajectories', () => {
     expect(promotedReview.proofCommands).toEqual([
       expect.objectContaining({ runId: firstRunId, command: 'npm test -- tests/agent/learning-agent-real.test.ts --run' }),
       expect.objectContaining({ runId: secondRunId, command: 'npm test -- tests/agent/learning-agent-real.test.ts --run' }),
+    ]);
+    expect(promotedReview.gradedTasks).toEqual([
+      expect.objectContaining({ sourceRunId: firstRunId, command: 'npm test -- tests/agent/learning-agent-real.test.ts --run' }),
+      expect.objectContaining({ sourceRunId: secondRunId, command: 'npm test -- tests/agent/learning-agent-real.test.ts --run' }),
     ]);
   });
 

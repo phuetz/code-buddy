@@ -28,6 +28,17 @@ export interface SkillCandidateProofCommandSummary {
   toolName: string;
 }
 
+export interface SkillCandidateGradedTaskSummary {
+  command: string;
+  expected: 'pass';
+  id: string;
+  isTest?: boolean;
+  sourceJobId?: string;
+  sourceRunId?: string;
+  timeoutMs?: number;
+  toolName?: string;
+}
+
 export interface SkillCandidateReviewSummary {
   candidateChecksum?: string;
   candidateDiffPreview?: {
@@ -46,6 +57,7 @@ export interface SkillCandidateReviewSummary {
   installedPath?: string;
   installedVersion?: string;
   firewall?: SkillCandidateFirewallSummary;
+  gradedTasks?: SkillCandidateGradedTaskSummary[];
   kind: string;
   promotionThreshold?: number;
   proofBackedSuccessCount?: number;
@@ -109,6 +121,7 @@ interface ResearchScriptSkillCandidate {
   installedIntegrityOk?: boolean;
   installedPath?: string;
   installedVersion?: string;
+  gradedTasks?: SkillCandidateGradedTaskSummary[];
   kind?: string;
   promotionThreshold?: number;
   proofBackedSuccessCount?: number;
@@ -268,6 +281,7 @@ function summarizeSkillCandidate(
     installedPath: candidate.installedPath,
     installedVersion: candidate.installedVersion,
     firewall: summarizeCandidateFirewall(candidate, options),
+    gradedTasks: candidate.gradedTasks,
     kind: candidate.kind ?? (candidate.sourceRunId ? 'learning' : 'research-script'),
     promotionThreshold: candidate.promotionThreshold,
     proofBackedSuccessCount: candidate.proofBackedSuccessCount,

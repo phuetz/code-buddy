@@ -23,9 +23,21 @@ export interface ResearchScriptSkillProofCommand {
   toolName: string;
 }
 
+export interface ResearchScriptSkillGradedTask {
+  command: string;
+  expected: 'pass';
+  id: string;
+  isTest?: boolean;
+  sourceJobId?: string;
+  sourceRunId?: string;
+  timeoutMs?: number;
+  toolName?: string;
+}
+
 export interface ResearchScriptSkillCandidate {
   eligible: boolean;
   evidenceRunIds?: string[];
+  gradedTasks?: ResearchScriptSkillGradedTask[];
   id: string;
   kind: MaterializedSkillCandidateKind;
   promotionThreshold?: number;
@@ -54,6 +66,7 @@ export interface ResearchScriptSkillCandidateReviewManifest {
   eligible: boolean;
   evidenceRunIds?: string[];
   generatedAt: string;
+  gradedTasks?: ResearchScriptSkillGradedTask[];
   kind?: MaterializedSkillCandidateKind;
   promotionThreshold?: number;
   proofBackedSuccessCount?: number;
@@ -143,6 +156,7 @@ interface RawResearchScriptSkillCandidateReviewManifest {
   eligible?: unknown;
   evidenceRunIds?: unknown;
   generatedAt?: unknown;
+  gradedTasks?: unknown;
   kind?: unknown;
   promotionThreshold?: unknown;
   proofBackedSuccessCount?: unknown;
@@ -178,6 +192,7 @@ export function buildResearchScriptSkillCandidate(
 
   const candidate = {
     eligible,
+    gradedTasks: deriveResearchScriptGradedTasks(job, successfulRuns),
     id: `skill-candidate-${stableHash([job.id, skillName].join('|'))}`,
     kind: 'research-script' as const,
     reason,
@@ -249,6 +264,7 @@ export async function readMaterializedResearchScriptSkillCandidate(
   return {
     eligible: manifest.eligible,
     evidenceRunIds: manifest.evidenceRunIds,
+    gradedTasks: manifest.gradedTasks,
     id: manifest.candidateId,
     kind: manifest.kind ?? 'research-script',
     promotionThreshold: manifest.promotionThreshold,
@@ -426,6 +442,7 @@ function buildResearchScriptSkillCandidateReviewManifest(
     candidateId: candidate.id,
     eligible: candidate.eligible,
     generatedAt: normalizeCreatedAt(generatedAt),
+    gradedTasks: candidate.gradedTasks,
     kind: 'research-script',
     schemaVersion: RESEARCH_SCRIPT_SKILL_CANDIDATE_REVIEW_SCHEMA_VERSION,
     skillName: candidate.skillName,
@@ -622,6 +639,7 @@ function parseReviewManifest(raw: string): ResearchScriptSkillCandidateReviewMan
       ...base,
       eligible: status === 'awaiting_human_approval',
       evidenceRunIds: normalizeStringArray(parsed.evidenceRunIds),
+      gradedTasks: normalizeGradedTasks(parsed.gradedTasks),
       kind: 'learning',
       promotionThreshold: normalizeOptionalPositiveInteger(parsed.promotionThreshold),
       proofBackedSuccessCount: normalizeOptionalPositiveInteger(parsed.proofBackedSuccessCount),
@@ -647,6 +665,7 @@ function parseReviewManifest(raw: string): ResearchScriptSkillCandidateReviewMan
   return {
     ...base,
     eligible: parsed.eligible,
+    gradedTasks: normalizeGradedTasks(parsed.gradedTasks),
     kind: 'research-script',
     sourceJobId: parsed.sourceJobId.trim(),
     status: parsed.eligible ? 'awaiting_human_approval' : 'not_eligible',
@@ -735,6 +754,61 @@ function normalizeProofCommands(value: unknown): ResearchScriptSkillProofCommand
     })
     .filter((item): item is ResearchScriptSkillProofCommand => item !== null);
   return commands.length > 0 ? commands.slice(-20) : undefined;
+}
+
+function deriveResearchScriptGradedTasks(
+  job: ResearchScriptJobArtifact,
+  runs: ResearchScriptJobRunResult[],
+): ResearchScriptSkillGradedTask[] | undefined {
+  const tasks = runs.flatMap((run, index): ResearchScriptSkillGradedTask[] => {
+    const command = run.commandPreview.trim();
+    if (!command) return [];
+    return [{
+      command,
+      expected: 'pass',
+      id: `graded-${stableHash(`${job.id}|${index}|${command}`)}`,
+      isTest: false,
+      sourceJobId: job.id,
+      timeoutMs: run.durationMs > 0 ? Math.max(30_000, Math.ceil(run.durationMs * 3)) : undefined,
+      toolName: 'research_script',
+    }];
+  }).slice(-5);
+  return tasks.length > 0 ? tasks : undefined;
+}
+
+function normalizeGradedTasks(value: unknown): ResearchScriptSkillGradedTask[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const tasks = value
+    .map((item): ResearchScriptSkillGradedTask | null => {
+      if (!isRecord(item)) return null;
+      const command = typeof item.command === 'string' && item.command.trim()
+        ? item.command.trim()
+        : undefined;
+      if (!command) return null;
+      const id = typeof item.id === 'string' && item.id.trim()
+        ? item.id.trim()
+        : `graded-${stableHash(command)}`;
+      return {
+        command,
+        expected: 'pass',
+        id,
+        isTest: item.isTest === true,
+        sourceJobId: typeof item.sourceJobId === 'string' && item.sourceJobId.trim()
+          ? item.sourceJobId.trim()
+          : undefined,
+        sourceRunId: typeof item.sourceRunId === 'string' && item.sourceRunId.trim()
+          ? item.sourceRunId.trim()
+          : undefined,
+        timeoutMs: typeof item.timeoutMs === 'number' && Number.isFinite(item.timeoutMs)
+          ? Math.max(0, Math.trunc(item.timeoutMs))
+          : undefined,
+        toolName: typeof item.toolName === 'string' && item.toolName.trim()
+          ? item.toolName.trim()
+          : undefined,
+      };
+    })
+    .filter((item): item is ResearchScriptSkillGradedTask => item !== null);
+  return tasks.length > 0 ? tasks.slice(-20) : undefined;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

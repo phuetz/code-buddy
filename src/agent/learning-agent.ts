@@ -109,6 +109,16 @@ export interface LearningSkillProofCommand {
   toolName: string;
 }
 
+export interface LearningSkillGradedTask {
+  command: string;
+  expected: 'pass';
+  id: string;
+  isTest: boolean;
+  sourceRunId: string;
+  timeoutMs?: number;
+  toolName: string;
+}
+
 export interface LearningToolStat {
   averageDurationMs?: number;
   failureCount: number;
@@ -144,6 +154,7 @@ export interface LearningSkillCandidate {
   promotionThreshold: number;
   proofBackedSuccessCount: number;
   proofCommands: LearningSkillProofCommand[];
+  gradedTasks: LearningSkillGradedTask[];
   proofStatus: LearningSkillProofStatus;
   reason: string;
   reviewManifestPath?: string;
@@ -297,6 +308,7 @@ interface LearningSkillCandidateReviewManifest {
   promotionThreshold: number;
   proofBackedSuccessCount: number;
   proofCommands: LearningSkillProofCommand[];
+  gradedTasks: LearningSkillGradedTask[];
   proofStatus: LearningSkillProofStatus;
   schemaVersion: typeof LEARNING_SKILL_CANDIDATE_REVIEW_SCHEMA_VERSION;
   skillName: string;
@@ -870,6 +882,7 @@ function buildSkillCandidates(
       promotionThreshold: LEARNING_SKILL_PROMOTION_THRESHOLD,
       proofBackedSuccessCount: 0,
       proofCommands: [],
+      gradedTasks: [],
       proofStatus: 'missing',
       reason: `Observed in ${exported.run.runId}: ${pattern.detail}. Awaiting repeated proof-backed runs.`,
       reviewManifestPath,
@@ -956,6 +969,10 @@ function applyLearningSkillPromotionEvidence(
     const promotionThreshold = candidate.promotionThreshold || LEARNING_SKILL_PROMOTION_THRESHOLD;
     const evidenceRunIds = Array.isArray(record?.evidenceRunIds) ? record.evidenceRunIds : [];
     const proofCommands = Array.isArray(record?.proofCommands) ? record.proofCommands : candidate.proofCommands;
+    const gradedTasks = deriveSkillGradedTasks({
+      ...candidate,
+      proofCommands,
+    });
     const proofStatus = record?.lastProofStatus ?? candidate.proofStatus ?? 'missing';
     const eligible = proofBackedSuccessCount >= promotionThreshold;
     const proofSummary = `${proofBackedSuccessCount}/${promotionThreshold} proof-backed successful run(s)`;
@@ -966,6 +983,7 @@ function applyLearningSkillPromotionEvidence(
       promotionThreshold,
       proofBackedSuccessCount,
       proofCommands,
+      gradedTasks,
       proofStatus,
       reason: eligible
         ? `${proofSummary} met the Learning Agent promotion threshold.`
@@ -1006,6 +1024,7 @@ function materializeLearningSkillCandidates(
         promotionThreshold: candidate.promotionThreshold,
         proofBackedSuccessCount: candidate.proofBackedSuccessCount,
         proofCommands: candidate.proofCommands,
+        gradedTasks: candidate.gradedTasks,
         proofStatus: candidate.proofStatus,
         schemaVersion: LEARNING_SKILL_CANDIDATE_REVIEW_SCHEMA_VERSION,
         skillName: candidate.skillName,
@@ -1158,6 +1177,36 @@ function mergeLearningProofCommands(
   return merged.slice(-20);
 }
 
+export function deriveSkillGradedTasks(candidate: Pick<
+  LearningSkillCandidate,
+  'proofCommands' | 'skillName'
+>): LearningSkillGradedTask[] {
+  const seen = new Set<string>();
+  const tasks: LearningSkillGradedTask[] = [];
+  for (const proofCommand of candidate.proofCommands) {
+    const command = proofCommand.command?.trim();
+    if (!command || proofCommand.success === false) continue;
+    const key = `${proofCommand.runId}|${command}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    tasks.push({
+      command,
+      expected: 'pass',
+      id: `graded-${stableHash(`${candidate.skillName}|${proofCommand.runId}|${proofCommand.sequence}|${command}`)}`,
+      isTest: proofCommand.isTest,
+      sourceRunId: proofCommand.runId,
+      timeoutMs: inferGradedTaskTimeoutMs(proofCommand),
+      toolName: proofCommand.toolName,
+    });
+  }
+  return tasks.slice(-5);
+}
+
+function inferGradedTaskTimeoutMs(command: LearningSkillProofCommand): number | undefined {
+  if (!command.durationMs || command.durationMs <= 0) return undefined;
+  return Math.max(30_000, Math.ceil(command.durationMs * 3));
+}
+
 function renderLearningSkillCandidateMarkdown(
   retrospective: LearningRetrospective,
   candidate: LearningSkillCandidate,
@@ -1203,6 +1252,11 @@ function renderLearningSkillCandidateMarkdown(
       ? candidate.proofCommands.map((command) => `- ${formatLearningProofCommand(command)}`)
       : ['- Proof command: none yet.']),
     '',
+    '## Graded Tasks',
+    ...(candidate.gradedTasks.length > 0
+      ? candidate.gradedTasks.map((task) => `- ${formatLearningGradedTask(task)}`)
+      : ['- No replayable graded task yet; wait for proof commands with concrete shell text.']),
+    '',
     '## Procedure',
     ...candidate.toolSequence.map((toolName, index) => `${index + 1}. Use \`${toolName}\` for the corresponding verified step from the trajectory; keep the same evidence boundary and real-path behavior.`),
     `${candidate.toolSequence.length + 1}. Capture the result, errors, and verification evidence before marking the task complete.`,
@@ -1229,6 +1283,12 @@ function formatLearningProofCommand(command: LearningSkillProofCommand): string 
   const duration = command.durationMs === undefined ? '' : ` in ${command.durationMs}ms`;
   const commandText = escapeInlineMarkdownCode(command.command ?? command.toolName);
   return `Proof command ${command.runId} #${command.sequence} ${result}${duration}: \`${commandText}\`.`;
+}
+
+function formatLearningGradedTask(task: LearningSkillGradedTask): string {
+  const timeout = task.timeoutMs === undefined ? '' : ` timeout=${task.timeoutMs}ms`;
+  const test = task.isTest ? ' test' : '';
+  return `Graded task ${task.id} from ${task.sourceRunId}${test}${timeout}: \`${escapeInlineMarkdownCode(task.command)}\` must ${task.expected}.`;
 }
 
 function escapeInlineMarkdownCode(value: string): string {
