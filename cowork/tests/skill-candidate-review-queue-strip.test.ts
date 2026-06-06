@@ -123,8 +123,20 @@ describe('SkillCandidateReviewQueueStrip', () => {
                   toolName: 'bash',
                 },
               ],
+              proofSummary: {
+                expected: 'pass',
+                gradedTaskCount: 2,
+                latestReplayCommand: 'npm run typecheck',
+                proofCommandCount: 2,
+                replayCommandCount: 2,
+                testCommandCount: 2,
+              },
               proofStatus: 'proven',
               reason: '2 successful runs met the promotion threshold.',
+              replayCommands: [
+                'npm test -- tests/agent/learning-agent-real.test.ts --run',
+                'npm run typecheck',
+              ],
               reviewCommands: [
                 'skill_manage action=candidate_view candidate_path=.codebuddy/skill-candidates/learning/learned-search-view-file-bash/SKILL.md',
               ],
@@ -159,6 +171,8 @@ describe('SkillCandidateReviewQueueStrip', () => {
     expect(strip?.textContent).toContain('passed 2200ms npm run typecheck (2 proof commands)');
     expect(strip?.textContent).toContain('Graded task');
     expect(strip?.textContent).toContain('npm run typecheck must pass from run-learning-architect timeout 30000ms (2 graded tasks)');
+    expect(strip?.textContent).toContain('Replay command');
+    expect(strip?.textContent).toContain('npm run typecheck (2 replay commands)');
     expect(strip?.textContent).toContain('run-learning-first, run-learning-architect');
     expect(strip?.textContent).toContain('Firewall: review');
     expect(strip?.textContent).toContain('90/100');

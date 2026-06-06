@@ -47,8 +47,10 @@ export interface SkillCandidateReviewQueueItem {
   promotionThreshold?: number;
   proofBackedSuccessCount?: number;
   proofCommands?: SkillCandidateProofCommand[];
+  proofSummary?: SkillCandidateProofSummary;
   proofStatus?: string;
   reason: string;
+  replayCommands?: string[];
   reviewCommands?: string[];
   skillName: string;
   skillPath: string;
@@ -77,6 +79,15 @@ export interface SkillCandidateGradedTask {
   sourceRunId?: string;
   timeoutMs?: number;
   toolName?: string;
+}
+
+export interface SkillCandidateProofSummary {
+  expected: 'pass' | 'unknown';
+  gradedTaskCount: number;
+  latestReplayCommand?: string;
+  proofCommandCount: number;
+  replayCommandCount: number;
+  testCommandCount: number;
 }
 
 export interface SkillCandidateSideBySideDiffRow {
@@ -383,6 +394,18 @@ export const SkillCandidateReviewQueueStrip: React.FC<{
                   <code className="truncate">{formatLatestGradedTask(candidate)}</code>
                 </div>
               ) : null}
+              {formatLatestReplayCommand(candidate) ? (
+                <div
+                  className="mt-0.5 flex min-w-0 items-center gap-1 text-[9px] text-text-muted"
+                  data-testid={`skill-candidate-replay-command-${candidate.skillName}`}
+                >
+                  <Terminal size={9} className="shrink-0 text-text-muted" />
+                  <span className="shrink-0">
+                    {t('fleet.skillCandidate.replayCommand', 'Replay command')}:
+                  </span>
+                  <code className="truncate">{formatLatestReplayCommand(candidate)}</code>
+                </div>
+              ) : null}
               {candidate.installedVersion ? (
                 <div className="mt-0.5 truncate text-[9px] text-text-muted">
                   {t('fleet.skillCandidate.installedVersion', 'Installed')}: v{candidate.installedVersion}
@@ -672,6 +695,27 @@ function formatLatestGradedTask(candidate: SkillCandidateReviewQueueItem): strin
     ? ` (${candidate.gradedTasks.length} graded tasks)`
     : '';
   return `${task.command} must ${task.expected}${sourceText}${timeout}${count}`;
+}
+
+function formatLatestReplayCommand(candidate: SkillCandidateReviewQueueItem): string | null {
+  const replayCommands = candidate.replayCommands?.length
+    ? candidate.replayCommands
+    : buildReplayCommandsFromCandidate(candidate);
+  const command = replayCommands.at(-1);
+  if (!command) return null;
+  const count = replayCommands.length > 1 ? ` (${replayCommands.length} replay commands)` : '';
+  return `${command}${count}`;
+}
+
+function buildReplayCommandsFromCandidate(candidate: SkillCandidateReviewQueueItem): string[] {
+  const commands = [
+    ...(candidate.gradedTasks ?? []).map((task) => task.command),
+    ...(candidate.proofCommands ?? []).map((command) => command.command ?? ''),
+  ]
+    .map((command) => command.trim())
+    .filter((command) => command.length > 0);
+
+  return [...new Set(commands)].slice(-10);
 }
 
 function isCandidateInstallActionVisible(candidate: SkillCandidateReviewQueueItem): boolean {

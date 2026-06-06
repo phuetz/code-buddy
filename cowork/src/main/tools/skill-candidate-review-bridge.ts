@@ -39,6 +39,15 @@ export interface SkillCandidateGradedTaskSummary {
   toolName?: string;
 }
 
+export interface SkillCandidateProofSummary {
+  expected: 'pass' | 'unknown';
+  gradedTaskCount: number;
+  latestReplayCommand?: string;
+  proofCommandCount: number;
+  replayCommandCount: number;
+  testCommandCount: number;
+}
+
 export interface SkillCandidateReviewSummary {
   candidateChecksum?: string;
   candidateDiffPreview?: {
@@ -62,8 +71,10 @@ export interface SkillCandidateReviewSummary {
   promotionThreshold?: number;
   proofBackedSuccessCount?: number;
   proofCommands?: SkillCandidateProofCommandSummary[];
+  proofSummary?: SkillCandidateProofSummary;
   proofStatus?: string;
   reason: string;
+  replayCommands?: string[];
   reviewCommands?: string[];
   skillName: string;
   skillPath: string;
@@ -126,8 +137,10 @@ interface ResearchScriptSkillCandidate {
   promotionThreshold?: number;
   proofBackedSuccessCount?: number;
   proofCommands?: SkillCandidateProofCommandSummary[];
+  proofSummary?: SkillCandidateProofSummary;
   proofStatus?: string;
   reason: string;
+  replayCommands?: string[];
   reviewCommands?: string[];
   skillName: string;
   skillPath: string;
@@ -269,6 +282,7 @@ function summarizeSkillCandidate(
     rootDir: string;
   },
 ): SkillCandidateReviewSummary {
+  const replayCommands = buildCandidateReplayCommands(candidate);
   return {
     candidateChecksum: candidate.candidateChecksum,
     candidateDiffPreview: candidate.candidateDiffPreview,
@@ -286,8 +300,10 @@ function summarizeSkillCandidate(
     promotionThreshold: candidate.promotionThreshold,
     proofBackedSuccessCount: candidate.proofBackedSuccessCount,
     proofCommands: candidate.proofCommands,
+    proofSummary: candidate.proofSummary ?? summarizeCandidateProof(candidate, replayCommands),
     proofStatus: candidate.proofStatus,
     reason: candidate.reason,
+    replayCommands: candidate.replayCommands ?? (replayCommands.length > 0 ? replayCommands : undefined),
     reviewCommands: candidate.reviewCommands,
     skillName: candidate.skillName,
     skillPath: candidate.skillPath,
@@ -296,6 +312,40 @@ function summarizeSkillCandidate(
     successfulRunCount: candidate.successfulRunCount,
     title: candidate.title,
     toolSequence: candidate.toolSequence,
+  };
+}
+
+function buildCandidateReplayCommands(candidate: Pick<
+  ResearchScriptSkillCandidate,
+  'gradedTasks' | 'proofCommands'
+>): string[] {
+  const commands = [
+    ...(candidate.gradedTasks ?? []).map((task) => task.command),
+    ...(candidate.proofCommands ?? []).map((command) => command.command ?? ''),
+  ]
+    .map((command) => command.trim())
+    .filter((command) => command.length > 0);
+
+  return [...new Set(commands)].slice(-10);
+}
+
+function summarizeCandidateProof(
+  candidate: Pick<ResearchScriptSkillCandidate, 'gradedTasks' | 'proofCommands'>,
+  replayCommands: string[],
+): SkillCandidateProofSummary | undefined {
+  const gradedTasks = candidate.gradedTasks ?? [];
+  const proofCommands = candidate.proofCommands ?? [];
+  if (gradedTasks.length === 0 && proofCommands.length === 0 && replayCommands.length === 0) {
+    return undefined;
+  }
+
+  return {
+    expected: gradedTasks.length > 0 ? 'pass' : 'unknown',
+    gradedTaskCount: gradedTasks.length,
+    latestReplayCommand: replayCommands.at(-1),
+    proofCommandCount: proofCommands.length,
+    replayCommandCount: replayCommands.length,
+    testCommandCount: gradedTasks.filter((task) => task.isTest === true).length,
   };
 }
 
