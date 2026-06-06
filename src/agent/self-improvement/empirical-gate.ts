@@ -25,9 +25,9 @@ export interface LessonMutatorPort extends LessonSearchPort {
 }
 
 /** Omission placeholders that must never enter a stored lesson. */
-const OMISSION_RE = /\.\.\.\s*(rest|remaining|other|more|etc)\b/i;
+export const OMISSION_RE = /\.\.\.\s*(rest|remaining|other|more|etc)\b/i;
 /** Obvious secret shapes — refuse to persist these into the learnable layer. */
-const SECRET_RE = /(sk-[a-z0-9]{16,}|api[_-]?key\s*[:=]\s*\S+|-----BEGIN [A-Z ]*PRIVATE KEY-----)/i;
+export const SECRET_RE = /(sk-[a-z0-9]{16,}|api[_-]?key\s*[:=]\s*\S+|-----BEGIN [A-Z ]*PRIVATE KEY-----)/i;
 
 function structuralProblem(proposal: ImprovementProposal): string | null {
   const content = proposal.lesson.content?.trim() ?? '';
