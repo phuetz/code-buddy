@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {
   buildActivityActionLines,
+  buildActivityFeedOverview,
   buildFleetActivityChips,
   buildFleetInternetProofStepLabels,
   buildScheduledTaskActivityChips,
@@ -50,7 +51,10 @@ describe('ActivityFeed scheduled-task visibility', () => {
     expect(componentSource).toContain('ScheduledTaskActivityMeta');
     expect(componentSource).toContain('ActivityActionRail');
     expect(componentSource).toContain('buildActivityActionLines(entry)');
+    expect(componentSource).toContain('buildActivityFeedOverview(visibleEntries)');
+    expect(componentSource).toContain('ActivityOverviewPanel');
     expect(helperSource).toContain('buildActivityActionLines');
+    expect(helperSource).toContain('buildActivityFeedOverview');
     expect(helperSource).toContain('readLatestCommandSummary(metadata)');
     expect(componentSource).toContain('buildFleetInternetProofStepLabels');
     expect(componentSource).toContain('const proofSteps = buildFleetInternetProofStepLabels(metadata);');
@@ -328,6 +332,64 @@ describe('ActivityFeed scheduled-task visibility', () => {
         title: 'test assertion failed',
       },
     ]);
+  });
+
+  it('builds a Codex-like overview from running, warning, and proof-backed activity', () => {
+    const running: ActivityEntry = {
+      id: 7,
+      type: 'workflow.run',
+      title: 'Autonomous improvement cycle',
+      metadata: {
+        status: 'running',
+        lastCommandText: 'npm run typecheck',
+        lastCommandStatus: 'running',
+      },
+      timestamp: 20,
+    };
+    const failed: ActivityEntry = {
+      id: 8,
+      type: 'fleet.saga.failed',
+      title: 'Fleet review failed',
+      metadata: {
+        errorSummary: 'review gate failed',
+      },
+      timestamp: 30,
+    };
+    const proofBacked: ActivityEntry = {
+      id: 9,
+      type: 'fleet.saga.completed',
+      title: 'Proof ledger sealed',
+      metadata: {
+        proofCommands: [
+          {
+            command: 'npm test -- tests/cowork/proof.test.ts --run',
+            sequence: 1,
+            success: true,
+          },
+        ],
+        internetProofStepCount: 2,
+      },
+      timestamp: 10,
+    };
+
+    expect(buildActivityActionLines(running)).toEqual([
+      {
+        label: 'running npm run typecheck',
+        tone: 'running',
+        title: 'npm run typecheck',
+      },
+    ]);
+    expect(buildActivityFeedOverview([failed, proofBacked, running])).toEqual({
+      counters: [
+        { label: '3 events', tone: 'neutral' },
+        { label: '1 running', tone: 'running' },
+        { label: '1 warning', tone: 'warning' },
+        { label: '1 proof-backed', tone: 'success' },
+      ],
+      detail: 'running npm run typecheck',
+      headline: 'Running: Autonomous improvement cycle',
+      tone: 'running',
+    });
   });
 
   it('keeps Fleet internet proof-loop required counts visible without assertions', () => {

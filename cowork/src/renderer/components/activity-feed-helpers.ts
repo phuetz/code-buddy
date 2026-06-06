@@ -19,6 +19,18 @@ export interface ActivityActionLine {
   title?: string;
 }
 
+export interface ActivityFeedOverviewCounter {
+  label: string;
+  tone: ActivityActionTone;
+}
+
+export interface ActivityFeedOverview {
+  counters: ActivityFeedOverviewCounter[];
+  detail?: string;
+  headline: string;
+  tone: ActivityActionTone;
+}
+
 export function isScheduledTaskActivity(entry: ActivityEntry): boolean {
   return entry.type.startsWith('scheduledTask.');
 }
@@ -101,6 +113,53 @@ export function buildActivityActionLines(entry: ActivityEntry): ActivityActionLi
   }
 
   return dedupeActionLines(lines).slice(0, 4);
+}
+
+export function buildActivityFeedOverview(entries: ActivityEntry[]): ActivityFeedOverview | null {
+  if (entries.length === 0) return null;
+  const sorted = [...entries].sort((left, right) => right.timestamp - left.timestamp);
+  const runningEntries = sorted.filter(isRunningActivityEntry);
+  const warningEntries = sorted.filter(isWarningActivityEntry);
+  const proofEntries = sorted.filter(hasProofActivityEvidence);
+  const focus = runningEntries[0] ?? warningEntries[0] ?? sorted[0];
+  if (!focus) return null;
+
+  const actionLine = buildActivityActionLines(focus)[0];
+  const focusTitle = truncateInline(focus.title, 88);
+  const detail = actionLine?.label
+    ?? (focus.description ? truncateInline(focus.description, 120) : undefined);
+  const tone: ActivityActionTone = runningEntries.length > 0
+    ? 'running'
+    : warningEntries.length > 0
+      ? 'warning'
+      : proofEntries.length > 0
+        ? 'success'
+        : 'neutral';
+  const prefix = tone === 'running'
+    ? 'Running'
+    : tone === 'warning'
+      ? 'Needs attention'
+      : tone === 'success'
+        ? 'Verified'
+        : 'Latest';
+
+  return {
+    counters: [
+      { label: `${entries.length} event${entries.length === 1 ? '' : 's'}`, tone: 'neutral' },
+      ...(runningEntries.length > 0
+        ? [{ label: `${runningEntries.length} running`, tone: 'running' as const }]
+        : []),
+      ...(warningEntries.length > 0
+        ? [{ label: `${warningEntries.length} warning${warningEntries.length === 1 ? '' : 's'}`, tone: 'warning' as const }]
+        : []),
+      ...(proofEntries.length > 0
+        ? [{ label: `${proofEntries.length} proof-backed`, tone: 'success' as const }]
+        : []),
+    ],
+    ...(detail ? { detail } : {}),
+    headline: `${prefix}: ${focusTitle}`,
+    tone,
+  };
 }
 
 export function buildFleetActivityChips(metadata: Record<string, unknown>): string[] {
@@ -227,15 +286,17 @@ function metadataStringList(value: unknown): string[] {
 interface ActivityCommandSummary {
   count: number;
   durationMs?: number;
-  status?: 'failed' | 'passed' | 'unknown';
+  status?: ActivityCommandStatus;
   text: string;
 }
+
+type ActivityCommandStatus = 'failed' | 'passed' | 'running' | 'unknown';
 
 interface ActivityCommandRecord {
   command?: string;
   durationMs?: number;
   sequence?: number;
-  status?: 'failed' | 'passed' | 'unknown';
+  status?: ActivityCommandStatus;
   toolName?: string;
 }
 
@@ -339,15 +400,19 @@ function metadataNumber(value: unknown): number | null {
 function normalizeCommandStatus(
   status: unknown,
   success?: unknown,
-): 'failed' | 'passed' | 'unknown' | undefined {
+): ActivityCommandStatus | undefined {
   if (typeof success === 'boolean') return success ? 'passed' : 'failed';
   if (status === 'passed' || status === 'failed' || status === 'unknown') return status;
+  if (status === 'running' || status === 'active' || status === 'in_progress') {
+    return 'running';
+  }
   return undefined;
 }
 
-function commandTone(status?: 'failed' | 'passed' | 'unknown'): ActivityActionTone {
+function commandTone(status?: ActivityCommandStatus): ActivityActionTone {
   if (status === 'failed') return 'warning';
   if (status === 'passed') return 'success';
+  if (status === 'running') return 'running';
   return 'neutral';
 }
 
@@ -440,6 +505,44 @@ function buildInternetProofSummaryChip(metadata: Record<string, unknown>): strin
     return `web proof ${stepCount}${requiredSuffix} assert ${assertionCount}`;
   }
   return `web proof ${stepCount}${requiredSuffix}`;
+}
+
+function isRunningActivityEntry(entry: ActivityEntry): boolean {
+  const status = metadataString(entry.metadata?.status);
+  return (
+    status === 'running' ||
+    status === 'active' ||
+    status === 'in_progress' ||
+    status === 'queued'
+  );
+}
+
+function isWarningActivityEntry(entry: ActivityEntry): boolean {
+  const metadata = entry.metadata ?? {};
+  const status = metadataString(metadata.status);
+  const failedSteps = metadataNumber(metadata.failedSteps) ?? 0;
+  return (
+    entry.type.includes('failed') ||
+    status === 'failed' ||
+    failedSteps > 0 ||
+    Boolean(metadataString(metadata.error)) ||
+    Boolean(metadataString(metadata.errorSummary)) ||
+    buildActivityActionLines(entry).some((line) => line.tone === 'warning')
+  );
+}
+
+function hasProofActivityEvidence(entry: ActivityEntry): boolean {
+  const metadata = entry.metadata ?? {};
+  const proofCount = metadataNumber(metadata.internetProofStepCount) ?? 0;
+  const completed = metadataNumber(metadata.completedSteps) ?? 0;
+  const total = metadataNumber(metadata.totalSteps) ?? 0;
+  return (
+    entry.type.includes('complete') ||
+    entry.type.includes('completed') ||
+    proofCount > 0 ||
+    completed > 0 && total > 0 && completed >= total ||
+    buildActivityActionLines(entry).some((line) => line.tone === 'success')
+  );
 }
 
 function readInternetProofSteps(metadata: Record<string, unknown>): Array<{

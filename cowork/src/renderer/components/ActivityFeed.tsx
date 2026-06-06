@@ -33,6 +33,7 @@ import {
   buildFleetActivityChips,
   buildFleetInternetProofStepLabels,
   buildActivityActionLines,
+  buildActivityFeedOverview,
   buildScheduledTaskActivityChips,
   filterActivityEntries,
   shouldRenderFleetActivityMeta,
@@ -41,6 +42,7 @@ import {
   shouldOpenScheduleSettings,
   type ActivityActionLine,
   type ActivityEntry,
+  type ActivityFeedOverview,
   type ActivityFilter,
 } from './activity-feed-helpers';
 
@@ -132,6 +134,10 @@ export const ActivityFeed: React.FC<ActivityFeedProps> = ({ open, onClose }) => 
   const visibleEntries = useMemo(
     () => filterActivityEntries(entries, filter),
     [entries, filter],
+  );
+  const overview = useMemo(
+    () => buildActivityFeedOverview(visibleEntries),
+    [visibleEntries],
   );
   const activityLocale = i18n.resolvedLanguage || i18n.language;
   const grouped = useMemo(
@@ -233,6 +239,10 @@ export const ActivityFeed: React.FC<ActivityFeedProps> = ({ open, onClose }) => 
         </div>
       </div>
 
+      {!loading && overview && (
+        <ActivityOverviewPanel overview={overview} />
+      )}
+
       {/* Body */}
       <div className="flex-1 min-h-0 overflow-y-auto">
         {loading && (
@@ -320,6 +330,39 @@ const ActivityActionRail: React.FC<{ lines: ActivityActionLine[] }> = ({ lines }
   </div>
 );
 
+const ActivityOverviewPanel: React.FC<{ overview: ActivityFeedOverview }> = ({ overview }) => (
+  <div
+    className={`border-b px-4 py-2 ${activityOverviewToneClass(overview.tone)}`}
+    data-testid="activity-overview"
+  >
+    <div className="flex items-center gap-2">
+      <span className={`h-2 w-2 shrink-0 rounded-full ${activityActionDotClass(overview.tone)}`} />
+      <div className="min-w-0 flex-1">
+        <div className="truncate text-[11px] font-semibold text-text-primary">
+          {overview.headline}
+        </div>
+        {overview.detail ? (
+          <div className="mt-0.5 truncate font-mono text-[10px] text-text-muted">
+            {overview.detail}
+          </div>
+        ) : null}
+      </div>
+    </div>
+    {overview.counters.length > 0 && (
+      <div className="mt-1.5 flex flex-wrap gap-1">
+        {overview.counters.map((counter) => (
+          <span
+            key={counter.label}
+            className={`rounded border px-1.5 py-0.5 text-[10px] ${activityOverviewCounterClass(counter.tone)}`}
+          >
+            {counter.label}
+          </span>
+        ))}
+      </div>
+    )}
+  </div>
+);
+
 const FleetActivityMeta: React.FC<{ metadata?: Record<string, unknown> }> = ({ metadata }) => {
   if (!metadata) return null;
   const chips = buildFleetActivityChips(metadata);
@@ -364,6 +407,20 @@ function activityActionDotClass(tone: ActivityActionLine['tone']): string {
   if (tone === 'warning') return 'bg-warning';
   if (tone === 'running') return 'bg-accent';
   return 'bg-text-muted';
+}
+
+function activityOverviewToneClass(tone: ActivityActionLine['tone']): string {
+  if (tone === 'success') return 'border-success/20 bg-success/5';
+  if (tone === 'warning') return 'border-warning/30 bg-warning/5';
+  if (tone === 'running') return 'border-accent/25 bg-accent/5';
+  return 'border-border-muted bg-surface/30';
+}
+
+function activityOverviewCounterClass(tone: ActivityActionLine['tone']): string {
+  if (tone === 'success') return 'border-success/25 bg-success/10 text-success';
+  if (tone === 'warning') return 'border-warning/30 bg-warning/10 text-warning';
+  if (tone === 'running') return 'border-accent/25 bg-accent/10 text-accent';
+  return 'border-border-muted bg-background/60 text-text-muted';
 }
 
 const ScheduledTaskActivityMeta: React.FC<{ metadata?: Record<string, unknown> }> = ({
