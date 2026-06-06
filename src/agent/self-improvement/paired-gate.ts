@@ -33,9 +33,10 @@ function gammaln(x: number): number {
   let y = x;
   let tmp = x + 5.5;
   tmp -= (x + 0.5) * Math.log(tmp);
+  // eslint-disable-next-line no-loss-of-precision -- standard Lanczos series constant
   let ser = 1.000000000190015;
   for (let j = 0; j < 6; j++) ser += cof[j]! / ++y;
-  return -tmp + Math.log((2.5066282746310005 * ser) / x);
+  return -tmp + Math.log((Math.sqrt(2 * Math.PI) * ser) / x);
 }
 
 /** Continued fraction for the incomplete beta (Lentz). */
