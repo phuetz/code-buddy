@@ -1536,26 +1536,29 @@ Look at the screenshot and find the element matching the user's intent. Output o
    * not already inside a review (sentinel), so a review can never recurse.
    */
   private async maybeRunBackgroundReview(): Promise<void> {
-    // Snapshot the recent transcript synchronously before any async work.
-    const transcript = this.chatHistory.slice(-20).map((entry) => ({
-      role: typeof entry.type === 'string' ? entry.type : 'assistant',
-      content: typeof entry.content === 'string' ? entry.content : JSON.stringify(entry.content ?? ''),
-    }));
-
-    const { shouldTriggerBackgroundReview } = await import('./learning/background-review-agent.js');
-    if (
-      !shouldTriggerBackgroundReview({
-        interactiveOptIn: this.backgroundReviewEnabled,
-        envFlag: process.env.CODEBUDDY_LEARNING_BACKGROUND_REVIEW,
-        sentinel: process.env.CODEBUDDY_BACKGROUND_REVIEW,
-        transcriptLength: transcript.length,
-      })
-    ) {
-      return;
-    }
-
+    // Wrap everything: this is invoked fire-and-forget, so an unhandled rejection
+    // here (including a dynamic-import failure) must never escape.
     try {
-      const { runBackgroundReview } = await import('./learning/background-review-agent.js');
+      // Snapshot the recent transcript synchronously before any async work.
+      const transcript = this.chatHistory.slice(-20).map((entry) => ({
+        role: typeof entry.type === 'string' ? entry.type : 'assistant',
+        content: typeof entry.content === 'string' ? entry.content : JSON.stringify(entry.content ?? ''),
+      }));
+
+      const { shouldTriggerBackgroundReview, runBackgroundReview } = await import(
+        './learning/background-review-agent.js'
+      );
+      if (
+        !shouldTriggerBackgroundReview({
+          interactiveOptIn: this.backgroundReviewEnabled,
+          envFlag: process.env.CODEBUDDY_LEARNING_BACKGROUND_REVIEW,
+          sentinel: process.env.CODEBUDDY_BACKGROUND_REVIEW,
+          transcriptLength: transcript.length,
+        })
+      ) {
+        return;
+      }
+
       type ReviewClient = import('./learning/background-review-agent.js').BackgroundReviewClient;
       const result = await runBackgroundReview({
         client: this.codebuddyClient as unknown as ReviewClient,
