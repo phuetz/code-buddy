@@ -11,6 +11,14 @@ export interface ActivityEntry {
 
 export type ActivityFilter = 'all' | 'fleet' | 'scheduled';
 
+export type ActivityActionTone = 'neutral' | 'running' | 'success' | 'warning';
+
+export interface ActivityActionLine {
+  label: string;
+  tone: ActivityActionTone;
+  title?: string;
+}
+
 export function isScheduledTaskActivity(entry: ActivityEntry): boolean {
   return entry.type.startsWith('scheduledTask.');
 }
@@ -54,6 +62,45 @@ export function shouldOpenScheduleSettings(entry: ActivityEntry): boolean {
 
 export function shouldOpenFleetCommandCenter(entry: ActivityEntry): boolean {
   return !isScheduledTaskActivity(entry) && isFleetActivity(entry);
+}
+
+export function buildActivityActionLines(entry: ActivityEntry): ActivityActionLine[] {
+  const metadata = entry.metadata ?? {};
+  const lines: ActivityActionLine[] = [];
+  const latestCommand = readLatestCommandSummary(metadata);
+  if (latestCommand) {
+    lines.push({
+      label: formatCommandActionLine(latestCommand),
+      tone: commandTone(latestCommand.status),
+      title: latestCommand.text,
+    });
+  }
+
+  const progress = buildStepProgressActionLine(metadata);
+  if (progress) lines.push(progress);
+
+  const proof = buildInternetProofActionLine(metadata);
+  if (proof) lines.push(proof);
+
+  const errorSummary = metadataString(metadata.errorSummary) ?? metadataString(metadata.error);
+  if (errorSummary) {
+    lines.push({
+      label: `Error: ${truncateInline(errorSummary, 120)}`,
+      tone: 'warning',
+      title: errorSummary,
+    });
+  } else {
+    const resultPreview = metadataString(metadata.finalResultPreview);
+    if (resultPreview) {
+      lines.push({
+        label: `Result: ${truncateInline(resultPreview, 120)}`,
+        tone: 'success',
+        title: resultPreview,
+      });
+    }
+  }
+
+  return dedupeActionLines(lines).slice(0, 4);
 }
 
 export function buildFleetActivityChips(metadata: Record<string, unknown>): string[] {
@@ -175,6 +222,155 @@ function metadataStringList(value: unknown): string[] {
   return value
     .map((item) => (typeof item === 'string' ? item.trim() : ''))
     .filter(Boolean);
+}
+
+interface ActivityCommandSummary {
+  count: number;
+  durationMs?: number;
+  status?: 'failed' | 'passed' | 'unknown';
+  text: string;
+}
+
+interface ActivityCommandRecord {
+  command?: string;
+  durationMs?: number;
+  sequence?: number;
+  status?: 'failed' | 'passed' | 'unknown';
+  toolName?: string;
+}
+
+function readLatestCommandSummary(
+  metadata: Record<string, unknown>,
+): ActivityCommandSummary | null {
+  const directText = metadataString(metadata.lastCommandText) ?? metadataString(metadata.lastCommandTool);
+  if (directText) {
+    return {
+      count: metadataNumber(metadata.commandCount) ?? 1,
+      durationMs: metadataNumber(metadata.lastCommandDurationMs) ?? undefined,
+      status: normalizeCommandStatus(metadata.lastCommandStatus),
+      text: directText,
+    };
+  }
+
+  const records = [
+    ...metadataCommandRecords(metadata.proofCommands),
+    ...metadataCommandRecords(metadata.commands),
+    ...metadataCommandRecords(isRecord(metadata.tests) ? metadata.tests.commands : undefined),
+  ].sort((left, right) => (left.sequence ?? 0) - (right.sequence ?? 0));
+  const latest = records.at(-1);
+  const text = latest ? metadataString(latest.command) ?? metadataString(latest.toolName) : null;
+  if (!latest || !text) return null;
+  return {
+    count: records.length,
+    durationMs: latest.durationMs,
+    status: latest.status,
+    text,
+  };
+}
+
+function metadataCommandRecords(value: unknown): ActivityCommandRecord[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((raw) => {
+    if (!isRecord(raw)) return [];
+    const command = metadataString(raw.command);
+    const toolName = metadataString(raw.toolName);
+    if (!command && !toolName) return [];
+    const durationMs = metadataNumber(raw.durationMs);
+    const sequence = metadataNumber(raw.sequence);
+    return [{
+      ...(command ? { command } : {}),
+      ...(durationMs !== null ? { durationMs } : {}),
+      ...(sequence !== null ? { sequence } : {}),
+      status: normalizeCommandStatus(raw.status, raw.success),
+      ...(toolName ? { toolName } : {}),
+    }];
+  });
+}
+
+function formatCommandActionLine(command: ActivityCommandSummary): string {
+  const status = command.status ?? 'unknown';
+  const duration = command.durationMs === undefined ? '' : ` ${formatCommandDuration(command.durationMs)}`;
+  const count = command.count > 1 ? ` (${command.count} commands)` : '';
+  return `${status}${duration} ${command.text}${count}`;
+}
+
+function buildStepProgressActionLine(
+  metadata: Record<string, unknown>,
+): ActivityActionLine | null {
+  const total = metadataNumber(metadata.totalSteps);
+  if (total === null || total <= 0) return null;
+  const completed = metadataNumber(metadata.completedSteps) ?? 0;
+  const failed = metadataNumber(metadata.failedSteps) ?? 0;
+  const duration = metadataNumber(metadata.durationMs);
+  const durationSuffix = duration === null ? '' : ` in ${formatDuration(duration)}`;
+  const failedSuffix = failed > 0 ? `, ${failed} failed` : '';
+  const status = metadataString(metadata.status);
+  return {
+    label: `Steps ${completed}/${total}${failedSuffix}${durationSuffix}`,
+    tone: failed > 0 || status === 'failed' ? 'warning' : completed >= total ? 'success' : 'running',
+  };
+}
+
+function buildInternetProofActionLine(
+  metadata: Record<string, unknown>,
+): ActivityActionLine | null {
+  const stepCount = metadataNumber(metadata.internetProofStepCount);
+  if (stepCount === null || stepCount <= 0) return null;
+  const requiredCount = metadataNumber(metadata.internetProofRequiredCount);
+  const assertionCount = metadataNumber(metadata.internetProofAssertionCount);
+  const required = requiredCount !== null && requiredCount > 0 ? `/${requiredCount}` : '';
+  const assertions = assertionCount !== null && assertionCount > 0
+    ? `, ${assertionCount} assertion${assertionCount === 1 ? '' : 's'}`
+    : '';
+  return {
+    label: `Proof ${stepCount}${required}${assertions}`,
+    tone: 'neutral',
+  };
+}
+
+function metadataString(value: unknown): string | null {
+  return typeof value === 'string' && value.trim() ? value.trim() : null;
+}
+
+function metadataNumber(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+function normalizeCommandStatus(
+  status: unknown,
+  success?: unknown,
+): 'failed' | 'passed' | 'unknown' | undefined {
+  if (typeof success === 'boolean') return success ? 'passed' : 'failed';
+  if (status === 'passed' || status === 'failed' || status === 'unknown') return status;
+  return undefined;
+}
+
+function commandTone(status?: 'failed' | 'passed' | 'unknown'): ActivityActionTone {
+  if (status === 'failed') return 'warning';
+  if (status === 'passed') return 'success';
+  return 'neutral';
+}
+
+function formatCommandDuration(durationMs: number): string {
+  if (!Number.isFinite(durationMs) || durationMs < 0) return '0ms';
+  if (durationMs < 1000) return `${Math.round(durationMs)}ms`;
+  if (durationMs < 10_000) return `${(durationMs / 1000).toFixed(1)}s`;
+  if (durationMs < 60_000) return `${Math.round(durationMs / 1000)}s`;
+  return formatDuration(durationMs);
+}
+
+function truncateInline(text: string, maxLength: number): string {
+  if (text.length <= maxLength) return text;
+  return `${text.slice(0, Math.max(0, maxLength - 3))}...`;
+}
+
+function dedupeActionLines(lines: ActivityActionLine[]): ActivityActionLine[] {
+  const seen = new Set<string>();
+  return lines.filter((line) => {
+    if (seen.has(line.label)) return false;
+    seen.add(line.label);
+    return true;
+  });
 }
 
 function appendRunLineageChips(

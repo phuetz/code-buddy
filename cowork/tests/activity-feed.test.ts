@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import {
+  buildActivityActionLines,
   buildFleetActivityChips,
   buildFleetInternetProofStepLabels,
   buildScheduledTaskActivityChips,
@@ -47,6 +48,10 @@ describe('ActivityFeed scheduled-task visibility', () => {
     expect(componentSource).toContain("t('activity.filterScheduled'");
     expect(componentSource).toContain("t('activity.emptyScheduled'");
     expect(componentSource).toContain('ScheduledTaskActivityMeta');
+    expect(componentSource).toContain('ActivityActionRail');
+    expect(componentSource).toContain('buildActivityActionLines(entry)');
+    expect(helperSource).toContain('buildActivityActionLines');
+    expect(helperSource).toContain('readLatestCommandSummary(metadata)');
     expect(componentSource).toContain('buildFleetInternetProofStepLabels');
     expect(componentSource).toContain('const proofSteps = buildFleetInternetProofStepLabels(metadata);');
     expect(helperSource).toContain('buildScheduledTaskActivityChips');
@@ -244,6 +249,84 @@ describe('ActivityFeed scheduled-task visibility', () => {
       'saga saga-abc',
       '2/2 done',
       'web proof 5/4 assert 1',
+    ]);
+  });
+
+  it('builds Codex-like action lines from proof commands and proof metadata', () => {
+    const entry: ActivityEntry = {
+      id: 4,
+      type: 'fleet.saga.completed',
+      title: 'Fleet saga completed',
+      metadata: {
+        proofCommands: [
+          {
+            command: 'npm run typecheck',
+            durationMs: 2200,
+            sequence: 1,
+            success: true,
+            toolName: 'shell_exec',
+          },
+          {
+            command: 'npm test -- tests/cowork/proof.test.ts --run',
+            durationMs: 912,
+            sequence: 2,
+            success: true,
+            toolName: 'shell_exec',
+          },
+        ],
+        completedSteps: 2,
+        totalSteps: 2,
+        durationMs: 1250,
+        internetProofStepCount: 5,
+        internetProofRequiredCount: 4,
+        internetProofAssertionCount: 1,
+        finalResultPreview: 'OK',
+      },
+      timestamp: 4,
+    };
+
+    expect(buildActivityActionLines(entry)).toEqual([
+      {
+        label: 'passed 912ms npm test -- tests/cowork/proof.test.ts --run (2 commands)',
+        tone: 'success',
+        title: 'npm test -- tests/cowork/proof.test.ts --run',
+      },
+      { label: 'Steps 2/2 in 1s', tone: 'success' },
+      { label: 'Proof 5/4, 1 assertion', tone: 'neutral' },
+      { label: 'Result: OK', tone: 'success', title: 'OK' },
+    ]);
+  });
+
+  it('builds warning action lines from failed direct command metadata', () => {
+    const entry: ActivityEntry = {
+      id: 5,
+      type: 'fleet.saga.failed',
+      title: 'Fleet saga failed',
+      metadata: {
+        lastCommandText: 'npm test -- tests/cowork/proof.test.ts --run',
+        lastCommandStatus: 'failed',
+        lastCommandDurationMs: 1220,
+        completedSteps: 0,
+        failedSteps: 1,
+        totalSteps: 2,
+        status: 'failed',
+        errorSummary: 'test assertion failed',
+      },
+      timestamp: 5,
+    };
+
+    expect(buildActivityActionLines(entry)).toEqual([
+      {
+        label: 'failed 1.2s npm test -- tests/cowork/proof.test.ts --run',
+        tone: 'warning',
+        title: 'npm test -- tests/cowork/proof.test.ts --run',
+      },
+      { label: 'Steps 0/2, 1 failed', tone: 'warning' },
+      {
+        label: 'Error: test assertion failed',
+        tone: 'warning',
+        title: 'test assertion failed',
+      },
     ]);
   });
 

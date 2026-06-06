@@ -32,12 +32,14 @@ import { formatAppTime, getAppLocale } from '../utils/i18n-format';
 import {
   buildFleetActivityChips,
   buildFleetInternetProofStepLabels,
+  buildActivityActionLines,
   buildScheduledTaskActivityChips,
   filterActivityEntries,
   shouldRenderFleetActivityMeta,
   shouldRenderScheduledTaskActivityMeta,
   shouldOpenFleetCommandCenter,
   shouldOpenScheduleSettings,
+  type ActivityActionLine,
   type ActivityEntry,
   type ActivityFilter,
 } from './activity-feed-helpers';
@@ -264,6 +266,7 @@ export const ActivityFeed: React.FC<ActivityFeedProps> = ({ open, onClose }) => 
               {dayEntries.map((entry) => {
                 const Icon = TYPE_ICONS[entry.type] ?? Activity;
                 const time = formatAppTime(entry.timestamp);
+                const actionLines = buildActivityActionLines(entry);
                 return (
                   <button
                     key={entry.id}
@@ -280,6 +283,9 @@ export const ActivityFeed: React.FC<ActivityFeedProps> = ({ open, onClose }) => 
                         <div className="text-[11px] text-text-muted truncate mt-0.5">
                           {entry.description}
                         </div>
+                      )}
+                      {actionLines.length > 0 && (
+                        <ActivityActionRail lines={actionLines} />
                       )}
                       {shouldRenderFleetActivityMeta(entry) && (
                         <FleetActivityMeta metadata={entry.metadata} />
@@ -298,6 +304,21 @@ export const ActivityFeed: React.FC<ActivityFeedProps> = ({ open, onClose }) => 
     </div>
   );
 };
+
+const ActivityActionRail: React.FC<{ lines: ActivityActionLine[] }> = ({ lines }) => (
+  <div className="mt-1 space-y-0.5">
+    {lines.map((line) => (
+      <div
+        key={line.label}
+        title={line.title ?? line.label}
+        className={`flex min-h-[18px] items-center gap-1.5 rounded border px-1.5 py-0.5 text-[10px] leading-4 ${activityActionToneClass(line.tone)}`}
+      >
+        <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${activityActionDotClass(line.tone)}`} />
+        <span className="min-w-0 truncate font-mono">{line.label}</span>
+      </div>
+    ))}
+  </div>
+);
 
 const FleetActivityMeta: React.FC<{ metadata?: Record<string, unknown> }> = ({ metadata }) => {
   if (!metadata) return null;
@@ -330,6 +351,20 @@ const FleetActivityMeta: React.FC<{ metadata?: Record<string, unknown> }> = ({ m
     </div>
   );
 };
+
+function activityActionToneClass(tone: ActivityActionLine['tone']): string {
+  if (tone === 'success') return 'border-success/30 bg-success/10 text-success';
+  if (tone === 'warning') return 'border-warning/40 bg-warning/10 text-warning';
+  if (tone === 'running') return 'border-accent/30 bg-accent/10 text-accent';
+  return 'border-border-muted bg-background/60 text-text-muted';
+}
+
+function activityActionDotClass(tone: ActivityActionLine['tone']): string {
+  if (tone === 'success') return 'bg-success';
+  if (tone === 'warning') return 'bg-warning';
+  if (tone === 'running') return 'bg-accent';
+  return 'bg-text-muted';
+}
 
 const ScheduledTaskActivityMeta: React.FC<{ metadata?: Record<string, unknown> }> = ({
   metadata,
