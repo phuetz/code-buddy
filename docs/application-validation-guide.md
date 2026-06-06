@@ -421,11 +421,12 @@ payload shape, response summarization, and redacted logs without requiring a
 private upstream OpenClaw install.
 The Hermes CLI migration suite also validates the user-facing bridge commands:
 `buddy hermes claw bridge status --json`, `bridge probe-ws --json`,
-`bridge draft --json`, and `bridge send --json` are machine-readable and keep
-tokens/message secrets out of stdout. The WebSocket probe is dry-run by default;
-live probing requires `--apply --yes --approved-by <name>`.
+`bridge call-ws logs.tail --json`, `bridge draft --json`, and
+`bridge send --json` are machine-readable and keep tokens/message secrets out of
+stdout. The WebSocket probe/call surfaces are dry-run by default; live network
+use requires `--apply --yes --approved-by <name>`.
 
-Observed result: `12` companion gateway tests, `16` OpenClaw bridge tests, `14`
+Observed result: `12` companion gateway tests, `18` OpenClaw bridge tests, `15`
 Hermes/OpenClaw CLI migration tests, and `64` focused Cowork OpenClaw/gateway
 surface tests passed, plus the targeted Cowork Playwright OpenClaw bridge proof
 passed and wrote:
@@ -441,6 +442,9 @@ OpenClaw daemon attach/response send plus CLI dry-run access. The OpenClaw
 bridge suite now also includes a local WebSocket gateway fixture for the
 documented `connect` -> `hello-ok` -> `req(status)` -> `res` flow; the probe log
 stores only frame types and response summaries, never tokens or raw payloads.
+The `call-ws` proof mirrors OpenClaw's low-level `gateway call <method>` pattern:
+it sends params only in a confirmed live call and records only method, param keys,
+frame types and RPC success in `ws-call-log.jsonl`.
 The node-host discovery proof reads OpenClaw's documented `~/.openclaw/node.json`
 shape, reports node id/display name/gateway host/port/capabilities, and keeps
 the node pairing token out of CLI JSON and logs.

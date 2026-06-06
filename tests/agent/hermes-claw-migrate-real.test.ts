@@ -439,4 +439,48 @@ describe('hermes claw migrate (real)', () => {
       logSpy.mockRestore();
     }
   });
+
+  it('exposes `buddy hermes claw bridge call-ws --json` as dry-run by default', async () => {
+    fs.writeJsonSync(path.join(openclaw, 'gateway.json'), {
+      wsUrl: 'ws://127.0.0.1:18789',
+      token: 'oc_cli_ws_call_secret_fixture',
+    });
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    try {
+      const program = new Command();
+      program.exitOverride();
+      program.configureOutput({ writeOut: () => {}, writeErr: () => {} });
+      registerHermesCommands(program);
+
+      await program.parseAsync([
+        'node',
+        'test',
+        'hermes',
+        'claw',
+        'bridge',
+        'call-ws',
+        'logs.tail',
+        '--source',
+        openclaw,
+        '--workspace-target',
+        target,
+        '--params',
+        '{"sinceMs":60000,"secret":"cli-ws-call-param-secret"}',
+        '--json',
+      ]);
+
+      const output = logSpy.mock.calls.map((c) => c.join(' ')).join('\n');
+      const payload = JSON.parse(output);
+      expect(payload.kind).toBe('openclaw_websocket_call_result');
+      expect(payload.ok).toBe(true);
+      expect(payload.record.status).toBe('preview');
+      expect(payload.record.request.method).toBe('logs.tail');
+      expect(payload.record.request.paramKeys).toEqual(['secret', 'sinceMs']);
+      expect(payload.record.safety.networkContacted).toBe(false);
+      expect(output).not.toContain('oc_cli_ws_call_secret_fixture');
+      expect(output).not.toContain('cli-ws-call-param-secret');
+    } finally {
+      logSpy.mockRestore();
+    }
+  });
 });

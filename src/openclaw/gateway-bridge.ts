@@ -393,6 +393,62 @@ export interface OpenClawWebSocketProbeResult {
   error?: string;
 }
 
+export interface OpenClawWebSocketCallInput {
+  method: string;
+  params?: Record<string, unknown>;
+  approvedBy?: string;
+  liveCallConfirmed?: boolean;
+  dryRun?: boolean;
+  timeoutMs?: number;
+}
+
+export interface OpenClawWebSocketCallOptions extends OpenClawGatewayDiscoveryOptions {
+  createId?: () => string;
+  callLogPath?: string;
+}
+
+export interface OpenClawWebSocketCallRecord {
+  id: string;
+  kind: 'openclaw_websocket_call';
+  schemaVersion: 1;
+  createdAt: string;
+  cwd: string;
+  lockfilePath: string;
+  wsUrl?: string;
+  dryRun: boolean;
+  approvedBy?: string;
+  liveCallConfirmed: boolean;
+  status: 'preview' | 'called' | 'blocked' | 'failed';
+  request: {
+    method: string;
+    requestId: string;
+    paramKeys: string[];
+  };
+  response?: {
+    helloOk: boolean;
+    rpcOk?: boolean;
+    frameTypes: string[];
+    error?: string;
+  };
+  safety: {
+    secretsIncluded: false;
+    tokenPresent: boolean;
+    tokenSent: boolean;
+    rawPayloadsStored: false;
+    networkContacted: boolean;
+    requiresLocalApproval: true;
+  };
+}
+
+export interface OpenClawWebSocketCallResult {
+  kind: 'openclaw_websocket_call_result';
+  ok: boolean;
+  callLogPath: string;
+  record: OpenClawWebSocketCallRecord;
+  discovery: OpenClawGatewayDiscovery;
+  error?: string;
+}
+
 const OPENCLAW_BRIDGE_SCHEMA_VERSION = 1;
 const DEFAULT_OPENCLAW_HOME = path.join(os.homedir(), '.openclaw');
 const EXECUTION_METHODS = [
@@ -435,6 +491,10 @@ export function getOpenClawResponseSendLogPath(cwd = process.cwd()): string {
 
 export function getOpenClawWebSocketProbeLogPath(cwd = process.cwd()): string {
   return path.join(cwd, '.codebuddy', 'openclaw', 'bridge', 'ws-probe-log.jsonl');
+}
+
+export function getOpenClawWebSocketCallLogPath(cwd = process.cwd()): string {
+  return path.join(cwd, '.codebuddy', 'openclaw', 'bridge', 'ws-call-log.jsonl');
 }
 
 function compactRedactedText(text: string, max = 260): string {
@@ -632,6 +692,14 @@ async function appendWebSocketProbeRecord(
 ): Promise<void> {
   await mkdir(path.dirname(probeLogPath), { recursive: true });
   await appendFile(probeLogPath, `${JSON.stringify(record)}\n`, 'utf8');
+}
+
+async function appendWebSocketCallRecord(
+  callLogPath: string,
+  record: OpenClawWebSocketCallRecord,
+): Promise<void> {
+  await mkdir(path.dirname(callLogPath), { recursive: true });
+  await appendFile(callLogPath, `${JSON.stringify(record)}\n`, 'utf8');
 }
 
 function parseOpenClawWebSocketFrame(data: WebSocket.RawData): Record<string, unknown> {
@@ -1428,6 +1496,226 @@ export async function probeOpenClawGatewayWebSocket(
       if (!resolved) {
         const detail = reason.length > 0 ? `: ${reason.toString('utf8')}` : '';
         finish(false, `OpenClaw WebSocket closed before probe completed (${code})${detail}`);
+      }
+    });
+  });
+}
+
+export async function callOpenClawGatewayWebSocket(
+  input: OpenClawWebSocketCallInput,
+  options: OpenClawWebSocketCallOptions = {},
+): Promise<OpenClawWebSocketCallResult> {
+  if (!input.method.trim()) throw new Error('OpenClaw WebSocket method is required');
+  const cwd = resolveCwd(options.cwd);
+  const now = options.now || new Date();
+  const discovery = await discoverOpenClawGateway({ ...options, cwd, now });
+  const lockfile = await readOpenClawLockfile(discovery.lockfilePath);
+  const token = tokenFromLockfile(lockfile);
+  const wsUrl = resolveWebSocketEndpoint(lockfile);
+  const dryRun = input.dryRun !== false;
+  const liveCallConfirmed = input.liveCallConfirmed === true;
+  const method = input.method.trim();
+  const requestId = options.createId?.() || `openclaw_ws_call_${now.getTime()}`;
+  const params = input.params && typeof input.params === 'object' ? input.params : {};
+  const paramKeys = Object.keys(params).sort();
+  const callLogPath = path.resolve(cwd, options.callLogPath || getOpenClawWebSocketCallLogPath(cwd));
+  const baseRecord: Omit<OpenClawWebSocketCallRecord, 'status' | 'safety' | 'response'> = {
+    id: requestId,
+    kind: 'openclaw_websocket_call',
+    schemaVersion: OPENCLAW_BRIDGE_SCHEMA_VERSION,
+    createdAt: now.toISOString(),
+    cwd,
+    lockfilePath: discovery.lockfilePath,
+    ...(wsUrl ? { wsUrl } : {}),
+    dryRun,
+    ...(input.approvedBy?.trim() ? { approvedBy: input.approvedBy.trim() } : {}),
+    liveCallConfirmed,
+    request: {
+      method,
+      requestId,
+      paramKeys,
+    },
+  };
+  const safetyBase = {
+    secretsIncluded: false as const,
+    tokenPresent: Boolean(token),
+    tokenSent: false,
+    rawPayloadsStored: false as const,
+    networkContacted: false,
+    requiresLocalApproval: true as const,
+  };
+
+  const blockedReason = !discovery.found
+    ? 'OpenClaw gateway lockfile was not found'
+    : !wsUrl
+      ? 'OpenClaw gateway WebSocket endpoint is missing or invalid'
+      : !dryRun && !input.approvedBy?.trim()
+        ? 'approvedBy is required for live OpenClaw WebSocket call'
+        : !dryRun && !liveCallConfirmed
+          ? 'liveCallConfirmed is required for live OpenClaw WebSocket call'
+          : undefined;
+
+  if (blockedReason) {
+    const record: OpenClawWebSocketCallRecord = {
+      ...baseRecord,
+      status: 'blocked',
+      response: {
+        helloOk: false,
+        frameTypes: [],
+        error: blockedReason,
+      },
+      safety: safetyBase,
+    };
+    await appendWebSocketCallRecord(callLogPath, record);
+    return {
+      kind: 'openclaw_websocket_call_result',
+      ok: false,
+      callLogPath,
+      record,
+      discovery,
+      error: blockedReason,
+    };
+  }
+
+  if (dryRun) {
+    const record: OpenClawWebSocketCallRecord = {
+      ...baseRecord,
+      status: 'preview',
+      safety: safetyBase,
+    };
+    await appendWebSocketCallRecord(callLogPath, record);
+    return {
+      kind: 'openclaw_websocket_call_result',
+      ok: true,
+      callLogPath,
+      record,
+      discovery,
+    };
+  }
+
+  return await new Promise<OpenClawWebSocketCallResult>((resolve) => {
+    const frameTypes: string[] = [];
+    let helloOk = false;
+    let resolved = false;
+    let rpcOk: boolean | undefined;
+    const timeout = setTimeout(() => {
+      finish(false, 'OpenClaw WebSocket call timed out');
+    }, input.timeoutMs ?? 5_000);
+    const socket = new WebSocket(wsUrl!, {
+      handshakeTimeout: input.timeoutMs ?? 5_000,
+    });
+
+    const finish = (ok: boolean, error?: string) => {
+      if (resolved) return;
+      resolved = true;
+      clearTimeout(timeout);
+      try {
+        socket.close();
+      } catch {
+        // Ignore close failures while finalizing a call result.
+      }
+      const record: OpenClawWebSocketCallRecord = {
+        ...baseRecord,
+        status: ok ? 'called' : 'failed',
+        response: {
+          helloOk,
+          ...(rpcOk !== undefined ? { rpcOk } : {}),
+          frameTypes,
+          ...(error ? { error } : {}),
+        },
+        safety: {
+          ...safetyBase,
+          tokenSent: Boolean(token),
+          networkContacted: true,
+        },
+      };
+      void appendWebSocketCallRecord(callLogPath, record).then(() => {
+        resolve({
+          kind: 'openclaw_websocket_call_result',
+          ok,
+          callLogPath,
+          record,
+          discovery,
+          ...(error ? { error } : {}),
+        });
+      }, (writeError: unknown) => {
+        const message = writeError instanceof Error ? writeError.message : String(writeError);
+        resolve({
+          kind: 'openclaw_websocket_call_result',
+          ok: false,
+          callLogPath,
+          record: {
+            ...record,
+            status: 'failed',
+            response: {
+              ...record.response!,
+              error: message,
+            },
+          },
+          discovery,
+          error: message,
+        });
+      });
+    };
+
+    socket.on('open', () => {
+      socket.send(JSON.stringify({
+        type: 'connect',
+        client: {
+          name: 'Code Buddy OpenClaw Bridge',
+          role: 'codebuddy-fleet-bridge',
+          schemaVersion: OPENCLAW_BRIDGE_SCHEMA_VERSION,
+        },
+        ...(token ? { auth: { token } } : {}),
+      }));
+    });
+
+    socket.on('message', (data) => {
+      let frame: Record<string, unknown>;
+      try {
+        frame = parseOpenClawWebSocketFrame(data);
+      } catch (error) {
+        finish(false, `OpenClaw WebSocket returned non-JSON frame: ${error instanceof Error ? error.message : String(error)}`);
+        return;
+      }
+      const type = frameType(frame);
+      frameTypes.push(type);
+      if ((type === 'hello-ok' || type === 'hello_ok') && !helloOk) {
+        helloOk = true;
+        socket.send(JSON.stringify({
+          type: 'req',
+          id: requestId,
+          method,
+          params,
+        }));
+        return;
+      }
+      if (type === 'res' || type === 'response') {
+        const ok = typeof frame.ok === 'boolean'
+          ? frame.ok
+          : !(frame.error || frame.err);
+        rpcOk = ok;
+        finish(ok, ok ? undefined : `OpenClaw WebSocket call failed for ${method}`);
+        return;
+      }
+      if (type === 'error') {
+        const message = typeof frame.message === 'string'
+          ? frame.message
+          : typeof frame.error === 'string'
+            ? frame.error
+            : `OpenClaw WebSocket returned an error frame for ${method}`;
+        finish(false, message);
+      }
+    });
+
+    socket.on('error', (error) => {
+      finish(false, error instanceof Error ? error.message : String(error));
+    });
+
+    socket.on('close', (code, reason) => {
+      if (!resolved) {
+        const detail = reason.length > 0 ? `: ${reason.toString('utf8')}` : '';
+        finish(false, `OpenClaw WebSocket closed before call completed (${code})${detail}`);
       }
     });
   });

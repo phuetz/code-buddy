@@ -7,6 +7,7 @@ import {
   attachOpenClawGateway,
   buildOpenClawNodeDescriptor,
   buildOpenClawResponsePreview,
+  callOpenClawGatewayWebSocket,
   discoverOpenClawGateway,
   mapOpenClawChannelToCodeBuddy,
   prepareOpenClawFleetHandoffDraft,
@@ -94,6 +95,17 @@ async function startOpenClawWebSocketContractServer(): Promise<{
           payload: {
             status: 'ok',
             tokenEcho: 'oc_ws_contract_secret_fixture',
+          },
+        }));
+        return;
+      }
+      if (frame.type === 'req' && frame.method === 'logs.tail') {
+        socket.send(JSON.stringify({
+          type: 'res',
+          id: frame.id,
+          ok: true,
+          payload: {
+            lines: ['secret=oc_ws_call_payload_secret'],
           },
         }));
       }
@@ -477,6 +489,122 @@ describe('OpenClaw gateway bridge compatibility', () => {
       const rawLog = await readFile(result.probeLogPath, 'utf8');
       expect(rawLog).toContain('ws-contract-1');
       expect(rawLog).not.toContain('oc_ws_contract_secret_fixture');
+    } finally {
+      await server.close();
+    }
+  });
+
+  it('previews OpenClaw WebSocket RPC calls without contacting the gateway', async () => {
+    await mkdir(openclawHome, { recursive: true });
+    await writeFile(path.join(openclawHome, 'gateway.json'), JSON.stringify({
+      wsUrl: 'ws://127.0.0.1:18789',
+      token: 'oc_ws_call_preview_secret_fixture',
+    }, null, 2), 'utf8');
+
+    const result = await callOpenClawGatewayWebSocket({
+      method: 'logs.tail',
+      params: { sinceMs: 60000, secret: 'params-preview-secret' },
+      dryRun: true,
+    }, {
+      home: openclawHome,
+      cwd: workspace,
+      now: new Date('2026-06-07T12:21:00.000Z'),
+      createId: () => 'ws-call-preview-1',
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.record).toMatchObject({
+      id: 'ws-call-preview-1',
+      status: 'preview',
+      wsUrl: 'ws://127.0.0.1:18789/',
+      request: {
+        method: 'logs.tail',
+        paramKeys: ['secret', 'sinceMs'],
+      },
+      safety: {
+        tokenPresent: true,
+        tokenSent: false,
+        networkContacted: false,
+        rawPayloadsStored: false,
+      },
+    });
+    expect(JSON.stringify(result)).not.toContain('params-preview-secret');
+    const rawLog = await readFile(result.callLogPath, 'utf8');
+    expect(rawLog).toContain('ws-call-preview-1');
+    expect(rawLog).not.toContain('oc_ws_call_preview_secret_fixture');
+    expect(rawLog).not.toContain('params-preview-secret');
+  });
+
+  it('validates guarded live OpenClaw WebSocket RPC calls without logging params or payloads', async () => {
+    const server = await startOpenClawWebSocketContractServer();
+    try {
+      await mkdir(openclawHome, { recursive: true });
+      await writeFile(path.join(openclawHome, 'gateway.json'), JSON.stringify({
+        wsUrl: server.wsUrl,
+        token: 'oc_ws_call_secret_fixture',
+      }, null, 2), 'utf8');
+
+      const result = await callOpenClawGatewayWebSocket({
+        approvedBy: 'Patrice',
+        dryRun: false,
+        liveCallConfirmed: true,
+        method: 'logs.tail',
+        params: {
+          sinceMs: 60000,
+          secret: 'params-live-secret',
+        },
+        timeoutMs: 2000,
+      }, {
+        home: openclawHome,
+        cwd: workspace,
+        now: new Date('2026-06-07T12:22:00.000Z'),
+        createId: () => 'ws-call-contract-1',
+      });
+
+      expect(result.ok).toBe(true);
+      expect(result.record).toMatchObject({
+        id: 'ws-call-contract-1',
+        status: 'called',
+        approvedBy: 'Patrice',
+        liveCallConfirmed: true,
+        request: {
+          method: 'logs.tail',
+          paramKeys: ['secret', 'sinceMs'],
+        },
+        response: {
+          helloOk: true,
+          rpcOk: true,
+          frameTypes: ['hello-ok', 'res'],
+        },
+        safety: {
+          tokenPresent: true,
+          tokenSent: true,
+          networkContacted: true,
+          rawPayloadsStored: false,
+        },
+      });
+      expect(server.frames).toHaveLength(2);
+      expect(server.frames[0]).toMatchObject({
+        type: 'connect',
+        auth: { token: 'oc_ws_call_secret_fixture' },
+      });
+      expect(server.frames[1]).toMatchObject({
+        type: 'req',
+        id: 'ws-call-contract-1',
+        method: 'logs.tail',
+        params: {
+          sinceMs: 60000,
+          secret: 'params-live-secret',
+        },
+      });
+      expect(JSON.stringify(result)).not.toContain('oc_ws_call_secret_fixture');
+      expect(JSON.stringify(result)).not.toContain('params-live-secret');
+      expect(JSON.stringify(result)).not.toContain('oc_ws_call_payload_secret');
+      const rawLog = await readFile(result.callLogPath, 'utf8');
+      expect(rawLog).toContain('ws-call-contract-1');
+      expect(rawLog).not.toContain('oc_ws_call_secret_fixture');
+      expect(rawLog).not.toContain('params-live-secret');
+      expect(rawLog).not.toContain('oc_ws_call_payload_secret');
     } finally {
       await server.close();
     }
