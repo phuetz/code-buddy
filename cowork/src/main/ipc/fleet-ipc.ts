@@ -23,9 +23,17 @@ import {
 } from '../../shared/internet-proof-metadata';
 
 const FLEET_DISPATCH_PROFILES = ['balanced', 'research', 'code', 'review', 'safe'] as const;
+const MISSION_CONTROL_DISCOVERY_CACHE_TTL_MS = 60_000;
 export type FleetDispatchProfile = (typeof FLEET_DISPATCH_PROFILES)[number];
 type FleetBridgeSource = FleetBridge | null | (() => FleetBridge | null);
 type ActivityFeedSource = ActivityFeed | null | (() => ActivityFeed | null);
+let missionControlDiscoveryCache:
+  | {
+      expiresAt: number;
+      peers: MissionControlDiscoveredPeer[];
+    }
+  | null = null;
+let missionControlDiscoveryInFlight: Promise<MissionControlDiscoveredPeer[]> | null = null;
 export interface FleetDispatchInput {
   goal: string;
   parallelism?: number;
@@ -256,20 +264,43 @@ export function registerFleetIpcHandlers(
 async function loadMissionControlDiscoveredPeers(
   peers: Array<{ url?: string }>,
 ): Promise<MissionControlDiscoveredPeer[]> {
+  const discovered = await loadCachedMissionControlDiscoveredPeers();
+  const knownUrls = new Set(peers.map((peer) => peer.url).filter(Boolean));
+  return discovered.filter((peer) => peer.url && !knownUrls.has(peer.url));
+}
+
+async function loadCachedMissionControlDiscoveredPeers(): Promise<MissionControlDiscoveredPeer[]> {
+  const now = Date.now();
+  if (missionControlDiscoveryCache && missionControlDiscoveryCache.expiresAt > now) {
+    return missionControlDiscoveryCache.peers;
+  }
+  if (!missionControlDiscoveryInFlight) {
+    missionControlDiscoveryInFlight = discoverMissionControlPeers().finally(() => {
+      missionControlDiscoveryInFlight = null;
+    });
+  }
+  return missionControlDiscoveryInFlight;
+}
+
+async function discoverMissionControlPeers(): Promise<MissionControlDiscoveredPeer[]> {
   try {
     const { discoverPeers } = await import('../fleet/discovery');
-    const knownUrls = new Set(peers.map((peer) => peer.url).filter(Boolean));
     const discovered = await discoverPeers();
-    return discovered
-      .filter((peer) => peer.url && !knownUrls.has(peer.url))
+    const peers = discovered
+      .filter((peer) => peer.url)
       .map((peer) => ({
         label: peer.label,
         source: peer.source,
         url: peer.url,
       }));
+    missionControlDiscoveryCache = {
+      expiresAt: Date.now() + MISSION_CONTROL_DISCOVERY_CACHE_TTL_MS,
+      peers,
+    };
+    return peers;
   } catch (err) {
     logWarn('[fleet.missionControlSnapshot] peer discovery unavailable:', err);
-    return [];
+    return missionControlDiscoveryCache?.peers ?? [];
   }
 }
 

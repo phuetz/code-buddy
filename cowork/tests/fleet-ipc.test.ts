@@ -232,8 +232,8 @@ describe('registerFleetIpcHandlers', () => {
 
     const result = await handler?.({});
 
-    expect(bridge.listPeers).toHaveBeenCalled();
-    expect(discoveryMock.discoverPeers).toHaveBeenCalled();
+    expect(bridge.listPeers).toHaveBeenCalledTimes(1);
+    expect(discoveryMock.discoverPeers).toHaveBeenCalledTimes(1);
     expect(coreLoaderMock.loadCoreModule).toHaveBeenCalledWith('observability/run-store.js');
     expect(coreLoaderMock.loadCoreModule).toHaveBeenCalledWith('observability/proof-ledger.js');
     expect(coreLoaderMock.loadCoreModule).toHaveBeenCalledWith('fleet/saga-store.js');
@@ -275,6 +275,15 @@ describe('registerFleetIpcHandlers', () => {
     expect((result as MissionControlSnapshot).agents.some(
       (agent) => agent.label === 'already-paired-ministar',
     )).toBe(false);
+
+    const secondResult = await handler?.({});
+    expect(bridge.listPeers).toHaveBeenCalledTimes(2);
+    expect(discoveryMock.discoverPeers).toHaveBeenCalledTimes(1);
+    expect(secondResult).toMatchObject({
+      summary: {
+        agentCount: 3,
+      },
+    });
   });
 
   it('refuses Fleet dispatch when no peer has known capabilities', async () => {
