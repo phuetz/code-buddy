@@ -63,6 +63,12 @@ describe('SkillPackageManagerStrip', () => {
                 contentPreview: '# Audit Helper\n\nRun real checks and capture evidence.',
                 enabled: true,
                 exists: true,
+                firewallCapabilities: ['filesystem', 'shell'],
+                firewallFindingCount: 3,
+                firewallQuarantineRequired: true,
+                firewallScore: 0,
+                firewallSummary: 'Firewall quarantine: score 0/100 with shell and filesystem findings.',
+                firewallVerdict: 'quarantine',
                 installedAt: 1,
                 integrityOk: true,
                 invocationCount: 2,
@@ -111,6 +117,9 @@ describe('SkillPackageManagerStrip', () => {
     expect(strip?.textContent).toContain('audit-helper');
     expect(strip?.textContent).toContain('v1.0.0');
     expect(strip?.textContent).toContain('integrity ok');
+    expect(strip?.textContent).toContain('Firewall quarantine 0/100');
+    expect(strip?.textContent).toContain('3 findings');
+    expect(strip?.textContent).toContain('filesystem, shell');
     expect(strip?.textContent).toContain('Run real checks and capture evidence.');
     expect(strip?.textContent).toContain('1 rollback');
     expect(strip?.textContent).toContain('2 run(s)');

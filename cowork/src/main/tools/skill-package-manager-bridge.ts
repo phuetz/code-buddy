@@ -2,6 +2,14 @@ import { isAbsolute, resolve } from 'path';
 import { loadCoreModule } from '../utils/core-loader';
 
 type HermesSkillPackageStatus = 'active' | 'disabled' | 'deprecated';
+type HermesSkillPackageFirewallCapability =
+  | 'dynamic-code'
+  | 'filesystem'
+  | 'network'
+  | 'prototype-pollution'
+  | 'secrets'
+  | 'shell';
+type HermesSkillPackageFirewallVerdict = 'allow' | 'review' | 'quarantine';
 export type SkillPackageLifecycleAction = 'enable' | 'disable' | 'deprecate';
 
 export interface SkillPackageManagerEntry {
@@ -11,6 +19,12 @@ export interface SkillPackageManagerEntry {
   enabled: boolean;
   exists: boolean;
   failureCount?: number;
+  firewallCapabilities?: HermesSkillPackageFirewallCapability[];
+  firewallFindingCount?: number;
+  firewallQuarantineRequired?: boolean;
+  firewallScore?: number;
+  firewallSummary?: string;
+  firewallVerdict?: HermesSkillPackageFirewallVerdict;
   installedAt: number;
   integrityOk: boolean;
   invocationCount?: number;

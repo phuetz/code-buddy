@@ -5,6 +5,11 @@ import {
   type SkillHistoryResult,
   type SkillLifecycleState,
 } from '../skills/hub.js';
+import {
+  scanSkillFirewall,
+  type SkillFirewallCapability,
+  type SkillFirewallVerdict,
+} from '../security/skill-scanner.js';
 
 export type HermesSkillPackageStatus = 'active' | 'disabled' | 'deprecated';
 export type HermesSkillPackageLifecycleAction = 'enable' | 'disable' | 'deprecate';
@@ -16,6 +21,12 @@ export interface HermesSkillPackageEntry {
   enabled: boolean;
   exists: boolean;
   failureCount?: number;
+  firewallCapabilities?: SkillFirewallCapability[];
+  firewallFindingCount?: number;
+  firewallQuarantineRequired?: boolean;
+  firewallScore?: number;
+  firewallSummary?: string;
+  firewallVerdict?: SkillFirewallVerdict;
   installedAt: number;
   integrityOk: boolean;
   invocationCount?: number;
@@ -327,6 +338,7 @@ function summarizeInstalledSkill(
   const usage = skill.usage;
   const enabled = skill.enabled !== false;
   const preview = buildContentPreview(content, previewChars);
+  const firewall = buildFirewallPreview(skill, history);
 
   return {
     ...(typeof usage?.averageDurationMs === 'number' ? { averageDurationMs: usage.averageDurationMs } : {}),
@@ -334,6 +346,7 @@ function summarizeInstalledSkill(
     enabled,
     exists: history?.current.exists ?? false,
     ...(typeof usage?.failureCount === 'number' ? { failureCount: usage.failureCount } : {}),
+    ...firewall,
     installedAt: skill.installedAt,
     integrityOk: history?.current.integrityOk ?? false,
     ...(typeof usage?.invocationCount === 'number' ? { invocationCount: usage.invocationCount } : {}),
@@ -350,6 +363,35 @@ function summarizeInstalledSkill(
     ...(typeof usage?.successCount === 'number' ? { successCount: usage.successCount } : {}),
     version: skill.version,
   };
+}
+
+function buildFirewallPreview(
+  skill: InstalledSkill,
+  history: SkillHistoryResult | null,
+): Pick<
+  HermesSkillPackageEntry,
+  | 'firewallCapabilities'
+  | 'firewallFindingCount'
+  | 'firewallQuarantineRequired'
+  | 'firewallScore'
+  | 'firewallSummary'
+  | 'firewallVerdict'
+> {
+  if (history?.current.exists !== true) return {};
+
+  try {
+    const report = scanSkillFirewall(path.dirname(skill.path));
+    return {
+      firewallCapabilities: report.capabilities,
+      firewallFindingCount: report.findings.length,
+      firewallQuarantineRequired: report.quarantineRequired,
+      firewallScore: report.score,
+      firewallSummary: report.summary,
+      firewallVerdict: report.verdict,
+    };
+  } catch {
+    return {};
+  }
 }
 
 function buildWorkspaceSkillsHub(workDir: string): {
