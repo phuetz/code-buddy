@@ -637,7 +637,7 @@
     "visionWarningTitle": "当前模型可能无法读取图片",
     "visionWarningBody": "当前模型未标记为支持视觉 — 请切换到支持视觉的模型（如 GPT-4o、Claude 3.5 Sonnet、Gemini）以获得可靠的图像理解。",
     "imageProcessFailed": "处理粘贴图片失败",
-    "dropToAttach": "拖拽文件以附加"
+    "dropToAttach": "拖拽文件以附加，或拖拽文件夹以切换工作区"
   },
   "context": {
     "progress": "进度",

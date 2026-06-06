@@ -31,6 +31,7 @@ import type { ExecutionMode } from '../types';
 import { usePermissionMode, useSearchState } from '../store/selectors';
 import type { Message, ContentBlock, ScheduleCreateInput, ScheduleWeekday } from '../types';
 import { findMessageSearchMatches } from '../utils/session-search';
+import { getElectronDroppedFilePath, resolveDroppedDirectoryPath } from '../utils/dropped-files';
 import { Send, Square, Plus, Loader2, Plug, X, Clock, Eye } from 'lucide-react';
 
 type AttachedFile = {
@@ -623,23 +624,17 @@ export function ChatView() {
 
     const files = Array.from(e.dataTransfer.files);
 
-    // Detect folder drops — switch working directory
-    const folderFiles = files.filter((file) => {
-      const filePath =
-        'path' in file && typeof (file as File & { path?: string }).path === 'string'
-          ? (file as File & { path?: string }).path
-          : '';
-      // Folders have empty type and a path
-      return !file.type && filePath && !file.name.includes('.');
-    });
-    if (folderFiles.length > 0) {
-      const folderPath = (folderFiles[0] as File & { path?: string }).path;
-      if (folderPath && window.electronAPI) {
-        window.electronAPI.send({
-          type: 'workdir.set',
-          payload: { path: folderPath },
-        });
-      }
+    const folderPath = await resolveDroppedDirectoryPath(
+      files,
+      e.dataTransfer.items,
+      getElectronDroppedFilePath,
+      window.electronAPI?.isDirectoryPath
+    );
+    if (folderPath && window.electronAPI) {
+      window.electronAPI.send({
+        type: 'workdir.set',
+        payload: { path: folderPath },
+      });
       return;
     }
 
@@ -678,7 +673,7 @@ export function ChatView() {
     if (otherFiles.length > 0) {
       const newFiles = await Promise.all(
         otherFiles.map(async (file) => {
-          const droppedPath = 'path' in file && typeof file.path === 'string' ? file.path : '';
+          const droppedPath = getElectronDroppedFilePath(file);
           const inlineDataBase64 = droppedPath ? undefined : await blobToBase64(file);
 
           return {

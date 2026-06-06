@@ -637,7 +637,7 @@
     "visionWarningTitle": "Le modèle ne peut pas lire les images",
     "visionWarningBody": "Le modèle actuel n'est pas marqué comme étant compatible avec la vision — passez à un modèle de vision (par exemple GPT-4o, Claude 3.5 Sonnet, Gemini) pour une compréhension fiable de l'image.",
     "imageProcessFailed": "Échec du traitement de l'image collée",
-    "dropToAttach": "Déposez les fichiers à joindre"
+    "dropToAttach": "Déposez des fichiers à joindre ou un dossier pour changer d'espace de travail"
   },
   "context": {
     "progress": "Progression",

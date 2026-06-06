@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from 'electron';
+import { contextBridge, ipcRenderer, webUtils } from 'electron';
 import type {
   ClientEvent,
   ServerEvent,
@@ -145,6 +145,22 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Select files using native dialog
   selectFiles: (): Promise<string[]> => ipcRenderer.invoke('dialog.selectFiles'),
+  getPathForFile: (file: File): string => {
+    try {
+      return (
+        webUtils.getPathForFile(file) ||
+        ('path' in file && typeof (file as File & { path?: string }).path === 'string'
+          ? (file as File & { path?: string }).path
+          : '')
+      );
+    } catch {
+      return 'path' in file && typeof (file as File & { path?: string }).path === 'string'
+        ? (file as File & { path?: string }).path
+        : '';
+    }
+  },
+  isDirectoryPath: (filePath: string): Promise<boolean> =>
+    ipcRenderer.invoke('fs.isDirectoryPath', filePath),
 
   artifacts: {
     listRecentFiles: (
@@ -2005,6 +2021,8 @@ declare global {
       openExternal: (url: string) => Promise<boolean>;
       showItemInFolder: (filePath: string, cwd?: string) => Promise<boolean>;
       selectFiles: () => Promise<string[]>;
+      getPathForFile: (file: File) => string;
+      isDirectoryPath: (filePath: string) => Promise<boolean>;
       artifacts: {
         listRecentFiles: (
           cwd: string,

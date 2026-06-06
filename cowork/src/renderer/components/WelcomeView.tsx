@@ -4,6 +4,7 @@ import { useAppStore } from '../store';
 import { useIPC } from '../hooks/useIPC';
 import type { ContentBlock } from '../types';
 import { getInitialSessionTitle } from '../../shared/session-title';
+import { getElectronDroppedFilePath, resolveDroppedDirectoryPath } from '../utils/dropped-files';
 import {
   FileText,
   BarChart3,
@@ -261,22 +262,17 @@ export function WelcomeView() {
 
     const files = Array.from(e.dataTransfer.files);
 
-    // Detect folder drops — switch working directory
-    const folderFiles = files.filter((file) => {
-      const filePath =
-        'path' in file && typeof (file as File & { path?: string }).path === 'string'
-          ? (file as File & { path?: string }).path
-          : '';
-      return !file.type && filePath && !file.name.includes('.');
-    });
-    if (folderFiles.length > 0) {
-      const folderPath = (folderFiles[0] as File & { path?: string }).path;
-      if (folderPath && window.electronAPI) {
-        window.electronAPI.send({
-          type: 'workdir.set',
-          payload: { path: folderPath },
-        });
-      }
+    const folderPath = await resolveDroppedDirectoryPath(
+      files,
+      e.dataTransfer.items,
+      getElectronDroppedFilePath,
+      window.electronAPI?.isDirectoryPath
+    );
+    if (folderPath && window.electronAPI) {
+      window.electronAPI.send({
+        type: 'workdir.set',
+        payload: { path: folderPath },
+      });
       return;
     }
 
@@ -308,7 +304,7 @@ export function WelcomeView() {
     if (otherFiles.length > 0) {
       const newFiles = await Promise.all(
         otherFiles.map(async (file) => {
-          const droppedPath = 'path' in file && typeof file.path === 'string' ? file.path : '';
+          const droppedPath = getElectronDroppedFilePath(file);
           const inlineDataBase64 = droppedPath ? undefined : await blobToBase64(file);
 
           return {

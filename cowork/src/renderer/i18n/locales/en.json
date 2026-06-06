@@ -637,7 +637,7 @@
     "visionWarningTitle": "Model may not read images",
     "visionWarningBody": "The current model isn't marked as vision-capable — switch to a vision model (e.g. GPT-4o, Claude 3.5 Sonnet, Gemini) for reliable image understanding.",
     "imageProcessFailed": "Failed to process pasted image",
-    "dropToAttach": "Drop files to attach"
+    "dropToAttach": "Drop files to attach or a folder to switch workspace"
   },
   "context": {
     "progress": "Progress",

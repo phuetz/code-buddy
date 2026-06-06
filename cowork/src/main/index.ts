@@ -2311,6 +2311,19 @@ ipcMain.handle('dialog.selectFiles', async () => {
   return result.filePaths;
 });
 
+ipcMain.handle('fs.isDirectoryPath', async (_event, filePath: string) => {
+  if (typeof filePath !== 'string' || filePath.trim().length === 0) {
+    return false;
+  }
+
+  try {
+    const stat = await fs.promises.stat(filePath);
+    return stat.isDirectory();
+  } catch {
+    return false;
+  }
+});
+
 // Config IPC handlers
 ipcMain.handle('config.get', () => {
   try {
