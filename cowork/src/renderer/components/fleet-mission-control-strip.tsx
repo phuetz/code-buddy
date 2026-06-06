@@ -196,6 +196,17 @@ function buildMissionWorkFocusChips(item: MissionControlWorkItem): MissionContro
       : []),
     ...(item.proof.commandCount > 0 ? [{ label: `${item.proof.commandCount} cmd` }] : []),
     ...(item.filesChanged.length > 0 ? [{ label: `${item.filesChanged.length} files` }] : []),
+    ...(item.proof.riskCount > 0
+      ? [
+          {
+            label: formatMissionCount(item.proof.riskCount, 'risk'),
+            tone: item.proof.highRiskCount > 0 ? 'attention' as const : undefined,
+          },
+        ]
+      : []),
+    ...(item.proof.redactionCount > 0
+      ? [{ label: formatMissionCount(item.proof.redactionCount, 'redaction'), tone: 'ok' as const }]
+      : []),
     ...(item.proof.highRiskCount > 0
       ? [{ label: `${item.proof.highRiskCount} high risk`, tone: 'attention' as const }]
       : []),
@@ -364,6 +375,16 @@ const MissionWorkList: React.FC<{
                     {item.filesChanged.length > 0 && (
                       <MissionChip>{item.filesChanged.length} files</MissionChip>
                     )}
+                    {item.proof.riskCount > 0 && (
+                      <MissionChip tone={item.proof.highRiskCount > 0 ? 'attention' : undefined}>
+                        {formatMissionCount(item.proof.riskCount, 'risk')}
+                      </MissionChip>
+                    )}
+                    {item.proof.redactionCount > 0 && (
+                      <MissionChip tone="ok">
+                        {formatMissionCount(item.proof.redactionCount, 'redaction')}
+                      </MissionChip>
+                    )}
                     {item.proof.highRiskCount > 0 && (
                       <MissionChip tone="attention">
                         {item.proof.highRiskCount} high risk
@@ -389,6 +410,10 @@ function formatMissionDuration(ms?: number): string | null {
   const minutes = Math.floor(seconds / 60);
   const remainingSeconds = Math.round(seconds - minutes * 60);
   return `${minutes}m ${remainingSeconds}s`;
+}
+
+function formatMissionCount(count: number, noun: string): string {
+  return `${count} ${noun}${count === 1 ? '' : 's'}`;
 }
 
 function missionFocusClass(tone: MissionFocusTone): string {
