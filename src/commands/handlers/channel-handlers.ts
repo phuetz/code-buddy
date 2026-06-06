@@ -238,7 +238,9 @@ export function buildChannelStatusReport(
     recommendations.push('Create .codebuddy/channels.json or pass --config to configure remote channels.');
   }
   if (enabledButNotRegistered.length > 0) {
-    recommendations.push(`Configured but not registered: ${enabledButNotRegistered.join(', ')}. Run buddy channels start.`);
+    recommendations.push(
+      `Configured but not registered: ${enabledButNotRegistered.join(', ')}. Run buddy hermes messaging start --json.`,
+    );
   }
   if (runtimeChannels.length === 0) {
     recommendations.push('No runtime channels are registered in this process.');

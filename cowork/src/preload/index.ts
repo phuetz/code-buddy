@@ -3334,7 +3334,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Read-only per-channel connection status (configuring/sending stays on the CLI)
   channels: {
-    status: () => ipcRenderer.invoke('channels.status'),
+    status: (options?: { configPath?: string }) => ipcRenderer.invoke('channels.status', options),
   },
 
   // S6: supervision-only mobile gateway management (loopback to embedded server)
@@ -6128,7 +6128,7 @@ declare global {
         }>;
       };
       channels: {
-        status: () => Promise<{
+        status: (options?: { configPath?: string }) => Promise<{
           ok: boolean;
           error?: string;
           items: Array<{

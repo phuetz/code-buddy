@@ -1,0 +1,15 @@
+{
+  "channels": [
+    {
+      "allowedUsers": [
+        "qa-reviewer"
+      ],
+      "enabled": true,
+      "options": {
+        "parseMode": "markdown"
+      },
+      "token": "fixture-token-not-secret",
+      "type": "telegram"
+    }
+  ]
+}

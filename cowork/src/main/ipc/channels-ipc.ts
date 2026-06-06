@@ -15,10 +15,24 @@ import {
   type ChannelGatewayStatusPayload,
 } from '../tools/channel-gateway-readiness-bridge';
 
+interface ChannelStatusRequest {
+  configPath?: string;
+}
+
 export function registerChannelsIpcHandlers(): void {
-  ipcMain.handle('channels.status', async () => {
+  ipcMain.handle('channels.status', async (_event, request?: ChannelStatusRequest) => {
     try {
-      return await getChannelGatewayStatusForReview();
+      const requestConfigPath =
+        typeof request?.configPath === 'string' && request.configPath.trim()
+          ? request.configPath.trim()
+          : undefined;
+      const envConfigPath =
+        typeof process.env.CODEBUDDY_CHANNELS_CONFIG === 'string' &&
+        process.env.CODEBUDDY_CHANNELS_CONFIG.trim()
+          ? process.env.CODEBUDDY_CHANNELS_CONFIG.trim()
+          : undefined;
+      const configPath = requestConfigPath ?? envConfigPath;
+      return await getChannelGatewayStatusForReview(configPath);
     } catch (err) {
       logError('[channels.status] failed:', err);
       return {

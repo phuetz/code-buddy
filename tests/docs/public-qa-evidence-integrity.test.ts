@@ -345,6 +345,19 @@ describe('public QA evidence report integrity', () => {
     expect(collectFencedCommandBlocks(frenchGuide)).toEqual(collectFencedCommandBlocks(englishGuide));
   });
 
+  it('keeps the Hermes messaging gateway operator capture published', async () => {
+    const [qaHub, mainDossier] = await Promise.all([
+      fs.readFile(path.join(repoRoot, qaHubPath), 'utf8'),
+      fs.readFile(path.join(repoRoot, mainDossierPath), 'utf8'),
+    ]);
+    const screenshotRef = './screenshots/111-hermes-messaging-gateway-operator-commands.png';
+
+    expect(qaHub).toContain(screenshotRef);
+    expect(mainDossier).toContain(screenshotRef);
+    expect(mainDossier).toContain('buddy hermes messaging status --json --config ...');
+    expect(mainDossier).toContain('buddy hermes messaging start --json --config ...');
+  });
+
   it('keeps every result uniquely identified and positively verified', async () => {
     const report = await readQaReport();
     const results = asResults(report);
