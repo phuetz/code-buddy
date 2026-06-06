@@ -196,7 +196,7 @@ describe('resolveEnginePathWithDiagnostic', () => {
         appPath: '/somewhere/wrong',
         mainBundleDir: '/repo/cowork/dist-electron/main',
       }).path,
-    ).toBe('/repo/dist');
+    ).toBe(path.resolve('/repo/cowork/dist-electron/main', '..', '..', '..', 'dist'));
   });
 
   it("env-override wins over mainBundleDir even when both are present", () => {
