@@ -549,13 +549,13 @@ export class WSLBridge implements SandboxExecutor {
   }
 
   /**
-   * Install Python packages commonly needed by skills (PDF, PPTX, etc.)
+   * Install Python packages commonly needed by skills (PDF, PPTX, XLSX, etc.)
    */
   static async installSkillDependencies(distro: string): Promise<void> {
     WSLBridge.validateDistroName(distro);
-    log('[WSL] Installing skill dependencies (markitdown, pypdf, etc.)...');
+    log('[WSL] Installing skill dependencies (markitdown, pypdf, openpyxl, etc.)...');
 
-    // These packages are required by the built-in PDF and PPTX skills
+    // These packages are required by the built-in PDF, PPTX, and XLSX skills.
     const packages = [
       'markitdown[pptx]', // PDF/PPTX text extraction
       'pypdf', // PDF manipulation
@@ -563,6 +563,8 @@ export class WSLBridge implements SandboxExecutor {
       'reportlab', // PDF creation
       'defusedxml', // Secure XML parsing for OOXML
       'python-pptx', // PPTX manipulation
+      'openpyxl', // XLSX read/write
+      'xlsxwriter', // XLSX creation with charts/styles
     ];
 
     try {
