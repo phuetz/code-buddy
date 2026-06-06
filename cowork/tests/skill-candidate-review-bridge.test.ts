@@ -32,8 +32,12 @@ describe('skill candidate review bridge', () => {
       },
       {
         eligible: true,
+        evidenceRunIds: ['run-learning-first', 'run-learning-ready'],
         id: 'candidate-ready',
         kind: 'learning',
+        promotionThreshold: 2,
+        proofBackedSuccessCount: 2,
+        proofStatus: 'proven',
         reason: '2 successful runs met the promotion threshold.',
         skillName: 'research-ready',
         skillPath: '.codebuddy/skill-candidates/research-ready/SKILL.md',
@@ -76,6 +80,7 @@ describe('skill candidate review bridge', () => {
     expect(candidates).toEqual([
       {
         eligible: true,
+        evidenceRunIds: ['run-learning-first', 'run-learning-ready'],
         firewall: {
           capabilities: [],
           findingCounts: { critical: 0, high: 0, info: 0, low: 0, medium: 0 },
@@ -86,6 +91,9 @@ describe('skill candidate review bridge', () => {
         },
         id: 'candidate-ready',
         kind: 'learning',
+        promotionThreshold: 2,
+        proofBackedSuccessCount: 2,
+        proofStatus: 'proven',
         reason: '2 successful runs met the promotion threshold.',
         skillName: 'research-ready',
         skillPath: '.codebuddy/skill-candidates/research-ready/SKILL.md',

@@ -16,6 +16,7 @@ import {
   type RunTrajectoryExportToolCall,
   type RunTrajectoryExportToolResult,
 } from '../observability/run-trajectory-export.js';
+import { PROOF_LEDGER_ARTIFACT } from '../observability/proof-ledger-constants.js';
 import type { RunStore } from '../observability/run-store.js';
 import { getLessonCandidateQueue } from './lesson-candidate-queue.js';
 import type { LessonCategory } from './lessons-tracker.js';
@@ -96,6 +97,7 @@ export const LEARNING_AGENT_OUTPUT_SCHEMA = {
 
 type PatternStatus = 'observed' | 'reinforced' | 'deprecated';
 type LearningSkillRecommendation = 'observe' | 'reinforce' | 'improve' | 'deprecate';
+type LearningSkillProofStatus = 'proven' | 'incomplete' | 'failed' | 'missing';
 
 export interface LearningToolStat {
   averageDurationMs?: number;
@@ -127,7 +129,11 @@ export interface LearningLessonCandidate {
 }
 
 export interface LearningSkillCandidate {
+  evidenceRunIds: string[];
   eligible: boolean;
+  promotionThreshold: number;
+  proofBackedSuccessCount: number;
+  proofStatus: LearningSkillProofStatus;
   reason: string;
   reviewManifestPath?: string;
   skillName: string;
@@ -167,11 +173,14 @@ export interface LearningPatternRecord {
   key: string;
   candidateSkillName?: string;
   candidateSkillPath?: string;
+  evidenceRunIds?: string[];
   failureCount: number;
   firstSeenAt: string;
   lastSeenAt: string;
   lastSeenRunId: string;
+  lastProofStatus?: LearningSkillProofStatus;
   observationCount: number;
+  proofBackedSuccessCount?: number;
   status: PatternStatus;
   successCount: number;
   toolSequence: string[];
@@ -270,11 +279,17 @@ export interface LearningAgentRunResult {
 interface LearningSkillCandidateReviewManifest {
   approvalRequired: true;
   candidateId: string;
+  eligible: boolean;
+  evidenceRunIds: string[];
   generatedAt: string;
+  promotionThreshold: number;
+  proofBackedSuccessCount: number;
+  proofStatus: LearningSkillProofStatus;
   schemaVersion: typeof LEARNING_SKILL_CANDIDATE_REVIEW_SCHEMA_VERSION;
   skillName: string;
   sourceRunId: string;
   status: 'awaiting_human_approval' | 'not_eligible';
+  successfulRunCount: number;
   toolSequence: string[];
 }
 
@@ -282,6 +297,7 @@ const LEARNING_DIR = path.join('.codebuddy', 'learning');
 const SKILL_CANDIDATE_ROOT = path.join('.codebuddy', 'skill-candidates', 'learning');
 const MIN_COMPLEX_TOOL_CALLS = 3;
 const MIN_PATTERN_SEQUENCE_LENGTH = 3;
+const LEARNING_SKILL_PROMOTION_THRESHOLD = 2;
 
 export function buildLearningRetrospective(
   runId: string,
@@ -349,7 +365,9 @@ export async function runLearningRetrospective(
   const proposeLessons = options.proposeLessonCandidates !== false;
   const materializeSkills = options.materializeSkillCandidates !== false;
 
-  const patternLibrary = updateLearningPatternLibrary(retrospective, workDir);
+  const proofStatus = readLearningRunProofStatus(store, runId);
+  const patternLibrary = updateLearningPatternLibrary(retrospective, workDir, proofStatus);
+  retrospective.skillCandidates = applyLearningSkillPromotionEvidence(retrospective.skillCandidates, patternLibrary);
   const skillUsageCount = recordSelectedSkillUsage(store, runId, workDir, retrospective);
   const patternLibraryPath = path.join(workDir, LEARNING_DIR, 'pattern-library.json');
   const materializedCandidates = materializeSkills
@@ -829,8 +847,12 @@ function buildSkillCandidates(
     const skillPath = toPosix(path.join(SKILL_CANDIDATE_ROOT, skillName, 'SKILL.md'));
     const reviewManifestPath = toPosix(path.join(SKILL_CANDIDATE_ROOT, skillName, 'candidate-review.json'));
     candidates.push({
-      eligible: true,
-      reason: `Observed in ${exported.run.runId}: ${pattern.detail}.`,
+      eligible: false,
+      evidenceRunIds: [],
+      promotionThreshold: LEARNING_SKILL_PROMOTION_THRESHOLD,
+      proofBackedSuccessCount: 0,
+      proofStatus: 'missing',
+      reason: `Observed in ${exported.run.runId}: ${pattern.detail}. Awaiting repeated proof-backed runs.`,
       reviewManifestPath,
       skillName,
       skillPath,
@@ -844,6 +866,7 @@ function buildSkillCandidates(
 function updateLearningPatternLibrary(
   retrospective: LearningRetrospective,
   workDir: string,
+  proofStatus: LearningSkillProofStatus,
 ): LearningPatternLibrary {
   const filePath = path.join(workDir, LEARNING_DIR, 'pattern-library.json');
   const library = readPatternLibrary(filePath);
@@ -852,10 +875,18 @@ function updateLearningPatternLibrary(
   for (const candidate of retrospective.skillCandidates) {
     const key = patternKey(candidate.toolSequence);
     const existing = library.patterns.find((pattern) => pattern.key === key);
+    const isProofBackedSuccess = retrospective.run.status === 'completed' && proofStatus === 'proven';
     if (existing) {
+      const evidenceRunIds = Array.isArray(existing.evidenceRunIds) ? existing.evidenceRunIds : [];
+      if (isProofBackedSuccess && !evidenceRunIds.includes(retrospective.run.runId)) {
+        evidenceRunIds.push(retrospective.run.runId);
+        existing.proofBackedSuccessCount = (existing.proofBackedSuccessCount ?? 0) + 1;
+      }
+      existing.evidenceRunIds = evidenceRunIds.slice(-10);
       existing.observationCount += 1;
       existing.lastSeenAt = now;
       existing.lastSeenRunId = retrospective.run.runId;
+      existing.lastProofStatus = proofStatus;
       existing.successCount += retrospective.run.status === 'completed' ? 1 : 0;
       existing.failureCount += retrospective.run.status === 'failed' ? 1 : 0;
       existing.status = classifyPatternStatus(existing);
@@ -866,11 +897,14 @@ function updateLearningPatternLibrary(
         key,
         candidateSkillName: candidate.skillName,
         candidateSkillPath: candidate.skillPath,
+        evidenceRunIds: isProofBackedSuccess ? [retrospective.run.runId] : [],
         failureCount: retrospective.run.status === 'failed' ? 1 : 0,
         firstSeenAt: now,
         lastSeenAt: now,
         lastSeenRunId: retrospective.run.runId,
+        lastProofStatus: proofStatus,
         observationCount: 1,
+        proofBackedSuccessCount: isProofBackedSuccess ? 1 : 0,
         status: 'observed',
         successCount: retrospective.run.status === 'completed' ? 1 : 0,
         toolSequence: candidate.toolSequence,
@@ -886,14 +920,38 @@ function updateLearningPatternLibrary(
   return library;
 }
 
+function applyLearningSkillPromotionEvidence(
+  candidates: LearningSkillCandidate[],
+  library: LearningPatternLibrary,
+): LearningSkillCandidate[] {
+  return candidates.map((candidate) => {
+    const record = library.patterns.find((pattern) => pattern.key === patternKey(candidate.toolSequence));
+    const proofBackedSuccessCount = record?.proofBackedSuccessCount ?? 0;
+    const promotionThreshold = candidate.promotionThreshold || LEARNING_SKILL_PROMOTION_THRESHOLD;
+    const evidenceRunIds = Array.isArray(record?.evidenceRunIds) ? record.evidenceRunIds : [];
+    const proofStatus = record?.lastProofStatus ?? candidate.proofStatus ?? 'missing';
+    const eligible = proofBackedSuccessCount >= promotionThreshold;
+    const proofSummary = `${proofBackedSuccessCount}/${promotionThreshold} proof-backed successful run(s)`;
+    return {
+      ...candidate,
+      eligible,
+      evidenceRunIds,
+      promotionThreshold,
+      proofBackedSuccessCount,
+      proofStatus,
+      reason: eligible
+        ? `${proofSummary} met the Learning Agent promotion threshold.`
+        : `${proofSummary}; keep as a candidate until repeated real runs prove it.`,
+    };
+  });
+}
+
 function materializeLearningSkillCandidates(
   retrospective: LearningRetrospective,
   workDir: string,
 ): LearningSkillCandidate[] {
   const materialized: LearningSkillCandidate[] = [];
   for (const candidate of retrospective.skillCandidates) {
-    if (!candidate.eligible) continue;
-
     try {
       const skillMarkdown = renderLearningSkillCandidateMarkdown(retrospective, candidate);
       const absoluteSkillPath = resolveInsideRoot(workDir, candidate.skillPath);
@@ -914,11 +972,17 @@ function materializeLearningSkillCandidates(
       const manifest: LearningSkillCandidateReviewManifest = {
         approvalRequired: true,
         candidateId: `learning-skill-${stableHash(`${retrospective.run.runId}|${candidate.skillName}`)}`,
+        eligible: candidate.eligible,
+        evidenceRunIds: candidate.evidenceRunIds,
         generatedAt: retrospective.generatedAt,
+        promotionThreshold: candidate.promotionThreshold,
+        proofBackedSuccessCount: candidate.proofBackedSuccessCount,
+        proofStatus: candidate.proofStatus,
         schemaVersion: LEARNING_SKILL_CANDIDATE_REVIEW_SCHEMA_VERSION,
         skillName: candidate.skillName,
         sourceRunId: retrospective.run.runId,
-        status: 'awaiting_human_approval',
+        status: candidate.eligible ? 'awaiting_human_approval' : 'not_eligible',
+        successfulRunCount: candidate.proofBackedSuccessCount,
         toolSequence: candidate.toolSequence,
       };
 
@@ -989,6 +1053,20 @@ function recordSelectedSkillUsage(
   return selectedSkills.size;
 }
 
+function readLearningRunProofStatus(store: RunStore, runId: string): LearningSkillProofStatus {
+  const raw = store.getArtifact(runId, PROOF_LEDGER_ARTIFACT);
+  if (!raw) return 'missing';
+  try {
+    const parsed = JSON.parse(raw) as { status?: unknown };
+    if (parsed.status === 'proven' || parsed.status === 'incomplete' || parsed.status === 'failed') {
+      return parsed.status;
+    }
+  } catch {
+    return 'missing';
+  }
+  return 'missing';
+}
+
 function renderLearningSkillCandidateMarkdown(
   retrospective: LearningRetrospective,
   candidate: LearningSkillCandidate,
@@ -1013,9 +1091,23 @@ function renderLearningSkillCandidateMarkdown(
     '',
     `# ${title}`,
     '',
+    `Status: ${candidate.eligible ? 'eligible for human review' : 'not eligible yet'}`,
+    `Reason: ${candidate.reason}`,
+    `Source run: ${retrospective.run.runId}`,
+    `Successful runs: ${candidate.proofBackedSuccessCount}`,
+    `Promotion threshold: ${candidate.promotionThreshold}`,
+    `Proof status: ${candidate.proofStatus}`,
+    '',
     '## When to Use',
     `Use this skill when a future task needs the same proven tool sequence: ${candidate.toolSequence.join(' -> ')}.`,
-    `It is based on run ${retrospective.run.runId} and should only be installed after human review confirms the pattern is broadly reusable.`,
+    `It is based on run ${retrospective.run.runId} and should only be installed after repeated proof-backed runs plus human review confirm the pattern is broadly reusable.`,
+    '',
+    '## Promotion Evidence',
+    `- Proof-backed successful runs: ${candidate.proofBackedSuccessCount}/${candidate.promotionThreshold}.`,
+    `- Latest proof status: ${candidate.proofStatus}.`,
+    ...(candidate.evidenceRunIds.length > 0
+      ? candidate.evidenceRunIds.map((runId) => `- Evidence run: ${runId}.`)
+      : ['- Evidence run: none yet.']),
     '',
     '## Procedure',
     ...candidate.toolSequence.map((toolName, index) => `${index + 1}. Use \`${toolName}\` for the corresponding verified step from the trajectory; keep the same evidence boundary and real-path behavior.`),

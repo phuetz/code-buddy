@@ -62,6 +62,7 @@ describe('SkillCandidateReviewQueueStrip', () => {
                 truncated: false,
               },
               eligible: true,
+              evidenceRunIds: ['run-learning-first', 'run-learning-architect'],
               installState: 'installed-different',
               installedIntegrityOk: true,
               installedVersion: '0.1.0',
@@ -80,6 +81,9 @@ describe('SkillCandidateReviewQueueStrip', () => {
                 verdict: 'review',
               },
               kind: 'learning',
+              promotionThreshold: 2,
+              proofBackedSuccessCount: 2,
+              proofStatus: 'proven',
               reason: '2 successful runs met the promotion threshold.',
               reviewCommands: [
                 'skill_manage action=candidate_view candidate_path=.codebuddy/skill-candidates/learning/learned-search-view-file-bash/SKILL.md',
@@ -107,8 +111,11 @@ describe('SkillCandidateReviewQueueStrip', () => {
     expect(strip?.textContent).toContain('candidate manifest is unreadable');
     expect(strip?.textContent).toContain('learned-search-view-file-bash');
     expect(strip?.textContent).toContain('Learning Agent');
+    expect(strip?.textContent).toContain('proof 2/2');
     expect(strip?.textContent).toContain('installed differs');
     expect(strip?.textContent).toContain('Installed: v0.1.0');
+    expect(strip?.textContent).toContain('Proof: proven');
+    expect(strip?.textContent).toContain('run-learning-first, run-learning-architect');
     expect(strip?.textContent).toContain('Firewall: review');
     expect(strip?.textContent).toContain('90/100');
     expect(strip?.textContent).toContain('network');

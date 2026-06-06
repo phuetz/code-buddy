@@ -15,8 +15,12 @@ export type MaterializedSkillCandidateKind = 'research-script' | 'learning';
 
 export interface ResearchScriptSkillCandidate {
   eligible: boolean;
+  evidenceRunIds?: string[];
   id: string;
   kind: MaterializedSkillCandidateKind;
+  promotionThreshold?: number;
+  proofBackedSuccessCount?: number;
+  proofStatus?: string;
   reason: string;
   skillName: string;
   skillPath: string;
@@ -37,8 +41,12 @@ export interface ResearchScriptSkillCandidateReviewManifest {
   approvalRequired: true;
   candidateId: string;
   eligible: boolean;
+  evidenceRunIds?: string[];
   generatedAt: string;
   kind?: MaterializedSkillCandidateKind;
+  promotionThreshold?: number;
+  proofBackedSuccessCount?: number;
+  proofStatus?: string;
   schemaVersion: typeof RESEARCH_SCRIPT_SKILL_CANDIDATE_REVIEW_SCHEMA_VERSION;
   skillName: string;
   sourceJobId: string;
@@ -121,8 +129,12 @@ interface RawResearchScriptSkillCandidateReviewManifest {
   approvalRequired?: unknown;
   candidateId?: unknown;
   eligible?: unknown;
+  evidenceRunIds?: unknown;
   generatedAt?: unknown;
   kind?: unknown;
+  promotionThreshold?: unknown;
+  proofBackedSuccessCount?: unknown;
+  proofStatus?: unknown;
   schemaVersion?: unknown;
   skillName?: unknown;
   sourceJobId?: unknown;
@@ -223,8 +235,12 @@ export async function readMaterializedResearchScriptSkillCandidate(
 
   return {
     eligible: manifest.eligible,
+    evidenceRunIds: manifest.evidenceRunIds,
     id: manifest.candidateId,
     kind: manifest.kind ?? 'research-script',
+    promotionThreshold: manifest.promotionThreshold,
+    proofBackedSuccessCount: manifest.proofBackedSuccessCount,
+    proofStatus: manifest.proofStatus,
     reason: extractMarkdownField(markdown, 'Reason') || reviewStatusReason(manifest),
     skillName: manifest.skillName,
     skillPath,
@@ -585,16 +601,21 @@ function parseReviewManifest(raw: string): ResearchScriptSkillCandidateReviewMan
 
   if (typeof parsed.sourceRunId === 'string' && parsed.sourceRunId.trim().length > 0) {
     const status = parsed.status === 'not_eligible' ? 'not_eligible' : 'awaiting_human_approval';
+    const successfulRunCount = typeof parsed.successfulRunCount === 'number' && Number.isFinite(parsed.successfulRunCount)
+      ? Math.trunc(parsed.successfulRunCount)
+      : 1;
     return {
       ...base,
       eligible: status === 'awaiting_human_approval',
+      evidenceRunIds: normalizeStringArray(parsed.evidenceRunIds),
       kind: 'learning',
+      promotionThreshold: normalizeOptionalPositiveInteger(parsed.promotionThreshold),
+      proofBackedSuccessCount: normalizeOptionalPositiveInteger(parsed.proofBackedSuccessCount),
+      proofStatus: typeof parsed.proofStatus === 'string' ? parsed.proofStatus.trim() : undefined,
       sourceJobId: '',
       sourceRunId: parsed.sourceRunId.trim(),
       status,
-      successfulRunCount: typeof parsed.successfulRunCount === 'number' && Number.isFinite(parsed.successfulRunCount)
-        ? Math.trunc(parsed.successfulRunCount)
-        : 1,
+      successfulRunCount,
       toolSequence: normalizeToolSequence(parsed.toolSequence),
     };
   }
@@ -658,6 +679,19 @@ function normalizeToolSequence(value: unknown): string[] | undefined {
     .map((item) => typeof item === 'string' ? item.trim() : '')
     .filter(Boolean);
   return sequence.length > 0 ? sequence : undefined;
+}
+
+function normalizeStringArray(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const strings = value
+    .map((item) => typeof item === 'string' ? item.trim() : '')
+    .filter(Boolean);
+  return strings.length > 0 ? strings : undefined;
+}
+
+function normalizeOptionalPositiveInteger(value: unknown): number | undefined {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return undefined;
+  return Math.max(0, Math.trunc(value));
 }
 
 function formatCandidateKind(candidate: ResearchScriptSkillCandidate): string {

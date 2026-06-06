@@ -75,8 +75,12 @@ interface NormalizedToolsProfile {
 
 interface ResearchScriptSkillCandidateSummary {
   eligible: boolean;
+  evidenceRunIds?: string[];
   id: string;
   kind: string;
+  promotionThreshold?: number;
+  proofBackedSuccessCount?: number;
+  proofStatus?: string;
   reason: string;
   skillName: string;
   skillPath: string;
@@ -107,8 +111,12 @@ function normalizeToolsProfile(profileArg: string): NormalizedToolsProfile {
 function summarizeSkillCandidate(candidate: ResearchScriptSkillCandidate): ResearchScriptSkillCandidateSummary {
   return {
     eligible: candidate.eligible,
+    evidenceRunIds: candidate.evidenceRunIds,
     id: candidate.id,
     kind: candidate.kind,
+    promotionThreshold: candidate.promotionThreshold,
+    proofBackedSuccessCount: candidate.proofBackedSuccessCount,
+    proofStatus: candidate.proofStatus,
     reason: candidate.reason,
     skillName: candidate.skillName,
     skillPath: candidate.skillPath,
@@ -168,6 +176,12 @@ function printSkillCandidate(candidate: ResearchScriptSkillCandidate): void {
   }
   console.log(`  Status: ${candidate.eligible ? 'eligible for human approval' : 'not eligible yet'}`);
   console.log(`  Successful runs: ${candidate.successfulRunCount}`);
+  if (candidate.proofBackedSuccessCount !== undefined || candidate.promotionThreshold !== undefined) {
+    console.log(`  Proof-backed runs: ${candidate.proofBackedSuccessCount ?? candidate.successfulRunCount}/${candidate.promotionThreshold ?? 'n/a'}`);
+  }
+  if (candidate.proofStatus) {
+    console.log(`  Proof status: ${candidate.proofStatus}`);
+  }
   if (candidate.toolSequence?.length) {
     console.log(`  Tool sequence: ${candidate.toolSequence.join(' -> ')}`);
   }
@@ -190,6 +204,9 @@ function printSkillCandidateList(candidates: ResearchScriptSkillCandidate[]): vo
       console.log(`    Source job: ${candidate.sourceJobId}`);
     }
     console.log(`    Successful runs: ${candidate.successfulRunCount}`);
+    if (candidate.proofBackedSuccessCount !== undefined || candidate.promotionThreshold !== undefined) {
+      console.log(`    Proof-backed runs: ${candidate.proofBackedSuccessCount ?? candidate.successfulRunCount}/${candidate.promotionThreshold ?? 'n/a'}`);
+    }
     if (candidate.toolSequence?.length) {
       console.log(`    Tool sequence: ${candidate.toolSequence.join(' -> ')}`);
     }

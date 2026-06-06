@@ -22,6 +22,7 @@ export interface SkillCandidateReviewQueueItem {
     truncated: boolean;
   };
   eligible: boolean;
+  evidenceRunIds?: string[];
   installState?: 'not-installed' | 'installed-current' | 'installed-different' | 'installed-missing';
   installedChecksum?: string;
   installedIntegrityOk?: boolean;
@@ -42,6 +43,9 @@ export interface SkillCandidateReviewQueueItem {
     verdict: 'allow' | 'review' | 'quarantine';
   };
   kind?: string;
+  promotionThreshold?: number;
+  proofBackedSuccessCount?: number;
+  proofStatus?: string;
   reason: string;
   reviewCommands?: string[];
   skillName: string;
@@ -304,6 +308,14 @@ export const SkillCandidateReviewQueueStrip: React.FC<{
                   <span className="rounded bg-accent/10 px-1 py-0.5 text-[9px] text-accent">
                     {candidate.successfulRunCount} runs
                   </span>
+                  {candidate.proofBackedSuccessCount !== undefined || candidate.promotionThreshold !== undefined ? (
+                    <span className={`rounded px-1 py-0.5 text-[9px] ${candidate.eligible ? 'bg-success/10 text-success' : 'bg-warning/10 text-warning'}`}>
+                      {t('fleet.skillCandidate.proofBackedRuns', 'proof {{count}}/{{threshold}}', {
+                        count: candidate.proofBackedSuccessCount ?? candidate.successfulRunCount,
+                        threshold: candidate.promotionThreshold ?? '?',
+                      })}
+                    </span>
+                  ) : null}
                   {candidate.installState ? (
                     <span className="rounded bg-accent/10 px-1 py-0.5 text-[9px] text-accent">
                       {formatInstallState(candidate.installState)}
@@ -314,6 +326,16 @@ export const SkillCandidateReviewQueueStrip: React.FC<{
               <div className="mt-0.5 truncate text-[9px] text-text-muted">
                 {(candidate.sourceRunId || candidate.sourceJobId) || 'unknown source'} · {candidate.reason}
               </div>
+              {candidate.proofStatus || candidate.evidenceRunIds?.length ? (
+                <div className="mt-0.5 truncate text-[9px] text-text-muted">
+                  {candidate.proofStatus
+                    ? `${t('fleet.skillCandidate.proofStatus', 'Proof')}: ${candidate.proofStatus}`
+                    : t('fleet.skillCandidate.proofStatusUnknown', 'Proof: unknown')}
+                  {candidate.evidenceRunIds?.length
+                    ? ` · ${candidate.evidenceRunIds.slice(-2).join(', ')}`
+                    : ''}
+                </div>
+              ) : null}
               {candidate.installedVersion ? (
                 <div className="mt-0.5 truncate text-[9px] text-text-muted">
                   {t('fleet.skillCandidate.installedVersion', 'Installed')}: v{candidate.installedVersion}

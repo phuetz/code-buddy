@@ -122,7 +122,7 @@ describe('Learning Agent on real RunStore trajectories', () => {
     const runId = startLearningRun();
     store.endRun(runId, 'completed');
     activeRunIds = activeRunIds.filter((id) => id !== runId);
-    await new Promise((resolve) => setTimeout(resolve, 120));
+    await waitFor(() => store.getArtifact(runId, 'proof-ledger.json') !== null);
 
     const result = await runLearningRetrospective(store, runId, {
       force: true,
@@ -143,11 +143,19 @@ describe('Learning Agent on real RunStore trajectories', () => {
     const candidateMarkdown = fs.readFileSync(candidatePath, 'utf8');
     expect(candidateMarkdown).toContain('author: Code Buddy Learning Agent');
     expect(candidateMarkdown).toContain('metadata:\n  hermes:');
+    expect(candidateMarkdown).toContain('Status: not eligible yet');
+    expect(candidateMarkdown).toContain('Proof-backed successful runs: 1/2.');
     expect(candidateMarkdown).toContain('## Quick Reference');
     expect(JSON.parse(fs.readFileSync(reviewPath, 'utf8'))).toMatchObject({
       approvalRequired: true,
+      eligible: false,
+      evidenceRunIds: [runId],
+      proofBackedSuccessCount: 1,
+      proofStatus: 'proven',
       skillName: 'learned-search-view-file-bash',
       sourceRunId: runId,
+      status: 'not_eligible',
+      successfulRunCount: 1,
     });
 
     const lessonQueue = JSON.parse(fs.readFileSync(path.join(tempDir, '.codebuddy', 'lesson-candidates.json'), 'utf8'));
@@ -158,7 +166,9 @@ describe('Learning Agent on real RunStore trajectories', () => {
     expect(library.patterns).toEqual([
       expect.objectContaining({
         candidateSkillName: 'learned-search-view-file-bash',
+        evidenceRunIds: [runId],
         observationCount: 1,
+        proofBackedSuccessCount: 1,
         status: 'observed',
       }),
     ]);
@@ -170,6 +180,51 @@ describe('Learning Agent on real RunStore trajectories', () => {
         successCount: 1,
       }),
     ]);
+  });
+
+  it('promotes learned skill candidates only after repeated proof-backed runs', async () => {
+    const firstRunId = startLearningRun();
+    store.endRun(firstRunId, 'completed');
+    activeRunIds = activeRunIds.filter((id) => id !== firstRunId);
+    await waitFor(() => store.getArtifact(firstRunId, 'proof-ledger.json') !== null);
+    const firstResult = await runLearningRetrospective(store, firstRunId, {
+      force: true,
+      workDir: tempDir,
+    });
+    expect(firstResult.retrospective?.skillCandidates[0]).toMatchObject({
+      eligible: false,
+      proofBackedSuccessCount: 1,
+      promotionThreshold: 2,
+    });
+
+    const secondRunId = startLearningRun();
+    store.endRun(secondRunId, 'completed');
+    activeRunIds = activeRunIds.filter((id) => id !== secondRunId);
+    await waitFor(() => store.getArtifact(secondRunId, 'proof-ledger.json') !== null);
+    const secondResult = await runLearningRetrospective(store, secondRunId, {
+      force: true,
+      workDir: tempDir,
+    });
+
+    expect(secondResult.retrospective?.skillCandidates[0]).toMatchObject({
+      eligible: true,
+      evidenceRunIds: [firstRunId, secondRunId],
+      proofBackedSuccessCount: 2,
+      proofStatus: 'proven',
+      promotionThreshold: 2,
+      reason: expect.stringContaining('met the Learning Agent promotion threshold'),
+    });
+
+    const reviewPath = path.join(tempDir, '.codebuddy', 'skill-candidates', 'learning', 'learned-search-view-file-bash', 'candidate-review.json');
+    expect(JSON.parse(fs.readFileSync(reviewPath, 'utf8'))).toMatchObject({
+      eligible: true,
+      evidenceRunIds: [firstRunId, secondRunId],
+      proofBackedSuccessCount: 2,
+      promotionThreshold: 2,
+      sourceRunId: secondRunId,
+      status: 'awaiting_human_approval',
+      successfulRunCount: 2,
+    });
   });
 
   it('auto-runs after endRun when enabled and the run is complex', async () => {
@@ -190,7 +245,7 @@ describe('Learning Agent on real RunStore trajectories', () => {
     const runId = startLearningRun();
     store.endRun(runId, 'completed');
     activeRunIds = activeRunIds.filter((id) => id !== runId);
-    await new Promise((resolve) => setTimeout(resolve, 120));
+    await waitFor(() => store.getArtifact(runId, 'proof-ledger.json') !== null);
 
     const retrospective = runCodeBuddyCliJson(['run', 'retrospective', runId, '--force', '--json']) as {
       retrospective: { toolSequence: string[] };

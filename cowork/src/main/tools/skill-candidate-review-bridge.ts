@@ -28,6 +28,7 @@ export interface SkillCandidateReviewSummary {
     truncated: boolean;
   };
   eligible: boolean;
+  evidenceRunIds?: string[];
   id: string;
   installState?: 'not-installed' | 'installed-current' | 'installed-different' | 'installed-missing';
   installedChecksum?: string;
@@ -36,6 +37,9 @@ export interface SkillCandidateReviewSummary {
   installedVersion?: string;
   firewall?: SkillCandidateFirewallSummary;
   kind: string;
+  promotionThreshold?: number;
+  proofBackedSuccessCount?: number;
+  proofStatus?: string;
   reason: string;
   reviewCommands?: string[];
   skillName: string;
@@ -87,6 +91,7 @@ interface ResearchScriptSkillCandidate {
     truncated: boolean;
   };
   eligible: boolean;
+  evidenceRunIds?: string[];
   id: string;
   installState?: 'not-installed' | 'installed-current' | 'installed-different' | 'installed-missing';
   installedChecksum?: string;
@@ -94,6 +99,9 @@ interface ResearchScriptSkillCandidate {
   installedPath?: string;
   installedVersion?: string;
   kind?: string;
+  promotionThreshold?: number;
+  proofBackedSuccessCount?: number;
+  proofStatus?: string;
   reason: string;
   reviewCommands?: string[];
   skillName: string;
@@ -240,6 +248,7 @@ function summarizeSkillCandidate(
     candidateChecksum: candidate.candidateChecksum,
     candidateDiffPreview: candidate.candidateDiffPreview,
     eligible: candidate.eligible,
+    evidenceRunIds: candidate.evidenceRunIds,
     id: candidate.id,
     installState: candidate.installState,
     installedChecksum: candidate.installedChecksum,
@@ -248,6 +257,9 @@ function summarizeSkillCandidate(
     installedVersion: candidate.installedVersion,
     firewall: summarizeCandidateFirewall(candidate, options),
     kind: candidate.kind ?? (candidate.sourceRunId ? 'learning' : 'research-script'),
+    promotionThreshold: candidate.promotionThreshold,
+    proofBackedSuccessCount: candidate.proofBackedSuccessCount,
+    proofStatus: candidate.proofStatus,
     reason: candidate.reason,
     reviewCommands: candidate.reviewCommands,
     skillName: candidate.skillName,
