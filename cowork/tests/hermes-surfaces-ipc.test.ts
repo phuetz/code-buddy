@@ -1115,9 +1115,16 @@ describe('companion IPC', () => {
         status: 'called',
       },
     }));
+    const rejectOpenClawPendingNode = vi.fn(async () => ({
+      record: {
+        request: { method: 'nodes.reject', paramKeys: ['code', 'reason'] },
+        status: 'called',
+      },
+    }));
     coreLoaderMock.loadCoreModule.mockResolvedValue({
       approveOpenClawPendingNode,
       listOpenClawPendingNodes,
+      rejectOpenClawPendingNode,
     });
     registerCompanionIpcHandlers(projectSource('/tmp/proj'));
 
@@ -1169,6 +1176,38 @@ describe('companion IPC', () => {
         dryRun: false,
         liveCallConfirmed: true,
         nodeId: undefined,
+      },
+      { cwd: '/tmp/proj', home: undefined },
+    );
+
+    const rejectHandler = electronMock.handlers.get('companion.openclaw.nodeReject');
+    const rejectedReject = (await rejectHandler?.({}, {
+      approvedBy: 'Patrice',
+      code: 'PAIR-CODE-SECRET',
+      reason: 'bad pairing secret',
+      liveCallConfirmed: false,
+    })) as { ok: boolean; error?: string };
+    expect(rejectedReject.ok).toBe(false);
+    expect(rejectedReject.error).toMatch(/liveCallConfirmed=true/);
+    expect(rejectOpenClawPendingNode).not.toHaveBeenCalled();
+
+    const acceptedReject = (await rejectHandler?.({}, {
+      approvedBy: 'Patrice',
+      code: 'PAIR-CODE-SECRET',
+      reason: 'bad pairing secret',
+      liveCallConfirmed: true,
+    })) as { ok: boolean; result?: Record<string, unknown> };
+    expect(acceptedReject.ok).toBe(true);
+    expect(JSON.stringify(acceptedReject)).not.toContain('PAIR-CODE-SECRET');
+    expect(JSON.stringify(acceptedReject)).not.toContain('bad pairing secret');
+    expect(rejectOpenClawPendingNode).toHaveBeenCalledWith(
+      {
+        approvedBy: 'Patrice',
+        code: 'PAIR-CODE-SECRET',
+        dryRun: false,
+        liveCallConfirmed: true,
+        nodeId: undefined,
+        reason: 'bad pairing secret',
       },
       { cwd: '/tmp/proj', home: undefined },
     );

@@ -72,6 +72,10 @@ interface OpenClawGatewayBridgeModule {
     message: Record<string, unknown>,
     options?: Record<string, unknown>,
   ) => Promise<Record<string, unknown>>;
+  rejectOpenClawPendingNode: (
+    input: Record<string, unknown>,
+    options?: Record<string, unknown>,
+  ) => Promise<Record<string, unknown>>;
   sendOpenClawResponse: (
     input: Record<string, unknown>,
     options?: Record<string, unknown>,
@@ -205,6 +209,38 @@ export async function approveOpenClawBridgePendingNodeForReview(
         dryRun: false,
         liveCallConfirmed: true,
         nodeId: options.nodeId,
+      },
+      coreOptions(options),
+    );
+    return { ok: true, result };
+  } catch (error) {
+    return { ok: false, error: errorMessage(error) };
+  }
+}
+
+export async function rejectOpenClawBridgePendingNodeForReview(
+  options: OpenClawBridgeNodePairingOptions & { reason?: string },
+): Promise<OpenClawBridgeActionResult> {
+  const approvedBy = requireApprover(options.approvedBy);
+  if (!approvedBy) return { ok: false, error: 'approvedBy is required' };
+  if (!options.nodeId?.trim() && !options.code?.trim()) {
+    return { ok: false, error: 'nodeId or code is required' };
+  }
+
+  const mod = await loadBridge();
+  if (!mod?.rejectOpenClawPendingNode) {
+    return { ok: false, error: 'Core OpenClaw node pairing bridge module is unavailable.' };
+  }
+
+  try {
+    const result = await mod.rejectOpenClawPendingNode(
+      {
+        approvedBy,
+        code: options.code,
+        dryRun: false,
+        liveCallConfirmed: true,
+        nodeId: options.nodeId,
+        reason: options.reason,
       },
       coreOptions(options),
     );

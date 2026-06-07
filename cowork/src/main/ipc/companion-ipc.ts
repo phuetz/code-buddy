@@ -18,6 +18,7 @@ import {
   listOpenClawBridgePendingNodesForReview,
   previewOpenClawBridgeAttachForReview,
   previewOpenClawBridgeSendForReview,
+  rejectOpenClawBridgePendingNodeForReview,
   sendOpenClawBridgeResponseForReview,
 } from '../tools/hermes-openclaw-bridge';
 import { resolveWorkDir, errorMessage, type ProjectManagerSource } from './ipc-workdir';
@@ -1983,6 +1984,44 @@ export function registerCompanionIpcHandlers(projectManagerSource: ProjectManage
         });
       } catch (err) {
         logError('[companion.openclaw.nodeApprove] failed:', err);
+        return { ok: false as const, error: errorMessage(err) };
+      }
+    },
+  );
+
+  ipcMain.handle(
+    'companion.openclaw.nodeReject',
+    async (
+      _e,
+      input?: {
+        projectId?: string;
+        source?: string;
+        nodeId?: string;
+        code?: string;
+        reason?: string;
+        approvedBy?: string;
+        liveCallConfirmed?: boolean;
+      },
+    ) => {
+      const { cwd, error } = await companionWorkDir(projectManagerSource, input?.projectId);
+      if (!cwd) return { ok: false as const, error };
+      if (!input?.approvedBy?.trim() || input.liveCallConfirmed !== true) {
+        return { ok: false as const, error: 'approvedBy and liveCallConfirmed=true are required' };
+      }
+      if (!input.nodeId?.trim() && !input.code?.trim()) {
+        return { ok: false as const, error: 'nodeId or code is required' };
+      }
+      try {
+        return await rejectOpenClawBridgePendingNodeForReview({
+          approvedBy: input.approvedBy,
+          code: input.code,
+          cwd,
+          nodeId: input.nodeId,
+          reason: input.reason,
+          source: input.source,
+        });
+      } catch (err) {
+        logError('[companion.openclaw.nodeReject] failed:', err);
         return { ok: false as const, error: errorMessage(err) };
       }
     },

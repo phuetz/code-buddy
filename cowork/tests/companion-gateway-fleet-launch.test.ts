@@ -92,6 +92,7 @@ describe('companion gateway Fleet launch surface', () => {
     expect(panel).toContain('previewOpenClawBridgeAttach');
     expect(panel).toContain('listOpenClawBridgePendingNodes');
     expect(panel).toContain('approveOpenClawBridgePendingNode');
+    expect(panel).toContain('rejectOpenClawBridgePendingNode');
     expect(panel).toContain('draftOpenClawBridgeHandoff');
     expect(panel).toContain('sendOpenClawBridgeResponse');
     expect(panel).toContain('liveAttachConfirmed: true');
@@ -99,11 +100,13 @@ describe('companion gateway Fleet launch surface', () => {
     expect(panel).toContain('liveSendConfirmed: true');
     expect(panel).toContain('This may contact the local OpenClaw gateway.');
     expect(panel).toContain('This may grant gateway access to that node.');
+    expect(panel).toContain('This may permanently deny that pending node.');
     expect(panel).toContain('This may contact an external recipient.');
     expect(preload).toContain('companion.openclaw.status');
     expect(preload).toContain('companion.openclaw.attachPreview');
     expect(preload).toContain('companion.openclaw.nodesPending');
     expect(preload).toContain('companion.openclaw.nodeApprove');
+    expect(preload).toContain('companion.openclaw.nodeReject');
     expect(preload).toContain('companion.openclaw.draft');
     expect(preload).toContain('companion.openclaw.send');
     expect(preload).toContain('OpenClawBridgeStatusResult');

@@ -8,6 +8,7 @@ import {
   listOpenClawBridgePendingNodesForReview,
   previewOpenClawBridgeAttachForReview,
   previewOpenClawBridgeSendForReview,
+  rejectOpenClawBridgePendingNodeForReview,
   sendOpenClawBridgeResponseForReview,
 } from '../src/main/tools/hermes-openclaw-bridge';
 
@@ -149,6 +150,48 @@ describe('Hermes OpenClaw gateway bridge', () => {
       { cwd: '/repo', home: '/home/u/.openclaw' },
     );
     expect(JSON.stringify(result)).not.toContain('PAIR-CODE-SECRET');
+    expect(result.result?.record).toMatchObject({ status: 'called' });
+  });
+
+  it('rejects pending OpenClaw nodes only with an approver and node id or code', async () => {
+    const rejectOpenClawPendingNode = vi.fn().mockResolvedValue({
+      kind: 'openclaw_websocket_call_result',
+      record: {
+        request: { method: 'nodes.reject', paramKeys: ['code', 'reason'] },
+        response: { summary: { rejected: true } },
+        status: 'called',
+      },
+    });
+    mockedLoadCoreModule.mockResolvedValue({ rejectOpenClawPendingNode });
+
+    const missingApprover = await rejectOpenClawBridgePendingNodeForReview({
+      code: 'PAIR-CODE-SECRET',
+      approvedBy: ' ',
+    });
+    expect(missingApprover.ok).toBe(false);
+    expect(rejectOpenClawPendingNode).not.toHaveBeenCalled();
+
+    const result = await rejectOpenClawBridgePendingNodeForReview({
+      approvedBy: 'Patrice',
+      code: 'PAIR-CODE-SECRET',
+      cwd: '/repo',
+      reason: 'bad pairing secret',
+      source: '/home/u/.openclaw',
+    });
+
+    expect(rejectOpenClawPendingNode).toHaveBeenCalledWith(
+      {
+        approvedBy: 'Patrice',
+        code: 'PAIR-CODE-SECRET',
+        dryRun: false,
+        liveCallConfirmed: true,
+        nodeId: undefined,
+        reason: 'bad pairing secret',
+      },
+      { cwd: '/repo', home: '/home/u/.openclaw' },
+    );
+    expect(JSON.stringify(result)).not.toContain('PAIR-CODE-SECRET');
+    expect(JSON.stringify(result)).not.toContain('bad pairing secret');
     expect(result.result?.record).toMatchObject({ status: 'called' });
   });
 

@@ -93,10 +93,11 @@ Buddy. The current integration is selective:
 - Cowork now exposes that OpenClaw adapter in the Companion panel through
   `companion.openclaw.*` IPC handlers and preload methods. Operators can inspect
   secret-safe status, preview attach, create safe Fleet handoff drafts, preview
-  sends, query pending node pairings, approve a node by id or pairing code, and
-  run live attach/node-pairing/send only after `approvedBy` plus native
-  confirmation. The UI stores only the returned bridge artifact/status object;
-  prompt text, pairing codes and gateway tokens are not persisted by the panel.
+  sends, query pending node pairings, approve or reject a node by id or pairing
+  code, and run live attach/node-pairing/send only after `approvedBy` plus
+  native confirmation. The UI stores only the returned bridge artifact/status
+  object; prompt text, pairing codes, rejection reasons and gateway tokens are
+  not persisted by the panel.
 - The bridge now has a local HTTP daemon contract test that exercises live
   `nodes/register` and `messages/reply` requests against a real Node HTTP
   server fixture. This proves endpoint resolution, bearer-token headers, JSON

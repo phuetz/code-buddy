@@ -1204,13 +1204,14 @@ compatibilité complète.
 Cowork expose le même contrat dans le Companion panel, section
 `OpenClaw bridge`. Les boutons `Preview attach`, `Draft handoff` et
 `Preview send` restent en dry-run. `Attach live`, `Pending nodes`,
-`Approve node` et `Send live` demandent un approbateur, ouvrent une confirmation
-native, puis passent par les handlers `companion.openclaw.attach`,
-`companion.openclaw.nodesPending`, `companion.openclaw.nodeApprove` ou
+`Approve node`, `Reject node` et `Send live` demandent un approbateur, ouvrent
+une confirmation native, puis passent par les handlers
+`companion.openclaw.attach`, `companion.openclaw.nodesPending`,
+`companion.openclaw.nodeApprove`, `companion.openclaw.nodeReject` ou
 `companion.openclaw.send` avec `liveAttachConfirmed=true`,
 `liveCallConfirmed=true` ou `liveSendConfirmed=true`. Le panneau affiche le
 statut/artifact retourné, mais ne persiste pas le texte complet saisi dans les
-prompts, les codes de pairage ni les tokens du gateway.
+prompts, les codes de pairage, les raisons de rejet ni les tokens du gateway.
 
 Preuve GUI publique-safe :
 

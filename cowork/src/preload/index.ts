@@ -1074,6 +1074,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
       liveCallConfirmed: boolean;
     }): Promise<OpenClawBridgeActionResult> =>
       ipcRenderer.invoke('companion.openclaw.nodeApprove', input),
+    rejectOpenClawBridgePendingNode: (input: {
+      projectId?: string;
+      source?: string;
+      nodeId?: string;
+      code?: string;
+      reason?: string;
+      approvedBy: string;
+      liveCallConfirmed: boolean;
+    }): Promise<OpenClawBridgeActionResult> =>
+      ipcRenderer.invoke('companion.openclaw.nodeReject', input),
     draftOpenClawBridgeHandoff: (input: {
       projectId?: string;
       messageId: string;
@@ -4481,6 +4491,15 @@ declare global {
           source?: string;
           nodeId?: string;
           code?: string;
+          approvedBy: string;
+          liveCallConfirmed: boolean;
+        }) => Promise<OpenClawBridgeActionResult>;
+        rejectOpenClawBridgePendingNode: (input: {
+          projectId?: string;
+          source?: string;
+          nodeId?: string;
+          code?: string;
+          reason?: string;
           approvedBy: string;
           liveCallConfirmed: boolean;
         }) => Promise<OpenClawBridgeActionResult>;

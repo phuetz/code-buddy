@@ -1624,6 +1624,7 @@ function OpenClawBridgePreview({
   onAttachLive,
   onNodesPending,
   onNodeApprove,
+  onNodeReject,
   onDraft,
   onSendPreview,
   onSendLive,
@@ -1635,6 +1636,7 @@ function OpenClawBridgePreview({
   onAttachLive: () => void;
   onNodesPending: () => void;
   onNodeApprove: () => void;
+  onNodeReject: () => void;
   onDraft: () => void;
   onSendPreview: () => void;
   onSendLive: () => void;
@@ -1686,6 +1688,13 @@ function OpenClawBridgePreview({
             className="rounded border border-accent/50 px-2 py-1 text-[11px] text-accent hover:bg-accent/10 disabled:opacity-50"
           >
             Approve node
+          </button>
+          <button
+            disabled={busy}
+            onClick={onNodeReject}
+            className="rounded border border-warning/60 px-2 py-1 text-[11px] text-warning hover:bg-warning/10 disabled:opacity-50"
+          >
+            Reject node
           </button>
           <button
             disabled={busy}
@@ -2555,6 +2564,33 @@ export function CompanionPanel() {
     setBusyAction(null);
     setOpenClawBridgeResult(res);
     if (!res.ok) setError(res.error ?? 'OpenClaw node approval failed');
+  };
+
+  const rejectOpenClawBridgePendingNode = async () => {
+    const nodeId = window.prompt('OpenClaw node id to reject, or leave blank to use a pairing code');
+    const code = nodeId?.trim()
+      ? undefined
+      : window.prompt('OpenClaw pairing code. It will not be echoed in the result.');
+    if (!nodeId?.trim() && !code?.trim()) return;
+    const reason = window.prompt('Optional rejection reason. It will not be echoed in logs.');
+    const approvedBy = window.prompt('Approver name for this OpenClaw node rejection');
+    if (!approvedBy?.trim()) return;
+    const confirmed = window.confirm(
+      'Reject this OpenClaw node pairing request now? This may permanently deny that pending node.',
+    );
+    if (!confirmed) return;
+    setBusyAction('openClawBridge');
+    setError(null);
+    const res = await window.electronAPI.companion.rejectOpenClawBridgePendingNode({
+      approvedBy,
+      code: code?.trim() || undefined,
+      liveCallConfirmed: true,
+      nodeId: nodeId?.trim() || undefined,
+      reason: reason?.trim() || undefined,
+    });
+    setBusyAction(null);
+    setOpenClawBridgeResult(res);
+    if (!res.ok) setError(res.error ?? 'OpenClaw node rejection failed');
   };
 
   const draftOpenClawBridgeHandoff = async () => {
@@ -3498,6 +3534,7 @@ export function CompanionPanel() {
               onAttachLive={() => void attachOpenClawBridge()}
               onNodesPending={() => void listOpenClawBridgePendingNodes()}
               onNodeApprove={() => void approveOpenClawBridgePendingNode()}
+              onNodeReject={() => void rejectOpenClawBridgePendingNode()}
               onDraft={() => void draftOpenClawBridgeHandoff()}
               onSendPreview={() => void previewOpenClawBridgeSend()}
               onSendLive={() => void sendOpenClawBridgeResponse()}

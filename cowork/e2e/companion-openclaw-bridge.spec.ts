@@ -189,6 +189,7 @@ async function mockOpenClawCompanionBackend(
       'companion.openclaw.attachPreview',
       'companion.openclaw.nodesPending',
       'companion.openclaw.nodeApprove',
+      'companion.openclaw.nodeReject',
       'companion.openclaw.draft',
       'companion.openclaw.sendPreview',
       'companion.skills.list',
@@ -304,6 +305,17 @@ async function mockOpenClawCompanionBackend(
         },
       },
     }));
+    ipcMain.handle('companion.openclaw.nodeReject', async () => ({
+      ok: true,
+      result: {
+        kind: 'openclaw_websocket_call_result',
+        record: {
+          request: { method: 'nodes.reject', paramKeys: ['nodeId'] },
+          response: { summary: { rejected: true } },
+          status: 'called',
+        },
+      },
+    }));
     ipcMain.handle('companion.openclaw.draft', async () => ({
       ok: true,
       result: { kind: 'handoff-draft', draftFile: `${cwd}/.codebuddy/openclaw-handoff.json` },
@@ -357,6 +369,9 @@ test('shows a public-safe OpenClaw bridge proof in the Companion cockpit', async
   await expect(bridge.getByRole('button', { name: 'Preview attach' })).toBeVisible();
   await expect(bridge.getByRole('button', { name: 'Attach live' })).toBeVisible();
   await expect(bridge.getByRole('button', { name: 'Draft handoff' })).toBeVisible();
+  await expect(bridge.getByRole('button', { name: 'Pending nodes' })).toBeVisible();
+  await expect(bridge.getByRole('button', { name: 'Approve node' })).toBeVisible();
+  await expect(bridge.getByRole('button', { name: 'Reject node' })).toBeVisible();
   await expect(bridge.getByRole('button', { name: 'Preview send' })).toBeVisible();
   await expect(bridge.getByRole('button', { name: 'Send live' })).toBeVisible();
 

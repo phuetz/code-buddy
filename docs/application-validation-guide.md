@@ -485,10 +485,12 @@ The Cowork Fleet launch surface test passed for native confirmation plus
 `fleet.dispatch(draft.dispatchInput)`, the `Reply draft` surface, and the
 confirmed `Send reply` and `Gateway lifecycle` surfaces. The Cowork OpenClaw
 bridge test passed for core-loader integration, secret-safe status, dry-run
-attach/send previews, Fleet handoff drafts, and live attach/send refusal unless
-the UI supplies `approvedBy` plus `liveAttachConfirmed=true` or
-`liveSendConfirmed=true`.
+attach/send previews, Fleet handoff drafts, guarded pending-node review,
+guarded node approval/rejection, and live attach/send refusal unless the UI
+supplies `approvedBy` plus `liveAttachConfirmed=true`,
+`liveCallConfirmed=true` or `liveSendConfirmed=true`.
 The Playwright screenshot proof opens the real Companion panel with synthetic
 IPC data, verifies `OpenClaw bridge`, `detected`, local gateway endpoint,
-token-present status and all seven bridge actions, then crops only that section
-so no account, home path, repository path, prompt text or token is published.
+token-present status and all eight bridge actions, then crops only that section
+so no account, home path, repository path, prompt text, pairing code, rejection
+reason or token is published.
