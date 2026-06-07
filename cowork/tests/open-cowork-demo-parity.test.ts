@@ -28,8 +28,27 @@ const demoVideos = [
   },
 ];
 
+const publicMediaSecretPatterns: Array<{ label: string; pattern: RegExp }> = [
+  { label: 'GitHub token', pattern: /\b(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9_]{20,}\b/g },
+  { label: 'GitHub fine-grained token', pattern: /\bgithub_pat_[A-Za-z0-9_]{20,}\b/g },
+  { label: 'OpenAI-style key', pattern: /\bsk-[A-Za-z0-9]{20,}\b/g },
+  { label: 'AWS access key', pattern: /\bAKIA[0-9A-Z]{16}\b/g },
+  { label: 'JWT', pattern: /\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b/g },
+  { label: 'Bearer token', pattern: /\bBearer\s+[A-Za-z0-9._-]{20,}\b/gi },
+  { label: 'auth query parameter', pattern: /[?&](?:token|auth|access_token|code)=/gi },
+  { label: 'Feishu auth URL', pattern: /open\.feishu\.cn\/app\/[^\s)]+\/auth/gi },
+];
+
 function readRepoFile(...segments: string[]): string {
   return readFileSync(path.join(repoRoot, ...segments), 'utf8');
+}
+
+function readmeDemoSection(readme: string): string {
+  const start = readme.indexOf('## 🎬 Demo');
+  const end = readme.indexOf('<a id="installation">');
+  expect(start).toBeGreaterThanOrEqual(0);
+  expect(end).toBeGreaterThan(start);
+  return readme.slice(start, end);
 }
 
 describe('Open Cowork demo parity', () => {
@@ -45,6 +64,15 @@ describe('Open Cowork demo parity', () => {
     expect(readme).toContain('access tokens');
     expect(readme).toContain('OAuth callback URLs');
     expect(readme).toContain('workspace-organizer');
+  });
+
+  it('keeps the public demo media section free of literal secret-like strings', () => {
+    const demoSection = readmeDemoSection(readRepoFile('cowork', 'readme.md'));
+    const hits = publicMediaSecretPatterns.flatMap(({ label, pattern }) =>
+      Array.from(demoSection.matchAll(pattern), (match) => `${label}: ${match[0]}`)
+    );
+
+    expect(hits).toEqual([]);
   });
 
   it('documents screenshots and videos under the same public-review policy', () => {
