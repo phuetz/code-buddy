@@ -17,6 +17,18 @@ const CONFIG_DIR = path.join(os.homedir(), '.codebuddy');
 const TRUST_FILE = path.join(CONFIG_DIR, 'trusted-folders.json');
 
 /**
+ * The agent's own managed skills directory (`~/.codebuddy/skills`).
+ *
+ * This holds SKILL.md definitions and their helper scripts that the agent
+ * legitimately needs to read in order to follow its own skill instructions.
+ * It is intentionally NOT the whole `~/.codebuddy` config dir — that dir also
+ * stores credentials (`codex-auth.json`, `credentials.enc`, `fleet.env`,
+ * `auth/`, …), so a read-allow must stay scoped to `skills/` only and must
+ * never grant write access.
+ */
+const SKILLS_READ_DIR = path.join(CONFIG_DIR, 'skills');
+
+/**
  * Directories that can never be trusted (too dangerous).
  */
 const ALWAYS_BLOCKED: string[] = [
@@ -75,6 +87,37 @@ export class TrustFolderManager {
     }
 
     return false;
+  }
+
+  /**
+   * Check whether a path is inside the agent's own managed skills directory
+   * (`~/.codebuddy/skills`).
+   *
+   * This is a READ-ONLY scoping helper, kept deliberately narrow: it is meant
+   * to let read-only file tools (e.g. `view_file`) read the agent's own
+   * SKILL.md files and helper scripts without a trust prompt, even when
+   * enforcement is on and the skills dir is outside the workspace cwd.
+   *
+   * It does NOT add the directory to the trusted set and does NOT cover the
+   * rest of `~/.codebuddy` (which holds credentials). Callers MUST additionally
+   * confirm the invoking tool is read-only before honoring this — see the gate
+   * in `tool-handler.ts`. Returning true here never authorizes a write.
+   */
+  isReadableSkillsPath(targetPath: string): boolean {
+    let resolved: string;
+    try {
+      resolved = fs.realpathSync(targetPath);
+    } catch {
+      resolved = path.resolve(targetPath);
+    }
+    const skillsRoot = (() => {
+      try {
+        return fs.realpathSync(SKILLS_READ_DIR);
+      } catch {
+        return path.resolve(SKILLS_READ_DIR);
+      }
+    })();
+    return resolved === skillsRoot || resolved.startsWith(skillsRoot + path.sep);
   }
 
   /**

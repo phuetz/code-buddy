@@ -106,6 +106,25 @@ export interface ToolHandlerDependencies {
 }
 
 /**
+ * Tools that only READ files/directories (no mutation). Used by the trust gate
+ * to grant a narrow read-only exception for the agent's own skills directory
+ * (~/.codebuddy/skills). Keep this list strictly read-only — adding a mutating
+ * tool here would let it write outside trusted folders. Mirrors the
+ * `file_read` / `file_search` categories in src/tools/metadata.ts.
+ */
+const READ_ONLY_FILE_TOOLS = new Set<string>([
+  'view_file',
+  'read_file',
+  'list_directory',
+  'search',
+  'search_files',
+  'find_symbols',
+  'find_references',
+  'find_definition',
+  'search_multi',
+]);
+
+/**
  * ToolHandler manages tool instantiation and execution
  *
  * All tools are registered with FormalToolRegistry for type-safe dispatch.
@@ -399,11 +418,21 @@ export class ToolHandler {
       if (trustManager.isEnforcementEnabled()) {
         const targetPath = args.path || args.file_path || args.target_file;
         if (typeof targetPath === 'string' && !trustManager.isTrusted(targetPath)) {
-          logger.info(`Tool blocked by trust folder: ${toolName}`, { path: targetPath });
-          return {
-            success: false,
-            error: `Path "${targetPath}" is not in a trusted directory. Use /trust to add it.`,
-          };
+          // Narrow exception: read-only file tools may read the agent's own
+          // managed skills directory (~/.codebuddy/skills) without a trust
+          // prompt, so it can follow its own SKILL.md instructions. This is
+          // scoped to read-only tools AND to skills/ only — it never authorizes
+          // a write, and never exposes the rest of ~/.codebuddy (credentials).
+          const isReadOnlySkillsRead =
+            READ_ONLY_FILE_TOOLS.has(toolName) &&
+            trustManager.isReadableSkillsPath(targetPath);
+          if (!isReadOnlySkillsRead) {
+            logger.info(`Tool blocked by trust folder: ${toolName}`, { path: targetPath });
+            return {
+              success: false,
+              error: `Path "${targetPath}" is not in a trusted directory. Use /trust to add it.`,
+            };
+          }
         }
       }
 
