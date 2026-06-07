@@ -15,6 +15,7 @@ import {
   prepareOpenClawFleetHandoffDraft,
   probeOpenClawGatewayWebSocket,
   sendOpenClawResponse,
+  validateOpenClawUpstreamCompatibility,
 } from '../../src/openclaw/gateway-bridge.js';
 
 async function startOpenClawContractServer(): Promise<{
@@ -759,6 +760,58 @@ describe('OpenClaw gateway bridge compatibility', () => {
       expect(rawLog).not.toContain('APPROVE-CODE-ECHO-SECRET');
       expect(rawLog).not.toContain('approve-token-secret');
       expect(rawLog).not.toContain('oc_pairing_approve_gateway_secret');
+    } finally {
+      await server.close();
+    }
+  });
+
+  it('runs a read-only upstream OpenClaw validation checklist against a local gateway fixture', async () => {
+    const server = await startOpenClawWebSocketContractServer();
+    try {
+      await mkdir(openclawHome, { recursive: true });
+      await writeFile(path.join(openclawHome, 'gateway.json'), JSON.stringify({
+        wsUrl: server.wsUrl,
+        token: 'oc_upstream_validation_gateway_secret',
+      }, null, 2), 'utf8');
+      await writeFile(path.join(openclawHome, 'node.json'), JSON.stringify({
+        nodeId: 'validation-node',
+        token: 'oc_upstream_validation_node_secret',
+      }, null, 2), 'utf8');
+      let id = 0;
+
+      const result = await validateOpenClawUpstreamCompatibility({
+        approvedBy: 'Patrice',
+        dryRun: false,
+        liveValidationConfirmed: true,
+        timeoutMs: 2000,
+      }, {
+        home: openclawHome,
+        cwd: workspace,
+        now: new Date('2026-06-07T12:26:00.000Z'),
+        createId: () => `ws-upstream-validation-${++id}`,
+      });
+
+      expect(result.ok).toBe(true);
+      expect(result.status).toBe('validated');
+      expect(result.safety).toMatchObject({
+        readOnly: true,
+        networkContacted: true,
+        rawPayloadsStored: false,
+        secretsIncluded: false,
+      });
+      expect(result.checks.map((check) => [check.name, check.status])).toEqual([
+        ['gateway-lockfile', 'passed'],
+        ['websocket-endpoint', 'passed'],
+        ['node-lockfile', 'passed'],
+        ['secret-redaction', 'passed'],
+        ['websocket-probe', 'passed'],
+        ['pending-node-list', 'passed'],
+      ]);
+      expect(result.probe?.record.status).toBe('connected');
+      expect(result.pendingNodes?.record.request.method).toBe('nodes.pending');
+      expect(JSON.stringify(result)).not.toContain('oc_upstream_validation_gateway_secret');
+      expect(JSON.stringify(result)).not.toContain('oc_upstream_validation_node_secret');
+      expect(JSON.stringify(result)).not.toContain('PAIR-SECRET-123');
     } finally {
       await server.close();
     }

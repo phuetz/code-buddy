@@ -190,6 +190,7 @@ export {
   prepareOpenClawFleetHandoffDraft,
   probeOpenClawGatewayWebSocket,
   sendOpenClawResponse,
+  validateOpenClawUpstreamCompatibility,
   type OpenClawBridgeOptions,
   type OpenClawBridgeResponsePreview,
   type OpenClawFleetDispatchDraftInput,
@@ -220,6 +221,9 @@ export {
   type OpenClawWebSocketProbeOptions,
   type OpenClawWebSocketProbeRecord,
   type OpenClawWebSocketProbeResult,
+  type OpenClawUpstreamValidationCheck,
+  type OpenClawUpstreamValidationInput,
+  type OpenClawUpstreamValidationResult,
 } from './gateway-bridge.js';
 
 export {

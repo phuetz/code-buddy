@@ -566,4 +566,48 @@ describe('hermes claw migrate (real)', () => {
       logSpy.mockRestore();
     }
   });
+
+  it('exposes `buddy hermes claw bridge validate-upstream --json` as dry-run by default', async () => {
+    fs.writeJsonSync(path.join(openclaw, 'gateway.json'), {
+      wsUrl: 'ws://127.0.0.1:18789',
+      token: 'oc_cli_validate_upstream_secret_fixture',
+    });
+    fs.writeJsonSync(path.join(openclaw, 'node.json'), {
+      nodeId: 'cli-validation-node',
+      token: 'oc_cli_validate_node_secret_fixture',
+    });
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    try {
+      const program = new Command();
+      program.exitOverride();
+      program.configureOutput({ writeOut: () => {}, writeErr: () => {} });
+      registerHermesCommands(program);
+
+      await program.parseAsync([
+        'node',
+        'test',
+        'hermes',
+        'claw',
+        'bridge',
+        'validate-upstream',
+        '--source',
+        openclaw,
+        '--workspace-target',
+        target,
+        '--json',
+      ]);
+
+      const output = logSpy.mock.calls.map((c) => c.join(' ')).join('\n');
+      const payload = JSON.parse(output);
+      expect(payload.kind).toBe('openclaw_upstream_validation_result');
+      expect(payload.ok).toBe(true);
+      expect(payload.status).toBe('preview');
+      expect(payload.safety.networkContacted).toBe(false);
+      expect(payload.checks.map((check: { name: string }) => check.name)).toContain('websocket-probe');
+      expect(output).not.toContain('oc_cli_validate_upstream_secret_fixture');
+      expect(output).not.toContain('oc_cli_validate_node_secret_fixture');
+    } finally {
+      logSpy.mockRestore();
+    }
+  });
 });

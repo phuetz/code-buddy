@@ -426,13 +426,14 @@ payload secrets out of stdout and `ws-call-log.jsonl`.
 The Hermes CLI migration suite also validates the user-facing bridge commands:
 `buddy hermes claw bridge status --json`, `bridge probe-ws --json`,
 `bridge call-ws logs.tail --json`, `bridge nodes-pending --json`,
-`bridge node-approve --code ... --json`, `bridge draft --json`, and
-`bridge send --json` are machine-readable and keep tokens, pairing codes, and
-message secrets out of stdout. The WebSocket probe/call/pairing surfaces are
-dry-run by default; live network use requires
+`bridge node-approve --code ... --json`, `bridge validate-upstream --json`,
+`bridge draft --json`, and `bridge send --json` are machine-readable and keep
+tokens, pairing codes, and message secrets out of stdout. The WebSocket
+probe/call/pairing/validation surfaces are dry-run by default; live network use
+requires
 `--apply --yes --approved-by <name>`.
 
-Observed result: `12` companion gateway tests, `20` OpenClaw bridge tests, `17`
+Observed result: `12` companion gateway tests, `21` OpenClaw bridge tests, `18`
 Hermes/OpenClaw CLI migration tests, and `67` focused Cowork OpenClaw/gateway
 surface tests passed, plus the targeted Cowork Playwright OpenClaw bridge proof
 passed and wrote:
@@ -455,6 +456,11 @@ frame types and RPC success in `ws-call-log.jsonl`.
 The node pairing proof mirrors OpenClaw's pending/approve workflow through
 `nodes-pending` and `node-approve`; it stores only redacted request metadata and
 safe response summaries, never pairing codes, tokens, or raw daemon payloads.
+The upstream validation proof adds `bridge validate-upstream`, a read-only
+checklist that previews by default and, with explicit approval, runs discovery,
+WebSocket status probe, and `nodes.pending` against a configured daemon while
+recording only redacted summaries. In this environment it is fixture-validated;
+run it against a real OpenClaw daemon before claiming upstream certification.
 The node-host discovery proof reads OpenClaw's documented `~/.openclaw/node.json`
 shape, reports node id/display name/gateway host/port/capabilities, and keeps
 the node pairing token out of CLI JSON and logs.
@@ -479,5 +485,5 @@ the UI supplies `approvedBy` plus `liveAttachConfirmed=true` or
 `liveSendConfirmed=true`.
 The Playwright screenshot proof opens the real Companion panel with synthetic
 IPC data, verifies `OpenClaw bridge`, `detected`, local gateway endpoint,
-token-present status and all five bridge actions, then crops only that section
+token-present status and all seven bridge actions, then crops only that section
 so no account, home path, repository path, prompt text or token is published.

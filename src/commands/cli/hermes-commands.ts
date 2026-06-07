@@ -46,6 +46,7 @@ import {
   prepareOpenClawFleetHandoffDraft,
   probeOpenClawGatewayWebSocket,
   sendOpenClawResponse,
+  validateOpenClawUpstreamCompatibility,
 } from '../../openclaw/gateway-bridge.js';
 import {
   buildHermesProtocolGatewayReadiness,
@@ -2518,6 +2519,49 @@ function registerHermesClawCommands(hermes: Command): void {
         record: {
           status: result.record.status,
           endpoint: result.record.wsUrl,
+        },
+        recommendations: result.error ? [result.error] : undefined,
+      }));
+    });
+
+  bridge
+    .command('validate-upstream')
+    .description('Run a read-only OpenClaw upstream daemon validation checklist (--apply --yes required for live)')
+    .option('--source <path>', 'OpenClaw home (default: ~/.openclaw)')
+    .option('--node-lockfile <path>', 'OpenClaw node host lockfile (default: <source>/node.json)')
+    .option('--workspace-target <path>', 'workspace for bridge artifacts (default: cwd)')
+    .option('--status-method <method>', 'OpenClaw status RPC method to call after hello-ok', 'status')
+    .option('--timeout-ms <ms>', 'WebSocket validation timeout', '5000')
+    .option('--skip-pending-nodes', 'skip the nodes.pending read-only validation call')
+    .option('--approved-by <name>', 'operator approving live upstream validation')
+    .option('--apply', 'contact the OpenClaw Gateway WebSocket (otherwise dry-run)')
+    .option('--yes', 'confirm live validation when used with --apply')
+    .option('--json', 'output JSON')
+    .action(async (options: HermesClawBridgeOptions & { skipPendingNodes?: boolean }) => {
+      const timeoutMs = Number.parseInt(options.timeoutMs || '5000', 10);
+      const result = await validateOpenClawUpstreamCompatibility({
+        approvedBy: options.approvedBy,
+        dryRun: options.apply !== true,
+        includePendingNodes: options.skipPendingNodes !== true,
+        liveValidationConfirmed: options.apply === true && options.yes === true,
+        statusMethod: options.statusMethod,
+        timeoutMs: Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : 5000,
+      }, {
+        home: options.source,
+        nodeLockfilePath: options.nodeLockfile,
+        cwd: options.workspaceTarget,
+      });
+      if (options.json) {
+        console.log(stableJson(result));
+        return;
+      }
+      console.log(renderOpenClawBridgeResult({
+        kind: result.kind,
+        ok: result.ok,
+        discovery: result.discovery,
+        record: {
+          status: result.status,
+          endpoint: result.discovery.daemon.wsUrl,
         },
         recommendations: result.error ? [result.error] : undefined,
       }));

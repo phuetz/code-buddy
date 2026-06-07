@@ -463,6 +463,42 @@ export interface OpenClawApproveNodeInput extends OpenClawNodePairingInput {
   code?: string;
 }
 
+export interface OpenClawUpstreamValidationInput {
+  approvedBy?: string;
+  dryRun?: boolean;
+  includePendingNodes?: boolean;
+  liveValidationConfirmed?: boolean;
+  statusMethod?: string;
+  timeoutMs?: number;
+}
+
+export interface OpenClawUpstreamValidationCheck {
+  name: string;
+  ok: boolean;
+  status: 'passed' | 'preview' | 'blocked' | 'failed' | 'skipped';
+  detail?: string;
+}
+
+export interface OpenClawUpstreamValidationResult {
+  kind: 'openclaw_upstream_validation_result';
+  ok: boolean;
+  status: 'preview' | 'validated' | 'blocked' | 'failed';
+  dryRun: boolean;
+  approvedBy?: string;
+  discovery: OpenClawGatewayDiscovery;
+  checks: OpenClawUpstreamValidationCheck[];
+  probe?: OpenClawWebSocketProbeResult;
+  pendingNodes?: OpenClawWebSocketCallResult;
+  safety: {
+    readOnly: true;
+    secretsIncluded: false;
+    rawPayloadsStored: false;
+    networkContacted: boolean;
+    requiresLocalApproval: true;
+  };
+  error?: string;
+}
+
 const OPENCLAW_BRIDGE_SCHEMA_VERSION = 1;
 const DEFAULT_OPENCLAW_HOME = path.join(os.homedir(), '.openclaw');
 const EXECUTION_METHODS = [
@@ -1835,6 +1871,171 @@ export async function approveOpenClawPendingNode(
     ...options,
     summarizePayload: safeNodeApprovalSummary,
   });
+}
+
+export async function validateOpenClawUpstreamCompatibility(
+  input: OpenClawUpstreamValidationInput = {},
+  options: OpenClawGatewayDiscoveryOptions & Pick<OpenClawWebSocketCallOptions, 'createId' | 'callLogPath'> & Pick<OpenClawWebSocketProbeOptions, 'probeLogPath'> = {},
+): Promise<OpenClawUpstreamValidationResult> {
+  const cwd = resolveCwd(options.cwd);
+  const now = options.now || new Date();
+  const discovery = await discoverOpenClawGateway({ ...options, cwd, now });
+  const nodeLockfilePath = getOpenClawNodeLockfilePath(options);
+  const dryRun = input.dryRun !== false;
+  const approvedBy = input.approvedBy?.trim();
+  const checks: OpenClawUpstreamValidationCheck[] = [
+    {
+      name: 'gateway-lockfile',
+      ok: discovery.found,
+      status: discovery.found ? 'passed' : 'blocked',
+      detail: discovery.found ? discovery.lockfilePath : 'OpenClaw gateway lockfile was not found',
+    },
+    {
+      name: 'websocket-endpoint',
+      ok: Boolean(discovery.daemon.wsUrl),
+      status: discovery.daemon.wsUrl ? 'passed' : 'blocked',
+      detail: discovery.daemon.wsUrl || 'OpenClaw gateway WebSocket endpoint is missing',
+    },
+    {
+      name: 'node-lockfile',
+      ok: discovery.nodeHost.found,
+      status: discovery.nodeHost.found ? 'passed' : 'preview',
+      detail: discovery.nodeHost.found
+        ? nodeLockfilePath
+        : 'node.json was not found; validation can still test the gateway',
+    },
+    {
+      name: 'secret-redaction',
+      ok: discovery.safety.secretsIncluded === false,
+      status: discovery.safety.secretsIncluded === false ? 'passed' : 'failed',
+      detail: 'Discovery result must not include raw gateway or node tokens',
+    },
+  ];
+
+  const blockedReason = !discovery.found
+    ? 'OpenClaw gateway lockfile was not found'
+    : !discovery.daemon.wsUrl
+      ? 'OpenClaw gateway WebSocket endpoint is missing'
+      : !dryRun && !approvedBy
+        ? 'approvedBy is required for live OpenClaw upstream validation'
+        : !dryRun && input.liveValidationConfirmed !== true
+          ? 'liveValidationConfirmed is required for live OpenClaw upstream validation'
+          : undefined;
+
+  if (blockedReason) {
+    return {
+      kind: 'openclaw_upstream_validation_result',
+      ok: false,
+      status: 'blocked',
+      dryRun,
+      ...(approvedBy ? { approvedBy } : {}),
+      discovery,
+      checks: [
+        ...checks,
+        {
+          name: 'live-approval',
+          ok: false,
+          status: 'blocked',
+          detail: blockedReason,
+        },
+      ],
+      safety: {
+        readOnly: true,
+        secretsIncluded: false,
+        rawPayloadsStored: false,
+        networkContacted: false,
+        requiresLocalApproval: true,
+      },
+      error: blockedReason,
+    };
+  }
+
+  if (dryRun) {
+    return {
+      kind: 'openclaw_upstream_validation_result',
+      ok: true,
+      status: 'preview',
+      dryRun: true,
+      ...(approvedBy ? { approvedBy } : {}),
+      discovery,
+      checks: [
+        ...checks,
+        {
+          name: 'websocket-probe',
+          ok: true,
+          status: 'preview',
+          detail: 'Would run connect -> hello-ok -> req(status) -> res',
+        },
+        {
+          name: 'pending-node-list',
+          ok: true,
+          status: input.includePendingNodes === false ? 'skipped' : 'preview',
+          detail: input.includePendingNodes === false
+            ? 'Skipped by includePendingNodes=false'
+            : 'Would run nodes.pending and store only a safe summary',
+        },
+      ],
+      safety: {
+        readOnly: true,
+        secretsIncluded: false,
+        rawPayloadsStored: false,
+        networkContacted: false,
+        requiresLocalApproval: true,
+      },
+    };
+  }
+
+  const probe = await probeOpenClawGatewayWebSocket({
+    approvedBy,
+    dryRun: false,
+    liveProbeConfirmed: true,
+    statusMethod: input.statusMethod,
+    timeoutMs: input.timeoutMs,
+  }, options);
+  const pendingNodes = input.includePendingNodes === false
+    ? undefined
+    : await listOpenClawPendingNodes({
+      approvedBy,
+      dryRun: false,
+      liveCallConfirmed: true,
+      timeoutMs: input.timeoutMs,
+    }, options);
+  const liveChecks: OpenClawUpstreamValidationCheck[] = [
+    {
+      name: 'websocket-probe',
+      ok: probe.ok,
+      status: probe.ok ? 'passed' : 'failed',
+      detail: probe.record.response?.error || probe.record.response?.gatewayId || probe.error,
+    },
+    {
+      name: 'pending-node-list',
+      ok: pendingNodes ? pendingNodes.ok : true,
+      status: pendingNodes ? (pendingNodes.ok ? 'passed' : 'failed') : 'skipped',
+      detail: pendingNodes
+        ? pendingNodes.record.response?.error || 'nodes.pending returned a redacted summary'
+        : 'Skipped by includePendingNodes=false',
+    },
+  ];
+  const ok = probe.ok && (pendingNodes ? pendingNodes.ok : true);
+  return {
+    kind: 'openclaw_upstream_validation_result',
+    ok,
+    status: ok ? 'validated' : 'failed',
+    dryRun: false,
+    ...(approvedBy ? { approvedBy } : {}),
+    discovery,
+    checks: [...checks, ...liveChecks],
+    probe,
+    ...(pendingNodes ? { pendingNodes } : {}),
+    safety: {
+      readOnly: true,
+      secretsIncluded: false,
+      rawPayloadsStored: false,
+      networkContacted: true,
+      requiresLocalApproval: true,
+    },
+    ...(ok ? {} : { error: 'OpenClaw upstream validation failed' }),
+  };
 }
 
 export function mapOpenClawChannelToCodeBuddy(value: string): ChannelType | 'webchat' {
