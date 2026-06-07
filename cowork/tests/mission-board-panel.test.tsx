@@ -326,4 +326,61 @@ describe('MissionBoardPanel', () => {
       'Loaded from mission IPC'
     );
   });
+
+  it('inspects ready runtime sub-tasks through the MissionBridge IPC', async () => {
+    const liveMission = runtimeMission();
+    const readyTask = {
+      ...liveMission.subTasks[1],
+      status: SubTaskStatus.Pending,
+      progress: 0,
+    };
+    const listMissions = vi.fn().mockResolvedValue({ ok: true, board: board([]), items: [] });
+    const listRuntimeMissions = vi.fn().mockResolvedValue({ ok: true, missions: [] });
+    const readySubTasks = vi.fn().mockResolvedValue({ ok: true, subTasks: [readyTask] });
+    const updateMission = vi.fn();
+    const syncMissions = vi.fn();
+    const runNextMission = vi.fn();
+
+    (
+      window as unknown as {
+        electronAPI?: {
+          companion: {
+            listMissions: typeof listMissions;
+            runNextMission: typeof runNextMission;
+            syncMissions: typeof syncMissions;
+            updateMission: typeof updateMission;
+          };
+          missions: {
+            list: typeof listRuntimeMissions;
+            readySubTasks: typeof readySubTasks;
+          };
+        };
+      }
+    ).electronAPI = {
+      companion: { listMissions, runNextMission, syncMissions, updateMission },
+      missions: { list: listRuntimeMissions, readySubTasks },
+    };
+
+    useAppStore.setState({
+      missionRuntime: { [liveMission.id]: liveMission },
+    });
+
+    const target = container();
+    root = createRoot(target);
+    await act(async () => {
+      root?.render(React.createElement(MissionBoardPanel, { onClose: () => {} }));
+      await flush();
+    });
+
+    const readyButton = target.querySelector('[data-testid="mission-runtime-ready-runtime-1"]') as HTMLButtonElement;
+    await act(async () => {
+      Simulate.click(readyButton);
+      await flush();
+    });
+
+    expect(readySubTasks).toHaveBeenCalledWith('runtime-1');
+    expect(target.querySelector('[data-testid="mission-runtime-ready-list-runtime-1"]')?.textContent).toContain(
+      'pending Wire UI'
+    );
+  });
 });

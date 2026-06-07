@@ -7,7 +7,7 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { AlertTriangle, CheckCircle2, ClipboardList, Clock3, Loader2, Play, RefreshCw, X } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, ClipboardList, Clock3, ListChecks, Loader2, Play, RefreshCw, X } from 'lucide-react';
 import { useAppStore } from '../store';
 import { dialogA11yProps, trapFocus } from '../utils/a11y';
 import type {
@@ -25,6 +25,7 @@ interface MissionBoardPanelProps {
 
 type CompanionMissionApi = NonNullable<Window['electronAPI']>['companion'];
 type MissionRuntimeApi = NonNullable<Window['electronAPI']>['missions'];
+type RuntimeSubTask = MissionRuntime['subTasks'][number];
 
 const COLUMNS: Array<{ status: CompanionMissionStatus; labelKey: string; fallback: string }> = [
   { status: 'open', labelKey: 'missionBoard.status.open', fallback: 'Open' },
@@ -102,6 +103,8 @@ export function MissionBoardPanel({ onClose }: MissionBoardPanelProps) {
   const [board, setBoard] = useState<CompanionMissionBoard | null>(null);
   const [missions, setMissions] = useState<CompanionMission[]>([]);
   const [runResult, setRunResult] = useState<CompanionMissionRunResult | null>(null);
+  const [readySubTasksByMission, setReadySubTasksByMission] = useState<Record<string, RuntimeSubTask[]>>({});
+  const [readySubTaskLoadingId, setReadySubTaskLoadingId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -209,6 +212,29 @@ export function MissionBoardPanel({ onClose }: MissionBoardPanelProps) {
       const result = await api.updateMission({ missionId, status });
       if (!result.ok) throw new Error(result.error ?? 'Mission update failed.');
     });
+
+  const inspectReadySubTasks = useCallback(async (missionId: string) => {
+    const api = getMissionRuntimeApi();
+    if (!api) {
+      setError('Mission runtime bridge is not available.');
+      return;
+    }
+
+    setReadySubTaskLoadingId(missionId);
+    setError(null);
+    try {
+      const result = await api.readySubTasks(missionId);
+      if (!result.ok) throw new Error(result.error ?? 'Failed to inspect ready sub-tasks.');
+      setReadySubTasksByMission((current) => ({
+        ...current,
+        [missionId]: result.subTasks ?? [],
+      }));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setReadySubTaskLoadingId(null);
+    }
+  }, []);
 
   const progress = missionProgress(missions);
   const activeCount = missions.filter((mission) => mission.status === 'in_progress').length;
@@ -338,6 +364,9 @@ export function MissionBoardPanel({ onClose }: MissionBoardPanelProps) {
                     events={missionRuntimeEvents[mission.id] ?? mission.events}
                     heartbeat={missionRuntimeHeartbeats[mission.id]}
                     mission={mission}
+                    onInspectReady={inspectReadySubTasks}
+                    readyLoading={readySubTaskLoadingId === mission.id}
+                    readySubTasks={readySubTasksByMission[mission.id]}
                     t={t}
                   />
                 ))}
@@ -400,11 +429,17 @@ function RuntimeMissionCard({
   events,
   heartbeat,
   mission,
+  onInspectReady,
+  readyLoading,
+  readySubTasks,
   t,
 }: {
   events?: MissionRuntimeEvent[];
   heartbeat?: string;
   mission: MissionRuntime;
+  onInspectReady: (missionId: string) => void;
+  readyLoading: boolean;
+  readySubTasks?: RuntimeSubTask[];
   t: (key: string, fallback: string, options?: Record<string, unknown>) => string;
 }) {
   const tasks = runtimeTaskProgress(mission);
@@ -444,6 +479,38 @@ function RuntimeMissionCard({
             : formatDate(mission.updatedAt)}
         </span>
       </div>
+      <div className="mt-3 flex flex-wrap gap-1.5">
+        <button
+          className="inline-flex items-center gap-1 rounded border border-border px-2 py-1 text-[10px] text-text-primary hover:bg-surface disabled:opacity-50"
+          data-testid={`mission-runtime-ready-${mission.id}`}
+          disabled={readyLoading}
+          onClick={() => onInspectReady(mission.id)}
+          type="button"
+        >
+          {readyLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <ListChecks className="h-3 w-3" />}
+          {readyLoading
+            ? t('missionBoard.runtime.inspectingReady', 'Inspecting...')
+            : t('missionBoard.runtime.ready', 'Ready work')}
+        </button>
+      </div>
+      {readySubTasks ? (
+        <div
+          className="mt-2 rounded border border-border-muted bg-surface/30 px-2 py-1.5"
+          data-testid={`mission-runtime-ready-list-${mission.id}`}
+        >
+          {readySubTasks.length === 0 ? (
+            <p className="text-[10px] text-text-muted">{t('missionBoard.runtime.noReady', 'No ready work')}</p>
+          ) : (
+            <ul className="space-y-1">
+              {readySubTasks.map((subTask) => (
+                <li key={subTask.id} className="truncate text-[10px] text-text-muted">
+                  <span className="font-medium text-text-secondary">{subTask.status}</span> {subTask.title}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      ) : null}
     </article>
   );
 }
