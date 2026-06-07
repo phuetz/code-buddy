@@ -31,27 +31,43 @@ function tsFiles(dir: string): string[] {
   return out;
 }
 
-describe('single mainWindow sync (rc.8 regression guard)', () => {
-  it('every module that creates the main BrowserWindow also calls setMainWindow()', () => {
-    const offenders: string[] = [];
-    for (const file of tsFiles(mainDir)) {
-      // window-management.ts is the canonical owner of the shared reference
-      // (its assignment IS the source of truth that getMainWindow() reads).
-      if (file.endsWith('window-management.ts')) continue;
+/**
+ * Shared main-process singletons that live in `window-management.ts` and MUST be
+ * synced via their setter whenever another module constructs them. Same bug
+ * class as the rc.8 dual-`mainWindow`: a stale/null shared ref silently breaks
+ * features that read it through the getter.
+ */
+const SHARED_SINGLETONS = [
+  { variable: 'mainWindow', ctor: 'BrowserWindow', setter: 'setMainWindow' },
+  { variable: 'tray', ctor: 'Tray', setter: 'setTray' },
+] as const;
 
-      const src = readFileSync(file, 'utf-8');
-      const createsMainWindow = /mainWindow\s*=\s*new\s+BrowserWindow/.test(src);
-      const syncsSharedRef = /setMainWindow\s*\(/.test(src);
-      if (createsMainWindow && !syncsSharedRef) {
-        offenders.push(file.slice(mainDir.length + 1));
+describe('shared main-process singleton sync (rc.8 regression guard)', () => {
+  it.each(SHARED_SINGLETONS)(
+    'every module that creates `$variable = new $ctor` also calls $setter()',
+    ({ variable, ctor, setter }) => {
+      const createPattern = new RegExp(`${variable}\\s*=\\s*new\\s+${ctor}\\b`);
+      const setterPattern = new RegExp(`${setter}\\s*\\(`);
+      const offenders: string[] = [];
+
+      for (const file of tsFiles(mainDir)) {
+        // window-management.ts is the canonical owner of the shared reference
+        // (its assignment IS the source of truth that the getter reads).
+        if (file.endsWith('window-management.ts')) continue;
+
+        const src = readFileSync(file, 'utf-8');
+        if (createPattern.test(src) && !setterPattern.test(src)) {
+          offenders.push(file.slice(mainDir.length + 1));
+        }
       }
-    }
 
-    expect(
-      offenders,
-      `These main-process modules create the main BrowserWindow but never call ` +
-        `setMainWindow(win) — that silently breaks main→renderer IPC ` +
-        `(rc.8 dual-mainWindow bug). Call setMainWindow(win) right after creating it.`,
-    ).toEqual([]);
-  });
+      expect(
+        offenders,
+        `These main-process modules create \`${variable}\` but never call ` +
+          `${setter}(...) — that leaves the shared ${variable} ref stale/null and ` +
+          `silently breaks features reading it via the getter (rc.8 dual-${variable} ` +
+          `bug class). Call ${setter}(...) right after creating it.`,
+      ).toEqual([]);
+    },
+  );
 });
