@@ -79,8 +79,10 @@ mission: {
 },
 ```
 
-(`ARCHITECTURE.md` already lists `mission` as a planned namespace — register
-it the same way the documented namespaces are.)
+(The `mission` namespace is the one proposed by
+`docs/AUTONOMOUS-SYSTEM-ROADMAP.md` §2.1 — "Nouveau namespace IPC `mission` ou
+extension de `workflow`". Register it the same way the namespaces documented in
+`cowork/ARCHITECTURE.md` are.)
 
 Watch the **rc.8 dual-`mainWindow` gotcha** (CLAUDE.md): do not redeclare
 `mainWindow`; `sendToRenderer` already reads it via `getMainWindow()` after
