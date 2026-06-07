@@ -26,6 +26,8 @@ import type {
   TeamMember,
   TeamTask,
   TeamMailboxMessage,
+  MissionRuntime,
+  MissionRuntimeEvent,
 } from '../types';
 import { applySessionUpdate } from '../utils/session-update';
 
@@ -107,6 +109,25 @@ const DEFAULT_SESSION_STATE: SessionState = {
   traceSteps: [],
   contextWindow: 0,
 };
+
+const MISSION_RUNTIME_EVENT_LIMIT = 200;
+
+function isSameMissionRuntimeEvent(a: MissionRuntimeEvent, b: MissionRuntimeEvent): boolean {
+  return a.ts === b.ts && a.type === b.type && a.message === b.message;
+}
+
+function appendMissionRuntimeEvent(
+  events: MissionRuntimeEvent[],
+  event: MissionRuntimeEvent
+): MissionRuntimeEvent[] {
+  if (events.some((item) => isSameMissionRuntimeEvent(item, event))) {
+    return events;
+  }
+  const next = [...events, event];
+  return next.length > MISSION_RUNTIME_EVENT_LIMIT
+    ? next.slice(next.length - MISSION_RUNTIME_EVENT_LIMIT)
+    : next;
+}
 
 // Helper to immutably update a single session's state within the record
 function patchSession(
@@ -242,6 +263,14 @@ interface AppState {
       error?: string;
     }
   >;
+  /**
+   * Mission Orchestrator runtime snapshots streamed by the main-side bridge.
+   * Kept separate from the older companion mission board until the IPC surface
+   * is fully wired, so the next UI pass can subscribe without backend coupling.
+   */
+  missionRuntime: Record<string, MissionRuntime>;
+  missionRuntimeEvents: Record<string, MissionRuntimeEvent[]>;
+  missionRuntimeHeartbeats: Record<string, string>;
   /** Approvals waiting for the user to click Approve/Reject. */
   pendingApprovals: Array<{
     workflowInstanceId: string;
@@ -544,6 +573,12 @@ interface AppState {
   applyWorkflowEvent: (
     payload: import('../../shared/workflow-types').WorkflowEventPayload
   ) => void;
+  upsertMissionRuntime: (mission: MissionRuntime) => void;
+  applyMissionRuntimeEvent: (payload: {
+    missionId: string;
+    event: MissionRuntimeEvent;
+  }) => void;
+  markMissionRuntimeHeartbeat: (missionId: string, at?: string) => void;
   pushPendingApproval: (
     approval: import('../../shared/workflow-types').PendingApproval
   ) => void;
@@ -761,6 +796,9 @@ export const useAppStore = create<AppState>((set) => ({
   browserActions: [],
   showBrowserOperatorOverlay: false,
   workflowExecutions: {},
+  missionRuntime: {},
+  missionRuntimeEvents: {},
+  missionRuntimeHeartbeats: {},
   pendingApprovals: [],
   openTabs: [],
   clipboardSummary: null,
@@ -1416,6 +1454,50 @@ export const useAppStore = create<AppState>((set) => ({
           return {};
       }
     }),
+  upsertMissionRuntime: (mission) =>
+    set((state) => ({
+      missionRuntime: {
+        ...state.missionRuntime,
+        [mission.id]: mission,
+      },
+      missionRuntimeEvents: {
+        ...state.missionRuntimeEvents,
+        [mission.id]: mission.events.slice(-MISSION_RUNTIME_EVENT_LIMIT),
+      },
+    })),
+  applyMissionRuntimeEvent: (payload) =>
+    set((state) => {
+      const previousEvents =
+        state.missionRuntimeEvents[payload.missionId] ??
+        state.missionRuntime[payload.missionId]?.events ??
+        [];
+      const nextEvents = appendMissionRuntimeEvent(previousEvents, payload.event);
+      const mission = state.missionRuntime[payload.missionId];
+      return {
+        missionRuntimeEvents: {
+          ...state.missionRuntimeEvents,
+          [payload.missionId]: nextEvents,
+        },
+        ...(mission
+          ? {
+              missionRuntime: {
+                ...state.missionRuntime,
+                [payload.missionId]: {
+                  ...mission,
+                  events: nextEvents,
+                },
+              },
+            }
+          : {}),
+      };
+    }),
+  markMissionRuntimeHeartbeat: (missionId, at = new Date().toISOString()) =>
+    set((state) => ({
+      missionRuntimeHeartbeats: {
+        ...state.missionRuntimeHeartbeats,
+        [missionId]: at,
+      },
+    })),
   pushPendingApproval: (approval) =>
     set((state) => {
       const filtered = state.pendingApprovals.filter((a) => a.stepId !== approval.stepId);

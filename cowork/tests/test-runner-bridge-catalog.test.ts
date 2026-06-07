@@ -200,6 +200,7 @@ function makeWorkspace(): string {
   writeFileSync(path.join(coworkDir, 'tests', 'mission-bridge.test.ts'), '');
   writeFileSync(path.join(coworkDir, 'tests', 'mission-heartbeat-recovery.test.ts'), '');
   writeFileSync(path.join(coworkDir, 'tests', 'mission-scheduler.test.ts'), '');
+  writeFileSync(path.join(coworkDir, 'tests', 'mission-renderer-events.test.ts'), '');
   writeFileSync(path.join(coworkDir, 'tests', 'mission-board-panel.test.tsx'), '');
   writeFileSync(path.join(coworkDir, 'tests', 'mission-board-surface.test.ts'), '');
   writeFileSync(path.join(coworkDir, 'tests', 'desktop-snapshot-panel.test.tsx'), '');
@@ -1058,6 +1059,7 @@ describe('TestRunnerBridge catalog', () => {
         'tests/mission-bridge.test.ts',
         'tests/mission-heartbeat-recovery.test.ts',
         'tests/mission-scheduler.test.ts',
+        'tests/mission-renderer-events.test.ts',
         'tests/mission-board-panel.test.tsx',
         'tests/mission-board-surface.test.ts',
       ])

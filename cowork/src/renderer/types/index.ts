@@ -1637,6 +1637,14 @@ export interface A2ATask {
   error?: string;
 }
 
+export type MissionRuntime = import('../../main/missions/mission-types').Mission;
+export type MissionRuntimeEvent = import('../../main/missions/mission-types').MissionEvent;
+
+export interface MissionRuntimeEventPayload {
+  missionId: string;
+  event: MissionRuntimeEvent;
+}
+
 export type ServerEvent =
   | { type: 'stream.message'; payload: { sessionId: string; message: Message } }
   | { type: 'stream.partial'; payload: { sessionId: string; delta: string } }
@@ -1714,6 +1722,10 @@ export type ServerEvent =
   | { type: 'browser.action'; payload: BrowserActionEvent }
   | { type: 'workflow.event'; payload: import('../../shared/workflow-types').WorkflowEventPayload }
   | { type: 'workflow.approval_required'; payload: import('../../shared/workflow-types').PendingApproval }
+  | { type: 'mission.created'; payload: MissionRuntime }
+  | { type: 'mission.updated'; payload: MissionRuntime }
+  | { type: 'mission.event'; payload: MissionRuntimeEventPayload }
+  | { type: 'mission.heartbeat'; payload: { missionId: string } }
   | {
       type: 'clipboard.summary';
       payload: {

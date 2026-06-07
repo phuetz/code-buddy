@@ -544,6 +544,19 @@ export function useIPC() {
             store.pushPendingApproval(event.payload);
             break;
 
+          case 'mission.created':
+          case 'mission.updated':
+            store.upsertMissionRuntime(event.payload);
+            break;
+
+          case 'mission.event':
+            store.applyMissionRuntimeEvent(event.payload);
+            break;
+
+          case 'mission.heartbeat':
+            store.markMissionRuntimeHeartbeat(event.payload.missionId);
+            break;
+
           case 'panic-stop': {
             const currentSessionId = store.activeSessionId;
             if (currentSessionId) {
