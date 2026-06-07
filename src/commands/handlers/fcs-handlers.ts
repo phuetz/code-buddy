@@ -364,11 +364,11 @@ async function handleFCSTemplatesAsync(search?: string): Promise<void> {
  * Get FCS help
  */
 function getFCSHelp(): string {
-  return `FileCommander Script (FCS) - 100% Compatible
+  return `FileCommander Script (FCS) - Suite Compatible
 ================================================
 
-FCS is a scripting language 100% compatible with FileCommander Enhanced.
-Use it to automate file operations, run shell commands, and integrate with AI.
+FCS is the shared suite scripting language used by NexusFile and Code Buddy.
+Use it to automate file operations, run shell commands, test workflows, and integrate with AI.
 
 Commands:
   /fcs                      Show this help
@@ -381,11 +381,11 @@ Commands:
 
 Language Features:
   Variables:      let x = 10; const PI = 3.14
-  Functions:      func greet(name) { print("Hello " + name) }
-  Control Flow:   if/else, for x in items, while condition
+  Functions:      def greet(name): ... or func greet(name) { ... }
+  Control Flow:   if/else, for x in items, for i in range(n), repeat n, while condition
   Classes:        class Person { func init() { } }
   Pipeline:       data |> transform |> output
-  Tests:          test "should work" { assert true }
+  Tests:          test "should work": then indented assert lines
   Decorators:     @benchmark func slow() { }
 
 Builtins:
@@ -400,18 +400,16 @@ Builtins:
 Example Script:
   +---------------------------------
   | // automation.fcs
-  | func backup(files) {
-  |     for f in files {
+  | def backup(files):
+  |     for f in files:
   |         copy(f, "backup/" + basename(f))
-  |     }
-  | }
   |
   | let sources = glob("src/*.ts")
-  | sources |> backup
+  | backup(sources)
   | print("Backup complete!")
   +---------------------------------
 
-Tip: FCS scripts work seamlessly with FileCommander Enhanced.`;
+Tip: see docs/fcs-suite-language.md for the portable NexusFile/Code Buddy subset.`;
 }
 
 /**

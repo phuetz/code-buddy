@@ -40,6 +40,7 @@
 | `/coverage` | Coverage target configuration |
 | `/transform modernize\|typescript\|async\|functional\|es-modules` | Code transformation |
 | `/suggest` | Proactive suggestions by category |
+| `/fcs run\|validate\|parse\|list\|templates` | Run and debug FileCommander Script suite automation |
 
 ### Agents and Orchestration
 

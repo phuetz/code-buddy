@@ -45,6 +45,7 @@ import {
   IfStmt,
   WhileStmt,
   ForStmt,
+  RepeatStmt,
   ForCStyleStmt,
   ReturnStmt,
   TryStmt,
@@ -133,6 +134,11 @@ export class FCSRuntime {
       } else {
         error = err instanceof Error ? err.message : String(err);
       }
+    }
+
+    const failedTests = this.testResults.filter(test => !test.passed);
+    if (!error && failedTests.length > 0) {
+      error = `${failedTests.length} FCS test(s) failed`;
     }
 
     return {
@@ -311,6 +317,9 @@ export class FCSRuntime {
       case 'For':
         return this.executeForStatement(node as ForStmt, ctx);
 
+      case 'Repeat':
+        return this.executeRepeatStatement(node as RepeatStmt, ctx);
+
       case 'ForCStyle':
         return this.executeForCStyleStatement(node as ForCStyleStmt, ctx);
 
@@ -468,18 +477,28 @@ export class FCSRuntime {
     node: TestDeclaration,
     ctx: RuntimeContext
   ): Promise<null> {
-    if (!this.config.verbose) {
+    if (!this.config.runTests) {
       return null;
     }
 
+    const localCtx: RuntimeContext = {
+      variables: new Map(),
+      functions: new Map(ctx.functions),
+      parent: ctx,
+    };
+
     try {
-      await this.executeBlock(node.body, ctx);
+      await this.executeBlock(node.body, localCtx);
       this.testResults.push({ name: node.name, passed: true });
-      this.output.push(`✓ ${node.name}`);
+      if (this.config.verbose) {
+        this.output.push(`PASS ${node.name}`);
+      }
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : String(err);
       this.testResults.push({ name: node.name, passed: false, error: errorMsg });
-      this.output.push(`✗ ${node.name}: ${errorMsg}`);
+      if (this.config.verbose) {
+        this.output.push(`FAIL ${node.name}: ${errorMsg}`);
+      }
     }
 
     return null;
@@ -521,7 +540,14 @@ export class FCSRuntime {
     node: WhileStmt,
     ctx: RuntimeContext
   ): Promise<CodeBuddyValue | ReturnSignal> {
+    let iterations = 0;
+    const maxIterations = this.getMaxLoopIterations();
     while (this.isTruthy(await this.evaluate(node.condition, ctx))) {
+      iterations++;
+      if (iterations > maxIterations) {
+        throw new Error(`Loop exceeded maxLoopIterations (${maxIterations})`);
+      }
+
       const result = await this.executeNode(node.body, ctx);
       if (result instanceof ReturnSignal) return result;
       if (result instanceof BreakSignal) break;
@@ -550,8 +576,50 @@ export class FCSRuntime {
       parent: ctx,
     };
 
+    let iterations = 0;
+    const maxIterations = this.getMaxLoopIterations();
     for (const item of items) {
+      iterations++;
+      if (iterations > maxIterations) {
+        throw new Error(`Loop exceeded maxLoopIterations (${maxIterations})`);
+      }
+
       localCtx.variables.set(node.variable, item);
+
+      const result = await this.executeNode(node.body, localCtx);
+      if (result instanceof ReturnSignal) return result;
+      if (result instanceof BreakSignal) break;
+      if (result instanceof ContinueSignal) continue;
+    }
+
+    return null;
+  }
+
+  private async executeRepeatStatement(
+    node: RepeatStmt,
+    ctx: RuntimeContext
+  ): Promise<CodeBuddyValue | ReturnSignal> {
+    const rawCount = await this.evaluate(node.count, ctx);
+    const count = Math.max(0, Math.floor(Number(rawCount)));
+    const maxIterations = this.getMaxLoopIterations();
+
+    if (!Number.isFinite(count)) {
+      throw new Error('repeat requires a finite numeric count');
+    }
+
+    if (count > maxIterations) {
+      throw new Error(`repeat count exceeds maxLoopIterations (${maxIterations})`);
+    }
+
+    const localCtx: RuntimeContext = {
+      variables: new Map(),
+      functions: ctx.functions,
+      parent: ctx,
+    };
+
+    for (let i = 0; i < count; i++) {
+      localCtx.variables.set('i', i);
+      localCtx.variables.set('_', i);
 
       const result = await this.executeNode(node.body, localCtx);
       if (result instanceof ReturnSignal) return result;
@@ -583,7 +651,14 @@ export class FCSRuntime {
     }
 
     // Loop while test is true
+    let iterations = 0;
+    const maxIterations = this.getMaxLoopIterations();
     while (node.test === null || this.isTruthy(await this.evaluate(node.test, localCtx))) {
+      iterations++;
+      if (iterations > maxIterations) {
+        throw new Error(`Loop exceeded maxLoopIterations (${maxIterations})`);
+      }
+
       const result = await this.executeNode(node.body, localCtx);
       if (result instanceof ReturnSignal) return result;
       if (result instanceof BreakSignal) break;
@@ -897,6 +972,18 @@ export class FCSRuntime {
     node: CallExpr,
     ctx: RuntimeContext
   ): Promise<CodeBuddyValue> {
+    if (
+      node.callee.type === 'Identifier' &&
+      (node.callee as IdentifierExpr).name === 'defined'
+    ) {
+      const firstArg = node.arguments[0];
+      if (!firstArg || firstArg.type !== 'Literal') {
+        throw new Error('defined() requires a string literal variable name');
+      }
+
+      return this.isDefined(String((firstArg as LiteralExpr).value), ctx);
+    }
+
     const callee = await this.evaluate(node.callee, ctx);
 
     if (typeof callee !== 'function') {
@@ -1040,6 +1127,24 @@ export class FCSRuntime {
       return false;
     }
     return true;
+  }
+
+  private isDefined(name: string, ctx: RuntimeContext): boolean {
+    let current: RuntimeContext | undefined = ctx;
+    while (current) {
+      if (current.variables.has(name) || current.functions.has(name)) {
+        return true;
+      }
+      current = current.parent;
+    }
+    return false;
+  }
+
+  private getMaxLoopIterations(): number {
+    const configured = Math.floor(Number(this.config.maxLoopIterations));
+    return Number.isFinite(configured) && configured > 0
+      ? configured
+      : DEFAULT_SCRIPT_CONFIG.maxLoopIterations;
   }
 
   getTestResults(): { name: string; passed: boolean; error?: string }[] {

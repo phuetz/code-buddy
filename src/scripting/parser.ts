@@ -39,6 +39,7 @@ import {
   IfStmt,
   WhileStmt,
   ForStmt,
+  RepeatStmt,
   ForCStyleStmt,
   ReturnStmt,
   BreakStmt,
@@ -95,7 +96,7 @@ export class FCSParser {
 
     while (!this.isAtEnd()) {
       guard();
-      this.skipNewlines();
+      this.skipLayoutTokens();
       if (this.isAtEnd()) break;
 
       const stmt = this.parseDeclaration();
@@ -103,7 +104,7 @@ export class FCSParser {
         statements.push(stmt);
       }
 
-      this.skipNewlines();
+      this.skipLayoutTokens();
     }
 
     return { type: 'Program', statements, body: statements };
@@ -127,7 +128,7 @@ export class FCSParser {
         void this.previous().value;
       }
 
-      if (this.matchKeyword('func', 'function') || this.matchKeyword('async')) {
+      if (this.matchKeyword('def', 'func', 'function') || this.matchKeyword('async')) {
         return this.parseFunctionDeclaration();
       }
 
@@ -168,6 +169,7 @@ export class FCSParser {
     if (this.matchKeyword('if')) return this.parseIfStatement();
     if (this.matchKeyword('while')) return this.parseWhileStatement();
     if (this.matchKeyword('for')) return this.parseForStatement();
+    if (this.matchKeyword('repeat')) return this.parseRepeatStatement();
     if (this.matchKeyword('return')) return this.parseReturnStatement();
     if (this.matchKeyword('break')) return this.parseBreakStatement();
     if (this.matchKeyword('continue')) return this.parseContinueStatement();
@@ -186,7 +188,7 @@ export class FCSParser {
   private parseFunctionDeclaration(): FunctionDeclaration {
     const isAsync = this.previous().value === 'async';
     if (isAsync) {
-      this.consumeKeyword('func', 'function');
+      this.consumeKeyword('def', 'func', 'function');
     }
 
     const name = this.consume(TokenType.Identifier, "Expected function name").value;
@@ -196,12 +198,17 @@ export class FCSParser {
     this.consume(TokenType.RightParen, "Expected ')' after parameters");
 
     let returnType: string | undefined;
+    let body: BlockStmt;
     if (this.match(TokenType.Colon)) {
-      returnType = this.consume(TokenType.Identifier, "Expected return type").value;
+      if (this.check(TokenType.Identifier)) {
+        returnType = this.consume(TokenType.Identifier, "Expected return type").value;
+        body = this.parseStatementBody("Expected function body after return type", false) as BlockStmt;
+      } else {
+        body = this.parseIndentedBlockAfterColon();
+      }
+    } else {
+      body = this.parseStatementBody("Expected '{' or ':' before function body", false) as BlockStmt;
     }
-
-    this.consume(TokenType.LeftBrace, "Expected '{' before function body");
-    const body = this.parseBlockStatement();
 
     return {
       type: 'FunctionDeclaration',
@@ -283,10 +290,10 @@ export class FCSParser {
     });
     while (!this.check(TokenType.RightBrace) && !this.isAtEnd()) {
       guard();
-      this.skipNewlines();
+      this.skipLayoutTokens();
       if (this.check(TokenType.RightBrace)) break;
 
-      if (this.matchKeyword('func', 'function', 'async')) {
+      if (this.matchKeyword('def', 'func', 'function', 'async')) {
         members.push(this.parseFunctionDeclaration());
       } else if (this.matchKeyword('let', 'const', 'var')) {
         members.push(this.parseVarDeclaration());
@@ -295,7 +302,7 @@ export class FCSParser {
         this.advance();
       }
 
-      this.skipNewlines();
+      this.skipLayoutTokens();
     }
 
     this.consume(TokenType.RightBrace, "Expected '}' after class body");
@@ -316,18 +323,16 @@ export class FCSParser {
       this.consume(TokenType.RightParen, "Expected ')' after condition");
     }
 
-    const thenBranch = this.match(TokenType.LeftBrace)
-      ? this.parseBlockStatement()
-      : this.parseStatement();
+    const thenBranch = this.parseStatementBody("Expected if body");
 
     let elseBranch: AstNode | null = null;
-    if (this.matchKeyword('else')) {
+    if (this.matchKeyword('elif')) {
+      elseBranch = this.parseIfStatement();
+    } else if (this.matchKeyword('else')) {
       if (this.matchKeyword('if')) {
         elseBranch = this.parseIfStatement();
       } else {
-        elseBranch = this.match(TokenType.LeftBrace)
-          ? this.parseBlockStatement()
-          : this.parseStatement();
+        elseBranch = this.parseStatementBody("Expected else body");
       }
     }
 
@@ -346,9 +351,7 @@ export class FCSParser {
       this.consume(TokenType.RightParen, "Expected ')' after condition");
     }
 
-    const body = this.match(TokenType.LeftBrace)
-      ? this.parseBlockStatement()
-      : this.parseStatement();
+    const body = this.parseStatementBody("Expected while body");
 
     return {
       type: 'While',
@@ -368,9 +371,7 @@ export class FCSParser {
     this.consumeKeyword('in');
     const iterable = this.parseExpression();
 
-    const body = this.match(TokenType.LeftBrace)
-      ? this.parseBlockStatement()
-      : this.parseStatement();
+    const body = this.parseStatementBody("Expected for body");
 
     return {
       type: 'For',
@@ -410,15 +411,24 @@ export class FCSParser {
     this.consume(TokenType.RightParen, "Expected ')' after for clauses");
 
     // Parse body
-    const body = this.match(TokenType.LeftBrace)
-      ? this.parseBlockStatement()
-      : this.parseStatement();
+    const body = this.parseStatementBody("Expected for body");
 
     return {
       type: 'ForCStyle',
       init,
       test,
       update,
+      body,
+    };
+  }
+
+  private parseRepeatStatement(): RepeatStmt {
+    const count = this.parseExpression();
+    const body = this.parseStatementBody("Expected repeat body");
+
+    return {
+      type: 'Repeat',
+      count,
       body,
     };
   }
@@ -432,7 +442,7 @@ export class FCSParser {
 
     while (!this.check(TokenType.RightBrace) && !this.isAtEnd()) {
       guard();
-      this.skipNewlines();
+      this.skipLayoutTokens();
       if (this.check(TokenType.RightBrace)) break;
 
       const stmt = this.parseDeclaration();
@@ -440,10 +450,61 @@ export class FCSParser {
         statements.push(stmt);
       }
 
-      this.skipNewlines();
+      this.skipLayoutTokens();
     }
 
     this.consume(TokenType.RightBrace, "Expected '}' after block");
+
+    return { type: 'Block', statements };
+  }
+
+  private parseStatementBody(message: string, allowSingleStatement = true): AstNode {
+    if (this.match(TokenType.LeftBrace)) {
+      return this.parseBlockStatement();
+    }
+
+    if (this.match(TokenType.Colon)) {
+      return this.parseIndentedBlockAfterColon();
+    }
+
+    if (allowSingleStatement) {
+      return this.parseStatement();
+    }
+
+    throw new Error(`${message} at line ${this.peek().line}`);
+  }
+
+  private parseIndentedBlockAfterColon(): BlockStmt {
+    this.skipNewlinesOnly();
+    const hasIndent = this.match(TokenType.Indent);
+    this.skipNewlinesOnly();
+
+    if (!hasIndent && this.check(TokenType.Dedent)) {
+      throw new Error(`Expected indented block at line ${this.peek().line}`);
+    }
+
+    const statements: AstNode[] = [];
+    const guard = createLoopGuard({
+      maxIterations: 100000,
+      context: 'indented block parsing',
+    });
+
+    while (!this.check(TokenType.Dedent) && !this.isAtEnd()) {
+      guard();
+      this.skipNewlinesOnly();
+      if (this.check(TokenType.Dedent) || this.isAtEnd()) break;
+
+      const stmt = this.parseDeclaration();
+      if (stmt) {
+        statements.push(stmt);
+      }
+
+      this.skipNewlinesOnly();
+    }
+
+    if (this.check(TokenType.Dedent)) {
+      this.advance();
+    }
 
     return { type: 'Block', statements };
   }
@@ -596,8 +657,7 @@ export class FCSParser {
       this.consume(TokenType.RightBracket, "Expected ']' after tags");
     }
 
-    this.consume(TokenType.LeftBrace, "Expected '{' before test body");
-    const body = this.parseBlockStatement();
+    const body = this.parseStatementBody("Expected '{' or ':' before test body", false) as BlockStmt;
 
     return {
       type: 'TestDeclaration',
@@ -1145,7 +1205,7 @@ export class FCSParser {
     if (this.isAtEnd()) return;
 
     // Allow implicit semicolon before certain tokens
-    if (this.check(TokenType.RightBrace) || this.checkKeyword('else')) {
+    if (this.check(TokenType.RightBrace) || this.check(TokenType.Dedent) || this.checkKeyword('else', 'elif')) {
       return;
     }
   }
@@ -1161,6 +1221,21 @@ export class FCSParser {
     }
   }
 
+  private skipNewlinesOnly(): void {
+    this.skipNewlines();
+  }
+
+  private skipLayoutTokens(): void {
+    const guard = createLoopGuard({
+      maxIterations: 100000,
+      context: 'layout token skipping',
+    });
+    while (this.match(TokenType.Newline, TokenType.Indent, TokenType.Dedent)) {
+      guard();
+      // Skip formatting-only layout tokens outside indentation-sensitive blocks.
+    }
+  }
+
   private synchronize(): void {
     this.advance();
 
@@ -1173,7 +1248,7 @@ export class FCSParser {
       if (this.previous().type === TokenType.Semicolon) return;
       if (this.previous().type === TokenType.Newline) return;
 
-      if (this.checkKeyword('if', 'for', 'while', 'let', 'const', 'func', 'function', 'class', 'return')) {
+      if (this.checkKeyword('if', 'for', 'repeat', 'while', 'let', 'const', 'def', 'func', 'function', 'class', 'test', 'return')) {
         return;
       }
 

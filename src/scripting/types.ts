@@ -98,7 +98,7 @@ export const FCS_KEYWORDS = new Set([
   'switch', 'case', 'default', 'do', 'until',
 
   // Declarations
-  'let', 'const', 'var', 'func', 'function', 'class', 'struct', 'enum', 'namespace',
+  'let', 'const', 'var', 'def', 'func', 'function', 'class', 'struct', 'enum', 'namespace',
 
   // Types
   'int', 'float', 'string', 'bool', 'array', 'dict', 'set', 'any', 'void',
@@ -122,7 +122,7 @@ export const FCS_KEYWORDS = new Set([
   'with', 'using', 'global', 'local', 'static', 'public', 'private', 'protected',
 
   // FileCommander specific
-  'editor', 'file', 'panel', 'command', 'test', 'assert', 'expect',
+  'editor', 'file', 'panel', 'command', 'test', 'assert', 'expect', 'repeat',
   'select', 'cursor', 'view', 'window', 'dialog',
 ]);
 
@@ -297,6 +297,12 @@ export interface ForStmt extends AstNode {
   body: AstNode;
 }
 
+export interface RepeatStmt extends AstNode {
+  type: 'Repeat';
+  count: AstNode;
+  body: AstNode;
+}
+
 // From Buddy Script: C-style for loop
 export interface ForCStyleStmt extends AstNode {
   type: 'ForCStyle';
@@ -445,6 +451,10 @@ export interface CodeBuddyScriptConfig {
   verbose: boolean;
   /** Dry run mode - don't execute side effects */
   dryRun: boolean;
+  /** Execute test blocks. Defaults to true for FCS suite automation. */
+  runTests: boolean;
+  /** Maximum iterations for loops/range expansion. Defaults to 10000. */
+  maxLoopIterations: number;
   /** Variables to inject into script */
   variables?: Record<string, CodeBuddyValue>;
   /** AI agent instance for AI operations */
@@ -459,6 +469,8 @@ export const DEFAULT_SCRIPT_CONFIG: CodeBuddyScriptConfig = {
   enableFileOps: true,
   verbose: false,
   dryRun: false,
+  runTests: true,
+  maxLoopIterations: 10000,
 };
 
 // ============================================

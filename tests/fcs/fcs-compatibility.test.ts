@@ -202,4 +202,66 @@ describe('FCS Compatibility', () => {
       expect(result.output).toContain('xxx');
     });
   });
+
+  describe('NexusFile FCS suite contract', () => {
+    test('executes Python-style def, test, local variables, and range blocks', async () => {
+      const result = await executeFCS(`
+        def add(a, b):
+          temp = a + b
+          return temp
+
+        test "locals stay local":
+          inside = add(20, 22)
+          assert inside == 42
+
+        total = 0
+        for i in range(4):
+          total = total + i
+
+        print(add(total, 36))
+        print(defined("inside"))
+      `);
+
+      expect(result.success).toBe(true);
+      expect(result.output).toEqual(['42', 'false']);
+      expect(result.testResults).toEqual([{ name: 'locals stay local', passed: true }]);
+    });
+
+    test('executes repeat blocks and keeps loop counters local', async () => {
+      const result = await executeFCS(`
+        count = 0
+        repeat 3:
+          count = count + 1
+
+        print(count)
+        print(defined("i"))
+        print(defined("_"))
+      `);
+
+      expect(result.success).toBe(true);
+      expect(result.output).toEqual(['3', 'false', 'false']);
+    });
+
+    test('reports runtime assertion failures through executeFCS', async () => {
+      const result = await executeFCS(`
+        test "fails":
+          assert false, "expected failure"
+      `);
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('1 FCS test(s) failed');
+      expect(result.testResults).toEqual([
+        { name: 'fails', passed: false, error: 'expected failure' },
+      ]);
+    });
+
+    test('bounds range expansion for suite scripts', async () => {
+      const result = await executeFCS('print(len(range(5)))', {
+        maxLoopIterations: 3,
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('range() exceeded maxLoopIterations (3)');
+    });
+  });
 });

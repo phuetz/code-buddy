@@ -133,8 +133,16 @@ export function createBuiltins(config: CodeBuddyScriptConfig, print: PrintFn): B
     else if (args.length >= 3) { start = args[0] ?? 0; end = args[1] ?? 0; step = args[2] ?? 1; }
 
     const result: number[] = [];
-    if (step > 0) { for (let i = start; i < end; i += step) result.push(i); }
-    else if (step < 0) { for (let i = start; i > end; i += step) result.push(i); }
+    const maxItems = Math.max(1, Math.floor(Number(config.maxLoopIterations)) || 10000);
+    const pushBounded = (value: number) => {
+      if (result.length >= maxItems) {
+        throw new Error(`range() exceeded maxLoopIterations (${maxItems})`);
+      }
+      result.push(value);
+    };
+
+    if (step > 0) { for (let i = start; i < end; i += step) pushBounded(i); }
+    else if (step < 0) { for (let i = start; i > end; i += step) pushBounded(i); }
     return result;
   };
 
