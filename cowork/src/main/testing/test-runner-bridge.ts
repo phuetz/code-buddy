@@ -562,6 +562,7 @@ export class TestRunnerBridge extends EventEmitter {
             'tests/mission-heartbeat-recovery.test.ts',
             'tests/mission-scheduler.test.ts',
             'tests/mission-renderer-events.test.ts',
+            'tests/mission-ipc.test.ts',
             'tests/mission-board-panel.test.tsx',
             'tests/mission-board-surface.test.ts',
             '--reporter=verbose',
@@ -577,6 +578,7 @@ export class TestRunnerBridge extends EventEmitter {
           path.join(coworkDir, 'tests', 'mission-heartbeat-recovery.test.ts'),
           path.join(coworkDir, 'tests', 'mission-scheduler.test.ts'),
           path.join(coworkDir, 'tests', 'mission-renderer-events.test.ts'),
+          path.join(coworkDir, 'tests', 'mission-ipc.test.ts'),
           path.join(coworkDir, 'tests', 'mission-board-panel.test.tsx'),
           path.join(coworkDir, 'tests', 'mission-board-surface.test.ts'),
         ]

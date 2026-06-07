@@ -71,10 +71,17 @@ import type {
   DesktopSnapshotCaptureOptions,
   DesktopSnapshotCaptureResult,
   DesktopSnapshotMethod,
+  MissionRuntime,
   VoiceConversationEvent,
   VoiceConversationSnapshot,
 } from '../renderer/types';
 import type { DiagnosticInput, DiagnosticResult } from '../renderer/types';
+import type {
+  MissionCreateInput,
+  MissionFilter,
+  MissionStatus,
+  SubTask,
+} from '../main/missions/mission-types';
 import type {
   McpServerConfig,
   McpTool,
@@ -1224,6 +1231,36 @@ contextBridge.exposeInMainWorld('electronAPI', {
     setActive: (id: string | null): Promise<Project | null> =>
       ipcRenderer.invoke('project.setActive', id),
     getActive: (): Promise<Project | null> => ipcRenderer.invoke('project.getActive'),
+  },
+
+  missions: {
+    list: (filter?: MissionFilter): Promise<{ ok: boolean; missions: MissionRuntime[]; error?: string }> =>
+      ipcRenderer.invoke('mission.list', filter),
+    get: (
+      missionId: string
+    ): Promise<{ ok: boolean; mission: MissionRuntime | null; error?: string }> =>
+      ipcRenderer.invoke('mission.get', missionId),
+    create: (
+      input: MissionCreateInput
+    ): Promise<{ ok: boolean; mission: MissionRuntime | null; error?: string }> =>
+      ipcRenderer.invoke('mission.create', input),
+    updateStatus: (
+      missionId: string,
+      status: MissionStatus
+    ): Promise<{ ok: boolean; mission: MissionRuntime | null; error?: string }> =>
+      ipcRenderer.invoke('mission.updateStatus', { missionId, status }),
+    cancel: (
+      missionId: string
+    ): Promise<{ ok: boolean; mission: MissionRuntime | null; error?: string }> =>
+      ipcRenderer.invoke('mission.cancel', missionId),
+    readySubTasks: (
+      missionId: string
+    ): Promise<{ ok: boolean; subTasks: SubTask[]; error?: string }> =>
+      ipcRenderer.invoke('mission.readySubTasks', missionId),
+    tickHeartbeat: (
+      now?: string
+    ): Promise<{ ok: boolean; missions: MissionRuntime[]; error?: string }> =>
+      ipcRenderer.invoke('mission.tickHeartbeat', now),
   },
 
   // Sub-agents (Claude Cowork parity)
@@ -4638,6 +4675,36 @@ declare global {
         delete: (id: string) => Promise<boolean>;
         setActive: (id: string | null) => Promise<Project | null>;
         getActive: () => Promise<Project | null>;
+      };
+      missions: {
+        list: (filter?: MissionFilter) => Promise<{
+          ok: boolean;
+          missions: MissionRuntime[];
+          error?: string;
+        }>;
+        get: (missionId: string) => Promise<{
+          ok: boolean;
+          mission: MissionRuntime | null;
+          error?: string;
+        }>;
+        create: (input: MissionCreateInput) => Promise<{
+          ok: boolean;
+          mission: MissionRuntime | null;
+          error?: string;
+        }>;
+        updateStatus: (
+          missionId: string,
+          status: MissionStatus
+        ) => Promise<{ ok: boolean; mission: MissionRuntime | null; error?: string }>;
+        cancel: (
+          missionId: string
+        ) => Promise<{ ok: boolean; mission: MissionRuntime | null; error?: string }>;
+        readySubTasks: (
+          missionId: string
+        ) => Promise<{ ok: boolean; subTasks: SubTask[]; error?: string }>;
+        tickHeartbeat: (
+          now?: string
+        ) => Promise<{ ok: boolean; missions: MissionRuntime[]; error?: string }>;
       };
       subAgent: {
         list: () => Promise<Array<Record<string, unknown>>>;

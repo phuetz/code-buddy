@@ -52,6 +52,7 @@ import { registerChannelsIpcHandlers } from './ipc/channels-ipc';
 import { registerUserModelIpcHandlers } from './ipc/user-model-ipc';
 import { registerCompanionIpcHandlers } from './ipc/companion-ipc';
 import { registerDesktopSnapshotIpcHandlers } from './ipc/desktop-snapshot-ipc';
+import { registerMissionIpcHandlers } from './ipc/mission-ipc';
 import { registerSpecIpcHandlers } from './ipc/spec-ipc';
 import { registerSpecNextIpcHandlers } from './ipc/spec-next-ipc';
 import { registerSkillsHubIpcHandlers } from './ipc/skills-ipc';
@@ -95,6 +96,7 @@ import { getGitBridge } from './git/git-bridge';
 import { getModelCapabilities } from './config/model-capability-bridge';
 import { TemplateService } from './project/template-service';
 import { WorkflowBridge } from './workflows/workflow-bridge';
+import { MissionBridge } from './missions/mission-bridge';
 import {
   VoiceConversationSession,
   type VoiceConversationEvent,
@@ -346,6 +348,7 @@ let globalSearchService: GlobalSearchService | null = null;
 let previewService: PreviewService | null = null;
 let templateService: TemplateService | null = null;
 let workflowBridge: WorkflowBridge | null = null;
+let missionBridge: MissionBridge | null = null;
 let voiceConversation: VoiceConversationSession | null = null;
 let voiceBridge: VoiceBridge | null = null;
 let ttsBridge: TTSBridge | null = null;
@@ -1714,6 +1717,12 @@ app
     workflowBridge = new WorkflowBridge();
     workflowBridge.setSendToRenderer(sendToRenderer);
 
+    // Mission Orchestrator — pure bridge, surfaced through mission.* IPC.
+    missionBridge = new MissionBridge({ sendToRenderer });
+    void missionBridge.init().catch((err) => {
+      logError('[MissionBridge] init failed:', err);
+    });
+
     // Voice bridge — lazy-spawned faster-whisper worker. The model is
     // loaded on first transcription, not at boot, so cold-start UX is
     // unaffected if the user never clicks the mic.
@@ -2492,6 +2501,7 @@ registerChannelsIpcHandlers();
 registerMobileSupervisionIpcHandlers();
 registerCompanionIpcHandlers(() => projectManager);
 registerDesktopSnapshotIpcHandlers();
+registerMissionIpcHandlers(() => missionBridge);
 registerSpecIpcHandlers(() => projectManager, configStore);
 registerSpecNextIpcHandlers(() => projectManager);
 registerProfilesIpcHandlers();
