@@ -7,7 +7,7 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { AlertTriangle, CheckCircle2, ClipboardList, Clock3, ListChecks, Loader2, Play, RefreshCw, X } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, ClipboardList, Clock3, ListChecks, Loader2, Play, Plus, RefreshCw, X } from 'lucide-react';
 import { useAppStore } from '../store';
 import { dialogA11yProps, trapFocus } from '../utils/a11y';
 import type {
@@ -105,6 +105,9 @@ export function MissionBoardPanel({ onClose }: MissionBoardPanelProps) {
   const [runResult, setRunResult] = useState<CompanionMissionRunResult | null>(null);
   const [readySubTasksByMission, setReadySubTasksByMission] = useState<Record<string, RuntimeSubTask[]>>({});
   const [readySubTaskLoadingId, setReadySubTaskLoadingId] = useState<string | null>(null);
+  const [runtimeDraftTitle, setRuntimeDraftTitle] = useState('');
+  const [runtimeDraftDescription, setRuntimeDraftDescription] = useState('');
+  const [creatingRuntimeMission, setCreatingRuntimeMission] = useState(false);
   const [loading, setLoading] = useState(true);
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -236,6 +239,37 @@ export function MissionBoardPanel({ onClose }: MissionBoardPanelProps) {
     }
   }, []);
 
+  const createRuntimeMission = useCallback(async () => {
+    const api = getMissionRuntimeApi();
+    const title = runtimeDraftTitle.trim();
+    const description = runtimeDraftDescription.trim();
+    if (!title) {
+      setError('Mission title is required.');
+      return;
+    }
+    if (!api) {
+      setError('Mission runtime bridge is not available.');
+      return;
+    }
+
+    setCreatingRuntimeMission(true);
+    setError(null);
+    try {
+      const result = await api.create({
+        title,
+        ...(description ? { description } : {}),
+      });
+      if (!result.ok || !result.mission) throw new Error(result.error ?? 'Mission creation failed.');
+      upsertMissionRuntime(result.mission);
+      setRuntimeDraftTitle('');
+      setRuntimeDraftDescription('');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setCreatingRuntimeMission(false);
+    }
+  }, [runtimeDraftDescription, runtimeDraftTitle, upsertMissionRuntime]);
+
   const progress = missionProgress(missions);
   const activeCount = missions.filter((mission) => mission.status === 'in_progress').length;
   const openCount = missions.filter((mission) => mission.status === 'open').length;
@@ -344,6 +378,39 @@ export function MissionBoardPanel({ onClose }: MissionBoardPanelProps) {
         ) : null}
 
         <div className="flex-1 overflow-auto px-4 py-3">
+          <section className="mb-3 rounded border border-border-muted bg-surface/25 p-3" data-testid="mission-runtime-create">
+            <div className="grid grid-cols-1 gap-2 md:grid-cols-[minmax(180px,1fr)_minmax(220px,1.4fr)_auto]">
+              <input
+                className="rounded border border-border bg-background px-2.5 py-1.5 text-xs text-text-primary placeholder:text-text-muted"
+                data-testid="mission-runtime-create-title"
+                onChange={(event) => setRuntimeDraftTitle(event.currentTarget.value)}
+                placeholder={t('missionBoard.runtime.createTitle', 'Mission title')}
+                type="text"
+                value={runtimeDraftTitle}
+              />
+              <input
+                className="rounded border border-border bg-background px-2.5 py-1.5 text-xs text-text-primary placeholder:text-text-muted"
+                data-testid="mission-runtime-create-description"
+                onChange={(event) => setRuntimeDraftDescription(event.currentTarget.value)}
+                placeholder={t('missionBoard.runtime.createDescription', 'Description')}
+                type="text"
+                value={runtimeDraftDescription}
+              />
+              <button
+                className="inline-flex items-center justify-center gap-1.5 rounded bg-accent px-2.5 py-1.5 text-xs font-medium text-white hover:bg-accent/90 disabled:opacity-50"
+                data-testid="mission-runtime-create-submit"
+                disabled={creatingRuntimeMission}
+                onClick={() => void createRuntimeMission()}
+                type="button"
+              >
+                {creatingRuntimeMission ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
+                {creatingRuntimeMission
+                  ? t('missionBoard.runtime.creating', 'Creating...')
+                  : t('missionBoard.runtime.create', 'Create')}
+              </button>
+            </div>
+          </section>
+
           {runtimeMissions.length > 0 ? (
             <section
               className="mb-3 rounded border border-border-muted bg-surface/30 p-3"

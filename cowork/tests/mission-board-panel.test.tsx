@@ -327,6 +327,80 @@ describe('MissionBoardPanel', () => {
     );
   });
 
+  it('creates a MissionBridge runtime mission from the board', async () => {
+    const createdMission = runtimeMission({
+      id: 'runtime-created',
+      title: 'Draft a runtime mission',
+      description: 'Created through the Mission Board.',
+      status: MissionStatus.Planning,
+      subTasks: [],
+      progress: 0,
+    });
+    const listMissions = vi.fn().mockResolvedValue({ ok: true, board: board([]), items: [] });
+    const listRuntimeMissions = vi.fn().mockResolvedValue({ ok: true, missions: [] });
+    const createRuntimeMission = vi.fn().mockResolvedValue({ ok: true, mission: createdMission });
+    const updateMission = vi.fn();
+    const syncMissions = vi.fn();
+    const runNextMission = vi.fn();
+
+    (
+      window as unknown as {
+        electronAPI?: {
+          companion: {
+            listMissions: typeof listMissions;
+            runNextMission: typeof runNextMission;
+            syncMissions: typeof syncMissions;
+            updateMission: typeof updateMission;
+          };
+          missions: {
+            list: typeof listRuntimeMissions;
+            create: typeof createRuntimeMission;
+          };
+        };
+      }
+    ).electronAPI = {
+      companion: { listMissions, runNextMission, syncMissions, updateMission },
+      missions: { list: listRuntimeMissions, create: createRuntimeMission },
+    };
+
+    const target = container();
+    root = createRoot(target);
+    await act(async () => {
+      root?.render(React.createElement(MissionBoardPanel, { onClose: () => {} }));
+      await flush();
+    });
+
+    const title = target.querySelector('[data-testid="mission-runtime-create-title"]') as HTMLInputElement;
+    const description = target.querySelector(
+      '[data-testid="mission-runtime-create-description"]'
+    ) as HTMLInputElement;
+    const submit = target.querySelector('[data-testid="mission-runtime-create-submit"]') as HTMLButtonElement;
+
+    await act(async () => {
+      title.value = 'Draft a runtime mission';
+      description.value = 'Created through the Mission Board.';
+      Simulate.change(title);
+      Simulate.change(description);
+      await flush();
+    });
+    await act(async () => {
+      Simulate.click(submit);
+      await flush();
+    });
+
+    expect(createRuntimeMission).toHaveBeenCalledWith({
+      title: 'Draft a runtime mission',
+      description: 'Created through the Mission Board.',
+    });
+    expect(useAppStore.getState().missionRuntime['runtime-created']).toMatchObject({
+      id: 'runtime-created',
+      title: 'Draft a runtime mission',
+    });
+    expect(target.querySelector('[data-testid="mission-runtime-card-runtime-created"]')?.textContent).toContain(
+      'Draft a runtime mission'
+    );
+  });
+
   it('inspects ready runtime sub-tasks through the MissionBridge IPC', async () => {
     const liveMission = runtimeMission();
     const readyTask = {
