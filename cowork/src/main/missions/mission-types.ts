@@ -116,7 +116,10 @@ export interface MissionCreateInput {
   title: string;
   description?: string;
   /** Optional seed sub-tasks (e.g. from an LLM decomposition step). */
-  subTasks?: Array<Omit<SubTask, 'status' | 'progress'> & Partial<Pick<SubTask, 'status' | 'progress'>>>;
+  subTasks?: Array<
+    Omit<SubTask, 'id' | 'status' | 'progress'> &
+      Partial<Pick<SubTask, 'id' | 'status' | 'progress'>>
+  >;
   /** Optional starting status (defaults to {@link MissionStatus.Planning}). */
   status?: MissionStatus;
 }
