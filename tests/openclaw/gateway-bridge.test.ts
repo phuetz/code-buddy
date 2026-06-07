@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'fs/promises';
+import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'fs/promises';
 import { createServer, type Server } from 'http';
 import * as os from 'os';
 import * as path from 'path';
@@ -777,12 +777,16 @@ describe('OpenClaw gateway bridge compatibility', () => {
         nodeId: 'validation-node',
         token: 'oc_upstream_validation_node_secret',
       }, null, 2), 'utf8');
+      const openclawBin = path.join(tempDir, 'openclaw');
+      await writeFile(openclawBin, '#!/usr/bin/env sh\nexit 0\n', 'utf8');
+      await chmod(openclawBin, 0o755);
       let id = 0;
 
       const result = await validateOpenClawUpstreamCompatibility({
         approvedBy: 'Patrice',
         dryRun: false,
         liveValidationConfirmed: true,
+        openclawBinaryPath: openclawBin,
         timeoutMs: 2000,
       }, {
         home: openclawHome,
@@ -800,6 +804,7 @@ describe('OpenClaw gateway bridge compatibility', () => {
         secretsIncluded: false,
       });
       expect(result.checks.map((check) => [check.name, check.status])).toEqual([
+        ['openclaw-cli', 'passed'],
         ['gateway-lockfile', 'passed'],
         ['websocket-endpoint', 'passed'],
         ['node-lockfile', 'passed'],

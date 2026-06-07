@@ -1,4 +1,5 @@
-import { appendFile, mkdir, readFile, writeFile } from 'fs/promises';
+import { constants as fsConstants } from 'fs';
+import { access, appendFile, mkdir, readFile, writeFile } from 'fs/promises';
 import * as os from 'os';
 import * as path from 'path';
 import { randomUUID } from 'crypto';
@@ -468,6 +469,7 @@ export interface OpenClawUpstreamValidationInput {
   dryRun?: boolean;
   includePendingNodes?: boolean;
   liveValidationConfirmed?: boolean;
+  openclawBinaryPath?: string;
   statusMethod?: string;
   timeoutMs?: number;
 }
@@ -778,6 +780,33 @@ function responsePayloadFromFrame(frame: Record<string, unknown>): unknown {
   if ('payload' in frame) return frame.payload;
   if ('result' in frame) return frame.result;
   if ('data' in frame) return frame.data;
+  return undefined;
+}
+
+async function executableExists(filePath: string): Promise<boolean> {
+  try {
+    await access(filePath, fsConstants.X_OK);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function findOpenClawBinary(explicitPath?: string): Promise<string | undefined> {
+  const trimmed = explicitPath?.trim();
+  if (trimmed) return await executableExists(trimmed) ? path.resolve(trimmed) : undefined;
+  const pathValue = process.env.PATH || '';
+  const extensions = process.platform === 'win32'
+    ? (process.env.PATHEXT || '.EXE;.CMD;.BAT;.COM').split(';').filter(Boolean)
+    : [''];
+  for (const directory of pathValue.split(path.delimiter).filter(Boolean)) {
+    for (const extension of extensions) {
+      const candidate = path.join(directory, `openclaw${extension.toLowerCase()}`);
+      if (await executableExists(candidate)) return candidate;
+      const originalCase = path.join(directory, `openclaw${extension}`);
+      if (originalCase !== candidate && await executableExists(originalCase)) return originalCase;
+    }
+  }
   return undefined;
 }
 
@@ -1881,9 +1910,16 @@ export async function validateOpenClawUpstreamCompatibility(
   const now = options.now || new Date();
   const discovery = await discoverOpenClawGateway({ ...options, cwd, now });
   const nodeLockfilePath = getOpenClawNodeLockfilePath(options);
+  const openclawBinaryPath = await findOpenClawBinary(input.openclawBinaryPath);
   const dryRun = input.dryRun !== false;
   const approvedBy = input.approvedBy?.trim();
   const checks: OpenClawUpstreamValidationCheck[] = [
+    {
+      name: 'openclaw-cli',
+      ok: Boolean(openclawBinaryPath),
+      status: openclawBinaryPath ? 'passed' : 'preview',
+      detail: openclawBinaryPath || 'OpenClaw CLI binary was not found on PATH; gateway validation can still run against an existing daemon',
+    },
     {
       name: 'gateway-lockfile',
       ok: discovery.found,

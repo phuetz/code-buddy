@@ -2207,6 +2207,7 @@ interface HermesClawBridgeOptions extends HermesCommandOptions {
   approvedBy?: string;
   endpointPath?: string;
   nodeLockfile?: string;
+  openclawBin?: string;
   params?: string;
   statusMethod?: string;
   timeoutMs?: string;
@@ -2532,6 +2533,7 @@ function registerHermesClawCommands(hermes: Command): void {
     .option('--workspace-target <path>', 'workspace for bridge artifacts (default: cwd)')
     .option('--status-method <method>', 'OpenClaw status RPC method to call after hello-ok', 'status')
     .option('--timeout-ms <ms>', 'WebSocket validation timeout', '5000')
+    .option('--openclaw-bin <path>', 'OpenClaw CLI binary path used for local install evidence')
     .option('--skip-pending-nodes', 'skip the nodes.pending read-only validation call')
     .option('--approved-by <name>', 'operator approving live upstream validation')
     .option('--apply', 'contact the OpenClaw Gateway WebSocket (otherwise dry-run)')
@@ -2544,6 +2546,7 @@ function registerHermesClawCommands(hermes: Command): void {
         dryRun: options.apply !== true,
         includePendingNodes: options.skipPendingNodes !== true,
         liveValidationConfirmed: options.apply === true && options.yes === true,
+        openclawBinaryPath: options.openclawBin,
         statusMethod: options.statusMethod,
         timeoutMs: Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : 5000,
       }, {

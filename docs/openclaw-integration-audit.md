@@ -119,10 +119,12 @@ Buddy. The current integration is selective:
   stdout/logs never echo pairing codes, gateway tokens or raw daemon payloads.
 - The CLI now includes `buddy hermes claw bridge validate-upstream`, a read-only
   certification checklist for real OpenClaw daemons. It previews by default and,
-  with explicit approval, runs discovery, WebSocket status, and `nodes.pending`
-  while storing only redacted summaries. It is fixture-tested locally; it still
-  needs to be executed against an upstream daemon binary before this audit can
-  claim upstream certification.
+  with explicit approval, verifies local `openclaw` binary evidence, discovery,
+  WebSocket status, and `nodes.pending` while storing only redacted summaries.
+  It is aligned with the official OpenClaw CLI reference for `gateway
+  status|probe|call` and `nodes pending|approve`, and fixture-tested locally; it
+  still needs to be executed against an upstream daemon binary before this audit
+  can claim upstream certification.
 - Discovery now also reads the OpenClaw-documented node host lockfile
   `~/.openclaw/node.json`, surfaces only node id, display name, gateway
   host/port and capabilities, and keeps the node pairing token out of CLI JSON
@@ -145,7 +147,7 @@ for Code Buddy's next architecture moves.
 
 | Area | Files | Current status | Evidence | Next action |
 |---|---|---:|---|---|
-| OpenClaw facade | `src/openclaw/index.ts`, `src/openclaw/gateway-bridge.ts` | Native facade plus local OpenClaw gateway compatibility adapter | Exports native modules plus `discoverOpenClawGateway`, `buildOpenClawNodeDescriptor`, `prepareOpenClawFleetHandoffDraft`, `buildOpenClawResponsePreview`, `probeOpenClawGatewayWebSocket`, `validateOpenClawUpstreamCompatibility`, `attachOpenClawGateway`, and `sendOpenClawResponse`. Covered by `tests/openclaw/gateway-bridge.test.ts`, including secret-safe `gateway.json`/`node.json` discovery, real local HTTP/WebSocket contract fixtures for live probe/attach/send paths, and the read-only upstream validation checklist. | Run `buddy hermes claw bridge validate-upstream --apply --yes --approved-by ...` against an upstream OpenClaw daemon binary before claiming full upstream compatibility. |
+| OpenClaw facade | `src/openclaw/index.ts`, `src/openclaw/gateway-bridge.ts` | Native facade plus local OpenClaw gateway compatibility adapter | Exports native modules plus `discoverOpenClawGateway`, `buildOpenClawNodeDescriptor`, `prepareOpenClawFleetHandoffDraft`, `buildOpenClawResponsePreview`, `probeOpenClawGatewayWebSocket`, `validateOpenClawUpstreamCompatibility`, `attachOpenClawGateway`, and `sendOpenClawResponse`. Covered by `tests/openclaw/gateway-bridge.test.ts`, including secret-safe `gateway.json`/`node.json` discovery, real local HTTP/WebSocket contract fixtures for live probe/attach/send paths, and the read-only upstream validation checklist with OpenClaw binary detection. | Run `buddy hermes claw bridge validate-upstream --openclaw-bin "$(command -v openclaw)" --apply --yes --approved-by ...` against an upstream OpenClaw daemon binary before claiming full upstream compatibility. |
 | Enterprise module bootstrap | `src/config/toml-config.ts`, `src/openclaw/index.ts` | Intentionally deferred | Config comments list 5/6 modules as deferred due conflicts: policy, hooks, compaction, retry, semantic memory. | Do not enable globally. Migrate one module at a time only after conflict analysis. |
 | Plugin conflict detector | `src/plugins/conflict-detection.ts`, `src/plugins/plugin-manager.ts` | Active | `PluginManager.loadPlugin()` imports `getPluginConflictDetector()` and blocks conflicting plugins before registration. Covered by `tests/plugins/plugin-conflict-detector.test.ts`. | Keep. Useful safety win with low architectural risk. |
 | Daily reset | `src/daemon/daily-reset.ts`, `src/agent/codebuddy-agent.ts`, `src/commands/handlers/daily-reset-handler.ts` | Active opt-in | Boot auto-starts when `[daily_reset].enabled=true`; slash handler can start/stop manually. | Keep as operational support for long-running autonomous sessions. |

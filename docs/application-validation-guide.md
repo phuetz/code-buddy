@@ -457,10 +457,11 @@ The node pairing proof mirrors OpenClaw's pending/approve workflow through
 `nodes-pending` and `node-approve`; it stores only redacted request metadata and
 safe response summaries, never pairing codes, tokens, or raw daemon payloads.
 The upstream validation proof adds `bridge validate-upstream`, a read-only
-checklist that previews by default and, with explicit approval, runs discovery,
-WebSocket status probe, and `nodes.pending` against a configured daemon while
-recording only redacted summaries. In this environment it is fixture-validated;
-run it against a real OpenClaw daemon before claiming upstream certification.
+checklist that previews by default and, with explicit approval, verifies the
+local `openclaw` CLI binary evidence, discovery, WebSocket status probe, and
+`nodes.pending` against a configured daemon while recording only redacted
+summaries. In this environment it is fixture-validated; run it against a real
+OpenClaw daemon before claiming upstream certification.
 The node-host discovery proof reads OpenClaw's documented `~/.openclaw/node.json`
 shape, reports node id/display name/gateway host/port/capabilities, and keeps
 the node pairing token out of CLI JSON and logs.

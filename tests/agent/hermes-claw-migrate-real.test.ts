@@ -576,6 +576,9 @@ describe('hermes claw migrate (real)', () => {
       nodeId: 'cli-validation-node',
       token: 'oc_cli_validate_node_secret_fixture',
     });
+    const openclawBin = path.join(tmp, 'openclaw');
+    fs.writeFileSync(openclawBin, '#!/usr/bin/env sh\nexit 0\n');
+    fs.chmodSync(openclawBin, 0o755);
     const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
     try {
       const program = new Command();
@@ -594,6 +597,8 @@ describe('hermes claw migrate (real)', () => {
         openclaw,
         '--workspace-target',
         target,
+        '--openclaw-bin',
+        openclawBin,
         '--json',
       ]);
 
@@ -603,6 +608,10 @@ describe('hermes claw migrate (real)', () => {
       expect(payload.ok).toBe(true);
       expect(payload.status).toBe('preview');
       expect(payload.safety.networkContacted).toBe(false);
+      expect(payload.checks).toContainEqual(expect.objectContaining({
+        name: 'openclaw-cli',
+        status: 'passed',
+      }));
       expect(payload.checks.map((check: { name: string }) => check.name)).toContain('websocket-probe');
       expect(output).not.toContain('oc_cli_validate_upstream_secret_fixture');
       expect(output).not.toContain('oc_cli_validate_node_secret_fixture');
