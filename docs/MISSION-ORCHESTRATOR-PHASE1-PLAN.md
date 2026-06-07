@@ -17,8 +17,10 @@ vitest):
 | `cowork/src/main/missions/mission-store.ts` | JSON persistence, one file per mission under a configurable base dir (default `~/.codebuddy/missions/`). Atomic write = unique-temp + rename (survives concurrent saves). `save/load/list/loadAll/remove`. Injectable `baseDir` + `fs` + `tempSuffix`. No `electron` import. |
 | `cowork/src/main/missions/mission-manager.ts` | `EventEmitter` over the store: `init/createMission/getMission/listMissions/addSubTask/updateSubTaskStatus/recomputeProgress/updateStatus/recordEvent/cancel/addUsage/removeMission`. Emits `mission:created` \| `mission:updated` \| `mission:event`. Injectable clock + id factory. |
 | `cowork/src/main/missions/mission-scheduler.ts` | Pure DAG scheduler. `readySubTasks(mission)` returns pending sub-tasks whose dependencies are satisfied, with blocker diagnostics for the future Mission Board. No execution, timers, IPC or Electron. |
+| `cowork/src/main/missions/mission-bridge.ts` | Pure main-process wrapper over the manager. Streams `mission.*` events through an injected sender, applies boot recovery, exposes `readySubTasks`, and drives heartbeat ticks without importing Electron or registering IPC. |
 | `cowork/tests/mission-core.test.ts` | 18 vitest tests: create→persist→reload from a fresh store, progress recompute (incl. zero-subtask), status transitions + reload, cancel, event-log append + emitter signals, atomic-write under 50 concurrent saves, corrupt-file tolerance. |
 | `cowork/tests/mission-scheduler.test.ts` | Scheduler tests for ready roots, completed dependencies, blocked missing/running/failed/skipped dependencies, non-schedulable mission statuses, blocker diagnostics and the optional skipped-as-satisfied mode. |
+| `cowork/tests/mission-bridge.test.ts` | Bridge tests for server-event translation, boot recovery streaming, ready-subtask exposure and heartbeat ticks without execution dispatch. |
 
 `recomputeProgress` = `round(completed / total * 100)`, zero sub-tasks → `0`.
 
@@ -220,8 +222,9 @@ The core deliberately makes **no** LLM calls and **no** bridge calls. The
 
 ### Phase-1 wiring checklist
 
-- [ ] `MissionBridge` (`cowork/src/main/missions/mission-bridge.ts`) owning the
-      manager + `sendToRenderer` subscription + decomposition/execution glue.
+- [x] `MissionBridge` (`cowork/src/main/missions/mission-bridge.ts`) owning the
+      manager + `sendToRenderer` subscription, boot recovery, ready-subtask
+      planning and heartbeat ticks. Decomposition/execution glue remains TODO.
 - [ ] `mission.*` `ipcMain.handle` block in `index.ts` (next to `workflow.*`).
 - [ ] `mission` preload namespace + `ServerEvent` union variants + `useIPC`
       cases + store slice.

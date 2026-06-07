@@ -197,6 +197,7 @@ function makeWorkspace(): string {
   writeFileSync(path.join(coworkDir, 'tests', 'slash-command-bridge-remote.test.ts'), '');
   writeFileSync(path.join(coworkDir, 'tests', 'open-cowork-demo-parity.test.ts'), '');
   writeFileSync(path.join(coworkDir, 'tests', 'mission-core.test.ts'), '');
+  writeFileSync(path.join(coworkDir, 'tests', 'mission-bridge.test.ts'), '');
   writeFileSync(path.join(coworkDir, 'tests', 'mission-heartbeat-recovery.test.ts'), '');
   writeFileSync(path.join(coworkDir, 'tests', 'mission-scheduler.test.ts'), '');
   writeFileSync(path.join(coworkDir, 'tests', 'mission-board-panel.test.tsx'), '');
@@ -1054,6 +1055,7 @@ describe('TestRunnerBridge catalog', () => {
     expect(catalog.find((item) => item.label === 'Cowork / autonomous mission board')?.args).toEqual(
       expect.arrayContaining([
         'tests/mission-core.test.ts',
+        'tests/mission-bridge.test.ts',
         'tests/mission-heartbeat-recovery.test.ts',
         'tests/mission-scheduler.test.ts',
         'tests/mission-board-panel.test.tsx',

@@ -558,6 +558,7 @@ export class TestRunnerBridge extends EventEmitter {
             'vitest',
             'run',
             'tests/mission-core.test.ts',
+            'tests/mission-bridge.test.ts',
             'tests/mission-heartbeat-recovery.test.ts',
             'tests/mission-scheduler.test.ts',
             'tests/mission-board-panel.test.tsx',
@@ -571,6 +572,7 @@ export class TestRunnerBridge extends EventEmitter {
         },
         [
           path.join(coworkDir, 'tests', 'mission-core.test.ts'),
+          path.join(coworkDir, 'tests', 'mission-bridge.test.ts'),
           path.join(coworkDir, 'tests', 'mission-heartbeat-recovery.test.ts'),
           path.join(coworkDir, 'tests', 'mission-scheduler.test.ts'),
           path.join(coworkDir, 'tests', 'mission-board-panel.test.tsx'),
