@@ -167,6 +167,48 @@ describe('FleetColabStore', () => {
     });
   });
 
+  describe('dependencies (DAG)', () => {
+    it('a task with unmet dependencies is not claimable', () => {
+      seedTasks([
+        { id: 'parent', title: 'p', status: 'open', priority: 'high', claimedBy: null },
+        { id: 'child', title: 'c', status: 'open', priority: 'high', claimedBy: null, dependsOn: ['parent'] },
+      ]);
+      expect(store.nextClaimable()?.id).toBe('parent');
+      expect(() => store.claim('child')).toThrow(/unmet dependencies: parent/);
+    });
+
+    it('the child becomes claimable once the parent is completed', () => {
+      seedTasks([
+        { id: 'parent', title: 'p', status: 'open', priority: 'low', claimedBy: null },
+        { id: 'child', title: 'c', status: 'open', priority: 'high', claimedBy: null, dependsOn: ['parent'] },
+      ]);
+      expect(store.nextClaimable()?.id).toBe('parent'); // child (high) is blocked
+      store.claim('parent');
+      store.completeTask('parent', { summary: 'done' });
+      expect(store.nextClaimable()?.id).toBe('child'); // now unblocked
+      expect(store.claim('child').status).toBe('in_progress');
+    });
+
+    it('treats a missing dependency id as unmet', () => {
+      seedTasks([{ id: 'child', title: 'c', status: 'open', priority: 'high', claimedBy: null, dependsOn: ['ghost'] }]);
+      expect(store.nextClaimable()).toBeNull();
+      expect(store.unmetDependencies({ dependsOn: ['ghost'] }, store.listTasks())).toEqual(['ghost']);
+    });
+
+    it('link/unlink edges, rejecting self-links and unknown deps', () => {
+      seedTasks([
+        { id: 'a', title: 'a', status: 'open', priority: 'high', claimedBy: null },
+        { id: 'b', title: 'b', status: 'open', priority: 'high', claimedBy: null },
+      ]);
+      expect(store.link('b', 'a').dependsOn).toEqual(['a']);
+      expect(() => store.claim('b')).toThrow(/unmet dependencies: a/);
+      expect(store.unlink('b', 'a')).toBe(true);
+      expect(store.unlink('b', 'a')).toBe(false);
+      expect(() => store.link('a', 'a')).toThrow(/cannot depend on itself/);
+      expect(() => store.link('a', 'ghost')).toThrow(/Unknown dependency/);
+    });
+  });
+
   describe('claim TTL / lease (reclaim a crashed agent)', () => {
     const claimedAt = new Date(5_000).toISOString();
     function seedInProgress(): void {

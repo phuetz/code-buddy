@@ -18,6 +18,7 @@ import {
   registerGroupCommands,
   registerAuthProfileCommands,
   registerGatewayPairingCommands,
+  registerFleetAutonomyCommands,
 } from '../../src/commands/cli/native-engine-commands';
 import { getHeartbeatEngine } from '../../src/daemon/heartbeat.js';
 import { resetAuthProfileManager } from '../../src/auth/profile-manager.js';
@@ -79,6 +80,21 @@ const mockPairingStore = {
 jest.mock('../../src/gateway/device-pairing.js', () => ({
   getGatewayPairingStore: jest.fn(function() { return mockPairingStore; }),
   isDeviceRole: jest.fn((v: string) => ['operator', 'node', 'control', 'webchat'].includes(v)),
+}));
+
+const mockColabStore = {
+  addTask: jest.fn(() => ({ id: 'task-1', priority: 'medium', dependsOn: undefined })),
+  link: jest.fn(() => ({ dependsOn: ['p'] })),
+  unlink: jest.fn(() => true),
+};
+
+jest.mock('../../src/fleet/colab-store.js', () => ({
+  FleetColabStore: jest.fn(function() { return mockColabStore; }),
+}));
+
+const mockCreateSwarm = jest.fn(() => ({ goal: 'g', workerIds: ['w-1', 'w-2'], verifierId: 'v-1', synthesizerId: 's-1' }));
+jest.mock('../../src/fleet/colab-swarm.js', () => ({
+  createSwarm: jest.fn((...args: unknown[]) => mockCreateSwarm(...args)),
 }));
 
 const mockIdentityManager = {
@@ -1066,6 +1082,43 @@ describe('Native Engine CLI Commands', () => {
   // ==========================================================================
   // Gateway Pairing Commands
   // ==========================================================================
+
+  describe('registerFleetAutonomyCommands', () => {
+    let program: Command;
+
+    beforeEach(() => {
+      program = createProgram();
+      registerFleetAutonomyCommands(program);
+    });
+
+    it('adds a task with dependencies', async () => {
+      await program.parseAsync(['node', 'test', 'autonomy', 'tasks', 'add', 'My task', '--priority', 'high', '--depends-on', 'a,b']);
+      expect(mockColabStore.addTask).toHaveBeenCalledWith(expect.objectContaining({ title: 'My task', priority: 'high', dependsOn: ['a', 'b'] }));
+      expect(getLogOutput()).toContain('Added task task-1');
+    });
+
+    it('creates a swarm graph (workers → verifier → synthesizer)', async () => {
+      await program.parseAsync(['node', 'test', 'autonomy', 'swarm', 'find bugs', '--worker', 'scan a', '--worker', 'scan b']);
+      expect(mockCreateSwarm).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+        goal: 'find bugs', workers: [{ title: 'scan a' }, { title: 'scan b' }],
+      }));
+      const out = getLogOutput();
+      expect(out).toContain('Swarm created');
+      expect(out).toContain('verifier: v-1');
+    });
+
+    it('requires at least one worker for a swarm', async () => {
+      await program.parseAsync(['node', 'test', 'autonomy', 'swarm', 'goal']);
+      expect(getErrorOutput()).toContain('At least one --worker is required');
+      expect(processExitSpy).toHaveBeenCalledWith(1);
+    });
+
+    it('links a dependency edge', async () => {
+      await program.parseAsync(['node', 'test', 'autonomy', 'link', 'child', 'parent']);
+      expect(mockColabStore.link).toHaveBeenCalledWith('child', 'parent');
+      expect(getLogOutput()).toContain('Linked: child depends on');
+    });
+  });
 
   describe('registerGatewayPairingCommands', () => {
     let program: Command;

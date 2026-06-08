@@ -55,6 +55,8 @@ export interface ColabTask {
   blockedReason?: string;
   filesToModify?: string[];
   acceptanceCriteria?: string[];
+  /** Ids of tasks that must be `completed` before this one is claimable (DAG). */
+  dependsOn?: string[];
   createdBy?: string;
   createdAt?: string;
 }
@@ -115,6 +117,7 @@ export interface AddTaskInput {
   priority?: ColabTaskPriority;
   filesToModify?: string[];
   acceptanceCriteria?: string[];
+  dependsOn?: string[];
   createdBy?: string;
   id?: string;
 }
@@ -222,6 +225,18 @@ export class FleetColabStore {
     return reclaimed;
   }
 
+  /** Dependency ids that are not yet `completed` (unknown/missing ids count as unmet). */
+  unmetDependencies(task: Pick<ColabTask, 'dependsOn'>, tasks: ColabTask[]): string[] {
+    if (!task.dependsOn || task.dependsOn.length === 0) return [];
+    const completed = new Set(tasks.filter((t) => t.status === 'completed').map((t) => t.id));
+    return task.dependsOn.filter((id) => !completed.has(id));
+  }
+
+  /** True when every dependency of a task is `completed` (DAG readiness). */
+  areDependenciesMet(task: Pick<ColabTask, 'dependsOn'>, tasks: ColabTask[]): boolean {
+    return this.unmetDependencies(task, tasks).length === 0;
+  }
+
   /**
    * Highest-priority auto-claimable task (open + unclaimed + non-critical),
    * matching the protocol's "première open + claimedBy=null par priority desc".
@@ -229,9 +244,11 @@ export class FleetColabStore {
    */
   nextClaimable(options: { allowCritical?: boolean } = {}): ColabTask | null {
     const nowMs = this.now();
-    const candidates = this.readTasks().tasks.filter((t) =>
+    const all = this.readTasks().tasks;
+    const candidates = all.filter((t) =>
       ((t.status === 'open' && !t.claimedBy) || this.isClaimExpired(t, nowMs))
-      && (options.allowCritical || t.priority !== 'critical'),
+      && (options.allowCritical || t.priority !== 'critical')
+      && this.areDependenciesMet(t, all),
     );
     if (candidates.length === 0) return null;
     candidates.sort((a, b) => PRIORITY_RANK[b.priority] - PRIORITY_RANK[a.priority]);
@@ -256,6 +273,10 @@ export class FleetColabStore {
     }
     if (task.status !== 'open' && !expired) {
       throw new Error(`Task '${taskId}' is '${task.status}', not open`);
+    }
+    const unmet = this.unmetDependencies(task, file.tasks);
+    if (unmet.length > 0) {
+      throw new Error(`Task '${taskId}' blocked by unmet dependencies: ${unmet.join(', ')}`);
     }
     task.status = 'in_progress';
     task.claimedBy = agentId;
@@ -323,12 +344,41 @@ export class FleetColabStore {
       claimedAt: null,
       ...(input.filesToModify ? { filesToModify: input.filesToModify } : {}),
       ...(input.acceptanceCriteria ? { acceptanceCriteria: input.acceptanceCriteria } : {}),
+      ...(input.dependsOn && input.dependsOn.length > 0 ? { dependsOn: [...new Set(input.dependsOn)] } : {}),
       createdBy: input.createdBy ?? this.agentId,
       createdAt: this.isoNow(),
     };
     file.tasks.push(task);
     this.writeTasks(file);
     return { ...task };
+  }
+
+  /** Add a `child dependsOn parent` edge (DAG). Both tasks must exist; self-links rejected. */
+  link(childId: string, parentId: string): ColabTask {
+    if (childId === parentId) throw new Error(`A task cannot depend on itself ('${childId}')`);
+    const file = this.readTasks();
+    const child = file.tasks.find((t) => t.id === childId);
+    const parent = file.tasks.find((t) => t.id === parentId);
+    if (!child) throw new Error(`Unknown fleet task '${childId}'`);
+    if (!parent) throw new Error(`Unknown dependency task '${parentId}'`);
+    const deps = new Set(child.dependsOn ?? []);
+    deps.add(parentId);
+    child.dependsOn = [...deps];
+    this.writeTasks(file);
+    return { ...child };
+  }
+
+  /** Remove a `child dependsOn parent` edge. Returns false if the edge was absent. */
+  unlink(childId: string, parentId: string): boolean {
+    const file = this.readTasks();
+    const child = file.tasks.find((t) => t.id === childId);
+    if (!child) throw new Error(`Unknown fleet task '${childId}'`);
+    const next = (child.dependsOn ?? []).filter((id) => id !== parentId);
+    if (next.length === (child.dependsOn ?? []).length) return false;
+    if (next.length > 0) child.dependsOn = next;
+    else delete child.dependsOn;
+    this.writeTasks(file);
+    return true;
   }
 
   // ── Worklog ───────────────────────────────────────────────────────────────

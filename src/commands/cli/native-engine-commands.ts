@@ -847,9 +847,99 @@ export function registerFleetAutonomyCommands(program: Command): void {
       console.log(`Tasks: ${tasks.length} (${Object.entries(byStatus).map(([s, n]) => `${s}=${n}`).join(', ') || 'none'})`);
       const next = store.nextClaimable();
       console.log(`Next auto-claimable: ${next ? `${next.title} [${next.priority}]` : 'none (or all critical)'}`);
+      const blocked = tasks.filter((t) => t.status === 'open' && !store.areDependenciesMet(t, tasks));
+      console.log(`Blocked by deps: ${blocked.length}${blocked.length ? ` (${blocked.map((t) => t.id).join(', ')})` : ''}`);
       const agents = Object.entries(presence);
       console.log(`Agents: ${agents.length ? agents.map(([id, p]) => `${id}(${p.status})`).join(', ') : 'none'}`);
       console.log('');
+    });
+
+  const tasks = fleet
+    .command('tasks')
+    .description('Manage fleet colab tasks');
+
+  tasks
+    .command('add <title>')
+    .description('Add a task to the fleet queue')
+    .option('--priority <p>', 'critical | high | medium | low', 'medium')
+    .option('--depends-on <ids>', 'comma-separated task ids this task depends on')
+    .option('--description <text>', 'task description')
+    .option('--dir <path>', 'colab dir')
+    .option('--json', 'output JSON')
+    .action(async (
+      title: string,
+      opts: { priority?: string; dependsOn?: string; description?: string; dir?: string; json?: boolean },
+    ) => {
+      const { FleetColabStore } = await import('../../fleet/colab-store.js');
+      const store = new FleetColabStore({ ...(opts.dir ? { dir: opts.dir } : {}) });
+      const priority = (['critical', 'high', 'medium', 'low'] as const).find((p) => p === opts.priority) ?? 'medium';
+      const task = store.addTask({
+        title,
+        priority,
+        ...(opts.description ? { description: opts.description } : {}),
+        ...(opts.dependsOn ? { dependsOn: opts.dependsOn.split(',').map((s) => s.trim()).filter(Boolean) } : {}),
+      });
+      if (opts.json) { console.log(JSON.stringify({ task }, null, 2)); return; }
+      console.log(`Added task ${task.id} [${task.priority}]${task.dependsOn ? ` depends on ${task.dependsOn.join(', ')}` : ''}`);
+    });
+
+  fleet
+    .command('swarm <goal>')
+    .description('Create a workers → verifier → synthesizer task graph')
+    .option('--worker <title>', 'a parallel worker (repeatable)', (v: string, acc: string[]) => { acc.push(v); return acc; }, [] as string[])
+    .option('--verifier <title>', 'verifier task title')
+    .option('--synthesizer <title>', 'synthesizer task title')
+    .option('--dir <path>', 'colab dir')
+    .option('--json', 'output JSON')
+    .action(async (
+      goal: string,
+      opts: { worker: string[]; verifier?: string; synthesizer?: string; dir?: string; json?: boolean },
+    ) => {
+      const { FleetColabStore } = await import('../../fleet/colab-store.js');
+      const { createSwarm } = await import('../../fleet/colab-swarm.js');
+      const store = new FleetColabStore({ ...(opts.dir ? { dir: opts.dir } : {}) });
+      if (!opts.worker || opts.worker.length === 0) {
+        console.error('At least one --worker is required.');
+        process.exit(1);
+        return;
+      }
+      const graph = createSwarm(store, {
+        goal,
+        workers: opts.worker.map((title) => ({ title })),
+        ...(opts.verifier ? { verifierTitle: opts.verifier } : {}),
+        ...(opts.synthesizer ? { synthesizerTitle: opts.synthesizer } : {}),
+      });
+      if (opts.json) { console.log(JSON.stringify({ graph }, null, 2)); return; }
+      console.log(`Swarm created for "${goal}":`);
+      console.log(`  workers: ${graph.workerIds.join(', ')}`);
+      console.log(`  verifier: ${graph.verifierId} (after all workers)`);
+      console.log(`  synthesizer: ${graph.synthesizerId} (after verifier)`);
+    });
+
+  fleet
+    .command('link <childId> <parentId>')
+    .description('Add a dependency: childId depends on parentId')
+    .option('--dir <path>', 'colab dir')
+    .action(async (childId: string, parentId: string, opts: { dir?: string }) => {
+      const { FleetColabStore } = await import('../../fleet/colab-store.js');
+      const store = new FleetColabStore({ ...(opts.dir ? { dir: opts.dir } : {}) });
+      try {
+        const child = store.link(childId, parentId);
+        console.log(`Linked: ${childId} depends on [${(child.dependsOn ?? []).join(', ')}]`);
+      } catch (error) {
+        console.error(`Failed to link: ${error instanceof Error ? error.message : error}`);
+        process.exit(1);
+      }
+    });
+
+  fleet
+    .command('unlink <childId> <parentId>')
+    .description('Remove a dependency edge')
+    .option('--dir <path>', 'colab dir')
+    .action(async (childId: string, parentId: string, opts: { dir?: string }) => {
+      const { FleetColabStore } = await import('../../fleet/colab-store.js');
+      const removed = new FleetColabStore({ ...(opts.dir ? { dir: opts.dir } : {}) }).unlink(childId, parentId);
+      console.log(removed ? `Unlinked ${childId} -/-> ${parentId}` : `No such dependency: ${childId} -> ${parentId}`);
     });
 }
 
