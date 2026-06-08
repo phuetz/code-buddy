@@ -6,9 +6,11 @@
  * until stopped. Idle ticks keep presence fresh; a kill-switch and a `maxTicks`
  * bound make it safe to run finite or supervised.
  *
- * The loop itself never throws and the v0 executor only writes scoped artifacts,
- * so continuous unattended operation has no repo blast radius. The full agentic
- * executor (tools/edits) remains a separate, checkpointed step.
+ * The loop itself never throws and the default v0 executor only writes scoped
+ * artifacts, so continuous unattended operation has no repo blast radius. A real
+ * agentic executor (tools/edits) is available opt-in via
+ * `CODEBUDDY_AUTONOMY_EXECUTOR=agent` + a fail-closed `CODEBUDDY_AUTONOMY_WORKSPACE_ROOT`
+ * (see {@link createAgentTaskExecutor}).
  */
 
 import { FleetColabStore } from '../fleet/colab-store.js';
@@ -16,6 +18,7 @@ import { resolveModelTierConfig, type ModelTierPolicy } from '../agent/model-tie
 import { FileWatcherTrigger } from '../agent/file-watcher-trigger.js';
 import { FleetAutonomousLoop, type TickResult } from './autonomous-loop.js';
 import { createLocalModelTaskExecutor } from './ollama-task-executor.js';
+import { createAgentTaskExecutor } from './agent-task-executor.js';
 
 export interface AutonomousDaemonConfig {
   loop: FleetAutonomousLoop;
@@ -147,6 +150,14 @@ export interface DefaultAutonomousLoopOptions {
   outputDir?: string;
   policy?: ModelTierPolicy;
   enabled?: () => boolean;
+  /**
+   * Executor: 'artifact' (default — v0, writes scoped artifacts, no repo edits)
+   * or 'agent' (runs the real agent, edits files). Defaults to env
+   * `CODEBUDDY_AUTONOMY_EXECUTOR` ('agent' enables it), else 'artifact'.
+   */
+  executorMode?: 'artifact' | 'agent';
+  /** Bounded workspace for the 'agent' executor (else `CODEBUDDY_AUTONOMY_WORKSPACE_ROOT`). */
+  workspaceRoot?: string;
 }
 
 /**
@@ -160,10 +171,13 @@ export function createDefaultAutonomousLoop(opts: DefaultAutonomousLoopOptions =
     ...(opts.agentId ? { agentId: opts.agentId } : {}),
   });
   const tierConfig = resolveModelTierConfig();
-  const executor = createLocalModelTaskExecutor({
-    ...(opts.outputDir ? { outputDir: opts.outputDir } : {}),
-    ...(process.env['CODEBUDDY_ESCALATION_API_KEY'] ? { apiKey: process.env['CODEBUDDY_ESCALATION_API_KEY'] } : {}),
-  });
+  const executorMode = opts.executorMode ?? (process.env['CODEBUDDY_AUTONOMY_EXECUTOR'] === 'agent' ? 'agent' : 'artifact');
+  const executor = executorMode === 'agent'
+    ? createAgentTaskExecutor({ ...(opts.workspaceRoot ? { workspaceRoot: opts.workspaceRoot } : {}) })
+    : createLocalModelTaskExecutor({
+        ...(opts.outputDir ? { outputDir: opts.outputDir } : {}),
+        ...(process.env['CODEBUDDY_ESCALATION_API_KEY'] ? { apiKey: process.env['CODEBUDDY_ESCALATION_API_KEY'] } : {}),
+      });
   return new FleetAutonomousLoop({
     store,
     tierConfig,
