@@ -8,22 +8,27 @@ We already have two native daemons, both newline-delimited JSON-RPC over stdin/s
 
 The same daemon pattern is the home for everything below.
 
-## What ELSE a Rust daemon should offload (ranked by value)
+## What ELSE a Rust daemon should offload — most of it is ALREADY native
 
-Code Buddy's actual CPU-bound hot paths, with the crate to use:
+**Important correction:** the obvious "heavy compute" candidates are **already built natively in Code Buddy** — do NOT rebuild them in the daemon. Verified:
 
-| Offload | Why it's hot in Code Buddy | Rust crate(s) | Value |
+| Candidate | Status in Code Buddy | Don't rebuild |
+|---|---|---|
+| **Embeddings** | ✅ `src/embeddings/embedding-provider.ts` (@xenova/transformers `all-MiniLM-L6-v2` local; or openai/grok) | redundant |
+| **Vector search / ANN** | ✅ `src/context/codebase-rag/hnsw-store.ts` (`HNSWVectorStore`) + `usearch` native dep | redundant |
+| **Codebase indexing & search** | ✅ **`gitnexus-rs`** (`src/plugins/gitnexus`, `src/tools/gitnexus-tool.ts`) + `@vscode/ripgrep` + tree-sitter | redundant |
+| **Tokenization / token counting** | ✅ `tiktoken` (`src/context/token-counter.ts`) | redundant |
+
+So the Rust daemon's **genuine, non-redundant niche is media/screen work** the JS stack doesn't already cover natively:
+
+| Offload | Why | Rust | Status |
 |---|---|---|---|
-| **Embeddings** | RAG tool selection (`src/codebuddy/tools.ts`) embeds the query every turn; memory + the screen index need them too | `fastembed-rs` (ONNX, bundles models) or `candle` | **High** — used constantly |
-| **Vector search / ANN** | nearest-neighbour over tool/memory/frame embeddings | `usearch`, `hnsw_rs`, embedded `qdrant` | **High** |
-| **Codebase indexing & search** | bug finder, RAG over files, BM25 `tool_search`, JIT context | `grep`/`ignore` (ripgrep), `tree-sitter` (AST), `tantivy` (full-text) | **High** on large repos |
-| **Tokenization / token counting** | context manager counts tokens on every turn + compaction | `tokenizers` (HF, native) | **Med-High** |
-| **Fuzzy string matching** | the edit tool's 5-strategy cascade (Levenshtein, LCS, fuzzy 10%) on big files | `strsim`, `triple_accel` | **Med** |
-| **OCR** | the screen pipeline (`ScreenWatcher --ocr`) shells to tesseract per frame | `ocrs` (pure Rust) or `leptess` | **Med** (screen-specific) |
-| **Perceptual hashing / dedup** | ✅ **done** — `codebuddy-captured phash/diff` | `image_hasher` | shipped |
-| **Compression** | session/checkpoint + pre-compaction flush | `zstd` | Low-Med |
+| **Perceptual hashing / dedup** | screen-frame idle-dedup, robust vs sha1 | `image_hasher` | ✅ **done** (`codebuddy-captured phash/diff`) |
+| **OCR** | the screen pipeline shells to tesseract per frame | `ocrs` (pure Rust) / `leptess` | candidate (screen-specific) |
+| **Native screen capture** | watcher's high-freq frame grab (vs ffmpeg single-frame) | `xcap` | candidate |
+| Fuzzy string match (str_replace cascade) | already TS; not a real bottleneck | `strsim` | skip |
 
-These share traits: CPU-bound, parallelizable, and slow in JS. They are **callable by both the CLI and the server** through the daemon bridge — which answers the next question.
+Lesson: **check `package.json` + `src/` before proposing an "offload."** Code Buddy already ships native `usearch`/HNSW, embeddings, gitnexus, and tiktoken — the compute thesis is largely already satisfied; the daemon only adds what's genuinely missing (so far: screen-frame hashing).
 
 ## Would the SERVER benefit from being rewritten in Rust? — No.
 
@@ -36,6 +41,6 @@ These share traits: CPU-bound, parallelizable, and slow in JS. They are **callab
 
 **Verdict:** keep the server (and the agent core) in TypeScript. Move the **compute** — not the glue — into the native daemon, and let both the CLI and the server call it. That is the architecture this work starts: TS orchestrates I/O; Rust does the heavy lifting.
 
-## Next step (highest-value offload)
+## Next step (reuse, don't rebuild)
 
-**Embeddings + vector search** (`fastembed-rs` + `usearch`) as `codebuddy-captured` methods (`embed`, `index.add`, `index.search`) — it would accelerate RAG tool selection, memory recall, and the screen "what did I see?" index in one move, all local/free.
+The screen **"what did I see?"** index should **reuse the existing stack** — `EmbeddingProvider` (embed OCR text) → `HNSWVectorStore` (`usearch`) — NOT a new daemon vector store. The daemon stays focused on what's genuinely missing: native screen OCR (`ocrs`) and capture (`xcap`), feeding text into the embedding/HNSW path Code Buddy already has.
