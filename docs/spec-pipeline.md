@@ -14,7 +14,7 @@ tokens). The fix is structural: break work into a **durable backlog of stories**
 and **gate implementation on an explicit human approval of each story's spec**.
 
 This is the third application of the propose → human approves → no silent action
-discipline already shipped for [lessons](hermes-agent-status.md) (lesson-candidate
+discipline already shipped for [lessons](hermes-openclaw-parity.md) (lesson-candidate
 queue) and the user model. Here the reviewed artifact is the **unit of work**.
 
 ## When to use which planning surface

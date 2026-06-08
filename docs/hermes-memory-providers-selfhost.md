@@ -2,6 +2,9 @@
 
 Date: 2026-06-04
 
+> **Living reference** for the memory-provider connectors and self-hosting. For the overall Hermes/OpenClaw parity
+> state, see [`hermes-openclaw-parity.md`](hermes-openclaw-parity.md) (`memory-providers` is one of its tracked features).
+
 Code Buddy maps Hermes' 8 external memory providers onto native TypeScript
 **connector adapters**. Each adapter is a thin pipe: it shuttles
 `remember`/`recall`/`search` across the provider's network or CLI boundary and

@@ -26,6 +26,8 @@
 
 **Now with a [Multi-AI Fleet Hub](docs/fleet-guide.md)** — multiple Code Buddy peers can observe each other's events live and invoke each other's LLMs via `/fleet send peer.chat`. Pilot local Ollama LLMs from any peer in your Tailscale network for free coding/reasoning. *(Phase (d).1 → (d).16a, May 2026.)*
 
+**Always-on autonomous fleet** — `buddy autonomy install` registers a self-driving background service (systemd / launchd / Task Scheduler) that continuously claims and executes tasks from a shared fleet queue. It runs **free-first** (local Ollama models, `$0`, before any paid API), with an **event-driven daemon** that wakes the instant the queue changes. The queue has **claim leases with TTL** (a crashed agent's task auto-reclaims), **DAG task dependencies**, and a **workers → verifier → synthesizer swarm** topology — see the [Fleet Guide](docs/fleet-guide.md). *(rc.8, June 2026.)*
+
 **Cowork + Buddy companion cockpit** — `buddy gui` / `buddy desktop` opens the Electron workspace powered by the same Code Buddy core engine. Buddy has a companion panel for ChatGPT-backed identity, voice, camera snapshots, MediaPipe face/hand/pose perception, self-evaluation, competitive radar, missions, routines, safety, and proactive check-ins.
 
 **Auto-memory writeback** — the agent persists what it learns (preferences, decisions, gotchas) to `.codebuddy/CODEBUDDY_MEMORY.md` across sessions. View with `/memory recent`. `buddy --init` also generates an `AGENTS.md` at the project root for cross-CLI compatibility (read by Claude Code, Gemini CLI, Cursor, Codex). *(rc.2, May 2026.)*
@@ -173,6 +175,7 @@ From source, Cowork requires Node.js `>=22` in `cowork/`; the root CLI still sup
 | **Security** | Guardian Agent (AI risk scoring), OS/Docker/OpenShell sandbox, SSRF guard, secrets vault, write policy, exec policy, loop detection, omission detection, output sanitizer | [security.md](docs/security.md) |
 | **Channels** | 20+ messaging channels (Telegram, Discord, Slack, WhatsApp, Signal, Teams, Matrix, IRC, and more), DM pairing, send policy | [channels.md](docs/channels.md) |
 | **Context Engine** | Smart compression, tool output masking, image pruning, transcript repair, pre-compaction flush, restorable compression, JIT context, importance-weighted window | [context-engine.md](docs/context-engine.md) |
+| **Fleet & Autonomy** | Peer-to-peer hub (`peer.chat` / `peer.tool.invoke` / `peer_delegate`), A2A + ACP + MCP interop, 24/7 autonomous service (`buddy autonomy install`), event-driven daemon, claim TTL/lease, DAG task dependencies, workers→verifier→synthesizer swarm, free-first local→Tailscale→paid model tier | [fleet-guide.md](docs/fleet-guide.md) |
 | **Infrastructure** | HTTP server (OpenAI-compatible), WebSocket gateway, daemon mode, cron, device nodes, canvas/A2UI, 6 cloud deploy configs, MCP, plugins | [infrastructure.md](docs/infrastructure.md) |
 | **Configuration** | Env vars, TOML config with profiles, model-aware limits, per-agent params, i18n (6 locales), personas | [configuration.md](docs/configuration.md) |
 | **Development** | TypeScript strict, Vitest (27,334 tests), ESM, middleware pipeline, facade architecture | [development.md](docs/development.md) |
@@ -212,7 +215,8 @@ From source, Cowork requires Node.js `>=22` in `cowork/`; the root CLI still sup
 | [Context Engine](docs/context-engine.md) | Compression, tool output masking, JIT context, pre-compaction flush |
 | [Infrastructure](docs/infrastructure.md) | HTTP server, WebSocket gateway, daemon, cron, deploy, plugins |
 | [PdfCommander MCP Integration](docs/mcp-pdfcommander-integration.md) | Register the PdfCommander headless MCP server in `mcp.json`, verify with `buddy mcp test`, drive PDF ops from the agent |
-| [Fleet Guide](docs/fleet-guide.md) | **Multi-AI hub** — `/fleet listen` + `/fleet send peer.chat`, env-driven multi-provider auto-detect, Tailscale lab examples |
+| [Fleet Guide](docs/fleet-guide.md) | **Multi-AI hub** — `/fleet listen` + `/fleet send peer.chat`, env-driven multi-provider auto-detect, Tailscale lab examples, autonomous fleet protocol |
+| [Hermes / OpenClaw Parity](docs/hermes-openclaw-parity.md) | Where Code Buddy stands vs Hermes Agent & OpenClaw — shipped capabilities, externally-gated features, and the one open code gap |
 | [Configuration](docs/configuration.md) | Environment variables, TOML config, project settings, model limits |
 | [Development](docs/development.md) | Build, test, architecture, coding conventions, adding tools |
 

@@ -102,6 +102,8 @@ Two systems coexist:
 
 Stateful WebSocket mesh letting Code Buddy peers observe each other's events live and invoke each other's LLMs / read-only tools. Bridges live in `src/fleet/` and are wired in `src/server/index.ts` on every `buddy server` start.
 
+> Parity vs Hermes Agent / OpenClaw (what's shipped, what's gated, the one open code gap): [`docs/hermes-openclaw-parity.md`](docs/hermes-openclaw-parity.md) — canonical, supersedes the dated audits now in `docs/archive/2026-q2-hermes-audits/`.
+
 - **`peer.chat`** (V1) — stateless one-shot LLM call to a peer (`peer-chat-bridge.ts`).
 - **`peer.chat-session.start|continue|end|continue-stream|list`** (V1.2, Phase d.21–d.22) — multi-turn sessions, FIFO-serialised per `sessionId`, 30-min idle TTL (`CODEBUDDY_PEER_SESSION_IDLE_MS`), persisted to `~/.codebuddy/peer-sessions/*.json` (`peer-session-store.ts`). Privacy guard: `peer.chat-session.list` returns metadata only, never prompt/assistant content (asserted by test).
 - **`peer.tool.invoke` + `.stream`** (V1.3, Phase d.23, `peer-tool-bridge.ts`) — remote read-only tool execution. **Three security gates** in order: allowlist (`CODEBUDDY_PEER_TOOL_ALLOWLIST`, default `view_file`/`list_directory`/`search`) → registry `fleetSafe: true` flag (`src/tools/metadata.ts`) → workspace root (`CODEBUDDY_PEER_TOOL_WORKSPACE_ROOT` must be set; **fails closed** with `PEER_WORKSPACE_NOT_CONFIGURED` if unset, so a misconfigured peer can't expose `/`). Anti-loop guards: `CODEBUDDY_PEER_MAX_DEPTH`, `CODEBUDDY_PEER_ROLE=leaf`.

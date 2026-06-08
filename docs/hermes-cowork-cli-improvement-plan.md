@@ -4,6 +4,9 @@ Date: 2026-05-18
 Workspace: local Code Buddy checkout (redacted for public docs)
 Status: implementation plan plus first shipped slice
 
+> **Improvement log** (chronological). For the current parity state and open gaps, see the canonical
+> [`hermes-openclaw-parity.md`](hermes-openclaw-parity.md).
+
 ## Goal
 
 Code Buddy should move toward the useful product shape shown by systems

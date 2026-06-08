@@ -2,6 +2,9 @@
 
 Date: 2026-05-16
 
+> **Strategy note** (long-lived). For the current, code-verified parity state and the list of open gaps, see the
+> canonical [`hermes-openclaw-parity.md`](hermes-openclaw-parity.md).
+
 Scope: Code Buddy weekend worktree. Hermes Agent was reviewed as a
 strategic benchmark after the OpenClaw integration audit.
 
@@ -48,7 +51,8 @@ Internet automation references:
 These are the bounded items to implement without changing the stack:
 
 For the broader architecture study and power-parity backlog, see
-[`docs/hermes-agent-power-todo.md`](hermes-agent-power-todo.md).
+[`hermes-agent-power-todo.md`](archive/2026-q2-hermes-audits/hermes-agent-power-todo.md) (archived).
+For the current parity state, see [`hermes-openclaw-parity.md`](hermes-openclaw-parity.md).
 
 1. **Visible workflow TODOs in Cowork** — every long-running workshop
    should expose the next useful actions, not only a completed/pending
