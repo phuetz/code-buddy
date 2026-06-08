@@ -1,0 +1,33 @@
+{
+  "comment": "Real autonomy test set. Each task asks the real Code Buddy agent to edit a stub .mjs file in an isolated sandbox so its self-verifying .check.mjs exits 0. 'priority: high' routes a task up the model ladder (escalateAtPriority). slug-id dependsOn slugify to exercise the DAG.",
+  "tasks": [
+    {
+      "id": "t-slugify",
+      "title": "Implement slugify() in slugify.mjs",
+      "priority": "medium",
+      "filesToModify": ["slugify.mjs"],
+      "check": "slugify.check.mjs",
+      "description": "Edit slugify.mjs so slugify(input) lowercases the string, replaces every run of non [a-z0-9] characters with a single '-', and strips leading/trailing '-'. The acceptance test is `node slugify.check.mjs` (must exit 0). Do not edit the .check.mjs file.",
+      "acceptanceCriteria": ["node slugify.check.mjs exits 0"]
+    },
+    {
+      "id": "t-luhn",
+      "title": "Implement luhnValid() in luhn.mjs",
+      "priority": "high",
+      "filesToModify": ["luhn.mjs"],
+      "check": "luhn.check.mjs",
+      "description": "Edit luhn.mjs so luhnValid(number) returns true iff the digit string passes the Luhn checksum (double every second digit from the right, subtract 9 if >9, sum, must be a multiple of 10); return false for empty or non-digit input. The acceptance test is `node luhn.check.mjs` (must exit 0). Do not edit the .check.mjs file.",
+      "acceptanceCriteria": ["node luhn.check.mjs exits 0"]
+    },
+    {
+      "id": "t-slug-id",
+      "title": "Implement slugId() in slug-id.mjs (reusing slugify)",
+      "priority": "medium",
+      "dependsOn": ["t-slugify"],
+      "filesToModify": ["slug-id.mjs"],
+      "check": "slug-id.check.mjs",
+      "description": "Edit slug-id.mjs so slugId(title, n) returns slugify(title) + '-' + n, reusing the slugify already exported from ./slugify.mjs (do not reimplement it). The acceptance test is `node slug-id.check.mjs` (must exit 0). Do not edit the .check.mjs file.",
+      "acceptanceCriteria": ["node slug-id.check.mjs exits 0"]
+    }
+  ]
+}

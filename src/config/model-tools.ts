@@ -396,6 +396,10 @@ const DEFAULT_MODEL_CONFIGS: ModelToolConfig[] = [
   {
     model: 'qwen2.5*',
     supportsReasoning: false,
+    // Conservative: qwen2.5:7b emits tool calls as TEXT (not structured OpenAI
+    // tool_calls) via Ollama, so the agent can't execute them — it stays
+    // chat-only. Verified flaky against scripts/autonomy-lab/ (unlike qwen3,
+    // which does emit structured calls). Use qwen3+ for autonomous editing.
     supportsToolCalls: false,
     supportsVision: false,
     contextWindow: 32768,
@@ -408,7 +412,11 @@ const DEFAULT_MODEL_CONFIGS: ModelToolConfig[] = [
   {
     model: 'qwen3*',
     supportsReasoning: true,
-    supportsToolCalls: false,
+    // qwen3 (incl. the 2026 MoE builds) reliably emits OpenAI tool calls via
+    // Ollama, so it can drive the agent loop — unlike the older small models
+    // this table conservatively gates to chat-only. Verified against the
+    // autonomy lab (scripts/autonomy-lab/).
+    supportsToolCalls: true,
     supportsVision: false,
     contextWindow: 32768,
     maxOutputTokens: 4096,
