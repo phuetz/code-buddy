@@ -7,10 +7,12 @@ import {
   Clock3,
   ClipboardList,
   Cpu,
+  Database,
   FileText,
   FlaskConical,
   Focus,
   GraduationCap,
+  Lightbulb,
   ListChecks,
   Smartphone,
   Fingerprint,
@@ -71,6 +73,10 @@ export function ShellNavigation() {
   const showDesktopSnapshot = useAppStore((s) => s.showDesktopSnapshot);
   const showSkillsManager = useAppStore((s) => s.showSkillsManager);
   const setShowSkillsManager = useAppStore((s) => s.setShowSkillsManager);
+  const showReasoningViewer = useAppStore((s) => s.showReasoningViewer);
+  const setShowReasoningViewer = useAppStore((s) => s.setShowReasoningViewer);
+  const showMemoryEditor = useAppStore((s) => s.showMemoryEditor);
+  const setShowMemoryEditor = useAppStore((s) => s.setShowMemoryEditor);
 
   const setActiveSession = useAppStore((s) => s.setActiveSession);
   const setShowSettings = useAppStore((s) => s.setShowSettings);
@@ -328,6 +334,22 @@ export function ShellNavigation() {
           active: showSpecPanel,
           onClick: () => setShowSpecPanel(true),
           testId: 'spec-panel-button',
+        },
+        {
+          id: 'reasoning',
+          label: t('reasoningViewer.title', 'Reasoning traces'),
+          icon: Lightbulb,
+          active: showReasoningViewer,
+          onClick: () => setShowReasoningViewer(true),
+          testId: 'reasoning-viewer-button',
+        },
+        {
+          id: 'memory',
+          label: t('memoryBrowser.title', 'Memory'),
+          icon: Database,
+          active: showMemoryEditor,
+          onClick: () => setShowMemoryEditor(true),
+          testId: 'memory-panel-button',
         },
       ],
     },

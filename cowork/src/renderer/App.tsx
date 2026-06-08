@@ -45,6 +45,7 @@ import { SnippetsLibrary } from './components/SnippetsLibrary';
 import { PersonaSwitcherDialog } from './components/PersonaSwitcherDialog';
 import { TestRunnerPanel } from './components/TestRunnerPanel';
 import { ReasoningTraceViewer } from './components/ReasoningTraceViewer';
+import { MemoryPanel } from './components/MemoryPanel';
 import { FocusView } from './components/FocusView';
 import { SplitPaneLayout } from './components/SplitPaneLayout';
 import { UpdateNotification } from './components/UpdateNotification';
@@ -136,6 +137,8 @@ function App() {
   const setShowTestRunner = useAppStore((s) => s.setShowTestRunner);
   const showReasoningViewer = useAppStore((s) => s.showReasoningViewer);
   const setShowReasoningViewer = useAppStore((s) => s.setShowReasoningViewer);
+  const showMemoryEditor = useAppStore((s) => s.showMemoryEditor);
+  const setShowMemoryEditor = useAppStore((s) => s.setShowMemoryEditor);
   const showEnrollmentDialog = useAppStore((s) => s.showEnrollmentDialog);
   const setShowEnrollmentDialog = useAppStore((s) => s.setShowEnrollmentDialog);
   const presenceEnabled = useAppStore((s) => s.presenceEnabled);
@@ -648,6 +651,7 @@ function App() {
         isOpen={showReasoningViewer}
         onClose={() => setShowReasoningViewer(false)}
       />
+      <MemoryPanel isOpen={showMemoryEditor} onClose={() => setShowMemoryEditor(false)} />
 
       {/* Notification toasts + center (Claude Cowork parity) */}
       <NotificationToastContainer />
