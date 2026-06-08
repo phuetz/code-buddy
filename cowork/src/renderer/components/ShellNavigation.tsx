@@ -1,6 +1,7 @@
 import {
   Activity,
   BarChart3,
+  Blocks,
   Bot,
   Brain,
   Clock3,
@@ -68,6 +69,8 @@ export function ShellNavigation() {
   const showGlobalSearch = useAppStore((s) => s.showGlobalSearch);
   const showMissionBoard = useAppStore((s) => s.showMissionBoard);
   const showDesktopSnapshot = useAppStore((s) => s.showDesktopSnapshot);
+  const showSkillsManager = useAppStore((s) => s.showSkillsManager);
+  const setShowSkillsManager = useAppStore((s) => s.setShowSkillsManager);
 
   const setActiveSession = useAppStore((s) => s.setActiveSession);
   const setShowSettings = useAppStore((s) => s.setShowSettings);
@@ -365,6 +368,14 @@ export function ShellNavigation() {
           label: t('settings.rules', 'Permission rules'),
           icon: Shield,
           onClick: () => openSettingsTab('rules'),
+        },
+        {
+          id: 'skills',
+          label: t('skills.title', 'Skills'),
+          icon: Blocks,
+          active: showSkillsManager,
+          onClick: () => setShowSkillsManager(true),
+          testId: 'skills-manager-button',
         },
         {
           id: 'plugins',
