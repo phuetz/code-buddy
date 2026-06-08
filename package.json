@@ -76,6 +76,7 @@
     "typecheck": "tsc --noEmit",
     "typecheck:watch": "tsc --noEmit --watch",
     "check:circular": "npx tsx scripts/check-circular-deps.ts",
+    "autonomy:lab": "tsx scripts/autonomy-lab/run.ts",
     "validate": "npm run lint && npm run typecheck && npm test",
     "install:bun": "bun install",
     "docs": "typedoc",
