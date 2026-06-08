@@ -97,6 +97,16 @@ jest.mock('../../src/fleet/colab-swarm.js', () => ({
   createSwarm: jest.fn((...args: unknown[]) => mockCreateSwarm(...args)),
 }));
 
+let capturedServiceConfig: Record<string, unknown> | undefined;
+const mockServiceInstall = jest.fn(async () => ({ success: true, servicePath: '/x.service', platform: 'linux' }));
+const mockServiceUninstall = jest.fn(async () => ({ success: true, servicePath: '/x.service', platform: 'linux' }));
+jest.mock('../../src/daemon/service-installer.js', () => ({
+  ServiceInstaller: jest.fn(function(config: Record<string, unknown>) {
+    capturedServiceConfig = config;
+    return { install: mockServiceInstall, uninstall: mockServiceUninstall };
+  }),
+}));
+
 const mockIdentityManager = {
   load: jest.fn(),
   getAll: jest.fn(),
@@ -1117,6 +1127,22 @@ describe('Native Engine CLI Commands', () => {
       await program.parseAsync(['node', 'test', 'autonomy', 'link', 'child', 'parent']);
       expect(mockColabStore.link).toHaveBeenCalledWith('child', 'parent');
       expect(getLogOutput()).toContain('Linked: child depends on');
+    });
+
+    it('installs the autonomy systemd service with local-model env + watch args', async () => {
+      const tmp = require('path').join(require('os').tmpdir(), 'cb-autonomy-svc-test');
+      await program.parseAsync(['node', 'test', 'autonomy', 'install', '--dir', tmp, '--model', 'qwen2.5:7b-instruct']);
+      expect(capturedServiceConfig?.serviceName).toBe('codebuddy-autonomy');
+      expect(capturedServiceConfig?.args).toEqual(expect.arrayContaining(['autonomy', 'run', '--watch', '--dir', tmp]));
+      expect((capturedServiceConfig?.env as Record<string, string>)?.CODEBUDDY_LOCAL_MODEL).toBe('qwen2.5:7b-instruct');
+      expect(mockServiceInstall).toHaveBeenCalled();
+      expect(getLogOutput()).toContain('Autonomy service installed');
+    });
+
+    it('uninstalls the autonomy service', async () => {
+      await program.parseAsync(['node', 'test', 'autonomy', 'uninstall']);
+      expect(mockServiceUninstall).toHaveBeenCalled();
+      expect(getLogOutput()).toContain('Autonomy service removed');
     });
   });
 

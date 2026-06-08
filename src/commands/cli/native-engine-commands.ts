@@ -947,6 +947,72 @@ export function registerFleetAutonomyCommands(program: Command): void {
       const removed = new FleetColabStore({ ...(opts.dir ? { dir: opts.dir } : {}) }).unlink(childId, parentId);
       console.log(removed ? `Unlinked ${childId} -/-> ${parentId}` : `No such dependency: ${childId} -> ${parentId}`);
     });
+
+  fleet
+    .command('install')
+    .description('Install the autonomous daemon as an always-on systemd service (survives reboot)')
+    .option('--dir <path>', 'colab queue dir (default ~/.codebuddy/fleet)')
+    .option('--output-dir <path>', 'artifact dir (default <dir>/out)')
+    .option('--model <model>', 'local model', 'qwen2.5:7b-instruct')
+    .option('--ollama-url <url>', 'Ollama OpenAI-compatible base URL', 'http://localhost:11434/v1')
+    .option('--interval <ms>', 'fallback heartbeat interval (events drive the rest)', '60000')
+    .option('--json', 'output JSON')
+    .action(async (opts: {
+      dir?: string; outputDir?: string; model: string; ollamaUrl: string; interval: string; json?: boolean;
+    }) => {
+      const os = await import('os');
+      const path = await import('path');
+      const fs = await import('fs');
+      const { ServiceInstaller } = await import('../../daemon/service-installer.js');
+
+      const dir = opts.dir || path.join(os.homedir(), '.codebuddy', 'fleet');
+      const outputDir = opts.outputDir || path.join(dir, 'out');
+      fs.mkdirSync(dir, { recursive: true });
+
+      // Run the built CLI from the service (rebuild dist first if it lacks the
+      // autonomy command); fall back to the currently-running entry in dev.
+      const distEntry = path.join(process.cwd(), 'dist', 'index.js');
+      const script = fs.existsSync(distEntry) ? distEntry : process.argv[1] ?? distEntry;
+
+      const installer = new ServiceInstaller({
+        serviceName: 'codebuddy-autonomy',
+        displayName: 'Code Buddy Autonomy',
+        description: 'Code Buddy autonomous fleet daemon (local-first, event-driven)',
+        execPath: process.execPath,
+        args: [script, 'autonomy', 'run', '--watch', '--dir', dir, '--output-dir', outputDir, '--interval', String(opts.interval)],
+        workingDirectory: dir,
+        env: {
+          HOME: os.homedir(),
+          CODEBUDDY_LOCAL_MODEL: opts.model,
+          OLLAMA_BASE_URL: opts.ollamaUrl,
+          CODEBUDDY_FLEET_COLAB_DIR: dir,
+        },
+      });
+      const result = await installer.install();
+      if (opts.json) { console.log(JSON.stringify({ result, dir, outputDir, model: opts.model }, null, 2)); return; }
+      if (!result.success) {
+        console.error(`Failed to install autonomy service: ${result.error}`);
+        process.exit(1);
+        return;
+      }
+      console.log(`Autonomy service installed (${result.platform}): ${result.servicePath}`);
+      console.log(`  Queue: ${dir}  |  model: ${opts.model} (local, $0)`);
+      console.log(`  Add work:  buddy autonomy tasks add "<title>" --dir ${dir}`);
+      console.log(`  Manage:    systemctl --user status|stop|start|restart codebuddy-autonomy`);
+      console.log(`  Remove:    buddy autonomy uninstall`);
+    });
+
+  fleet
+    .command('uninstall')
+    .description('Remove the autonomous daemon systemd service')
+    .option('--json', 'output JSON')
+    .action(async (opts: { json?: boolean }) => {
+      const { ServiceInstaller } = await import('../../daemon/service-installer.js');
+      const result = await new ServiceInstaller({ serviceName: 'codebuddy-autonomy' }).uninstall();
+      if (opts.json) { console.log(JSON.stringify({ result }, null, 2)); return; }
+      console.log(result.success ? `Autonomy service removed (${result.platform})` : `Failed: ${result.error}`);
+      if (!result.success) process.exit(1);
+    });
 }
 
 // ============================================================================
