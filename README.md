@@ -44,6 +44,7 @@ Code, commands, web, voice, and vision — from your terminal, a desktop app, yo
 [Quick Start](#quick-start) |
 [Cowork + Companion](#cowork-desktop--buddy-companion) |
 [Features](#features) |
+[FAQ](docs/faq.md) |
 [Documentation](#documentation) |
 [Contributing](#contributing)
 
