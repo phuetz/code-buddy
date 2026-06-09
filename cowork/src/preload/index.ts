@@ -3713,6 +3713,70 @@ contextBridge.exposeInMainWorld('electronAPI', {
         { host?: string; status?: string; currentTask?: string | null; lastSeen?: string }
       >;
     }> => ipcRenderer.invoke('autonomy.snapshot', dir),
+    // Daemon lifecycle — pilot the always-on `codebuddy-autonomy` service.
+    daemonStatus: (): Promise<{
+      ok: boolean;
+      error?: string;
+      serviceName: string;
+      service: { installed: boolean; running: boolean; platform: string } | null;
+      queueDir: string;
+      manageCommand: string;
+    }> => ipcRenderer.invoke('autonomy.daemonStatus'),
+    serviceControl: (
+      action: 'start' | 'stop' | 'restart'
+    ): Promise<{
+      ok: boolean;
+      error?: string;
+      action: 'start' | 'stop' | 'restart';
+      service: { installed: boolean; running: boolean; platform: string } | null;
+    }> => ipcRenderer.invoke('autonomy.serviceControl', action),
+    serviceInstall: (options?: {
+      dir?: string;
+      model?: string;
+      ollamaUrl?: string;
+      intervalMs?: number;
+      executor?: 'artifact' | 'agent';
+      workspace?: string;
+    }): Promise<{
+      ok: boolean;
+      error?: string;
+      servicePath?: string;
+      platform?: string;
+      instructions?: string;
+      queueDir?: string;
+      model?: string;
+      executor?: 'artifact' | 'agent';
+    }> => ipcRenderer.invoke('autonomy.serviceInstall', options),
+    serviceUninstall: (): Promise<{
+      ok: boolean;
+      error?: string;
+      servicePath?: string;
+      platform?: string;
+    }> => ipcRenderer.invoke('autonomy.serviceUninstall'),
+    // One-shot tick through the real CLI (`autonomy run --json`).
+    runTick: (
+      dir?: string
+    ): Promise<{
+      ok: boolean;
+      error?: string;
+      ticks?: number;
+      outcomes?: Record<string, number>;
+      stoppedReason?: string;
+      output?: string;
+    }> => ipcRenderer.invoke('autonomy.runTick', dir),
+    // Free-first model ladder (local → network → paid) + current choice.
+    modelTier: (): Promise<{
+      ok: boolean;
+      error?: string;
+      ladder: Array<{
+        tier: 'local' | 'network' | 'escalated';
+        model: string;
+        baseUrl?: string;
+        paid: boolean;
+        configured: boolean;
+      }>;
+      currentChoice?: { model: string; tier: string; paid: boolean; reason: string };
+    }> => ipcRenderer.invoke('autonomy.modelTier'),
   },
 
   lessons: {
@@ -6971,6 +7035,63 @@ declare global {
             string,
             { host?: string; status?: string; currentTask?: string | null; lastSeen?: string }
           >;
+        }>;
+        daemonStatus: () => Promise<{
+          ok: boolean;
+          error?: string;
+          serviceName: string;
+          service: { installed: boolean; running: boolean; platform: string } | null;
+          queueDir: string;
+          manageCommand: string;
+        }>;
+        serviceControl: (action: 'start' | 'stop' | 'restart') => Promise<{
+          ok: boolean;
+          error?: string;
+          action: 'start' | 'stop' | 'restart';
+          service: { installed: boolean; running: boolean; platform: string } | null;
+        }>;
+        serviceInstall: (options?: {
+          dir?: string;
+          model?: string;
+          ollamaUrl?: string;
+          intervalMs?: number;
+          executor?: 'artifact' | 'agent';
+          workspace?: string;
+        }) => Promise<{
+          ok: boolean;
+          error?: string;
+          servicePath?: string;
+          platform?: string;
+          instructions?: string;
+          queueDir?: string;
+          model?: string;
+          executor?: 'artifact' | 'agent';
+        }>;
+        serviceUninstall: () => Promise<{
+          ok: boolean;
+          error?: string;
+          servicePath?: string;
+          platform?: string;
+        }>;
+        runTick: (dir?: string) => Promise<{
+          ok: boolean;
+          error?: string;
+          ticks?: number;
+          outcomes?: Record<string, number>;
+          stoppedReason?: string;
+          output?: string;
+        }>;
+        modelTier: () => Promise<{
+          ok: boolean;
+          error?: string;
+          ladder: Array<{
+            tier: 'local' | 'network' | 'escalated';
+            model: string;
+            baseUrl?: string;
+            paid: boolean;
+            configured: boolean;
+          }>;
+          currentChoice?: { model: string; tier: string; paid: boolean; reason: string };
         }>;
       };
       lessons: {

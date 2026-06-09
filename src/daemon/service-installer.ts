@@ -39,6 +39,15 @@ export interface ServiceInstallResult {
   error?: string;
 }
 
+export type ServiceControlAction = 'start' | 'stop' | 'restart';
+
+export interface ServiceControlResult {
+  success: boolean;
+  action: ServiceControlAction;
+  platform: string;
+  error?: string;
+}
+
 // ============================================================================
 // Defaults
 // ============================================================================
@@ -113,6 +122,61 @@ export class ServiceInstaller {
           platform: os,
           error: `Unsupported platform: ${os}`,
         };
+    }
+  }
+
+  /**
+   * Start/stop/restart the installed service through the platform's service
+   * manager (systemd user unit, launchd plist, Task Scheduler task). Fails
+   * cleanly when the service isn't installed — install() is the only way to
+   * create it.
+   */
+  async control(action: ServiceControlAction): Promise<ServiceControlResult> {
+    const os = platform();
+    const current = await this.status();
+    if (!current.installed) {
+      return {
+        success: false,
+        action,
+        platform: os,
+        error: `Service ${this.config.serviceName} is not installed`,
+      };
+    }
+
+    try {
+      switch (os) {
+        case 'linux':
+          execSync(`systemctl --user ${action} ${this.config.serviceName}.service`, { stdio: 'pipe' });
+          return { success: true, action, platform: os };
+        case 'darwin': {
+          const plistPath = this.getLaunchdPlistPath();
+          if (action === 'stop' || action === 'restart') {
+            execSync(`launchctl unload ${plistPath} 2>/dev/null || true`, { stdio: 'pipe' });
+          }
+          if (action === 'start' || action === 'restart') {
+            execSync(`launchctl load ${plistPath}`, { stdio: 'pipe' });
+          }
+          return { success: true, action, platform: os };
+        }
+        case 'win32': {
+          if (action === 'stop' || action === 'restart') {
+            execSync(`schtasks /end /tn "${this.config.serviceName}"`, { stdio: 'pipe' });
+          }
+          if (action === 'start' || action === 'restart') {
+            execSync(`schtasks /run /tn "${this.config.serviceName}"`, { stdio: 'pipe' });
+          }
+          return { success: true, action, platform: os };
+        }
+        default:
+          return { success: false, action, platform: os, error: `Unsupported platform: ${os}` };
+      }
+    } catch (error) {
+      return {
+        success: false,
+        action,
+        platform: os,
+        error: error instanceof Error ? error.message : String(error),
+      };
     }
   }
 

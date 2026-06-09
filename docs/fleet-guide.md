@@ -760,6 +760,12 @@ LLM (continuing with peer's answer in context): "darkstar suggests …"
 > - **Verified completion.** A task's optional `verifyCommand` (e.g. `node x.check.mjs`, `npm test`) must exit 0,
 >   else the task is released for retry. **Auto-escalation**: repeated failures climb the model ladder.
 > - **Local agentic models:** use qwen3+/devstral/mistral (qwen2.5:7b is chat-only). Runnable demo: `npm run autonomy:lab`.
+> - **Service lifecycle.** `buddy autonomy service start|stop|restart|status` controls the installed
+>   `codebuddy-autonomy` service (systemd user unit / launchd / Task Scheduler) without touching the unit by hand.
+> - **GUI piloting.** The Cowork Autonomy panel (Agents & Fleet → Autonomy) pilots the daemon end to end:
+>   service status + start/stop/restart/install/uninstall, a one-shot "run one tick" through the real CLI,
+>   the free-first model ladder with the model the next tick would use, plus the live queue/presence/worklog
+>   (`cowork/src/main/autonomy/autonomy-daemon-bridge.ts`).
 
 Fleet bus = the `claude-et-patrice/.codebuddy/` repo on a shared
 Tailscale mesh. Each peer periodically:

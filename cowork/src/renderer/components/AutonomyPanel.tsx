@@ -1,14 +1,33 @@
 /**
- * AutonomyPanel — read-only view of the autonomous fleet's colab queue.
+ * AutonomyPanel — pilot the autonomous fleet from the GUI.
  *
- * Surfaces what `buddy autonomy run` / the always-on daemon are doing: the
- * shared task queue (status + priority + claim + DAG deps), live presence, and
- * the recent worklog. Reads via the `autonomy.snapshot` IPC (FleetColabStore,
- * default ~/.codebuddy/fleet). Mirrors the ReasoningTraceViewer/MemoryPanel shell.
+ * Three layers:
+ * 1. Daemon lifecycle — status of the always-on `codebuddy-autonomy` service
+ *    with start/stop/restart, install/uninstall, and a one-shot "run a tick"
+ *    that goes through the real CLI (`autonomy.daemonStatus` & friends IPC).
+ * 2. Free-first model ladder — local → network → paid rungs and the model a
+ *    tick would use right now (`autonomy.modelTier` IPC).
+ * 3. Colab queue — the shared task queue (status + priority + claim + DAG
+ *    deps), live presence, recent worklog (`autonomy.snapshot` IPC).
+ * Mirrors the ReasoningTraceViewer/MemoryPanel shell.
  */
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { X, Cpu, RefreshCw, Loader2, CheckCircle2, CircleDot, Ban } from 'lucide-react';
+import {
+  X,
+  Cpu,
+  RefreshCw,
+  Loader2,
+  CheckCircle2,
+  CircleDot,
+  Ban,
+  Play,
+  Square,
+  RotateCcw,
+  Zap,
+  Download,
+  Trash2,
+} from 'lucide-react';
 
 interface ColabTaskView {
   id: string;
@@ -36,6 +55,33 @@ interface Snapshot {
   worklog: WorklogView[];
   presence: Record<string, PresenceView>;
 }
+interface DaemonStatusView {
+  ok: boolean;
+  error?: string;
+  serviceName: string;
+  service: { installed: boolean; running: boolean; platform: string } | null;
+  queueDir: string;
+  manageCommand: string;
+}
+interface ModelTierView {
+  ok: boolean;
+  error?: string;
+  ladder: Array<{
+    tier: 'local' | 'network' | 'escalated';
+    model: string;
+    baseUrl?: string;
+    paid: boolean;
+    configured: boolean;
+  }>;
+  currentChoice?: { model: string; tier: string; paid: boolean; reason: string };
+}
+interface TickResultView {
+  ok: boolean;
+  error?: string;
+  ticks?: number;
+  outcomes?: Record<string, number>;
+  stoppedReason?: string;
+}
 
 interface AutonomyPanelProps {
   isOpen: boolean;
@@ -61,6 +107,11 @@ export function AutonomyPanel({ isOpen, onClose }: AutonomyPanelProps) {
   const { t } = useTranslation();
   const [snap, setSnap] = useState<Snapshot | null>(null);
   const [loading, setLoading] = useState(false);
+  const [daemon, setDaemon] = useState<DaemonStatusView | null>(null);
+  const [tier, setTier] = useState<ModelTierView | null>(null);
+  const [busyAction, setBusyAction] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [lastTick, setLastTick] = useState<TickResultView | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -68,6 +119,12 @@ export function AutonomyPanel({ isOpen, onClose }: AutonomyPanelProps) {
       const api = window.electronAPI;
       const result = api?.autonomy ? await api.autonomy.snapshot() : null;
       setSnap(result as Snapshot | null);
+      if (api?.autonomy?.daemonStatus) {
+        setDaemon((await api.autonomy.daemonStatus()) as DaemonStatusView);
+      }
+      if (api?.autonomy?.modelTier) {
+        setTier((await api.autonomy.modelTier()) as ModelTierView);
+      }
     } catch (err) {
       setSnap({ ok: false, error: String(err), dir: null, tasks: [], worklog: [], presence: {} });
     } finally {
@@ -79,10 +136,29 @@ export function AutonomyPanel({ isOpen, onClose }: AutonomyPanelProps) {
     if (isOpen) void load();
   }, [isOpen, load]);
 
+  const runDaemonAction = useCallback(
+    async (name: string, action: () => Promise<{ ok: boolean; error?: string }>) => {
+      setBusyAction(name);
+      setActionError(null);
+      try {
+        const result = await action();
+        if (!result.ok) setActionError(result.error ?? `${name} failed`);
+      } catch (err) {
+        setActionError(String(err));
+      } finally {
+        setBusyAction(null);
+        void load();
+      }
+    },
+    [load]
+  );
+
   if (!isOpen) return null;
 
   const tasks = snap?.tasks ?? [];
   const presence = Object.entries(snap?.presence ?? {});
+  const service = daemon?.service ?? null;
+  const api = window.electronAPI;
 
   return (
     <div
@@ -121,6 +197,175 @@ export function AutonomyPanel({ isOpen, onClose }: AutonomyPanelProps) {
         </p>
         {snap && !snap.ok && (
           <p className="text-[11px] text-error">{snap.error ?? t('autonomy.unavailable', 'Queue unavailable')}</p>
+        )}
+
+        {/* Daemon lifecycle */}
+        <section data-testid="autonomy-daemon-section">
+          <h3 className="text-[10px] font-semibold uppercase tracking-[0.14em] text-text-muted mb-1.5">
+            {t('autonomy.daemon', 'Always-on daemon')}
+          </h3>
+          <div className="p-2.5 rounded-lg bg-surface/40 border border-border-muted space-y-2">
+            <div className="flex items-center gap-2">
+              <span
+                data-testid="autonomy-daemon-dot"
+                className={`w-2 h-2 rounded-full ${
+                  service?.running ? 'bg-success' : service?.installed ? 'bg-warning' : 'bg-text-muted'
+                }`}
+              />
+              <span className="text-text-secondary">
+                {service?.running
+                  ? t('autonomy.daemonRunning', 'Service running')
+                  : service?.installed
+                    ? t('autonomy.daemonStopped', 'Installed, stopped')
+                    : t('autonomy.daemonNotInstalled', 'Not installed')}
+              </span>
+              {daemon?.serviceName && (
+                <span className="ml-auto font-mono text-[10px] text-text-muted truncate">{daemon.serviceName}</span>
+              )}
+            </div>
+            {daemon && !daemon.ok && <p className="text-[11px] text-error">{daemon.error}</p>}
+            <div className="flex flex-wrap items-center gap-1.5">
+              {service?.installed && !service.running && (
+                <button
+                  onClick={() => void runDaemonAction('start', () => api.autonomy.serviceControl('start'))}
+                  disabled={busyAction !== null}
+                  className="flex items-center gap-1 px-2 py-1 rounded border border-border text-text-secondary hover:text-text-primary hover:border-accent/50 disabled:opacity-50"
+                  data-testid="autonomy-daemon-start"
+                >
+                  {busyAction === 'start' ? <Loader2 size={11} className="animate-spin" /> : <Play size={11} />}
+                  {t('autonomy.start', 'Start')}
+                </button>
+              )}
+              {service?.running && (
+                <>
+                  <button
+                    onClick={() => void runDaemonAction('stop', () => api.autonomy.serviceControl('stop'))}
+                    disabled={busyAction !== null}
+                    className="flex items-center gap-1 px-2 py-1 rounded border border-border text-text-secondary hover:text-text-primary hover:border-warning/50 disabled:opacity-50"
+                    data-testid="autonomy-daemon-stop"
+                  >
+                    {busyAction === 'stop' ? <Loader2 size={11} className="animate-spin" /> : <Square size={11} />}
+                    {t('autonomy.stop', 'Stop')}
+                  </button>
+                  <button
+                    onClick={() => void runDaemonAction('restart', () => api.autonomy.serviceControl('restart'))}
+                    disabled={busyAction !== null}
+                    className="flex items-center gap-1 px-2 py-1 rounded border border-border text-text-secondary hover:text-text-primary hover:border-accent/50 disabled:opacity-50"
+                    data-testid="autonomy-daemon-restart"
+                  >
+                    {busyAction === 'restart' ? <Loader2 size={11} className="animate-spin" /> : <RotateCcw size={11} />}
+                    {t('autonomy.restart', 'Restart')}
+                  </button>
+                </>
+              )}
+              {service && !service.installed && (
+                <button
+                  onClick={() => void runDaemonAction('install', () => api.autonomy.serviceInstall())}
+                  disabled={busyAction !== null}
+                  className="flex items-center gap-1 px-2 py-1 rounded border border-border text-text-secondary hover:text-text-primary hover:border-accent/50 disabled:opacity-50"
+                  title={t(
+                    'autonomy.installHint',
+                    'Installs the always-on service (artifact executor: no repo edits, local $0 model)'
+                  )}
+                  data-testid="autonomy-daemon-install"
+                >
+                  {busyAction === 'install' ? <Loader2 size={11} className="animate-spin" /> : <Download size={11} />}
+                  {t('autonomy.install', 'Install service')}
+                </button>
+              )}
+              <button
+                onClick={() =>
+                  void runDaemonAction('tick', async () => {
+                    const result = (await api.autonomy.runTick()) as TickResultView;
+                    setLastTick(result);
+                    return result;
+                  })
+                }
+                disabled={busyAction !== null}
+                className="flex items-center gap-1 px-2 py-1 rounded border border-border text-text-secondary hover:text-text-primary hover:border-accent/50 disabled:opacity-50"
+                title={t('autonomy.tickHint', 'Run one autonomous tick now through the real CLI')}
+                data-testid="autonomy-daemon-tick"
+              >
+                {busyAction === 'tick' ? <Loader2 size={11} className="animate-spin" /> : <Zap size={11} />}
+                {t('autonomy.tick', 'Run one tick')}
+              </button>
+              {service?.installed && (
+                <button
+                  onClick={() => void runDaemonAction('uninstall', () => api.autonomy.serviceUninstall())}
+                  disabled={busyAction !== null}
+                  className="ml-auto flex items-center gap-1 px-2 py-1 rounded border border-border-muted text-text-muted hover:text-error hover:border-error/50 disabled:opacity-50"
+                  data-testid="autonomy-daemon-uninstall"
+                >
+                  {busyAction === 'uninstall' ? <Loader2 size={11} className="animate-spin" /> : <Trash2 size={11} />}
+                  {t('autonomy.uninstall', 'Uninstall')}
+                </button>
+              )}
+            </div>
+            {actionError && (
+              <p className="text-[11px] text-error" data-testid="autonomy-daemon-error">
+                {actionError}
+              </p>
+            )}
+            {lastTick?.ok && (
+              <p className="text-[10px] text-text-muted" data-testid="autonomy-daemon-tick-result">
+                {t('autonomy.tickResult', 'Last tick')}: {lastTick.ticks ?? 0} tick(s)
+                {lastTick.outcomes
+                  ? ` — ${Object.entries(lastTick.outcomes)
+                      .map(([k, v]) => `${k}×${v}`)
+                      .join(', ')}`
+                  : ''}
+              </p>
+            )}
+            {daemon?.manageCommand && (
+              <p className="text-[10px] text-text-muted font-mono truncate" title={daemon.manageCommand}>
+                {daemon.manageCommand}
+              </p>
+            )}
+          </div>
+        </section>
+
+        {/* Free-first model ladder */}
+        {tier && (
+          <section data-testid="autonomy-model-tier-section">
+            <h3 className="text-[10px] font-semibold uppercase tracking-[0.14em] text-text-muted mb-1.5">
+              {t('autonomy.modelTier', 'Model ladder (free-first)')}
+            </h3>
+            {!tier.ok && <p className="text-[11px] text-error">{tier.error}</p>}
+            <div className="space-y-1">
+              {tier.ladder.map((rung, i) => (
+                <div
+                  key={`${rung.tier}-${i}`}
+                  className={`flex items-center gap-2 px-2 py-1 rounded border ${
+                    tier.currentChoice?.model === rung.model && rung.configured
+                      ? 'bg-accent/10 border-accent/40'
+                      : 'bg-surface/40 border-border-muted'
+                  } ${rung.configured ? '' : 'opacity-60'}`}
+                >
+                  <span className="text-[9px] px-1.5 py-0.5 rounded border border-border uppercase text-text-muted">
+                    {rung.tier}
+                  </span>
+                  <span className="font-mono truncate text-text-secondary">{rung.model}</span>
+                  {rung.paid ? (
+                    <span className="ml-auto text-[9px] px-1 rounded border border-warning/40 text-warning">$</span>
+                  ) : (
+                    <span className="ml-auto text-[9px] px-1 rounded border border-success/40 text-success">$0</span>
+                  )}
+                  {rung.baseUrl && (
+                    <span className="text-[10px] text-text-muted truncate max-w-[160px]" title={rung.baseUrl}>
+                      {rung.baseUrl}
+                    </span>
+                  )}
+                </div>
+              ))}
+            </div>
+            {tier.currentChoice && (
+              <p className="mt-1 text-[10px] text-text-muted" title={tier.currentChoice.reason}>
+                {t('autonomy.currentChoice', 'Next tick uses')}:{' '}
+                <span className="font-mono">{tier.currentChoice.model}</span> ({tier.currentChoice.tier},{' '}
+                {tier.currentChoice.paid ? '$' : '$0'})
+              </p>
+            )}
+          </section>
         )}
 
         {/* Presence */}

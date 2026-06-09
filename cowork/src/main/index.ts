@@ -205,6 +205,14 @@ import {
   runHermesProtocolGatewaysSmokeForReview,
 } from './tools/hermes-protocol-gateways-bridge';
 import { runHermesLocalSmokeSuiteForReview } from './tools/hermes-local-smoke-bridge';
+import {
+  getAutonomyDaemonStatusForReview,
+  controlAutonomyServiceForReview,
+  installAutonomyServiceForReview,
+  uninstallAutonomyServiceForReview,
+  runAutonomyTickForReview,
+  getAutonomyModelTierForReview,
+} from './autonomy/autonomy-daemon-bridge';
 import { getHermesMobileSupervisionForReview } from './tools/hermes-mobile-supervision-bridge';
 import { getHermesFeatureParityForReview } from './tools/hermes-feature-parity-bridge';
 import { getHermesPortalForReview } from './tools/hermes-portal-bridge';
@@ -2654,6 +2662,37 @@ ipcMain.handle('autonomy.snapshot', async (_event, dir?: string) => {
     };
   }
 });
+
+// ── Autonomy: daemon lifecycle + free-first model tier ──────────────────
+// Pilots the always-on `codebuddy-autonomy` service (install/uninstall/
+// start/stop/restart), runs one-shot ticks through the real CLI, and surfaces
+// the local→network→paid model ladder. See autonomy/autonomy-daemon-bridge.ts.
+ipcMain.handle('autonomy.daemonStatus', async () => getAutonomyDaemonStatusForReview());
+
+ipcMain.handle('autonomy.serviceControl', async (_event, action: 'start' | 'stop' | 'restart') =>
+  controlAutonomyServiceForReview(action)
+);
+
+ipcMain.handle(
+  'autonomy.serviceInstall',
+  async (
+    _event,
+    options?: {
+      dir?: string;
+      model?: string;
+      ollamaUrl?: string;
+      intervalMs?: number;
+      executor?: 'artifact' | 'agent';
+      workspace?: string;
+    }
+  ) => installAutonomyServiceForReview(options ?? {})
+);
+
+ipcMain.handle('autonomy.serviceUninstall', async () => uninstallAutonomyServiceForReview());
+
+ipcMain.handle('autonomy.runTick', async (_event, dir?: string) => runAutonomyTickForReview(dir));
+
+ipcMain.handle('autonomy.modelTier', async () => getAutonomyModelTierForReview());
 
 // ── Pluggable memory provider selector (GAP-10) ─────────────────────────
 ipcMain.handle('memoryProvider.list', async () => {

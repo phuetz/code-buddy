@@ -1031,6 +1031,30 @@ export function registerFleetAutonomyCommands(program: Command): void {
     });
 
   fleet
+    .command('service <action>')
+    .description('Control the installed autonomy service: start | stop | restart | status')
+    .option('--json', 'output JSON')
+    .action(async (action: string, opts: { json?: boolean }) => {
+      const { ServiceInstaller } = await import('../../daemon/service-installer.js');
+      const installer = new ServiceInstaller({ serviceName: 'codebuddy-autonomy' });
+      if (action === 'status') {
+        const status = await installer.status();
+        if (opts.json) { console.log(JSON.stringify({ status }, null, 2)); return; }
+        console.log(`Autonomy service (${status.platform}): ${status.installed ? (status.running ? 'running' : 'installed, stopped') : 'not installed'}`);
+        return;
+      }
+      if (action !== 'start' && action !== 'stop' && action !== 'restart') {
+        console.error(`Invalid action "${action}" (use start|stop|restart|status).`);
+        process.exit(1);
+        return;
+      }
+      const result = await installer.control(action);
+      if (opts.json) { console.log(JSON.stringify({ result }, null, 2)); return; }
+      console.log(result.success ? `Autonomy service ${action}: ok (${result.platform})` : `Failed to ${action}: ${result.error}`);
+      if (!result.success) process.exit(1);
+    });
+
+  fleet
     .command('uninstall')
     .description('Remove the autonomous daemon systemd service')
     .option('--json', 'output JSON')
