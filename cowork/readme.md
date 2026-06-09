@@ -62,6 +62,23 @@ The left nav is grouped to mirror Code Buddy's areas: **Work · Agents & Fleet �
   <sub>▶ a 20-second overview · <a href="../docs/qa/code-buddy-studio/cowork-demo-hero.mp4">MP4</a> · recorded from this build</sub>
 </p>
 
+### ▶ Real local AI — on your machine, ~$0, reasoning shown
+
+Cowork runs the embedded Code Buddy engine on **local Ollama** models. These are real, unedited captures on `qwen3.6:35b-a3b` — the **reasoning zone is open** as the agent thinks, and it actually uses tools:
+
+<table>
+  <tr>
+    <td width="50%" align="center">
+      <a href="../docs/qa/code-buddy-studio/cowork-demo-chat.mp4"><img src="../docs/qa/code-buddy-studio/cowork-demo-chat.gif" alt="Local reasoning chat" width="440" /></a><br/>
+      <sub><b>Reasoning chat</b> — the model thinks through a haiku step by step (counts syllables, drafts), then answers · local · <code>~$0.0001</code></sub>
+    </td>
+    <td width="50%" align="center">
+      <a href="../docs/qa/code-buddy-studio/cowork-demo-task.mp4"><img src="../docs/qa/code-buddy-studio/cowork-demo-task.gif" alt="Agent creates a file" width="440" /></a><br/>
+      <sub><b>Real task</b> — “create <code>robot-haiku.md</code>” → the agent reasons, <b>uses the file tool</b>, and confirms the artifact · local · <code>~$0.0001</code></sub>
+    </td>
+  </tr>
+</table>
+
 Short tours of Cowork **by use case** — recorded from **this** build (click any for the sharper MP4):
 
 <table>

@@ -48,6 +48,30 @@ async function launchCowork(videoDir: string): Promise<{ app: ElectronApplicatio
   return { app, page };
 }
 
+// Point Cowork at a local Ollama model via the config IPC (the store is
+// encrypted, so we can't pre-seed a file) and reload so isConfigured flips.
+async function configureOllama(page: Page, model: string): Promise<Page> {
+  await page.evaluate(async (m) => {
+    const api = (window as unknown as { electronAPI: any }).electronAPI;
+    const cfg = await api.config.get();
+    // enableThinking + thinkingLevel so the reasoning zone is shown during the turn.
+    const patch = { provider: 'ollama', baseUrl: 'http://localhost:11434', model: m, apiKey: 'ollama', enableThinking: true, thinkingLevel: 'high' };
+    const configSets = Array.isArray(cfg.configSets) && cfg.configSets.length
+      ? cfg.configSets.map((c: any, i: number) => (i === 0 ? { ...c, ...patch } : c))
+      : [{ name: 'Default', ...patch }];
+    await api.config.save({ ...cfg, ...patch, configSets });
+  }, model);
+  await page.reload();
+  await page.waitForLoadState('domcontentloaded');
+  await expect(page.getByTestId('app-root')).toBeVisible({ timeout: 30_000 });
+  const onboarding = page.getByTestId('onboarding-wizard');
+  if (await onboarding.isVisible({ timeout: 1500 }).catch(() => false)) {
+    await page.getByTestId('onboarding-skip').click().catch(() => {});
+  }
+  await page.waitForTimeout(1200);
+  return page;
+}
+
 async function visit(page: Page, ids: string[], pauseMs = 1600): Promise<void> {
   for (const id of ids) {
     try {
@@ -139,4 +163,67 @@ test('demo extensibility', async () => {
   await app.close();
   // eslint-disable-next-line no-console
   if (video) console.log(`SCENE extensibility=${await video.path()}`);
+});
+
+// Command palette: Ctrl+K → fuzzy-find any action.
+test('demo command-palette', async () => {
+  test.skip(!process.env.RECORD_DEMO, 'set RECORD_DEMO=1 to record demo videos');
+  const dir = path.resolve('demo-video', 'command-palette');
+  const { app, page } = await launchCowork(dir);
+  await page.waitForTimeout(1200);
+  await page.mouse.click(640, 70); // blur the autofocused composer so the Ctrl+K handler fires
+  await page.waitForTimeout(300);
+  await page.keyboard.press('Control+k');
+  await page.waitForTimeout(1400);
+  await page.keyboard.type('fleet', { delay: 95 });
+  await page.waitForTimeout(1600);
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(450);
+  await page.keyboard.press('Control+k');
+  await page.waitForTimeout(900);
+  await page.keyboard.type('settings', { delay: 95 });
+  await page.waitForTimeout(1800);
+  const video = page.video();
+  await app.close();
+  // eslint-disable-next-line no-console
+  if (video) console.log(`SCENE command-palette=${await video.path()}`);
+});
+
+// Real chat: configure local Ollama and ask a question — a genuine streamed reply.
+test('demo chat', async () => {
+  test.skip(!process.env.RECORD_DEMO, 'set RECORD_DEMO=1 to record demo videos');
+  test.setTimeout(120_000);
+  const dir = path.resolve('demo-video', 'chat');
+  const { app, page } = await launchCowork(dir);
+  await configureOllama(page, 'qwen3.6:35b-a3b-q4_K_M'); // reasoning model → visible thinking
+  const input = page.getByTestId('welcome-prompt-input'); // work-surface composer
+  await input.click().catch(() => {});
+  await input.fill('Think it through, then write a short, upbeat haiku about a robot companion.');
+  await page.waitForTimeout(900);
+  await input.press('Enter');
+  await page.waitForTimeout(60000); // reasoning model: stream the thinking zone + answer (pre-warmed)
+  const video = page.video();
+  await app.close();
+  // eslint-disable-next-line no-console
+  if (video) console.log(`SCENE chat=${await video.path()}`);
+});
+
+// Open-cowork-style task: ask the agent to actually create a file (tool use) on a
+// local tool-capable model — a real artifact, not just chat.
+test('demo task', async () => {
+  test.skip(!process.env.RECORD_DEMO, 'set RECORD_DEMO=1 to record demo videos');
+  test.setTimeout(200_000);
+  const dir = path.resolve('demo-video', 'task');
+  const { app, page } = await launchCowork(dir);
+  await configureOllama(page, 'qwen3.6:35b-a3b-q4_K_M');
+  const input = page.getByTestId('welcome-prompt-input');
+  await input.click().catch(() => {});
+  await input.fill('Create a file named robot-haiku.md containing a haiku about a robot companion, then confirm it is done.');
+  await page.waitForTimeout(800);
+  await input.press('Enter');
+  await page.waitForTimeout(115000); // reasoning + tool-capable model + agent loop + file write
+  const video = page.video();
+  await app.close();
+  // eslint-disable-next-line no-console
+  if (video) console.log(`SCENE task=${await video.path()}`);
 });
