@@ -1,6 +1,6 @@
 {
   "name": "@phuetz/codebuddy-cowork",
-  "version": "1.0.0-rc.8",
+  "version": "1.0.0",
   "description": "Desktop Agent application with sandboxed environment for AI Agent interaction",
   "keywords": [
     "ai-agent",

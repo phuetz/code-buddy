@@ -10,10 +10,20 @@ once it reaches `1.0.0`.
 
 ## [Unreleased]
 
-Heading toward `1.0.0` final. Open audit blockers tracked in
+Post-1.0 work tracked in the V1.1 roadmap: OpenAPI spec (WS8-T2),
+GitNexus integration (WS2), Lessons store + Context Engine v2 (WS3),
+central Policy Engine + PII lint (WS5). See
 `claude-et-patrice/propositions/` and the V1.x roadmap section of
-[`docs/fleet-guide.md`](docs/fleet-guide.md). Backlog notes also under
-`## [0.5.1-fleet]`.
+[`docs/fleet-guide.md`](docs/fleet-guide.md).
+
+---
+
+## [1.0.0] — 2026-06-10 🎉
+
+**General availability.** Multi-AI fleet hub (`peer.chat` +
+`peer.chat-session.*` + `peer.tool.invoke`), the Cowork desktop GUI,
+15 providers, ~30K tests. Everything below this heading up to
+`[1.0.0-rc.1]` shipped between rc.1 and GA.
 
 ### V1 GA blockers closed (2026-06-10)
 
