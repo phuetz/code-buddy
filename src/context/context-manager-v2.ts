@@ -13,7 +13,10 @@
  * - Key Information Preservation
  */
 
+import * as fs from 'fs';
+import * as path from 'path';
 import { CodeBuddyMessage } from '../codebuddy/client.js';
+import { redactSecrets } from '../fleet/privacy-lint.js';
 import { createTokenCounter, TokenCounter } from './token-counter.js';
 import { logger } from '../utils/logger.js';
 import { getModelToolConfig } from '../config/model-tools.js';
@@ -95,6 +98,24 @@ interface ConversationSummary {
 }
 
 /**
+ * Periodic memory snapshot (WS3-T2) — a compact, persisted view of the
+ * session so very long runs (12–15 h) survive crashes and aggressive
+ * compaction without losing the thread.
+ */
+export interface ContextSnapshot {
+  sessionId: string;
+  takenAt: string;
+  stats: {
+    messageCount: number;
+    tokenCount: number;
+    compressionCount: number;
+    totalTokensSaved: number;
+  };
+  /** Extractive, privacy-linted summary of the conversation so far. */
+  summary: string;
+}
+
+/**
  * Memory metrics for monitoring context manager health
  */
 export interface ContextMemoryMetrics {
@@ -162,6 +183,10 @@ export class ContextManagerV2 {
   private _cachedStatsFingerprint = '';
   /** Last compression timestamp */
   private lastCompressionTime: Date | null = null;
+  /** WS3-T2 — periodic snapshot timer (unref'd, never keeps the process alive) */
+  private snapshotTimer: NodeJS.Timeout | null = null;
+  /** WS3-T2 — snapshots taken this session */
+  private snapshotCount: number = 0;
 
   // Default configuration based on research recommendations
   static readonly DEFAULT_CONFIG: ContextManagerConfig = {
@@ -1160,6 +1185,104 @@ export class ContextManagerV2 {
     }
 
     return lines.join('\n');
+  }
+
+  // ==========================================================================
+  // WS3-T2 — Periodic memory snapshot
+  // ==========================================================================
+
+  /**
+   * Take a compact snapshot of the session and persist it to
+   * `.codebuddy/context-snapshot.json` (latest wins). Returns null when the
+   * conversation is too small to be worth snapshotting.
+   *
+   * The summary is privacy-linted before it touches disk (WS3 guard-rail).
+   */
+  takeSnapshot(
+    messages: CodeBuddyMessage[],
+    workDir: string = process.cwd(),
+  ): ContextSnapshot | null {
+    if (!messages || messages.length < 4) return null;
+
+    const snapshot: ContextSnapshot = {
+      sessionId: this.sessionId,
+      takenAt: new Date().toISOString(),
+      stats: {
+        messageCount: messages.length,
+        tokenCount: this.countTokens(messages),
+        compressionCount: this.compressionCount,
+        totalTokensSaved: this.totalTokensSaved,
+      },
+      summary: redactSecrets(this.createSummary(messages)),
+    };
+
+    try {
+      const dir = path.join(workDir, '.codebuddy');
+      fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(
+        path.join(dir, 'context-snapshot.json'),
+        JSON.stringify(snapshot, null, 2),
+        'utf8',
+      );
+    } catch (err) {
+      logger.debug('Context snapshot write failed', { error: String(err) });
+      return null;
+    }
+
+    this.snapshotCount++;
+    try {
+      const runStore = RunStore.getInstance();
+      if (runStore.getCurrentRunId()) {
+        runStore.appendEvent('context_snapshot', {
+          sessionId: snapshot.sessionId,
+          messageCount: snapshot.stats.messageCount,
+          tokenCount: snapshot.stats.tokenCount,
+          snapshotCount: this.snapshotCount,
+        });
+      }
+    } catch {
+      // Observability must never break the snapshot path.
+    }
+    return snapshot;
+  }
+
+  /**
+   * Start the periodic snapshot loop for long sessions (12–15 h).
+   *
+   * Interval resolution: explicit param → `CODEBUDDY_SNAPSHOT_INTERVAL_MIN`
+   * env (minutes) → 45 min default. `0` (or negative) disables. The timer
+   * is unref'd so it never keeps a finished process alive.
+   */
+  startPeriodicSnapshot(
+    getMessages: () => CodeBuddyMessage[],
+    intervalMs?: number,
+    workDir: string = process.cwd(),
+  ): void {
+    this.stopPeriodicSnapshot();
+
+    let resolved = intervalMs;
+    if (resolved === undefined) {
+      const envMin = parseInt(process.env.CODEBUDDY_SNAPSHOT_INTERVAL_MIN || '45', 10);
+      resolved = (Number.isFinite(envMin) ? envMin : 45) * 60_000;
+    }
+    if (!resolved || resolved <= 0) return;
+
+    this.snapshotTimer = setInterval(() => {
+      try {
+        this.takeSnapshot(getMessages(), workDir);
+      } catch (err) {
+        logger.debug('Periodic context snapshot failed', { error: String(err) });
+      }
+    }, resolved);
+    this.snapshotTimer.unref();
+  }
+
+  /** Stop the periodic snapshot loop (idempotent). */
+  stopPeriodicSnapshot(): void {
+    if (this.snapshotTimer) {
+      clearInterval(this.snapshotTimer);
+      this.snapshotTimer = null;
+    }
   }
 }
 

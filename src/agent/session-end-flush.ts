@@ -23,7 +23,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import type { CodeBuddyClient } from '../codebuddy/client.js';
 import { isFeatureEnabled } from '../config/feature-flags.js';
-import { scanForSecrets } from '../fleet/privacy-lint.js';
+import { redactSecrets } from '../fleet/privacy-lint.js';
 import { logger } from '../utils/logger.js';
 import type { ChatEntry } from './types.js';
 
@@ -64,24 +64,6 @@ const HANDOFF_MIN_TRANSCRIPT_CHARS = 8_000;
 const RISK_PATTERN = /\b(error|failed|failure|exception|denied|timeout|timed out|blocked|fatal|refused)\b/i;
 const MAX_RISKS = 5;
 const SNIPPET_MAX = 240;
-
-/**
- * Redact every privacy-lint match. Must run on the FULL text before any
- * truncation — cutting a PEM block in half would hide it from the lint.
- */
-function redactSecrets(text: string): string {
-  const lint = scanForSecrets(text);
-  if (!lint.hasSecrets) return text;
-  let out = '';
-  let cursor = 0;
-  for (const match of [...lint.matches].sort((a, b) => a.start - b.start)) {
-    if (match.start < cursor) continue; // overlapping match already covered
-    out += text.slice(cursor, match.start) + `[REDACTED:${match.kind}]`;
-    cursor = match.end;
-  }
-  out += text.slice(cursor);
-  return out;
-}
 
 function meaningfulTurns(history: ChatEntry[]): { assistant: number; tools: number } {
   let assistant = 0;

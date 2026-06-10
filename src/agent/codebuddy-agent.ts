@@ -156,6 +156,11 @@ export class CodeBuddyAgent extends BaseAgent {
     // This is safe because the singletons returned by getters are the concrete implementations
     this.tokenCounter = this.infrastructure.tokenCounter;
     this.contextManager = this.infrastructure.contextManager;
+    // WS3-T2 — periodic memory snapshot for very long sessions. Interval from
+    // CODEBUDDY_SNAPSHOT_INTERVAL_MIN (default 45 min, 0 disables); the timer
+    // is unref'd so it never keeps a finished process alive. Optional call:
+    // test doubles and custom context engines may not implement snapshots.
+    this.contextManager.startPeriodicSnapshot?.(() => this.historyManager.getMessagesRef());
     this.checkpointManager = this.infrastructure.checkpoints as unknown as CheckpointManager;
     this.sessionStore = this.infrastructure.sessions as unknown as SessionStore;
     this.modeManager = this.infrastructure.modeManager;
@@ -1880,6 +1885,7 @@ Look at the screenshot and find the element matching the user's intent. Output o
         error: err instanceof Error ? err.message : String(err),
       });
     });
+    this.contextManager.stopPeriodicSnapshot?.();
     this.peerRoutingConfig = null;
     super.dispose();
   }

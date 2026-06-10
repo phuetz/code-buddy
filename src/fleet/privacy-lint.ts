@@ -210,3 +210,24 @@ function redactPreview(text: string, start: number, end: number): string {
       : matched.slice(0, 4) + '…[redacted]…' + matched.slice(-4);
   return `${before}${redacted}${after}`.replace(/\s+/g, ' ').trim();
 }
+
+/**
+ * Replace every secret/PII match with a `[REDACTED:<kind>]` marker.
+ *
+ * Run this on FULL text before any truncation — cutting a PEM block (or
+ * any multi-line secret) in half can hide it from the patterns above.
+ * Used by every memory-persistence path (WS3 guard-rail).
+ */
+export function redactSecrets(text: string): string {
+  const lint = scanForSecrets(text);
+  if (!lint.hasSecrets) return text;
+  let out = '';
+  let cursor = 0;
+  for (const match of [...lint.matches].sort((a, b) => a.start - b.start)) {
+    if (match.start < cursor) continue; // overlapping match already covered
+    out += text.slice(cursor, match.start) + `[REDACTED:${match.kind}]`;
+    cursor = match.end;
+  }
+  out += text.slice(cursor);
+  return out;
+}
