@@ -106,15 +106,26 @@ security design and must not be fabricated.
 
 ## CLI groups (~40) — disposition
 - 🟢 pilotable (panel/app): server/gui (app), spec, skills, lessons, user-model, cron/schedule (SettingsSchedule), provider/config (Settings), mcp (marketplace), companion, run (audit log), identity + device + **channels** (read-only C3-pattern panels). knowledge-graph (`/knowledge-graph` → LessonsVaultGraph). autonomous-code runs surface via the run/audit log; gitnexus is an MCP tool reachable via the MCP marketplace.
-- 🟡 route/new-panel: research, flow (live launcher — new feature, value provider/key-gated; see gated note).
+- 🟢 **research, flow — live launcher SHIPPED (2026-06-10)**: the provider gate is lifted by the
+  local Ollama ($0) — `LiveLauncherPanel` (Automation group) spawns the real dist CLI headless
+  (`liveLauncher.*` IPC, `cowork/src/main/launcher/live-launcher-bridge.ts`), streams stdout live,
+  supports cancel + hard timeout, renders the report. Core prerequisites landed: `--model`, `--wide`
+  (the TTY gate silently degraded a GUI subprocess to direct mode), `detectProviderFromEnv()`
+  fallback. E2E proves launch + stream + honest failure reporting; the live result was verified
+  manually against the local Ollama (cold-load latency is a hardware property, reported honestly).
+- 🟢 **backup — SHIPPED (2026-06-10)**: was 🔴 "maintenance", but it protects the data the GUI
+  itself accumulates (memory, lessons, missions). Settings → Import/Export now carries a Backups
+  section (create `--only-config`, list, verify, restore behind an explicit confirmation) through
+  the same core handler as `buddy backup`.
 - 🔒 security-adjacent (→ gated): secrets (vault UI), groups (`group-security` access-control config / allowlists — a security boundary, not a benign read-only list).
-- 🔴 CLI-only: completions, update, doctor, onboard, security-audit, deploy, nodes, daemon, backup (one-off / OS / maintenance).
+- 🔴 CLI-only: completions, update, doctor, onboard, security-audit, deploy, nodes, daemon (one-off / OS / maintenance).
 
 ## Gated (axis-A autonomy + axis-B surfaces that need live resources or a security design)
 Not fabricated as unverifiable code; each needs a real resource or its own review:
 - **D4 — gateway inbound listener** (always-joinable agent): separate plan with its own threat-model + ExitPlanMode. Posture fixed: inbound *proposes* `needs_local_operator`, never auto-dispatches.
 - **secrets vault EXECUTION**: encrypted vault + master key; security-sensitive, no reusable API surface — needs a dedicated secure design.
-- **research / flow LIVE**: depend on a configured provider + network; a launcher panel could exist but E2E could only prove "it launches", not the live result (provider/key-gated). New-feature scope, not a wire-an-existing-surface.
+- ~~**research / flow LIVE**~~ — **lifted 2026-06-10**: the local Ollama ($0) provides the live
+  provider; the launcher shipped (see the 🟢 entry above and `docs/cowork-alignment-audit-2026-06-10.md`).
 - **browser-operator EXECUTION**: the `browser_operator` agent tool (D3) proposes a consent-gated session; the live browser run stays operator-driven behind the consent gate.
 - **groups (`group-security`)**: read-only listable, but the data is messaging/gateway access-control config (allowlists) — a security boundary. Belongs with the secrets/D4 security-design pass, not a casual read-only panel.
 
@@ -125,5 +136,6 @@ special / prompt-forward / docked-panel) or a 🔴 with a true reason; the
 constructible 🟡 backlog is empty. "Completely pilotable" here means every command
 has a **deliberate disposition** — not the (false) claim that 100% open a panel.
 The only work beyond this matrix is the **gated** list (D4 gateway, secrets vault
-execution, research/flow live, browser-operator execution), which needs live
-resources or a security design and is documented, not fabricated.
+execution, browser-operator execution, groups), which needs a security design and
+is documented, not fabricated. research/flow live shipped 2026-06-10 (gate lifted
+by the local Ollama); see `docs/cowork-alignment-audit-2026-06-10.md`.
