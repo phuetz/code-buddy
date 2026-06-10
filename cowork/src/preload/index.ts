@@ -3951,6 +3951,65 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.invoke('lessons.add', category, content, projectId),
   },
 
+  // `.codebuddy/` backups — same core handler as `buddy backup`.
+  backup: {
+    list: (): Promise<{ ok: boolean; error?: string; output?: string }> =>
+      ipcRenderer.invoke('backup.list'),
+    create: (options?: { onlyConfig?: boolean }): Promise<{ ok: boolean; error?: string; output?: string }> =>
+      ipcRenderer.invoke('backup.create', options),
+    verify: (file: string): Promise<{ ok: boolean; error?: string; output?: string }> =>
+      ipcRenderer.invoke('backup.verify', file),
+    restore: (file: string): Promise<{ ok: boolean; error?: string; output?: string }> =>
+      ipcRenderer.invoke('backup.restore', file),
+  },
+
+  // Research / Flow live launcher — runs the real core CLI headless;
+  // progress streams as `liveLauncher.event` ServerEvents (onEvent).
+  liveLauncher: {
+    start: (input: {
+      kind: 'research' | 'flow';
+      prompt: string;
+      model?: string;
+      provider?: 'ollama' | 'inherit';
+      ollamaUrl?: string;
+      wide?: boolean;
+      workers?: number;
+      maxRetries?: number;
+      timeoutMs?: number;
+    }): Promise<{ ok: boolean; error?: string; runId?: string; reportPath?: string }> =>
+      ipcRenderer.invoke('liveLauncher.start', input),
+    cancel: (runId: string): Promise<{ ok: boolean; error?: string }> =>
+      ipcRenderer.invoke('liveLauncher.cancel', runId),
+    status: (
+      runId: string
+    ): Promise<{
+      runId: string;
+      kind: 'research' | 'flow';
+      prompt: string;
+      model?: string;
+      provider: 'ollama' | 'inherit';
+      status: 'running' | 'succeeded' | 'failed' | 'cancelled';
+      startedAt: number;
+      endedAt?: number;
+      exitCode?: number;
+      reportPath?: string;
+      logTail: string[];
+      result?: string;
+      error?: string;
+    } | null> => ipcRenderer.invoke('liveLauncher.status', runId),
+    list: (): Promise<
+      Array<{
+        runId: string;
+        kind: 'research' | 'flow';
+        prompt: string;
+        status: 'running' | 'succeeded' | 'failed' | 'cancelled';
+        startedAt: number;
+        endedAt?: number;
+        reportPath?: string;
+      }>
+    > => ipcRenderer.invoke('liveLauncher.list'),
+  },
+
   // Knowledge base (Claude Cowork parity)
   knowledge: {
     list: (projectId?: string): Promise<Array<Record<string, unknown>>> =>
@@ -7403,6 +7462,52 @@ declare global {
           content: string,
           projectId?: string
         ) => Promise<{ success: boolean; error?: string; lessonId?: string }>;
+      };
+      backup: {
+        list: () => Promise<{ ok: boolean; error?: string; output?: string }>;
+        create: (options?: { onlyConfig?: boolean }) => Promise<{ ok: boolean; error?: string; output?: string }>;
+        verify: (file: string) => Promise<{ ok: boolean; error?: string; output?: string }>;
+        restore: (file: string) => Promise<{ ok: boolean; error?: string; output?: string }>;
+      };
+      liveLauncher: {
+        start: (input: {
+          kind: 'research' | 'flow';
+          prompt: string;
+          model?: string;
+          provider?: 'ollama' | 'inherit';
+          ollamaUrl?: string;
+          wide?: boolean;
+          workers?: number;
+          maxRetries?: number;
+          timeoutMs?: number;
+        }) => Promise<{ ok: boolean; error?: string; runId?: string; reportPath?: string }>;
+        cancel: (runId: string) => Promise<{ ok: boolean; error?: string }>;
+        status: (runId: string) => Promise<{
+          runId: string;
+          kind: 'research' | 'flow';
+          prompt: string;
+          model?: string;
+          provider: 'ollama' | 'inherit';
+          status: 'running' | 'succeeded' | 'failed' | 'cancelled';
+          startedAt: number;
+          endedAt?: number;
+          exitCode?: number;
+          reportPath?: string;
+          logTail: string[];
+          result?: string;
+          error?: string;
+        } | null>;
+        list: () => Promise<
+          Array<{
+            runId: string;
+            kind: 'research' | 'flow';
+            prompt: string;
+            status: 'running' | 'succeeded' | 'failed' | 'cancelled';
+            startedAt: number;
+            endedAt?: number;
+            reportPath?: string;
+          }>
+        >;
       };
       knowledge: {
         list: (projectId?: string) => Promise<Array<Record<string, unknown>>>;

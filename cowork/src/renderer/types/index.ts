@@ -1695,6 +1695,10 @@ export type ServerEvent =
   | { type: 'fleet.event'; payload: FleetEventRecord }
   | { type: 'fleet.saga.update'; payload: { sagaId: string } }
   | {
+      type: 'liveLauncher.event';
+      payload: import('../../shared/live-launcher-types').LiveLauncherEventPayload;
+    }
+  | {
       type: 'fleet.peer.discovered';
       payload: {
         peers: Array<{

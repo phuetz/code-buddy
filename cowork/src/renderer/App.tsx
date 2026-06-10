@@ -47,6 +47,7 @@ import { TestRunnerPanel } from './components/TestRunnerPanel';
 import { ReasoningTraceViewer } from './components/ReasoningTraceViewer';
 import { MemoryPanel } from './components/MemoryPanel';
 import { AutonomyPanel } from './components/AutonomyPanel';
+import { LiveLauncherPanel } from './components/LiveLauncherPanel';
 import { FocusView } from './components/FocusView';
 import { SplitPaneLayout } from './components/SplitPaneLayout';
 import { UpdateNotification } from './components/UpdateNotification';
@@ -142,6 +143,8 @@ function App() {
   const setShowMemoryEditor = useAppStore((s) => s.setShowMemoryEditor);
   const showAutonomyPanel = useAppStore((s) => s.showAutonomyPanel);
   const setShowAutonomyPanel = useAppStore((s) => s.setShowAutonomyPanel);
+  const showLiveLauncher = useAppStore((s) => s.showLiveLauncher);
+  const setShowLiveLauncher = useAppStore((s) => s.setShowLiveLauncher);
   const showEnrollmentDialog = useAppStore((s) => s.showEnrollmentDialog);
   const setShowEnrollmentDialog = useAppStore((s) => s.setShowEnrollmentDialog);
   const presenceEnabled = useAppStore((s) => s.presenceEnabled);
@@ -656,6 +659,7 @@ function App() {
       />
       <MemoryPanel isOpen={showMemoryEditor} onClose={() => setShowMemoryEditor(false)} />
       <AutonomyPanel isOpen={showAutonomyPanel} onClose={() => setShowAutonomyPanel(false)} />
+      <LiveLauncherPanel isOpen={showLiveLauncher} onClose={() => setShowLiveLauncher(false)} />
 
       {/* Notification toasts + center (Claude Cowork parity) */}
       <NotificationToastContainer />

@@ -29,6 +29,7 @@ import {
   SlashSquare,
   Sparkles,
   Star,
+  Telescope,
   Users,
   Webhook,
   Workflow,
@@ -80,6 +81,8 @@ export function ShellNavigation() {
   const setShowMemoryEditor = useAppStore((s) => s.setShowMemoryEditor);
   const showAutonomyPanel = useAppStore((s) => s.showAutonomyPanel);
   const setShowAutonomyPanel = useAppStore((s) => s.setShowAutonomyPanel);
+  const showLiveLauncher = useAppStore((s) => s.showLiveLauncher);
+  const setShowLiveLauncher = useAppStore((s) => s.setShowLiveLauncher);
 
   const setActiveSession = useAppStore((s) => s.setActiveSession);
   const setShowSettings = useAppStore((s) => s.setShowSettings);
@@ -227,6 +230,14 @@ export function ShellNavigation() {
           icon: Workflow,
           onClick: () => openSettingsTab('workflows'),
           testId: 'workflows-button',
+        },
+        {
+          id: 'live-launcher',
+          label: t('liveLauncher.title', 'Research / Flow launcher'),
+          icon: Telescope,
+          active: showLiveLauncher,
+          onClick: () => setShowLiveLauncher(true),
+          testId: 'live-launcher-button',
         },
         {
           id: 'mission-board',
