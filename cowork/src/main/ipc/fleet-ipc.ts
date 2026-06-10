@@ -234,6 +234,13 @@ export function registerFleetIpcHandlers(
     return runner.cancel(sagaId.trim());
   });
 
+  // Route preview — run the privacy lint + classifier + TaskRouter on a
+  // goal WITHOUT creating a saga, so the operator can see which peers
+  // and models would carry the work (and why) before dispatching.
+  ipcMain.handle('fleet.routePreview', async (_event, input: FleetDispatchInput) =>
+    previewFleetRoute(input, { fleetBridge: getFleetBridge() })
+  );
+
   // Cost observability — today's fleet spend vs the configured caps, by
   // provider and by peer, plus the 7-day total. Read-only view over the
   // same core CostTracker ledger the dispatch cost gate (W5) charges.
@@ -295,6 +302,158 @@ export function registerFleetIpcHandlers(
       return { ok: false, error: message };
     }
   });
+}
+
+/** One routed lane as shown in the GUI route preview. */
+export interface RoutePreviewLane {
+  peerId: string;
+  model: string;
+  /** 0..1 router score — lets the UI explain "why this peer". */
+  score?: number;
+  breakdown?: { match: number; cost: number; load: number; latency: number };
+  /** Chain steps only. */
+  role?: string;
+}
+
+export interface FleetRoutePreviewResult {
+  ok: boolean;
+  error?: string;
+  privacyTag?: 'public' | 'sensitive';
+  lintWarning?: string;
+  rationale?: string;
+  primary?: RoutePreviewLane;
+  fallback?: RoutePreviewLane;
+  parallel?: RoutePreviewLane[];
+  chain?: RoutePreviewLane[];
+}
+
+/**
+ * Dry-run the routing half of {@link dispatchFleetSaga}: privacy lint
+ * (same refuse/auto-bump semantics, so the preview is honest about what
+ * the dispatch would do), classification, TaskRouter plan. No saga is
+ * created and no runner is started.
+ */
+export async function previewFleetRoute(
+  input: FleetDispatchInput,
+  dependencies: { fleetBridge: FleetBridge | null },
+): Promise<FleetRoutePreviewResult> {
+  const { fleetBridge } = dependencies;
+  if (!fleetBridge) return { ok: false, error: 'FleetBridge not initialized' };
+  if (typeof input?.goal !== 'string' || !input.goal.trim()) {
+    return { ok: false, error: 'A goal is required.' };
+  }
+  if (input.dispatchProfile !== undefined && !isFleetDispatchProfile(input.dispatchProfile)) {
+    return {
+      ok: false,
+      error: `dispatchProfile must be one of ${FLEET_DISPATCH_PROFILES.join(', ')}`,
+    };
+  }
+  try {
+    type ClassificationLike = Record<string, unknown>;
+    type RouterMod = {
+      TaskRouter: new () => {
+        plan: (
+          cls: ClassificationLike,
+          peers: Array<{ peerId: string; capability: unknown }>,
+          constraints?: unknown,
+        ) => unknown;
+      };
+      planChainDispatch?: (
+        cls: ClassificationLike,
+        peers: Array<{ peerId: string; capability: unknown }>,
+        opts: { chainRoles: string[]; constraints?: unknown },
+      ) => unknown;
+    };
+    type ClsMod = { classifyTaskComplexity: (msg: string) => ClassificationLike };
+    type LintMod = {
+      scanForSecrets: (
+        prompt: string,
+      ) => { hasSecrets: boolean; highConfidence: boolean; matches: unknown[] };
+    };
+    const [routerMod, clsMod, lintMod] = await Promise.all([
+      loadCoreModule<RouterMod>('fleet/task-router.js'),
+      loadCoreModule<ClsMod>('optimization/model-routing.js'),
+      loadCoreModule<LintMod>('fleet/privacy-lint.js'),
+    ]);
+    if (!routerMod || !clsMod) {
+      return { ok: false, error: 'core fleet modules unavailable' };
+    }
+
+    let effectivePrivacyTag = input.privacyTag;
+    let lintWarning: string | undefined;
+    if (lintMod) {
+      const lint = lintMod.scanForSecrets(input.goal);
+      if (lint.hasSecrets) {
+        if (input.privacyTag === 'public') {
+          return {
+            ok: false,
+            error: `Privacy lint would block this dispatch — secrets detected (${lint.matches.length} match(es)) with privacyTag='public'.`,
+          };
+        }
+        if (effectivePrivacyTag !== 'sensitive') {
+          effectivePrivacyTag = 'sensitive';
+          lintWarning = `would auto-bump to sensitive (${lint.matches.length} match(es))`;
+        }
+      }
+    }
+
+    const peers = (await Promise.resolve(fleetBridge.listPeers())) as Array<
+      { id: string; capability?: unknown }
+    >;
+    const peerSlots = peers
+      .filter((p) => Boolean(p.capability))
+      .map((p) => ({ peerId: p.id, capability: p.capability as unknown }));
+    if (peerSlots.length === 0) {
+      return { ok: false, error: 'No peer with known capabilities — refresh capabilities first.' };
+    }
+
+    const classification = clsMod.classifyTaskComplexity(input.goal);
+    const router = new routerMod.TaskRouter();
+    const chainRoles = (input.chainRoles ?? []).map((r) => r.trim()).filter(Boolean);
+    const councilMode = input.council === true && chainRoles.length === 0;
+    const targetPeerIds = normalizeStringList(input.targetPeerIds);
+    const constraints = {
+      parallelism: councilMode ? Math.max(2, input.parallelism ?? 2) : input.parallelism,
+      privacyTag: effectivePrivacyTag,
+      dispatchProfile: input.dispatchProfile,
+      maxCostUsd: input.maxCostUsd,
+      targetPeerIds: targetPeerIds.length > 0 ? targetPeerIds : undefined,
+    };
+    const plan = (chainRoles.length > 0 && typeof routerMod.planChainDispatch === 'function'
+      ? routerMod.planChainDispatch(classification, peerSlots, { chainRoles, constraints })
+      : router.plan(classification, peerSlots, constraints)) as {
+      rationale?: string;
+      primary?: RoutePreviewLane;
+      fallback?: RoutePreviewLane;
+      parallel?: RoutePreviewLane[];
+      chain?: RoutePreviewLane[];
+    };
+
+    return {
+      ok: true,
+      ...(effectivePrivacyTag ? { privacyTag: effectivePrivacyTag } : {}),
+      ...(lintWarning ? { lintWarning } : {}),
+      ...(typeof plan.rationale === 'string' ? { rationale: plan.rationale } : {}),
+      ...(plan.primary ? { primary: sanitizeRouteLane(plan.primary) } : {}),
+      ...(plan.fallback ? { fallback: sanitizeRouteLane(plan.fallback) } : {}),
+      ...(plan.parallel ? { parallel: plan.parallel.map(sanitizeRouteLane) } : {}),
+      ...(plan.chain ? { chain: plan.chain.map(sanitizeRouteLane) } : {}),
+    };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logError('[fleet.routePreview] failed:', message);
+    return { ok: false, error: message };
+  }
+}
+
+function sanitizeRouteLane(lane: RoutePreviewLane): RoutePreviewLane {
+  return {
+    peerId: lane.peerId,
+    model: lane.model,
+    ...(typeof lane.score === 'number' ? { score: lane.score } : {}),
+    ...(lane.breakdown ? { breakdown: lane.breakdown } : {}),
+    ...(typeof lane.role === 'string' ? { role: lane.role } : {}),
+  };
 }
 
 /** The slice of a persisted saga that a replay reads. */

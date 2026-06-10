@@ -621,3 +621,111 @@ describe('fleet.costSummary', () => {
     });
   });
 });
+
+describe('previewFleetRoute', () => {
+  beforeEach(() => {
+    coreLoaderMock.loadCoreModule.mockReset();
+  });
+
+  function installPreviewCoreModules(planResult: unknown) {
+    const planCalls: Array<{ constraints: unknown }> = [];
+    coreLoaderMock.loadCoreModule.mockImplementation(async (path: string) => {
+      switch (path) {
+        case 'fleet/task-router.js':
+          return {
+            TaskRouter: class {
+              plan(_cls: unknown, _peers: unknown, constraints?: unknown) {
+                planCalls.push({ constraints });
+                return planResult;
+              }
+            },
+          };
+        case 'optimization/model-routing.js':
+          return { classifyTaskComplexity: () => ({ complexity: 'simple' }) };
+        case 'fleet/privacy-lint.js':
+          return {
+            scanForSecrets: (prompt: string) => ({
+              hasSecrets: prompt.includes('sk-secret'),
+              highConfidence: true,
+              matches: prompt.includes('sk-secret') ? [{}] : [],
+            }),
+          };
+        default:
+          return null;
+      }
+    });
+    return { planCalls };
+  }
+
+  it('returns sanitized lanes + rationale without creating a saga or starting a runner', async () => {
+    const { previewFleetRoute } = await import('../src/main/ipc/fleet-ipc');
+    installPreviewCoreModules({
+      rationale: 'best match: darkstar (free local)',
+      primary: {
+        peerId: 'darkstar/repo',
+        model: 'qwen3.6:27b',
+        score: 0.91,
+        breakdown: { match: 1, cost: 1, load: 0.8, latency: 0.7 },
+        internal: 'should-not-leak',
+      },
+      fallback: { peerId: 'ministar/repo', model: 'qwen2.5:7b', score: 0.6 },
+    });
+    const bridge = {
+      listPeers: vi.fn(async () => [
+        { id: 'darkstar/repo', capability: { roles: ['code'] } },
+        { id: 'ministar/repo', capability: { roles: ['code'] } },
+      ]),
+    } as unknown as FleetBridge;
+
+    const result = await previewFleetRoute({ goal: 'refactor the parser' }, { fleetBridge: bridge });
+
+    expect(result.ok).toBe(true);
+    expect(result.primary).toEqual({
+      peerId: 'darkstar/repo',
+      model: 'qwen3.6:27b',
+      score: 0.91,
+      breakdown: { match: 1, cost: 1, load: 0.8, latency: 0.7 },
+    });
+    expect(result.fallback?.peerId).toBe('ministar/repo');
+    expect(result.rationale).toContain('darkstar');
+    // Dry-run only: no saga store touched, no runner started.
+    expect(sagaRunnerMock.instances.every((r) => r.start.mock.calls.length === 0)).toBe(true);
+  });
+
+  it('is honest about the privacy lint: auto-bump surfaces as a warning, forced public refuses', async () => {
+    const { previewFleetRoute } = await import('../src/main/ipc/fleet-ipc');
+    installPreviewCoreModules({ primary: { peerId: 'p', model: 'm' } });
+    const bridge = {
+      listPeers: vi.fn(async () => [{ id: 'p', capability: {} }]),
+    } as unknown as FleetBridge;
+
+    const bumped = await previewFleetRoute({ goal: 'use sk-secret-123' }, { fleetBridge: bridge });
+    expect(bumped.ok).toBe(true);
+    expect(bumped.privacyTag).toBe('sensitive');
+    expect(bumped.lintWarning).toContain('sensitive');
+
+    const refused = await previewFleetRoute(
+      { goal: 'use sk-secret-123', privacyTag: 'public' },
+      { fleetBridge: bridge },
+    );
+    expect(refused.ok).toBe(false);
+    expect(refused.error).toContain('Privacy lint');
+  });
+
+  it('fails cleanly without a goal, bridge, or capable peers', async () => {
+    const { previewFleetRoute } = await import('../src/main/ipc/fleet-ipc');
+
+    expect((await previewFleetRoute({ goal: '  ' }, { fleetBridge: {} as never })).ok).toBe(false);
+    expect((await previewFleetRoute({ goal: 'x' }, { fleetBridge: null })).error).toContain(
+      'FleetBridge',
+    );
+
+    installPreviewCoreModules({ primary: { peerId: 'p', model: 'm' } });
+    const emptyBridge = {
+      listPeers: vi.fn(async () => [{ id: 'p' }]), // no capability
+    } as unknown as FleetBridge;
+    const noPeers = await previewFleetRoute({ goal: 'x' }, { fleetBridge: emptyBridge });
+    expect(noPeers.ok).toBe(false);
+    expect(noPeers.error).toContain('capabilities');
+  });
+});

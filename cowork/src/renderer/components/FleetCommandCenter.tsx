@@ -86,6 +86,7 @@ import { LessonsVaultStrip } from './lessons-vault-strip';
 import { LessonsVaultGraph } from './LessonsVaultGraph';
 import { SagaBoard } from './fleet-saga-board';
 import { FleetCostStrip } from './FleetCostStrip';
+import { FleetRoutePreview } from './FleetRoutePreview';
 import { PeerDetail, PeerRow } from './fleet-peer-panel';
 import { SagaDetail } from './fleet-saga-detail';
 import {
@@ -1079,6 +1080,17 @@ export const FleetCommandCenter: React.FC<Props> = ({ isOpen, onClose }) => {
                     )}
                     {t('fleet.dispatch', 'Dispatch')}
                   </button>
+                </div>
+                <div className="mt-2">
+                  <FleetRoutePreview
+                    goal={goalText}
+                    dispatchProfile={dispatchProfile}
+                    privacyTag={privacyTag}
+                    parallelism={parallelism}
+                    council={council}
+                    targetPeerIds={routablePeers.map((peer) => peer.id)}
+                    disabled={routablePeers.length === 0}
+                  />
                 </div>
                 {error && (
                   <div className="mt-2 p-2 bg-error/10 border border-error/30 rounded text-error text-[11px] flex items-start gap-1.5">

@@ -3043,6 +3043,27 @@ contextBridge.exposeInMainWorld('electronAPI', {
       dispatchProfile?: 'balanced' | 'research' | 'code' | 'review' | 'safe';
       lintWarning?: string;
     }> => ipcRenderer.invoke('fleet.replaySaga', sagaId),
+    /** Dry-run the router on a goal (no saga created): lanes + scores + rationale. */
+    routePreview: (input: {
+      goal: string;
+      parallelism?: number;
+      privacyTag?: 'public' | 'sensitive';
+      dispatchProfile?: 'balanced' | 'research' | 'code' | 'review' | 'safe';
+      council?: boolean;
+      chainRoles?: string[];
+      targetPeerIds?: string[];
+      maxCostUsd?: number;
+    }): Promise<{
+      ok: boolean;
+      error?: string;
+      privacyTag?: 'public' | 'sensitive';
+      lintWarning?: string;
+      rationale?: string;
+      primary?: { peerId: string; model: string; score?: number; role?: string };
+      fallback?: { peerId: string; model: string; score?: number; role?: string };
+      parallel?: Array<{ peerId: string; model: string; score?: number; role?: string }>;
+      chain?: Array<{ peerId: string; model: string; score?: number; role?: string }>;
+    }> => ipcRenderer.invoke('fleet.routePreview', input),
     /** Today's fleet spend vs caps (per provider / per peer) + 7-day total. */
     costSummary: (): Promise<{
       ok: boolean;
@@ -6498,6 +6519,26 @@ declare global {
             weekUsd: number;
           };
           budget?: { maxDailyUsd: number; maxSagaUsd: number };
+        }>;
+        routePreview: (input: {
+          goal: string;
+          parallelism?: number;
+          privacyTag?: 'public' | 'sensitive';
+          dispatchProfile?: 'balanced' | 'research' | 'code' | 'review' | 'safe';
+          council?: boolean;
+          chainRoles?: string[];
+          targetPeerIds?: string[];
+          maxCostUsd?: number;
+        }) => Promise<{
+          ok: boolean;
+          error?: string;
+          privacyTag?: 'public' | 'sensitive';
+          lintWarning?: string;
+          rationale?: string;
+          primary?: { peerId: string; model: string; score?: number; role?: string };
+          fallback?: { peerId: string; model: string; score?: number; role?: string };
+          parallel?: Array<{ peerId: string; model: string; score?: number; role?: string }>;
+          chain?: Array<{ peerId: string; model: string; score?: number; role?: string }>;
         }>;
       };
       team: {
