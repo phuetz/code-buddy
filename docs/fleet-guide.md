@@ -776,6 +776,11 @@ LLM (continuing with peer's answer in context): "darkstar suggests …"
 >   result is discarded — there is no `peer.dispatchCancel` RPC yet) and replay a terminal saga as a new one
 >   (same goal + routing intent; routing recomputed against the peers available now; the raw goal is replayed so
 >   injected fleet lessons don't stack). `fleet.cancelSaga` / `fleet.replaySaga` IPC, `SagaRunner.cancel`.
+> - **GUI spend, route preview, live peer sessions.** The Command Center also carries: a fleet spend strip over the
+>   core CostTracker ledger (today vs daily cap, 7-day, per-peer/provider — `fleet.costSummary`); a pre-dispatch
+>   "Preview route" that dry-runs lint+classifier+TaskRouter with lane scores and rationale, no saga created
+>   (`fleet.routePreview`); and interactive `peer.chat-session.*` piloting from the peer detail panel — start/attach/
+>   turn/end with a local transcript, metadata-only listing (`fleet.peerSession*`).
 
 Fleet bus = the `claude-et-patrice/.codebuddy/` repo on a shared
 Tailscale mesh. Each peer periodically:
