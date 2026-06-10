@@ -234,6 +234,105 @@ export function registerFleetIpcHandlers(
     return runner.cancel(sagaId.trim());
   });
 
+  // Interactive peer chat sessions — drive a remote peer's multi-turn
+  // peer.chat-session.* lifecycle from the GUI. The transcript lives on
+  // the remote peer (list returns metadata only, never message content —
+  // a privacy guard asserted by core tests); the GUI keeps a local
+  // transcript of the turns it sent in this window.
+  ipcMain.handle(
+    'fleet.peerSessionStart',
+    async (
+      _event,
+      peerId: string,
+      options?: { model?: string; dispatchProfile?: string; systemPrompt?: string }
+    ) => {
+      const outcome = await peerSessionRequest(getFleetBridge(), peerId, 'peer.chat-session.start', {
+        ...(options?.model ? { model: options.model } : {}),
+        ...(options?.dispatchProfile ? { dispatchProfile: options.dispatchProfile } : {}),
+        ...(options?.systemPrompt ? { systemPrompt: options.systemPrompt } : {}),
+      }, PEER_SESSION_RPC_TIMEOUT_MS);
+      if (!outcome.ok) return outcome;
+      const result = outcome.result as { sessionId?: string; expiresAt?: number; dispatchProfile?: string };
+      return {
+        ok: true,
+        sessionId: result?.sessionId,
+        expiresAt: result?.expiresAt,
+        dispatchProfile: result?.dispatchProfile,
+      };
+    }
+  );
+
+  ipcMain.handle(
+    'fleet.peerSessionSay',
+    async (_event, peerId: string, sessionId: string, prompt: string) => {
+      if (typeof sessionId !== 'string' || !sessionId.trim()) {
+        return { ok: false, error: 'A session id is required.' };
+      }
+      if (typeof prompt !== 'string' || !prompt.trim()) {
+        return { ok: false, error: 'A prompt is required.' };
+      }
+      const outcome = await peerSessionRequest(
+        getFleetBridge(),
+        peerId,
+        'peer.chat-session.continue',
+        { sessionId: sessionId.trim(), prompt },
+        PEER_SESSION_TURN_TIMEOUT_MS
+      );
+      if (!outcome.ok) return outcome;
+      const result = outcome.result as { text?: string; finishReason?: string | null; usage?: unknown };
+      return { ok: true, text: result?.text ?? '', finishReason: result?.finishReason ?? null };
+    }
+  );
+
+  ipcMain.handle('fleet.peerSessionEnd', async (_event, peerId: string, sessionId: string) => {
+    if (typeof sessionId !== 'string' || !sessionId.trim()) {
+      return { ok: false, error: 'A session id is required.' };
+    }
+    const outcome = await peerSessionRequest(
+      getFleetBridge(),
+      peerId,
+      'peer.chat-session.end',
+      { sessionId: sessionId.trim() },
+      PEER_SESSION_RPC_TIMEOUT_MS
+    );
+    if (!outcome.ok) return outcome;
+    const result = outcome.result as { closed?: boolean };
+    return { ok: true, closed: Boolean(result?.closed) };
+  });
+
+  ipcMain.handle('fleet.peerSessionList', async (_event, peerId: string) => {
+    const outcome = await peerSessionRequest(
+      getFleetBridge(),
+      peerId,
+      'peer.chat-session.list',
+      {},
+      PEER_SESSION_RPC_TIMEOUT_MS
+    );
+    if (!outcome.ok) return { ...outcome, sessions: [] };
+    const result = outcome.result as {
+      count?: number;
+      sessions?: Array<{
+        sessionId: string;
+        turnCount?: number;
+        model?: string;
+        dispatchProfile?: string;
+        ageMs?: number;
+        idleMs?: number;
+        expiresInMs?: number;
+      }>;
+    };
+    const sessions = (result?.sessions ?? []).map((s) => ({
+      sessionId: s.sessionId,
+      turnCount: s.turnCount ?? 0,
+      ...(s.model ? { model: s.model } : {}),
+      ...(s.dispatchProfile ? { dispatchProfile: s.dispatchProfile } : {}),
+      ...(typeof s.ageMs === 'number' ? { ageMs: s.ageMs } : {}),
+      ...(typeof s.idleMs === 'number' ? { idleMs: s.idleMs } : {}),
+      ...(typeof s.expiresInMs === 'number' ? { expiresInMs: s.expiresInMs } : {}),
+    }));
+    return { ok: true, count: result?.count ?? sessions.length, sessions };
+  });
+
   // Route preview — run the privacy lint + classifier + TaskRouter on a
   // goal WITHOUT creating a saga, so the operator can see which peers
   // and models would carry the work (and why) before dispatching.
@@ -822,6 +921,30 @@ function setOptionalMetadataString(
 
 function resolveSource<T>(source: T | null | (() => T | null)): T | null {
   return typeof source === 'function' ? (source as () => T | null)() : source;
+}
+
+const PEER_SESSION_RPC_TIMEOUT_MS = 15_000;
+// A turn waits on a remote LLM call — give it the same headroom a slow
+// local model needs rather than the snappy metadata timeout.
+const PEER_SESSION_TURN_TIMEOUT_MS = 180_000;
+
+async function peerSessionRequest(
+  fleetBridge: FleetBridge | null,
+  peerId: unknown,
+  method: string,
+  params: Record<string, unknown>,
+  timeoutMs: number,
+): Promise<{ ok: true; result: unknown } | { ok: false; error: string }> {
+  if (!fleetBridge) return { ok: false, error: 'FleetBridge not initialized' };
+  if (typeof peerId !== 'string' || !peerId.trim()) {
+    return { ok: false, error: 'A peer id is required.' };
+  }
+  try {
+    const result = await fleetBridge.peerRequest(peerId.trim(), method, params, { timeoutMs });
+    return { ok: true, result };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
 }
 
 function normalizeStringList(value: unknown): string[] {

@@ -729,3 +729,140 @@ describe('previewFleetRoute', () => {
     expect(noPeers.error).toContain('capabilities');
   });
 });
+
+describe('fleet.peerSession* IPC', () => {
+  beforeEach(() => {
+    electronMock.handlers.clear();
+    electronMock.handle.mockClear();
+    coreLoaderMock.loadCoreModule.mockReset();
+  });
+
+  function makeSessionBridge() {
+    const calls: Array<{ peerId: string; method: string; params: Record<string, unknown> }> = [];
+    const bridge = {
+      peerRequest: vi.fn(async (peerId: string, method: string, params: Record<string, unknown>) => {
+        calls.push({ peerId, method, params });
+        switch (method) {
+          case 'peer.chat-session.start':
+            return { sessionId: 'sess_1', expiresAt: 123, traceId: 't' };
+          case 'peer.chat-session.continue':
+            return { text: 'bonjour de darkstar', finishReason: 'stop', usage: {} };
+          case 'peer.chat-session.end':
+            return { closed: true, traceId: 't' };
+          case 'peer.chat-session.list':
+            return {
+              count: 1,
+              sessions: [
+                {
+                  sessionId: 'sess_1',
+                  turnCount: 2,
+                  model: 'qwen3.6:27b',
+                  ageMs: 1000,
+                  idleMs: 50,
+                  expiresInMs: 100,
+                  internalField: 'should-not-leak',
+                },
+              ],
+            };
+          default:
+            throw new Error(`unmocked ${method}`);
+        }
+      }),
+    } as unknown as FleetBridge;
+    return { bridge, calls };
+  }
+
+  it('drives the full session lifecycle through peer.chat-session.*', async () => {
+    const { bridge, calls } = makeSessionBridge();
+    registerFleetIpcHandlers(bridge);
+
+    const start = (await electronMock.handlers.get('fleet.peerSessionStart')?.({}, 'darkstar')) as {
+      ok: boolean;
+      sessionId?: string;
+    };
+    expect(start.ok).toBe(true);
+    expect(start.sessionId).toBe('sess_1');
+
+    const say = (await electronMock.handlers.get('fleet.peerSessionSay')?.(
+      {},
+      'darkstar',
+      'sess_1',
+      'salut'
+    )) as { ok: boolean; text?: string };
+    expect(say.ok).toBe(true);
+    expect(say.text).toBe('bonjour de darkstar');
+
+    const list = (await electronMock.handlers.get('fleet.peerSessionList')?.({}, 'darkstar')) as {
+      ok: boolean;
+      sessions: Array<Record<string, unknown>>;
+    };
+    expect(list.ok).toBe(true);
+    expect(list.sessions[0].sessionId).toBe('sess_1');
+    // Metadata is sanitized — unknown remote fields never reach the renderer.
+    expect(list.sessions[0].internalField).toBeUndefined();
+
+    const end = (await electronMock.handlers.get('fleet.peerSessionEnd')?.(
+      {},
+      'darkstar',
+      'sess_1'
+    )) as { ok: boolean; closed?: boolean };
+    expect(end.ok).toBe(true);
+    expect(end.closed).toBe(true);
+
+    expect(calls.map((c) => c.method)).toEqual([
+      'peer.chat-session.start',
+      'peer.chat-session.continue',
+      'peer.chat-session.list',
+      'peer.chat-session.end',
+    ]);
+    expect(calls.every((c) => c.peerId === 'darkstar')).toBe(true);
+  });
+
+  it('fails closed on missing prompt/sessionId/bridge', async () => {
+    const { bridge } = makeSessionBridge();
+    registerFleetIpcHandlers(bridge);
+
+    const noPrompt = (await electronMock.handlers.get('fleet.peerSessionSay')?.(
+      {},
+      'darkstar',
+      'sess_1',
+      '  '
+    )) as { ok: boolean; error?: string };
+    expect(noPrompt.ok).toBe(false);
+    expect(noPrompt.error).toContain('prompt');
+
+    const noSession = (await electronMock.handlers.get('fleet.peerSessionEnd')?.(
+      {},
+      'darkstar',
+      ''
+    )) as { ok: boolean; error?: string };
+    expect(noSession.ok).toBe(false);
+
+    electronMock.handlers.clear();
+    registerFleetIpcHandlers(null);
+    const noBridge = (await electronMock.handlers.get('fleet.peerSessionList')?.(
+      {},
+      'darkstar'
+    )) as { ok: boolean; error?: string; sessions: unknown[] };
+    expect(noBridge.ok).toBe(false);
+    expect(noBridge.sessions).toEqual([]);
+  });
+
+  it('surfaces remote RPC errors (e.g. SESSION_NOT_FOUND) as structured failures', async () => {
+    const bridge = {
+      peerRequest: vi.fn(async () => {
+        throw new Error('SESSION_NOT_FOUND: no session with id "sess_9"');
+      }),
+    } as unknown as FleetBridge;
+    registerFleetIpcHandlers(bridge);
+
+    const say = (await electronMock.handlers.get('fleet.peerSessionSay')?.(
+      {},
+      'darkstar',
+      'sess_9',
+      'salut'
+    )) as { ok: boolean; error?: string };
+    expect(say.ok).toBe(false);
+    expect(say.error).toContain('SESSION_NOT_FOUND');
+  });
+});

@@ -3043,6 +3043,44 @@ contextBridge.exposeInMainWorld('electronAPI', {
       dispatchProfile?: 'balanced' | 'research' | 'code' | 'review' | 'safe';
       lintWarning?: string;
     }> => ipcRenderer.invoke('fleet.replaySaga', sagaId),
+    /** Interactive peer chat sessions (peer.chat-session.*). Transcript stays on the peer. */
+    peerSessionStart: (
+      peerId: string,
+      options?: { model?: string; dispatchProfile?: string; systemPrompt?: string }
+    ): Promise<{
+      ok: boolean;
+      error?: string;
+      sessionId?: string;
+      expiresAt?: number;
+      dispatchProfile?: string;
+    }> => ipcRenderer.invoke('fleet.peerSessionStart', peerId, options),
+    peerSessionSay: (
+      peerId: string,
+      sessionId: string,
+      prompt: string
+    ): Promise<{ ok: boolean; error?: string; text?: string; finishReason?: string | null }> =>
+      ipcRenderer.invoke('fleet.peerSessionSay', peerId, sessionId, prompt),
+    peerSessionEnd: (
+      peerId: string,
+      sessionId: string
+    ): Promise<{ ok: boolean; error?: string; closed?: boolean }> =>
+      ipcRenderer.invoke('fleet.peerSessionEnd', peerId, sessionId),
+    peerSessionList: (
+      peerId: string
+    ): Promise<{
+      ok: boolean;
+      error?: string;
+      count?: number;
+      sessions: Array<{
+        sessionId: string;
+        turnCount: number;
+        model?: string;
+        dispatchProfile?: string;
+        ageMs?: number;
+        idleMs?: number;
+        expiresInMs?: number;
+      }>;
+    }> => ipcRenderer.invoke('fleet.peerSessionList', peerId),
     /** Dry-run the router on a goal (no saga created): lanes + scores + rationale. */
     routePreview: (input: {
       goal: string;
@@ -6539,6 +6577,39 @@ declare global {
           fallback?: { peerId: string; model: string; score?: number; role?: string };
           parallel?: Array<{ peerId: string; model: string; score?: number; role?: string }>;
           chain?: Array<{ peerId: string; model: string; score?: number; role?: string }>;
+        }>;
+        peerSessionStart: (
+          peerId: string,
+          options?: { model?: string; dispatchProfile?: string; systemPrompt?: string }
+        ) => Promise<{
+          ok: boolean;
+          error?: string;
+          sessionId?: string;
+          expiresAt?: number;
+          dispatchProfile?: string;
+        }>;
+        peerSessionSay: (
+          peerId: string,
+          sessionId: string,
+          prompt: string
+        ) => Promise<{ ok: boolean; error?: string; text?: string; finishReason?: string | null }>;
+        peerSessionEnd: (
+          peerId: string,
+          sessionId: string
+        ) => Promise<{ ok: boolean; error?: string; closed?: boolean }>;
+        peerSessionList: (peerId: string) => Promise<{
+          ok: boolean;
+          error?: string;
+          count?: number;
+          sessions: Array<{
+            sessionId: string;
+            turnCount: number;
+            model?: string;
+            dispatchProfile?: string;
+            ageMs?: number;
+            idleMs?: number;
+            expiresInMs?: number;
+          }>;
         }>;
       };
       team: {

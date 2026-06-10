@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { Cloud, HardDrive, Loader2, RefreshCw, Wifi } from 'lucide-react';
 import type { FleetPeer } from '../types';
 import { formatPeerSeenAt, peerStatusTone } from './fleet-command-center-helpers';
+import { FleetPeerSessionPanel } from './FleetPeerSessionPanel';
 
 export const PeerRow: React.FC<{
   peer: FleetPeer;
@@ -187,6 +188,7 @@ export const PeerDetail: React.FC<{
           </ul>
         </div>
       )}
+      <FleetPeerSessionPanel peerId={peer.id} />
       {!cap && (
         <div className="rounded border border-warning/30 bg-warning/10 px-3 py-2">
           <div className="text-[11px] text-warning">
