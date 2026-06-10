@@ -71,9 +71,9 @@ export const BLOCKED_PATTERNS: RegExp[] = [
   /\bawk\s+.*\bsystem\s*\(/i,            // awk system() call
 
   // Unicode/special character bypass attempts
-  // eslint-disable-next-line no-control-regex
   // Tab/LF/CR intentionally EXCLUDED so legitimate multi-line commands
   // (heredocs, scripts) pass; mirrors BLOCKED_CONTROL_CHARS below.
+  // eslint-disable-next-line no-control-regex
   /[\u0000-\u0008\u000b\u000c\u000e-\u001f]/,
   /[\u007f-\u009f]/,                     // Delete and C1 control codes
   /[\u200b-\u200f]/,                     // Zero-width and directional chars
