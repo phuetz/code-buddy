@@ -137,7 +137,12 @@ export class FeishuChannel extends ChannelBase {
   }
 
   /**
-   * Verify webhook signature from X-Lark-Signature header
+   * Verify webhook signature from the X-Lark-Signature header.
+   *
+   * Per the Lark Open Platform spec, Feishu signs requests only when an
+   * Encrypt Key is configured, and the signature is the plain SHA-256 hex
+   * digest of `timestamp + nonce + encrypt_key + body` — not an HMAC, and
+   * keyed by the encrypt key, not the verification token.
    */
   private verifyWebhookSignature(
     timestamp: string,
@@ -145,14 +150,13 @@ export class FeishuChannel extends ChannelBase {
     body: string,
     signature: string
   ): boolean {
-    const verificationToken = this.config?.verificationToken;
-    if (!verificationToken) return false; // Reject — verificationToken is required for webhook mode
+    const encryptKey = this.config?.encryptKey;
+    if (!encryptKey) return false;
 
     try {
-      const content = timestamp + nonce + verificationToken + body;
       const computedSignature = crypto
-        .createHmac('sha256', verificationToken)
-        .update(content)
+        .createHash('sha256')
+        .update(timestamp + nonce + encryptKey + body)
         .digest('hex');
       const sigBuf = Buffer.from(signature, 'hex');
       const computedBuf = Buffer.from(computedSignature, 'hex');
@@ -161,6 +165,14 @@ export class FeishuChannel extends ChannelBase {
     } catch {
       return false;
     }
+  }
+
+  /** Timing-safe comparison for short shared secrets (verification token). */
+  private static safeEqual(a: string, b: string): boolean {
+    const ab = Buffer.from(a);
+    const bb = Buffer.from(b);
+    if (ab.length !== bb.length) return false;
+    return crypto.timingSafeEqual(ab, bb);
   }
 
   /**
@@ -172,22 +184,67 @@ export class FeishuChannel extends ChannelBase {
   ): Promise<{ status: number; data: Record<string, unknown> }> {
     log('[Feishu] Received webhook request');
 
-    // Verify webhook signature — always required
-    const signature = _headers['x-lark-signature'];
-    const timestamp = _headers['x-lark-request-timestamp'] || '';
-    const nonce = _headers['x-lark-request-nonce'] || '';
-    if (!signature) {
-      logWarn('[Feishu] Webhook request rejected: missing X-Lark-Signature header');
-      return { status: 403, data: { error: 'Missing signature' } };
+    // Fail closed: without at least one shared secret there is no way to
+    // authenticate that the request really comes from Feishu.
+    if (!this.config.encryptKey && !this.config.verificationToken) {
+      logWarn('[Feishu] Webhook rejected: neither encryptKey nor verificationToken configured');
+      return { status: 403, data: { error: 'Webhook verification not configured' } };
     }
-    if (!this.verifyWebhookSignature(timestamp, nonce, body, signature)) {
-      logWarn('[Feishu] Webhook signature verification failed');
-      return { status: 403, data: { error: 'Invalid signature' } };
+
+    // Signature gate — Feishu signs requests only when an Encrypt Key is
+    // configured; in that mode the signature is mandatory.
+    if (this.config.encryptKey) {
+      const signature = _headers['x-lark-signature'];
+      const timestamp = _headers['x-lark-request-timestamp'] || '';
+      const nonce = _headers['x-lark-request-nonce'] || '';
+      if (!signature) {
+        logWarn('[Feishu] Webhook request rejected: missing X-Lark-Signature header');
+        return { status: 403, data: { error: 'Missing signature' } };
+      }
+      if (!this.verifyWebhookSignature(timestamp, nonce, body, signature)) {
+        logWarn('[Feishu] Webhook signature verification failed');
+        return { status: 403, data: { error: 'Invalid signature' } };
+      }
     }
 
     try {
-      const data = JSON.parse(body);
-      log('[Feishu] Webhook data:', JSON.stringify(data, null, 2));
+      let data = JSON.parse(body);
+
+      // P6.2 — Decrypt encrypted webhook bodies per the Lark Open
+      // Platform spec: AES-256-CBC with key = SHA256(encrypt_key), IV =
+      // first 16 bytes of the ciphertext, body = base64(IV || ciphertext).
+      if (data && typeof data === 'object' && data.encrypt) {
+        if (!this.config.encryptKey) {
+          logWarn('[Feishu] Encrypted webhook received but no encryptKey configured');
+          return { status: 401, data: { code: 1, msg: 'Encryption not configured' } };
+        }
+        try {
+          const key = crypto.createHash('sha256').update(this.config.encryptKey).digest();
+          const blob = Buffer.from(data.encrypt as string, 'base64');
+          const iv = blob.subarray(0, 16);
+          const ciphertext = blob.subarray(16);
+          const decipher = crypto.createDecipheriv('aes-256-cbc', key, iv);
+          const decrypted = Buffer.concat([decipher.update(ciphertext), decipher.final()]);
+          data = JSON.parse(decrypted.toString('utf8'));
+        } catch (err) {
+          logError('[Feishu] Decryption failed:', err);
+          return { status: 401, data: { code: 1, msg: 'Decryption failed' } };
+        }
+      }
+
+      // Verification-token check. Feishu echoes the token at the top level
+      // (v1 events, url_verification) or in header.token (v2 events);
+      // whenever a token is configured the claim must match.
+      if (this.config.verificationToken) {
+        const claimedToken: unknown = data?.header?.token ?? data?.token;
+        if (
+          typeof claimedToken !== 'string' ||
+          !FeishuChannel.safeEqual(claimedToken, this.config.verificationToken)
+        ) {
+          logWarn('[Feishu] Webhook rejected: verification token mismatch');
+          return { status: 403, data: { error: 'Invalid verification token' } };
+        }
+      }
 
       // Handle URL verification challenge
       if (data.type === 'url_verification') {
@@ -222,34 +279,6 @@ export class FeishuChannel extends ChannelBase {
         }
 
         return { status: 200, data: { code: 0 } };
-      }
-
-      // P6.2 — Decrypt encrypted webhook bodies per the Lark Open
-      // Platform spec: AES-256-CBC with key = SHA256(encrypt_key), IV =
-      // first 16 bytes of the ciphertext, body = base64(IV || ciphertext).
-      if (this.config.encryptKey && data.encrypt) {
-        try {
-          const crypto = await import('crypto');
-          const key = crypto.createHash('sha256').update(this.config.encryptKey).digest();
-          const blob = Buffer.from(data.encrypt as string, 'base64');
-          const iv = blob.subarray(0, 16);
-          const ciphertext = blob.subarray(16);
-          const decipher = crypto.createDecipheriv('aes-256-cbc', key, iv);
-          const decrypted = Buffer.concat([decipher.update(ciphertext), decipher.final()]);
-          const parsed = JSON.parse(decrypted.toString('utf8'));
-          // Re-enter the same path with the decrypted body
-          if (parsed?.type === 'url_verification') {
-            return { status: 200, data: { challenge: parsed.challenge } };
-          }
-          const innerType = parsed?.header?.event_type ?? parsed?.event?.type;
-          if (innerType === 'im.message.receive_v1' || innerType === 'message') {
-            this.handleMessageEvent(parsed.event);
-          }
-          return { status: 200, data: { code: 0 } };
-        } catch (err) {
-          logError('[Feishu] Decryption failed:', err);
-          return { status: 401, data: { code: 1, msg: 'Decryption failed' } };
-        }
       }
 
       log('[Feishu] Unknown webhook format, returning OK');
