@@ -33,6 +33,21 @@ const KNOWN_CYCLES: string[] = [
   ]),
   JSON.stringify(['agent/codebuddy-agent.ts', 'daemon/heartbeat.ts']),
   JSON.stringify(['config/config-mutator.ts', 'config/toml-config.ts']),
+  // Lessons loop ↔ run store: run-store lazily imports learning-agent
+  // (dynamic import at flush time) and lessons-tracker lazily imports
+  // run-store back; learning-agent's static run-store import is type-only.
+  // No module-init coupling at runtime — accepted (QA 1.0.0 validation).
+  JSON.stringify([
+    'agent/learning-agent.ts',
+    'agent/lesson-candidate-queue.ts',
+    'agent/lessons-tracker.ts',
+    'observability/run-store.ts',
+  ]),
+  JSON.stringify([
+    'agent/learning-agent.ts',
+    'observability/run-store.ts',
+    'observability/run-trajectory-export.ts',
+  ]),
 ];
 
 async function main() {
