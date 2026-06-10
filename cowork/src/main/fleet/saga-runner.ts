@@ -211,6 +211,13 @@ function readDispatchProfile(value: unknown): FleetDispatchProfile {
 
 export class SagaRunner {
   private readonly active = new Set<string>();
+  /**
+   * Sagas the operator cancelled mid-flight. Checked by the polling
+   * loops so an in-flight run() winds down instead of completing or
+   * retrying steps the operator already abandoned. Entries are cleared
+   * when run() exits (or immediately, if no run() is active).
+   */
+  private readonly cancelRequested = new Set<string>();
 
   constructor(
     private readonly fleetBridge: FleetBridge,
@@ -239,7 +246,54 @@ export class SagaRunner {
       logError('[saga-runner] run threw unexpectedly:', err);
     }).finally(() => {
       this.active.delete(sagaId);
+      this.cancelRequested.delete(sagaId);
     });
+  }
+
+  /**
+   * Operator-initiated cancellation. Marks the saga and every
+   * non-terminal step `cancelled` in the store and aborts this runner's
+   * polling/dispatch loops. Honest semantic: the *orchestration* stops —
+   * an LLM call already in flight on a remote peer runs to completion
+   * there, but its result is discarded (there is no `peer.dispatchCancel`
+   * RPC in the protocol yet).
+   */
+  async cancel(sagaId: string): Promise<{ ok: boolean; error?: string; status?: string }> {
+    const sagaMod = await loadCoreModule<SagaStoreModule>('fleet/saga-store.js');
+    if (!sagaMod) {
+      return { ok: false, error: 'Core saga-store module is unavailable (build the core dist first).' };
+    }
+    const store = sagaMod.getSagaStore();
+    const saga = await store.load(sagaId);
+    if (!saga) return { ok: false, error: `Unknown saga '${sagaId}'` };
+    if (saga.status === 'completed' || saga.status === 'failed' || saga.status === 'cancelled') {
+      return { ok: false, error: `Saga is already terminal ('${saga.status}')`, status: saga.status };
+    }
+
+    this.cancelRequested.add(sagaId);
+    const updated = await store.update(sagaId, (s) => {
+      for (const step of s.steps) {
+        if (step.status === 'pending' || step.status === 'running') {
+          step.status = 'cancelled';
+        }
+      }
+      s.status = 'cancelled';
+      s.completedAt = s.completedAt ?? Date.now();
+      return s;
+    });
+    this.emitSagaUpdate(sagaId);
+    this.activityFeed?.record({
+      type: 'fleet.saga.cancelled',
+      title: 'Fleet saga cancelled',
+      description: truncateActivityText(saga.goal, 140),
+      metadata: { sagaId, status: 'cancelled', totalSteps: saga.steps.length },
+    });
+    // No active run() to clean the flag up — drop it now so a future
+    // replayed saga reusing this id (impossible today, defensive) or a
+    // long-lived runner doesn't keep stale entries.
+    if (!this.active.has(sagaId)) this.cancelRequested.delete(sagaId);
+    log('[saga-runner] saga cancelled by operator', { sagaId });
+    return { ok: true, status: updated?.status ?? 'cancelled' };
   }
 
   // ─────── internals ───────
@@ -292,8 +346,8 @@ export class SagaRunner {
       await this.runStep(store, saga.id, i);
       const refreshed = await store.load(saga.id);
       const step = refreshed?.steps[i];
-      if (!step || step.status === 'failed') {
-        return; // chain broken — later steps stay pending
+      if (!step || step.status === 'failed' || step.status === 'cancelled') {
+        return; // chain broken or cancelled — later steps don't fire
       }
     }
   }
@@ -353,6 +407,10 @@ export class SagaRunner {
     if (!saga) return;
     const step = saga.steps[laneIndex];
     if (!step) return;
+    // Operator cancelled — don't fire (or re-fire) anything for this saga.
+    if (this.cancelRequested.has(sagaId) || saga.status === 'cancelled' || step.status === 'cancelled') {
+      return;
+    }
 
     // Mark running + emit.
     await store.update(sagaId, (s) => {
@@ -416,7 +474,10 @@ export class SagaRunner {
     }
 
     // Poll status.
-    const result = await this.pollStatus(step.peerId, runId);
+    const result = await this.pollStatus(step.peerId, runId, () => this.cancelRequested.has(sagaId));
+    // Cancelled while in flight — the store already holds the cancelled
+    // statuses; completing/failing/retrying the step would resurrect them.
+    if (this.cancelRequested.has(sagaId)) return;
     if (hasDispatchMetadata(result)) {
       await store.update(sagaId, (s) => {
         const target = s.steps[laneIndex];
@@ -556,6 +617,7 @@ export class SagaRunner {
   private async pollStatus(
     peerId: string,
     runId: string,
+    shouldAbort?: () => boolean,
   ): Promise<{
     status: SagaStepShape['status'];
     toolPolicy?: DispatchToolPolicyShape;
@@ -566,6 +628,9 @@ export class SagaRunner {
   }> {
     const deadline = Date.now() + POLL_TIMEOUT_MS;
     while (Date.now() < deadline) {
+      if (shouldAbort?.()) {
+        return { status: 'cancelled', error: 'cancelled_by_operator' };
+      }
       try {
         const response = (await this.fleetBridge.peerRequest(
           peerId,
@@ -607,6 +672,9 @@ export class SagaRunner {
     const saga = await store.load(sagaId);
     if (!saga) return;
     if (saga.status === 'completed' && saga.finalResult) return;
+    // A cancelled saga stays cancelled — aggregating the steps that did
+    // complete before the cancel would flip it back to 'completed'.
+    if (saga.status === 'cancelled' || this.cancelRequested.has(sagaId)) return;
 
     const aggMod = await loadCoreModule<AggregatorModule>('fleet/result-aggregator.js');
     if (!aggMod) {
@@ -744,11 +812,9 @@ export class SagaRunner {
 
     const saga = await store.load(sagaId);
     if (!saga) return;
-    if (
-      saga.status !== 'completed' &&
-      saga.status !== 'failed' &&
-      saga.status !== 'cancelled'
-    ) {
+    if (saga.status !== 'completed' && saga.status !== 'failed') {
+      // 'cancelled' is recorded by cancel() itself — recording it here too
+      // would double-count the saga in the activity feed.
       return;
     }
 

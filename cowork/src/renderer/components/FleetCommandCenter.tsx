@@ -1209,7 +1209,15 @@ export const FleetCommandCenter: React.FC<Props> = ({ isOpen, onClose }) => {
                     : t('fleet.peerDetail', 'Peer detail')}
               </div>
               {selectedSaga ? (
-                <SagaDetail saga={selectedSaga} peersById={fleetPeers} />
+                <SagaDetail
+                  saga={selectedSaga}
+                  peersById={fleetPeers}
+                  onReplayed={(newSagaId) => {
+                    setSelectedSagaId(newSagaId);
+                    setSelectedPeerId(null);
+                    setSelectedOutcomeId(null);
+                  }}
+                />
               ) : selectedOutcome ? (
                 <FleetOutcomeDetail
                   entry={selectedOutcome}

@@ -221,6 +221,102 @@ export function registerFleetIpcHandlers(
       return [];
     }
   });
+
+  // Operator cancel — stops the orchestration (store statuses + this
+  // runner's polling loops). An LLM call already in flight on a remote
+  // peer runs to completion there; its result is discarded.
+  ipcMain.handle('fleet.cancelSaga', async (_event, sagaId: string) => {
+    if (typeof sagaId !== 'string' || !sagaId.trim()) {
+      return { ok: false, error: 'A saga id is required.' };
+    }
+    const runner = getSagaRunner();
+    if (!runner) return { ok: false, error: 'FleetBridge not initialized' };
+    return runner.cancel(sagaId.trim());
+  });
+
+  // Replay — re-dispatch a terminal saga as a NEW saga with the same
+  // goal and routing intent (profile, council, chain roles, target
+  // peers). Routing itself is recomputed against the peers available
+  // NOW, which is the point of a replay after a failure.
+  ipcMain.handle('fleet.replaySaga', async (_event, sagaId: string) => {
+    if (typeof sagaId !== 'string' || !sagaId.trim()) {
+      return { ok: false, error: 'A saga id is required.' };
+    }
+    try {
+      type SagaMod = {
+        getSagaStore: () => { load: (id: string) => Promise<ReplayableSaga | null> };
+      };
+      const sagaMod = await loadCoreModule<SagaMod>('fleet/saga-store.js');
+      if (!sagaMod) return { ok: false, error: 'core saga-store unavailable' };
+      const saga = await sagaMod.getSagaStore().load(sagaId.trim());
+      if (!saga) return { ok: false, error: `Unknown saga '${sagaId.trim()}'` };
+      if (saga.status === 'pending' || saga.status === 'running') {
+        return { ok: false, error: 'Saga is still active — cancel it before replaying.' };
+      }
+      return dispatchFleetSaga(buildSagaReplayInput(saga), {
+        fleetBridge: getFleetBridge(),
+        sagaRunner: getSagaRunner(),
+        activityFeed: getActivityFeed(),
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      logError('[fleet.replaySaga] failed:', message);
+      return { ok: false, error: message };
+    }
+  });
+}
+
+/** The slice of a persisted saga that a replay reads. */
+export interface ReplayableSaga {
+  id: string;
+  goal: string;
+  status: string;
+  plan?: { chain?: Array<{ role?: string }> } | null;
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Rebuild a {@link FleetDispatchInput} from a persisted saga so a replay
+ * re-enters the normal dispatch path (privacy lint, cost cap, router).
+ *
+ * - The goal is `metadata.rawGoal` when present — replaying the augmented
+ *   goal would stack a second "Past fleet lessons" block on top.
+ * - `privacyTag` only forwards 'sensitive'. A stored 'public' is dropped so
+ *   the privacy lint re-decides (forcing 'public' on a goal with secrets
+ *   would make the dispatch refuse outright).
+ * - Chain roles come back from `plan.chain[].role`; council from
+ *   `metadata.aggregation === 'consensus'`.
+ */
+export function buildSagaReplayInput(saga: ReplayableSaga): FleetDispatchInput {
+  const metadata = saga.metadata ?? {};
+  const rawGoal = typeof metadata.rawGoal === 'string' && metadata.rawGoal.trim()
+    ? metadata.rawGoal
+    : saga.goal;
+
+  const chainRoles = (saga.plan?.chain ?? [])
+    .map((step) => (typeof step.role === 'string' ? step.role.trim() : ''))
+    .filter((role) => role.length > 0);
+  const allChainStepsHaveRoles =
+    (saga.plan?.chain?.length ?? 0) > 0 && chainRoles.length === (saga.plan?.chain?.length ?? 0);
+
+  const parallelism =
+    typeof metadata.parallelism === 'number' && Number.isFinite(metadata.parallelism) && metadata.parallelism >= 1
+      ? Math.floor(metadata.parallelism)
+      : undefined;
+
+  const targetPeerIds = normalizeStringList(metadata.targetPeerIds);
+
+  return {
+    goal: rawGoal,
+    ...(isFleetDispatchProfile(metadata.dispatchProfile)
+      ? { dispatchProfile: metadata.dispatchProfile }
+      : {}),
+    ...(metadata.privacyTag === 'sensitive' ? { privacyTag: 'sensitive' as const } : {}),
+    ...(allChainStepsHaveRoles ? { chainRoles } : {}),
+    ...(metadata.aggregation === 'consensus' && !allChainStepsHaveRoles ? { council: true } : {}),
+    ...(parallelism !== undefined && !allChainStepsHaveRoles ? { parallelism } : {}),
+    ...(targetPeerIds.length > 0 ? { targetPeerIds } : {}),
+  };
 }
 
 export async function dispatchFleetSaga(

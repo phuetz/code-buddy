@@ -1070,3 +1070,116 @@ describe('SagaRunner — Phase H chain step retry on stall', () => {
     expect(saga.status).toBe('failed');
   });
 });
+
+describe('SagaRunner — operator cancel', () => {
+  it('marks the saga and its non-terminal steps cancelled, emits, and records the activity', async () => {
+    state.sagas.set('saga_cancel_idle', {
+      id: 'saga_cancel_idle',
+      goal: 'long fan-out',
+      plan: { primary: { peerId: 'peer-a', model: 'm1' } },
+      steps: [
+        { peerId: 'peer-a', model: 'm1', lane: 'primary', status: 'running' },
+        { peerId: 'peer-b', model: 'm2', lane: 'parallel', status: 'pending' },
+      ],
+      status: 'running',
+      createdAt: Date.now(),
+    });
+    const sendToRenderer = vi.fn();
+    const activityFeed = { record: vi.fn() };
+    const runner = new SagaRunner(
+      makeFleetBridgeMock({}) as never,
+      sendToRenderer,
+      activityFeed as never,
+    );
+
+    const result = await runner.cancel('saga_cancel_idle');
+
+    expect(result.ok).toBe(true);
+    expect(result.status).toBe('cancelled');
+    const saga = state.sagas.get('saga_cancel_idle')!;
+    expect(saga.status).toBe('cancelled');
+    expect(saga.steps.every((s) => s.status === 'cancelled')).toBe(true);
+    expect(sendToRenderer).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'fleet.saga.update' }),
+    );
+    expect(activityFeed.record).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'fleet.saga.cancelled' }),
+    );
+  });
+
+  it('refuses to cancel a terminal saga', async () => {
+    state.sagas.set('saga_cancel_done', {
+      id: 'saga_cancel_done',
+      goal: 'done already',
+      plan: { primary: { peerId: 'peer-a', model: 'm1' } },
+      steps: [{ peerId: 'peer-a', model: 'm1', lane: 'primary', status: 'completed' }],
+      status: 'completed',
+      createdAt: Date.now(),
+    });
+    const runner = new SagaRunner(makeFleetBridgeMock({}) as never, vi.fn());
+
+    const result = await runner.cancel('saga_cancel_done');
+
+    expect(result.ok).toBe(false);
+    expect(result.error).toContain('terminal');
+    expect(state.sagas.get('saga_cancel_done')!.status).toBe('completed');
+  });
+
+  it('returns an error for an unknown saga', async () => {
+    const runner = new SagaRunner(makeFleetBridgeMock({}) as never, vi.fn());
+
+    const result = await runner.cancel('saga_ghost');
+
+    expect(result.ok).toBe(false);
+    expect(result.error).toContain('saga_ghost');
+  });
+
+  it('aborts in-flight polling: the saga stays cancelled and the fallback lane never fires', async () => {
+    state.sagas.set('saga_cancel_live', {
+      id: 'saga_cancel_live',
+      goal: 'never-ending step',
+      plan: {
+        primary: { peerId: 'peer-a', model: 'm1' },
+        fallback: { peerId: 'peer-b', model: 'm2' },
+      },
+      steps: [
+        { peerId: 'peer-a', model: 'm1', lane: 'primary', status: 'pending' },
+        { peerId: 'peer-b', model: 'm2', lane: 'fallback', status: 'pending' },
+      ],
+      status: 'pending',
+      createdAt: Date.now(),
+    });
+    const dispatched: string[] = [];
+    const fleetBridge = makeFleetBridgeMock({
+      'peer.dispatch': async () => {
+        dispatched.push('dispatch');
+        return { runId: 'run-live' };
+      },
+      // Never terminal — only the operator cancel can end this saga.
+      'peer.dispatchStatus': async () => ({ found: true, status: 'running' }),
+    });
+    const activityFeed = { record: vi.fn() };
+    const runner = new SagaRunner(fleetBridge as never, vi.fn(), activityFeed as never);
+    runner.start('saga_cancel_live');
+    await waitFor(() => dispatched.length === 1);
+
+    const result = await runner.cancel('saga_cancel_live');
+    expect(result.ok).toBe(true);
+
+    // Let the poll loop hit its abort check and the run() wind down.
+    await vi.advanceTimersByTimeAsync(2_500);
+
+    const saga = state.sagas.get('saga_cancel_live')!;
+    // Without the cancelRequested guards the poll result would failStep the
+    // primary (flipping the saga to 'failed') and then fire the fallback.
+    expect(saga.status).toBe('cancelled');
+    expect(saga.steps[0].status).toBe('cancelled');
+    expect(saga.steps[1].status).toBe('cancelled');
+    expect(dispatched.length).toBe(1);
+    // Exactly one activity record: the cancel — no duplicate terminal record.
+    expect(activityFeed.record).toHaveBeenCalledTimes(1);
+    expect(activityFeed.record).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'fleet.saga.cancelled' }),
+    );
+  });
+});

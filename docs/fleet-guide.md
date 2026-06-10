@@ -771,6 +771,11 @@ LLM (continuing with peer's answer in context): "darkstar suggests …"
 >   and a one-click sweep of expired claims — all through the core `FleetColabStore` so GUI edits share the protocol
 >   invariants (DAG readiness, claim lease, worklog append). Mutations are attributed to `<host>/cowork`
 >   (`cowork/src/main/autonomy/colab-board-bridge.ts`, `autonomy.task*` IPC).
+> - **GUI saga cancel/replay.** The Fleet Command Center's saga detail can cancel an active saga (stops the
+>   orchestration and the runner's polling; an LLM call already in flight on a remote peer finishes there but its
+>   result is discarded — there is no `peer.dispatchCancel` RPC yet) and replay a terminal saga as a new one
+>   (same goal + routing intent; routing recomputed against the peers available now; the raw goal is replayed so
+>   injected fleet lessons don't stack). `fleet.cancelSaga` / `fleet.replaySaga` IPC, `SagaRunner.cancel`.
 
 Fleet bus = the `claude-et-patrice/.codebuddy/` repo on a shared
 Tailscale mesh. Each peer periodically:

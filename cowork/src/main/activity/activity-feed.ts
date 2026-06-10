@@ -29,6 +29,7 @@ export type ActivityType =
   | 'fleet.dispatch'
   | 'fleet.saga.completed'
   | 'fleet.saga.failed'
+  | 'fleet.saga.cancelled'
   | 'fleet.chatSession.started'
   | 'fleet.chatSession.turn'
   | 'fleet.chatSession.ended';

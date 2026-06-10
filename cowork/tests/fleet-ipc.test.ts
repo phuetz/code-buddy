@@ -509,3 +509,65 @@ function installDispatchCoreModules() {
 
   return { buildInternetProofPlan, createSaga, dispatchPlan, internetProofPlan, plan };
 }
+
+describe('buildSagaReplayInput', () => {
+  it('replays the raw goal with the original routing intent (profile, sensitive, targets, parallelism)', async () => {
+    const { buildSagaReplayInput } = await import('../src/main/ipc/fleet-ipc');
+
+    const input = buildSagaReplayInput({
+      id: 'saga_old',
+      goal: '## Past fleet lessons\n- lesson\n\n## Goal\nreal goal',
+      status: 'failed',
+      plan: {},
+      metadata: {
+        rawGoal: 'real goal',
+        dispatchProfile: 'review',
+        privacyTag: 'sensitive',
+        parallelism: 3,
+        targetPeerIds: ['peer-a', 'peer-b'],
+      },
+    });
+
+    // The augmented goal is NOT replayed — lessons would stack twice.
+    expect(input.goal).toBe('real goal');
+    expect(input.dispatchProfile).toBe('review');
+    expect(input.privacyTag).toBe('sensitive');
+    expect(input.parallelism).toBe(3);
+    expect(input.targetPeerIds).toEqual(['peer-a', 'peer-b']);
+    expect(input.chainRoles).toBeUndefined();
+    expect(input.council).toBeUndefined();
+  });
+
+  it('reconstructs chain roles from the plan and drops parallelism for chain replays', async () => {
+    const { buildSagaReplayInput } = await import('../src/main/ipc/fleet-ipc');
+
+    const input = buildSagaReplayInput({
+      id: 'saga_chain',
+      goal: 'build it',
+      status: 'completed',
+      plan: { chain: [{ role: 'code' }, { role: 'review' }, { role: 'safe' }] },
+      metadata: { parallelism: 2 },
+    });
+
+    expect(input.chainRoles).toEqual(['code', 'review', 'safe']);
+    expect(input.parallelism).toBeUndefined();
+    expect(input.council).toBeUndefined();
+  });
+
+  it('replays council sagas in council mode and never forces privacyTag=public', async () => {
+    const { buildSagaReplayInput } = await import('../src/main/ipc/fleet-ipc');
+
+    const input = buildSagaReplayInput({
+      id: 'saga_council',
+      goal: 'deliberate',
+      status: 'cancelled',
+      plan: {},
+      metadata: { aggregation: 'consensus', parallelism: 2, privacyTag: 'public' },
+    });
+
+    expect(input.council).toBe(true);
+    expect(input.parallelism).toBe(2);
+    // A stored 'public' is dropped so the privacy lint re-decides on replay.
+    expect(input.privacyTag).toBeUndefined();
+  });
+});

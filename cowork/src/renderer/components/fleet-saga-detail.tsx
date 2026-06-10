@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { Loader2, RotateCcw, Square } from 'lucide-react';
 import type { FleetPeer } from '../types';
 import { formatSagaAge, laneClass, sagaStatusTone } from './fleet-command-center-helpers';
 import type { SagaSummary } from './fleet-command-center-helpers';
@@ -11,8 +12,12 @@ import { FleetCouncilStrip } from './FleetCouncilStrip';
 export const SagaDetail: React.FC<{
   saga: SagaSummary;
   peersById: Record<string, FleetPeer>;
-}> = ({ saga, peersById }) => {
+  /** Called with the NEW saga id after a successful replay (so the caller can select it). */
+  onReplayed?: (sagaId: string) => void;
+}> = ({ saga, peersById, onReplayed }) => {
   const { t } = useTranslation();
+  const [busyAction, setBusyAction] = useState<'cancel' | 'replay' | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
   const total = saga.steps.length;
   const completed = saga.steps.filter((s) => s.status === 'completed').length;
   const running = saga.steps.filter((s) => s.status === 'running').length;
@@ -20,6 +25,36 @@ export const SagaDetail: React.FC<{
   const proofSteps = buildFleetInternetProofStepLabels({
     internetProofPlan: saga.metadata?.internetProofPlan,
   });
+  const isActive = saga.status === 'pending' || saga.status === 'running';
+  const isTerminal =
+    saga.status === 'completed' || saga.status === 'failed' || saga.status === 'cancelled';
+
+  const cancelSaga = async () => {
+    setBusyAction('cancel');
+    setActionError(null);
+    try {
+      const result = await window.electronAPI.fleet.cancelSaga(saga.id);
+      if (!result.ok) setActionError(result.error ?? 'Cancel failed');
+    } catch (err) {
+      setActionError(String(err));
+    } finally {
+      setBusyAction(null);
+    }
+  };
+
+  const replaySaga = async () => {
+    setBusyAction('replay');
+    setActionError(null);
+    try {
+      const result = await window.electronAPI.fleet.replaySaga(saga.id);
+      if (!result.ok) setActionError(result.error ?? 'Replay failed');
+      else if (result.sagaId) onReplayed?.(result.sagaId);
+    } catch (err) {
+      setActionError(String(err));
+    } finally {
+      setBusyAction(null);
+    }
+  };
 
   return (
     <div className="p-4 space-y-3 text-xs">
@@ -27,6 +62,44 @@ export const SagaDetail: React.FC<{
         <div className="text-text-primary font-medium">{saga.goal}</div>
         <div className="mt-0.5 text-[11px] text-text-muted break-all">Saga {saga.id}</div>
       </div>
+
+      <div className="flex flex-wrap items-center gap-1.5">
+        {isActive && (
+          <button
+            onClick={() => void cancelSaga()}
+            disabled={busyAction !== null}
+            className="flex items-center gap-1 px-2 py-1 rounded border border-border text-text-secondary hover:text-error hover:border-error/50 disabled:opacity-50"
+            title={t(
+              'fleet.detail.cancelHint',
+              'Stops the orchestration. An LLM call already running on a remote peer finishes there; its result is discarded.'
+            )}
+            data-testid="fleet-saga-cancel"
+          >
+            {busyAction === 'cancel' ? <Loader2 size={11} className="animate-spin" /> : <Square size={11} />}
+            {t('fleet.detail.cancel', 'Cancel saga')}
+          </button>
+        )}
+        {isTerminal && (
+          <button
+            onClick={() => void replaySaga()}
+            disabled={busyAction !== null}
+            className="flex items-center gap-1 px-2 py-1 rounded border border-border text-text-secondary hover:text-text-primary hover:border-accent/50 disabled:opacity-50"
+            title={t(
+              'fleet.detail.replayHint',
+              'Re-dispatch the same goal as a new saga — routing is recomputed against the peers available now.'
+            )}
+            data-testid="fleet-saga-replay"
+          >
+            {busyAction === 'replay' ? <Loader2 size={11} className="animate-spin" /> : <RotateCcw size={11} />}
+            {t('fleet.detail.replay', 'Replay as new saga')}
+          </button>
+        )}
+      </div>
+      {actionError && (
+        <p className="text-[11px] text-error" data-testid="fleet-saga-action-error">
+          {actionError}
+        </p>
+      )}
 
       <div className="grid grid-cols-2 gap-2 text-[10px]">
         <PeerStat

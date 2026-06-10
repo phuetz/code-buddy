@@ -3024,6 +3024,25 @@ contextBridge.exposeInMainWorld('electronAPI', {
         createdAt: number;
       }>
     > => ipcRenderer.invoke('fleet.listSagas'),
+    /**
+     * Operator cancel — stops the saga orchestration. An LLM call already
+     * in flight on a remote peer finishes there; its result is discarded.
+     */
+    cancelSaga: (
+      sagaId: string
+    ): Promise<{ ok: boolean; error?: string; status?: string }> =>
+      ipcRenderer.invoke('fleet.cancelSaga', sagaId),
+    /** Re-dispatch a terminal saga as a new saga with the same goal + routing intent. */
+    replaySaga: (
+      sagaId: string
+    ): Promise<{
+      ok: boolean;
+      sagaId?: string;
+      error?: string;
+      privacyTag?: 'public' | 'sensitive';
+      dispatchProfile?: 'balanced' | 'research' | 'code' | 'review' | 'safe';
+      lintWarning?: string;
+    }> => ipcRenderer.invoke('fleet.replaySaga', sagaId),
   },
 
   // Reasoning trace viewer (Claude Cowork parity Phase 3 step 17)
@@ -6448,6 +6467,15 @@ declare global {
             createdAt: number;
           }>
         >;
+        cancelSaga: (sagaId: string) => Promise<{ ok: boolean; error?: string; status?: string }>;
+        replaySaga: (sagaId: string) => Promise<{
+          ok: boolean;
+          sagaId?: string;
+          error?: string;
+          privacyTag?: 'public' | 'sensitive';
+          dispatchProfile?: 'balanced' | 'research' | 'code' | 'review' | 'safe';
+          lintWarning?: string;
+        }>;
       };
       team: {
         getStatus: () => Promise<unknown>;
