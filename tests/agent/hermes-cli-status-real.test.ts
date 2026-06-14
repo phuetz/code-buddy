@@ -81,14 +81,17 @@ describe('Hermes CLI status real smoke', () => {
     expect(todo.kind).toBe('hermes_parity_todo');
     expect(todo.command).toBe('buddy hermes todo --json');
     expect(todo.summary.includedDeferred).toBe(false);
-    expect(todo.summary.activeTodoCount).toBeGreaterThan(0);
+    // All Hermes features are now covered/covered-partial except the single
+    // deferred `partial` (openclaw-migration), so there are zero ACTIVE todos.
+    expect(todo.summary.activeTodoCount).toBe(0);
     expect(todo.summary.deferredCount).toBeGreaterThanOrEqual(1);
     expect(todo.todos.map((item) => item.id)).not.toContain('openclaw-migration');
     expect(todo.deferred).toEqual([
       expect.objectContaining({
         id: 'openclaw-migration',
-        // 34 categories now recognized; remaining work is real-install validation.
-        nextWork: expect.stringContaining('live install'),
+        // Stays partial; remaining work is exercising MEMORY/MCP/cron readers
+        // against a populated install that actually has that data.
+        nextWork: expect.stringContaining('populated install'),
       }),
     ]);
 
