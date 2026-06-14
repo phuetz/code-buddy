@@ -13,10 +13,10 @@ import type {
   RemoteConfig,
   GatewayConfig,
   FeishuChannelConfig,
-  WechatChannelConfig,
+  WeChatChannelConfig,
   TelegramChannelConfig,
   SlackChannelConfig,
-  DingtalkChannelConfig,
+  DingTalkChannelConfig,
   WebSocketChannelConfig,
   PairedUser,
 } from './types';
@@ -127,14 +127,14 @@ class RemoteConfigStore {
   /**
    * Get wechat channel config
    */
-  getWechatConfig(): WechatChannelConfig | undefined {
+  getWechatConfig(): WeChatChannelConfig | undefined {
     return this.store.get('channels.wechat');
   }
   
   /**
    * Set wechat channel config
    */
-  setWechatConfig(config: WechatChannelConfig): void {
+  setWechatConfig(config: WeChatChannelConfig): void {
     this.store.set('channels.wechat', config);
     log('[RemoteConfig] WeChat config updated');
   }
@@ -172,14 +172,14 @@ class RemoteConfigStore {
   /**
    * Get dingtalk channel config
    */
-  getDingtalkConfig(): DingtalkChannelConfig | undefined {
+  getDingtalkConfig(): DingTalkChannelConfig | undefined {
     return this.store.get('channels.dingtalk');
   }
   
   /**
    * Set dingtalk channel config
    */
-  setDingtalkConfig(config: DingtalkChannelConfig): void {
+  setDingtalkConfig(config: DingTalkChannelConfig): void {
     this.store.set('channels.dingtalk', config);
     log('[RemoteConfig] DingTalk config updated');
   }

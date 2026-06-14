@@ -9,6 +9,8 @@ import { v4 as uuidv4 } from 'uuid';
 import { RemoteGateway } from './gateway';
 import { MessageRouter } from './message-router';
 import { FeishuChannel } from './channels/feishu';
+import { WeChatChannel } from './channels/wechat';
+import { DingTalkChannel } from './channels/dingtalk';
 import { SlackChannel } from './channels/slack';
 import { TelegramChannel } from './channels/telegram';
 import { remoteConfigStore } from './remote-config-store';
@@ -1142,8 +1144,21 @@ export class RemoteManager extends EventEmitter {
       log('[RemoteManager] Telegram channel registered');
     }
 
-    // Support for WeChat and DingTalk is planned for a future release.
-    // They will be registered here once their channel classes are implemented.
+    // Register WeChat channel if configured
+    const wechatConfig = config.channels.wechat;
+    if (wechatConfig) {
+      const wechatChannel = new WeChatChannel(wechatConfig);
+      this.gateway.registerChannel(wechatChannel);
+      log('[RemoteManager] WeChat channel registered');
+    }
+
+    // Register DingTalk channel if configured
+    const dingtalkConfig = config.channels.dingtalk;
+    if (dingtalkConfig && dingtalkConfig.appKey && dingtalkConfig.appSecret) {
+      const dingtalkChannel = new DingTalkChannel(dingtalkConfig);
+      this.gateway.registerChannel(dingtalkChannel);
+      log('[RemoteManager] DingTalk channel registered');
+    }
   }
 
   /**

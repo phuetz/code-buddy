@@ -87,7 +87,7 @@ export interface ChannelConfig {
   enabled: boolean;
   
   /** Channel-specific configuration */
-  config: FeishuChannelConfig | WechatChannelConfig | TelegramChannelConfig | SlackChannelConfig | DingtalkChannelConfig | WebSocketChannelConfig;
+  config: FeishuChannelConfig | WeChatChannelConfig | TelegramChannelConfig | SlackChannelConfig | DingTalkChannelConfig | WebSocketChannelConfig;
 }
 
 // Feishu (飞书) Channel
@@ -136,7 +136,7 @@ export interface FeishuChannelConfig {
 }
 
 // WeChat Channel (via wechaty)
-export interface WechatChannelConfig {
+export interface WeChatChannelConfig {
   type: 'wechat';
   
   /** Wechaty puppet type */
@@ -224,7 +224,7 @@ export interface SlackChannelConfig {
 }
 
 // DingTalk (钉钉) Channel
-export interface DingtalkChannelConfig {
+export interface DingTalkChannelConfig {
   type: 'dingtalk';
   
   /** App Key */
@@ -553,10 +553,10 @@ export interface RemoteConfig {
   gateway: GatewayConfig;
   channels: {
     feishu?: FeishuChannelConfig;
-    wechat?: WechatChannelConfig;
+    wechat?: WeChatChannelConfig;
     telegram?: TelegramChannelConfig;
     slack?: SlackChannelConfig;
-    dingtalk?: DingtalkChannelConfig;
+    dingtalk?: DingTalkChannelConfig;
     websocket?: WebSocketChannelConfig;
   };
 }
