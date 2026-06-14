@@ -137,6 +137,7 @@
     "@huggingface/transformers": "^4.2.0",
     "@iarna/toml": "^2.2.5",
     "@modelcontextprotocol/sdk": "^1.24.3",
+    "@noble/curves": "^1.9.7",
     "@opentelemetry/api": "^1.9.0",
     "@opentelemetry/exporter-trace-otlp-http": "^0.212.0",
     "@opentelemetry/instrumentation-http": "^0.212.0",

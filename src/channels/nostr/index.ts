@@ -8,6 +8,7 @@
 import { createECDH, createHash, randomBytes } from 'crypto';
 import { sha256 } from '@noble/hashes/sha256';
 import { bytesToHex } from '@noble/hashes/utils';
+import { schnorr } from '@noble/curves/secp256k1';
 import { logger } from '../../utils/logger.js';
 import {
   BaseChannel,
@@ -34,6 +35,8 @@ export interface NostrChannelConfig extends ChannelConfig {
   maxRetries?: number;
   /** Initial reconnect backoff in ms (default 1000). */
   reconnectDelayMs?: number;
+  /** How long `send()` waits for a relay `OK` ack before failing (default 8000). */
+  publishTimeoutMs?: number;
 }
 
 /**
@@ -133,6 +136,16 @@ export class NostrAdapter {
 
   getConfig(): NostrConfig {
     return { ...this.config, relays: [...this.config.relays] };
+  }
+
+  /**
+   * Resolve the configured secret as raw 32 bytes: 64-char hex as-is, `nsec...`
+   * bech32 decoded to its 32-byte payload, otherwise a deterministic sha256 of
+   * the arbitrary secret. No configured key => a fresh random 32 bytes.
+   * Public so {@link NostrChannel} signs under the *same* identity (esp. nsec).
+   */
+  getSecretKeyBytes(): Buffer {
+    return this.resolvePrivateKeyBytes();
   }
 
   private resolvePrivateKeyBytes(): Buffer {
@@ -281,6 +294,23 @@ interface RelayConnection {
   reconnection: ReconnectionManager;
 }
 
+/** A fully NIP-01 signed Nostr event ready to publish. */
+interface SignedNostrEvent {
+  id: string;
+  pubkey: string;
+  created_at: number;
+  kind: number;
+  tags: string[][];
+  content: string;
+  sig: string;
+}
+
+/** A publish awaiting the relay's `["OK", id, accepted, message]` ack. */
+interface PendingPublish {
+  resolve: (ok: { accepted: boolean; message: string; relayUrl: string }) => void;
+  timer: ReturnType<typeof setTimeout>;
+}
+
 /**
  * Real Nostr relay channel (NIP-01).
  *
@@ -310,6 +340,10 @@ export class NostrChannel extends BaseChannel {
   private shuttingDown = false;
   /** Injectable socket factory (defaults to the Node global `WebSocket`). */
   private readonly socketFactory: RelaySocketFactory;
+  /** Outstanding publishes keyed by event id, resolved on the relay's `OK` ack. */
+  private readonly pendingPublishes = new Map<string, PendingPublish>();
+  /** How long to wait for a relay `["OK", id, ...]` ack before timing out. */
+  private readonly publishTimeoutMs: number;
 
   constructor(config: NostrChannelConfig, socketFactory?: RelaySocketFactory) {
     super('nostr', {
@@ -336,6 +370,7 @@ export class NostrChannel extends BaseChannel {
     this.filters = config.filters ?? {};
     this.maxRetries = config.maxRetries ?? 10;
     this.reconnectDelayMs = config.reconnectDelayMs ?? 1000;
+    this.publishTimeoutMs = config.publishTimeoutMs ?? 8000;
     this.subId = `cb-${randomBytes(6).toString('hex')}`;
 
     this.socketFactory =
@@ -379,6 +414,12 @@ export class NostrChannel extends BaseChannel {
       this.closeSocket(relay);
     }
 
+    // Fail any in-flight publishes so awaiting `send()` calls can't hang.
+    for (const pending of this.pendingPublishes.values()) {
+      pending.resolve({ accepted: false, message: 'channel disconnected', relayUrl: '' });
+    }
+    this.pendingPublishes.clear();
+
     this.status.connected = false;
     this.status.authenticated = false;
     this.status.lastActivity = new Date();
@@ -386,27 +427,65 @@ export class NostrChannel extends BaseChannel {
   }
 
   /**
-   * Build a Nostr kind-1 event for the outbound message and attempt to send it.
+   * Build, BIP-340 sign, and publish a Nostr kind-1 event for the outbound
+   * message.
    *
-   * HONEST LIMITATION: a publishable Nostr event needs a secp256k1 BIP-340
-   * Schnorr signature, and this repo ships no Schnorr signer (`@noble/curves` /
-   * `secp256k1` are absent and Node's `crypto` has no BIP-340 path). We build
-   * the *real* unsigned event (correct `pubkey` + sha256 `id`) but do NOT fake a
-   * signature, so this returns a clear error. Inbound subscription / receive is
-   * fully functional. Live publishing remains gated on a configured signer.
+   * When a secret key is configured we derive the x-only `pubkey` and the
+   * Schnorr `sig` via `@noble/curves` (audited secp256k1/BIP-340), compute the
+   * canonical sha256 `id`, publish `["EVENT", event]` to every connected relay,
+   * and resolve from the relay's `["OK", id, accepted, msg]` acknowledgement.
+   *
+   * HONEST GATE: if NO secret key is configured we do NOT sign with a throwaway
+   * key — we return the same clear error as before. Live publishing is gated
+   * only on the operator providing their nsec/hex key + a reachable relay.
    */
   async send(message: OutboundMessage): Promise<DeliveryResult> {
     try {
-      const event = this.buildUnsignedEvent(message.content);
+      // Honesty guard: never sign with the random fallback key. A configured
+      // key is required to produce a publishable, attributable event.
+      if (!this.adapter.getConfig().privateKey) {
+        const unsigned = this.buildUnsignedEvent(message.content);
+        return {
+          success: false,
+          messageId: unsigned.id,
+          error: 'Nostr send requires a configured secret key / signer (no key configured)',
+          timestamp: new Date(),
+        };
+      }
+
+      const event = this.buildSignedEvent(message.content);
       this.status.lastActivity = new Date();
-      logger.debug('NostrChannel: built unsigned event (send requires signer)', {
-        id: event.id,
-        pubkey: event.pubkey,
-      });
+
+      const sockets = this.relays
+        .map((r) => r.socket)
+        .filter((s): s is RelaySocket => s !== null && s.readyState === 1 /* OPEN */);
+
+      if (sockets.length === 0) {
+        return {
+          success: false,
+          messageId: event.id,
+          error: 'Nostr send failed: no relay socket is open',
+          timestamp: new Date(),
+        };
+      }
+
+      const ack = await this.publishToRelays(event, sockets);
+      if (ack.accepted) {
+        logger.debug('NostrChannel: relay accepted published event', {
+          id: event.id,
+          relay: ack.relayUrl,
+        });
+        return {
+          success: true,
+          messageId: event.id,
+          timestamp: new Date(),
+        };
+      }
+
       return {
         success: false,
         messageId: event.id,
-        error: 'Nostr send requires a configured secret key / signer (Schnorr signing unavailable)',
+        error: ack.message || 'Nostr relay rejected the event',
         timestamp: new Date(),
       };
     } catch (error) {
@@ -416,6 +495,47 @@ export class NostrChannel extends BaseChannel {
         timestamp: new Date(),
       };
     }
+  }
+
+  /**
+   * Publish a signed event to every open relay socket and resolve from the
+   * FIRST `["OK", id, ...]` acknowledgement (or a timeout). The pending entry is
+   * keyed by event id and resolved by {@link handleRelayData}'s `OK` branch.
+   */
+  private publishToRelays(
+    event: SignedNostrEvent,
+    sockets: RelaySocket[],
+  ): Promise<{ accepted: boolean; message: string; relayUrl: string }> {
+    return new Promise((resolve) => {
+      const timer = setTimeout(() => {
+        this.pendingPublishes.delete(event.id);
+        resolve({ accepted: false, message: 'timed out waiting for relay OK', relayUrl: '' });
+      }, this.publishTimeoutMs);
+      // Don't keep the event loop alive solely for this ack timer.
+      if (typeof (timer as { unref?: () => void }).unref === 'function') {
+        (timer as { unref: () => void }).unref();
+      }
+
+      this.pendingPublishes.set(event.id, {
+        resolve: (ok) => {
+          clearTimeout(timer);
+          this.pendingPublishes.delete(event.id);
+          resolve(ok);
+        },
+        timer,
+      });
+
+      const frame = JSON.stringify(['EVENT', event]);
+      for (const socket of sockets) {
+        try {
+          socket.send(frame);
+        } catch (error) {
+          logger.debug('NostrChannel: failed to send EVENT frame', {
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
+    });
   }
 
   // ============================================================================
@@ -521,7 +641,14 @@ export class NostrChannel extends BaseChannel {
 
     if (kind === 'OK') {
       // Publish acknowledgement: ["OK", <eventId>, <ok>, <message>]
-      logger.debug('NostrChannel: relay OK', { url: relay.url, accepted: frame[2], message: frame[3] });
+      const eventId = typeof frame[1] === 'string' ? frame[1] : '';
+      const accepted = frame[2] === true;
+      const message = typeof frame[3] === 'string' ? frame[3] : '';
+      logger.debug('NostrChannel: relay OK', { url: relay.url, eventId, accepted, message });
+      const pending = this.pendingPublishes.get(eventId);
+      if (pending) {
+        pending.resolve({ accepted, message, relayUrl: relay.url });
+      }
       return;
     }
   }
@@ -561,7 +688,7 @@ export class NostrChannel extends BaseChannel {
   /**
    * Build the canonical unsigned Nostr event for `content`. The `id` is the
    * sha256 of the NIP-01 serialization `[0, pubkey, created_at, kind, tags,
-   * content]`. No signature is produced (no Schnorr signer available).
+   * content]`. Used for the honest no-key error path (still surfaces a real id).
    */
   private buildUnsignedEvent(content: string): {
     id: string;
@@ -580,21 +707,41 @@ export class NostrChannel extends BaseChannel {
     return { id, pubkey, created_at, kind, tags, content };
   }
 
-  /** x-only 32-byte public key as lowercase hex (Nostr event `pubkey` field). */
-  private getPublicKeyHex(): string {
-    const privateKey = this.resolvePrivateKeyBytes();
-    const ecdh = createECDH('secp256k1');
-    ecdh.setPrivateKey(privateKey);
-    const compressed = ecdh.getPublicKey(undefined, 'compressed');
-    return compressed.subarray(1, 33).toString('hex');
+  /**
+   * Build a fully BIP-340 signed Nostr kind-1 event for `content`.
+   *
+   * `pubkey` and `sig` are derived from the same secp256k1 secret via
+   * `@noble/curves`' Schnorr primitives: `schnorr.getPublicKey` yields the
+   * x-only pubkey (correct BIP-340 even-y normalization), `id` is the sha256 of
+   * the NIP-01 serialization, and `sig = schnorr.sign(id, sk)`. Nostr signs the
+   * 32-byte id directly (no extra pre-hash), which is exactly noble's raw-message
+   * contract — so `schnorr.verify(sig, id, pubkey)` round-trips.
+   */
+  private buildSignedEvent(content: string): SignedNostrEvent {
+    const sk = this.resolvePrivateKeyBytes();
+    const pubkey = bytesToHex(schnorr.getPublicKey(sk));
+    const created_at = Math.floor(Date.now() / 1000);
+    const kind = 1;
+    const tags: string[][] = [];
+    const serialized = JSON.stringify([0, pubkey, created_at, kind, tags, content]);
+    const id = bytesToHex(sha256(new TextEncoder().encode(serialized)));
+    const sig = bytesToHex(schnorr.sign(id, sk));
+    return { id, pubkey, created_at, kind, tags, content, sig };
   }
 
+  /** x-only 32-byte public key as lowercase hex (Nostr event `pubkey` field). */
+  private getPublicKeyHex(): string {
+    return bytesToHex(schnorr.getPublicKey(this.resolvePrivateKeyBytes()));
+  }
+
+  /**
+   * Resolve the signing secret as raw 32 bytes. Delegates to the adapter's
+   * canonical resolver so hex AND `nsec...` bech32 keys decode to the SAME
+   * identity the operator configured (a duplicated resolver here previously
+   * dropped the nsec branch and silently signed under a sha256-derived key).
+   */
   private resolvePrivateKeyBytes(): Buffer {
-    const raw = this.adapter.getConfig().privateKey;
-    if (!raw) return randomBytes(32);
-    if (/^[0-9a-fA-F]{64}$/.test(raw)) return Buffer.from(raw, 'hex');
-    // Derive a deterministic key from arbitrary secrets (matches NostrAdapter).
-    return createHash('sha256').update(raw).digest();
+    return this.adapter.getSecretKeyBytes();
   }
 
   private closeSocket(relay: RelayConnection): void {

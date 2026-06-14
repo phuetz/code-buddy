@@ -15,6 +15,8 @@ import { createRequire } from 'module';
 import express, { Application } from 'express';
 import cors from 'cors';
 import { createServer, Server as HttpServer } from 'http';
+import { createServer as createHttpsServer, Server as HttpsServer } from 'https';
+import { resolveServerTlsOptions } from './tls-config.js';
 
 const _require = createRequire(import.meta.url);
 let SERVER_VERSION = '0.0.0';
@@ -115,7 +117,10 @@ export function getServerBaseUrl(server: HttpServer, config: ServerConfig): stri
   const publicHost = config.host === '0.0.0.0' || config.host === '::' ? '127.0.0.1' : config.host;
   const host =
     publicHost.includes(':') && !publicHost.startsWith('[') ? `[${publicHost}]` : publicHost;
-  return `http://${host}:${port}`;
+  // Report https:// when the server was constructed with TLS so the logged URL
+  // isn't a lie. Default (plain http.Server) stays http://.
+  const scheme = server instanceof HttpsServer ? 'https' : 'http';
+  return `${scheme}://${host}:${port}`;
 }
 
 // Default configuration
@@ -963,7 +968,17 @@ export async function startServer(userConfig: Partial<ServerConfig> = {}): Promi
   }
 
   const app = createApp(config);
-  const server = createServer(app);
+  // Optional TLS: serve the API (including /api/mobile) over HTTPS when
+  // CODEBUDDY_HTTPS / CODEBUDDY_MOBILE_TLS is set so the mobile-supervision
+  // endpoint can be exposed off-device securely. Default (no env) is plain HTTP,
+  // byte-for-byte unchanged. resolveServerTlsOptions() throws (never silently
+  // downgrades) if TLS is requested but cannot be satisfied. The https.Server
+  // surface (listen/address/on('upgrade')/close) matches http.Server at runtime,
+  // so we keep the `HttpServer` type to avoid widening downstream signatures.
+  const tlsOptions = resolveServerTlsOptions();
+  const server: HttpServer = tlsOptions
+    ? (createHttpsServer(tlsOptions, app) as unknown as HttpServer)
+    : createServer(app);
 
   const startChannelBridge = async (baseUrl: string): Promise<void> => {
     try {
