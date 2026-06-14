@@ -8,6 +8,9 @@
  *
  * @module main/server/server-bridge
  */
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
 import * as crypto from 'crypto';
 import { log, logError } from '../utils/logger';
 import { loadCoreModule } from '../utils/core-loader';
@@ -112,18 +115,29 @@ export class ServerBridge {
     if (this.bootInFlight) {
       return this.bootInFlight;
     }
+
     this.lastError = null;
     this.bootInFlight = (async () => {
       try {
         // The core server's auth middleware throws at module-load time
-        // ("SECURITY ERROR: JWT_SECRET …") under NODE_ENV=production
-        // unless the env var is set. Cowork runs in production mode by
-        // default, so we mint a random secret at runtime — fine for a
-        // local/single-user desktop app where issued tokens don't need
-        // to survive a restart.
+        // under NODE_ENV=production unless the env var is set.
         if (!process.env.JWT_SECRET) {
-          process.env.JWT_SECRET = crypto.randomBytes(64).toString('hex');
-          log('[ServerBridge] minted runtime JWT_SECRET (single-user fallback)');
+          const secretPath = path.join(os.homedir(), '.codebuddy', '.jwt_secret');
+          try {
+            if (fs.existsSync(secretPath)) {
+              process.env.JWT_SECRET = fs.readFileSync(secretPath, 'utf8').trim();
+              log('[ServerBridge] loaded persisted JWT_SECRET');
+            } else {
+              const secret = crypto.randomBytes(64).toString('hex');
+              fs.mkdirSync(path.dirname(secretPath), { recursive: true });
+              fs.writeFileSync(secretPath, secret, { mode: 0o600 });
+              process.env.JWT_SECRET = secret;
+              log('[ServerBridge] minted and persisted new JWT_SECRET');
+            }
+          } catch (err) {
+            process.env.JWT_SECRET = crypto.randomBytes(64).toString('hex');
+            logError('[ServerBridge] failed to persist JWT_SECRET, using ephemeral fallback:', err);
+          }
         }
 
         // Boot the core SQLite DB first — `getDatabaseManager()` is the

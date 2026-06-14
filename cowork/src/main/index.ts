@@ -2371,7 +2371,7 @@ ipcMain.handle(
 ipcMain.handle('workspace.readDir', async (_event, dirPath: string) => {
   try {
     // Reject malformed input (non-string / empty / null byte) before touching the FS.
-    if (typeof dirPath !== 'string' || dirPath.length === 0 || dirPath.includes('\0')) {
+    if (typeof dirPath !== 'string' || dirPath.length === 0 || dirPath.includes('\0') || dirPath.includes('..')) {
       return [];
     }
     const resolvedDir = resolve(dirPath);

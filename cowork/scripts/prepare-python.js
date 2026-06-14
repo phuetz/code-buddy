@@ -39,10 +39,9 @@ const ABI = `cp${PYTHON_MINOR.replace('.', '')}`; // e.g. 3.12 -> cp312
 
 const GITHUB_REPO = process.env.OPEN_COWORK_PYTHON_STANDALONE_REPO || 'astral-sh/python-build-standalone';
 const RUNTIME_VERSION_FILENAME = 'runtime-version.txt';
-const BUNDLED_GUI_PACKAGES = [
-  'pillow',
-  'pyobjc-framework-Quartz',
-];
+const BUNDLED_GUI_PACKAGES = process.platform === 'darwin'
+  ? ['pillow', 'pyobjc-framework-Quartz']
+  : ['pillow'];
 const BUNDLED_RUNTIME_FINGERPRINT = BUNDLED_GUI_PACKAGES.join('|');
 // Use the correct GitHub API endpoint (v3, no trailing slash)
 const RELEASES_API = `https://api.github.com/repos/${GITHUB_REPO}/releases?per_page=30`;
@@ -53,6 +52,7 @@ const DEFAULT_PYTHON_URLS = PYTHON_MINOR === '3.10'
   ? {
       'aarch64-apple-darwin': 'https://github.com/astral-sh/python-build-standalone/releases/download/20260203/cpython-3.10.19+20260203-aarch64-apple-darwin-install_only.tar.gz',
       'x86_64-apple-darwin': 'https://github.com/astral-sh/python-build-standalone/releases/download/20260203/cpython-3.10.19+20260203-x86_64-apple-darwin-install_only.tar.gz',
+      'x86_64-unknown-linux-gnu': 'https://github.com/astral-sh/python-build-standalone/releases/download/20260203/cpython-3.10.19+20260203-x86_64-unknown-linux-gnu-install_only.tar.gz',
     }
   : {};
 

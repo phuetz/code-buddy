@@ -133,6 +133,14 @@ const ALLOWED_CLIENT_EVENTS: ReadonlySet<string> = new Set<ClientEvent['type']>(
   'workdir.select',
 ]);
 
+// ── Threat Model: IPC Validation ──────────────────────────────────────────────
+// While this preload exposes ~150 specific invoke wrappers, the actual validation 
+// of payloads, path traversals, and privileges is explicitly deferred to the 
+// Main process (`ipcMain.handle` listeners). This design ensures that the renderer
+// cannot bypass security checks, as the ultimate source of truth and execution
+// rights resides in the trusted Main process.
+// ──────────────────────────────────────────────────────────────────────────────
+
 // Expose protected methods that allow the renderer process to use
 // the ipcRenderer without exposing the entire object
 contextBridge.exposeInMainWorld('electronAPI', {
@@ -142,7 +150,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
       console.warn('[Preload] Blocked unauthorized event type:', event.type);
       return;
     }
-    console.log('[Preload] Sending event:', event.type);
     ipcRenderer.send('client-event', event);
   },
 
