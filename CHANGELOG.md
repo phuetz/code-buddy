@@ -15,6 +15,68 @@ GitNexus integration (WS2), central Policy Engine + PII lint (WS5). See
 `claude-et-patrice/propositions/` and the V1.x roadmap section of
 [`docs/fleet-guide.md`](docs/fleet-guide.md).
 
+### Added — computer use, vision & Screenpipe (2026-06-14)
+
+- **`camera_analyze` tool** — captures a webcam frame (`captureCameraSnapshot`,
+  ffmpeg/v4l2) and returns a natural-language description from a local vision
+  model (default `ollama/gemma4:12b` via the Ollama `/v1` endpoint). Closes the
+  loop past `camera_snapshot` (PNG-only) and `vision_analyze` (local metadata/OCR
+  only). Validated against a real Logitech BRIO + gemma4.
+- **Desktop automation over MCP** — `CodeBuddyMCPServer` now exposes the
+  desktop-automation stack as MCP tools: `desktop_screenshot` and
+  `desktop_snapshot` (accessibility/AT-SPI element enumeration) are read-only and
+  always exposed; `desktop_click` / `desktop_move_mouse` / `desktop_type` /
+  `desktop_key` actuate the real desktop and are **gated behind
+  `CODEBUDDY_MCP_DESKTOP_CONTROL=1`** (fail-closed). Cross-platform "computer use"
+  backed by Code Buddy's own validated stack rather than a Windows-only framework.
+- **Screenpipe `screen_memory`** — the client now sends an optional
+  `Authorization: Bearer` header (`SCREENPIPE_API_KEY`) required by recent
+  Screenpipe `/search`; validated end-to-end (real OCR recall). See
+  [`docs/screen-capture-and-ai.md`](docs/screen-capture-and-ai.md).
+
+### Added — real channel transports (2026-06-14)
+
+- **irc / nostr / mattermost / nextcloud-talk** were in-process stubs (their
+  `start()` only flipped a flag). They now have **real network transports**, each
+  wired to the shared `ReconnectionManager` (exponential backoff + jitter) and
+  proven against a local loopback mock server:
+  - **irc** — TCP/TLS client (RFC 1459/2812 subset): 001-gated registration,
+    PING/PONG, PRIVMSG parsing, JOIN/QUIT, reconnect on drop.
+  - **nostr** — WebSocket relay client (NIP-01 REQ/EVENT), per-relay reconnect.
+    `send()` builds a real unsigned kind-1 event but returns an honest error
+    (publishing needs a Schnorr signer).
+  - **mattermost** — WebSocket event stream (`/api/v4/websocket`,
+    `authentication_challenge` → `hello`, `posted`-event parse) + REST
+    `POST /api/v4/posts` for outbound; bounded auth-handshake timeout.
+  - **nextcloud-talk** — HTTP long-poll (Spreed chat API) + REST send.
+- **feishu/Lark** — refused to fake the proprietary Lark long-connection
+  (Protobuf framing, SDK-only): implemented real REST outbound
+  (`tenant_access_token` → `im/v1/messages`) and made `connect()` honest
+  (`inbound: lark-sdk-required`). Live inbound needs `@larksuiteoapi/node-sdk`.
+- Live multi-platform delivery still requires each platform's tokens/accounts.
+
+### Fixed (2026-06-14)
+
+- **camofox** — reworked from the wrong Chrome-CDP assumption to the correct
+  `camoufox server` + `playwright.firefox.connect()` path (Camoufox is Firefox,
+  not Chrome). Validated end-to-end (real page round-trip) at the repo-pinned
+  Playwright 1.58.2.
+- **desktop-automation (Linux)** — `createNativeProvider` now prefers
+  `NutJsProvider` when xdotool/xclip/wmctrl are absent (and registers it under the
+  `native` key) instead of silently falling back to the mock provider; fixed an
+  ImageMagick `import` headless hang (`-window root`) and an AT-SPI interpreter
+  probe that cached a transient timeout permanently.
+- **OpenClaw migrator (security)** — all archive review slices are now written
+  owner-only (`0600`) and the pre-migration backup root is `0700` (it aggregates
+  device credentials + tokens).
+- **transport hardening** — fixed a mattermost connect-hang (no auth timeout), an
+  IRC unbounded line-buffer (OOM), and a `camera_analyze` body-read that ran
+  outside its abort timeout.
+- **runtime SSH** lifecycle validated on localhost (real `ssh` round-trips).
+
+> Parity vs Hermes Agent / OpenClaw: **15 covered / 4 covered-partial / 1 partial
+> / 0 gap** — see [`docs/hermes-openclaw-parity.md`](docs/hermes-openclaw-parity.md).
+
 ## [1.1.0] — 2026-06-11
 
 ### Added — `/goal` Ralph loop, parité Hermes Agent (2026-06-11)

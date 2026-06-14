@@ -12,7 +12,7 @@ Code Buddy includes ~110 tools organized into categories. Tools are selected per
 | **Web** | `web_search`, `web_fetch`, `browser`, `firecrawl_search`, `firecrawl_scrape` | Search the web, fetch pages, automate browsers |
 | **Patching** | `apply_patch` (Codex-style, 4-pass seek), `lsp_rename`, `lsp_code_action` | Apply diffs, LSP-powered refactoring |
 | **Planning** | `plan`, `create_todo_list`, `get_todo_list`, `update_todo_list`, `reason` (ToT/MCTS) | Task planning and structured reasoning |
-| **Media** | `screenshot`, `audio`, `video`, `ocr_extract`, `image_process`, `clipboard` | Screen capture, OCR (Tesseract.js), image processing (Sharp) |
+| **Media / Vision** | `screenshot`, `camera_snapshot`, `camera_analyze`, `vision_analyze`, `screen_memory`, `audio`, `video`, `ocr_extract`, `image_process`, `clipboard` | Screen + **webcam** capture, vision-model description via a local VLM (`camera_analyze` → ffmpeg snapshot → e.g. `ollama/gemma4:12b`), Screenpipe recall (`screen_memory`), OCR (Tesseract.js), image processing (Sharp) |
 | **Documents** | `pdf`, `document`, `archive`, `execute_cell`, `execute_all` | PDF/Excel processing, Jupyter notebook execution |
 | **Security** | `scan_secrets`, `scan_vulnerabilities`, `find_bugs` | Secret detection (14 patterns), CVE scanning, bug finder (25+ patterns, 6 languages) |
 | **Code Quality** | `resolve_conflicts` | Merge conflict resolution |
@@ -25,6 +25,23 @@ Code Buddy includes ~110 tools organized into categories. Tools are selected per
 ## RAG Tool Selection
 
 Not all ~110 tools are sent to the LLM every turn. The RAG-based tool selector (`src/codebuddy/tools.ts`) filters tools per query using embedding similarity. Only relevant tools are included in each API call, reducing prompt tokens significantly. Tools are cached after the first selection round.
+
+## Computer Use (desktop automation over MCP)
+
+When Code Buddy runs as an **MCP server** (`CodeBuddyMCPServer`), it exposes its
+desktop-automation stack (AT-SPI/accessibility + nut-js + screenshots) as MCP
+tools so any MCP client can drive the desktop cross-platform:
+
+- **Read-only, always exposed**: `desktop_screenshot` (full/region PNG),
+  `desktop_snapshot` (enumerate on-screen UI elements with refs + click
+  coordinates).
+- **Control, opt-in only**: `desktop_click`, `desktop_move_mouse`, `desktop_type`,
+  `desktop_key` actuate the real desktop and are **registered only when
+  `CODEBUDDY_MCP_DESKTOP_CONTROL=1`** (fail-closed by default).
+
+On Linux the manager prefers `NutJsProvider` (libnut) when `xdotool`/`xclip`/
+`wmctrl` are absent. This is the portable alternative to a Windows-only desktop
+framework — see [`docs/screen-capture-and-ai.md`](screen-capture-and-ai.md).
 
 ## Edit Tool -- Multi-Strategy Matching
 

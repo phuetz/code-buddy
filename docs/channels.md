@@ -21,19 +21,27 @@ Code Buddy supports 20+ messaging channels for remote interaction.
 | **WeCom** | Group robot webhook | Text/markdown messages, group mentions |
 | **Weixin/WeChat Official Account** | Customer service API | Text messages to OpenID recipients |
 | **QQ** | OneBot v11 HTTP | Private/group messages through a QQ bot gateway |
-| **IRC** | Native | SASL auth, TLS, multi-channel |
-| **Feishu/Lark** | API | Interactive cards, reasoning hooks, identity-aware headers |
+| **IRC** | TCP/TLS (RFC 1459/2812) | SASL auth, TLS, multi-channel, auto-reconnect |
+| **Feishu/Lark** | REST (outbound) | Interactive cards, reasoning hooks; real-time inbound needs the Lark SDK |
 | **Synology Chat** | Webhooks | Incoming/outgoing webhooks |
 | **ntfy** | HTTP POST | Push notifications to self-hosted or ntfy.sh topics |
 | **LINE** | Messaging API | Rich messages |
-| **Nostr** | Relay protocol | Decentralized |
+| **Nostr** | WebSocket relays (NIP-01) | Decentralized, auto-reconnect; publishing needs a Schnorr signer |
 | **Zalo** | OA API | Vietnam market |
-| **Mattermost** | API | Self-hosted Slack alternative |
-| **Nextcloud Talk** | API | On-premise collaboration |
+| **Mattermost** | WebSocket + REST | Self-hosted Slack alternative, auto-reconnect |
+| **Nextcloud Talk** | HTTP long-poll + REST | On-premise collaboration, auto-reconnect |
 | **Twilio Voice** | TwiML | Voice calls |
 | **iMessage** | AppleScript | macOS only |
 | **Twitch** | IRC-based | Chat integration |
 | **Gmail** | Pub/Sub | Webhook notifications |
+
+> **Transport classes & auto-reconnect (2026-06-14).** Adapters with a persistent
+> connection — Discord, Slack, Telegram, WhatsApp, Signal, Matrix, iMessage, and
+> (added 2026-06-14) IRC, Nostr, Mattermost, Nextcloud Talk — are wired to a shared
+> `ReconnectionManager` (exponential backoff + jitter) and auto-reconnect on drop.
+> REST/webhook adapters (DingTalk, QQ, ntfy, LINE, Teams, Google Chat, …) have no
+> socket to reconnect. Live delivery on any platform still requires that platform's
+> token/account.
 
 ## Starting a Channel
 

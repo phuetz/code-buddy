@@ -10,6 +10,8 @@
 - **`ScreenWatcher`** — the "real-time awareness" loop: periodic capture → **idle-frame dedup** (fingerprint diff, only surface changed frames) → optional **OCR** (tesseract) → **secret/PII redaction via the existing `src/fleet/privacy-lint.ts`** before anything is stored or sent to a model → `Observation`.
 - **CLI**: `buddy screen capture | record | watch | list-windows`.
   - `buddy screen watch --ocr --interval 5` ≈ the local-first foundation below.
+- **Webcam** — `camera_snapshot` grabs a frame (ffmpeg/v4l2), and **`camera_analyze`** feeds that frame to a local vision model (default `ollama/gemma4:12b`) and returns a description. Validated against a real Logitech BRIO.
+- **Computer use** — the desktop-automation stack (AT-SPI accessibility element enumeration + nut-js mouse/keyboard + screenshots) is exposed as **MCP tools**: `desktop_screenshot` / `desktop_snapshot` are read-only and always on; `desktop_click` / `desktop_type` / `desktop_move_mouse` / `desktop_key` actuate the desktop and are gated behind `CODEBUDDY_MCP_DESKTOP_CONTROL=1`. On Linux this prefers nut-js when xdotool/xclip are absent. See [`tools-reference.md`](tools-reference.md#computer-use-desktop-automation-over-mcp).
 
 This is intentionally the **portable, cheap** path (capture + dedup + OCR + redact), not fragile per-frame video — see the feasibility note at the end.
 
