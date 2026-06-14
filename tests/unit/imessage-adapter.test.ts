@@ -626,11 +626,17 @@ describe('IMessageAdapter', () => {
         await vi.advanceTimersByTimeAsync(3000);
       }
 
-      // After max retries, error should be emitted and reconnect attempted
+      // After max retries, error should be emitted and a reconnect scheduled.
       expect(errorHandler).toHaveBeenCalledWith(expect.any(Error));
       expect(errorHandler.mock.calls[0][0].message).toContain('Polling failed after max retries');
 
-      // Health check succeeds, so reconnection should succeed
+      // Reconnection now flows through ReconnectionManager (exponential backoff +
+      // jitter), so the reconnect closure is scheduled, not immediate. Advance in
+      // small steps to fire it; the health check (/server/info -> 200) succeeds,
+      // so reconnection completes and emits 'reconnected'.
+      for (let i = 0; i < 80; i++) {
+        await vi.advanceTimersByTimeAsync(100);
+      }
       expect(reconnectedHandler).toHaveBeenCalled();
       expect(adapter.isRunning()).toBe(true);
     });
