@@ -1,5 +1,4 @@
 import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
-import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import {
   useActiveSessionId,
@@ -15,9 +14,8 @@ import {
 import { useAppStore } from '../store';
 import { applySlashCommandResult } from '../commands/slash-command-actions';
 import { useIPC } from '../hooks/useIPC';
-import { MessageCard } from './MessageCard';
 import { SessionSearch } from './SessionSearch';
-import { SubAgentPanel } from './SubAgentPanel';
+import { ChatList } from './ChatList';
 import { ChatHeader } from './ChatHeader';
 import { MentionAutocomplete, type MentionItem } from './MentionAutocomplete';
 import { SlashCommandPalette, type SlashCommandItem } from './SlashCommandPalette';
@@ -25,7 +23,6 @@ import { MicButton } from './MicButton';
 import { interruptSpeech, speakText } from './VoiceOutputToggle';
 import { MemoryEditCard } from './MemoryEditCard';
 import { FileAttachmentChip } from './FileAttachmentChip';
-import { APP_NAME } from '../brand';
 import { usePermissionMode, useSearchState } from '../store/selectors';
 import type { Message, ContentBlock, ScheduleCreateInput, ScheduleWeekday } from '../types';
 import {
@@ -51,7 +48,6 @@ import {
   Send,
   Square,
   Plus,
-  Loader2,
   X,
   Clock,
   Eye,
@@ -245,15 +241,6 @@ export function ChatView() {
     if (searchMatches.length === 0) return;
     setCurrentSearchMatch((index) => (index - 1 + searchMatches.length) % searchMatches.length);
   }, [searchMatches.length]);
-
-  // Format execution time for display
-  const formatExecutionTime = useCallback((ms: number): string => {
-    if (ms < 1000) return `${ms}ms`;
-    if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
-    const minutes = Math.floor(ms / 60000);
-    const seconds = ((ms % 60000) / 1000).toFixed(0);
-    return `${minutes}m ${seconds}s`;
-  }, []);
 
   // --- Real-time execution timer ---
   const [clockNow, setClockNow] = useState(() => Date.now());
@@ -979,101 +966,19 @@ export function ChatView() {
 
       {/* Messages */}
       <div ref={scrollContainerRef} className="flex-1 overflow-y-auto">
-        <div
-          ref={messagesContainerRef}
-          className="w-full max-w-[920px] mx-auto py-8 px-5 lg:px-8 space-y-5"
-        >
-          {/* Sub-agent panel (Claude Cowork parity) */}
-          <SubAgentPanel compact />
-
-          {displayedMessages.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-28 text-text-muted space-y-3 text-center">
-              <p className="text-[11px] uppercase tracking-[0.16em] text-text-muted/80">
-                {APP_NAME}
-              </p>
-              <p className="text-base text-text-secondary">{t('chat.startConversation')}</p>
-            </div>
-          ) : (
-            displayedMessages.map((message) => {
-              const isStreaming =
-                typeof message.id === 'string' && message.id.startsWith('partial-');
-              return (
-                <motion.div
-                  key={message.id}
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ type: 'spring', damping: 20, stiffness: 100 }}
-                >
-                  <MessageCard
-                    message={message}
-                    isStreaming={isStreaming}
-                    searchMatchState={
-                      searchMatches.includes(message.id)
-                        ? activeSearchMatchId === message.id
-                          ? 'active'
-                          : 'match'
-                        : 'none'
-                    }
-                    onEdit={handleEditMessage}
-                    onRegenerate={handleRegenerateMessage}
-                  />
-                </motion.div>
-              );
-            })
-          )}
-
-          {/* Processing indicator - show when we have an active turn but no streaming content yet.
-              Enriched with elapsed-seconds counter and a cold-start hint after 5 s and 30 s
-              so users running large local models (qwen3.6:35b, gemma4:26b…) get feedback that
-              the model is loading rather than thinking the app is frozen. */}
-          {hasActiveTurn &&
-            (!partialMessage || partialMessage.trim() === '') &&
-            !partialThinking && (
-              <div className="flex flex-col gap-1 px-4 py-3 rounded-2xl bg-background/80 border border-border-subtle max-w-fit">
-                <div className="flex items-center gap-3">
-                  <Loader2 className="w-4 h-4 text-accent animate-spin" />
-                  <span className="text-sm text-text-secondary">
-                    {t('chat.processing')}
-                    {liveElapsed > 1000 && (
-                      <span className="text-text-muted/80 ml-2 tabular-nums">
-                        · {Math.floor(liveElapsed / 1000)}s
-                      </span>
-                    )}
-                  </span>
-                </div>
-                {liveElapsed > 5000 && liveElapsed < 30000 && (
-                  <span className="text-[11px] text-text-muted/70 ml-7 italic">
-                    {t(
-                      'chat.modelLoading',
-                      'Loading model or generating thinking — first token usually arrives within 30 s.'
-                    )}
-                  </span>
-                )}
-                {liveElapsed >= 30000 && (
-                  <span className="text-[11px] text-warning/80 ml-7 italic">
-                    {t(
-                      'chat.modelColdStart',
-                      'Cold start in progress (large local models can take 30–120 s on first run).'
-                    )}
-                  </span>
-                )}
-              </div>
-            )}
-
-          {/* Real-time execution timer */}
-          {liveElapsed > 0 && (
-            <div className="flex items-center gap-1.5 text-[11px] text-text-muted mt-1 ml-0.5">
-              <Clock className="w-3 h-3" />
-              <span>
-                {timerActive
-                  ? formatExecutionTime(liveElapsed)
-                  : t('messageCard.executionTime', { time: formatExecutionTime(liveElapsed) })}
-              </span>
-            </div>
-          )}
-
-          <div ref={messagesEndRef} />
-        </div>
+        <ChatList
+          displayedMessages={displayedMessages}
+          searchMatches={searchMatches}
+          activeSearchMatchId={activeSearchMatchId}
+          hasActiveTurn={hasActiveTurn}
+          partialMessage={partialMessage}
+          partialThinking={partialThinking}
+          liveElapsed={liveElapsed}
+          timerActive={timerActive}
+          messagesEndRef={messagesEndRef}
+          onEditMessage={handleEditMessage}
+          onRegenerateMessage={handleRegenerateMessage}
+        />
       </div>
 
       {/* Input */}
