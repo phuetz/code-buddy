@@ -889,7 +889,9 @@ export function AutonomyPanel({ isOpen, onClose }: AutonomyPanelProps) {
               <ScrollText size={11} />
               {t('autonomy.yoloLogs', 'YOLO Mode & Daemon Logs')}
             </h3>
+            {service?.installed && (
             <button
+              data-testid="autonomy-daemon-logs-toggle"
               onClick={() => {
                 const next = !showLogs;
                 setShowLogs(next);
@@ -901,7 +903,7 @@ export function AutonomyPanel({ isOpen, onClose }: AutonomyPanelProps) {
             >
               {logsLoading ? <Loader2 size={10} className="animate-spin" /> : showLogs ? <Square size={10} /> : <Play size={10} />}
               {showLogs ? t('common.hide', 'Hide Logs') : t('autonomy.tailLogs', 'Live Tail')}
-            </button>
+            </button>)}
           </div>
           {showLogs && (
             <div data-testid="autonomy-daemon-logs" className="bg-[#1e1e1e] rounded-lg border border-[#333] p-2 overflow-hidden flex flex-col mt-2">

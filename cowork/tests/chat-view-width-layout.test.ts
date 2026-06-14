@@ -7,9 +7,14 @@ function readChatView() {
   return fs.readFileSync(filePath, 'utf8');
 }
 
+function readChatList() {
+  const filePath = path.resolve(__dirname, '../src/renderer/components/ChatList.tsx');
+  return fs.readFileSync(filePath, 'utf8');
+}
+
 describe('chat view width layout', () => {
   it('uses a centered responsive messages container', () => {
-    const source = readChatView();
+    const source = readChatList();
     expect(source).toContain('max-w-[920px]');
     expect(source).toContain('lg:px-8');
   });

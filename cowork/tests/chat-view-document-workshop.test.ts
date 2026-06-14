@@ -3,10 +3,13 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 const chatViewPath = path.resolve(process.cwd(), 'src/renderer/components/ChatView.tsx');
+const messageComposerPath = path.resolve(process.cwd(), 'src/renderer/components/MessageComposer.tsx');
 
 describe('ChatView document workshop action', () => {
   it('offers the Word-workshop prompt action for document attachments', () => {
-    const source = fs.readFileSync(chatViewPath, 'utf8');
+    const source1 = fs.readFileSync(chatViewPath, 'utf8');
+    const source2 = fs.readFileSync(messageComposerPath, 'utf8');
+    const source = source1 + source2;
 
     expect(source).toContain('buildDocumentWorkshopPrompt');
     expect(source).toContain('buildComposerContentBlocks');
@@ -20,7 +23,9 @@ describe('ChatView document workshop action', () => {
   });
 
   it('submits a document-workshop prompt automatically when only a document is attached', () => {
-    const source = fs.readFileSync(chatViewPath, 'utf8');
+    const source1 = fs.readFileSync(chatViewPath, 'utf8');
+    const source2 = fs.readFileSync(messageComposerPath, 'utf8');
+    const source = source1 + source2;
 
     expect(source).toContain('const contentBlocks = buildComposerContentBlocks(');
     expect(source).toContain('currentPrompt,');

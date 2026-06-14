@@ -13,6 +13,6 @@ describe('ChatView stop control', () => {
 
   it('routes stop action to session.stop for active session', () => {
     expect(chatViewContent).toContain('stopSession(activeSessionId);');
-    expect(chatViewContent).toContain('onClick={handleStop}');
+    expect(chatViewContent).toContain('handleStop={handleStop}');
   });
 });
