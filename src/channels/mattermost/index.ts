@@ -30,6 +30,9 @@ import {
 } from '../core.js';
 import { ReconnectionManager } from '../reconnection-manager.js';
 
+/** Bounded wait for the WS upgrade + auth handshake before failing connect(). */
+const MM_CONNECT_TIMEOUT_MS = 30000;
+
 export interface MattermostConfig {
   url: string;
   token: string;
@@ -281,6 +284,27 @@ export class MattermostChannel extends BaseChannel {
       }
       this.ws = ws;
 
+      // The WS upgrade can succeed while the server never sends a frame (bad
+      // token held open, wrong service on the port). Without a timeout the
+      // connect() Promise would never settle. Bound the handshake.
+      const connectTimer = setTimeout(() => {
+        if (this.connectSettled) return;
+        this.connectSettled = true;
+        try {
+          ws.close();
+        } catch {
+          /* ignore */
+        }
+        reject(new Error(`Mattermost WebSocket did not authenticate within ${MM_CONNECT_TIMEOUT_MS}ms`));
+      }, MM_CONNECT_TIMEOUT_MS);
+      if (typeof (connectTimer as { unref?: () => void }).unref === 'function') {
+        (connectTimer as { unref: () => void }).unref();
+      }
+      const onConnected = () => {
+        clearTimeout(connectTimer);
+        resolve();
+      };
+
       ws.on('open', () => {
         // Mattermost expects the auth challenge as the first frame after open.
         this.sendAction('authentication_challenge', { token: this.mmConfig.token });
@@ -289,7 +313,7 @@ export class MattermostChannel extends BaseChannel {
       ws.on('message', (data) => {
         try {
           const event = JSON.parse(data.toString()) as MattermostWsEvent;
-          this.handleWsEvent(event, resolve);
+          this.handleWsEvent(event, onConnected);
         } catch (error) {
           logger.warn('MattermostChannel: failed to parse WS frame', {
             error: error instanceof Error ? error.message : String(error),
@@ -298,10 +322,17 @@ export class MattermostChannel extends BaseChannel {
       });
 
       ws.on('close', () => {
+        clearTimeout(connectTimer);
+        // A close before the handshake settles must reject connect() (don't hang).
+        if (!this.connectSettled) {
+          this.connectSettled = true;
+          reject(new Error('Mattermost WebSocket closed before authentication'));
+        }
         this.handleDrop();
       });
 
       ws.on('error', (error) => {
+        clearTimeout(connectTimer);
         const err = error instanceof Error ? error : new Error(String(error));
         if (this.listenerCount('error') > 0) {
           this.emit('error', this.type, err);

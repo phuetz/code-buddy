@@ -636,6 +636,7 @@ export class CameraAnalyzeTool implements ITool {
     }, CAMERA_VISION_TIMEOUT_MS);
 
     let response: Response;
+    let text: string;
     try {
       response = await fetchImpl(endpoint, {
         method: 'POST',
@@ -655,6 +656,9 @@ export class CameraAnalyzeTool implements ITool {
           ],
         }),
       });
+      // Read the body INSIDE the try so the abort timeout also covers a server
+      // that sends headers then stalls the body (otherwise response.text() hangs).
+      text = await response.text();
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error);
       if (timedOut) {
@@ -671,7 +675,6 @@ export class CameraAnalyzeTool implements ITool {
       clearTimeout(timer);
     }
 
-    const text = await response.text();
     if (!response.ok) {
       throw new Error(`Vision model returned HTTP ${response.status} from ${endpoint}: ${text.slice(0, 500)}`);
     }

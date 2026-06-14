@@ -329,6 +329,15 @@ export class IRCAdapter extends EventEmitter {
    */
   private handleData(chunk: string, onWelcome: () => void): void {
     this.recvBuffer += chunk;
+    // RFC 1459 caps a line at 512 bytes. Guard against a peer that streams bytes
+    // without ever sending a newline (unbounded buffer growth -> OOM): drop the
+    // connection, which the close handler turns into a backoff reconnect.
+    if (this.recvBuffer.length > 8192) {
+      logger.warn('IRCAdapter: line buffer overflow, dropping connection', { size: this.recvBuffer.length });
+      this.recvBuffer = '';
+      this.socket?.destroy(new Error('IRC line buffer overflow'));
+      return;
+    }
     let idx: number;
     // IRC servers terminate lines with \r\n, but be lenient and split on \n.
     while ((idx = this.recvBuffer.indexOf('\n')) !== -1) {
