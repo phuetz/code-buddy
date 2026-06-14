@@ -6,8 +6,17 @@
  */
 
 import { createECDH, createHash, randomBytes } from 'crypto';
+import { sha256 } from '@noble/hashes/sha256';
+import { bytesToHex } from '@noble/hashes/utils';
 import { logger } from '../../utils/logger.js';
-import { BaseChannel, ChannelConfig, DeliveryResult, OutboundMessage } from '../core.js';
+import {
+  BaseChannel,
+  ChannelConfig,
+  DeliveryResult,
+  InboundMessage,
+  OutboundMessage,
+} from '../core.js';
+import { ReconnectionManager } from '../reconnection-manager.js';
 
 export interface NostrConfig {
   privateKey?: string;
@@ -17,7 +26,30 @@ export interface NostrConfig {
 export interface NostrChannelConfig extends ChannelConfig {
   privateKey?: string;
   relays: string[];
+  /** Single relay convenience alias (merged with `relays`). */
+  relay?: string;
+  /** Optional NIP-01 filters merged into the subscription REQ. */
+  filters?: Record<string, unknown>;
+  /** Max reconnection attempts per relay (default 10). */
+  maxRetries?: number;
+  /** Initial reconnect backoff in ms (default 1000). */
+  reconnectDelayMs?: number;
 }
+
+/**
+ * A minimal subset of the WHATWG/`ws` WebSocket surface the relay client uses.
+ * Lets us accept the Node global `WebSocket` without pulling in DOM lib types.
+ */
+interface RelaySocket {
+  readyState: number;
+  send(data: string): void;
+  close(code?: number, reason?: string): void;
+  terminate?(): void;
+  addEventListener(type: string, listener: (event: unknown) => void): void;
+}
+
+/** Factory so tests / runtimes can inject a socket constructor. */
+export type RelaySocketFactory = (url: string) => RelaySocket;
 
 export class NostrAdapter {
   private static readonly BECH32_CHARSET = 'qpzry9x8gf2tvdw0s3jn54khce6mua7l';
@@ -242,10 +274,44 @@ export class NostrAdapter {
   }
 }
 
+/** Per-relay socket bookkeeping. */
+interface RelayConnection {
+  url: string;
+  socket: RelaySocket | null;
+  reconnection: ReconnectionManager;
+}
+
+/**
+ * Real Nostr relay channel (NIP-01).
+ *
+ * Opens persistent WebSocket connections to each configured relay, subscribes
+ * to kind-1 (text note) events via a `REQ` frame, and surfaces inbound events
+ * as `'message'` events on the channel. Dropped sockets are recovered with the
+ * shared {@link ReconnectionManager} (exponential backoff + jitter), the same
+ * idiom used by the discord/slack/imessage adapters.
+ *
+ * Connection semantics are *optimistic*: `connect()` marks the channel
+ * connected and returns immediately, opening sockets in the background. This
+ * mirrors how a real Nostr client behaves (any one of N relays may be down)
+ * and lets the channel come up even when a relay is unreachable.
+ *
+ * `NostrAdapter` (above) is retained unchanged as the key / bech32 / relay-list
+ * utility — its `start()`/`sendDirectMessage()` are legacy in-process stubs
+ * kept only for the existing unit tests. The real transport lives here.
+ */
 export class NostrChannel extends BaseChannel {
   private adapter: NostrAdapter;
+  private relays: RelayConnection[] = [];
+  private readonly subId: string;
+  private readonly filters: Record<string, unknown>;
+  private readonly maxRetries: number;
+  private readonly reconnectDelayMs: number;
+  /** Set while an intentional disconnect is in progress so `close` skips reconnect. */
+  private shuttingDown = false;
+  /** Injectable socket factory (defaults to the Node global `WebSocket`). */
+  private readonly socketFactory: RelaySocketFactory;
 
-  constructor(config: NostrChannelConfig) {
+  constructor(config: NostrChannelConfig, socketFactory?: RelaySocketFactory) {
     super('nostr', {
       type: 'nostr',
       enabled: config.enabled,
@@ -257,41 +323,90 @@ export class NostrChannel extends BaseChannel {
       rateLimit: config.rateLimit,
       options: config.options,
     });
+
+    const relayUrls = [
+      ...(Array.isArray(config.relays) ? config.relays : []),
+      ...(config.relay ? [config.relay] : []),
+    ].filter((u): u is string => typeof u === 'string' && u.length > 0);
+
     this.adapter = new NostrAdapter({
       privateKey: config.privateKey,
-      relays: config.relays,
+      relays: relayUrls,
     });
+    this.filters = config.filters ?? {};
+    this.maxRetries = config.maxRetries ?? 10;
+    this.reconnectDelayMs = config.reconnectDelayMs ?? 1000;
+    this.subId = `cb-${randomBytes(6).toString('hex')}`;
+
+    this.socketFactory =
+      socketFactory ??
+      ((url: string) => new (globalThis as unknown as { WebSocket: new (u: string) => RelaySocket }).WebSocket(url));
+
+    this.relays = relayUrls.map((url) => ({
+      url,
+      socket: null,
+      reconnection: new ReconnectionManager(`nostr:${url}`, {
+        maxRetries: this.maxRetries,
+        initialDelayMs: this.reconnectDelayMs,
+        maxDelayMs: 60000,
+      }),
+    }));
   }
 
-  // Nostr is a genuinely persistent protocol (WebSocket relay connections),
-  // but this adapter is currently an in-process stub: NostrAdapter.start()
-  // only records the relay list and flips a `running` flag — no relay sockets
-  // are actually opened, so there is no close/error event to recover from.
-  // Reconnection (ReconnectionManager) is N/A until real relay sockets with
-  // drop detection are wired in here.
+  /**
+   * Optimistically connect: mark the channel up, emit `'connected'`, then open
+   * every relay socket in the background. Resolves immediately — it never waits
+   * on a socket `'open'`, so an unreachable relay can't block startup.
+   */
   async connect(): Promise<void> {
-    await this.adapter.start();
+    this.shuttingDown = false;
     this.status.connected = true;
     this.status.authenticated = true;
     this.status.lastActivity = new Date();
     this.emit('connected', this.type);
+
+    for (const relay of this.relays) {
+      this.openRelay(relay);
+    }
   }
 
   async disconnect(): Promise<void> {
     if (!this.status.connected) return;
-    await this.adapter.stop();
+    this.shuttingDown = true;
+
+    for (const relay of this.relays) {
+      relay.reconnection.cancel();
+      this.closeSocket(relay);
+    }
+
     this.status.connected = false;
+    this.status.authenticated = false;
     this.status.lastActivity = new Date();
     this.emit('disconnected', this.type);
   }
 
+  /**
+   * Build a Nostr kind-1 event for the outbound message and attempt to send it.
+   *
+   * HONEST LIMITATION: a publishable Nostr event needs a secp256k1 BIP-340
+   * Schnorr signature, and this repo ships no Schnorr signer (`@noble/curves` /
+   * `secp256k1` are absent and Node's `crypto` has no BIP-340 path). We build
+   * the *real* unsigned event (correct `pubkey` + sha256 `id`) but do NOT fake a
+   * signature, so this returns a clear error. Inbound subscription / receive is
+   * fully functional. Live publishing remains gated on a configured signer.
+   */
   async send(message: OutboundMessage): Promise<DeliveryResult> {
     try {
-      const result = await this.adapter.sendDirectMessage(message.channelId, message.content);
+      const event = this.buildUnsignedEvent(message.content);
       this.status.lastActivity = new Date();
+      logger.debug('NostrChannel: built unsigned event (send requires signer)', {
+        id: event.id,
+        pubkey: event.pubkey,
+      });
       return {
-        success: result.success,
-        messageId: result.eventId,
+        success: false,
+        messageId: event.id,
+        error: 'Nostr send requires a configured secret key / signer (Schnorr signing unavailable)',
         timestamp: new Date(),
       };
     } catch (error) {
@@ -301,6 +416,218 @@ export class NostrChannel extends BaseChannel {
         timestamp: new Date(),
       };
     }
+  }
+
+  // ============================================================================
+  // Relay socket lifecycle
+  // ============================================================================
+
+  private openRelay(relay: RelayConnection): void {
+    let socket: RelaySocket;
+    try {
+      socket = this.socketFactory(relay.url);
+    } catch (error) {
+      logger.warn('NostrChannel: failed to construct relay socket', {
+        url: relay.url,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      this.scheduleRelayReconnect(relay);
+      return;
+    }
+    relay.socket = socket;
+
+    socket.addEventListener('open', () => {
+      logger.debug('NostrChannel: relay open', { url: relay.url });
+      relay.reconnection.onConnected();
+      this.status.connected = true;
+      this.status.lastActivity = new Date();
+      this.sendSubscription(socket);
+    });
+
+    socket.addEventListener('message', (event: unknown) => {
+      const data = (event as { data?: unknown }).data;
+      this.handleRelayData(relay, data);
+    });
+
+    socket.addEventListener('error', (event: unknown) => {
+      const err = this.errorFromEvent(event);
+      logger.debug('NostrChannel: relay socket error', { url: relay.url, error: err.message });
+      // BaseChannel is an EventEmitter — only emit 'error' when someone listens,
+      // otherwise EventEmitter throws and crashes the process.
+      if (this.listenerCount('error') > 0) {
+        this.emit('error', this.type, err);
+      }
+    });
+
+    socket.addEventListener('close', () => {
+      relay.socket = null;
+      if (this.shuttingDown) return;
+      logger.debug('NostrChannel: relay closed, scheduling reconnect', { url: relay.url });
+      this.scheduleRelayReconnect(relay);
+    });
+  }
+
+  private scheduleRelayReconnect(relay: RelayConnection): void {
+    if (this.shuttingDown) return;
+    relay.reconnection.scheduleReconnect(async () => {
+      if (this.shuttingDown) return;
+      this.openRelay(relay);
+    });
+  }
+
+  private sendSubscription(socket: RelaySocket): void {
+    const filter: Record<string, unknown> = { kinds: [1], ...this.filters };
+    const req = JSON.stringify(['REQ', this.subId, filter]);
+    try {
+      socket.send(req);
+    } catch (error) {
+      logger.debug('NostrChannel: failed to send REQ', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  private handleRelayData(relay: RelayConnection, data: unknown): void {
+    let frame: unknown;
+    try {
+      const text = typeof data === 'string' ? data : String(data);
+      frame = JSON.parse(text);
+    } catch {
+      logger.debug('NostrChannel: ignoring non-JSON relay frame', { url: relay.url });
+      return;
+    }
+
+    if (!Array.isArray(frame) || frame.length === 0) return;
+    const kind = frame[0];
+
+    if (kind === 'EVENT') {
+      // ["EVENT", <subId>, <event>]
+      const event = frame[2] as Record<string, unknown> | undefined;
+      if (event && typeof event === 'object') {
+        this.emitInbound(event, relay.url);
+      }
+      return;
+    }
+
+    if (kind === 'EOSE') {
+      // End of stored events — nothing to do.
+      return;
+    }
+
+    if (kind === 'NOTICE') {
+      logger.info('NostrChannel: relay NOTICE', { url: relay.url, message: String(frame[1] ?? '') });
+      return;
+    }
+
+    if (kind === 'OK') {
+      // Publish acknowledgement: ["OK", <eventId>, <ok>, <message>]
+      logger.debug('NostrChannel: relay OK', { url: relay.url, accepted: frame[2], message: frame[3] });
+      return;
+    }
+  }
+
+  private emitInbound(event: Record<string, unknown>, relayUrl: string): void {
+    const content = typeof event.content === 'string' ? event.content : '';
+    const pubkey = typeof event.pubkey === 'string' ? event.pubkey : 'unknown';
+    const id = typeof event.id === 'string' ? event.id : `nostr-${Date.now()}`;
+    const createdAt = typeof event.created_at === 'number' ? event.created_at : Math.floor(Date.now() / 1000);
+
+    const inbound: InboundMessage = {
+      id,
+      channel: {
+        id: relayUrl,
+        type: 'nostr',
+        name: relayUrl,
+        isDM: false,
+      },
+      sender: {
+        id: pubkey,
+        username: pubkey,
+      },
+      content,
+      contentType: 'text',
+      timestamp: new Date(createdAt * 1000),
+      raw: event,
+    };
+
+    this.status.lastActivity = new Date();
+    const parsed = this.parseCommand(inbound);
+    this.emit('message', parsed);
+    if (parsed.isCommand) {
+      this.emit('command', parsed);
+    }
+  }
+
+  /**
+   * Build the canonical unsigned Nostr event for `content`. The `id` is the
+   * sha256 of the NIP-01 serialization `[0, pubkey, created_at, kind, tags,
+   * content]`. No signature is produced (no Schnorr signer available).
+   */
+  private buildUnsignedEvent(content: string): {
+    id: string;
+    pubkey: string;
+    created_at: number;
+    kind: number;
+    tags: string[][];
+    content: string;
+  } {
+    const pubkey = this.getPublicKeyHex();
+    const created_at = Math.floor(Date.now() / 1000);
+    const kind = 1;
+    const tags: string[][] = [];
+    const serialized = JSON.stringify([0, pubkey, created_at, kind, tags, content]);
+    const id = bytesToHex(sha256(new TextEncoder().encode(serialized)));
+    return { id, pubkey, created_at, kind, tags, content };
+  }
+
+  /** x-only 32-byte public key as lowercase hex (Nostr event `pubkey` field). */
+  private getPublicKeyHex(): string {
+    const privateKey = this.resolvePrivateKeyBytes();
+    const ecdh = createECDH('secp256k1');
+    ecdh.setPrivateKey(privateKey);
+    const compressed = ecdh.getPublicKey(undefined, 'compressed');
+    return compressed.subarray(1, 33).toString('hex');
+  }
+
+  private resolvePrivateKeyBytes(): Buffer {
+    const raw = this.adapter.getConfig().privateKey;
+    if (!raw) return randomBytes(32);
+    if (/^[0-9a-fA-F]{64}$/.test(raw)) return Buffer.from(raw, 'hex');
+    // Derive a deterministic key from arbitrary secrets (matches NostrAdapter).
+    return createHash('sha256').update(raw).digest();
+  }
+
+  private closeSocket(relay: RelayConnection): void {
+    const socket = relay.socket;
+    relay.socket = null;
+    if (!socket) return;
+    try {
+      // Prefer terminate(): the socket may still be CONNECTING against a dead
+      // relay, where close() would hang waiting for a handshake that won't come.
+      if (typeof socket.terminate === 'function') {
+        socket.terminate();
+      } else {
+        socket.close();
+      }
+    } catch (error) {
+      logger.debug('NostrChannel: error closing relay socket', {
+        url: relay.url,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  private errorFromEvent(event: unknown): Error {
+    if (event instanceof Error) return event;
+    const maybe = event as { error?: unknown; message?: unknown };
+    if (maybe?.error instanceof Error) return maybe.error;
+    if (typeof maybe?.message === 'string') return new Error(maybe.message);
+    return new Error('Nostr relay socket error');
+  }
+
+  /** Expose the configured relay URLs (post construction). */
+  getRelayUrls(): string[] {
+    return this.relays.map((r) => r.url);
   }
 }
 

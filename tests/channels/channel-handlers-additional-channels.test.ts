@@ -31,6 +31,7 @@ describe('handleChannels additional channel activation', () => {
     'google-chat',
     'teams',
     'imessage',
+    'mattermost',
   ]);
 
   async function mockConnect(channelType: ChannelType): Promise<void> {
@@ -69,6 +70,16 @@ describe('handleChannels additional channel activation', () => {
       case 'teams': {
         const { TeamsChannel } = await import('../../src/channels/teams/index.js');
         vi.spyOn(TeamsChannel.prototype, 'connect').mockImplementation(markConnected);
+        break;
+      }
+      case 'mattermost': {
+        // Mattermost now opens a real WebSocket; mock connect() so this
+        // activation test doesn't dial out to a non-existent host (same tier
+        // as the other genuinely-networked channels above). The real WS + REST
+        // transport is proven against a loopback mock in
+        // mattermost-transport.test.ts.
+        const { MattermostChannel } = await import('../../src/channels/mattermost/index.js');
+        vi.spyOn(MattermostChannel.prototype, 'connect').mockImplementation(markConnected);
         break;
       }
       case 'imessage': {
