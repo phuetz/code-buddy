@@ -62,13 +62,15 @@ export function MessageComposer(props: MessageComposerProps) {
   const { t } = useTranslation();
   
   return (
-    <div className="border-t border-border-muted bg-background/92 backdrop-blur-md">
+    <div
+      className="border-t border-border-muted bg-background/92 backdrop-blur-md"
+      onDragOver={props.handleDragOver}
+      onDragLeave={props.handleDragLeave}
+      onDrop={props.handleDrop}
+    >
       <div className="max-w-[920px] mx-auto px-5 lg:px-8 py-5">
         <form
           onSubmit={props.handleSubmit}
-          onDragOver={props.handleDragOver}
-          onDragLeave={props.handleDragLeave}
-          onDrop={props.handleDrop}
           className="relative w-full"
         >
           {props.isDragging && (
