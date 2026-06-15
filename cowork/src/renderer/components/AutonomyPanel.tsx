@@ -271,7 +271,7 @@ export function AutonomyPanel({ isOpen, onClose }: AutonomyPanelProps) {
 
   return (
     <div
-      className="fixed right-0 top-0 h-full w-[600px] max-w-[95vw] bg-background border-l border-border shadow-2xl z-40 flex flex-col"
+      className="h-full w-full bg-background flex flex-col"
       data-testid="autonomy-panel"
     >
       {/* Header */}

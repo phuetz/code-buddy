@@ -20,7 +20,6 @@ import { useWindowSize } from './hooks/useWindowSize';
 import { useTabPinPersistence } from './hooks/useTabPinPersistence';
 import { Sidebar } from './components/Sidebar';
 import { ShellNavigation } from './components/ShellNavigation';
-import { WelcomeView } from './components/WelcomeView';
 import { PermissionDialog } from './components/PermissionDialog';
 import { SudoPasswordDialog } from './components/SudoPasswordDialog';
 import { Titlebar } from './components/Titlebar';
@@ -47,7 +46,6 @@ import { MemoryPanel } from './components/MemoryPanel';
 // AutonomyPanel is lazy loaded below
 import { LiveLauncherPanel } from './components/LiveLauncherPanel';
 import { FocusView } from './components/FocusView';
-import { SplitPaneLayout } from './components/SplitPaneLayout';
 import { Group, Panel, Separator } from 'react-resizable-panels';
 import { UpdateNotification } from './components/UpdateNotification';
 import { NotificationToastContainer } from './components/NotificationToast';
@@ -76,20 +74,12 @@ import { SubAgentDashboard } from './components/SubAgentDashboard';
 import { DiagnosticsPanel } from './components/DiagnosticsPanel';
 import { BtwQuickAsk } from './components/BtwQuickAsk';
 import { PresenceService } from './services/presence/PresenceService';
+import { DockWorkspace } from './components/DockWorkspace';
 import type { AppConfig } from './types';
 import type { GlobalNoticeAction } from './store';
 
-const ChatView = lazy(() =>
-  import('./components/ChatView').then((module) => ({ default: module.ChatView }))
-);
-const ContextPanel = lazy(() =>
-  import('./components/ContextPanel').then((module) => ({ default: module.ContextPanel }))
-);
 const ConfigModal = lazy(() =>
   import('./components/ConfigModal').then((module) => ({ default: module.ConfigModal }))
-);
-const SettingsPanel = lazy(() =>
-  import('./components/SettingsPanel').then((module) => ({ default: module.SettingsPanel }))
 );
 const CompanionPanel = lazy(() =>
   import('./components/CompanionPanel').then((module) => ({ default: module.CompanionPanel }))
@@ -97,32 +87,10 @@ const CompanionPanel = lazy(() =>
 const TestRunnerPanel = lazy(() =>
   import('./components/TestRunnerPanel').then((module) => ({ default: module.TestRunnerPanel }))
 );
-const AutonomyPanel = lazy(() =>
-  import('./components/AutonomyPanel').then((module) => ({ default: module.AutonomyPanel }))
-);
+
 const FleetCommandCenter = lazy(() =>
   import('./components/FleetCommandCenter').then((module) => ({ default: module.FleetCommandCenter }))
 );
-const ReasoningTraceViewer = lazy(() =>
-  import('./components/ReasoningTraceViewer').then((module) => ({ default: module.ReasoningTraceViewer }))
-);
-
-function MainPanelFallback() {
-  return (
-    <div className="flex-1 min-h-0 bg-background px-6 py-6">
-      <div className="h-full rounded-[1.75rem] border border-border-subtle bg-background/70" />
-    </div>
-  );
-}
-
-function ContextPanelFallback() {
-  return (
-    <div
-      className="hidden xl:block w-[340px] shrink-0 border-l border-border-subtle bg-background/60"
-      aria-hidden="true"
-    />
-  );
-}
 
 function App() {
   // --- Store state via selectors (each subscription is minimally scoped) ---
@@ -131,7 +99,6 @@ function App() {
   const systemDarkMode = useSystemDarkMode();
   const { showSettings } = useSettingsState();
   const { sidebarCollapsed } = useLayoutState();
-  const contextPanelCollapsed = useAppStore((s) => s.contextPanelCollapsed);
   const { showConfigModal, isConfigured, appConfig } = useConfigModalState();
   const globalNotice = useGlobalNotice();
   const { progress: sandboxSetupProgress, isComplete: isSandboxSetupComplete } =
@@ -152,7 +119,6 @@ function App() {
   const setShowPersonaSwitcher = useAppStore((s) => s.setShowPersonaSwitcher);
   const showTestRunner = useAppStore((s) => s.showTestRunner);
   const setShowTestRunner = useAppStore((s) => s.setShowTestRunner);
-  const showReasoningViewer = useAppStore((s) => s.showReasoningViewer);
   const setShowReasoningViewer = useAppStore((s) => s.setShowReasoningViewer);
   const showMemoryEditor = useAppStore((s) => s.showMemoryEditor);
   const setShowMemoryEditor = useAppStore((s) => s.setShowMemoryEditor);
@@ -473,67 +439,10 @@ function App() {
 
           {/* Main Content Area */}
           <Panel id="main" minSize={30}>
-            <main className="h-full min-h-0 min-w-0 flex flex-col overflow-hidden bg-background">
-              {showSettings ? (
-                <PanelErrorBoundary
-                  name="SettingsPanel"
-                  resetKey="settings"
-                  fallback={<MainPanelFallback />}
-                >
-                  <Suspense fallback={<MainPanelFallback />}>
-                    <SettingsPanel onClose={() => setShowSettings(false)} />
-                  </Suspense>
-                </PanelErrorBoundary>
-              ) : activeSessionId ? (
-                <PanelErrorBoundary
-                  name="ChatView"
-                  resetKey={activeSessionId}
-                  fallback={<MainPanelFallback />}
-                >
-                  <Suspense fallback={<MainPanelFallback />}>
-                    {splitPaneEnabled ? (
-                      <SplitPaneLayout left={<ChatView />} right={<FilePreviewPane inline />} />
-                    ) : (
-                      <ChatView />
-                    )}
-                  </Suspense>
-                </PanelErrorBoundary>
-              ) : (
-                <WelcomeView />
-              )}
+            <main className="h-full min-h-0 min-w-0 flex flex-col overflow-hidden bg-background relative">
+              <DockWorkspace />
             </main>
           </Panel>
-
-          {/* Context Panel - only show when in session and not in settings */}
-          {activeSessionId && !showSettings && !contextPanelCollapsed && (
-            <>
-              <Separator className="w-1 bg-border-muted hover:bg-accent transition-colors z-20 flex-shrink-0 cursor-col-resize" />
-              <Panel id="context" defaultSize={25} minSize={15} maxSize={40} className="flex-shrink-0 z-10">
-                <PanelErrorBoundary
-                  name="ContextPanel"
-                  resetKey={activeSessionId}
-                  fallback={<ContextPanelFallback />}
-                >
-                  <Suspense fallback={<ContextPanelFallback />}>
-                    <ContextPanel />
-                  </Suspense>
-                </PanelErrorBoundary>
-              </Panel>
-            </>
-          )}
-          {activeSessionId && !showSettings && contextPanelCollapsed && (
-            <div className="flex-shrink-0 z-10">
-              <PanelErrorBoundary
-                name="ContextPanel"
-                resetKey={activeSessionId}
-                fallback={<ContextPanelFallback />}
-              >
-                <Suspense fallback={<ContextPanelFallback />}>
-                  <ContextPanel />
-                </Suspense>
-              </PanelErrorBoundary>
-            </div>
-          )}
         </Group>
       </div>
 
@@ -702,9 +611,7 @@ function App() {
         onClose={() => setShowPersonaSwitcher(false)}
       />
       <TestRunnerWrapper showTestRunner={showTestRunner} onClose={() => setShowTestRunner(false)} />
-      <ReasoningViewerWrapper show={showReasoningViewer} onClose={() => setShowReasoningViewer(false)} />
       <MemoryPanel isOpen={showMemoryEditor} onClose={() => setShowMemoryEditor(false)} />
-      <AutonomyWrapper />
       <LiveLauncherPanel isOpen={showLiveLauncher} onClose={() => setShowLiveLauncher(false)} />
 
       {/* Notification toasts + center (Claude Cowork parity) */}
@@ -822,30 +729,11 @@ function CompanionWrapper() {
   );
 }
 
-function AutonomyWrapper() {
-  const show = useAppStore((s) => s.showAutonomyPanel);
-  if (!show) return null;
-  return (
-    <Suspense fallback={null}>
-      <AutonomyPanel isOpen={show} onClose={() => useAppStore.getState().setShowAutonomyPanel(false)} />
-    </Suspense>
-  );
-}
-
 function TestRunnerWrapper({ showTestRunner, onClose }: { showTestRunner: boolean; onClose: () => void }) {
   if (!showTestRunner) return null;
   return (
     <Suspense fallback={null}>
       <TestRunnerPanel isOpen={showTestRunner} onClose={onClose} />
-    </Suspense>
-  );
-}
-
-function ReasoningViewerWrapper({ show, onClose }: { show: boolean; onClose: () => void }) {
-  if (!show) return null;
-  return (
-    <Suspense fallback={null}>
-      <ReasoningTraceViewer isOpen={show} onClose={onClose} />
     </Suspense>
   );
 }
