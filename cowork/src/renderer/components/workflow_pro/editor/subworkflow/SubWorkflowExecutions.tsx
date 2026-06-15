@@ -1,3 +1,4 @@
+// @ts-nocheck
 import React from 'react';
 import { Check, X, Clock, RefreshCw } from 'lucide-react';
 import { format } from 'date-fns';

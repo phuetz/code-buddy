@@ -5,7 +5,7 @@
 
 import React, { useState, useCallback } from 'react';
 import { Share2, Users, Copy, X, Check } from 'lucide-react';
-import { useWorkflowStore } from '../../../../store/workflowStore';
+import { useWorkflowStore } from '../../store';
 
 type PermissionLevel = 'viewer' | 'editor' | 'admin';
 

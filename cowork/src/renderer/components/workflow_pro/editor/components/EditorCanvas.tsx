@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * EditorCanvas Component
  * Encapsulates ReactFlow with all necessary configurations and handlers

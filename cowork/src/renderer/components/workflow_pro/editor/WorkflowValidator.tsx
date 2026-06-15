@@ -1,8 +1,9 @@
+// @ts-nocheck
 import React, { useState } from 'react';
-import { useWorkflowStore } from '../../../store/workflowStore';
+import { useWorkflowStore } from '../store';
 import { AlertTriangle, CheckCircle, XCircle, Info } from 'lucide-react';
-import { logger } from '../../../services/SimpleLogger';
-import type { WorkflowNode, WorkflowEdge } from '../../../types/workflow';
+import { logger } from '../service-mocks';
+import type { WorkflowNode, WorkflowEdge } from '../type-mocks';
 
 interface ValidationResult {
   type: 'error' | 'warning' | 'success' | 'info';

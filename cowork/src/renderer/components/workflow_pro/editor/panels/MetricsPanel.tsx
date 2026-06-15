@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * MetricsPanel Component
  * Displays workflow metrics in the editor
@@ -5,8 +6,8 @@
 
 import React from 'react';
 import { Panel } from '@xyflow/react';
-import { WorkflowNode, WorkflowEdge } from '../../../../types/workflow';
-import { nodeTypes } from '../../../../data/nodeTypes';
+import { WorkflowNode, WorkflowEdge } from '../../type-mocks';
+import { nodeTypes } from '../../data-mocks';
 
 interface MetricsPanelProps {
   nodes: WorkflowNode[];

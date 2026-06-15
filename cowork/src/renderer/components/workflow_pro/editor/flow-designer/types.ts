@@ -1,5 +1,5 @@
 import { type LucideIcon } from 'lucide-react';
-import { WorkflowNode, WorkflowEdge } from '../../../../types/workflow';
+import { WorkflowNode, WorkflowEdge } from '../../type-mocks';
 
 export interface FlowPattern {
   id: string;

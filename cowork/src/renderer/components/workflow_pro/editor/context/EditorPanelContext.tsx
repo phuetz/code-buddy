@@ -19,7 +19,7 @@ import React, {
   useMemo,
   ReactNode,
 } from 'react';
-import type { WorkflowNode } from '../../../../types/workflow';
+import type { WorkflowNode } from '../../type-mocks';
 
 // ============================================================================
 // Types

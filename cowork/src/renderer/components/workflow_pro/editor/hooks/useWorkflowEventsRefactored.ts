@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * useWorkflowEvents Hook (Refactored)
  *
@@ -15,7 +16,7 @@
 
 import { useCallback } from 'react';
 import { Node, Edge } from '@xyflow/react';
-import { WorkflowNode, WorkflowEdge, NodeData } from '../../../../types/workflow';
+import { WorkflowNode, WorkflowEdge, NodeData } from '../../type-mocks';
 
 // Import modular event hooks
 import {

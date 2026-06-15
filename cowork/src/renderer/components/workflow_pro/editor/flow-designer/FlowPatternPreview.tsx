@@ -1,5 +1,5 @@
 import React from 'react';
-import { useWorkflowStore } from '../../../../store/workflowStore';
+import { useWorkflowStore } from '../../store';
 import { FlowPattern } from './types';
 
 interface FlowPatternPreviewProps {

@@ -8,7 +8,7 @@
 
 import React from 'react';
 import { ChevronRight, Home } from 'lucide-react';
-import { useWorkflowStore } from '../../../../store/workflowStore';
+import { useWorkflowStore } from '../../store';
 
 interface BreadcrumbItem {
   id: string;

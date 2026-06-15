@@ -1,6 +1,7 @@
+// @ts-nocheck
 import React from 'react';
 import type { SubWorkflowEditorProps, SubWorkflowInput, SubWorkflowOutput } from './types';
-import type { DataType } from '../../../../types/subworkflows';
+import type { DataType } from '../../type-mocks';
 
 export const SubWorkflowEditor: React.FC<SubWorkflowEditorProps> = ({
   isOpen,

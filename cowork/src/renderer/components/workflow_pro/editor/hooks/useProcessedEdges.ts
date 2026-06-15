@@ -6,7 +6,7 @@
 
 import { useMemo } from 'react';
 import { Edge } from '@xyflow/react';
-import { WorkflowEdge } from '../../../../types/workflow';
+import { WorkflowEdge } from '../../type-mocks';
 import { edgeStyleMap, defaultMarkerEnd, ConnectionStyle } from '../config/editorConfig';
 
 interface UseProcessedEdgesParams {

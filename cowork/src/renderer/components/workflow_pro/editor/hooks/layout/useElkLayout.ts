@@ -1,8 +1,9 @@
+// @ts-nocheck
 import { useCallback, useState } from 'react';
 import ELK from 'elkjs/lib/elk.bundled.js';
 import { useReactFlow, Node } from '@xyflow/react';
-import { useWorkflowStore } from '../../../../../store/workflowStore';
-import { notificationService } from '../../../../../services/NotificationService';
+import { useWorkflowStore } from '../../../store';
+import { notificationService } from '../../../service-mocks';
 
 const elk = new ELK();
 

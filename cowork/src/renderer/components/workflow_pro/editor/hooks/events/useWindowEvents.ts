@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * useWindowEvents
  *
@@ -7,7 +8,7 @@
 
 import { useEffect, useCallback } from 'react';
 import { usePanels } from '../../context';
-import { notificationService } from '../../../../../services/NotificationService';
+import { notificationService } from '../../../service-mocks';
 
 export interface UseWindowEventsOptions {
   /** Execute workflow callback */

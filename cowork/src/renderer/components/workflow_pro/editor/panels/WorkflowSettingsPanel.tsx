@@ -4,7 +4,7 @@
  */
 
 import React, { useCallback, useEffect, useState } from 'react';
-import { useWorkflowStore } from '../../../../store/workflowStore';
+import { useWorkflowStore } from '../../store';
 import { Settings, Clock, Gauge, Layers, AlertTriangle, Trash2, FileText } from 'lucide-react';
 
 interface WorkflowOption {

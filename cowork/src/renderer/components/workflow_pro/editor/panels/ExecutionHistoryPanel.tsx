@@ -5,7 +5,7 @@
 
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useWorkflowStore } from '../../../../store/workflowStore';
+import { useWorkflowStore } from '../../store';
 import {
   History,
   CheckCircle,

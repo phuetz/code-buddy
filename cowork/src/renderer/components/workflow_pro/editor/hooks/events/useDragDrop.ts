@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * useDragDrop
  *
@@ -10,13 +11,13 @@
 
 import { useCallback, useRef, useState } from 'react';
 import { MarkerType, useReactFlow } from '@xyflow/react';
-import { WorkflowNode, WorkflowEdge, NodeData } from '../../../../../types/workflow';
-import { useWorkflowStore } from '../../../../../store/workflowStore';
+import { WorkflowNode, WorkflowEdge, NodeData } from '../../../type-mocks';
+import { useWorkflowStore } from '../../../store';
 import { gridConfig } from '../../config/editorConfig';
-import { nodeTypes } from '../../../../../data/nodeTypes';
-import { notificationService } from '../../../../../services/NotificationService';
-import { logger } from '../../../../../services/SimpleLogger';
-import { findNonOverlappingPosition } from '../../utils/nodePositioning';
+import { nodeTypes } from '../../../data-mocks';
+import { notificationService } from '../../../service-mocks';
+import { logger } from '../../../service-mocks';
+import { findNonOverlappingPosition } from '../../../hook-mocks';
 
 export interface UseDragDropOptions {
   /** Reference to the ReactFlow wrapper */

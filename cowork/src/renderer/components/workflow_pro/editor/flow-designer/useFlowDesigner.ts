@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { useWorkflowStore } from '../../../../store/workflowStore';
+import { useWorkflowStore } from '../../store';
 import { FlowPattern, UseFlowDesignerReturn } from './types';
 import { flowPatterns } from './flowPatterns';
 

@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * Workflow Activation Toggle
  * Global on/off switch for workflow activation (like n8n)

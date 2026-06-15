@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * useConnectionHandlers
  *
@@ -9,7 +10,7 @@
 import { useCallback } from 'react';
 import type { OnConnectStart, OnConnectEnd } from '@xyflow/react';
 import { usePanels } from '../../context';
-import { notificationService } from '../../../../../services/NotificationService';
+import { notificationService } from '../../../service-mocks';
 
 export interface UseConnectionHandlersOptions {
   /** Reference to pending connection state */

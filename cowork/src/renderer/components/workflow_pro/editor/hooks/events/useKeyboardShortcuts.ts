@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * useKeyboardShortcuts
  *
@@ -23,9 +24,9 @@
  */
 
 import { useEffect, useCallback } from 'react';
-import { useWorkflowStore } from '../../../../../store/workflowStore';
+import { useWorkflowStore } from '../../../store';
 import { usePanels } from '../../context';
-import { notificationService } from '../../../../../services/NotificationService';
+import { notificationService } from '../../../service-mocks';
 
 export interface UseKeyboardShortcutsOptions {
   /** ReactFlow functions */

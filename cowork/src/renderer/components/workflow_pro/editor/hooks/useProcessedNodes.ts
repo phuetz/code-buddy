@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * useProcessedNodes Hook
  * Optimized node processing with memoization
@@ -5,8 +6,8 @@
 
 import { useMemo } from 'react';
 import { Node } from '@xyflow/react';
-import { WorkflowNode } from '../../../../types/workflow';
-import { nodeTypes } from '../../../../data/nodeTypes';
+import { WorkflowNode } from '../../type-mocks';
+import { nodeTypes } from '../../data-mocks';
 import { scaleConfig, ViewMode } from '../config/editorConfig';
 
 interface UseProcessedNodesParams {

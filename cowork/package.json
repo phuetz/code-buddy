@@ -100,6 +100,7 @@
     "@playwright/test": "1.59.1",
     "@types/archiver": "^7.0.0",
     "@types/better-sqlite3": "^7.6.12",
+    "@types/dagre": "0.7.54",
     "@types/node": "^25.5.0",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",

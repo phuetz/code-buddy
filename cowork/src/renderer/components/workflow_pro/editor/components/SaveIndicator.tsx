@@ -8,7 +8,7 @@
  */
 
 import React, { useEffect, useRef, useState } from 'react';
-import { useWorkflowStore } from '../../../../store/workflowStore';
+import { useWorkflowStore } from '../../store';
 
 interface SaveIndicatorProps {
   darkMode?: boolean;

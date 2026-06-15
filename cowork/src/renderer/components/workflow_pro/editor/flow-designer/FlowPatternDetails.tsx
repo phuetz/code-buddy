@@ -1,6 +1,6 @@
 import React from 'react';
 import { Workflow } from 'lucide-react';
-import { useWorkflowStore } from '../../../../store/workflowStore';
+import { useWorkflowStore } from '../../store';
 import { FlowPattern } from './types';
 import { FlowPatternPreview } from './FlowPatternPreview';
 

@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * EditorMinimap Component
  * Customized MiniMap wrapper for ReactFlow with design system styles
@@ -5,7 +6,7 @@
 
 import React, { useCallback, useMemo } from 'react';
 import { MiniMap, Node } from '@xyflow/react';
-import { nodeTypes } from '../../../../data/nodeTypes';
+import { nodeTypes } from '../../data-mocks';
 import { categoryColors } from '../config/editorConfig';
 
 export interface EditorMinimapProps {

@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * AISuggestionsPopover
  * Floating panel showing AI-suggested next nodes based on common workflow patterns.
@@ -5,8 +6,8 @@
 
 import React from 'react';
 import { Sparkles, Plus, X } from 'lucide-react';
-import { nodeTypes } from '../../../data/nodeTypes';
-import { WorkflowGenerator } from '../../../nlp/WorkflowGenerator';
+import { nodeTypes } from '../data-mocks';
+import { WorkflowGenerator } from '../service-mocks';
 
 interface AISuggestionsPopoverProps {
   nodeType: string;

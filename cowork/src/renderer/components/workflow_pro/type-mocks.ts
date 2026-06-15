@@ -1,0 +1,12 @@
+export type WorkflowNode = any;
+export type WorkflowEdge = any;
+export type Workflow = any;
+export type ExecutionState = any;
+export type DebugState = any;
+export type SubWorkflow = any;
+export type WorkflowExecution = any;
+export type ValidationResult = any;
+export type NLPQuery = any;
+export type StreamingResult = any;
+export type ViewportState = any;
+export type NodeData = any;

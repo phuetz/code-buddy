@@ -1,6 +1,6 @@
 import React from 'react';
 import { Search } from 'lucide-react';
-import { useWorkflowStore } from '../../../../store/workflowStore';
+import { useWorkflowStore } from '../../store';
 import { CATEGORY_OPTIONS } from './flowPatterns';
 
 interface FlowDesignerFiltersProps {

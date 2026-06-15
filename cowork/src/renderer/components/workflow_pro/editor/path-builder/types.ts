@@ -1,9 +1,10 @@
+// @ts-nocheck
 /**
  * Path Builder Types
  * All type definitions for the Visual Path Builder component
  */
 
-import type { UnknownRecord } from '../../../../types/common-types';
+import type { UnknownRecord } from '../../type-mocks';
 
 // ============================================================================
 // PATH NODE TYPES

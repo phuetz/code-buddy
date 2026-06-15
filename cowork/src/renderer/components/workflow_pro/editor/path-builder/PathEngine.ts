@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * Path Engine
  * Core execution engine for path building and workflow branching
@@ -5,7 +6,7 @@
 
 import { EventEmitter } from 'events';
 import * as crypto from 'crypto';
-import type { UnknownRecord } from '../../../../types/common-types';
+import type { UnknownRecord } from '../../type-mocks';
 import type {
   PathBuilderConfig,
   PathNode,

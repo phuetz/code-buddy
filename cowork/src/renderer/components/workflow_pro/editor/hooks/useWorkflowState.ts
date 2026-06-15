@@ -10,7 +10,7 @@
 
 import { useState, useRef, useCallback } from 'react';
 import { Node, Edge } from '@xyflow/react';
-import { WorkflowNode } from '../../../../types/workflow';
+import { WorkflowNode } from '../../type-mocks';
 
 // Types for UI state
 export type ViewMode = 'normal' | 'compact' | 'detailed';

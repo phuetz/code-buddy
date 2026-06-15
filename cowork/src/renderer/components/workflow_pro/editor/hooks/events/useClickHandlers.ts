@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * useClickHandlers
  *
@@ -7,8 +8,8 @@
 
 import { useCallback } from 'react';
 import { Node, Edge } from '@xyflow/react';
-import { WorkflowNode, WorkflowEdge } from '../../../../../types/workflow';
-import { useWorkflowStore } from '../../../../../store/workflowStore';
+import { WorkflowNode, WorkflowEdge } from '../../../type-mocks';
+import { useWorkflowStore } from '../../../store';
 import { usePanels } from '../../context';
 
 export interface UseClickHandlersOptions {

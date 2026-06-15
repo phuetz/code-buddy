@@ -6,7 +6,7 @@
  */
 
 import React, { useState, useCallback, useRef } from 'react';
-import { useWorkflowStore } from '../../../store/workflowStore';
+import { useWorkflowStore } from '../store';
 import { X, AlertTriangle, CheckCircle, Clock, Loader2 } from 'lucide-react';
 
 interface SplitPaneExecutionViewProps {

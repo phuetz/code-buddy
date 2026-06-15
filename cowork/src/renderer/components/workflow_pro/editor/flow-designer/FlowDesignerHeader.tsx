@@ -1,6 +1,6 @@
 import React from 'react';
 import { Workflow, X } from 'lucide-react';
-import { useWorkflowStore } from '../../../../store/workflowStore';
+import { useWorkflowStore } from '../../store';
 
 interface FlowDesignerHeaderProps {
   previewMode: boolean;

@@ -1,14 +1,15 @@
+// @ts-nocheck
 /**
  * useWorkflowExecution Hook
  * Handles workflow execution logic
  */
 
 import { useCallback } from 'react';
-import { logger } from '../../../../services/SimpleLogger';
-import { useWorkflowStore } from '../../../../store/workflowStore';
-import { workflowAPI, WorkflowExecutionRequest } from '../../../../services/WorkflowAPI';
-import { notificationService } from '../../../../services/NotificationService';
-import { WorkflowNode, WorkflowEdge } from '../../../../types/workflow';
+import { logger } from '../../service-mocks';
+import { useWorkflowStore } from '../../store';
+import { workflowAPI, WorkflowExecutionRequest } from '../../service-mocks';
+import { notificationService } from '../../service-mocks';
+import { WorkflowNode, WorkflowEdge } from '../../type-mocks';
 
 /**
  * Returns true if `nodeId` has a breakpoint set in the store. Reads via

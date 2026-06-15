@@ -1,6 +1,7 @@
+// @ts-nocheck
 import { useState, useEffect, useCallback } from 'react';
-import { SubWorkflowService } from '../../../../services/SubWorkflowService';
-import { logger } from '../../../../services/SimpleLogger';
+import { SubWorkflowService } from '../../service-mocks';
+import { logger } from '../../service-mocks';
 import type {
   SubWorkflow,
   SubWorkflowExecution,

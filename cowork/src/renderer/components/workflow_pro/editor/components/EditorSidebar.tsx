@@ -5,7 +5,7 @@
 
 import React, { useCallback } from 'react';
 import { X, Trash2, Copy, Play, Pin } from 'lucide-react';
-import type { WorkflowNode, NodeData } from '../../../../types/workflow';
+import type { WorkflowNode, NodeData } from '../../type-mocks';
 
 export interface EditorSidebarProps {
   /** Selected node to configure */

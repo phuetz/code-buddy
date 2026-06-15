@@ -4,7 +4,7 @@
  */
 
 import React from 'react';
-import { UnifiedHeader } from '../../../core/UnifiedHeader';
+import { UnifiedHeader } from '../../ui-mocks';
 
 export type ViewMode = 'normal' | 'compact' | 'detailed';
 export type ConnectionStyleType = 'bezier' | 'straight' | 'smoothstep';
