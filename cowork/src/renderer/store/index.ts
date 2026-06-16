@@ -215,6 +215,8 @@ interface AppState {
 
   // Per-session autonomous goal-loop status (drives the chat goal banner).
   goalStatesBySession: Record<string, GoalStatusPayload>;
+  // Per-turn history of goal snapshots → the GoalBanner phase timeline.
+  goalPhasesBySession: Record<string, GoalStatusPayload[]>;
 
   // UI state
   isLoading: boolean;
@@ -848,6 +850,7 @@ export const useAppStore = create<AppState>((set) => ({
   activeSessionId: null,
   sessionStates: {},
   goalStatesBySession: {},
+  goalPhasesBySession: {},
   isLoading: false,
   sidebarCollapsed: false,
   contextPanelCollapsed: false,
@@ -1501,26 +1504,40 @@ export const useAppStore = create<AppState>((set) => ({
 
   setGoalStatus: (sessionId, goal) =>
     set((state) => {
-      // 'cleared' means the user dropped the goal → hide the banner. 'active',
-      // 'paused' and 'done' all stay visible (done shows a green ✓ until the
-      // user clears it or starts a new goal).
+      // 'cleared' means the user dropped the goal → hide the banner + timeline.
+      // 'active', 'paused' and 'done' all stay visible (done shows a green ✓
+      // until the user clears it or starts a new goal).
       if (goal.status === 'cleared') {
-        if (!state.goalStatesBySession[sessionId]) return {};
-        const next = { ...state.goalStatesBySession };
-        delete next[sessionId];
-        return { goalStatesBySession: next };
+        if (!state.goalStatesBySession[sessionId] && !state.goalPhasesBySession[sessionId]) return {};
+        const nextStatus = { ...state.goalStatesBySession };
+        const nextPhases = { ...state.goalPhasesBySession };
+        delete nextStatus[sessionId];
+        delete nextPhases[sessionId];
+        return { goalStatesBySession: nextStatus, goalPhasesBySession: nextPhases };
       }
+      // Accumulate one phase per judged turn so the timeline grows turn by turn.
+      // If the same turn re-fires (e.g. an up-front 0/N then a judged 0/N),
+      // replace the last entry rather than duplicating it.
+      const phases = state.goalPhasesBySession[sessionId] ?? [];
+      const last = phases[phases.length - 1];
+      const nextPhases =
+        last && last.turnsUsed === goal.turnsUsed
+          ? [...phases.slice(0, -1), goal]
+          : [...phases, goal];
       return {
         goalStatesBySession: { ...state.goalStatesBySession, [sessionId]: goal },
+        goalPhasesBySession: { ...state.goalPhasesBySession, [sessionId]: nextPhases },
       };
     }),
 
   clearGoalStatus: (sessionId) =>
     set((state) => {
-      if (!state.goalStatesBySession[sessionId]) return {};
-      const next = { ...state.goalStatesBySession };
-      delete next[sessionId];
-      return { goalStatesBySession: next };
+      if (!state.goalStatesBySession[sessionId] && !state.goalPhasesBySession[sessionId]) return {};
+      const nextStatus = { ...state.goalStatesBySession };
+      const nextPhases = { ...state.goalPhasesBySession };
+      delete nextStatus[sessionId];
+      delete nextPhases[sessionId];
+      return { goalStatesBySession: nextStatus, goalPhasesBySession: nextPhases };
     }),
 
   // System theme actions
