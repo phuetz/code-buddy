@@ -145,14 +145,20 @@ See [Getting Started](docs/getting-started.md) for install options, headless mod
 
 Cowork is the desktop cockpit for Code Buddy: chat, tools, traces, workflows, settings, permissions, models, MCP connectors, skills, artifacts, and companion controls — all against the same core agent as the CLI. The Code Buddy settings panel can probe the local backend, start it, discover models, and route turns through the embedded engine or a configured server.
 
+<p align="center">
+  <a href="docs/qa/code-buddy-studio/showcase-2026-06-16/cowork-chat-stream.mp4"><img src="docs/qa/code-buddy-studio/showcase-2026-06-16/cowork-chat-stream.gif" alt="Real gpt-5.5 chat streaming in the Cowork desktop app for $0" width="760"/></a>
+  <br/>
+  <sub>Real <code>gpt-5.5</code> in the Cowork desktop app — the answer streams in, cost <code>$0.0000</code>. <a href="docs/qa/code-buddy-studio/showcase-2026-06-16/cowork-chat-stream.mp4">MP4 →</a></sub>
+</p>
+
 <table>
   <tr>
     <td width="50%" align="center"><img src="docs/qa/code-buddy-studio/showcase-2026-06-16/00-welcome.png" alt="Cowork desktop cockpit" width="430"/><br/><sub>Desktop cockpit — menus, sessions, composer</sub></td>
-    <td width="50%" align="center"><img src="docs/qa/code-buddy-studio/showcase-2026-06-16/01-chat-gpt55-real.png" alt="Real gpt-5.5 chat at $0" width="430"/><br/><sub>Real <code>gpt-5.5</code> chat · cost <code>$0.0000</code></sub></td>
+    <td width="50%" align="center"><img src="docs/qa/code-buddy-studio/showcase-2026-06-16/05-onboarding-provider.png" alt="Onboarding — pick a provider" width="430"/><br/><sub>Onboarding — 15 providers, ChatGPT <code>$0</code> or local Ollama</sub></td>
   </tr>
   <tr>
-    <td width="50%" align="center"><img src="docs/qa/code-buddy-studio/showcase-2026-06-16/02-chat-dark-theme.png" alt="Cowork dark theme" width="430"/><br/><sub>Light &amp; dark themes</sub></td>
     <td width="50%" align="center"><img src="docs/qa/code-buddy-studio/showcase-2026-06-16/03-fleet-autonomy.png" alt="Fleet and autonomy dashboard" width="430"/><br/><sub>Fleet dispatch · tool-permission posture · Hermes toolsets</sub></td>
+    <td width="50%" align="center"><img src="docs/qa/code-buddy-studio/showcase-2026-06-16/02-chat-dark-theme.png" alt="Cowork dark theme" width="430"/><br/><sub>Light &amp; dark themes</sub></td>
   </tr>
 </table>
 
