@@ -726,3 +726,4 @@ import { createGuiTools } from './gui-tools.js';
 import { createSessionTools } from './session-tools.js';
 import { createAliasTools } from './tool-aliases.js';
 import { createGitNexusTools } from './gitnexus-tools.js';
+export * from "./windows-tools.js";

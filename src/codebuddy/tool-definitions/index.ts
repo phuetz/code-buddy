@@ -316,3 +316,4 @@ export {
 
 // Re-export CodeBuddyTool from client for convenience
 export type { CodeBuddyTool as Tool } from './types.js';
+export * from "./windows-tools.js";

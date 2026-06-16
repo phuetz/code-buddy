@@ -379,6 +379,13 @@ export const TOOL_METADATA: ToolMetadata[] = [
     priority: 6,
     description: 'Control desktop applications with app profiles, Excel automation, mouse, keyboard, windows, dialogs, form fields, dropdowns, lists, buttons, links, radios, tabs, menus, tree items, sliders, checkboxes, and assertions'
   },
+  {
+    name: 'office_macro_execute',
+    category: 'system',
+    keywords: ['office', 'excel', 'word', 'powerpoint', 'vba', 'macro', 'powershell', 'com', 'windows', 'automation'],
+    priority: 4,
+    description: 'Execute VBA or PowerShell macros in Microsoft Office apps (Excel/Word/PowerPoint) via COM — Windows only. Dangerous: runs arbitrary code, requires confirmation. Not exposed to fleet peers.'
+  },
 
   // Planning
   {

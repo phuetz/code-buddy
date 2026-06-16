@@ -54,6 +54,7 @@ import {
   CODEBASE_REPLACE_TOOLS,
   SESSION_TOOLS,
   GITNEXUS_TOOLS,
+  WINDOWS_TOOLS,
 } from "./tool-definitions/index.js";
 import { FLEET_TOOLS } from "./fleet-tool-defs.js";
 
@@ -77,6 +78,7 @@ export {
   CORE_TOOLS, MORPH_EDIT_TOOL, isMorphEnabled,
   SEARCH_TOOLS, TODO_TOOLS, KANBAN_TOOLS, MESSAGING_TOOLS, YUANBAO_TOOLS, HOMEASSISTANT_TOOLS, MOA_TOOLS, SPOTIFY_TOOLS, X_SEARCH_TOOLS, FEISHU_TOOLS, CRON_TOOLS, WEB_TOOLS, ADVANCED_TOOLS, MULTIMODAL_TOOLS,
   COMPUTER_CONTROL_TOOLS, BROWSER_TOOLS, CANVAS_TOOLS, REASON_TOOL, EXECUTE_CODE_TOOL,
+  WINDOWS_TOOLS,
 } from "./tool-definitions/index.js";
 
 export function getBuiltinToolNames(): string[] {
@@ -111,6 +113,7 @@ export function getBuiltinToolNames(): string[] {
     SESSION_TOOLS,
     FLEET_TOOLS,
     GITNEXUS_TOOLS,
+    WINDOWS_TOOLS,
   ];
 
   return Array.from(new Set(
@@ -196,6 +199,9 @@ export function initializeToolRegistry(): void {
 
   // ExitPlanMode tool (request approval to leave plan mode)
   registerGroup(EXIT_PLAN_MODE_TOOLS);
+
+  // Windows OS-specific tools (Office VBA, etc.)
+  registerGroup(WINDOWS_TOOLS, () => process.platform === 'win32');
 
   // Codebase replace tools
   registerGroup(CODEBASE_REPLACE_TOOLS);

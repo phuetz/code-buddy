@@ -51,6 +51,9 @@ export const TOOL_GROUPS: Record<string, ToolGroup[]> = {
   spawn_process: ['group:runtime', 'group:runtime:process'],
   kill_process: ['group:runtime', 'group:runtime:process', 'group:dangerous'],
 
+  // Runtime - Office macros (arbitrary VBA/PowerShell via COM, Windows only)
+  office_macro_execute: ['group:runtime', 'group:runtime:shell', 'group:dangerous'],
+
   // Web - Fetch
   web_fetch: ['group:web', 'group:web:fetch'],
   http_request: ['group:web', 'group:web:fetch'],
