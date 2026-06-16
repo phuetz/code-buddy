@@ -1,0 +1,13 @@
+# Python deps for the bundled Anthropic document skills (.claude/skills/{pptx,docx,xlsx,pdf}).
+# Create/edit-focused set installed into the bundled Python runtime so the skills run offline.
+# (markitdown — read/convert existing docs — is intentionally omitted: it pulls onnxruntime/numpy
+#  ~200MB; install separately if you need document text-extraction.)
+python-pptx
+openpyxl
+python-docx
+pypdf
+pdf2image
+defusedxml
+six
+beautifulsoup4
+lxml

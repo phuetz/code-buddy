@@ -25,8 +25,8 @@
   "main": "dist-electron/main/index.js",
   "scripts": {
     "dev": "npm run download:node && npm run build:wsl-agent && npm run build:lima-agent && npm run build:mcp && vite",
-    "dev:with-python": "npm run download:node && npm run prepare:python && npm run build:wsl-agent && npm run build:lima-agent && npm run build:mcp && vite",
-    "build": "npm run download:node && npm run prepare:gui-tools && npm run prepare:python:all && npm run build:wsl-agent && npm run build:lima-agent && npm run build:mcp && npm run build:tray-icon && tsc && vite build && node scripts/pre-build-check.js && electron-builder",
+    "dev:with-python": "npm run download:node && npm run prepare:python && npm run prepare:python:skills && npm run build:wsl-agent && npm run build:lima-agent && npm run build:mcp && vite",
+    "build": "npm run download:node && npm run prepare:gui-tools && npm run prepare:python:all && npm run prepare:python:skills && npm run build:wsl-agent && npm run build:lima-agent && npm run build:mcp && npm run build:tray-icon && tsc && vite build && node scripts/pre-build-check.js && electron-builder",
     "build:e2e": "vite build",
     "build:win": "node scripts/build-windows.js",
     "build:tray-icon": "node scripts/build-tray-icon.js",
@@ -40,6 +40,7 @@
     "prepare:gui-tools": "node scripts/prepare-gui-tools.js",
     "prepare:python": "node scripts/prepare-python.js",
     "prepare:python:all": "node scripts/prepare-python.js --all",
+    "prepare:python:skills": "node scripts/install-skill-python-deps.mjs",
     "preview": "vite preview",
     "lint": "node scripts/lint.cjs",
     "format": "prettier --write \"src/**/*.{ts,tsx,css}\"",
