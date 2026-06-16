@@ -104,3 +104,17 @@ DEV_LOG.md
 
 # demo recording scratch (assets live in docs/qa)
 /demo-video
+
+# One-off scratch / working files (regenerable — keep out of the repo)
+dom-dump.html
+scratch*
+extracted_*.json
+translate_fr.js
+patch_team.py
+merge_json.ts
+test-results/
+e2e/_*.spec.ts
+e2e/debug.spec.ts
+e2e/scratch.spec.ts
+e2e/audit-*.spec.ts
+e2e/sprint4-*.spec.ts
