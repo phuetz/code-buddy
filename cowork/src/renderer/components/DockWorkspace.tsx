@@ -2,7 +2,7 @@ import { useEffect, useRef, Suspense } from 'react';
 import DockLayout, { LayoutData } from 'rc-dock';
 import 'rc-dock/dist/rc-dock.css';
 import { useAppStore } from '../store';
-import { useActiveSessionId, useSettingsState } from '../store/selectors';
+import { useActiveSessionId } from '../store/selectors';
 import { PanelErrorBoundary } from './PanelErrorBoundary';
 import { SplitPaneLayout } from './SplitPaneLayout';
 import { WelcomeView } from './WelcomeView';
@@ -12,7 +12,6 @@ import { FilePreviewPane } from './FilePreviewPane';
 import React from 'react';
 const ChatView = React.lazy(() => import('./ChatView').then(m => ({ default: m.ChatView })));
 const ContextPanel = React.lazy(() => import('./ContextPanel').then(m => ({ default: m.ContextPanel })));
-const SettingsPanel = React.lazy(() => import('./SettingsPanel').then(m => ({ default: m.SettingsPanel })));
 const AutonomyPanel = React.lazy(() => import('./AutonomyPanel').then(m => ({ default: m.AutonomyPanel })));
 const ReasoningTraceViewer = React.lazy(() => import('./ReasoningTraceViewer').then(m => ({ default: m.ReasoningTraceViewer })));
 
@@ -30,18 +29,44 @@ function ContextPanelFallback() {
   );
 }
 
+function ReactiveChatTab() {
+  const activeSessionId = useActiveSessionId();
+  const splitPaneEnabled = useAppStore((s) => s.splitPaneEnabled);
+  if (activeSessionId) {
+    return (
+      <PanelErrorBoundary name="ChatView" resetKey={activeSessionId} fallback={<MainPanelFallback />}>
+        <Suspense fallback={<MainPanelFallback />}>
+          {splitPaneEnabled ? <SplitPaneLayout left={<ChatView />} right={<FilePreviewPane inline />} /> : <ChatView />}
+        </Suspense>
+      </PanelErrorBoundary>
+    );
+  }
+  return <WelcomeView />;
+}
+
+function ReactiveContextTab() {
+  const activeSessionId = useActiveSessionId();
+  if (activeSessionId) {
+    return (
+      <PanelErrorBoundary name="ContextPanel" resetKey={activeSessionId} fallback={<ContextPanelFallback />}>
+        <Suspense fallback={<ContextPanelFallback />}>
+          <ContextPanel />
+        </Suspense>
+      </PanelErrorBoundary>
+    );
+  }
+  return <ContextPanelFallback />;
+}
+
 export function DockWorkspace() {
   const dockRef = useRef<DockLayout>(null);
   const activeSessionId = useActiveSessionId();
-  const { showSettings } = useSettingsState();
   const contextPanelCollapsed = useAppStore((s) => s.contextPanelCollapsed);
-  const splitPaneEnabled = useAppStore((s) => s.splitPaneEnabled);
   const showReasoningViewer = useAppStore((s) => s.showReasoningViewer);
   const showAutonomyPanel = useAppStore((s) => s.showAutonomyPanel);
 
   const setShowReasoningViewer = useAppStore((s) => s.setShowReasoningViewer);
   const setShowAutonomyPanel = useAppStore((s) => s.setShowAutonomyPanel);
-  const setShowSettings = useAppStore((s) => s.setShowSettings);
 
   // Initial Layout
   const defaultLayout: LayoutData = {
@@ -55,19 +80,7 @@ export function DockWorkspace() {
               id: 'chat',
               title: 'Chat',
               closable: false,
-              content: activeSessionId ? (
-                <PanelErrorBoundary name="ChatView" resetKey={activeSessionId} fallback={<MainPanelFallback />}>
-                  <Suspense fallback={<MainPanelFallback />}>
-                    {splitPaneEnabled ? (
-                      <SplitPaneLayout left={<ChatView />} right={<FilePreviewPane inline />} />
-                    ) : (
-                      <ChatView />
-                    )}
-                  </Suspense>
-                </PanelErrorBoundary>
-              ) : (
-                <WelcomeView />
-              ),
+              content: <ReactiveChatTab />,
             }
           ]
         },
@@ -79,13 +92,7 @@ export function DockWorkspace() {
               id: 'context',
               title: 'Context',
               closable: false,
-              content: (
-                <PanelErrorBoundary name="ContextPanel" resetKey={activeSessionId} fallback={<ContextPanelFallback />}>
-                  <Suspense fallback={<ContextPanelFallback />}>
-                    <ContextPanel />
-                  </Suspense>
-                </PanelErrorBoundary>
-              )
+              content: <ReactiveContextTab />
             }
           ]
         }] : [])
@@ -93,7 +100,6 @@ export function DockWorkspace() {
     }
   };
 
-  // Watch for external triggers to open panels
   useEffect(() => {
     if (showReasoningViewer && dockRef.current) {
       if (!dockRef.current.find('reasoning')) {
@@ -108,6 +114,7 @@ export function DockWorkspace() {
           )
         }, 'mainPanel', 'middle');
       }
+      setTimeout(() => dockRef.current?.updateTab('reasoning', null, true), 50);
     } else if (!showReasoningViewer && dockRef.current) {
       const tab = dockRef.current.find('reasoning');
       if (tab) {
@@ -131,31 +138,12 @@ export function DockWorkspace() {
           )
         }, 'mainPanel', 'middle');
       }
+      setTimeout(() => dockRef.current?.updateTab('autonomy', null, true), 50);
     }
   }, [showAutonomyPanel, setShowAutonomyPanel]);
 
-  useEffect(() => {
-    if (showSettings && dockRef.current) {
-      if (!dockRef.current.find('settings')) {
-        dockRef.current.dockMove({
-          id: 'settings',
-          title: 'Settings',
-          closable: true,
-          content: (
-            <Suspense fallback={<MainPanelFallback />}>
-              <SettingsPanel onClose={() => setShowSettings(false)} />
-            </Suspense>
-          )
-        }, 'mainPanel', 'middle');
-      }
-    } else if (!showSettings && dockRef.current) {
-      // If closed externally
-    }
-  }, [showSettings, setShowSettings]);
-
-
   return (
-    <div className="w-full h-full rc-dock-theme-dark bg-background [&_.dock-panel]:bg-background [&_.dock-bar]:bg-surface [&_.dock-tab]:bg-surface [&_.dock-tab-active]:bg-surface-hover [&_.dock-ink-bar]:bg-accent text-text-primary">
+    <div className="w-full h-full rc-dock-theme-dark bg-background [&_.dock-panel]:bg-background [&_.dock-bar]:bg-surface [&_.dock-tab]:bg-surface [&_.dock-tab-active]:bg-surface-hover [&_.dock-ink-bar]:bg-accent text-text-primary relative">
       <DockLayout 
         ref={dockRef} 
         defaultLayout={defaultLayout} 

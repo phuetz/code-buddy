@@ -10,6 +10,7 @@ import {
   ClipboardCopy,
   Headphones,
   Network,
+  Book,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -78,6 +79,17 @@ export function Titlebar() {
 
       {/* Code Buddy HTTP server toggle — boots `src/server/index.ts` in-process */}
       <ServerToggle />
+
+      {/* Documentation */}
+      <button
+        onClick={() => useAppStore.getState().setShowHelpDocs(true)}
+        className="w-10 h-full flex items-center justify-center titlebar-no-drag hover:bg-surface transition-colors"
+        title={t('helpDocs.title', 'Documentation')}
+        aria-label="Show documentation"
+        data-testid="documentation-button"
+      >
+        <Book className="w-4 h-4 text-text-secondary" />
+      </button>
 
       {/* Keyboard shortcuts help (Ctrl+/) */}
       <button

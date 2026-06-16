@@ -30,7 +30,7 @@ import { CheckpointPanel } from './CheckpointPanel';
 import { DiffViewer } from './DiffViewer';
 import { FileTree } from './FileTree';
 import { SubAgentPanel } from './SubAgentPanel';
-import { MemoryBrowser } from './MemoryBrowser';
+import { MemoryInspector } from './MemoryInspector';
 import { KnowledgeBaseBrowser } from './KnowledgeBaseBrowser';
 import { GitStatusPanel } from './GitStatusPanel';
 import {
@@ -1022,7 +1022,7 @@ export function ContextPanel() {
 
         {activeTab === 'git' && <GitStatusPanel />}
 
-        {activeTab === 'memory' && <MemoryBrowser />}
+        {activeTab === 'memory' && <MemoryInspector />}
 
         {activeTab === 'knowledge' && <KnowledgeBaseBrowser />}
 

@@ -31,7 +31,6 @@ const VALID_ROLES = [
 
 export function TeamPanel() {
   const { t } = useTranslation();
-  const show = useAppStore((s) => s.showTeamPanel);
   const setShow = useAppStore((s) => s.setShowTeamPanel);
   const team = useAppStore((s) => s.team);
   const members = useAppStore((s) => s.teamMembers);
@@ -61,16 +60,16 @@ export function TeamPanel() {
     [tasks]
   );
 
+  // When rendered in a dock, 'show' might be controlled externally by the dock's tab lifecycle.
+  // But we keep it for backward compatibility if needed, though rc-dock unmounts tabs when closed.
   useEffect(() => {
-    if (!show || !teamApi) return;
+    if (!teamApi) return;
     void teamApi.getStatus().then((snapshot) => {
       const snap = snapshot as (typeof team & { error?: string }) | { error: string };
       if (!snap || (snap as { error?: string }).error) return;
       setTeamSnapshot(snap as typeof team);
     });
-  }, [show, teamApi, setTeamSnapshot]);
-
-  if (!show) return null;
+  }, [teamApi, setTeamSnapshot]);
 
   const isActive = team?.status === 'active' || team?.status === 'paused';
 
@@ -148,120 +147,75 @@ export function TeamPanel() {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-stretch justify-end bg-slate-950/80 backdrop-blur-md" data-testid="team-panel">
+    <div className="flex h-full w-full flex-col bg-background text-text-primary" data-testid="team-panel">
       <style>{`
-        .korben-panel {
-          background: linear-gradient(145deg, rgba(15,23,42,0.95), rgba(2,6,23,0.98));
-          border-left: 1px solid rgba(56,189,248,0.2);
-          box-shadow: -10px 0 40px rgba(0,0,0,0.8), inset 0 0 30px rgba(56,189,248,0.05);
-          font-family: 'Inter', sans-serif;
+        .task-card {
+          background: var(--color-surface);
+          border: 1px solid var(--color-border-subtle);
+          border-radius: var(--radius-lg, 8px);
+          transition: all 0.2s ease;
         }
-        .korben-header {
-          background: linear-gradient(90deg, rgba(15,23,42,1) 0%, rgba(30,58,138,0.4) 100%);
-          border-bottom: 1px solid rgba(56,189,248,0.3);
-        }
-        .korben-glow-text {
-          text-shadow: 0 0 10px rgba(56,189,248,0.5);
-        }
-        .korben-card {
-          background: rgba(30,41,59,0.4);
-          border: 1px solid rgba(56,189,248,0.15);
-          backdrop-filter: blur(8px);
-          transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-        }
-        .korben-card:hover {
-          border-color: rgba(56,189,248,0.5);
-          box-shadow: 0 4px 20px rgba(56,189,248,0.15);
-          transform: translateY(-1px);
+        .task-card:hover {
+          border-color: var(--color-border);
+          background: var(--color-surface-hover);
         }
         .korben-drop-active {
-          border-color: rgba(52,211,153,0.8) !important;
-          background: rgba(52,211,153,0.15) !important;
-          box-shadow: 0 0 25px rgba(52,211,153,0.3) !important;
-          transform: scale(1.02);
-        }
-        .korben-btn {
-          background: rgba(56,189,248,0.1);
-          border: 1px solid rgba(56,189,248,0.4);
-          color: #38bdf8;
-          transition: all 0.2s;
-        }
-        .korben-btn:hover {
-          background: rgba(56,189,248,0.2);
-          box-shadow: 0 0 15px rgba(56,189,248,0.3);
-        }
-        .korben-btn-danger {
-          background: rgba(244,63,94,0.1);
-          border: 1px solid rgba(244,63,94,0.4);
-          color: #f43f5e;
-        }
-        .korben-btn-danger:hover {
-          background: rgba(244,63,94,0.2);
-          box-shadow: 0 0 15px rgba(244,63,94,0.3);
-        }
-        .korben-input {
-          background: rgba(15,23,42,0.6);
-          border: 1px solid rgba(56,189,248,0.3);
-          color: #e2e8f0;
-          transition: border-color 0.2s, box-shadow 0.2s;
-        }
-        .korben-input:focus {
-          outline: none;
-          border-color: #38bdf8;
-          box-shadow: 0 0 10px rgba(56,189,248,0.2);
+          border-color: var(--color-accent) !important;
+          background: var(--color-accent-muted) !important;
+          transform: scale(1.01);
         }
         .scroll-sci-fi::-webkit-scrollbar {
           width: 6px;
         }
         .scroll-sci-fi::-webkit-scrollbar-track {
-          background: rgba(15,23,42,0.5);
+          background: transparent;
         }
         .scroll-sci-fi::-webkit-scrollbar-thumb {
-          background: rgba(56,189,248,0.3);
+          background: var(--color-border);
           border-radius: 3px;
         }
         .scroll-sci-fi::-webkit-scrollbar-thumb:hover {
-          background: rgba(56,189,248,0.6);
+          background: var(--color-border-muted);
         }
       `}</style>
 
-      <div className="flex h-full w-[800px] flex-col korben-panel text-slate-300">
-        {/* Header */}
-        <div className="korben-header flex items-center justify-between px-6 py-4">
+
+      {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 bg-background border-b border-border">
           <div className="flex items-center gap-3">
-            <Activity className="w-5 h-5 text-sky-400 animate-pulse" />
-            <h2 className="text-lg font-bold tracking-widest text-sky-100 korben-glow-text uppercase">
+            <Activity className="w-5 h-5 text-accent animate-pulse" />
+            <h2 className="text-sm font-semibold tracking-wide text-text-primary uppercase">
               Fleet Command
             </h2>
             {team && (
-              <span className={`ml-3 text-[10px] px-2 py-0.5 rounded-sm uppercase tracking-wider font-bold border ${isActive ? 'border-sky-400 text-sky-400 bg-sky-400/10 shadow-[0_0_8px_rgba(56,189,248,0.3)]' : 'border-slate-500 text-slate-400'}`}>
+              <span className={`ml-3 text-[10px] px-2 py-0.5 rounded uppercase tracking-wider font-semibold border ${isActive ? 'border-accent text-accent bg-accent/10' : 'border-border text-text-muted bg-surface'}`}>
                 {team.status}
               </span>
             )}
             {team?.uptime && team.uptime !== 'N/A' && (
-              <span className="text-xs font-mono text-sky-200/60 ml-2">{team.uptime}</span>
+              <span className="text-xs font-mono text-text-muted ml-2">{team.uptime}</span>
             )}
           </div>
-          <button onClick={() => setShow(false)} className="rounded-full p-1.5 hover:bg-white/10 transition-colors text-slate-400 hover:text-white">
-            <X className="w-5 h-5" />
+          <button onClick={() => setShow(false)} className="rounded-md p-1.5 hover:bg-surface-hover transition-colors text-text-secondary hover:text-text-primary">
+            <X className="w-4 h-4" />
           </button>
         </div>
 
         {/* Action Bar */}
-        <div className="flex items-center justify-between border-b border-sky-400/20 px-6 py-3 bg-slate-900/40">
+        <div className="flex items-center justify-between border-b border-border px-6 py-3 bg-surface">
           {!isActive ? (
-            <button onClick={() => setShowStartModal(true)} className="korben-btn flex items-center gap-2 rounded px-4 py-1.5 text-sm font-semibold uppercase tracking-wider">
+            <button onClick={() => setShowStartModal(true)} className="flex items-center gap-2 rounded px-4 py-1.5 text-sm font-medium bg-accent text-white hover:bg-accent-hover transition-colors">
               <Play className="w-4 h-4" /> Start Fleet
             </button>
           ) : (
             <div className="flex gap-3">
-              <button onClick={() => setShowAddMember(true)} className="korben-btn flex items-center gap-2 rounded px-3 py-1.5 text-xs font-semibold uppercase tracking-wider">
+              <button onClick={() => setShowAddMember(true)} className="flex items-center gap-2 rounded px-3 py-1.5 text-xs font-medium bg-surface-hover text-text-primary hover:bg-surface-active border border-border transition-colors">
                 <UserPlus className="w-4 h-4" /> Deploy Unit
               </button>
-              <button onClick={() => setShowAddTask(true)} className="korben-btn flex items-center gap-2 rounded px-3 py-1.5 text-xs font-semibold uppercase tracking-wider">
+              <button onClick={() => setShowAddTask(true)} className="flex items-center gap-2 rounded px-3 py-1.5 text-xs font-medium bg-surface-hover text-text-primary hover:bg-surface-active border border-border transition-colors">
                 <Plus className="w-4 h-4" /> New Task
               </button>
-              <button onClick={handleStop} className="korben-btn-danger flex items-center gap-2 rounded px-3 py-1.5 text-xs font-semibold uppercase tracking-wider">
+              <button onClick={handleStop} className="flex items-center gap-2 rounded px-3 py-1.5 text-xs font-medium bg-error/10 text-error hover:bg-error/20 border border-error/20 transition-colors">
                 <Square className="w-4 h-4" /> Abort
               </button>
             </div>
@@ -270,49 +224,49 @@ export function TeamPanel() {
 
         {/* Modals Inline */}
         {showStartModal && (
-          <div className="border-b border-sky-400/20 px-6 py-4 bg-slate-800/50 backdrop-blur-md">
-            <label className="text-[10px] uppercase tracking-widest text-sky-400 mb-1 block font-bold">Mission Objective</label>
-            <textarea value={goalInput} onChange={(e) => setGoalInput(e.target.value)} rows={2} className="korben-input w-full rounded p-2 text-sm resize-none mb-3" placeholder="Define the primary directive..." />
-            {errorMsg && <p className="text-xs text-rose-400 mb-3 flex items-center gap-1"><AlertCircle className="w-3 h-3" />{errorMsg}</p>}
+          <div className="border-b border-border px-6 py-4 bg-surface">
+            <label className="text-xs uppercase tracking-wider text-text-secondary mb-1 block font-semibold">Mission Objective</label>
+            <textarea value={goalInput} onChange={(e) => setGoalInput(e.target.value)} rows={2} className="w-full bg-background border border-border focus:border-accent outline-none rounded p-2 text-sm resize-none mb-3 text-text-primary placeholder:text-text-muted" placeholder="Define the primary directive..." />
+            {errorMsg && <p className="text-xs text-error mb-3 flex items-center gap-1"><AlertCircle className="w-3 h-3" />{errorMsg}</p>}
             <div className="flex justify-end gap-3">
-              <button onClick={() => setShowStartModal(false)} className="text-xs uppercase font-bold text-slate-400 hover:text-white">Cancel</button>
-              <button onClick={handleStart} className="korben-btn rounded px-4 py-1.5 text-xs font-bold uppercase tracking-wider">Execute</button>
+              <button onClick={() => setShowStartModal(false)} className="text-sm font-medium text-text-secondary hover:text-text-primary">Cancel</button>
+              <button onClick={handleStart} className="rounded px-4 py-1.5 text-sm font-medium bg-accent text-white hover:bg-accent-hover transition-colors">Execute</button>
             </div>
           </div>
         )}
 
         {showAddMember && (
-          <div className="border-b border-sky-400/20 px-6 py-4 bg-slate-800/50 backdrop-blur-md">
+          <div className="border-b border-border px-6 py-4 bg-slate-800/50 backdrop-blur-md">
             <div className="flex gap-3 mb-3">
               <div className="flex-1">
-                <label className="text-[10px] uppercase tracking-widest text-sky-400 mb-1 block font-bold">Unit Designation</label>
-                <input type="text" value={memberLabel} onChange={(e) => setMemberLabel(e.target.value)} className="korben-input w-full rounded p-2 text-sm" placeholder="e.g. Alpha-1" />
+                <label className="text-[10px] uppercase tracking-widest text-accent mb-1 block font-bold">Unit Designation</label>
+                <input type="text" value={memberLabel} onChange={(e) => setMemberLabel(e.target.value)} className="bg-background border border-border focus:border-accent outline-none text-text-primary placeholder:text-text-muted w-full rounded p-2 text-sm" placeholder="e.g. Alpha-1" />
               </div>
               <div className="flex-1">
-                <label className="text-[10px] uppercase tracking-widest text-sky-400 mb-1 block font-bold">Role Profile</label>
-                <select value={memberRole} onChange={(e) => setMemberRole(e.target.value)} className="korben-input w-full rounded p-2 text-sm">
+                <label className="text-[10px] uppercase tracking-widest text-accent mb-1 block font-bold">Role Profile</label>
+                <select value={memberRole} onChange={(e) => setMemberRole(e.target.value)} className="bg-background border border-border focus:border-accent outline-none text-text-primary placeholder:text-text-muted w-full rounded p-2 text-sm">
                   {VALID_ROLES.map((r) => <option key={r} value={r}>{r.toUpperCase()}</option>)}
                 </select>
               </div>
             </div>
-            {errorMsg && <p className="text-xs text-rose-400 mb-3 flex items-center gap-1"><AlertCircle className="w-3 h-3" />{errorMsg}</p>}
+            {errorMsg && <p className="text-xs text-error mb-3 flex items-center gap-1"><AlertCircle className="w-3 h-3" />{errorMsg}</p>}
             <div className="flex justify-end gap-3">
-              <button onClick={() => setShowAddMember(false)} className="text-xs uppercase font-bold text-slate-400 hover:text-white">Cancel</button>
-              <button onClick={handleAddMember} className="korben-btn rounded px-4 py-1.5 text-xs font-bold uppercase tracking-wider">Deploy</button>
+              <button onClick={() => setShowAddMember(false)} className="text-xs uppercase font-bold text-text-secondary hover:text-white">Cancel</button>
+              <button onClick={handleAddMember} className="rounded px-4 py-1.5 text-xs font-medium bg-surface-hover text-text-primary hover:bg-surface-active border border-border transition-colors rounded px-4 py-1.5 text-xs font-bold uppercase tracking-wider">Deploy</button>
             </div>
           </div>
         )}
 
         {showAddTask && (
-          <div className="border-b border-sky-400/20 px-6 py-4 bg-slate-800/50 backdrop-blur-md">
-            <label className="text-[10px] uppercase tracking-widest text-sky-400 mb-1 block font-bold">Task Title</label>
-            <input type="text" value={taskTitle} onChange={(e) => setTaskTitle(e.target.value)} className="korben-input w-full rounded p-2 text-sm mb-3" placeholder="Brief directive..." />
-            <label className="text-[10px] uppercase tracking-widest text-sky-400 mb-1 block font-bold">Description</label>
-            <textarea value={taskDesc} onChange={(e) => setTaskDesc(e.target.value)} className="korben-input w-full rounded p-2 text-sm resize-none mb-3" rows={2} placeholder="Detailed parameters..." />
-            {errorMsg && <p className="text-xs text-rose-400 mb-3 flex items-center gap-1"><AlertCircle className="w-3 h-3" />{errorMsg}</p>}
+          <div className="border-b border-border px-6 py-4 bg-slate-800/50 backdrop-blur-md">
+            <label className="text-[10px] uppercase tracking-widest text-accent mb-1 block font-bold">Task Title</label>
+            <input type="text" value={taskTitle} onChange={(e) => setTaskTitle(e.target.value)} className="bg-background border border-border focus:border-accent outline-none text-text-primary placeholder:text-text-muted w-full rounded p-2 text-sm mb-3" placeholder="Brief directive..." />
+            <label className="text-[10px] uppercase tracking-widest text-accent mb-1 block font-bold">Description</label>
+            <textarea value={taskDesc} onChange={(e) => setTaskDesc(e.target.value)} className="bg-background border border-border focus:border-accent outline-none text-text-primary placeholder:text-text-muted w-full rounded p-2 text-sm resize-none mb-3" rows={2} placeholder="Detailed parameters..." />
+            {errorMsg && <p className="text-xs text-error mb-3 flex items-center gap-1"><AlertCircle className="w-3 h-3" />{errorMsg}</p>}
             <div className="flex justify-end gap-3">
-              <button onClick={() => setShowAddTask(false)} className="text-xs uppercase font-bold text-slate-400 hover:text-white">Cancel</button>
-              <button onClick={handleAddTask} className="korben-btn rounded px-4 py-1.5 text-xs font-bold uppercase tracking-wider">Queue Task</button>
+              <button onClick={() => setShowAddTask(false)} className="text-xs uppercase font-bold text-text-secondary hover:text-white">Cancel</button>
+              <button onClick={handleAddTask} className="rounded px-4 py-1.5 text-xs font-medium bg-surface-hover text-text-primary hover:bg-surface-active border border-border transition-colors rounded px-4 py-1.5 text-xs font-bold uppercase tracking-wider">Queue Task</button>
             </div>
           </div>
         )}
@@ -321,44 +275,44 @@ export function TeamPanel() {
         <div className="flex flex-1 min-h-0">
           
           {/* Active Units */}
-          <div className="w-1/2 border-r border-sky-400/20 flex flex-col p-4">
-            <h3 className="text-[11px] font-bold tracking-[0.2em] text-sky-200/60 uppercase mb-4 flex items-center gap-2">
+          <div className="w-1/2 border-r border-border flex flex-col p-4">
+            <h3 className="text-[11px] font-bold tracking-[0.2em] text-text-secondary uppercase mb-4 flex items-center gap-2">
               <Cpu className="w-4 h-4" /> Active Units ({memberList.length})
             </h3>
             <div className="flex-1 overflow-y-auto scroll-sci-fi pr-2 space-y-3">
               {memberList.length === 0 && (
-                <div className="text-sm text-slate-500 italic text-center py-10">No units deployed.</div>
+                <div className="text-sm text-text-muted italic text-center py-10">No units deployed.</div>
               )}
               {memberList.map((member) => (
                 <div
                   key={member.id}
-                  className={`korben-card rounded-lg p-3 relative overflow-hidden ${dragOverMember === member.id ? 'korben-drop-active' : ''}`}
+                  className={`task-card rounded-lg p-3 relative overflow-hidden ${dragOverMember === member.id ? 'korben-drop-active' : ''}`}
                   onDragOver={(e) => { e.preventDefault(); setDragOverMember(member.id); }}
                   onDragLeave={() => setDragOverMember(null)}
                   onDrop={(e) => handleDropOnMember(e, member.id)}
                 >
-                  <div className="absolute top-0 left-0 w-1 h-full bg-slate-700">
+                  <div className="absolute top-0 left-0 w-1 h-full bg-border-muted">
                     <div className={`w-full h-full ${renderStatusGlow(member.status)}`} />
                   </div>
                   <div className="pl-3 flex justify-between items-start">
                     <div>
-                      <div className="font-bold text-sky-100 flex items-center gap-2">
+                      <div className="font-bold text-text-primary flex items-center gap-2">
                         {member.label || member.id.substring(0, 8)}
-                        <span className="text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded border border-sky-400/30 text-sky-300 bg-sky-400/10">
+                        <span className="text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded border border-border-muted text-text-secondary bg-surface-muted">
                           {member.role}
                         </span>
                       </div>
-                      <div className="text-xs text-slate-400 mt-1 uppercase tracking-wider">
-                        Status: <span className={member.status === 'working' ? 'text-sky-400' : member.status === 'error' ? 'text-rose-400' : 'text-emerald-400'}>{member.status}</span>
+                      <div className="text-xs text-text-secondary mt-1 uppercase tracking-wider">
+                        Status: <span className={member.status === 'working' ? 'text-accent' : member.status === 'error' ? 'text-error' : 'text-success'}>{member.status}</span>
                       </div>
                       {member.currentTaskId && (
-                        <div className="text-xs text-sky-300 mt-2 p-1.5 bg-sky-900/30 rounded border border-sky-400/20">
-                          <span className="text-[9px] text-sky-200/60 block mb-0.5">CURRENT DIRECTIVE</span>
+                        <div className="text-xs text-text-secondary mt-2 p-1.5 bg-surface rounded border border-border">
+                          <span className="text-[9px] text-text-secondary block mb-0.5">CURRENT DIRECTIVE</span>
                           {tasks[member.currentTaskId]?.title || member.currentTaskId}
                         </div>
                       )}
                     </div>
-                    <button onClick={() => handleRemoveMember(member.id)} className="text-slate-500 hover:text-rose-400 transition-colors p-1">
+                    <button onClick={() => handleRemoveMember(member.id)} className="text-text-muted hover:text-error transition-colors p-1">
                       <Trash2 className="w-4 h-4" />
                     </button>
                   </div>
@@ -369,12 +323,12 @@ export function TeamPanel() {
 
           {/* Task Queue */}
           <div className="w-1/2 flex flex-col p-4">
-            <h3 className="text-[11px] font-bold tracking-[0.2em] text-sky-200/60 uppercase mb-4 flex items-center gap-2">
+            <h3 className="text-[11px] font-bold tracking-[0.2em] text-text-secondary uppercase mb-4 flex items-center gap-2">
               <Activity className="w-4 h-4" /> Mission Queue ({taskList.length})
             </h3>
             <div className="flex-1 overflow-y-auto scroll-sci-fi pr-2 space-y-2">
               {taskList.length === 0 && (
-                <div className="text-sm text-slate-500 italic text-center py-10">Queue is empty.</div>
+                <div className="text-sm text-text-muted italic text-center py-10">Queue is empty.</div>
               )}
               {taskList.map((task) => {
                 const assignee = task.assignedTo ? members[task.assignedTo]?.label || 'UNIT' : null;
@@ -384,29 +338,29 @@ export function TeamPanel() {
                     key={task.id}
                     draggable={isUnassigned}
                     onDragStart={(e) => handleDragStart(e, task.id)}
-                    className={`korben-card rounded p-2.5 flex gap-3 ${isUnassigned ? 'cursor-grab active:cursor-grabbing border-dashed border-sky-400/40 hover:border-sky-400/80' : ''}`}
+                    className={`task-card rounded p-2.5 flex gap-3 ${isUnassigned ? 'cursor-grab active:cursor-grabbing border-dashed border-border hover:border-accent' : ''}`}
                   >
                     {isUnassigned ? (
-                      <div className="text-sky-400/50 pt-1 cursor-grab flex-shrink-0">
+                      <div className="text-text-muted pt-1 cursor-grab flex-shrink-0">
                         <GripVertical className="w-4 h-4" />
                       </div>
                     ) : (
                       <div className="w-4 flex-shrink-0 flex justify-center pt-1">
-                        {task.status === 'completed' && <CheckCircle2 className="w-4 h-4 text-emerald-400" />}
-                        {task.status === 'in_progress' && <Clock className="w-4 h-4 text-sky-400 animate-pulse" />}
-                        {task.status === 'failed' && <AlertCircle className="w-4 h-4 text-rose-400" />}
+                        {task.status === 'completed' && <CheckCircle2 className="w-4 h-4 text-success" />}
+                        {task.status === 'in_progress' && <Clock className="w-4 h-4 text-accent animate-pulse" />}
+                        {task.status === 'failed' && <AlertCircle className="w-4 h-4 text-error" />}
                       </div>
                     )}
                     <div className="flex-1 min-w-0">
-                      <div className={`text-sm font-semibold truncate ${task.status === 'completed' ? 'text-slate-500 line-through' : 'text-sky-100'}`}>
+                      <div className={`text-sm font-semibold truncate ${task.status === 'completed' ? 'text-text-muted line-through' : 'text-text-primary'}`}>
                         {task.title}
                       </div>
                       <div className="flex items-center gap-2 mt-1">
                         <span className={`text-[9px] uppercase tracking-widest px-1.5 py-[1px] rounded ${
-                          task.status === 'pending' ? 'bg-slate-700 text-slate-300' :
-                          task.status === 'in_progress' ? 'bg-sky-900/50 text-sky-300 border border-sky-400/30' :
-                          task.status === 'completed' ? 'bg-emerald-900/30 text-emerald-400' :
-                          'bg-rose-900/30 text-rose-400'
+                          task.status === 'pending' ? 'bg-border-muted text-slate-300' :
+                          task.status === 'in_progress' ? 'bg-sky-900/50 text-text-secondary border border-border-muted' :
+                          task.status === 'completed' ? 'bg-emerald-900/30 text-success' :
+                          'bg-rose-900/30 text-error'
                         }`}>
                           {task.status}
                         </span>
@@ -424,18 +378,18 @@ export function TeamPanel() {
 
             {/* Mailbox Feed */}
             {mailbox.length > 0 && (
-              <div className="mt-4 pt-4 border-t border-sky-400/20 h-40 flex flex-col">
-                <h3 className="text-[10px] font-bold tracking-[0.2em] text-sky-200/60 uppercase mb-2 flex items-center gap-2">
+              <div className="mt-4 pt-4 border-t border-border h-40 flex flex-col">
+                <h3 className="text-[10px] font-bold tracking-[0.2em] text-text-secondary uppercase mb-2 flex items-center gap-2">
                   <Mail className="w-3 h-3" /> Comms Log
                 </h3>
                 <div className="flex-1 overflow-y-auto scroll-sci-fi text-[11px] font-mono leading-relaxed bg-slate-900/50 p-2 rounded border border-sky-400/10">
                   {mailbox.slice().reverse().slice(0, 15).map(msg => (
-                    <div key={msg.id} className="mb-1.5 text-slate-400">
-                      <span className="text-sky-400 font-bold">{members[msg.from]?.label || msg.from}</span>
+                    <div key={msg.id} className="mb-1.5 text-text-secondary">
+                      <span className="text-accent font-bold">{members[msg.from]?.label || msg.from}</span>
                       <span className="text-slate-600"> {'>'} </span>
                       <span className="text-indigo-300">{msg.to === 'all' ? 'ALL' : members[msg.to]?.label || msg.to}</span>
                       <span className="text-slate-600">: </span>
-                      <span className="text-sky-100/80">{msg.content}</span>
+                      <span className="text-text-primary/80">{msg.content}</span>
                     </div>
                   ))}
                 </div>
@@ -444,6 +398,5 @@ export function TeamPanel() {
           </div>
         </div>
       </div>
-    </div>
   );
 }

@@ -26,6 +26,7 @@ import {
   Gauge,
   Search,
   Sparkles,
+  Volume2,
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useWindowSize } from '../hooks/useWindowSize';
@@ -59,6 +60,7 @@ import { SettingsTelemetry } from './settings/SettingsTelemetry';
 import { SettingsControlCenter } from './settings/SettingsControlCenter';
 import { SettingsRemoteBackend } from './settings/SettingsRemoteBackend';
 import { SettingsTunnel } from './settings/SettingsTunnel';
+import { SettingsAudio } from './settings/SettingsAudio';
 import { SkillsBrowser } from './SkillsBrowser';
 
 interface SettingsPanelProps {
@@ -89,6 +91,7 @@ interface SettingsPanelProps {
     | 'plugins'
     | 'telemetry'
     | 'profiles'
+    | 'audio'
     | 'general';
 }
 
@@ -121,6 +124,7 @@ type TabId =
   | 'coreEngine'
   | 'profiles'
   | 'remoteBackend'
+  | 'audio'
   | 'general';
 
 const VALID_TABS = new Set<TabId>([
@@ -152,6 +156,7 @@ const VALID_TABS = new Set<TabId>([
   'coreEngine',
   'profiles',
   'remoteBackend',
+  'audio',
   'general',
 ]);
 
@@ -170,6 +175,7 @@ const SETTINGS_TAB_GROUPS: { id: string; label: string }[] = [
 const TAB_GROUP: Record<TabId, string> = {
   control: 'essentials',
   general: 'essentials',
+  audio: 'essentials',
   codebuddy: 'essentials',
   coreEngine: 'essentials',
   api: 'models',
@@ -428,6 +434,12 @@ export function SettingsPanel({ onClose, initialTab = 'control' }: SettingsPanel
       label: t('remoteBackend.tabLabel', 'Remote backend'),
       icon: Network,
       description: t('remoteBackend.tabHint', 'Run chat/sessions on a remote Code Buddy backend'),
+    },
+    {
+      id: 'audio' as TabId,
+      label: t('settings.audio', 'Audio & TTS'),
+      icon: Volume2,
+      description: t('settings.audioDesc', 'Configure local voice, Piper TTS models and speech rates'),
     },
     {
       id: 'general' as TabId,
@@ -694,6 +706,9 @@ export function SettingsPanel({ onClose, initialTab = 'control' }: SettingsPanel
               </div>
               <div className={activeTab === 'remoteBackend' ? '' : 'hidden'}>
                 {viewedTabs.has('remoteBackend') && <SettingsRemoteBackend />}
+              </div>
+              <div className={activeTab === 'audio' ? '' : 'hidden'}>
+                {viewedTabs.has('audio') && <SettingsAudio />}
               </div>
               <div className={activeTab === 'general' ? '' : 'hidden'}>
                 {viewedTabs.has('general') && <SettingsGeneral />}

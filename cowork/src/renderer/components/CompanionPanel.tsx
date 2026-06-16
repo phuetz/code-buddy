@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 /**
  * CompanionPanel — Buddy's Lisa-inspired cockpit.
  *
@@ -266,6 +267,7 @@ function mediaPipeHandValue(analysis: CompanionMediaPipeVisionAnalysis): string 
 }
 
 function MediaPipeVisionSummary({ analysis }: { analysis: CompanionMediaPipeVisionAnalysis | null }) {
+    const { t } = useTranslation();
   if (!analysis) return null;
   const available = analysis.status === 'ok';
 
@@ -282,31 +284,31 @@ function MediaPipeVisionSummary({ analysis }: { analysis: CompanionMediaPipeVisi
           </span>
         </div>
         {typeof analysis.elapsedMs === 'number' && (
-          <span className="shrink-0 text-[10px] text-text-muted">{analysis.elapsedMs}ms</span>
+          <span className="shrink-0 text-[10px] text-text-muted">{analysis.elapsedMs}{t('companion.ms', `ms`)}</span>
         )}
       </div>
       <div className="grid grid-cols-2 gap-2">
         <StatusTile
           icon={Eye}
-          label="Faces"
+          label={t('companion.faces', `Faces`)}
           value={analysis.faceCount > 0 ? `${analysis.faceCount} detected` : 'None detected'}
           ok={available && analysis.faceCount > 0}
         />
         <StatusTile
           icon={Activity}
-          label="Hands"
+          label={t('companion.hands', `Hands`)}
           value={mediaPipeHandValue(analysis)}
           ok={available && analysis.handCount > 0}
         />
         <StatusTile
           icon={Monitor}
-          label="Pose"
+          label={t('companion.pose', `Pose`)}
           value={analysis.poseCount > 0 ? `${analysis.poseCount} body pose` : 'None detected'}
           ok={available && analysis.poseCount > 0}
         />
         <StatusTile
           icon={Brain}
-          label="Engine"
+          label={t('companion.engine', `Engine`)}
           value={analysis.error ?? analysis.engine}
           ok={available}
         />
@@ -833,6 +835,7 @@ function CompanionPulsePanel({
   syncDetail?: string;
   onRunAction: (action: CompanionPulseAction) => void;
 }) {
+    const { t } = useTranslation();
   const spokenPulse = companionPulseSpeech(pulse, syncDetail);
 
   return (
@@ -871,7 +874,7 @@ function CompanionPulsePanel({
         className="mt-2 flex items-center justify-between gap-2 rounded border border-border bg-background/60 px-2 py-1.5 text-xs text-text-secondary"
       >
         <span className="min-w-0">
-          <span className="font-medium text-text-primary">Next:</span> {pulse.nextAction}
+          <span className="font-medium text-text-primary">{t('companion.next', `Next:`)}</span> {pulse.nextAction}
         </span>
         <div className="flex shrink-0 items-center gap-1">
           {pulse.nextActionKey && pulse.nextActionLabel && (
@@ -894,7 +897,7 @@ function CompanionPulsePanel({
           >
             <Volume2 className="h-3.5 w-3.5" />
             Speak pulse
-          </button>
+                                </button>
         </div>
       </div>
     </div>
@@ -985,6 +988,7 @@ function voiceDiagnosticsSummary(diagnostics: VoiceDiagnostics): { ok: boolean; 
 }
 
 function VoiceDiagnosticsIssueList({ diagnostics }: { diagnostics: VoiceDiagnostics }) {
+    const { t } = useTranslation();
   const issues = voiceDiagnosticIssues(diagnostics);
   if (issues.length === 0) {
     return null;
@@ -995,7 +999,7 @@ function VoiceDiagnosticsIssueList({ diagnostics }: { diagnostics: VoiceDiagnost
       data-testid="voice-diagnostics-actions"
       className="rounded border border-warning/30 bg-warning/5 px-3 py-2"
     >
-      <div className="text-[11px] font-semibold uppercase text-text-muted">Recovery cues</div>
+      <div className="text-[11px] font-semibold uppercase text-text-muted">{t('companion.recoveryCues', `Recovery cues`)}</div>
       <ul className="mt-2 space-y-1">
         {issues.map((issue) => (
           <li key={issue.id} className="flex items-start gap-2 text-xs text-text-secondary">
@@ -1198,14 +1202,14 @@ function CompanionCardRow({
               className="rounded border border-border px-2 py-1 text-[10px] text-text-secondary hover:bg-surface disabled:opacity-50"
             >
               Resolve
-            </button>
+                                      </button>
             <button
               disabled={busy}
               onClick={() => onStatus(card.id, 'dismissed')}
               className="rounded border border-border px-2 py-1 text-[10px] text-text-secondary hover:bg-surface disabled:opacity-50"
             >
               Dismiss
-            </button>
+                                      </button>
           </div>
         )}
       </div>
@@ -1243,7 +1247,7 @@ function GatewayChannelRow({
             {channel.allowOutbound && (
               <span className="rounded bg-background px-1.5 py-0.5 text-[10px] text-text-muted">
                 outbound
-              </span>
+                                            </span>
             )}
           </div>
           <p className="mt-1 text-[11px] text-text-muted">
@@ -1262,7 +1266,7 @@ function GatewayChannelRow({
             className="rounded border border-border px-2 py-1 text-[10px] text-text-secondary hover:bg-surface disabled:opacity-50"
           >
             Observe
-          </button>
+                                </button>
           <button
             disabled={busy}
             onClick={() => onUpdate(channel.channel, {
@@ -1274,7 +1278,7 @@ function GatewayChannelRow({
             className="rounded border border-border px-2 py-1 text-[10px] text-text-secondary hover:bg-surface disabled:opacity-50"
           >
             Assist
-          </button>
+                                </button>
           <button
             disabled={busy}
             onClick={() => onUpdate(channel.channel, {
@@ -1286,14 +1290,14 @@ function GatewayChannelRow({
             className="rounded border border-border px-2 py-1 text-[10px] text-text-secondary hover:bg-surface disabled:opacity-50"
           >
             Act
-          </button>
+                                </button>
           <button
             disabled={busy}
             onClick={() => onUpdate(channel.channel, { enabled: false })}
             className="rounded border border-border px-2 py-1 text-[10px] text-text-secondary hover:bg-surface disabled:opacity-50"
           >
             Pause
-          </button>
+                                </button>
         </div>
       </div>
     </div>
@@ -1315,28 +1319,29 @@ function GatewayInboxPreview({
   onReplyDraft: (itemId: string) => void;
   onReplySend: (itemId: string) => void;
 }) {
+    const { t } = useTranslation();
   const items = inbox.items.slice(0, 5);
   return (
     <section className="space-y-3" data-testid="companion-gateway-inbox">
       <div className="flex items-center justify-between">
-        <h3 className="text-xs font-semibold uppercase tracking-wide text-text-muted">Gateway inbox</h3>
+        <h3 className="text-xs font-semibold uppercase tracking-wide text-text-muted">{t('companion.gatewayInbox', `Gateway inbox`)}</h3>
         <span className="text-[10px] text-text-muted">
           {inbox.counts.queued} queued
-        </span>
+                          </span>
       </div>
       <div
         className="grid grid-cols-2 gap-2"
         data-testid="companion-gateway-inbox-counts"
       >
-        <StatusTile icon={Radio} label="Queued" value={String(inbox.counts.queued)} ok={inbox.counts.queued === 0} />
-        <StatusTile icon={AlertCircle} label="High" value={String(inbox.counts.highPriority)} ok={inbox.counts.highPriority === 0} />
-        <StatusTile icon={Activity} label="Total" value={String(inbox.counts.total)} ok />
-        <StatusTile icon={ShieldCheck} label="Dispatch" value={inbox.safety.autoDispatch ? 'auto' : 'review'} ok={!inbox.safety.autoDispatch} />
+        <StatusTile icon={Radio} label={t('companion.queued1', `Queued`)} value={String(inbox.counts.queued)} ok={inbox.counts.queued === 0} />
+        <StatusTile icon={AlertCircle} label={t('companion.high', `High`)} value={String(inbox.counts.highPriority)} ok={inbox.counts.highPriority === 0} />
+        <StatusTile icon={Activity} label={t('companion.total', `Total`)} value={String(inbox.counts.total)} ok />
+        <StatusTile icon={ShieldCheck} label={t('companion.dispatch', `Dispatch`)} value={inbox.safety.autoDispatch ? 'auto' : 'review'} ok={!inbox.safety.autoDispatch} />
       </div>
       {items.length === 0 ? (
         <div className="rounded border border-border bg-surface/35 px-3 py-6 text-center text-xs text-text-muted">
           No gateway messages waiting for review.
-        </div>
+                          </div>
       ) : (
         <div className="space-y-2">
           {items.map((item) => (
@@ -1375,7 +1380,7 @@ function GatewayInboxPreview({
                       className="rounded border border-accent/50 px-2 py-1 text-[10px] text-accent hover:bg-accent/10 disabled:opacity-50"
                     >
                       Prepare draft
-                    </button>
+                                                      </button>
                   )}
                 </div>
               </div>
@@ -1396,7 +1401,7 @@ function GatewayInboxPreview({
                       className="rounded border border-accent/50 px-2 py-1 text-[10px] text-accent hover:bg-accent/10 disabled:opacity-50"
                     >
                       Fleet draft
-                    </button>
+                                                      </button>
                   )}
                   {item.draft.fleet && (
                     <button
@@ -1404,7 +1409,7 @@ function GatewayInboxPreview({
                       className="inline-flex max-w-full items-center gap-1 rounded border border-border px-2 py-1 text-[10px] text-text-muted hover:bg-surface"
                     >
                       <FolderOpen className="h-3.5 w-3.5 shrink-0" />
-                      <span className="truncate">Fleet: {item.draft.fleet.dispatchInput.dispatchProfile}</span>
+                      <span className="truncate">{t('companion.fleet', `Fleet:`)}{item.draft.fleet.dispatchInput.dispatchProfile}</span>
                     </button>
                   )}
                   {item.draft.fleet && !item.draft.fleet.outboundReply && (
@@ -1414,7 +1419,7 @@ function GatewayInboxPreview({
                       className="rounded border border-accent/50 px-2 py-1 text-[10px] text-accent hover:bg-accent/10 disabled:opacity-50"
                     >
                       Reply draft
-                    </button>
+                                                      </button>
                   )}
                   {item.draft.fleet?.outboundReply && (
                     <button
@@ -1422,7 +1427,7 @@ function GatewayInboxPreview({
                       className="inline-flex max-w-full items-center gap-1 rounded border border-border px-2 py-1 text-[10px] text-text-muted hover:bg-surface"
                     >
                       <FolderOpen className="h-3.5 w-3.5 shrink-0" />
-                      <span className="truncate">Reply: {item.draft.fleet.outboundReply.reviewedBy}</span>
+                      <span className="truncate">{t('companion.reply', `Reply:`)}{item.draft.fleet.outboundReply.reviewedBy}</span>
                     </button>
                   )}
                   {item.draft.fleet?.outboundReply && (
@@ -1432,7 +1437,7 @@ function GatewayInboxPreview({
                       className="rounded border border-red-500/50 px-2 py-1 text-[10px] text-red-300 hover:bg-red-500/10 disabled:opacity-50"
                     >
                       Send reply
-                    </button>
+                                                      </button>
                   )}
                 </div>
               )}
@@ -1444,7 +1449,7 @@ function GatewayInboxPreview({
                   {item.safety.secretRedaction}
                 </span>
                 {item.safety.rawTextStored === false && (
-                  <span className="rounded bg-background px-1.5 py-0.5">preview only</span>
+                  <span className="rounded bg-background px-1.5 py-0.5">{t('companion.previewOnly', `preview only`)}</span>
                 )}
               </div>
             </div>
@@ -1465,22 +1470,23 @@ function GatewayInboxPreview({
 }
 
 function GatewayLifecyclePreview({ report }: { report: CompanionGatewayLifecycleReport }) {
+    const { t } = useTranslation();
   const topChannels = report.channels
     .filter((channel) => channel.enabled || channel.queueCount > 0 || channel.draftCount > 0)
     .slice(0, 5);
   return (
     <section className="space-y-3" data-testid="companion-gateway-lifecycle">
       <div className="flex items-center justify-between">
-        <h3 className="text-xs font-semibold uppercase tracking-wide text-text-muted">Gateway lifecycle</h3>
+        <h3 className="text-xs font-semibold uppercase tracking-wide text-text-muted">{t('companion.gatewayLifecycle', `Gateway lifecycle`)}</h3>
         <span className="text-[10px] text-text-muted">
           {report.summary.readyChannelCount} ready · {report.summary.attentionChannelCount} attention
-        </span>
+                          </span>
       </div>
       <div className="grid grid-cols-2 gap-2">
-        <StatusTile icon={Radio} label="Enabled" value={`${report.summary.enabledCount}/${report.summary.channelCount}`} ok={report.summary.enabledCount > 0} />
-        <StatusTile icon={ListChecks} label="Queued" value={String(report.summary.queuedCount)} ok={report.summary.queuedCount === 0} />
-        <StatusTile icon={ShieldCheck} label="Replies" value={String(report.summary.replyDraftCount)} ok />
-        <StatusTile icon={Activity} label="Outbox" value={String(report.summary.outboundSendCount)} ok={report.summary.failedSendCount === 0 && report.summary.blockedSendCount === 0} />
+        <StatusTile icon={Radio} label={t('companion.enabled1', `Enabled`)} value={`${report.summary.enabledCount}/${report.summary.channelCount}`} ok={report.summary.enabledCount > 0} />
+        <StatusTile icon={ListChecks} label={t('companion.queued1', `Queued`)} value={String(report.summary.queuedCount)} ok={report.summary.queuedCount === 0} />
+        <StatusTile icon={ShieldCheck} label={t('companion.replies', `Replies`)} value={String(report.summary.replyDraftCount)} ok />
+        <StatusTile icon={Activity} label={t('companion.outbox', `Outbox`)} value={String(report.summary.outboundSendCount)} ok={report.summary.failedSendCount === 0 && report.summary.blockedSendCount === 0} />
       </div>
       {topChannels.length > 0 && (
         <div className="space-y-1">
@@ -1491,7 +1497,7 @@ function GatewayLifecyclePreview({ report }: { report: CompanionGatewayLifecycle
             >
               <span className="truncate text-text-primary">{channel.channel}</span>
               <span className="shrink-0 text-text-muted">
-                {channel.state} · q{channel.queueCount}/d{channel.draftCount}/r{channel.replyDraftCount}
+                {channel.state} · q{channel.queueCount}{t('companion.d', `/d`)}{channel.draftCount}{t('companion.r', `/r`)}{channel.replyDraftCount}
               </span>
             </div>
           ))}
@@ -1536,21 +1542,22 @@ function GatewayAdminPlanPreview({
   busy: boolean;
   onExecute: (action: CompanionGatewayAdminAction & { action: CompanionGatewayExecutableAdminAction }) => void;
 }) {
+    const { t } = useTranslation();
   const topActions = plan.actions.slice(0, 5);
   const replay = plan.deliveryDiagnostics.replayablePreviews.slice(0, 3);
   return (
     <section className="space-y-3" data-testid="companion-gateway-admin-plan">
       <div className="flex items-center justify-between">
-        <h3 className="text-xs font-semibold uppercase tracking-wide text-text-muted">Gateway admin</h3>
+        <h3 className="text-xs font-semibold uppercase tracking-wide text-text-muted">{t('companion.gatewayAdmin', `Gateway admin`)}</h3>
         <span className="text-[10px] text-text-muted">
           {plan.summary.actionCount} actions · dry-run
-        </span>
+                          </span>
       </div>
       <div className="grid grid-cols-2 gap-2">
-        <StatusTile icon={ClipboardCheck} label="Approval" value={plan.safety.requiresLocalApproval ? 'required' : 'open'} ok={plan.safety.requiresLocalApproval} />
-        <StatusTile icon={ShieldCheck} label="Secrets" value={plan.safety.secretsIncluded ? 'included' : 'redacted'} ok={!plan.safety.secretsIncluded} />
-        <StatusTile icon={RefreshCw} label="Replay" value={String(plan.summary.replayablePreviewCount)} ok={plan.summary.failedSendCount === 0 && plan.summary.blockedSendCount === 0} />
-        <StatusTile icon={Activity} label="Admin exec" value={plan.safety.executesChannelAdmin ? 'live' : 'plan'} ok={!plan.safety.executesChannelAdmin} />
+        <StatusTile icon={ClipboardCheck} label={t('companion.approval', `Approval`)} value={plan.safety.requiresLocalApproval ? 'required' : 'open'} ok={plan.safety.requiresLocalApproval} />
+        <StatusTile icon={ShieldCheck} label={t('companion.secrets', `Secrets`)} value={plan.safety.secretsIncluded ? 'included' : 'redacted'} ok={!plan.safety.secretsIncluded} />
+        <StatusTile icon={RefreshCw} label={t('companion.replay', `Replay`)} value={String(plan.summary.replayablePreviewCount)} ok={plan.summary.failedSendCount === 0 && plan.summary.blockedSendCount === 0} />
+        <StatusTile icon={Activity} label={t('companion.adminExec', `Admin exec`)} value={plan.safety.executesChannelAdmin ? 'live' : 'plan'} ok={!plan.safety.executesChannelAdmin} />
       </div>
       {topActions.length > 0 && (
         <div className="space-y-1">
@@ -1579,7 +1586,7 @@ function GatewayAdminPlanPreview({
                 >
                   <Play className="h-3 w-3" />
                   Execute
-                </button>
+                                          </button>
               )}
             </div>
           ))}
@@ -1641,6 +1648,7 @@ function OpenClawBridgePreview({
   onSendPreview: () => void;
   onSendLive: () => void;
 }) {
+    const { t } = useTranslation();
   const detected = recordBool(status?.discovery, 'detected') === true;
   const endpoint = recordString(status?.discovery, 'endpoint') ?? 'not configured';
   const tokenState = recordBool(status?.discovery, 'tokenPresent') === true ? 'present' : 'not found';
@@ -1650,15 +1658,15 @@ function OpenClawBridgePreview({
   return (
     <section className="space-y-3" data-testid="companion-openclaw-bridge">
       <div className="flex items-center justify-between">
-        <h3 className="text-xs font-semibold uppercase tracking-wide text-text-muted">OpenClaw bridge</h3>
+        <h3 className="text-xs font-semibold uppercase tracking-wide text-text-muted">{t('companion.openClawBridge', `OpenClaw bridge`)}</h3>
         <span className={detected ? 'text-[10px] text-success' : 'text-[10px] text-warning'}>
           {detected ? 'detected' : 'not detected'}
         </span>
       </div>
       <div className="rounded border border-border bg-surface/35 p-3">
         <div className="grid grid-cols-2 gap-2">
-          <StatusTile icon={Radio} label="Gateway" value={endpoint} ok={detected} />
-          <StatusTile icon={ShieldCheck} label="Token" value={tokenState} ok={tokenState === 'present'} />
+          <StatusTile icon={Radio} label={t('companion.gateway', `Gateway`)} value={endpoint} ok={detected} />
+          <StatusTile icon={ShieldCheck} label={t('companion.token', `Token`)} value={tokenState} ok={tokenState === 'present'} />
         </div>
         <div className="mt-3 flex flex-wrap gap-2">
           <button
@@ -1667,56 +1675,56 @@ function OpenClawBridgePreview({
             className="rounded border border-border px-2 py-1 text-[11px] text-text-secondary hover:bg-surface disabled:opacity-50"
           >
             Preview attach
-          </button>
+                                </button>
           <button
             disabled={busy}
             onClick={onAttachLive}
             className="rounded border border-accent/50 px-2 py-1 text-[11px] text-accent hover:bg-accent/10 disabled:opacity-50"
           >
             Attach live
-          </button>
+                                </button>
           <button
             disabled={busy}
             onClick={onNodesPending}
             className="rounded border border-border px-2 py-1 text-[11px] text-text-secondary hover:bg-surface disabled:opacity-50"
           >
             Pending nodes
-          </button>
+                                </button>
           <button
             disabled={busy}
             onClick={onNodeApprove}
             className="rounded border border-accent/50 px-2 py-1 text-[11px] text-accent hover:bg-accent/10 disabled:opacity-50"
           >
             Approve node
-          </button>
+                                </button>
           <button
             disabled={busy}
             onClick={onNodeReject}
             className="rounded border border-warning/60 px-2 py-1 text-[11px] text-warning hover:bg-warning/10 disabled:opacity-50"
           >
             Reject node
-          </button>
+                                </button>
           <button
             disabled={busy}
             onClick={onDraft}
             className="rounded border border-border px-2 py-1 text-[11px] text-text-secondary hover:bg-surface disabled:opacity-50"
           >
             Draft handoff
-          </button>
+                                </button>
           <button
             disabled={busy}
             onClick={onSendPreview}
             className="rounded border border-border px-2 py-1 text-[11px] text-text-secondary hover:bg-surface disabled:opacity-50"
           >
             Preview send
-          </button>
+                                </button>
           <button
             disabled={busy}
             onClick={onSendLive}
             className="rounded border border-warning/60 px-2 py-1 text-[11px] text-warning hover:bg-warning/10 disabled:opacity-50"
           >
             Send live
-          </button>
+                                </button>
         </div>
         {result && (
           <div className="mt-3 rounded bg-background px-2 py-1.5 text-[10px] text-text-muted">
@@ -1790,14 +1798,14 @@ function SkillCandidateRow({
               className="rounded border border-border px-2 py-1 text-[10px] text-text-secondary hover:bg-surface disabled:opacity-50"
             >
               Promote
-            </button>
+                                      </button>
             <button
               disabled={busy}
               onClick={() => onDismiss(candidate.id)}
               className="rounded border border-border px-2 py-1 text-[10px] text-text-secondary hover:bg-surface disabled:opacity-50"
             >
               Dismiss
-            </button>
+                                      </button>
           </div>
         )}
       </div>
@@ -1806,6 +1814,7 @@ function SkillCandidateRow({
 }
 
 export function CompanionPanel() {
+    const { t } = useTranslation();
   const show = useAppStore((s) => s.showCompanionPanel);
   const setShow = useAppStore((s) => s.setShowCompanionPanel);
 
@@ -2813,14 +2822,14 @@ export function CompanionPanel() {
         <div className="flex items-center justify-between border-b border-border px-4 py-3">
           <div className="flex items-center gap-2">
             <Bot className="h-4 w-4 text-accent" />
-            <h2 className="text-sm font-semibold text-text-primary">Buddy companion</h2>
+            <h2 className="text-sm font-semibold text-text-primary">{t('companion.buddyCompanion', `Buddy companion`)}</h2>
           </div>
           <div className="flex items-center gap-1">
             <button
               onClick={() => void refresh()}
               className="rounded p-1 hover:bg-surface transition-colors"
               aria-label="Refresh companion panel"
-              title="Refresh"
+              title={t('companion.refresh', `Refresh`)}
             >
               <RefreshCw className={`h-4 w-4 text-text-muted ${loading ? 'animate-spin' : ''}`} />
             </button>
@@ -2847,7 +2856,7 @@ export function CompanionPanel() {
         <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
           <section className="space-y-3">
             <div className="flex items-center justify-between">
-              <h3 className="text-xs font-semibold uppercase tracking-wide text-text-muted">Readiness</h3>
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-text-muted">{t('companion.readiness', `Readiness`)}</h3>
               <div className="flex min-w-0 flex-col items-end gap-0.5">
                 {syncPresentation !== null && (
                   <div className="flex items-center gap-1">
@@ -2865,7 +2874,7 @@ export function CompanionPanel() {
                         onClick={refreshIfIdle}
                         disabled={busyAction !== null || loading}
                         aria-label="Retry companion sync"
-                        title="Retry companion sync"
+                        title={t('companion.retryCompanionSync', `Retry companion sync`)}
                         className="rounded p-0.5 text-warning hover:bg-warning/10 disabled:opacity-50"
                       >
                         <RefreshCw className="h-3 w-3" />
@@ -2881,43 +2890,43 @@ export function CompanionPanel() {
               <div className="grid grid-cols-2 gap-2">
                 <StatusTile
                   icon={Brain}
-                  label="Brain"
+                  label={t('companion.brain', `Brain`)}
                   value={status.chatGptCredentialsPresent ? status.model : 'ChatGPT login missing'}
                   ok={status.chatGptCredentialsPresent}
                 />
                 <StatusTile
                   icon={Bot}
-                  label="Identity"
+                  label={t('companion.identity', `Identity`)}
                   value={status.identity.soulIsCompanion && status.identity.bootIsCompanion ? 'Companion identity' : 'Identity incomplete'}
                   ok={status.identity.soulIsCompanion && status.identity.bootIsCompanion}
                 />
                 <StatusTile
                   icon={Mic}
-                  label="Voice input"
+                  label={t('companion.voiceInput', `Voice input`)}
                   value={voiceInputReadiness?.value ?? 'Needs attention / voice input unavailable'}
                   ok={voiceInputReadiness?.ok ?? false}
                 />
                 <StatusTile
                   icon={Volume2}
-                  label="Voice output"
+                  label={t('companion.voiceOutput', `Voice output`)}
                   value={voiceOutputReadiness?.value ?? 'Needs attention / voice output unavailable'}
                   ok={voiceOutputReadiness?.ok ?? false}
                 />
                 <StatusTile
                   icon={Activity}
-                  label="Dialogue"
+                  label={t('companion.dialogue', `Dialogue`)}
                   value={dialogueReadiness.value}
                   ok={dialogueReadiness.ok}
                 />
                 <StatusTile
                   icon={Camera}
-                  label="Camera"
+                  label={t('companion.camera', `Camera`)}
                   value={visionReadiness?.value ?? 'Camera unavailable'}
                   ok={visionReadiness?.ok ?? false}
                 />
                 <StatusTile
                   icon={Radio}
-                  label="Wake word"
+                  label={t('companion.wakeWord', `Wake word`)}
                   value={wakeReadiness?.value ?? 'Needs attention / wake word unavailable'}
                   ok={wakeReadiness?.ok ?? false}
                 />
@@ -3056,7 +3065,7 @@ export function CompanionPanel() {
           {voiceDiagnostics && (
             <section className="space-y-3">
               <div className="flex items-center justify-between">
-                <h3 className="text-xs font-semibold uppercase tracking-wide text-text-muted">Voice diagnostics</h3>
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-text-muted">{t('companion.voiceDiagnostics', `Voice diagnostics`)}</h3>
                 <span className="text-[10px] text-text-muted">
                   {new Date(voiceDiagnostics.checkedAt).toLocaleTimeString()}
                 </span>
@@ -3066,13 +3075,13 @@ export function CompanionPanel() {
               <div className="grid grid-cols-2 gap-2">
                 <StatusTile
                   icon={Mic}
-                  label="STT route"
+                  label={t('companion.sTTRoute', `STT route`)}
                   value={routeDiagnosticValue(voiceDiagnostics.stt)}
                   ok={voiceDiagnostics.stt.available}
                 />
                 <StatusTile
                   icon={Volume2}
-                  label="TTS route"
+                  label={t('companion.tTSRoute', `TTS route`)}
                   value={routeDiagnosticValue(voiceDiagnostics.tts)}
                   ok={voiceDiagnostics.tts.available}
                 />
@@ -3080,7 +3089,7 @@ export function CompanionPanel() {
                   <>
                     <StatusTile
                       icon={Radio}
-                      label="Kyutai STT"
+                      label={t('companion.kyutaiSTT', `Kyutai STT`)}
                       value={probeDiagnosticValue(
                         voiceDiagnostics.kyutai.sttEnabled,
                         voiceDiagnostics.kyutai.sttProbe,
@@ -3089,7 +3098,7 @@ export function CompanionPanel() {
                     />
                     <StatusTile
                       icon={Radio}
-                      label="Kyutai TTS"
+                      label={t('companion.kyutaiTTS', `Kyutai TTS`)}
                       value={probeDiagnosticValue(
                         voiceDiagnostics.kyutai.ttsEnabled,
                         voiceDiagnostics.kyutai.ttsProbe,
@@ -3098,7 +3107,7 @@ export function CompanionPanel() {
                     />
                     <StatusTile
                       icon={Activity}
-                      label="Audio tooling"
+                      label={t('companion.audioTooling', `Audio tooling`)}
                       value={`${voiceDiagnostics.kyutai.ffmpegFound ? 'ffmpeg ready' : 'ffmpeg missing'} / ${voiceDiagnostics.kyutai.baseUrl.replace(/^wss?:\/\//, '')}`}
                       ok={voiceDiagnostics.kyutai.ffmpegFound}
                     />
@@ -3111,7 +3120,7 @@ export function CompanionPanel() {
           {checkIn && (
             <section className="space-y-3">
               <div className="flex items-center justify-between">
-                <h3 className="text-xs font-semibold uppercase tracking-wide text-text-muted">Check-in</h3>
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-text-muted">{t('companion.checkIn', `Check-in`)}</h3>
                 <span className="text-[10px] text-text-muted">{checkIn.mood} / {checkIn.priority}</span>
               </div>
               <div className="rounded border border-accent/30 bg-accent/5 p-3">
@@ -3133,7 +3142,7 @@ export function CompanionPanel() {
                   >
                     <Volume2 className="h-3.5 w-3.5" />
                     Speak
-                  </button>
+                                                        </button>
                   {checkIn.suggestedCommand && (
                     <span className="min-w-0 rounded bg-background px-2 py-1.5 text-[11px] text-text-muted">
                       <span className="truncate">{checkIn.suggestedCommand}</span>
@@ -3147,7 +3156,7 @@ export function CompanionPanel() {
           {lastInspection && (
             <section className="space-y-3">
               <div className="flex items-center justify-between">
-                <h3 className="text-xs font-semibold uppercase tracking-wide text-text-muted">Vision inspection</h3>
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-text-muted">{t('companion.visionInspection', `Vision inspection`)}</h3>
                 <span className="text-[10px] text-text-muted">
                   {lastInspection.analysis?.format || 'image'}
                   {lastInspection.analysis?.dimensions
@@ -3179,7 +3188,7 @@ export function CompanionPanel() {
           {setupResult && (
             <section className="space-y-3">
               <div className="flex items-center justify-between">
-                <h3 className="text-xs font-semibold uppercase tracking-wide text-text-muted">Activation</h3>
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-text-muted">{t('companion.activation', `Activation`)}</h3>
                 <span className="text-[10px] text-text-muted">
                   {setupResult.selfPercept ? 'self-state recorded' : 'setup complete'}
                 </span>
@@ -3207,10 +3216,10 @@ export function CompanionPanel() {
           {improvementCycle && (
             <section className="space-y-3">
               <div className="flex items-center justify-between">
-                <h3 className="text-xs font-semibold uppercase tracking-wide text-text-muted">Improvement loop</h3>
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-text-muted">{t('companion.improvementLoop', `Improvement loop`)}</h3>
                 <span className="text-[10px] text-text-muted">
                   {improvementCycle.radar.score}/100 / {improvementCycle.board.missions.length} mission(s)
-                </span>
+                                                  </span>
               </div>
               <div className="rounded border border-accent/30 bg-accent/5 p-3">
                 <div className="flex items-start gap-2">
@@ -3246,7 +3255,7 @@ export function CompanionPanel() {
           {impulses && (
             <section className="space-y-3">
               <div className="flex items-center justify-between">
-                <h3 className="text-xs font-semibold uppercase tracking-wide text-text-muted">Impulses</h3>
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-text-muted">{t('companion.impulses', `Impulses`)}</h3>
                 <span className="text-[10px] text-text-muted">
                   {new Date(impulses.timestamp).toLocaleString()}
                 </span>
@@ -3292,13 +3301,13 @@ export function CompanionPanel() {
 
           <section className="space-y-3">
             <div className="flex items-center justify-between">
-              <h3 className="text-xs font-semibold uppercase tracking-wide text-text-muted">Companion cards</h3>
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-text-muted">{t('companion.companionCards', `Companion cards`)}</h3>
               <span className="text-[10px] text-text-muted">{cards.length} open</span>
             </div>
             {cards.length === 0 ? (
               <div className="rounded border border-border bg-surface/35 px-3 py-6 text-center text-xs text-text-muted">
                 No open companion cards.
-              </div>
+                                            </div>
             ) : (
               <div className="space-y-2">
                 {cards.map((card) => (
@@ -3316,10 +3325,10 @@ export function CompanionPanel() {
           {gateway && (
             <section className="space-y-3">
               <div className="flex items-center justify-between">
-                <h3 className="text-xs font-semibold uppercase tracking-wide text-text-muted">Gateway</h3>
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-text-muted">{t('companion.gateway', `Gateway`)}</h3>
                 <span className="text-[10px] text-text-muted">
                   {gateway.channels.filter((channel) => channel.enabled).length}/{gateway.channels.length} enabled
-                </span>
+                                                  </span>
               </div>
               <div className="space-y-2">
                 {gateway.channels.slice(0, 8).map((channel) => (
@@ -3358,7 +3367,7 @@ export function CompanionPanel() {
           {gatewayAdminExecution && (
             <section className="space-y-2" data-testid="companion-gateway-admin-execution">
               <div className="flex items-center justify-between">
-                <h3 className="text-xs font-semibold uppercase tracking-wide text-text-muted">Gateway admin result</h3>
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-text-muted">{t('companion.gatewayAdminResult', `Gateway admin result`)}</h3>
                 <span className={gatewayAdminExecution.ok ? 'text-[10px] text-success' : 'text-[10px] text-error'}>
                   {gatewayAdminExecution.record.status}
                 </span>
@@ -3398,8 +3407,8 @@ export function CompanionPanel() {
           {gatewayDraft && (
             <section className="space-y-3" data-testid="companion-gateway-draft">
               <div className="flex items-center justify-between">
-                <h3 className="text-xs font-semibold uppercase tracking-wide text-text-muted">Gateway draft</h3>
-                <span className="text-[10px] text-text-muted">local approval</span>
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-text-muted">{t('companion.gatewayDraft', `Gateway draft`)}</h3>
+                <span className="text-[10px] text-text-muted">{t('companion.localApproval', `local approval`)}</span>
               </div>
               <div className="rounded border border-border bg-surface/35 p-3">
                 <div className="flex items-center gap-2">
@@ -3423,7 +3432,7 @@ export function CompanionPanel() {
           {gatewayFleetDraft && (
             <section className="space-y-3" data-testid="companion-gateway-fleet-draft">
               <div className="flex items-center justify-between">
-                <h3 className="text-xs font-semibold uppercase tracking-wide text-text-muted">Gateway Fleet draft</h3>
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-text-muted">{t('companion.gatewayFleetDraft', `Gateway Fleet draft`)}</h3>
                 <span className="text-[10px] text-text-muted">{gatewayFleetDraft.dispatchInput.dispatchProfile}</span>
               </div>
               <div className="rounded border border-border bg-surface/35 p-3">
@@ -3462,8 +3471,8 @@ export function CompanionPanel() {
           {gatewayOutboundReplyDraft && (
             <section className="space-y-3" data-testid="companion-gateway-outbound-reply-draft">
               <div className="flex items-center justify-between">
-                <h3 className="text-xs font-semibold uppercase tracking-wide text-text-muted">Gateway reply draft</h3>
-                <span className="text-[10px] text-text-muted">not sent</span>
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-text-muted">{t('companion.gatewayReplyDraft', `Gateway reply draft`)}</h3>
+                <span className="text-[10px] text-text-muted">{t('companion.notSent', `not sent`)}</span>
               </div>
               <div className="rounded border border-border bg-surface/35 p-3">
                 <div className="flex items-center gap-2">
@@ -3476,9 +3485,9 @@ export function CompanionPanel() {
                   {gatewayOutboundReplyDraft.contentPreview}
                 </p>
                 <div className="mt-2 flex flex-wrap gap-1 text-[10px] text-text-muted">
-                  <span className="rounded bg-background px-1.5 py-0.5">local approval</span>
-                  <span className="rounded bg-background px-1.5 py-0.5">preview only</span>
-                  <span className="rounded bg-background px-1.5 py-0.5">autoDispatch=false</span>
+                  <span className="rounded bg-background px-1.5 py-0.5">{t('companion.localApproval', `local approval`)}</span>
+                  <span className="rounded bg-background px-1.5 py-0.5">{t('companion.previewOnly', `preview only`)}</span>
+                  <span className="rounded bg-background px-1.5 py-0.5">{t('companion.autoDispatchFalse', `autoDispatch=false`)}</span>
                 </div>
                 <button
                   onClick={() => void window.electronAPI.showItemInFolder(gatewayOutboundReplyDraft.draftFile)}
@@ -3494,7 +3503,7 @@ export function CompanionPanel() {
           {gatewayOutboundReplySend && (
             <section className="space-y-3" data-testid="companion-gateway-outbound-reply-send">
               <div className="flex items-center justify-between">
-                <h3 className="text-xs font-semibold uppercase tracking-wide text-text-muted">Gateway reply send</h3>
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-text-muted">{t('companion.gatewayReplySend', `Gateway reply send`)}</h3>
                 <span className="text-[10px] text-text-muted">{gatewayOutboundReplySend.send.status}</span>
               </div>
               <div className="rounded border border-border bg-surface/35 p-3">
@@ -3509,7 +3518,7 @@ export function CompanionPanel() {
                     {gatewayOutboundReplySend.dryRun ? 'preview' : 'live'}
                   </span>
                   <span className="rounded bg-background px-1.5 py-0.5">{gatewayOutboundReplySend.send.status}</span>
-                  <span className="rounded bg-background px-1.5 py-0.5">send-policy</span>
+                  <span className="rounded bg-background px-1.5 py-0.5">{t('companion.sendPolicy', `send-policy`)}</span>
                 </div>
                 <button
                   onClick={() => void window.electronAPI.showItemInFolder(gatewayOutboundReplySend.send.outboxPath)}
@@ -3544,7 +3553,7 @@ export function CompanionPanel() {
           {missionRun && (
             <section className="space-y-3">
               <div className="flex items-center justify-between">
-                <h3 className="text-xs font-semibold uppercase tracking-wide text-text-muted">Mission run</h3>
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-text-muted">{t('companion.missionRun', `Mission run`)}</h3>
                 <span className="text-[10px] text-text-muted">
                   {missionRun.success ? 'prepared' : 'blocked'}
                 </span>
@@ -3575,7 +3584,7 @@ export function CompanionPanel() {
           {evaluation && (
             <section className="space-y-3">
               <div className="flex items-center justify-between">
-                <h3 className="text-xs font-semibold uppercase tracking-wide text-text-muted">Self-evaluation</h3>
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-text-muted">{t('companion.selfEvaluation', `Self-evaluation`)}</h3>
                 <span className="text-[10px] text-text-muted">
                   {new Date(evaluation.timestamp).toLocaleString()}
                 </span>
@@ -3593,7 +3602,7 @@ export function CompanionPanel() {
                   </div>
                   <span className="text-[10px] text-text-muted">
                     {evaluation.findings.length} finding(s)
-                  </span>
+                                                        </span>
                 </div>
                 {evaluation.nextActions.length > 0 && (
                   <div className="mt-3 space-y-1">
@@ -3632,7 +3641,7 @@ export function CompanionPanel() {
           {radar && (
             <section className="space-y-3">
               <div className="flex items-center justify-between">
-                <h3 className="text-xs font-semibold uppercase tracking-wide text-text-muted">Competitive radar</h3>
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-text-muted">{t('companion.competitiveRadar', `Competitive radar`)}</h3>
                 <span className="text-[10px] text-text-muted">
                   {radar.score}/100
                 </span>
@@ -3640,7 +3649,7 @@ export function CompanionPanel() {
               <div className="rounded border border-border bg-surface/35 p-3">
                 <div className="flex items-center gap-2">
                   <Radar className="h-4 w-4 text-accent" />
-                  <span className="text-sm font-semibold text-text-primary">Hermes / OpenClaw / Lisa / UNI gaps</span>
+                  <span className="text-sm font-semibold text-text-primary">{t('companion.hermesOpenClawLisaUNI', `Hermes / OpenClaw / Lisa / UNI gaps`)}</span>
                 </div>
                 {radar.nextMoves.length > 0 && (
                   <div className="mt-3 space-y-1">
@@ -3675,15 +3684,15 @@ export function CompanionPanel() {
 
           <section className="space-y-3">
             <div className="flex items-center justify-between">
-              <h3 className="text-xs font-semibold uppercase tracking-wide text-text-muted">Mission board</h3>
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-text-muted">{t('companion.missionBoard', `Mission board`)}</h3>
               <span className="text-[10px] text-text-muted">
                 {missions.length} mission(s)
-              </span>
+                                            </span>
             </div>
             {missions.length === 0 ? (
               <div className="rounded border border-border bg-surface/35 px-3 py-6 text-center text-xs text-text-muted">
                 Sync missions to turn the competitive radar into a working backlog.
-              </div>
+                                            </div>
             ) : (
               <div className="space-y-2">
                 {missions.slice(0, 5).map((mission) => (
@@ -3710,7 +3719,7 @@ export function CompanionPanel() {
                             className="rounded border border-border px-2 py-1 text-[10px] text-text-secondary hover:bg-surface disabled:opacity-50"
                           >
                             Start
-                          </button>
+                                                                  </button>
                         )}
                         {mission.status === 'in_progress' && (
                           <button
@@ -3719,7 +3728,7 @@ export function CompanionPanel() {
                             className="rounded border border-border px-2 py-1 text-[10px] text-text-secondary hover:bg-surface disabled:opacity-50"
                           >
                             Done
-                          </button>
+                                                                  </button>
                         )}
                       </div>
                     </div>
@@ -3731,20 +3740,20 @@ export function CompanionPanel() {
 
           <section className="space-y-3">
             <div className="flex items-center justify-between">
-              <h3 className="text-xs font-semibold uppercase tracking-wide text-text-muted">Learned routines</h3>
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-text-muted">{t('companion.learnedRoutines', `Learned routines`)}</h3>
               <span className="text-[10px] text-text-muted">
                 {skillCandidates.length} candidate(s)
-              </span>
+                                            </span>
             </div>
             {skillCuratorResult && (
               <div className="rounded border border-border bg-surface/35 p-3 text-xs text-text-secondary">
                 {skillCuratorResult.created} created · {skillCuratorResult.updated} updated · {skillCuratorResult.pruned} pruned
-              </div>
+                                            </div>
             )}
             {skillCandidates.length === 0 ? (
               <div className="rounded border border-border bg-surface/35 px-3 py-6 text-center text-xs text-text-muted">
                 Curate routines after missions or percepts exist.
-              </div>
+                                            </div>
             ) : (
               <div className="space-y-2">
                 {skillCandidates.slice(0, 5).map((candidate) => (
@@ -3762,7 +3771,7 @@ export function CompanionPanel() {
 
           <section className="space-y-3">
             <div className="flex items-center justify-between">
-              <h3 className="text-xs font-semibold uppercase tracking-wide text-text-muted">Safety ledger</h3>
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-text-muted">{t('companion.safetyLedger', `Safety ledger`)}</h3>
               <span className="text-[10px] text-text-muted">
                 {safetyStats ? `${safetyStats.total} event(s)` : 'No stats'}
               </span>
@@ -3779,7 +3788,7 @@ export function CompanionPanel() {
             {safetyEvents.length === 0 ? (
               <div className="rounded border border-border bg-surface/35 px-3 py-6 text-center text-xs text-text-muted">
                 No safety events recorded yet.
-              </div>
+                                            </div>
             ) : (
               <div className="space-y-2">
                 {safetyEvents.map((event) => (
@@ -3791,7 +3800,7 @@ export function CompanionPanel() {
 
           <section className="space-y-3">
             <div className="flex items-center justify-between">
-              <h3 className="text-xs font-semibold uppercase tracking-wide text-text-muted">Privacy</h3>
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-text-muted">{t('companion.privacy', `Privacy`)}</h3>
               <span className="text-[10px] text-text-muted">
                 {privacyReport ? `${privacyReport.totalEntries} entries · ${formatBytes(privacyReport.totalBytes)}` : 'No report'}
               </span>
@@ -3826,7 +3835,7 @@ export function CompanionPanel() {
             {privacyPurge && (
               <div className="rounded border border-border bg-surface/35 p-3 text-xs text-text-secondary">
                 Purged {privacyPurge.removed.filter((item) => item.existed).length} store(s).
-                {privacyPurge.backup?.manifestPath && (
+                                              {privacyPurge.backup?.manifestPath && (
                   <button
                     onClick={() => void window.electronAPI.showItemInFolder(privacyPurge.backup!.manifestPath)}
                     className="ml-2 inline-flex max-w-full items-center gap-1 rounded border border-border px-2 py-1 text-[11px] text-text-secondary hover:bg-surface"
@@ -3858,7 +3867,7 @@ export function CompanionPanel() {
 
           <section className="space-y-2">
             <div className="flex items-center justify-between">
-              <h3 className="text-xs font-semibold uppercase tracking-wide text-text-muted">Sensory journal</h3>
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-text-muted">{t('companion.sensoryJournal', `Sensory journal`)}</h3>
               <span className="text-[10px] text-text-muted">
                 {stats ? `${stats.total} percepts` : 'No stats'}
               </span>
