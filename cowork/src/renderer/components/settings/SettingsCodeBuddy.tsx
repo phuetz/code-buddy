@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Zap, CheckCircle, XCircle, Loader2, RefreshCw, Globe, Server } from 'lucide-react';
 
@@ -86,6 +87,7 @@ async function wait(ms: number): Promise<void> {
 }
 
 export function SettingsCodeBuddy() {
+    const { t } = useTranslation();
   const [config, setConfig] = useState<CodeBuddyConfig>({
     enabled: false,
     endpoint: 'http://localhost:3000',
@@ -320,20 +322,20 @@ export function SettingsCodeBuddy() {
         <h3 className="text-lg font-semibold text-text-primary flex items-center gap-2">
           <Zap className="w-5 h-5 text-accent" />
           Code Buddy Backend
-        </h3>
+                          </h3>
         <p className="text-sm text-text-muted mt-1">
           Connect to a Code Buddy server for 110+ tools, MCTSr reasoning, multi-agent orchestration,
-          and TurboQuant local inference.
-        </p>
+                            and TurboQuant local inference.
+                          </p>
       </div>
 
       {/* Enable toggle */}
       <div className="flex items-center justify-between p-4 rounded-lg bg-surface-secondary border border-border-muted">
         <div>
-          <p className="text-sm font-medium text-text-primary">Enable Code Buddy Backend</p>
+          <p className="text-sm font-medium text-text-primary">{t('settings.enableCodeBuddyBackend', `Enable Code Buddy Backend`)}</p>
           <p className="text-xs text-text-muted mt-0.5">
             Route LLM calls through Code Buddy instead of direct API
-          </p>
+                                </p>
         </div>
         <button
           onClick={() => updateConfig(c => ({ ...c, enabled: !c.enabled }))}
@@ -355,7 +357,7 @@ export function SettingsCodeBuddy() {
           <div className="flex items-center justify-between gap-3 mb-1.5">
             <label className="block text-sm font-medium text-text-primary">
               Server Endpoint
-            </label>
+                                      </label>
             <div className="flex flex-wrap justify-end gap-1.5">
               {ENDPOINT_PRESETS.map((preset) => {
                 const isActive = config.endpoint.trim().replace(/\/+$/, '') === preset.endpoint;
@@ -397,23 +399,23 @@ export function SettingsCodeBuddy() {
               setAvailableModels([]);
               setModelsMessage('');
             }}
-            placeholder="http://localhost:3000"
+            placeholder={t('settings.httpLocalhost3000', `http://localhost:3000`)}
             className="w-full px-3 py-2 rounded-lg bg-background border border-border-muted text-text-primary text-sm focus:outline-none focus:ring-2 focus:ring-accent/40"
           />
           <p className="text-xs text-text-muted mt-1">
-            Start Code Buddy with: <code className="bg-surface-secondary px-1 rounded">buddy server</code>
+            Start Code Buddy with: <code className="bg-surface-secondary px-1 rounded">{t('settings.buddyServer', `buddy server`)}</code>
           </p>
         </div>
 
         <div>
           <label className="block text-sm font-medium text-text-primary mb-1.5">
-            API Key <span className="text-text-muted">(optional)</span>
+            API Key <span className="text-text-muted">{t('settings.optional', `(optional)`)}</span>
           </label>
           <input
             type="password"
             value={config.apiKey}
             onChange={e => updateConfig(c => ({ ...c, apiKey: e.target.value }))}
-            placeholder="Leave empty for local server"
+            placeholder={t('settings.leaveEmptyForLocalServer', `Leave empty for local server`)}
             className="w-full px-3 py-2 rounded-lg bg-background border border-border-muted text-text-primary text-sm focus:outline-none focus:ring-2 focus:ring-accent/40"
           />
         </div>
@@ -421,7 +423,7 @@ export function SettingsCodeBuddy() {
         <div>
           <div className="flex items-center justify-between gap-3 mb-1.5">
             <label className="block text-sm font-medium text-text-primary">
-              Model Override <span className="text-text-muted">(optional)</span>
+              Model Override <span className="text-text-muted">{t('settings.optional', `(optional)`)}</span>
             </label>
             <button
               type="button"
@@ -434,7 +436,7 @@ export function SettingsCodeBuddy() {
                 ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
                 : <RefreshCw className="h-3.5 w-3.5" />}
               Models
-            </button>
+                                      </button>
           </div>
           {modelChoices.length > 0 ? (
             <select
@@ -443,7 +445,7 @@ export function SettingsCodeBuddy() {
               onChange={e => updateConfig(c => ({ ...c, model: e.target.value }))}
               className="w-full px-3 py-2 rounded-lg bg-background border border-border-muted text-text-primary text-sm focus:outline-none focus:ring-2 focus:ring-accent/40"
             >
-              <option value="">Use server default</option>
+              <option value="">{t('settings.useServerDefault', `Use server default`)}</option>
               {modelChoices.map(model => (
                 <option key={model} value={model}>{model}</option>
               ))}
@@ -454,7 +456,7 @@ export function SettingsCodeBuddy() {
               data-testid="codebuddy-model-input"
               value={config.model}
               onChange={e => updateConfig(c => ({ ...c, model: e.target.value }))}
-              placeholder="Uses server default (e.g. gemini-3.1-flash-lite-preview)"
+              placeholder={t('settings.usesServerDefaultEGGemi', `Uses server default (e.g. gemini-3.1-flash-lite-preview)`)}
               className="w-full px-3 py-2 rounded-lg bg-background border border-border-muted text-text-primary text-sm focus:outline-none focus:ring-2 focus:ring-accent/40"
             />
           )}
@@ -476,17 +478,17 @@ export function SettingsCodeBuddy() {
           <h4 className="text-sm font-medium text-text-primary flex items-center gap-2">
             <Globe className="w-4 h-4 text-accent" />
             Advanced
-          </h4>
+                                </h4>
           <div className="flex items-center justify-between p-4 rounded-lg bg-surface-secondary border border-border-muted">
             <div className="flex-1 min-w-0 mr-4">
               <p className="text-sm font-medium text-text-primary">
                 Gemini Google Search grounding
-              </p>
+                                            </p>
               <p className="text-xs text-text-muted mt-0.5">
                 When the active model is a Gemini family member, let it search
-                the web server-side and append cited sources to its replies.
-                Ignored for non-Gemini models — safe to leave on.
-              </p>
+                                              the web server-side and append cited sources to its replies.
+                                              Ignored for non-Gemini models — safe to leave on.
+                                            </p>
             </div>
             <button
               onClick={() => updateConfig(c => ({ ...c, geminiGroundingEnabled: !c.geminiGroundingEnabled }))}
@@ -510,11 +512,11 @@ export function SettingsCodeBuddy() {
               <div className="flex-1 min-w-0 mr-4">
                 <p className="text-sm font-medium text-text-primary">
                   Visual Grounding Fallback
-                </p>
+                                                  </p>
                 <p className="text-xs text-text-muted mt-0.5">
                   When standard UI Automation fails to find a control (e.g. custom canvases or Skia),
-                  take an annotated screenshot (Set-of-Marks) and ask a multimodal vision model to locate it.
-                </p>
+                                                    take an annotated screenshot (Set-of-Marks) and ask a multimodal vision model to locate it.
+                                                  </p>
               </div>
               <button
                 onClick={() => updateConfig(c => ({ ...c, visionGroundingEnabled: !c.visionGroundingEnabled }))}
@@ -537,13 +539,13 @@ export function SettingsCodeBuddy() {
               <div className="pt-3 border-t border-border-muted">
                 <label className="block text-xs font-medium text-text-primary mb-1.5">
                   Vision Grounding Model
-                </label>
+                                                  </label>
                 <select
                   value={config.visionGroundingModel || ''}
                   onChange={e => updateConfig(c => ({ ...c, visionGroundingModel: e.target.value }))}
                   className="w-full px-3 py-1.5 rounded-lg bg-background border border-border-muted text-text-primary text-xs focus:outline-none focus:ring-2 focus:ring-accent/40"
                 >
-                  <option value="">Use server default</option>
+                  <option value="">{t('settings.useServerDefault', `Use server default`)}</option>
                   {visionModelChoices.map(model => (
                     <option key={model} value={model}>
                       {model} {recommendedVisionModels.includes(model) ? '(Recommended)' : ''}
@@ -552,7 +554,7 @@ export function SettingsCodeBuddy() {
                 </select>
                 <p className="text-[10px] text-text-muted mt-1">
                   Fallback calls require a multimodal (vision-capable) model like Gemini Flash or GPT-4o-mini.
-                </p>
+                                                  </p>
               </div>
             )}
           </div>
@@ -569,7 +571,7 @@ export function SettingsCodeBuddy() {
         >
           {isTesting ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
           Test Connection
-        </button>
+                          </button>
         <button
           onClick={saveConfig}
           data-testid="codebuddy-save"
@@ -578,7 +580,7 @@ export function SettingsCodeBuddy() {
         >
           {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
           Save
-        </button>
+                          </button>
         {savedMsg && (
           <span className={`self-center text-sm ${savedMsg.startsWith('Error') ? 'text-red-400' : 'text-green-400'}`}>
             {savedMsg}
@@ -612,10 +614,10 @@ export function SettingsCodeBuddy() {
           </div>
           {health.status === 'connected' && (
             <div className="text-xs text-text-muted space-y-1 ml-7">
-              {health.version && <p>Version: {health.version}</p>}
-              {health.tools ? <p>Tools: {health.tools} available</p> : null}
+              {health.version && <p>{t('settings.version', `Version:`)}{health.version}</p>}
+              {health.tools ? <p>{t('settings.tools', `Tools:`)}{health.tools} available</p> : null}
               {health.models && health.models.length > 0 && (
-                <p>Models: {health.models.slice(0, 5).join(', ')}{health.models.length > 5 ? ` +${health.models.length - 5} more` : ''}</p>
+                <p>{t('settings.models1', `Models:`)}{health.models.slice(0, 5).join(', ')}{health.models.length > 5 ? ` +${health.models.length - 5} more` : ''}</p>
               )}
             </div>
           )}
@@ -634,15 +636,15 @@ export function SettingsCodeBuddy() {
       {/* Features info */}
       {config.enabled && (
         <div className="p-4 rounded-lg bg-accent/5 border border-accent/20">
-          <p className="text-sm font-medium text-text-primary mb-2">When enabled, you get:</p>
+          <p className="text-sm font-medium text-text-primary mb-2">{t('settings.whenEnabledYouGet', `When enabled, you get:`)}</p>
           <ul className="text-xs text-text-muted space-y-1">
-            <li>• 110+ tools (file ops, search, git, web, code analysis, documents)</li>
-            <li>• MCTSr reasoning (Tree-of-Thought + Monte Carlo search)</li>
-            <li>• 15 LLM providers (Gemini, Claude, GPT, Grok, Ollama, vLLM...)</li>
-            <li>• Multi-agent orchestration (spawn, send, wait, close, resume)</li>
-            <li>• TurboQuant local inference (4-8x KV cache compression)</li>
-            <li>• Document generation (PPTX, DOCX, XLSX, PDF) — native TypeScript</li>
-            <li>• GUI automation (screenshot, click, type, key combos)</li>
+            <li>{t('settings.110ToolsFileOpsSearch', `• 110+ tools (file ops, search, git, web, code analysis, documents)`)}</li>
+            <li>{t('settings.mCTSrReasoningTreeOfTho', `• MCTSr reasoning (Tree-of-Thought + Monte Carlo search)`)}</li>
+            <li>{t('settings.15LLMProvidersGeminiCl', `• 15 LLM providers (Gemini, Claude, GPT, Grok, Ollama, vLLM...)`)}</li>
+            <li>{t('settings.multiAgentOrchestrationS', `• Multi-agent orchestration (spawn, send, wait, close, resume)`)}</li>
+            <li>{t('settings.turboQuantLocalInference', `• TurboQuant local inference (4-8x KV cache compression)`)}</li>
+            <li>{t('settings.documentGenerationPPTXD', `• Document generation (PPTX, DOCX, XLSX, PDF) — native TypeScript`)}</li>
+            <li>{t('settings.gUIAutomationScreenshot', `• GUI automation (screenshot, click, type, key combos)`)}</li>
           </ul>
         </div>
       )}

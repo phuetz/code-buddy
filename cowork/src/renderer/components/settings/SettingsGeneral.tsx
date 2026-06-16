@@ -34,6 +34,7 @@ export function SettingsGeneral() {
   const themeOptions = [
     { value: 'light' as const, label: t('general.themeLight') },
     { value: 'dark' as const, label: t('general.themeDark') },
+    { value: 'open-cowork' as const, label: t('general.themeOpenCowork', 'Open Cowork') },
     { value: 'system' as const, label: t('general.themeSystem', 'System') },
   ];
 

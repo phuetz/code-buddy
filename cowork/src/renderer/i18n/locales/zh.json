@@ -1,4 +1,9 @@
 {
+  "goal": {
+    "label": "目标",
+    "pause": "暂停目标",
+    "clear": "清除目标"
+  },
   "missionBoard": {
     "title": "任务看板",
     "bridgeUnavailable": "Companion 任务桥不可用。",

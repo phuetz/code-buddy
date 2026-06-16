@@ -7,55 +7,81 @@
 @layer base {
   /* Define CSS variables for theming */
   :root {
-    /* Dark theme (default) — Claude warm palette */
-    --color-background: #171614;
-    --color-background-secondary: #1d1b18;
-    --color-surface: #22201d;
-    --color-surface-hover: #2a2723;
-    --color-surface-active: #33302b;
-    --color-surface-muted: #1b1916;
-    --color-border: #34302a;
-    --color-border-muted: #2a2722;
-    --color-border-subtle: rgba(255, 245, 232, 0.07);
-    --color-mcp: #9d8abc;
-    --shadow-soft: 0 1px 4px rgba(0, 0, 0, 0.24);
-    --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.22), 0 0 0 1px rgba(255, 245, 232, 0.03);
-    --shadow-elevated: 0 8px 24px rgba(0, 0, 0, 0.34), 0 0 0 1px rgba(255, 245, 232, 0.04);
-    --color-accent: #d67a52;
-    --color-accent-hover: #c56c46;
-    --color-accent-muted: rgba(214, 122, 82, 0.14);
-    --color-text-primary: #f1ece4;
-    --color-text-secondary: #b6ada2;
-    --color-text-muted: #8c8378;
-    --color-success: #22c55e;
-    --color-warning: #eab308;
+    /* Dark theme (default) — OpenAI / Codex premium slate palette */
+    --color-background: #1e1e1e;
+    --color-background-secondary: #252526;
+    --color-surface: #2d2d2d;
+    --color-surface-hover: #333333;
+    --color-surface-active: #3e3e42;
+    --color-surface-muted: #2d2d2d;
+    --color-border: #404040;
+    --color-border-muted: #333333;
+    --color-border-subtle: rgba(255, 255, 255, 0.04);
+    --color-mcp: #8b5cf6; /* Keep a nice purple for tools */
+    --shadow-soft: 0 1px 4px rgba(0, 0, 0, 0.3);
+    --shadow-card: 0 2px 4px rgba(0, 0, 0, 0.25), 0 0 0 1px rgba(255, 255, 255, 0.05);
+    --shadow-elevated: 0 10px 30px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.05);
+    --color-accent: #10a37f;
+    --color-accent-hover: #1a7f64;
+    --color-accent-muted: rgba(16, 163, 127, 0.15);
+    --color-text-primary: #e5e5e5;
+    --color-text-secondary: #a3a3a3;
+    --color-text-muted: #737373;
+    --color-success: #10a37f;
+    --color-warning: #d97706;
     --color-error: #ef4444;
   }
 
-  /* Light theme override — Claude warm cream */
+  /* Light theme override — Minimalist clean gray */
   .light {
-    --color-background: #f5f3ed;
-    --color-background-secondary: #f0eee8;
-    --color-surface: #faf9f4;
-    --color-surface-hover: #f5f3ed;
-    --color-surface-active: #eceae4;
-    --color-surface-muted: #f2f0eb;
-    --color-border: #e2dfd9;
-    --color-border-muted: #e8e6e0;
-    --color-border-subtle: rgba(0, 0, 0, 0.05);
-    --color-mcp: #8570a6;
-    --shadow-soft: 0 1px 4px rgba(0, 0, 0, 0.04);
-    --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
-    --shadow-elevated: 0 4px 12px rgba(0, 0, 0, 0.1);
-    --color-accent: #d97757;
-    --color-accent-hover: #c46849;
-    --color-accent-muted: #fef3ee;
-    --color-text-primary: #1a1a1a;
-    --color-text-secondary: #5c5c5c;
-    --color-text-muted: #8c8c8c;
-    --color-success: #16a34a;
-    --color-warning: #ca8a04;
-    --color-error: #dc2626;
+    --color-background: #ffffff;
+    --color-background-secondary: #f9f9f9;
+    --color-surface: #ffffff;
+    --color-surface-hover: #f3f4f6;
+    --color-surface-active: #e5e7eb;
+    --color-surface-muted: #f9fafb;
+    --color-border: #e5e5e5;
+    --color-border-muted: #f3f3f3;
+    --color-border-subtle: rgba(0, 0, 0, 0.03);
+    --color-mcp: #7c3aed;
+    --shadow-soft: 0 1px 3px rgba(0, 0, 0, 0.05);
+    --shadow-card: 0 2px 5px rgba(0, 0, 0, 0.05), 0 1px 2px rgba(0, 0, 0, 0.02);
+    --shadow-elevated: 0 10px 25px rgba(0, 0, 0, 0.1);
+    --color-accent: #10a37f;
+    --color-accent-hover: #1a7f64;
+    --color-accent-muted: rgba(16, 163, 127, 0.1);
+    --color-text-primary: #171717;
+    --color-text-secondary: #525252;
+    --color-text-muted: #a3a3a3;
+    --color-success: #10a37f;
+    --color-warning: #d97706;
+    --color-error: #ef4444;
+  }
+
+  /* Open-Cowork theme override — Warm charcoal/orange aesthetic */
+  .open-cowork {
+    --color-background: #171614;
+    --color-background-secondary: #1a1917;
+    --color-surface: #22201d;
+    --color-surface-hover: #2a2824;
+    --color-surface-active: #33302c;
+    --color-surface-muted: #1e1c19;
+    --color-border: #3b3732;
+    --color-border-muted: #2f2c28;
+    --color-border-subtle: rgba(255, 255, 255, 0.04);
+    --color-mcp: #c88d6b;
+    --shadow-soft: 0 1px 4px rgba(0, 0, 0, 0.4);
+    --shadow-card: 0 2px 4px rgba(0, 0, 0, 0.3), 0 0 0 1px rgba(255, 255, 255, 0.04);
+    --shadow-elevated: 0 10px 30px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.04);
+    --color-accent: #d67a52;
+    --color-accent-hover: #c56c46;
+    --color-accent-muted: rgba(214, 122, 82, 0.15);
+    --color-text-primary: #f1ece4;
+    --color-text-secondary: #bbaea0;
+    --color-text-muted: #887e74;
+    --color-success: #78a36d;
+    --color-warning: #d6a752;
+    --color-error: #cc6b6b;
   }
 
   * {

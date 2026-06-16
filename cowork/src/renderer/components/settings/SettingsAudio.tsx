@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { Volume2, VolumeX, Settings2 } from 'lucide-react';
 import { useAppStore } from '../../store';
