@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Code Buddy — the open-source AI coding agent that runs free, on your own machine</title>
+  <meta name="description" content="Open-source AI coding agent (terminal + desktop) that runs free on local Ollama for $0, or any of 15 providers. Watch it reason, then use tools. Multi-AI fleet, 24/7 autonomy, MIT." />
+  <meta property="og:title" content="Code Buddy — free, local AI coding agent" />
+  <meta property="og:description" content="Watch a local model reason on screen, then use real tools — no cloud, ~$0. Terminal + desktop, 15 providers, MIT." />
+  <meta property="og:type" content="website" />
+  <meta property="og:image" content="assets/00-welcome.png" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="nav">
+    <div class="wrap nav-row">
+      <a class="brand" href="#top">🤖 <span>Code Buddy</span></a>
+      <nav class="nav-links">
+        <a href="#features">Features</a>
+        <a href="#shipped">What's shipped</a>
+        <a href="#install">Install</a>
+        <a class="btn btn-ghost" href="https://github.com/phuetz/code-buddy">GitHub</a>
+        <a class="btn btn-primary" href="https://github.com/phuetz/code-buddy">⭐ Star</a>
+      </nav>
+    </div>
+  </header>
+
+  <main id="top">
+    <!-- HERO -->
+    <section class="hero">
+      <div class="wrap hero-grid">
+        <div class="hero-copy">
+          <span class="pill">Open source · MIT · v1.1.0</span>
+          <h1>The AI coding agent that runs <span class="grad">free, on your own machine.</span></h1>
+          <p class="lead">
+            Watch a <strong>local model reason on screen</strong>, then use real tools to do the work —
+            no cloud, no API bill, <code>~$0</code>. Or bring any of <strong>15 providers</strong> with
+            automatic failover. From your terminal, a desktop app, your phone, or a 24/7 service.
+          </p>
+          <div class="cta">
+            <a class="btn btn-primary lg" href="https://github.com/phuetz/code-buddy">⭐ Star on GitHub</a>
+            <a class="btn btn-ghost lg" href="https://github.com/phuetz/code-buddy#quick-start">Quick start →</a>
+          </div>
+          <div class="trust">
+            <span>🆓 Local Ollama · <code>$0</code></span>
+            <span>🔌 15 providers</span>
+            <span>🧪 27K+ tests</span>
+            <span>🖥️ Terminal + Desktop</span>
+          </div>
+        </div>
+        <div class="hero-media">
+          <a href="assets/cowork-chat-stream.mp4" title="Watch the MP4">
+            <img src="assets/cowork-chat-stream.gif" alt="Real gpt-5.5 chat streaming in the Cowork desktop app for $0" loading="eager" />
+          </a>
+          <p class="caption">Real <code>gpt-5.5</code> in the desktop app — the answer streams in, cost <code>$0.0000</code>.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- FEATURES -->
+    <section id="features" class="section">
+      <div class="wrap">
+        <h2>One engine. Everywhere you work.</h2>
+        <div class="cards">
+          <div class="card">
+            <div class="ic">🆓</div>
+            <h3>Free &amp; local-first</h3>
+            <p>Runs entirely on local <strong>Ollama (<code>$0</code>)</strong>, any of 15 providers with auto-failover, or a flat-fee <strong>ChatGPT Plus/Pro</strong> login — no per-token metering.</p>
+          </div>
+          <div class="card">
+            <div class="ic">🧠</div>
+            <h3>Reasoning you can watch</h3>
+            <p>Local models think step-by-step on screen, then call tools to act — edit files, run commands, search the web, verify results.</p>
+          </div>
+          <div class="card">
+            <div class="ic">🛠️</div>
+            <h3>~110 tools, MCP &amp; skills</h3>
+            <p>Edit, shell, web search, browser, PDFs/Office, a skills marketplace, and MCP connectors — extend it to your stack.</p>
+          </div>
+          <div class="card">
+            <div class="ic">🤝</div>
+            <h3>Multi-AI fleet</h3>
+            <p>Peers on your network observe each other live and call each other's models &amp; read-only tools — one machine's spare GPU becomes everyone's.</p>
+          </div>
+          <div class="card">
+            <div class="ic">🤖</div>
+            <h3>24/7 autonomy</h3>
+            <p>A background service claims &amp; runs tasks free-first on local models — TTL leases, DAG deps, a workers→verifier→synthesizer swarm.</p>
+          </div>
+          <div class="card">
+            <div class="ic">👁️</div>
+            <h3>Personal companion</h3>
+            <p>Optional: bidirectional voice, opt-in camera/presence, persistent memory, and 20+ messaging channels.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SHOWCASE -->
+    <section class="section alt">
+      <div class="wrap">
+        <h2>The Cowork desktop cockpit</h2>
+        <p class="sub">Chat, tools, traces, workflows, settings, permissions, models — against the same core engine as the CLI.</p>
+        <div class="shots">
+          <figure>
+            <img src="assets/00-welcome.png" alt="Cowork desktop cockpit" loading="lazy" />
+            <figcaption>Desktop cockpit — menus, sessions, composer</figcaption>
+          </figure>
+          <figure>
+            <img src="assets/05-onboarding-provider.png" alt="Onboarding — pick a provider" loading="lazy" />
+            <figcaption>Onboarding — 15 providers, ChatGPT <code>$0</code> or local Ollama</figcaption>
+          </figure>
+          <figure>
+            <img src="assets/03-fleet-autonomy.png" alt="Fleet and autonomy dashboard" loading="lazy" />
+            <figcaption>Fleet dispatch · tool-permission posture · Hermes toolsets</figcaption>
+          </figure>
+          <figure>
+            <img src="assets/02-chat-dark-theme.png" alt="Cowork dark theme" loading="lazy" />
+            <figcaption>Light &amp; dark themes</figcaption>
+          </figure>
+        </div>
+      </div>
+    </section>
+
+    <!-- SHIPPED -->
+    <section id="shipped" class="section">
+      <div class="wrap narrow">
+        <h2>What's shipped — not roadmap</h2>
+        <ul class="shipped">
+          <li><b>$0 local coding agent</b> — a local model reasons, then calls tools to do real work.</li>
+          <li><b>ChatGPT Plus/Pro → gpt-5.5 at $0</b> — <code>buddy login</code>, flat-fee, no API key.</li>
+          <li><b>Goal loops (Ralph loop)</b> — a judge re-checks completion each turn and auto-continues until done.</li>
+          <li><b>Multi-AI fleet</b> — <code>peer.chat</code> / <code>peer.tool.invoke</code> across your network.</li>
+          <li><b>15 providers</b> with failover &amp; circuit breakers; ~110 tools, MCP, skills.</li>
+          <li><b>27K+ Vitest tests</b> wired to CI.</li>
+        </ul>
+        <p class="honest">Honest about scope — see the <a href="https://github.com/phuetz/code-buddy/blob/main/docs/hermes-openclaw-parity.md">parity doc</a> for exactly what's full vs. in-progress.</p>
+      </div>
+    </section>
+
+    <!-- INSTALL -->
+    <section id="install" class="section alt">
+      <div class="wrap narrow">
+        <h2>Install in seconds</h2>
+        <pre class="code"><code># Free &amp; local: point at a local Ollama, $0
+npm install -g @phuetz/code-buddy
+export CODEBUDDY_PROVIDER=ollama
+buddy
+
+# …or log in with your ChatGPT Plus/Pro subscription (no API key)
+buddy login &amp;&amp; buddy</code></pre>
+        <p class="sub">Node ≥ 18 for the CLI · Node ≥ 22 for the desktop app. Run <code>buddy doctor</code> to check your environment.</p>
+        <div class="cta center">
+          <a class="btn btn-primary lg" href="https://github.com/phuetz/code-buddy">⭐ Star on GitHub</a>
+          <a class="btn btn-ghost lg" href="https://github.com/phuetz/code-buddy#documentation">Documentation</a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="wrap foot-row">
+      <span>🤖 Code Buddy — MIT</span>
+      <span><a href="https://github.com/phuetz/code-buddy">github.com/phuetz/code-buddy</a></span>
+    </div>
+  </footer>
+</body>
+</html>
