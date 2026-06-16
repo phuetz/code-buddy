@@ -42,10 +42,35 @@ function getCommandAvailability(cmd: string): 'installed' | 'not found' {
 
 function checkNodeVersion(): DoctorCheck {
   const major = parseInt(process.version.slice(1), 10);
-  if (major >= 18) {
-    return { name: 'Node.js version', status: 'ok', message: `${process.version} (>= 18 required)` };
+  if (major < 18) {
+    return { name: 'Node.js version', status: 'error', message: `${process.version} — Node.js >= 18 is required` };
   }
-  return { name: 'Node.js version', status: 'error', message: `${process.version} — Node.js >= 18 is required` };
+  if (major < 22) {
+    return {
+      name: 'Node.js version',
+      status: 'warn',
+      message: `${process.version} — OK for the CLI (>= 18), but the Cowork desktop app needs >= 22`,
+    };
+  }
+  return { name: 'Node.js version', status: 'ok', message: `${process.version} (CLI >= 18 and Cowork >= 22 OK)` };
+}
+
+// The SQLite layer (memory/sessions/cache/analytics) is a native module. On a
+// platform without a matching prebuilt binary, `npm install` may have failed to
+// build it — surface that here clearly instead of crashing a DB feature later.
+async function checkNativeSqlite(): Promise<DoctorCheck> {
+  try {
+    await import('better-sqlite3');
+    return { name: 'SQLite (better-sqlite3)', status: 'ok', message: 'native module available' };
+  } catch {
+    return {
+      name: 'SQLite (better-sqlite3)',
+      status: 'warn',
+      message:
+        'native module not built — DB-backed features (memory/sessions/cache) are unavailable. ' +
+        'Install build tools and reinstall (Linux: `build-essential python3`; macOS: `xcode-select --install`).',
+    };
+  }
 }
 
 function checkDependencies(): DoctorCheck[] {
@@ -427,6 +452,7 @@ export async function runDoctorChecks(cwd?: string): Promise<DoctorCheck[]> {
   const dir = cwd ?? process.cwd();
   return [
     checkNodeVersion(),
+    await checkNativeSqlite(),
     ...checkDependencies(),
     ...checkApiKeys(),
     await checkChatGptOAuth(),

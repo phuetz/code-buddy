@@ -2207,6 +2207,26 @@ program
     }
   });
 
+// Cowork (the Electron desktop GUI) needs Node >= 22; the terminal CLI runs on
+// Node >= 18. Without this guard a Node 18/20 user gets a cryptic Electron/Vite
+// crash mid-launch instead of a clear message — a classic first-run star-killer.
+const COWORK_MIN_NODE_MAJOR = 22;
+function assertNodeForCowork(): void {
+  const major = Number(process.versions.node.split(".")[0]);
+  if (Number.isFinite(major) && major < COWORK_MIN_NODE_MAJOR) {
+    cli.stdout(
+      `❌ Cowork (the desktop GUI) requires Node.js >= ${COWORK_MIN_NODE_MAJOR} — you're on v${process.versions.node}.`,
+    );
+    cli.stdout(
+      `   The terminal CLI works on Node >= 18; only the Electron app needs >= ${COWORK_MIN_NODE_MAJOR}.`,
+    );
+    cli.stdout(
+      `   Upgrade Node (e.g. \`nvm install 22 && nvm use 22\`) and retry. Linux build notes: cowork/DEV-LINUX.md`,
+    );
+    process.exit(1);
+  }
+}
+
 // Desktop GUI commands
 program
   .command("gui")
@@ -2214,6 +2234,7 @@ program
   .option("--dev", "start with Vite dev server (hot reload)")
   .option("--detach", "run in background")
   .action(async (options) => {
+    assertNodeForCowork();
     const { launchDesktop } = await import("./desktop/launcher.js");
     const code = await launchDesktop({
       dev: options.dev,
@@ -2228,6 +2249,7 @@ program
   .option("--dev", "start with Vite dev server")
   .option("--detach", "run in background")
   .action(async (options) => {
+    assertNodeForCowork();
     const { launchDesktop } = await import("./desktop/launcher.js");
     const code = await launchDesktop({
       dev: options.dev,
@@ -2240,6 +2262,7 @@ program
   .command("install-gui")
   .description("Install Electron and build the desktop GUI")
   .action(async () => {
+    assertNodeForCowork();
     const { installGUI } = await import("./desktop/installer.js");
     await installGUI();
   });

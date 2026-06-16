@@ -115,6 +115,8 @@ git clone https://github.com/phuetz/code-buddy.git
 cd code-buddy && npm install && npm run build && npm link   # exposes `buddy` globally
 ```
 
+> **Requirements:** Node.js **≥ 18** for the CLI. The **Cowork desktop app needs Node ≥ 22** plus a C++ build toolchain for native modules (`better-sqlite3`). Run **`buddy doctor`** anytime to check your environment (`--fix` to auto-remediate).
+
 Then pick a brain:
 
 ```bash
@@ -163,14 +165,16 @@ Cowork is the desktop cockpit for Code Buddy: chat, tools, traces, workflows, se
 </table>
 
 ```bash
-buddy server --port 3000   # local backend for Cowork, Fleet, and OpenAI-compatible clients
+# Node >= 22 required for the desktop app (the CLI runs on >= 18)
+buddy install-gui          # one-time: install Electron + build the desktop bundle
 buddy gui                  # launch the desktop app (or: buddy desktop)
+buddy server --port 3000   # optional: shared backend for Cowork, Fleet, OpenAI-compatible clients
 
 # Source dev loop
 npm install && npm run build && npm run dev:gui
 ```
 
-From source, Cowork requires Node.js `>=22` (the root CLI supports Node.js `>=18`). Camera/voice are opt-in and local: snapshots are explicit, percepts are append-only under `.codebuddy/companion/`, and Cowork uses MediaPipe Tasks Vision for face/hand/pose signals. Details: [Cowork Desktop](docs/cowork.md) · [Cowork Architecture](cowork/ARCHITECTURE.md).
+The CLI guards this: on Node < 22, `buddy gui` prints a clear upgrade message instead of crashing. Linux source builds need a manual Electron rebuild — see [`cowork/DEV-LINUX.md`](cowork/DEV-LINUX.md). Camera/voice are opt-in and local: snapshots are explicit, percepts are append-only under `.codebuddy/companion/`, and Cowork uses MediaPipe Tasks Vision for face/hand/pose signals. Details: [Cowork Desktop](docs/cowork.md) · [Cowork Architecture](cowork/ARCHITECTURE.md).
 
 ---
 
