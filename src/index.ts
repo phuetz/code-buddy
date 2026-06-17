@@ -1492,23 +1492,58 @@ program
             explicitModel: options.model,
           })
         : null;
-      const apiKey = options.apiKey || explicitProvider?.apiKey || await loadApiKey();
-      const baseURL = options.baseUrl || explicitProvider?.baseURL || await loadBaseURL();
+      let apiKey = options.apiKey || explicitProvider?.apiKey || await loadApiKey();
+      let baseURL = options.baseUrl || explicitProvider?.baseURL || await loadBaseURL();
       let model = options.model || explicitProvider?.model || await loadModel();  // let: can be overridden by --agent
       const maxToolRounds = parseInt(options.maxToolRounds) || 400;
 
       if (!apiKey) {
-        logger.error(
-          [
-            "❌ No AI provider configured. Pick one to get started:",
-            "   • Guided setup (recommended) — interactive wizard:     buddy onboard",
-            "   • Free, no API key — sign in with your ChatGPT plan:    buddy login",
-            "   • Local & free — run a model with Ollama, then:         export OLLAMA_HOST=http://localhost:11434",
-            "   • API key — set GROK_API_KEY / OPENAI_API_KEY / ANTHROPIC_API_KEY / GOOGLE_API_KEY (or pass --api-key)",
-            "   Run  buddy doctor  to check your setup.",
-          ].join("\n")
-        );
-        process.exit(1);
+        // In an interactive terminal, offer the guided setup wizard right here
+        // (like Hermes) instead of dead-ending on an error — then continue the
+        // session with the credentials it captured.
+        const interactive =
+          Boolean(process.stdin.isTTY) && Boolean(process.stdout.isTTY) &&
+          !options.prompt && !options.print &&
+          process.env.CI !== 'true' && process.env.GITHUB_ACTIONS !== 'true';
+
+        let recovered = false;
+        if (interactive) {
+          const readline = await import('readline');
+          const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+          const answer: string = await new Promise((resolve) =>
+            rl.question('\n❔ No AI provider configured. Run guided setup now? [Y/n] ', resolve)
+          );
+          rl.close();
+          const yes = answer.trim() === '' || /^y(es)?$/i.test(answer.trim());
+          if (yes) {
+            try {
+              const { runOnboarding } = await import('./wizard/onboarding.js');
+              const result = await runOnboarding();
+              // Bust the cached provider detection so the just-saved creds resolve.
+              cachedProvider = undefined;
+              apiKey = options.apiKey || await loadApiKey();
+              baseURL = options.baseUrl || await loadBaseURL();
+              model = options.model || result.model || await loadModel();
+              recovered = Boolean(apiKey);
+            } catch (err) {
+              logger.error('Guided setup did not complete', err instanceof Error ? err : { error: String(err) });
+            }
+          }
+        }
+
+        if (!recovered) {
+          logger.error(
+            [
+              "❌ No AI provider configured. Pick one to get started:",
+              "   • Guided setup (recommended) — interactive wizard:     buddy onboard",
+              "   • Free, no API key — sign in with your ChatGPT plan:    buddy login",
+              "   • Local & free — run a model with Ollama, then:         export OLLAMA_HOST=http://localhost:11434",
+              "   • API key — set GROK_API_KEY / OPENAI_API_KEY / ANTHROPIC_API_KEY / GOOGLE_API_KEY (or pass --api-key)",
+              "   Run  buddy doctor  to check your setup.",
+            ].join("\n")
+          );
+          process.exit(1);
+        }
       }
 
       // Save API key and base URL to user settings if provided via command line

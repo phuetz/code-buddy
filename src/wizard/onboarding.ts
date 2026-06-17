@@ -20,6 +20,9 @@ export interface OnboardingProviderGuide {
   authMode: OnboardingAuthMode;
   envVar: string;
   defaultModel: string;
+  /** Inference base URL — persisted so the chosen provider resolves on the
+   *  next run (the provider strategy in client.ts is picked from baseURL). */
+  baseURL?: string;
   setupCommand?: string;
   verifyCommand: string;
   help: string;
@@ -77,6 +80,7 @@ export const PROVIDER_GUIDES: OnboardingProviderGuide[] = [
     authMode: 'api-key',
     envVar: 'GROK_API_KEY',
     defaultModel: 'grok-3',
+    baseURL: 'https://api.x.ai/v1',
     verifyCommand: 'buddy doctor',
     help: 'Set GROK_API_KEY in your shell or secret manager.',
   },
@@ -86,6 +90,7 @@ export const PROVIDER_GUIDES: OnboardingProviderGuide[] = [
     authMode: 'api-key',
     envVar: 'ANTHROPIC_API_KEY',
     defaultModel: 'claude-sonnet-4-20250514',
+    baseURL: 'https://api.anthropic.com/v1',
     verifyCommand: 'buddy doctor',
     help: 'Set ANTHROPIC_API_KEY in your shell or secret manager.',
   },
@@ -95,6 +100,7 @@ export const PROVIDER_GUIDES: OnboardingProviderGuide[] = [
     authMode: 'api-key',
     envVar: 'GEMINI_API_KEY',
     defaultModel: 'gemini-2.0-flash',
+    baseURL: 'https://generativelanguage.googleapis.com/v1beta',
     verifyCommand: 'buddy doctor',
     help: 'Set GEMINI_API_KEY in your shell or secret manager.',
   },
@@ -104,6 +110,7 @@ export const PROVIDER_GUIDES: OnboardingProviderGuide[] = [
     authMode: 'local',
     envVar: '',
     defaultModel: 'llama3',
+    baseURL: 'http://localhost:11434/v1',
     setupCommand: 'ollama serve',
     verifyCommand: 'curl http://localhost:11434/api/tags',
     help: 'Run Ollama locally and pull the model you selected.',
@@ -114,6 +121,7 @@ export const PROVIDER_GUIDES: OnboardingProviderGuide[] = [
     authMode: 'local',
     envVar: '',
     defaultModel: 'default',
+    baseURL: 'http://localhost:1234/v1',
     verifyCommand: 'curl http://localhost:1234/v1/models',
     help: 'Start the LM Studio local server before launching Code Buddy.',
   },
@@ -178,6 +186,65 @@ function askChoice(rl: readline.Interface, question: string, choices: string[], 
       resolve(choices[selectedIdx] ?? choices[0] ?? '');
     });
   });
+}
+
+/** Read a secret without echoing it (masks keystrokes with '*'). The captured
+ *  value is always correct regardless of echo; masking is cosmetic, and falls
+ *  back to a visible prompt if the terminal doesn't support muting. */
+function askSecret(rl: readline.Interface, question: string): Promise<string> {
+  return new Promise((resolve) => {
+    const rlAny = rl as unknown as { _writeToOutput?: (s: string) => void };
+    const original = rlAny._writeToOutput?.bind(rl);
+    let muted = false;
+    if (typeof original === 'function') {
+      rlAny._writeToOutput = (str: string) => {
+        if (!muted || /[\r\n]/.test(str)) original(str);
+        else original('*'.repeat(str.length || 1));
+      };
+    }
+    rl.question(`  ${question}: `, (answer) => {
+      if (typeof original === 'function') rlAny._writeToOutput = original;
+      resolve(answer.trim());
+    });
+    muted = true;
+  });
+}
+
+/**
+ * Persist the chosen provider so the session works now AND on the next run:
+ *   - provider + baseURL + model → `~/.codebuddy/user-settings.json`
+ *     (loadBaseURL/loadModel read it; the provider strategy is picked from baseURL).
+ *   - an entered API key → encrypted credential store (never plaintext in settings),
+ *     plus `process.env[envVar]` so the current process resolves immediately.
+ *   - ollama → default `OLLAMA_HOST` so auto-detection picks it up.
+ * All writes are best-effort; the wizard summary still prints on failure.
+ */
+export async function persistProviderSelection(
+  guide: OnboardingProviderGuide,
+  model: string,
+  apiKey: string
+): Promise<void> {
+  try {
+    const { getSettingsManager } = await import('../utils/settings-manager.js');
+    getSettingsManager().saveUserSettings({
+      provider: guide.id,
+      defaultModel: model,
+      model,
+      ...(guide.baseURL ? { baseURL: guide.baseURL } : {}),
+    });
+  } catch { /* non-fatal */ }
+
+  if (guide.authMode === 'api-key' && apiKey) {
+    try {
+      const { getCredentialManager } = await import('../security/credential-manager.js');
+      getCredentialManager().setApiKey(apiKey);
+    } catch { /* non-fatal */ }
+    if (guide.envVar) process.env[guide.envVar] = apiKey;
+  }
+
+  if (guide.id === 'ollama' && !process.env.OLLAMA_HOST) {
+    process.env.OLLAMA_HOST = 'http://localhost:11434';
+  }
 }
 
 export function writeConfig(configDir: string, result: OnboardingResult): void {
@@ -283,23 +350,37 @@ export async function runOnboarding(): Promise<OnboardingResult> {
     ).then((choice) => choice.split(/\s+—\s+/)[0] ?? choice);
     const guide = getProviderGuide(provider);
 
-    // 2. API Key
+    // 2. Model selection (needed before we persist the provider).
+    const model = await ask(rl, 'Which model do you want to use?', guide.defaultModel);
+
+    // 3. Authentication — captured inline so you leave the wizard ready to chat.
     const envVar = guide.envVar;
     let apiKey = '';
+    let oauthDone = false;
     if (guide.authMode === 'oauth') {
+      const doNow = (await ask(rl, 'Sign in with your ChatGPT account now? (Y/n)', 'y')).toLowerCase();
+      if (doNow === 'y' || doNow === 'yes') {
+        try {
+          const { loginInteractive } = await import('../providers/codex-oauth.js');
+          rl.pause();
+          const auth = await loginInteractive();
+          rl.resume();
+          oauthDone = true;
+          console.log(`\n  ✅ Signed in${auth.email ? ` as ${auth.email}` : ''}.`);
+        } catch (err) {
+          try { rl.resume(); } catch { /* ignore */ }
+          console.log(`\n  ⚠️ Sign-in didn't complete (${err instanceof Error ? err.message : String(err)}).`);
+          console.log(`  Finish later with: ${guide.setupCommand ?? 'buddy login'}`);
+        }
+      } else {
+        console.log(`  No problem — run \`${guide.setupCommand ?? 'buddy login'}\` when you're ready.`);
+      }
+    } else if (guide.authMode === 'api-key' && envVar) {
       console.log(`\n  ${guide.help}`);
-      console.log(`  After this wizard, run: ${guide.setupCommand ?? 'buddy login'}`);
-      console.log(`  Verify with: ${guide.verifyCommand}`);
-    } else if (envVar) {
-      console.log(`\n  You will need to set ${envVar} in your environment.`);
-      apiKey = await ask(rl, `Enter your API key (or press Enter to set ${envVar} later)`);
+      apiKey = await askSecret(rl, `Enter your ${envVar} (or press Enter to set it later)`);
     } else {
       console.log(`\n  ${guide.help}`);
     }
-
-    // 3. Model selection
-    const defaultModel = guide.defaultModel;
-    const model = await ask(rl, 'Which model do you want to use?', defaultModel);
 
     // 4. TTS setup
     const ttsAnswer = await ask(rl, 'Enable text-to-speech? (y/n)', 'n');
@@ -308,6 +389,9 @@ export async function runOnboarding(): Promise<OnboardingResult> {
     if (ttsEnabled) {
       ttsProvider = await askChoice(rl, 'Which TTS provider?', TTS_PROVIDERS, 0);
     }
+
+    // 5. Persist credentials + provider so the session works now and next run.
+    await persistProviderSelection(guide, model, apiKey);
 
     const result: OnboardingResult = {
       provider,
@@ -319,23 +403,32 @@ export async function runOnboarding(): Promise<OnboardingResult> {
       ...(ttsProvider ? { ttsProvider } : {}),
     };
 
-    // 5. Write config
-    const configDir = join(process.cwd(), '.codebuddy');
-    writeConfig(configDir, result);
+    // 6. Write project config
+    writeConfig(join(process.cwd(), '.codebuddy'), result);
 
-    // 6. Summary
+    // 7. Summary
+    const ready =
+      oauthDone ||
+      (guide.authMode === 'api-key' && Boolean(apiKey)) ||
+      guide.authMode === 'local';
     console.log('');
-    console.log('  Setup complete! Configuration saved to .codebuddy/config.json');
+    console.log(`  ${ready ? 'Setup complete — you\'re ready to go!' : 'Setup saved.'}`);
     console.log('');
     console.log(`  Provider:  ${provider}`);
-    console.log(`  Auth:      ${guide.authMode}`);
+    console.log(`  Auth:      ${guide.authMode}${oauthDone ? ' (signed in)' : guide.authMode === 'api-key' && apiKey ? ' (key saved)' : ''}`);
     console.log(`  Model:     ${model}`);
     if (ttsEnabled && ttsProvider) {
       console.log(`  TTS:       ${ttsProvider}`);
     }
-    if (envVar && !apiKey) {
+    if (guide.authMode === 'oauth' && !oauthDone) {
       console.log('');
-      console.log(`  Remember to set ${envVar} in your environment before using Code Buddy.`);
+      console.log(`  Next: run \`${guide.setupCommand ?? 'buddy login'}\` to finish signing in.`);
+    } else if (guide.authMode === 'api-key' && !apiKey && envVar) {
+      console.log('');
+      console.log(`  Next: set ${envVar} in your environment (or re-run \`buddy onboard\`).`);
+    } else if (guide.authMode === 'local') {
+      console.log('');
+      console.log(`  Next: make sure your local server is running (${guide.setupCommand ?? guide.verifyCommand}).`);
     }
     console.log('');
     console.log(renderOnboardingRoadmap(result));
