@@ -825,6 +825,25 @@ describe('MCTS Edge Cases', () => {
       expect(result).toBeDefined();
       // Alternatives should be other good solutions
     });
+
+    it('returns a high-scoring non-terminal node as the solution (regression: analysis-only tree)', async () => {
+      const callbacks = createMockCallbacks();
+      // No code and no therefore/conclusion/solution markers → thoughts classify as
+      // analysis/hypothesis, never implementation/conclusion. With a high evaluated
+      // score this used to yield solution=null / success=false despite a 1.0 node.
+      callbacks.evaluateThought.mockResolvedValue(0.8);
+      callbacks.generateThoughts.mockResolvedValue(['The ball costs five cents']);
+
+      const mcts = createMCTS({ maxIterations: 4, maxDepth: 2 }, callbacks);
+      const result = await mcts.search({ description: 'A bat and a ball cost $1.10 in total' });
+
+      expect(result.solution).not.toBeNull();
+      expect(result.success).toBe(true);
+      expect(result.path.length).toBeGreaterThan(0);
+      expect(['analysis', 'hypothesis', 'verification', 'refinement']).toContain(
+        result.solution!.type,
+      );
+    });
   });
 
   describe('Execution result handling', () => {

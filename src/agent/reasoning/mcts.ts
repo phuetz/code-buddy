@@ -618,15 +618,31 @@ export class MCTS {
   private findBestSolution(): ThoughtNode | null {
     if (!this.root) return null;
 
+    // Preferred tier: the best-scoring terminal-typed node (a concrete
+    // `implementation` or an explicit `conclusion`). Fallback tier: the
+    // best-scoring *derived* node of any type — many problems/models yield only
+    // analysis/verification/hypothesis thoughts, and a high-scoring one of those
+    // is still the best answer the search found. Without the fallback, such a
+    // search returns null even when a node scored 1.0. Both tiers exclude pruned
+    // nodes and the root (the problem statement, depth 0 — not a derived solution).
     let best: ThoughtNode | null = null;
     let bestScore = -1;
+    let fallback: ThoughtNode | null = null;
+    let fallbackScore = -1;
 
     const traverse = (node: ThoughtNode) => {
-      if (node.state !== 'pruned' &&
+      if (node.state !== 'pruned' && node.depth > 0) {
+        if (
           (node.type === 'implementation' || node.type === 'conclusion') &&
-          node.score > bestScore) {
-        bestScore = node.score;
-        best = node;
+          node.score > bestScore
+        ) {
+          bestScore = node.score;
+          best = node;
+        }
+        if (node.score > fallbackScore) {
+          fallbackScore = node.score;
+          fallback = node;
+        }
       }
 
       for (const child of node.children) {
@@ -635,7 +651,7 @@ export class MCTS {
     };
 
     traverse(this.root);
-    return best;
+    return best ?? fallback;
   }
 
   /**
