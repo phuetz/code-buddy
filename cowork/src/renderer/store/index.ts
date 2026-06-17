@@ -762,6 +762,7 @@ interface AppState {
   updateSubAgentStatus: (sessionId: string, agentId: string, status: SubAgentStatus) => void;
   completeSubAgent: (sessionId: string, agentId: string, result: string) => void;
   appendSubAgentOutput: (sessionId: string, agentId: string, delta: string) => void;
+  setSubAgentActivity: (sessionId: string, agentId: string, currentStep: string) => void;
   clearSubAgents: (sessionId: string) => void;
 
   // Fleet actions
@@ -2033,6 +2034,17 @@ export const useAppStore = create<AppState>((set) => ({
         subAgentOutputs: {
           ...state.subAgentOutputs,
           [sessionId]: { ...sessionOutputs, [agentId]: existing + delta },
+        },
+      };
+    }),
+  setSubAgentActivity: (sessionId, agentId, currentStep) =>
+    set((state) => {
+      const list = state.subAgents[sessionId];
+      if (!list) return state;
+      return {
+        subAgents: {
+          ...state.subAgents,
+          [sessionId]: list.map((a) => (a.id === agentId ? { ...a, currentStep } : a)),
         },
       };
     }),

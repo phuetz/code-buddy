@@ -503,6 +503,14 @@ export function useIPC() {
             );
             break;
 
+          case 'subagent.activity':
+            store.setSubAgentActivity(
+              event.payload.sessionId,
+              event.payload.agentId,
+              event.payload.currentStep
+            );
+            break;
+
           case 'subagent.output':
             store.appendSubAgentOutput(
               event.payload.sessionId,

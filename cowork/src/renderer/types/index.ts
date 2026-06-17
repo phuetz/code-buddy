@@ -1729,6 +1729,7 @@ export type ServerEvent =
   | { type: 'subagent.status'; payload: { sessionId: string; agentId: string; status: SubAgentStatus; nickname: string } }
   | { type: 'subagent.completed'; payload: { sessionId: string; agentId: string; nickname: string; result: string } }
   | { type: 'subagent.output'; payload: { sessionId: string; agentId: string; delta: string } }
+  | { type: 'subagent.activity'; payload: { sessionId: string; agentId: string; nickname: string; currentStep: string } }
   | { type: 'fleet.peers'; payload: { peers: FleetPeer[] } }
   | { type: 'fleet.peer.update'; payload: { peer: FleetPeer } }
   | { type: 'fleet.event'; payload: FleetEventRecord }

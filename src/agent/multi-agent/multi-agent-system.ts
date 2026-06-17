@@ -685,7 +685,10 @@ export class MultiAgentSystem extends EventEmitter {
       task.assignedTo = resolvedRole;
     }
 
-    const agent = this.agents.get(task.assignedTo);
+    // Case-insensitive lookup: plans may carry capitalized roles ("Coder").
+    const agent =
+      this.agents.get(task.assignedTo) ??
+      this.agents.get(String(task.assignedTo).toLowerCase() as AgentRole);
     if (!agent) {
       errors.push(`No agent found for role: ${task.assignedTo}`);
       return;

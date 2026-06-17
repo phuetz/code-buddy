@@ -29,6 +29,13 @@ export interface SlashExecuteResult {
   };
 }
 
+/** Mirror of OrchestratorBridge.run()'s result (see main `orchestrator.run`). */
+export interface OrchestratorRunResult {
+  success: boolean;
+  summary?: string;
+  agentResults?: Array<{ role: string; success: boolean; output?: string }>;
+}
+
 export interface SlashActionContext {
   /** Command name without the leading slash (for notice prefixes). */
   commandName: string;
@@ -70,9 +77,27 @@ function runOrchestrator(goal: string, ctx: SlashActionContext): void {
     return;
   }
   const maxRounds = useAppStore.getState().lastOrchestratorOptions?.maxRounds ?? 3;
+  const sessionId = ctx.activeSessionId;
   // `/swarm` and `/parallel` both imply the parallel strategy (matches the CLI).
   void window.electronAPI?.orchestrator
-    ?.run(ctx.activeSessionId, goal, { strategy: 'parallel', maxRounds })
+    ?.run(sessionId, goal, { strategy: 'parallel', maxRounds })
+    .then((raw: unknown) => {
+      // Surface the synthesized result in the chat — without this the swarm
+      // ran to completion but left no trace beyond the live sub-agent panel.
+      const result = raw as OrchestratorRunResult | undefined;
+      if (!result) return;
+      const lines: string[] = [
+        result.success ? '✅ **Swarm complete**' : '⚠️ **Swarm finished with issues**',
+      ];
+      if (result.summary?.trim()) lines.push('', result.summary.trim());
+      if (result.agentResults?.length) {
+        lines.push('', '**Agents:**');
+        for (const r of result.agentResults) {
+          lines.push(`- ${r.role}: ${r.success ? '✓' : '✗'}`);
+        }
+      }
+      renderOutput(sessionId, lines.join('\n'));
+    })
     .catch((err: unknown) => {
       notice('error', `Swarm échoué : ${err instanceof Error ? err.message : String(err)}`);
     });

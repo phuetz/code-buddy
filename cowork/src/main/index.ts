@@ -1596,7 +1596,8 @@ app
     orchestratorBridge = new OrchestratorBridge(
       sendToRenderer,
       () => configStore.get('apiKey') || process.env.GROK_API_KEY || '',
-      () => configStore.get('baseUrl') || process.env.GROK_BASE_URL
+      () => configStore.get('baseUrl') || process.env.GROK_BASE_URL,
+      () => configStore.get('model') || process.env.GROK_MODEL
     );
 
     // Initialize fleet bridge — multi-host Code Buddy listener (GAP 3)

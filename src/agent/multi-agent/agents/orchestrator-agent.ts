@@ -79,7 +79,12 @@ DECISION MAKING:
     "bash",
     "codebase_map",
   ],
-  maxRounds: 20,
+  // Bounded so a model that over-explores during planning/synthesis can't loop
+  // indefinitely on a large repo. With the "plan directly" task prompt, planning
+  // normally terminates in 1 round; if a model still exhausts this cap without
+  // emitting a <plan>, parsePlan() falls back to a default coder task so the
+  // workflow still delegates to the worker agents.
+  maxRounds: 8,
 };
 
 export class OrchestratorAgent extends BaseAgent {
@@ -116,16 +121,18 @@ export class OrchestratorAgent extends BaseAgent {
     const planningTask: AgentTask = {
       id: createId("task"),
       title: "Create Execution Plan",
-      description: `Analyze the following goal and create a detailed execution plan:
+      description: `Analyze the following goal and OUTPUT an execution plan using the <plan> XML format from your instructions.
 
 GOAL: ${goal}
 
-Explore the codebase to understand the current state, then create a comprehensive plan that:
-1. Breaks down the goal into manageable phases
+Plan directly. Do NOT explore the codebase unless it is strictly required to plan — for self-contained tasks, skip exploration entirely and emit the plan in your first response. A good plan:
+1. Breaks the goal into manageable phases
 2. Identifies specific tasks within each phase
 3. Assigns each task to the most appropriate agent
 4. Considers dependencies and parallelization opportunities
-5. Includes validation and review steps`,
+5. Includes validation and review steps
+
+Respond with ONLY the <plan>...</plan> block and no other prose.`,
       status: "in_progress",
       priority: "critical",
       assignedTo: "orchestrator",
@@ -194,7 +201,11 @@ Explore the codebase to understand the current state, then create a comprehensiv
           description: taskDescMatch?.[1]?.trim() ?? "",
           status: "pending",
           priority: priority as TaskPriority,
-          assignedTo: agent as AgentRole,
+          // Normalize role casing: the planning prompt lists specialists as
+          // "Coder"/"Reviewer"/"Tester" (capitalized), so models often emit
+          // `agent="Coder"`, but the agent registry is keyed lowercase. Without
+          // this, `agents.get("Coder")` misses and the worker never runs.
+          assignedTo: (agent ?? "coder").toLowerCase() as AgentRole,
           dependencies: [],
           subtasks: [],
           artifacts: [],
