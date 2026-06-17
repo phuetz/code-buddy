@@ -163,7 +163,6 @@
     "google-auth-library": "^10.6.2",
     "ignore": "^5.3.2",
     "ink": "^4.4.1",
-    "kokoro-js": "^1.2.1",
     "marked": "^15.0.12",
     "marked-terminal": "^7.3.0",
     "ml-matrix": "^6.12.2",
