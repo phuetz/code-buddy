@@ -75,13 +75,13 @@ const PROVIDER_GROUPS: Array<{
     id: 'primary',
     titleKey: 'api.llm.primaryProviders',
     fallback: 'Cloud',
-    providers: ['chatgpt', 'openrouter', 'openai', 'anthropic', 'gemini'],
+    providers: ['chatgpt', 'openrouter', 'openai', 'anthropic', 'gemini', 'grok', 'groq', 'together', 'fireworks', 'mistral'],
   },
   {
     id: 'local',
     titleKey: 'api.llm.localProviders',
     fallback: 'Local',
-    providers: ['ollama', 'lmstudio'],
+    providers: ['ollama', 'lmstudio', 'vllm'],
   },
   {
     id: 'advanced',
@@ -100,6 +100,12 @@ const PROVIDER_ICONS: Record<ProviderType, typeof Bot> = {
   ollama: Laptop,
   lmstudio: Cpu,
   custom: Wrench,
+  grok: Sparkles,
+  groq: Cloud,
+  together: Cloud,
+  fireworks: Cloud,
+  vllm: Cpu,
+  mistral: Cloud,
 };
 
 const PROVIDER_ORDER: ProviderType[] = [
@@ -108,8 +114,14 @@ const PROVIDER_ORDER: ProviderType[] = [
   'openai',
   'anthropic',
   'gemini',
+  'grok',
+  'groq',
+  'together',
+  'fireworks',
+  'mistral',
   'ollama',
   'lmstudio',
+  'vllm',
   'custom',
 ];
 

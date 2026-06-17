@@ -88,6 +88,34 @@ export class ExtendedThinkingManager {
   }
 
   /**
+   * Apply a UI/settings thinking level — `off | minimal | low | medium | high | xhigh`.
+   * `off` (or any unknown level) disables thinking; any other level enables it with a
+   * scaled token budget. This is the runtime entry point for hot-swapping the level from
+   * the Cowork ReasoningLevelPicker; the OpenAI-compat / Grok / Ollama providers read
+   * {@link getThinkingConfig} fresh per request, so the change takes effect next turn.
+   */
+  applyThinkingLevel(level: string): void {
+    const budgets: Record<string, number> = {
+      minimal: 1024,
+      low: 2048,
+      medium: 4096,
+      high: 8192,
+      xhigh: 16384,
+    };
+    const budget = budgets[level];
+    if (budget === undefined) {
+      this.enabled = false;
+      this.alwaysEnabled = false;
+      logger.info(`Extended thinking disabled (level=${level})`);
+      return;
+    }
+    this.maxThinkingTokens = budget;
+    this.enabled = false; // the configured level drives state via alwaysEnabled
+    this.alwaysEnabled = true;
+    logger.info(`Extended thinking level=${level} (budget: ${budget} tokens)`);
+  }
+
+  /**
    * Get the thinking configuration to merge into API request parameters.
    * Returns an object with a `thinking` key when enabled, or an empty object when disabled.
    */

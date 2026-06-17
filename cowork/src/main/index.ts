@@ -1492,12 +1492,19 @@ app
           }
         }
 
+        // Apply the user's persisted reasoning/thinking level so the engine
+        // honors it from boot (not just on later changes via the picker).
+        if (typeof engineAdapter.setThinkingLevel === 'function') {
+          await engineAdapter.setThinkingLevel(configStore.get('thinkingLevel'));
+        }
+
         log('[Main] Code Buddy engine adapter initialized (embedded mode)');
       } catch (err) {
         if (classifyEngineLoadError(err) === 'missing') {
-          log(
+          logWarn(
             `[Main] Code Buddy engine not present at ${engineResolution.path}/desktop/codebuddy-engine-adapter.js ` +
-              `(layer=${engineResolution.layer}). Falling back to pi-coding-agent runner. ` +
+              `(layer=${engineResolution.layer}). Falling back to the reduced pi-coding-agent runner ` +
+              `(loses middlewares, output sanitizer, MCP runtime sync, model/skills hot-swap). ` +
               `Fix: run \`npx tsc -p .\` at the repo root to build the core, ` +
               `or set CODEBUDDY_ENGINE_PATH=/path/to/dist to point elsewhere.`
           );
@@ -3252,6 +3259,18 @@ const syncConfigAfterMutation = async (previousConfig: AppConfig) => {
       model: runtimeConfig.model,
       workingDirectory: currentWorkingDir || process.cwd(),
     });
+  }
+
+  // Hot-swap the reasoning/thinking level WITHOUT a runner reload — the engine
+  // adapter updates the global extended-thinking budget (read per-turn by the
+  // OpenAI-compat/Grok/Ollama providers) and the Gemini default on live agents.
+  if (
+    previousConfig.thinkingLevel !== updatedConfig.thinkingLevel &&
+    engineAdapter?.setThinkingLevel
+  ) {
+    await engineAdapter
+      .setThinkingLevel(updatedConfig.thinkingLevel)
+      .catch((err) => logError('[Config] thinkingLevel hot-swap failed:', err));
   }
 
   if (sessionManager) {

@@ -127,6 +127,16 @@ export interface EngineAdapter {
   reloadSkills?(): Promise<void>;
 
   /**
+   * Hot-swap the reasoning/thinking level for live sessions —
+   * `off | minimal | low | medium | high | xhigh`. Updates the global
+   * extended-thinking budget (read per-turn by the OpenAI-compat / Grok /
+   * Ollama providers) and the Gemini-native default on cached agents, so the
+   * Cowork ReasoningLevelPicker takes effect on the next turn without a session
+   * restart. Optional — adapters without a thinking system can omit this.
+   */
+  setThinkingLevel?(level: string): Promise<void>;
+
+  /**
    * Set the default visual grounding fallback configuration.
    */
   setDefaultVisionGrounding?(enabled: boolean, model?: string): void;

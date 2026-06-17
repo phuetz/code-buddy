@@ -46,7 +46,13 @@ export type ProviderType =
   | 'openai'
   | 'gemini'
   | 'ollama'
-  | 'lmstudio';
+  | 'lmstudio'
+  | 'grok'
+  | 'groq'
+  | 'together'
+  | 'fireworks'
+  | 'vllm'
+  | 'mistral';
 export type CustomProtocolType = 'anthropic' | 'openai' | 'gemini';
 export type AppTheme = 'dark' | 'light' | 'system';
 export type MemoryStrategy = 'auto' | 'manual' | 'rolling';
@@ -58,6 +64,12 @@ export type ProviderProfileKey =
   | 'gemini'
   | 'ollama'
   | 'lmstudio'
+  | 'grok'
+  | 'groq'
+  | 'together'
+  | 'fireworks'
+  | 'vllm'
+  | 'mistral'
   | 'custom:anthropic'
   | 'custom:openai'
   | 'custom:gemini';
@@ -135,6 +147,10 @@ export interface AppConfig {
 
   // Enable thinking mode (show thinking steps)
   enableThinking: boolean;
+
+  // Reasoning/thinking level for the engine runner (off..xhigh). Hot-swappable
+  // mid-session via the ReasoningLevelPicker → engine adapter.
+  thinkingLevel: ThinkingLevel;
 
   // First run flag
   isConfigured: boolean;
@@ -228,6 +244,19 @@ export interface AppConfig {
 const DEFAULT_CONFIG_SET_ID = 'default';
 const MAX_CONFIG_SET_COUNT = 20;
 const LOCAL_ANTHROPIC_PLACEHOLDER_KEY = 'sk-ant-local-proxy';
+export type ThinkingLevel = 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+
+function isThinkingLevel(value: unknown): value is ThinkingLevel {
+  return (
+    value === 'off' ||
+    value === 'minimal' ||
+    value === 'low' ||
+    value === 'medium' ||
+    value === 'high' ||
+    value === 'xhigh'
+  );
+}
+
 const DIRECT_READ_KEYS = new Set<keyof AppConfig>([
   'provider',
   'apiKey',
@@ -243,6 +272,7 @@ const DIRECT_READ_KEYS = new Set<keyof AppConfig>([
   'memoryStrategy',
   'sandboxEnabled',
   'enableThinking',
+  'thinkingLevel',
   'isConfigured',
   'onboardingCompleted',
 ]);
@@ -300,6 +330,36 @@ const defaultProfiles: Record<ProviderProfileKey, ProviderProfile> = {
     baseUrl: 'https://generativelanguage.googleapis.com',
     model: 'gemini-2.5-flash',
   },
+  grok: {
+    apiKey: '',
+    baseUrl: 'https://api.x.ai/v1',
+    model: 'grok-3-latest',
+  },
+  groq: {
+    apiKey: '',
+    baseUrl: 'https://api.groq.com/openai/v1',
+    model: 'llama-3.3-70b-versatile',
+  },
+  together: {
+    apiKey: '',
+    baseUrl: 'https://api.together.xyz/v1',
+    model: 'meta-llama/Llama-3.3-70B-Instruct-Turbo',
+  },
+  fireworks: {
+    apiKey: '',
+    baseUrl: 'https://api.fireworks.ai/inference/v1',
+    model: 'accounts/fireworks/models/llama-v3p3-70b-instruct',
+  },
+  vllm: {
+    apiKey: '',
+    baseUrl: 'http://localhost:8000/v1',
+    model: 'model',
+  },
+  mistral: {
+    apiKey: '',
+    baseUrl: 'https://api.mistral.ai/v1',
+    model: 'mistral-large-latest',
+  },
 };
 
 const defaultConfigSet: ApiConfigSet = {
@@ -332,6 +392,7 @@ const defaultConfig: AppConfig = {
   memoryStrategy: 'auto',
   sandboxEnabled: false,
   enableThinking: false,
+  thinkingLevel: 'off',
   isConfigured: false,
   onboardingCompleted: false,
   memoryProvider: 'local',
@@ -1001,6 +1062,7 @@ export class ConfigStore {
         : defaultConfig.memoryStrategy,
       sandboxEnabled: toBoolean(raw.sandboxEnabled, defaultConfig.sandboxEnabled),
       enableThinking: projected.enableThinking,
+      thinkingLevel: isThinkingLevel(raw.thinkingLevel) ? raw.thinkingLevel : defaultConfig.thinkingLevel,
       isConfigured: toBoolean(raw.isConfigured, defaultConfig.isConfigured),
       onboardingCompleted: toBoolean(raw.onboardingCompleted, defaultConfig.onboardingCompleted),
       memoryProvider:
@@ -1140,6 +1202,9 @@ export class ConfigStore {
           return defaultConfig[key];
         }
         if (key === 'memoryStrategy' && !isMemoryStrategy(rawValue)) {
+          return defaultConfig[key];
+        }
+        if (key === 'thinkingLevel' && !isThinkingLevel(rawValue)) {
           return defaultConfig[key];
         }
         if (

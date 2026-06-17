@@ -68,6 +68,13 @@ export class CodeBuddyEngineAdapter implements EngineAdapter {
   private agentIdentities: Map<string, string> = new Map();
 
   /**
+   * Configured reasoning/thinking level (`off | minimal | … | xhigh`), set via
+   * {@link setThinkingLevel}. Re-applied to each freshly-created agent so a
+   * model swap / new session keeps the user's chosen level.
+   */
+  private thinkingLevel?: string;
+
+  /**
    * Hard cap on cached agents — matches the pi-runner's
    * `MAX_CACHED_SESSIONS` (50) so memory pressure is comparable
    * across runners. Long-running Cowork sessions used to grow the
@@ -148,6 +155,14 @@ export class CodeBuddyEngineAdapter implements EngineAdapter {
 
         if (typeof (agent as any).setVisionGroundingModel === 'function') {
           (agent as any).setVisionGroundingModel(this.config.visionGroundingModel);
+        }
+
+        // Re-apply the configured thinking level so a freshly-created agent
+        // (new session or post model-swap) keeps the user's chosen level on the
+        // Gemini-native path. The OpenAI-compat / Grok / Ollama path reads the
+        // global extended-thinking budget per turn, so it needs no per-agent step.
+        if (this.thinkingLevel) {
+          this.applyGeminiThinkingLevel(agent, this.thinkingLevel);
         }
 
         // Phase 9 — enforce LRU before insertion so we never exceed
@@ -516,6 +531,51 @@ export class CodeBuddyEngineAdapter implements EngineAdapter {
       logger.info('[CodeBuddyEngineAdapter] skills registry reloaded');
     } catch (err) {
       logger.warn('[CodeBuddyEngineAdapter] reloadSkills failed', { err });
+    }
+  }
+
+  /**
+   * Hot-swap the reasoning/thinking level for live sessions. Updates the global
+   * extended-thinking budget (read per-turn by the OpenAI-compat / Grok / Ollama
+   * providers → effective next turn, no rebuild) and the Gemini-native default on
+   * every cached agent. The level is remembered so future agents inherit it.
+   */
+  async setThinkingLevel(level: string): Promise<void> {
+    this.thinkingLevel = level;
+    try {
+      const { getExtendedThinking } = await import('../agent/extended-thinking.js');
+      getExtendedThinking().applyThinkingLevel(level);
+    } catch (err) {
+      logger.warn('[CodeBuddyEngineAdapter] applyThinkingLevel failed', { err });
+    }
+    for (const agent of this.agents.values()) {
+      this.applyGeminiThinkingLevel(agent, level);
+    }
+    logger.info('[CodeBuddyEngineAdapter] thinkingLevel set', { level });
+  }
+
+  /**
+   * Map a UI level to the Gemini-native default thinking level on a single
+   * agent's client. `GeminiThinkingLevel` is `minimal|low|medium|high`, so
+   * `xhigh` clamps to `high` and `off`/unknown leaves the Gemini default
+   * untouched (the global extended-thinking switch already disables it for the
+   * OpenAI-compat path). Best-effort; never throws.
+   */
+  private applyGeminiThinkingLevel(agent: unknown, level: string): void {
+    const geminiLevel =
+      level === 'minimal' || level === 'low' || level === 'medium'
+        ? level
+        : level === 'high' || level === 'xhigh'
+          ? 'high'
+          : null;
+    if (!geminiLevel) return;
+    try {
+      const getClient = (agent as { getClient?: () => CodeBuddyClient }).getClient;
+      if (typeof getClient === 'function') {
+        getClient.call(agent)?.setDefaultThinkingLevel(geminiLevel);
+      }
+    } catch {
+      /* best effort — Gemini path only */
     }
   }
 

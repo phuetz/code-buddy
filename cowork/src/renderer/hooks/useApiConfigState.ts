@@ -76,6 +76,12 @@ const PROFILE_KEYS: ProviderProfileKey[] = [
   'gemini',
   'ollama',
   'lmstudio',
+  'grok',
+  'groq',
+  'together',
+  'fireworks',
+  'vllm',
+  'mistral',
   'custom:anthropic',
   'custom:openai',
   'custom:gemini',
@@ -94,7 +100,13 @@ function isProviderType(value: unknown): value is ProviderType {
     value === 'openai' ||
     value === 'gemini' ||
     value === 'ollama' ||
-    value === 'lmstudio'
+    value === 'lmstudio' ||
+    value === 'grok' ||
+    value === 'groq' ||
+    value === 'together' ||
+    value === 'fireworks' ||
+    value === 'vllm' ||
+    value === 'mistral'
   );
 }
 

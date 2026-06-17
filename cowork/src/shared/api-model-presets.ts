@@ -6,7 +6,13 @@ export type SharedProviderType =
   | 'openai'
   | 'gemini'
   | 'ollama'
-  | 'lmstudio';
+  | 'lmstudio'
+  | 'grok'
+  | 'groq'
+  | 'together'
+  | 'fireworks'
+  | 'vllm'
+  | 'mistral';
 
 export type SharedCustomProtocolType = 'anthropic' | 'openai' | 'gemini';
 
@@ -27,6 +33,12 @@ export interface SharedProviderPresets {
   gemini: SharedProviderPreset;
   ollama: SharedProviderPreset;
   lmstudio: SharedProviderPreset;
+  grok: SharedProviderPreset;
+  groq: SharedProviderPreset;
+  together: SharedProviderPreset;
+  fireworks: SharedProviderPreset;
+  vllm: SharedProviderPreset;
+  mistral: SharedProviderPreset;
 }
 
 export interface ModelInputGuidance {
@@ -149,6 +161,73 @@ export const API_PROVIDER_PRESETS: SharedProviderPresets = {
     keyPlaceholder: 'sk-xxx',
     keyHint: 'Enter the API key for this endpoint.',
   },
+  grok: {
+    name: 'Grok (xAI)',
+    baseUrl: 'https://api.x.ai/v1',
+    models: [
+      { id: 'grok-3-latest', name: 'grok-3-latest' },
+      { id: 'grok-3', name: 'grok-3' },
+      { id: 'grok-3-mini', name: 'grok-3-mini' },
+      { id: 'grok-code-fast-1', name: 'grok-code-fast-1' },
+    ],
+    keyPlaceholder: 'xai-...',
+    keyHint: 'Get it from console.x.ai.',
+  },
+  groq: {
+    name: 'Groq',
+    baseUrl: 'https://api.groq.com/openai/v1',
+    models: [
+      { id: 'llama-3.3-70b-versatile', name: 'llama-3.3-70b-versatile' },
+      { id: 'llama-3.1-8b-instant', name: 'llama-3.1-8b-instant' },
+      { id: 'deepseek-r1-distill-llama-70b', name: 'deepseek-r1-distill-llama-70b' },
+      { id: 'qwen-2.5-32b', name: 'qwen-2.5-32b' },
+    ],
+    keyPlaceholder: 'gsk_...',
+    keyHint: 'Get it from console.groq.com/keys.',
+  },
+  together: {
+    name: 'Together AI',
+    baseUrl: 'https://api.together.xyz/v1',
+    models: [
+      { id: 'meta-llama/Llama-3.3-70B-Instruct-Turbo', name: 'meta-llama/Llama-3.3-70B-Instruct-Turbo' },
+      { id: 'deepseek-ai/DeepSeek-R1', name: 'deepseek-ai/DeepSeek-R1' },
+      { id: 'Qwen/Qwen2.5-72B-Instruct-Turbo', name: 'Qwen/Qwen2.5-72B-Instruct-Turbo' },
+    ],
+    keyPlaceholder: '...',
+    keyHint: 'Get it from api.together.xyz/settings/api-keys.',
+  },
+  fireworks: {
+    name: 'Fireworks AI',
+    baseUrl: 'https://api.fireworks.ai/inference/v1',
+    models: [
+      { id: 'accounts/fireworks/models/llama-v3p3-70b-instruct', name: 'llama-v3p3-70b-instruct' },
+      { id: 'accounts/fireworks/models/deepseek-r1', name: 'deepseek-r1' },
+      { id: 'accounts/fireworks/models/qwen2p5-72b-instruct', name: 'qwen2p5-72b-instruct' },
+    ],
+    keyPlaceholder: 'fw_...',
+    keyHint: 'Get it from fireworks.ai/account/api-keys.',
+  },
+  vllm: {
+    name: 'vLLM (self-hosted)',
+    baseUrl: 'http://localhost:8000/v1',
+    models: [
+      { id: 'model', name: 'model (set to your served model id)' },
+    ],
+    keyPlaceholder: 'Optional',
+    keyHint: 'Self-hosted vLLM usually needs no key. Set the model id to the one your server serves.',
+  },
+  mistral: {
+    name: 'Mistral',
+    baseUrl: 'https://api.mistral.ai/v1',
+    models: [
+      { id: 'mistral-large-latest', name: 'mistral-large-latest' },
+      { id: 'mistral-small-latest', name: 'mistral-small-latest' },
+      { id: 'codestral-latest', name: 'codestral-latest' },
+      { id: 'open-mistral-nemo', name: 'open-mistral-nemo' },
+    ],
+    keyPlaceholder: '...',
+    keyHint: 'Get it from console.mistral.ai.',
+  },
 };
 
 export const PI_AI_CURATED_PRESETS: Record<string, { piProvider: string; pick: string[] }> = {
@@ -229,6 +308,22 @@ export function getModelInputGuidance(
     return {
       placeholder: 'local-model, qwen2.5-coder, deepseek-coder, llama-3.1-8b',
       hint: 'Use the exact model ID returned by your LM Studio server.',
+    };
+  }
+
+  const openAiCompatPlaceholders: Partial<Record<SharedProviderType, string>> = {
+    grok: 'grok-3-latest, grok-3, grok-3-mini',
+    groq: 'llama-3.3-70b-versatile, deepseek-r1-distill-llama-70b',
+    together: 'meta-llama/Llama-3.3-70B-Instruct-Turbo, deepseek-ai/DeepSeek-R1',
+    fireworks: 'accounts/fireworks/models/llama-v3p3-70b-instruct',
+    vllm: 'model (your served model id)',
+    mistral: 'mistral-large-latest, codestral-latest',
+  };
+  const compatPlaceholder = openAiCompatPlaceholders[provider];
+  if (compatPlaceholder) {
+    return {
+      placeholder: compatPlaceholder,
+      hint: 'Use the exact model ID served by this endpoint.',
     };
   }
 

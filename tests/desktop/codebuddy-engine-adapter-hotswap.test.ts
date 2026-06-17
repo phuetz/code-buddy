@@ -233,4 +233,21 @@ describe('CodeBuddyEngineAdapter — hot-swap on config change (Phase 8)', () =>
     );
     expect(constructorCalls).toHaveLength(2);
   });
+
+  it('setThinkingLevel hot-swaps the global extended-thinking budget', async () => {
+    const { getExtendedThinking, resetExtendedThinking } = await import(
+      '../../src/agent/extended-thinking.js'
+    );
+    resetExtendedThinking();
+    const adapter = new CodeBuddyEngineAdapter({ apiKey: 'k', model: 'gemma' });
+
+    await adapter.setThinkingLevel('high');
+    expect(getExtendedThinking().getThinkingConfig()).toEqual({
+      thinking: { type: 'enabled', budget_tokens: 8192 },
+    });
+
+    await adapter.setThinkingLevel('off');
+    expect(getExtendedThinking().getThinkingConfig()).toEqual({});
+    resetExtendedThinking();
+  });
 });

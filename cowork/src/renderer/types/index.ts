@@ -1867,7 +1867,13 @@ export type ProviderType =
   | 'openai'
   | 'gemini'
   | 'ollama'
-  | 'lmstudio';
+  | 'lmstudio'
+  | 'grok'
+  | 'groq'
+  | 'together'
+  | 'fireworks'
+  | 'vllm'
+  | 'mistral';
 export type CustomProtocolType = 'anthropic' | 'openai' | 'gemini';
 export type AppTheme = 'dark' | 'light' | 'system' | 'open-cowork';
 export type MemoryStrategy = 'auto' | 'manual' | 'rolling';
@@ -1879,6 +1885,12 @@ export type ProviderProfileKey =
   | 'gemini'
   | 'ollama'
   | 'lmstudio'
+  | 'grok'
+  | 'groq'
+  | 'together'
+  | 'fireworks'
+  | 'vllm'
+  | 'mistral'
   | 'custom:anthropic'
   | 'custom:openai'
   | 'custom:gemini';
@@ -1966,6 +1978,12 @@ export interface ProviderPresets {
   gemini: ProviderPreset;
   ollama: ProviderPreset;
   lmstudio: ProviderPreset;
+  grok: ProviderPreset;
+  groq: ProviderPreset;
+  together: ProviderPreset;
+  fireworks: ProviderPreset;
+  vllm: ProviderPreset;
+  mistral: ProviderPreset;
 }
 
 export interface ProviderModelInfo {

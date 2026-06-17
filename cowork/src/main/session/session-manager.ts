@@ -121,6 +121,12 @@ export interface EngineAdapterLike {
    */
   setDefaultVisionGrounding?: (enabled: boolean, model?: string) => void;
   /**
+   * Hot-swap the reasoning/thinking level (`off..xhigh`) for live sessions.
+   * Optional — older bundles without the hook simply don't expose it.
+   * See `EngineAdapter.setThinkingLevel` (core).
+   */
+  setThinkingLevel?: (level: string) => Promise<void>;
+  /**
    * Push the host's view of the MCP server registry to the engine.
    * Optional — older bundles without the runtime sync hook simply
    * don't expose it. See `EngineAdapter.setMcpServers` (core).
@@ -498,7 +504,7 @@ export class SessionManager {
       log('[SessionManager] Using Code Buddy engine runner (embedded)');
     } else {
       this.agentRunner = this.createClaudeAgentRunner();
-      log('[SessionManager] Using pi-coding-agent runner');
+      logWarn('[SessionManager] Using reduced pi-coding-agent runner (engine bundle absent) — full-fat features unavailable');
     }
   }
 
