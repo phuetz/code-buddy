@@ -1501,9 +1501,10 @@ program
         logger.error(
           [
             "❌ No AI provider configured. Pick one to get started:",
-            "   • Free, no API key — sign in with your ChatGPT plan:  buddy login",
-            "   • Local & free — run a model with Ollama, then:        export OLLAMA_HOST=http://localhost:11434",
-            "   • API key — set one of GROK_API_KEY / OPENAI_API_KEY / ANTHROPIC_API_KEY / GOOGLE_API_KEY (or pass --api-key)",
+            "   • Guided setup (recommended) — interactive wizard:     buddy onboard",
+            "   • Free, no API key — sign in with your ChatGPT plan:    buddy login",
+            "   • Local & free — run a model with Ollama, then:         export OLLAMA_HOST=http://localhost:11434",
+            "   • API key — set GROK_API_KEY / OPENAI_API_KEY / ANTHROPIC_API_KEY / GOOGLE_API_KEY (or pass --api-key)",
             "   Run  buddy doctor  to check your setup.",
           ].join("\n")
         );
@@ -2079,9 +2080,10 @@ gitCommand
         logger.error(
           [
             "❌ No AI provider configured. Pick one to get started:",
-            "   • Free, no API key — sign in with your ChatGPT plan:  buddy login",
-            "   • Local & free — run a model with Ollama, then:        export OLLAMA_HOST=http://localhost:11434",
-            "   • API key — set one of GROK_API_KEY / OPENAI_API_KEY / ANTHROPIC_API_KEY / GOOGLE_API_KEY (or pass --api-key)",
+            "   • Guided setup (recommended) — interactive wizard:     buddy onboard",
+            "   • Free, no API key — sign in with your ChatGPT plan:    buddy login",
+            "   • Local & free — run a model with Ollama, then:         export OLLAMA_HOST=http://localhost:11434",
+            "   • API key — set GROK_API_KEY / OPENAI_API_KEY / ANTHROPIC_API_KEY / GOOGLE_API_KEY (or pass --api-key)",
             "   Run  buddy doctor  to check your setup.",
           ].join("\n")
         );
