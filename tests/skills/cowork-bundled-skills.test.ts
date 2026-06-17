@@ -18,8 +18,14 @@ describe('Cowork bundled skills load into the core SkillRegistry', () => {
   beforeAll(async () => {
     // Use a fresh registry (not the global singleton) pointed at Cowork's
     // bundled skills directory — the same wiring the embedded engine uses.
+    // Pin the workspace/managed tiers to empty so the registry loads ONLY the
+    // bundled skills: otherwise a dev's local ~/.codebuddy/skills (e.g. a
+    // `pdfcommander` skill) shadows the bundled `pdf` and makes routing
+    // assertions non-deterministic across machines.
     registry = new SkillRegistry({
       bundledPath: COWORK_SKILLS_DIR,
+      workspacePath: '',
+      managedPath: '',
       cacheEnabled: false,
       watchEnabled: false,
     });
@@ -30,13 +36,18 @@ describe('Cowork bundled skills load into the core SkillRegistry', () => {
     registry.shutdown();
   });
 
-  it('parses all five document/automation skills as bundled-tier skills', () => {
+  it('parses the document, data & automation skills as bundled-tier skills', () => {
     expect(fs.existsSync(COWORK_SKILLS_DIR)).toBe(true);
     const names = registry
       .list()
       .map((s) => s.metadata.name)
       .sort();
-    for (const expected of ['pptx', 'docx', 'xlsx', 'pdf', 'skill-creator']) {
+    for (const expected of [
+      // create skills
+      'pptx', 'docx', 'xlsx', 'pdf', 'skill-creator',
+      // Python clean-room skills (read / chart / automate / research)
+      'doc-ingest', 'data-charts', 'web-automate', 'web-research',
+    ]) {
       expect(names, `registry missing skill: ${expected}`).toContain(expected);
     }
   });
@@ -67,16 +78,36 @@ describe('Cowork bundled skills load into the core SkillRegistry', () => {
     expect(match!.confidence).toBeGreaterThanOrEqual(ACTIVATION_THRESHOLD);
   });
 
+  // The Python clean-room skills (doc-ingest / data-charts / web-automate /
+  // web-research) must route to themselves for their intent — and NOT steal the
+  // create skills' requests. These pin the routing the manual scorer audit
+  // verified, so a future trigger/description edit can't silently regress it.
+  const routes: Array<[string, string]> = [
+    ['Extract the text from this document and convert it to markdown', 'doc-ingest'],
+    ['Plot a bar chart of the monthly revenue', 'data-charts'],
+    ['Scrape the headlines from this website with a headless browser', 'web-automate'],
+    ['Research this topic across sources and write a cited brief', 'web-research'],
+  ];
+  for (const [request, expected] of routes) {
+    it(`routes "${request.slice(0, 32)}…" to ${expected} above threshold`, () => {
+      const match = registry.findBestMatch(request);
+      expect(match, `no match for: ${request}`).not.toBeNull();
+      expect(match?.skill.metadata.name).toBe(expected);
+      expect(match!.confidence).toBeGreaterThanOrEqual(ACTIVATION_THRESHOLD);
+    });
+  }
+
   it('injects the full SKILL.md workflow body (script commands), not just the overview', () => {
     const pptx = registry.get('pptx');
     expect(pptx).toBeDefined();
     // This is exactly what codebuddy-agent.ts:958 injects on activation.
     const injected = skillMdToUnified(pptx!).systemPrompt || '';
-    // Body-only tokens — present in the SKILL.md workflow but NOT in the
-    // one-line frontmatter/overview description. Their presence proves the
-    // model receives the actual instructions to drive the bundled scripts.
-    expect(injected).toContain('unpack.py');
-    expect(injected).toContain('markitdown');
+    // Body-only tokens — present in the clean-room SKILL.md workflow/example
+    // but NOT in the one-line frontmatter/overview description. Their presence
+    // proves the model receives the actual instructions (drive python-pptx
+    // directly), not just the overview.
+    expect(injected).toContain('python-pptx');
+    expect(injected).toContain('Presentation(');
     expect(injected.length).toBeGreaterThan(1000);
   });
 });
