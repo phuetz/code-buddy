@@ -975,6 +975,13 @@ export class ToolHandler {
     context: IToolExecutionContext
   ): Promise<ToolResult> {
     const command = args.command as string;
+    if (typeof command !== 'string' || command.trim() === '') {
+      return {
+        success: false,
+        error:
+          'bash: missing a non-empty "command" string argument. Put the shell command to run in the "command" field.',
+      };
+    }
 
     // Execute pre-bash hooks
     try {
@@ -1086,8 +1093,17 @@ export class ToolHandler {
         });
         reasoner.setMode(mode as ThinkingMode);
 
+        const problem = args.problem;
+        if (typeof problem !== 'string' || problem.trim() === '') {
+          return {
+            success: false,
+            error:
+              'reason: missing a non-empty "problem" string argument. Put the problem to reason about in the "problem" field.',
+          };
+        }
+
         const gen = reasoner.solveStreaming({
-          description: args.problem as string,
+          description: problem,
           context: args.context as string | undefined,
           constraints: args.constraints as string[] | undefined,
         });
