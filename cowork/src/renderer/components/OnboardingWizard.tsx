@@ -399,10 +399,10 @@ export function OnboardingWizard({
                     {t('onboarding.providerTitle', 'Connect an AI provider')}
                   </h3>
                   <p className="text-xs text-text-muted">
-                    {t(
-                      'onboarding.providerDesc',
-                      `${APP_NAME} supports Anthropic, OpenAI, Gemini, Ollama, LM Studio, and any OpenAI-compatible endpoint.`
-                    )}
+                    {t('onboarding.providerDesc', {
+                      appName: APP_NAME,
+                      defaultValue: `${APP_NAME} supports Anthropic, OpenAI, Gemini, Ollama, LM Studio, and any OpenAI-compatible endpoint.`,
+                    })}
                   </p>
                 </div>
               </div>
@@ -460,10 +460,10 @@ export function OnboardingWizard({
                     {t('onboarding.workspaceTitle', 'Pick a default workspace')}
                   </h3>
                   <p className="text-xs text-text-muted">
-                    {t(
-                      'onboarding.workspaceDesc',
-                      `${APP_NAME} agents read and write files inside the workspace folder. You can pick a different one per session later.`
-                    )}
+                    {t('onboarding.workspaceDesc', {
+                      appName: APP_NAME,
+                      defaultValue: `${APP_NAME} agents read and write files inside the workspace folder. You can pick a different one per session later.`,
+                    })}
                   </p>
                 </div>
               </div>
@@ -597,10 +597,10 @@ export function OnboardingWizard({
                 {t('onboarding.readyTitle', 'Ready for the first companion chat.')}
               </h3>
               <p className="text-xs text-text-muted max-w-sm mx-auto">
-                {t(
-                  'onboarding.readyDesc',
-                  `${APP_NAME} keeps setup separate from your real sessions so Buddy can introduce itself, check readiness, and propose the next useful action.`
-                )}
+                {t('onboarding.readyDesc', {
+                  appName: APP_NAME,
+                  defaultValue: `${APP_NAME} keeps setup separate from your real sessions so Buddy can introduce itself, check readiness, and propose the next useful action.`,
+                })}
               </p>
               <div className="text-left">{connectionPanel}</div>
               <div
