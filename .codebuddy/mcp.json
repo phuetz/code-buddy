@@ -27,6 +27,14 @@
       },
       "enabled": false,
       "description": "GitHub integration MCP server"
+    },
+    "gitnexus": {
+      "name": "gitnexus",
+      "type": "stdio",
+      "command": "gitnexus",
+      "args": ["mcp"],
+      "enabled": false,
+      "description": "Code Explorer (gitnexus) — optional proprietary add-on. Graph-powered code intelligence: query, impact/blast-radius, callers, hotspots, complexity over a pre-indexed knowledge graph. Run `gitnexus analyze .` once, then the agent asks the graph instead of reading dozens of files. https://github.com/phuetz/code-explorer"
     }
   }
 }
