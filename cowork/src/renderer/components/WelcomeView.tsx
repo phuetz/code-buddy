@@ -28,6 +28,7 @@ import {
   FolderOpen,
 } from 'lucide-react';
 import { ProjectSelector } from './ProjectSelector';
+import { Tooltip } from './Tooltip';
 import { FileAttachmentChip } from './FileAttachmentChip';
 import { APP_NAME } from '../brand';
 
@@ -569,16 +570,17 @@ export function WelcomeView() {
                 />
               ))}
               {shouldShowDocumentWorkshopAction && (
-                <button
-                  type="button"
-                  onClick={applyDocumentWorkshopPrompt}
-                  data-testid="welcome-document-workshop-action"
-                  className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full border border-accent/35 bg-accent/10 text-xs font-medium text-accent hover:bg-accent/15 transition-colors"
-                  title={t('welcome.documentWorkshopActionTitle', 'Prepare a Word workshop prompt')}
-                >
-                  <FileSearch className="w-3.5 h-3.5" />
-                  <span>{t('welcome.documentWorkshopAction', 'Atelier Word')}</span>
-                </button>
+                <Tooltip label={t('welcome.documentWorkshopActionTitle', 'Prepare a Word workshop prompt')} side="top">
+                  <button
+                    type="button"
+                    onClick={applyDocumentWorkshopPrompt}
+                    data-testid="welcome-document-workshop-action"
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full border border-accent/35 bg-accent/10 text-xs font-medium text-accent hover:bg-accent/15 transition-colors"
+                  >
+                    <FileSearch className="w-3.5 h-3.5" />
+                    <span>{t('welcome.documentWorkshopAction', 'Atelier Word')}</span>
+                  </button>
+                </Tooltip>
               )}
             </div>
           )}
@@ -618,39 +620,41 @@ export function WelcomeView() {
           {/* Bottom Actions */}
           <div className="flex items-center justify-between pt-3 border-t border-border-muted">
             <div className="flex items-center gap-3">
-              <button
-                type="button"
-                onClick={() => setMemoryEnabled(!memoryEnabled)}
-                className={`flex items-center gap-2 text-sm transition-colors ${
-                  memoryEnabled
-                    ? 'text-accent hover:text-accent-hover'
-                    : 'text-text-secondary hover:text-text-primary'
-                }`}
-                title={t('welcome.toggleMemory', 'Toggle cross-session memory')}
-              >
-                <Brain className="w-4 h-4" />
-                <span className="hidden sm:inline">
-                  {memoryEnabled
-                    ? t('welcome.memoryEnabled', 'Memory On')
-                    : t('welcome.memoryDisabled', 'Memory Off')}
-                </span>
-              </button>
+              <Tooltip label={t('welcome.toggleMemory', 'Toggle cross-session memory')} side="top">
+                <button
+                  type="button"
+                  onClick={() => setMemoryEnabled(!memoryEnabled)}
+                  className={`flex items-center gap-2 text-sm transition-colors ${
+                    memoryEnabled
+                      ? 'text-accent hover:text-accent-hover'
+                      : 'text-text-secondary hover:text-text-primary'
+                  }`}
+                >
+                  <Brain className="w-4 h-4" />
+                  <span className="hidden sm:inline">
+                    {memoryEnabled
+                      ? t('welcome.memoryEnabled', 'Memory On')
+                      : t('welcome.memoryDisabled', 'Memory Off')}
+                  </span>
+                </button>
+              </Tooltip>
 
-              <button
-                type="button"
-                onClick={handleSelectFolder}
-                className={`flex items-center gap-2 text-sm transition-colors ${
-                  workingDir
-                    ? 'text-text-secondary hover:text-text-primary'
-                    : 'text-accent hover:text-accent-hover'
-                }`}
-                title={workingDir || t('welcome.selectWorkingFolder')}
-              >
-                <FolderOpen className="w-4 h-4" />
-                <span>
-                  {workingDir ? workingDir.split(/[/\\]/).pop() : t('welcome.selectWorkingFolder')}
-                </span>
-              </button>
+              <Tooltip label={workingDir || t('welcome.selectWorkingFolder')} side="top">
+                <button
+                  type="button"
+                  onClick={handleSelectFolder}
+                  className={`flex items-center gap-2 text-sm transition-colors ${
+                    workingDir
+                      ? 'text-text-secondary hover:text-text-primary'
+                      : 'text-accent hover:text-accent-hover'
+                  }`}
+                >
+                  <FolderOpen className="w-4 h-4" />
+                  <span>
+                    {workingDir ? workingDir.split(/[/\\]/).pop() : t('welcome.selectWorkingFolder')}
+                  </span>
+                </button>
+              </Tooltip>
 
               {isElectron && (
                 <button
