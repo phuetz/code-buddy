@@ -409,6 +409,46 @@ async function getDetectedProvider(): Promise<DetectedProvider | null> {
   await ensureEnvLoaded();
   cachedProvider = detectProviderFromEnv();
 
+  // xAI subscription login (`buddy login xai`). Token load + refresh is async,
+  // so it can't live in the sync env detector. A valid login takes precedence
+  // over an ambient local/env provider (mirrors ChatGPT-login precedence) — but
+  // ONLY when the token actually resolves, so a stale login never strands a
+  // working provider. Without this, `buddy login xai` stored tokens the runtime
+  // never consumed.
+  {
+    const xaiOverride = process.env.CODEBUDDY_PROVIDER?.toLowerCase();
+    const xaiWanted =
+      xaiOverride === 'xai' ||
+      (!xaiOverride &&
+        cachedProvider?.provider !== 'chatgpt' &&
+        !process.env.GROK_API_KEY &&
+        !process.env.XAI_API_KEY);
+    if (xaiWanted) {
+      try {
+        const { hasXaiCredentials, getValidXaiAccessToken } = await import(
+          './providers/xai-oauth.js'
+        );
+        if (hasXaiCredentials()) {
+          const token = await getValidXaiAccessToken();
+          if (token) {
+            cachedProvider = {
+              provider: 'grok',
+              apiKey: token,
+              baseURL: 'https://api.x.ai/v1',
+              defaultModel: process.env.GROK_MODEL || 'grok-3-latest',
+            };
+          } else {
+            logger.warn('xAI login found but no valid access token — run `buddy login xai` again.');
+          }
+        }
+      } catch (err) {
+        logger.debug('xAI login resolution skipped', {
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
+  }
+
   // Honor an onboarded LOCAL provider (Ollama / LM Studio) persisted to
   // user-settings.json by `buddy onboard`. Env detection only inspects
   // OLLAMA_HOST/oauth files, so a user who completed the wizard and picked
