@@ -42,7 +42,7 @@ interface RawSensoryFrame {
 const KNOWN_MODALITIES = new Set(['audio', 'vision', 'screen', 'vital', 'ui']);
 
 function sanitizeKind(kind: string): string {
-  return kind.replace(/[^a-zA-Z0-9_:.\-]/g, '').slice(0, 64);
+  return kind.replace(/[^a-zA-Z0-9_:.-]/g, '').slice(0, 64);
 }
 
 export function startSensoryBridge(options: SensoryBridgeOptions = {}): SensoryBridgeHandle {
