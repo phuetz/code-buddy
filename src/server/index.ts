@@ -1112,6 +1112,19 @@ export async function startServer(userConfig: Partial<ServerConfig> = {}): Promi
       logger.info(`Metrics Dashboard: ${baseUrl}/api/metrics/dashboard`);
       logger.info(`Docs: ${baseUrl}/api/docs`);
       logger.info(`WebSocket: ${config.websocketEnabled ? 'Enabled (/ws)' : 'Disabled'}`);
+      // Sensory nervous-system bridge (opt-in): ingress for the Rust buddy-sense
+      // daemon → internal event bus → reactions. Loopback-only.
+      if (process.env.CODEBUDDY_SENSORY === 'true') {
+        try {
+          const { startSensoryBridge } = await import('../sensory/sensory-bridge.js');
+          const { wireSensoryReactions } = await import('../sensory/reactions.js');
+          startSensoryBridge();
+          wireSensoryReactions();
+          logger.info('Sensory bridge: Enabled (buddy-sense → event bus)');
+        } catch (err) {
+          logger.warn(`Sensory bridge failed to start: ${err instanceof Error ? err.message : String(err)}`);
+        }
+      }
       logger.info(`Auth: ${config.authEnabled ? 'Enabled' : 'Disabled'}`);
       if (!isLoopbackHost(config.host)) {
         logger.warn(
