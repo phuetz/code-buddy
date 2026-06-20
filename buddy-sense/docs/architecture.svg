@@ -1,0 +1,132 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="640" viewBox="0 0 1000 640" font-family="Segoe UI, Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L8,3 L0,6 z" fill="#5a6b7b"/>
+    </marker>
+    <style>
+      .title { font-size: 22px; font-weight: 700; fill: #1b2733; }
+      .sub { font-size: 12px; fill: #5a6b7b; }
+      .lane { font-size: 13px; font-weight: 700; fill: #34465a; letter-spacing: .5px; }
+      .box { fill: #ffffff; stroke: #c3ced9; stroke-width: 1.5; rx: 8; }
+      .name { font-size: 13px; font-weight: 600; fill: #1b2733; }
+      .desc { font-size: 11px; fill: #6b7a89; }
+      .edge { stroke: #5a6b7b; stroke-width: 1.6; fill: none; }
+      .brain { font-size: 10.5px; font-style: italic; fill: #8a6d3b; }
+    </style>
+  </defs>
+
+  <text x="32" y="38" class="title">buddy-sense — the nervous system</text>
+  <text x="32" y="58" class="sub">Parallel senses (Rust) → thalamus → WebSocket bridge → Code Buddy's event bus (TypeScript). Local, $0, opt-in.</text>
+
+  <!-- Lane backgrounds -->
+  <rect x="20" y="76" width="430" height="544" rx="12" fill="#f3f7fb" stroke="#dde6ee"/>
+  <rect x="470" y="76" width="510" height="544" rx="12" fill="#f6f4fb" stroke="#e6e0ee"/>
+  <text x="40" y="98" class="lane">buddy-sense  ·  RUST DAEMON</text>
+  <text x="490" y="98" class="lane">CODE BUDDY  ·  TYPESCRIPT</text>
+
+  <!-- Senses -->
+  <text x="40" y="124" class="sub">SENSES (run concurrently)</text>
+  <g>
+    <rect x="40" y="132" width="190" height="50" class="box"/>
+    <text x="50" y="152" class="name">audio</text>
+    <text x="50" y="168" class="desc">cpal / WAV · energy VAD</text>
+    <text x="50" y="178" class="desc">+ Silero neural (opt-in)</text>
+  </g>
+  <g>
+    <rect x="40" y="190" width="190" height="44" class="box"/>
+    <text x="50" y="210" class="name">vital — heartbeat</text>
+    <text x="50" y="226" class="desc">autonomic rhythm · uptime, load</text>
+  </g>
+  <g>
+    <rect x="40" y="242" width="190" height="44" class="box"/>
+    <text x="50" y="262" class="name">vision</text>
+    <text x="50" y="278" class="desc">motion detect → camera_analyze</text>
+  </g>
+  <g>
+    <rect x="40" y="294" width="190" height="44" class="box"/>
+    <text x="50" y="314" class="name">screen</text>
+    <text x="50" y="330" class="desc">xcap change-detect (live-screen)</text>
+  </g>
+  <g>
+    <rect x="40" y="346" width="190" height="44" class="box"/>
+    <text x="50" y="366" class="name">ui</text>
+    <text x="50" y="382" class="desc">AT-SPI focus (live-ui)</text>
+  </g>
+  <text x="40" y="408" class="sub">bounded mpsc (backpressure) ▸</text>
+
+  <!-- Thalamus -->
+  <g>
+    <rect x="250" y="150" width="180" height="190" class="box" fill="#eaf2fb" stroke="#9fc0e3"/>
+    <text x="262" y="174" class="name">THALAMUS (bus.rs)</text>
+    <text x="262" y="196" class="desc">• coalesce high-rate bursts</text>
+    <text x="262" y="212" class="desc">• salience gate (escalate)</text>
+    <text x="262" y="228" class="desc">• vital never coalesced</text>
+    <text x="262" y="244" class="desc">• ring-buffer memory</text>
+    <text x="262" y="260" class="desc">• broadcast (fan-out)</text>
+    <text x="262" y="300" class="brain">≈ attention gate</text>
+    <text x="262" y="316" class="brain">≈ global workspace</text>
+  </g>
+  <!-- sense -> thalamus arrows -->
+  <path class="edge" d="M230,157 L250,200" marker-end="url(#arrow)"/>
+  <path class="edge" d="M230,212 L250,222" marker-end="url(#arrow)"/>
+  <path class="edge" d="M230,264 L250,244" marker-end="url(#arrow)"/>
+  <path class="edge" d="M230,316 L250,266" marker-end="url(#arrow)"/>
+  <path class="edge" d="M230,368 L250,290" marker-end="url(#arrow)"/>
+
+  <!-- Bridge -->
+  <g>
+    <rect x="250" y="420" width="180" height="56" class="box"/>
+    <text x="262" y="442" class="name">bridge (WebSocket)</text>
+    <text x="262" y="460" class="desc">serialize + token · reconnect</text>
+  </g>
+  <path class="edge" d="M340,340 L340,420" marker-end="url(#arrow)"/>
+
+  <!-- WS crossing -->
+  <path class="edge" stroke-dasharray="5 4" d="M430,448 L470,300 L500,260" marker-end="url(#arrow)"/>
+  <text x="436" y="500" class="sub">ws://127.0.0.1:8129</text>
+  <text x="436" y="514" class="desc">loopback · Origin-checked · token</text>
+
+  <!-- Code Buddy side -->
+  <g>
+    <rect x="500" y="120" width="220" height="48" class="box"/>
+    <text x="512" y="140" class="name">sensory-bridge.ts</text>
+    <text x="512" y="156" class="desc">loopback WS → getGlobalEventBus()</text>
+  </g>
+  <g>
+    <rect x="500" y="200" width="220" height="46" class="box" fill="#efeafb" stroke="#b9a6e3"/>
+    <text x="512" y="220" class="name">event bus</text>
+    <text x="512" y="236" class="desc">emit('sensory:perception')</text>
+  </g>
+  <path class="edge" d="M610,168 L610,200" marker-end="url(#arrow)"/>
+
+  <!-- reactions -->
+  <text x="500" y="276" class="sub">SUBSCRIBERS (reactions)</text>
+  <g>
+    <rect x="500" y="284" width="220" height="44" class="box"/>
+    <text x="512" y="304" class="name">reactions → short-term memory</text>
+    <text x="512" y="320" class="desc">sensory-memory (rolling buffer)</text>
+  </g>
+  <g>
+    <rect x="500" y="336" width="220" height="44" class="box"/>
+    <text x="512" y="356" class="name">heartbeat-scheduler</text>
+    <text x="512" y="372" class="desc">treatments every N beats (pacemaker)</text>
+  </g>
+  <g>
+    <rect x="750" y="336" width="210" height="44" class="box" fill="#eafbf1" stroke="#9fe3bf"/>
+    <text x="762" y="356" class="name">dreaming</text>
+    <text x="762" y="372" class="desc">consolidate → CODEBUDDY_MEMORY.md</text>
+  </g>
+  <g>
+    <rect x="750" y="284" width="210" height="44" class="box"/>
+    <text x="762" y="304" class="name">vision / screen / ui reactions</text>
+    <text x="762" y="320" class="desc">camera_analyze · OCR · percepts.jsonl</text>
+  </g>
+  <path class="edge" d="M720,222 L750,300" marker-end="url(#arrow)"/>
+  <path class="edge" d="M610,246 L610,284" marker-end="url(#arrow)"/>
+  <path class="edge" d="M610,328 L610,336" marker-end="url(#arrow)"/>
+  <path class="edge" d="M720,358 L750,358" marker-end="url(#arrow)"/>
+  <text x="724" y="352" class="brain">every N beats</text>
+
+  <!-- footer -->
+  <text x="40" y="600" class="desc">Heavy analysis (STT, vision) is delegated to Code Buddy — the daemon stays light. Opt-in features: live-mic, live-screen, live-ui, neural-vad.</text>
+</svg>

@@ -148,4 +148,24 @@ mod tests {
         assert_eq!(recent[0].ts_ms, 4); // most recent first
         assert_eq!(recent[1].ts_ms, 3);
     }
+
+    #[tokio::test]
+    async fn run_loop_broadcasts_admitted_and_drops_coalesced() {
+        let (stx, srx) = mpsc::channel::<SensoryEvent>(16);
+        let (btx, mut brx) = broadcast::channel::<SensoryEvent>(16);
+        let thalamus = Thalamus::new(8, 100);
+        let handle = tokio::spawn(async move { thalamus.run(srx, btx).await });
+
+        stx.send(ev(Modality::Vision, "motion", 0, 10)).await.unwrap(); // passes
+        stx.send(ev(Modality::Vision, "motion", 30, 10)).await.unwrap(); // within window → coalesced
+        stx.send(ev(Modality::Audio, "speech_start", 40, 200)).await.unwrap(); // salient → passes
+        drop(stx); // close the sense channel → the run loop ends after draining
+        handle.await.unwrap();
+
+        let mut kinds = Vec::new();
+        while let Ok(e) = brx.try_recv() {
+            kinds.push(e.kind);
+        }
+        assert_eq!(kinds, vec!["motion", "speech_start"]); // the 2nd motion was dropped
+    }
 }

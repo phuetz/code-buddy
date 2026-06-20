@@ -1,0 +1,74 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="460" viewBox="0 0 960 460" font-family="Segoe UI, Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="a2" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L8,3 L0,6 z" fill="#5a6b7b"/>
+    </marker>
+    <style>
+      .t  { font-size: 21px; font-weight: 700; fill: #1b2733; }
+      .s  { font-size: 12px; fill: #5a6b7b; }
+      .b  { fill: #ffffff; stroke: #c3ced9; stroke-width: 1.5; }
+      .n  { font-size: 13px; font-weight: 600; fill: #1b2733; }
+      .d  { font-size: 11px; fill: #6b7a89; }
+      .e  { stroke: #5a6b7b; stroke-width: 1.6; fill: none; }
+      .i  { font-size: 10.5px; font-style: italic; fill: #8a6d3b; }
+    </style>
+  </defs>
+
+  <text x="32" y="40" class="t">Heartbeat-paced memory consolidation  ·  "dreaming"</text>
+  <text x="32" y="60" class="s">The autonomic heartbeat is a pacemaker: every N beats it consolidates short-term perception into long-term memory.</text>
+
+  <!-- Heartbeat pacemaker -->
+  <rect x="32" y="92" width="250" height="70" rx="10" class="b" fill="#fdeef0" stroke="#e6a9b4"/>
+  <text x="46" y="116" class="n">vital — heartbeat (pacemaker)</text>
+  <text x="46" y="136" class="d">beat every BUDDY_SENSE_HEARTBEAT_MS</text>
+  <text x="46" y="152" class="d">♥ ♥ ♥ ♥ ♥ ♥ … (uptime, load)</text>
+
+  <!-- Perceptions -> short-term memory -->
+  <rect x="32" y="200" width="250" height="64" rx="10" class="b"/>
+  <text x="46" y="224" class="n">perceptions (audio/vision/…)</text>
+  <text x="46" y="244" class="d">every event → reactions push into</text>
+  <text x="46" y="258" class="d">short-term sensory memory (rolling)</text>
+
+  <rect x="360" y="200" width="230" height="64" rx="10" class="b" fill="#eef4fb" stroke="#9fc0e3"/>
+  <text x="374" y="224" class="n">short-term memory</text>
+  <text x="374" y="244" class="d">bounded buffer (working memory)</text>
+  <text x="374" y="258" class="d">drained each dreaming pass</text>
+  <path class="e" d="M282,232 L360,232" marker-end="url(#a2)"/>
+
+  <!-- Dreaming pass -->
+  <rect x="360" y="92" width="230" height="76" rx="10" class="b" fill="#eafbf1" stroke="#9fe3bf"/>
+  <text x="374" y="116" class="n">dreaming pass</text>
+  <text x="374" y="136" class="d">consolidate(): counts by kind,</text>
+  <text x="374" y="150" class="d">salient events, time window, avg load</text>
+  <text x="374" y="164" class="d">(drain → summarize)</text>
+  <path class="e" d="M157,162 C157,185 300,130 360,130" marker-end="url(#a2)"/>
+  <text x="180" y="150" class="i">every N beats →</text>
+  <path class="e" d="M475,200 L475,168" marker-end="url(#a2)"/>
+
+  <!-- Outputs -->
+  <rect x="670" y="92" width="258" height="64" rx="10" class="b"/>
+  <text x="684" y="116" class="n">dream journal</text>
+  <text x="684" y="136" class="d">.codebuddy/companion/dreams.jsonl</text>
+  <text x="684" y="150" class="d">(rotated past 512 KB — no disk hazard)</text>
+  <path class="e" d="M590,124 L670,124" marker-end="url(#a2)"/>
+
+  <rect x="670" y="196" width="258" height="72" rx="10" class="b" fill="#efeafb" stroke="#b9a6e3"/>
+  <text x="684" y="220" class="n">long-term memory</text>
+  <text x="684" y="240" class="d">salient dreams → remember('dream:recent')</text>
+  <text x="684" y="254" class="d">.codebuddy/CODEBUDDY_MEMORY.md</text>
+  <text x="684" y="266" class="d">— the file the agent actually reads</text>
+  <path class="e" d="M590,150 C640,150 640,220 670,224" marker-end="url(#a2)"/>
+  <text x="600" y="196" class="i">salient only</text>
+
+  <text x="32" y="330" class="i">Heartbeat-paced analogue of Hermes's curator/cron and OpenClaw's dreaming — driven by the heart, not a wall clock.</text>
+
+  <!-- mini legend -->
+  <rect x="32" y="356" width="14" height="14" rx="3" fill="#fdeef0" stroke="#e6a9b4"/>
+  <text x="52" y="368" class="d">pacemaker</text>
+  <rect x="140" y="356" width="14" height="14" rx="3" fill="#eafbf1" stroke="#9fe3bf"/>
+  <text x="160" y="368" class="d">consolidation</text>
+  <rect x="260" y="356" width="14" height="14" rx="3" fill="#efeafb" stroke="#b9a6e3"/>
+  <text x="280" y="368" class="d">long-term memory</text>
+  <rect x="400" y="356" width="14" height="14" rx="3" fill="#eef4fb" stroke="#9fc0e3"/>
+  <text x="420" y="368" class="d">short-term memory</text>
+</svg>

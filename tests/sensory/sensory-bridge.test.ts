@@ -81,4 +81,29 @@ describe('sensory bridge → event bus → reaction', () => {
       await bridge.close();
     }
   });
+
+  it('clamps out-of-range salience and drops a negative ts_ms (UI frame)', async () => {
+    const bridge = startSensoryBridge({ port: 18234 });
+    const received: Perception[] = [];
+    const unwire = wireSensoryReactions((p) => received.push(p));
+    try {
+      const ws = await open(18234);
+      ws.send(JSON.stringify({ modality: 'ui', kind: 'app_focus', salience: 999, ts_ms: -5, payload: { app: 'Code' } }));
+      await new Promise<void>((resolve) => {
+        const t = setInterval(() => {
+          if (received.length) {
+            clearInterval(t);
+            resolve();
+          }
+        }, 10);
+      });
+      ws.close();
+      expect(received[0]!.modality).toBe('ui');
+      expect(received[0]!.salience).toBe(255); // clamped from 999
+      expect(received[0]!.tsMs).toBeUndefined(); // negative ts_ms is rejected
+    } finally {
+      unwire();
+      await bridge.close();
+    }
+  });
 });
