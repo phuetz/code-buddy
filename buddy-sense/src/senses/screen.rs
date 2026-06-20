@@ -18,7 +18,7 @@ const SCREEN_SALIENCE: u8 = 140;
 /// Detect screen changes across a sequence of downsampled grayscale frames.
 /// Rising-edge hysteresis (one event per change, not a storm), emitting
 /// `screen/change`. Pure + testable headless.
-pub fn detect_change_events(frames: &[Vec<u8>], threshold: f64) -> Vec<SensoryEvent> {
+pub fn detect_change_events(frames: &[Vec<u8>], threshold: f64, frame_ms: u64) -> Vec<SensoryEvent> {
     let mut out = Vec::new();
     let mut changed = false;
     let mut ts: u64 = 0;
@@ -36,7 +36,7 @@ pub fn detect_change_events(frames: &[Vec<u8>], threshold: f64) -> Vec<SensoryEv
         } else if changed && score < threshold {
             changed = false;
         }
-        ts += 1;
+        ts += frame_ms; // ms, consistent with the audio sense (not a frame index)
     }
     out
 }
@@ -108,14 +108,14 @@ mod tests {
     #[test]
     fn static_screen_produces_no_change() {
         let f = vec![120u8; 64];
-        assert!(detect_change_events(&[f.clone(), f.clone(), f.clone()], 0.05).is_empty());
+        assert!(detect_change_events(&[f.clone(), f.clone(), f.clone()], 0.05, 100).is_empty());
     }
 
     #[test]
     fn a_changed_screen_fires_one_change_event() {
         let a = vec![20u8; 64];
         let b = vec![220u8; 64];
-        let events = detect_change_events(&[a.clone(), a.clone(), b.clone(), b.clone()], 0.1);
+        let events = detect_change_events(&[a.clone(), a.clone(), b.clone(), b.clone()], 0.1, 100);
         assert_eq!(events.len(), 1);
         assert_eq!(events[0].modality, Modality::Screen);
         assert_eq!(events[0].kind, "change");

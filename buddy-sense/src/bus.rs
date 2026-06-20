@@ -53,7 +53,9 @@ impl Memory {
 /// the same modality? Coalesces a burst of the same low-salience kind within
 /// `window_ms`. Salient events always pass.
 pub fn should_coalesce(prev: Option<&SensoryEvent>, ev: &SensoryEvent, window_ms: u64) -> bool {
-    if ev.salience >= ESCALATE_SALIENCE {
+    // Salient events bypass coalescing; vital signs (the heartbeat) are a
+    // deliberate rhythm and must never be dropped, even at fast rates.
+    if ev.salience >= ESCALATE_SALIENCE || ev.modality == Modality::Vital {
         return false;
     }
     match prev {
@@ -125,6 +127,14 @@ mod tests {
         let mut t = Thalamus::new(8, 1000);
         assert!(t.admit(ev(Modality::Audio, "speech_start", 0, 200)).is_some());
         assert!(t.admit(ev(Modality::Audio, "speech_start", 10, 200)).is_some()); // salient → not coalesced
+    }
+
+    #[test]
+    fn vital_heartbeat_is_never_coalesced_even_at_fast_rates() {
+        let mut t = Thalamus::new(8, 1000); // 1s window — a 10ms heartbeat would coalesce if not excluded
+        assert!(t.admit(ev(Modality::Vital, "heartbeat", 0, 5)).is_some());
+        assert!(t.admit(ev(Modality::Vital, "heartbeat", 10, 5)).is_some());
+        assert!(t.admit(ev(Modality::Vital, "heartbeat", 20, 5)).is_some());
     }
 
     #[test]

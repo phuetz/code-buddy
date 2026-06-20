@@ -70,13 +70,17 @@ export function startSensoryBridge(options: SensoryBridgeOptions = {}): SensoryB
       if (token && frame.token !== token) return;
       if (!frame.modality || !frame.kind) return;
 
+      // Validate/clamp numeric fields so a malformed frame can't poison downstream.
+      const salience = Number.isFinite(frame.salience) ? Math.max(0, Math.min(255, Math.round(frame.salience as number))) : 0;
+      const tsMs = Number.isFinite(frame.ts_ms) && (frame.ts_ms as number) >= 0 ? (frame.ts_ms as number) : undefined;
+
       bus.emit('sensory:perception', {
         source: 'buddy-sense',
         metadata: {
           modality: frame.modality,
           kind: frame.kind,
-          salience: frame.salience ?? 0,
-          tsMs: frame.ts_ms,
+          salience,
+          tsMs,
           payload: frame.payload,
         },
       });

@@ -919,6 +919,9 @@ function createApp(config: ServerConfig): Application {
   return app;
 }
 
+/** Guards the sensory layer against double-wiring on a second in-process start. */
+let sensoryWired = false;
+
 /**
  * Start the server
  */
@@ -1114,7 +1117,8 @@ export async function startServer(userConfig: Partial<ServerConfig> = {}): Promi
       logger.info(`WebSocket: ${config.websocketEnabled ? 'Enabled (/ws)' : 'Disabled'}`);
       // Sensory nervous-system bridge (opt-in): ingress for the Rust buddy-sense
       // daemon → internal event bus → reactions. Loopback-only.
-      if (process.env.CODEBUDDY_SENSORY === 'true') {
+      if (process.env.CODEBUDDY_SENSORY === 'true' && !sensoryWired) {
+        sensoryWired = true; // wire once per process (a 2nd start would double listeners + re-bind the port)
         try {
           const { startSensoryBridge } = await import('../sensory/sensory-bridge.js');
           const { wireSensoryReactions } = await import('../sensory/reactions.js');

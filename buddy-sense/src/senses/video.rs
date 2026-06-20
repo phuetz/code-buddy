@@ -28,7 +28,7 @@ pub fn motion_score(prev: &[u8], frame: &[u8]) -> f64 {
 /// Detect motion across a frame sequence. Emits a `vision/motion` event when the
 /// score crosses `threshold` upward (hysteresis: re-arms only after it drops back
 /// below), so a sustained scene change yields one event, not a storm.
-pub fn detect_motion_events(frames: &[Vec<u8>], threshold: f64) -> Vec<SensoryEvent> {
+pub fn detect_motion_events(frames: &[Vec<u8>], threshold: f64, frame_ms: u64) -> Vec<SensoryEvent> {
     let mut out = Vec::new();
     let mut moving = false;
     let mut ts: u64 = 0;
@@ -46,7 +46,7 @@ pub fn detect_motion_events(frames: &[Vec<u8>], threshold: f64) -> Vec<SensoryEv
         } else if moving && score < threshold {
             moving = false;
         }
-        ts += 1;
+        ts += frame_ms; // ms, consistent with the audio sense (not a frame index)
     }
     out
 }
@@ -59,7 +59,7 @@ mod tests {
     fn static_frames_produce_no_motion() {
         let frame = vec![100u8; 64];
         let frames = vec![frame.clone(), frame.clone(), frame.clone()];
-        assert!(detect_motion_events(&frames, 0.05).is_empty());
+        assert!(detect_motion_events(&frames, 0.05, 100).is_empty());
     }
 
     #[test]
@@ -68,7 +68,7 @@ mod tests {
         let bright = vec![240u8; 64];
         // calm, calm, bright (motion), bright (sustained → no second event)
         let frames = vec![calm.clone(), calm.clone(), bright.clone(), bright.clone()];
-        let events = detect_motion_events(&frames, 0.1);
+        let events = detect_motion_events(&frames, 0.1, 100);
         assert_eq!(events.len(), 1);
         assert_eq!(events[0].modality, Modality::Vision);
         assert_eq!(events[0].kind, "motion");
