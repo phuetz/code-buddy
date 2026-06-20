@@ -1121,6 +1121,12 @@ export async function startServer(userConfig: Partial<ServerConfig> = {}): Promi
           const { getHeartbeatScheduler } = await import('../sensory/heartbeat-scheduler.js');
           startSensoryBridge();
           wireSensoryReactions();
+          // Vision reaction (opt-in) — vision/motion → camera_analyze (local gemma).
+          if (process.env.CODEBUDDY_SENSORY_CAMERA === 'true') {
+            const { wireVisionReaction } = await import('../sensory/vision-reaction.js');
+            wireVisionReaction();
+            logger.info('Sensory vision reaction: Enabled (vision/motion → camera_analyze)');
+          }
           // Heartbeat pacemaker — heartbeats trigger periodic processing (every N beats).
           const heart = getHeartbeatScheduler();
           const everyBeats = Math.max(1, Number(process.env.CODEBUDDY_HEARTBEAT_EVERY ?? 10));
