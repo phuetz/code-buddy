@@ -35,6 +35,10 @@ export interface SkillMetadata {
   disableModelInvocation?: boolean;
   /** Self-improvement: if true, curation won't overwrite/remove/consolidate this skill */
   pinned?: boolean;
+  /** Provenance: this skill was imported from an external source. */
+  imported?: boolean;
+  /** Provenance: label of the source it was imported from (e.g. "hermes"). */
+  source?: string;
 }
 
 export interface SkillRequirements {
