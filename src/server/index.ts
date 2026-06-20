@@ -1118,9 +1118,19 @@ export async function startServer(userConfig: Partial<ServerConfig> = {}): Promi
         try {
           const { startSensoryBridge } = await import('../sensory/sensory-bridge.js');
           const { wireSensoryReactions } = await import('../sensory/reactions.js');
+          const { getHeartbeatScheduler } = await import('../sensory/heartbeat-scheduler.js');
           startSensoryBridge();
           wireSensoryReactions();
-          logger.info('Sensory bridge: Enabled (buddy-sense → event bus)');
+          // Heartbeat pacemaker — heartbeats trigger periodic processing (every N beats).
+          const heart = getHeartbeatScheduler();
+          const everyBeats = Math.max(1, Number(process.env.CODEBUDDY_HEARTBEAT_EVERY ?? 10));
+          heart.register({
+            name: 'pacemaker-tick',
+            everyBeats,
+            handler: (ctx) => logger.info(`[heartbeat] pacemaker tick — beat ${ctx.beat} (load ${ctx.load1 ?? '?'})`),
+          });
+          heart.start();
+          logger.info(`Sensory bridge: Enabled (buddy-sense → event bus; heartbeat treatments every ${everyBeats} beats)`);
         } catch (err) {
           logger.warn(`Sensory bridge failed to start: ${err instanceof Error ? err.message : String(err)}`);
         }

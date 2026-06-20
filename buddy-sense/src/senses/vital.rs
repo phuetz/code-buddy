@@ -33,9 +33,12 @@ pub fn heartbeat_event(beat: u64, uptime_ms: u64, interval_ms: u64) -> SensoryEv
     )
 }
 
-/// Run the heartbeat forever (until the thalamus channel closes), emitting a beat
-/// every `interval_ms`. Spawn it alongside the other senses.
-pub async fn run(tx: mpsc::Sender<SensoryEvent>, interval_ms: u64) {
+/// Run the heartbeat, emitting a beat every `interval_ms`. With `max_beats =
+/// Some(n)` it stops after `n` beats (a finite burst — "a number of beats");
+/// with `None` it beats forever (until the thalamus channel closes). The rate
+/// (interval) dials how MANY beats per minute → how often treatments are
+/// triggered downstream. Spawn it alongside the other senses.
+pub async fn run(tx: mpsc::Sender<SensoryEvent>, interval_ms: u64, max_beats: Option<u64>) {
     let started = now_ms();
     let mut beat: u64 = 0;
     let mut ticker = tokio::time::interval(std::time::Duration::from_millis(interval_ms.max(1)));
@@ -45,6 +48,11 @@ pub async fn run(tx: mpsc::Sender<SensoryEvent>, interval_ms: u64) {
         let uptime_ms = now_ms().saturating_sub(started);
         if tx.send(heartbeat_event(beat, uptime_ms, interval_ms)).await.is_err() {
             break; // thalamus gone → stop beating
+        }
+        if let Some(max) = max_beats {
+            if beat >= max {
+                break;
+            }
         }
     }
 }
@@ -67,12 +75,23 @@ mod tests {
     #[tokio::test]
     async fn run_beats_at_the_interval() {
         let (tx, mut rx) = mpsc::channel::<SensoryEvent>(8);
-        let handle = tokio::spawn(async move { run(tx, 20).await });
+        let handle = tokio::spawn(async move { run(tx, 20, None).await });
         let first = rx.recv().await.unwrap();
         let second = rx.recv().await.unwrap();
         assert_eq!(first.kind, "heartbeat");
         assert_eq!(first.payload["beat"], 1);
         assert_eq!(second.payload["beat"], 2);
         handle.abort();
+    }
+
+    #[tokio::test]
+    async fn run_stops_after_max_beats() {
+        let (tx, mut rx) = mpsc::channel::<SensoryEvent>(8);
+        tokio::spawn(async move { run(tx, 5, Some(3)).await });
+        let mut count = 0;
+        while rx.recv().await.is_some() {
+            count += 1;
+        }
+        assert_eq!(count, 3); // exactly the requested number of beats, then stops
     }
 }

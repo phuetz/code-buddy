@@ -47,9 +47,13 @@ async fn main() {
         .ok()
         .and_then(|s| s.parse::<u64>().ok())
         .unwrap_or(1000);
+    // Optional: stop after N beats (a finite burst). None → beats forever.
+    let heartbeat_count = std::env::var("BUDDY_SENSE_HEARTBEAT_COUNT")
+        .ok()
+        .and_then(|s| s.parse::<u64>().ok());
     {
         let tx = sense_tx.clone();
-        tokio::spawn(async move { senses::vital::run(tx, heartbeat_ms).await });
+        tokio::spawn(async move { senses::vital::run(tx, heartbeat_ms, heartbeat_count).await });
     }
 
     match wav {
