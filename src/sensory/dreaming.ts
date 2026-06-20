@@ -8,7 +8,7 @@
  * @module sensory/dreaming
  */
 
-import { appendFile, mkdir } from 'fs/promises';
+import { appendFile, mkdir, stat, rename } from 'fs/promises';
 import path from 'path';
 
 import { getSensoryMemory } from './sensory-memory.js';
@@ -87,7 +87,15 @@ export async function runDreamingPass(options: DreamingOptions = {}): Promise<Dr
   try {
     const dir = path.join(options.cwd ?? process.cwd(), '.codebuddy', 'companion');
     await mkdir(dir, { recursive: true });
-    await appendFile(path.join(dir, 'dreams.jsonl'), `${JSON.stringify(summary)}\n`, 'utf8');
+    const file = path.join(dir, 'dreams.jsonl');
+    // Rotate when large (the disk-guard lesson): keep one .1 backup, never grow unbounded.
+    try {
+      const info = await stat(file);
+      if (info.size > 512 * 1024) await rename(file, `${file}.1`);
+    } catch {
+      /* no file yet */
+    }
+    await appendFile(file, `${JSON.stringify(summary)}\n`, 'utf8');
   } catch (err) {
     logger.warn(`[dreaming] could not persist dream: ${err instanceof Error ? err.message : String(err)}`);
   }
@@ -113,9 +121,14 @@ export async function promoteSalientDream(summary: DreamSummary): Promise<void> 
     const { getMemoryManager } = await import('../memory/persistent-memory.js');
     const manager = getMemoryManager();
     await manager.initialize();
-    const kinds = Object.entries(summary.byKind)
-      .map(([k, n]) => `${k}×${n}`)
-      .join(', ');
+    // Cap the kinds string (a daemon could emit many distinct kinds → an
+    // oversized write that the memory char-limit would reject).
+    const kindEntries = Object.entries(summary.byKind).sort((a, b) => b[1] - a[1]);
+    const kinds =
+      kindEntries
+        .slice(0, 12)
+        .map(([k, n]) => `${k}×${n}`)
+        .join(', ') + (kindEntries.length > 12 ? `, +${kindEntries.length - 12} more` : '');
     const top = summary.salient
       .slice(0, 5)
       .map((s) => `${s.modality}/${s.kind}`)

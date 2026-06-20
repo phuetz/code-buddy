@@ -1122,10 +1122,16 @@ export async function startServer(userConfig: Partial<ServerConfig> = {}): Promi
           startSensoryBridge();
           wireSensoryReactions();
           // Vision reaction (opt-in) — vision/motion → camera_analyze (local gemma).
+          // Requires a shared token: a frame can trigger the webcam, so refuse to
+          // wire it on an unauthenticated bridge.
           if (process.env.CODEBUDDY_SENSORY_CAMERA === 'true') {
-            const { wireVisionReaction } = await import('../sensory/vision-reaction.js');
-            wireVisionReaction();
-            logger.info('Sensory vision reaction: Enabled (vision/motion → camera_analyze)');
+            if (!process.env.CODEBUDDY_SENSORY_TOKEN) {
+              logger.warn('Sensory vision reaction NOT enabled: set CODEBUDDY_SENSORY_TOKEN to allow camera triggering.');
+            } else {
+              const { wireVisionReaction } = await import('../sensory/vision-reaction.js');
+              wireVisionReaction();
+              logger.info('Sensory vision reaction: Enabled (vision/motion → camera_analyze)');
+            }
           }
           // Screen reaction (opt-in) — screen/change → percept (+ pluggable OCR/describe).
           if (process.env.CODEBUDDY_SENSORY_SCREEN === 'true') {

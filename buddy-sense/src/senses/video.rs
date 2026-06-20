@@ -1,10 +1,11 @@
 //! Video sense — light motion detection. Compares downsampled grayscale frames;
 //! rising motion emits a salient `vision/motion` event. The heavy describe
 //! (camera_analyze with a local vision model) stays in Code Buddy — this sense
-//! only decides "something moved." Live capture (nokhwa/V4L2) is opt-in behind
-//! the `live-camera` feature; the detector itself is pure + testable headless.
+//! only decides "something moved." DETECTOR CORE ONLY for now: there is no live
+//! camera capture path yet (frames are fed externally / by tests). The live
+//! demo used Code Buddy's existing camera_analyze. Pure + testable headless.
 
-// Exercised by tests + the live-camera capture path; not called by the default binary.
+// Exercised by tests; not called by the default binary (no live path yet).
 #![allow(dead_code)]
 
 use crate::event::{Modality, SensoryEvent};

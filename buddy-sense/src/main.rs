@@ -35,10 +35,11 @@ async fn main() {
         tokio::spawn(async move { thalamus.run(sense_rx, tx).await });
     }
 
-    // Bridge to Code Buddy.
+    // Bridge to Code Buddy. A shared token (if set) authenticates our frames.
     {
         let rx = bcast_tx.subscribe();
-        tokio::spawn(async move { bridge::run_bridge(url, rx).await });
+        let token = std::env::var("BUDDY_SENSE_TOKEN").ok().filter(|t| !t.is_empty());
+        tokio::spawn(async move { bridge::run_bridge(url, token, rx).await });
     }
 
     // Vital sense — the autonomic heartbeat, ALWAYS on and in PARALLEL with the

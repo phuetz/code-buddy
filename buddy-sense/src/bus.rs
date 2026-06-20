@@ -1,8 +1,10 @@
-//! The thalamus — the brain's ordering layer. It receives raw events from every
-//! sense (bounded channel = backpressure), COALESCES high-rate low-salience
-//! events, keeps a parallel short-term MEMORY (per-modality ring buffers), and
-//! BROADCASTS the admitted events (the "global workspace"). Salient events
-//! (>= ESCALATE_SALIENCE) always pass — the thalamic attention gate.
+//! The thalamus — the brain's attention GATE (not a reordering scheduler). It
+//! receives raw events from every sense (bounded channel = backpressure),
+//! COALESCES high-rate low-salience events, keeps a parallel short-term MEMORY
+//! (per-modality ring buffers), and BROADCASTS the admitted events in arrival
+//! order (the "global workspace"). Salient events (>= ESCALATE_SALIENCE) bypass
+//! coalescing — but this is a GATE, not priority reordering: a salient event
+//! behind a backlog is still delivered after it (true priority is future work).
 
 use std::collections::{HashMap, VecDeque};
 

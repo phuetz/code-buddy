@@ -30,6 +30,9 @@ pub fn vad_events(samples: &[i16], sample_rate: u32, frame_ms: u64, threshold: f
     let mut out = Vec::new();
     let mut speaking = false;
     let mut ts: u64 = 0;
+    // Hysteresis: enter speech at `threshold`, leave only when RMS drops below a
+    // lower bound — stops chattering start/end on a signal hovering at threshold.
+    let t_low = threshold * 0.6;
     for frame in samples.chunks(frame_len) {
         let rms = rms_i16(frame);
         if !speaking && rms >= threshold {
@@ -41,7 +44,7 @@ pub fn vad_events(samples: &[i16], sample_rate: u32, frame_ms: u64, threshold: f
                 salience: SPEECH_SALIENCE,
                 payload: serde_json::json!({ "rms": rms }),
             });
-        } else if speaking && rms < threshold {
+        } else if speaking && rms < t_low {
             speaking = false;
             out.push(SensoryEvent {
                 modality: Modality::Audio,
@@ -70,15 +73,26 @@ pub fn read_wav_mono(path: &str) -> Result<(Vec<i16>, u32), String> {
     let mut reader = hound::WavReader::open(path).map_err(|e| e.to_string())?;
     let spec = reader.spec();
     let channels = spec.channels.max(1) as usize;
+    // Surface decode errors instead of silently turning an unsupported format
+    // into all-zeros ("no speech"). 16-bit int + float cover the common cases.
     let raw: Vec<i16> = match spec.sample_format {
-        hound::SampleFormat::Int => reader
+        hound::SampleFormat::Int if spec.bits_per_sample == 16 => reader
             .samples::<i16>()
-            .map(|s| s.unwrap_or(0))
-            .collect(),
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| e.to_string())?,
         hound::SampleFormat::Float => reader
             .samples::<f32>()
-            .map(|s| (s.unwrap_or(0.0) * 32767.0) as i16)
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| e.to_string())?
+            .into_iter()
+            .map(|s| (s * 32767.0) as i16)
             .collect(),
+        _ => {
+            return Err(format!(
+                "unsupported WAV format: {:?} {}-bit (supported: 16-bit int, float)",
+                spec.sample_format, spec.bits_per_sample
+            ))
+        }
     };
     let mono: Vec<i16> = if channels <= 1 {
         raw
@@ -119,5 +133,23 @@ mod tests {
     fn pure_silence_emits_nothing() {
         let evs = vad_events(&vec![0i16; 16_000], 16_000, 20, 0.05);
         assert!(evs.is_empty());
+    }
+
+    #[test]
+    fn hysteresis_prevents_chatter_around_threshold() {
+        let rate = 16_000u32;
+        let frame = (rate / 50) as usize; // 20 ms
+        let blk = |v: i16, n: usize| std::iter::repeat(v).take(frame * n);
+        let mut s = Vec::new();
+        s.extend(blk(0, 2)); // silence
+        for _ in 0..3 {
+            s.extend(blk(3932, 1)); // rms ~0.12 — above threshold 0.1
+            s.extend(blk(2621, 1)); // rms ~0.08 — below threshold but above t_low (0.06)
+        }
+        s.extend(blk(0, 2)); // silence
+        let evs = vad_events(&s, rate, 20, 0.1);
+        let kinds: Vec<&str> = evs.iter().map(|e| e.kind.as_str()).collect();
+        // One start, one end — NOT a start/end on every dip (the chatter bug).
+        assert_eq!(kinds, vec!["speech_start", "speech_end"]);
     }
 }

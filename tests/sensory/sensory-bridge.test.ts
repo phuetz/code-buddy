@@ -56,4 +56,29 @@ describe('sensory bridge → event bus → reaction', () => {
       await bridge.close();
     }
   });
+
+  it('rejects cross-origin connections (CSWSH defence)', async () => {
+    const bridge = startSensoryBridge({ port: 18233 });
+    const received: Perception[] = [];
+    const unwire = wireSensoryReactions((p) => received.push(p));
+    try {
+      const ws = new WebSocket('ws://127.0.0.1:18233', { headers: { Origin: 'http://evil.example' } });
+      await new Promise<void>((resolve) => {
+        ws.on('open', () => resolve());
+        ws.on('close', () => resolve());
+        ws.on('error', () => resolve());
+      });
+      try {
+        ws.send(JSON.stringify({ modality: 'audio', kind: 'speech_start', salience: 200 }));
+      } catch {
+        /* socket already closed by the server */
+      }
+      await new Promise((r) => setTimeout(r, 150));
+      ws.close();
+      expect(received).toHaveLength(0); // an Origin-bearing client is refused
+    } finally {
+      unwire();
+      await bridge.close();
+    }
+  });
 });

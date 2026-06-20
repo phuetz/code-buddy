@@ -45,9 +45,16 @@ export function startSensoryBridge(options: SensoryBridgeOptions = {}): SensoryB
   const wss = new WebSocketServer({ host, port });
 
   wss.on('connection', (ws, req) => {
-    // Loopback-only: a sensory feed must come from this machine.
-    const remote = req.socket.remoteAddress ?? '';
-    if (!remote.includes('127.0.0.1') && !remote.includes('::1')) {
+    // Reject cross-origin (CSWSH): the Rust daemon sends NO Origin header; a
+    // browser page / extension always does. This stops a local web origin from
+    // injecting frames (and, with the camera reaction on, triggering the webcam).
+    if (req.headers.origin) {
+      ws.close();
+      return;
+    }
+    // Loopback-only: exact match, tolerating IPv4-mapped IPv6 (::ffff:127.0.0.1).
+    const remote = (req.socket.remoteAddress ?? '').replace(/^::ffff:/, '');
+    if (remote !== '127.0.0.1' && remote !== '::1') {
       ws.close();
       return;
     }
