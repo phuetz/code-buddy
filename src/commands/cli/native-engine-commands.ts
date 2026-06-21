@@ -1016,6 +1016,43 @@ export function registerFleetAutonomyCommands(program: Command): void {
       console.log(`Added task ${task.id} [${task.priority}]${goalNote}${task.dependsOn ? ` depends on ${task.dependsOn.join(', ')}` : ''}`);
     });
 
+  tasks
+    .command('board')
+    .description('Render the unified fleet board as Hermes-style columns (To Do / In Progress / Review / Done)')
+    .option('--dir <path>', 'colab dir')
+    .option('--json', 'output JSON')
+    .action(async (opts: { dir?: string; json?: boolean }) => {
+      const { FleetColabStore } = await import('../../fleet/colab-store.js');
+      const store = new FleetColabStore({ ...(opts.dir ? { dir: opts.dir } : {}) });
+      const all = store.listTasks();
+      const columns = [
+        { key: 'open', label: 'To Do' },
+        { key: 'in_progress', label: 'In Progress' },
+        { key: 'blocked', label: 'Review' },
+        { key: 'completed', label: 'Done' },
+      ] as const;
+      if (opts.json) {
+        const grouped = Object.fromEntries(columns.map((c) => [c.label, all.filter((t) => t.status === c.key)]));
+        console.log(JSON.stringify(grouped, null, 2));
+        return;
+      }
+      for (const col of columns) {
+        const items = all.filter((t) => t.status === col.key);
+        console.log(`\n${col.label} (${items.length})`);
+        if (items.length === 0) { console.log('  —'); continue; }
+        for (const t of items) {
+          const annotations: string[] = [];
+          if (t.claimedBy) annotations.push(`@${t.claimedBy}`);
+          if (t.attempts) annotations.push(`attempts:${t.attempts}`);
+          if (t.dependsOn?.length) annotations.push(`deps:${t.dependsOn.length}`);
+          if (t.goalMode) annotations.push('goal');
+          if (col.key === 'blocked' && t.blockedReason) annotations.push(`(${t.blockedReason})`);
+          const suffix = annotations.length ? ` — ${annotations.join(' ')}` : '';
+          console.log(`  ${t.id} [${t.priority}] ${t.title}${suffix}`);
+        }
+      }
+    });
+
   fleet
     .command('swarm <goal>')
     .description('Create a workers → verifier → synthesizer task graph')
