@@ -1,0 +1,18 @@
+{
+  "//": "depcheck config. Real production imports that were missing direct declarations (highlight.js, @opentelemetry/resources, @opentelemetry/semantic-conventions) are now declared in package.json. The entries below are genuine false positives: packages depcheck cannot statically see.",
+  "ignores": [
+    "@huggingface/transformers",
+    "@semantic-release/changelog",
+    "@semantic-release/git",
+    "conventional-changelog-conventionalcommits",
+    "@types/jest",
+    "@jest/globals",
+    "ink-testing-library",
+    "@noble/hashes",
+    "@eslint/js",
+    "glob",
+    "@actions/core",
+    "@actions/github"
+  ],
+  "ignorePatterns": ["dist", "coverage", ".codebuddy", "buddy-sense", "cowork"]
+}
