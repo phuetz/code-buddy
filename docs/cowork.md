@@ -8,6 +8,9 @@ learning surfaces are all reachable from one Electron app.
 Use this page when you want to try Cowork from a GitHub checkout, validate the
 ChatGPT subscription route, or explain what the desktop app adds beyond the CLI.
 
+> 📚 **Full Cowork documentation set** (architecture, every panel, visual workflows,
+> build/run, settings, troubleshooting): [`cowork/docs/`](../cowork/docs/README.md).
+
 ## What Cowork Adds
 
 - A supervised desktop workspace for Code Buddy sessions and artifacts.
