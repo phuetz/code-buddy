@@ -78,18 +78,11 @@ https://github.com/user-attachments/assets/f57b9106-4b2c-4747-aecd-a07f78af5dfc
 <a id="下载与安装"></a>
 ## 📦 下载与安装
 
-### 方式一：Homebrew（macOS，推荐）
+### 下载安装包（推荐）
 
-```bash
-brew tap phuetz/tap
-brew install --cask --no-quarantine code-buddy
-```
+请访问我们的 [Release 页面](https://github.com/phuetz/code-buddy/releases) 下载最新版本（Windows / macOS / Linux）。
 
-> `--no-quarantine` 可跳过 macOS Gatekeeper 验证，避免"无法验证开发者"的弹窗。
-
-### 方式二：下载安装包
-
-请访问我们的 [Release 页面](https://github.com/phuetz/code-buddy/releases) 下载最新版本。
+> macOS：若安装后提示"无法验证开发者"，请右键点击应用 → **打开**，或前往 **系统设置 > 隐私与安全性** 点击"仍要打开"。
 
 | 平台 | 文件类型 |
 |------|----------|
@@ -164,11 +157,7 @@ brew install lima
 
 ### 📝 重要提示
 
-1.  **macOS 安装问题**：如果直接下载 DMG 安装后提示”无法验证开发者”，推荐使用 Homebrew 安装以避免此问题：
-    ```bash
-    brew tap phuetz/tap && brew install --cask --no-quarantine code-buddy
-    ```
-    或者前往 **系统设置 > 隐私与安全性** 点击”仍要打开”。
+1.  **macOS 安装问题**：如果直接下载安装后提示”无法验证开发者”，请右键点击应用 → **打开**，或前往 **系统设置 > 隐私与安全性** 点击”仍要打开”。
 2.  **网络连接**：对于 `WebSearch` 等联网工具，可能需要开启代理软件的“虚拟网卡 (TUN模式)”功能才能正常访问。
 3. **Notion连接器使用**: 除了设置Notion token之外，还需要在根页面添加连接。更多指引请看https://www.notion.com/help/add-and-manage-connections-with-the-api。
 
