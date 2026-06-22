@@ -1,5 +1,5 @@
 {
-  "detectedAt": "2026-06-11T09:31:47.947Z",
+  "detectedAt": "2026-06-20T22:25:05.072Z",
   "languages": [
     "TypeScript",
     "JavaScript"
@@ -26,7 +26,7 @@
     ]
   },
   "contextPack": "Language: TypeScript, JavaScript | Framework: Ink (terminal UI) | Package manager: npm | Commands: test=\"npm run test\", lint=\"npm run lint\", format=\"npm run format\", build=\"npm run build\", typecheck=\"npm run typecheck\", validate=\"npm run validate\" | Dirs: src=src, tests=tests, docs=docs | Naming: camelCase (JS/TS)",
-  "_configMtime": 1781166737657.4424,
+  "_configMtime": 1781992709633.4739,
   "name": "@phuetz/code-buddy",
   "description": "Open-source multi-provider AI coding agent for the terminal. Supports Grok, Claude, ChatGPT, Gemini, Ollama and LM Studio with 52+ tools, multi-channel messaging, skills system, and Enterprise-grade architecture.",
   "moduleType": "esm",
@@ -57,34 +57,34 @@
   "cartography": {
     "fileStats": {
       "byExtension": {
-        ".ts": 2910,
+        ".ts": 3025,
         ".js": 27,
         ".cs": 1,
         ".tsx": 49
       },
       "locEstimate": {
-        "TypeScript": 1003509,
+        "TypeScript": 1040829,
         "JavaScript": 319,
         "C#": 685
       },
-      "totalSourceFiles": 1856,
-      "totalTestFiles": 1131,
+      "totalSourceFiles": 1914,
+      "totalTestFiles": 1188,
       "largestFiles": [
         {
           "path": "src/agent/autonomous/agentic-coding-runner.ts",
           "lines": 8438
         },
         {
+          "path": "src/tools/computer-control-tool.ts",
+          "lines": 6554
+        },
+        {
           "path": "tests/commands/autonomous-code-command.test.ts",
           "lines": 6589
         },
         {
-          "path": "src/tools/computer-control-tool.ts",
-          "lines": 6199
-        },
-        {
           "path": "src/commands/cli/hermes-commands.ts",
-          "lines": 3923
+          "lines": 4063
         },
         {
           "path": "tests/agent/autonomous/agentic-coding-runner.test.ts",
@@ -92,23 +92,23 @@
         },
         {
           "path": "tests/commands/hermes-commands.test.ts",
-          "lines": 3745
+          "lines": 3725
+        },
+        {
+          "path": "src/index.ts",
+          "lines": 3268
         },
         {
           "path": "src/commands/cli/autonomous-code-command.ts",
           "lines": 2900
         },
         {
-          "path": "src/index.ts",
-          "lines": 2774
-        },
-        {
           "path": "src/skills/hub.ts",
           "lines": 3034
         },
         {
-          "path": "src/openclaw/gateway-bridge.ts",
-          "lines": 2628
+          "path": "tests/agent/execution/agent-executor.test.ts",
+          "lines": 2173
         }
       ]
     },
@@ -117,17 +117,17 @@
         {
           "name": "Agent core",
           "directory": "src/agent",
-          "fileCount": 250
+          "fileCount": 272
         },
         {
           "name": "Tool implementations",
           "directory": "src/tools",
-          "fileCount": 209
+          "fileCount": 213
         },
         {
           "name": "Command handlers",
           "directory": "src/commands",
-          "fileCount": 128
+          "fileCount": 130
         },
         {
           "name": "Utilities",
@@ -142,12 +142,17 @@
         {
           "name": "Messaging channels",
           "directory": "src/channels",
-          "fileCount": 67
+          "fileCount": 69
         },
         {
           "name": "Context management",
           "directory": "src/context",
-          "fileCount": 67
+          "fileCount": 68
+        },
+        {
+          "name": "codebuddy",
+          "directory": "src/codebuddy",
+          "fileCount": 50
         },
         {
           "name": "Security",
@@ -155,14 +160,9 @@
           "fileCount": 50
         },
         {
-          "name": "codebuddy",
-          "directory": "src/codebuddy",
-          "fileCount": 49
-        },
-        {
           "name": "HTTP server",
           "directory": "src/server",
-          "fileCount": 37
+          "fileCount": 39
         },
         {
           "name": "Configuration",
@@ -180,9 +180,19 @@
           "fileCount": 29
         },
         {
+          "name": "Memory system",
+          "directory": "src/memory",
+          "fileCount": 27
+        },
+        {
           "name": "Plugin system",
           "directory": "src/plugins",
-          "fileCount": 28
+          "fileCount": 27
+        },
+        {
+          "name": "Provider adapters",
+          "directory": "src/providers",
+          "fileCount": 27
         },
         {
           "name": "Hooks",
@@ -190,18 +200,8 @@
           "fileCount": 26
         },
         {
-          "name": "Memory system",
-          "directory": "src/memory",
-          "fileCount": 25
-        },
-        {
           "name": "fleet",
           "directory": "src/fleet",
-          "fileCount": 22
-        },
-        {
-          "name": "Provider adapters",
-          "directory": "src/providers",
           "fileCount": 22
         },
         {
@@ -215,6 +215,21 @@
           "fileCount": 18
         },
         {
+          "name": "Skills system",
+          "directory": "src/skills",
+          "fileCount": 18
+        },
+        {
+          "name": "browser-automation",
+          "directory": "src/browser-automation",
+          "fileCount": 17
+        },
+        {
+          "name": "MCP integration",
+          "directory": "src/mcp",
+          "fileCount": 17
+        },
+        {
           "name": "companion",
           "directory": "src/companion",
           "fileCount": 16
@@ -225,33 +240,18 @@
           "fileCount": 16
         },
         {
-          "name": "MCP integration",
-          "directory": "src/mcp",
-          "fileCount": 16
-        },
-        {
-          "name": "Skills system",
-          "directory": "src/skills",
-          "fileCount": 16
-        },
-        {
-          "name": "browser-automation",
-          "directory": "src/browser-automation",
-          "fileCount": 15
-        },
-        {
           "name": "daemon",
           "directory": "src/daemon",
           "fileCount": 15
         },
         {
-          "name": "analytics",
-          "directory": "src/analytics",
-          "fileCount": 13
-        },
-        {
           "name": "desktop-automation",
           "directory": "src/desktop-automation",
+          "fileCount": 14
+        },
+        {
+          "name": "analytics",
+          "directory": "src/analytics",
           "fileCount": 13
         },
         {
@@ -310,6 +310,11 @@
           "fileCount": 8
         },
         {
+          "name": "goals",
+          "directory": "src/goals",
+          "fileCount": 8
+        },
+        {
           "name": "input",
           "directory": "src/input",
           "fileCount": 8
@@ -317,6 +322,11 @@
         {
           "name": "scheduler",
           "directory": "src/scheduler",
+          "fileCount": 8
+        },
+        {
+          "name": "sensory",
+          "directory": "src/sensory",
           "fileCount": 8
         },
         {
@@ -365,11 +375,6 @@
           "fileCount": 6
         },
         {
-          "name": "goals",
-          "directory": "src/goals",
-          "fileCount": 6
-        },
-        {
           "name": "intelligence",
           "directory": "src/intelligence",
           "fileCount": 6
@@ -392,6 +397,16 @@
         {
           "name": "plugin-sdk",
           "directory": "src/plugin-sdk",
+          "fileCount": 6
+        },
+        {
+          "name": "Prompt engineering",
+          "directory": "src/prompts",
+          "fileCount": 6
+        },
+        {
+          "name": "Protocols",
+          "directory": "src/protocols",
           "fileCount": 6
         },
         {
@@ -432,16 +447,6 @@
         {
           "name": "orchestration",
           "directory": "src/orchestration",
-          "fileCount": 5
-        },
-        {
-          "name": "Prompt engineering",
-          "directory": "src/prompts",
-          "fileCount": 5
-        },
-        {
-          "name": "Protocols",
-          "directory": "src/protocols",
           "fileCount": 5
         },
         {
@@ -657,19 +662,19 @@
       "hotModules": [
         {
           "module": "src/utils/logger",
-          "importedBy": 595
+          "importedBy": 618
         },
         {
           "module": "src/types",
-          "importedBy": 197
+          "importedBy": 201
         },
         {
           "module": "src/codebuddy/client",
-          "importedBy": 97
+          "importedBy": 104
         },
         {
           "module": "src/tools/registry/types",
-          "importedBy": 51
+          "importedBy": 54
         },
         {
           "module": "src/agent/codebuddy-agent",
@@ -681,14 +686,14 @@
         },
         {
           "module": "src/codebuddy/tool-definitions/types",
-          "importedBy": 39
-        },
-        {
-          "module": "src/channels/core",
-          "importedBy": 34
+          "importedBy": 40
         },
         {
           "module": "src/knowledge/knowledge-graph",
+          "importedBy": 31
+        },
+        {
+          "module": "src/channels/core",
           "importedBy": 31
         },
         {
@@ -697,7 +702,7 @@
         },
         {
           "module": "src/utils/confirmation-service",
-          "importedBy": 25
+          "importedBy": 23
         },
         {
           "module": "src/ui/context/theme-context",
@@ -708,12 +713,12 @@
           "importedBy": 20
         },
         {
-          "module": "src/plugins/types",
+          "module": "src/agent/types",
           "importedBy": 17
         },
         {
-          "module": "src/agent/types",
-          "importedBy": 15
+          "module": "src/utils/provider-detector",
+          "importedBy": 17
         }
       ],
       "circularRisks": [
@@ -748,6 +753,10 @@
         {
           "a": "src/events/typed-emitter",
           "b": "src/events/filtered-emitter"
+        },
+        {
+          "a": "src/sensory/sensory-memory",
+          "b": "src/sensory/reactions"
         }
       ],
       "orphanModules": [
@@ -1377,7 +1386,17 @@
         },
         {
           "method": "POST",
+          "path": "/followup-draft/:id/dispatch",
+          "file": "src/server/routes/mobile.ts"
+        },
+        {
+          "method": "POST",
           "path": "/pair",
+          "file": "src/server/routes/mobile.ts"
+        },
+        {
+          "method": "GET",
+          "path": "/events",
           "file": "src/server/routes/mobile.ts"
         },
         {
@@ -1568,7 +1587,9 @@
         "config",
         "content",
         "diff_preview",
+        "dispatch",
         "done",
+        "event",
         "help",
         "overview",
         "plan_progress",
@@ -1579,11 +1600,9 @@
         "session:create",
         "session:join",
         "session:leave",
-        "sessions",
-        "skill",
-        "steer"
+        "sessions"
       ],
-      "endpointCount": 186
+      "endpointCount": 188
     },
     "patterns": {
       "singletons": [
@@ -1667,6 +1686,7 @@
         "TriggerRegistry",
         "AgentRegistry",
         "ModelRegistry",
+        "ContextRegistry",
         "AgentRegistry",
         "HookRegistry",
         "KanbanBoardRegistry",
@@ -1701,6 +1721,7 @@
         "TurnLimitMiddleware",
         "types",
         "VerificationEnforcementMiddleware",
+        "VisualValidationMiddleware",
         "WorkflowGuardMiddleware",
         "index",
         "TurnLimitMiddleware",
@@ -1796,10 +1817,13 @@
         "ChannelManager",
         "DMPairingManager",
         "DMPolicyEngine",
+        "GatewayLifecycleManager",
         "GroupSecurityManager",
         "IdentityLinker",
         "IMessageAdapter",
+        "IRCAdapter",
         "MessagePreprocessor",
+        "NextcloudTalkClient",
         "PeerRouter",
         "CIWatcher",
         "ReconnectionManager",
@@ -2208,6 +2232,10 @@
           "file": "src/tools/ocr-tool.ts"
         },
         {
+          "name": "OfficeMacroTool",
+          "file": "src/tools/office-macro-tool.ts"
+        },
+        {
           "name": "PDFTool",
           "file": "src/tools/pdf-tool.ts"
         },
@@ -2226,6 +2254,10 @@
         {
           "name": "ReasoningTool",
           "file": "src/tools/reasoning-tool.ts"
+        },
+        {
+          "name": "RegisterToolTool",
+          "file": "src/tools/register-tool-handler.ts"
         },
         {
           "name": "RequestPermissionsTool",
@@ -2465,6 +2497,11 @@
           "priority": 155
         },
         {
+          "name": "VisualValidationMiddleware",
+          "file": "src/agent/middleware/visual-validation-middleware.ts",
+          "priority": 156
+        },
+        {
           "name": "QualityGateMiddleware",
           "file": "src/agent/middleware/quality-gate-middleware.ts",
           "priority": 200
@@ -2505,10 +2542,10 @@
           "module": "agent",
           "exports": [
             "VerificationEnforcementMiddleware",
+            "VisualValidationMiddleware",
             "ToolExecutionOrchestrator",
             "AutoObservationMiddleware",
-            "SessionDurationMiddleware",
-            "ContextWarningMiddleware"
+            "SessionDurationMiddleware"
           ]
         },
         {
@@ -2614,11 +2651,11 @@
         {
           "module": "channels",
           "exports": [
+            "GatewayLifecycleManager",
             "GroupSecurityManager",
             "NextcloudTalkAdapter",
             "NextcloudTalkChannel",
-            "TelegramProFormatter",
-            "MessagePreprocessor"
+            "TelegramProFormatter"
           ]
         },
         {
@@ -2868,7 +2905,7 @@
             "GoalStore",
             "CONTINUATION_PROMPT_WITH_SUBGOALS_TEMPLATE",
             "JUDGE_USER_PROMPT_WITH_SUBGOALS_TEMPLATE",
-            "MAX_CONSECUTIVE_PARSE_FAILURES"
+            "CONTINUATION_PROMPT_WITH_PLAN_TEMPLATE"
           ]
         },
         {
@@ -3017,8 +3054,8 @@
             "ReconciliationActionSchema",
             "SupermemoryMemoryProvider",
             "OpenVikingMemoryProvider",
-            "ByteRoverMemoryProvider",
-            "PersistentMemoryManager"
+            "MemoryWriteRejectedError",
+            "ByteRoverMemoryProvider"
           ]
         },
         {
@@ -3145,20 +3182,20 @@
           "module": "prompts",
           "exports": [
             "PromptManager",
+            "getExecutionDisciplineBlock",
             "getChatOnlySystemPromptEN",
             "RESEARCH_MODE_ADDITIONS",
-            "getChatOnlySystemPrompt",
-            "getSystemPromptForMode"
+            "getChatOnlySystemPrompt"
           ]
         },
         {
           "module": "protocols",
           "exports": [
+            "AcpSessionStore",
             "A2AAgentServer",
             "A2AAgentClient",
             "AcpStdioServer",
-            "createCodeBuddyTaskExecutor",
-            "createAcpAgenticRunner"
+            "createCodeBuddyTaskExecutor"
           ]
         },
         {
@@ -3242,13 +3279,23 @@
           ]
         },
         {
+          "module": "sensory",
+          "exports": [
+            "HeartbeatScheduler",
+            "SensoryMemory",
+            "shouldWireVisionReaction",
+            "getHeartbeatScheduler",
+            "wireSensoryReactions"
+          ]
+        },
+        {
           "module": "server",
           "exports": [
             "ApiServerError",
+            "TunnelManager",
             "Dashboard",
             "createSecurityHeadersMiddleware",
-            "createJsonLoggingMiddleware",
-            "createWorkflowBuilderRoutes"
+            "createJsonLoggingMiddleware"
           ]
         },
         {
@@ -3414,11 +3461,11 @@
         {
           "module": "wizard",
           "exports": [
-            "runFullProviderOnboarding",
-            "listConfiguredProviders",
-            "PROVIDER_DEFAULT_MODEL",
-            "runProviderOnboarding",
-            "validateProviderKey"
+            "buildRecommendedNextCommands",
+            "getValidationConfigForGuide",
+            "persistProviderSelection",
+            "renderOnboardingRoadmap",
+            "PROVIDER_DEFAULT_MODEL"
           ]
         },
         {

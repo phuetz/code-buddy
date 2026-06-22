@@ -137,8 +137,8 @@
         0,
         0
       ],
-      "timestamp": 1781202610222,
-      "expiresAt": 1781202910222,
+      "timestamp": 1781994337906,
+      "expiresAt": 1781994637906,
       "hits": 0,
       "metadata": {
         "toolName": "search",
@@ -159,7 +159,7 @@
     "avgSimilarity": 0,
     "lshLookups": 1,
     "lshCandidates": 0,
-    "avgLookupTimeMs": 0.17257299999999987,
+    "avgLookupTimeMs": 0.2264239999999802,
     "memoryEstimateBytes": 1318,
     "clusters": 0
   }
