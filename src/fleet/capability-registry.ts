@@ -379,7 +379,15 @@ function buildGrokCatalog(): FleetModelDescriptor[] {
 }
 
 function buildMistralCatalog(): FleetModelDescriptor[] {
-  const ids = ['mistral-large-latest', 'mistral-medium-latest', 'mistral-small-latest'];
+  const ids = [
+    'mistral-large-latest',
+    'mistral-medium-latest',
+    'mistral-small-latest',
+    'codestral-latest',
+    'devstral-latest',
+    'magistral-medium-latest',
+    'ministral-8b-latest',
+  ];
   return ids.map((id) => ({
     id,
     contextWindow: 128_000,

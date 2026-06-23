@@ -400,6 +400,15 @@ export class OpenAICompatProvider implements Provider {
       return false;
     }
 
+    // `search_parameters` is an xAI/Grok-specific field. Sending it to other
+    // OpenAI-compatible providers (Mistral, Groq, Together, Fireworks, …)
+    // is rejected with HTTP 422. When search is off (the default) there is
+    // nothing to send anyway, so omit the field — a plain request must never
+    // carry a disabled-search config that breaks the upstream.
+    if (!searchParams.mode || searchParams.mode === 'off') {
+      return false;
+    }
+
     if (this.isXaiProvider()) {
       logger.debug('Skipping deprecated search_parameters for xAI provider', {
         source: 'OpenAICompatProvider',

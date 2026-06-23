@@ -234,7 +234,15 @@ export const RUNTIME_PROVIDER_CATALOG: RuntimeProviderCatalogEntry[] = [
     modelEnvKeys: ['MISTRAL_MODEL'],
     defaultBaseURL: 'https://api.mistral.ai/v1',
     defaultModel: 'mistral-large-latest',
-    models: ['mistral-large-latest', 'mistral-medium-latest', 'mistral-small-latest', 'codestral-latest'],
+    models: [
+      'mistral-large-latest',
+      'mistral-medium-latest',
+      'mistral-small-latest',
+      'codestral-latest',
+      'devstral-latest',
+      'magistral-medium-latest',
+      'ministral-8b-latest',
+    ],
   },
   {
     id: 'groq',
