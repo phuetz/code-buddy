@@ -542,12 +542,29 @@ export async function registerAIMessageHandler(manager: import('../../channels/i
       const lastEntry = entries[entries.length - 1];
       const response = lastEntry ? String(lastEntry.content) : '';
 
-      // 6. Deliver reply
+      // 6. Deliver reply (text)
       await channel.send({
         channelId: message.channel.id,
         content: response,
         replyTo: message.id,
       });
+
+      // 7. If the user SPOKE (voice note), answer by voice too — mirror the
+      //    modality. Best-effort: the text reply already landed, so a TTS/upload
+      //    failure (or a channel without voice support) is a no-op, never fatal.
+      const userSpoke = message.attachments?.some((a) => a.type === 'voice' || a.type === 'audio');
+      const voiceChannel = channel as unknown as {
+        sendVoiceReply?: (channelId: string, text: string) => Promise<void>;
+      };
+      if (userSpoke && response.trim() && typeof voiceChannel.sendVoiceReply === 'function') {
+        try {
+          await voiceChannel.sendVoiceReply(message.channel.id, response);
+        } catch (voiceErr) {
+          logger.warn(
+            `Voice reply skipped: ${voiceErr instanceof Error ? voiceErr.message : String(voiceErr)}`,
+          );
+        }
+      }
     } catch (err) {
       logger.error('Channel AI response failed', { error: err instanceof Error ? err.message : String(err) });
     }

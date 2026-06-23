@@ -476,6 +476,9 @@ export class TelegramChannel extends BaseChannel {
     }
 
     const message = this.convertMessage(msg);
+    // Voice note → text: transcribe locally (faster-whisper, $0, offline) so you
+    // can TALK to the bot — the agent then sees a normal text message.
+    await this.maybeTranscribeVoice(message);
     const parsed = this.parseCommand(message);
 
     // Attach session key for session isolation
@@ -874,6 +877,77 @@ export class TelegramChannel extends BaseChannel {
     }
 
     return keyboard;
+  }
+
+  /**
+   * Voice note → text. A Telegram voice/audio message arrives with no text but a
+   * voice attachment (file_id). Download it and transcribe it locally with
+   * faster-whisper (offline, $0) so the agent receives a normal text message —
+   * this is what lets you *talk* to the bot. No-op (and never throws) when there
+   * is already text, no audio attachment, or local Whisper isn't installed.
+   */
+  private async maybeTranscribeVoice(message: InboundMessage): Promise<void> {
+    if (message.content && message.content.trim()) return;
+    const audio = message.attachments?.find((a) => a.type === 'voice' || a.type === 'audio');
+    if (!audio?.url) return;
+    try {
+      const { localWhisperAvailable, transcribeFile } = await import('../../voice/local-whisper.js');
+      if (!localWhisperAvailable()) {
+        logger.warn(
+          '[telegram] voice note received but local Whisper is unavailable — install the ai-stack voice venv (faster-whisper) to enable speech',
+        );
+        return;
+      }
+      const fileUrl = await this.getFileUrl(audio.url);
+      const res = await fetch(fileUrl);
+      if (!res.ok) throw new Error(`download HTTP ${res.status}`);
+      const bytes = Buffer.from(await res.arrayBuffer());
+      const os = await import('node:os');
+      const path = await import('node:path');
+      const fs = await import('node:fs/promises');
+      const tmp = path.join(os.tmpdir(), `cb-tg-voice-${message.id}.ogg`);
+      await fs.writeFile(tmp, bytes);
+      try {
+        const text = await transcribeFile(tmp, { language: process.env.CODEBUDDY_VOICE_LANG || 'fr' });
+        if (text && text.trim()) {
+          message.content = text.trim();
+          message.contentType = 'text';
+          logger.info(`[telegram] voice note transcribed → "${message.content.slice(0, 60)}…"`);
+        }
+      } finally {
+        await fs.unlink(tmp).catch(() => undefined);
+      }
+    } catch (err) {
+      logger.warn(
+        `[telegram] voice transcription failed: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+  }
+
+  /**
+   * Answer by VOICE: synthesize `text` locally (Piper → OGG/Opus) and send it as
+   * a Telegram voice note via multipart upload. Used to mirror the user's
+   * modality — when they send a voice note, the bot can reply with one too.
+   * Throws on failure so the caller keeps the text reply as the fallback.
+   */
+  async sendVoiceReply(channelId: string, text: string): Promise<void> {
+    const { localTtsAvailable, synthesizeToOgg } = await import('../../voice/local-tts.js');
+    if (!localTtsAvailable()) throw new Error('local TTS (Piper) unavailable');
+    // Cap spoken length — a short reply is fine, avoid minutes of audio.
+    const spoken = text.length > 800 ? `${text.slice(0, 800)}…` : text;
+    const ogg = await synthesizeToOgg(spoken);
+    const fs = await import('node:fs/promises');
+    try {
+      const bytes = await fs.readFile(ogg);
+      const form = new FormData();
+      form.append('chat_id', channelId);
+      form.append('voice', new Blob([bytes], { type: 'audio/ogg' }), 'voice.ogg');
+      const url = `${TELEGRAM_API_BASE}/bot${this.telegramConfig.token}/sendVoice`;
+      const res = await fetch(url, { method: 'POST', body: form });
+      if (!res.ok) throw new Error(`sendVoice HTTP ${res.status}`);
+    } finally {
+      await fs.unlink(ogg).catch(() => undefined);
+    }
   }
 
   /**
