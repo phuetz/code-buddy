@@ -552,6 +552,15 @@ async function getOrCreateChannelAgent(
   }
   // Per-bot persona (multi-bot): a bot may define its own model + system prompt.
   const persona = botId ? channelBotPersonas.get(botId) : undefined;
+  // Opt-in Code Explorer nudge (set CODE_EXPLORER_BIN): some models won't reach
+  // for the code-graph MCP tools on their own and just say "I can't" — tell them
+  // plainly that they can, and give the CLI fallback. No-op when the env is unset.
+  const ceBin = process.env.CODE_EXPLORER_BIN;
+  const codeExplorerHint = ceBin
+    ? `CODE EXPLORER is available for the user's indexed code repositories. For ANY question about repos, code structure, blast-radius/impact, dependencies, dead code, cycles, or code search, you MUST use it — call the \`mcp__code-explorer__*\` tools (list_repos, query, context, impact, find_cycles, hotspots, search_code), or if a tool call isn't available run the CLI via bash: \`${ceBin} <subcommand>\` (e.g. \`${ceBin} list\`, \`${ceBin} query "text"\`, \`${ceBin} impact <symbol>\`). Never reply that you cannot list repositories or analyze code — you can, through Code Explorer.`
+    : undefined;
+  const channelSystemPromptAppend =
+    [persona?.systemPrompt, codeExplorerHint].filter(Boolean).join('\n\n') || undefined;
   const { CodeBuddyAgent } = await import('../../agent/codebuddy-agent.js');
   const model = persona?.model || agentConfig.model || resolved.model;
   const agent = new CodeBuddyAgent(
@@ -562,7 +571,7 @@ async function getOrCreateChannelAgent(
     true, // useRAGToolSelection — relevant tools on demand, not all ~194
     process.env.CODEBUDDY_CHANNEL_PROMPT_ID || 'auto', // minimal/adaptive prompt, not the 73KB legacy
     process.cwd(),
-    persona?.systemPrompt, // systemPromptAppend — the bot's persona, appended to the base prompt
+    channelSystemPromptAppend, // systemPromptAppend — persona + (opt-in) Code Explorer nudge
   );
   // Scope per-bot state (memory/lessons) to this bot so bots don't share facts.
   agent.setChannelBotId(botId);
@@ -611,6 +620,32 @@ export async function registerAIMessageHandler(manager: import('../../channels/i
       if (!message.content || !message.content.trim()) {
         return;
       }
+
+      // Remote tool-approval over Telegram. A daemon has no interactive terminal,
+      // so tools that need confirmation fail closed. Instead: intercept
+      // `/approve <id>` / `/deny <id>` and resolve the pending approval (the agent
+      // turn that requested it is blocked awaiting it, on another concurrent
+      // message), and register THIS chat as the approval channel + wire it into
+      // the confirmation service so the daemon ASKS the user instead of failing.
+      const { getRemoteApprovalService } = await import('../../security/remote-approval.js');
+      const approvalSvc = getRemoteApprovalService();
+      const approvalCmd = message.content.trim().match(/^\/(approve|deny)\s+(\S+)/i);
+      if (approvalCmd && approvalCmd[1] && approvalCmd[2]) {
+        const ok = approvalCmd[1].toLowerCase() === 'approve';
+        const reqId = approvalCmd[2];
+        approvalSvc.handleResponse(reqId, ok);
+        await channel.send({
+          channelId: message.channel.id,
+          content: `${ok ? '✅ Approuvé' : '🚫 Refusé'} : ${reqId}`,
+          replyTo: message.id,
+        });
+        return;
+      }
+      approvalSvc.registerChannel('telegram', async (msg) => {
+        await channel.send({ channelId: message.channel.id, content: msg });
+      });
+      const { ConfirmationService } = await import('../../utils/confirmation-service.js');
+      ConfirmationService.getInstance().setRemoteApprovalService(approvalSvc);
 
       // 2. Context-adaptive agent reply (« comme Claude »): the agent's own
       //    query-classifier + buildForQuery scale the system prompt to the

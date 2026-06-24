@@ -121,6 +121,10 @@ const SAFE_COMMANDS = new Set([
   'npm list', 'npm ls', 'npm outdated', 'npm view',
   'node --version', 'npm --version', 'python --version',
   'cargo --version', 'go version', 'rustc --version',
+  // Code Explorer (read-oriented code-graph companion) — safe to auto-approve;
+  // its writes only touch its own index, and destructive shell patterns are
+  // still caught by DESTRUCTIVE_PATTERNS above.
+  'code-explorer', 'gitnexus',
 ]);
 
 // Network-related commands
