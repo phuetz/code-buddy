@@ -253,16 +253,34 @@ export class MCPManager extends EventEmitter {
     const { loadMCPConfig } = await import('./config.js');
     const config = loadMCPConfig();
     
-    // Initialize servers in parallel to avoid blocking
+    // Initialize servers in parallel. Each server gets its OWN timeout so a
+    // hanging/unresponsive server (e.g. one whose stdio handshake never
+    // completes, or a GUI-bound server whose display is down) can't block the
+    // init of the others — previously a single hung server made Promise.all
+    // wait forever, so NO MCP tools (incl. healthy ones) ever loaded.
+    const INIT_TIMEOUT_MS = Number(process.env.CODEBUDDY_MCP_INIT_TIMEOUT_MS) || 15_000;
     const enabledServers = config.servers.filter(s => s.enabled !== false);
     const initPromises = enabledServers.map(async (serverConfig) => {
       try {
-        await this.addServer(serverConfig);
+        await Promise.race([
+          this.addServer(serverConfig),
+          new Promise<never>((_, reject) =>
+            setTimeout(
+              () =>
+                reject(
+                  new Error(
+                    `MCP server "${serverConfig.name}" init timed out after ${INIT_TIMEOUT_MS}ms — skipped so other servers still load`,
+                  ),
+                ),
+              INIT_TIMEOUT_MS,
+            ),
+          ),
+        ]);
       } catch (error) {
         logger.warn(`Failed to initialize MCP server ${serverConfig.name}`, { error });
       }
     });
-    
+
     await Promise.all(initPromises);
   }
 }
