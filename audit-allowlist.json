@@ -1,0 +1,36 @@
+{
+  "$comment": "Documented exceptions for scripts/ci-audit-gate.mjs. The gate BLOCKS on any critical, and on any high-severity advisory whose package is NOT listed here. Each entry must carry a real reason and a reviewBy date; an expired entry FAILS the gate so the list cannot rot silently. Moderates/lows are tracked (printed) but non-blocking. Revisit and shrink this list whenever upstream ships a fix.",
+  "allow": [
+    {
+      "package": "xlsx",
+      "severity": "high",
+      "advisories": [
+        "https://github.com/advisories/GHSA-4r6h-8v6p-xvw6",
+        "https://github.com/advisories/GHSA-5pgg-2g8v-p4x9"
+      ],
+      "reason": "SheetJS prototype-pollution + ReDoS, no upstream fix available on the npm distribution. Only reachable by parsing an attacker-controlled spreadsheet; the xlsx skill processes user-provided files locally, never untrusted network input. Track SheetJS for a patched npm release or migrate to the vendor CDN build.",
+      "reviewBy": "2026-09-21"
+    },
+    {
+      "package": "@opentelemetry/sdk-node",
+      "severity": "high",
+      "advisories": ["https://github.com/advisories/GHSA-q7rr-3cgh-j5r3"],
+      "reason": "Prometheus exporter process crash via malformed HTTP request. Fix requires @opentelemetry/sdk-node@0.219.0 (semver-major across the whole otel stack) — deferred to a dedicated, test-gated bump. Observability is opt-in (OTEL_EXPORTER_OTLP_ENDPOINT / SENTRY_DSN) and the Prometheus endpoint is not exposed by default, so the DoS surface is off unless a user wires it to untrusted traffic.",
+      "reviewBy": "2026-09-21"
+    },
+    {
+      "package": "@opentelemetry/exporter-prometheus",
+      "severity": "high",
+      "advisories": ["https://github.com/advisories/GHSA-q7rr-3cgh-j5r3"],
+      "reason": "Same advisory as @opentelemetry/sdk-node (GHSA-q7rr-3cgh-j5r3); cleared by the same deferred semver-major otel bump. Opt-in observability, exporter off by default.",
+      "reviewBy": "2026-09-21"
+    },
+    {
+      "package": "undici",
+      "severity": "high",
+      "advisories": ["https://github.com/advisories/GHSA-c76h-2ccp-4975"],
+      "reason": "Dev-only: pulled transitively by semantic-release / @actions release tooling (node-gyp, @semantic-release/github). Not in the production runtime dependency tree; runs only in CI release jobs. Parent pins the version so a direct bump is not in range.",
+      "reviewBy": "2026-09-21"
+    }
+  ]
+}
