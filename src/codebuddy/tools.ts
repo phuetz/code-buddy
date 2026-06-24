@@ -334,8 +334,12 @@ export function convertMCPToolToCodeBuddyTool(mcpTool: MCPTool): CodeBuddyTool {
   };
 }
 
-/** Threshold: defer MCP schemas when there are more than this many MCP tools */
-const DEFERRED_SCHEMA_THRESHOLD = 30;
+/** Threshold: defer MCP schemas when there are more than this many MCP tools.
+ *  Deferred tools become param-less stubs that REQUIRE a `tool_search` round
+ *  before they can be called — many models skip that and fall back to `bash`,
+ *  so for moderate tool counts it's better to keep full schemas and let RAG
+ *  tool-selection pick the relevant ~15. Override with CODEBUDDY_MCP_DEFER_THRESHOLD. */
+const DEFERRED_SCHEMA_THRESHOLD = Number(process.env.CODEBUDDY_MCP_DEFER_THRESHOLD) || 30;
 
 /** Full MCP tool schemas stored for deferred retrieval */
 let _deferredMCPSchemas: Map<string, CodeBuddyTool> | null = null;
