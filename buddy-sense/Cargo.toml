@@ -34,6 +34,9 @@ tokio-stream = { version = "0.1", optional = true }
 
 [features]
 default = []
+# Live camera sense via ffmpeg (v4l2) — no extra crate, uses the system ffmpeg.
+# The pure motion detector builds + tests without it.
+live-vision = []
 live-screen = ["dep:xcap"]
 neural-vad = ["dep:vad-rs", "dep:ort", "dep:ort-sys"]
 live-ui = ["dep:atspi", "dep:tokio-stream"]

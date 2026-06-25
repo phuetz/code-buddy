@@ -105,6 +105,17 @@ async fn main() {
         tokio::spawn(async move { senses::screen::live::run(tx, screen_ms, screen_threshold).await });
     }
 
+    // Camera sense — live webcam motion detection (the robot's eyes), opt-in build.
+    #[cfg(feature = "live-vision")]
+    {
+        let tx = sense_tx.clone();
+        let device = std::env::var("BUDDY_SENSE_CAMERA").unwrap_or_else(|_| "/dev/video0".to_string());
+        let cam_ms = std::env::var("BUDDY_SENSE_CAMERA_MS").ok().and_then(|s| s.parse::<u64>().ok()).unwrap_or(1500);
+        let cam_threshold = std::env::var("BUDDY_SENSE_CAMERA_THRESHOLD").ok().and_then(|s| s.parse::<f64>().ok()).unwrap_or(0.04);
+        eprintln!("[buddy-sense] camera sense active ({device}, {cam_ms}ms, threshold {cam_threshold})");
+        tokio::spawn(async move { senses::video::live::run(tx, device, cam_ms, cam_threshold).await });
+    }
+
     // UI sense — semantic accessibility events (active app / focus), opt-in build.
     #[cfg(feature = "live-ui")]
     {
