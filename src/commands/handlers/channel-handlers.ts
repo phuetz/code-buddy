@@ -753,7 +753,7 @@ export async function registerAIMessageHandler(manager: import('../../channels/i
       //    raw; if Telegram rejects the HTML (success:false) fall back to plain
       //    text. Other channels keep native markdown (Discord/Slack render it).
       if (channel.type === 'telegram' && response.trim()) {
-        const { renderTelegramHtml } = await import('../../rendering/telegram-html.js');
+        const { renderTelegramHtml, renderPlain } = await import('../../rendering/index.js');
         const chunks = renderTelegramHtml(response);
         let ok = chunks.length > 0;
         for (let i = 0; i < chunks.length; i++) {
@@ -769,7 +769,8 @@ export async function registerAIMessageHandler(manager: import('../../channels/i
           }
         }
         if (!ok) {
-          await channel.send({ channelId: message.channel.id, content: response, replyTo: message.id });
+          // HTML rejected → send clean stripped plain text (not raw markdown).
+          await channel.send({ channelId: message.channel.id, content: renderPlain(response), replyTo: message.id });
         }
       } else {
         await channel.send({
