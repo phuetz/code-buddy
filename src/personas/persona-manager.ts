@@ -31,6 +31,16 @@ export interface Persona {
   isDefault: boolean;
   createdAt: Date;
   updatedAt: Date;
+  // ── Voice / robot layer (optional; unset → today's env defaults) ──
+  /** Piper `.onnx` voice for this personality's SPOKEN replies (else CODEBUDDY_TTS_VOICE). */
+  voice?: string;
+  /** Name the robot answers to when this persona is active (else CODEBUDDY_ROBOT_NAME). */
+  robotName?: string;
+  /** Spoken-character system prompt for the voice loop (else SPEAK_SYSTEM_PROMPT). Keep it
+   *  voice-shaped: 1–2 short spoken sentences, no markdown/lists/code. */
+  spokenPrompt?: string;
+  /** What this persona says when it greets an arriving person (the "engage on arrival" bridge). */
+  greeting?: string;
 }
 
 export interface PersonaTrait {
@@ -285,6 +295,15 @@ You adapt your explanations to the learner's level, never make them feel bad for
       { type: 'keyword', pattern: 'friend', priority: 70 },
       { type: 'keyword', pattern: 'ami', priority: 70 },
     ],
+    // Voice/robot layer: a warm spoken character + name + greeting. `voice` is left unset so it
+    // uses the configured CODEBUDDY_TTS_VOICE — a per-personality `.onnx` is set on custom personas
+    // (built-ins must stay machine-independent, no hardcoded local voice paths).
+    robotName: 'Buddy',
+    spokenPrompt:
+      'Tu es Buddy, le compagnon robot de Patrice — chaleureux, direct et complice. On te parle à ' +
+      "voix haute et tu réponds à voix haute, en français, en UNE à DEUX phrases courtes et " +
+      'naturelles. Pas de markdown, pas de listes, pas de code, pas d\'emoji.',
+    greeting: 'Salut ! Content de te voir. Je suis là si tu as besoin.',
     isBuiltin: true,
     isDefault: false,
   },
@@ -404,11 +423,32 @@ export class PersonaManager extends EventEmitter {
     // Load custom personas
     await this.loadCustomPersonas();
 
-    // Set active persona
-    this.setActivePersona(this.config.activePersonaId);
+    // Set active persona — a previously chosen personality STICKS across sessions (persisted to
+    // disk), so the robot keeps the voice/character the user last selected.
+    const persisted = await this.loadPersistedActiveId();
+    const target = persisted && this.personas.has(persisted) ? persisted : this.config.activePersonaId;
+    this.setActivePersona(target);
 
     // Start hot-reload watcher
     this.startWatcher();
+  }
+
+  /** Where the last-selected persona id is remembered (sibling of the personas dir → test-isolated). */
+  private stateFile(): string {
+    return path.join(path.dirname(this.dataDir), 'persona-state.json');
+  }
+
+  private async loadPersistedActiveId(): Promise<string | null> {
+    try {
+      const data = (await fs.readJson(this.stateFile())) as { activePersonaId?: string };
+      return typeof data?.activePersonaId === 'string' ? data.activePersonaId : null;
+    } catch {
+      return null; // no file yet / unreadable → fall back to config default
+    }
+  }
+
+  private persistActiveId(id: string): void {
+    void fs.writeJson(this.stateFile(), { activePersonaId: id }).catch(() => undefined);
   }
 
   /**
@@ -483,6 +523,7 @@ export class PersonaManager extends EventEmitter {
     const previousPersona = this.activePersona;
     this.activePersona = persona;
     this.config.activePersonaId = id;
+    this.persistActiveId(id);
 
     this.emit('persona:changed', {
       previous: previousPersona,
@@ -891,4 +932,22 @@ export function resetPersonaManager(): void {
     personaManagerInstance.dispose();
   }
   personaManagerInstance = null;
+}
+
+/** The active persona's voice/robot layer (voice `.onnx`, name, spoken character, greeting).
+ *  Never-throws → `{}` so the voice consumers fall back to their env defaults. Used by the
+ *  sensory voice loop / respond-decider / agent-reply / arrival greeting. */
+export function getActivePersonaVoice(): {
+  voice?: string;
+  robotName?: string;
+  spokenPrompt?: string;
+  greeting?: string;
+} {
+  try {
+    const p = getPersonaManager().getActivePersona();
+    if (!p) return {};
+    return { voice: p.voice, robotName: p.robotName, spokenPrompt: p.spokenPrompt, greeting: p.greeting };
+  } catch {
+    return {};
+  }
 }

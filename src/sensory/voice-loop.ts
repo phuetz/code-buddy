@@ -207,12 +207,15 @@ export async function resolveVoiceModel(heard: string): Promise<VoiceModelRoute>
 async function defaultReply(heard: string): Promise<string> {
   try {
     const { CodeBuddyClient } = await import('../codebuddy/client.js');
+    const { getActivePersonaVoice } = await import('../personas/persona-manager.js');
     const route = await resolveVoiceModel(heard);
     logger.debug(`[voice] reply model: ${route.model} — ${route.reason}`);
     const client = new CodeBuddyClient(route.apiKey, route.model, route.baseURL);
+    // The active personality shapes the spoken character (else the default companion prompt).
+    const systemPrompt = getActivePersonaVoice().spokenPrompt || SPEAK_SYSTEM_PROMPT;
     const resp = await client.chat(
       [
-        { role: 'system', content: SPEAK_SYSTEM_PROMPT },
+        { role: 'system', content: systemPrompt },
         { role: 'user', content: heard },
       ] as never,
       [],
@@ -266,9 +269,19 @@ export async function sayNow(
 ): Promise<void> {
   const t = (text ?? '').trim();
   if (!t) return;
+  // The active personality picks its own Piper voice (.onnx) if it set one (else the env default).
+  let voice = options.voice;
+  if (!voice && !options.synth) {
+    try {
+      const { getActivePersonaVoice } = await import('../personas/persona-manager.js');
+      voice = getActivePersonaVoice().voice;
+    } catch {
+      /* keep env default */
+    }
+  }
   // 1. Home speakers (best-effort — a missing audio device must not block the phone push).
   try {
-    const synth = options.synth ?? makeDefaultSynth(options.voice, options.rootDir);
+    const synth = options.synth ?? makeDefaultSynth(voice, options.rootDir);
     const play = options.play ?? defaultPlay;
     const wav = await synth(t);
     if (wav) {
@@ -301,13 +314,26 @@ export async function sayNow(
  */
 export function makeVoiceReply(options: VoiceReplyOptions = {}): (heard: string) => Promise<void> {
   const replyFn = options.replyFn ?? defaultReply;
-  const synth = options.synth ?? makeDefaultSynth(options.voice, options.rootDir);
   const play = options.play ?? defaultPlay;
 
   return async (heard: string): Promise<void> => {
     try {
       const reply = (await replyFn(heard)).trim();
       if (!reply) return; // nothing to say → silence (never an error)
+      // Resolve the voice per-reply so a mid-session `/persona use …` changes the voice live.
+      let synth = options.synth;
+      if (!synth) {
+        let voice = options.voice;
+        if (!voice) {
+          try {
+            const { getActivePersonaVoice } = await import('../personas/persona-manager.js');
+            voice = getActivePersonaVoice().voice;
+          } catch {
+            /* keep env default */
+          }
+        }
+        synth = makeDefaultSynth(voice, options.rootDir);
+      }
       const wav = await synth(reply);
       if (!wav) return;
       await play(wav);

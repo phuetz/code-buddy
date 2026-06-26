@@ -99,10 +99,12 @@ function makeDefaultSummarize(): SummarizeFn {
   return async (agentOutput: string, transcript: string): Promise<string> => {
     const { CodeBuddyClient } = await import('../codebuddy/client.js');
     const { resolveVoiceModel, SPEAK_SYSTEM_PROMPT } = await import('./voice-loop.js');
+    const { getActivePersonaVoice } = await import('../personas/persona-manager.js');
     const route = await resolveVoiceModel(transcript);
     const client = new CodeBuddyClient(route.apiKey, route.model, route.baseURL);
+    // Inherit the active personality's spoken character (else the default companion prompt).
     const sys =
-      SPEAK_SYSTEM_PROMPT +
+      (getActivePersonaVoice().spokenPrompt || SPEAK_SYSTEM_PROMPT) +
       " On te donne ce que tu viens de faire ou de trouver en réponse à une demande parlée. " +
       "Résume le RÉSULTAT à voix haute, en une à deux phrases.";
     const resp = await client.chat(
