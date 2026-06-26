@@ -1196,11 +1196,49 @@ export async function startServer(userConfig: Partial<ServerConfig> = {}): Promi
               // cross-talk after one address would make the robot answer the whole room.
               const alwaysRespond = process.env.CODEBUDDY_SENSORY_ALWAYS_RESPOND === 'true';
               const chimeIn = process.env.CODEBUDDY_SENSORY_CHIME_IN === 'true';
-              const wireOpts: Parameters<typeof wireSpeechReaction>[0] = { onHeard: reply };
+
+              // Reminder voice-ack: a spoken "c'est fait" marks a PENDING reminder done. It binds
+              // only to a reminder fired in its window (safety: never from ambient speech / the
+              // chime-in LLM), bypasses the silence gate, reads the bind back, and short-circuits
+              // the normal reply so the robot doesn't both confirm AND chat.
+              let onHeard = reply;
+              let reminderShortcut: ((t: string) => boolean) | undefined;
+              if (process.env.CODEBUDDY_REMINDERS === 'true') {
+                const rem = await import('../companion/reminders.js');
+                const { sayNow } = await import('../sensory/voice-loop.js');
+                // A reminder voice-ack OR a voice-creation both bypass the silence gate and
+                // short-circuit the normal reply (the robot confirms instead of chatting).
+                reminderShortcut = (t: string) =>
+                  rem.matchAck(t, Date.now()) !== null || rem.parseVoiceReminder(t) !== null;
+                onHeard = async (t: string) => {
+                  const id = rem.matchAck(t, Date.now());
+                  if (id) {
+                    const done = await rem.markDone(id, 'voice');
+                    if (done) await sayNow(rem.reminderReadback(done.label));
+                    return;
+                  }
+                  const created = rem.parseVoiceReminder(t);
+                  if (created) {
+                    try {
+                      const r = await rem.addReminder(created);
+                      await sayNow(`C'est noté : ${r.label}, à ${r.time}.`);
+                    } catch (err) {
+                      logger.warn(`[reminders] voice create failed: ${err instanceof Error ? err.message : String(err)}`);
+                    }
+                    return;
+                  }
+                  await reply(t);
+                };
+              }
+
+              const wireOpts: Parameters<typeof wireSpeechReaction>[0] = { onHeard };
               if (!alwaysRespond) {
                 const { createResponseDecider } = await import('../sensory/respond-decider.js');
                 const decider = createResponseDecider();
-                wireOpts.shouldRespond = (t) => decider.decide(t);
+                wireOpts.shouldRespond = (t) =>
+                  reminderShortcut?.(t)
+                    ? Promise.resolve({ respond: true, reason: 'reminder' })
+                    : decider.decide(t);
               }
               sensoryTeardown.push(wireSpeechReaction(wireOpts));
               logger.info(
@@ -1245,6 +1283,20 @@ export async function startServer(userConfig: Partial<ServerConfig> = {}): Promi
           logger.info(`Sensory bridge: Enabled (buddy-sense → event bus; heartbeat treatments every ${everyBeats} beats)`);
         } catch (err) {
           logger.warn(`Sensory bridge failed to start: ${err instanceof Error ? err.message : String(err)}`);
+        }
+      }
+      // Reminders (opt-in, independent of the sensory daemon so Telegram delivery works without a
+      // mic/camera): a tick loop announces due reminders (voice + Telegram) and escalates a missed
+      // dose to Telegram. Voice acknowledgement ("c'est fait") is wired in the speech block above.
+      if (process.env.CODEBUDDY_REMINDERS === 'true') {
+        try {
+          const { wireReminderRunner } = await import('../companion/reminder-runner.js');
+          sensoryTeardown.push(wireReminderRunner());
+          logger.info(
+            'Reminders: Enabled (CODEBUDDY_REMINDERS) — due reminders announced (voice + Telegram); no-ack → re-nag then Telegram',
+          );
+        } catch (err) {
+          logger.warn(`Reminders failed to start: ${err instanceof Error ? err.message : String(err)}`);
         }
       }
       logger.info(`Auth: ${config.authEnabled ? 'Enabled' : 'Disabled'}`);

@@ -2466,6 +2466,73 @@ program
     }
   });
 
+program
+  .command("remind [action] [args...]")
+  .description("Reminders — the robot reminds you (meds…) and you flag them done (add|list|done|rm)")
+  .option("--at <time>", "time of day HH:MM (for `add`)")
+  .option("--days <csv>", "days of week 0=Sun..6=Sat, e.g. 1,3,5 (default: every day)")
+  .option("--daily", "every day (default when --days omitted)")
+  .option("--message <text>", "custom spoken/sent text")
+  .action(async (action: string | undefined, args: string[] = [], options) => {
+    const r = await import("./companion/reminders.js");
+    const act = (action || "list").toLowerCase();
+    try {
+      if (act === "add") {
+        const label = args.join(" ").trim();
+        if (!label || !options.at) {
+          cli.stdout('Usage: buddy remind add "<label>" --at HH:MM [--days 1,3,5]');
+          return;
+        }
+        const days = options.days
+          ? String(options.days)
+              .split(",")
+              .map((s: string) => parseInt(s.trim(), 10))
+              .filter((n: number) => Number.isInteger(n) && n >= 0 && n <= 6)
+          : undefined;
+        const rem = await r.addReminder({
+          label,
+          time: options.at,
+          ...(days && days.length ? { days } : {}),
+          ...(options.message ? { message: options.message } : {}),
+        });
+        cli.stdout(
+          `✅ Added ${rem.id}: "${rem.label}" at ${rem.time} ${rem.days?.length ? `on ${rem.days.join(",")}` : "daily"}`,
+        );
+      } else if (act === "list") {
+        const list = await r.listReminders();
+        if (!list.length) {
+          cli.stdout('No reminders yet. Add one: buddy remind add "médicaments" --at 09:00');
+          return;
+        }
+        for (const x of list) {
+          cli.stdout(
+            `${x.enabled ? "•" : "◦"} ${x.id}  ${x.time}  ${x.days?.length ? `[${x.days.join(",")}]` : "daily"}  ${x.label}` +
+              `${x.lastDoneAt ? `  (last done ${x.lastDoneAt.slice(0, 16).replace("T", " ")})` : ""}`,
+          );
+        }
+      } else if (act === "done") {
+        const id = args[0];
+        if (!id) {
+          cli.stdout("Usage: buddy remind done <id>");
+          return;
+        }
+        const done = await r.markDone(id, "cli");
+        cli.stdout(done ? `✅ Marked done: ${done.label}` : `Reminder not found: ${id}`);
+      } else if (act === "rm" || act === "remove") {
+        const id = args[0];
+        if (!id) {
+          cli.stdout("Usage: buddy remind rm <id>");
+          return;
+        }
+        cli.stdout((await r.removeReminder(id)) ? `🗑️  Removed ${id}` : `Reminder not found: ${id}`);
+      } else {
+        cli.stdout("Usage: buddy remind add|list|done|rm");
+      }
+    } catch (e) {
+      cli.stdout(`❌ ${e instanceof Error ? e.message : String(e)}`);
+    }
+  });
+
 // Cowork (the Electron desktop GUI) needs Node >= 22; the terminal CLI runs on
 // Node >= 18. Without this guard a Node 18/20 user gets a cryptic Electron/Vite
 // crash mid-launch instead of a clear message — a classic first-run star-killer.

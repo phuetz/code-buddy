@@ -11,6 +11,19 @@ once it reaches `1.0.0`.
 ## [Unreleased]
 
 ### Added
+- **Reminders — the robot reminds you (meds…) and you flag them done.** Opt-in
+  (`CODEBUDDY_REMINDERS=true`). Due reminders are announced **aloud** (new `sayNow` — the missing
+  proactive-speech primitive, Piper, `$0`) **and** to **Telegram**; no acknowledgement → gentle
+  re-nag (1–2×) → Telegram escalation + a logged "missed". **Safety-first ack (this is health):** a
+  spoken "c'est fait" marks a reminder done **only** when one is pending in its bounded ack window
+  (`CODEBUDDY_REMINDER_ACK_WINDOW_MS`), **never** from ambient speech or the chime-in LLM, and the
+  bind is **read back aloud** so a mis-bind is correctable. Create three ways — `buddy remind
+  add "<label>" --at HH:MM [--days 1,3,5]` (+ `list`/`done`/`rm`), the hand-editable
+  `~/.codebuddy/reminders.json`, or by voice ("rappelle-moi … à 9h"). Stored as JSON
+  (`src/companion/reminders.ts` + `reminder-runner.ts`); runner is independent of the sensory
+  daemon. (Live-proven: robot speaks a reminder via Piper in ~3s; CLI mutates the JSON + log.
+  Telegram *delivery* is live; an interactive Telegram *button-ack* is the next step; voice
+  create/ack are synthetic-tested — no live mic yet.)
 - **Robot mode listens like a human — replies only when addressed or warranted.** In daemon mode the robot used to answer *every* utterance it heard. New `respond-decider.ts` adds a tiered, cheap-first gate between hearing and speaking (the percept is still recorded on every utterance — observation/memory stay continuous): **addressed** (robot name, fuzzy-matched for STT mangling → always replies) → **engagement window** (follow-ups within `CODEBUDDY_SENSORY_ENGAGE_WINDOW_MS` reply without re-addressing — bounded *per address*, the window does NOT slide on cross-talk, so one address can't make it answer the room forever) → **silent** unless `CODEBUDDY_SENSORY_CHIME_IN=true`, which adds a cheap cue check then a rare high-bar LLM judge (error→silent, so it never butts into a human-human conversation). `CODEBUDDY_ROBOT_NAME` (default `Buddy`), `CODEBUDDY_SENSORY_ALWAYS_RESPOND=true` reverts to the old reply-to-everything behavior. NO LLM call on ambient speech. (Note: buddy-sense audio is still WAV-fed — there is no live-mic capture yet, so this is unit- + synthetic-event-tested, not demonstrable as a live always-listening robot.)
 - **Voice COMMANDS — speak an instruction, the agent acts, the result is spoken (CLI + Cowork).**
   Opt-in (`CODEBUDDY_SENSORY_SPEAK_ACT=true`). A spoken utterance now drives a REAL agent turn via

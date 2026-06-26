@@ -256,6 +256,34 @@ async function defaultPlay(wav: string): Promise<void> {
 }
 
 /**
+ * Speak an arbitrary string aloud RIGHT NOW (proactively), not as a reply to something heard.
+ * The missing primitive for reminders/announcements: synthesize (Piper) → play → clean up.
+ * Injectable synth/play for tests. Never-throws ($0 on local Piper).
+ */
+export async function sayNow(
+  text: string,
+  options: { voice?: string; rootDir?: string; synth?: SynthFn; play?: PlayFn } = {},
+): Promise<void> {
+  try {
+    const t = (text ?? '').trim();
+    if (!t) return;
+    const synth = options.synth ?? makeDefaultSynth(options.voice, options.rootDir);
+    const play = options.play ?? defaultPlay;
+    const wav = await synth(t);
+    if (!wav) return;
+    await play(wav);
+    try {
+      const { unlink } = await import('fs/promises');
+      await unlink(wav);
+    } catch {
+      /* leave the file if cleanup fails */
+    }
+  } catch (err) {
+    logger.warn(`[voice] sayNow failed: ${err instanceof Error ? err.message : String(err)}`);
+  }
+}
+
+/**
  * Build an `onHeard` handler that thinks then speaks. Never-throws.
  * Wire it into `wireSpeechReaction({ onHeard: makeVoiceReply() })`.
  */

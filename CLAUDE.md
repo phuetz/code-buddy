@@ -213,6 +213,10 @@ Persistent memory lives at `.codebuddy/CODEBUDDY_MEMORY.md` (project) and `~/.co
 | `CODEBUDDY_SENSORY_CHIME_IN` | `true` lets the robot speak **unprompted** when the conversation warrants it (cheap cue → rare high-bar LLM judge, error→silent). Default off (conservative — never butt into a human-human conversation) |
 | `CODEBUDDY_SENSORY_RESPOND_DECISION_MODEL` | Pin the model for the rare chime-in judgment (else the fast reply model) |
 | `CODEBUDDY_SENSORY_ALWAYS_RESPOND` | `true` bypasses the response gate — reply to **every** utterance (the pre-2026-06-26 behavior, for testing) |
+| `CODEBUDDY_REMINDERS` | Enable reminders (`buddy server`): the robot announces due reminders aloud (`sayNow`/Piper) + Telegram, and you flag them done. Store: `~/.codebuddy/reminders.json` (hand-editable) + `~/.codebuddy/companion/reminder-log.jsonl`. Runner is independent of the sensory daemon (`src/companion/reminders.ts` + `reminder-runner.ts`). Create via `buddy remind add`, the JSON, or voice ("rappelle-moi … à 9h") |
+| `CODEBUDDY_REMINDER_ACK_WINDOW_MS` | How long a fired reminder stays acknowledgeable (default 300000). A voice "c'est fait" binds ONLY to a reminder pending in this window — never to ambient speech / the chime-in LLM — and the bind is read back aloud |
+| `CODEBUDDY_REMINDER_RENAG_MS` / `CODEBUDDY_REMINDER_RENAG_MAX` | Gentle re-nag gap (default 60000) and max re-nags (default 2) before a missed dose escalates to Telegram + logs `missed` |
+| `CODEBUDDY_REMINDER_TICK_MS` | Reminder runner poll interval (default 60000) |
 | `CODEBUDDY_TTS_VOICE` / `CODEBUDDY_TTS_PIPER_MODEL` | Path to a Piper `.onnx` voice. Enables the `piper` TTS provider (`auto` picks it only when set) + the voice loop's synthesis |
 | `OMNIPARSER_API_URL` / `OMNIPARSER_API_KEY` | Base URL (default `http://localhost:8000`) + optional Bearer for a self-hosted OmniParser v2 server, enabling `computer_control` `snapshot_with_screenshot` + `useOmniParser` (no-op if unreachable) |
 | `SENTRY_DSN`, `OTEL_EXPORTER_OTLP_ENDPOINT` | Observability |

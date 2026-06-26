@@ -4,6 +4,7 @@ import {
   describeVoiceReadiness,
   resolveVoiceModel,
   resetVoiceModelCache,
+  sayNow,
 } from '../../src/sensory/voice-loop.js';
 
 describe('voice loop — readiness (fail-loud prereqs)', () => {
@@ -62,6 +63,45 @@ describe('voice loop — model resolution (env authoritative)', () => {
     expect(r.baseURL).toBe('http://localhost:9999/v1');
     expect(r.apiKey).toBe('secret');
     expect(r.reason).toContain('pinned');
+  });
+});
+
+describe('sayNow — proactive speech (reminders/announcements)', () => {
+  it('synthesizes then plays (in order)', async () => {
+    const calls: string[] = [];
+    await sayNow('bonjour', {
+      synth: async (t) => {
+        calls.push(`synth:${t}`);
+        return '/tmp/none.wav';
+      },
+      play: async (w) => {
+        calls.push(`play:${w}`);
+      },
+    });
+    expect(calls).toEqual(['synth:bonjour', 'play:/tmp/none.wav']);
+  });
+
+  it('stays silent on empty text (no synth, no play)', async () => {
+    let synthed = 0;
+    await sayNow('   ', {
+      synth: async () => {
+        synthed += 1;
+        return '/tmp/none.wav';
+      },
+      play: async () => {},
+    });
+    expect(synthed).toBe(0);
+  });
+
+  it('never throws when synthesis fails', async () => {
+    await expect(
+      sayNow('x', {
+        synth: async () => {
+          throw new Error('piper down');
+        },
+        play: async () => {},
+      }),
+    ).resolves.toBeUndefined();
   });
 });
 
