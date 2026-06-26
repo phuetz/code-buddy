@@ -650,6 +650,21 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.invoke('schedule.toggle', id, enabled),
     runNow: (id: string): Promise<ScheduleTask | null> => ipcRenderer.invoke('schedule.runNow', id),
   },
+  automations: {
+    list: (): Promise<{
+      ok: boolean;
+      error?: string;
+      reminders: Array<Record<string, unknown>>;
+      rules: Array<Record<string, unknown>>;
+      runs: Array<Record<string, unknown>>;
+    }> => ipcRenderer.invoke('automations.list'),
+    toggle: (kind: 'rule' | 'reminder', id: string, enabled: boolean): Promise<{ ok: boolean; error?: string }> =>
+      ipcRenderer.invoke('automations.toggle', kind, id, enabled),
+    remove: (kind: 'rule' | 'reminder', id: string): Promise<{ ok: boolean; error?: string }> =>
+      ipcRenderer.invoke('automations.remove', kind, id),
+    reminderDone: (id: string): Promise<{ ok: boolean; error?: string }> =>
+      ipcRenderer.invoke('automations.reminderDone', id),
+  },
 
   // Checkpoint operations
   checkpoint: {
@@ -4710,6 +4725,18 @@ declare global {
         delete: (id: string) => Promise<{ success: boolean }>;
         toggle: (id: string, enabled: boolean) => Promise<ScheduleTask | null>;
         runNow: (id: string) => Promise<ScheduleTask | null>;
+      };
+      automations: {
+        list: () => Promise<{
+          ok: boolean;
+          error?: string;
+          reminders: Array<Record<string, unknown>>;
+          rules: Array<Record<string, unknown>>;
+          runs: Array<Record<string, unknown>>;
+        }>;
+        toggle: (kind: 'rule' | 'reminder', id: string, enabled: boolean) => Promise<{ ok: boolean; error?: string }>;
+        remove: (kind: 'rule' | 'reminder', id: string) => Promise<{ ok: boolean; error?: string }>;
+        reminderDone: (id: string) => Promise<{ ok: boolean; error?: string }>;
       };
       checkpoint: {
         list: () => Promise<unknown>;

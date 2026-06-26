@@ -217,6 +217,7 @@ Persistent memory lives at `.codebuddy/CODEBUDDY_MEMORY.md` (project) and `~/.co
 | `CODEBUDDY_REMINDER_ACK_WINDOW_MS` | How long a fired reminder stays acknowledgeable (default 300000). A voice "c'est fait" binds ONLY to a reminder pending in this window — never to ambient speech / the chime-in LLM — and the bind is read back aloud |
 | `CODEBUDDY_REMINDER_RENAG_MS` / `CODEBUDDY_REMINDER_RENAG_MAX` | Gentle re-nag gap (default 60000) and max re-nags (default 2) before a missed dose escalates to Telegram + logs `missed` |
 | `CODEBUDDY_REMINDER_TICK_MS` | Reminder runner poll interval (default 60000) |
+| `CODEBUDDY_SENSORY_RULES_FILE` / `CODEBUDDY_RULE_RUNS_FILE` | Override the sensory-rules store / run-log paths. Administer with `buddy rules list\|enable\|disable\|rm\|runs\|validate\|add` or the Cowork **Automations** panel. Edits **hot-reload** on a running server (`wireSensoryRules` mtime-cache); `validateRule` runs `isDestructive` at write-time so a dangerous shell/agent rule is rejected on save. `src/sensory/sensory-rules-engine.ts` |
 | `CODEBUDDY_TTS_VOICE` / `CODEBUDDY_TTS_PIPER_MODEL` | Path to a Piper `.onnx` voice. Enables the `piper` TTS provider (`auto` picks it only when set) + the voice loop's synthesis |
 | `OMNIPARSER_API_URL` / `OMNIPARSER_API_KEY` | Base URL (default `http://localhost:8000`) + optional Bearer for a self-hosted OmniParser v2 server, enabling `computer_control` `snapshot_with_screenshot` + `useOmniParser` (no-op if unreachable) |
 | `SENTRY_DSN`, `OTEL_EXPORTER_OTLP_ENDPOINT` | Observability |

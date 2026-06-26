@@ -183,6 +183,11 @@ export async function markFired(id: string, now: Date = new Date()): Promise<Rem
   return r;
 }
 
+/** Enable/disable a reminder (admin). Returns the updated reminder, or null if not found. */
+export async function setReminderEnabled(id: string, enabled: boolean): Promise<Reminder | null> {
+  return patchReminder(id, { enabled });
+}
+
 export async function markDone(id: string, via: 'voice' | 'telegram' | 'cli', now: Date = new Date()): Promise<Reminder | null> {
   const r = await patchReminder(id, { lastDoneAt: now.toISOString() });
   if (r) await logReminderEvent('done', r, { via }, now);

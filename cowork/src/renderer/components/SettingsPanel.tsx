@@ -18,6 +18,7 @@ import {
   SlashSquare,
   Layers,
   Webhook,
+  Bell,
   Network,
   FolderKanban,
   Blocks,
@@ -49,6 +50,7 @@ import { SettingsSnippets } from './settings/SettingsSnippets';
 import { SettingsCustomCommands } from './settings/SettingsCustomCommands';
 import { SettingsWorkspacePresets } from './settings/SettingsWorkspacePresets';
 import { SettingsHooks } from './settings/SettingsHooks';
+import { SettingsAutomations } from './settings/SettingsAutomations';
 import { SettingsA2AAgents } from './settings/SettingsA2AAgents';
 import { SettingsServer } from './settings/SettingsServer';
 import { SettingsCoreEngine } from './settings/SettingsCoreEngine';
@@ -87,6 +89,7 @@ interface SettingsPanelProps {
     | 'customCommands'
     | 'workspacePresets'
     | 'hooks'
+    | 'automations'
     | 'a2a'
     | 'plugins'
     | 'telemetry'
@@ -117,6 +120,7 @@ type TabId =
   | 'customCommands'
   | 'workspacePresets'
   | 'hooks'
+  | 'automations'
   | 'a2a'
   | 'plugins'
   | 'telemetry'
@@ -149,6 +153,7 @@ const VALID_TABS = new Set<TabId>([
   'customCommands',
   'workspacePresets',
   'hooks',
+  'automations',
   'a2a',
   'plugins',
   'telemetry',
@@ -192,6 +197,7 @@ const TAB_GROUP: Record<TabId, string> = {
   workflows: 'automation',
   schedule: 'automation',
   hooks: 'automation',
+  automations: 'automation',
   workspacePresets: 'automation',
   a2a: 'automation',
   sandbox: 'security',
@@ -392,6 +398,12 @@ export function SettingsPanel({ onClose, initialTab = 'control' }: SettingsPanel
       label: t('hooks.title', 'Hooks & triggers'),
       icon: Webhook,
       description: t('hooks.hint', 'Run shell or HTTP hooks on agent events'),
+    },
+    {
+      id: 'automations' as TabId,
+      label: t('automations.title', 'Automations'),
+      icon: Bell,
+      description: t('automations.hint', 'Administer reminders + triggerable sensory rules'),
     },
     {
       id: 'a2a' as TabId,
@@ -685,6 +697,9 @@ export function SettingsPanel({ onClose, initialTab = 'control' }: SettingsPanel
               </div>
               <div className={activeTab === 'hooks' ? '' : 'hidden'}>
                 {viewedTabs.has('hooks') && <SettingsHooks />}
+              </div>
+              <div className={activeTab === 'automations' ? '' : 'hidden'}>
+                {viewedTabs.has('automations') && <SettingsAutomations isActive={activeTab === 'automations'} />}
               </div>
               <div className={activeTab === 'a2a' ? '' : 'hidden'}>
                 {viewedTabs.has('a2a') && <SettingsA2AAgents />}

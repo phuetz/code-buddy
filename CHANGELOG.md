@@ -11,6 +11,18 @@ once it reaches `1.0.0`.
 ## [Unreleased]
 
 ### Added
+- **Administer the robot's behaviors — reminders + triggerable actions (sensory rules).** Reminders
+  already had CRUD; the sensory **rules** engine (event → shell/webhook/alert/agent) had none —
+  hand-edited JSON, loaded once at startup (restart to take effect), the destructive check only at
+  fire-time. Now: a **core** CRUD-lite (`listSensoryRules`/`upsertSensoryRule`/`toggleSensoryRule`/
+  `removeSensoryRule`/`readRuleRuns` + `validateRule` running the **same `isDestructive` gate at
+  write-time**, so a dangerous rule is rejected on save, not at 3am) with **live hot-reload**
+  (`wireSensoryRules` mtime-caches the file and reloads before matching — an admin edit takes effect
+  on the running robot with **no restart**, proven live). Two thin clients over that core:
+  `buddy rules list|enable|disable|rm|runs|validate|add`, and a Cowork **Automations** settings panel
+  (reminders + rules with enable/disable/done/delete + a recent-fires view, delegating to the core via
+  `automations.*` IPC — no duplicate I/O). Depth = manage + observe; creating complex rules stays
+  JSON-edit (now validated + hot-reloaded), no rule-builder.
 - **Reminders — the robot reminds you (meds…) and you flag them done.** Opt-in
   (`CODEBUDDY_REMINDERS=true`). Due reminders are announced **aloud** (new `sayNow` — the missing
   proactive-speech primitive, Piper, `$0`) **and** to **Telegram**; no acknowledgement → gentle
