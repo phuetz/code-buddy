@@ -11,6 +11,7 @@ once it reaches `1.0.0`.
 ## [Unreleased]
 
 ### Added
+- **Robot mode listens like a human — replies only when addressed or warranted.** In daemon mode the robot used to answer *every* utterance it heard. New `respond-decider.ts` adds a tiered, cheap-first gate between hearing and speaking (the percept is still recorded on every utterance — observation/memory stay continuous): **addressed** (robot name, fuzzy-matched for STT mangling → always replies) → **engagement window** (follow-ups within `CODEBUDDY_SENSORY_ENGAGE_WINDOW_MS` reply without re-addressing) → **silent** unless `CODEBUDDY_SENSORY_CHIME_IN=true`, which adds a cheap cue check then a rare high-bar LLM judge (error→silent, so it never butts into a human-human conversation). `CODEBUDDY_ROBOT_NAME` (default `Buddy`), `CODEBUDDY_SENSORY_ALWAYS_RESPOND=true` reverts to the old reply-to-everything behavior. NO LLM call on ambient speech. (Note: buddy-sense audio is still WAV-fed — there is no live-mic capture yet, so this is unit- + synthetic-event-tested, not demonstrable as a live always-listening robot.)
 - **Voice COMMANDS — speak an instruction, the agent acts, the result is spoken (CLI + Cowork).**
   Opt-in (`CODEBUDDY_SENSORY_SPEAK_ACT=true`). A spoken utterance now drives a REAL agent turn via
   `makeAgentReply` (`src/sensory/agent-reply.ts`) instead of a chatty reply, then a condensed 1–2

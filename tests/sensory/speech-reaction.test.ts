@@ -3,6 +3,7 @@ import { mkdtemp, readFile } from 'fs/promises';
 import os from 'os';
 import path from 'path';
 import { wireSpeechReaction, type Transcriber } from '../../src/sensory/speech-reaction.js';
+import { createResponseDecider } from '../../src/sensory/respond-decider.js';
 import { getGlobalEventBus } from '../../src/events/event-bus.js';
 
 function speechEnd(wav?: string): void {
@@ -46,6 +47,94 @@ describe('speech reaction — speech_end → STT → percept', () => {
       const percepts = await readFile(path.join(tmp, '.codebuddy', 'companion', 'percepts.jsonl'), 'utf8');
       expect(percepts).toContain('Bonjour Patrice');
       expect(percepts).toContain('sensory_speech_reaction');
+    } finally {
+      unwire();
+    }
+  });
+
+  it('records the percept but stays silent when shouldRespond vetoes', async () => {
+    const tmp = await mkdtemp(path.join(os.tmpdir(), 'speech-'));
+    let heard = 0;
+    let clock = 1000;
+    const unwire = wireSpeechReaction({
+      transcriber: async () => 'il fait beau aujourd’hui',
+      debounceMs: 3000,
+      cwd: tmp,
+      now: () => clock,
+      shouldRespond: async () => ({ respond: false, reason: 'ambient' }),
+      onHeard: () => {
+        heard += 1;
+      },
+    });
+    try {
+      speechEnd('/tmp/x.wav');
+      await tick();
+      expect(heard).toBe(0); // vetoed → did not speak
+      // …but it still observed + remembered.
+      const percepts = await readFile(path.join(tmp, '.codebuddy', 'companion', 'percepts.jsonl'), 'utf8');
+      expect(percepts).toContain('il fait beau');
+    } finally {
+      unwire();
+    }
+  });
+
+  it('fires onHeard when shouldRespond approves', async () => {
+    const tmp = await mkdtemp(path.join(os.tmpdir(), 'speech-'));
+    let heard = '';
+    let clock = 1000;
+    const unwire = wireSpeechReaction({
+      transcriber: async () => 'Buddy, quelle heure ?',
+      debounceMs: 3000,
+      cwd: tmp,
+      now: () => clock,
+      shouldRespond: async () => ({ respond: true, reason: 'addressed' }),
+      onHeard: (t) => {
+        heard = t;
+      },
+    });
+    try {
+      speechEnd('/tmp/x.wav');
+      await tick();
+      expect(heard).toBe('Buddy, quelle heure ?');
+    } finally {
+      unwire();
+    }
+  });
+
+  it('integration smoke: the REAL decider gates the REAL speech-reaction (synthetic events)', async () => {
+    const tmp = await mkdtemp(path.join(os.tmpdir(), 'speech-'));
+    let clock = 1000;
+    // chime-in off (default) → addressed-only.
+    const decider = createResponseDecider({ now: () => clock, recentContext: async () => [] });
+    const spoken: string[] = [];
+    let transcript = 'Buddy, quelle heure est-il ?';
+    const unwire = wireSpeechReaction({
+      transcriber: async () => transcript,
+      debounceMs: 0,
+      cwd: tmp,
+      now: () => clock,
+      shouldRespond: (t) => decider.decide(t),
+      onHeard: async (t) => {
+        spoken.push(t);
+        decider.markEngaged();
+      },
+    });
+    try {
+      // 1) Addressed by name → speaks.
+      speechEnd('/tmp/x.wav');
+      await tick();
+      // 2) In-window follow-up without the name → speaks (continuity).
+      clock += 5000;
+      transcript = 'et demain ?';
+      speechEnd('/tmp/x.wav');
+      await tick();
+      // 3) Much later, ambient human-human chatter → silent.
+      clock += 60_000;
+      transcript = 'il fait beau aujourd’hui';
+      speechEnd('/tmp/x.wav');
+      await tick();
+
+      expect(spoken).toEqual(['Buddy, quelle heure est-il ?', 'et demain ?']);
     } finally {
       unwire();
     }

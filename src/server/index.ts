@@ -1188,13 +1188,31 @@ export async function startServer(userConfig: Partial<ServerConfig> = {}): Promi
                     | 'bypassPermissions') || 'plan',
                 });
               }
-              sensoryTeardown.push(
-                wireSpeechReaction({ onHeard: makeVoiceReply(replyFn ? { replyFn } : {}) }),
-              );
+              const reply = makeVoiceReply(replyFn ? { replyFn } : {});
+              // Human-like response gate: listen to everything, speak only when addressed or
+              // (opt-in) when the conversation warrants it. ALWAYS_RESPOND reverts to replying
+              // to every utterance.
+              const alwaysRespond = process.env.CODEBUDDY_SENSORY_ALWAYS_RESPOND === 'true';
+              const chimeIn = process.env.CODEBUDDY_SENSORY_CHIME_IN === 'true';
+              let onHeard = reply;
+              const wireOpts: Parameters<typeof wireSpeechReaction>[0] = {};
+              if (!alwaysRespond) {
+                const { createResponseDecider } = await import('../sensory/respond-decider.js');
+                const decider = createResponseDecider();
+                wireOpts.shouldRespond = (t) => decider.decide(t);
+                // Refresh the engagement window AFTER the (possibly slow) reply, so a follow-up
+                // doesn't fall outside the window while the robot was still speaking.
+                onHeard = async (t: string) => {
+                  await reply(t);
+                  decider.markEngaged();
+                };
+              }
+              wireOpts.onHeard = onHeard;
+              sensoryTeardown.push(wireSpeechReaction(wireOpts));
               logger.info(
                 `Sensory speech reaction: Enabled (speech_end → STT → ${
-                  readiness.act ? `agent[${readiness.permissionMode}]` : `think[${readiness.model}]`
-                } → speak` +
+                  alwaysRespond ? 'always-respond' : chimeIn ? 'gate[addressed+chime-in]' : 'gate[addressed-only]'
+                } → ${readiness.act ? `agent[${readiness.permissionMode}]` : `think[${readiness.model}]`} → speak` +
                   `${readiness.speakReady ? `[${readiness.voice}]` : ' — SILENT until CODEBUDDY_TTS_VOICE is set'})`,
               );
             } else {

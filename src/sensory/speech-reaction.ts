@@ -24,6 +24,12 @@ export interface SpeechReactionOptions {
   now?: () => number;
   /** Action hook for the transcript (e.g. trigger an agent turn). */
   onHeard?: (text: string) => void | Promise<void>;
+  /**
+   * Human-like response gate. The percept is ALWAYS recorded (observation/memory stay
+   * continuous); `onHeard` only fires when this returns `respond: true`. Omit → respond to
+   * everything (today's behavior). See `respond-decider.ts`.
+   */
+  shouldRespond?: (text: string) => Promise<{ respond: boolean; reason: string }>;
 }
 
 /** Default transcriber: local faster-whisper (base), best-effort, $0. Exported so the
@@ -84,6 +90,15 @@ export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => v
           options.cwd ? { cwd: options.cwd } : {},
         );
         logger.info(`[speech] heard → ${text}`);
+        // Human-like gate: observed + remembered above; only SPEAK if warranted.
+        if (options.shouldRespond) {
+          const decision = await options.shouldRespond(text);
+          if (!decision.respond) {
+            logger.info(`[speech] silent (${decision.reason})`);
+            return;
+          }
+          logger.info(`[speech] responding (${decision.reason})`);
+        }
         await options.onHeard?.(text);
       } catch (err) {
         logger.warn(`[speech] reaction failed: ${err instanceof Error ? err.message : String(err)}`);
