@@ -236,10 +236,23 @@ export function resetAcks(): void {
 
 // ── the safety-critical matcher ───────────────────────────────────────
 
-/** Explicit "I did it" phrases. Deliberately NOT bare "fait"/"pris" (would catch "il fait beau",
- *  "on a pris le train") — anchored done-intent only. */
-const DONE_PHRASE =
-  /(c'?est fait|c'?est bon|j'?ai pris|je l'?ai pris|je les ai pris|j'?ai bien pris|pris mes? |voil[aà]\b.*fait|oui.*fait|\bdone\b|\btaken\b|^\s*pris\b|fait\s*[!.]?\s*$)/i;
+/** Explicit, INTENTIONAL "I did it" phrases. Tightened hard because a false bind marks a dose
+ *  taken and is uncorrectable: NO bare "fait"/"pris", no "c'est bon", no "oui … fait". "j'ai pris"
+ *  binds only when terminal OR followed by a medication/object noun (so "j'ai pris mes clés" /
+ *  "on a pris le train" / "c'est parfait" do NOT match). */
+const DONE_OBJ =
+  '(?:le |la |les |mes? |mon |ma |du |de la )?(?:m[ée]dicaments?|comprim[ée]s?|cachets?|pilules?|traitement|gouttes?|le|la|les|[cç]a)';
+const DONE_PHRASE = new RegExp(
+  [
+    "c'?est fait",
+    "c'?est pris",
+    `j'?ai (?:bien )?pris(?=\\s*[.!?]?\\s*$|\\s+${DONE_OBJ}\\b)`,
+    "je l(?:es?)?'?ai pris(?=\\s*[.!?]?\\s*$)",
+    '\\bdone\\b',
+    '\\btaken\\b',
+  ].join('|'),
+  'i',
+);
 
 /**
  * Does this transcript acknowledge a pending reminder? Returns the reminder id to mark done, or

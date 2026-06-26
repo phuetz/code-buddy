@@ -86,11 +86,37 @@ describe('reminders — matchAck (the safety-critical bind)', () => {
     expect(matchAck("j'ai pris mes médicaments", now)).toBe('r1');
   });
 
-  it('does NOT bind ambient speech (no done-phrase)', () => {
+  it('does NOT bind ambient speech / lookalike affirmations (the dangerous false positives)', () => {
     const now = 1_000_000;
     openAck({ id: 'r1', label: 'meds' }, now);
-    expect(matchAck('il fait beau aujourd’hui', now)).toBeNull();
-    expect(matchAck('on a pris le train ce matin', now)).toBeNull();
+    // Each of these was said WHILE a reminder is pending — none may mark it done.
+    for (const ambient of [
+      'il fait beau aujourd’hui',
+      'on a pris le train ce matin',
+      'oui il fait beau',
+      "c'est parfait",
+      'voilà il fait beau',
+      "c'est bon",
+      "j'ai pris mes clés",
+      'tu as pris du bon temps',
+    ]) {
+      expect(matchAck(ambient, now), ambient).toBeNull();
+    }
+  });
+
+  it('binds the real done-phrases', () => {
+    const now = 1_000_000;
+    openAck({ id: 'r1', label: 'meds' }, now);
+    for (const done of [
+      "c'est fait",
+      "j'ai pris",
+      "j'ai pris mes médicaments",
+      "j'ai bien pris mes comprimés",
+      "je l'ai pris",
+      'done',
+    ]) {
+      expect(matchAck(done, now), done).toBe('r1');
+    }
   });
 
   it('does not bind outside the ack window', () => {
