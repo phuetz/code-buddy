@@ -11,6 +11,13 @@ once it reaches `1.0.0`.
 ## [Unreleased]
 
 ### Added
+- **The robot's voice follows you — voice notes to Telegram/phone when you're away.** New
+  `sendTelegramVoice(text)` (`src/sensory/alert.ts`) synthesizes the line to OGG/Opus (reusing the
+  existing `synthesizeToOgg` Piper→ffmpeg pipeline — the format Telegram voice notes require) and
+  POSTs `sendVoice`, falling back to text on any failure (never-throws, no-op without the alert
+  token). With `CODEBUDDY_VOICE_TO_TELEGRAM=true`, `sayNow` (so every reminder/announcement) also
+  pushes the spoken line to your phone — independent of the home speakers, so a missing audio device
+  doesn't block it. Live-proven: a real voice note delivered to Telegram in ~1.3s.
 - **Administer the robot's behaviors — reminders + triggerable actions (sensory rules).** Reminders
   already had CRUD; the sensory **rules** engine (event → shell/webhook/alert/agent) had none —
   hand-edited JSON, loaded once at startup (restart to take effect), the destructive check only at

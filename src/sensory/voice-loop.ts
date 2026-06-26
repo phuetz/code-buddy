@@ -264,22 +264,34 @@ export async function sayNow(
   text: string,
   options: { voice?: string; rootDir?: string; synth?: SynthFn; play?: PlayFn } = {},
 ): Promise<void> {
+  const t = (text ?? '').trim();
+  if (!t) return;
+  // 1. Home speakers (best-effort — a missing audio device must not block the phone push).
   try {
-    const t = (text ?? '').trim();
-    if (!t) return;
     const synth = options.synth ?? makeDefaultSynth(options.voice, options.rootDir);
     const play = options.play ?? defaultPlay;
     const wav = await synth(t);
-    if (!wav) return;
-    await play(wav);
-    try {
-      const { unlink } = await import('fs/promises');
-      await unlink(wav);
-    } catch {
-      /* leave the file if cleanup fails */
+    if (wav) {
+      await play(wav);
+      try {
+        const { unlink } = await import('fs/promises');
+        await unlink(wav);
+      } catch {
+        /* leave the file if cleanup fails */
+      }
     }
   } catch (err) {
-    logger.warn(`[voice] sayNow failed: ${err instanceof Error ? err.message : String(err)}`);
+    logger.warn(`[voice] sayNow (local) failed: ${err instanceof Error ? err.message : String(err)}`);
+  }
+  // 2. Phone — when traveling, push the same line as a Telegram VOICE NOTE so it reaches you
+  //    even with no one at the speakers. Opt-in, best-effort.
+  if (process.env.CODEBUDDY_VOICE_TO_TELEGRAM === 'true') {
+    try {
+      const { sendTelegramVoice } = await import('./alert.js');
+      await sendTelegramVoice(t);
+    } catch (err) {
+      logger.warn(`[voice] sayNow (telegram) failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
   }
 }
 
