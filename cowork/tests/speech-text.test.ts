@@ -2,7 +2,14 @@
  * speech-text — pure spoken-digest + command-mode helpers (no React/DOM).
  */
 import { describe, it, expect } from 'vitest';
-import { cleanForSpeech, condenseForSpeech } from '../src/renderer/utils/speech-text';
+import { cleanForSpeech, condenseForSpeech, isVoiceCommandMode } from '../src/renderer/utils/speech-text';
+
+describe('voice command mode (Cowork defaults to piloting)', () => {
+  it('defaults to ON when unset (no localStorage in node → piloting)', () => {
+    // localStorage is undefined here → the helper falls back to true (piloting).
+    expect(isVoiceCommandMode()).toBe(true);
+  });
+});
 
 describe('condenseForSpeech', () => {
   it('strips markdown for natural speech', () => {

@@ -52,12 +52,14 @@ export function condenseForSpeech(text: string, opts: CondenseOptions = {}): str
 
 const COMMAND_MODE_KEY = 'cowork.voice.command.enabled';
 
-/** True when push-to-talk should EXECUTE the transcript (command mode) vs. dictate it. */
+/** True when push-to-talk should EXECUTE the transcript (voice piloting) vs. dictate it.
+ *  Cowork defaults to PILOTING — the mic commands the agent; flip the toggle for dictation.
+ *  (Only an explicit '0' opts out; unset → piloting on.) */
 export function isVoiceCommandMode(): boolean {
   try {
-    return localStorage.getItem(COMMAND_MODE_KEY) === '1';
+    return localStorage.getItem(COMMAND_MODE_KEY) !== '0';
   } catch {
-    return false;
+    return true;
   }
 }
 
