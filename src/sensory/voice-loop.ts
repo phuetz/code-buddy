@@ -230,13 +230,30 @@ async function defaultReply(heard: string): Promise<string> {
 
 /** Default synth: Piper neural TTS via the shared text_to_speech synthesizer. */
 function makeDefaultSynth(voice?: string, rootDir?: string): SynthFn {
-  return async (text: string) => {
+  const synthFresh = async (text: string): Promise<string> => {
     const { synthesizeTextToSpeech } = await import('../tools/text-to-speech-tool.js');
     const res = await synthesizeTextToSpeech(
       { text, provider: 'piper', format: 'wav', ...(voice ? { voice } : {}) },
       rootDir ? { rootDir } : {},
     );
     return res.outputPath;
+  };
+  // Reuse the synthesized WAV for repeated phrases (greeting, "oui je t'entends", …) so
+  // Piper isn't re-run every time. Best-effort: any cache error falls back to a fresh
+  // synth. Opt-out with CODEBUDDY_TTS_CACHE=false.
+  if (process.env.CODEBUDDY_TTS_CACHE === 'false') return synthFresh;
+  return async (text: string): Promise<string> => {
+    try {
+      const { getTtsCache } = await import('./tts-cache.js');
+      const cache = getTtsCache();
+      const hit = cache.lookup(text, voice); // throwaway tmp copy (caller plays+unlinks it)
+      if (hit) return hit;
+      const wav = await synthFresh(text);
+      cache.store(text, voice, wav); // best-effort; cache copy survives the caller's unlink
+      return wav;
+    } catch {
+      return synthFresh(text);
+    }
   };
 }
 
