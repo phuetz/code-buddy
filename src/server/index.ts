@@ -1132,6 +1132,13 @@ export async function startServer(userConfig: Partial<ServerConfig> = {}): Promi
           // Requires a shared token: a frame can trigger the webcam, so refuse to
           // wire it on an unauthenticated bridge.
           const sensoryToken = process.env.CODEBUDDY_SENSORY_TOKEN;
+          // One shared response decider for the whole sensory session: the vision
+          // arrival greeting opens the engagement window (markEngaged) that the
+          // speech reaction's gate reads, so a greeted visitor's natural reply is
+          // treated as addressed — no wake-word needed. Without this shared wiring
+          // the greeting played but never opened a conversation.
+          const { createResponseDecider } = await import('../sensory/respond-decider.js');
+          const responseDecider = createResponseDecider();
           {
             const { shouldWireVisionReaction, wireVisionReaction } = await import('../sensory/vision-reaction.js');
             if (shouldWireVisionReaction({ camera: process.env.CODEBUDDY_SENSORY_CAMERA, token: sensoryToken })) {
@@ -1143,8 +1150,10 @@ export async function startServer(userConfig: Partial<ServerConfig> = {}): Promi
             // Semantic vision events (person_entered/left, drowsy) from the vision sidecar.
             if (shouldWireVisionReaction({ camera: process.env.CODEBUDDY_SENSORY_CAMERA, token: sensoryToken })) {
               const { wireSemanticVisionReaction } = await import('../sensory/semantic-vision-reaction.js');
-              sensoryTeardown.push(wireSemanticVisionReaction());
-              logger.info('Sensory semantic-vision reaction: Enabled (person/drowsy → alert)');
+              sensoryTeardown.push(
+                wireSemanticVisionReaction({ onEngage: () => responseDecider.markEngaged() }),
+              );
+              logger.info('Sensory semantic-vision reaction: Enabled (person/drowsy → alert + greet→engage)');
             }
             // Event→action rules engine (a camera event triggers code) — opt-in + token-gated,
             // since rules can run shell. Safety lives in sensory-action-executor (env-only context,
@@ -1233,12 +1242,12 @@ export async function startServer(userConfig: Partial<ServerConfig> = {}): Promi
 
               const wireOpts: Parameters<typeof wireSpeechReaction>[0] = { onHeard };
               if (!alwaysRespond) {
-                const { createResponseDecider } = await import('../sensory/respond-decider.js');
-                const decider = createResponseDecider();
+                // Reuse the session decider shared with the vision greeting above, so a
+                // person-arrival greeting's open engagement window carries into this gate.
                 wireOpts.shouldRespond = (t) =>
                   reminderShortcut?.(t)
                     ? Promise.resolve({ respond: true, reason: 'reminder' })
-                    : decider.decide(t);
+                    : responseDecider.decide(t);
               }
               sensoryTeardown.push(wireSpeechReaction(wireOpts));
               logger.info(
