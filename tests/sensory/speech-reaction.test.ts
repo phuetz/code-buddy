@@ -1,21 +1,145 @@
 import { describe, it, expect } from 'vitest';
-import { mkdtemp, readFile } from 'fs/promises';
+import { mkdtemp, readFile, writeFile } from 'fs/promises';
 import os from 'os';
 import path from 'path';
-import { wireSpeechReaction, type Transcriber } from '../../src/sensory/speech-reaction.js';
+import {
+  normalizeSpeechTranscript,
+  resolveFasterWhisperOptions,
+  wireSpeechReaction,
+  type Transcriber,
+} from '../../src/sensory/speech-reaction.js';
 import { createResponseDecider } from '../../src/sensory/respond-decider.js';
 import { getGlobalEventBus } from '../../src/events/event-bus.js';
 
-function speechEnd(wav?: string): void {
+function speechEnd(wav?: string, payload: Record<string, unknown> = {}): void {
   getGlobalEventBus().emit('sensory:perception', {
     source: 'test',
-    metadata: { modality: 'audio', kind: 'speech_end', payload: wav ? { wav } : {} },
+    metadata: { modality: 'audio', kind: 'speech_end', payload: wav ? { wav, ...payload } : payload },
+  });
+}
+
+/** The live-mic path: buddy-sense's `live-audio` sense decoded the utterance and
+ *  ships the text in the payload (no WAV). */
+function transcriptFinal(text: string, payload: Record<string, unknown> = {}): void {
+  getGlobalEventBus().emit('sensory:perception', {
+    source: 'test',
+    metadata: { modality: 'audio', kind: 'transcript_final', payload: { text, ...payload } },
   });
 }
 
 const tick = (): Promise<void> => new Promise((r) => setTimeout(r, 30));
 
 describe('speech reaction — speech_end → STT → percept', () => {
+  it('defaults faster-whisper to French assistant comprehension settings', () => {
+    const previous = {
+      lang: process.env.CODEBUDDY_SPEECH_LANG,
+      companionLang: process.env.CODEBUDDY_COMPANION_LANGUAGE,
+      beam: process.env.CODEBUDDY_SPEECH_BEAM_SIZE,
+      vad: process.env.CODEBUDDY_SPEECH_VAD_FILTER,
+      previousText: process.env.CODEBUDDY_SPEECH_CONDITION_PREVIOUS_TEXT,
+      prompt: process.env.CODEBUDDY_SPEECH_INITIAL_PROMPT,
+      hotwords: process.env.CODEBUDDY_SPEECH_HOTWORDS,
+      hotwordsFile: process.env.CODEBUDDY_SPEECH_HOTWORDS_FILE,
+    };
+    delete process.env.CODEBUDDY_SPEECH_LANG;
+    delete process.env.CODEBUDDY_COMPANION_LANGUAGE;
+    delete process.env.CODEBUDDY_SPEECH_BEAM_SIZE;
+    delete process.env.CODEBUDDY_SPEECH_VAD_FILTER;
+    delete process.env.CODEBUDDY_SPEECH_CONDITION_PREVIOUS_TEXT;
+    delete process.env.CODEBUDDY_SPEECH_INITIAL_PROMPT;
+    delete process.env.CODEBUDDY_SPEECH_HOTWORDS;
+    delete process.env.CODEBUDDY_SPEECH_HOTWORDS_FILE;
+
+    try {
+      expect(resolveFasterWhisperOptions()).toMatchObject({
+        language: 'fr',
+        beamSize: 1,
+        vadFilter: true,
+        conditionOnPreviousText: false,
+      });
+      expect(resolveFasterWhisperOptions().initialPrompt).toContain('Ne complète pas les silences');
+      expect(resolveFasterWhisperOptions().hotwords).toContain('Lisa');
+      expect(resolveFasterWhisperOptions().hotwords).toContain('Buddy');
+      expect(resolveFasterWhisperOptions().hotwords).toContain('Code Buddy');
+    } finally {
+      if (previous.lang === undefined) delete process.env.CODEBUDDY_SPEECH_LANG;
+      else process.env.CODEBUDDY_SPEECH_LANG = previous.lang;
+      if (previous.companionLang === undefined) delete process.env.CODEBUDDY_COMPANION_LANGUAGE;
+      else process.env.CODEBUDDY_COMPANION_LANGUAGE = previous.companionLang;
+      if (previous.beam === undefined) delete process.env.CODEBUDDY_SPEECH_BEAM_SIZE;
+      else process.env.CODEBUDDY_SPEECH_BEAM_SIZE = previous.beam;
+      if (previous.vad === undefined) delete process.env.CODEBUDDY_SPEECH_VAD_FILTER;
+      else process.env.CODEBUDDY_SPEECH_VAD_FILTER = previous.vad;
+      if (previous.previousText === undefined) delete process.env.CODEBUDDY_SPEECH_CONDITION_PREVIOUS_TEXT;
+      else process.env.CODEBUDDY_SPEECH_CONDITION_PREVIOUS_TEXT = previous.previousText;
+      if (previous.prompt === undefined) delete process.env.CODEBUDDY_SPEECH_INITIAL_PROMPT;
+      else process.env.CODEBUDDY_SPEECH_INITIAL_PROMPT = previous.prompt;
+      if (previous.hotwords === undefined) delete process.env.CODEBUDDY_SPEECH_HOTWORDS;
+      else process.env.CODEBUDDY_SPEECH_HOTWORDS = previous.hotwords;
+      if (previous.hotwordsFile === undefined) delete process.env.CODEBUDDY_SPEECH_HOTWORDS_FILE;
+      else process.env.CODEBUDDY_SPEECH_HOTWORDS_FILE = previous.hotwordsFile;
+    }
+  });
+
+  it('loads configurable STT hotwords from env and a dictionary file', async () => {
+    const tmp = await mkdtemp(path.join(os.tmpdir(), 'speech-hotwords-'));
+    const dictionary = path.join(tmp, 'hotwords.txt');
+    await writeFile(dictionary, 'Murmure\nYOLOv8\nLisa\n');
+    const previous = {
+      hotwords: process.env.CODEBUDDY_SPEECH_HOTWORDS,
+      hotwordsFile: process.env.CODEBUDDY_SPEECH_HOTWORDS_FILE,
+    };
+    process.env.CODEBUDDY_SPEECH_HOTWORDS = 'Telos, council; Code Buddy';
+    process.env.CODEBUDDY_SPEECH_HOTWORDS_FILE = dictionary;
+
+    try {
+      const hotwords = resolveFasterWhisperOptions().hotwords || '';
+      expect(hotwords).toContain('Telos');
+      expect(hotwords).toContain('council');
+      expect(hotwords).toContain('Murmure');
+      expect(hotwords).toContain('YOLOv8');
+      expect((hotwords.match(/Lisa/g) || []).length).toBe(1);
+    } finally {
+      if (previous.hotwords === undefined) delete process.env.CODEBUDDY_SPEECH_HOTWORDS;
+      else process.env.CODEBUDDY_SPEECH_HOTWORDS = previous.hotwords;
+      if (previous.hotwordsFile === undefined) delete process.env.CODEBUDDY_SPEECH_HOTWORDS_FILE;
+      else process.env.CODEBUDDY_SPEECH_HOTWORDS_FILE = previous.hotwordsFile;
+    }
+  });
+
+  it('filters known Whisper subtitle hallucinations before the voice loop responds', () => {
+    expect(normalizeSpeechTranscript("Sous-titres réalisés par la communauté d'Amara.org")).toEqual({
+      text: '',
+      filteredReason: 'subtitle_hallucination',
+    });
+    expect(normalizeSpeechTranscript('Sous-titrage Société Radio-Canada')).toEqual({
+      text: '',
+      filteredReason: 'subtitle_hallucination',
+    });
+    expect(normalizeSpeechTranscript('Buddy, ouvre le diagnostic audio')).toEqual({
+      text: 'Buddy, ouvre le diagnostic audio',
+    });
+  });
+
+  it('filters non-speech, repetitive noise, and prompt leakage hallucinations', () => {
+    expect(normalizeSpeechTranscript('...')).toEqual({
+      text: '',
+      filteredReason: 'non_speech',
+    });
+    expect(normalizeSpeechTranscript('MMMMMMMMMMMMMMMMMMMM')).toEqual({
+      text: '',
+      filteredReason: 'repetitive_noise',
+    });
+    expect(normalizeSpeechTranscript('Fascination en français avec Lisa, Patrice, Code Buddy')).toEqual({
+      text: '',
+      filteredReason: 'prompt_leakage',
+    });
+    expect(normalizeSpeechTranscript('Mm.')).toEqual({
+      text: '',
+      filteredReason: 'filler_noise',
+    });
+  });
+
   it('transcribes the utterance once, records a hearing percept, fires onHeard', async () => {
     const tmp = await mkdtemp(path.join(os.tmpdir(), 'speech-'));
     let calls = 0;
@@ -101,11 +225,104 @@ describe('speech reaction — speech_end → STT → percept', () => {
     }
   });
 
+  it('queues the latest speech_end while STT is already in flight', async () => {
+    const tmp = await mkdtemp(path.join(os.tmpdir(), 'speech-'));
+    let releaseFirst: (() => void) | undefined;
+    const firstDone = new Promise<void>((resolve) => {
+      releaseFirst = resolve;
+    });
+    const calls: string[] = [];
+    const heard: string[] = [];
+    const transcriber: Transcriber = async (wav) => {
+      calls.push(wav);
+      if (wav.endsWith('first.wav')) {
+        await firstDone;
+        return 'premiere phrase';
+      }
+      return 'deuxieme phrase';
+    };
+    const unwire = wireSpeechReaction({
+      transcriber,
+      debounceMs: 3000,
+      cwd: tmp,
+      onHeard: (text) => {
+        heard.push(text);
+      },
+    });
+    try {
+      speechEnd('/tmp/first.wav');
+      await tick();
+      speechEnd('/tmp/second.wav');
+      await tick();
+
+      expect(calls).toEqual(['/tmp/first.wav']);
+      releaseFirst?.();
+      await tick();
+      await tick();
+
+      expect(calls).toEqual(['/tmp/first.wav', '/tmp/second.wav']);
+      expect(heard).toEqual(['premiere phrase', 'deuxieme phrase']);
+    } finally {
+      unwire();
+    }
+  });
+
+  it('records acquisition and loop latency metrics with hearing percepts', async () => {
+    const tmp = await mkdtemp(path.join(os.tmpdir(), 'speech-'));
+    let clock = 10_000;
+    const unwire = wireSpeechReaction({
+      transcriber: async () => {
+        clock += 120;
+        return 'Buddy, lance un diagnostic';
+      },
+      debounceMs: 0,
+      cwd: tmp,
+      now: () => clock,
+      shouldRespond: async () => {
+        clock += 30;
+        return { respond: true, reason: 'addressed' };
+      },
+      onHeard: async () => {
+        clock += 250;
+      },
+    });
+    try {
+      speechEnd('/tmp/x.wav', {
+        device: 'plughw:CARD=BRIO,DEV=0',
+        startedAtMs: 9000,
+        endedAtMs: 9800,
+        peakRms: 0.08,
+        avgRms: 0.035,
+        rmsOn: 0.02,
+        rmsOff: 0.012,
+        writeMs: 7,
+        ms: 820,
+        sampleRate: 16000,
+      });
+      await tick();
+
+      const raw = await readFile(path.join(tmp, '.codebuddy', 'companion', 'percepts.jsonl'), 'utf8');
+      const percept = JSON.parse(raw.trim()) as { payload: { responded: boolean; latency: Record<string, number>; capture: Record<string, unknown> } };
+      expect(percept.payload.responded).toBe(true);
+      expect(percept.payload.latency.sttMs).toBe(120);
+      expect(percept.payload.latency.decisionMs).toBe(30);
+      expect(percept.payload.latency.actionMs).toBe(250);
+      expect(percept.payload.latency.totalMs).toBe(400);
+      expect(percept.payload.capture.device).toBe('plughw:CARD=BRIO,DEV=0');
+      expect(percept.payload.capture.peakRms).toBe(0.08);
+      expect(percept.payload.capture.avgRms).toBe(0.035);
+      expect(percept.payload.capture.rmsOn).toBe(0.02);
+      expect(percept.payload.capture.writeMs).toBe(7);
+    } finally {
+      unwire();
+    }
+  });
+
   it('integration smoke: the REAL decider gates the REAL speech-reaction (synthetic events)', async () => {
     const tmp = await mkdtemp(path.join(os.tmpdir(), 'speech-'));
     let clock = 1000;
     // chime-in off (default) → addressed-only.
-    const decider = createResponseDecider({ now: () => clock, recentContext: async () => [] });
+    const decider = createResponseDecider({ robotName: 'Buddy', now: () => clock, recentContext: async () => [] });
     const spoken: string[] = [];
     let transcript = 'Buddy, quelle heure est-il ?';
     const unwire = wireSpeechReaction({
@@ -153,6 +370,84 @@ describe('speech reaction — speech_end → STT → percept', () => {
       getGlobalEventBus().emit('sensory:perception', { source: 'test', metadata: { modality: 'vital', kind: 'heartbeat', payload: { beat: 1 } } });
       await tick();
       expect(calls).toBe(0);
+    } finally {
+      unwire();
+    }
+  });
+});
+
+describe('speech reaction — live transcript_final (buddy-sense live-audio)', () => {
+  it('drives cognition from the payload text WITHOUT calling the transcriber', async () => {
+    const tmp = await mkdtemp(path.join(os.tmpdir(), 'speech-live-'));
+    let sttCalls = 0;
+    const transcriber: Transcriber = async () => {
+      sttCalls += 1; // must NEVER fire on the live path
+      return 'should-not-run';
+    };
+    let heard = '';
+    const unwire = wireSpeechReaction({
+      transcriber,
+      debounceMs: 3000,
+      cwd: tmp,
+      now: () => 1000,
+      onHeard: (t) => {
+        heard = t;
+      },
+    });
+    try {
+      transcriptFinal('Bonjour Lisa', { ms: 1200 });
+      await tick();
+      expect(sttCalls).toBe(0); // text already decoded in buddy-sense → no STT here
+      expect(heard).toBe('Bonjour Lisa');
+
+      const percepts = await readFile(path.join(tmp, '.codebuddy', 'companion', 'percepts.jsonl'), 'utf8');
+      expect(percepts).toContain('Bonjour Lisa');
+      expect(percepts).toContain('"live":true'); // recorded as the live-mic path, no fake wav
+    } finally {
+      unwire();
+    }
+  });
+
+  it('honours the shouldRespond gate on the live path too', async () => {
+    const tmp = await mkdtemp(path.join(os.tmpdir(), 'speech-live-'));
+    let heard = 0;
+    const unwire = wireSpeechReaction({
+      transcriber: async () => 'unused',
+      debounceMs: 0,
+      cwd: tmp,
+      now: () => 1000,
+      shouldRespond: async () => ({ respond: false, reason: 'ambient' }),
+      onHeard: () => {
+        heard += 1;
+      },
+    });
+    try {
+      transcriptFinal('il fait beau');
+      await tick();
+      expect(heard).toBe(0); // vetoed → silent, but still observed
+      const percepts = await readFile(path.join(tmp, '.codebuddy', 'companion', 'percepts.jsonl'), 'utf8');
+      expect(percepts).toContain('il fait beau');
+    } finally {
+      unwire();
+    }
+  });
+
+  it('ignores an empty live transcript', async () => {
+    const tmp = await mkdtemp(path.join(os.tmpdir(), 'speech-live-'));
+    let heard = 0;
+    const unwire = wireSpeechReaction({
+      transcriber: async () => 'unused',
+      debounceMs: 0,
+      cwd: tmp,
+      now: () => 1000,
+      onHeard: () => {
+        heard += 1;
+      },
+    });
+    try {
+      transcriptFinal('   '); // whitespace only → dropped before any job
+      await tick();
+      expect(heard).toBe(0);
     } finally {
       unwire();
     }
