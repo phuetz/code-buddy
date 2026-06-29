@@ -58,6 +58,8 @@ Watch a **local model reason on screen, then use real tools to do the work** —
 
 An open-source, multi-provider AI coding agent with a terminal UI, an HTTP/WebSocket server, and the **Cowork** desktop app — all on one core engine. It reads files, writes code, runs commands, opens PRs, and plans complex tasks across **15 LLM providers** with automatic failover and per-provider circuit breakers. With `buddy login`, a ChatGPT Plus / Pro subscription becomes the flat-fee brain of the whole system — no API keys, no per-token metering. An optional companion layer adds voice, durable memory, opt-in camera perception, and 24/7 background operation.
 
+For that companion layer, `buddy companion live` now gives a MySoulmate-style integrated preflight: it checks whether the existing voice-assistant loop, Python vision sidecar, memory, sensory flags, Telegram, YOLO, and Fleet pieces are actually wired for a real live session, then records the result as a local self-percept.
+
 ---
 
 ## In action
@@ -145,11 +147,11 @@ More desktop demos (Fleet, Autonomy, Companion, …) and captures: [`cowork/read
 
 Toward the long-term companion/robot vision, [`buddy-sense/`](buddy-sense/) is a **Rust, event-driven perception layer**. Parallel **sense modules** (audio VAD — energy or Silero neural; an autonomic **heartbeat**; screen via `xcap`; UI focus via AT-SPI) feed a **thalamus** that gates + coalesces the stream and broadcasts it over a loopback WebSocket into Code Buddy's event bus — where the heartbeat **paces background memory consolidation** ("dreaming", inspired by OpenClaw). Local, `$0`, permissive deps only (clean-room — no proprietary code copied).
 
-**The eyes are now live.** [`buddy-vision/`](buddy-vision/) (Python sidecar, sibling to `buddy-sense/`) watches a camera and emits **semantic** events — `person_entered` / `person_left` and `drowsy` (MediaPipe FaceLandmarker; each detector is a **state machine → one event per transition**, so no alert spam) — into the same bus. A local vision model (e.g. moondream) describes the scene on motion (deduped), and meaningful events push a Telegram alert (photo + caption). Built for **remote watch** — a camera somewhere far away pinging you only when it matters (a person enters, a drowsiness "guardian-angel" alert). All local, `$0`, offline. Setup: `buddy-vision/setup.sh`.
+**The eyes are now live.** [`buddy-vision/`](buddy-vision/) (Python sidecar, sibling to `buddy-sense/`) watches a camera and emits **semantic** events — `person_entered` / `person_left` and `drowsy` (MediaPipe FaceLandmarker by default, optional YOLOv8 person-presence backend; each detector is a **state machine → one event per transition**, so no alert spam) — into the same bus. A local vision model (e.g. moondream) describes the scene on motion (deduped), and meaningful events push a Telegram alert (photo + caption). Built for **remote watch** — a camera somewhere far away pinging you only when it matters (a person enters, a drowsiness "guardian-angel" alert). All local, `$0`, offline. Setup: `buddy-vision/setup.sh`.
 
 <p align="center"><img src="buddy-sense/docs/architecture.svg" alt="buddy-sense nervous-system architecture: senses → thalamus → bridge → Code Buddy event bus" width="840"/></p>
 
-**Honestly experimental** — distinct from the GA core above: the default daemon emits the heartbeat (+ audio from a WAV file); the live camera/mic aren't wired into the daemon yet. `speech → STT → 'hearing' percept` **is** wired (faster-whisper), with a hook left for driving a full agent turn. What's real today: the pure detector cores + thalamus + bridge are unit-tested (`cargo test`, 20 tests, no hardware), and the loopback bridge → event bus → reaction path (incl. the speech transcription) is covered on the Code Buddy side.
+**Honestly experimental** — distinct from the GA core above: the Rust daemon emits the heartbeat (+ audio from a WAV file), while live camera and live microphone run as Python sidecars (`buddy-vision/watch.py` and `buddy-vision/ear.py`) into the same bridge. The ear sidecar now defaults to `BUDDY_EAR_DEVICE=auto`, preferring webcam/USB microphones discovered through ALSA. `speech_end → STT → response gate → think/agent → speak` **is** wired with faster-whisper + Piper; voice actions default to `CODEBUDDY_SENSORY_SPEAK_PERMISSION_MODE=plan`. What's real today: the pure detector cores + thalamus + bridge are unit-tested (`cargo test`, 20 tests, no hardware), and the loopback bridge → event bus → reaction path (incl. speech transcription) is covered on the Code Buddy side.
 
 ```bash
 cd buddy-sense && cargo test     # 20 tests, no hardware
@@ -203,12 +205,12 @@ buddy --yolo                                       # full autonomy
 ```bash
 buddy llm                                    # list the LLMs you're logged into + the failover order
 buddy llm ensemble "is this approach sound?" # ask ChatGPT + Grok + Ollama together, then synthesize
-buddy council "compare REST vs GraphQL"      # route by capability, judge the best answer, LEARN which AI wins per task type
+buddy council "compare REST vs GraphQL"      # conductor roles + synthesis + judge + learned ranking
 buddy council --scoreboard                   # the learned ranking (which model is best for code / reasoning / …)
 CODEBUDDY_LLM_FAILOVER=1 buddy -p "…"         # if the primary errors, auto-continue on the next active LLM
 ```
 
-**`buddy council`** takes the ensemble further: it routes a task to the *best-suited* models by capability (and by their past win rate), an impartial judge keeps the single best answer, and a scoreboard **learns which AI is best for which kind of task** over time — so it gets smarter the more you use it. Works in Telegram too (`council <task>`).
+**`buddy council`** takes the ensemble further: for complex tasks, a lightweight conductor assigns complementary roles (architect, implementer, reviewer, verifier, skeptic, etc.) instead of asking every model the exact same prompt. It still routes by capability and past win rate, an impartial judge scores the candidates, a synthesis pass merges the best role-specialized contributions, and a scoreboard **learns which AI is best for which kind of task and role** over time — so future runs can put stronger models on reviewer/verifier/architect jobs. Use `--no-conductor` to force the old direct fan-out, or `--no-synthesis` to keep only the judge-selected answer. Works in Telegram too (`council <task>`).
 
 <p align="center">
   <img src="docs/assets/llm-demo.gif" alt="buddy llm lists your active LLMs, then auto-fails over from Grok to ChatGPT when the primary errors" width="760"/>

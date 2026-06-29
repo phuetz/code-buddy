@@ -2996,7 +2996,7 @@ program
 // Council — capability-aware multi-LLM router + ensemble (judge + consensus) + learning.
 program
   .command("council [task...]")
-  .description("Ask several capable LLMs the same task, judge + reconcile the answers, and learn which model is best per task type")
+  .description("Ask a capability-routed AI council with conductor roles, judge + reconcile the answers, and learn winners per task type")
   .option("-n, --count <n>", "How many models to consult (default 3)")
   .option("--models <list>", "Restrict to these providers/models (comma list)")
   .option("--judge <model>", "Provider/model to use as the impartial judge")
@@ -3004,10 +3004,12 @@ program
   .option("--no-consensus", "Skip the consensus/agreement summary")
   .option("--scoreboard", "Print the learned model ranking and exit")
   .option("--fleet", "Also consult connected fleet peers (other machines' Code Buddy) over the network")
+  .option("--no-conductor", "Disable adaptive council roles and ask every model the exact same prompt")
+  .option("--no-synthesis", "Disable the final collective synthesis pass")
   .action(
     async (
       taskParts: string[] = [],
-      options: { count?: string; models?: string; judge?: string; taskType?: string; consensus?: boolean; scoreboard?: boolean; fleet?: boolean },
+      options: { count?: string; models?: string; judge?: string; taskType?: string; consensus?: boolean; scoreboard?: boolean; fleet?: boolean; conductor?: boolean; synthesis?: boolean },
     ) => {
       const { runCouncil } = await import("./commands/council.js");
       await runCouncil(
@@ -3020,6 +3022,8 @@ program
           consensus: options.consensus,
           scoreboard: options.scoreboard,
           fleet: options.fleet,
+          conductor: options.conductor,
+          synthesis: options.synthesis,
         },
         cli.stdout,
       );
