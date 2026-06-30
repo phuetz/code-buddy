@@ -16,6 +16,7 @@ import * as fs from 'fs/promises';
 import * as fsSync from 'fs';
 import path from 'path';
 import { resolveCommandProvider } from '../llm-provider-resolution.js';
+import { addKnowledgeSubcommands } from './knowledge-ingest.js';
 
 async function runDirectResearch(
   topic: string,
@@ -276,6 +277,11 @@ export function createResearchCommand(): Command {
         clearTimeout(hardStopTimer);
       }
     });
+
+  // `buddy research ingest|recall|stats` — feed/query the collective knowledge graph with
+  // real scientific publications (Patrice's vision). Subcommands take precedence over the
+  // default <topic> action, so `research "topic"` still runs Wide Research.
+  addKnowledgeSubcommands(cmd);
 
   return cmd;
 }
