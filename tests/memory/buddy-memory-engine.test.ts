@@ -9,10 +9,19 @@ import {
 
 // The Rust engine MVP (Phase 1): keyword recall over the shared JSONL ledger via a sidecar.
 // Skips cleanly where the binary isn't built.
-const bin =
-  process.env.CODEBUDDY_BUDDY_MEMORY_BIN ||
-  join(homedir(), 'DEV', 'buddy-memory', 'target', 'debug', 'buddy-memory');
-const hasBin = existsSync(bin);
+function findBin(): string | null {
+  const env = process.env.CODEBUDDY_BUDDY_MEMORY_BIN;
+  if (env && existsSync(env)) return env;
+  for (const sub of ['release', 'debug']) {
+    const p = join(homedir(), 'DEV', 'buddy-memory', 'target', sub, 'buddy-memory');
+    if (existsSync(p)) return p;
+  }
+  return null;
+}
+const bin = findBin();
+const hasBin = bin !== null;
+/** Heuristic: a release/embeddings build is needed for semantic recall (Phase 2). */
+const hasEmbeddings = !!bin && bin.includes('/release/');
 
 describe('CKG Rust engine (CODEBUDDY_CKG_ENGINE=rust)', () => {
   let dir: string;
@@ -48,6 +57,17 @@ describe('CKG Rust engine (CODEBUDDY_CKG_ENGINE=rust)', () => {
     expect(stats.entities).toBeGreaterThanOrEqual(1);
     expect(existsSync(ledgerPath)).toBe(true);
   }, 30000);
+
+  it.skipIf(!hasEmbeddings)('Phase 2: hybrid recall finds a FR paraphrase semantically (TS→Rust)', async () => {
+    const ckg = new CollectiveKnowledgeGraph({ ledgerPath, agentId: 'host/repo' });
+    await ckg.ingest({ name: 'voice', text: 'La réponse vocale du robot est beaucoup trop lente.' });
+    await ckg.ingest({ name: 'cake', text: 'La recette de gâteau demande trois œufs et du beurre.' });
+    // Paraphrase with no shared keywords → only semantics surfaces the voice discovery.
+    const hits = await ckg.recallHybrid('mon assistant parle avec beaucoup de retard', { limit: 1 });
+    expect(hits.length).toBe(1);
+    expect(hits[0]!.name).toBe('voice');
+    expect((hits[0]!.similarity ?? 0)).toBeGreaterThan(0.2);
+  }, 60000);
 
   it.skipIf(!hasBin)('corroboration: same fact from two agents → corroborations=2 via engine', async () => {
     const a = new CollectiveKnowledgeGraph({ ledgerPath, agentId: 'ministar/code-buddy' });
