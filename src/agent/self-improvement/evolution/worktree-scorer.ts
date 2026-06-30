@@ -23,6 +23,8 @@ import {
   type FitnessContext,
   type FitnessReport,
 } from './variant-fitness.js';
+import { assertNoProtectedChanges, resetProtectedToBaseline } from './protected-paths.js';
+import { scrubbedEnv } from './scrub-env.js';
 
 export interface ScoreBranchOptions {
   /** Repo root that owns the worktree. Default: process.cwd(). */
@@ -31,10 +33,18 @@ export interface ScoreBranchOptions {
   /** Baseline report to flag regressions against. */
   baseline?: FitnessReport;
   timeoutMs?: number;
-  /** Env for the fitness subprocesses (pass a scrubbed env for untrusted variants). */
+  /** Env for the fitness subprocesses. If unset, a SCRUBBED env (no secrets) is used by default. */
   env?: NodeJS.ProcessEnv;
   /** Symlink node_modules from base into the worktree (default true). */
   linkNodeModules?: boolean;
+  /**
+   * Baseline ref (e.g. 'main'). When set: a branch that touches a PROTECTED path is rejected
+   * unscored (anti-self-weakening), and protected paths are reset to this ref in the worktree
+   * before scoring (defense-in-depth).
+   */
+  baselineRef?: string;
+  /** Use a secret-scrubbed env by default (true). Set false (or pass env) when eval-tasks need keys. */
+  scrubEnv?: boolean;
 }
 
 export interface ScoreBranchResult {
@@ -52,19 +62,50 @@ export async function scoreBranchInWorktree(branch: string, opts: ScoreBranchOpt
   const basePath = opts.basePath ?? process.cwd();
   const components = opts.components ?? defaultDeterministicComponents();
 
+  // Anti-self-weakening: reject a variant that changes any protected path (gates/benchmarks/
+  // held-out/harness) BEFORE building or scoring it. The core Phase-C guard.
+  if (opts.baselineRef) {
+    const check = assertNoProtectedChanges(branch, opts.baselineRef, basePath);
+    if (!check.ok) {
+      return {
+        branch,
+        worktreePath: '',
+        report: {
+          score: 0,
+          passedAll: false,
+          regressions: [],
+          components: [
+            {
+              name: 'protected-violation',
+              weight: 1,
+              score: 0,
+              passed: false,
+              detail: `variant changes protected paths: ${check.violations.join(', ')}`,
+            },
+          ],
+        },
+      };
+    }
+  }
+
   // Preflight disk so a build/test loop can't fill the disk (disk-guard; throws if too low).
   ensureFreeSpace(basePath, undefined, { label: 'evolve worktree' });
 
+  const env = opts.env ?? (opts.scrubEnv === false ? process.env : scrubbedEnv());
   const mgr = WorktreeSessionManager.getInstance();
   const session = mgr.createWorktreeSession(branch, basePath);
   try {
     if (opts.linkNodeModules !== false) {
       linkNodeModules(basePath, session.worktreePath);
     }
+    // Defense-in-depth: even if detection missed something, restore protected paths to baseline.
+    if (opts.baselineRef) {
+      resetProtectedToBaseline(session.worktreePath, opts.baselineRef);
+    }
     const ctx: FitnessContext = {
       checkoutDir: session.worktreePath,
+      env,
       ...(opts.timeoutMs !== undefined ? { timeoutMs: opts.timeoutMs } : {}),
-      ...(opts.env ? { env: opts.env } : {}),
     };
     const report = await computeFitness(ctx, components, opts.baseline);
     return { branch, worktreePath: session.worktreePath, report };
