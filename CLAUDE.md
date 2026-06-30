@@ -166,6 +166,12 @@ When a tool touches a path, the system walks upward to the project root loading 
 
 Persistent memory lives at `.codebuddy/CODEBUDDY_MEMORY.md` (project) and `~/.codebuddy/memory.md` (user). The agent writes back preferences, decisions, and gotchas across sessions (see `src/memory/persistent-memory.ts`). User-facing surface: `/memory recent`, `/memory show`, `buddy --init` (also generates an `AGENTS.md` for cross-CLI compatibility — read by Claude Code, Gemini CLI, Cursor, Codex).
 
+## Collective Knowledge Graph engine — `buddy-memory/` (Rust) + `src/memory/collective-knowledge-graph.ts`
+
+The CKG is the **shared, cross-agent** memory (distinct from the per-session writeback above): a typed graph (`lesson`/`decision`/`fact`/`discovery` nodes; `related_to`/`supersedes`/`supports`/`contradicts`/… edges) with **bi-temporal supersede**, **cross-agent corroboration** (a fact independent agents agree on gains confidence + rank), and **hybrid recall** (multilingual embeddings + keyword + salience + MMR, **no LLM at retrieval**). Store = append-only JSONL ledger (`~/.codebuddy/collective/ckg-ledger.jsonl`, O_APPEND atomic → cross-process safe). Injection is gated by `CODEBUDDY_COLLECTIVE_MEMORY`; fed by `buddy research ingest|recall|stats|ingest-code` + the autonomous research-ingest daemon.
+
+**`buddy-memory/`** is the optional **Rust engine** backing it — an **in-tree Rust sidecar, exactly like `buddy-sense/`** (spawned over newline JSON-RPC stdio; the TS class is a thin client in `buddy-memory-client.ts`). It mirrors Code Explorer's architecture: ledger write-ahead + snapshot fast-load (`<ledger>.snap`, no full O(N) replay on cold start) + an ONNX embedder (`embeddings` cargo feature; copies Code Explorer's `OnnxEmbedder` since gitnexus's `mod onnx` is private — so deps stay permissive/MIT, no PolyForm taint). **Opt-in via `CODEBUDDY_CKG_ENGINE=rust`** and the binary being built; otherwise the in-process TS implementation runs unchanged. Both share the same ledger, so switching is seamless and falls back on any engine error. Build: `cd buddy-memory && cargo build --release --features embeddings`. Status: Phases 1–3 done (model+ledger+JSON-RPC, hybrid semantic recall, snapshot+parity); Phase 4 = sub-linear recall index + default cutover.
+
 ## Config Files
 
 - `src/config/model-tools.ts` — **start here for model-specific behavior**. Per-model caps with glob matching.
@@ -223,6 +229,10 @@ Persistent memory lives at `.codebuddy/CODEBUDDY_MEMORY.md` (project) and `~/.co
 | `CODEBUDDY_SENSORY_RULES_FILE` / `CODEBUDDY_RULE_RUNS_FILE` | Override the sensory-rules store / run-log paths. Administer with `buddy rules list\|enable\|disable\|rm\|runs\|validate\|add` or the Cowork **Automations** panel. Edits **hot-reload** on a running server (`wireSensoryRules` mtime-cache); `validateRule` runs `isDestructive` at write-time so a dangerous shell/agent rule is rejected on save. `src/sensory/sensory-rules-engine.ts` |
 | `CODEBUDDY_TTS_VOICE` / `CODEBUDDY_TTS_PIPER_MODEL` | Path to a Piper `.onnx` voice. Enables the `piper` TTS provider (`auto` picks it only when set) + the voice loop's synthesis |
 | `OMNIPARSER_API_URL` / `OMNIPARSER_API_KEY` | Base URL (default `http://localhost:8000`) + optional Bearer for a self-hosted OmniParser v2 server, enabling `computer_control` `snapshot_with_screenshot` + `useOmniParser` (no-op if unreachable) |
+| `CODEBUDDY_COLLECTIVE_MEMORY` | Enable Collective Knowledge Graph injection into context (default off). `src/memory/collective-knowledge-graph.ts` |
+| `CODEBUDDY_CKG_ENGINE` | `rust` routes the CKG (ingest/recallHybrid) to the in-tree Rust engine `buddy-memory/`; unset → in-process TS (default, fallback on any engine error). Same shared ledger either way |
+| `CODEBUDDY_BUDDY_MEMORY_BIN` | Override the `buddy-memory` binary (else `buddy-memory/target/{release,debug}` → `~/DEV/buddy-memory/...` → PATH) |
+| `BUDDY_MEMORY_EMBED_MODEL` / `BUDDY_MEMORY_EMBED_TOKEN_TYPE` | Multilingual MiniLM `.onnx` for hybrid recall (default `~/.codebuddy/models/buddy-memory/model.onnx`, `tokenizer.json` beside it; needs the `embeddings` cargo feature) + whether the graph expects `token_type_ids` (default true) |
 | `SENTRY_DSN`, `OTEL_EXPORTER_OTLP_ENDPOINT` | Observability |
 | `PERF_TIMING`, `CACHE_TRACE`, `VERBOSE` | Debug flags |
 
