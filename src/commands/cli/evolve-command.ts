@@ -20,6 +20,7 @@ import { CodeVariantStore, type VariantRecord } from '../../agent/self-improveme
 interface EvolveOptions {
   goal?: string;
   rounds?: string;
+  concurrency?: string;
   baseline?: string;
   model?: string;
   confirm?: boolean;
@@ -107,7 +108,8 @@ export function registerEvolveCommands(program: Command): void {
     .command('run')
     .description('Author + evaluate candidate variant(s) toward a weakness (gated by CODEBUDDY_EVOLVE=true)')
     .requiredOption('--goal <text>', 'The weakness/goal to improve toward')
-    .option('--rounds <n>', 'Number of candidate variants to evaluate', '1')
+    .option('--rounds <n>', 'Number of candidate variants to evaluate (fan-out)', '1')
+    .option('--concurrency <n>', 'How many candidates to evaluate at once', '2')
     .option('--baseline <ref>', 'Baseline ref to branch from + rank against', 'main')
     .option('--model <model>', 'Model for the mutator agent')
     .action(async (options: EvolveOptions) => {
@@ -116,31 +118,36 @@ export function registerEvolveCommands(program: Command): void {
         process.exitCode = 1;
         return;
       }
-      const { runEvolutionCycle, agentMutator } = await import('../../agent/self-improvement/evolution/evolution-engine.js');
+      const { runEvolutionRound, agentMutator } = await import('../../agent/self-improvement/evolution/evolution-engine.js');
       const { computeFitness, defaultDeterministicComponents } = await import('../../agent/self-improvement/evolution/variant-fitness.js');
       const baselineRef = options.baseline ?? 'main';
       const rounds = Math.max(1, Number(options.rounds ?? '1') || 1);
+      const concurrency = Math.max(1, Number(options.concurrency ?? '2') || 2);
       const components = defaultDeterministicComponents();
 
       logger.info(`Scoring baseline (${baselineRef})…`);
       const baseline = await computeFitness({ checkoutDir: process.cwd() }, components);
       logger.info(`  baseline fitness=${baseline.score.toFixed(3)}`);
+      logger.info(`Evolving ${rounds} candidate(s), ${concurrency} at a time, toward: ${options.goal}`);
 
-      const store = new CodeVariantStore();
-      for (let i = 0; i < rounds; i++) {
-        logger.info(`\nRound ${i + 1}/${rounds} — mutating toward: ${options.goal}`);
-        const result = await runEvolutionCycle({
-          baselineRef,
-          weakness: { id: `goal-${i + 1}`, goal: options.goal as string, kind: 'manual' },
-          mutate: agentMutator(options.model ? { model: options.model } : {}),
-          components,
-          baseline,
-          store,
-        });
-        logger.info(
-          `  variant ${result.variantId}: fitness=${result.report.score.toFixed(3)} beats=${result.beatsBaseline} kept=${result.kept}`,
-        );
+      const results = await runEvolutionRound({
+        rounds,
+        concurrency,
+        baselineRef,
+        weakness: { id: 'goal', goal: options.goal as string, kind: 'manual' },
+        mutate: agentMutator(options.model ? { model: options.model } : {}),
+        components,
+        baseline,
+        store: new CodeVariantStore(),
+      });
+      for (const r of results) {
+        logger.info(`  ${r.variantId}: fitness=${r.report.score.toFixed(3)} beats=${r.beatsBaseline} kept=${r.kept}`);
       }
-      logger.info('\nDone. Review with `buddy evolve list` / `buddy evolve review <id>`; keep with `buddy evolve keep <id> --confirm`.');
+      const winner = results.find((r) => r.beatsBaseline);
+      logger.info(
+        winner
+          ? `\nBest: ${winner.variantId} (fitness ${winner.report.score.toFixed(3)}). Review: \`buddy evolve review ${winner.variantId}\`; keep: \`buddy evolve keep ${winner.variantId} --confirm\`.`
+          : '\nNo candidate beat the baseline. Try more rounds, a sharper --goal, or a stronger --model.',
+      );
     });
 }
