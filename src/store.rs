@@ -219,7 +219,12 @@ impl Store {
         // cross-instance corroboration correct and is race-safe (no manual offset arithmetic).
         self.load_incremental();
         self.events_since_snapshot += 1;
-        if self.events_since_snapshot >= SNAPSHOT_EVERY {
+        // Adaptive cadence: a snapshot clones+serializes the whole graph (O(N)), so snapshotting
+        // every 200 events would be O(N²) under bulk ingest. Scale the interval with graph size:
+        // snapshot every max(200, N/4) events → O(N) amortized. The trade-off is a longer ledger
+        // tail to replay after a crash, which the fast cold-start load absorbs.
+        let threshold = SNAPSHOT_EVERY.max(self.current.len() as u64 / 4);
+        if self.events_since_snapshot >= threshold {
             self.save_snapshot();
         }
     }
