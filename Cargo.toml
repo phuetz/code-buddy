@@ -11,11 +11,17 @@ authors = ["Patrick Huetz"]
 name = "buddy-memory"
 path = "src/main.rs"
 
+[features]
+# Hybrid (semantic) recall via ONNX embeddings. Off by default → keyword recall, light build.
+embeddings = ["dep:ort", "dep:tokenizers"]
+
 [dependencies]
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sha2 = "0.10"
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
+ort = { version = "2.0.0-rc.12", optional = true }
+tokenizers = { version = "0.20", default-features = false, features = ["onig"], optional = true }
 
 [profile.release]
 opt-level = 3

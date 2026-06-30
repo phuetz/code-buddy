@@ -3,6 +3,8 @@
 //! server over stdio: each line `{"id":N,"method":"...","params":{...}}` → `{"id":N,"result":...}`
 //! (or `{"id":N,"error":"..."}`). Code Buddy spawns this as a sidecar; the TS CKG is a client.
 
+#[cfg(feature = "embeddings")]
+mod embed;
 mod model;
 mod store;
 
@@ -90,11 +92,24 @@ fn dispatch(store: &mut Store, method: &str, params: &Value) -> Result<Value, St
             let input = parse_publication(params);
             Ok(opt_result(store.remember(&input)))
         }
-        // Phase 1: recallHybrid degrades to keyword recall (embeddings land in Phase 2).
-        "recall" | "recallHybrid" => {
+        "recall" => {
             let query = params.get("query").and_then(|v| v.as_str()).unwrap_or("");
             let limit = params.get("limit").and_then(|v| v.as_u64()).unwrap_or(5) as usize;
             let types = parse_str_array(params.get("types"));
+            Ok(serde_json::to_value(store.recall(query, limit, types.as_deref())).unwrap_or(Value::Null))
+        }
+        "recallHybrid" => {
+            let query = params.get("query").and_then(|v| v.as_str()).unwrap_or("");
+            let limit = params.get("limit").and_then(|v| v.as_u64()).unwrap_or(5) as usize;
+            let types = parse_str_array(params.get("types"));
+            #[cfg(feature = "embeddings")]
+            let res = {
+                let w_sem = params.get("semanticWeight").and_then(|v| v.as_f64()).unwrap_or(0.7);
+                let mmr = params.get("mmrLambda").and_then(|v| v.as_f64()).unwrap_or(0.7);
+                store.recall_hybrid(query, limit, types.as_deref(), w_sem, mmr)
+            };
+            // Built without embeddings → keyword recall (degrades like the TS path).
+            #[cfg(not(feature = "embeddings"))]
             let res = store.recall(query, limit, types.as_deref());
             Ok(serde_json::to_value(res).unwrap_or(Value::Null))
         }

@@ -60,6 +60,12 @@ pub struct Store {
     relations: HashMap<String, MemRelation>,
     offset: u64,
     default_agent: String,
+    #[cfg(feature = "embeddings")]
+    embedder: Option<crate::embed::Embedder>,
+    #[cfg(feature = "embeddings")]
+    embed_tried: bool,
+    #[cfg(feature = "embeddings")]
+    emb_cache: HashMap<String, Vec<f32>>,
 }
 
 fn now_iso() -> String {
@@ -136,6 +142,12 @@ impl Store {
             relations: HashMap::new(),
             offset: 0,
             default_agent,
+            #[cfg(feature = "embeddings")]
+            embedder: None,
+            #[cfg(feature = "embeddings")]
+            embed_tried: false,
+            #[cfg(feature = "embeddings")]
+            emb_cache: HashMap::new(),
         };
         s.load_incremental();
         s
@@ -406,6 +418,181 @@ impl Store {
             valid_to: e.valid_to.clone(),
             relations,
         }
+    }
+}
+
+#[cfg(feature = "embeddings")]
+impl Store {
+    fn ensure_embedder(&mut self) {
+        if self.embed_tried {
+            return;
+        }
+        self.embed_tried = true;
+        let model = std::env::var("BUDDY_MEMORY_EMBED_MODEL").unwrap_or_else(|_| {
+            let home = std::env::var("CODEBUDDY_HOME")
+                .or_else(|_| std::env::var("HOME").map(|h| format!("{}/.codebuddy", h)))
+                .unwrap_or_else(|_| ".codebuddy".to_string());
+            format!("{}/models/buddy-memory/model.onnx", home)
+        });
+        let path = std::path::Path::new(&model);
+        if !path.exists() {
+            return;
+        }
+        let needs_tt = std::env::var("BUDDY_MEMORY_EMBED_TOKEN_TYPE").map(|v| v != "false").unwrap_or(true);
+        if let Ok(e) = crate::embed::Embedder::load(path, 384, 256, needs_tt) {
+            self.embedder = Some(e);
+        }
+    }
+
+    /// Hybrid recall: semantic (ONNX embeddings) + keyword + salience + corroboration, then MMR
+    /// for diversity. No LLM at retrieval. Falls back to keyword recall if the model is missing or
+    /// produces zero vectors. Mirrors the TS `recallHybrid` scoring.
+    pub fn recall_hybrid(
+        &mut self,
+        query: &str,
+        limit: usize,
+        types: Option<&[String]>,
+        w_sem: f64,
+        mmr_lambda: f64,
+    ) -> Vec<RecallResult> {
+        self.load_incremental();
+        self.ensure_embedder();
+        if self.embedder.is_none() {
+            return self.recall(query, limit, types);
+        }
+        struct Cand {
+            id: String,
+            embed_text: String,
+            kw_text: String,
+            ch: String,
+            mentions: u64,
+            updated_at: String,
+            contributors: usize,
+        }
+        let mut cands: Vec<Cand> = Vec::new();
+        for e in self.current.values() {
+            if let Some(ts) = types {
+                if !ts.iter().any(|t| t == &e.node_type) {
+                    continue;
+                }
+            }
+            cands.push(Cand {
+                id: e.id.clone(),
+                embed_text: format!("{}. {}", e.name, e.text),
+                kw_text: format!("{} {}", e.name, e.text),
+                ch: e.content_hash.clone(),
+                mentions: e.mentions,
+                updated_at: e.updated_at.clone(),
+                contributors: e.contributors.len(),
+            });
+        }
+        if cands.is_empty() {
+            return Vec::new();
+        }
+
+        let mut to_embed: Vec<&str> = vec![query];
+        let mut need: Vec<usize> = Vec::new();
+        for (i, c) in cands.iter().enumerate() {
+            if !self.emb_cache.contains_key(&c.ch) {
+                need.push(i);
+                to_embed.push(&c.embed_text);
+            }
+        }
+        let emb = match self.embedder.as_mut().unwrap().embed(&to_embed) {
+            Ok(v) if !v.is_empty() => v,
+            _ => return self.recall(query, limit, types),
+        };
+        let qvec = emb[0].clone();
+        if qvec.iter().all(|x| *x == 0.0) {
+            return self.recall(query, limit, types); // model failed → keyword
+        }
+        for (k, ci) in need.iter().enumerate() {
+            if let Some(v) = emb.get(k + 1) {
+                self.emb_cache.insert(cands[*ci].ch.clone(), v.clone());
+            }
+        }
+
+        let q = tokenize(query);
+        let mut items: Vec<(usize, f64, f32)> = Vec::new(); // (cand idx, relevance, similarity)
+        for (i, c) in cands.iter().enumerate() {
+            let v = match self.emb_cache.get(&c.ch) {
+                Some(v) => v,
+                None => continue,
+            };
+            let sem = crate::embed::cosine(&qvec, v);
+            let kw = keyword_overlap(&q, &c.kw_text);
+            let sal = compute_salience(c.mentions, days_since(&c.updated_at), 60.0, 1.0);
+            let rel = (w_sem * sem as f64 + (1.0 - w_sem) * kw)
+                * (0.7 + 0.3 * sal.min(1.0))
+                * corroboration_boost(c.contributors);
+            items.push((i, rel, sem));
+        }
+        items.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+
+        // MMR (Carbonell-Goldstein): relevant but diverse.
+        let mut picked: Vec<(usize, f64, f32)> = Vec::new();
+        while picked.len() < limit && !items.is_empty() {
+            let mut best = 0usize;
+            let mut best_mmr = f64::NEG_INFINITY;
+            for (j, cand) in items.iter().enumerate() {
+                let mut max_sim = 0f32;
+                for p in &picked {
+                    if let (Some(a), Some(b)) =
+                        (self.emb_cache.get(&cands[cand.0].ch), self.emb_cache.get(&cands[p.0].ch))
+                    {
+                        max_sim = max_sim.max(crate::embed::cosine(a, b));
+                    }
+                }
+                let mmr = mmr_lambda * cand.1 - (1.0 - mmr_lambda) * max_sim as f64;
+                if mmr > best_mmr {
+                    best_mmr = mmr;
+                    best = j;
+                }
+            }
+            picked.push(items.remove(best));
+        }
+
+        picked
+            .into_iter()
+            .filter_map(|(idx, rel, sem)| {
+                self.current.get(&cands[idx].id).map(|e| self.to_result(e, Some(rel), Some(sem as f64)))
+            })
+            .collect()
+    }
+}
+
+#[cfg(all(test, feature = "embeddings"))]
+mod hybrid_tests {
+    use super::*;
+
+    fn model_present() -> bool {
+        std::env::var("BUDDY_MEMORY_EMBED_MODEL")
+            .ok()
+            .map(|p| std::path::Path::new(&p).exists())
+            .unwrap_or_else(|| {
+                std::env::var("HOME")
+                    .map(|h| std::path::Path::new(&format!("{}/.codebuddy/models/buddy-memory/model.onnx", h)).exists())
+                    .unwrap_or(false)
+            })
+    }
+
+    #[test]
+    fn hybrid_recall_finds_paraphrase_semantically() {
+        if !model_present() {
+            eprintln!("skip: multilingual model not present");
+            return;
+        }
+        let dir = std::env::temp_dir().join(format!("bm-hyb-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let ledger = dir.join("ledger.jsonl");
+        let mut s = Store::new(ledger, "test/repo".to_string());
+        s.remember(&RememberInput { text: "La réponse vocale du robot est beaucoup trop lente.".into(), node_type: Some("discovery".into()), ..Default::default() });
+        s.remember(&RememberInput { text: "La recette de gâteau demande trois œufs et du beurre.".into(), node_type: Some("discovery".into()), ..Default::default() });
+        // Paraphrase with no shared keywords → semantic must surface the voice discovery.
+        let hits = s.recall_hybrid("mon assistant parle avec beaucoup de retard", 2, None, 0.7, 0.7);
+        assert!(!hits.is_empty());
+        assert!(hits[0].text.contains("vocale"), "top hit should be the voice discovery, got {:?}", hits[0].text);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }
 
