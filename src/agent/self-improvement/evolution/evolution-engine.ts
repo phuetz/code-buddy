@@ -18,7 +18,8 @@ import { execFileSync, spawn } from 'child_process';
 import { logger } from '../../../utils/logger.js';
 import { scoreBranchInWorktree } from './worktree-scorer.js';
 import { WorktreeSessionManager } from '../../../git/worktree-sessions.js';
-import { CodeVariantStore, type VariantRecord } from './code-variant-store.js';
+import { CodeVariantStore, behaviorDescriptor, diverseElites, type VariantRecord } from './code-variant-store.js';
+import { changedPathsVsBase } from './protected-paths.js';
 import type { FitnessComponent, FitnessReport } from './variant-fitness.js';
 
 export interface Weakness {
@@ -100,11 +101,8 @@ export function gatherInspirations(
   baselineScore?: number,
 ): Inspiration[] {
   if (k <= 0) return [];
-  const elites = store
-    .list()
-    .filter((v) => v.passedAll && v.regressions.length === 0 && (baselineScore === undefined || v.score > baselineScore))
-    .sort((a, b) => b.score - a.score)
-    .slice(0, k);
+  // MAP-Elites: one elite per behavior niche → diverse inspirations, not k clones of one lineage.
+  const elites = diverseElites(store.list(), k, baselineScore);
   return elites.map((v) => {
     let diff = '';
     try {
@@ -190,6 +188,7 @@ export async function runEvolutionCycle(opts: EvolutionCycleOptions): Promise<Ev
     regressions: report.regressions,
     createdAt: new Date().toISOString(),
     detail: `${opts.weakness.kind}: ${opts.weakness.goal}`,
+    behavior: behaviorDescriptor(changedPathsVsBase(branch, opts.baselineRef, basePath)),
   };
   store.record(record);
 

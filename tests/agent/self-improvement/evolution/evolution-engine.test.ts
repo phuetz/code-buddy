@@ -41,11 +41,12 @@ describe('gatherInspirations (AlphaEvolve-style elites)', () => {
     const dir = mkdtempSync(join(tmpdir(), 'insp-'));
     try {
       const store = new CodeVariantStore(join(dir, 'v.json'));
-      store.record(vr({ id: 'e1', score: 0.9 }));
-      store.record(vr({ id: 'e2', score: 0.95 }));
-      store.record(vr({ id: 'e3', score: 0.99, passedAll: false })); // failed → excluded
-      store.record(vr({ id: 'e4', score: 0.6 })); // below baseline → excluded
-      store.record(vr({ id: 'e5', score: 0.92, regressions: ['unit-tests'] })); // regressed → excluded
+      // distinct niches so MAP-Elites keeps both (diversity); e2 higher → first.
+      store.record(vr({ id: 'e1', score: 0.9, behavior: 'src/a:single' }));
+      store.record(vr({ id: 'e2', score: 0.95, behavior: 'src/b:single' }));
+      store.record(vr({ id: 'e3', score: 0.99, passedAll: false, behavior: 'src/c:single' })); // failed → excluded
+      store.record(vr({ id: 'e4', score: 0.6, behavior: 'src/d:single' })); // below baseline → excluded
+      store.record(vr({ id: 'e5', score: 0.92, regressions: ['unit-tests'], behavior: 'src/e:single' })); // regressed → excluded
       // branches don't exist here → diffs come back empty, but SELECTION must be correct.
       const insp = gatherInspirations(store, 'HEAD', process.cwd(), 2, 0.7);
       expect(insp.map((i) => i.id)).toEqual(['e2', 'e1']);

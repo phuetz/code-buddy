@@ -22,6 +22,8 @@ export interface VariantRecord {
   regressions: string[];
   createdAt: string;
   detail?: string;
+  /** MAP-Elites niche descriptor (which area + how broad a change) — for diversity. */
+  behavior?: string;
 }
 
 export interface BestOptions {
@@ -35,6 +37,45 @@ export interface BestOptions {
 
 function defaultStorePath(): string {
   return join(process.cwd(), '.codebuddy', 'self-improvement', 'evolution', 'variants.json');
+}
+
+/**
+ * MAP-Elites niche descriptor for a variant, from the files it changed: dominant code area (first
+ * two path segments) + a breadth bucket. Variants in the same niche compete; different niches are
+ * preserved → diversity. e.g. "src/agent:single", "src/tools:broad".
+ */
+export function behaviorDescriptor(changedFiles: string[]): string {
+  const files = changedFiles.filter((f) => f.trim().length > 0);
+  if (files.length === 0) return 'none';
+  const counts = new Map<string, number>();
+  for (const f of files) {
+    const area = f.split('/').slice(0, 2).join('/');
+    counts.set(area, (counts.get(area) ?? 0) + 1);
+  }
+  const dominant = [...counts.entries()].sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1))[0]![0];
+  const breadth = files.length === 1 ? 'single' : files.length <= 3 ? 'small' : 'broad';
+  return `${dominant}:${breadth}`;
+}
+
+/**
+ * MAP-Elites elite selection: the best passing, no-regression, above-baseline variant PER niche,
+ * top-k niches by score. Diverse by construction — one elite per behavior cell, not k clones of the
+ * single global best. Drives diverse inspirations (the AlphaEvolve program-database, niche-aware).
+ */
+export function diverseElites(records: VariantRecord[], k: number, baselineScore?: number): VariantRecord[] {
+  if (k <= 0) return [];
+  const eligible = records.filter(
+    (v) => v.passedAll && v.regressions.length === 0 && (baselineScore === undefined || v.score > baselineScore),
+  );
+  const bestPerNiche = new Map<string, VariantRecord>();
+  for (const v of eligible) {
+    const niche = v.behavior ?? 'unknown';
+    const cur = bestPerNiche.get(niche);
+    if (!cur || v.score > cur.score || (v.score === cur.score && v.createdAt > cur.createdAt)) {
+      bestPerNiche.set(niche, v);
+    }
+  }
+  return [...bestPerNiche.values()].sort((a, b) => b.score - a.score).slice(0, k);
 }
 
 export class CodeVariantStore {
