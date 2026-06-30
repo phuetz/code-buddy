@@ -1,0 +1,22 @@
+[package]
+name = "buddy-memory"
+version = "0.1.0"
+edition = "2021"
+license = "PolyForm-Noncommercial-1.0.0"
+description = "Rust engine for Code Buddy's Collective Knowledge Graph (CKG) — graph memory with bi-temporal supersede, cross-agent corroboration, and hybrid retrieval. Spawned as a sidecar by Code Buddy (no code dependency)."
+repository = "https://github.com/phuetz/buddy-memory"
+authors = ["Patrick Huetz"]
+
+[[bin]]
+name = "buddy-memory"
+path = "src/main.rs"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
+
+[profile.release]
+opt-level = 3
+lto = "thin"
