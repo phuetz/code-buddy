@@ -6,7 +6,7 @@
 
 use crate::model::*;
 use chrono::{DateTime, SecondsFormat, Utc};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::collections::{BTreeSet, HashMap};
 use std::fs::{self, OpenOptions};
 use std::io::Write;
@@ -53,12 +53,29 @@ pub struct Stats {
     pub ledger_path: String,
 }
 
+/// Fast-load snapshot of the materialized graph at a given ledger offset. Avoids replaying the
+/// whole JSONL on cold start: load the snapshot, then replay only the ledger tail beyond `offset`.
+/// The ledger stays the source of truth; the snapshot is a best-effort cache.
+#[derive(Serialize, Deserialize)]
+struct Snapshot {
+    version: u8,
+    offset: u64,
+    current: HashMap<String, MemEntity>,
+    superseded: HashMap<String, MemEntity>,
+    relations: HashMap<String, MemRelation>,
+}
+
+/// Write a fresh snapshot after this many appended events.
+const SNAPSHOT_EVERY: u64 = 200;
+
 pub struct Store {
     ledger_path: PathBuf,
+    snapshot_path: PathBuf,
     current: HashMap<String, MemEntity>,
     superseded: HashMap<String, MemEntity>,
     relations: HashMap<String, MemRelation>,
     offset: u64,
+    events_since_snapshot: u64,
     default_agent: String,
     #[cfg(feature = "embeddings")]
     embedder: Option<crate::embed::Embedder>,
@@ -135,12 +152,15 @@ fn keyword_overlap(q: &BTreeSet<String>, text: &str) -> f64 {
 
 impl Store {
     pub fn new(ledger_path: PathBuf, default_agent: String) -> Self {
+        let snapshot_path = snapshot_path_for(&ledger_path);
         let mut s = Store {
             ledger_path,
+            snapshot_path,
             current: HashMap::new(),
             superseded: HashMap::new(),
             relations: HashMap::new(),
             offset: 0,
+            events_since_snapshot: 0,
             default_agent,
             #[cfg(feature = "embeddings")]
             embedder: None,
@@ -149,7 +169,8 @@ impl Store {
             #[cfg(feature = "embeddings")]
             emb_cache: HashMap::new(),
         };
-        s.load_incremental();
+        s.load_snapshot(); // fast cold start (sets offset to the snapshot's coverage)
+        s.load_incremental(); // replay only the ledger tail beyond the snapshot
         s
     }
 
@@ -192,11 +213,54 @@ impl Store {
             let line = serde_json::to_string(ev).unwrap_or_default();
             let _ = writeln!(f, "{}", line);
         }
-        // Advance offset past our own write so load_incremental won't double-apply it.
-        if let Ok(m) = fs::metadata(&self.ledger_path) {
-            self.offset = m.len();
+        // Apply via the ledger tail (NOT apply_event directly): load_incremental reads everything
+        // from `offset` — our just-written line PLUS any events other processes appended since our
+        // last read — applying each exactly once and advancing the offset. This is what keeps
+        // cross-instance corroboration correct and is race-safe (no manual offset arithmetic).
+        self.load_incremental();
+        self.events_since_snapshot += 1;
+        if self.events_since_snapshot >= SNAPSHOT_EVERY {
+            self.save_snapshot();
         }
-        self.apply_event(ev);
+    }
+
+    /// Persist a fast-load snapshot of the current materialized graph (atomic temp+rename).
+    pub fn save_snapshot(&mut self) {
+        let snap = Snapshot {
+            version: 1,
+            offset: self.offset,
+            current: self.current.clone(),
+            superseded: self.superseded.clone(),
+            relations: self.relations.clone(),
+        };
+        if let Ok(json) = serde_json::to_string(&snap) {
+            let tmp = self.snapshot_path.with_extension("snap.tmp");
+            if fs::write(&tmp, json).is_ok() {
+                let _ = fs::rename(&tmp, &self.snapshot_path);
+            }
+        }
+        self.events_since_snapshot = 0;
+    }
+
+    /// Restore from the snapshot if present and consistent with the ledger. Best-effort: any
+    /// problem (missing/corrupt/ahead-of-ledger) leaves the store empty for a full tail replay.
+    fn load_snapshot(&mut self) {
+        let data = match fs::read_to_string(&self.snapshot_path) {
+            Ok(d) => d,
+            Err(_) => return,
+        };
+        let snap: Snapshot = match serde_json::from_str::<Snapshot>(&data) {
+            Ok(s) if s.version == 1 => s,
+            _ => return,
+        };
+        let ledger_len = fs::metadata(&self.ledger_path).map(|m| m.len()).unwrap_or(0);
+        if snap.offset > ledger_len {
+            return; // snapshot ahead of the ledger (truncated/rebuilt) → ignore, replay fully
+        }
+        self.current = snap.current;
+        self.superseded = snap.superseded;
+        self.relations = snap.relations;
+        self.offset = snap.offset;
     }
 
     fn apply_event(&mut self, ev: &LedgerEvent) {
@@ -594,6 +658,77 @@ mod hybrid_tests {
         assert!(hits[0].text.contains("vocale"), "top hit should be the voice discovery, got {:?}", hits[0].text);
         let _ = std::fs::remove_dir_all(&dir);
     }
+}
+
+#[cfg(test)]
+mod store_tests {
+    use super::*;
+
+    fn tmp_ledger() -> PathBuf {
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static CTR: AtomicU64 = AtomicU64::new(0);
+        // Per-call unique (tests run in parallel threads and rm their own dir — avoid collisions).
+        let n = CTR.fetch_add(1, Ordering::Relaxed);
+        let dir = std::env::temp_dir().join(format!("bm-store-{}-{}", std::process::id(), n));
+        std::fs::create_dir_all(&dir).unwrap();
+        dir.join("ledger.jsonl")
+    }
+    fn input(name: &str, text: &str, agent: &str) -> RememberInput {
+        RememberInput { text: text.into(), node_type: Some("fact".into()), name: Some(name.into()), agent_id: Some(agent.into()), ..Default::default() }
+    }
+
+    #[test]
+    fn snapshot_then_reload_preserves_state() {
+        let led = tmp_ledger();
+        {
+            let mut s = Store::new(led.clone(), "a/r".into());
+            s.remember(&input("k1", "alpha beta gamma", "a/r"));
+            s.remember(&input("k2", "delta epsilon", "a/r"));
+            s.save_snapshot();
+            s.remember(&input("k3", "zeta eta theta", "a/r")); // appended AFTER the snapshot (tail)
+        }
+        // Fresh store: must load snapshot (k1,k2) + replay only the tail (k3).
+        let mut s2 = Store::new(led.clone(), "a/r".into());
+        assert_eq!(s2.stats().entities, 3);
+        assert!(s2.snapshot_path.exists());
+        assert!(s2.recall("zeta eta", 5, None).iter().any(|r| r.name == "k3"));
+        let _ = std::fs::remove_dir_all(led.parent().unwrap());
+    }
+
+    #[test]
+    fn supersede_invalidates_old_and_links() {
+        let led = tmp_ledger();
+        let mut s = Store::new(led.clone(), "a/r".into());
+        s.remember(&input("decision", "on route la voix vers devstral local", "a/r"));
+        s.remember(&input("decision", "on route la voix vers gpt-5.5 cloud", "a/r"));
+        let cur = s.recall("route voix", 5, None);
+        let top = cur.iter().find(|r| r.name == "decision").expect("current decision");
+        assert!(top.text.contains("gpt-5.5"));
+        assert!(top.relations.iter().any(|rel| rel.predicate == "supersedes"));
+        let old = s.get_superseded();
+        assert_eq!(old.len(), 1);
+        assert!(old[0].text.contains("devstral"));
+        assert!(old[0].valid_to.is_some());
+        let _ = std::fs::remove_dir_all(led.parent().unwrap());
+    }
+
+    #[test]
+    fn corroboration_counts_distinct_agents() {
+        let led = tmp_ledger();
+        let mut a = Store::new(led.clone(), "ministar/cb".into());
+        let mut b = Store::new(led.clone(), "laptop/cb".into());
+        a.remember(&RememberInput { text: "le ledger append-only evite les pertes".into(), node_type: Some("fact".into()), name: Some("k".into()), agent_id: Some("ministar/cb".into()), confidence: Some(0.6), ..Default::default() });
+        b.remember(&RememberInput { text: "le ledger append-only evite les pertes".into(), node_type: Some("fact".into()), name: Some("k".into()), agent_id: Some("laptop/cb".into()), confidence: Some(0.6), ..Default::default() });
+        let hits = b.recall("ledger pertes", 1, None);
+        assert_eq!(hits[0].corroborations, 2);
+        assert!(hits[0].confidence > 0.6);
+        let _ = std::fs::remove_dir_all(led.parent().unwrap());
+    }
+}
+
+fn snapshot_path_for(ledger: &Path) -> PathBuf {
+    let name = ledger.file_name().and_then(|n| n.to_str()).unwrap_or("ckg-ledger.jsonl");
+    ledger.with_file_name(format!("{}.snap", name))
 }
 
 fn read_range(path: &Path, start: u64, end: u64) -> Option<Vec<u8>> {
