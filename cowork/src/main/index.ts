@@ -143,7 +143,6 @@ import { runConfigApiTest } from './config/config-test-routing';
 import { resolveEngineRuntimeConfig } from './config/engine-runtime-config';
 import { listLmStudioModels } from './config/lmstudio-api';
 import { listOllamaModels } from './config/ollama-api';
-import { buildModelInventory } from '@codebuddy/fleet/model-inventory.js';
 import { mcpConfigStore } from './mcp/mcp-config-store';
 import { getSandboxAdapter, shutdownSandbox } from './sandbox/sandbox-adapter';
 import { SandboxSync } from './sandbox/sandbox-sync';
@@ -3423,7 +3422,16 @@ ipcMain.handle('config.discover-lmstudio-local', async (_event, payload?: { base
 
 ipcMain.handle('config.model-inventory', async (_event, payload?: { includeTailnetPeers?: boolean }) => {
   try {
-    return await buildModelInventory({
+    // Load the core module dynamically (the pattern used by every other main→core access) rather
+    // than a static `@codebuddy/*` import — a static value import bundles core TS into the main
+    // build and rollup can't resolve the aliased `.js`→`.ts`, which broke `vite build` entirely.
+    const mod = await loadCoreModule<typeof import('@codebuddy/fleet/model-inventory.js')>(
+      'fleet/model-inventory.js',
+    );
+    if (!mod) {
+      return { updatedAt: new Date().toISOString(), machineLabel: '', entries: [] };
+    }
+    return await mod.buildModelInventory({
       includeTailnetPeers: payload?.includeTailnetPeers ?? true,
       forceCapabilityRefresh: true,
     });
