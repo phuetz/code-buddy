@@ -31,39 +31,70 @@ const RAIL: RailItem[] = [
   { view: 'advanced', label: 'Avancé', glyph: '⚙️' },
 ];
 
-/** Progressive-disclosure launcher: the dense/power-user surfaces, out of the default flow. */
+interface LauncherCard {
+  label: string;
+  hint: string;
+  open: () => void;
+}
+
+function CardGrid({ cards }: { cards: LauncherCard[] }) {
+  return (
+    <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
+      {cards.map((c) => (
+        <button
+          key={c.label}
+          type="button"
+          onClick={c.open}
+          className="text-left rounded-lg border border-border bg-background hover:bg-accent transition-colors p-3"
+        >
+          <div className="font-medium">{c.label}</div>
+          <div className="text-xs text-muted-foreground mt-0.5">{c.hint}</div>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * Progressive-disclosure launcher: the power-user surfaces, out of the default flow. Split into
+ * "Avancé" (stable power-user tools) and "Labs" (dense / experimental / competitor-parity surfaces),
+ * so a first-time user isn't confronted with the fleet mesh and parity strips next to Settings.
+ */
 function AdvancedLauncher() {
   const s = useAppStore();
-  const cards: Array<{ label: string; hint: string; open: () => void }> = [
+  const advanced: LauncherCard[] = [
     { label: 'Réglages', hint: 'Modèles, clés, MCP, workspace', open: () => s.setShowSettings(true) },
-    { label: 'Fleet', hint: 'Multi-agents, pairs, routage', open: () => s.setShowFleetCommandCenter(true) },
-    { label: 'Autonomie', hint: 'Boucle autonome, YOLO', open: () => s.setShowAutonomyPanel(true) },
     { label: 'Mémoire', hint: 'Ce que Code Buddy retient', open: () => s.setShowMemoryEditor(true) },
     { label: 'Skills', hint: 'Docs Office, charts, recherche', open: () => s.setShowSkillsManager(true) },
     { label: 'Companion', hint: 'Voix, présence, canaux', open: () => s.setShowCompanionPanel(true) },
-    { label: 'Missions', hint: 'Tableau des tâches', open: () => s.setShowMissionBoard(true) },
+    { label: 'Autonomie', hint: 'Boucle autonome, YOLO', open: () => s.setShowAutonomyPanel(true) },
     { label: 'Tests', hint: 'Lancer la suite de tests', open: () => s.setShowTestRunner(true) },
     { label: 'Insights', hint: 'Analyse de session', open: () => s.setShowSessionInsights(true) },
   ];
+  const labs: LauncherCard[] = [
+    { label: 'Fleet', hint: 'Multi-agents, pairs, routage', open: () => s.setShowFleetCommandCenter(true) },
+    { label: 'Missions', hint: 'Tableau des tâches multi-agents', open: () => s.setShowMissionBoard(true) },
+    { label: 'Workflows', hint: 'Éditeur de workflow visuel', open: () => s.setShowWorkflowProPanel(true) },
+    { label: 'Migration Claw', hint: 'Import OpenClaw / parité', open: () => s.setShowClawMigration(true) },
+  ];
   return (
-    <div className="h-full overflow-auto p-6">
-      <h2 className="text-lg font-semibold mb-1">Avancé</h2>
-      <p className="text-sm text-muted-foreground mb-4">
-        Les surfaces puissantes de Code Buddy — hors du chemin par défaut, à un clic.
-      </p>
-      <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
-        {cards.map((c) => (
-          <button
-            key={c.label}
-            type="button"
-            onClick={c.open}
-            className="text-left rounded-lg border border-border bg-background hover:bg-accent transition-colors p-3"
-          >
-            <div className="font-medium">{c.label}</div>
-            <div className="text-xs text-muted-foreground mt-0.5">{c.hint}</div>
-          </button>
-        ))}
-      </div>
+    <div className="h-full overflow-auto p-6 space-y-6">
+      <section>
+        <h2 className="text-lg font-semibold mb-1">Avancé</h2>
+        <p className="text-sm text-muted-foreground mb-4">
+          Les surfaces puissantes de Code Buddy — hors du chemin par défaut, à un clic.
+        </p>
+        <CardGrid cards={advanced} />
+      </section>
+      <section>
+        <h2 className="text-lg font-semibold mb-1">
+          Labs <span className="text-xs font-normal text-muted-foreground">· expérimental</span>
+        </h2>
+        <p className="text-sm text-muted-foreground mb-4">
+          Orchestration multi-agents et surfaces de parité — denses, pour quand tu en as besoin.
+        </p>
+        <CardGrid cards={labs} />
+      </section>
     </div>
   );
 }
