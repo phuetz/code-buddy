@@ -3,6 +3,8 @@
  */
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useAppStore } from '../store';
+import { CAPABILITY_COMMANDS } from './command-palette-capabilities';
 import {
   Search,
   MessageSquare,
@@ -222,6 +224,15 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
             },
           ]
         : []),
+      // Universal backstop: every Code Buddy capability reachable from ⌘K (the new shell dropped the
+      // TopMenuBar, so this is the discoverability net). Each opens its globally-mounted panel.
+      ...CAPABILITY_COMMANDS.map((c) => ({
+        id: c.id,
+        label: c.label,
+        description: c.description,
+        icon: <Brain size={14} />,
+        action: () => c.run(useAppStore.getState()),
+      })),
     ],
     [
       onNewSession,

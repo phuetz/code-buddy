@@ -212,7 +212,7 @@ function getSession(states: Record<string, SessionState>, sessionId: string): Se
   return states[sessionId] ?? { ...DEFAULT_SESSION_STATE, queuedIntents: readQueuedIntents(sessionId) };
 }
 
-interface AppState {
+export interface AppState {
   // Sessions
   sessions: Session[];
   activeSessionId: string | null;
