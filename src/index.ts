@@ -3421,6 +3421,12 @@ addLazyCommandGroup(program, 'improve', 'Recursive self-improvement: empirically
   registerImproveCommands(program);
 });
 
+// Evolve — git-versioned evolutionary self-improvement (evaluate code variants, keep the best, human-gated)
+addLazyCommandGroup(program, 'evolve', 'Git-versioned evolutionary self-improvement: evaluate code variants, keep the best (human-gated)', async () => {
+  const { registerEvolveCommands } = await import('./commands/cli/evolve-command.js');
+  registerEvolveCommands(program);
+});
+
 // LSP — Language Server Protocol diagnostics (Hermes parity: `hermes lsp`)
 addLazyCommandGroup(program, 'lsp', 'Language Server Protocol diagnostics', async () => {
   const { registerLspCommands } = await import('./commands/cli/lsp-command.js');
