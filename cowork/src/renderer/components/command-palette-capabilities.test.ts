@@ -1,13 +1,26 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { CAPABILITY_COMMANDS } from './command-palette-capabilities';
-import type { AppState } from '../store';
+import { useAppStore } from '../store';
 
 /**
  * The ⌘K palette is the new shell's only universal navigation surface (no TopMenuBar). These tests
  * guard that (a) every key capability has an entry, (b) ids/labels are unique, and (c) each entry's
- * `run` fires exactly one store setter — so a wiring typo (wrong or missing setter) is caught here,
- * not by the user staring at a dead menu item.
+ * `run` flips exactly one real store `show*` flag to true — so a wiring typo (wrong/missing setter)
+ * is caught here, against the REAL store, not by the user staring at a dead menu item.
+ *
+ * NOTE — what this does NOT prove: that a *panel* reads the flipped flag and is mounted where the new
+ * shell renders it. That mount-liveness was verified manually against App.tsx / DockWorkspace (the
+ * hosts NewShell renders): 26 panels are mounted globally in App.tsx, autonomy/reasoning render in
+ * the chat view (DockWorkspace), and the previously-dead `showWorkflowProPanel` flag was given a
+ * mounted overlay reader in App.tsx as part of this change.
  */
+
+/** All boolean `show*` flags on the live store — the universe a capability may flip. */
+function showFlags(): string[] {
+  const s = useAppStore.getState() as unknown as Record<string, unknown>;
+  return Object.keys(s).filter((k) => k.startsWith('show') && typeof s[k] === 'boolean');
+}
+
 describe('CAPABILITY_COMMANDS', () => {
   it('covers every key capability of Code Buddy', () => {
     const ids = new Set(CAPABILITY_COMMANDS.map((c) => c.id));
@@ -40,37 +53,20 @@ describe('CAPABILITY_COMMANDS', () => {
     }
   });
 
-  it('each run() fires exactly one store setter with true', () => {
+  it('each run() flips exactly one real store show-flag to true', () => {
+    const flags = showFlags();
+    expect(flags.length).toBeGreaterThan(20); // sanity: the store really exposes show* flags
     for (const c of CAPABILITY_COMMANDS) {
-      // A recording proxy: any setShow* access returns a spy; anything else throws so we notice a
-      // capability that reaches for non-setter state.
-      const calls: Array<{ name: string; arg: unknown }> = [];
-      const fakeStore = new Proxy(
-        {},
-        {
-          get(_t, prop: string) {
-            if (typeof prop === 'string' && prop.startsWith('setShow')) {
-              return (arg: unknown) => calls.push({ name: prop, arg });
-            }
-            throw new Error(`${c.id} touched non-setter store member: ${String(prop)}`);
-          },
-        },
-      ) as unknown as AppState;
+      // Reset every show-flag to false, then run the capability and see which one it turns on.
+      const reset: Record<string, boolean> = {};
+      for (const f of flags) reset[f] = false;
+      useAppStore.setState(reset as never);
 
-      c.run(fakeStore);
-      expect(calls.length, `${c.id} should fire exactly one setter`).toBe(1);
-      expect(calls[0]!.name).toMatch(/^setShow/);
-      expect(calls[0]!.arg).toBe(true);
-    }
-  });
+      c.run(useAppStore.getState());
 
-  it('run is a plain function that does not throw', () => {
-    const noop = new Proxy(
-      {},
-      { get: () => vi.fn() },
-    ) as unknown as AppState;
-    for (const c of CAPABILITY_COMMANDS) {
-      expect(() => c.run(noop)).not.toThrow();
+      const after = useAppStore.getState() as unknown as Record<string, boolean>;
+      const flipped = flags.filter((f) => after[f] === true);
+      expect(flipped, `${c.id} should flip exactly one show-flag (flipped: ${flipped.join(',') || 'none'})`).toHaveLength(1);
     }
   });
 });

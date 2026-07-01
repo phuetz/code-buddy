@@ -78,6 +78,7 @@ import { ShellNavigation } from './components/ShellNavigation';
 import { NewShell } from './components/NewShell';
 import { ExportDialogHost } from './components/ExportDialogHost';
 import { EvolutionPanel } from './components/EvolutionPanel';
+import { WorkflowProPanel } from './components/WorkflowProPanel';
 import type { AppConfig } from './types';
 import type { GlobalNoticeAction } from './store';
 
@@ -115,6 +116,7 @@ function App() {
   const showShortcutsDialog = useShowShortcutsDialog();
   const newShellEnabled = useAppStore((s) => s.newShellEnabled);
   const showEvolutionPanel = useAppStore((s) => s.showEvolutionPanel);
+  const showWorkflowProPanel = useAppStore((s) => s.showWorkflowProPanel);
   const showGlobalSearch = useAppStore((s) => s.showGlobalSearch);
   const showActivityFeed = useAppStore((s) => s.showActivityFeed);
   const showFileActivity = useAppStore((s) => s.showFileActivity);
@@ -452,6 +454,33 @@ function App() {
 
       {/* Evolution panel (new-shell Labs) — versions from recursive self-improvement. */}
       {showEvolutionPanel && <EvolutionPanel onClose={() => useAppStore.getState().setShowEvolutionPanel(false)} />}
+
+      {/* WorkflowBuilder Pro — the flag had no mounted reader (dead from ⌘K and the Labs launcher).
+          Host the full-bleed component in a closable overlay so the capability is actually reachable. */}
+      {showWorkflowProPanel && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+          onClick={() => useAppStore.getState().setShowWorkflowProPanel(false)}
+        >
+          <div
+            className="bg-background border border-border rounded-lg shadow-xl w-[960px] max-w-[94vw] h-[82vh] flex flex-col overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-end px-2 py-1 border-b border-border">
+              <button
+                type="button"
+                onClick={() => useAppStore.getState().setShowWorkflowProPanel(false)}
+                className="text-xs px-2 py-1 rounded-md border border-border hover:bg-accent"
+              >
+                Fermer
+              </button>
+            </div>
+            <div className="flex-1 min-h-0">
+              <WorkflowProPanel />
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Permission Dialog */}
       {pendingPermission && <PermissionDialog permission={pendingPermission} />}

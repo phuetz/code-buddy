@@ -30,7 +30,6 @@ export const CAPABILITY_COMMANDS: CapabilityCommand[] = [
   { id: 'cap-evolution', label: 'Evolution', description: 'Versions from self-improvement', run: (s) => s.setShowEvolutionPanel(true) },
   { id: 'cap-memory', label: 'Memory', description: 'What Code Buddy remembers', run: (s) => s.setShowMemoryEditor(true) },
   { id: 'cap-lessons-candidates', label: 'Lesson candidates', description: 'Review learned-lesson candidates', run: (s) => s.setShowLessonCandidatePanel(true) },
-  { id: 'cap-lessons-vault', label: 'Lessons vault', description: 'The lessons knowledge graph', run: (s) => s.setShowLessonsGraph(true) },
   { id: 'cap-user-model', label: 'User model', description: 'What Code Buddy learned about you', run: (s) => s.setShowUserModelPanel(true) },
   { id: 'cap-research', label: 'Research / Flow launcher', description: 'Wide research + planning flow', run: (s) => s.setShowLiveLauncher(true) },
   { id: 'cap-reasoning-trace', label: 'Reasoning trace', description: 'Inspect the reasoning tree', run: (s) => s.setShowReasoningViewer(true) },
