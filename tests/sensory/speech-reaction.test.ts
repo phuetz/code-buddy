@@ -202,6 +202,45 @@ describe('speech reaction — speech_end → STT → percept', () => {
     }
   });
 
+  it('a silent (vetoed) turn does NOT extend the debounce — a real address right after is still heard', async () => {
+    // Echo-guard regression: the end-of-cycle re-stamp must fire ONLY when the robot spoke.
+    // Here turn 1 is vetoed (no speech, so no echo) but its STT burns 2s of clock. If the
+    // re-stamp ran unconditionally it would push lastAt to 3000, and the real address at
+    // t=4500 (3500ms after the utterance began — past the 3000ms debounce) would be wrongly
+    // swallowed (4500-3000=1500 < 3000). With the fix, lastAt stays at the job-start 1000.
+    const tmp = await mkdtemp(path.join(os.tmpdir(), 'speech-'));
+    let clock = 1000;
+    let sttCalls = 0;
+    const heard: string[] = [];
+    const unwire = wireSpeechReaction({
+      transcriber: async () => {
+        sttCalls += 1;
+        clock += 2000; // STT consumes 2s of the injected clock
+        return sttCalls === 1 ? 'il fait beau aujourd’hui' : 'Buddy, quelle heure ?';
+      },
+      debounceMs: 3000,
+      cwd: tmp,
+      now: () => clock,
+      shouldRespond: async (text) =>
+        text.startsWith('Buddy') ? { respond: true, reason: 'addressed' } : { respond: false, reason: 'ambient' },
+      onHeard: (t) => {
+        heard.push(t);
+      },
+    });
+    try {
+      speechEnd('/tmp/silent.wav'); // turn 1: vetoed, STT advances clock 1000 → 3000
+      await tick();
+      expect(heard).toEqual([]); // stayed silent
+
+      clock = 4500; // a real address arrives 3500ms after turn 1 began (past the 3000ms debounce)
+      speechEnd('/tmp/real.wav'); // turn 2: addressed
+      await tick();
+      expect(heard).toEqual(['Buddy, quelle heure ?']); // NOT swallowed by a stale echo re-stamp
+    } finally {
+      unwire();
+    }
+  });
+
   it('fires onHeard when shouldRespond approves', async () => {
     const tmp = await mkdtemp(path.join(os.tmpdir(), 'speech-'));
     let heard = '';

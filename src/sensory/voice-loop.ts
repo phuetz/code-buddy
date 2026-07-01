@@ -517,8 +517,11 @@ export async function resolveVoiceModel(heard: string): Promise<VoiceModelRoute>
     logger.debug(`[voice] model routing skipped: ${err instanceof Error ? err.message : String(err)}`);
   }
 
-  // Fallback: the documented default (may be silent if not pulled — readiness warns).
-  return { model: override || 'llama3.2', apiKey, baseURL, reason: 'fallback default' };
+  // Fallback: the documented default (may be silent if not pulled — readiness warns). Note we do
+  // NOT reuse `override` here: reaching this point means override was empty or 'auto' (a real pin
+  // already returned at the top), and `'auto' || 'llama3.2'` would wrongly yield the literal model
+  // name 'auto' → the LLM endpoint 404s and the robot stays silent.
+  return { model: 'llama3.2', apiKey, baseURL, reason: 'fallback default' };
 }
 
 /** One prior spoken exchange, oldest-first, fed back as conversational memory. */
@@ -602,12 +605,31 @@ async function defaultPlay(wav: string): Promise<void> {
     { cmd: 'pw-play', args: (f) => [f] },
     { cmd: 'ffplay', args: (f) => ['-nodisp', '-autoexit', '-loglevel', 'quiet', f] },
   ];
+  // A player that blocks instead of exiting (malformed WAV with a huge declared duration, an ALSA
+  // device that hangs) would never resolve this promise. Under withSpeakingGuard that latches
+  // isSpeaking()=true forever, so the speech reaction would drop every utterance and the robot goes
+  // permanently deaf. A generous timeout (far beyond any real spoken line) kills the child and
+  // recovers.
+  const playTimeoutMs = Number(process.env.CODEBUDDY_VOICE_PLAY_TIMEOUT_MS) || 60_000;
   for (const c of candidates) {
     if (!(await commandExists(c.cmd))) continue;
     await new Promise<void>((resolve) => {
       const child = spawn(c.cmd, c.args(wav), { stdio: 'ignore' });
-      child.on('error', () => resolve());
-      child.on('close', () => resolve());
+      const killTimer = setTimeout(() => {
+        logger.warn(`[voice] player ${c.cmd} exceeded ${playTimeoutMs}ms — killing to avoid latching the speaking guard`);
+        try {
+          child.kill('SIGKILL');
+        } catch {
+          /* already gone */
+        }
+        resolve();
+      }, playTimeoutMs);
+      const done = (): void => {
+        clearTimeout(killTimer);
+        resolve();
+      };
+      child.on('error', done);
+      child.on('close', done);
     });
     return;
   }

@@ -7,8 +7,8 @@
  * Tiered, cheap-first (mirrors human pre-attentive filtering — we do NOT run an LLM on every
  * utterance):
  *   0. addressed   — the robot's name appears (FUZZY, to survive STT mangling) → respond
- *   1. greeting    — a short direct greeting ("bonjour", "salut", ...) → respond
- *   2. engaged     — a reply happened within the engagement window → follow-ups respond
+ *   1. engaged     — a reply happened within the engagement window → follow-ups respond
+ *   2. greeting    — a short direct greeting ("bonjour", "salut", ...) → respond
  *   3. (chime-in off) → silent. No LLM call.
  *   4. cue         — only with chime-in ON: a question/imperative/keyword cue → escalate
  *   5. judge       — a rare fast-LLM yes/no, HIGH bar; any error/uncertainty → silent
@@ -79,9 +79,21 @@ function levenshtein(a: string, b: string): number {
   return prev[n]!;
 }
 
+/** True if word `a` is within a small edit distance of target `b` (tol scales with `b`). */
+function fuzzyWordMatch(a: string, b: string): boolean {
+  if (a === b) return true;
+  const tol = b.length <= 4 ? 1 : 2;
+  return Math.abs(a.length - b.length) <= tol && levenshtein(a, b) <= tol;
+}
+
 /** Default fuzzy matcher: any word within a small edit distance of the name counts as
  *  addressed (STT turns "Buddy" into "buddy"/"body"/"buddha"). Errs toward catching the
- *  address — ignoring someone talking straight to you is the worse failure. */
+ *  address — ignoring someone talking straight to you is the worse failure.
+ *
+ *  Multi-word names ("Code Buddy") are matched too: a per-word tokenizer can never bring a
+ *  single word within edit distance of a two-word name, so we also try (a) a run of consecutive
+ *  words matching the name phrase word-by-word, and (b) a single collapsed token matching the
+ *  spaceless name (STT often merges "Code Buddy" → "codebuddy"). */
 export function fuzzyNameMatch(text: string, name: string): boolean {
   const n = name.toLowerCase().trim();
   if (!n) return false;
@@ -90,10 +102,27 @@ export function fuzzyNameMatch(text: string, name: string): boolean {
     .replace(/[^\p{L}\p{N}\s]/gu, ' ')
     .split(/\s+/)
     .filter(Boolean);
-  const tol = n.length <= 4 ? 1 : 2;
-  for (const w of words) {
-    if (w === n) return true;
-    if (Math.abs(w.length - n.length) <= tol && levenshtein(w, n) <= tol) return true;
+  if (words.length === 0) return false;
+
+  const nameWords = n.split(/\s+/).filter(Boolean);
+
+  // Single-word name (the common case): any word close enough.
+  if (nameWords.length <= 1) {
+    return words.some((w) => fuzzyWordMatch(w, n));
+  }
+
+  // Multi-word name: (b) collapsed single token, then (a) a consecutive word run.
+  const collapsed = nameWords.join('');
+  if (words.some((w) => fuzzyWordMatch(w, collapsed))) return true;
+  for (let i = 0; i + nameWords.length <= words.length; i++) {
+    let all = true;
+    for (let j = 0; j < nameWords.length; j++) {
+      if (!fuzzyWordMatch(words[i + j]!, nameWords[j]!)) {
+        all = false;
+        break;
+      }
+    }
+    if (all) return true;
   }
   return false;
 }
@@ -213,20 +242,23 @@ export function createResponseDecider(opts: ResponseDeciderOptions = {}): Respon
         return { respond: true, reason: 'addressed' };
       }
 
+      // Tier 1 — inside the engagement window (continuity, no LLM), checked BEFORE the
+      // standalone-greeting tier: a follow-up that happens to sound like a greeting ("salut,
+      // ça va ?" after the robot just greeted you) must stay tagged as conversation
+      // continuity, not be reclassified as a fresh greeting. Reply to the follow-up but DO NOT
+      // slide the window: otherwise, once addressed, ambient cross-talk would keep refreshing
+      // it and the robot would answer the whole room forever. The window is a bounded grace
+      // period after each address; re-address to extend.
+      if (now() - lastEngagedAt < engageWindowMs) {
+        return { respond: true, reason: 'engaged' };
+      }
+
       // Voice-assistant affordance: a short standalone greeting is directed at the assistant
       // when the mic loop is active. Keep it narrow so human-to-human greetings such as
       // "bonjour Patrice" or a longer sentence do not wake the robot.
       if (respondToGreeting && isDirectGreeting(text)) {
         markEngaged();
         return { respond: true, reason: 'greeting' };
-      }
-
-      // Tier 1 — inside the engagement window (continuity, no LLM). Reply to the follow-up
-      // but DO NOT slide the window: otherwise, once addressed, ambient cross-talk would keep
-      // refreshing it and the robot would answer the whole room forever. The window is a
-      // bounded grace period after each address; re-address to extend.
-      if (now() - lastEngagedAt < engageWindowMs) {
-        return { respond: true, reason: 'engaged' };
       }
 
       // Not addressed, not in a conversation.

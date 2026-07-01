@@ -41,7 +41,10 @@ export function wireSemanticVisionReaction(options: SemanticVisionOptions = {}):
 
   const id = bus.on('sensory:perception', (evt: BaseEvent) => {
     const p = perceptionOf(evt);
-    if (p.modality !== 'vision' || !p.kind || !(p.kind in MESSAGES)) return;
+    // Own-property check (not `in`, and not bracket-access-!==-undefined — both walk the
+    // prototype chain): a crafted frame with kind='toString'/'constructor' would otherwise pass
+    // and interpolate an inherited Function into the alert/percept.
+    if (p.modality !== 'vision' || !p.kind || !Object.prototype.hasOwnProperty.call(MESSAGES, p.kind)) return;
     const kind = p.kind;
     const payload = (p.payload ?? {}) as { imagePath?: string; camera?: string };
 

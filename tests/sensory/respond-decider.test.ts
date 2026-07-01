@@ -21,6 +21,16 @@ describe('fuzzyNameMatch', () => {
     expect(fuzzyNameMatch('il fait beau aujourd’hui', 'Buddy')).toBe(false);
     expect(fuzzyNameMatch('on va au restaurant', 'Buddy')).toBe(false);
   });
+
+  it('matches a multi-word robot name (consecutive words or a collapsed token)', () => {
+    expect(fuzzyNameMatch('Code Buddy, quelle heure ?', 'Code Buddy')).toBe(true);
+    expect(fuzzyNameMatch('hey code buddy tu es là', 'Code Buddy')).toBe(true);
+    expect(fuzzyNameMatch('codebuddy tu m’entends', 'Code Buddy')).toBe(true); // STT merged the words
+    expect(fuzzyNameMatch('code buddi', 'Code Buddy')).toBe(true); // per-word STT mangling
+    // Not a false positive: the two words present but not consecutive / not the name.
+    expect(fuzzyNameMatch('le code du body est cassé', 'Code Buddy')).toBe(false);
+    expect(fuzzyNameMatch('on parle de tout autre chose', 'Code Buddy')).toBe(false);
+  });
 });
 
 describe('respond-decider — addressed + engagement window (no LLM)', () => {

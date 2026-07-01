@@ -987,6 +987,7 @@ export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => v
       let decisionMs = 0;
       let actionMs = 0;
       let decisionReason: string | undefined;
+      let spoke = false; // did the robot actually emit audio this turn? gates the echo re-stamp
       try {
         // Live-mic path (buddy-sense `live-audio`): the daemon already decoded the
         // utterance in-process, so the transcript rides in the event payload — no
@@ -1068,6 +1069,7 @@ export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => v
           const actionStartMs = now();
           await options.onHeard?.(text);
           actionMs = elapsedSince(actionStartMs, now);
+          spoke = true; // the reply (voice-loop) played — its echo tail must be debounced
         }
         const totalMs = elapsedSince(transcribeStartMs, now);
         await recordCompanionPercept(
@@ -1104,10 +1106,13 @@ export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => v
       } catch (err) {
         logger.warn(`[speech] reaction failed: ${err instanceof Error ? err.message : String(err)}`);
       } finally {
-        // Re-stamp AFTER the full hear→think→speak cycle so the debounce window
-        // restarts from end-of-playback. When onHeard speaks (voice-loop), this
-        // suppresses the robot re-hearing the tail of its own voice (echo guard).
-        lastAt = now();
+        // Re-stamp AFTER the full hear→think→speak cycle so the debounce window restarts from
+        // end-of-playback — but ONLY when the robot actually spoke (that's the echo tail we must
+        // not re-hear). After a silent turn (empty/filtered transcript, or the gate vetoed a
+        // reply) there is no echo, so keep the job-start debounce anchor (set at startSpeechJob):
+        // pushing lastAt out by the STT/decision duration would swallow a real address arriving
+        // in the (debounceMs, debounceMs+sttMs] window after a silent turn.
+        if (spoke) lastAt = now();
         inFlight = false;
         activeWav = undefined;
         const nextSpeech = pendingSpeech;
