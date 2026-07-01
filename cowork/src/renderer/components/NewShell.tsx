@@ -14,6 +14,7 @@ import { useAppStore } from '../store';
 import type { PrimaryView } from '../store';
 import { DockWorkspace } from './DockWorkspace';
 import { ActivityPane } from './ActivityPane';
+import { PlanPanel } from './PlanPanel';
 import { FileActivityPanel } from './FileActivityPanel';
 
 interface RailItem {
@@ -24,6 +25,7 @@ interface RailItem {
 
 const RAIL: RailItem[] = [
   { view: 'chat', label: 'Chat', glyph: '💬' },
+  { view: 'plan', label: 'Plan', glyph: '📋' },
   { view: 'activity', label: 'Activité', glyph: '📊' },
   { view: 'workspace', label: 'Fichiers', glyph: '📁' },
   { view: 'advanced', label: 'Avancé', glyph: '⚙️' },
@@ -101,6 +103,7 @@ export function NewShell() {
         <div className={`absolute inset-0 ${primaryView === 'chat' ? '' : 'hidden'}`}>
           <DockWorkspace />
         </div>
+        {primaryView === 'plan' && <PlanPanel />}
         {primaryView === 'activity' && <ActivityPane />}
         {primaryView === 'workspace' && <FileActivityPanel open onClose={backToChat} />}
         {primaryView === 'advanced' && <AdvancedLauncher />}
