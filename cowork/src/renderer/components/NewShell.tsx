@@ -105,6 +105,8 @@ function AdvancedLauncher() {
 export function NewShell() {
   const primaryView = useAppStore((st) => st.primaryView);
   const setPrimaryView = useAppStore((st) => st.setPrimaryView);
+  const setShowCommandPalette = useAppStore((st) => st.setShowCommandPalette);
+  const setShowShortcutsDialog = useAppStore((st) => st.setShowShortcutsDialog);
   const backToChat = () => setPrimaryView('chat');
 
   return (
@@ -129,6 +131,29 @@ export function NewShell() {
             </button>
           );
         })}
+
+        {/* Footer: the discoverability net. ⌘K reaches every capability; "?" lists all shortcuts. */}
+        <div className="mt-auto flex flex-col items-stretch gap-1">
+          <button
+            type="button"
+            onClick={() => setShowCommandPalette(true)}
+            title="Palette de commandes (⌘K) — atteindre n'importe quelle fonctionnalité"
+            className="flex flex-col items-center gap-0.5 py-2 mx-1 rounded-md text-[10px] text-muted-foreground hover:bg-accent/60 transition-colors"
+          >
+            <span className="text-sm leading-none font-mono">⌘K</span>
+            <span>Palette</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowShortcutsDialog(true)}
+            title="Raccourcis clavier (⌘/)"
+            aria-label="Raccourcis clavier"
+            className="flex flex-col items-center gap-0.5 py-2 mx-1 rounded-md text-[10px] text-muted-foreground hover:bg-accent/60 transition-colors"
+          >
+            <span className="text-lg leading-none">?</span>
+            <span>Aide</span>
+          </button>
+        </div>
       </nav>
 
       {/* Primary area */}

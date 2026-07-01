@@ -378,7 +378,14 @@ function App() {
         setSearchActive(true);
       } else if (mod && e.key === 'b') {
         e.preventDefault();
-        setSidebarCollapsed(!sidebarCollapsed);
+        if (newShellEnabled) {
+          // The new shell has no collapsible sidebar; repurpose Cmd+B as the "power drawer" toggle
+          // (chat ⇄ Advanced launcher) so the chord isn't dead.
+          const cur = useAppStore.getState().primaryView;
+          useAppStore.getState().setPrimaryView(cur === 'advanced' ? 'chat' : 'advanced');
+        } else {
+          setSidebarCollapsed(!sidebarCollapsed);
+        }
       }
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -389,6 +396,7 @@ function App() {
     showGlobalSearch,
     sidebarCollapsed,
     activeSessionId,
+    newShellEnabled,
     setShowCommandPalette,
     setShowShortcutsDialog,
     setShowGlobalSearch,
