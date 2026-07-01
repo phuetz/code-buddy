@@ -163,6 +163,9 @@ function renderResult(result: CouncilRunResult, opts: CouncilOptions, out: Emit)
       `(marge juge ${signals.margin.toFixed(2)}, accord ${Math.round(signals.consensusScore * 100)}% — ` +
       `${signals.reasons.join('; ')})`,
   );
+  if (verdict.judgeModel) {
+    out(`⚖️ Juge : ${verdict.judgeModel}${verdict.neutral ? '' : ' (membre du panel — verdict non appris)'}`);
+  }
   if (verdict.verified) {
     out(`🔬 Vérifié par le juge : ${verdict.verified}`);
   }
