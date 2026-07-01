@@ -31,6 +31,8 @@ interface EvolveOptions {
   baseline?: string;
   model?: string;
   confirm?: boolean;
+  /** Commander sets this false when --no-plan is passed (default true → deliberate planning on). */
+  plan?: boolean;
 }
 
 function git(args: string[]): string {
@@ -151,7 +153,8 @@ export function registerEvolveCommands(program: Command): void {
     .option('--rounds <n>', 'Candidates per goal (fan-out), or max auto-weaknesses', '1')
     .option('--concurrency <n>', 'How many candidates to evaluate at once', '2')
     .option('--baseline <ref>', 'Baseline ref to branch from + rank against', 'main')
-    .option('--model <model>', 'Model for the mutator agent')
+    .option('--model <model>', 'Model for the mutator agent + planner')
+    .option('--no-plan', 'Skip deliberate planning (use the ad-hoc mutator prompt)')
     .action(async (options: EvolveOptions) => {
       if (process.env.CODEBUDDY_EVOLVE !== 'true') {
         logger.error('Evolution is opt-in. Set CODEBUDDY_EVOLVE=true to run (it spawns real agent runs + LLM calls).');
@@ -164,12 +167,17 @@ export function registerEvolveCommands(program: Command): void {
         return;
       }
       const { runEvolutionRound, agentMutator } = await import('../../agent/self-improvement/evolution/evolution-engine.js');
+      const { makeLlmVariantPlanner } = await import('../../agent/self-improvement/evolution/variant-planner.js');
       const { computeFitness, defaultDeterministicComponents } = await import('../../agent/self-improvement/evolution/variant-fitness.js');
       const baselineRef = options.baseline ?? 'main';
       const rounds = Math.max(1, Number(options.rounds ?? '1') || 1);
       const concurrency = Math.max(1, Number(options.concurrency ?? '2') || 2);
       const components = defaultDeterministicComponents();
       const mutate = agentMutator(options.model ? { model: options.model } : {});
+      // Deliberate planner (default on). --no-plan → a planner that returns null → mutator's ad-hoc prompt.
+      const planner = options.plan === false
+        ? (async () => null)
+        : makeLlmVariantPlanner(options.model ? { model: options.model } : {});
       const store = new CodeVariantStore();
 
       // Resolve the weakness/goals.
@@ -208,6 +216,7 @@ export function registerEvolveCommands(program: Command): void {
           baselineRef,
           weakness: w,
           mutate,
+          planner,
           components,
           baseline,
           store,

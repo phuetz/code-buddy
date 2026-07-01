@@ -19,6 +19,7 @@ import { logger } from '../../../utils/logger.js';
 import { scoreBranchInWorktree } from './worktree-scorer.js';
 import { WorktreeSessionManager } from '../../../git/worktree-sessions.js';
 import { CodeVariantStore, behaviorDescriptor, diverseElites, computeGeneration, type VariantRecord } from './code-variant-store.js';
+import { makeLlmVariantPlanner, renderVariantPlan, type VariantPlan, type VariantPlanner } from './variant-planner.js';
 import { changedPathsVsBase } from './protected-paths.js';
 import type { FitnessComponent, FitnessReport } from './variant-fitness.js';
 
@@ -46,6 +47,8 @@ export interface MutateArgs {
   env: NodeJS.ProcessEnv;
   /** Prior elite variants for context (may be empty). */
   inspirations: Inspiration[];
+  /** The deliberate plan for this variant (from the planner). Absent → mutator uses its ad-hoc prompt. */
+  plan?: VariantPlan;
 }
 
 /** Produces a code change in the worktree toward the weakness. Returns whether it changed anything. */
@@ -68,6 +71,8 @@ export interface EvolutionCycleOptions {
   keepLosers?: boolean;
   /** How many prior elite variants to show the mutator as inspirations (default 2; 0 disables). */
   inspirationCount?: number;
+  /** Plans the variant before mutating (default: LLM planner). null result → mutator's ad-hoc prompt. */
+  planner?: VariantPlanner;
 }
 
 export interface EvolutionCycleResult {
@@ -132,6 +137,10 @@ export async function runEvolutionCycle(opts: EvolutionCycleOptions): Promise<Ev
     opts.baseline?.score,
   );
 
+  // Deliberate planning: decide the approach (build-on / diverge / fresh) + concrete steps BEFORE
+  // touching code. Never-throws → null falls back to the mutator's legacy ad-hoc prompt.
+  const plan: VariantPlan | null = await (opts.planner ?? makeLlmVariantPlanner())({ weakness: opts.weakness, inspirations });
+
   // 1. branch off baseline.
   git(['branch', '-f', branch, opts.baselineRef], basePath);
 
@@ -141,8 +150,16 @@ export async function runEvolutionCycle(opts: EvolutionCycleOptions): Promise<Ev
   const mgr = WorktreeSessionManager.getInstance();
   const session = mgr.createWorktreeSession(branch, basePath);
   try {
-    const res = await opts.mutate({ branch, weakness: opts.weakness, worktreeDir: session.worktreePath, env, inspirations });
-    mutationPlan = res.plan;
+    const res = await opts.mutate({
+      branch,
+      weakness: opts.weakness,
+      worktreeDir: session.worktreePath,
+      env,
+      inspirations,
+      ...(plan ? { plan } : {}),
+    });
+    // Store the deliberate plan when we have one (audit); else the mutator's own record.
+    mutationPlan = plan ? renderVariantPlan(plan) : res.plan;
     git(['add', '-A'], session.worktreePath);
     const dirty = git(['status', '--porcelain'], session.worktreePath).trim().length > 0;
     if (dirty) {
@@ -218,16 +235,24 @@ export async function runEvolutionCycle(opts: EvolutionCycleOptions): Promise<Ev
  * Integration-grade (LLM calls) — the engine accepts any Mutator so tests inject a deterministic one.
  */
 export function agentMutator(opts: { timeoutMs?: number; model?: string } = {}): Mutator {
-  return async ({ weakness, worktreeDir, env, inspirations }) => {
+  return async ({ weakness, worktreeDir, env, inspirations, plan }) => {
     const cli = process.argv[1];
     if (!cli) return { changed: false, detail: 'no CLI entrypoint' };
-    let prompt = `You are improving Code Buddy's own source. Goal: ${weakness.goal}. Make the smallest correct code change. Do NOT modify tests, benchmarks, gates, or the eval harness.`;
-    if (inspirations.length > 0) {
-      prompt +=
-        '\n\nPrior high-scoring approaches (build on the best ideas OR try a genuinely different angle — do not just copy):\n' +
-        inspirations
-          .map((i) => `--- [fitness ${i.score.toFixed(3)}] ${i.goal}\n${i.diff || '(diff unavailable)'}`)
-          .join('\n');
+    // Guardrail is constant; the body is EITHER the deliberate plan (execute it) OR — when no plan
+    // was produced (no provider) — the legacy ad-hoc goal+inspirations prompt.
+    const guardrail = `You are improving Code Buddy's own source. Make the smallest correct code change. Do NOT modify tests, benchmarks, gates, or the eval harness.`;
+    let prompt: string;
+    if (plan) {
+      prompt = `${guardrail}\n\nFollow this plan for "${weakness.goal}":\n${renderVariantPlan(plan)}`;
+    } else {
+      prompt = `${guardrail} Goal: ${weakness.goal}.`;
+      if (inspirations.length > 0) {
+        prompt +=
+          '\n\nPrior high-scoring approaches (build on the best ideas OR try a genuinely different angle — do not just copy):\n' +
+          inspirations
+            .map((i) => `--- [fitness ${i.score.toFixed(3)}] ${i.goal}\n${i.diff || '(diff unavailable)'}`)
+            .join('\n');
+      }
     }
     const mutationPlan = prompt; // capture the exact instruction that drove this generation
     const args = [cli, '--prompt', prompt, '--directory', worktreeDir];
