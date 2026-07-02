@@ -21,8 +21,11 @@ import { DEFAULT_BM25_CONFIG } from './types.js';
 export function tokenize(text: string): string[] {
   return text
     .toLowerCase()
-    // Remove punctuation except apostrophes in words
-    .replace(/[^\w\s']/g, ' ')
+    // Strip punctuation but KEEP Unicode letters/digits. `\w` is ASCII-only
+    // ([A-Za-z0-9_]), so `[^\w\s']` used to delete accented characters —
+    // "créer" became "cr"+"er", "déployée" → "ploy" — mangling every French
+    // (and other non-ASCII) word and wrecking BM25 ranking for that content.
+    .replace(/[^\p{L}\p{N}\s']/gu, ' ')
     // Split on whitespace
     .split(/\s+/)
     // Remove empty tokens and very short tokens
