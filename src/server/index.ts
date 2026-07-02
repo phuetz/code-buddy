@@ -1249,7 +1249,9 @@ export async function startServer(userConfig: Partial<ServerConfig> = {}): Promi
                   if (created) {
                     try {
                       const r = await rem.addReminder(created);
-                      await sayNow(`C'est noté : ${r.label}, à ${r.time}.`);
+                      // Read back the CADENCE ("demain" / "tous les jours") so a mis-captured
+                      // recurrence is audible on the spot (the train-bug class of confusion).
+                      await sayNow(`C'est noté : ${r.label}, ${rem.reminderCadencePhrase(r)} à ${r.time}.`);
                     } catch (err) {
                       logger.warn(`[reminders] voice create failed: ${err instanceof Error ? err.message : String(err)}`);
                     }

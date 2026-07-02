@@ -55,9 +55,11 @@ describe('describeRemindersForSpeech', () => {
   it('handles none / one / many', () => {
     expect(describeRemindersForSpeech([])).toMatch(/aucun rappel/i);
     expect(describeRemindersForSpeech([rem('a', 'médicaments')])).toMatch(/un rappel.*médicaments.*09:00.*tous les jours/i);
-    const many = describeRemindersForSpeech([rem('a', 'x'), rem('b', 'y', { date: '2026-07-03' })]);
+    // Far date → deterministic absolute cadence ("le …") regardless of when the suite runs
+    // (a near date would read back relatively, e.g. "demain").
+    const many = describeRemindersForSpeech([rem('a', 'x'), rem('b', 'y', { date: '2026-12-25' })]);
     expect(many).toMatch(/2 rappels/);
-    expect(many).toContain('le 2026-07-03');
+    expect(many).toContain('le 2026-12-25');
   });
   it('skips disabled reminders', () => {
     expect(describeRemindersForSpeech([rem('a', 'off', { enabled: false })])).toMatch(/aucun rappel/i);

@@ -129,9 +129,21 @@ export async function addReminder(input: AddReminderInput): Promise<Reminder> {
     createdAt: now.toISOString(),
   };
   const list = await loadReminders();
+  // Anti-duplicate: saying the same thing twice must not stack identical reminders. An enabled
+  // reminder with the same normalized label + time + cadence (date/days) is returned as-is.
+  const dupe = list.find((r) => r.enabled && reminderKey(r) === reminderKey(reminder));
+  if (dupe) {
+    logger.info(`[reminders] duplicate ignored: "${reminder.label}" at ${reminder.time}`);
+    return dupe;
+  }
   list.push(reminder);
   await saveReminders(list);
   return reminder;
+}
+
+/** Identity key for de-duplication: normalized label + time + one-shot date + weekday mask. */
+function reminderKey(r: Pick<Reminder, 'label' | 'time' | 'date' | 'days'>): string {
+  return `${normLabel(r.label)}|${r.time}|${r.date ?? ''}|${(r.days ?? []).slice().sort((a, b) => a - b).join(',')}`;
 }
 
 export async function removeReminder(id: string): Promise<boolean> {
@@ -561,14 +573,31 @@ export function matchReminderByLabel(reminders: Reminder[], target: string): Rem
   return bestScore > 0 ? best : null;
 }
 
+/**
+ * A spoken cadence phrase for a reminder — "demain" / "aujourd'hui" / "le YYYY-MM-DD" for a one-shot,
+ * "chaque lundi, mercredi" for a weekday mask, else "tous les jours". So the confirmation reads back
+ * the RECURRENCE (a mis-captured "tous les jours" is now audible — the train-bug class of confusion).
+ */
+export function reminderCadencePhrase(r: Pick<Reminder, 'date' | 'days'>, now: Date = new Date()): string {
+  if (r.date) {
+    const today = localDateKey(now);
+    const tomorrow = localDateKey(new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1));
+    if (r.date === today) return "aujourd'hui";
+    if (r.date === tomorrow) return 'demain';
+    return `le ${r.date}`;
+  }
+  if (r.days?.length) {
+    const names = ['dimanche', 'lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi'];
+    return `chaque ${r.days.map((d) => names[d]).filter(Boolean).join(', ')}`;
+  }
+  return 'tous les jours';
+}
+
 /** A spoken summary of the active reminders (bounded), or a gentle "none" line. */
 export function describeRemindersForSpeech(reminders: Reminder[]): string {
   const active = reminders.filter((r) => r.enabled);
   if (active.length === 0) return "Tu n'as aucun rappel actif pour le moment.";
-  const items = active.slice(0, 8).map((r) => {
-    const when = r.date ? `le ${r.date}` : r.days?.length ? 'certains jours' : 'tous les jours';
-    return `${r.label} à ${r.time} ${when}`;
-  });
+  const items = active.slice(0, 8).map((r) => `${r.label} à ${r.time} ${reminderCadencePhrase(r)}`);
   const head = active.length === 1 ? 'Tu as un rappel :' : `Tu as ${active.length} rappels :`;
   const tail = active.length > 8 ? ` … et ${active.length - 8} autres.` : '.';
   return `${head} ${items.join(' ; ')}${tail}`;
