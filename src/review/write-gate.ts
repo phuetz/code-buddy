@@ -15,8 +15,9 @@
  * @module review/write-gate
  */
 
-import { reviewAndApply } from './review-engine.js';
+import { reviewAndApply, type ReviewAndApplyResult } from './review-engine.js';
 import { resolveDefaultReviewClient } from './llm-client.js';
+import { reviewApplyWithRevisions, type RevisionRound } from './revision-loop.js';
 import type { CouncilChatClient } from '../council/types.js';
 import type { ApplyMode, ReviewAnnotation, ReviewMode } from './types.js';
 import type { ProposedChangeInput } from './diff-model.js';
@@ -35,6 +36,25 @@ export interface ReviewGatedWriteDeps {
   client?: CouncilChatClient | null;
   timeoutMs?: number;
   applyMode?: ApplyMode;
+  /** Automatic revision loop overrides (default from CODEBUDDY_DIFF_REVIEW_REVISE). */
+  revision?: {
+    enabled?: boolean;
+    maxRounds?: number;
+    /** Reviser client; undefined → the reviewer client (or pool default); null → revision skipped. */
+    client?: CouncilChatClient | null;
+  };
+}
+
+/**
+ * Env gate for the automatic revision loop (default off — repo convention):
+ * CODEBUDDY_DIFF_REVIEW_REVISE=true enables it, CODEBUDDY_DIFF_REVIEW_REVISE_ROUNDS
+ * bounds the rounds (default 2).
+ */
+export function resolveRevisionConfig(env: NodeJS.ProcessEnv = process.env): { enabled: boolean; maxRounds: number } {
+  const enabled = env.CODEBUDDY_DIFF_REVIEW_REVISE === 'true';
+  const raw = Number(env.CODEBUDDY_DIFF_REVIEW_REVISE_ROUNDS);
+  const maxRounds = Number.isFinite(raw) && raw >= 1 ? Math.floor(raw) : 2;
+  return { enabled, maxRounds };
 }
 
 export interface ReviewGatedWriteOutcome {
@@ -59,27 +79,61 @@ export async function reviewGatedWrite(
   const client =
     deps.mode === 'full' ? (deps.client !== undefined ? deps.client : await resolveDefaultReviewClient()) : null;
 
-  const { verdict, apply } = await reviewAndApply(
-    {
-      workDir: input.cwd,
-      intent: input.intent,
-      origin: { kind: 'agent', label: input.originLabel ?? 'agent-write' },
-      changes: input.changes,
-    },
-    {
-      mode: deps.mode,
-      client,
-      ...(deps.timeoutMs !== undefined ? { timeoutMs: deps.timeoutMs } : {}),
-    },
-    { ...(deps.applyMode !== undefined ? { mode: deps.applyMode } : {}) },
-  );
+  const buildInput = {
+    workDir: input.cwd,
+    intent: input.intent,
+    origin: { kind: 'agent' as const, label: input.originLabel ?? 'agent-write' },
+    changes: input.changes,
+  };
+  const engineDeps = {
+    mode: deps.mode,
+    client,
+    ...(deps.timeoutMs !== undefined ? { timeoutMs: deps.timeoutMs } : {}),
+  };
+  const applyOpts = { ...(deps.applyMode !== undefined ? { mode: deps.applyMode } : {}) };
 
+  // Automatic revision loop (opt-in): a revisable verdict is handed to a
+  // reviser LLM with the annotations, and the revised diff re-enters the SAME
+  // gate. No reviser available → plain single-shot review (never a harder
+  // failure than the review itself).
+  const revisionConfig = resolveRevisionConfig();
+  const revisionEnabled = deps.revision?.enabled ?? revisionConfig.enabled;
+  let result: ReviewAndApplyResult;
+  let rounds: RevisionRound[] | null = null;
+  let reviserClient: CouncilChatClient | null = null;
+  if (revisionEnabled) {
+    reviserClient =
+      deps.revision?.client !== undefined
+        ? deps.revision.client
+        : (client ?? (await resolveDefaultReviewClient()));
+  }
+  if (revisionEnabled && reviserClient) {
+    const loop = await reviewApplyWithRevisions(buildInput, engineDeps, applyOpts, {
+      client: reviserClient,
+      maxRounds: deps.revision?.maxRounds ?? revisionConfig.maxRounds,
+      ...(deps.timeoutMs !== undefined ? { timeoutMs: deps.timeoutMs } : {}),
+    });
+    result = loop.final;
+    rounds = loop.revised ? loop.rounds : null;
+  } else {
+    result = await reviewAndApply(buildInput, engineDeps, applyOpts);
+  }
+
+  const { verdict, apply } = result;
   const reviewers = verdict.reviewers.map((r) => r.reviewer).join(', ');
+  const revisionCount = rounds ? rounds.length - 1 : 0;
+  const revisionSuffix = revisionCount > 0 ? ` after ${revisionCount} revision round${revisionCount > 1 ? 's' : ''}` : '';
+  const revisionNotes =
+    rounds
+      ?.filter((r) => r.reviserNote)
+      .map((r, i) => `  revision ${i + 1}: ${r.reviserNote}`)
+      .join('\n') ?? '';
 
   if (verdict.decision === 'accept' && apply?.applied) {
     const lines = [
-      `review accepted (${verdict.mode}: ${reviewers}) — applied: ${apply.appliedFiles.join(', ')}`,
+      `review accepted${revisionSuffix} (${verdict.mode}: ${reviewers}) — applied: ${apply.appliedFiles.join(', ')}`,
     ];
+    if (revisionNotes) lines.push(revisionNotes);
     const suggestions = verdict.annotations.filter((a) => a.severity === 'suggestion');
     if (suggestions.length > 0) {
       lines.push('non-blocking suggestions:', formatReviewAnnotations(suggestions));
@@ -90,7 +144,7 @@ export async function reviewGatedWrite(
   if (verdict.decision === 'accept' && apply && !apply.applied) {
     // Accepted but the transaction refused (apply-time conflict) or failed (rolled back).
     const lines = [
-      `review accepted but apply ${apply.rolledBack ? 'failed and was rolled back' : 'aborted'}:`,
+      `review accepted${revisionSuffix} but apply ${apply.rolledBack ? 'failed and was rolled back' : 'aborted'}:`,
       ...apply.errors.map((e) => `  ${e}`),
       ...apply.conflicts.map((c) => `  [conflict] ${c.path}: ${c.kind} — ${c.detail}`),
       'Nothing was left half-applied. Re-read the files and re-propose against the current base.',
@@ -101,11 +155,11 @@ export async function reviewGatedWrite(
   const header = verdict.failClosed
     ? `review UNAVAILABLE (${verdict.mode}) — fail-closed, nothing applied. Retry later or run with CODEBUDDY_DIFF_REVIEW=static.`
     : verdict.decision === 'reject'
-      ? `review REJECTED the change (${verdict.mode}: ${reviewers}) — nothing applied.`
-      : `review requests changes (${verdict.mode}: ${reviewers}) — nothing applied. Revise to address the annotations, then retry.`;
+      ? `review REJECTED the change${revisionSuffix} (${verdict.mode}: ${reviewers}) — nothing applied.`
+      : `review requests changes${revisionSuffix} (${verdict.mode}: ${reviewers}) — nothing applied. Revise to address the annotations, then retry.`;
 
   return {
     ok: false,
-    summary: [header, formatReviewAnnotations(verdict.annotations)].filter(Boolean).join('\n'),
+    summary: [header, revisionNotes, formatReviewAnnotations(verdict.annotations)].filter(Boolean).join('\n'),
   };
 }
