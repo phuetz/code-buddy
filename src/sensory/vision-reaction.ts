@@ -18,6 +18,18 @@ import type { BaseEvent } from '../events/types.js';
 import { perceptionOf } from './reactions.js';
 import { sendTelegramAlert } from './alert.js';
 
+/** Varied prefixes for the motion Telegram caption (the `${desc}` suffix already
+ *  varies with the scene) so the notification isn't the exact same opening
+ *  every time. `pickMotionPrefix` rotates and avoids the consecutive repeat. */
+export const MOTION_PREFIXES = ['👁️ Mouvement', '👀 Ça bouge', '🎥 J’ai vu bouger', '🌟 Du mouvement'];
+let lastMotionPrefixIdx = -1;
+export function pickMotionPrefix(rng: () => number = Math.random): string {
+  let idx = Math.floor(rng() * MOTION_PREFIXES.length) % MOTION_PREFIXES.length;
+  if (idx === lastMotionPrefixIdx) idx = (idx + 1) % MOTION_PREFIXES.length;
+  lastMotionPrefixIdx = idx;
+  return MOTION_PREFIXES[idx]!;
+}
+
 export interface VisionAnalysis {
   success: boolean;
   description?: string;
@@ -138,7 +150,7 @@ export function wireVisionReaction(options: VisionReactionOptions = {}): () => v
         if (sceneSimilarity(desc, lastAlertedDesc) < alertSimThreshold || now() - lastAlertAt >= alertCooldownMs) {
           lastAlertAt = now();
           lastAlertedDesc = desc;
-          await sendTelegramAlert(`👁️ Mouvement${payload.camera ? ` (${payload.camera})` : ''} : ${desc}`, frame);
+          await sendTelegramAlert(`${pickMotionPrefix()}${payload.camera ? ` (${payload.camera})` : ''} : ${desc}`, frame);
         } else {
           logger.info('[vision] alert suppressed (scène similaire dans le cooldown)');
         }

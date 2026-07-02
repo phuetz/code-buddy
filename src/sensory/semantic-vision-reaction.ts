@@ -14,12 +14,46 @@ import { perceptionOf } from './reactions.js';
 import { sendTelegramAlert } from './alert.js';
 import { buildArrivalOpener, buildLlmArrivalOpener, loadArrivalState, saveArrivalState, pushRecent, type ArrivalChat } from './arrival-opener.js';
 
-/** Human-readable alert per semantic event kind (extend as detectors are added). */
-const MESSAGES: Record<string, string> = {
-  person_entered: "👤 Quelqu'un est entré dans le champ",
-  person_left: '🚪 Plus personne dans le champ',
-  drowsy: '😴 Somnolence détectée (yeux fermés)',
+/**
+ * Human-readable alert POOLS per semantic event kind (extend as detectors are
+ * added). A pool, not a single string, so the Telegram notification isn't the
+ * exact same phrase every time — `pickCameraMessage` rotates and avoids the
+ * consecutive repeat. (The SPOKEN greeting is varied separately by the arrival
+ * opener; this is the phone notification.)
+ */
+export const CAMERA_MESSAGES: Record<string, string[]> = {
+  person_entered: [
+    "👤 Quelqu'un est entré dans le champ",
+    '👀 Présence détectée devant la caméra',
+    '🙂 Il y a quelqu’un devant moi',
+    '🎥 Un visage vient d’apparaître',
+    '✨ Quelqu’un arrive',
+  ],
+  person_left: [
+    '🚪 Plus personne dans le champ',
+    '🌙 La pièce est de nouveau vide',
+    '👋 La personne est partie',
+    '🎥 Le champ est vide',
+  ],
+  drowsy: [
+    '😴 Somnolence détectée (yeux fermés)',
+    '💤 La personne a l’air de somnoler',
+    '😪 Yeux fermés — fatigue détectée',
+  ],
 };
+
+const lastMsgIdx: Record<string, number> = {};
+
+/** Pick a varied alert caption for `kind`, avoiding the consecutive repeat. Returns `kind` if unknown. */
+export function pickCameraMessage(kind: string, rng: () => number = Math.random): string {
+  const pool = Object.prototype.hasOwnProperty.call(CAMERA_MESSAGES, kind) ? CAMERA_MESSAGES[kind]! : null;
+  if (!pool || pool.length === 0) return kind;
+  if (pool.length === 1) return pool[0]!;
+  let idx = Math.floor(rng() * pool.length) % pool.length;
+  if (idx === lastMsgIdx[kind]) idx = (idx + 1) % pool.length; // never the same caption twice in a row
+  lastMsgIdx[kind] = idx;
+  return pool[idx]!;
+}
 
 export interface SemanticVisionOptions {
   cwd?: string;
@@ -46,13 +80,13 @@ export function wireSemanticVisionReaction(options: SemanticVisionOptions = {}):
     // Own-property check (not `in`, and not bracket-access-!==-undefined — both walk the
     // prototype chain): a crafted frame with kind='toString'/'constructor' would otherwise pass
     // and interpolate an inherited Function into the alert/percept.
-    if (p.modality !== 'vision' || !p.kind || !Object.prototype.hasOwnProperty.call(MESSAGES, p.kind)) return;
+    if (p.modality !== 'vision' || !p.kind || !Object.prototype.hasOwnProperty.call(CAMERA_MESSAGES, p.kind)) return;
     const kind = p.kind;
     const payload = (p.payload ?? {}) as { imagePath?: string; camera?: string };
 
     void (async () => {
       try {
-        const label = MESSAGES[kind] ?? kind;
+        const label = pickCameraMessage(kind);
         const { recordCompanionPercept } = await import('../companion/percepts.js');
         await recordCompanionPercept(
           {
