@@ -29,6 +29,8 @@ export interface WorkflowOptions {
   writePolicyMode?: 'strict' | 'confirm' | 'off';
   /** Extra tags for run metadata */
   tags?: string[];
+  /** How many times to feed a red test suite back to the agent and re-run (default: 1). 0 disables the fix loop. */
+  maxFixRounds?: number;
 }
 
 export interface WorkflowResult {
@@ -121,6 +123,15 @@ async function runTests(profile: RepoProfile): Promise<string> {
     const out = (e.stdout || '') + (e.stderr || '');
     return `Tests failed.\n${out.slice(0, 2000)}`;
   }
+}
+
+/**
+ * A test run counts as "green" if it passed or if there is no test command to
+ * run. Anything else (a `Tests failed.` string from runTests) is a failure the
+ * workflow must NOT report as completed.
+ */
+function testsGreen(results: string): boolean {
+  return results.startsWith('Tests passed') || results.startsWith('No test command');
 }
 
 // ──────────────────────────────────────────────────────────────────
@@ -229,16 +240,41 @@ Start with PLAN only. List exactly what you will do.`;
       artifactPaths.push(patchPath);
     }
 
-    // ── Step 4: Test ─────────────────────────────────────────────
+    // ── Step 4: Test (with a bounded fix loop) ───────────────────
     runStore.emit(runId, { type: 'step_start', data: { step: 'test' } });
     console.log('\n[Running tests…]');
 
-    const testResults = await runTests(profile);
+    let testResults = await runTests(profile);
     console.log(testResults.slice(0, 500));
 
+    // If the suite is red, feed the failure back to the agent for a bounded
+    // number of fix rounds and re-run. Previously the workflow ran tests once
+    // and reported 'completed' unconditionally — a red suite was silently
+    // reported as success (runTests swallows failure and never throws). This
+    // makes the "VERIFY: re-run tests to confirm they pass" the prompts promise
+    // actually happen. `No test command` is not treated as a failure.
+    const maxFixRounds = Math.max(0, options.maxFixRounds ?? 1);
+    let fixRound = 0;
+    while (!testsGreen(testResults) && fixRound < maxFixRounds) {
+      fixRound++;
+      runStore.emit(runId, { type: 'decision', data: { description: `Tests failing — fix round ${fixRound}/${maxFixRounds}` } });
+      console.log(`\n[Tests failing — attempting fix ${fixRound}/${maxFixRounds}…]`);
+
+      const fixPrompt = `The test suite is FAILING. Here is the output:\n\n${testResults.slice(0, 2000)}\n\nDiagnose the root cause and apply a fix using apply_patch with unified diffs. Then stop — the suite will be re-run automatically to verify.`;
+      for await (const chunk of agent.processUserMessageStream(fixPrompt)) {
+        if (chunk.type === 'content' && chunk.content) {
+          process.stdout.write(chunk.content);
+        }
+      }
+
+      testResults = await runTests(profile);
+      console.log(testResults.slice(0, 500));
+    }
+
+    const testsPassed = testsGreen(testResults);
     const testLogPath = runStore.saveArtifact(runId, 'test-results.log', testResults);
     artifactPaths.push(testLogPath);
-    runStore.emit(runId, { type: 'step_end', data: { step: 'test', passed: testResults.startsWith('Tests passed') } });
+    runStore.emit(runId, { type: 'step_end', data: { step: 'test', passed: testsPassed } });
 
     // ── Step 5: Summary ──────────────────────────────────────────
     runStore.emit(runId, { type: 'step_start', data: { step: 'summary' } });
@@ -262,13 +298,16 @@ Keep it under 300 words.`;
     artifactPaths.push(summaryPath);
     runStore.emit(runId, { type: 'step_end', data: { step: 'summary' } });
 
-    runStore.endRun(runId, 'completed');
+    // Fail closed on a red suite: the workflow only reports 'completed' when the
+    // tests are actually green (or there are none to run).
+    const finalStatus: WorkflowResult['status'] = testsPassed ? 'completed' : 'failed';
+    runStore.endRun(runId, finalStatus);
     writePolicy.setMode(previousMode);
     agent.setRunId(undefined);
 
     return {
       runId,
-      status: 'completed',
+      status: finalStatus,
       artifactPaths,
       summary: summaryOutput,
     };
