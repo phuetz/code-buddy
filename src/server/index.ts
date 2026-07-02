@@ -1367,6 +1367,18 @@ export async function startServer(userConfig: Partial<ServerConfig> = {}): Promi
           logger.warn(`Companion presence failed to start: ${err instanceof Error ? err.message : String(err)}`);
         }
       }
+      // Companion proactive (opt-in): Lisa reaches out FIRST — morning/evening, after an absence, on
+      // a tenure milestone or a due follow-up — INDEPENDENT of the camera (Telegram voice note when
+      // away, spoken when present). Priority-scored, single winner, 12h cooldown. See proactive-engine.ts.
+      if (process.env.CODEBUDDY_COMPANION_PROACTIVE === 'true') {
+        try {
+          const { wireProactiveLoop } = await import('../companion/proactive-engine.js');
+          sensoryTeardown.push(wireProactiveLoop());
+          logger.info('Companion proactive: Enabled (CODEBUDDY_COMPANION_PROACTIVE) — reaches out first, camera-independent (spoken/Telegram)');
+        } catch (err) {
+          logger.warn(`Companion proactive failed to start: ${err instanceof Error ? err.message : String(err)}`);
+        }
+      }
       // Companion idle (opt-in): when ALONE, it does useful safe work ($0, read-only/reversible) and
       // leaves reviewable artifacts in the idle log — never acts on your repos/prod. See idle-loop.ts.
       if (process.env.CODEBUDDY_COMPANION_IDLE === 'true') {
