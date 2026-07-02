@@ -15,6 +15,7 @@
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
+import { createHash } from 'crypto';
 import * as yaml from 'yaml';
 import { scanSkillFirewall } from '../security/skill-scanner.js';
 import { parseSkillFile, validateSkill } from './parser.js';
@@ -92,6 +93,20 @@ export function findSkillDirs(root: string): string[] {
 function slugify(raw: string): string {
   const base = String(raw).trim().toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-+|-+$/g, '');
   return base.startsWith(IMPORTED_PREFIX) ? base : `${IMPORTED_PREFIX}${base || 'skill'}`;
+}
+
+/** Base slug a skill dir maps to (frontmatter name, else dir basename). */
+function baseSlugForDir(skillDir: string): string {
+  const md = fs.existsSync(path.join(skillDir, 'SKILL.md'))
+    ? path.join(skillDir, 'SKILL.md')
+    : path.join(skillDir, 'skill.md');
+  try {
+    const m = fs.readFileSync(md, 'utf-8').match(FRONTMATTER_RE);
+    const name = m ? ((yaml.parse(m[1]!) ?? {}) as Record<string, unknown>).name : undefined;
+    return slugify(String(name ?? path.basename(skillDir)));
+  } catch {
+    return slugify(path.basename(skillDir));
+  }
 }
 
 function normalizeTags(raw: unknown): string[] {
@@ -224,6 +239,19 @@ export function importSkills(sourceDir: string, options: ImportOptions = {}): Im
   const skillDirs = findSkillDirs(sourceDir);
   report.total = skillDirs.length;
 
+  // Pre-pass: which base slugs are claimed by MORE THAN ONE distinct source?
+  // Flattening the 1-3-level layout collapses category dirs, so two different
+  // source skills sharing a frontmatter `name` would slug to the same
+  // `imported-<name>` and the second would be dropped as a "conflict" —
+  // silently losing a skill. Colliding sources get a stable per-source suffix
+  // instead (order-independent + idempotent, since it derives from the source
+  // path). Unique names keep the bare slug (the common case is unchanged).
+  const baseSlugCounts = new Map<string, number>();
+  for (const skillDir of skillDirs) {
+    const base = baseSlugForDir(skillDir);
+    baseSlugCounts.set(base, (baseSlugCounts.get(base) ?? 0) + 1);
+  }
+
   for (const skillDir of skillDirs) {
     const rel = path.relative(sourceDir, skillDir);
     if (options.category && !rel.includes(options.category)) {
@@ -272,7 +300,14 @@ export function importSkills(sourceDir: string, options: ImportOptions = {}): Im
       report.skipped.push({ sourcePath: rel, reason: 'unparseable frontmatter' });
       continue;
     }
-    const slug = slugify(String(rawFm.name ?? path.basename(skillDir)));
+    const baseSlug = slugify(String(rawFm.name ?? path.basename(skillDir)));
+    // Disambiguate only when >1 distinct source claims this base slug, so
+    // distinct same-named skills all survive; single-name skills keep the
+    // bare slug (idempotent re-import still hits the on-disk conflict skip).
+    const slug =
+      (baseSlugCounts.get(baseSlug) ?? 0) > 1
+        ? `${baseSlug}-${createHash('sha256').update(rel).digest('hex').slice(0, 6)}`
+        : baseSlug;
     const destDir = path.join(destRoot, slug);
     if (fs.existsSync(destDir) && !options.overwrite) {
       report.skipped.push({ sourcePath: rel, reason: `conflict: ${slug} already imported` });

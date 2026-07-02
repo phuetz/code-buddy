@@ -138,3 +138,46 @@ describe('skill-importer — support files + conflicts', () => {
     expect(forced.imported).toHaveLength(1);
   });
 });
+
+describe('skill-importer — distinct same-named sources (no silent loss)', () => {
+  it('disambiguates two different skills sharing a frontmatter name — both survive', () => {
+    // Two DISTINCT skills in different category dirs, same `name: deploy`.
+    writeSkill(path.join(src, 'aws', 'deploy'), 'name: deploy\ndescription: "Deploy to AWS."\nversion: 1.0.0', '# AWS deploy\nUse the aws cli.');
+    writeSkill(path.join(src, 'gcp', 'deploy'), 'name: deploy\ndescription: "Deploy to GCP."\nversion: 1.0.0', '# GCP deploy\nUse gcloud.');
+
+    const report = importSkills(src, { destRoot: dest, source: 'test' });
+
+    expect(report.imported).toHaveLength(2); // neither dropped as a "conflict"
+    const names = report.imported.map((i) => i.name).sort();
+    expect(names[0]).toMatch(new RegExp(`^${IMPORTED_PREFIX}deploy`));
+    expect(names[1]).toMatch(new RegExp(`^${IMPORTED_PREFIX}deploy-[0-9a-f]{6}$`)); // disambiguated
+    expect(new Set(names).size).toBe(2); // distinct dest dirs
+
+    // Both installed on disk with their own body.
+    const bodies = report.imported.map((i) => fs.readFileSync(path.join(dest, i.name, 'SKILL.md'), 'utf-8'));
+    expect(bodies.some((b) => b.includes('aws cli'))).toBe(true);
+    expect(bodies.some((b) => b.includes('gcloud'))).toBe(true);
+  });
+
+  it('is idempotent: re-importing the same distinct sources produces the same slugs (no leak)', () => {
+    writeSkill(path.join(src, 'aws', 'deploy'), 'name: deploy\ndescription: "AWS."\nversion: 1.0.0', '# AWS');
+    writeSkill(path.join(src, 'gcp', 'deploy'), 'name: deploy\ndescription: "GCP."\nversion: 1.0.0', '# GCP');
+
+    const first = importSkills(src, { destRoot: dest, source: 'test' });
+    expect(first.imported).toHaveLength(2);
+    const firstNames = first.imported.map((i) => i.name).sort();
+
+    const second = importSkills(src, { destRoot: dest, source: 'test' });
+    expect(second.imported).toHaveLength(0); // all already there
+    expect(second.skipped.filter((s) => s.reason.includes('conflict'))).toHaveLength(2);
+    // No new/leaked dest dirs — exactly the same two slugs.
+    expect(fs.readdirSync(dest).filter((d) => d.startsWith(IMPORTED_PREFIX)).sort()).toEqual(firstNames);
+  });
+
+  it('keeps the bare slug when the name is unique (common case unchanged)', () => {
+    writeSkill(path.join(src, 'dev', 'git-helper'), BENIGN_FM, BENIGN_BODY);
+    const report = importSkills(src, { destRoot: dest, source: 'test' });
+    expect(report.imported).toHaveLength(1);
+    expect(report.imported[0]!.name).toBe(`${IMPORTED_PREFIX}git-helper`); // no hash suffix
+  });
+});
