@@ -66,5 +66,34 @@ describe('RemindTool', () => {
     expect(s.name).toBe('remind');
     expect(s.parameters.required).toEqual(['label', 'time']);
     expect(Object.keys(s.parameters.properties)).toContain('date');
+    expect(Object.keys(s.parameters.properties)).toContain('leadMinutes');
+  });
+
+  it('leadMinutes fires BEFORE the event and labels how far ahead', async () => {
+    const r = await tool.execute({ label: 'train', time: '10:38', leadMinutes: 30 });
+    expect(r.success).toBe(true);
+    const stored = await listReminders();
+    expect(stored[0]!.time).toBe('10:08'); // 10:38 − 30 min
+    expect(stored[0]!.label).toContain('dans 30 minutes');
+  });
+
+  it('leadMinutes accepts whole hours', async () => {
+    await tool.execute({ label: 'réunion', time: '10:00', leadMinutes: 120 });
+    const stored = await listReminders();
+    expect(stored[0]!.time).toBe('08:00');
+    expect(stored[0]!.label).toContain('dans 2 heures');
+  });
+
+  it('a lead that would cross midnight keeps the event time (no lead applied)', async () => {
+    const r = await tool.execute({ label: 'nuit', time: '00:15', leadMinutes: 30 });
+    expect(r.success).toBe(true);
+    const stored = await listReminders();
+    expect(stored[0]!.time).toBe('00:15');
+    expect(stored[0]!.label).not.toContain('dans');
+  });
+
+  it('validate rejects a negative leadMinutes', () => {
+    expect(tool.validate({ label: 'x', time: '09:00', leadMinutes: -5 }).valid).toBe(false);
+    expect(tool.validate({ label: 'x', time: '09:00', leadMinutes: 15 }).valid).toBe(true);
   });
 });

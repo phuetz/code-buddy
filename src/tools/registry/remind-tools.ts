@@ -24,11 +24,29 @@ export class RemindTool implements ITool {
     const message = typeof input.message === 'string' && input.message.trim() ? input.message.trim() : undefined;
     if (!label) return { success: false, error: 'remind: `label` is required' };
     if (!time) return { success: false, error: 'remind: `time` (HH:MM) is required' };
+
+    // Lead time — fire BEFORE the event ("remind me 30 min before the train at 10:38" → 10:08), with
+    // a label that says how far ahead. Same-day only (a lead crossing midnight keeps the event time).
+    const lead = typeof input.leadMinutes === 'number' && input.leadMinutes > 0 ? Math.floor(input.leadMinutes) : 0;
+    let fireTime = time;
+    let leadLabel = label;
+    if (lead > 0) {
+      const [h, m] = time.split(':').map(Number);
+      if (h !== undefined && m !== undefined) {
+        const total = h * 60 + m - lead;
+        if (total >= 0) {
+          fireTime = `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`;
+          const human = lead % 60 === 0 ? `${lead / 60} heure${lead / 60 > 1 ? 's' : ''}` : `${lead} minute${lead > 1 ? 's' : ''}`;
+          leadLabel = `${label} (dans ${human})`;
+        }
+      }
+    }
+
     try {
       const { addReminder, reminderCadencePhrase } = await import('../../companion/reminders.js');
       const r = await addReminder({
-        label,
-        time,
+        label: leadLabel,
+        time: fireTime,
         ...(date ? { date } : {}),
         ...(message ? { message } : {}),
       });
@@ -56,6 +74,10 @@ export class RemindTool implements ITool {
             type: 'string',
             description: 'One-shot date YYYY-MM-DD — fires once then retires. OMIT for a daily recurring reminder.',
           },
+          leadMinutes: {
+            type: 'number',
+            description: 'Fire this many minutes BEFORE `time` (for "remind me N before the event"). `time` is the EVENT time; the reminder fires at time − leadMinutes.',
+          },
           message: { type: 'string', description: 'Optional custom spoken/sent text' },
         },
         required: ['label', 'time'],
@@ -71,6 +93,9 @@ export class RemindTool implements ITool {
     }
     if (i.date !== undefined && (typeof i.date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(i.date.trim()))) {
       return { valid: false, errors: ['`date` must be YYYY-MM-DD'] };
+    }
+    if (i.leadMinutes !== undefined && (typeof i.leadMinutes !== 'number' || i.leadMinutes < 0)) {
+      return { valid: false, errors: ['`leadMinutes` must be a non-negative number'] };
     }
     return { valid: true };
   }
