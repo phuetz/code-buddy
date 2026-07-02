@@ -20,6 +20,7 @@ import { getErrorMessage } from "../../errors/index.js";
 import { sanitizeToolResult } from "../../utils/sanitize.js";
 import {
   prepareTurnMessages,
+  compactTurnMessagesInPlace,
   injectInitialContext,
   injectNextRoundContext,
   runJitContextDiscovery,
@@ -688,8 +689,9 @@ export class AgentExecutor {
             return;
           }
           if (mwResult.action === 'compact') {
-            // Trigger context compaction
-            this.deps.contextManager.prepareMessages(messages);
+            // Trigger context compaction IN PLACE — prepareMessages() is pure
+            // and its discarded return made this action a silent no-op.
+            compactTurnMessagesInPlace(this.deps.contextManager, messages);
             // S7: record a fork run at the compaction boundary for lineage.
             // No-op unless this session is linked to an observability run.
             const forkId = recordCompactionFork(
@@ -1001,7 +1003,10 @@ export class AgentExecutor {
                   estimatedTokens,
                   contextWindow,
                 });
-                this.deps.contextManager.prepareMessages(messages);
+                // IN PLACE — the discarded return used to make this a no-op,
+                // so the recomputed inputTokens never shrank and this guard
+                // re-fired on every tool call while the transcript kept growing.
+                compactTurnMessagesInPlace(this.deps.contextManager, messages);
                 inputTokens = this.deps.tokenCounter.countMessageTokens(
                   messages as Parameters<typeof this.deps.tokenCounter.countMessageTokens>[0]
                 );

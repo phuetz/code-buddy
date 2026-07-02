@@ -52,6 +52,28 @@ export function prepareTurnMessages(
   return repairToolCallPairs(contextManager.prepareMessages(messages));
 }
 
+/**
+ * Compact + repair IN PLACE — for mid-loop compaction sites where `messages`
+ * is a SHARED reference (the turn loop and its helpers keep pushing into it).
+ * `prepareMessages()` is pure and returns a NEW array; the agent-executor
+ * call sites that discarded its return value were silent no-ops: the
+ * transcript never shrank, the middleware 'compact' action did nothing, and
+ * proactive compaction re-fired forever while the provider limit approached.
+ * Returns true when the transcript actually changed.
+ */
+export function compactTurnMessagesInPlace(
+  contextManager: ContextManagerV2,
+  messages: CodeBuddyMessage[]
+): boolean {
+  const compacted = prepareTurnMessages(contextManager, messages);
+  if (compacted === messages) return false;
+  const changed =
+    compacted.length !== messages.length || compacted.some((m, i) => m !== messages[i]);
+  if (!changed) return false;
+  messages.splice(0, messages.length, ...compacted);
+  return true;
+}
+
 export interface InitialContextDeps {
   message: string;
   cwd: string;
