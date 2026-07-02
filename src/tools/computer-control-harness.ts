@@ -99,8 +99,11 @@ export function buildComputerControlHarnessBundle(
         target: sensitiveAction.id,
         runId,
         decision: 'approved',
-        reviewer: 'human-operator',
-        reason: 'Computer control action carried explicit confirmDangerous=true.',
+        // Honest provenance: this approval came from the AGENT setting
+        // confirmDangerous=true, NOT from a human operator. Labelling it
+        // 'human-operator' misrepresented the audit trail (S5).
+        reviewer: 'agent-self-attested',
+        reason: 'Computer control action carried agent-set confirmDangerous=true (no human approval).',
         decidedAt: endedAt,
         scope: options.audit.action,
       })

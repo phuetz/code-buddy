@@ -26,6 +26,7 @@ import {
   type ApplicationProfile,
 } from './application-profiles.js';
 import { getActiveRunStore } from '../observability/run-store.js';
+import { getPermissionModeManager } from '../security/permission-modes.js';
 import { logger } from '../utils/logger.js';
 import {
   getDesktopAutomation,
@@ -6277,7 +6278,22 @@ $proc = Get-Process -Id $pid -ErrorAction SilentlyContinue
     if (policy === 'block') {
       return `Action "${input.action}" is blocked by safety policy.`;
     }
-    if (policy === 'confirm' && !input.confirmDangerous) {
+    // policy === 'confirm'
+    if (input.simulateOnly) return null; // a dry-run applies no system changes
+
+    // S5: give the confirmation real teeth via the active permission mode instead
+    // of trusting the model-set `confirmDangerous` flag alone (a prompt-injected
+    // model can set it). A read-only posture (plan mode) must NEVER mutate the
+    // desktop; full-auto postures (bypass/dontAsk) pre-approve; otherwise the
+    // agent must at least assert intent with confirmDangerous.
+    const mode = getPermissionModeManager().getMode();
+    if (mode === 'plan') {
+      return `Action "${input.action}" is blocked: only read-only actions are allowed in plan mode.`;
+    }
+    if (mode === 'bypassPermissions' || mode === 'dontAsk') {
+      return null;
+    }
+    if (!input.confirmDangerous) {
       return (
         `Action "${input.action}" requires explicit confirmation. ` +
         `Use simulateOnly=true for a dry-run or set confirmDangerous=true to proceed intentionally.`
@@ -6367,7 +6383,13 @@ $proc = Get-Process -Id $pid -ErrorAction SilentlyContinue
       return 'confirm';
     }
 
-    if (profile === 'strict' && this.isDangerousAction(input.action, input)) {
+    // S5: dangerous actions (close_window, lock, sleep, alt+f4, ctrl+w, delete,
+    // …) require confirmation under EVERY safety profile. Previously only
+    // `strict` gated them, so the DEFAULT `balanced` profile let them through
+    // with no gate at all. `strict` still differs by requiring unique window
+    // matches / stricter matching elsewhere; the danger gate is now baseline.
+    void profile;
+    if (this.isDangerousAction(input.action, input)) {
       return 'confirm';
     }
 
