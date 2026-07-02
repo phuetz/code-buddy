@@ -269,6 +269,9 @@ export class ContextManagerV2 {
       }
     }
 
+    // Re-arm warning thresholds we've dropped below so they can fire again.
+    this.rearmWarningsAfterCompaction(stats, compacted);
+
     return compacted;
   }
 
@@ -452,13 +455,15 @@ export class ContextManagerV2 {
       return messages;
     }
 
-    // Use enhanced compression if available
-    if (this.config.enableEnhancedCompression && this.enhancedCompressor) {
-      return this.prepareMessagesEnhanced(messages, stats);
-    }
+    // Use enhanced compression if available, else legacy.
+    const compacted = this.config.enableEnhancedCompression && this.enhancedCompressor
+      ? this.prepareMessagesEnhanced(messages, stats)
+      : this.prepareMessagesLegacy(messages, stats);
 
-    // Fall back to legacy compression
-    return this.prepareMessagesLegacy(messages, stats);
+    // Re-arm warning thresholds we've dropped below so they can fire again.
+    this.rearmWarningsAfterCompaction(stats, compacted);
+
+    return compacted;
   }
 
   /**
@@ -887,6 +892,21 @@ export class ContextManagerV2 {
    */
   resetWarnings(): void {
     this.triggeredWarnings.clear();
+  }
+
+  /**
+   * After a compaction reduces context usage, re-arm any warning threshold we've
+   * now dropped BELOW so it can fire again when usage climbs back up. Without
+   * this, `triggeredWarnings` only ever grew, so a threshold warned at most once
+   * per conversation — on a long session with multiple compaction cycles the
+   * user stopped getting context warnings exactly when they matter most.
+   */
+  private rearmWarningsAfterCompaction(before: ContextStats, compacted: CodeBuddyMessage[]): void {
+    const after = this.getStats(compacted);
+    if (after.totalTokens >= before.totalTokens) return; // compaction didn't reduce usage
+    for (const threshold of [...this.triggeredWarnings]) {
+      if (threshold > after.usagePercent) this.triggeredWarnings.delete(threshold);
+    }
   }
 
   /**

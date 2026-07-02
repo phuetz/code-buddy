@@ -219,6 +219,54 @@ describe('ContextManagerV2', () => {
       expect(result.warn).toBe(false);
       expect(result.message).toBe('');
     });
+
+    // Regression: a threshold used to warn at most once per conversation because
+    // triggeredWarnings only ever grew — never re-armed after a compaction. On a
+    // long multi-compaction session the user stopped getting context warnings.
+    it('re-fires a threshold after compaction drops usage below it', () => {
+      const mgr = new ContextManagerV2({
+        maxContextTokens: 200,
+        responseReserveTokens: 20,
+        warningThresholds: [75],
+        enableWarnings: true,
+      });
+      const big: CodeBuddyMessage[] = Array.from({ length: 30 }, () => ({ role: 'user', content: 'A'.repeat(40) }));
+      const small: CodeBuddyMessage[] = [{ role: 'user', content: 'hi' }];
+
+      // 1. Warning fires; 2. deduped on repeat (same high usage).
+      expect(mgr.shouldWarn(big).warn).toBe(true);
+      expect(mgr.shouldWarn(big).warn).toBe(false);
+
+      // 3. A compaction reduces usage — re-arm thresholds we dropped below.
+      const before = (mgr as unknown as { getStats(m: CodeBuddyMessage[]): unknown }).getStats(big);
+      (mgr as unknown as { rearmWarningsAfterCompaction(b: unknown, c: CodeBuddyMessage[]): void })
+        .rearmWarningsAfterCompaction(before, small);
+
+      // 4. Warning fires AGAIN when usage climbs back up.
+      expect(mgr.shouldWarn(big).warn).toBe(true);
+      mgr.dispose();
+    });
+
+    it('does NOT re-arm when compaction did not reduce usage', () => {
+      const mgr = new ContextManagerV2({
+        maxContextTokens: 200,
+        responseReserveTokens: 20,
+        warningThresholds: [75],
+        enableWarnings: true,
+      });
+      const big: CodeBuddyMessage[] = Array.from({ length: 30 }, () => ({ role: 'user', content: 'A'.repeat(40) }));
+
+      expect(mgr.shouldWarn(big).warn).toBe(true);
+      expect(mgr.shouldWarn(big).warn).toBe(false);
+
+      // "compacted" is the same big set → no reduction → threshold stays armed-off.
+      const before = (mgr as unknown as { getStats(m: CodeBuddyMessage[]): unknown }).getStats(big);
+      (mgr as unknown as { rearmWarningsAfterCompaction(b: unknown, c: CodeBuddyMessage[]): void })
+        .rearmWarningsAfterCompaction(before, big);
+
+      expect(mgr.shouldWarn(big).warn).toBe(false);
+      mgr.dispose();
+    });
   });
 
   describe('Configuration', () => {
