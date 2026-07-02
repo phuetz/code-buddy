@@ -8,6 +8,14 @@ import { getGlobalEventBus } from '../../src/events/event-bus.js';
 
 let tmp: string;
 const tick = () => new Promise((r) => setTimeout(r, 60));
+/** Poll until a mock has been called at least `n` times — robust vs a fixed sleep when the greeting's
+ *  async chain (cold dynamic imports of percepts/persona) runs slower than 60ms under parallel load. */
+async function waitForCalls(fn: { mock: { calls: unknown[] } }, n: number, timeoutMs = 2000): Promise<void> {
+  const start = Date.now();
+  while (fn.mock.calls.length < n && Date.now() - start < timeoutMs) {
+    await new Promise((r) => setTimeout(r, 5));
+  }
+}
 function personEntered(): void {
   getGlobalEventBus().emit('sensory:perception', {
     source: 'test',
@@ -33,7 +41,7 @@ describe('arrival greeting — the robot notices and engages when someone arrive
     const unwire = wireSemanticVisionReaction({ greet, onEngage, now: () => clock, cwd: tmp });
     try {
       personEntered();
-      await tick();
+      await waitForCalls(greet, 1);
       expect(greet).toHaveBeenCalledTimes(1);
       expect(typeof greet.mock.calls[0]![0]).toBe('string');
       expect(greet.mock.calls[0]![0]!.length).toBeGreaterThan(0);
@@ -48,7 +56,7 @@ describe('arrival greeting — the robot notices and engages when someone arrive
       // after the cooldown → greets again
       clock += 61_000;
       personEntered();
-      await tick();
+      await waitForCalls(greet, 2);
       expect(greet).toHaveBeenCalledTimes(2);
     } finally {
       unwire();
@@ -79,7 +87,7 @@ describe('arrival greeting — the robot notices and engages when someone arrive
     });
     try {
       personEntered();
-      await tick();
+      await waitForCalls(greet, 1);
       expect(greet).toHaveBeenCalledTimes(1);
 
       // The greeting opened the window → the visitor's reply is now engaged + answered.
@@ -106,7 +114,7 @@ describe('arrival greeting — the robot notices and engages when someone arrive
     const unwire1 = wireSemanticVisionReaction({ greet: greet1, llmChat, now: () => clock, cwd: tmp });
     try {
       personEntered();
-      await tick();
+      await waitForCalls(greet1, 1);
       expect(greet1).toHaveBeenCalledTimes(1);
       expect(greet1.mock.calls[0]![0]).toBe('Tiens, te revoilà — content de te voir.');
       expect(llmChat).toHaveBeenCalledTimes(1);
@@ -121,7 +129,7 @@ describe('arrival greeting — the robot notices and engages when someone arrive
     const unwire2 = wireSemanticVisionReaction({ greet: greet2, llmChat: nullChat, now: () => clock, cwd: tmp });
     try {
       personEntered();
-      await tick();
+      await waitForCalls(greet2, 1);
       expect(greet2).toHaveBeenCalledTimes(1);
       expect(nullChat).toHaveBeenCalledTimes(1);
       const line = greet2.mock.calls[0]![0]!;
