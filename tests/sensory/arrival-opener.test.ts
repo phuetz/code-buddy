@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildArrivalOpener, pushRecent, ARRIVAL_RING_SIZE, ARRIVAL_TRIGGERS, templatePool } from '../../src/sensory/arrival-opener.js';
+import { buildArrivalOpener, buildLlmArrivalOpener, pushRecent, ARRIVAL_RING_SIZE, ARRIVAL_TRIGGERS, templatePool } from '../../src/sensory/arrival-opener.js';
 
 // Local 08:00 → morning; constructed + read with local time so it's TZ-stable.
 const morningNow = new Date(2026, 5, 30, 8, 0, 0).getTime();
@@ -63,6 +63,45 @@ describe('buildArrivalOpener', () => {
     expect(withName.text).toContain('Patrice');
     expect(without.text).not.toContain('{{');
     expect(without.text).not.toContain('  '); // no double space left by the dropped token
+  });
+});
+
+describe('buildLlmArrivalOpener (opt-in natural layer)', () => {
+  it('seeds the model with context + lines to avoid, and returns a cleaned line', async () => {
+    let seen = '';
+    const chat = async (messages: Array<{ role: string; content: string }>) => {
+      seen = messages.map((m) => m.content).join('\n');
+      return '  « Tiens, te revoilà — tu m’avais parlé du déploiement. »  ';
+    };
+    const line = await buildLlmArrivalOpener({
+      now: morningNow,
+      name: 'Patrice',
+      recentTexts: ['Bonjour {{name}}.'],
+      recentHeard: ['on déploie ce soir'],
+      chat,
+      timeoutMs: 1000,
+    });
+    expect(line).toBe('Tiens, te revoilà — tu m’avais parlé du déploiement.'); // quotes/space trimmed
+    expect(seen).toMatch(/Patrice/);
+    expect(seen).toMatch(/matin/); // time context
+    expect(seen).toMatch(/déploie ce soir/); // memory context surfaced
+    expect(seen).toMatch(/Bonjour/); // recent line to avoid
+  });
+
+  it('falls back (null) when the model returns nothing', async () => {
+    expect(await buildLlmArrivalOpener({ now: morningNow, chat: async () => null, timeoutMs: 1000 })).toBeNull();
+    expect(await buildLlmArrivalOpener({ now: morningNow, chat: async () => '   ', timeoutMs: 1000 })).toBeNull();
+  });
+
+  it('never throws — an erroring model yields null', async () => {
+    const line = await buildLlmArrivalOpener({ now: morningNow, chat: async () => { throw new Error('boom'); }, timeoutMs: 1000 });
+    expect(line).toBeNull();
+  });
+
+  it('times out to null when the model hangs', async () => {
+    const hang = () => new Promise<string | null>(() => {}); // never resolves
+    const line = await buildLlmArrivalOpener({ now: morningNow, chat: hang, timeoutMs: 40 });
+    expect(line).toBeNull();
   });
 });
 

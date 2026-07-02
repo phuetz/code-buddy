@@ -21,6 +21,7 @@ beforeEach(async () => {
 afterEach(async () => {
   await rm(tmp, { recursive: true, force: true });
   delete process.env.CODEBUDDY_SENSORY_GREET;
+  delete process.env.CODEBUDDY_SENSORY_GREET_LLM;
 });
 
 describe('arrival greeting — the robot notices and engages when someone arrives', () => {
@@ -91,6 +92,44 @@ describe('arrival greeting — the robot notices and engages when someone arrive
       expect((await decider.decide('quelqu’un a parlé au loin')).respond).toBe(false);
     } finally {
       unwire();
+    }
+  });
+
+  it('speaks the LLM opener when CODEBUDDY_SENSORY_GREET_LLM=true, else falls back to a template', async () => {
+    process.env.CODEBUDDY_SENSORY_GREET = 'true';
+    process.env.CODEBUDDY_SENSORY_GREET_LLM = 'true';
+
+    // 1) A model line is used verbatim as the spoken greeting.
+    const greet1 = vi.fn(async () => {});
+    const llmChat = vi.fn(async () => 'Tiens, te revoilà — content de te voir.');
+    let clock = 1000;
+    const unwire1 = wireSemanticVisionReaction({ greet: greet1, llmChat, now: () => clock, cwd: tmp });
+    try {
+      personEntered();
+      await tick();
+      expect(greet1).toHaveBeenCalledTimes(1);
+      expect(greet1.mock.calls[0]![0]).toBe('Tiens, te revoilà — content de te voir.');
+      expect(llmChat).toHaveBeenCalledTimes(1);
+    } finally {
+      unwire1();
+    }
+
+    // 2) When the model yields null, the deterministic template is spoken instead.
+    const greet2 = vi.fn(async () => {});
+    const nullChat = vi.fn(async () => null);
+    clock += 200_000; // fresh temp cwd anyway; new wiring has its own cooldown clock
+    const unwire2 = wireSemanticVisionReaction({ greet: greet2, llmChat: nullChat, now: () => clock, cwd: tmp });
+    try {
+      personEntered();
+      await tick();
+      expect(greet2).toHaveBeenCalledTimes(1);
+      expect(nullChat).toHaveBeenCalledTimes(1);
+      const line = greet2.mock.calls[0]![0]!;
+      expect(typeof line).toBe('string');
+      expect(line.length).toBeGreaterThan(0);
+      expect(line).not.toBe('Tiens, te revoilà — content de te voir.'); // not the LLM line
+    } finally {
+      unwire2();
     }
   });
 

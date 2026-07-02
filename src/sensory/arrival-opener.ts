@@ -15,6 +15,7 @@
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs';
 import { homedir } from 'os';
 import { join, dirname } from 'path';
+import { withTimeout } from '../council/with-timeout.js';
 
 export type ArrivalTrigger = 'morning' | 'afternoon' | 'evening' | 'night' | 'backSoon' | 'drowsy';
 
@@ -152,12 +153,106 @@ export function buildArrivalOpener(ctx: ArrivalContext): ArrivalOpener {
   return { text: interpolate(template, ctx.name), trigger, template };
 }
 
+// ---- Optional LLM opener (layered on top for real, non-scripted freshness) -------------------
+
+const TRIGGER_TIME_LABEL: Record<ArrivalTrigger, string> = {
+  morning: 'le matin',
+  afternoon: 'l’après-midi',
+  evening: 'le soir',
+  night: 'tard, la nuit',
+  backSoon: 'il vient juste de revenir (parti quelques minutes)',
+  drowsy: 'il a l’air fatigué',
+};
+
+/** Chat seam: takes messages, returns the raw assistant text or null. Injectable for tests. */
+export type ArrivalChat = (messages: Array<{ role: string; content: string }>) => Promise<string | null>;
+
+export interface LlmArrivalContext {
+  now: number;
+  lastSeenAt?: number | null;
+  name?: string;
+  drowsy?: boolean;
+  /** Recently spoken lines to avoid repeating (LLM anti-repetition). */
+  recentTexts?: string[];
+  /** Recent things the person said (memory-aware; may be referenced). Most-recent first. */
+  recentHeard?: string[];
+  /** Persona tone/voice prompt (from getActivePersonaVoiceAsync().spokenPrompt). */
+  personaPrompt?: string;
+  /** Chat seam (default: the sensory voice model). */
+  chat?: ArrivalChat;
+  /** Per-call timeout before falling back to the deterministic opener (ms). */
+  timeoutMs?: number;
+}
+
+/** Default chat: route to the sensory voice model (same path as hybrid-reply / respond-decider). */
+async function defaultVoiceChat(messages: Array<{ role: string; content: string }>): Promise<string | null> {
+  try {
+    const { resolveVoiceModel } = await import('./voice-loop.js');
+    const { CodeBuddyClient } = await import('../codebuddy/client.js');
+    const route = await resolveVoiceModel('');
+    const client = new CodeBuddyClient(route.apiKey, route.model, route.baseURL);
+    const resp = (await client.chat(messages as never, [])) as {
+      choices?: Array<{ message?: { content?: string | null } }>;
+    };
+    return (resp?.choices?.[0]?.message?.content ?? '').trim() || null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Generate a fresh, context-aware arrival line with the voice LLM — the natural,
+ * non-scripted layer on top of the deterministic templates. Seeds the model with
+ * the time context, the recent lines to AVOID, and (optionally) the last things
+ * heard so it can reference the conversation. Returns a single clean line, or
+ * `null` on timeout / error / unavailable → the caller falls back to the instant
+ * deterministic opener. Never throws.
+ */
+export async function buildLlmArrivalOpener(ctx: LlmArrivalContext): Promise<string | null> {
+  const chat = ctx.chat ?? defaultVoiceChat;
+  const timeoutMs = ctx.timeoutMs ?? Number(process.env.CODEBUDDY_SENSORY_GREET_LLM_TIMEOUT_MS ?? 4000);
+  const trigger = selectTrigger({ now: ctx.now, lastSeenAt: ctx.lastSeenAt, drowsy: ctx.drowsy });
+  const who = ctx.name || 'la personne';
+  const avoid = (ctx.recentTexts ?? []).filter(Boolean).slice(0, 6);
+  const heard = (ctx.recentHeard ?? []).filter(Boolean).slice(0, 4);
+
+  const sys = [
+    ctx.personaPrompt?.trim() || 'Tu es un compagnon robot chaleureux, tendre et attentionné.',
+    `Tu viens de voir ${who} apparaître devant ta caméra. Dis UNE seule phrase d'accueil — courte, naturelle, chaleureuse et VARIÉE, comme un vrai compagnon (pas un assistant). Pas forcément une question.`,
+    `Moment : ${TRIGGER_TIME_LABEL[trigger]}.`,
+    heard.length ? `Dernières choses qu'il t'a dites (tu peux y faire référence en douceur, sans forcer) : ${heard.map((h) => `« ${h} »`).join(' ; ')}.` : '',
+    avoid.length ? `N'utilise PAS ces formulations récentes : ${avoid.map((a) => `« ${a} »`).join(' ; ')}.` : '',
+    `Réponds en français, UNE phrase, sans guillemets, sans emoji superflu, sans préambule.`,
+  ]
+    .filter(Boolean)
+    .join('\n');
+
+  try {
+    const raw = await withTimeout(
+      chat([
+        { role: 'system', content: sys },
+        { role: 'user', content: "Ta phrase d'accueil :" },
+      ]),
+      timeoutMs,
+      'arrival-opener',
+    );
+    if (!raw) return null;
+    const line = raw.split('\n').map((s) => s.trim()).find(Boolean) ?? '';
+    const cleaned = line.replace(/^["“«]\s*/, '').replace(/\s*["”»]$/, '').trim();
+    return cleaned.length >= 2 ? cleaned : null;
+  } catch {
+    return null;
+  }
+}
+
 // ---- Persisted state (last-seen + recent ring) so variety survives restarts -----------------
 
 export interface ArrivalState {
   lastSeenAt?: number;
-  /** RAW templates recently used (most-recent first). */
+  /** RAW templates recently used (most-recent first) — deterministic anti-repetition. */
   recent: string[];
+  /** Lines actually SPOKEN recently (template or LLM) — seeds the LLM "avoid" list. */
+  recentSpoken?: string[];
 }
 
 export const ARRIVAL_RING_SIZE = 10;
@@ -170,7 +265,11 @@ export function loadArrivalState(statePath = defaultStatePath()): ArrivalState {
   try {
     if (existsSync(statePath)) {
       const data = JSON.parse(readFileSync(statePath, 'utf8'));
-      return { recent: Array.isArray(data.recent) ? data.recent : [], lastSeenAt: data.lastSeenAt };
+      return {
+        recent: Array.isArray(data.recent) ? data.recent : [],
+        lastSeenAt: data.lastSeenAt,
+        ...(Array.isArray(data.recentSpoken) ? { recentSpoken: data.recentSpoken } : {}),
+      };
     }
   } catch {
     /* best effort */

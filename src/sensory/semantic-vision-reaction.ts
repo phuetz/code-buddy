@@ -12,7 +12,7 @@ import { logger } from '../utils/logger.js';
 import type { BaseEvent } from '../events/types.js';
 import { perceptionOf } from './reactions.js';
 import { sendTelegramAlert } from './alert.js';
-import { buildArrivalOpener, loadArrivalState, saveArrivalState, pushRecent } from './arrival-opener.js';
+import { buildArrivalOpener, buildLlmArrivalOpener, loadArrivalState, saveArrivalState, pushRecent, type ArrivalChat } from './arrival-opener.js';
 
 /** Human-readable alert per semantic event kind (extend as detectors are added). */
 const MESSAGES: Record<string, string> = {
@@ -28,6 +28,8 @@ export interface SemanticVisionOptions {
   /** Called right after a greeting so the conversation window opens (server wires decider.markEngaged). */
   onEngage?: () => void;
   now?: () => number;
+  /** LLM chat seam for the opt-in natural opener (injectable for tests; default routes to the voice model). */
+  llmChat?: ArrivalChat;
 }
 
 export function wireSemanticVisionReaction(options: SemanticVisionOptions = {}): () => void {
@@ -86,7 +88,38 @@ export function wireSemanticVisionReaction(options: SemanticVisionOptions = {}):
             recent: state.recent,
             ...(process.env.CODEBUDDY_USER_NAME ? { name: process.env.CODEBUDDY_USER_NAME } : {}),
           });
-          const greeting = opener.text || persona.greeting || 'Bonjour ! Je suis là si tu as besoin.';
+          let greeting = opener.text || persona.greeting || 'Bonjour ! Je suis là si tu as besoin.';
+
+          // Natural, non-scripted layer (opt-in CODEBUDDY_SENSORY_GREET_LLM): a fresh
+          // LLM line seeded with the recent lines to AVOID + the last things heard so it
+          // can reference the conversation. Times out to the instant opener above.
+          if (process.env.CODEBUDDY_SENSORY_GREET_LLM === 'true') {
+            try {
+              let recentHeard: string[] = [];
+              try {
+                const { readRecentCompanionPercepts } = await import('../companion/percepts.js');
+                const heard = await readRecentCompanionPercepts({ modality: 'hearing', limit: 4 });
+                recentHeard = heard
+                  .map((h) => String((h.payload as { text?: string })?.text ?? h.summary ?? '').replace(/^Heard:\s*/i, ''))
+                  .filter(Boolean);
+              } catch {
+                /* memory context optional */
+              }
+              const llmLine = await buildLlmArrivalOpener({
+                now: t,
+                lastSeenAt: state.lastSeenAt ?? null,
+                recentTexts: [...(state.recentSpoken ?? []), ...state.recent],
+                recentHeard,
+                ...(persona.spokenPrompt ? { personaPrompt: persona.spokenPrompt } : {}),
+                ...(process.env.CODEBUDDY_USER_NAME ? { name: process.env.CODEBUDDY_USER_NAME } : {}),
+                ...(options.llmChat ? { chat: options.llmChat } : {}),
+              });
+              if (llmLine) greeting = llmLine;
+            } catch {
+              /* keep the deterministic opener */
+            }
+          }
+
           const greet =
             options.greet ??
             (async (text: string) => {
@@ -94,7 +127,11 @@ export function wireSemanticVisionReaction(options: SemanticVisionOptions = {}):
               await sayNow(text);
             });
           await greet(greeting);
-          saveArrivalState({ lastSeenAt: t, recent: pushRecent(state.recent, opener.template) });
+          saveArrivalState({
+            lastSeenAt: t,
+            recent: pushRecent(state.recent, opener.template),
+            recentSpoken: pushRecent(state.recentSpoken ?? [], greeting),
+          });
           options.onEngage?.(); // open the conversation window — follow-ups are now treated as addressed
           logger.info(`[vision] greeted arrival (${opener.trigger}) → ${greeting}`);
         } catch (err) {
