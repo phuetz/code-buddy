@@ -510,7 +510,24 @@ export class TextEditorTool implements Disposable {
       lines.splice(startLine - 1, endLine - startLine + 1, ...replacementLines);
       const newFileContent = lines.join("\n");
 
-      await this.vfs.writeFile(resolvedPath, newFileContent, "utf-8");
+      // Diff-review gate — resolved to FULL content, same as str_replace/create.
+      // Without this, CODEBUDDY_DIFF_REVIEW was silently bypassed for
+      // replace_lines (an ungated write path the gate is meant to close).
+      const gate = await maybeReviewGatedWrite({
+        baseDirectory: this.baseDirectory,
+        resolvedPath,
+        displayPath: filePath,
+        newContent: newFileContent,
+        intent: `replace_lines ${startLine}-${endLine} in ${filePath}`,
+        originLabel: "replace_lines",
+      });
+      if (gate.gated && !gate.ok) {
+        return { success: false, error: gate.error };
+      }
+      const gatedSummary = gate.gated && gate.ok ? gate.summary : null;
+      if (!gate.gated) {
+        await this.vfs.writeFile(resolvedPath, newFileContent, "utf-8");
+      }
 
       this.editHistory.push({
         command: "str_replace",
@@ -525,7 +542,7 @@ export class TextEditorTool implements Disposable {
 
       return {
         success: true,
-        output: diff,
+        output: gatedSummary ? `${diff}\n\n${gatedSummary}` : diff,
       };
     } catch (error: unknown) {
       return {
@@ -602,7 +619,23 @@ export class TextEditorTool implements Disposable {
       lines.splice(insertLine - 1, 0, content);
       const newContent = lines.join("\n");
 
-      await this.vfs.writeFile(resolvedPath, newContent, "utf-8");
+      // Diff-review gate — resolved to FULL content, same as str_replace/create.
+      // Without this, CODEBUDDY_DIFF_REVIEW was silently bypassed for insert.
+      const gate = await maybeReviewGatedWrite({
+        baseDirectory: this.baseDirectory,
+        resolvedPath,
+        displayPath: filePath,
+        newContent,
+        intent: `insert at line ${insertLine} in ${filePath}`,
+        originLabel: "insert",
+      });
+      if (gate.gated && !gate.ok) {
+        return { success: false, error: gate.error };
+      }
+      const gatedSummary = gate.gated && gate.ok ? gate.summary : null;
+      if (!gate.gated) {
+        await this.vfs.writeFile(resolvedPath, newContent, "utf-8");
+      }
 
       this.editHistory.push({
         command: "insert",
@@ -619,7 +652,7 @@ export class TextEditorTool implements Disposable {
 
       return {
         success: true,
-        output: diff,
+        output: gatedSummary ? `${diff}\n\n${gatedSummary}` : diff,
       };
     } catch (error: unknown) {
       return {
