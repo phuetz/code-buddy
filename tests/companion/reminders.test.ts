@@ -99,6 +99,12 @@ describe('reminders — matchAck (the safety-critical bind)', () => {
       "c'est bon",
       "j'ai pris mes clés",
       'tu as pris du bon temps',
+      // First-person "j'ai pris le <noun>" is NOT a dose ack — the bare article
+      // must not bind when a real object follows (regression guard).
+      "j'ai pris le train",
+      "j'ai pris le métro ce matin",
+      "j'ai pris la voiture",
+      "j'ai pris le bus pour rentrer",
     ]) {
       expect(matchAck(ambient, now), ambient).toBeNull();
     }
@@ -112,7 +118,11 @@ describe('reminders — matchAck (the safety-critical bind)', () => {
       "j'ai pris",
       "j'ai pris mes médicaments",
       "j'ai bien pris mes comprimés",
+      "j'ai pris le comprimé",
       "je l'ai pris",
+      // Elided object at the end still binds ("I took it/the [dose]").
+      "j'ai pris le",
+      "j'ai pris ça",
       'done',
     ]) {
       expect(matchAck(done, now), done).toBe('r1');

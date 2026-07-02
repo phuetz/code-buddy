@@ -293,13 +293,22 @@ export async function loadPendingAcks(): Promise<void> {
  *  taken and is uncorrectable: NO bare "fait"/"pris", no "c'est bon", no "oui … fait". "j'ai pris"
  *  binds only when terminal OR followed by a medication/object noun (so "j'ai pris mes clés" /
  *  "on a pris le train" / "c'est parfait" do NOT match). */
-const DONE_OBJ =
-  '(?:le |la |les |mes? |mon |ma |du |de la )?(?:m[ée]dicaments?|comprim[ée]s?|cachets?|pilules?|traitement|gouttes?|le|la|les|[cç]a)';
+// Medication/object nouns confirming an intentional dose ack. May appear
+// mid-sentence ("j'ai pris mes gouttes du soir"). NOTE: no bare articles here.
+const MED_NOUN =
+  '(?:le |la |les |mes? |mon |ma |du |de la )?(?:m[ée]dicaments?|comprim[ée]s?|cachets?|pilules?|traitement|gouttes?)';
 const DONE_PHRASE = new RegExp(
   [
     "c'?est fait",
     "c'?est pris",
-    `j'?ai (?:bien )?pris(?=\\s*[.!?]?\\s*$|\\s+${DONE_OBJ}\\b)`,
+    // "j'ai pris" binds ONLY when: terminal, OR followed by a medication noun,
+    // OR followed by a bare article/ça that is itself TERMINAL (elided object:
+    // "j'ai pris le" / "j'ai pris ça"). A bare "le/la/les/ça" MID-sentence must
+    // NOT bind — "j'ai pris le train" / "j'ai pris le métro ce matin" are not
+    // dose acknowledgements, and a false bind marks a dose taken uncorrectably.
+    // (`(?=\\s|[.,!?]|$)` not `\\b`: a noun ending in an accent like "comprimé"
+    //  fails an ASCII `\\b`.)
+    `j'?ai (?:bien )?pris(?=\\s*[.!?]?\\s*$|\\s+${MED_NOUN}(?=\\s|[.,!?]|$)|\\s+(?:le|la|les|[cç]a)\\s*[.!?]?\\s*$)`,
     "je l(?:es?)?'?ai pris(?=\\s*[.!?]?\\s*$)",
     '\\bdone\\b',
     '\\btaken\\b',
