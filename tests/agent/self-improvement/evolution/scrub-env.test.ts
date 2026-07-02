@@ -31,4 +31,30 @@ describe('scrub-env', () => {
       ['ANTHROPIC_API_KEY', 'AWS_SECRET_ACCESS_KEY', 'DATABASE_PASSWORD', 'GITHUB_TOKEN', 'GROK_API_KEY', 'JWT_SECRET', 'OPENAI_API_KEY', 'PICOVOICE_ACCESS_KEY'].sort(),
     );
   });
+
+  it('strips value-bearing connection strings whose key name is innocuous', () => {
+    const conn: NodeJS.ProcessEnv = {
+      PATH: '/usr/bin',
+      DATABASE_URL: 'postgres://user:pw@host/db',
+      REDIS_URL: 'redis://:pw@host:6379',
+      MONGODB_URI: 'mongodb+srv://user:pw@cluster',
+      SUPABASE_URL: 'https://x.supabase.co',
+      POSTGRES_HOST: 'db.internal',
+    };
+    const out = scrubbedEnv(conn);
+    expect(out.PATH).toBe('/usr/bin');
+    for (const k of ['DATABASE_URL', 'REDIS_URL', 'MONGODB_URI', 'SUPABASE_URL', 'POSTGRES_HOST']) {
+      expect(out[k], k).toBeUndefined();
+    }
+  });
+
+  it('redirects HOME/USERPROFILE so ~/.codebuddy credential files are unreachable by path', () => {
+    const out = scrubbedEnv(dirty, { homeDir: '/tmp/sandbox-home' });
+    expect(out.HOME).toBe('/tmp/sandbox-home'); // not /home/u
+    expect(out.USERPROFILE).toBe('/tmp/sandbox-home');
+  });
+
+  it('without homeDir, HOME is preserved (back-compat)', () => {
+    expect(scrubbedEnv(dirty).HOME).toBe('/home/u');
+  });
 });

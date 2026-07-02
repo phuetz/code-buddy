@@ -8,19 +8,41 @@
  * @module agent/self-improvement/evolution/scrub-env
  */
 
-/** A key is treated as secret if its NAME matches any of these (over-strip on purpose). */
+/**
+ * A key is treated as secret if its NAME matches any of these (over-strip on
+ * purpose). Beyond the obvious `*_KEY`/`*_TOKEN`, this also strips value-bearing
+ * connection strings whose key name is innocuous — `DATABASE_URL`, `REDIS_URL`,
+ * `MONGODB_URI`, `SUPABASE_URL` all embed credentials yet dodged the original
+ * filter. The scrubbed env feeds only the deterministic fitness (typecheck +
+ * tests), which needs no URLs, so stripping every `*_URL`/`*_URI` is safe.
+ */
 const SECRET_KEY_RE = new RegExp(
-  '(SECRET|TOKEN|PASSWORD|PASSWD|CREDENTIAL|API[_-]?KEY|_KEY$|ACCESS[_-]?KEY|PRIVATE|_DSN$|_PAT$|AUTH|SESSION|COOKIE)',
+  '(SECRET|TOKEN|PASSWORD|PASSWD|CREDENTIAL|API[_-]?KEY|_KEY$|ACCESS[_-]?KEY|PRIVATE|_DSN$|_PAT$|AUTH|SESSION|COOKIE' +
+    '|_URL$|_URI$|CONNECTION|DATABASE|REDIS|MONGO|SUPABASE|POSTGRES|MYSQL|AMQP)',
   'i',
 );
 
-/** Return a copy of `base` with secret-looking keys removed. Keeps PATH, HOME, NODE_ vars, etc. */
-export function scrubbedEnv(base: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
+export interface ScrubOptions {
+  /**
+   * Redirect HOME/USERPROFILE to this dir. Env scrubbing alone does NOT stop a
+   * variant from READING credential files by path (`~/.codebuddy/*.json`);
+   * pointing HOME at a throwaway dir makes the real home unreachable so the
+   * OAuth/token files there can't be read and exfiltrated during scoring.
+   */
+  homeDir?: string;
+}
+
+/** Return a copy of `base` with secret-looking keys removed, optionally with HOME redirected. */
+export function scrubbedEnv(base: NodeJS.ProcessEnv = process.env, options: ScrubOptions = {}): NodeJS.ProcessEnv {
   const out: NodeJS.ProcessEnv = {};
   for (const [k, v] of Object.entries(base)) {
     if (v === undefined) continue;
     if (SECRET_KEY_RE.test(k)) continue;
     out[k] = v;
+  }
+  if (options.homeDir) {
+    out.HOME = options.homeDir;
+    out.USERPROFILE = options.homeDir;
   }
   return out;
 }

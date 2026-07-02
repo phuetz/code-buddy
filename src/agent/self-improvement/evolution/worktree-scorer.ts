@@ -91,9 +91,13 @@ export async function scoreBranchInWorktree(branch: string, opts: ScoreBranchOpt
   // Preflight disk so a build/test loop can't fill the disk (disk-guard; throws if too low).
   ensureFreeSpace(basePath, undefined, { label: 'evolve worktree' });
 
-  const env = opts.env ?? (opts.scrubEnv === false ? process.env : scrubbedEnv());
   const mgr = WorktreeSessionManager.getInstance();
   const session = mgr.createWorktreeSession(branch, basePath);
+  // Default scoring env: secrets stripped AND HOME redirected into the
+  // worktree so the variant's own code (which runs under `npx vitest`) cannot
+  // read `~/.codebuddy/*.json` credential files and exfiltrate them.
+  const env =
+    opts.env ?? (opts.scrubEnv === false ? process.env : scrubbedEnv(process.env, { homeDir: session.worktreePath }));
   try {
     if (opts.linkNodeModules !== false) {
       linkNodeModules(basePath, session.worktreePath);
