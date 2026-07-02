@@ -6,6 +6,7 @@ import { getHooksManager } from "../hooks/lifecycle-hooks.js";
 import { Fact, FactCategory } from "./facts-memory.js";
 import { logger } from "../utils/logger.js";
 import { shouldWriteProjectRuntimeFiles } from "../utils/runtime-flags.js";
+import { decideForgets, type ForgetCandidate, type ForgettingConfig } from "./memory-forgetting.js";
 
 function mapMemoryCategoryToFactCategory(cat: MemoryCategory): FactCategory {
   switch (cat) {
@@ -37,6 +38,8 @@ export interface Memory {
   category: MemoryCategory;
   createdAt: Date;
   updatedAt: Date;
+  /** Last recall (reinforcement anchor for the forgetting curve). */
+  lastAccessedAt?: Date;
   accessCount: number;
   tags?: string[];
 }
@@ -112,6 +115,37 @@ function parsePositiveInt(value: string | undefined, fallback: number): number {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
+/** Metadata round-tripped through the markdown file so recall reinforcement
+ * and the forgetting curve survive restarts (older files simply lack it). */
+interface MemoryMeta {
+  createdAt?: Date;
+  updatedAt?: Date;
+  lastAccessedAt?: Date;
+  accessCount?: number;
+}
+
+function parseMemoryMeta(body: string): MemoryMeta {
+  const field = (name: string): string | undefined =>
+    new RegExp(`\\b${name}=(\\S+)`).exec(body)?.[1];
+  const date = (raw: string | undefined): Date | undefined => {
+    if (!raw) return undefined;
+    const parsed = new Date(raw);
+    return Number.isNaN(parsed.getTime()) ? undefined : parsed;
+  };
+  const accessed = Number.parseInt(field("accessed") ?? "", 10);
+  return {
+    createdAt: date(field("created")),
+    updatedAt: date(field("updated")),
+    lastAccessedAt: date(field("last")),
+    accessCount: Number.isFinite(accessed) && accessed >= 0 ? accessed : undefined,
+  };
+}
+
+function renderMemoryMeta(memory: Memory): string {
+  const last = memory.lastAccessedAt ? ` last=${memory.lastAccessedAt.toISOString()}` : "";
+  return `  <!-- meta: accessed=${memory.accessCount} created=${memory.createdAt.toISOString()} updated=${memory.updatedAt.toISOString()}${last} -->`;
+}
+
 function cloneMemoryMap(memories: Map<string, Memory>): Map<string, Memory> {
   return new Map(Array.from(memories.entries()).map(([key, memory]) => [
     key,
@@ -119,6 +153,7 @@ function cloneMemoryMap(memories: Map<string, Memory>): Map<string, Memory> {
       ...memory,
       createdAt: new Date(memory.createdAt),
       updatedAt: new Date(memory.updatedAt),
+      lastAccessedAt: memory.lastAccessedAt ? new Date(memory.lastAccessedAt) : undefined,
       tags: memory.tags ? [...memory.tags] : undefined,
     },
   ]));
@@ -168,6 +203,9 @@ export class PersistentMemoryManager extends EventEmitter {
    * promise and returning it to every caller ensures a single run.
    */
   private initPromise: Promise<void> | null = null;
+  /** Scopes with unpersisted recall reinforcement (see reinforce/flushAccessMetadata). */
+  private accessDirtyScopes = new Set<MemoryScope>();
+  private accessFlushTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(config: Partial<MemoryConfig> = {}) {
     super();
@@ -255,7 +293,17 @@ export class PersistentMemoryManager extends EventEmitter {
     const lines = content.split("\n");
     let currentKey = "";
     let currentValue = "";
+    let currentMeta: MemoryMeta | undefined;
     let inMemoryBlock = false;
+
+    const pushCurrent = () => {
+      if (currentKey && currentValue) {
+        memories.push(this.createMemory(currentKey, currentValue.trim(), currentCategory, currentMeta));
+      }
+      currentKey = "";
+      currentValue = "";
+      currentMeta = undefined;
+    };
 
     for (const line of lines) {
       // Check for category headers
@@ -270,9 +318,7 @@ export class PersistentMemoryManager extends EventEmitter {
       // Check for memory entries (format: - **key**: value)
       const memoryMatch = line.match(/^-\s*\*\*([^*]+)\*\*:\s*(.*)$/);
       if (memoryMatch) {
-        if (currentKey && currentValue) {
-          memories.push(this.createMemory(currentKey, currentValue.trim(), currentCategory));
-        }
+        pushCurrent();
         // Group 1 (`[^*]+`) always matches at least one char; group 2 (`.*`) defaults to "" when empty.
         const [, matchedKey = "", matchedValue = ""] = memoryMatch;
         currentKey = matchedKey;
@@ -281,36 +327,40 @@ export class PersistentMemoryManager extends EventEmitter {
         continue;
       }
 
+      // Metadata comment (written by saveMemories; absent in older files).
+      // Must be checked BEFORE the multi-line continuation branch or it would
+      // be folded into the value.
+      const metaMatch = line.match(/^\s*<!--\s*meta:\s*(.*?)\s*-->\s*$/);
+      if (metaMatch && inMemoryBlock) {
+        currentMeta = parseMemoryMeta(metaMatch[1] ?? "");
+        continue;
+      }
+
       // Continue multi-line value
       if (inMemoryBlock && line.startsWith("  ")) {
         currentValue += "\n" + line.trim();
       } else if (inMemoryBlock && line.trim() === "") {
         // End of memory block
-        if (currentKey && currentValue) {
-          memories.push(this.createMemory(currentKey, currentValue.trim(), currentCategory));
-        }
-        currentKey = "";
-        currentValue = "";
+        pushCurrent();
         inMemoryBlock = false;
       }
     }
 
     // Don't forget last memory
-    if (currentKey && currentValue) {
-      memories.push(this.createMemory(currentKey, currentValue.trim(), currentCategory));
-    }
+    pushCurrent();
 
     return memories;
   }
 
-  private createMemory(key: string, value: string, category: MemoryCategory): Memory {
+  private createMemory(key: string, value: string, category: MemoryCategory, meta?: MemoryMeta): Memory {
     return {
       key,
       value,
       category,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-      accessCount: 0,
+      createdAt: meta?.createdAt ?? new Date(),
+      updatedAt: meta?.updatedAt ?? new Date(),
+      ...(meta?.lastAccessedAt ? { lastAccessedAt: meta.lastAccessedAt } : {}),
+      accessCount: meta?.accessCount ?? 0,
     };
   }
 
@@ -379,14 +429,16 @@ export class PersistentMemoryManager extends EventEmitter {
             fValue = fact.text.substring(colonIdx + 2).trim();
           }
 
-          const existing = memories.get(fKey);
+          // The map was cleared above — prior metadata lives in previousMemories.
+          const prior = previousMemories.get(fKey);
           memories.set(fKey, {
             key: fKey,
             value: fValue,
             category: mapFactCategoryToMemoryCategory(fact.category),
-            createdAt: existing?.createdAt || fact.updatedAt || new Date(),
+            createdAt: prior?.createdAt || fact.updatedAt || new Date(),
             updatedAt: fact.updatedAt || new Date(),
-            accessCount: existing?.accessCount || 0,
+            ...(prior?.lastAccessedAt ? { lastAccessedAt: prior.lastAccessedAt } : {}),
+            accessCount: prior?.accessCount || 0,
             tags: fact.source ? [fact.source] : tags
           });
         }
@@ -503,6 +555,7 @@ export class PersistentMemoryManager extends EventEmitter {
       category,
       createdAt: existing?.createdAt || new Date(),
       updatedAt: new Date(),
+      ...(existing?.lastAccessedAt ? { lastAccessedAt: existing.lastAccessedAt } : {}),
       accessCount: existing?.accessCount || 0,
       tags,
     };
@@ -605,23 +658,69 @@ export class PersistentMemoryManager extends EventEmitter {
       const memories = scope === "project" ? this.projectMemories : this.userMemories;
       const memory = memories.get(key);
       if (memory) {
-        memory.accessCount++;
+        this.reinforce(memory, scope);
         return memory.value;
       }
       return null;
     }
 
     // Search both scopes, project first
-    let memory = this.projectMemories.get(key);
-    if (!memory) {
-      memory = this.userMemories.get(key);
-    }
+    const projectHit = this.projectMemories.get(key);
+    const memory = projectHit ?? this.userMemories.get(key);
 
     if (memory) {
-      memory.accessCount++;
+      this.reinforce(memory, projectHit ? "project" : "user");
       return memory.value;
     }
     return null;
+  }
+
+  /**
+   * Recall reinforcement: bump the spaced-repetition signals the forgetting
+   * curve reads (accessCount → stability, lastAccessedAt → decay anchor) and
+   * schedule a debounced persist so they survive restarts.
+   */
+  private reinforce(memory: Memory, scope: MemoryScope): void {
+    memory.accessCount++;
+    memory.lastAccessedAt = new Date();
+    this.scheduleAccessFlush(scope);
+  }
+
+  private scheduleAccessFlush(scope: MemoryScope): void {
+    this.accessDirtyScopes.add(scope);
+    if (this.accessFlushTimer) return;
+    this.accessFlushTimer = setTimeout(() => {
+      void this.flushAccessMetadata();
+    }, 10_000);
+    this.accessFlushTimer.unref?.();
+  }
+
+  /** Persist pending recall reinforcement now (also runs on a 10s debounce). Never throws. */
+  async flushAccessMetadata(): Promise<void> {
+    if (this.accessFlushTimer) {
+      clearTimeout(this.accessFlushTimer);
+      this.accessFlushTimer = null;
+    }
+    const scopes = Array.from(this.accessDirtyScopes);
+    this.accessDirtyScopes.clear();
+    for (const scope of scopes) {
+      try {
+        // Headless one-shot runs must not create project runtime files just
+        // because something was recalled (same invariant as ensureMemoryFiles).
+        if (
+          scope === "project" &&
+          !shouldWriteProjectRuntimeFiles() &&
+          !(await fs.pathExists(this.config.projectMemoryPath))
+        ) {
+          continue;
+        }
+        await this.saveMemories(scope);
+      } catch (err) {
+        logger.warn(
+          `[persistent-memory] could not persist recall reinforcement (${scope}): ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    }
   }
 
   /**
@@ -646,13 +745,13 @@ export class PersistentMemoryManager extends EventEmitter {
     const queryLower = query.toLowerCase();
     const queryWords = queryLower.split(/\s+/);
 
-    const allMemories = [
-      ...this.projectMemories.values(),
-      ...this.userMemories.values(),
+    const allMemories: Array<{ memory: Memory; scope: MemoryScope }> = [
+      ...Array.from(this.projectMemories.values(), (memory) => ({ memory, scope: "project" as const })),
+      ...Array.from(this.userMemories.values(), (memory) => ({ memory, scope: "user" as const })),
     ];
 
     // Score memories by relevance
-    const scored = allMemories.map((memory) => {
+    const scored = allMemories.map(({ memory, scope }) => {
       const textLower = `${memory.key} ${memory.value}`.toLowerCase();
       let score = 0;
 
@@ -665,15 +764,76 @@ export class PersistentMemoryManager extends EventEmitter {
       // Boost by access count
       score += memory.accessCount * 0.1;
 
-      return { memory, score };
+      return { memory, scope, score };
     });
 
     // Sort by score and return top results
-    return scored
+    const top = scored
       .filter((s) => s.score > 0)
       .sort((a, b) => b.score - a.score)
-      .slice(0, limit)
-      .map((s) => s.memory);
+      .slice(0, limit);
+
+    // Retrieval-for-prompt counts as recall: reinforce the returned hits
+    // (unlike getContextForPrompt, which renders everything indiscriminately).
+    for (const { memory, scope } of top) {
+      this.reinforce(memory, scope);
+    }
+
+    return top.map((s) => s.memory);
+  }
+
+  /**
+   * Ebbinghaus forgetting pass (recoverable): memories whose retention decayed
+   * below the threshold are appended to a sibling `*.archive.md`, then removed.
+   * An archive write failure aborts the pass — we never drop what we could not
+   * preserve. `preferences`/`decisions` and `pinned`-tagged entries never decay
+   * (see memory-forgetting.ts).
+   */
+  async applyForgetting(
+    scope: MemoryScope,
+    options: { now?: Date; config?: Partial<ForgettingConfig> } = {},
+  ): Promise<{ forgotten: ForgetCandidate[] }> {
+    const memories = scope === "project" ? this.projectMemories : this.userMemories;
+    const now = options.now ?? new Date();
+    const candidates = decideForgets(memories.values(), now, options.config);
+    if (candidates.length === 0) return { forgotten: [] };
+
+    const archivePath = this.getArchivePath(scope);
+    const lines = candidates.map((candidate) => {
+      const memory = memories.get(candidate.key)!;
+      const tags = memory.tags?.length ? ` [${memory.tags.join(", ")}]` : "";
+      return (
+        `- **${memory.key}** (${memory.category}${tags}, accessed ${memory.accessCount}×, ` +
+        `age ${Math.round(candidate.ageDays)}d, retention ${candidate.retention.toFixed(3)}): ${memory.value}`
+      );
+    });
+
+    try {
+      await fs.ensureDir(path.dirname(archivePath));
+      await fs.appendFile(archivePath, `\n## Forgotten ${now.toISOString()}\n${lines.join("\n")}\n`);
+    } catch (err) {
+      logger.warn(
+        `[persistent-memory] forgetting aborted — archive write failed, keeping all ${scope} memories: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      return { forgotten: [] };
+    }
+
+    for (const candidate of candidates) {
+      memories.delete(candidate.key);
+    }
+    await this.saveMemories(scope);
+    for (const candidate of candidates) {
+      this.emit("memory:forgotten", { key: candidate.key, scope, reason: "decay", retention: candidate.retention });
+    }
+    logger.info(
+      `[persistent-memory] ${scope}: ${candidates.length} memories faded (archived to ${archivePath})`,
+    );
+    return { forgotten: candidates };
+  }
+
+  private getArchivePath(scope: MemoryScope): string {
+    const filePath = scope === "project" ? this.config.projectMemoryPath : this.config.userMemoryPath;
+    return filePath.replace(/\.md$/i, "") + ".archive.md";
   }
 
   /**
@@ -766,6 +926,7 @@ export class PersistentMemoryManager extends EventEmitter {
           if (memory.tags && memory.tags.length > 0) {
             content += `  Tags: ${memory.tags.join(", ")}\n`;
           }
+          content += `${renderMemoryMeta(memory)}\n`;
         }
       }
       content += `\n`;
@@ -880,7 +1041,9 @@ export class PersistentMemoryManager extends EventEmitter {
       // 3. Reconcile facts
       const reconciledFacts = await service.reconcileFacts(currentProjectFacts, extractedFacts);
 
-      // 4. Update project memories with reconciled facts
+      // 4. Update project memories with reconciled facts (preserving each
+      // surviving key's recall-reinforcement metadata).
+      const priorProjectMemories = new Map(this.projectMemories);
       this.projectMemories.clear();
       for (const fact of reconciledFacts) {
         let key = `fact-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
@@ -892,13 +1055,15 @@ export class PersistentMemoryManager extends EventEmitter {
           value = fact.text.substring(colonIdx + 2).trim();
         }
 
+        const prior = priorProjectMemories.get(key);
         this.projectMemories.set(key, {
           key,
           value,
           category: mapFactCategoryToMemoryCategory(fact.category),
-          createdAt: fact.updatedAt || new Date(),
+          createdAt: prior?.createdAt || fact.updatedAt || new Date(),
           updatedAt: fact.updatedAt || new Date(),
-          accessCount: 0,
+          ...(prior?.lastAccessedAt ? { lastAccessedAt: prior.lastAccessedAt } : {}),
+          accessCount: prior?.accessCount || 0,
           tags: fact.source ? [fact.source] : ['auto-captured']
         });
       }

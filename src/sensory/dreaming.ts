@@ -72,6 +72,10 @@ export interface DreamingOptions {
   now?: number;
   /** Injectable promotion (tests); defaults to promoteSalientDream. */
   promote?: (summary: DreamSummary) => Promise<void>;
+  /** Injectable forgetting pass (tests); defaults to runForgettingPass. */
+  forget?: () => Promise<void>;
+  /** Override the CODEBUDDY_MEMORY_FORGET env gate (tests). */
+  forgettingEnabled?: boolean;
 }
 
 /**
@@ -105,10 +109,42 @@ export async function runDreamingPass(options: DreamingOptions = {}): Promise<Dr
     await (options.promote ?? promoteSalientDream)(summary);
   }
 
+  // Sleep prunes as well as it consolidates: the Ebbinghaus pass over
+  // persistent memory (opt-in — it removes entries, recoverably).
+  const forgettingOn = options.forgettingEnabled ?? process.env.CODEBUDDY_MEMORY_FORGET === 'true';
+  if (forgettingOn) {
+    await (options.forget ?? runForgettingPass)();
+  }
+
   logger.info(
     `[dreaming] consolidated ${summary.total} perception(s) → ${Object.keys(summary.byKind).length} kind(s), ${summary.salient.length} salient, avg load ${summary.avgLoad ?? '?'}`,
   );
   return summary;
+}
+
+/**
+ * Ebbinghaus forgetting pass over persistent memory (both scopes): what the
+ * companion never recalls fades below the retention threshold and is archived
+ * (never rm — a sibling `*.archive.md` keeps everything recoverable); what she
+ * actually uses is reinforced at recall and survives. Gated behind
+ * CODEBUDDY_MEMORY_FORGET=true by the caller. Never throws.
+ */
+export async function runForgettingPass(): Promise<void> {
+  try {
+    const { getMemoryManager } = await import('../memory/persistent-memory.js');
+    const { resolveForgettingConfig } = await import('../memory/memory-forgetting.js');
+    const manager = getMemoryManager();
+    await manager.initialize();
+    const config = resolveForgettingConfig();
+    const project = await manager.applyForgetting('project', { config });
+    const user = await manager.applyForgetting('user', { config });
+    const faded = project.forgotten.length + user.forgotten.length;
+    if (faded > 0) {
+      logger.info(`[dreaming] forgetting pass: ${faded} memories faded (archived, recoverable)`);
+    }
+  } catch (err) {
+    logger.warn(`[dreaming] forgetting pass failed: ${err instanceof Error ? err.message : String(err)}`);
+  }
 }
 
 /**
