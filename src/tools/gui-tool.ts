@@ -14,6 +14,7 @@ import { readFileSync, unlinkSync, existsSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { logger } from '../utils/logger.js';
+import { getPermissionModeManager } from '../security/permission-modes.js';
 import type { ToolResult } from '../types/index.js';
 
 // ============================================================================
@@ -89,6 +90,35 @@ function assertScreenInteger(value: number, label: string): number {
     throw new Error(`Invalid ${label}: expected a non-negative finite number, got ${String(value)}`);
   }
   return Math.round(value);
+}
+
+/** GUI actions that drive real OS input (must be gated). */
+const MUTATING_GUI_ACTIONS = new Set(['click', 'type', 'scroll', 'key']);
+
+/**
+ * Honour the active permission mode for GUI mutation. gui_control is not a
+ * read-only tool, so a read-only posture (e.g. `plan` mode) must block it — the
+ * same gate computer_control lives behind. Returns an error string when denied,
+ * or null when allowed. This closes S4: previously gui_control was a second,
+ * ungated input path that bypassed computer_control's danger classification.
+ */
+function guiPermissionError(action: string): string | null {
+  const decision = getPermissionModeManager().checkPermission(action, 'gui_control');
+  return decision.allowed ? null : `gui_control blocked: ${decision.reason}`;
+}
+
+/**
+ * System-level key combinations that switch the active virtual terminal, kill
+ * the X server, or trigger a secure-attention sequence. A prompt-injected agent
+ * could otherwise boot the user out of their session, so these are refused
+ * unless the operator explicitly opts in via CODEBUDDY_GUI_ALLOW_SYSTEM_KEYS.
+ */
+function isSystemKeyCombo(modifiers: string[], key: string): boolean {
+  if (modifiers.includes('ctrl') && modifiers.includes('alt')) {
+    if (/^f([1-9]|1[0-2])$/.test(key)) return true; // ctrl+alt+F1..F12 → VT switch
+    if (key === 'delete' || key === 'backspace') return true; // ctrl+alt+del / X-server kill
+  }
+  return false;
 }
 
 // ============================================================================
@@ -328,6 +358,13 @@ async function performScroll(x: number, y: number, direction: 'up' | 'down' | 'l
  */
 export async function executeGuiAction(input: GuiToolInput): Promise<GuiToolResult> {
   try {
+    // S4 — mutating GUI actions must respect the active permission mode (a
+    // read-only posture blocks them); screenshot/find_element are read-only.
+    if (MUTATING_GUI_ACTIONS.has(input.action)) {
+      const permErr = guiPermissionError(input.action);
+      if (permErr) return { success: false, error: permErr };
+    }
+
     switch (input.action) {
       case 'screenshot': {
         const b64 = captureScreenshotNative(input.region);
@@ -358,6 +395,13 @@ export async function executeGuiAction(input: GuiToolInput): Promise<GuiToolResu
       case 'key': {
         if (!input.keys) {
           return { success: false, error: 'key requires keys (e.g. "ctrl+c")' };
+        }
+        const { modifiers, key } = parseKeyCombination(input.keys);
+        if (isSystemKeyCombo(modifiers, key) && process.env.CODEBUDDY_GUI_ALLOW_SYSTEM_KEYS !== 'true') {
+          return {
+            success: false,
+            error: `gui_control blocked: system key combo "${input.keys}" can switch VT / kill the display (set CODEBUDDY_GUI_ALLOW_SYSTEM_KEYS=true to allow)`,
+          };
         }
         await performKey(input.keys);
         return { success: true };

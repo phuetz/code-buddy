@@ -293,6 +293,74 @@ describe('gui fallback is shell-injection safe (S1)', () => {
 });
 
 // ============================================================================
+// S4 — gui_control is gated (permission mode + destructive combos)
+// ============================================================================
+
+import { getPermissionModeManager, resetPermissionModeManager } from '../../src/security/permission-modes.js';
+
+describe('gui_control gating (S4)', () => {
+  const originalPlatform = process.platform;
+  function setPlatform(p: string) {
+    Object.defineProperty(process, 'platform', { value: p, configurable: true });
+  }
+  beforeEach(() => {
+    setPlatform('linux');
+    resetPermissionModeManager();
+    vi.mocked(execFileSync).mockReset().mockReturnValue(Buffer.from(''));
+    delete process.env.CODEBUDDY_GUI_ALLOW_SYSTEM_KEYS;
+  });
+  afterEach(() => {
+    Object.defineProperty(process, 'platform', { value: originalPlatform, configurable: true });
+    resetPermissionModeManager();
+    delete process.env.CODEBUDDY_GUI_ALLOW_SYSTEM_KEYS;
+    vi.restoreAllMocks();
+  });
+
+  it('blocks a mutating action in plan (read-only) mode; no subprocess spawned', async () => {
+    getPermissionModeManager().setMode('plan');
+    const result = await executeGuiAction({ action: 'type', text: 'hello' });
+    expect(result.success).toBe(false);
+    expect(result.error).toMatch(/blocked/i);
+    expect(execFileSync).not.toHaveBeenCalled();
+  });
+
+  it('allows a mutating action in default mode', async () => {
+    getPermissionModeManager().setMode('default');
+    const result = await executeGuiAction({ action: 'type', text: 'hello' });
+    expect(result.success).toBe(true);
+    expect(execFileSync).toHaveBeenCalled();
+  });
+
+  it('does not gate read-only screenshot even in plan mode', async () => {
+    getPermissionModeManager().setMode('plan');
+    vi.mocked(existsSync).mockReturnValue(true);
+    vi.mocked(readFileSync).mockReturnValue(Buffer.from('PNG'));
+    const result = await executeGuiAction({ action: 'screenshot' });
+    expect(result.success).toBe(true);
+  });
+
+  it('refuses a VT-switch / display-kill combo by default', async () => {
+    getPermissionModeManager().setMode('default');
+    for (const keys of ['ctrl+alt+f1', 'ctrl+alt+f12', 'ctrl+alt+delete', 'ctrl+alt+backspace']) {
+      const result = await executeGuiAction({ action: 'key', keys });
+      expect(result.success, keys).toBe(false);
+      expect(result.error, keys).toMatch(/system key combo/i);
+    }
+    expect(execFileSync).not.toHaveBeenCalled();
+  });
+
+  it('allows a normal combo (ctrl+c) and a system combo under explicit opt-in', async () => {
+    getPermissionModeManager().setMode('default');
+    const ok = await executeGuiAction({ action: 'key', keys: 'ctrl+c' });
+    expect(ok.success).toBe(true);
+
+    process.env.CODEBUDDY_GUI_ALLOW_SYSTEM_KEYS = 'true';
+    const opted = await executeGuiAction({ action: 'key', keys: 'ctrl+alt+f1' });
+    expect(opted.success).toBe(true);
+  });
+});
+
+// ============================================================================
 // guiControl — ToolResult adapter
 // ============================================================================
 
