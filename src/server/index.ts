@@ -1349,6 +1349,20 @@ export async function startServer(userConfig: Partial<ServerConfig> = {}): Promi
               await runDreamingPass();
             },
           });
+          // Episodic journal (opt-in) — consolidate the heard DIALOGUE into "what we talked about"
+          // so the arrival opener / follow-ups can reference it. Distinct from dreaming (sensor stats).
+          if (process.env.CODEBUDDY_EPISODE_JOURNAL === 'true') {
+            const episodeEvery = Math.max(1, Number(process.env.CODEBUDDY_EPISODE_EVERY ?? 40));
+            heart.register({
+              name: 'episodic-journal',
+              everyBeats: episodeEvery,
+              handler: async () => {
+                const { runEpisodeConsolidation } = await import('../sensory/episodic-journal.js');
+                await runEpisodeConsolidation();
+              },
+            });
+            logger.info(`Episodic journal: Enabled (CODEBUDDY_EPISODE_JOURNAL) — dialogue consolidation every ${episodeEvery} beats`);
+          }
           heart.start();
           sensoryTeardown.push(() => heart.stop());
           logger.info(`Sensory bridge: Enabled (buddy-sense → event bus; heartbeat treatments every ${everyBeats} beats)`);
