@@ -13,6 +13,7 @@
  */
 
 import { inspectAuthoredCode } from './authored-artifact-gate.js';
+import { AUTHORED_PREFIX } from './authored-tool-runtime.js';
 import { scoreToolCases } from './sandbox-scorer.js';
 import type { ToolMutatorPort } from './tool-skill-mutator.js';
 import type { ToolBenchmarkScenario, ToolGateOutcome, ToolProposal } from './tool-types.js';
@@ -41,6 +42,17 @@ export async function validateToolProposal(
   const scan = inspectAuthoredCode(proposal.spec.code, 'code');
   if (!scan.ok) {
     return { ...zero, accepted: false, rejectionReason: 'static-scan', reasons: scan.reasons };
+  }
+
+  // G1b — namespace: an authored tool must never be able to shadow a built-in.
+  // Reject before spending any scoring on a mis-named proposal.
+  if (!proposal.spec.name.startsWith(AUTHORED_PREFIX)) {
+    return {
+      ...zero,
+      accepted: false,
+      rejectionReason: 'name-invalid',
+      reasons: [`tool name "${proposal.spec.name}" is not namespaced "${AUTHORED_PREFIX}*" — refusing to avoid shadowing a built-in`],
+    };
   }
 
   // Fail-closed: a scenario with no held-out cases can't defend against gaming.

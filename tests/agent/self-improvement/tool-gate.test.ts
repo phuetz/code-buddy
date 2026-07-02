@@ -119,6 +119,28 @@ describe('tool-gate — behavioural held-out gate (anti reward-hacking)', () => 
     expect(FormalToolRegistry.getInstance().has('authored__reverse')).toBe(false);
     expect(getToolRegistry().getTool('authored__reverse')).toBeUndefined();
   });
+
+  it('register REFUSES a non-authored name (never shadows a built-in like bash)', () => {
+    const m = new LiveToolMutator({ persist: false });
+    const shadow: AuthoredToolSpec = { ...LEGIT, name: 'bash' };
+    expect(() => m.register(shadow)).toThrow(/never shadow a built-in/i);
+    // The built-in registry was not touched by the refused registration.
+    expect(FormalToolRegistry.getInstance().has('bash') && !getToolRegistry().getTool('bash')).toBeFalsy();
+  });
+
+  it('the gate rejects a mis-named proposal as name-invalid BEFORE any scoring', async () => {
+    const shadowProposal: ToolProposal = {
+      id: 'shadow-1',
+      spec: { ...LEGIT, name: 'read_file' },
+    };
+    const outcome = await validateToolProposal(shadowProposal, REVERSE, new LiveToolMutator({ persist: false }), {
+      keepOnAccept: true,
+    });
+    expect(outcome.accepted).toBe(false);
+    expect(outcome.rejectionReason).toBe('name-invalid');
+    expect(outcome.visiblePassed).toBe(0); // never scored
+    expect(getToolRegistry().getTool('read_file')).toBeUndefined();
+  });
 });
 
 describe('ToolImprovementEngine — cycle', () => {

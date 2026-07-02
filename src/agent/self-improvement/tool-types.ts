@@ -39,6 +39,7 @@ export interface ToolProposal {
 
 export type ToolGateRejection =
   | 'static-scan'
+  | 'name-invalid'
   | 'visible-fail'
   | 'heldout-fail';
 

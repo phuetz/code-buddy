@@ -12,7 +12,7 @@ import type { CodeBuddyTool } from '../../codebuddy/client.js';
 import type { ToolMetadata } from '../../tools/types.js';
 import { FormalToolRegistry } from '../../tools/registry/tool-registry.js';
 import { getToolRegistry } from '../../tools/registry.js';
-import { buildAuthoredTool, type AuthoredToolSpec } from './authored-tool-runtime.js';
+import { AUTHORED_PREFIX, buildAuthoredTool, type AuthoredToolSpec } from './authored-tool-runtime.js';
 import { AuthoredToolStore } from './authored-tool-store.js';
 
 export interface ToolMutatorPort {
@@ -38,6 +38,17 @@ export class LiveToolMutator implements ToolMutatorPort {
   }
 
   register(spec: AuthoredToolSpec): { name: string } {
+    // Hard backstop for the namespace invariant: registration uses
+    // `override: true`, so a spec named `bash`/`read_file` would silently
+    // REPLACE the built-in and route the model's calls to sandboxed authored
+    // code (bypassing e.g. the bash command validator). Only the LLM proposer
+    // applies `toAuthoredName`; a hand-built ToolProposal, a StaticToolProposer
+    // fixture, or a tampered persisted spec would otherwise slip through.
+    if (!spec.name.startsWith(AUTHORED_PREFIX)) {
+      throw new Error(
+        `refusing to register tool "${spec.name}": authored tools must be namespaced "${AUTHORED_PREFIX}*" (never shadow a built-in)`,
+      );
+    }
     const tool = buildAuthoredTool(spec);
     FormalToolRegistry.getInstance().register(tool, { override: true });
     const definition: CodeBuddyTool = {
