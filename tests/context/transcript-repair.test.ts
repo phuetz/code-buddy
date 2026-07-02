@@ -251,4 +251,60 @@ describe('repairToolCallPairs', () => {
       expect(roles).toEqual(['system', 'user', 'assistant']);
     });
   });
+
+  describe('rebuild edge cases (V6 audit — finding 5)', () => {
+    const call = (id: string): CodeBuddyMessage =>
+      ({ role: 'assistant', content: null, tool_calls: [{ id, type: 'function', function: { name: 't', arguments: '{}' } }] } as unknown as CodeBuddyMessage);
+    const res = (id: string, body = 'r'): CodeBuddyMessage =>
+      ({ role: 'tool', tool_call_id: id, content: body } as unknown as CodeBuddyMessage);
+
+    it('is idempotent — repairing a repaired transcript is a no-op', () => {
+      const messages: CodeBuddyMessage[] = [
+        { role: 'user', content: 'q' },
+        call('a1'), // no result → synthetic injected
+        res('orphan'), // orphan → removed
+      ];
+      const once = repairToolCallPairs(messages);
+      const twice = repairToolCallPairs(once);
+      expect(twice).toEqual(once);
+      // Every tool result references a surviving call.
+      const callIds = new Set(once.flatMap((m) => ((m as { tool_calls?: Array<{ id: string }> }).tool_calls ?? []).map((c) => c.id)));
+      expect(once.every((m) => m.role !== 'tool' || callIds.has((m as { tool_call_id: string }).tool_call_id))).toBe(true);
+    });
+
+    it('strips an id-less tool_call (unpairable) and demotes an assistant left with none', () => {
+      const idless = { role: 'assistant', content: 'x', tool_calls: [{ type: 'function', function: { name: 't', arguments: '{}' } }] } as unknown as CodeBuddyMessage;
+      const result = repairToolCallPairs([{ role: 'user', content: 'q' }, idless]);
+      expect(result).toHaveLength(2);
+      expect((result[1] as { tool_calls?: unknown }).tool_calls).toBeUndefined();
+      expect(result.some((m) => m.role === 'tool')).toBe(false);
+    });
+
+    it('keeps only the FIRST of two calls sharing an id (protocol corruption)', () => {
+      const messages: CodeBuddyMessage[] = [call('dup'), res('dup', 'first'), call('dup'), res('dup', 'second')];
+      const result = repairToolCallPairs(messages);
+      const toolMsgs = result.filter((m) => m.role === 'tool');
+      expect(toolMsgs).toHaveLength(1);
+      expect((toolMsgs[0] as { content: string }).content).toBe('first');
+      // The second assistant lost its duplicate call and carries no tool_calls.
+      const assistants = result.filter((m) => m.role === 'assistant');
+      expect(assistants).toHaveLength(2);
+    });
+
+    it('relocates a result that appeared BEFORE its call to the canonical slot', () => {
+      const messages: CodeBuddyMessage[] = [res('a1', 'early'), call('a1')];
+      const result = repairToolCallPairs(messages);
+      const idx = { assistant: result.findIndex((m) => m.role === 'assistant'), tool: result.findIndex((m) => m.role === 'tool') };
+      expect(idx.tool).toBe(idx.assistant + 1); // result now follows its call
+      expect((result[idx.tool] as { content: string }).content).toBe('early'); // real result kept, not synthetic
+    });
+
+    it('drops a duplicate result for one id, keeping the first', () => {
+      const messages: CodeBuddyMessage[] = [call('a1'), res('a1', 'keep'), res('a1', 'drop')];
+      const result = repairToolCallPairs(messages);
+      const toolMsgs = result.filter((m) => m.role === 'tool');
+      expect(toolMsgs).toHaveLength(1);
+      expect((toolMsgs[0] as { content: string }).content).toBe('keep');
+    });
+  });
 });

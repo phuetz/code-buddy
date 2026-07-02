@@ -6,7 +6,7 @@
  * prepareMessages, sliding window, tool truncation, summarization, warnings, config.
  */
 
-import { ContextManagerV2 } from '../../src/context/context-manager-v2';
+import { ContextManagerV2, createContextManager } from '../../src/context/context-manager-v2';
 import type { CodeBuddyMessage } from '../../src/codebuddy/client';
 import { RunStore } from '../../src/observability/run-store';
 
@@ -302,6 +302,29 @@ describe('ContextManagerV2 (gap coverage)', () => {
       const mgr = createManager({ autoCompactThreshold: 999999 });
       const msgs = makeMessages(2, 20);
       expect(mgr.shouldAutoCompact(msgs)).toBe(false);
+      mgr.dispose();
+    });
+
+    it('createContextManager clamps autoCompactThreshold to a sub-200K window (was dead)', () => {
+      // An explicit small window: the old default 200K threshold could never
+      // fire under it, so the absolute auto-compact gate was inert.
+      const mgr = createContextManager('gpt-4', 8192);
+      expect(mgr.getConfig().autoCompactThreshold).toBe(8192);
+      // A transcript that overflows the small window now actually trips the
+      // gate (the old 200K default could never be reached under 8192).
+      const msgs = makeMessages(400, 200);
+      expect(mgr.shouldAutoCompact(msgs)).toBe(true);
+      mgr.dispose();
+    });
+
+    it('clamps to a 128K model window and leaves the cap for larger ones', () => {
+      // gpt-4 → 128K window in model-tools: clamped to the window, not 200K.
+      expect(createContextManager('gpt-4').getConfig().autoCompactThreshold).toBe(128_000);
+    });
+
+    it('createContextManager keeps the 200K cap for large-window models', () => {
+      const mgr = createContextManager('gpt-5'); // 400K window in model-tools
+      expect(mgr.getConfig().autoCompactThreshold).toBe(200_000);
       mgr.dispose();
     });
   });

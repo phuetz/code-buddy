@@ -1310,6 +1310,11 @@ export function createContextManager(
     model,
     maxContextTokens: detectedLimit,
     responseReserveTokens: Math.floor(detectedLimit * 0.125), // 12.5% reserve
+    // The absolute auto-compact gate (mistral-vibe style, default 200K) was
+    // DEAD for every sub-200K model: the default exceeded the whole window,
+    // so shouldAutoCompact() could never fire on it. Clamp it to the window;
+    // for ≥200K-window models (grok 2M…) the 200K cap keeps its meaning.
+    autoCompactThreshold: Math.min(200_000, detectedLimit),
   });
 }
 
