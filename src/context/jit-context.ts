@@ -48,6 +48,27 @@ export const JIT_CONTEXT_PREFIX = '\n\n--- Discovered Context ---\n';
 export const JIT_CONTEXT_SUFFIX = '\n--- End Context ---';
 
 /**
+ * Truncate discovered context to a char budget WITHOUT leaving broken markdown.
+ * A blind substring can cut mid-code-fence, so everything after the outer
+ * delimiter reads as if still inside a ``` block. Prefer a structural boundary
+ * (blank line / heading) near the cut, then close any code fence left open.
+ */
+export function truncateJitContent(text: string, max: number): string {
+  if (text.length <= max) return text;
+  let cut = text.slice(0, Math.max(0, max - 3));
+  const boundary = Math.max(cut.lastIndexOf('\n\n'), cut.lastIndexOf('\n## '), cut.lastIndexOf('\n# '));
+  if (boundary > max * 0.5) {
+    cut = cut.slice(0, boundary);
+  }
+  cut += '...';
+  // Odd number of fences ⇒ one is unterminated ⇒ close it.
+  if (((cut.match(/```/g) || []).length) % 2 === 1) {
+    cut += '\n```';
+  }
+  return cut;
+}
+
+/**
  * Clear caches (for testing / `/context reload`). Resets both the doc dedup set
  * and the active context registry so the next pass re-scans from scratch.
  */
@@ -123,10 +144,7 @@ export function discoverJitContext(
 
     if (discoveredContent.length === 0) return '';
 
-    let result = discoveredContent.join('\n\n');
-    if (result.length > MAX_JIT_CONTEXT_CHARS) {
-      result = result.substring(0, MAX_JIT_CONTEXT_CHARS - 3) + '...';
-    }
+    const result = truncateJitContent(discoveredContent.join('\n\n'), MAX_JIT_CONTEXT_CHARS);
 
     return `${JIT_CONTEXT_PREFIX}${result}${JIT_CONTEXT_SUFFIX}`;
   } catch (err) {

@@ -86,7 +86,7 @@ User → ChatInterface (Ink/React) → CodeBuddyAgent → LLM provider
    | `AutoRepairMiddleware` | 150 | Detect errors, invoke fault localizer, suggest repairs |
    | `QualityGateMiddleware` | 200 | Auto-delegate to CodeGuardian and SecurityReview agents |
 
-   Register in `codebuddy-agent.ts` constructor (priority order shown above). Lower priority runs first. Three more middleware exist with factory functions but aren't wired by default: `LearningFirstMiddleware` (35), `ToolFilterMiddleware` (50), `VerificationEnforcementMiddleware` (155) — check `src/agent/middleware/` before assuming the table is exhaustive.
+   Register in `codebuddy-agent.ts` constructor (priority order shown above). Lower priority runs first. `VerificationEnforcementMiddleware` (155) **is** wired (`codebuddy-agent.ts:~393`) — it nudges "verify before finishing" once per task (its `hasWarned` latch, and every middleware's per-task counters, are cleared by `MiddlewarePipeline.resetForNewTask()` at the start of each turn). Two more middleware exist with factory functions but aren't wired by default: `LearningFirstMiddleware` (35), `ToolFilterMiddleware` (50) — check `src/agent/middleware/` before assuming the table is exhaustive.
 6. **Confirmation service** — Singleton. Check order: permission mode → declarative rules → session flags → Guardian Agent.
 7. **Per-turn context injection** — Each LLM turn appends `<lessons_context>` (before) and `<todo_context>` (after). Must be applied in both agent-executor paths.
 8. **Pluggable ContextEngine** — Plugins can register a custom context pipeline via `PluginContext.registerContextEngine()`. If `ownsCompaction` is set, built-in auto-compact is skipped. Trust check blocks non-trusted plugins from owning compaction.

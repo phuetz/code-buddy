@@ -735,11 +735,15 @@ Output formatting discipline:
       // use `mockReturnValueOnce` aren't consumed twice.
       const contextWindow = toolCfg.contextWindow ?? 8192;
       const maxOutputTokens = toolCfg.maxOutputTokens ?? 2048;
-      const budgetTokens = Math.min(Math.floor((contextWindow - maxOutputTokens) * 0.5), 32_000); // 32K hard cap
+      // Guard the degenerate case where maxOutputTokens >= contextWindow (some
+      // custom/reasoning model configs): (cw - maxOut) can be <= 0, making
+      // budgetChars 0 or negative. Without Math.max, slice(0, 0-3) === slice(0,
+      // -3) returns the WHOLE prompt minus 3 chars — the opposite of truncating.
+      const budgetTokens = Math.max(0, Math.min(Math.floor((contextWindow - maxOutputTokens) * 0.5), 32_000)); // 32K hard cap
       const budgetChars = budgetTokens * 4; // ~4 chars per token
       if (systemPrompt.length > budgetChars) {
         logger.warn(`System prompt truncated for ${modelName}: ${systemPrompt.length} chars → ${budgetChars} (budget: ${budgetTokens} tokens, 32K hard cap)`);
-        systemPrompt = systemPrompt.slice(0, budgetChars - 3) + '...';
+        systemPrompt = systemPrompt.slice(0, Math.max(0, budgetChars - 3)) + '...';
       }
 
       // Cache system prompt for optimization
@@ -823,7 +827,11 @@ Output formatting discipline:
  * Map query complexity to per-block gates. The `lite` model profile maps
  * to `trivial` (minimal prompt); `rich` maps to `complex` (everything).
  */
-export function gatesForComplexity(complexity: QueryComplexity): BuildOptions {
+export function gatesForComplexity(complexity: QueryComplexity): Required<BuildOptions> {
+  // NOTE: the return type is Required<BuildOptions> on purpose — the result is
+  // merged over ALL_BLOCKS (all-true) by the caller, so ANY omitted key would
+  // silently default to `true` and leak that block into a cheap tier (defeating
+  // the classifier's token savings). Keep these objects exhaustive.
   switch (complexity) {
     case 'trivial':
       // Greetings, "thanks", yes/no — only base SP + writing rules.
@@ -838,6 +846,7 @@ export function gatesForComplexity(complexity: QueryComplexity): BuildOptions {
         includeFleet: false,
         includeMemoryDirective: false,
         includeLessonsDirective: false,
+        includeUserModelDirective: false,
         includeWritingRules: true,
         includeCodingStyle: false,
         includeWorkflowRules: false,
@@ -846,7 +855,9 @@ export function gatesForComplexity(complexity: QueryComplexity): BuildOptions {
       };
     case 'simple':
       // Short questions, no code signals — base + identity + memory
-      // directives + rules + writing rules. Skip heavy bootstrap/docs/knowledge.
+      // directives + rules + writing rules. Skip heavy bootstrap/docs/knowledge
+      // AND the execution-discipline / user-model blocks (the tier is meant to
+      // be cheap; it already drops workflow rules for the same reason).
       return {
         includeBootstrap: false,
         includePersona: true,
@@ -858,9 +869,11 @@ export function gatesForComplexity(complexity: QueryComplexity): BuildOptions {
         includeFleet: true,
         includeMemoryDirective: true,
         includeLessonsDirective: true,
+        includeUserModelDirective: false,
         includeWritingRules: true,
         includeCodingStyle: false,
         includeWorkflowRules: false,
+        includeExecutionDiscipline: false,
         includeVariation: true,
       };
     case 'complex':

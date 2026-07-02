@@ -803,7 +803,10 @@ Safety checks:
   if (!fs.existsSync(settingsPath) || options.force) {
     const settingsContent = {
       model: 'grok-code-fast-1',
-      maxToolRounds: 400,
+      // 50 is the real non-YOLO runtime default; the scaffold previously wrote
+      // 400 (the YOLO cap), which both misrepresented behavior and — if a future
+      // path wires settings.json into the agent — would silently 8× the budget.
+      maxToolRounds: 50,
       theme: 'default'
     };
     fs.writeFileSync(settingsPath, JSON.stringify(settingsContent, null, 2));
