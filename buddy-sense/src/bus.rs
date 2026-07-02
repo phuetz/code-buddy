@@ -1,10 +1,10 @@
-//! The thalamus — the brain's attention GATE (not a reordering scheduler). It
-//! receives raw events from every sense (bounded channel = backpressure),
-//! COALESCES high-rate low-salience events, keeps a parallel short-term MEMORY
-//! (per-modality ring buffers), and BROADCASTS the admitted events in arrival
-//! order (the "global workspace"). Salient events (>= ESCALATE_SALIENCE) bypass
-//! coalescing — but this is a GATE, not priority reordering: a salient event
-//! behind a backlog is still delivered after it (true priority is future work).
+//! The thalamus — the brain's attention gate AND a bounded priority scheduler. It
+//! receives raw events from the per-organ channels, COALESCES high-rate low-salience
+//! events, keeps a parallel short-term MEMORY (per-modality ring buffers), and
+//! BROADCASTS admitted events (the "global workspace"). Salient events
+//! (>= ESCALATE_SALIENCE) bypass coalescing, and within each attention batch the
+//! most salient are served FIRST (`run_multi`), so a salient event (speech) is not
+//! stuck behind a backlog of low-salience motion. Same-salience keeps arrival order.
 
 use std::collections::{HashMap, VecDeque};
 
@@ -103,16 +103,35 @@ impl Thalamus {
         receivers: Vec<mpsc::Receiver<SensoryEvent>>,
         tx: broadcast::Sender<SensoryEvent>,
     ) {
+        use futures_util::FutureExt;
         use tokio_stream::wrappers::ReceiverStream;
         use tokio_stream::{StreamExt, StreamMap};
+
+        // Max events reordered together in one attention pass (bounded work + latency).
+        const ATTENTION_BATCH: usize = 32;
 
         let mut map: StreamMap<usize, ReceiverStream<SensoryEvent>> = StreamMap::new();
         for (i, rx) in receivers.into_iter().enumerate() {
             map.insert(i, ReceiverStream::new(rx));
         }
-        while let Some((_organ, ev)) = map.next().await {
-            if let Some(out) = self.admit(ev) {
-                let _ = tx.send(out);
+
+        // Block for the next event, then greedily gather whatever is IMMEDIATELY ready into a bounded
+        // batch and serve it highest-salience-first — real attention, so a salient event isn't stuck
+        // behind a backlog of low-salience motion. Stable sort → equal salience keeps arrival order;
+        // coalescing still runs per admit.
+        while let Some((_organ, first)) = map.next().await {
+            let mut batch = vec![first];
+            while batch.len() < ATTENTION_BATCH {
+                match map.next().now_or_never() {
+                    Some(Some((_organ, ev))) => batch.push(ev),
+                    _ => break, // nothing immediately ready, or all organ channels closed
+                }
+            }
+            batch.sort_by_key(|e| std::cmp::Reverse(e.salience)); // stable: equal salience keeps arrival order
+            for ev in batch {
+                if let Some(out) = self.admit(ev) {
+                    let _ = tx.send(out);
+                }
             }
         }
     }
@@ -180,7 +199,30 @@ mod tests {
         while let Ok(e) = brx.try_recv() {
             kinds.push(e.kind);
         }
-        assert_eq!(kinds, vec!["motion", "speech_start"]); // the 2nd motion was dropped
+        // The 2nd motion is coalesced; the salient speech is served BEFORE the motion (attention),
+        // even though the motion arrived first.
+        assert_eq!(kinds, vec!["speech_start", "motion"]);
+    }
+
+    #[tokio::test]
+    async fn serves_high_salience_before_low_within_a_batch() {
+        let (stx, srx) = mpsc::channel::<SensoryEvent>(16);
+        let (btx, mut brx) = broadcast::channel::<SensoryEvent>(16);
+        let thalamus = Thalamus::new(8, 0); // window 0 → no coalescing, isolate the ordering
+        // Buffer low → high → mid BEFORE the thalamus drains, so they land in ONE attention batch.
+        stx.send(ev(Modality::Vision, "motion", 0, 10)).await.unwrap(); // low
+        stx.send(ev(Modality::Audio, "speech_start", 1, 200)).await.unwrap(); // high
+        stx.send(ev(Modality::Ui, "focus", 2, 90)).await.unwrap(); // mid
+        drop(stx);
+        let handle = tokio::spawn(async move { thalamus.run_multi(vec![srx], btx).await });
+        handle.await.unwrap();
+
+        let mut kinds = Vec::new();
+        while let Ok(e) = brx.try_recv() {
+            kinds.push(e.kind);
+        }
+        // Served by descending salience (200 > 90 > 10), not arrival order.
+        assert_eq!(kinds, vec!["speech_start", "focus", "motion"]);
     }
 
     #[tokio::test]
