@@ -13,6 +13,7 @@ import { ConfirmationService } from '../utils/confirmation-service.js';
 import { getCheckpointManager } from '../checkpoints/checkpoint-manager.js';
 import { UnifiedVfsRouter } from '../services/vfs/unified-vfs-router.js';
 import { generateDiff as sharedGenerateDiff } from '../utils/diff-generator.js';
+import { maybeReviewGatedWrite } from './review-gate-helper.js';
 import { logger } from '../utils/logger.js';
 
 /**
@@ -140,22 +141,41 @@ export class MultiEditTool {
       }
     }
 
-    // ── Create checkpoint before writing ──────────────────────────
-    try {
-      this.checkpointManager.checkpointBeforeEdit(filePath);
-    } catch (err) {
-      logger.warn('Failed to create checkpoint for multi-edit', {
-        file: filePath,
-        error: err instanceof Error ? err.message : String(err),
-      });
+    // ── Diff-review gate (after the user confirmation above) ──────
+    // The dry-run already resolved every edit to FULL resulting content —
+    // exactly what the gate reviews. When gated, the review transaction
+    // takes its own checkpoint and writes; the legacy path below is skipped.
+    const gate = await maybeReviewGatedWrite({
+      baseDirectory: this.baseDirectory,
+      resolvedPath,
+      displayPath: filePath,
+      newContent: content,
+      intent: `multi_edit (${edits.length} edit${edits.length > 1 ? 's' : ''}) on ${filePath}`,
+      originLabel: 'multi_edit',
+    });
+    if (gate.gated && !gate.ok) {
+      return { success: false, error: gate.error };
     }
+    const gatedSummary = gate.gated && gate.ok ? gate.summary : null;
 
-    // ── Write the final content ───────────────────────────────────
-    try {
-      await this.vfs.writeFile(resolvedPath, content, 'utf-8');
-    } catch (error: unknown) {
-      const msg = error instanceof Error ? error.message : String(error);
-      return { success: false, error: `Failed to write file: ${msg}` };
+    if (!gate.gated) {
+      // ── Create checkpoint before writing ────────────────────────
+      try {
+        this.checkpointManager.checkpointBeforeEdit(filePath);
+      } catch (err) {
+        logger.warn('Failed to create checkpoint for multi-edit', {
+          file: filePath,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+
+      // ── Write the final content ─────────────────────────────────
+      try {
+        await this.vfs.writeFile(resolvedPath, content, 'utf-8');
+      } catch (error: unknown) {
+        const msg = error instanceof Error ? error.message : String(error);
+        return { success: false, error: `Failed to write file: ${msg}` };
+      }
     }
 
     // ── Build summary ─────────────────────────────────────────────
@@ -168,6 +188,7 @@ export class MultiEditTool {
       `Applied ${edits.length} edit${edits.length > 1 ? 's' : ''} to ${filePath} (${lineDiffStr})`,
       '',
       diffResult.diff,
+      ...(gatedSummary ? ['', gatedSummary] : []),
     ].join('\n');
 
     return {

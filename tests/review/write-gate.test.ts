@@ -14,6 +14,7 @@ vi.mock('../../src/utils/logger.js', () => ({
 
 import { ApplyPatchTool, computePatchedFiles, parsePatch } from '../../src/tools/apply-patch.js';
 import { TextEditorTool } from '../../src/tools/text-editor.js';
+import { MultiEditTool } from '../../src/tools/multi-edit.js';
 import { reviewGatedWrite } from '../../src/review/write-gate.js';
 import { resetCheckpointManager } from '../../src/checkpoints/checkpoint-manager.js';
 import { ConfirmationService } from '../../src/utils/confirmation-service.js';
@@ -287,5 +288,106 @@ describe('TextEditorTool.create — gated behind CODEBUDDY_DIFF_REVIEW (create_f
 
     expect(result.success).toBe(false);
     expect(fs.existsSync(outside)).toBe(false);
+  });
+});
+
+describe('TextEditorTool.strReplace — gated behind CODEBUDDY_DIFF_REVIEW', () => {
+  function editor(): TextEditorTool {
+    process.chdir(workDir);
+    const tool = new TextEditorTool();
+    tool.setBaseDirectory(workDir);
+    return tool;
+  }
+
+  it('off (default): legacy path, no review artifacts', async () => {
+    delete process.env.CODEBUDDY_DIFF_REVIEW;
+    write('a.ts', 'const a = 1;\n');
+
+    const result = await editor().strReplace('a.ts', 'const a = 1;', 'const a = 2;');
+
+    expect(result.success).toBe(true);
+    expect(read('a.ts')).toBe('const a = 2;\n');
+    expect(fs.existsSync(path.join(workDir, '.codebuddy'))).toBe(false);
+  });
+
+  it('static: the resolved full content is reviewed, applied and journaled', async () => {
+    process.env.CODEBUDDY_DIFF_REVIEW = 'static';
+    write('a.ts', 'const a = 1;\nconst keep = true;\n');
+
+    const result = await editor().strReplace('a.ts', 'const a = 1;', 'const a = 2;');
+
+    expect(result.success).toBe(true);
+    expect(result.output).toMatch(/review accepted/);
+    expect(read('a.ts')).toBe('const a = 2;\nconst keep = true;\n');
+    const ledger = JSON.parse(read('.codebuddy/diff-reviews.jsonl').trim());
+    expect(ledger.origin.label).toBe('str_replace');
+    expect(ledger.applied).toBe(true);
+  });
+
+  it('static: a replacement smuggling a secret is blocked, file untouched', async () => {
+    process.env.CODEBUDDY_DIFF_REVIEW = 'static';
+    write('a.ts', 'const a = 1;\n');
+
+    const result = await editor().strReplace('a.ts', 'const a = 1;', 'const k = "AKIAABCDEFGHIJKLMNOP";');
+
+    expect(result.success).toBe(false);
+    expect(result.error).toMatch(/REJECTED/);
+    expect(result.error).toMatch(/AWS access key/);
+    expect(read('a.ts')).toBe('const a = 1;\n');
+  });
+});
+
+describe('MultiEditTool — gated behind CODEBUDDY_DIFF_REVIEW', () => {
+  function multiEditor(): MultiEditTool {
+    process.chdir(workDir);
+    const tool = new MultiEditTool();
+    tool.setBaseDirectory(workDir);
+    return tool;
+  }
+
+  it('off (default): legacy path, no review artifacts', async () => {
+    delete process.env.CODEBUDDY_DIFF_REVIEW;
+    write('a.ts', 'const a = 1;\nconst b = 1;\n');
+
+    const result = await multiEditor().execute('a.ts', [
+      { old_string: 'const a = 1;', new_string: 'const a = 2;' },
+      { old_string: 'const b = 1;', new_string: 'const b = 2;' },
+    ]);
+
+    expect(result.success).toBe(true);
+    expect(read('a.ts')).toBe('const a = 2;\nconst b = 2;\n');
+    expect(fs.existsSync(path.join(workDir, '.codebuddy'))).toBe(false);
+  });
+
+  it('static: the atomically resolved content is reviewed, applied and journaled', async () => {
+    process.env.CODEBUDDY_DIFF_REVIEW = 'static';
+    write('a.ts', 'const a = 1;\nconst b = 1;\n');
+
+    const result = await multiEditor().execute('a.ts', [
+      { old_string: 'const a = 1;', new_string: 'const a = 2;' },
+      { old_string: 'const b = 1;', new_string: 'const b = 2;' },
+    ]);
+
+    expect(result.success).toBe(true);
+    expect(result.output).toMatch(/review accepted/);
+    expect(read('a.ts')).toBe('const a = 2;\nconst b = 2;\n');
+    const ledger = JSON.parse(read('.codebuddy/diff-reviews.jsonl').trim());
+    expect(ledger.origin.label).toBe('multi_edit');
+    expect(ledger.intent).toBe('multi_edit (2 edits) on a.ts');
+    expect(ledger.applied).toBe(true);
+  });
+
+  it('static: one edit smuggling a secret blocks the WHOLE batch (atomicity preserved)', async () => {
+    process.env.CODEBUDDY_DIFF_REVIEW = 'static';
+    write('a.ts', 'const a = 1;\nconst b = 1;\n');
+
+    const result = await multiEditor().execute('a.ts', [
+      { old_string: 'const a = 1;', new_string: 'const a = 2;' },
+      { old_string: 'const b = 1;', new_string: 'const k = "AKIAABCDEFGHIJKLMNOP";' },
+    ]);
+
+    expect(result.success).toBe(false);
+    expect(result.error).toMatch(/REJECTED/);
+    expect(read('a.ts')).toBe('const a = 1;\nconst b = 1;\n'); // neither edit landed
   });
 });

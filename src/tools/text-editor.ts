@@ -12,6 +12,7 @@ import { multiStrategyMatch } from "../utils/multi-strategy-match.js";
 import { UnifiedVfsRouter } from "../services/vfs/unified-vfs-router.js";
 import { generateDiff as sharedGenerateDiff } from "../utils/diff-generator.js";
 import { detectOmissionPlaceholders, formatOmissionError } from "./omission-placeholder-detector.js";
+import { maybeReviewGatedWrite } from "./review-gate-helper.js";
 import { createHash } from 'crypto';
 
 /**
@@ -264,7 +265,25 @@ export class TextEditorTool implements Disposable {
       const newContent = replaceAll
         ? content.split(oldStr).join(newStr)
         : content.replace(oldStr, newStr);
-      await this.vfs.writeFile(resolvedPath, newContent, "utf-8");
+
+      // Diff-review gate — the matching cascade above resolved the fragment
+      // to FULL resulting content, which is exactly what the gate reviews.
+      // Runs AFTER the user confirmation (complements the human gate).
+      const gate = await maybeReviewGatedWrite({
+        baseDirectory: this.baseDirectory,
+        resolvedPath,
+        displayPath: filePath,
+        newContent,
+        intent: `str_replace in ${filePath}`,
+        originLabel: "str_replace",
+      });
+      if (gate.gated && !gate.ok) {
+        return { success: false, error: gate.error };
+      }
+      const gatedSummary = gate.gated && gate.ok ? gate.summary : null;
+      if (!gate.gated) {
+        await this.vfs.writeFile(resolvedPath, newContent, "utf-8");
+      }
 
       this.editHistory.push({
         command: "str_replace",
@@ -280,7 +299,7 @@ export class TextEditorTool implements Disposable {
 
       return {
         success: true,
-        output: diff,
+        output: gatedSummary ? `${diff}\n\n${gatedSummary}` : diff,
       };
     } catch (error: unknown) {
       return {
@@ -361,36 +380,21 @@ export class TextEditorTool implements Disposable {
         }
       }
 
-      // Diff-review gate (CODEBUDDY_DIFF_REVIEW=static|full, default off) —
-      // covers create_file AND its write_file alias. The env check is inlined
-      // so the off path never loads the review module graph; keep in sync
-      // with resolveReviewMode() in src/review/review-engine.ts. Runs AFTER
-      // the user confirmation above — the review complements the human gate,
-      // it never replaces it.
-      const reviewMode = (process.env.CODEBUDDY_DIFF_REVIEW ?? "off").toLowerCase();
-      if (reviewMode === "static" || reviewMode === "full") {
-        const relPath = path.relative(this.baseDirectory, resolvedPath);
-        if (relPath.startsWith("..") || path.isAbsolute(relPath)) {
-          // Fail closed: the review model only covers paths inside the base
-          // directory — an ungated escape hatch would defeat the gate.
-          return {
-            success: false,
-            error: `review gate: ${filePath} resolves outside the base directory — gated creation only covers project files (fail-closed, nothing written)`,
-          };
-        }
-        const { reviewGatedWrite } = await import("../review/write-gate.js");
-        const outcome = await reviewGatedWrite(
-          {
-            changes: [{ path: relPath.split(path.sep).join("/"), newContent: content }],
-            cwd: this.baseDirectory,
-            intent: `create ${filePath}`,
-            originLabel: "create_file",
-          },
-          { mode: reviewMode },
-        );
-        if (!outcome.ok) {
-          return { success: false, error: outcome.summary };
-        }
+      // Diff-review gate — covers create_file AND its write_file alias.
+      // Runs AFTER the user confirmation above (the review complements the
+      // human gate, it never replaces it); see tools/review-gate-helper.ts.
+      const gate = await maybeReviewGatedWrite({
+        baseDirectory: this.baseDirectory,
+        resolvedPath,
+        displayPath: filePath,
+        newContent: content,
+        intent: `create ${filePath}`,
+        originLabel: "create_file",
+      });
+      if (gate.gated && !gate.ok) {
+        return { success: false, error: gate.error };
+      }
+      if (gate.gated && gate.ok) {
         this.editHistory.push({
           command: "create",
           path: filePath,
@@ -398,7 +402,7 @@ export class TextEditorTool implements Disposable {
           fileHash: this.computeHash(content),
         });
         const gatedDiff = this.generateDiff([], content.split("\n"), filePath);
-        return { success: true, output: `${gatedDiff}\n\n${outcome.summary}` };
+        return { success: true, output: `${gatedDiff}\n\n${gate.summary}` };
       }
 
       const dir = path.dirname(resolvedPath);
