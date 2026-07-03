@@ -66,6 +66,96 @@ export function createLessonsCommand(): Command {
       }
     });
 
+  // ---- show ----------------------------------------------------------------
+  cmd
+    .command('show <id>')
+    .description('Show one lesson by id, with the file(s) it lives in')
+    .option('--json', 'Output JSON')
+    .action((id, opts) => {
+      const tracker = getLessonsTracker(process.cwd());
+      const item = tracker.get(id);
+      if (!item) {
+        console.error(`Lesson not found: ${id}`);
+        process.exit(1);
+      }
+      if (opts.json) {
+        console.log(JSON.stringify(item, null, 2));
+        return;
+      }
+      const ctx = item.context ? ` (${item.context})` : '';
+      const date = new Date(item.createdAt).toISOString().slice(0, 10);
+      console.log(`[${item.id}] ${item.category}${ctx}`);
+      console.log(`  ${item.content}`);
+      console.log(`  — ${date} ${item.source}`);
+      for (const loc of item.locations) console.log(`  file: ${loc.path} (${loc.scope})`);
+    });
+
+  // ---- rm ------------------------------------------------------------------
+  cmd
+    .command('rm <id>')
+    .alias('remove')
+    .description('Delete a lesson by id (from every file it lives in)')
+    .option('--json', 'Output JSON')
+    .action(async (id, opts) => {
+      const tracker = getLessonsTracker(process.cwd());
+      const result = await tracker.removeWithReport(id);
+      if (!result.removed) {
+        console.error(`Lesson not found: ${id}`);
+        process.exit(1);
+      }
+      if (opts.json) {
+        console.log(JSON.stringify({ id, ...result }, null, 2));
+        return;
+      }
+      for (const loc of result.removedFrom) console.log(`Removed [${id}] from ${loc.path} (${loc.scope})`);
+    });
+
+  // ---- edit ----------------------------------------------------------------
+  cmd
+    .command('edit <id>')
+    .description('Edit a lesson in place (id, date and source are preserved)')
+    .option('--content <text>', 'New content (single line)')
+    .option('-c, --category <cat>', `New category: ${VALID_CATEGORIES.join('|')}`)
+    .option('--context <ctx>', 'New domain context (no hyphens)')
+    .option('--clear-context', 'Remove the context')
+    .option('--json', 'Output JSON')
+    .action(async (id, opts) => {
+      if (opts.content === undefined && opts.category === undefined && opts.context === undefined && !opts.clearContext) {
+        console.error('Nothing to change — pass at least one of --content, --category, --context, --clear-context');
+        process.exit(1);
+      }
+      let category: LessonCategory | undefined;
+      if (opts.category !== undefined) {
+        category = opts.category.toUpperCase() as LessonCategory;
+        if (!VALID_CATEGORIES.includes(category)) {
+          console.error(`Invalid category: ${category}. Must be one of: ${VALID_CATEGORIES.join(', ')}`);
+          process.exit(1);
+        }
+      }
+      const tracker = getLessonsTracker(process.cwd());
+      try {
+        const updated = await tracker.update(id, {
+          ...(opts.content !== undefined ? { content: opts.content } : {}),
+          ...(category !== undefined ? { category } : {}),
+          ...(opts.clearContext ? { context: null } : opts.context !== undefined ? { context: opts.context } : {}),
+        });
+        if (!updated) {
+          console.error(`Lesson not found: ${id}`);
+          process.exit(1);
+        }
+        if (opts.json) {
+          console.log(JSON.stringify(updated, null, 2));
+          return;
+        }
+        const ctx = updated.context ? ` (${updated.context})` : '';
+        console.log(`Updated [${updated.id}] (${updated.category})${ctx}: ${updated.content}`);
+        for (const loc of updated.locations) console.log(`  file: ${loc.path} (${loc.scope})`);
+      } catch (err) {
+        console.error(err instanceof Error ? err.message : String(err));
+        process.exit(1);
+      }
+    });
+
   // ---- add -----------------------------------------------------------------
   cmd
     .command('add <content>')

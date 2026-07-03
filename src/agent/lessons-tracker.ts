@@ -38,6 +38,20 @@ export interface LessonItem {
   source: 'user_correction' | 'self_observed' | 'manual';
 }
 
+/** Which lessons.md file a lesson lives in. */
+export type LessonScope = 'project' | 'global';
+export interface LessonLocation {
+  scope: LessonScope;
+  path: string;
+}
+
+/** Patch for `update()` — `context: null` clears the context. */
+export interface LessonPatch {
+  content?: string;
+  category?: LessonCategory;
+  context?: string | null;
+}
+
 /** Options for the per-turn lessons context block. */
 export interface LessonsContextOptions {
   /** Rank lessons against this text (BM25) within each category; default = recency. */
@@ -352,6 +366,8 @@ export class LessonsTracker {
   private projectPath: string;
   private globalPath: string;
   private items: LessonItem[] = [];
+  /** Which file(s) each lesson id was loaded from (see load()). */
+  private locationsById = new Map<string, LessonLocation[]>();
   private loaded = false;
   private _cachedBlock: string | null = null;
   private _cachedKey = '';
@@ -406,6 +422,19 @@ export class LessonsTracker {
     this.loaded = true;
     const globalItems = this.loadFile(this.globalPath);
     const projectItems = this.loadFile(this.projectPath);
+    // Origin tracking: management ops (rm/edit) must rewrite the FILE(S) an id
+    // actually lives in — rewriting only the project file resurrects a
+    // global-only lesson on the next fresh load.
+    this.locationsById.clear();
+    const record = (items: LessonItem[], scope: LessonScope, filePath: string): void => {
+      for (const item of items) {
+        const arr = this.locationsById.get(item.id) ?? [];
+        arr.push({ scope, path: filePath });
+        this.locationsById.set(item.id, arr);
+      }
+    };
+    record(globalItems, 'global', this.globalPath);
+    record(projectItems, 'project', this.projectPath);
     // Merge: project overrides global for duplicate ids (warn on content mismatch)
     const byId = new Map<string, LessonItem>();
     for (const item of [...globalItems, ...projectItems]) {
@@ -454,6 +483,7 @@ export class LessonsTracker {
       source,
     };
     this.items.push(item);
+    this.locationsById.set(item.id, [{ scope: 'project', path: this.projectPath }]);
     this._cachedBlock = null;
     this.save();
 
@@ -469,14 +499,101 @@ export class LessonsTracker {
     return item;
   }
 
+  /**
+   * Delete a lesson (fire-and-forget). Rewrites every file the id lives in —
+   * the previous implementation rewrote only the PROJECT file, so removing a
+   * lesson that lived only in `~/.codebuddy/lessons.md` resurrected it on the
+   * next fresh load. Use `removeWithReport()` to await the writes and learn
+   * which file(s) were touched.
+   */
   remove(id: string): boolean {
     this.load();
-    const idx = this.items.findIndex(i => i.id === id);
-    if (idx === -1) return false;
-    this.items.splice(idx, 1);
-    this._cachedBlock = null;
-    this.save();
+    if (!this.items.some(i => i.id === id)) return false;
+    void this.removeWithReport(id);
     return true;
+  }
+
+  /** Look up one lesson by id, with the file location(s) it lives in. */
+  get(id: string): (LessonItem & { locations: LessonLocation[] }) | undefined {
+    this.load();
+    const item = this.items.find(i => i.id === id);
+    if (!item) return undefined;
+    return { ...item, locations: this.locationsOf(id) };
+  }
+
+  /**
+   * Edit a lesson in place. `id`, `createdAt` and `source` are preserved (the
+   * metadata comment is regenerated from them); a category change regroups the
+   * line under the new `## CATEGORY` heading at serialisation. Every file the
+   * id lives in is rewritten atomically. Throws on a patch that would corrupt
+   * the markdown line format.
+   */
+  async update(id: string, patch: LessonPatch): Promise<(LessonItem & { locations: LessonLocation[] }) | undefined> {
+    this.load();
+    const item = this.items.find(i => i.id === id);
+    if (!item) return undefined;
+    // The line format is `- [id] content <!-- date source[:context] -->`: the
+    // parser cuts content at the first `<!--`, and context is matched by
+    // `[^-]+` so it cannot contain hyphens; both must stay single-line.
+    if (patch.content !== undefined) {
+      const content = patch.content.trim();
+      if (!content) throw new Error('lesson content cannot be empty');
+      if (/[\r\n]/.test(content) || content.includes('<!--') || content.includes('-->')) {
+        throw new Error('lesson content must be a single line without HTML comment markers');
+      }
+      item.content = content;
+    }
+    if (patch.category !== undefined) item.category = patch.category;
+    if (patch.context !== undefined) {
+      const context = patch.context === null ? '' : patch.context.trim();
+      if (/[-\r\n]/.test(context)) {
+        throw new Error('lesson context cannot contain hyphens or newlines (markdown metadata format)');
+      }
+      if (context) item.context = context;
+      else delete item.context;
+    }
+    this._cachedBlock = null;
+    const locations = this.locationsOf(id);
+    const updated = { ...item };
+    for (const loc of locations) {
+      await this.rewriteLessonsFile(loc.path, items => items.map(it => (it.id === id ? { ...updated } : it)));
+    }
+    return { ...updated, locations };
+  }
+
+  /** Delete a lesson from every file it lives in, reporting which ones. */
+  async removeWithReport(id: string): Promise<{ removed: boolean; removedFrom: LessonLocation[] }> {
+    this.load();
+    const idx = this.items.findIndex(i => i.id === id);
+    if (idx === -1) return { removed: false, removedFrom: [] };
+    const locations = this.locationsOf(id);
+    this.items.splice(idx, 1);
+    this.locationsById.delete(id);
+    this._cachedBlock = null;
+    for (const loc of locations) {
+      await this.rewriteLessonsFile(loc.path, items => items.filter(it => it.id !== id));
+    }
+    return { removed: true, removedFrom: locations };
+  }
+
+  private locationsOf(id: string): LessonLocation[] {
+    return this.locationsById.get(id) ?? [{ scope: 'project', path: this.projectPath }];
+  }
+
+  /**
+   * Atomically rewrite ONE lessons file through the serialized write queue:
+   * the file is re-read fresh inside the queue (so a concurrent writer's
+   * changes are preserved), mutated, written to `<file>.tmp` and renamed over.
+   */
+  private rewriteLessonsFile(filePath: string, mutate: (items: LessonItem[]) => LessonItem[]): Promise<void> {
+    return this.enqueueWrite(() => {
+      const next = mutate(this.loadFile(filePath));
+      const dir = path.dirname(filePath);
+      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+      const tmp = `${filePath}.tmp`;
+      fs.writeFileSync(tmp, this.serialiseItems(next), 'utf-8');
+      fs.renameSync(tmp, filePath);
+    });
   }
 
   clearByCategory(category?: LessonCategory): number {
@@ -812,6 +929,10 @@ export class LessonsTracker {
   // --------------------------------------------------------------------------
 
   private serialise(): string {
+    return this.serialiseItems(this.items);
+  }
+
+  private serialiseItems(items: LessonItem[]): string {
     const lines = [
       '# Lessons Learned',
       `<!-- auto-generated by Code Buddy — last updated ${new Date().toISOString()} -->`,
@@ -819,7 +940,7 @@ export class LessonsTracker {
     ];
 
     const grouped = new Map<LessonCategory, LessonItem[]>();
-    for (const item of this.items) {
+    for (const item of items) {
       const arr = grouped.get(item.category) ?? [];
       arr.push(item);
       grouped.set(item.category, arr);
