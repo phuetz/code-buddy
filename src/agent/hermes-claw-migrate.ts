@@ -21,6 +21,7 @@
  */
 
 import fs from 'fs';
+import { createRequire } from 'module';
 import os from 'os';
 import path from 'path';
 import { getSkillsHub, type SkillsHub } from '../skills/hub.js';
@@ -317,6 +318,8 @@ export interface ClawCronJobEntry {
   name: string;
   schedule: string;
   task: string;
+  /** Carried from the source job; a disabled OpenClaw job stays disabled after import. */
+  enabled: boolean;
 }
 
 /**
@@ -349,11 +352,139 @@ export function mapClawCronJobs(cfg: Record<string, unknown>): ClawCronJobEntry[
         : typeof rec.name === 'string' && rec.name.trim()
           ? rec.name.trim()
           : `claw-cron-${out.length}`;
-      out.push({ name, schedule, task });
+      out.push({ name, schedule, task, enabled: rec.enabled !== false });
     }
     if (out.length > 0) break; // first populated candidate wins
   }
   return out;
+}
+
+/**
+ * Map ONE OpenClaw 2026.6.x cron job (the `job_json` shape persisted in
+ * `state/openclaw.sqlite:cron_jobs`, verified against a live 2026.6.1 install)
+ * to a ClawCronJobEntry.
+ *
+ * Real shape: `{ id, name, enabled, schedule: { kind: 'cron'|'every'|'at',
+ * expr?, ... }, payload: { kind: 'agentTurn'|'systemEvent', message? }, ... }`.
+ * Only `kind:'cron'` schedules with a 5-field expression and an `agentTurn`
+ * message payload are mapped — `every`/`at` one-shots and `systemEvent`
+ * payloads have no direct Code Buddy cron consumer and stay in the state DB.
+ */
+export function mapClawStateCronJob(raw: unknown): ClawCronJobEntry | null {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const rec = raw as Record<string, unknown>;
+  const schedule = rec.schedule;
+  if (!schedule || typeof schedule !== 'object' || Array.isArray(schedule)) return null;
+  const sched = schedule as Record<string, unknown>;
+  if (sched.kind !== 'cron') return null;
+  const expr = typeof sched.expr === 'string' ? sched.expr.trim() : '';
+  // 6-field (seconds) expressions are dropped — Code Buddy cron is 5-field.
+  if (!expr || expr.split(/\s+/).length !== 5) return null;
+  const payload = rec.payload;
+  const pay = payload && typeof payload === 'object' && !Array.isArray(payload)
+    ? (payload as Record<string, unknown>)
+    : undefined;
+  const message = pay && pay.kind === 'agentTurn' && typeof pay.message === 'string'
+    ? pay.message.trim()
+    : '';
+  if (!message) return null;
+  const name = typeof rec.name === 'string' && rec.name.trim()
+    ? rec.name.trim()
+    : typeof rec.id === 'string' && rec.id.trim()
+      ? `claw-cron-${rec.id.slice(0, 8)}`
+      : 'claw-cron';
+  return { name, schedule: expr, task: message, enabled: rec.enabled !== false };
+}
+
+/**
+ * Read cron jobs from the OpenClaw 2026.6.x gateway state DB
+ * (`state/openclaw.sqlite`, table `cron_jobs`, column `job_json`).
+ *
+ * Returns `null` (fail-soft) when the DB is absent or unreadable — including
+ * when the native `better-sqlite3` module is unavailable in this runtime — so
+ * callers can distinguish "no state DB" from "state DB with zero jobs".
+ * Opened read-only; never writes to the OpenClaw state.
+ */
+export function readClawStateCronJobs(home: string): ClawCronJobEntry[] | null {
+  const statePath = path.join(home, 'state', 'openclaw.sqlite');
+  if (!fs.existsSync(statePath)) return null;
+  interface SqliteCronDb {
+    prepare(sql: string): { all(): Array<{ job_json: string | null }> };
+    close(): void;
+  }
+  try {
+    const requireModule = createRequire(import.meta.url);
+    const Database = requireModule('better-sqlite3') as new (
+      file: string,
+      opts: { readonly: boolean; fileMustExist: boolean },
+    ) => SqliteCronDb;
+    const db = new Database(statePath, { readonly: true, fileMustExist: true });
+    try {
+      const rows = db.prepare('SELECT job_json FROM cron_jobs').all();
+      const out: ClawCronJobEntry[] = [];
+      for (const row of rows) {
+        if (typeof row.job_json !== 'string' || !row.job_json.trim()) continue;
+        try {
+          const mapped = mapClawStateCronJob(JSON.parse(row.job_json));
+          if (mapped) out.push(mapped);
+        } catch {
+          continue; // one malformed job_json never poisons the rest
+        }
+      }
+      return out;
+    } finally {
+      db.close();
+    }
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Collect cron jobs from every known OpenClaw storage generation: the legacy
+ * config arrays (clawdbot/moltbot `cronJobs`/`cron`/`scheduler.jobs`) first,
+ * then the 2026.6.x gateway state DB. Returns the jobs plus a human-readable
+ * source tag for plan entries.
+ */
+export function collectClawCronJobs(
+  home: string,
+  cfg: Record<string, unknown>,
+): { jobs: ClawCronJobEntry[]; source: string } {
+  const fromConfig = mapClawCronJobs(cfg);
+  if (fromConfig.length > 0) return { jobs: fromConfig, source: 'config:cronJobs' };
+  const fromState = readClawStateCronJobs(home);
+  if (fromState && fromState.length > 0) {
+    return { jobs: fromState, source: 'state:openclaw.sqlite#cron_jobs' };
+  }
+  return { jobs: [], source: 'none' };
+}
+
+/**
+ * Resolve the MCP server map across OpenClaw layout generations.
+ *
+ * OpenClaw 2026.6.x nests it under `mcp.servers.<name>` (verified live:
+ * `openclaw mcp set` writes exactly that path); legacy clawdbot/moltbot used a
+ * flat `mcpServers`/`mcp_servers` root record. A bare `mcp` root record is only
+ * accepted as a server map when it is NOT the 2026.6.x wrapper (no `servers`
+ * key) — previously the wrapper itself was mis-read as one server named
+ * "servers".
+ */
+export function clawMcpServers(
+  cfg: Record<string, unknown>,
+): { servers: Record<string, unknown>; source: string } | undefined {
+  const nested = nestedValue(cfg, 'mcp.servers');
+  if (nested && typeof nested === 'object' && !Array.isArray(nested) && Object.keys(nested).length > 0) {
+    return { servers: nested as Record<string, unknown>, source: 'config:mcp.servers' };
+  }
+  for (const key of ['mcpServers', 'mcp_servers']) {
+    const rec = firstRecord(cfg, [key]);
+    if (rec && Object.keys(rec).length > 0) return { servers: rec, source: `config:${key}` };
+  }
+  const bare = firstRecord(cfg, ['mcp']);
+  if (bare && !('servers' in bare) && Object.keys(bare).length > 0) {
+    return { servers: bare, source: 'config:mcp' };
+  }
+  return undefined;
 }
 
 /**
@@ -737,16 +868,17 @@ export function buildClawMigrationPlan(opts: ClawMigrationOptions = {}): ClawMig
     entries.push({ category: 'model', label: 'default model', action: 'skip', source: null, destination: null, detail: 'No model in config.' });
   }
 
-  // MCP servers -> .codebuddy/settings.json mcpServers (consumed by loadMCPConfig)
-  const mcp = firstRecord(cfg, ['mcpServers', 'mcp_servers', 'mcp']);
-  if (mcp && Object.keys(mcp).length > 0) {
+  // MCP servers -> .codebuddy/settings.json mcpServers (consumed by loadMCPConfig).
+  // 2026.6.x nests the map under `mcp.servers`; legacy installs used flat root keys.
+  const mcp = clawMcpServers(cfg);
+  if (mcp) {
     entries.push({
       category: 'mcp_servers',
-      label: `mcp servers (${Object.keys(mcp).length})`,
+      label: `mcp servers (${Object.keys(mcp.servers).length})`,
       action: importOrPresetArchive('mcp_servers', ctx),
-      source: 'config:mcpServers',
+      source: mcp.source,
       destination: settingsKeyDest(ctx, 'mcpServers'),
-      detail: `Merged servers: ${Object.keys(mcp).join(', ')}.`,
+      detail: `Merged servers: ${Object.keys(mcp.servers).join(', ')}.`,
     });
   } else {
     entries.push({ category: 'mcp_servers', label: 'mcp servers', action: 'skip', source: null, destination: null, detail: 'No MCP servers in config.' });
@@ -780,17 +912,21 @@ export function buildClawMigrationPlan(opts: ClawMigrationOptions = {}): ClawMig
   // consumers. Each gets a dedicated mapper that conservatively translates
   // well-understood fields; unmapped / complex fields stay in the archive.
 
-  // cron -> CronScheduler jobs written to settings.json:cronJobs
+  // cron -> CronScheduler jobs written to settings.json:cronJobs.
+  // Legacy config arrays first, then the 2026.6.x gateway state DB
+  // (state/openclaw.sqlite:cron_jobs).
   {
-    const jobs = mapClawCronJobs(cfg);
+    const { jobs, source } = collectClawCronJobs(home, cfg);
     if (jobs.length > 0) {
       entries.push({
         category: 'cron',
         label: `cron jobs (${jobs.length})`,
         action: importOrPresetArchive('cron', ctx),
-        source: 'config:cronJobs',
+        source,
         destination: settingsKeyDest(ctx, 'cronJobs'),
-        detail: `Mapped ${jobs.length} cron job(s): ${jobs.map((j) => j.name).join(', ')}.`,
+        detail: `Mapped ${jobs.length} cron job(s): ${jobs
+          .map((j) => `${j.name}${j.enabled ? '' : ' (disabled)'}`)
+          .join(', ')}.`,
       });
     } else {
       entries.push({ category: 'cron', label: 'cron jobs', action: 'skip', source: null, destination: null, detail: 'No mappable cron jobs in config.' });
@@ -1069,11 +1205,11 @@ function applyEntry(entry: ClawMigrationEntry, opts: ClawMigrationOptions, ctx: 
     }
     case 'mcp_servers': {
       if (!entry.destination) return;
-      const mcp = firstRecord(ctx.config?.raw ?? {}, ['mcpServers', 'mcp_servers', 'mcp']);
+      const mcp = clawMcpServers(ctx.config?.raw ?? {});
       if (!mcp) return;
       mergeSettings(ctx, (settings) => {
         const existing = (settings.mcpServers as Record<string, unknown> | undefined) ?? {};
-        settings.mcpServers = overwrite ? { ...existing, ...mcp } : { ...mcp, ...existing };
+        settings.mcpServers = overwrite ? { ...existing, ...mcp.servers } : { ...mcp.servers, ...existing };
       });
       entry.applied = true;
       return;
@@ -1095,7 +1231,7 @@ function applyEntry(entry: ClawMigrationEntry, opts: ClawMigrationOptions, ctx: 
       return;
     }
     case 'cron': {
-      const jobs = mapClawCronJobs(ctx.config?.raw ?? {});
+      const { jobs } = collectClawCronJobs(ctx.home, ctx.config?.raw ?? {});
       if (jobs.length === 0) return;
       mergeSettings(ctx, (settings) => {
         const existing = (settings.cronJobs as Array<Record<string, unknown>> | undefined) ?? [];
@@ -1104,7 +1240,8 @@ function applyEntry(entry: ClawMigrationEntry, opts: ClawMigrationOptions, ctx: 
           type: 'cron' as const,
           schedule: { cron: j.schedule },
           task: { type: 'message' as const, message: j.task },
-          enabled: true,
+          // A job disabled in OpenClaw is imported disabled — never silently activated.
+          enabled: j.enabled,
         }));
         settings.cronJobs = overwrite ? mapped : [...existing, ...mapped];
       });

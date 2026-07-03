@@ -1,5 +1,6 @@
 import { Command } from 'commander';
 import fs from 'fs-extra';
+import { createRequire } from 'module';
 import os from 'os';
 import path from 'path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -10,6 +11,10 @@ import {
   runClawMigration,
   buildClawMigrationPlan,
   mapClawCronJobs,
+  mapClawStateCronJob,
+  readClawStateCronJobs,
+  collectClawCronJobs,
+  clawMcpServers,
   mapClawCommandAllowlist,
   mapClawMemoryBackend,
   mapClawExecTimeout,
@@ -264,6 +269,10 @@ describe('hermes claw migrate (real)', () => {
     fs.writeFileSync(path.join(workspace, 'AGENTS.md'), '# Agents\nLive workspace agent doc\n');
     fs.writeFileSync(path.join(workspace, 'IDENTITY.md'), 'id doc with no consumer\n');
     fs.writeFileSync(path.join(workspace, 'BOOTSTRAP.md'), 'bootstrap doc with no consumer\n');
+    // MEMORY.md at the workspace root — the OpenClaw long-term memory convention
+    // (documented in its own AGENTS.md), present on the populated live install
+    // since 2026-07-03.
+    fs.writeFileSync(path.join(workspace, 'MEMORY.md'), '- Live-install remembered fact\n');
 
     // A symlinked plugin-skill, exactly like `plugin-skills/browser-automation`
     // -> the installed openclaw npm package. The Dirent reports isDirectory()
@@ -292,6 +301,11 @@ describe('hermes claw migrate (real)', () => {
       plugins: { entries: { ollama: { enabled: true } } },
       session: { dmScope: 'per-conversation' },
       tools: { profile: 'coder' },
+      // 2026.6.x nests MCP servers under `mcp.servers.<name>` (verified live:
+      // `openclaw mcp set filesystem '{...}'` writes exactly this path). The
+      // pre-fix reader matched the bare `mcp` key and imported ONE bogus server
+      // named "servers".
+      mcp: { servers: { filesystem: { command: 'npx', args: ['-y', '@modelcontextprotocol/server-filesystem', '/tmp'] } } },
     });
 
     const report = await runClawMigration({ source: home, workspaceTarget: target, skillsHub: hub, apply: true });
@@ -311,8 +325,16 @@ describe('hermes claw migrate (real)', () => {
     expect(fs.existsSync(path.join(target, 'IDENTITY.md'))).toBe(false);
     expect(fs.existsSync(path.join(target, 'BOOTSTRAP.md'))).toBe(false);
 
-    // No MEMORY.md on the live install -> memory honestly skips.
-    expect(action.get('memory')).toBe('skip');
+    // MEMORY.md resolved from the WORKSPACE dir and appended to the project
+    // memory file (exercised against the populated live install, 2026-07-03).
+    expect(action.get('memory')).toBe('import');
+    const migratedMemory = fs.readFileSync(path.join(target, '.codebuddy', 'CODEBUDDY_MEMORY.md'), 'utf-8');
+    expect(migratedMemory).toContain('Migrated from OpenClaw');
+    expect(migratedMemory).toContain('Live-install remembered fact');
+
+    // MCP servers read from the 2026.6.x nested `mcp.servers` map — the real
+    // server name imports; the wrapper is never mistaken for a server.
+    expect(action.get('mcp_servers')).toBe('import');
 
     // The symlinked plugin-skill is discovered (Dirent.isDirectory() is false for
     // the link; the reader follows it via statSync) and installed.
@@ -328,6 +350,10 @@ describe('hermes claw migrate (real)', () => {
     expect(settings.model).toBe('ollama/gemma4:12b');
     expect(settings.gateway).toBeUndefined();
     expect(settings.models).toBeUndefined();
+    // The nested `mcp.servers` map lands on the real consumer key with the real
+    // server name — the pre-fix reader wrote `mcpServers.servers` instead.
+    expect(settings.mcpServers.filesystem).toEqual({ command: 'npx', args: ['-y', '@modelcontextprotocol/server-filesystem', '/tmp'] });
+    expect(settings.mcpServers.servers).toBeUndefined();
 
     // SECURITY: the gateway archive carries a nested token, so it MUST be 0600
     // (this file was written at default 0644 before `gateway` joined the
@@ -491,7 +517,7 @@ describe('hermes claw migrate (real)', () => {
   describe('mapClawCronJobs', () => {
     it('maps a standard cron array with label', () => {
       const jobs = mapClawCronJobs({ cron: [{ schedule: '*/5 * * * *', task: 'health-check', label: 'health' }] });
-      expect(jobs).toEqual([{ name: 'health', schedule: '*/5 * * * *', task: 'health-check' }]);
+      expect(jobs).toEqual([{ name: 'health', schedule: '*/5 * * * *', task: 'health-check', enabled: true }]);
     });
 
     it('falls through to cronJobs key', () => {
@@ -507,6 +533,155 @@ describe('hermes claw migrate (real)', () => {
 
     it('returns empty for missing key', () => {
       expect(mapClawCronJobs({})).toEqual([]);
+    });
+  });
+
+  describe('mapClawStateCronJob (2026.6.x job_json shape)', () => {
+    // Sanitized copy of a REAL `job_json` row from a live 2026.6.1 gateway
+    // state DB (state/openclaw.sqlite:cron_jobs, read 2026-07-03).
+    const realJob = {
+      id: '2100729c-5843-47f9-a471-02d457240625',
+      name: 'parity-probe',
+      enabled: false,
+      createdAtMs: 1783058723196,
+      schedule: { kind: 'cron', expr: '0 9 * * 1' },
+      sessionTarget: 'isolated',
+      wakeMode: 'now',
+      payload: { kind: 'agentTurn', message: 'Weekly parity probe' },
+      delivery: { mode: 'announce', channel: 'last' },
+      state: {},
+    };
+
+    it('maps the real live-install shape, preserving the disabled flag', () => {
+      expect(mapClawStateCronJob(realJob)).toEqual({
+        name: 'parity-probe',
+        schedule: '0 9 * * 1',
+        task: 'Weekly parity probe',
+        enabled: false,
+      });
+    });
+
+    it('drops non-cron schedule kinds (at/every one-shots)', () => {
+      expect(mapClawStateCronJob({ ...realJob, schedule: { kind: 'at', at: '2026-07-04T09:00:00+02:00' } })).toBeNull();
+      expect(mapClawStateCronJob({ ...realJob, schedule: { kind: 'every', everyMs: 600000 } })).toBeNull();
+    });
+
+    it('drops 6-field (seconds) expressions — Code Buddy cron is 5-field', () => {
+      expect(mapClawStateCronJob({ ...realJob, schedule: { kind: 'cron', expr: '0 0 9 * * 1' } })).toBeNull();
+    });
+
+    it('drops systemEvent payloads (no direct Code Buddy consumer)', () => {
+      expect(mapClawStateCronJob({ ...realJob, payload: { kind: 'systemEvent', text: 'heartbeat' } })).toBeNull();
+    });
+
+    it('falls back to an id-derived name', () => {
+      const mapped = mapClawStateCronJob({ ...realJob, name: undefined });
+      expect(mapped?.name).toBe('claw-cron-2100729c');
+    });
+  });
+
+  describe('clawMcpServers (layout generations)', () => {
+    it('reads the 2026.6.x nested mcp.servers map', () => {
+      const found = clawMcpServers({ mcp: { servers: { filesystem: { command: 'npx' } } } });
+      expect(found?.source).toBe('config:mcp.servers');
+      expect(Object.keys(found?.servers ?? {})).toEqual(['filesystem']);
+    });
+
+    it('never mistakes the 2026.6.x wrapper for a server map (the pre-fix bug)', () => {
+      // An empty `mcp.servers` means NO servers — the wrapper itself must not
+      // be imported as one server named "servers".
+      expect(clawMcpServers({ mcp: { servers: {} } })).toBeUndefined();
+    });
+
+    it('still reads legacy flat root keys', () => {
+      const found = clawMcpServers({ mcpServers: { files: { command: 'mcp-files' } } });
+      expect(found?.source).toBe('config:mcpServers');
+      expect(Object.keys(found?.servers ?? {})).toEqual(['files']);
+    });
+
+    it('accepts a bare legacy `mcp` record only when it is not the wrapper', () => {
+      const found = clawMcpServers({ mcp: { files: { command: 'mcp-files' } } });
+      expect(found?.source).toBe('config:mcp');
+      expect(Object.keys(found?.servers ?? {})).toEqual(['files']);
+    });
+  });
+
+  describe('readClawStateCronJobs (gateway state DB)', () => {
+    const sqliteAvailable = (() => {
+      try {
+        createRequire(import.meta.url)('better-sqlite3');
+        return true;
+      } catch {
+        return false;
+      }
+    })();
+
+    function writeStateDb(home: string, jobJsons: string[]): void {
+      const Database = createRequire(import.meta.url)('better-sqlite3') as new (file: string) => {
+        exec(sql: string): void;
+        prepare(sql: string): { run(...args: unknown[]): unknown };
+        close(): void;
+      };
+      const stateDir = path.join(home, 'state');
+      fs.ensureDirSync(stateDir);
+      const db = new Database(path.join(stateDir, 'openclaw.sqlite'));
+      try {
+        // Column subset of the real 2026.6.1 `cron_jobs` DDL — the reader only
+        // selects `job_json`.
+        db.exec('CREATE TABLE cron_jobs (store_key TEXT, job_id TEXT, name TEXT, enabled INTEGER, job_json TEXT)');
+        const insert = db.prepare('INSERT INTO cron_jobs (store_key, job_id, name, enabled, job_json) VALUES (?, ?, ?, ?, ?)');
+        for (const [i, jobJson] of jobJsons.entries()) {
+          insert.run('/home/user/.openclaw/cron/jobs.json', `job-${i}`, `job-${i}`, 1, jobJson);
+        }
+      } finally {
+        db.close();
+      }
+    }
+
+    it('returns null when no state DB exists (distinguishable from zero jobs)', () => {
+      expect(readClawStateCronJobs(path.join(tmp, 'no-such-home'))).toBeNull();
+    });
+
+    it.skipIf(!sqliteAvailable)('reads and maps real-shape cron jobs from state/openclaw.sqlite', () => {
+      const home = path.join(tmp, '.openclaw-state');
+      writeStateDb(home, [
+        JSON.stringify({
+          id: 'aaaa1111', name: 'weekly-report', enabled: true,
+          schedule: { kind: 'cron', expr: '0 9 * * 1' },
+          payload: { kind: 'agentTurn', message: 'Send the weekly report' },
+        }),
+        JSON.stringify({
+          id: 'bbbb2222', name: 'one-shot', enabled: true,
+          schedule: { kind: 'at', at: '2026-07-04T09:00:00+02:00' },
+          payload: { kind: 'agentTurn', message: 'One shot' },
+        }),
+        '{not json', // one malformed row never poisons the rest
+      ]);
+      const jobs = readClawStateCronJobs(home);
+      expect(jobs).toEqual([
+        { name: 'weekly-report', schedule: '0 9 * * 1', task: 'Send the weekly report', enabled: true },
+      ]);
+    });
+
+    it.skipIf(!sqliteAvailable)('collectClawCronJobs prefers legacy config arrays, then falls back to the state DB', () => {
+      const home = path.join(tmp, '.openclaw-collect');
+      writeStateDb(home, [
+        JSON.stringify({
+          id: 'cccc3333', name: 'from-state', enabled: false,
+          schedule: { kind: 'cron', expr: '30 8 * * *' },
+          payload: { kind: 'agentTurn', message: 'From the state DB' },
+        }),
+      ]);
+      // Legacy config array present -> it wins (first storage generation).
+      const fromConfig = collectClawCronJobs(home, { cron: [{ schedule: '0 9 * * *', task: 'daily', label: 'morning' }] });
+      expect(fromConfig.source).toBe('config:cronJobs');
+      expect(fromConfig.jobs.map((j) => j.name)).toEqual(['morning']);
+      // No config array -> the 2026.6.x state DB is read, disabled flag intact.
+      const fromState = collectClawCronJobs(home, {});
+      expect(fromState.source).toBe('state:openclaw.sqlite#cron_jobs');
+      expect(fromState.jobs).toEqual([
+        { name: 'from-state', schedule: '30 8 * * *', task: 'From the state DB', enabled: false },
+      ]);
     });
   });
 

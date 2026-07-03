@@ -1,7 +1,21 @@
 # Hermes Agent & OpenClaw — parity and gaps (canonical)
 
-**Date: 2026-06-14** (supersedes 2026-06-09/13) · Machine: Ministar Linux (Ryzen AI 9 HX 470, Ollama Vulkan) · Verified
+**Date: 2026-07-03** (supersedes 2026-06-09/13/14) · Machine: Ministar Linux (Ryzen AI 9 HX 470, Ollama Vulkan) · Verified
 against live installs: Hermes Agent `v0.16.0`, OpenClaw `2026.6.1`.
+
+> **2026-07-03 validation pass — the last `partial` is closed.** The OpenClaw migrator's three unexercised readers
+> (MEMORY/MCP/cron) were finally exercised against the live `~/.openclaw` after populating it **through OpenClaw
+> itself** (`openclaw mcp set`, `openclaw cron add --disabled`, `MEMORY.md` at the workspace root per OpenClaw's own
+> AGENTS.md convention — no hand-crafted mocks). Two real 2026.6.x schema-drift bugs surfaced and were fixed:
+> (1) MCP servers live under the nested `mcp.servers.<name>` map and the old root-key reader mis-read the `mcp`
+> wrapper as ONE bogus server named "servers"; (2) cron jobs are persisted in the gateway state DB
+> (`state/openclaw.sqlite:cron_jobs`), never in `openclaw.json`, so the config-array reader could never see them —
+> a read-only sqlite reader was added (fail-soft, disabled flag carried so an imported disabled job is never silently
+> activated). Full round-trip proven (dry-run + `--apply` into a throwaway target), regression-locked with sanitized
+> real-shape fixtures incl. a real-DDL sqlite fixture. `openclaw-migration` flips `partial` → **`covered-partial`**
+> per §4's own flip rule. **Vs Hermes the manifest now reads 15 `covered` + 5 `covered-partial` + 0 `partial` + 0
+> `gap` — no open code gap remains; every residual gate is an external account, a product decision, or absent
+> source data.**
 
 > **2026-06-13/14 validation pass** — real-instance/real-LLM round-trips, no metric-gaming: (1) Docker hibernate/wake
 > exercised against the live daemon with independent `docker inspect` proof; SSH connection lifecycle validated on
@@ -24,11 +38,11 @@ against live installs: Hermes Agent `v0.16.0`, OpenClaw `2026.6.1`.
 ## TL;DR
 
 - **Vs Hermes** — the parity manifest (`src/agent/hermes-parity-manifest.ts`, surfaced by `buddy hermes parity --json`)
-  reports **15 `covered` + 4 `covered-partial` + 1 `partial`, 0 `gap`** (total 20); tool parity = **65 exact + 6
-  native-equivalent**. *This is the project's own self-assessment.* The 4 `covered-partial` are gated on external
-  accounts or product decisions — **not on missing Code Buddy code**; the 1 `partial` (openclaw-migration) has real
-  validation progress but stays partial because some readers are unexercised for lack of source data (table + §4). Each
-  was pushed as far as honestly possible with local resources this session; nothing was flipped to `covered` on a mock.
+  reports **15 `covered` + 5 `covered-partial` + 0 `partial`, 0 `gap`** (total 20); tool parity = **65 exact + 6
+  native-equivalent**. *This is the project's own self-assessment.* All 5 `covered-partial` are gated on external
+  accounts, product decisions, or genuinely absent source data — **none on missing Code Buddy code**. The former
+  `partial` (openclaw-migration) flipped on 2026-07-03 after its last unexercised readers were exercised against the
+  populated live install (§4). Nothing was ever flipped on a mock.
 - **Vs OpenClaw** — the gateway bridge + CLI `validate-upstream` are **validated against a live OpenClaw 2026.6.1 daemon**
   (`openclaw gateway status --json`, exitCode 0, and raw WS `protocol:4` `connect.challenge` -> signed `req(connect)` ->
   `res` -> `req(status)` -> `res`). The optional live `node.pair.list` check is scope-gated by OpenClaw
@@ -63,20 +77,20 @@ The multi-AI comparison doc that called TTL/DAG/swarm "the honest gap" predates 
 > on `colab-store`. Remaining nuance is cross-machine *atomicity* — Code Buddy's JSON queue is advisory across machines
 > (arbitration = `git push`), by design, vs Hermes' single-machine SQLite atomicity. That is an architectural choice, not a gap.
 
-## 2. Gaps vs Hermes Agent — the 4 `covered-partial` + 1 `partial`
+## 2. Gaps vs Hermes Agent — the 5 `covered-partial` (0 `partial`)
 
-| Feature (manifest id) | Status / gate | Why it isn't `covered` (2026-06-14) | Module |
+| Feature (manifest id) | Status / gate | Why it isn't `covered` (2026-07-03) | Module |
 |---|---|---|---|
-| `messaging-gateway` | covered-partial — **External** (accounts) | ~11 adapters now have a real persistent transport (discord/slack/telegram/whatsapp/signal/matrix/imessage + **irc/nostr/mattermost/nextcloud-talk** — real TCP/WS/long-poll clients added 2026-06-14, loopback-mock-proven, ReconnectionManager-wired); ~a dozen are functional REST/webhook adapters (dingtalk/qq/ntfy/line/teams/…, reconnection N/A). Only **feishu real-time inbound** remains unimplemented (proprietary Lark long-connection, SDK-only) — its `connect()` is honest (`inbound:lark-sdk-required`), REST outbound works. Live delivery still needs ~20 platform tokens; Nostr publishing needs a Schnorr signer. | `src/channels/*` |
-| `browser-automation` | covered-partial — **External** (accounts) | Local Playwright/Chromium validated. **Camofox now WORKS end-to-end** (2026-06-14): runner reworked to the correct `camoufox server` + `firefox.connect()` path (real Camoufox is Firefox, not Chrome CDP) — a real page round-trip ran through the production runner at repo-pinned Playwright 1.58.2. Remaining gates are accounts only: Browser Use (gateway/key), Browserbase/Stagehand (account). | `src/agent/hermes-browser-backends.ts`, `src/browser-automation/camofox-runner.ts` |
+| `messaging-gateway` | covered-partial — **External** (accounts) | ~11 adapters now have a real persistent transport (discord/slack/telegram/whatsapp/signal/matrix/imessage + **irc/nostr/mattermost/nextcloud-talk** — real TCP/WS/long-poll clients added 2026-06-14, loopback-mock-proven, ReconnectionManager-wired); ~a dozen are functional REST/webhook adapters (dingtalk/qq/ntfy/line/teams/…, reconnection N/A). **Feishu inbound is now wired to the official Lark SDK** (optional runtime import; live use needs the SDK installed + a real Feishu app — an external-account gate, no longer a code stub). **Nostr publishing works with a configured key** (BIP-340 Schnorr signing via @noble/curves, sign→verify round-trip tested). Live multi-platform delivery still needs ~20 platform tokens. | `src/channels/*` |
+| `browser-automation` | covered-partial — **External** (accounts) | Local Playwright/Chromium validated. **Camofox WORKS end-to-end** (`camoufox server` + `firefox.connect()`, real page round-trip at repo-pinned Playwright 1.58.2). **Browser Use now runs locally** (pip browser-use + Ollama + Chromium, validated) in addition to the managed gateway. Only Browserbase/Stagehand still needs a paid account. | `src/agent/hermes-browser-backends.ts`, `src/browser-automation/camofox-runner.ts` |
 | `runtime-backends` | covered-partial — **External** (accounts) | **Docker hibernate/wake validated for real** (running→paused→running, `docker inspect` proof). **SSH connection lifecycle validated on localhost** (real `ssh` round-trips; hibernate is a no-op by design). Modal/Daytona need accounts. | `src/agent/hermes-runtime-backends.ts`, `src/agent/hermes-runtime-lifecycle.ts` |
-| `mobile-supervision` | covered-partial — **Product** (by design) | Silent remote execution is refused on purpose; local-operator-gated. Off-device TLS packaging + client UX remain product work. | `src/server/routes/mobile.ts` |
-| `openclaw-migration` | **`partial`** — validation progress (see §4) | Verified against the now-populated `~/.openclaw`: 5 reader paths import real data (import 1→5), plus a real 0644→0600 secret-archive **security fix**. STAYS `partial` because MEMORY/MCP/cron readers are unexercised (no such data on this install) — the full reader set isn't validated. | `src/agent/hermes-claw-migrate.ts` |
+| `mobile-supervision` | covered-partial — **Product** (by design) | Silent remote execution is refused on purpose; local-operator-gated. **Off-device TLS is now supported** (`CODEBUDDY_HTTPS=1` + cert/key, real HTTPS round-trip validated). Polished mobile client UX remains product work. | `src/server/routes/mobile.ts` |
+| `openclaw-migration` | **covered-partial** — flipped 2026-07-03 (see §4) | The full reader set is now exercised against the populated live install: identity/model/providers (2026-06-13) **+ MEMORY/MCP/cron (2026-07-03**, after populating the install through OpenClaw itself; two real 2026.6.x schema-drift bugs found and fixed — nested `mcp.servers`, cron in the gateway state DB**)**. Not `covered` because two long-tail readers stay honestly unverified for lack of source data: the legacy pre-sqlite `cron/jobs.json` file store and a migratable memory-backend config (no such concept in 2026.6.x — that skip is correct, legacy-only). | `src/agent/hermes-claw-migrate.ts` |
 
 Local/free is covered wherever possible (Playwright/Chromium, Docker/WSL/SSH, Honcho/ByteRover via CLI). What pins these
-at `covered-partial` is **paid accounts, a product decision, or an ecosystem version-lock** — not missing code. Flipping
-any to `covered` without a real round-trip would be metric-gaming (refused). Where a local round-trip was possible this
-session it was run for real (Docker, the migrator, Camoufox install, the agentic loop on a real LLM).
+at `covered-partial` is **paid accounts, a product decision, or genuinely absent source data** — not missing code. Flipping
+any to `covered` without a real round-trip would be metric-gaming (refused). Where a local round-trip was possible it
+was run for real (Docker, the migrator dry-run + apply, Camoufox install, the agentic loop on a real LLM).
 
 **Intentional product decisions** (not gaps): direct background skill writes (Code Buddy keeps review gates), RPC
 code→tools in subagents (closed-by-default for security), live mobile execution, Nous Portal live OAuth. These remain
@@ -106,9 +120,37 @@ it has **no shared peer task board**. OpenClaw "enterprise" modules (policy/hook
 - **OpenClaw**: central **gateway hub** — isolated agents behind one gateway, routing bindings, node pairing, ACP bridge, channels. Human↔agent / agent↔node routing.
 - **Code Buddy**: richer **peer.* fleet** (A2A/ACP/MCP) + `colab-store` queue **now with TTL/lease + DAG + swarm** + event-driven autonomous daemon + free-first model tier. Cross-machine arbitration via git.
 
-## 4. OpenClaw migrator readers — validation progress, STAYS `partial` (2026-06-14)
+## 4. OpenClaw migrator readers — CLOSED, flipped to `covered-partial` (2026-07-03)
 
-> **Status: still `partial`, with significant validation progress.** The `~/.openclaw` install is now **populated** (the
+> **Status: `covered-partial` since 2026-07-03.** The flip condition below ("flip only after a populated install
+> exercises **the rest**") is now met. The last three unexercised readers were exercised against the live
+> `~/.openclaw` after populating it **through OpenClaw itself** — `openclaw mcp set filesystem '{...}'`, `openclaw
+> cron add --name parity-probe --cron "0 9 * * 1" --disabled`, and `MEMORY.md` at the workspace root (the
+> convention OpenClaw's own AGENTS.md documents). Results, per reader:
+>
+> - **memory** — worked as written: `MEMORY.md` resolved from the workspace dir and imports (append under a
+>   "Migrated from OpenClaw" heading). No code change needed, now exercised.
+> - **mcp_servers** — **real bug found & fixed**: 2026.6.x nests the map under `mcp.servers.<name>`, and the old
+>   root-key reader (`mcpServers`/`mcp_servers`/`mcp`) matched the bare `mcp` wrapper and imported ONE bogus server
+>   named `servers`. New `clawMcpServers()` resolves nested-then-legacy and never mis-reads the wrapper; the live
+>   dry-run now says `Merged servers: filesystem`.
+> - **cron** — **real bug found & fixed**: 2026.6.x persists cron jobs in the gateway state DB
+>   (`state/openclaw.sqlite`, table `cron_jobs`, column `job_json`), never in `openclaw.json`, so the config-array
+>   reader could never see them. New `readClawStateCronJobs()` reads the DB **read-only** via better-sqlite3
+>   (fail-soft `null` when absent/unavailable; one malformed row never poisons the rest);
+>   `mapClawStateCronJob()` maps the verified job shape (5-field `kind:'cron'` schedules with an `agentTurn`
+>   message; `every`/`at` one-shots and `systemEvent` payloads honestly dropped), and the `enabled` flag is
+>   carried — **a job disabled in OpenClaw is imported disabled, never silently activated** (the old apply path
+>   hard-coded `enabled: true`).
+>
+> Full real round-trip proven: dry-run plan + `--apply` into a throwaway target landed `mcpServers.filesystem`,
+> a disabled `cronJobs` entry, and the appended memory block in `.codebuddy/settings.json` /
+> `CODEBUDDY_MEMORY.md`. Regression-locked in `tests/agent/hermes-claw-migrate-real.test.ts` (56 tests) with
+> sanitized real-shape fixtures, including a real-DDL sqlite fixture. Still not `covered`: the legacy pre-sqlite
+> `cron/jobs.json` file store and a migratable memory-backend config have no source data anywhere (2026.6.x has
+> no such concepts) — those readers are not written blind, per this section's own rule.
+
+> **Historical (2026-06-14): the state before the flip.** The `~/.openclaw` install is now **populated** (the
 > 2026-06-08 audit ran against an empty one), so the identity/persona/skill readers could finally be exercised against
 > real data. Live dry-run: **import 1 → 5** (the nested default model, SOUL/USER/AGENTS persona resolved from
 > `agents.defaults.workspace`, and a symlinked plugin-skill). A real **security bug** was found and fixed in the process:
@@ -160,20 +202,20 @@ the **migrator** is a separate module and was not.)
 2. ✅ Regression-locked: `tests/agent/hermes-claw-migrate-real.test.ts` (legacy `clawdbot.json` asserts `settings.model ===
    'claude-sonnet-4-6'`; new 2026.6.x `openclaw.json` asserts model→import of `ollama/qwen2.5:7b-instruct` + custom_providers
    archived 0600 from `models.providers`).
-3. **Still pending source data**: only when an install actually has them, verify and add 2026.6.x readers for MCP,
-   agent-behavior overrides, identity and a migratable memory store — don't add them blind.
-4. **Manifest status kept `partial` (deliberately).** Two readers fixed against one near-empty install is *not* "the
-   migrator works against real installs." The note (`hermes-parity-manifest.ts`) now says model+provider readers are
-   fixed and live-validated, with identity/memory/mcp/agent-settings still unverified for lack of source data. Flip to
-   `covered-partial` only after a populated install exercises the rest.
+3. ✅ **DONE (2026-07-03)**: MCP (`clawMcpServers`, nested `mcp.servers`), cron (`readClawStateCronJobs` +
+   `mapClawStateCronJob`, gateway state DB) and MEMORY.md readers verified against real data (see the resolution
+   note at the top of this section). Only the legacy `cron/jobs.json` file store and a migratable memory-backend
+   config remain unwritten — no source data exists anywhere to verify their shapes against.
+4. ✅ **Manifest flipped `partial` → `covered-partial` (2026-07-03)**, per this section's own flip rule — a populated
+   install now exercises the full practically-verifiable reader set.
 - Files: `src/agent/hermes-claw-migrate.ts` (readers), `src/agent/hermes-parity-manifest.ts` (note),
-  `tests/agent/hermes-claw-migrate-real.test.ts` (2026.6.x fixture).
+  `tests/agent/hermes-claw-migrate-real.test.ts` (2026.6.x + sqlite fixtures).
 
 ## 5. Verification
 
 ```bash
 # Hermes parity (counts come from the manifest itself)
-npx tsx src/index.ts hermes parity --json            # expect 15 covered-partial / 5 partial / 0 gap
+npx tsx src/index.ts hermes parity --json            # expect 15 covered / 5 covered-partial / 0 partial / 0 gap
 
 # Already-shipped fleet primitives (sanity — these are NOT gaps)
 grep -nE "isClaimExpired|areDependenciesMet|nextClaimable" src/fleet/colab-store.ts
@@ -181,7 +223,11 @@ grep -nE "isClaimExpired|areDependenciesMet|nextClaimable" src/fleet/colab-store
 # OpenClaw bridge interop against the live 2026.6.1 daemon
 npx tsx src/index.ts hermes claw bridge validate-upstream --openclaw-bin "$(command -v openclaw)"
 
-# The migrator gap — reproduces 0 imports against the real install
+# The migrator against the populated live install — memory/mcp/cron all import
+# (7 imports on this machine; cron sourced from state:openclaw.sqlite#cron_jobs)
 npx tsx src/index.ts hermes claw status --json | python3 -c \
   "import json,sys; d=json.load(sys.stdin); print('imported:', sum(1 for e in d['entries'] if e['action']=='import'), '/', len(d['entries']))"
+
+# The migrator regression suite (incl. the real-DDL sqlite cron fixture)
+npm test -- tests/agent/hermes-claw-migrate-real.test.ts --run
 ```

@@ -586,7 +586,7 @@ const FEATURES: HermesParityFeature[] = [
       'cowork/src/main/tools/hermes-claw-migrate-bridge.ts',
       'cowork/src/renderer/components/ClawMigrationDialog.tsx',
     ],
-    status: 'partial',
+    status: 'covered-partial',
     verificationCommands: [
       'npm test -- tests/agent/hermes-claw-migrate-real.test.ts tests/agent/hermes-claw-agent-settings.test.ts --run',
       'npx tsx src/index.ts hermes claw status --json',
@@ -616,12 +616,25 @@ const FEATURES: HermesParityFeature[] = [
       'the gateway.auth.token archive was written 0644 and is now 0600 (all archive slices are now written 0600 unconditionally); nested ' +
       'secret names (gateway.auth.token, models.providers.*.apiKey) are now surfaced by name only. Regression-locked with ' +
       'sanitized real-shape fixtures. Remaining skips (memory/MCP/cron/...) are genuine source absences on this install, ' +
-      'not unverified readers.',
+      'not unverified readers. ' +
+      'FLIPPED to `covered-partial` (2026-07-03): the last unexercised readers (MEMORY/MCP/cron) were finally exercised ' +
+      'against the live install after populating it THROUGH OpenClaw itself (`openclaw mcp set`, `openclaw cron add ' +
+      '--disabled`, plus MEMORY.md at the workspace root per OpenClaw\'s own AGENTS.md convention). Two real 2026.6.x ' +
+      'schema-drift bugs were found and fixed in the process: (1) MCP servers live under the nested `mcp.servers.<name>` ' +
+      'map, and the old root-key reader matched the bare `mcp` wrapper and imported ONE bogus server named "servers" ' +
+      '(clawMcpServers now resolves nested-then-legacy, wrapper never mis-read); (2) 2026.6.x cron jobs are persisted in ' +
+      'the gateway state DB (state/openclaw.sqlite:cron_jobs), never in openclaw.json — readClawStateCronJobs now reads ' +
+      'job_json read-only via better-sqlite3 (fail-soft null when absent/unavailable), mapClawStateCronJob maps the ' +
+      'verified job shape (5-field cron + agentTurn payload only) and the enabled flag is carried so a disabled OpenClaw ' +
+      'job is never silently activated after import. Full real round-trip proven: dry-run plan + --apply landed ' +
+      'mcpServers.filesystem, a disabled cronJobs entry, and the appended memory block in a throwaway target. ' +
+      'Regression-locked with sanitized real-shape fixtures (incl. a real-DDL sqlite fixture).',
     nextWork:
-      'Stays `partial`: MEMORY/MCP/cron readers are unexercised (this install has no such data), so the migrator full ' +
-      'reader set is not yet validated; flip to covered-partial only when a populated install exercises them. ' +
-      'identityBaseDirs intentionally ignores a workspace resolving outside the OpenClaw home (safety) — revisit if a ' +
-      'real out-of-tree workspace appears.',
+      'Not `covered` because two long-tail readers stay honestly unverified for lack of source data: the legacy ' +
+      'pre-sqlite `cron/jobs.json` file store (this install migrated straight to the state DB; the reader is not ' +
+      'written blind) and a migratable memory-backend config (no such concept in the 2026.6.x openclaw.json — the ' +
+      'memory_backend skip is correct, legacy-only). identityBaseDirs intentionally ignores a workspace resolving ' +
+      'outside the OpenClaw home (safety) — revisit if a real out-of-tree workspace appears.',
   },
 ];
 
