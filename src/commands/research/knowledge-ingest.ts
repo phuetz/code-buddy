@@ -37,6 +37,18 @@ export interface KnowledgeIngestDeps {
   makeClassifier?: () => RelationClassifier;
   /** Pull Code Explorer code-graph insights as discoveries (for `ingest-code`). */
   fetchCodeInsights?: (opts: { repo?: string }) => Promise<Publication[]>;
+  /** Inspect one node (id or name) incl. bi-temporal status. For `research show`. */
+  getEntity: (idOrName: string) => {
+    status: 'current' | 'retracted' | 'not_found';
+    entity?: { id: string; name: string; type: string; text: string; confidence: number; mentions: number; validTo?: string | null };
+    history: Array<{ text: string; validTo?: string | null }>;
+  };
+  /** Retract (tombstone) a node — append-only, revivable. For `research retract`. */
+  retract: (idOrName: string, opts?: { reason?: string }) => {
+    retracted: boolean;
+    id: string | null;
+    status: 'retracted' | 'already_retracted' | 'not_found';
+  };
   log: (msg: string) => void;
 }
 
@@ -54,6 +66,8 @@ async function defaultDeps(): Promise<KnowledgeIngestDeps> {
     listEntities: (opts) => ckg.listEntities(opts as { limit?: number; type?: import('../../memory/knowledge-graph.js').EntityType }),
     makeClassifier: () => makeLlmRelationClassifier(),
     fetchCodeInsights: (opts) => fetchCodeExplorerInsights(opts),
+    getEntity: (idOrName) => ckg.getEntity(idOrName),
+    retract: (idOrName, opts) => ckg.retract(idOrName, opts ?? {}),
     log: (msg) => console.log(msg),
   };
 }
@@ -153,6 +167,44 @@ export async function runRecall(
   return hits.length;
 }
 
+/** Show one node with bi-temporal status + history. Returns the status (for tests). */
+export function runShow(idOrName: string, deps: KnowledgeIngestDeps): 'current' | 'retracted' | 'not_found' {
+  const result = deps.getEntity(idOrName);
+  if (result.status === 'not_found' || !result.entity) {
+    deps.log(`Nœud introuvable : ${idOrName}`);
+    return 'not_found';
+  }
+  const e = result.entity;
+  const badge = result.status === 'current' ? '🟢 courant' : '⚫ rétracté';
+  deps.log(`${badge} [${e.type}] ${e.name}`);
+  deps.log(`  id : ${e.id}`);
+  deps.log(`  ${e.text.slice(0, 300)}`);
+  deps.log(`  conf ${e.confidence.toFixed(2)}, ${e.mentions} mention(s)${e.validTo ? `, invalidé le ${e.validTo}` : ''}`);
+  if (result.history.length > 0 && result.status === 'current') {
+    deps.log(`  ${result.history.length} version(s) antérieure(s) :`);
+    for (const h of result.history) deps.log(`    · ${h.text.slice(0, 100)} (jusqu'au ${h.validTo ?? '?'})`);
+  }
+  return result.status;
+}
+
+/** Retract a node (append-only tombstone). Returns the outcome (for tests). */
+export function runRetract(
+  idOrName: string,
+  opts: { reason?: string },
+  deps: KnowledgeIngestDeps,
+): 'retracted' | 'already_retracted' | 'not_found' {
+  const result = deps.retract(idOrName, opts.reason ? { reason: opts.reason } : {});
+  if (result.status === 'retracted') {
+    deps.log(`⚫ Rétracté : ${result.id}${opts.reason ? ` (${opts.reason})` : ''}`);
+    deps.log('   Le ledger ne fait que croître — un nouveau remember() du même nœud le fait revivre.');
+  } else if (result.status === 'already_retracted') {
+    deps.log(`Déjà rétracté : ${result.id}`);
+  } else {
+    deps.log(`Nœud introuvable : ${idOrName}`);
+  }
+  return result.status;
+}
+
 /** Attach ingest/recall/stats subcommands to the `research` command. */
 export function addKnowledgeSubcommands(cmd: Command, depsFactory: () => Promise<KnowledgeIngestDeps> = defaultDeps): void {
   cmd
@@ -222,6 +274,21 @@ export function addKnowledgeSubcommands(cmd: Command, depsFactory: () => Promise
         deps.log(`• [${r.type}] ${r.name}`);
         deps.log(`    ${date} · ${meta}${r.source ? ` · ${r.source}` : ''}`);
       }
+    });
+
+  cmd
+    .command('show <idOrName>')
+    .description('Show one knowledge-graph node (id or name) with its bi-temporal status and history')
+    .action(async (idOrName: string) => {
+      runShow(idOrName, await depsFactory());
+    });
+
+  cmd
+    .command('retract <idOrName>')
+    .description('Retract a knowledge-graph node (append-only tombstone; a later remember() revives it)')
+    .option('-r, --reason <text>', 'Why the node is retracted (audit)')
+    .action(async (idOrName: string, opts: { reason?: string }) => {
+      runRetract(idOrName, opts, await depsFactory());
     });
 
   // Topics the auto-ingest daemon studies — persisted, unioned with CODEBUDDY_RESEARCH_TOPICS.

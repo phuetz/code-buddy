@@ -136,12 +136,15 @@ interface CkgRelation {
 
 interface LedgerEvent {
   v: 1;
-  kind: 'entity' | 'relation';
+  // 'retraction' removes a node from the current view (append-only tombstone).
+  // Older readers dispatch only on entity/relation and skip unknown kinds, so
+  // adding it is backward-compatible by construction.
+  kind: 'entity' | 'relation' | 'retraction';
   recordedAt: string;
   agentId: string;
   source?: string;
   contentHash: string;
-  // entity
+  // entity + retraction
   id?: string;
   type?: EntityType;
   name?: string;
@@ -526,6 +529,81 @@ export class CollectiveKnowledgeGraph {
     }));
   }
 
+  /**
+   * Inspect ONE node by id (or exact/normalized name), including its
+   * bi-temporal status and superseded/retracted history — `buddy research show`.
+   */
+  getEntity(idOrName: string): {
+    status: 'current' | 'retracted' | 'not_found';
+    entity?: CkgRecallResult & { validTo?: string | null };
+    history: Array<CkgRecallResult & { validTo?: string | null }>;
+  } {
+    this.load();
+    const id = this.resolveEntityId(idOrName);
+    if (!id) return { status: 'not_found', history: [] };
+    const history = [...this.superseded.values()]
+      .filter((e) => e.id === id)
+      .sort((a, b) => ((a.validTo ?? '') < (b.validTo ?? '') ? -1 : 1))
+      .map((e) => ({ ...this.toResult(e), validTo: e.validTo }));
+    const cur = this.current.get(id);
+    if (cur) return { status: 'current', entity: { ...this.toResult(cur), validTo: null }, history };
+    // No current version but history exists: a supersede always installs a new
+    // current, so this state can only result from a retraction tombstone.
+    const latest = history[history.length - 1];
+    return latest ? { status: 'retracted', entity: latest, history } : { status: 'not_found', history: [] };
+  }
+
+  /**
+   * Retract a node — append-only tombstone; the ledger only grows, and a later
+   * `remember()` of the same id revives the node. Idempotent: retracting a
+   * missing or already-retracted node is a no-op. — `buddy research retract`.
+   */
+  retract(idOrName: string, opts: { reason?: string } = {}): {
+    retracted: boolean;
+    id: string | null;
+    status: 'retracted' | 'already_retracted' | 'not_found';
+  } {
+    try {
+      this.load(); // see other agents' writes first (same hygiene as remember)
+      const id = this.resolveEntityId(idOrName);
+      if (!id) return { retracted: false, id: null, status: 'not_found' };
+      if (!this.current.has(id)) return { retracted: false, id, status: 'already_retracted' };
+      const recordedAt = new Date().toISOString();
+      const event: LedgerEvent = {
+        v: 1,
+        kind: 'retraction',
+        recordedAt,
+        agentId: this.agentId,
+        contentHash: contentHash('retraction', `${id}|${recordedAt}`),
+        id,
+        ...(opts.reason ? { reason: opts.reason } : {}),
+      };
+      this.append(event);
+      this.applyRetraction(event);
+      return { retracted: true, id, status: 'retracted' };
+    } catch (err) {
+      logger.warn(`[ckg] retract failed: ${err instanceof Error ? err.message : String(err)}`);
+      return { retracted: false, id: null, status: 'not_found' };
+    }
+  }
+
+  /** Resolve an id, exact name, or normalized name to a known entity id. */
+  private resolveEntityId(idOrName: string): string | null {
+    const raw = idOrName.trim();
+    if (!raw) return null;
+    const known = (id: string): boolean =>
+      this.current.has(id) || [...this.superseded.values()].some((e) => e.id === id);
+    if (raw.includes(':') && known(raw)) return raw;
+    const norm = normalizeName(raw);
+    for (const e of this.current.values()) {
+      if (e.name === raw || normalizeName(e.name) === norm) return e.id;
+    }
+    for (const e of this.superseded.values()) {
+      if (e.name === raw || normalizeName(e.name) === norm) return e.id;
+    }
+    return null;
+  }
+
   // -- internals ------------------------------------------------------------
 
   private append(event: LedgerEvent): void {
@@ -558,7 +636,24 @@ export class CollectiveKnowledgeGraph {
       }
       if (event.kind === 'entity') this.applyEntity(event);
       else if (event.kind === 'relation') this.applyRelation(event);
+      else if (event.kind === 'retraction') this.applyRetraction(event);
     }
+  }
+
+  /**
+   * Apply a retraction tombstone: the current version moves to the superseded
+   * (audit) map with `validTo` stamped, and disappears from `current` — so
+   * recall/recallHybrid/listEntities exclude it with no changes of their own.
+   * Replay order is file order, so a later entity event for the same id
+   * REVIVES the node (append-only undo) by simply installing a fresh current.
+   */
+  private applyRetraction(e: LedgerEvent): void {
+    if (!e.id) return;
+    const cur = this.current.get(e.id);
+    if (!cur) return; // idempotent: nothing current to retract
+    cur.validTo = e.recordedAt;
+    this.superseded.set(`${cur.id}@${cur.contentHash}`, cur);
+    this.current.delete(e.id);
   }
 
   private applyEntity(e: LedgerEvent): void {
