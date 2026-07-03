@@ -860,3 +860,67 @@ export function snoozePending(text: string, nowMs: number): { id: string; label:
 export function isSnoozeCommand(text: string, nowMs: number): boolean {
   return parseSnooze(text) != null && pendingAcks(nowMs).length > 0;
 }
+
+// ── UNDO (revert the just-created reminder) ───────────────────────────
+// The confirm-and-await flow, ambient-style: the creation confirmation already
+// reads the label + cadence back; a bare "annule" / "c'est pas ça" within the
+// window removes what was just created — a natural spoken correction instead of
+// a blocking "confirme ?" dialog. In-memory only: the window is short, and a
+// server restart inside it simply forfeits the shortcut (unlike snoozes, no
+// meds dose depends on it).
+
+interface UndoableCreation {
+  id: string;
+  label: string;
+  atMs: number;
+}
+let lastCreated: UndoableCreation | null = null;
+
+/** How long a voice-created reminder stays revocable by a bare "annule" (default 2 min). */
+export function undoWindowMs(): number {
+  const n = Number(process.env.CODEBUDDY_REMINDER_UNDO_WINDOW_MS);
+  return Number.isFinite(n) && n > 0 ? n : 120_000;
+}
+
+/** Record a VOICE-created reminder as undo-able (call right after addReminder). */
+export function noteCreatedForUndo(r: Pick<Reminder, 'id' | 'label'>, nowMs: number): void {
+  lastCreated = { id: r.id, label: r.label, atMs: nowMs };
+}
+
+const UNDO_RE = /\b(annule|annuler|annule ca|efface|oublie|c est pas ca|pas ca|non non|je me suis trompe|erreur)\b/;
+
+/**
+ * Is this utterance a BARE spoken correction? A targeted "supprime le rappel du
+ * train" is parseReminderCommand's job (the text contains "rappel"), and a long
+ * sentence is conversation — only a short bare "annule"-class phrase counts.
+ */
+export function parseUndo(text: string): boolean {
+  const t = normLabel(text);
+  if (!t) return false;
+  if (/\brappels?\b/.test(t)) return false; // targeted management, not a bare undo
+  if (t.split(' ').filter(Boolean).length > 6) return false; // long → conversation
+  return UNDO_RE.test(t);
+}
+
+/**
+ * If `text` is a bare undo and a reminder was voice-created within the window,
+ * consume the undo slot and return the creation to revert. Pure decision — the
+ * caller performs the store removal + spoken confirmation.
+ */
+export function undoPending(text: string, nowMs: number): { id: string; label: string } | null {
+  if (!parseUndo(text)) return null;
+  if (!lastCreated || nowMs - lastCreated.atMs > undoWindowMs()) return null;
+  const undone = { id: lastCreated.id, label: lastCreated.label };
+  lastCreated = null;
+  return undone;
+}
+
+/** True when the utterance would undo a fresh creation (for the voice shortcut gate). */
+export function isUndoCommand(text: string, nowMs: number): boolean {
+  return parseUndo(text) && lastCreated !== null && nowMs - lastCreated.atMs <= undoWindowMs();
+}
+
+/** Test seam. */
+export function resetUndo(): void {
+  lastCreated = null;
+}

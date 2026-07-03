@@ -1236,9 +1236,20 @@ export async function startServer(userConfig: Partial<ServerConfig> = {}): Promi
                 reminderShortcut = (t: string) =>
                   rem.matchAck(t, Date.now()) !== null ||
                   rem.isSnoozeCommand(t, Date.now()) ||
+                  rem.isUndoCommand(t, Date.now()) ||
                   rem.isReminderVoiceCommand(t) ||
                   rem.parseVoiceReminder(t) !== null;
                 onHeard = async (t: string) => {
+                  // Spoken undo FIRST: a bare "annule" right after a creation reverts it (the
+                  // confirm-and-await flow, ambient-style — the confirmation read the cadence
+                  // back, the correction stays natural speech). Window-bounded, so it never
+                  // hijacks an "annule" said minutes later in conversation.
+                  const undone = rem.undoPending(t, Date.now());
+                  if (undone) {
+                    await rem.removeReminder(undone.id);
+                    await sayNow(`OK, j'annule le rappel : ${undone.label}.`);
+                    return;
+                  }
                   // Snooze a pending reminder ("dans 10 minutes" / "plus tard") before anything else.
                   const snoozed = rem.snoozePending(t, Date.now());
                   if (snoozed) {
@@ -1259,6 +1270,8 @@ export async function startServer(userConfig: Partial<ServerConfig> = {}): Promi
                   if (created) {
                     try {
                       const r = await rem.addReminder(created);
+                      // Arm the spoken undo: a bare "annule" within the window reverts THIS creation.
+                      rem.noteCreatedForUndo(r, Date.now());
                       // Read back the CADENCE ("demain" / "tous les jours") so a mis-captured
                       // recurrence is audible on the spot (the train-bug class of confusion).
                       await sayNow(`C'est noté : ${r.label}, ${rem.reminderCadencePhrase(r)} à ${r.time}.`);
