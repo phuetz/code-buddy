@@ -15,7 +15,7 @@ function readMessageCard() {
 describe('message card file attachment layout', () => {
   it('keeps user bubble shrinkable in flex layouts', () => {
     const source = readMessageCard();
-    expect(source).toContain('max-w-[80%] min-w-0 break-words');
+    expect(source).toContain('max-w-[85%] min-w-0 break-words');
   });
 
   it('prevents file attachment row overflow with long filenames', () => {

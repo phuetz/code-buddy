@@ -100,6 +100,8 @@
     "@commitlint/config-conventional": "^20.5.0",
     "@electron/notarize": "^2.5.0",
     "@playwright/test": "1.59.1",
+    "@testing-library/jest-dom": "6.9.1",
+    "@testing-library/react": "16.3.2",
     "@types/archiver": "^7.0.0",
     "@types/better-sqlite3": "^7.6.12",
     "@types/dagre": "0.7.54",

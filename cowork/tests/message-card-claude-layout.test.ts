@@ -14,10 +14,11 @@ function readAllMessageContent() {
 }
 
 describe('MessageCard Claude-style layout', () => {
-  it('uses a softer user bubble treatment', () => {
+  it('uses a right-aligned user message treatment in the shared conversation column', () => {
     const source = readAllMessageContent();
-    expect(source).toContain('message-user px-4 py-3');
-    expect(source).toContain('rounded-[1.65rem]');
+    expect(source).toContain('max-w-3xl mx-auto px-4 w-full');
+    expect(source).toContain('max-w-[85%] min-w-0 break-words text-right');
+    expect(source).toContain('bg-black/[0.03] dark:bg-white/[0.03]');
   });
 
   it('uses quieter rounded shells for tool and thinking cards', () => {

@@ -85,7 +85,7 @@ describe('SettingsCodeBuddy auto-start connection test', () => {
     });
     expect(target.textContent).toContain('Connected to Code Buddy');
     expect(target.textContent).toContain('Started local Code Buddy backend automatically.');
-    expect(target.textContent).toContain('Version: 1.0.0-test');
+    expect(target.textContent).toMatch(/Version:\s*1\.0\.0-test/);
   });
 
   it('loads remote models into the override selector and saves the selected model', async () => {

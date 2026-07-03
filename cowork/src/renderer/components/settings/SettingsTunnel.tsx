@@ -5,7 +5,9 @@ import { useAppStore } from '../../store';
 
 export function SettingsTunnel() {
   const { t } = useTranslation();
-  const tunnel = useAppStore((s) => s.ngrokTunnel);
+  // Defensive default: a persisted store from an older version (or a partial
+  // test harness) may lack the slice — the panel must render, not throw.
+  const tunnel = useAppStore((s) => s.ngrokTunnel) ?? { active: false, authToken: '', domain: '', url: null };
   const setTunnel = useAppStore((s) => s.setNgrokTunnel);
 
   const [loading, setLoading] = useState(false);

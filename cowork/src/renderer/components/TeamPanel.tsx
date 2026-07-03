@@ -76,7 +76,12 @@ export function TeamPanel() {
   const handleStart = async () => {
     setErrorMsg(null);
     if (!teamApi) {
-      setErrorMsg(t('team.bridgeUnavailableManage', 'Bridge unavailable.'));
+      setErrorMsg(
+        t(
+          'team.bridgeUnavailableManage',
+          'Team bridge unavailable in browser preview. Open the desktop app to manage teams.'
+        )
+      );
       return;
     }
     const result = await teamApi.start(goalInput.trim() || undefined);
@@ -281,7 +286,14 @@ export function TeamPanel() {
             </h3>
             <div className="flex-1 overflow-y-auto scroll-sci-fi pr-2 space-y-3">
               {memberList.length === 0 && (
-                <div className="text-sm text-text-muted italic text-center py-10">No units deployed.</div>
+                <div className="text-sm text-text-muted italic text-center py-10">
+                  {!teamApi
+                    ? t(
+                        'team.bridgeUnavailableObserve',
+                        'Team bridge unavailable in browser preview. Open the desktop app to start or observe teams.'
+                      )
+                    : 'No units deployed.'}
+                </div>
               )}
               {memberList.map((member) => (
                 <div

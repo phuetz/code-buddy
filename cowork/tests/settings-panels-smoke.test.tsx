@@ -51,6 +51,7 @@ vi.mock('../src/renderer/store', () => {
     appConfig: {},
     team: { members: [], tasks: [] },
     systemDarkMode: true,
+    ngrokTunnel: { active: false, authToken: '', domain: '', url: null },
   };
   const isCallbackKey = (k: string) =>
     /^(set|show|toggle|open|close|clear|add|remove|update|refresh|on|hide|select|start|stop|reset|save|load)/.test(

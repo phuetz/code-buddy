@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 // @ts-nocheck
 /**
  * WorkflowAnalyticsPanel tests (V24-3)

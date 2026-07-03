@@ -17,7 +17,7 @@ function readAllChatComponents() {
 describe('ChatView Claude-style layout', () => {
   it('uses a narrower conversation column shared by messages and composer', () => {
     const source = readAllChatComponents();
-    expect(source).toContain('max-w-[920px]');
+    expect(source).toContain('max-w-3xl mx-auto px-4');
   });
 
   it('uses a quieter header treatment with the shared app name and compact connector badge', () => {
@@ -30,7 +30,6 @@ describe('ChatView Claude-style layout', () => {
 
   it('uses a softer rounded composer shell instead of the previous heavy input bar', () => {
     const source = readAllChatComponents();
-    expect(source).toContain('rounded-[1.75rem]');
-    expect(source).toContain('shadow-soft');
+    expect(source).toContain('rounded-3xl shadow-sm');
   });
 });

@@ -126,7 +126,7 @@ const localeAwareRendererSurfaces = [
   path.resolve(process.cwd(), 'src/renderer/components/AuditLogViewer.tsx'),
   path.resolve(process.cwd(), 'src/renderer/components/BookmarksPanel.tsx'),
   path.resolve(process.cwd(), 'src/renderer/components/CheckpointPanel.tsx'),
-  path.resolve(process.cwd(), 'src/renderer/components/MemoryBrowser.tsx'),
+  path.resolve(process.cwd(), 'src/renderer/components/MemoryInspector.tsx'),
   path.resolve(process.cwd(), 'src/renderer/components/NotificationCenter.tsx'),
   path.resolve(process.cwd(), 'src/renderer/components/ReasoningTraceViewer.tsx'),
   path.resolve(process.cwd(), 'src/renderer/components/SessionInsightsPanel.tsx'),

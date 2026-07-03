@@ -15,8 +15,7 @@ function readChatList() {
 describe('chat view width layout', () => {
   it('uses a centered responsive messages container', () => {
     const source = readChatList();
-    expect(source).toContain('max-w-[920px]');
-    expect(source).toContain('lg:px-8');
+    expect(source).toContain('max-w-3xl mx-auto px-4');
   });
 
   it('observes message container via ref instead of hard-coded class selector', () => {

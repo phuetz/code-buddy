@@ -39,6 +39,11 @@ const EXPECTED_BUILTIN_SKILLS = [
   'pdf',
   'skill-creator',
   'workspace-organizer',
+  // Added 2026-06-17 (d69e8c1b…8591299f): the Python-extras tier.
+  'data-charts',
+  'doc-ingest',
+  'web-automate',
+  'web-research',
 ];
 
 function createDbMock(): DatabaseInstance {
@@ -99,17 +104,19 @@ describe('Built-in Agent Skills are shipped and loadable', () => {
     }
   });
 
-  it('bundles the executable scripts the demo-video skills depend on', () => {
-    // pptx / xlsx are the skills demonstrated generating real artifacts in the
-    // README demo videos — guard that their helper scripts are actually shipped,
-    // not just the SKILL.md prose.
-    expect(fs.existsSync(path.join(BUILTIN_SKILLS_DIR, 'pptx', 'scripts', 'inventory.py'))).toBe(
-      true
-    );
-    expect(fs.existsSync(path.join(BUILTIN_SKILLS_DIR, 'xlsx', 'recalc.py'))).toBe(true);
-    expect(
-      fs.existsSync(path.join(BUILTIN_SKILLS_DIR, 'pdf', 'scripts', 'fill_fillable_fields.py'))
-    ).toBe(true);
+  it('bundles the executable scripts the shipped skills depend on', () => {
+    // The proprietary Office helper scripts (pptx/inventory.py, xlsx/recalc.py,
+    // pdf/fill_fillable_fields.py) were DELIBERATELY removed with the clean-room
+    // MIT rewrite (904f11f1) — do not guard for them. The only scripts the
+    // current bundle ships (and skill-creator's SKILL.md references) are:
+    for (const script of ['init_skill.py', 'package_skill.py', 'quick_validate.py']) {
+      expect(
+        fs.existsSync(path.join(BUILTIN_SKILLS_DIR, 'skill-creator', 'scripts', script)),
+        `missing bundled script: skill-creator/scripts/${script}`
+      ).toBe(true);
+    }
+    // No Python build artifacts in the shipped bundle.
+    expect(fs.existsSync(path.join(BUILTIN_SKILLS_DIR, 'skill-creator', 'scripts', '__pycache__'))).toBe(false);
   });
 
   it('ships the workspace organization guardrails shown in the cleanup demo', () => {
