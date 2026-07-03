@@ -128,6 +128,7 @@ import { registerSnippetsIpcHandlers } from './ipc/snippets-ipc';
 import { registerCustomCommandsIpcHandlers } from './ipc/custom-commands-ipc';
 import { registerWorkspacePresetsIpcHandlers } from './ipc/workspace-presets-ipc';
 import { registerBookmarksIpcHandlers } from './ipc/bookmarks-ipc';
+import { registerTemplateIpcHandlers } from './ipc/template-ipc';
 import { ConfigExportService } from './config/config-export-service';
 import { KnowledgeService } from './knowledge/knowledge-service';
 import { NotificationBridge } from './notification/notification-bridge';
@@ -5082,40 +5083,7 @@ ipcMain.handle(
 );
 
 // Project templates — Claude Cowork parity Phase 2 step 12
-ipcMain.handle('template.list', async () => {
-  if (!templateService) return [];
-  try {
-    return await templateService.list();
-  } catch (err) {
-    logError('[template.list] failed:', err);
-    return [];
-  }
-});
-
-ipcMain.handle('template.preview', async (_event, name: string) => {
-  if (!templateService) return null;
-  try {
-    return await templateService.preview(name);
-  } catch (err) {
-    logError('[template.preview] failed:', err);
-    return null;
-  }
-});
-
-ipcMain.handle('template.create', async (_event, name: string, workspaceRoot: string) => {
-  if (!templateService) {
-    return { success: false, error: 'Template service unavailable' };
-  }
-  try {
-    return await templateService.apply(name, workspaceRoot);
-  } catch (err) {
-    logError('[template.create] failed:', err);
-    return {
-      success: false,
-      error: (err as Error).message ?? 'Template execution failed',
-    };
-  }
-});
+registerTemplateIpcHandlers({ getTemplateService: () => templateService });
 
 // File preview pane — Claude Cowork parity Phase 2 step 9
 ipcMain.handle('preview.get', async (_event, filePath: string) => {
