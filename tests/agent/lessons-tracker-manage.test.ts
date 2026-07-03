@@ -165,6 +165,27 @@ describe('LessonsTracker management (show/rm/edit)', () => {
     expect(await tracker.update('missing-id', { content: 'x' })).toBeUndefined();
   });
 
+  it('save() does NOT leak global lessons into the project file (duplication bug)', async () => {
+    await fs.ensureDir(path.dirname(globalFile));
+    await fs.writeFile(globalFile, GLOBAL_MD); // gid1 lives ONLY in the global file
+
+    const tracker = new LessonsTracker(projectDir);
+    const added = tracker.add('INSIGHT', 'project-only note');
+    await tracker.save();
+
+    const projectRaw = await fs.readFile(projectFile, 'utf-8');
+    expect(projectRaw).toContain(`[${added.id}]`);
+    // The global lesson must NOT be duplicated into the project file.
+    expect(projectRaw).not.toContain('gid1');
+    // And it still lives untouched in the global file.
+    expect(await fs.readFile(globalFile, 'utf-8')).toContain('gid1');
+
+    // A fresh load still sees both, each from its own file.
+    const fresh = new LessonsTracker(projectDir);
+    expect(fresh.get('gid1')?.locations).toEqual([{ scope: 'global', path: globalFile }]);
+    expect(fresh.get(added.id)?.locations).toEqual([{ scope: 'project', path: projectFile }]);
+  });
+
   it('serializes concurrent update + remove without clobbering (write queue)', async () => {
     const tracker = new LessonsTracker(projectDir);
     const a = tracker.add('RULE', 'lesson a');

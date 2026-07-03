@@ -462,7 +462,14 @@ export class LessonsTracker {
       if (!fs.existsSync(dir)) {
         fs.mkdirSync(dir, { recursive: true });
       }
-      fs.writeFileSync(this.projectPath, this.serialise(), 'utf-8');
+      // Only PROJECT-origin lessons belong in the project file. Writing the
+      // merged set used to duplicate every global (~/.codebuddy) lesson into
+      // each project's lessons.md on the first add(). locationsOf defaults to
+      // project, so runtime-added items are always included.
+      const projectItems = this.items.filter(item =>
+        this.locationsOf(item.id).some(loc => loc.path === this.projectPath),
+      );
+      fs.writeFileSync(this.projectPath, this.serialiseItems(projectItems), 'utf-8');
     });
   }
 
