@@ -16,6 +16,7 @@ import { DockWorkspace } from './DockWorkspace';
 import { ActivityPane } from './ActivityPane';
 import { PlanPanel } from './PlanPanel';
 import { FileActivityPanel } from './FileActivityPanel';
+import { HomeView } from './HomeView';
 
 interface RailItem {
   view: PrimaryView;
@@ -107,7 +108,11 @@ export function NewShell() {
   const setPrimaryView = useAppStore((st) => st.setPrimaryView);
   const setShowCommandPalette = useAppStore((st) => st.setShowCommandPalette);
   const setShowShortcutsDialog = useAppStore((st) => st.setShowShortcutsDialog);
+  const activeSessionId = useAppStore((st) => st.activeSessionId);
   const backToChat = () => setPrimaryView('chat');
+  // Chat with no active session → the calm Home center-of-gravity, not the
+  // dense workspace (REDESIGN.md § Home).
+  const showHome = primaryView === 'chat' && !activeSessionId;
 
   return (
     <div className="h-full min-h-0 flex overflow-hidden bg-background" data-testid="new-shell">
@@ -158,8 +163,14 @@ export function NewShell() {
 
       {/* Primary area */}
       <div className="flex-1 min-w-0 min-h-0 relative">
-        {/* Chat stays mounted so a session isn't torn down when peeking at other views. */}
-        <div className={`absolute inset-0 ${primaryView === 'chat' ? '' : 'hidden'}`}>
+        {/* Home greets when Chat has no session; DockWorkspace stays mounted
+            (but hidden) so an active session isn't torn down when peeking. */}
+        {showHome && (
+          <div className="absolute inset-0">
+            <HomeView />
+          </div>
+        )}
+        <div className={`absolute inset-0 ${primaryView === 'chat' && !showHome ? '' : 'hidden'}`}>
           <DockWorkspace />
         </div>
         {primaryView === 'plan' && <PlanPanel />}
