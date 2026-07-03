@@ -10,6 +10,14 @@ import path from 'path';
 import { createHash } from 'node:crypto';
 import type { ChatEntry } from '../../agent/types.js';
 import type { CodeBuddyMessage } from '../../codebuddy/client.js';
+import {
+  MODEL_NAME_PATTERN,
+  clearSessionModelOverride,
+  getSessionModelOverride,
+  resolveChannelModel,
+  setSessionModelOverride,
+  __resetSessionModelOverridesForTests,
+} from '../../channels/channel-model-override.js';
 import { logger } from '../../utils/logger.js';
 
 interface ChannelOptions {
@@ -449,6 +457,9 @@ let aiHandlerRegistered = false;
 /** Reset the one-shot registration guard. Test-only — never call in production. */
 export function __resetChannelAIHandlerForTests(): void {
   aiHandlerRegistered = false;
+  channelAgentCache.clear();
+  channelBotPersonas.clear();
+  __resetSessionModelOverridesForTests();
 }
 
 /**
@@ -550,21 +561,35 @@ async function persistChannelSession(
 async function getOrCreateChannelAgent(
   sessionKey: string,
   resolved: { apiKey: string; baseUrl: string; model: string },
-  agentConfig: { model?: string; maxToolRounds?: number },
+  agentConfig: { model?: string; systemPrompt?: string; maxToolRounds?: number },
   botId?: string,
+  routeModel?: string,
 ): Promise<import('../../agent/codebuddy-agent.js').CodeBuddyAgent> {
   const now = Date.now();
   // Evict idle agents first.
   for (const [key, cached] of channelAgentCache) {
     if (now - cached.lastUsed > CHANNEL_AGENT_IDLE_MS) channelAgentCache.delete(key);
   }
+  // Per-bot persona (multi-bot): a bot may define its own model + system prompt.
+  const persona = botId ? channelBotPersonas.get(botId) : undefined;
+  // Hermes-style tiers, finest scope first: /model session override > matched
+  // route > bot persona > merged route default (includes the router-wide
+  // defaultAgent fallback — kept below persona) > provider default.
+  const { model } = resolveChannelModel({
+    sessionOverride: getSessionModelOverride(sessionKey),
+    routeModel,
+    personaModel: persona?.model,
+    routeDefaultModel: agentConfig.model,
+    globalModel: resolved.model,
+  });
   const hit = channelAgentCache.get(sessionKey);
   if (hit) {
     hit.lastUsed = now;
+    // Reconcile a changed override on the cached agent (no eviction — the
+    // in-memory conversation history is what makes the chat feel continuous).
+    if (hit.agent.getCurrentModel() !== model) hit.agent.setModel(model);
     return hit.agent;
   }
-  // Per-bot persona (multi-bot): a bot may define its own model + system prompt.
-  const persona = botId ? channelBotPersonas.get(botId) : undefined;
   // Opt-in Code Explorer nudge (set CODE_EXPLORER_BIN): some models won't reach
   // for the code-graph MCP tools on their own and just say "I can't" — tell them
   // plainly that they can, and give the CLI fallback. No-op when the env is unset.
@@ -578,10 +603,15 @@ async function getOrCreateChannelAgent(
   const pythonHint =
     'ACTING vs SHOWING: when the user asks you to draw, plot, generate, create, compute or build something, you MUST actually DO it by running tools/code now — do NOT just print the code or instructions and stop. Execute it and deliver the real artifact. ' +
     'For Python work needing packages (plotting, data, etc.): do NOT use `pip`/`pip3 install` (system Python is PEP 668-locked). Use `uv` — e.g. write the script to a file then run `uv run --with matplotlib --with pandas --with numpy python /tmp/plot.py` (matplotlib must use the Agg backend). When you produce a chart/image, SAVE it to an absolute path like `/tmp/<name>.png` and state that exact path in your reply — it is then sent to the user automatically as a photo.';
+  // System prompts APPEND (constructor arg 8, wrapped in <runtime_persona>) —
+  // never the full-replace arg 9, which would drop the tool-calling base prompt
+  // and break tools on the channel path. Persona (bot identity) first, then the
+  // matched route's prompt (conversation instruction — more specific, later =
+  // higher salience). Both are complementary, not competing.
   const channelSystemPromptAppend =
-    [persona?.systemPrompt, codeExplorerHint, pythonHint].filter(Boolean).join('\n\n') || undefined;
+    [persona?.systemPrompt, agentConfig.systemPrompt, codeExplorerHint, pythonHint].filter(Boolean).join('\n\n') ||
+    undefined;
   const { CodeBuddyAgent } = await import('../../agent/codebuddy-agent.js');
-  const model = persona?.model || agentConfig.model || resolved.model;
   const agent = new CodeBuddyAgent(
     resolved.apiKey || 'local',
     resolved.baseUrl,
@@ -758,13 +788,55 @@ export async function registerAIMessageHandler(manager: import('../../channels/i
         return;
       }
 
-      const { getRouteAgentConfig } = await import('../../channels/core.js');
+      const { getRouteAgentConfig, resolveRoute } = await import('../../channels/core.js');
       const agentConfig = getRouteAgentConfig(message);
+      // The "route" tier only counts an EXPLICITLY matched route — a
+      // matchType of 'default' is the router-wide fallback and must not
+      // outrank a bot persona (it lands in the route-default tier instead).
+      const resolvedRoute = resolveRoute(message);
+      const routeModel =
+        resolvedRoute && resolvedRoute.matchType !== 'default' ? resolvedRoute.agent?.model : undefined;
+
+      // /model — per-conversation model override (Hermes parity: session tier).
+      // `/model` shows the effective model + source, `/model <name>` overrides
+      // this chat, `/model reset` reverts to the channel/global tiers. Handled
+      // before the agent so it never burns an LLM turn. `(?:@\S+)?` accepts
+      // Telegram's `/model@BotName` group form.
+      const modelCmd = message.content.trim().match(/^\/model(?:@\S+)?(?:\s+(\S+))?\s*$/i);
+      if (modelCmd) {
+        const arg = modelCmd[1];
+        const personaForShow = botId ? channelBotPersonas.get(botId) : undefined;
+        const effective = (): string => {
+          const { model, source } = resolveChannelModel({
+            sessionOverride: getSessionModelOverride(sessionKey),
+            routeModel,
+            personaModel: personaForShow?.model,
+            routeDefaultModel: agentConfig.model,
+            globalModel: resolved.model,
+          });
+          return `${model} (source : ${source})`;
+        };
+        let reply: string;
+        if (!arg) {
+          reply = `Modèle : ${effective()} — /model <nom> pour changer, /model reset pour annuler`;
+        } else if (arg.toLowerCase() === 'reset') {
+          clearSessionModelOverride(sessionKey);
+          reply = `Override retiré. Modèle effectif : ${effective()}`;
+        } else if (!MODEL_NAME_PATTERN.test(arg)) {
+          reply = 'Nom de modèle invalide. Usage : /model <nom> | /model reset | /model';
+        } else {
+          setSessionModelOverride(sessionKey, arg);
+          reply = `✅ Modèle de cette conversation : ${arg} — appliqué dès le prochain message. Si le modèle est invalide, /model reset pour revenir.`;
+        }
+        await channel.send({ channelId: message.channel.id, content: reply, replyTo: message.id });
+        return;
+      }
+
       // Reuse ONE agent per chat (cached by sessionKey) so multi-turn context
       // persists in-memory across messages; restored from disk on a cold start.
       // botId selects the per-bot persona and is already baked into sessionKey,
       // so different bots keep separate agents + histories.
-      const agent = await getOrCreateChannelAgent(sessionKey, resolved, agentConfig, botId);
+      const agent = await getOrCreateChannelAgent(sessionKey, resolved, agentConfig, botId, routeModel);
 
       const entries = await agent.processUserMessage(message.content);
       const lastEntry = entries[entries.length - 1];

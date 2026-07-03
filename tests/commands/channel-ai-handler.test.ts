@@ -25,6 +25,8 @@ const hoisted = vi.hoisted(() => {
     convertMessagesToChatEntries: vi.fn(),
     setChannelBotId: vi.fn(),
     getChatHistory: vi.fn(),
+    constructorCalls: [] as any[][],
+    setModelCalls: [] as string[],
   };
 });
 
@@ -41,7 +43,18 @@ vi.mock('../../src/agent/codebuddy-agent.js', () => {
       setChatHistory: hoisted.setChatHistory,
       setMessages: hoisted.setMessages,
     };
-    constructor(_apiKey?: string, _baseUrl?: string, _model?: string, _maxRounds?: number) {}
+    private model: string;
+    constructor(...args: any[]) {
+      hoisted.constructorCalls.push(args);
+      this.model = String(args[2] ?? '');
+    }
+    getCurrentModel() {
+      return this.model;
+    }
+    setModel(model: string) {
+      hoisted.setModelCalls.push(model);
+      this.model = model;
+    }
     getSessionStore() {
       return {
         loadSession: hoisted.loadSession,
@@ -59,6 +72,7 @@ vi.mock('../../src/agent/codebuddy-agent.js', () => {
 
 import {
   registerAIMessageHandler,
+  registerChannelBotPersona,
   __resetChannelAIHandlerForTests,
 } from '../../src/commands/handlers/channel-handlers.js';
 
@@ -75,11 +89,11 @@ function makeManager() {
   };
 }
 
-function makeMessage(content: string, sessionKey = 'sess-1') {
+function makeMessage(content: string, sessionKey = 'sess-1', botId?: string) {
   return {
     id: `msg-${Math.random().toString(36).slice(2)}`,
     content,
-    channel: { id: 'chan-42' },
+    channel: { id: 'chan-42', ...(botId ? { botId } : {}) },
     sessionKey,
   };
 }
@@ -89,6 +103,8 @@ describe('registerAIMessageHandler inbound roundtrip (GAP-7)', () => {
     __resetChannelAIHandlerForTests();
     vi.clearAllMocks();
     hoisted.sessions.clear();
+    hoisted.constructorCalls.length = 0;
+    hoisted.setModelCalls.length = 0;
     process.env.GROK_API_KEY = 'test-key';
 
     // Default happy path: approved pairing, simple route, in-memory session store.
@@ -192,5 +208,144 @@ describe('registerAIMessageHandler inbound roundtrip (GAP-7)', () => {
       { role: 'assistant', content: 'earlier answer' },
     ]);
     expect(hoisted.processUserMessage).toHaveBeenCalledWith('next');
+  });
+
+  // -------------------------------------------------------------------------
+  // Per-channel model + system-prompt overrides (Hermes parity):
+  // session > route > persona > route-default > global, driven through the
+  // REAL handler; the mocked agent only captures what reaches it.
+  // -------------------------------------------------------------------------
+  describe('per-channel model overrides', () => {
+    it('an explicitly matched route model beats the bot persona model', async () => {
+      registerChannelBotPersona('bot1', { model: 'persona-m' });
+      hoisted.resolveRoute.mockReturnValue({ matchType: 'peer', agent: { model: 'route-m' } });
+
+      const manager = makeManager();
+      await registerAIMessageHandler(manager as any);
+      await manager.emit(makeMessage('hello', 'sess-route', 'bot1'), { send: vi.fn().mockResolvedValue(undefined) });
+
+      expect(hoisted.constructorCalls).toHaveLength(1);
+      expect(hoisted.constructorCalls[0]![2]).toBe('route-m');
+    });
+
+    it('the persona model beats the merged route-default model', async () => {
+      registerChannelBotPersona('bot1', { model: 'persona-m' });
+      hoisted.resolveRoute.mockReturnValue(null); // no explicit route match
+      hoisted.getRouteAgentConfig.mockReturnValue({ model: 'default-m', maxToolRounds: 5 });
+
+      const manager = makeManager();
+      await registerAIMessageHandler(manager as any);
+      await manager.emit(makeMessage('hello', 'sess-persona', 'bot1'), { send: vi.fn().mockResolvedValue(undefined) });
+
+      expect(hoisted.constructorCalls[0]![2]).toBe('persona-m');
+    });
+
+    it('a router-default matchType stays in the route-default tier (persona wins)', async () => {
+      registerChannelBotPersona('bot1', { model: 'persona-m' });
+      hoisted.resolveRoute.mockReturnValue({ matchType: 'default', agent: { model: 'default-m' } });
+
+      const manager = makeManager();
+      await registerAIMessageHandler(manager as any);
+      await manager.emit(makeMessage('hello', 'sess-dflt', 'bot1'), { send: vi.fn().mockResolvedValue(undefined) });
+
+      expect(hoisted.constructorCalls[0]![2]).toBe('persona-m');
+    });
+
+    it('/model <name> sets a session override that beats every channel tier', async () => {
+      registerChannelBotPersona('bot1', { model: 'persona-m' });
+      hoisted.resolveRoute.mockReturnValue({ matchType: 'peer', agent: { model: 'route-m' } });
+
+      const manager = makeManager();
+      await registerAIMessageHandler(manager as any);
+      const send = vi.fn().mockResolvedValue(undefined);
+
+      await manager.emit(makeMessage('/model session-m', 'sess-ovr', 'bot1'), { send });
+      // The /model turn replies without invoking the agent.
+      expect(hoisted.processUserMessage).not.toHaveBeenCalled();
+      expect(send.mock.calls[0][0].content).toContain('session-m');
+
+      await manager.emit(makeMessage('hello', 'sess-ovr', 'bot1'), { send });
+      expect(hoisted.constructorCalls[0]![2]).toBe('session-m');
+    });
+
+    it('/model reset reverts to the channel tier on the next turn', async () => {
+      hoisted.resolveRoute.mockReturnValue({ matchType: 'peer', agent: { model: 'route-m' } });
+
+      const manager = makeManager();
+      await registerAIMessageHandler(manager as any);
+      const send = vi.fn().mockResolvedValue(undefined);
+
+      await manager.emit(makeMessage('/model session-m', 'sess-rst'), { send });
+      await manager.emit(makeMessage('hello', 'sess-rst'), { send });
+      expect(hoisted.constructorCalls[0]![2]).toBe('session-m');
+
+      await manager.emit(makeMessage('/model reset', 'sess-rst'), { send });
+      expect(send.mock.calls.at(-1)![0].content).toContain('route-m');
+
+      // Cached agent is reconciled to the channel-tier model on the next turn.
+      await manager.emit(makeMessage('again', 'sess-rst'), { send });
+      expect(hoisted.setModelCalls).toContain('route-m');
+      expect(hoisted.constructorCalls).toHaveLength(1); // never rebuilt
+    });
+
+    it('/model alone shows the effective model + source without invoking the agent', async () => {
+      registerChannelBotPersona('bot1', { model: 'persona-m' });
+      hoisted.resolveRoute.mockReturnValue(null);
+
+      const manager = makeManager();
+      await registerAIMessageHandler(manager as any);
+      const send = vi.fn().mockResolvedValue(undefined);
+      await manager.emit(makeMessage('/model', 'sess-show', 'bot1'), { send });
+
+      expect(hoisted.processUserMessage).not.toHaveBeenCalled();
+      const reply = send.mock.calls[0][0].content as string;
+      expect(reply).toContain('persona-m');
+      expect(reply).toContain('persona');
+    });
+
+    it('reconciles a cached agent via setModel instead of rebuilding it', async () => {
+      const manager = makeManager();
+      await registerAIMessageHandler(manager as any);
+      const send = vi.fn().mockResolvedValue(undefined);
+
+      await manager.emit(makeMessage('turn one', 'sess-cache'), { send });
+      expect(hoisted.constructorCalls).toHaveLength(1);
+
+      await manager.emit(makeMessage('/model new-m', 'sess-cache'), { send });
+      await manager.emit(makeMessage('turn two', 'sess-cache'), { send });
+
+      expect(hoisted.setModelCalls).toContain('new-m');
+      expect(hoisted.constructorCalls).toHaveLength(1); // cache preserved
+    });
+
+    it('rejects a bogus model name and keeps the channel-tier model', async () => {
+      hoisted.resolveRoute.mockReturnValue({ matchType: 'peer', agent: { model: 'route-m' } });
+
+      const manager = makeManager();
+      await registerAIMessageHandler(manager as any);
+      const send = vi.fn().mockResolvedValue(undefined);
+
+      await manager.emit(makeMessage('/model bad`name', 'sess-bad'), { send });
+      expect(send.mock.calls[0][0].content).toContain('invalide');
+
+      await manager.emit(makeMessage('hello', 'sess-bad'), { send });
+      expect(hoisted.constructorCalls[0]![2]).toBe('route-m');
+    });
+
+    it("the matched route's systemPrompt reaches the agent append (arg 8), full-replace arg 9 unused", async () => {
+      registerChannelBotPersona('bot1', { systemPrompt: 'PERSONA-IDENTITY' });
+      hoisted.getRouteAgentConfig.mockReturnValue({ systemPrompt: 'ROUTE-RULES', maxToolRounds: 5 });
+
+      const manager = makeManager();
+      await registerAIMessageHandler(manager as any);
+      await manager.emit(makeMessage('hello', 'sess-sp', 'bot1'), { send: vi.fn().mockResolvedValue(undefined) });
+
+      const args = hoisted.constructorCalls[0]!;
+      const append = String(args[7]);
+      expect(append).toContain('PERSONA-IDENTITY');
+      expect(append).toContain('ROUTE-RULES');
+      expect(append.indexOf('PERSONA-IDENTITY')).toBeLessThan(append.indexOf('ROUTE-RULES'));
+      expect(args[8]).toBeUndefined();
+    });
   });
 });
