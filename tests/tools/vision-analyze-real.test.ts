@@ -8,11 +8,13 @@ vi.setConfig({ testTimeout: 60_000 });
 
 import { buildLocalHermesToolParityManifest } from '../../src/agent/hermes-tool-parity-local.js';
 import { BrowserVisionTool, VisionAnalyzeTool } from '../../src/tools/registry/vision-tools.js';
+import { serveTestPages, type TestPageServer } from '../helpers/browser-test-page.js';
 
 let tempWorkspace: string;
 let originalCwd: string;
 let idCounter: number;
 let browserTool: BrowserVisionTool | undefined;
+let pages: TestPageServer | undefined;
 
 function fixedNow(): Date {
   return new Date('2026-05-30T20:00:00.000Z');
@@ -40,6 +42,8 @@ describe('Hermes vision tools real integrations', () => {
   afterEach(async () => {
     await browserTool?.dispose();
     browserTool = undefined;
+    await pages?.close();
+    pages = undefined;
     process.chdir(originalCwd);
     await fs.rm(tempWorkspace, { recursive: true, force: true });
   });
@@ -89,9 +93,7 @@ describe('Hermes vision tools real integrations', () => {
   });
 
   it('captures and analyzes a real Playwright browser screenshot', async () => {
-    const htmlPath = path.join(tempWorkspace, 'vision-page.html');
-    await fs.writeFile(
-      htmlPath,
+    pages = await serveTestPages(
       [
         '<!doctype html>',
         '<html><head><title>Hermes Vision Fixture</title></head>',
@@ -102,7 +104,6 @@ describe('Hermes vision tools real integrations', () => {
         '</main>',
         '</body></html>',
       ].join(''),
-      'utf8',
     );
 
     browserTool = new BrowserVisionTool({
@@ -110,9 +111,8 @@ describe('Hermes vision tools real integrations', () => {
       now: fixedNow,
       createId: nextId,
     });
-    const fileUrl = `file:///${htmlPath.replace(/\\/g, '/')}`;
     const result = await browserTool.execute({
-      url: fileUrl,
+      url: pages.url,
       include_snapshot: true,
       full_page: false,
       headless: true,

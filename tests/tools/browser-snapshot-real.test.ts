@@ -4,13 +4,17 @@ import {
   BrowserSnapshotExecuteTool,
   resetMiscInstances,
 } from '../../src/tools/registry/misc-tools.js';
+import { serveTestPages, type TestPageServer } from '../helpers/browser-test-page.js';
 
 describe('browser_snapshot real Playwright integration', () => {
   const browser = new BrowserExecuteTool();
   const snapshot = new BrowserSnapshotExecuteTool();
+  let pages: TestPageServer | undefined;
 
   afterEach(async () => {
     await browser.execute({ action: 'close' }).catch(() => {});
+    await pages?.close();
+    pages = undefined;
     resetMiscInstances();
     const { resetBrowserManager, resetBrowserTool } = await import('../../src/browser-automation/index.js');
     resetBrowserTool();
@@ -21,7 +25,7 @@ describe('browser_snapshot real Playwright integration', () => {
     await expect(browser.execute({ action: 'launch', headless: true }))
       .resolves.toMatchObject({ success: true });
 
-    const html = encodeURIComponent(`<!doctype html>
+    pages = await serveTestPages(`<!doctype html>
       <title>Snapshot smoke</title>
       <main>
         <h1>Hermes snapshot smoke</h1>
@@ -32,7 +36,7 @@ describe('browser_snapshot real Playwright integration', () => {
 
     await expect(browser.execute({
       action: 'navigate',
-      url: `data:text/html,${html}`,
+      url: pages.url,
       waitUntil: 'load',
     })).resolves.toMatchObject({ success: true });
 
@@ -51,7 +55,7 @@ describe('browser_snapshot real Playwright integration', () => {
     };
     expect(data.snapshotId).toMatch(/^websnap-/);
     expect(data.title).toBe('Snapshot smoke');
-    expect(data.url).toContain('data:text/html,');
+    expect(data.url).toContain(pages.url);
     expect(data.elementCount).toBeGreaterThan(0);
   });
 });

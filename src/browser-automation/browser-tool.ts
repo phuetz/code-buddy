@@ -786,6 +786,16 @@ export class BrowserTool {
    */
   private async guardNavigationUrl(url: string): Promise<{ ok: true } | { ok: false; error: string }> {
     if (url.trim().toLowerCase() === 'about:blank') return { ok: true };
+    // Session-registered dev origins (loopback-only by construction — see
+    // security/dev-origins.ts) are the one sanctioned exception: the dev
+    // server the agent itself launched. A miss falls through to the normal
+    // fail-closed SSRF gate below.
+    try {
+      const { isDevOriginAllowed } = await import('../security/dev-origins.js');
+      if (isDevOriginAllowed(url)) return { ok: true };
+    } catch {
+      // Registry unavailable → no exception granted; the SSRF gate decides.
+    }
     try {
       const { assertSafeUrl } = await import('../security/ssrf-guard.js');
       const check = await assertSafeUrl(url);

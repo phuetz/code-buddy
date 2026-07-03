@@ -4,13 +4,17 @@ import {
   BrowserExecuteTool,
   resetMiscInstances,
 } from '../../src/tools/registry/misc-tools.js';
+import { serveTestPages, type TestPageServer } from '../helpers/browser-test-page.js';
 
 describe('browser_console real Playwright integration', () => {
   const browser = new BrowserExecuteTool();
   const consoleTool = new BrowserConsoleExecuteTool();
+  let pages: TestPageServer | undefined;
 
   afterEach(async () => {
     await browser.execute({ action: 'close' }).catch(() => {});
+    await pages?.close();
+    pages = undefined;
     resetMiscInstances();
     const { resetBrowserManager, resetBrowserTool } = await import('../../src/browser-automation/index.js');
     resetBrowserTool();
@@ -21,7 +25,7 @@ describe('browser_console real Playwright integration', () => {
     await expect(browser.execute({ action: 'launch', headless: true }))
       .resolves.toMatchObject({ success: true });
 
-    const html = encodeURIComponent(`<!doctype html>
+    pages = await serveTestPages(`<!doctype html>
       <title>Console smoke</title>
       <script>
         console.log('Hermes console log');
@@ -33,7 +37,7 @@ describe('browser_console real Playwright integration', () => {
 
     await expect(browser.execute({
       action: 'navigate',
-      url: `data:text/html,${html}`,
+      url: pages.url,
       waitUntil: 'load',
     })).resolves.toMatchObject({ success: true });
 
@@ -53,7 +57,7 @@ describe('browser_console real Playwright integration', () => {
       entries?: Array<{ type: string; text: string; url?: string }>;
     }).entries ?? [];
     expect(entries.map(entry => entry.type)).toEqual(expect.arrayContaining(['log', 'warning', 'error', 'pageerror']));
-    expect(entries.some(entry => entry.url?.startsWith('data:text/html,'))).toBe(true);
+    expect(entries.some(entry => entry.url?.startsWith(pages!.url))).toBe(true);
 
     await expect(consoleTool.execute({ action: 'clear' }))
       .resolves.toMatchObject({ success: true });

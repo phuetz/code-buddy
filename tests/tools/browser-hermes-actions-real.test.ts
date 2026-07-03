@@ -12,9 +12,10 @@ import {
   BrowserTypeTool,
   resetBrowserInstance,
 } from '../../src/tools/registry/browser-tools.js';
+import { serveTestPages, type TestPageServer } from '../helpers/browser-test-page.js';
 
-function dataPage(title: string, body: string): string {
-  return `data:text/html,${encodeURIComponent(`<!doctype html><title>${title}</title>${body}`)}`;
+function htmlPage(title: string, body: string): string {
+  return `<!doctype html><title>${title}</title>${body}`;
 }
 
 function refFor(output: string | undefined, label: string): number {
@@ -34,9 +35,12 @@ describe('Hermes browser action wrappers real Playwright integration', () => {
   const press = new BrowserPressTool();
   const scroll = new BrowserScrollTool();
   const back = new BrowserBackTool();
+  let pages: TestPageServer | undefined;
 
   afterEach(async () => {
     await browser.execute({ action: 'close' }).catch(() => {});
+    await pages?.close();
+    pages = undefined;
     await resetBrowserInstance().catch(() => {});
     resetMiscInstances();
     const { resetBrowserManager, resetBrowserTool } = await import('../../src/browser-automation/index.js');
@@ -45,7 +49,7 @@ describe('Hermes browser action wrappers real Playwright integration', () => {
   });
 
   it('navigates, snapshots, types, presses, clicks, scrolls, and goes back in one real browser session', async () => {
-    const firstUrl = dataPage('Hermes browser wrappers', `
+    const firstPage = htmlPage('Hermes browser wrappers', `
       <main style="min-height: 2400px">
         <h1>Hermes browser wrappers</h1>
         <input aria-label="Mission name" value="" onkeydown="
@@ -61,7 +65,12 @@ describe('Hermes browser action wrappers real Playwright integration', () => {
         <button id="bottom" style="margin-top: 1900px">Bottom marker</button>
       </main>
     `);
-    const secondUrl = dataPage('Hermes second page', '<h1>Second page</h1>');
+    pages = await serveTestPages({
+      '/': firstPage,
+      '/second': htmlPage('Hermes second page', '<h1>Second page</h1>'),
+    });
+    const firstUrl = `${pages.url}/`;
+    const secondUrl = `${pages.url}/second`;
 
     await expect(navigate.execute({ url: firstUrl, waitUntil: 'load' }))
       .resolves.toMatchObject({ success: true });

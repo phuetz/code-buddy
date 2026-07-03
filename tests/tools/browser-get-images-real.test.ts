@@ -4,13 +4,17 @@ import {
   BrowserGetImagesExecuteTool,
   resetMiscInstances,
 } from '../../src/tools/registry/misc-tools.js';
+import { serveTestPages, type TestPageServer } from '../helpers/browser-test-page.js';
 
 describe('browser_get_images real Playwright integration', () => {
   const browser = new BrowserExecuteTool();
   const images = new BrowserGetImagesExecuteTool();
+  let pages: TestPageServer | undefined;
 
   afterEach(async () => {
     await browser.execute({ action: 'close' }).catch(() => {});
+    await pages?.close();
+    pages = undefined;
     resetMiscInstances();
     const { resetBrowserManager, resetBrowserTool } = await import('../../src/browser-automation/index.js');
     resetBrowserTool();
@@ -24,7 +28,7 @@ describe('browser_get_images real Playwright integration', () => {
     const svg = Buffer
       .from('<svg xmlns="http://www.w3.org/2000/svg" width="32" height="24"><rect width="32" height="24" fill="red"/></svg>')
       .toString('base64');
-    const html = encodeURIComponent(`<!doctype html>
+    pages = await serveTestPages(`<!doctype html>
       <title>Images smoke</title>
       <img src="data:image/svg+xml;base64,${svg}" alt="Hermes emblem" width="32" height="24">
       <img src="data:image/svg+xml;base64,${svg}" alt="Hidden image" style="display:none">
@@ -32,7 +36,7 @@ describe('browser_get_images real Playwright integration', () => {
 
     await expect(browser.execute({
       action: 'navigate',
-      url: `data:text/html,${html}`,
+      url: pages.url,
       waitUntil: 'load',
     })).resolves.toMatchObject({ success: true });
 

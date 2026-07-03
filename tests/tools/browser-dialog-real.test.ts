@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { BrowserDialogExecuteTool, BrowserExecuteTool, resetMiscInstances } from '../../src/tools/registry/misc-tools.js';
+import { serveTestPages, type TestPageServer } from '../helpers/browser-test-page.js';
 
 async function waitForDialog(tool: BrowserDialogExecuteTool): Promise<Array<{ id: string; message: string; type: string }>> {
   for (let attempt = 0; attempt < 20; attempt++) {
@@ -18,9 +19,12 @@ async function waitForDialog(tool: BrowserDialogExecuteTool): Promise<Array<{ id
 describe('browser_dialog real Playwright integration', () => {
   const browser = new BrowserExecuteTool();
   const dialog = new BrowserDialogExecuteTool();
+  let pages: TestPageServer | undefined;
 
   afterEach(async () => {
     await browser.execute({ action: 'close' }).catch(() => {});
+    await pages?.close();
+    pages = undefined;
     resetMiscInstances();
     const { resetBrowserManager, resetBrowserTool } = await import('../../src/browser-automation/index.js');
     resetBrowserTool();
@@ -31,8 +35,8 @@ describe('browser_dialog real Playwright integration', () => {
     await expect(browser.execute({ action: 'launch', headless: true }))
       .resolves.toMatchObject({ success: true });
 
-    const html = encodeURIComponent('<!doctype html><title>Dialog smoke</title><button>ready</button>');
-    await expect(browser.execute({ action: 'navigate', url: `data:text/html,${html}`, waitUntil: 'domcontentloaded' }))
+    pages = await serveTestPages('<!doctype html><title>Dialog smoke</title><button>ready</button>');
+    await expect(browser.execute({ action: 'navigate', url: pages.url, waitUntil: 'domcontentloaded' }))
       .resolves.toMatchObject({ success: true });
 
     await expect(browser.execute({
