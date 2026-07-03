@@ -20,6 +20,7 @@ import {
   TodoTool,
   ImageTool,
   WebSearchTool,
+  WeatherTool,
   MorphEditorTool,
 } from "../tools/index.js";
 import { ToolResult, getErrorMessage } from "../types/index.js";
@@ -54,6 +55,8 @@ export interface ToolExecutorDependencies {
   todoTool: TodoTool;
   imageTool: ImageTool;
   webSearch: WebSearchTool;
+  /** Optional — defaults to a fresh WeatherTool (no config/key needed). */
+  weather?: WeatherTool;
   checkpointManager: CheckpointManager;
   morphEditor?: MorphEditorTool | null;
 }
@@ -199,6 +202,7 @@ const TOOL_CATEGORY_MAP: Record<string, ToolCategory> = {
   // Web
   web_search: 'web',
   web_fetch: 'web',
+  weather: 'web',
   browser: 'web',
   // Planning
   create_todo_list: 'planning',
@@ -236,6 +240,7 @@ export class ToolExecutor {
   private todoTool: TodoTool;
   private imageTool: ImageTool;
   private webSearch: WebSearchTool;
+  private weather: WeatherTool;
   private checkpointManager: CheckpointManager;
   private morphEditor?: MorphEditorTool | null;
 
@@ -264,6 +269,7 @@ export class ToolExecutor {
     this.todoTool = deps.todoTool;
     this.imageTool = deps.imageTool;
     this.webSearch = deps.webSearch;
+    this.weather = deps.weather ?? new WeatherTool();
     this.checkpointManager = deps.checkpointManager;
     this.morphEditor = deps.morphEditor;
 
@@ -448,6 +454,15 @@ export class ToolExecutor {
           freshness: args.freshness as string | undefined,
           provider: args.provider as string | undefined,
         } as import('../tools/web-search.js').WebSearchOptions);
+
+      case "weather":
+        // Live dispatch goes through ToolHandler→FormalToolRegistry
+        // (WeatherExecuteTool); this keeps the legacy executor in parity.
+        return await this.weather.getWeather(
+          args.location as string,
+          args.days as number | undefined,
+          args.units as 'metric' | 'imperial' | undefined,
+        );
 
       case "web_fetch":
         return await this.webSearch.fetchPage(args.url as string);

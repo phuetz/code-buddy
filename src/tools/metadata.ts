@@ -217,6 +217,15 @@ export const TOOL_METADATA: ToolMetadata[] = [
     fleetSafe: true,
   },
   {
+    name: 'weather',
+    category: 'web',
+    keywords: ['weather', 'météo', 'meteo', 'forecast', 'prévisions', 'previsions', 'température', 'temperature', 'pluie', 'neige', 'vent'],
+    priority: 8,
+    description: 'Current weather and forecast for a city via Open-Meteo (no API key)',
+    // Read-only (public weather API) — answerable under the plan posture.
+    fleetSafe: true,
+  },
+  {
     name: 'web_fetch',
     category: 'web',
     keywords: ['fetch', 'url', 'website', 'page', 'download', 'http', 'https', 'link', 'read'],

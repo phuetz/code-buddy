@@ -8,7 +8,7 @@
 
 import type { ToolResult } from '../../types/index.js';
 import type { ITool, ToolSchema, IToolMetadata, IValidationResult, ToolCategoryType } from './types.js';
-import { WebSearchTool } from '../index.js';
+import { WebSearchTool, WeatherTool } from '../index.js';
 
 // ============================================================================
 // Shared WebSearchTool Instance
@@ -207,6 +207,87 @@ export class WebFetchTool implements ITool {
 }
 
 // ============================================================================
+// WeatherExecuteTool
+// ============================================================================
+
+// Lazy singleton — same lifecycle pattern as the web-search instance above.
+let weatherInstance: WeatherTool | null = null;
+function getWeather(): WeatherTool {
+  if (!weatherInstance) weatherInstance = new WeatherTool();
+  return weatherInstance;
+}
+
+/**
+ * WeatherExecuteTool - ITool adapter for the real Open-Meteo weather tool.
+ */
+export class WeatherExecuteTool implements ITool {
+  readonly name = 'weather';
+  readonly description =
+    'Current weather and forecast for a city via Open-Meteo (no API key). Use for weather/météo/forecast questions.';
+
+  async execute(input: Record<string, unknown>): Promise<ToolResult> {
+    return await getWeather().getWeather(
+      input.location as string,
+      input.days as number | undefined,
+      input.units as 'metric' | 'imperial' | undefined,
+    );
+  }
+
+  getSchema(): ToolSchema {
+    return {
+      name: this.name,
+      description: this.description,
+      parameters: {
+        type: 'object',
+        properties: {
+          location: {
+            type: 'string',
+            description: "City name as the user said it (e.g. 'Paris', 'La Roche-sur-Yon')",
+          },
+          days: {
+            type: 'number',
+            description: 'Forecast days 1-7 (default 1 = today only)',
+            default: 1,
+          },
+          units: {
+            type: 'string',
+            description: "Units: 'metric' (default, °C) or 'imperial' (°F)",
+          },
+        },
+        required: ['location'],
+      },
+    };
+  }
+
+  validate(input: unknown): IValidationResult {
+    if (typeof input !== 'object' || input === null) {
+      return { valid: false, errors: ['Input must be an object'] };
+    }
+    const data = input as Record<string, unknown>;
+    if (typeof data.location !== 'string' || data.location.trim() === '') {
+      return { valid: false, errors: ['location must be a non-empty string'] };
+    }
+    return { valid: true };
+  }
+
+  getMetadata(): IToolMetadata {
+    return {
+      name: this.name,
+      description: this.description,
+      category: 'web' as ToolCategoryType,
+      keywords: ['weather', 'météo', 'meteo', 'forecast', 'prévisions', 'température', 'temperature'],
+      priority: 8,
+      modifiesFiles: false,
+      makesNetworkRequests: true,
+    };
+  }
+
+  isAvailable(): boolean {
+    return true;
+  }
+}
+
+// ============================================================================
 // Factory Function
 // ============================================================================
 
@@ -217,5 +298,6 @@ export function createWebTools(): ITool[] {
   return [
     new WebSearchExecuteTool(),
     new WebFetchTool(),
+    new WeatherExecuteTool(),
   ];
 }

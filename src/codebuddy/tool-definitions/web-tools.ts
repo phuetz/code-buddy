@@ -127,6 +127,38 @@ export const BROWSER_TOOL: CodeBuddyTool = {
   },
 };
 
+// Weather tool — real data via Open-Meteo (no API key), replaces the old
+// hardcoded weather card inside web_search.
+export const WEATHER_TOOL: CodeBuddyTool = {
+  type: "function",
+  function: {
+    name: "weather",
+    description:
+      "Get current weather and forecast for a city via Open-Meteo (no API key). " +
+      "Returns temperature, feels-like, sky condition, wind and humidity, plus a daily forecast. " +
+      "ALWAYS use this tool (never web_search) for weather/météo/forecast questions.",
+    parameters: {
+      type: "object",
+      properties: {
+        location: {
+          type: "string",
+          description: "City name as the user said it (e.g. 'Paris', 'La Roche-sur-Yon')",
+        },
+        days: {
+          type: "number",
+          description: "Forecast days 1-7 (default 1 = today only)",
+        },
+        units: {
+          type: "string",
+          enum: ["metric", "imperial"],
+          description: "Units (default metric: °C, km/h)",
+        },
+      },
+      required: ["location"],
+    },
+  },
+};
+
 /**
  * All web tools as an array
  */
@@ -134,5 +166,6 @@ export const WEB_TOOLS: CodeBuddyTool[] = [
   WEB_SEARCH_TOOL,
   WEB_FETCH_TOOL,
   WEB_EXTRACT_TOOL,
+  WEATHER_TOOL,
   // BROWSER_TOOL omitted — superseded by the richer browser-tools.ts (40+ actions)
 ];

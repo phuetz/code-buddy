@@ -382,7 +382,7 @@ describe('PermissionModeManager — Phase T1', () => {
     // source of truth, ~41 tools).
     it('allows registry read-only tools (web_search/web_fetch/list_directory) in plan mode', () => {
       const m = new PermissionModeManager({ mode: 'plan' });
-      for (const tool of ['web_search', 'web_fetch', 'list_directory']) {
+      for (const tool of ['web_search', 'web_fetch', 'list_directory', 'weather']) {
         expect(m.checkPermission(tool, tool).allowed, tool).toBe(true);
       }
     });

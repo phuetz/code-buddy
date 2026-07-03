@@ -9,6 +9,7 @@ export {
   type UnifiedSearchResult,
 } from "./search.js";
 export { WebSearchTool } from "./web-search.js";
+export { WeatherTool } from "./weather.js";
 export { ImageTool, type ImageInput, type ProcessedImage } from "./image-tool.js";
 export { MorphEditorTool } from "./morph-editor.js";
 export { ReasoningTool } from "./reasoning-tool.js";
