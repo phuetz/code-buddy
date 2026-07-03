@@ -136,6 +136,7 @@ import { registerAuditIpcHandlers } from './ipc/audit-ipc';
 import { registerPersonaIpcHandlers } from './ipc/persona-ipc';
 import { registerSessionInsightsIpcHandlers } from './ipc/session-insights-ipc';
 import { registerPluginsIpcHandlers } from './ipc/plugins-ipc';
+import { registerTestRunnerIpcHandlers } from './ipc/test-runner-ipc';
 import { ConfigExportService } from './config/config-export-service';
 import { KnowledgeService } from './knowledge/knowledge-service';
 import { NotificationBridge } from './notification/notification-bridge';
@@ -4979,75 +4980,8 @@ ipcMain.handle('remote-backend.getConfig', async () => {
   return { url: cfg.url, autoConnect: cfg.autoConnect, hasToken: !!cfg.token };
 });
 
-// Test runner — Claude Cowork parity Phase 3 step 12
-ipcMain.handle('test.detect', async () => {
-  try {
-    const { getTestRunnerBridge } = await import('./testing/test-runner-bridge');
-    return await getTestRunnerBridge().detectFramework();
-  } catch (err) {
-    logError('[test.detect] failed:', err);
-    return null;
-  }
-});
-
-ipcMain.handle('test.run', async (_event, files?: string[]) => {
-  try {
-    const { getTestRunnerBridge } = await import('./testing/test-runner-bridge');
-    return await getTestRunnerBridge().run(files ?? []);
-  } catch (err) {
-    logError('[test.run] failed:', err);
-    return null;
-  }
-});
-
-ipcMain.handle('test.catalog', async () => {
-  try {
-    const { getTestRunnerBridge } = await import('./testing/test-runner-bridge');
-    return getTestRunnerBridge().getCatalog();
-  } catch (err) {
-    logError('[test.catalog] failed:', err);
-    return [];
-  }
-});
-
-ipcMain.handle('test.runCatalogItem', async (_event, id: string) => {
-  try {
-    const { getTestRunnerBridge } = await import('./testing/test-runner-bridge');
-    return await getTestRunnerBridge().runCatalogItem(id);
-  } catch (err) {
-    logError('[test.runCatalogItem] failed:', err);
-    return null;
-  }
-});
-
-ipcMain.handle('test.runFailing', async () => {
-  try {
-    const { getTestRunnerBridge } = await import('./testing/test-runner-bridge');
-    return await getTestRunnerBridge().runFailing();
-  } catch (err) {
-    logError('[test.runFailing] failed:', err);
-    return null;
-  }
-});
-
-ipcMain.handle('test.cancel', async () => {
-  try {
-    const { getTestRunnerBridge } = await import('./testing/test-runner-bridge');
-    getTestRunnerBridge().cancel();
-    return { success: true };
-  } catch (_err) {
-    return { success: false };
-  }
-});
-
-ipcMain.handle('test.getState', async () => {
-  try {
-    const { getTestRunnerBridge } = await import('./testing/test-runner-bridge');
-    return getTestRunnerBridge().getState();
-  } catch (_err) {
-    return null;
-  }
-});
+// Test runner — Claude Cowork parity Phase 3 step 12 — extracted to ipc/test-runner-ipc.ts
+registerTestRunnerIpcHandlers();
 
 // Persona switcher — Claude Cowork parity Phase 3 step 11 — extracted to ipc/persona-ipc.ts
 registerPersonaIpcHandlers();
