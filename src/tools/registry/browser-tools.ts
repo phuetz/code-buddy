@@ -10,12 +10,10 @@ import { BrowserTool } from '../browser/playwright-tool.js';
 import { BrowserExecuteTool } from './misc-tools.js';
 
 // ============================================================================
-// Shared BrowserTool Instance
+// Shared browser session — ALL adapters below go through the same
+// BrowserManager (Layer B). The legacy playwright-tool BrowserTool is only
+// referenced for reset (older code may still hold an instance).
 // ============================================================================
-
-function getBrowser(): BrowserTool {
-  return BrowserTool.getInstance();
-}
 
 const hermesBrowser = new BrowserExecuteTool();
 
@@ -64,12 +62,10 @@ export class BrowserLaunchTool implements ITool {
   async execute(input: Record<string, unknown>): Promise<ToolResult> {
     const headless = input.headless !== false; // Default to true
 
-    try {
-      await getBrowser().launch({ headless });
-      return { success: true, output: `Browser launched successfully (headless: ${headless}).` };
-    } catch (error) {
-      return { success: false, error: `Failed to launch browser: ${error instanceof Error ? error.message : String(error)}` };
-    }
+    // Same BrowserManager session as browser_navigate/click/snapshot —
+    // browser_launch used to open a SEPARATE legacy BrowserTool instance
+    // that none of the other adapters saw.
+    return executeHermesBrowser({ action: 'launch', headless });
   }
 
   getSchema(): ToolSchema {
@@ -88,7 +84,7 @@ export class BrowserLaunchTool implements ITool {
     };
   }
 
-  validate(input: unknown): IValidationResult {
+  validate(_input: unknown): IValidationResult {
     return { valid: true };
   }
 
@@ -505,28 +501,34 @@ export class BrowserActionTool implements ITool {
     const action = input.action as string;
     const selector = input.selector as string;
     const value = input.value as string;
-    
-    try {
-      if (!getBrowser().isLaunched()) return { success: false, error: 'Browser is not launched.' };
 
-      switch (action) {
-        case 'click':
-          await getBrowser().click(selector);
-          return { success: true, output: `Clicked element: ${selector}` };
-        case 'type':
-          await getBrowser().type(selector, value);
-          return { success: true, output: `Typed into element: ${selector}` };
-        case 'html':
-          const html = await getBrowser().getHtml();
-          return { success: true, output: html.substring(0, 10000) + (html.length > 10000 ? '\\n... (truncated)' : '') };
-        case 'screenshot':
-          const path = await getBrowser().screenshot();
-          return { success: true, output: `Screenshot saved to ${path}` };
-        default:
-          return { success: false, error: `Unknown action: ${action}` };
+    // Delegates to the shared BrowserManager session (same instance as
+    // browser_navigate/click/snapshot). Selector-based click/type are
+    // shimmed through evaluate — the ref-based `browser` tool is the
+    // preferred path for interaction.
+    switch (action) {
+      case 'click': {
+        if (!selector) return { success: false, error: 'selector is required for click' };
+        const result = await executeHermesBrowser({
+          action: 'evaluate',
+          expression: `(() => { const el = document.querySelector(${JSON.stringify(selector)}); if (!el) throw new Error('No element matches selector: ' + ${JSON.stringify(selector)}); el.click(); return 'clicked'; })()`,
+        });
+        return result.success ? { success: true, output: `Clicked element: ${selector}` } : result;
       }
-    } catch (error) {
-      return { success: false, error: `Browser action failed: ${error instanceof Error ? error.message : String(error)}` };
+      case 'type': {
+        if (!selector) return { success: false, error: 'selector is required for type' };
+        const result = await executeHermesBrowser({
+          action: 'evaluate',
+          expression: `(() => { const el = document.querySelector(${JSON.stringify(selector)}); if (!el) throw new Error('No element matches selector: ' + ${JSON.stringify(selector)}); el.focus(); el.value = ${JSON.stringify(value ?? '')}; el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true })); return 'typed'; })()`,
+        });
+        return result.success ? { success: true, output: `Typed into element: ${selector}` } : result;
+      }
+      case 'html':
+        return executeHermesBrowser({ action: 'get_content' });
+      case 'screenshot':
+        return executeHermesBrowser({ action: 'screenshot' });
+      default:
+        return { success: false, error: `Unknown action: ${action}` };
     }
   }
 
