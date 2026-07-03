@@ -628,13 +628,18 @@ const FEATURES: HermesParityFeature[] = [
       'verified job shape (5-field cron + agentTurn payload only) and the enabled flag is carried so a disabled OpenClaw ' +
       'job is never silently activated after import. Full real round-trip proven: dry-run plan + --apply landed ' +
       'mcpServers.filesystem, a disabled cronJobs entry, and the appended memory block in a throwaway target. ' +
-      'Regression-locked with sanitized real-shape fixtures (incl. a real-DDL sqlite fixture).',
+      'Regression-locked with sanitized real-shape fixtures (incl. a real-DDL sqlite fixture). ' +
+      'ADDENDUM (2026-07-03, same day): the legacy pre-sqlite `cron/jobs.json` file reader is now written too — ' +
+      'not blind: its shape ({version:1, jobs:[...]}, same job objects as the sqlite job_json) was verified against ' +
+      'OpenClaw\'s OWN migration reader (loadLegacyCronStoreForMigration/saveCronJobsStore in the installed 2026.6.1 ' +
+      'package\'s doctor-cron module). collectClawCronJobs now covers all three storage generations: config arrays ' +
+      '-> state DB (authoritative once populated) -> legacy file. Also: the live node.pair.list bridge check passes ' +
+      'now that the paired device holds operator.pairing (validate-upstream --apply: 8/8 checks).',
     nextWork:
-      'Not `covered` because two long-tail readers stay honestly unverified for lack of source data: the legacy ' +
-      'pre-sqlite `cron/jobs.json` file store (this install migrated straight to the state DB; the reader is not ' +
-      'written blind) and a migratable memory-backend config (no such concept in the 2026.6.x openclaw.json — the ' +
-      'memory_backend skip is correct, legacy-only). identityBaseDirs intentionally ignores a workspace resolving ' +
-      'outside the OpenClaw home (safety) — revisit if a real out-of-tree workspace appears.',
+      'Not `covered` because one long-tail reader stays honestly unverified for lack of source data anywhere: a ' +
+      'migratable memory-backend config (no such concept in the 2026.6.x openclaw.json — the memory_backend skip is ' +
+      'correct, legacy-clawdbot-only, fixture-tested but never seen on a real install). identityBaseDirs intentionally ' +
+      'ignores a workspace resolving outside the OpenClaw home (safety) — revisit if a real out-of-tree workspace appears.',
   },
 ];
 

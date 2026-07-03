@@ -441,10 +441,45 @@ export function readClawStateCronJobs(home: string): ClawCronJobEntry[] | null {
 }
 
 /**
+ * Read cron jobs from the legacy pre-sqlite file store, `<home>/cron/jobs.json`.
+ *
+ * Shape verified against OpenClaw's OWN migration reader
+ * (`loadLegacyCronStoreForMigration` / `saveCronJobsStore` in the 2026.6.1
+ * package's doctor-cron module): `{ version: 1, jobs: [...] }` where each job
+ * is the SAME object shape later persisted to `state/openclaw.sqlite` as
+ * `job_json` — so entries map through `mapClawStateCronJob`. A bare top-level
+ * array is tolerated defensively. Returns `null` when the file is absent or
+ * unparseable.
+ */
+export function readClawCronJobsFile(home: string): ClawCronJobEntry[] | null {
+  const filePath = path.join(home, 'cron', 'jobs.json');
+  if (!fs.existsSync(filePath)) return null;
+  try {
+    const parsed: unknown = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+    const jobs = Array.isArray(parsed)
+      ? parsed
+      : parsed && typeof parsed === 'object' && Array.isArray((parsed as Record<string, unknown>).jobs)
+        ? ((parsed as Record<string, unknown>).jobs as unknown[])
+        : null;
+    if (!jobs) return null;
+    const out: ClawCronJobEntry[] = [];
+    for (const job of jobs) {
+      const mapped = mapClawStateCronJob(job);
+      if (mapped) out.push(mapped);
+    }
+    return out;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Collect cron jobs from every known OpenClaw storage generation: the legacy
  * config arrays (clawdbot/moltbot `cronJobs`/`cron`/`scheduler.jobs`) first,
- * then the 2026.6.x gateway state DB. Returns the jobs plus a human-readable
- * source tag for plan entries.
+ * then the 2026.6.x gateway state DB (authoritative once populated — the
+ * product's doctor migrates and archives the file store into it), then the
+ * legacy pre-sqlite `cron/jobs.json` file. Returns the jobs plus a
+ * human-readable source tag for plan entries.
  */
 export function collectClawCronJobs(
   home: string,
@@ -455,6 +490,10 @@ export function collectClawCronJobs(
   const fromState = readClawStateCronJobs(home);
   if (fromState && fromState.length > 0) {
     return { jobs: fromState, source: 'state:openclaw.sqlite#cron_jobs' };
+  }
+  const fromFile = readClawCronJobsFile(home);
+  if (fromFile && fromFile.length > 0) {
+    return { jobs: fromFile, source: 'file:cron/jobs.json' };
   }
   return { jobs: [], source: 'none' };
 }

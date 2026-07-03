@@ -13,6 +13,7 @@ import {
   mapClawCronJobs,
   mapClawStateCronJob,
   readClawStateCronJobs,
+  readClawCronJobsFile,
   collectClawCronJobs,
   clawMcpServers,
   mapClawCommandAllowlist,
@@ -661,6 +662,44 @@ describe('hermes claw migrate (real)', () => {
       expect(jobs).toEqual([
         { name: 'weekly-report', schedule: '0 9 * * 1', task: 'Send the weekly report', enabled: true },
       ]);
+    });
+
+    it('reads the legacy pre-sqlite cron/jobs.json file store ({version:1, jobs:[...]})', () => {
+      // Shape verified against OpenClaw's own migration reader (doctor-cron
+      // `loadLegacyCronStoreForMigration` / `saveCronJobsStore`): the file
+      // carries the SAME job objects later persisted to sqlite as job_json.
+      const home = path.join(tmp, '.openclaw-legacy-file');
+      fs.ensureDirSync(path.join(home, 'cron'));
+      fs.writeJsonSync(path.join(home, 'cron', 'jobs.json'), {
+        version: 1,
+        jobs: [
+          {
+            id: 'dddd4444', name: 'legacy-file-job', enabled: false,
+            schedule: { kind: 'cron', expr: '15 7 * * *' },
+            payload: { kind: 'agentTurn', message: 'From the legacy file store' },
+          },
+          {
+            id: 'eeee5555', name: 'legacy-one-shot', enabled: true,
+            schedule: { kind: 'at', at: '2026-07-04T09:00:00+02:00' },
+            payload: { kind: 'agentTurn', message: 'dropped (not a cron kind)' },
+          },
+        ],
+      });
+      expect(readClawCronJobsFile(home)).toEqual([
+        { name: 'legacy-file-job', schedule: '15 7 * * *', task: 'From the legacy file store', enabled: false },
+      ]);
+      // No config array, no state DB -> collect falls back to the file store.
+      const collected = collectClawCronJobs(home, {});
+      expect(collected.source).toBe('file:cron/jobs.json');
+      expect(collected.jobs.map((j) => j.name)).toEqual(['legacy-file-job']);
+    });
+
+    it('returns null for an absent or malformed legacy file (never throws)', () => {
+      expect(readClawCronJobsFile(path.join(tmp, 'no-such-home'))).toBeNull();
+      const home = path.join(tmp, '.openclaw-legacy-bad');
+      fs.ensureDirSync(path.join(home, 'cron'));
+      fs.writeFileSync(path.join(home, 'cron', 'jobs.json'), '{not json');
+      expect(readClawCronJobsFile(home)).toBeNull();
     });
 
     it.skipIf(!sqliteAvailable)('collectClawCronJobs prefers legacy config arrays, then falls back to the state DB', () => {

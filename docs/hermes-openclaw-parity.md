@@ -45,8 +45,9 @@ against live installs: Hermes Agent `v0.16.0`, OpenClaw `2026.6.1`.
   populated live install (§4). Nothing was ever flipped on a mock.
 - **Vs OpenClaw** — the gateway bridge + CLI `validate-upstream` are **validated against a live OpenClaw 2026.6.1 daemon**
   (`openclaw gateway status --json`, exitCode 0, and raw WS `protocol:4` `connect.challenge` -> signed `req(connect)` ->
-  `res` -> `req(status)` -> `res`). The optional live `node.pair.list` check is scope-gated by OpenClaw
-  (`operator.pairing`) on this paired device. Code Buddy's AI-to-AI substrate (`peer.*` + A2A/ACP/MCP) is **richer** than
+  `res` -> `req(status)` -> `res`). **The live `node.pair.list` check now passes too** (2026-07-03: the paired CLI device
+  was granted `operator.pairing`; `validate-upstream --apply` reports 8/8 checks passed incl. `pending-node-list`
+  returning a redacted summary). Code Buddy's AI-to-AI substrate (`peer.*` + A2A/ACP/MCP) is **richer** than
   OpenClaw's.
 - **The OpenClaw migrator's two schema-drift reader bugs are now fixed** (`src/agent/hermes-claw-migrate.ts`, 2026-06-08):
   the default model (`agents.defaults.model.primary`) now **imports** and the custom-provider catalog (`models.providers`)
@@ -105,7 +106,7 @@ Code Buddy absorbed OpenClaw patterns rather than forking it. AI-to-AI, it **exc
 | Gateway discovery (real 2026.6.x `openclaw.json` + `devices/paired.json` layout) | **Covered / validated 2026-06-08** | `src/openclaw/gateway-bridge.ts::discoverOpenClawGateway` |
 | CLI `validate-upstream` interop (`openclaw gateway status --json`, exitCode 0) | **Covered / validated** | `gateway-bridge.ts::validateOpenClawUpstreamCompatibility` |
 | Raw WS `protocol:4` handshake + signed paired-device auth | **Covered / live-validated 2026-06-09** — `connect.challenge`, signed device-token connect, and `status` pass against OpenClaw 2026.6.1 | `gateway-bridge.ts` |
-| Node pairing RPCs (`node.pair.list|approve|reject`) | **Covered / guarded** — current method names, safe summaries; live `node.pair.list` is blocked on this machine until OpenClaw grants `operator.pairing` | `gateway-bridge.ts` |
+| Node pairing RPCs (`node.pair.list|approve|reject`) | **Covered / live-validated 2026-07-03** — current method names, safe summaries; live `node.pair.list` passes now that the paired device holds `operator.pairing` (redacted summary returned) | `gateway-bridge.ts` |
 | Companion gateway inbox + Fleet handoff + approved reply (Telegram/Slack…) | **Covered, supervised** (local draft, never auto-dispatch) | `src/companion/gateway.ts`, `gateway-inbox.ts` |
 | Per-skill `SKILL.md` Ed25519 signatures | **Covered** (2026-06-07) | `src/skills/hub-signing.ts` |
 | Signed registry **index** + seeded official publisher key | **Covered** (2026-06-09) — well-known indexes verify `signature`/`indexSignature` over canonical JSON; official key is seed-read-only | `src/skills/hub-signing.ts`, `src/skills/hub.ts` |
@@ -145,10 +146,17 @@ it has **no shared peer task board**. OpenClaw "enterprise" modules (policy/hook
 >
 > Full real round-trip proven: dry-run plan + `--apply` into a throwaway target landed `mcpServers.filesystem`,
 > a disabled `cronJobs` entry, and the appended memory block in `.codebuddy/settings.json` /
-> `CODEBUDDY_MEMORY.md`. Regression-locked in `tests/agent/hermes-claw-migrate-real.test.ts` (56 tests) with
-> sanitized real-shape fixtures, including a real-DDL sqlite fixture. Still not `covered`: the legacy pre-sqlite
-> `cron/jobs.json` file store and a migratable memory-backend config have no source data anywhere (2026.6.x has
-> no such concepts) — those readers are not written blind, per this section's own rule.
+> `CODEBUDDY_MEMORY.md`. Regression-locked in `tests/agent/hermes-claw-migrate-real.test.ts` (58 tests) with
+> sanitized real-shape fixtures, including a real-DDL sqlite fixture.
+>
+> **Addendum (same day):** the legacy pre-sqlite `cron/jobs.json` file reader is now written too — not blind: its
+> shape (`{version: 1, jobs: [...]}`, the same job objects as the sqlite `job_json`) was **verified against
+> OpenClaw's own migration reader** (`loadLegacyCronStoreForMigration`/`saveCronJobsStore` in the installed
+> 2026.6.1 package's doctor-cron module — the product's doctor migrates that file into sqlite and archives it).
+> `collectClawCronJobs` now covers all three cron storage generations: config arrays → state DB (authoritative
+> once populated) → legacy file. Still not `covered`: a migratable memory-backend config has no source data
+> anywhere (legacy-clawdbot-only concept, fixture-tested, never seen on a real install) — that reader's
+> real-install verification stays honestly open, per this section's own rule.
 
 > **Historical (2026-06-14): the state before the flip.** The `~/.openclaw` install is now **populated** (the
 > 2026-06-08 audit ran against an empty one), so the identity/persona/skill readers could finally be exercised against
@@ -203,9 +211,10 @@ the **migrator** is a separate module and was not.)
    'claude-sonnet-4-6'`; new 2026.6.x `openclaw.json` asserts model→import of `ollama/qwen2.5:7b-instruct` + custom_providers
    archived 0600 from `models.providers`).
 3. ✅ **DONE (2026-07-03)**: MCP (`clawMcpServers`, nested `mcp.servers`), cron (`readClawStateCronJobs` +
-   `mapClawStateCronJob`, gateway state DB) and MEMORY.md readers verified against real data (see the resolution
-   note at the top of this section). Only the legacy `cron/jobs.json` file store and a migratable memory-backend
-   config remain unwritten — no source data exists anywhere to verify their shapes against.
+   `mapClawStateCronJob`, gateway state DB; plus `readClawCronJobsFile` for the legacy `cron/jobs.json` store,
+   source-verified against the product's own migration reader) and MEMORY.md readers verified (see the resolution
+   note at the top of this section). Only a migratable memory-backend config remains unverified on a real install —
+   no source data exists anywhere (legacy-clawdbot-only concept).
 4. ✅ **Manifest flipped `partial` → `covered-partial` (2026-07-03)**, per this section's own flip rule — a populated
    install now exercises the full practically-verifiable reader set.
 - Files: `src/agent/hermes-claw-migrate.ts` (readers), `src/agent/hermes-parity-manifest.ts` (note),
