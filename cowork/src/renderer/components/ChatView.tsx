@@ -230,26 +230,9 @@ export function ChatView() {
     setCurrentSearchMatch((index) => (index - 1 + searchMatches.length) % searchMatches.length);
   }, [searchMatches.length]);
 
-  // --- Real-time execution timer ---
-  const [clockNow, setClockNow] = useState(() => Date.now());
-
-  useEffect(() => {
-    const isActive = Boolean(executionClock?.startAt && executionClock.endAt === null);
-    if (!isActive) {
-      return;
-    }
-    setClockNow(Date.now());
-    const interval = setInterval(() => {
-      setClockNow(Date.now());
-    }, 100);
-    return () => clearInterval(interval);
-  }, [executionClock?.startAt, executionClock?.endAt]);
-
-  const liveElapsed =
-    executionClock?.startAt == null
-      ? 0
-      : Math.max(0, (executionClock.endAt ?? clockNow) - executionClock.startAt);
-  const timerActive = Boolean(executionClock?.startAt && executionClock.endAt === null);
+  // The real-time execution timer now lives in <LiveTimer> (inside ChatList):
+  // it owns the 100 ms tick so the running clock no longer re-renders this
+  // whole view / the message list. `executionClock` is passed straight through.
 
   // Debounced scroll function to prevent scroll conflicts
   const scrollToBottom = useRef((behavior: ScrollBehavior = 'auto', immediate: boolean = false) => {
@@ -965,8 +948,7 @@ export function ChatView() {
           hasActiveTurn={hasActiveTurn}
           partialMessage={partialMessage}
           partialThinking={partialThinking}
-          liveElapsed={liveElapsed}
-          timerActive={timerActive}
+          executionClock={executionClock}
           messagesEndRef={messagesEndRef}
           onEditMessage={handleEditMessage}
           onRegenerateMessage={handleRegenerateMessage}
