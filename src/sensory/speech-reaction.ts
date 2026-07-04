@@ -898,8 +898,11 @@ async function transcribeWavWithSherpaRustRaw(wav: string): Promise<string> {
   return transcribeWavWithSherpaRustWorker(wav, bin, resolveParakeetModelDir(), sherpaRustThreads());
 }
 
-async function transcribeWavRaw(wav: string): Promise<string> {
-  const engine = resolveSpeechRecognitionEngine();
+async function transcribeWavRaw(wav: string, engineOverride?: SpeechRecognitionEngine): Promise<string> {
+  // `engineOverride` lets ONE call path (e.g. long/video transcription) prefer a faster
+  // engine WITHOUT touching the global `CODEBUDDY_SPEECH_ENGINE` default that the
+  // companion/sensory hot paths read. Unset → the env-driven resolution (unchanged).
+  const engine = engineOverride ?? resolveSpeechRecognitionEngine();
   if (engine === 'faster-whisper') {
     return transcribeWavWithFasterWhisperRaw(wav);
   }
@@ -952,9 +955,12 @@ async function transcribeWavRaw(wav: string): Promise<string> {
 }
 
 /** Default transcriber: local faster-whisper (base), best-effort, $0. Exported so the
- *  push-to-talk CLI path (`buddy voice`) transcribes through the exact same STT as the daemon. */
-export async function transcribeWav(wav: string): Promise<string> {
-  return normalizeSpeechTranscript(await transcribeWavRaw(wav)).text;
+ *  push-to-talk CLI path (`buddy voice`) transcribes through the exact same STT as the daemon.
+ *  `engineOverride` (additive, back-compat with the `Transcriber` type) lets a specific caller
+ *  pin/prefer an engine for its call only — e.g. the long/video path passes `auto` to lean on
+ *  the in-process Rust sherpa-rs engine — without changing the global STT default. */
+export async function transcribeWav(wav: string, engineOverride?: SpeechRecognitionEngine): Promise<string> {
+  return normalizeSpeechTranscript(await transcribeWavRaw(wav, engineOverride)).text;
 }
 
 export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => void {

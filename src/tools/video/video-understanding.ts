@@ -34,7 +34,7 @@ import {
   type DownloadResult,
   type VideoDownloadResult,
 } from './media-fetch.js';
-import { transcribeLong, type TimedSegment, type LongTranscribeOptions } from './long-transcribe.js';
+import { transcribeLong, describeVideoSttEngine, type TimedSegment, type LongTranscribeOptions } from './long-transcribe.js';
 import type { SampledFrame, FrameSampleDeps } from './frame-sample.js';
 import type { FrameDedupDeps } from './frame-dedup.js';
 import type { DescribeFrameDeps } from './describe-frame.js';
@@ -547,7 +547,11 @@ export async function understandVideo(
 
   const visualRendered = visual ? renderVisual(visual) : '';
   const cloudRendered = cloud ? renderCloud(cloud) : '';
-  const header = `# Transcript\nsource: ${source}\nmethod: ${method}\nsegments: ${segments.length}\n${visual ? `visual: ${visual.framesDistinct}/${visual.framesSampled} frames\n` : ''}${cloud ? `cloud: gemini${cloud.answer ? '' : ' (dégradé)'}\n` : ''}${input.question ? `question: ${input.question}\n` : ''}`;
+  // Debug metadata (persisted header only — `output` is left byte-identical). When a local-STT
+  // method ran, record which engine the video path preferred, so a slow/empty transcript can be
+  // traced to the engine (sherpa-rs vs faster-whisper). Captions carry no STT, so it's omitted.
+  const sttLine = method === 'youtube-captions' ? '' : `stt: ${describeVideoSttEngine()}\n`;
+  const header = `# Transcript\nsource: ${source}\nmethod: ${method}\n${sttLine}segments: ${segments.length}\n${visual ? `visual: ${visual.framesDistinct}/${visual.framesSampled} frames\n` : ''}${cloud ? `cloud: gemini${cloud.answer ? '' : ' (dégradé)'}\n` : ''}${input.question ? `question: ${input.question}\n` : ''}`;
   try {
     const visualBody = visualRendered ? `${rendered}\n\n## Visuel (ce qui est montré)\n${visualRendered}\n` : `${rendered}\n`;
     const body = cloudRendered ? `${cloudRendered}\n\n${visualBody}` : visualBody;

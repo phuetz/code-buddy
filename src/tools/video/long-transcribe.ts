@@ -27,7 +27,7 @@ import { mkdtemp, readdir, rm } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { logger } from '../../utils/logger.js';
-import type { Transcriber } from '../../sensory/speech-reaction.js';
+import type { Transcriber, SpeechRecognitionEngine } from '../../sensory/speech-reaction.js';
 
 /** A transcribed span of audio with real timestamps. */
 export interface TimedSegment {
@@ -39,6 +39,14 @@ export interface TimedSegment {
 export interface LongTranscribeOptions {
   /** Injectable STT (default: `transcribeWav` from speech-reaction, lazy-loaded). */
   transcriber?: Transcriber;
+  /**
+   * STT engine PREFERENCE for the DEFAULT transcriber (ignored when `transcriber` is supplied).
+   * Default: `resolveVideoSttEngine()` — `auto` (which resolves to the in-process Rust sherpa-rs
+   * engine when its binary is built: ~ms/chunk vs faster-whisper's ~500 ms+, and the real fix for
+   * the >20 s-chunk silent-drop) UNLESS the user pinned `CODEBUDDY_SPEECH_ENGINE`, which is
+   * honoured verbatim. Fallback to faster-whisper is automatic inside `auto`.
+   */
+  engine?: SpeechRecognitionEngine;
   /**
    * Target chunk length in seconds. Default: derived from the STT worker timeout budget
    * (`defaultChunkSec()`, ~15 s for the 20 s default) so a spoken chunk never overruns the
@@ -78,6 +86,37 @@ export function defaultChunkSec(): number {
   const budgetMs = Number.isFinite(raw) && raw > 0 ? raw : DEFAULT_WORKER_TIMEOUT_MS;
   const sec = Math.floor((budgetMs / 1000) * CHUNK_BUDGET_FRACTION);
   return Math.max(MIN_DEFAULT_CHUNK_SEC, Math.min(MAX_DEFAULT_CHUNK_SEC, sec));
+}
+
+/**
+ * Resolve the STT engine PREFERENCE for the long/video transcription path.
+ *
+ * When the user has NOT pinned `CODEBUDDY_SPEECH_ENGINE`, the video path prefers `auto`, which
+ * resolves (inside `transcribeWav`/`transcribeWavRaw`) to the in-process Rust sherpa-rs engine
+ * when its binary is built — ~ms per chunk vs the python faster-whisper's ~500 ms+ and heavy
+ * model load. sherpa-rs decodes a chunk in a handful of ms, which is the true fix for the
+ * silent-drop hazard (a chunk whose decode overran the 20 s worker timeout was dropped as empty).
+ *
+ * When the user DID pin the engine, `undefined` is returned so `transcribeWav` honours the env
+ * verbatim (the user commands). This does NOT change the GLOBAL STT default: the companion/sensory
+ * hot paths keep reading `CODEBUDDY_SPEECH_ENGINE` (faster-whisper unless opted in) — only this
+ * batch/video path leans on the faster engine. Fallback to faster-whisper is automatic inside
+ * `auto` (sherpa-rs binary/model absent → next engine), so the path never hard-fails. Pure.
+ */
+export function resolveVideoSttEngine(): SpeechRecognitionEngine | undefined {
+  const pinned = process.env.CODEBUDDY_SPEECH_ENGINE?.trim();
+  return pinned ? undefined : 'auto';
+}
+
+/**
+ * Human-readable label of the STT engine PREFERENCE the video path applies (for the debug
+ * header of `understandVideo`). Reflects `resolveVideoSttEngine()`: the pinned
+ * `CODEBUDDY_SPEECH_ENGINE` when set, else `auto` (sherpa-rs when built, else faster-whisper).
+ * Describes the DEFAULT transcriber's choice; an injected transcriber bypasses it.
+ */
+export function describeVideoSttEngine(): string {
+  const pinned = process.env.CODEBUDDY_SPEECH_ENGINE?.trim();
+  return pinned || 'auto (sherpa-rs si buildé, sinon faster-whisper)';
 }
 
 function runProcess(
@@ -145,8 +184,17 @@ export async function transcribeLong(
   const ffprobeBin = options.ffprobeBin ?? 'ffprobe';
   const spawn = options.spawn ?? realSpawn;
 
-  const transcriber: Transcriber = options.transcriber
-    ?? (await import('../../sensory/speech-reaction.js')).transcribeWav;
+  // Default transcriber: the daemon's `transcribeWav`, but with a video-path engine PREFERENCE
+  // (`resolveVideoSttEngine()` → `auto`, i.e. the fast in-process Rust sherpa-rs when built, else
+  // faster-whisper) so long transcription runs on the fast engine unless the user pinned
+  // `CODEBUDDY_SPEECH_ENGINE`. An injected transcriber (tests / callers) bypasses this entirely.
+  // Kept as a lazy import so the STT module only loads when we actually need the default engine.
+  let transcriber = options.transcriber;
+  if (!transcriber) {
+    const { transcribeWav } = await import('../../sensory/speech-reaction.js');
+    const engine = options.engine ?? resolveVideoSttEngine();
+    transcriber = (wav: string): Promise<string> => transcribeWav(wav, engine);
+  }
 
   let workDir = options.workDir;
   let ownWorkDir = false;
