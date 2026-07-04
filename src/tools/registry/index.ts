@@ -363,6 +363,13 @@ export {
   resetBugFinderInstances,
 } from './bug-finder-tools.js';
 
+// Tool Adapters - Document Generator (generate_document)
+export {
+  GenerateDocumentExecuteTool,
+  createDocumentGeneratorTools,
+  resetDocumentGeneratorInstances,
+} from './document-generator-tools.js';
+
 // Tool Adapters - Merge Conflict (resolve_conflicts)
 export {
   ResolveConflictsExecuteTool,

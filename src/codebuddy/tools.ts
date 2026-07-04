@@ -53,6 +53,8 @@ import {
   ADVISOR_TOOLS,
   VERIFY_TOOLS,
   DELEGATE_AGENT_TOOLS,
+  BUG_FINDER_TOOLS,
+  DOCUMENT_GENERATOR_TOOLS,
   ASK_USER_QUESTION_TOOLS,
   EXIT_PLAN_MODE_TOOLS,
   CODEBASE_REPLACE_TOOLS,
@@ -115,6 +117,8 @@ export function getBuiltinToolNames(): string[] {
     ADVISOR_TOOLS,
     VERIFY_TOOLS,
     DELEGATE_AGENT_TOOLS,
+    BUG_FINDER_TOOLS,
+    DOCUMENT_GENERATOR_TOOLS,
     ASK_USER_QUESTION_TOOLS,
     EXIT_PLAN_MODE_TOOLS,
     CODEBASE_REPLACE_TOOLS,
@@ -226,6 +230,14 @@ export function initializeToolRegistry(): void {
   // and SQL have no covering single-shot tool, so this closes a real capability
   // gap; the LLM bridge for the SWE agent is wired at boot (setDelegateAgentProvider).
   registerGroup(DELEGATE_AGENT_TOOLS);
+
+  // find_bugs (regex static analysis) + generate_document (PPTX/DOCX/XLSX/PDF).
+  // Both are finished features with real implementations that were exported but
+  // never added to any exposition group — dispatched by ToolHandler now, so
+  // this makes them reachable. generate_document complements the read-only
+  // `document` tool (whose own output references it).
+  registerGroup(BUG_FINDER_TOOLS);
+  registerGroup(DOCUMENT_GENERATOR_TOOLS);
 
   // AskUserQuestion tool (structured multi-option mid-task questions)
   registerGroup(ASK_USER_QUESTION_TOOLS);

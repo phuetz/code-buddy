@@ -88,4 +88,27 @@ describe('interactive dispatch ⊇ LLM exposition (anti-drift invariant)', () =>
         `the exposition groups in src/codebuddy/tools.ts): ${JSON.stringify(orphans)}`,
     ).toEqual([]);
   });
+
+  it('previously-orphaned tools now resolve through interactive dispatch', () => {
+    // These were the drift cases fixed alongside this invariant:
+    //  - firecrawl_search/scrape: exposition is env-gated (FIRECRAWL_API_KEY),
+    //    so the generic check above skips them when the key is unset — assert
+    //    the dispatch adapter is present regardless (latent-orphan guard).
+    //  - find_bugs / generate_document: real features that were exported but
+    //    never wired into interactive dispatch.
+    //  - delegate_agent: single tool reaching the specialized agents.
+    FormalToolRegistry.reset();
+    makeInteractiveHandler();
+    const dispatchable = new Set(getFormalToolRegistry().getNames());
+
+    for (const name of [
+      'firecrawl_search',
+      'firecrawl_scrape',
+      'find_bugs',
+      'generate_document',
+      'delegate_agent',
+    ]) {
+      expect(dispatchable.has(name), `${name} must be dispatchable in interactive chat`).toBe(true);
+    }
+  });
 });

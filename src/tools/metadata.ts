@@ -1233,6 +1233,15 @@ export const TOOL_METADATA: ToolMetadata[] = [
     // No fleetSafe: swe/excel-write/sql-import/archive-create can write — not peer-exposable.
   },
 
+  // Document generator (PPTX/DOCX/XLSX/PDF) — complements the read-only `document` tool
+  {
+    name: 'generate_document',
+    category: 'document' as ToolCategory,
+    keywords: ['generate', 'document', 'pptx', 'docx', 'xlsx', 'pdf', 'powerpoint', 'word', 'excel', 'slides', 'deck', 'report', 'create', 'export'],
+    priority: 6,
+    description: 'Generate professional documents (PowerPoint/Word/Excel/PDF) from markdown content'
+  },
+
   // Fleet — multi-Claude orchestration via peer-RPC (Phase (d).17)
   {
     name: 'peer_delegate',

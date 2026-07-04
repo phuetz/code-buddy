@@ -93,6 +93,12 @@ import {
   // "Unknown tool" once the key was present. Registered here so interactive
   // dispatch ⊇ exposition. Inert without the key (isAvailable gates it).
   createFirecrawlTools,
+  // find_bugs (regex static analysis) + generate_document (PPTX/DOCX/XLSX/PDF)
+  // are real features now exposed to the LLM (codebuddy/tools.ts). Their
+  // adapters previously only lived in the headless registry / streaming path,
+  // so the non-streaming interactive dispatch resolved "Unknown tool".
+  createBugFinderTools,
+  createDocumentGeneratorTools,
   // delegate_agent → reaches the built-in specialized agents (pdf/excel/
   // data_analysis/sql/archive/swe). Interactive-only, mirroring the `verify`
   // delegation tool. Its LLM bridge is wired at boot via setDelegateAgentProvider.
@@ -421,6 +427,8 @@ export class ToolHandler {
       ...createXSearchTools(),
       ...createSecretsTools(),
       ...createFirecrawlTools(),
+      ...createBugFinderTools(),
+      ...createDocumentGeneratorTools(),
       ...createDelegateAgentTools(),
       // Self-improvement: the agent can author its own tools (opt-in only).
       ...(process.env.CODEBUDDY_SELF_IMPROVE === 'true' ? [createRegisterToolTool()] : []),
