@@ -37,8 +37,10 @@
  *      injected `executeCode` boundary (the Phase-2 sandbox router) with
  *      `envMode:'isolate'` set HERE — the caller cannot opt out of isolation.
  *   4. NEVER-THROWS. A failing generation degrades to a floored (failed) node —
- *      optionally retried once via a bounded, INJECTED-probability debug — and
- *      the loop keeps going, returning a partial result. It never crashes.
+ *      optionally RE-RUN once (the same code unchanged — a plain re-attempt, NOT
+ *      an LLM debug/repair; it only helps a flaky/non-deterministic failure) under
+ *      a bounded, INJECTED probability — and the loop keeps going, returning a
+ *      partial result. It never crashes.
  *   5. DECOUPLED (like Phase 1). Scoring targets the EXPERIMENT'S metric in the
  *      EXPERIMENT folder (the sandbox run dir), NEVER Code Buddy's own `src/`.
  *
@@ -123,7 +125,7 @@ export interface ExperimentLoopDeps extends ExperimentDeps {
   now: () => string;
   /** Injected monotonic wall-clock in ms, for the wall-clock hard cap. */
   clock: () => number;
-  /** Injected RNG in [0,1) for the bounded probabilistic node-debug retry. */
+  /** Injected RNG in [0,1) gating the bounded probabilistic re-attempt of a failed node. */
   random: () => number;
 }
 
@@ -148,9 +150,15 @@ export interface ExperimentBudget {
   patience?: number;
   /** Minimum best-score gain that counts as an improvement (convergence eps). Default 1e-9. */
   minImprovement?: number;
-  /** Probability of retrying a FAILED node once (bounded debug). Default 0 (off). */
+  /**
+   * Probability of RE-RUNNING a FAILED node once. NOTE: this re-executes the SAME
+   * code unchanged — it is a plain re-attempt, NOT an LLM debug/repair, so it only
+   * recovers a flaky/non-deterministic failure, never a deterministic bug. Each
+   * re-run still counts against maxExperiments. Default 0 (off); there is no CLI
+   * flag today, so the loop never re-runs unless a caller sets it programmatically.
+   */
   debugProbability?: number;
-  /** Max extra debug retries per failed node (sequential only). Default 1, clamped to [0,3]. */
+  /** Max extra re-attempts per failed node (sequential only). Default 1, clamped to [0,3]. */
   maxDebugRetries?: number;
   /** Root dir for the sandbox run dir (default `process.cwd()`). */
   rootDir?: string;
@@ -440,9 +448,9 @@ export async function runExperimentLoop(
     result.stopReason = 'exhausted';
 
     // Execute ONE candidate: author → sandboxed exec → score → decide → record.
-    // Never throws — a failure floors the node so the loop keeps going. Bounded
-    // debug retry only in the sequential path (allowRetry), where the hard cap
-    // re-check is race-free.
+    // Never throws — a failure floors the node so the loop keeps going. The bounded
+    // re-attempt (same code re-run, not a debug/repair) is enabled only in the
+    // sequential path (allowRetry), where the hard-cap re-check is race-free.
     const runCandidate = async (
       idea: ScienceIdea,
       parent: ExperimentVariantRecord | null,
@@ -481,7 +489,7 @@ export async function runExperimentLoop(
           logger.debug(`[science] experiment execution threw (floored): ${errMsg(err)}`);
         }
         if (execution && execution.ok) break;
-        // Decide whether to spend one more (bounded) debug attempt.
+        // Decide whether to spend one more (bounded) re-attempt of the SAME code.
         const canRetry =
           allowRetry &&
           attempt + 1 < maxAttempts &&
