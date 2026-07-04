@@ -49,6 +49,7 @@ import { registerMobileSupervisionIpcHandlers } from './ipc/mobile-supervision-i
 import { registerIdentityIpcHandlers } from './ipc/identity-ipc';
 import { registerDeviceIpcHandlers } from './ipc/device-ipc';
 import { registerChannelsIpcHandlers } from './ipc/channels-ipc';
+import { registerPairingIpcHandlers } from './ipc/pairing-ipc';
 import { registerUserModelIpcHandlers } from './ipc/user-model-ipc';
 import { registerCompanionIpcHandlers } from './ipc/companion-ipc';
 import { registerAutomationsIpcHandlers } from './ipc/automations-ipc';
@@ -2477,6 +2478,7 @@ registerUserModelIpcHandlers(() => projectManager);
 registerIdentityIpcHandlers(() => projectManager);
 registerDeviceIpcHandlers();
 registerChannelsIpcHandlers();
+registerPairingIpcHandlers();
 registerMobileSupervisionIpcHandlers();
 registerCompanionIpcHandlers(() => projectManager);
 registerAutomationsIpcHandlers();

@@ -4359,9 +4359,36 @@ contextBridge.exposeInMainWorld('electronAPI', {
     switch: (name: string | null) => ipcRenderer.invoke('profiles.switch', name),
   },
 
-  // Read-only per-channel connection status (configuring/sending stays on the CLI)
+  // Per-channel connection status (read-only) + Phase-5 config surface. Secrets
+  // are write-only: `setSecret` never echoes the token and `listConfig` reports
+  // `hasSecret` only — the value never crosses back to the renderer.
   channels: {
     status: () => ipcRenderer.invoke('channels.status'),
+    listConfig: (opts?: { configPath?: string }) => ipcRenderer.invoke('channels.listConfig', opts),
+    setConfig: (
+      type: string,
+      patch: { enabled?: boolean; webhookUrl?: string; allowedUsers?: string[]; allowedChannels?: string[] },
+      opts?: { configPath?: string },
+    ) => ipcRenderer.invoke('channels.setConfig', type, patch, opts),
+    setEnabled: (type: string, enabled: boolean, opts?: { configPath?: string }) =>
+      ipcRenderer.invoke('channels.setEnabled', type, enabled, opts),
+    setSecret: (type: string, token: string) => ipcRenderer.invoke('channels.setSecret', type, token),
+    deleteSecret: (type: string) => ipcRenderer.invoke('channels.deleteSecret', type),
+    removeChannel: (type: string, opts?: { configPath?: string }) =>
+      ipcRenderer.invoke('channels.removeChannel', type, opts),
+  },
+
+  // DM pairing / allowlist — "who is allowed to DM the agent" (core dm-pairing.ts).
+  pairing: {
+    status: () => ipcRenderer.invoke('pairing.status'),
+    list: () => ipcRenderer.invoke('pairing.list'),
+    pending: () => ipcRenderer.invoke('pairing.pending'),
+    approve: (channelType: string, code: string, approvedBy?: string) =>
+      ipcRenderer.invoke('pairing.approve', channelType, code, approvedBy),
+    approveDirect: (channelType: string, senderId: string, approvedBy?: string, displayName?: string) =>
+      ipcRenderer.invoke('pairing.approveDirect', channelType, senderId, approvedBy, displayName),
+    revoke: (channelType: string, senderId: string) =>
+      ipcRenderer.invoke('pairing.revoke', channelType, senderId),
   },
 
   // S6: supervision-only mobile gateway management (loopback to embedded server)
@@ -8089,6 +8116,91 @@ declare global {
             schemaVersion: 1;
           } | null;
         }>;
+        listConfig: (opts?: { configPath?: string }) => Promise<{
+          ok: boolean;
+          error?: string;
+          path: string;
+          channels: Array<{
+            type: string;
+            enabled: boolean;
+            configured: boolean;
+            hasSecret: boolean;
+            hasWebhookUrl: boolean;
+            webhookUrl?: string;
+            allowedUsers: string[];
+            allowedChannels: string[];
+            optionKeys: string[];
+            connected: boolean;
+            authenticated: boolean;
+            lastActivity?: number;
+            error?: string;
+          }>;
+          catalog: Array<{ type: string; label: string; secretLabel: string; needsSecret: boolean; supportsWebhook: boolean }>;
+        }>;
+        setConfig: (
+          type: string,
+          patch: { enabled?: boolean; webhookUrl?: string; allowedUsers?: string[]; allowedChannels?: string[] },
+          opts?: { configPath?: string },
+        ) => Promise<{ ok: boolean; error?: string }>;
+        setEnabled: (
+          type: string,
+          enabled: boolean,
+          opts?: { configPath?: string },
+        ) => Promise<{ ok: boolean; error?: string }>;
+        setSecret: (type: string, token: string) => Promise<{ ok: boolean; error?: string }>;
+        deleteSecret: (type: string) => Promise<{ ok: boolean; error?: string }>;
+        removeChannel: (type: string, opts?: { configPath?: string }) => Promise<{ ok: boolean; error?: string }>;
+      };
+      pairing: {
+        status: () => Promise<{
+          ok: boolean;
+          error?: string;
+          enabled: boolean;
+          totalApproved: number;
+          totalPending: number;
+          totalBlocked: number;
+          approvedByChannel: Record<string, number>;
+        }>;
+        list: () => Promise<{
+          ok: boolean;
+          error?: string;
+          approved: Array<{
+            channelType: string;
+            senderId: string;
+            displayName?: string;
+            approvedAt: string;
+            approvedBy: string;
+            notes?: string;
+          }>;
+        }>;
+        pending: () => Promise<{
+          ok: boolean;
+          error?: string;
+          pending: Array<{
+            code: string;
+            channelType: string;
+            senderId: string;
+            displayName?: string;
+            createdAt: string;
+            expiresAt: string;
+            attempts: number;
+          }>;
+        }>;
+        approve: (
+          channelType: string,
+          code: string,
+          approvedBy?: string,
+        ) => Promise<{ ok: boolean; error?: string; approved?: { channelType: string; senderId: string; approvedAt: string; approvedBy: string; displayName?: string } | null }>;
+        approveDirect: (
+          channelType: string,
+          senderId: string,
+          approvedBy?: string,
+          displayName?: string,
+        ) => Promise<{ ok: boolean; error?: string; approved?: { channelType: string; senderId: string; approvedAt: string; approvedBy: string; displayName?: string } | null }>;
+        revoke: (
+          channelType: string,
+          senderId: string,
+        ) => Promise<{ ok: boolean; error?: string; revoked?: boolean }>;
       };
       identityFiles: {
         list: (projectId?: string) => Promise<{
