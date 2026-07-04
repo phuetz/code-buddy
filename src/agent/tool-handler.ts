@@ -71,6 +71,22 @@ import {
   createSessionTools,
   createCodeExplorerTools,
   createScreenpipeTools,
+  // Integration/messaging/security adapters — exposed to the LLM via
+  // codebuddy/tools.ts registerGroup(...) but previously NOT dispatchable in the
+  // pure interactive path (they only lived in the headless registry/index.ts),
+  // so a live call resolved to "Unknown tool". Registered here so interactive
+  // dispatch ⊇ exposition. All these factories are inert at mount (constructors
+  // only store options; no I/O without credentials).
+  createKanbanTools,
+  createSendMessageTools,
+  createDiscordTools,
+  createHomeAssistantTools,
+  createFeishuTools,
+  createYuanbaoTools,
+  createMixtureOfAgentsTools,
+  createSpotifyTools,
+  createXSearchTools,
+  createSecretsTools,
 } from "../tools/registry/index.js";
 import type { FormalToolRegistry, IToolExecutionContext } from "../tools/registry/index.js";
 import { createRegisterToolTool } from "../tools/register-tool-handler.js";
@@ -382,6 +398,18 @@ export class ToolHandler {
       ...createSessionTools(),
       ...createCodeExplorerTools(),
       ...createScreenpipeTools(),
+      // Integration / messaging / security tools — exposed to the LLM, so they
+      // must be dispatchable in interactive chat (not only in headless/multi-agent).
+      ...createKanbanTools(),
+      ...createSendMessageTools(),
+      ...createDiscordTools(),
+      ...createHomeAssistantTools(),
+      ...createFeishuTools(),
+      ...createYuanbaoTools(),
+      ...createMixtureOfAgentsTools(),
+      ...createSpotifyTools(),
+      ...createXSearchTools(),
+      ...createSecretsTools(),
       // Self-improvement: the agent can author its own tools (opt-in only).
       ...(process.env.CODEBUDDY_SELF_IMPROVE === 'true' ? [createRegisterToolTool()] : []),
     ];

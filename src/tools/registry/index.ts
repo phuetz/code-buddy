@@ -119,6 +119,13 @@ export {
   createFeishuTools,
 } from './feishu-tools.js';
 
+// Tool Adapters - Secrets detector (scan_secrets)
+export {
+  ScanSecretsExecuteTool,
+  createSecretsTools,
+  resetSecretsInstances,
+} from './secrets-tools.js';
+
 // Tool Adapters - Cron jobs
 export {
   CronjobExecuteTool,
@@ -508,6 +515,7 @@ export async function createAllToolsAsync(): Promise<ITool[]> {
   const { createSpotifyTools } = await import('./spotify-tools.js');
   const { createXSearchTools } = await import('./x-search-tools.js');
   const { createFeishuTools } = await import('./feishu-tools.js');
+  const { createSecretsTools } = await import('./secrets-tools.js');
   const { createCronjobTools } = await import('./cronjob-tools.js');
   const { createDockerTools } = await import('./docker-tools.js');
   const { createKubernetesTools } = await import('./kubernetes-tools.js');
@@ -565,6 +573,7 @@ export async function createAllToolsAsync(): Promise<ITool[]> {
     ...createSpotifyTools(),
     ...createXSearchTools(),
     ...createFeishuTools(),
+    ...createSecretsTools(),
     ...createCronjobTools(),
     ...createDockerTools(),
     ...createKubernetesTools(),
@@ -646,6 +655,7 @@ export function registerBuiltinTools(registry: FormalToolRegistry): number {
     ...createSpotifyTools(),
     ...createXSearchTools(),
     ...createFeishuTools(),
+    ...createSecretsTools(),
     ...createCronjobTools(),
     ...createDockerTools(),
     ...createKubernetesTools(),
@@ -717,6 +727,7 @@ import { createMixtureOfAgentsTools } from './moa-tools.js';
 import { createSpotifyTools } from './spotify-tools.js';
 import { createXSearchTools } from './x-search-tools.js';
 import { createFeishuTools } from './feishu-tools.js';
+import { createSecretsTools } from './secrets-tools.js';
 import { createCronjobTools } from './cronjob-tools.js';
 import { createDockerTools } from './docker-tools.js';
 import { createKubernetesTools } from './kubernetes-tools.js';
