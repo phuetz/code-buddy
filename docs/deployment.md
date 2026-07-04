@@ -167,11 +167,18 @@ Persist `/home/codebuddy/.codebuddy` — it holds the SQLite database,
 sessions, memory, and peer-session state. Schema migrations run
 automatically at startup (see Upgrades below).
 
-> `docker-compose.yml` at the repo root targets **interactive CLI**
-> usage, not server mode. For a composed server deployment, add a
-> service that overrides the command with
-> `server --port 3000 --host 0.0.0.0` and mounts a named volume on
-> `/home/codebuddy/.codebuddy`.
+Or use Compose — [`docker-compose.yml`](../docker-compose.yml) at the repo
+root runs exactly this as a single `codebuddy` **server** service
+(`restart: unless-stopped`, named volume on `/home/codebuddy/.codebuddy`,
+`JWT_SECRET` required):
+
+```bash
+cp .env.example .env          # set JWT_SECRET + a provider key
+docker compose up -d
+```
+
+See [`install.md`](install.md) for the full one-command / Docker / npm
+install paths.
 
 ---
 

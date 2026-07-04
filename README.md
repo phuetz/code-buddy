@@ -165,15 +165,21 @@ Design, the five sense modules, the opt-in features, and the diagrams: [`buddy-s
 ## Quick Start
 
 ```bash
-# Install from npm
+# One command — installs Node if needed (no sudo), then Code Buddy
+curl -fsSL https://raw.githubusercontent.com/phuetz/code-buddy/main/install.sh | sh
+
+# …or, if you already have Node ≥ 20:
 npm install -g @phuetz/code-buddy
+
+# …or run it 24/7 in Docker (the VPS path):
+docker compose up -d          # after: cp .env.example .env && set JWT_SECRET
 
 # …or from source (newest features)
 git clone https://github.com/phuetz/code-buddy.git
 cd code-buddy && npm install && npm run build && npm link   # exposes `buddy` globally
 ```
 
-> **Requirements:** Node.js **≥ 18** for the CLI. The **Cowork desktop app needs Node ≥ 22** plus a C++ build toolchain for native modules (`better-sqlite3`). Run **`buddy doctor`** anytime to check your environment (`--fix` to auto-remediate).
+> **Requirements:** Node.js **≥ 18** for the CLI (the one-command installer provisions **≥ 20**). The **Cowork desktop app needs Node ≥ 22** plus a C++ build toolchain for native modules (`better-sqlite3`). Run **`buddy doctor`** anytime to check your environment (`--fix` to auto-remediate). Full install guide (one-command, Docker/VPS, npm): **[docs/install.md](docs/install.md)**.
 
 Then pick a brain:
 
@@ -382,6 +388,7 @@ Configure via env vars, **TOML profiles** (`[profiles.<name>]`, `buddy --profile
 
 | Document | Description |
 |:---------|:------------|
+| [Install](docs/install.md) | The three install paths — one-command `curl \| sh`, Docker/VPS (24/7), npm |
 | [Getting Started](docs/getting-started.md) | Prerequisites, install, first run, headless mode, sessions |
 | [Providers](docs/providers.md) | All 15 providers, connection profiles, model pairs, circuit breaker |
 | [Tools Reference](docs/tools-reference.md) | Tool categories, RAG selection, edit matching, `apply_patch`, streaming |
