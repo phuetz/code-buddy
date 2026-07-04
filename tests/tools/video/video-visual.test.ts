@@ -277,6 +277,49 @@ describe('fuseTranscriptWithFrames', () => {
     const fused = await fuseTranscriptWithFrames(segments, [], vi.fn(async () => 'never'));
     expect(fused[0].shown).toBeUndefined();
   });
+
+  it('describes frames directly when there are NO segments (muted screencast, #2)', async () => {
+    const frames: SampledFrame[] = [
+      { path: '/a.jpg', t: 5 },
+      { path: '/b.jpg', t: 30 },
+    ];
+    const describe = vi.fn(async (p: string) => `shown@${p}`);
+    const fused = await fuseTranscriptWithFrames([], frames, describe);
+    expect(fused).toHaveLength(2);
+    expect(fused[0]).toMatchObject({ shown: 'shown@/a.jpg', keyframeT: 5 });
+    expect(fused[1]).toMatchObject({ shown: 'shown@/b.jpg', keyframeT: 30 });
+    expect(describe).toHaveBeenCalledTimes(2);
+  });
+
+  it('returns [] when there are neither segments nor frames', async () => {
+    const fused = await fuseTranscriptWithFrames([], [], vi.fn(async () => 'never'));
+    expect(fused).toEqual([]);
+  });
+
+  it('does NOT attribute a far-off frame to a distant segment (#7)', async () => {
+    const segments = [
+      { t_start: 0, t_end: 5, said: 'early' },
+      { t_start: 600, t_end: 605, said: 'much later' },
+    ];
+    // After dedup only two early frames survive (screencast) — neither near t≈600.
+    const frames: SampledFrame[] = [
+      { path: '/early.jpg', t: 2 }, // inside segment 0
+      { path: '/still-early.jpg', t: 8 }, // ~592 s before segment 1
+    ];
+    const describe = vi.fn(async (p: string) => `shown@${p}`);
+    const fused = await fuseTranscriptWithFrames(segments, frames, describe);
+    expect(fused[0].shown).toBeTruthy(); // nearby frame attached
+    expect(fused[1].shown).toBeUndefined(); // no wrong attribution
+    expect(fused[1].keyframePath).toBeUndefined();
+  });
+
+  it('still attaches a frame just outside a short segment, within tolerance (#7 guard)', async () => {
+    // The single-frame static-screencast case (frame 5 s before a 10 s segment) must keep working.
+    const segments = [{ t_start: 10, t_end: 20, said: 'x' }];
+    const frames: SampledFrame[] = [{ path: '/f.jpg', t: 5 }];
+    const fused = await fuseTranscriptWithFrames(segments, frames, async (p) => `shown@${p}`);
+    expect(fused[0].shown).toBe('shown@/f.jpg');
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -408,6 +451,36 @@ describe('understandVideo — visual path (injected pipeline)', () => {
       expect(result.segments[0].said).toBe('speech');
     }
     expect(describeFrameFn).not.toHaveBeenCalled();
+  });
+
+  it('muted screencast + visual:true describes frames despite an empty transcript (#2)', async () => {
+    const describeFrameFn = vi.fn(async (p: string) => `SCREEN(${p})`);
+    const result = await understandVideo(
+      { source: '/videos/muted.mp4', visual: true },
+      {
+        outDir,
+        existsSync: (p) => p === '/videos/muted.mp4',
+        extractAudio: async () => ({ success: true, output: 'ok', data: { path: '/tmp/x.mp3' } }),
+        transcribeLong: async () => [], // no speech at all
+        sampleFrames: async () => [
+          { path: '/f0.jpg', t: 2 },
+          { path: '/f1.jpg', t: 40 },
+        ],
+        dedupFrames: async (f) => f,
+        describeFrame: describeFrameFn,
+      },
+    );
+    expect(isUnderstandOk(result)).toBe(true);
+    if (isUnderstandOk(result)) {
+      expect(result.segments).toHaveLength(0);
+      expect(result.visual).toBeDefined();
+      expect(result.visual!.framesDistinct).toBe(2);
+      expect(result.visual!.fused.filter((s) => s.shown)).toHaveLength(2);
+      // The visual descriptions surface in the human output (not "aucune parole détectée").
+      expect(result.output).toContain('SCREEN(/f0.jpg)');
+      expect(result.output).toContain('MONTRÉ');
+    }
+    expect(describeFrameFn).toHaveBeenCalledTimes(2);
   });
 
   it('visual on a remote source downloads the picture track (injected)', async () => {

@@ -259,9 +259,20 @@ async function defaultExtractAudio(): Promise<(filePath: string) => Promise<Tool
   return (filePath: string) => tool.extractAudio(filePath);
 }
 
+/**
+ * Minimum distance (seconds) a frame may sit OUTSIDE a segment's span and still be
+ * attributed as "shown" during it. Acts as a floor under the per-segment tolerance
+ * (`max(halfDuration, this)`) so short segments aren't over-strict, while a frame far
+ * outside the span is never wrongly credited. Screencasts can dedup down to 2–3 distinct
+ * frames, so without this bound a t=5 s frame gets attributed to a t=600 s segment.
+ */
+const MIN_KEYFRAME_ATTACH_TOLERANCE_SEC = 15;
+
 /** Pick the ONE distinct frame that best represents a transcript segment: the frame
  *  whose timestamp falls inside `[t_start, t_end]` (closest to the midpoint), else
- *  the globally nearest frame by |t − midpoint|. Returns `null` for no frames. */
+ *  the globally nearest frame by |t − midpoint| — but ONLY if it sits within a bounded
+ *  distance of the segment span (else no frame is attached, so we never mis-attribute a
+ *  far-away frame as "shown"). Returns `null` for no frames / no in-range candidate. */
 function pickKeyframe(seg: TimedSegment, frames: SampledFrame[]): SampledFrame | null {
   if (frames.length === 0) return null;
   const mid = (seg.t_start + seg.t_end) / 2;
@@ -276,6 +287,14 @@ function pickKeyframe(seg: TimedSegment, frames: SampledFrame[]): SampledFrame |
       best = f;
     }
   }
+  if (!best) return null;
+  // In-range frames always attach; an out-of-range best attaches only within tolerance.
+  const inRange = best.t >= seg.t_start && best.t <= seg.t_end;
+  if (!inRange) {
+    const gap = best.t < seg.t_start ? seg.t_start - best.t : best.t - seg.t_end;
+    const tolerance = Math.max((seg.t_end - seg.t_start) / 2, MIN_KEYFRAME_ATTACH_TOLERANCE_SEC);
+    if (gap > tolerance) return null;
+  }
   return best;
 }
 
@@ -284,13 +303,22 @@ function pickKeyframe(seg: TimedSegment, frames: SampledFrame[]): SampledFrame |
  * per segment and describe each DISTINCT chosen frame exactly once (cached by path,
  * so a static screencast shared across many segments costs one VLM call). Returns the
  * enriched `{ t_start, t_end, said, shown }` tuples. Never throws.
+ *
+ * **Muted video / silent screencast (the target use case):** when there are NO transcript
+ * segments to anchor on but distinct frames DO exist, the frames are described directly as
+ * synthetic per-frame segments (one anchor per frame timestamp) instead of returning nothing
+ * — so a screencast with no speech still yields visual descriptions.
  */
 export async function fuseTranscriptWithFrames(
   segments: TimedSegment[],
   frames: SampledFrame[],
   describe: (imagePath: string) => Promise<string>,
 ): Promise<VisualSegment[]> {
-  const chosen = segments.map((seg) => pickKeyframe(seg, frames));
+  // No transcript to anchor on, but frames exist → describe them by their own timestamps.
+  const anchors: TimedSegment[] =
+    segments.length > 0 ? segments : frames.map((f) => ({ t_start: f.t, t_end: f.t, said: '' }));
+
+  const chosen = anchors.map((seg) => pickKeyframe(seg, frames));
 
   // Describe each distinct chosen frame once.
   const cache = new Map<string, string>();
@@ -305,7 +333,7 @@ export async function fuseTranscriptWithFrames(
     cache.set(path, shown);
   }
 
-  return segments.map((seg, i) => {
+  return anchors.map((seg, i) => {
     const frame = chosen[i];
     if (!frame) return { ...seg };
     const shown = cache.get(frame.path) ?? '';
