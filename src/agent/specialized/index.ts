@@ -48,6 +48,17 @@ export type {
   RefactorSuggestion, PatchStep, PatchPlan, PatchDiff,
 } from './code-guardian-agent.js';
 
+// Verifier Agent (independent fresh-context verifier — evidence over claims)
+export {
+  VerifierAgent,
+  getVerifierAgent,
+  resetVerifierAgent,
+  VERIFIER_SYSTEM_PROMPT,
+  VERIFIER_AGENT_CONFIG,
+  VERIFIER_ALLOWED_TOOLS,
+  VERIFIER_DENIED_TOOLS,
+} from './verifier-agent.js';
+
 // Agent Registry
 export {
   AgentRegistry,

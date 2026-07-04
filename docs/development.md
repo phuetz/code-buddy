@@ -109,4 +109,4 @@ Tool aliases can be defined in `src/tools/registry/tool-aliases.ts`.
 - CLI command tests: use Commander `parseAsync()` + `exitOverride()`, mock `console.log`/`process.exit`
 - Mock dynamic imports via virtual modules for channel adapter tests
 - Use `vi.hoisted()` for mock variables in `vi.mock()` factories
-- The `AgentRegistry` has 8 built-in agents
+- The `AgentRegistry` has 9 built-in agents

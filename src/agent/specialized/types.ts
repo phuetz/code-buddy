@@ -26,7 +26,8 @@ export type AgentCapability =
   | 'code-refactor'
   | 'code-security'
   | 'code-edit'
-  | 'code-debug';
+  | 'code-debug'
+  | 'code-verify';
 
 export interface SpecializedAgentConfig {
   /** Unique agent identifier */
@@ -43,6 +44,23 @@ export interface SpecializedAgentConfig {
   maxFileSize?: number;
   /** Required external tools/binaries */
   requiredTools?: string[];
+  /**
+   * Role/doctrine system prompt for LLM-driven agents (e.g. the Verifier).
+   * Deterministic agents (PDF, Excel, …) leave this unset.
+   */
+  systemPrompt?: string;
+  /**
+   * Positive allowlist of tool names this agent may execute. When set and
+   * non-empty, any tool outside the list is refused by `isToolAllowed()`.
+   * Unset/empty ⇒ no allowlist restriction.
+   */
+  allowedTools?: string[];
+  /**
+   * Explicit denylist of tool names (e.g. destructive writes for a read-only
+   * verifier). A denied tool is refused even if it also appears in the
+   * allowlist — deny wins (fail-closed).
+   */
+  deniedTools?: string[];
   /** Optional configuration */
   options?: Record<string, unknown>;
 }
@@ -120,6 +138,34 @@ export abstract class SpecializedAgent extends EventEmitter {
   canHandleExtension(ext: string): boolean {
     const normalizedExt = ext.startsWith('.') ? ext.slice(1) : ext;
     return this.config.fileExtensions.includes(normalizedExt.toLowerCase());
+  }
+
+  /** Role/doctrine system prompt, if this agent is LLM-driven */
+  getSystemPrompt(): string | undefined {
+    return this.config.systemPrompt;
+  }
+
+  /** Tools this agent is explicitly allowed to execute (allowlist, may be empty) */
+  getAllowedTools(): string[] {
+    return this.config.allowedTools ?? [];
+  }
+
+  /** Tools this agent is explicitly forbidden from executing */
+  getDeniedTools(): string[] {
+    return this.config.deniedTools ?? [];
+  }
+
+  /**
+   * Toolset gate. Deny wins (fail-closed): a denied tool is never permitted.
+   * If an allowlist is configured, only listed tools pass; with no allowlist
+   * the agent is unrestricted (backwards-compatible for the deterministic
+   * agents, which set neither field).
+   */
+  isToolAllowed(tool: string): boolean {
+    if (this.config.deniedTools?.includes(tool)) return false;
+    const allow = this.config.allowedTools;
+    if (allow && allow.length > 0) return allow.includes(tool);
+    return true;
   }
 
   /** Initialize the agent (check dependencies, etc.) */

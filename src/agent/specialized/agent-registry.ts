@@ -21,6 +21,7 @@ import { getArchiveAgent } from './archive-agent.js';
 import { getCodeGuardianAgent } from './code-guardian-agent.js';
 import { getSecurityReviewAgent } from './security-review-agent.js';
 import { getSWEAgent } from './swe-agent-adapter.js';
+import { getVerifierAgent } from './verifier-agent.js';
 import { getErrorMessage } from '../../types/index.js';
 import { getAgentParams } from '../../config/agent-defaults.js';
 import { logger } from '../../utils/logger.js';
@@ -72,6 +73,7 @@ export class AgentRegistry extends EventEmitter {
       getCodeGuardianAgent(),
       getSecurityReviewAgent(),
       getSWEAgent(),
+      getVerifierAgent(),
     ];
 
     for (const agent of agents) {

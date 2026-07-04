@@ -32,7 +32,7 @@ Tests live in **`tests/`** only — there are no in-source `src/**/*.test.ts` fi
 - **CLI command tests:** Commander `parseAsync()` + `exitOverride()`, mock `console.log` / `process.exit`.
 - **Channel adapter tests:** mock `global.fetch` for health checks, mock dynamic imports via virtual modules.
 - **`DeviceNodeManager` tests:** mock `ssh-transport` / `adb-transport` / `local-transport` and `fs` (prevents `devices.json` bleed between tests). `pairDevice()` is async.
-- **`AgentRegistry`** ships 8 built-in agents: PDF, Excel, DataAnalysis, SQL, Archive, CodeGuardian, SecurityReview, SWE.
+- **`AgentRegistry`** ships 9 built-in agents: PDF, Excel, DataAnalysis, SQL, Archive, CodeGuardian, SecurityReview, SWE, Verifier (independent fresh-context verifier — read/execute-only toolset, returns a CONFIRMED / NEEDS REVIEW verdict backed by evidence; delegated explicitly via `executeOn('verifier', …)`, never auto-triggers).
 - **`better-sqlite3`** is a native module — three test files are skipped where Electron headers aren't available. If your test loads the DB layer, expect a rebuild step.
 
 ## Architecture
