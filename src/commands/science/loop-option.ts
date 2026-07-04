@@ -2,8 +2,11 @@
  * `buddy science --loop` — Phase 3 budget resolution (pure, testable).
  *
  * Turns the CLI budget flags (`--max-generations`, `--max-experiments`,
- * `--budget`, `--parallel`) + the `CODEBUDDY_SCIENCE_*` env vars into an
- * {@link ExperimentBudget}. The loop itself CLAMPS every value to a hard ceiling,
+ * `--budget`, `--parallel`, `--max-cost`, `--cost-per-experiment`) + the
+ * `CODEBUDDY_SCIENCE_*` env vars into an {@link ExperimentBudget}. Without
+ * `--cost-per-experiment` the accumulated cost stays 0, so `--max-cost` alone
+ * never fires — both are needed to arm the cost cap. The loop itself CLAMPS every
+ * value to a hard ceiling,
  * so this resolver only has to reject NON-NUMERIC / non-positive input (a typo
  * must abort loudly rather than silently fall back to a default that runs code).
  *
@@ -22,12 +25,23 @@ export interface LoopCliInput {
   /** Wall-clock budget: a duration like `500`, `30s`, `10m`, `2h` (ms if unitless). */
   budget?: string | undefined;
   parallel?: string | undefined;
+  /** HARD CAP: cost budget in arbitrary units (the loop stops when reached). */
+  maxCost?: string | undefined;
+  /** Cost charged per executed experiment — drives the cost cap. */
+  costPerExperiment?: string | undefined;
 }
 
 /** Parse a positive integer, or return null on any non-integer / non-positive input. */
 function parsePositiveInt(raw: string): number | null {
   const n = Number(raw);
   if (!Number.isFinite(n) || !Number.isInteger(n) || n <= 0) return null;
+  return n;
+}
+
+/** Parse a positive (possibly fractional) number, or null on non-finite / non-positive input. */
+function parsePositiveNumber(raw: string): number | null {
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n <= 0) return null;
   return n;
 }
 
@@ -78,6 +92,20 @@ export function resolveLoopBudget(
     const ms = parseDuration(budRaw);
     if (ms === null) return { kind: 'invalid', error: `Invalid --budget "${budRaw}" (duration expected, e.g. 500, 30s, 10m, 2h).` };
     budget.maxWallClockMs = ms;
+  }
+
+  const costRaw = opts.maxCost ?? env.CODEBUDDY_SCIENCE_MAX_COST;
+  if (costRaw !== undefined && costRaw !== '') {
+    const n = parsePositiveNumber(costRaw);
+    if (n === null) return { kind: 'invalid', error: `Invalid --max-cost "${costRaw}" (positive number expected).` };
+    budget.maxCost = n;
+  }
+
+  const cpeRaw = opts.costPerExperiment ?? env.CODEBUDDY_SCIENCE_COST_PER_EXPERIMENT;
+  if (cpeRaw !== undefined && cpeRaw !== '') {
+    const n = parsePositiveNumber(cpeRaw);
+    if (n === null) return { kind: 'invalid', error: `Invalid --cost-per-experiment "${cpeRaw}" (positive number expected).` };
+    budget.costPerExperiment = n;
   }
 
   return { kind: 'ok', budget };

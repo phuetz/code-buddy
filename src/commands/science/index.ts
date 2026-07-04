@@ -59,6 +59,10 @@ interface ScienceCliOptions {
   budget?: string;
   /** Phase 3: parallel workers per generation (bounded). */
   parallel?: string;
+  /** Phase 3 HARD CAP: cost budget (arbitrary units); arm with --cost-per-experiment. */
+  maxCost?: string;
+  /** Phase 3: cost charged per executed experiment (drives --max-cost). */
+  costPerExperiment?: string;
 }
 
 /** Human-readable one-pass summary. */
@@ -151,6 +155,14 @@ export function createScienceCommand(): Command {
     .option('--max-experiments <n>', 'Phase 3 HARD CAP: max experiments executed (default 10, clamped ≤500)')
     .option('--budget <duration>', 'Phase 3 HARD CAP: wall-clock budget, e.g. 500, 30s, 10m, 2h (default 30m)')
     .option('--parallel <n>', 'Phase 3: parallel workers per generation (default 1, clamped ≤8)')
+    .option(
+      '--max-cost <n>',
+      'Phase 3 HARD CAP: cost budget in arbitrary units — the loop stops the instant it is reached. Only fires when armed with --cost-per-experiment (default cost 0). Also via CODEBUDDY_SCIENCE_MAX_COST',
+    )
+    .option(
+      '--cost-per-experiment <n>',
+      'Phase 3: cost charged per executed experiment; accumulates toward --max-cost (default 0 = the cost cap never fires). Also via CODEBUDDY_SCIENCE_COST_PER_EXPERIMENT',
+    )
     .action(async (goal: string, opts: ScienceCliOptions) => {
       // ── OPT-IN gate (default OFF = zero behaviour change) ─────────────────
       if (process.env.CODEBUDDY_AI_SCIENTIST !== 'true') {
@@ -207,6 +219,8 @@ export function createScienceCommand(): Command {
             ...(opts.maxExperiments ? { maxExperiments: opts.maxExperiments } : {}),
             ...(opts.budget ? { budget: opts.budget } : {}),
             ...(opts.parallel ? { parallel: opts.parallel } : {}),
+            ...(opts.maxCost ? { maxCost: opts.maxCost } : {}),
+            ...(opts.costPerExperiment ? { costPerExperiment: opts.costPerExperiment } : {}),
           },
           process.env,
         );

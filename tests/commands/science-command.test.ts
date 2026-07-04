@@ -57,6 +57,9 @@ describe('buddy science — opt-in gate', () => {
     expect(help).toContain('--max-experiments');
     expect(help).toContain('--budget');
     expect(help).toContain('--parallel');
+    // Phase 3 cost cap (F3) — previously advertised in the budget but unreachable.
+    expect(help).toContain('--max-cost');
+    expect(help).toContain('--cost-per-experiment');
     // The description must flag it as experimental / gated.
     expect(help.toLowerCase()).toContain('experimental');
   });
@@ -102,6 +105,27 @@ describe('buddy science --loop — Phase 3 budget resolution', () => {
     expect(parseDuration('10m')).toBe(600_000);
     expect(parseDuration('2h')).toBe(7_200_000);
     expect(parseDuration('nope')).toBeNull();
+  });
+
+  // ── F3: the cost cap flags reach the budget (they were dead before) ──────────
+  it('parses --max-cost / --cost-per-experiment (fractional) into the budget', () => {
+    const res = resolveLoopBudget({ maxCost: '5', costPerExperiment: '1.5' }, {});
+    expect(res).toEqual({ kind: 'ok', budget: { maxCost: 5, costPerExperiment: 1.5 } });
+  });
+
+  it('reads the cost cap from CODEBUDDY_SCIENCE_* env; flags win over env', () => {
+    expect(
+      resolveLoopBudget({}, { CODEBUDDY_SCIENCE_MAX_COST: '10', CODEBUDDY_SCIENCE_COST_PER_EXPERIMENT: '2' }),
+    ).toEqual({ kind: 'ok', budget: { maxCost: 10, costPerExperiment: 2 } });
+    expect(resolveLoopBudget({ maxCost: '3' }, { CODEBUDDY_SCIENCE_MAX_COST: '10' })).toMatchObject({
+      budget: { maxCost: 3 },
+    });
+  });
+
+  it('rejects a non-numeric / non-positive cost (typo aborts loudly)', () => {
+    expect(resolveLoopBudget({ maxCost: 'free' }, {}).kind).toBe('invalid');
+    expect(resolveLoopBudget({ maxCost: '0' }, {}).kind).toBe('invalid');
+    expect(resolveLoopBudget({ costPerExperiment: '-1' }, {}).kind).toBe('invalid');
   });
 });
 
