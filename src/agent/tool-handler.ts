@@ -87,6 +87,12 @@ import {
   createSpotifyTools,
   createXSearchTools,
   createSecretsTools,
+  // Firecrawl (firecrawl_search / firecrawl_scrape) — exposed to the LLM when
+  // FIRECRAWL_API_KEY is set (src/codebuddy/tools.ts registerGroup), but its
+  // adapter only lived in the headless registry, so a live call resolved to
+  // "Unknown tool" once the key was present. Registered here so interactive
+  // dispatch ⊇ exposition. Inert without the key (isAvailable gates it).
+  createFirecrawlTools,
 } from "../tools/registry/index.js";
 import type { FormalToolRegistry, IToolExecutionContext } from "../tools/registry/index.js";
 import { createRegisterToolTool } from "../tools/register-tool-handler.js";
@@ -410,6 +416,7 @@ export class ToolHandler {
       ...createSpotifyTools(),
       ...createXSearchTools(),
       ...createSecretsTools(),
+      ...createFirecrawlTools(),
       // Self-improvement: the agent can author its own tools (opt-in only).
       ...(process.env.CODEBUDDY_SELF_IMPROVE === 'true' ? [createRegisterToolTool()] : []),
     ];
