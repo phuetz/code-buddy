@@ -50,6 +50,7 @@ function buildSummaryPrompt(messages: ChatCompletionMessageParam[]): string {
 3. Problems solved
 4. Current task state
 5. Important context for continuation
+6. Failed attempts and dead-ends: what was tried, why it failed (the error), and what NOT to retry — these are as important as what succeeded, so future turns don't repeat them
 
 Conversation:
 ${conversation}
@@ -61,6 +62,8 @@ Provide a structured summary in this format:
 ### Files Changed
 - ...
 ### Current State
+- ...
+### Failed Attempts (do not retry)
 - ...
 ### Key Context
 - ...`;

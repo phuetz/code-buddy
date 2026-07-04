@@ -150,6 +150,26 @@ describe('compress command', () => {
       expect(promptArg).toContain('Important context for continuation');
     });
 
+    it('instructs the summarizer to preserve failed attempts and dead-ends (Manus pattern)', async () => {
+      // Volet B: when the context is compacted, the WRONG turns must survive so
+      // future turns don't re-try what already failed. Assert the summary prompt
+      // explicitly asks the model to keep failures + why they failed.
+      const longContent = 'x'.repeat(9000);
+      const messages: ChatCompletionMessageParam[] = [
+        { role: 'user', content: longContent },
+      ];
+
+      mockLlmCall.mockResolvedValue('Summary');
+
+      await compressContext(messages, mockLlmCall, mockEstimateTokens);
+
+      const promptArg = mockLlmCall.mock.calls[0][0];
+      expect(promptArg).toContain('Failed attempts and dead-ends');
+      expect(promptArg).toContain('what NOT to retry');
+      // and a dedicated output section so failures are not folded away
+      expect(promptArg).toContain('### Failed Attempts (do not retry)');
+    });
+
     it('should return correct CompressResult structure', async () => {
       const longContent = 'x'.repeat(9000);
       const messages: ChatCompletionMessageParam[] = [

@@ -20,6 +20,7 @@ const _SUMMARIZE_PROMPT = `Summarize the following conversation segment concisel
 2. Important facts discussed
 3. Unresolved questions or TODOs
 4. Technical details that would be needed for context
+5. Failed attempts and dead-ends: what was tried, why it failed (the error), and what NOT to retry — as important as what succeeded
 
 Be concise but complete. Output only the summary, no preamble.
 
