@@ -22,6 +22,9 @@ import { CodeVariantStore, behaviorDescriptor, diverseElites, computeGeneration,
 import { makeLlmVariantPlanner, renderVariantPlan, type VariantPlan, type VariantPlanner } from './variant-planner.js';
 import { changedPathsVsBase } from './protected-paths.js';
 import type { FitnessComponent, FitnessReport } from './variant-fitness.js';
+import { pickModelUCB, type BanditScoreboard } from './model-bandit.js';
+import type { LlmCandidate } from '../../../fleet/model-selector.js';
+import type { ModelScoreboard } from '../../../fleet/model-scoreboard.js';
 
 export interface Weakness {
   id: string;
@@ -49,15 +52,41 @@ export interface MutateArgs {
   inspirations: Inspiration[];
   /** The deliberate plan for this variant (from the planner). Absent → mutator uses its ad-hoc prompt. */
   plan?: VariantPlan;
+  /**
+   * Model id chosen by the cost-aware UCB bandit (opt-in). Absent → the mutator uses its own static
+   * model (byte-identical to the pre-bandit behavior). `agentMutator` prefers this over its closure.
+   */
+  model?: string;
 }
 
 /** Produces a code change in the worktree toward the weakness. Returns whether it changed anything. */
 export type Mutator = (args: MutateArgs) => Promise<{ changed: boolean; detail?: string; plan?: string }>;
 
-export interface EvolutionCycleOptions {
+/**
+ * Opt-in cost-aware UCB model selection for the mutator (Sakana ShinkaEvolve sample-efficiency).
+ * All fields are injectable so the wiring is testable without a network; every field is optional and
+ * the whole feature is OFF unless `useModelBandit` is set — the static-model path stays byte-identical.
+ */
+export interface ModelBanditWiring {
+  /**
+   * Turn the bandit ON. Default off → the mutator keeps its static model, the scoreboard is never
+   * read, no bandit `recordOutcome` fires, and the `MutateArgs` are byte-identical to before.
+   */
+  useModelBandit?: boolean;
+  /** Inject the selector (tests). Receives candidates + scoreboard, returns the chosen model id. Default: `pickModelUCB`. */
+  modelSelector?: (candidates: readonly LlmCandidate[], scoreboard: BanditScoreboard) => string | undefined;
+  /** Inject the candidate catalog (tests / avoid the network). Default: built from the active-LLM registry. */
+  banditCandidates?: LlmCandidate[];
+  /** Inject the scoreboard (tests). Default: the `getModelScoreboard()` singleton. */
+  scoreboard?: ModelScoreboard;
+}
+
+export interface EvolutionCycleOptions extends ModelBanditWiring {
   baselineRef: string;
   weakness: Weakness;
   mutate: Mutator;
+  /** Injected clock (default `Date.now`) for the bandit's outcome timestamp + mutation latency. */
+  now?: () => number;
   basePath?: string;
   components?: FitnessComponent[];
   /** Baseline fitness to rank against (regressions + beats-baseline). */
@@ -146,6 +175,103 @@ export function gatherInspirations(
   });
 }
 
+/** The bandit's pick for one cycle: the model + its provider + the scoreboard to record the outcome to. */
+export interface BanditChoice {
+  model: string;
+  provider: string;
+  scoreboard: ModelScoreboard;
+}
+
+/**
+ * Default bandit catalog: the cloud/subscription LLMs the user is authenticated to, with their
+ * nominal input $/Mtok (the cost signal the bandit trades against quality). Reuses the public
+ * `buildActiveLlmRegistry` — the SAME source the fleet model-selector uses — rather than duplicating
+ * detection. Never-throws → an empty catalog on any failure, and the caller falls back to the static
+ * model. Local models are included when the registry surfaces them (they cost $0 → no cost penalty).
+ */
+async function listBanditCandidates(env: NodeJS.ProcessEnv): Promise<LlmCandidate[]> {
+  try {
+    const { buildActiveLlmRegistry } = await import('../../../providers/active-llm-registry.js');
+    const reg = await buildActiveLlmRegistry({ env });
+    const out: LlmCandidate[] = [];
+    const seen = new Set<string>();
+    for (const c of reg.all) {
+      if (!c.model) continue;
+      const key = c.model.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push({
+        provider: c.provider,
+        model: c.model,
+        ...(c.apiKey ? { apiKey: c.apiKey } : {}),
+        ...(c.baseURL ? { baseURL: c.baseURL } : {}),
+        isLocal: c.isLocal,
+        costInputUsdPerMtok: c.costInputUsdPerMtok,
+        strengths: [], // the bandit ranks on scoreboard win-rate + cost, not capability strengths
+      });
+    }
+    return out;
+  } catch (err) {
+    logger.debug?.(`[evolve] bandit candidate probe skipped: ${err instanceof Error ? err.message : String(err)}`);
+    return [];
+  }
+}
+
+/**
+ * Decide the mutator's model via the cost-aware UCB bandit. Returns `null` when the bandit is OFF
+ * (the common case → static model, byte-identical path) OR when nothing could be chosen (empty
+ * catalog / error). NEVER throws: a bandit failure must never fail an evolution cycle.
+ */
+export async function resolveBanditModel(
+  opts: ModelBanditWiring,
+  env: NodeJS.ProcessEnv,
+): Promise<BanditChoice | null> {
+  if (!opts.useModelBandit) return null;
+  try {
+    const scoreboard =
+      opts.scoreboard ?? (await import('../../../fleet/model-scoreboard.js')).getModelScoreboard();
+    const candidates = opts.banditCandidates ?? (await listBanditCandidates(env));
+    if (candidates.length === 0) return null;
+    const select =
+      opts.modelSelector ?? ((cands, sb) => pickModelUCB(cands, sb, { taskType: 'evolve' }));
+    const chosen = select(candidates, scoreboard);
+    if (!chosen) return null;
+    const cand = candidates.find((c) => c.model === chosen);
+    return { model: chosen, provider: cand?.provider ?? 'unknown', scoreboard };
+  } catch (err) {
+    logger.warn(
+      `[evolve] model bandit selection failed, using static model: ${err instanceof Error ? err.message : String(err)}`,
+    );
+    return null;
+  }
+}
+
+/**
+ * Close the bandit loop: feed this cycle's outcome back to the scoreboard so the NEXT selection's
+ * `smoothedWinRate` reflects it (`taskType: 'evolve'`). NEVER throws. `costUsd` is not metered in the
+ * evolution loop (no per-run token accounting) — the bandit's cost signal is the catalog $/Mtok read
+ * at selection time — so the marginal $ recorded here is 0 unless the caller supplies one.
+ */
+export function recordBanditOutcome(
+  choice: BanditChoice,
+  outcome: { won: boolean; quality: number; latencyMs: number; costUsd?: number; at: string },
+): void {
+  try {
+    choice.scoreboard.recordOutcome({
+      at: outcome.at,
+      taskType: 'evolve',
+      model: choice.model,
+      provider: choice.provider,
+      won: outcome.won,
+      quality: outcome.quality,
+      costUsd: outcome.costUsd ?? 0,
+      latencyMs: outcome.latencyMs,
+    });
+  } catch (err) {
+    logger.warn(`[evolve] bandit recordOutcome failed: ${err instanceof Error ? err.message : String(err)}`);
+  }
+}
+
 /** Run one mutation→evaluate→record cycle. Never merges; prunes losing branches by default. */
 export async function runEvolutionCycle(opts: EvolutionCycleOptions): Promise<EvolutionCycleResult> {
   const basePath = opts.basePath ?? process.cwd();
@@ -153,6 +279,12 @@ export async function runEvolutionCycle(opts: EvolutionCycleOptions): Promise<Ev
   const branch = `codebuddy/evolve/${variantId}`;
   const env = opts.env ?? process.env;
   const store = opts.store ?? new CodeVariantStore();
+  const now = opts.now ?? Date.now;
+
+  // Cost-aware UCB model selection (opt-in). Off → null: the mutator keeps its static model, the
+  // scoreboard is untouched, and the mutate args below are byte-identical to the pre-bandit path.
+  const banditChoice = await resolveBanditModel(opts, env);
+  let mutationLatencyMs = 0;
 
   // AlphaEvolve-style inspirations: show the mutator prior elite variants (built before this branch).
   const inspirations = gatherInspirations(
@@ -178,6 +310,7 @@ export async function runEvolutionCycle(opts: EvolutionCycleOptions): Promise<Ev
   const mgr = WorktreeSessionManager.getInstance();
   const session = mgr.createWorktreeSession(branch, basePath);
   try {
+    const mutateStartedAt = banditChoice ? now() : 0;
     const res = await opts.mutate({
       branch,
       weakness: opts.weakness,
@@ -185,7 +318,9 @@ export async function runEvolutionCycle(opts: EvolutionCycleOptions): Promise<Ev
       env,
       inspirations,
       ...(plan ? { plan } : {}),
+      ...(banditChoice ? { model: banditChoice.model } : {}),
     });
+    if (banditChoice) mutationLatencyMs = Math.max(0, now() - mutateStartedAt);
     // Store the deliberate plan when we have one (audit); else the mutator's own record.
     mutationPlan = plan ? renderVariantPlan(plan) : res.plan;
     git(['add', '-A'], session.worktreePath);
@@ -217,6 +352,16 @@ export async function runEvolutionCycle(opts: EvolutionCycleOptions): Promise<Ev
   });
   const report = scored.report;
   const wins = mutated && beatsBaseline(report, opts.baseline);
+
+  // Close the bandit loop: record this model's outcome so the next selection learns from it.
+  if (banditChoice) {
+    recordBanditOutcome(banditChoice, {
+      won: wins,
+      quality: report.score,
+      latencyMs: mutationLatencyMs,
+      at: new Date(now()).toISOString(),
+    });
+  }
 
   // 5. record + prune.
   const sha = (() => {
@@ -263,7 +408,7 @@ export async function runEvolutionCycle(opts: EvolutionCycleOptions): Promise<Ev
  * Integration-grade (LLM calls) — the engine accepts any Mutator so tests inject a deterministic one.
  */
 export function agentMutator(opts: { timeoutMs?: number; model?: string } = {}): Mutator {
-  return async ({ weakness, worktreeDir, env, inspirations, plan }) => {
+  return async ({ weakness, worktreeDir, env, inspirations, plan, model }) => {
     const cli = process.argv[1];
     if (!cli) return { changed: false, detail: 'no CLI entrypoint' };
     // Guardrail is constant; the body is EITHER the deliberate plan (execute it) OR — when no plan
@@ -284,7 +429,10 @@ export function agentMutator(opts: { timeoutMs?: number; model?: string } = {}):
     }
     const mutationPlan = prompt; // capture the exact instruction that drove this generation
     const args = [cli, '--prompt', prompt, '--directory', worktreeDir];
-    if (opts.model) args.push('--model', opts.model);
+    // Prefer the bandit's per-cycle pick (MutateArgs.model) over the closure's static model; either
+    // absent → no `--model` (byte-identical to the pre-bandit path).
+    const chosenModel = model ?? opts.model;
+    if (chosenModel) args.push('--model', chosenModel);
     await new Promise<void>((resolve) => {
       const child = spawn(process.execPath, args, {
         cwd: worktreeDir,
