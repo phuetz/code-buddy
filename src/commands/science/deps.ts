@@ -39,6 +39,7 @@ import type {
   ReportContext,
   ReviewVerdict,
 } from '../../agent/science/experiment-orchestrator.js';
+import { boundText } from '../../agent/science/experiment-orchestrator.js';
 import type { ExperimentLoopDeps, MutationContext } from '../../agent/science/experiment-loop.js';
 import {
   createExperimentSandboxRunner,
@@ -157,8 +158,10 @@ async function synthesizeReport(provider: ResolvedCommandProvider, ctx: ReportCo
     `Hypothèse: ${ctx.idea.hypothesis}`,
     `Nouveauté: ${ctx.novelty.noveltyAssessment} — ${ctx.novelty.summary}`,
     `Exécution (sandbox isolate): exit ${ctx.execution.exitCode ?? 'unknown'}${ctx.execution.timedOut ? ', timeout' : ''}, ${ctx.execution.durationMs}ms`,
-    `stdout:\n${ctx.execution.stdout.slice(0, 4000)}`,
-    ctx.execution.stderr.trim() ? `stderr:\n${ctx.execution.stderr.slice(0, 1000)}` : '',
+    // Head+tail bound so the synthesizer sees BOTH the opening lines and the
+    // final result line of a long log (not just a head-only slice).
+    `stdout:\n${boundText(ctx.execution.stdout, 4000)}`,
+    ctx.execution.stderr.trim() ? `stderr:\n${boundText(ctx.execution.stderr, 1000)}` : '',
     `Analyse: ${ctx.analysis.summary}`,
     ...ctx.analysis.findings.map((f) => `- ${f}`),
   ]
@@ -237,7 +240,9 @@ async function reviewWithVerifier(
       `Hypothesis: ${idea.hypothesis}`,
       '',
       'Report under review:',
-      report.report.slice(0, 8000),
+      // Head+tail bound: the code-rendered evidence section lives at the report
+      // TAIL, so keep the tail visible even when a long report must be bounded.
+      boundText(report.report, 8000),
       '',
       'Return CONFIRMED only if the report is internally consistent and its conclusions follow from the shown execution output; otherwise NEEDS REVIEW with the reason.',
     ].join('\n');

@@ -416,6 +416,14 @@ export async function runExperiment(
     if (!run.report || !run.report.report.trim()) {
       run.report = degradedReport(reportCtx, 'report synthesis returned nothing');
     }
+    // SELF-CONTAINMENT INVARIANT (verifiability): the report handed to the
+    // independent reviewer AND the human at GATE #2 MUST show its evidence. A
+    // report boundary may cite the run without embedding the data; append the
+    // code-rendered, bounded evidence section when it is missing. Idempotent.
+    run.report = {
+      ...run.report,
+      report: ensureEvidenceSection(run.report.report, reportCtx.execution),
+    };
     stage({ stage: 'report', ok: true, detail: `${run.report.report.length} chars` });
 
     // ── 7. Independent review (degrades to NEEDS REVIEW) ─────────────────────
@@ -491,7 +499,6 @@ function degradedAnalysis(execution: ExecuteCodeResult, reason: string): Experim
 }
 
 function degradedReport(ctx: ReportContext, reason: string): ScienceReport {
-  const exec = ctx.execution;
   const body = [
     `# Experiment Report: ${ctx.goal}`,
     '',
@@ -507,11 +514,9 @@ function degradedReport(ctx: ReportContext, reason: string): ScienceReport {
     '',
     `${ctx.novelty.noveltyAssessment} — ${ctx.novelty.summary}`,
     '',
-    '## Résultat d\'exécution (sandbox isolate)',
-    '',
-    `- statut : ${exec.ok ? 'ok' : 'échec'} (exit ${exec.exitCode ?? 'unknown'}${exec.timedOut ? ', timeout' : ''})`,
-    `- durée : ${exec.durationMs}ms`,
-    ...(exec.stdout.trim() ? ['', '```', truncate(exec.stdout, 2000), '```'] : []),
+    // Real execution output, code-rendered (the same section runExperiment
+    // guarantees on the LLM path) — keeps the deterministic report verifiable.
+    renderExecutionEvidence(ctx.execution),
     '',
     '## Analyse',
     '',
@@ -564,4 +569,96 @@ function errMsg(err: unknown): string {
 function truncate(text: string, max: number): string {
   const t = typeof text === 'string' ? text : String(text);
   return t.length <= max ? t : `${t.slice(0, max)}… [tronqué]`;
+}
+
+// ============================================================================
+// Verifiable evidence — the report must SHOW its execution output (G1 fix).
+//
+// A scientific report has to be self-contained: the independent reviewer and
+// the human at GATE #2 can only verify a claim if the raw output that backs it
+// is present. A report boundary — especially an LLM synthesizer — may cite the
+// run (`experiment://<runId>`) without embedding the data, so the code embeds
+// it deterministically (the same discipline as paper-qa's code-rendered
+// references: rendered by CODE, never invented by the model).
+// ============================================================================
+
+/**
+ * Stable heading of the embedded execution-evidence section. A single constant
+ * so {@link ensureEvidenceSection} can detect an already-embedded section
+ * (idempotence) and every render site emits the SAME heading.
+ */
+export const EVIDENCE_HEADING = "## Sortie de l'expérience (données brutes)";
+
+/** Default cap (chars) of the raw stdout embedded as evidence. */
+const EVIDENCE_STDOUT_MAX = 4000;
+
+/**
+ * Bound `text` to at most `max` characters, keeping BOTH the head and the tail
+ * (with an explicit elision marker) when truncation is needed — so a long log
+ * keeps its opening lines AND its final result line. Never throws.
+ */
+export function boundText(text: unknown, max: number): string {
+  const t = typeof text === 'string' ? text : String(text ?? '');
+  const cap = Number.isFinite(max) ? Math.floor(max) : 0;
+  if (cap <= 0) return '';
+  if (t.length <= cap) return t;
+  const marker = `\n… [${t.length - cap} caractères tronqués] …\n`;
+  const budget = cap - marker.length;
+  if (budget <= 0) return t.slice(0, cap);
+  const head = Math.ceil(budget * 0.6);
+  const tail = budget - head;
+  const headPart = t.slice(0, head);
+  const tailPart = tail > 0 ? t.slice(t.length - tail) : '';
+  return `${headPart}${marker}${tailPart}`;
+}
+
+/**
+ * Deterministically render the REAL execution output as a self-contained,
+ * verifiable evidence section. The stdout (and any stderr) is bounded head+tail
+ * via {@link boundText}. Never throws.
+ */
+export function renderExecutionEvidence(
+  execution: ExecuteCodeResult,
+  opts: { stdoutMax?: number } = {},
+): string {
+  const max =
+    typeof opts.stdoutMax === 'number' && opts.stdoutMax > 0
+      ? Math.floor(opts.stdoutMax)
+      : EVIDENCE_STDOUT_MAX;
+  const stdout = typeof execution.stdout === 'string' ? execution.stdout : '';
+  const stderr = typeof execution.stderr === 'string' ? execution.stderr : '';
+  const lines: string[] = [
+    EVIDENCE_HEADING,
+    '',
+    `- statut : ${execution.ok ? 'ok' : 'échec'} (exit ${execution.exitCode ?? 'unknown'}${execution.timedOut ? ', timeout' : ''})`,
+    `- durée : ${execution.durationMs}ms`,
+    `- run : experiment://${execution.runId}`,
+  ];
+  const boundedOut = boundText(stdout, max);
+  if (boundedOut.trim()) {
+    lines.push('', 'stdout :', '```', boundedOut, '```');
+  } else {
+    lines.push('', '_(stdout vide)_');
+  }
+  const boundedErr = boundText(stderr, Math.min(max, 1000));
+  if (boundedErr.trim()) {
+    lines.push('', 'stderr :', '```', boundedErr, '```');
+  }
+  return lines.join('\n');
+}
+
+/**
+ * Guarantee the report is SELF-CONTAINED and verifiable: if it does not already
+ * embed the execution evidence, append the code-rendered
+ * {@link renderExecutionEvidence} section. Idempotent (keyed on
+ * {@link EVIDENCE_HEADING}) so a report that already shows its data is untouched.
+ */
+export function ensureEvidenceSection(
+  reportMarkdown: string,
+  execution: ExecuteCodeResult,
+): string {
+  const body = typeof reportMarkdown === 'string' ? reportMarkdown : '';
+  if (body.includes(EVIDENCE_HEADING)) return body;
+  const section = renderExecutionEvidence(execution);
+  return body.trim() ? `${body.trimEnd()}\n\n${section}\n` : `${section}\n`;
 }

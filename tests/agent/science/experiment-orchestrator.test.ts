@@ -14,8 +14,11 @@ import { describe, it, expect, vi } from 'vitest';
 
 import {
   runExperiment,
+  boundText,
+  EVIDENCE_HEADING,
   type ExperimentDeps,
   type GateDecision,
+  type ScienceReport,
 } from '../../../src/agent/science/experiment-orchestrator.js';
 import type {
   ExecuteCodeInput,
@@ -320,5 +323,86 @@ describe('runExperiment — never-throws', () => {
     expect(run.published).toBe(false);
     expect(run.status).toBe('declined-at-publish-gate');
     expect(run.error).toContain('publication failed');
+  });
+});
+
+// --------------------------------------------------------------------------
+// G1 — the report must EMBED its execution output so it is self-contained and
+// verifiable (the reviewer + the human at GATE #2 can check the claims).
+// --------------------------------------------------------------------------
+
+describe('runExperiment — verifiable evidence (G1)', () => {
+  it('embeds the REAL stdout in the report even when the boundary omits it, and the reviewer sees it', async () => {
+    let reviewedReport = '';
+    const deps = makeDeps({
+      executeCode: vi.fn(async () => fakeExecResult({ stdout: 'accuracy=0.87\nn=100\n' })),
+      // Simulate an LLM synthesizer that cites the run but does NOT show the data.
+      report: vi.fn(async () => ({ report: '# Report\n\n## TL;DR\n\nThe hypothesis holds per the run.' })),
+      review: vi.fn(async (report: ScienceReport) => {
+        reviewedReport = report.report;
+        return { verdict: 'CONFIRMED' as const, evidence: 'saw the raw output' };
+      }),
+    });
+
+    const run = await runExperiment('sample-size vs standard error', deps);
+
+    // The final report is self-contained: it CONTAINS the real stdout.
+    expect(run.report?.report).toContain(EVIDENCE_HEADING);
+    expect(run.report?.report).toContain('accuracy=0.87');
+    expect(run.report?.report).toContain('n=100');
+    expect(run.report?.report).toContain('experiment://exec-test');
+    // The report handed to review() is the SAME self-contained one.
+    expect(reviewedReport).toContain('accuracy=0.87');
+    expect(reviewedReport).toContain('n=100');
+  });
+
+  it('bounds a huge stdout head+tail (keeps the opening AND the final result line)', async () => {
+    const huge = `HEAD_MARKER_START\n${'x'.repeat(50_000)}\nTAIL_ACCURACY=0.99`;
+    const deps = makeDeps({
+      executeCode: vi.fn(async () => fakeExecResult({ stdout: huge })),
+      report: vi.fn(async () => ({ report: '# Report\n\n## TL;DR\n\nBounded.' })),
+    });
+
+    const run = await runExperiment('huge output', deps);
+    const body = run.report?.report ?? '';
+
+    expect(body).toContain('HEAD_MARKER_START'); // head preserved
+    expect(body).toContain('TAIL_ACCURACY=0.99'); // tail preserved
+    expect(body).toContain('caractères tronqués'); // explicit elision marker
+    // Far smaller than the raw log (bounded, not the full 50k dump).
+    expect(body.length).toBeLessThan(10_000);
+  });
+
+  it('does not double-embed when the report already shows its evidence (idempotent)', async () => {
+    const deps = makeDeps({
+      executeCode: vi.fn(async () => fakeExecResult({ stdout: 'metric=1\n' })),
+      report: vi.fn(async () => ({
+        report: `# Report\n\n## TL;DR\n\nok\n\n${EVIDENCE_HEADING}\n\nstdout :\n\`\`\`\nmetric=1\n\`\`\``,
+      })),
+    });
+    const run = await runExperiment('idempotent', deps);
+    const body = run.report?.report ?? '';
+    const occurrences = body.split(EVIDENCE_HEADING).length - 1;
+    expect(occurrences).toBe(1);
+  });
+});
+
+describe('boundText — head+tail bounded truncation', () => {
+  it('returns the text unchanged when within the cap', () => {
+    expect(boundText('accuracy=0.87\nn=100', 4000)).toBe('accuracy=0.87\nn=100');
+  });
+
+  it('keeps head and tail with an elision marker when over the cap', () => {
+    const out = boundText(`START${'y'.repeat(9000)}END`, 200);
+    expect(out.length).toBeLessThan(400);
+    expect(out.startsWith('START')).toBe(true);
+    expect(out.endsWith('END')).toBe(true);
+    expect(out).toContain('caractères tronqués');
+  });
+
+  it('never throws on non-string / non-positive cap', () => {
+    expect(boundText(undefined, 100)).toBe('');
+    expect(boundText('abc', 0)).toBe('');
+    expect(boundText('abc', -5)).toBe('');
   });
 });

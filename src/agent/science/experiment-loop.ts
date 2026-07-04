@@ -74,6 +74,7 @@ import type {
   ScienceIdea,
   ScienceReport,
 } from './experiment-orchestrator.js';
+import { ensureEvidenceSection, renderExecutionEvidence } from './experiment-orchestrator.js';
 import {
   cachedExecutionRunner,
   experimentFitnessComponent,
@@ -702,6 +703,12 @@ export async function runExperimentLoop(
     if (!result.report || !result.report.report.trim()) {
       result.report = degradedReport(reportCtx, 'report synthesis returned nothing');
     }
+    // SELF-CONTAINMENT INVARIANT (verifiability): the winner report handed to
+    // the reviewer + GATE #2 MUST embed the winner's real execution output.
+    result.report = {
+      ...result.report,
+      report: ensureEvidenceSection(result.report.report, reportCtx.execution),
+    };
     stage('report', true, `${result.report.report.length} chars`);
 
     try {
@@ -917,7 +924,6 @@ function degradedAnalysis(execution: ExecuteCodeResult, reason: string): Experim
 }
 
 function degradedReport(ctx: ReportContext, reason: string): ScienceReport {
-  const exec = ctx.execution;
   const body = [
     `# Experiment Report (loop winner): ${ctx.goal}`,
     '',
@@ -929,11 +935,8 @@ function degradedReport(ctx: ReportContext, reason: string): ScienceReport {
     '',
     ctx.idea.hypothesis,
     '',
-    '## Résultat d\'exécution (sandbox isolate)',
-    '',
-    `- statut : ${exec.ok ? 'ok' : 'échec'} (exit ${exec.exitCode ?? 'unknown'}${exec.timedOut ? ', timeout' : ''})`,
-    `- durée : ${exec.durationMs}ms`,
-    ...(exec.stdout.trim() ? ['', '```', truncate(exec.stdout, 2000), '```'] : []),
+    // Real winner execution output, code-rendered + bounded (verifiable).
+    renderExecutionEvidence(ctx.execution),
     '',
     '## Analyse',
     '',
