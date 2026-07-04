@@ -12,6 +12,9 @@ import type { ModelRouter, RoutingDecision } from '../../optimization/model-rout
 import { classifyTaskComplexity, selectModel, GROK_MODELS } from '../../optimization/model-routing.js';
 import type { CostTracker } from '../../utils/cost-tracker.js';
 import type { ModelPairsConfig } from '../../config/toml-config.js';
+import { getModelScoreboard, type ModelScoreboard } from '../../fleet/model-scoreboard.js';
+import { inferTaskType } from '../../fleet/model-capability-heuristics.js';
+import { logger } from '../../utils/logger.js';
 
 /**
  * Task intent classification used for architect/editor model pair routing.
@@ -38,6 +41,18 @@ export interface ModelRoutingStats {
 export interface ModelRoutingFacadeDeps {
   modelRouter: ModelRouter;
   costTracker: CostTracker;
+}
+
+/**
+ * Optional injection seams for {@link ModelRoutingFacade.autoRouteIfEnabled}.
+ * Used by tests to supply a deterministic scoreboard / env without touching the
+ * real `~/.codebuddy/fleet-model-performance.jsonl` ledger or `process.env`.
+ */
+export interface AutoRouteOptions {
+  /** Inject a ModelScoreboard (tests). Production uses the singleton. */
+  scoreboard?: ModelScoreboard;
+  /** Inject env (tests). Production reads `process.env`. */
+  env?: NodeJS.ProcessEnv;
 }
 
 /**
@@ -112,10 +127,15 @@ export class ModelRoutingFacade {
    *
    * @param userMessage - The user's message to classify
    * @param availableModels - Optional list of available model IDs (defaults to GROK_MODELS keys)
+   * @param opts - Optional test injection seams (scoreboard / env)
    * @returns The recommended model name, or null if auto-routing is disabled
    *          or fewer than 2 models are available
    */
-  autoRouteIfEnabled(userMessage: string, availableModels?: string[]): string | null {
+  autoRouteIfEnabled(
+    userMessage: string,
+    availableModels?: string[],
+    opts?: AutoRouteOptions,
+  ): string | null {
     if (!this.autoRoutingEnabled) {
       return null;
     }
@@ -126,11 +146,82 @@ export class ModelRoutingFacade {
     }
 
     const classification = classifyTaskComplexity(userMessage);
-    const decision = selectModel(classification, undefined, models);
+    let decision = selectModel(classification, undefined, models);
+
+    // Opt-in council-learned tie-break (CODEBUDDY_COUNCIL_ROUTING). Default OFF
+    // is a STRICT no-op: the branch is skipped entirely, so no ModelScoreboard
+    // is constructed, no ledger file is read, and no latency is added.
+    const env = opts?.env ?? process.env;
+    if (env.CODEBUDDY_COUNCIL_ROUTING === 'true') {
+      decision = this.applyScoreboardTieBreak(decision, userMessage, models, opts?.scoreboard);
+    }
 
     this.lastRoutingDecision = decision;
 
     return decision.recommendedModel;
+  }
+
+  /**
+   * Council-learned tie-break for auto-routing — opt-in via
+   * `CODEBUDDY_COUNCIL_ROUTING=true`. This is the only place the council's
+   * `ModelScoreboard` (trained by `buddy council` runs) feeds the MAIN chat
+   * model choice; without it the scoreboard only steered the voice loop and the
+   * diff reviewer.
+   *
+   * CONSERVATIVE by design — it never overrides a hard constraint (cost,
+   * capacity, a pinned or `/switch`-ed model, the vision requirement all live
+   * upstream). It only arbitrates between the complexity-based
+   * `recommendedModel` and the `alternativeModel` that `selectModel` itself
+   * already surfaced as viable, and only departs from the recommendation when
+   * the scoreboard has ACTUAL run history showing the alternative is the better
+   * AI for this task category. An empty / unseen scoreboard leaves the decision
+   * untouched (silent fallback). Never throws.
+   */
+  private applyScoreboardTieBreak(
+    decision: RoutingDecision,
+    userMessage: string,
+    models: string[],
+    scoreboardOverride?: ModelScoreboard,
+  ): RoutingDecision {
+    try {
+      const alt = decision.alternativeModel;
+      // Only a genuine {recommended, alternative} ambiguity is a tie to break.
+      if (!alt || alt === decision.recommendedModel || !models.includes(alt)) {
+        return decision;
+      }
+
+      const sb = scoreboardOverride ?? getModelScoreboard();
+      const taskType = inferTaskType(userMessage);
+      const rec = decision.recommendedModel;
+      const recBias = sb.selectionBias(taskType, rec);
+      const altBias = sb.selectionBias(taskType, alt);
+
+      // Depart from the recommendation only on real evidence: the alternative
+      // must both out-score the recommendation AND have observed runs. Selection
+      // bias is a neutral 0 for unseen models, so an empty scoreboard can never
+      // satisfy `altBias > recBias` with `runCount > 0` → guaranteed fallback.
+      if (altBias > recBias && sb.runCount(taskType, alt) > 0) {
+        logger.debug(
+          `[council-routing] scoreboard prefers ${alt} over ${rec} for ${taskType} ` +
+            `(bias ${altBias.toFixed(2)} > ${recBias.toFixed(2)})`,
+        );
+        return {
+          ...decision,
+          recommendedModel: alt,
+          tier: GROK_MODELS[alt]?.tier ?? decision.tier,
+          reason: `${decision.reason} | council-routing: ${alt} historically stronger for ${taskType} tasks`,
+          alternativeModel: rec,
+          alternativeReason: decision.reason,
+        };
+      }
+
+      return decision;
+    } catch (err) {
+      logger.debug(
+        `[council-routing] tie-break skipped: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      return decision;
+    }
   }
 
   /**
