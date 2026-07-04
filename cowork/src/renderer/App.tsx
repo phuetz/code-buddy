@@ -83,6 +83,7 @@ import { EvolutionPanel } from './components/EvolutionPanel';
 import { WorkflowProPanel } from './components/WorkflowProPanel';
 import { KnowledgePanel } from './components/KnowledgePanel';
 import { SciencePanel } from './components/SciencePanel';
+import { HelpDocs } from './components/HelpDocs';
 import type { AppConfig } from './types';
 import type { GlobalNoticeAction } from './store';
 
@@ -122,6 +123,7 @@ function App() {
   const showEvolutionPanel = useAppStore((s) => s.showEvolutionPanel);
   const showKnowledgePanel = useAppStore((s) => s.showKnowledgePanel);
   const showSciencePanel = useAppStore((s) => s.showSciencePanel);
+  const showHelpDocs = useAppStore((s) => s.showHelpDocs);
   const showWorkflowProPanel = useAppStore((s) => s.showWorkflowProPanel);
   const showGlobalSearch = useAppStore((s) => s.showGlobalSearch);
   const showActivityFeed = useAppStore((s) => s.showActivityFeed);
@@ -480,6 +482,10 @@ function App() {
 
       {/* AI-Scientist panel (new-shell Labs) — READ-ONLY tracking of `buddy science` experiment variants. */}
       {showSciencePanel && <SciencePanel onClose={() => useAppStore.getState().setShowSciencePanel(false)} />}
+
+      {/* Documentation overlay — the flag had no mounted reader, so the Titlebar/TopMenuBar
+          "Documentation" buttons (setShowHelpDocs(true)) were dead clicks. Mount it here. */}
+      {showHelpDocs && <HelpDocs onClose={() => useAppStore.getState().setShowHelpDocs(false)} />}
 
       {/* WorkflowBuilder Pro — the flag had no mounted reader (dead from ⌘K and the Labs launcher).
           Host the full-bleed component in a closable overlay so the capability is actually reachable. */}
