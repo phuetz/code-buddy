@@ -84,6 +84,7 @@ function AdvancedLauncher() {
     },
     { label: 'Connaissances', hint: 'Mémoire collective (CKG) + sujets de recherche', open: () => s.setShowKnowledgePanel(true) },
     { label: 'Évolution', hint: 'Versions générées par l’auto-amélioration', open: () => s.setShowEvolutionPanel(true) },
+    { label: 'AI-Scientist', hint: 'Expériences `buddy science` (lecture seule)', open: () => s.setShowSciencePanel(true) },
     { label: 'Fleet', hint: 'Multi-agents, pairs, routage', open: () => s.setShowFleetCommandCenter(true) },
     { label: 'Missions', hint: 'Tableau des tâches multi-agents', open: () => s.setShowMissionBoard(true) },
     { label: 'Workflows', hint: 'Éditeur de workflow visuel', open: () => s.setShowWorkflowProPanel(true) },

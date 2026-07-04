@@ -240,6 +240,8 @@ export interface AppState {
   showEvolutionPanel: boolean;
   /** Knowledge panel (new-shell Labs) — CKG discoveries/stats + research-ingest topics. */
   showKnowledgePanel: boolean;
+  /** AI-Scientist panel (new-shell Labs) — READ-ONLY tracking of `buddy science` experiment variants. */
+  showSciencePanel: boolean;
   settingsTab: string | null;
   scheduleDraft: ScheduleDraft | null;
   permissionRuleTestDraft: PermissionRuleTestDraft | null;
@@ -579,6 +581,7 @@ export interface AppState {
   setShowSettings: (show: boolean) => void;
   setShowEvolutionPanel: (show: boolean) => void;
   setShowKnowledgePanel: (show: boolean) => void;
+  setShowSciencePanel: (show: boolean) => void;
   setSettingsTab: (tab: string | null) => void;
   setScheduleDraft: (draft: Omit<ScheduleDraft, 'nonce'> | null) => void;
   clearScheduleDraft: () => void;
@@ -894,6 +897,7 @@ export const useAppStore = create<AppState>((set) => ({
   showSettings: false,
   showEvolutionPanel: false,
   showKnowledgePanel: false,
+  showSciencePanel: false,
   settingsTab: null,
   scheduleDraft: null,
   permissionRuleTestDraft: null,
@@ -1500,6 +1504,7 @@ export const useAppStore = create<AppState>((set) => ({
   setShowSettings: (show) => set({ showSettings: show }),
   setShowEvolutionPanel: (show) => set({ showEvolutionPanel: show }),
   setShowKnowledgePanel: (show) => set({ showKnowledgePanel: show }),
+  setShowSciencePanel: (show) => set({ showSciencePanel: show }),
   setSettingsTab: (tab) => set({ settingsTab: tab }),
   setScheduleDraft: (draft) =>
     set({

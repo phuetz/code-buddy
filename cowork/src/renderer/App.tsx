@@ -80,6 +80,7 @@ import { ExportDialogHost } from './components/ExportDialogHost';
 import { EvolutionPanel } from './components/EvolutionPanel';
 import { WorkflowProPanel } from './components/WorkflowProPanel';
 import { KnowledgePanel } from './components/KnowledgePanel';
+import { SciencePanel } from './components/SciencePanel';
 import type { AppConfig } from './types';
 import type { GlobalNoticeAction } from './store';
 
@@ -118,6 +119,7 @@ function App() {
   const newShellEnabled = useAppStore((s) => s.newShellEnabled);
   const showEvolutionPanel = useAppStore((s) => s.showEvolutionPanel);
   const showKnowledgePanel = useAppStore((s) => s.showKnowledgePanel);
+  const showSciencePanel = useAppStore((s) => s.showSciencePanel);
   const showWorkflowProPanel = useAppStore((s) => s.showWorkflowProPanel);
   const showGlobalSearch = useAppStore((s) => s.showGlobalSearch);
   const showActivityFeed = useAppStore((s) => s.showActivityFeed);
@@ -467,6 +469,9 @@ function App() {
 
       {/* Knowledge panel (new-shell Labs) — the Collective Knowledge Graph + research-ingest topics. */}
       {showKnowledgePanel && <KnowledgePanel onClose={() => useAppStore.getState().setShowKnowledgePanel(false)} />}
+
+      {/* AI-Scientist panel (new-shell Labs) — READ-ONLY tracking of `buddy science` experiment variants. */}
+      {showSciencePanel && <SciencePanel onClose={() => useAppStore.getState().setShowSciencePanel(false)} />}
 
       {/* WorkflowBuilder Pro — the flag had no mounted reader (dead from ⌘K and the Labs launcher).
           Host the full-bleed component in a closable overlay so the capability is actually reachable. */}
