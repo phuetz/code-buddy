@@ -395,8 +395,6 @@ export interface AppState {
   clipboardMonitoringEnabled: boolean;
   /** Flips true while the main process is generating a summary. */
   clipboardSummarising: boolean;
-  /** Whether the user has the panel expanded in the UI. Persists in localStorage via the panel. */
-  showClipboardPanel: boolean;
   showMemoryEditor: boolean;
   showActivityFeed: boolean;
   showFileActivity: boolean;
@@ -728,7 +726,6 @@ export interface AppState {
   ) => void;
   setClipboardMonitoringEnabled: (enabled: boolean) => void;
   setClipboardSummarising: (busy: boolean) => void;
-  setShowClipboardPanel: (show: boolean) => void;
   setShowMemoryEditor: (show: boolean) => void;
   setShowActivityFeed: (show: boolean) => void;
   setShowFileActivity: (show: boolean) => void;
@@ -941,7 +938,6 @@ export const useAppStore = create<AppState>((set) => ({
   clipboardSummary: null,
   clipboardMonitoringEnabled: false,
   clipboardSummarising: false,
-  showClipboardPanel: false,
   showMemoryEditor: false,
   showActivityFeed: false,
   showFileActivity: false,
@@ -1945,7 +1941,6 @@ export const useAppStore = create<AppState>((set) => ({
   setClipboardMonitoringEnabled: (enabled) =>
     set({ clipboardMonitoringEnabled: enabled }),
   setClipboardSummarising: (busy) => set({ clipboardSummarising: busy }),
-  setShowClipboardPanel: (show) => set({ showClipboardPanel: show }),
   setShowMemoryEditor: (show) => set({ showMemoryEditor: show }),
   setShowActivityFeed: (show) => set({ showActivityFeed: show }),
   setShowFileActivity: (show) => set({ showFileActivity: show }),
