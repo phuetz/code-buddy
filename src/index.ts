@@ -3301,6 +3301,17 @@ addLazyCommand(
   },
 );
 
+// Paper QA — grounded, cited answers over a local corpus of scientific PDFs
+addLazyCommand(
+  program,
+  'papers',
+  'Paper QA: ask a question over a corpus of scientific PDFs and get a grounded, cited answer',
+  async () => {
+    const { createPapersCommand } = await import('./commands/papers/index.js');
+    return createPapersCommand();
+  },
+);
+
 // Planning Flow — OpenManus-compatible multi-agent orchestration
 addLazyCommand(
   program,
