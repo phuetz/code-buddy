@@ -586,6 +586,10 @@ export async function runExperimentLoop(
       } else {
         for (const s of batch) {
           if (experiments >= b.maxExperiments) break;
+          // F4: re-check the time/cost caps BETWEEN experiments so a sequential
+          // batch stops at the cap instant, not only at the next generation head.
+          wallClockMs = Math.max(0, deps.clock() - startMs);
+          if (wallClockMs >= b.maxWallClockMs || cost >= b.maxCost) break;
           produced.push(await runCandidate(s.idea, s.parent, s.parentFitness, true));
         }
       }
@@ -627,6 +631,19 @@ export async function runExperimentLoop(
 
       generation += 1;
       wallClockMs = Math.max(0, deps.clock() - startMs);
+
+      // F4: enforce the time/cost caps at the generation boundary too — a batch
+      // (parallel or sequential) that just spent the budget must STOP here with
+      // the honest reason, BEFORE convergence can mask it and without overshooting
+      // into another generation's batch.
+      if (wallClockMs >= b.maxWallClockMs) {
+        result.stopReason = 'max-wallclock';
+        break;
+      }
+      if (cost >= b.maxCost) {
+        result.stopReason = 'max-cost';
+        break;
+      }
 
       if (stagnation >= b.patience) {
         result.stopReason = 'converged';

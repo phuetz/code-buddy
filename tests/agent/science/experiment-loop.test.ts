@@ -411,3 +411,71 @@ describe('runExperimentLoop — bounded parallel workers', () => {
     expect(result.stopReason).toBe('max-experiments');
   });
 });
+
+// --------------------------------------------------------------------------
+// 7. F4 — time/cost caps enforced MID-RUN, not only at generation boundaries
+// --------------------------------------------------------------------------
+
+describe('runExperimentLoop — F4: honest wall-clock / cost enforcement', () => {
+  it('stops with max-wallclock when the cap is crossed during a generation (not masked by convergence)', async () => {
+    // A virtual clock that advances 60ms per executed experiment. With a constant
+    // score the loop would CONVERGE (patience 1) at gen 1 — pre-fix that masked the
+    // wall-clock cap. The fix checks time at the generation boundary FIRST, so the
+    // honest stop reason is 'max-wallclock'.
+    let virtualMs = 0;
+    const h = makeHarness({
+      scoreFor: () => 0.5, // constant ⇒ stagnates after the seed
+      executeCode: async () => {
+        virtualMs += 60;
+        return fakeExec();
+      },
+      clock: () => virtualMs,
+    });
+    const result = await runExperimentLoop('x', h.deps, {
+      maxGenerations: 5,
+      maxExperiments: 999,
+      maxWallClockMs: 100, // crossed midway through gen 1 (virtualMs 120)
+      patience: 1,
+      parallelism: 1,
+    });
+    expect(result.stopReason).toBe('max-wallclock');
+    // Stopped promptly — exactly the two experiments that fit under the cap.
+    expect(result.budget.experimentsRun).toBe(2);
+    expect(h.execCalls).toHaveLength(2);
+  });
+
+  it('does not start a new experiment once the wall-clock cap is already exceeded', async () => {
+    // Clock jumps PAST the cap after the first experiment; the sequential
+    // between-experiments re-check must refuse to start a second one.
+    let virtualMs = 0;
+    const h = makeHarness({
+      executeCode: async () => {
+        virtualMs += 200; // one experiment blows the 100ms budget
+        return fakeExec();
+      },
+      clock: () => virtualMs,
+    });
+    const result = await runExperimentLoop('x', h.deps, {
+      maxGenerations: 5,
+      maxExperiments: 999,
+      maxWallClockMs: 100,
+      parallelism: 1,
+    });
+    expect(result.stopReason).toBe('max-wallclock');
+    expect(h.execCalls).toHaveLength(1); // never overshot into a second experiment
+  });
+
+  it('the cost cap fires end-to-end once armed with costPerExperiment', async () => {
+    const h = makeHarness(); // strictly increasing score ⇒ no convergence
+    const result = await runExperimentLoop('x', h.deps, {
+      maxGenerations: 999,
+      maxExperiments: 999,
+      maxCost: 5,
+      costPerExperiment: 2, // cost after 3 experiments = 6 ≥ 5 ⇒ stop
+      parallelism: 1,
+    });
+    expect(result.stopReason).toBe('max-cost');
+    expect(result.budget.experimentsRun).toBe(3);
+    expect(result.budget.costSpent).toBe(6);
+  });
+});
