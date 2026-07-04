@@ -58,6 +58,19 @@ export async function withSpeakingGuard(play: () => Promise<void>): Promise<void
   return run;
 }
 
+/**
+ * Barge-in reset — hard-clear the guard when the current spoken turn is INTERRUPTED
+ * (the human starts talking, or a programmatic `interrupt()`). Drops any active play
+ * count, clears the echo tail, and resets the mouth chain so the ear re-opens
+ * IMMEDIATELY (no tail) and no queued playback continues. Distinct from `endSpeaking`,
+ * which arms the tail for a normal end-of-utterance. Idempotent, never-throws.
+ */
+export function interruptSpeaking(): void {
+  activePlays = 0;
+  speakingUntilMs = 0;
+  mouthChain = Promise.resolve();
+}
+
 /** Test helper: reset the guard state. */
 export function _resetVoiceActivityForTests(): void {
   activePlays = 0;
