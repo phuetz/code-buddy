@@ -1,4 +1,4 @@
-import axios from 'axios';
+import axios, { type AxiosRequestConfig } from 'axios';
 import { ToolResult, getErrorMessage } from '../types/index.js';
 import { logger } from '../utils/logger.js';
 import { assertSafeUrl } from '../security/ssrf-guard.js';
@@ -7,7 +7,18 @@ import { assertSafeUrl } from '../security/ssrf-guard.js';
 // Types
 // ============================================================================
 
-export type SearchProvider = 'brave' | 'perplexity' | 'serper' | 'duckduckgo' | 'brave-mcp';
+export type SearchProvider = 'brave' | 'perplexity' | 'serper' | 'duckduckgo' | 'brave-mcp' | 'searxng';
+
+/**
+ * Injectable HTTP GET boundary. Defaults to `axios.get`; the SearXNG provider
+ * routes through this so tests can supply a fake without any real network.
+ */
+export type WebSearchHttpGet = (url: string, config?: AxiosRequestConfig) => Promise<{ data: unknown }>;
+
+export interface WebSearchToolDeps {
+  /** Override the HTTP GET boundary (used by the SearXNG provider). */
+  httpGet?: WebSearchHttpGet;
+}
 
 /**
  * Web search mode (Codex-inspired prompt injection mitigation).
@@ -155,6 +166,22 @@ interface PerplexityResponse {
 }
 
 // ============================================================================
+// SearXNG API types (JSON search endpoint)
+// ============================================================================
+
+interface SearxngResult {
+  title?: string;
+  url?: string;
+  content?: string;
+  publishedDate?: string;
+  engine?: string;
+}
+
+interface SearxngResponse {
+  results?: SearxngResult[];
+}
+
+// ============================================================================
 // Constants
 // ============================================================================
 
@@ -199,10 +226,49 @@ function resolvePerplexityBaseUrl(apiKey?: string): string {
 }
 
 /**
+ * Validate + normalize the `SEARXNG_URL` env value.
+ *
+ * SearXNG is an operator-configured, trusted endpoint (like `OLLAMA_HOST` /
+ * `VLLM_BASE_URL`), and its canonical deployment is loopback
+ * (`http://localhost:8888`) — so we deliberately do NOT run it through the
+ * SSRF guard (which fails closed on loopback/private IPs). Instead we require a
+ * well-formed http(s) URL; anything else disables the provider (never throws).
+ *
+ * @returns the trimmed URL (no trailing slash) if valid, else `undefined`.
+ */
+function normalizeSearxngUrl(raw: string | undefined): string | undefined {
+  if (!raw) return undefined;
+  const trimmed = raw.trim();
+  if (!trimmed) return undefined;
+
+  let parsed: URL;
+  try {
+    parsed = new URL(trimmed);
+  } catch {
+    logger.warn('SEARXNG_URL is not a valid URL — SearXNG search provider disabled', { value: trimmed });
+    return undefined;
+  }
+
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    logger.warn('SEARXNG_URL must be an http(s) URL — SearXNG search provider disabled', {
+      protocol: parsed.protocol,
+    });
+    return undefined;
+  }
+
+  return trimmed.replace(/\/+$/, '');
+}
+
+/**
  * Web Search Tool — Enterprise-aligned provider chain
  *
  * Provider resolution (auto mode):
- *   Brave MCP → Brave API → Perplexity → Serper → DuckDuckGo
+ *   SearXNG (when SEARXNG_URL set) → Brave MCP → Brave API → Perplexity → Serper → DuckDuckGo
+ *
+ * SearXNG, when configured, is PREFERRED (first in the chain): it needs no API
+ * key and is privacy-respecting, matching Code Buddy's local-first stance. When
+ * `SEARXNG_URL` is unset it is never tried and the chain is byte-identical to
+ * the historical Brave→Perplexity→Serper→DuckDuckGo order.
  *
  * Supports country, search_lang, ui_lang, freshness (Brave), Perplexity AI search.
  */
@@ -215,13 +281,21 @@ export class WebSearchTool {
   private serperApiKey: string | undefined;
   private braveApiKey: string | undefined;
   private perplexityApiKey: string | undefined;
+  private searxngUrl: string | undefined;
 
-  constructor() {
+  // Injectable HTTP GET boundary (SearXNG only) — defaults to axios.get
+  private readonly httpGet: WebSearchHttpGet;
+
+  constructor(deps: WebSearchToolDeps = {}) {
+    this.httpGet = deps.httpGet ?? ((url, config) => axios.get(url, config));
+
     this.serperApiKey = process.env.SERPER_API_KEY;
     this.braveApiKey = process.env.BRAVE_API_KEY;
     this.perplexityApiKey = process.env.PERPLEXITY_API_KEY || process.env.OPENROUTER_API_KEY;
+    this.searxngUrl = normalizeSearxngUrl(process.env.SEARXNG_URL);
 
     const providers: string[] = [];
+    if (this.searxngUrl) providers.push('searxng');
     if (this.braveApiKey) providers.push('brave');
     if (this.perplexityApiKey) providers.push('perplexity');
     if (this.serperApiKey) providers.push('serper');
@@ -341,6 +415,10 @@ export class WebSearchTool {
 
   private buildProviderChain(): SearchProvider[] {
     const chain: SearchProvider[] = [];
+    // SearXNG is PREFERRED when configured: no API key, privacy-respecting
+    // meta-search (local-first). When SEARXNG_URL is unset this branch is
+    // skipped and the chain is byte-identical to the historical order.
+    if (this.searxngUrl) chain.push('searxng');
     // Brave MCP is checked dynamically
     chain.push('brave-mcp');
     if (this.braveApiKey) chain.push('brave');
@@ -382,6 +460,9 @@ export class WebSearchTool {
     let results: SearchResult[];
 
     switch (provider) {
+      case 'searxng':
+        results = await this.searchSearXNG(query, count, options);
+        break;
       case 'brave-mcp':
         if (!(await this.isBraveMCPAvailable())) {
           throw new Error('Brave MCP not connected');
@@ -462,6 +543,75 @@ export class WebSearchTool {
       options.freshness || 'default',
     ];
     return parts.join(':');
+  }
+
+  // ============================================================================
+  // SearXNG (self-hosted meta-search, no API key)
+  // ============================================================================
+
+  /**
+   * Query a SearXNG instance's JSON search endpoint
+   * (`GET {SEARXNG_URL}/search?q=…&format=json`) and map `results[]`
+   * (`title`/`url`/`content`) to `SearchResult[]`.
+   *
+   * Never swallows transport errors: a timeout / unreachable instance / non-2xx
+   * throws so the caller's fallback chain moves to the next provider. Invalid
+   * JSON or an empty payload yields `[]` (→ "No results" → next provider). The
+   * `httpGet` boundary is injectable so tests run without real network.
+   */
+  private async searchSearXNG(
+    query: string,
+    count: number,
+    options: WebSearchOptions,
+  ): Promise<SearchResult[]> {
+    if (!this.searxngUrl) {
+      // Only reachable if `searxng` is force-selected while unconfigured — the
+      // auto chain never adds it in that case. Throwing routes to the next
+      // provider (or surfaces a clear error) instead of a `!`-deref crash.
+      throw new Error('SearXNG provider is not configured (SEARXNG_URL unset)');
+    }
+
+    const url = new URL(`${this.searxngUrl}/search`);
+    url.searchParams.set('q', query);
+    url.searchParams.set('format', 'json');
+    url.searchParams.set('categories', 'general');
+    url.searchParams.set('pageno', '1');
+    url.searchParams.set('safesearch', options.safeSearch ? '1' : '0');
+    if (options.search_lang) url.searchParams.set('language', options.search_lang);
+
+    const response = await this.httpGet(url.toString(), {
+      headers: {
+        'Accept': 'application/json',
+        'User-Agent': 'CodeBuddyCLI/1.0 (+https://github.com/code-buddy)',
+      },
+      timeout: DEFAULT_TIMEOUT_MS,
+    });
+
+    const payload = (response?.data ?? {}) as SearxngResponse;
+    const rawResults = Array.isArray(payload.results) ? payload.results : [];
+
+    const results: SearchResult[] = [];
+    for (const entry of rawResults) {
+      const entryUrl = entry && typeof entry.url === 'string' ? entry.url : '';
+      if (!entryUrl) continue;
+      const title = typeof entry.title === 'string' && entry.title.trim() ? entry.title.trim() : entryUrl;
+      const snippet = typeof entry.content === 'string' ? entry.content.trim() : '';
+      const published =
+        typeof entry.publishedDate === 'string' && entry.publishedDate.trim()
+          ? entry.publishedDate.trim()
+          : undefined;
+      results.push({
+        title,
+        url: entryUrl,
+        snippet,
+        siteName: resolveSiteName(entryUrl),
+        published,
+      });
+      if (results.length >= count) break;
+    }
+
+    logger.debug('SearXNG search completed', { query, resultCount: results.length });
+    return results;
   }
 
   // ============================================================================
