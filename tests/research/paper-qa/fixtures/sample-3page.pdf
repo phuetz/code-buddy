@@ -1,0 +1,85 @@
+%PDF-1.4
+%ÿÿÿÿ
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R 5 0 R 7 0 R] /Count 3 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 9 0 R >> >> >>
+endobj
+4 0 obj
+<< /Length 116 >>
+stream
+BT /F1 12 Tf 72 720 Td
+(ALPHA PAGE ONE) Tj
+0 -16 Td
+(Introduction) Tj
+0 -16 Td
+(The alpha marker lives here.) Tj
+ET
+endstream
+endobj
+5 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 6 0 R /Resources << /Font << /F1 9 0 R >> >> >>
+endobj
+6 0 obj
+<< /Length 461 >>
+stream
+BT /F1 12 Tf 72 720 Td
+(BETA PAGE TWO) Tj
+0 -16 Td
+(Methods) Tj
+0 -16 Td
+(The beta marker lives here on the second page.) Tj
+0 -16 Td
+(This page is intentionally much longer than the others.) Tj
+0 -16 Td
+(It contains several extra sentences of prose.) Tj
+0 -16 Td
+(Uniform division would never land the boundary here.) Tj
+0 -16 Td
+(More filler text to grow the page well beyond page one.) Tj
+0 -16 Td
+(Even more filler so the length gap is unmistakable.) Tj
+ET
+endstream
+endobj
+7 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 8 0 R /Resources << /Font << /F1 9 0 R >> >> >>
+endobj
+8 0 obj
+<< /Length 164 >>
+stream
+BT /F1 12 Tf 72 720 Td
+(GAMMA PAGE THREE) Tj
+0 -16 Td
+(Conclusion) Tj
+0 -16 Td
+(The gamma marker lives here.) Tj
+0 -16 Td
+(Final remarks close the document.) Tj
+ET
+endstream
+endobj
+9 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+xref
+0 10
+0000000000 65535 f 
+0000000015 00000 n 
+0000000064 00000 n 
+0000000133 00000 n 
+0000000259 00000 n 
+0000000425 00000 n 
+0000000551 00000 n 
+0000001062 00000 n 
+0000001188 00000 n 
+0000001402 00000 n 
+trailer
+<< /Size 10 /Root 1 0 R >>
+startxref
+1472
+%%EOF
