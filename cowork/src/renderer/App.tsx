@@ -18,6 +18,8 @@ import {
 import { useIPC } from './hooks/useIPC';
 import { useWindowSize } from './hooks/useWindowSize';
 import { useTabPinPersistence } from './hooks/useTabPinPersistence';
+import { useAutoBargeIn } from './hooks/useAutoBargeIn';
+import { useBargeInTurnCancel } from './hooks/useBargeInTurnCancel';
 import { TopMenuBar } from './components/TopMenuBar';
 import { PermissionDialog } from './components/PermissionDialog';
 import { SudoPasswordDialog } from './components/SudoPasswordDialog';
@@ -171,6 +173,12 @@ function App() {
   const { width } = useWindowSize();
   // Pin state survives restarts via configStore.tabs.pinnedSessionIds.
   useTabPinPersistence();
+  // Automatic (VAD) barge-in: listen to the mic while the agent's TTS plays and
+  // interrupt hands-free when the user starts speaking. Opt-in, never-throws.
+  useAutoBargeIn();
+  // On any barge-in (VAD or push-to-talk), also cancel the running agent turn —
+  // not just the TTS — so no ghost reply lands after the interruption.
+  useBargeInTurnCancel(activeSessionId, stopSession);
   const initialized = useRef(false);
   const sidebarBeforeSettings = useRef(false);
   // P1.6 — first-run onboarding wizard. Shows when no provider key is set

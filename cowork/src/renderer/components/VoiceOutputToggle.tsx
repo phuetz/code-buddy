@@ -44,9 +44,41 @@ interface VoiceInterruptedEventDetail {
   timestamp: number;
 }
 
+interface AssistantSpeakingEventDetail {
+  speaking: boolean;
+}
+
 declare global {
   interface WindowEventMap {
     'cowork:voice-interrupted': CustomEvent<VoiceInterruptedEventDetail>;
+    'cowork:assistant-speaking': CustomEvent<AssistantSpeakingEventDetail>;
+  }
+}
+
+/**
+ * True while the assistant's TTS is audibly playing (Piper `<audio>` or browser
+ * SpeechSynthesis). Read-only; the auto-barge-in VAD uses this to gate itself so
+ * it only interrupts while the agent is speaking. never-throws.
+ */
+export function isAssistantSpeaking(): boolean {
+  try {
+    if (activeAudio && !activeAudio.paused && !activeAudio.ended) return true;
+    if (typeof window !== 'undefined' && window.speechSynthesis?.speaking) return true;
+  } catch {
+    /* ignore */
+  }
+  return false;
+}
+
+/** Broadcast a speaking-state transition so listeners (auto-barge-in) can react. */
+function emitSpeakingState(speaking: boolean): void {
+  if (typeof window === 'undefined' || typeof window.dispatchEvent !== 'function') return;
+  try {
+    window.dispatchEvent(
+      new CustomEvent('cowork:assistant-speaking', { detail: { speaking } }),
+    );
+  } catch {
+    /* ignore — CustomEvent may be unavailable in some test envs */
   }
 }
 
@@ -74,6 +106,8 @@ function cancelActivePlayback(): boolean {
       /* ignore */
     }
   }
+  // Playback stopped — tell the auto-barge-in VAD to close the mic.
+  emitSpeakingState(false);
   return hadPlayback;
 }
 
@@ -120,11 +154,13 @@ async function speakViaPiper(text: string): Promise<boolean> {
     const audio = new Audio(url);
     activeAudio = audio;
     recordVoiceEvent({ type: 'assistant_speech_started' });
+    emitSpeakingState(true);
     let finished = false;
     const finishSpeech = () => {
       if (finished) return;
       finished = true;
       recordVoiceEvent({ type: 'assistant_speech_finished' });
+      emitSpeakingState(false);
     };
     const cleanup = () => {
       URL.revokeObjectURL(url);
@@ -162,7 +198,11 @@ function speakViaBrowser(text: string): void {
     utterance.lang = 'fr-FR';
     interruptSpeech('new_speech');
     recordVoiceEvent({ type: 'assistant_speech_started' });
-    utterance.onend = () => recordVoiceEvent({ type: 'assistant_speech_finished' });
+    emitSpeakingState(true);
+    utterance.onend = () => {
+      recordVoiceEvent({ type: 'assistant_speech_finished' });
+      emitSpeakingState(false);
+    };
     window.speechSynthesis.speak(utterance);
   } catch (err) {
     console.warn('[VoiceOutputToggle] browser tts failed:', err);

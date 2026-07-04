@@ -34,6 +34,7 @@ import {
 import { useAppStore } from '../store';
 import { useIPC } from '../hooks/useIPC';
 import { interruptSpeech, isTtsEnabled, speakText } from './VoiceOutputToggle';
+import { isAutoBargeInEnabled, setAutoBargeInEnabled } from '../hooks/useAutoBargeIn';
 import type { VoiceConversationEvent } from '../types';
 
 interface Props {
@@ -77,6 +78,7 @@ export const VoiceChatOverlay: React.FC<Props> = ({ isOpen, onClose }) => {
     }
   });
   const [sending, setSending] = useState(false);
+  const [autoBargeIn, setAutoBargeIn] = useState<boolean>(() => isAutoBargeInEnabled());
 
   const recorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -250,6 +252,12 @@ export const VoiceChatOverlay: React.FC<Props> = ({ isOpen, onClose }) => {
     }
   };
 
+  const toggleAutoBargeIn = () => {
+    const next = !autoBargeIn;
+    setAutoBargeIn(next);
+    setAutoBargeInEnabled(next);
+  };
+
   const handleRateChange = (v: number) => {
     setTtsRate(v);
     try {
@@ -360,6 +368,25 @@ export const VoiceChatOverlay: React.FC<Props> = ({ isOpen, onClose }) => {
                 }`}
               >
                 {autoSpeak ? t('common.on', 'Activé') : t('common.off', 'Désactivé')}
+              </button>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-zinc-400">
+                {t(
+                  'voiceOverlay.autoBargeIn',
+                  'Barge-in automatique (couper l\'agent dès que vous parlez)',
+                )}
+              </span>
+              <button
+                onClick={toggleAutoBargeIn}
+                className={`px-3 py-1 rounded text-[11px] font-medium transition-colors ${
+                  autoBargeIn
+                    ? 'bg-success/15 text-success'
+                    : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
+                }`}
+                data-testid="voice-overlay-auto-barge-in"
+              >
+                {autoBargeIn ? t('common.on', 'Activé') : t('common.off', 'Désactivé')}
               </button>
             </div>
             <div className="flex items-center justify-between">
