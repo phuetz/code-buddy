@@ -26,8 +26,18 @@ import {
   isYoutubeUrl,
   type Segment,
 } from './youtube-captions.js';
-import { downloadAudioWav, isDownloadOk, type DownloadResult } from './media-fetch.js';
+import {
+  downloadAudioWav,
+  downloadVideoFile,
+  isDownloadOk,
+  isVideoDownloadOk,
+  type DownloadResult,
+  type VideoDownloadResult,
+} from './media-fetch.js';
 import { transcribeLong, type TimedSegment, type LongTranscribeOptions } from './long-transcribe.js';
+import type { SampledFrame, FrameSampleDeps } from './frame-sample.js';
+import type { FrameDedupDeps } from './frame-dedup.js';
+import type { DescribeFrameDeps } from './describe-frame.js';
 
 export type UnderstandMethod = 'youtube-captions' | 'youtube-audio' | 'local-file' | 'direct-url';
 
@@ -35,6 +45,26 @@ export interface UnderstandVideoInput {
   source: string;
   question?: string;
   language?: string;
+  /** Phase 2: also analyze what is SHOWN on screen (frames → VLM/OCR). */
+  visual?: boolean;
+  /** With `visual`, also OCR each keyframe (best for reading code on screen). */
+  ocr?: boolean;
+}
+
+/** A transcript segment enriched with what was SHOWN during it (Phase 2). */
+export interface VisualSegment extends TimedSegment {
+  /** VLM/OCR description of the representative keyframe for this segment. */
+  shown?: string;
+  keyframePath?: string;
+  keyframeT?: number;
+}
+
+export interface VisualResult {
+  fused: VisualSegment[];
+  framesSampled: number;
+  framesDistinct: number;
+  /** Present when visual was requested but couldn't run (degraded to transcript). */
+  note?: string;
 }
 
 export interface UnderstandVideoSuccess {
@@ -43,6 +73,8 @@ export interface UnderstandVideoSuccess {
   source: string;
   method: UnderstandMethod;
   output: string;
+  /** Present only when `visual: true` produced (or attempted) frame analysis. */
+  visual?: VisualResult;
 }
 
 export interface UnderstandVideoFailure {
@@ -66,6 +98,20 @@ export interface UnderstandVideoDeps {
   now?: () => number;
   /** Max chars of transcript rendered inline before truncating with a pointer to the file. */
   maxOutputChars?: number;
+
+  // --- Phase 2 (`visual`) injectables — untouched unless `input.visual` is set. ---
+  /** Sample timestamped keyframes from a local video (default: `sampleFrames`). */
+  sampleFrames?: (videoPath: string, opts?: FrameSampleDeps) => Promise<SampledFrame[]>;
+  /** Options handed to the default frame sampler. */
+  frameSampleOptions?: FrameSampleDeps;
+  /** Dedup consecutive near-identical frames (default: `dedupConsecutiveFrames`). */
+  dedupFrames?: (frames: SampledFrame[], opts?: FrameDedupDeps) => Promise<SampledFrame[]>;
+  /** Describe one keyframe → text (default: `describeFrame`, local VLM + optional OCR). */
+  describeFrame?: (imagePath: string, prompt?: string, opts?: DescribeFrameDeps) => Promise<string>;
+  /** Options handed to the default describer (e.g. `withOcr`). */
+  describeOptions?: DescribeFrameDeps;
+  /** Download the picture track for a remote source (default: `downloadVideoFile`). */
+  downloadVideo?: (source: string, outDir: string) => Promise<VideoDownloadResult>;
 }
 
 const DEFAULT_MAX_OUTPUT_CHARS = 6000;
@@ -107,11 +153,18 @@ function safeSlug(source: string): string {
   return cleaned || `video-${Date.now()}`;
 }
 
+interface ResolvedSegments {
+  segments: TimedSegment[];
+  method: UnderstandMethod;
+  /** Set when a local video file is available for Phase 2 frame sampling. */
+  videoPath?: string;
+}
+
 async function resolveSegments(
   input: UnderstandVideoInput,
   deps: UnderstandVideoDeps,
   outDir: string,
-): Promise<{ segments: TimedSegment[]; method: UnderstandMethod } | UnderstandVideoFailure> {
+): Promise<ResolvedSegments | UnderstandVideoFailure> {
   const source = input.source;
   const fetchCaptions = deps.fetchCaptions ?? fetchYoutubeCaptions;
   const downloadAudio = deps.downloadAudio ?? ((s: string, d: string) => downloadAudioWav(s, d));
@@ -138,14 +191,16 @@ async function resolveSegments(
   // --- Local file: ffmpeg audio extract + local STT ---
   const localPath = isAbsolute(source) ? source : resolvePath(deps.cwd ?? process.cwd(), source);
   if (existsSync(source) || existsSync(localPath)) {
+    const filePath = existsSync(source) ? source : localPath;
     const extract = deps.extractAudio ?? (await defaultExtractAudio());
-    const extracted = await extract(existsSync(source) ? source : localPath);
+    const extracted = await extract(filePath);
     if (!extracted.success) {
       return { error: extracted.error ?? 'audio extraction failed' };
     }
     const audioPath = (extracted.data as { path?: string } | undefined)?.path;
     if (!audioPath) return { error: 'audio extraction produced no output path' };
-    return { segments: await runTranscribe(audioPath, transcribeOpts), method: 'local-file' };
+    // The local file IS the video → available for Phase 2 frame sampling.
+    return { segments: await runTranscribe(audioPath, transcribeOpts), method: 'local-file', videoPath: filePath };
   }
 
   // --- Direct media URL: yt-dlp handles generic URLs too ---
@@ -162,6 +217,126 @@ async function defaultExtractAudio(): Promise<(filePath: string) => Promise<Tool
   const { VideoTool } = await import('../video-tool.js');
   const tool = new VideoTool();
   return (filePath: string) => tool.extractAudio(filePath);
+}
+
+/** Pick the ONE distinct frame that best represents a transcript segment: the frame
+ *  whose timestamp falls inside `[t_start, t_end]` (closest to the midpoint), else
+ *  the globally nearest frame by |t − midpoint|. Returns `null` for no frames. */
+function pickKeyframe(seg: TimedSegment, frames: SampledFrame[]): SampledFrame | null {
+  if (frames.length === 0) return null;
+  const mid = (seg.t_start + seg.t_end) / 2;
+  let best: SampledFrame | null = null;
+  let bestScore = Number.POSITIVE_INFINITY;
+  for (const f of frames) {
+    const inside = f.t >= seg.t_start && f.t <= seg.t_end;
+    // Prefer in-range frames (score = |t-mid|); out-of-range penalized heavily.
+    const score = Math.abs(f.t - mid) + (inside ? 0 : 1e6);
+    if (score < bestScore) {
+      bestScore = score;
+      best = f;
+    }
+  }
+  return best;
+}
+
+/**
+ * Fuse the transcript with the sampled keyframes: attach ONE representative keyframe
+ * per segment and describe each DISTINCT chosen frame exactly once (cached by path,
+ * so a static screencast shared across many segments costs one VLM call). Returns the
+ * enriched `{ t_start, t_end, said, shown }` tuples. Never throws.
+ */
+export async function fuseTranscriptWithFrames(
+  segments: TimedSegment[],
+  frames: SampledFrame[],
+  describe: (imagePath: string) => Promise<string>,
+): Promise<VisualSegment[]> {
+  const chosen = segments.map((seg) => pickKeyframe(seg, frames));
+
+  // Describe each distinct chosen frame once.
+  const cache = new Map<string, string>();
+  const uniquePaths = [...new Set(chosen.filter((f): f is SampledFrame => f !== null).map((f) => f.path))];
+  for (const path of uniquePaths) {
+    let shown = '';
+    try {
+      shown = await describe(path);
+    } catch (err) {
+      logger.warn(`[video] describe failed for ${path}: ${err instanceof Error ? err.message : String(err)}`);
+    }
+    cache.set(path, shown);
+  }
+
+  return segments.map((seg, i) => {
+    const frame = chosen[i];
+    if (!frame) return { ...seg };
+    const shown = cache.get(frame.path) ?? '';
+    const out: VisualSegment = { ...seg, keyframePath: frame.path, keyframeT: frame.t };
+    if (shown) out.shown = shown;
+    return out;
+  });
+}
+
+/** Resolve a local video path for Phase 2: the local source file if available, else
+ *  download the picture track for a remote source. Returns `null` (with a note) when
+ *  the visual analysis can't run — the caller degrades to transcript-only. */
+async function resolveVideoPath(
+  input: UnderstandVideoInput,
+  deps: UnderstandVideoDeps,
+  outDir: string,
+  localVideoPath: string | undefined,
+): Promise<{ videoPath: string } | { note: string }> {
+  if (localVideoPath) return { videoPath: localVideoPath };
+
+  // Remote source (YouTube / direct URL): download the picture track.
+  if (/^https?:\/\//i.test(input.source) || isYoutubeUrl(input.source)) {
+    const download = deps.downloadVideo ?? ((s: string, d: string) => downloadVideoFile(s, d));
+    const dl = await download(input.source, outDir);
+    if (isVideoDownloadOk(dl)) return { videoPath: dl.videoPath };
+    return { note: `visuel indisponible (téléchargement vidéo échoué: ${dl.error})` };
+  }
+
+  return { note: 'visuel indisponible (aucune vidéo locale ni URL téléchargeable)' };
+}
+
+/** The Phase 2 visual pipeline: sample frames → dedup → fuse with the transcript.
+ *  Fully injectable, never throws; on any failure returns a degraded VisualResult
+ *  (transcript untouched). */
+async function runVisualPipeline(
+  input: UnderstandVideoInput,
+  deps: UnderstandVideoDeps,
+  outDir: string,
+  segments: TimedSegment[],
+  localVideoPath: string | undefined,
+): Promise<VisualResult> {
+  const resolved = await resolveVideoPath(input, deps, outDir, localVideoPath);
+  if ('note' in resolved) {
+    logger.warn(`[video] ${resolved.note}`);
+    return { fused: segments.map((s) => ({ ...s })), framesSampled: 0, framesDistinct: 0, note: resolved.note };
+  }
+
+  const sampleFramesFn =
+    deps.sampleFrames ??
+    (async (v: string, o?: FrameSampleDeps) => (await import('./frame-sample.js')).sampleFrames(v, o));
+  const dedupFramesFn =
+    deps.dedupFrames ??
+    (async (f: SampledFrame[], o?: FrameDedupDeps) => (await import('./frame-dedup.js')).dedupConsecutiveFrames(f, o));
+  const describeFrameFn =
+    deps.describeFrame ??
+    (async (p: string, prompt?: string, o?: DescribeFrameDeps) => (await import('./describe-frame.js')).describeFrame(p, prompt, o));
+
+  const describeOptions: DescribeFrameDeps = {
+    ...(deps.describeOptions ?? {}),
+    ...(input.ocr ? { withOcr: true } : {}),
+  };
+
+  const frames = await sampleFramesFn(resolved.videoPath, deps.frameSampleOptions);
+  if (frames.length === 0) {
+    return { fused: segments.map((s) => ({ ...s })), framesSampled: 0, framesDistinct: 0, note: 'aucune frame échantillonnée' };
+  }
+  const distinct = await dedupFramesFn(frames);
+  const fused = await fuseTranscriptWithFrames(segments, distinct, (imagePath) =>
+    describeFrameFn(imagePath, undefined, describeOptions),
+  );
+  return { fused, framesSampled: frames.length, framesDistinct: distinct.length };
 }
 
 /**
@@ -192,21 +367,49 @@ export async function understandVideo(
   const transcriptPath = join(outDir, `transcript-${safeSlug(source)}.txt`);
   const rendered = renderTranscript(segments);
 
-  const header = `# Transcript\nsource: ${source}\nmethod: ${method}\nsegments: ${segments.length}\n${input.question ? `question: ${input.question}\n` : ''}`;
+  // --- Phase 2: visual analysis (opt-in). Phase 1 is STRICTLY untouched otherwise. ---
+  let visual: VisualResult | undefined;
+  if (input.visual) {
+    try {
+      visual = await runVisualPipeline({ ...input, source }, deps, outDir, segments, resolved.videoPath);
+    } catch (err) {
+      // Fail-soft: a broken visual pipeline degrades to the transcript, never crashes.
+      logger.warn(`[video] visual pipeline error: ${err instanceof Error ? err.message : String(err)}`);
+      visual = { fused: segments.map((s) => ({ ...s })), framesSampled: 0, framesDistinct: 0, note: 'visuel en erreur (dégradé au transcript)' };
+    }
+  }
+
+  const visualRendered = visual ? renderVisual(visual) : '';
+  const header = `# Transcript\nsource: ${source}\nmethod: ${method}\nsegments: ${segments.length}\n${visual ? `visual: ${visual.framesDistinct}/${visual.framesSampled} frames\n` : ''}${input.question ? `question: ${input.question}\n` : ''}`;
   try {
-    await writeFile(transcriptPath, `${header}\n${rendered}\n`, 'utf8');
+    const body = visualRendered ? `${rendered}\n\n## Visuel (ce qui est montré)\n${visualRendered}\n` : `${rendered}\n`;
+    await writeFile(transcriptPath, `${header}\n${body}`, 'utf8');
   } catch (err) {
     logger.warn(`[video] could not persist transcript to ${transcriptPath}: ${err instanceof Error ? err.message : String(err)}`);
   }
 
   let output: string;
-  if (segments.length === 0) {
+  const bodyForOutput = visualRendered ? `${rendered}\n\n## Visuel (ce qui est montré)\n${visualRendered}` : rendered;
+  if (segments.length === 0 && !visualRendered) {
     output = `Aucune parole détectée dans la vidéo (méthode: ${method}). Transcript vide écrit dans ${transcriptPath}.`;
-  } else if (rendered.length <= maxChars) {
-    output = `Transcript horodaté (${segments.length} segments, méthode: ${method}) — sauvegardé dans ${transcriptPath}:\n\n${rendered}`;
+  } else if (bodyForOutput.length <= maxChars) {
+    output = `Transcript horodaté (${segments.length} segments, méthode: ${method}${visual ? `, visuel: ${visual.framesDistinct} frames distinctes` : ''}) — sauvegardé dans ${transcriptPath}:\n\n${bodyForOutput}`;
   } else {
-    output = `Transcript horodaté tronqué (${segments.length} segments, méthode: ${method}). Transcript complet dans ${transcriptPath}:\n\n${rendered.slice(0, maxChars)}\n\n… [tronqué — transcript complet dans ${transcriptPath}]`;
+    output = `Transcript horodaté tronqué (${segments.length} segments, méthode: ${method}${visual ? `, visuel: ${visual.framesDistinct} frames distinctes` : ''}). Complet dans ${transcriptPath}:\n\n${bodyForOutput.slice(0, maxChars)}\n\n… [tronqué — transcript complet dans ${transcriptPath}]`;
   }
 
-  return { segments, transcriptPath, source, method, output };
+  const result: UnderstandVideoSuccess = { segments, transcriptPath, source, method, output };
+  if (visual) result.visual = visual;
+  return result;
+}
+
+/** Render the fused visual segments as timestamped `SAID … | SHOWN …` lines. */
+function renderVisual(visual: VisualResult): string {
+  const lines = visual.fused
+    .filter((seg) => seg.shown)
+    .map((seg) => `[${formatTimestamp(seg.t_start)} - ${formatTimestamp(seg.t_end)}] MONTRÉ: ${seg.shown}`);
+  if (lines.length === 0) {
+    return visual.note ? `(${visual.note})` : '(aucune description visuelle produite)';
+  }
+  return lines.join('\n');
 }

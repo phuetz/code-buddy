@@ -471,7 +471,7 @@ export class VideoAnalyzeTool implements ITool {
 
 export class UnderstandVideoTool implements ITool {
   readonly name = 'understand_video';
-  readonly description = 'Understand a video (YouTube/URL/local file) by producing a timestamped transcript, local-first and $0.';
+  readonly description = 'Understand a video (YouTube/URL/local file): timestamped transcript of what is said, and optionally (visual:true) what is shown on screen. Local-first and $0.';
 
   async execute(input: Record<string, unknown>, context?: IToolExecutionContext): Promise<ToolResult> {
     try {
@@ -479,6 +479,8 @@ export class UnderstandVideoTool implements ITool {
         source: requiredString(input, 'source'),
         question: optionalString(input, 'question'),
         language: optionalString(input, 'language'),
+        ...(optionalBoolean(input.visual) !== undefined ? { visual: optionalBoolean(input.visual) } : {}),
+        ...(optionalBoolean(input.ocr) !== undefined ? { ocr: optionalBoolean(input.ocr) } : {}),
       }, {
         ...(context?.cwd ? { cwd: context.cwd } : {}),
       });
@@ -522,6 +524,14 @@ export class UnderstandVideoTool implements ITool {
             type: 'string',
             description: "Optional preferred language code (e.g. 'en', 'fr').",
           },
+          visual: {
+            type: 'boolean',
+            description: 'Also analyze what is SHOWN on screen (frames → local vision model). Default false.',
+          },
+          ocr: {
+            type: 'boolean',
+            description: 'With visual:true, also OCR each keyframe (best for on-screen code). Default false.',
+          },
         },
         required: ['source'],
       },
@@ -540,7 +550,7 @@ export class UnderstandVideoTool implements ITool {
       name: this.name,
       description: this.description,
       category: 'media' as ToolCategoryType,
-      keywords: ['video', 'youtube', 'transcribe', 'transcript', 'captions', 'subtitles', 'summarize', 'watch'],
+      keywords: ['video', 'youtube', 'transcribe', 'transcript', 'captions', 'subtitles', 'summarize', 'watch', 'visual', 'screencast', 'frames', 'ocr', 'on-screen'],
       priority: 8,
       modifiesFiles: true,
       makesNetworkRequests: true,

@@ -229,7 +229,7 @@ export const UNDERSTAND_VIDEO_TOOL: CodeBuddyTool = {
   type: "function",
   function: {
     name: "understand_video",
-    description: "Understand what a video SAYS by producing a timestamped transcript, local-first and $0. Accepts a YouTube URL (tries free captions first, then downloads audio with yt-dlp and transcribes locally with Whisper), a direct media URL, or a local video/audio file path. Returns the structured transcript and persists it to .codebuddy/video/. Use this to summarize or answer a question about a video's spoken content. Does NOT analyze on-screen visuals (that is a separate capability).",
+    description: "Understand a video, local-first and $0. By default produces a timestamped transcript of what is SAID (YouTube captions → yt-dlp audio + local Whisper → local file). Set visual:true to ALSO analyze what is SHOWN on screen (samples keyframes, dedups near-identical ones, describes each with a local vision model, fuses one keyframe per transcript segment into {said, shown} tuples) — ideal for code screencasts; set ocr:true to also read on-screen code/text with OCR. Returns the structured transcript and persists it to .codebuddy/video/.",
     parameters: {
       type: "object",
       properties: {
@@ -244,6 +244,14 @@ export const UNDERSTAND_VIDEO_TOOL: CodeBuddyTool = {
         language: {
           type: "string",
           description: "Optional preferred caption/transcription language code (e.g. 'en', 'fr'). Tried first, then en/fr."
+        },
+        visual: {
+          type: "boolean",
+          description: "Also analyze what is SHOWN on screen (frames → local vision model), fused per transcript segment. Local-first, slower. Default false (transcript only)."
+        },
+        ocr: {
+          type: "boolean",
+          description: "With visual:true, also OCR each keyframe (best for reading code/text on screen). Default false."
         }
       },
       required: ["source"]

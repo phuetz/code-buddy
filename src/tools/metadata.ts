@@ -795,9 +795,9 @@ export const TOOL_METADATA: ToolMetadata[] = [
   {
     name: 'understand_video',
     category: 'media',
-    keywords: ['video', 'youtube', 'transcribe', 'transcript', 'captions', 'subtitles', 'vidéo', 'résume vidéo', 'summarize', 'watch', 'movie', 'mp4'],
+    keywords: ['video', 'youtube', 'transcribe', 'transcript', 'captions', 'subtitles', 'vidéo', 'résume vidéo', 'summarize', 'watch', 'movie', 'mp4', 'visual', 'screencast', 'frames', 'on-screen', 'shown'],
     priority: 8,
-    description: 'Understand a video (YouTube/URL/local file) via a timestamped local transcript'
+    description: 'Understand a video (YouTube/URL/local file): timestamped transcript + optional on-screen visual analysis (visual:true)'
   },
   {
     name: 'ocr',
