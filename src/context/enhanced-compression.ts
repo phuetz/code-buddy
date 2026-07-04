@@ -114,6 +114,26 @@ const KEY_INFO_PATTERNS = {
 };
 
 /**
+ * Predicate: does this tool-result content represent a FAILED tool execution?
+ *
+ * Manus AI "keep the failures in context" principle: a failed `tool_result`
+ * must survive compaction so the agent doesn't blindly retry the same broken
+ * call. Shared by the enhanced compressor's content classifier (so failures
+ * are classified `'error'` and preserved) AND the legacy/snapshot extractive
+ * summary in `context-manager-v2` (so failures are carried into the summary
+ * text) — one source of truth for what "a tool failure" looks like.
+ */
+export function isFailedToolResultContent(content: string): boolean {
+  return (
+    /"success"\s*:\s*false/.test(content) ||
+    /\berror\b.*:/i.test(content) ||
+    content.startsWith('Error:') ||
+    content.startsWith('Failed:') ||
+    /\[ERROR\]|\bfailed\b.*\b(tool|command|execution)\b/i.test(content)
+  );
+}
+
+/**
  * Enhanced Context Compression Engine.
  *
  * Implements advanced compression strategies while preserving
@@ -511,13 +531,7 @@ export class EnhancedContextCompressor {
       // Manus AI error preservation: classify failed tool results as 'error'
       // so they receive a higher importance score and are never compressed away.
       const content = typeof msg.content === 'string' ? msg.content : '';
-      const isFailure =
-        /"success"\s*:\s*false/.test(content) ||
-        /\berror\b.*:/i.test(content) ||
-        content.startsWith('Error:') ||
-        content.startsWith('Failed:') ||
-        /\[ERROR\]|\bfailed\b.*\b(tool|command|execution)\b/i.test(content);
-      if (isFailure) return 'error';
+      if (isFailedToolResultContent(content)) return 'error';
       return 'tool_result';
     }
 

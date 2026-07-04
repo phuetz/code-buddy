@@ -24,6 +24,7 @@ import { RunStore } from '../observability/run-store.js';
 import {
   EnhancedContextCompressor,
   EnhancedCompressionConfig,
+  isFailedToolResultContent,
 } from './enhanced-compression.js';
 import { ImportanceScorer } from './importance-scorer.js';
 import { computeAutoCompactThreshold } from './auto-compact-threshold.js';
@@ -738,7 +739,31 @@ export class ContextManagerV2 {
    * This is a simple extractive summary - for production, use LLM-based summarization
    */
   private createSummary(messages: CodeBuddyMessage[]): string {
+    // Bounds for the "failed tool attempts" section carried through the
+    // extractive summary — keep it small so it never bloats the budget.
+    const MAX_PRESERVED_TOOL_FAILURES = 5;
+    const MAX_TOOL_FAILURE_CHARS = 200;
+
     const summaryParts: string[] = [];
+
+    // Attribute a failed tool_result to the tool that produced it by mapping
+    // tool_call_id -> function name from the assistant tool_calls.
+    const toolNameById = new Map<string, string>();
+    for (const msg of messages) {
+      if (msg.role === 'assistant' && 'tool_calls' in msg && Array.isArray(msg.tool_calls)) {
+        for (const tc of msg.tool_calls) {
+          if (tc && tc.type === 'function' && typeof tc.id === 'string') {
+            toolNameById.set(tc.id, tc.function.name);
+          }
+        }
+      }
+    }
+
+    // Manus AI error preservation: failed tool attempts must SURVIVE extractive
+    // compaction so the agent doesn't blindly retry them. Keep ONLY failures
+    // (successful tool_results would be noise) — the successes' role:'tool'
+    // messages are otherwise dropped here, which is exactly what we want.
+    const failedAttempts: string[] = [];
 
     for (const msg of messages) {
       if (msg.role === 'user' && typeof msg.content === 'string') {
@@ -749,12 +774,28 @@ export class ContextManagerV2 {
         // Extract key assistant responses (first 100 chars)
         const truncated = msg.content.substring(0, 100);
         summaryParts.push(`Assistant: ${truncated}${msg.content.length > 100 ? '...' : ''}`);
+      } else if (msg.role === 'tool' && typeof msg.content === 'string') {
+        if (isFailedToolResultContent(msg.content)) {
+          const id = (msg as { tool_call_id?: string }).tool_call_id;
+          const name = (id ? toolNameById.get(id) : undefined) ?? 'tool';
+          const snippet = msg.content.replace(/\s+/g, ' ').trim().slice(0, MAX_TOOL_FAILURE_CHARS);
+          failedAttempts.push(`- ${name}: ${snippet}`);
+        }
       }
     }
 
-    // Limit summary to target size based on compression ratio
+    // Limit conversation lines to target size based on compression ratio.
     const maxSummaryItems = Math.ceil(messages.length / this.config.compressionRatio);
-    return summaryParts.slice(0, maxSummaryItems).join('\n');
+    const lines = summaryParts.slice(0, maxSummaryItems);
+
+    // Append the bounded failed-tool-attempts section AFTER the slice so a long
+    // conversation can't push it out — the whole point is that failures survive.
+    if (failedAttempts.length > 0) {
+      lines.push('Failed tool attempts (do not retry):');
+      lines.push(...failedAttempts.slice(-MAX_PRESERVED_TOOL_FAILURES));
+    }
+
+    return lines.join('\n');
   }
 
   /**
