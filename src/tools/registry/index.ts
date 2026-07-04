@@ -63,6 +63,9 @@ export {
   resetWebSearchInstance,
 } from './web-tools.js';
 
+// Tool Adapters - Research (Deep/Wide/STORM)
+export { createResearchTools } from './research-tools.js';
+
 // Tool Adapters - Todo
 export {
   CreateTodoListTool,
@@ -526,6 +529,7 @@ export async function createAllToolsAsync(): Promise<ITool[]> {
   const { createBashTools } = await import('./bash-tools.js');
   const { createSearchTools } = await import('./search-tools.js');
   const { createWebTools } = await import('./web-tools.js');
+  const { createResearchTools } = await import('./research-tools.js');
   const { createTodoTools } = await import('./todo-tools.js');
   const { createKanbanTools } = await import('./kanban-tools.js');
   const { createSendMessageTools } = await import('./send-message-tools.js');
@@ -584,6 +588,7 @@ export async function createAllToolsAsync(): Promise<ITool[]> {
     ...createBashTools(),
     ...createSearchTools(),
     ...createWebTools(),
+    ...createResearchTools(),
     ...createTodoTools(),
     ...createKanbanTools(),
     ...createSendMessageTools(),
@@ -666,6 +671,7 @@ export function registerBuiltinTools(registry: FormalToolRegistry): number {
     ...createRemindTools(),
     ...createSearchTools(),
     ...createWebTools(),
+    ...createResearchTools(),
     ...createTodoTools(),
     ...createKanbanTools(),
     ...createSendMessageTools(),
@@ -738,6 +744,7 @@ import { createSelfDescribeTools } from './self-describe-tools.js';
 import { createRemindTools } from './remind-tools.js';
 import { createSearchTools } from './search-tools.js';
 import { createWebTools } from './web-tools.js';
+import { createResearchTools } from './research-tools.js';
 import { createTodoTools } from './todo-tools.js';
 import { createKanbanTools } from './kanban-tools.js';
 import { createSendMessageTools } from './send-message-tools.js';

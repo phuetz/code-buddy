@@ -132,6 +132,12 @@ export {
   WEB_TOOLS,
 } from './web-tools.js';
 
+// Research tools (Deep/Wide/STORM)
+export {
+  DEEP_RESEARCH_TOOL,
+  RESEARCH_TOOLS,
+} from './research-tools.js';
+
 // Advanced tools
 export {
   MULTI_EDIT_TOOL,

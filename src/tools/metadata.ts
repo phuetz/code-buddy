@@ -233,6 +233,18 @@ export const TOOL_METADATA: ToolMetadata[] = [
     fleetSafe: true,
   },
   {
+    name: 'deep_research',
+    category: 'web',
+    keywords: [
+      'research', 'deep research', 'investigate', 'investigation', 'sources', 'cite', 'citation',
+      'report', 'literature', 'state of the art', "état de l'art", 'etat de l\'art',
+      'recherche approfondie', 'recherche', 'enquête', 'due diligence', 'compare', 'comparison',
+      'storm', 'perspectives', 'multi-source', 'cited',
+    ],
+    priority: 7,
+    description: 'Bounded multi-source cited research pipeline (deep/wide/STORM) returning a report with references',
+  },
+  {
     name: 'web_fetch',
     category: 'web',
     keywords: ['fetch', 'url', 'website', 'page', 'download', 'http', 'https', 'link', 'read'],
