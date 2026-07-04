@@ -6,7 +6,11 @@ import { loadCoreModule } from '../src/main/utils/core-loader';
 import {
   buildAttachmentOnlyPrompt,
   buildAttachedFilesPromptContext,
+  buildPaperQaGuidance,
+  buildYoutubeVideoGuidance,
   extractAttachmentTextExcerpt,
+  extractYoutubeUrls,
+  hasQuestionIntent,
   resolveAttachmentPath,
   shouldIncludeDocumentWorkshopGuidance,
 } from '../src/main/session/file-attachment-context';
@@ -400,5 +404,171 @@ describe('file attachment prompt context', () => {
 
     expect(context).not.toContain('[Video understanding guidance]');
     expect(context).not.toContain('understand_video');
+  });
+
+  it('detects question intent narrowly (ends with ? or interrogative prefix)', () => {
+    expect(hasQuestionIntent('Quels sont les résultats de cette étude ?')).toBe(true);
+    expect(hasQuestionIntent('What does the paper conclude')).toBe(true);
+    expect(hasQuestionIntent('Résume ce PDF')).toBe(true);
+    expect(hasQuestionIntent('Explique-moi la méthode')).toBe(true);
+    // Not a question: does not end with ? nor begins with an interrogative word.
+    expect(hasQuestionIntent('Please answer every question from this document workshop')).toBe(
+      false
+    );
+    expect(hasQuestionIntent('Génère un livrable DOCX à partir de ce document')).toBe(false);
+    // Prefix boundary: "ouvre" must not match the "ou" (où) prefix.
+    expect(hasQuestionIntent('Ouvre ce fichier et corrige-le')).toBe(false);
+    expect(hasQuestionIntent('')).toBe(false);
+  });
+
+  it('routes an attached PDF + question to the paper_qa tool (grounded QA)', async () => {
+    mockedLoadCoreModule.mockResolvedValue(null);
+
+    const context = await buildAttachedFilesPromptContext(
+      [
+        attachment({
+          filename: 'etude.pdf',
+          relativePath: '.tmp/etude.pdf',
+          mimeType: 'application/pdf',
+        }),
+      ],
+      undefined,
+      'Quels sont les résultats de cette étude ?'
+    );
+
+    expect(context).toContain('[Paper QA guidance]');
+    expect(context).toContain('paper_qa');
+    expect(context).toContain('`paths` corpus');
+    // The real PDF path is passed as the corpus.
+    expect(context).toContain('- .tmp/etude.pdf');
+    // A pure question over a single PDF goes to paper_qa, NOT the DOCX atelier.
+    expect(context).not.toContain('[Document workshop guidance]');
+    expect(context).not.toContain('[Document workshop path hints]');
+    // Standard attached-files section is still present (paper_qa is additive).
+    expect(context).toContain('[Attached files - use Read tool to access them]');
+  });
+
+  it('keeps the DOCX atelier for a PDF without a question (no paper_qa)', async () => {
+    mockedLoadCoreModule.mockResolvedValue(null);
+
+    const context = await buildAttachedFilesPromptContext(
+      [
+        attachment({
+          filename: 'analyse.pdf',
+          relativePath: '.tmp/analyse.pdf',
+          mimeType: 'application/pdf',
+        }),
+      ],
+      undefined,
+      'Please answer every question from this document workshop'
+    );
+
+    expect(context).not.toContain('[Paper QA guidance]');
+    // The workshop path is unchanged for non-question document flows.
+    expect(context).toContain('[Document workshop guidance]');
+    expect(context).toContain('[Document workshop path hints]');
+    expect(context).toContain('analyse.pdf: pdf extract path');
+  });
+
+  it('routes the PDF to paper_qa while the DOCX still gets the atelier (cohabitation)', async () => {
+    mockedLoadCoreModule.mockResolvedValue(null);
+
+    const context = await buildAttachedFilesPromptContext(
+      [
+        attachment({
+          filename: 'paper.pdf',
+          relativePath: '.tmp/paper.pdf',
+          mimeType: 'application/pdf',
+        }),
+        attachment({
+          filename: 'questions.docx',
+          relativePath: '.tmp/questions.docx',
+          mimeType:
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        }),
+      ],
+      undefined,
+      'Quelles réponses donner aux questions ?'
+    );
+
+    // Grounded QA for the PDF corpus.
+    expect(context).toContain('[Paper QA guidance]');
+    expect(context).toContain('- .tmp/paper.pdf');
+    // The DOCX still flows through the atelier (workshop intent present).
+    expect(context).toContain('[Document workshop guidance]');
+    expect(context).toContain('[Document workshop path hints]');
+    expect(context).toContain('questions.docx: document extract_images');
+    // The paper_qa-routed PDF is NOT duplicated into the workshop path hints.
+    expect(context).not.toContain('paper.pdf: pdf extract path');
+  });
+
+  it('routes a YouTube URL in the prompt to understand_video (source = URL)', async () => {
+    mockedLoadCoreModule.mockResolvedValue(null);
+
+    const context = await buildAttachedFilesPromptContext(
+      [
+        attachment({
+          filename: 'notes.txt',
+          relativePath: '.tmp/notes.txt',
+          mimeType: 'text/plain',
+        }),
+      ],
+      undefined,
+      'Résume cette vidéo https://www.youtube.com/watch?v=dQw4w9WgXcQ'
+    );
+
+    expect(context).toContain('[Video URL understanding guidance]');
+    expect(context).toContain('understand_video');
+    expect(context).toContain('https://www.youtube.com/watch?v=dQw4w9WgXcQ');
+  });
+
+  it('builds YouTube guidance from the prompt with no attachment at all', () => {
+    expect(
+      buildYoutubeVideoGuidance('regarde https://youtu.be/dQw4w9WgXcQ stp')
+    ).toContain('[Video URL understanding guidance]');
+    expect(
+      buildYoutubeVideoGuidance('a short: https://www.youtube.com/shorts/abc123XYZ')
+    ).toContain('understand_video');
+    // No YouTube URL → no guidance.
+    expect(buildYoutubeVideoGuidance('juste une question sans lien ?')).toBeNull();
+    expect(buildYoutubeVideoGuidance('https://vimeo.com/12345')).toBeNull();
+  });
+
+  it('extracts and deduplicates YouTube URLs from free text', () => {
+    const urls = extractYoutubeUrls(
+      'un https://youtu.be/aaaaaaaaaaa et encore https://youtu.be/aaaaaaaaaaa et https://www.youtube.com/watch?v=bbbbbbbbbbb'
+    );
+    expect(urls).toEqual([
+      'https://youtu.be/aaaaaaaaaaa',
+      'https://www.youtube.com/watch?v=bbbbbbbbbbb',
+    ]);
+    expect(extractYoutubeUrls('no link here')).toEqual([]);
+  });
+
+  it('leaves the context untouched when there is no PDF question and no URL', async () => {
+    mockedLoadCoreModule.mockResolvedValue(null);
+
+    const context = await buildAttachedFilesPromptContext(
+      [
+        attachment({
+          filename: 'notes.txt',
+          relativePath: '.tmp/notes.txt',
+          mimeType: 'text/plain',
+        }),
+      ],
+      undefined,
+      'Résume ce fichier'
+    );
+
+    expect(context).not.toContain('[Paper QA guidance]');
+    expect(context).not.toContain('[Video URL understanding guidance]');
+    expect(context).not.toContain('understand_video');
+  });
+
+  it('does not fire paper_qa for a DOCX question (paper_qa is PDF-only)', () => {
+    const docx = attachment({
+      mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    });
+    expect(buildPaperQaGuidance('Que conclut ce document ?', [docx])).toBeNull();
   });
 });

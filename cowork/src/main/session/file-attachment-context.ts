@@ -118,6 +118,65 @@ function hasWorkshopIntent(prompt: string): boolean {
   ].some((term) => normalized.includes(term));
 }
 
+// Interrogative / imperative prefixes that mark a prompt as a genuine question
+// (the user wants an ANSWER, not a DOCX deliverable). Kept narrow on purpose so
+// it stays orthogonal to the document-workshop intent, which is about producing
+// a deliverable from a questionnaire (see hasWorkshopIntent).
+const QUESTION_INTENT_PREFIXES = [
+  'quoi',
+  'comment',
+  'pourquoi',
+  'quel',
+  'quelle',
+  'quels',
+  'quelles',
+  'qui',
+  'quand',
+  'ou',
+  'combien',
+  'est-ce',
+  'what',
+  'how',
+  'why',
+  'who',
+  'when',
+  'where',
+  'which',
+  'whose',
+  'whom',
+  'resume',
+  'resumer',
+  'explique',
+  'expliquer',
+  'explain',
+  'summarize',
+  'summarise',
+  'describe',
+  'decris',
+  'decrire',
+  'liste',
+  'list',
+];
+
+/**
+ * Heuristic: does the user prompt read as a question expecting an answer?
+ *
+ * True when the prompt ends with a question mark, or begins with an
+ * interrogative / summary word. Deliberately narrower than hasWorkshopIntent so
+ * the DOCX atelier (edition / conversion / deliverable generation) keeps its
+ * non-question flows untouched.
+ */
+export function hasQuestionIntent(prompt: string): boolean {
+  const normalized = normalizeIntentText(prompt).trim();
+  if (!normalized) return false;
+  if (/\?["')»«.\s]*$/.test(normalized)) return true;
+  return QUESTION_INTENT_PREFIXES.some((term) => {
+    if (!normalized.startsWith(term)) return false;
+    const nextChar = normalized.charAt(term.length);
+    return nextChar === '' || !/[a-z0-9]/.test(nextChar);
+  });
+}
+
 function isTextAttachment(
   file: Pick<FileAttachmentContent, 'filename' | 'relativePath' | 'mimeType'>
 ): boolean {
@@ -174,6 +233,89 @@ export function buildVideoUnderstandingGuidance(
     '- One or more videos were attached. Do NOT try to Read them directly or treat them as plain text — they have no readable text excerpt.',
     '- Call the understand_video tool with the video file path as its `source` to produce a transcript, then answer from that transcript.',
     '- Pass the user question through as the understand_video `question` argument when it is about the video content.',
+    ...lines,
+  ].join('\n');
+}
+
+/**
+ * Routes attached PDF(s) + a genuine question to the core `paper_qa` tool.
+ *
+ * When one or more PDFs are attached and the prompt reads as a question, the
+ * best route is grounded QA over the PDF corpus, not the DOCX atelier. This
+ * injects a Pattern-A instruction (same shape as buildVideoUnderstandingGuidance)
+ * that steers the agent to call `paper_qa` with the user question and the real
+ * PDF paths as its `paths` corpus — an anchored, cited answer (page/section
+ * provenance) with an honest refusal when evidence is insufficient. The agent
+ * invokes the tool itself through the existing agentic loop.
+ *
+ * Returns null when the prompt is not a question or no PDF is attached, so the
+ * existing document-workshop (edition / conversion) path is left untouched.
+ */
+export function buildPaperQaGuidance(
+  prompt: string,
+  files: Array<Pick<FileAttachmentContent, 'filename' | 'relativePath' | 'mimeType'>>
+): string | null {
+  if (!hasQuestionIntent(prompt)) return null;
+  const pdfs = files.filter(isPdfAttachment);
+  if (pdfs.length === 0) return null;
+
+  const lines = pdfs.map((file) => `- ${normalizePromptPath(file.relativePath || file.filename)}`);
+
+  return [
+    '[Paper QA guidance]',
+    '- One or more PDF documents were attached and the user asked a question.',
+    '- Answer with the paper_qa tool: pass the user question as `question` and these PDF paths as the `paths` corpus.',
+    '- paper_qa returns an ANCHORED, CITED answer (page/section provenance) and REFUSES honestly when the corpus does not support an answer — prefer it over free-form reading for grounded Q&A.',
+    '- PDF corpus paths:',
+    ...lines,
+  ].join('\n');
+}
+
+// Matches YouTube video URLs (watch, short-link, shorts) anywhere in free text.
+// Scheme is optional so a pasted bare `youtu.be/...` is still caught.
+const YOUTUBE_URL_RE =
+  /(?:https?:\/\/)?(?:www\.|m\.)?(?:youtube\.com\/(?:watch\?\S*v=[\w-]{6,}|shorts\/[\w-]{6,})|youtu\.be\/[\w-]{6,})[^\s<>"')]*/gi;
+
+/**
+ * Extracts (deduplicated, order-preserving) YouTube URLs from arbitrary text.
+ */
+export function extractYoutubeUrls(text: string): string[] {
+  if (!text) return [];
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const match of text.matchAll(YOUTUBE_URL_RE)) {
+    const url = match[0];
+    if (url && !seen.has(url)) {
+      seen.add(url);
+      out.push(url);
+    }
+  }
+  return out;
+}
+
+/**
+ * Routes a YouTube URL found in the prompt text to the core `understand_video`
+ * tool. Does not depend on any attached file — the source is the URL itself.
+ *
+ * Pattern-A instruction (same shape as buildVideoUnderstandingGuidance): steer
+ * the agent to call `understand_video` with `source` set to the URL,
+ * transcript-first (local, $0), adding `visual: true` only when the on-screen
+ * content actually matters (it is slow).
+ *
+ * Returns null when the prompt has no YouTube URL.
+ */
+export function buildYoutubeVideoGuidance(prompt: string): string | null {
+  const urls = extractYoutubeUrls(prompt);
+  if (urls.length === 0) return null;
+
+  const lines = urls.map((url) => `- ${url}`);
+
+  return [
+    '[Video URL understanding guidance]',
+    '- The prompt contains one or more YouTube URLs. Do NOT open them in a browser or try to Read them.',
+    '- Call the understand_video tool with the URL as its `source` (transcript-first, local and $0). Pass the user question through as the `question` argument.',
+    '- Add `visual: true` ONLY when the on-screen visual content matters (code screencasts, slides, diagrams) — it is slow. Default to the transcript-only path.',
+    '- YouTube URLs:',
     ...lines,
   ].join('\n');
 }
@@ -346,9 +488,29 @@ export async function buildAttachedFilesPromptContext(
     sections.push(videoGuidance);
   }
 
-  if (shouldIncludeDocumentWorkshopGuidance(prompt, files)) {
+  // A YouTube URL in the prompt routes to understand_video (source = URL).
+  const urlVideoGuidance = buildYoutubeVideoGuidance(prompt);
+  if (urlVideoGuidance) {
+    sections.push(urlVideoGuidance);
+  }
+
+  // PDF(s) + a genuine question route to grounded QA (paper_qa).
+  const paperQaGuidance = buildPaperQaGuidance(prompt, files);
+  if (paperQaGuidance) {
+    sections.push(paperQaGuidance);
+  }
+
+  // Cohabitation with the DOCX atelier: PDFs routed to paper_qa are removed from
+  // the workshop set, so a genuine question over PDFs goes to grounded QA rather
+  // than the edition/conversion path — while DOCX (and non-question flows) keep
+  // the workshop behavior unchanged.
+  const workshopFiles = paperQaGuidance
+    ? files.filter((file) => !isPdfAttachment(file))
+    : files;
+
+  if (shouldIncludeDocumentWorkshopGuidance(prompt, workshopFiles)) {
     sections.push(buildDocumentWorkshopGuidance());
-    const pathHints = buildDocumentWorkshopPathHints(files);
+    const pathHints = buildDocumentWorkshopPathHints(workshopFiles);
     if (pathHints) {
       sections.push(pathHints);
     }

@@ -59,6 +59,7 @@ import {
 import {
   buildAttachedFilesPromptContext,
   buildAttachmentOnlyPrompt,
+  buildYoutubeVideoGuidance,
 } from './file-attachment-context';
 import { generateTitleWithClaudeSdk } from '../claude/claude-sdk-one-shot';
 import { buildScheduledTaskTitle } from '../../shared/schedule/task-title';
@@ -1409,6 +1410,15 @@ export class SessionManager {
           );
           enhancedPrompt = `${promptForAgent}\n\n${fileContext}`;
           logCtx('[SessionManager] Enhanced prompt with file info:', enhancedPrompt);
+        } else {
+          // No attachment, but a YouTube URL in the prompt still routes to
+          // understand_video (source = URL) — buildAttachedFilesPromptContext
+          // only runs when files are present, so cover the no-attachment case.
+          const urlVideoGuidance = buildYoutubeVideoGuidance(promptForAgent);
+          if (urlVideoGuidance) {
+            enhancedPrompt = `${promptForAgent}\n\n${urlVideoGuidance}`;
+            logCtx('[SessionManager] Enhanced prompt with YouTube URL guidance');
+          }
         }
 
         // Process @mentions in the prompt (Claude Cowork parity)
