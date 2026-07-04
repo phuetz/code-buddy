@@ -1226,7 +1226,9 @@ export async function startServer(userConfig: Partial<ServerConfig> = {}): Promi
               // only to a reminder fired in its window (safety: never from ambient speech / the
               // chime-in LLM), bypasses the silence gate, reads the bind back, and short-circuits
               // the normal reply so the robot doesn't both confirm AND chat.
-              let onHeard = reply;
+              // `reply` is a VoiceReplyHandler (callable + `.interrupt()`); the wrappers below
+              // replace it with plain handlers, so type onHeard by the call contract they share.
+              let onHeard: (t: string) => Promise<void> = reply;
               let reminderShortcut: ((t: string) => boolean) | undefined;
               if (process.env.CODEBUDDY_REMINDERS === 'true') {
                 const rem = await import('../companion/reminders.js');

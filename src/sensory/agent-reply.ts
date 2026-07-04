@@ -23,13 +23,15 @@
  */
 
 import { logger } from '../utils/logger.js';
-import type { ReplyFn } from './voice-loop.js';
+import type { ReplyFn, VoiceStepOptions } from './voice-loop.js';
 import type { PermissionMode } from '../security/permission-modes.js';
 
-/** Run a full agent turn for the transcript, return the assistant's final text. */
-export type AgentRunner = (transcript: string) => Promise<string>;
-/** Condense a (possibly long, markdown) agent answer into 1-2 spoken FR sentences. */
-export type SummarizeFn = (agentOutput: string, transcript: string) => Promise<string>;
+/** Run a full agent turn for the transcript, return the assistant's final text.
+ *  `opts.signal` (optional) lets a barge-in abort the turn's LLM calls. */
+export type AgentRunner = (transcript: string, opts?: VoiceStepOptions) => Promise<string>;
+/** Condense a (possibly long, markdown) agent answer into 1-2 spoken FR sentences.
+ *  `opts.signal` (optional) lets a barge-in abort the summarizing LLM call. */
+export type SummarizeFn = (agentOutput: string, transcript: string, opts?: VoiceStepOptions) => Promise<string>;
 
 export interface AgentReplyOptions {
   /** Voice ACT posture, applied ONCE at construction. Default 'plan' (read-only, safe). */
@@ -128,7 +130,7 @@ function makeDefaultAgentRunner(cwd: string): AgentRunner {
 
 /** Default summarize: one fast-model pass turning the agent answer into spoken FR. */
 function makeDefaultSummarize(): SummarizeFn {
-  return async (agentOutput: string, transcript: string): Promise<string> => {
+  return async (agentOutput: string, transcript: string, opts?: VoiceStepOptions): Promise<string> => {
     const { CodeBuddyClient } = await import('../codebuddy/client.js');
     const { resolveVoiceModel, SPEAK_SYSTEM_PROMPT } = await import('./voice-loop.js');
     const { getActivePersonaVoiceAsync } = await import('../personas/persona-manager.js');
@@ -145,6 +147,8 @@ function makeDefaultSummarize(): SummarizeFn {
         { role: 'user', content: `Demande: ${transcript}\n\nRésultat:\n${agentOutput}` },
       ] as never,
       [],
+      // Additive: barge-in aborts the summarizing call too. Undefined ⇒ unchanged.
+      opts?.signal ? { signal: opts.signal } : undefined,
     );
     return (resp?.choices?.[0]?.message?.content ?? '').trim();
   };
@@ -178,7 +182,8 @@ export function makeAgentReply(options: AgentReplyOptions = {}): ReplyFn {
     postureApplied = true;
   }
 
-  return async (heard: string): Promise<string> => {
+  return async (heard: string, replyOpts?: VoiceStepOptions): Promise<string> => {
+    const signal = replyOpts?.signal;
     try {
       await ensurePosture();
       if (options.ack) {
@@ -188,12 +193,15 @@ export function makeAgentReply(options: AgentReplyOptions = {}): ReplyFn {
           /* ack is best-effort */
         }
       }
-      const output = await agentRunner(heard);
+      const output = await agentRunner(heard, signal ? { signal } : undefined);
+      // Interrupted (barge-in): abandon — the voice loop drops an aborted reply, so never
+      // synthesize a stale answer or a misleading "C'est fait.".
+      if (signal?.aborted) return '';
       // Empty output: in an acting posture it means "did it silently" → "C'est fait."; in read-only
       // 'plan' it can't have acted, so claiming success would be a lie → say it honestly.
       if (!output.trim()) return mode === 'plan' ? DEFAULT_PLAN_NOANSWER : DEFAULT_DONE;
       try {
-        const spoken = (await summarize(output, heard)).trim();
+        const spoken = (await summarize(output, heard, signal ? { signal } : undefined)).trim();
         if (spoken) return spoken;
       } catch (err) {
         logger.warn(`[voice-act] summarize failed: ${msg(err)}`);

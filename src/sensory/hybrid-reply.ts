@@ -21,7 +21,7 @@
  */
 
 import { logger } from '../utils/logger.js';
-import type { ReplyFn } from './voice-loop.js';
+import type { ReplyFn, VoiceStepOptions } from './voice-loop.js';
 import type { PermissionMode } from '../security/permission-modes.js';
 
 export interface HybridTurn {
@@ -38,8 +38,9 @@ export interface HybridReplyOptions {
   maxHistoryTurns?: number;
   /** Injectable: exact phatic matcher. Default `fastCompanionReply`. */
   fastReply?: (heard: string) => string | null;
-  /** Injectable: warm small-talk reply. Default the persona-voiced companion LLM reply. */
-  chitchat?: (heard: string, history: HybridTurn[]) => Promise<string>;
+  /** Injectable: warm small-talk reply. Default the persona-voiced companion LLM reply.
+   *  `opts.signal` (optional) lets a barge-in abort the warm-reply LLM call. */
+  chitchat?: (heard: string, history: HybridTurn[], opts?: VoiceStepOptions) => Promise<string>;
   /** Injectable: grounded agent turn → spoken summary. Default `makeAgentReply`. */
   agentReply?: ReplyFn;
   /** Injectable: true ⇒ route to the agent (substantive); false ⇒ chitchat. Default `isSubstantiveQuery`. */
@@ -123,7 +124,7 @@ export function makeHybridReply(options: HybridReplyOptions = {}): ReplyFn {
     if (fastReply && chitchat && agentReply) return;
     const vl = await import('./voice-loop.js');
     fastReply = fastReply ?? vl.fastCompanionReply;
-    chitchat = chitchat ?? ((heard, hist) => vl.defaultReply(heard, hist));
+    chitchat = chitchat ?? ((heard, hist, opts) => vl.defaultReply(heard, hist, opts));
     if (!agentReply) {
       const { makeAgentReply } = await import('./agent-reply.js');
       agentReply = makeAgentReply({
@@ -141,7 +142,8 @@ export function makeHybridReply(options: HybridReplyOptions = {}): ReplyFn {
     while (history.length > maxTurns * 2) history.shift();
   }
 
-  return async (heard: string): Promise<string> => {
+  return async (heard: string, replyOpts?: VoiceStepOptions): Promise<string> => {
+    const signal = replyOpts?.signal;
     try {
       // Evolve Lisa's inner state by the emotional colour of what he just said (opt-in relational
       // layer). Env-gated BEFORE the dynamic import so the default path stays untouched; best-effort.
@@ -163,13 +165,14 @@ export function makeHybridReply(options: HybridReplyOptions = {}): ReplyFn {
         return fast;
       }
       const substantive = classify(heard);
+      const stepOpts = signal ? { signal } : undefined;
       let out = '';
       if (substantive) {
         const preamble = buildContextPreamble(history);
         const input = preamble ? `${preamble}\n\nDemande actuelle : ${heard}` : heard;
-        out = (await agentReply!(input)).trim();
+        out = (await agentReply!(input, stepOpts)).trim();
       } else {
-        out = (await chitchat!(heard, history.slice(-maxTurns * 2))).trim();
+        out = (await chitchat!(heard, history.slice(-maxTurns * 2), stepOpts)).trim();
       }
       remember(heard, out);
       logger.info(`[voice-hybrid] ${substantive ? 'agent' : 'chitchat'} → ${out.slice(0, 60)}`);

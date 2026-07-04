@@ -22,16 +22,28 @@ import { join } from 'path';
 import { logger } from '../utils/logger.js';
 import { commandExists } from '../utils/command-exists.js';
 import { inferTaskType } from '../fleet/model-capability-heuristics.js';
-import { withSpeakingGuard } from './voice-activity.js';
+import { withSpeakingGuard, interruptSpeaking } from './voice-activity.js';
 import { prepareSpeech } from './speech-sanitizer.js';
 import { matchVoiceInteraction, VOICE_INTERACTION_PREWARM_PHRASES } from './voice-interactions.js';
 
+/**
+ * Cancellation handle threaded into the two interruptible steps of a spoken turn: the
+ * LLM/agent "think" (`ReplyFn`) and the TTS "play" (`PlayFn`). When the signal aborts
+ * (barge-in / programmatic `interrupt()`), the think step's HTTP request is aborted and
+ * the play step kills its audio child. Optional + additive — a step that ignores it keeps
+ * its previous (non-interruptible) behavior.
+ */
+export interface VoiceStepOptions {
+  /** Abort the in-flight step (barge-in / cancellation). */
+  signal?: AbortSignal;
+}
+
 /** Think: turn what was heard into a short spoken reply ('' → stay silent). */
-export type ReplyFn = (heard: string) => Promise<string>;
+export type ReplyFn = (heard: string, opts?: VoiceStepOptions) => Promise<string>;
 /** Synthesize: turn reply text into a playable WAV file, return its path. */
 export type SynthFn = (text: string) => Promise<string>;
 /** Speak: play a WAV file to the speakers (blocking until done). */
-export type PlayFn = (wav: string) => Promise<void>;
+export type PlayFn = (wav: string, opts?: VoiceStepOptions) => Promise<void>;
 
 export interface VoiceReplyOptions {
   /** Injectable "think" step. Default: a short companion reply from a local LLM ($0). */
@@ -538,7 +550,11 @@ export interface VoiceHistoryTurn {
 /** Recent reply openings (first few words), so the companion doesn't reuse the same entry twice. */
 let recentReplyOpeners: string[] = [];
 
-export async function defaultReply(heard: string, history: VoiceHistoryTurn[] = []): Promise<string> {
+export async function defaultReply(
+  heard: string,
+  history: VoiceHistoryTurn[] = [],
+  replyOpts?: VoiceStepOptions,
+): Promise<string> {
   const fast = fastCompanionReply(heard);
   if (fast) {
     logger.info(`[voice] fast reply → ${fast}`);
@@ -584,6 +600,9 @@ export async function defaultReply(heard: string, history: VoiceHistoryTurn[] = 
         { role: 'user', content: heard },
       ] as never,
       [],
+      // Additive: thread the barge-in signal so an interrupt aborts the in-flight
+      // LLM call. Undefined when not interruptible → the call is unchanged.
+      replyOpts?.signal ? { signal: replyOpts.signal } : undefined,
     );
     const reply = (resp?.choices?.[0]?.message?.content ?? '').trim();
     // Remember this opening so the next reply varies its entry (opt-in relational layer only).
@@ -637,8 +656,13 @@ function makeDefaultSynth(voice?: string, rootDir?: string): SynthFn {
   };
 }
 
-/** Default speak: play a WAV with the first available local player, blocking until done. */
-async function defaultPlay(wav: string): Promise<void> {
+/** Default speak: play a WAV with the first available local player, blocking until done.
+ *  Interruptible: when `opts.signal` aborts (barge-in), the audio child is SIGKILLed and
+ *  the play resolves immediately so the ear can re-open. */
+async function defaultPlay(wav: string, opts: VoiceStepOptions = {}): Promise<void> {
+  const signal = opts.signal;
+  // Already interrupted before we even start → don't spawn anything.
+  if (signal?.aborted) return;
   const candidates: Array<{ cmd: string; args: (f: string) => string[] }> = [
     { cmd: 'aplay', args: (f) => ['-q', f] },
     { cmd: 'pw-play', args: (f) => [f] },
@@ -654,6 +678,14 @@ async function defaultPlay(wav: string): Promise<void> {
     if (!(await commandExists(c.cmd))) continue;
     await new Promise<void>((resolve) => {
       const child = spawn(c.cmd, c.args(wav), { stdio: 'ignore' });
+      let settled = false;
+      const finish = (): void => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(killTimer);
+        signal?.removeEventListener('abort', onAbort);
+        resolve();
+      };
       const killTimer = setTimeout(() => {
         logger.warn(`[voice] player ${c.cmd} exceeded ${playTimeoutMs}ms — killing to avoid latching the speaking guard`);
         try {
@@ -661,14 +693,21 @@ async function defaultPlay(wav: string): Promise<void> {
         } catch {
           /* already gone */
         }
-        resolve();
+        finish();
       }, playTimeoutMs);
-      const done = (): void => {
-        clearTimeout(killTimer);
-        resolve();
+      // Barge-in: the same SIGKILL, but on demand instead of only on timeout.
+      const onAbort = (): void => {
+        logger.info(`[voice] playback interrupted — killing ${c.cmd}`);
+        try {
+          child.kill('SIGKILL');
+        } catch {
+          /* already gone */
+        }
+        finish();
       };
-      child.on('error', done);
-      child.on('close', done);
+      signal?.addEventListener('abort', onAbort, { once: true });
+      child.on('error', finish);
+      child.on('close', finish);
     });
     return;
   }
@@ -734,22 +773,55 @@ export async function sayNow(
 }
 
 /**
- * Build an `onHeard` handler that thinks then speaks. Never-throws.
- * Wire it into `wireSpeechReaction({ onHeard: makeVoiceReply() })`.
+ * An `onHeard` handler (callable as `(heard) => Promise<void>`) with an added `interrupt()`
+ * method — the foundation of barge-in. It is a plain function so it drops into
+ * `wireSpeechReaction({ onHeard: makeVoiceReply() })` unchanged; `.interrupt()` is an
+ * extra property, not a new call contract.
  */
-export function makeVoiceReply(options: VoiceReplyOptions = {}): (heard: string) => Promise<void> {
-  const replyFn = options.replyFn ?? defaultReply;
+export interface VoiceReplyHandler {
+  (heard: string): Promise<void>;
+  /**
+   * Cancel the in-flight spoken turn (barge-in): abort the LLM/agent think step (its HTTP
+   * request), kill the TTS playback, and hard-reset the half-duplex guard so the ear re-opens
+   * IMMEDIATELY (no echo tail). The handler promise then resolves, which lets the speech-reaction
+   * queue drain the next utterance with no blocked state. Idempotent, never-throws; a no-op when
+   * nothing is in flight.
+   */
+  interrupt(): void;
+}
+
+/**
+ * Build an `onHeard` handler that thinks then speaks, with a programmatic `interrupt()`.
+ * Never-throws. Wire it into `wireSpeechReaction({ onHeard: makeVoiceReply() })`.
+ *
+ * Interruption is driven by ONE `AbortController` per turn: `interrupt()` aborts it, which both
+ * cancels the think step (signal → provider transport) and kills the TTS child (signal → play).
+ * Without an `interrupt()` call the controller is never aborted, so the turn runs exactly as
+ * before (tour-par-tour bloquant) — the signal threading is inert.
+ */
+export function makeVoiceReply(options: VoiceReplyOptions = {}): VoiceReplyHandler {
+  // Default think step: adapt `defaultReply(heard, history, opts)` to the `ReplyFn(heard, opts)`
+  // contract so the barge-in signal reaches the LLM call.
+  const replyFn: ReplyFn = options.replyFn ?? ((heard, opts) => defaultReply(heard, [], opts));
   const play = options.play ?? defaultPlay;
 
-  return async (heard: string): Promise<void> => {
+  // The single in-flight turn's cancellation handle. null while idle.
+  let currentAbort: AbortController | null = null;
+
+  const handler = async (heard: string): Promise<void> => {
+    const controller = new AbortController();
+    currentAbort = controller;
+    const { signal } = controller;
     const startedAt = Date.now();
     let replyMs = 0;
     let synthMs = 0;
     let playMs = 0;
     try {
       const replyStart = Date.now();
-      const rawReply = await replyFn(heard);
+      const rawReply = await replyFn(heard, { signal });
       replyMs = Date.now() - replyStart;
+      // Interrupted during the think step → abandon silently (never speak a stale reply).
+      if (signal.aborted) return;
       // Sanity gate before synth: strip leaked control tokens + foreign-script contamination
       // (observed: a French reply degrading into CJK the Piper voice can't pronounce), stay silent
       // if nothing meaningful survives. `reply` is what we synth, log, and hand to onSpoke.
@@ -778,9 +850,13 @@ export function makeVoiceReply(options: VoiceReplyOptions = {}): (heard: string)
       const wav = await synth(reply);
       synthMs = Date.now() - synthStart;
       if (!wav) return;
+      // Interrupted during synth → don't start playback.
+      if (signal.aborted) return;
       const playStart = Date.now();
-      await withSpeakingGuard(() => play(wav)); // half-duplex: mute the ear while speaking
+      await withSpeakingGuard(() => play(wav, { signal })); // half-duplex + interruptible
       playMs = Date.now() - playStart;
+      // A barge-in kills the player early; don't claim we "spoke" the whole line.
+      if (signal.aborted) return;
       logger.info(`[voice] spoke → ${reply}`);
       logger.info(
         `[voice] timings: reply=${replyMs}ms synth=${synthMs}ms play=${playMs}ms total=${Date.now() - startedAt}ms`,
@@ -795,6 +871,30 @@ export function makeVoiceReply(options: VoiceReplyOptions = {}): (heard: string)
       }
     } catch (err) {
       logger.warn(`[voice] reply→speak failed: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      // If THIS turn was interrupted, hard-reset the half-duplex guard so the ear re-opens NOW
+      // (barge-in), overriding the echo tail that withSpeakingGuard's finally just armed. Runs
+      // last, so it wins the race against that endSpeaking(). Never re-arms after a normal turn.
+      if (signal.aborted) {
+        try {
+          interruptSpeaking();
+        } catch {
+          /* never-throws */
+        }
+      }
+      if (currentAbort === controller) currentAbort = null;
     }
   };
+
+  (handler as VoiceReplyHandler).interrupt = (): void => {
+    const controller = currentAbort;
+    if (!controller) return; // nothing in flight → clean no-op
+    try {
+      controller.abort();
+    } catch {
+      /* never-throws */
+    }
+  };
+
+  return handler as VoiceReplyHandler;
 }
