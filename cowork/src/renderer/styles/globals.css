@@ -8,6 +8,7 @@
   /* Define CSS variables for theming */
   :root {
     /* Dark theme (default) — OpenAI / Codex premium slate palette */
+    color-scheme: dark;
     --color-background: #1e1e1e;
     --color-background-secondary: #252526;
     --color-surface: #2d2d2d;
@@ -34,6 +35,7 @@
 
   /* Light theme override — Minimalist clean gray */
   .light {
+    color-scheme: light;
     --color-background: #ffffff;
     --color-background-secondary: #f9f9f9;
     --color-surface: #ffffff;
@@ -60,6 +62,7 @@
 
   /* Ember theme — warm charcoal/orange aesthetic */
   .ember {
+    color-scheme: dark;
     --color-background: #171614;
     --color-background-secondary: #1a1917;
     --color-surface: rgba(34, 32, 29, 0.7);
@@ -86,6 +89,7 @@
 
   /* Genspark theme — electric violet/indigo on deep space */
   .genspark {
+    color-scheme: dark;
     --color-background: #0d0b1f;
     --color-background-secondary: #141129;
     --color-surface: #1c1838;
@@ -112,6 +116,7 @@
 
   /* Codex theme — OpenAI teal-green on GitHub slate */
   .codex {
+    color-scheme: dark;
     --color-background: #0d1117;
     --color-background-secondary: #161b22;
     --color-surface: #1c2128;
@@ -138,6 +143,7 @@
 
   /* Anthropic theme — Claude cream + terracotta (light) */
   .anthropic {
+    color-scheme: light;
     --color-background: #faf9f5;
     --color-background-secondary: #f0eee6;
     --color-surface: #ffffff;
@@ -164,6 +170,17 @@
 
   * {
     @apply border-border;
+  }
+
+  /* Native listboxes (<select>): the popup uses OS defaults unless the theme opts
+     in (color-scheme, set per theme above) AND option colors are pinned — otherwise
+     dark themes show low-contrast gray text on a white popup. Force theme tokens so
+     every dropdown is readable in every theme. */
+  select,
+  option,
+  optgroup {
+    background-color: var(--color-surface);
+    color: var(--color-text-primary);
   }
 
   /* KaTeX / LaTeX formula rendering — theme-aware (tokens, not hardcoded colors) */
