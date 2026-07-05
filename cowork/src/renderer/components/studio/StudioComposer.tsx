@@ -66,23 +66,24 @@ export function StudioComposer({ templates, onScaffold, onPrompt, busy = false }
   return (
     <section className="border-b border-border bg-surface p-3">
       <div className="flex flex-col gap-3">
-        <div className="flex flex-col gap-2 lg:flex-row">
-          <div className="flex min-w-0 flex-1 items-center gap-2 rounded-md border border-border bg-background px-3">
-            <Wand2 className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-            <input
-              value={prompt}
-              onChange={(event) => updatePrompt(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter' && !event.shiftKey) {
-                  event.preventDefault();
-                  handleGenerate();
-                }
-              }}
-              disabled={busy}
-              placeholder="Décris l'app à construire"
-              className="h-10 min-w-0 flex-1 bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed"
-            />
-          </div>
+        <div className="flex min-w-0 items-start gap-2 rounded-md border border-border bg-background px-3 py-2 focus-within:border-accent">
+          <Wand2 className="mt-1.5 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+          <textarea
+            value={prompt}
+            onChange={(event) => updatePrompt(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
+                event.preventDefault();
+                handleGenerate();
+              }
+            }}
+            disabled={busy}
+            rows={4}
+            placeholder="Décris l'app à construire — ex. « une todo app React avec filtres, thème sombre et persistance locale ». Ctrl/⌘+Entrée pour générer."
+            className="min-h-[104px] min-w-0 flex-1 resize-y bg-transparent py-1 text-sm leading-relaxed text-foreground outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed"
+          />
+        </div>
+        <div className="flex items-center gap-2">
           <select
             value={selectedTemplate?.id ?? template}
             onChange={(event) => setTemplate(event.target.value as StudioTemplateId)}
@@ -100,7 +101,7 @@ export function StudioComposer({ templates, onScaffold, onPrompt, busy = false }
             type="button"
             onClick={handleGenerate}
             disabled={busy || !prompt.trim()}
-            className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground disabled:cursor-not-allowed disabled:opacity-50"
+            className="ml-auto inline-flex h-10 items-center justify-center gap-2 rounded-md bg-primary px-5 text-sm font-medium text-primary-foreground disabled:cursor-not-allowed disabled:opacity-50"
           >
             <Send className="h-4 w-4" aria-hidden="true" />
             Générer
