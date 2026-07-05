@@ -233,6 +233,15 @@ export const TOOL_METADATA: ToolMetadata[] = [
     fleetSafe: true,
   },
   {
+    name: 'design_system',
+    category: 'utility',
+    keywords: ['design', 'design system', 'ui', 'brand', 'branding', 'style', 'theme', 'spotify', 'apple', 'brutalism', 'interface', 'landing', 'esthétique', 'charte', 'palette', 'typographie'],
+    priority: 7,
+    description: 'List 150 brand design systems and read a chosen DESIGN.md to generate branded UIs',
+    // Read-only (reads vendored DESIGN.md assets) — answerable under the plan posture.
+    fleetSafe: true,
+  },
+  {
     name: 'deep_research',
     category: 'web',
     keywords: [
