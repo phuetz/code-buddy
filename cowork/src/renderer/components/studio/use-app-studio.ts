@@ -170,6 +170,7 @@ export function useAppStudio(options: UseAppStudioOptions = {}) {
       template: request.template,
       targetDir: request.targetDir,
       vars: request.vars,
+      ...(request.designSystem ? { designSystem: request.designSystem } : {}),
     });
     if (result.ok) {
       const nextProjectRoot = result.data.projectDir;

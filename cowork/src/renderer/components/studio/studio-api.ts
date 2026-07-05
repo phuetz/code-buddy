@@ -78,6 +78,7 @@ export interface ScaffoldApi {
     template: StudioTemplateId;
     targetDir: string;
     vars?: Record<string, string | boolean>;
+    designSystem?: string;
   }): Promise<StudioResult<{ projectDir: string; files: string[] }>>;
 }
 

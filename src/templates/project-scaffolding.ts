@@ -14,6 +14,7 @@ import { existsSync } from 'fs';
 import { EventEmitter } from 'events';
 import { spawn } from 'child_process';
 import { performance } from 'perf_hooks';
+import { applyDesignSystem } from './design-system-apply.js';
 
 // ============================================================================
 // Types
@@ -77,6 +78,8 @@ export interface GenerateOptions {
   variables: Record<string, string | boolean>;
   skipInstall?: boolean;
   skipGit?: boolean;
+  /** Optional brand design system id (e.g. 'spotify') applied after generation. */
+  designSystem?: string;
 }
 
 export interface GenerateResult {
@@ -806,6 +809,17 @@ export class TemplateEngine extends EventEmitter {
     }
 
     this.emit('progress', { phase: 'files-created', count: filesCreated.length });
+
+    // Apply the chosen brand design system (tokens.css + DESIGN.md) if requested.
+    if (options.designSystem) {
+      const branding = applyDesignSystem(projectPath, options.designSystem);
+      if (branding.applied) {
+        filesCreated.push(...branding.files);
+        this.emit('progress', { phase: 'design-system', id: options.designSystem, files: branding.files.length });
+      } else if (branding.warning) {
+        warnings.push(`Design system not applied: ${branding.warning}`);
+      }
+    }
 
     // Run post-generate hooks
     if (!options.skipInstall) {

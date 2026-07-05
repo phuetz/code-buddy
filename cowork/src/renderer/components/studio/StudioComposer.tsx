@@ -1,6 +1,7 @@
-import { Send, Wand2 } from 'lucide-react';
+import { Palette, Send, Wand2 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { suggestTemplate, type StudioTemplateId } from './utils/studio-intent.js';
+import { designSystemsByCategory, findDesignSystem } from './design-systems-catalog.js';
 
 export interface TemplateCard {
   id: StudioTemplateId;
@@ -13,6 +14,7 @@ export interface StudioScaffoldRequest {
   prompt: string;
   targetDir: string;
   vars: Record<string, string>;
+  designSystem?: string;
 }
 
 export interface StudioComposerProps {
@@ -62,10 +64,13 @@ export function StudioComposer({ templates, onScaffold, onPrompt, busy = false, 
   const [description, setDescription] = useState('');
   const [targetDir, setTargetDir] = useState('app-studio-project');
   const [targetEdited, setTargetEdited] = useState(false);
+  const [designSystem, setDesignSystem] = useState('');
   const selectedTemplate = useMemo(
     () => templates.find((item) => item.id === template) ?? templates[0],
     [template, templates],
   );
+  const designGroups = useMemo(() => designSystemsByCategory(), []);
+  const selectedDesign = designSystem ? findDesignSystem(designSystem) : undefined;
   const requiredVars = VARS_BY_TEMPLATE[template];
 
   useEffect(() => {
@@ -127,6 +132,7 @@ export function StudioComposer({ templates, onScaffold, onPrompt, busy = false, 
       prompt: text,
       targetDir: targetDir.trim(),
       vars,
+      ...(designSystem ? { designSystem } : {}),
     });
   };
 
@@ -181,6 +187,34 @@ export function StudioComposer({ templates, onScaffold, onPrompt, busy = false, 
             <Send className="h-4 w-4" aria-hidden="true" />
             Générer
           </button>
+        </div>
+        <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]">
+          <div className="flex items-center gap-2 rounded-md border border-border bg-background px-2">
+            <Palette className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+            <select
+              value={designSystem}
+              onChange={(event) => setDesignSystem(event.target.value)}
+              disabled={busy}
+              className="h-10 min-w-0 flex-1 bg-transparent text-sm text-foreground outline-none disabled:cursor-not-allowed disabled:opacity-50"
+              aria-label="Style de design"
+            >
+              <option value="">Style : aucun (neutre)</option>
+              {designGroups.map((group) => (
+                <optgroup key={group.category} label={group.category}>
+                  {group.systems.map((system) => (
+                    <option key={system.id} value={system.id}>
+                      {system.name}
+                    </option>
+                  ))}
+                </optgroup>
+              ))}
+            </select>
+          </div>
+          <p className="flex items-center text-xs text-muted-foreground">
+            {selectedDesign
+              ? `${selectedDesign.name} — ${selectedDesign.tagline}`
+              : "Choisis un style de marque : l'app générée en reprend couleurs, typo et géométrie."}
+          </p>
         </div>
         <div className="grid gap-2 md:grid-cols-3">
           <input

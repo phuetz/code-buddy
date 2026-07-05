@@ -752,6 +752,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
         template: string;
         targetDir: string;
         vars?: Record<string, string | boolean>;
+        designSystem?: string;
       }) => ipcRenderer.invoke('studio.scaffold.generate', request),
     },
   },

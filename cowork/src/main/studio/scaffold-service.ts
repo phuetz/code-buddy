@@ -25,6 +25,8 @@ export interface ScaffoldProjectInput {
   template: StudioTemplateId;
   targetDir: string;
   vars?: StudioTemplateVars;
+  /** Optional brand design system id (e.g. 'spotify') applied after generation. */
+  designSystem?: string;
 }
 
 export interface ScaffoldProjectResult {
@@ -41,6 +43,7 @@ type CoreGenerateOptions = {
   projectName: string;
   outputDir: string;
   variables: StudioTemplateVars;
+  designSystem?: string;
 };
 
 type CoreGenerateResult = {
@@ -115,6 +118,7 @@ export class ScaffoldService {
         projectName,
         outputDir: dirname(targetDir),
         variables: { ...vars, projectName },
+        ...(input.designSystem ? { designSystem: input.designSystem } : {}),
       });
       if (!result.success) {
         return { ok: false, error: result.warnings?.join('\n') || 'Template generation failed' };
