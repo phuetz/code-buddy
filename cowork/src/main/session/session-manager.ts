@@ -1609,7 +1609,7 @@ export class SessionManager {
         }
         this.sendToRenderer({
           type: 'error',
-          payload: { message: errorText },
+          payload: { sessionId: session.id, message: errorText },
         });
       } finally {
         this.activeTurnJournalIds.delete(session.id);

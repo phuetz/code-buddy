@@ -382,12 +382,18 @@ export function useIPC() {
           case 'error':
             console.error('[useIPC] Server error:', event.payload.message);
             store.setLoading(false);
-            if (event.payload.sessionId) {
-              store.updateSession(event.payload.sessionId, { status: 'idle' });
-              store.finishExecutionClock(event.payload.sessionId);
-              store.clearActiveTurn(event.payload.sessionId);
-              store.clearPendingTurns(event.payload.sessionId);
-              store.clearQueuedMessages(event.payload.sessionId);
+            {
+              // Fall back to the active session so a backend error that omits the
+              // sessionId can't strand the composer in a permanent 'running' state.
+              const errSessionId =
+                event.payload.sessionId ?? useAppStore.getState().activeSessionId ?? undefined;
+              if (errSessionId) {
+                store.updateSession(errSessionId, { status: 'idle' });
+                store.finishExecutionClock(errSessionId);
+                store.clearActiveTurn(errSessionId);
+                store.clearPendingTurns(errSessionId);
+                store.clearQueuedMessages(errSessionId);
+              }
             }
             if (event.payload.code === 'CONFIG_REQUIRED_ACTIVE_SET') {
               store.setGlobalNotice({
