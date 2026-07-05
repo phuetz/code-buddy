@@ -21,6 +21,7 @@ import { useMemo } from 'react';
 import { AppStudioView } from './studio/AppStudioView';
 import { useAppStudio } from './studio/use-app-studio';
 import { createStudioApis } from './studio/studio-api-bridge';
+import { MissionControlView } from './os/MissionControlView';
 
 interface RailItem {
   view: PrimaryView;
@@ -34,6 +35,7 @@ const RAIL: RailItem[] = [
   { view: 'activity', label: 'Activité', glyph: '📊' },
   { view: 'workspace', label: 'Fichiers', glyph: '📁' },
   { view: 'studio', label: 'App Studio', glyph: '🛠️' },
+  { view: 'os', label: 'Mission Control', glyph: '🛰️' },
   { view: 'advanced', label: 'Avancé', glyph: '⚙️' },
 ];
 
@@ -203,6 +205,7 @@ export function NewShell() {
         {primaryView === 'activity' && <ActivityPane />}
         {primaryView === 'workspace' && <FileActivityPanel open onClose={backToChat} />}
         {primaryView === 'studio' && <StudioView />}
+        {primaryView === 'os' && <MissionControlView />}
         {primaryView === 'advanced' && <AdvancedLauncher />}
       </div>
     </div>
