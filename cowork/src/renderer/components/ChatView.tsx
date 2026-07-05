@@ -43,7 +43,8 @@ import {
   CHAT_COMPOSER_INSERT_EVENT,
   type ChatComposerInsertDetail,
 } from '../utils/chat-composer-events';
-import { Eye } from 'lucide-react';
+import { Eye, PanelRightOpen } from 'lucide-react';
+import { FlightPlanPanel } from './FlightPlanPanel';
 
 function toScheduleCreateInput(
   input: {
@@ -93,6 +94,8 @@ export function ChatView() {
   const setGlobalNotice = useAppStore((s) => s.setGlobalNotice);
   const showMemoryEditor = useAppStore((s) => s.showMemoryEditor);
   const setShowMemoryEditor = useAppStore((s) => s.setShowMemoryEditor);
+  const showFlightPlan = useAppStore((s) => s.showFlightPlan);
+  const setShowFlightPlan = useAppStore((s) => s.setShowFlightPlan);
   const setShowSettings = useAppStore((s) => s.setShowSettings);
   const setSettingsTab = useAppStore((s) => s.setSettingsTab);
   const setScheduleDraft = useAppStore((s) => s.setScheduleDraft);
@@ -897,7 +900,9 @@ export function ChatView() {
   }
 
   return (
-    <div className="h-full flex-1 min-h-0 flex flex-col overflow-hidden bg-background">
+    <div className="h-full flex-1 min-h-0 flex overflow-hidden bg-background">
+      {/* Chat column (left) — vertical stack of header, messages and composer. */}
+      <div className="flex flex-1 min-h-0 flex-col overflow-hidden">
       <ChatHeader />
       <GoalBanner />
 
@@ -1069,6 +1074,22 @@ export function ChatView() {
           }
         }}
       />
+      </div>
+
+      {/* Flight Plan (right) — live step timeline, or a slim rail to re-open it. */}
+      {showFlightPlan ? (
+        <FlightPlanPanel />
+      ) : (
+        <button
+          type="button"
+          onClick={() => setShowFlightPlan(true)}
+          title="Afficher le plan de vol"
+          aria-label="Afficher le plan de vol"
+          className="shrink-0 w-8 flex items-start justify-center border-l border-border bg-surface pt-3 hover:bg-accent/50 transition-colors"
+        >
+          <PanelRightOpen size={16} className="text-text-muted" aria-hidden />
+        </button>
+      )}
     </div>
   );
 }
