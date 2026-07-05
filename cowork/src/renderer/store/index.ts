@@ -235,6 +235,8 @@ export interface AppState {
   contextPanelCollapsed: boolean;
   // New shell (opt-in redesign behind COWORK_NEW_SHELL) — see cowork/REDESIGN.md.
   newShellEnabled: boolean;
+  /** Live Flight Plan panel (step timeline right of chat) — persisted as COWORK_FLIGHT_PLAN. */
+  showFlightPlan: boolean;
   primaryView: PrimaryView;
   showSettings: boolean;
   /** Evolution panel (new-shell Labs) — lists variants from recursive self-improvement. */
@@ -578,6 +580,7 @@ export interface AppState {
   setSidebarCollapsed: (collapsed: boolean) => void;
   setContextPanelCollapsed: (collapsed: boolean) => void;
   setNewShellEnabled: (on: boolean) => void;
+  setShowFlightPlan: (on: boolean) => void;
   setPrimaryView: (v: PrimaryView) => void;
   setShowSettings: (show: boolean) => void;
   setShowEvolutionPanel: (show: boolean) => void;
@@ -889,6 +892,21 @@ function readNewShellFlag(): boolean {
   return true;
 }
 
+/** Read the opt-in Flight Plan panel flag from localStorage (renderer). Safe in non-DOM test envs. */
+function readFlightPlanFlag(): boolean {
+  try {
+    if (typeof localStorage !== 'undefined') {
+      const v = localStorage.getItem('COWORK_FLIGHT_PLAN');
+      if (v === 'false') return false; // explicit opt-out
+      if (v === 'true') return true;
+    }
+  } catch {
+    /* ignore */
+  }
+  // The live step timeline is on by default — it's the headline "plan de vol" surface.
+  return true;
+}
+
 export const useAppStore = create<AppState>((set) => ({
   // Initial state
   sessions: [],
@@ -900,6 +918,7 @@ export const useAppStore = create<AppState>((set) => ({
   sidebarCollapsed: false,
   contextPanelCollapsed: false,
   newShellEnabled: readNewShellFlag(),
+  showFlightPlan: readFlightPlanFlag(),
   primaryView: 'chat',
   showSettings: false,
   showEvolutionPanel: false,
@@ -1505,6 +1524,14 @@ export const useAppStore = create<AppState>((set) => ({
       /* ignore */
     }
     set({ newShellEnabled: on });
+  },
+  setShowFlightPlan: (on) => {
+    try {
+      if (typeof localStorage !== 'undefined') localStorage.setItem('COWORK_FLIGHT_PLAN', String(on));
+    } catch {
+      /* ignore */
+    }
+    set({ showFlightPlan: on });
   },
   setPrimaryView: (v) => set({ primaryView: v }),
   setShowSettings: (show) => set({ showSettings: show }),
