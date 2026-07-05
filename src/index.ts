@@ -3323,6 +3323,18 @@ addLazyCommand(
   },
 );
 
+// Vision-training — synthetic perception curriculum: score robot vision vs
+// self-labeled scenes to find where it's weak (opt-in CODEBUDDY_VISION_TRAIN=true)
+addLazyCommand(
+  program,
+  'vision-train',
+  'Synthetic perception-training loop (EXPERIMENTAL, opt-in CODEBUDDY_VISION_TRAIN=true): score the robot vision (YOLO) on labeled generated/real scenes → a weakness benchmark',
+  async () => {
+    const { createVisionTrainCommand } = await import('./commands/vision-train.js');
+    return createVisionTrainCommand();
+  },
+);
+
 // Planning Flow — OpenManus-compatible multi-agent orchestration
 addLazyCommand(
   program,
