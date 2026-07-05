@@ -877,11 +877,16 @@ const defaultSettings: Settings = {
 /** Read the opt-in new-shell flag from localStorage (renderer). Safe in non-DOM test envs. */
 function readNewShellFlag(): boolean {
   try {
-    if (typeof localStorage !== 'undefined') return localStorage.getItem('COWORK_NEW_SHELL') === 'true';
+    if (typeof localStorage !== 'undefined') {
+      const v = localStorage.getItem('COWORK_NEW_SHELL');
+      if (v === 'false') return false; // explicit opt-out back to the legacy dock
+      if (v === 'true') return true;
+    }
   } catch {
     /* ignore */
   }
-  return false;
+  // New shell is the default surface — it hosts App Studio, Mission Control, etc.
+  return true;
 }
 
 export const useAppStore = create<AppState>((set) => ({
