@@ -88,7 +88,7 @@ export type FleetGoalDraftProfile = 'balanced' | 'research' | 'code' | 'review' 
  * overlay flags with one calm view model. Slice 1: Chat is the home; Activity/Workspace reuse the
  * existing overlays; Advanced is a progressive-disclosure launcher into the current panels.
  */
-export type PrimaryView = 'chat' | 'plan' | 'activity' | 'workspace' | 'advanced' | 'studio' | 'os';
+export type PrimaryView = 'chat' | 'plan' | 'activity' | 'workspace' | 'advanced' | 'studio' | 'os' | 'labs';
 
 export interface FleetGoalDraft {
   goal: string;

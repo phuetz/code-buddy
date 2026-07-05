@@ -22,6 +22,7 @@ import { AppStudioView } from './studio/AppStudioView';
 import { useAppStudio } from './studio/use-app-studio';
 import { createStudioApis } from './studio/studio-api-bridge';
 import { MissionControlView } from './os/MissionControlView';
+import { LabsGallery } from './labs/LabsGallery';
 
 interface RailItem {
   view: PrimaryView;
@@ -36,6 +37,7 @@ const RAIL: RailItem[] = [
   { view: 'workspace', label: 'Fichiers', glyph: '📁' },
   { view: 'studio', label: 'App Studio', glyph: '🛠️' },
   { view: 'os', label: 'Mission Control', glyph: '🛰️' },
+  { view: 'labs', label: 'Labs', glyph: '🧪' },
   { view: 'advanced', label: 'Avancé', glyph: '⚙️' },
 ];
 
@@ -206,6 +208,7 @@ export function NewShell() {
         {primaryView === 'workspace' && <FileActivityPanel open onClose={backToChat} />}
         {primaryView === 'studio' && <StudioView />}
         {primaryView === 'os' && <MissionControlView />}
+        {primaryView === 'labs' && <LabsGallery />}
         {primaryView === 'advanced' && <AdvancedLauncher />}
       </div>
     </div>
