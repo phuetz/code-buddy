@@ -234,6 +234,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   showItemInFolder: (filePath: string, cwd?: string) =>
     ipcRenderer.invoke('shell.showItemInFolder', filePath, cwd),
+  sessionPrune: {
+    preview: (filter: { olderThanDays?: number; titleMatch?: string; excludeId?: string }) =>
+      ipcRenderer.invoke('session.prunePreview', filter),
+    apply: (ids: string[]) => ipcRenderer.invoke('session.pruneApply', { ids }),
+  },
 
   // Select files using native dialog
   selectFiles: (): Promise<string[]> => ipcRenderer.invoke('dialog.selectFiles'),
@@ -4580,6 +4585,13 @@ declare global {
       getVersion: () => Promise<string>;
       openExternal: (url: string) => Promise<boolean>;
       showItemInFolder: (filePath: string, cwd?: string) => Promise<boolean>;
+      sessionPrune: {
+        preview: (filter: { olderThanDays?: number; titleMatch?: string; excludeId?: string }) => Promise<{
+          matches: Array<{ id: string; title: string; updatedAt: number }>;
+          ageSpan: { oldest: number; newest: number } | null;
+        }>;
+        apply: (ids: string[]) => Promise<{ ok: boolean; archived: number }>;
+      };
       selectFiles: () => Promise<string[]>;
       artifacts: {
         listRecentFiles: (

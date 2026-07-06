@@ -2798,6 +2798,34 @@ function resolveLessonsWorkspace(projectId?: string): string {
 }
 
 // ── Session export IPC handler ────────────────────────────────────────
+// Bulk session prune (Hermes parity): preview matches + age span, then
+// archive them in one pass. Pinned/archived/active sessions never match.
+ipcMain.handle(
+  'session.prunePreview',
+  async (_event, filter: { olderThanDays?: number; titleMatch?: string; excludeId?: string }) => {
+    const { previewPrune } = await import('../shared/session-prune');
+    if (!sessionManager) return { matches: [], ageSpan: null };
+    const sessions = sessionManager
+      .listSessions()
+      .filter((s) => s.id !== filter.excludeId)
+      .map((s) => ({ id: s.id, title: s.title, pinned: s.pinned, archived: s.archived, updatedAt: s.updatedAt }));
+    const preview = previewPrune(sessions, filter, Date.now());
+    return {
+      matches: preview.matches.map((m) => ({ id: m.id, title: m.title ?? '', updatedAt: m.updatedAt })),
+      ageSpan: preview.ageSpan,
+    };
+  }
+);
+
+ipcMain.handle('session.pruneApply', async (_event, { ids }: { ids: string[] }) => {
+  if (!sessionManager) return { ok: false, archived: 0 };
+  let archived = 0;
+  for (const id of ids) {
+    if (sessionManager.updateSessionSettings(id, { archived: true })) archived += 1;
+  }
+  return { ok: true, archived };
+});
+
 ipcMain.handle('session.export', async (_event, sessionId: string, format: 'md' | 'json') => {
   try {
     if (!sessionManager) return null;

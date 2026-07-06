@@ -31,6 +31,7 @@ import { PanelErrorBoundary } from './components/PanelErrorBoundary';
 import { CommandPalette } from './components/CommandPalette';
 import { KeyboardShortcutsDialog } from './components/KeyboardShortcutsDialog';
 import { GlobalSearchDialog } from './components/GlobalSearchDialog';
+import { SessionPruneDialog } from './components/SessionPruneDialog';
 import { FilePreviewPane } from './components/FilePreviewPane';
 import { ArtifactPanel } from './components/ArtifactPanel';
 import { ComputerUseOverlay } from './components/ComputerUseOverlay';
@@ -660,6 +661,7 @@ function App() {
 
       {/* Global Search Dialog (Cmd+P / Cmd+Shift+K) — Phase 2 step 8 */}
       <GlobalSearchDialog open={showGlobalSearch} onClose={() => setShowGlobalSearch(false)} />
+      <SessionPruneDialog />
 
       {/* File Preview Pane — Phase 2 step 9 (skipped when split-pane owns it) */}
       {!splitPaneEnabled && <FilePreviewPane />}

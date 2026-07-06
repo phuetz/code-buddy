@@ -311,6 +311,8 @@ export interface AppState {
   showCommandPalette: boolean;
   showShortcutsDialog: boolean;
   showGlobalSearch: boolean;
+  /** Bulk session prune dialog (Hermes sessions-prune parity). */
+  showSessionPrune: boolean;
   previewFilePath: string | null;
   activeArtifact: {
     id: string;
@@ -661,6 +663,7 @@ export interface AppState {
   setShowCommandPalette: (show: boolean) => void;
   setShowShortcutsDialog: (show: boolean) => void;
   setShowGlobalSearch: (show: boolean) => void;
+  setShowSessionPrune: (show: boolean) => void;
   setPreviewFilePath: (filePath: string | null) => void;
   setActiveArtifact: (
     artifact: {
@@ -964,6 +967,7 @@ export const useAppStore = create<AppState>((set) => ({
   showCommandPalette: false,
   showShortcutsDialog: false,
   showGlobalSearch: false,
+  showSessionPrune: false,
   previewFilePath: null,
   activeArtifact: null,
   guiActions: [],
@@ -1710,6 +1714,7 @@ export const useAppStore = create<AppState>((set) => ({
   setShowCommandPalette: (show) => set({ showCommandPalette: show }),
   setShowShortcutsDialog: (show) => set({ showShortcutsDialog: show }),
   setShowGlobalSearch: (show) => set({ showGlobalSearch: show }),
+  setShowSessionPrune: (show) => set({ showSessionPrune: show }),
   setPreviewFilePath: (filePath) => set({ previewFilePath: filePath }),
   setActiveArtifact: (artifact) => set({ activeArtifact: artifact }),
   appendGuiAction: (action) =>
