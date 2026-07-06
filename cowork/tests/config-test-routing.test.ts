@@ -6,6 +6,28 @@ const mocks = vi.hoisted(() => ({
   probeWithClaudeSdk: vi.fn(),
 }));
 
+const coreMocks = vi.hoisted(() => {
+  const chat = vi.fn();
+  const ctor = vi.fn();
+  class FakeCodeBuddyClient {
+    constructor(apiKey: string, model?: string, baseURL?: string) {
+      ctor(apiKey, model, baseURL);
+    }
+    chat(...args: unknown[]) {
+      return chat(...args);
+    }
+  }
+  return { chat, ctor, FakeCodeBuddyClient };
+});
+
+vi.mock('../src/main/utils/core-loader', () => ({
+  loadCoreModule: vi.fn(async (rel: string) =>
+    rel === 'codebuddy/client.js'
+      ? { CHATGPT_OAUTH_SENTINEL: 'oauth-chatgpt', CodeBuddyClient: coreMocks.FakeCodeBuddyClient }
+      : null
+  ),
+}));
+
 vi.mock('../src/main/claude/claude-sdk-one-shot', () => ({
   probeWithClaudeSdk: mocks.probeWithClaudeSdk,
 }));
@@ -193,5 +215,44 @@ describe('runConfigApiTest', () => {
 
     expect(result).toEqual(probeFailure);
     expect(mocks.probeWithClaudeSdk).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('runConfigApiTest — chatgpt OAuth routing', () => {
+  it('routes the chatgpt provider through the CORE client (Codex Responses), not the generic probe', async () => {
+    coreMocks.chat.mockResolvedValue({ choices: [{ message: { content: 'ok' } }] });
+
+    const result = await runConfigApiTest(
+      { provider: 'chatgpt', apiKey: '', model: 'gpt-5.5' },
+      { ...createConfig(), provider: 'chatgpt' }
+    );
+
+    expect(result.ok).toBe(true);
+    expect(mocks.probeWithClaudeSdk).not.toHaveBeenCalled();
+    expect(coreMocks.ctor).toHaveBeenCalledWith('oauth-chatgpt', 'gpt-5.5', undefined);
+  });
+
+  it('maps an empty Codex body to a server_error (the historical false negative, now explicit)', async () => {
+    coreMocks.chat.mockResolvedValue({ choices: [{ message: { content: '' } }] });
+
+    const result = await runConfigApiTest(
+      { provider: 'chatgpt', apiKey: '', model: 'gpt-5.5' },
+      { ...createConfig(), provider: 'chatgpt' }
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.errorType).toBe('server_error');
+  });
+
+  it('maps OAuth failures to unauthorized', async () => {
+    coreMocks.chat.mockRejectedValue(new Error('401 unauthorized: token expired'));
+
+    const result = await runConfigApiTest(
+      { provider: 'chatgpt', apiKey: '', model: 'gpt-5.5' },
+      { ...createConfig(), provider: 'chatgpt' }
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.errorType).toBe('unauthorized');
   });
 });
