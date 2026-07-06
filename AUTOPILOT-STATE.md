@@ -331,8 +331,17 @@ Patrice : « carte blanche, tests visuels, boucle loop, le but = le cerveau du r
   par item : ouvrir, renommer inline, épingler, archiver — via le VRAI session.updateSettings (typings preload
   rattrapés : pinned/archived/tags acceptés par le main mais non déclarés). Prouvé live : 55 conversations,
   recherche « video » → 3, aller-retour épingler.
+- **AUDIT BOLT.NEW + FIX PREVIEW (`e81755a6`, demande Patrice)** : la réouverture d'un projet laissait la Preview
+  VIDE à jamais (rien ne relançait le serveur ; l'état vide n'avait AUCUNE action). Fix : auto-serve des projets
+  statiques dès l'arbre chargé (http.server loopback) + bouton « Démarrer la preview » (npm projets) + « Exporter »
+  (zip natif via archiver, Save-As) + « Déployer » (seed le composer vers l'outil core deploy, jamais accessible
+  du studio). Prouvé : e2e-refuge rouvert → serveur auto sur :8792, page rendue, plan auto-coché 5/6.
+  **Audit bolt.new consolidé — couvert** : génération+plan LLM, workbench, multi-tabs, éditeur ÉDITABLE+save,
+  preview auto/manuel, open-external, verify web_test, historique projets, illustrations. **Restes** : terminal
+  interactif (taper des commandes — interactive_shell core existe), versions/rollback par étape (checkpoints core
+  non exposés studio).
 - **File suivante (idées)** : e2e confirmation organique ; purge des 61 warnings lint ; app vitrine vidéo hero e2e ;
-  métadonnées des médias (prompt d'origine — nécessite persistance côté outil média).
+  métadonnées des médias ; terminal interactif studio ; checkpoints studio.
 
 ## SESSION 2026-07-05 NUIT+ — BATCH GENSPARK MASSIF (Patrice « lance un maximum » + « inspire-toi de Genspark »)
 ~13 vagues Codex lancées en parallèle (worktrees + setsid détachés) → **11 intégrées sur main** (gate tsc+vite+tests
