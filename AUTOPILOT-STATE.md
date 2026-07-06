@@ -346,8 +346,14 @@ Patrice : « carte blanche, tests visuels, boucle loop, le but = le cerveau du r
   déjà via commands.run, il manquait l'historique). C (CheckpointTimeline présentationnel, 3 tests) → 3e onglet
   « Versions » du workbench via StudioVersionsPane sur l'IPC ghost-snapshots réel (list/restore + reload preview).
   Validé visuellement (onglet + état vide honnête). A (purge lint) tourne encore — monitor armé.
-- **File suivante (idées)** : fin vague A (lint) ; e2e confirmation organique ; app vitrine vidéo hero e2e ;
-  métadonnées des médias.
+- **SALVE CODEX SOLDÉE + MÉTADONNÉES MÉDIAS (`0289e142`+`57cb3824`)** : (a) sidecar `<fichier>.meta.json` écrit aux
+  3 sites de génération (images OpenAI-compat/ComfyUI, vidéos — fail-open) ; la médiathèque affiche le PROMPT
+  D'ORIGINE sur chaque carte et « variante studio » repart du vrai prompt. Prouvé live (chaton roux xAI → sidecar
+  + carte avec prompt). (b) Vague A lint récupérée : 61→2 warnings (les 2 restants = deps hooks non sûres, par
+  consigne), 28 fichiers, cherry-pick sans conflit, gate complet vert, boot vérifié. Worktrees codex-* nettoyés.
+  Bilan salve : 3 vagues lancées, 3 récupérées+câblées (terminal ↑/↓, onglet Versions, lint) — la chaîne
+  Codex-produit/Fable-gate-câble-merge tourne.
+- **File suivante (idées)** : e2e confirmation organique ; app vitrine vidéo hero e2e.
 
 ## SESSION 2026-07-05 NUIT+ — BATCH GENSPARK MASSIF (Patrice « lance un maximum » + « inspire-toi de Genspark »)
 ~13 vagues Codex lancées en parallèle (worktrees + setsid détachés) → **11 intégrées sur main** (gate tsc+vite+tests
