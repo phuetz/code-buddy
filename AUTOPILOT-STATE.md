@@ -326,6 +326,11 @@ Patrice : « carte blanche, tests visuels, boucle loop, le but = le cerveau du r
   (b) « Projets récents » façon bolt.new dans l'état vide App Studio (dédup sessions par cwd, hors default) —
   un clic rouvre le projet complet (plan+fichiers+éditeur+chat hydraté, prouvé sur e2e-refuge). 10 médias réels
   listés live, use-in-chat prouvé.
+- **HISTORIQUE DES CONVERSATIONS (`9f9e6c88`, demande Patrice, façon ChatGPT)** : drawer gauche (rail 🕘 + ⌘K) —
+  toutes les conversations, épinglées d'abord puis groupes par date (modèle pur testé, recherche pliée), actions
+  par item : ouvrir, renommer inline, épingler, archiver — via le VRAI session.updateSettings (typings preload
+  rattrapés : pinned/archived/tags acceptés par le main mais non déclarés). Prouvé live : 55 conversations,
+  recherche « video » → 3, aller-retour épingler.
 - **File suivante (idées)** : e2e confirmation organique ; purge des 61 warnings lint ; app vitrine vidéo hero e2e ;
   métadonnées des médias (prompt d'origine — nécessite persistance côté outil média).
 
