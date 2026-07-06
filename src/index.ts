@@ -3361,6 +3361,21 @@ addLazyCommand(
   },
 );
 
+// Dev-loop — boucle unifiée plan→exécute→vérifie(Verifier)→juge→décide (façon /loop)
+addLazyCommand(
+  program,
+  'loop',
+  'Boucle de dev autonome (plan→exécute→vérifie→juge→décide) jusqu\'à fait prouvé ou budget',
+  async () => {
+    const { createLoopCommand } = await import('./commands/loop-cli.js');
+    return createLoopCommand();
+  },
+  async argv => {
+    const { validateLoopCommandNumericOptions } = await import('./commands/loop-cli.js');
+    validateLoopCommandNumericOptions(argv);
+  },
+);
+
 // Todo attention bias — Manus AI-inspired persistent task list
 addLazyCommand(
   program,

@@ -96,7 +96,7 @@ function truncateGoalTurnPart(text: string): string {
   return `${text.slice(0, TOOL_RESULT_SNIPPET_CHARS)}... [truncated]`;
 }
 
-function buildGoalTurnSummary(entries: ChatEntry[]): string {
+export function buildGoalTurnSummary(entries: ChatEntry[]): string {
   const parts: string[] = [];
   let hasToolResult = false;
 
@@ -127,7 +127,7 @@ function buildGoalTurnSummary(entries: ChatEntry[]): string {
   return summary;
 }
 
-function buildGoalRunSummary(turnSummaries: string[]): string {
+export function buildGoalRunSummary(turnSummaries: string[]): string {
   return turnSummaries
     .map((summary, index) => `[Goal turn ${index + 1}]\n${summary}`)
     .join('\n\n');
