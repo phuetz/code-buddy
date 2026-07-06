@@ -67,6 +67,14 @@ const WIRING: Record<string, LabsWiring> = {
     load: () => import('../deliverables/PodStudioPanel').then((m) => named(m, 'PodStudioPanel')),
     props: {},
   },
+  B11: {
+    load: () => import('../deliverables/ImageStudioPanel').then((m) => named(m, 'ImageStudioPanel')),
+    props: {},
+  },
+  B12: {
+    load: () => import('../deliverables/VideoStudioPanel').then((m) => named(m, 'VideoStudioPanel')),
+    props: {},
+  },
   A2: {
     load: () => import('../MissionBoard').then((m) => named(m, 'MissionBoard')),
     props: { missions: [], onOpen: () => {}, onPause: () => {}, onResume: () => {} },

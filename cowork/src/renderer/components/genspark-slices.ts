@@ -120,6 +120,30 @@ export const GENSPARK_SLICES: GensparkSlice[] = [
       'FONCTIONNEL (promu) : session agent réelle + bloc ```pod → PodcastComposer live + synthèse text_to_speech (piper).',
   },
   {
+    id: 'B11',
+    title: 'ImageStudioPanel',
+    roadmap: 12,
+    category: 'deliverable',
+    mount: 'labs',
+    componentFile: 'components/deliverables/ImageStudioPanel.tsx',
+    logicFile: 'components/deliverables/media-path-model.ts',
+    testFile: '../../tests/media-path-model.test.ts',
+    needsData:
+      'FONCTIONNEL (promu) : session agent réelle + image_generate → rendu inline du fichier généré + variantes.',
+  },
+  {
+    id: 'B12',
+    title: 'VideoStudioPanel',
+    roadmap: 13,
+    category: 'deliverable',
+    mount: 'labs',
+    componentFile: 'components/deliverables/VideoStudioPanel.tsx',
+    logicFile: 'components/deliverables/media-path-model.ts',
+    testFile: '../../tests/media-path-model.test.ts',
+    needsData:
+      'FONCTIONNEL (promu) : session agent réelle + video_generate → lecture inline du fichier généré + variantes.',
+  },
+  {
     id: 'B1',
     title: 'SlideDeckBuilder',
     roadmap: 8,
