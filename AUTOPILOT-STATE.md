@@ -412,8 +412,15 @@ Patrice : « carte blanche, tests visuels, boucle loop, le but = le cerveau du r
   WebContainers. → vague Codex K (catalogue generation-stacks : static/react-vite/vue-vite/pwa/expo) EN COURS,
   je câble le sélecteur + injection dans le prompt de génération. Preview : static=http.server, vite=npm run dev
   (déjà détecté), expo=code seul (honnête, pas d'iframe).
-- **File suivante (idées)** : câbler vague K (stacks) ; e2e génération app React/PWA quand backend dispo ;
-  no-explicit-any PAS en masse.
+- **CHOIX DU TYPE D'APP — 5 STACKS (`acab499d`, parité bolt.new)** : la génération n'était que « HTML/CSS/JS
+  statique ». Catalogue generation-stacks (vague K : static/react-vite/vue-vite/pwa-mobile/expo, chacun avec
+  balise plan, guidance, note preview, runnable) câblé dans buildAiGenerationPrompt (balise stack + label + guidance
+  + preview) + sélecteur dans le composer (icône Layers). Expo honnêtement runnable:false (npx expo start sur
+  appareil). 3 tests builder + 2 catalogue ; sélecteur montre les 5 live. Copie chat DÉJÀ là (MessageCard + CodeBlock).
+- **DEMANDE EN COURS** : concevoir une « boucle de développement » façon Claude Code /loop (plan→exécute→vérifie→
+  juge→répète) — Patrice demande le mode plan. Infra existante repérée : goals/goal-loop.ts (maybeContinueGoalAfterTurn),
+  goal-manager/goal-judge, autonomous-daemon, buddy improve loop. À unifier en commande dev-loop de premier rang.
+- **File suivante (idées)** : implémenter la dev-loop après validation du plan ; e2e génération React/PWA.
 
 ## SESSION 2026-07-05 NUIT+ — BATCH GENSPARK MASSIF (Patrice « lance un maximum » + « inspire-toi de Genspark »)
 ~13 vagues Codex lancées en parallèle (worktrees + setsid détachés) → **11 intégrées sur main** (gate tsc+vite+tests
