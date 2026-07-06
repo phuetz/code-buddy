@@ -852,6 +852,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
       }
     ): Promise<{ success: boolean; error?: string; path?: string }> =>
       ipcRenderer.invoke('session.exportToFile', sessionId, options),
+    exportPdf: (sessionId: string, options?: { redactSecrets?: boolean }): Promise<{ success: boolean; savedTo?: string; canceled?: boolean; error?: string }> =>
+      ipcRenderer.invoke('session.exportPdf', sessionId, options),
     startBackground: (payload: {
       title: string;
       prompt: string;
@@ -5032,6 +5034,7 @@ declare global {
         }>;
       };
       session: {
+        exportPdf: (sessionId: string, options?: { redactSecrets?: boolean }) => Promise<{ success: boolean; savedTo?: string; canceled?: boolean; error?: string }>;
         export: (sessionId: string, format: 'md' | 'json') => Promise<unknown>;
         exportFull: (
           sessionId: string,

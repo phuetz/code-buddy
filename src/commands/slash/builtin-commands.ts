@@ -1361,6 +1361,26 @@ const agentControlCommands: SlashCommand[] = [
     ]
   },
   {
+    name: 'grill-me',
+    description: "Interrogatoire technique sans complaisance du travail récent (--yolo = roast intégral)",
+    prompt: '__GRILL_ME__',
+    filePath: '',
+    isBuiltin: true,
+    arguments: [
+      { name: 'cible', description: 'Sujet/fichier à griller (défaut : le travail récent) + flag --yolo', required: false }
+    ]
+  },
+  {
+    name: 'deepthink',
+    description: 'Réflexion profonde en mode plan (lecture seule) : angles multiples, confrontation, recommandation',
+    prompt: '__DEEPTHINK__',
+    filePath: '',
+    isBuiltin: true,
+    arguments: [
+      { name: 'problème', description: 'La question ou le problème à penser en profondeur', required: true }
+    ]
+  },
+  {
     name: 'btw',
     description: 'Ask a quick side question without modifying conversation context',
     prompt: '__BTW__',

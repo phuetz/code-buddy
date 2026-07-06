@@ -1,4 +1,6 @@
 import { ChatEntry } from "../agent/codebuddy-agent.js";
+import { handleGrillMe } from './handlers/grill-me-handler.js';
+import { handleDeepthink } from './handlers/deepthink-handler.js';
 import { CodeBuddyClient } from "../codebuddy/client.js";
 
 // Import all handlers from modular files
@@ -485,6 +487,8 @@ export class EnhancedCommandHandler {
 
     // BTW side-question (Native Engine v2026.3.14 alignment)
     ['__BTW__', (args) => handleBtw(args)],
+    ['__GRILL_ME__', (args) => handleGrillMe(args)],
+    ['__DEEPTHINK__', (args) => handleDeepthink(args)],
 
     // Heartbeat engine activation (fleet AUTONOMOUS-FLEET-PROTOCOL v0.1)
     ['__HEARTBEAT__', (args) => handleHeartbeat(args)],

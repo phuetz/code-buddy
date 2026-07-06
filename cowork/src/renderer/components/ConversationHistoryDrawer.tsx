@@ -8,7 +8,7 @@
  * optimistically for instant feedback).
  */
 import { useMemo, useState } from 'react';
-import { Archive, Check, History, Pencil, Pin, PinOff, Search, X } from 'lucide-react';
+import { Archive, Check, FileDown, FileText, History, Pencil, Pin, PinOff, Search, X } from 'lucide-react';
 
 import { useAppStore } from '../store';
 import { groupSessions } from './conversation-history-model';
@@ -161,6 +161,24 @@ export function ConversationHistoryDrawer() {
                             className="rounded p-1 text-muted-foreground hover:text-foreground"
                           >
                             {session.pinned ? <PinOff className="h-3 w-3" aria-hidden="true" /> : <Pin className="h-3 w-3" aria-hidden="true" />}
+                          </button>
+                          <button
+                            type="button"
+                            title="Exporter en Markdown"
+                            onClick={() => void window.electronAPI?.session?.exportToFile?.(session.id, { format: 'markdown', redactSecrets: true })}
+                            className="rounded p-1 text-muted-foreground hover:text-foreground"
+                            data-testid="history-export-md"
+                          >
+                            <FileText className="h-3 w-3" aria-hidden="true" />
+                          </button>
+                          <button
+                            type="button"
+                            title="Exporter en PDF"
+                            onClick={() => void window.electronAPI?.session?.exportPdf?.(session.id)}
+                            className="rounded p-1 text-muted-foreground hover:text-foreground"
+                            data-testid="history-export-pdf"
+                          >
+                            <FileDown className="h-3 w-3" aria-hidden="true" />
                           </button>
                           <button
                             type="button"

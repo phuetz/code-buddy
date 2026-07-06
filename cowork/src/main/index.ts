@@ -2929,6 +2929,57 @@ ipcMain.handle(
 
 registerWorkflowServiceIpcHandlers();
 
+// Export a conversation as PDF: render the standalone HTML export in an
+// offscreen window and print it (native Save-As).
+ipcMain.handle('session.exportPdf', async (_event, sessionId: string) => {
+  try {
+    if (!sessionManager) return { success: false, error: 'Session manager unavailable' };
+    const session = sessionManager.listSessions().find((sess) => sess.id === sessionId);
+    const rawMessages = sessionManager.getMessages(sessionId);
+    const { buildConversationPdfHtml } = await import('./session/conversation-pdf-template');
+    const pdfMessages = rawMessages
+      .filter((message) => message.role === 'user' || message.role === 'assistant')
+      .map((message) => ({
+        role: message.role,
+        timestamp: message.timestamp,
+        text: (Array.isArray(message.content) ? message.content : [])
+          .filter((block): block is { type: 'text'; text: string } => (block as { type?: string }).type === 'text')
+          .map((block) => block.text)
+          .join('\n\n'),
+      }))
+      .filter((message) => message.text.trim().length > 0);
+    const htmlContent = buildConversationPdfHtml({
+      title: session?.title || 'Conversation',
+      model: session?.model,
+      exportedAt: new Date(),
+      messages: pdfMessages,
+    });
+    const win = getMainWindow();
+    const safeName = (session?.title || 'conversation').replace(/[^\w\u00C0-\u017F -]+/g, '').trim().slice(0, 60) || 'conversation';
+    const dialogResult = win
+      ? await dialog.showSaveDialog(win, {
+          title: 'Exporter la conversation en PDF',
+          defaultPath: `${safeName}.pdf`,
+          filters: [{ name: 'PDF', extensions: ['pdf'] }],
+        })
+      : await dialog.showSaveDialog({ title: 'Exporter la conversation en PDF', defaultPath: 'conversation.pdf' });
+    if (dialogResult.canceled || !dialogResult.filePath) return { success: false, canceled: true };
+    const offscreen = new BrowserWindow({ show: false, webPreferences: { sandbox: true } });
+    try {
+      await offscreen.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(htmlContent));
+      const pdf = await offscreen.webContents.printToPDF({ printBackground: true, margins: { marginType: 'default' } });
+      const fsp = await import('fs/promises');
+      await fsp.writeFile(dialogResult.filePath, pdf);
+    } finally {
+      offscreen.destroy();
+    }
+    return { success: true, savedTo: dialogResult.filePath };
+  } catch (err) {
+    logWarn('[session.exportPdf] failed:', err);
+    return { success: false, error: String(err) };
+  }
+});
+
 ipcMain.handle(
   'session.exportToFile',
   async (
