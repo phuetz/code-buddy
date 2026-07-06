@@ -1,4 +1,4 @@
-import { Code2, Eye, PanelBottom, Play } from 'lucide-react';
+import { Code2, Eye, PanelBottom, Play, Plus } from 'lucide-react';
 import { useState } from 'react';
 import { BuildStatusStrip, type BuildPhase } from './BuildStatusStrip.js';
 import { CodeEditorPane } from './CodeEditorPane.js';
@@ -57,6 +57,8 @@ export interface AppStudioViewProps {
   onOpenPreviewExternal?: () => void;
   /** Ask the agent session to verify the running app with web_test. */
   onVerifyPreview?: () => void;
+  /** Start a fresh app (bolt.new "new") — returns to the composer entry. */
+  onNewApp?: () => void;
   onTerminalInput?: (line: string) => void;
   onClearTerminal?: () => void;
   onStopBuild: () => void;
@@ -91,6 +93,7 @@ export function AppStudioView({
   onReloadPreview,
   onOpenPreviewExternal,
   onVerifyPreview,
+  onNewApp,
   onTerminalInput,
   onClearTerminal,
   onStopBuild,
@@ -173,6 +176,19 @@ export function AppStudioView({
   if (chat) {
     return (
       <main className="flex h-full min-h-0 flex-col bg-background text-foreground" data-testid="studio-bolt">
+        {onNewApp ? (
+          <div className="flex shrink-0 items-center border-b border-border bg-surface px-2 py-1.5">
+            <button
+              type="button"
+              onClick={onNewApp}
+              className="inline-flex h-7 items-center gap-1.5 rounded-md border border-border px-2.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
+              title="Démarrer une nouvelle app"
+            >
+              <Plus className="h-3.5 w-3.5" aria-hidden="true" />
+              Nouvelle app
+            </button>
+          </div>
+        ) : null}
         <BuildStatusStrip phase={buildPhase} elapsedMs={buildElapsedMs} error={buildError} onStop={onStopBuild} />
         <div className="grid min-h-0 flex-1 grid-cols-[minmax(320px,380px)_minmax(0,1fr)]">
           <div className="flex min-h-0 flex-col border-r border-border bg-surface">

@@ -220,6 +220,7 @@ function StudioView() {
       {...viewProps}
       onGenerateWithAI={onGenerateWithAI}
       onVerifyPreview={onVerifyPreview}
+      onNewApp={() => setActiveSession(null)}
       {...(chat ? { chat } : {})}
     />
   );
