@@ -3,6 +3,7 @@ import { Suspense, lazy, isValidElement, cloneElement, memo, useMemo } from 'rea
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../../store';
 import { PanelErrorBoundary } from '../PanelErrorBoundary';
+import { MediaAttachments } from './MediaAttachments';
 import {
   splitTextByFileMentions,
   splitChildrenByFileMentions,
@@ -302,6 +303,10 @@ export const ContentBlockView = memo(function ContentBlockView({
               components={markdownComponents}
             />
           </Suspense>
+          {/* Generated media (image/video/voice paths in the reply) render as
+              real inline viewers — only once the turn is done, so a partial
+              streamed path never mounts a broken player. */}
+          {!isStreaming && <MediaAttachments text={text} />}
         </PanelErrorBoundary>
       );
     }

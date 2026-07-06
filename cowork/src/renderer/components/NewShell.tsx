@@ -284,7 +284,29 @@ export function NewShell() {
   const setShowCommandPalette = useAppStore((st) => st.setShowCommandPalette);
   const setShowShortcutsDialog = useAppStore((st) => st.setShowShortcutsDialog);
   const activeSessionId = useAppStore((st) => st.activeSessionId);
+  const { getSessionMessages, getSessionTraceSteps } = useIPC();
+  const setMessages = useAppStore((st) => st.setMessages);
+  const setTraceSteps = useAppStore((st) => st.setTraceSteps);
   const backToChat = () => setPrimaryView('chat');
+
+  // Hydrate ANY cold session from the DB — resuming from Home after a reload
+  // showed « Démarrez la conversation » on a session full of persisted
+  // messages (StudioView had this; the chat view did not). Same guards: never
+  // clobber a live turn or an already-hydrated state.
+  useEffect(() => {
+    if (!activeSessionId) return;
+    const state = useAppStore.getState().sessionStates[activeSessionId];
+    if (state?.messages?.length || state?.activeTurn) return;
+    void Promise.all([
+      getSessionMessages(activeSessionId),
+      getSessionTraceSteps(activeSessionId),
+    ]).then(([messages, steps]) => {
+      const current = useAppStore.getState().sessionStates[activeSessionId];
+      if (current?.activeTurn) return;
+      if (messages?.length && !current?.messages?.length) setMessages(activeSessionId, messages);
+      if (steps?.length && !current?.traceSteps?.length) setTraceSteps(activeSessionId, steps);
+    });
+  }, [activeSessionId, getSessionMessages, getSessionTraceSteps, setMessages, setTraceSteps]);
   // Chat with no active session → the calm Home center-of-gravity, not the
   // dense workspace (REDESIGN.md § Home).
   const showHome = primaryView === 'chat' && !activeSessionId;

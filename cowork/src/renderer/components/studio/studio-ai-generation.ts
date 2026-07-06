@@ -61,6 +61,14 @@ export function buildAiGenerationPrompt(req: StudioScaffoldRequest): string {
       "Si la génération d'image échoue, continue sans elle (dégradé propre, pas d'app cassée).",
   );
   lines.push(
+    "- VIDÉOS : si l'utilisateur demande de la vidéo OU si une vidéo d'ambiance sert vraiment le design (héros " +
+      "plein écran d'une vitrine, démo produit), GÉNÈRE-la avec l'outil `video_generate` (charge-le via " +
+      '`tool_search("video_generate")`) : un prompt anglais détaillé, UNE seule vidéo courte maximum (la génération ' +
+      "prend ~1 min). Même règle de chemin : référence la sortie RELATIVE telle quelle " +
+      '(ex. `<video autoplay muted loop src=".codebuddy/media-generation/videos/xxx.mp4">`), ne copie pas le binaire. ' +
+      "En cas d'échec, dégrade proprement (image ou fond CSS à la place).",
+  );
+  lines.push(
     "- Stack : HTML/CSS/JS statique (index.html + style.css + app.js) qui s'ouvre directement dans un navigateur, SANS build ni installation. (Pas de framework sauf demande explicite.)",
   );
   lines.push("- L'application doit être fonctionnelle ET soignée visuellement selon la guidance de design.");
