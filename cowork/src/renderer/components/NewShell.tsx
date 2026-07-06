@@ -31,6 +31,7 @@ import { useIPC } from '../hooks/useIPC';
 import { getInitialSessionTitle } from '../../shared/session-title';
 import { MissionControlView } from './os/MissionControlView';
 import { LabsGallery } from './labs/LabsGallery';
+import { CreationsView } from './deliverables/CreationsView';
 
 interface RailItem {
   view: PrimaryView;
@@ -44,6 +45,7 @@ const RAIL: RailItem[] = [
   { view: 'activity', label: 'Activité', glyph: '📊' },
   { view: 'workspace', label: 'Fichiers', glyph: '📁' },
   { view: 'studio', label: 'App Studio', glyph: '🛠️' },
+  { view: 'creations', label: 'Créations', glyph: '✨' },
   { view: 'os', label: 'Mission Control', glyph: '🛰️' },
   { view: 'labs', label: 'Labs', glyph: '🧪' },
   { view: 'advanced', label: 'Avancé', glyph: '⚙️' },
@@ -350,6 +352,7 @@ export function NewShell() {
         {primaryView === 'activity' && <ActivityPane />}
         {primaryView === 'workspace' && <FileActivityPanel open onClose={backToChat} />}
         {primaryView === 'studio' && <StudioView />}
+        {primaryView === 'creations' && <CreationsView />}
         {primaryView === 'os' && <MissionControlView />}
         {primaryView === 'labs' && <LabsGallery />}
         {primaryView === 'advanced' && <AdvancedLauncher />}

@@ -29,6 +29,7 @@ export const CAPABILITY_COMMANDS: CapabilityCommand[] = [
   // global overlays — from a non-chat view the tab would mount inside a display:none subtree and
   // never show. Switch to the chat view first so the panel is actually visible.
   { id: 'cap-autonomy', label: 'Autonomy', description: 'Autonomous loop, YOLO, goal', run: (s) => { s.setPrimaryView('chat'); s.setShowAutonomyPanel(true); } },
+  { id: 'cap-creations', label: 'Créations', description: 'Studios livrables : deck, feuille, doc, pod, image, vidéo, drive', run: (s) => s.setPrimaryView('creations') },
   { id: 'cap-workflows', label: 'Workflows', description: 'Visual workflow editor', run: (s) => s.setShowWorkflowProPanel(true) },
   { id: 'cap-evolution', label: 'Evolution', description: 'Versions from self-improvement', run: (s) => s.setShowEvolutionPanel(true) },
   { id: 'cap-knowledge', label: 'Knowledge (CKG)', description: 'Collective memory + research topics', run: (s) => s.setShowKnowledgePanel(true) },

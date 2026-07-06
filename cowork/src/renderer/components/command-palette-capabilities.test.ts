@@ -54,7 +54,10 @@ describe('CAPABILITY_COMMANDS', () => {
     }
   });
 
-  it('each run() flips exactly one real store show-flag to true', () => {
+  it('each run() flips exactly one real store show-flag to true (or navigates to a primary view)', () => {
+    // Capabilities whose action IS the navigation — they switch primaryView instead of
+    // opening an overlay, so no show-flag must flip.
+    const viewSwitchers: Record<string, string> = { 'cap-creations': 'creations' };
     const flags = showFlags();
     expect(flags.length).toBeGreaterThan(20); // sanity: the store really exposes show* flags
     for (const c of CAPABILITY_COMMANDS) {
@@ -62,12 +65,19 @@ describe('CAPABILITY_COMMANDS', () => {
       const reset: Record<string, boolean> = {};
       for (const f of flags) reset[f] = false;
       useAppStore.setState(reset as never);
+      useAppStore.getState().setPrimaryView('chat');
 
       c.run(useAppStore.getState());
 
       const after = useAppStore.getState() as unknown as Record<string, boolean>;
       const flipped = flags.filter((f) => after[f] === true);
-      expect(flipped, `${c.id} should flip exactly one show-flag (flipped: ${flipped.join(',') || 'none'})`).toHaveLength(1);
+      const expectedView = viewSwitchers[c.id];
+      if (expectedView) {
+        expect(flipped, `${c.id} is a view switcher — it must not open an overlay`).toHaveLength(0);
+        expect(useAppStore.getState().primaryView, `${c.id} should navigate to ${expectedView}`).toBe(expectedView);
+      } else {
+        expect(flipped, `${c.id} should flip exactly one show-flag (flipped: ${flipped.join(',') || 'none'})`).toHaveLength(1);
+      }
     }
   });
 
