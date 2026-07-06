@@ -304,8 +304,13 @@ Patrice : « carte blanche, tests visuels, boucle loop, le but = le cerveau du r
   3 états sur chaque carte de l'onglet Outils. Prouvé e2e : clic GUI → {web_search: deny} écrit dans le VRAI
   fichier consulté par le tool-handler → re-clic le retire. C'était le 2e « seam consulté mais jamais alimenté »
   de la journée (après le permissionCallback) — patron de chasse : grep les champs de contexte optionnels.
+- **CARTE « FICHIERS PRODUITS » (`cf7e8681`, page résultat Genspark)** : en fin de tour, les fichiers
+  créés/modifiés/supprimés remontent en carte repliable sous la conversation (changedFilesFromTrace réutilisé du
+  bolt split sur les traceSteps réels ; clic = afficher dans le dossier). Rien pendant un tour actif / sans
+  production. Prouvé live : tour réel → « Fichiers produits · 1 » avec le chemin exact. La ligne « page résultat
+  de tâche » Genspark est soldée côté chat.
 - **File suivante (idées)** : e2e confirmation organique ; purge des 61 warnings lint ; app vitrine vidéo hero
-  e2e ; Genspark suite : page résultat de tâche ; SecretSource pluggable (structure) ; session prune/bulk-archive.
+  e2e ; SecretSource pluggable (structure) ; session prune/bulk-archive.
 
 ## SESSION 2026-07-05 NUIT+ — BATCH GENSPARK MASSIF (Patrice « lance un maximum » + « inspire-toi de Genspark »)
 ~13 vagues Codex lancées en parallèle (worktrees + setsid détachés) → **11 intégrées sur main** (gate tsc+vite+tests
