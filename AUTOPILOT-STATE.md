@@ -340,8 +340,14 @@ Patrice : « carte blanche, tests visuels, boucle loop, le but = le cerveau du r
   preview auto/manuel, open-external, verify web_test, historique projets, illustrations. **Restes** : terminal
   interactif (taper des commandes — interactive_shell core existe), versions/rollback par étape (checkpoints core
   non exposés studio).
-- **File suivante (idées)** : e2e confirmation organique ; purge des 61 warnings lint ; app vitrine vidéo hero e2e ;
-  métadonnées des médias ; terminal interactif studio ; checkpoints studio.
+- **VAGUES CODEX B+C RÉCUPÉRÉES ET CÂBLÉES (`bb814235`, demande Patrice « fais travailler Codex »)** : 3 vagues
+  lancées en worktrees isolés détachés (technique éprouvée + garde anti-stall 120 s). B (modèle historique
+  terminal, 8 tests) → câblé dans le VRAI xterm TerminalPane (↑/↓ rappellent les commandes ; la saisie existait
+  déjà via commands.run, il manquait l'historique). C (CheckpointTimeline présentationnel, 3 tests) → 3e onglet
+  « Versions » du workbench via StudioVersionsPane sur l'IPC ghost-snapshots réel (list/restore + reload preview).
+  Validé visuellement (onglet + état vide honnête). A (purge lint) tourne encore — monitor armé.
+- **File suivante (idées)** : fin vague A (lint) ; e2e confirmation organique ; app vitrine vidéo hero e2e ;
+  métadonnées des médias.
 
 ## SESSION 2026-07-05 NUIT+ — BATCH GENSPARK MASSIF (Patrice « lance un maximum » + « inspire-toi de Genspark »)
 ~13 vagues Codex lancées en parallèle (worktrees + setsid détachés) → **11 intégrées sur main** (gate tsc+vite+tests
