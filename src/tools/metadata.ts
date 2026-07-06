@@ -815,7 +815,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   {
     name: 'image_generate',
     category: 'media',
-    keywords: ['image', 'generate', 'picture', 'photo', 'openai', 'xai', 'hermes'],
+    keywords: ['image', 'generate', 'picture', 'photo', 'openai', 'xai', 'hermes', 'gener', 'cree', 'dessin', 'illustration'],
     priority: 8,
     description: 'Generate an image through the configured image backend and cache returned media when possible'
   },
@@ -836,7 +836,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
   {
     name: 'video_generate',
     category: 'media',
-    keywords: ['video', 'generate', 'text-to-video', 'image-to-video', 'xai', 'fal', 'hermes'],
+    keywords: ['video', 'generate', 'text-to-video', 'image-to-video', 'xai', 'fal', 'hermes', 'gener', 'cree', 'clip', 'film', 'animation'],
     priority: 8,
     description: 'Generate a video through the configured video backend and cache returned media when possible'
   },
@@ -1585,7 +1585,7 @@ export const CATEGORY_KEYWORDS: Record<ToolCategory, string[]> = {
   git: ['git', 'commit', 'push', 'pull', 'branch', 'merge', 'diff', 'status', 'version control'],
   web: ['search online', 'google', 'web', 'internet', 'fetch url', 'website', 'documentation', 'latest', 'news', 'browser', 'automate', 'click', 'fill form', 'screenshot', 'scrape', 'headless', 'ui test', 'observe', 'extract from page', 'assert page', 'stagehand', 'weather', 'météo', 'meteo', 'forecast', 'temperature', 'actualité', 'actualite', 'current events', 'real time', 'real-time'],
   planning: ['plan', 'todo', 'task', 'organize', 'steps', 'breakdown'],
-  media: ['image', 'audio', 'video', 'screenshot', 'picture', 'photo', 'sound', 'music', 'capture', 'camera', 'webcam', 'vision'],
+  media: ['image', 'audio', 'video', 'screenshot', 'picture', 'photo', 'sound', 'music', 'capture', 'camera', 'webcam', 'vision', 'clip', 'film', 'animation', 'dessin', 'illustration', 'voix'],
   document: ['pdf', 'document', 'docx', 'xlsx', 'word', 'excel', 'archive', 'zip'],
   utility: ['diagram', 'chart', 'export', 'qr', 'visualize', 'convert'],
   codebase: ['codebase', 'structure', 'architecture', 'analyze', 'overview', 'dependencies'],

@@ -459,6 +459,40 @@ describe("Tool Selection with Various Queries", () => {
   });
 });
 
+describe("French accented queries (diacritics folding)", () => {
+  // Regression for the real Cowork bug: « Crée une vidéo… » never selected
+  // video_generate because the \W tokenizer split accented words apart
+  // ("vidéo" → "vid o") — the agent then claimed it could not make videos.
+  let selector: ToolSelector;
+  const mediaTools: CodeBuddyTool[] = [
+    ...mockTools,
+    createMockTool("image_generate", "Generate an image through the configured image backend"),
+    createMockTool("video_generate", "Generate a video through the configured video backend"),
+  ];
+
+  beforeEach(() => {
+    selector = new ToolSelector();
+  });
+
+  it("classifies « crée une vidéo » into the media category", () => {
+    const classification = selector.classifyQuery("Crée une vidéo d'un bébé sharpei");
+    expect(classification.categories[0]).toBe("media");
+  });
+
+  it("selects video_generate for a French video request", () => {
+    const result = selector.selectTools(
+      "Crée une vidéo d'un bébé sharpei qui court dans l'herbe au ralenti",
+      mediaTools,
+    );
+    expect(result.selectedTools.some(t => t.function.name === "video_generate")).toBe(true);
+  });
+
+  it("selects image_generate for a French image request", () => {
+    const result = selector.selectTools("Génère une image d'un chiot sharpei dans la nature", mediaTools);
+    expect(result.selectedTools.some(t => t.function.name === "image_generate")).toBe(true);
+  });
+});
+
 describe("LRU Cache Behavior", () => {
   let selector: ToolSelector;
 

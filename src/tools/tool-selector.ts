@@ -120,9 +120,10 @@ export class ToolSelector {
       this.toolIndex.set(metadata.name, metadata);
     }
 
-    // Calculate document frequency for each keyword
+    // Calculate document frequency for each keyword (folded, so IDF lookups
+    // from folded query tokens hit the same keys)
     for (const metadata of TOOL_METADATA) {
-      const uniqueKeywords = new Set(metadata.keywords.map(k => k.toLowerCase()));
+      const uniqueKeywords = new Set(metadata.keywords.map(k => ToolSelector.foldDiacritics(k.toLowerCase())));
       for (const keyword of uniqueKeywords) {
         this.documentFrequency.set(
           keyword,
@@ -139,11 +140,20 @@ export class ToolSelector {
   }
 
   /**
+   * Fold diacritics so accented queries match ASCII keywords: « vidéo » →
+   * "video", « génère » → "genere". Without this, the \W tokenizer split
+   * accented words apart ("vidéo" → "vid o") and French queries never
+   * matched any media/tool keyword.
+   */
+  private static foldDiacritics(text: string): string {
+    return text.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  }
+
+  /**
    * Tokenize and normalize a query string
    */
   private tokenize(text: string): string[] {
-    return text
-      .toLowerCase()
+    return ToolSelector.foldDiacritics(text.toLowerCase())
       .replace(/[^\w\s]/g, ' ')
       .split(/\s+/)
       .filter(token => token.length > 1);
@@ -153,7 +163,7 @@ export class ToolSelector {
    * Calculate TF-IDF score for a query against a tool
    */
   private calculateTFIDF(queryTokens: string[], metadata: ToolMetadata): number {
-    const toolKeywords = new Set(metadata.keywords.map(k => k.toLowerCase()));
+    const toolKeywords = new Set(metadata.keywords.map(k => ToolSelector.foldDiacritics(k.toLowerCase())));
     let score = 0;
 
     // Calculate term frequency in query
@@ -197,14 +207,15 @@ export class ToolSelector {
     }
 
     const tokens = this.tokenize(query);
-    const queryLower = query.toLowerCase();
+    const queryLower = ToolSelector.foldDiacritics(query.toLowerCase());
 
     const categoryScores = new Map<ToolCategory, number>();
     const detectedKeywords: string[] = [];
 
     // Score each category
-    for (const [category, keywords] of Object.entries(CATEGORY_KEYWORDS) as [ToolCategory, string[]][]) {
+    for (const [category, rawKeywords] of Object.entries(CATEGORY_KEYWORDS) as [ToolCategory, string[]][]) {
       let score = 0;
+      const keywords = rawKeywords.map((k) => ToolSelector.foldDiacritics(k));
 
       for (const keyword of keywords) {
         if (queryLower.includes(keyword)) {
