@@ -434,8 +434,15 @@ Patrice : « carte blanche, tests visuels, boucle loop, le but = le cerveau du r
   Codex (gpt-5.5) ; no-op strict sur tout autre backend ; préserve un modèle déjà-Codex. Appliqué aux 3 sites de
   retour. PROUVÉ live : `buddy loop "…"` SANS `-m` → résout gpt-5.5 → Verifier CONFIRMED → exit 0, fichier réel.
   151 tests provider verts + 4 tests de branches. Plus besoin de `-m gpt-5.5` pour les commandes headless.
-- **File suivante (idées)** : slash /loop in-session (V2, sentinel `__LOOP__` calqué sur /goal) ; e2e génération
-  React/PWA depuis App Studio ; Cowork LiveLauncher « Loop ».
+- **Slash `/loop` in-session LIVRÉ (`cedd07a7`)** : complète le concept de boucle en session interactive, à parité
+  avec `buddy loop`. `/loop` = `/goal` + le gate Verifier indépendant : quand le juge dit « done », un Verifier au
+  contexte frais reproduit le travail ; un verdict non-CONFIRMED repasse le tour en « continue » (jamais de « fait »
+  non prouvé). Flag `verifyGated` (posé par /loop, pas /goal) ; le gate ne tourne QUE quand verifyGated ET juge=done
+  (coût borné) ; no-op pour /goal et les hosts sans bridge verify (desktop/headless restent juge-seul, inchangés).
+  Sentinel `__LOOP__` (enhanced + headless-slash), host interactif passe le bridge (réutilise defaultDevLoopVerifier).
+  3 tests du gate + 112 tests goal/slash verts + build. Sous-commandes status/pause/resume/clear partagées avec /goal.
+- **File suivante (idées)** : e2e App Studio dev-server start→preview (computer-use/CDP) ; bug « Test de connexion »
+  ChatGPT OAuth (route OneShot en openai-completions au lieu du protocole Codex) ; Cowork LiveLauncher « Loop ».
 
 ## SESSION 2026-07-05 NUIT+ — BATCH GENSPARK MASSIF (Patrice « lance un maximum » + « inspire-toi de Genspark »)
 ~13 vagues Codex lancées en parallèle (worktrees + setsid détachés) → **11 intégrées sur main** (gate tsc+vite+tests
