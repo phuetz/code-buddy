@@ -210,6 +210,7 @@ import {
 } from '../shared/local-file-path';
 import { eventRequiresSessionManager } from './client-event-utils';
 import { getUnsupportedWorkspacePathReason } from './workspace-path-constraints';
+import { resolveEnvFileCandidates } from './env-files';
 import {
   log,
   logWarn,
@@ -356,14 +357,14 @@ process.on('uncaughtException', (err) => {
   logError('[main] Uncaught exception:', err.stack ?? err.message);
 });
 
-// Load .env file from project root (for development)
-const envPath = resolve(__dirname, '../../.env');
-log('[dotenv] Loading from:', envPath);
-const dotenvResult = config({ path: envPath });
-if (dotenvResult.error) {
-  logWarn('[dotenv] Failed to load .env:', dotenvResult.error.message);
-} else {
-  log('[dotenv] Loaded successfully');
+// Load env files — precedence and rationale in env-files.ts.
+for (const envPath of resolveEnvFileCandidates(__dirname, app.getPath('home'))) {
+  const dotenvResult = config({ path: envPath });
+  if (dotenvResult.error) {
+    log('[dotenv] Skipped (not found):', envPath);
+  } else {
+    log('[dotenv] Loaded:', envPath);
+  }
 }
 
 // Apply saved config (this overrides .env if config exists)
