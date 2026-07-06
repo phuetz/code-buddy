@@ -5,7 +5,9 @@
  * matrix) plus the autonomy posture panel. Fleet data is read from the Cowork
  * renderer store; the store itself is fed by the existing fleet IPC events.
  */
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
+
+import { usePolling } from './util/use-polling';
 
 import { useAppStore } from '../../store';
 import { AutonomyControlPanel, type AutonomyControlState } from '../os-actions/AutonomyControlPanel';
@@ -106,52 +108,43 @@ export function MissionControlView() {
   // ~/.codebuddy JSONL ledgers (os.councilHealth IPC). Null → honest empty.
   const [council, setCouncil] = useState<CouncilSession | null>(null);
   const [dhiHistory, setDhiHistory] = useState<Array<{ at: string; taskType: string; dhi: number }>>([]);
-  useEffect(() => {
-    let cancelled = false;
+  const refreshCouncil = useCallback(() => {
     void window.electronAPI?.os
       ?.councilHealth()
       .then((payload) => {
-        if (cancelled || !payload) return;
+        if (!payload) return;
         if (payload.session) setCouncil(payload.session);
         setDhiHistory(payload.history ?? []);
       })
       .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
   }, []);
+  usePolling(refreshCouncil, 30_000);
 
   // Real autonomy daemon queue (the ~/.codebuddy/fleet task board).
   const [daemonSnapshot, setDaemonSnapshot] = useState<AutonomySnapshot | null>(null);
-  useEffect(() => {
-    let cancelled = false;
+  const refreshSnapshot = useCallback(() => {
     void window.electronAPI?.autonomy
       ?.snapshot()
       .then((snap) => {
-        if (cancelled || !snap?.ok) return;
+        if (!snap?.ok) return;
         setDaemonSnapshot({ tasks: snap.tasks ?? [], worklog: snap.worklog ?? [], presence: snap.presence ?? {} });
       })
       .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
   }, []);
+  usePolling(refreshSnapshot, 30_000);
 
   // Real Collective Knowledge Graph (the robot's shared memory), folded from
   // the append-only ledger by the os.knowledgeGraph IPC.
   const [knowledge, setKnowledge] = useState<{ nodes: KnowledgeGraphNode[]; edges: KnowledgeGraphEdge[] }>({ nodes: [], edges: [] });
-  useEffect(() => {
-    let cancelled = false;
+  const refreshKnowledge = useCallback(() => {
     void window.electronAPI?.os
       ?.knowledgeGraph()
       .then((payload) => {
-        if (!cancelled && payload) setKnowledge({ nodes: payload.nodes, edges: payload.edges });
+        if (payload) setKnowledge({ nodes: payload.nodes, edges: payload.edges });
       })
       .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
   }, []);
+  usePolling(refreshKnowledge, 30_000);
 
   // Real autonomy daemon state (the always-on `codebuddy-autonomy` service).
   const [daemonRunning, setDaemonRunning] = useState<boolean | null>(null);
@@ -161,9 +154,7 @@ export function MissionControlView() {
       .then((status) => setDaemonRunning(status.ok ? Boolean(status.service?.running) : null))
       .catch(() => setDaemonRunning(null));
   }, []);
-  useEffect(() => {
-    refreshDaemon();
-  }, [refreshDaemon]);
+  usePolling(refreshDaemon, 30_000);
 
   const controlDaemon = useCallback(
     (action: 'start' | 'stop') => {
