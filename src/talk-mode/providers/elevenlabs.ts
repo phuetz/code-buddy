@@ -105,7 +105,7 @@ export class ElevenLabsProvider implements ITTSProvider {
         sampleRate: 44100,
         isDefault: index === 0,
       }));
-    } catch (error) {
+    } catch (_error) {
       // Use default voices if fetch fails
       this.cachedVoices = [
         {

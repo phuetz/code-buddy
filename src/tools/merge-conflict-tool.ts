@@ -178,7 +178,7 @@ export async function resolveAllConflicts(
 
       try {
         replacement = await llmCall(prompt);
-      } catch (err) {
+      } catch (_err) {
         logger.warn('AI conflict resolution failed, falling back to ours');
         replacement = resolveConflict(conflict, 'ours');
       }

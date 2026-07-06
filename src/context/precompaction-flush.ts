@@ -187,7 +187,7 @@ export class PrecompactionFlusher {
       fs.appendFileSync(memoryPath, block, 'utf-8');
       logger.debug('PrecompactionFlusher: facts saved', { memoryPath });
       return memoryPath;
-    } catch (err) {
+    } catch (_err) {
       // Try global fallback
       const globalPath = path.join(
         process.env.HOME ?? process.env.USERPROFILE ?? '~',

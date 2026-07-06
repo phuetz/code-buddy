@@ -123,7 +123,7 @@ export class VoiceToCodePipeline extends EventEmitter {
       this.recognizer = recognizer;
       this.active = true;
       this.emit('status', 'started');
-    } catch (err) {
+    } catch (_err) {
       // STT modules not available — provide setup instructions
       const setupMessage = getSetupInstructions(this.config.sttProvider);
       this.emit('error', new Error(setupMessage));

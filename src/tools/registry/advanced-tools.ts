@@ -256,7 +256,7 @@ export class CodebaseMapExecuteTool implements ITool {
             const { saveCodeGraph } = await import('../../knowledge/code-graph-persistence.js');
             saveCodeGraph(graph, process.cwd());
           }
-        } catch (err) {
+        } catch (_err) {
           // Deep population optional — continue with existing graph
         }
       }

@@ -82,7 +82,7 @@ async function discoverHttp() {
       const tag = res.ok ? c.green(`${res.status}`) : c.yellow(`${res.status}`);
       log(`  ${tag}  GET ${route}  ${c.dim(ct)}  ${body ? c.dim('› ' + body) : ''}`);
       if (res.status !== 404) anything = true;
-    } catch (e) {
+    } catch (_e) {
       // connection refused on a route is unusual once the server is up; ignore per-route errors
     }
   }

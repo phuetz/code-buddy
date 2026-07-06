@@ -286,7 +286,7 @@ public class NativeInput {
           } else {
             reject(new Error(res.error || 'Unknown daemon error'));
           }
-        } catch (err) {
+        } catch (_err) {
           reject(new Error(`Failed to parse daemon response: ${line}`));
         }
       });

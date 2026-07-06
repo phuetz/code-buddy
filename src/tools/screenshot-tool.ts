@@ -372,7 +372,7 @@ Write-Output 'ok'
         try {
           const linuxResult = await this.captureLinux(outputPath, options);
           resolve(linuxResult);
-        } catch (err) {
+        } catch (_err) {
           reject(new Error(`WSL screenshot failed (PowerShell: ${stderr.trim()}, scrot fallback also failed)`));
         }
       });
@@ -381,7 +381,7 @@ Write-Output 'ok'
         try {
           const linuxResult = await this.captureLinux(outputPath, options);
           resolve(linuxResult);
-        } catch (err) {
+        } catch (_err) {
           reject(new Error('WSL screenshot failed: powershell.exe not available and scrot failed'));
         }
       });

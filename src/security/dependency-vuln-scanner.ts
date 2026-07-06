@@ -153,7 +153,7 @@ function auditNpm(projectRoot: string): VulnerabilityReport {
           });
         }
       }
-    } catch (e) {
+    } catch (_e) {
       logger.debug('npm audit JSON parse failed');
     }
   }
@@ -213,7 +213,7 @@ function auditPip(projectRoot: string): VulnerabilityReport {
           });
         }
       }
-    } catch (e) {
+    } catch (_e) {
       logger.debug('pip audit JSON parse failed');
     }
   }
@@ -247,7 +247,7 @@ function auditCargo(projectRoot: string): VulnerabilityReport {
           description: advisory.description || advisory.title || '',
         });
       }
-    } catch (e) {
+    } catch (_e) {
       logger.debug('cargo audit JSON parse failed');
     }
   }
@@ -288,7 +288,7 @@ function auditGo(projectRoot: string): VulnerabilityReport {
           // Skip non-JSON lines
         }
       }
-    } catch (e) {
+    } catch (_e) {
       logger.debug('govulncheck JSON parse failed');
     }
   }

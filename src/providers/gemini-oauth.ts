@@ -71,7 +71,7 @@ export async function getGeminiOauthTokens(forceLogin = false): Promise<Credenti
         await fs.writeFile(credsPath, JSON.stringify(client.credentials, null, 2));
         return client.credentials;
       }
-    } catch (e) {
+    } catch (_e) {
       // Ignore read errors or invalid JSON
     }
   }

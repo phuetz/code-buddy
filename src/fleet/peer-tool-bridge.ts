@@ -470,7 +470,7 @@ function logAudit(input: {
         : `Peer ${input.ctx.connectionId} invoked ${input.tool}`,
       metadata: { peerId: input.ctx.connectionId, tool: input.tool, ok: input.ok, error: input.error }
     });
-  } catch (err) {
+  } catch (_err) {
     // ignore
   }
   auditLogger.log({

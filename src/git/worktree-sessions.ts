@@ -55,7 +55,7 @@ export class WorktreeSessionManager {
         cwd: basePath,
         stdio: 'pipe',
       });
-    } catch (err) {
+    } catch (_err) {
       // If worktree already exists or branch doesn't exist, create with -b
       try {
         execSync(`git worktree add -b "${branch}" "${worktreePath}"`, {

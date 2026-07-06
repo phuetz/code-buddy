@@ -233,7 +233,7 @@ export async function executeRoutePeer(params: RoutePeerParams): Promise<ToolRes
           metadata: { peer: output.recommendation.peer, model: output.recommendation.model, prompt: params.prompt }
         });
       }
-    } catch (err) {
+    } catch (_err) {
       // ignore
     }
     return {

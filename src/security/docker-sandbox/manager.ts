@@ -329,7 +329,7 @@ export class DockerSandboxManager extends EventEmitter {
 
       // Remove container
       await this.docker.removeContainer(container.containerId, true);
-    } catch (error) {
+    } catch (_error) {
       // Container might already be gone
     }
 

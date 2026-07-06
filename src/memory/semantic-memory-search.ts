@@ -329,7 +329,7 @@ export class SemanticMemorySearch extends EventEmitter {
           this.indexEntry(entry);
         }
         logger.debug(`Loaded ${this.index.size} memory entries from index`);
-      } catch (error) {
+      } catch (_error) {
         logger.warn('Failed to load memory index, starting fresh');
       }
     }
@@ -383,7 +383,7 @@ export class SemanticMemorySearch extends EventEmitter {
           lineEnd: content.split('\n').length,
           timestamp: stats.mtime,
         });
-      } catch (error) {
+      } catch (_error) {
         logger.warn(`Failed to index memory file: ${file}`);
       }
     }

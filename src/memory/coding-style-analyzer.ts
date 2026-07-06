@@ -72,7 +72,7 @@ export class CodingStyleAnalyzer {
         const content = fs.readFileSync(filePath, 'utf-8');
         const partial = this.analyzeContent(content, filePath);
         partials.push(partial);
-      } catch (err) {
+      } catch (_err) {
         logger.debug(`Failed to read file for style analysis: ${filePath}`);
       }
     }
@@ -473,7 +473,7 @@ export class CodingStyleAnalyzer {
           }
         }
       }
-    } catch (err) {
+    } catch (_err) {
       logger.debug(`Failed to read directory: ${dirPath}`);
     }
 

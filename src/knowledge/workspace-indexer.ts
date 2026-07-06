@@ -138,7 +138,7 @@ export class WorkspaceIndexer extends EventEmitter {
                   await this.vectorIndex.load(this.config.indexPath);
               }
               logger.info(`Loaded workspace index with ${this.entries.size} chunks.`);
-          } catch (e) {
+          } catch (_e) {
               logger.warn('Failed to load index metadata, starting fresh.');
           }
       }
@@ -175,7 +175,7 @@ export class WorkspaceIndexer extends EventEmitter {
         if (fs.existsSync(mtimeCachePath)) {
           mtimeCache = JSON.parse(await fs.readFile(mtimeCachePath, 'utf-8'));
         }
-      } catch (e) {
+      } catch (_e) {
         logger.warn('Failed to load mtime cache, starting fresh.');
       }
 
@@ -191,7 +191,7 @@ export class WorkspaceIndexer extends EventEmitter {
             if (mtimeCache[file] !== stats.mtimeMs) {
                 filesToIndex.push(file);
             }
-        } catch (err) {
+        } catch (_err) {
             // Can't stat, skip
         }
       }
@@ -257,7 +257,7 @@ export class WorkspaceIndexer extends EventEmitter {
               await new Promise(r => setTimeout(r, 10));
           }
           
-        } catch (fileErr) {
+        } catch (_fileErr) {
             // Skip unreadable files
         }
       }

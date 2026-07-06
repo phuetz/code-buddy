@@ -36,7 +36,7 @@ export class SubmitPlanTool extends BaseTool {
       const planDir = path.join(process.cwd(), '.codebuddy', 'plans');
       await fs.ensureDir(planDir);
       await fs.writeFile(path.join(planDir, 'current.md'), planContent);
-    } catch (e) {
+    } catch (_e) {
       logger.warn('Failed to write plan file to disk');
     }
 
