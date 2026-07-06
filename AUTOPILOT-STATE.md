@@ -314,8 +314,12 @@ Patrice : « carte blanche, tests visuels, boucle loop, le but = le cerveau du r
   ${op:...}) via execFile (pas de shell). 6 tests contre un VRAI faux binaire op sur PATH ; validation live
   1Password honnêtement account-gated. Prouvé sur dist. Le doc de parité enregistre les 3 fills du jour
   (df968447, e53f6abc, ed1acbb6) — seul reste CLI : session prune/bulk-archive.
-- **File suivante (idées)** : e2e confirmation organique ; purge des 61 warnings lint ; app vitrine vidéo hero
-  e2e ; session prune/bulk-archive (dernier reste parité).
+- **SESSION PRUNE EN MASSE (`f48c147f`) — LA COLONNE PARITÉ EST VIDE** : « Nettoyer les sessions » (⌘K) — filtre
+  pur (âge jours 0=tout, titre plié accents), pinned/archivées/active jamais touchées, aperçu (compte + age span
+  + liste) puis archivage en un clic (updateSessionSettings, réversible). Prouvé live sur 3 vraies sessions de
+  test. Le doc de parité acte : ZÉRO gap enregistré vs Hermes v2026.7.1+516 et OpenClaw 2026.6.11 — ne restent
+  que les gates externes (Vertex/GCP, Slack prod, 1Password live).
+- **File suivante (idées)** : e2e confirmation organique ; purge des 61 warnings lint ; app vitrine vidéo hero e2e.
 
 ## SESSION 2026-07-05 NUIT+ — BATCH GENSPARK MASSIF (Patrice « lance un maximum » + « inspire-toi de Genspark »)
 ~13 vagues Codex lancées en parallèle (worktrees + setsid détachés) → **11 intégrées sur main** (gate tsc+vite+tests
