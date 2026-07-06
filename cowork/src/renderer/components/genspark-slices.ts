@@ -72,6 +72,18 @@ export const GENSPARK_SLICES: GensparkSlice[] = [
     needsData: 'Mode d’autonomie courant et libellés des garde-fous actifs.',
   },
   {
+    id: 'B0',
+    title: 'DeckStudioPanel',
+    roadmap: 8,
+    category: 'deliverable',
+    mount: 'labs',
+    componentFile: 'components/deliverables/DeckStudioPanel.tsx',
+    logicFile: 'components/deliverables/deck-block-model.ts',
+    testFile: '../../tests/deck-block-model.test.ts',
+    needsData:
+      'FONCTIONNEL (promu) : session agent réelle + bloc ```deck → SlideDeckPreview live + export skill pptx.',
+  },
+  {
     id: 'B1',
     title: 'SlideDeckBuilder',
     roadmap: 8,

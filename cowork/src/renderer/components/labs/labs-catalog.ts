@@ -49,6 +49,12 @@ function named(mod: Record<string, unknown>, name: string): { default: LabsCompo
  * simply not shown (honest: the gallery only surfaces what it can actually render).
  */
 const WIRING: Record<string, LabsWiring> = {
+  // B0 is the first PROMOTED entry: a functional, self-contained generator
+  // (real agent session inside), not an empty-state preview.
+  B0: {
+    load: () => import('../deliverables/DeckStudioPanel').then((m) => named(m, 'DeckStudioPanel')),
+    props: {},
+  },
   A2: {
     load: () => import('../MissionBoard').then((m) => named(m, 'MissionBoard')),
     props: { missions: [], onOpen: () => {}, onPause: () => {}, onResume: () => {} },
