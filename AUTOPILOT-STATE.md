@@ -319,7 +319,15 @@ Patrice : « carte blanche, tests visuels, boucle loop, le but = le cerveau du r
   + liste) puis archivage en un clic (updateSessionSettings, réversible). Prouvé live sur 3 vraies sessions de
   test. Le doc de parité acte : ZÉRO gap enregistré vs Hermes v2026.7.1+516 et OpenClaw 2026.6.11 — ne restent
   que les gates externes (Vertex/GCP, Slack prod, 1Password live).
-- **File suivante (idées)** : e2e confirmation organique ; purge des 61 warnings lint ; app vitrine vidéo hero e2e.
+- **MÉDIATHÈQUE + HISTORIQUE PROJETS (`918f2a9a`, demande Patrice)** : (a) onglet Médias dans Créations — scan
+  media.list de TOUS les roots de session (.codebuddy/media-generation récursif + audio racine, tests fs réels),
+  grille vignettes inline + filtres, actions par média : réutiliser dans le chat (chatComposerSeed→Home),
+  variante studio Image/Vidéo (creationsSeed), copier chemin, exporter (Save-As natif media.export), dossier.
+  (b) « Projets récents » façon bolt.new dans l'état vide App Studio (dédup sessions par cwd, hors default) —
+  un clic rouvre le projet complet (plan+fichiers+éditeur+chat hydraté, prouvé sur e2e-refuge). 10 médias réels
+  listés live, use-in-chat prouvé.
+- **File suivante (idées)** : e2e confirmation organique ; purge des 61 warnings lint ; app vitrine vidéo hero e2e ;
+  métadonnées des médias (prompt d'origine — nécessite persistance côté outil média).
 
 ## SESSION 2026-07-05 NUIT+ — BATCH GENSPARK MASSIF (Patrice « lance un maximum » + « inspire-toi de Genspark »)
 ~13 vagues Codex lancées en parallèle (worktrees + setsid détachés) → **11 intégrées sur main** (gate tsc+vite+tests
