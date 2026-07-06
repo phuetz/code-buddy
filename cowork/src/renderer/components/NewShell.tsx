@@ -17,7 +17,7 @@ import { ActivityPane } from './ActivityPane';
 import { PlanPanel } from './PlanPanel';
 import { FileActivityPanel } from './FileActivityPanel';
 import { HomeView } from './HomeView';
-import { useCallback, useMemo } from 'react';
+import { useCallback, useEffect, useMemo } from 'react';
 import { AppStudioView } from './studio/AppStudioView';
 import { useAppStudio } from './studio/use-app-studio';
 import { sessionToStudioMessages } from './studio/studio-chat-adapter';
@@ -144,10 +144,25 @@ function StudioView() {
   const sessionCwd = activeSession?.cwd ?? '';
   // Point the workbench at the active project session's dir so files/preview
   // populate as the app is generated (bolt.new-style unified workspace).
-  const { viewProps } = useAppStudio({ apis, projectRoot: sessionCwd });
+  const { viewProps, actions } = useAppStudio({ apis, projectRoot: sessionCwd });
   const { startSession, continueSession } = useIPC();
   const setActiveSession = useAppStore((st) => st.setActiveSession);
   const workingDir = useAppStore((st) => st.workingDir);
+
+  // Refresh the file tree as the agent writes files: the initial load happens
+  // before generation, so without this the workbench stays on "les fichiers
+  // apparaîtront ici" even once index.html exists (seen live on e2e-meteo5).
+  // `actions.refreshTree` is the hook's stable useCallback (the `actions`
+  // object itself is re-created per render — don't depend on it).
+  const refreshTree = actions.refreshTree;
+  const st = activeSessionId ? sessionStates[activeSessionId] : undefined;
+  const turnActive = Boolean(st?.activeTurn);
+  const traceCount = st?.traceSteps?.length ?? 0;
+  useEffect(() => {
+    if (!sessionCwd) return;
+    // New tool steps / turn end = files may have changed on disk.
+    void refreshTree(sessionCwd);
+  }, [sessionCwd, traceCount, turnActive, refreshTree]);
 
   // AI generation: start a project-scoped agent session and STAY in App Studio —
   // the bolt.new split shows the chat (left) driving the workbench (right) live.
