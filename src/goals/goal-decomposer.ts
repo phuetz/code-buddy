@@ -6,6 +6,13 @@ export interface GoalPlanSubtask {
   title: string;
   description?: string;
   acceptanceCriteria: string[];
+  /**
+   * True quand le LLM n'a fourni aucun critère vérifiable et que le critère a
+   * été auto-rempli à partir du titre (tautologique — « Evidence shows X is
+   * complete »). Un plan sain n'en a aucun : `decomposeGoal` tente une passe
+   * de réparation ciblée, et le dev-loop signale ceux qui restent.
+   */
+  criteriaAutoFilled?: boolean;
 }
 
 export interface GoalPlanTask extends GoalPlanSubtask {
@@ -87,7 +94,93 @@ export async function decomposeGoal(
     options.timeoutMs ?? DEFAULT_PLAN_TIMEOUT_MS
   );
   const raw = response.choices?.[0]?.message?.content ?? '';
-  return parseGoalPlan(raw, goal);
+  const plan = parseGoalPlan(raw, goal);
+  // Invariant (jarvis-OS validate_step, adapté) : chaque step doit porter un
+  // critère de succès VÉRIFIABLE. Le plan étant advisory ici, on répare au
+  // lieu de rejeter — une passe LLM ciblée sur les seuls items auto-remplis.
+  if (plan && weakCriteriaItems(plan).length > 0) {
+    return repairPlanCriteria(goal, plan, client, options);
+  }
+  return plan;
+}
+
+/** Tasks/subtasks dont le critère a été auto-rempli (non vérifiable). */
+export function weakCriteriaItems(plan: GoalPlan): GoalPlanSubtask[] {
+  const weak: GoalPlanSubtask[] = [];
+  for (const task of plan.tasks) {
+    if (task.criteriaAutoFilled) weak.push(task);
+    for (const subtask of task.subtasks) {
+      if (subtask.criteriaAutoFilled) weak.push(subtask);
+    }
+  }
+  return weak;
+}
+
+const MAX_REPAIR_ITEMS = 12;
+const REPAIR_MAX_TOKENS = 1024;
+const REPAIR_TIMEOUT_MS = 20_000;
+
+/**
+ * Passe de réparation ciblée : demande des critères objectivement vérifiables
+ * pour les seuls items auto-remplis, et les fusionne dans le plan (mutation en
+ * place des items concernés). Fail-open : toute erreur rend le plan inchangé.
+ */
+export async function repairPlanCriteria(
+  goal: string,
+  plan: GoalPlan,
+  client: CodeBuddyClient,
+  options: DecomposeGoalOptions = {}
+): Promise<GoalPlan> {
+  const weak = weakCriteriaItems(plan).slice(0, MAX_REPAIR_ITEMS);
+  if (weak.length === 0) return plan;
+  try {
+    const list = weak
+      .map((w) => `- ${w.id}: ${w.title}${w.description ? ` — ${w.description}` : ''}`)
+      .join('\n');
+    const messages: CodeBuddyMessage[] = [
+      {
+        role: 'system',
+        content:
+          'You harden a task plan. For each listed task, provide 1-3 OBJECTIVELY ' +
+          'VERIFIABLE acceptance criteria: a command whose exit code or output ' +
+          'proves completion, a file that must exist with specific content, or an ' +
+          'observable behavior. Never restate the task title as its own criterion. ' +
+          'Return only valid JSON.',
+      },
+      {
+        role: 'user',
+        content:
+          `Goal:\n${goal}\n\nTasks missing verifiable acceptance criteria:\n${list}\n\n` +
+          `Return this exact JSON shape:\n{"criteria": {"<taskId>": ["criterion", "..."]}}`,
+      },
+    ];
+    const response = await withTimeout(
+      client.chat(messages, [], {
+        ...(options.model ? { model: options.model } : {}),
+        maxTokens: REPAIR_MAX_TOKENS,
+        temperature: 0,
+      }),
+      REPAIR_TIMEOUT_MS
+    );
+    const raw = response.choices?.[0]?.message?.content ?? '';
+    const parsed = parseJsonResponse(raw) as { criteria?: Record<string, unknown> } | null;
+    const map =
+      parsed && typeof parsed === 'object' && parsed.criteria && typeof parsed.criteria === 'object'
+        ? (parsed.criteria as Record<string, unknown>)
+        : {};
+    const byId = new Map(weak.map((w) => [w.id, w]));
+    for (const [id, value] of Object.entries(map)) {
+      const target = byId.get(id);
+      if (!target) continue;
+      const values = cleanStringArray(value).slice(0, MAX_CRITERIA_PER_ITEM);
+      if (!values.length) continue;
+      target.acceptanceCriteria = values;
+      delete target.criteriaAutoFilled;
+    }
+  } catch {
+    /* fail-open : le plan garde ses critères de repli, marqués autoFilled */
+  }
+  return plan;
 }
 
 export function parseGoalPlan(raw: string, originalGoal: string = ''): GoalPlan | null {
@@ -121,7 +214,7 @@ export function normalizeGoalPlan(raw: unknown, originalGoal: string = ''): Goal
     const id = uniqueId(cleanId(taskRecord.id, fallbackId), seenIds);
     const title = cleanText(taskRecord.title, `Task ${tasks.length + 1}`);
     const description = cleanOptionalText(taskRecord.description);
-    const acceptanceCriteria = cleanCriteria(taskRecord, title);
+    const { criteria: acceptanceCriteria, autoFilled } = cleanCriteria(taskRecord, title);
     const subtasks = cleanSubtasks(taskRecord.subtasks, id);
 
     tasks.push({
@@ -129,6 +222,7 @@ export function normalizeGoalPlan(raw: unknown, originalGoal: string = ''): Goal
       title,
       ...(description ? { description } : {}),
       acceptanceCriteria,
+      ...(autoFilled ? { criteriaAutoFilled: true } : {}),
       dependsOn: [],
       subtasks,
     });
@@ -254,25 +348,33 @@ function cleanSubtasks(raw: unknown, parentId: string): GoalPlanSubtask[] {
     const id = uniqueId(cleanId(record.id, fallbackId), seenIds);
     const title = cleanText(record.title, `Subtask ${subtasks.length + 1}`);
     const description = cleanOptionalText(record.description);
+    const { criteria, autoFilled } = cleanCriteria(record, title);
     subtasks.push({
       id,
       title,
       ...(description ? { description } : {}),
-      acceptanceCriteria: cleanCriteria(record, title),
+      acceptanceCriteria: criteria,
+      ...(autoFilled ? { criteriaAutoFilled: true } : {}),
     });
   }
 
   return subtasks;
 }
 
-function cleanCriteria(record: Record<string, unknown>, fallbackTitle: string): string[] {
+function cleanCriteria(
+  record: Record<string, unknown>,
+  fallbackTitle: string,
+): { criteria: string[]; autoFilled: boolean } {
   const raw =
     record.acceptanceCriteria ??
     record.criteria ??
     record.acceptance ??
     record.doneWhen;
   const values = cleanStringArray(raw).slice(0, MAX_CRITERIA_PER_ITEM);
-  return values.length ? values : [`Evidence shows "${fallbackTitle}" is complete`];
+  if (values.length) return { criteria: values, autoFilled: false };
+  // Repli tautologique — marqué pour la passe de réparation (invariant
+  // jarvis-OS : un step sans critère vérifiable ne devrait pas exister).
+  return { criteria: [`Evidence shows "${fallbackTitle}" is complete`], autoFilled: true };
 }
 
 function cleanDependsOn(

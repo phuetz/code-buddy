@@ -15,7 +15,7 @@
 
 import type { ChatEntry } from '../codebuddy-agent.js';
 import type { CodeBuddyClient, CodeBuddyMessage, CodeBuddyTool } from '../../codebuddy/client.js';
-import { decomposeGoal, shouldAutoDecomposeGoal } from '../../goals/goal-decomposer.js';
+import { decomposeGoal, shouldAutoDecomposeGoal, weakCriteriaItems } from '../../goals/goal-decomposer.js';
 import { judgeGoal, type GoalJudgeFn } from '../../goals/goal-judge.js';
 import { getGoalManager, resolveGoalsConfig } from '../../goals/goal-manager.js';
 import type { GoalStatus } from '../../goals/goal-state.js';
@@ -215,7 +215,13 @@ export async function runDevLoop(
       const plan = await decomposeGoal(goalText, agent.getClient(), judgeModel ? { model: judgeModel } : {});
       if (plan) {
         manager.attachGoalPlan(plan);
-        emit(`↳ Plan : ${plan.tasks.length} tâche(s)`);
+        const weak = weakCriteriaItems(plan);
+        emit(
+          `↳ Plan : ${plan.tasks.length} tâche(s)` +
+            (weak.length
+              ? ` (⚠ ${weak.length} sans critère vérifiable malgré réparation : ${weak.map((w) => w.id).join(', ')})`
+              : ''),
+        );
       }
     } catch (error) {
       logger.debug('dev-loop decompose failed (fail-open)', { error: String(error) });

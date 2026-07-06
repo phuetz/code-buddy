@@ -5,7 +5,9 @@ import {
   formatGoalPlan,
   goalPlanToCriteria,
   parseGoalPlan,
+  repairPlanCriteria,
   shouldAutoDecomposeGoal,
+  weakCriteriaItems,
 } from '../../src/goals/goal-decomposer.js';
 
 function mockClient(content: string): CodeBuddyClient {
@@ -90,5 +92,76 @@ describe('goal-decomposer', () => {
       [],
       expect.objectContaining({ temperature: 0, maxTokens: 4096 })
     );
+  });
+});
+
+describe('goal-decomposer — critères vérifiables obligatoires', () => {
+  it('marks auto-filled (tautological) criteria with criteriaAutoFilled', () => {
+    const plan = parseGoalPlan(
+      JSON.stringify({
+        summary: 'p',
+        tasks: [
+          { id: 'T1', title: 'No criteria here', subtasks: [{ id: 'T1.1', title: 'Nested none' }] },
+          { id: 'T2', title: 'Has criteria', acceptanceCriteria: ['npm test exits 0'] },
+        ],
+      })
+    );
+    expect(plan!.tasks[0]!.criteriaAutoFilled).toBe(true);
+    expect(plan!.tasks[0]!.subtasks[0]!.criteriaAutoFilled).toBe(true);
+    expect(plan!.tasks[1]!.criteriaAutoFilled).toBeUndefined();
+    expect(weakCriteriaItems(plan!).map((w) => w.id)).toEqual(['T1', 'T1.1']);
+  });
+
+  it('repairPlanCriteria merges verifiable criteria for weak items only (fail-open otherwise)', async () => {
+    const plan = parseGoalPlan(
+      JSON.stringify({
+        summary: 'p',
+        tasks: [
+          { id: 'T1', title: 'Weak task' },
+          { id: 'T2', title: 'Strong task', acceptanceCriteria: ['grep finds the export'] },
+        ],
+      })
+    )!;
+    const client = mockClient(
+      JSON.stringify({ criteria: { T1: ['`npm test -- x.test.ts` exits 0'], T2: ['must be ignored'], T9: ['unknown id'] } })
+    );
+
+    const repaired = await repairPlanCriteria('goal', plan, client);
+
+    expect(repaired.tasks[0]!.acceptanceCriteria).toEqual(['`npm test -- x.test.ts` exits 0']);
+    expect(repaired.tasks[0]!.criteriaAutoFilled).toBeUndefined();
+    // T2 n'était pas faible : la réponse du LLM le concernant est ignorée.
+    expect(repaired.tasks[1]!.acceptanceCriteria).toEqual(['grep finds the export']);
+  });
+
+  it('repairPlanCriteria is fail-open on garbage LLM output', async () => {
+    const plan = parseGoalPlan(
+      JSON.stringify({ summary: 'p', tasks: [{ id: 'T1', title: 'Weak task' }] })
+    )!;
+    const repaired = await repairPlanCriteria('goal', plan, mockClient('not json at all'));
+    expect(repaired.tasks[0]!.criteriaAutoFilled).toBe(true);
+    expect(repaired.tasks[0]!.acceptanceCriteria[0]).toContain('Evidence shows');
+  });
+
+  it('decomposeGoal chains the repair pass when the plan has weak criteria', async () => {
+    const planJson = JSON.stringify({
+      summary: 'p',
+      tasks: [{ id: 'T1', title: 'Weak task' }],
+    });
+    const repairJson = JSON.stringify({ criteria: { T1: ['file src/x.ts exists and exports x'] } });
+    let call = 0;
+    const client = {
+      chat: vi.fn(async () => ({
+        choices: [
+          { message: { role: 'assistant', content: call++ === 0 ? planJson : repairJson }, finish_reason: 'stop' },
+        ],
+      })),
+    } as unknown as CodeBuddyClient;
+
+    const plan = await decomposeGoal('implement then verify', client);
+
+    expect(client.chat).toHaveBeenCalledTimes(2);
+    expect(plan!.tasks[0]!.acceptanceCriteria).toEqual(['file src/x.ts exists and exports x']);
+    expect(plan!.tasks[0]!.criteriaAutoFilled).toBeUndefined();
   });
 });
