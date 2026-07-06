@@ -379,6 +379,11 @@ Patrice : « carte blanche, tests visuels, boucle loop, le but = le cerveau du r
   workingDir vide) → ensureCwdExists mkdir contre le process cwd = cowork/ → l'app a pollué le source tree
   (famille cwd embarqué, nouvelle porte). Fix : resolveSafeCwd avant tout mkdir/trust dans les 2 chemins startSession
   (absolu passe, relatif ancré sous default_working_dir, ./ et ../ retirés) — 4 tests, safeCwdBase dans le bundle.
+- **CATÉGORIE « BIBLIOTHÈQUE » + LIEN CONVERSATION (`06c94a3d`, demande Patrice)** : entrée rail dédiée 🖼️
+  (+ ⌘K) — toutes les images/vidéos générées en vignettes, pleine page. Chaque média LIÉ à la conversation qui
+  l'a produit : media.list construit un index basename→sessionId en scannant les messages (le basename est repris
+  dans le marqueur MEDIA: — vérité terrain, modèle pur + 4 tests), bouton 💬 « voir la conversation » par carte.
+  Prouvé live : 11 médias, 8 liés ; clic vignette chaton → ouvre « Génère une image d'un chaton roux ».
 - **File suivante (idées)** : e2e confirmation organique ; vérifier les autres appelants de startSession pour cwd relatif.
 
 ## SESSION 2026-07-05 NUIT+ — BATCH GENSPARK MASSIF (Patrice « lance un maximum » + « inspire-toi de Genspark »)
