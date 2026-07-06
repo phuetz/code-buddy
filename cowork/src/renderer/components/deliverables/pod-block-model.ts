@@ -104,8 +104,9 @@ export function buildPodExportPrompt(pod: ParsedPod): string {
   const fullScript = pod.segments.map((s) => s.script).join('\n\n');
   return [
     `Synthétise cet épisode en fichier audio avec l'outil \`text_to_speech\` : un SEUL appel, tout le script,`,
-    `output_path « ${pod.title}.wav » dans le dossier de travail courant (provider auto-détecté — piper local si disponible).`,
-    'Réponds avec le chemin du fichier créé et sa durée si connue.',
+    `output_path « ${pod.title}.wav » dans le dossier de travail courant, provider "auto" (détecte piper local).`,
+    `Si \`text_to_speech\` n'apparaît pas dans tes outils, appelle d'abord \`tool_search\` avec "text_to_speech" pour le charger —`,
+    `n'écris PAS ta propre commande shell de synthèse. Réponds avec le chemin du fichier créé.`,
     '',
     'Script complet à lire :',
     '"""',
