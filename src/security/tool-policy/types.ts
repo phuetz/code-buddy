@@ -231,6 +231,8 @@ export interface PolicyConfig {
   auditLog: boolean;
   /** Default action for unknown tools */
   defaultAction: PolicyAction;
+  /** Persistent per-tool overrides (Hermes-style per-tool gating from the GUI) */
+  toolOverrides: Record<string, PolicyAction>;
 }
 
 /**
@@ -243,6 +245,7 @@ export const DEFAULT_POLICY_CONFIG: PolicyConfig = {
   agentRules: {},
   providerRules: {},
   auditLog: false,
+  toolOverrides: {},
   defaultAction: 'confirm',
 };
 

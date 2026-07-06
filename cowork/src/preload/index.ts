@@ -1962,6 +1962,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   tools: {
     list: (): Promise<Array<{ name: string; description: string; category: string }>> =>
       ipcRenderer.invoke('tools.list'),
+    getOverrides: (): Promise<Record<string, 'allow' | 'deny' | 'confirm'>> =>
+      ipcRenderer.invoke('tools.getOverrides'),
+    setOverride: (name: string, action: 'allow' | 'deny' | null): Promise<{ ok: boolean; overrides?: Record<string, string> }> =>
+      ipcRenderer.invoke('tools.setOverride', { name, action }),
     hermesCatalog: {
       get: (): Promise<{
         generatedAt: string;
@@ -5986,6 +5990,8 @@ declare global {
       };
       tools: {
         list: () => Promise<Array<{ name: string; description: string; category: string }>>;
+        getOverrides: () => Promise<Record<string, 'allow' | 'deny' | 'confirm'>>;
+        setOverride: (name: string, action: 'allow' | 'deny' | null) => Promise<{ ok: boolean; overrides?: Record<string, string> }>;
         hermesCatalog: {
           get: () => Promise<{
             generatedAt: string;

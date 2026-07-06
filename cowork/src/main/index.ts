@@ -3986,6 +3986,41 @@ ipcMain.handle('tools.list', async () => {
   }
 });
 
+// Persistent per-tool policy overrides (Capacités → Outils gating).
+ipcMain.handle('tools.getOverrides', async () => {
+  try {
+    const { loadCoreModule } = await import('./utils/core-loader');
+    const mod = await loadCoreModule<{
+      getPolicyManager: () => { getToolOverrides: () => Record<string, string> };
+    }>('security/tool-policy/index.js');
+    return mod ? mod.getPolicyManager().getToolOverrides() : {};
+  } catch (err) {
+    logWarn('[tools.getOverrides] failed:', err);
+    return {};
+  }
+});
+
+ipcMain.handle('tools.setOverride', async (_event, { name, action }: { name: string; action: 'allow' | 'deny' | null }) => {
+  try {
+    const { loadCoreModule } = await import('./utils/core-loader');
+    const mod = await loadCoreModule<{
+      getPolicyManager: () => {
+        setToolOverride: (n: string, a: string) => void;
+        clearToolOverride: (n: string) => void;
+        getToolOverrides: () => Record<string, string>;
+      };
+    }>('security/tool-policy/index.js');
+    if (!mod) return { ok: false };
+    const manager = mod.getPolicyManager();
+    if (action === null) manager.clearToolOverride(name);
+    else manager.setToolOverride(name, action);
+    return { ok: true, overrides: manager.getToolOverrides() };
+  } catch (err) {
+    logWarn('[tools.setOverride] failed:', err);
+    return { ok: false };
+  }
+});
+
 ipcMain.handle('tools.hermesCatalog.get', async () => {
   try {
     return await getHermesToolCatalogForReview();

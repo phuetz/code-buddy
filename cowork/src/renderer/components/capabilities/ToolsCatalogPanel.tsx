@@ -1,13 +1,16 @@
 /**
- * ToolsCatalogPanel — the agent's REAL tool registry, full page.
+ * ToolsCatalogPanel — the agent's REAL tool registry, full page, with
+ * Hermes-style per-tool gating.
  *
  * Backed by the `tools.list` IPC (the same registry the agent dispatches
- * from), grouped by category with a search box. Read-only by design: tool
- * availability is governed by permission modes and the RAG selection, not by
- * hand-toggles — this page answers « qu'est-ce que l'agent sait faire ? ».
+ * from). Each tool carries a three-state gate — Défaut (profile/group
+ * rules) / Autorisé / Refusé — persisted through `tools.setOverride` into
+ * the core PolicyManager (`~/.codebuddy` policy config), the SAME policy the
+ * tool-handler consults before every execution. Session overrides still
+ * outrank these gates by design.
  */
-import { useEffect, useMemo, useState } from 'react';
-import { Search, Wrench } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Check, Search, Wrench, X } from 'lucide-react';
 
 interface ToolEntry {
   name: string;
@@ -15,8 +18,34 @@ interface ToolEntry {
   category: string;
 }
 
+type Gate = 'allow' | 'deny' | null;
+
+function GateButtons({ gate, onChange }: { gate: Gate; onChange: (gate: Gate) => void }) {
+  return (
+    <div className="flex shrink-0 items-center gap-0.5" data-testid="tool-gate">
+      <button
+        type="button"
+        title="Autoriser toujours"
+        onClick={() => onChange(gate === 'allow' ? null : 'allow')}
+        className={`rounded p-1 ${gate === 'allow' ? 'bg-success/20 text-success' : 'text-muted-foreground hover:text-success'}`}
+      >
+        <Check className="h-3.5 w-3.5" aria-hidden="true" />
+      </button>
+      <button
+        type="button"
+        title="Refuser toujours"
+        onClick={() => onChange(gate === 'deny' ? null : 'deny')}
+        className={`rounded p-1 ${gate === 'deny' ? 'bg-destructive/20 text-destructive' : 'text-muted-foreground hover:text-destructive'}`}
+      >
+        <X className="h-3.5 w-3.5" aria-hidden="true" />
+      </button>
+    </div>
+  );
+}
+
 export function ToolsCatalogPanel() {
   const [tools, setTools] = useState<ToolEntry[] | null>(null);
+  const [overrides, setOverrides] = useState<Record<string, string>>({});
   const [query, setQuery] = useState('');
 
   useEffect(() => {
@@ -29,9 +58,31 @@ export function ToolsCatalogPanel() {
       .catch(() => {
         if (!cancelled) setTools([]);
       });
+    void window.electronAPI?.tools
+      ?.getOverrides?.()
+      .then((current) => {
+        if (!cancelled && current) setOverrides(current);
+      })
+      .catch(() => {});
     return () => {
       cancelled = true;
     };
+  }, []);
+
+  const setGate = useCallback((name: string, gate: Gate) => {
+    // Optimistic; the IPC result re-syncs the authoritative map.
+    setOverrides((prev) => {
+      const next = { ...prev };
+      if (gate === null) delete next[name];
+      else next[name] = gate;
+      return next;
+    });
+    void window.electronAPI?.tools
+      ?.setOverride?.(name, gate)
+      .then((result) => {
+        if (result?.ok && result.overrides) setOverrides(result.overrides);
+      })
+      .catch(() => {});
   }, []);
 
   const groups = useMemo(() => {
@@ -50,6 +101,7 @@ export function ToolsCatalogPanel() {
 
   const total = tools?.length ?? 0;
   const shown = groups.reduce((n, [, list]) => n + list.length, 0);
+  const gated = Object.keys(overrides).length;
 
   return (
     <div className="h-full overflow-y-auto p-4" data-testid="tools-catalog-panel">
@@ -68,8 +120,14 @@ export function ToolsCatalogPanel() {
           </div>
           <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
             {tools === null ? '…' : `${shown} / ${total} outils`}
+            {gated > 0 ? ` · ${gated} gardé${gated > 1 ? 's' : ''}` : ''}
           </span>
         </div>
+
+        <p className="text-xs text-muted-foreground">
+          ✓ / ✗ fixent une règle PERSISTANTE par outil (au-dessus des règles de groupe, sous les
+          décisions de session). Re-cliquer retire la règle.
+        </p>
 
         {tools !== null && total === 0 ? (
           <p className="text-sm text-muted-foreground">
@@ -83,15 +141,24 @@ export function ToolsCatalogPanel() {
               {category} · {list.length}
             </h2>
             <div className="grid gap-2 sm:grid-cols-2">
-              {list.map((tool) => (
-                <div key={tool.name} className="rounded-lg border border-border bg-surface p-3">
-                  <div className="flex items-center gap-2">
-                    <Wrench className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
-                    <code className="truncate text-xs font-semibold text-foreground">{tool.name}</code>
+              {list.map((tool) => {
+                const gate = (overrides[tool.name] as Gate) ?? null;
+                return (
+                  <div
+                    key={tool.name}
+                    className={`rounded-lg border p-3 ${
+                      gate === 'deny' ? 'border-destructive/40 bg-destructive/5' : gate === 'allow' ? 'border-success/40 bg-surface' : 'border-border bg-surface'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <Wrench className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
+                      <code className="min-w-0 flex-1 truncate text-xs font-semibold text-foreground">{tool.name}</code>
+                      <GateButtons gate={gate} onChange={(g) => setGate(tool.name, g)} />
+                    </div>
+                    <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">{tool.description}</p>
                   </div>
-                  <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">{tool.description}</p>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </section>
         ))}

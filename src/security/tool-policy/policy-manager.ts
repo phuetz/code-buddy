@@ -80,6 +80,9 @@ export class PolicyManager extends EventEmitter {
     const context: Partial<PolicyContext> = {
       args,
       sessionOverrides: this.sessionOverrides,
+      // Persistent per-tool overrides (set from the Capacités GUI / CLI) —
+      // the resolver already honours these right below session overrides.
+      globalOverrides: new Map(Object.entries(this.config.toolOverrides)),
     };
 
     const decision = this.resolver.resolve(toolName, context);
@@ -171,6 +174,31 @@ export class PolicyManager extends EventEmitter {
   // ============================================================================
   // Session Overrides
   // ============================================================================
+
+  /**
+   * Set a PERSISTENT per-tool override (survives restarts; resolver priority
+   * just below session overrides). This is the Hermes-style per-tool gate.
+   */
+  setToolOverride(toolName: string, action: PolicyAction): void {
+    this.config.toolOverrides[toolName] = action;
+    this.resolver.updateConfig(this.config);
+    this.clearCache();
+    this.emit('policy:rule-added', { rule: { group: toolName as unknown as ToolGroup, action }, source: 'global' });
+    this.saveConfig();
+  }
+
+  /** Remove a persistent per-tool override (back to profile/group rules). */
+  clearToolOverride(toolName: string): void {
+    delete this.config.toolOverrides[toolName];
+    this.resolver.updateConfig(this.config);
+    this.clearCache();
+    this.saveConfig();
+  }
+
+  /** All persistent per-tool overrides. */
+  getToolOverrides(): Record<string, PolicyAction> {
+    return { ...this.config.toolOverrides };
+  }
 
   /**
    * Set session override for a tool
@@ -369,6 +397,7 @@ export class PolicyManager extends EventEmitter {
           globalRules: loaded.globalRules || [],
           agentRules: loaded.agentRules || {},
           providerRules: loaded.providerRules || {},
+          toolOverrides: loaded.toolOverrides || {},
         };
       }
     } catch (error) {
