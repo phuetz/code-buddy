@@ -286,9 +286,13 @@ Patrice : « carte blanche, tests visuels, boucle loop, le but = le cerveau du r
   tracée) + 35 tests. ⚠️ Gotcha relance Electron AGGRAVÉ : vérifier « bind() failed » ABSENT du log ET une seule
   instance (`pgrep -f dist-electron`) — 2 instances = tours morts silencieux (DB partagée), la boucle d'attente port
   doit VÉRIFIER la libération réellement (pas de lancement aveugle après 20 s).
+- **MISSION CONTROL AUTO-REFRESH (`de7c2b41`)** : les 4 chargements (council/CKG/board/daemon) passaient une seule
+  fois au mount → hook usePolling (run immédiat + interval 30 s + cleanup, 2 tests renderHook). Preuve STRICTE :
+  entrée worklog temporaire écrite dans le vrai ledger → apparue dans le board en ≤30 s SANS reload (puis retirée).
+  Notes : contextBridge FIGE window.electronAPI (interception impossible côté renderer) ; l'angle mort anti-stall
+  n'existe pas (chatStream est un async generator — le POST part au 1er next(), couvert par la garde).
 - **File suivante (idées)** : e2e confirmation organique (trouver l'op qui demande confirmation par défaut) ;
-  purge des 61 warnings lint ; rafraîchissement périodique Mission Control ; app vitrine vidéo hero e2e ;
-  Genspark suite : page résultat de tâche ; angle mort garde anti-stall (établissement du stream avant 1er chunk).
+  purge des 61 warnings lint ; app vitrine vidéo hero e2e ; Genspark suite : page résultat de tâche.
 
 ## SESSION 2026-07-05 NUIT+ — BATCH GENSPARK MASSIF (Patrice « lance un maximum » + « inspire-toi de Genspark »)
 ~13 vagues Codex lancées en parallèle (worktrees + setsid détachés) → **11 intégrées sur main** (gate tsc+vite+tests
