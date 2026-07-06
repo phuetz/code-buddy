@@ -108,6 +108,18 @@ export const GENSPARK_SLICES: GensparkSlice[] = [
       'FONCTIONNEL (promu) : session agent réelle + bloc ```doc → DocPreview live + export skill docx.',
   },
   {
+    id: 'B10',
+    title: 'PodStudioPanel',
+    roadmap: 11,
+    category: 'deliverable',
+    mount: 'labs',
+    componentFile: 'components/deliverables/PodStudioPanel.tsx',
+    logicFile: 'components/deliverables/pod-block-model.ts',
+    testFile: '../../tests/pod-block-model.test.ts',
+    needsData:
+      'FONCTIONNEL (promu) : session agent réelle + bloc ```pod → PodcastComposer live + synthèse text_to_speech (piper).',
+  },
+  {
     id: 'B1',
     title: 'SlideDeckBuilder',
     roadmap: 8,
