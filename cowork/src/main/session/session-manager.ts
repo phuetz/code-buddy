@@ -29,6 +29,7 @@ import type {
 } from '../../renderer/types';
 import type { DatabaseInstance, TraceStepRow } from '../db/database';
 import { PathResolver } from '../sandbox/path-resolver';
+import { resolveSafeCwd } from './safe-cwd';
 import { loadCoreModule } from '../utils/core-loader';
 import {
   SandboxAdapter,
@@ -715,10 +716,13 @@ export class SessionManager {
       }
     }
 
+    // A relative/empty cwd must never resolve against the Electron process
+    // cwd (cowork/ in dev). Anchor it under the safe base first.
+    effectiveCwd = resolveSafeCwd(effectiveCwd, this.safeCwdBase());
     this.ensureCwdExists(effectiveCwd);
     // Trust only a cwd the caller EXPLICITLY chose (GUI folder pick), not the
     // active-project fallback — that one was trusted when the project opened.
-    if (cwd) await this.trustSessionCwd(cwd);
+    if (effectiveCwd) await this.trustSessionCwd(effectiveCwd);
 
     const session = this.createSession(title, effectiveCwd, allowedTools, memoryEnabled);
 
@@ -762,8 +766,9 @@ export class SessionManager {
       }
     }
 
+    effectiveCwd = resolveSafeCwd(effectiveCwd, this.safeCwdBase());
     this.ensureCwdExists(effectiveCwd);
-    if (cwd) await this.trustSessionCwd(cwd);
+    if (effectiveCwd) await this.trustSessionCwd(effectiveCwd);
 
     const session = this.createSession(title, effectiveCwd);
     session.isBackground = true;
@@ -795,6 +800,19 @@ export class SessionManager {
    * folder overwrote cowork's own index.html). Fail-open: an uncreatable path
    * is logged and the session proceeds with the old behavior.
    */
+  /** Base for anchoring relative session cwds — the app's default working dir. */
+  private safeCwdBase(): string {
+    try {
+      // Lazy require avoids a hard electron dep in unit tests of this module.
+      const electron = require('electron') as { app?: { getPath: (n: string) => string } };
+      const home = electron.app?.getPath('userData');
+      if (home) return path.join(home, 'default_working_dir');
+    } catch {
+      /* not in electron — fall through */
+    }
+    return path.join(require('os').homedir(), '.codebuddy', 'projects');
+  }
+
   private ensureCwdExists(cwd?: string): void {
     if (!cwd) return;
     try {
