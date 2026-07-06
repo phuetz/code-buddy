@@ -15,10 +15,13 @@ HX 470, Ollama Vulkan) · Verified against live installs: Hermes Agent `v0.16.0`
 > `command-validator.validateCommand`, which both bash paths (buffered + streaming) run unconditionally — YOLO
 > skips confirmations, never validation. Proven on the built runtime (dist): force-push blocked with the rule's
 > description, normal commands pass; 6 real-store tests + 654 security/bash tests green. **Registered, smaller,
-> not yet filled:** `/deny <reason>` relaying the denial reason to the agent (our ConfirmationResult has a
-> `feedback` field but the tool-handler callback is boolean); pluggable SecretSource + 1Password `op://`
-> (structure fillable, any honest validation of the `op` source is account-gated); session prune filters/bulk
-> archive (CLI conveniences).
+> not yet filled:** session prune filters/bulk archive (CLI conveniences).
+> **Filled later the same day:** `/deny <reason>` → the FULL interactive confirmation bridge for Cowork
+> (`df968447` — the permission callback was a dead link end to end; denial reason now reaches the agent as
+> feedback), per-tool gating from the GUI (`e53f6abc` — the resolver's `globalOverrides` seam finally has a
+> producer, persisted to `~/.codebuddy/tool-policy.json`), and pluggable SecretSource + first-class 1Password
+> (`ed1acbb6` — registry over the SecretRef switch, `op://` whole-value + `${op:...}` token via execFile; live
+> `op` validation stays account-gated, exercised against a real fake binary on PATH).
 
 > **2026-07-03 OpenClaw drift re-audit — ten versions, zero integration drift.** The local install was upgraded
 > 2026.6.1 → **2026.6.11** (npm latest stable) and every integration surface re-validated LIVE against the new
