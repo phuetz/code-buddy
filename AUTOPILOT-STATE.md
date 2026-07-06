@@ -297,8 +297,15 @@ Patrice : « carte blanche, tests visuels, boucle loop, le but = le cerveau du r
   groupés/cherchables), McpCapabilitiesPanel (mcp.getServers/Status/Tools, lecture — édition dans Réglages),
   SkillsManagerPage réutilisée telle quelle (review-gated). Validé écran (3 onglets). Raffinements notés :
   intégrer la page skills sans son chrome overlay ; per-tool gating (le toggle Hermes) en suite.
+- **PER-TOOL GATING PERSISTANT (`e53f6abc`, parité Hermes)** : le PolicyResolver avait un seam `globalOverrides`
+  que RIEN n'alimentait (dormant). PolicyConfig gagne `toolOverrides` persisté (~/.codebuddy/tool-policy.json),
+  PolicyManager set/clear/get + alimente le seam — priorité : session > gate outil > règles groupe > profil
+  (3 tests fichier réel dont survie au restart). Cowork : IPC tools.getOverrides/setOverride + toggle ✓/✗
+  3 états sur chaque carte de l'onglet Outils. Prouvé e2e : clic GUI → {web_search: deny} écrit dans le VRAI
+  fichier consulté par le tool-handler → re-clic le retire. C'était le 2e « seam consulté mais jamais alimenté »
+  de la journée (après le permissionCallback) — patron de chasse : grep les champs de contexte optionnels.
 - **File suivante (idées)** : e2e confirmation organique ; purge des 61 warnings lint ; app vitrine vidéo hero
-  e2e ; Genspark suite : page résultat de tâche ; per-tool gating dans Capacités.
+  e2e ; Genspark suite : page résultat de tâche ; SecretSource pluggable (structure) ; session prune/bulk-archive.
 
 ## SESSION 2026-07-05 NUIT+ — BATCH GENSPARK MASSIF (Patrice « lance un maximum » + « inspire-toi de Genspark »)
 ~13 vagues Codex lancées en parallèle (worktrees + setsid détachés) → **11 intégrées sur main** (gate tsc+vite+tests
