@@ -27,17 +27,18 @@ interface QuickAction {
 interface StudioTile {
   label: string;
   icon: typeof Presentation;
-  run: (s: ReturnType<typeof useAppStore.getState>) => void;
+  /** `seed` = the Home composer's current text, carried into the studio. */
+  run: (s: ReturnType<typeof useAppStore.getState>, seed: string | null) => void;
 }
 
 const STUDIO_TILES: StudioTile[] = [
   { label: 'App', icon: Hammer, run: (s) => s.setPrimaryView('studio') },
-  { label: 'Deck', icon: Presentation, run: (s) => { s.setCreationsTab('deck'); s.setPrimaryView('creations'); } },
-  { label: 'Feuille', icon: Table2, run: (s) => { s.setCreationsTab('sheet'); s.setPrimaryView('creations'); } },
-  { label: 'Document', icon: FileText, run: (s) => { s.setCreationsTab('doc'); s.setPrimaryView('creations'); } },
-  { label: 'Pod', icon: Radio, run: (s) => { s.setCreationsTab('pod'); s.setPrimaryView('creations'); } },
-  { label: 'Image', icon: ImageIcon, run: (s) => { s.setCreationsTab('image'); s.setPrimaryView('creations'); } },
-  { label: 'Vidéo', icon: Clapperboard, run: (s) => { s.setCreationsTab('video'); s.setPrimaryView('creations'); } },
+  { label: 'Deck', icon: Presentation, run: (s, seed) => { s.setCreationsSeed(seed); s.setCreationsTab('deck'); s.setPrimaryView('creations'); } },
+  { label: 'Feuille', icon: Table2, run: (s, seed) => { s.setCreationsSeed(seed); s.setCreationsTab('sheet'); s.setPrimaryView('creations'); } },
+  { label: 'Document', icon: FileText, run: (s, seed) => { s.setCreationsSeed(seed); s.setCreationsTab('doc'); s.setPrimaryView('creations'); } },
+  { label: 'Pod', icon: Radio, run: (s, seed) => { s.setCreationsSeed(seed); s.setCreationsTab('pod'); s.setPrimaryView('creations'); } },
+  { label: 'Image', icon: ImageIcon, run: (s, seed) => { s.setCreationsSeed(seed); s.setCreationsTab('image'); s.setPrimaryView('creations'); } },
+  { label: 'Vidéo', icon: Clapperboard, run: (s, seed) => { s.setCreationsSeed(seed); s.setCreationsTab('video'); s.setPrimaryView('creations'); } },
   { label: 'Drive', icon: FolderOpen, run: (s) => { s.setCreationsTab('drive'); s.setPrimaryView('creations'); } },
   { label: 'Recherche', icon: Search, run: (s) => s.setShowLiveLauncher(true) },
 ];
@@ -184,19 +185,25 @@ export function HomeView() {
         </div>
       </form>
 
-      {/* Genspark-style agent row: every studio is one click away. */}
+      {/* Genspark-style agent row: every studio is one click away; the typed
+          subject travels with the click (creationsSeed). */}
       <div className="w-full max-w-xl flex flex-wrap justify-center gap-2" data-testid="home-studios">
         {STUDIO_TILES.map(({ label, icon: Icon, run }) => (
           <button
             key={label}
             type="button"
-            onClick={() => run(useAppStore.getState())}
+            onClick={() => run(useAppStore.getState(), prompt.trim() || null)}
             className="flex flex-col items-center gap-1.5 rounded-xl border border-border bg-background hover:border-accent hover:bg-accent/10 transition-colors px-4 py-3 min-w-[72px]"
           >
             <Icon className="h-5 w-5 text-muted-foreground" aria-hidden="true" />
             <span className="text-xs">{label}</span>
           </button>
         ))}
+        {prompt.trim() ? (
+          <div className="w-full text-center text-xs text-muted-foreground">
+            Ton sujet accompagnera le studio choisi.
+          </div>
+        ) : null}
       </div>
 
       <div className="w-full max-w-xl grid grid-cols-1 sm:grid-cols-3 gap-3" data-testid="home-quick">

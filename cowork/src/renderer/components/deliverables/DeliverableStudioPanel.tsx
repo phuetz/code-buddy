@@ -8,7 +8,7 @@
  * docx) in a follow-up turn. Kind-specific bits are injected via config.
  */
 import { FileDown, Loader2, Send } from 'lucide-react';
-import { useMemo, useState, type ComponentType, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ComponentType, type ReactNode } from 'react';
 import { useAppStore } from '../../store';
 import { useIPC } from '../../hooks/useIPC';
 
@@ -40,6 +40,17 @@ export function DeliverableStudioPanel<T>({ config }: { config: DeliverableStudi
   const [subject, setSubject] = useState('');
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [exportAsked, setExportAsked] = useState(false);
+
+  // Consume the one-shot subject carried from the Home composer (Genspark
+  // flow: type the topic, pick the output type, land in a prefilled studio).
+  const creationsSeed = useAppStore((st) => st.creationsSeed);
+  const setCreationsSeed = useAppStore((st) => st.setCreationsSeed);
+  useEffect(() => {
+    if (creationsSeed) {
+      setSubject(creationsSeed);
+      setCreationsSeed(null);
+    }
+  }, [creationsSeed, setCreationsSeed]);
 
   const sessionStates = useAppStore((st) => st.sessionStates);
   const workingDir = useAppStore((st) => st.workingDir);
