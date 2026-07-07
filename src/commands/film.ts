@@ -249,5 +249,55 @@ export function createFilmCommand(): Command {
       }
     });
 
+  cmd
+    .command('from-prompt <pitch>')
+    .description(
+      'Génère une vidéo de présentation narrée depuis un simple sujet (le LLM planifie les scènes → narration Piper → rendu premium + sous-titres karaoké). $0 via ChatGPT.'
+    )
+    .option('--scenes <n>', 'nombre de scènes visé', '6')
+    .option('--resolution <WxH>', "résolution de sortie (défaut '1920x1080')")
+    .option('--music <file>', 'musique de fond (défaut : une nappe générée)')
+    .option('--no-music', 'pas de musique de fond')
+    .option('--no-subtitles', 'pas de sous-titres karaoké')
+    .option('--lang <lang>', 'langue de la narration', 'français')
+    .option('--model <id>', 'modèle du planner (sinon le modèle courant)')
+    .option('--name <name>', 'nom du film')
+    .option('--out <file>', 'chemin de sortie explicite')
+    .action(async (pitch: string, opts: Record<string, unknown>) => {
+      const { produceVideoFromPrompt } = await import('../agent/film/video-studio.js');
+      console.log(`🎬  Production vidéo depuis le prompt : « ${pitch} »`);
+      const music = typeof opts.music === 'string' ? opts.music : undefined;
+      const res = await produceVideoFromPrompt(
+        pitch,
+        {
+          count: num(typeof opts.scenes === 'string' ? opts.scenes : undefined) ?? 6,
+          resolution: typeof opts.resolution === 'string' ? opts.resolution : undefined,
+          music,
+          noMusic: opts.music === false,
+          subtitles: opts.subtitles !== false,
+          lang: typeof opts.lang === 'string' ? opts.lang : undefined,
+          model: typeof opts.model === 'string' ? opts.model : undefined,
+          name: typeof opts.name === 'string' ? opts.name : undefined,
+          output: typeof opts.out === 'string' ? opts.out : undefined,
+        },
+        {
+          onProgress: (p) => {
+            const scene = p.scene ? `[${p.scene}/${p.total ?? '?'}] ` : '';
+            console.log(`   ${scene}${p.phase}${p.message ? ` — ${p.message.slice(0, 60)}` : ''}`);
+          },
+        }
+      );
+      if (res.success) {
+        console.log(
+          `\n✓ ${res.sceneCount} scène(s) · ${res.probedDuration ?? '?'}s · qualité ${res.quality?.pass ? 'PASS' : 'REVIEW'}`
+        );
+        console.log(`   film: ${res.filmPath}`);
+      } else {
+        console.log(`\n✗ ${res.error ?? 'échec'}`);
+        process.exitCode = 1;
+      }
+      for (const w of res.warnings) console.log(`   ⚠ ${w}`);
+    });
+
   return cmd;
 }
