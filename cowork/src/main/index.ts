@@ -61,6 +61,8 @@ import { CommandRunner } from './studio/command-runner';
 import { registerScaffoldIpc } from './studio/scaffold-ipc';
 import { registerMediaGenIpc } from './media/media-gen-ipc';
 import { MediaGenService } from './media/media-gen-service';
+import { registerFilmIpc } from './film/film-ipc';
+import { FilmService } from './film/film-service';
 import { ScaffoldService } from './studio/scaffold-service';
 import { registerPairingIpcHandlers } from './ipc/pairing-ipc';
 import { registerUserModelIpcHandlers } from './ipc/user-model-ipc';
@@ -2539,6 +2541,10 @@ registerScaffoldIpc(ipcMain, new ScaffoldService());
 
 // Media generation surface delegates to the core image_generate tool.
 registerMediaGenIpc(ipcMain, new MediaGenService());
+
+// Video Studio: prompt → premium narrated video (core produceVideoFromPrompt).
+// Films land in the media-library working dir so they show up in the Bibliothèque.
+registerFilmIpc(ipcMain, new FilmService(undefined, join(app.getPath('userData'), 'default_working_dir')));
 
 // ── .codebuddy/ backups (same core handler as `buddy backup`) ────────────
 registerBackupIpcHandlers();
