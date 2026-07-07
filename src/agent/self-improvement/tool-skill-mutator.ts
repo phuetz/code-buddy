@@ -14,6 +14,7 @@ import { FormalToolRegistry } from '../../tools/registry/tool-registry.js';
 import { getToolRegistry } from '../../tools/registry.js';
 import { AUTHORED_PREFIX, buildAuthoredTool, type AuthoredToolSpec } from './authored-tool-runtime.js';
 import { AuthoredToolStore } from './authored-tool-store.js';
+import { inspectAuthoredCode } from './authored-artifact-gate.js';
 
 export interface ToolMutatorPort {
   register(spec: AuthoredToolSpec): { name: string };
@@ -48,6 +49,14 @@ export class LiveToolMutator implements ToolMutatorPort {
       throw new Error(
         `refusing to register tool "${spec.name}": authored tools must be namespaced "${AUTHORED_PREFIX}*" (never shadow a built-in)`,
       );
+    }
+    // Même backstop pour la sûreté du code : les appelants légitimes
+    // (register_tool, tool-gate) pré-scannent, mais un spec persisté trafiqué
+    // ou un appel direct ne doit avoir AUCUN chemin d'enregistrement sans le
+    // scan G1. Si le test gardien no-backdoor casse, STOP — sécuriser d'abord.
+    const scan = inspectAuthoredCode(spec.code, 'code');
+    if (!scan.ok) {
+      throw new Error(`refusing to register tool "${spec.name}": ${scan.reasons.join('; ')}`);
     }
     const tool = buildAuthoredTool(spec);
     FormalToolRegistry.getInstance().register(tool, { override: true });

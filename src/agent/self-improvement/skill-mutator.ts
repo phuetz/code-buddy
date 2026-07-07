@@ -149,9 +149,24 @@ export class LiveSkillMutator implements SkillMutatorPort {
   }
 
   create(spec: SkillSpec): { name: string } {
+    // Backstops durs, miroir de LiveToolMutator.register : (a) namespace
+    // authored-* obligatoire — sans lui, un spec nommé comme une skill user/
+    // bundled l'écraserait ; (b) re-gate de sûreté — les appelants légitimes
+    // (skill-gate, consolidator) pré-gatent, mais AUCUN chemin d'installation
+    // ne doit exister sans scan (appel direct, contenu trafiqué). Si le test
+    // gardien no-backdoor casse, une backdoor a été réintroduite — STOP.
+    if (!isAuthoredSkillName(spec.name)) {
+      throw new Error(
+        `refusing to create skill "${spec.name}": authored skills must be named "${AUTHORED_SKILL_PREFIX}*" (never shadow a user/bundled skill)`,
+      );
+    }
+    const content = ensureFrontmatter(spec.name, spec.description, spec.content);
+    const gate = safetyGateSkill(content);
+    if (!gate.ok) {
+      throw new Error(`refusing to install skill "${spec.name}": ${gate.reasons.join('; ')}`);
+    }
     const dir = this.dirFor(spec.name);
     fs.mkdirSync(dir, { recursive: true });
-    const content = ensureFrontmatter(spec.name, spec.description, spec.content);
     fs.writeFileSync(this.skillFile(spec.name), content, 'utf-8');
     this.reload();
     return { name: spec.name };
