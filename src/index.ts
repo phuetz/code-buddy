@@ -3164,6 +3164,11 @@ addLazyCommandGroup(program, 'hub', 'Skills marketplace (search, install, publis
   registerHubCommands(program);
 });
 
+addLazyCommandGroup(program, 'curator', 'Propose-only maintenance report (memory, skills, CKG, lessons, costs)', async () => {
+  const { registerCuratorCommand } = await import('./commands/curator-cli.js');
+  registerCuratorCommand(program);
+});
+
 addLazyCommandGroup(program, 'gateway-pairing', 'Operator approval for gateway device pairing', async () => {
   const { registerGatewayPairingCommands } = await import('./commands/cli/native-engine-commands.js');
   registerGatewayPairingCommands(program);

@@ -813,6 +813,19 @@ export class PersistentMemoryManager extends EventEmitter {
   }
 
   /**
+   * Read-only enumeration of live memories (copies) for inspection tooling —
+   * the Curator's dry-run forgetting scan reads through this instead of
+   * poking the private maps. Does NOT reinforce (unlike getRelevantMemories).
+   */
+  listMemories(scope: MemoryScope): Memory[] {
+    const memories = scope === "project" ? this.projectMemories : this.userMemories;
+    return Array.from(memories.values()).map((m) => ({
+      ...m,
+      ...(m.tags ? { tags: [...m.tags] } : {}),
+    }));
+  }
+
+  /**
    * Ebbinghaus forgetting pass (recoverable): memories whose retention decayed
    * below the threshold are appended to a sibling `*.archive.md`, then removed.
    * An archive write failure aborts the pass — we never drop what we could not
