@@ -1380,6 +1380,21 @@ export async function startServer(userConfig: Partial<ServerConfig> = {}): Promi
             });
             logger.info(`Episodic journal: Enabled (CODEBUDDY_EPISODE_JOURNAL) — dialogue consolidation every ${episodeEvery} beats`);
           }
+          // Voice-assistant improvement loop (opt-in, MySoulmate-inspired) — reflect on recent
+          // dialogue and adapt over time: learned reply-guidance + bounded trait drift (behavioral
+          // mode; never auto-accepts personal facts — those stay pending for `buddy assistant improve --apply`).
+          if (process.env.CODEBUDDY_VOICE_IMPROVE === 'true') {
+            const improveEvery = Math.max(1, Number(process.env.CODEBUDDY_VOICE_IMPROVE_EVERY ?? 60));
+            heart.register({
+              name: 'voice-improvement',
+              everyBeats: improveEvery,
+              handler: async () => {
+                const { runVoiceImprovementCycle } = await import('../companion/voice-improvement-loop.js');
+                await runVoiceImprovementCycle({ mode: 'behavioral' });
+              },
+            });
+            logger.info(`Voice improvement loop: Enabled (CODEBUDDY_VOICE_IMPROVE) — reflect + adapt every ${improveEvery} beats (behavioral; facts stay pending)`);
+          }
           heart.start();
           sensoryTeardown.push(() => heart.stop());
           logger.info(`Sensory bridge: Enabled (buddy-sense → event bus; heartbeat treatments every ${everyBeats} beats)`);

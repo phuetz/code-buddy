@@ -21,6 +21,7 @@
 import { getUserModel } from '../memory/user-model.js';
 import { injectPresenceBlock } from '../memory/presence-injector.js';
 import { loadRelationshipState, getPersonalitySummary } from './relationship-state.js';
+import { loadVoiceGuidance, formatVoiceGuidance } from './voice-guidance.js';
 
 export interface RelationalContextOptions {
   cwd?: string;
@@ -32,11 +33,14 @@ export interface RelationalContextOptions {
   includePresence?: boolean;
   /** Include the recent-episode block ("what we talked about"). Default true. */
   includeEpisode?: boolean;
+  /** Include the learned voice-guidance block ("how to reply better"). Default true. */
+  includeGuidance?: boolean;
   /** Injectable seams (tests) — each defaults to the real source above. */
   factsBlock?: () => string | null;
   personalitySummary?: () => string;
   presenceBlock?: () => Promise<string>;
   episodeBlock?: () => Promise<string | null>;
+  guidanceBlock?: () => string | null;
   /** Override the relationship-state file (tests). */
   relationshipStatePath?: string;
 }
@@ -58,7 +62,9 @@ async function defaultReadEpisode(): Promise<string | null> {
  * splice unconditionally). Order: what she knows about him → what they talked about recently → her
  * own state → who's present now.
  */
-export async function buildRelationalContext(options: RelationalContextOptions = {}): Promise<string> {
+export async function buildRelationalContext(
+  options: RelationalContextOptions = {}
+): Promise<string> {
   const parts: string[] = [];
 
   if (options.includeFacts !== false) {
@@ -72,10 +78,24 @@ export async function buildRelationalContext(options: RelationalContextOptions =
     }
   }
 
+  if (options.includeGuidance !== false) {
+    try {
+      const guidance = options.guidanceBlock
+        ? options.guidanceBlock()
+        : formatVoiceGuidance(loadVoiceGuidance());
+      if (guidance && guidance.trim()) parts.push(guidance.trim());
+    } catch {
+      /* best-effort — no learned guidance is fine */
+    }
+  }
+
   if (options.includeEpisode !== false) {
     try {
-      const episode = options.episodeBlock ? await options.episodeBlock() : await defaultReadEpisode();
-      if (episode && episode.trim()) parts.push(`<recent_episode>\n${episode.trim()}\n</recent_episode>`);
+      const episode = options.episodeBlock
+        ? await options.episodeBlock()
+        : await defaultReadEpisode();
+      if (episode && episode.trim())
+        parts.push(`<recent_episode>\n${episode.trim()}\n</recent_episode>`);
     } catch {
       /* best-effort — no episode is fine */
     }
@@ -94,7 +114,9 @@ export async function buildRelationalContext(options: RelationalContextOptions =
 
   if (options.includePresence !== false) {
     try {
-      const presence = options.presenceBlock ? await options.presenceBlock() : await injectPresenceBlock();
+      const presence = options.presenceBlock
+        ? await options.presenceBlock()
+        : await injectPresenceBlock();
       if (presence && presence.trim()) parts.push(presence.trim());
     } catch {
       /* best-effort */
