@@ -182,6 +182,18 @@ export async function synthesizeNarration(
   const env = deps.env ?? process.env;
   const piperBin = deps.piperBin ?? env.CODEBUDDY_PIPER_BIN ?? 'piper';
   const ffprobeBin = deps.ffprobeBin ?? 'ffprobe';
+
+  // Active engine: Pocket TTS (Lisa's estelle) when selected, else Piper. Pocket
+  // is fail-open too — a failure falls through to Piper below.
+  if ((env.CODEBUDDY_TTS_ENGINE ?? '').trim().toLowerCase() === 'pocket') {
+    const ok = await synthesizePocketNarration(trimmed, outPath, env, deps.timeoutMs ?? 180_000);
+    if (ok) {
+      const duration = await probeDuration(spawn, ffprobeBin, outPath);
+      if (duration != null) return { path: outPath, duration };
+    }
+    logger.info('[narration] Pocket TTS unavailable/failed — falling back to Piper');
+  }
+
   const voice = resolvePiperVoice(env);
   if (!voice) {
     logger.info('[narration] no Piper voice configured (CODEBUDDY_TTS_VOICE) — narration skipped');
@@ -207,6 +219,42 @@ export async function synthesizeNarration(
     return null;
   }
   return { path: outPath, duration };
+}
+
+/**
+ * Synthesize `text` to a WAV at `outPath` via Pocket TTS (Lisa's estelle voice).
+ * Fail-open: returns false on any error so the caller falls back to Piper.
+ * Voice/lang from `CODEBUDDY_POCKET_VOICE` (default estelle) / `CODEBUDDY_POCKET_LANG`
+ * (default french).
+ */
+async function synthesizePocketNarration(
+  text: string,
+  outPath: string,
+  env: NodeJS.ProcessEnv,
+  timeoutMs: number
+): Promise<boolean> {
+  try {
+    const { PocketTTSProvider } = await import('../../talk-mode/providers/pocket-tts.js');
+    const provider = new PocketTTSProvider();
+    await provider.initialize({
+      provider: 'pocket',
+      enabled: true,
+      priority: 1,
+      settings: {
+        voice: env.CODEBUDDY_POCKET_VOICE ?? 'estelle',
+        language: env.CODEBUDDY_POCKET_LANG ?? 'french',
+        timeoutMs,
+      },
+    });
+    if (!(await provider.isAvailable())) return false;
+    const res = await provider.synthesize(text);
+    if (!res?.audio?.length) return false;
+    const { writeFileSync } = await import('node:fs');
+    writeFileSync(outPath, res.audio);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /** Bake a narration WAV into a clip's audio (silence-padded to `duration`). */

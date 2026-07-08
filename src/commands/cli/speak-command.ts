@@ -13,32 +13,55 @@ import { logger } from '../../utils/logger.js';
 export function registerSpeakCommand(program: Command): void {
   program
     .command("speak [text...]")
-    .description("Synthesize speech using AudioReader TTS")
-    .option("--voice <voice>", "Voice ID to use (e.g., af_bella, ff_siwis)")
+    .description("Synthesize speech (AudioReader by default, or Pocket TTS via --engine pocket)")
+    .option("--engine <engine>", "TTS engine: audioreader | pocket (Kyutai, on-CPU, voice cloning)")
+    .option("--voice <voice>", "Voice ID (audioreader) or preset/clone-sample path (pocket, e.g. estelle)")
+    .option("--language <lang>", "Language for the pocket engine (e.g. french, english)")
     .option("--list-voices", "List available voices")
     .option("--speed <speed>", "Speaking speed (0.25-4.0)", "1.0")
     .option("--format <format>", "Output format (wav, mp3)", "wav")
     .option("--url <url>", "AudioReader API URL", "http://localhost:8000")
-    .action(async (textParts: string[], opts: { voice?: string; listVoices?: boolean; speed: string; format: string; url: string }) => {
-      const { AudioReaderTTSProvider } = await import("../../talk-mode/providers/audioreader-tts.js");
-      const provider = new AudioReaderTTSProvider();
-      await provider.initialize({
-        provider: 'audioreader',
-        enabled: true,
-        priority: 1,
-        settings: {
-          baseURL: opts.url,
-          defaultVoice: opts.voice,
-          speed: parseFloat(opts.speed),
-          format: opts.format,
-        },
-      });
+    .action(async (textParts: string[], opts: { engine?: string; voice?: string; language?: string; listVoices?: boolean; speed: string; format: string; url: string }) => {
+      // Engine selection: explicit --engine wins, else CODEBUDDY_TTS_ENGINE, else audioreader.
+      const engine = (opts.engine ?? process.env.CODEBUDDY_TTS_ENGINE ?? 'audioreader').trim().toLowerCase();
 
-      const available = await provider.isAvailable();
-      if (!available) {
-        console.error("AudioReader is not running at " + opts.url);
-        console.error("Start it with: cd ~/claude/AudioReader && python main.py");
-        process.exit(1);
+      let provider: import("../../talk-mode/tts-manager.js").ITTSProvider;
+      if (engine === 'pocket') {
+        const { PocketTTSProvider } = await import("../../talk-mode/providers/pocket-tts.js");
+        provider = new PocketTTSProvider();
+        await provider.initialize({
+          provider: 'pocket',
+          enabled: true,
+          priority: 1,
+          settings: {
+            voice: opts.voice ?? process.env.CODEBUDDY_POCKET_VOICE ?? 'estelle',
+            language: opts.language ?? process.env.CODEBUDDY_POCKET_LANG ?? 'french',
+          },
+        });
+        if (!(await provider.isAvailable())) {
+          console.error("pocket-tts not found. Install with: pip install pocket-tts (or install uv for `uvx pocket-tts`).");
+          process.exit(1);
+        }
+      } else {
+        const { AudioReaderTTSProvider } = await import("../../talk-mode/providers/audioreader-tts.js");
+        provider = new AudioReaderTTSProvider();
+        await provider.initialize({
+          provider: 'audioreader',
+          enabled: true,
+          priority: 1,
+          settings: {
+            baseURL: opts.url,
+            defaultVoice: opts.voice,
+            speed: parseFloat(opts.speed),
+            format: opts.format,
+          },
+        });
+        if (!(await provider.isAvailable())) {
+          console.error("AudioReader is not running at " + opts.url);
+          console.error("Start it with: cd ~/claude/AudioReader && python main.py");
+          console.error("Tip: use `--engine pocket` for the on-CPU Kyutai voice (Lisa/estelle), no server needed.");
+          process.exit(1);
+        }
       }
 
       if (opts.listVoices) {

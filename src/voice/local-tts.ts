@@ -10,10 +10,54 @@
  * as "voice reply unavailable" and keep the text reply.
  */
 import { spawn } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { existsSync, writeFileSync } from 'node:fs';
 import { unlink } from 'node:fs/promises';
 import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
+
+/**
+ * TTS engine selector. `piper` (default) keeps the historical behavior;
+ * `pocket` routes synthesis to Kyutai Pocket TTS (on-CPU, 26 voices + cloning),
+ * with Lisa's chosen voice `estelle` (French → french_24l) by default.
+ */
+export function resolveTtsEngine(env: NodeJS.ProcessEnv = process.env): 'piper' | 'pocket' {
+  return (env.CODEBUDDY_TTS_ENGINE ?? '').trim().toLowerCase() === 'pocket' ? 'pocket' : 'piper';
+}
+
+/**
+ * Synthesize `text` to a WAV at `wavPath` via Pocket TTS. Returns true on
+ * success, false on any failure (caller falls back to Piper). Voice/lang from
+ * `CODEBUDDY_POCKET_VOICE` (default `estelle`) / `CODEBUDDY_POCKET_LANG`
+ * (default `french`).
+ */
+export async function synthesizePocketWav(
+  text: string,
+  wavPath: string,
+  env: NodeJS.ProcessEnv = process.env,
+  timeoutMs = 180_000,
+): Promise<boolean> {
+  try {
+    const { PocketTTSProvider } = await import('../talk-mode/providers/pocket-tts.js');
+    const provider = new PocketTTSProvider();
+    await provider.initialize({
+      provider: 'pocket',
+      enabled: true,
+      priority: 1,
+      settings: {
+        voice: env.CODEBUDDY_POCKET_VOICE ?? 'estelle',
+        language: env.CODEBUDDY_POCKET_LANG ?? 'french',
+        timeoutMs,
+      },
+    });
+    if (!(await provider.isAvailable())) return false;
+    const res = await provider.synthesize(text);
+    if (!res?.audio?.length) return false;
+    writeFileSync(wavPath, res.audio);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 function resolvePiperBin(): string {
   const candidates = [
@@ -43,6 +87,8 @@ function resolvePiperVoice(): string | undefined {
 
 /** True when a real Piper binary (not just the bare `piper` fallback) is resolvable. */
 export function localTtsAvailable(): boolean {
+  // The Pocket engine auto-installs via `uvx pocket-tts`, so treat it as available.
+  if (resolveTtsEngine() === 'pocket') return true;
   return (
     resolvePiperBin() !== 'piper' ||
     Boolean(process.env.COWORK_PIPER_BIN) ||
@@ -137,7 +183,14 @@ export async function synthesizeToOgg(text: string, options: LocalTtsOptions = {
   if (voice) piperArgs.push('--model', voice);
 
   try {
-    await run(bin, piperArgs, { stdin: cleanForSpeech(text), timeoutMs });
+    // Active engine: Pocket TTS (Lisa's estelle) when selected, else Piper.
+    // Pocket falls back to Piper on any failure so the voice note is never lost.
+    const usedPocket =
+      resolveTtsEngine() === 'pocket' &&
+      (await synthesizePocketWav(cleanForSpeech(text), wav, process.env, timeoutMs));
+    if (!usedPocket) {
+      await run(bin, piperArgs, { stdin: cleanForSpeech(text), timeoutMs });
+    }
     // Telegram voice notes want OGG/Opus mono. 32 kbps is plenty for speech.
     await run(
       ffmpeg,
