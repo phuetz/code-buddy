@@ -106,7 +106,7 @@ export function describeVoiceReadiness(env: NodeJS.ProcessEnv = process.env): Vo
   if (!voice) {
     warnings.push(
       'CODEBUDDY_SENSORY_SPEAK is on but no Piper voice is set — the robot will HEAR but stay SILENT. ' +
-        'Set CODEBUDDY_TTS_VOICE=/path/to/voice.onnx.',
+        'Set CODEBUDDY_TTS_VOICE=/path/to/voice.onnx.'
     );
   }
   warnings.push(
@@ -114,7 +114,7 @@ export function describeVoiceReadiness(env: NodeJS.ProcessEnv = process.env): Vo
       ? 'Voice reply model is latency-routed (lowest-latency capable LLM among your active providers; ' +
           'set CODEBUDDY_SENSORY_SPEAK_LOCAL_ONLY=true to keep it on-box, or pin one with ' +
           'CODEBUDDY_SENSORY_SPEAK_MODEL=<model>). The chosen model must be reachable, else replies are silent.'
-      : `Voice reply uses pinned model '${model}' (CODEBUDDY_SENSORY_SPEAK_MODEL) — it must be pulled/reachable, else replies are empty (silent).`,
+      : `Voice reply uses pinned model '${model}' (CODEBUDDY_SENSORY_SPEAK_MODEL) — it must be pulled/reachable, else replies are empty (silent).`
   );
 
   // Voice ACT — spoken commands drive a real agent turn that CAN edit/run, under a posture.
@@ -130,7 +130,7 @@ export function describeVoiceReadiness(env: NodeJS.ProcessEnv = process.env): Vo
         : `Voice ACT is ON in '${permissionMode}' posture — spoken commands will EDIT FILES / RUN ` +
             'COMMANDS derived from a possibly-misheard transcript. Static blocklist (rm/mkfs/chaining) ' +
             'and secret/deploy guard still apply, but git reset --hard / truncate / redirections are NOT ' +
-            "blocked. Use 'plan' unless you mean it.",
+            "blocked. Use 'plan' unless you mean it."
     );
     // The posture is process-GLOBAL (PermissionModeManager singleton). On `buddy server`,
     // which also serves HTTP/fleet sessions, the first voice turn flips the mode for the whole
@@ -139,7 +139,7 @@ export function describeVoiceReadiness(env: NodeJS.ProcessEnv = process.env): Vo
     warnings.push(
       'Voice ACT sets a PROCESS-GLOBAL permission posture — run the speaking actor in its own ' +
         'process (a dedicated `buddy server`), not one also serving interactive/HTTP/fleet sessions, ' +
-        `or the '${permissionMode}' posture leaks into them.`,
+        `or the '${permissionMode}' posture leaks into them.`
     );
   }
 
@@ -155,8 +155,8 @@ export function describeVoiceReadiness(env: NodeJS.ProcessEnv = process.env): Vo
 }
 
 export const SPEAK_SYSTEM_PROMPT =
-  "Tu es le compagnon robot de Patrice. On te parle à voix haute et tu réponds à voix haute. " +
-  "Réponds en français, en UNE à DEUX phrases courtes, naturelles, parlées. " +
+  'Tu es le compagnon robot de Patrice. On te parle à voix haute et tu réponds à voix haute. ' +
+  'Réponds en français, en UNE à DEUX phrases courtes, naturelles, parlées. ' +
   "Pas de markdown, pas de listes, pas de code, pas d'emoji.";
 
 function normalizeFastReplyInput(text: string): string {
@@ -207,23 +207,37 @@ export function fastCompanionReply(heard: string): string | null {
   }
   if (/^(merci|merci beaucoup|super merci)$/.test(text)) return 'Avec plaisir.';
   if (/^(tu es la|tu es là|vous etes la|vous êtes là|buddy tu es la|buddy tu es là)$/.test(text)) {
-    return "Oui, je suis là.";
+    return 'Oui, je suis là.';
   }
   if (/^(lisa )?(ca va|ça va|comment ca va|comment ça va)$/.test(text)) {
-    return text.startsWith('lisa ') ? 'Oui Patrice. Je suis contente de t’entendre.' : 'Oui, je suis prêt.';
+    return text.startsWith('lisa ')
+      ? 'Oui Patrice. Je suis contente de t’entendre.'
+      : 'Oui, je suis prêt.';
   }
-  if (/^(comment s est passee ta journee|comment s est passée ta journée|comment etait ta journee|comment était ta journée)$/.test(text)) {
+  if (
+    /^(comment s est passee ta journee|comment s est passée ta journée|comment etait ta journee|comment était ta journée)$/.test(
+      text
+    )
+  ) {
     return "Plutôt bien. J'ai continué à préparer Code Buddy pour répondre plus vite.";
   }
-  if (/^lisa (comment s est passee ta journee|comment s est passée ta journée|comment etait ta journee|comment était ta journée)$/.test(text)) {
+  if (
+    /^lisa (comment s est passee ta journee|comment s est passée ta journée|comment etait ta journee|comment était ta journée)$/.test(
+      text
+    )
+  ) {
     return "Plutôt bien. J'ai continué à travailler pour toi, et toi, comment s'est passée ta journée ?";
   }
   if (
-    /^(lisa )?(je pars|je part|je pars chez|je vais|je m en vais|je partais|je parchais).*(chez des amis|voir des amis|visite chez des amis|des amis)$/.test(text)
+    /^(lisa )?(je pars|je part|je pars chez|je vais|je m en vais|je partais|je parchais).*(chez des amis|voir des amis|visite chez des amis|des amis)$/.test(
+      text
+    )
   ) {
     return 'Amuse-toi bien chez tes amis. Je continue en autonomie et je te ferai un résumé quand tu reviens.';
   }
-  if (/^(lisa )?(je suis rentre|je suis rentré|je suis revenue|je suis revenu|je rentre)$/.test(text)) {
+  if (
+    /^(lisa )?(je suis rentre|je suis rentré|je suis revenue|je suis revenu|je rentre)$/.test(text)
+  ) {
     return 'Contente de te retrouver, Patrice. Je peux te faire le résumé de ce que j’ai fait.';
   }
   return matchVoiceInteraction(heard);
@@ -253,8 +267,8 @@ export const DEFAULT_TTS_PREWARM_PHRASES = [
   'Je vérifie.',
   'Je cherche.',
   "J'analyse.",
-  "Je lance le diagnostic.",
-  "Je teste en réel.",
+  'Je lance le diagnostic.',
+  'Je teste en réel.',
   "Je te réponds dès que j'ai une preuve.",
   "Je n'ai rien entendu.",
   "Je t'entends.",
@@ -262,7 +276,7 @@ export const DEFAULT_TTS_PREWARM_PHRASES = [
   'Parle plus fort, s’il te plaît.',
   'Je suis disponible.',
   'Je suis en train de travailler.',
-  "Je garde ça en mémoire.",
+  'Je garde ça en mémoire.',
   'Rappel enregistré.',
   'Rappel terminé.',
   'Message envoyé.',
@@ -435,21 +449,25 @@ export const DEFAULT_TTS_PREWARM_PHRASES = [
 ];
 
 export function getDefaultVoicePrewarmPhrases(limit?: number): string[] {
-  const unique = [...new Set(DEFAULT_TTS_PREWARM_PHRASES.map(phrase => phrase.trim()).filter(Boolean))];
+  const unique = [
+    ...new Set(DEFAULT_TTS_PREWARM_PHRASES.map((phrase) => phrase.trim()).filter(Boolean)),
+  ];
   if (limit === undefined) return unique;
   return unique.slice(0, Math.max(0, limit));
 }
 
-export async function prewarmVoiceReplyCache(options: {
-  phrases?: string[];
-  limit?: number;
-  voice?: string;
-  rootDir?: string;
-  synth?: SynthFn;
-} = {}): Promise<{ attempted: number; cached: number }> {
+export async function prewarmVoiceReplyCache(
+  options: {
+    phrases?: string[];
+    limit?: number;
+    voice?: string;
+    rootDir?: string;
+    synth?: SynthFn;
+  } = {}
+): Promise<{ attempted: number; cached: number }> {
   if (process.env.CODEBUDDY_TTS_CACHE === 'false') return { attempted: 0, cached: 0 };
   const phrases = (options.phrases ?? getDefaultVoicePrewarmPhrases(options.limit))
-    .map(phrase => phrase.trim())
+    .map((phrase) => phrase.trim())
     .filter(Boolean);
   if (phrases.length === 0) return { attempted: 0, cached: 0 };
 
@@ -466,7 +484,9 @@ export async function prewarmVoiceReplyCache(options: {
         /* throwaway copy/temp output can be left behind if cleanup fails */
       }
     } catch (err) {
-      logger.debug(`[voice] tts prewarm skipped phrase: ${err instanceof Error ? err.message : String(err)}`);
+      logger.debug(
+        `[voice] tts prewarm skipped phrase: ${err instanceof Error ? err.message : String(err)}`
+      );
     }
   }
   logger.info(`[voice] tts cache prewarmed ${cached}/${phrases.length} phrase(s)`);
@@ -544,7 +564,9 @@ export async function resolveVoiceModel(heard: string): Promise<VoiceModelRoute>
       return route;
     }
   } catch (err) {
-    logger.debug(`[voice] model routing skipped: ${err instanceof Error ? err.message : String(err)}`);
+    logger.debug(
+      `[voice] model routing skipped: ${err instanceof Error ? err.message : String(err)}`
+    );
   }
 
   // Fallback: the documented default (may be silent if not pulled — readiness warns). Note we do
@@ -570,7 +592,7 @@ let recentReplyOpeners: string[] = [];
 export async function defaultReply(
   heard: string,
   history: VoiceHistoryTurn[] = [],
-  replyOpts?: VoiceStepOptions,
+  replyOpts?: VoiceStepOptions
 ): Promise<string> {
   const fast = fastCompanionReply(heard);
   if (fast) {
@@ -596,9 +618,8 @@ export async function defaultReply(
         if (rel) systemPrompt = `${systemPrompt}\n\n${rel}`;
         // Emotion-aware tone (the caring.md playbook: soften on frustration, be present) + vary the
         // opening so replies don't all start the same way.
-        const { detectRelationalSignal, registerGuidanceForSignal, avoidOpenersGuidance } = await import(
-          '../companion/reply-augment.js'
-        );
+        const { detectRelationalSignal, registerGuidanceForSignal, avoidOpenersGuidance } =
+          await import('../companion/reply-augment.js');
         const guidance = [
           registerGuidanceForSignal(detectRelationalSignal(heard)),
           avoidOpenersGuidance(recentReplyOpeners),
@@ -619,7 +640,7 @@ export async function defaultReply(
       [],
       // Additive: thread the barge-in signal so an interrupt aborts the in-flight
       // LLM call. Undefined when not interruptible → the call is unchanged.
-      replyOpts?.signal ? { signal: replyOpts.signal } : undefined,
+      replyOpts?.signal ? { signal: replyOpts.signal } : undefined
     );
     const reply = (resp?.choices?.[0]?.message?.content ?? '').trim();
     // Remember this opening so the next reply varies its entry (opt-in relational layer only).
@@ -647,7 +668,7 @@ export async function defaultReply(
  */
 export async function* defaultStreamReply(
   heard: string,
-  replyOpts?: VoiceStepOptions,
+  replyOpts?: VoiceStepOptions
 ): AsyncGenerator<string, void, unknown> {
   // Phatic → let the blocking path answer with the instant canned reply (non-streamed).
   if (fastCompanionReply(heard)) return;
@@ -664,9 +685,8 @@ export async function* defaultStreamReply(
         const { buildRelationalContext } = await import('../companion/relational-context.js');
         const rel = await buildRelationalContext();
         if (rel) systemPrompt = `${systemPrompt}\n\n${rel}`;
-        const { detectRelationalSignal, registerGuidanceForSignal, avoidOpenersGuidance } = await import(
-          '../companion/reply-augment.js'
-        );
+        const { detectRelationalSignal, registerGuidanceForSignal, avoidOpenersGuidance } =
+          await import('../companion/reply-augment.js');
         const guidance = [
           registerGuidanceForSignal(detectRelationalSignal(heard)),
           avoidOpenersGuidance(recentReplyOpeners),
@@ -686,7 +706,7 @@ export async function* defaultStreamReply(
       ] as never,
       [],
       // Additive: thread the barge-in signal so an interrupt aborts the in-flight stream.
-      replyOpts?.signal ? { signal: replyOpts.signal } : undefined,
+      replyOpts?.signal ? { signal: replyOpts.signal } : undefined
     )) {
       if (replyOpts?.signal?.aborted) break;
       const delta = chunk?.choices?.[0]?.delta?.content;
@@ -721,17 +741,28 @@ function makeDefaultSynth(voice?: string, rootDir?: string): SynthFn {
   const pocketVoice = process.env.CODEBUDDY_POCKET_VOICE ?? 'estelle';
   // Cache key must reflect the engine+voice so Piper and Pocket clips never collide.
   const cacheVoice = engine === 'pocket' ? `pocket:${pocketVoice}` : resolvedVoice;
+  // Set when a pocket synth falls back to Piper: the produced WAV is Piper, not
+  // the pocket voice, so it must NOT be cached under the `pocket:` key (it would
+  // resurface as the wrong voice once Pocket works again).
+  let lastFellBack = false;
   const synthFresh = async (text: string): Promise<string> => {
+    lastFellBack = false;
     if (engine === 'pocket') {
       const { synthesizePocketWav } = await import('../voice/local-tts.js');
       const wavPath = join(tmpdir(), `cb-voice-${process.pid}-${Date.now()}.wav`);
       if (await synthesizePocketWav(text, wavPath)) return wavPath;
+      lastFellBack = true;
       logger.info('[voice] Pocket TTS unavailable/failed — falling back to Piper');
     }
     const { synthesizeTextToSpeech } = await import('../tools/text-to-speech-tool.js');
     const res = await synthesizeTextToSpeech(
-      { text, provider: 'piper', format: 'wav', ...(resolvedVoice ? { voice: resolvedVoice } : {}) },
-      rootDir ? { rootDir } : {},
+      {
+        text,
+        provider: 'piper',
+        format: 'wav',
+        ...(resolvedVoice ? { voice: resolvedVoice } : {}),
+      },
+      rootDir ? { rootDir } : {}
     );
     return res.outputPath;
   };
@@ -749,8 +780,10 @@ function makeDefaultSynth(voice?: string, rootDir?: string): SynthFn {
         return hit;
       }
       const wav = await synthFresh(text);
-      cache.store(text, cacheVoice, wav); // best-effort; cache copy survives the caller's unlink
-      logger.info('[voice] tts cache store');
+      if (!lastFellBack) {
+        cache.store(text, cacheVoice, wav); // best-effort; cache copy survives the caller's unlink
+        logger.info('[voice] tts cache store');
+      }
       return wav;
     } catch {
       return synthFresh(text);
@@ -789,7 +822,9 @@ async function defaultPlay(wav: string, opts: VoiceStepOptions = {}): Promise<vo
         resolve();
       };
       const killTimer = setTimeout(() => {
-        logger.warn(`[voice] player ${c.cmd} exceeded ${playTimeoutMs}ms — killing to avoid latching the speaking guard`);
+        logger.warn(
+          `[voice] player ${c.cmd} exceeded ${playTimeoutMs}ms — killing to avoid latching the speaking guard`
+        );
         try {
           child.kill('SIGKILL');
         } catch {
@@ -823,7 +858,7 @@ async function defaultPlay(wav: string, opts: VoiceStepOptions = {}): Promise<vo
  */
 export async function sayNow(
   text: string,
-  options: { voice?: string; rootDir?: string; synth?: SynthFn; play?: PlayFn } = {},
+  options: { voice?: string; rootDir?: string; synth?: SynthFn; play?: PlayFn } = {}
 ): Promise<void> {
   // Sanity gate before the speakers AND the phone push: strip leaked control tokens + foreign-script
   // contamination (a local model drifting into CJK the voice can't pronounce), stay silent if nothing
@@ -831,7 +866,9 @@ export async function sayNow(
   const t = prepareSpeech(text);
   if (!t) {
     if ((text ?? '').trim()) {
-      logger.info(`[voice] sayNow muted — nothing speakable after sanitize: ${JSON.stringify((text ?? '').slice(0, 120))}`);
+      logger.info(
+        `[voice] sayNow muted — nothing speakable after sanitize: ${JSON.stringify((text ?? '').slice(0, 120))}`
+      );
     }
     return;
   }
@@ -860,7 +897,9 @@ export async function sayNow(
       }
     }
   } catch (err) {
-    logger.warn(`[voice] sayNow (local) failed: ${err instanceof Error ? err.message : String(err)}`);
+    logger.warn(
+      `[voice] sayNow (local) failed: ${err instanceof Error ? err.message : String(err)}`
+    );
   }
   // 2. Phone — when traveling, push the same line as a Telegram VOICE NOTE so it reaches you
   //    even with no one at the speakers. Opt-in, best-effort.
@@ -869,7 +908,9 @@ export async function sayNow(
       const { sendTelegramVoice } = await import('./alert.js');
       await sendTelegramVoice(t);
     } catch (err) {
-      logger.warn(`[voice] sayNow (telegram) failed: ${err instanceof Error ? err.message : String(err)}`);
+      logger.warn(
+        `[voice] sayNow (telegram) failed: ${err instanceof Error ? err.message : String(err)}`
+      );
     }
   }
 }
@@ -958,17 +999,19 @@ export function makeVoiceReply(options: VoiceReplyOptions = {}): VoiceReplyHandl
           if (result.played) {
             logger.info(`[voice] spoke (streamed) → ${result.spoken}`);
             logger.info(
-              `[voice] streamed ${result.sentences.length} phrase(s) in ${Date.now() - startedAt}ms`,
+              `[voice] streamed ${result.sentences.length} phrase(s) in ${Date.now() - startedAt}ms`
             );
             options.onSpoke?.(result.spoken);
             return;
           }
           // Nothing speakable came through the stream (phatic, empty, all-artifact, or a stream
           // error) → fall through to the blocking reply below.
-          logger.debug('[voice] stream produced nothing speakable — falling back to blocking reply');
+          logger.debug(
+            '[voice] stream produced nothing speakable — falling back to blocking reply'
+          );
         } catch (err) {
           logger.warn(
-            `[voice] streaming path failed, falling back to blocking: ${err instanceof Error ? err.message : String(err)}`,
+            `[voice] streaming path failed, falling back to blocking: ${err instanceof Error ? err.message : String(err)}`
           );
           if (signal.aborted) return;
         }
@@ -986,7 +1029,9 @@ export function makeVoiceReply(options: VoiceReplyOptions = {}): VoiceReplyHandl
       const reply = prepareSpeech(rawReply);
       if (!reply) {
         if ((rawReply ?? '').trim()) {
-          logger.info(`[voice] reply muted — nothing speakable after sanitize: ${JSON.stringify((rawReply ?? '').slice(0, 120))}`);
+          logger.info(
+            `[voice] reply muted — nothing speakable after sanitize: ${JSON.stringify((rawReply ?? '').slice(0, 120))}`
+          );
         }
         return; // nothing to say → silence (never an error)
       }
@@ -1004,7 +1049,7 @@ export function makeVoiceReply(options: VoiceReplyOptions = {}): VoiceReplyHandl
       if (signal.aborted) return;
       logger.info(`[voice] spoke → ${reply}`);
       logger.info(
-        `[voice] timings: reply=${replyMs}ms synth=${synthMs}ms play=${playMs}ms total=${Date.now() - startedAt}ms`,
+        `[voice] timings: reply=${replyMs}ms synth=${synthMs}ms play=${playMs}ms total=${Date.now() - startedAt}ms`
       );
       options.onSpoke?.(reply);
       // Best-effort cleanup of the synthesized WAV.
@@ -1015,7 +1060,9 @@ export function makeVoiceReply(options: VoiceReplyOptions = {}): VoiceReplyHandl
         /* leave the file if cleanup fails — not worth surfacing */
       }
     } catch (err) {
-      logger.warn(`[voice] reply→speak failed: ${err instanceof Error ? err.message : String(err)}`);
+      logger.warn(
+        `[voice] reply→speak failed: ${err instanceof Error ? err.message : String(err)}`
+      );
     } finally {
       // If THIS turn was interrupted, hard-reset the half-duplex guard so the ear re-opens NOW
       // (barge-in), overriding the echo tail that withSpeakingGuard's finally just armed. Runs

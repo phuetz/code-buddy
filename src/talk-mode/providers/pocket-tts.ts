@@ -24,7 +24,7 @@
 
 import { spawn } from 'child_process';
 import { mkdtempSync, readFileSync, rmSync, existsSync } from 'fs';
-import { tmpdir } from 'os';
+import { homedir, tmpdir } from 'os';
 import { join } from 'path';
 import type {
   TTSProviderConfig,
@@ -43,11 +43,45 @@ export interface PocketLauncher {
 
 const SAMPLE_RATE = 24000; // Pocket TTS emits 24 kHz mono WAV.
 
-/** Candidate launchers, in preference order (a direct binary beats uvx). */
-const LAUNCHER_CANDIDATES: PocketLauncher[] = [
-  { command: 'pocket-tts', argsPrefix: [] },
-  { command: 'uvx', argsPrefix: ['pocket-tts'] },
-];
+/** A launcher from a command/path: a `…/uvx` needs the `pocket-tts` subcommand prefix. */
+function launcherFor(cmd: string): PocketLauncher {
+  return { command: cmd, argsPrefix: /(^|\/)uvx$/.test(cmd) ? ['pocket-tts'] : [] };
+}
+
+/**
+ * Ordered launcher candidates. PATH-relative first (`pocket-tts`, `uvx`), then
+ * an explicit `CODEBUDDY_POCKET_BIN`, then ABSOLUTE fallbacks under the home dir
+ * — critical because a systemd daemon runs with a minimal PATH (no `~/.local/bin`),
+ * so `uvx` is otherwise unreachable and Pocket silently falls back to Piper. Pure
+ * except for the `existsSync` check on absolute paths (only real files are kept).
+ */
+export function pocketLauncherCandidates(
+  binaryPath?: string,
+  env: NodeJS.ProcessEnv = process.env,
+  home: string = homedir(),
+  exists: (p: string) => boolean = existsSync
+): PocketLauncher[] {
+  const out: PocketLauncher[] = [];
+  const seen = new Set<string>();
+  const push = (cmd: string): void => {
+    if (cmd && !seen.has(cmd)) {
+      seen.add(cmd);
+      out.push(launcherFor(cmd));
+    }
+  };
+  if (binaryPath) push(binaryPath);
+  if (env.CODEBUDDY_POCKET_BIN?.trim()) push(env.CODEBUDDY_POCKET_BIN.trim());
+  push('pocket-tts');
+  push('uvx');
+  for (const abs of [
+    join(home, '.local/bin/pocket-tts'),
+    join(home, '.local/bin/uvx'),
+    join(home, '.cargo/bin/uvx'),
+  ]) {
+    if (exists(abs)) push(abs);
+  }
+  return out;
+}
 
 /**
  * Map an incoming language (a BCP-47-ish code like `fr-FR`/`fr`, or a raw
@@ -201,15 +235,7 @@ export class PocketTTSProvider implements ITTSProvider {
   }
 
   private async detectLauncher(): Promise<PocketLauncher | null> {
-    const override = this.config.binaryPath;
-    const candidates: PocketLauncher[] = override
-      ? [
-          { command: override, argsPrefix: override.endsWith('uvx') ? ['pocket-tts'] : [] },
-          ...LAUNCHER_CANDIDATES,
-        ]
-      : LAUNCHER_CANDIDATES;
-
-    for (const c of candidates) {
+    for (const c of pocketLauncherCandidates(this.config.binaryPath)) {
       if (await this.checkCommand(c.command, [...c.argsPrefix, '--help'])) return c;
     }
     return null;

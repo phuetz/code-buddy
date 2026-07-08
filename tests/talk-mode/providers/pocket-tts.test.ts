@@ -12,6 +12,7 @@ import {
   isVoiceSamplePath,
   buildGenerateArgs,
   wavDurationMs,
+  pocketLauncherCandidates,
 } from '../../../src/talk-mode/providers/pocket-tts.js';
 import { spawn } from 'child_process';
 
@@ -118,6 +119,38 @@ describe('buildGenerateArgs', () => {
       '--config',
       '/tmp/custom.yaml',
     ]);
+  });
+});
+
+describe('pocketLauncherCandidates', () => {
+  const home = '/home/u';
+  it('prefers PATH-relative pocket-tts then uvx by default', () => {
+    const cs = pocketLauncherCandidates(undefined, {}, home, () => false);
+    expect(cs.map((c) => c.command)).toEqual(['pocket-tts', 'uvx']);
+    expect(cs.find((c) => c.command === 'uvx')?.argsPrefix).toEqual(['pocket-tts']);
+  });
+
+  it('honors CODEBUDDY_POCKET_BIN first', () => {
+    const cs = pocketLauncherCandidates(
+      undefined,
+      { CODEBUDDY_POCKET_BIN: '/opt/uvx' },
+      home,
+      () => false
+    );
+    expect(cs[0]).toEqual({ command: '/opt/uvx', argsPrefix: ['pocket-tts'] });
+  });
+
+  it('adds absolute ~/.local/bin/uvx fallback when PATH is minimal (the daemon case)', () => {
+    const exists = (p: string) => p === '/home/u/.local/bin/uvx';
+    const cs = pocketLauncherCandidates(undefined, {}, home, exists);
+    const uvxAbs = cs.find((c) => c.command === '/home/u/.local/bin/uvx');
+    expect(uvxAbs).toBeDefined();
+    expect(uvxAbs?.argsPrefix).toEqual(['pocket-tts']);
+  });
+
+  it('config binaryPath wins over everything', () => {
+    const cs = pocketLauncherCandidates('/custom/pocket-tts', {}, home, () => false);
+    expect(cs[0]).toEqual({ command: '/custom/pocket-tts', argsPrefix: [] });
   });
 });
 
