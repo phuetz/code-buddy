@@ -8,7 +8,17 @@
 // Provider Types
 // ============================================================================
 
-export type TTSProvider = 'piper' | 'coqui' | 'espeak' | 'system' | 'mock' | 'openai' | 'elevenlabs' | 'edge' | 'audioreader';
+export type TTSProvider =
+  | 'piper'
+  | 'coqui'
+  | 'espeak'
+  | 'system'
+  | 'mock'
+  | 'openai'
+  | 'elevenlabs'
+  | 'edge'
+  | 'audioreader'
+  | 'pocket';
 
 export interface TTSProviderConfig {
   /** Provider identifier */
@@ -143,6 +153,34 @@ export interface EdgeTTSConfig {
   volume?: string;
   /** Pitch adjustment (e.g., '+5Hz', '-10Hz') */
   pitch?: string;
+}
+
+/**
+ * Kyutai Pocket TTS — a 100M-param on-CPU TTS with 5-second voice cloning
+ * (MIT). Runs via the `pocket-tts` CLI (`uvx pocket-tts` or a `pip install`ed
+ * binary). See src/talk-mode/providers/pocket-tts.ts.
+ */
+export interface PocketTTSConfig {
+  /**
+   * A preset voice name (e.g. 'alba', 'anna') OR an absolute path to a
+   * .wav/.mp3/.flac sample to clone (≈5 s is enough). Paths win over presets.
+   */
+  voice?: string;
+  /**
+   * Pocket TTS language model: 'english' (default), 'french', 'german',
+   * 'spanish', 'portuguese', 'italian'. Non-English support bigger, higher
+   * quality (but slower) 24-layer variants via the `_24l` suffix
+   * (e.g. 'french_24l'). Set `highQuality: true` to auto-append `_24l`.
+   */
+  language?: string;
+  /** Auto-append `_24l` to non-English languages for the higher-quality variant. */
+  highQuality?: boolean;
+  /** Explicit launcher override, e.g. 'pocket-tts' or 'uvx'. Auto-detected otherwise. */
+  binaryPath?: string;
+  /** Local YAML path for custom weights (maps to `--config`). */
+  configPath?: string;
+  /** Max ms to wait for a single synthesis (first ever run downloads the model). */
+  timeoutMs?: number;
 }
 
 // ============================================================================

@@ -8,6 +8,7 @@ export { OpenAITTSProvider } from './openai-tts.js';
 export { ElevenLabsProvider } from './elevenlabs.js';
 export { EdgeTTSProvider } from './edge-tts.js';
 export { AudioReaderTTSProvider } from './audioreader-tts.js';
+export { PocketTTSProvider } from './pocket-tts.js';
 
 // Re-export types
 export type {
@@ -16,4 +17,5 @@ export type {
   ElevenLabsConfig,
   EdgeTTSConfig,
   AudioReaderTTSConfig,
+  PocketTTSConfig,
 } from '../types.js';
