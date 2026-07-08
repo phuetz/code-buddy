@@ -1,0 +1,316 @@
+/**
+ * Kyutai Pocket TTS Provider
+ *
+ * A 100M-parameter on-CPU text-to-speech model (MIT) with **5-second voice
+ * cloning** and six languages (English, French, German, Spanish, Portuguese,
+ * Italian). Runs faster than real-time on a laptop CPU — no GPU, no web API.
+ *
+ * This provider shells out to the `pocket-tts` CLI, mirroring the edge-tts
+ * provider's pattern: a launcher is auto-detected (`pocket-tts` on PATH, else
+ * `uvx pocket-tts` which auto-installs), `generate` writes `./tts_output.wav`
+ * in a throwaway working dir, and we read it back. Fail-open: if no launcher is
+ * found, `isAvailable()` is false and `synthesize()` throws a clear install
+ * hint (the TTS manager then falls back to another provider, e.g. Piper).
+ *
+ * Notes learned from the real CLI:
+ *  - French has ONLY a 24-layer model → the language token must be `french_24l`
+ *    (plain `french` errors). The language mapper handles this.
+ *  - `--voice` takes a preset name OR a path to a .wav/.mp3/.flac to clone.
+ *  - First ever run downloads torch + the model (seconds on a fast box), so the
+ *    synthesis timeout is generous by default.
+ *
+ * @module talk-mode/providers/pocket-tts
+ */
+
+import { spawn } from 'child_process';
+import { mkdtempSync, readFileSync, rmSync, existsSync } from 'fs';
+import { tmpdir } from 'os';
+import { join } from 'path';
+import type {
+  TTSProviderConfig,
+  Voice,
+  SynthesisOptions,
+  SynthesisResult,
+  PocketTTSConfig,
+} from '../types.js';
+import type { ITTSProvider } from '../tts-manager.js';
+
+/** A resolved launcher: `command` + a fixed args prefix (e.g. `uvx pocket-tts`). */
+export interface PocketLauncher {
+  command: string;
+  argsPrefix: string[];
+}
+
+const SAMPLE_RATE = 24000; // Pocket TTS emits 24 kHz mono WAV.
+
+/** Candidate launchers, in preference order (a direct binary beats uvx). */
+const LAUNCHER_CANDIDATES: PocketLauncher[] = [
+  { command: 'pocket-tts', argsPrefix: [] },
+  { command: 'uvx', argsPrefix: ['pocket-tts'] },
+];
+
+/**
+ * Map an incoming language (a BCP-47-ish code like `fr-FR`/`fr`, or a raw
+ * Pocket token like `french`/`french_24l`) to a valid Pocket TTS language.
+ *
+ * Two hard rules from the model: English has no `_24l` variant, and **French
+ * only exists as `french_24l`** — plain `french` is rejected by the CLI.
+ * `highQuality` upgrades any other non-English language to its `_24l` variant.
+ * Pure.
+ */
+export function resolvePocketLanguage(input?: string, highQuality = false): string {
+  const raw = (input ?? '').trim().toLowerCase();
+  if (!raw) return 'english';
+
+  // Already a Pocket token (e.g. 'french_24l', 'italian') — pass through,
+  // but still enforce the French-must-be-24l rule.
+  const base = raw.replace(/_24l$/, '');
+  const wants24l = raw.endsWith('_24l') || highQuality;
+
+  const CODE_TO_LANG: Record<string, string> = {
+    en: 'english',
+    eng: 'english',
+    english: 'english',
+    fr: 'french',
+    fra: 'french',
+    fre: 'french',
+    french: 'french',
+    de: 'german',
+    deu: 'german',
+    ger: 'german',
+    german: 'german',
+    es: 'spanish',
+    spa: 'spanish',
+    spanish: 'spanish',
+    pt: 'portuguese',
+    por: 'portuguese',
+    portuguese: 'portuguese',
+    it: 'italian',
+    ita: 'italian',
+    italian: 'italian',
+  };
+  // Accept 'fr-FR' → 'fr' → 'french', etc.
+  const key = base.split(/[-_]/)[0] ?? base;
+  const lang = CODE_TO_LANG[base] ?? CODE_TO_LANG[key] ?? 'english';
+
+  if (lang === 'english') return 'english'; // no 24l variant
+  if (lang === 'french') return 'french_24l'; // French is ONLY available as 24l
+  return wants24l ? `${lang}_24l` : lang;
+}
+
+/** True if `voice` looks like a local audio sample to clone (a path, not a preset). */
+export function isVoiceSamplePath(voice?: string): boolean {
+  if (!voice) return false;
+  if (/\.(wav|mp3|flac|ogg|m4a)$/i.test(voice)) return true;
+  return voice.includes('/') || voice.includes('\\');
+}
+
+/**
+ * Build the argv for `pocket-tts generate` (WITHOUT the launcher prefix).
+ * Pure + unit-testable. `generate` writes `tts_output.wav` in its cwd, so the
+ * caller runs it inside a throwaway dir and reads that file back.
+ */
+export function buildGenerateArgs(opts: {
+  text: string;
+  language: string;
+  voice?: string;
+  configPath?: string;
+}): string[] {
+  const args = ['generate', '--language', opts.language, '--text', opts.text];
+  if (opts.voice) args.push('--voice', opts.voice);
+  if (opts.configPath) args.push('--config', opts.configPath);
+  return args;
+}
+
+/** Parse the PCM data-chunk length from a canonical WAV header → duration ms. */
+export function wavDurationMs(buf: Buffer, sampleRate = SAMPLE_RATE): number {
+  // 44-byte canonical header: bytesPerSample assumed 2 (16-bit), mono.
+  if (buf.length <= 44) return 0;
+  const dataBytes = buf.length - 44;
+  return Math.round((dataBytes / (sampleRate * 2)) * 1000);
+}
+
+/** The documented preset voices (a representative catalog; any name/path works). */
+const PRESET_VOICES: Array<{ id: string; gender: 'male' | 'female'; lang: string }> = [
+  { id: 'alba', gender: 'female', lang: 'en-US' },
+  { id: 'anna', gender: 'female', lang: 'en-US' },
+  { id: 'charles', gender: 'male', lang: 'en-US' },
+  { id: 'estelle', gender: 'female', lang: 'en-US' },
+  { id: 'giovanni', gender: 'male', lang: 'it-IT' },
+  { id: 'lola', gender: 'female', lang: 'es-ES' },
+  { id: 'juergen', gender: 'male', lang: 'de-DE' },
+  { id: 'rafael', gender: 'male', lang: 'pt-BR' },
+];
+
+export class PocketTTSProvider implements ITTSProvider {
+  readonly id = 'pocket' as const;
+  private config: PocketTTSConfig = {};
+  private initialized = false;
+  private launcher: PocketLauncher | null = null;
+
+  async initialize(config: TTSProviderConfig): Promise<void> {
+    this.config = (config.settings as PocketTTSConfig | undefined) ?? {};
+    this.launcher = await this.detectLauncher();
+    if (!this.launcher) {
+      console.warn(
+        'pocket-tts launcher not found. Install with: pip install pocket-tts (or install uv for `uvx pocket-tts`).'
+      );
+    }
+    this.initialized = true;
+  }
+
+  async isAvailable(): Promise<boolean> {
+    return this.initialized && this.launcher !== null;
+  }
+
+  async listVoices(): Promise<Voice[]> {
+    return PRESET_VOICES.map((v, i) => ({
+      id: `pocket-${v.id}`,
+      name: `Pocket ${v.id}`,
+      language: v.lang,
+      gender: v.gender,
+      provider: 'pocket' as const,
+      providerId: v.id,
+      quality: 'high',
+      sampleRate: SAMPLE_RATE,
+      isDefault: i === 0,
+    }));
+  }
+
+  private async detectLauncher(): Promise<PocketLauncher | null> {
+    const override = this.config.binaryPath;
+    const candidates: PocketLauncher[] = override
+      ? [
+          { command: override, argsPrefix: override.endsWith('uvx') ? ['pocket-tts'] : [] },
+          ...LAUNCHER_CANDIDATES,
+        ]
+      : LAUNCHER_CANDIDATES;
+
+    for (const c of candidates) {
+      if (await this.checkCommand(c.command, [...c.argsPrefix, '--help'])) return c;
+    }
+    return null;
+  }
+
+  private checkCommand(command: string, args: string[]): Promise<boolean> {
+    return new Promise((resolve) => {
+      let settled = false;
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const done = (v: boolean) => {
+        if (settled) return;
+        settled = true;
+        if (timer) clearTimeout(timer);
+        resolve(v);
+      };
+      let proc: ReturnType<typeof spawn>;
+      try {
+        proc = spawn(command, args, { stdio: 'ignore' });
+      } catch {
+        done(false);
+        return;
+      }
+      proc.on('close', (code) => done(code === 0));
+      proc.on('error', () => done(false));
+      timer = setTimeout(() => {
+        try {
+          proc.kill();
+        } catch {
+          /* noop */
+        }
+        done(false);
+      }, 8000);
+    });
+  }
+
+  async synthesize(text: string, options?: SynthesisOptions): Promise<SynthesisResult> {
+    if (!this.launcher) {
+      throw new Error(
+        'pocket-tts launcher not found. Install with: pip install pocket-tts (or install uv for `uvx pocket-tts`).'
+      );
+    }
+    const language = resolvePocketLanguage(
+      options?.language ?? this.config.language,
+      this.config.highQuality ?? false
+    );
+    const voice = this.resolveVoice(options?.voice);
+    const args = [
+      ...this.launcher.argsPrefix,
+      ...buildGenerateArgs({
+        text,
+        language,
+        ...(voice ? { voice } : {}),
+        ...(this.config.configPath ? { configPath: this.config.configPath } : {}),
+      }),
+    ];
+
+    const workDir = mkdtempSync(join(tmpdir(), 'pocket-tts-'));
+    try {
+      await this.runGenerate(this.launcher.command, args, workDir);
+      const outPath = join(workDir, 'tts_output.wav');
+      if (!existsSync(outPath)) {
+        throw new Error('pocket-tts did not produce tts_output.wav');
+      }
+      const audio = readFileSync(outPath);
+      return {
+        audio,
+        format: 'wav',
+        durationMs: wavDurationMs(audio),
+        sampleRate: SAMPLE_RATE,
+        channels: 1,
+        bitsPerSample: 16,
+        provider: 'pocket',
+        voice: voice ?? 'default',
+      };
+    } finally {
+      try {
+        rmSync(workDir, { recursive: true, force: true });
+      } catch {
+        /* best effort */
+      }
+    }
+  }
+
+  /** Resolve an incoming voice: a `pocket-`prefixed id, a preset name, or a clone path. */
+  private resolveVoice(voice?: string): string | undefined {
+    const v = voice ?? this.config.voice;
+    if (!v) return undefined;
+    if (isVoiceSamplePath(v)) return v; // clone from an audio sample
+    return v.startsWith('pocket-') ? v.slice('pocket-'.length) : v;
+  }
+
+  private runGenerate(command: string, args: string[], cwd: string): Promise<void> {
+    const timeoutMs = this.config.timeoutMs ?? 180000; // first run downloads the model
+    return new Promise((resolve, reject) => {
+      const proc = spawn(command, args, { cwd, stdio: ['ignore', 'pipe', 'pipe'] });
+      let stderr = '';
+      const timer = setTimeout(() => {
+        try {
+          proc.kill();
+        } catch {
+          /* noop */
+        }
+        reject(new Error(`pocket-tts generate timed out after ${timeoutMs}ms`));
+      }, timeoutMs);
+      proc.stderr?.on('data', (d) => {
+        stderr += d.toString();
+      });
+      proc.on('close', (code) => {
+        clearTimeout(timer);
+        if (code === 0) resolve();
+        else
+          reject(new Error(`pocket-tts generate exited with code ${code}: ${stderr.slice(-500)}`));
+      });
+      proc.on('error', (err) => {
+        clearTimeout(timer);
+        reject(err);
+      });
+    });
+  }
+
+  async shutdown(): Promise<void> {
+    this.initialized = false;
+    this.launcher = null;
+  }
+}
+
+export default PocketTTSProvider;

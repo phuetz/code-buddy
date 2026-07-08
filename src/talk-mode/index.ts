@@ -17,6 +17,7 @@ export type {
   ElevenLabsConfig,
   EdgeTTSConfig,
   AudioReaderTTSConfig,
+  PocketTTSConfig,
   Voice,
   SynthesisOptions,
   SynthesisResult,
@@ -31,20 +32,12 @@ export type {
   TalkModeEvents,
 } from './types.js';
 
-export {
-  DEFAULT_QUEUE_CONFIG,
-  DEFAULT_TALK_MODE_CONFIG,
-} from './types.js';
+export { DEFAULT_QUEUE_CONFIG, DEFAULT_TALK_MODE_CONFIG } from './types.js';
 
 // Manager
 export type { ITTSProvider } from './tts-manager.js';
 
-export {
-  MockTTSProvider,
-  TTSManager,
-  getTTSManager,
-  resetTTSManager,
-} from './tts-manager.js';
+export { MockTTSProvider, TTSManager, getTTSManager, resetTTSManager } from './tts-manager.js';
 
 // Providers
 export {
@@ -52,4 +45,5 @@ export {
   ElevenLabsProvider,
   EdgeTTSProvider,
   AudioReaderTTSProvider,
+  PocketTTSProvider,
 } from './providers/index.js';
