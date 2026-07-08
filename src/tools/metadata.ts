@@ -841,6 +841,13 @@ export const TOOL_METADATA: ToolMetadata[] = [
     description: 'Generate a video through the configured video backend and cache returned media when possible'
   },
   {
+    name: 'video_stitch',
+    category: 'media',
+    keywords: ['video', 'stitch', 'montage', 'film', 'concatenate', 'concat', 'chain', 'transition', 'xfade', 'crossfade', 'enchainer', 'assembler', 'monter', 'clip', 'produire', 'production', 'long', 'music', 'voiceover'],
+    priority: 8,
+    description: 'Chain multiple local video clips into one longer film with transitions (xfade/gl), optional background music (ducked) and voiceover, via ffmpeg; saved under .codebuddy/media-generation/films/'
+  },
+  {
     name: 'understand_video',
     category: 'media',
     keywords: ['video', 'youtube', 'transcribe', 'transcript', 'captions', 'subtitles', 'vidéo', 'résume vidéo', 'summarize', 'watch', 'movie', 'mp4', 'visual', 'screencast', 'frames', 'on-screen', 'shown', 'cloud', 'gemini'],

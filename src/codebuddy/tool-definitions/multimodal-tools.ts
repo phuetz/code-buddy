@@ -321,6 +321,87 @@ export const VIDEO_GENERATE_TOOL: CodeBuddyTool = {
   }
 };
 
+// Video Stitch Tool - Chain multiple clips into ONE longer film with transitions
+export const VIDEO_STITCH_TOOL: CodeBuddyTool = {
+  type: "function",
+  function: {
+    name: "video_stitch",
+    description: "Chain (montage) multiple local video clips into ONE longer film with transitions, then optionally lay a looped background-music track (auto-ducked under dialogue) and a voiceover over the whole thing. This is how you turn the short clips produced by video_generate (they land in .codebuddy/media-generation/videos/) into a coherent long-form video. Uses ffmpeg (must be installed). Normalizes every clip to a common resolution/fps first, then welds them with the native ffmpeg xfade+acrossfade filters (engine 'xfade', ~50 transitions, default) or the gl-transition filter when present (engine 'gl', falls back to xfade otherwise). The result is saved under .codebuddy/media-generation/films/ and returned as a MEDIA:<path>.",
+    parameters: {
+      type: "object",
+      properties: {
+        clips: {
+          type: "array",
+          items: { type: "string" },
+          description: "Ordered list of local video file paths to weld together, in play order. At least one; two or more to actually chain."
+        },
+        transition: {
+          type: "string",
+          description: "A single transition name applied at EVERY boundary (fade, fadeblack, dissolve, wipeleft/right/up/down, slideleft/right/up/down, circleopen/close, radial, pixelize, smoothleft…, or 'cut' for a hard cut). Default 'fade'."
+        },
+        transitions: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              type: { type: "string", description: "Transition name (see `transition`) or 'cut'." },
+              duration: { type: "number", description: "This boundary's transition duration in seconds." }
+            }
+          },
+          description: "Optional per-boundary transitions (one object per gap between adjacent clips), overriding `transition`. Length should be clips.length − 1."
+        },
+        transition_duration: {
+          type: "number",
+          description: "Default transition duration in seconds applied to every boundary that does not specify its own. Default 1. Auto-clamped to fit inside the shortest adjacent clip."
+        },
+        engine: {
+          type: "string",
+          enum: ["xfade", "gl"],
+          description: "Transition engine. 'xfade' (default) = native ffmpeg filters, zero dependency. 'gl' = GLSL gl-transition filter if this ffmpeg has it, else it falls back to xfade with a warning."
+        },
+        resolution: {
+          type: "string",
+          description: "Output resolution as a preset ('360p','480p','540p','720p','1080p','1440p','2160p','4k') or explicit 'WIDTHxHEIGHT'. Defaults to the first clip's dimensions."
+        },
+        aspect_ratio: {
+          type: "string",
+          enum: ["16:9", "9:16", "1:1", "4:3", "3:4", "3:2", "2:3"],
+          description: "Aspect ratio used with a resolution preset to compute the target dimensions. Default 16:9."
+        },
+        fps: {
+          type: "number",
+          description: "Output frame rate. Defaults to the first clip's fps, else 30."
+        },
+        music: {
+          type: "string",
+          description: "Optional background music file path. Looped and trimmed to the film length, and ducked under dialogue/voiceover unless ducking:false."
+        },
+        music_volume: {
+          type: "number",
+          description: "Background music volume 0..1. Default 0.25."
+        },
+        ducking: {
+          type: "boolean",
+          description: "Duck (lower) the music while dialogue/voiceover plays. Default true when music is present."
+        },
+        voiceover: {
+          type: "string",
+          description: "Optional full-length narration/voiceover audio file path, mixed at full volume over the film."
+        },
+        name: {
+          type: "string",
+          description: "Optional film name, used for the output filename and its sidecar metadata."
+        },
+        output: {
+          type: "string",
+          description: "Optional explicit output path. Defaults to .codebuddy/media-generation/films/<name>-<id>.mp4."
+        }
+      },
+      required: ["clips"]
+    }
+  }
+};
+
 // Screenshot Tool - Capture screenshots
 export const SCREENSHOT_TOOL: CodeBuddyTool = {
   type: "function",
@@ -960,6 +1041,7 @@ export const MULTIMODAL_TOOLS: CodeBuddyTool[] = [
   VIDEO_ANALYZE_TOOL,
   UNDERSTAND_VIDEO_TOOL,
   VIDEO_GENERATE_TOOL,
+  VIDEO_STITCH_TOOL,
   SCREENSHOT_TOOL,
   CAMERA_SNAPSHOT_TOOL,
   CAMERA_ANALYZE_TOOL,

@@ -42,6 +42,22 @@ describe('scanRoot', () => {
   });
 });
 
+describe('assembled films', () => {
+  it('indexes a produced film under media-generation/films with its sidecar', () => {
+    const films = path.join(root, '.codebuddy', 'media-generation', 'films');
+    fs.mkdirSync(films, { recursive: true });
+    fs.writeFileSync(path.join(films, 'my-demo-123.mp4'), 'x'.repeat(30));
+    fs.writeFileSync(
+      path.join(films, 'my-demo-123.mp4.meta.json'),
+      JSON.stringify({ kind: 'film', prompt: 'My Demo — 3 clips enchaînés (xfade)', provider: 'film', model: 'xfade' }),
+    );
+    const film = scanRoot(root).find((i) => i.path.endsWith('my-demo-123.mp4'));
+    expect(film?.kind).toBe('video');
+    expect(film).toMatchObject({ provider: 'film', model: 'xfade' });
+    expect(film?.prompt).toContain('My Demo');
+  });
+});
+
 describe('sidecar metadata', () => {
   it('reads prompt/model/provider from <file>.meta.json, fail-open otherwise', () => {
     const images = path.join(root, '.codebuddy', 'media-generation', 'images');

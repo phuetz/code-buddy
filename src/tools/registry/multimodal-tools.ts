@@ -27,6 +27,12 @@ import {
   understandVideo,
   isUnderstandOk,
 } from '../video/video-understanding.js';
+import {
+  assembleFilm,
+  type TransitionEngine,
+  type TransitionSpec,
+  type AssembleFilmDeps,
+} from '../video/film-assemble.js';
 
 // ============================================================================
 // Lazy-loaded tool instances
@@ -645,6 +651,126 @@ export class VideoGenerateTool implements ITool {
       priority: 8,
       modifiesFiles: true,
       makesNetworkRequests: true,
+    };
+  }
+
+  isAvailable(): boolean { return true; }
+}
+
+// ============================================================================
+// VideoStitchTool — chain clips into a longer film with transitions
+// ============================================================================
+
+/** Parse the `transitions`/`transition` inputs into what assembleFilm expects. */
+function parseStitchTransitions(
+  input: Record<string, unknown>,
+  defaultDuration: number,
+): string | TransitionSpec[] | undefined {
+  const arr = input.transitions;
+  if (Array.isArray(arr) && arr.length > 0) {
+    const specs = arr.map((t): TransitionSpec => {
+      if (typeof t === 'string') return { type: t.trim() || 'fade', duration: defaultDuration };
+      if (t && typeof t === 'object') {
+        const o = t as Record<string, unknown>;
+        const type = typeof o.type === 'string' && o.type.trim() ? o.type.trim() : 'fade';
+        const duration =
+          typeof o.duration === 'number' && Number.isFinite(o.duration) ? o.duration : defaultDuration;
+        return { type, duration };
+      }
+      return { type: 'fade', duration: defaultDuration };
+    });
+    return specs;
+  }
+  return optionalString(input, 'transition');
+}
+
+export class VideoStitchTool implements ITool {
+  readonly name = 'video_stitch';
+  readonly description = 'Chain multiple video clips into one longer film with transitions, optional music (ducked) and voiceover. Requires ffmpeg.';
+
+  constructor(private readonly options: { rootDir?: string; deps?: AssembleFilmDeps } = {}) {}
+
+  async execute(input: Record<string, unknown>, context?: IToolExecutionContext): Promise<ToolResult> {
+    try {
+      const engineRaw = optionalString(input, 'engine');
+      const engine: TransitionEngine | undefined =
+        engineRaw === 'gl' ? 'gl' : engineRaw === 'xfade' ? 'xfade' : undefined;
+      const defaultDuration = optionalNumber(input, 'transition_duration') ?? 1;
+
+      const result = await assembleFilm({
+        clips: optionalStringList(input.clips) ?? [],
+        transitions: parseStitchTransitions(input, defaultDuration),
+        transitionDuration: optionalNumber(input, 'transition_duration'),
+        engine,
+        resolution: optionalString(input, 'resolution'),
+        aspectRatio: optionalString(input, 'aspect_ratio'),
+        fps: optionalNumber(input, 'fps'),
+        music: optionalString(input, 'music'),
+        musicVolume: optionalNumber(input, 'music_volume'),
+        ducking: optionalBoolean(input.ducking),
+        voiceover: optionalString(input, 'voiceover'),
+        name: optionalString(input, 'name'),
+        output: optionalString(input, 'output'),
+        rootDir: this.options.rootDir ?? context?.cwd,
+      }, this.options.deps ?? {});
+      return {
+        success: result.success,
+        output: JSON.stringify(result, null, 2),
+        data: result,
+        error: result.success ? undefined : result.error,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
+      };
+    }
+  }
+
+  getSchema(): ToolSchema {
+    return {
+      name: this.name,
+      description: this.description,
+      parameters: {
+        type: 'object',
+        properties: {
+          clips: { type: 'array', items: { type: 'string' }, description: 'Ordered local video paths to weld together.' },
+          transition: { type: 'string', description: "Single transition applied at every boundary (fade, wipeleft, dissolve, circleopen, 'cut'…). Default 'fade'." },
+          transitions: { type: 'array', items: { type: 'object' }, description: 'Optional per-boundary transitions ({type, duration}), length clips.length−1.' },
+          transition_duration: { type: 'number', description: 'Default transition duration in seconds (default 1).' },
+          engine: { type: 'string', enum: ['xfade', 'gl'], description: "Transition engine ('xfade' default, 'gl' falls back to xfade)." },
+          resolution: { type: 'string', description: "Preset ('720p','1080p','4k'…) or 'WxH'. Defaults to the first clip." },
+          aspect_ratio: { type: 'string', enum: ['16:9', '9:16', '1:1', '4:3', '3:4', '3:2', '2:3'], description: 'Aspect ratio for a resolution preset. Default 16:9.' },
+          fps: { type: 'number', description: 'Output frame rate. Defaults to the first clip, else 30.' },
+          music: { type: 'string', description: 'Optional background music path (looped, ducked).' },
+          music_volume: { type: 'number', description: 'Music volume 0..1 (default 0.25).' },
+          ducking: { type: 'boolean', description: 'Duck music under dialogue/voiceover (default true).' },
+          voiceover: { type: 'string', description: 'Optional full-length narration audio path.' },
+          name: { type: 'string', description: 'Optional film name (output filename + sidecar).' },
+          output: { type: 'string', description: 'Optional explicit output path.' },
+        },
+        required: ['clips'],
+      },
+    };
+  }
+
+  validate(input: unknown): IValidationResult {
+    if (typeof input !== 'object' || input === null) return { valid: false, errors: ['Input must be an object'] };
+    const data = input as Record<string, unknown>;
+    const clips = optionalStringList(data.clips);
+    if (!clips || clips.length === 0) return { valid: false, errors: ['clips (a non-empty array of video paths) is required'] };
+    return { valid: true };
+  }
+
+  getMetadata(): IToolMetadata {
+    return {
+      name: this.name,
+      description: this.description,
+      category: 'media' as ToolCategoryType,
+      keywords: ['video', 'stitch', 'montage', 'film', 'concatenate', 'transition', 'xfade', 'enchainer', 'assembler', 'media'],
+      priority: 8,
+      modifiesFiles: true,
+      makesNetworkRequests: false,
     };
   }
 
@@ -1300,6 +1426,7 @@ export function createMultimodalTools(): ITool[] {
     new VideoAnalyzeTool(),
     new UnderstandVideoTool(),
     new VideoGenerateTool(),
+    new VideoStitchTool(),
     new VideoExecuteTool(),
     new PDFExecuteTool(),
     new OCRExecuteTool(),

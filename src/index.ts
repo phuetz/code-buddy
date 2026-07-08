@@ -3351,6 +3351,17 @@ addLazyCommand(
   },
 );
 
+// Film producer — chain generated clips into a long-form film with transitions
+addLazyCommand(
+  program,
+  'film',
+  'Produce a long-form film from a scene plan: generate a clip per scene → montage with transitions + music → quality gate (resumable). Subcommands: generate|assemble|status',
+  async () => {
+    const { createFilmCommand } = await import('./commands/film.js');
+    return createFilmCommand();
+  },
+);
+
 // Goal Ralph loop — headless judge-gated auto-continue (Hermes Agent parity)
 addLazyCommand(
   program,

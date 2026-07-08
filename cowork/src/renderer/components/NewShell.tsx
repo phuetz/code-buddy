@@ -33,6 +33,7 @@ import { MissionControlView } from './os/MissionControlView';
 import { LabsGallery } from './labs/LabsGallery';
 import { CreationsView } from './deliverables/CreationsView';
 import { MediaLibraryView } from './deliverables/MediaLibraryView';
+import { VideoStudioView } from './videostudio/VideoStudioView';
 import { CapabilitiesView } from './capabilities/CapabilitiesView';
 import { ConversationHistoryDrawer } from './ConversationHistoryDrawer';
 import { OnboardingTour } from './onboarding/OnboardingTour';
@@ -50,6 +51,7 @@ const RAIL: RailItem[] = [
   { view: 'workspace', label: 'Fichiers', glyph: '📁' },
   { view: 'studio', label: 'App Studio', glyph: '🛠️' },
   { view: 'creations', label: 'Créations', glyph: '✨' },
+  { view: 'videostudio', label: 'Video Studio', glyph: '🎬' },
   { view: 'library', label: 'Bibliothèque', glyph: '🖼️' },
   { view: 'capabilities', label: 'Capacités', glyph: '🧰' },
   { view: 'os', label: 'Mission Control', glyph: '🛰️' },
@@ -391,6 +393,7 @@ export function NewShell() {
         {primaryView === 'workspace' && <FileActivityPanel open onClose={backToChat} />}
         {primaryView === 'studio' && <StudioView />}
         {primaryView === 'creations' && <CreationsView />}
+        {primaryView === 'videostudio' && <VideoStudioView />}
         {primaryView === 'library' && <MediaLibraryView />}
         {primaryView === 'capabilities' && <CapabilitiesView />}
         {primaryView === 'os' && <MissionControlView />}

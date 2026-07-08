@@ -718,6 +718,32 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.invoke('media.copyToClipboard', { sourcePath }),
   },
 
+  // Video Studio — prompt → premium narrated video (src/main/film/film-ipc.ts).
+  film: {
+    produce: (request: {
+      pitch: string;
+      scenes?: number;
+      resolution?: string;
+      noMusic?: boolean;
+      subtitles?: boolean;
+      lang?: string;
+    }): Promise<{
+      ok: boolean;
+      filmPath?: string;
+      url?: string;
+      sceneCount?: number;
+      duration?: number;
+      qualityPass?: boolean;
+      warnings?: string[];
+      error?: string;
+    }> => ipcRenderer.invoke('film.produce', request),
+    onProgress: (cb: (p: { phase: string; scene?: number; total?: number; message?: string }) => void): (() => void) => {
+      const wrapped = (_e: unknown, data: { phase: string; scene?: number; total?: number; message?: string }): void => cb(data);
+      ipcRenderer.on('film.progress', wrapped);
+      return () => ipcRenderer.removeListener('film.progress', wrapped);
+    },
+  },
+
   // App Studio (bolt.diy-style file tree + editor + terminal + live preview).
   // Channels mirror the main-process register*Ipc handlers under
   // src/main/studio/*. Note: the file listing handler is `studio.files.tree`.
@@ -4612,6 +4638,10 @@ declare global {
         export: (sourcePath: string) => Promise<{ ok: boolean; savedTo?: string; canceled?: boolean; error?: string }>;
         exportMany: (paths: string[]) => Promise<{ ok: boolean; copied?: number; destDir?: string; canceled?: boolean; error?: string }>;
         copyToClipboard: (sourcePath: string) => Promise<{ ok: boolean; mode?: 'image' | 'path'; error?: string }>;
+      };
+      film: {
+        produce: (request: { pitch: string; scenes?: number; resolution?: string; noMusic?: boolean; subtitles?: boolean; lang?: string }) => Promise<{ ok: boolean; filmPath?: string; url?: string; sceneCount?: number; duration?: number; qualityPass?: boolean; warnings?: string[]; error?: string }>;
+        onProgress: (cb: (p: { phase: string; scene?: number; total?: number; message?: string }) => void) => () => void;
       };
       selectFiles: () => Promise<string[]>;
       artifacts: {
