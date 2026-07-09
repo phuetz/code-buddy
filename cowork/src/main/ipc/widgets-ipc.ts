@@ -7,6 +7,10 @@ interface WidgetRegistryModule {
   renderWidgetForData?: (data: unknown) => string | null;
 }
 
+interface WidgetEngineModule {
+  resolveOrGenerate?: (data: unknown) => Promise<string | null>;
+}
+
 function hasStructuredType(data: unknown): data is { type: string } {
   return (
     typeof data === 'object' &&
@@ -20,6 +24,20 @@ export function registerWidgetsIpcHandlers(): void {
     if (!hasStructuredType(data)) return null;
 
     try {
+      // Prefer the engine: it renders known kinds instantly AND, when opted in
+      // (CODEBUDDY_WIDGETS=true), authors+gates+keeps a widget for a NEW kind.
+      // Default off ⇒ behaves exactly like renderWidgetForData. never-throws.
+      try {
+        const engine = await loadCoreModule<WidgetEngineModule>('widgets/widget-engine.js');
+        if (engine?.resolveOrGenerate) {
+          const html = await engine.resolveOrGenerate(data);
+          if (typeof html === 'string' && html.trim().length > 0) return html;
+          // engine returned null (miss + generation off/failed) → fall through to registry
+        }
+      } catch (engineError) {
+        logError('[widgets-ipc] engine unavailable, falling back to registry:', engineError);
+      }
+
       const mod = await loadCoreModule<WidgetRegistryModule>('widgets/widget-registry.js');
       if (!mod?.renderWidgetForData) return null;
       if (mod.hasWidgetForData && !mod.hasWidgetForData(data)) return null;

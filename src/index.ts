@@ -3127,6 +3127,11 @@ addLazyCommandGroup(program, 'assistant', 'Manage the voice assistant (Lisa): im
   registerAssistantCommand(program);
 });
 
+addLazyCommandGroup(program, 'widgets', 'Inline conversation widgets: list, preview, generate (authored)', async () => {
+  const { registerWidgetsCommand } = await import('./commands/widgets.js');
+  registerWidgetsCommand(program);
+});
+
 // Utility commands (doctor, security-audit, onboard, webhook) are all registered
 // by a single registerUtilityCommands() call, so we must remove all stubs before
 // re-registering to avoid Commander duplicate command errors.

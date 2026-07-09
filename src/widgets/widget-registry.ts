@@ -17,6 +17,7 @@ import { join } from 'node:path';
 import { renderWeatherWidget } from './curated/weather.js';
 import { renderNewsWidget } from './curated/news.js';
 import { widgetKind } from './widget-types.js';
+import { renderTemplate } from './template-engine.js';
 
 /** Curated server-side renderers: data → self-contained HTML fragment (no script). */
 const CURATED: Record<string, (data: unknown) => string> = {
@@ -61,8 +62,11 @@ export function renderWidgetFragment(data: unknown, env: NodeJS.ProcessEnv = pro
   try {
     const p = join(authoredWidgetsDir(env), `authored-${kind}`, 'widget.html');
     if (existsSync(p)) {
-      const html = readFileSync(p, 'utf8');
-      if (html.trim()) return html;
+      const tpl = readFileSync(p, 'utf8');
+      // Authored widgets are SAFE Mustache-style templates, rendered server-side
+      // with the data interpolated (always escaped). No client script, CSP-proof.
+      const frag = renderTemplate(tpl, data);
+      if (frag.trim()) return frag;
     }
   } catch {
     /* none */

@@ -43,3 +43,25 @@ export function widgetKind(data: unknown): string | null {
   const t = (data as { type?: unknown })?.type;
   return typeof t === 'string' && t.trim() ? t.trim() : null;
 }
+
+/** A candidate authored widget (LLM-proposed), before it clears the gate. */
+export interface WidgetProposal {
+  /** The data `type` this widget renders. */
+  kind: string;
+  /** SAFE Mustache-style HTML+CSS template (no script), read by the template engine. */
+  template: string;
+  /** Sample data the gate renders the template against. */
+  sample: unknown;
+  /** Optional human-readable brief the proposer was given. */
+  brief?: string;
+}
+
+/** Result of running a proposal through the widget gate (fail-closed). */
+export interface WidgetGateOutcome {
+  accepted: boolean;
+  /** Short machine reason on reject (`static-scan` | `render-empty` | `render-unsafe` | `unrendered-tokens`). */
+  reason?: string;
+  reasons?: string[];
+  /** The rendered sample fragment, present only on accept. */
+  fragment?: string;
+}

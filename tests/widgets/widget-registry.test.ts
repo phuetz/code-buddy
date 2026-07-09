@@ -31,7 +31,9 @@ describe('resolveWidgetSource', () => {
   });
 
   it('returns null for an unknown kind with no authored widget', () => {
-    expect(resolveWidgetSource('stock', {} as NodeJS.ProcessEnv)).toBeNull();
+    // Isolated empty dir — an empty env would resolve to the REAL ~/.codebuddy/widgets.
+    const env = { CODEBUDDY_WIDGETS_DIR: mkdtempSync(join(tmpdir(), 'wdg-empty-')) } as NodeJS.ProcessEnv;
+    expect(resolveWidgetSource('stock', env)).toBeNull();
   });
 
   it('falls back to an authored widget for a NEW kind, but curated wins', () => {
@@ -98,6 +100,7 @@ describe('helpers', () => {
   });
   it('hasWidgetForData', () => {
     expect(hasWidgetForData(sampleWeather)).toBe(true);
-    expect(hasWidgetForData({ type: 'stock' }, {} as NodeJS.ProcessEnv)).toBe(false);
+    const env = { CODEBUDDY_WIDGETS_DIR: mkdtempSync(join(tmpdir(), 'wdg-empty-')) } as NodeJS.ProcessEnv;
+    expect(hasWidgetForData({ type: 'stock' }, env)).toBe(false);
   });
 });
