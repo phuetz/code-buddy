@@ -18,7 +18,7 @@ import { listAuthoredWidgets, keepAuthoredWidget } from '../widgets/widget-engin
 import { proposeWidget } from '../widgets/widget-proposer.js';
 import { gateWidget } from '../widgets/widget-gate.js';
 
-const CURATED_KINDS = ['weather', 'news'] as const;
+const CURATED_KINDS = ['weather', 'news', 'stock', 'market', 'bourse'] as const;
 
 /** Built-in sample payloads so `preview` works for curated kinds with no --sample. */
 const SAMPLES: Record<string, unknown> = {
@@ -40,7 +40,37 @@ const SAMPLES: Record<string, unknown> = {
       { title: 'Un autre titre', source: 'AFP' },
     ],
   },
+  stock: {
+    type: 'stock',
+    name: 'Apple Inc.',
+    symbol: 'AAPL',
+    price: 226.34,
+    change: 3.12,
+    changePercent: 1.4,
+    currency: 'USD',
+    open: 223.5,
+    high: 227.1,
+    low: 222.8,
+    previousClose: 223.22,
+    volume: 48200000,
+    market: 'NASDAQ',
+    time: 'Clôture',
+  },
+  market: {
+    type: 'market',
+    name: 'CAC 40',
+    symbol: 'PX1',
+    value: 7654.2,
+    change: -42.8,
+    changePercent: -0.56,
+    high: 7712.0,
+    low: 7640.1,
+    previousClose: 7697.0,
+    market: 'Euronext Paris',
+    time: '17:35',
+  },
 };
+SAMPLES.bourse = { ...(SAMPLES.market as object), type: 'bourse' };
 
 function parseSample(raw: string | undefined, kind: string): unknown {
   if (raw && raw.trim()) {

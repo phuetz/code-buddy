@@ -68,7 +68,10 @@ export function renderStockWidget(raw: unknown): string {
   const previousClose = num(d.previousClose);
   const neg = (pct ?? change ?? 0) < 0;
   const sign = neg ? '' : '+';
-  const currency = d.currency ?? (d.symbol === 'PX1' || d.name === 'CAC 40' ? 'pts' : '');
+  // An index (market/bourse kind, or a recognized index) is quoted in points
+  // unless an explicit currency is given.
+  const isIndex = d.type === 'market' || d.type === 'bourse' || d.symbol === 'PX1' || d.name === 'CAC 40';
+  const currency = d.currency ?? (isIndex ? 'pts' : '');
   const title = d.name ?? d.symbol ?? 'Cours de bourse';
   const pill = pct != null ? `${sign}${fmt(pct)}%` : change != null ? `${sign}${fmt(change)}` : '—';
   const abs = change != null ? `${sign}${fmt(change)}${currency ? ` ${currency}` : ''}` : '';
