@@ -75,6 +75,21 @@ describe('server-side rendering (no client script)', () => {
     expect(renderWidgetForData({ nope: true })).toBeNull();
   });
 
+  it('renders the REAL WeatherTool forecast shape (high/low/date), not just min/max/day', () => {
+    // WeatherTool.data.forecast items are { date, high, low, condition } — the
+    // widget must map those, not render "—°".
+    const doc = renderWidgetForData({
+      type: 'weather',
+      location: 'Lyon',
+      current: { temperature: 33, condition: 'Sunny' },
+      forecast: [{ date: '2026-07-09', high: 35, low: 24, condition: 'partly cloudy' }],
+      units: 'metric',
+    })!;
+    expect(doc).toContain('35° / 24°'); // high/low rendered
+    expect(doc).not.toContain('—°'); // no missing-value placeholder
+    expect(doc).toContain('jeu'); // weekday derived from the ISO date (2026-07-09 = Thursday)
+  });
+
   it('renders a news payload server-side with the item titles inline', () => {
     const doc = renderWidgetForData({
       type: 'news',

@@ -11,6 +11,26 @@ function esc(s: unknown): string {
   return String(s == null ? '' : s).replace(/[&<>"]/g, (m) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[m]!);
 }
 
+const WEEKDAYS = ['dim', 'lun', 'mar', 'mer', 'jeu', 'ven', 'sam'];
+
+/** Short weekday label from a `day` string or an ISO `date` (YYYY-MM-DD). */
+function dayLabel(raw: { day?: unknown; date?: unknown }): string {
+  if (typeof raw.day === 'string' && raw.day.trim()) return raw.day.trim();
+  const d = raw.date;
+  if (typeof d === 'string' && /^\d{4}-\d{2}-\d{2}/.test(d)) {
+    const parsed = new Date(d + (d.length === 10 ? 'T00:00:00' : ''));
+    const wd = parsed.getDay();
+    if (!Number.isNaN(wd)) return WEEKDAYS[wd]!;
+  }
+  return typeof d === 'string' ? d.slice(5) : '';
+}
+
+/** First finite number among the given candidates (tolerates min/max vs low/high). */
+function num(...candidates: unknown[]): number | null {
+  for (const c of candidates) if (typeof c === 'number' && Number.isFinite(c)) return c;
+  return null;
+}
+
 function emoji(cond: unknown): string {
   const c = String(cond ?? '').toLowerCase();
   if (/orage|thunder|storm/.test(c)) return '⛈️';
@@ -60,11 +80,15 @@ export function renderWeatherWidget(raw: unknown): string {
     (meta.length ? `<div class="meta">${meta.map((m) => esc(m)).join('<span>·</span>')}</div>` : '') +
     (fc.length
       ? `<div class="fc">${fc
-          .map(
-            (f) =>
-              `<div class="day"><div class="d">${esc(f.day)}</div><div class="e">${emoji(f.condition)}</div>` +
-              `<div class="t">${f.max != null ? Math.round(f.max) : '—'}° / ${f.min != null ? Math.round(f.min) : '—'}°</div></div>`
-          )
+          .map((f) => {
+            const g = f as Record<string, unknown>;
+            const hi = num(g.max, g.high);
+            const lo = num(g.min, g.low);
+            return (
+              `<div class="day"><div class="d">${esc(dayLabel(g))}</div><div class="e">${emoji(g.condition)}</div>` +
+              `<div class="t">${hi != null ? Math.round(hi) : '—'}° / ${lo != null ? Math.round(lo) : '—'}°</div></div>`
+            );
+          })
           .join('')}</div>`
       : '') +
     `</div>`

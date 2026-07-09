@@ -74,7 +74,7 @@ export function renderWidgetFragment(data: unknown, env: NodeJS.ProcessEnv = pro
   return null;
 }
 
-const BASE_CSS = `*{box-sizing:border-box}html,body{margin:0;padding:0;background:transparent}body{padding:2px}`;
+const BASE_CSS = `*{box-sizing:border-box}html,body{margin:0;padding:0;background:transparent}`;
 
 /** Wrap a rendered fragment into a complete, self-contained HTML document (no script). Pure. */
 export function renderWidgetDocument(fragment: string): string {
