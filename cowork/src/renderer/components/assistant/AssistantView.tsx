@@ -164,6 +164,11 @@ export function AssistantView() {
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [volume, setVolume] = useState<number | null>(null);
+  // Editable sentence used by « Écouter ». Kept in sync with the core default
+  // (DEFAULT_VOICE_PREVIEW_TEXT) so the mount pre-warm hits the same cache entry.
+  const [previewText, setPreviewText] = useState(
+    'Bonjour ! Voici un aperçu de ma voix. Est-ce qu’elle te plaît ?'
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -257,7 +262,7 @@ export function AssistantView() {
     setError(null);
     setNotice(null);
     try {
-      const result = await assistant.preview(voice);
+      const result = await assistant.preview(voice, previewText);
       if (isAssistantError(result)) throw new Error(result.error);
       if (!result) throw new Error('Aperçu vocal indisponible.');
       // Play via a user-gesture-initiated Audio() so the autoplay policy never blocks it.
@@ -358,34 +363,51 @@ export function AssistantView() {
     if (setting.type === 'voice') {
       const voiceOptions = Array.from(new Set([value, setting.default, ...voices].filter(Boolean)));
       return (
-        <div className="flex items-center gap-2">
-          <select
-            value={value}
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center gap-2">
+            <select
+              value={value}
+              disabled={disabled}
+              data-testid={`assistant-field-${setting.key}`}
+              onChange={(event) => setField(setting.key, event.target.value)}
+              className="min-w-0 flex-1 rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-primary disabled:opacity-50"
+            >
+              {voiceOptions.map((voice) => (
+                <option key={voice} value={voice}>
+                  {voice}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              data-testid="assistant-preview"
+              onClick={() => void previewVoice(setting)}
+              disabled={
+                disabled || previewing === setting.key || !value.trim() || !previewText.trim()
+              }
+              className="inline-flex shrink-0 items-center gap-2 rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground transition hover:bg-muted disabled:opacity-50"
+            >
+              {previewing === setting.key ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Headphones className="h-4 w-4" />
+              )}
+              {previewing === setting.key ? 'Génération…' : 'Écouter'}
+            </button>
+          </div>
+          <textarea
+            value={previewText}
             disabled={disabled}
-            data-testid={`assistant-field-${setting.key}`}
-            onChange={(event) => setField(setting.key, event.target.value)}
-            className="min-w-0 flex-1 rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-primary disabled:opacity-50"
-          >
-            {voiceOptions.map((voice) => (
-              <option key={voice} value={voice}>
-                {voice}
-              </option>
-            ))}
-          </select>
-          <button
-            type="button"
-            data-testid="assistant-preview"
-            onClick={() => void previewVoice(setting)}
-            disabled={disabled || previewing === setting.key || !value.trim()}
-            className="inline-flex shrink-0 items-center gap-2 rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground transition hover:bg-muted disabled:opacity-50"
-          >
-            {previewing === setting.key ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Headphones className="h-4 w-4" />
-            )}
-            Écouter
-          </button>
+            data-testid="assistant-preview-text"
+            onChange={(event) => setPreviewText(event.target.value)}
+            rows={2}
+            placeholder="Texte à faire dire pour tester la voix…"
+            className="w-full resize-none rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-primary disabled:opacity-50"
+          />
+          <p className="text-xs text-muted-foreground">
+            Texte de test — modifie-le puis clique « Écouter ». Le 1er aperçu prend quelques
+            secondes, les suivants sont instantanés.
+          </p>
         </div>
       );
     }

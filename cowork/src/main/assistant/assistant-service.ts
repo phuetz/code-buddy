@@ -64,7 +64,7 @@ interface CoreAssistantConfigModule {
   readAssistantConfig?: () => Record<string, string>;
   writeAssistantConfig?: (updates: Record<string, string>) => AssistantSaveSuccessResponse;
   listPocketVoices?: () => string[];
-  previewVoice?: (name: string) => Promise<string | null>;
+  previewVoice?: (name: string, text?: string) => Promise<string | null>;
   restartAssistantServices?: (
     services: Array<'buddy-vision-brain' | 'lisa-telegram'>
   ) => Promise<AssistantRestartServiceResult[]>;
@@ -153,7 +153,7 @@ export class AssistantService {
     }
   }
 
-  async preview(name: string): Promise<AssistantPreviewResponse> {
+  async preview(name: string, text?: string): Promise<AssistantPreviewResponse> {
     try {
       const voiceName = (name ?? '').trim();
       if (!voiceName) return unavailable('voix requise');
@@ -163,7 +163,8 @@ export class AssistantService {
         return unavailable('module assistant indisponible (aperçu vocal impossible)');
       }
 
-      return mod.previewVoice(voiceName);
+      const sample = (text ?? '').trim();
+      return mod.previewVoice(voiceName, sample || undefined);
     } catch (err) {
       return unavailable(errorMessage(err));
     }

@@ -831,8 +831,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     get: (): Promise<AssistantConfigResponse> => ipcRenderer.invoke('assistant.get'),
     save: (updates: Record<string, string>): Promise<AssistantSaveResponse> =>
       ipcRenderer.invoke('assistant.save', updates),
-    preview: (name: string): Promise<AssistantPreviewResponse> =>
-      ipcRenderer.invoke('assistant.preview', name),
+    preview: (name: string, text?: string): Promise<AssistantPreviewResponse> =>
+      ipcRenderer.invoke('assistant.preview', name, text),
     restart: (): Promise<AssistantRestartResponse> => ipcRenderer.invoke('assistant.restart'),
     getVolume: (): Promise<AssistantVolumeResponse> => ipcRenderer.invoke('assistant.getVolume'),
     setVolume: (percent: number): Promise<AssistantSetVolumeResponse> =>
@@ -4886,9 +4886,7 @@ declare global {
         export: (
           sourcePath: string
         ) => Promise<{ ok: boolean; savedTo?: string; canceled?: boolean; error?: string }>;
-        exportMany: (
-          paths: string[]
-        ) => Promise<{
+        exportMany: (paths: string[]) => Promise<{
           ok: boolean;
           copied?: number;
           destDir?: string;
@@ -4925,7 +4923,7 @@ declare global {
       assistant: {
         get: () => Promise<AssistantConfigResponse>;
         save: (updates: Record<string, string>) => Promise<AssistantSaveResponse>;
-        preview: (name: string) => Promise<AssistantPreviewResponse>;
+        preview: (name: string, text?: string) => Promise<AssistantPreviewResponse>;
         restart: () => Promise<AssistantRestartResponse>;
         getVolume: () => Promise<AssistantVolumeResponse>;
         setVolume: (percent: number) => Promise<AssistantSetVolumeResponse>;
@@ -5601,10 +5599,7 @@ declare global {
           projectId?: string;
           recordSuggestions?: boolean;
         }) => Promise<{ ok: boolean; result?: CompanionMissionBoardSyncResult; error?: string }>;
-        listMissions: (input?: {
-          projectId?: string;
-          status?: CompanionMissionStatus;
-        }) => Promise<{
+        listMissions: (input?: { projectId?: string; status?: CompanionMissionStatus }) => Promise<{
           ok: boolean;
           board?: CompanionMissionBoard;
           items: CompanionMission[];
@@ -5667,19 +5662,13 @@ declare global {
         gatewayInbox: (
           projectId?: string
         ) => Promise<{ ok: boolean; inbox?: CompanionGatewayInbox; error?: string }>;
-        draftGatewayInboxItem: (input: {
-          projectId?: string;
-          itemId: string;
-        }) => Promise<{
+        draftGatewayInboxItem: (input: { projectId?: string; itemId: string }) => Promise<{
           ok: boolean;
           draft?: CompanionGatewayInboxDraft;
           inbox?: CompanionGatewayInbox;
           error?: string;
         }>;
-        routeGatewayDraftToFleet: (input: {
-          projectId?: string;
-          itemId: string;
-        }) => Promise<{
+        routeGatewayDraftToFleet: (input: { projectId?: string; itemId: string }) => Promise<{
           ok: boolean;
           fleetDraft?: CompanionGatewayFleetDraft;
           inbox?: CompanionGatewayInbox;

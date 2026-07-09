@@ -24,8 +24,8 @@ export function registerAssistantIpc(
     service.save(updates ?? {})
   );
   ipcMain.handle(ASSISTANT_CHANNELS.voices, async () => service.voices());
-  ipcMain.handle(ASSISTANT_CHANNELS.preview, async (_event, name: string) =>
-    service.preview(name ?? '')
+  ipcMain.handle(ASSISTANT_CHANNELS.preview, async (_event, name: string, text?: string) =>
+    service.preview(name ?? '', text)
   );
   ipcMain.handle(ASSISTANT_CHANNELS.restart, async () => service.restart());
   ipcMain.handle(ASSISTANT_CHANNELS.getVolume, async () => service.getVolume());

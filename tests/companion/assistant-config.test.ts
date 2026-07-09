@@ -10,12 +10,21 @@ import {
 } from '../../src/companion/assistant-config.js';
 
 describe('voicePreviewCachePath', () => {
-  it('builds a stable, sanitized path under ~/.codebuddy/companion/voice-previews', () => {
+  it('builds a sanitized path under ~/.codebuddy/companion/voice-previews, keyed on voice+text', () => {
     const p = voicePreviewCachePath('estelle');
-    expect(p).toMatch(/\.codebuddy\/companion\/voice-previews\/estelle\.wav$/);
-    // same voice → same path (cache key), unsafe chars sanitized
+    expect(p).toMatch(/\.codebuddy\/companion\/voice-previews\/estelle-[a-z0-9]+\.wav$/);
+    // default text → stable path (prewarm-friendly), unsafe chars sanitized
     expect(voicePreviewCachePath('estelle')).toBe(p);
-    expect(voicePreviewCachePath('a b/../c')).toMatch(/a-b-\.\.-c\.wav$/);
+    expect(voicePreviewCachePath('a b/../c')).toMatch(/a-b-\.\.-c-[a-z0-9]+\.wav$/);
+  });
+
+  it('gives a different cache entry for a different test sentence', () => {
+    expect(voicePreviewCachePath('estelle', 'un texte')).not.toBe(
+      voicePreviewCachePath('estelle', 'un autre texte')
+    );
+    expect(voicePreviewCachePath('estelle', 'même texte')).toBe(
+      voicePreviewCachePath('estelle', 'même texte')
+    );
   });
 });
 

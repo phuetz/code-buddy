@@ -380,20 +380,42 @@ export function listPocketVoices(): string[] {
   return [...PRESET_VOICES];
 }
 
+/** Default sentence used to test a voice (kept in sync with the Cowork panel's pre-fill). */
+export const DEFAULT_VOICE_PREVIEW_TEXT =
+  'Bonjour ! Voici un aperçu de ma voix. Est-ce qu’elle te plaît ?';
+
+/** Tiny stable string hash (djb2, base36) — for keying the preview cache on the text. Pure. */
+function hashText(text: string): string {
+  let h = 5381;
+  for (let i = 0; i < text.length; i++) h = ((h << 5) + h + text.charCodeAt(i)) >>> 0;
+  return h.toString(36);
+}
+
 /**
- * Stable on-disk path for a voice's preview sample. Same `safeName` scheme as
- * before, but persistent (not tmp) + keyed only on the voice name so re-listens
- * hit the cache. Pure/testable.
+ * Stable on-disk path for a voice's preview sample, keyed on BOTH the voice and
+ * the (hashed) test text so a custom sentence gets its own cache entry while the
+ * default sentence stays stable (prewarm-friendly). Pure/testable.
  */
-export function voicePreviewCachePath(name: string): string {
+export function voicePreviewCachePath(
+  name: string,
+  text: string = DEFAULT_VOICE_PREVIEW_TEXT
+): string {
   const safeName = name.trim().replace(/[^a-z0-9._-]/gi, '-') || 'voice';
-  return join(homedir(), '.codebuddy', 'companion', 'voice-previews', `${safeName}.wav`);
+  const effective = text.trim() || DEFAULT_VOICE_PREVIEW_TEXT;
+  return join(
+    homedir(),
+    '.codebuddy',
+    'companion',
+    'voice-previews',
+    `${safeName}-${hashText(effective)}.wav`
+  );
 }
 
 /**
  * Synthesize (or reuse) a short voice preview WAV, returning its path. Cached at
- * a stable path per voice so re-listening the same voice is instant (Pocket
- * `french_24l` costs ~4-8 s per synth on CPU). `force` regenerates. never-throws.
+ * a stable path per (voice, text) so re-listening the same sentence is instant
+ * (Pocket `french_24l` costs ~4-8 s per synth on CPU). `force` regenerates.
+ * never-throws.
  */
 export async function previewVoice(
   name: string,
@@ -403,9 +425,10 @@ export async function previewVoice(
   try {
     const voiceName = name.trim();
     if (!voiceName) return null;
-    const outPath = voicePreviewCachePath(voiceName);
+    const effectiveText = (text ?? '').trim() || DEFAULT_VOICE_PREVIEW_TEXT;
+    const outPath = voicePreviewCachePath(voiceName, effectiveText);
 
-    // Cache hit: a non-empty WAV already exists for this voice → return instantly.
+    // Cache hit: a non-empty WAV already exists for this voice+text → return instantly.
     if (!opts?.force) {
       try {
         if (existsSync(outPath) && statSync(outPath).size > 44) return outPath;
@@ -423,7 +446,7 @@ export async function previewVoice(
     });
     if (!(await provider.isAvailable())) return null;
 
-    const result = await provider.synthesize(text ?? `Bonjour, je suis ${voiceName}.`, {
+    const result = await provider.synthesize(effectiveText, {
       voice: voiceName,
       language: 'french',
       format: 'wav',
