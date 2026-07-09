@@ -8,8 +8,8 @@
  * @module companion/assistant-config
  */
 import { execFile } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { homedir, tmpdir } from 'node:os';
+import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { promisify } from 'node:util';
 import { PocketTTSProvider, PRESET_VOICES } from '../talk-mode/providers/pocket-tts.js';
@@ -380,10 +380,40 @@ export function listPocketVoices(): string[] {
   return [...PRESET_VOICES];
 }
 
-export async function previewVoice(name: string, text?: string): Promise<string | null> {
+/**
+ * Stable on-disk path for a voice's preview sample. Same `safeName` scheme as
+ * before, but persistent (not tmp) + keyed only on the voice name so re-listens
+ * hit the cache. Pure/testable.
+ */
+export function voicePreviewCachePath(name: string): string {
+  const safeName = name.trim().replace(/[^a-z0-9._-]/gi, '-') || 'voice';
+  return join(homedir(), '.codebuddy', 'companion', 'voice-previews', `${safeName}.wav`);
+}
+
+/**
+ * Synthesize (or reuse) a short voice preview WAV, returning its path. Cached at
+ * a stable path per voice so re-listening the same voice is instant (Pocket
+ * `french_24l` costs ~4-8 s per synth on CPU). `force` regenerates. never-throws.
+ */
+export async function previewVoice(
+  name: string,
+  text?: string,
+  opts?: { force?: boolean }
+): Promise<string | null> {
   try {
     const voiceName = name.trim();
     if (!voiceName) return null;
+    const outPath = voicePreviewCachePath(voiceName);
+
+    // Cache hit: a non-empty WAV already exists for this voice → return instantly.
+    if (!opts?.force) {
+      try {
+        if (existsSync(outPath) && statSync(outPath).size > 44) return outPath;
+      } catch {
+        /* fall through to (re)synthesis */
+      }
+    }
+
     const provider = new PocketTTSProvider();
     await provider.initialize({
       provider: 'pocket',
@@ -398,8 +428,7 @@ export async function previewVoice(name: string, text?: string): Promise<string 
       language: 'french',
       format: 'wav',
     });
-    const safeName = voiceName.replace(/[^a-z0-9._-]/gi, '-') || 'voice';
-    const outPath = join(tmpdir(), `codebuddy-assistant-preview-${safeName}-${Date.now()}.wav`);
+    mkdirSync(dirname(outPath), { recursive: true });
     writeFileSync(outPath, result.audio, { mode: 0o600 });
     return outPath;
   } catch {
@@ -424,4 +453,48 @@ export async function restartAssistantServices(
     }
   }
   return results;
+}
+
+// ============================================================================
+// System output volume (live control — applies immediately, not an env var)
+// ============================================================================
+
+/** Extract the first "NN%" from `pactl`/`amixer` output → clamped 0..150. Pure. */
+export function parseVolumePercent(output: string): number | null {
+  const match = output.match(/(\d+)\s*%/);
+  if (!match) return null;
+  return Math.max(0, Math.min(150, Number(match[1])));
+}
+
+/** Read the current default-sink volume percent (pactl, falling back to amixer). null if unavailable. */
+export async function getSystemVolume(): Promise<number | null> {
+  try {
+    const { stdout } = await execFileAsync('pactl', ['get-sink-volume', '@DEFAULT_SINK@']);
+    return parseVolumePercent(stdout);
+  } catch {
+    try {
+      const { stdout } = await execFileAsync('amixer', ['sget', 'Master']);
+      return parseVolumePercent(stdout);
+    } catch {
+      return null;
+    }
+  }
+}
+
+/** Set the default-sink volume (unmutes first). Clamped 0..150. never-throws. */
+export async function setSystemVolume(percent: number): Promise<boolean> {
+  const pct = Math.max(0, Math.min(150, Math.round(percent)));
+  try {
+    await execFileAsync('pactl', ['set-sink-mute', '@DEFAULT_SINK@', '0']);
+    await execFileAsync('pactl', ['set-sink-volume', '@DEFAULT_SINK@', `${pct}%`]);
+    return true;
+  } catch {
+    try {
+      await execFileAsync('amixer', ['-q', 'sset', 'Master', 'unmute']);
+      await execFileAsync('amixer', ['-q', 'sset', 'Master', `${pct}%`]);
+      return true;
+    } catch {
+      return false;
+    }
+  }
 }

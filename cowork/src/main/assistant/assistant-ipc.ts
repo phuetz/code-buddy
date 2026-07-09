@@ -11,6 +11,8 @@ export const ASSISTANT_CHANNELS = {
   voices: 'assistant.voices',
   preview: 'assistant.preview',
   restart: 'assistant.restart',
+  getVolume: 'assistant.getVolume',
+  setVolume: 'assistant.setVolume',
 } as const;
 
 export function registerAssistantIpc(
@@ -26,4 +28,8 @@ export function registerAssistantIpc(
     service.preview(name ?? '')
   );
   ipcMain.handle(ASSISTANT_CHANNELS.restart, async () => service.restart());
+  ipcMain.handle(ASSISTANT_CHANNELS.getVolume, async () => service.getVolume());
+  ipcMain.handle(ASSISTANT_CHANNELS.setVolume, async (_event, percent: number) =>
+    service.setVolume(percent)
+  );
 }

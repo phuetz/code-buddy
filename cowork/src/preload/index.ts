@@ -149,7 +149,11 @@ interface AssistantSaveSuccessResponse {
 
 type AssistantSaveResponse = AssistantSaveSuccessResponse | AssistantErrorResponse;
 type AssistantPreviewResponse = string | null | AssistantErrorResponse;
-type AssistantRestartResponse = Array<{ service: string; ok: boolean; error?: string }> | AssistantErrorResponse;
+type AssistantRestartResponse =
+  | Array<{ service: string; ok: boolean; error?: string }>
+  | AssistantErrorResponse;
+type AssistantVolumeResponse = { volume: number | null } | AssistantErrorResponse;
+type AssistantSetVolumeResponse = { ok: true; volume: number } | AssistantErrorResponse;
 
 // Track registered callbacks to prevent duplicate listeners
 let registeredCallback: ((event: ServerEvent) => void) | null = null;
@@ -178,8 +182,8 @@ const ALLOWED_CLIENT_EVENTS: ReadonlySet<string> = new Set<ClientEvent['type']>(
 ]);
 
 // ── Threat Model: IPC Validation ──────────────────────────────────────────────
-// While this preload exposes ~150 specific invoke wrappers, the actual validation 
-// of payloads, path traversals, and privileges is explicitly deferred to the 
+// While this preload exposes ~150 specific invoke wrappers, the actual validation
+// of payloads, path traversals, and privileges is explicitly deferred to the
 // Main process (`ipcMain.handle` listeners). This design ensures that the renderer
 // cannot bypass security checks, as the ultimate source of truth and execution
 // rights resides in the trusted Main process.
@@ -313,31 +317,28 @@ contextBridge.exposeInMainWorld('electronAPI', {
     }): Promise<unknown> => ipcRenderer.invoke('presence:add-sample', payload),
     encode: (payload: { rgbBytes: number[] }): Promise<number[]> =>
       ipcRenderer.invoke('presence:encode', payload),
-    match: (payload: {
-      embedding: number[];
-      threshold?: number;
-    }): Promise<unknown> => ipcRenderer.invoke('presence:match', payload),
+    match: (payload: { embedding: number[]; threshold?: number }): Promise<unknown> =>
+      ipcRenderer.invoke('presence:match', payload),
     list: (): Promise<unknown[]> => ipcRenderer.invoke('presence:list'),
     remove: (payload: { personId: string }): Promise<boolean> =>
       ipcRenderer.invoke('presence:remove', payload),
     hasModel: (): Promise<{ installed: boolean; path: string }> =>
       ipcRenderer.invoke('presence:has-model'),
-    selectModelFile: (): Promise<string | null> =>
-      ipcRenderer.invoke('presence:select-model-file'),
-    installModelFromPath: (
-      payload: { sourcePath: string },
-    ): Promise<{ ok: boolean; error?: string; installedPath?: string }> =>
+    selectModelFile: (): Promise<string | null> => ipcRenderer.invoke('presence:select-model-file'),
+    installModelFromPath: (payload: {
+      sourcePath: string;
+    }): Promise<{ ok: boolean; error?: string; installedPath?: string }> =>
       ipcRenderer.invoke('presence:install-model-from-path', payload),
-    downloadModel: (
-      payload: { url: string },
-    ): Promise<{ ok: boolean; error?: string; installedPath?: string }> =>
+    downloadModel: (payload: {
+      url: string;
+    }): Promise<{ ok: boolean; error?: string; installedPath?: string }> =>
       ipcRenderer.invoke('presence:download-model', payload),
     onDownloadProgress: (
-      listener: (progress: { bytes: number; total: number | null }) => void,
+      listener: (progress: { bytes: number; total: number | null }) => void
     ): (() => void) => {
       const wrapped = (
         _event: Electron.IpcRendererEvent,
-        progress: { bytes: number; total: number | null },
+        progress: { bytes: number; total: number | null }
       ) => listener(progress);
       ipcRenderer.on('presence:download-progress', wrapped);
       return () => {
@@ -358,11 +359,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
           matchedAt: number;
         };
         timestamp: number;
-      }) => void,
+      }) => void
     ): (() => void) => {
       const wrapped = (
         _event: Electron.IpcRendererEvent,
-        payload: Parameters<typeof listener>[0],
+        payload: Parameters<typeof listener>[0]
       ) => listener(payload);
       ipcRenderer.on('presence:event', wrapped);
       return () => {
@@ -375,21 +376,21 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // settings file is the source of truth, but some flags benefit from
   // hot-apply without restarting the app).
   codebuddy: {
-    listModels: (
-      payload: { endpoint: string; apiKey?: string },
-    ): Promise<ProviderModelInfo[]> =>
+    listModels: (payload: { endpoint: string; apiKey?: string }): Promise<ProviderModelInfo[]> =>
       ipcRenderer.invoke('codebuddy:list-models', payload),
-    probeConnection: (
-      payload: { endpoint: string; apiKey?: string },
-    ): Promise<{ version: string; models: string[]; tools: number }> =>
+    probeConnection: (payload: {
+      endpoint: string;
+      apiKey?: string;
+    }): Promise<{ version: string; models: string[]; tools: number }> =>
       ipcRenderer.invoke('codebuddy:probe-connection', payload),
-    setGeminiGrounding: (
-      payload: { enabled: boolean },
-    ): Promise<{ ok: boolean; reason?: string }> =>
+    setGeminiGrounding: (payload: {
+      enabled: boolean;
+    }): Promise<{ ok: boolean; reason?: string }> =>
       ipcRenderer.invoke('codebuddy:set-gemini-grounding', payload),
-    setVisionGrounding: (
-      payload: { enabled: boolean; model?: string },
-    ): Promise<{ ok: boolean; reason?: string }> =>
+    setVisionGrounding: (payload: {
+      enabled: boolean;
+      model?: string;
+    }): Promise<{ ok: boolean; reason?: string }> =>
       ipcRenderer.invoke('codebuddy:set-vision-grounding', payload),
   },
 
@@ -422,18 +423,24 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.invoke('config.diagnose', input),
     discoverLocal: (payload?: { baseUrl?: string }): Promise<LocalOllamaDiscoveryResult> =>
       ipcRenderer.invoke('config.discover-local', payload),
-    discoverLocalLmStudio: (payload?: { baseUrl?: string }): Promise<LocalLmStudioDiscoveryResult> =>
+    discoverLocalLmStudio: (payload?: {
+      baseUrl?: string;
+    }): Promise<LocalLmStudioDiscoveryResult> =>
       ipcRenderer.invoke('config.discover-lmstudio-local', payload),
-    modelInventory: (payload?: { includeTailnetPeers?: boolean }): Promise<ModelInventorySnapshot> =>
-      ipcRenderer.invoke('config.model-inventory', payload),
+    modelInventory: (payload?: {
+      includeTailnetPeers?: boolean;
+    }): Promise<ModelInventorySnapshot> => ipcRenderer.invoke('config.model-inventory', payload),
   },
 
   // Workflow Builder Pro API
   workflowBuilder: {
-    start: (): Promise<{ success: boolean; error?: string }> => ipcRenderer.invoke('workflow.start'),
+    start: (): Promise<{ success: boolean; error?: string }> =>
+      ipcRenderer.invoke('workflow.start'),
     stop: (): Promise<{ success: boolean; error?: string }> => ipcRenderer.invoke('workflow.stop'),
-    status: (): Promise<{ running: boolean; port: number }> => ipcRenderer.invoke('workflow.status'),
-    logs: (limit?: number): Promise<{ lines: string[] }> => ipcRenderer.invoke('workflow.logs', limit),
+    status: (): Promise<{ running: boolean; port: number }> =>
+      ipcRenderer.invoke('workflow.status'),
+    logs: (limit?: number): Promise<{ lines: string[] }> =>
+      ipcRenderer.invoke('workflow.logs', limit),
   },
 
   // Window control methods
@@ -710,7 +717,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
       rules: Array<Record<string, unknown>>;
       runs: Array<Record<string, unknown>>;
     }> => ipcRenderer.invoke('automations.list'),
-    toggle: (kind: 'rule' | 'reminder', id: string, enabled: boolean): Promise<{ ok: boolean; error?: string }> =>
+    toggle: (
+      kind: 'rule' | 'reminder',
+      id: string,
+      enabled: boolean
+    ): Promise<{ ok: boolean; error?: string }> =>
       ipcRenderer.invoke('automations.toggle', kind, id, enabled),
     remove: (kind: 'rule' | 'reminder', id: string): Promise<{ ok: boolean; error?: string }> =>
       ipcRenderer.invoke('automations.remove', kind, id),
@@ -751,13 +762,35 @@ contextBridge.exposeInMainWorld('electronAPI', {
       model?: string;
     }): Promise<{ ok: boolean; outputPath?: string; url?: string; error?: string }> =>
       ipcRenderer.invoke('media.generateImage', request),
-    list: (): Promise<Array<{ path: string; kind: 'image' | 'video' | 'audio'; size: number; mtimeMs: number; root: string; prompt?: string; model?: string; provider?: string; sessionId?: string }>> =>
-      ipcRenderer.invoke('media.list'),
-    export: (sourcePath: string): Promise<{ ok: boolean; savedTo?: string; canceled?: boolean; error?: string }> =>
+    list: (): Promise<
+      Array<{
+        path: string;
+        kind: 'image' | 'video' | 'audio';
+        size: number;
+        mtimeMs: number;
+        root: string;
+        prompt?: string;
+        model?: string;
+        provider?: string;
+        sessionId?: string;
+      }>
+    > => ipcRenderer.invoke('media.list'),
+    export: (
+      sourcePath: string
+    ): Promise<{ ok: boolean; savedTo?: string; canceled?: boolean; error?: string }> =>
       ipcRenderer.invoke('media.export', { sourcePath }),
-    exportMany: (paths: string[]): Promise<{ ok: boolean; copied?: number; destDir?: string; canceled?: boolean; error?: string }> =>
-      ipcRenderer.invoke('media.exportMany', { paths }),
-    copyToClipboard: (sourcePath: string): Promise<{ ok: boolean; mode?: 'image' | 'path'; error?: string }> =>
+    exportMany: (
+      paths: string[]
+    ): Promise<{
+      ok: boolean;
+      copied?: number;
+      destDir?: string;
+      canceled?: boolean;
+      error?: string;
+    }> => ipcRenderer.invoke('media.exportMany', { paths }),
+    copyToClipboard: (
+      sourcePath: string
+    ): Promise<{ ok: boolean; mode?: 'image' | 'path'; error?: string }> =>
       ipcRenderer.invoke('media.copyToClipboard', { sourcePath }),
   },
 
@@ -781,8 +814,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
       warnings?: string[];
       error?: string;
     }> => ipcRenderer.invoke('film.produce', request),
-    onProgress: (cb: (p: { phase: string; scene?: number; total?: number; message?: string }) => void): (() => void) => {
-      const wrapped = (_e: unknown, data: { phase: string; scene?: number; total?: number; message?: string }): void => cb(data);
+    onProgress: (
+      cb: (p: { phase: string; scene?: number; total?: number; message?: string }) => void
+    ): (() => void) => {
+      const wrapped = (
+        _e: unknown,
+        data: { phase: string; scene?: number; total?: number; message?: string }
+      ): void => cb(data);
       ipcRenderer.on('film.progress', wrapped);
       return () => ipcRenderer.removeListener('film.progress', wrapped);
     },
@@ -796,13 +834,18 @@ contextBridge.exposeInMainWorld('electronAPI', {
     preview: (name: string): Promise<AssistantPreviewResponse> =>
       ipcRenderer.invoke('assistant.preview', name),
     restart: (): Promise<AssistantRestartResponse> => ipcRenderer.invoke('assistant.restart'),
+    getVolume: (): Promise<AssistantVolumeResponse> => ipcRenderer.invoke('assistant.getVolume'),
+    setVolume: (percent: number): Promise<AssistantSetVolumeResponse> =>
+      ipcRenderer.invoke('assistant.setVolume', percent),
   },
 
   // App Studio (bolt.diy-style file tree + editor + terminal + live preview).
   // Channels mirror the main-process register*Ipc handlers under
   // src/main/studio/*. Note: the file listing handler is `studio.files.tree`.
   studio: {
-    exportZip: (root: string): Promise<{ ok: boolean; savedTo?: string; canceled?: boolean; error?: string }> =>
+    exportZip: (
+      root: string
+    ): Promise<{ ok: boolean; savedTo?: string; canceled?: boolean; error?: string }> =>
       ipcRenderer.invoke('studio.exportZip', { root }),
     devServer: {
       start: (request: { cwd: string; command: string; url: string; timeoutMs?: number }) =>
@@ -813,7 +856,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       onLog: (listener: (payload: { pid: number; lines: string[] }) => void): (() => void) => {
         const wrapped = (
           _event: Electron.IpcRendererEvent,
-          payload: { pid: number; lines: string[] },
+          payload: { pid: number; lines: string[] }
         ) => listener(payload);
         ipcRenderer.on('studio.dev.log', wrapped);
         return () => {
@@ -822,14 +865,17 @@ contextBridge.exposeInMainWorld('electronAPI', {
       },
     },
     files: {
-      read: (root: string, relPath: string) => ipcRenderer.invoke('studio.files.read', root, relPath),
+      read: (root: string, relPath: string) =>
+        ipcRenderer.invoke('studio.files.read', root, relPath),
       write: (root: string, relPath: string, content: string) =>
         ipcRenderer.invoke('studio.files.write', root, relPath, content),
       list: (root: string) => ipcRenderer.invoke('studio.files.tree', root),
-      create: (root: string, relPath: string) => ipcRenderer.invoke('studio.files.create', root, relPath),
+      create: (root: string, relPath: string) =>
+        ipcRenderer.invoke('studio.files.create', root, relPath),
       rename: (root: string, from: string, to: string) =>
         ipcRenderer.invoke('studio.files.rename', root, from, to),
-      delete: (root: string, relPath: string) => ipcRenderer.invoke('studio.files.delete', root, relPath),
+      delete: (root: string, relPath: string) =>
+        ipcRenderer.invoke('studio.files.delete', root, relPath),
     },
     commands: {
       run: (request: { cwd: string; command: string; id: string }) =>
@@ -841,11 +887,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
           stream: 'stdout' | 'stderr' | 'system';
           line: string;
           timestamp: string;
-        }) => void,
+        }) => void
       ): (() => void) => {
         const wrapped = (
           _event: Electron.IpcRendererEvent,
-          payload: Parameters<typeof listener>[0],
+          payload: Parameters<typeof listener>[0]
         ) => listener(payload);
         ipcRenderer.on('studio.cmd.output', wrapped);
         return () => {
@@ -936,7 +982,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
       }
     ): Promise<{ success: boolean; error?: string; path?: string }> =>
       ipcRenderer.invoke('session.exportToFile', sessionId, options),
-    exportPdf: (sessionId: string, options?: { redactSecrets?: boolean }): Promise<{ success: boolean; savedTo?: string; canceled?: boolean; error?: string }> =>
+    exportPdf: (
+      sessionId: string,
+      options?: { redactSecrets?: boolean }
+    ): Promise<{ success: boolean; savedTo?: string; canceled?: boolean; error?: string }> =>
       ipcRenderer.invoke('session.exportPdf', sessionId, options),
     startBackground: (payload: {
       title: string;
@@ -1050,9 +1099,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       };
       error?: string;
     }> => ipcRenderer.invoke('clipboard.summarizeNow'),
-    setMonitoring: (
-      enabled: boolean,
-    ): Promise<{ ok: boolean; running?: boolean }> =>
+    setMonitoring: (enabled: boolean): Promise<{ ok: boolean; running?: boolean }> =>
       ipcRenderer.invoke('clipboard.setMonitoring', enabled),
     status: (): Promise<{ running: boolean; monitoringEnabled: boolean }> =>
       ipcRenderer.invoke('clipboard.status'),
@@ -1115,7 +1162,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
      */
     speak: (
       text: string,
-      options?: { lengthScale?: number },
+      options?: { lengthScale?: number }
     ): Promise<{
       ok: boolean;
       audio?: ArrayBuffer;
@@ -1134,7 +1181,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     conversationStatus: (): Promise<VoiceConversationSnapshot> =>
       ipcRenderer.invoke('voice.conversationStatus'),
     recordConversationEvent: (
-      payload: VoiceConversationEvent,
+      payload: VoiceConversationEvent
     ): Promise<{ ok: boolean; snapshot?: VoiceConversationSnapshot; error?: string }> =>
       ipcRenderer.invoke('voice.conversationEvent', payload),
   },
@@ -1153,7 +1200,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
       recordSelf?: boolean;
     }): Promise<{ ok: boolean; result?: CompanionSetupResponse; error?: string }> =>
       ipcRenderer.invoke('companion.setup', input),
-    status: (projectId?: string): Promise<{ ok: boolean; status?: CompanionStatus; error?: string }> =>
+    status: (
+      projectId?: string
+    ): Promise<{ ok: boolean; status?: CompanionStatus; error?: string }> =>
       ipcRenderer.invoke('companion.status', projectId),
     recentPercepts: (input?: {
       limit?: number;
@@ -1161,9 +1210,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
       projectId?: string;
     }): Promise<{ ok: boolean; items: CompanionPercept[]; error?: string }> =>
       ipcRenderer.invoke('companion.percepts.recent', input),
-    perceptStats: (projectId?: string): Promise<{ ok: boolean; stats?: CompanionPerceptStats; error?: string }> =>
+    perceptStats: (
+      projectId?: string
+    ): Promise<{ ok: boolean; stats?: CompanionPerceptStats; error?: string }> =>
       ipcRenderer.invoke('companion.percepts.stats', projectId),
-    recordSelf: (projectId?: string): Promise<{ ok: boolean; percept?: CompanionPercept; error?: string }> =>
+    recordSelf: (
+      projectId?: string
+    ): Promise<{ ok: boolean; percept?: CompanionPercept; error?: string }> =>
       ipcRenderer.invoke('companion.self.record', projectId),
     evaluate: (input?: {
       projectId?: string;
@@ -1203,8 +1256,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
     listMissions: (input?: {
       projectId?: string;
       status?: CompanionMissionStatus;
-    }): Promise<{ ok: boolean; board?: CompanionMissionBoard; items: CompanionMission[]; error?: string }> =>
-      ipcRenderer.invoke('companion.missions.list', input),
+    }): Promise<{
+      ok: boolean;
+      board?: CompanionMissionBoard;
+      items: CompanionMission[];
+      error?: string;
+    }> => ipcRenderer.invoke('companion.missions.list', input),
     runNextMission: (input?: {
       projectId?: string;
       dryRun?: boolean;
@@ -1223,26 +1280,38 @@ contextBridge.exposeInMainWorld('electronAPI', {
       risk?: CompanionSafetyEventRisk;
     }): Promise<{ ok: boolean; items: CompanionSafetyEvent[]; error?: string }> =>
       ipcRenderer.invoke('companion.safety.recent', input),
-    safetyStats: (projectId?: string): Promise<{ ok: boolean; stats?: CompanionSafetyLedgerStats; error?: string }> =>
+    safetyStats: (
+      projectId?: string
+    ): Promise<{ ok: boolean; stats?: CompanionSafetyLedgerStats; error?: string }> =>
       ipcRenderer.invoke('companion.safety.stats', projectId),
     listCards: (input?: {
       projectId?: string;
       status?: CompanionCardStatus;
       kind?: CompanionCardKind;
       limit?: number;
-    }): Promise<{ ok: boolean; store?: CompanionCardStore; items: CompanionCard[]; error?: string }> =>
-      ipcRenderer.invoke('companion.cards.list', input),
+    }): Promise<{
+      ok: boolean;
+      store?: CompanionCardStore;
+      items: CompanionCard[];
+      error?: string;
+    }> => ipcRenderer.invoke('companion.cards.list', input),
     updateCard: (input: {
       projectId?: string;
       cardId: string;
       status: CompanionCardStatus;
     }): Promise<{ ok: boolean; card?: CompanionCard; error?: string }> =>
       ipcRenderer.invoke('companion.cards.update', input),
-    gatewayProfile: (projectId?: string): Promise<{ ok: boolean; profile?: CompanionGatewayProfile; error?: string }> =>
+    gatewayProfile: (
+      projectId?: string
+    ): Promise<{ ok: boolean; profile?: CompanionGatewayProfile; error?: string }> =>
       ipcRenderer.invoke('companion.gateway.profile', projectId),
-    gatewayLifecycle: (projectId?: string): Promise<{ ok: boolean; report?: CompanionGatewayLifecycleReport; error?: string }> =>
+    gatewayLifecycle: (
+      projectId?: string
+    ): Promise<{ ok: boolean; report?: CompanionGatewayLifecycleReport; error?: string }> =>
       ipcRenderer.invoke('companion.gateway.lifecycle', projectId),
-    gatewayAdminPlan: (projectId?: string): Promise<{ ok: boolean; plan?: CompanionGatewayAdminPlan; error?: string }> =>
+    gatewayAdminPlan: (
+      projectId?: string
+    ): Promise<{ ok: boolean; plan?: CompanionGatewayAdminPlan; error?: string }> =>
       ipcRenderer.invoke('companion.gateway.adminPlan', projectId),
     executeGatewayAdminAction: (input: {
       projectId?: string;
@@ -1252,25 +1321,39 @@ contextBridge.exposeInMainWorld('electronAPI', {
       liveAdminConfirmed: boolean;
     }): Promise<{ ok: boolean; result?: CompanionGatewayAdminExecutionResult; error?: string }> =>
       ipcRenderer.invoke('companion.gateway.executeAdminAction', input),
-    gatewayInbox: (projectId?: string): Promise<{ ok: boolean; inbox?: CompanionGatewayInbox; error?: string }> =>
+    gatewayInbox: (
+      projectId?: string
+    ): Promise<{ ok: boolean; inbox?: CompanionGatewayInbox; error?: string }> =>
       ipcRenderer.invoke('companion.gateway.inbox', projectId),
     draftGatewayInboxItem: (input: {
       projectId?: string;
       itemId: string;
-    }): Promise<{ ok: boolean; draft?: CompanionGatewayInboxDraft; inbox?: CompanionGatewayInbox; error?: string }> =>
-      ipcRenderer.invoke('companion.gateway.draft', input),
+    }): Promise<{
+      ok: boolean;
+      draft?: CompanionGatewayInboxDraft;
+      inbox?: CompanionGatewayInbox;
+      error?: string;
+    }> => ipcRenderer.invoke('companion.gateway.draft', input),
     routeGatewayDraftToFleet: (input: {
       projectId?: string;
       itemId: string;
-    }): Promise<{ ok: boolean; fleetDraft?: CompanionGatewayFleetDraft; inbox?: CompanionGatewayInbox; error?: string }> =>
-      ipcRenderer.invoke('companion.gateway.fleetDraft', input),
+    }): Promise<{
+      ok: boolean;
+      fleetDraft?: CompanionGatewayFleetDraft;
+      inbox?: CompanionGatewayInbox;
+      error?: string;
+    }> => ipcRenderer.invoke('companion.gateway.fleetDraft', input),
     draftGatewayOutboundReply: (input: {
       projectId?: string;
       itemId: string;
       text: string;
       reviewedBy: string;
-    }): Promise<{ ok: boolean; replyDraft?: CompanionGatewayOutboundReplyDraft; inbox?: CompanionGatewayInbox; error?: string }> =>
-      ipcRenderer.invoke('companion.gateway.outboundReplyDraft', input),
+    }): Promise<{
+      ok: boolean;
+      replyDraft?: CompanionGatewayOutboundReplyDraft;
+      inbox?: CompanionGatewayInbox;
+      error?: string;
+    }> => ipcRenderer.invoke('companion.gateway.outboundReplyDraft', input),
     sendGatewayOutboundReply: (input: {
       projectId?: string;
       itemId: string;
@@ -1278,8 +1361,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
       approvedBy: string;
       dryRun?: boolean;
       liveDeliveryConfirmed?: boolean;
-    }): Promise<{ ok: boolean; result?: CompanionGatewayOutboundReplySendResult; inbox?: CompanionGatewayInbox; error?: string }> =>
-      ipcRenderer.invoke('companion.gateway.sendOutboundReply', input),
+    }): Promise<{
+      ok: boolean;
+      result?: CompanionGatewayOutboundReplySendResult;
+      inbox?: CompanionGatewayInbox;
+      error?: string;
+    }> => ipcRenderer.invoke('companion.gateway.sendOutboundReply', input),
     updateGatewayChannel: (input: {
       projectId?: string;
       channel: string;
@@ -1366,9 +1453,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
       text: string;
       approvedBy: string;
       liveSendConfirmed: boolean;
-    }): Promise<OpenClawBridgeActionResult> =>
-      ipcRenderer.invoke('companion.openclaw.send', input),
-    listSkillCandidates: (projectId?: string): Promise<{
+    }): Promise<OpenClawBridgeActionResult> => ipcRenderer.invoke('companion.openclaw.send', input),
+    listSkillCandidates: (
+      projectId?: string
+    ): Promise<{
       ok: boolean;
       store?: CompanionSkillCandidateStore;
       items: CompanionSkillCandidate[];
@@ -1389,7 +1477,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
       candidateId: string;
     }): Promise<{ ok: boolean; candidate?: CompanionSkillCandidate; error?: string }> =>
       ipcRenderer.invoke('companion.skills.dismiss', input),
-    privacyReport: (projectId?: string): Promise<{ ok: boolean; report?: CompanionPrivacyReport; error?: string }> =>
+    privacyReport: (
+      projectId?: string
+    ): Promise<{ ok: boolean; report?: CompanionPrivacyReport; error?: string }> =>
       ipcRenderer.invoke('companion.privacy.report', projectId),
     exportPrivacy: (input?: {
       projectId?: string;
@@ -1441,9 +1531,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       methods?: DesktopSnapshotMethod[];
       error?: string;
     }> => ipcRenderer.invoke('desktopSnapshot.status'),
-    capture: (
-      input?: DesktopSnapshotCaptureOptions,
-    ): Promise<DesktopSnapshotCaptureResult> =>
+    capture: (input?: DesktopSnapshotCaptureOptions): Promise<DesktopSnapshotCaptureResult> =>
       ipcRenderer.invoke('desktopSnapshot.capture', input),
   },
 
@@ -1469,7 +1557,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
 
   missions: {
-    list: (filter?: MissionFilter): Promise<{ ok: boolean; missions: MissionRuntime[]; error?: string }> =>
+    list: (
+      filter?: MissionFilter
+    ): Promise<{ ok: boolean; missions: MissionRuntime[]; error?: string }> =>
       ipcRenderer.invoke('mission.list', filter),
     get: (
       missionId: string
@@ -1684,13 +1774,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
         title: string;
         snippet: string;
         score: number;
-          context: {
-            sessionId?: string;
-            projectId?: string;
-            messageIndex?: number;
-            messageId?: string;
-            path?: string;
-          };
+        context: {
+          sessionId?: string;
+          projectId?: string;
+          messageIndex?: number;
+          messageId?: string;
+          path?: string;
+        };
       }>;
       totalByCategory: Record<'session' | 'message' | 'memory' | 'knowledge' | 'file', number>;
     }> => ipcRenderer.invoke('search.global', query, limit),
@@ -2064,7 +2154,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.invoke('tools.list'),
     getOverrides: (): Promise<Record<string, 'allow' | 'deny' | 'confirm'>> =>
       ipcRenderer.invoke('tools.getOverrides'),
-    setOverride: (name: string, action: 'allow' | 'deny' | null): Promise<{ ok: boolean; overrides?: Record<string, string> }> =>
+    setOverride: (
+      name: string,
+      action: 'allow' | 'deny' | null
+    ): Promise<{ ok: boolean; overrides?: Record<string, string> }> =>
       ipcRenderer.invoke('tools.setOverride', { name, action }),
     hermesCatalog: {
       get: (): Promise<{
@@ -2892,23 +2985,25 @@ contextBridge.exposeInMainWorld('electronAPI', {
       list: (options?: {
         cwd?: string;
         limit?: number;
-      }): Promise<Array<{
-        averageDurationMs?: number;
-        deprecated: boolean;
-        failureCount: number;
-        invocationCount: number;
-        lastDurationMs?: number;
-        lastError?: string;
-        lastRunId?: string;
-        lastUsedAt: string;
-        nextAction: string;
-        recommendation: 'observe' | 'reinforce' | 'improve' | 'deprecate';
-        reinforced: boolean;
-        score: number;
-        scoreReason: string;
-        skillName: string;
-        successCount: number;
-      }>> => ipcRenderer.invoke('tools.learningUsage.list', options ?? {}),
+      }): Promise<
+        Array<{
+          averageDurationMs?: number;
+          deprecated: boolean;
+          failureCount: number;
+          invocationCount: number;
+          lastDurationMs?: number;
+          lastError?: string;
+          lastRunId?: string;
+          lastUsedAt: string;
+          nextAction: string;
+          recommendation: 'observe' | 'reinforce' | 'improve' | 'deprecate';
+          reinforced: boolean;
+          score: number;
+          scoreReason: string;
+          skillName: string;
+          successCount: number;
+        }>
+      > => ipcRenderer.invoke('tools.learningUsage.list', options ?? {}),
     },
     skillCandidate: {
       list: (options?: {
@@ -2916,33 +3011,39 @@ contextBridge.exposeInMainWorld('electronAPI', {
         eligibleOnly?: boolean;
         limit?: number;
         skillRoot?: string;
-      }): Promise<Array<{
-        candidateChecksum?: string;
-        candidateDiffPreview?: {
-          addedLines: number;
-          preview: string;
-          removedLines: number;
-          summary: string;
-          truncated: boolean;
-        };
-        eligible: boolean;
-        id: string;
-        installState?: 'not-installed' | 'installed-current' | 'installed-different' | 'installed-missing';
-        installedChecksum?: string;
-        installedIntegrityOk?: boolean;
-        installedPath?: string;
-        installedVersion?: string;
-        kind: string;
-        reason: string;
-        reviewCommands?: string[];
-        skillName: string;
-        skillPath: string;
-        sourceJobId: string;
-        sourceRunId?: string;
-        successfulRunCount: number;
-        title: string;
-        toolSequence?: string[];
-      }>> => ipcRenderer.invoke('tools.skillCandidate.list', options ?? {}),
+      }): Promise<
+        Array<{
+          candidateChecksum?: string;
+          candidateDiffPreview?: {
+            addedLines: number;
+            preview: string;
+            removedLines: number;
+            summary: string;
+            truncated: boolean;
+          };
+          eligible: boolean;
+          id: string;
+          installState?:
+            | 'not-installed'
+            | 'installed-current'
+            | 'installed-different'
+            | 'installed-missing';
+          installedChecksum?: string;
+          installedIntegrityOk?: boolean;
+          installedPath?: string;
+          installedVersion?: string;
+          kind: string;
+          reason: string;
+          reviewCommands?: string[];
+          skillName: string;
+          skillPath: string;
+          sourceJobId: string;
+          sourceRunId?: string;
+          successfulRunCount: number;
+          title: string;
+          toolSequence?: string[];
+        }>
+      > => ipcRenderer.invoke('tools.skillCandidate.list', options ?? {}),
       install: (options: {
         approvedBy: string;
         candidatePath: string;
@@ -2961,7 +3062,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
           };
           eligible: boolean;
           id: string;
-          installState?: 'not-installed' | 'installed-current' | 'installed-different' | 'installed-missing';
+          installState?:
+            | 'not-installed'
+            | 'installed-current'
+            | 'installed-different'
+            | 'installed-missing';
           installedChecksum?: string;
           installedIntegrityOk?: boolean;
           installedPath?: string;
@@ -3034,7 +3139,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
           category: string;
           content: string;
           context?: string;
-          createdBy?: { runId?: string; outcomeId?: string; sagaId?: string; note?: string; at: number };
+          createdBy?: {
+            runId?: string;
+            outcomeId?: string;
+            sagaId?: string;
+            note?: string;
+            at: number;
+          };
           usedBy?: Array<{ runId: string; at: number }>;
         }>;
         backlinks: string[];
@@ -3056,9 +3167,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
       websocket: boolean;
       error?: string | null;
     }> => ipcRenderer.invoke('server.status'),
-    start: (
-      cfg?: { port?: number; host?: string; websocketEnabled?: boolean }
-    ): Promise<{
+    start: (cfg?: {
+      port?: number;
+      host?: string;
+      websocketEnabled?: boolean;
+    }): Promise<{
       running: boolean;
       port: number | null;
       host: string | null;
@@ -3101,10 +3214,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
    * gateway / channels feature.
    */
   remoteBackend: {
-    connect: (
-      url: string,
-      token: string
-    ): Promise<{ success: boolean; error?: string }> =>
+    connect: (url: string, token: string): Promise<{ success: boolean; error?: string }> =>
       ipcRenderer.invoke('remote-backend.connect', { url, token }),
     disconnect: (): Promise<{ success: boolean }> =>
       ipcRenderer.invoke('remote-backend.disconnect'),
@@ -3301,8 +3411,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getStatus: (): Promise<unknown> => ipcRenderer.invoke('team.getStatus'),
     start: (goal?: string): Promise<{ success: boolean; leadId?: string; message: string }> =>
       ipcRenderer.invoke('team.start', goal),
-    stop: (): Promise<{ success: boolean; message: string }> =>
-      ipcRenderer.invoke('team.stop'),
+    stop: (): Promise<{ success: boolean; message: string }> => ipcRenderer.invoke('team.stop'),
     addMember: (
       role: string,
       label?: string
@@ -3336,18 +3445,33 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Mission Control OS — real council ledgers (read-only)
   os: {
     /** Latest council run (DHI + per-model verdicts) + DHI history, from ~/.codebuddy JSONL ledgers. */
-    councilHealth: (historyLimit?: number): Promise<{
+    councilHealth: (
+      historyLimit?: number
+    ): Promise<{
       session: {
         id: string;
         title: string;
         dhi: number;
-        verdicts: Array<{ agentId: string; model: string; label: string; score: number; stance: 'approve' | 'revise' | 'reject' }>;
+        verdicts: Array<{
+          agentId: string;
+          model: string;
+          label: string;
+          score: number;
+          stance: 'approve' | 'revise' | 'reject';
+        }>;
       } | null;
       history: Array<{ at: string; taskType: string; dhi: number }>;
     }> => ipcRenderer.invoke('os.councilHealth', historyLimit),
     /** Current Collective Knowledge Graph (folded from the append-only ledger). */
-    knowledgeGraph: (maxNodes?: number): Promise<{
-      nodes: Array<{ id: string; type: 'lesson' | 'decision' | 'fact' | 'discovery'; label: string; confidence?: number }>;
+    knowledgeGraph: (
+      maxNodes?: number
+    ): Promise<{
+      nodes: Array<{
+        id: string;
+        type: 'lesson' | 'decision' | 'fact' | 'discovery';
+        label: string;
+        confidence?: number;
+      }>;
       edges: Array<{ from: string; to: string; kind: string }>;
       truncated: boolean;
     }> => ipcRenderer.invoke('os.knowledgeGraph', maxNodes),
@@ -3418,8 +3542,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       privacyTag?: 'public' | 'sensitive';
       dispatchProfile?: 'balanced' | 'research' | 'code' | 'review' | 'safe';
       lintWarning?: string;
-    }> =>
-      ipcRenderer.invoke('fleet.dispatch', input),
+    }> => ipcRenderer.invoke('fleet.dispatch', input),
     /** List currently-tracked sagas (active + recent). */
     listSagas: (): Promise<
       Array<{
@@ -3446,9 +3569,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
      * Operator cancel — stops the saga orchestration. An LLM call already
      * in flight on a remote peer finishes there; its result is discarded.
      */
-    cancelSaga: (
-      sagaId: string
-    ): Promise<{ ok: boolean; error?: string; status?: string }> =>
+    cancelSaga: (sagaId: string): Promise<{ ok: boolean; error?: string; status?: string }> =>
       ipcRenderer.invoke('fleet.cancelSaga', sagaId),
     /** Re-dispatch a terminal saga as a new saga with the same goal + routing intent. */
     replaySaga: (
@@ -3824,7 +3945,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
       fixtureIds?: string[];
       maxArtifactBytes?: number;
       runId?: string;
-    }): Promise<unknown | null> => ipcRenderer.invoke('audit.buildGoldenWorkflowEvalReport', filter),
+    }): Promise<unknown | null> =>
+      ipcRenderer.invoke('audit.buildGoldenWorkflowEvalReport', filter),
     buildMobileSnapshot: (filter?: {
       cwd?: string;
       includeLessons?: boolean;
@@ -4151,7 +4273,19 @@ contextBridge.exposeInMainWorld('electronAPI', {
       handled?: boolean;
       action?: {
         type: 'open_schedule' | 'create_schedule' | 'ui_effect';
-        uiEffect?: 'open_model_picker' | 'run_orchestrator' | 'open_orchestrator_launcher' | 'open_fleet' | 'set_plan_mode' | 'open_lessons' | 'open_team' | 'open_companion' | 'open_spec' | 'open_settings' | 'open_panel' | 'engine_action';
+        uiEffect?:
+          | 'open_model_picker'
+          | 'run_orchestrator'
+          | 'open_orchestrator_launcher'
+          | 'open_fleet'
+          | 'set_plan_mode'
+          | 'open_lessons'
+          | 'open_team'
+          | 'open_companion'
+          | 'open_spec'
+          | 'open_settings'
+          | 'open_panel'
+          | 'engine_action';
         args?: string[];
         draft?: {
           prompt: string;
@@ -4343,7 +4477,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ): Promise<{
       ok: boolean;
       error?: string;
-      task?: { id: string; title: string; status: string; priority: string; claimedBy?: string | null };
+      task?: {
+        id: string;
+        title: string;
+        status: string;
+        priority: string;
+        claimedBy?: string | null;
+      };
       dir?: string;
     }> => ipcRenderer.invoke('autonomy.taskClaim', taskId, dir),
     taskComplete: (
@@ -4353,7 +4493,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ): Promise<{
       ok: boolean;
       error?: string;
-      task?: { id: string; title: string; status: string; priority: string; claimedBy?: string | null };
+      task?: {
+        id: string;
+        title: string;
+        status: string;
+        priority: string;
+        claimedBy?: string | null;
+      };
       dir?: string;
     }> => ipcRenderer.invoke('autonomy.taskComplete', taskId, summary, dir),
     taskBlock: (
@@ -4363,7 +4509,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ): Promise<{
       ok: boolean;
       error?: string;
-      task?: { id: string; title: string; status: string; priority: string; blockedReason?: string };
+      task?: {
+        id: string;
+        title: string;
+        status: string;
+        priority: string;
+        blockedReason?: string;
+      };
       dir?: string;
     }> => ipcRenderer.invoke('autonomy.taskBlock', taskId, reason, dir),
     taskRelease: (
@@ -4372,7 +4524,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ): Promise<{
       ok: boolean;
       error?: string;
-      task?: { id: string; title: string; status: string; priority: string; claimedBy?: string | null };
+      task?: {
+        id: string;
+        title: string;
+        status: string;
+        priority: string;
+        claimedBy?: string | null;
+      };
       dir?: string;
     }> => ipcRenderer.invoke('autonomy.taskRelease', taskId, dir),
     reclaimExpired: (
@@ -4394,7 +4552,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   backup: {
     list: (): Promise<{ ok: boolean; error?: string; output?: string }> =>
       ipcRenderer.invoke('backup.list'),
-    create: (options?: { onlyConfig?: boolean }): Promise<{ ok: boolean; error?: string; output?: string }> =>
+    create: (options?: {
+      onlyConfig?: boolean;
+    }): Promise<{ ok: boolean; error?: string; output?: string }> =>
       ipcRenderer.invoke('backup.create', options),
     verify: (file: string): Promise<{ ok: boolean; error?: string; output?: string }> =>
       ipcRenderer.invoke('backup.verify', file),
@@ -4499,11 +4659,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
       },
       projectId?: string
     ) => ipcRenderer.invoke('lessonCandidate.approve', id, input, projectId),
-    discard: (
-      id: string,
-      input: { reviewedBy?: string; reason?: string },
-      projectId?: string
-    ) => ipcRenderer.invoke('lessonCandidate.discard', id, input, projectId),
+    discard: (id: string, input: { reviewedBy?: string; reason?: string }, projectId?: string) =>
+      ipcRenderer.invoke('lessonCandidate.discard', id, input, projectId),
     proposeFromSession: (
       chatHistory: Array<{ type: string; content: string }>,
       projectId?: string
@@ -4526,22 +4683,18 @@ contextBridge.exposeInMainWorld('electronAPI', {
       },
       projectId?: string
     ) => ipcRenderer.invoke('userModel.accept', id, input, projectId),
-    discard: (
-      id: string,
-      input: { reviewedBy?: string; reason?: string },
-      projectId?: string
-    ) => ipcRenderer.invoke('userModel.discard', id, input, projectId),
-    runInference: (
-      chatHistory: Array<{ type: string; content: string }>,
-      projectId?: string
-    ) => ipcRenderer.invoke('userModel.runInference', chatHistory, projectId),
+    discard: (id: string, input: { reviewedBy?: string; reason?: string }, projectId?: string) =>
+      ipcRenderer.invoke('userModel.discard', id, input, projectId),
+    runInference: (chatHistory: Array<{ type: string; content: string }>, projectId?: string) =>
+      ipcRenderer.invoke('userModel.runInference', chatHistory, projectId),
   },
 
   // C3: agent identity files (SOUL.md, USER.md, …). Named `identityFiles` to
   // avoid colliding with the existing persona-activation `identity` API.
   identityFiles: {
     list: (projectId?: string) => ipcRenderer.invoke('identityFiles.list', projectId),
-    get: (name: string, projectId?: string) => ipcRenderer.invoke('identityFiles.get', name, projectId),
+    get: (name: string, projectId?: string) =>
+      ipcRenderer.invoke('identityFiles.get', name, projectId),
     set: (name: string, content: string, projectId?: string) =>
       ipcRenderer.invoke('identityFiles.set', name, content, projectId),
   },
@@ -4567,12 +4720,18 @@ contextBridge.exposeInMainWorld('electronAPI', {
     listConfig: (opts?: { configPath?: string }) => ipcRenderer.invoke('channels.listConfig', opts),
     setConfig: (
       type: string,
-      patch: { enabled?: boolean; webhookUrl?: string; allowedUsers?: string[]; allowedChannels?: string[] },
-      opts?: { configPath?: string },
+      patch: {
+        enabled?: boolean;
+        webhookUrl?: string;
+        allowedUsers?: string[];
+        allowedChannels?: string[];
+      },
+      opts?: { configPath?: string }
     ) => ipcRenderer.invoke('channels.setConfig', type, patch, opts),
     setEnabled: (type: string, enabled: boolean, opts?: { configPath?: string }) =>
       ipcRenderer.invoke('channels.setEnabled', type, enabled, opts),
-    setSecret: (type: string, token: string) => ipcRenderer.invoke('channels.setSecret', type, token),
+    setSecret: (type: string, token: string) =>
+      ipcRenderer.invoke('channels.setSecret', type, token),
     deleteSecret: (type: string) => ipcRenderer.invoke('channels.deleteSecret', type),
     removeChannel: (type: string, opts?: { configPath?: string }) =>
       ipcRenderer.invoke('channels.removeChannel', type, opts),
@@ -4585,7 +4744,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
     pending: () => ipcRenderer.invoke('pairing.pending'),
     approve: (channelType: string, code: string, approvedBy?: string) =>
       ipcRenderer.invoke('pairing.approve', channelType, code, approvedBy),
-    approveDirect: (channelType: string, senderId: string, approvedBy?: string, displayName?: string) =>
+    approveDirect: (
+      channelType: string,
+      senderId: string,
+      approvedBy?: string,
+      displayName?: string
+    ) =>
       ipcRenderer.invoke('pairing.approveDirect', channelType, senderId, approvedBy, displayName),
     revoke: (channelType: string, senderId: string) =>
       ipcRenderer.invoke('pairing.revoke', channelType, senderId),
@@ -4616,7 +4780,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
         verify?: string[];
         runVerification?: boolean;
       },
-      coworkProjectId?: string,
+      coworkProjectId?: string
     ) => ipcRenderer.invoke('spec.next', input, coworkProjectId),
     listProjects: (coworkProjectId?: string) =>
       ipcRenderer.invoke('spec.listProjects', coworkProjectId),
@@ -4636,14 +4800,28 @@ contextBridge.exposeInMainWorld('electronAPI', {
       input: { title: string; epicId?: string; narrative?: string; acceptanceCriteria?: string[] },
       coworkProjectId?: string
     ) => ipcRenderer.invoke('spec.addStory', specProjectId, input, coworkProjectId),
-    approveStory: (specProjectId: string, storyId: string, reviewedBy: string, coworkProjectId?: string) =>
+    approveStory: (
+      specProjectId: string,
+      storyId: string,
+      reviewedBy: string,
+      coworkProjectId?: string
+    ) =>
       ipcRenderer.invoke('spec.approveStory', specProjectId, storyId, reviewedBy, coworkProjectId),
     startStory: (specProjectId: string, storyId: string, coworkProjectId?: string) =>
       ipcRenderer.invoke('spec.startStory', specProjectId, storyId, coworkProjectId),
-    completeStory: (specProjectId: string, storyId: string, evidence: string, coworkProjectId?: string) =>
+    completeStory: (
+      specProjectId: string,
+      storyId: string,
+      evidence: string,
+      coworkProjectId?: string
+    ) =>
       ipcRenderer.invoke('spec.completeStory', specProjectId, storyId, evidence, coworkProjectId),
-    blockStory: (specProjectId: string, storyId: string, reason: string, coworkProjectId?: string) =>
-      ipcRenderer.invoke('spec.blockStory', specProjectId, storyId, reason, coworkProjectId),
+    blockStory: (
+      specProjectId: string,
+      storyId: string,
+      reason: string,
+      coworkProjectId?: string
+    ) => ipcRenderer.invoke('spec.blockStory', specProjectId, storyId, reason, coworkProjectId),
     reopenStory: (specProjectId: string, storyId: string, coworkProjectId?: string) =>
       ipcRenderer.invoke('spec.reopenStory', specProjectId, storyId, coworkProjectId),
     listEpics: (specProjectId: string, coworkProjectId?: string) =>
@@ -4681,27 +4859,76 @@ declare global {
       openExternal: (url: string) => Promise<boolean>;
       showItemInFolder: (filePath: string, cwd?: string) => Promise<boolean>;
       sessionPrune: {
-        preview: (filter: { olderThanDays?: number; titleMatch?: string; excludeId?: string }) => Promise<{
+        preview: (filter: {
+          olderThanDays?: number;
+          titleMatch?: string;
+          excludeId?: string;
+        }) => Promise<{
           matches: Array<{ id: string; title: string; updatedAt: number }>;
           ageSpan: { oldest: number; newest: number } | null;
         }>;
         apply: (ids: string[]) => Promise<{ ok: boolean; archived: number }>;
       };
       media: {
-        list: () => Promise<Array<{ path: string; kind: 'image' | 'video' | 'audio'; size: number; mtimeMs: number; root: string; prompt?: string; model?: string; provider?: string; sessionId?: string }>>;
-        export: (sourcePath: string) => Promise<{ ok: boolean; savedTo?: string; canceled?: boolean; error?: string }>;
-        exportMany: (paths: string[]) => Promise<{ ok: boolean; copied?: number; destDir?: string; canceled?: boolean; error?: string }>;
-        copyToClipboard: (sourcePath: string) => Promise<{ ok: boolean; mode?: 'image' | 'path'; error?: string }>;
+        list: () => Promise<
+          Array<{
+            path: string;
+            kind: 'image' | 'video' | 'audio';
+            size: number;
+            mtimeMs: number;
+            root: string;
+            prompt?: string;
+            model?: string;
+            provider?: string;
+            sessionId?: string;
+          }>
+        >;
+        export: (
+          sourcePath: string
+        ) => Promise<{ ok: boolean; savedTo?: string; canceled?: boolean; error?: string }>;
+        exportMany: (
+          paths: string[]
+        ) => Promise<{
+          ok: boolean;
+          copied?: number;
+          destDir?: string;
+          canceled?: boolean;
+          error?: string;
+        }>;
+        copyToClipboard: (
+          sourcePath: string
+        ) => Promise<{ ok: boolean; mode?: 'image' | 'path'; error?: string }>;
       };
       film: {
-        produce: (request: { pitch: string; scenes?: number; resolution?: string; noMusic?: boolean; subtitles?: boolean; lang?: string; style?: 'short' | 'standard' }) => Promise<{ ok: boolean; filmPath?: string; url?: string; sceneCount?: number; duration?: number; qualityPass?: boolean; warnings?: string[]; error?: string }>;
-        onProgress: (cb: (p: { phase: string; scene?: number; total?: number; message?: string }) => void) => () => void;
+        produce: (request: {
+          pitch: string;
+          scenes?: number;
+          resolution?: string;
+          noMusic?: boolean;
+          subtitles?: boolean;
+          lang?: string;
+          style?: 'short' | 'standard';
+        }) => Promise<{
+          ok: boolean;
+          filmPath?: string;
+          url?: string;
+          sceneCount?: number;
+          duration?: number;
+          qualityPass?: boolean;
+          warnings?: string[];
+          error?: string;
+        }>;
+        onProgress: (
+          cb: (p: { phase: string; scene?: number; total?: number; message?: string }) => void
+        ) => () => void;
       };
       assistant: {
         get: () => Promise<AssistantConfigResponse>;
         save: (updates: Record<string, string>) => Promise<AssistantSaveResponse>;
         preview: (name: string) => Promise<AssistantPreviewResponse>;
         restart: () => Promise<AssistantRestartResponse>;
+        getVolume: () => Promise<AssistantVolumeResponse>;
+        setVolume: (percent: number) => Promise<AssistantSetVolumeResponse>;
       };
       selectFiles: () => Promise<string[]>;
       artifacts: {
@@ -4724,22 +4951,19 @@ declare global {
           snapshotPath?: string;
         }) => Promise<unknown>;
         encode: (payload: { rgbBytes: number[] }) => Promise<number[]>;
-        match: (payload: {
-          embedding: number[];
-          threshold?: number;
-        }) => Promise<unknown>;
+        match: (payload: { embedding: number[]; threshold?: number }) => Promise<unknown>;
         list: () => Promise<unknown[]>;
         remove: (payload: { personId: string }) => Promise<boolean>;
         hasModel: () => Promise<{ installed: boolean; path: string }>;
         selectModelFile: () => Promise<string | null>;
-        installModelFromPath: (
-          payload: { sourcePath: string },
-        ) => Promise<{ ok: boolean; error?: string; installedPath?: string }>;
-        downloadModel: (
-          payload: { url: string },
-        ) => Promise<{ ok: boolean; error?: string; installedPath?: string }>;
+        installModelFromPath: (payload: {
+          sourcePath: string;
+        }) => Promise<{ ok: boolean; error?: string; installedPath?: string }>;
+        downloadModel: (payload: {
+          url: string;
+        }) => Promise<{ ok: boolean; error?: string; installedPath?: string }>;
         onDownloadProgress: (
-          listener: (progress: { bytes: number; total: number | null }) => void,
+          listener: (progress: { bytes: number; total: number | null }) => void
         ) => () => void;
         onEvent: (
           listener: (event: {
@@ -4752,22 +4976,25 @@ declare global {
               matchedAt: number;
             };
             timestamp: number;
-          }) => void,
+          }) => void
         ) => () => void;
       };
       codebuddy: {
-        listModels: (
-          payload: { endpoint: string; apiKey?: string },
-        ) => Promise<ProviderModelInfo[]>;
-        probeConnection: (
-          payload: { endpoint: string; apiKey?: string },
-        ) => Promise<{ version: string; models: string[]; tools: number }>;
-        setGeminiGrounding: (
-          payload: { enabled: boolean },
-        ) => Promise<{ ok: boolean; reason?: string }>;
-        setVisionGrounding: (
-          payload: { enabled: boolean; model?: string },
-        ) => Promise<{ ok: boolean; reason?: string }>;
+        listModels: (payload: {
+          endpoint: string;
+          apiKey?: string;
+        }) => Promise<ProviderModelInfo[]>;
+        probeConnection: (payload: {
+          endpoint: string;
+          apiKey?: string;
+        }) => Promise<{ version: string; models: string[]; tools: number }>;
+        setGeminiGrounding: (payload: {
+          enabled: boolean;
+        }) => Promise<{ ok: boolean; reason?: string }>;
+        setVisionGrounding: (payload: {
+          enabled: boolean;
+          model?: string;
+        }) => Promise<{ ok: boolean; reason?: string }>;
       };
       config: {
         get: () => Promise<AppConfig>;
@@ -4789,8 +5016,12 @@ declare global {
         }) => Promise<ProviderModelInfo[]>;
         diagnose: (input: DiagnosticInput) => Promise<DiagnosticResult>;
         discoverLocal: (payload?: { baseUrl?: string }) => Promise<LocalOllamaDiscoveryResult>;
-        discoverLocalLmStudio: (payload?: { baseUrl?: string }) => Promise<LocalLmStudioDiscoveryResult>;
-        modelInventory: (payload?: { includeTailnetPeers?: boolean }) => Promise<ModelInventorySnapshot>;
+        discoverLocalLmStudio: (payload?: {
+          baseUrl?: string;
+        }) => Promise<LocalLmStudioDiscoveryResult>;
+        modelInventory: (payload?: {
+          includeTailnetPeers?: boolean;
+        }) => Promise<ModelInventorySnapshot>;
       };
       workflowBuilder: {
         start: () => Promise<{ success: boolean; error?: string }>;
@@ -5013,7 +5244,11 @@ declare global {
           rules: Array<Record<string, unknown>>;
           runs: Array<Record<string, unknown>>;
         }>;
-        toggle: (kind: 'rule' | 'reminder', id: string, enabled: boolean) => Promise<{ ok: boolean; error?: string }>;
+        toggle: (
+          kind: 'rule' | 'reminder',
+          id: string,
+          enabled: boolean
+        ) => Promise<{ ok: boolean; error?: string }>;
         remove: (kind: 'rule' | 'reminder', id: string) => Promise<{ ok: boolean; error?: string }>;
         reminderDone: (id: string) => Promise<{ ok: boolean; error?: string }>;
       };
@@ -5048,7 +5283,9 @@ declare global {
         status: (cwd?: string) => Promise<unknown>;
       };
       studio: {
-        exportZip: (root: string) => Promise<{ ok: boolean; savedTo?: string; canceled?: boolean; error?: string }>;
+        exportZip: (
+          root: string
+        ) => Promise<{ ok: boolean; savedTo?: string; canceled?: boolean; error?: string }>;
         devServer: {
           start: (request: {
             cwd: string;
@@ -5078,7 +5315,7 @@ declare global {
               stream: 'stdout' | 'stderr' | 'system';
               line: string;
               timestamp: string;
-            }) => void,
+            }) => void
           ) => () => void;
         };
         scaffold: {
@@ -5130,7 +5367,10 @@ declare global {
         }>;
       };
       session: {
-        exportPdf: (sessionId: string, options?: { redactSecrets?: boolean }) => Promise<{ success: boolean; savedTo?: string; canceled?: boolean; error?: string }>;
+        exportPdf: (
+          sessionId: string,
+          options?: { redactSecrets?: boolean }
+        ) => Promise<{ success: boolean; savedTo?: string; canceled?: boolean; error?: string }>;
         export: (sessionId: string, format: 'md' | 'json') => Promise<unknown>;
         exportFull: (
           sessionId: string,
@@ -5236,9 +5476,7 @@ declare global {
           };
           error?: string;
         }>;
-        setMonitoring: (
-          enabled: boolean,
-        ) => Promise<{ ok: boolean; running?: boolean }>;
+        setMonitoring: (enabled: boolean) => Promise<{ ok: boolean; running?: boolean }>;
         status: () => Promise<{ running: boolean; monitoringEnabled: boolean }>;
       };
       voice: {
@@ -5288,7 +5526,7 @@ declare global {
         }>;
         speak: (
           text: string,
-          options?: { lengthScale?: number },
+          options?: { lengthScale?: number }
         ) => Promise<{
           ok: boolean;
           audio?: ArrayBuffer;
@@ -5304,7 +5542,7 @@ declare global {
         }) => Promise<{ ok: boolean; error?: string }>;
         conversationStatus: () => Promise<VoiceConversationSnapshot>;
         recordConversationEvent: (
-          payload: VoiceConversationEvent,
+          payload: VoiceConversationEvent
         ) => Promise<{ ok: boolean; snapshot?: VoiceConversationSnapshot; error?: string }>;
       };
       companion: {
@@ -5320,14 +5558,20 @@ declare global {
           model?: string;
           recordSelf?: boolean;
         }) => Promise<{ ok: boolean; result?: CompanionSetupResponse; error?: string }>;
-        status: (projectId?: string) => Promise<{ ok: boolean; status?: CompanionStatus; error?: string }>;
+        status: (
+          projectId?: string
+        ) => Promise<{ ok: boolean; status?: CompanionStatus; error?: string }>;
         recentPercepts: (input?: {
           limit?: number;
           modality?: CompanionPerceptModality;
           projectId?: string;
         }) => Promise<{ ok: boolean; items: CompanionPercept[]; error?: string }>;
-        perceptStats: (projectId?: string) => Promise<{ ok: boolean; stats?: CompanionPerceptStats; error?: string }>;
-        recordSelf: (projectId?: string) => Promise<{ ok: boolean; percept?: CompanionPercept; error?: string }>;
+        perceptStats: (
+          projectId?: string
+        ) => Promise<{ ok: boolean; stats?: CompanionPerceptStats; error?: string }>;
+        recordSelf: (
+          projectId?: string
+        ) => Promise<{ ok: boolean; percept?: CompanionPercept; error?: string }>;
         evaluate: (input?: {
           projectId?: string;
           recordSuggestions?: boolean;
@@ -5360,7 +5604,12 @@ declare global {
         listMissions: (input?: {
           projectId?: string;
           status?: CompanionMissionStatus;
-        }) => Promise<{ ok: boolean; board?: CompanionMissionBoard; items: CompanionMission[]; error?: string }>;
+        }) => Promise<{
+          ok: boolean;
+          board?: CompanionMissionBoard;
+          items: CompanionMission[];
+          error?: string;
+        }>;
         runNextMission: (input?: {
           projectId?: string;
           dryRun?: boolean;
@@ -5376,43 +5625,77 @@ declare global {
           kind?: CompanionSafetyEventKind;
           risk?: CompanionSafetyEventRisk;
         }) => Promise<{ ok: boolean; items: CompanionSafetyEvent[]; error?: string }>;
-        safetyStats: (projectId?: string) => Promise<{ ok: boolean; stats?: CompanionSafetyLedgerStats; error?: string }>;
+        safetyStats: (
+          projectId?: string
+        ) => Promise<{ ok: boolean; stats?: CompanionSafetyLedgerStats; error?: string }>;
         listCards: (input?: {
           projectId?: string;
           status?: CompanionCardStatus;
           kind?: CompanionCardKind;
           limit?: number;
-        }) => Promise<{ ok: boolean; store?: CompanionCardStore; items: CompanionCard[]; error?: string }>;
+        }) => Promise<{
+          ok: boolean;
+          store?: CompanionCardStore;
+          items: CompanionCard[];
+          error?: string;
+        }>;
         updateCard: (input: {
           projectId?: string;
           cardId: string;
           status: CompanionCardStatus;
         }) => Promise<{ ok: boolean; card?: CompanionCard; error?: string }>;
-        gatewayProfile: (projectId?: string) => Promise<{ ok: boolean; profile?: CompanionGatewayProfile; error?: string }>;
-        gatewayLifecycle: (projectId?: string) => Promise<{ ok: boolean; report?: CompanionGatewayLifecycleReport; error?: string }>;
-        gatewayAdminPlan: (projectId?: string) => Promise<{ ok: boolean; plan?: CompanionGatewayAdminPlan; error?: string }>;
+        gatewayProfile: (
+          projectId?: string
+        ) => Promise<{ ok: boolean; profile?: CompanionGatewayProfile; error?: string }>;
+        gatewayLifecycle: (
+          projectId?: string
+        ) => Promise<{ ok: boolean; report?: CompanionGatewayLifecycleReport; error?: string }>;
+        gatewayAdminPlan: (
+          projectId?: string
+        ) => Promise<{ ok: boolean; plan?: CompanionGatewayAdminPlan; error?: string }>;
         executeGatewayAdminAction: (input: {
           projectId?: string;
           action: CompanionGatewayExecutableAdminAction;
           channel: string;
           approvedBy: string;
           liveAdminConfirmed: boolean;
-        }) => Promise<{ ok: boolean; result?: CompanionGatewayAdminExecutionResult; error?: string }>;
-        gatewayInbox: (projectId?: string) => Promise<{ ok: boolean; inbox?: CompanionGatewayInbox; error?: string }>;
+        }) => Promise<{
+          ok: boolean;
+          result?: CompanionGatewayAdminExecutionResult;
+          error?: string;
+        }>;
+        gatewayInbox: (
+          projectId?: string
+        ) => Promise<{ ok: boolean; inbox?: CompanionGatewayInbox; error?: string }>;
         draftGatewayInboxItem: (input: {
           projectId?: string;
           itemId: string;
-        }) => Promise<{ ok: boolean; draft?: CompanionGatewayInboxDraft; inbox?: CompanionGatewayInbox; error?: string }>;
+        }) => Promise<{
+          ok: boolean;
+          draft?: CompanionGatewayInboxDraft;
+          inbox?: CompanionGatewayInbox;
+          error?: string;
+        }>;
         routeGatewayDraftToFleet: (input: {
           projectId?: string;
           itemId: string;
-        }) => Promise<{ ok: boolean; fleetDraft?: CompanionGatewayFleetDraft; inbox?: CompanionGatewayInbox; error?: string }>;
+        }) => Promise<{
+          ok: boolean;
+          fleetDraft?: CompanionGatewayFleetDraft;
+          inbox?: CompanionGatewayInbox;
+          error?: string;
+        }>;
         draftGatewayOutboundReply: (input: {
           projectId?: string;
           itemId: string;
           text: string;
           reviewedBy: string;
-        }) => Promise<{ ok: boolean; replyDraft?: CompanionGatewayOutboundReplyDraft; inbox?: CompanionGatewayInbox; error?: string }>;
+        }) => Promise<{
+          ok: boolean;
+          replyDraft?: CompanionGatewayOutboundReplyDraft;
+          inbox?: CompanionGatewayInbox;
+          error?: string;
+        }>;
         sendGatewayOutboundReply: (input: {
           projectId?: string;
           itemId: string;
@@ -5420,7 +5703,12 @@ declare global {
           approvedBy: string;
           dryRun?: boolean;
           liveDeliveryConfirmed?: boolean;
-        }) => Promise<{ ok: boolean; result?: CompanionGatewayOutboundReplySendResult; inbox?: CompanionGatewayInbox; error?: string }>;
+        }) => Promise<{
+          ok: boolean;
+          result?: CompanionGatewayOutboundReplySendResult;
+          inbox?: CompanionGatewayInbox;
+          error?: string;
+        }>;
         updateGatewayChannel: (input: {
           projectId?: string;
           channel: string;
@@ -5517,7 +5805,9 @@ declare global {
           projectId?: string;
           candidateId: string;
         }) => Promise<{ ok: boolean; candidate?: CompanionSkillCandidate; error?: string }>;
-        privacyReport: (projectId?: string) => Promise<{ ok: boolean; report?: CompanionPrivacyReport; error?: string }>;
+        privacyReport: (
+          projectId?: string
+        ) => Promise<{ ok: boolean; report?: CompanionPrivacyReport; error?: string }>;
         exportPrivacy: (input?: {
           projectId?: string;
           kinds?: CompanionPrivacyKind[];
@@ -5527,7 +5817,11 @@ declare global {
           kinds?: CompanionPrivacyKind[];
           backup?: boolean;
         }) => Promise<{ ok: boolean; result?: CompanionPrivacyPurgeResult; error?: string }>;
-        cameraStatus: () => Promise<{ ok: boolean; status?: Record<string, unknown>; error?: string }>;
+        cameraStatus: () => Promise<{
+          ok: boolean;
+          status?: Record<string, unknown>;
+          error?: string;
+        }>;
         cameraSnapshot: (input?: {
           outputPath?: string;
           device?: string;
@@ -5561,9 +5855,7 @@ declare global {
           methods?: DesktopSnapshotMethod[];
           error?: string;
         }>;
-        capture: (
-          input?: DesktopSnapshotCaptureOptions,
-        ) => Promise<DesktopSnapshotCaptureResult>;
+        capture: (input?: DesktopSnapshotCaptureOptions) => Promise<DesktopSnapshotCaptureResult>;
       };
       update: {
         check: () => Promise<unknown>;
@@ -6119,7 +6411,10 @@ declare global {
       tools: {
         list: () => Promise<Array<{ name: string; description: string; category: string }>>;
         getOverrides: () => Promise<Record<string, 'allow' | 'deny' | 'confirm'>>;
-        setOverride: (name: string, action: 'allow' | 'deny' | null) => Promise<{ ok: boolean; overrides?: Record<string, string> }>;
+        setOverride: (
+          name: string,
+          action: 'allow' | 'deny' | null
+        ) => Promise<{ ok: boolean; overrides?: Record<string, string> }>;
         hermesCatalog: {
           get: () => Promise<{
             generatedAt: string;
@@ -6186,9 +6481,7 @@ declare global {
           } | null>;
         };
         hermesToolsets: {
-          get: (options?: {
-            profile?: string;
-          }) => Promise<{
+          get: (options?: { profile?: string }) => Promise<{
             activeProfile: 'balanced' | 'research' | 'code' | 'review' | 'safe';
             activeToolset: {
               allowedTools: string[];
@@ -6387,9 +6680,7 @@ declare global {
             platform: string;
             recommendations: string[];
           } | null>;
-          smoke: (options: {
-            backendId: string;
-          }) => Promise<{
+          smoke: (options: { backendId: string }) => Promise<{
             error?: string;
             ok: boolean;
             result?: {
@@ -6473,9 +6764,7 @@ declare global {
           }>;
         };
         hermesMobileSupervision: {
-          get: (options?: {
-            query?: string;
-          }) => Promise<{
+          get: (options?: { query?: string }) => Promise<{
             approvalQueue: {
               autoDispatch: boolean;
               counts: {
@@ -6540,10 +6829,7 @@ declare global {
           } | null>;
         };
         hermesLearningLoop: {
-          get: (options?: {
-            cwd?: string;
-            limit?: number;
-          }) => Promise<{
+          get: (options?: { cwd?: string; limit?: number }) => Promise<{
             autoRetrospective: {
               enabled: boolean;
               envVar: 'CODEBUDDY_LEARNING_AGENT';
@@ -6680,11 +6966,7 @@ declare global {
               workDir: string;
             };
           }>;
-          runRetrospective: (options: {
-            cwd?: string;
-            force?: boolean;
-            runId: string;
-          }) => Promise<{
+          runRetrospective: (options: { cwd?: string; force?: boolean; runId: string }) => Promise<{
             error?: string;
             ok: boolean;
             result?: {
@@ -6704,10 +6986,7 @@ declare global {
           }>;
         };
         skillPackage: {
-          list: (options?: {
-            cwd?: string;
-            limit?: number;
-          }) => Promise<{
+          list: (options?: { cwd?: string; limit?: number }) => Promise<{
             cacheDir: string;
             disabledCount: number;
             enabledCount: number;
@@ -6920,26 +7199,25 @@ declare global {
           }>;
         };
         learningUsage: {
-          list: (options?: {
-            cwd?: string;
-            limit?: number;
-          }) => Promise<Array<{
-            averageDurationMs?: number;
-            deprecated: boolean;
-            failureCount: number;
-            invocationCount: number;
-            lastDurationMs?: number;
-            lastError?: string;
-            lastRunId?: string;
-            lastUsedAt: string;
-            nextAction: string;
-            recommendation: 'observe' | 'reinforce' | 'improve' | 'deprecate';
-            reinforced: boolean;
-            score: number;
-            scoreReason: string;
-            skillName: string;
-            successCount: number;
-          }>>;
+          list: (options?: { cwd?: string; limit?: number }) => Promise<
+            Array<{
+              averageDurationMs?: number;
+              deprecated: boolean;
+              failureCount: number;
+              invocationCount: number;
+              lastDurationMs?: number;
+              lastError?: string;
+              lastRunId?: string;
+              lastUsedAt: string;
+              nextAction: string;
+              recommendation: 'observe' | 'reinforce' | 'improve' | 'deprecate';
+              reinforced: boolean;
+              score: number;
+              scoreReason: string;
+              skillName: string;
+              successCount: number;
+            }>
+          >;
         };
         skillCandidate: {
           list: (options?: {
@@ -6947,33 +7225,39 @@ declare global {
             eligibleOnly?: boolean;
             limit?: number;
             skillRoot?: string;
-          }) => Promise<Array<{
-            candidateChecksum?: string;
-            candidateDiffPreview?: {
-              addedLines: number;
-              preview: string;
-              removedLines: number;
-              summary: string;
-              truncated: boolean;
-            };
-            eligible: boolean;
-            id: string;
-            installState?: 'not-installed' | 'installed-current' | 'installed-different' | 'installed-missing';
-            installedChecksum?: string;
-            installedIntegrityOk?: boolean;
-            installedPath?: string;
-            installedVersion?: string;
-            kind: string;
-            reason: string;
-            reviewCommands?: string[];
-            skillName: string;
-            skillPath: string;
-            sourceJobId: string;
-            sourceRunId?: string;
-            successfulRunCount: number;
-            title: string;
-            toolSequence?: string[];
-          }>>;
+          }) => Promise<
+            Array<{
+              candidateChecksum?: string;
+              candidateDiffPreview?: {
+                addedLines: number;
+                preview: string;
+                removedLines: number;
+                summary: string;
+                truncated: boolean;
+              };
+              eligible: boolean;
+              id: string;
+              installState?:
+                | 'not-installed'
+                | 'installed-current'
+                | 'installed-different'
+                | 'installed-missing';
+              installedChecksum?: string;
+              installedIntegrityOk?: boolean;
+              installedPath?: string;
+              installedVersion?: string;
+              kind: string;
+              reason: string;
+              reviewCommands?: string[];
+              skillName: string;
+              skillPath: string;
+              sourceJobId: string;
+              sourceRunId?: string;
+              successfulRunCount: number;
+              title: string;
+              toolSequence?: string[];
+            }>
+          >;
           install: (options: {
             approvedBy: string;
             candidatePath: string;
@@ -6992,7 +7276,11 @@ declare global {
               };
               eligible: boolean;
               id: string;
-              installState?: 'not-installed' | 'installed-current' | 'installed-different' | 'installed-missing';
+              installState?:
+                | 'not-installed'
+                | 'installed-current'
+                | 'installed-different'
+                | 'installed-missing';
               installedChecksum?: string;
               installedIntegrityOk?: boolean;
               installedPath?: string;
@@ -7055,17 +7343,20 @@ declare global {
             schemaVersion: 1;
             vaultDir: string;
           } | null>;
-          getConceptDetails: (options: {
-            conceptName: string;
-            cwd?: string;
-          }) => Promise<{
+          getConceptDetails: (options: { conceptName: string; cwd?: string }) => Promise<{
             concept: { id: string; label: string; weight: number };
             lessons: Array<{
               id: string;
               category: string;
               content: string;
               context?: string;
-              createdBy?: { runId?: string; outcomeId?: string; sagaId?: string; note?: string; at: number };
+              createdBy?: {
+                runId?: string;
+                outcomeId?: string;
+                sagaId?: string;
+                note?: string;
+                at: number;
+              };
               usedBy?: Array<{ runId: string; at: number }>;
             }>;
             backlinks: string[];
@@ -7116,10 +7407,7 @@ declare global {
         }>;
       };
       remoteBackend: {
-        connect: (
-          url: string,
-          token: string
-        ) => Promise<{ success: boolean; error?: string }>;
+        connect: (url: string, token: string) => Promise<{ success: boolean; error?: string }>;
         disconnect: () => Promise<{ success: boolean }>;
         status: () => Promise<{
           status: 'disconnected' | 'connecting' | 'connected' | 'error';
@@ -7260,10 +7548,7 @@ declare global {
           result?: string;
           error?: string;
         }>;
-        cancelTask: (
-          id: string,
-          taskId: string
-        ) => Promise<{ success: boolean; error?: string }>;
+        cancelTask: (id: string, taskId: string) => Promise<{ success: boolean; error?: string }>;
         listTasks: () => Promise<
           Array<{
             taskId: string;
@@ -7451,9 +7736,7 @@ declare global {
       };
       team: {
         getStatus: () => Promise<unknown>;
-        start: (
-          goal?: string
-        ) => Promise<{ success: boolean; leadId?: string; message: string }>;
+        start: (goal?: string) => Promise<{ success: boolean; leadId?: string; message: string }>;
         stop: () => Promise<{ success: boolean; message: string }>;
         addMember: (
           role: string,
@@ -7602,11 +7885,7 @@ declare global {
           }>
         >;
         getRunDetail: (runId: string) => Promise<unknown | null>;
-        searchRuns: (filter?: {
-          query?: string;
-          limit?: number;
-          sources?: string[];
-        }) => Promise<{
+        searchRuns: (filter?: { query?: string; limit?: number; sources?: string[] }) => Promise<{
           schemaVersion: 1;
           generatedAt: string;
           query: string;
@@ -8043,7 +8322,19 @@ declare global {
           handled?: boolean;
           action?: {
             type: 'open_schedule' | 'create_schedule' | 'ui_effect';
-            uiEffect?: 'open_model_picker' | 'run_orchestrator' | 'open_orchestrator_launcher' | 'open_fleet' | 'set_plan_mode' | 'open_lessons' | 'open_team' | 'open_companion' | 'open_spec' | 'open_settings' | 'open_panel' | 'engine_action';
+            uiEffect?:
+              | 'open_model_picker'
+              | 'run_orchestrator'
+              | 'open_orchestrator_launcher'
+              | 'open_fleet'
+              | 'set_plan_mode'
+              | 'open_lessons'
+              | 'open_team'
+              | 'open_companion'
+              | 'open_spec'
+              | 'open_settings'
+              | 'open_panel'
+              | 'engine_action';
             args?: string[];
             draft?: {
               prompt: string;
@@ -8213,7 +8504,13 @@ declare global {
         ) => Promise<{
           ok: boolean;
           error?: string;
-          task?: { id: string; title: string; status: string; priority: string; claimedBy?: string | null };
+          task?: {
+            id: string;
+            title: string;
+            status: string;
+            priority: string;
+            claimedBy?: string | null;
+          };
           dir?: string;
         }>;
         taskComplete: (
@@ -8223,7 +8520,13 @@ declare global {
         ) => Promise<{
           ok: boolean;
           error?: string;
-          task?: { id: string; title: string; status: string; priority: string; claimedBy?: string | null };
+          task?: {
+            id: string;
+            title: string;
+            status: string;
+            priority: string;
+            claimedBy?: string | null;
+          };
           dir?: string;
         }>;
         taskBlock: (
@@ -8233,7 +8536,13 @@ declare global {
         ) => Promise<{
           ok: boolean;
           error?: string;
-          task?: { id: string; title: string; status: string; priority: string; blockedReason?: string };
+          task?: {
+            id: string;
+            title: string;
+            status: string;
+            priority: string;
+            blockedReason?: string;
+          };
           dir?: string;
         }>;
         taskRelease: (
@@ -8242,7 +8551,13 @@ declare global {
         ) => Promise<{
           ok: boolean;
           error?: string;
-          task?: { id: string; title: string; status: string; priority: string; claimedBy?: string | null };
+          task?: {
+            id: string;
+            title: string;
+            status: string;
+            priority: string;
+            claimedBy?: string | null;
+          };
           dir?: string;
         }>;
         reclaimExpired: (
@@ -8258,7 +8573,9 @@ declare global {
       };
       backup: {
         list: () => Promise<{ ok: boolean; error?: string; output?: string }>;
-        create: (options?: { onlyConfig?: boolean }) => Promise<{ ok: boolean; error?: string; output?: string }>;
+        create: (options?: {
+          onlyConfig?: boolean;
+        }) => Promise<{ ok: boolean; error?: string; output?: string }>;
         verify: (file: string) => Promise<{ ok: boolean; error?: string; output?: string }>;
         restore: (file: string) => Promise<{ ok: boolean; error?: string; output?: string }>;
       };
@@ -8434,21 +8751,35 @@ declare global {
             lastActivity?: number;
             error?: string;
           }>;
-          catalog: Array<{ type: string; label: string; secretLabel: string; needsSecret: boolean; supportsWebhook: boolean }>;
+          catalog: Array<{
+            type: string;
+            label: string;
+            secretLabel: string;
+            needsSecret: boolean;
+            supportsWebhook: boolean;
+          }>;
         }>;
         setConfig: (
           type: string,
-          patch: { enabled?: boolean; webhookUrl?: string; allowedUsers?: string[]; allowedChannels?: string[] },
-          opts?: { configPath?: string },
+          patch: {
+            enabled?: boolean;
+            webhookUrl?: string;
+            allowedUsers?: string[];
+            allowedChannels?: string[];
+          },
+          opts?: { configPath?: string }
         ) => Promise<{ ok: boolean; error?: string }>;
         setEnabled: (
           type: string,
           enabled: boolean,
-          opts?: { configPath?: string },
+          opts?: { configPath?: string }
         ) => Promise<{ ok: boolean; error?: string }>;
         setSecret: (type: string, token: string) => Promise<{ ok: boolean; error?: string }>;
         deleteSecret: (type: string) => Promise<{ ok: boolean; error?: string }>;
-        removeChannel: (type: string, opts?: { configPath?: string }) => Promise<{ ok: boolean; error?: string }>;
+        removeChannel: (
+          type: string,
+          opts?: { configPath?: string }
+        ) => Promise<{ ok: boolean; error?: string }>;
       };
       pairing: {
         status: () => Promise<{
@@ -8488,31 +8819,70 @@ declare global {
         approve: (
           channelType: string,
           code: string,
-          approvedBy?: string,
-        ) => Promise<{ ok: boolean; error?: string; approved?: { channelType: string; senderId: string; approvedAt: string; approvedBy: string; displayName?: string } | null }>;
+          approvedBy?: string
+        ) => Promise<{
+          ok: boolean;
+          error?: string;
+          approved?: {
+            channelType: string;
+            senderId: string;
+            approvedAt: string;
+            approvedBy: string;
+            displayName?: string;
+          } | null;
+        }>;
         approveDirect: (
           channelType: string,
           senderId: string,
           approvedBy?: string,
-          displayName?: string,
-        ) => Promise<{ ok: boolean; error?: string; approved?: { channelType: string; senderId: string; approvedAt: string; approvedBy: string; displayName?: string } | null }>;
+          displayName?: string
+        ) => Promise<{
+          ok: boolean;
+          error?: string;
+          approved?: {
+            channelType: string;
+            senderId: string;
+            approvedAt: string;
+            approvedBy: string;
+            displayName?: string;
+          } | null;
+        }>;
         revoke: (
           channelType: string,
-          senderId: string,
+          senderId: string
         ) => Promise<{ ok: boolean; error?: string; revoked?: boolean }>;
       };
       identityFiles: {
         list: (projectId?: string) => Promise<{
           ok: boolean;
           error?: string;
-          items: Array<{ name: string; content: string; source: 'project' | 'global'; path: string; lastModified: number }>;
+          items: Array<{
+            name: string;
+            content: string;
+            source: 'project' | 'global';
+            path: string;
+            lastModified: number;
+          }>;
         }>;
-        get: (name: string, projectId?: string) => Promise<{
+        get: (
+          name: string,
+          projectId?: string
+        ) => Promise<{
           ok: boolean;
           error?: string;
-          file?: { name: string; content: string; source: 'project' | 'global'; path: string; lastModified: number } | null;
+          file?: {
+            name: string;
+            content: string;
+            source: 'project' | 'global';
+            path: string;
+            lastModified: number;
+          } | null;
         }>;
-        set: (name: string, content: string, projectId?: string) => Promise<{ ok: boolean; error?: string }>;
+        set: (
+          name: string,
+          content: string,
+          projectId?: string
+        ) => Promise<{ ok: boolean; error?: string }>;
       };
       mobileSupervision: {
         status: () => Promise<{
@@ -8538,7 +8908,12 @@ declare global {
       skillsHub: {
         list: (projectId?: string) => Promise<unknown[]>;
         listEnabled: (projectId?: string) => Promise<unknown[]>;
-        setEnabled: (name: string, enabled: boolean, projectId?: string, filePath?: string) => Promise<unknown>;
+        setEnabled: (
+          name: string,
+          enabled: boolean,
+          projectId?: string,
+          filePath?: string
+        ) => Promise<unknown>;
       };
       memoryProvider: {
         list: () => Promise<string[]>;

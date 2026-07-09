@@ -68,7 +68,12 @@ interface CoreAssistantConfigModule {
   restartAssistantServices?: (
     services: Array<'buddy-vision-brain' | 'lisa-telegram'>
   ) => Promise<AssistantRestartServiceResult[]>;
+  getSystemVolume?: () => Promise<number | null>;
+  setSystemVolume?: (percent: number) => Promise<boolean>;
 }
+
+export type AssistantVolumeResponse = { volume: number | null } | AssistantErrorResponse;
+export type AssistantSetVolumeResponse = { ok: true; volume: number } | AssistantErrorResponse;
 
 type CoreLoader = () => Promise<CoreAssistantConfigModule | null>;
 
@@ -159,6 +164,28 @@ export class AssistantService {
       }
 
       return mod.previewVoice(voiceName);
+    } catch (err) {
+      return unavailable(errorMessage(err));
+    }
+  }
+
+  async getVolume(): Promise<AssistantVolumeResponse> {
+    try {
+      const mod = await this.module();
+      if (!mod?.getSystemVolume) return unavailable('module assistant indisponible (volume)');
+      return { volume: await mod.getSystemVolume() };
+    } catch (err) {
+      return unavailable(errorMessage(err));
+    }
+  }
+
+  async setVolume(percent: number): Promise<AssistantSetVolumeResponse> {
+    try {
+      const pct = Math.max(0, Math.min(150, Math.round(Number(percent) || 0)));
+      const mod = await this.module();
+      if (!mod?.setSystemVolume) return unavailable('module assistant indisponible (volume)');
+      const ok = await mod.setSystemVolume(pct);
+      return ok ? { ok: true, volume: pct } : unavailable('réglage du volume impossible');
     } catch (err) {
       return unavailable(errorMessage(err));
     }

@@ -158,12 +158,12 @@ export function AssistantView() {
   const [values, setValues] = useState<Record<string, string>>({});
   const [initialValues, setInitialValues] = useState<Record<string, string>>({});
   const [voices, setVoices] = useState<string[]>([]);
-  const [audioPath, setAudioPath] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [applying, setApplying] = useState(false);
   const [previewing, setPreviewing] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [volume, setVolume] = useState<number | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -189,6 +189,17 @@ export function AssistantView() {
         setInitialValues(loadedValues);
         setVoices(result.voices ?? []);
         if (isAssistantError(result)) setError(result.error);
+        // Pre-warm the active voice's preview so the first « Écouter » is instant
+        // (cache-gated in the core → no re-synthesis if already cached). Fire-and-forget.
+        const activeVoice = (loadedValues.CODEBUDDY_POCKET_VOICE ?? '').trim();
+        if (activeVoice) void assistant.preview(activeVoice).catch(() => undefined);
+        // Load the current system output volume for the slider (best-effort).
+        try {
+          const vol = await assistant.getVolume();
+          if (!cancelled && !isAssistantError(vol)) setVolume(vol.volume);
+        } catch {
+          /* volume unavailable — hide the slider */
+        }
       } catch (err) {
         if (!cancelled) setError(err instanceof Error ? err.message : String(err));
       } finally {
@@ -249,13 +260,21 @@ export function AssistantView() {
       const result = await assistant.preview(voice);
       if (isAssistantError(result)) throw new Error(result.error);
       if (!result) throw new Error('Aperçu vocal indisponible.');
-      setAudioPath(result);
-      setNotice('Aperçu vocal lancé.');
+      // Play via a user-gesture-initiated Audio() so the autoplay policy never blocks it.
+      const audio = new Audio(fileUrl(result));
+      void audio.play().catch(() => setError("Impossible de jouer l'aperçu (audio)."));
+      setNotice(`Aperçu de « ${voice} » lancé.`);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setPreviewing(null);
     }
+  };
+
+  const changeVolume = (pct: number): void => {
+    setVolume(pct);
+    const assistant = window.electronAPI?.assistant;
+    if (assistant?.setVolume) void assistant.setVolume(pct).catch(() => undefined);
   };
 
   const applyChanges = async (): Promise<void> => {
@@ -440,6 +459,29 @@ export function AssistantView() {
               </button>
             </div>
 
+            {volume !== null && (
+              <section className="rounded-lg border border-border bg-surface p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <h2 className="text-sm font-semibold">Volume</h2>
+                    <p className="text-xs text-muted-foreground">
+                      Niveau sonore des enceintes (appliqué en direct).
+                    </p>
+                  </div>
+                  <span className="text-sm tabular-nums text-muted-foreground">{volume}%</span>
+                </div>
+                <input
+                  type="range"
+                  min={0}
+                  max={100}
+                  value={Math.min(100, volume)}
+                  data-testid="assistant-volume"
+                  onChange={(event) => changeVolume(Number(event.target.value))}
+                  className="mt-3 w-full accent-primary"
+                />
+              </section>
+            )}
+
             {groupedSettings.map(({ group, items }) => {
               const meta = GROUP_META[group];
               const Icon = meta.icon;
@@ -478,8 +520,6 @@ export function AssistantView() {
             })}
           </>
         )}
-
-        {audioPath && <audio key={audioPath} src={fileUrl(audioPath)} autoPlay />}
 
         {!loading && settings.length === 0 && (
           <div className="rounded-lg border border-dashed border-border bg-surface p-6 text-center text-sm text-muted-foreground">
