@@ -22,6 +22,8 @@ const UA =
 export interface StockQuoteToolOptions {
   /** Yahoo chart API base (default `https://query1.finance.yahoo.com`). */
   yahooBaseUrl?: string;
+  /** Nasdaq API base (default `https://api.nasdaq.com`). */
+  nasdaqBaseUrl?: string;
   /** Stooq base (default `https://stooq.com`). */
   stooqBaseUrl?: string;
   /** Finnhub base (default `https://finnhub.io`). */
@@ -114,6 +116,56 @@ export function parseYahooQuote(raw: unknown, symbolInput: string): StockWidgetD
   };
 }
 
+/** Parse a "$1,234.50"/"−0.26%"/"48,100,162" US-formatted string. null if unusable. */
+function usNum(v: unknown): number | null {
+  if (typeof v === 'number' && Number.isFinite(v)) return v;
+  if (typeof v !== 'string') return null;
+  const t = v.replace(/[$%\s]/g, '').replace(/,/g, '');
+  if (!t || /^n\/?a$/i.test(t)) return null;
+  const n = Number(t);
+  return Number.isFinite(n) ? n : null;
+}
+
+/** Parse a Nasdaq `/api/quote/<sym>/info` response. Pure. null if unusable. */
+export function parseNasdaqQuote(raw: unknown, symbolInput: string): StockWidgetData | null {
+  const d = (raw as { data?: Record<string, unknown> })?.data;
+  const pd = d?.primaryData as Record<string, unknown> | undefined;
+  const price = usNum(pd?.lastSalePrice);
+  if (!d || price == null) return null;
+  const change = usNum(pd?.netChange);
+  const changePercent = usNum(pd?.percentageChange);
+  const volume = usNum(pd?.volume);
+  const previousClose = change != null ? round(price - change) : undefined;
+  // keyStats.dayrange.value is "low - high".
+  let high: number | undefined;
+  let low: number | undefined;
+  const dr = (d.keyStats as { dayrange?: { value?: unknown } } | undefined)?.dayrange?.value;
+  if (typeof dr === 'string') {
+    const parts = dr.split('-').map((x) => usNum(x));
+    if (parts.length === 2 && parts[0] != null && parts[1] != null) {
+      low = parts[0];
+      high = parts[1];
+    }
+  }
+  const rawName = typeof d.companyName === 'string' ? d.companyName : '';
+  const name = rawName.replace(/\s+(Common Stock|Common Shares|Ordinary Shares|Class [A-Z] Common Stock).*$/i, '').trim();
+  const currency = (typeof pd?.currency === 'string' && pd.currency) || 'USD';
+  return {
+    type: 'stock',
+    symbol: typeof d.symbol === 'string' ? d.symbol : symbolInput.toUpperCase(),
+    name: name || (typeof d.symbol === 'string' ? d.symbol : symbolInput.toUpperCase()),
+    price,
+    ...(change != null ? { change } : {}),
+    ...(changePercent != null ? { changePercent } : {}),
+    currency,
+    ...(high != null ? { high } : {}),
+    ...(low != null ? { low } : {}),
+    ...(previousClose != null ? { previousClose } : {}),
+    ...(volume != null ? { volume } : {}),
+    ...(typeof d.exchange === 'string' ? { market: d.exchange } : {}),
+  };
+}
+
 /** Parse a Finnhub `/quote` (+ optional `/stock/profile2`) response. Pure. null if unusable. */
 export function parseFinnhubQuote(quote: unknown, profile: unknown, symbolInput: string): StockWidgetData | null {
   const q = (quote ?? {}) as Record<string, unknown>;
@@ -190,6 +242,7 @@ export function formatQuoteSummary(d: StockWidgetData): string {
 
 export class StockQuoteTool {
   private readonly yahooBaseUrl: string;
+  private readonly nasdaqBaseUrl: string;
   private readonly stooqBaseUrl: string;
   private readonly finnhubBaseUrl: string;
   private readonly finnhubKey: string | undefined;
@@ -198,6 +251,7 @@ export class StockQuoteTool {
   constructor(options: StockQuoteToolOptions = {}) {
     this.yahooBaseUrl =
       options.yahooBaseUrl ?? process.env.CODEBUDDY_YAHOO_FINANCE_BASE ?? 'https://query1.finance.yahoo.com';
+    this.nasdaqBaseUrl = options.nasdaqBaseUrl ?? process.env.CODEBUDDY_NASDAQ_BASE ?? 'https://api.nasdaq.com';
     this.stooqBaseUrl = options.stooqBaseUrl ?? process.env.CODEBUDDY_STOOQ_BASE ?? 'https://stooq.com';
     this.finnhubBaseUrl = options.finnhubBaseUrl ?? process.env.CODEBUDDY_FINNHUB_BASE ?? 'https://finnhub.io';
     this.finnhubKey = options.finnhubKey ?? process.env.FINNHUB_API_KEY ?? undefined;
@@ -247,7 +301,23 @@ export class StockQuoteTool {
       const data = parseYahooQuote(resp.data, s);
       if (data) return { success: true, output: formatQuoteSummary(data), data };
     } catch {
-      /* fall through to Stooq */
+      /* fall through to Nasdaq */
+    }
+
+    // Fallback ($0, works from datacenter IPs where Yahoo/Stooq block): Nasdaq API.
+    // US symbols only (no `.`/`^` suffix), rich enough (price, change, day range, volume).
+    if (!/[.^]/.test(s)) {
+      try {
+        const url = `${this.nasdaqBaseUrl}/api/quote/${encodeURIComponent(s.toUpperCase())}/info?assetclass=stocks`;
+        const resp = await axios.get(url, {
+          timeout: this.timeoutMs,
+          headers: { 'User-Agent': UA, Accept: 'application/json', 'Accept-Language': 'en-US,en;q=0.9' },
+        });
+        const data = parseNasdaqQuote(resp.data, s);
+        if (data) return { success: true, output: formatQuoteSummary(data), data };
+      } catch {
+        /* fall through to Stooq */
+      }
     }
 
     // Fallback: Stooq CSV (basic OHLCV, no change).

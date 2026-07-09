@@ -2,7 +2,13 @@
  * Stock quote tool — pure parsers (Yahoo chart JSON, Stooq CSV) + French summary.
  * No network: tests run against captured payload shapes.
  */
-import { parseYahooQuote, parseStooqCsv, parseFinnhubQuote, formatQuoteSummary } from '../../src/tools/stock-quote.js';
+import {
+  parseYahooQuote,
+  parseStooqCsv,
+  parseFinnhubQuote,
+  parseNasdaqQuote,
+  formatQuoteSummary,
+} from '../../src/tools/stock-quote.js';
 
 const yahooEquity = {
   chart: {
@@ -144,6 +150,46 @@ describe('parseFinnhubQuote', () => {
   it('returns null for an unknown symbol (Finnhub c:0)', () => {
     expect(parseFinnhubQuote({ c: 0 }, null, 'nope')).toBeNull();
     expect(parseFinnhubQuote({}, null, 'x')).toBeNull();
+  });
+});
+
+describe('parseNasdaqQuote', () => {
+  // Real Nasdaq /info shape (US-formatted strings: "$", "%", thousands ",").
+  const nasdaq = {
+    data: {
+      symbol: 'AAPL',
+      companyName: 'Apple Inc. Common Stock',
+      exchange: 'NASDAQ-GS',
+      primaryData: {
+        lastSalePrice: '$315.39',
+        netChange: '-0.83',
+        percentageChange: '-0.26%',
+        volume: '48,100,162.20',
+        currency: null,
+      },
+      keyStats: { dayrange: { label: 'High/Low:', value: '308.16 - 316.53' } },
+    },
+  };
+
+  it('parses US-formatted values, derives previous close, trims the name', () => {
+    const d = parseNasdaqQuote(nasdaq, 'aapl')!;
+    expect(d.type).toBe('stock');
+    expect(d.symbol).toBe('AAPL');
+    expect(d.name).toBe('Apple Inc.'); // " Common Stock" trimmed
+    expect(d.price).toBe(315.39);
+    expect(d.change).toBe(-0.83);
+    expect(d.changePercent).toBe(-0.26);
+    expect(d.currency).toBe('USD'); // null → USD default
+    expect(d.low).toBe(308.16);
+    expect(d.high).toBe(316.53);
+    expect(d.previousClose).toBe(316.22); // price - change = 315.39 - (-0.83)
+    expect(d.volume).toBe(48100162.2);
+    expect(d.market).toBe('NASDAQ-GS');
+  });
+
+  it('returns null without a price', () => {
+    expect(parseNasdaqQuote({ data: { primaryData: {} } }, 'x')).toBeNull();
+    expect(parseNasdaqQuote({}, 'x')).toBeNull();
   });
 });
 
