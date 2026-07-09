@@ -43,13 +43,3 @@ export function widgetKind(data: unknown): string | null {
   const t = (data as { type?: unknown })?.type;
   return typeof t === 'string' && t.trim() ? t.trim() : null;
 }
-
-export interface WidgetSpec {
-  /** Unique name: `curated-<kind>` or `authored-<kind>`. */
-  name: string;
-  /** The data `type` this widget renders (weather, news, …). */
-  kind: string;
-  /** Self-contained body fragment (HTML + scoped <style> + <script> reading __WIDGET_DATA__). */
-  html: string;
-  source: 'curated' | 'authored';
-}

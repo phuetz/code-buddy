@@ -2383,6 +2383,10 @@ Tool routing:
                 typeof event.result === 'string'
                   ? event.result
                   : JSON.stringify(event.result || '');
+              const resultData =
+                typeof event.result === 'object' && event.result !== null && 'data' in event.result
+                  ? (event.result as { data?: unknown }).data
+                  : undefined;
               this.sendTraceUpdate(session.id, toolCallId, {
                 status: isError ? 'error' : 'completed',
                 toolName: event.toolName,
@@ -2400,6 +2404,7 @@ Tool routing:
                     toolUseId: toolCallId,
                     content: sanitizeOutputPaths(outputText),
                     isError,
+                    ...(resultData !== undefined ? { data: resultData } : {}),
                   },
                 ],
                 timestamp: Date.now(),

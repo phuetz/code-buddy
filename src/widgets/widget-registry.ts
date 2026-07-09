@@ -1,24 +1,27 @@
 /**
- * Widget registry — resolves the widget for a given data `kind` and renders it
- * into a self-contained sandboxed HTML document with the data injected.
+ * Widget registry — resolves the renderer for a data `kind` and produces a
+ * self-contained HTML document, SERVER-SIDE (data interpolated into static
+ * HTML+CSS, no client script). This is CSP-proof: srcdoc iframes inherit the
+ * host CSP, so an inline-`<script>` widget renders blank in Cowork/Electron.
  *
- * Curated widgets ship in-repo (weather, news). Authored widgets (generated on
- * the fly, Phase 2) live under ~/.codebuddy/widgets/<name>/widget.html and are
- * loaded lazily — but curated ALWAYS wins for a kind it covers (authored only
- * fills gaps, and can't shadow a curated one). never-throws.
+ * Curated widgets are pure render functions in-repo (weather, news). Authored
+ * widgets (generated on the fly, Phase 2) live under
+ * ~/.codebuddy/widgets/<name>/widget.html as a static fragment — but curated
+ * ALWAYS wins for a kind it covers. never-throws.
  *
  * @module widgets/widget-registry
  */
 import { existsSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import { WEATHER_WIDGET_HTML } from './curated/weather.js';
-import { NEWS_WIDGET_HTML } from './curated/news.js';
-import { widgetKind, type WidgetSpec } from './widget-types.js';
+import { renderWeatherWidget } from './curated/weather.js';
+import { renderNewsWidget } from './curated/news.js';
+import { widgetKind } from './widget-types.js';
 
-const CURATED: Record<string, string> = {
-  weather: WEATHER_WIDGET_HTML,
-  news: NEWS_WIDGET_HTML,
+/** Curated server-side renderers: data → self-contained HTML fragment (no script). */
+const CURATED: Record<string, (data: unknown) => string> = {
+  weather: renderWeatherWidget,
+  news: renderNewsWidget,
 };
 
 /** Root dir for authored widgets (env-overridable). */
@@ -26,63 +29,66 @@ export function authoredWidgetsDir(env: NodeJS.ProcessEnv = process.env): string
   return env.CODEBUDDY_WIDGETS_DIR?.trim() || join(homedir(), '.codebuddy', 'widgets');
 }
 
-/** Resolve the widget for a kind: curated first, else an authored one if present. never-throws. */
-export function resolveWidget(
+/** Which source (if any) can render this kind: curated wins over authored. */
+export function resolveWidgetSource(
   kind: string,
   env: NodeJS.ProcessEnv = process.env
-): WidgetSpec | null {
+): 'curated' | 'authored' | null {
   const k = (kind ?? '').trim().toLowerCase();
   if (!k) return null;
-  if (CURATED[k]) return { name: `curated-${k}`, kind: k, html: CURATED[k]!, source: 'curated' };
+  if (CURATED[k]) return 'curated';
   try {
-    const p = join(authoredWidgetsDir(env), `authored-${k}`, 'widget.html');
-    if (existsSync(p)) {
-      const html = readFileSync(p, 'utf8');
-      if (html.trim()) return { name: `authored-${k}`, kind: k, html, source: 'authored' };
-    }
+    if (existsSync(join(authoredWidgetsDir(env), `authored-${k}`, 'widget.html'))) return 'authored';
   } catch {
-    /* no authored widget — fine */
+    /* none */
   }
   return null;
 }
 
-/** JSON safe to inline inside a <script> tag (prevents a </script> breakout). */
-function safeJson(value: unknown): string {
-  return JSON.stringify(value ?? {})
-    .replace(/</g, '\\u003c')
-    .replace(/>/g, '\\u003e');
+/** Server-render the widget FRAGMENT for a data payload (curated fn, else authored static). */
+export function renderWidgetFragment(data: unknown, env: NodeJS.ProcessEnv = process.env): string | null {
+  const kind = widgetKind(data)?.toLowerCase();
+  if (!kind) return null;
+  const curated = CURATED[kind];
+  if (curated) {
+    try {
+      const frag = curated(data);
+      return frag && frag.trim() ? frag : null;
+    } catch {
+      return null;
+    }
+  }
+  try {
+    const p = join(authoredWidgetsDir(env), `authored-${kind}`, 'widget.html');
+    if (existsSync(p)) {
+      const html = readFileSync(p, 'utf8');
+      if (html.trim()) return html;
+    }
+  } catch {
+    /* none */
+  }
+  return null;
 }
 
 const BASE_CSS = `*{box-sizing:border-box}html,body{margin:0;padding:0;background:transparent}body{padding:2px}`;
 
-/**
- * Wrap a widget fragment + its data into a complete, self-contained HTML document
- * (the data script runs BEFORE the widget's own script). Pure.
- */
-export function renderWidgetDocument(spec: WidgetSpec, data: unknown): string {
+/** Wrap a rendered fragment into a complete, self-contained HTML document (no script). Pure. */
+export function renderWidgetDocument(fragment: string): string {
   return (
     '<!doctype html><html><head><meta charset="utf-8">' +
     '<meta name="viewport" content="width=device-width,initial-scale=1">' +
-    `<style>${BASE_CSS}</style></head><body>` +
-    `<script>window.__WIDGET_DATA__=${safeJson(data)};</script>` +
-    spec.html +
-    '</body></html>'
+    `<style>${BASE_CSS}</style></head><body>${fragment}</body></html>`
   );
 }
 
-/** Convenience: resolve + render for a tool's `data` payload. null when no widget fits. */
-export function renderWidgetForData(
-  data: unknown,
-  env: NodeJS.ProcessEnv = process.env
-): string | null {
-  const kind = widgetKind(data);
-  if (!kind) return null;
-  const spec = resolveWidget(kind, env);
-  return spec ? renderWidgetDocument(spec, data) : null;
+/** Resolve + server-render for a tool's `data` payload → a full HTML doc, or null. */
+export function renderWidgetForData(data: unknown, env: NodeJS.ProcessEnv = process.env): string | null {
+  const fragment = renderWidgetFragment(data, env);
+  return fragment ? renderWidgetDocument(fragment) : null;
 }
 
 /** True when SOME widget (curated or authored) can render this data. */
 export function hasWidgetForData(data: unknown, env: NodeJS.ProcessEnv = process.env): boolean {
   const kind = widgetKind(data);
-  return !!kind && resolveWidget(kind, env) !== null;
+  return !!kind && resolveWidgetSource(kind, env) !== null;
 }

@@ -4,6 +4,7 @@ import { ChevronDown, ChevronRight, XCircle, CheckCircle2 } from 'lucide-react';
 import { useAppStore } from '../../store';
 import { shouldUseScreenshotSummary } from '../../utils/tool-result-summary';
 import type { ToolResultContent, ContentBlock, ToolUseContent, Message } from '../../types';
+import { WidgetBlock } from '../widgets/WidgetBlock';
 
 // Only allow safe image MIME types for data: URI rendering
 const ALLOWED_IMAGE_TYPES = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/webp']);
@@ -73,6 +74,7 @@ export const ToolResultBlock = memo(function ToolResultBlock({
   };
 
   const hasImages = block.images && block.images.length > 0;
+  const widgetData = !block.isError ? block.data : undefined;
 
   return (
     <div
@@ -106,6 +108,8 @@ export const ToolResultBlock = memo(function ToolResultBlock({
           <ChevronRight className="w-3.5 h-3.5 text-text-muted flex-shrink-0" />
         )}
       </button>
+
+      {widgetData !== undefined && <WidgetBlock data={widgetData} className="mb-2 mt-2" />}
 
       {expanded && (
         <div className="border-t border-border/50 px-3 py-2 animate-fade-in">

@@ -839,6 +839,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.invoke('assistant.setVolume', percent),
   },
 
+  widgets: {
+    render: (data: unknown): Promise<string | null> => ipcRenderer.invoke('widgets.render', data),
+  },
+
   // App Studio (bolt.diy-style file tree + editor + terminal + live preview).
   // Channels mirror the main-process register*Ipc handlers under
   // src/main/studio/*. Note: the file listing handler is `studio.files.tree`.
@@ -4927,6 +4931,9 @@ declare global {
         restart: () => Promise<AssistantRestartResponse>;
         getVolume: () => Promise<AssistantVolumeResponse>;
         setVolume: (percent: number) => Promise<AssistantSetVolumeResponse>;
+      };
+      widgets: {
+        render: (data: unknown) => Promise<string | null>;
       };
       selectFiles: () => Promise<string[]>;
       artifacts: {

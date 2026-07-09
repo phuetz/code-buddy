@@ -9,6 +9,7 @@ import { TodoWriteBlock } from './TodoWriteBlock';
 import { getToolIcon, getToolLabel } from './toolHelpers';
 import { TerminalOutput } from './TerminalOutput';
 import { DiffViewer } from '../DiffViewer';
+import { WidgetBlock } from '../widgets/WidgetBlock';
 
 const EDIT_TOOLS = new Set(['write', 'edit', 'str_replace_editor', 'create_file', 'write_file', 'edit_file', 'apply_patch']);
 const BASH_TOOLS = new Set(['bash', 'execute_command', 'shell_exec', 'run_command']);
@@ -69,7 +70,8 @@ export const ToolUseBlock = memo(function ToolUseBlock({
   const hasActiveTurn = Boolean(activeTurn);
   const isRunning = !toolResult && hasActiveTurn;
   const isError = toolResult?.isError === true;
-  const isSuccess = toolResult && !isError;
+  const isSuccess = Boolean(toolResult && !isError);
+  const widgetData = toolResult && !isError ? toolResult.data : undefined;
 
   // Live output while running — tool_stream deltas accumulated on the trace
   // step by the store. The card streams instead of hiding behind the spinner.
@@ -177,6 +179,8 @@ export const ToolUseBlock = memo(function ToolUseBlock({
           <ChevronRight className="w-3.5 h-3.5 text-text-muted flex-shrink-0" />
         )}
       </button>
+
+      {widgetData !== undefined && <WidgetBlock data={widgetData} className="mb-2 mt-2" />}
 
       {/* Expanded content */}
       {expanded && (

@@ -274,6 +274,7 @@ export class CodeBuddyEngineRunner {
                   toolUseId: event.tool.id,
                   content: event.tool.output || '',
                   isError: event.tool.isError,
+                  ...(event.tool.data !== undefined ? { data: event.tool.data } : {}),
                 } as ToolResultContent);
 
                 // Phase 2 step 13: emit gui.action events for Computer Use overlay.

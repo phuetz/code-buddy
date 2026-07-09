@@ -157,6 +157,7 @@ import { registerSessionInsightsIpcHandlers } from './ipc/session-insights-ipc';
 import { registerPluginsIpcHandlers } from './ipc/plugins-ipc';
 import { registerTestRunnerIpcHandlers } from './ipc/test-runner-ipc';
 import { registerMemoryIpcHandlers } from './ipc/memory-ipc';
+import { registerWidgetsIpcHandlers } from './ipc/widgets-ipc';
 import { ConfigExportService } from './config/config-export-service';
 import { KnowledgeService } from './knowledge/knowledge-service';
 import { NotificationBridge } from './notification/notification-bridge';
@@ -2550,6 +2551,9 @@ registerFilmIpc(ipcMain, new FilmService(undefined, join(app.getPath('userData')
 
 // Assistant: voice assistant config + daemon lifecycle (core companion/assistant-config).
 registerAssistantIpc(ipcMain, new AssistantService());
+
+// Tool result widgets: render core-provided self-contained HTML in the main process.
+registerWidgetsIpcHandlers();
 
 // ── .codebuddy/ backups (same core handler as `buddy backup`) ────────────
 registerBackupIpcHandlers();

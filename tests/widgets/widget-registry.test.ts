@@ -1,12 +1,14 @@
 /**
  * Widget registry — curated resolution, authored fallback (curated wins), and
- * safe data injection. Pure/isolated (temp authored dir).
+ * SERVER-SIDE rendering (data interpolated into static HTML, no client script —
+ * CSP-proof for inline srcdoc iframes). Pure/isolated (temp authored dir).
  */
 import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
-  resolveWidget,
+  resolveWidgetSource,
+  renderWidgetFragment,
   renderWidgetDocument,
   renderWidgetForData,
   hasWidgetForData,
@@ -21,15 +23,15 @@ const sampleWeather: WeatherWidgetData = {
   units: 'metric',
 };
 
-describe('resolveWidget', () => {
-  it('returns curated widgets for weather and news', () => {
-    expect(resolveWidget('weather')?.source).toBe('curated');
-    expect(resolveWidget('news')?.name).toBe('curated-news');
-    expect(resolveWidget('WEATHER')?.kind).toBe('weather'); // case-insensitive
+describe('resolveWidgetSource', () => {
+  it('returns curated for weather and news (case-insensitive)', () => {
+    expect(resolveWidgetSource('weather')).toBe('curated');
+    expect(resolveWidgetSource('news')).toBe('curated');
+    expect(resolveWidgetSource('WEATHER')).toBe('curated');
   });
 
   it('returns null for an unknown kind with no authored widget', () => {
-    expect(resolveWidget('stock', {} as NodeJS.ProcessEnv)).toBeNull();
+    expect(resolveWidgetSource('stock', {} as NodeJS.ProcessEnv)).toBeNull();
   });
 
   it('falls back to an authored widget for a NEW kind, but curated wins', () => {
@@ -38,31 +40,54 @@ describe('resolveWidget', () => {
     // Authored widget for a novel kind 'stock'.
     mkdirSync(join(dir, 'authored-stock'), { recursive: true });
     writeFileSync(join(dir, 'authored-stock', 'widget.html'), '<div>stock</div>');
-    expect(resolveWidget('stock', env)?.source).toBe('authored');
+    expect(resolveWidgetSource('stock', env)).toBe('authored');
     // An authored 'weather' must NOT shadow the curated one.
     mkdirSync(join(dir, 'authored-weather'), { recursive: true });
     writeFileSync(join(dir, 'authored-weather', 'widget.html'), '<div>evil</div>');
-    expect(resolveWidget('weather', env)?.source).toBe('curated');
+    expect(resolveWidgetSource('weather', env)).toBe('curated');
   });
 });
 
-describe('renderWidgetDocument + data injection', () => {
-  it('produces a self-contained doc with the data injected and no </script> breakout', () => {
-    const spec = resolveWidget('weather')!;
-    const doc = renderWidgetDocument(spec, { type: 'weather', location: '</script><b>x' });
+describe('server-side rendering (no client script)', () => {
+  it('renderWidgetForData interpolates the real data, wraps a full doc, and injects NO script', () => {
+    const doc = renderWidgetForData(sampleWeather)!;
     expect(doc).toContain('<!doctype html>');
-    expect(doc).toContain('window.__WIDGET_DATA__=');
-    // The injected JSON must not contain a raw closing script tag.
-    expect(doc).not.toContain('</script><b>x'); // escaped to <
-    expect(doc).toContain('\\u003c/script');
+    expect(doc).toContain('Paris'); // location interpolated directly into the HTML
+    expect(doc).toContain('22°C'); // temperature rendered server-side
+    expect(doc).not.toContain('window.__WIDGET_DATA__'); // no client-side data script
+    expect(doc).not.toMatch(/<script/i); // CSP-proof: zero <script>
   });
 
-  it('renderWidgetForData resolves + renders, null for an unrecognized payload', () => {
-    const doc = renderWidgetForData(sampleWeather);
-    expect(doc).toContain('Paris'); // location travels in the injected JSON payload
-    expect(doc).toContain('window.__WIDGET_DATA__');
+  it('escapes injected values so they cannot break out of the markup', () => {
+    const doc = renderWidgetForData({ type: 'weather', location: '</div><b>x', current: {} })!;
+    expect(doc).not.toContain('</div><b>x'); // '<' and '>' are HTML-escaped
+    expect(doc).toContain('&lt;'); // proof of escaping
+  });
+
+  it('renderWidgetFragment returns null for an unrecognized payload', () => {
+    expect(renderWidgetFragment({ nope: true })).toBeNull();
+    expect(renderWidgetFragment('not an object')).toBeNull();
+  });
+
+  it('renderWidgetForData returns null for an unrecognized payload', () => {
     expect(renderWidgetForData({ nope: true })).toBeNull();
-    expect(renderWidgetForData('not an object')).toBeNull();
+  });
+
+  it('renders a news payload server-side with the item titles inline', () => {
+    const doc = renderWidgetForData({
+      type: 'news',
+      title: 'À la une',
+      items: [{ title: 'Titre A', source: 'Le Monde' }],
+    })!;
+    expect(doc).toContain('À la une');
+    expect(doc).toContain('Titre A');
+    expect(doc).not.toMatch(/<script/i);
+  });
+
+  it('renderWidgetDocument wraps a fragment into a self-contained doc', () => {
+    const doc = renderWidgetDocument('<div>hi</div>');
+    expect(doc).toContain('<!doctype html>');
+    expect(doc).toContain('<div>hi</div>');
   });
 });
 

@@ -3,6 +3,7 @@ import { Activity, ChevronDown, ChevronRight } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { ContentBlock, Message, ToolResultContent } from '../../types';
 import { ContentBlockView } from './ContentBlockView';
+import { WidgetBlock } from '../widgets/WidgetBlock';
 
 interface ActivityGroupBlockProps {
   blocks: ContentBlock[];
@@ -18,6 +19,32 @@ export const ActivityGroupBlock = memo(function ActivityGroupBlock({
   isStreaming,
 }: ActivityGroupBlockProps) {
   const { t } = useTranslation();
+  const widgetCandidates = useMemo(() => {
+    const candidates: Array<{ id: string; data: unknown }> = [];
+    const seen = new Set<string>();
+    const pushResult = (result: ToolResultContent) => {
+      if (result.isError || result.data === undefined || seen.has(result.toolUseId)) return;
+      seen.add(result.toolUseId);
+      candidates.push({ id: result.toolUseId, data: result.data });
+    };
+
+    for (const block of blocks) {
+      if (block.type === 'tool_result') {
+        pushResult(block as ToolResultContent);
+      }
+      if (block.type === 'tool_use') {
+        const toolUseId = (block as { id?: unknown }).id;
+        if (typeof toolUseId !== 'string') continue;
+        const result = allBlocks.find(
+          (candidate) =>
+            candidate.type === 'tool_result' &&
+            (candidate as ToolResultContent).toolUseId === toolUseId
+        ) as ToolResultContent | undefined;
+        if (result) pushResult(result);
+      }
+    }
+    return candidates;
+  }, [allBlocks, blocks]);
   const [expanded, setExpanded] = useState(isStreaming === true);
   const { toolCount, thinkingCount, errorCount } = useMemo(() => {
     let tools = 0;
@@ -59,6 +86,15 @@ export const ActivityGroupBlock = memo(function ActivityGroupBlock({
           <ChevronRight className="w-3.5 h-3.5 text-text-muted shrink-0" />
         )}
       </button>
+      {!expanded
+        ? widgetCandidates.map((candidate) => (
+            <WidgetBlock
+              key={candidate.id}
+              data={candidate.data}
+              className="mb-2 mt-2"
+            />
+          ))
+        : null}
       {expanded ? (
         <div className="space-y-1.5 border-t border-border/50 px-2.5 py-2">
           {blocks.map((block, index) => (

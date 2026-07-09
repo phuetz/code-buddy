@@ -1168,6 +1168,7 @@ export interface ToolResultContent {
   toolUseId: string;
   content: string;
   isError?: boolean;
+  data?: unknown;
   images?: Array<{
     data: string;          // base64 encoded image data
     mimeType: string;      // e.g., 'image/png'
