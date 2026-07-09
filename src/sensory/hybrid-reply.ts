@@ -25,6 +25,16 @@ import type { ReplyFn, VoiceStepOptions } from './voice-loop.js';
 import type { PermissionMode } from '../security/permission-modes.js';
 import { matchPrefetched, loadPrefetchCache } from '../companion/prefetch-engine.js';
 import { loadPrefetchItems } from '../companion/prefetch-config.js';
+import { isJokeRequest, nextJoke } from '../companion/jokes.js';
+
+/** Instant joke when the user asks for one (no LLM, no agent). null otherwise. */
+function defaultJokeMatch(heard: string): string | null {
+  try {
+    return isJokeRequest(heard) ? nextJoke() : null;
+  } catch {
+    return null;
+  }
+}
 
 /**
  * Instant answer for a common question from the prefetch cache (weather, news,
@@ -71,6 +81,8 @@ export interface HybridReplyOptions {
   /** Injectable: instant precomputed answer for a common question (null ⇒ none).
    *  Default: the prefetch cache when CODEBUDDY_PREFETCH is on. */
   prefetch?: (heard: string) => string | null;
+  /** Injectable: instant joke when asked (null ⇒ not a joke request). Default: jokes.ts. */
+  jokes?: (heard: string) => string | null;
 }
 
 /** Lowercase + strip diacritics so STT accent loss ("ca va" ≈ "ça va") still matches. */
@@ -194,6 +206,13 @@ export function makeHybridReply(options: HybridReplyOptions = {}): ReplyFn {
         remember(heard, pre);
         logger.info(`[voice-hybrid] prefetch → ${pre.slice(0, 60)}`);
         return pre;
+      }
+      // Instant joke on request — no LLM, no slow agent turn.
+      const joke = (options.jokes ?? defaultJokeMatch)(heard);
+      if (joke) {
+        remember(heard, joke);
+        logger.info(`[voice-hybrid] joke → ${joke.slice(0, 60)}`);
+        return joke;
       }
       const substantive = classify(heard);
       const stepOpts = signal ? { signal } : undefined;

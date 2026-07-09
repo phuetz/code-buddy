@@ -618,10 +618,10 @@ export async function defaultReply(
         if (rel) systemPrompt = `${systemPrompt}\n\n${rel}`;
         // Emotion-aware tone (the caring.md playbook: soften on frustration, be present) + vary the
         // opening so replies don't all start the same way.
-        const { detectRelationalSignal, registerGuidanceForSignal, avoidOpenersGuidance } =
+        const { detectEmotion, emotionGuidance, avoidOpenersGuidance } =
           await import('../companion/reply-augment.js');
         const guidance = [
-          registerGuidanceForSignal(detectRelationalSignal(heard)),
+          emotionGuidance(detectEmotion(heard)),
           avoidOpenersGuidance(recentReplyOpeners),
         ]
           .filter(Boolean)
@@ -685,10 +685,10 @@ export async function* defaultStreamReply(
         const { buildRelationalContext } = await import('../companion/relational-context.js');
         const rel = await buildRelationalContext();
         if (rel) systemPrompt = `${systemPrompt}\n\n${rel}`;
-        const { detectRelationalSignal, registerGuidanceForSignal, avoidOpenersGuidance } =
+        const { detectEmotion, emotionGuidance, avoidOpenersGuidance } =
           await import('../companion/reply-augment.js');
         const guidance = [
-          registerGuidanceForSignal(detectRelationalSignal(heard)),
+          emotionGuidance(detectEmotion(heard)),
           avoidOpenersGuidance(recentReplyOpeners),
         ]
           .filter(Boolean)

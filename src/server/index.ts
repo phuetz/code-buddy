@@ -1407,6 +1407,20 @@ export async function startServer(userConfig: Partial<ServerConfig> = {}): Promi
             void runPrefetch(); // warm the cache immediately, don't wait for the first beat
             logger.info(`Prefetch: Enabled (CODEBUDDY_PREFETCH) — precompute common answers every ${prefetchEvery} beats`);
           }
+          // Jokes top-up (opt-in) — generate a few fresh jokes in the background so Lisa's humour
+          // stays varied. The curated list already works instantly WITHOUT this.
+          if (process.env.CODEBUDDY_JOKES_TOPUP === 'true') {
+            const jokesEvery = Math.max(1, Number(process.env.CODEBUDDY_JOKES_TOPUP_EVERY ?? 200));
+            heart.register({
+              name: 'jokes-topup',
+              everyBeats: jokesEvery,
+              handler: async () => {
+                const { refreshJokePool } = await import('../companion/jokes.js');
+                await refreshJokePool();
+              },
+            });
+            logger.info(`Jokes top-up: Enabled (CODEBUDDY_JOKES_TOPUP) — fresh jokes every ${jokesEvery} beats`);
+          }
           heart.start();
           sensoryTeardown.push(() => heart.stop());
           logger.info(`Sensory bridge: Enabled (buddy-sense → event bus; heartbeat treatments every ${everyBeats} beats)`);
