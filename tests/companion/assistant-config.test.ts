@@ -1,7 +1,31 @@
 import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { mergeEnv, parseEnv, writeAssistantConfig } from '../../src/companion/assistant-config.js';
+import {
+  mergeEnv,
+  parseEnv,
+  parseVolumePercent,
+  voicePreviewCachePath,
+  writeAssistantConfig,
+} from '../../src/companion/assistant-config.js';
+
+describe('voicePreviewCachePath', () => {
+  it('builds a stable, sanitized path under ~/.codebuddy/companion/voice-previews', () => {
+    const p = voicePreviewCachePath('estelle');
+    expect(p).toMatch(/\.codebuddy\/companion\/voice-previews\/estelle\.wav$/);
+    // same voice → same path (cache key), unsafe chars sanitized
+    expect(voicePreviewCachePath('estelle')).toBe(p);
+    expect(voicePreviewCachePath('a b/../c')).toMatch(/a-b-\.\.-c\.wav$/);
+  });
+});
+
+describe('parseVolumePercent', () => {
+  it('extracts the first NN% and clamps to 0..150', () => {
+    expect(parseVolumePercent('Volume: front-left: 45875 /  70% / -9.29 dB')).toBe(70);
+    expect(parseVolumePercent('Mono: Playback 65536 [100%] [on]')).toBe(100);
+    expect(parseVolumePercent('no percent here')).toBeNull();
+  });
+});
 
 describe('parseEnv', () => {
   it('ignores comments and empty lines', () => {
