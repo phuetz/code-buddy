@@ -21,6 +21,7 @@ import {
   ImageTool,
   WebSearchTool,
   WeatherTool,
+  StockQuoteTool,
   MorphEditorTool,
 } from "../tools/index.js";
 import { ToolResult, getErrorMessage } from "../types/index.js";
@@ -57,6 +58,8 @@ export interface ToolExecutorDependencies {
   webSearch: WebSearchTool;
   /** Optional — defaults to a fresh WeatherTool (no config/key needed). */
   weather?: WeatherTool;
+  /** Optional — defaults to a fresh StockQuoteTool (no config/key needed). */
+  stockQuote?: StockQuoteTool;
   checkpointManager: CheckpointManager;
   morphEditor?: MorphEditorTool | null;
 }
@@ -203,6 +206,7 @@ const TOOL_CATEGORY_MAP: Record<string, ToolCategory> = {
   web_search: 'web',
   web_fetch: 'web',
   weather: 'web',
+  stock_quote: 'web',
   browser: 'web',
   // Planning
   create_todo_list: 'planning',
@@ -241,6 +245,7 @@ export class ToolExecutor {
   private imageTool: ImageTool;
   private webSearch: WebSearchTool;
   private weather: WeatherTool;
+  private stockQuote: StockQuoteTool;
   private checkpointManager: CheckpointManager;
   private morphEditor?: MorphEditorTool | null;
 
@@ -270,6 +275,7 @@ export class ToolExecutor {
     this.imageTool = deps.imageTool;
     this.webSearch = deps.webSearch;
     this.weather = deps.weather ?? new WeatherTool();
+    this.stockQuote = deps.stockQuote ?? new StockQuoteTool();
     this.checkpointManager = deps.checkpointManager;
     this.morphEditor = deps.morphEditor;
 
@@ -463,6 +469,11 @@ export class ToolExecutor {
           args.days as number | undefined,
           args.units as 'metric' | 'imperial' | undefined,
         );
+
+      case "stock_quote":
+        // Live dispatch also goes through ToolHandler→FormalToolRegistry
+        // (StockQuoteExecuteTool); this keeps the legacy executor in parity.
+        return await this.stockQuote.getQuote(args.symbol as string);
 
       case "web_fetch":
         return await this.webSearch.fetchPage(args.url as string);

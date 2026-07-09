@@ -159,6 +159,30 @@ export const WEATHER_TOOL: CodeBuddyTool = {
   },
 };
 
+// Stock quote tool — real market data via Yahoo Finance → Nasdaq → Stooq (free,
+// no API key), optional Finnhub. Emits a structured payload that renders the
+// curated stock widget inline.
+export const STOCK_QUOTE_TOOL: CodeBuddyTool = {
+  type: "function",
+  function: {
+    name: "stock_quote",
+    description:
+      "Get a real stock or index market quote (price, change, day range, volume) via Yahoo Finance / Nasdaq (free, no API key). " +
+      "ALWAYS use this tool (never web_search) for stock price / cours de bourse / market index questions.",
+    parameters: {
+      type: "object",
+      properties: {
+        symbol: {
+          type: "string",
+          description:
+            "Ticker symbol. US stocks plain (e.g. 'AAPL', 'TSLA', 'NVDA'); other exchanges suffixed (e.g. 'MC.PA' for LVMH, 'BMW.DE'); indices prefixed with ^ (e.g. '^FCHI' for CAC 40, '^GSPC' for S&P 500). Map the company/index name the user says to its ticker.",
+        },
+      },
+      required: ["symbol"],
+    },
+  },
+};
+
 /**
  * All web tools as an array
  */
@@ -167,5 +191,6 @@ export const WEB_TOOLS: CodeBuddyTool[] = [
   WEB_FETCH_TOOL,
   WEB_EXTRACT_TOOL,
   WEATHER_TOOL,
+  STOCK_QUOTE_TOOL,
   // BROWSER_TOOL omitted — superseded by the richer browser-tools.ts (40+ actions)
 ];
