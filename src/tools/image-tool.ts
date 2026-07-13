@@ -2,6 +2,7 @@ import { UnifiedVfsRouter } from '../services/vfs/unified-vfs-router.js';
 import path from 'path';
 import { ToolResult, getErrorMessage } from '../types/index.js';
 import { assertSafeUrl } from '../security/ssrf-guard.js';
+import { safeAxiosGet } from '../security/safe-fetch.js';
 
 export interface ImageInput {
   type: 'base64' | 'url' | 'file';
@@ -119,7 +120,8 @@ export class ImageTool {
 
     const axios = (await import('axios')).default;
 
-    const response = await axios.get(url, {
+    // SSRF-safe: safeAxiosGet re-validates every redirect hop before following it.
+    const response = await safeAxiosGet(axios, url, {
       responseType: 'arraybuffer',
       timeout: 30000,
       maxContentLength: this.maxFileSizeMB * 1024 * 1024,

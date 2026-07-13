@@ -7,6 +7,7 @@
 
 import type { ToolResult } from '../types/index.js';
 import { assertSafeUrl } from '../security/ssrf-guard.js';
+import { safeFetch } from '../security/safe-fetch.js';
 
 // ============================================================================
 // Types
@@ -121,13 +122,18 @@ export class FetchTool {
       const timeoutId = setTimeout(() => controller.abort(), timeout);
 
       try {
-        const response = await fetch(url, {
-          method,
-          headers: requestHeaders,
-          body: requestBody,
-          redirect: followRedirects ? 'follow' : 'manual',
-          signal: controller.signal,
-        });
+        // SSRF-safe: safeFetch re-validates every redirect Location hop, not just
+        // the initial URL — a 302 to a metadata/loopback IP is refused mid-chain.
+        const response = await safeFetch(
+          url,
+          {
+            method,
+            headers: requestHeaders,
+            body: requestBody,
+            signal: controller.signal,
+          },
+          { followRedirects },
+        );
 
         clearTimeout(timeoutId);
 
