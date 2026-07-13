@@ -1128,8 +1128,10 @@ export async function startServer(userConfig: Partial<ServerConfig> = {}): Promi
           const { shouldWireSpeechReaction, wireSensoryReactions } = await import('../sensory/reactions.js');
           const { getHeartbeatScheduler } = await import('../sensory/heartbeat-scheduler.js');
           const sensoryBridgeHandle = startSensoryBridge();
+          sensoryTeardown.push(() => sensoryBridgeHandle.close());
+          await sensoryBridgeHandle.ready;
           const unwireReactions = wireSensoryReactions();
-          sensoryTeardown.push(() => sensoryBridgeHandle.close(), unwireReactions);
+          sensoryTeardown.push(unwireReactions);
           // Vision reaction (opt-in) — vision/motion → camera_analyze (local gemma).
           // Requires a shared token: a frame can trigger the webcam, so refuse to
           // wire it on an unauthenticated bridge.
