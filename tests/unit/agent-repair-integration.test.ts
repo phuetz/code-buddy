@@ -5,6 +5,8 @@
  */
 import { createRepairEngine } from '../../src/agent/repair/index.js';
 import { resetRepairCoordinator } from '../../src/agent/execution/repair-coordinator.js';
+import { ConfirmationService } from '../../src/utils/confirmation-service.js';
+import { FormalToolRegistry } from '../../src/tools/registry/tool-registry.js';
 
 jest.mock('../../src/agent/repair/index.js', () => ({
   RepairEngine: jest.fn().mockImplementation(function() { return {
@@ -34,11 +36,34 @@ jest.mock('../../src/codebuddy/client.js', () => ({
   }; }),
 }));
 
-const mockBashInstance = {
-  execute: jest.fn().mockResolvedValue({ success: true, output: '' }),
-  getCurrentDirectory: jest.fn().mockReturnValue('/test'),
-  setSelfHealing: jest.fn(),
-  isSelfHealingEnabled: jest.fn().mockReturnValue(true),
+const mockBashInstance = vi.hoisted(() => ({
+  execute: vi.fn().mockResolvedValue({ success: true, output: '' }),
+  getCurrentDirectory: vi.fn().mockReturnValue('/test'),
+  setSelfHealing: vi.fn(),
+  isSelfHealingEnabled: vi.fn().mockReturnValue(true),
+}));
+
+const testBashTool = {
+  name: 'bash',
+  description: 'Test bash adapter',
+  execute: (input: Record<string, unknown>, context?: { cwd: string }) =>
+    mockBashInstance.execute(input.command, undefined, context?.cwd),
+  getSchema: () => ({
+    name: 'bash',
+    description: 'Test bash adapter',
+    parameters: {
+      type: 'object' as const,
+      properties: { command: { type: 'string' as const } },
+      required: ['command'],
+    },
+  }),
+  getMetadata: () => ({
+    name: 'bash',
+    description: 'Test bash adapter',
+    category: 'system' as const,
+    keywords: ['bash'],
+    priority: 10,
+  }),
 };
 
 jest.mock('../../src/tools/index.js', () => ({
@@ -86,6 +111,7 @@ jest.mock('../../src/persistence/session-store.js', () => ({
   getSessionStore: jest.fn().mockReturnValue({
     save: jest.fn(),
     load: jest.fn(),
+    getCurrentSessionId: jest.fn().mockReturnValue(null),
   }),
 }));
 
@@ -247,6 +273,7 @@ describe('Agent Repair Integration', () => {
 
     // Reset the repair coordinator singleton
     resetRepairCoordinator();
+    ConfirmationService.getInstance().setSessionFlag('allOperations', true);
 
     // Get reference to mock repair engine
     mockRepairEngine = {
@@ -258,9 +285,11 @@ describe('Agent Repair Integration', () => {
 
     // Create agent instance
     agent = new CodeBuddyAgent('test-api-key');
+    FormalToolRegistry.getInstance().register(testBashTool, { override: true });
   });
 
   afterEach(() => {
+    ConfirmationService.getInstance().setSessionFlag('allOperations', false);
     if (agent?.dispose) {
       agent.dispose();
     }
@@ -471,8 +500,8 @@ describe('Agent Repair Integration', () => {
         },
       });
 
+      expect(mockBashInstance.execute, JSON.stringify(result)).toHaveBeenCalledTimes(2); // Initial + Retry
       expect(mockRepairEngine.repair).toHaveBeenCalled();
-      expect(mockBashInstance.execute).toHaveBeenCalledTimes(2); // Initial + Retry
       expect(result.success).toBe(true);
       expect(result.output).toContain('Auto-repaired: Fixed type error');
     });
@@ -497,8 +526,8 @@ describe('Agent Repair Integration', () => {
         },
       });
 
+      expect(mockBashInstance.execute, JSON.stringify(result)).toHaveBeenCalledTimes(1); // No retry if repair failed
       expect(mockRepairEngine.repair).toHaveBeenCalled();
-      expect(mockBashInstance.execute).toHaveBeenCalledTimes(1); // No retry if repair failed
       expect(result.success).toBe(false);
     });
   });

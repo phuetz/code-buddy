@@ -75,6 +75,8 @@ import type {
   MissionRuntime,
   VoiceConversationEvent,
   VoiceConversationSnapshot,
+  Session,
+  Message,
 } from '../renderer/types';
 import type { DiagnosticInput, DiagnosticResult } from '../renderer/types';
 import type {
@@ -83,6 +85,21 @@ import type {
   MissionStatus,
   SubTask,
 } from '../main/missions/mission-types';
+import type { VoiceBackgroundMissionInput } from '../shared/voice-background-mission';
+import type {
+  WorkflowDryRunResult,
+  WorkflowRunComparison,
+  WorkflowRunRecord,
+} from '../shared/workflow-supervision';
+import type {
+  AgentBaseAuditEvent,
+  AgentBaseCodeBuddyDiscoveryResult,
+  AgentBaseCodeBuddyImportResult,
+  AgentBaseConnector,
+  AgentBaseInvokeInput,
+  AgentBaseInvokeResult,
+  AgentBasePermission,
+} from '../shared/agentbase-types';
 import type {
   McpServerConfig,
   McpTool,
@@ -107,9 +124,78 @@ import type {
   ClawMigrationRunResponse,
   HermesKanbanApi,
 } from '../renderer/types/hermes';
+import type {
+  OsCapsuleActivateInput,
+  OsCapsuleCreateInput,
+  OsCapsuleRevokeInput,
+  OsConstitutionUpdateInput,
+  OsExchangeAwardInput,
+  OsExchangeBidInput,
+  OsExchangeRehearseInput,
+  OsExchangeRejectInput,
+  OsForgeCreateInput,
+  OsForgeEvaluateInput,
+  OsForgeSelectInput,
+  OsIntentActionResult,
+  OsIntentProofInput,
+  OsIntentProofPayload,
+} from '../shared/intent-proof-types';
+import type { OsAutonomyBriefingPayload } from '../shared/autonomy-briefing-ipc';
+import type {
+  MaisonModeInput,
+  MaisonRendererApi,
+  MaisonSnapshotPayload,
+  MaisonTimerStartInput,
+} from '../shared/maison-ipc';
+import type {
+  ProjectEvolutionApi,
+  ProjectEvolutionCreateInput,
+  ProjectEvolutionMutationResult,
+  ProjectEvolutionProposal,
+  ProjectEvolutionRejectInput,
+} from '../shared/project-evolution';
+import {
+  BROWSER_OPERATOR_RUNTIME_CHANNELS,
+  type BrowserOperatorOwnedInput,
+  type BrowserOperatorPrepareInput,
+  type BrowserOperatorPrepareResult,
+  type BrowserOperatorRuntimeEvent,
+  type BrowserOperatorRuntimeListResult,
+  type BrowserOperatorRuntimeResult,
+  type BrowserOperatorStartInput,
+  type BrowserOperatorStopResult,
+} from '../shared/browser-operator-runtime-types';
+import {
+  MEETING_LIVE_CHANNELS,
+  type MeetingLiveApi,
+  type MeetingLiveAppendSegmentInput,
+  type MeetingLiveCapabilitiesResult,
+  type MeetingLiveDiscardResult,
+  type MeetingLiveListResult,
+  type MeetingLivePauseInput,
+  type MeetingLiveResult,
+  type MeetingLiveResumeInput,
+  type MeetingLiveSharedAudioArmResult,
+  type MeetingLiveSharedAudioReleaseInput,
+  type MeetingLiveSharedAudioReleaseResult,
+  type MeetingLiveSessionInput,
+  type MeetingLiveStartInput,
+} from '../shared/meeting-live';
+import {
+  COMFY_LAB_CHANNELS,
+  type ComfyLabApi,
+  type ComfyLabCopyPlanInput,
+} from '../shared/comfy-lab';
+import {
+  AVATAR_BIBLE_CHANNELS,
+  type AvatarBibleApi,
+  type AvatarBibleIdInput,
+  type AvatarBibleMetadataInput,
+  type AvatarBibleUpdateInput,
+} from '../shared/avatar-bible';
 
 type AssistantSettingGroup = 'voice' | 'speech' | 'behavior' | 'companion';
-type AssistantSettingType = 'toggle' | 'enum' | 'text' | 'voice';
+type AssistantSettingType = 'toggle' | 'enum' | 'text' | 'voice' | 'volume';
 type AssistantEnvFile = 'vision' | 'lisa' | 'both';
 
 interface AssistantSetting {
@@ -149,6 +235,7 @@ interface AssistantSaveSuccessResponse {
 
 type AssistantSaveResponse = AssistantSaveSuccessResponse | AssistantErrorResponse;
 type AssistantPreviewResponse = string | null | AssistantErrorResponse;
+type AssistantPlayPreviewResponse = { ok: true; path: string } | AssistantErrorResponse;
 type AssistantRestartResponse =
   | Array<{ service: string; ok: boolean; error?: string }>
   | AssistantErrorResponse;
@@ -508,6 +595,23 @@ contextBridge.exposeInMainWorld('electronAPI', {
     }> => ipcRenderer.invoke('mcp.invokeTool', toolName, args),
   },
 
+  agentBase: {
+    list: (): Promise<AgentBaseConnector[]> => ipcRenderer.invoke('agentbase.list'),
+    setPermissions: (
+      connectorId: string,
+      patch: Partial<Record<AgentBasePermission, boolean>>
+    ): Promise<Record<AgentBasePermission, boolean> | null> =>
+      ipcRenderer.invoke('agentbase.setPermissions', connectorId, patch),
+    audit: (limit?: number): Promise<AgentBaseAuditEvent[]> =>
+      ipcRenderer.invoke('agentbase.audit', limit),
+    discoverCodeBuddy: (): Promise<AgentBaseCodeBuddyDiscoveryResult> =>
+      ipcRenderer.invoke('agentbase.discoverCodeBuddy'),
+    importCodeBuddy: (candidateId: string): Promise<AgentBaseCodeBuddyImportResult> =>
+      ipcRenderer.invoke('agentbase.importCodeBuddy', candidateId),
+    invoke: (input: AgentBaseInvokeInput): Promise<AgentBaseInvokeResult> =>
+      ipcRenderer.invoke('agentbase.invoke', input),
+  },
+
   // Skills methods
   skills: {
     getAll: (): Promise<Skill[]> => ipcRenderer.invoke('skills.getAll'),
@@ -754,6 +858,29 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Media generation — delegates to the core image_generate tool via
   // src/main/media/media-gen-ipc.ts.
+  comfyLab: {
+    inspect: () => ipcRenderer.invoke(COMFY_LAB_CHANNELS.inspect),
+    openComfyUi: () => ipcRenderer.invoke(COMFY_LAB_CHANNELS.openComfyUi),
+    copyPlan: (input: ComfyLabCopyPlanInput) =>
+      ipcRenderer.invoke(COMFY_LAB_CHANNELS.copyPlan, input),
+  } satisfies ComfyLabApi,
+
+  avatarBible: {
+    list: () => ipcRenderer.invoke(AVATAR_BIBLE_CHANNELS.list),
+    importImage: (input: AvatarBibleMetadataInput) =>
+      ipcRenderer.invoke(AVATAR_BIBLE_CHANNELS.importImage, input),
+    update: (input: AvatarBibleUpdateInput) =>
+      ipcRenderer.invoke(AVATAR_BIBLE_CHANNELS.update, input),
+    setMaster: (input: AvatarBibleIdInput) =>
+      ipcRenderer.invoke(AVATAR_BIBLE_CHANNELS.setMaster, input),
+    remove: (input: AvatarBibleIdInput) =>
+      ipcRenderer.invoke(AVATAR_BIBLE_CHANNELS.remove, input),
+    preview: (input: AvatarBibleIdInput) =>
+      ipcRenderer.invoke(AVATAR_BIBLE_CHANNELS.preview, input),
+    materializeForFlow: (input: AvatarBibleIdInput) =>
+      ipcRenderer.invoke(AVATAR_BIBLE_CHANNELS.materializeForFlow, input),
+  } satisfies AvatarBibleApi,
+
   media: {
     generateImage: (request: {
       prompt: string;
@@ -762,6 +889,65 @@ contextBridge.exposeInMainWorld('electronAPI', {
       model?: string;
     }): Promise<{ ok: boolean; outputPath?: string; url?: string; error?: string }> =>
       ipcRenderer.invoke('media.generateImage', request),
+    editImage: (request: {
+      prompt: string;
+      imagePath: string;
+      maskDataUrl?: string;
+      selections?: Array<{ x: number; y: number; width: number; height: number }>;
+      provider?: string;
+      model?: string;
+    }): Promise<{
+      ok: boolean;
+      outputPath?: string;
+      url?: string;
+      history?: {
+        chainId: string;
+        headVersionId: string;
+        versions: Array<{ id: string; parentId: string | null; path: string; createdAt: number }>;
+      };
+      error?: string;
+    }> =>
+      ipcRenderer.invoke('media.editImage', request),
+    imageEditHistory: (request: { imagePath: string }): Promise<{
+      ok: boolean;
+      history?: {
+        chainId: string;
+        headVersionId: string;
+        versions: Array<{ id: string; parentId: string | null; path: string; createdAt: number }>;
+      };
+      error?: string;
+    }> => ipcRenderer.invoke('media.imageEditHistory', request),
+    generateVideo: (request: {
+      prompt: string;
+      aspect?: string;
+      duration?: number;
+      audio?: boolean;
+      model?: string;
+      imagePath?: string;
+      referenceImagePaths?: string[];
+    }): Promise<{ ok: boolean; outputPath?: string; url?: string; error?: string }> =>
+      ipcRenderer.invoke('media.generateVideo', request),
+    capabilities: (): Promise<{
+      imageGeneration: boolean;
+      imageReferences: boolean;
+      imageEditing: boolean;
+      imageMasking: boolean;
+      videoGeneration: boolean;
+      videoReferences: boolean;
+      firstFrame: boolean;
+      lastFrame: boolean;
+      audio: boolean;
+      provider: string;
+      model: string;
+    }> => ipcRenderer.invoke('media.capabilities'),
+    assembleVideo: (request: { clips: string[]; aspect?: string; name?: string }): Promise<{
+      ok: boolean;
+      outputPath?: string;
+      url?: string;
+      duration?: number;
+      warnings?: string[];
+      error?: string;
+    }> => ipcRenderer.invoke('media.assembleVideo', request),
     list: (): Promise<
       Array<{
         path: string;
@@ -833,6 +1019,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.invoke('assistant.save', updates),
     preview: (name: string, text?: string): Promise<AssistantPreviewResponse> =>
       ipcRenderer.invoke('assistant.preview', name, text),
+    playPreview: (name: string, text?: string): Promise<AssistantPlayPreviewResponse> =>
+      ipcRenderer.invoke('assistant.playPreview', name, text),
     restart: (): Promise<AssistantRestartResponse> => ipcRenderer.invoke('assistant.restart'),
     getVolume: (): Promise<AssistantVolumeResponse> => ipcRenderer.invoke('assistant.getVolume'),
     setVolume: (percent: number): Promise<AssistantSetVolumeResponse> =>
@@ -1003,21 +1191,29 @@ contextBridge.exposeInMainWorld('electronAPI', {
       updates: {
         projectId?: string | null;
         executionMode?: 'chat' | 'task';
+        permissionMode?: Session['permissionMode'];
         isBackground?: boolean;
         title?: string;
         pinned?: boolean;
         archived?: boolean;
         tags?: string[];
+        model?: string;
+        intelligence?: Partial<NonNullable<Session['intelligence']>>;
       }
     ) => ipcRenderer.invoke('session.updateSettings', sessionId, updates),
+    externalList: (): Promise<Array<{ id: string; name: string; model: string; messageCount: number; lastAccessedAt: string; source: 'cli' }>> =>
+      ipcRenderer.invoke('session.externalList'),
+    externalImport: (id: string): Promise<Session> => ipcRenderer.invoke('session.externalImport', id),
     // Branching (Claude Cowork parity Phase 2)
     branches: (
       sessionId: string
     ): Promise<
       Array<{
         id: string;
+        sessionId: string;
         name: string;
         parentId?: string;
+        parentMessageId?: string;
         parentMessageIndex?: number;
         createdAt: number;
         updatedAt: number;
@@ -1028,19 +1224,24 @@ contextBridge.exposeInMainWorld('electronAPI', {
     fork: (
       sessionId: string,
       name: string,
-      fromMessageIndex?: number
-    ): Promise<{ success: boolean; branch?: Record<string, unknown>; error?: string }> =>
-      ipcRenderer.invoke('session.fork', sessionId, name, fromMessageIndex),
+      fromMessageIndex?: number,
+      fromMessageId?: string
+    ): Promise<{
+      success: boolean;
+      branch?: Record<string, unknown>;
+      messages?: Message[];
+      error?: string;
+    }> => ipcRenderer.invoke('session.fork', sessionId, name, fromMessageIndex, fromMessageId),
     checkout: (
       sessionId: string,
       branchId: string
-    ): Promise<{ success: boolean; error?: string }> =>
+    ): Promise<{ success: boolean; messages?: Message[]; error?: string }> =>
       ipcRenderer.invoke('session.checkout', sessionId, branchId),
     mergeBranch: (
       sessionId: string,
       sourceBranchId: string,
       strategy?: 'append' | 'replace'
-    ): Promise<{ success: boolean; error?: string }> =>
+    ): Promise<{ success: boolean; messages?: Message[]; error?: string }> =>
       ipcRenderer.invoke('session.mergeBranch', sessionId, sourceBranchId, strategy),
     deleteBranch: (
       sessionId: string,
@@ -1161,7 +1362,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       } | null;
     }> => ipcRenderer.invoke('voice.diagnostics'),
     /**
-     * Synthesise `text` to French speech via Piper. Returns a WAV
+     * Synthesise `text` through resident Pocket TTS (Piper fallback). Returns a WAV
      * ArrayBuffer the renderer can wrap in a Blob and play through an
      * `<audio>` element.
      */
@@ -1190,6 +1391,18 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ): Promise<{ ok: boolean; snapshot?: VoiceConversationSnapshot; error?: string }> =>
       ipcRenderer.invoke('voice.conversationEvent', payload),
   },
+
+  maison: {
+    snapshot: (): Promise<MaisonSnapshotPayload> => ipcRenderer.invoke('maison.snapshot'),
+    setMode: (input: MaisonModeInput): Promise<MaisonSnapshotPayload> =>
+      ipcRenderer.invoke('maison.setMode', input),
+    timerStart: (input: MaisonTimerStartInput): Promise<MaisonSnapshotPayload> =>
+      ipcRenderer.invoke('maison.timerStart', input),
+    timerAcknowledge: (id: string): Promise<MaisonSnapshotPayload> =>
+      ipcRenderer.invoke('maison.timerAcknowledge', id),
+    timerCancel: (id: string): Promise<MaisonSnapshotPayload> =>
+      ipcRenderer.invoke('maison.timerCancel', id),
+  } satisfies MaisonRendererApi,
 
   companion: {
     setup: (input?: {
@@ -1561,6 +1774,65 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getActive: (): Promise<Project | null> => ipcRenderer.invoke('project.getActive'),
   },
 
+  projectEvolution: {
+    list: (projectId: string): Promise<{ proposals: ProjectEvolutionProposal[] }> =>
+      ipcRenderer.invoke('project.evolution.list', projectId),
+    create: (input: ProjectEvolutionCreateInput): Promise<ProjectEvolutionProposal> =>
+      ipcRenderer.invoke('project.evolution.create', input),
+    approve: (proposalId: string): Promise<ProjectEvolutionMutationResult> =>
+      ipcRenderer.invoke('project.evolution.approve', proposalId),
+    reject: (input: ProjectEvolutionRejectInput): Promise<ProjectEvolutionMutationResult> =>
+      ipcRenderer.invoke('project.evolution.reject', input),
+    rollback: (proposalId: string): Promise<ProjectEvolutionMutationResult> =>
+      ipcRenderer.invoke('project.evolution.rollback', proposalId),
+  } satisfies ProjectEvolutionApi,
+
+  browserOperatorRuntime: {
+    prepare: (input: BrowserOperatorPrepareInput): Promise<BrowserOperatorPrepareResult> =>
+      ipcRenderer.invoke(BROWSER_OPERATOR_RUNTIME_CHANNELS.prepare, input),
+    start: (input: BrowserOperatorStartInput): Promise<BrowserOperatorRuntimeResult> =>
+      ipcRenderer.invoke(BROWSER_OPERATOR_RUNTIME_CHANNELS.start, input),
+    stop: (input: BrowserOperatorOwnedInput): Promise<BrowserOperatorStopResult> =>
+      ipcRenderer.invoke(BROWSER_OPERATOR_RUNTIME_CHANNELS.stop, input),
+    status: (input: BrowserOperatorOwnedInput): Promise<BrowserOperatorRuntimeResult> =>
+      ipcRenderer.invoke(BROWSER_OPERATOR_RUNTIME_CHANNELS.status, input),
+    list: (ownerSessionId: string): Promise<BrowserOperatorRuntimeListResult> =>
+      ipcRenderer.invoke(BROWSER_OPERATOR_RUNTIME_CHANNELS.list, ownerSessionId),
+    onEvent: (callback: (event: BrowserOperatorRuntimeEvent) => void): (() => void) => {
+      const wrapped = (
+        _event: Electron.IpcRendererEvent,
+        event: BrowserOperatorRuntimeEvent
+      ) => callback(event);
+      ipcRenderer.on(BROWSER_OPERATOR_RUNTIME_CHANNELS.event, wrapped);
+      return () => ipcRenderer.removeListener(BROWSER_OPERATOR_RUNTIME_CHANNELS.event, wrapped);
+    },
+  },
+
+  meetingLive: {
+    capabilities: (): Promise<MeetingLiveCapabilitiesResult> =>
+      ipcRenderer.invoke(MEETING_LIVE_CHANNELS.capabilities),
+    armSharedAudio: (): MeetingLiveSharedAudioArmResult =>
+      ipcRenderer.sendSync(MEETING_LIVE_CHANNELS.armSharedAudio),
+    releaseSharedAudio: (
+      input: MeetingLiveSharedAudioReleaseInput,
+    ): Promise<MeetingLiveSharedAudioReleaseResult> =>
+      ipcRenderer.invoke(MEETING_LIVE_CHANNELS.releaseSharedAudio, input),
+    list: (): Promise<MeetingLiveListResult> =>
+      ipcRenderer.invoke(MEETING_LIVE_CHANNELS.list),
+    start: (input: MeetingLiveStartInput): Promise<MeetingLiveResult> =>
+      ipcRenderer.invoke(MEETING_LIVE_CHANNELS.start, input),
+    appendSegment: (input: MeetingLiveAppendSegmentInput): Promise<MeetingLiveResult> =>
+      ipcRenderer.invoke(MEETING_LIVE_CHANNELS.appendSegment, input),
+    pause: (input: MeetingLivePauseInput): Promise<MeetingLiveResult> =>
+      ipcRenderer.invoke(MEETING_LIVE_CHANNELS.pause, input),
+    resume: (input: MeetingLiveResumeInput): Promise<MeetingLiveResult> =>
+      ipcRenderer.invoke(MEETING_LIVE_CHANNELS.resume, input),
+    finalize: (input: MeetingLiveSessionInput): Promise<MeetingLiveResult> =>
+      ipcRenderer.invoke(MEETING_LIVE_CHANNELS.finalize, input),
+    discard: (input: MeetingLiveSessionInput): Promise<MeetingLiveDiscardResult> =>
+      ipcRenderer.invoke(MEETING_LIVE_CHANNELS.discard, input),
+  } satisfies MeetingLiveApi,
+
   missions: {
     list: (
       filter?: MissionFilter
@@ -1574,6 +1846,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
       input: MissionCreateInput
     ): Promise<{ ok: boolean; mission: MissionRuntime | null; error?: string }> =>
       ipcRenderer.invoke('mission.create', input),
+    createVoice: (
+      input: VoiceBackgroundMissionInput
+    ): Promise<{ ok: boolean; mission: MissionRuntime | null; error?: string }> =>
+      ipcRenderer.invoke('mission.createVoice', input),
     updateStatus: (
       missionId: string,
       status: MissionStatus
@@ -2145,7 +2421,23 @@ contextBridge.exposeInMainWorld('electronAPI', {
       completedSteps: number;
       totalSteps: number;
       error?: string;
+      runId?: string;
     }> => ipcRenderer.invoke('workflow.run', id, initialContext),
+    preview: (id: string): Promise<WorkflowDryRunResult> =>
+      ipcRenderer.invoke('workflow.preview', id),
+    history: (workflowId?: string, limit?: number): Promise<WorkflowRunRecord[]> =>
+      ipcRenderer.invoke('workflow.history', workflowId, limit),
+    replay: (runId: string): Promise<{
+      success: boolean;
+      status: string;
+      duration: number;
+      completedSteps: number;
+      totalSteps: number;
+      error?: string;
+      runId?: string;
+    }> => ipcRenderer.invoke('workflow.replay', runId),
+    compare: (leftRunId: string, rightRunId: string): Promise<WorkflowRunComparison | null> =>
+      ipcRenderer.invoke('workflow.compare', leftRunId, rightRunId),
     approve: (stepId: string, approved: boolean): Promise<boolean> =>
       ipcRenderer.invoke('workflow.approve', stepId, approved),
   },
@@ -3230,6 +3522,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
     }> => ipcRenderer.invoke('remote-backend.status'),
     getConfig: (): Promise<{ url: string; autoConnect: boolean; hasToken: boolean }> =>
       ipcRenderer.invoke('remote-backend.getConfig'),
+    capabilities: (): Promise<{
+      protocol: number;
+      mode: string;
+      capabilities: string[];
+      mutationsRequireLocalApproval: boolean;
+    }> => ipcRenderer.invoke('remote-backend.capabilities'),
+    invoke: (method: 'system.snapshot' | 'skills.list' | 'fleet.status'): Promise<unknown> =>
+      ipcRenderer.invoke('remote-backend.invoke', method),
     /** Subscribe to live status pushes. Returns an unsubscribe function. */
     onStatus: (
       callback: (status: {
@@ -3449,6 +3749,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Mission Control OS — real council ledgers (read-only)
   os: {
+    /** Latest evidence-backed autonomy handover from ~/.codebuddy/fleet/briefings. */
+    autonomyBriefing: (): Promise<OsAutonomyBriefingPayload | null> =>
+      ipcRenderer.invoke('os.autonomyBriefing'),
     /** Latest council run (DHI + per-model verdicts) + DHI history, from ~/.codebuddy JSONL ledgers. */
     councilHealth: (
       historyLimit?: number
@@ -3480,6 +3783,31 @@ contextBridge.exposeInMainWorld('electronAPI', {
       edges: Array<{ from: string; to: string; kind: string }>;
       truncated: boolean;
     }> => ipcRenderer.invoke('os.knowledgeGraph', maxNodes),
+    /** Current session's durable intent and secret-redacted verification history. */
+    intentProof: (input?: OsIntentProofInput): Promise<OsIntentProofPayload> =>
+      ipcRenderer.invoke('os.intentProof', input),
+    intentForgeCreate: (input: OsForgeCreateInput): Promise<OsIntentActionResult> =>
+      ipcRenderer.invoke('os.intentForgeCreate', input),
+    intentForgeEvaluate: (input: OsForgeEvaluateInput): Promise<OsIntentActionResult> =>
+      ipcRenderer.invoke('os.intentForgeEvaluate', input),
+    intentForgeSelect: (input: OsForgeSelectInput): Promise<OsIntentActionResult> =>
+      ipcRenderer.invoke('os.intentForgeSelect', input),
+    intentConstitutionUpdate: (input: OsConstitutionUpdateInput): Promise<OsIntentActionResult> =>
+      ipcRenderer.invoke('os.intentConstitutionUpdate', input),
+    intentExchangeBid: (input: OsExchangeBidInput): Promise<OsIntentActionResult> =>
+      ipcRenderer.invoke('os.intentExchangeBid', input),
+    intentExchangeRehearse: (input: OsExchangeRehearseInput): Promise<OsIntentActionResult> =>
+      ipcRenderer.invoke('os.intentExchangeRehearse', input),
+    intentExchangeAward: (input: OsExchangeAwardInput): Promise<OsIntentActionResult> =>
+      ipcRenderer.invoke('os.intentExchangeAward', input),
+    intentExchangeReject: (input: OsExchangeRejectInput): Promise<OsIntentActionResult> =>
+      ipcRenderer.invoke('os.intentExchangeReject', input),
+    intentCapsuleCreate: (input: OsCapsuleCreateInput): Promise<OsIntentActionResult> =>
+      ipcRenderer.invoke('os.intentCapsuleCreate', input),
+    intentCapsuleActivate: (input: OsCapsuleActivateInput): Promise<OsIntentActionResult> =>
+      ipcRenderer.invoke('os.intentCapsuleActivate', input),
+    intentCapsuleRevoke: (input: OsCapsuleRevokeInput): Promise<OsIntentActionResult> =>
+      ipcRenderer.invoke('os.intentCapsuleRevoke', input),
   },
 
   // Fleet — multi-host Code Buddy listener (GAP 3)
@@ -4715,6 +5043,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     active: () => ipcRenderer.invoke('profiles.active'),
     create: (name: string) => ipcRenderer.invoke('profiles.create', name),
     switch: (name: string | null) => ipcRenderer.invoke('profiles.switch', name),
+    export: (name: string) => ipcRenderer.invoke('profiles.export', name),
+    import: (profile: unknown) => ipcRenderer.invoke('profiles.import', profile),
   },
 
   // Per-channel connection status (read-only) + Phase-5 config surface. Secrets
@@ -4875,6 +5205,69 @@ declare global {
         apply: (ids: string[]) => Promise<{ ok: boolean; archived: number }>;
       };
       media: {
+        generateImage: (request: {
+          prompt: string;
+          aspect?: string;
+          provider?: string;
+          model?: string;
+        }) => Promise<{ ok: boolean; outputPath?: string; url?: string; error?: string }>;
+        imageEditHistory: (request: { imagePath: string }) => Promise<{
+          ok: boolean;
+          history?: {
+            chainId: string;
+            headVersionId: string;
+            versions: Array<{ id: string; parentId: string | null; path: string; createdAt: number }>;
+          };
+          error?: string;
+        }>;
+        editImage: (request: {
+          prompt: string;
+          imagePath: string;
+          maskDataUrl?: string;
+          selections?: Array<{ x: number; y: number; width: number; height: number }>;
+          provider?: string;
+          model?: string;
+        }) => Promise<{
+          ok: boolean;
+          outputPath?: string;
+          url?: string;
+          history?: {
+            chainId: string;
+            headVersionId: string;
+            versions: Array<{ id: string; parentId: string | null; path: string; createdAt: number }>;
+          };
+          error?: string;
+        }>;
+        generateVideo: (request: {
+          prompt: string;
+          aspect?: string;
+          duration?: number;
+          audio?: boolean;
+          model?: string;
+          imagePath?: string;
+          referenceImagePaths?: string[];
+        }) => Promise<{ ok: boolean; outputPath?: string; url?: string; error?: string }>;
+        capabilities: () => Promise<{
+          imageGeneration: boolean;
+          imageReferences: boolean;
+          imageEditing: boolean;
+          imageMasking: boolean;
+          videoGeneration: boolean;
+          videoReferences: boolean;
+          firstFrame: boolean;
+          lastFrame: boolean;
+          audio: boolean;
+          provider: string;
+          model: string;
+        }>;
+        assembleVideo: (request: { clips: string[]; aspect?: string; name?: string }) => Promise<{
+          ok: boolean;
+          outputPath?: string;
+          url?: string;
+          duration?: number;
+          warnings?: string[];
+          error?: string;
+        }>;
         list: () => Promise<
           Array<{
             path: string;
@@ -4929,6 +5322,7 @@ declare global {
         get: () => Promise<AssistantConfigResponse>;
         save: (updates: Record<string, string>) => Promise<AssistantSaveResponse>;
         preview: (name: string, text?: string) => Promise<AssistantPreviewResponse>;
+        playPreview: (name: string, text?: string) => Promise<AssistantPlayPreviewResponse>;
         restart: () => Promise<AssistantRestartResponse>;
         getVolume: () => Promise<AssistantVolumeResponse>;
         setVolume: (percent: number) => Promise<AssistantSetVolumeResponse>;
@@ -5084,6 +5478,17 @@ declare global {
           result?: unknown;
           error?: string;
         }>;
+      };
+      agentBase: {
+        list: () => Promise<AgentBaseConnector[]>;
+        setPermissions: (
+          connectorId: string,
+          patch: Partial<Record<AgentBasePermission, boolean>>
+        ) => Promise<Record<AgentBasePermission, boolean> | null>;
+        audit: (limit?: number) => Promise<AgentBaseAuditEvent[]>;
+        discoverCodeBuddy: () => Promise<AgentBaseCodeBuddyDiscoveryResult>;
+        importCodeBuddy: (candidateId: string) => Promise<AgentBaseCodeBuddyImportResult>;
+        invoke: (input: AgentBaseInvokeInput) => Promise<AgentBaseInvokeResult>;
       };
       skills: {
         getAll: () => Promise<Skill[]>;
@@ -5405,18 +5810,25 @@ declare global {
           updates: {
             projectId?: string | null;
             executionMode?: 'chat' | 'task';
+            permissionMode?: Session['permissionMode'];
             isBackground?: boolean;
             title?: string;
             pinned?: boolean;
             archived?: boolean;
             tags?: string[];
+            model?: string;
+            intelligence?: Partial<NonNullable<Session['intelligence']>>;
           }
         ) => Promise<boolean>;
+        externalList: () => Promise<Array<{ id: string; name: string; model: string; messageCount: number; lastAccessedAt: string; source: 'cli' }>>;
+        externalImport: (id: string) => Promise<Session>;
         branches: (sessionId: string) => Promise<
           Array<{
             id: string;
+            sessionId: string;
             name: string;
             parentId?: string;
+            parentMessageId?: string;
             parentMessageIndex?: number;
             createdAt: number;
             updatedAt: number;
@@ -5427,17 +5839,23 @@ declare global {
         fork: (
           sessionId: string,
           name: string,
-          fromMessageIndex?: number
-        ) => Promise<{ success: boolean; branch?: Record<string, unknown>; error?: string }>;
+          fromMessageIndex?: number,
+          fromMessageId?: string
+        ) => Promise<{
+          success: boolean;
+          branch?: Record<string, unknown>;
+          messages?: Message[];
+          error?: string;
+        }>;
         checkout: (
           sessionId: string,
           branchId: string
-        ) => Promise<{ success: boolean; error?: string }>;
+        ) => Promise<{ success: boolean; messages?: Message[]; error?: string }>;
         mergeBranch: (
           sessionId: string,
           sourceBranchId: string,
           strategy?: 'append' | 'replace'
-        ) => Promise<{ success: boolean; error?: string }>;
+        ) => Promise<{ success: boolean; messages?: Message[]; error?: string }>;
         deleteBranch: (
           sessionId: string,
           branchId: string
@@ -5551,6 +5969,7 @@ declare global {
           payload: VoiceConversationEvent
         ) => Promise<{ ok: boolean; snapshot?: VoiceConversationSnapshot; error?: string }>;
       };
+      maison: MaisonRendererApi;
       companion: {
         setup: (input?: {
           projectId?: string;
@@ -5868,6 +6287,18 @@ declare global {
         setActive: (id: string | null) => Promise<Project | null>;
         getActive: () => Promise<Project | null>;
       };
+      projectEvolution: ProjectEvolutionApi;
+      browserOperatorRuntime: {
+        prepare: (input: BrowserOperatorPrepareInput) => Promise<BrowserOperatorPrepareResult>;
+        start: (input: BrowserOperatorStartInput) => Promise<BrowserOperatorRuntimeResult>;
+        stop: (input: BrowserOperatorOwnedInput) => Promise<BrowserOperatorStopResult>;
+        status: (input: BrowserOperatorOwnedInput) => Promise<BrowserOperatorRuntimeResult>;
+        list: (ownerSessionId: string) => Promise<BrowserOperatorRuntimeListResult>;
+        onEvent: (callback: (event: BrowserOperatorRuntimeEvent) => void) => () => void;
+      };
+      meetingLive: MeetingLiveApi;
+      comfyLab: ComfyLabApi;
+      avatarBible: AvatarBibleApi;
       missions: {
         list: (filter?: MissionFilter) => Promise<{
           ok: boolean;
@@ -5880,6 +6311,11 @@ declare global {
           error?: string;
         }>;
         create: (input: MissionCreateInput) => Promise<{
+          ok: boolean;
+          mission: MissionRuntime | null;
+          error?: string;
+        }>;
+        createVoice: (input: VoiceBackgroundMissionInput) => Promise<{
           ok: boolean;
           mission: MissionRuntime | null;
           error?: string;
@@ -6402,7 +6838,23 @@ declare global {
           completedSteps: number;
           totalSteps: number;
           error?: string;
+          runId?: string;
         }>;
+        preview: (id: string) => Promise<WorkflowDryRunResult>;
+        history: (workflowId?: string, limit?: number) => Promise<WorkflowRunRecord[]>;
+        replay: (runId: string) => Promise<{
+          success: boolean;
+          status: string;
+          duration: number;
+          completedSteps: number;
+          totalSteps: number;
+          error?: string;
+          runId?: string;
+        }>;
+        compare: (
+          leftRunId: string,
+          rightRunId: string
+        ) => Promise<WorkflowRunComparison | null>;
         approve: (stepId: string, approved: boolean) => Promise<boolean>;
       };
       tools: {
@@ -7412,6 +7864,13 @@ declare global {
           error?: string;
         }>;
         getConfig: () => Promise<{ url: string; autoConnect: boolean; hasToken: boolean }>;
+        capabilities: () => Promise<{
+          protocol: number;
+          mode: string;
+          capabilities: string[];
+          mutationsRequireLocalApproval: boolean;
+        }>;
+        invoke: (method: 'system.snapshot' | 'skills.list' | 'fleet.status') => Promise<unknown>;
         onStatus: (
           callback: (status: {
             status: 'disconnected' | 'connecting' | 'connected' | 'error';
@@ -7560,6 +8019,7 @@ declare global {
         >;
       };
       os: {
+        autonomyBriefing: () => Promise<OsAutonomyBriefingPayload | null>;
         councilHealth: (historyLimit?: number) => Promise<{
           session: {
             id: string;
@@ -7585,6 +8045,18 @@ declare global {
           edges: Array<{ from: string; to: string; kind: string }>;
           truncated: boolean;
         }>;
+        intentProof: (input?: OsIntentProofInput) => Promise<OsIntentProofPayload>;
+        intentForgeCreate: (input: OsForgeCreateInput) => Promise<OsIntentActionResult>;
+        intentForgeEvaluate: (input: OsForgeEvaluateInput) => Promise<OsIntentActionResult>;
+        intentForgeSelect: (input: OsForgeSelectInput) => Promise<OsIntentActionResult>;
+        intentConstitutionUpdate: (input: OsConstitutionUpdateInput) => Promise<OsIntentActionResult>;
+        intentExchangeBid: (input: OsExchangeBidInput) => Promise<OsIntentActionResult>;
+        intentExchangeRehearse: (input: OsExchangeRehearseInput) => Promise<OsIntentActionResult>;
+        intentExchangeAward: (input: OsExchangeAwardInput) => Promise<OsIntentActionResult>;
+        intentExchangeReject: (input: OsExchangeRejectInput) => Promise<OsIntentActionResult>;
+        intentCapsuleCreate: (input: OsCapsuleCreateInput) => Promise<OsIntentActionResult>;
+        intentCapsuleActivate: (input: OsCapsuleActivateInput) => Promise<OsIntentActionResult>;
+        intentCapsuleRevoke: (input: OsCapsuleRevokeInput) => Promise<OsIntentActionResult>;
       };
       fleet: {
         list: () => Promise<
@@ -8680,6 +9152,17 @@ declare global {
           ok: boolean;
           error?: string;
           requiresRestart?: boolean;
+          profiles?: Array<{ name: string; active: boolean }>;
+          active?: string | null;
+        }>;
+        export: (name: string) => Promise<{
+          ok: boolean;
+          error?: string;
+          profile?: Record<string, unknown>;
+        }>;
+        import: (profile: unknown) => Promise<{
+          ok: boolean;
+          error?: string;
           profiles?: Array<{ name: string; active: boolean }>;
           active?: string | null;
         }>;

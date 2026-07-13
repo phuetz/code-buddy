@@ -200,7 +200,7 @@ ${source}
   return '';
 }
 
-export const ArtifactPanel: React.FC = () => {
+export const ArtifactPanel: React.FC<{ inline?: boolean }> = ({ inline = false }) => {
   const { t } = useTranslation();
   const activeArtifact = useAppStore((s) => s.activeArtifact);
   const setActiveArtifact = useAppStore((s) => s.setActiveArtifact);
@@ -238,7 +238,9 @@ export const ArtifactPanel: React.FC = () => {
     return parseAgenticHarnessArtifact(activeArtifact.source);
   }, [activeArtifact]);
 
-  if (!activeArtifact) return null;
+  if (!activeArtifact) {
+    return inline ? <div className="flex h-full items-center justify-center p-6 text-xs text-text-muted">Aucun artefact pour cette session.</div> : null;
+  }
 
   const handleCopy = async () => {
     try {
@@ -293,7 +295,9 @@ export const ArtifactPanel: React.FC = () => {
     Boolean(agenticHarness);
 
   return (
-    <div className="fixed right-0 top-0 bottom-0 w-[560px] max-w-[90vw] bg-background border-l border-border shadow-elevated z-40 flex flex-col">
+    <div className={inline
+      ? 'h-full min-h-0 bg-background flex flex-col'
+      : 'fixed right-0 top-0 bottom-0 w-[560px] max-w-[90vw] bg-background border-l border-border shadow-elevated z-40 flex flex-col'}>
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-border-muted shrink-0">
         <div className="flex items-center gap-2 min-w-0">

@@ -186,11 +186,12 @@ export async function listOllamaModels(input: {
 
 export async function fetchOllamaVersion(input: {
   baseUrl?: string;
+  fetchImpl?: typeof fetch;
 }): Promise<string | null> {
   try {
     const normalizedBase = normalizeOllamaBaseUrl(input.baseUrl);
     const nativeBase = ollamaNativeBaseUrl(normalizedBase ?? 'http://localhost:11434/v1');
-    const response = await fetch(`${nativeBase}/api/version`, {
+    const response = await (input.fetchImpl ?? fetch)(`${nativeBase}/api/version`, {
       signal: AbortSignal.timeout(3000),
     });
     if (!response.ok) return null;

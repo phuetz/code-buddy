@@ -13,6 +13,9 @@ import { log, logError } from '../utils/logger';
 import { isBrowserOperatorTool, buildBrowserActionPayload } from './browser-action';
 import { getReasoningBridge } from '../reasoning/reasoning-bridge';
 import { createReasoningCapture } from '../reasoning/reasoning-capture';
+import { configStore } from '../config/config-store';
+import { CoworkCrossChannelContinuity } from '../companion/cross-channel-continuity';
+import type { ContextOptimizationMetadata } from '@codebuddy/shared/context-optimization-metadata';
 import type {
   Session,
   Message,
@@ -48,6 +51,7 @@ interface EngineStreamEvent {
     isError?: boolean;
     delta?: string;
     data?: unknown;
+    contextOptimization?: ContextOptimizationMetadata;
   };
   tokenCount?: number;
   cost?: { inputTokens: number; outputTokens: number; totalCost: number };
@@ -66,13 +70,23 @@ interface EngineStreamEvent {
   };
   diffPreview?: { turnId: number; diffs: Array<Record<string, unknown>>; plan?: string };
   goalStatus?: {
+    goalId?: string;
     goal: string;
     status: 'active' | 'paused' | 'done' | 'cleared';
     turnsUsed: number;
     maxTurns: number;
+    verifyGated?: boolean;
     lastVerdict?: 'done' | 'continue' | 'skipped';
     lastReason?: string;
   };
+}
+
+interface TurnCheckpoint {
+  id: string;
+  commitHash: string;
+  description: string;
+  timestamp: number;
+  turn: number;
 }
 
 /** Callbacks injected by SessionManager */
@@ -92,10 +106,16 @@ interface RunnerCallbacks {
 export class CodeBuddyEngineRunner {
   private adapter: EngineAdapter;
   private callbacks: RunnerCallbacks;
+  private continuity: Pick<CoworkCrossChannelContinuity, 'prepare'>;
 
-  constructor(adapter: EngineAdapter, callbacks: RunnerCallbacks) {
+  constructor(
+    adapter: EngineAdapter,
+    callbacks: RunnerCallbacks,
+    continuity: Pick<CoworkCrossChannelContinuity, 'prepare'> = new CoworkCrossChannelContinuity(),
+  ) {
     this.adapter = adapter;
     this.callbacks = callbacks;
+    this.continuity = continuity;
   }
 
   /**
@@ -104,6 +124,7 @@ export class CodeBuddyEngineRunner {
    */
   async run(session: Session, prompt: string, existingMessages: Message[]): Promise<void> {
     const { sendToRenderer, saveMessage } = this.callbacks;
+    const turnStartedAt = Date.now();
 
     // Notify session is running
     sendToRenderer({
@@ -132,55 +153,35 @@ export class CodeBuddyEngineRunner {
       saveMessage(userMessage);
     }
 
-    // Create checkpoint before this turn (ghost snapshot)
-    try {
-      if (session.cwd) {
-        const { loadCoreModule } = await import('../utils/core-loader');
-        type GhostSnapshotMod = {
-          getGhostSnapshotManager: (cwd: string) => {
-            createSnapshot: (desc: string) => Promise<{
-              id: string;
-              commitHash: string;
-              description: string;
-              timestamp: number;
-              turn: number;
-            } | null>;
-          };
-        };
-        const mod = await loadCoreModule<GhostSnapshotMod>('checkpoints/ghost-snapshot.js');
-        if (!mod) {
-          throw new Error('ghost-snapshot module unavailable');
-        }
-        const gsm = mod.getGhostSnapshotManager(session.cwd);
-        const snapshot = await gsm.createSnapshot(`Turn: ${prompt.slice(0, 60)}`);
-        if (snapshot) {
-          sendToRenderer({
-            type: 'checkpoint.created',
-            payload: {
-              sessionId: session.id,
-              snapshot: {
-                id: snapshot.id,
-                commitHash: snapshot.commitHash,
-                description: snapshot.description,
-                timestamp: snapshot.timestamp,
-                turn: snapshot.turn,
-              },
-            },
-          } as ServerEvent);
-        }
-      }
-    } catch {
-      // Checkpoint creation is best-effort — don't block the session
-    }
-
     // Filter out the current user message to avoid duplicate context assembly
     const historyMessages = hasUserMessageAtEnd
       ? existingMessages.slice(0, -1)
       : existingMessages;
 
-    // Convert existing messages to engine format
-    const engineMessages = this.convertMessages(historyMessages, prompt);
-    const systemPromptAppend = await this.resolveActivePersonaPrompt();
+    // Local transcript conversion is synchronous. The safety checkpoint,
+    // active persona, and explicit Lisa-thread rendezvous are independent and
+    // begin together so continuity never adds a serial first-token waterfall.
+    const localEngineMessages = this.convertMessages(historyMessages, prompt);
+    const [snapshot, personaPrompt, sharedContinuity] = await Promise.all([
+      this.createTurnCheckpoint(session, prompt),
+      this.resolveActivePersonaPrompt(),
+      this.continuity.prepare(session, localEngineMessages, prompt, userMessageId),
+    ]);
+    const engineMessages = sharedContinuity.active
+      ? [...sharedContinuity.messages, ...localEngineMessages]
+      : localEngineMessages;
+    const systemPromptAppend = [personaPrompt, sharedContinuity.systemPrompt]
+      .filter((part): part is string => Boolean(part?.trim()))
+      .join('\n\n') || undefined;
+    if (snapshot) {
+      sendToRenderer({
+        type: 'checkpoint.created',
+        payload: {
+          sessionId: session.id,
+          snapshot,
+        },
+      } as ServerEvent);
+    }
 
     let fullContent = '';
     let runtimeError: string | null = null;
@@ -195,12 +196,46 @@ export class CodeBuddyEngineRunner {
       problem: prompt,
       mode: session.model ?? 'embedded',
     });
+    const engineStartedAt = Date.now();
+    let firstVisibleEventRecorded = false;
+    const runtimeConfig = session.intelligence?.configSetId
+      ? configStore.getConfigForSet(session.intelligence.configSetId)
+      : configStore.getAll();
 
     try {
       await this.adapter.runSession(
         session.id,
         engineMessages,
         (event: EngineStreamEvent) => {
+          if (
+            !firstVisibleEventRecorded &&
+            (event.type === 'content' || event.type === 'thinking' || event.type === 'tool_start')
+          ) {
+            firstVisibleEventRecorded = true;
+            session.intelligence = {
+              ...(session.intelligence ?? {
+                thinkingLevel: runtimeConfig.thinkingLevel ?? 'off',
+                fastMode: false,
+                executionLocation: 'local',
+                latencyBudgetMs: 900,
+              }),
+              cacheState: 'warm',
+              lastLatency: {
+                setupMs: engineStartedAt - turnStartedAt,
+                firstTokenMs: Date.now() - turnStartedAt,
+                measuredAt: Date.now(),
+                configSetId: session.intelligence?.configSetId,
+                model: session.model || runtimeConfig.model,
+              },
+            };
+            log('[EngineRunner] first visible stream event', {
+              sessionId: session.id,
+              setupMs: engineStartedAt - turnStartedAt,
+              engineMs: Date.now() - engineStartedAt,
+              totalMs: Date.now() - turnStartedAt,
+              eventType: event.type,
+            });
+          }
           switch (event.type) {
             case 'content':
               if (event.content) {
@@ -275,6 +310,9 @@ export class CodeBuddyEngineRunner {
                   content: event.tool.output || '',
                   isError: event.tool.isError,
                   ...(event.tool.data !== undefined ? { data: event.tool.data } : {}),
+                  ...(event.tool.contextOptimization
+                    ? { contextOptimization: event.tool.contextOptimization }
+                    : {}),
                 } as ToolResultContent);
 
                 // Phase 2 step 13: emit gui.action events for Computer Use overlay.
@@ -442,10 +480,29 @@ export class CodeBuddyEngineRunner {
         },
         {
           workingDirectory: session.cwd,
-          model: session.model,
+          apiKey: runtimeConfig.apiKey,
+          baseURL: runtimeConfig.baseUrl,
+          model: session.model || runtimeConfig.model,
+          thinkingLevel: session.intelligence?.thinkingLevel,
+          permissionMode: session.permissionModeOverride ?? session.permissionMode ?? 'default',
           systemPromptAppend,
         }
       );
+      session.intelligence = {
+        ...(session.intelligence ?? {
+          thinkingLevel: runtimeConfig.thinkingLevel ?? 'off',
+          fastMode: false,
+          executionLocation: 'local',
+          latencyBudgetMs: 900,
+        }),
+        lastLatency: {
+          ...session.intelligence?.lastLatency,
+          totalMs: Date.now() - turnStartedAt,
+          measuredAt: Date.now(),
+          configSetId: session.intelligence?.configSetId,
+          model: session.model || runtimeConfig.model,
+        },
+      };
       log('[EngineRunner] turn options', { sessionId: session.id, cwd: session.cwd ?? '(undefined)' });
 
       if (runtimeError && !fullContent && contentBlocks.length === 0) {
@@ -459,8 +516,9 @@ export class CodeBuddyEngineRunner {
       }
       assistantContent.push(...contentBlocks);
 
+      const assistantMessageId = uuidv4();
       const assistantMessage: Message = {
-        id: uuidv4(),
+        id: assistantMessageId,
         sessionId: session.id,
         role: 'assistant',
         content:
@@ -470,6 +528,9 @@ export class CodeBuddyEngineRunner {
         timestamp: Date.now(),
       };
       saveMessage(assistantMessage);
+      if (!runtimeError && fullContent.trim()) {
+        sharedContinuity.recordAssistant(assistantMessageId, fullContent);
+      }
 
       // Send final message
       sendToRenderer({
@@ -588,11 +649,43 @@ export class CodeBuddyEngineRunner {
     return Boolean(await this.adapter.steer?.(sessionId, prompt));
   }
 
+  private async createTurnCheckpoint(
+    session: Session,
+    prompt: string
+  ): Promise<TurnCheckpoint | null> {
+    if (!session.cwd) return null;
+    try {
+      const { loadCoreModule } = await import('../utils/core-loader');
+      type GhostSnapshotMod = {
+        getGhostSnapshotManager: (cwd: string) => {
+          createSnapshot: (desc: string) => Promise<
+            (Omit<TurnCheckpoint, 'timestamp'> & { timestamp: number | Date }) | null
+          >;
+        };
+      };
+      const mod = await loadCoreModule<GhostSnapshotMod>('checkpoints/ghost-snapshot.js');
+      if (!mod) return null;
+      const snapshot = await mod
+        .getGhostSnapshotManager(session.cwd)
+        .createSnapshot(`Turn: ${prompt.slice(0, 60)}`);
+      if (!snapshot) return null;
+      return {
+        ...snapshot,
+        timestamp: snapshot.timestamp instanceof Date
+          ? snapshot.timestamp.getTime()
+          : snapshot.timestamp,
+      };
+    } catch {
+      // Checkpoint creation is best-effort, but its attempt remains ahead of tools.
+      return null;
+    }
+  }
+
   private async resolveActivePersonaPrompt(): Promise<string | undefined> {
     try {
       const { getIdentityBridge } = await import('../identity/identity-bridge');
       const bridge = getIdentityBridge();
-      await bridge.list();
+      await bridge.ensureLoaded();
       const active = bridge.getActive();
       if (!active || active.kind !== 'persona') {
         return undefined;

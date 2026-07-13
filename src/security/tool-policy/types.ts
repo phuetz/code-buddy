@@ -44,6 +44,7 @@ export type ToolGroup =
   | 'group:system:info'     // System information gathering
   | 'group:system:modify'   // System modifications
   // Special
+  | 'group:safe'            // Audited read-only / bounded tools (fleetSafe)
   | 'group:dangerous'       // Potentially destructive operations
   | 'group:mcp'             // MCP server tools
   | 'group:plugin';         // Plugin marketplace tools
@@ -70,6 +71,7 @@ export const ALL_TOOL_GROUPS: ToolGroup[] = [
   'group:system',
   'group:system:info',
   'group:system:modify',
+  'group:safe',
   'group:dangerous',
   'group:mcp',
   'group:plugin',

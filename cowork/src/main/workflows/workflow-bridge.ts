@@ -29,9 +29,21 @@ import type {
   WorkflowRunResult,
   PendingApproval,
 } from '../../shared/workflow-types';
+import type {
+  WorkflowDryRunResult,
+  WorkflowRunComparison,
+  WorkflowRunRecord,
+  WorkflowRunSource,
+} from '../../shared/workflow-supervision';
 import { log, logError, logWarn } from '../utils/logger';
 import { loadCoreModule } from '../utils/core-loader';
 import { compileVisualToCore } from './dag-compiler';
+import {
+  containsRedactedWorkflowValue,
+  previewWorkflow,
+  workflowToolArgumentPreview,
+  WorkflowRunStore,
+} from './workflow-supervisor';
 import {
   CoworkToolAgent,
   COWORK_TOOL_AGENT_ID,
@@ -101,6 +113,7 @@ interface CoreToolRegistryModule {
 
 export class WorkflowBridge {
   private filePath: string;
+  private runStore: WorkflowRunStore;
   private cache: WorkflowDefinition[] | null = null;
 
   private orchestrator: CoreOrchestrator | null = null;
@@ -116,14 +129,16 @@ export class WorkflowBridge {
   private instanceToWorkflowId = new Map<string, string>();
   /** Active workflow run, used to tag lifecycle events. V1 = 1 at a time. */
   private currentRun: { workflowId: string; instanceId: string } | null = null;
+  private activeRunEvents: WorkflowEventPayload[] | null = null;
+  private trackedRunActive = false;
 
-  constructor() {
-    const userDataPath = app.getPath('userData');
+  constructor(userDataPath = app.getPath('userData')) {
     const dir = path.join(userDataPath, 'workflows');
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });
     }
     this.filePath = path.join(dir, 'workflows.json');
+    this.runStore = new WorkflowRunStore(path.join(dir, 'runs.json'));
   }
 
   setSendToRenderer(fn: (event: ServerEvent) => void): void {
@@ -212,22 +227,141 @@ export class WorkflowBridge {
       };
     }
 
-    const totalNodes = definition.nodes.filter(
-      (n) => n.type !== 'start' && n.type !== 'end'
-    ).length;
+    return this.runTracked(this.toVisualDefinition(definition), initialContext, 'manual');
+  }
 
-    // Compile first — fail-fast on configuration errors before booting the
-    // orchestrator, so users get a clear message at design time.
-    const visual: WorkflowVisualDefinition = {
+  preview(id: string): WorkflowDryRunResult {
+    const definition = this.get(id);
+    if (!definition) {
+      return {
+        valid: false,
+        workflowId: id,
+        generatedAt: Date.now(),
+        totalExecutableSteps: 0,
+        approvalSteps: 0,
+        externalToolSteps: 0,
+        steps: [],
+        warnings: [],
+        error: `Workflow not found: ${id}`,
+      };
+    }
+    return previewWorkflow(this.toVisualDefinition(definition));
+  }
+
+  history(workflowId?: string, limit = 50): WorkflowRunRecord[] {
+    return this.runStore.list(workflowId, limit);
+  }
+
+  compareRuns(leftRunId: string, rightRunId: string): WorkflowRunComparison | null {
+    return this.runStore.compare(leftRunId, rightRunId);
+  }
+
+  async replay(runId: string): Promise<WorkflowRunResult> {
+    const prior = this.runStore.get(runId);
+    if (!prior) {
+      return {
+        success: false,
+        status: 'failed',
+        duration: 0,
+        completedSteps: 0,
+        totalSteps: 0,
+        error: `Workflow run not found: ${runId}`,
+      };
+    }
+    if (
+      containsRedactedWorkflowValue(prior.definition) ||
+      containsRedactedWorkflowValue(prior.initialContext)
+    ) {
+      const record = this.runStore.create(
+        prior.definition,
+        prior.initialContext,
+        'replay',
+        runId
+      );
+      const result: WorkflowRunResult = {
+        success: false,
+        status: 'failed',
+        duration: 0,
+        completedSteps: 0,
+        totalSteps: prior.definition.nodes.filter(
+          (node) => node.type !== 'start' && node.type !== 'end'
+        ).length,
+        error:
+          'Secret input required: the stored replay snapshot contains redacted values. '
+          + 'Provide fresh credentials in a new reviewed run; placeholder values were not executed.',
+      };
+      this.runStore.finish(record, result, []);
+      return { ...result, runId: record.id };
+    }
+    return this.runTracked(prior.definition, prior.initialContext, 'replay', runId);
+  }
+
+  private toVisualDefinition(definition: WorkflowDefinition): WorkflowVisualDefinition {
+    return {
       id: definition.id,
       name: definition.name,
       description: definition.description,
       nodes: definition.nodes,
       edges: definition.edges,
     };
+  }
+
+  private async runTracked(
+    definition: WorkflowVisualDefinition,
+    initialContext: Record<string, unknown>,
+    source: WorkflowRunSource,
+    replayOf?: string
+  ): Promise<WorkflowRunResult> {
+    if (this.trackedRunActive) {
+      return {
+        success: false,
+        status: 'failed',
+        duration: 0,
+        completedSteps: 0,
+        totalSteps: definition.nodes.filter((node) => node.type !== 'start' && node.type !== 'end').length,
+        error: 'Another visual workflow is already running',
+      };
+    }
+    this.trackedRunActive = true;
+    try {
+      const record = this.runStore.create(definition, initialContext, source, replayOf);
+      this.activeRunEvents = [];
+      let result: WorkflowRunResult;
+      try {
+        result = await this.executeDefinition(definition, initialContext);
+      } catch (error) {
+        result = {
+          success: false,
+          status: 'failed',
+          duration: Date.now() - record.startedAt,
+          completedSteps: 0,
+          totalSteps: definition.nodes.filter((node) => node.type !== 'start' && node.type !== 'end').length,
+          error: error instanceof Error ? error.message : String(error),
+        };
+      }
+      const events = this.activeRunEvents ?? [];
+      this.runStore.finish(record, result, events);
+      return { ...result, runId: record.id };
+    } finally {
+      this.activeRunEvents = null;
+      this.trackedRunActive = false;
+    }
+  }
+
+  private async executeDefinition(
+    definition: WorkflowVisualDefinition,
+    initialContext: Record<string, unknown>
+  ): Promise<WorkflowRunResult> {
+
+    const totalNodes = definition.nodes.filter(
+      (n) => n.type !== 'start' && n.type !== 'end'
+    ).length;
+
+    // Compile first — fail-fast on configuration errors before booting the
+    // orchestrator, so users get a clear message at design time.
     let coreDef;
     try {
-      coreDef = compileVisualToCore(visual);
+      coreDef = compileVisualToCore(definition);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       logWarn('[WorkflowBridge] compile failed:', message);
@@ -266,8 +400,8 @@ export class WorkflowBridge {
       if (captured) return;
       captured = true;
       const evt = args[0] as { instanceId: string };
-      this.instanceToWorkflowId.set(evt.instanceId, definition.id);
-      this.currentRun = { workflowId: definition.id, instanceId: evt.instanceId };
+      this.instanceToWorkflowId.set(evt.instanceId, definition.id ?? '');
+      this.currentRun = { workflowId: definition.id ?? '', instanceId: evt.instanceId };
     };
     // prependListener so we run BEFORE the global lifecycle emitter installed
     // in ensureOrchestrator — otherwise the first emit would carry an empty
@@ -282,14 +416,14 @@ export class WorkflowBridge {
       );
       // Final safety: ensure the mapping is set even if our handler
       // missed the event (defensive).
-      this.instanceToWorkflowId.set(instance.instanceId, definition.id);
+      this.instanceToWorkflowId.set(instance.instanceId, definition.id ?? '');
       const duration = Date.now() - startedAt;
       const success = instance.status === 'completed';
 
       // Final emit so the renderer can mark the workflow complete.
       this.emitWorkflowEvent({
         type: success ? 'completed' : 'failed',
-        workflowId: definition.id,
+        workflowId: definition.id ?? '',
         instanceId: instance.instanceId,
         ...(success
           ? { output: instance.output ?? {} }
@@ -300,7 +434,7 @@ export class WorkflowBridge {
       this.instanceToWorkflowId.delete(instance.instanceId);
       this.currentRun = null;
 
-      log('[WorkflowBridge] run finished:', definition.id, instance.status);
+      log('[WorkflowBridge] run finished:', definition.id ?? '', instance.status);
       return {
         success,
         status: success ? 'completed' : 'failed',
@@ -316,6 +450,11 @@ export class WorkflowBridge {
       const message = err instanceof Error ? err.message : String(err);
       logWarn('[WorkflowBridge] run failed:', message);
       this.taskToVisualNode.clear();
+      this.loopBodyNodes.clear();
+      if (this.currentRun) {
+        this.instanceToWorkflowId.delete(this.currentRun.instanceId);
+      }
+      this.currentRun = null;
       return {
         success: false,
         status: 'failed',
@@ -378,6 +517,38 @@ export class WorkflowBridge {
 
         const toolAgent = new CoworkToolAgent({
           registry,
+          confirmToolInvocation: async ({ toolName, toolInput }) => {
+            const confirmationModule = await loadCoreModule<{
+              ConfirmationService: {
+                getInstance(): {
+                  requestConfirmation(
+                    options: {
+                      operation: string;
+                      filename: string;
+                      content?: string;
+                      forcePrompt?: boolean;
+                    },
+                    operationType?: 'file' | 'bash'
+                  ): Promise<{ confirmed: boolean; feedback?: string }>;
+                };
+              };
+            }>('utils/confirmation-service.js');
+            if (!confirmationModule) {
+              return {
+                confirmed: false,
+                feedback: 'Confirmation service unavailable',
+              };
+            }
+            return confirmationModule.ConfirmationService.getInstance().requestConfirmation(
+              {
+                operation: `Workflow external tool: ${toolName}`,
+                filename: `workflow://${this.currentRun?.workflowId ?? 'unknown'}/${encodeURIComponent(toolName)}`,
+                content: `Reviewed arguments:\n${workflowToolArgumentPreview(toolInput)}`,
+                forcePrompt: true,
+              },
+              'file'
+            );
+          },
           onApprovalRequired: (payload) => {
             const approval: PendingApproval = {
               workflowInstanceId: payload.workflowInstanceId,
@@ -610,6 +781,7 @@ export class WorkflowBridge {
   }
 
   private emitWorkflowEvent(payload: WorkflowEventPayload): void {
+    this.activeRunEvents?.push(payload);
     if (!this.sendToRenderer) return;
     this.sendToRenderer({ type: 'workflow.event', payload });
   }

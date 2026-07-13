@@ -36,7 +36,7 @@ const INTENTS: InternetScoutIntent[] = [...INTERNET_SCOUT_INTENTS];
 export class BrowserOperatorTool implements ITool {
   readonly name = 'browser_operator';
   readonly description =
-    'Propose a consent-gated Browser Operator session for a live web goal that web_search/web_fetch cannot satisfy (interaction, login-gated, multi-step). Returns a reviewable plan — action log, consent scopes, stop control, proof export — WITHOUT launching a browser. The operator reviews and runs it; local/interactive/login-gated sessions require explicit consent.';
+    'Propose a consent-gated Browser Operator session for a live web goal that web_search/web_fetch cannot satisfy (interaction, login-gated, multi-step). Returns a reviewable plan — action log, consent scopes, stop control, proof export — WITHOUT launching a browser. Resolve and pass sourceUrl for an executable runtime; a draft without sourceUrl remains review-only. The operator reviews and runs it; local/interactive/login-gated sessions require explicit consent.';
 
   async execute(input: Record<string, unknown>): Promise<ToolResult> {
     try {
@@ -48,6 +48,9 @@ export class BrowserOperatorTool implements ITool {
         ...(typeof data.intent === 'string' ? { intent: data.intent as InternetScoutIntent } : {}),
         ...(typeof data.requiresInteraction === 'boolean'
           ? { requiresInteraction: data.requiresInteraction }
+          : {}),
+        ...(typeof data.interactionInstruction === 'string'
+          ? { interactionInstruction: data.interactionInstruction }
           : {}),
         ...(typeof data.expectedText === 'string' ? { expectedText: data.expectedText } : {}),
         ...(typeof data.maxPages === 'number' ? { maxPages: data.maxPages } : {}),
@@ -61,6 +64,9 @@ export class BrowserOperatorTool implements ITool {
       const consentLine = draft.consent.required
         ? `⚠ Consent required (scopes: ${draft.consent.scopes.join(', ')}). This proposal does NOT launch a browser — the operator must review and grant consent before any session runs.`
         : 'Isolated public-read plan: no local/authenticated browser access requested. This proposal does NOT launch a browser; the operator reviews and runs it.';
+      const executionLine = draft.sourceUrl
+        ? `Executable starting URL: ${draft.sourceUrl}`
+        : 'Review-only draft: resolve a public HTTP(S) sourceUrl, then create a new Browser Operator draft before execution.';
 
       return {
         success: true,
@@ -68,6 +74,7 @@ export class BrowserOperatorTool implements ITool {
           renderBrowserOperatorSessionDraft(draft),
           '',
           consentLine,
+          executionLine,
           '',
           '## Source Plan',
           renderInternetScoutPlan(plan),
@@ -102,7 +109,7 @@ export class BrowserOperatorTool implements ITool {
           },
           sourceUrl: {
             type: 'string',
-            description: 'Optional known starting URL for the session.',
+            description: 'Explicit credential-free HTTP(S) starting URL. Required by the executable runtime; resolve it with web_search first when unknown.',
           },
           intent: {
             type: 'string',
@@ -112,11 +119,15 @@ export class BrowserOperatorTool implements ITool {
           mode: {
             type: 'string',
             enum: MODES,
-            description: 'Browser surface. "isolated" (default) uses a fresh public surface; "local" reuses the operator\'s logged-in browser and therefore requires consent.',
+            description: 'Browser surface. "isolated" (default) is headless; "local" opens a fresh visible dedicated browser owned by Code Buddy. Attaching an existing logged-in browser is not yet supported.',
           },
           requiresInteraction: {
             type: 'boolean',
             description: 'Set true when the goal needs clicking/typing (mutating interaction). Adds an interact stage and consent scope.',
+          },
+          interactionInstruction: {
+            type: 'string',
+            description: 'Exact single visible browser action to review and confirm. Defaults to goal when requiresInteraction is true.',
           },
           allowLoginPages: {
             type: 'boolean',
@@ -169,6 +180,12 @@ export class BrowserOperatorTool implements ITool {
       if (data[flag] !== undefined && typeof data[flag] !== 'boolean') {
         return { valid: false, errors: [`${flag} must be a boolean`] };
       }
+    }
+
+    if (data.interactionInstruction !== undefined && (
+      typeof data.interactionInstruction !== 'string' || data.interactionInstruction.trim() === ''
+    )) {
+      return { valid: false, errors: ['interactionInstruction must be a non-empty string'] };
     }
 
     return { valid: true };

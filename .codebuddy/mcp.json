@@ -43,6 +43,64 @@
       "args": ["mcp"],
       "enabled": false,
       "description": "lm-resizer — context compression for agents (compress noisy tool output, retrieve originals by hash, stats). Build https://github.com/phuetz/lm-resizer and enable. Code Buddy also auto-compresses tool output before the LLM when CODEBUDDY_LM_RESIZER=true."
+    },
+    "pubcommander": {
+      "name": "pubcommander",
+      "type": "stdio",
+      "command": "node",
+      "args": [
+        "/home/patrice/DEV/PubCommander/server/dist/mcp/stdio.js"
+      ],
+      "env": {
+        "LOG_LEVEL": "silent"
+      },
+      "enabled": true,
+      "description": "PubCommander editorial control: drafts, approval queue, scheduling dry-runs, guarded publication and analytics."
+    },
+    "pubcommander-editorial": {
+      "name": "pubcommander-editorial",
+      "type": "stdio",
+      "command": "node",
+      "args": ["/home/patrice/DEV/PubCommander/server/dist/mcp/stdio.js"],
+      "env": { "LOG_LEVEL": "silent", "PUBCOMMANDER_MCP_MODULES": "editorial" },
+      "enabled": false,
+      "description": "PubCommander templates, writing styles, content pillars, ideas and viral references."
+    },
+    "pubcommander-media": {
+      "name": "pubcommander-media",
+      "type": "stdio",
+      "command": "node",
+      "args": ["/home/patrice/DEV/PubCommander/server/dist/mcp/stdio.js"],
+      "env": { "LOG_LEVEL": "silent", "PUBCOMMANDER_MCP_MODULES": "media" },
+      "enabled": false,
+      "description": "PubCommander generated-media inventory and YouTube transcription."
+    },
+    "pubcommander-autoblog": {
+      "name": "pubcommander-autoblog",
+      "type": "stdio",
+      "command": "node",
+      "args": ["/home/patrice/DEV/PubCommander/server/dist/mcp/stdio.js"],
+      "env": { "LOG_LEVEL": "silent", "PUBCOMMANDER_MCP_MODULES": "autoblog" },
+      "enabled": false,
+      "description": "PubCommander AutoBlog configuration visibility for book and website campaigns."
+    },
+    "pubcommander-analytics": {
+      "name": "pubcommander-analytics",
+      "type": "stdio",
+      "command": "node",
+      "args": ["/home/patrice/DEV/PubCommander/server/dist/mcp/stdio.js"],
+      "env": { "LOG_LEVEL": "silent", "PUBCOMMANDER_MCP_MODULES": "analytics" },
+      "enabled": false,
+      "description": "PubCommander real stored publication performance by platform."
+    },
+    "pubcommander-automation": {
+      "name": "pubcommander-automation",
+      "type": "stdio",
+      "command": "node",
+      "args": ["/home/patrice/DEV/PubCommander/server/dist/mcp/stdio.js"],
+      "env": { "LOG_LEVEL": "silent", "PUBCOMMANDER_MCP_MODULES": "automation" },
+      "enabled": false,
+      "description": "PubCommander visual automations and execution history."
     }
   }
 }

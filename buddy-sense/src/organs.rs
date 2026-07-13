@@ -88,7 +88,13 @@ pub fn resolve_organs(available: &[Organ], env: Option<&str>) -> Vec<Organ> {
 mod tests {
     use super::*;
 
-    const ALL: &[Organ] = &[Organ::Vital, Organ::Screen, Organ::Vision, Organ::Ui, Organ::LiveAudio];
+    const ALL: &[Organ] = &[
+        Organ::Vital,
+        Organ::Screen,
+        Organ::Vision,
+        Organ::Ui,
+        Organ::LiveAudio,
+    ];
 
     #[test]
     fn unset_env_runs_every_available_organ() {
@@ -121,13 +127,19 @@ mod tests {
 
     #[test]
     fn unknown_tokens_are_ignored_but_valid_ones_still_apply() {
-        assert_eq!(resolve_organs(ALL, Some("screen,bogus")), vec![Organ::Vital, Organ::Screen]);
+        assert_eq!(
+            resolve_organs(ALL, Some("screen,bogus")),
+            vec![Organ::Vital, Organ::Screen]
+        );
     }
 
     #[test]
     fn only_intersects_what_is_actually_available() {
         // Binary built with just the heartbeat: asking for vision yields only vital.
-        assert_eq!(resolve_organs(&[Organ::Vital], Some("vision")), vec![Organ::Vital]);
+        assert_eq!(
+            resolve_organs(&[Organ::Vital], Some("vision")),
+            vec![Organ::Vital]
+        );
     }
 
     #[test]

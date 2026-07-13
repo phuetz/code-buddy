@@ -11,6 +11,7 @@
 import { CodeBuddyClient, CodeBuddyMessage, CodeBuddyToolCall } from "../../codebuddy/client.js";
 import { withStallGuard } from "../../utils/stream-stall-guard.js";
 import { ChatEntry, StreamingChunk } from "../types.js";
+import type { ToolResult } from '../../types/index.js';
 import { ToolHandler, normalizeHallucinatedLocalToolCall } from "../tool-handler.js";
 import { ToolSelectionStrategy } from "./tool-selection-strategy.js";
 import { StreamingHandler, RawStreamingChunk } from "../streaming/index.js";
@@ -43,7 +44,6 @@ import {
   PLAN_APPROVAL_SIGNAL,
 } from "./turn-signals.js";
 import {
-  persistToolResult,
   applyObservationVariator,
   logYoloCostIfEnabled,
 } from "./post-tool-handlers.js";
@@ -52,9 +52,12 @@ import type { MiddlewarePipeline, MiddlewareContext } from "../middleware/index.
 import { extractEditedFilesFromHistory } from "../middleware/changed-files.js";
 import type { MessageQueue } from "../message-queue.js";
 import { semanticTruncate } from "../../utils/head-tail-truncation.js";
-import { compressWithLmResizer, isLmResizerEnabled } from "../../context/lm-resizer-compressor.js";
+import { optimizeToolObservation } from '../../context/tool-observation-optimizer.js';
 import { compress as tokenJuice, isTokenJuiceEnabled, JUICE_MIN_CHARS } from "../../context/token-juice.js";
-import { getRestorableCompressor } from "../../context/restorable-compression.js";
+import {
+  formatToolResultForRecovery,
+  getRestorableCompressor,
+} from "../../context/restorable-compression.js";
 import { recordCompactionFork } from "../../context/compaction-fork.js";
 import { getActiveRunStore } from "../../observability/run-store.js";
 import type { ICMBridge } from "../../memory/icm-bridge.js";
@@ -63,6 +66,7 @@ import { formatTokenUsage, estimateCost } from "../../utils/token-display.js";
 import { classifyQuery } from "./query-classifier.js";
 import { getModelToolConfig } from "../../config/model-tools.js";
 import { getLatencyOptimizer, getStreamingOptimizer } from "../../optimization/latency-optimizer.js";
+import { buildTextEmotionalPresenceContext } from "../../companion/reply-augment.js";
 
 /**
  * Tools whose (verbose, prose/HTML) output TokenJuice may losslessly compress before it
@@ -673,6 +677,19 @@ export class AgentExecutor {
     // preprocessUserMessage (F10).
     message = await this.preprocessUserMessage(message, messages);
 
+    // Pure, per-turn tone context. Keep it out of the persisted transcript and
+    // the agent identity: a changing system-prompt append would rebuild Cowork's
+    // cached agent on every message. This block is added to each prepared LLM
+    // request in the turn instead, including post-tool rounds.
+    const emotionalPresenceContext = buildTextEmotionalPresenceContext(
+      message,
+      messages.flatMap((turn) =>
+        typeof turn.content === 'string'
+          ? [{ role: turn.role, content: turn.content }]
+          : []
+      )
+    );
+
     const { injection: ctxLevel, complexity: queryComplexity } = classifyQuery(message);
     logger.debug(`Query classified as '${queryComplexity}' — context injection level: ${JSON.stringify(ctxLevel)}`);
 
@@ -839,6 +856,12 @@ export class AgentExecutor {
 
         const preparedMessages = prepareTurnMessages(this.deps.contextManager, messages);
         preparedMessages.push(...contextBlocks);
+        if (emotionalPresenceContext) {
+          preparedMessages.push({
+            role: 'system',
+            content: `<interaction_context ephemeral="true">\n${emotionalPresenceContext}\n</interaction_context>`,
+          });
+        }
 
         // Context warning — always check regardless of pipeline state
         {
@@ -941,7 +964,7 @@ export class AgentExecutor {
           rawStreamedContent =
             `Blocked: ${forcedChatOnlyToolRunModel} is configured as a chat-only local model and ` +
             'returned no structured tool call even with GROK_FORCE_TOOLS=true. ' +
-            'Use a tool-capable model such as qwen3.5-ctx32k or gpt-5.5 for goals that need shell/tools.';
+            'Use a tool-capable model such as qwen3.5-ctx32k or gpt-5.6-sol for goals that need shell/tools.';
           yield { type: "content", content: `${rawStreamedContent}\n` };
         }
         if (!rawStreamedContent) rawStreamedContent = "Using tools to help you...";
@@ -1060,7 +1083,7 @@ export class AgentExecutor {
             emitFleetToolStarted(toolCall);
 
             // Use streaming execution for tools that support it (bash, reason, + adapter-based)
-            let result;
+            let result: ToolResult;
             const _streamToolStartMs = Date.now();
             const STREAMING_TOOLS = ['bash', 'reason', 'generate_document'];
             if (STREAMING_TOOLS.includes(toolCall.function.name)) {
@@ -1212,63 +1235,113 @@ export class AgentExecutor {
               return;
             }
 
-            // Persist the FULL raw output for recovery (restore_context) BEFORE any
-            // truncation/compression, so the original is always recoverable, not the shrunk copy.
-            const rawForRecovery = sanitizeToolResult(result?.success ? result.output || "Success" : result?.error || "Error");
-            persistToolResult(toolCall.id, rawForRecovery);
+            // Build three deliberately separate views of one observation:
+            //   1. recovery: exact native output persisted before any hook/optimizer,
+            //   2. display: provider-sanitized ToolResult emitted to the UI,
+            //   3. model: token-budgeted observation appended to the transcript.
+            // Non-streaming ToolHandler calls already persisted (1) before their
+            // after-hooks. Streaming adapters are persisted here on first sight.
+            const recoveryStore = getRestorableCompressor();
+            const toolWorkspace = typeof this.deps.toolHandler.getWorkingDirectory === 'function'
+              ? this.deps.toolHandler.getWorkingDirectory()
+              : process.cwd();
+            let rawForRecovery = formatToolResultForRecovery(result);
+            if (toolCall.id) {
+              const existingRecovery = recoveryStore.restore(toolCall.id, toolWorkspace);
+              if (existingRecovery.found) {
+                rawForRecovery = existingRecovery.content;
+              } else {
+                recoveryStore.writeToolResult(
+                  toolCall.id,
+                  rawForRecovery,
+                  toolWorkspace,
+                );
+              }
+            }
 
-            // TokenJuice (lossless): before the lossy shrink below, dedupe exactly-repeated
-            // blocks + convert any raw HTML → markdown in VERBOSE WEB output (web_fetch/web_search),
-            // where the gain is clear and the risk is low. Scoped to those tools on purpose — never
-            // applied blindly to structured tool output the agent must parse. Only kicks in above a
-            // size threshold; default ON (transforms are exact/semantically-preserving), kill-switch
-            // via CODEBUDDY_TOKEN_JUICE=false. The full original was persisted above (recoverable).
+            let modelObservation = rawForRecovery;
+            // TokenJuice remains a lossless first pass for verbose web content.
+            // It only affects the model view; recovery and display stay intact.
             if (
               isTokenJuiceEnabled() &&
-              result?.output &&
-              result.output.length > JUICE_MIN_CHARS &&
+              result?.success &&
+              modelObservation.length > JUICE_MIN_CHARS &&
               JUICE_WEB_TOOLS.has(toolCall.function.name)
             ) {
-              const juiced = tokenJuice(result.output, { html: true, dedupe: true });
+              const juiced = tokenJuice(modelObservation, { html: true, dedupe: true });
               if (juiced.savedChars > 0) {
                 logger.debug(
                   `[token-juice] ${toolCall.function.name}: saved ${juiced.savedChars} chars (${juiced.applied.join('+')})`,
                 );
-                result = { ...result, output: juiced.output };
+                modelObservation = juiced.output;
               }
             }
 
-            // Shrink very large tool output (> 20k chars) before it reaches the LLM. Prefer
-            // lm-resizer (signal-preserving, keeps errors/paths, recoverable) when enabled
-            // (CODEBUDDY_LM_RESIZER=true); otherwise fall back to semantic truncation. Both are
-            // best-effort; off by default → unchanged behaviour.
-            const RAW_OUTPUT_LIMIT = 20_000;
-            if (result?.output && result.output.length > RAW_OUTPUT_LIMIT) {
-              let shrunk: string | null = null;
-              if (isLmResizerEnabled()) {
-                const r = await compressWithLmResizer(result.output, message ?? "");
-                if (r && r.compressed.length < result.output.length) {
-                  const note = r.hash
-                    ? `\n[lm-resizer: ~${r.bytesSaved} bytes saved — full output via restore_context (or \`lm-resizer retrieve ${r.hash}\`)]`
-                    : "";
-                  shrunk = r.compressed + note;
+            let logicalCommand = '';
+            try {
+              const args = JSON.parse(toolCall.function.arguments || '{}') as Record<string, unknown>;
+              if (typeof args.command === 'string') logicalCommand = args.command;
+            } catch { /* malformed args were already handled by the dispatcher */ }
+
+            const activeObservationModel = this.deps.client.getCurrentModel() ?? '';
+            const activeObservationConfig = getModelToolConfig(activeObservationModel);
+            const optimization = await optimizeToolObservation({
+              toolName: toolCall.function.name,
+              toolCallId: toolCall.id || `tool_${Date.now()}`,
+              content: modelObservation,
+              success: result?.success,
+              exitCode: result?.success ? 0 : 1,
+              command: logicalCommand,
+              query: message ?? '',
+              workspaceRoot: toolWorkspace,
+              contextWindow: activeObservationConfig.contextWindow ?? 128_000,
+              currentInputTokens: inputTokens,
+              signal: abortController?.signal,
+            });
+
+            let modelStreamContent = optimization.content;
+            // lm-resizer owns the semantic budget when available. Its absence or
+            // an intentionally raw failure still receives a model-aware hard cap;
+            // the exact observation remains available through restore_context.
+            if (toolCall.function.name !== 'restore_context') {
+              const budgetTokens = optimization.tokenBudget ?? 5_000;
+              const hardLimitChars = Math.min(80_000, Math.max(8_000, budgetTokens * 4));
+              if (
+                modelStreamContent.length > hardLimitChars ||
+                this.deps.tokenCounter.countTokens(modelStreamContent) > budgetTokens
+              ) {
+                const truncated = semanticTruncate(modelStreamContent, { maxChars: hardLimitChars });
+                if (truncated.truncated) {
+                  const recoveryNote = toolCall.id
+                    ? `\n\n[Full exact observation: restore_context({"identifier":${JSON.stringify(toolCall.id)}})]`
+                    : '';
+                  modelStreamContent = `${truncated.output}${recoveryNote}`;
                 }
               }
-              if (shrunk === null) {
-                const truncResult = semanticTruncate(result.output, { maxChars: RAW_OUTPUT_LIMIT });
-                if (truncResult.truncated) shrunk = truncResult.output;
-              }
-              if (shrunk !== null) {
-                result = { ...result, output: shrunk };
-              }
             }
 
-            // --- Disk-backed tool result (Manus AI #19): the content sent to the LLM
-            // (already-shrunk above; the full original was persisted at rawForRecovery). ---
-            const rawStreamContent = sanitizeToolResult(result?.success ? result.output || "Success" : result?.error || "Error");
+            const observationMetadata = {
+              optimizer: optimization.optimized ? 'lm-resizer' : 'none',
+              reason: optimization.reason,
+              rawRef: optimization.rawRef,
+              originalBytes: optimization.originalBytes,
+              finalBytes: Buffer.byteLength(modelStreamContent),
+              bytesSaved: Math.max(0, optimization.originalBytes - Buffer.byteLength(modelStreamContent)),
+              ...(optimization.transport ? { transport: optimization.transport } : {}),
+            };
+            result = {
+              ...result,
+              metadata: {
+                ...(result?.metadata ?? {}),
+                contextOptimization: observationMetadata,
+              },
+            };
 
-            // --- Observation Variator (Manus AI #17) ---
-            const variedStreamContent = applyObservationVariator(toolCall.function.name, rawStreamContent);
+            const rawStreamContent = sanitizeToolResult(rawForRecovery);
+            const variedStreamContent = applyObservationVariator(
+              toolCall.function.name,
+              sanitizeToolResult(modelStreamContent),
+            );
 
             const toolResultEntry: ChatEntry = {
               type: "tool_result",

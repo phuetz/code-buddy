@@ -50,6 +50,45 @@ export function condenseForSpeech(text: string, opts: CondenseOptions = {}): str
   return out;
 }
 
+export interface StreamingSpeechChunks {
+  chunks: string[];
+  nextOffset: number;
+}
+
+/**
+ * Return only sentences that are complete in a streaming assistant response.
+ * `nextOffset` points into the original (un-cleaned) text, so callers can feed
+ * successive deltas without ever speaking the same sentence twice.
+ */
+export function extractCompleteSpeechChunks(
+  text: string,
+  startOffset = 0,
+  maxChunks = 3
+): StreamingSpeechChunks {
+  const safeOffset = Math.max(0, Math.min(startOffset, text.length));
+  const tail = text.slice(safeOffset);
+  const chunks: string[] = [];
+  const boundary = /[.!?…](?=\s|$)/g;
+  let consumed = 0;
+  let segmentStart = 0;
+  let match: RegExpExecArray | null;
+
+  while (chunks.length < Math.max(0, maxChunks) && (match = boundary.exec(tail))) {
+    const segmentEnd = match.index + match[0].length;
+    const cleaned = cleanForSpeech(tail.slice(segmentStart, segmentEnd)).replace(/\s+/g, ' ').trim();
+    if (cleaned) chunks.push(cleaned);
+    consumed = segmentEnd;
+    while (/\s/.test(tail[consumed] ?? '')) consumed += 1;
+    segmentStart = consumed;
+    boundary.lastIndex = consumed;
+  }
+
+  return {
+    chunks,
+    nextOffset: safeOffset + consumed,
+  };
+}
+
 const COMMAND_MODE_KEY = 'cowork.voice.command.enabled';
 
 /** True when push-to-talk should EXECUTE the transcript (voice piloting) vs. dictate it.

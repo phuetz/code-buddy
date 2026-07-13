@@ -42,8 +42,19 @@ pub struct SensoryEvent {
 }
 
 impl SensoryEvent {
-    pub fn new(modality: Modality, kind: impl Into<String>, salience: u8, payload: serde_json::Value) -> Self {
-        Self { modality, kind: kind.into(), ts_ms: now_ms(), salience, payload }
+    pub fn new(
+        modality: Modality,
+        kind: impl Into<String>,
+        salience: u8,
+        payload: serde_json::Value,
+    ) -> Self {
+        Self {
+            modality,
+            kind: kind.into(),
+            ts_ms: now_ms(),
+            salience,
+            payload,
+        }
     }
 }
 

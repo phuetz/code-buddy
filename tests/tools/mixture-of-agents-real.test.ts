@@ -74,6 +74,91 @@ describe('mixture_of_agents Hermes tool real HTTP path', () => {
     const aggregatorRequest = requests[2]!.body;
     expect(JSON.stringify(aggregatorRequest.messages)).toContain('ref-alpha says plan A');
     expect(JSON.stringify(aggregatorRequest.messages)).toContain('ref-beta says plan B');
+    expect(aggregatorRequest.reasoning).toEqual({
+      enabled: true,
+      effort: 'low',
+      exclude: true,
+    });
+  });
+
+  it('assigns complementary use-case roles to simultaneous reference calls', async () => {
+    const result = await executeMixtureOfAgents(
+      { user_prompt: 'Review this patch.', use_case: 'code' },
+      {
+        apiKey: 'openrouter-test-token',
+        baseUrl,
+        referenceModels: ['ref-alpha', 'ref-beta'],
+        aggregatorModel: 'agg-synth',
+        maxRetries: 1,
+      },
+    );
+
+    expect(result.success).toBe(true);
+    const data = result.data as {
+      use_case: string;
+      reference_results: Array<{ role: string }>;
+    };
+    expect(data.use_case).toBe('code');
+    expect(data.reference_results[0]?.role).toContain('Architecte logiciel');
+    expect(data.reference_results[1]?.role).toContain('Implémenteur');
+    expect(JSON.stringify(requests[0]?.body.messages)).toContain('Architecte logiciel');
+    expect(JSON.stringify(requests[1]?.body.messages)).toContain('Implémenteur');
+  });
+
+  it('uses a parallel redundancy race without a serial aggregator in the fast profile', async () => {
+    const result = await executeMixtureOfAgents(
+      { user_prompt: 'Answer quickly.', use_case: 'fast' },
+      {
+        apiKey: 'openrouter-test-token',
+        baseUrl,
+        referenceModels: ['ref-alpha', 'ref-beta'],
+        aggregatorModel: 'agg-synth',
+        maxRetries: 1,
+      },
+    );
+
+    expect(result.success).toBe(true);
+    expect(result.data).toEqual(
+      expect.objectContaining({
+        use_case: 'fast',
+        aggregation_skipped: true,
+      }),
+    );
+    expect(requests).toHaveLength(2);
+    expect(requests.map((request) => request.body.model)).toEqual(['ref-alpha', 'ref-beta']);
+  });
+
+  it('returns the best reference with provenance when the free aggregator is unavailable', async () => {
+    const result = await executeMixtureOfAgents(
+      { user_prompt: 'Keep useful work when synthesis is down.' },
+      {
+        apiKey: 'openrouter-test-token',
+        baseUrl,
+        referenceModels: ['ref-alpha'],
+        aggregatorModel: 'agg-fail',
+        maxRetries: 1,
+      },
+    );
+
+    expect(result.success).toBe(true);
+    expect(result.data).toEqual(
+      expect.objectContaining({
+        response: 'ref-alpha says plan A',
+        aggregation_degraded: true,
+        error: expect.stringContaining('Aggregator unavailable'),
+      }),
+    );
+  });
+
+  it('rejects unknown use-case profiles before making an HTTP request', async () => {
+    const result = await executeMixtureOfAgents(
+      { user_prompt: 'Test.', use_case: 'unknown-profile' },
+      { apiKey: 'openrouter-test-token', baseUrl },
+    );
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('Unknown mixture_of_agents use_case');
+    expect(requests).toHaveLength(0);
   });
 
   it('continues when one reference model fails and the minimum threshold is still met', async () => {
@@ -135,7 +220,7 @@ function handleRequest(req: IncomingMessage, res: ServerResponse): void {
     });
 
     const model = typeof body.model === 'string' ? body.model : '';
-    if (model === 'ref-fail') {
+    if (model === 'ref-fail' || model === 'agg-fail') {
       writeJson(res, 429, { error: { message: 'rate limited' } });
       return;
     }

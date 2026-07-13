@@ -16,6 +16,7 @@ import {
   _unwireForTests,
   getDispatchState,
   type PeerChatClientGetter,
+  type PeerChatClientResolver,
 } from '../../src/fleet/peer-chat-bridge.js';
 import {
   dispatchPeerRequest,
@@ -146,6 +147,29 @@ describe('peer-chat-bridge — Phase (d).15', () => {
 
       expect(r.ok).toBe(false);
       expect(r.error?.message).toContain('dispatchProfile must be one of');
+      expect(chat).not.toHaveBeenCalled();
+    });
+
+    it('fails closed for an unknown or unavailable explicit provider', async () => {
+      const { client, chat } = makeMockClient();
+      const resolver = vi.fn(() => null) as PeerChatClientResolver;
+      wirePeerChatBridge(() => client as never, {
+        provider: 'agy-cli', model: 'Gemini 3.1 Pro (High)', isLocal: false,
+      }, resolver);
+
+      const unknown = await dispatchPeerRequest(
+        { id: 'provider-unknown', method: 'peer.chat', params: { prompt: 'q', provider: 'bogus' } },
+        baseCtx,
+      );
+      expect(unknown.ok).toBe(false);
+      expect(unknown.error?.message).toContain('unknown provider');
+
+      const unavailable = await dispatchPeerRequest(
+        { id: 'provider-missing', method: 'peer.chat', params: { prompt: 'q', provider: 'openrouter' } },
+        baseCtx,
+      );
+      expect(unavailable.ok).toBe(false);
+      expect(unavailable.error?.message).toContain('PROVIDER_UNAVAILABLE');
       expect(chat).not.toHaveBeenCalled();
     });
   });
@@ -296,6 +320,43 @@ describe('peer-chat-bridge — Phase (d).15', () => {
       expect(payload.modelRequested).toBe('grok-3-mini-fast');
     });
 
+    it('routes an explicit provider to its exact client and reports provenance', async () => {
+      const defaultClient = makeMockClient();
+      const lemonadeClient = makeMockClient(vi.fn(async () => ({
+        choices: [{ message: { role: 'assistant', content: 'local answer' }, finish_reason: 'stop' }],
+      })));
+      const resolver = vi.fn((provider: string) => provider === 'lemonade'
+        ? {
+            client: lemonadeClient.client as never,
+            info: { provider: 'lemonade' as const, model: 'qwen-local', isLocal: true },
+          }
+        : null) as PeerChatClientResolver;
+      wirePeerChatBridge(
+        () => defaultClient.client as never,
+        { provider: 'agy-cli', model: 'Gemini 3.1 Pro (High)', isLocal: false },
+        resolver,
+      );
+
+      const response = await dispatchPeerRequest(
+        {
+          id: 'provider-exact',
+          method: 'peer.chat',
+          params: { prompt: 'Q', provider: 'lemonade', model: 'qwen-local' },
+        },
+        baseCtx,
+      );
+
+      expect(response.ok).toBe(true);
+      expect(defaultClient.chat).not.toHaveBeenCalled();
+      expect(lemonadeClient.chat).toHaveBeenCalledOnce();
+      expect(response.payload).toMatchObject({
+        text: 'local answer',
+        providerRequested: 'lemonade',
+        providerResolved: 'lemonade',
+        modelRequested: 'qwen-local',
+      });
+    });
+
     it('returns empty text when the LLM response has no content (defensive)', async () => {
       const chat = vi.fn(async () => ({
         choices: [{ message: { role: 'assistant', content: null }, finish_reason: 'length' }],
@@ -349,6 +410,125 @@ describe('peer-chat-bridge — Phase (d).15', () => {
   });
 
   describe('peer.dispatch — profile metadata', () => {
+    it('routes an explicit Fleet provider alias to the exact client and reports provenance', async () => {
+      const defaultClient = makeMockClient();
+      const lmStudioClient = makeMockClient(vi.fn(async () => ({
+        choices: [{ message: { role: 'assistant', content: 'lm answer' }, finish_reason: 'stop' }],
+      })));
+      const resolver = vi.fn((provider: string) => provider === 'lmstudio'
+        ? {
+            client: lmStudioClient.client as never,
+            info: { provider: 'lmstudio' as const, model: 'local-model', isLocal: true },
+          }
+        : null) as PeerChatClientResolver;
+      wirePeerChatBridge(
+        () => defaultClient.client as never,
+        { provider: 'agy-cli', model: 'Gemini 3.1 Pro (High)', isLocal: false },
+        resolver,
+      );
+
+      const accepted = await dispatchPeerRequest(
+        {
+          id: 'dispatch-provider-alias',
+          method: 'peer.dispatch',
+          params: {
+            id: 'run-provider-alias',
+            prompt: 'Answer locally',
+            provider: 'lm-studio',
+            model: 'local-model',
+          },
+        },
+        baseCtx,
+      );
+
+      expect(accepted.ok).toBe(true);
+      await waitFor(() => getDispatchState('run-provider-alias')?.status === 'completed');
+      expect(defaultClient.chat).not.toHaveBeenCalled();
+      expect(lmStudioClient.chat).toHaveBeenCalledOnce();
+      expect(resolver).toHaveBeenCalledWith('lmstudio', 'local-model');
+      expect(accepted.payload).toMatchObject({
+        providerRequested: 'lmstudio',
+        providerResolved: 'lmstudio',
+      });
+
+      const status = await dispatchPeerRequest(
+        {
+          id: 'dispatch-provider-alias-status',
+          method: 'peer.dispatchStatus',
+          params: { runId: 'run-provider-alias' },
+        },
+        baseCtx,
+      );
+      expect(status.payload).toMatchObject({
+        status: 'completed',
+        result: 'lm answer',
+        providerRequested: 'lmstudio',
+        providerResolved: 'lmstudio',
+      });
+    });
+
+    it('keeps unknown on the legacy client but fails closed for explicit invalid/unavailable providers', async () => {
+      const defaultClient = makeMockClient();
+      const resolver = vi.fn(() => null) as PeerChatClientResolver;
+      wirePeerChatBridge(
+        () => defaultClient.client as never,
+        { provider: 'agy-cli', model: 'Gemini 3.1 Pro (High)', isLocal: false },
+        resolver,
+      );
+
+      const legacy = await dispatchPeerRequest(
+        {
+          id: 'dispatch-provider-legacy',
+          method: 'peer.dispatch',
+          params: {
+            id: 'run-provider-legacy',
+            prompt: 'Use the legacy default',
+            provider: 'unknown',
+          },
+        },
+        baseCtx,
+      );
+      expect(legacy.ok).toBe(true);
+      await waitFor(() => getDispatchState('run-provider-legacy')?.status === 'completed');
+      expect(defaultClient.chat).toHaveBeenCalledOnce();
+      expect(getDispatchState('run-provider-legacy')?.provider).toBeUndefined();
+
+      const invalid = await dispatchPeerRequest(
+        {
+          id: 'dispatch-provider-invalid',
+          method: 'peer.dispatch',
+          params: {
+            id: 'run-provider-invalid',
+            prompt: 'Do not queue this',
+            provider: 'bogus',
+          },
+        },
+        baseCtx,
+      );
+      expect(invalid.ok).toBe(false);
+      expect(invalid.error?.message).toContain('unknown provider');
+      expect(getDispatchState('run-provider-invalid')).toBeNull();
+
+      const unavailable = await dispatchPeerRequest(
+        {
+          id: 'dispatch-provider-unavailable',
+          method: 'peer.dispatch',
+          params: {
+            id: 'run-provider-unavailable',
+            prompt: 'Do not fall back',
+            provider: 'openrouter',
+          },
+        },
+        baseCtx,
+      );
+      expect(unavailable.ok).toBe(true);
+      await waitFor(() => getDispatchState('run-provider-unavailable')?.status === 'failed');
+      expect(getDispatchState('run-provider-unavailable')?.error).toContain(
+        'PROVIDER_UNAVAILABLE',
+      );
+      expect(defaultClient.chat).toHaveBeenCalledOnce();
+    });
+
     it('rejects unknown dispatchProfile values before queuing a dispatch', async () => {
       const { client, chat } = makeMockClient();
       wirePeerChatBridge(() => client as never);

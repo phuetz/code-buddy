@@ -26,10 +26,12 @@ camera_snapshot
 canvas
 clipboard
 code_explorer_ask
+code_exec
 code_graph
 code_stats
 codebase_map
 codebase_replace
+comfy_recipe
 computer_control
 create_file
 create_skill
@@ -75,6 +77,7 @@ ha_get_state
 ha_list_entities
 ha_list_services
 http_probe
+image_edit
 image_generate
 internet_scout_plan
 internet_scout_run
@@ -107,6 +110,7 @@ list_directory
 list_peers
 lsp_code_action
 lsp_rename
+meeting_notes
 mixture_of_agents
 multi_edit
 object_detect

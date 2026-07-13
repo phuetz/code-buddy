@@ -24,6 +24,7 @@ import {
   globalShortcut,
   session,
   clipboard,
+  desktopCapturer,
   nativeImage,
 } from 'electron';
 import { join, resolve, dirname, isAbsolute, basename } from 'path';
@@ -61,6 +62,10 @@ import { CommandRunner } from './studio/command-runner';
 import { registerScaffoldIpc } from './studio/scaffold-ipc';
 import { registerMediaGenIpc } from './media/media-gen-ipc';
 import { MediaGenService } from './media/media-gen-service';
+import { registerComfyLabIpc } from './comfy-lab/comfy-lab-ipc';
+import { ComfyLabService } from './comfy-lab/comfy-lab-service';
+import { registerAvatarBibleIpc } from './comfy-lab/avatar-bible-ipc';
+import { AvatarBibleService } from './comfy-lab/avatar-bible-service';
 import { registerFilmIpc } from './film/film-ipc';
 import { FilmService } from './film/film-service';
 import { registerAssistantIpc } from './assistant/assistant-ipc';
@@ -69,12 +74,16 @@ import { ScaffoldService } from './studio/scaffold-service';
 import { registerPairingIpcHandlers } from './ipc/pairing-ipc';
 import { registerUserModelIpcHandlers } from './ipc/user-model-ipc';
 import { registerCompanionIpcHandlers } from './ipc/companion-ipc';
+import { registerMaisonIpcHandlers } from './ipc/maison-ipc';
 import { registerAutomationsIpcHandlers } from './ipc/automations-ipc';
 import { registerDesktopSnapshotIpcHandlers } from './ipc/desktop-snapshot-ipc';
 import { registerMissionIpcHandlers } from './ipc/mission-ipc';
 import { registerSpecIpcHandlers } from './ipc/spec-ipc';
 import { registerSpecNextIpcHandlers } from './ipc/spec-next-ipc';
 import { registerLiveLauncherIpcHandlers } from './ipc/live-launcher-ipc';
+import { registerBrowserOperatorRuntimeIpcHandlers } from './ipc/browser-operator-runtime-ipc';
+import { registerMeetingLiveIpcHandlers } from './ipc/meeting-live-ipc';
+import { meetingDisplayAudioBroker } from './meeting/meeting-display-audio';
 import { registerPermissionIpcHandlers } from './ipc/permission-ipc';
 import { registerConfigModelIpcHandlers } from './ipc/config-model-ipc';
 import { registerLogsIpcHandlers } from './ipc/logs-ipc';
@@ -89,6 +98,7 @@ import { registerGitIpcHandlers } from './ipc/git-ipc';
 import { registerCheckpointIpcHandlers } from './ipc/checkpoint-ipc';
 import { initDatabase, closeDatabase } from './db/database';
 import { SessionManager, type EngineAdapterLike } from './session/session-manager';
+import { getExternalSession, listExternalSessions } from './session/cli-session-continuity';
 import {
   classifyEngineLoadError,
   resolveEnginePathWithDiagnostic,
@@ -102,6 +112,7 @@ import {
 } from './codebuddy/model-discovery';
 import { ProjectManager } from './project/project-manager';
 import { ProjectMemoryService } from './project/project-memory';
+import { ProjectEvolutionService } from './project/project-evolution';
 import { SubAgentBridge } from './agent/sub-agent-bridge';
 import { OrchestratorBridge } from './agent/orchestrator-bridge';
 import { FleetBridge } from './fleet/fleet-bridge';
@@ -390,6 +401,7 @@ let skillsManager: SkillsManager | null = null;
 let pluginRuntimeService: PluginRuntimeService | null = null;
 let scheduledTaskManager: ScheduledTaskManager | null = null;
 let projectManager: ProjectManager | null = null;
+let projectEvolutionService: ProjectEvolutionService | null = null;
 let subAgentBridge: SubAgentBridge | null = null;
 let orchestratorBridge: OrchestratorBridge | null = null;
 let fleetBridge: FleetBridge | null = null;
@@ -1087,6 +1099,7 @@ function createWindow() {
   }
 
   mainWindow.on('closed', () => {
+    meetingDisplayAudioBroker.dispose();
     mainWindow = null;
     setMainWindow(null);
   });
@@ -1313,32 +1326,42 @@ remoteBackendManager.init({
 app
   .whenReady()
   .then(async () => {
-    // Grant microphone access by default — without this, the renderer's
-    // `navigator.mediaDevices.getUserMedia({audio: true})` rejects
-    // silently and the MicButton (Phase 8 voice) appears stuck on
-    // click. The user already implicitly authorised the mic when they
-    // installed Cowork; the OS still gates physical access at the
-    // audio-capture layer, so this is purely about Electron's own
-    // intra-process permission gate.
-    session.defaultSession.setPermissionRequestHandler((_webContents, permission, callback) => {
-      // Electron's union for request-side permission includes
-      // 'media' (covers both audio + video capture in one bucket).
-      // Older Electrons also expose 'audioCapture' separately so we
-      // accept both via a permissive cast.
+    meetingDisplayAudioBroker.install(session.defaultSession, desktopCapturer);
+    // Media permission is confined to the canonical Cowork renderer. Preview
+    // webviews share defaultSession but must never inherit microphone or
+    // loopback access. Display capture additionally requires a one-shot arm
+    // from Meeting Live and is consumed by the display-media handler.
+    session.defaultSession.setPermissionRequestHandler((webContents, permission, callback) => {
       const p = permission as string;
-      if (p === 'media' || p === 'audioCapture') {
+      const main = getMainWindow();
+      const trustedMain = Boolean(
+        main && !main.isDestroyed() && webContents.id === main.webContents.id,
+      );
+      if (trustedMain && (p === 'media' || p === 'audioCapture')) {
+        callback(true);
+        return;
+      }
+      if (
+        trustedMain
+        && p === 'display-capture'
+        && meetingDisplayAudioBroker.isArmedFor(webContents)
+      ) {
         callback(true);
         return;
       }
       callback(false);
     });
-    // Electron 11+ also queries via setPermissionCheckHandler before
-    // actually firing the request — both must agree for getUserMedia
-    // to succeed. The check-side union is slightly different from the
-    // request-side; same permissive cast.
-    session.defaultSession.setPermissionCheckHandler((_webContents, permission) => {
+    session.defaultSession.setPermissionCheckHandler((webContents, permission) => {
       const p = permission as string;
-      return p === 'media' || p === 'audioCapture';
+      const main = getMainWindow();
+      const trustedMain = Boolean(
+        webContents && main && !main.isDestroyed() && webContents.id === main.webContents.id,
+      );
+      if (!trustedMain) return false;
+      if (p === 'media' || p === 'audioCapture') return true;
+      return p === 'display-capture'
+        && Boolean(webContents)
+        && meetingDisplayAudioBroker.isArmedFor(webContents!);
     });
 
     // Apply dev logs setting from config
@@ -1605,22 +1628,11 @@ app
     // This avoids session.start racing the startup path and hitting a null manager.
     sessionManager = new SessionManager(db, sendToRenderer, pluginRuntimeService, engineAdapter);
 
-    // Cowork is a trusted local GUI driving a headless engine: auto-approve tool
-    // operations so the agent's own bash/file work — e.g. running the bundled
-    // Python to draw a chart — doesn't fail with "Approval requires an interactive
-    // terminal" (there is no TTY in the embedded engine) and trigger a jarring
-    // auto-repair loop. Safety is unchanged: the command-validator still hard-blocks
-    // dangerous patterns (rm/dd/chmod/curl/sh/eval…) and the user's permission mode
-    // (e.g. plan = read-only, set via Settings) is still checked first.
-    try {
-      const confirmMod = await loadCoreModule<{
-        ConfirmationService: { getInstance(): { setSessionFlag(flag: string, value: boolean): void } };
-      }>('utils/confirmation-service.js');
-      confirmMod?.ConfirmationService.getInstance().setSessionFlag('allOperations', true);
-      log('[main] Embedded engine: auto-approving tool operations (trusted local GUI)');
-    } catch (err) {
-      log('[main] Failed to configure embedded auto-approve:', err);
-    }
+    // Do not grant `allOperations` process-wide. The engine adapter wires
+    // ConfirmationService to Cowork's real permission dialog, while routine
+    // workspace commands now run autonomously inside the OS/Docker sandbox.
+    // Boundary approvals are cached only for the exact argv + cwd key.
+    log('[main] Embedded engine: workspace sandbox + scoped permission dialog enabled');
 
     const recovery = sessionManager.recoverFromTurnJournals();
     if (recovery.sessionsChanged > 0 || recovery.errors > 0) {
@@ -1639,6 +1651,7 @@ app
     // Wire project memory service into session manager
     const projectMemoryService = new ProjectMemoryService(projectManager);
     projectMemoryServiceRef = projectMemoryService;
+    projectEvolutionService = new ProjectEvolutionService(db, projectManager);
     sessionManager.setProjectServices(projectManager, projectMemoryService);
     sessionManager.recoverQueuedPromptsFromTurnJournals();
 
@@ -1683,7 +1696,16 @@ app
     skillMdBridge = new SkillMdBridge();
     costBridge = new CostBridge(db);
     rulesBridge = new RulesBridge();
-    sessionBranchingBridge = new SessionBranchingBridge();
+    sessionBranchingBridge = new SessionBranchingBridge(db, {
+      isBusy: (sessionId) => sessionManager?.isConversationBusy(sessionId) ?? true,
+      captureRecoveryJournalFence: (sessionId) =>
+        sessionManager?.captureTurnJournalFenceForBranchChange(sessionId) ?? null,
+      rotateRecoveryJournal: (sessionId) =>
+        sessionManager?.rotateTurnJournalForBranchChange(sessionId),
+      resetConversation: (sessionId) =>
+        sessionManager?.resetConversationAfterBranchChange(sessionId),
+      getMessages: (sessionId) => sessionManager?.getMessages(sessionId) ?? [],
+    });
 
     // MCP marketplace bridge — wired to the live config store + running manager.
     mcpMarketplaceBridge = new MCPMarketplaceBridge();
@@ -1810,8 +1832,62 @@ app
     workflowBridge = new WorkflowBridge();
     workflowBridge.setSendToRenderer(sendToRenderer);
 
-    // Mission Orchestrator — pure bridge, surfaced through mission.* IPC.
-    missionBridge = new MissionBridge({ sendToRenderer });
+    // Mission Orchestrator — one persisted engine for board + voice missions.
+    // Voice delegation starts an ordinary background SessionManager session;
+    // no second scheduler or execution loop is introduced here.
+    missionBridge = new MissionBridge({
+      sendToRenderer,
+      executeVoiceMission: async ({ title, prompt, cwd, projectId }) => {
+        if (!sessionManager) throw new Error('Session manager not initialized');
+        if (cwd) {
+          const unsupportedReason = getWorkspacePathUnsupportedReason(cwd);
+          if (unsupportedReason) throw new Error(unsupportedReason);
+        }
+        const started = await sessionManager.startBackgroundSession(
+          title,
+          prompt,
+          cwd,
+          projectId,
+        );
+        // A complete snapshot lets the renderer open the result immediately,
+        // even when this is the first time it has seen the background session.
+        sendToRenderer({
+          type: 'session.update',
+          payload: { sessionId: started.id, updates: started },
+        });
+        return { sessionId: started.id };
+      },
+      cancelVoiceSession: (sessionId) => sessionManager?.stopSession(sessionId),
+      inspectVoiceSession: (sessionId) => {
+        const session = sessionManager?.listSessions().find((candidate) => candidate.id === sessionId);
+        if (!session) return 'missing';
+        if (session.status === 'completed') return 'completed';
+        if (session.status === 'error') return 'failed';
+        return session.status === 'running' ? 'running' : 'queued';
+      },
+    });
+    sessionManager.onBackgroundSessionLifecycle((event) => {
+      if (event.status !== 'completed' && event.status !== 'failed') return;
+      const messages = sessionManager?.getMessages(event.sessionId) ?? [];
+      const assistant = [...messages].reverse().find((message) => message.role === 'assistant');
+      const resultPreview = assistant
+        ? assistant.content
+            .filter((block) => block.type === 'text')
+            .map((block) => ('text' in block ? block.text : ''))
+            .join('\n')
+            .replace(/\s+/gu, ' ')
+            .trim()
+            .slice(0, 600)
+        : '';
+      void missionBridge
+        ?.settleVoiceSession({
+          sessionId: event.sessionId,
+          status: event.status,
+          ...(resultPreview ? { resultPreview } : {}),
+          ...(event.error ? { error: event.error } : {}),
+        })
+        .catch((error) => logError('[MissionBridge] voice session settlement failed:', error));
+    });
     void missionBridge.init().catch((err) => {
       logError('[MissionBridge] init failed:', err);
     });
@@ -1825,9 +1901,8 @@ app
     // COWORK_STT_PROVIDER / COWORK_TTS_PROVIDER / COWORK_VOICE_PROVIDER
     // is set to "kyutai" (or "dsm"/"moshi").
     kyutaiBridge = new KyutaiBridge();
-    // TTS bridge — Piper + fr_FR voice. Boots fast (no model load
-    // until first synthesize), so always-on is fine. Override paths
-    // via COWORK_PIPER_BIN / COWORK_PIPER_VOICE env vars.
+    // TTS bridge — resident Pocket TTS by default, with the older Piper path
+    // retained as an automatic compatibility fallback.
     ttsBridge = new TTSBridge();
     // Clipboard summariser (Lisa-derived). Created always; only
     // starts polling when user enables it via Settings.
@@ -2388,6 +2463,7 @@ for (const sig of ['SIGTERM', 'SIGINT'] as const) {
 
 // Handle app quit - before-quit (for macOS Cmd+Q and other quit methods)
 app.on('before-quit', async (event) => {
+  meetingDisplayAudioBroker.dispose();
   if (!isCleaningUp) {
     // In dev mode, exit quickly — no need for async sandbox cleanup
     if (process.env.VITE_DEV_SERVER_URL) {
@@ -2402,8 +2478,9 @@ app.on('before-quit', async (event) => {
       tray = null;
       return;
     }
-    // Set the flag immediately before any await to prevent re-entrant cleanup
-    isCleaningUp = true;
+    // cleanupSandboxResources sets the re-entrancy flag synchronously before
+    // its first await. Setting it here would make that function skip its own
+    // cleanup, leaving child processes alive during Electron shutdown.
     event.preventDefault();
     try {
       await cleanupSandboxResources();
@@ -2473,7 +2550,8 @@ registerConfigModelIpcHandlers();
 // ── Project IPC handlers (Claude Cowork parity) ──────────────────────
 registerProjectIpcHandlers(
   () => projectManager,
-  () => activityFeed
+  () => activityFeed,
+  () => projectEvolutionService
 );
 
 // ── Sub-agent IPC handlers (Claude Cowork parity) ────────────────────
@@ -2524,12 +2602,15 @@ registerChannelsIpcHandlers();
 registerPairingIpcHandlers();
 registerMobileSupervisionIpcHandlers();
 registerCompanionIpcHandlers(() => projectManager);
+registerMaisonIpcHandlers();
 registerAutomationsIpcHandlers();
 registerDesktopSnapshotIpcHandlers();
 registerMissionIpcHandlers(() => missionBridge);
 registerSpecIpcHandlers(() => projectManager, configStore);
 registerSpecNextIpcHandlers(() => projectManager);
 registerLiveLauncherIpcHandlers();
+registerBrowserOperatorRuntimeIpcHandlers({ getProjectManager: () => projectManager });
+registerMeetingLiveIpcHandlers({ getMainWindow });
 registerProfilesIpcHandlers();
 
 // ── App Studio (bolt.diy-style: file tree + editor + terminal + live preview) ─
@@ -2542,8 +2623,41 @@ registerStudioFilesIpc(ipcMain);
 registerCommandRunnerIpc(ipcMain, new CommandRunner(), () => getMainWindow()?.webContents ?? null);
 registerScaffoldIpc(ipcMain, new ScaffoldService());
 
-// Media generation surface delegates to the core image_generate tool.
-registerMediaGenIpc(ipcMain, new MediaGenService());
+// Media generation surface delegates to the core image_generate tool. Local
+// image egress (Design View edits) is confined in the main process to the
+// generated-media folders of workspaces Cowork itself knows about; renderer
+// supplied absolute paths never become trust roots.
+const avatarBibleService = new AvatarBibleService({
+  getWorkspace: () => projectManager?.getActive()?.workspacePath ?? currentWorkingDir,
+  selectImage: async () => {
+    const result = await dialog.showOpenDialog({
+      title: 'Importer une référence dans la Bible des avatars',
+      properties: ['openFile'],
+      filters: [{ name: 'Images avatar', extensions: ['png', 'jpg', 'jpeg', 'webp'] }],
+    });
+    return result.canceled ? null : result.filePaths[0] ?? null;
+  },
+});
+registerAvatarBibleIpc(ipcMain, avatarBibleService);
+registerMediaGenIpc(ipcMain, new MediaGenService(
+  undefined,
+  app.getPath('home'),
+  undefined,
+  () => {
+    const roots = new Set<string>([join(app.getPath('userData'), 'default_working_dir')]);
+    if (currentWorkingDir) roots.add(currentWorkingDir);
+    const activeWorkspace = projectManager?.getActive()?.workspacePath;
+    if (activeWorkspace) roots.add(activeWorkspace);
+    for (const session of sessionManager?.listSessions() ?? []) {
+      if (session.cwd) roots.add(session.cwd);
+    }
+    return roots;
+  },
+));
+registerComfyLabIpc(ipcMain, new ComfyLabService({
+  openExternal: async (url) => shell.openExternal(url),
+  writeClipboard: (text) => clipboard.writeText(text),
+}));
 
 // Video Studio: prompt → premium narrated video (core produceVideoFromPrompt).
 // Films land in the media-library working dir so they show up in the Bibliothèque.
@@ -2569,6 +2683,14 @@ ipcMain.handle('dispatch.task', async (_event, request: DispatchRequest) => {
 });
 
 // ── Session settings update IPC (Claude Cowork parity) ──────────────
+ipcMain.handle('session.externalList', async () => listExternalSessions());
+ipcMain.handle('session.externalImport', async (_event, id: string) => {
+  if (!sessionManager) throw new Error('SessionManager not initialized');
+  const external = getExternalSession(id);
+  if (!external) throw new Error('External session not found');
+  return sessionManager.importExternalSession(external);
+});
+
 ipcMain.handle(
   'session.updateSettings',
   async (
@@ -2583,6 +2705,8 @@ ipcMain.handle(
       archived?: boolean;
       tags?: string[];
       source?: string;
+      model?: string;
+      intelligence?: Partial<import('../renderer/types').SessionIntelligence>;
     }
   ) => {
     if (!sessionManager) return false;
@@ -3582,6 +3706,25 @@ registerScienceIpcHandlers();
 registerMcpIpcHandlers({
   getSessionManager: () => sessionManager,
   getMarketplaceBridge: () => mcpMarketplaceBridge,
+  getWorkspaceRoots: () => {
+    const roots = new Set<string>();
+    const active = projectManager?.getActive()?.workspacePath;
+    if (active) roots.add(active);
+    if (currentWorkingDir) roots.add(currentWorkingDir);
+    for (const conversation of sessionManager?.listSessions() ?? []) {
+      if (conversation.cwd) roots.add(conversation.cwd);
+    }
+    // In source builds the bundled Cowork app lives one directory below the
+    // Code Buddy repository. Treat that repository as an app-owned discovery
+    // root when (and only when) it actually contains a project MCP file.
+    if (!app.isPackaged) {
+      const developmentRoot = resolve(app.getAppPath(), '..');
+      if (fs.existsSync(join(developmentRoot, '.codebuddy', 'mcp.json'))) {
+        roots.add(developmentRoot);
+      }
+    }
+    return [...roots];
+  },
 });
 
 // ── Cost dashboard IPC handlers (Claude Cowork parity Phase 2) ──────
@@ -3601,11 +3744,20 @@ ipcMain.handle('session.branches', async (_event, sessionId: string) => {
 
 ipcMain.handle(
   'session.fork',
-  async (_event, sessionId: string, name: string, fromMessageIndex?: number) => {
+  async (
+    _event,
+    sessionId: string,
+    name: string,
+    fromMessageIndex?: number,
+    fromMessageId?: string,
+  ) => {
     if (!sessionBranchingBridge) {
       return { success: false, error: 'Branching bridge unavailable' };
     }
-    return sessionBranchingBridge.fork(sessionId, name, fromMessageIndex);
+    return sessionBranchingBridge.fork(sessionId, name, {
+      ...(typeof fromMessageIndex === 'number' ? { messageIndex: fromMessageIndex } : {}),
+      ...(typeof fromMessageId === 'string' ? { messageId: fromMessageId } : {}),
+    });
   }
 );
 
@@ -3862,6 +4014,8 @@ ipcMain.handle(
       recordVoiceConversationEventFromMain({
         type: 'transcription_completed',
         transcript: text,
+        durationMs,
+        provider,
       });
       void recordCompanionPerceptFromMain({
         modality: 'hearing',
@@ -3909,7 +4063,10 @@ ipcMain.handle('voice.status', async () => {
 ipcMain.handle('voice.diagnostics', async () => {
   const kyutai = kyutaiBridge ? await kyutaiBridge.diagnostics({ timeoutMs: 750 }) : null;
   const sttProvider = kyutai?.sttEnabled ? 'kyutai' : 'faster-whisper';
-  const ttsProvider = kyutai?.ttsEnabled ? 'kyutai' : 'piper';
+  const ttsProvider = kyutai?.ttsEnabled ? 'kyutai' : (ttsBridge?.getProvider() ?? 'pocket');
+  const ttsFallbackProvider = kyutai?.ttsEnabled
+    ? (ttsBridge?.getProvider() ?? 'pocket')
+    : ttsBridge?.getFallbackProvider();
   const result = {
     ok: true,
     checkedAt: new Date().toISOString(),
@@ -3926,7 +4083,7 @@ ipcMain.handle('voice.diagnostics', async () => {
     tts: {
       provider: ttsProvider,
       available: Boolean(kyutai?.ttsEnabled) || Boolean(ttsBridge?.isReady()),
-      fallbackProvider: 'piper',
+      fallbackProvider: ttsFallbackProvider,
       fallbackAvailable: Boolean(ttsBridge?.isReady()),
       bootError: ttsBridge?.getBootError() ?? null,
     },
@@ -3961,8 +4118,8 @@ ipcMain.handle('voice.diagnostics', async () => {
 });
 
 /**
- * Text → speech via Piper. Returns the WAV bytes for the renderer to
- * play. Renderer keeps an `<audio>` element + Blob URL alive for the
+ * Text → speech via resident Pocket TTS, with Piper fallback. Returns the WAV
+ * bytes for the renderer to play. Renderer keeps an `<audio>` element + Blob URL alive for the
  * duration of playback then revokes the URL.
  */
 ipcMain.handle(
@@ -3998,9 +4155,9 @@ ipcMain.handle(
             provider: 'kyutai',
           };
         } catch (kyutaiErr) {
-          logWarn('[voice.speak] Kyutai failed; falling back to Piper:', kyutaiErr);
+          logWarn('[voice.speak] Kyutai failed; falling back to local TTS:', kyutaiErr);
           if (!ttsBridge || !ttsBridge.isReady()) {
-            const fallbackError = ttsBridge?.getBootError() ?? 'piper fallback not ready';
+            const fallbackError = ttsBridge?.getBootError() ?? 'local TTS fallback not ready';
             throw new Error(
               `${kyutaiErr instanceof Error ? kyutaiErr.message : String(kyutaiErr)}; ${fallbackError}`
             );
@@ -4018,8 +4175,12 @@ ipcMain.handle(
         audio: result.audio,
         sampleRate: result.sampleRate,
         durationMs: result.synthesisDurationMs,
-        provider: 'piper',
-        fallbackFrom: kyutaiActive ? 'kyutai' : undefined,
+        provider: result.provider,
+        fallbackFrom: kyutaiActive
+          ? 'kyutai'
+          : result.provider !== ttsBridge.getProvider()
+            ? ttsBridge.getProvider()
+            : undefined,
       };
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -4038,8 +4199,10 @@ ipcMain.handle('voice.ttsStatus', async () => {
   return {
     available: kyutaiActive || Boolean(ttsBridge?.isReady()),
     bootError: ttsBridge?.getBootError() ?? null,
-    provider: kyutaiActive ? 'kyutai' : 'piper',
-    fallbackProvider: 'piper',
+    provider: kyutaiActive ? 'kyutai' : (ttsBridge?.getProvider() ?? 'pocket'),
+    fallbackProvider: kyutaiActive
+      ? (ttsBridge?.getProvider() ?? 'pocket')
+      : ttsBridge?.getFallbackProvider(),
     kyutai,
   };
 });
@@ -4175,6 +4338,49 @@ ipcMain.handle(
     }
     return workflowBridge.run(id, initialContext ?? {});
   }
+);
+
+ipcMain.handle('workflow.preview', async (_event, id: string) => {
+  if (!workflowBridge) {
+    return {
+      valid: false,
+      workflowId: id,
+      generatedAt: Date.now(),
+      totalExecutableSteps: 0,
+      approvalSteps: 0,
+      externalToolSteps: 0,
+      steps: [],
+      warnings: [],
+      error: 'Workflow bridge unavailable',
+    };
+  }
+  return workflowBridge.preview(id);
+});
+
+ipcMain.handle(
+  'workflow.history',
+  async (_event, workflowId?: string, limit?: number) =>
+    workflowBridge?.history(workflowId, limit) ?? []
+);
+
+ipcMain.handle('workflow.replay', async (_event, runId: string) => {
+  if (!workflowBridge) {
+    return {
+      success: false,
+      status: 'failed',
+      duration: 0,
+      completedSteps: 0,
+      totalSteps: 0,
+      error: 'Workflow bridge unavailable',
+    };
+  }
+  return workflowBridge.replay(runId);
+});
+
+ipcMain.handle(
+  'workflow.compare',
+  async (_event, leftRunId: string, rightRunId: string) =>
+    workflowBridge?.compareRuns(leftRunId, rightRunId) ?? null
 );
 
 ipcMain.handle(
@@ -5261,6 +5467,14 @@ ipcMain.handle('remote-backend.getConfig', async () => {
   return { url: cfg.url, autoConnect: cfg.autoConnect, hasToken: !!cfg.token };
 });
 
+ipcMain.handle('remote-backend.capabilities', async () => {
+  return remoteBackendManager.describeControlPlane();
+});
+
+ipcMain.handle('remote-backend.invoke', async (_event, method: string) => {
+  return remoteBackendManager.invokeControl(method);
+});
+
 // Test runner — Claude Cowork parity Phase 3 step 12 — extracted to ipc/test-runner-ipc.ts
 registerTestRunnerIpcHandlers();
 
@@ -6013,7 +6227,8 @@ async function handleClientEvent(event: ClientEvent): Promise<unknown> {
       return sm.continueSession(
         event.payload.sessionId,
         event.payload.prompt,
-        event.payload.content
+        event.payload.content,
+        { permissionModeOverride: event.payload.permissionModeOverride },
       );
 
     case 'session.steer':
@@ -6042,6 +6257,14 @@ async function handleClientEvent(event: ClientEvent): Promise<unknown> {
         executionMode:
           event.payload.updates.executionMode === 'chat' || event.payload.updates.executionMode === 'task'
             ? event.payload.updates.executionMode
+            : undefined,
+        permissionMode:
+          event.payload.updates.permissionMode === 'default' ||
+          event.payload.updates.permissionMode === 'plan' ||
+          event.payload.updates.permissionMode === 'acceptEdits' ||
+          event.payload.updates.permissionMode === 'dontAsk' ||
+          event.payload.updates.permissionMode === 'bypassPermissions'
+            ? event.payload.updates.permissionMode
             : undefined,
         isBackground: event.payload.updates.isBackground,
         title: event.payload.updates.title,

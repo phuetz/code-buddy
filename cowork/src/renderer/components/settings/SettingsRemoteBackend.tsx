@@ -11,7 +11,7 @@
  */
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { AlertCircle, CheckCircle2, Info, Loader2, Network } from 'lucide-react';
+import { AlertCircle, CheckCircle2, Info, Loader2, Network, RefreshCw, ShieldCheck } from 'lucide-react';
 import { useAppStore } from '../../store';
 
 type ConnStatus = 'disconnected' | 'connecting' | 'connected' | 'error';
@@ -27,6 +27,25 @@ export function SettingsRemoteBackend() {
   const [host, setHost] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [capabilities, setCapabilities] = useState<string[]>([]);
+  const [controlSnapshot, setControlSnapshot] = useState<Record<string, unknown> | null>(null);
+
+  const refreshControlPlane = useCallback(async () => {
+    const api = window.electronAPI?.remoteBackend;
+    if (!api) return;
+    try {
+      const [description, system, fleet, skills] = await Promise.all([
+        api.capabilities(),
+        api.invoke('system.snapshot'),
+        api.invoke('fleet.status'),
+        api.invoke('skills.list'),
+      ]);
+      setCapabilities(description.capabilities ?? []);
+      setControlSnapshot({ system, fleet, skills });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }, []);
 
   const applyStatus = useCallback(
     (next: { status: ConnStatus; host?: string; error?: string }) => {
@@ -78,6 +97,10 @@ export function SettingsRemoteBackend() {
     };
   }, [applyStatus]);
 
+  useEffect(() => {
+    if (status === 'connected') void refreshControlPlane();
+  }, [refreshControlPlane, status]);
+
   const handleConnect = async () => {
     const api = window.electronAPI?.remoteBackend;
     if (!api || busy) return;
@@ -93,6 +116,7 @@ export function SettingsRemoteBackend() {
         // Token accepted and persisted; clear the local input but mark stored.
         setToken('');
         setHasStoredToken(true);
+        await refreshControlPlane();
       }
     } catch (err) {
       setStatus('error');
@@ -111,6 +135,8 @@ export function SettingsRemoteBackend() {
       setStatus('disconnected');
       setHost(null);
       setRemoteBackend({ connected: false, host: null });
+      setCapabilities([]);
+      setControlSnapshot(null);
     } finally {
       setBusy(false);
     }
@@ -208,16 +234,35 @@ export function SettingsRemoteBackend() {
         />
       </div>
 
-      {/* Local-management notice */}
+      {/* Capability-scoped remote control plane */}
       <div className="p-2 rounded bg-accent/10 border border-accent/30 text-text-secondary text-[11px] flex gap-2 items-start">
-        <Info size={12} className="mt-0.5 shrink-0 text-accent" />
+        {isConnected ? <ShieldCheck size={12} className="mt-0.5 shrink-0 text-success" /> : <Info size={12} className="mt-0.5 shrink-0 text-accent" />}
         <div>
-          {t(
-            'remoteBackend.localNotice',
-            'While a remote backend is connected, only chat and sessions run remotely. Management surfaces (config, MCP, skills, fleet) stay local to this machine.'
-          )}
+          {isConnected
+            ? 'Control Plane distant actif. Les lectures sont limitées aux capacités annoncées ; toute mutation reste soumise à une approbation locale.'
+            : 'Après connexion, Cowork négocie les capacités de supervision du backend sans exposer le jeton au renderer.'}
         </div>
       </div>
+
+      {isConnected && (
+        <section className="rounded-lg border border-border-muted bg-surface/35 p-3 space-y-3" data-testid="remote-control-plane">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <div className="text-xs font-semibold text-text-primary">Control Plane</div>
+              <div className="text-[10px] text-text-muted">{capabilities.length} capacités négociées · lecture sécurisée</div>
+            </div>
+            <button type="button" onClick={() => void refreshControlPlane()} className="inline-flex items-center gap-1 rounded border border-border-muted px-2 py-1 text-[10px] text-text-secondary hover:bg-surface-hover">
+              <RefreshCw size={11} /> Actualiser
+            </button>
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {capabilities.map((capability) => <span key={capability} className="rounded-full border border-success/25 bg-success/5 px-2 py-0.5 text-[10px] text-success">{capability}</span>)}
+          </div>
+          {controlSnapshot && (
+            <pre className="max-h-36 overflow-auto rounded bg-background/70 p-2 text-[10px] leading-relaxed text-text-muted">{JSON.stringify(controlSnapshot, null, 2)}</pre>
+          )}
+        </section>
+      )}
 
       {error && (
         <div className="p-2 rounded bg-error/10 border border-error/30 text-error text-xs flex gap-2 items-start">

@@ -46,7 +46,11 @@ pub async fn run(tx: mpsc::Sender<SensoryEvent>, interval_ms: u64, max_beats: Op
         ticker.tick().await;
         beat += 1;
         let uptime_ms = now_ms().saturating_sub(started);
-        if tx.send(heartbeat_event(beat, uptime_ms, interval_ms)).await.is_err() {
+        if tx
+            .send(heartbeat_event(beat, uptime_ms, interval_ms))
+            .await
+            .is_err()
+        {
             break; // thalamus gone → stop beating
         }
         if let Some(max) = max_beats {

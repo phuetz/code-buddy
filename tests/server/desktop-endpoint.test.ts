@@ -113,6 +113,23 @@ describe('desktop WebSocket endpoint (/desktop)', () => {
     return `ws://127.0.0.1:${address.port}`;
   }
 
+  async function startNoAuth(): Promise<string> {
+    const { startServer } = await import('../../src/server/index.js');
+    started = await startServer({
+      port: 0,
+      host: '127.0.0.1',
+      authEnabled: false,
+      websocketEnabled: true,
+      logging: false,
+      rateLimit: false,
+      cors: false,
+      docsEnabled: false,
+      securityHeaders: { enabled: false },
+    });
+    const address = started.server.address() as AddressInfo;
+    return `ws://127.0.0.1:${address.port}`;
+  }
+
   function mintToken(): string {
     return generateToken({ sub: 'cowork-user', scopes: ['chat'], type: 'user' }, JWT_SECRET, '1h');
   }
@@ -264,4 +281,49 @@ describe('desktop WebSocket endpoint (/desktop)', () => {
 
     expect(reply.type).toBe('pong');
   }, 15_000);
+
+  it('blocks proxied no-auth desktop and generic agent chat while preserving the WS peer transport', async () => {
+    const wsBase = await startNoAuth();
+    const headers = { 'X-Forwarded-For': '127.0.0.1' };
+
+    const desktopStatus = await new Promise<number | undefined>((resolve, reject) => {
+      const ws = new WebSocket(`${wsBase}/desktop`, { headers });
+      const timer = setTimeout(() => reject(new Error('desktop upgrade stayed open')), 8_000);
+      ws.on('open', () => {
+        clearTimeout(timer);
+        ws.close();
+        reject(new Error('proxied anonymous desktop unexpectedly opened'));
+      });
+      ws.on('unexpected-response', (_req, res) => {
+        clearTimeout(timer);
+        resolve(res.statusCode);
+      });
+      ws.on('error', () => {
+        clearTimeout(timer);
+        resolve(undefined);
+      });
+    });
+    if (desktopStatus !== undefined) expect(desktopStatus).toBe(403);
+
+    const chatError = await new Promise<Record<string, unknown>>((resolve, reject) => {
+      const ws = new WebSocket(`${wsBase}/ws`, { headers });
+      const timer = setTimeout(() => reject(new Error('timed out waiting for chat denial')), 8_000);
+      ws.on('open', () => {
+        ws.send(JSON.stringify({ type: 'chat', payload: { message: 'read .env' } }));
+      });
+      ws.on('message', (data) => {
+        const message = JSON.parse(data.toString()) as Record<string, unknown>;
+        if (message.type === 'error') {
+          clearTimeout(timer);
+          ws.close();
+          resolve(message);
+        }
+      });
+      ws.on('error', (error) => {
+        clearTimeout(timer);
+        reject(error);
+      });
+    });
+    expect(chatError.error).toMatchObject({ code: 'REMOTE_AUTH_REQUIRED' });
+  }, 20_000);
 });

@@ -5,6 +5,7 @@ import { useAppStore } from '../../store';
 import { shouldUseScreenshotSummary } from '../../utils/tool-result-summary';
 import type { ToolResultContent, ContentBlock, ToolUseContent, Message } from '../../types';
 import { WidgetBlock } from '../widgets/WidgetBlock';
+import { ContextOptimizationNotice } from './ContextOptimizationNotice';
 
 // Only allow safe image MIME types for data: URI rendering
 const ALLOWED_IMAGE_TYPES = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/webp']);
@@ -97,6 +98,7 @@ export const ToolResultBlock = memo(function ToolResultBlock({
           {displayName}
         </span>
         <span className="text-[11px] text-text-muted truncate flex-1">{getSummary()}</span>
+        <ContextOptimizationNotice metadata={block.contextOptimization} compact />
         {hasImages && (
           <span className="text-[11px] text-text-muted flex-shrink-0">
             +{block.images?.length ?? 0} img
@@ -113,6 +115,11 @@ export const ToolResultBlock = memo(function ToolResultBlock({
 
       {expanded && (
         <div className="border-t border-border/50 px-3 py-2 animate-fade-in">
+          {block.contextOptimization && (
+            <div className="mb-2">
+              <ContextOptimizationNotice metadata={block.contextOptimization} />
+            </div>
+          )}
           <pre
             className={`text-xs font-mono whitespace-pre-wrap break-all rounded-lg p-2.5 border border-border-subtle max-h-[300px] overflow-y-auto ${
               block.isError ? 'text-error bg-error/5' : 'text-text-secondary bg-surface-muted'

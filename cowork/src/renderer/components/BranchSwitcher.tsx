@@ -19,11 +19,15 @@ import {
   X,
   Loader2,
 } from 'lucide-react';
+import { useAppStore } from '../store';
+import { SESSION_BRANCH_CHANGED_EVENT } from '../utils/session-branch-events';
 
 interface BranchSummary {
   id: string;
+  sessionId: string;
   name: string;
   parentId?: string;
+  parentMessageId?: string;
   parentMessageIndex?: number;
   createdAt: number;
   updatedAt: number;
@@ -35,6 +39,8 @@ interface BranchSwitcherProps {
   sessionId: string;
   /** Optional message index for "fork from here" context */
   forkFromMessageIndex?: number;
+  /** Stable persisted ID preferred over an index when forking from a message. */
+  forkFromMessageId?: string;
   /** Called after successful checkout/fork so the caller can refresh messages */
   onBranchChanged?: () => void;
 }
@@ -42,6 +48,7 @@ interface BranchSwitcherProps {
 export const BranchSwitcher: React.FC<BranchSwitcherProps> = ({
   sessionId,
   forkFromMessageIndex,
+  forkFromMessageId,
   onBranchChanged,
 }) => {
   const { t } = useTranslation();
@@ -51,6 +58,7 @@ export const BranchSwitcher: React.FC<BranchSwitcherProps> = ({
   const [showForkDialog, setShowForkDialog] = useState(false);
   const [newBranchName, setNewBranchName] = useState('');
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const ref = useRef<HTMLDivElement>(null);
 
   const load = useCallback(async () => {
@@ -66,6 +74,16 @@ export const BranchSwitcher: React.FC<BranchSwitcherProps> = ({
       setLoading(false);
     }
   }, [sessionId]);
+
+  useEffect(() => {
+    void load();
+    const handleBranchChanged = (event: Event) => {
+      const detail = (event as CustomEvent<{ sessionId?: string }>).detail;
+      if (detail?.sessionId === sessionId) void load();
+    };
+    window.addEventListener(SESSION_BRANCH_CHANGED_EVENT, handleBranchChanged);
+    return () => window.removeEventListener(SESSION_BRANCH_CHANGED_EVENT, handleBranchChanged);
+  }, [load, sessionId]);
 
   useEffect(() => {
     if (open) void load();
@@ -87,17 +105,23 @@ export const BranchSwitcher: React.FC<BranchSwitcherProps> = ({
       if (!api?.session?.checkout) return;
       setBusy(true);
       try {
+        setError(null);
         const result = await api.session.checkout(sessionId, branchId);
         if (result.success) {
+          if (result.messages) {
+            useAppStore.getState().setMessages(sessionId, result.messages);
+          }
           onBranchChanged?.();
           await load();
           setOpen(false);
+        } else {
+          setError(result.error ?? t('branch.operationFailed'));
         }
       } finally {
         setBusy(false);
       }
     },
-    [sessionId, load, onBranchChanged]
+    [sessionId, load, onBranchChanged, t]
   );
 
   const handleFork = useCallback(async () => {
@@ -107,17 +131,28 @@ export const BranchSwitcher: React.FC<BranchSwitcherProps> = ({
     if (!api?.session?.fork) return;
     setBusy(true);
     try {
-      const result = await api.session.fork(sessionId, name, forkFromMessageIndex);
+      setError(null);
+      const result = await api.session.fork(
+        sessionId,
+        name,
+        forkFromMessageIndex,
+        forkFromMessageId,
+      );
       if (result.success) {
+        if (result.messages) {
+          useAppStore.getState().setMessages(sessionId, result.messages);
+        }
         setNewBranchName('');
         setShowForkDialog(false);
         onBranchChanged?.();
         await load();
+      } else {
+        setError(result.error ?? t('branch.operationFailed'));
       }
     } finally {
       setBusy(false);
     }
-  }, [newBranchName, sessionId, forkFromMessageIndex, onBranchChanged, load]);
+  }, [newBranchName, sessionId, forkFromMessageIndex, forkFromMessageId, onBranchChanged, load, t]);
 
   const handleDelete = useCallback(
     async (branchId: string, branchName: string) => {
@@ -126,7 +161,9 @@ export const BranchSwitcher: React.FC<BranchSwitcherProps> = ({
       if (!api?.session?.deleteBranch) return;
       setBusy(true);
       try {
-        await api.session.deleteBranch(sessionId, branchId);
+        setError(null);
+        const result = await api.session.deleteBranch(sessionId, branchId);
+        if (!result.success) setError(result.error ?? t('branch.operationFailed'));
         await load();
       } finally {
         setBusy(false);
@@ -171,6 +208,11 @@ export const BranchSwitcher: React.FC<BranchSwitcherProps> = ({
             </div>
 
             <div className="max-h-72 overflow-y-auto">
+              {error ? (
+                <div className="mx-3 mt-2 rounded border border-error/30 bg-error/10 px-2 py-1.5 text-[10px] text-error">
+                  {error}
+                </div>
+              ) : null}
               {loading && (
                 <div className="flex items-center justify-center gap-2 py-4 text-xs text-text-muted">
                   <Loader2 size={12} className="animate-spin" />

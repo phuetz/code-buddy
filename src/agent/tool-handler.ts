@@ -37,7 +37,11 @@ import { getMCPManager } from "../codebuddy/tools.js";
 import { getErrorMessage } from "../errors/index.js";
 import { logger } from "../utils/logger.js";
 import { RepairCoordinator } from "./execution/repair-coordinator.js";
-import { getPolicyManager, type PolicyDecision } from "../security/tool-policy/index.js";
+import {
+  getPolicyManager,
+  getToolGroups,
+  type PolicyDecision,
+} from "../security/tool-policy/index.js";
 import { getTrustFolderManager } from "../security/trust-folders.js";
 import {
   getToolHooksManager,
@@ -51,6 +55,20 @@ import { WritePolicy, WRITE_TOOL_NAMES } from "../security/write-policy.js";
 import { RunStore } from "../observability/run-store.js";
 import { isToolNameAllowed } from "../utils/tool-filter.js";
 import { loadAuthoredTools } from "./self-improvement/tool-skill-mutator.js";
+import { ConfirmationService } from "../utils/confirmation-service.js";
+import {
+  buildToolApprovalKey,
+  toolArgsApprovalPreview,
+} from "../security/tool-policy/approval-scope.js";
+import { TOOL_METADATA } from "../tools/metadata.js";
+import {
+  formatToolResultForRecovery,
+  getRestorableCompressor,
+} from '../context/restorable-compression.js';
+import {
+  attachCodeExecRuntime,
+  createCodeExecToolCallId,
+} from '../tools/code-exec-tool.js';
 
 /**
  * Dependencies required to initialize the ToolHandler
@@ -64,6 +82,10 @@ export interface ToolHandlerDependencies {
   marketplace: PluginMarketplace;
   /** Coordinates auto-repair attempts for failed commands */
   repairCoordinator: RepairCoordinator;
+  /** Resolve the active conversation lazily (sessions can switch at runtime). */
+  sessionIdProvider?: () => string | null | undefined;
+  /** Optional stable agent identity. A private UUID is generated when omitted. */
+  agentId?: string;
 }
 
 /**
@@ -84,6 +106,15 @@ const READ_ONLY_FILE_TOOLS = new Set<string>([
   'find_definition',
   'search_multi',
 ]);
+
+/** Shell adapters own a stricter argv/sandbox/escalation pipeline. */
+const PRECISE_RUNTIME_APPROVAL_TOOLS = new Set<string>([
+  'bash',
+  'terminal',
+  'shell_exec',
+]);
+
+const LEGACY_TOOL_METADATA = new Map(TOOL_METADATA.map((metadata) => [metadata.name, metadata]));
 
 export interface NormalizedHallucinatedToolCall {
   toolName: string;
@@ -219,8 +250,11 @@ export class ToolHandler {
    */
   private currentWorkingDirectory: string | undefined;
   private currentBotId: string | undefined;
+  /** Keeps code_exec stores and executors isolated between agent instances. */
+  private readonly codeExecAgentScopeId: string;
 
   constructor(private deps: ToolHandlerDependencies) {
+    this.codeExecAgentScopeId = deps.agentId?.trim() || `agent_${createCodeExecToolCallId()}`;
     this.registry = getFormalToolRegistry();
     this.initializeRegistry();
     this.initializeToolHooks();
@@ -276,6 +310,11 @@ export class ToolHandler {
         });
       }
     }
+  }
+
+  /** Workspace currently used by tool execution and recovery storage. */
+  getWorkingDirectory(): string {
+    return this.currentWorkingDirectory ?? process.cwd();
   }
 
   /**
@@ -412,107 +451,16 @@ export class ToolHandler {
         return filterBlock;
       }
 
-      // Check permission mode before execution
-      try {
-        const { getPermissionModeManager } = await import('../security/permission-modes.js');
-        const permManager = getPermissionModeManager();
-        const permDecision = permManager.checkPermission('execute', toolName);
-        if (!permDecision.allowed) {
-          return { success: false, error: `Permission denied: ${permDecision.reason}` };
-        }
-      } catch { /* permission-modes module optional */ }
+      const authorizationCwd = this.currentWorkingDirectory ?? process.cwd();
+      const authorizedScope = buildToolApprovalKey(toolName, args, authorizationCwd);
 
-      // Check policy before execution
-      const policyDecision = this.checkToolPolicy(toolName, args);
-
-      if (policyDecision.action === 'deny') {
-        logger.info(`Tool denied by policy: ${toolName}`, { reason: policyDecision.reason });
-
-        // Execute denied hooks
-        await hooksManager.executeDeniedHooks(
-          hookContext,
-          new Error(policyDecision.reason || 'Tool denied by policy')
-        );
-
-        return {
-          success: false,
-          error: `Tool "${toolName}" is not allowed: ${policyDecision.reason}`,
-        };
-      }
-
-      if (policyDecision.action === 'confirm') {
-        // Request user confirmation if callback is set
-        if (this.confirmationCallback) {
-          const confirmed = await this.confirmationCallback(toolName, args, policyDecision);
-          if (!confirmed) {
-            logger.info(`Tool execution cancelled by user: ${toolName}`);
-
-            // Execute denied hooks for user cancellation
-            await hooksManager.executeDeniedHooks(
-              hookContext,
-              new Error('User cancelled execution')
-            );
-
-            return {
-              success: false,
-              error: `User cancelled execution of "${toolName}"`,
-            };
-          }
-          // User confirmed - set session override to allow future executions
-          getPolicyManager().setSessionOverride(toolName, 'allow');
-        }
-        // If no callback, proceed (for backwards compatibility)
-      }
-
-      // Check trust folders for file/bash operations
-      const trustManager = getTrustFolderManager();
-      if (trustManager.isEnforcementEnabled()) {
-        const targetPath = args.path || args.file_path || args.target_file;
-        if (typeof targetPath === 'string' && !trustManager.isTrusted(targetPath)) {
-          // Narrow exception: read-only file tools may read the agent's own
-          // managed skills directory (~/.codebuddy/skills) without a trust
-          // prompt, so it can follow its own SKILL.md instructions. This is
-          // scoped to read-only tools AND to skills/ only — it never authorizes
-          // a write, and never exposes the rest of ~/.codebuddy (credentials).
-          const isReadOnlySkillsRead =
-            READ_ONLY_FILE_TOOLS.has(toolName) &&
-            trustManager.isReadableSkillsPath(targetPath);
-          if (!isReadOnlySkillsRead) {
-            logger.info(`Tool blocked by trust folder: ${toolName}`, { path: targetPath });
-            return {
-              success: false,
-              error: `Path "${targetPath}" is not in a trusted directory. Run Code Buddy from within that directory, or add it to ~/.codebuddy/trusted-folders.json (the "folders" array).`,
-            };
-          }
-        }
-      }
-
-      // ── WritePolicy gating (strict / confirm modes) ──────────────
-      if (WRITE_TOOL_NAMES.has(toolName)) {
-        const writePolicy = WritePolicy.getInstance();
-        const paths: string[] = [];
-        if (typeof args.path === 'string') paths.push(args.path);
-        if (typeof args.file_path === 'string') paths.push(args.file_path);
-        if (typeof args.target_file === 'string') paths.push(args.target_file);
-        if (Array.isArray(args.files)) {
-          for (const f of args.files) {
-            if (typeof f === 'string') paths.push(f);
-            else if (typeof f?.path === 'string') paths.push(f.path);
-          }
-        }
-
-        const gateResult = await writePolicy.gate(
-          { toolName, paths, description: args.description as string | undefined },
-          this.currentRunId
-        );
-
-        if (!gateResult.allowed) {
-          return {
-            success: false,
-            error: gateResult.reason || `WritePolicy blocked tool "${toolName}"`,
-          };
-        }
-      }
+      const authorizationError = await this.authorizeToolAction(
+        toolName,
+        args,
+        hookContext,
+        hooksManager,
+      );
+      if (authorizationError) return authorizationError;
 
       // ── RunStore: emit tool_call event ───────────────────────────
       if (this.currentRunId) {
@@ -570,6 +518,21 @@ export class ToolHandler {
       toolCall.function.arguments = JSON.stringify(lifecycleModifiedArgs);
       hookContext.args = lifecycleModifiedArgs;
       const finalArgs = hookContext.args;
+
+      // Hooks are allowed to enrich arguments, but changed arguments describe a
+      // different action. Re-run every permission/trust/write gate against the
+      // actual values that will be dispatched. This closes the preflight→hook
+      // TOCTOU where an approved workspace path could become an outside path.
+      const finalScope = buildToolApprovalKey(toolName, finalArgs, authorizationCwd);
+      if (finalScope !== authorizedScope) {
+        const modifiedAuthorizationError = await this.authorizeToolAction(
+          toolName,
+          finalArgs,
+          hookContext,
+          hooksManager,
+        );
+        if (modifiedAuthorizationError) return modifiedAuthorizationError;
+      }
 
       // Execute tool with potentially modified args
       let result: ToolResult;
@@ -632,6 +595,17 @@ export class ToolHandler {
       }
 
       // Convert to hook result format
+      // Preserve the native result before provider-facing sanitizers or legacy
+      // RTK hooks can truncate it. This is the recovery source used by
+      // restore_context; the model may receive a compact representation later.
+      if (toolCall.id) {
+        getRestorableCompressor().writeToolResult(
+          toolCall.id,
+          formatToolResultForRecovery(result),
+          this.currentWorkingDirectory ?? process.cwd(),
+        );
+      }
+
       const hookResult: ToolHookResult = {
         success: result.success,
         output: result.output,
@@ -808,6 +782,154 @@ export class ToolHandler {
   }
 
   /**
+   * One authorization stage shared by the original tool call and the final
+   * post-hook arguments. A `confirm` decision can never silently fall through.
+   */
+  private async authorizeToolAction(
+    toolName: string,
+    args: Record<string, unknown>,
+    hookContext: ToolHookContext,
+    hooksManager: ReturnType<typeof getToolHooksManager>,
+  ): Promise<ToolResult | null> {
+    try {
+      const { getPermissionModeManager } = await import('../security/permission-modes.js');
+      const shellCommand =
+        typeof args.command === 'string'
+          ? args.command
+          : typeof args.cmd === 'string'
+            ? args.cmd
+            : null;
+      const permissionAction =
+        PRECISE_RUNTIME_APPROVAL_TOOLS.has(toolName) && shellCommand
+          ? shellCommand
+          : 'execute';
+      const decision = getPermissionModeManager().checkPermission(permissionAction, toolName);
+      if (!decision.allowed) {
+        return { success: false, error: `Permission denied: ${decision.reason}` };
+      }
+    } catch {
+      /* permission-modes module optional */
+    }
+
+    const policyDecision = this.checkToolPolicy(toolName, args);
+    if (policyDecision.action === 'deny') {
+      logger.info(`Tool denied by policy: ${toolName}`, { reason: policyDecision.reason });
+      await hooksManager.executeDeniedHooks(
+        hookContext,
+        new Error(policyDecision.reason || 'Tool denied by policy'),
+      );
+      return {
+        success: false,
+        error: `Tool "${toolName}" is not allowed: ${policyDecision.reason}`,
+      };
+    }
+
+    const trustManager = getTrustFolderManager();
+    if (trustManager.isEnforcementEnabled()) {
+      const targetPath =
+        args.path ||
+        args.file_path ||
+        args.target_file ||
+        args.outputPath ||
+        args.output_path;
+      if (typeof targetPath === 'string' && !trustManager.isTrusted(targetPath)) {
+        const isReadOnlySkillsRead =
+          READ_ONLY_FILE_TOOLS.has(toolName) &&
+          trustManager.isReadableSkillsPath(targetPath);
+        if (!isReadOnlySkillsRead) {
+          logger.info(`Tool blocked by trust folder: ${toolName}`, { path: targetPath });
+          return {
+            success: false,
+            error: `Path "${targetPath}" is not in a trusted directory. Run Code Buddy from within that directory, or add it to ~/.codebuddy/trusted-folders.json (the "folders" array).`,
+          };
+        }
+      }
+    }
+
+    const isConditionalMeetingWrite =
+      toolName === 'meeting_notes' &&
+      typeof args.output_prefix === 'string' &&
+      args.output_prefix.trim().length > 0;
+    if (WRITE_TOOL_NAMES.has(toolName) && (toolName !== 'meeting_notes' || isConditionalMeetingWrite)) {
+      const paths: string[] = [];
+      if (typeof args.path === 'string') paths.push(args.path);
+      if (typeof args.file_path === 'string') paths.push(args.file_path);
+      if (typeof args.target_file === 'string') paths.push(args.target_file);
+      if (typeof args.output_prefix === 'string') paths.push(args.output_prefix);
+      if (Array.isArray(args.files)) {
+        for (const file of args.files) {
+          if (typeof file === 'string') paths.push(file);
+          else if (typeof file?.path === 'string') paths.push(file.path);
+        }
+      }
+
+      const gateResult = await WritePolicy.getInstance().gate(
+        { toolName, paths, description: args.description as string | undefined },
+        this.currentRunId,
+      );
+      if (!gateResult.allowed) {
+        return {
+          success: false,
+          error: gateResult.reason || `WritePolicy blocked tool "${toolName}"`,
+        };
+      }
+    }
+
+    // Shell adapters own a more precise full-expression policy followed by a
+    // workspace sandbox. Prompting here would happen before that safer attempt.
+    // All deterministic trust/write gates above intentionally run first.
+    if (
+      policyDecision.action === 'confirm' &&
+      !PRECISE_RUNTIME_APPROVAL_TOOLS.has(toolName)
+    ) {
+      let confirmed: boolean;
+      if (this.confirmationCallback) {
+        confirmed = await this.confirmationCallback(toolName, args, policyDecision);
+      } else {
+        const cwd = this.currentWorkingDirectory ?? process.cwd();
+        const groups = getToolGroups(toolName);
+        const highRisk =
+          groups.includes('group:dangerous') ||
+          groups.includes('group:mcp') ||
+          groups.includes('group:plugin');
+        const result = await ConfirmationService.getInstance().requestConfirmation(
+          {
+            operation: `Execute tool: ${toolName}`,
+            filename: `${toolName} @ ${cwd}`,
+            toolName,
+            toolArgs: args,
+            showVSCodeOpen: false,
+            content:
+              `Policy: ${policyDecision.reason}\nWorking directory: ${cwd}\nArguments:\n` +
+              toolArgsApprovalPreview(args),
+            approvalKey: buildToolApprovalKey(toolName, args, cwd),
+            riskLevel: highRisk ? 'high' : 'medium',
+            detail: { cwd, policySource: policyDecision.source },
+          },
+          'tool',
+        );
+        confirmed = result.confirmed;
+      }
+
+      if (!confirmed) {
+        logger.info(`Tool execution cancelled by policy gate: ${toolName}`);
+        await hooksManager.executeDeniedHooks(
+          hookContext,
+          new Error('User cancelled execution'),
+        );
+        return {
+          success: false,
+          error: `User cancelled execution of "${toolName}"`,
+        };
+      }
+      // Never promote one approval to PolicyManager's process-global
+      // `toolName -> allow`. ConfirmationService retains exact arg/cwd scopes.
+    }
+
+    return null;
+  }
+
+  /**
    * Check tool policy before execution
    * @param toolName Tool name to check
    * @param args Tool arguments
@@ -815,7 +937,58 @@ export class ToolHandler {
    */
   private checkToolPolicy(toolName: string, args: Record<string, unknown>): PolicyDecision {
     const policyManager = getPolicyManager();
-    return policyManager.checkTool(toolName, args);
+    const decision = policyManager.checkTool(toolName, args);
+    if (decision.action === 'deny') return decision;
+
+    const registryMetadata = this.registry.get(toolName)?.metadata;
+    const legacyMetadata = LEGACY_TOOL_METADATA.get(toolName);
+    const requiresConfirmation = registryMetadata?.requiresConfirmation;
+
+    // Explicit global/session overrides are user authority. Profile/default
+    // allows still combine with the adapter's effect declaration using the
+    // strictest decision, so a forgotten group cannot erase a confirm marker.
+    if (
+      requiresConfirmation === true &&
+      decision.action === 'allow' &&
+      (decision.source === 'profile' || decision.source === 'default')
+    ) {
+      return {
+        action: 'confirm',
+        reason: 'Tool metadata requires confirmation',
+        source: 'default',
+        timestamp: new Date(),
+      };
+    }
+
+    if (decision.source !== 'default') return decision;
+
+    const modifiesFiles = registryMetadata?.modifiesFiles;
+    const makesNetworkRequests = registryMetadata?.makesNetworkRequests;
+    const fleetSafe = registryMetadata?.fleetSafe === true || legacyMetadata?.fleetSafe === true;
+    if (fleetSafe && modifiesFiles !== true) {
+      return {
+        action: 'allow',
+        reason: 'Read-only fleet-safe tool metadata',
+        source: 'default',
+        timestamp: new Date(),
+      };
+    }
+
+    const category = registryMetadata?.category;
+    const inferredReadOnly =
+      (category === 'file_read' || category === 'file_search' || category === 'codebase') &&
+      modifiesFiles !== true &&
+      makesNetworkRequests !== true;
+    if (inferredReadOnly) {
+      return {
+        action: 'allow',
+        reason: `Read-only ${category} tool metadata`,
+        source: 'default',
+        timestamp: new Date(),
+      };
+    }
+
+    return decision;
   }
 
   /**
@@ -825,8 +998,7 @@ export class ToolHandler {
    * @returns True if tool is allowed
    */
   public isToolAllowed(toolName: string, args?: Record<string, unknown>): boolean {
-    const policyManager = getPolicyManager();
-    return policyManager.isAllowed(toolName, args);
+    return this.checkToolPolicy(toolName, args || {}).action === 'allow';
   }
 
   /**
@@ -864,10 +1036,60 @@ export class ToolHandler {
     }
 
     const metadata = registeredTool.metadata;
-    const context: IToolExecutionContext = {
+    const sessionId = this.deps.sessionIdProvider?.() ?? this.currentRunId;
+    let context: IToolExecutionContext = {
       cwd: this.currentWorkingDirectory ?? process.cwd(),
       botId: this.currentBotId,
+      ...(sessionId ? { sessionId } : {}),
     };
+
+    if (toolName === 'code_exec') {
+      const availableTools = Array.from(new Set([
+        ...this.registry.getNames(),
+        ...getMCPManager().getTools().map((tool) => tool.name),
+        ...this.deps.marketplace.getTools(),
+      ]))
+        .filter((name) => name !== 'code_exec' && name !== 'exec' && isToolNameAllowed(name))
+        .sort();
+      const stateSessionId = sessionId || 'sessionless';
+      const stateAgentId = this.currentBotId
+        ? `${this.codeExecAgentScopeId}:bot:${this.currentBotId}`
+        : this.codeExecAgentScopeId;
+      context = attachCodeExecRuntime(context, {
+        scopeId: `${stateAgentId}:session:${stateSessionId}`,
+        sessionId: stateSessionId,
+        agentId: stateAgentId,
+        cwd: context.cwd,
+        availableTools,
+        executor: async (nestedToolName, nestedArgs) => {
+          // Defense in depth: code_exec is omitted from the child bridge and
+          // rejected again here so tools.call('code_exec', ...) cannot recurse.
+          if (nestedToolName === 'code_exec' || nestedToolName === 'exec') {
+            return {
+              success: false,
+              error: 'Recursive code_exec calls are not allowed.',
+            };
+          }
+          let serializedArgs: string;
+          try {
+            serializedArgs = JSON.stringify(nestedArgs);
+          } catch {
+            return {
+              success: false,
+              error: `Arguments for nested tool "${nestedToolName}" are not JSON-serializable.`,
+            };
+          }
+          return await this.executeTool({
+            id: createCodeExecToolCallId(),
+            type: 'function',
+            function: {
+              name: nestedToolName,
+              arguments: serializedArgs,
+            },
+          });
+        },
+      });
+    }
 
     // Handle bash tool with hooks and auto-repair
     if (toolName === 'bash') {
@@ -1056,7 +1278,20 @@ export class ToolHandler {
     // Reason: stream MCTS progress events in real-time
     if (toolName === 'reason') {
       try {
-        const args = JSON.parse(toolCall.function.arguments);
+        const args = JSON.parse(toolCall.function.arguments) as Record<string, unknown>;
+        const authorizationError = await this.authorizeToolAction(
+          toolName,
+          args,
+          {
+            toolName,
+            originalArgs: { ...args },
+            args,
+            toolCallId: toolCall.id,
+            timestamp: startTime,
+          },
+          getToolHooksManager(),
+        );
+        if (authorizationError) return authorizationError;
         const { getTreeOfThoughtReasoner } = await import('./reasoning/index.js');
         const apiKey = process.env.GROK_API_KEY || process.env.XAI_API_KEY || '';
         const baseURL = process.env.GROK_BASE_URL;
@@ -1102,14 +1337,39 @@ export class ToolHandler {
     // instead of a single opaque "Created X" at the end.
     if (toolName === 'generate_document') {
       try {
-        const args = JSON.parse(toolCall.function.arguments);
+        const args = JSON.parse(toolCall.function.arguments) as Record<string, unknown>;
+        const authorizationError = await this.authorizeToolAction(
+          toolName,
+          args,
+          {
+            toolName,
+            originalArgs: { ...args },
+            args,
+            toolCallId: toolCall.id,
+            timestamp: startTime,
+          },
+          getToolHooksManager(),
+        );
+        if (authorizationError) return authorizationError;
         const { executeGenerateDocumentStreaming } = await import('../tools/document-generator.js');
+        const outputPath = args.outputPath ?? args.output_path;
+        if (
+          typeof args.type !== 'string' ||
+          typeof args.title !== 'string' ||
+          typeof args.content !== 'string' ||
+          typeof outputPath !== 'string'
+        ) {
+          return {
+            success: false,
+            error: 'generate_document requires string type, title, content, and outputPath arguments.',
+          };
+        }
         const gen = executeGenerateDocumentStreaming({
           type: args.type,
           title: args.title,
           content: args.content,
-          outputPath: args.outputPath ?? args.output_path,
-          theme: args.theme,
+          outputPath,
+          theme: typeof args.theme === 'string' ? args.theme : undefined,
         });
         let r = await gen.next();
         while (!r.done) {

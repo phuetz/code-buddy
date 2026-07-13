@@ -26,6 +26,8 @@ import type {
   ToolUseContent,
   ToolResultContent,
   MessageMetadata,
+  SessionIntelligence,
+  PermissionMode,
 } from '../../renderer/types';
 import type { DatabaseInstance, TraceStepRow } from '../db/database';
 import { PathResolver } from '../sandbox/path-resolver';
@@ -66,8 +68,14 @@ import {
 import { generateTitleWithClaudeSdk } from '../claude/claude-sdk-one-shot';
 import { buildScheduledTaskTitle } from '../../shared/schedule/task-title';
 import { CodeBuddyEngineRunner } from '../engine/codebuddy-engine-runner';
-import { TurnJournal, type TurnJournalReadResult } from './turn-journal';
+import {
+  TurnJournal,
+  type TurnJournalFence,
+  type TurnJournalReadResult,
+} from './turn-journal';
+import { readConversationBranchJournalFence } from './sqlite-session-branches';
 import { buildSessionRecallPrefill, repairSessionTranscript } from './session-insights-bridge';
+import { appendLatencyMeasurement } from '../../shared/session-latency';
 
 export { formatFileAttachmentPromptLine } from './file-attachment-context';
 
@@ -89,6 +97,31 @@ export function createUniqueAttachmentFilename(
 
   usedFilenames.add(candidate.toLowerCase());
   return candidate;
+}
+
+const DEFAULT_SESSION_LATENCY_BUDGET_MS = 900;
+
+function defaultSessionIntelligence(): SessionIntelligence {
+  const config = configStore.getAll();
+  return {
+    configSetId: config.activeConfigSetId,
+    profileId: config.activeProfileKey,
+    thinkingLevel: config.thinkingLevel ?? (config.enableThinking ? 'medium' : 'off'),
+    fastMode: false,
+    executionLocation: 'local',
+    latencyBudgetMs: DEFAULT_SESSION_LATENCY_BUDGET_MS,
+    cacheState: 'unknown',
+  };
+}
+
+function parseSessionIntelligence(raw: string | null | undefined): SessionIntelligence {
+  if (!raw) return defaultSessionIntelligence();
+  try {
+    const parsed = JSON.parse(raw) as Partial<SessionIntelligence>;
+    return { ...defaultSessionIntelligence(), ...parsed };
+  } catch {
+    return defaultSessionIntelligence();
+  }
 }
 
 interface AgentRunner {
@@ -169,7 +202,10 @@ export interface EngineAdapterLike {
 
 /** Minimal interface for the project memory service */
 export interface ProjectMemoryServiceLike {
-  loadProjectContext(projectId: string): Promise<string | null>;
+  loadProjectContext(
+    projectId: string,
+    options?: { includeMemory?: boolean }
+  ): Promise<string | null>;
   consolidateSessionMemory(
     projectId: string,
     sessionId: string,
@@ -375,6 +411,7 @@ interface QueuedPromptItem {
   turnId: string;
   prompt: string;
   content?: ContentBlock[];
+  permissionModeOverride?: PermissionMode;
 }
 
 interface RecoveredQueuedPromptSnapshot {
@@ -383,6 +420,16 @@ interface RecoveredQueuedPromptSnapshot {
   recoverable: boolean;
   nonRecoverableTypes: string[];
 }
+
+export interface BackgroundSessionLifecycleEvent {
+  sessionId: string;
+  status: 'queued' | 'running' | 'completed' | 'failed';
+  error?: string;
+}
+
+export type BackgroundSessionLifecycleListener = (
+  event: BackgroundSessionLifecycleEvent,
+) => void;
 
 export class SessionManager {
   private db: DatabaseInstance;
@@ -406,6 +453,7 @@ export class SessionManager {
   private static readonly MAX_CACHE_SIZE = 100;
   private turnJournal = new TurnJournal();
   private activeTurnJournalIds: Map<string, string> = new Map();
+  private backgroundSessionLifecycleListeners = new Set<BackgroundSessionLifecycleListener>();
 
   /** Optional Code Buddy engine adapter for in-process execution */
   private engineAdapter?: EngineAdapterLike;
@@ -484,6 +532,12 @@ export class SessionManager {
   /** Inject notification bridge (wired from main/index.ts) */
   setNotificationBridge(bridge: NotificationBridgeLike): void {
     this.notificationBridge = bridge;
+  }
+
+  /** Observe durable background-session outcomes without creating another task engine. */
+  onBackgroundSessionLifecycle(listener: BackgroundSessionLifecycleListener): () => void {
+    this.backgroundSessionLifecycleListeners.add(listener);
+    return () => this.backgroundSessionLifecycleListeners.delete(listener);
   }
 
   /** Inject ICM integration (wired from main/index.ts) */
@@ -778,6 +832,8 @@ export class SessionManager {
 
     this.saveSession(session);
 
+    this.emitBackgroundSessionLifecycle({ sessionId: session.id, status: 'queued' });
+
     // Notify renderer that a background session was created
     this.sendToRenderer({
       type: 'session.update',
@@ -889,6 +945,8 @@ export class SessionManager {
       ],
       memoryEnabled,
       model: configStore.get('model') || undefined,
+      intelligence: defaultSessionIntelligence(),
+      permissionMode: 'default',
       pinned: false,
       archived: false,
       tags: extractSessionTags(title),
@@ -911,9 +969,11 @@ export class SessionManager {
       allowed_tools: JSON.stringify(session.allowedTools),
       memory_enabled: session.memoryEnabled ? 1 : 0,
       model: session.model || null,
+      intelligence: JSON.stringify(session.intelligence ?? defaultSessionIntelligence()),
       project_id: session.projectId ?? null,
       is_background: session.isBackground ? 1 : 0,
       execution_mode: session.executionMode ?? null,
+      permission_mode: session.permissionMode ?? 'default',
       pinned: session.pinned ? 1 : 0,
       archived: session.archived ? 1 : 0,
       tags: JSON.stringify(session.tags ?? extractSessionTags(session.title)),
@@ -955,9 +1015,11 @@ export class SessionManager {
       allowedTools,
       memoryEnabled: row.memory_enabled === 1,
       model: row.model || undefined,
+      intelligence: parseSessionIntelligence(row.intelligence),
       projectId: row.project_id ?? null,
       isBackground: row.is_background === 1,
       executionMode: (row.execution_mode as 'chat' | 'task' | null) ?? undefined,
+      permissionMode: (row.permission_mode as PermissionMode | null) ?? 'default',
       pinned: row.pinned === 1,
       archived: row.archived === 1,
       tags: parseSessionTags(row.tags, row.title),
@@ -999,9 +1061,11 @@ export class SessionManager {
         allowedTools,
         memoryEnabled: row.memory_enabled === 1,
         model: row.model || undefined,
+        intelligence: parseSessionIntelligence(row.intelligence),
         projectId: row.project_id ?? null,
         isBackground: row.is_background === 1,
         executionMode: (row.execution_mode as 'chat' | 'task' | null) ?? undefined,
+        permissionMode: (row.permission_mode as PermissionMode | null) ?? 'default',
         pinned: row.pinned === 1,
         archived: row.archived === 1,
         tags: parseSessionTags(row.tags, row.title),
@@ -1010,6 +1074,48 @@ export class SessionManager {
         updatedAt: row.updated_at,
       };
     });
+  }
+
+  /** Import a CLI/channel transcript into the Cowork catalog without altering the source file. */
+  importExternalSession(input: {
+    id: string;
+    name: string;
+    workingDirectory?: string;
+    model?: string;
+    createdAt?: string;
+    lastAccessedAt?: string;
+    messages: Array<{ type: string; content: string; timestamp?: string }>;
+  }): Session {
+    const stableId = `cli-import:${input.id}`;
+    const existing = this.loadSession(stableId);
+    if (existing) return existing;
+    const createdAt = Date.parse(input.createdAt ?? '') || Date.now();
+    const updatedAt = Date.parse(input.lastAccessedAt ?? '') || createdAt;
+    const session: Session = {
+      ...this.createSession(input.name || input.id, input.workingDirectory),
+      id: stableId,
+      model: input.model || undefined,
+      source: 'cli-import',
+      createdAt,
+      updatedAt,
+      intelligence: {
+        ...defaultSessionIntelligence(),
+        executionLocation: 'local',
+      },
+    };
+    this.saveSession(session);
+    for (const item of input.messages) {
+      if (!item || typeof item.content !== 'string') continue;
+      const role: Message['role'] = item.type === 'user' ? 'user' : item.type === 'assistant' ? 'assistant' : 'system';
+      this.saveMessage({
+        id: uuidv4(),
+        sessionId: session.id,
+        role,
+        content: [{ type: 'text', text: item.content }],
+        timestamp: Date.parse(item.timestamp ?? '') || createdAt,
+      });
+    }
+    return session;
   }
 
   /**
@@ -1157,7 +1263,8 @@ export class SessionManager {
   async continueSession(
     sessionId: string,
     prompt: string,
-    content?: ContentBlock[]
+    content?: ContentBlock[],
+    options?: { permissionModeOverride?: PermissionMode },
   ): Promise<void> {
     log('[SessionManager] Continuing session:', sessionId);
 
@@ -1166,7 +1273,9 @@ export class SessionManager {
       throw new Error(`Session not found: ${sessionId}`);
     }
 
-    this.enqueuePrompt(session, prompt, content);
+    this.enqueuePrompt(session, prompt, content, {
+      permissionModeOverride: options?.permissionModeOverride,
+    });
   }
 
   async steerSession(
@@ -1424,7 +1533,7 @@ export class SessionManager {
     session: Session,
     prompt: string,
     content?: ContentBlock[],
-    options?: { turnId?: string }
+    options?: { turnId?: string; permissionModeOverride?: PermissionMode }
   ): Promise<void> {
     const traceId = options?.turnId ?? generateTraceId();
     return runWithLogContext({ sessionId: session.id, traceId }, async () => {
@@ -1512,14 +1621,17 @@ export class SessionManager {
 
         const useAutomatedMemory = this.shouldUseAutomatedMemory(session);
 
-        // Inject project memory context (Claude Cowork parity)
+        // Project instructions and selected knowledge always apply. The
+        // project's learned memory remains controlled by the memory strategy.
         const projectId = session.projectId ?? this.projectManager?.getActiveId() ?? null;
-        if (useAutomatedMemory && projectId && this.projectMemory) {
+        if (projectId && this.projectMemory) {
           try {
-            const projectContext = await this.projectMemory.loadProjectContext(projectId);
+            const projectContext = await this.projectMemory.loadProjectContext(projectId, {
+              includeMemory: useAutomatedMemory,
+            });
             if (projectContext) {
               enhancedPrompt = `${projectContext}\n\n${enhancedPrompt}`;
-              logCtx('[SessionManager] Injected project memory for', projectId);
+              logCtx('[SessionManager] Injected project shared context for', projectId);
             }
           } catch (err) {
             logCtxError('[SessionManager] Failed to inject project memory:', err);
@@ -1585,19 +1697,41 @@ export class SessionManager {
         );
         const messagesForContext = [...existingMessages, userMessage];
 
-        // Update session model to match current config (may have changed since session creation)
-        const currentModel = configStore.get('model');
-        if (currentModel && currentModel !== session.model) {
-          session.model = currentModel;
-          this.db.sessions.update(session.id, { model: currentModel });
-          this.sendToRenderer({
-            type: 'session.update',
-            payload: { sessionId: session.id, updates: { model: currentModel } },
-          });
+        // The model/runtime posture belongs to the session. Older builds copied
+        // the global model here on every turn, which made concurrent profiles
+        // impossible and silently invalidated prompt caches in other tabs.
+        if (!session.model) {
+          const runtimeConfig = session.intelligence?.configSetId
+            ? configStore.getConfigForSet(session.intelligence.configSetId)
+            : configStore.getAll();
+          session.model = runtimeConfig.model || undefined;
+          if (session.model) this.db.sessions.update(session.id, { model: session.model });
         }
 
         // Run the agent
-        await this.agentRunner.run(session, enhancedPrompt, messagesForContext);
+        const runStartedAt = Date.now();
+        const turnSession = options?.permissionModeOverride
+          ? { ...session, permissionModeOverride: options.permissionModeOverride }
+          : session;
+        await this.agentRunner.run(turnSession, enhancedPrompt, messagesForContext);
+        session.intelligence = appendLatencyMeasurement({
+          ...defaultSessionIntelligence(),
+          ...session.intelligence,
+        }, {
+          ...session.intelligence?.lastLatency,
+          totalMs: Date.now() - runStartedAt,
+          measuredAt: Date.now(),
+          configSetId: session.intelligence?.configSetId,
+          model: session.model,
+        });
+        this.db.sessions.update(session.id, {
+          model: session.model ?? null,
+          intelligence: JSON.stringify(session.intelligence),
+        });
+        this.sendToRenderer({
+          type: 'session.update',
+          payload: { sessionId: session.id, updates: { model: session.model, intelligence: session.intelligence } },
+        });
         this.turnJournal.append(session.id, 'turn_completed', {}, traceId);
 
         // Store ICM episode for cross-session recall (Claude Cowork parity)
@@ -1626,6 +1760,9 @@ export class SessionManager {
           } catch (err) {
             logCtxError('[SessionManager] Notification dispatch failed:', err);
           }
+        }
+        if (session.isBackground) {
+          this.emitBackgroundSessionLifecycle({ sessionId: session.id, status: 'completed' });
         }
 
         // Consolidate project memory asynchronously (Claude Cowork parity)
@@ -1683,6 +1820,22 @@ export class SessionManager {
           type: 'error',
           payload: { sessionId: session.id, message: errorText },
         });
+        if (session.isBackground) {
+          this.emitBackgroundSessionLifecycle({
+            sessionId: session.id,
+            status: 'failed',
+            error: errorText,
+          });
+          try {
+            this.notificationBridge?.notifyTaskComplete(
+              session.id,
+              `Background task "${session.title ?? session.id}" failed: ${errorText}`,
+              false,
+            );
+          } catch (notificationError) {
+            logCtxError('[SessionManager] Failure notification dispatch failed:', notificationError);
+          }
+        }
       } finally {
         this.activeTurnJournalIds.delete(session.id);
       }
@@ -1783,11 +1936,16 @@ export class SessionManager {
     session: Session,
     prompt: string,
     content?: ContentBlock[],
-    options?: { turnId?: string; recordJournal?: boolean }
+    options?: { turnId?: string; recordJournal?: boolean; permissionModeOverride?: PermissionMode }
   ): void {
     const turnId = options?.turnId ?? generateTraceId();
     const queue = this.promptQueues.get(session.id) || [];
-    queue.push({ turnId, prompt, content });
+    queue.push({
+      turnId,
+      prompt,
+      content,
+      permissionModeOverride: options?.permissionModeOverride,
+    });
     this.promptQueues.set(session.id, queue);
     if (options?.recordJournal !== false) {
       const submissionSnapshot = content ? buildTurnSubmissionSnapshot(content) : null;
@@ -1833,6 +1991,9 @@ export class SessionManager {
     const controller = new AbortController();
     this.activeSessions.set(session.id, controller);
     this.updateSessionStatus(session.id, 'running');
+    if (session.isBackground) {
+      this.emitBackgroundSessionLifecycle({ sessionId: session.id, status: 'running' });
+    }
 
     try {
       // Outer loop: after the inner loop drains, re-check for items that
@@ -1857,6 +2018,7 @@ export class SessionManager {
 
           await this.processPrompt(latestSession, item.prompt, item.content, {
             turnId: item.turnId,
+            permissionModeOverride: item.permissionModeOverride,
           });
 
           if (controller.signal.aborted) return; // finally handles cleanup
@@ -1991,18 +2153,31 @@ export class SessionManager {
     });
   }
 
+  private emitBackgroundSessionLifecycle(event: BackgroundSessionLifecycleEvent): void {
+    for (const listener of this.backgroundSessionLifecycleListeners) {
+      try {
+        listener(event);
+      } catch (error) {
+        logWarn('[SessionManager] Background lifecycle listener failed:', error);
+      }
+    }
+  }
+
   /** Update project assignment / execution mode / background flag (Claude Cowork parity) */
   updateSessionSettings(
     sessionId: string,
     updates: {
       projectId?: string | null;
       executionMode?: 'chat' | 'task';
+      permissionMode?: PermissionMode;
       isBackground?: boolean;
       title?: string;
       pinned?: boolean;
       archived?: boolean;
       tags?: string[];
       source?: string;
+      model?: string;
+      intelligence?: Partial<SessionIntelligence>;
     }
   ): boolean {
     const existing = this.db.sessions.get(sessionId);
@@ -2014,12 +2189,22 @@ export class SessionManager {
     const dbUpdates: Record<string, unknown> = {};
     if (updates.projectId !== undefined) dbUpdates.project_id = updates.projectId;
     if (updates.executionMode !== undefined) dbUpdates.execution_mode = updates.executionMode;
+    if (updates.permissionMode !== undefined) dbUpdates.permission_mode = updates.permissionMode;
     if (updates.isBackground !== undefined) dbUpdates.is_background = updates.isBackground ? 1 : 0;
     if (updates.title !== undefined) dbUpdates.title = updates.title;
     if (updates.pinned !== undefined) dbUpdates.pinned = updates.pinned ? 1 : 0;
     if (updates.archived !== undefined) dbUpdates.archived = updates.archived ? 1 : 0;
     if (updates.tags !== undefined) dbUpdates.tags = JSON.stringify(updates.tags);
     if (updates.source !== undefined) dbUpdates.source = updates.source;
+    if (updates.model !== undefined) dbUpdates.model = updates.model;
+    let mergedIntelligence: SessionIntelligence | undefined;
+    if (updates.intelligence !== undefined) {
+      mergedIntelligence = {
+        ...parseSessionIntelligence(existing.intelligence),
+        ...updates.intelligence,
+      };
+      dbUpdates.intelligence = JSON.stringify(mergedIntelligence);
+    }
     if (updates.title !== undefined && updates.tags === undefined) {
       dbUpdates.tags = JSON.stringify(extractSessionTags(updates.title));
     }
@@ -2032,12 +2217,15 @@ export class SessionManager {
     const rendererUpdates: Record<string, unknown> = {};
     if (updates.projectId !== undefined) rendererUpdates.projectId = updates.projectId;
     if (updates.executionMode !== undefined) rendererUpdates.executionMode = updates.executionMode;
+    if (updates.permissionMode !== undefined) rendererUpdates.permissionMode = updates.permissionMode;
     if (updates.isBackground !== undefined) rendererUpdates.isBackground = updates.isBackground;
     if (updates.title !== undefined) rendererUpdates.title = updates.title;
     if (updates.pinned !== undefined) rendererUpdates.pinned = updates.pinned;
     if (updates.archived !== undefined) rendererUpdates.archived = updates.archived;
     if (updates.tags !== undefined) rendererUpdates.tags = updates.tags;
     if (updates.source !== undefined) rendererUpdates.source = updates.source;
+    if (updates.model !== undefined) rendererUpdates.model = updates.model;
+    if (mergedIntelligence) rendererUpdates.intelligence = mergedIntelligence;
     if (updates.title !== undefined && updates.tags === undefined) {
       rendererUpdates.tags = extractSessionTags(updates.title);
     }
@@ -2247,8 +2435,38 @@ export class SessionManager {
     return [...messages];
   }
 
+  /** True when replacing persisted history would race an active or queued turn. */
+  isConversationBusy(sessionId: string): boolean {
+    return (
+      this.activeSessions.has(sessionId) ||
+      (this.promptQueues.get(sessionId)?.length ?? 0) > 0
+    );
+  }
+
+  /**
+   * Invalidate every history-bearing runtime after an atomic branch restore.
+   * The next `getMessages()` reads the selected rows from SQLite, while the
+   * next provider turn starts without a hidden server-side thread from the
+   * previously checked-out branch.
+   */
+  resetConversationAfterBranchChange(sessionId: string): void {
+    this.messageCache.delete(sessionId);
+    this.activeTurnJournalIds.delete(sessionId);
+    this.agentRunner.clearSdkSession?.(sessionId);
+  }
+
+  captureTurnJournalFenceForBranchChange(sessionId: string): TurnJournalFence | null {
+    return this.turnJournal.captureFence(sessionId);
+  }
+
+  /** Archive a journal after the SQLite branch transaction has committed. */
+  rotateTurnJournalForBranchChange(sessionId: string): void {
+    this.turnJournal.rotate(sessionId, 'branch-checkout');
+  }
+
   getTurnJournal(sessionId: string): TurnJournalReadResult {
-    return this.turnJournal.read(sessionId);
+    const fence = readConversationBranchJournalFence(this.db, sessionId);
+    return this.turnJournal.read(sessionId, 200, fence);
   }
 
   getMemoryPreview(sessionId: string): SessionMemoryPreview | null {

@@ -87,7 +87,7 @@ or account id into public docs.
 Model routing and fallback:
 
 ```bash
-buddy --model gpt-5.5 --prompt "PUBLIC-PROOF-CODE-BUDDY-provider-route"
+buddy --model gpt-5.6-sol --prompt "PUBLIC-PROOF-CODE-BUDDY-provider-route"
 buddy --base-url http://localhost:11434/v1 --model llama3 --prompt "Say OK"
 ```
 
@@ -165,7 +165,7 @@ OpenAI-compatible chat smoke:
 ```bash
 curl http://127.0.0.1:3000/api/chat/completions \
   -H "content-type: application/json" \
-  -d '{"model":"gpt-5.5","messages":[{"role":"user","content":"Say PUBLIC-PROOF-CODE-BUDDY-server"}]}'
+  -d '{"model":"gpt-5.6-sol","messages":[{"role":"user","content":"Say PUBLIC-PROOF-CODE-BUDDY-server"}]}'
 ```
 
 In production, JWT is required. Do not publish bearer tokens.

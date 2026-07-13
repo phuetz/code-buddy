@@ -200,7 +200,14 @@ describe('Hermes CLI commands', () => {
   });
 
   it('prints a compact Hermes overview without leaking configured secret values', async () => {
-    const keys = ['CODEBUDDY_MODEL', 'OPENAI_API_KEY', 'CODEBUDDY_NOUS_ACCESS_TOKEN', 'MEM0_API_KEY', 'MEM0_BASE_URL'];
+    const keys = [
+      'CODEBUDDY_MODEL',
+      'OPENAI_API_KEY',
+      'CODEBUDDY_NOUS_ACCESS_TOKEN',
+      'MEM0_API_KEY',
+      'MEM0_BASE_URL',
+      'CODEBUDDY_CHANNEL_CONFIG',
+    ];
     const originalEnv = new Map(keys.map((key) => [key, process.env[key]]));
     const program = createProgram();
     registerHermesCommands(program);
@@ -214,6 +221,10 @@ describe('Hermes CLI commands', () => {
       process.env.CODEBUDDY_NOUS_ACCESS_TOKEN = 'secret-overview-nous-token';
       process.env.MEM0_API_KEY = 'secret-overview-mem0-key';
       process.env.MEM0_BASE_URL = 'https://private-memory.example.test';
+      process.env.CODEBUDDY_CHANNEL_CONFIG = path.join(
+        os.tmpdir(),
+        `codebuddy-missing-channels-${process.pid}-${Date.now()}.json`,
+      );
       resetMemoryProviderRegistry();
 
       await program.parseAsync(['node', 'test', 'hermes', 'status', 'safe', '--json']);
@@ -344,7 +355,7 @@ describe('Hermes CLI commands', () => {
       expect(output.requestedProfile).toBe('safe');
       expect(output.dispatchProfile).toBe('safe');
       expect(output.summary.featureParity.activeTodoCount).toBe(0);
-      expect(output.summary.featureParity.deferredCount).toBe(1);
+      expect(output.summary.featureParity.deferredCount).toBe(0);
       expect(output.summary.toolParity.total).toBeGreaterThan(0);
       expect(output.summary.toolParity.gaps).toBe(0);
       expect(output.readiness.provider).toMatchObject({
@@ -2119,6 +2130,7 @@ describe('Hermes CLI commands', () => {
         auditDocument: string;
       };
       summary: {
+        coveredPartial: number;
         total: number;
         partial: number;
         gaps: number;
@@ -2135,12 +2147,11 @@ describe('Hermes CLI commands', () => {
     expect(output.schemaVersion).toBe(1);
     expect(output.command).toBe('buddy hermes parity --json');
     expect(output.officialSource.repository).toBe('https://github.com/NousResearch/hermes-agent');
-    expect(output.officialSource.inspectedCommit).toBe('5921d667');
-    expect(output.officialSource.auditDocument).toBe('docs/hermes-agent-official-parity-audit-2026-05-30.md');
+    expect(output.officialSource.inspectedCommit).toBe('1c4cc00f7');
+    expect(output.officialSource.auditDocument).toBe('docs/hermes-openclaw-parity.md');
     expect(output.summary.total).toBe(output.features.length);
-    expect(output.summary.partial).toBeGreaterThan(0);
-    // OpenClaw migration was the lone gap; `buddy hermes claw migrate` now closes it
-    // (status partial), so feature-level gaps are zero.
+    expect(output.summary.coveredPartial).toBeGreaterThan(0);
+    expect(output.summary.partial).toBe(0);
     expect(output.summary.gaps).toBe(0);
     const expectedFeatures = [
         expect.objectContaining({
@@ -2342,7 +2353,7 @@ describe('Hermes CLI commands', () => {
     expect(output.schemaVersion).toBe(1);
     expect(output.command).toBe('buddy hermes todo --json');
     expect(output.summary.activeTodoCount).toBe(0);
-    expect(output.summary.deferredCount).toBe(1);
+    expect(output.summary.deferredCount).toBe(0);
     expect(output.summary.selectedTodoCount).toBe(output.summary.activeTodoCount);
     expect(output.summary.shownTodoCount).toBe(output.todos.length);
     expect(output.summary.hiddenTodoCount).toBe(
@@ -2351,11 +2362,8 @@ describe('Hermes CLI commands', () => {
     expect(output.summary.todoLimit).toBe(7);
     expect(output.summary.includedDeferred).toBe(false);
     expect(output.todos.length).toBe(0);
-    expect(output.deferred).toEqual([
-      expect.objectContaining({ id: 'openclaw-migration',
-          status: 'partial' }),
-    ]);
-    expect(output.notes.join(' ')).toContain('OpenClaw migration is deferred');
+    expect(output.deferred).toEqual([]);
+    expect(output.notes.join(' ')).toContain('Covered-partial items');
   });
 
   it('appends deliberately deferred Hermes work after active priorities when requested', async () => {
@@ -2370,11 +2378,8 @@ describe('Hermes CLI commands', () => {
     };
 
     expect(output.summary.includedDeferred).toBe(true);
-    expect(output.todos.at(-1)).toMatchObject({
-      id: 'openclaw-migration',
-      priority: output.todos.length,
-    });
-    expect(output.summary.activeTodoCount).toBe(output.todos.length - 1);
+    expect(output.todos).toEqual([]);
+    expect(output.summary.activeTodoCount).toBe(0);
   });
 
   it('prints readable Hermes TODO output', async () => {
@@ -2386,8 +2391,8 @@ describe('Hermes CLI commands', () => {
     const output = getLogOutput();
     expect(output).toContain('Hermes TODO:');
     expect(output).toMatch(/Showing: 0\/0 active item\(s\)/);
-    expect(output).toContain('Deferred by decision:');
-    expect(output).toContain('OpenClaw migration [partial]');
+    expect(output).not.toContain('Deferred by decision:');
+    expect(output).not.toContain('OpenClaw migration [partial]');
   });
 
   it('labels Hermes TODO output as selected work when deferred items are included', async () => {
@@ -2400,7 +2405,7 @@ describe('Hermes CLI commands', () => {
     expect(output).toMatch(/Showing: \d+\/\d+ active\/deferred item\(s\)/);
     expect(output).toContain('Next selected work:');
     expect(output).not.toContain('Next active work:');
-    expect(output).toContain('OpenClaw migration [partial]');
+    expect(output).not.toContain('OpenClaw migration [partial]');
   });
 
   it('prints real local Nous Portal readiness without leaking secrets', async () => {

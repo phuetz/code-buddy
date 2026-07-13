@@ -21,6 +21,12 @@ import {
   hasCodexCredentials,
   getCodexAuthFilePath,
 } from '../../providers/codex-oauth.js';
+import {
+  CHATGPT_OAUTH_DEFAULT_MODEL,
+  CHATGPT_OAUTH_SAFE_FALLBACK_MODEL,
+  discoverChatGptModels,
+  selectChatGptOAuthModel,
+} from '../../providers/chatgpt-models.js';
 
 function makeEntry(content: string): ChatEntry {
   return {
@@ -36,6 +42,18 @@ function describeProvider(args: string[]): 'chatgpt' | 'unknown' {
     return 'chatgpt';
   }
   return 'unknown';
+}
+
+async function appendModelStatus(
+  lines: string[],
+  auth: NonNullable<Awaited<ReturnType<typeof getChatGptAuth>>>,
+): Promise<void> {
+  const catalog = await discoverChatGptModels(auth);
+  const model = selectChatGptOAuthModel(CHATGPT_OAUTH_DEFAULT_MODEL, catalog);
+  lines.push(`   Model:   ${model}`);
+  if (!catalog) {
+    lines.push(`   Discovery unavailable; safe fallback: ${CHATGPT_OAUTH_SAFE_FALLBACK_MODEL}`);
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────
@@ -64,10 +82,10 @@ export async function handleLogin(args: string[]): Promise<CommandHandlerResult>
     if (auth.email) lines.push(`   Account: ${auth.email}`);
     if (auth.plan_type) lines.push(`   Plan:    ${auth.plan_type}`);
     if (auth.is_fedramp) lines.push(`   FedRAMP: yes`);
-    if (auth.account_id) lines.push(`   Account ID: ${auth.account_id}`);
+    await appendModelStatus(lines, auth);
     lines.push('');
     lines.push(`Tokens stored at: ${getCodexAuthFilePath()}`);
-    lines.push('Use `gpt-5.5` or another supported ChatGPT model. Try a message now.');
+    lines.push(`Use ${CHATGPT_OAUTH_DEFAULT_MODEL} or another model exposed by your ChatGPT account.`);
   } catch (err) {
     lines.push('❌ Login failed');
     lines.push(`   ${err instanceof Error ? err.message : String(err)}`);
@@ -128,8 +146,8 @@ export async function handleWhoami(): Promise<CommandHandlerResult> {
     lines.push('ChatGPT: ✅ connected');
     if (auth.email) lines.push(`  Account: ${auth.email}`);
     if (auth.plan_type) lines.push(`  Plan:    ${auth.plan_type}`);
-    if (auth.account_id) lines.push(`  Account ID: ${auth.account_id}`);
     if (auth.is_fedramp) lines.push(`  FedRAMP: yes`);
+    await appendModelStatus(lines, auth);
   } catch (err) {
     lines.push('ChatGPT: ⚠️  error reading credentials');
     lines.push(`  ${err instanceof Error ? err.message : String(err)}`);

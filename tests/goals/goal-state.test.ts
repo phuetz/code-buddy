@@ -44,6 +44,11 @@ describe('goal-state', () => {
       expect(restored!.subgoals).toEqual([]);
       expect(restored!.status).toBe('paused');
       expect(restored!.pausedReason).toBe('turn budget exhausted (20/20)');
+      expect(restored!.goalId).toMatch(/^goal-legacy-/);
+      expect(normalizeGoalState({
+        goal: 'fix tests',
+        createdAt: 123,
+      })!.goalId).toBe(restored!.goalId);
     });
 
     it('rejects payloads without goal text', () => {
@@ -135,6 +140,16 @@ describe('goal-state', () => {
         'T1 Implement: diff exists',
         'T1.1 Implement / Patch: file changed',
       ]);
+    });
+
+    it('preserves the independent proof gate across process restarts', () => {
+      const state = createGoalState('ship with proof');
+      state.verifyGated = true;
+
+      expect(normalizeGoalState(JSON.parse(JSON.stringify(state)))).toMatchObject({
+        goalId: state.goalId,
+        verifyGated: true,
+      });
     });
   });
 

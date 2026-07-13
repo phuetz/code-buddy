@@ -1252,7 +1252,7 @@ describe('Tools Integration', () => {
     await textEditor.strReplace(filePath, 'original', 'modified');
 
     // Verify with bash cat
-    const catResult = await bashTool.execute(`cat ${filePath}`);
+    const catResult = await bashTool.execute('cat editable.txt', undefined, integrationDir);
     expect(catResult.success).toBe(true);
     expect(catResult.output).toContain('modified');
   });
@@ -1263,7 +1263,7 @@ describe('Tools Integration', () => {
     await textEditor.create(path.join(integrationDir, 'file2.txt'), 'content2');
 
     // List with bash
-    const lsResult = await bashTool.execute(`ls ${integrationDir}`);
+    const lsResult = await bashTool.execute('ls .', undefined, integrationDir);
     expect(lsResult.success).toBe(true);
     expect(lsResult.output).toContain('file1.txt');
     expect(lsResult.output).toContain('file2.txt');

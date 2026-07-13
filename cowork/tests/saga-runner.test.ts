@@ -14,13 +14,26 @@ const state = vi.hoisted(() => {
   type SagaStep = {
     peerId: string;
     model: string;
+    provider?: string;
+    attempts?: Array<{
+      peerId: string;
+      model: string;
+      providerRequested?: string;
+      providerResolved?: string;
+      runId?: string;
+      status: 'running' | 'completed' | 'failed';
+      failureDomain?: 'peer' | 'provider';
+      startedAt: number;
+      completedAt?: number;
+      error?: string;
+    }>;
     lane: 'primary' | 'fallback' | 'parallel' | 'chain';
     role?: string;
     dependsOn?: number;
     /** Phase H — set when SagaRunner reassigns the step on an alternate peer. */
     retried?: boolean;
     runId?: string;
-    status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
+    status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled' | 'skipped';
     toolPolicy?: {
       profile?: string;
       policyProfile?: string;
@@ -45,9 +58,10 @@ const state = vi.hoisted(() => {
     id: string;
     goal: string;
     plan: {
-      primary: { peerId: string; model: string };
-      fallback?: { peerId: string; model: string };
-      parallel?: Array<{ peerId: string; model: string }>;
+      primary: { peerId: string; model: string; provider?: string };
+      fallback?: { peerId: string; model: string; provider?: string };
+      parallel?: Array<{ peerId: string; model: string; provider?: string }>;
+      chain?: Array<{ peerId: string; model: string; provider?: string; role?: string }>;
     };
     steps: SagaStep[];
     status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
@@ -156,16 +170,43 @@ vi.mock('../src/main/utils/core-loader', () => ({
             constraints: {
               requiredRole?: string;
               excludePeerIds?: string[];
+              excludeProviders?: string[];
             },
           ) {
             const exclude = new Set(constraints.excludePeerIds ?? []);
+            const excludedProviders = new Set(constraints.excludeProviders ?? []);
             const role = constraints.requiredRole;
-            const alt = peers.find((p) => !exclude.has(p.peerId));
+            for (const candidate of peers) {
+              if (exclude.has(candidate.peerId)) continue;
+              const capability = candidate.capability as {
+                models?: Array<{ id: string; provider?: string }>;
+              };
+              const model = capability.models?.find(
+                (entry) => !entry.provider || !excludedProviders.has(entry.provider),
+              );
+              if (model) {
+                return {
+                  primary: {
+                    peerId: candidate.peerId,
+                    model: model.id,
+                    provider: model.provider,
+                  },
+                  rationale: 'retry provider alt',
+                };
+              }
+            }
+            const alt = peers.find((p) =>
+              !exclude.has(p.peerId) && excludedProviders.size === 0,
+            );
             if (!alt) {
-              throw new Error('NoPeerAvailableError: no alt peer');
+              throw new Error('NoPeerAvailableError: no alt failure domain');
             }
             return {
-              primary: { peerId: alt.peerId, model: `model-for-${role}` },
+              primary: {
+                peerId: alt.peerId,
+                model: `model-for-${role}`,
+                provider: 'openrouter',
+              },
               rationale: 'retry alt',
             };
           }
@@ -273,8 +314,14 @@ describe('SagaRunner — sequential primary success', () => {
     state.sagas.set('saga_seq_ok', {
       id: 'saga_seq_ok',
       goal: 'hello',
-      plan: { primary: { peerId: 'peer-a', model: 'm1' } },
-      steps: [{ peerId: 'peer-a', model: 'm1', lane: 'primary', status: 'pending' }],
+      plan: { primary: { peerId: 'peer-a', model: 'm1', provider: 'openai' } },
+      steps: [{
+        peerId: 'peer-a',
+        model: 'm1',
+        provider: 'openai',
+        lane: 'primary',
+        status: 'pending',
+      }],
       status: 'pending',
       metadata: {
         privacyTag: 'public',
@@ -357,6 +404,7 @@ describe('SagaRunner — sequential primary success', () => {
     expect(dispatchParams[0]).toMatchObject({
       prompt: 'hello',
       model: 'm1',
+      provider: 'openai',
       dispatchProfile: 'code',
     });
     expect(saga.steps[0].toolPolicy).toMatchObject({
@@ -679,9 +727,9 @@ describe('SagaRunner — Hermes-style chain (Draft → Review → Test)', () => 
       id: 'saga_chain',
       goal: 'Fix the off-by-one bug',
       plan: {
-        primary: { peerId: 'drafter', model: 'm-draft' },
+        primary: { peerId: 'drafter', model: 'm-draft', provider: 'unknown' },
         chain: [
-          { peerId: 'drafter', model: 'm-draft', role: 'code' },
+          { peerId: 'drafter', model: 'm-draft', provider: 'unknown', role: 'code' },
           { peerId: 'reviewer', model: 'm-review', role: 'review' },
           { peerId: 'tester', model: 'm-test', role: 'safe' },
         ],
@@ -690,6 +738,7 @@ describe('SagaRunner — Hermes-style chain (Draft → Review → Test)', () => 
         {
           peerId: 'drafter',
           model: 'm-draft',
+          provider: 'unknown',
           lane: 'chain',
           role: 'code',
           status: 'pending',
@@ -762,6 +811,7 @@ describe('SagaRunner — Hermes-style chain (Draft → Review → Test)', () => 
       model: 'm-draft',
       dispatchProfile: 'code',
     });
+    expect(dispatchParams[0]).not.toHaveProperty('provider');
     // Step 1 (Review) inherits the draft output + 'review' profile.
     expect(dispatchParams[1]).toMatchObject({
       model: 'm-review',
@@ -873,7 +923,7 @@ describe('SagaRunner — primary fails, fallback fires', () => {
 
     const fleetBridge = makeFleetBridgeMock({
       'peer-a:peer.dispatch': async () => {
-        throw new Error('peer-a unavailable');
+        throw new Error('ECONNREFUSED: peer-a unavailable');
       },
       'peer-b:peer.dispatch': async () => ({ runId: 'fb-run' }),
       'peer.dispatchStatus': async () => ({
@@ -893,9 +943,230 @@ describe('SagaRunner — primary fails, fallback fires', () => {
 
     const saga = state.sagas.get('saga_fb')!;
     expect(saga.steps[0].status).toBe('failed');
-    expect(saga.steps[0].error).toContain('peer-a unavailable');
+    expect(saga.steps[0].error).toContain('ECONNREFUSED');
     expect(saga.steps[1].status).toBe('completed');
     expect(saga.steps[1].result).toBe('FALLBACK_OK');
+  });
+
+  it('does not run a pre-planned fallback after an explicit business failure', async () => {
+    state.sagas.set('saga_business_failure', {
+      id: 'saga_business_failure',
+      goal: 'respect a review decision',
+      plan: {
+        primary: { peerId: 'robot', model: 'reviewer-a', provider: 'openrouter' },
+        fallback: { peerId: 'robot', model: 'reviewer-b', provider: 'lemonade' },
+      },
+      steps: [
+        {
+          peerId: 'robot',
+          model: 'reviewer-a',
+          provider: 'openrouter',
+          lane: 'primary',
+          status: 'pending',
+        },
+        {
+          peerId: 'robot',
+          model: 'reviewer-b',
+          provider: 'lemonade',
+          lane: 'fallback',
+          status: 'pending',
+        },
+      ],
+      status: 'pending',
+    });
+
+    const fleetBridge = makeFleetBridgeMock({
+      'peer.dispatch': async () => ({ runId: 'business-run' }),
+      'peer.dispatchStatus': async () => ({
+        found: true,
+        status: 'failed',
+        error: 'review_rejected',
+      }),
+    });
+
+    new SagaRunner(fleetBridge as never, vi.fn()).start('saga_business_failure');
+    await waitFor(() => state.sagas.get('saga_business_failure')?.status === 'failed');
+
+    const saga = state.sagas.get('saga_business_failure')!;
+    expect(saga.steps[0].status).toBe('failed');
+    expect(saga.steps[1].status).toBe('skipped');
+    expect(fleetBridge.peerRequest).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('SagaRunner — provider-aware chain failover', () => {
+  it('retries HTTP 503 on another provider of the same peer and persists redacted provenance', async () => {
+    state.sagas.set('saga_same_peer_provider', {
+      id: 'saga_same_peer_provider',
+      goal: 'keep the robot autonomous',
+      plan: {
+        primary: { peerId: 'robot', model: 'cloud-a', provider: 'openrouter' },
+        chain: [
+          {
+            peerId: 'robot',
+            model: 'cloud-a',
+            provider: 'openrouter',
+            role: 'code',
+          },
+        ],
+      },
+      steps: [
+        {
+          peerId: 'robot',
+          model: 'cloud-a',
+          provider: 'openrouter',
+          lane: 'chain',
+          role: 'code',
+          status: 'pending',
+        },
+      ],
+      status: 'pending',
+    });
+
+    let runCount = 0;
+    const dispatchedProviders: string[] = [];
+    const fleetBridge = makeFleetBridgeMock(
+      {
+        'peer.dispatch': async (params) => {
+          runCount += 1;
+          const provider = String(params.provider ?? '');
+          dispatchedProviders.push(provider);
+          return {
+            runId: `same-peer-${runCount}`,
+            providerRequested: provider,
+            providerResolved: provider,
+          };
+        },
+        'peer.dispatchStatus': async (params) => {
+          if (params.runId === 'same-peer-1') {
+            return {
+              found: true,
+              status: 'failed',
+              providerRequested: 'openrouter',
+              providerResolved: 'openrouter',
+              error: 'HTTP 503 upstream unavailable: Bearer super-secret-token-value',
+            };
+          }
+          return {
+            found: true,
+            status: 'completed',
+            providerRequested: 'lemonade',
+            providerResolved: 'lemonade',
+            result: 'LOCAL_RECOVERY',
+          };
+        },
+      },
+      {
+        peers: [
+          {
+            id: 'robot',
+            capability: {
+              roles: ['code'],
+              models: [
+                { id: 'cloud-a', provider: 'openrouter' },
+                { id: 'local-b', provider: 'lemonade' },
+              ],
+            },
+          },
+        ],
+      },
+    );
+
+    new SagaRunner(fleetBridge as never, vi.fn()).start('saga_same_peer_provider');
+    await waitFor(
+      () => state.sagas.get('saga_same_peer_provider')?.finalResult === 'LOCAL_RECOVERY',
+      5_000,
+    );
+
+    const step = state.sagas.get('saga_same_peer_provider')!.steps[0];
+    expect(step.peerId).toBe('robot');
+    expect(step.provider).toBe('lemonade');
+    expect(step.retried).toBe(true);
+    expect(dispatchedProviders).toEqual(['openrouter', 'lemonade']);
+    expect(step.attempts).toHaveLength(2);
+    expect(step.attempts?.[0]).toMatchObject({
+      providerRequested: 'openrouter',
+      providerResolved: 'openrouter',
+      status: 'failed',
+      failureDomain: 'provider',
+    });
+    expect(step.attempts?.[0]?.error).toContain('Bearer [REDACTED]');
+    expect(step.attempts?.[0]?.error).not.toContain('super-secret-token-value');
+    expect(step.attempts?.[1]).toMatchObject({
+      providerRequested: 'lemonade',
+      providerResolved: 'lemonade',
+      status: 'completed',
+    });
+  });
+
+  it('caps provider failover at one retry even when the alternate hits HTTP 429 quota', async () => {
+    state.sagas.set('saga_retry_cap', {
+      id: 'saga_retry_cap',
+      goal: 'bounded recovery',
+      plan: {
+        primary: { peerId: 'robot', model: 'cloud-a', provider: 'openrouter' },
+        chain: [
+          {
+            peerId: 'robot',
+            model: 'cloud-a',
+            provider: 'openrouter',
+            role: 'code',
+          },
+        ],
+      },
+      steps: [
+        {
+          peerId: 'robot',
+          model: 'cloud-a',
+          provider: 'openrouter',
+          lane: 'chain',
+          role: 'code',
+          status: 'pending',
+        },
+      ],
+      status: 'pending',
+    });
+
+    let runCount = 0;
+    const fleetBridge = makeFleetBridgeMock(
+      {
+        'peer.dispatch': async () => ({ runId: `cap-${++runCount}` }),
+        'peer.dispatchStatus': async (params) => ({
+          found: true,
+          status: 'failed',
+          error: params.runId === 'cap-1'
+            ? 'PROVIDER_UNAVAILABLE: openrouter'
+            : 'HTTP 429 insufficient quota',
+        }),
+      },
+      {
+        peers: [
+          {
+            id: 'robot',
+            capability: {
+              roles: ['code'],
+              models: [
+                { id: 'cloud-a', provider: 'openrouter' },
+                { id: 'local-b', provider: 'lemonade' },
+                { id: 'local-c', provider: 'ollama' },
+              ],
+            },
+          },
+        ],
+      },
+    );
+
+    new SagaRunner(fleetBridge as never, vi.fn()).start('saga_retry_cap');
+    await waitFor(() => state.sagas.get('saga_retry_cap')?.status === 'failed', 5_000);
+
+    const step = state.sagas.get('saga_retry_cap')!.steps[0];
+    expect(runCount).toBe(2);
+    expect(step.retried).toBe(true);
+    expect(step.attempts).toHaveLength(2);
+    expect(step.attempts?.[1]).toMatchObject({
+      status: 'failed',
+      failureDomain: 'provider',
+    });
   });
 });
 
@@ -905,16 +1176,22 @@ describe('SagaRunner — Phase H chain step retry on stall', () => {
       id: 'saga_retry',
       goal: 'Review my draft',
       plan: {
-        primary: { peerId: 'drafter', model: 'm-draft' },
+        primary: { peerId: 'drafter', model: 'm-draft', provider: 'openai' },
         chain: [
-          { peerId: 'drafter', model: 'm-draft', role: 'code' },
-          { peerId: 'reviewer-stall', model: 'm-review', role: 'review' },
+          { peerId: 'drafter', model: 'm-draft', provider: 'openai', role: 'code' },
+          {
+            peerId: 'reviewer-stall',
+            model: 'm-review',
+            provider: 'anthropic',
+            role: 'review',
+          },
         ],
       },
       steps: [
         {
           peerId: 'drafter',
           model: 'm-draft',
+          provider: 'openai',
           lane: 'chain',
           role: 'code',
           status: 'pending',
@@ -922,6 +1199,7 @@ describe('SagaRunner — Phase H chain step retry on stall', () => {
         {
           peerId: 'reviewer-stall',
           model: 'm-review',
+          provider: 'anthropic',
           lane: 'chain',
           role: 'review',
           dependsOn: 0,
@@ -932,7 +1210,7 @@ describe('SagaRunner — Phase H chain step retry on stall', () => {
     });
 
     let runIdCounter = 0;
-    const dispatchCalls: Array<{ peerId: string; runId: string }> = [];
+    const dispatchCalls: Array<{ peerId: string; runId: string; provider?: string }> = [];
     const fleetBridge = makeFleetBridgeMock(
       {
         'peer.dispatch': async () => {
@@ -971,7 +1249,11 @@ describe('SagaRunner — Phase H chain step retry on stall', () => {
         if (method === 'peer.dispatch') {
           runIdCounter += 1;
           const runId = `retry-run-${runIdCounter}`;
-          dispatchCalls.push({ peerId, runId });
+          dispatchCalls.push({
+            peerId,
+            runId,
+            ...(typeof params.provider === 'string' ? { provider: params.provider } : {}),
+          });
           return { runId };
         }
         if (method === 'peer.dispatchStatus') {
@@ -1002,12 +1284,20 @@ describe('SagaRunner — Phase H chain step retry on stall', () => {
     expect(saga.finalResult).toBe('REVIEW_DONE_ALT');
     // Step 1 was reassigned from reviewer-stall to alt-reviewer.
     expect(saga.steps[1].peerId).toBe('alt-reviewer');
+    expect(saga.steps[1].provider).toBe('openrouter');
     expect(saga.steps[1].retried).toBe(true);
     expect(saga.steps[1].status).toBe('completed');
     // 3 dispatches happened: drafter, reviewer-stall, alt-reviewer.
     expect(dispatchCalls).toHaveLength(3);
-    expect(dispatchCalls[1].peerId).toBe('reviewer-stall');
-    expect(dispatchCalls[2].peerId).toBe('alt-reviewer');
+    expect(dispatchCalls[0]).toMatchObject({ peerId: 'drafter', provider: 'openai' });
+    expect(dispatchCalls[1]).toMatchObject({
+      peerId: 'reviewer-stall',
+      provider: 'anthropic',
+    });
+    expect(dispatchCalls[2]).toMatchObject({
+      peerId: 'alt-reviewer',
+      provider: 'openrouter',
+    });
   });
 
   it('breaks the chain when no alternate peer carries the required role', async () => {

@@ -54,12 +54,12 @@ export const API_PROVIDER_PRESETS: SharedProviderPresets = {
     // API key (sentinel `oauth-chatgpt`).
     baseUrl: 'https://chatgpt.com/backend-api/codex',
     models: [
-      { id: 'gpt-5.5', name: 'GPT-5.5 (default)' },
-      { id: 'gpt-5.1-codex', name: 'GPT-5.1 Codex' },
-      { id: 'gpt-5.1-codex-max', name: 'GPT-5.1 Codex Max' },
-      { id: 'gpt-5-codex', name: 'GPT-5 Codex' },
-      { id: 'gpt-5.1', name: 'GPT-5.1' },
-      { id: 'gpt-5', name: 'GPT-5' },
+      { id: 'gpt-5.6-sol', name: 'GPT-5.6 Sol (default · 372K subscription)' },
+      { id: 'gpt-5.6-terra', name: 'GPT-5.6 Terra (ChatGPT subscription)' },
+      { id: 'gpt-5.6-luna', name: 'GPT-5.6 Luna (ChatGPT subscription)' },
+      { id: 'gpt-5.5', name: 'GPT-5.5 (legacy fallback · 272K)' },
+      { id: 'gpt-5.4', name: 'GPT-5.4 (legacy · 272K)' },
+      { id: 'gpt-5.4-mini', name: 'GPT-5.4 Mini (legacy)' },
     ],
     keyPlaceholder: 'oauth-chatgpt',
     keyHint: 'OAuth sign-in; no API key is required.',
@@ -68,6 +68,31 @@ export const API_PROVIDER_PRESETS: SharedProviderPresets = {
     name: 'OpenRouter',
     baseUrl: 'https://openrouter.ai/api/v1',
     models: [
+      { id: 'openrouter/free', name: 'Gratuit — routeur automatique (recommandé)' },
+      { id: 'openai/gpt-oss-20b:free', name: 'Gratuit — GPT-OSS 20B (rapide + outils)' },
+      { id: 'cohere/north-mini-code:free', name: 'Gratuit — North Mini Code (agent code)' },
+      { id: 'qwen/qwen3-coder:free', name: 'Gratuit — Qwen3 Coder (gros dépôts)' },
+      {
+        id: 'qwen/qwen3-next-80b-a3b-instruct:free',
+        name: 'Gratuit — Qwen3 Next 80B A3B (général)',
+      },
+      { id: 'google/gemma-4-26b-a4b-it:free', name: 'Gratuit — Gemma 4 26B (vision)' },
+      {
+        id: 'nvidia/nemotron-3-super-120b-a12b:free',
+        name: 'Gratuit — Nemotron 3 Super (raisonnement long)',
+      },
+      {
+        id: 'nvidia/nemotron-3-ultra-550b-a55b:free',
+        name: 'Gratuit — Nemotron 3 Ultra 550B (recherche profonde, lent)',
+      },
+      {
+        id: 'meta-llama/llama-3.3-70b-instruct:free',
+        name: 'Gratuit — Llama 3.3 70B (rédaction)',
+      },
+      {
+        id: 'poolside/laguna-xs-2.1:free',
+        name: 'Gratuit — Laguna XS 2.1 (coding expérimental)',
+      },
       { id: 'anthropic/claude-opus-4-6', name: 'anthropic/claude-opus-4-6' },
       { id: 'anthropic/claude-sonnet-4-6', name: 'anthropic/claude-sonnet-4-6' },
       { id: 'anthropic/claude-haiku-4-5', name: 'anthropic/claude-haiku-4-5' },
@@ -98,6 +123,10 @@ export const API_PROVIDER_PRESETS: SharedProviderPresets = {
     baseUrl: 'https://api.openai.com/v1',
     models: [
       { id: 'gpt-5.4', name: 'gpt-5.4' },
+      {
+        id: 'gpt-5.6-sol',
+        name: 'GPT-5.6 Sol (1.05M · vision · tools · reasoning max; alias gpt-5.6)',
+      },
       { id: 'gpt-5.4-pro', name: 'gpt-5.4-pro' },
       { id: 'gpt-5-mini', name: 'gpt-5-mini' },
       { id: 'gpt-5-nano', name: 'gpt-5-nano' },
@@ -251,7 +280,7 @@ export const PI_AI_CURATED_PRESETS: Record<string, { piProvider: string; pick: s
   },
   openai: {
     piProvider: 'openai',
-    pick: ['gpt-5.4', 'gpt-5.4-pro', 'gpt-5-mini', 'gpt-5-nano', 'gpt-5.3-codex', 'o3', 'gpt-4.1'],
+    pick: ['gpt-5.6-sol', 'gpt-5.4', 'gpt-5.4-pro', 'gpt-5-mini', 'gpt-5-nano', 'gpt-5.3-codex', 'o3', 'gpt-4.1'],
   },
   gemini: {
     piProvider: 'google',
@@ -293,7 +322,7 @@ export function getModelInputGuidance(
 
   if (provider === 'openai') {
     return {
-      placeholder: 'gpt-5.4, gpt-5.3-codex, o3',
+      placeholder: 'gpt-5.6-sol, gpt-5.4, gpt-5.3-codex, o3',
       hint: 'Use the exact model ID for the selected protocol or endpoint.',
     };
   }

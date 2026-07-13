@@ -123,7 +123,7 @@ const DEFAULT_CONFIG: ToolSelectionConfig = {
   // direct editors and points at apply_patch, so a selection without it
   // re-opens the historical edit deadlock. `extension_forge` is the one safe,
   // confirmation-gated entry point for creating reusable runtime capabilities.
-  alwaysInclude: ['view_file', 'create_file', 'str_replace_editor', 'apply_patch', 'bash', 'search', 'web_search', 'remember', 'memory_propose', 'lessons_add', 'lessons_propose', 'lessons_search', 'tool_search', 'extension_forge'],
+  alwaysInclude: ['view_file', 'create_file', 'str_replace_editor', 'apply_patch', 'bash', 'search', 'web_search', 'restore_context', 'remember', 'memory_propose', 'lessons_add', 'lessons_propose', 'lessons_search', 'tool_search', 'extension_forge'],
   useAdaptiveThreshold: true,
   enableCaching: true,
   cacheTTLMs: 5 * 60 * 1000, // 5 minutes
@@ -185,7 +185,15 @@ export class ToolSelectionStrategy {
     query: string,
     options: Partial<ToolSelectionConfig> = {}
   ): Promise<SelectionResult> {
-    const effectiveConfig = { ...this.config, ...options };
+    const mergedConfig = { ...this.config, ...options };
+    // Recovery is part of the observation contract, not a relevance hint.
+    // Keep it available even when a lite profile supplies a smaller
+    // `alwaysInclude` override: once an earlier result was compacted, the
+    // model must never be stranded without the exact callId recovery path.
+    const effectiveConfig: ToolSelectionConfig = {
+      ...mergedConfig,
+      alwaysInclude: Array.from(new Set([...mergedConfig.alwaysInclude, 'restore_context'])),
+    };
     const modelName = ToolSelectionStrategy.normalizeModelName(effectiveConfig.modelName);
     this.lastQuery = query;
 

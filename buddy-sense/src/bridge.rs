@@ -13,12 +13,19 @@ use crate::event::SensoryEvent;
 fn frame_json(ev: &SensoryEvent, token: Option<&str>) -> Option<String> {
     let mut value = serde_json::to_value(ev).ok()?;
     if let (Some(tok), Some(obj)) = (token, value.as_object_mut()) {
-        obj.insert("token".to_string(), serde_json::Value::String(tok.to_string()));
+        obj.insert(
+            "token".to_string(),
+            serde_json::Value::String(tok.to_string()),
+        );
     }
     Some(value.to_string())
 }
 
-pub async fn run_bridge(url: String, token: Option<String>, mut rx: broadcast::Receiver<SensoryEvent>) {
+pub async fn run_bridge(
+    url: String,
+    token: Option<String>,
+    mut rx: broadcast::Receiver<SensoryEvent>,
+) {
     loop {
         match tokio_tungstenite::connect_async(&url).await {
             Ok((mut ws, _)) => {
@@ -112,8 +119,12 @@ mod tests {
 
         // Drop the peer → the bridge must reconnect (a second accept happens).
         drop(ws);
-        let reconnected = tokio::time::timeout(std::time::Duration::from_secs(6), listener.accept()).await;
-        assert!(reconnected.is_ok(), "bridge should reconnect after the peer drops");
+        let reconnected =
+            tokio::time::timeout(std::time::Duration::from_secs(6), listener.accept()).await;
+        assert!(
+            reconnected.is_ok(),
+            "bridge should reconnect after the peer drops"
+        );
         handle.abort();
     }
 }

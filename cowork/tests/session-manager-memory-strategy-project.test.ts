@@ -133,7 +133,9 @@ describe('SessionManager project memory strategy', () => {
       processPrompt(session: Session, prompt: string, content?: ContentBlock[]): Promise<void>;
     }).processPrompt(session, 'Remember this exact fact.', content);
 
-    expect(projectMemory.loadProjectContext).not.toHaveBeenCalled();
+    expect(projectMemory.loadProjectContext).toHaveBeenCalledWith('project-1', {
+      includeMemory: false,
+    });
     expect(projectMemory.consolidateSessionMemory).not.toHaveBeenCalled();
     expect(icmIntegration.searchRelevantMemories).not.toHaveBeenCalled();
     expect(icmIntegration.storeEpisode).not.toHaveBeenCalled();

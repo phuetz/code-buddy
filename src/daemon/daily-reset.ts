@@ -25,6 +25,8 @@
 
 import { EventEmitter } from 'events';
 import { logger } from '../utils/logger.js';
+import { resolveZonedDateTime } from '../life-rhythm/day-context.js';
+import { findNextZonedMinute } from '../life-rhythm/zoned-minute.js';
 
 // ============================================================================
 // Types
@@ -130,17 +132,16 @@ export class DailyResetManager extends EventEmitter {
   // --------------------------------------------------------------------------
 
   /** Returns milliseconds until the next reset window. */
-  msUntilNextReset(): number {
-    const now = new Date();
-    const next = new Date(now);
-    next.setHours(this.config.resetHour, this.config.resetMinute, 0, 0);
-
-    if (next <= now) {
-      // Already past today's reset time — schedule for tomorrow
-      next.setDate(next.getDate() + 1);
-    }
-
-    return next.getTime() - now.getTime();
+  msUntilNextReset(now: Date = new Date()): number {
+    if (Number.isNaN(now.getTime())) throw new RangeError('now must be a valid Date');
+    const timeZone = this.config.timezone
+      ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
+    return findNextZonedMinute(
+      now,
+      timeZone,
+      this.config.resetHour,
+      this.config.resetMinute
+    ).instant.getTime() - now.getTime();
   }
 
   private scheduleNext(): void {
@@ -172,16 +173,18 @@ export class DailyResetManager extends EventEmitter {
    */
   async runReset(
     messages: Array<{ role: string; content: string | null }>,
-    systemMessage?: { role: string; content: string }
+    systemMessage?: { role: string; content: string },
+    now: Date = new Date()
   ): Promise<ResetResult> {
-    // toISOString() always returns 'YYYY-MM-DDTHH:mm:ss.sssZ'; slice(0,10)
-    // yields the same 'YYYY-MM-DD' as split('T')[0] but stays typed as string.
-    const today = new Date().toISOString().slice(0, 10);
+    if (Number.isNaN(now.getTime())) throw new RangeError('now must be a valid Date');
+    const timeZone = this.config.timezone
+      ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const today = resolveZonedDateTime(now, timeZone).localDate;
 
     // Avoid duplicate resets on the same day
     if (this.lastResetDate === today) {
       return {
-        triggeredAt: new Date(),
+        triggeredAt: now,
         messagesCleared: 0,
         summaryMessage: null,
       };
@@ -208,7 +211,7 @@ export class DailyResetManager extends EventEmitter {
     }
 
     const result: ResetResult = {
-      triggeredAt: new Date(),
+      triggeredAt: now,
       messagesCleared,
       summaryMessage,
     };

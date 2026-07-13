@@ -1194,7 +1194,7 @@ describe('CodeBuddyClient', () => {
       );
     });
 
-    it('should use "off" mode when specified', async () => {
+    it('should omit search parameters when search is disabled', async () => {
       mockCreate.mockResolvedValueOnce({
         choices: [
           { message: { role: 'assistant', content: 'Result' }, finish_reason: 'stop' },
@@ -1203,11 +1203,13 @@ describe('CodeBuddyClient', () => {
 
       await client.search('Query without search', { mode: 'off' });
 
-      expect(mockCreate).toHaveBeenCalledWith(
+      const callArg = mockCreate.mock.calls[0]?.[0];
+      expect(callArg).toEqual(
         expect.objectContaining({
-          search_parameters: { mode: 'off' },
-        })
+          messages: [{ role: 'user', content: 'Query without search' }],
+        }),
       );
+      expect(callArg?.search_parameters).toBeUndefined();
     });
   });
 

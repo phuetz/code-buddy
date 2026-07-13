@@ -20,7 +20,7 @@ import {
 } from 'lucide-react';
 
 type AssistantSettingGroup = 'voice' | 'speech' | 'behavior' | 'companion';
-type AssistantSettingType = 'toggle' | 'enum' | 'text' | 'voice';
+type AssistantSettingType = 'toggle' | 'enum' | 'text' | 'voice' | 'volume';
 
 interface AssistantSetting {
   key: string;
@@ -69,6 +69,16 @@ const LABEL_OVERRIDES: Record<string, string> = {
   CODEBUDDY_TTS_ENGINE: 'Moteur vocal',
   CODEBUDDY_POCKET_VOICE: 'Voix Pocket',
   CODEBUDDY_POCKET_LANG: 'Langue Pocket',
+  CODEBUDDY_POCKET_SERVER: 'Garder Pocket en mémoire',
+  CODEBUDDY_POCKET_URL: 'Serveur Pocket local',
+  CODEBUDDY_VOICEBOX_URL: 'Serveur Voicebox',
+  CODEBUDDY_VOICEBOX_PROFILE: 'Profil vocal Voicebox',
+  CODEBUDDY_VOICEBOX_ENGINE: 'Moteur Voicebox',
+  CODEBUDDY_VOICEBOX_LANGUAGE: 'Langue Voicebox',
+  CODEBUDDY_VOICEBOX_MODEL_SIZE: 'Taille du modèle Voicebox',
+  CODEBUDDY_VOICEBOX_INSTRUCT: 'Interprétation de la voix',
+  CODEBUDDY_VOICEBOX_AUDIO_STREAM: 'Diffuser le son Voicebox',
+  CODEBUDDY_TTS_VOLUME: 'Volume de Lisa',
   CODEBUDDY_TTS_VOICE: 'Voix Piper de secours',
   CODEBUDDY_SENSORY_SPEAK: 'Parole activée',
   CODEBUDDY_SENSORY_SPEAK_ACT: 'Annoncer les actions',
@@ -83,18 +93,40 @@ const LABEL_OVERRIDES: Record<string, string> = {
   CODEBUDDY_SENSORY_GREET: 'Salutations',
   CODEBUDDY_REMINDERS: 'Rappels',
   CODEBUDDY_COMPANION_RELATIONAL: 'Mémoire relationnelle',
+  CODEBUDDY_CONVERSATION_COWORK: 'Continuité Cowork ↔ Lisa',
+  CODEBUDDY_CONVERSATION_MIRROR_COWORK: 'Publier les tours Cowork',
+  CODEBUDDY_CONVERSATION_COWORK_HISTORY: 'Tours partagés dans Cowork',
   CODEBUDDY_COMPANION_PROACTIVE: 'Companion proactif',
   CODEBUDDY_VOICE_IMPROVE: 'Amélioration vocale',
+  CODEBUDDY_AVATAR_BRIDGE: 'Pont avatar MetaHuman',
+  CODEBUDDY_AVATAR_STREAM_AUDIO: 'Audio vers MetaHuman',
 };
 
 const HELP_OVERRIDES: Record<string, string> = {
   CODEBUDDY_TTS_ENGINE: 'Choisit le moteur de synthèse vocale.',
   CODEBUDDY_POCKET_VOICE: 'Sélectionne une voix Pocket ou un échantillon de clonage court.',
   CODEBUDDY_POCKET_LANG: 'Langue transmise au moteur Pocket.',
+  CODEBUDDY_POCKET_SERVER:
+    'Garde le modèle Pocket chargé entre les phrases pour supprimer son coût de redémarrage.',
+  CODEBUDDY_POCKET_URL: 'Endpoint local du serveur Pocket persistant.',
+  CODEBUDDY_VOICEBOX_URL:
+    'Endpoint REST Voicebox, local ou sur Darkstar via le réseau Tailscale de confiance.',
+  CODEBUDDY_VOICEBOX_PROFILE: 'Nom ou identifiant du profil vocal de Lisa dans Voicebox.',
+  CODEBUDDY_VOICEBOX_ENGINE: 'Backend de rendu choisi par Voicebox.',
+  CODEBUDDY_VOICEBOX_LANGUAGE: 'Code de langue transmis au rendu Voicebox.',
+  CODEBUDDY_VOICEBOX_MODEL_SIZE:
+    '1.7B privilégie la qualité sur Darkstar ; 0.6B réduit la latence.',
+  CODEBUDDY_VOICEBOX_INSTRUCT:
+    'Décrit seulement le ton, le rythme et la chaleur. Voicebox ne réécrit jamais les paroles de Lisa.',
+  CODEBUDDY_VOICEBOX_AUDIO_STREAM:
+    'Envoie le WAV à la sortie et à l’avatar dès son arrivée depuis Voicebox.',
+  CODEBUDDY_TTS_VOLUME:
+    'Volume propre à la voix. À 100 %, Pocket et Piper sont normalisés sans saturation.',
   CODEBUDDY_TTS_VOICE: 'Chemin du modèle Piper .onnx utilisé en secours.',
   CODEBUDDY_SENSORY_SPEAK: 'Autorise les réponses parlées du daemon vision.',
   CODEBUDDY_SENSORY_SPEAK_ACT: 'Autorise les retours vocaux pendant les actions.',
-  CODEBUDDY_SENSORY_SPEAK_PERMISSION_MODE: 'Définit le niveau de prudence des actions vocales.',
+  CODEBUDDY_SENSORY_SPEAK_PERMISSION_MODE:
+    'Posture locale à chaque tour vocal. Elle ne modifie jamais le mode plan d’une session de code.',
   CODEBUDDY_SENSORY_SPEAK_MODEL: 'Modèle utilisé pour formuler les réponses parlées.',
   CODEBUDDY_SENSORY_SPEECH: 'Active l’entrée vocale du daemon sensoriel.',
   CODEBUDDY_ROBOT_NAME: 'Nom utilisé par l’assistant pour se présenter.',
@@ -106,19 +138,35 @@ const HELP_OVERRIDES: Record<string, string> = {
   CODEBUDDY_SENSORY_GREET: 'Active les salutations du companion.',
   CODEBUDDY_REMINDERS: 'Active les rappels companion.',
   CODEBUDDY_COMPANION_RELATIONAL: 'Injecte le contexte relationnel dans les réponses companion.',
+  CODEBUDDY_CONVERSATION_COWORK:
+    'Autorise uniquement les sessions Cowork marquées Lisa à reprendre le fil voix et Telegram.',
+  CODEBUDDY_CONVERSATION_MIRROR_COWORK:
+    'Publie sur le canal configuré les tours des sessions Cowork explicitement reliées.',
+  CODEBUDDY_CONVERSATION_COWORK_HISTORY:
+    'Nombre de tours récents voix, Telegram et Cowork injectés dans une session Lisa (4 à 80).',
   CODEBUDDY_COMPANION_PROACTIVE: 'Autorise les comportements proactifs du companion.',
   CODEBUDDY_VOICE_IMPROVE: 'Active la boucle d’amélioration de l’assistant vocal.',
+  CODEBUDDY_AVATAR_BRIDGE:
+    'Publie les intentions de jeu, la parole et les interruptions vers Unreal/MetaHuman.',
+  CODEBUDDY_AVATAR_STREAM_AUDIO:
+    'En mode automatique, transmet le WAV seulement lorsqu’un renderer compatible répond au heartbeat.',
 };
 
 const OPTION_LABELS: Record<string, Record<string, string>> = {
   CODEBUDDY_TTS_ENGINE: {
-    piper: 'Piper local',
-    pocket: 'Pocket TTS',
+    pocket: 'Pocket TTS — recommandé',
+    voicebox: 'Voicebox — expressif sur GPU',
+    piper: 'Piper — secours ancien',
   },
   CODEBUDDY_SENSORY_SPEAK_PERMISSION_MODE: {
-    plan: 'Planifier avant d’agir',
+    default: 'Normal sécurisé — recommandé',
     dontAsk: 'Agir sans demander',
     bypassPermissions: 'Mode autonome complet',
+  },
+  CODEBUDDY_AVATAR_STREAM_AUDIO: {
+    auto: 'Automatique — recommandé',
+    true: 'Toujours transmettre',
+    false: 'Ne jamais transmettre',
   },
 };
 
@@ -143,10 +191,6 @@ function fieldHelp(setting: AssistantSetting): string {
 
 function optionLabel(setting: AssistantSetting, value: string): string {
   return OPTION_LABELS[setting.key]?.[value] ?? value;
-}
-
-function fileUrl(path: string): string {
-  return path.startsWith('file://') ? path : `file://${path}`;
 }
 
 function isAssistantError(value: unknown): value is AssistantErrorResponse {
@@ -262,13 +306,9 @@ export function AssistantView() {
     setError(null);
     setNotice(null);
     try {
-      const result = await assistant.preview(voice, previewText);
+      const result = await assistant.playPreview(voice, previewText);
       if (isAssistantError(result)) throw new Error(result.error);
-      if (!result) throw new Error('Aperçu vocal indisponible.');
-      // Play via a user-gesture-initiated Audio() so the autoplay policy never blocks it.
-      const audio = new Audio(fileUrl(result));
-      void audio.play().catch(() => setError("Impossible de jouer l'aperçu (audio)."));
-      setNotice(`Aperçu de « ${voice} » lancé.`);
+      setNotice(`Aperçu de « ${voice} » joué.`);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -360,6 +400,29 @@ export function AssistantView() {
       );
     }
 
+    if (setting.type === 'volume') {
+      const numericValue = Math.max(0, Math.min(100, Number(value) || 0));
+      return (
+        <div className="flex items-center gap-3">
+          <input
+            type="range"
+            min={0}
+            max={100}
+            step={1}
+            value={numericValue}
+            aria-label={fieldLabel(setting)}
+            disabled={disabled}
+            data-testid={`assistant-field-${setting.key}`}
+            onChange={(event) => setField(setting.key, event.target.value)}
+            className="min-w-0 flex-1 accent-primary"
+          />
+          <output className="w-12 text-right text-sm tabular-nums text-muted-foreground">
+            {numericValue}%
+          </output>
+        </div>
+      );
+    }
+
     if (setting.type === 'voice') {
       const voiceOptions = Array.from(new Set([value, setting.default, ...voices].filter(Boolean)));
       return (
@@ -392,7 +455,7 @@ export function AssistantView() {
               ) : (
                 <Headphones className="h-4 w-4" />
               )}
-              {previewing === setting.key ? 'Génération…' : 'Écouter'}
+              {previewing === setting.key ? 'Lecture…' : 'Écouter'}
             </button>
           </div>
           <textarea
@@ -485,7 +548,7 @@ export function AssistantView() {
               <section className="shrink-0 rounded-lg border border-border bg-surface p-4">
                 <div className="flex items-center justify-between gap-3">
                   <div>
-                    <h2 className="text-sm font-semibold">Volume</h2>
+                    <h2 className="text-sm font-semibold">Volume des enceintes</h2>
                     <p className="text-xs text-muted-foreground">
                       Niveau sonore des enceintes (appliqué en direct).
                     </p>

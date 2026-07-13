@@ -19,6 +19,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import { createHash } from 'crypto';
 import { logger } from '../utils/logger.js';
 
 // ============================================================================
@@ -45,6 +46,29 @@ export interface RestoreResult {
   found: boolean;
   content: string;
   identifier: string;
+}
+
+export interface RecoverableToolResult {
+  success: boolean;
+  output?: string;
+  error?: string;
+}
+
+/**
+ * Build one lossless textual observation from the two-channel ToolResult shape.
+ * Several tools return useful stdout together with an error; choosing only one
+ * channel made the supposedly recoverable copy incomplete.
+ */
+export function formatToolResultForRecovery(result: RecoverableToolResult | undefined): string {
+  if (!result) return 'Error';
+  const output = result.output ?? '';
+  const error = result.error ?? '';
+  if (output && error) {
+    return `[tool output]\n${output}\n\n[tool error]\n${error}`;
+  }
+  if (output) return output;
+  if (error) return error;
+  return result.success ? 'Success' : 'Error';
 }
 
 // ============================================================================
@@ -90,8 +114,10 @@ function extractIdentifiers(text: string): string[] {
 export class RestorableCompressor {
   /** identifier → original content */
   private store = new Map<string, string>();
-  /** Working directory captured at first writeToolResult call */
+  /** Last workspace is retained only as a compatibility fallback. */
   private workDir: string = process.cwd();
+  /** Absolute recovery path -> content, so identical call IDs stay workspace-scoped. */
+  private toolResultMemory = new Map<string, string>();
   /** Maximum store entries before auto-eviction */
   private static readonly MAX_STORE_ENTRIES = 500;
 
@@ -109,6 +135,11 @@ export class RestorableCompressor {
     const keysToEvict = [...this.store.keys()].slice(0, evictCount);
     for (const key of keysToEvict) {
       this.store.delete(key);
+    }
+    while (this.toolResultMemory.size > RestorableCompressor.MAX_STORE_ENTRIES) {
+      const oldest = this.toolResultMemory.keys().next().value;
+      if (oldest === undefined) break;
+      this.toolResultMemory.delete(oldest);
     }
   }
 
@@ -178,19 +209,18 @@ export class RestorableCompressor {
    * For file path identifiers, attempts to read from disk as a fallback.
    * For URLs, returns a hint to use web_fetch.
    */
-  restore(identifier: string): RestoreResult {
-    // 1. Check in-memory store
+  restore(identifier: string, workDir = this.workDir): RestoreResult {
+    // 1. Check the workspace-scoped disk/memory store first. Provider call IDs
+    // are not guaranteed globally unique across concurrent Cowork sessions.
+    const diskContent = this.readToolResultFromDisk(identifier, workDir);
+    if (diskContent !== null) {
+      return { found: true, content: diskContent, identifier };
+    }
+
+    // 2. Check the legacy identifier store used by message compaction.
     const stored = this.store.get(identifier);
     if (stored) {
       return { found: true, content: stored, identifier };
-    }
-
-    // 2. Tool call ID — check disk-backed store
-    if (identifier.startsWith('call_') || identifier.startsWith('toulu_') || identifier.startsWith('toolu_')) {
-      const diskContent = this.readToolResultFromDisk(identifier, this.workDir);
-      if (diskContent) {
-        return { found: true, content: diskContent, identifier };
-      }
     }
 
     // 3. File path fallback — try reading from disk
@@ -234,15 +264,23 @@ export class RestorableCompressor {
    * @param workDir - Working directory (defaults to process.cwd())
    */
   writeToolResult(callId: string, content: string, workDir = process.cwd()): void {
+    if (!callId) return;
     // Capture working directory for later restore() calls
-    this.workDir = workDir;
+    this.workDir = path.resolve(workDir);
     try {
-      const dir = path.join(workDir, '.codebuddy', 'tool-results');
+      const dir = path.join(this.workDir, '.codebuddy', 'tool-results');
       if (!fs.existsSync(dir)) {
-        fs.mkdirSync(dir, { recursive: true });
+        fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
       }
-      const filePath = path.join(dir, `${callId}.txt`);
-      fs.writeFileSync(filePath, content, 'utf-8');
+      // Existing directories may have inherited a permissive umask.
+      // Recovery files can contain source code, credentials printed by a tool,
+      // or personal data, so keep them private on POSIX systems.
+      if (process.platform !== 'win32') fs.chmodSync(dir, 0o700);
+
+      const filePath = path.join(dir, `${this.safeCallIdFilename(callId)}.txt`);
+      fs.writeFileSync(filePath, content, { encoding: 'utf-8', mode: 0o600 });
+      if (process.platform !== 'win32') fs.chmodSync(filePath, 0o600);
+      this.toolResultMemory.set(filePath, content);
       // Also store in memory for fast access; enforce capacity to prevent
       // memory leak in long sessions (shared helper with compress()).
       this.store.set(callId, content);
@@ -259,16 +297,35 @@ export class RestorableCompressor {
    */
   private readToolResultFromDisk(callId: string, workDir = process.cwd()): string | null {
     try {
-      const filePath = path.join(workDir, '.codebuddy', 'tool-results', `${callId}.txt`);
+      const filePath = path.join(
+        path.resolve(workDir),
+        '.codebuddy',
+        'tool-results',
+        `${this.safeCallIdFilename(callId)}.txt`,
+      );
+      const cached = this.toolResultMemory.get(filePath);
+      if (cached !== undefined) return cached;
       if (fs.existsSync(filePath)) {
         const content = fs.readFileSync(filePath, 'utf-8');
-        this.store.set(callId, content); // cache back into memory
+        this.store.set(callId, content); // legacy compatibility/listing
+        this.toolResultMemory.set(filePath, content);
+        this.ensureCapacity();
         return content;
       }
     } catch {
       // ignore
     }
     return null;
+  }
+
+  /**
+   * Tool-call IDs normally contain only ASCII letters, digits, `_` and `-`.
+   * Providers are external inputs nevertheless: hash anything outside that
+   * narrow grammar so an ID can never escape `.codebuddy/tool-results`.
+   */
+  private safeCallIdFilename(callId: string): string {
+    if (/^[a-zA-Z0-9_-]{1,200}$/.test(callId)) return callId;
+    return `call_${createHash('sha256').update(callId).digest('hex')}`;
   }
 
   /** List all stored identifiers */

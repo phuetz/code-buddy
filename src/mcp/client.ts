@@ -16,8 +16,32 @@ export class MCPManager extends EventEmitter {
   private serverStatuses: Map<string, ServerStatus> = new Map();
   private retryCounts: Map<string, number> = new Map();
   private healthCheckIntervals: Map<string, NodeJS.Timeout> = new Map();
+  private serverAddPromises: Map<string, Promise<void>> = new Map();
+  private initializationPromise: Promise<void> | null = null;
 
   async addServer(config: MCPServerConfig): Promise<void> {
+    if (
+      this.serverStatuses.get(config.name) === 'connected' &&
+      this.clients.has(config.name) &&
+      this.transports.has(config.name)
+    ) {
+      return;
+    }
+    const pending = this.serverAddPromises.get(config.name);
+    if (pending) return pending;
+
+    const addPromise = this.addServerInternal(config);
+    this.serverAddPromises.set(config.name, addPromise);
+    try {
+      await addPromise;
+    } finally {
+      if (this.serverAddPromises.get(config.name) === addPromise) {
+        this.serverAddPromises.delete(config.name);
+      }
+    }
+  }
+
+  private async addServerInternal(config: MCPServerConfig): Promise<void> {
     this.serverConfigs.set(config.name, config);
     this.serverStatuses.set(config.name, 'connecting');
     
@@ -245,42 +269,49 @@ export class MCPManager extends EventEmitter {
     return transport?.getType();
   }
 
-  async ensureServersInitialized(): Promise<void> {
-    if (this.clients.size > 0) {
-      return; // Already initialized
+  async ensureServersInitialized(configOverride?: { servers: MCPServerConfig[] }): Promise<void> {
+    if (this.initializationPromise) return this.initializationPromise;
+    const initialize = async (): Promise<void> => {
+      const config = configOverride ?? (await import('./config.js')).loadMCPConfig();
+      const enabledServers = config.servers.filter((server) =>
+        server.enabled !== false && this.serverStatuses.get(server.name) !== 'connected'
+      );
+      if (enabledServers.length === 0) return;
+
+      // Initialize servers in parallel. Each server gets its OWN timeout so a
+      // hanging/unresponsive server can't block every healthy MCP server.
+      const INIT_TIMEOUT_MS = Number(process.env.CODEBUDDY_MCP_INIT_TIMEOUT_MS) || 15_000;
+      const initPromises = enabledServers.map(async (serverConfig) => {
+        let timer: NodeJS.Timeout | undefined;
+        try {
+          await Promise.race([
+            this.addServer(serverConfig),
+            new Promise<never>((_, reject) => {
+              timer = setTimeout(
+                () => reject(new Error(
+                  `MCP server "${serverConfig.name}" init timed out after ${INIT_TIMEOUT_MS}ms — skipped so other servers still load`,
+                )),
+                INIT_TIMEOUT_MS,
+              );
+              timer.unref?.();
+            }),
+          ]);
+        } catch (error) {
+          logger.warn(`Failed to initialize MCP server ${serverConfig.name}`, { error });
+        } finally {
+          if (timer) clearTimeout(timer);
+        }
+      });
+
+      await Promise.all(initPromises);
+    };
+
+    const run = initialize();
+    this.initializationPromise = run;
+    try {
+      await run;
+    } finally {
+      if (this.initializationPromise === run) this.initializationPromise = null;
     }
-
-    const { loadMCPConfig } = await import('./config.js');
-    const config = loadMCPConfig();
-    
-    // Initialize servers in parallel. Each server gets its OWN timeout so a
-    // hanging/unresponsive server (e.g. one whose stdio handshake never
-    // completes, or a GUI-bound server whose display is down) can't block the
-    // init of the others — previously a single hung server made Promise.all
-    // wait forever, so NO MCP tools (incl. healthy ones) ever loaded.
-    const INIT_TIMEOUT_MS = Number(process.env.CODEBUDDY_MCP_INIT_TIMEOUT_MS) || 15_000;
-    const enabledServers = config.servers.filter(s => s.enabled !== false);
-    const initPromises = enabledServers.map(async (serverConfig) => {
-      try {
-        await Promise.race([
-          this.addServer(serverConfig),
-          new Promise<never>((_, reject) =>
-            setTimeout(
-              () =>
-                reject(
-                  new Error(
-                    `MCP server "${serverConfig.name}" init timed out after ${INIT_TIMEOUT_MS}ms — skipped so other servers still load`,
-                  ),
-                ),
-              INIT_TIMEOUT_MS,
-            ),
-          ),
-        ]);
-      } catch (error) {
-        logger.warn(`Failed to initialize MCP server ${serverConfig.name}`, { error });
-      }
-    });
-
-    await Promise.all(initPromises);
   }
 }

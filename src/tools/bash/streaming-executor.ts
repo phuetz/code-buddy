@@ -14,6 +14,12 @@ import { getFilteredEnv } from './command-validator.js';
 import { getShellEnvPolicy } from '../../security/shell-env-policy.js';
 import { buildBashEnvPrelude, CONTROLLED_SUBPROCESS_ENV } from './env-overrides.js';
 import { rewriteCommandWithRtk } from './rtk-rewrite.js';
+import {
+  evaluateShellExecution,
+  executableIdentitiesStillMatch,
+  executeInWorkspaceSandbox,
+  isSandboxBoundaryFailure,
+} from './execution-policy.js';
 
 export interface StreamingExecutorDeps {
   getCurrentDirectory: () => string;
@@ -48,24 +54,7 @@ export async function* executeStreaming(
     return { success: false, error: `Command blocked: ${commandSafetyValidation.error}` };
   }
 
-  // Check confirmation
-  const confirmationService = ConfirmationService.getInstance();
-  const sessionFlags = confirmationService.getSessionFlags();
-  if (!sessionFlags.bashCommands && !sessionFlags.allOperations) {
-    const confirmationResult = await confirmationService.requestConfirmation(
-      {
-        operation: 'Run bash command (streaming)',
-        filename: command,
-        showVSCodeOpen: false,
-        content: `Command: ${command}\nWorking directory: ${deps.getCurrentDirectory()}`,
-      },
-      'bash'
-    );
-    if (!confirmationResult.confirmed) {
-      return { success: false, error: confirmationResult.feedback || 'Cancelled by user' };
-    }
-  }
-
+  const cwd = deps.getCurrentDirectory();
   const rewrite = await rewriteCommandWithRtk(command);
   let executionCommand = command;
   if (rewrite.rewritten) {
@@ -81,6 +70,70 @@ export async function* executeStreaming(
     }
   }
 
+  // Freeze the transformed command before policy/approval. Buffered and
+  // streaming execution now authorize exactly what they dispatch.
+  const policy = await evaluateShellExecution(executionCommand, cwd);
+  if (policy.action === 'deny') {
+    return { success: false, error: `Command blocked by execution policy: ${policy.reason}` };
+  }
+
+  let requiresDirectApproval = policy.action === 'ask';
+  let escalationReason = policy.reason;
+
+  if (policy.action === 'sandbox') {
+    const sandboxed = await executeInWorkspaceSandbox(executionCommand, cwd, timeout);
+    if (sandboxed.available && sandboxed.result) {
+      const { stdout, stderr, exitCode, backend } = sandboxed.result;
+      if (exitCode === 0 || !isSandboxBoundaryFailure(sandboxed.result)) {
+        if (stdout) yield stdout;
+        if (stderr) yield stderr;
+        return exitCode === 0
+          ? { success: true, output: (stdout || stderr || 'Command executed successfully (no output)').trim() }
+          : {
+              success: false,
+              error: `${(stderr || stdout || `Command exited with code ${exitCode}`).trim()}\n[sandbox:${backend}; exit code ${exitCode}]`,
+            };
+      }
+      requiresDirectApproval = true;
+      escalationReason = `Sandbox boundary denied the command: ${stderr || stdout}`;
+    } else {
+      requiresDirectApproval = true;
+      escalationReason = sandboxed.reason || 'Workspace sandbox unavailable';
+    }
+  }
+
+  // Ask only when the command needs authority outside the workspace sandbox.
+  const confirmationService = ConfirmationService.getInstance();
+  if (requiresDirectApproval) {
+    const confirmationResult = await confirmationService.requestConfirmation(
+      {
+        operation: 'Run command outside the workspace sandbox (streaming)',
+        filename: executionCommand,
+        showVSCodeOpen: false,
+        content:
+          (executionCommand === command
+            ? `Command: ${executionCommand}\n`
+            : `Original command: ${command}\nTransformed command: ${executionCommand}\n`) +
+          `Working directory: ${cwd}\n` +
+          `Boundary: ${escalationReason}`,
+        approvalKey: policy.approvalKey,
+        riskLevel: 'high',
+        detail: { cwd },
+      },
+      'bash'
+    );
+    if (!confirmationResult.confirmed) {
+      return { success: false, error: confirmationResult.feedback || 'Cancelled by user' };
+    }
+  }
+
+  if (!executableIdentitiesStillMatch(policy, cwd)) {
+    return {
+      success: false,
+      error: 'Executable identity changed after policy evaluation; retry the command for a fresh decision.',
+    };
+  }
+
   // Spawn the process
   const isWindows = process.platform === 'win32';
   const policyEnv = getShellEnvPolicy().buildEnv(getFilteredEnv());
@@ -91,7 +144,7 @@ export async function* executeStreaming(
 
   const proc = spawn('bash', ['-c', `${buildBashEnvPrelude()}\n${executionCommand}`], {
     shell: false,
-    cwd: deps.getCurrentDirectory(),
+    cwd,
     env: controlledEnv,
     detached: !isWindows,
     stdio: ['ignore', 'pipe', 'pipe'],

@@ -9,6 +9,8 @@
  */
 
 import type { ToolResult } from '../../types/index.js';
+import fs from 'fs/promises';
+import path from 'path';
 import type { ITool, ToolSchema, IToolMetadata, IValidationResult, ToolCategoryType, IToolExecutionContext } from './types.js';
 import {
   synthesizeTextToSpeech,
@@ -16,6 +18,7 @@ import {
   type TextToSpeechProvider,
 } from '../text-to-speech-tool.js';
 import {
+  editImage,
   generateImage,
   generateVideo,
   type MediaGenerationRuntime,
@@ -393,6 +396,122 @@ export class ImageGenerateTool implements ITool {
   }
 
   isAvailable(): boolean { return true; }
+}
+
+// ============================================================================
+// ImageEditTool
+// ============================================================================
+
+export class ImageEditTool implements ITool {
+  readonly name = 'image_edit';
+  readonly description = 'Create a new edited image from a workspace image, with an optional explicit PNG mask and normalized marked regions.';
+
+  constructor(private readonly options: MediaGenerationRuntime = {}) {}
+
+  async execute(input: Record<string, unknown>, context?: IToolExecutionContext): Promise<ToolResult> {
+    try {
+      const cwd = path.resolve(context?.cwd ?? this.options.rootDir ?? process.cwd());
+      const imageUrl = await loadBoundedWorkspaceImage(requiredString(input, 'image_path'), cwd, false);
+      const maskPath = optionalString(input, 'mask_path');
+      const maskUrl = maskPath ? await loadBoundedWorkspaceImage(maskPath, cwd, true) : undefined;
+      const result = await editImage({
+        prompt: requiredString(input, 'prompt'),
+        imageUrl,
+        ...(maskUrl ? { maskUrl } : {}),
+        ...(Array.isArray(input.selections) ? { selections: parseImageEditSelections(input.selections) } : {}),
+      }, {
+        ...this.options,
+        rootDir: this.options.rootDir ?? cwd,
+        signal: this.options.signal ?? context?.abortSignal,
+      });
+      return { success: true, output: JSON.stringify(result, null, 2), data: result };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : String(error) };
+    }
+  }
+
+  getSchema(): ToolSchema {
+    return {
+      name: this.name,
+      description: this.description,
+      parameters: {
+        type: 'object',
+        properties: {
+          prompt: { type: 'string', description: 'The exact visual change to make.' },
+          image_path: { type: 'string', description: 'Source PNG/JPEG/WebP inside the current workspace. The original is never overwritten.' },
+          mask_path: { type: 'string', description: 'Optional PNG alpha mask inside the current workspace.' },
+          selections: {
+            type: 'array',
+            description: 'Optional normalized edit rectangles, each in the 0..1 range.',
+            items: {
+              type: 'object',
+              properties: {
+                x: { type: 'number' },
+                y: { type: 'number' },
+                width: { type: 'number' },
+                height: { type: 'number' },
+              },
+              required: ['x', 'y', 'width', 'height'],
+            },
+          },
+        },
+        required: ['prompt', 'image_path'],
+      },
+    };
+  }
+
+  validate(input: unknown): IValidationResult {
+    if (!input || typeof input !== 'object') return { valid: false, errors: ['Input must be an object'] };
+    const data = input as Record<string, unknown>;
+    const errors: string[] = [];
+    if (typeof data.prompt !== 'string' || !data.prompt.trim()) errors.push('prompt is required');
+    if (typeof data.image_path !== 'string' || !data.image_path.trim()) errors.push('image_path is required');
+    return { valid: errors.length === 0, ...(errors.length ? { errors } : {}) };
+  }
+
+  getMetadata(): IToolMetadata {
+    return {
+      name: this.name,
+      description: this.description,
+      category: 'media' as ToolCategoryType,
+      keywords: ['image', 'edit', 'inpaint', 'mask', 'mark', 'design', 'openai', 'xai', 'comfyui'],
+      priority: 8,
+      requiresConfirmation: true,
+      modifiesFiles: true,
+      makesNetworkRequests: true,
+    };
+  }
+
+  isAvailable(): boolean { return true; }
+}
+
+async function loadBoundedWorkspaceImage(value: string, workspace: string, requirePng: boolean): Promise<string> {
+  const resolved = path.resolve(workspace, value);
+  const [root, realPath] = await Promise.all([fs.realpath(workspace), fs.realpath(resolved)]);
+  if (realPath !== root && !realPath.startsWith(`${root}${path.sep}`)) {
+    throw new Error('image path escapes the current workspace');
+  }
+  const extension = path.extname(realPath).toLowerCase();
+  const mime = extension === '.png' ? 'image/png'
+    : extension === '.jpg' || extension === '.jpeg' ? 'image/jpeg'
+      : extension === '.webp' ? 'image/webp' : undefined;
+  if (!mime || (requirePng && mime !== 'image/png')) {
+    throw new Error(requirePng ? 'mask_path must be a PNG file' : 'image_path must be PNG, JPEG, or WebP');
+  }
+  const metadata = await fs.stat(realPath);
+  if (!metadata.isFile() || metadata.size <= 0 || metadata.size > 50 * 1024 * 1024) {
+    throw new Error('image must be a file smaller than 50 MB');
+  }
+  return `data:${mime};base64,${(await fs.readFile(realPath)).toString('base64')}`;
+}
+
+function parseImageEditSelections(input: unknown[]): Array<{ x: number; y: number; width: number; height: number }> {
+  return input.slice(0, 20).flatMap((value) => {
+    if (!value || typeof value !== 'object') return [];
+    const item = value as Record<string, unknown>;
+    if (![item.x, item.y, item.width, item.height].every((entry) => typeof entry === 'number' && Number.isFinite(entry))) return [];
+    return [{ x: item.x as number, y: item.y as number, width: item.width as number, height: item.height as number }];
+  });
 }
 
 // ============================================================================
@@ -1423,6 +1542,7 @@ export function createMultimodalTools(): ITool[] {
     new AudioExecuteTool(),
     new TextToSpeechTool(),
     new ImageGenerateTool(),
+    new ImageEditTool(),
     new VideoAnalyzeTool(),
     new UnderstandVideoTool(),
     new VideoGenerateTool(),

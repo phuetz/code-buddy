@@ -141,12 +141,13 @@ describe('route_peer tool', () => {
 
     expect(result.success).toBe(true);
     const data = result.data as {
-      recommendation: { peer: string; model: string };
-      nextCall: { tool: string; args: { peer: string; model: string } };
+      recommendation: { peer: string; model: string; provider: string };
+      nextCall: { tool: string; args: { peer: string; model: string; provider: string } };
     };
     expect(data.recommendation).toMatchObject({
       peer: 'chatgpt-pro',
       model: 'gpt-5.1-codex',
+      provider: 'chatgpt-oauth',
     });
     expect(data.nextCall).toEqual({
       tool: 'peer_delegate',
@@ -154,6 +155,7 @@ describe('route_peer tool', () => {
         peer: 'chatgpt-pro',
         prompt: 'think deeply and analyze this multi-agent architecture',
         model: 'gpt-5.1-codex',
+        provider: 'chatgpt-oauth',
       },
     });
   });

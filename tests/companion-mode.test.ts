@@ -192,7 +192,7 @@ describe('companion-mode', () => {
       provider: 'edge-tts',
       autoSpeak: true,
     }));
-    expect(mocks.settings.setCurrentModel).toHaveBeenCalledWith('gpt-5.5');
+    expect(mocks.settings.setCurrentModel).toHaveBeenCalledWith('gpt-5.6-sol');
     expect(result.modelConfigured).toBe(true);
   });
 
@@ -332,7 +332,7 @@ describe('companion-mode', () => {
     expect(output).toContain('CODEBUDDY_SENSORY_CAMERA=true');
     expect(output).toContain('CODEBUDDY_ROBOT_NAME=Buddy');
     expect(output).toContain('CODEBUDDY_SENSORY_SPEAK_ACT=true');
-    expect(output).toContain('CODEBUDDY_SENSORY_SPEAK_PERMISSION_MODE=plan');
+    expect(output).toContain('CODEBUDDY_SENSORY_SPEAK_PERMISSION_MODE=default');
     expect(output).toContain('CODEBUDDY_SPEECH_PYTHON=/tmp/voice/bin/python');
     expect(output).toContain('CODEBUDDY_SPEECH_ENGINE=parakeet');
     expect(output).toContain(`CODEBUDDY_PARAKEET_MODEL_DIR=${path.join(tempDir, 'parakeet')}`);

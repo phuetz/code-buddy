@@ -4,6 +4,7 @@
 
 import * as path from 'path';
 import * as os from 'os';
+import { mkdtempSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import {
   WorkspaceIsolation,
   getWorkspaceIsolation,
@@ -122,6 +123,115 @@ describe('WorkspaceIsolation', () => {
       isolation.addAllowedPath('/custom/allowed/path');
       const result = isolation.validatePath('/custom/allowed/path/file.ts');
       expect(result.valid).toBe(true);
+    });
+
+    it('should scope an embedded actor workspace to its async turn', async () => {
+      const parent = mkdtempSync(path.join(process.cwd(), '.codebuddy-scoped-workspace-'));
+      const voiceRoot = path.join(parent, 'voice-repo');
+      mkdirSync(voiceRoot);
+      const target = path.join(voiceRoot, 'package.json');
+      try {
+        expect(isolation.validatePath(target).valid).toBe(false);
+        await isolation.withWorkspaceRootAsync(voiceRoot, async () => {
+          expect(isolation.validatePath(target).valid).toBe(true);
+          await Promise.resolve();
+          expect(isolation.validatePath(target).valid).toBe(true);
+        });
+        expect(isolation.validatePath(target).valid).toBe(false);
+      } finally {
+        rmSync(parent, { recursive: true, force: true });
+      }
+    });
+
+    it('should keep canonical containment for a symlinked scoped workspace', async () => {
+      const parent = mkdtempSync(path.join(process.cwd(), '.codebuddy-symlink-workspace-'));
+      const realRoot = path.join(parent, 'real');
+      const linkedRoot = path.join(parent, 'linked');
+      mkdirSync(realRoot);
+      symlinkSync(realRoot, linkedRoot, 'dir');
+      try {
+        await isolation.withWorkspaceRootAsync(linkedRoot, async () => {
+          expect(isolation.validatePath(path.join(linkedRoot, 'inside.ts')).valid).toBe(true);
+          expect(isolation.validatePath(path.join(realRoot, 'inside.ts')).valid).toBe(true);
+        });
+      } finally {
+        rmSync(parent, { recursive: true, force: true });
+      }
+    });
+
+    it('should reject a symlink escape below a scoped workspace', async () => {
+      const parent = mkdtempSync(path.join(process.cwd(), '.codebuddy-symlink-escape-'));
+      const voiceRoot = path.join(parent, 'voice');
+      const outsideRoot = path.join(parent, 'outside');
+      mkdirSync(voiceRoot);
+      mkdirSync(outsideRoot);
+      writeFileSync(path.join(outsideRoot, 'secret.txt'), 'private');
+      symlinkSync(outsideRoot, path.join(voiceRoot, 'escape'), 'dir');
+      try {
+        await isolation.withWorkspaceRootAsync(voiceRoot, async () => {
+          const result = isolation.validatePath(path.join(voiceRoot, 'escape', 'secret.txt'));
+          expect(result.valid).toBe(false);
+          expect(result.reason).toBe('symlink_escape');
+        });
+      } finally {
+        rmSync(parent, { recursive: true, force: true });
+      }
+    });
+
+    it('should reject creating a missing file through a symlinked parent', () => {
+      const parent = mkdtempSync(path.join(process.cwd(), '.codebuddy-create-symlink-escape-'));
+      const workspace = path.join(parent, 'workspace');
+      const outside = path.join(parent, 'outside');
+      mkdirSync(workspace);
+      mkdirSync(outside);
+      symlinkSync(outside, path.join(workspace, 'escape'), 'dir');
+      const scoped = new WorkspaceIsolation({ workspaceRoot: workspace });
+
+      try {
+        const target = path.join(workspace, 'escape', 'new-file.txt');
+        const result = scoped.validatePath(target, 'create file');
+        expect(result.valid).toBe(false);
+        expect(result.reason).toBe('symlink_escape');
+      } finally {
+        rmSync(parent, { recursive: true, force: true });
+      }
+    });
+
+    it('should keep the global bot workspace blocked while a voice turn is active', async () => {
+      const parent = mkdtempSync(path.join(process.cwd(), '.codebuddy-concurrent-workspace-'));
+      const voiceRoot = path.join(parent, 'code-buddy');
+      mkdirSync(voiceRoot);
+      const voiceFile = path.join(voiceRoot, 'package.json');
+      let releaseVoice!: () => void;
+      const gate = new Promise<void>((resolve) => { releaseVoice = resolve; });
+      let reportStarted!: () => void;
+      const started = new Promise<void>((resolve) => { reportStarted = resolve; });
+      try {
+        const voice = isolation.withWorkspaceRootAsync(voiceRoot, async () => {
+          reportStarted();
+          expect(isolation.validatePath(voiceFile).valid).toBe(true);
+          await gate;
+        });
+        await started;
+        expect(isolation.validatePath(voiceFile).valid).toBe(false);
+        releaseVoice();
+        await voice;
+      } finally {
+        releaseVoice?.();
+        rmSync(parent, { recursive: true, force: true });
+      }
+    });
+
+    it('should reject protected and unavailable scoped workspace roots', async () => {
+      await expect(
+        isolation.withWorkspaceRootAsync(path.join(os.homedir(), '.ssh'), async () => undefined)
+      ).rejects.toThrow(/protected/i);
+      await expect(
+        isolation.withWorkspaceRootAsync(
+          path.join(process.cwd(), '.workspace-that-does-not-exist'),
+          async () => undefined
+        )
+      ).rejects.toThrow(/unavailable/i);
     });
   });
 

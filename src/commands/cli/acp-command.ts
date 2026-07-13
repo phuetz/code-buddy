@@ -39,7 +39,10 @@ export function registerAcpCommand(program: Command): void {
       // list_directory / search) routed through the client's fs/* +
       // session/request_permission primitives when the editor advertises them.
       const agenticRunner = client
-        ? createAcpAgenticRunner({ chat: (messages, tools) => client.chat(messages, tools) })
+        ? createAcpAgenticRunner({
+            chat: (messages, tools) => client.chat(messages, tools),
+            model: detected?.defaultModel,
+          })
         : null;
 
       const promptRunner: AcpPromptRunner = async (ctx) => {

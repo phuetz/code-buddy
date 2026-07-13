@@ -136,10 +136,21 @@ export async function detectCapabilities(): Promise<SandboxCapabilities> {
     capabilities.landlock = checkLandlockSupport();
   }
 
-  // Check for bubblewrap (Linux)
+  // Check that bubblewrap can actually create a user namespace. Merely finding
+  // the binary produced false positives on hosts where the kernel/container
+  // policy rejects uid_map setup; the old runtime then attempted a sandbox and
+  // failed every otherwise-valid command.
   if (platform === 'linux') {
     try {
-      const result = await execSimple('which', ['bwrap']);
+      const result = await execSimple('bwrap', [
+        '--unshare-user',
+        '--unshare-pid',
+        '--die-with-parent',
+        '--ro-bind', '/', '/',
+        '--proc', '/proc',
+        '--dev', '/dev',
+        'true',
+      ]);
       capabilities.bubblewrap = result.exitCode === 0;
     } catch {
       capabilities.bubblewrap = false;
@@ -226,13 +237,6 @@ async function execBubblewrap(
   // Mount /dev minimally
   bwrapArgs.push('--dev', '/dev');
 
-  // Mount read-only paths
-  for (const p of config.readOnlyPaths) {
-    if (fs.existsSync(p)) {
-      bwrapArgs.push('--ro-bind', p, p);
-    }
-  }
-
   // Mount read-write paths
   for (const p of config.readWritePaths) {
     if (fs.existsSync(p)) {
@@ -244,6 +248,16 @@ async function execBubblewrap(
   if (fs.existsSync(config.workDir)) {
     bwrapArgs.push('--bind', config.workDir, config.workDir);
     bwrapArgs.push('--chdir', config.workDir);
+  }
+
+  // Read-only overlays are deliberately mounted LAST.  Bubblewrap resolves
+  // overlapping binds in order; doing this before the workspace bind made
+  // `.git` and `.codebuddy` writable again despite the profile claiming the
+  // opposite.
+  for (const p of config.readOnlyPaths) {
+    if (fs.existsSync(p)) {
+      bwrapArgs.push('--ro-bind', p, p);
+    }
   }
 
   // Create /tmp
@@ -542,13 +556,6 @@ async function execLandlock(
     // Mount /dev minimally
     bwrapArgs.push('--dev', '/dev');
 
-    // Mount read-only paths
-    for (const p of config.readOnlyPaths) {
-      if (fs.existsSync(p)) {
-        bwrapArgs.push('--ro-bind', p, p);
-      }
-    }
-
     // Mount read-write paths
     for (const p of config.readWritePaths) {
       if (fs.existsSync(p)) {
@@ -560,6 +567,14 @@ async function execLandlock(
     if (fs.existsSync(config.workDir)) {
       bwrapArgs.push('--bind', config.workDir, config.workDir);
       bwrapArgs.push('--chdir', config.workDir);
+    }
+
+    // See execBubblewrap: overlapping read-only paths must be applied after
+    // every writable parent bind or the parent silently re-opens them.
+    for (const p of config.readOnlyPaths) {
+      if (fs.existsSync(p)) {
+        bwrapArgs.push('--ro-bind', p, p);
+      }
     }
 
     // Create /tmp
@@ -889,11 +904,22 @@ export class OSSandbox extends EventEmitter implements SandboxBackendInterface {
       return execUnsandboxed(shell, [shellArg, shellCommand], this.config.timeout);
     }
 
-    if (!(await this.isAvailable()) && this.config.allowUnsandboxed) {
-      this.stats.commandsBypassed++;
-      const shell = os.platform() === 'win32' ? 'cmd' : 'sh';
-      const shellArg = os.platform() === 'win32' ? '/c' : '-c';
-      return execUnsandboxed(shell, [shellArg, shellCommand], this.config.timeout);
+    if (!(await this.isAvailable())) {
+      if (this.config.allowUnsandboxed) {
+        this.stats.commandsBypassed++;
+        const shell = os.platform() === 'win32' ? 'cmd' : 'sh';
+        const shellArg = os.platform() === 'win32' ? '/c' : '-c';
+        return execUnsandboxed(shell, [shellArg, shellCommand], this.config.timeout);
+      }
+      return {
+        exitCode: 1,
+        stdout: '',
+        stderr: 'No OS sandbox backend is available and unsandboxed fallback is disabled',
+        duration: 0,
+        timedOut: false,
+        backend: 'none',
+        sandboxed: false,
+      };
     }
 
     this.stats.commandsSandboxed++;
@@ -1166,6 +1192,7 @@ export async function createSandboxConfigForMode(
       readOnlyPaths: [...systemReadOnly, workspaceRoot, ...extraReadOnly],
       readWritePaths: [],
       allowNetwork: false,
+      allowUnsandboxed: false,
     };
   }
 
@@ -1183,6 +1210,7 @@ export async function createSandboxConfigForMode(
       readOnlyPaths: [...systemReadOnly, ...protectedPaths, ...extraReadOnly],
       readWritePaths: [workspaceRoot, ...extraReadWrite],
       allowNetwork: false,
+      allowUnsandboxed: false,
     };
   }
 

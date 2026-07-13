@@ -12,6 +12,7 @@ const mkRegistry = (
 
 describe('CoworkToolAgent / runToolInvoke', () => {
   it('delegates to FormalToolRegistry.execute and returns shaped output on success', async () => {
+    const confirmToolInvocation = vi.fn(async () => ({ confirmed: true }));
     const registry = mkRegistry(async (name, input) => ({
       success: true,
       output: { stdout: `ran ${name} with ${JSON.stringify(input)}` },
@@ -20,6 +21,7 @@ describe('CoworkToolAgent / runToolInvoke', () => {
     }));
     const agent = new CoworkToolAgent({
       registry,
+      confirmToolInvocation,
       onApprovalRequired: () => {
         throw new Error('should not be called');
       },
@@ -36,6 +38,10 @@ describe('CoworkToolAgent / runToolInvoke', () => {
       toolName: 'bash_run',
       duration: 42,
     });
+    expect(confirmToolInvocation).toHaveBeenCalledWith({
+      toolName: 'bash_run',
+      toolInput: { command: 'echo hi' },
+    });
   });
 
   it('throws when the registry reports failure', async () => {
@@ -47,12 +53,61 @@ describe('CoworkToolAgent / runToolInvoke', () => {
     }));
     const agent = new CoworkToolAgent({
       registry,
+      confirmToolInvocation: async () => ({ confirmed: true }),
       onApprovalRequired: () => undefined,
     });
 
     await expect(
       agent.runToolInvoke({ toolName: 'bash_run', toolInput: {} })
     ).rejects.toThrow('permission denied');
+  });
+
+  it('fails closed before a mutating tool when fresh confirmation is unavailable', async () => {
+    const execute = vi.fn(async () => ({
+      success: true,
+      toolName: 'publish_article',
+      duration: 1,
+    }));
+    const agent = new CoworkToolAgent({
+      registry: mkRegistry(execute),
+      onApprovalRequired: () => undefined,
+    });
+    await expect(agent.runToolInvoke({
+      toolName: 'publish_article',
+      toolInput: { title: 'Draft' },
+    })).rejects.toThrow('Fresh confirmation required');
+    expect(execute).not.toHaveBeenCalled();
+  });
+
+  it('does not execute a mutating tool after a fresh denial', async () => {
+    const execute = vi.fn(async () => ({
+      success: true,
+      toolName: 'delete_page',
+      duration: 1,
+    }));
+    const agent = new CoworkToolAgent({
+      registry: mkRegistry(execute),
+      confirmToolInvocation: async () => ({ confirmed: false, feedback: 'keep it' }),
+      onApprovalRequired: () => undefined,
+    });
+    await expect(agent.runToolInvoke({
+      toolName: 'delete_page',
+      toolInput: { id: 'page' },
+    })).rejects.toThrow('keep it');
+    expect(execute).not.toHaveBeenCalled();
+  });
+
+  it('keeps known read-only tools free of redundant prompts', async () => {
+    const confirmToolInvocation = vi.fn(async () => ({ confirmed: true }));
+    const execute = vi.fn(async (name: string) => ({ success: true, toolName: name, duration: 1 }));
+    const agent = new CoworkToolAgent({
+      registry: mkRegistry(execute),
+      confirmToolInvocation,
+      onApprovalRequired: () => undefined,
+    });
+    await agent.runToolInvoke({ toolName: 'search_files', toolInput: { query: 'x' } });
+    expect(confirmToolInvocation).not.toHaveBeenCalled();
+    expect(execute).toHaveBeenCalledOnce();
   });
 
   it('throws when toolName is missing', async () => {

@@ -180,6 +180,28 @@ describe('RemoteBackend proxy round-trip', () => {
     expect(backend.forward({ type: 'session.list', payload: {} } as ClientEvent)).toBe(false);
   });
 
+  it('negotiates capability-scoped control requests without leaking them into chat events', async () => {
+    const serverEvents: ServerEvent[] = [];
+    const backend = new RemoteBackend({ onServerEvent: (event) => serverEvents.push(event), onStatus: () => {} });
+    const connected = backend.connect('ws://host', 't');
+    const ws = FakeWebSocket.lastInstance!;
+    ws.simulateOpen();
+    await connected;
+
+    const request = backend.requestControl('describe');
+    const frame = JSON.parse(ws.sent.at(-1)!);
+    expect(frame.type).toBe('control.describe');
+    expect(frame.requestId).toMatch(/^control_/);
+    ws.simulateMessage({
+      type: 'control.result',
+      payload: { requestId: frame.requestId, ok: true, result: { capabilities: ['system.snapshot'] } },
+    });
+
+    await expect(request).resolves.toEqual({ capabilities: ['system.snapshot'] });
+    expect(serverEvents).toEqual([]);
+    backend.disconnect();
+  });
+
   it('rejects connect without url or token', async () => {
     const backend = new RemoteBackend({ onServerEvent: () => {}, onStatus: () => {} });
     await expect(backend.connect('', 't')).rejects.toThrow(/URL is required/);

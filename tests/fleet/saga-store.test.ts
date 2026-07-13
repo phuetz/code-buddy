@@ -179,6 +179,80 @@ describe('SagaStore — create + load', () => {
     expect(saga.steps.every((s) => s.lane === 'parallel')).toBe(true);
   });
 
+  it('copies providers into every lane while legacy plans remain provider-less', async () => {
+    const store = new SagaStore({ storeDir: tmpDir });
+
+    const sequentialPlan = makePlan(false);
+    sequentialPlan.primary.provider = 'openai';
+    sequentialPlan.fallback!.provider = 'anthropic';
+    const sequential = await store.create({ goal: 'sequential providers', plan: sequentialPlan });
+    expect(sequential.steps.map((step) => step.provider)).toEqual(['openai', 'anthropic']);
+
+    const parallelPlan = makePlan(true);
+    parallelPlan.parallel![0]!.provider = 'ollama';
+    parallelPlan.parallel![1]!.provider = 'openrouter';
+    const parallel = await store.create({ goal: 'parallel providers', plan: parallelPlan });
+    expect(parallel.steps.map((step) => step.provider)).toEqual(['ollama', 'openrouter']);
+
+    const chainPlan = makeChainPlan();
+    chainPlan.chain![0]!.provider = 'chatgpt-oauth';
+    chainPlan.chain![1]!.provider = 'gemini';
+    chainPlan.chain![2]!.provider = 'lm-studio';
+    const chain = await store.create({ goal: 'chain providers', plan: chainPlan });
+    expect(chain.steps.map((step) => step.provider)).toEqual([
+      'chatgpt-oauth',
+      'gemini',
+      'lm-studio',
+    ]);
+
+    const legacy = await store.create({ goal: 'legacy provider', plan: makePlan(false) });
+    expect(legacy.steps.every((step) => step.provider === undefined)).toBe(true);
+    expect((await store.load(legacy.id))?.steps.every(
+      (step) => step.provider === undefined,
+    )).toBe(true);
+  });
+
+  it('persists secret-free attempt provenance and loads legacy JSON without attempts', async () => {
+    const store = new SagaStore({ storeDir: tmpDir });
+    const plan = makePlan(false);
+    plan.primary.provider = 'openrouter';
+    const saga = await store.create({ goal: 'durable failover', plan });
+
+    expect(saga.steps[0]?.attempts).toEqual([]);
+    await store.update(saga.id, (current) => {
+      current.steps[0]?.attempts?.push({
+        peerId: 'robot-brain',
+        model: 'openrouter/free',
+        providerRequested: 'openrouter',
+        providerResolved: 'openrouter',
+        runId: 'run-safe-id',
+        status: 'failed',
+        failureDomain: 'provider',
+        startedAt: 100,
+        completedAt: 125,
+        error: 'HTTP 429 quota exhausted',
+      });
+      return current;
+    });
+
+    const reloaded = await store.load(saga.id);
+    expect(reloaded?.steps[0]?.attempts).toEqual([
+      expect.objectContaining({
+        providerRequested: 'openrouter',
+        providerResolved: 'openrouter',
+        failureDomain: 'provider',
+        status: 'failed',
+      }),
+    ]);
+    expect(JSON.stringify(reloaded)).not.toContain('apiKey');
+
+    const file = path.join(tmpDir, `${saga.id}.json`);
+    const legacy = JSON.parse(fs.readFileSync(file, 'utf-8')) as SagaRecord;
+    delete legacy.steps[0]!.attempts;
+    fs.writeFileSync(file, JSON.stringify(legacy));
+    expect((await store.load(saga.id))?.steps[0]?.attempts).toBeUndefined();
+  });
+
   it('returns null when loading a non-existent saga', async () => {
     const store = new SagaStore({ storeDir: tmpDir });
     expect(await store.load('saga_nope')).toBeNull();

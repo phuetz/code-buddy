@@ -5,6 +5,7 @@
  */
 import { FileText } from 'lucide-react';
 import { DocPreview } from './DocPreview.js';
+import { DocDesignEditor } from './DesignViewEditors.js';
 import { DeliverableStudioPanel, type DeliverableStudioConfig } from './DeliverableStudioPanel.js';
 import {
   buildDocExportPrompt,
@@ -29,6 +30,7 @@ export function DocStudioPanel() {
     strip: stripDocBlocks,
     describe: (doc) => `${doc.title} — ${doc.blocks.length} blocs`,
     renderPreview: (doc) => <DocPreview blocks={doc?.blocks ?? []} />,
+    renderDesign: (doc, onChange) => <DocDesignEditor value={doc} onChange={onChange} />,
     testId: 'doc-studio',
   };
 

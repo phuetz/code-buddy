@@ -72,13 +72,87 @@ describe('listActiveLlmModelPool — cloud expansion', () => {
     expect(pool.map((p) => p.model)).toEqual(['grok-4-1-fast', 'grok-3-mini']);
   });
 
+  it('marks OpenRouter free variants as zero-cost council candidates', async () => {
+    buildActiveLlmRegistry.mockResolvedValue({
+      all: [active({
+        provider: 'openrouter',
+        model: 'openrouter/free',
+        apiKey: 'k-openrouter',
+        baseURL: 'https://openrouter.ai/api/v1',
+        costInputUsdPerMtok: 1,
+      })],
+    });
+    findRuntimeProvider.mockReturnValue({
+      models: ['openrouter/free', 'openai/gpt-oss-20b:free', 'openai/gpt-5.4'],
+    });
+
+    const pool = await listActiveLlmModelPool({ env: {} });
+
+    expect(pool).toEqual([
+      expect.objectContaining({ model: 'openrouter/free', costInputUsdPerMtok: 0 }),
+      expect.objectContaining({ model: 'openai/gpt-oss-20b:free', costInputUsdPerMtok: 0 }),
+      expect.objectContaining({ model: 'openai/gpt-5.4', costInputUsdPerMtok: 1 }),
+    ]);
+  });
+
   it('returns an empty pool when no provider is active', async () => {
     buildActiveLlmRegistry.mockResolvedValue({ all: [] });
     expect(await listActiveLlmModelPool({ env: {} })).toEqual([]);
   });
+
+  it('expands Antigravity from its dynamically discovered opaque model names', async () => {
+    buildActiveLlmRegistry.mockResolvedValue({
+      all: [active({
+        provider: 'agy-cli',
+        model: 'Gemini 3.1 Pro (High)',
+        apiKey: 'agy-cli',
+        baseURL: 'agy-cli://local',
+        costInputUsdPerMtok: 0,
+      })],
+    });
+    getLocalCapabilities.mockResolvedValue({
+      models: [
+        { id: 'Gemini 3.1 Pro (High)', provider: 'agy-cli' },
+        { id: 'Claude Opus 4.6 Thinking', provider: 'agy-cli' },
+      ],
+    });
+
+    const pool = await listActiveLlmModelPool({ env: {} });
+
+    expect(pool.map((p) => p.model)).toEqual([
+      'Gemini 3.1 Pro (High)',
+      'Claude Opus 4.6 Thinking',
+    ]);
+    expect(pool.every((p) => p.costInputUsdPerMtok === 0)).toBe(true);
+  });
 });
 
 describe('listActiveLlmModelPool — local expansion', () => {
+  it('expands installed Lemonade models as local zero-cost candidates', async () => {
+    buildActiveLlmRegistry.mockResolvedValue({
+      all: [active({
+        provider: 'lemonade',
+        model: 'Qwen3.6-35B-A3B-MTP-GGUF',
+        isLocal: true,
+        apiKey: 'lemonade',
+        baseURL: 'http://127.0.0.1:13305/api/v1',
+        costInputUsdPerMtok: 0,
+      })],
+    });
+    getLocalCapabilities.mockResolvedValue({
+      models: [
+        { id: 'Qwen3.6-35B-A3B-MTP-GGUF', provider: 'lemonade' },
+        { id: 'gemma-4-31B-it-GGUF', provider: 'lemonade' },
+      ],
+    });
+
+    const pool = await listActiveLlmModelPool({ env: {} });
+    expect(pool.map((p) => p.model)).toEqual([
+      'Qwen3.6-35B-A3B-MTP-GGUF',
+      'gemma-4-31B-it-GGUF',
+    ]);
+  });
+
   it('expands local runtimes to their installed models, deduping bare names with Ollama preferred', async () => {
     buildActiveLlmRegistry.mockResolvedValue({
       all: [

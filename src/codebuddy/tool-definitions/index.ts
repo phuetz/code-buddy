@@ -139,6 +139,24 @@ export {
   RESEARCH_TOOLS,
 } from './research-tools.js';
 
+// Local JavaScript orchestration (Responses Lite wire alias: `exec`)
+export {
+  CODE_EXEC_TOOL,
+  CODE_EXEC_TOOLS,
+} from './code-exec-tools.js';
+
+// Local-first meeting notes
+export {
+  MEETING_NOTES_TOOL,
+  MEETING_TOOLS,
+} from './meeting-tools.js';
+
+// Registered local ComfyUI recipes
+export {
+  COMFY_RECIPE_TOOL,
+  COMFY_RECIPE_TOOLS,
+} from './comfy-recipe-tools.js';
+
 // Advanced tools
 export {
   MULTI_EDIT_TOOL,
@@ -164,6 +182,7 @@ export {
   AUDIO_TOOL,
   TEXT_TO_SPEECH_TOOL,
   IMAGE_GENERATE_TOOL,
+  IMAGE_EDIT_TOOL,
   VIDEO_TOOL,
   VIDEO_ANALYZE_TOOL,
   VIDEO_GENERATE_TOOL,

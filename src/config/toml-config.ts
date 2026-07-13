@@ -700,6 +700,14 @@ export const DEFAULT_CONFIG: CodeBuddyConfig = {
       max_context_tokens: 200000,
       description: 'Claude Haiku 4.5 (64K output, fastest)',
     },
+    'gpt-5.6-sol': {
+      provider: 'openai',
+      model_id: 'gpt-5.6-sol',
+      price_per_m_input: 5.0,
+      price_per_m_output: 30.0,
+      max_context_tokens: 1050000,
+      description: 'GPT-5.6 Sol (1.05M context, 128K output, vision, max reasoning)',
+    },
     'gpt-5': {
       provider: 'openai',
       model_id: 'gpt-5',
@@ -821,7 +829,10 @@ export const DEFAULT_CONFIG: CodeBuddyConfig = {
   },
 
   integrations: {
-    rtk_enabled: true,
+    // Legacy pre-execution RTK wrapping is opt-in. Explicit `true` values in
+    // existing config files remain supported, but the safe default keeps the
+    // logical command intact for policy/sandbox evaluation.
+    rtk_enabled: false,
     rtk_min_output_length: 500,
     icm_enabled: true,
   },

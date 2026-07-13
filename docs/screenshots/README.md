@@ -173,6 +173,25 @@ integration code that supports it.
 
 ---
 
+## Part 4 — Lisa companion on Telegram
+
+The companion thread continues outside Cowork through the configured Telegram
+channel, while preserving Lisa's identity and conversational context.
+
+### 4.1 Natural companion conversation
+
+![Lisa companion conversation on Telegram](./telegram-companion-chat.jpg)
+
+### 4.2 Recursive reasoning and continuity
+
+![Lisa companion recursive exchange on Telegram](./telegram-companion-recursive.jpg)
+
+### 4.3 Assisted self-development
+
+![Lisa companion self-development exchange on Telegram](./telegram-companion-selfcode.jpg)
+
+---
+
 ## How to reproduce
 
 ```bash

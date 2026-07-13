@@ -39,6 +39,7 @@ import {
 } from '../agent/custom/custom-agent-runtime.js';
 import type { ToolResult } from '../types/index.js';
 import { logger } from '../utils/logger.js';
+import type { PeerChatProviderId } from '../fleet/peer-chat-client-factory.js';
 
 const DEFAULT_TIMEOUT_MS = 60_000;
 const IDLE_RESET_MS = 120_000;
@@ -73,6 +74,7 @@ export interface PeerDelegateParams {
   peer: string;
   prompt: string;
   systemPrompt?: string;
+  provider?: PeerChatProviderId | string;
   model?: string;
   dispatchProfile?: FleetDispatchProfile | string;
   timeoutMs?: number;
@@ -81,6 +83,8 @@ export interface PeerDelegateParams {
 interface PeerChatRpcResult {
   text?: string;
   modelRequested?: string;
+  providerRequested?: string;
+  providerResolved?: string;
   finishReason?: string;
   usage?: {
     prompt_tokens?: number;
@@ -172,6 +176,7 @@ export async function executePeerDelegate(params: PeerDelegateParams): Promise<T
       {
         prompt: params.prompt,
         ...(systemPrompt ? { systemPrompt } : {}),
+        ...(params.provider ? { provider: params.provider } : {}),
         ...(params.model ? { model: params.model } : {}),
         ...(shouldPropagateDispatchProfile ? { dispatchProfile } : {}),
       },
@@ -187,6 +192,7 @@ export async function executePeerDelegate(params: PeerDelegateParams): Promise<T
       lines.push(`[tokens: ${inT} in / ${outT} out | total: ${raw.usage.total_tokens}]`);
     }
     if (raw?.modelRequested) lines.push(`[model: ${raw.modelRequested}]`);
+    if (raw?.providerResolved) lines.push(`[provider: ${raw.providerResolved}]`);
     const returnedDispatchProfile = raw?.dispatchProfile ?? (
       shouldPropagateDispatchProfile ? dispatchProfile : undefined
     );
@@ -208,6 +214,8 @@ export async function executePeerDelegate(params: PeerDelegateParams): Promise<T
         text,
         peer: params.peer,
         modelRequested: raw?.modelRequested,
+        providerRequested: raw?.providerRequested,
+        providerResolved: raw?.providerResolved,
         finishReason: raw?.finishReason,
         usage: raw?.usage,
         traceId: raw?.traceId,

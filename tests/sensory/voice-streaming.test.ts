@@ -1,8 +1,10 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import {
   makeVoiceReply,
   defaultStreamReply,
+  immediateThinkingAcknowledgement,
   type PlayFn,
+  type VoiceReplyTiming,
 } from '../../src/sensory/voice-loop.js';
 import {
   streamToSpeech,
@@ -10,6 +12,7 @@ import {
   safeCommitLength,
 } from '../../src/sensory/voice-stream.js';
 import { isSpeaking, _resetVoiceActivityForTests } from '../../src/sensory/voice-activity.js';
+import { makeHybridReply } from '../../src/sensory/hybrid-reply.js';
 
 /**
  * Streaming voice pipeline (Lot 3): the reply is spoken sentence-by-sentence as the LLM
@@ -48,6 +51,15 @@ describe('SentenceAssembler — sentence cutting', () => {
     expect(out).toHaveLength(3);
     expect(out.every((s) => s.length <= 200)).toBe(true);
     expect(out.join('').length).toBe(500);
+  });
+
+  it('cuts a sufficiently long clause at a comma for lower TTS latency', () => {
+    const a = new SentenceAssembler();
+    expect(a.push('Je vérifie maintenant cette première partie, puis je continue. ')).toEqual([
+      'Je vérifie maintenant cette première partie,',
+      'puis je continue.',
+    ]);
+    expect(a.flush()).toEqual([]);
   });
 });
 
@@ -107,6 +119,92 @@ describe('streamToSpeech — pipeline (time-to-first-audio)', () => {
     expect(result.played).toBe(true);
     expect(result.sentences).toEqual(['Bonjour.', 'Comment ça va ?', 'Très bien.']);
     expect(result.aborted).toBe(false);
+  });
+
+  it('uses a native synth+play stream without creating temporary WAV files', async () => {
+    const spoken: string[] = [];
+    const synth = vi.fn(async () => 'unused.wav');
+    const play = vi.fn(async () => undefined);
+    async function* stream(): AsyncGenerator<string> {
+      yield 'Première phrase. Deuxième phrase.';
+    }
+
+    const result = await streamToSpeech({
+      stream: stream(),
+      synth,
+      play,
+      streamSpeak: async (text) => {
+        spoken.push(text);
+        return true;
+      },
+      guard: passthroughGuard,
+      unlink: noUnlink,
+    });
+
+    expect(spoken).toEqual(['Première phrase.', 'Deuxième phrase.']);
+    expect(synth).not.toHaveBeenCalled();
+    expect(play).not.toHaveBeenCalled();
+    expect(result).toMatchObject({ played: true, aborted: false });
+  });
+
+  it('falls back per segment after native streaming fails without losing the LLM reply', async () => {
+    const nativeSpeak = vi.fn(async () => false);
+    const synthesized: string[] = [];
+    const played: string[] = [];
+    async function* stream(): AsyncGenerator<string> {
+      yield 'Première phrase. Deuxième phrase.';
+    }
+
+    const result = await streamToSpeech({
+      stream: stream(),
+      streamSpeak: nativeSpeak,
+      synth: async (text) => {
+        synthesized.push(text);
+        return `wav:${text}`;
+      },
+      play: async (wav) => {
+        played.push(wav);
+      },
+      guard: passthroughGuard,
+      unlink: noUnlink,
+    });
+
+    // One failed startup is enough: the rest of this turn stays on the reliable
+    // fallback instead of retrying Pocket or regenerating the answer.
+    expect(nativeSpeak).toHaveBeenCalledTimes(1);
+    expect(synthesized).toEqual(['Première phrase.', 'Deuxième phrase.']);
+    expect(played).toEqual(['wav:Première phrase.', 'wav:Deuxième phrase.']);
+    expect(result).toMatchObject({
+      played: true,
+      spoken: 'Première phrase. Deuxième phrase.',
+      fallbackSegments: 2,
+    });
+  });
+
+  it('recovers from a thrown native stream error and keeps later segments in order', async () => {
+    const nativeSpeak = vi.fn(async () => {
+      throw new Error('Pocket pipe closed');
+    });
+    const played: string[] = [];
+    async function* stream(): AsyncGenerator<string> {
+      yield 'Un. Deux.';
+    }
+
+    const result = await streamToSpeech({
+      stream: stream(),
+      streamSpeak: nativeSpeak,
+      synth: async (text) => `wav:${text}`,
+      play: async (wav) => {
+        played.push(wav);
+      },
+      guard: passthroughGuard,
+      unlink: noUnlink,
+    });
+
+    expect(nativeSpeak).toHaveBeenCalledTimes(1);
+    expect(played).toEqual(['wav:Un.', 'wav:Deux.']);
+    expect(result.sentences).toEqual(['Un.', 'Deux.']);
+    expect(result.fallbackSegments).toBe(2);
   });
 });
 
@@ -299,13 +397,140 @@ describe('makeVoiceReply — streaming integration', () => {
     });
     await expect(onHeard('hello')).resolves.toBeUndefined();
   });
+
+  it('automatically uses the stream attached to the hybrid reply', async () => {
+    const calls: string[] = [];
+    let timing: VoiceReplyTiming | undefined;
+    const hybrid = makeHybridReply({
+      fastReply: () => null,
+      prefetch: () => null,
+      jokes: () => null,
+      chitchat: async () => {
+        calls.push('blocking');
+        return 'Réponse bloquante.';
+      },
+      chitchatStream: async function* () {
+        calls.push('stream');
+        yield 'Première phrase. ';
+        yield 'Deuxième phrase.';
+      },
+      agentReply: async () => 'agent',
+      classify: () => false,
+    });
+    const onHeard = makeVoiceReply({
+      replyFn: hybrid,
+      synth: async (text) => `wav:${text}`,
+      play: async (wav) => {
+        calls.push(`play:${wav}`);
+      },
+      onTiming: (value) => {
+        timing = value;
+      },
+    });
+
+    await onHeard('parle-moi');
+
+    expect(calls).toEqual([
+      'stream',
+      'play:wav:Première phrase.',
+      'play:wav:Deuxième phrase.',
+    ]);
+    expect(timing).toMatchObject({ mode: 'streamed', spoke: true });
+    expect(timing?.firstTextMs).toEqual(expect.any(Number));
+    expect(timing?.firstSegmentMs).toEqual(expect.any(Number));
+    expect(timing?.firstAudioMs).toEqual(expect.any(Number));
+  });
+
+  it('sends a prefetched shortcut through the progressive audio path', async () => {
+    const calls: string[] = [];
+    const turns: Array<{ role: 'user' | 'assistant'; content: string }> = [];
+    let timing: VoiceReplyTiming | undefined;
+    const hybrid = makeHybridReply({
+      fastReply: () => null,
+      prefetch: () => 'Première actualité. Deuxième actualité.',
+      jokes: () => null,
+      chitchat: async () => {
+        throw new Error('blocking chitchat must not run');
+      },
+      // eslint-disable-next-line require-yield -- this path must remain unreachable
+      chitchatStream: async function* () {
+        throw new Error('LLM stream must not run');
+      },
+      agentReply: async () => {
+        throw new Error('agent must not run');
+      },
+      classify: () => true,
+    });
+    const onHeard = makeVoiceReply({
+      replyFn: hybrid,
+      streamSpeak: async (text, options) => {
+        calls.push(text);
+        options?.onFirstAudio?.();
+        return true;
+      },
+      synth: async () => '',
+      play: async () => undefined,
+      avatarEnabled: false,
+      onConversationTurn: (turn) => {
+        turns.push(turn);
+      },
+      onTiming: (value) => {
+        timing = value;
+      },
+    });
+
+    await onHeard("quelles sont les actualités aujourd'hui ?");
+
+    expect(calls).toEqual(['Première actualité.', 'Deuxième actualité.']);
+    expect(turns).toEqual([
+      { role: 'user', content: "quelles sont les actualités aujourd'hui ?" },
+      { role: 'assistant', content: 'Première actualité. Deuxième actualité.' },
+    ]);
+    expect(timing).toMatchObject({
+      mode: 'streamed',
+      spoke: true,
+      firstTextMs: expect.any(Number),
+      firstSegmentMs: expect.any(Number),
+      firstAudioMs: expect.any(Number),
+    });
+  });
 });
 
-describe('defaultStreamReply — phatic stays non-streamed', () => {
+describe('defaultStreamReply — instant prefixes and phatic fallback', () => {
   it('yields nothing for a phatic utterance (blocking path answers it instead)', async () => {
     const chunks: string[] = [];
     for await (const c of defaultStreamReply('bonjour')) chunks.push(c);
     expect(chunks).toEqual([]);
+  });
+
+  it('yields an emotional acknowledgement before starting the model continuation', async () => {
+    const stream = defaultStreamReply(
+      "ce soir j'ai le moral vraiment bas et j'aimerais un peu de compagnie"
+    );
+    const first = await stream.next();
+    expect(first).toMatchObject({ done: false, value: 'Je suis là avec toi. ' });
+    await stream.return();
+  });
+
+  it('yields a prewarmable thinking backchannel before an ordinary question', async () => {
+    const previous = process.env.CODEBUDDY_VOICE_BACKCHANNEL;
+    process.env.CODEBUDDY_VOICE_BACKCHANNEL = 'true';
+    try {
+      const stream = defaultStreamReply('Pourquoi le ciel est bleu ?');
+      const first = await stream.next();
+      expect(['Alors… ', 'Voyons ça. ']).toContain(first.value);
+      await stream.return();
+    } finally {
+      if (previous === undefined) delete process.env.CODEBUDDY_VOICE_BACKCHANNEL;
+      else process.env.CODEBUDDY_VOICE_BACKCHANNEL = previous;
+    }
+  });
+
+  it('skips generic filler by default on the fast local lane', () => {
+    expect(immediateThinkingAcknowledgement('Pourquoi le ciel est bleu ?', {})).toBeNull();
+    expect(immediateThinkingAcknowledgement('Pourquoi le ciel est bleu ?', {
+      CODEBUDDY_VOICE_BACKCHANNEL: 'true',
+    })).toEqual(expect.any(String));
   });
 
   it('a phatic reply through the default stream falls back to the blocking canned reply', async () => {

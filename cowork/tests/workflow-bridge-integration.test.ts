@@ -60,6 +60,7 @@ function setupBridgeLikeFixture(): BridgeFixture {
   const orchestrator = new Orchestrator({ maxAgents: 4, logLevel: 'warn' });
   const toolAgent = new CoworkToolAgent({
     registry,
+    confirmToolInvocation: async () => ({ confirmed: true }),
     onApprovalRequired: () => {
       // Tests that need approvals install their own handler before running.
     },
@@ -384,6 +385,37 @@ describe('workflow-bridge integration (real Orchestrator)', () => {
       );
       expect(bodyCalls).toHaveLength(3);
       expect(fixture.registryCalls[3].input.command).toBe('done');
+    },
+    10000
+  );
+
+  it(
+    'V0.5 — enforces the visual maxIterations in the production core',
+    async () => {
+      const fixture = setupBridgeLikeFixture();
+      const visual: WorkflowVisualDefinition = {
+        id: 'wf_loop_limit',
+        name: 'loop-limit',
+        nodes: [
+          node('start', 'start'),
+          node('lp', 'loop', { condition: 'true', maxIterations: 2 }),
+          node('body', 'tool', { toolName: 'bash_run', toolInput: { command: 'iter' } }),
+          node('after', 'tool', { toolName: 'bash_run', toolInput: { command: 'done' } }),
+          node('end', 'end'),
+        ],
+        edges: [
+          edge('start', 'lp'),
+          edge('lp', 'body', 'body'),
+          edge('lp', 'after', 'exit'),
+          edge('body', 'end'),
+          edge('after', 'end'),
+        ],
+      };
+
+      const { instance } = await fixture.run(visual, 'wf_loop_limit');
+      expect(instance.status).toBe('completed');
+      expect(fixture.registryCalls.filter((call) => call.input.command === 'iter')).toHaveLength(2);
+      expect(fixture.registryCalls.at(-1)?.input.command).toBe('done');
     },
     10000
   );

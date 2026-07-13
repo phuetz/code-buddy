@@ -52,6 +52,11 @@ export interface ApprovalPattern {
   tags?: string[];
   /** Source of this pattern (user, system, plugin) */
   source: PatternSource;
+  /**
+   * Optional project boundary for an approval learned from a prompt.
+   * Missing means global, preserving legacy and explicitly managed patterns.
+   */
+  cwd?: string;
 }
 
 /**

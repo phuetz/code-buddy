@@ -13,6 +13,12 @@ import { decomposeGoal, shouldAutoDecomposeGoal } from './goal-decomposer.js';
 import { judgeGoal } from './goal-judge.js';
 import { GoalManager, getGoalManager, resolveGoalsConfig } from './goal-manager.js';
 import type { GoalStatus, GoalVerdict } from './goal-state.js';
+import { buildIntentGraph, intentCriterionIds } from './intent-graph.js';
+import {
+  ProofLedger,
+  type CriterionProofResult,
+  type ProofRecorder,
+} from './proof-ledger.js';
 
 export interface GoalTurnOutcome {
   /** User-visible status line (✓ / ⏸ / ↻) to append to chat history. */
@@ -25,6 +31,7 @@ export interface GoalTurnOutcome {
    * without re-reading goal storage. Absent fields when no goal is active.
    */
   goalText?: string;
+  goalId?: string;
   status?: GoalStatus;
   turnsUsed?: number;
   maxTurns?: number;
@@ -42,7 +49,12 @@ export interface GoalTurnOutcome {
 export type GoalVerifyFn = (ctx: {
   goal: string;
   evidence: string;
-}) => Promise<{ verdict: 'CONFIRMED' | 'NEEDS REVIEW' | 'unverified' }>;
+  criteria?: Array<{ id: string; title: string }>;
+}) => Promise<{
+  verdict: 'CONFIRMED' | 'NEEDS REVIEW' | 'unverified';
+  evidence?: string;
+  criterionResults?: CriterionProofResult[];
+}>;
 
 export interface GoalAfterTurnOptions {
   client: CodeBuddyClient | null;
@@ -58,6 +70,8 @@ export interface GoalAfterTurnOptions {
    * verdict flips the turn back to "continue". No-op for classic `/goal` goals.
    */
   verify?: GoalVerifyFn;
+  /** Test/embed seam. False disables the Code Buddy 2.0 Proof Ledger. */
+  proofRecorder?: ProofRecorder | false;
 }
 
 // The executor appends a per-turn usage footer ("[tokens: … | cost: …]") as a
@@ -92,11 +106,24 @@ export async function maybeContinueGoalAfterTurn(
 
   const config = resolveGoalsConfig();
   await maybeAttachGoalPlan(manager, options.client, config.plannerModel);
+  const proofRecorder = options.proofRecorder === false
+    ? null
+    : options.proofRecorder
+      ?? (manager.state?.verifyGated && process.env.NODE_ENV !== 'test'
+        ? new ProofLedger(manager.state.goalId)
+        : null);
   // Dev-loop gate (/loop): only when the goal is verifyGated AND a Verifier
   // bridge is supplied. Runs the independent Verifier only if the judge would
   // otherwise say "done", and downgrades a non-CONFIRMED "done" to "continue"
   // — a claimed-but-unproven goal never passes. Mirrors dev-loop.ts's gate.
   const verifyGate = manager.state?.verifyGated && options.verify;
+  const intentGraph = manager.state ? buildIntentGraph(manager.state) : null;
+  const criteria = intentGraph?.nodes
+    .filter((node) => node.kind === 'criterion')
+    .map((node) => ({ id: node.id, title: node.title })) ?? [];
+  const verificationCapture: {
+    result?: Awaited<ReturnType<GoalVerifyFn>>;
+  } = {};
   const decision = await manager.evaluateAfterTurn(lastResponse, {
     judge: async params => {
       const base = await judgeGoal(options.client, {
@@ -108,7 +135,12 @@ export async function maybeContinueGoalAfterTurn(
       if (verifyGate && base.verdict === 'done') {
         let verdict: 'CONFIRMED' | 'NEEDS REVIEW' | 'unverified' = 'unverified';
         try {
-          ({ verdict } = await options.verify!({ goal: manager.state!.goal, evidence: lastResponse }));
+          verificationCapture.result = await options.verify!({
+            goal: manager.state!.goal,
+            evidence: lastResponse,
+            criteria,
+          });
+          verdict = verificationCapture.result.verdict;
         } catch (error) {
           logger.debug('goal verify gate failed (fail-open, treated as unverified)', { error: String(error) });
         }
@@ -125,6 +157,52 @@ export async function maybeContinueGoalAfterTurn(
   });
 
   if (decision.verdict === 'inactive') return null;
+
+  const verifierResult = verificationCapture.result;
+  if (verifierResult) {
+    proofRecorder?.append({
+      turn: manager.state?.turnsUsed ?? 0,
+      kind: 'verification',
+      status:
+        verifierResult.verdict === 'CONFIRMED'
+          ? 'pass'
+          : verifierResult.verdict === 'NEEDS REVIEW'
+            ? 'fail'
+            : 'unknown',
+      assurance: 'independent',
+      summary: `Interactive Verifier returned ${verifierResult.verdict}.`,
+      evidence: verifierResult.evidence ?? lastResponse,
+      criterionIds: criteria.map((criterion) => criterion.id),
+      criterionResults: verifierResult.criterionResults?.length
+        ? verifierResult.criterionResults
+        : criteria.map((criterion) => ({
+            criterionId: criterion.id,
+            status: verifierResult.verdict === 'CONFIRMED' ? 'passed' : 'unknown',
+            evidence: verifierResult.verdict === 'CONFIRMED'
+              ? 'Overall independent verifier confirmed every criterion.'
+              : 'Verifier did not provide a granular criterion verdict.',
+          })),
+      sessionKey: manager.sessionKey,
+      source: 'interactive-loop',
+    });
+  }
+
+  if (manager.state?.verifyGated) {
+    const criterionIds = decision.verdict === 'done'
+      ? intentCriterionIds(buildIntentGraph(manager.state))
+      : [];
+    proofRecorder?.append({
+      turn: manager.state.turnsUsed,
+      kind: 'decision',
+      status: decision.verdict === 'done' ? 'pass' : 'fail',
+      assurance: verifierResult ? 'independent' : 'judge',
+      summary: decision.reason,
+      evidence: lastResponse,
+      criterionIds,
+      sessionKey: manager.sessionKey,
+      source: 'interactive-loop',
+    });
+  }
 
   const outcome: GoalTurnOutcome = { ...goalSnapshot(manager) };
   if (decision.message) outcome.message = decision.message;
@@ -143,6 +221,7 @@ function goalSnapshot(manager: GoalManager): Partial<GoalTurnOutcome> {
   const s = manager.state;
   if (!s) return {};
   return {
+    goalId: s.goalId,
     goalText: s.goal,
     status: s.status,
     turnsUsed: s.turnsUsed,

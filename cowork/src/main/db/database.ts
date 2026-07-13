@@ -79,9 +79,11 @@ export interface SessionRow {
   allowed_tools: string; // JSON string
   memory_enabled: number;
   model: string | null;
+  intelligence?: string | null;
   project_id: string | null;
   is_background: number;
   execution_mode: string | null;
+  permission_mode?: string | null;
   pinned?: number;
   archived?: number;
   tags?: string | null;
@@ -96,6 +98,7 @@ export interface ProjectRow {
   description: string | null;
   workspace_path: string | null;
   memory_config: string | null; // JSON string
+  context_config: string | null; // JSON string
   created_at: number;
   updated_at: number;
 }
@@ -284,9 +287,11 @@ function initializeSchema(database: Database.Database): void {
 
     ensureColumn(database, 'sessions', 'openai_thread_id', 'openai_thread_id TEXT');
     ensureColumn(database, 'sessions', 'model', 'model TEXT');
+    ensureColumn(database, 'sessions', 'intelligence', 'intelligence TEXT');
     ensureColumn(database, 'sessions', 'project_id', 'project_id TEXT');
     ensureColumn(database, 'sessions', 'is_background', 'is_background INTEGER DEFAULT 0');
     ensureColumn(database, 'sessions', 'execution_mode', 'execution_mode TEXT');
+    ensureColumn(database, 'sessions', 'permission_mode', "permission_mode TEXT DEFAULT 'default'");
     ensureColumn(database, 'sessions', 'pinned', 'pinned INTEGER DEFAULT 0');
     ensureColumn(database, 'sessions', 'archived', 'archived INTEGER DEFAULT 0');
     ensureColumn(database, 'sessions', 'tags', 'tags TEXT');
@@ -419,10 +424,16 @@ function createProjectsTable(database: Database.Database): void {
     description TEXT,
     workspace_path TEXT,
     memory_config TEXT,
+    context_config TEXT,
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL
   )`;
   database.exec(createSql);
+  // Older Project Hub builds created the table before these JSON columns
+  // existed. Keep both additions idempotent so prepared statements remain
+  // compatible with every on-disk schema still supported by Cowork.
+  ensureColumn(database, 'projects', 'memory_config', 'memory_config TEXT');
+  ensureColumn(database, 'projects', 'context_config', 'context_config TEXT');
 
   const indexSql = `CREATE INDEX IF NOT EXISTS idx_sessions_project_id ON sessions(project_id)`;
   database.exec(indexSql);
@@ -587,8 +598,8 @@ export function initDatabase(): DatabaseInstance {
   // Prepare statements for better performance
   const insertSession = rawDb.prepare(`
     INSERT OR REPLACE INTO sessions
-    (id, title, claude_session_id, openai_thread_id, status, cwd, mounted_paths, allowed_tools, memory_enabled, model, project_id, is_background, execution_mode, pinned, archived, tags, source, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    (id, title, claude_session_id, openai_thread_id, status, cwd, mounted_paths, allowed_tools, memory_enabled, model, intelligence, project_id, is_background, execution_mode, permission_mode, pinned, archived, tags, source, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
   // Note: Dynamic update queries are built in sessions.update() for flexibility
@@ -702,8 +713,8 @@ export function initDatabase(): DatabaseInstance {
   // Project prepared statements
   const insertProject = rawDb.prepare(`
     INSERT OR REPLACE INTO projects
-    (id, name, description, workspace_path, memory_config, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
+    (id, name, description, workspace_path, memory_config, context_config, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
   const getProjectStmt = rawDb.prepare(`SELECT * FROM projects WHERE id = ?`);
@@ -726,9 +737,11 @@ export function initDatabase(): DatabaseInstance {
           session.allowed_tools,
           session.memory_enabled,
           session.model,
+          session.intelligence ?? null,
           session.project_id ?? null,
           session.is_background ?? 0,
           session.execution_mode ?? null,
+          session.permission_mode ?? 'default',
           session.pinned ?? 0,
           session.archived ?? 0,
           session.tags ?? null,
@@ -948,6 +961,7 @@ export function initDatabase(): DatabaseInstance {
           project.description,
           project.workspace_path,
           project.memory_config,
+          project.context_config,
           project.created_at,
           project.updated_at
         );

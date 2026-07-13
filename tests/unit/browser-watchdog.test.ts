@@ -31,6 +31,7 @@ vi.mock('../../src/utils/confirmation-service.js', () => {
 });
 
 describe('Browser Operator Watchdog', () => {
+  const executorOptions = { urlGuard: async () => ({ safe: true }) };
   beforeEach(() => {
     pageContentMock = '<html><body>normal page</body></html>';
     gotoPromiseFactory = () => Promise.resolve();
@@ -69,7 +70,7 @@ describe('Browser Operator Watchdog', () => {
       }
     };
 
-    const executor = new BrowserOperatorExecutor(session);
+    const executor = new BrowserOperatorExecutor(session, executorOptions);
     const result = await executor.execute();
 
     expect(result.success).toBe(true);
@@ -119,7 +120,7 @@ describe('Browser Operator Watchdog', () => {
       }
     };
 
-    const executor = new BrowserOperatorExecutor(session);
+    const executor = new BrowserOperatorExecutor(session, executorOptions);
 
     // We expect the execution loop to throw SecurityCheckpointDetected once the watchdog runs and sets the checkpointDetected flag.
     // Since the watchdog runs on a 3-second interval, we can speed up the test by manually triggering the interval if needed,
@@ -172,7 +173,7 @@ describe('Browser Operator Watchdog', () => {
 
     vi.useFakeTimers();
 
-    const executor = new BrowserOperatorExecutor(session);
+    const executor = new BrowserOperatorExecutor(session, executorOptions);
     const executePromise = executor.execute();
     const rejection = expect(executePromise).rejects.toThrow(SecurityCheckpointDetected);
     await vi.advanceTimersByTimeAsync(3500);

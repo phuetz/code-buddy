@@ -2,7 +2,12 @@
  * speech-text — pure spoken-digest + command-mode helpers (no React/DOM).
  */
 import { describe, it, expect } from 'vitest';
-import { cleanForSpeech, condenseForSpeech, isVoiceCommandMode } from '../src/renderer/utils/speech-text';
+import {
+  cleanForSpeech,
+  condenseForSpeech,
+  extractCompleteSpeechChunks,
+  isVoiceCommandMode,
+} from '../src/renderer/utils/speech-text';
 
 describe('voice command mode (Cowork defaults to piloting)', () => {
   it('defaults to ON when unset (no localStorage in node → piloting)', () => {
@@ -47,5 +52,28 @@ describe('condenseForSpeech', () => {
 
   it('passes through a short plain reply unchanged', () => {
     expect(condenseForSpeech('Fait, le fichier est créé.')).toBe('Fait, le fichier est créé.');
+  });
+});
+
+describe('extractCompleteSpeechChunks', () => {
+  it('emits complete sentences and leaves the unfinished suffix pending', () => {
+    const result = extractCompleteSpeechChunks('Bonjour. Je commence une réponse');
+    expect(result).toEqual({ chunks: ['Bonjour.'], nextOffset: 9 });
+  });
+
+  it('continues from the raw source offset without repeating earlier speech', () => {
+    const first = extractCompleteSpeechChunks('Bonjour. Deuxième phrase. Troisième');
+    const second = extractCompleteSpeechChunks(
+      'Bonjour. Deuxième phrase. Troisième terminée !',
+      first.nextOffset
+    );
+    expect(first.chunks).toEqual(['Bonjour.', 'Deuxième phrase.']);
+    expect(second.chunks).toEqual(['Troisième terminée !']);
+  });
+
+  it('cleans markdown before queueing a completed sentence', () => {
+    expect(extractCompleteSpeechChunks('**Terminé** avec `Pocket`.').chunks).toEqual([
+      'Terminé avec Pocket.',
+    ]);
   });
 });

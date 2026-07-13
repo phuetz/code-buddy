@@ -401,10 +401,24 @@ export class CollectiveKnowledgeGraph {
     pub: { id?: string; title: string; abstract?: string; source?: string; agentId?: string },
     opts: { relationClassifier?: RelationClassifier; autoLinkK?: number; autoLinkThreshold?: number } = {},
   ): Promise<CkgRecallResult | null> {
-    const text = pub.abstract ? `${pub.title}. ${pub.abstract}` : pub.title;
+    const text = (pub.abstract ? `${pub.title}. ${pub.abstract}` : pub.title).trim();
+    const name = (pub.id ?? pub.title).trim();
+
+    // Publication feeds are polled repeatedly. Reasserting the exact same paper
+    // is not independent corroboration: it only bloats the append-only ledger,
+    // recomputes embeddings/relations, and makes the autonomous research phase
+    // look productive forever. Keep generic `remember()` reinforcement intact,
+    // but make this polling-oriented entry point idempotent. A changed abstract
+    // under the same stable id still flows through `ingest()` and supersedes the
+    // previous version through the existing bi-temporal machinery.
+    const existing = this.getEntity(name);
+    if (existing.status === 'current' && existing.entity?.text === text) {
+      return null;
+    }
+
     return this.ingest({
       type: 'discovery',
-      name: pub.id ?? pub.title,
+      name,
       text,
       source: pub.source ?? 'publication',
       ...(pub.agentId ? { agentId: pub.agentId } : {}),

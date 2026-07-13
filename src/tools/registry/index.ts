@@ -214,6 +214,16 @@ export {
   createScriptTools,
 } from './script-tools.js';
 
+// Tool Adapter - bounded JavaScript orchestration / Responses Lite Code Mode
+export {
+  CodeExecTool,
+  createCodeExecTools,
+  attachCodeExecRuntime,
+  createCodeExecToolCallId,
+  CODE_EXEC_LIMITS,
+} from '../code-exec-tool.js';
+export type { CodeExecRuntime } from '../code-exec-tool.js';
+
 // Tool Adapters - Hermes execute_code
 export {
   ExecuteCodeTool,
@@ -304,6 +314,7 @@ export {
   AudioExecuteTool,
   TextToSpeechTool,
   ImageGenerateTool,
+  ImageEditTool,
   VideoAnalyzeTool,
   VideoGenerateTool,
   VideoExecuteTool,
@@ -379,6 +390,12 @@ export {
   createDocumentGeneratorTools,
   resetDocumentGeneratorInstances,
 } from './document-generator-tools.js';
+
+// Tool Adapters - Meeting Notes
+export { createMeetingTools } from './meeting-tools.js';
+
+// Tool Adapters - Registered local ComfyUI recipes
+export { createComfyRecipeTools } from './comfy-recipe-tools.js';
 
 // Tool Adapters - Merge Conflict (resolve_conflicts)
 export {
@@ -537,6 +554,8 @@ export async function createAllToolsAsync(): Promise<ITool[]> {
   const { createSearchTools } = await import('./search-tools.js');
   const { createWebTools } = await import('./web-tools.js');
   const { createResearchTools } = await import('./research-tools.js');
+  const { createMeetingTools } = await import('./meeting-tools.js');
+  const { createComfyRecipeTools } = await import('./comfy-recipe-tools.js');
   const { createTodoTools } = await import('./todo-tools.js');
   const { createKanbanTools } = await import('./kanban-tools.js');
   const { createSendMessageTools } = await import('./send-message-tools.js');
@@ -562,6 +581,7 @@ export async function createAllToolsAsync(): Promise<ITool[]> {
   const { createLeadScoutTools } = await import('./lead-scout-tools.js');
   const { createBrowserOperatorTools } = await import('./browser-operator-tools.js');
   const { createScriptTools } = await import('./script-tools.js');
+  const { createCodeExecTools } = await import('../code-exec-tool.js');
   const { createPlanTools } = await import('./plan-tools.js');
   const { createAttentionTools } = await import('./attention-tools.js');
   const { createSkillsInspectionTools } = await import('./skills-inspection-tools.js');
@@ -598,6 +618,8 @@ export async function createAllToolsAsync(): Promise<ITool[]> {
     ...createSearchTools(),
     ...createWebTools(),
     ...createResearchTools(),
+    ...createMeetingTools(),
+    ...createComfyRecipeTools(),
     ...createTodoTools(),
     ...createKanbanTools(),
     ...createSendMessageTools(),
@@ -625,6 +647,7 @@ export async function createAllToolsAsync(): Promise<ITool[]> {
     ...createMemoryTools(),
     ...createParallelTools(),
     ...createScriptTools(),
+    ...createCodeExecTools(),
     ...createPlanTools(),
     ...createAttentionTools(),
     ...createSkillsInspectionTools(),
@@ -685,6 +708,8 @@ export function registerBuiltinTools(registry: FormalToolRegistry): number {
     ...createSearchTools(),
     ...createWebTools(),
     ...createResearchTools(),
+    ...createMeetingTools(),
+    ...createComfyRecipeTools(),
     ...createTodoTools(),
     ...createKanbanTools(),
     ...createSendMessageTools(),
@@ -705,6 +730,7 @@ export function registerBuiltinTools(registry: FormalToolRegistry): number {
     ...createProcessTools(),
     ...createVisionTools(),
     ...createScriptTools(),
+    ...createCodeExecTools(),
     ...createPlanTools(),
     ...createKnowledgeTools(),
     ...createRelationshipIntelligenceTools(),
@@ -765,6 +791,8 @@ import { createRemindTools } from './remind-tools.js';
 import { createSearchTools } from './search-tools.js';
 import { createWebTools } from './web-tools.js';
 import { createResearchTools } from './research-tools.js';
+import { createMeetingTools } from './meeting-tools.js';
+import { createComfyRecipeTools } from './comfy-recipe-tools.js';
 import { createTodoTools } from './todo-tools.js';
 import { createKanbanTools } from './kanban-tools.js';
 import { createSendMessageTools } from './send-message-tools.js';
@@ -785,6 +813,7 @@ import { createBrowserTools } from './browser-tools.js';
 import { createProcessTools } from './process-tools.js';
 import { createVisionTools } from './vision-tools.js';
 import { createScriptTools } from './script-tools.js';
+import { createCodeExecTools } from '../code-exec-tool.js';
 import { createPlanTools } from './plan-tools.js';
 import { createKnowledgeTools } from './knowledge-tools.js';
 import { createRelationshipIntelligenceTools } from './relationship-intelligence-tools.js';

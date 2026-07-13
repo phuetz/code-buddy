@@ -23,6 +23,7 @@ import {
   type AssistantSettingGroup,
 } from '../companion/assistant-config.js';
 import { logger } from '../utils/logger.js';
+import type { TtsLatencyBenchmarkReport } from '../voice/tts-latency-benchmark.js';
 
 const GROUPS: AssistantSettingGroup[] = ['voice', 'speech', 'behavior', 'companion'];
 const GROUP_LABELS: Record<AssistantSettingGroup, string> = {
@@ -37,8 +38,12 @@ function findSetting(key: string): AssistantSetting | undefined {
 }
 
 function validateCliValue(setting: AssistantSetting, value: string): boolean {
-  if (setting.type !== 'enum') return true;
-  return setting.options?.includes(value) ?? false;
+  if (setting.type === 'enum') return setting.options?.includes(value) ?? false;
+  if (setting.type === 'volume') {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) && parsed >= 0 && parsed <= 100;
+  }
+  return true;
 }
 
 function printWriteResult(result: { vision: string[]; lisa: string[] }): void {
@@ -135,6 +140,154 @@ export function registerAssistantCommand(program: Command): void {
     });
 
   assistant
+    .command('voicebox')
+    .description('Probe the Voicebox endpoint and configured Lisa profile (read-only)')
+    .option('--json', 'Output the diagnostic as JSON')
+    .option('--benchmark [text]', 'Also compare Voicebox and Pocket latency (two runs each)')
+    .option('--runs <n>', 'Benchmark attempts per renderer (1–5)', '2')
+    .action(async (options: { json?: boolean; benchmark?: string | boolean; runs: string }) => {
+      const { probeVoicebox } = await import('../voice/voicebox-tts.js');
+      const config = readAssistantConfig();
+      // Persisted assistant values supply defaults; explicit launch-time env
+      // overrides remain authoritative for one-off diagnostics and CI probes.
+      const env = { ...config, ...process.env };
+      const report = await probeVoicebox(env);
+      let benchmark: TtsLatencyBenchmarkReport | undefined;
+      if (options.benchmark) {
+        const { DEFAULT_TTS_BENCHMARK_TEXT, runTtsLatencyBenchmark } = await import(
+          '../voice/tts-latency-benchmark.js'
+        );
+        const text = typeof options.benchmark === 'string'
+          ? options.benchmark
+          : DEFAULT_TTS_BENCHMARK_TEXT;
+        benchmark = await runTtsLatencyBenchmark(env, text, {
+          runs: Math.max(1, Math.min(5, Number(options.runs) || 2)),
+        });
+      }
+      if (options.json) {
+        console.log(JSON.stringify(benchmark ? { probe: report, benchmark } : report, null, 2));
+      } else {
+        console.log(`Voicebox: ${report.available ? 'prêt' : 'indisponible'}`);
+        console.log(`Endpoint: ${report.baseUrl}`);
+        console.log(`Moteur: ${report.engine}`);
+        console.log(
+          `Profil configuré: ${report.configuredProfile ?? '(aucun — choisissez-en un ci-dessous)'}`
+        );
+        if (report.resolvedProfile) {
+          console.log(`Profil résolu: ${report.resolvedProfile.name} (${report.resolvedProfile.id})`);
+        }
+        if (report.profiles.length > 0) {
+          console.log('Profils disponibles:');
+          for (const profile of report.profiles) console.log(`  ${profile.name} (${profile.id})`);
+        }
+        if (report.error) console.error(`Erreur: ${report.error}`);
+        if (report.hint) console.error(`Conseil: ${report.hint}`);
+        if (benchmark) {
+          console.log('\nLatence TTS (le premier essai inclut le chargement à froid):');
+          for (const result of benchmark.results) {
+            const timing = result.successes > 0
+              ? `moyenne ${result.averageMs} ms, meilleur ${result.bestMs} ms`
+              : 'aucun rendu réussi';
+            console.log(`  ${result.engine}: ${timing} (${result.successes}/${benchmark.runs})`);
+            for (const attempt of result.attempts) {
+              if (attempt.error) console.log(`    essai ${attempt.run}: ${attempt.error}`);
+            }
+          }
+        }
+      }
+      if (!report.available) process.exitCode = 1;
+    });
+
+  assistant
+    .command('latency')
+    .description('Measure cached-answer latency to first PCM without playing or publishing audio')
+    .option('--json', 'Output the full measurement as JSON')
+    .option('--query <text>', 'Prefetched question to exercise (default: today news)')
+    .option('--engine <name>', 'active, pocket, voicebox, or both', 'active')
+    .option('--runs <n>', 'Sequential attempts per renderer (1–5)', '2')
+    .option('--segment-chars <n>', 'Progressive TTS segment size (32–240)')
+    .action(async (options: {
+      json?: boolean;
+      query?: string;
+      engine: string;
+      runs: string;
+      segmentChars?: string;
+    }) => {
+      const {
+        DEFAULT_PERCEIVED_VOICE_QUERY,
+        runPerceivedVoiceLatencyBenchmark,
+      } = await import('../voice/perceived-latency-benchmark.js');
+      const { resolveTtsEngine } = await import('../voice/local-tts.js');
+      const config = readAssistantConfig();
+      const env = { ...config, ...process.env };
+      const requested = options.engine.trim().toLowerCase();
+      let engines: Array<'pocket' | 'voicebox'>;
+      if (requested === 'both') {
+        engines = ['voicebox', 'pocket'];
+      } else if (requested === 'pocket' || requested === 'voicebox') {
+        engines = [requested];
+      } else if (requested === 'active') {
+        const active = resolveTtsEngine(env);
+        if (active === 'piper') {
+          console.error(
+            'Le moteur actif Piper ne fournit pas de flux PCM progressif. ' +
+              'Utilise --engine pocket, --engine voicebox ou --engine both.'
+          );
+          process.exitCode = 1;
+          return;
+        }
+        engines = [active];
+      } else {
+        console.error(`Moteur invalide : ${options.engine}`);
+        process.exitCode = 1;
+        return;
+      }
+      const runs = Math.max(1, Math.min(5, Number(options.runs) || 2));
+      const report = await runPerceivedVoiceLatencyBenchmark(
+        env,
+        options.query ?? DEFAULT_PERCEIVED_VOICE_QUERY,
+        {
+          runs,
+          engines,
+          ...(options.segmentChars === undefined
+            ? {}
+            : { sentenceCap: Number(options.segmentChars) }),
+        }
+      );
+      if (options.json) {
+        console.log(JSON.stringify(report, null, 2));
+      } else {
+        const freshness = report.cacheFreshness
+          ? `${report.cacheFreshness}, ${Math.round((report.cacheAgeMs ?? 0) / 1_000)} s`
+          : 'indéterminée';
+        console.log(
+          `Réponse préchargée: ${report.cacheHit ? `oui (${report.answerChars} caractères, ${freshness})` : 'non'}`
+        );
+        console.log(`Découpage progressif: ${report.sentenceCap} caractères maximum`);
+        console.log('Latence perçue (aucun son réellement joué ni événement publié):');
+        for (const result of report.results) {
+          const summary = result.successes > 0
+            ? `premier son moyen ${result.averageFirstAudioMs} ms ` +
+              `(meilleur ${result.bestFirstAudioMs} ms), fin génération ${result.averageTotalMs} ms`
+            : 'aucun flux réussi';
+          console.log(`  ${result.engine}: ${summary} (${result.successes}/${report.runs})`);
+          for (const attempt of result.attempts) {
+            console.log(
+              `    essai ${attempt.run}: texte=${attempt.firstTextMs ?? '-'} ms, ` +
+                `segment=${attempt.firstSegmentMs ?? '-'} ms, octet=${attempt.firstByteMs ?? '-'} ms, ` +
+                `audio=${attempt.firstAudioMs ?? '-'} ms, total=${attempt.totalMs} ms, ` +
+                `${attempt.streamRequests} requête(s), ${attempt.audioBytes} octets` +
+                (attempt.error ? `, erreur=${attempt.error}` : '')
+            );
+          }
+        }
+      }
+      if (!report.cacheHit || report.results.some((result) => result.successes === 0)) {
+        process.exitCode = 1;
+      }
+    });
+
+  assistant
     .command('preview')
     .description('Synthesize and play a Pocket TTS voice preview')
     .argument('<name>', 'Pocket voice name or clone sample path')
@@ -177,6 +330,21 @@ export function registerAssistantCommand(program: Command): void {
           process.exitCode = 1;
         }
       }
+    });
+
+  assistant
+    .command('doctor')
+    .description('Check the local robot organs; safe/read-only unless --repair is explicit')
+    .option('--json', 'Output the bounded diagnostic as JSON')
+    .option('--repair', 'Restart only allowlisted unhealthy systemd user services')
+    .action(async (options: { json?: boolean; repair?: boolean }) => {
+      const { formatAssistantRuntimeDoctorReport, runAssistantRuntimeDoctor } = await import(
+        '../doctor/assistant-runtime.js'
+      );
+      const report = await runAssistantRuntimeDoctor({ repair: options.repair === true });
+      console.log(
+        options.json ? JSON.stringify(report, null, 2) : formatAssistantRuntimeDoctorReport(report),
+      );
     });
 
   assistant
@@ -226,6 +394,153 @@ export function registerAssistantCommand(program: Command): void {
         );
       }
     });
+
+  assistant
+    .command('quality')
+    .description('Evaluate recent user/Lisa exchanges without exposing their raw content')
+    .option('--apply', 'Apply one reversible guidance if the same weakness is recurring')
+    .option('--limit <n>', 'Maximum recent cross-channel turns to evaluate', '40')
+    .action(async (opts: { apply?: boolean; limit: string }) => {
+      const {
+        formatConversationImprovementResult,
+        runConversationImprovementCycle,
+      } = await import('../companion/conversation-improvement-loop.js');
+      const limit = Math.max(4, Math.min(200, Number(opts.limit) || 40));
+      const result = await runConversationImprovementCycle({
+        mode: opts.apply ? 'behavioral' : 'dry',
+        limit,
+      });
+      if (!result) {
+        console.log(
+          'Pas encore assez de conversation complète : il faut au moins deux échanges utilisateur/Lisa.'
+        );
+        return;
+      }
+      console.log(formatConversationImprovementResult(result));
+      if (!opts.apply) {
+        console.log('\n(diagnostic seul — relance avec --apply pour autoriser une adaptation réversible)');
+      }
+    });
+
+  assistant
+    .command('benchmark')
+    .description('Run the reproducible Lisa conversation suite (Darkstar/Ollama or current provider)')
+    .option('--model <name>', 'Model to evaluate')
+    .option('--base-url <url>', 'Ollama host, for example http://darkstar:11434')
+    .option('--runs <n>', 'Repeat every scenario N times', '1')
+    .option('--concurrency <n>', 'Concurrent generations (1-4)', '1')
+    .option('--timeout <ms>', 'Timeout for each generation', '120000')
+    .option('--scenarios <csv>', 'Only run scenario IDs containing one of these patterns')
+    .option('--verbose', 'Print generated previews (the suite contains synthetic data only)')
+    .option('--json', 'Print the complete machine-readable report')
+    .option('--no-write', 'Do not persist aggregate metrics in ~/.codebuddy/companion')
+    .action(
+      async (opts: {
+        model?: string;
+        baseUrl?: string;
+        runs: string;
+        concurrency: string;
+        timeout: string;
+        scenarios?: string;
+        verbose?: boolean;
+        json?: boolean;
+        write?: boolean;
+      }) => {
+        const {
+          createOllamaConversationGenerator,
+          defaultConversationBenchmarkPaths,
+          formatConversationBenchmarkReport,
+          LISA_CORE_BENCHMARK_SCENARIOS,
+          runConversationBenchmark,
+          writeConversationBenchmarkReport,
+        } = await import('../conversation/conversation-benchmark.js');
+        const [{ getActivePersonaVoiceAsync }, { SPEAK_SYSTEM_PROMPT }] = await Promise.all([
+          import('../personas/persona-manager.js'),
+          import('../sensory/voice-loop.js'),
+        ]);
+        const personaPrompt = (await getActivePersonaVoiceAsync()).spokenPrompt || SPEAK_SYSTEM_PROMPT;
+        const scenarioFilters = (opts.scenarios ?? '')
+          .split(',')
+          .map((value) => value.trim().toLowerCase())
+          .filter(Boolean);
+        const scenarios =
+          scenarioFilters.length === 0
+            ? LISA_CORE_BENCHMARK_SCENARIOS
+            : LISA_CORE_BENCHMARK_SCENARIOS.filter((scenario) =>
+                scenarioFilters.some((filter) => scenario.id.toLowerCase().includes(filter))
+              );
+        if (scenarios.length === 0) {
+          console.error(`Aucun scénario ne correspond à : ${opts.scenarios}`);
+          process.exitCode = 1;
+          return;
+        }
+        const ollamaHost = opts.baseUrl?.trim() || process.env.OLLAMA_HOST?.trim();
+        let model = opts.model?.trim();
+        let provider: string;
+        let generate: import('../conversation/conversation-benchmark.js').ConversationBenchmarkGenerator;
+
+        if (ollamaHost) {
+          model =
+            model ||
+            process.env.CODEBUDDY_SENSORY_SPEAK_MODEL?.trim() ||
+            process.env.GROK_MODEL?.trim() ||
+            'qwen3.6:35b-a3b-q4_K_M';
+          provider = 'ollama';
+          generate = createOllamaConversationGenerator({
+            host: ollamaHost,
+            model,
+            timeoutMs: Math.max(5_000, Number(opts.timeout) || 120_000),
+          });
+        } else {
+          const { resolveCommandProvider } = await import('./llm-provider-resolution.js');
+          const resolved = resolveCommandProvider({ ...(model ? { explicitModel: model } : {}) });
+          if (!resolved) {
+            console.error(
+              'Aucun modèle disponible. Fournis --base-url pour Darkstar, lance `buddy login`, ou configure un fournisseur.'
+            );
+            process.exitCode = 1;
+            return;
+          }
+          const { CodeBuddyClient } = await import('../codebuddy/client.js');
+          model = model || resolved.model || 'modèle courant';
+          provider = resolved.providerLabel;
+          const client = new CodeBuddyClient(resolved.apiKey, resolved.model, resolved.baseURL);
+          generate = async (input) => {
+            const response = await client.chat(input.messages as never, [], {
+              temperature: 0.25,
+              maxTokens: input.maxTokens,
+              disableProviderFallback: true,
+            });
+            const content = response.choices[0]?.message.content;
+            if (!content?.trim()) throw new Error('Le modèle a renvoyé une réponse vide');
+            return content.trim();
+          };
+        }
+
+        const report = await runConversationBenchmark({
+          generate,
+          personaPrompt,
+          runs: Math.max(1, Math.min(10, Number(opts.runs) || 1)),
+          concurrency: Math.max(1, Math.min(4, Number(opts.concurrency) || 1)),
+          scenarios,
+          model,
+          provider,
+        });
+        if (opts.write !== false) writeConversationBenchmarkReport(report);
+        console.log(
+          opts.json ? JSON.stringify(report, null, 2) : formatConversationBenchmarkReport(report)
+        );
+        if (opts.verbose && !opts.json) {
+          for (const result of report.results) {
+            console.log(`\n[${result.scenarioId}] ${result.responsePreview ?? result.error ?? '(vide)'}`);
+          }
+        }
+        if (opts.write !== false && !opts.json) {
+          console.log(`Mesures agrégées : ${defaultConversationBenchmarkPaths().latest}`);
+        }
+        if (!report.summary.regressionGatePasses) process.exitCode = 2;
+      }
+    );
 }
 
 export default registerAssistantCommand;

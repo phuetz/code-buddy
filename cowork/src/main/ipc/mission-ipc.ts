@@ -7,6 +7,7 @@ import type {
   MissionStatus,
   SubTask,
 } from '../missions/mission-types';
+import type { VoiceBackgroundMissionInput } from '../../shared/voice-background-mission';
 
 type MissionBridgeSource = MissionBridge | null | (() => MissionBridge | null);
 
@@ -52,6 +53,35 @@ export function registerMissionIpcHandlers(source: MissionBridgeSource) {
     if (!bridge) return unavailable({ mission: null }) as MissionItemResult;
     return { ok: true, mission: await bridge.createMission(input) };
   });
+
+  ipcMain.handle(
+    'mission.createVoice',
+    async (_event, input?: VoiceBackgroundMissionInput): Promise<MissionItemResult> => {
+      const prompt = input?.prompt?.trim();
+      if (!prompt) return { ok: false, error: 'prompt is required', mission: null };
+      if (prompt.length > 50_000) {
+        return {
+          ok: false,
+          error: 'prompt exceeds the 50000 character limit',
+          mission: null,
+        };
+      }
+      const bridge = resolveBridge(source);
+      if (!bridge) return unavailable({ mission: null }) as MissionItemResult;
+      try {
+        return {
+          ok: true,
+          mission: await bridge.createVoiceMission({ ...input, prompt }),
+        };
+      } catch (error) {
+        return {
+          ok: false,
+          error: error instanceof Error ? error.message : String(error),
+          mission: null,
+        };
+      }
+    },
+  );
 
   ipcMain.handle(
     'mission.updateStatus',

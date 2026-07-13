@@ -114,17 +114,22 @@ export class IdentityBridge extends EventEmitter {
     activatedAt: 0,
   };
   private readonly activeFilePath: string;
+  private readonly initializationPromise: Promise<void>;
+  private loaded = false;
+  private listPromise: Promise<PersonaEntry[]> | null = null;
+  private readonly detailCache = new Map<string, { mtime: number; content: string }>();
 
   constructor() {
     super();
     const userData = app.isReady() ? app.getPath('userData') : path.join(os.homedir(), '.codebuddy-cowork');
     this.activeFilePath = path.join(userData, 'active-persona.json');
-    void this.loadActivePersona();
+    this.initializationPromise = this.loadActivePersona();
   }
 
   setWorkspace(dir: string | null): void {
     if (dir === this.workspaceDir) return;
     this.workspaceDir = dir;
+    this.loaded = false;
     this.rewatch();
     void this.list();
   }
@@ -228,6 +233,25 @@ export class IdentityBridge extends EventEmitter {
   }
 
   async list(): Promise<PersonaEntry[]> {
+    if (this.listPromise) return this.listPromise;
+    const pending = this.scanEntries();
+    this.listPromise = pending;
+    try {
+      return await pending;
+    } finally {
+      if (this.listPromise === pending) this.listPromise = null;
+    }
+  }
+
+  /** Ensure the watcher-backed cache has been populated without rescanning on every turn. */
+  async ensureLoaded(): Promise<PersonaEntry[]> {
+    await this.initializationPromise;
+    if (this.loaded) return this.cachedEntries;
+    return this.list();
+  }
+
+  private async scanEntries(): Promise<PersonaEntry[]> {
+    await this.initializationPromise;
     const results: PersonaEntry[] = [];
     if (this.workspaceDir) {
       const wsCodebuddy = path.join(this.workspaceDir, '.codebuddy');
@@ -246,6 +270,11 @@ export class IdentityBridge extends EventEmitter {
       deduped.push(e);
     }
     this.cachedEntries = deduped;
+    this.loaded = true;
+    const liveIds = new Set(deduped.map((entry) => entry.id));
+    for (const id of this.detailCache.keys()) {
+      if (!liveIds.has(id)) this.detailCache.delete(id);
+    }
     this.emit('personas:updated', deduped);
     return deduped;
   }
@@ -253,8 +282,13 @@ export class IdentityBridge extends EventEmitter {
   async getDetail(id: string): Promise<PersonaDetail | null> {
     const entry = this.cachedEntries.find((e) => e.id === id);
     if (!entry) return null;
+    const cached = this.detailCache.get(id);
+    if (cached?.mtime === entry.mtime) {
+      return { ...entry, content: cached.content };
+    }
     try {
       const content = await fs.readFile(entry.filePath, 'utf-8');
+      this.detailCache.set(id, { mtime: entry.mtime, content });
       return { ...entry, content };
     } catch (err) {
       logWarn('[IdentityBridge] getDetail failed:', err);

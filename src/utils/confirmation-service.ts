@@ -1,6 +1,7 @@
 import { spawn } from 'child_process';
 import { EventEmitter } from 'events';
 import path from 'path';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import type { RemoteApprovalService } from '../security/remote-approval.js';
 import { checkDeclarativePermission } from '../security/declarative-rules.js';
 import { auditLogger } from '../security/audit-logger.js';
@@ -12,12 +13,31 @@ import { logger } from './logger.js';
 export interface ConfirmationOptions {
   operation: string;
   filename: string;
+  /** Canonical tool identity for generic (non-file/non-shell) action gates. */
+  toolName?: string;
+  /** Original JSON arguments used by declarative rules for a generic tool. */
+  toolArgs?: Record<string, unknown>;
   showVSCodeOpen?: boolean;
   content?: string; // Content to show in confirmation dialog
   /** Unified diff preview of changes (shown to user before approval) */
   diffPreview?: string;
   /** Number of lines changed (triggers enhanced confirmation if > threshold) */
   linesChanged?: number;
+  /**
+   * Require a fresh human decision even when the current permission mode,
+   * environment or session flags would normally auto-approve. Deterministic
+   * policy denials still win. Use for one-shot, externally visible effects.
+   */
+  forcePrompt?: boolean;
+  /** Risk supplied by the action-policy evaluator (avoids untyped side channels). */
+  riskLevel?: 'low' | 'medium' | 'high' | 'critical';
+  /**
+   * Exact session grant key (typically canonical argv + cwd + sandbox profile).
+   * When present, "don't ask again" never widens to every Bash/file operation.
+   */
+  approvalKey?: string;
+  /** Structured policy detail retained for compatibility with PolicyEngine. */
+  detail?: Record<string, unknown>;
 }
 
 export interface ConfirmationResult {
@@ -25,6 +45,8 @@ export interface ConfirmationResult {
   dontAskAgain?: boolean;
   feedback?: string;
 }
+
+export type ConfirmationOperationType = 'file' | 'bash' | 'tool';
 
 /**
  * Execute a command safely using spawn with separate arguments
@@ -75,6 +97,8 @@ export class ConfirmationService extends EventEmitter {
     bashCommands: false,
     allOperations: false,
   };
+  private scopedSessionApprovals = new Set<string>();
+  private readonly approvalContext = new AsyncLocalStorage<string>();
 
   // Dry-run mode - preview changes without applying
   private dryRunMode: boolean = false;
@@ -113,6 +137,15 @@ export class ConfirmationService extends EventEmitter {
     bridge: ((options: ConfirmationOptions) => Promise<ConfirmationResult>) | null
   ): void {
     this.interactiveBridge = bridge;
+  }
+
+  /** Isolate exact grants between concurrent desktop/voice/CLI sessions. */
+  withApprovalContextAsync<T>(contextId: string, fn: () => Promise<T>): Promise<T> {
+    return this.approvalContext.run(contextId, fn);
+  }
+
+  private scopedApprovalKey(key: string): string {
+    return `${this.approvalContext.getStore() ?? 'global'}:${key}`;
   }
 
   /**
@@ -227,7 +260,7 @@ export class ConfirmationService extends EventEmitter {
 
   async requestConfirmation(
     options: ConfirmationOptions,
-    operationType: 'file' | 'bash' = 'file'
+    operationType: ConfirmationOperationType = 'file'
   ): Promise<ConfirmationResult> {
     // In dry-run mode, log the operation but don't execute
     if (this.dryRunMode) {
@@ -256,9 +289,13 @@ export class ConfirmationService extends EventEmitter {
     // Policy Engine Check
     const capability: Capability = process.env.CODEBUDDY_SELF_IMPROVEMENT === 'true' || options.operation === 'self_improvement'
       ? 'self_improvement'
-      : (operationType === 'bash' ? 'shell:safe' : 'fs:write:scoped');
+      : operationType === 'bash'
+        ? 'shell:safe'
+        : operationType === 'tool'
+          ? 'net:listed'
+          : 'fs:write:scoped';
     let risk: 'low' | 'medium' | 'high' = 'medium';
-    const rawRisk = ((options as any).riskLevel || (options as any).risk || process.env.CODEBUDDY_RISK_LEVEL || '').toLowerCase();
+    const rawRisk = (options.riskLevel || process.env.CODEBUDDY_RISK_LEVEL || '').toLowerCase();
     if (rawRisk === 'low') {
       risk = 'low';
     } else if (rawRisk === 'high' || rawRisk === 'critical') {
@@ -268,7 +305,7 @@ export class ConfirmationService extends EventEmitter {
     const detail: Record<string, unknown> = {
       path: options.filename,
       command: operationType === 'bash' ? options.filename : undefined,
-      ...(options as any).detail
+      ...options.detail,
     };
 
     const policyResult = PolicyEngine.getInstance().evaluate({
@@ -285,6 +322,7 @@ export class ConfirmationService extends EventEmitter {
     }
 
     const isSelfImprovement = capability === 'self_improvement';
+    const forcePrompt = options.forcePrompt === true;
 
     // SECURITY (CC18 hardening): an explicit permission-mode denial — e.g. `plan`
     // mode blocking writes, or a declarative deny rule surfaced through the mode —
@@ -293,8 +331,13 @@ export class ConfirmationService extends EventEmitter {
     // that `shell:safe` always evaluates to `allow`) would silently bypass a
     // restrictive mode. We only short-circuit to BLOCKED here; the permissive path
     // (mode allows) falls through unchanged, so normal UX is preserved.
-    const modeToolName = operationType === 'bash' ? 'bash' : 'edit';
-    const earlyModeDecision = getPermissionModeManager().checkPermission(options.operation, modeToolName);
+    const modeToolName = operationType === 'bash'
+      ? 'bash'
+      : operationType === 'tool'
+        ? options.toolName ?? options.operation
+        : 'edit';
+    const permissionAction = operationType === 'bash' ? options.filename : options.operation;
+    const earlyModeDecision = getPermissionModeManager().checkPermission(permissionAction, modeToolName);
     if (!isSelfImprovement && !earlyModeDecision.allowed) {
       return this.auditGate('permission-mode', true, options, {
         confirmed: false,
@@ -302,37 +345,23 @@ export class ConfirmationService extends EventEmitter {
       });
     }
 
-    if (!isSelfImprovement && process.env.CODEBUDDY_AUTO_CONFIRM === 'true') {
-      return this.auditGate('auto-confirm-env', false, options, { confirmed: true });
-    }
-
-    if (!isSelfImprovement && policyResult.decision === 'allow') {
-      return this.auditGate('policy-engine', false, options, { confirmed: true });
-    }
-
-    // CC18: Check permission mode before other checks
-    const toolName = operationType === 'bash' ? 'Bash' : 'Edit';
-    const permMgr = getPermissionModeManager();
-    const modeDecision = permMgr.checkPermission(options.operation, toolName.toLowerCase());
-    if (!modeDecision.allowed) {
-      return this.auditGate('permission-mode', true, options, {
-        confirmed: false,
-        feedback: modeDecision.reason,
-      });
-    }
-    if (!isSelfImprovement && !modeDecision.prompted) {
-      // Mode says auto-approve (e.g., acceptEdits for edits, dontAsk for non-destructive)
-      return this.auditGate('permission-mode', false, options, { confirmed: true });
-    }
-
-    // Check declarative permission rules (fast O(n) check before Guardian)
+    const toolName = operationType === 'bash'
+      ? 'Bash'
+      : operationType === 'tool'
+        ? options.toolName ?? options.operation
+        : 'Edit';
+    // Denials are evaluated before every convenience allow. Previously the
+    // PolicyEngine's broad `shell:safe` allow returned before project deny
+    // rules were even consulted.
     const toolArgs = operationType === 'bash'
       ? { command: options.filename }
-      : { file_path: options.filename };
-    const declarativeDecision = checkDeclarativePermission(toolName, toolArgs);
-    if (!isSelfImprovement && declarativeDecision === 'allow') {
-      return this.auditGate('declarative-rule', false, options, { confirmed: true });
-    }
+      : operationType === 'tool'
+        ? options.toolArgs ?? {}
+        : { file_path: options.filename };
+    const declarativeRoot = typeof options.detail?.cwd === 'string'
+      ? options.detail.cwd
+      : process.cwd();
+    const declarativeDecision = checkDeclarativePermission(toolName, toolArgs, declarativeRoot);
     if (declarativeDecision === 'deny') {
       return this.auditGate('declarative-rule', true, options, {
         confirmed: false,
@@ -340,10 +369,46 @@ export class ConfirmationService extends EventEmitter {
       });
     }
 
+    if (!isSelfImprovement && !forcePrompt && process.env.CODEBUDDY_AUTO_CONFIRM === 'true') {
+      return this.auditGate('auto-confirm-env', false, options, { confirmed: true });
+    }
+
+    if (!isSelfImprovement && !forcePrompt && policyResult.decision === 'allow') {
+      return this.auditGate('policy-engine', false, options, { confirmed: true });
+    }
+
+    // CC18: Check permission mode before other negotiable checks.
+    const permMgr = getPermissionModeManager();
+    const modeDecision = permMgr.checkPermission(permissionAction, toolName.toLowerCase());
+    if (!modeDecision.allowed) {
+      return this.auditGate('permission-mode', true, options, {
+        confirmed: false,
+        feedback: modeDecision.reason,
+      });
+    }
+    if (!isSelfImprovement && !forcePrompt && !modeDecision.prompted) {
+      // Mode says auto-approve (e.g., acceptEdits for edits, dontAsk for non-destructive)
+      return this.auditGate('permission-mode', false, options, { confirmed: true });
+    }
+
+    if (!isSelfImprovement && !forcePrompt && declarativeDecision === 'allow') {
+      return this.auditGate('declarative-rule', false, options, { confirmed: true });
+    }
+
     // Check session flags — but require re-confirmation for large changes
     const isLargeChange = (options.linesChanged ?? 0) > this.largeChangeThreshold;
     if (
       !isSelfImprovement &&
+      !forcePrompt &&
+      options.approvalKey &&
+      this.scopedSessionApprovals.has(this.scopedApprovalKey(options.approvalKey))
+    ) {
+      return this.auditGate('scoped-session-grant', false, options, { confirmed: true });
+    }
+    if (
+      !isSelfImprovement &&
+      !forcePrompt &&
+      !options.approvalKey &&
       !isLargeChange && (
         this.sessionFlags.allOperations ||
         (operationType === 'file' && this.sessionFlags.fileOperations) ||
@@ -381,8 +446,10 @@ export class ConfirmationService extends EventEmitter {
     // the interactive surface, so it takes precedence over the TTY check.
     if (this.interactiveBridge) {
       const bridged = await this.interactiveBridge(options);
-      if (bridged.dontAskAgain && bridged.confirmed) {
-        if (operationType === 'file') {
+      if (!forcePrompt && bridged.dontAskAgain && bridged.confirmed) {
+        if (options.approvalKey) {
+          this.scopedSessionApprovals.add(this.scopedApprovalKey(options.approvalKey));
+        } else if (operationType === 'file') {
           this.sessionFlags.fileOperations = true;
         } else if (operationType === 'bash') {
           this.sessionFlags.bashCommands = true;
@@ -429,9 +496,12 @@ export class ConfirmationService extends EventEmitter {
 
     const result = await this.pendingConfirmation;
 
-    if (result.dontAskAgain) {
-      // Set the appropriate session flag based on operation type
-      if (operationType === 'file') {
+    if (!forcePrompt && result.dontAskAgain) {
+      if (options.approvalKey) {
+        this.scopedSessionApprovals.add(this.scopedApprovalKey(options.approvalKey));
+      // Set the legacy broad flag only for callers that did not provide an
+      // exact scope. New execution paths must always provide approvalKey.
+      } else if (operationType === 'file') {
         this.sessionFlags.fileOperations = true;
       } else if (operationType === 'bash') {
         this.sessionFlags.bashCommands = true;
@@ -496,6 +566,7 @@ export class ConfirmationService extends EventEmitter {
       bashCommands: false,
       allOperations: false,
     };
+    this.scopedSessionApprovals.clear();
   }
 
   getSessionFlags() {
@@ -512,6 +583,7 @@ export class ConfirmationService extends EventEmitter {
   dispose(): void {
     this.pendingConfirmation = null;
     this.resolveConfirmation = null;
+    this.scopedSessionApprovals.clear();
     this.removeAllListeners();
   }
 }

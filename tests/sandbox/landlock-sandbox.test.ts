@@ -192,8 +192,8 @@ describe('Landlock + Seccomp Sandbox', () => {
       });
 
       mockSpawn.mockImplementation((cmd: string, args: string[]) => {
-        if (cmd === 'which' && args[0] === 'bwrap') {
-          return createMockProcess(0, '/usr/bin/bwrap\n');
+        if (cmd === 'bwrap' && args.includes('--unshare-user')) {
+          return createMockProcess(0);
         }
         return createMockProcess(1);
       });
@@ -210,8 +210,8 @@ describe('Landlock + Seccomp Sandbox', () => {
       mockRelease.mockReturnValue('4.19.0-generic');
 
       mockSpawn.mockImplementation((cmd: string, args: string[]) => {
-        if (cmd === 'which' && args[0] === 'bwrap') {
-          return createMockProcess(0, '/usr/bin/bwrap\n');
+        if (cmd === 'bwrap' && args.includes('--unshare-user')) {
+          return createMockProcess(0);
         }
         return createMockProcess(1);
       });

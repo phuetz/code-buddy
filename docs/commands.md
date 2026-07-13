@@ -74,6 +74,30 @@
 | `/companion safety recent\|stats` | Inspect Buddy's local safety ledger for senses, missions, tools, and data actions |
 | `/companion camera status\|snapshot` | Check/capture the local webcam bridge for Buddy vision |
 | `/companion percepts recent\|stats` | Inspect Buddy's local sensory journal |
+| `/companion continuity init\|status\|refresh\|verify` | Manage the integrity-protected companion lineage across model, machine, and future body migrations |
+| `/companion migration export\|verify\|restore` | Create and restore an AES-256-GCM encrypted companion migration bundle; restoration is a dry run unless `--apply` is supplied |
+
+### Maison
+
+```bash
+buddy maison status [--json]
+buddy maison mode <normal|free-day|focus|rest|cooking|guests|away|silent> [--for 2h]
+buddy maison silence [--for 8h] | resume | holidays [year]
+buddy maison timer start <45s|10m|2h> <label>
+buddy maison timer list | cancel <id> | acknowledge <id>
+
+buddy maison food status [--reveal] [--json]
+buddy maison food allergens
+buddy maison food add <kind> <ingredient|allergen|tag> <value> [--confirm]
+buddy maison food verify <recipe.json>
+buddy maison food suggest <recipes.json> [--inventory override.json]
+buddy maison food plan list|next|add|status|remove
+buddy maison food inventory list|add|remove
+```
+
+`food suggest` utilise par défaut l'inventaire Maison actif et ignore les faits non confirmés pour le
+classement. `--inventory` fournit un remplacement explicite. Les cibles privées du profil alimentaire ne
+sont jamais imprimées par `status` sans `--reveal`.
 
 ### Autonomy
 
@@ -129,7 +153,28 @@ buddy cron update <id> [--name <name>] [--every <ms>|--cron <expr>|--at <iso>] \
   [--deliver <type:id>...] [--format full|summary] [--clear-delivery] [--json]
 buddy skills list [--all] [--json] | doctor [--json] [--repair-missing --approved-by <reviewer>]
 buddy skills usage [--json] | learning-usage [--json] | enable <name> | disable <name>
+buddy mcp list | test <name> | audit [name] [--all] [--json]
+buddy mcp enable <name> | disable <name>
+buddy mcp profile create <name> <server...> [-d description]
+buddy mcp profile list [--json] | use <name> | delete <name>
+buddy campaign status | overview [--json]
+buddy campaign library templates|styles|pillars|viral [--search text]
+buddy campaign transcribe <youtube-url> [-o transcript.json]
+buddy campaign draft --content-file post.md --platforms linkedin,instagram
+buddy campaign submit <post-id> | analytics [--post id]
 ```
+
+`buddy mcp audit` connects only for the duration of the probe and reports the
+full provider-facing tool catalog in exact characters/bytes plus an estimated
+token count. The heaviest tools are listed individually. Use `enable` and
+`disable` to change the highest-priority configuration source without deleting
+the server or expanding normal runtime context.
+
+MCP profiles are project-local, data-driven sets stored in
+`.codebuddy/mcp-profiles.json`. Activating a profile enables exactly its listed
+servers and disables the others, which keeps unrelated tool schemas out of the
+mission context. Profiles reference server names; they never duplicate commands,
+URLs, headers, or secrets.
 
 Installed skills can also be inspected by agents through the read-only
 `skills_list` and `skill_view` tools, backed by the same SkillsHub lockfile as
@@ -166,9 +211,16 @@ The REST endpoint mirrors that shape with
 ### Research and Orchestration
 
 ```bash
-buddy research "<topic>" [--workers N] [--rounds N] [--output file.md]
+buddy research "<topic>" [--workers N] [--rounds N] [--report file.md]
+  [--wide] [--checkpoint state.json | --resume state.json] [--json]
+buddy meeting notes <transcript|audio|video> [--output prefix] [--force] [--json] [--language fr] [--ai|--no-ai]
 buddy flow "<goal>" [--max-retries N] [--verbose]
 buddy goal "<goal>" [--max-turns N] [--judge-model <model>] [-m <model>]   # headless Ralph loop: full agent + judge until done (exit 0) or paused (exit 1)
+buddy loop "<goal>" [--max-turns N] [--budget USD] [--verify-cmd <shell>]  # plan → execute → independent proof gate → judge
+buddy intent [graph|proofs|progress|integrity|outcomes|constitution|exchange|shadows] [--json] [--limit N] # durable intent, proof chain and sovereign execution views
+buddy forge create|evaluate|compare|select ...                              # proof-gated Counterfactual Forge branches
+buddy exchange constitution|bid|rank|rehearse|award|reject ...              # policy-gated multi-LLM/Fleet market and Shadow Twin
+buddy capsule list|create|activate|revoke ...                               # proof-backed portable workflows from proven outcomes
 buddy llm
 buddy llm ensemble "<question>"
 buddy council "<task>" [-n 3] [--models gpt,ollama] [--judge <model>] [--task-type code|reasoning|french|vision|general] [--fleet] [--no-conductor] [--no-synthesis] [--no-consensus]
@@ -418,6 +470,13 @@ buddy backup create | verify | list | restore [--only-config] [--no-include-work
 buddy onboard          # Interactive setup wizard
 buddy doctor [--fix]   # Environment diagnostics (--fix for auto-migration)
 buddy speak [text] [--voice <name>] [--list-voices] [--speed <n>]
+buddy assistant show
+buddy assistant set <key> <value>
+buddy assistant voice <pocket-name-or-sample>
+buddy assistant voices
+buddy assistant voicebox [--json] [--benchmark [text]] [--runs <1-5>]
+buddy assistant latency [--json] [--query <text>] [--engine active|pocket|voicebox|both] [--runs <1-5>] [--segment-chars <32-240>]
+buddy assistant apply
 buddy companion setup [--force] [--no-voice] [--no-set-model]
 buddy companion status
 buddy companion live [--no-record]
@@ -457,7 +516,7 @@ as isolated demos. It scores the required live-session checks (identity, ChatGPT
 brain, camera, sensory server flags, voice-assistant behavior
 (`ear.py` live microphone → `speech_end` → faster-whisper STT → response gate →
 think/agent → speak, with voice actions kept in
-`CODEBUDDY_SENSORY_SPEAK_PERMISSION_MODE=plan` by default), token-gated camera
+`CODEBUDDY_SENSORY_SPEAK_PERMISSION_MODE=default` in an async-scoped guarded turn; explicit `buddy voice --mode plan` sessions stay read-only), token-gated camera
 auth (`CODEBUDDY_SENSORY_TOKEN` must match `BUDDY_SENSE_TOKEN`), webcam/USB
 microphone autodetection (`BUDDY_EAR_DEVICE=auto` via `arecord -l`), and the
 Python `buddy-vision/watch.py` sidecar with `websocket-client` plus its

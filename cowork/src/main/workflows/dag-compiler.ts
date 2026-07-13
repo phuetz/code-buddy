@@ -57,6 +57,7 @@ export interface CoreWorkflowStep {
   falseBranch?: CoreWorkflowStep[];
   loopCondition?: string;
   loopBody?: CoreWorkflowStep[];
+  maxIterations?: number;
 }
 
 export interface CoreWorkflowDefinition {
@@ -213,6 +214,14 @@ function ensureLoopConfig(node: WorkflowVisualNode): LoopNodeConfig {
   if (!cfg || typeof cfg.condition !== 'string' || cfg.condition.length === 0) {
     throw new CompilationError(
       `Node '${node.id}' (loop): missing config.condition`
+    );
+  }
+  if (
+    cfg.maxIterations !== undefined
+    && (!Number.isSafeInteger(cfg.maxIterations) || cfg.maxIterations < 1 || cfg.maxIterations > 100)
+  ) {
+    throw new CompilationError(
+      `Node '${node.id}' (loop): config.maxIterations must be an integer between 1 and 100`
     );
   }
   return {
@@ -566,10 +575,9 @@ function compileSingle(
         type: 'loop',
         loopCondition: compileExpressions(cfg.condition),
         loopBody,
+        ...(cfg.maxIterations ? { maxIterations: cfg.maxIterations } : {}),
       };
-      // maxIterations is not natively part of the core WorkflowStep type
-      // but the core engine has a hard cap of 100; we keep the user's
-      // value in the step `name` for traceability if they configured one.
+      // Keep the limit visible in traces as well as executable by the core.
       if (cfg.maxIterations) {
         stepBase.name = `${stepBase.name} (max ${cfg.maxIterations})`;
       }

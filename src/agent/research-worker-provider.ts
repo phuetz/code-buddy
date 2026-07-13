@@ -23,6 +23,8 @@ export interface ResearchWorkerStreamChunk {
 
 export interface ResearchWorker {
   processUserMessageStream(query: string): AsyncIterable<ResearchWorkerStreamChunk>;
+  /** Cooperative cancellation used by bounded Wide Research worker slots. */
+  abortCurrentOperation?(): void;
 }
 
 export type ResearchWorkerFactory = (params: {

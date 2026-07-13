@@ -37,16 +37,29 @@ import {
   type FleetDispatchToolDecision,
   type FleetDispatchToolPolicy,
 } from './dispatch-profile.js';
-import type { PeerChatProviderInfo } from './peer-chat-client-factory.js';
+import {
+  normalizePeerChatProviderId,
+  type PeerChatProviderId,
+  type PeerChatProviderInfo,
+} from './peer-chat-client-factory.js';
 
 // Re-imported for the streaming variant — kept narrow to avoid a wider import surface.
 type ContentChunk = { choices?: Array<{ delta?: { content?: string }; finish_reason?: string | null }>; usage?: unknown };
 
 /** Closure that returns the CodeBuddyClient to use for peer.chat, or null if none is wired. */
 export type PeerChatClientGetter = () => CodeBuddyClient | null;
+export type PeerChatClientResolver = (
+  provider: PeerChatProviderId,
+  model?: string,
+) => { client: CodeBuddyClient; info: PeerChatProviderInfo } | null;
 
 let cachedGetter: PeerChatClientGetter | null = null;
 let cachedProviderInfo: PeerChatProviderInfo | null = null;
+let cachedResolver: PeerChatClientResolver | null = null;
+const providerClients = new Map<PeerChatProviderId, {
+  client: CodeBuddyClient;
+  info: PeerChatProviderInfo;
+}>();
 let wired = false;
 
 const DEFAULT_SYSTEM_PROMPT = 'Answer this side question briefly. Do not use tools.';
@@ -95,6 +108,68 @@ function resolvePeerChatSystemPrompt(
   return DEFAULT_SYSTEM_PROMPT;
 }
 
+interface ResolvedPeerChatClient {
+  client: CodeBuddyClient;
+  providerRequested?: PeerChatProviderId;
+  providerResolved?: PeerChatProviderId;
+}
+
+/**
+ * Resolve an explicit backend without ever falling through to another one.
+ * Calls that omit `provider` retain the historical default-client behaviour.
+ */
+function resolveClientForRequest(
+  providerValue: unknown,
+  model: string | undefined,
+  method: 'peer.chat' | 'peer.chat-stream' | 'peer.dispatch',
+): ResolvedPeerChatClient {
+  // `unknown` is the provider sentinel emitted by legacy capability
+  // descriptors. Treat it like an omitted provider so older peers retain
+  // the historical default-client behavior.
+  if (providerValue === undefined || providerValue === 'unknown') {
+    const client = cachedGetter?.() ?? null;
+    if (!client) {
+      throw new Error(
+        `CLIENT_UNAVAILABLE: no LLM client wired on this peer (${method} cannot answer)`,
+      );
+    }
+    return {
+      client,
+      ...(cachedProviderInfo?.provider
+        ? { providerResolved: cachedProviderInfo.provider }
+        : {}),
+    };
+  }
+
+  const provider = normalizePeerChatProviderId(providerValue);
+  if (!provider) {
+    throw new Error(`${method}: unknown provider "${String(providerValue)}"`);
+  }
+
+  if (cachedProviderInfo?.provider === provider) {
+    const client = cachedGetter?.() ?? null;
+    if (client) {
+      return { client, providerRequested: provider, providerResolved: provider };
+    }
+  }
+
+  let resolved = providerClients.get(provider);
+  if (!resolved && cachedResolver) {
+    resolved = cachedResolver(provider, model) ?? undefined;
+    if (resolved) providerClients.set(provider, resolved);
+  }
+  if (!resolved || resolved.info.provider !== provider) {
+    throw new Error(
+      `PROVIDER_UNAVAILABLE: ${provider} is not configured on this peer (${method})`,
+    );
+  }
+  return {
+    client: resolved.client,
+    providerRequested: provider,
+    providerResolved: resolved.info.provider,
+  };
+}
+
 /**
  * Register the `peer.chat` method on the peer-rpc registry. The
  * `getClient` closure is captured and called on EACH invocation, so
@@ -107,6 +182,7 @@ function resolvePeerChatSystemPrompt(
 export function wirePeerChatBridge(
   getClient: PeerChatClientGetter,
   providerInfo?: PeerChatProviderInfo | null,
+  resolveClient?: PeerChatClientResolver,
 ): void {
   if (wired) {
     logger.debug('[peer-chat-bridge] wire() called while already wired — no-op');
@@ -114,6 +190,7 @@ export function wirePeerChatBridge(
   }
   cachedGetter = getClient;
   cachedProviderInfo = providerInfo ?? null;
+  cachedResolver = resolveClient ?? null;
   registerPeerMethod('peer.chat', async (params, ctx) => {
     const prompt = typeof params.prompt === 'string' ? params.prompt : '';
     const profile = resolvePeerChatProfile(params);
@@ -121,17 +198,14 @@ export function wirePeerChatBridge(
     const model = typeof params.model === 'string' && params.model.length > 0
       ? params.model
       : undefined;
+    const provider = params.provider;
 
     if (!prompt) {
       // dispatchPeerRequest wraps thrown errors as METHOD_ERROR.
       throw new Error('peer.chat: prompt is required (string)');
     }
-    const client = cachedGetter?.() ?? null;
-    if (!client) {
-      throw new Error(
-        'CLIENT_UNAVAILABLE: no LLM client wired on this peer (peer.chat cannot answer)',
-      );
-    }
+    const selected = resolveClientForRequest(provider, model, 'peer.chat');
+    const client = selected.client;
 
     const chatOptions: ChatOptions | undefined = model ? { model } : undefined;
     const doneLoad = beginFleetWork('peer.chat');
@@ -155,6 +229,8 @@ export function wirePeerChatBridge(
       // directly (provider-specific). Echo what the caller asked for
       // so they can attribute the response correctly.
       modelRequested: model,
+      providerRequested: selected.providerRequested,
+      providerResolved: selected.providerResolved,
       finishReason: response?.choices?.[0]?.finish_reason,
       usage: response?.usage,
       // Echo traceId so consumers can correlate a peer.chat answer
@@ -176,16 +252,13 @@ export function wirePeerChatBridge(
     const model = typeof params.model === 'string' && params.model.length > 0
       ? params.model
       : undefined;
+    const provider = params.provider;
 
     if (!prompt) {
       throw new Error('peer.chat-stream: prompt is required (string)');
     }
-    const client = cachedGetter?.() ?? null;
-    if (!client) {
-      throw new Error(
-        'CLIENT_UNAVAILABLE: no LLM client wired on this peer (peer.chat-stream cannot answer)',
-      );
-    }
+    const selected = resolveClientForRequest(provider, model, 'peer.chat-stream');
+    const client = selected.client;
 
     const chatOptions: ChatOptions | undefined = model ? { model } : undefined;
     const doneLoad = beginFleetWork('peer.chat');
@@ -222,6 +295,8 @@ export function wirePeerChatBridge(
     return {
       text: aggregate,
       modelRequested: model,
+      providerRequested: selected.providerRequested,
+      providerResolved: selected.providerResolved,
       finishReason: finishReason ?? undefined,
       usage,
       traceId: ctx.traceId,
@@ -243,6 +318,8 @@ export function unwirePeerChatBridge(): void {
   unregisterPeerMethod('peer.chat-stream');
   cachedGetter = null;
   cachedProviderInfo = null;
+  cachedResolver = null;
+  providerClients.clear();
   wired = false;
   logger.debug('[peer-chat-bridge] unwired');
 }
@@ -271,6 +348,8 @@ export function _unwireForTests(): void {
   }
   cachedGetter = null;
   cachedProviderInfo = null;
+  cachedResolver = null;
+  providerClients.clear();
   wired = false;
   dispatchedTasks.clear();
 }
@@ -289,6 +368,8 @@ interface DispatchState {
   runId: string;
   prompt: string;
   model?: string;
+  provider?: PeerChatProviderId;
+  providerResolved?: PeerChatProviderId;
   dispatchProfile: FleetDispatchProfile;
   toolPolicy: FleetDispatchToolPolicy;
   toolDecisions: FleetDispatchToolDecision[];
@@ -314,6 +395,7 @@ export function dispatchPeerTask(input: {
   runId: string;
   prompt: string;
   model?: string;
+  provider?: PeerChatProviderId;
   dispatchProfile?: FleetDispatchProfile;
   traceId?: string;
   parentRunId?: string;
@@ -327,6 +409,7 @@ export function dispatchPeerTask(input: {
     runId: input.runId,
     prompt: input.prompt,
     model: input.model,
+    provider: input.provider,
     dispatchProfile,
     toolPolicy: getDispatchToolPolicy(dispatchProfile),
     toolDecisions: toolset.decisions,
@@ -352,13 +435,17 @@ export function dispatchPeerTask(input: {
 
 async function runDispatchedTask(state: DispatchState): Promise<void> {
   state.status = 'running';
-  const client = cachedGetter?.() ?? null;
-  if (!client) {
+  let selected: ReturnType<typeof resolveClientForRequest>;
+  try {
+    selected = resolveClientForRequest(state.provider, state.model, 'peer.dispatch');
+  } catch (error) {
     state.status = 'failed';
-    state.error = 'CLIENT_UNAVAILABLE: no LLM client wired on this peer';
+    state.error = error instanceof Error ? error.message : String(error);
     state.completedAt = Date.now();
     return;
   }
+  const client = selected.client;
+  state.providerResolved = selected.providerResolved;
   const chatOptions: ChatOptions | undefined = state.model
     ? { model: state.model }
     : undefined;

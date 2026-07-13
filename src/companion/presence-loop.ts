@@ -29,6 +29,16 @@ import {
 import { dueFollowUp, markFired } from './event-followups.js';
 import { getCompanionConductor } from './orchestrator.js';
 import { resolveUserName } from './user-name.js';
+import { readRecentDialogueHearing } from './dialogue-percepts.js';
+import {
+  resolveCurrentHomeInteractionPolicy,
+  type HomeInteractionDecision,
+} from './home-interaction-policy.js';
+import {
+  reserveDailyInteraction,
+  type DailyInteractionReservation,
+} from './daily-interaction-budget.js';
+import { resolveHouseholdClock } from './household-time.js';
 
 export interface PresenceCtx {
   now: Date;
@@ -86,6 +96,10 @@ export interface PresenceDeps {
   eventFollowUpsPath?: string;
   /** The shared conductor (arbitrates who speaks). Default: the singleton. Injectable for tests. */
   conductor?: { claim: (surface: 'presence') => boolean };
+  /** Household posture/calendar gate. Wired by `wirePresenceLoop`; injectable for tests. */
+  homePolicy?: (now: Date) => Promise<HomeInteractionDecision>;
+  /** Shared cross-surface daily invitation budget. Wired by `wirePresenceLoop`. */
+  claimDailyBudget?: (limit: number, now: Date) => Promise<DailyInteractionReservation>;
 }
 
 // ── helpers ───────────────────────────────────────────────────────────
@@ -243,26 +257,29 @@ async function defaultSay(text: string): Promise<void> {
   await sayNow(text);
 }
 
+/**
+ * Presence files can be fresh while explicitly saying that nobody matched
+ * (`left`, `unknown`, or an empty camera frame). Only a confirmed match is a
+ * licence for an unsolicited spoken moment.
+ */
+export function hasConfirmedPresence(
+  context: { hasMatch?: unknown } | null | undefined
+): boolean {
+  return context?.hasMatch === true;
+}
+
 async function defaultPersonPresent(): Promise<boolean> {
   try {
     const { readPresenceContext } = await import('../memory/presence-injector.js');
     const p = await readPresenceContext();
-    return Boolean(p); // a fresh presence record → someone's here
+    return hasConfirmedPresence(p);
   } catch {
     return false;
   }
 }
 
 async function defaultRecentHearing(): Promise<string[]> {
-  try {
-    const { readRecentCompanionPercepts } = await import('./percepts.js');
-    const recent = await readRecentCompanionPercepts({ modality: 'hearing', limit: 6 });
-    return recent
-      .map((p) => String((p.payload as { text?: string })?.text ?? p.summary ?? ''))
-      .filter(Boolean);
-  } catch {
-    return [];
-  }
+  return readRecentDialogueHearing(6);
 }
 
 /**
@@ -273,12 +290,14 @@ export async function runPresenceTick(deps: PresenceDeps = {}): Promise<string |
   try {
     if (process.env.CODEBUDDY_COMPANION_PRESENCE !== 'true') return null;
     const now = (deps.now ?? (() => new Date()))();
-    const hour = now.getHours();
+    const hour = resolveHouseholdClock(now).hour;
 
     // — Rails (cheap-first) —
     if (isQuietHour(hour)) return null; // never while you sleep
     const present = await (deps.isPersonPresent ?? defaultPersonPresent)();
     if (!present) return null; // never to an empty room
+    const homeDecision = deps.homePolicy ? await deps.homePolicy(now) : null;
+    if (homeDecision && !homeDecision.allowed) return null;
 
     // — Shared-history bookkeeping — read the gap BEFORE recording this sighting, so the reunion
     // moment (which can only fire on RETURN — the tick early-returns while absent) sees the real
@@ -323,16 +342,30 @@ export async function runPresenceTick(deps: PresenceDeps = {}): Promise<string |
       if (nowMs - last < moment.cooldownMs) continue;
       const line = moment.generate(ctx);
       if (!line) continue;
-      // Yield to the conductor: if another companion surface just spoke, stay silent this tick (the
-      // moment is NOT marked fired, so it retries next tick).
+      let reservation: DailyInteractionReservation | null = null;
+      if (homeDecision && deps.claimDailyBudget) {
+        reservation = await deps.claimDailyBudget(homeDecision.spontaneousDailyLimit, now);
+        if (!reservation.granted) {
+          logger.info('[presence] shared household invitation budget exhausted');
+          return null;
+        }
+      }
+      // Yield to the conductor only after a budget slot is reserved. A denied
+      // floor releases that slot, so neither shared guard is consumed falsely.
       const conductor = deps.conductor ?? getCompanionConductor();
       if (!conductor.claim('presence')) {
+        await reservation?.release();
         logger.info('[presence] yielded to the conductor (another voice has the floor)');
         return null;
       }
+      try {
+        await (deps.say ?? defaultSay)(line);
+      } catch (error) {
+        await reservation?.release();
+        throw error;
+      }
       lastFiredByMoment.set(moment.id, nowMs);
       firedTimestamps.push(nowMs);
-      await (deps.say ?? defaultSay)(line);
       if (moment.engage) deps.onEngage?.();
       // Record a celebrated tenure milestone (all marks up to today) so it never repeats.
       if (moment.id === 'milestone') {
@@ -362,8 +395,14 @@ export async function runPresenceTick(deps: PresenceDeps = {}): Promise<string |
 export function wirePresenceLoop(deps: PresenceDeps = {}): () => void {
   const tickMs =
     deps.tickMs ?? (Number(process.env.CODEBUDDY_COMPANION_PRESENCE_TICK_MS) || 300_000); // 5 min
+  const householdAwareDeps: PresenceDeps = {
+    ...deps,
+    homePolicy: deps.homePolicy ?? ((now) => resolveCurrentHomeInteractionPolicy('presence', { now })),
+    claimDailyBudget: deps.claimDailyBudget ?? ((limit, now) =>
+      reserveDailyInteraction({ limit, now, surface: 'presence' })),
+  };
   const timer = setInterval(() => {
-    void runPresenceTick(deps);
+    void runPresenceTick(householdAwareDeps);
   }, tickMs);
   if (typeof timer.unref === 'function') timer.unref();
   logger.info(

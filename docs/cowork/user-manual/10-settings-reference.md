@@ -42,7 +42,10 @@ débutants sont marqués « ★ Start here ».
 ## Security & Workspace
 - **Sandbox** — isolation d'exécution WSL / Lima / native et installation des runtimes. ★
 - **Permission rules** — règles allow/deny pour les outils et les chemins, avec testeur dry-run.
-- **Projects** — profils d'espace de travail avec mémoire par projet.
+- **Projects** — Hubs d'espace de travail : instruction maître, fichiers de référence bornés et
+  mémoire partagée entre les sessions du projet. Les décisions réutilisables peuvent devenir des
+  [propositions d'évolution locales et approuvées](../../project-evolution.md), avec aperçu
+  avant/après, détection d'obsolescence et rollback.
 - **Config profiles** — profils de configuration isolés.
 
 ## Server & Diagnostics

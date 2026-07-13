@@ -10,6 +10,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import { randomUUID } from 'node:crypto';
 import { logger } from '../utils/logger.js';
 
 // ============================================================================
@@ -64,32 +65,39 @@ const DANGEROUS_COMMANDS = new Set([
 const RULES_DIR = '.codebuddy/rules';
 const RULES_FILE = 'allow-rules.json';
 
-/** In-memory rules cache */
-let _rules: PolicyRule[] | null = null;
+/** In-memory rules cache, isolated by the resolved rules file path. */
+const rulesCache = new Map<string, PolicyRule[]>();
 
 function getRulesPath(cwd: string = process.cwd()): string {
-  return path.join(cwd, RULES_DIR, RULES_FILE);
+  return path.join(path.resolve(cwd), RULES_DIR, RULES_FILE);
 }
 
 /**
  * Load rules from disk.
  */
 export function loadRules(cwd: string = process.cwd()): PolicyRule[] {
-  if (_rules) return _rules;
-
   const filePath = getRulesPath(cwd);
+  const cached = rulesCache.get(filePath);
+  if (cached) return cached;
+
   try {
     if (fs.existsSync(filePath)) {
       const content = fs.readFileSync(filePath, 'utf-8');
-      _rules = JSON.parse(content) as PolicyRule[];
-      return _rules;
+      const parsed = JSON.parse(content) as unknown;
+      if (!Array.isArray(parsed)) {
+        throw new Error('Policy rules file must contain a JSON array');
+      }
+      const rules = parsed as PolicyRule[];
+      rulesCache.set(filePath, rules);
+      return rules;
     }
   } catch (err) {
     logger.debug(`Failed to load policy rules: ${err instanceof Error ? err.message : String(err)}`);
   }
 
-  _rules = [];
-  return _rules;
+  const rules: PolicyRule[] = [];
+  rulesCache.set(filePath, rules);
+  return rules;
 }
 
 /**
@@ -98,15 +106,27 @@ export function loadRules(cwd: string = process.cwd()): PolicyRule[] {
 function saveRules(rules: PolicyRule[], cwd: string = process.cwd()): void {
   const filePath = getRulesPath(cwd);
   const dir = path.dirname(filePath);
+  const tempPath = `${filePath}.tmp-${process.pid}-${randomUUID()}`;
 
   try {
     if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
+      fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
     }
-    fs.writeFileSync(filePath, JSON.stringify(rules, null, 2));
-    _rules = rules;
+    fs.writeFileSync(tempPath, `${JSON.stringify(rules, null, 2)}\n`, {
+      encoding: 'utf-8',
+      flag: 'wx',
+      mode: 0o600,
+    });
+    fs.renameSync(tempPath, filePath);
+    rulesCache.set(filePath, rules);
   } catch (err) {
     logger.debug(`Failed to save policy rules: ${err instanceof Error ? err.message : String(err)}`);
+  } finally {
+    try {
+      fs.rmSync(tempPath, { force: true });
+    } catch {
+      // Best effort: a failed cleanup must not hide the original save error.
+    }
   }
 }
 
@@ -170,8 +190,7 @@ export function acceptAmendment(rule: PolicyRule, cwd?: string): void {
   const rules = loadRules(cwd);
   // Deduplicate
   if (!rules.some(r => r.pattern === rule.pattern && r.tool === rule.tool)) {
-    rules.push(rule);
-    saveRules(rules, cwd);
+    saveRules([...rules, rule], cwd);
     logger.info(`Policy rule added: allow "${rule.pattern}"`);
   }
 }
@@ -181,20 +200,17 @@ export function acceptAmendment(rule: PolicyRule, cwd?: string): void {
  */
 export function removeRule(pattern: string, cwd?: string): boolean {
   const rules = loadRules(cwd);
-  const idx = rules.findIndex(r => r.pattern === pattern);
-  if (idx >= 0) {
-    rules.splice(idx, 1);
-    saveRules(rules, cwd);
-    return true;
-  }
-  return false;
+  if (!rules.some(r => r.pattern === pattern)) return false;
+
+  saveRules(rules.filter(r => r.pattern !== pattern), cwd);
+  return true;
 }
 
 /**
  * Reset the rules cache (for testing).
  */
 export function resetRulesCache(): void {
-  _rules = null;
+  rulesCache.clear();
 }
 
 // ============================================================================

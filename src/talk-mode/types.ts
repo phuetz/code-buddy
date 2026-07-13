@@ -18,7 +18,8 @@ export type TTSProvider =
   | 'elevenlabs'
   | 'edge'
   | 'audioreader'
-  | 'pocket';
+  | 'pocket'
+  | 'voicebox';
 
 export interface TTSProviderConfig {
   /** Provider identifier */
@@ -180,6 +181,18 @@ export interface PocketTTSConfig {
   /** Local YAML path for custom weights (maps to `--config`). */
   configPath?: string;
   /** Max ms to wait for a single synthesis (first ever run downloads the model). */
+  timeoutMs?: number;
+}
+
+/** Voicebox REST renderer (local or reachable through a trusted private network). */
+export interface VoiceboxTTSConfig {
+  baseURL?: string;
+  profile?: string;
+  engine?: 'qwen' | 'qwen_custom_voice' | 'luxtts' | 'chatterbox' | 'chatterbox_turbo' | 'tada' | 'kokoro';
+  language?: string;
+  modelSize?: '0.6B' | '1.7B' | '1B' | '3B';
+  /** Acoustic delivery only. The provider always disables personality rewriting. */
+  instruct?: string;
   timeoutMs?: number;
 }
 

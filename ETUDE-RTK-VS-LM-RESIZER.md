@@ -1,5 +1,10 @@
 # Étude — Remplacer `rtk` par `lm-resizer` ?
 
+> **Mise à jour du 12 juillet 2026 :** les écarts décrits ci-dessous ont été
+> comblés. Le chemin retenu n'est pas un wrapper pré-exécution mais un
+> post-traitement inerte, récupérable et centralisé. Voir
+> [`docs/audits/lm-resizer-integration-2026-07-12.md`](docs/audits/lm-resizer-integration-2026-07-12.md).
+
 _2026-07-02 · analyse à base de preuves (mesures réelles + lecture de code des deux outils). Doc de décision, non committé par défaut._
 
 ## Verdict en une ligne

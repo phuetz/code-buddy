@@ -150,7 +150,12 @@ export function resolveTickProvider(
 ): ResolvedTickProvider {
   // 1. Per-task override
   if (task.preferLocal) {
-    const r = resolveProviderFromEnv('ollama');
+    // Fleet's "prefer" contract falls through when no local endpoint was
+    // configured. The generic provider factory also supports explicit Ollama
+    // at its conventional default URL, which is too strong for this probe.
+    const r = process.env.OLLAMA_HOST?.trim()
+      ? resolveProviderFromEnv('ollama')
+      : null;
     if (r) {
       return { ...r, reason: 'preferLocal' };
     }
@@ -164,7 +169,9 @@ export function resolveTickProvider(
     return buildGrokEnvProvider('config:cloud');
   }
   // 3. auto or explicit
-  const r = resolveProviderFromEnv(cfg);
+  const r = cfg === 'ollama' && !process.env.OLLAMA_HOST?.trim()
+    ? null
+    : resolveProviderFromEnv(cfg);
   if (r) {
     return { ...r, reason: cfg === 'auto' ? 'config:auto' : 'config:explicit' };
   }

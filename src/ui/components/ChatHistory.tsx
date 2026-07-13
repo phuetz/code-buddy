@@ -11,6 +11,10 @@ import { Divider } from "./EnhancedSpinners.js";
 import { ReasoningBlock } from "./ReasoningBlock.js";
 import { ToolStreamOutput } from "./ToolStreamOutput.js";
 import { logger } from "../../utils/logger.js";
+import {
+  extractContextOptimizationMetadata,
+  presentContextOptimization,
+} from "../../shared/context-optimization-metadata.js";
 
 interface ChatHistoryProps {
   entries: ChatEntry[];
@@ -251,6 +255,9 @@ const MemoizedChatEntry = React.memo(
 
         const filePath = getFilePath(entry.toolCall);
         const isExecuting = entry.type === "tool_call" || !entry.toolResult;
+        const contextOptimization = presentContextOptimization(
+          extractContextOptimizationMetadata(entry.toolResult?.metadata),
+        );
         
         // Format JSON content for better readability
         const formatToolContent = (content: string, toolName: string): { text: string; isStructured: boolean } => {
@@ -347,6 +354,14 @@ const MemoizedChatEntry = React.memo(
                 return <Text color={colors.toolResult}>⎿ {formatted.text}</Text>;
               })()}
             </Box>
+            {contextOptimization && !isExecuting && (
+              <Box marginLeft={2} flexDirection="column">
+                <Text color={colors.info}>⎿ {contextOptimization.badge}</Text>
+                <Text color={colors.textMuted}>
+                  {"  "}rawRef {contextOptimization.rawRef} · restore on demand: {contextOptimization.restoreCommand}
+                </Text>
+              </Box>
+            )}
             {shouldShowDiff && !isExecuting && (
               <Box marginLeft={4} flexDirection="column">
                 {renderDiff(entry.content, filePath)}

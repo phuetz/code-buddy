@@ -217,6 +217,64 @@ describe('AllowlistStore', () => {
       const pattern = newStore.getAllPatterns().find(p => p.pattern === 'reload-test');
       expect(pattern).toBeDefined();
     });
+
+    it('should atomically replace config without leaving temporary files', () => {
+      store.addPattern('atomic-first', 'exact', 'allow');
+      store.addPattern('atomic-second', 'exact', 'allow');
+
+      const configPath = path.join(tempDir, 'exec-approvals.json');
+      const parsed = JSON.parse(fs.readFileSync(configPath, 'utf-8')) as {
+        patterns: Array<{ pattern: string }>;
+      };
+
+      expect(parsed.patterns.some(pattern => pattern.pattern === 'atomic-second')).toBe(true);
+      expect(fs.readdirSync(tempDir).filter(name => name.includes('.tmp-'))).toEqual([]);
+      if (process.platform !== 'win32') {
+        expect(fs.statSync(configPath).mode & 0o777).toBe(0o600);
+      }
+    });
+
+    it('persists prompt-created approvals with a canonical cwd boundary', async () => {
+      const projectA = path.join(tempDir, 'project-a');
+      const projectB = path.join(tempDir, 'project-b');
+      fs.mkdirSync(projectA);
+      fs.mkdirSync(projectB);
+
+      const pattern = store.recordApproval('custom-build --fast', 'allow', {
+        pattern: 'custom-build*',
+        patternType: 'glob',
+        cwd: path.join(projectA, '.'),
+      });
+
+      expect(pattern?.cwd).toBe(path.resolve(projectA));
+      expect(store.checkCommand('custom-build --fast', projectA).decision).toBe('allow');
+      expect(store.checkCommand('custom-build --fast', projectB).decision).toBe('prompt');
+
+      const reloaded = new AllowlistStore(tempDir);
+      await reloaded.initialize();
+      expect(reloaded.checkCommand('custom-build --fast', projectA).decision).toBe('allow');
+      expect(reloaded.checkCommand('custom-build --fast', projectB).decision).toBe('prompt');
+    });
+
+    it('keeps explicitly added legacy patterns global for API compatibility', () => {
+      const projectA = path.join(tempDir, 'global-a');
+      const projectB = path.join(tempDir, 'global-b');
+      store.addPattern('explicit-global', 'exact', 'allow');
+
+      expect(store.checkCommand('explicit-global', projectA).decision).toBe('allow');
+      expect(store.checkCommand('explicit-global', projectB).decision).toBe('allow');
+    });
+
+    it('does not share pattern state between independent store instances', async () => {
+      const otherDir = path.join(tempDir, 'other-config');
+      const otherStore = new AllowlistStore(otherDir);
+      await otherStore.initialize();
+
+      store.addPattern('only-first-store', 'exact', 'allow');
+
+      expect(store.getAllPatterns().some(pattern => pattern.pattern === 'only-first-store')).toBe(true);
+      expect(otherStore.getAllPatterns().some(pattern => pattern.pattern === 'only-first-store')).toBe(false);
+    });
   });
 
   describe('import/export', () => {

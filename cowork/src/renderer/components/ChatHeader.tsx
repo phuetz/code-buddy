@@ -4,27 +4,27 @@ import { Plug } from 'lucide-react';
 import { useAppStore } from '../store';
 import { useActiveSessionId, useCurrentSession, usePermissionMode } from '../store/selectors';
 import { APP_NAME } from '../brand';
-import type { ExecutionMode } from '../types';
+import type { ExecutionMode, PermissionMode } from '../types';
 
 import { ContextWindowGauge } from './ContextWindowGauge';
 import { LiveBudgetMeter } from './LiveBudgetMeter';
-import { ReasoningLevelPicker } from './ReasoningLevelPicker';
 import { YoloModeToggle } from './YoloModeToggle';
-import { ModelSwitcher } from './ModelSwitcher';
+import { SessionIntelligenceBar } from './SessionIntelligenceBar';
 import { PermissionModeSelector } from './PermissionModeSelector';
 import { TaskModeToggle } from './TaskModeToggle';
 import { BranchSwitcher } from './BranchSwitcher';
 import { VoiceOutputToggle } from './VoiceOutputToggle';
+import { CompanionThreadToggle } from './CompanionThreadToggle';
 
 import { useIPC } from '../hooks/useIPC';
 
 export function ChatHeader() {
   const { t } = useTranslation();
-  const { isElectron } = useIPC();
+  const { isElectron, updateSessionSettings } = useIPC();
   const activeSessionId = useActiveSessionId();
   const activeSession = useCurrentSession();
   const permissionMode = usePermissionMode();
-  const appConfig = useAppStore((s) => s.appConfig);
+  const sessionPermissionMode = activeSession?.permissionMode ?? permissionMode;
 
   const [activeConnectors, setActiveConnectors] = useState<
     { id: string; name: string; connected: boolean; toolCount: number }[]
@@ -127,22 +127,20 @@ export function ChatHeader() {
       <div className="flex items-center gap-1.5 justify-self-end">
         <ContextWindowGauge />
         <LiveBudgetMeter />
-        <ReasoningLevelPicker />
+        <SessionIntelligenceBar />
+        <CompanionThreadToggle
+          session={activeSession}
+          updateTags={(tags) => updateSessionSettings(activeSession.id, { tags })}
+        />
         <YoloModeToggle />
-        {appConfig?.model && (
-          <ModelSwitcher
-            currentModel={appConfig.model}
-            onModelChange={(model) => {
-              window.electronAPI?.model?.switch(model);
-              useAppStore.getState().setAppConfig({ ...appConfig, model });
-            }}
-          />
-        )}
         <PermissionModeSelector
-          currentMode={permissionMode}
+          currentMode={sessionPermissionMode}
           onModeChange={(mode) => {
-            window.electronAPI?.permission?.setMode(mode);
+            useAppStore.getState().updateSession(activeSession.id, { permissionMode: mode });
             useAppStore.getState().setPermissionMode(mode);
+            void window.electronAPI?.session?.updateSettings?.(activeSession.id, {
+              permissionMode: mode as PermissionMode,
+            });
           }}
         />
         {activeSession && (
@@ -157,8 +155,11 @@ export function ChatHeader() {
               });
               // If switching to task mode, auto-enable dontAsk permission mode
               if (newMode === 'task') {
-                window.electronAPI?.permission?.setMode('dontAsk');
+                useAppStore.getState().updateSession(activeSession.id, { permissionMode: 'dontAsk' });
                 useAppStore.getState().setPermissionMode('dontAsk');
+                void window.electronAPI?.session?.updateSettings?.(activeSession.id, {
+                  permissionMode: 'dontAsk',
+                });
               }
             }}
           />

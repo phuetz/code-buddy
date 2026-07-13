@@ -47,6 +47,7 @@ export interface InternetScoutPlanOptions {
   sourceUrl?: string;
   intent?: InternetScoutIntent;
   requiresInteraction?: boolean;
+  interactionInstruction?: string;
   expectedText?: string;
   persistWhenProven?: boolean;
   maxPages?: number;
@@ -98,6 +99,7 @@ export function buildInternetScoutPlan(options: InternetScoutPlanOptions): Inter
   const query = normalizeText(options.query) || goal;
   const sourceUrl = normalizeText(options.sourceUrl);
   const expectedText = normalizeText(options.expectedText);
+  const interactionInstruction = normalizeText(options.interactionInstruction) || goal;
   const intent = normalizeIntent(options.intent);
   const maxPages = normalizeMaxPages(options.maxPages);
   const allowLoginPages = options.allowLoginPages === true;
@@ -154,6 +156,21 @@ export function buildInternetScoutPlan(options: InternetScoutPlanOptions): Inter
       action: 'identify_element',
       reason: 'Use LLM-assisted observation to resolve a visible selector before any click, typing, or form fill.',
       inputs: { target: query, requiresVisibleRef: true },
+    });
+    steps.push({
+      id: 'reviewed-interaction',
+      title: 'Perform the exact reviewed interaction',
+      tool: 'browser',
+      stage: 'interact',
+      evidence: 'user-action',
+      required: true,
+      action: 'act',
+      reason: 'Execute one visible browser action tied to the exact operator-reviewed instruction; the executor asks for confirmation again immediately before acting.',
+      inputs: {
+        instruction: interactionInstruction,
+        exactReviewedGoal: true,
+        maxActions: 1,
+      },
     });
   }
 
@@ -308,6 +325,7 @@ function buildSafetyRules(): string[] {
     'Use public web pages or user-authorized pages only.',
     'Prefer web_fetch before browser automation to reduce page load and side effects.',
     'Observe before clicking or typing, and use visible refs rather than blind selectors.',
+    'Interactive plans may execute only the exact reviewed action and require a second confirmation immediately before it runs.',
     'Do not bypass captcha, bot checks, paywalls, access controls, or robots/rate-limit signals.',
     'Do not infer or persist identity for unknown people without explicit permission and evidence.',
     'Persist only compact facts with source evidence; avoid storing raw page dumps or private data.',

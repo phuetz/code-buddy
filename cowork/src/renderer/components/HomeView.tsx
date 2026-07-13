@@ -16,6 +16,8 @@ import { useIPC } from '../hooks/useIPC';
 import { getInitialSessionTitle } from '../../shared/session-title';
 import { AGENT_RECIPES } from './agent-recipes';
 import type { Session } from '../types';
+import { LivingBriefing } from './LivingBriefing';
+import { MaisonHomeCard } from './home/MaisonHomeCard';
 
 interface QuickAction {
   label: string;
@@ -156,9 +158,11 @@ export function HomeView() {
 
   return (
     <div
-      className="h-full min-h-0 overflow-auto flex flex-col items-center justify-center gap-8 p-8"
+      className="h-full min-h-0 overflow-auto flex flex-col items-center gap-6 p-5 sm:p-8"
       data-testid="home-view"
     >
+      <LivingBriefing sessions={sessions} onOpenMissionControl={() => setPrimaryView('os')} />
+
       <div className="text-center">
         <h1 className="text-2xl font-semibold">Que veux-tu faire ?</h1>
         <p className="text-sm text-muted-foreground mt-1">
@@ -196,6 +200,8 @@ export function HomeView() {
           </button>
         </div>
       </form>
+
+      <MaisonHomeCard />
 
       {/* Genspark-style agent row: every studio is one click away; the typed
           subject travels with the click (creationsSeed). */}

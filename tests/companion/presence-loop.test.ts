@@ -2,12 +2,19 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { mkdtempSync, rmSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { runPresenceTick, resetPresenceState, type Moment, type PresenceDeps } from '../../src/companion/presence-loop.js';
+import {
+  hasConfirmedPresence,
+  runPresenceTick,
+  resetPresenceState,
+  type Moment,
+  type PresenceDeps,
+} from '../../src/companion/presence-loop.js';
 import { addFollowUp, dueFollowUp } from '../../src/companion/event-followups.js';
 
 const AFTERNOON = new Date('2026-06-26T14:00:00');
 const EVENING = new Date('2026-06-26T20:00:00');
 const NIGHT = new Date('2026-06-26T23:30:00');
+const ORIGINAL_TIMEZONE = process.env.CODEBUDDY_TIMEZONE;
 
 let stateDir: string;
 
@@ -37,10 +44,19 @@ beforeEach(() => {
 afterEach(() => {
   delete process.env.CODEBUDDY_COMPANION_PRESENCE;
   delete process.env.CODEBUDDY_COMPANION_QUIET;
+  if (ORIGINAL_TIMEZONE === undefined) delete process.env.CODEBUDDY_TIMEZONE;
+  else process.env.CODEBUDDY_TIMEZONE = ORIGINAL_TIMEZONE;
   rmSync(stateDir, { recursive: true, force: true });
 });
 
 describe('presence loop — the conductor speaks only when it warms (rails)', () => {
+  it('requires a confirmed face match instead of treating any fresh record as presence', () => {
+    expect(hasConfirmedPresence({ hasMatch: true })).toBe(true);
+    expect(hasConfirmedPresence({ hasMatch: false })).toBe(false);
+    expect(hasConfirmedPresence({})).toBe(false);
+    expect(hasConfirmedPresence(null)).toBe(false);
+  });
+
   it('is silent when not opted in (default OFF)', async () => {
     delete process.env.CODEBUDDY_COMPANION_PRESENCE;
     const say = vi.fn(async () => {});
@@ -62,10 +78,77 @@ describe('presence loop — the conductor speaks only when it warms (rails)', ()
     expect(say).not.toHaveBeenCalled();
   });
 
+  it('uses the household timezone for quiet hours instead of the host timezone', async () => {
+    process.env.CODEBUDDY_TIMEZONE = 'Pacific/Auckland';
+    const say = vi.fn(async () => {});
+    const householdNight = new Date('2026-07-12T10:30:00.000Z'); // 22:30 in Auckland
+    expect(await runPresenceTick(baseDeps({
+      say,
+      now: () => householdNight,
+      recentHearing: async () => ["j'en peux plus"],
+    }))).toBeNull();
+    expect(say).not.toHaveBeenCalled();
+  });
+
   it('never speaks to an empty room', async () => {
     const say = vi.fn(async () => {});
     expect(await runPresenceTick(baseDeps({ say, isPersonPresent: () => false, recentHearing: async () => ["j'en peux plus"] }))).toBeNull();
     expect(say).not.toHaveBeenCalled();
+  });
+
+  it('honours an explicit silent/focus household policy', async () => {
+    const say = vi.fn(async () => {});
+    const line = await runPresenceTick(baseDeps({
+      say,
+      recentHearing: async () => ["j'en peux plus"],
+      homePolicy: async () => ({
+        allowed: false,
+        spontaneousDailyLimit: 0,
+        privateContentAllowed: true,
+        reason: 'silent',
+      }),
+    }));
+    expect(line).toBeNull();
+    expect(say).not.toHaveBeenCalled();
+  });
+
+  it('stays silent when the shared daily household budget is exhausted', async () => {
+    const say = vi.fn(async () => {});
+    const claimDailyBudget = vi.fn(async () => ({
+      granted: false,
+      release: async () => undefined,
+    }));
+    const line = await runPresenceTick(baseDeps({
+      say,
+      recentHearing: async () => ["j'en peux plus"],
+      homePolicy: async () => ({
+        allowed: true,
+        spontaneousDailyLimit: 2,
+        privateContentAllowed: true,
+        reason: 'free day',
+      }),
+      claimDailyBudget,
+    }));
+    expect(line).toBeNull();
+    expect(claimDailyBudget).toHaveBeenCalledWith(2, AFTERNOON);
+    expect(say).not.toHaveBeenCalled();
+  });
+
+  it('releases a reserved budget slot when the conductor denies the voice floor', async () => {
+    const release = vi.fn(async () => undefined);
+    const line = await runPresenceTick(baseDeps({
+      recentHearing: async () => ["j'en peux plus"],
+      homePolicy: async () => ({
+        allowed: true,
+        spontaneousDailyLimit: 2,
+        privateContentAllowed: true,
+        reason: 'free day',
+      }),
+      claimDailyBudget: async () => ({ granted: true, release }),
+      conductor: { claim: () => false },
+    }));
+    expect(line).toBeNull();
+    expect(release).toHaveBeenCalledTimes(1);
   });
 
   it('never talks over a live conversation', async () => {

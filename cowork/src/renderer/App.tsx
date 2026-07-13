@@ -20,6 +20,7 @@ import { useWindowSize } from './hooks/useWindowSize';
 import { useTabPinPersistence } from './hooks/useTabPinPersistence';
 import { useAutoBargeIn } from './hooks/useAutoBargeIn';
 import { useBargeInTurnCancel } from './hooks/useBargeInTurnCancel';
+import { matchesShortcut, SHORTCUTS_CHANGED_EVENT } from './utils/shortcut-registry';
 import { TopMenuBar } from './components/TopMenuBar';
 import { PermissionDialog } from './components/PermissionDialog';
 import { SudoPasswordDialog } from './components/SudoPasswordDialog';
@@ -57,7 +58,6 @@ import { ModelInstallDialog } from './components/ModelInstallDialog';
 import { OrchestratorLauncher } from './components/OrchestratorLauncher';
 import { FleetPanel } from './components/FleetPanel';
 // FleetCommandCenter is lazy loaded below
-import { SkillsManagerWrapper } from './components/skills-manager-page';
 import { ClawMigrationDialog } from './components/ClawMigrationDialog';
 import { KanbanPanel } from './components/KanbanPanel';
 import { TeamPanel } from './components/TeamPanel';
@@ -80,11 +80,6 @@ import { DockWorkspace } from './components/DockWorkspace';
 import { ShellNavigation } from './components/ShellNavigation';
 import { NewShell } from './components/NewShell';
 import { ExportDialogHost } from './components/ExportDialogHost';
-import { EvolutionPanel } from './components/EvolutionPanel';
-import { WorkflowProPanel } from './components/WorkflowProPanel';
-import { KnowledgePanel } from './components/KnowledgePanel';
-import { SciencePanel } from './components/SciencePanel';
-import { HelpDocs } from './components/HelpDocs';
 import type { AppConfig } from './types';
 import type { GlobalNoticeAction } from './store';
 
@@ -103,6 +98,26 @@ const FleetCommandCenter = lazy(() =>
 
 const SettingsPanel = lazy(() =>
   import('./components/SettingsPanel').then((module) => ({ default: module.SettingsPanel }))
+);
+const EvolutionPanel = lazy(() =>
+  import('./components/EvolutionPanel').then((module) => ({ default: module.EvolutionPanel }))
+);
+const WorkflowProPanel = lazy(() =>
+  import('./components/WorkflowProPanel').then((module) => ({ default: module.WorkflowProPanel }))
+);
+const KnowledgePanel = lazy(() =>
+  import('./components/KnowledgePanel').then((module) => ({ default: module.KnowledgePanel }))
+);
+const SciencePanel = lazy(() =>
+  import('./components/SciencePanel').then((module) => ({ default: module.SciencePanel }))
+);
+const HelpDocs = lazy(() =>
+  import('./components/HelpDocs').then((module) => ({ default: module.HelpDocs }))
+);
+const SkillsManagerPage = lazy(() =>
+  import('./components/skills-manager-page').then((module) => ({
+    default: module.SkillsManagerPage,
+  }))
 );
 
 function App() {
@@ -125,6 +140,7 @@ function App() {
   const showKnowledgePanel = useAppStore((s) => s.showKnowledgePanel);
   const showSciencePanel = useAppStore((s) => s.showSciencePanel);
   const showHelpDocs = useAppStore((s) => s.showHelpDocs);
+  const showSkillsManager = useAppStore((s) => s.showSkillsManager);
   const showWorkflowProPanel = useAppStore((s) => s.showWorkflowProPanel);
   const showGlobalSearch = useAppStore((s) => s.showGlobalSearch);
   const showActivityFeed = useAppStore((s) => s.showActivityFeed);
@@ -197,6 +213,7 @@ function App() {
   const [showDiagnostics, setShowDiagnostics] = useState(false);
   // P3.9 — /btw quick ask popup (Cmd+Shift+/)
   const [showBtwQuickAsk, setShowBtwQuickAsk] = useState(false);
+  const [shortcutRevision, setShortcutRevision] = useState(0);
   useEffect(() => {
     if (!appConfig) return;
     const config = appConfig as unknown as { onboardingCompleted?: boolean; apiKey?: string };
@@ -320,81 +337,78 @@ function App() {
 
   // Global keyboard shortcuts
   useEffect(() => {
+    const handleShortcutRegistryChange = () => setShortcutRevision((value) => value + 1);
+    window.addEventListener(SHORTCUTS_CHANGED_EVENT, handleShortcutRegistryChange);
     const handleKeyDown = (e: KeyboardEvent) => {
-      const mod = e.metaKey || e.ctrlKey;
-      // Cmd+Shift+K or Cmd+P opens global search (Cmd+K is the action launcher).
-      if (mod && e.shiftKey && (e.key === 'k' || e.key === 'K')) {
+      if (matchesShortcut('globalSearch', e)) {
         e.preventDefault();
         setShowGlobalSearch(!showGlobalSearch);
-      } else if (mod && e.shiftKey && (e.key === 's' || e.key === 'S')) {
+      } else if (matchesShortcut('snippets', e)) {
         // Phase 3 step 5: snippets library
         e.preventDefault();
         setShowSnippetsLibrary(true);
-      } else if (mod && e.shiftKey && (e.key === 'p' || e.key === 'P')) {
+      } else if (matchesShortcut('persona', e)) {
         // Phase 3 step 11: persona switcher
         e.preventDefault();
         setShowPersonaSwitcher(true);
-      } else if (mod && e.shiftKey && (e.key === 't' || e.key === 'T')) {
+      } else if (matchesShortcut('tests', e)) {
         // Phase 3 step 12: test runner panel
         e.preventDefault();
         setShowTestRunner(true);
-      } else if (mod && e.shiftKey && (e.key === 'r' || e.key === 'R')) {
+      } else if (matchesShortcut('reasoning', e)) {
         // Phase 3 step 17: reasoning trace viewer
         e.preventDefault();
         setShowReasoningViewer(true);
-      } else if (mod && e.shiftKey && (e.key === 'm' || e.key === 'M')) {
+      } else if (matchesShortcut('orchestrator', e)) {
         // Multi-agent orchestrator launcher
         e.preventDefault();
         setShowOrchestratorLauncher(true);
-      } else if (mod && e.shiftKey && (e.key === 'a' || e.key === 'A')) {
+      } else if (matchesShortcut('subagents', e)) {
         // P2.6 — sub-agent dashboard
         e.preventDefault();
         setShowSubAgentDashboard((v) => !v);
-      } else if (mod && e.shiftKey && (e.key === 'd' || e.key === 'D')) {
+      } else if (matchesShortcut('diagnostics', e)) {
         // P3.4 — security diagnostics
         e.preventDefault();
         setShowDiagnostics((v) => !v);
-      } else if (mod && e.shiftKey && e.key === '?') {
+      } else if (matchesShortcut('quickAsk', e)) {
         // P3.9 — /btw quick ask
         e.preventDefault();
         setShowBtwQuickAsk((v) => !v);
-      } else if (mod && e.shiftKey && (e.key === 'i' || e.key === 'I')) {
+      } else if (matchesShortcut('insights', e)) {
         e.preventDefault();
         setShowSessionInsights(true);
-      } else if (mod && e.shiftKey && (e.key === 'o' || e.key === 'O')) {
+      } else if (matchesShortcut('resume', e)) {
         e.preventDefault();
         setShowResumeChooser(true);
-      } else if (mod && e.shiftKey && (e.key === 'f' || e.key === 'F')) {
+      } else if (matchesShortcut('focus', e)) {
         e.preventDefault();
         setShowFocusView(true);
-      } else if (mod && e.shiftKey && (e.key === 'l' || e.key === 'L')) {
+      } else if (matchesShortcut('skills', e)) {
         // Hermes skills parity — full-page Skills Manager
         e.preventDefault();
         setShowSkillsManager(true);
-      } else if (mod && e.shiftKey && (e.key === 'e' || e.key === 'E')) {
+      } else if (matchesShortcut('fileActivity', e)) {
         // Phase A2 — file activity panel (agent file I/O timeline)
         e.preventDefault();
         setShowFileActivity(true);
-      } else if (mod && e.key === '\\') {
+      } else if (matchesShortcut('toggleSplitPane', e)) {
         // Phase 3 step 8: toggle split-pane layout
         e.preventDefault();
         toggleSplitPane();
-      } else if (mod && (e.key === 'p' || e.key === 'P') && !e.shiftKey) {
-        e.preventDefault();
-        setShowGlobalSearch(!showGlobalSearch);
-      } else if (mod && e.key === 'k') {
+      } else if (matchesShortcut('commandPalette', e)) {
         e.preventDefault();
         setShowCommandPalette(!showCommandPalette);
-      } else if (mod && e.key === '/') {
+      } else if (matchesShortcut('shortcuts', e)) {
         e.preventDefault();
         setShowShortcutsDialog(!showShortcutsDialog);
-      } else if (mod && e.key === ',') {
+      } else if (matchesShortcut('settings', e)) {
         e.preventDefault();
         setShowSettings(true);
-      } else if (mod && e.key === 'f' && activeSessionId) {
+      } else if (matchesShortcut('sessionSearch', e) && activeSessionId) {
         e.preventDefault();
         setSearchActive(true);
-      } else if (mod && e.key === 'b') {
+      } else if (matchesShortcut('toggleSidebar', e)) {
         e.preventDefault();
         if (newShellEnabled) {
           // The new shell has no collapsible sidebar; repurpose Cmd+B as the "power drawer" toggle
@@ -407,7 +421,10 @@ function App() {
       }
     };
     window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener(SHORTCUTS_CHANGED_EVENT, handleShortcutRegistryChange);
+    };
   }, [
     showCommandPalette,
     showShortcutsDialog,
@@ -432,6 +449,7 @@ function App() {
     setShowSkillsManager,
     setShowFileActivity,
     toggleSplitPane,
+    shortcutRevision,
   ]);
 
   // Determine if we should show the sandbox setup dialog
@@ -483,27 +501,37 @@ function App() {
       {/* Evolution panel (new-shell Labs) — versions from recursive self-improvement. */}
       {showEvolutionPanel && (
         <PanelErrorBoundary name="EvolutionPanel" fallback={null}>
-          <EvolutionPanel onClose={() => useAppStore.getState().setShowEvolutionPanel(false)} />
+          <Suspense fallback={null}>
+            <EvolutionPanel onClose={() => useAppStore.getState().setShowEvolutionPanel(false)} />
+          </Suspense>
         </PanelErrorBoundary>
       )}
 
       {/* Knowledge panel (new-shell Labs) — the Collective Knowledge Graph + research-ingest topics. */}
       {showKnowledgePanel && (
         <PanelErrorBoundary name="KnowledgePanel" fallback={null}>
-          <KnowledgePanel onClose={() => useAppStore.getState().setShowKnowledgePanel(false)} />
+          <Suspense fallback={null}>
+            <KnowledgePanel onClose={() => useAppStore.getState().setShowKnowledgePanel(false)} />
+          </Suspense>
         </PanelErrorBoundary>
       )}
 
       {/* AI-Scientist panel (new-shell Labs) — READ-ONLY tracking of `buddy science` experiment variants. */}
       {showSciencePanel && (
         <PanelErrorBoundary name="SciencePanel" fallback={null}>
-          <SciencePanel onClose={() => useAppStore.getState().setShowSciencePanel(false)} />
+          <Suspense fallback={null}>
+            <SciencePanel onClose={() => useAppStore.getState().setShowSciencePanel(false)} />
+          </Suspense>
         </PanelErrorBoundary>
       )}
 
       {/* Documentation overlay — the flag had no mounted reader, so the Titlebar/TopMenuBar
           "Documentation" buttons (setShowHelpDocs(true)) were dead clicks. Mount it here. */}
-      {showHelpDocs && <HelpDocs onClose={() => useAppStore.getState().setShowHelpDocs(false)} />}
+      {showHelpDocs && (
+        <Suspense fallback={null}>
+          <HelpDocs onClose={() => useAppStore.getState().setShowHelpDocs(false)} />
+        </Suspense>
+      )}
 
       {/* WorkflowBuilder Pro — the flag had no mounted reader (dead from ⌘K and the Labs launcher).
           Host the full-bleed component in a closable overlay so the capability is actually reachable. */}
@@ -526,7 +554,9 @@ function App() {
               </button>
             </div>
             <div className="flex-1 min-h-0">
-              <WorkflowProPanel />
+              <Suspense fallback={null}>
+                <WorkflowProPanel />
+              </Suspense>
             </div>
           </div>
         </div>
@@ -668,10 +698,10 @@ function App() {
       <SessionPruneDialog />
 
       {/* File Preview Pane — Phase 2 step 9 (skipped when split-pane owns it) */}
-      {!splitPaneEnabled && <FilePreviewPane />}
+      {!splitPaneEnabled && (!newShellEnabled || !activeSessionId) && <FilePreviewPane />}
 
       {/* Artifact Panel — Phase 2 step 10 */}
-      <ArtifactPanel />
+      {(!newShellEnabled || !activeSessionId) && <ArtifactPanel />}
 
       {/* Computer Use Overlay — Phase 2 step 13 */}
       <ComputerUseOverlay />
@@ -734,7 +764,13 @@ function App() {
       <FleetCommandCenterWrapper />
 
       {/* Skills Manager — full-page Hermes skills parity (Cmd/Ctrl+Shift+L) */}
-      <SkillsManagerWrapper />
+      {showSkillsManager && (
+        <PanelErrorBoundary name="SkillsManagerPage" fallback={null}>
+          <Suspense fallback={null}>
+            <SkillsManagerPage onClose={() => setShowSkillsManager(false)} />
+          </Suspense>
+        </PanelErrorBoundary>
+      )}
       <TeamWrapper />
 
       {/* Team panel — Agent Teams (Phase 4 layer 9) */}

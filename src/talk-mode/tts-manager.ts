@@ -15,10 +15,8 @@ import type {
   SpeechItem,
   TalkModeConfig,
   PlaybackState,
-  SynthesisProgress,
-  AudioFormat,
 } from './types.js';
-import { DEFAULT_TALK_MODE_CONFIG, DEFAULT_QUEUE_CONFIG } from './types.js';
+import { DEFAULT_TALK_MODE_CONFIG } from './types.js';
 
 // ============================================================================
 // TTS Provider Interface

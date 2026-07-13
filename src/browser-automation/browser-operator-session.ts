@@ -95,8 +95,8 @@ export function buildBrowserOperatorSessionDraft(
     dedicatedTab: {
       label: normalizeText(options.dedicatedTabLabel) || `Browser Operator - ${truncate(plan.goal, 48)}`,
       reason: mode === 'local'
-        ? 'Use a visible local tab so the operator can inspect and stop authenticated browsing.'
-        : 'Use an isolated browser surface so public web work stays separated from local logged-in tabs.',
+        ? 'Open a visible browser owned by Code Buddy with a persistent dedicated profile. Sign-ins made in this profile can be reused, but existing personal browser tabs are never attached.'
+        : 'Use an isolated browser surface (headless) so public web work stays separated from the operator browser.',
     },
     consent: {
       required: consentRequired,
@@ -182,6 +182,7 @@ function buildConsentScopes(
   if (mode === 'local') {
     scopes.add('local_browser');
     scopes.add('public_web_read');
+    scopes.add('authenticated_tabs');
   }
 
   if (plan.allowLoginPages) {
@@ -206,7 +207,7 @@ function buildConsentReason(
 
   const reasons: string[] = [];
   if (mode === 'local') {
-    reasons.push('local browser access');
+    reasons.push('local browser access and its persistent authenticated Code Buddy profile');
   }
   if (plan.allowLoginPages) {
     reasons.push('login or authenticated pages may be encountered');

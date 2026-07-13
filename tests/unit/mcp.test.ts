@@ -17,11 +17,19 @@ jest.mock('../../src/mcp/config.js', () => ({
   addMCPServer: jest.fn(),
   removeMCPServer: jest.fn(),
   loadMCPConfig: jest.fn(),
+  setMCPServerEnabled: jest.fn(),
   PREDEFINED_SERVERS: {},
 }));
 
 jest.mock('../../src/codebuddy/tools.js', () => ({
   getMCPManager: jest.fn(),
+}));
+
+jest.mock('../../src/mcp/profiles.js', () => ({
+  loadMCPProfiles: jest.fn(),
+  removeMCPProfile: jest.fn(),
+  setActiveMCPProfile: jest.fn(),
+  upsertMCPProfile: jest.fn(),
 }));
 
 jest.mock('chalk', () => {
@@ -58,13 +66,19 @@ jest.mock('readline', () => {
 import { createMCPCommand } from '../../src/commands/mcp';
 import * as mcpConfig from '../../src/mcp/config';
 import * as tools from '../../src/codebuddy/tools';
+import * as mcpProfiles from '../../src/mcp/profiles';
 import { logger } from '../../src/utils/logger.js';
 
 const mockAddMCPServer = mcpConfig.addMCPServer as jest.Mock;
 const mockRemoveMCPServer = mcpConfig.removeMCPServer as jest.Mock;
 const mockLoadMCPConfig = mcpConfig.loadMCPConfig as jest.Mock;
+const mockSetMCPServerEnabled = mcpConfig.setMCPServerEnabled as jest.Mock;
 const mockGetMCPManager = tools.getMCPManager as jest.Mock;
 const loggerErrorSpy = logger.error as jest.Mock;
+const mockLoadMCPProfiles = mcpProfiles.loadMCPProfiles as jest.Mock;
+const mockRemoveMCPProfile = mcpProfiles.removeMCPProfile as jest.Mock;
+const mockSetActiveMCPProfile = mcpProfiles.setActiveMCPProfile as jest.Mock;
+const mockUpsertMCPProfile = mcpProfiles.upsertMCPProfile as jest.Mock;
 
 describe('MCP Command', () => {
   let command: Command;
@@ -91,6 +105,16 @@ describe('MCP Command', () => {
     };
     mockGetMCPManager.mockReturnValue(mockManager);
     mockLoadMCPConfig.mockReturnValue({ servers: [] });
+    mockSetMCPServerEnabled.mockReturnValue({ updated: true, source: 'project-settings' });
+    mockLoadMCPProfiles.mockReturnValue({ version: 1, activeProfile: null, profiles: {} });
+    mockRemoveMCPProfile.mockReturnValue(true);
+    mockUpsertMCPProfile.mockImplementation((name: string, servers: string[], description?: string) => ({
+      name,
+      servers,
+      description,
+      createdAt: '2026-07-11T00:00:00.000Z',
+      updatedAt: '2026-07-11T00:00:00.000Z',
+    }));
 
     command = createMCPCommand();
 
@@ -123,6 +147,123 @@ describe('MCP Command', () => {
       expect(subcommands).toContain('remove');
       expect(subcommands).toContain('list');
       expect(subcommands).toContain('test');
+      expect(subcommands).toContain('audit');
+      expect(subcommands).toContain('enable');
+      expect(subcommands).toContain('disable');
+      expect(subcommands).toContain('profile');
+    });
+  });
+
+  describe('enable and disable subcommands', () => {
+    test('enables a configured server', async () => {
+      const enableCmd = command.commands.find(c => c.name() === 'enable');
+      await enableCmd?.parseAsync(['node', 'test', 'pubcommander']);
+
+      expect(mockSetMCPServerEnabled).toHaveBeenCalledWith('pubcommander', true);
+      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Enabled MCP server'));
+    });
+
+    test('disables and disconnects a live server', async () => {
+      mockManager.getServers.mockReturnValue(['pubcommander']);
+      const disableCmd = command.commands.find(c => c.name() === 'disable');
+      await disableCmd?.parseAsync(['node', 'test', 'pubcommander']);
+
+      expect(mockSetMCPServerEnabled).toHaveBeenCalledWith('pubcommander', false);
+      expect(mockManager.removeServer).toHaveBeenCalledWith('pubcommander');
+    });
+  });
+
+  describe('profile subcommand', () => {
+    test('creates a profile only from known servers', async () => {
+      mockLoadMCPConfig.mockReturnValue({
+        servers: [
+          { name: 'pubcommander', transport: { type: 'stdio', command: 'node' } },
+          { name: 'filesystem', transport: { type: 'stdio', command: 'node' } },
+        ],
+      });
+      const profileCmd = command.commands.find(c => c.name() === 'profile');
+
+      await profileCmd?.parseAsync([
+        'node', 'test', 'create', 'edition', 'pubcommander', 'filesystem',
+        '--description', 'Editorial work',
+      ]);
+
+      expect(mockUpsertMCPProfile).toHaveBeenCalledWith(
+        'edition',
+        ['pubcommander', 'filesystem'],
+        'Editorial work',
+      );
+    });
+
+    test('activates exactly the servers selected by the profile', async () => {
+      mockLoadMCPProfiles.mockReturnValue({
+        version: 1,
+        activeProfile: null,
+        profiles: {
+          edition: {
+            name: 'edition',
+            servers: ['pubcommander'],
+            createdAt: '2026-07-11T00:00:00.000Z',
+            updatedAt: '2026-07-11T00:00:00.000Z',
+          },
+        },
+      });
+      mockLoadMCPConfig.mockReturnValue({
+        servers: [
+          { name: 'pubcommander', enabled: false, transport: { type: 'stdio', command: 'node' } },
+          { name: 'filesystem', enabled: true, transport: { type: 'stdio', command: 'node' } },
+        ],
+      });
+      mockManager.getServers.mockReturnValue(['filesystem']);
+      const profileCmd = command.commands.find(c => c.name() === 'profile');
+
+      await profileCmd?.parseAsync(['node', 'test', 'use', 'edition']);
+
+      expect(mockSetMCPServerEnabled).toHaveBeenCalledWith('pubcommander', true);
+      expect(mockSetMCPServerEnabled).toHaveBeenCalledWith('filesystem', false);
+      expect(mockManager.removeServer).toHaveBeenCalledWith('filesystem');
+      expect(mockSetActiveMCPProfile).toHaveBeenCalledWith('edition');
+    });
+  });
+
+  describe('audit subcommand', () => {
+    test('reports per-tool and total prompt footprint', async () => {
+      mockLoadMCPConfig.mockReturnValue({
+        servers: [{
+          name: 'pubcommander',
+          enabled: true,
+          transport: { type: 'stdio', command: 'node' },
+        }],
+      });
+      mockManager.getTools.mockReturnValue([{
+        serverName: 'pubcommander',
+        name: 'mcp__pubcommander__list_posts',
+        description: 'List posts',
+        inputSchema: { type: 'object', properties: {} },
+      }]);
+      mockManager.getServers
+        .mockReturnValueOnce([])
+        .mockReturnValueOnce(['pubcommander']);
+
+      const auditCmd = command.commands.find(c => c.name() === 'audit');
+      await auditCmd?.parseAsync(['node', 'test', 'pubcommander']);
+
+      expect(mockManager.addServer).toHaveBeenCalled();
+      expect(mockManager.removeServer).toHaveBeenCalledWith('pubcommander');
+      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Full catalog:'));
+      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Total full catalogs:'));
+    });
+
+    test('emits JSON for automation', async () => {
+      mockLoadMCPConfig.mockReturnValue({
+        servers: [{ name: 'empty', enabled: true, transport: { type: 'stdio', command: 'node' } }],
+      });
+      mockManager.getServers.mockReturnValue(['empty']);
+
+      const auditCmd = command.commands.find(c => c.name() === 'audit');
+      await auditCmd?.parseAsync(['node', 'test', 'empty', '--json']);
+
+      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('"estimatedTokens": 0'));
     });
   });
 
@@ -512,8 +653,8 @@ describe('MCP Command', () => {
       });
       mockManager.getServers.mockReturnValue(['tool-server']);
       mockManager.getTools.mockReturnValue([
-        { serverName: 'tool-server', name: 'mcp__tool-server__read', description: 'Read' },
-        { serverName: 'tool-server', name: 'mcp__tool-server__write', description: 'Write' },
+        { serverName: 'tool-server', name: 'mcp__tool-server__read', description: 'Read', inputSchema: { type: 'object' } },
+        { serverName: 'tool-server', name: 'mcp__tool-server__write', description: 'Write', inputSchema: { type: 'object' } },
       ]);
 
       const listCmd = command.commands.find(c => c.name() === 'list');
@@ -521,6 +662,9 @@ describe('MCP Command', () => {
 
       expect(consoleSpy).toHaveBeenCalledWith(
         expect.stringContaining('Tools: 2')
+      );
+      expect(consoleSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Prompt footprint:')
       );
     });
 
@@ -559,6 +703,7 @@ describe('MCP Command', () => {
       await testCmd?.parseAsync(['node', 'test', 'test-server']);
 
       expect(mockManager.addServer).toHaveBeenCalled();
+      expect(mockManager.removeServer).toHaveBeenCalledWith('test-server');
       expect(consoleSpy).toHaveBeenCalledWith(
         expect.stringContaining('Successfully connected')
       );
@@ -585,8 +730,8 @@ describe('MCP Command', () => {
         ],
       });
       mockManager.getTools.mockReturnValue([
-        { serverName: 'test-server', name: 'mcp__test-server__read_file', description: 'Read file' },
-        { serverName: 'test-server', name: 'mcp__test-server__write_file', description: 'Write file' },
+        { serverName: 'test-server', name: 'mcp__test-server__read_file', description: 'Read file', inputSchema: { type: 'object' } },
+        { serverName: 'test-server', name: 'mcp__test-server__write_file', description: 'Write file', inputSchema: { type: 'object' } },
       ]);
 
       const testCmd = command.commands.find(c => c.name() === 'test');
@@ -594,6 +739,9 @@ describe('MCP Command', () => {
 
       expect(consoleSpy).toHaveBeenCalledWith(
         expect.stringContaining('Tools:')
+      );
+      expect(consoleSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Prompt footprint:')
       );
     });
 
@@ -620,7 +768,7 @@ describe('MCP Command', () => {
   describe('Predefined servers', () => {
     beforeEach(() => {
       // Add a predefined server for testing
-      (mcpConfig.PREDEFINED_SERVERS as any)['filesystem'] = {
+      mcpConfig.PREDEFINED_SERVERS.filesystem = {
         name: 'filesystem',
         transport: {
           type: 'stdio',
@@ -631,7 +779,7 @@ describe('MCP Command', () => {
     });
 
     afterEach(() => {
-      delete (mcpConfig.PREDEFINED_SERVERS as any)['filesystem'];
+      delete mcpConfig.PREDEFINED_SERVERS.filesystem;
     });
 
     test('should use predefined server config', async () => {

@@ -121,6 +121,7 @@ describe('SessionManager.listSessions', () => {
       project_id: 'project-1',
       is_background: 1,
       execution_mode: 'task',
+      permission_mode: 'dontAsk',
       created_at: 1000,
       updated_at: 2000,
     };
@@ -149,6 +150,7 @@ describe('SessionManager.listSessions', () => {
     expect(s.projectId).toBe('project-1');
     expect(s.isBackground).toBe(true);
     expect(s.executionMode).toBe('task');
+    expect(s.permissionMode).toBe('dontAsk');
     expect(s.pinned).toBe(false);
     expect(s.archived).toBe(false);
     expect(s.tags).toEqual([]);
@@ -548,6 +550,31 @@ describe('SessionManager Hermes-style session actions', () => {
           archived: true,
           tags: ['memory'],
         },
+      },
+    });
+  });
+
+  it('persists permission posture per session instead of mutating a global singleton', () => {
+    const update = vi.fn();
+    const sendToRenderer = vi.fn();
+    const db = makeDb({
+      sessions: {
+        create: vi.fn(),
+        get: vi.fn(() => ({ id: 's-permission' })),
+        getAll: vi.fn(() => []),
+        update,
+        delete: vi.fn(),
+      } as any,
+    });
+    const manager = new SessionManager(db, sendToRenderer);
+
+    expect(manager.updateSessionSettings('s-permission', { permissionMode: 'plan' })).toBe(true);
+    expect(update).toHaveBeenCalledWith('s-permission', { permission_mode: 'plan' });
+    expect(sendToRenderer).toHaveBeenCalledWith({
+      type: 'session.update',
+      payload: {
+        sessionId: 's-permission',
+        updates: { permissionMode: 'plan' },
       },
     });
   });

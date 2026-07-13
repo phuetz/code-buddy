@@ -63,7 +63,9 @@ export interface BuildActiveLlmRegistryOptions {
  * subscription-OAuth backends (no per-token metering). */
 const APPROX_COST_USD_PER_MTOK: Record<string, number> = {
   chatgpt: 0,
+  'agy-cli': 0,
   ollama: 0,
+  lemonade: 0,
   lmstudio: 0,
   'gemini-cli': 0,
   grok: 0.5,
@@ -82,14 +84,17 @@ function canonicalProviderId(provider: string | undefined | null): string | unde
 /** Local runtimes that actually responded to a probe → their first real
  * installed model (reuses the fleet capability registry's Ollama/LM Studio
  * HTTP probes; `probeOllama` sets `id` to the actual model name). */
-async function getReachableLocalModels(force?: boolean): Promise<Map<string, string>> {
+async function getReachableRuntimeModels(force?: boolean): Promise<Map<string, string>> {
   const map = new Map<string, string>();
   try {
     const { getLocalCapabilities } = await import('../fleet/capability-registry.js');
     const caps = await getLocalCapabilities({ force });
     for (const m of caps.models) {
       const id = canonicalProviderId(m.provider);
-      if ((id === 'ollama' || id === 'lmstudio') && !map.has(id)) {
+      if (
+        (id === 'ollama' || id === 'lmstudio' || id === 'lemonade' || id === 'agy-cli') &&
+        !map.has(id)
+      ) {
         map.set(id, m.id);
       }
     }
@@ -133,15 +138,21 @@ function toActiveLlm(
   entry: RuntimeProviderCatalogEntry | undefined,
 ): ActiveLlm {
   const isLocal = (entry?.authMode ?? resolved.authMode) === 'local';
+  const resolvedModel = resolved.defaultModel;
+  const isFreeOpenRouterModel =
+    resolved.provider === 'openrouter' &&
+    (resolvedModel === 'openrouter/free' || resolvedModel.endsWith(':free'));
   return {
     ...resolved,
-    model: resolved.defaultModel,
+    model: resolvedModel,
     rawSpec: `active:${resolved.provider}`,
     fallbackSource: 'environment',
     isLocal,
     reachable: true,
     priority: entry?.priority ?? 500,
-    costInputUsdPerMtok: APPROX_COST_USD_PER_MTOK[resolved.provider] ?? 1,
+    costInputUsdPerMtok: isFreeOpenRouterModel
+      ? 0
+      : APPROX_COST_USD_PER_MTOK[resolved.provider] ?? 1,
   };
 }
 
@@ -180,7 +191,7 @@ export async function buildActiveLlmRegistry(
   const primaryProvider = canonicalProviderId(opts.primary?.provider) ?? null;
 
   const catalog = getDirectRuntimeProviderCatalog();
-  const reachableLocalModels = await getReachableLocalModels(opts.force);
+  const reachableRuntimeModels = await getReachableRuntimeModels(opts.force);
   const all: ActiveLlm[] = [];
   const seen = new Set<string>();
 
@@ -199,13 +210,23 @@ export async function buildActiveLlmRegistry(
     }
     if (!resolved) continue;
 
+    // Antigravity is represented in the catalog so every provider surface can
+    // name it, but it is only active when the CLI probe actually returned a
+    // model. This prevents a stale PATH/config entry from occupying a council
+    // seat and failing on every deliberation.
+    if (entry.id === 'agy-cli') {
+      const realModel = reachableRuntimeModels.get('agy-cli');
+      if (!realModel) continue;
+      resolved = { ...resolved, defaultModel: realModel };
+    }
+
     const isLocal = (entry.authMode ?? resolved.authMode) === 'local';
     if (opts.localOnly && !isLocal) continue;
     // The catalog reports a local provider as "configured" even when it isn't
     // running — only keep locals we actually probed as reachable, and use their
     // real installed model (not the catalog default, which may not be pulled).
     if (isLocal) {
-      const realModel = reachableLocalModels.get(canonicalProviderId(resolved.provider) ?? '');
+      const realModel = reachableRuntimeModels.get(canonicalProviderId(resolved.provider) ?? '');
       if (!realModel) continue;
       resolved = { ...resolved, defaultModel: realModel };
     }

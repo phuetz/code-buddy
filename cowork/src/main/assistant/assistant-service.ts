@@ -7,7 +7,7 @@
 import { loadCoreModule } from '../utils/core-loader.js';
 
 export type AssistantSettingGroup = 'voice' | 'speech' | 'behavior' | 'companion';
-export type AssistantSettingType = 'toggle' | 'enum' | 'text' | 'voice';
+export type AssistantSettingType = 'toggle' | 'enum' | 'text' | 'voice' | 'volume';
 export type AssistantEnvFile = 'vision' | 'lisa' | 'both';
 
 export interface AssistantSetting {
@@ -57,6 +57,10 @@ export type AssistantVoicesResponse = string[] | (AssistantErrorResponse & { voi
 
 export type AssistantPreviewResponse = string | null | AssistantErrorResponse;
 
+export type AssistantPlayPreviewResponse =
+  | { ok: true; path: string }
+  | AssistantErrorResponse;
+
 export type AssistantRestartResponse = AssistantRestartServiceResult[] | AssistantErrorResponse;
 
 interface CoreAssistantConfigModule {
@@ -65,6 +69,10 @@ interface CoreAssistantConfigModule {
   writeAssistantConfig?: (updates: Record<string, string>) => AssistantSaveSuccessResponse;
   listPocketVoices?: () => string[];
   previewVoice?: (name: string, text?: string) => Promise<string | null>;
+  playVoicePreview?: (
+    name: string,
+    text?: string
+  ) => Promise<{ path: string; played: boolean } | null>;
   restartAssistantServices?: (
     services: Array<'buddy-vision-brain' | 'lisa-telegram'>
   ) => Promise<AssistantRestartServiceResult[]>;
@@ -165,6 +173,29 @@ export class AssistantService {
 
       const sample = (text ?? '').trim();
       return mod.previewVoice(voiceName, sample || undefined);
+    } catch (err) {
+      return unavailable(errorMessage(err));
+    }
+  }
+
+  async playPreview(name: string, text?: string): Promise<AssistantPlayPreviewResponse> {
+    try {
+      const voiceName = (name ?? '').trim();
+      if (!voiceName) return unavailable('voix requise');
+
+      const mod = await this.module();
+      if (!mod?.playVoicePreview) {
+        return unavailable('module assistant indisponible (lecture de l\'aperçu impossible)');
+      }
+
+      const sample = (text ?? '').trim();
+      const result = await mod.playVoicePreview(voiceName, sample || undefined);
+      if (!result) return unavailable('aperçu vocal indisponible');
+      if (!result.played) {
+        return unavailable('aucun lecteur audio système disponible pour lire l\'aperçu');
+      }
+
+      return { ok: true, path: result.path };
     } catch (err) {
       return unavailable(errorMessage(err));
     }

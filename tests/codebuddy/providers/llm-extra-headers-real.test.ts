@@ -58,15 +58,20 @@ describe('OpenAICompatProvider extra headers (real loopback round-trip)', () => 
   let server: http.Server;
   let baseURL: string;
   let seenHeaders: http.IncomingHttpHeaders | null;
+  let seenBody: Record<string, unknown> | null;
   const envBefore = process.env.CODEBUDDY_LLM_EXTRA_HEADERS;
+  const lemonadeHostBefore = process.env.LEMONADE_HOST;
+  const lemonadeThinkingBefore = process.env.CODEBUDDY_LEMONADE_THINKING;
 
   beforeEach(async () => {
     seenHeaders = null;
+    seenBody = null;
     server = http.createServer((req, res) => {
       let body = '';
       req.on('data', (chunk) => (body += chunk));
       req.on('end', () => {
         seenHeaders = req.headers;
+        seenBody = JSON.parse(body) as Record<string, unknown>;
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(
           JSON.stringify({
@@ -93,6 +98,10 @@ describe('OpenAICompatProvider extra headers (real loopback round-trip)', () => 
   afterEach(async () => {
     if (envBefore === undefined) delete process.env.CODEBUDDY_LLM_EXTRA_HEADERS;
     else process.env.CODEBUDDY_LLM_EXTRA_HEADERS = envBefore;
+    if (lemonadeHostBefore === undefined) delete process.env.LEMONADE_HOST;
+    else process.env.LEMONADE_HOST = lemonadeHostBefore;
+    if (lemonadeThinkingBefore === undefined) delete process.env.CODEBUDDY_LEMONADE_THINKING;
+    else process.env.CODEBUDDY_LEMONADE_THINKING = lemonadeThinkingBefore;
     await new Promise<void>((resolve) => server.close(() => resolve()));
   });
 
@@ -124,5 +133,37 @@ describe('OpenAICompatProvider extra headers (real loopback round-trip)', () => 
     });
     await provider.chat([{ role: 'user', content: 'ping' }]);
     expect(seenHeaders?.['x-proxy-tag']).toBeUndefined();
+  });
+
+  it('disables hidden Lemonade thinking by default on the wire', async () => {
+    process.env.LEMONADE_HOST = baseURL;
+    delete process.env.CODEBUDDY_LEMONADE_THINKING;
+    const provider = new OpenAICompatProvider({
+      apiKey: 'lemonade',
+      baseURL,
+      model: 'Qwen3.6-35B-A3B-MTP-GGUF',
+      defaultMaxTokens: 128,
+      getCircuitBreakerConfig: () => undefined,
+    });
+
+    await provider.chat([{ role: 'user', content: 'ping' }]);
+
+    expect(seenBody?.chat_template_kwargs).toEqual({ enable_thinking: false });
+  });
+
+  it('allows deliberate Lemonade jobs to opt thinking back in', async () => {
+    process.env.LEMONADE_HOST = baseURL;
+    process.env.CODEBUDDY_LEMONADE_THINKING = '1';
+    const provider = new OpenAICompatProvider({
+      apiKey: 'lemonade',
+      baseURL,
+      model: 'Qwen3.6-35B-A3B-MTP-GGUF',
+      defaultMaxTokens: 128,
+      getCircuitBreakerConfig: () => undefined,
+    });
+
+    await provider.chat([{ role: 'user', content: 'ping' }]);
+
+    expect(seenBody?.chat_template_kwargs).toEqual({ enable_thinking: true });
   });
 });

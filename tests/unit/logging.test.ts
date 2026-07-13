@@ -13,6 +13,7 @@
 import { existsSync, mkdirSync, rmSync, readFileSync, writeFileSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
+import { Logger, debug, getLogger, logger, resetLogger } from '../../src/utils/logger.js';
 
 // ============================================================================
 // Logger (src/utils/logger.ts) Tests
@@ -74,48 +75,41 @@ afterEach(() => {
 describe('Log Level Configuration', () => {
   describe('Logger class level management', () => {
     it('should default to info level', () => {
-      const { Logger } = require('../../src/utils/logger');
       const logger = new Logger({ silent: true });
       expect(logger.getLevel()).toBe('info');
     });
 
     it('should respect LOG_LEVEL environment variable', () => {
       process.env.LOG_LEVEL = 'warn';
-      const { Logger } = require('../../src/utils/logger');
       const logger = new Logger({ silent: true });
       expect(logger.getLevel()).toBe('warn');
     });
 
     it('should set level to debug when DEBUG=true', () => {
       process.env.DEBUG = 'true';
-      const { Logger } = require('../../src/utils/logger');
       const logger = new Logger({ silent: true });
       expect(logger.getLevel()).toBe('debug');
     });
 
     it('should set level to debug when DEBUG=1', () => {
       process.env.DEBUG = '1';
-      const { Logger } = require('../../src/utils/logger');
       const logger = new Logger({ silent: true });
       expect(logger.getLevel()).toBe('debug');
     });
 
     it('should set level to debug when DEBUG=codebuddy', () => {
       process.env.DEBUG = 'codebuddy';
-      const { Logger } = require('../../src/utils/logger');
       const logger = new Logger({ silent: true });
       expect(logger.getLevel()).toBe('debug');
     });
 
     it('should ignore invalid LOG_LEVEL values', () => {
       process.env.LOG_LEVEL = 'invalid';
-      const { Logger } = require('../../src/utils/logger');
       const logger = new Logger({ silent: true });
       expect(logger.getLevel()).toBe('info');
     });
 
     it('should allow setting level programmatically', () => {
-      const { Logger } = require('../../src/utils/logger');
       const logger = new Logger({ silent: true });
 
       logger.setLevel('error');
@@ -126,7 +120,6 @@ describe('Log Level Configuration', () => {
     });
 
     it('should filter messages below current level', () => {
-      const { Logger } = require('../../src/utils/logger');
       const logger = new Logger({ silent: true, level: 'warn' });
 
       logger.debug('debug message');
@@ -141,7 +134,6 @@ describe('Log Level Configuration', () => {
     });
 
     it('should log all levels when set to debug', () => {
-      const { Logger } = require('../../src/utils/logger');
       const logger = new Logger({ silent: true, level: 'debug' });
 
       logger.debug('debug message');
@@ -154,7 +146,6 @@ describe('Log Level Configuration', () => {
     });
 
     it('should only log errors when set to error level', () => {
-      const { Logger } = require('../../src/utils/logger');
       const logger = new Logger({ silent: true, level: 'error' });
 
       logger.debug('debug message');
@@ -170,13 +161,11 @@ describe('Log Level Configuration', () => {
 
   describe('isDebugEnabled', () => {
     it('should return true when level is debug', () => {
-      const { Logger } = require('../../src/utils/logger');
       const logger = new Logger({ silent: true, level: 'debug' });
       expect(logger.isDebugEnabled()).toBe(true);
     });
 
     it('should return false when level is info', () => {
-      const { Logger } = require('../../src/utils/logger');
       const logger = new Logger({ silent: true, level: 'info' });
       expect(logger.isDebugEnabled()).toBe(false);
     });
@@ -184,7 +173,6 @@ describe('Log Level Configuration', () => {
     it('should work with convenience logger', () => {
       process.env.DEBUG = 'true';
       jest.resetModules();
-      const { logger, resetLogger } = require('../../src/utils/logger');
       resetLogger();
       expect(logger.isDebugEnabled()).toBe(true);
     });
@@ -198,7 +186,6 @@ describe('Log Level Configuration', () => {
 describe('Log Formatting', () => {
   describe('Text format', () => {
     it('should include timestamp when enabled', () => {
-      const { Logger } = require('../../src/utils/logger');
       const logger = new Logger({
         silent: true,
         format: 'text',
@@ -213,7 +200,6 @@ describe('Log Formatting', () => {
     });
 
     it('should include source when provided', () => {
-      const { Logger } = require('../../src/utils/logger');
       const logger = new Logger({
         silent: true,
         source: 'TestModule',
@@ -226,7 +212,6 @@ describe('Log Formatting', () => {
     });
 
     it('should include context when provided', () => {
-      const { Logger } = require('../../src/utils/logger');
       const logger = new Logger({ silent: true });
 
       logger.info('test message', { userId: 123, action: 'login' });
@@ -236,7 +221,6 @@ describe('Log Formatting', () => {
     });
 
     it('should handle Error objects in error method', () => {
-      const { Logger } = require('../../src/utils/logger');
       const logger = new Logger({ silent: true });
       const error = new Error('Test error');
 
@@ -251,7 +235,6 @@ describe('Log Formatting', () => {
     });
 
     it('should handle Error objects with additional context', () => {
-      const { Logger } = require('../../src/utils/logger');
       const logger = new Logger({ silent: true });
       const error = new Error('Test error');
 
@@ -268,7 +251,6 @@ describe('Log Formatting', () => {
 
   describe('JSON format', () => {
     it('should format entries as JSON when format is json', () => {
-      const { Logger } = require('../../src/utils/logger');
       const consoleSpy = jest.spyOn(console, 'error').mockImplementation();
 
       const logger = new Logger({
@@ -291,7 +273,6 @@ describe('Log Formatting', () => {
     });
 
     it('should include timestamp in JSON format', () => {
-      const { Logger } = require('../../src/utils/logger');
       const consoleSpy = jest.spyOn(console, 'error').mockImplementation();
 
       const logger = new Logger({
@@ -311,7 +292,6 @@ describe('Log Formatting', () => {
   describe('Color support', () => {
     it('should disable colors when NO_COLOR is set', () => {
       process.env.NO_COLOR = '1';
-      const { Logger } = require('../../src/utils/logger');
       const logger = new Logger({ silent: true });
 
       // Logger should have colors disabled
@@ -319,7 +299,6 @@ describe('Log Formatting', () => {
     });
 
     it('should enable colors by default in TTY environment', () => {
-      const { Logger } = require('../../src/utils/logger');
       const logger = new Logger({
         silent: true,
         enableColors: true,
@@ -337,8 +316,6 @@ describe('Log Formatting', () => {
 describe('File Logging', () => {
   it('should write logs to file when LOG_FILE is set', async () => {
     const logFile = join(TEST_LOG_DIR, 'test-log-1.jsonl');
-
-    const { Logger } = require('../../src/utils/logger');
     const logger = new Logger({
       silent: true,
       logFile,
@@ -368,8 +345,6 @@ describe('File Logging', () => {
   it('should create log directory if it does not exist', async () => {
     const nestedDir = join(TEST_LOG_DIR, 'nested', 'dir');
     const logFile = join(nestedDir, 'test-log-2.jsonl');
-
-    const { Logger } = require('../../src/utils/logger');
     const logger = new Logger({
       silent: true,
       logFile,
@@ -390,8 +365,6 @@ describe('File Logging', () => {
 
     // Create initial content
     writeFileSync(logFile, '{"level":"info","message":"existing"}\n');
-
-    const { Logger } = require('../../src/utils/logger');
     const logger = new Logger({
       silent: true,
       logFile,
@@ -413,8 +386,6 @@ describe('File Logging', () => {
 
   it('should write JSON format to file regardless of display format', async () => {
     const logFile = join(TEST_LOG_DIR, 'test-log-4.jsonl');
-
-    const { Logger } = require('../../src/utils/logger');
     const logger = new Logger({
       silent: true,
       format: 'text', // Display format is text
@@ -439,7 +410,6 @@ describe('File Logging', () => {
     const consoleSpy = jest.spyOn(console, 'error').mockImplementation();
 
     // Try to write to an invalid path
-    const { Logger } = require('../../src/utils/logger');
     const logger = new Logger({
       silent: true,
       logFile: '/nonexistent/path/that/should/fail/log.jsonl',
@@ -453,8 +423,6 @@ describe('File Logging', () => {
 
   it('should close file stream on close()', () => {
     const logFile = join(TEST_LOG_DIR, 'test-log-5.jsonl');
-
-    const { Logger } = require('../../src/utils/logger');
     const logger = new Logger({
       silent: true,
       logFile,
@@ -476,8 +444,6 @@ describe('File Logging', () => {
 describe('Console Output', () => {
   it('should output to console.error for info and debug levels', () => {
     const consoleSpy = jest.spyOn(console, 'error').mockImplementation();
-
-    const { Logger } = require('../../src/utils/logger');
     const logger = new Logger({ silent: false, level: 'debug' });
 
     logger.debug('debug message');
@@ -490,8 +456,6 @@ describe('Console Output', () => {
 
   it('should output to console.error for warn level', () => {
     const consoleSpy = jest.spyOn(console, 'error').mockImplementation();
-
-    const { Logger } = require('../../src/utils/logger');
     const logger = new Logger({ silent: false });
 
     logger.warn('warning message');
@@ -503,8 +467,6 @@ describe('Console Output', () => {
 
   it('should output to console.error for error level', () => {
     const consoleSpy = jest.spyOn(console, 'error').mockImplementation();
-
-    const { Logger } = require('../../src/utils/logger');
     const logger = new Logger({ silent: false });
 
     logger.error('error message');
@@ -518,8 +480,6 @@ describe('Console Output', () => {
     const logSpy = jest.spyOn(console, 'log').mockImplementation();
     const warnSpy = jest.spyOn(console, 'warn').mockImplementation();
     const errorSpy = jest.spyOn(console, 'error').mockImplementation();
-
-    const { Logger } = require('../../src/utils/logger');
     const logger = new Logger({ silent: true, level: 'debug' });
 
     logger.debug('debug');
@@ -538,8 +498,6 @@ describe('Console Output', () => {
 
   it('should allow toggling silent mode', () => {
     const consoleSpy = jest.spyOn(console, 'error').mockImplementation();
-
-    const { Logger } = require('../../src/utils/logger');
     const logger = new Logger({ silent: true });
 
     logger.info('silent message');
@@ -559,7 +517,6 @@ describe('Console Output', () => {
 
 describe('Log Rotation and History Management', () => {
   it('should maintain log history', () => {
-    const { Logger } = require('../../src/utils/logger');
     const logger = new Logger({ silent: true });
 
     logger.info('message 1');
@@ -573,7 +530,6 @@ describe('Log Rotation and History Management', () => {
   });
 
   it('should limit history size to prevent memory issues', () => {
-    const { Logger } = require('../../src/utils/logger');
     const logger = new Logger({ silent: true });
 
     // Log more than the default max history size (1000)
@@ -589,7 +545,6 @@ describe('Log Rotation and History Management', () => {
   });
 
   it('should clear history on clearHistory()', () => {
-    const { Logger } = require('../../src/utils/logger');
     const logger = new Logger({ silent: true });
 
     logger.info('message 1');
@@ -603,7 +558,6 @@ describe('Log Rotation and History Management', () => {
   });
 
   it('should export logs as JSON', () => {
-    const { Logger } = require('../../src/utils/logger');
     const logger = new Logger({ silent: true });
 
     logger.info('message 1', { key: 'value1' });
@@ -619,7 +573,6 @@ describe('Log Rotation and History Management', () => {
   });
 
   it('should return copy of history to prevent mutation', () => {
-    const { Logger } = require('../../src/utils/logger');
     const logger = new Logger({ silent: true });
 
     logger.info('original message');
@@ -642,7 +595,6 @@ describe('Log Rotation and History Management', () => {
 
 describe('Child Logger', () => {
   it('should create child logger with source', () => {
-    const { Logger } = require('../../src/utils/logger');
     const parent = new Logger({ silent: true });
     const child = parent.child('ChildModule');
 
@@ -653,7 +605,6 @@ describe('Child Logger', () => {
   });
 
   it('should inherit parent options', () => {
-    const { Logger } = require('../../src/utils/logger');
     const parent = new Logger({ silent: true, level: 'warn' });
     const child = parent.child('ChildModule');
 
@@ -672,7 +623,6 @@ describe('Child Logger', () => {
 
 describe('Timer Functionality', () => {
   it('should log timer start and end', async () => {
-    const { Logger } = require('../../src/utils/logger');
     const logger = new Logger({ silent: true, level: 'debug' });
 
     const endTimer = logger.time('test-operation');
@@ -690,7 +640,6 @@ describe('Timer Functionality', () => {
   });
 
   it('should measure approximate duration', async () => {
-    const { Logger } = require('../../src/utils/logger');
     const logger = new Logger({ silent: true, level: 'debug' });
 
     const endTimer = logger.time('duration-test');
@@ -713,7 +662,6 @@ describe('Timer Functionality', () => {
 
 describe('Default Logger Singleton', () => {
   it('should return same instance on multiple getLogger calls', () => {
-    const { getLogger, resetLogger } = require('../../src/utils/logger');
     resetLogger();
 
     const logger1 = getLogger();
@@ -723,7 +671,6 @@ describe('Default Logger Singleton', () => {
   });
 
   it('should create fresh instance after resetLogger', () => {
-    const { getLogger, resetLogger } = require('../../src/utils/logger');
 
     const logger1 = getLogger();
     resetLogger();
@@ -733,7 +680,6 @@ describe('Default Logger Singleton', () => {
   });
 
   it('should work with convenience logger object', () => {
-    const { logger, resetLogger } = require('../../src/utils/logger');
     resetLogger();
 
     // These should not throw
@@ -746,7 +692,6 @@ describe('Default Logger Singleton', () => {
   });
 
   it('should create child from convenience logger', () => {
-    const { logger, resetLogger } = require('../../src/utils/logger');
     resetLogger();
 
     const child = logger.child('TestModule');
@@ -762,8 +707,6 @@ describe('Debug Helper Function', () => {
   it('should only log when DEBUG is enabled', () => {
     process.env.DEBUG = 'true';
     jest.resetModules();
-
-    const { debug, getLogger, resetLogger } = require('../../src/utils/logger');
     resetLogger();
 
     debug('debug message', { key: 'value' });
@@ -775,8 +718,6 @@ describe('Debug Helper Function', () => {
   it('should not log when DEBUG is not enabled', () => {
     delete process.env.DEBUG;
     jest.resetModules();
-
-    const { debug, getLogger, resetLogger } = require('../../src/utils/logger');
     resetLogger();
 
     debug('debug message');
@@ -1132,7 +1073,6 @@ describe('Interaction Logger', () => {
 describe('Edge Cases and Error Handling', () => {
   describe('Logger edge cases', () => {
     it('should handle empty message', () => {
-      const { Logger } = require('../../src/utils/logger');
       const logger = new Logger({ silent: true });
 
       logger.info('');
@@ -1142,7 +1082,6 @@ describe('Edge Cases and Error Handling', () => {
     });
 
     it('should handle undefined context', () => {
-      const { Logger } = require('../../src/utils/logger');
       const logger = new Logger({ silent: true });
 
       logger.info('message', undefined);
@@ -1152,7 +1091,6 @@ describe('Edge Cases and Error Handling', () => {
     });
 
     it('should handle complex context objects', () => {
-      const { Logger } = require('../../src/utils/logger');
       const logger = new Logger({ silent: true });
 
       const complexContext = {
@@ -1169,7 +1107,6 @@ describe('Edge Cases and Error Handling', () => {
     });
 
     it('should handle special characters in messages', () => {
-      const { Logger } = require('../../src/utils/logger');
       const logger = new Logger({ silent: true });
 
       const specialMessage = '```json\n{"key": "value"}\n```\n<tag>content</tag>';
@@ -1181,7 +1118,6 @@ describe('Edge Cases and Error Handling', () => {
     });
 
     it('should handle unicode in messages', () => {
-      const { Logger } = require('../../src/utils/logger');
       const logger = new Logger({ silent: true });
 
       const unicodeMessage = 'Hello World - Emoji Test';

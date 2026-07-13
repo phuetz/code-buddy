@@ -55,6 +55,10 @@ import {
   type FleetDispatchProfile,
   type FleetHermesToolsetDescriptor,
 } from '../../fleet/dispatch-profile.js';
+import {
+  normalizePeerChatProviderId,
+  type PeerChatProviderId,
+} from '../../fleet/peer-chat-client-factory.js';
 
 // eslint-disable-next-line no-control-regex -- Fleet stream chunks may contain terminal control bytes from remote peers.
 const ANSI_ESCAPE_PATTERN = /\x1B\[[0-?]*[ -/]*[@-~]/g;
@@ -130,6 +134,7 @@ Actions:
   chat start <peer>                   (V1.2.1) UX wrapper around
        [--system "<prompt>"]          peer.chat-session.* — opens a
        [--model <id>]                 multi-turn session with stable alias
+       [--provider <id>]              pinned to an exact LLM backend
        [--profile balanced|research|code|review|safe]
        [--name <alias>]               so you don't have to copy sessionId
                                       between turns.
@@ -218,6 +223,7 @@ interface ParsedRouteArgs {
 interface RouteLaneSummary {
   peer: string;
   model: string;
+  provider?: string;
   score: number;
 }
 
@@ -245,6 +251,7 @@ interface RoutePeerCommandData {
       peer: string;
       prompt: string;
       model: string;
+      provider?: string;
       dispatchProfile?: FleetDispatchProfile;
     };
   };
@@ -627,6 +634,7 @@ function pickDefaultPeer(): ActiveListener | null {
 interface ChatSessionSummary {
   sessionId: string;
   turnCount: number;
+  provider?: PeerChatProviderId;
   model?: string;
   dispatchProfile?: FleetDispatchProfile;
   toolPolicy?: FleetDispatchToolPolicy;
@@ -642,6 +650,7 @@ interface ChatSessionRef {
   peerName: string;
   sessionId: string;
   systemPrompt?: string;
+  provider?: PeerChatProviderId;
   model?: string;
   dispatchProfile?: FleetDispatchProfile;
   turnCount: number;
@@ -668,6 +677,7 @@ function deriveDefaultAlias(peerName: string): string {
 interface ParsedChatStartArgs {
   peerName: string | null;
   systemPrompt: string | null;
+  provider: PeerChatProviderId | null;
   model: string | null;
   dispatchProfile?: FleetDispatchProfile;
   alias: string | null;
@@ -677,6 +687,7 @@ interface ParsedChatStartArgs {
 function parseChatStartArgs(rest: string[]): ParsedChatStartArgs {
   let peerName: string | null = null;
   let systemPrompt: string | null = null;
+  let provider: PeerChatProviderId | null = null;
   let model: string | null = null;
   let dispatchProfile: FleetDispatchProfile | undefined;
   let alias: string | null = null;
@@ -689,9 +700,25 @@ function parseChatStartArgs(rest: string[]): ParsedChatStartArgs {
     } else if (arg === '--model' && i + 1 < rest.length) {
       model = rest[i + 1] ?? null;
       i++;
+    } else if (arg === '--provider' && i + 1 < rest.length) {
+      const rawProvider = rest[i + 1];
+      provider = normalizePeerChatProviderId(rawProvider);
+      if (!provider) {
+        return {
+          peerName,
+          systemPrompt,
+          provider: null,
+          model,
+          alias,
+          error: `Unknown Fleet chat provider "${String(rawProvider)}".`,
+        };
+      }
+      i++;
     } else if ((arg === '--profile' || arg === '--dispatch-profile') && i + 1 < rest.length) {
       const parsed = parseDispatchProfileFlag(rest[i + 1]);
-      if (parsed.error) return { peerName, systemPrompt, model, alias, error: parsed.error };
+      if (parsed.error) {
+        return { peerName, systemPrompt, provider, model, alias, error: parsed.error };
+      }
       dispatchProfile = parsed.value;
       i++;
     } else if (arg === '--name' && i + 1 < rest.length) {
@@ -701,7 +728,7 @@ function parseChatStartArgs(rest: string[]): ParsedChatStartArgs {
       peerName = arg;
     }
   }
-  return { peerName, systemPrompt, model, dispatchProfile, alias };
+  return { peerName, systemPrompt, provider, model, dispatchProfile, alias };
 }
 
 interface ParsedChatSayArgs {
@@ -827,10 +854,11 @@ async function handleChat(rest: string[]): Promise<CommandHandlerResult> {
     for (const ref of chatSessions.values()) {
       const age = formatRelativeAge(now - ref.lastUsedAt);
       const modelTxt = ref.model ? `model ${ref.model}` : 'default model';
+      const providerTxt = ref.provider ? `provider ${ref.provider}, ` : '';
       const profileTxt = ref.dispatchProfile ? `, profile ${ref.dispatchProfile}` : '';
       const isActive = ref.alias === activeAlias ? '   ← active' : '';
       lines.push(
-        `  ${ref.alias.padEnd(20)} → ${ref.peerName.padEnd(18)} [turn ${ref.turnCount}, ${age} ago, ${modelTxt}${profileTxt}]${isActive}`,
+        `  ${ref.alias.padEnd(20)} → ${ref.peerName.padEnd(18)} [turn ${ref.turnCount}, ${age} ago, ${providerTxt}${modelTxt}${profileTxt}]${isActive}`,
       );
     }
     return textResult(lines.join('\n'));
@@ -840,6 +868,7 @@ async function handleChat(rest: string[]): Promise<CommandHandlerResult> {
     const {
       peerName,
       systemPrompt,
+      provider,
       model,
       dispatchProfile,
       alias: explicitAlias,
@@ -850,7 +879,7 @@ async function handleChat(rest: string[]): Promise<CommandHandlerResult> {
     }
     if (!peerName) {
       return textResult(
-        'Usage: /fleet chat start <peer> [--system "<prompt>"] [--model <id>] [--profile balanced|research|code|review|safe] [--name <alias>]',
+        'Usage: /fleet chat start <peer> [--system "<prompt>"] [--provider <id>] [--model <id>] [--profile balanced|research|code|review|safe] [--name <alias>]',
       );
     }
     const target = getFleetRegistry().get(peerName);
@@ -867,13 +896,19 @@ async function handleChat(rest: string[]): Promise<CommandHandlerResult> {
     }
     const params: Record<string, unknown> = {};
     if (systemPrompt) params.systemPrompt = systemPrompt;
+    if (provider) params.provider = provider;
     if (model) params.model = model;
     if (dispatchProfile) params.dispatchProfile = dispatchProfile;
 
     try {
       const result = (await target.listener.request('peer.chat-session.start', params, {
         timeoutMs: 30_000,
-      })) as { sessionId?: string; dispatchProfile?: FleetDispatchProfile };
+      })) as {
+        sessionId?: string;
+        dispatchProfile?: FleetDispatchProfile;
+        providerRequested?: PeerChatProviderId;
+        providerResolved?: PeerChatProviderId;
+      };
       const sessionId = result?.sessionId;
       if (typeof sessionId !== 'string' || !sessionId) {
         return textResult(
@@ -881,12 +916,14 @@ async function handleChat(rest: string[]): Promise<CommandHandlerResult> {
         );
       }
       const storedProfile = result.dispatchProfile ?? dispatchProfile;
+      const storedProvider = result.providerResolved ?? result.providerRequested ?? provider ?? undefined;
       const now = Date.now();
       chatSessions.set(alias, {
         alias,
         peerName,
         sessionId,
         systemPrompt: systemPrompt ?? undefined,
+        provider: storedProvider,
         model: model ?? undefined,
         dispatchProfile: storedProfile,
         turnCount: 0,
@@ -895,9 +932,10 @@ async function handleChat(rest: string[]): Promise<CommandHandlerResult> {
       });
       activeAlias = alias;
       const sidShort = sessionId.length > 14 ? `${sessionId.slice(0, 14)}…` : sessionId;
+      const providerTxt = storedProvider ? ` Provider: ${storedProvider}.` : '';
       const profileTxt = storedProfile ? ` Profile: ${storedProfile}.` : '';
       return textResult(
-        `Chat session "${alias}" opened with ${peerName} (sessionId=${sidShort}).${profileTxt} ` +
+        `Chat session "${alias}" opened with ${peerName} (sessionId=${sidShort}).${providerTxt}${profileTxt} ` +
           `Send turns with /fleet chat say <message>.`,
       );
     } catch (err) {
@@ -929,18 +967,28 @@ async function handleChat(rest: string[]): Promise<CommandHandlerResult> {
       const t0 = Date.now();
       const result = (await target.listener.request(
         'peer.chat-session.continue',
-        { sessionId: ref.sessionId, prompt: message },
+        {
+          sessionId: ref.sessionId,
+          prompt: message,
+          ...(ref.provider ? { provider: ref.provider } : {}),
+        },
         { timeoutMs: 120_000 },
-      )) as { text?: string; dispatchProfile?: FleetDispatchProfile };
+      )) as {
+        text?: string;
+        dispatchProfile?: FleetDispatchProfile;
+        providerResolved?: PeerChatProviderId;
+      };
       const elapsed = Date.now() - t0;
       ref.turnCount++;
       ref.lastUsedAt = Date.now();
       ref.dispatchProfile = result.dispatchProfile ?? ref.dispatchProfile;
+      ref.provider = result.providerResolved ?? ref.provider;
       activeAlias = alias;
       const text = result?.text ?? '';
+      const providerTxt = ref.provider ? `, provider ${ref.provider}` : '';
       const profileTxt = ref.dispatchProfile ? `, profile ${ref.dispatchProfile}` : '';
       return textResult(
-        `← ${alias} (${ref.peerName}) [turn ${ref.turnCount}, ${elapsed}ms${profileTxt}]:\n${text}`,
+        `← ${alias} (${ref.peerName}) [turn ${ref.turnCount}, ${elapsed}ms${providerTxt}${profileTxt}]:\n${text}`,
       );
     } catch (err) {
       const messageText = err instanceof Error ? err.message : String(err);
@@ -1013,7 +1061,7 @@ async function handleChat(rest: string[]): Promise<CommandHandlerResult> {
   return textResult(
     `Unknown chat sub-action: ${sub}\n` +
       `Usage: /fleet chat (start|say|end|list) ...\n` +
-      `  start <peer> [--system <s>] [--model <m>] [--profile <profile>] [--name <alias>]\n` +
+      `  start <peer> [--system <s>] [--provider <id>] [--model <m>] [--profile <profile>] [--name <alias>]\n` +
       `  say <message> [--session <alias>]\n` +
       `  end [<alias>] | --all\n` +
       `  list`,
@@ -1071,10 +1119,11 @@ export async function handleFleet(args: string[]): Promise<CommandHandlerResult>
           blocks.push(`  Chat sessions (${entry.length}):`);
           for (const s of entry) {
             const modelTxt = s.model ? `model ${s.model}` : 'default model';
+            const providerTxt = s.provider ? `provider ${s.provider}  ` : '';
             const profileTxt = s.dispatchProfile ? `  profile ${s.dispatchProfile}` : '';
             blocks.push(
               `    ${s.sessionId.padEnd(22)} turn ${String(s.turnCount).padEnd(2)} ` +
-                `idle ${formatRelativeAge(s.idleMs)}  ${modelTxt}${profileTxt}`,
+                `idle ${formatRelativeAge(s.idleMs)}  ${providerTxt}${modelTxt}${profileTxt}`,
             );
             const policySummary = formatChatSessionPolicySummary(s);
             if (policySummary) {
@@ -1559,7 +1608,8 @@ function isRoutePeerCommandData(value: unknown): value is RoutePeerCommandData {
 
 function formatLane(label: string, lane: RouteLaneSummary | null | undefined): string {
   if (!lane) return `${label}: none`;
-  return `${label}: ${lane.peer} / ${lane.model} (score ${lane.score.toFixed(3)})`;
+  const provider = lane.provider ? `${lane.provider} / ` : '';
+  return `${label}: ${lane.peer} / ${provider}${lane.model} (score ${lane.score.toFixed(3)})`;
 }
 
 function formatRoutePeerCommandData(data: RoutePeerCommandData, council = false): string {
@@ -1611,6 +1661,7 @@ function formatRoutePeerCommandData(data: RoutePeerCommandData, council = false)
   lines.push('Next call:');
   const nextCallJson = {
     peer: data.nextCall.args.peer,
+    ...(data.nextCall.args.provider ? { provider: data.nextCall.args.provider } : {}),
     model: data.nextCall.args.model,
     dispatchProfile: profile,
     prompt: data.nextCall.args.prompt,
@@ -1670,6 +1721,7 @@ async function handleRoute(rest: string[]): Promise<CommandHandlerResult> {
   const delegateResult = await executePeerDelegate({
     peer: routeData.recommendation.peer,
     prompt: parsed.prompt,
+    provider: routeData.recommendation.provider,
     model: routeData.recommendation.model,
     dispatchProfile: routeData.nextCall.args.dispatchProfile ?? parsed.routeParams.dispatchProfile,
     ...(parsed.delegateTimeoutMs !== undefined ? { timeoutMs: parsed.delegateTimeoutMs } : {}),

@@ -86,6 +86,11 @@ describe('buildBrowserOperatorSessionDraft', () => {
       requiresConsent: true,
       expectedArtifact: 'browser-action-log.jsonl',
     });
+    expect(draft.actionLog.find((entry) => entry.id === 'reviewed-interaction')).toMatchObject({
+      action: 'act',
+      requiresConsent: true,
+      inputs: { instruction: 'tester un formulaire', maxActions: 1 },
+    });
     expect(draft.actionLog.find((entry) => entry.id === 'assert')).toMatchObject({
       expectedArtifact: 'browser-assertion.json',
     });

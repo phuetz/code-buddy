@@ -70,6 +70,9 @@ export interface CompanionVoiceLoopStats {
     device?: string;
     sttMs?: number;
     totalMs?: number;
+    firstAudioMs?: number;
+    perceivedResponseMs?: number;
+    responseMode?: string;
     peakRms?: number;
     rmsOn?: number;
     signalMargin?: number;
@@ -79,6 +82,9 @@ export interface CompanionVoiceLoopStats {
     totalMs?: CompanionNumericStats;
     decisionMs?: CompanionNumericStats;
     actionMs?: CompanionNumericStats;
+    firstAudioMs?: CompanionNumericStats;
+    perceivedResponseMs?: CompanionNumericStats;
+    voiceTotalMs?: CompanionNumericStats;
     eventToSttStartMs?: CompanionNumericStats;
   };
   capture: {
@@ -286,6 +292,9 @@ function buildVoiceLoopStats(percepts: CompanionPercept[]): CompanionVoiceLoopSt
   const totalMs: number[] = [];
   const decisionMs: number[] = [];
   const actionMs: number[] = [];
+  const firstAudioMs: number[] = [];
+  const perceivedResponseMs: number[] = [];
+  const voiceTotalMs: number[] = [];
   const eventToSttStartMs: number[] = [];
   const captureMs: number[] = [];
   const writeMs: number[] = [];
@@ -304,6 +313,9 @@ function buildVoiceLoopStats(percepts: CompanionPercept[]): CompanionVoiceLoopSt
     const total = finiteNumberValue(latency?.totalMs);
     const decision = finiteNumberValue(latency?.decisionMs);
     const action = finiteNumberValue(latency?.actionMs);
+    const firstAudio = finiteNumberValue(latency?.firstAudioMs);
+    const perceivedResponse = finiteNumberValue(latency?.perceivedResponseMs);
+    const voiceTotal = finiteNumberValue(latency?.voiceTotalMs);
     const eventDelay = finiteNumberValue(latency?.eventToSttStartMs);
     const captureDuration = finiteNumberValue(capture?.ms);
     const writeDuration = finiteNumberValue(capture?.writeMs);
@@ -321,6 +333,9 @@ function buildVoiceLoopStats(percepts: CompanionPercept[]): CompanionVoiceLoopSt
     }
     if (decision !== undefined) decisionMs.push(decision);
     if (action !== undefined) actionMs.push(action);
+    if (firstAudio !== undefined) firstAudioMs.push(firstAudio);
+    if (perceivedResponse !== undefined) perceivedResponseMs.push(perceivedResponse);
+    if (voiceTotal !== undefined) voiceTotalMs.push(voiceTotal);
     if (eventDelay !== undefined) eventToSttStartMs.push(eventDelay);
     if (captureDuration !== undefined) captureMs.push(captureDuration);
     if (writeDuration !== undefined) writeMs.push(writeDuration);
@@ -352,6 +367,9 @@ function buildVoiceLoopStats(percepts: CompanionPercept[]): CompanionVoiceLoopSt
           device: stringValue(latestCapture?.device),
           sttMs: finiteNumberValue(latestLatency?.sttMs),
           totalMs: finiteNumberValue(latestLatency?.totalMs),
+          firstAudioMs: finiteNumberValue(latestLatency?.firstAudioMs),
+          perceivedResponseMs: finiteNumberValue(latestLatency?.perceivedResponseMs),
+          responseMode: stringValue(latestPayload?.responseMode),
           peakRms: latestPeakRms,
           rmsOn: latestRmsOn,
           signalMargin: latestSignalMargin,
@@ -362,6 +380,9 @@ function buildVoiceLoopStats(percepts: CompanionPercept[]): CompanionVoiceLoopSt
       totalMs: numericStats(totalMs),
       decisionMs: numericStats(decisionMs),
       actionMs: numericStats(actionMs),
+      firstAudioMs: numericStats(firstAudioMs),
+      perceivedResponseMs: numericStats(perceivedResponseMs),
+      voiceTotalMs: numericStats(voiceTotalMs),
       eventToSttStartMs: numericStats(eventToSttStartMs),
     },
     capture: {
@@ -527,6 +548,8 @@ export function formatCompanionPerceptStats(stats: CompanionPerceptStats): strin
       '',
       `Voice loop (last ${stats.voice.hearingCount}/${stats.voice.windowSize} hearing percepts):`,
       `- total: ${fmtMs(stats.voice.latency.totalMs)}`,
+      `- perceived response: ${fmtMs(stats.voice.latency.perceivedResponseMs)}`,
+      `- first audio (voice action): ${fmtMs(stats.voice.latency.firstAudioMs)}`,
       `- stt: ${fmtMs(stats.voice.latency.sttMs)}`,
       `- event->stt: ${fmtMs(stats.voice.latency.eventToSttStartMs)}`,
       `- capture: ${fmtMs(stats.voice.capture.captureMs)}`,
@@ -538,6 +561,9 @@ export function formatCompanionPerceptStats(stats: CompanionPerceptStats): strin
         `- latest: ${stats.voice.latest.timestamp}`
           + (stats.voice.latest.device ? ` device=${stats.voice.latest.device}` : '')
           + (stats.voice.latest.totalMs !== undefined ? ` total=${Math.round(stats.voice.latest.totalMs)}ms` : '')
+          + (stats.voice.latest.perceivedResponseMs !== undefined ? ` perceived=${Math.round(stats.voice.latest.perceivedResponseMs)}ms` : '')
+          + (stats.voice.latest.firstAudioMs !== undefined ? ` firstAudio=${Math.round(stats.voice.latest.firstAudioMs)}ms` : '')
+          + (stats.voice.latest.responseMode ? ` mode=${stats.voice.latest.responseMode}` : '')
           + (stats.voice.latest.sttMs !== undefined ? ` stt=${Math.round(stats.voice.latest.sttMs)}ms` : '')
           + (stats.voice.latest.signalMargin !== undefined ? ` margin=${stats.voice.latest.signalMargin.toFixed(2)}` : ''),
       );

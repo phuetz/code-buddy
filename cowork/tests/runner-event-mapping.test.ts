@@ -17,14 +17,6 @@
  */
 import { describe, expect, it, vi } from 'vitest';
 
-vi.mock('electron', () => ({
-  app: {
-    isPackaged: false,
-    getPath: () => '/tmp',
-    getVersion: () => '0.0.0',
-  },
-}));
-
 vi.mock('../src/main/utils/core-loader', () => ({
   loadCoreModule: vi.fn(async () => null),
 }));

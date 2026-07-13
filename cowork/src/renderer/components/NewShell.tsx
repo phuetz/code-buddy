@@ -17,8 +17,7 @@ import { ActivityPane } from './ActivityPane';
 import { PlanPanel } from './PlanPanel';
 import { FileActivityPanel } from './FileActivityPanel';
 import { HomeView } from './HomeView';
-import { useCallback, useEffect, useMemo } from 'react';
-import { AppStudioView } from './studio/AppStudioView';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import { useAppStudio } from './studio/use-app-studio';
 import { sessionToStudioMessages } from './studio/studio-chat-adapter';
 import { buildDevPlan, advancePlan, latestLlmPlan } from './studio/dev-plan';
@@ -29,37 +28,73 @@ import type { StudioScaffoldRequest } from './studio/StudioComposer';
 import { buildAiGenerationPrompt } from './studio/studio-ai-generation';
 import { useIPC } from '../hooks/useIPC';
 import { getInitialSessionTitle } from '../../shared/session-title';
-import { MissionControlView } from './os/MissionControlView';
-import { LabsGallery } from './labs/LabsGallery';
-import { CreationsView } from './deliverables/CreationsView';
-import { MediaLibraryView } from './deliverables/MediaLibraryView';
-import { VideoStudioView } from './videostudio/VideoStudioView';
-import { AssistantView } from './assistant/AssistantView';
-import { CapabilitiesView } from './capabilities/CapabilitiesView';
 import { ConversationHistoryDrawer } from './ConversationHistoryDrawer';
 import { OnboardingTour } from './onboarding/OnboardingTour';
+import { GuidedTooltip } from './Tooltip';
+import { CapabilitiesView } from './capabilities/CapabilitiesView';
+
+const AppStudioView = lazy(() =>
+  import('./studio/AppStudioView').then((module) => ({ default: module.AppStudioView })),
+);
+const MissionControlView = lazy(() =>
+  import('./os/MissionControlView').then((module) => ({ default: module.MissionControlView })),
+);
+const LabsGallery = lazy(() =>
+  import('./labs/LabsGallery').then((module) => ({ default: module.LabsGallery })),
+);
+const CreationsView = lazy(() =>
+  import('./deliverables/CreationsView').then((module) => ({ default: module.CreationsView })),
+);
+const MediaLibraryView = lazy(() =>
+  import('./deliverables/MediaLibraryView').then((module) => ({ default: module.MediaLibraryView })),
+);
+const VideoStudioView = lazy(() =>
+  import('./videostudio/VideoStudioView').then((module) => ({ default: module.VideoStudioView })),
+);
+const AssistantView = lazy(() =>
+  import('./assistant/AssistantView').then((module) => ({ default: module.AssistantView })),
+);
+const MeetingLiveView = lazy(() =>
+  import('./MeetingLiveView').then((module) => ({ default: module.MeetingLiveView })),
+);
 
 interface RailItem {
   view: PrimaryView;
   label: string;
   glyph: string;
+  help: string;
 }
 
 const RAIL: RailItem[] = [
-  { view: 'chat', label: 'Chat', glyph: '💬' },
-  { view: 'plan', label: 'Plan', glyph: '📋' },
-  { view: 'activity', label: 'Activité', glyph: '📊' },
-  { view: 'workspace', label: 'Fichiers', glyph: '📁' },
-  { view: 'studio', label: 'App Studio', glyph: '🛠️' },
-  { view: 'creations', label: 'Créations', glyph: '✨' },
-  { view: 'videostudio', label: 'Video Studio', glyph: '🎬' },
-  { view: 'assistant', label: 'Assistant', glyph: '🎙️' },
-  { view: 'library', label: 'Bibliothèque', glyph: '🖼️' },
-  { view: 'capabilities', label: 'Capacités', glyph: '🧰' },
-  { view: 'os', label: 'Mission Control', glyph: '🛰️' },
-  { view: 'labs', label: 'Labs', glyph: '🧪' },
-  { view: 'advanced', label: 'Avancé', glyph: '⚙️' },
+  { view: 'chat', label: 'Chat', glyph: '💬', help: 'Discute avec Code Buddy, joins des fichiers et transforme une demande en action.' },
+  { view: 'plan', label: 'Plan', glyph: '📋', help: 'Décompose une mission en étapes lisibles avant de laisser l’agent exécuter.' },
+  { view: 'activity', label: 'Activité', glyph: '📊', help: 'Observe les outils, fichiers, modèles et décisions produits pendant la session.' },
+  { view: 'workspace', label: 'Fichiers', glyph: '📁', help: 'Explore les fichiers du projet et ouvre les artefacts générés par les agents.' },
+  { view: 'studio', label: 'App Studio', glyph: '🛠️', help: 'Construis une application avec une boucle de génération, test et amélioration.' },
+  { view: 'creations', label: 'Créations', glyph: '✨', help: 'Retrouve tes livrables : documents, feuilles, présentations et exports.' },
+  { view: 'videostudio', label: 'Video Studio', glyph: '🎬', help: 'Prépare un storyboard, génère des scènes et assemble une vidéo vérifiable.' },
+  { view: 'assistant', label: 'Assistant', glyph: '🎙️', help: 'Configure le mode vocal temps réel, Pocket TTS, le volume et les interruptions.' },
+  { view: 'meeting', label: 'Réunion', glyph: '📝', help: 'Enregistre une réunion locale avec consentement, checkpoints récupérables et notes automatiques.' },
+  { view: 'library', label: 'Bibliothèque', glyph: '🖼️', help: 'Consulte les médias et ressources réutilisables du workspace.' },
+  { view: 'capabilities', label: 'Capacités', glyph: '🧰', help: 'Active les skills, outils, serveurs MCP et providers disponibles pour l’agent.' },
+  { view: 'os', label: 'Mission Control', glyph: '🛰️', help: 'Pilote le loop 2.0 : Constitution, Exchange multi-LLM, Shadow Twin et preuves.' },
+  { view: 'labs', label: 'Labs', glyph: '🧪', help: 'Découvre les fonctionnalités expérimentales et les nouveaux modes d’orchestration.' },
+  { view: 'advanced', label: 'Avancé', glyph: '⚙️', help: 'Accède aux réglages experts, à la supervision et aux intégrations avancées.' },
 ];
+
+const THEME_OPTIONS = [
+  { value: 'light', label: 'Clair', glyph: '☀️' },
+  { value: 'dark', label: 'Sombre', glyph: '🌙' },
+  { value: 'system', label: 'Système', glyph: '🖥️' },
+  { value: 'ember', label: 'Ember', glyph: '🔥' },
+  { value: 'genspark', label: 'Genspark', glyph: '✨' },
+  { value: 'codex', label: 'Codex', glyph: '◼️' },
+  { value: 'anthropic', label: 'Anthropic', glyph: '🟠' },
+] as const;
+
+function themeGlyph(theme: string): string {
+  return THEME_OPTIONS.find((option) => option.value === theme)?.glyph ?? '🎨';
+}
 
 interface LauncherCard {
   label: string;
@@ -297,7 +332,19 @@ export function NewShell() {
   const { getSessionMessages, getSessionTraceSteps } = useIPC();
   const setMessages = useAppStore((st) => st.setMessages);
   const setTraceSteps = useAppStore((st) => st.setTraceSteps);
+  const theme = useAppStore((st) => st.settings.theme);
+  const updateSettings = useAppStore((st) => st.updateSettings);
+  const [themePickerOpen, setThemePickerOpen] = useState(false);
   const backToChat = () => setPrimaryView('chat');
+
+  useEffect(() => {
+    if (!themePickerOpen) return;
+    const closeOnEscape = (event: KeyboardEvent): void => {
+      if (event.key === 'Escape') setThemePickerOpen(false);
+    };
+    window.addEventListener('keydown', closeOnEscape);
+    return () => window.removeEventListener('keydown', closeOnEscape);
+  }, [themePickerOpen]);
 
   // Hydrate ANY cold session from the DB — resuming from Home after a reload
   // showed « Démarrez la conversation » on a session full of persisted
@@ -328,52 +375,112 @@ export function NewShell() {
         {RAIL.map((item) => {
           const active = primaryView === item.view;
           return (
-            <button
-              key={item.view}
-              type="button"
-              aria-current={active ? 'page' : undefined}
-              onClick={() => setPrimaryView(item.view)}
-              title={item.label}
-              className={`flex flex-col items-center gap-0.5 py-2 mx-1 rounded-md text-[10px] transition-colors ${
-                active ? 'bg-accent text-foreground' : 'text-muted-foreground hover:bg-accent/60'
-              }`}
-            >
-              <span className="text-lg leading-none">{item.glyph}</span>
-              <span>{item.label}</span>
-            </button>
+            <GuidedTooltip key={item.view} title={item.label} description={item.help} kicker="Espace Cowork" side="right">
+              <button
+                type="button"
+                aria-current={active ? 'page' : undefined}
+                onClick={() => setPrimaryView(item.view)}
+                title={item.label}
+                className={`flex flex-col items-center gap-0.5 py-2 mx-1 rounded-md text-[10px] transition-colors ${
+                  active ? 'bg-accent text-foreground' : 'text-muted-foreground hover:bg-accent/60'
+                }`}
+              >
+                <span className="text-lg leading-none">{item.glyph}</span>
+                <span>{item.label}</span>
+              </button>
+            </GuidedTooltip>
           );
         })}
 
         {/* Footer: the discoverability net. ⌘K reaches every capability; "?" lists all shortcuts. */}
-        <button
-          type="button"
-          onClick={() => useAppStore.getState().setShowConversationHistory(true)}
-          title="Historique des conversations"
-          className="flex flex-col items-center gap-0.5 py-2 mx-1 rounded-md text-[10px] text-muted-foreground hover:bg-accent/60 transition-colors"
-          data-testid="rail-history"
-        >
-          <span className="text-lg leading-none">🕘</span>
-          <span>Historique</span>
-        </button>
-        <div className="mt-auto flex flex-col items-stretch gap-1">
+        <GuidedTooltip title="Historique" description="Retrouve une session précédente, ses messages et ses preuves sans quitter ton workspace." kicker="Navigation" side="right">
+          <button
+            type="button"
+            onClick={() => useAppStore.getState().setShowConversationHistory(true)}
+            title="Historique des conversations"
+            className="flex flex-col items-center gap-0.5 py-2 mx-1 rounded-md text-[10px] text-muted-foreground hover:bg-accent/60 transition-colors"
+            data-testid="rail-history"
+          >
+            <span className="text-lg leading-none">🕘</span>
+            <span>Historique</span>
+          </button>
+        </GuidedTooltip>
+        <div className="mt-auto grid grid-cols-3 gap-0.5 px-1 pt-1">
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setThemePickerOpen((open) => !open)}
+              title="Choisir le thème de l’application"
+              aria-label="Choisir le thème"
+              aria-haspopup="menu"
+              aria-expanded={themePickerOpen}
+              className="flex h-9 w-full items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent/60"
+              data-testid="rail-theme"
+            >
+              <span className="text-base leading-none" aria-hidden="true">
+                {themeGlyph(theme)}
+              </span>
+            </button>
+            {themePickerOpen && (
+              <div
+                role="menu"
+                aria-label="Choisir le thème"
+                className="absolute bottom-0 left-full z-50 ml-2 w-52 overflow-hidden rounded-xl border border-border bg-surface p-2 shadow-xl"
+                data-testid="theme-picker"
+              >
+                <div className="px-2 pb-2 pt-1 text-xs font-semibold text-foreground">
+                  Apparence
+                </div>
+                <div className="grid grid-cols-2 gap-1">
+                  {THEME_OPTIONS.map((option) => {
+                    const selected = theme === option.value;
+                    return (
+                      <button
+                        key={option.value}
+                        type="button"
+                        role="menuitemradio"
+                        aria-checked={selected}
+                        onClick={() => {
+                          updateSettings({ theme: option.value });
+                          setThemePickerOpen(false);
+                        }}
+                        className={`flex items-center gap-2 rounded-lg border px-2.5 py-2 text-left text-xs transition-colors ${
+                          selected
+                            ? 'border-accent bg-accent/10 text-foreground'
+                            : 'border-transparent text-muted-foreground hover:border-border hover:bg-accent/50 hover:text-foreground'
+                        }`}
+                        data-testid={`theme-option-${option.value}`}
+                      >
+                        <span aria-hidden="true">{option.glyph}</span>
+                        <span>{option.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
           <button
             type="button"
             onClick={() => setShowCommandPalette(true)}
             title="Palette de commandes (⌘K) — atteindre n'importe quelle fonctionnalité"
-            className="flex flex-col items-center gap-0.5 py-2 mx-1 rounded-md text-[10px] text-muted-foreground hover:bg-accent/60 transition-colors"
+            aria-label="Palette de commandes"
+            className="flex h-9 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent/60"
           >
-            <span className="text-sm leading-none font-mono">⌘K</span>
-            <span>Palette</span>
+            <span className="text-xs leading-none font-mono" aria-hidden="true">
+              ⌘K
+            </span>
           </button>
           <button
             type="button"
             onClick={() => setShowShortcutsDialog(true)}
             title="Raccourcis clavier (⌘/)"
             aria-label="Raccourcis clavier"
-            className="flex flex-col items-center gap-0.5 py-2 mx-1 rounded-md text-[10px] text-muted-foreground hover:bg-accent/60 transition-colors"
+            className="flex h-9 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent/60"
           >
-            <span className="text-lg leading-none">?</span>
-            <span>Aide</span>
+            <span className="text-base leading-none" aria-hidden="true">
+              ?
+            </span>
           </button>
         </div>
       </nav>
@@ -393,14 +500,23 @@ export function NewShell() {
         {primaryView === 'plan' && <PlanPanel />}
         {primaryView === 'activity' && <ActivityPane />}
         {primaryView === 'workspace' && <FileActivityPanel open onClose={backToChat} />}
-        {primaryView === 'studio' && <StudioView />}
-        {primaryView === 'creations' && <CreationsView />}
-        {primaryView === 'videostudio' && <VideoStudioView />}
-        {primaryView === 'assistant' && <AssistantView />}
-        {primaryView === 'library' && <MediaLibraryView />}
-        {primaryView === 'capabilities' && <CapabilitiesView />}
-        {primaryView === 'os' && <MissionControlView />}
-        {primaryView === 'labs' && <LabsGallery />}
+        <Suspense
+          fallback={
+            <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+              Chargement…
+            </div>
+          }
+        >
+          {primaryView === 'studio' && <StudioView />}
+          {primaryView === 'creations' && <CreationsView />}
+          {primaryView === 'videostudio' && <VideoStudioView />}
+          {primaryView === 'assistant' && <AssistantView />}
+          {primaryView === 'meeting' && <MeetingLiveView />}
+          {primaryView === 'library' && <MediaLibraryView />}
+          {primaryView === 'capabilities' && <CapabilitiesView />}
+          {primaryView === 'os' && <MissionControlView />}
+          {primaryView === 'labs' && <LabsGallery />}
+        </Suspense>
         {primaryView === 'advanced' && <AdvancedLauncher />}
       </div>
       <ConversationHistoryDrawer />

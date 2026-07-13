@@ -245,6 +245,7 @@ describe('Tools CLI commands', () => {
       'static-read',
       'observe',
       'interaction-plan',
+      'reviewed-interaction',
       'extract',
       'assert',
     ]);

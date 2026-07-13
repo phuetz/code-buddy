@@ -21,7 +21,16 @@
  *
  * @module companion/voice-improvement-loop
  */
-import { appendFileSync, mkdirSync, renameSync, statSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import {
+  appendFileSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  renameSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { logger } from '../utils/logger.js';
@@ -37,6 +46,12 @@ import {
   addVoiceGuidance,
   defaultVoiceGuidancePath,
 } from './voice-guidance.js';
+import {
+  readRecentDialogueHearing,
+  selectDialogueHearingTexts,
+} from './dialogue-percepts.js';
+
+export { selectDialogueHearingTexts as selectLearnableHearingTexts };
 
 export type VoiceImprovementMode = 'dry' | 'behavioral' | 'all';
 
@@ -63,6 +78,8 @@ export interface VoiceImprovementResult {
   at: number;
   /** How many heard utterances the reflection was based on. */
   heardCount: number;
+  /** Content hash used to avoid relearning the same rolling dialogue every heartbeat. */
+  conversationFingerprint: string;
   reflection: VoiceReflection;
   /** Facts newly PROPOSED (pending human review) this cycle. */
   proposedFacts: string[];
@@ -89,6 +106,8 @@ export interface VoiceImprovementDeps {
   guidancePath?: string;
   /** Override the relationship-state path (tests). */
   relationshipStatePath?: string;
+  /** Override the processed-dialogue cursor (tests). */
+  dedupeStatePath?: string;
 }
 
 const REFLECT_SYSTEM =
@@ -118,23 +137,9 @@ export function normalizeReflection(raw: unknown): VoiceReflection {
   return { facts, guidance, signal };
 }
 
-/** Default heard source — recent hearing percepts (mirrors episodic-journal). */
+/** Default heard source — addressed hearing percepts only (mirrors episodic-journal). */
 async function defaultReadHeard(limit: number, cwd?: string): Promise<string[]> {
-  try {
-    const { readRecentCompanionPercepts } = await import('./percepts.js');
-    const heard = await readRecentCompanionPercepts({
-      modality: 'hearing',
-      limit,
-      ...(cwd ? { cwd } : {}),
-    });
-    return heard
-      .map((h) =>
-        String((h.payload as { text?: string })?.text ?? h.summary ?? '').replace(/^Heard:\s*/i, '')
-      )
-      .filter(Boolean);
-  } catch {
-    return [];
-  }
+  return readRecentDialogueHearing(limit, cwd);
 }
 
 /** Default reflection — one JSON LLM call via the resolved command provider ($0 on ChatGPT-OAuth). */
@@ -172,6 +177,44 @@ function defaultJournalPath(cwd?: string): string {
   return join(cwd ?? homedir(), '.codebuddy', 'companion', 'voice-improvements.jsonl');
 }
 
+interface VoiceImprovementState {
+  lastFingerprint?: string;
+  processedAt?: number;
+}
+
+function defaultDedupeStatePath(cwd?: string): string {
+  return join(cwd ?? homedir(), '.codebuddy', 'companion', 'voice-improvement-state.json');
+}
+
+function conversationFingerprint(heard: string[]): string {
+  const canonical = heard.map((text) => text.trim().replace(/\s+/g, ' ')).join('\n');
+  return createHash('sha256').update(canonical).digest('hex');
+}
+
+function loadImprovementState(path: string): VoiceImprovementState {
+  try {
+    if (!existsSync(path)) return {};
+    const parsed = JSON.parse(readFileSync(path, 'utf8')) as Record<string, unknown>;
+    return {
+      ...(typeof parsed.lastFingerprint === 'string'
+        ? { lastFingerprint: parsed.lastFingerprint }
+        : {}),
+      ...(typeof parsed.processedAt === 'number' ? { processedAt: parsed.processedAt } : {}),
+    };
+  } catch {
+    return {};
+  }
+}
+
+function saveImprovementState(path: string, state: VoiceImprovementState): void {
+  try {
+    mkdirSync(dirname(path), { recursive: true });
+    writeFileSync(path, JSON.stringify(state));
+  } catch {
+    /* best effort — a failed cursor write only causes a later safe retry */
+  }
+}
+
 /** Append an audit line, rotating at 512 KB (mirrors dreaming/episodic-journal). Never throws. */
 function appendJournal(result: VoiceImprovementResult, cwd?: string): void {
   try {
@@ -201,12 +244,20 @@ export async function runVoiceImprovementCycle(
   // Need a couple of real utterances to say anything useful.
   if (heard.length < 2) return null;
 
+  const fingerprint = conversationFingerprint(heard);
+  const dedupeStatePath = deps.dedupeStatePath ?? defaultDedupeStatePath(deps.cwd);
+  if (loadImprovementState(dedupeStatePath).lastFingerprint === fingerprint) {
+    logger.debug?.('[voice-improve] unchanged addressed dialogue — reflection skipped');
+    return null;
+  }
+
   const reflection = await (deps.reflect ?? defaultReflect)(heard);
   if (!reflection) return null;
 
   const result: VoiceImprovementResult = {
     at: now,
     heardCount: heard.length,
+    conversationFingerprint: fingerprint,
     reflection,
     proposedFacts: [],
     acceptedFacts: [],
@@ -269,6 +320,9 @@ export async function runVoiceImprovementCycle(
   }
 
   appendJournal(result, deps.cwd);
+  if (mode !== 'dry') {
+    saveImprovementState(dedupeStatePath, { lastFingerprint: fingerprint, processedAt: now });
+  }
   logger.info(
     `[voice-improve] cycle: ${heard.length} heard → ${reflection.facts.length} fact(s), ` +
       `guidance=${result.guidanceApplied ? 'yes' : 'no'}, signal=${reflection.signal}, mode=${mode}`

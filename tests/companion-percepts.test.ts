@@ -100,6 +100,9 @@ describe('companion percept store', () => {
           totalMs: 900,
           decisionMs: 30,
           actionMs: 120,
+          firstAudioMs: 90,
+          perceivedResponseMs: 540,
+          voiceTotalMs: 120,
           eventToSttStartMs: 45,
         },
         capture: {
@@ -110,6 +113,7 @@ describe('companion percept store', () => {
           avgRms: 0.05,
           rmsOn: 0.04,
         },
+        responseMode: 'streamed',
       },
       tags: ['speech', 'stt', 'latency'],
     }, {
@@ -126,6 +130,9 @@ describe('companion percept store', () => {
           totalMs: 6_200,
           decisionMs: 80,
           actionMs: 1_900,
+          firstAudioMs: 1_200,
+          perceivedResponseMs: 4_380,
+          voiceTotalMs: 1_900,
           eventToSttStartMs: 75,
         },
         capture: {
@@ -136,6 +143,7 @@ describe('companion percept store', () => {
           avgRms: 0.025,
           rmsOn: 0.04,
         },
+        responseMode: 'blocking',
       },
       tags: ['speech', 'stt', 'latency'],
     }, {
@@ -151,6 +159,9 @@ describe('companion percept store', () => {
     expect(stats.voice?.latency.sttMs?.p50).toBe(420);
     expect(stats.voice?.latency.sttMs?.p95).toBe(3100);
     expect(stats.voice?.latency.totalMs?.p95).toBe(6200);
+    expect(stats.voice?.latency.firstAudioMs?.p50).toBe(90);
+    expect(stats.voice?.latency.perceivedResponseMs?.p95).toBe(4380);
+    expect(stats.voice?.latest?.responseMode).toBe('blocking');
     expect(stats.voice?.capture.signalMargin?.min).toBeCloseTo(1.25, 2);
     expect(stats.voice?.health.slowSttCount).toBe(1);
     expect(stats.voice?.health.slowLoopCount).toBe(1);
@@ -159,6 +170,8 @@ describe('companion percept store', () => {
     const formatted = formatCompanionPerceptStats(stats);
     expect(formatted).toContain('Voice loop');
     expect(formatted).toContain('p95=3100ms');
+    expect(formatted).toContain('perceived response');
+    expect(formatted).toContain('mode=blocking');
     expect(formatted).toContain('weakSignal=1');
     expect(formatted).toContain('device=hw:Webcam,0');
   });

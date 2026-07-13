@@ -147,7 +147,10 @@ export async function bootstrapDarkstarNetworkModel(
 
   try {
     const target = await resolveDarkstarTailnetBaseUrl(fetchStatus);
-    const ollamaVersion = await fetchOllamaVersion({ baseUrl: target.baseUrl });
+    const ollamaVersion = await fetchOllamaVersion({
+      baseUrl: target.baseUrl,
+      fetchImpl,
+    });
     const gemmaSupported = supportsGemma4(ollamaVersion);
     const response = await fetchJsonWithTimeout(fetchImpl, target.probeUrl, 1500);
     if (!response.ok) {

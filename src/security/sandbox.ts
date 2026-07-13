@@ -46,8 +46,8 @@ const DEFAULT_BLOCKED_PATHS = [
 ];
 
 const DANGEROUS_COMMANDS = [
-  'rm -rf /',
-  'rm -rf /*',
+  '\\brm\\s+-[^\\s]*r[^\\s]*f[^\\s]*\\s+/(?:\\s*)$',
+  '\\brm\\s+-[^\\s]*r[^\\s]*f[^\\s]*\\s+/\\*(?:\\s*)$',
   'dd if=',
   'mkfs',
   ':(){ :|:& };:',

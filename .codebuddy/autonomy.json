@@ -1,5 +1,5 @@
 {
-  "level": "yolo",
+  "level": "confirm",
   "dangerousOperations": [
     "rm",
     "rm -rf",
@@ -26,7 +26,7 @@
   ],
   "sessionOverrides": {},
   "yolo": {
-    "enabled": true,
+    "enabled": false,
     "allowList": [
       "npm test",
       "npm run lint",

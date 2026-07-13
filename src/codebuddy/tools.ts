@@ -43,6 +43,9 @@ import {
   CRON_TOOLS,
   WEB_TOOLS,
   RESEARCH_TOOLS,
+  CODE_EXEC_TOOLS,
+  MEETING_TOOLS,
+  COMFY_RECIPE_TOOLS,
   ADVANCED_TOOLS,
   MULTIMODAL_TOOLS,
   COMPUTER_CONTROL_TOOLS,
@@ -136,7 +139,7 @@ export type { CodeBuddyTool, JsonSchemaProperty };
 
 // Explicit re-exports from tool-definitions (no blanket export *)
 export {
-  CORE_TOOLS, MORPH_EDIT_TOOL, isMorphEnabled,
+  CORE_TOOLS, MORPH_EDIT_TOOL, isMorphEnabled, CODE_EXEC_TOOLS,
   SEARCH_TOOLS, TODO_TOOLS, KANBAN_TOOLS, MESSAGING_TOOLS, YUANBAO_TOOLS, HOMEASSISTANT_TOOLS, MOA_TOOLS, SPOTIFY_TOOLS, X_SEARCH_TOOLS, FEISHU_TOOLS, CRON_TOOLS, WEB_TOOLS, RESEARCH_TOOLS, ADVANCED_TOOLS, MULTIMODAL_TOOLS,
   COMPUTER_CONTROL_TOOLS, BROWSER_TOOLS, CANVAS_TOOLS, REASON_TOOL, EXECUTE_CODE_TOOL,
   WINDOWS_TOOLS,
@@ -159,6 +162,9 @@ export function getBuiltinToolNames(): string[] {
     CRON_TOOLS,
     WEB_TOOLS,
     RESEARCH_TOOLS,
+    CODE_EXEC_TOOLS,
+    MEETING_TOOLS,
+    COMFY_RECIPE_TOOLS,
     ADVANCED_TOOLS,
     MULTIMODAL_TOOLS,
     COMPUTER_CONTROL_TOOLS,
@@ -262,6 +268,9 @@ export function initializeToolRegistry(): void {
   registerGroup(CRON_TOOLS);
   registerGroup(WEB_TOOLS);
   registerGroup(RESEARCH_TOOLS);
+  registerGroup(CODE_EXEC_TOOLS);
+  registerGroup(MEETING_TOOLS);
+  registerGroup(COMFY_RECIPE_TOOLS);
   registerGroup(ADVANCED_TOOLS);
   registerGroup(MULTIMODAL_TOOLS);
   registerGroup(COMPUTER_CONTROL_TOOLS);
@@ -421,7 +430,19 @@ export function codeExplorerToolPrefix(): string | null {
   }
 }
 
-export async function initializeMCPServers(): Promise<void> {
+let mcpServersInitPromise: Promise<void> | null = null;
+
+export function initializeMCPServers(): Promise<void> {
+  if (mcpServersInitPromise) return mcpServersInitPromise;
+  const run = initializeMCPServersOnce();
+  const tracked = run.finally(() => {
+    if (mcpServersInitPromise === tracked) mcpServersInitPromise = null;
+  });
+  mcpServersInitPromise = tracked;
+  return tracked;
+}
+
+async function initializeMCPServersOnce(): Promise<void> {
   const manager = getMCPManager();
   const config = loadMCPConfig();
 
@@ -460,13 +481,7 @@ export async function initializeMCPServers(): Promise<void> {
   }) as typeof process.stderr.write;
 
   try {
-    for (const serverConfig of config.servers) {
-      try {
-        await manager.addServer(serverConfig);
-      } catch (error) {
-        logger.warn(`Failed to initialize MCP server ${serverConfig.name}: ${error instanceof Error ? error.message : String(error)}`);
-      }
-    }
+    await manager.ensureServersInitialized(config);
   } finally {
     // Restore original stderr.write
     process.stderr.write = originalStderrWrite;

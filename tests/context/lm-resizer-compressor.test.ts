@@ -47,7 +47,10 @@ describe('lm-resizer compressor', () => {
         Array.from({ length: 30 }, () => 'warning: unused var x').join('\n') +
         '\nERROR: test failed at foo.ts:42 expected 3 got 2\n' +
         Array.from({ length: 20 }, () => 'ok 1 - passes').join('\n');
-      const r = await compressWithLmResizer(noisy, 'why did the test fail');
+      const r = await compressWithLmResizer(noisy, 'why did the test fail', {
+        bin,
+        httpUrl: null,
+      });
       expect(r).not.toBeNull();
       expect(r!.compressed.length).toBeLessThan(noisy.length); // shrank
       expect(r!.compressed).toContain('ERROR: test failed at foo.ts:42'); // signal preserved

@@ -13,6 +13,7 @@
  * those targeting `cowork-tool-runner` to this class.
  */
 import { logWarn } from '../utils/logger';
+import { workflowToolRequiresConfirmation } from './workflow-supervisor';
 
 export const COWORK_TOOL_AGENT_ID = 'cowork-tool-runner';
 
@@ -54,6 +55,11 @@ export interface CoworkToolAgentOptions {
   registry: FormalToolRegistryLike;
   /** Called when an approval is required so the bridge can forward it to the renderer. */
   onApprovalRequired: (payload: ApprovalRequestPayload) => void;
+  /** Fresh, non-cacheable confirmation for mutating/external tool calls. */
+  confirmToolInvocation?: (input: {
+    toolName: string;
+    toolInput: Record<string, unknown>;
+  }) => Promise<{ confirmed: boolean; feedback?: string }>;
 }
 
 interface PendingApproval {
@@ -110,6 +116,21 @@ export class CoworkToolAgent {
       throw new Error('tool_invoke task missing string toolName');
     }
     const toolInput = (taskInput.toolInput as Record<string, unknown>) ?? {};
+    if (workflowToolRequiresConfirmation(toolName)) {
+      if (!this.options.confirmToolInvocation) {
+        throw new Error(
+          `Fresh confirmation required for workflow tool '${toolName}', but no confirmation bridge is available`
+        );
+      }
+      const confirmation = await this.options.confirmToolInvocation({ toolName, toolInput });
+      if (!confirmation.confirmed) {
+        throw new Error(
+          confirmation.feedback
+            ? `Workflow tool '${toolName}' was not approved: ${confirmation.feedback}`
+            : `Workflow tool '${toolName}' was not approved`
+        );
+      }
+    }
     const result = await this.options.registry.execute(toolName, toolInput);
     if (!result.success) {
       throw new Error(result.error ?? `Tool '${toolName}' failed without error message`);

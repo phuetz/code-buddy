@@ -18,6 +18,12 @@ import { dirname, join } from 'node:path';
 
 export type PrefetchKind = 'weather' | 'news' | 'agenda' | 'date';
 export const PREFETCH_KINDS: readonly PrefetchKind[] = ['weather', 'news', 'agenda', 'date'];
+export const DEFAULT_NEWS_QUERY =
+  "actualités France monde technologie intelligence artificielle aujourd'hui";
+export const DEFAULT_NEWS_SEARCH_LANES = [
+  "actualités importantes France monde aujourd'hui",
+  "actualités technologie intelligence artificielle aujourd'hui",
+] as const;
 
 export interface PrefetchItem {
   kind: PrefetchKind;
@@ -28,8 +34,15 @@ export interface PrefetchItem {
 /** Keep the list small — each item is a periodic network/compute cost. */
 export const MAX_PREFETCH_ITEMS = 12;
 
-/** Out-of-the-box list: only the free/local answers (no network, no keys). */
-export const DEFAULT_PREFETCH_ITEMS: PrefetchItem[] = [{ kind: 'date' }, { kind: 'agenda' }];
+/**
+ * Out-of-the-box list. News uses the normal web-search provider chain and is
+ * kept as structured evidence; no LLM generation is performed by the warmer.
+ */
+export const DEFAULT_PREFETCH_ITEMS: PrefetchItem[] = [
+  { kind: 'date' },
+  { kind: 'agenda' },
+  { kind: 'news' },
+];
 
 export function defaultPrefetchItemsPath(env: NodeJS.ProcessEnv = process.env): string {
   return (

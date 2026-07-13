@@ -61,6 +61,10 @@ const SCOPES =
 /** Refresh threshold: re-fetch tokens when last_refresh is older than this. */
 const TOKEN_REFRESH_AGE_MS = 60 * 60 * 1000; // 1 hour
 
+/** Coalesce in-process refreshes so a burst of concurrent 401s cannot spend
+ * the same rotating refresh token more than once. */
+let refreshAuthInFlight: Promise<ChatGptAuth | null> | null = null;
+
 const AUTH_FILE_PATH = path.join(os.homedir(), '.codebuddy', 'codex-auth.json');
 
 /** Token bundle returned by `https://auth.openai.com/oauth/token`. */
@@ -592,6 +596,26 @@ export async function getChatGptAuth(): Promise<ChatGptAuth | null> {
   const ageMs = Date.now() - lastRefreshMs;
 
   if (ageMs > TOKEN_REFRESH_AGE_MS) {
+    return refreshChatGptAuth();
+  }
+
+  return chatGptAuthFromTokens(file.tokens);
+}
+
+/**
+ * Force an OAuth refresh even when `last_refresh` is recent.
+ *
+ * A 401 is authoritative: simply calling `getChatGptAuth()` used to reload
+ * the same <1-hour-old access token and retry it unchanged. Responses
+ * providers must call this function for their single 401 recovery attempt.
+ */
+export async function refreshChatGptAuth(): Promise<ChatGptAuth | null> {
+  if (refreshAuthInFlight) return refreshAuthInFlight;
+
+  refreshAuthInFlight = (async () => {
+    const file = loadAuthFile();
+    if (!file?.tokens?.refresh_token) return null;
+
     try {
       const refreshed = await refreshTokens(file.tokens.refresh_token);
       const updated: CodexAuthDotJson = {
@@ -605,14 +629,18 @@ export async function getChatGptAuth(): Promise<ChatGptAuth | null> {
       saveAuthFile(updated);
       return chatGptAuthFromTokens(updated.tokens!);
     } catch (err) {
-      // Refresh failed — token may have been revoked. Surface to caller
-      // so they can decide whether to clear credentials.
-      logger.error('ChatGPT token refresh failed', err instanceof Error ? err : { error: String(err) });
+      // Do not log token endpoint bodies or auth material. Status/name is
+      // sufficient for diagnosis; the caller provides the re-login action.
+      logger.error('ChatGPT token refresh failed', {
+        error: err instanceof Error ? err.name : 'unknown',
+      });
       return null;
     }
-  }
+  })().finally(() => {
+    refreshAuthInFlight = null;
+  });
 
-  return chatGptAuthFromTokens(file.tokens);
+  return refreshAuthInFlight;
 }
 
 /**

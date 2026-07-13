@@ -125,6 +125,7 @@ describe('TOML Serializer', () => {
     expect(toml).toContain('[middleware]');
     expect(toml).toContain('[ui]');
     expect(toml).toContain('[agent]');
+    expect(toml).toContain('rtk_enabled = false');
   });
 
   it('should serialize and parse back correctly', () => {
@@ -162,6 +163,13 @@ describe('Default Configuration', () => {
     expect(DEFAULT_CONFIG.models['grok-code-fast']).toBeDefined();
     expect(DEFAULT_CONFIG.models['grok-3']).toBeDefined();
     expect(DEFAULT_CONFIG.models['claude-sonnet']).toBeDefined();
+    expect(DEFAULT_CONFIG.models['gpt-5.6-sol']).toMatchObject({
+      provider: 'openai',
+      model_id: 'gpt-5.6-sol',
+      price_per_m_input: 5,
+      price_per_m_output: 30,
+      max_context_tokens: 1_050_000,
+    });
     expect(DEFAULT_CONFIG.models['gpt-4o']).toBeDefined();
   });
 
@@ -187,6 +195,13 @@ describe('Default Configuration', () => {
     expect(DEFAULT_CONFIG.middleware.max_turns).toBe(100);
     expect(DEFAULT_CONFIG.middleware.max_cost).toBe(10.0);
     expect(DEFAULT_CONFIG.middleware.auto_compact_threshold).toBe(80000);
+  });
+
+  it('keeps legacy RTK rewriting opt-in while accepting explicit legacy enablement', () => {
+    expect(DEFAULT_CONFIG.integrations?.rtk_enabled).toBe(false);
+
+    const parsed = parseTOML('[integrations]\nrtk_enabled = true\n');
+    expect((parsed.integrations as Record<string, unknown>).rtk_enabled).toBe(true);
   });
 });
 

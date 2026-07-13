@@ -63,6 +63,18 @@ import {
   type CompanionSafetyEventKind,
   type CompanionSafetyEventRisk,
 } from '../../companion/safety-ledger.js';
+import {
+  formatCompanionContinuityStatus,
+  getCompanionContinuityStatus,
+  refreshCompanionContinuity,
+} from '../../companion/continuity.js';
+import {
+  exportCompanionMigration,
+  formatCompanionMigrationResult,
+  getOrCreateCompanionMigrationPassphrase,
+  readCompanionMigrationPassphrase,
+  restoreCompanionMigration,
+} from '../../companion/migration.js';
 
 function entry(content: string): ChatEntry {
   return {
@@ -106,6 +118,71 @@ function flagValue(args: string[], name: string, options: { consumeRest?: boolea
 
 export async function handleCompanion(args: string[]): Promise<CommandHandlerResult> {
   const action = args[0]?.toLowerCase() || 'status';
+
+  if (action === 'continuity' || action === 'lineage') {
+    const continuityAction = args[1]?.toLowerCase() || 'status';
+    if (continuityAction === 'init' || continuityAction === 'refresh') {
+      refreshCompanionContinuity();
+      return {
+        handled: true,
+        entry: entry(formatCompanionContinuityStatus(getCompanionContinuityStatus())),
+      };
+    }
+    if (continuityAction === 'status' || continuityAction === 'verify') {
+      return {
+        handled: true,
+        entry: entry(formatCompanionContinuityStatus(getCompanionContinuityStatus())),
+      };
+    }
+    return {
+      handled: true,
+      entry: entry([
+        'Usage: /companion continuity init',
+        '       /companion continuity status',
+        '       /companion continuity refresh',
+        '       /companion continuity verify',
+      ].join('\n')),
+    };
+  }
+
+  if (action === 'migration' || action === 'migrate') {
+    const migrationAction = args[1]?.toLowerCase() || 'help';
+    const keyFile = flagValue(args, '--key-file');
+    if (migrationAction === 'export') {
+      const key = keyFile || process.env.CODEBUDDY_COMPANION_MIGRATION_KEY
+        ? readCompanionMigrationPassphrase({ keyFile })
+        : getOrCreateCompanionMigrationPassphrase();
+      const result = exportCompanionMigration({
+        passphrase: key.passphrase,
+        bundlePath: flagValue(args, '--output'),
+      });
+      return { handled: true, entry: entry(formatCompanionMigrationResult(result, key.keyPath)) };
+    }
+    if (migrationAction === 'verify' || migrationAction === 'restore') {
+      const bundlePath = args[2] && !args[2].startsWith('--') ? args[2] : flagValue(args, '--bundle');
+      if (!bundlePath) {
+        return { handled: true, entry: entry('A migration bundle path is required.') };
+      }
+      const key = readCompanionMigrationPassphrase({ keyFile });
+      const apply = migrationAction === 'restore' && args.includes('--apply');
+      const overwrite = apply && args.includes('--overwrite');
+      const result = restoreCompanionMigration({
+        passphrase: key.passphrase,
+        bundlePath,
+        apply,
+        overwrite,
+      });
+      return { handled: true, entry: entry(formatCompanionMigrationResult(result, key.keyPath)) };
+    }
+    return {
+      handled: true,
+      entry: entry([
+        'Usage: /companion migration export [--output <path>] [--key-file <path>]',
+        '       /companion migration verify <bundle> [--key-file <path>]',
+        '       /companion migration restore <bundle> [--apply] [--overwrite] [--key-file <path>]',
+      ].join('\n')),
+    };
+  }
 
   if (action === 'percepts' || action === 'senses') {
     const perceptAction = args[1]?.toLowerCase() || 'recent';
@@ -453,6 +530,8 @@ export async function handleCompanion(args: string[]): Promise<CommandHandlerRes
       '       /companion check-in [--text <text>] [--preview]',
       '       /companion missions sync|list|run-next|start|done|dismiss',
       '       /companion safety recent|stats',
+      '       /companion continuity init|status|refresh|verify',
+      '       /companion migration export|verify|restore',
       '       /companion camera status',
       '       /companion camera snapshot [--output <path>] [--device <device>]',
       '       /companion camera inspect [--image <path>] [--ocr]',

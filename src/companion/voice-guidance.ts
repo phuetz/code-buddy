@@ -85,6 +85,16 @@ export function addVoiceGuidance(
   return [{ text: t, at: now }, ...kept].slice(0, MAX_VOICE_GUIDANCE);
 }
 
+/** Remove one exact learned behavior while preserving unrelated guidance. */
+export function removeVoiceGuidance(
+  text: string,
+  existing: VoiceGuidanceItem[] = []
+): VoiceGuidanceItem[] {
+  const normalized = text.trim().toLowerCase();
+  if (!normalized) return [...existing];
+  return existing.filter((item) => item.text.trim().toLowerCase() !== normalized);
+}
+
 /** Format the guidance as a `<voice_guidance>` block for the reply system prompt (null when empty). */
 export function formatVoiceGuidance(items: VoiceGuidanceItem[]): string | null {
   const lines = items

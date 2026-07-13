@@ -1,8 +1,8 @@
 # Guide Recherche — Deep Research & SearXNG
 
-`buddy research "<sujet>"` lance par défaut le **Wide Research** historique
-(N workers parallèles sur des sous-thèmes, synthèse non déterministe, pas de
-citations garanties). Ce guide couvre la suite **Deep Research**, opt-in via
+`buddy research "<sujet>"` lance par défaut le **Wide Research**
+(un ensemble d'items indépendants traité par vagues concurrentes, synthèse non
+déterministe, pas de citations garanties). Ce guide couvre la suite **Deep Research**, opt-in via
 `--deep` et ses trois extensions (`--iterations`, `--perspectives`/`--storm`,
 `--ckg`), ainsi que **SearXNG** comme méta-moteur de recherche web privé.
 
@@ -24,8 +24,11 @@ chaque étage a un repli déterministe si le LLM ou un provider échoue.
 ## Exemples de commandes
 
 ```bash
-# Wide Research (comportement historique, inchangé)
+# Wide Research avec les valeurs par défaut (5 items / concurrence 5)
 buddy research "tendances de l'IA générative en 2026"
+
+# 120 angles au total, par vagues de 12 workers simultanés
+buddy research "marché européen de la robotique" --wide --items 120 --concurrency 12
 
 # Deep Research — Phase A : pipeline déterministe et cité
 buddy research --deep "impact des LLM sur le développement logiciel"
@@ -48,6 +51,83 @@ SEARXNG_URL=http://localhost:8888 buddy research --deep "..."
 # Sauvegarder le rapport dans un fichier (fonctionne avec tous les modes)
 buddy research --deep --iterations 2 "sujet" --report rapport.md
 ```
+
+## Checkpoint et reprise du Wide Research
+
+Le Wide Research parallèle peut enregistrer son état après la décomposition,
+après chaque item terminé et à la fin de chaque vague :
+
+```bash
+# Nouvelle recherche durable
+buddy research "robotique domestique" --wide --items 100 --concurrency 10 \
+  --checkpoint .codebuddy/research/robot.json
+
+# Reprise avec les mêmes sujet et options ; les workers déjà réussis ne repartent pas
+buddy research "robotique domestique" --items 100 --concurrency 10 \
+  --resume .codebuddy/research/robot.json
+
+# Sortie machine : un seul document JSON sur stdout
+buddy research "robotique domestique" --resume .codebuddy/research/robot.json --json
+
+# Contexte transmis à chaque worker et modèle explicitement prioritaire
+buddy research "robotique domestique" --wide --context "Privilégier mes notes locales" --model gemma-3
+```
+
+`--checkpoint` et `--resume` sont mutuellement exclusifs et concernent le Wide
+Research (pas `--deep`/STORM). La reprise vérifie le sujet, le nombre total
+d'items, la concurrence, les rounds, les timeouts et un fingerprint des paramètres d'exécution. En
+cas de différence, elle s'arrête avant de lancer un worker et laisse le fichier
+intact.
+
+Le volume total `--items` est borné entre **1 et 250**. `--concurrency` est
+borné entre **1 et 20**, et ne peut pas dépasser le nombre d'items. Par exemple,
+`--items 250 --concurrency 10` produit 25 vagues au maximum. L'ancien
+`--workers N` reste accepté comme raccourci compatible : il fixe les deux
+valeurs au même nombre, avec son plafond historique de 20. Le nombre de rounds
+vaut toujours au moins **1**. Une décomposition LLM vide ou trop courte est
+complétée automatiquement : un run ne peut donc jamais être marqué terminé
+avec zéro item.
+
+Sans `--timeout-ms`, le délai global n'est plus figé à cinq minutes : il est
+calculé à partir du nombre de vagues, du timeout par worker et des niveaux de
+synthèse. La CLI affiche ce budget auto-calculé avant le départ. Un
+`--timeout-ms` explicite reste prioritaire et n'est jamais agrandi en silence.
+À l'expiration d'un worker, Code Buddy lui transmet une annulation coopérative
+et conserve son slot jusqu'à sa terminaison effective. Une dépendance qui tarde
+à s'arrêter ne permet donc ni à la vague suivante de dépasser `--concurrency`,
+ni au rapport de revenir pendant que des agents fantômes continuent en arrière-plan.
+
+La synthèse finale est elle aussi bornée. Code Buddy ne concatène pas 100 à
+250 rapports dans un prompt unique : il regroupe les résultats par budget de
+caractères et par fan-in, synthétise ces groupes par vagues, puis réduit les
+résumés niveau par niveau jusqu'au rapport final. Un manifeste déterministe
+liste chaque item réussi ou échoué. Si un résultat doit être tronqué dans un
+prompt intermédiaire, le rapport le signale explicitement et sa version brute
+reste entière dans le checkpoint, afin qu'une reprise puisse régénérer la
+synthèse sans relancer les workers réussis.
+
+`--checkpoint` refuse d'écraser un fichier qui n'est pas déjà un checkpoint
+compatible. Si le checkpoint existe déjà, utilisez `--resume` ; pour un nouveau
+run, choisissez un nouveau chemin.
+
+Le checkpoint est un JSON versionné écrit par fichier temporaire puis renommage
+atomique. Il contient le sujet, les options d'exécution non sensibles, les
+sous-sujets, les résultats d'items, la taille des vagues et l'état du run. Il ne contient ni clé
+API, ni en-têtes, ni configuration provider brute. Un chemin relatif est résolu
+depuis le répertoire courant. Les checkpoints sont des états locaux de
+confiance, privés (`0600` sous POSIX) et appartenant à l'utilisateur courant ;
+un répertoire, une cible symbolique ou un chemin traversant un parent
+symbolique est refusé. Le checkpoint et `--report` doivent désigner deux
+fichiers réellement distincts : les alias canoniques et hardlinks sont aussi
+détectés. En mode durable, le rapport crée ses répertoires parents et est lui
+aussi remplacé atomiquement.
+
+Les sorties de workers, erreurs, rapports, affichage humain et document JSON
+sont filtrés avant exposition : clés connues, en-têtes `Bearer` et motifs de
+credentials sont remplacés par `[REDACTED]`. Le JSON annonce `completed`,
+`partial` ou `failed`, fournit les comptes explicites et `resumeAvailable`.
+Un résultat partiel ou échoué termine avec un code de sortie **1**, tout en
+laissant le checkpoint reprenable intact.
 
 `--perspectives N` implique `--deep` et prime sur `--iterations` (chaque
 perspective ne fait qu'un seul round de recherche, mais en parallèle des

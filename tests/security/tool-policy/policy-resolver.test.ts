@@ -32,6 +32,13 @@ describe('PolicyResolver', () => {
       expect(decision.action).toBe('confirm');
     });
 
+    it('applies the primary policy groups to canonical aliases', () => {
+      expect(getToolGroups('shell_exec')).toEqual(getToolGroups('bash'));
+      expect(getToolGroups('file_write')).toEqual(getToolGroups('create_file'));
+      expect(resolver.resolve('shell_exec').action).toBe('confirm');
+      expect(resolver.resolve('file_write').action).toBe('allow');
+    });
+
     it('should require confirmation for dangerous operations', () => {
       const decision = resolver.resolve('delete_file');
       expect(decision.action).toBe('confirm');
@@ -51,6 +58,15 @@ describe('PolicyResolver', () => {
     it('should allow web search', () => {
       const decision = resolver.resolve('web_search');
       expect(decision.action).toBe('allow');
+    });
+
+    it('allows audited fleet-safe reads without allowing unclassified effects', () => {
+      for (const toolName of ['weather', 'stock_quote', 'project_map']) {
+        expect(getToolGroups(toolName)).toContain('group:safe');
+        expect(resolver.resolve(toolName).action).toBe('allow');
+      }
+      expect(resolver.resolve('browser_click').action).toBe('confirm');
+      expect(resolver.resolve('generate_document').action).toBe('confirm');
     });
 
     it('should handle unknown tools with default action', () => {

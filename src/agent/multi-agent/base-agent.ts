@@ -7,7 +7,12 @@
 
 import { EventEmitter } from "events";
 import { CodeBuddyClient, CodeBuddyMessage, CodeBuddyTool } from "../../codebuddy/client.js";
+import { formatToolResultForRecovery } from "../../context/restorable-compression.js";
 import { getErrorMessage } from "../../types/index.js";
+import {
+  commandFromToolArguments,
+  prepareToolObservationForPrompt,
+} from "../prompt-tool-observation.js";
 import {
   AgentRole,
   AgentConfig,
@@ -142,7 +147,10 @@ Current working directory: ${process.cwd()}`;
       const allowedTools = this.filterTools(tools);
 
       // Run the agent loop
-      const output = await this.runAgentLoop(allowedTools, executeTool);
+      const output = await this.runAgentLoop(allowedTools, executeTool, {
+        query: `${task.title}\n${task.description}`,
+        workspaceRoot: context.codebaseInfo?.rootPath ?? process.cwd(),
+      });
 
       // Parse artifacts from output
       this.parseArtifacts(output);
@@ -228,13 +236,18 @@ ${context.decisions.slice(-5).map(d => `- ${d.description} (by ${d.madeBy})`).jo
    * Filter tools based on agent's allowed tools
    */
   protected filterTools(tools: CodeBuddyTool[]): CodeBuddyTool[] {
-    if (!this.config.allowedTools || this.config.allowedTools.length === 0) {
-      return tools;
-    }
+    const filtered = !this.config.allowedTools || this.config.allowedTools.length === 0
+      ? tools
+      : tools.filter(t => this.config.allowedTools!.includes(t.function.name));
 
-    return tools.filter(t =>
-      this.config.allowedTools!.includes(t.function.name)
-    );
+    // Optimized observations advertise exact callId recovery. Keep the
+    // read-only recovery tool available whenever the host supplied it, even
+    // for specialized agents whose historical whitelist predates it.
+    const restoreContext = tools.find((tool) => tool.function.name === "restore_context");
+    if (restoreContext && !filtered.some((tool) => tool.function.name === "restore_context")) {
+      return [...filtered, restoreContext];
+    }
+    return filtered;
   }
 
   /**
@@ -242,7 +255,8 @@ ${context.decisions.slice(-5).map(d => `- ${d.description} (by ${d.madeBy})`).jo
    */
   protected async runAgentLoop(
     tools: CodeBuddyTool[],
-    executeTool: ToolExecutor
+    executeTool: ToolExecutor,
+    observationContext: { query: string; workspaceRoot: string },
   ): Promise<string> {
     const maxRounds = this.config.maxRounds || 30;
     let accumulatedOutput = "";
@@ -286,12 +300,25 @@ ${context.decisions.slice(-5).map(d => `- ${d.description} (by ${d.madeBy})`).jo
           });
 
           const result = await executeTool(toolCall);
+          const rawContent = formatToolResultForRecovery(result);
+          const observation = await prepareToolObservationForPrompt({
+            toolName: toolCall.function.name,
+            toolCallId: toolCall.id,
+            content: rawContent,
+            success: result.success,
+            exitCode: result.success ? 0 : 1,
+            ...(result.error === undefined ? {} : { error: result.error }),
+            command: commandFromToolArguments(toolCall.function.arguments),
+            query: observationContext.query,
+            workspaceRoot: observationContext.workspaceRoot,
+            model: this.config.providerOverride?.model ?? this.config.model ?? "grok-3-latest",
+            messages: this.messages,
+            allowOptimization: tools.some((tool) => tool.function.name === "restore_context"),
+          });
 
           this.messages.push({
             role: "tool",
-            content: result.success
-              ? result.output || "Success"
-              : result.error || "Error",
+            content: observation.content,
             tool_call_id: toolCall.id,
           });
         }

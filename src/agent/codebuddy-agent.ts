@@ -259,7 +259,8 @@ export class CodeBuddyAgent extends BaseAgent {
       checkpointManager: this.checkpointManager,
       hooksManager: this.hooksManager,
       marketplace: this.marketplace,
-      repairCoordinator: this.repairCoordinator
+      repairCoordinator: this.repairCoordinator,
+      sessionIdProvider: () => this.sessionStore.getCurrentSessionId() ?? undefined,
     });
     this.toolHandler.setWorkingDirectory(workingDirectory);
 

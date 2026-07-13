@@ -14,7 +14,7 @@ auth headers or request transports.
 
 | Provider | Runtime path | Env / credential | Models (examples) |
 |:---------|:-------------|:-----------------|:------------------|
-| **ChatGPT OAuth** | direct Responses | `buddy login chatgpt` | gpt-5.5, gpt-5-codex |
+| **ChatGPT OAuth** | direct Responses Lite | `buddy login chatgpt` | gpt-5.6-sol (default), gpt-5.6-terra, gpt-5.6-luna |
 | **Ollama** | direct OpenAI-compatible | `OLLAMA_HOST` | qwen2.5-coder, llama3, devstral |
 | **LM Studio** | direct OpenAI-compatible | `LMSTUDIO_HOST` / `LM_STUDIO_HOST` | Any local served model |
 | **Grok** (xAI) | direct OpenAI-compatible | `GROK_API_KEY` / `XAI_API_KEY` | grok-4, grok-code-fast-1 |
@@ -50,8 +50,48 @@ auth headers or request transports.
 | **Azure OpenAI** | plugin-native | `AZURE_OPENAI_ENDPOINT` | Azure deployments |
 | **AWS Bedrock** | plugin-native | `AWS_BEDROCK_REGION` | Bedrock models |
 | **GitHub Copilot** | plugin-native | `GITHUB_COPILOT_TOKEN` | Copilot models |
+| **Antigravity CLI** | subscription subprocess | `AGY_CLI_PATH` | Dynamically discovered with `agy models` |
+| **Lemonade** | local OpenAI-compatible | `LEMONADE_HOST` | Downloaded Ryzen NPU/GPU/CPU models |
 
 Legacy/non-chat helper providers such as Deepgram remain in `src/providers/additional-providers.ts`.
+
+## Subscription and free-capacity providers
+
+Code Buddy keeps subscription authentication separate from metered API keys:
+
+- `buddy login xai` stores and refreshes the Grok/xAI subscription OAuth token;
+- ChatGPT OAuth discovers the account's live Codex model catalog and uses
+  `gpt-5.6-sol` by default. The catalog is cached with its ETag, so newly
+  available models do not require another hard-coded registry update;
+- ChatGPT OAuth and Gemini CLI use their existing subscription transports;
+- Antigravity is opt-in with `CODEBUDDY_PEER_PROVIDER=agy-cli`. The provider
+  always launches `agy` with `--mode plan --sandbox`; Code Buddy remains the
+  sole tool executor. Its model names are discovered dynamically through a
+  pseudo-terminal because `agy models` requires a TTY;
+- OpenRouter defaults to `openrouter/free` and advertises the curated `:free`
+  pool from the runtime provider catalog. It remains cloud egress even when the
+  selected model costs zero;
+- Lemonade model discovery probes `http://127.0.0.1:13305/v1/models`. It is
+  selected for chat only when `LEMONADE_HOST` is configured or when the operator
+  explicitly sets `CODEBUDDY_PEER_PROVIDER=lemonade`.
+
+Examples:
+
+```bash
+# Google Antigravity subscription, read-only advisor
+AGY_CLI_PATH="$HOME/.local/bin/agy" \
+CODEBUDDY_PEER_PROVIDER=agy-cli \
+CODEBUDDY_PEER_MODEL='Gemini 3.1 Pro (High)' buddy server
+
+# Local Lemonade Server
+CODEBUDDY_PEER_PROVIDER=lemonade \
+LEMONADE_HOST=http://127.0.0.1:13305 \
+LEMONADE_MODEL=Qwen3.6-35B-A3B-MTP-GGUF buddy server
+
+# OpenRouter zero-cost router
+CODEBUDDY_PEER_PROVIDER=openrouter \
+OPENROUTER_MODEL=openrouter/free buddy server
+```
 
 ## Plugin-Native Transports
 

@@ -85,7 +85,7 @@ For that companion layer, `buddy companion live` now gives a MySoulmate-style in
   </tr>
 </table>
 
-**ChatGPT Pro / Plus login** — `buddy login`, sign in once, then chat with `gpt-5.5` from the terminal. No API key; cost reported as `$0.0000` (flat-fee plan).
+**ChatGPT Pro / Plus login** — `buddy login`, sign in once, then chat with `gpt-5.6-sol` from the terminal. No API key; cost reported as `$0.0000` (flat-fee plan). Code Buddy discovers the models enabled for the account and keeps a compatibility fallback for staged rollouts.
 
 <p align="center">
   <img src="docs/screenshots/chatgpt-oauth-login.png" alt="ChatGPT OAuth login flow" width="820"/>
@@ -133,7 +133,7 @@ More desktop demos (Fleet, Autonomy, Companion, …) and captures: [`cowork/read
 **1.6.0 GA — these aren't roadmap items.** The captures above are unedited, and the core runs today:
 
 - ✅ **`$0` local coding agent** — a local Ollama model reasons on screen, then calls tools to do real work. *(the demos above)*
-- ✅ **ChatGPT Plus/Pro → `gpt-5.5` at `$0`** — `buddy login`, flat-fee, no API key, no per-token metering.
+- ✅ **ChatGPT Plus/Pro → `gpt-5.6-sol` at `$0`** — `buddy login`, flat-fee, no API key, no per-token metering.
 - ✅ **Goal loops (Ralph loop)** — a judge model re-checks completion every turn and auto-continues until done; proven multi-turn on a free local model, with a real in-loop length-truncation recovery ([test](tests/agent/in-loop-recovery.real.test.ts), no mocks).
 - ✅ **Multi-AI Fleet** — peers observe each other live and call each other's models & read-only tools (`peer.chat` / `peer.tool.invoke`).
 - ✅ **15 providers** with automatic failover and per-provider circuit breakers; **~110 tools**, MCP connectors, and a skills marketplace.
@@ -151,7 +151,7 @@ Toward the long-term companion/robot vision, [`buddy-sense/`](buddy-sense/) is a
 
 <p align="center"><img src="buddy-sense/docs/architecture.svg" alt="buddy-sense nervous-system architecture: senses → thalamus → bridge → Code Buddy event bus" width="840"/></p>
 
-**Honestly experimental** — distinct from the GA core above: the Rust daemon emits the heartbeat (+ audio from a WAV file), while live camera and live microphone run as Python sidecars (`buddy-vision/watch.py` and `buddy-vision/ear.py`) into the same bridge. The ear sidecar now defaults to `BUDDY_EAR_DEVICE=auto`, preferring webcam/USB microphones discovered through ALSA. `speech_end → STT → response gate → think/agent → speak` **is** wired with faster-whisper + Piper; voice actions default to `CODEBUDDY_SENSORY_SPEAK_PERMISSION_MODE=plan`. What's real today: the pure detector cores + thalamus + bridge are unit-tested (`cargo test`, 20 tests, no hardware), and the loopback bridge → event bus → reaction path (incl. speech transcription) is covered on the Code Buddy side.
+**Honestly experimental** — distinct from the GA core above: the Rust daemon emits the heartbeat (+ audio from a WAV file), while live camera and live microphone run as Python sidecars (`buddy-vision/watch.py` and `buddy-vision/ear.py`) into the same bridge. The ear sidecar now defaults to `BUDDY_EAR_DEVICE=auto`, preferring webcam/USB microphones discovered through ALSA. `speech_end → STT → response gate → think/agent → speak` **is** wired with faster-whisper + Piper; resident voice actions use the async-scoped guarded posture `CODEBUDDY_SENSORY_SPEAK_PERMISSION_MODE=default` (an explicit `buddy voice --mode plan` session remains read-only). What's real today: the pure detector cores + thalamus + bridge are unit-tested (`cargo test`, 20 tests, no hardware), and the loopback bridge → event bus → reaction path (incl. speech transcription) is covered on the Code Buddy side.
 
 ```bash
 cd buddy-sense && cargo test     # 20 tests, no hardware
@@ -191,7 +191,7 @@ buddy
 # Option B — log in with your ChatGPT Plus / Pro subscription (no API key)
 buddy login        # opens browser for OAuth → tokens persisted
 buddy whoami       # ✅ connected · you@example.com · Plan: pro
-buddy              # auto-routes to gpt-5.5 via the Codex backend, cost $0.0000
+buddy              # auto-routes to gpt-5.6-sol via the Codex backend, cost $0.0000
 
 # Option C — bring your own API key
 export GROK_API_KEY=...   # or GEMINI_API_KEY / OPENAI_API_KEY / ANTHROPIC_API_KEY

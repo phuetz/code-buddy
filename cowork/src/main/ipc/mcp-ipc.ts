@@ -13,22 +13,87 @@
  * @module main/ipc/mcp-ipc
  */
 
-import { ipcMain } from 'electron';
+import { app, ipcMain } from 'electron';
+import path from 'path';
 import { mcpConfigStore } from '../mcp/mcp-config-store';
+import { AgentBaseBridge } from '../mcp/agentbase-bridge';
+import {
+  discoverCodeBuddyMcpImports,
+  materializeCodeBuddyMcpImport,
+} from '../mcp/codebuddy-mcp-import';
 import type { SessionManager } from '../session/session-manager';
 import type { MCPMarketplaceBridge } from '../mcp/mcp-marketplace-bridge';
 import type { MCPServerConfig } from '../mcp/mcp-manager';
 import { log, logError } from '../utils/logger';
+import { loadCoreModule } from '../utils/core-loader';
 
 export interface McpIpcDeps {
   /** Current SessionManager (null until the DB is open) — accessor, not value. */
   getSessionManager: () => SessionManager | null;
   /** Current MCP marketplace bridge (null until created at boot) — accessor. */
   getMarketplaceBridge: () => MCPMarketplaceBridge | null;
+  /** Main-process-owned active project roots used for read-only MCP discovery. */
+  getWorkspaceRoots?: () => string[];
 }
 
 export function registerMcpIpcHandlers(deps: McpIpcDeps): void {
   const { getSessionManager, getMarketplaceBridge } = deps;
+  let agentBaseBridge: AgentBaseBridge | null = null;
+
+  const getAgentBaseBridge = (): AgentBaseBridge => {
+    if (agentBaseBridge) return agentBaseBridge;
+    agentBaseBridge = new AgentBaseBridge(
+      path.join(app.getPath('userData'), 'agentbase'),
+      {
+        listServers: () => mcpConfigStore.getServers(),
+        listStatuses: () =>
+          getSessionManager()?.getMCPManager().getServerStatus() ?? [],
+        listTools: () => getSessionManager()?.getMCPManager().getTools() ?? [],
+        listMarketplace: () => getMarketplaceBridge()?.list() ?? [],
+        hasOAuthState: (serverId) => Boolean(mcpConfigStore.getOAuthState(serverId)),
+        invokeTool: async (toolName, args) => {
+          const bridge = getMarketplaceBridge();
+          if (!bridge) {
+            return { success: false, durationMs: 0, error: 'MCP marketplace bridge not ready' };
+          }
+          return bridge.invokeTool(toolName, args);
+        },
+        confirmExternalAction: async ({ connector, tool, argumentKeys, argumentPreview }) => {
+          const module = await loadCoreModule<{
+            ConfirmationService: {
+              getInstance(): {
+                requestConfirmation(
+                  options: {
+                    operation: string;
+                    filename: string;
+                    content?: string;
+                    forcePrompt?: boolean;
+                  },
+                  operationType?: 'file' | 'bash'
+                ): Promise<{ confirmed: boolean; feedback?: string }>;
+              };
+            };
+          }>('utils/confirmation-service.js');
+          if (!module) {
+            return { confirmed: false, feedback: 'Confirmation service unavailable' };
+          }
+          return module.ConfirmationService.getInstance().requestConfirmation(
+            {
+              operation: `External connector action: ${connector.name} / ${tool.name}`,
+              filename: `mcp://${connector.id}/${encodeURIComponent(tool.name)}`,
+              content:
+                `Permission: ${tool.permission}\n`
+                + `Argument keys: ${argumentKeys.join(', ') || '(none)'}\n`
+                + `Reviewed arguments:\n${argumentPreview}`,
+              forcePrompt: true,
+            },
+            'file'
+          );
+        },
+      }
+    );
+    return agentBaseBridge;
+  };
 
   // ── MCP server config CRUD ───────────────────────────────────────
   ipcMain.handle('mcp.getServers', () => {
@@ -144,6 +209,67 @@ export function registerMcpIpcHandlers(deps: McpIpcDeps): void {
     }
   });
 
+  // ── AgentBase — unified, honest view over configured MCP connectors ──
+  ipcMain.handle('agentbase.list', () => getAgentBaseBridge().list());
+
+  ipcMain.handle(
+    'agentbase.setPermissions',
+    (_event, connectorId: string, patch: { read?: boolean; write?: boolean; external?: boolean }) =>
+      getAgentBaseBridge().setPermissions(connectorId, patch)
+  );
+
+  ipcMain.handle('agentbase.audit', (_event, limit?: number) =>
+    getAgentBaseBridge().auditLog(limit)
+  );
+
+  ipcMain.handle('agentbase.discoverCodeBuddy', () => {
+    try {
+      const result = discoverCodeBuddyMcpImports({
+        workspaceRoots: deps.getWorkspaceRoots?.() ?? [],
+        homeDir: app.getPath('home'),
+        configuredServers: mcpConfigStore.getServers(),
+      });
+      return { ok: true, ...result };
+    } catch (error) {
+      return {
+        ok: false,
+        candidates: [],
+        warnings: [],
+        error: error instanceof Error ? error.message : String(error),
+      };
+    }
+  });
+
+  ipcMain.handle('agentbase.importCodeBuddy', async (_event, candidateId: string) => {
+    try {
+      const config = materializeCodeBuddyMcpImport({
+        workspaceRoots: deps.getWorkspaceRoots?.() ?? [],
+        homeDir: app.getPath('home'),
+        configuredServers: mcpConfigStore.getServers(),
+      }, candidateId);
+      mcpConfigStore.saveServer(config);
+      // Deliberately do not call MCPManager.updateServer here. The import is a
+      // persistence-only operation and must not reach any transport lifecycle
+      // code (stdio/network) even if updateServer changes in the future.
+      // Enabling through the existing reviewed MCP settings performs the first
+      // runtime update. AgentBase reads configured inventory from the store.
+      getSessionManager()?.invalidateMcpServersCache();
+      getAgentBaseBridge().recordConnectorImport(config.id, config.name);
+      return {
+        ok: true,
+        imported: { id: config.id, name: config.name, enabled: false as const },
+      };
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : String(error) };
+    }
+  });
+
+  ipcMain.handle(
+    'agentbase.invoke',
+    (_event, input: { connectorId: string; toolName: string; args: Record<string, unknown> }) =>
+      getAgentBaseBridge().invoke(input)
+  );
+
   // ── MCP marketplace (Claude Cowork parity Phase 2) ───────────────
   ipcMain.handle('mcp.registry', () => {
     const bridge = getMarketplaceBridge();
@@ -212,15 +338,22 @@ export function registerMcpIpcHandlers(deps: McpIpcDeps): void {
     'mcp.invokeTool',
     async (_event, toolName: string, args: Record<string, unknown>) => {
       try {
-        const bridge = getMarketplaceBridge();
-        if (!bridge) {
+        const tool = getAgentBaseBridge()
+          .list()
+          .flatMap((connector) => connector.tools.map((entry) => ({ connector, entry })))
+          .find(({ entry }) => entry.name === toolName);
+        if (!tool) {
           return {
             success: false,
             durationMs: 0,
-            error: 'MCP marketplace bridge not ready',
+            error: 'Tool is not exposed by a connected AgentBase connector',
           };
         }
-        return await bridge.invokeTool(toolName, args ?? {});
+        return await getAgentBaseBridge().invoke({
+          connectorId: tool.connector.id,
+          toolName,
+          args: args ?? {},
+        });
       } catch (err) {
         logError('[mcp.invokeTool] failed:', err);
         return {

@@ -48,7 +48,12 @@ impl Stt {
     /// Load the offline transducer from a sherpa-onnx model directory.
     pub fn load(model_dir: &str) -> Result<Self, String> {
         let f = |name: &str| format!("{model_dir}/{name}");
-        for name in ["encoder.int8.onnx", "decoder.int8.onnx", "joiner.int8.onnx", "tokens.txt"] {
+        for name in [
+            "encoder.int8.onnx",
+            "decoder.int8.onnx",
+            "joiner.int8.onnx",
+            "tokens.txt",
+        ] {
             if !std::path::Path::new(&f(name)).exists() {
                 return Err(format!("model file missing: {}", f(name)));
             }
@@ -130,7 +135,11 @@ pub fn run_worker() -> ! {
                 continue;
             }
         };
-        let id = req.get("id").and_then(|v| v.as_str()).unwrap_or("").to_string();
+        let id = req
+            .get("id")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
         let wav = req.get("wav").and_then(|v| v.as_str()).unwrap_or("");
         if wav.is_empty() {
             emit(&serde_json::json!({ "id": id, "error": "missing wav" }));

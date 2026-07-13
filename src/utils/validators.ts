@@ -146,8 +146,7 @@ const PATH_TRAVERSAL_PATTERNS = [
 
 /** Dangerous command patterns */
 const DANGEROUS_COMMAND_PATTERNS: RegExp[] = [
-  /rm\s+(-rf?|--recursive)\s+[/~]/i,      // rm -rf /
-  /rm\s+.*\/\s*$/i,                        // rm path/
+  /\brm\b(?=[^|;&\n]*(?:\s-[a-z]*r[a-z]*\b|--recursive\b))[^|;&\n]*\s(?:\/|\/home\/?|~\/?|\$\{?HOME\}?)\s*$/i,
   />\s*\/dev\/sd[a-z]/i,                   // write to disk device
   /dd\s+.*if=.*of=\/dev/i,                 // dd to device
   /mkfs/i,                                  // format filesystem

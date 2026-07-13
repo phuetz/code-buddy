@@ -7,6 +7,8 @@
  *     whose payload ALREADY carries the decoded text → no WAV, no STT on this side.
  * DEBOUNCED (one transcription per utterance — the energy VAD over-segments), opt-in
  * (`CODEBUDDY_SENSORY_SPEECH=true`), injectable transcriber, never-throws.
+ * Processed fallback WAVs are ephemeral and removed after the job settles. Set
+ * `CODEBUDDY_SENSORY_KEEP_WAV=true` to retain them for audio/STT debugging.
  *
  * @module sensory/speech-reaction
  */
@@ -14,7 +16,7 @@
 import { existsSync, readFileSync } from 'fs';
 import { homedir } from 'os';
 import { fileURLToPath } from 'url';
-import { delimiter, dirname, join } from 'path';
+import { basename, delimiter, dirname, join, resolve } from 'path';
 import type { ChildProcessWithoutNullStreams } from 'child_process';
 import type { Interface as ReadlineInterface } from 'readline';
 import { getGlobalEventBus } from '../events/event-bus.js';
@@ -29,6 +31,11 @@ import {
   type SpeechRecognitionEngine,
 } from './speech-engine-config.js';
 import { resolveUserName } from '../companion/user-name.js';
+import {
+  isLikelyIncompleteVoiceTurn,
+  joinVoiceTurnFragments,
+  resolveIncompleteTurnHoldMs,
+} from './voice-turn-taking.js';
 
 // Re-exported for back-compat: callers + tests import these from speech-reaction.
 export { resolveSpeechRecognitionEngine };
@@ -40,16 +47,128 @@ export interface SpeechReactionOptions {
   /** Injectable STT (tests / custom). Default: faster-whisper via python ($0). */
   transcriber?: Transcriber;
   debounceMs?: number;
+  /** Maximum wait used only when a fast VAD final ends on an unfinished phrase. */
+  incompleteTurnHoldMs?: number;
   cwd?: string;
   now?: () => number;
   /** Action hook for the transcript (e.g. trigger an agent turn). */
   onHeard?: (text: string) => void | Promise<void>;
+  /**
+   * Acoustic turn-open hook, fired immediately when the Rust VAD opens — before
+   * endpointing and STT. Intended only for idempotent preparation (imports,
+   * prompt/MCP warmup); it must never be interpreted as permission to reply.
+   */
+  onSpeechStart?: (payload: Record<string, unknown>) => void | Promise<void>;
+  /** Interrupt the active think/speak turn when an explicit barge-in transcript arrives. */
+  onBargeIn?: (text: string) => void;
   /**
    * Human-like response gate. The percept is ALWAYS recorded (observation/memory stay
    * continuous); `onHeard` only fires when this returns `respond: true`. Omit → respond to
    * everything (today's behavior). See `respond-decider.ts`.
    */
   shouldRespond?: (text: string) => Promise<{ respond: boolean; reason: string }>;
+  /** Optional timing handoff from the response handler (e.g. `makeVoiceReply`). */
+  getResponseTiming?: () =>
+    | {
+        mode: string;
+        firstTextMs?: number;
+        firstSegmentMs?: number;
+        firstAudioMs?: number;
+        firstContentAudioMs?: number;
+        streamFallbackSegments?: number;
+        totalMs: number;
+        spoke: boolean;
+      }
+    | undefined;
+}
+
+/**
+ * Safe half-duplex barge-in gate. Requiring the assistant name or an explicit
+ * stop phrase avoids treating its own loudspeaker echo as a human interruption.
+ */
+export function isBargeInTranscript(
+  text: string,
+  robotName: string = process.env.CODEBUDDY_ROBOT_NAME || 'Lisa'
+): boolean {
+  const normalized = text
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/\p{M}+/gu, '')
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!normalized) return false;
+  const name = robotName
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/\p{M}+/gu, '')
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .trim();
+  if (name && new RegExp(`(^|\\s)${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(\\s|$)`).test(normalized)) {
+    return true;
+  }
+  return /^(stop|arrete|tais toi|attends|une seconde|laisse moi parler)(\s|$)/.test(normalized);
+}
+
+/**
+ * Deduplicate repeated `speech_end` events without imposing a multi-second pause between
+ * human turns. Playback echo is already covered independently by `voice-activity`'s
+ * speaking guard + echo tail, so this only needs to absorb duplicate capture events.
+ */
+export const DEFAULT_SPEECH_DEBOUNCE_MS = 800;
+
+/** Debug kill switch: keep fallback utterance WAVs instead of deleting them. */
+export const SPEECH_KEEP_WAV_ENV = 'CODEBUDDY_SENSORY_KEEP_WAV';
+
+export function resolveSpeechDebounceMs(env: NodeJS.ProcessEnv = process.env): number {
+  const raw = env.CODEBUDDY_SPEECH_DEBOUNCE_MS?.trim();
+  if (!raw) return DEFAULT_SPEECH_DEBOUNCE_MS;
+  const value = Number(raw);
+  return Number.isFinite(value) && value >= 0 ? value : DEFAULT_SPEECH_DEBOUNCE_MS;
+}
+
+function companionAudioDirectories(env: NodeJS.ProcessEnv = process.env): string[] {
+  const configured = [
+    env.BUDDY_EAR_WAV_DIR?.trim(),
+    env.CODEBUDDY_COMPANION_AUDIO_DIR?.trim(),
+  ].filter((value): value is string => Boolean(value));
+  return [...new Set([
+    resolve(join(homedir(), '.codebuddy', 'companion')),
+    ...configured.map(value => resolve(expandSpeechPath(value))),
+  ])];
+}
+
+/**
+ * Remove only producer-owned fallback audio. An event payload is untrusted: a
+ * path outside the configured companion directory, a symlink, or any filename
+ * other than `utt-<digits>.wav` is never removed.
+ */
+async function removeProcessedCompanionWav(wav: string): Promise<void> {
+  if (truthyEnv(SPEECH_KEEP_WAV_ENV, false)) return;
+  if (!/^utt-\d+\.wav$/.test(basename(wav))) return;
+
+  const candidate = resolve(expandSpeechPath(wav));
+  const candidateParent = dirname(candidate);
+  const allowedDirectory = companionAudioDirectories().find(dir => dir === candidateParent);
+  if (!allowedDirectory) return;
+
+  try {
+    const { lstat, realpath, unlink } = await import('node:fs/promises');
+    const info = await lstat(candidate);
+    if (!info.isFile() || info.isSymbolicLink()) return;
+    const [realParent, realAllowedDirectory] = await Promise.all([
+      realpath(candidateParent),
+      realpath(allowedDirectory),
+    ]);
+    if (realParent !== realAllowedDirectory) return;
+    await unlink(candidate);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+      logger.debug('[speech] fallback WAV cleanup skipped', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
 }
 
 function resolveSpeechPython(): string {
@@ -1024,7 +1143,8 @@ export async function transcribeWav(
 
 export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => void {
   const bus = getGlobalEventBus();
-  const debounceMs = options.debounceMs ?? Number(process.env.CODEBUDDY_SPEECH_DEBOUNCE_MS ?? 4000);
+  const debounceMs = options.debounceMs ?? resolveSpeechDebounceMs();
+  const incompleteTurnHoldMs = options.incompleteTurnHoldMs ?? resolveIncompleteTurnHoldMs();
   const now = options.now ?? (() => Date.now());
   const transcribe = options.transcriber ?? transcribeWavRaw;
   let lastAt = Number.NEGATIVE_INFINITY;
@@ -1032,19 +1152,46 @@ export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => v
   let activeWav: string | undefined;
   let disposed = false;
   let liveSeq = 0; // unique dedup key for live-mic finals (there's no WAV to key on)
-  let pendingSpeech: {
+  type SpeechJob = {
     p: ReturnType<typeof perceptionOf>;
     wav: string;
     presetText?: string;
+  };
+  let pendingSpeech: SpeechJob | null = null;
+  let heldLiveTurn: {
+    p: ReturnType<typeof perceptionOf>;
+    text: string;
+    key: string;
+    timer: ReturnType<typeof setTimeout>;
   } | null = null;
 
+  const cleanupSpeechJob = async (job: SpeechJob): Promise<void> => {
+    // `presetText` identifies buddy-sense's WAV-free live path. Only the
+    // Python fallback's batch jobs own a disposable source file.
+    if (job.presetText === undefined) await removeProcessedCompanionWav(job.wav);
+  };
+
+  const queuePendingSpeech = (job: SpeechJob): void => {
+    const superseded = pendingSpeech;
+    pendingSpeech = job;
+    if (superseded && superseded.wav !== job.wav) {
+      void cleanupSpeechJob(superseded);
+    }
+  };
+
   const startSpeechJob = (
-    job: { p: ReturnType<typeof perceptionOf>; wav: string; presetText?: string },
+    job: SpeechJob,
     bypassDebounce = false
   ): void => {
     const t = now();
-    if (isSpeaking(t)) return; // half-duplex: ignore the mic while the robot is speaking (+ echo tail)
-    if (!bypassDebounce && t - lastAt < debounceMs) return; // one transcription per utterance
+    if (isSpeaking(t)) {
+      void cleanupSpeechJob(job);
+      return; // half-duplex: ignore the mic while the robot is speaking (+ echo tail)
+    }
+    if (!bypassDebounce && t - lastAt < debounceMs) {
+      void cleanupSpeechJob(job);
+      return; // one transcription per utterance
+    }
     lastAt = t;
     inFlight = true;
     activeWav = job.wav;
@@ -1054,12 +1201,16 @@ export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => v
       const eventTimestamp = finiteTimestamp(job.p.receivedAt);
       const captureStartedAtMs = finiteTimestamp(payload.startedAtMs);
       const captureEndedAtMs = finiteTimestamp(payload.endedAtMs) ?? finiteTimestamp(job.p.tsMs);
+      const endpointMs = finiteTimestamp(payload.endpointMs);
+      const decodeMs = finiteTimestamp(payload.decodeMs);
+      const turnDetectionMs = finiteTimestamp(payload.turnDetectionMs);
       const transcribeStartMs = now();
       let sttMs = 0;
       let decisionMs = 0;
       let actionMs = 0;
       let decisionReason: string | undefined;
       let spoke = false; // did the robot actually emit audio this turn? gates the echo re-stamp
+      let responseTiming: ReturnType<NonNullable<SpeechReactionOptions['getResponseTiming']>>;
       try {
         // Live-mic path (buddy-sense `live-audio`): the daemon already decoded the
         // utterance in-process, so the transcript rides in the event payload — no
@@ -1076,6 +1227,12 @@ export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => v
           ...(eventTimestamp !== undefined ? { eventReceivedAtMs: eventTimestamp } : {}),
           transcribeStartMs,
           sttMs,
+          ...(endpointMs !== undefined ? { endpointMs } : {}),
+          ...(decodeMs !== undefined ? { decodeMs } : {}),
+          ...(turnDetectionMs !== undefined ? { turnDetectionMs } : {}),
+          ...(endpointMs !== undefined || decodeMs !== undefined || turnDetectionMs !== undefined
+            ? { inputReadyMs: (endpointMs ?? 0) + (turnDetectionMs ?? 0) + (decodeMs ?? 0) + sttMs }
+            : {}),
           decisionMs,
           actionMs,
           totalMs: sttMs,
@@ -1089,6 +1246,13 @@ export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => v
           peakRms: payload.peakRms ?? payload.rms,
           avgRms: payload.avgRms,
           ms: payload.ms,
+          audioMs: payload.audioMs,
+          endpointMs: payload.endpointMs,
+          decodeMs: payload.decodeMs,
+          turnDetector: payload.turnDetector,
+          turnProbability: payload.turnProbability,
+          turnDetectionMs: payload.turnDetectionMs,
+          turnForcedAfterHold: payload.turnForcedAfterHold,
           writeMs: payload.writeMs,
           vadHangMs: payload.vadHangMs,
           endedReason: payload.endedReason,
@@ -1143,9 +1307,22 @@ export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => v
           const actionStartMs = now();
           await options.onHeard?.(text);
           actionMs = elapsedSince(actionStartMs, now);
-          spoke = true; // the reply (voice-loop) played — its echo tail must be debounced
+          responseTiming = options.getResponseTiming?.();
+          // Plain hooks historically imply speech; instrumented voice handlers report whether
+          // audio really started (empty/muted/failed replies must not arm a fake echo debounce).
+          spoke = responseTiming?.spoke ?? true;
         }
         const totalMs = elapsedSince(transcribeStartMs, now);
+        const inputReadyMs =
+          (endpointMs ?? 0) + (turnDetectionMs ?? 0) + (decodeMs ?? 0) + sttMs;
+        const perceivedResponseMs =
+          responseTiming?.firstAudioMs !== undefined
+            ? inputReadyMs + decisionMs + responseTiming.firstAudioMs
+            : undefined;
+        const perceivedContentResponseMs =
+          responseTiming?.firstContentAudioMs !== undefined
+            ? inputReadyMs + decisionMs + responseTiming.firstContentAudioMs
+            : undefined;
         await recordCompanionPercept(
           {
             modality: 'hearing',
@@ -1162,7 +1339,30 @@ export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => v
                 decisionMs,
                 actionMs,
                 totalMs,
+                ...(responseTiming?.firstTextMs !== undefined
+                  ? { firstTextMs: responseTiming.firstTextMs }
+                  : {}),
+                ...(responseTiming?.firstSegmentMs !== undefined
+                  ? { firstSegmentMs: responseTiming.firstSegmentMs }
+                  : {}),
+                ...(responseTiming?.firstAudioMs !== undefined
+                  ? {
+                      firstAudioMs: responseTiming.firstAudioMs,
+                      perceivedResponseMs,
+                    }
+                  : {}),
+                ...(responseTiming?.firstContentAudioMs !== undefined
+                  ? {
+                      firstContentAudioMs: responseTiming.firstContentAudioMs,
+                      perceivedContentResponseMs,
+                    }
+                  : {}),
+                ...(responseTiming?.streamFallbackSegments !== undefined
+                  ? { streamFallbackSegments: responseTiming.streamFallbackSegments }
+                  : {}),
+                ...(responseTiming ? { voiceTotalMs: responseTiming.totalMs } : {}),
               },
+              ...(responseTiming ? { responseMode: responseTiming.mode, spoke } : {}),
               capture: {
                 ...capturePayload,
               },
@@ -1174,6 +1374,12 @@ export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => v
         if (actionMs > 0 || decisionMs > 0) {
           logger.info(
             `[speech] loop timings: stt=${sttMs}ms decision=${decisionMs}ms action=${actionMs}ms total=${totalMs}ms` +
+              (perceivedResponseMs !== undefined
+                ? ` perceived=${perceivedResponseMs}ms`
+                : '') +
+              (perceivedContentResponseMs !== undefined
+                ? ` perceivedContent=${perceivedContentResponseMs}ms`
+                : '') +
               (decisionReason ? ` reason=${decisionReason}` : '')
           );
         }
@@ -1182,6 +1388,11 @@ export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => v
           `[speech] reaction failed: ${err instanceof Error ? err.message : String(err)}`
         );
       } finally {
+        // The Python ear writes one source WAV per utterance. Delete it on every
+        // terminal path (success, empty STT, error, or teardown during a job).
+        // The helper fails closed for arbitrary paths and honours the debug
+        // retention switch documented at the top of this module.
+        await cleanupSpeechJob(job);
         // Re-stamp AFTER the full hear→think→speak cycle so the debounce window restarts from
         // end-of-playback — but ONLY when the robot actually spoke (that's the echo tail we must
         // not re-hear). After a silent turn (empty/filtered transcript, or the gate vetoed a
@@ -1204,15 +1415,63 @@ export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => v
     const p = perceptionOf(evt);
     if (p.modality !== 'audio') return;
 
+    // Rust live-audio publishes this on the exact VAD closed→open edge. Use the
+    // human's speaking time for preparation, but keep the response decision on
+    // `transcript_final`: television/noise can warm a standby, never make it talk.
+    if (p.kind === 'speech_start') {
+      if (options.onSpeechStart) {
+        const payload = (p.payload as Record<string, unknown> | undefined) ?? {};
+        void Promise.resolve().then(() => options.onSpeechStart!(payload)).catch((error) => {
+          logger.debug('[speech] predictive warmup skipped', {
+            error: error instanceof Error ? error.message : String(error),
+          });
+        });
+      }
+      return;
+    }
+
     // Live-mic path (buddy-sense `live-audio`): the transcript is ALREADY decoded
     // and carried in the payload — drive the same cognition with the text directly,
     // no WAV / no STT. Keyed on a synthetic id since there's no file to dedup on.
     if (p.kind === 'transcript_final') {
-      const text = (p.payload as { text?: string } | undefined)?.text?.trim();
+      const livePayload = p.payload as { text?: string; turnDetector?: string } | undefined;
+      let text = livePayload?.text?.trim();
       if (!text) return;
       const key = `live:${liveSeq++}`;
+      if (heldLiveTurn) {
+        clearTimeout(heldLiveTurn.timer);
+        text = joinVoiceTurnFragments(heldLiveTurn.text, text);
+        heldLiveTurn = null;
+      }
+      // Smart Turn has already considered prosody and the complete audio. The
+      // text heuristic is only a fail-open fallback for VAD-only sources.
+      if (
+        !livePayload?.turnDetector &&
+        incompleteTurnHoldMs > 0 &&
+        isLikelyIncompleteVoiceTurn(text)
+      ) {
+        const timer = setTimeout(() => {
+          const held = heldLiveTurn;
+          if (!held || held.key !== key || disposed) return;
+          heldLiveTurn = null;
+          const job = { p: held.p, wav: held.key, presetText: held.text };
+          if (inFlight) queuePendingSpeech(job);
+          else startSpeechJob(job);
+        }, incompleteTurnHoldMs);
+        heldLiveTurn = { p, text, key, timer };
+        logger.debug(`[speech] holding likely incomplete turn for ${incompleteTurnHoldMs}ms → ${text}`);
+        return;
+      }
       if (inFlight) {
-        if (key !== activeWav) pendingSpeech = { p, wav: key, presetText: text };
+        if (options.onBargeIn && isBargeInTranscript(text)) {
+          logger.info(`[speech] barge-in → ${text}`);
+          try {
+            options.onBargeIn(text);
+          } catch {
+            /* interruption is best-effort; still queue the new utterance */
+          }
+        }
+        if (key !== activeWav) queuePendingSpeech({ p, wav: key, presetText: text });
         return;
       }
       startSpeechJob({ p, wav: key, presetText: text });
@@ -1225,7 +1484,7 @@ export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => v
 
     if (inFlight) {
       if (wav !== activeWav) {
-        pendingSpeech = { p, wav };
+        queuePendingSpeech({ p, wav });
       }
       return;
     }
@@ -1235,7 +1494,11 @@ export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => v
 
   return () => {
     disposed = true;
+    if (heldLiveTurn) clearTimeout(heldLiveTurn.timer);
+    heldLiveTurn = null;
+    const abandonedSpeech = pendingSpeech;
     pendingSpeech = null;
+    if (abandonedSpeech) void cleanupSpeechJob(abandonedSpeech);
     bus.off(id);
   };
 }

@@ -71,9 +71,42 @@ describe('isDirectedFollowUp', () => {
     expect(isDirectedFollowUp('on prépare le dîner de ce soir')).toBe(false);
     expect(isDirectedFollowUp('il fait beau aujourd’hui')).toBe(false);
   });
+
+  it('treats long second-person broadcast speech as ambient without a direct cue', () => {
+    expect(isDirectedFollowUp(
+      "Je vous attends pour comprendre l'actualité du jour, l'éclairer, l'analyser, " +
+        'tenter de la mettre en perspective, sans parti et sans concession.',
+    )).toBe(false);
+    // A real concise reply in the same grammatical person remains conversational.
+    expect(isDirectedFollowUp('je vous écoute')).toBe(true);
+  });
 });
 
 describe('respond-decider — addressed + engagement window (no LLM)', () => {
+  it('keeps passive arrival windows short until the human explicitly joins', async () => {
+    let t = 0;
+    const d = createResponseDecider({
+      now: () => t,
+      engageWindowMs: 30_000,
+      recentContext: async () => [],
+    });
+    d.markEngaged('arrival');
+
+    expect(await d.decide(
+      "Mais quel pays d'Europe est le plus propice pour accueillir le royaume de Mickey ? " +
+        "À la fin des années quatre-vingt, la société croule sous les candidatures.",
+    )).toEqual({ respond: false, reason: 'ambient-in-window' });
+
+    t = 1_000;
+    expect(await d.decide('salut, ça va ?')).toEqual({ respond: true, reason: 'engaged' });
+    // The concise reply established a real conversation; long directed questions now work.
+    t = 2_000;
+    expect((await d.decide(
+      "Et maintenant, peux-tu m'expliquer calmement pourquoi ce choix technique est préférable " +
+        "pour notre projet et quelles conséquences il aura demain ?",
+    )).respond).toBe(true);
+  });
+
   it('responds when addressed and opens the engagement window', async () => {
     let t = 1000;
     const judge = vi.fn(async () => false);
@@ -120,6 +153,13 @@ describe('respond-decider — addressed + engagement window (no LLM)', () => {
     // Ambient cross-talk inside the window → silent (do NOT answer the room).
     t = 50_000;
     expect(await d.decide('on prépare le dîner de ce soir')).toEqual({
+      respond: false,
+      reason: 'ambient-in-window',
+    });
+    expect(await d.decide(
+      "Je vous attends pour comprendre l'actualité du jour, l'éclairer, l'analyser, " +
+        'tenter de la mettre en perspective, sans parti et sans concession.',
+    )).toEqual({
       respond: false,
       reason: 'ambient-in-window',
     });

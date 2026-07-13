@@ -11,6 +11,8 @@ import {
 import { join } from 'path';
 import { logger } from '../utils/logger.js';
 import { getFreeSpaceInfo } from '../utils/disk-guard.js';
+import { SERVER_CONFIG } from '../config/constants.js';
+import { diagnoseServerExposure } from '../server/exposure-diagnostic.js';
 
 export interface FixResult {
   success: boolean;
@@ -137,13 +139,23 @@ async function checkChatGptOAuth(): Promise<DoctorCheck> {
         message: `credential file present but unreadable — try \`/logout chatgpt\` then \`/login chatgpt\``,
       };
     }
+    const {
+      CHATGPT_OAUTH_DEFAULT_MODEL,
+      CHATGPT_OAUTH_SAFE_FALLBACK_MODEL,
+      discoverChatGptModels,
+      selectChatGptOAuthModel,
+    } = await import('../providers/chatgpt-models.js');
+    const catalog = await discoverChatGptModels(auth);
+    const selectedModel = selectChatGptOAuthModel(CHATGPT_OAUTH_DEFAULT_MODEL, catalog);
     const parts: string[] = [];
     if (auth.email) parts.push(auth.email);
     if (auth.plan_type) parts.push(`Plan: ${auth.plan_type}`);
     if (auth.is_fedramp) parts.push('FedRAMP');
+    parts.push(`Model: ${selectedModel}`);
+    if (!catalog) parts.push(`discovery unavailable; safe fallback: ${CHATGPT_OAUTH_SAFE_FALLBACK_MODEL}`);
     return {
       name: 'ChatGPT OAuth',
-      status: 'ok',
+      status: catalog ? 'ok' : 'warn',
       message: parts.length > 0 ? parts.join(' · ') : 'signed in',
     };
   } catch (err) {
@@ -267,6 +279,25 @@ function checkGit(cwd: string): DoctorCheck {
   } catch {
     return { name: 'Git', status: 'warn', message: 'installed, but not inside a git repo' };
   }
+}
+
+/**
+ * Check the server configuration derived from environment/defaults. Explicit
+ * CLI flags are diagnosed again from the effective config when the server
+ * starts, so Fleet/A2A launches remain supported and observable.
+ */
+export function checkServerExposureEnvironment(
+  env: NodeJS.ProcessEnv = process.env,
+): DoctorCheck {
+  const host = env.HOST || SERVER_CONFIG.DEFAULT_HOST;
+  const authEnabled = env.NODE_ENV === 'production' ? true : env.AUTH_ENABLED !== 'false';
+  const diagnostic = diagnoseServerExposure({ host, authEnabled });
+
+  return {
+    name: 'Server network exposure',
+    status: diagnostic.unsafe ? 'warn' : 'ok',
+    message: diagnostic.message,
+  };
 }
 
 // ============================================================================
@@ -466,6 +497,7 @@ export async function runDoctorChecks(cwd?: string): Promise<DoctorCheck[]> {
     ...(await import('./env-sanity.js')).checkEnvSanity(dir),
     ...checkStaleLockFiles(dir),
     ...checkTtsProviders(),
+    checkServerExposureEnvironment(),
     checkDiskSpace(dir),
     checkGit(dir),
   ];

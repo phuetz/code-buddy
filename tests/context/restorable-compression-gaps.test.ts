@@ -10,6 +10,7 @@ import * as os from 'os';
 import * as fs from 'fs-extra';
 import {
   RestorableCompressor,
+  formatToolResultForRecovery,
   getRestorableCompressor,
   resetRestorableCompressor,
   CompressibleMessage,
@@ -33,6 +34,16 @@ describe('RestorableCompressor (gap coverage)', () => {
     const padded = content + ' ' + 'x'.repeat(Math.max(0, 201 - content.length));
     return { role: 'assistant', content: padded };
   }
+
+  describe('formatToolResultForRecovery()', () => {
+    it('preserves output and error when a tool returns both channels', () => {
+      expect(formatToolResultForRecovery({
+        success: false,
+        output: 'partial stdout',
+        error: 'late failure',
+      })).toBe('[tool output]\npartial stdout\n\n[tool error]\nlate failure');
+    });
+  });
 
   // --------------------------------------------------------------------------
   // Identifier extraction (tested via compress)
@@ -229,6 +240,59 @@ describe('RestorableCompressor (gap coverage)', () => {
       const compressor = new RestorableCompressor();
       compressor.writeToolResult('call_mem', 'Memory content', tmpDir);
       expect(compressor.listIdentifiers()).toContain('call_mem');
+    });
+
+    it('restores the right result after writes from multiple workspaces', () => {
+      const compressor = new RestorableCompressor();
+      const first = path.join(tmpDir, 'workspace-a');
+      const second = path.join(tmpDir, 'workspace-b');
+      fs.mkdirSync(first);
+      fs.mkdirSync(second);
+
+      compressor.writeToolResult('call_workspace_a', 'from A', first);
+      compressor.writeToolResult('call_workspace_b', 'from B', second);
+      // Force the disk-backed path to exercise the per-call workspace index.
+      (compressor as any).store.delete('call_workspace_a');
+
+      expect(compressor.restore('call_workspace_a', first)).toMatchObject({
+        found: true,
+        content: 'from A',
+      });
+    });
+
+    it('isolates identical provider call IDs across concurrent workspaces', () => {
+      const compressor = new RestorableCompressor();
+      const first = path.join(tmpDir, 'collision-a');
+      const second = path.join(tmpDir, 'collision-b');
+      fs.mkdirSync(first);
+      fs.mkdirSync(second);
+
+      compressor.writeToolResult('call_reused', 'workspace A secret', first);
+      compressor.writeToolResult('call_reused', 'workspace B secret', second);
+
+      expect(compressor.restore('call_reused', first).content).toBe('workspace A secret');
+      expect(compressor.restore('call_reused', second).content).toBe('workspace B secret');
+    });
+
+    it('never uses an untrusted call ID as a path', () => {
+      const compressor = new RestorableCompressor();
+      compressor.writeToolResult('../../outside', 'private', tmpDir);
+
+      expect(fs.existsSync(path.join(tmpDir, 'outside.txt'))).toBe(false);
+      expect(compressor.restore('../../outside')).toMatchObject({
+        found: true,
+        content: 'private',
+      });
+    });
+
+    it.runIf(process.platform !== 'win32')('creates private recovery directories and files', () => {
+      const compressor = new RestorableCompressor();
+      compressor.writeToolResult('call_private', 'sensitive output', tmpDir);
+      const dir = path.join(tmpDir, '.codebuddy', 'tool-results');
+      const file = path.join(dir, 'call_private.txt');
+
+      expect(fs.statSync(dir).mode & 0o777).toBe(0o700);
+      expect(fs.statSync(file).mode & 0o777).toBe(0o600);
     });
 
     it('should auto-evict oldest when store exceeds 500 entries', () => {

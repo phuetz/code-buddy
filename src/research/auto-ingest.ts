@@ -41,7 +41,7 @@ export async function runAutoResearchIngest(deps: AutoIngestDeps): Promise<{ app
     }
     return n > 0
       ? { applied: true, detail: `ingested ${n} publication(s) on "${topic}"` }
-      : { applied: false, detail: `no publications for "${topic}"` };
+      : { applied: false, detail: `no new publications for "${topic}"` };
   } catch (err) {
     return { applied: false, detail: `research ingest failed: ${err instanceof Error ? err.message : String(err)}` };
   }

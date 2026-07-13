@@ -10,6 +10,7 @@ import { getToolIcon, getToolLabel } from './toolHelpers';
 import { TerminalOutput } from './TerminalOutput';
 import { DiffViewer } from '../DiffViewer';
 import { WidgetBlock } from '../widgets/WidgetBlock';
+import { ContextOptimizationNotice } from './ContextOptimizationNotice';
 
 const EDIT_TOOLS = new Set(['write', 'edit', 'str_replace_editor', 'create_file', 'write_file', 'edit_file', 'apply_patch']);
 const BASH_TOOLS = new Set(['bash', 'execute_command', 'shell_exec', 'run_command']);
@@ -155,6 +156,8 @@ export const ToolUseBlock = memo(function ToolUseBlock({
           </span>
         )}
 
+        <ContextOptimizationNotice metadata={toolResult?.contextOptimization} compact />
+
         {/* Summary / duration */}
         {isSuccess && summary && !expanded && (
           <span className="text-[11px] text-text-muted truncate max-w-[180px] flex-shrink-0">
@@ -185,6 +188,11 @@ export const ToolUseBlock = memo(function ToolUseBlock({
       {/* Expanded content */}
       {expanded && (
         <div className="border-t border-border/50 animate-fade-in bg-background/35">
+          {toolResult?.contextOptimization && (
+            <div className="px-3 pt-2">
+              <ContextOptimizationNotice metadata={toolResult.contextOptimization} />
+            </div>
+          )}
           {/* Input section */}
           <div className="px-3 py-2">
             <div className="text-[10px] uppercase tracking-wider text-text-muted font-medium mb-1">

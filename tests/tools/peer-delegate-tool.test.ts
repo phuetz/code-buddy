@@ -160,12 +160,13 @@ describe('peer_delegate tool', () => {
       expect(data.traceId).toBe('tr-abc');
     });
 
-    it('forwards systemPrompt and model when provided', async () => {
+    it('forwards provider, systemPrompt and model when provided', async () => {
       const request = vi.fn().mockResolvedValue({ text: 'ok', usage: undefined });
       registerPeer('alpha', request);
       await executePeerDelegate({
         peer: 'alpha',
         prompt: 'hi',
+        provider: 'anthropic',
         systemPrompt: 'be brief',
         model: 'claude-opus-4-5',
         timeoutMs: 30_000,
@@ -173,6 +174,7 @@ describe('peer_delegate tool', () => {
       const [, params, options] = request.mock.calls[0];
       expect(params).toMatchObject({
         prompt: 'hi',
+        provider: 'anthropic',
         systemPrompt: 'be brief',
         model: 'claude-opus-4-5',
       });

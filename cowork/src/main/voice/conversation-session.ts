@@ -26,6 +26,8 @@ export interface VoiceConversationEvent {
   error?: string;
   reason?: string;
   hadPlayback?: boolean;
+  durationMs?: number;
+  provider?: string;
 }
 
 export interface VoiceConversationSnapshot {
@@ -44,6 +46,13 @@ export interface VoiceConversationSnapshot {
   resumedAfterInterruption?: boolean;
   resumeInstruction?: string;
   hadPlaybackDuringLastInterruption?: boolean;
+  lastSttMs?: number;
+  lastResponseMs?: number;
+  lastVoiceTurnMs?: number;
+  lastProvider?: string;
+  lastListeningStartedAt?: number;
+  lastTranscriptionStartedAt?: number;
+  lastUserMessageAt?: number;
 }
 
 function nowMs(): number {
@@ -113,15 +122,21 @@ export class VoiceConversationSession {
         next.phase = 'listening';
         next.turnId += 1;
         next.lastError = undefined;
+        next.lastListeningStartedAt = timestamp;
         break;
       case 'listening_stopped':
+        next.phase = 'transcribing';
+        break;
       case 'transcription_started':
         next.phase = 'transcribing';
+        next.lastTranscriptionStartedAt = timestamp;
         break;
       case 'transcription_completed':
         next.phase = 'thinking';
         next.lastTranscriptPreview = preview(event.transcript);
         next.lastError = undefined;
+        next.lastSttMs = event.durationMs ?? (next.lastTranscriptionStartedAt ? timestamp - next.lastTranscriptionStartedAt : undefined);
+        next.lastProvider = event.provider ?? next.lastProvider;
         break;
       case 'transcription_failed':
         next.phase = 'error';
@@ -130,15 +145,18 @@ export class VoiceConversationSession {
       case 'user_message_sent':
         next.phase = 'thinking';
         next.lastTranscriptPreview = preview(event.transcript) ?? next.lastTranscriptPreview;
+        next.lastUserMessageAt = timestamp;
         break;
       case 'assistant_speech_started':
         next.phase = 'speaking';
         next.lastError = undefined;
+        next.lastResponseMs = next.lastUserMessageAt ? timestamp - next.lastUserMessageAt : undefined;
         break;
       case 'assistant_speech_finished':
         next.phase = 'idle';
         next.pendingInterruption = false;
         next.resumedAfterInterruption = false;
+        next.lastVoiceTurnMs = next.lastListeningStartedAt ? timestamp - next.lastListeningStartedAt : undefined;
         break;
       case 'assistant_interrupted':
         next.phase = 'interrupted';

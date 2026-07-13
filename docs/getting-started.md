@@ -285,10 +285,13 @@ To send a message to the peer (and have it route to its LLM):
 For a longer conversation, open a multi-turn chat session with an
 operating posture:
 ```
-> /fleet chat start ministar-linux --profile review
+> /fleet chat start ministar-linux --provider lemonade --profile review
 > /fleet chat say audit the dispatch flow before we change it
 > /fleet status --with-sessions
 ```
+
+`--provider` pins the session to that exact backend; an unavailable
+provider fails closed instead of silently switching models.
 
 Inspect connection state:
 ```

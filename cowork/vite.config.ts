@@ -71,7 +71,9 @@ export default defineConfig({
                 'electron-updater',
                 'chokidar',
                 'archiver',
-                'ngrok',
+                // Native N-API bindings are packaged separately and must not be
+                // parsed or inlined by Rollup.
+                '@ngrok/ngrok',
                 'ws',
                 'glob',
                 'dotenv',

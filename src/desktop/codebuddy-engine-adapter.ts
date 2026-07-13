@@ -20,6 +20,7 @@ import type {
 import type { EnginePermissionResponse } from '../shared/engine-types.js';
 import type { StreamingChunk } from '../agent/types.js';
 import type { CodeBuddyClient } from '../codebuddy/client.js';
+import { parseContextOptimizationMetadata } from '../shared/context-optimization-metadata.js';
 import type {
   EngineMessage,
   EngineSessionConfig,
@@ -123,7 +124,7 @@ export class CodeBuddyEngineAdapter implements EngineAdapter {
       const promptAppendHash = config.systemPromptAppend
         ? createHash('sha256').update(config.systemPromptAppend).digest('hex').slice(0, 12)
         : '';
-      const desiredIdentity = `${config.apiKey || ''}:${config.baseURL || ''}:${config.model || ''}:${config.workingDirectory || ''}:${promptAppendHash}`;
+      const desiredIdentity = `${config.apiKey || ''}:${config.baseURL || ''}:${config.model || ''}:${config.workingDirectory || ''}:${config.thinkingLevel || ''}:${promptAppendHash}`;
       const cachedIdentity = this.agentIdentities.get(sessionId);
       let agent = this.agents.get(sessionId) as InstanceType<typeof CodeBuddyAgent> | undefined;
       if (agent && cachedIdentity !== desiredIdentity) {
@@ -162,8 +163,9 @@ export class CodeBuddyEngineAdapter implements EngineAdapter {
         // (new session or post model-swap) keeps the user's chosen level on the
         // Gemini-native path. The OpenAI-compat / Grok / Ollama path reads the
         // global extended-thinking budget per turn, so it needs no per-agent step.
-        if (this.thinkingLevel) {
-          this.applyGeminiThinkingLevel(agent, this.thinkingLevel);
+        const effectiveThinkingLevel = config.thinkingLevel || this.thinkingLevel;
+        if (effectiveThinkingLevel) {
+          this.applyGeminiThinkingLevel(agent, effectiveThinkingLevel);
         }
 
         // Phase 9 — enforce LRU before insertion so we never exceed
@@ -244,6 +246,19 @@ export class CodeBuddyEngineAdapter implements EngineAdapter {
 
       const streamingAgent = agent as GoalStreamingAgent;
       const goalSessionKey = buildCoworkGoalSessionKey(sessionId);
+      const [
+        { getPermissionModeManager },
+        { getOperatingModeManager },
+        { ConfirmationService },
+      ] = await Promise.all([
+        import('../security/permission-modes.js'),
+        import('../agent/operating-modes.js'),
+        import('../utils/confirmation-service.js'),
+      ]);
+      const permissionManager = getPermissionModeManager();
+      const operatingModeManager = getOperatingModeManager();
+      const confirmationService = ConfirmationService.getInstance();
+      const turnPermissionMode = config.permissionMode ?? permissionManager.getMode();
 
       const runPromptTurn = async (
         prompt: string
@@ -296,6 +311,9 @@ export class CodeBuddyEngineAdapter implements EngineAdapter {
             case 'tool_result':
               if (chunk.toolCall && chunk.toolResult) {
                 const finalOutput = chunk.toolResult.output || chunk.toolResult.error;
+                const contextOptimization = parseContextOptimizationMetadata(
+                  chunk.toolResult.metadata?.contextOptimization,
+                );
                 const toolStatus = chunk.toolResult.success ? 'success' : 'error';
                 if (finalOutput) {
                   toolEvidence.push(
@@ -318,6 +336,7 @@ export class CodeBuddyEngineAdapter implements EngineAdapter {
                     output: finalOutput,
                     isError: !chunk.toolResult.success,
                     data: chunk.toolResult.data,
+                    ...(contextOptimization ? { contextOptimization } : {}),
                   },
                 });
               }
@@ -376,6 +395,16 @@ export class CodeBuddyEngineAdapter implements EngineAdapter {
         return { interrupted: false, judgeResponse: buildGoalJudgeResponse(turnContent, toolEvidence, toolFailures) };
       };
 
+      const runScopedPromptTurn = (prompt: string) =>
+        confirmationService.withApprovalContextAsync(sessionId, () =>
+          permissionManager.withModeAsync(turnPermissionMode, () =>
+            operatingModeManager.withModeAsync(
+              turnPermissionMode === 'plan' ? 'plan' : 'balanced',
+              () => runPromptTurn(prompt),
+            ),
+          ),
+        );
+
       const emitGoalStatus = (message: string): void => {
         const content = `${fullContent ? '\n\n' : ''}${message}\n\n`;
         fullContent += content;
@@ -391,10 +420,12 @@ export class CodeBuddyEngineAdapter implements EngineAdapter {
         onEvent({
           type: 'goal_status',
           goalStatus: {
+            goalId: s.goalId,
             goal: s.goal,
             status: s.status,
             turnsUsed: s.turnsUsed,
             maxTurns: s.maxTurns,
+            verifyGated: s.verifyGated === true,
             ...(s.lastVerdict ? { lastVerdict: s.lastVerdict } : {}),
             ...(s.lastReason ? { lastReason: s.lastReason } : {}),
           },
@@ -404,7 +435,7 @@ export class CodeBuddyEngineAdapter implements EngineAdapter {
       // Emit once up-front so the banner appears the instant a goal turn starts
       // (before the first judge verdict), then again after each judged turn.
       emitGoalSnapshot();
-      let turn = await runPromptTurn(lastMessage.content);
+      let turn = await runScopedPromptTurn(lastMessage.content);
       for (let i = 0; i < GOAL_LOOP_HARD_BACKSTOP; i++) {
         const outcome = await maybeContinueGoalAfterTurn({
           client: streamingAgent.getClient?.() ?? null,
@@ -422,7 +453,7 @@ export class CodeBuddyEngineAdapter implements EngineAdapter {
         if (turn.interrupted || !outcome?.continuationPrompt) {
           break;
         }
-        turn = await runPromptTurn(outcome.continuationPrompt);
+        turn = await runScopedPromptTurn(outcome.continuationPrompt);
       }
 
       return {

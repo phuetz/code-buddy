@@ -74,6 +74,24 @@ describe('checkUserDenyRules', () => {
     fs.utimesSync(file, new Date(), new Date(Date.now() + 5000));
     expect(checkUserDenyRules('docker system prune -af').denied).toBe(true);
   });
+
+  it('applies cwd-scoped deny rules only inside their project', () => {
+    const projectA = path.join(home, 'project-a');
+    const projectB = path.join(home, 'project-b');
+    writeStore([
+      {
+        id: 'scoped',
+        pattern: 'custom-deploy',
+        type: 'prefix',
+        decision: 'deny',
+        enabled: true,
+        cwd: projectA,
+      },
+    ]);
+
+    expect(checkUserDenyRules('custom-deploy production', projectA).denied).toBe(true);
+    expect(checkUserDenyRules('custom-deploy production', projectB).denied).toBe(false);
+  });
 });
 
 describe('validateCommand integration (the seam both bash paths run)', () => {

@@ -184,6 +184,8 @@ export interface WorkflowRunResult {
   completedSteps: number;
   totalSteps: number;
   instanceId?: string;
+  /** Persistent supervision record id for history, comparison and replay. */
+  runId?: string;
   output?: Record<string, unknown>;
   error?: string;
 }

@@ -1,9 +1,10 @@
 /**
  * TTS bridge — unit tests for the parts that don't need spawning
- * Piper. The real piper invocation is integration-tested manually
+ * Pocket or Piper. The real engine invocation is integration-tested manually
  * (the binary lives outside the repo at
  * `/home/patrice/DEV/ai-stack/voice/piper`).
  */
+import { writeFileSync } from 'node:fs';
 import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('electron', () => ({
@@ -25,6 +26,33 @@ const {
   sanitizeForSpeech,
 } = __test;
 
+function makeWavHeader(sampleRate: number): Buffer {
+  const buf = Buffer.alloc(44);
+  buf.write('RIFF', 0, 'ascii');
+  buf.writeUInt32LE(36, 4);
+  buf.write('WAVE', 8, 'ascii');
+  buf.write('fmt ', 12, 'ascii');
+  buf.writeUInt32LE(16, 16); // fmt chunk size
+  buf.writeUInt16LE(1, 20); // PCM
+  buf.writeUInt16LE(1, 22); // channels = mono
+  buf.writeUInt32LE(sampleRate, 24);
+  buf.writeUInt32LE(sampleRate * 2, 28); // byte rate
+  buf.writeUInt16LE(2, 32); // block align
+  buf.writeUInt16LE(16, 34); // bits per sample
+  buf.write('data', 36, 'ascii');
+  buf.writeUInt32LE(0, 40);
+  return buf;
+}
+
+function makePcmWav(sampleRate: number, samples: number[]): Buffer {
+  const header = makeWavHeader(sampleRate);
+  const pcm = Buffer.alloc(samples.length * 2);
+  samples.forEach((sample, index) => pcm.writeInt16LE(sample, index * 2));
+  header.writeUInt32LE(36 + pcm.length, 4);
+  header.writeUInt32LE(pcm.length, 40);
+  return Buffer.concat([header, pcm]);
+}
+
 describe('TTSBridge — text sanitisation', () => {
   it('removes triple-backtick code fences (replaced with placeholder)', () => {
     const input = 'Here is code:\n```js\nconst x = 1;\n```\nSee?';
@@ -38,14 +66,12 @@ describe('TTSBridge — text sanitisation', () => {
 
   it('removes markdown emphasis markers (* _ ~)', () => {
     expect(sanitizeForSpeech('this is *bold* and _italic_ and ~strike~')).toBe(
-      'this is bold and italic and strike',
+      'this is bold and italic and strike'
     );
   });
 
   it('rewrites markdown links to just the text label', () => {
-    expect(sanitizeForSpeech('see [the docs](https://example.com)')).toBe(
-      'see the docs',
-    );
+    expect(sanitizeForSpeech('see [the docs](https://example.com)')).toBe('see the docs');
   });
 
   it('drops markdown image syntax entirely', () => {
@@ -62,24 +88,6 @@ describe('TTSBridge — text sanitisation', () => {
 });
 
 describe('TTSBridge — WAV header parsing', () => {
-  function makeWavHeader(sampleRate: number): Buffer {
-    const buf = Buffer.alloc(44);
-    buf.write('RIFF', 0, 'ascii');
-    buf.writeUInt32LE(36, 4);
-    buf.write('WAVE', 8, 'ascii');
-    buf.write('fmt ', 12, 'ascii');
-    buf.writeUInt32LE(16, 16); // fmt chunk size
-    buf.writeUInt16LE(1, 20); // PCM
-    buf.writeUInt16LE(1, 22); // channels = mono
-    buf.writeUInt32LE(sampleRate, 24);
-    buf.writeUInt32LE(sampleRate * 2, 28); // byte rate
-    buf.writeUInt16LE(2, 32); // block align
-    buf.writeUInt16LE(16, 34); // bits per sample
-    buf.write('data', 36, 'ascii');
-    buf.writeUInt32LE(0, 40);
-    return buf;
-  }
-
   it('reads 22050 Hz header correctly (Piper FR voice default)', () => {
     expect(readWavSampleRate(makeWavHeader(22050))).toBe(22050);
   });
@@ -144,6 +152,7 @@ describe('TTSBridge — portable runtime resolution', () => {
 describe('TTSBridge — boot error handling', () => {
   it('reports bootError when binary path is missing', () => {
     const bridge = new TTSBridge({
+      engine: 'piper',
       binary: '/nonexistent/piper',
       voice: '/nonexistent/voice.onnx',
     });
@@ -153,6 +162,7 @@ describe('TTSBridge — boot error handling', () => {
 
   it('synthesize() rejects when bootError is set', async () => {
     const bridge = new TTSBridge({
+      engine: 'piper',
       binary: '/nonexistent/piper',
       voice: '/nonexistent/voice.onnx',
     });
@@ -161,6 +171,7 @@ describe('TTSBridge — boot error handling', () => {
 
   it('synthesize() rejects on empty text without spawning piper', async () => {
     const bridge = new TTSBridge({
+      engine: 'piper',
       binary: '/nonexistent/piper',
       voice: '/nonexistent/voice.onnx',
     });
@@ -170,9 +181,132 @@ describe('TTSBridge — boot error handling', () => {
 
   it('synthesize() rejects when sanitization removes all speakable text', async () => {
     const bridge = new TTSBridge({
+      engine: 'piper',
       binary: process.execPath,
       voice: process.execPath,
     });
-    await expect(bridge.synthesize('![screenshot](image.png)')).rejects.toThrow(/empty after sanitization/);
+    await expect(bridge.synthesize('![screenshot](image.png)')).rejects.toThrow(
+      /empty after sanitization/
+    );
+  });
+});
+
+describe('TTSBridge — Pocket primary path', () => {
+  it('uses Pocket by default without requiring the legacy Piper runtime', () => {
+    const bridge = new TTSBridge({
+      env: {},
+      binary: '/nonexistent/piper',
+      voice: '/nonexistent/voice.onnx',
+    });
+
+    expect(bridge.isReady()).toBe(true);
+    expect(bridge.getProvider()).toBe('pocket');
+    expect(bridge.getFallbackProvider()).toBe('piper');
+  });
+
+  it('returns Pocket audio and reports the actual provider', async () => {
+    const pocketSynthesizer = vi.fn(async (_text: string, wavPath: string) => {
+      writeFileSync(wavPath, makeWavHeader(24000));
+      return true;
+    });
+    const bridge = new TTSBridge({
+      env: {},
+      binary: '/nonexistent/piper',
+      voice: '/nonexistent/voice.onnx',
+      pocketSynthesizer,
+    });
+
+    const result = await bridge.synthesize('Bonjour depuis Pocket');
+
+    expect(pocketSynthesizer).toHaveBeenCalledOnce();
+    expect(result.provider).toBe('pocket');
+    expect(result.sampleRate).toBe(24000);
+    expect(result.audio.byteLength).toBe(44);
+  });
+
+  it('reports the missing Piper runtime only if Pocket synthesis fails', async () => {
+    const bridge = new TTSBridge({
+      env: {},
+      binary: '/nonexistent/piper',
+      voice: '/nonexistent/voice.onnx',
+      pocketSynthesizer: async () => false,
+    });
+
+    await expect(bridge.synthesize('Bonjour')).rejects.toThrow(/piper binary.*not found/i);
+  });
+
+  it('honors the persisted assistant volume without requiring a Cowork restart', async () => {
+    const pocketSynthesizer = vi.fn(async (_text: string, wavPath: string) => {
+      writeFileSync(wavPath, makePcmWav(24000, [10_000, -10_000]));
+      return true;
+    });
+    const bridge = new TTSBridge({
+      env: {},
+      assistantConfigReader: () => ({ CODEBUDDY_TTS_VOLUME: '50' }),
+      binary: '/nonexistent/piper',
+      voice: '/nonexistent/voice.onnx',
+      pocketSynthesizer,
+    });
+
+    const result = await bridge.synthesize('Volume explicite');
+    const output = Buffer.from(result.audio);
+    const peak = Math.max(Math.abs(output.readInt16LE(44)), Math.abs(output.readInt16LE(46)));
+
+    expect(pocketSynthesizer).toHaveBeenCalledWith(
+      'Volume explicite',
+      expect.any(String),
+      expect.objectContaining({ CODEBUDDY_TTS_VOLUME: '50' }),
+      30000
+    );
+    expect(peak).toBeGreaterThan(13_500);
+    expect(peak).toBeLessThan(15_000);
+  });
+});
+
+describe('TTSBridge — Voicebox expressive path', () => {
+  it('returns Voicebox audio and reports the renderer used', async () => {
+    const voiceboxSynthesizer = vi.fn(async (_text: string, wavPath: string) => {
+      writeFileSync(wavPath, makeWavHeader(24000));
+      return true;
+    });
+    const pocketSynthesizer = vi.fn(async () => false);
+    const bridge = new TTSBridge({
+      engine: 'voicebox',
+      env: { CODEBUDDY_VOICEBOX_PROFILE: 'Lisa' },
+      binary: '/nonexistent/piper',
+      voice: '/nonexistent/voice.onnx',
+      voiceboxSynthesizer,
+      pocketSynthesizer,
+    });
+
+    const result = await bridge.synthesize('Bonjour depuis Voicebox');
+
+    expect(voiceboxSynthesizer).toHaveBeenCalledOnce();
+    expect(pocketSynthesizer).not.toHaveBeenCalled();
+    expect(result.provider).toBe('voicebox');
+    expect(result.sampleRate).toBe(24000);
+    expect(bridge.getFallbackProvider()).toBe('pocket');
+  });
+
+  it('falls back to Pocket without misreporting the resulting voice', async () => {
+    const voiceboxSynthesizer = vi.fn(async () => false);
+    const pocketSynthesizer = vi.fn(async (_text: string, wavPath: string) => {
+      writeFileSync(wavPath, makeWavHeader(24000));
+      return true;
+    });
+    const bridge = new TTSBridge({
+      engine: 'voicebox',
+      env: { CODEBUDDY_VOICEBOX_PROFILE: 'Lisa' },
+      binary: '/nonexistent/piper',
+      voice: '/nonexistent/voice.onnx',
+      voiceboxSynthesizer,
+      pocketSynthesizer,
+    });
+
+    const result = await bridge.synthesize('Darkstar est temporairement indisponible');
+
+    expect(result.provider).toBe('pocket');
+    expect(voiceboxSynthesizer).toHaveBeenCalledOnce();
+    expect(pocketSynthesizer).toHaveBeenCalledOnce();
   });
 });

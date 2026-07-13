@@ -220,7 +220,7 @@ describe('dag-compiler / V0.5 — loop nodes', () => {
     const def = baseDef({
       nodes: [
         node('start', 'start'),
-        node('lp', 'loop', { condition: '$i < 3' }),
+        node('lp', 'loop', { condition: '$i < 3', maxIterations: 3 }),
         node('a', 'tool', { toolName: 'bash_run', toolInput: { command: 'iter' } }),
         node('after', 'tool', { toolName: 'bash_run', toolInput: { command: 'done' } }),
         node('end', 'end'),
@@ -239,6 +239,7 @@ describe('dag-compiler / V0.5 — loop nodes', () => {
     expect(core.steps).toHaveLength(2);
     expect(core.steps[0].type).toBe('loop');
     expect(core.steps[0].loopCondition).toBe('$i < 3');
+    expect(core.steps[0].maxIterations).toBe(3);
     expect(core.steps[0].loopBody).toHaveLength(1);
     expect(core.steps[0].loopBody![0].tasks![0].input.cowork_visual_node_id).toBe('a');
     // After the exit, the main chain continues with `after`.
@@ -261,6 +262,24 @@ describe('dag-compiler / V0.5 — loop nodes', () => {
       ],
     });
     expect(() => compileVisualToCore(def)).toThrow(/missing config\.condition/);
+  });
+
+  it('rejects an unsafe loop maxIterations instead of silently using 100', () => {
+    const def = baseDef({
+      nodes: [
+        node('start', 'start'),
+        node('lp', 'loop', { condition: 'true', maxIterations: 0 }),
+        node('a', 'tool', { toolName: 'noop', toolInput: {} }),
+        node('end', 'end'),
+      ],
+      edges: [
+        edge('start', 'lp'),
+        edge('lp', 'a', 'body'),
+        edge('lp', 'end', 'exit'),
+        edge('a', 'end'),
+      ],
+    });
+    expect(() => compileVisualToCore(def)).toThrow(/maxIterations must be an integer between 1 and 100/);
   });
 
   it("rejects a loop without 'body'/'exit' edge labels", () => {

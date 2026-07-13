@@ -102,7 +102,7 @@ export function getBundledSkillsPath(): string {
   try {
     const shipped = path.join(path.dirname(fileURLToPath(import.meta.url)), 'bundled');
     if (fs.existsSync(shipped)) return shipped;
-  } catch {
+  } catch (_error) {
     // Exotic host without import.meta.url support — fall through.
   }
 

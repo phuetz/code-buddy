@@ -150,14 +150,17 @@ describe('BashTool', () => {
 
     // cat is not available on Windows
     (isWindows ? it.skip : it)('should execute cat command', async () => {
-      const tmpFile = path.join(os.tmpdir(), `bash-test-${Date.now()}.txt`);
+      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'bash-cat-'));
+      const tmpFile = path.join(tmpDir, 'input.txt');
       fs.writeFileSync(tmpFile, 'test content');
       try {
-        const result = await bashTool.execute(`cat ${tmpFile}`);
+        // The sandbox only exposes the selected workspace. Supplying the temp
+        // directory as cwd grants this test file without exposing host /tmp.
+        const result = await bashTool.execute(`cat ${tmpFile}`, 30000, tmpDir);
         expect(result.success).toBe(true);
         expect(result.output).toContain('test content');
       } finally {
-        fs.unlinkSync(tmpFile);
+        fs.rmSync(tmpDir, { recursive: true, force: true });
       }
     });
 
@@ -226,16 +229,15 @@ describe('BashTool', () => {
       }
     );
 
-    it('should block base command rm', async () => {
-      const result = await bashTool.execute('rm file.txt');
-      expect(result.success).toBe(false);
-      expect(result.error).toContain('blocked');
+    it('should confine a workspace rm instead of blocking the binary', async () => {
+      const result = await bashTool.execute('rm -f .codebuddy-policy-nonexistent');
+      expect(result.success).toBe(true);
     });
 
-    it('should block sudo', async () => {
+    it('should require a precise approval for sudo', async () => {
       const result = await bashTool.execute('sudo ls');
       expect(result.success).toBe(false);
-      expect(result.error).toContain('blocked');
+      expect(result.error).toContain('Approval requires');
     });
 
     it('should block nc/netcat', async () => {
@@ -244,16 +246,16 @@ describe('BashTool', () => {
       expect(result.error).toContain('blocked');
     });
 
-    it('should block chmod', async () => {
+    it('should confine chmod instead of blocking the binary', async () => {
       const result = await bashTool.execute('chmod 755 file.txt');
       expect(result.success).toBe(false);
-      expect(result.error).toContain('blocked');
+      expect(result.error).not.toContain('blocked');
     });
 
-    it('should block chown', async () => {
+    it('should require a precise approval for chown', async () => {
       const result = await bashTool.execute('chown root file.txt');
       expect(result.success).toBe(false);
-      expect(result.error).toContain('blocked');
+      expect(result.error).toContain('Approval requires');
     });
 
     it('should block reboot', async () => {
@@ -268,10 +270,10 @@ describe('BashTool', () => {
       expect(result.error).toContain('blocked');
     });
 
-    it('should block crontab', async () => {
+    it('should require a precise approval for crontab', async () => {
       const result = await bashTool.execute('crontab -e');
       expect(result.success).toBe(false);
-      expect(result.error).toContain('blocked');
+      expect(result.error).toContain('Approval requires');
     });
   });
 

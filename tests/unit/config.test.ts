@@ -694,6 +694,14 @@ denylist = ["rm -rf /", "sudo .*"]
         expect(SUPPORTED_MODELS['gemini-2.5-flash']).toBeDefined();
       });
 
+      it('should have GPT-5.6 Sol and its official API alias', () => {
+        expect(SUPPORTED_MODELS['gpt-5.6-sol']).toEqual({
+          maxTokens: 1_050_000,
+          provider: 'openai',
+        });
+        expect(SUPPORTED_MODELS['gpt-5.6']).toEqual(SUPPORTED_MODELS['gpt-5.6-sol']);
+      });
+
       it('should have local LLM support', () => {
         expect(SUPPORTED_MODELS['lmstudio']).toBeDefined();
         expect(SUPPORTED_MODELS['meta-llama-3.1-8b-instruct']).toBeDefined();

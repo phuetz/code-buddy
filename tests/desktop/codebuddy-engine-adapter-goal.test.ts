@@ -24,7 +24,21 @@ vi.mock('../../src/agent/codebuddy-agent.js', () => {
         yield {
           type: 'tool_result',
           toolCall: { id: 'tool-1', function: { name: 'bash', arguments: '{}' } },
-          toolResult: { success: true, output: 'tool proof' },
+          toolResult: {
+            success: true,
+            output: 'tool proof',
+            metadata: {
+              contextOptimization: {
+                optimizer: 'lm-resizer',
+                reason: 'optimized',
+                rawRef: 'tool-1',
+                originalBytes: 1_000,
+                finalBytes: 180,
+                bytesSaved: 820,
+                transport: 'cli',
+              },
+            },
+          },
         };
       }
       yield { type: 'done' };
@@ -77,7 +91,11 @@ describe('CodeBuddyEngineAdapter goal loop', () => {
 
   it('continues an active Cowork goal with per-session goal state and tool evidence', async () => {
     const adapter = new CodeBuddyEngineAdapter({ apiKey: 'k', model: 'm' });
-    const events: Array<{ type: string; content?: string }> = [];
+    const events: Array<{
+      type: string;
+      content?: string;
+      tool?: { contextOptimization?: { rawRef: string; bytesSaved: number } };
+    }> = [];
 
     await adapter.runSession(
       'sess-goal',
@@ -101,5 +119,7 @@ describe('CodeBuddyEngineAdapter goal loop', () => {
     expect(streamed).toContain('Continuing toward goal');
     expect(streamed).toContain('answer:next prompt');
     expect(streamed).toContain('Goal done');
+    expect(events.find((event) => event.type === 'tool_end')?.tool?.contextOptimization)
+      .toMatchObject({ rawRef: 'tool-1', bytesSaved: 820 });
   });
 });

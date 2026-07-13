@@ -34,6 +34,19 @@ import type {
 } from '../client.js';
 import type { Provider } from './provider-interface.js';
 import type { ChatGptAuth } from '../../providers/codex-oauth.js';
+import {
+  CHATGPT_OAUTH_DEFAULT_MODEL,
+  CHATGPT_OAUTH_SAFE_FALLBACK_MODEL,
+  getChatGptOAuthFallbackModels,
+  isChatGptModelCompatibilityError,
+  isChatGptSubscriptionModel,
+  modelUsesResponsesLite,
+  normalizeChatGptOAuthModel,
+  resolveChatGptReasoningEffort,
+  selectChatGptOAuthModel,
+  type ChatGptCodexModelCatalog,
+  type ChatGptModelCatalogProvider,
+} from '../../providers/chatgpt-models.js';
 import { logger } from '../../utils/logger.js';
 import { getInstallationId } from '../../utils/installation-id.js';
 
@@ -48,18 +61,6 @@ const ORIGINATOR = 'codex_cli_rs';
 const CONNECT_TIMEOUT_MS = 60_000;       // until response headers
 const STREAM_IDLE_TIMEOUT_MS = 120_000;  // between SSE events
 
-/** Models the ChatGPT Codex backend can expose after the primary model is
- *  rejected. `gpt-5.2` is the known-good safety fallback from real OAuth
- *  smoke testing, while several codex-suffixed slugs may be plan-gated. */
-const FALLBACK_MODELS = [
-  'gpt-5.2',
-  'gpt-5.1-codex',
-  'gpt-5.1-codex-max',
-  'gpt-5-codex',
-  'gpt-5.1',
-  'gpt-5',
-];
-
 export interface ChatGptResponsesProviderOptions {
   /**
    * Lazy auth provider — returns null if no credentials on disk. Called
@@ -69,12 +70,17 @@ export interface ChatGptResponsesProviderOptions {
   authProvider: () => Promise<ChatGptAuth | null>;
   /**
    * Force a fresh auth fetch after a 401 (refresh + retry once). The
-   * default impl calls `loginInteractive()` which opens the browser —
-   * NOT what we want during a chat turn. Tests can stub this.
+   * production client supplies `refreshChatGptAuth()`; direct callers can
+   * stub it. When omitted, the regular auth provider is reused.
    */
   refreshAuth?: () => Promise<ChatGptAuth | null>;
+  /** Optional account model discovery. Kept injectable so provider unit tests
+   * do not need to multiplex `/models` and `/responses` fetch mocks. */
+  modelCatalogProvider?: ChatGptModelCatalogProvider;
   model: string;
   defaultMaxTokens: number;
+  /** Provider-specific default; accepts Sol's `max` and `ultra` levels. */
+  defaultReasoningEffort?: string;
   /**
    * If true, skip auto-fallback when the backend rejects a model with
    * `model_not_supported` / `model_not_found`. Default: false (i.e.
@@ -82,14 +88,6 @@ export interface ChatGptResponsesProviderOptions {
    * for tests, or when the user genuinely wants to see the raw error.
    */
   disableModelFallback?: boolean;
-}
-
-/** Pick the next viable model after `current` from FALLBACK_MODELS.
- *  Returns null if `current` is already the last entry or absent. */
-function pickFallbackModel(current: string): string | null {
-  const idx = FALLBACK_MODELS.indexOf(current);
-  if (idx < 0) return FALLBACK_MODELS[0] ?? null; // current not in list → start from top
-  return FALLBACK_MODELS[idx + 1] ?? null;
 }
 
 /** Models served only by the classic OpenAI API — the ChatGPT/Codex backend
@@ -108,8 +106,7 @@ const CODEX_UNSUPPORTED_MODELS = new Set([
  *  claude-*, gemini-*, …) are NOT served and would 400. */
 function isCodexServableModel(model: string): boolean {
   if (CODEX_UNSUPPORTED_MODELS.has(model)) return false;
-  if (FALLBACK_MODELS.includes(model)) return true;
-  return /^gpt-5/i.test(model) || /^o[1-9]/i.test(model) || /codex/i.test(model);
+  return isChatGptSubscriptionModel(model);
 }
 
 /** When a model the Codex backend cannot serve reaches this provider WITHOUT an
@@ -125,13 +122,14 @@ function resolveCodexModel(
   hasExplicitModel: boolean,
   configuredModel?: string,
 ): string {
-  if (hasExplicitModel || isCodexServableModel(model)) return model;
+  const normalized = normalizeChatGptOAuthModel(model);
+  if (hasExplicitModel || isCodexServableModel(normalized)) return normalized;
   const target =
     configuredModel && isCodexServableModel(configuredModel)
-      ? configuredModel
-      : (FALLBACK_MODELS[0] ?? 'gpt-5.2');
+      ? normalizeChatGptOAuthModel(configuredModel)
+      : CHATGPT_OAUTH_DEFAULT_MODEL;
   logger.debug(
-    `[chatgpt-responses] "${model}" is not served by the Codex backend; using "${target}". Set --model to override.`,
+    `[chatgpt-responses] "${normalized}" is not served by the Codex backend; using "${target}". Set --model to override.`,
   );
   return target;
 }
@@ -142,8 +140,14 @@ function resolveCodexModel(
 
 interface ResponsesInputMessage {
   type: 'message';
-  role: 'user' | 'assistant' | 'system';
+  role: 'user' | 'assistant' | 'system' | 'developer';
   content: Array<{ type: 'input_text' | 'output_text'; text: string }>;
+}
+
+interface ResponsesAdditionalTools {
+  type: 'additional_tools';
+  role: 'developer';
+  tools: ResponsesTool[];
 }
 
 interface ResponsesFunctionCall {
@@ -155,6 +159,19 @@ interface ResponsesFunctionCall {
 
 interface ResponsesFunctionCallOutput {
   type: 'function_call_output';
+  call_id: string;
+  output: string;
+}
+
+interface ResponsesCustomToolCall {
+  type: 'custom_tool_call';
+  name: string;
+  input: string;
+  call_id: string;
+}
+
+interface ResponsesCustomToolCallOutput {
+  type: 'custom_tool_call_output';
   call_id: string;
   output: string;
 }
@@ -172,17 +189,33 @@ interface ResponsesReasoningItem {
 }
 
 type ResponsesInputItem =
+  | ResponsesAdditionalTools
   | ResponsesInputMessage
   | ResponsesFunctionCall
   | ResponsesFunctionCallOutput
+  | ResponsesCustomToolCall
+  | ResponsesCustomToolCallOutput
   | ResponsesReasoningItem;
 
-interface ResponsesTool {
+interface ResponsesFunctionTool {
   type: 'function';
   name: string;
   description: string;
   parameters: Record<string, unknown>;
 }
+
+interface ResponsesCustomTool {
+  type: 'custom';
+  name: string;
+  description: string;
+  format: {
+    type: 'grammar';
+    syntax: 'lark';
+    definition: string;
+  };
+}
+
+type ResponsesTool = ResponsesFunctionTool | ResponsesCustomTool;
 
 interface ResponsesRequestBody {
   model: string;
@@ -193,7 +226,7 @@ interface ResponsesRequestBody {
   parallel_tool_calls?: boolean;
   store: boolean;
   stream: boolean;
-  reasoning?: { effort: string };
+  reasoning?: { effort?: string; context?: 'all_turns' };
   prompt_cache_key?: string;
   /** Tells the backend to surface the chain-of-thought as encrypted
    *  blobs in the SSE stream. Required to make `lastTurnReasoningItems`
@@ -208,6 +241,7 @@ interface ResponsesRequestBody {
 export class ChatGptResponsesProvider implements Provider {
   private authProvider: () => Promise<ChatGptAuth | null>;
   private refreshAuth: () => Promise<ChatGptAuth | null>;
+  private modelCatalogProvider?: ChatGptModelCatalogProvider;
   private currentModel: string;
   /** Stable per-instance key so the backend's prompt cache lights up
    *  across tool-call turns within the same conversation. */
@@ -224,6 +258,7 @@ export class ChatGptResponsesProvider implements Provider {
    */
   private lastTurnReasoningItems: ResponsesReasoningItem[] = [];
   private disableModelFallback: boolean;
+  private defaultReasoningEffort?: string;
   /** The model this provider was constructed with (the user's configured
    *  session model). Never mutated by per-call overrides or fallback, so it is
    *  the safe remap target when a mis-routed / non-Codex model arrives. */
@@ -232,14 +267,20 @@ export class ChatGptResponsesProvider implements Provider {
   constructor(opts: ChatGptResponsesProviderOptions) {
     this.authProvider = opts.authProvider;
     this.refreshAuth = opts.refreshAuth ?? opts.authProvider;
-    this.currentModel = opts.model;
-    this.configuredModel = opts.model;
+    this.modelCatalogProvider = opts.modelCatalogProvider;
+    this.currentModel = normalizeChatGptOAuthModel(opts.model);
+    this.configuredModel = normalizeChatGptOAuthModel(opts.model);
     this.promptCacheKey = `cb-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
     this.disableModelFallback = opts.disableModelFallback ?? false;
+    this.defaultReasoningEffort = opts.defaultReasoningEffort;
   }
 
   setModel(model: string): void {
-    this.currentModel = model;
+    this.currentModel = normalizeChatGptOAuthModel(model);
+  }
+
+  setDefaultReasoningEffort(level: string): void {
+    this.defaultReasoningEffort = level;
   }
 
   // ─── Public Provider interface ─────────────────────────────────────
@@ -295,34 +336,7 @@ export class ChatGptResponsesProvider implements Provider {
     tools: CodeBuddyTool[] = [],
     opts: ChatOptions = {}
   ): AsyncGenerator<ChatCompletionChunk, void, unknown> {
-    const model = resolveCodexModel(
-      opts.model ?? this.currentModel,
-      opts.model != null,
-      this.configuredModel,
-    );
-    // If this is a brand-new conversational turn (last user message has
-    // no preceding tool round in messages), drop any stale reasoning
-    // blobs from the previous turn — they belonged to a different
-    // chain-of-thought.
-    if (isFreshUserTurn(messages)) {
-      this.lastTurnReasoningItems = [];
-    }
-    const reasoningEffort = this.deriveReasoningEffort(opts);
-    const { instructions, input } = convertMessages(messages, this.lastTurnReasoningItems);
-    const body = buildRequestBody({
-      model,
-      instructions,
-      input,
-      tools,
-      reasoningEffort,
-      maxTokens: opts.maxTokens,
-      promptCacheKey: this.promptCacheKey,
-      // Only ask for encrypted reasoning when reasoning effort is set —
-      // saves bandwidth on plain Q&A turns.
-      includeEncryptedReasoning: !!reasoningEffort,
-    });
-
-    // First attempt with current auth.
+    // Auth is needed both by `/models` discovery and by the Responses call.
     let auth = await this.authProvider();
     if (!auth) {
       throw new Error(
@@ -330,7 +344,34 @@ export class ChatGptResponsesProvider implements Provider {
       );
     }
 
-    let response = await this.postResponses(body, auth);
+    let catalog: ChatGptCodexModelCatalog | null = null;
+    if (this.modelCatalogProvider) {
+      try {
+        catalog = await this.modelCatalogProvider(auth);
+      } catch (error) {
+        logger.debug('[chatgpt-responses] Model discovery failed; continuing with safe policy', {
+          error: error instanceof Error ? error.name : 'unknown',
+        });
+      }
+    }
+
+    let model = resolveCodexModel(
+      opts.model ?? this.currentModel,
+      opts.model != null,
+      this.configuredModel,
+    );
+    if (!opts.model) model = selectChatGptOAuthModel(model, catalog);
+
+    // If this is a brand-new conversational turn (last user message has
+    // no preceding tool round in messages), drop any stale reasoning
+    // blobs from the previous turn — they belonged to a different
+    // chain-of-thought.
+    if (isFreshUserTurn(messages)) {
+      this.lastTurnReasoningItems = [];
+    }
+    const { instructions, input } = convertMessages(messages, this.lastTurnReasoningItems);
+    let request = this.buildRequestForModel(model, instructions, input, tools, opts, catalog);
+    let response = await this.postResponses(request.body, auth, request.useResponsesLite);
 
     // 401 → refresh and retry once.
     if (response.status === 401) {
@@ -341,44 +382,50 @@ export class ChatGptResponsesProvider implements Provider {
           'ChatGPT auth expired or revoked. Run `/login chatgpt` to re-authenticate.',
         );
       }
-      response = await this.postResponses(body, auth);
+      // Retry the exact same request. Authentication errors must never be
+      // disguised as model fallback.
+      response = await this.postResponses(request.body, auth, request.useResponsesLite);
     }
 
-    // 400 / 404 with `model_not_supported` (or `model_not_found`) →
-    // auto-fallback to the first FALLBACK_MODELS entry when the current
-    // model is not already one of those fallback candidates. CLI `--model`
-    // reaches this provider through `currentModel`, not always `opts.model`,
-    // so the fallback-list membership check prevents cascading from one
-    // explicitly chosen fallback slug to the next rejected slug.
-    if (
-      !response.ok &&
-      (response.status === 400 || response.status === 404) &&
-      !this.disableModelFallback &&
-      !opts.model &&
-      !FALLBACK_MODELS.includes(model)
-    ) {
+    // Only 400/404 model compatibility failures may advance to another
+    // account-supported model. Quota (429), auth (401/403), and transient
+    // errors stop immediately.
+    if (!response.ok && !this.disableModelFallback && !opts.model) {
       const errorText = await response.clone().text().catch(() => '');
-      if (/model.*(not.{0,5}supported|not.{0,5}found)/i.test(errorText)) {
-        const fallback = pickFallbackModel(model);
-        if (fallback) {
+      if (isChatGptModelCompatibilityError(response.status, errorText)) {
+        for (const fallback of getChatGptOAuthFallbackModels(model, catalog)) {
           logger.warn(
             `[chatgpt-responses] Model "${model}" rejected by backend. Auto-falling back to "${fallback}". Set --model explicitly to override.`,
           );
-          body.model = fallback;
-          this.currentModel = fallback;
-          response = await this.postResponses(body, auth);
+          request = this.buildRequestForModel(
+            fallback,
+            instructions,
+            input,
+            tools,
+            opts,
+            catalog,
+          );
+          response = await this.postResponses(request.body, auth, request.useResponsesLite);
+          model = fallback;
+          if (response.ok) break;
+
+          const fallbackError = await response.clone().text().catch(() => '');
+          if (!isChatGptModelCompatibilityError(response.status, fallbackError)) break;
         }
       }
     }
 
     if (!response.ok) {
       const errorText = await response.text().catch(() => '');
-      // Report the model that was ACTUALLY rejected by the final
-      // request — `body.model` may have been mutated by the auto-fallback
-      // branch above. The local `model` variable is the original
-      // request, which is misleading after a fallback.
-      throw enrichError(response.status, errorText, body.model);
+      throw enrichError(
+        response.status,
+        errorText,
+        request.body.model,
+        getChatGptOAuthFallbackModels(request.body.model, catalog),
+      );
     }
+
+    this.currentModel = request.body.model;
 
     if (!response.body) {
       throw new Error('ChatGPT Responses backend returned empty body');
@@ -387,11 +434,11 @@ export class ChatGptResponsesProvider implements Provider {
     // Reset capture buffer for THIS response — only successful new
     // reasoning blobs should populate `lastTurnReasoningItems`. We swap
     // in a fresh array so the SSE parser can push without races.
-    // Pass `body.model` (post-fallback) so streaming chunks are labelled
+    // Pass the post-fallback model so streaming chunks are labelled
     // with the model that actually served the response.
     const capturedReasoning: ResponsesReasoningItem[] = [];
     try {
-      yield* parseSseStream(response.body, body.model, (item) => {
+      yield* parseSseStream(response.body, request.body.model, (item) => {
         capturedReasoning.push(item);
       });
     } finally {
@@ -405,18 +452,40 @@ export class ChatGptResponsesProvider implements Provider {
 
   // ─── Internal helpers ──────────────────────────────────────────────
 
-  private deriveReasoningEffort(opts: ChatOptions): string | undefined {
-    // Map our generic effort knob to Codex's `reasoning.effort`.
-    const level = opts.thinkingLevel; // Gemini-shaped knob, but we reuse
-    if (!level) return undefined;
-    // Codex accepts: none, minimal, low, medium, high, xhigh.
-    const allowed = ['minimal', 'low', 'medium', 'high'];
-    return allowed.includes(level) ? level : undefined;
+  private buildRequestForModel(
+    model: string,
+    instructions: string | undefined,
+    input: ResponsesInputItem[],
+    tools: CodeBuddyTool[],
+    opts: ChatOptions,
+    catalog: ChatGptCodexModelCatalog | null,
+  ): { body: ResponsesRequestBody; useResponsesLite: boolean } {
+    const configuredEffort = opts.codexReasoningEffort
+      ?? opts.thinkingLevel
+      ?? this.defaultReasoningEffort
+      ?? process.env.CODEBUDDY_CODEX_REASONING_EFFORT;
+    const reasoningEffort = resolveChatGptReasoningEffort(configuredEffort, model, catalog);
+    const useResponsesLite = modelUsesResponsesLite(model, catalog);
+    return {
+      body: buildRequestBody({
+        model,
+        instructions,
+        input,
+        tools,
+        reasoningEffort,
+        maxTokens: opts.maxTokens,
+        promptCacheKey: this.promptCacheKey,
+        includeEncryptedReasoning: !!reasoningEffort,
+        useResponsesLite,
+      }),
+      useResponsesLite,
+    };
   }
 
   private async postResponses(
     body: ResponsesRequestBody,
-    auth: ChatGptAuth
+    auth: ChatGptAuth,
+    useResponsesLite: boolean,
   ): Promise<Response> {
     const headers: Record<string, string> = {
       Authorization: `Bearer ${auth.access_token}`,
@@ -435,12 +504,11 @@ export class ChatGptResponsesProvider implements Provider {
     if (auth.is_fedramp) {
       headers['X-OpenAI-Fedramp'] = 'true';
     }
+    if (useResponsesLite) {
+      headers['x-openai-internal-codex-responses-lite'] = 'true';
+    }
 
-    logger.debug(
-      `[chatgpt-responses] POST ${RESPONSES_URL} (model=${body.model}, account=${
-        auth.email ?? auth.account_id ?? 'anonymous'
-      })`,
-    );
+    logger.debug(`[chatgpt-responses] POST ${RESPONSES_URL} (model=${body.model})`);
 
     // Connect timeout: bounds the wait for response headers only. Cleared
     // as soon as fetch resolves, so it does not interrupt body streaming —
@@ -522,6 +590,18 @@ export function convertMessages(
 ): ConversionResult {
   const systemParts: string[] = [];
   const input: ResponsesInputItem[] = [];
+  const customToolCallIds = new Set<string>();
+
+  // Code Buddy's internal transcript shape is function-call compatible. The
+  // `code_exec` marker lets us recover the Codex custom-tool wire type without
+  // widening every message type in the application.
+  for (const message of messages) {
+    if (message.role !== 'assistant') continue;
+    const calls = (message as { tool_calls?: CodeBuddyToolCall[] }).tool_calls;
+    for (const call of calls ?? []) {
+      if (call.function.name === 'code_exec') customToolCallIds.add(call.id);
+    }
+  }
 
   // Prepend prior-turn reasoning blobs ONLY if the conversation is
   // already past at least one assistant tool round — otherwise the
@@ -548,11 +628,17 @@ export function convertMessages(
           ? msg.content
           : JSON.stringify(msg.content ?? '');
       if (toolCallId) {
-        input.push({
-          type: 'function_call_output',
-          call_id: toolCallId,
-          output,
-        });
+        input.push(customToolCallIds.has(toolCallId)
+          ? {
+              type: 'custom_tool_call_output',
+              call_id: toolCallId,
+              output,
+            }
+          : {
+              type: 'function_call_output',
+              call_id: toolCallId,
+              output,
+            });
       }
       continue;
     }
@@ -561,12 +647,21 @@ export function convertMessages(
       const tc = (msg as { tool_calls?: CodeBuddyToolCall[] }).tool_calls;
       if (tc && tc.length > 0) {
         for (const call of tc) {
-          input.push({
-            type: 'function_call',
-            name: call.function.name,
-            arguments: call.function.arguments,
-            call_id: call.id,
-          });
+          if (call.function.name === 'code_exec') {
+            input.push({
+              type: 'custom_tool_call',
+              name: 'exec',
+              input: extractCodeExecInput(call.function.arguments),
+              call_id: call.id,
+            });
+          } else {
+            input.push({
+              type: 'function_call',
+              name: call.function.name,
+              arguments: call.function.arguments,
+              call_id: call.id,
+            });
+          }
         }
         // If the assistant message also has text content alongside tool
         // calls, emit it as an output_text message.
@@ -608,17 +703,51 @@ export function convertMessages(
   };
 }
 
+function extractCodeExecInput(argumentsJson: string): string {
+  try {
+    const parsed = JSON.parse(argumentsJson) as { code?: unknown };
+    if (typeof parsed.code === 'string') return parsed.code;
+  } catch {
+    // A hand-authored transcript can contain raw code; preserve it verbatim.
+  }
+  return argumentsJson;
+}
+
 // ─────────────────────────────────────────────────────────────────────
 // Tools flatten (chat/completions → Codex Responses)
 // ─────────────────────────────────────────────────────────────────────
 
+const CODE_EXEC_LARK_GRAMMAR = String.raw`
+start: pragma_source | plain_source
+pragma_source: PRAGMA_LINE NEWLINE SOURCE
+plain_source: SOURCE
+
+PRAGMA_LINE: /[ \t]*\/\/ @exec:[^\r\n]*/
+NEWLINE: /\r?\n/
+SOURCE: /[\s\S]+/
+`;
+
 export function flattenTools(tools: CodeBuddyTool[]): ResponsesTool[] {
-  return tools.map((tool) => ({
-    type: 'function',
-    name: tool.function.name,
-    description: tool.function.description,
-    parameters: tool.function.parameters as Record<string, unknown>,
-  }));
+  return tools.map((tool): ResponsesTool => {
+    if (tool.function.name === 'code_exec') {
+      return {
+        type: 'custom',
+        name: 'exec',
+        description: tool.function.description,
+        format: {
+          type: 'grammar',
+          syntax: 'lark',
+          definition: CODE_EXEC_LARK_GRAMMAR,
+        },
+      };
+    }
+    return {
+      type: 'function',
+      name: tool.function.name,
+      description: tool.function.description,
+      parameters: tool.function.parameters as Record<string, unknown>,
+    };
+  });
 }
 
 // ─────────────────────────────────────────────────────────────────────
@@ -641,6 +770,9 @@ interface BuildRequestBodyOpts {
    *  can re-inject them next turn (preserves chain-of-thought across
    *  tool rounds). Only meaningful when `reasoningEffort` is set. */
   includeEncryptedReasoning?: boolean;
+  /** Codex Responses Lite moves instructions/tools into input items and
+   * requires serial tool execution + all-turn reasoning context. */
+  useResponsesLite?: boolean;
 }
 
 /** Default `instructions` value when the caller didn't provide a system
@@ -654,19 +786,40 @@ const DEFAULT_INSTRUCTIONS =
   'You are Code Buddy, a helpful AI assistant powered by ChatGPT.';
 
 export function buildRequestBody(opts: BuildRequestBodyOpts): ResponsesRequestBody {
+  const instructions = opts.instructions && opts.instructions.trim().length > 0
+    ? opts.instructions
+    : DEFAULT_INSTRUCTIONS;
+  const flattenedTools = flattenTools(opts.tools);
   const body: ResponsesRequestBody = {
     model: opts.model,
-    instructions: opts.instructions && opts.instructions.trim().length > 0
-      ? opts.instructions
-      : DEFAULT_INSTRUCTIONS,
     input: opts.input,
     tool_choice: 'auto',
-    parallel_tool_calls: true,
+    parallel_tool_calls: !opts.useResponsesLite,
     store: false,
     stream: true,
   };
-  if (opts.tools.length > 0) body.tools = flattenTools(opts.tools);
-  if (opts.reasoningEffort) body.reasoning = { effort: opts.reasoningEffort };
+  if (opts.useResponsesLite) {
+    body.input = [
+      {
+        type: 'additional_tools',
+        role: 'developer',
+        tools: flattenedTools,
+      },
+      {
+        type: 'message',
+        role: 'developer',
+        content: [{ type: 'input_text', text: instructions }],
+      },
+      ...opts.input,
+    ];
+    body.reasoning = opts.reasoningEffort
+      ? { effort: opts.reasoningEffort, context: 'all_turns' }
+      : { context: 'all_turns' };
+  } else {
+    body.instructions = instructions;
+    if (flattenedTools.length > 0) body.tools = flattenedTools;
+    if (opts.reasoningEffort) body.reasoning = { effort: opts.reasoningEffort };
+  }
   if (opts.promptCacheKey) body.prompt_cache_key = opts.promptCacheKey;
   if (opts.includeEncryptedReasoning) {
     body.include = ['reasoning.encrypted_content'];
@@ -707,6 +860,7 @@ export async function* parseSseStream(
   // call merge into one — names/call_ids/arguments concatenated — producing a
   // 100+ char call_id the Responses backend rejects (max 64) on the next turn.
   let functionCallIndex = 0;
+  const customCalls = new Map<string, { callId?: string; name?: string; input: string }>();
 
   const makeChunk = (delta: DeltaWithReasoning, finishReason?: string): ChatCompletionChunk => ({
     id: `chatcmpl-codex-${chunkIndex++}`,
@@ -770,10 +924,14 @@ export async function* parseSseStream(
         let parsed: {
           type?: string;
           delta?: string;
+          item_id?: string;
+          call_id?: string;
           item?: {
             type?: string;
+            id?: string;
             name?: string;
             arguments?: string;
+            input?: string;
             call_id?: string;
             encrypted_content?: string;
           };
@@ -786,6 +944,38 @@ export async function* parseSseStream(
         }
 
         const type = parsed.type;
+
+        if (type === 'response.output_item.added' && parsed.item?.type === 'custom_tool_call') {
+          const key = parsed.item.id ?? parsed.item.call_id;
+          if (key) {
+            const state = {
+              callId: parsed.item.call_id,
+              name: parsed.item.name,
+              input: parsed.item.input ?? '',
+            };
+            customCalls.set(key, state);
+            if (parsed.item.call_id) customCalls.set(parsed.item.call_id, state);
+          }
+          continue;
+        }
+
+        if (
+          type === 'response.custom_tool_call_input.delta' &&
+          typeof parsed.delta === 'string'
+        ) {
+          const key = parsed.item_id ?? parsed.call_id;
+          if (key) {
+            const existing = customCalls.get(key) ?? {
+              callId: parsed.call_id,
+              input: '',
+            };
+            existing.callId ??= parsed.call_id;
+            existing.input += parsed.delta;
+            customCalls.set(key, existing);
+            if (existing.callId) customCalls.set(existing.callId, existing);
+          }
+          continue;
+        }
 
         if (type === 'response.output_text.delta' && typeof parsed.delta === 'string') {
           yield makeChunk({ content: parsed.delta });
@@ -822,6 +1012,32 @@ export async function* parseSseStream(
                 },
               }],
             });
+          }
+          continue;
+        }
+
+        if (type === 'response.output_item.done' && parsed.item?.type === 'custom_tool_call') {
+          const item = parsed.item;
+          const accumulated = customCalls.get(item.id ?? '')
+            ?? customCalls.get(item.call_id ?? '');
+          const callId = item.call_id ?? accumulated?.callId;
+          const customName = item.name ?? accumulated?.name;
+          const rawInput = item.input ?? accumulated?.input ?? '';
+          if (callId && customName === 'exec') {
+            yield makeChunk({
+              tool_calls: [{
+                index: functionCallIndex++,
+                id: callId,
+                type: 'function',
+                function: {
+                  name: 'code_exec',
+                  arguments: JSON.stringify({ code: rawInput }),
+                },
+              }],
+            });
+          }
+          for (const [key, state] of customCalls) {
+            if (state === accumulated || key === item.id || key === callId) customCalls.delete(key);
           }
           continue;
         }
@@ -866,18 +1082,26 @@ export async function* parseSseStream(
 // Error enrichment
 // ─────────────────────────────────────────────────────────────────────
 
-function enrichError(status: number, body: string, model: string): Error {
+function enrichError(
+  status: number,
+  body: string,
+  model: string,
+  fallbackModels: string[] = [CHATGPT_OAUTH_SAFE_FALLBACK_MODEL],
+): Error {
   // Try to surface the model_not_found case with a helpful suggestion.
-  if (status === 404 || /model_not_found/i.test(body)) {
+  if (isChatGptModelCompatibilityError(status, body)) {
+    const fallbackHint = fallbackModels.length > 0
+      ? `Suggested fallbacks: ${fallbackModels.join(', ')}. `
+      : 'No alternate model was discovered for this account. ';
     return new Error(
       `Model "${model}" not available on the ChatGPT Codex backend. ` +
-        `Suggested fallbacks: ${FALLBACK_MODELS.join(', ')}. ` +
-        `Switch with \`/switch <model>\` or set GROK_MODEL.`,
+        fallbackHint +
+        `Switch with \`/switch <model>\` or set CHATGPT_MODEL.`,
     );
   }
   if (status === 401 || status === 403) {
     return new Error(
-      `ChatGPT auth rejected (${status}). Run \`/login chatgpt\` to re-authenticate.\n${body.slice(0, 300)}`,
+      `ChatGPT auth rejected (${status}). Run \`/login chatgpt\` to re-authenticate.`,
     );
   }
   return new Error(`ChatGPT Responses backend error (${status}): ${body.slice(0, 500)}`);

@@ -54,6 +54,7 @@ describe('buildInternetScoutPlan', () => {
       'static-read',
       'observe',
       'interaction-plan',
+      'reviewed-interaction',
       'extract',
       'assert',
     ]);
@@ -66,6 +67,11 @@ describe('buildInternetScoutPlan', () => {
       tool: 'browser',
       action: 'assert_text',
       required: true,
+    });
+    expect(plan.steps.find((step) => step.id === 'reviewed-interaction')).toMatchObject({
+      action: 'act',
+      required: true,
+      inputs: { instruction: 'tester un formulaire', maxActions: 1 },
     });
   });
 

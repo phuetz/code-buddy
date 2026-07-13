@@ -59,9 +59,14 @@ export function resetDenyGuardCache(): void {
  * Check a command against the user's deny rules. Called from the shared
  * command validator — must stay synchronous and cheap.
  */
-export function checkUserDenyRules(command: string): DenyRuleVerdict {
+export function checkUserDenyRules(
+  command: string,
+  cwd: string = process.cwd(),
+): DenyRuleVerdict {
   const patterns = loadDenyPatterns();
+  const canonicalCwd = path.resolve(cwd);
   for (const pattern of patterns) {
+    if (pattern.cwd && path.resolve(pattern.cwd) !== canonicalCwd) continue;
     if (matchApprovalPattern(command, pattern)) {
       return { denied: true, pattern: pattern.pattern, description: pattern.description };
     }

@@ -65,7 +65,7 @@ const PLAN_MODE_ALLOWED_TOOLS = new Set([
   // Search
   'grep', 'glob', 'search_files', 'find_references', 'web_search', 'browser_search',
   // Think
-  'reason', 'think',
+  'reason', 'think', 'mixture_of_agents',
   // Plan
   'plan', 'submit_plan', 'exit_plan_mode',
   // Communicate

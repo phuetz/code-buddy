@@ -21,6 +21,10 @@ pièges récurrents.
 - **Overlay de chat vocal** — un mode mains libres avec micro en direct, transcription éditable, et
   synthèse vocale (TTS) pour les réponses de l'agent. Activez la sortie TTS et réglez le débit dans
   **Réglages → Audio**.
+- **Réunion** — l’entrée dédiée de la barre latérale capture le micro après confirmation du
+  consentement des participants. Elle sauvegarde des checkpoints locaux toutes les dix secondes,
+  permet de reprendre après une interruption et crée des notes Markdown/JSON avec Whisper local.
+  Elle ne rejoint pas Zoom, Meet ou Teams et ne capture pas l’audio système.
 
 > _[capture : overlay de chat vocal]_
 

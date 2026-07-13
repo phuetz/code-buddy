@@ -208,4 +208,16 @@ describe('ConfigStore config sets', () => {
     const invalidStore = new ConfigStore();
     expect(invalidStore.get('theme')).toBe('light');
   });
+
+  it('resolves a session config set without changing the global active set', () => {
+    const store = new ConfigStore();
+    const created = store.createSet({ name: 'Concurrent', mode: 'blank' });
+    const concurrent = created.configSets.find((set) => set.id !== 'default')!;
+    store.switchSet({ id: 'default' });
+
+    const resolved = store.getConfigForSet(concurrent.id);
+    expect(resolved.activeConfigSetId).toBe(concurrent.id);
+    expect(store.getAll().activeConfigSetId).toBe('default');
+    expect(resolved.model).toBe(concurrent.profiles[concurrent.activeProfileKey]?.model);
+  });
 });

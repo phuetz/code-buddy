@@ -2,7 +2,7 @@
  * Tunnel Manager - Manages ngrok/cloudflare tunnels for remote access
  */
 
-import ngrok from 'ngrok';
+import ngrok, { type Listener as NgrokListener } from '@ngrok/ngrok';
 import { log, logError } from '../utils/logger';
 import { remoteConfigStore } from './remote-config-store';
 
@@ -21,6 +21,7 @@ class TunnelManager {
   private currentUrl: string | null = null;
   private isConnected: boolean = false;
   private provider: 'ngrok' | 'cloudflare' | 'none' = 'none';
+  private ngrokListener: NgrokListener | null = null;
   private statusCallback: ((status: TunnelStatus) => void) | null = null;
 
   private constructor() {}
@@ -84,23 +85,27 @@ class TunnelManager {
     log('[TunnelManager] Starting ngrok tunnel...');
 
     try {
-      // Set authtoken
-      await ngrok.authtoken(config.authToken);
-
-      // Connect
-      const url = await ngrok.connect({
+      const listener = await ngrok.forward({
         addr: localPort,
-        region: (config.region as ngrok.Ngrok.Region) || 'us',
-        onStatusChange: (status) => {
+        authtoken: config.authToken,
+        region: config.region,
+        onStatusChange: (status: string) => {
           log('[TunnelManager] Ngrok status:', status);
           if (status === 'closed') {
             this.isConnected = false;
             this.currentUrl = null;
+            this.ngrokListener = null;
             this.emitStatus();
           }
         },
       });
+      const url = listener.url();
+      if (!url) {
+        await listener.close();
+        throw new Error('Ngrok started without returning a public URL');
+      }
 
+      this.ngrokListener = listener;
       this.currentUrl = url;
       this.isConnected = true;
       
@@ -120,15 +125,21 @@ class TunnelManager {
   async stop(): Promise<void> {
     if (this.provider === 'ngrok' && this.isConnected) {
       log('[TunnelManager] Stopping ngrok tunnel...');
+      // Closing the listener may synchronously emit `closed`, whose callback
+      // clears currentUrl. Preserve it so the SDK still disconnects the exact
+      // public endpoint that was opened.
+      const urlToDisconnect = this.currentUrl;
       try {
-        await ngrok.disconnect();
-        await ngrok.kill();
+        await this.ngrokListener?.close();
+        this.ngrokListener = null;
+        await ngrok.disconnect(urlToDisconnect);
       } catch (error) {
         logError('[TunnelManager] Error stopping ngrok:', error);
       }
     }
 
     this.currentUrl = null;
+    this.ngrokListener = null;
     this.isConnected = false;
     this.provider = 'none';
     this.emitStatus();

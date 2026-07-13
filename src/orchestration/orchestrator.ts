@@ -633,7 +633,10 @@ export class Orchestrator extends EventEmitter {
     context: Record<string, unknown>
   ): Promise<void> {
     let iteration = 0;
-    const maxIterations = 100; // Safety limit
+    const configuredLimit = Number.isSafeInteger(step.maxIterations)
+      ? Number(step.maxIterations)
+      : 100;
+    const maxIterations = Math.max(1, Math.min(configuredLimit, 100));
 
     while (
       this.evaluateCondition(step.loopCondition || 'false', context) &&

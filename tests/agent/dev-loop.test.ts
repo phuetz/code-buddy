@@ -12,6 +12,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   runDevLoop,
   makeShellVerifier,
+  parseVerifierCriterionResults,
   type DevLoopAgent,
   type DevLoopVerifier,
 } from '../../src/agent/dev-loop/dev-loop.js';
@@ -60,6 +61,31 @@ afterEach(() => {
 });
 
 describe('runDevLoop — Verifier gate', () => {
+  it('records verification and final decision as proof-carrying loop events', async () => {
+    judgeMock.mockResolvedValue({ verdict: 'done', reason: 'verified', parseFailed: false });
+    const append = vi.fn(() => null);
+
+    const result = await runDevLoop(fakeAgent(['work']), 'court objectif', {
+      maxTurns: 2,
+      verify: async () => ({ verdict: 'CONFIRMED', evidence: 'focused test: 1 passed' }),
+      proofRecorder: { append },
+      currentCostUsd: zeroCost,
+      noPlan: true,
+    });
+
+    expect(result.status).toBe('done');
+    expect(append).toHaveBeenNthCalledWith(1, expect.objectContaining({
+      kind: 'verification',
+      status: 'pass',
+      assurance: 'independent',
+    }));
+    expect(append).toHaveBeenNthCalledWith(2, expect.objectContaining({
+      kind: 'decision',
+      status: 'pass',
+      assurance: 'independent',
+    }));
+  });
+
   it('blocks "done" while the Verifier says NEEDS REVIEW, accepts once CONFIRMED', async () => {
     // Judge always says done; Verifier says NEEDS REVIEW then CONFIRMED.
     judgeMock.mockResolvedValue({ verdict: 'done', reason: 'looks done', parseFailed: false });
@@ -130,6 +156,16 @@ describe('makeShellVerifier — deterministic shell gate', () => {
     });
     expect(result.status).not.toBe('done');
     expect(result.lastVerifierVerdict).toBe('NEEDS REVIEW');
+  });
+});
+
+describe('parseVerifierCriterionResults', () => {
+  it('accepts only known criterion ids from the machine-readable final line', () => {
+    const result = parseVerifierCriterionResults(
+      'oracle output\nCRITERIA_JSON: [{"criterionId":"c1","status":"passed","evidence":"exit 0"},{"criterionId":"invented","status":"passed"}]',
+      [{ id: 'c1', title: 'focused test exits 0' }],
+    );
+    expect(result).toEqual([{ criterionId: 'c1', status: 'passed', evidence: 'exit 0' }]);
   });
 });
 

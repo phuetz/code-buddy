@@ -14,6 +14,10 @@ import {
   detectEmotion,
   emotionToSignal,
   emotionGuidance,
+  emotionalContinuityGuidance,
+  textEmotionGuidance,
+  buildTextEmotionalPresenceContext,
+  immediateEmotionAcknowledgement,
   openerKey,
   pushOpener,
   avoidOpenersGuidance,
@@ -70,6 +74,21 @@ describe('detectEmotion (enriched)', () => {
   it('negatives take priority (frustration first)', () => {
     expect(detectEmotion('merci mais je suis à bout').emotion).toBe('frustration');
   });
+
+  it('understands local negation instead of inventing sadness or fatigue', () => {
+    expect(detectEmotion('je ne suis pas triste').emotion).toBe('neutral');
+    expect(detectEmotion('je ne suis plus fatigué').emotion).toBe('neutral');
+    expect(detectEmotion('je ne vais pas bien, je suis triste').emotion).toBe('sadness');
+    expect(detectEmotion("je n'ai pas le moral").emotion).toBe('sadness');
+  });
+
+  it('also recognizes common English emotional cues', () => {
+    expect(detectEmotion('I am completely stuck on this').emotion).toBe('frustration');
+    expect(detectEmotion('I feel anxious about the release').emotion).toBe('anxiety');
+    expect(detectEmotion('thanks, that really helped').emotion).toBe('gratitude');
+    expect(detectEmotion('I am not sad').emotion).toBe('neutral');
+    expect(detectEmotion("I don't feel tired").emotion).toBe('neutral');
+  });
 });
 
 describe('emotionToSignal (backward-compatible mapping)', () => {
@@ -105,6 +124,68 @@ describe('emotionGuidance (rich tone + proactive humour)', () => {
 
   it('neutral → empty', () => {
     expect(emotionGuidance({ emotion: 'neutral', intensity: 'normal' })).toBe('');
+  });
+});
+
+describe('immediateEmotionAcknowledgement', () => {
+  it('provides a short first sign of presence for difficult emotions only', () => {
+    expect(immediateEmotionAcknowledgement({ emotion: 'sadness', intensity: 'high' })).toBe(
+      'Je suis là avec toi.'
+    );
+    expect(immediateEmotionAcknowledgement({ emotion: 'anxiety', intensity: 'normal' })).toMatch(
+      /doucement/i
+    );
+    expect(immediateEmotionAcknowledgement({ emotion: 'neutral', intensity: 'normal' })).toBeNull();
+    expect(immediateEmotionAcknowledgement({ emotion: 'joy', intensity: 'normal' })).toBeNull();
+  });
+});
+
+describe('emotionalContinuityGuidance', () => {
+  it('keeps gentle continuity for a neutral follow-up after sadness', () => {
+    const guidance = emotionalContinuityGuidance('oui, je vois', [
+      { role: 'user', content: 'je suis vraiment triste ce soir' },
+      { role: 'assistant', content: 'Je suis là avec toi.' },
+    ]);
+    expect(guidance).toMatch(/tristesse|chaleur/i);
+    expect(guidance).toMatch(/ne ram[eè]ne pas|de force/i);
+  });
+
+  it('does not override a new explicit emotion or revive an old one', () => {
+    expect(
+      emotionalContinuityGuidance("maintenant je suis très heureux", [
+        { role: 'user', content: 'je suis triste' },
+      ])
+    ).toBe('');
+    expect(
+      emotionalContinuityGuidance('quelle heure est-il', [
+        { role: 'user', content: 'je suis triste' },
+        { role: 'user', content: 'parlons du projet' },
+        { role: 'user', content: 'le build passe' },
+      ])
+    ).toBe('');
+  });
+});
+
+describe('text emotional presence context', () => {
+  it('acknowledges frustration once, then keeps the assistant concrete', () => {
+    const guidance = textEmotionGuidance(detectEmotion("j'en peux plus, je suis bloqué"));
+    expect(guidance).toMatch(/acknowledgement|concrete help/i);
+
+    const context = buildTextEmotionalPresenceContext("j'en peux plus, je suis bloqué", []);
+    expect(context).toMatch(/user.s language|human and specific/i);
+    expect(context).toMatch(/never mention emotion detection/i);
+  });
+
+  it('is empty for an emotionally neutral turn with no recent signal', () => {
+    expect(buildTextEmotionalPresenceContext('ouvre le fichier package.json', [])).toBe('');
+  });
+
+  it('carries warmth across one neutral follow-up without reviving the subject', () => {
+    const context = buildTextEmotionalPresenceContext('d’accord, continuons', [
+      { role: 'user', content: 'je suis vraiment triste ce soir' },
+      { role: 'assistant', content: 'Je suis là.' },
+    ]);
+    expect(context).toMatch(/chaleur|ne ram[eè]ne pas/i);
   });
 });
 
@@ -144,7 +225,9 @@ describe('hybrid reply evolves Lisa’s traits per utterance (real state file, o
   it('an affectionate utterance nudges warmth up; feature-off leaves it untouched', async () => {
     // Injected seams → no model, no network. The evolution runs at the top of the reply, gated.
     const reply = makeHybridReply({
-      fastReply: () => 'coucou',
+      // Exercise the awaited companion path. Instant shortcuts intentionally
+      // evolve traits in the background so they never add spoken latency.
+      fastReply: () => null,
       chitchat: async () => 'coucou',
       agentReply: async () => 'coucou',
       classify: () => false,

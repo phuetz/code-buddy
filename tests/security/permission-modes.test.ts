@@ -204,6 +204,15 @@ describe('PermissionModeManager — Phase T1', () => {
         expect(d.prompted).toBe(false);
       }
     });
+
+    it('allows an option-aware read-only shell expression but blocks shell mutation', () => {
+      expect(m.checkPermission('git status && rg TODO src', 'bash')).toMatchObject({
+        allowed: true,
+        prompted: false,
+      });
+      expect(m.checkPermission('find . -delete', 'bash').allowed).toBe(false);
+      expect(m.checkPermission('cat README.md > copy.md', 'bash').allowed).toBe(false);
+    });
   });
 
   describe('checkPermission — acceptEdits mode', () => {
@@ -332,6 +341,43 @@ describe('PermissionModeManager — Phase T1', () => {
       const b = getPermissionModeManager();
       expect(b).not.toBe(a);
       expect(b.getMode()).toBe('default'); // fresh defaults
+    });
+  });
+
+  describe('async-scoped posture', () => {
+    it('keeps a temporary actor mode out of the owning code session', async () => {
+      const m = new PermissionModeManager({ mode: 'plan' });
+
+      await m.withModeAsync('default', async () => {
+        expect(m.getMode()).toBe('default');
+        expect(m.checkPermission('inspect repository', 'bash').allowed).toBe(true);
+        await Promise.resolve();
+        expect(m.getMode()).toBe('default');
+      });
+
+      expect(m.getMode()).toBe('plan');
+      expect(m.checkPermission('inspect repository', 'bash').allowed).toBe(false);
+    });
+
+    it('isolates concurrent voice and code postures', async () => {
+      const m = new PermissionModeManager({ mode: 'plan' });
+      let releaseVoice!: () => void;
+      const voiceGate = new Promise<void>((resolve) => { releaseVoice = resolve; });
+      let voiceStarted!: () => void;
+      const started = new Promise<void>((resolve) => { voiceStarted = resolve; });
+
+      const voice = m.withModeAsync('default', async () => {
+        voiceStarted();
+        expect(m.getMode()).toBe('default');
+        await voiceGate;
+        return m.getMode();
+      });
+
+      await started;
+      expect(m.getMode()).toBe('plan');
+      releaseVoice();
+      await expect(voice).resolves.toBe('default');
+      expect(m.getMode()).toBe('plan');
     });
   });
 

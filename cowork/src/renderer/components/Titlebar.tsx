@@ -173,8 +173,9 @@ export function Titlebar() {
 function TitlebarModelCost() {
   const newShellEnabled = useAppStore((s) => s.newShellEnabled);
   const appConfig = useAppStore((s) => s.appConfig);
+  const activeSessionId = useAppStore((s) => s.activeSessionId);
 
-  if (!newShellEnabled) return null;
+  if (!newShellEnabled || activeSessionId) return null;
 
   return (
     <div className="titlebar-no-drag flex items-center gap-1.5 px-2 h-full">

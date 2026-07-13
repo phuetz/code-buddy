@@ -29,6 +29,16 @@ import {
 import { dueFollowUp, markFired } from './event-followups.js';
 import { getCompanionConductor } from './orchestrator.js';
 import { resolveUserName } from './user-name.js';
+import { readRecentDialogueHearing } from './dialogue-percepts.js';
+import {
+  resolveCurrentHomeInteractionPolicy,
+  type HomeInteractionDecision,
+} from './home-interaction-policy.js';
+import {
+  reserveDailyInteraction,
+  type DailyInteractionReservation,
+} from './daily-interaction-budget.js';
+import { resolveHouseholdClock } from './household-time.js';
 
 /** The closed set of reasons Lisa might reach out. */
 export type ProactiveTrigger =
@@ -240,6 +250,13 @@ export interface ProactiveDeps {
   eventFollowUpsPath?: string;
   /** The shared conductor (arbitrates who speaks). Default: the singleton. Injectable for tests. */
   conductor?: { claim: (surface: 'proactive') => boolean };
+  /** Household posture/calendar gate. Wired by `wireProactiveLoop`; injectable for tests. */
+  homePolicy?: (
+    surface: 'proactive-local' | 'proactive-remote',
+    now: Date
+  ) => Promise<HomeInteractionDecision>;
+  /** Shared cross-surface daily invitation budget. Wired by `wireProactiveLoop`. */
+  claimDailyBudget?: (limit: number, now: Date) => Promise<DailyInteractionReservation>;
 }
 
 async function defaultPresent(): Promise<boolean> {
@@ -252,15 +269,7 @@ async function defaultPresent(): Promise<boolean> {
 }
 
 async function defaultRecentHearing(): Promise<string[]> {
-  try {
-    const { readRecentCompanionPercepts } = await import('./percepts.js');
-    const recent = await readRecentCompanionPercepts({ modality: 'hearing', limit: 6 });
-    return recent
-      .map((p) => String((p.payload as { text?: string })?.text ?? p.summary ?? ''))
-      .filter(Boolean);
-  } catch {
-    return [];
-  }
+  return readRecentDialogueHearing(6);
 }
 
 async function defaultSay(text: string): Promise<void> {
@@ -281,8 +290,13 @@ export async function runProactiveTick(deps: ProactiveDeps = {}): Promise<string
   try {
     if (process.env.CODEBUDDY_COMPANION_PROACTIVE !== 'true') return null;
     const now = (deps.now ?? (() => Date.now()))();
-    const hour = new Date(now).getHours();
+    const hour = resolveHouseholdClock(new Date(now)).hour;
     if (isQuietHour(hour)) return null; // never wake him at night, even by phone
+    const present = await (deps.present ?? defaultPresent)();
+    const homeDecision = deps.homePolicy
+      ? await deps.homePolicy(present ? 'proactive-local' : 'proactive-remote', new Date(now))
+      : null;
+    if (homeDecision && !homeDecision.allowed) return null;
 
     const cooldownMs =
       deps.cooldownMs ??
@@ -324,16 +338,32 @@ export async function runProactiveTick(deps: ProactiveDeps = {}): Promise<string
       }
     }
 
-    // Deliver: aloud if he's here, otherwise reach his phone. A SPOKEN ritual yields to the conductor
-    // (so it doesn't collide with a presence moment / greeting); a Telegram note when he's away does
-    // not compete for the mouth, so it isn't gated.
-    const present = await (deps.present ?? defaultPresent)();
+    let reservation: DailyInteractionReservation | null = null;
+    if (homeDecision && deps.claimDailyBudget) {
+      reservation = await deps.claimDailyBudget(homeDecision.spontaneousDailyLimit, new Date(now));
+      if (!reservation.granted) {
+        logger.info('[proactive] shared household invitation budget exhausted');
+        return null;
+      }
+    }
+
+    // Deliver: aloud if he's here, otherwise reach his phone. A spoken ritual
+    // yields to the conductor; a denied floor releases the budget reservation.
     if (present) {
       const conductor = deps.conductor ?? getCompanionConductor();
-      if (!conductor.claim('proactive')) return null; // another voice has the floor → retry next tick
-      await (deps.say ?? defaultSay)(line);
-    } else {
-      await (deps.telegramVoice ?? defaultTelegramVoice)(line);
+      if (!conductor.claim('proactive')) {
+        await reservation?.release();
+        return null;
+      }
+    }
+    try {
+      if (present) await (deps.say ?? defaultSay)(line);
+      else if (!(await (deps.telegramVoice ?? defaultTelegramVoice)(line))) {
+        throw new Error('remote proactive delivery was not accepted');
+      }
+    } catch (error) {
+      await reservation?.release();
+      throw error;
     }
 
     // Persist throttle + per-occurrence locks so a trigger fires exactly once.
@@ -363,10 +393,16 @@ export function wireProactiveLoop(deps: ProactiveDeps = {}): () => void {
   const tickMs = Number(process.env.CODEBUDDY_COMPANION_PROACTIVE_TICK_MS) || 900_000; // 15 min
   // Optional LLM freshening (templates-first, LLM-optional). Wired only here so runProactiveTick
   // stays pure/testable.
+  const householdAware: ProactiveDeps = {
+    ...deps,
+    homePolicy: deps.homePolicy ?? ((surface, now) => resolveCurrentHomeInteractionPolicy(surface, { now })),
+    claimDailyBudget: deps.claimDailyBudget ?? ((limit, now) =>
+      reserveDailyInteraction({ limit, now, surface: 'proactive' })),
+  };
   const withLlm: ProactiveDeps =
     process.env.CODEBUDDY_COMPANION_PROACTIVE_LLM === 'true' && !deps.refine
-      ? { ...deps, refine: defaultRefine }
-      : deps;
+      ? { ...householdAware, refine: defaultRefine }
+      : householdAware;
   const timer = setInterval(() => {
     void runProactiveTick(withLlm);
   }, tickMs);

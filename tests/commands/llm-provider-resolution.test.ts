@@ -17,13 +17,14 @@ describe('reconcileModelForBackend', () => {
     expect(reconcileModelForBackend('grok-code-fast-1', CODEX, 'gpt-5.5')).toBe('gpt-5.5');
   });
 
-  it('falls back to gpt-5.5 when even the backend default is not Codex', () => {
-    expect(reconcileModelForBackend('grok-code-fast-1', CODEX, 'grok-3-fast')).toBe('gpt-5.5');
+  it('falls back to gpt-5.6-sol when even the backend default is not Codex', () => {
+    expect(reconcileModelForBackend('grok-code-fast-1', CODEX, 'grok-3-fast')).toBe('gpt-5.6-sol');
   });
 
   it('preserves an already-Codex model on the Codex backend', () => {
     expect(reconcileModelForBackend('gpt-5.2', CODEX, 'gpt-5.5')).toBe('gpt-5.2');
     expect(reconcileModelForBackend('gpt-5.5', CODEX, 'gpt-5.5')).toBe('gpt-5.5');
+    expect(reconcileModelForBackend('gpt-5.6', CODEX, 'gpt-5.5')).toBe('gpt-5.6-sol');
     expect(reconcileModelForBackend('codex-mini-latest', CODEX, 'gpt-5.5')).toBe('codex-mini-latest');
   });
 

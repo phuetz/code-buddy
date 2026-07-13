@@ -1,15 +1,26 @@
 import fs from 'fs';
+import os from 'os';
 import path from 'path';
+import { randomUUID } from 'crypto';
 import type { BrowserOperatorSessionDraft, BrowserOperatorActionLogEntry } from './browser-operator-session.js';
 import { buildBrowserOperatorHarnessBundle } from './browser-operator-harness.js';
 import { logger } from '../utils/logger.js';
 import { ConfirmationService } from '../utils/confirmation-service.js';
+import { getDataRedactionEngine } from '../security/data-redaction.js';
 
 const INIT_TIMEOUT_MS = 30_000;
 const NAVIGATION_TIMEOUT_MS = 60_000;
 const ACTION_TIMEOUT_MS = 45_000;
 const EXTRACT_TIMEOUT_MS = 60_000;
 const WATCHDOG_INTERVAL_MS = 3_000;
+export const BROWSER_OPERATOR_PROFILE_MARKER = '.codebuddy-browser-operator-profile.json';
+export const BROWSER_OPERATOR_PROFILE_LOCK = '.codebuddy-browser-operator.lock';
+const PROFILE_OWNER = 'code-buddy-browser-operator';
+const PROFILE_MARKER_SCHEMA_VERSION = 1;
+const PROFILE_LOCK_SCHEMA_VERSION = 1;
+const PROFILE_LOCK_STALE_MS = 120_000;
+const PROFILE_LOCK_UPDATE_MS = 15_000;
+const MAX_PROFILE_CONTROL_FILE_BYTES = 4_096;
 
 type StagehandPage = Record<string, any>;
 type StagehandContext = Record<string, any>;
@@ -18,10 +29,100 @@ type StagehandInstance = {
   context?: StagehandContext;
   init: () => Promise<void>;
   close: () => Promise<void>;
-  act?: (instruction: string, options?: Record<string, unknown>) => Promise<unknown>;
+  connectURL?: () => string;
   extract?: (...args: unknown[]) => Promise<unknown>;
   observe?: (...args: unknown[]) => Promise<unknown>;
 };
+
+interface NavigationRequestLike {
+  url?: () => string;
+  isNavigationRequest?: () => boolean;
+  resourceType?: () => string;
+}
+
+interface NavigationRouteLike {
+  abort?: (errorCode?: string) => Promise<unknown> | unknown;
+  continue?: () => Promise<unknown> | unknown;
+  request?: () => NavigationRequestLike;
+}
+
+type NavigationRouteHandler = (
+  route: NavigationRouteLike,
+  request?: NavigationRequestLike,
+) => Promise<void>;
+
+interface NavigationRouteTarget {
+  route: (url: string, handler: NavigationRouteHandler) => Promise<unknown> | unknown;
+  unroute?: (url: string, handler: NavigationRouteHandler) => Promise<unknown> | unknown;
+}
+
+interface NavigationGuardBrowser {
+  contexts: () => Array<NavigationRouteTarget & { pages?: () => StagehandPage[] }>;
+}
+
+interface BrowserOperatorProfileMarker {
+  schemaVersion: number;
+  owner: string;
+  profileId: string;
+  createdAt: string;
+}
+
+interface BrowserOperatorProfileLockMetadata {
+  schemaVersion: number;
+  owner: string;
+  token: string;
+  pid: number;
+  hostname: string;
+  acquiredAt: string;
+}
+
+export type BrowserOperatorSemanticRisk = 'read' | 'low' | 'sensitive';
+
+interface BrowserOperatorTargetContext {
+  text: string;
+  ariaLabel: string;
+  labels: string;
+  neighborhood: string;
+  formAction: string;
+  formText: string;
+  role: string;
+  inputType: string;
+  name: string;
+  href: string;
+}
+
+interface BrowserOperatorTargetInspection {
+  inspected: true;
+  targetFound: boolean;
+  url: string;
+  documentTitle: string;
+  contexts: BrowserOperatorTargetContext[];
+  resolvedSelectors: string[];
+  error?: string;
+}
+
+interface BrowserOperatorSemanticPreflight {
+  risk: BrowserOperatorSemanticRisk;
+  targetInspected: boolean;
+  reasons: string[];
+  resolvedSelectors: string[];
+}
+
+export interface BrowserOperatorProfileLock {
+  profilePath: string;
+  lockPath: string;
+  token: string;
+  release: () => void;
+}
+
+export interface BrowserOperatorProfileLockOptions {
+  staleMs?: number;
+  updateMs?: number;
+  pid?: number;
+  hostname?: string;
+  now?: () => number;
+  isProcessAlive?: (pid: number) => boolean;
+}
 
 interface BrowserActionResult {
   evidence: string;
@@ -40,7 +141,29 @@ type GuardedResult<T> =
   | { kind: 'value'; value: T }
   | { kind: 'error'; error: unknown }
   | { kind: 'checkpoint' }
+  | { kind: 'stopped' }
   | { kind: 'timeout' };
+
+export interface BrowserOperatorExecutorEvent {
+  type: 'started' | 'action' | 'stopping' | 'completed';
+  sessionId: string;
+  stopped?: boolean;
+  success?: boolean;
+  action?: BrowserOperatorActionLogEntry;
+}
+
+export interface BrowserOperatorExecutorOptions {
+  /** Injectable for deterministic tests; production defaults to the fail-closed SSRF guard. */
+  urlGuard?: (url: string) => Promise<{ safe: boolean; reason?: string }>;
+  onEvent?: (event: BrowserOperatorExecutorEvent) => void;
+}
+
+export interface BrowserOperatorExecutorResult {
+  success: boolean;
+  stopped: boolean;
+  actionLog: BrowserOperatorActionLogEntry[];
+  proofPath: string;
+}
 
 const MUTATING_ACTIONS = new Set([
   'act',
@@ -63,6 +186,43 @@ const MUTATING_ACTIONS = new Set([
   'set_offline',
   'set_geolocation',
 ]);
+
+const TARGET_INSPECTION_ACTIONS = new Set([
+  'act',
+  'click',
+  'double_click',
+  'right_click',
+  'type',
+  'fill',
+  'select',
+  'press',
+  'hover',
+  'upload_files',
+  'download',
+]);
+
+const SENSITIVE_SEMANTIC_SIGNALS: Array<{ reason: string; pattern: RegExp }> = [
+  {
+    reason: 'payment, purchase, or money movement',
+    pattern: /(?:\bcheckout\b|\bpay(?:ment| now)?\b|\bpurchase\b|\bplace order\b|\bcomplete order\b|\border total\b|\bcart total\b|\bamount due\b|\btotal (?:due|to pay)\b|\bbilling\b|\bcredit card\b|\bcard number\b|\bcvv\b|\btransfer (?:funds|money)\b|\bdonat(?:e|ion)\b|paiement|payer|achat|commander|total de la commande|montant à payer|carte bancaire|facturation|virement|faire un don)/i,
+  },
+  {
+    reason: 'external message, publication, or submission',
+    pattern: /(?:\bsend\b|\bsubmit\b|\bpublish\b|\bpost (?:comment|message|reply)\b|\bshare\b|\bupload\b|\bsend email\b|\bmessage preview\b|\brecipient(?:s)?\b|envoyer|soumettre|publier|partager|téléverser|televerser|aperçu du message|apercu du message|destinataire|envoyer.*courriel)/i,
+  },
+  {
+    reason: 'destructive or account-changing effect',
+    pattern: /(?:\bdelete\b|\bremove\b|\btrash\b|\bdestroy\b|\berase\b|\bpermanent(?:ly)?\b|\bcannot be undone\b|\bclose account\b|\bcancel (?:account|subscription|booking)\b|\bunsubscribe\b|\brevoke\b|\breset password\b|\bchange password\b|\bgrant permission\b|\binvite user\b|supprimer|effacer|détruire|detruire|irréversible|irreversible|fermer le compte|annuler l'abonnement|résilier|resilier|révoquer|revoquer|mot de passe|accorder.*autorisation|inviter)/i,
+  },
+  {
+    reason: 'booking or binding reservation',
+    pattern: /(?:\bbook now\b|\bconfirm booking\b|\bconfirm reservation\b|\bschedule appointment\b|\bcheck[- ]?in\b|confirmer la réservation|confirmer la reservation|prendre rendez-vous|réserver maintenant|reserver maintenant)/i,
+  },
+  {
+    reason: 'credential or highly sensitive form field',
+    pattern: /(?:\bpassword\b|\bpasscode\b|\bone[- ]time code\b|\botp\b|\bsocial security\b|\biban\b|\bprivate key\b|mot de passe|code de sécurité|code de securite)/i,
+  },
+];
 
 const BROWSER_ACTIONS = new Set([
   'navigate',
@@ -115,14 +275,32 @@ export class SecurityCheckpointDetected extends Error {
   }
 }
 
+export class BrowserOperatorStopped extends Error {
+  constructor() {
+    super('Browser Operator stopped by the local operator.');
+    this.name = 'BrowserOperatorStopped';
+  }
+}
+
 export class BrowserOperatorExecutor {
   private session: BrowserOperatorSessionDraft;
+  private readonly options: BrowserOperatorExecutorOptions;
   private stagehand: StagehandInstance | null = null;
   private page: StagehandPage | null = null;
   private isStopped = false;
+  private readonly stopListeners = new Set<() => void>();
+  private readonly navigationRoutePattern = '**/*';
+  private readonly navigationRouteTargets: NavigationRouteTarget[] = [];
+  private readonly pendingNavigationChecks = new Set<Promise<void>>();
+  private navigationRouteHandler: NavigationRouteHandler | null = null;
+  private navigationGuardBrowser: NavigationGuardBrowser | null = null;
+  private navigationViolation: Error | null = null;
+  private profileLock: BrowserOperatorProfileLock | null = null;
+  private readonly semanticTargetSelectors = new Map<string, string[]>();
 
-  constructor(session: BrowserOperatorSessionDraft) {
+  constructor(session: BrowserOperatorSessionDraft, options: BrowserOperatorExecutorOptions = {}) {
     this.session = session;
+    this.options = options;
   }
 
   /**
@@ -139,20 +317,31 @@ export class BrowserOperatorExecutor {
    * Stop the session execution.
    */
   stop(): void {
+    if (this.isStopped) return;
     this.isStopped = true;
+    for (const listener of this.stopListeners) listener();
+    this.stopListeners.clear();
+    // Closing the owned Stagehand instance interrupts Playwright operations
+    // that would otherwise remain alive until their individual timeout.
+    void this.stagehand?.close().catch(() => undefined);
+    this.emit({ type: 'stopping', sessionId: this.session.sessionId, stopped: true });
     logger.info(`BrowserOperatorExecutor: Stop signal received for session ${this.session.sessionId}`);
   }
 
   /**
    * Run the planned browser actions sequentially.
    */
-  async execute(cwd: string = process.cwd()): Promise<{ success: boolean; stopped: boolean; actionLog: BrowserOperatorActionLogEntry[] }> {
+  async execute(cwd: string = process.cwd()): Promise<BrowserOperatorExecutorResult> {
     if (!this.session.consent.granted) {
       logger.error('BrowserOperatorExecutor: Execution blocked. Consent required.');
       throw new Error('BrowserOperatorConsentRequired: Execution blocked. Local browser operator requires human consent.');
     }
 
+    assertSafeSessionId(this.session.sessionId);
+    const workspaceRoot = requireWorkspaceRoot(cwd);
+
     logger.info(`BrowserOperatorExecutor: Starting execution for session ${this.session.sessionId} (mode: ${this.session.mode})`);
+    this.emit({ type: 'started', sessionId: this.session.sessionId });
 
     const checkpointListeners = new Set<() => void>();
     let watchdogInterval: NodeJS.Timeout | null = null;
@@ -182,8 +371,12 @@ export class BrowserOperatorExecutor {
       if (checkpointDetected) {
         throw new SecurityCheckpointDetected(checkpointReason);
       }
+      if (this.isStopped) {
+        throw new BrowserOperatorStopped();
+      }
 
       let checkpointListener: (() => void) | null = null;
+      let stopListener: (() => void) | null = null;
       let timeoutHandle: NodeJS.Timeout | null = null;
 
       const operationPromise: Promise<GuardedResult<T>> = Promise.resolve()
@@ -196,15 +389,29 @@ export class BrowserOperatorExecutor {
         checkpointListeners.add(checkpointListener);
       });
 
+      const stopPromise = new Promise<GuardedResult<T>>((resolve) => {
+        stopListener = () => resolve({ kind: 'stopped' });
+        this.stopListeners.add(stopListener);
+        if (this.isStopped) stopListener();
+      });
+
       const timeoutPromise = new Promise<GuardedResult<T>>((resolve) => {
         timeoutHandle = setTimeout(() => resolve({ kind: 'timeout' }), timeoutMs);
         timeoutHandle.unref?.();
       });
 
       try {
-        const result = await Promise.race([operationPromise, checkpointPromise, timeoutPromise]);
+        const result = await Promise.race([
+          operationPromise,
+          checkpointPromise,
+          stopPromise,
+          timeoutPromise,
+        ]);
         if (result.kind === 'checkpoint') {
           throw new SecurityCheckpointDetected(checkpointReason);
+        }
+        if (result.kind === 'stopped') {
+          throw new BrowserOperatorStopped();
         }
         if (result.kind === 'timeout') {
           throw new Error(`${label} timed out after ${timeoutMs}ms`);
@@ -216,6 +423,9 @@ export class BrowserOperatorExecutor {
       } finally {
         if (checkpointListener) {
           checkpointListeners.delete(checkpointListener);
+        }
+        if (stopListener) {
+          this.stopListeners.delete(stopListener);
         }
         if (timeoutHandle) {
           clearTimeout(timeoutHandle);
@@ -276,14 +486,29 @@ export class BrowserOperatorExecutor {
     try {
       await runGuarded('stagehand.init', INIT_TIMEOUT_MS, async () => {
         const isHeadless = this.session.mode === 'isolated';
+        const persistentProfile = this.session.mode === 'local'
+          ? resolvePersistentBrowserOperatorProfile()
+          : undefined;
+        if (persistentProfile) {
+          this.profileLock = acquirePersistentBrowserOperatorProfileLock(persistentProfile);
+        }
+        const stagehandEnvironment = this.session.mode === 'local'
+          ? 'LOCAL'
+          : process.env.BROWSERBASE_API_KEY ? 'BROWSERBASE' : 'LOCAL';
         const { Stagehand } = await import('@browserbasehq/stagehand');
         this.stagehand = new Stagehand({
-          env: process.env.BROWSERBASE_API_KEY ? 'BROWSERBASE' : 'LOCAL',
+          env: stagehandEnvironment,
           apiKey: process.env.BROWSERBASE_API_KEY,
           projectId: process.env.BROWSERBASE_PROJECT_ID,
           verbose: 1,
           localBrowserLaunchOptions: {
             headless: isHeadless,
+            ...(persistentProfile
+              ? {
+                  userDataDir: persistentProfile,
+                  preserveUserDataDir: true,
+                }
+              : {}),
           },
         }) as unknown as StagehandInstance;
         await this.stagehand.init();
@@ -292,6 +517,11 @@ export class BrowserOperatorExecutor {
 
       if (!this.page) {
         throw new Error('Stagehand did not expose a browser page instance.');
+      }
+
+      await runGuarded('navigation guard init', INIT_TIMEOUT_MS, () => this.installNavigationGuard());
+      if (!this.isStopped) {
+        await this.assertNavigationBoundary();
       }
 
       startWatchdog();
@@ -304,6 +534,7 @@ export class BrowserOperatorExecutor {
         if (this.isStopped) {
           entry.status = 'stopped';
           entry.evidence = 'Session stopped by operator request.';
+          this.emitAction(entry);
           continue;
         }
 
@@ -311,6 +542,7 @@ export class BrowserOperatorExecutor {
         if (!BROWSER_ACTIONS.has(action)) {
           entry.status = 'completed';
           entry.evidence = `Skipped non-browser step (${entry.tool}${entry.action ? `.${entry.action}` : ''}); execute it with its dedicated tool.`;
+          this.emitAction(entry);
           continue;
         }
 
@@ -318,8 +550,29 @@ export class BrowserOperatorExecutor {
           entry.status = 'blocked';
           entry.evidence = `Composite placeholder "${action}" needs a concrete observed ref, selector, or instruction.`;
           this.isStopped = true;
+          this.emitAction(entry);
           continue;
         }
+
+        let semanticPreflight: BrowserOperatorSemanticPreflight;
+        try {
+          semanticPreflight = await runGuarded(
+            'browser semantic preflight',
+            ACTION_TIMEOUT_MS,
+            () => this.semanticPreflight(entry, action),
+          );
+        } catch (error) {
+          if (error instanceof SecurityCheckpointDetected || error instanceof BrowserOperatorStopped) {
+            throw error;
+          }
+          const message = error instanceof Error ? error.message : String(error);
+          entry.status = 'blocked';
+          entry.evidence = `Failed: ${message}`;
+          this.isStopped = true;
+          this.emitAction(entry);
+          continue;
+        }
+        this.semanticTargetSelectors.set(entry.id, semanticPreflight.resolvedSelectors);
 
         if (requiresStepConfirmation(entry, action)) {
           const confirmationService = ConfirmationService.getInstance();
@@ -327,34 +580,79 @@ export class BrowserOperatorExecutor {
             operation: 'browser_write',
             filename: action,
             content: buildConfirmationMessage(entry, action),
+            // Browser interactions can have effects outside the workspace.
+            // Cowork auto-approves ordinary embedded file/bash work, so this
+            // one-shot gate must explicitly bypass every permissive shortcut.
+            forcePrompt: true,
           });
 
           if (!result.confirmed) {
             this.isStopped = true;
             entry.status = 'stopped';
             entry.evidence = 'Consent denied by operator.';
+            this.emitAction(entry);
             throw new Error('BrowserOperatorConsentDenied: Execution stopped by user.');
           }
         }
 
+        if (MUTATING_ACTIONS.has(action)) {
+          try {
+            semanticPreflight = await runGuarded(
+              'fresh browser semantic preflight',
+              ACTION_TIMEOUT_MS,
+              () => this.semanticPreflight(entry, action),
+            );
+            this.semanticTargetSelectors.set(entry.id, semanticPreflight.resolvedSelectors);
+          } catch (error) {
+            if (error instanceof SecurityCheckpointDetected || error instanceof BrowserOperatorStopped) {
+              throw error;
+            }
+            const message = error instanceof Error ? error.message : String(error);
+            entry.status = 'blocked';
+            entry.evidence = `Failed: ${message}`;
+            this.isStopped = true;
+            this.emitAction(entry);
+            continue;
+          }
+        }
+
         entry.status = 'running';
+        this.emitAction(entry);
         logger.info(`BrowserOperatorExecutor: Running action ${entry.sequence}: ${entry.title}`);
 
         try {
-          const result = await this.executeBrowserAction(entry, action, cwd, runGuarded);
+          await this.assertNavigationBoundary();
+          const result = await this.executeBrowserAction(entry, action, workspaceRoot, runGuarded);
+          await this.assertNavigationBoundary();
           entry.status = 'completed';
-          entry.evidence = result.evidence;
+          entry.evidence = `${result.evidence}\n[Semantic preflight: ${semanticPreflight.risk}${semanticPreflight.targetInspected ? ', target inspected locally' : ''}]`;
         } catch (err) {
-          if (err instanceof SecurityCheckpointDetected) {
-            entry.status = 'blocked';
-            entry.evidence = err.message;
-            throw err;
+          let actionError = err;
+          try {
+            await this.assertNavigationBoundary();
+          } catch (navigationError) {
+            actionError = navigationError;
           }
 
-          const message = err instanceof Error ? err.message : String(err);
+          if (actionError instanceof SecurityCheckpointDetected) {
+            entry.status = 'blocked';
+            entry.evidence = actionError.message;
+            this.emitAction(entry);
+            throw actionError;
+          }
+
+          if (actionError instanceof BrowserOperatorStopped) {
+            entry.status = 'stopped';
+            entry.evidence = actionError.message;
+            this.isStopped = true;
+            this.emitAction(entry);
+            continue;
+          }
+
+          const message = actionError instanceof Error ? actionError.message : String(actionError);
           entry.status = 'blocked';
           entry.evidence = `Failed: ${message}`;
-          logger.error('BrowserOperatorExecutor: Action failed', err as Error);
+          logger.error('BrowserOperatorExecutor: Action failed', actionError as Error);
           this.isStopped = true;
         }
 
@@ -369,6 +667,21 @@ export class BrowserOperatorExecutor {
             }
           }
         }
+        this.emitAction(entry);
+      }
+
+      if (!this.isStopped) {
+        await this.assertNavigationBoundary();
+      }
+    } catch (error) {
+      if (!(error instanceof BrowserOperatorStopped)) throw error;
+      this.isStopped = true;
+      for (const entry of this.session.actionLog) {
+        if (entry.status === 'planned' || entry.status === 'running') {
+          entry.status = 'stopped';
+          entry.evidence = error.message;
+          this.emitAction(entry);
+        }
       }
     } finally {
       if (watchdogInterval) {
@@ -378,6 +691,17 @@ export class BrowserOperatorExecutor {
         await this.stagehand?.close();
       } catch {
         // Ignore close failures.
+      } finally {
+        // Keep request interception active until the owned browser has stopped;
+        // otherwise a delayed meta-refresh could slip through the teardown gap.
+        await this.uninstallNavigationGuard();
+        try {
+          this.profileLock?.release();
+        } catch (error) {
+          logger.error('BrowserOperatorExecutor: failed to release the persistent browser profile lock', error as Error);
+        } finally {
+          this.profileLock = null;
+        }
       }
     }
 
@@ -385,8 +709,9 @@ export class BrowserOperatorExecutor {
     const success = !this.isStopped && this.session.actionLog.every((entry) => entry.status === 'completed');
     const stopped = this.isStopped;
     const generatedAt = new Date().toISOString();
+    const redactedSession = redactSessionForProof(this.session);
     const harness = buildBrowserOperatorHarnessBundle({
-      session: this.session,
+      session: redactedSession,
       artifactRef: proofFileName,
       success,
       stopped,
@@ -394,10 +719,10 @@ export class BrowserOperatorExecutor {
     });
 
     const proofArtifact = {
-      sessionId: this.session.sessionId,
+      sessionId: redactedSession.sessionId,
       generatedAt,
-      goal: this.session.goal,
-      mode: this.session.mode,
+      goal: redactedSession.goal,
+      mode: redactedSession.mode,
       engine: 'stagehand-browser-pilot',
       capabilities: [
         'navigation',
@@ -416,23 +741,30 @@ export class BrowserOperatorExecutor {
         'uploads',
         'watchdog',
       ],
-      consent: this.session.consent,
-      actionLog: this.session.actionLog,
+      consent: redactedSession.consent,
+      actionLog: redactedSession.actionLog,
       success,
       stopped,
       harness,
     };
 
-    const proofPath = path.join(cwd, '.codebuddy', 'runs', this.session.sessionId, 'artifacts', proofFileName);
-    fs.mkdirSync(path.dirname(proofPath), { recursive: true });
-    fs.writeFileSync(proofPath, JSON.stringify(proofArtifact, null, 2), 'utf-8');
+    const artifactDirectory = ensureSafeArtifactDirectory(workspaceRoot, this.session.sessionId);
+    const proofPath = nextAvailableArtifactPath(path.join(artifactDirectory, proofFileName));
+    writePrivateArtifact(proofPath, JSON.stringify(proofArtifact, null, 2));
 
     logger.info(`BrowserOperatorExecutor: Execution complete. Proof written to ${proofFileName}`);
+    this.emit({
+      type: 'completed',
+      sessionId: this.session.sessionId,
+      success: proofArtifact.success,
+      stopped: proofArtifact.stopped,
+    });
 
     return {
       success: proofArtifact.success,
       stopped: proofArtifact.stopped,
       actionLog: this.session.actionLog,
+      proofPath,
     };
   }
 
@@ -448,8 +780,9 @@ export class BrowserOperatorExecutor {
 
     switch (action) {
       case 'navigate': {
-        const url = getString(inputs.url) || this.session.query;
-        if (!url) throw new Error('navigate requires inputs.url or session.query');
+        const requestedUrl = getString(inputs.url) || this.session.query;
+        if (!requestedUrl) throw new Error('navigate requires inputs.url or session.query');
+        const url = await this.guardNavigationUrl(requestedUrl);
         await runGuarded('page.goto', NAVIGATION_TIMEOUT_MS, () => page.goto(url, {
           waitUntil: getString(inputs.waitUntil) || 'domcontentloaded',
           timeout: getTimeout(inputs, NAVIGATION_TIMEOUT_MS),
@@ -500,9 +833,7 @@ export class BrowserOperatorExecutor {
 
       case 'act':
         return {
-          evidence: await runGuarded('page.act', timeoutMs, () => this.semanticAct(
-            getString(inputs.instruction) || getString(inputs.text) || entry.title,
-          )),
+          evidence: await runGuarded('page.act', timeoutMs, () => this.executeBoundSemanticAct(entry)),
         };
 
       case 'click':
@@ -531,9 +862,12 @@ export class BrowserOperatorExecutor {
         const key = getString(inputs.key);
         if (!key) throw new Error('press requires inputs.key');
         await runGuarded('page.keyboard.press', timeoutMs, () => {
+          const inspectedSelector = this.semanticSelector(entry);
+          const locator = inspectedSelector ? page.locator?.(inspectedSelector) : undefined;
+          if (locator?.press) return locator.press(key);
           if (page.keyboard?.press) return page.keyboard.press(key);
           if (page.keyPress) return page.keyPress(key);
-          return this.semanticAct(`press ${key}`);
+          throw new Error('No deterministic key press API is available for the locally inspected target.');
         });
         return { evidence: `Pressed ${key}` };
       }
@@ -626,7 +960,7 @@ export class BrowserOperatorExecutor {
 
       case 'upload_files':
         return {
-          evidence: await runGuarded('upload files', timeoutMs, () => this.uploadFiles(entry)),
+          evidence: await runGuarded('upload files', timeoutMs, () => this.uploadFiles(entry, cwd)),
         };
 
       case 'download':
@@ -638,7 +972,9 @@ export class BrowserOperatorExecutor {
         return { evidence: `Tabs: ${formatStructured(await this.listTabs())}` };
 
       case 'new_tab': {
-        const tab = await runGuarded('new tab', timeoutMs, () => this.newTab(getString(inputs.url)));
+        const requestedUrl = getString(inputs.url);
+        const url = requestedUrl ? await this.guardNavigationUrl(requestedUrl) : undefined;
+        const tab = await runGuarded('new tab', timeoutMs, () => this.newTab(url));
         return { evidence: `New tab opened: ${formatStructured(tab)}` };
       }
 
@@ -661,6 +997,485 @@ export class BrowserOperatorExecutor {
       throw new Error('Browser page is not initialized.');
     }
     return this.page;
+  }
+
+  private semanticSelector(entry: BrowserOperatorActionLogEntry, index = 0): string {
+    return this.semanticTargetSelectors.get(entry.id)?.[index] ?? '';
+  }
+
+  private async executeBoundSemanticAct(entry: BrowserOperatorActionLogEntry): Promise<string> {
+    const page = this.requirePage();
+    const inputs = entry.inputs ?? {};
+    const instruction = getString(inputs.instruction) || getString(inputs.text) || entry.title;
+    const selector = this.semanticSelector(entry);
+    if (!selector) {
+      throw new Error('BrowserOperatorTargetInspectionRequired: semantic act has no locally bound target selector.');
+    }
+    const locator = page.locator?.(selector);
+    if (/(?:\bclick\b|\bopen\b|\bchoose\b|\bcontinue\b|cliquer|ouvrir|choisir|continuer)/i.test(instruction)) {
+      if (locator?.click) {
+        await locator.click({ button: 'left', clickCount: 1 });
+      } else if (page.click) {
+        await page.click(selector, { button: 'left', clickCount: 1 });
+      } else {
+        throw new Error('No deterministic click API is available for the locally inspected semantic target.');
+      }
+      return `Performed locally bound semantic click on ${selector}`;
+    }
+    const value = getString(inputs.value) || (inputs.instruction ? getString(inputs.text) : '');
+    if (value && /(?:\btype\b|\bfill\b|\benter\b|saisir|remplir)/i.test(instruction)) {
+      if (locator?.fill) {
+        await locator.fill(value);
+      } else if (page.fill) {
+        await page.fill(selector, value);
+      } else {
+        throw new Error('No deterministic fill API is available for the locally inspected semantic target.');
+      }
+      return `Performed locally bound semantic fill on ${selector}`;
+    }
+    throw new Error('BrowserOperatorSemanticActBlocked: semantic instruction cannot be bound to a deterministic local interaction. Use click, fill, type, select, or press explicitly.');
+  }
+
+  private async semanticPreflight(
+    entry: BrowserOperatorActionLogEntry,
+    action: string,
+  ): Promise<BrowserOperatorSemanticPreflight> {
+    if (!MUTATING_ACTIONS.has(action)) {
+      return { risk: 'read', targetInspected: false, reasons: [], resolvedSelectors: [] };
+    }
+
+    const page = this.requirePage();
+    const targetInspectionRequired = TARGET_INSPECTION_ACTIONS.has(action);
+    let inspection: BrowserOperatorTargetInspection | null = null;
+    if (targetInspectionRequired) {
+      if (typeof page.evaluate !== 'function') {
+        throw new Error('BrowserOperatorTargetInspectionRequired: mutating action blocked because local DOM inspection is unavailable.');
+      }
+      const request = buildSemanticInspectionRequest(entry, action);
+      let rawInspection: unknown;
+      try {
+        rawInspection = await page.evaluate((input: {
+          selectorGroups: string[][];
+          intent: string;
+          useActiveElement: boolean;
+          allowIntentFallback: boolean;
+        }) => {
+          const bound = (value: unknown, max = 600) => String(value ?? '').replace(/\s+/g, ' ').trim().slice(0, max);
+          const isInspectableTarget = (element: Element | null): element is Element => Boolean(
+            element && !['HTML', 'BODY', 'HEAD', 'SCRIPT', 'STYLE'].includes(element.tagName),
+          );
+          const targetText = (element: Element) => {
+            const html = element as HTMLElement;
+            return bound(html.innerText || element.textContent || '', 300);
+          };
+          const selectorFor = (element: Element): string => {
+            const escape = (value: string) => {
+              const css = (globalThis as typeof globalThis & { CSS?: { escape?: (input: string) => string } }).CSS;
+              return css?.escape ? css.escape(value) : value.replace(/[^a-zA-Z0-9_-]/g, '\\$&');
+            };
+            const id = element.getAttribute('id');
+            if (id) return `#${escape(id)}`;
+            for (const attribute of ['data-testid', 'data-test-id', 'data-test']) {
+              const value = element.getAttribute(attribute);
+              if (value) return `[${attribute}="${value.replace(/"/g, '\\"')}"]`;
+            }
+            const name = element.getAttribute('name');
+            if (name) return `${element.tagName.toLowerCase()}[name="${name.replace(/"/g, '\\"')}"]`;
+            const aria = element.getAttribute('aria-label');
+            if (aria) return `${element.tagName.toLowerCase()}[aria-label="${aria.replace(/"/g, '\\"')}"]`;
+            const parent = element.parentElement;
+            if (!parent) return element.tagName.toLowerCase();
+            const peers = Array.from(parent.children).filter((candidate) => candidate.tagName === element.tagName);
+            return `${selectorFor(parent)} > ${element.tagName.toLowerCase()}:nth-of-type(${Math.max(1, peers.indexOf(element) + 1)})`;
+          };
+          const labelsFor = (element: Element): string => {
+            const labels: string[] = [];
+            const control = element as HTMLInputElement;
+            if (control.labels) {
+              labels.push(...Array.from(control.labels).map((label) => targetText(label)));
+            }
+            const wrappingLabel = element.closest('label');
+            if (wrappingLabel) labels.push(targetText(wrappingLabel));
+            const labelledBy = element.getAttribute('aria-labelledby') || '';
+            for (const id of labelledBy.split(/\s+/).filter(Boolean)) {
+              const label = document.getElementById(id);
+              if (label) labels.push(targetText(label));
+            }
+            return bound([...new Set(labels.filter(Boolean))].join(' | '), 500);
+          };
+          const describe = (element: Element): BrowserOperatorTargetContext => {
+            const html = element as HTMLElement;
+            const form = element.closest('form') as HTMLFormElement | null;
+            const neighborhoodRoot = element.closest('[role="dialog"],dialog,form,fieldset,section,article,li')
+              || element.parentElement;
+            return {
+              text: targetText(element),
+              ariaLabel: bound(element.getAttribute('aria-label'), 300),
+              labels: labelsFor(element),
+              neighborhood: bound((neighborhoodRoot as HTMLElement | null)?.innerText || neighborhoodRoot?.textContent, 800),
+              formAction: bound(form?.getAttribute('action') || form?.action, 500),
+              formText: bound(form?.innerText || form?.textContent, 800),
+              role: bound(element.getAttribute('role') || html.tagName, 80),
+              inputType: bound(element.getAttribute('type'), 80),
+              name: bound(element.getAttribute('name') || element.id, 200),
+              href: bound(element.getAttribute('href') || (element as HTMLAnchorElement).href, 500),
+            };
+          };
+          const candidates = () => Array.from(document.querySelectorAll(
+            'button,a[href],input,textarea,select,[role="button"],[role="menuitem"],[contenteditable="true"]',
+          )).filter(isInspectableTarget);
+          const findByIntent = (intent: string): Element | null => {
+            const normalized = bound(intent, 500).toLowerCase();
+            const tokens = normalized.split(/[^\p{L}\p{N}]+/u).filter((token) => token.length > 2);
+            let best: { element: Element; score: number } | null = null;
+            for (const element of candidates()) {
+              const context = describe(element);
+              const haystack = `${context.text} ${context.ariaLabel} ${context.labels} ${context.name} ${context.role}`.toLowerCase();
+              const score = (normalized && haystack.includes(normalized) ? 20 : 0)
+                + tokens.filter((token) => haystack.includes(token)).length * 3;
+              if (score > 0 && (!best || score > best.score)) best = { element, score };
+            }
+            return best?.element ?? null;
+          };
+
+          try {
+            const targets: Element[] = [];
+            for (const group of input.selectorGroups) {
+              const target = group.map((selector) => document.querySelector(selector)).find(isInspectableTarget) ?? null;
+              if (target) targets.push(target);
+            }
+            if (input.useActiveElement && isInspectableTarget(document.activeElement)) {
+              targets.push(document.activeElement);
+            }
+            if (
+              targets.length === 0
+              && (input.selectorGroups.length === 0 || input.allowIntentFallback && input.selectorGroups.length === 1)
+              && input.intent
+            ) {
+              const intentTarget = findByIntent(input.intent);
+              if (intentTarget) targets.push(intentTarget);
+            }
+            const expectedTargets = input.selectorGroups.length > 0 ? input.selectorGroups.length : 1;
+            const uniqueTargets = [...new Set(targets)];
+            return {
+              inspected: true as const,
+              targetFound: uniqueTargets.length >= expectedTargets,
+              url: bound(location.href, 1_000),
+              documentTitle: bound(document.title, 300),
+              contexts: uniqueTargets.slice(0, 12).map(describe),
+              resolvedSelectors: uniqueTargets.slice(0, 12).map(selectorFor),
+            };
+          } catch (error) {
+            return {
+              inspected: true as const,
+              targetFound: false,
+              url: bound(location.href, 1_000),
+              documentTitle: bound(document.title, 300),
+              contexts: [],
+              resolvedSelectors: [],
+              error: error instanceof Error ? bound(error.message, 300) : 'target inspection failed',
+            };
+          }
+        }, request);
+      } catch (error) {
+        throw new Error(`BrowserOperatorTargetInspectionRequired: mutating action blocked because local target inspection failed (${error instanceof Error ? error.message : String(error)}).`);
+      }
+      inspection = normalizeTargetInspection(rawInspection);
+      if (
+        !inspection
+        || !inspection.targetFound
+        || inspection.contexts.length === 0
+        || inspection.resolvedSelectors.length === 0
+      ) {
+        const detail = inspection?.error ? ` (${inspection.error})` : '';
+        throw new Error(`BrowserOperatorTargetInspectionRequired: mutating action blocked because its exact local target could not be inspected${detail}.`);
+      }
+    }
+
+    const currentUrl = typeof page.url === 'function' ? String(page.url() ?? '') : '';
+    const semanticContext = [
+      action,
+      entry.title,
+      entry.reason,
+      semanticInputDescription(entry, action),
+      currentUrl,
+      inspection?.url,
+      inspection?.documentTitle,
+      ...(inspection?.contexts.flatMap((context) => [
+        context.text,
+        context.ariaLabel,
+        context.labels,
+        context.neighborhood,
+        context.formAction,
+        context.formText,
+        context.role,
+        context.inputType,
+        context.name,
+        context.href,
+      ]) ?? []),
+    ].filter(Boolean).join('\n');
+    const reasons = SENSITIVE_SEMANTIC_SIGNALS
+      .filter(({ pattern }) => pattern.test(semanticContext))
+      .map(({ reason }) => reason);
+    if (reasons.length > 0) {
+      throw new Error(
+        `BrowserOperatorSensitiveEffectBlocked: semantic preflight detected ${[...new Set(reasons)].join(', ')}. Generic browser confirmation never authorizes this effect; a dedicated effect-specific approval receipt is required and is not available.`,
+      );
+    }
+
+    return {
+      risk: 'low',
+      targetInspected: targetInspectionRequired,
+      reasons: [],
+      resolvedSelectors: inspection?.resolvedSelectors ?? [],
+    };
+  }
+
+  private async guardNavigationUrl(rawUrl: string): Promise<string> {
+    let url: URL;
+    try {
+      url = new URL(rawUrl);
+    } catch {
+      throw new Error('Navigation blocked: invalid URL.');
+    }
+    if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) {
+      throw new Error('Navigation blocked: only credential-free HTTP(S) URLs are allowed.');
+    }
+
+    let check: { safe: boolean; reason?: string };
+    if (this.options.urlGuard) {
+      try {
+        check = await this.options.urlGuard(url.toString());
+      } catch (error) {
+        const reason = error instanceof Error ? error.message : String(error);
+        throw new Error(`Navigation blocked: URL guard failed (${reason}).`);
+      }
+    } else {
+      try {
+        const { isDevOriginAllowed } = await import('../security/dev-origins.js');
+        if (isDevOriginAllowed(url.toString())) return url.toString();
+        const { assertSafeUrl } = await import('../security/ssrf-guard.js');
+        check = await assertSafeUrl(url.toString());
+      } catch (error) {
+        const reason = error instanceof Error ? error.message : String(error);
+        throw new Error(`Navigation blocked: URL guard unavailable (${reason}).`);
+      }
+    }
+
+    if (!check.safe) {
+      throw new Error(`Navigation blocked: ${check.reason || 'URL not allowed'}`);
+    }
+    return url.toString();
+  }
+
+  /**
+   * Install a browser-context request gate before the first planned action.
+   * Context-level routing is important here: it covers redirect hops and pages
+   * opened by a click/semantic action, not only explicit page.goto calls.
+   */
+  private async installNavigationGuard(): Promise<void> {
+    if (this.navigationRouteHandler) return;
+
+    this.navigationRouteHandler = async (route, request) => {
+      const check = this.handleNavigationRoute(route, request);
+      this.pendingNavigationChecks.add(check);
+      try {
+        await check;
+      } finally {
+        this.pendingNavigationChecks.delete(check);
+      }
+    };
+
+    const routeTargets: NavigationRouteTarget[] = [];
+    const page = this.requirePage();
+    const stagehandContext = this.stagehand?.context;
+    if (isNavigationRouteTarget(stagehandContext)) {
+      routeTargets.push(stagehandContext);
+    }
+
+    let pageContext: unknown;
+    try {
+      pageContext = typeof page.context === 'function' ? page.context() : undefined;
+    } catch {
+      pageContext = undefined;
+    }
+    if (isNavigationRouteTarget(pageContext) && !routeTargets.includes(pageContext)) {
+      routeTargets.push(pageContext);
+    }
+
+    if (routeTargets.length === 0) {
+      const connectUrl = this.stagehand?.connectURL?.();
+      if (connectUrl) {
+        const { chromium } = await import('playwright-core');
+        this.navigationGuardBrowser = await chromium.connectOverCDP(connectUrl, {
+          timeout: INIT_TIMEOUT_MS,
+        }) as unknown as NavigationGuardBrowser;
+        routeTargets.push(...this.navigationGuardBrowser.contexts());
+      }
+    }
+
+    if (routeTargets.length === 0) {
+      // urlGuard is explicitly documented as a deterministic test injection.
+      // Legacy test doubles do not expose network routing; production Stagehand
+      // exposes connectURL(), so a real runtime without interception fails closed.
+      if (this.options.urlGuard) {
+        logger.warn('BrowserOperatorExecutor: navigation request interception unavailable on injected test backend; retaining post-action URL verification.');
+        return;
+      }
+      this.navigationRouteHandler = null;
+      throw new Error('Navigation blocked: browser request interception is unavailable.');
+    }
+
+    for (const target of routeTargets) {
+      await target.route(this.navigationRoutePattern, this.navigationRouteHandler);
+      this.navigationRouteTargets.push(target);
+    }
+  }
+
+  private async uninstallNavigationGuard(): Promise<void> {
+    const handler = this.navigationRouteHandler;
+    this.navigationRouteHandler = null;
+    if (!handler) return;
+
+    const targets = this.navigationRouteTargets.splice(0);
+    await Promise.allSettled(targets.map(async (target) => {
+      await target.unroute?.(this.navigationRoutePattern, handler);
+    }));
+    this.navigationGuardBrowser = null;
+    this.pendingNavigationChecks.clear();
+  }
+
+  private async handleNavigationRoute(
+    route: NavigationRouteLike,
+    requestArgument?: NavigationRequestLike,
+  ): Promise<void> {
+    const request = requestArgument ?? route.request?.();
+    if (!request) {
+      this.recordNavigationViolation(new Error('Navigation blocked: intercepted request metadata is unavailable.'));
+      await abortNavigationRoute(route);
+      return;
+    }
+
+    let isNavigationRequest: boolean;
+    try {
+      isNavigationRequest = typeof request.isNavigationRequest === 'function'
+        ? request.isNavigationRequest()
+        : request.resourceType?.() === 'document';
+    } catch {
+      this.recordNavigationViolation(new Error('Navigation blocked: intercepted request type is unavailable.'));
+      await abortNavigationRoute(route);
+      return;
+    }
+
+    if (!isNavigationRequest) {
+      await continueNavigationRoute(route);
+      return;
+    }
+
+    let requestedUrl = '';
+    try {
+      requestedUrl = request.url?.() ?? '';
+      if (!requestedUrl) {
+        throw new Error('empty intercepted URL');
+      }
+      await this.guardNavigationUrl(requestedUrl);
+    } catch (error) {
+      this.recordNavigationViolation(normalizeNavigationError(error));
+      await abortNavigationRoute(route);
+      return;
+    }
+
+    try {
+      await continueNavigationRoute(route);
+    } catch (error) {
+      if (!this.isStopped) {
+        logger.warn(`BrowserOperatorExecutor: failed to continue a guarded navigation request: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
+  }
+
+  /**
+   * Await in-flight route decisions and validate every visible top-level URL.
+   * This second boundary catches custom Stagehand actions whose navigation may
+   * be abstracted away from the active page object.
+   */
+  private async assertNavigationBoundary(): Promise<void> {
+    while (this.pendingNavigationChecks.size > 0) {
+      await Promise.allSettled([...this.pendingNavigationChecks]);
+    }
+    if (this.navigationViolation) throw this.navigationViolation;
+
+    for (const browserPage of this.navigationPages()) {
+      if (typeof browserPage.url !== 'function') continue;
+      let currentUrl: string;
+      try {
+        currentUrl = String(browserPage.url() ?? '').trim();
+      } catch (error) {
+        this.recordNavigationViolation(new Error(`Navigation blocked: current page URL is unavailable (${error instanceof Error ? error.message : String(error)}).`));
+        break;
+      }
+      if (!currentUrl || currentUrl === 'about:blank' || currentUrl.startsWith('about:blank#')) continue;
+      try {
+        await this.guardNavigationUrl(currentUrl);
+      } catch (error) {
+        this.recordNavigationViolation(normalizeNavigationError(error));
+        break;
+      }
+    }
+
+    if (this.navigationViolation) throw this.navigationViolation;
+  }
+
+  private navigationPages(): StagehandPage[] {
+    const pages: StagehandPage[] = [];
+    const append = (candidate: unknown) => {
+      if (candidate && typeof candidate === 'object' && !pages.includes(candidate as StagehandPage)) {
+        pages.push(candidate as StagehandPage);
+      }
+    };
+
+    append(this.page);
+    try {
+      const contextPages = this.stagehand?.context?.pages?.();
+      if (Array.isArray(contextPages)) contextPages.forEach(append);
+    } catch {
+      // The active page still provides a final-URL boundary.
+    }
+    try {
+      for (const context of this.navigationGuardBrowser?.contexts() ?? []) {
+        const contextPages = context.pages?.();
+        if (Array.isArray(contextPages)) contextPages.forEach(append);
+      }
+    } catch {
+      // The request route remains the primary pre-navigation boundary.
+    }
+    return pages;
+  }
+
+  private recordNavigationViolation(error: Error): void {
+    if (!this.navigationViolation) {
+      this.navigationViolation = error;
+      logger.error(`BrowserOperatorExecutor: ${error.message}`);
+    }
+    this.isStopped = true;
+    for (const listener of this.stopListeners) listener();
+    this.stopListeners.clear();
+  }
+
+  private emitAction(action: BrowserOperatorActionLogEntry): void {
+    this.emit({
+      type: 'action',
+      sessionId: this.session.sessionId,
+      action: redactActionLogEntry(action),
+    });
+  }
+
+  private emit(event: BrowserOperatorExecutorEvent): void {
+    try {
+      this.options.onEvent?.(event);
+    } catch {
+      // Observability callbacks must never alter execution semantics.
+    }
   }
 
   private context(): StagehandContext {
@@ -688,21 +1503,6 @@ export class BrowserOperatorExecutor {
     return context.activePage?.() ?? context.pages?.()[0] ?? null;
   }
 
-  private async semanticAct(instruction: string): Promise<string> {
-    const page = this.requirePage();
-    if (page.act) {
-      await page.act({ action: instruction });
-      return `Successfully performed semantic action: ${instruction}`;
-    }
-
-    if (!this.stagehand?.act) {
-      throw new Error('Stagehand semantic action API is not available.');
-    }
-
-    await this.stagehand.act(instruction);
-    return `Successfully performed semantic action: ${instruction}`;
-  }
-
   private async clickLike(action: string, entry: BrowserOperatorActionLogEntry): Promise<string> {
     const page = this.requirePage();
     const inputs = entry.inputs ?? {};
@@ -713,7 +1513,7 @@ export class BrowserOperatorExecutor {
     const button = action === 'right_click' ? 'right' : getString(inputs.button) || 'left';
     const clickCount = action === 'double_click' ? 2 : getNumber(inputs.clickCount) ?? 1;
     let resolved: ResolvedBrowserElement | null = null;
-    let effectiveSelector = selector;
+    let effectiveSelector = selector || this.semanticSelector(entry);
 
     if (!effectiveSelector && target && ref === undefined) {
       resolved = await this.tryIdentifyElement(target, inputs);
@@ -732,10 +1532,7 @@ export class BrowserOperatorExecutor {
       return `Clicked selector ${effectiveSelector}${resolved ? ` (${resolved.source}: ${resolved.description})` : ''}`;
     }
 
-    const instruction = text
-      ? `click on "${text}"`
-      : `click ${ref !== undefined ? `element with reference ${ref}` : entry.title}`;
-    return this.semanticAct(instruction);
+    throw new Error(`BrowserOperatorTargetInspectionRequired: no deterministic selector remained for ${text || ref || entry.title}.`);
   }
 
   private async typeText(entry: BrowserOperatorActionLogEntry): Promise<string> {
@@ -746,7 +1543,7 @@ export class BrowserOperatorExecutor {
     const text = getString(inputs.text) || getString(inputs.value);
     if (!text) throw new Error('type requires inputs.text or inputs.value');
     let resolved: ResolvedBrowserElement | null = null;
-    let effectiveSelector = selector;
+    let effectiveSelector = selector || this.semanticSelector(entry);
 
     if (!effectiveSelector && target && inputs.ref === undefined) {
       resolved = await this.tryIdentifyElement(target, inputs);
@@ -769,7 +1566,7 @@ export class BrowserOperatorExecutor {
       return `Typed ${text.length} chars into ${effectiveSelector}${resolved ? ` (${resolved.source}: ${resolved.description})` : ''}`;
     }
 
-    return this.semanticAct(`type "${text}" into ${getString(inputs.ref) || entry.title}`);
+    throw new Error(`BrowserOperatorTargetInspectionRequired: no deterministic selector remained for ${getString(inputs.ref) || entry.title}.`);
   }
 
   private async fillFields(entry: BrowserOperatorActionLogEntry): Promise<string> {
@@ -787,11 +1584,15 @@ export class BrowserOperatorExecutor {
       throw new Error('fill requires inputs.fields, or selector + value');
     }
 
+    let fieldIndex = 0;
     for (const [target, fieldValue] of Object.entries(fields)) {
+      const inspectedSelector = this.semanticSelector(entry, fieldIndex++);
       await this.typeText({
         ...entry,
         inputs: isNumeric(target)
-          ? { ...inputs, ref: Number(target), text: String(fieldValue) }
+          ? inspectedSelector
+            ? { ...inputs, selector: inspectedSelector, text: String(fieldValue) }
+            : { ...inputs, ref: Number(target), text: String(fieldValue) }
           : { ...inputs, selector: target, text: String(fieldValue) },
       });
     }
@@ -810,7 +1611,7 @@ export class BrowserOperatorExecutor {
     const value = getString(inputs.value) || getString(inputs.label) || getString(inputs.index);
     if (!value) throw new Error('select requires value, label, or index');
     let resolved: ResolvedBrowserElement | null = null;
-    let effectiveSelector = selector;
+    let effectiveSelector = selector || this.semanticSelector(entry);
 
     if (!effectiveSelector) {
       const target = getElementIntent(entry, 'select');
@@ -831,7 +1632,7 @@ export class BrowserOperatorExecutor {
       return `Selected ${value} in ${effectiveSelector}${resolved ? ` (${resolved.source}: ${resolved.description})` : ''}`;
     }
 
-    return this.semanticAct(`select "${value}" in ${entry.title}`);
+    throw new Error(`BrowserOperatorTargetInspectionRequired: no deterministic selector remained for ${entry.title}.`);
   }
 
   private async hover(entry: BrowserOperatorActionLogEntry): Promise<string> {
@@ -839,7 +1640,7 @@ export class BrowserOperatorExecutor {
     const inputs = entry.inputs ?? {};
     const selector = getString(inputs.selector);
     let resolved: ResolvedBrowserElement | null = null;
-    let effectiveSelector = selector;
+    let effectiveSelector = selector || this.semanticSelector(entry);
     if (!effectiveSelector) {
       const target = getElementIntent(entry, 'hover');
       if (target) {
@@ -859,7 +1660,7 @@ export class BrowserOperatorExecutor {
       }
       return `Hovered ${effectiveSelector}${resolved ? ` (${resolved.source}: ${resolved.description})` : ''}`;
     }
-    return this.semanticAct(`hover ${getString(inputs.text) || getString(inputs.ref) || entry.title}`);
+    throw new Error(`BrowserOperatorTargetInspectionRequired: no deterministic selector remained for ${getString(inputs.text) || getString(inputs.ref) || entry.title}.`);
   }
 
   private async tryIdentifyElement(target: string, inputs: Record<string, any> = {}): Promise<ResolvedBrowserElement | null> {
@@ -1097,21 +1898,21 @@ export class BrowserOperatorExecutor {
       throw new Error('Screenshot API is not available.');
     }
     const inputs = entry.inputs ?? {};
-    const artifactPath = getString(inputs.outputPath) || path.join(
-      cwd,
-      '.codebuddy',
-      'runs',
-      this.session.sessionId,
-      'artifacts',
-      `evidence_${entry.id}.png`,
+    const artifactDirectory = ensureSafeArtifactDirectory(cwd, this.session.sessionId);
+    const artifactPath = resolveArtifactOutputPath(
+      artifactDirectory,
+      getString(inputs.outputPath),
+      `evidence_${safeArtifactName(entry.id)}.png`,
     );
-    fs.mkdirSync(path.dirname(artifactPath), { recursive: true });
     const buffer = await page.screenshot({
       fullPage: inputs.fullPage === true,
-      path: page.screenshot.length === 0 ? undefined : artifactPath,
     });
     if (Buffer.isBuffer(buffer)) {
-      fs.writeFileSync(artifactPath, buffer);
+      writePrivateArtifact(artifactPath, buffer);
+    } else if (typeof buffer === 'string') {
+      writePrivateArtifact(artifactPath, Buffer.from(buffer, 'base64'));
+    } else {
+      throw new Error('Screenshot API did not return image bytes.');
     }
     return artifactPath;
   }
@@ -1148,10 +1949,12 @@ export class BrowserOperatorExecutor {
     });
   }
 
-  private async uploadFiles(entry: BrowserOperatorActionLogEntry): Promise<string> {
+  private async uploadFiles(entry: BrowserOperatorActionLogEntry, workspaceRoot: string): Promise<string> {
     const page = this.requirePage();
     const inputs = entry.inputs ?? {};
-    const files = Array.isArray(inputs.files) ? inputs.files.map(String) : [];
+    const files = Array.isArray(inputs.files)
+      ? inputs.files.map((file) => requireWorkspaceFile(String(file), workspaceRoot))
+      : [];
     if (files.length === 0) throw new Error('upload_files requires inputs.files');
     const selector = getString(inputs.selector) || 'input[type="file"]';
     const locator = page.locator?.(selector);
@@ -1172,11 +1975,17 @@ export class BrowserOperatorExecutor {
       page.waitForEvent('download', { timeout: getTimeout(inputs, ACTION_TIMEOUT_MS) }),
       this.clickLike('click', entry),
     ]);
-    const suggestedFilename = download.suggestedFilename?.() ?? `download-${Date.now()}`;
-    const outputPath = getString(inputs.downloadPath) || path.join(cwd, '.codebuddy', 'runs', this.session.sessionId, 'artifacts', suggestedFilename);
-    fs.mkdirSync(path.dirname(outputPath), { recursive: true });
+    const suggestedFilename = safeArtifactName(download.suggestedFilename?.() ?? `download-${Date.now()}`);
+    const artifactDirectory = ensureSafeArtifactDirectory(cwd, this.session.sessionId);
+    const outputPath = resolveArtifactOutputPath(
+      artifactDirectory,
+      getString(inputs.downloadPath),
+      suggestedFilename,
+    );
+    assertArtifactDoesNotExist(outputPath);
     if (download.saveAs) {
       await download.saveAs(outputPath);
+      fs.chmodSync(outputPath, 0o600);
     }
     return `Downloaded ${suggestedFilename} to ${outputPath}`;
   }
@@ -1234,6 +2043,413 @@ export class BrowserOperatorExecutor {
     const remaining = context.pages?.() ?? [];
     this.page = remaining[0] ?? this.page;
   }
+}
+
+/**
+ * Local Browser Operator sessions reuse a dedicated Code Buddy profile so an
+ * operator can sign in once in the visible window. We never point Stagehand at
+ * the user's normal Chrome profile: that would broaden access to unrelated
+ * tabs and make profile-lock corruption possible.
+ */
+export function resolvePersistentBrowserOperatorProfile(
+  configured = process.env.CODEBUDDY_BROWSER_OPERATOR_PROFILE_DIR,
+): string {
+  const requested = configured?.trim()
+    ? path.resolve(configured.trim())
+    : path.join(os.homedir(), '.codebuddy', 'browser-operator-profile');
+  fs.mkdirSync(requested, { recursive: true, mode: 0o700 });
+  const info = fs.lstatSync(requested);
+  if (!info.isDirectory() || info.isSymbolicLink()) {
+    throw new Error('Browser Operator persistent profile must be a real directory.');
+  }
+  fs.chmodSync(requested, 0o700);
+  const profilePath = fs.realpathSync(requested);
+  const markerPath = path.join(profilePath, BROWSER_OPERATOR_PROFILE_MARKER);
+  if (!fs.existsSync(markerPath)) {
+    const entries = fs.readdirSync(profilePath);
+    if (entries.length > 0) {
+      throw new Error(
+        'Browser Operator persistent profile is non-empty and has no Code Buddy ownership marker. Choose a new empty directory; existing Chrome/Edge profiles are never adopted.',
+      );
+    }
+    createBrowserOperatorProfileMarker(markerPath);
+  }
+  validateBrowserOperatorProfileMarker(markerPath);
+  return profilePath;
+}
+
+/**
+ * Acquire the cross-process lease protecting the dedicated Chrome profile.
+ * The lock is refreshed while held, recovered only when its owner is dead or
+ * its heartbeat is stale, and released only when the random owner token still
+ * matches. Callers must retain it until Stagehand has fully closed.
+ */
+export function acquirePersistentBrowserOperatorProfileLock(
+  profilePath: string,
+  options: BrowserOperatorProfileLockOptions = {},
+): BrowserOperatorProfileLock {
+  const resolvedProfile = resolvePersistentBrowserOperatorProfile(profilePath);
+  const lockPath = path.join(resolvedProfile, BROWSER_OPERATOR_PROFILE_LOCK);
+  const staleMs = Math.max(2_000, options.staleMs ?? PROFILE_LOCK_STALE_MS);
+  const updateMs = Math.max(500, Math.min(options.updateMs ?? PROFILE_LOCK_UPDATE_MS, Math.floor(staleMs / 2)));
+  const now = options.now ?? Date.now;
+  const pid = options.pid ?? process.pid;
+  const host = options.hostname ?? os.hostname();
+  const isProcessAlive = options.isProcessAlive ?? defaultIsProcessAlive;
+  const token = randomUUID();
+  const metadata: BrowserOperatorProfileLockMetadata = {
+    schemaVersion: PROFILE_LOCK_SCHEMA_VERSION,
+    owner: PROFILE_OWNER,
+    token,
+    pid,
+    hostname: host,
+    acquiredAt: new Date(now()).toISOString(),
+  };
+
+  for (let attempt = 0; attempt < 4; attempt++) {
+    try {
+      createPrivateControlFile(lockPath, JSON.stringify(metadata, null, 2));
+      return createHeldBrowserOperatorProfileLock({
+        profilePath: resolvedProfile,
+        lockPath,
+        token,
+        updateMs,
+      });
+    } catch (error) {
+      if (!isErrnoCode(error, 'EEXIST')) throw error;
+      const snapshot = readBrowserOperatorProfileLockSnapshot(lockPath);
+      if (!isBrowserOperatorProfileLockStale(snapshot, {
+        staleMs,
+        now: now(),
+        hostname: host,
+        isProcessAlive,
+      })) {
+        throw new Error('Browser Operator persistent profile is already in use by another process.');
+      }
+      reclaimStaleBrowserOperatorProfileLock(lockPath, snapshot, token);
+    }
+  }
+
+  throw new Error('Browser Operator could not acquire the persistent profile lock safely.');
+}
+
+interface BrowserOperatorProfileLockSnapshot {
+  stat: fs.Stats;
+  metadata: BrowserOperatorProfileLockMetadata | null;
+}
+
+function createBrowserOperatorProfileMarker(markerPath: string): void {
+  const marker: BrowserOperatorProfileMarker = {
+    schemaVersion: PROFILE_MARKER_SCHEMA_VERSION,
+    owner: PROFILE_OWNER,
+    profileId: randomUUID(),
+    createdAt: new Date().toISOString(),
+  };
+  try {
+    createPrivateControlFile(markerPath, JSON.stringify(marker, null, 2));
+  } catch (error) {
+    // Two Code Buddy processes may initialize the same empty directory at the
+    // same instant. The winner's marker is validated below by both processes.
+    if (!isErrnoCode(error, 'EEXIST')) throw error;
+  }
+}
+
+function validateBrowserOperatorProfileMarker(markerPath: string): void {
+  const info = fs.lstatSync(markerPath);
+  if (!info.isFile() || info.isSymbolicLink() || info.size > MAX_PROFILE_CONTROL_FILE_BYTES) {
+    throw new Error('Browser Operator profile ownership marker is unsafe or invalid.');
+  }
+  let marker: BrowserOperatorProfileMarker;
+  try {
+    marker = JSON.parse(fs.readFileSync(markerPath, 'utf8')) as BrowserOperatorProfileMarker;
+  } catch {
+    throw new Error('Browser Operator profile ownership marker is unreadable.');
+  }
+  if (
+    marker.schemaVersion !== PROFILE_MARKER_SCHEMA_VERSION
+    || marker.owner !== PROFILE_OWNER
+    || typeof marker.profileId !== 'string'
+    || marker.profileId.length < 16
+    || typeof marker.createdAt !== 'string'
+    || !Number.isFinite(Date.parse(marker.createdAt))
+  ) {
+    throw new Error('Browser Operator profile ownership marker does not belong to Code Buddy.');
+  }
+  fs.chmodSync(markerPath, 0o600);
+}
+
+function createPrivateControlFile(filePath: string, content: string): void {
+  const fd = fs.openSync(filePath, 'wx', 0o600);
+  try {
+    fs.writeFileSync(fd, content, 'utf8');
+    fs.fsyncSync(fd);
+  } finally {
+    fs.closeSync(fd);
+  }
+  fs.chmodSync(filePath, 0o600);
+}
+
+function createHeldBrowserOperatorProfileLock(input: {
+  profilePath: string;
+  lockPath: string;
+  token: string;
+  updateMs: number;
+}): BrowserOperatorProfileLock {
+  let released = false;
+  const update = setInterval(() => {
+    try {
+      const current = readBrowserOperatorProfileLockSnapshot(input.lockPath);
+      if (current.metadata?.token !== input.token) {
+        clearInterval(update);
+        logger.error('BrowserOperatorExecutor: persistent profile lock ownership was compromised.');
+        return;
+      }
+      const timestamp = new Date();
+      fs.utimesSync(input.lockPath, timestamp, timestamp);
+    } catch (error) {
+      clearInterval(update);
+      logger.error('BrowserOperatorExecutor: persistent profile lock heartbeat failed', error as Error);
+    }
+  }, input.updateMs);
+  update.unref?.();
+
+  return {
+    profilePath: input.profilePath,
+    lockPath: input.lockPath,
+    token: input.token,
+    release: () => {
+      if (released) return;
+      released = true;
+      clearInterval(update);
+      let snapshot: BrowserOperatorProfileLockSnapshot;
+      try {
+        snapshot = readBrowserOperatorProfileLockSnapshot(input.lockPath);
+      } catch (error) {
+        if (isErrnoCode(error, 'ENOENT')) return;
+        throw error;
+      }
+      if (snapshot.metadata?.token !== input.token) {
+        throw new Error('Browser Operator refused to release a persistent profile lock owned by another process.');
+      }
+      fs.unlinkSync(input.lockPath);
+    },
+  };
+}
+
+function readBrowserOperatorProfileLockSnapshot(lockPath: string): BrowserOperatorProfileLockSnapshot {
+  const stat = fs.lstatSync(lockPath);
+  if (!stat.isFile() || stat.isSymbolicLink()) {
+    throw new Error('Browser Operator persistent profile lock is not a safe regular file.');
+  }
+  if (stat.size > MAX_PROFILE_CONTROL_FILE_BYTES) {
+    return { stat, metadata: null };
+  }
+  try {
+    const value = JSON.parse(fs.readFileSync(lockPath, 'utf8')) as Partial<BrowserOperatorProfileLockMetadata>;
+    const valid = value.schemaVersion === PROFILE_LOCK_SCHEMA_VERSION
+      && value.owner === PROFILE_OWNER
+      && typeof value.token === 'string'
+      && value.token.length >= 16
+      && Number.isSafeInteger(value.pid)
+      && Number(value.pid) > 0
+      && typeof value.hostname === 'string'
+      && value.hostname.length > 0
+      && typeof value.acquiredAt === 'string'
+      && Number.isFinite(Date.parse(value.acquiredAt));
+    return { stat, metadata: valid ? value as BrowserOperatorProfileLockMetadata : null };
+  } catch {
+    return { stat, metadata: null };
+  }
+}
+
+function isBrowserOperatorProfileLockStale(
+  snapshot: BrowserOperatorProfileLockSnapshot,
+  input: {
+    staleMs: number;
+    now: number;
+    hostname: string;
+    isProcessAlive: (pid: number) => boolean;
+  },
+): boolean {
+  const heartbeatExpired = snapshot.stat.mtimeMs < input.now - input.staleMs;
+  if (!snapshot.metadata) return heartbeatExpired;
+  if (snapshot.metadata.hostname !== input.hostname) return heartbeatExpired;
+  return !input.isProcessAlive(snapshot.metadata.pid);
+}
+
+function reclaimStaleBrowserOperatorProfileLock(
+  lockPath: string,
+  expected: BrowserOperatorProfileLockSnapshot,
+  contenderToken: string,
+): void {
+  const quarantinePath = `${lockPath}.stale-${contenderToken}`;
+  try {
+    fs.renameSync(lockPath, quarantinePath);
+  } catch (error) {
+    if (isErrnoCode(error, 'ENOENT')) return;
+    throw error;
+  }
+
+  let moved: BrowserOperatorProfileLockSnapshot;
+  try {
+    moved = readBrowserOperatorProfileLockSnapshot(quarantinePath);
+  } catch (error) {
+    restoreUnexpectedProfileLock(quarantinePath, lockPath);
+    throw error;
+  }
+  const sameFile = moved.stat.dev === expected.stat.dev
+    && moved.stat.ino === expected.stat.ino
+    && moved.stat.size === expected.stat.size
+    && moved.metadata?.token === expected.metadata?.token;
+  if (!sameFile) {
+    restoreUnexpectedProfileLock(quarantinePath, lockPath);
+    throw new Error('Browser Operator profile lock changed during stale recovery; acquisition was aborted.');
+  }
+  fs.unlinkSync(quarantinePath);
+}
+
+function restoreUnexpectedProfileLock(quarantinePath: string, lockPath: string): void {
+  try {
+    fs.linkSync(quarantinePath, lockPath);
+  } catch (error) {
+    if (!isErrnoCode(error, 'EEXIST')) {
+      logger.error('BrowserOperatorExecutor: could not restore a concurrently replaced profile lock', error as Error);
+    }
+  } finally {
+    try {
+      fs.unlinkSync(quarantinePath);
+    } catch {
+      // Best effort: never overwrite a newer owner's lock during recovery.
+    }
+  }
+}
+
+function defaultIsProcessAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return isErrnoCode(error, 'EPERM');
+  }
+}
+
+function isErrnoCode(error: unknown, code: string): boolean {
+  return Boolean(error && typeof error === 'object' && (error as NodeJS.ErrnoException).code === code);
+}
+
+function buildSemanticInspectionRequest(
+  entry: BrowserOperatorActionLogEntry,
+  action: string,
+): {
+  selectorGroups: string[][];
+  intent: string;
+  useActiveElement: boolean;
+  allowIntentFallback: boolean;
+} {
+  const inputs = entry.inputs ?? {};
+  const selectorGroups: string[][] = [];
+  let allowIntentFallback = false;
+  const selector = getString(inputs.selector);
+  if (selector) selectorGroups.push([selector]);
+
+  if (action === 'fill') {
+    const fields = getRecord(inputs.fields);
+    for (const key of Object.keys(fields)) {
+      if (isNumeric(key)) {
+        selectorGroups.push(referenceSelectorGroup(key));
+        allowIntentFallback = true;
+      } else if (key !== selector) {
+        selectorGroups.push([key]);
+      }
+    }
+  }
+
+  if (inputs.ref !== undefined && selectorGroups.length === 0) {
+    selectorGroups.push(referenceSelectorGroup(String(inputs.ref)));
+    allowIntentFallback = true;
+  }
+  if (action === 'upload_files' && selectorGroups.length === 0) {
+    selectorGroups.push(['input[type="file"]']);
+  }
+
+  return {
+    selectorGroups,
+    intent: getElementIntent(entry, action) || entry.title || action,
+    useActiveElement: action === 'press',
+    allowIntentFallback,
+  };
+}
+
+function referenceSelectorGroup(ref: string): string[] {
+  const escaped = ref.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+  return [
+    `[data-ref="${escaped}"]`,
+    `[data-stagehand-ref="${escaped}"]`,
+    `[aria-ref="${escaped}"]`,
+  ];
+}
+
+function semanticInputDescription(entry: BrowserOperatorActionLogEntry, action: string): string {
+  const inputs = entry.inputs ?? {};
+  const values: unknown[] = [
+    inputs.selector,
+    inputs.target,
+    inputs.llmTarget,
+    inputs.element,
+    inputs.description,
+    inputs.instruction,
+    inputs.label,
+    inputs.name,
+    inputs.placeholder,
+    inputs.role,
+    inputs.href,
+    inputs.formAction,
+    inputs.key,
+    ...Object.keys(getRecord(inputs.fields)),
+  ];
+  // Typed values may contain arbitrary prose or secrets and are neither needed
+  // for effect classification nor safe to copy into inspection evidence.
+  if (action === 'click' || action === 'act' || action === 'double_click' || action === 'right_click') {
+    values.push(inputs.text);
+  }
+  return values.filter((value) => value !== undefined && value !== null).map(String).join(' ');
+}
+
+function normalizeTargetInspection(value: unknown): BrowserOperatorTargetInspection | null {
+  if (!value || typeof value !== 'object') return null;
+  const record = value as Record<string, unknown>;
+  if (record.inspected !== true || !Array.isArray(record.contexts)) return null;
+  const contexts = record.contexts.slice(0, 12).flatMap((candidate) => {
+    if (!candidate || typeof candidate !== 'object') return [];
+    const context = candidate as Record<string, unknown>;
+    return [{
+      text: boundedSemanticText(context.text, 300),
+      ariaLabel: boundedSemanticText(context.ariaLabel, 300),
+      labels: boundedSemanticText(context.labels, 500),
+      neighborhood: boundedSemanticText(context.neighborhood, 800),
+      formAction: boundedSemanticText(context.formAction, 500),
+      formText: boundedSemanticText(context.formText, 800),
+      role: boundedSemanticText(context.role, 80),
+      inputType: boundedSemanticText(context.inputType, 80),
+      name: boundedSemanticText(context.name, 200),
+      href: boundedSemanticText(context.href, 500),
+    }];
+  });
+  return {
+    inspected: true,
+    targetFound: record.targetFound === true,
+    url: boundedSemanticText(record.url, 1_000),
+    documentTitle: boundedSemanticText(record.documentTitle, 300),
+    contexts,
+    resolvedSelectors: Array.isArray(record.resolvedSelectors)
+      ? record.resolvedSelectors.slice(0, 12).map((selector) => boundedSemanticText(selector, 1_000)).filter(Boolean)
+      : [],
+    ...(record.error ? { error: boundedSemanticText(record.error, 300) } : {}),
+  };
+}
+
+function boundedSemanticText(value: unknown, maxLength: number): string {
+  return String(value ?? '').replace(/\s+/g, ' ').trim().slice(0, maxLength);
 }
 
 function normalizeAction(entry: BrowserOperatorActionLogEntry): string {
@@ -1301,6 +2517,34 @@ function scoreObservedElement(candidate: ResolvedBrowserElement, target: string)
     + (candidate.selector.startsWith('#') ? 1 : 0);
 }
 
+function isNavigationRouteTarget(value: unknown): value is NavigationRouteTarget {
+  return Boolean(value && typeof value === 'object' && typeof (value as { route?: unknown }).route === 'function');
+}
+
+async function continueNavigationRoute(route: NavigationRouteLike): Promise<void> {
+  if (typeof route.continue !== 'function') {
+    throw new Error('Navigation blocked: intercepted request cannot be continued safely.');
+  }
+  await route.continue();
+}
+
+async function abortNavigationRoute(route: NavigationRouteLike): Promise<void> {
+  if (typeof route.abort !== 'function') return;
+  try {
+    await route.abort('blockedbyclient');
+  } catch {
+    // The browser may already be closing after the fail-closed stop signal.
+  }
+}
+
+function normalizeNavigationError(error: unknown): Error {
+  if (error instanceof Error && /^Navigation blocked:/i.test(error.message)) {
+    return error;
+  }
+  const reason = error instanceof Error ? error.message : String(error);
+  return new Error(`Navigation blocked: intercepted browser navigation was rejected (${reason}).`);
+}
+
 function timeoutForAction(action: string): number {
   if (action === 'navigate') return NAVIGATION_TIMEOUT_MS;
   if (action === 'extract' || action === 'observe') return EXTRACT_TIMEOUT_MS;
@@ -1364,4 +2608,157 @@ function formatStructured(value: unknown): string {
 
 function truncate(value: string, maxLength: number): string {
   return value.length > maxLength ? `${value.slice(0, maxLength)}\n... (truncated)` : value;
+}
+
+const SAFE_SESSION_ID = /^[a-zA-Z0-9._-]{1,128}$/;
+const SENSITIVE_FIELD_HINT = /password|passcode|secret|token|credential|api[_ -]?key|private[_ -]?key/i;
+
+function assertSafeSessionId(sessionId: string): void {
+  if (!SAFE_SESSION_ID.test(sessionId)) {
+    throw new Error('Browser Operator session id is invalid.');
+  }
+}
+
+function requireWorkspaceRoot(input: string): string {
+  try {
+    const root = fs.realpathSync(path.resolve(input));
+    if (!fs.statSync(root).isDirectory()) throw new Error('not a directory');
+    return root;
+  } catch {
+    throw new Error('Browser Operator workspace root must be an existing directory.');
+  }
+}
+
+function isPathInside(root: string, candidate: string): boolean {
+  const relative = path.relative(root, candidate);
+  return relative === '' || (!relative.startsWith(`..${path.sep}`) && relative !== '..' && !path.isAbsolute(relative));
+}
+
+function ensureSafeArtifactDirectory(workspaceRoot: string, sessionId: string): string {
+  assertSafeSessionId(sessionId);
+  const root = requireWorkspaceRoot(workspaceRoot);
+  let current = root;
+  for (const segment of ['.codebuddy', 'runs', sessionId, 'artifacts']) {
+    current = path.join(current, segment);
+    if (fs.existsSync(current)) {
+      const info = fs.lstatSync(current);
+      if (info.isSymbolicLink() || !info.isDirectory()) {
+        throw new Error(`Unsafe Browser Operator artifact directory: ${current}`);
+      }
+    } else {
+      fs.mkdirSync(current, { mode: 0o700 });
+    }
+    const real = fs.realpathSync(current);
+    if (!isPathInside(root, real)) {
+      throw new Error('Browser Operator artifact directory escaped the workspace.');
+    }
+  }
+  return current;
+}
+
+function safeArtifactName(input: string): string {
+  const safe = path.basename(input)
+    .replace(/[^a-zA-Z0-9._-]+/g, '-')
+    .replace(/^\.+/, '')
+    .slice(0, 160);
+  return safe || 'artifact';
+}
+
+function resolveArtifactOutputPath(
+  artifactDirectory: string,
+  requestedPath: string,
+  fallbackName: string,
+): string {
+  const candidate = requestedPath
+    ? path.resolve(artifactDirectory, requestedPath)
+    : path.join(artifactDirectory, safeArtifactName(fallbackName));
+  if (path.dirname(candidate) !== artifactDirectory || !isPathInside(artifactDirectory, candidate)) {
+    throw new Error('Browser Operator artifact output must stay inside its private artifact directory.');
+  }
+  return candidate;
+}
+
+function assertArtifactDoesNotExist(filePath: string): void {
+  if (fs.existsSync(filePath)) {
+    const info = fs.lstatSync(filePath);
+    if (info.isSymbolicLink()) {
+      throw new Error('Browser Operator refused a symlink artifact target.');
+    }
+    throw new Error(`Browser Operator artifact already exists: ${path.basename(filePath)}`);
+  }
+}
+
+function nextAvailableArtifactPath(preferredPath: string): string {
+  if (!fs.existsSync(preferredPath)) return preferredPath;
+  const extension = path.extname(preferredPath);
+  const stem = preferredPath.slice(0, preferredPath.length - extension.length);
+  for (let index = 1; index <= 1_000; index++) {
+    const candidate = `${stem}.${index}${extension}`;
+    if (!fs.existsSync(candidate)) return candidate;
+  }
+  throw new Error('Browser Operator could not reserve a unique proof artifact name.');
+}
+
+function writePrivateArtifact(filePath: string, content: string | Buffer): void {
+  assertArtifactDoesNotExist(filePath);
+  const fd = fs.openSync(filePath, 'wx', 0o600);
+  try {
+    fs.writeFileSync(fd, content);
+    fs.fsyncSync(fd);
+  } finally {
+    fs.closeSync(fd);
+  }
+  fs.chmodSync(filePath, 0o600);
+}
+
+function requireWorkspaceFile(input: string, workspaceRoot: string): string {
+  const root = requireWorkspaceRoot(workspaceRoot);
+  const candidate = path.resolve(root, input);
+  if (!isPathInside(root, candidate)) {
+    throw new Error('Browser Operator upload path must stay inside the workspace.');
+  }
+  try {
+    const info = fs.lstatSync(candidate);
+    if (info.isSymbolicLink() || !info.isFile()) throw new Error('not a regular file');
+    const real = fs.realpathSync(candidate);
+    if (!isPathInside(root, real)) throw new Error('escaped workspace');
+    return real;
+  } catch {
+    throw new Error(`Browser Operator upload file is unavailable or unsafe: ${input}`);
+  }
+}
+
+function redactActionLogEntry(entry: BrowserOperatorActionLogEntry): BrowserOperatorActionLogEntry {
+  const cloned = JSON.parse(JSON.stringify(entry)) as BrowserOperatorActionLogEntry;
+  const inputs = cloned.inputs ?? {};
+  const hint = [
+    cloned.title,
+    cloned.reason,
+    inputs.selector,
+    inputs.target,
+    inputs.label,
+    inputs.name,
+    inputs.placeholder,
+  ].filter(Boolean).join(' ');
+  if (SENSITIVE_FIELD_HINT.test(hint)) {
+    for (const key of ['value', 'text', 'instruction']) {
+      if (inputs[key] !== undefined) inputs[key] = '[REDACTED]';
+    }
+  }
+  if (inputs.fields && typeof inputs.fields === 'object' && !Array.isArray(inputs.fields)) {
+    inputs.fields = Object.fromEntries(
+      Object.entries(inputs.fields as Record<string, unknown>).map(([key, value]) => [
+        key,
+        SENSITIVE_FIELD_HINT.test(key) ? '[REDACTED]' : value,
+      ]),
+    );
+  }
+  cloned.inputs = inputs;
+  return getDataRedactionEngine().redactObject(cloned);
+}
+
+function redactSessionForProof(session: BrowserOperatorSessionDraft): BrowserOperatorSessionDraft {
+  const cloned = JSON.parse(JSON.stringify(session)) as BrowserOperatorSessionDraft;
+  cloned.actionLog = cloned.actionLog.map(redactActionLogEntry);
+  return getDataRedactionEngine().redactObject(cloned);
 }

@@ -160,6 +160,47 @@ export const IMAGE_GENERATE_TOOL: CodeBuddyTool = {
   }
 };
 
+// Image editing / inpainting — creates a new version and never overwrites the source.
+export const IMAGE_EDIT_TOOL: CodeBuddyTool = {
+  type: "function",
+  function: {
+    name: "image_edit",
+    description: "Create a new edited image from a PNG, JPEG, or WebP inside the current workspace. Supports an optional PNG alpha mask and normalized marked regions. The source image is never overwritten.",
+    parameters: {
+      type: "object",
+      properties: {
+        prompt: {
+          type: "string",
+          description: "Exact visual change to apply while preserving everything outside the requested regions"
+        },
+        image_path: {
+          type: "string",
+          description: "Workspace-relative or absolute path to the source PNG, JPEG, or WebP"
+        },
+        mask_path: {
+          type: "string",
+          description: "Optional workspace-confined PNG alpha mask"
+        },
+        selections: {
+          type: "array",
+          description: "Optional edit rectangles using normalized 0..1 coordinates",
+          items: {
+            type: "object",
+            properties: {
+              x: { type: "number", description: "Left edge, normalized from 0 to 1" },
+              y: { type: "number", description: "Top edge, normalized from 0 to 1" },
+              width: { type: "number", description: "Width, normalized from 0 to 1" },
+              height: { type: "number", description: "Height, normalized from 0 to 1" }
+            },
+            required: ["x", "y", "width", "height"]
+          }
+        }
+      },
+      required: ["prompt", "image_path"]
+    }
+  }
+};
+
 // Video Tool - Process video files and extract frames
 export const VIDEO_TOOL: CodeBuddyTool = {
   type: "function",
@@ -1037,6 +1078,7 @@ export const MULTIMODAL_TOOLS: CodeBuddyTool[] = [
   AUDIO_TOOL,
   TEXT_TO_SPEECH_TOOL,
   IMAGE_GENERATE_TOOL,
+  IMAGE_EDIT_TOOL,
   VIDEO_TOOL,
   VIDEO_ANALYZE_TOOL,
   UNDERSTAND_VIDEO_TOOL,

@@ -36,6 +36,9 @@ jest.mock('../../src/tools/index.js', () => ({
   WeatherTool: jest.fn().mockImplementation(function() { return {
     getWeather: jest.fn().mockResolvedValue({ success: true, output: 'weather report' }),
   }; }),
+  StockQuoteTool: jest.fn().mockImplementation(function() { return {
+    getQuote: jest.fn().mockResolvedValue({ success: true, output: 'stock quote' }),
+  }; }),
   MorphEditorTool: jest.fn().mockImplementation(function() { return {
     editFile: jest.fn().mockResolvedValue({ success: true, output: 'File edited' }),
   }; }),

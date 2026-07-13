@@ -23,7 +23,10 @@ pub struct Memory {
 
 impl Memory {
     pub fn new(cap: usize) -> Self {
-        Self { cap, buffers: HashMap::new() }
+        Self {
+            cap,
+            buffers: HashMap::new(),
+        }
     }
 
     pub fn push(&mut self, ev: &SensoryEvent) {
@@ -91,7 +94,11 @@ pub struct Thalamus {
 
 impl Thalamus {
     pub fn new(memory_cap: usize, coalesce_window_ms: u64) -> Self {
-        Self { coalesce_window_ms, memory: Memory::new(memory_cap), last: HashMap::new() }
+        Self {
+            coalesce_window_ms,
+            memory: Memory::new(memory_cap),
+            last: HashMap::new(),
+        }
     }
 
     /// Admit one event: returns Some(ev) to broadcast, or None if coalesced.
@@ -183,7 +190,13 @@ mod tests {
     use serde_json::json;
 
     fn ev(m: Modality, kind: &str, ts: u64, sal: u8) -> SensoryEvent {
-        SensoryEvent { modality: m, kind: kind.into(), ts_ms: ts, salience: sal, payload: json!({}) }
+        SensoryEvent {
+            modality: m,
+            kind: kind.into(),
+            ts_ms: ts,
+            salience: sal,
+            payload: json!({}),
+        }
     }
 
     #[test]
@@ -198,8 +211,12 @@ mod tests {
     #[test]
     fn salient_events_always_pass() {
         let mut t = Thalamus::new(8, 1000);
-        assert!(t.admit(ev(Modality::Audio, "speech_start", 0, 200)).is_some());
-        assert!(t.admit(ev(Modality::Audio, "speech_start", 10, 200)).is_some()); // salient → not coalesced
+        assert!(t
+            .admit(ev(Modality::Audio, "speech_start", 0, 200))
+            .is_some());
+        assert!(t
+            .admit(ev(Modality::Audio, "speech_start", 10, 200))
+            .is_some()); // salient → not coalesced
     }
 
     #[test]
@@ -234,7 +251,10 @@ mod tests {
         let mods = d.payload.get("modalities").unwrap();
         assert_eq!(mods.get("vision").unwrap().get("count").unwrap(), 2);
         assert_eq!(mods.get("audio").unwrap().get("count").unwrap(), 1);
-        assert_eq!(mods.get("vision").unwrap().get("last_kind").unwrap(), "motion");
+        assert_eq!(
+            mods.get("vision").unwrap().get("last_kind").unwrap(),
+            "motion"
+        );
     }
 
     #[tokio::test]
@@ -244,9 +264,15 @@ mod tests {
         let thalamus = Thalamus::new(8, 100);
         let handle = tokio::spawn(async move { thalamus.run_multi(vec![srx], btx).await });
 
-        stx.send(ev(Modality::Vision, "motion", 0, 10)).await.unwrap(); // passes
-        stx.send(ev(Modality::Vision, "motion", 30, 10)).await.unwrap(); // within window → coalesced
-        stx.send(ev(Modality::Audio, "speech_start", 40, 200)).await.unwrap(); // salient → passes
+        stx.send(ev(Modality::Vision, "motion", 0, 10))
+            .await
+            .unwrap(); // passes
+        stx.send(ev(Modality::Vision, "motion", 30, 10))
+            .await
+            .unwrap(); // within window → coalesced
+        stx.send(ev(Modality::Audio, "speech_start", 40, 200))
+            .await
+            .unwrap(); // salient → passes
         drop(stx); // close the sense channel → the run loop ends after draining
         handle.await.unwrap();
 
@@ -264,9 +290,13 @@ mod tests {
         let (stx, srx) = mpsc::channel::<SensoryEvent>(16);
         let (btx, mut brx) = broadcast::channel::<SensoryEvent>(16);
         let thalamus = Thalamus::new(8, 0); // window 0 → no coalescing, isolate the ordering
-        // Buffer low → high → mid BEFORE the thalamus drains, so they land in ONE attention batch.
-        stx.send(ev(Modality::Vision, "motion", 0, 10)).await.unwrap(); // low
-        stx.send(ev(Modality::Audio, "speech_start", 1, 200)).await.unwrap(); // high
+                                            // Buffer low → high → mid BEFORE the thalamus drains, so they land in ONE attention batch.
+        stx.send(ev(Modality::Vision, "motion", 0, 10))
+            .await
+            .unwrap(); // low
+        stx.send(ev(Modality::Audio, "speech_start", 1, 200))
+            .await
+            .unwrap(); // high
         stx.send(ev(Modality::Ui, "focus", 2, 90)).await.unwrap(); // mid
         drop(stx);
         let handle = tokio::spawn(async move { thalamus.run_multi(vec![srx], btx).await });
@@ -289,8 +319,12 @@ mod tests {
         let thalamus = Thalamus::new(8, 100);
         let handle = tokio::spawn(async move { thalamus.run_multi(vec![vrx, arx], btx).await });
 
-        vtx.send(ev(Modality::Vision, "motion", 0, 180)).await.unwrap();
-        atx.send(ev(Modality::Audio, "speech_start", 5, 200)).await.unwrap();
+        vtx.send(ev(Modality::Vision, "motion", 0, 180))
+            .await
+            .unwrap();
+        atx.send(ev(Modality::Audio, "speech_start", 5, 200))
+            .await
+            .unwrap();
         drop(vtx);
         drop(atx);
         handle.await.unwrap();
@@ -310,9 +344,14 @@ mod tests {
         // must not stop organ B's producer. (With ONE shared channel, a full queue blocks ALL sends.)
         let (a_tx, _a_rx) = mpsc::channel::<SensoryEvent>(1); // organ A, capacity 1, unconsumed
         let (b_tx, _b_rx) = mpsc::channel::<SensoryEvent>(1); // organ B, its own channel
-        a_tx.try_send(ev(Modality::Vision, "motion", 0, 180)).unwrap(); // fill A
-        assert!(a_tx.try_send(ev(Modality::Vision, "motion", 1, 180)).is_err()); // A is now full…
-        // …yet B is completely unaffected — its producer sends freely.
-        assert!(b_tx.try_send(ev(Modality::Audio, "speech_start", 2, 200)).is_ok());
+        a_tx.try_send(ev(Modality::Vision, "motion", 0, 180))
+            .unwrap(); // fill A
+        assert!(a_tx
+            .try_send(ev(Modality::Vision, "motion", 1, 180))
+            .is_err()); // A is now full…
+                        // …yet B is completely unaffected — its producer sends freely.
+        assert!(b_tx
+            .try_send(ev(Modality::Audio, "speech_start", 2, 200))
+            .is_ok());
     }
 }

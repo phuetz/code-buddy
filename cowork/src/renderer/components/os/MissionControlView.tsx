@@ -15,6 +15,7 @@ import type { AutonomyPosture } from '../os-actions/utils/autonomy-control-model
 import { CouncilArenaView } from './CouncilArenaView';
 import { FleetLoadStrip } from './FleetLoadStrip';
 import { FleetTopologyView } from './FleetTopologyView';
+import { IntentProofPanel } from './IntentProofPanel';
 import { PeerCapabilityMatrix } from './PeerCapabilityMatrix';
 import { KnowledgeGraphView } from '../os-panels/KnowledgeGraphView';
 import type { KnowledgeGraphEdge, KnowledgeGraphNode } from '../os-panels/knowledge-graph-view-model.js';
@@ -26,6 +27,15 @@ import { Sparkline } from '../viz/Sparkline';
 import type { CouncilSession } from './util/council-model';
 import type { FleetLoad } from './util/fleet-load-model';
 import type { Peer, PeerStatus } from './util/fleet-model';
+import type {
+  OsCapsuleCreateInput,
+  OsConstitutionUpdateInput,
+  OsExchangeBidInput,
+  OsExchangeRehearseInput,
+  OsForgeCreateInput,
+  OsIntentActionResult,
+  OsIntentProofPayload,
+} from '../../../shared/intent-proof-types';
 
 const EMPTY_LOAD: FleetLoad = { queued: 0, running: 0, capacity: 0, backpressure: 0, utilization: 0 };
 const EMPTY_COUNCIL: CouncilSession = { id: 'council', title: 'Council', dhi: 0, verdicts: [] };
@@ -101,8 +111,189 @@ function postureFromPermissionMode(permissionMode: ReturnType<typeof useAppStore
 
 export function MissionControlView() {
   const fleetPeers = useAppStore((state) => state.fleetPeers);
+  const activeSessionId = useAppStore((state) => state.activeSessionId);
   const permissionMode = useAppStore((state) => state.permissionMode);
   const setPermissionMode = useAppStore((state) => state.setPermissionMode);
+
+  // Code Buddy 2.0 mission contract: GoalState projected as an Intent Graph,
+  // with its append-only Proof Ledger. Prefer the active Cowork session; when
+  // there is no active chat, main returns the most recent local mission.
+  const [intentProof, setIntentProof] = useState<OsIntentProofPayload | null>(null);
+  const [intentLoading, setIntentLoading] = useState(true);
+  const [intentAction, setIntentAction] = useState<string | null>(null);
+  const [intentActionError, setIntentActionError] = useState<string | null>(null);
+  const refreshIntent = useCallback(() => {
+    const readIntentProof = window.electronAPI?.os?.intentProof;
+    if (!readIntentProof) {
+      setIntentProof(null);
+      setIntentLoading(false);
+      return;
+    }
+    void readIntentProof({
+      ...(activeSessionId ? { sessionId: activeSessionId } : {}),
+      proofLimit: 50,
+    })
+      .then((payload) => setIntentProof(payload ?? null))
+      .catch(() => setIntentProof(null))
+      .finally(() => setIntentLoading(false));
+  }, [activeSessionId]);
+  usePolling(refreshIntent, 10_000);
+
+  const manuallyRefreshIntent = useCallback(() => {
+    setIntentLoading(true);
+    refreshIntent();
+  }, [refreshIntent]);
+
+  const performIntentAction = useCallback(async (
+    action: string,
+    run: () => Promise<OsIntentActionResult>,
+  ) => {
+    setIntentAction(action);
+    setIntentActionError(null);
+    try {
+      const result = await run();
+      setIntentProof(result.payload);
+      if (!result.ok) setIntentActionError(result.error ?? 'Action impossible.');
+    } catch (error) {
+      setIntentActionError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setIntentAction(null);
+    }
+  }, []);
+
+  const createForgeBranch = useCallback(async (input: Omit<OsForgeCreateInput, 'sessionId'>) => {
+    const api = window.electronAPI?.os?.intentForgeCreate;
+    if (!api) {
+      setIntentActionError('Le pont Counterfactual Forge n’est pas disponible.');
+      return;
+    }
+    await performIntentAction('create', () => api({
+      ...input,
+      ...(activeSessionId ? { sessionId: activeSessionId } : {}),
+    }));
+  }, [activeSessionId, performIntentAction]);
+
+  const evaluateForgeBranch = useCallback(async (branchId: string) => {
+    const api = window.electronAPI?.os?.intentForgeEvaluate;
+    if (!api) {
+      setIntentActionError('Le pont Counterfactual Forge n’est pas disponible.');
+      return;
+    }
+    await performIntentAction(`evaluate:${branchId}`, () => api({
+      branchId,
+      ...(activeSessionId ? { sessionId: activeSessionId } : {}),
+    }));
+  }, [activeSessionId, performIntentAction]);
+
+  const selectForgeBranch = useCallback(async (branchId: string) => {
+    const api = window.electronAPI?.os?.intentForgeSelect;
+    if (!api) {
+      setIntentActionError('Le pont Counterfactual Forge n’est pas disponible.');
+      return;
+    }
+    await performIntentAction(`select:${branchId}`, () => api({
+      branchId,
+      ...(activeSessionId ? { sessionId: activeSessionId } : {}),
+    }));
+  }, [activeSessionId, performIntentAction]);
+
+  const updateConstitution = useCallback(async (input: Omit<OsConstitutionUpdateInput, 'sessionId'>) => {
+    const api = window.electronAPI?.os?.intentConstitutionUpdate;
+    if (!api) {
+      setIntentActionError('Le pont de constitution n’est pas disponible.');
+      return;
+    }
+    await performIntentAction('constitution', () => api({
+      ...input,
+      ...(activeSessionId ? { sessionId: activeSessionId } : {}),
+    }));
+  }, [activeSessionId, performIntentAction]);
+
+  const submitExchangeBid = useCallback(async (input: Omit<OsExchangeBidInput, 'sessionId'>) => {
+    const api = window.electronAPI?.os?.intentExchangeBid;
+    if (!api) {
+      setIntentActionError('Le pont Mission Exchange n’est pas disponible.');
+      return;
+    }
+    await performIntentAction('exchange:bid', () => api({
+      ...input,
+      ...(activeSessionId ? { sessionId: activeSessionId } : {}),
+    }));
+  }, [activeSessionId, performIntentAction]);
+
+  const rehearseExchangeBid = useCallback(async (input: Omit<OsExchangeRehearseInput, 'sessionId'>) => {
+    const api = window.electronAPI?.os?.intentExchangeRehearse;
+    if (!api) {
+      setIntentActionError('Le pont Shadow Twin n’est pas disponible.');
+      return;
+    }
+    await performIntentAction(`exchange:shadow:${input.bidId}`, () => api({
+      ...input,
+      ...(activeSessionId ? { sessionId: activeSessionId } : {}),
+    }));
+  }, [activeSessionId, performIntentAction]);
+
+  const awardExchangeBid = useCallback(async (bidId: string) => {
+    const api = window.electronAPI?.os?.intentExchangeAward;
+    if (!api) {
+      setIntentActionError('Le pont de règlement n’est pas disponible.');
+      return;
+    }
+    await performIntentAction(`exchange:award:${bidId}`, () => api({
+      bidId,
+      humanApproved: true,
+      ...(activeSessionId ? { sessionId: activeSessionId } : {}),
+    }));
+  }, [activeSessionId, performIntentAction]);
+
+  const rejectExchangeBid = useCallback(async (bidId: string) => {
+    const api = window.electronAPI?.os?.intentExchangeReject;
+    if (!api) {
+      setIntentActionError('Le pont de règlement n’est pas disponible.');
+      return;
+    }
+    await performIntentAction(`exchange:reject:${bidId}`, () => api({
+      bidId,
+      ...(activeSessionId ? { sessionId: activeSessionId } : {}),
+    }));
+  }, [activeSessionId, performIntentAction]);
+
+  const createCapsule = useCallback(async (input: Omit<OsCapsuleCreateInput, 'sessionId'>) => {
+    const api = window.electronAPI?.os?.intentCapsuleCreate;
+    if (!api) {
+      setIntentActionError('Le pont Outcome Capsules n’est pas disponible.');
+      return;
+    }
+    await performIntentAction('capsule:create', () => api({
+      ...input,
+      ...(activeSessionId ? { sessionId: activeSessionId } : {}),
+    }));
+  }, [activeSessionId, performIntentAction]);
+
+  const activateCapsule = useCallback(async (capsuleId: string) => {
+    const api = window.electronAPI?.os?.intentCapsuleActivate;
+    if (!api) {
+      setIntentActionError('Le pont Outcome Capsules n’est pas disponible.');
+      return;
+    }
+    await performIntentAction(`capsule:activate:${capsuleId}`, () => api({
+      capsuleId,
+      humanApproved: true,
+      ...(activeSessionId ? { sessionId: activeSessionId } : {}),
+    }));
+  }, [activeSessionId, performIntentAction]);
+
+  const revokeCapsule = useCallback(async (capsuleId: string) => {
+    const api = window.electronAPI?.os?.intentCapsuleRevoke;
+    if (!api) {
+      setIntentActionError('Le pont Outcome Capsules n’est pas disponible.');
+      return;
+    }
+    await performIntentAction(`capsule:revoke:${capsuleId}`, () => api({
+      capsuleId,
+      ...(activeSessionId ? { sessionId: activeSessionId } : {}),
+    }));
+  }, [activeSessionId, performIntentAction]);
 
   // Real council data: the latest CLI council run read from the
   // ~/.codebuddy JSONL ledgers (os.councilHealth IPC). Null → honest empty.
@@ -209,17 +400,46 @@ export function MissionControlView() {
       value: peers.length > 0 ? String(peers.length) : 'aucun',
       tone: peers.length > 0 ? 'ok' : 'muted',
     },
+    {
+      label: 'Intention',
+      value: intentProof?.state
+        ? `${intentProof.state.turnsUsed}/${intentProof.state.maxTurns} tours`
+        : 'aucune',
+      tone: !intentProof?.state
+        ? 'muted'
+        : intentProof.state.status === 'done'
+          ? 'ok'
+          : intentProof.state.status === 'paused'
+            ? 'warn'
+            : 'ok',
+    },
   ];
 
   return (
     <div className="h-full min-h-0 overflow-y-auto bg-background">
-      <div className="mx-auto max-w-6xl space-y-6 p-6">
+      <div className="mx-auto max-w-[1500px] space-y-4 p-4 sm:p-5">
         <header>
           <h1 className="text-xl font-semibold text-foreground">Mission Control</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Cockpit de la flotte, du council et de l'autonomie. Lance <code className="rounded bg-muted px-1 py-0.5 text-xs">buddy server</code> pour alimenter les vues avec des données réelles.
-          </p>
         </header>
+
+        <IntentProofPanel
+          payload={intentProof}
+          loading={intentLoading}
+          pendingAction={intentAction}
+          actionError={intentActionError}
+          onRefresh={manuallyRefreshIntent}
+          onForgeCreate={createForgeBranch}
+          onForgeEvaluate={evaluateForgeBranch}
+          onForgeSelect={selectForgeBranch}
+          onConstitutionUpdate={updateConstitution}
+          onExchangeBid={submitExchangeBid}
+          onExchangeRehearse={rehearseExchangeBid}
+          onExchangeAward={awardExchangeBid}
+          onExchangeReject={rejectExchangeBid}
+          onCapsuleCreate={createCapsule}
+          onCapsuleActivate={activateCapsule}
+          onCapsuleRevoke={revokeCapsule}
+        />
 
         <OsStatusBar items={statusItems} />
 

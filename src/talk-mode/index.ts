@@ -18,6 +18,7 @@ export type {
   EdgeTTSConfig,
   AudioReaderTTSConfig,
   PocketTTSConfig,
+  VoiceboxTTSConfig,
   Voice,
   SynthesisOptions,
   SynthesisResult,
@@ -46,4 +47,5 @@ export {
   EdgeTTSProvider,
   AudioReaderTTSProvider,
   PocketTTSProvider,
+  VoiceboxTTSProvider,
 } from './providers/index.js';

@@ -16,17 +16,20 @@ describe('VoiceConversationSession', () => {
       type: 'transcription_completed',
       timestamp: 1300,
       transcript: 'Bonjour Buddy, resume ma journee.',
+      durationMs: 95,
+      provider: 'kyutai',
     });
     expect(session.snapshot()).toMatchObject({
       phase: 'thinking',
       lastTranscriptPreview: 'Bonjour Buddy, resume ma journee.',
     });
 
+    session.record({ type: 'user_message_sent', timestamp: 1350 });
     session.record({ type: 'assistant_speech_started', timestamp: 1400 });
-    expect(session.snapshot().phase).toBe('speaking');
+    expect(session.snapshot()).toMatchObject({ phase: 'speaking', lastSttMs: 95, lastProvider: 'kyutai', lastResponseMs: 50 });
 
     session.record({ type: 'assistant_speech_finished', timestamp: 1500 });
-    expect(session.snapshot().phase).toBe('idle');
+    expect(session.snapshot()).toMatchObject({ phase: 'idle', lastVoiceTurnMs: 400 });
   });
 
   it('records barge-in interruptions as first-class state', () => {

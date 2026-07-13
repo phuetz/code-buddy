@@ -14,7 +14,11 @@ import { app } from 'electron';
 import { logWarn } from '../utils/logger';
 import { configStore } from '../config/config-store';
 import { mcpConfigStore } from '../mcp/mcp-config-store';
-import type { ProjectManager } from '../project/project-manager';
+import type {
+  ProjectContextConfig,
+  ProjectManager,
+  ProjectMemoryConfig,
+} from '../project/project-manager';
 
 export interface ConfigExportBundle {
   version: number;
@@ -54,6 +58,153 @@ export interface ImportResult {
 }
 
 const BUNDLE_VERSION = 1;
+const MAX_BUNDLE_BYTES = 5 * 1024 * 1024;
+const MAX_BUNDLE_ITEMS = 1_000;
+const REDACTED_VALUE = '[REDACTED]';
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function normalizedKey(key: string): string {
+  return key.replace(/[^a-z0-9]/gi, '').toLowerCase();
+}
+
+function isSensitiveKey(key: string): boolean {
+  const normalized = normalizedKey(key);
+  return normalized.includes('apikey')
+    || normalized.endsWith('password')
+    || normalized.endsWith('passwd')
+    || normalized.endsWith('secret')
+    || normalized.endsWith('token')
+    || normalized.endsWith('privatekey')
+    || normalized.endsWith('encryptionkey')
+    || normalized.endsWith('accesskey')
+    || normalized === 'authorization'
+    || normalized.endsWith('authorization')
+    || normalized === 'cookie'
+    || normalized.endsWith('cookie');
+}
+
+function redactStringFragments(value: string): string {
+  return value
+    .replace(/\b(Bearer|Basic)\s+[^\s,;]+/gi, `$1 ${REDACTED_VALUE}`)
+    .replace(
+      /([?&](?:api[_-]?key|access[_-]?token|auth[_-]?token|password|secret|token)=)[^&#\s]+/gi,
+      `$1${REDACTED_VALUE}`
+    )
+    .replace(/(https?:\/\/)[^:/@\s]+:[^/@\s]+@/gi, `$1${REDACTED_VALUE}@`);
+}
+
+function redactArgumentList(values: unknown[]): unknown[] {
+  let redactNext = false;
+  return values.map((value) => {
+    if (redactNext) {
+      redactNext = false;
+      return REDACTED_VALUE;
+    }
+    if (typeof value !== 'string') return redactSensitiveConfig(value);
+    const separator = value.indexOf('=');
+    const flag = (separator >= 0 ? value.slice(0, separator) : value).replace(/^-+/, '');
+    if (isSensitiveKey(flag)) {
+      if (separator < 0) {
+        redactNext = true;
+        return value;
+      }
+      return `${value.slice(0, separator + 1)}${REDACTED_VALUE}`;
+    }
+    return redactStringFragments(value);
+  });
+}
+
+/** Recursively redact credentials from API profiles and MCP env/header/argument trees. */
+export function redactSensitiveConfig(value: unknown, parentKey = ''): unknown {
+  if (Array.isArray(value)) {
+    return normalizedKey(parentKey).endsWith('args')
+      ? redactArgumentList(value)
+      : value.map((item) => redactSensitiveConfig(item));
+  }
+  if (!isRecord(value)) {
+    return typeof value === 'string' ? redactStringFragments(value) : value;
+  }
+  const result: Record<string, unknown> = {};
+  for (const [key, child] of Object.entries(value)) {
+    result[key] = isSensitiveKey(key)
+      ? REDACTED_VALUE
+      : redactSensitiveConfig(child, key);
+  }
+  return result;
+}
+
+function restoreRedactedValues(incoming: unknown, current: unknown): unknown {
+  if (incoming === REDACTED_VALUE) return current;
+  if (Array.isArray(incoming)) {
+    const currentItems = Array.isArray(current) ? current : [];
+    const currentById = new Map(
+      currentItems
+        .filter(isRecord)
+        .filter((item) => typeof item.id === 'string')
+        .map((item) => [item.id as string, item])
+    );
+    return incoming.map((item, index) => {
+      const matchingCurrent = isRecord(item) && typeof item.id === 'string'
+        ? currentById.get(item.id) ?? currentItems[index]
+        : currentItems[index];
+      return restoreRedactedValues(item, matchingCurrent);
+    });
+  }
+  if (!isRecord(incoming)) return incoming;
+  const currentRecord = isRecord(current) ? current : {};
+  const result: Record<string, unknown> = {};
+  for (const [key, child] of Object.entries(incoming)) {
+    const restored = restoreRedactedValues(child, currentRecord[key]);
+    if (restored !== undefined) result[key] = restored;
+  }
+  return result;
+}
+
+function validateProject(value: unknown): value is Record<string, unknown> {
+  if (!isRecord(value) || typeof value.name !== 'string') return false;
+  if (!value.name.trim() || value.name.length > 200) return false;
+  if (value.id !== undefined && (typeof value.id !== 'string' || value.id.length > 200)) return false;
+  if (value.description !== undefined && typeof value.description !== 'string') return false;
+  if (value.workspacePath !== undefined && typeof value.workspacePath !== 'string') return false;
+  if (value.memoryConfig !== undefined && !isRecord(value.memoryConfig)) return false;
+  if (value.contextConfig !== undefined && !isRecord(value.contextConfig)) return false;
+  return true;
+}
+
+function validateMcpServer(value: unknown): value is Record<string, unknown> {
+  if (!isRecord(value)) return false;
+  if (typeof value.id !== 'string' || !value.id || value.id.length > 200) return false;
+  if (typeof value.name !== 'string' || !value.name.trim() || value.name.length > 200) return false;
+  if (!['stdio', 'sse', 'streamable-http'].includes(String(value.type))) return false;
+  if (value.command !== undefined && typeof value.command !== 'string') return false;
+  if (value.args !== undefined && (!Array.isArray(value.args) || !value.args.every((arg) => typeof arg === 'string'))) return false;
+  if (value.env !== undefined && (!isRecord(value.env) || !Object.values(value.env).every((item) => typeof item === 'string'))) return false;
+  if (value.headers !== undefined && (!isRecord(value.headers) || !Object.values(value.headers).every((item) => typeof item === 'string'))) return false;
+  return true;
+}
+
+function assertBundle(value: unknown): ConfigExportBundle {
+  if (!isRecord(value)) throw new Error('Invalid bundle: expected an object');
+  if (typeof value.version !== 'number' || !Number.isSafeInteger(value.version) || value.version < 1) {
+    throw new Error('Invalid bundle: unsupported version');
+  }
+  if (Number(value.version) > BUNDLE_VERSION) {
+    throw new Error(`Bundle version ${String(value.version)} is newer than supported ${BUNDLE_VERSION}`);
+  }
+  if (!isRecord(value.app) || !isRecord(value.app.api)) {
+    throw new Error('Invalid bundle: app.api must be an object');
+  }
+  if (!Array.isArray(value.projects) || value.projects.length > MAX_BUNDLE_ITEMS || !value.projects.every(validateProject)) {
+    throw new Error('Invalid bundle: malformed projects');
+  }
+  if (!Array.isArray(value.mcpServers) || value.mcpServers.length > MAX_BUNDLE_ITEMS || !value.mcpServers.every(validateMcpServer)) {
+    throw new Error('Invalid bundle: malformed MCP servers');
+  }
+  return value as unknown as ConfigExportBundle;
+}
 
 export class ConfigExportService {
   constructor(private projectManager: ProjectManager) {}
@@ -78,23 +229,18 @@ export class ConfigExportService {
         description: p.description,
         workspacePath: p.workspacePath,
         memoryConfig: p.memoryConfig,
+        contextConfig: p.contextConfig,
         createdAt: p.createdAt,
       })),
-      mcpServers: mcpServers.map((s) => ({ ...s })),
+      mcpServers: mcpServers.map((server) =>
+        redactSensitiveConfig(server) as Record<string, unknown>
+      ),
     };
   }
 
   /** Sanitize the API config: drop or mask known secret fields. */
   private sanitizeApiConfig(config: Record<string, unknown>): Record<string, unknown> {
-    const out: Record<string, unknown> = {};
-    for (const [key, value] of Object.entries(config)) {
-      if (/(apiKey|password|secret|token)$/i.test(key)) {
-        out[key] = '[REDACTED]';
-      } else {
-        out[key] = value;
-      }
-    }
-    return out;
+    return redactSensitiveConfig(config) as Record<string, unknown>;
   }
 
   /** Write the bundle to a file path on disk. */
@@ -103,7 +249,11 @@ export class ConfigExportService {
       const bundle = this.exportBundle();
       const dir = path.dirname(targetPath);
       if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-      fs.writeFileSync(targetPath, JSON.stringify(bundle, null, 2), 'utf-8');
+      fs.writeFileSync(targetPath, JSON.stringify(bundle, null, 2), {
+        encoding: 'utf-8',
+        mode: 0o600,
+      });
+      fs.chmodSync(targetPath, 0o600);
       return { success: true, bundle };
     } catch (err) {
       return { success: false, error: (err as Error).message };
@@ -116,18 +266,12 @@ export class ConfigExportService {
       if (!fs.existsSync(sourcePath)) {
         return { success: false, error: `File not found: ${sourcePath}` };
       }
+      const stat = fs.statSync(sourcePath);
+      if (!stat.isFile() || stat.size > MAX_BUNDLE_BYTES) {
+        return { success: false, error: 'Invalid bundle: file is not regular or is too large' };
+      }
       const raw = fs.readFileSync(sourcePath, 'utf-8');
-      const parsed = JSON.parse(raw) as ConfigExportBundle;
-      if (typeof parsed.version !== 'number') {
-        return { success: false, error: 'Invalid bundle: missing version' };
-      }
-      if (parsed.version > BUNDLE_VERSION) {
-        return {
-          success: false,
-          error: `Bundle version ${parsed.version} is newer than supported ${BUNDLE_VERSION}`,
-        };
-      }
-      return { success: true, bundle: parsed };
+      return { success: true, bundle: assertBundle(JSON.parse(raw) as unknown) };
     } catch (err) {
       return { success: false, error: (err as Error).message };
     }
@@ -135,6 +279,7 @@ export class ConfigExportService {
 
   /** Compute conflicts between an incoming bundle and current state. */
   diffBundle(bundle: ConfigExportBundle): ImportPreview {
+    bundle = assertBundle(bundle);
     const conflicts: ImportConflict[] = [];
     const currentProjects = this.projectManager.list();
     const currentProjectIds = new Set(currentProjects.map((p) => p.id));
@@ -190,6 +335,20 @@ export class ConfigExportService {
       errors: [],
     };
 
+    if (strategy !== 'skip' && strategy !== 'overwrite') {
+      result.success = false;
+      result.errors.push('Invalid import conflict strategy');
+      return result;
+    }
+
+    try {
+      bundle = assertBundle(bundle);
+    } catch (error) {
+      result.success = false;
+      result.errors.push((error as Error).message);
+      return result;
+    }
+
     const currentProjects = this.projectManager.list();
     const currentProjectIds = new Set(currentProjects.map((p) => p.id));
     const currentProjectNames = new Map(currentProjects.map((p) => [p.name, p.id]));
@@ -210,6 +369,8 @@ export class ConfigExportService {
               name: name,
               description: proj.description as string | undefined,
               workspacePath: proj.workspacePath as string | undefined,
+              memoryConfig: proj.memoryConfig as ProjectMemoryConfig | undefined,
+              contextConfig: proj.contextConfig as ProjectContextConfig | undefined,
             });
           }
         } else {
@@ -217,6 +378,8 @@ export class ConfigExportService {
             name,
             description: proj.description as string | undefined,
             workspacePath: proj.workspacePath as string | undefined,
+            memoryConfig: proj.memoryConfig as ProjectMemoryConfig | undefined,
+            contextConfig: proj.contextConfig as ProjectContextConfig | undefined,
           });
         }
         result.imported.projects++;
@@ -231,7 +394,15 @@ export class ConfigExportService {
       const isConflict = currentServerNames.has(name);
       if (isConflict && strategy === 'skip') continue;
       try {
-        mcpConfigStore.saveServer(server as never);
+        const existing = currentServers.find((candidate) =>
+          candidate.id === server.id || candidate.name === name
+        );
+        const restored = restoreRedactedValues(server, existing) as Record<string, unknown>;
+        mcpConfigStore.saveServer({
+          ...restored,
+          id: existing?.id ?? String(server.id),
+          enabled: false,
+        } as never);
         result.imported.mcpServers++;
       } catch (err) {
         result.errors.push(`MCP server ${name}: ${(err as Error).message}`);
@@ -241,11 +412,10 @@ export class ConfigExportService {
     // API config (only update non-secret fields)
     if (bundle.app.api && Object.keys(bundle.app.api).length > 0) {
       try {
-        const incoming: Record<string, unknown> = {};
-        for (const [key, value] of Object.entries(bundle.app.api)) {
-          if (value === '[REDACTED]') continue;
-          incoming[key] = value;
-        }
+        const incoming = restoreRedactedValues(
+          bundle.app.api,
+          configStore.getAll()
+        ) as Record<string, unknown>;
         if (Object.keys(incoming).length > 0) {
           configStore.update(incoming as never);
           result.imported.apiUpdated = true;
@@ -256,6 +426,7 @@ export class ConfigExportService {
     }
 
     if (result.errors.length > 0) {
+      result.success = false;
       logWarn('[ConfigExportService] import completed with errors:', result.errors);
     }
 

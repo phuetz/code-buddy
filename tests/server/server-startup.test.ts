@@ -194,6 +194,33 @@ describe('server startup', () => {
     }
   });
 
+  it('warns actionably but preserves explicit Fleet/A2A non-loopback no-auth startup', async () => {
+    const { logger } = await import('../../src/utils/logger.js');
+    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+    const { startServer, stopServer } = await import('../../src/server/index.js');
+    const started = await startServer({
+      port: 0,
+      host: '0.0.0.0',
+      authEnabled: false,
+      websocketEnabled: false,
+      logging: false,
+      rateLimit: false,
+      cors: false,
+    });
+
+    try {
+      expect(started.server.listening).toBe(true);
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('SERVER_UNAUTHENTICATED_NETWORK_BIND'),
+      );
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Fleet/A2A'));
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('JWT_SECRET'));
+    } finally {
+      await stopServer(started.server);
+      warnSpy.mockRestore();
+    }
+  });
+
   it('keeps health endpoints public when authentication is enabled', async () => {
     process.env.CODEBUDDY_PROVIDER = 'openai';
     process.env.OPENAI_API_KEY = 'test-openai-key';

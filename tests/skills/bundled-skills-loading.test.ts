@@ -18,6 +18,7 @@ const SHIPPED_SKILLS = [
   'code-explorer',
   'file-edit',
   'git-commit',
+  'pubcommander-control',
   'typescript-expert',
   'weather',
   'web-app-testing',

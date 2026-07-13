@@ -19,6 +19,7 @@
 import fs from 'fs-extra';
 import * as path from 'path';
 import * as os from 'os';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { EventEmitter } from 'events';
 import { logger } from '../utils/logger.js';
 
@@ -124,6 +125,8 @@ export class WorkspaceIsolation extends EventEmitter {
   private blockedAccessLog: BlockedAccessLog[] = [];
   private systemWhitelist: Set<string>;
   private blockedPaths: Set<string>;
+  /** Extra workspace roots attached to one async actor/turn only. */
+  private readonly workspaceContext = new AsyncLocalStorage<readonly string[]>();
 
   constructor(config: Partial<WorkspaceIsolationConfig> = {}) {
     super();
@@ -188,6 +191,40 @@ export class WorkspaceIsolation extends EventEmitter {
   }
 
   /**
+   * Run an embedded actor against its own workspace without widening the
+   * process-global whitelist. The root must already exist as a directory; both
+   * its lexical and canonical paths are retained so a benign symlinked workspace
+   * works while the normal realpath validation still catches escapes below it.
+   */
+  withWorkspaceRootAsync<T>(workspaceRoot: string, fn: () => Promise<T>): Promise<T> {
+    const lexicalRoot = path.resolve(workspaceRoot);
+    if (this.isBlockedPath(lexicalRoot)) {
+      return Promise.reject(new Error(`Scoped workspace root is protected: ${workspaceRoot}`));
+    }
+
+    let canonicalRoot: string;
+    try {
+      canonicalRoot = fs.realpathSync(lexicalRoot);
+      if (!fs.statSync(canonicalRoot).isDirectory()) {
+        return Promise.reject(new Error(`Scoped workspace root is not a directory: ${workspaceRoot}`));
+      }
+    } catch (error) {
+      return Promise.reject(
+        new Error(
+          `Scoped workspace root is unavailable: ${workspaceRoot} (${error instanceof Error ? error.message : String(error)})`
+        )
+      );
+    }
+    if (this.isBlockedPath(canonicalRoot)) {
+      return Promise.reject(new Error(`Scoped workspace root resolves to a protected path: ${workspaceRoot}`));
+    }
+
+    const inherited = this.workspaceContext.getStore() ?? [];
+    const roots = Array.from(new Set([...inherited, lexicalRoot, canonicalRoot]));
+    return this.workspaceContext.run(roots, fn);
+  }
+
+  /**
    * Check if a path is in the blocked list
    */
   private isBlockedPath(resolvedPath: string): boolean {
@@ -235,13 +272,38 @@ export class WorkspaceIsolation extends EventEmitter {
    * Check if a path is within the workspace
    */
   private isWithinWorkspace(resolvedPath: string): boolean {
-    const normalizedWorkspace = path.normalize(this.config.workspaceRoot);
     const normalizedPath = path.normalize(resolvedPath);
+    const roots = [this.config.workspaceRoot, ...(this.workspaceContext.getStore() ?? [])];
+    return roots.some((root) => {
+      const normalizedWorkspace = path.normalize(root);
+      return (
+        normalizedPath === normalizedWorkspace ||
+        normalizedPath.startsWith(normalizedWorkspace + path.sep)
+      );
+    });
+  }
 
-    return (
-      normalizedPath === normalizedWorkspace ||
-      normalizedPath.startsWith(normalizedWorkspace + path.sep)
-    );
+  /**
+   * Resolve the nearest existing ancestor and append the missing suffix.
+   * `realpath(target)` cannot protect a create/write when the final file does
+   * not exist yet; resolving its parent chain catches `workspace/link/new`
+   * where `link` already points outside the workspace.
+   */
+  private resolveViaExistingAncestor(resolvedPath: string): string | null {
+    let ancestor = resolvedPath;
+    while (!fs.existsSync(ancestor)) {
+      const parent = path.dirname(ancestor);
+      if (parent === ancestor) return null;
+      ancestor = parent;
+    }
+
+    try {
+      const canonicalAncestor = fs.realpathSync(ancestor);
+      const missingSuffix = path.relative(ancestor, resolvedPath);
+      return path.resolve(canonicalAncestor, missingSuffix);
+    } catch {
+      return null;
+    }
   }
 
   /**
@@ -338,38 +400,32 @@ export class WorkspaceIsolation extends EventEmitter {
       };
     }
 
-    // Check for symlink traversal if file exists
-    try {
-      if (fs.existsSync(resolved)) {
-        const realPath = fs.realpathSync(resolved);
-
-        // Check if real path is blocked
-        if (this.isBlockedPath(realPath)) {
-          this.logBlockedAccess(filePath, realPath, 'blocked_path_via_symlink', operation);
-          return {
-            valid: false,
-            resolved,
-            error: `Symlink to protected path is blocked: ${filePath} -> ${realPath}`,
-            reason: 'symlink_escape',
-          };
-        }
-
-        // Check if real path is within workspace or whitelisted
-        const realIsInWorkspace = this.isWithinWorkspace(realPath);
-        const realIsWhitelisted = this.isWhitelisted(realPath);
-
-        if (!realIsInWorkspace && !realIsWhitelisted) {
-          this.logBlockedAccess(filePath, realPath, 'symlink_escape', operation);
-          return {
-            valid: false,
-            resolved,
-            error: `Symlink traversal not allowed: ${filePath} points to ${realPath} (outside workspace)`,
-            reason: 'symlink_escape',
-          };
-        }
+    // Resolve the complete path when it exists, or its nearest existing parent
+    // before a create. This closes the missing-target symlink escape.
+    const realPath = this.resolveViaExistingAncestor(resolved);
+    if (realPath) {
+      if (this.isBlockedPath(realPath)) {
+        this.logBlockedAccess(filePath, realPath, 'blocked_path_via_symlink', operation);
+        return {
+          valid: false,
+          resolved,
+          error: `Symlink to protected path is blocked: ${filePath} -> ${realPath}`,
+          reason: 'symlink_escape',
+        };
       }
-    } catch (_err) {
-      // If realpath fails, file may not exist yet - that's OK
+
+      const realIsInWorkspace = this.isWithinWorkspace(realPath);
+      const realIsWhitelisted = this.isWhitelisted(realPath);
+
+      if (!realIsInWorkspace && !realIsWhitelisted) {
+        this.logBlockedAccess(filePath, realPath, 'symlink_escape', operation);
+        return {
+          valid: false,
+          resolved,
+          error: `Symlink traversal not allowed: ${filePath} points to ${realPath} (outside workspace)`,
+          reason: 'symlink_escape',
+        };
+      }
     }
 
     return {

@@ -8,6 +8,8 @@
  * @module shared/engine-types
  */
 
+import type { ContextOptimizationMetadata } from './context-optimization-metadata.js';
+
 // ── Stream Events ──────────────────────────────────────────────────────
 
 export type EngineStreamEventType =
@@ -41,6 +43,8 @@ export interface EngineStreamEvent {
     isError?: boolean;
     delta?: string;
     data?: unknown;
+    /** Recoverable model-context reduction; raw output is not transported here. */
+    contextOptimization?: ContextOptimizationMetadata;
   };
   /** Token usage info */
   tokenCount?: number;
@@ -84,10 +88,14 @@ export interface EngineStreamEvent {
   };
   /** Autonomous goal-loop progress (for host UIs like the Cowork goal banner). */
   goalStatus?: {
+    /** Stable mission identity shared with the Intent Graph and Proof Ledger. */
+    goalId?: string;
     goal: string;
     status: 'active' | 'paused' | 'done' | 'cleared';
     turnsUsed: number;
     maxTurns: number;
+    /** True when completion is gated by the independent verifier. */
+    verifyGated?: boolean;
     lastVerdict?: 'done' | 'continue' | 'skipped';
     lastReason?: string;
   };
@@ -106,6 +114,10 @@ export interface EngineSessionConfig {
   apiKey: string;
   baseURL?: string;
   model?: string;
+  /** Per-session reasoning level supplied by desktop hosts. */
+  thinkingLevel?: 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+  /** Approval posture scoped to this engine session/turn. */
+  permissionMode?: 'default' | 'plan' | 'acceptEdits' | 'dontAsk' | 'bypassPermissions';
   maxToolRounds?: number;
   workingDirectory?: string;
   /** Runtime system prompt addition supplied by the host (for active Cowork personas). */

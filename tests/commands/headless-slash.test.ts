@@ -1,10 +1,20 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const handleCommand = vi.fn();
-const setConversationHistory = vi.fn();
-const setCodeBuddyClient = vi.fn();
-const handleGoal = vi.fn();
-const handleSubgoal = vi.fn();
+const {
+  handleCommand,
+  setConversationHistory,
+  setCodeBuddyClient,
+  handleGoal,
+  handleLoop,
+  handleSubgoal,
+} = vi.hoisted(() => ({
+  handleCommand: vi.fn(),
+  setConversationHistory: vi.fn(),
+  setCodeBuddyClient: vi.fn(),
+  handleGoal: vi.fn(),
+  handleLoop: vi.fn(),
+  handleSubgoal: vi.fn(),
+}));
 
 vi.mock('../../src/commands/enhanced-command-handler.js', () => ({
   getEnhancedCommandHandler: () => ({
@@ -16,6 +26,7 @@ vi.mock('../../src/commands/enhanced-command-handler.js', () => ({
 
 vi.mock('../../src/commands/handlers/goal-handler.js', () => ({
   handleGoal,
+  handleLoop,
   handleSubgoal,
 }));
 
@@ -30,6 +41,7 @@ describe('headless slash execution', () => {
     setConversationHistory.mockReset();
     setCodeBuddyClient.mockReset();
     handleGoal.mockReset();
+    handleLoop.mockReset();
     handleSubgoal.mockReset();
   });
 

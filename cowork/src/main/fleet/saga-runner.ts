@@ -34,6 +34,8 @@ import type { ActivityFeed } from '../activity/activity-feed';
 interface DispatchLaneShape {
   peerId: string;
   model: string;
+  /** Exact backend selected by the core router; absent on legacy plans. */
+  provider?: string;
 }
 
 interface DispatchPlanShape {
@@ -47,6 +49,10 @@ interface DispatchPlanShape {
 interface SagaStepShape {
   peerId: string;
   model: string;
+  /** Exact backend selected by the core router; absent on legacy sagas. */
+  provider?: string;
+  /** Durable execution provenance. Absent on sagas written by older builds. */
+  attempts?: SagaStepAttemptShape[];
   lane: 'primary' | 'fallback' | 'parallel' | 'chain';
   /** Only set on chain steps — role hint (`code|review|safe|...`). */
   role?: string;
@@ -59,11 +65,24 @@ interface SagaStepShape {
    */
   retried?: boolean;
   runId?: string;
-  status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
+  status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled' | 'skipped';
   toolPolicy?: DispatchToolPolicyShape;
   toolDecisions?: DispatchToolDecisionShape[];
   toolset?: DispatchHermesToolsetShape;
   result?: string;
+  error?: string;
+}
+
+interface SagaStepAttemptShape {
+  peerId: string;
+  model: string;
+  providerRequested?: string;
+  providerResolved?: string;
+  runId?: string;
+  status: 'running' | 'completed' | 'failed';
+  failureDomain?: FailureDomain;
+  startedAt: number;
+  completedAt?: number;
   error?: string;
 }
 
@@ -151,6 +170,8 @@ interface CouncilProposerModule {
 interface DispatchStatusResponse {
   found?: boolean;
   status?: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
+  providerRequested?: string;
+  providerResolved?: string;
   toolPolicy?: DispatchToolPolicyShape;
   toolDecisions?: DispatchToolDecisionShape[];
   toolset?: DispatchHermesToolsetShape;
@@ -203,10 +224,75 @@ const POLL_INTERVAL_MS = 2_000;
 const POLL_TIMEOUT_MS = 5 * 60 * 1_000;
 const DISPATCH_TIMEOUT_MS = 30_000;
 
+type FailureDomain = 'peer' | 'provider';
+
+const PROVIDER_FAILURE_PATTERN = new RegExp(
+  [
+    'PROVIDER_UNAVAILABLE',
+    '\\b(?:HTTP(?: status)?\\s*)?(?:500|502|503|504)\\b',
+    '\\b(?:HTTP\\s*)?401\\b',
+    '\\b(?:HTTP\\s*)?429\\b',
+    '\\brate[ _-]?limit(?:ed|ing)?\\b',
+    '\\btoo many requests\\b',
+    '\\bquota\\b',
+    '\\binsufficient[ _-]?(?:credits?|balance|quota)\\b',
+    '\\bbilling(?: hard)? limit\\b',
+    '\\bcircuit breaker[^\\n]*\\bopen\\b',
+    '\\b(?:ECONNREFUSED|ECONNRESET|ETIMEDOUT|EAI_AGAIN|ENETUNREACH|EHOSTUNREACH)\\b',
+    '\\bfetch failed\\b',
+    '\\bsocket hang up\\b',
+    '\\bconnection (?:refused|reset|timed out)\\b',
+    '\\bnetwork (?:error|unreachable)\\b',
+  ].join('|'),
+  'i',
+);
+
+const PEER_TRANSPORT_FAILURE_PATTERN = new RegExp(
+  [
+    '\\bpeer\\.invoke REQUEST_TIMEOUT\\b',
+    '\\bFleet listener (?:connect|auth) timeout\\b',
+    '\\bpeer (?:disconnected|unreachable)\\b',
+    '\\bWebSocket (?:closed|not connected)\\b',
+    '\\b(?:ECONNREFUSED|ECONNRESET|ETIMEDOUT|EAI_AGAIN|ENETUNREACH|EHOSTUNREACH)\\b',
+    '\\bfetch failed\\b',
+    '\\bsocket hang up\\b',
+    '\\bconnection (?:refused|reset|timed out)\\b',
+    '\\bnetwork (?:error|unreachable)\\b',
+  ].join('|'),
+  'i',
+);
+
 function readDispatchProfile(value: unknown): FleetDispatchProfile {
   return typeof value === 'string' && FLEET_DISPATCH_PROFILES.has(value as FleetDispatchProfile)
     ? (value as FleetDispatchProfile)
     : 'balanced';
+}
+
+/**
+ * Fail over only for explicit infrastructure signals. Deliberate model/task
+ * outcomes such as `review_rejected` remain terminal and are never replayed on
+ * a different provider.
+ */
+function classifyExplicitFailure(
+  error: string | undefined,
+  phase: 'dispatch' | 'provider',
+): FailureDomain | null {
+  if (!error) return null;
+  if (error === 'poll_timeout') return 'peer';
+  if (phase === 'dispatch' && PEER_TRANSPORT_FAILURE_PATTERN.test(error)) {
+    return 'peer';
+  }
+  return PROVIDER_FAILURE_PATTERN.test(error) ? 'provider' : null;
+}
+
+/** Persist useful diagnostics without ever copying credentials into saga JSON. */
+function redactAttemptError(error: string): string {
+  return error
+    .replace(/\bBearer\s+[^\s,;]+/gi, 'Bearer [REDACTED]')
+    .replace(/\b(?:sk|xai|or)-[A-Za-z0-9._-]{8,}\b/g, '[REDACTED]')
+    .replace(/\bAIza[A-Za-z0-9_-]{8,}\b/g, '[REDACTED]')
+    .replace(/([?&](?:api[_-]?key|token|access[_-]?token)=)[^&\s]+/gi, '$1[REDACTED]')
+    .slice(0, 1_000);
 }
 
 export class SagaRunner {
@@ -392,9 +478,31 @@ export class SagaRunner {
     if (!refreshed) return;
     const primary = refreshed.steps[primaryIdx];
     if (!primary || primary.status === 'completed') return;
+    if (
+      this.cancelRequested.has(saga.id) ||
+      refreshed.status === 'cancelled' ||
+      primary.status === 'cancelled'
+    ) {
+      return;
+    }
 
     const fallbackIdx = refreshed.steps.findIndex((s) => s.lane === 'fallback');
     if (fallbackIdx < 0) return;
+    const failureDomain = classifyExplicitFailure(primary.error, 'provider');
+    if (!failureDomain) {
+      // A pre-planned fallback is still a retry. Do not replay semantic/model
+      // outcomes on another provider: make the untouched lane terminal and
+      // preserve the primary failure as the saga result.
+      await store.update(saga.id, (current) => {
+        const fallback = current.steps[fallbackIdx];
+        if (fallback?.status === 'pending') fallback.status = 'skipped';
+        current.status = 'failed';
+        current.completedAt = current.completedAt ?? Date.now();
+        return current;
+      });
+      this.emitSagaUpdate(saga.id);
+      return;
+    }
     await this.runStep(store, saga.id, fallbackIdx);
   }
 
@@ -420,6 +528,7 @@ export class SagaRunner {
       }
       return s;
     });
+    await this.beginStepAttempt(store, sagaId, laneIndex, step);
     this.emitSagaUpdate(sagaId);
 
     // Fire peer.dispatch.
@@ -428,6 +537,9 @@ export class SagaRunner {
       const params = {
         prompt: this.buildStepPrompt(saga, step),
         model: step.model,
+        ...(step.provider && step.provider !== 'unknown'
+          ? { provider: step.provider }
+          : {}),
         // Chain steps use the step's role as dispatch profile (so a
         // `review` step asks the remote peer to operate under the
         // review profile). Non-chain steps inherit the saga's overall
@@ -444,6 +556,8 @@ export class SagaRunner {
         { timeoutMs: DISPATCH_TIMEOUT_MS },
       )) as {
         runId?: string;
+        providerRequested?: string;
+        providerResolved?: string;
         toolPolicy?: DispatchToolPolicyShape;
         toolDecisions?: DispatchToolDecisionShape[];
         toolset?: DispatchHermesToolsetShape;
@@ -457,17 +571,50 @@ export class SagaRunner {
         if (target) {
           target.runId = runId;
           applyDispatchMetadata(target, response);
+          const attempt = findRunningAttempt(target);
+          if (attempt) {
+            attempt.runId = runId;
+            if (response.providerRequested) {
+              attempt.providerRequested = response.providerRequested;
+            }
+            if (response.providerResolved) {
+              attempt.providerResolved = response.providerResolved;
+            }
+          }
         }
         return s;
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
+      const failureDomain = classifyExplicitFailure(message, 'dispatch');
       logWarn('[saga-runner] peer.dispatch failed', {
         sagaId,
         laneIndex,
         peerId: step.peerId,
         error: message,
       });
+      await this.finishStepAttempt(
+        store,
+        sagaId,
+        laneIndex,
+        'failed',
+        message,
+        failureDomain ?? undefined,
+      );
+      if (
+        failureDomain &&
+        await this.retryChainStepOnAlternateLane(
+          store,
+          sagaId,
+          laneIndex,
+          step,
+          failureDomain,
+        )
+      ) {
+        this.emitSagaUpdate(sagaId);
+        await this.runStep(store, sagaId, laneIndex);
+        return;
+      }
       await store.failStep(sagaId, laneIndex, `dispatch_failed: ${message}`);
       this.emitSagaUpdate(sagaId);
       return;
@@ -478,41 +625,56 @@ export class SagaRunner {
     // Cancelled while in flight — the store already holds the cancelled
     // statuses; completing/failing/retrying the step would resurrect them.
     if (this.cancelRequested.has(sagaId)) return;
-    if (hasDispatchMetadata(result)) {
+    if (
+      hasDispatchMetadata(result) ||
+      Boolean(result.providerRequested) ||
+      Boolean(result.providerResolved)
+    ) {
       await store.update(sagaId, (s) => {
         const target = s.steps[laneIndex];
         if (target) {
           applyDispatchMetadata(target, result);
+          const attempt = findRunningAttempt(target);
+          if (attempt) {
+            if (result.providerRequested) {
+              attempt.providerRequested = result.providerRequested;
+            }
+            if (result.providerResolved) {
+              attempt.providerResolved = result.providerResolved;
+            }
+          }
         }
         return s;
       });
     }
     if (result.status === 'completed') {
+      await this.finishStepAttempt(store, sagaId, laneIndex, 'completed');
       await store.completeStep(sagaId, laneIndex, result.result ?? '');
       this.emitSagaUpdate(sagaId);
       return;
     }
-    // Phase H — chain step stalled or failed. Attempt one retry on an
-    // alternative peer carrying the same role before giving up on the
-    // chain. Non-chain steps keep the existing failure path.
-    const isChainStep = step.lane === 'chain' && step.role;
-    const isStallFailure =
-      result.status === 'cancelled' ||
-      (result.status === 'failed' && result.error === 'poll_timeout');
-    if (isChainStep && isStallFailure && !step.retried) {
-      const reassigned = await this.retryChainStepOnAlternatePeer(
+    const failureDomain = classifyExplicitFailure(result.error, 'provider');
+    await this.finishStepAttempt(
+      store,
+      sagaId,
+      laneIndex,
+      'failed',
+      result.error ?? `terminal status: ${result.status}`,
+      failureDomain ?? undefined,
+    );
+    if (
+      failureDomain &&
+      await this.retryChainStepOnAlternateLane(
         store,
         sagaId,
         laneIndex,
-        step.peerId,
-        step.role!,
-      );
-      if (reassigned) {
-        this.emitSagaUpdate(sagaId);
-        await this.runStep(store, sagaId, laneIndex);
-        return;
-      }
-      // No alt peer — fall through to failStep below.
+        step,
+        failureDomain,
+      )
+    ) {
+      this.emitSagaUpdate(sagaId);
+      await this.runStep(store, sagaId, laneIndex);
+      return;
     }
     if (result.status === 'failed') {
       await store.failStep(sagaId, laneIndex, result.error ?? 'unknown_error');
@@ -523,32 +685,80 @@ export class SagaRunner {
     this.emitSagaUpdate(sagaId);
   }
 
-  /**
-   * Phase H — find an alternative peer with the requested role (using
-   * the core TaskRouter with `excludePeerIds` set to the stalled peer)
-   * and re-stage the saga step so {@link runStep} can fire dispatch
-   * again. Sets `retried: true` to cap further retries.
-   *
-   * Returns `true` if the step was reassigned, `false` if no
-   * alternative is available (chain breaks). Errors are swallowed and
-   * logged — caller falls through to the failure path.
-   */
-  private async retryChainStepOnAlternatePeer(
+  private async beginStepAttempt(
     store: SagaStoreShape,
     sagaId: string,
     laneIndex: number,
-    originalPeerId: string,
-    role: string,
+    step: SagaStepShape,
+  ): Promise<void> {
+    await store.update(sagaId, (saga) => {
+      const target = saga.steps[laneIndex];
+      if (!target) return saga;
+      const attempt: SagaStepAttemptShape = {
+        peerId: step.peerId,
+        model: step.model,
+        ...(step.provider && step.provider !== 'unknown'
+          ? { providerRequested: step.provider }
+          : {}),
+        status: 'running',
+        startedAt: Date.now(),
+      };
+      target.attempts = [...(target.attempts ?? []), attempt];
+      return saga;
+    });
+  }
+
+  private async finishStepAttempt(
+    store: SagaStoreShape,
+    sagaId: string,
+    laneIndex: number,
+    status: 'completed' | 'failed',
+    error?: string,
+    failureDomain?: FailureDomain,
+  ): Promise<void> {
+    await store.update(sagaId, (saga) => {
+      const target = saga.steps[laneIndex];
+      if (!target) return saga;
+      const attempt = findRunningAttempt(target);
+      if (!attempt) return saga;
+      attempt.status = status;
+      attempt.completedAt = Date.now();
+      if (error) attempt.error = redactAttemptError(error);
+      if (failureDomain) attempt.failureDomain = failureDomain;
+      return saga;
+    });
+  }
+
+  /**
+   * Re-route one failed chain attempt while preserving its role. Provider
+   * failures exclude only the failed backend (same peer remains eligible);
+   * peer transport/timeouts exclude the machine. `retried` caps this to one
+   * failover, and semantic failures never call this method.
+   */
+  private async retryChainStepOnAlternateLane(
+    store: SagaStoreShape,
+    sagaId: string,
+    laneIndex: number,
+    failedStep: SagaStepShape,
+    failureDomain: FailureDomain,
   ): Promise<boolean> {
+    if (failedStep.lane !== 'chain' || !failedStep.role || failedStep.retried) {
+      return false;
+    }
     try {
       type RouterMod = {
         TaskRouter: new () => {
           plan: (
             cls: Record<string, unknown>,
             peers: Array<{ peerId: string; capability: unknown }>,
-            constraints?: unknown,
+            constraints?: {
+              requiredRole?: string;
+              excludePeerIds?: string[];
+              excludeProviders?: string[];
+              privacyTag?: unknown;
+            },
           ) => {
-            primary: { peerId: string; model: string };
+            primary: { peerId: string; model: string; provider?: string };
           };
         };
       };
@@ -565,6 +775,21 @@ export class SagaRunner {
       }
       const saga = await store.load(sagaId);
       if (!saga) return false;
+      const currentStep = saga.steps[laneIndex];
+      if (!currentStep || currentStep.retried) return false;
+
+      const failedProvider =
+        currentStep.provider && currentStep.provider !== 'unknown'
+          ? currentStep.provider
+          : currentStep.attempts?.at(-1)?.providerResolved ??
+            currentStep.attempts?.at(-1)?.providerRequested;
+      if (failureDomain === 'provider' && !failedProvider) {
+        logWarn('[saga-runner] retry: failed provider is unknown; refusing ambiguous replay', {
+          sagaId,
+          laneIndex,
+        });
+        return false;
+      }
 
       const peers = (await Promise.resolve(this.fleetBridge.listPeers())) as Array<
         { id: string; capability?: unknown }
@@ -577,37 +802,57 @@ export class SagaRunner {
       const classification = clsMod.classifyTaskComplexity(saga.goal);
       const router = new routerMod.TaskRouter();
       const altPlan = router.plan(classification, peerSlots, {
-        requiredRole: role,
-        excludePeerIds: [originalPeerId],
+        requiredRole: failedStep.role,
+        ...(failureDomain === 'peer'
+          ? { excludePeerIds: [currentStep.peerId] }
+          : { excludeProviders: [failedProvider!] }),
         privacyTag: saga.metadata?.privacyTag,
       });
       const altPeerId = altPlan.primary.peerId;
       const altModel = altPlan.primary.model;
+      const altProvider = altPlan.primary.provider;
+      if (
+        altPeerId === currentStep.peerId &&
+        altModel === currentStep.model &&
+        altProvider === currentStep.provider
+      ) {
+        logWarn('[saga-runner] retry: router returned the failed lane unchanged', {
+          sagaId,
+          laneIndex,
+          failureDomain,
+        });
+        return false;
+      }
       await store.update(sagaId, (s) => {
         const target = s.steps[laneIndex];
         if (!target) return s;
         target.peerId = altPeerId;
         target.model = altModel;
+        target.provider = altProvider;
         target.status = 'pending';
         target.retried = true;
         target.runId = undefined;
         target.error = undefined;
         return s;
       });
-      logWarn('[saga-runner] chain step retried on alternate peer', {
+      logWarn('[saga-runner] chain step retried on alternate failure domain', {
         sagaId,
         laneIndex,
-        from: originalPeerId,
-        to: altPeerId,
-        role,
+        failureDomain,
+        fromPeer: currentStep.peerId,
+        fromProvider: failedProvider,
+        toPeer: altPeerId,
+        toProvider: altProvider,
+        role: failedStep.role,
       });
       return true;
     } catch (err) {
       // NoPeerAvailableError or any router throw — chain breaks.
-      logWarn('[saga-runner] retry: no alternate peer found', {
+      logWarn('[saga-runner] retry: no alternate failure domain found', {
         sagaId,
         laneIndex,
-        role,
+        role: failedStep.role,
+        failureDomain,
         error: err instanceof Error ? err.message : String(err),
       });
       return false;
@@ -620,6 +865,8 @@ export class SagaRunner {
     shouldAbort?: () => boolean,
   ): Promise<{
     status: SagaStepShape['status'];
+    providerRequested?: string;
+    providerResolved?: string;
     toolPolicy?: DispatchToolPolicyShape;
     toolDecisions?: DispatchToolDecisionShape[];
     toolset?: DispatchHermesToolsetShape;
@@ -646,6 +893,8 @@ export class SagaRunner {
           ) {
             return {
               status: response.status,
+              providerRequested: response.providerRequested,
+              providerResolved: response.providerResolved,
               toolPolicy: response.toolPolicy,
               toolDecisions: response.toolDecisions,
               toolset: response.toolset,
@@ -870,6 +1119,15 @@ export class SagaRunner {
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function findRunningAttempt(step: SagaStepShape): SagaStepAttemptShape | undefined {
+  const attempts = step.attempts ?? [];
+  for (let index = attempts.length - 1; index >= 0; index--) {
+    const attempt = attempts[index];
+    if (attempt?.status === 'running') return attempt;
+  }
+  return undefined;
 }
 
 function hasDispatchMetadata(input: {

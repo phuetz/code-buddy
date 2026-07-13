@@ -52,10 +52,12 @@ describe('interactive dispatch ⊇ LLM exposition (anti-drift invariant)', () =>
     // --- Interactive dispatch set (FormalToolRegistry via the interactive path ONLY) ---
     FormalToolRegistry.reset();
     makeInteractiveHandler(); // constructor → initializeRegistry()
-    const interactiveDispatchable = new Set(getFormalToolRegistry().getNames());
 
     // --- Exposed set (what the LLM actually sees) ---
+    // Initialization can reload persisted, re-gated authored tools into both
+    // registries, so capture the dispatch side after that synchronized load.
     initializeToolRegistry();
+    const interactiveDispatchable = new Set(getFormalToolRegistry().getNames());
     const exposed = getToolRegistry()
       .getEnabledTools()
       .map((t) => t.function.name);
@@ -72,12 +74,16 @@ describe('interactive dispatch ⊇ LLM exposition (anti-drift invariant)', () =>
      *  3. an external `mcp__*` / `plugin__*` tool — resolved dynamically by the
      *     MCP manager / plugin marketplace at runtime (documented exception: these
      *     depend on a live external provider, so they can't be asserted statically).
+     *  4. `authored__*` — persisted, workspace-specific tools registered into
+     *     both registries by LiveToolMutator; their lifecycle has dedicated tests
+     *     and must not make this static-surface invariant depend on local state.
      */
     const isInteractivelyDispatchable = (name: string): boolean =>
       interactiveDispatchable.has(name) ||
       name === 'edit_file' ||
       name.startsWith('mcp__') ||
-      name.startsWith('plugin__');
+      name.startsWith('plugin__') ||
+      name.startsWith('authored__');
 
     const orphans = exposed.filter((name) => !isInteractivelyDispatchable(name)).sort();
 

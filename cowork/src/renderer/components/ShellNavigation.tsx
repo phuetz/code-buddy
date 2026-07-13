@@ -38,6 +38,7 @@ import {
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../store';
+import { GuidedTooltip } from './Tooltip';
 
 interface ShellNavAction {
   id: string;
@@ -53,6 +54,22 @@ interface ShellNavGroup {
   label: string;
   actions: ShellNavAction[];
 }
+
+const SHELL_HELP: Record<string, string> = {
+  'work-home': 'Reviens à ton espace de travail principal et à la conversation active.',
+  'new-task': 'Démarre une session propre pour une nouvelle demande.',
+  'global-search': 'Retrouve sessions, messages, mémoire, fichiers et connaissances depuis un seul endroit.',
+  orchestrator: 'Lance une équipe de plusieurs agents pour comparer les approches et paralléliser le travail.',
+  team: 'Coordonne les agents, leurs rôles, leurs décisions et leur contexte partagé.',
+  'fleet-command': 'Supervise les pairs Fleet et les échanges multi-LLM en temps réel.',
+  autonomy: 'Observe et règle le niveau d’autonomie, les limites et les validations humaines.',
+  workflows: 'Compose des workflows réutilisables avec étapes, conditions, boucles et approbations.',
+  'live-launcher': 'Lance une recherche ou une mission structurée avec mesure des résultats.',
+  'mission-board': 'Organise les missions, leur avancement et les prochaines actions.',
+  assistant: 'Configure l’assistant vocal, le TTS local, le volume et les interruptions.',
+  skills: 'Installe, inspecte et autorise les skills qui étendent les capacités de l’agent.',
+  plugins: 'Gère les extensions et les intégrations qui ajoutent de nouveaux outils.',
+};
 
 export function ShellNavigation() {
   const { t } = useTranslation();
@@ -460,23 +477,26 @@ export function ShellNavigation() {
 
 function ShellNavButton({ action }: { action: ShellNavAction }) {
   const Icon = action.icon;
+  const description = SHELL_HELP[action.id] ?? `Ouvre ${action.label} et affiche ses outils disponibles.`;
   return (
-    <button
-      type="button"
-      onClick={action.onClick}
-      aria-label={action.label}
-      data-testid={action.testId}
-      className={`relative flex h-9 items-center gap-2.5 rounded-lg px-2.5 text-left transition-colors ${
-        action.active
-          ? 'bg-accent/10 text-accent'
-          : 'text-text-secondary hover:bg-surface-hover hover:text-text-primary'
-      }`}
-    >
-      <Icon className="h-4 w-4 shrink-0" />
-      <span className="truncate text-[13px] font-medium">{action.label}</span>
-      {action.active && (
-        <span className="absolute left-0 top-1/2 h-4 w-0.5 -translate-y-1/2 rounded-r bg-accent" />
-      )}
-    </button>
+    <GuidedTooltip title={action.label} description={description} kicker="Cowork" side="right">
+      <button
+        type="button"
+        onClick={action.onClick}
+        aria-label={action.label}
+        data-testid={action.testId}
+        className={`relative flex h-9 items-center gap-2.5 rounded-lg px-2.5 text-left transition-colors ${
+          action.active
+            ? 'bg-accent/10 text-accent'
+            : 'text-text-secondary hover:bg-surface-hover hover:text-text-primary'
+        }`}
+      >
+        <Icon className="h-4 w-4 shrink-0" />
+        <span className="truncate text-[13px] font-medium">{action.label}</span>
+        {action.active && (
+          <span className="absolute left-0 top-1/2 h-4 w-0.5 -translate-y-1/2 rounded-r bg-accent" />
+        )}
+      </button>
+    </GuidedTooltip>
   );
 }

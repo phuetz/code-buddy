@@ -1,136 +1,82 @@
-/**
- * KeyboardShortcutsDialog — Modal listing every keyboard shortcut Cowork
- * registers. Sourced from:
- *   - cowork/src/renderer/App.tsx (19 mod / mod+shift bindings)
- *   - cowork/src/renderer/components/TabBar.tsx (Cmd+1..9 tab switching)
- *   - Per-component Escape close handlers (ActivityFeed, FocusView, …)
- *   - cowork/src/main/index.ts (Cmd+Alt+S panic stop, registered globally)
- *   - cowork/src/main/window-management.ts (macOS menu accelerators)
- *
- * Keep this file in sync when a shortcut is added — the dialog is the
- * canonical user-facing reference. The header search filters across all
- * sections, so users can `Cmd+/` then type "snip" to find Cmd+Shift+S.
- */
-import React, { useEffect, useMemo, useState } from 'react';
+import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { X, Search } from 'lucide-react';
+import { Download, RotateCcw, Search, Upload, X } from 'lucide-react';
+import {
+  SHORTCUT_DEFINITIONS,
+  eventToBinding,
+  getShortcutBinding,
+  importShortcuts,
+  readShortcutOverrides,
+  resetShortcuts,
+  saveShortcutBinding,
+  type ShortcutAction,
+} from '../utils/shortcut-registry';
 
-interface KeyboardShortcutsDialogProps {
-  onClose: () => void;
-}
+type ShortcutSection = (typeof SHORTCUT_DEFINITIONS)[number]['section'];
 
-interface ShortcutEntry {
-  keys: string;
-  description: string;
-}
-
-interface ShortcutSection {
-  title: string;
-  shortcuts: ShortcutEntry[];
-}
-
-const isMac = typeof navigator !== 'undefined' && /Mac/.test(navigator.userAgent);
-const mod = isMac ? '⌘' : 'Ctrl';
-const opt = isMac ? '⌥' : 'Alt';
-const shift = isMac ? '⇧' : 'Shift';
-
-export const KeyboardShortcutsDialog: React.FC<KeyboardShortcutsDialogProps> = ({ onClose }) => {
+export function KeyboardShortcutsDialog({ onClose }: { onClose: () => void }) {
   const { t } = useTranslation();
   const [query, setQuery] = useState('');
-
-  // Close on Escape
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.stopPropagation();
-        onClose();
-      }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
-
-  const sections: ShortcutSection[] = useMemo(
-    () => [
-      {
-        title: t('shortcutsDialog.general', 'General'),
-        shortcuts: [
-          { keys: `${mod}+K`, description: t('shortcutsDialog.openCommandPalette', 'Open command palette') },
-          { keys: `${mod}+P`, description: t('shortcutsDialog.openGlobalSearch', 'Open global search') },
-          { keys: `${mod}+/`, description: t('shortcutsDialog.showKeyboardShortcuts', 'Show keyboard shortcuts (this dialog)') },
-          { keys: `${mod}+,`, description: t('shortcutsDialog.openSettings', 'Open settings') },
-          { keys: `${mod}+F`, description: t('shortcutsDialog.searchMessages', 'Search in active session') },
-          { keys: 'Escape', description: t('shortcutsDialog.closeOpenDialog', 'Close the topmost dialog / panel') },
-        ],
-      },
-      {
-        title: t('shortcutsDialog.layout', 'Layout & navigation'),
-        shortcuts: [
-          { keys: `${mod}+B`, description: t('shortcutsDialog.toggleSidebar', 'Toggle sidebar') },
-          { keys: `${mod}+\\`, description: t('shortcutsDialog.toggleSplitPane', 'Toggle split-pane layout') },
-          { keys: `${mod}+1..9`, description: t('shortcutsDialog.switchTab', 'Switch to tab 1..9') },
-        ],
-      },
-      {
-        title: t('shortcutsDialog.chat', 'Chat input'),
-        shortcuts: [
-          { keys: 'Enter', description: t('shortcutsDialog.sendMessage', 'Send message') },
-          { keys: `${shift}+Enter`, description: t('shortcutsDialog.newLine', 'New line in the message') },
-          { keys: 'Escape', description: t('shortcutsDialog.stopGeneration', 'Cancel a running response (when chat focused)') },
-        ],
-      },
-      {
-        title: t('shortcutsDialog.panels', 'Panels & overlays'),
-        shortcuts: [
-          { keys: `${mod}+${shift}+K`, description: t('shortcutsDialog.toggleGlobalSearch', 'Toggle global search overlay') },
-          { keys: `${mod}+${shift}+S`, description: t('shortcutsDialog.openSnippets', 'Open snippets library') },
-          { keys: `${mod}+${shift}+P`, description: t('shortcutsDialog.openPersonaSwitcher', 'Open persona switcher') },
-          { keys: `${mod}+${shift}+T`, description: t('shortcutsDialog.openTestRunner', 'Open test runner panel') },
-          { keys: `${mod}+${shift}+R`, description: t('shortcutsDialog.openReasoning', 'Open reasoning-trace viewer') },
-          { keys: `${mod}+${shift}+I`, description: t('shortcutsDialog.openSessionInsights', 'Open session insights') },
-          { keys: `${mod}+${shift}+O`, description: t('shortcutsDialog.openResumeChooser', 'Open session resume chooser') },
-          { keys: `${mod}+${shift}+F`, description: t('shortcutsDialog.openFocusView', 'Toggle focus view') },
-        ],
-      },
-      {
-        title: t('shortcutsDialog.multiAgent', 'Multi-agent & workflow'),
-        shortcuts: [
-          { keys: `${mod}+${shift}+M`, description: t('shortcutsDialog.openOrchestratorLauncher', 'Open multi-agent orchestrator launcher') },
-          { keys: `${mod}+${shift}+A`, description: t('shortcutsDialog.openSubAgentDashboard', 'Open sub-agent dashboard') },
-        ],
-      },
-      {
-        title: t('shortcutsDialog.diagnostics', 'Diagnostics & one-shots'),
-        shortcuts: [
-          { keys: `${mod}+${shift}+D`, description: t('shortcutsDialog.openDiagnostics', 'Open security diagnostics (vulns/secrets/licenses)') },
-          { keys: `${mod}+${shift}+/`, description: t('shortcutsDialog.btwQuickAsk', 'One-shot quick question (BTW)') },
-        ],
-      },
-      {
-        title: t('shortcutsDialog.power', 'Power-user'),
-        shortcuts: [
-          { keys: `${mod}+${opt}+S`, description: t('shortcutsDialog.panicStop', 'Panic-stop the active agent (global)') },
-          { keys: `${mod}+R`, description: t('shortcutsDialog.reloadRenderer', 'Reload the renderer (Electron default)') },
-          { keys: `${mod}+${shift}+I`, description: t('shortcutsDialog.toggleDevtools', 'Toggle DevTools (in dev builds)') },
-        ],
-      },
-    ],
-    [t]
+  const [revision, setRevision] = useState(0);
+  const [recording, setRecording] = useState<ShortcutAction | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const lowered = query.trim().toLowerCase();
+  const shortcutLabels: Record<ShortcutAction, string> = {
+    commandPalette: t('shortcutsDialog.openCommandPalette', 'Open command palette'),
+    globalSearch: t('shortcutsDialog.globalSearch', 'Global search'),
+    shortcuts: t('shortcutsDialog.configureShortcuts', 'Configure shortcuts'),
+    settings: t('shortcutsDialog.openSettings', 'Open settings'),
+    sessionSearch: t('shortcutsDialog.searchMessages', 'Search in messages'),
+    toggleSidebar: t('shortcutsDialog.toggleSidebar', 'Toggle sidebar'),
+    toggleSplitPane: t('shortcutsDialog.toggleSplitPane', 'Toggle split view'),
+    snippets: t('shortcutsDialog.snippets', 'Snippet library'),
+    persona: t('shortcutsDialog.persona', 'Change persona'),
+    tests: t('shortcutsDialog.tests', 'Tests and runs'),
+    reasoning: t('shortcutsDialog.reasoning', 'Reasoning trace'),
+    orchestrator: t('shortcutsDialog.orchestrator', 'Multi-agent orchestrator'),
+    subagents: t('shortcutsDialog.subagents', 'Sub-agent board'),
+    diagnostics: t('shortcutsDialog.diagnostics', 'Security diagnostics'),
+    quickAsk: t('shortcutsDialog.quickAsk', 'Quick BTW question'),
+    insights: t('shortcutsDialog.insights', 'Session insights'),
+    resume: t('shortcutsDialog.resume', 'Resume session'),
+    focus: t('shortcutsDialog.focus', 'Focus mode'),
+    skills: t('shortcutsDialog.skills', 'Skill manager'),
+    fileActivity: t('shortcutsDialog.fileActivity', 'File activity'),
+  };
+  const sectionLabels: Record<ShortcutSection, string> = {
+    Général: t('shortcutsDialog.general', 'General'),
+    Navigation: t('shortcutsDialog.navigation', 'Navigation'),
+    Panneaux: t('shortcutsDialog.panels', 'Panels'),
+    'Multi-agent': t('shortcutsDialog.multiAgent', 'Multi-agent'),
+  };
+  const sections = SHORTCUT_DEFINITIONS.filter((item) => {
+    const searchValue = `${shortcutLabels[item.action]} ${item.defaultBinding}`.toLowerCase();
+    return !lowered || searchValue.includes(lowered);
+  }).reduce<Record<ShortcutSection, typeof SHORTCUT_DEFINITIONS>>(
+    (acc, item) => {
+      (acc[item.section] ??= []).push(item);
+      return acc;
+    },
+    {} as Record<ShortcutSection, typeof SHORTCUT_DEFINITIONS>
   );
 
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return sections;
-    return sections
-      .map((section) => ({
-        ...section,
-        shortcuts: section.shortcuts.filter(
-          (sc) =>
-            sc.keys.toLowerCase().includes(q) || sc.description.toLowerCase().includes(q)
-        ),
-      }))
-      .filter((section) => section.shortcuts.length > 0);
-  }, [sections, query]);
+  const exportBindings = () => {
+    const blob = new Blob([JSON.stringify(readShortcutOverrides(), null, 2)], {
+      type: 'application/json',
+    });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = 'code-buddy-shortcuts.json';
+    anchor.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const importBindings = async (file?: File) => {
+    if (!file) return;
+    importShortcuts(JSON.parse(await file.text()));
+    setRevision((value) => value + 1);
+  };
 
   return (
     <div
@@ -141,99 +87,111 @@ export const KeyboardShortcutsDialog: React.FC<KeyboardShortcutsDialogProps> = (
       aria-label={t('shortcutsDialog.title', 'Keyboard shortcuts')}
     >
       <div
-        className="w-[640px] max-w-[92vw] max-h-[85vh] bg-background border border-border rounded-xl shadow-2xl overflow-hidden flex flex-col"
-        onClick={(e) => e.stopPropagation()}
+        className="flex max-h-[86vh] w-[680px] max-w-[94vw] flex-col overflow-hidden rounded-xl border border-border bg-background shadow-2xl"
+        onClick={(event) => event.stopPropagation()}
+        data-testid="shortcut-editor"
+        data-revision={revision}
       >
-        {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-border shrink-0">
-          <h2 className="text-sm font-medium text-secondary">
-            {t('shortcutsDialog.title', 'Keyboard shortcuts')}
-          </h2>
+        <header className="flex items-center justify-between border-b border-border px-5 py-4">
+          <div>
+            <h2 className="text-sm font-semibold text-secondary">
+              {t('shortcutsDialog.configurableTitle', 'Configurable shortcuts')}
+            </h2>
+            <p className="mt-0.5 text-[10px] text-muted-foreground">
+              {t(
+                'shortcutsDialog.instructions',
+                'Select a shortcut, then press the new key combination.'
+              )}
+            </p>
+          </div>
           <button
             onClick={onClose}
-            className="text-muted-foreground hover:text-secondary transition-colors"
+            className="rounded p-1 text-muted-foreground hover:bg-surface-hover"
             aria-label={t('common.close', 'Close')}
           >
             <X size={16} />
           </button>
-        </div>
-
-        {/* Search */}
-        <div className="px-5 py-3 border-b border-border shrink-0">
-          <div className="relative">
+        </header>
+        <div className="flex items-center gap-2 border-b border-border px-5 py-3">
+          <div className="relative min-w-0 flex-1">
             <Search
               size={13}
-              className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none"
+              className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground"
             />
             <input
-              type="text"
-              autoFocus
+              ref={inputRef}
               value={query}
-              onChange={(e) => setQuery(e.target.value)}
+              onChange={(event) => setQuery(event.target.value)}
               placeholder={t('shortcutsDialog.searchPlaceholder', 'Search shortcuts…')}
-              className="w-full pl-8 pr-3 py-1.5 text-xs bg-zinc-800/60 border border-border rounded-md text-secondary placeholder:text-muted-foreground focus:outline-none focus:border-zinc-500"
+              className="w-full rounded-md border border-border bg-surface py-1.5 pl-8 pr-3 text-xs outline-none focus:border-accent"
             />
           </div>
+          <button
+            onClick={exportBindings}
+            className="inline-flex items-center gap-1 rounded border border-border px-2 py-1.5 text-[10px] text-secondary"
+          >
+            <Download size={11} /> {t('shortcutsDialog.export', 'Export')}
+          </button>
+          <label className="inline-flex cursor-pointer items-center gap-1 rounded border border-border px-2 py-1.5 text-[10px] text-secondary">
+            <Upload size={11} /> {t('shortcutsDialog.import', 'Import')}
+            <input
+              type="file"
+              accept="application/json"
+              className="hidden"
+              onChange={(event) => void importBindings(event.target.files?.[0])}
+            />
+          </label>
+          <button
+            onClick={() => {
+              resetShortcuts();
+              setRevision((value) => value + 1);
+            }}
+            className="rounded border border-border p-1.5 text-muted-foreground"
+            title={t('shortcutsDialog.reset', 'Reset')}
+          >
+            <RotateCcw size={12} />
+          </button>
         </div>
-
-        {/* Content */}
-        <div className="overflow-y-auto p-5 space-y-5 flex-1">
-          {filtered.length === 0 ? (
-            <div className="text-center text-muted-foreground text-sm py-8">
-              {t('shortcutsDialog.noMatches', 'No shortcut matches your search.')}
-            </div>
-          ) : (
-            filtered.map((section) => (
-              <div key={section.title}>
-                <h3 className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-2">
-                  {section.title}
-                </h3>
-                <div className="space-y-0.5">
-                  {section.shortcuts.map((shortcut) => (
-                    <div
-                      key={shortcut.keys + shortcut.description}
-                      className="flex items-center justify-between gap-3 py-1.5 px-2 rounded hover:bg-zinc-800/40 transition-colors"
+        <div className="flex-1 space-y-5 overflow-y-auto p-5">
+          {Object.entries(sections).map(([section, definitions]) => (
+            <section key={section}>
+              <h3 className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                {sectionLabels[section as ShortcutSection]}
+              </h3>
+              <div className="space-y-1">
+                {definitions.map((definition) => (
+                  <div
+                    key={definition.action}
+                    className="flex items-center justify-between rounded-lg px-3 py-2 hover:bg-surface/70"
+                  >
+                    <span className="text-xs text-secondary">
+                      {shortcutLabels[definition.action]}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setRecording(definition.action)}
+                      onKeyDown={(event) => {
+                        if (recording !== definition.action) return;
+                        event.preventDefault();
+                        const binding = eventToBinding(event);
+                        if (!binding) return;
+                        saveShortcutBinding(definition.action, binding);
+                        setRecording(null);
+                        setRevision((value) => value + 1);
+                      }}
+                      className={`min-w-28 rounded border px-2 py-1 font-mono text-[10px] ${recording === definition.action ? 'border-accent bg-accent/10 text-accent' : 'border-border bg-surface text-secondary'}`}
                     >
-                      <span className="text-sm text-secondary flex-1 min-w-0">
-                        {shortcut.description}
-                      </span>
-                      <ShortcutKey keys={shortcut.keys} />
-                    </div>
-                  ))}
-                </div>
+                      {recording === definition.action
+                        ? t('shortcutsDialog.pressKeys', 'Press the keys…')
+                        : getShortcutBinding(definition.action)}
+                    </button>
+                  </div>
+                ))}
               </div>
-            ))
-          )}
-        </div>
-
-        {/* Footer */}
-        <div className="px-5 py-2.5 border-t border-border text-[10px] text-muted-foreground shrink-0 flex items-center justify-between">
-          <span>
-            {t('shortcutsDialog.footerHint', 'Press {{shortcut}} anywhere to reopen this dialog.', { shortcut: `${mod}+/` })}
-          </span>
-          <span className="text-muted-foreground">
-            {filtered.reduce((acc, s) => acc + s.shortcuts.length, 0)}{' '}
-            {t('shortcutsDialog.results', 'results')}
-          </span>
+            </section>
+          ))}
         </div>
       </div>
     </div>
   );
-};
-
-/** Renders a key combination as a row of `<kbd>` boxes. */
-const ShortcutKey: React.FC<{ keys: string }> = ({ keys }) => {
-  const parts = keys.split('+').map((p) => p.trim()).filter(Boolean);
-  return (
-    <span className="flex items-center gap-1 shrink-0">
-      {parts.map((part, i) => (
-        <React.Fragment key={i}>
-          {i > 0 && <span className="text-muted-foreground text-xs">+</span>}
-          <kbd className="text-[11px] font-mono px-1.5 py-0.5 rounded bg-surface border border-border text-secondary min-w-[20px] text-center">
-            {part}
-          </kbd>
-        </React.Fragment>
-      ))}
-    </span>
-  );
-};
+}

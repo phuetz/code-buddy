@@ -52,7 +52,25 @@ Before compaction triggers, a silent background LLM turn extracts durable facts 
 
 ## Restorable Compression
 
-When context is compressed, file paths and URLs are extracted as identifiers and the original content is stored to `.codebuddy/tool-results/<callId>.txt`. The agent can call `restore_context("src/agent/types.ts")` to retrieve the full content on demand, making compression lossless for structured identifiers.
+Before a tool observation is optimized, its raw content is stored at
+`.codebuddy/tool-results/<callId>.txt`. The always-available
+`restore_context` tool accepts that exact call ID (for example
+`restore_context("call_abc123")`) and retrieves the persisted raw observation.
+Legacy file-path and URL identifiers extracted during context compaction remain
+supported as a fallback.
+
+The same lossless boundary is used by the multi-agent, subagent, SWE and ACP
+tool loops: their public tool result remains untouched, while only the copy
+inserted into the next LLM prompt may be optimized. SWE and ACP scope
+`restore_context` to call IDs produced in the current run/turn. A legacy or
+custom subagent that supplies an executor without exposing the
+`restore_context` schema still persists its raw result, but deliberately skips
+optimization so the model cannot be left with an unrecoverable observation.
+ACP file reads persist the complete editor-buffer/disk text before applying
+the public `maxToolOutputBytes` display bound. ACP search remains intentionally
+bounded upstream (50 matches per file and 200 collected result lines), so its
+recoverable copy is exact for the collected observation rather than an
+exhaustive snapshot of every workspace match.
 
 ## Proactive Compaction
 

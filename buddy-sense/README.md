@@ -115,10 +115,32 @@ LD_LIBRARY_PATH=target/release \
 ```
 
 Env: `BUDDY_SENSE_MIC_SOURCE` (PulseAudio source, default `default`; e.g. the BRIO's
-`alsa_input.usb-046d_Logitech_BRIO…`), `BUDDY_SENSE_MIC_THRESHOLD` (energy VAD, default
-`0.02` — biased low so quiet conversational speech still opens an utterance; raise it
-in a noisy room), `BUDDY_SENSE_MIC_ENDPOINT_MS` (silence to close an utterance, default `700`),
+`alsa_input.usb-046d_Logitech_BRIO…`), `BUDDY_SENSE_MIC_THRESHOLD` (minimum normalized
+RMS used by the energy VAD, default `0.02`). The adaptive gate is on by default: it
+calibrates for one second, tracks the 10th-percentile idle noise over two seconds,
+and derives separate open/close thresholds above that floor. This prevents an
+amplified microphone or continuous room noise from keeping every utterance open
+until the 15-second safety cap. Set `BUDDY_SENSE_MIC_ADAPTIVE=false` to restore the
+exact fixed-threshold behavior (then `BUDDY_SENSE_MIC_THRESHOLD` is the open
+threshold and 60% of it is the close threshold). `BUDDY_SENSE_MIC_ENDPOINT_MS`
+sets silence to close an utterance (default `420`; confirmed silence is trimmed
+to an 80 ms acoustic tail before STT),
 `BUDDY_SENSE_MIC_DEBUG=1` (echo each final to stderr), `BUDDY_SENSE_FFMPEG` (ffmpeg path).
+
+Each `transcript_final` includes additive endpoint diagnostics: `endedReason`
+(`silence` or `cap`), `endpointWaitMs`, `rmsOn`, `rmsOff`, `noiseFloorRms`,
+`adaptiveVad`, `hardCap`, and `hardCapCount`. If Smart Turn joins several
+segments, any earlier hard cap is preserved in the final count/reason.
+
+When the verified Smart Turn v3.2 model is present, `live-audio` automatically
+adds audio-native end-of-turn detection above the fast VAD. Install it once from
+the Code Buddy root with `node scripts/install-smart-turn.mjs`. A prediction of
+an unfinished thought keeps the audio locally for at most 1200 ms and joins the
+continuation; timeout, worker crash, or missing model fails open to VAD.
+Configuration: `BUDDY_SENSE_SMART_TURN=false` disables it,
+`BUDDY_SENSE_SMART_TURN_THRESHOLD` changes the completion threshold (default
+`0.5`), `BUDDY_SENSE_SMART_TURN_MAX_HOLD_MS` bounds the wait, and
+`BUDDY_SENSE_SMART_TURN_TIMEOUT_MS` bounds inference.
 
 Built with tokio + tokio-tungstenite (+ optional xcap / atspi / vad-rs / sherpa-rs;
 the `live-audio` mic path uses the system ffmpeg, not cpal).

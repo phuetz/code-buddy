@@ -100,6 +100,7 @@ export class RemoteBackend {
   private currentStatus: RemoteBackendStatus = 'disconnected';
   private host: string | undefined;
   private readonly callbacks: RemoteBackendCallbacks;
+  private pendingControl = new Map<string, { resolve: (value: unknown) => void; reject: (error: Error) => void; timer: NodeJS.Timeout }>();
 
   constructor(callbacks: RemoteBackendCallbacks) {
     this.callbacks = callbacks;
@@ -190,6 +191,11 @@ export class RemoteBackend {
     if (this.currentStatus !== 'disconnected') {
       this.setStatus('disconnected');
     }
+    for (const pending of this.pendingControl.values()) {
+      clearTimeout(pending.timer);
+      pending.reject(new Error('Remote backend disconnected'));
+    }
+    this.pendingControl.clear();
   }
 
   isConnected(): boolean {
@@ -224,6 +230,19 @@ export class RemoteBackend {
     }
   }
 
+  requestControl(method: 'describe' | 'invoke', payload: Record<string, unknown> = {}): Promise<unknown> {
+    if (!this.isConnected() || !this.ws) return Promise.reject(new Error('Remote backend is not connected'));
+    const requestId = `control_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this.pendingControl.delete(requestId);
+        reject(new Error('Remote control request timed out'));
+      }, 10_000);
+      this.pendingControl.set(requestId, { resolve, reject, timer });
+      this.ws!.send(JSON.stringify({ type: `control.${method}`, payload, requestId }));
+    });
+  }
+
   private handleMessage(data: unknown): void {
     let text: string;
     if (typeof data === 'string') {
@@ -250,6 +269,21 @@ export class RemoteBackend {
       typeof (parsed as { type?: unknown }).type !== 'string'
     ) {
       logWarn('[RemoteBackend] Received frame without a type; ignoring');
+      return;
+    }
+
+    if ((parsed as { type: string }).type === 'control.result') {
+      const payload = (parsed as { payload?: { requestId?: string; ok?: boolean; result?: unknown; error?: string } }).payload;
+      const requestId = payload?.requestId;
+      if (requestId) {
+        const pending = this.pendingControl.get(requestId);
+        if (pending) {
+          clearTimeout(pending.timer);
+          this.pendingControl.delete(requestId);
+          if (payload?.ok) pending.resolve(payload.result);
+          else pending.reject(new Error(payload?.error || 'Remote control request failed'));
+        }
+      }
       return;
     }
 

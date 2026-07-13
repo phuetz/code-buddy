@@ -27,7 +27,7 @@
  *     rejection fails the tool call instead of leaking content.
  *
  * Read-only tools are always exposed (`view_file`, `list_directory`,
- * `search`). `write_file` is exposed only when the editor advertises
+ * `search`, `restore_context`). `write_file` is exposed only when the editor advertises
  * `fs.writeTextFile`, and the write is routed through the editor permission
  * flow. Cancellation is honoured by checking `signal.aborted` on every loop
  * iteration and after every client round-trip.
@@ -38,6 +38,11 @@ import { rgPath } from '@vscode/ripgrep';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { logger } from '../../utils/logger.js';
+import { formatToolResultForRecovery } from '../../context/restorable-compression.js';
+import {
+  commandFromToolArguments,
+  prepareToolObservationForPrompt,
+} from '../../agent/prompt-tool-observation.js';
 import type {
   AcpContentBlock,
   AcpPromptContext,
@@ -61,8 +66,12 @@ export interface AcpAgenticRunnerOptions {
   chat: AcpChatFn;
   /** Max LLM rounds before returning `max_turn_requests`. Default 12. */
   maxRounds?: number;
-  /** Max bytes returned by a single read/search before truncation. */
+  /** Max bytes shown by a single read/search result before recoverable truncation. */
   maxToolOutputBytes?: number;
+  /** Model metadata used to allocate recoverable observation budgets. */
+  model?: string;
+  contextWindow?: number;
+  responseReserveTokens?: number;
 }
 
 const DEFAULT_MAX_ROUNDS = 12;
@@ -109,6 +118,20 @@ const READONLY_TOOLS: CodeBuddyTool[] = [
   {
     type: 'function',
     function: {
+      name: 'restore_context',
+      description: 'Restore the exact raw output of an earlier tool call in this ACP turn by call ID.',
+      parameters: {
+        type: 'object',
+        properties: {
+          identifier: { type: 'string', description: 'Exact earlier tool call ID' },
+        },
+        required: ['identifier'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
       name: 'search',
       description: 'Search the workspace for a text pattern (ripgrep).',
       parameters: {
@@ -143,12 +166,21 @@ const TOOL_KIND: Record<string, 'read' | 'search' | 'edit'> = {
   view_file: 'read',
   list_directory: 'read',
   search: 'search',
+  restore_context: 'read',
   write_file: 'edit',
 };
 
 interface ToolExecResult {
+  /** Bounded/public ACP representation. */
   output: string;
+  /** Exact collected observation before the public display bound, when available. */
+  rawOutput?: string;
   isError: boolean;
+}
+
+interface BoundedToolText {
+  raw: string;
+  display: string;
 }
 
 /**
@@ -199,6 +231,10 @@ export function createAcpAgenticRunner(
       { role: 'system', content: SYSTEM_PROMPT },
       { role: 'user', content: userText },
     ];
+    // Recovery is deliberately scoped to this ACP prompt turn. A model cannot
+    // use a guessed callId to read an observation belonging to another editor
+    // session, while RestorableCompressor still provides the disk-backed copy.
+    const rawToolObservations = new Map<string, string>();
 
     const allTools: CodeBuddyTool[] = [...READONLY_TOOLS];
     if (ctx.canRequestClient('fs/write_text_file')) {
@@ -273,7 +309,18 @@ export function createAcpAgenticRunner(
         });
 
         let result: ToolExecResult;
-        if (call.function.name.startsWith('mcp__') && mcpManager) {
+        if (call.function.name === 'restore_context') {
+          const identifier = stringArg(args, 'identifier');
+          const raw = identifier ? rawToolObservations.get(identifier) : undefined;
+          result = raw === undefined
+            ? {
+                output: identifier
+                  ? `Tool call ${identifier} is not available in this ACP turn`
+                  : 'restore_context: missing string identifier',
+                isError: true,
+              }
+            : { output: raw, isError: false };
+        } else if (call.function.name.startsWith('mcp__') && mcpManager) {
           try {
             const mcpRes = await mcpManager.callTool(call.function.name, args);
             const outputText = Array.isArray(mcpRes.content)
@@ -301,10 +348,43 @@ export function createAcpAgenticRunner(
           content: [{ type: 'content', content: { type: 'text', text: result.output } }],
         });
 
+        const nativeOutput = result.rawOutput ?? result.output;
+        const recoveryContent = formatToolResultForRecovery({
+          success: !result.isError,
+          ...(result.isError ? { error: nativeOutput } : { output: nativeOutput }),
+        });
+        const displayContent = formatToolResultForRecovery({
+          success: !result.isError,
+          ...(result.isError ? { error: result.output } : { output: result.output }),
+        });
+        const observation = await prepareToolObservationForPrompt({
+          toolName: call.function.name,
+          toolCallId: call.id,
+          content: recoveryContent,
+          fallbackContent: displayContent === recoveryContent
+            ? displayContent
+            : `${displayContent}\n\n[ACP display was bounded; exact raw output: restore_context(identifier=${JSON.stringify(call.id)})]`,
+          success: !result.isError,
+          exitCode: result.isError ? 1 : 0,
+          ...(result.isError ? { error: result.output } : {}),
+          command: commandFromToolArguments(args),
+          query: userText,
+          workspaceRoot: ctx.cwd,
+          model: options.model,
+          messages,
+          contextWindow: options.contextWindow,
+          responseReserveTokens: options.responseReserveTokens,
+          signal: ctx.signal,
+          allowOptimization: true,
+        });
+        if (call.function.name !== 'restore_context') {
+          rawToolObservations.set(call.id, observation.rawContent);
+        }
+
         messages.push({
           role: 'tool',
           tool_call_id: call.id,
-          content: result.output,
+          content: observation.content,
         } as CodeBuddyMessage);
       }
     }
@@ -335,12 +415,21 @@ async function executeAcpTool(input: ExecuteAcpToolInput): Promise<ToolExecResul
   const { name, args, ctx, toolCallId, maxToolOutputBytes } = input;
   try {
     switch (name) {
-      case 'view_file':
-        return { output: await readFileViaClientOrDisk(args, ctx, toolCallId, maxToolOutputBytes), isError: false };
-      case 'list_directory':
-        return { output: await listDirectory(args, ctx.cwd), isError: false };
-      case 'search':
-        return { output: await searchWorkspace(args, ctx.cwd, maxToolOutputBytes), isError: false };
+      case 'view_file': {
+        const text = await readFileViaClientOrDisk(args, ctx, toolCallId, maxToolOutputBytes);
+        return { output: text.display, rawOutput: text.raw, isError: false };
+      }
+      case 'list_directory': {
+        const text = await listDirectory(args, ctx.cwd);
+        return { output: text.display, rawOutput: text.raw, isError: false };
+      }
+      case 'search': {
+        // ripgrep collection is intentionally bounded upstream (per-file and
+        // total result caps). The persisted value is exact for that collected
+        // observation, not a promise of an exhaustive workspace search.
+        const text = await searchWorkspace(args, ctx.cwd, maxToolOutputBytes);
+        return { output: text.display, rawOutput: text.raw, isError: false };
+      }
       case 'write_file':
         return { output: await writeFileViaClientOrDisk(args, ctx, toolCallId), isError: false };
       default:
@@ -364,7 +453,7 @@ async function readFileViaClientOrDisk(
   ctx: AcpPromptContext,
   toolCallId: string,
   maxBytes: number,
-): Promise<string> {
+): Promise<BoundedToolText> {
   const rawPath = stringArg(args, 'file_path') ?? stringArg(args, 'path');
   if (!rawPath) throw new Error('view_file: missing string file_path');
 
@@ -386,13 +475,13 @@ async function readFileViaClientOrDisk(
 
     const result = await ctx.requestClient('fs/read_text_file', { sessionId: ctx.sessionId, path: absolute });
     const content = extractClientReadContent(result);
-    return truncate(content, maxBytes);
+    return { raw: content, display: truncate(content, maxBytes) };
   }
 
   // Disk fallback, scoped to cwd.
   const resolved = resolveInsideCwd(rawPath, ctx.cwd);
   const content = await fs.readFile(resolved, 'utf-8');
-  return truncate(content, maxBytes);
+  return { raw: content, display: truncate(content, maxBytes) };
 }
 
 /**
@@ -457,7 +546,10 @@ function extractClientReadContent(result: unknown): string {
   throw new Error('fs/read_text_file returned no string content');
 }
 
-async function listDirectory(args: Record<string, unknown>, cwd: string): Promise<string> {
+async function listDirectory(
+  args: Record<string, unknown>,
+  cwd: string,
+): Promise<BoundedToolText> {
   const rawPath = stringArg(args, 'path') ?? stringArg(args, 'directory') ?? '.';
   const resolved = resolveInsideCwd(rawPath, cwd);
   const entries = await fs.readdir(resolved, { withFileTypes: true });
@@ -472,16 +564,20 @@ async function listDirectory(args: Record<string, unknown>, cwd: string): Promis
   if (truncated) {
     visible.push(`... truncated after ${LIST_DIRECTORY_MAX_ENTRIES} entries (${lines.length} total)`);
   }
-  return visible.join('\n');
+  return { raw: lines.join('\n'), display: visible.join('\n') };
 }
 
-function searchWorkspace(args: Record<string, unknown>, cwd: string, maxBytes: number): Promise<string> {
+function searchWorkspace(
+  args: Record<string, unknown>,
+  cwd: string,
+  maxBytes: number,
+): Promise<BoundedToolText> {
   const query = stringArg(args, 'query') ?? stringArg(args, 'pattern');
   if (!query) throw new Error('search: missing string query');
   const rawPath = stringArg(args, 'path') ?? '.';
   const resolved = resolveInsideCwd(rawPath, cwd);
 
-  return new Promise<string>((resolve, reject) => {
+  return new Promise<BoundedToolText>((resolve, reject) => {
     const rgArgs = ['--no-heading', '--line-number', '--color', 'never', '--max-count', '50', '--', query, resolved];
     const proc = spawn(rgPath, rgArgs, { stdio: ['ignore', 'pipe', 'pipe'] });
     let stdout = '';
@@ -507,7 +603,8 @@ function searchWorkspace(args: Record<string, unknown>, cwd: string, maxBytes: n
       clearTimeout(timer);
       // 0 = matches, 1 = no matches (still ok), 2 = error.
       if (code === 0 || code === 1 || (code === null && stdout.length > 0)) {
-        resolve(truncate(stdout || '(no matches)', maxBytes));
+        const raw = stdout || '(no matches)';
+        resolve({ raw, display: truncate(raw, maxBytes) });
       } else {
         reject(new Error(`search: ripgrep exited with code ${code}: ${stderr.trim()}`));
       }

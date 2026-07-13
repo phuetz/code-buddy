@@ -23,6 +23,16 @@ describe('ClaudeAgentRunner pi-coding-agent integration', () => {
     expect(agentRunnerContent).toContain('Failed to prepare MCP server config, skipping server');
   });
 
+  it('routes pi-coding-agent MCP calls through the AgentBase production gate', () => {
+    expect(agentRunnerContent).toContain("import { AgentBaseBridge } from '../mcp/agentbase-bridge'");
+    const executeStart = agentRunnerContent.indexOf('async execute(_toolCallId, params');
+    const executeEnd = agentRunnerContent.indexOf('return toolDef;', executeStart);
+    const executeBlock = agentRunnerContent.slice(executeStart, executeEnd);
+    expect(executeBlock).toContain('await agentBase.invoke({');
+    expect(executeBlock).not.toContain('mcpManager.callTool(');
+    expect(executeBlock).toContain("throw new Error(invocation.error ?? 'AgentBase denied");
+  });
+
   it('uses standard markdown link guidance for sources citations', () => {
     expect(agentRunnerContent).toContain(
       'otherwise use standard Markdown links: [Title](https://claude.ai/chat/URL)'

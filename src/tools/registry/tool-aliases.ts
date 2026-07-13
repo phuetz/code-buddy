@@ -22,7 +22,7 @@
  * To add new aliases simply append to TOOL_ALIASES below.
  */
 
-import type { ITool, IToolMetadata, ToolSchema } from './types.js';
+import type { ITool, IToolExecutionContext, IToolMetadata, ToolSchema } from './types.js';
 import type { ToolResult } from '../../types/index.js';
 
 // ============================================================================
@@ -119,8 +119,11 @@ class AliasITool implements ITool {
     return { valid: true };
   }
 
-  async execute(input: Record<string, unknown>): Promise<ToolResult> {
-    return this.primary.execute(input);
+  async execute(
+    input: Record<string, unknown>,
+    context?: IToolExecutionContext,
+  ): Promise<ToolResult> {
+    return this.primary.execute(input, context);
   }
 }
 

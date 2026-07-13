@@ -56,17 +56,32 @@ function toEntry(c: ActiveLlm): ActiveLlmModelPoolEntry {
   };
 }
 
+function modelCost(active: ActiveLlm, model: string): number {
+  if (
+    active.provider === 'openrouter' &&
+    (model === 'openrouter/free' || model.endsWith(':free'))
+  ) {
+    return 0;
+  }
+  return active.costInputUsdPerMtok;
+}
+
 /** Local runtimes report 'lm-studio' from the capability probe, 'lmstudio' in the catalog. */
 function normalizeLocalProvider(provider: string): string {
   return provider === 'lm-studio' ? 'lmstudio' : provider;
 }
 
-async function probeLocalModels(): Promise<Array<{ id: string; provider: string }>> {
+async function probeSelectableModels(): Promise<Array<{ id: string; provider: string }>> {
   try {
     const { getLocalCapabilities } = await import('../fleet/capability-registry.js');
     const caps = await getLocalCapabilities({});
     return caps.models
-      .filter((m) => m.provider === 'ollama' || m.provider === 'lm-studio')
+      .filter((m) =>
+        m.provider === 'ollama' ||
+        m.provider === 'lm-studio' ||
+        m.provider === 'lemonade' ||
+        m.provider === 'agy-cli',
+      )
       .map((m) => ({ id: m.id, provider: normalizeLocalProvider(m.provider) }));
   } catch {
     return [];
@@ -95,26 +110,35 @@ export async function listActiveLlmModelPool(
   const seenCloud = new Set<string>();
   const seenLocalNames = new Set<string>();
   const maxLocal = Math.max(1, opts.maxLocalPerProvider ?? DEFAULT_MAX_LOCAL_PER_PROVIDER);
+  const discoveredModels = base.some((c) => c.isLocal || c.provider === 'agy-cli')
+    ? await probeSelectableModels()
+    : [];
 
   for (const active of cloud) {
     const defaultEntry = toEntry(active);
     // The registry's resolved default (env override included) always seats first.
-    for (const model of [defaultEntry.model, ...(findRuntimeProvider(active.provider)?.models ?? [])]) {
+    const catalogModels = active.provider === 'agy-cli'
+      ? discoveredModels.filter((m) => m.provider === 'agy-cli').map((m) => m.id)
+      : (findRuntimeProvider(active.provider)?.models ?? []);
+    for (const model of [defaultEntry.model, ...catalogModels]) {
       const key = `${active.provider}:${model}`.toLowerCase();
       if (seenCloud.has(key)) continue;
       seenCloud.add(key);
-      pool.push({ ...defaultEntry, model });
+      pool.push({
+        ...defaultEntry,
+        model,
+        costInputUsdPerMtok: modelCost(active, model),
+      });
     }
   }
 
-  const localModels = locals.length > 0 ? await probeLocalModels() : [];
   for (const active of locals) {
     const defaultEntry = toEntry(active);
     const providerId = normalizeLocalProvider(active.provider);
     let added = 0;
     for (const model of [
       defaultEntry.model,
-      ...localModels.filter((m) => m.provider === providerId).map((m) => m.id),
+      ...discoveredModels.filter((m) => m.provider === providerId).map((m) => m.id),
     ]) {
       if (added >= maxLocal) break;
       const name = model.toLowerCase();

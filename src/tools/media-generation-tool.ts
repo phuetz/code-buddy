@@ -1,4 +1,5 @@
 import { randomUUID } from 'crypto';
+import { constants as fsConstants } from 'fs';
 import fs from 'fs/promises';
 import path from 'path';
 
@@ -14,11 +15,31 @@ export interface MediaGenerationRuntime {
   fetch?: typeof fetch;
   now?: () => Date;
   createId?: () => string;
+  signal?: AbortSignal;
 }
 
 export interface ImageGenerateInput {
   prompt: string;
   aspectRatio?: string;
+}
+
+export interface ImageEditSelection {
+  /** Normalized coordinates in the source image (0..1). */
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export interface ImageEditInput {
+  prompt: string;
+  /** Source image as a bounded data URL, or an HTTPS URL for providers that support it (xAI). */
+  imageUrl: string;
+  /** Optional non-secret local provenance stored in the output sidecar. */
+  sourceRef?: string;
+  /** Optional PNG data URL whose alpha channel marks the editable area. */
+  maskUrl?: string;
+  selections?: ImageEditSelection[];
 }
 
 export interface ImageGenerateResult {
@@ -35,6 +56,21 @@ export interface ImageGenerateResult {
   revised_prompt?: string;
   error?: string;
   error_type?: string;
+}
+
+export interface ImageEditResult extends Omit<ImageGenerateResult, 'kind' | 'aspect_ratio'> {
+  kind: 'image_edit_result';
+  source: string;
+  masked: boolean;
+  maskMode: 'alpha' | 'region-prompt' | 'none';
+  selections: ImageEditSelection[];
+}
+
+export interface ImageEditCapabilities {
+  provider: MediaProvider;
+  available: boolean;
+  alphaMasking: boolean;
+  reason?: string;
 }
 
 export interface VideoGenerateInput {
@@ -212,6 +248,132 @@ export async function generateImage(
   };
 }
 
+/**
+ * Edit an existing image without overwriting it. OpenAI receives a real PNG
+ * alpha mask through `/images/edits`; xAI receives its documented JSON image
+ * edit request and a precise normalized-region hint in the prompt. ComfyUI
+ * runs only through an explicit, validated API-format inpaint workflow.
+ */
+export async function editImage(
+  input: ImageEditInput,
+  runtime: MediaGenerationRuntime = {},
+): Promise<ImageEditResult> {
+  const prompt = input.prompt.trim();
+  if (!prompt) throw new Error('prompt is required for image editing');
+  const imageUrl = validateImageReference(input.imageUrl, 'source image');
+  const selections = normalizeEditSelections(input.selections);
+  const maskUrl = input.maskUrl ? validateDataImage(input.maskUrl, 'mask') : undefined;
+  const config = resolveImageProvider(runtime.env ?? process.env);
+  const fetchImpl = runtime.fetch ?? fetch;
+  const generatedAt = (runtime.now ?? (() => new Date()))().toISOString();
+  const selectionHint = selections.length > 0
+    ? ` Preserve everything outside these normalized regions (x,y,width,height): ${selections
+      .map((selection) => `${selection.x.toFixed(4)},${selection.y.toFixed(4)},${selection.width.toFixed(4)},${selection.height.toFixed(4)}`)
+      .join('; ')}.`
+    : '';
+  const effectivePrompt = `${prompt}${selectionHint}`;
+
+  if (config.provider === 'comfyui') {
+    return editComfyUIImage({
+      prompt,
+      effectivePrompt,
+      imageUrl,
+      maskUrl,
+      selections,
+      sourceRef: input.sourceRef,
+    }, config, runtime, generatedAt);
+  }
+
+  let response: Record<string, unknown>;
+  if (config.provider === 'xai') {
+    response = await postJson(fetchImpl, joinUrl(config.baseUrl, '/images/edits'), {
+      headers: authHeaders(config.apiKey),
+      body: {
+        model: config.model,
+        prompt: effectivePrompt,
+        image: { url: imageUrl, type: 'image_url' },
+      },
+    });
+  } else {
+    if (!imageUrl.startsWith('data:')) {
+      throw new Error('OpenAI image edits require a bounded image data URL; HTTPS sources are supported only by xAI');
+    }
+    const form = new FormData();
+    form.append('model', config.model);
+    form.append('prompt', effectivePrompt);
+    form.append('image[]', dataUrlToBlob(imageUrl, 'source image'), 'source.png');
+    if (maskUrl) form.append('mask', dataUrlToBlob(maskUrl, 'mask'), 'mask.png');
+    const httpResponse = await fetchWithTimeout(fetchImpl, joinUrl(config.baseUrl, '/images/edits'), {
+      method: 'POST',
+      headers: config.apiKey ? { Authorization: `Bearer ${config.apiKey}` } : {},
+      body: form,
+    }, 180_000);
+    response = await readJsonResponse(httpResponse, joinUrl(config.baseUrl, '/images/edits'));
+  }
+
+  const first = firstDataItem(response);
+  const b64 = stringField(first, 'b64_json');
+  const remoteUrl = stringField(first, 'url');
+  const revisedPrompt = stringField(first, 'revised_prompt');
+  let outputPath: string | undefined;
+  if (b64) {
+    outputPath = await saveGeneratedAsset(Buffer.from(b64, 'base64'), {
+      rootDir: runtime.rootDir,
+      dirName: 'images',
+      prefix: 'image-edit',
+      extension: 'png',
+      createId: runtime.createId,
+    });
+  } else if (remoteUrl) {
+    outputPath = (await tryDownloadAsset(remoteUrl, {
+      fetchImpl,
+      rootDir: runtime.rootDir,
+      dirName: 'images',
+      prefix: 'image-edit',
+      fallbackExtension: 'png',
+      createId: runtime.createId,
+      maxBytes: 50 * 1024 * 1024,
+    })).outputPath;
+  }
+  const image = outputPath ?? remoteUrl;
+  if (!image) throw new Error('Image edit provider returned neither b64_json nor url');
+
+  const maskMode: ImageEditResult['maskMode'] = config.provider === 'openai' && maskUrl
+    ? 'alpha'
+    : selections.length > 0
+      ? 'region-prompt'
+      : 'none';
+  const sourceReference = sanitizeImageSourceReference(input.sourceRef) ?? redactDataUrl(imageUrl);
+  await writeMediaSidecar(outputPath, {
+    kind: 'image-edit',
+    prompt,
+    ...(revisedPrompt ? { revisedPrompt } : {}),
+    provider: config.provider,
+    model: config.model,
+    source: sourceReference,
+    masked: maskMode === 'alpha',
+    maskMode,
+    selections,
+    generatedAt,
+  });
+
+  return {
+    kind: 'image_edit_result',
+    success: true,
+    image,
+    ...(outputPath ? { outputPath, mediaPath: `MEDIA:${outputPath}` } : {}),
+    provider: config.provider,
+    model: config.model,
+    prompt,
+    generatedAt,
+    source: sourceReference,
+    masked: maskMode === 'alpha',
+    maskMode,
+    selections,
+    ...(revisedPrompt ? { revised_prompt: revisedPrompt } : {}),
+  };
+}
+
 // ---------------------------------------------------------------------------
 // ComfyUI local image backend (offline, GPU). Distinct from the OpenAI-shaped
 // providers: it submits a node graph to /prompt, polls /history/{id} until the
@@ -283,10 +445,51 @@ interface ComfyImageRef {
   type: string;
 }
 
+interface ComfyWorkflowNode {
+  class_type: string;
+  inputs: Record<string, unknown>;
+  _meta?: Record<string, unknown>;
+}
+
+interface ComfyWorkflowBinding {
+  nodeId: string;
+  input: string;
+}
+
+interface ComfyInpaintBindings {
+  source: ComfyWorkflowBinding;
+  mask: ComfyWorkflowBinding;
+  prompt: ComfyWorkflowBinding;
+  negativePrompt?: ComfyWorkflowBinding;
+  output: ComfyWorkflowBinding;
+}
+
+interface ComfyInpaintTemplate {
+  workflow: Record<string, ComfyWorkflowNode>;
+  bindings: ComfyInpaintBindings;
+}
+
+interface ComfyUploadedImage extends ComfyImageRef {
+  workflowPath: string;
+}
+
+const COMFY_INPAINT_PLACEHOLDERS = {
+  source: '{{CODEBUDDY_SOURCE_IMAGE}}',
+  mask: '{{CODEBUDDY_MASK_IMAGE}}',
+  prompt: '{{CODEBUDDY_PROMPT}}',
+  negativePrompt: '{{CODEBUDDY_NEGATIVE_PROMPT}}',
+  output: '{{CODEBUDDY_OUTPUT_PREFIX}}',
+} as const;
+const MAX_COMFY_WORKFLOW_BYTES = 1024 * 1024;
+const MAX_COMFY_WORKFLOW_NODES = 512;
+const SAFE_COMFY_ID = /^[A-Za-z0-9_.-]{1,128}$/;
+const SAFE_COMFY_INPUT = /^[A-Za-z0-9_.-]{1,64}$/;
+
 /** First image emitted by any output node in a /history entry, or null. */
 function firstComfyImage(outputs: unknown): ComfyImageRef | null {
   if (!outputs || typeof outputs !== 'object') return null;
   for (const node of Object.values(outputs as Record<string, unknown>)) {
+    if (!node || typeof node !== 'object' || Array.isArray(node)) continue;
     const images = (node as { images?: unknown }).images;
     if (Array.isArray(images)) {
       for (const img of images) {
@@ -304,8 +507,649 @@ function firstComfyImage(outputs: unknown): ComfyImageRef | null {
   return null;
 }
 
-function comfyDelay(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+function comfyDelay(ms: number, signal?: AbortSignal): Promise<void> {
+  throwIfAborted(signal);
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      signal?.removeEventListener('abort', onAbort);
+      resolve();
+    }, ms);
+    const onAbort = () => {
+      clearTimeout(timer);
+      reject(abortError(signal));
+    };
+    signal?.addEventListener('abort', onAbort, { once: true });
+  });
+}
+
+export async function getImageEditCapabilities(
+  runtime: MediaGenerationRuntime = {},
+): Promise<ImageEditCapabilities> {
+  const config = resolveImageProvider(runtime.env ?? process.env);
+  if (config.provider === 'openai') {
+    return { provider: config.provider, available: true, alphaMasking: true };
+  }
+  if (config.provider === 'xai') {
+    return { provider: config.provider, available: true, alphaMasking: false };
+  }
+  if (config.provider !== 'comfyui') {
+    return { provider: config.provider, available: false, alphaMasking: false, reason: 'Provider does not support image editing' };
+  }
+  try {
+    await loadComfyInpaintTemplate(runtime);
+    return { provider: 'comfyui', available: true, alphaMasking: true };
+  } catch (error) {
+    return {
+      provider: 'comfyui',
+      available: false,
+      alphaMasking: false,
+      reason: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+async function editComfyUIImage(
+  input: {
+    prompt: string;
+    effectivePrompt: string;
+    imageUrl: string;
+    maskUrl?: string;
+    selections: ImageEditSelection[];
+    sourceRef?: string;
+  },
+  config: ProviderConfig,
+  runtime: MediaGenerationRuntime,
+  generatedAt: string,
+): Promise<ImageEditResult> {
+  throwIfAborted(runtime.signal);
+  const template = await loadComfyInpaintTemplate(runtime);
+  if (!input.imageUrl.startsWith('data:')) {
+    throw new Error('ComfyUI inpainting requires a bounded source image data URL');
+  }
+  if (!input.maskUrl) {
+    throw new Error('ComfyUI inpainting requires an explicit PNG alpha mask');
+  }
+  if (!input.maskUrl.toLowerCase().startsWith('data:image/png;base64,')) {
+    throw new Error('ComfyUI inpainting requires a PNG alpha mask');
+  }
+  if (input.effectivePrompt.length > 20_000) {
+    throw new Error('ComfyUI inpainting prompt exceeds 20000 characters');
+  }
+
+  const fetchImpl = runtime.fetch ?? fetch;
+  const envSource = runtime.env ?? process.env;
+  const clientId = sanitizeId(runtime.createId?.() ?? randomUUID()).slice(0, 80);
+  const source = await uploadComfyInput({
+    baseUrl: config.baseUrl,
+    dataUrl: input.imageUrl,
+    filename: `codebuddy-source-${clientId}`,
+    fetchImpl,
+    signal: runtime.signal,
+  });
+  const mask = await uploadComfyInput({
+    baseUrl: config.baseUrl,
+    dataUrl: input.maskUrl,
+    filename: `codebuddy-mask-${clientId}`,
+    fetchImpl,
+    signal: runtime.signal,
+    maskFor: source,
+  });
+  const workflow = instantiateComfyInpaintWorkflow(template, {
+    source: source.workflowPath,
+    mask: mask.workflowPath,
+    prompt: input.effectivePrompt,
+    negativePrompt: env(envSource, 'CODEBUDDY_IMAGE_NEGATIVE') ?? 'blurry, low quality, deformed, watermark',
+    outputPrefix: `codebuddy-inpaint-${clientId}`,
+  });
+
+  const submit = await postJson(fetchImpl, joinUrl(config.baseUrl, '/prompt'), {
+    headers: { 'Content-Type': 'application/json' },
+    body: { prompt: workflow, client_id: clientId },
+    timeoutMs: comfyDuration(envSource, 'CODEBUDDY_COMFYUI_SUBMIT_TIMEOUT_MS', 120_000, 1_000, 300_000),
+    signal: runtime.signal,
+  });
+  const promptId = stringField(submit, 'prompt_id');
+  if (!promptId || !SAFE_COMFY_ID.test(promptId) || isDangerousKey(promptId)) {
+    const detail = submit.error ?? submit.node_errors;
+    throw new Error(`ComfyUI rejected the inpaint workflow${detail ? `: ${JSON.stringify(detail).slice(0, 300)}` : ' (no valid prompt_id)'}`);
+  }
+
+  const outputRef = await pollComfyOutput({
+    baseUrl: config.baseUrl,
+    promptId,
+    outputNodeId: template.bindings.output.nodeId,
+    fetchImpl,
+    signal: runtime.signal,
+    timeoutMs: comfyDuration(envSource, 'CODEBUDDY_COMFYUI_INPAINT_TIMEOUT_MS',
+      comfyDuration(envSource, 'CODEBUDDY_COMFYUI_TIMEOUT_MS', 300_000, 0, 900_000), 0, 900_000),
+    intervalMs: comfyDuration(envSource, 'CODEBUDDY_COMFYUI_POLL_MS', 1_500, 10, 10_000),
+    now: runtime.now ?? (() => new Date()),
+  });
+  const viewUrl = joinUrl(config.baseUrl,
+    `/view?filename=${encodeURIComponent(outputRef.filename)}&subfolder=${encodeURIComponent(outputRef.subfolder)}&type=output`);
+  const viewResponse = await fetchWithTimeout(fetchImpl, viewUrl, {
+    headers: { Accept: 'image/png' },
+  }, 120_000, runtime.signal);
+  if (!viewResponse.ok) {
+    throw new Error(`ComfyUI /view returned ${viewResponse.status} for the configured inpaint output`);
+  }
+  const bytes = await readBoundedResponseBytes(
+    viewResponse,
+    MAX_EDIT_REFERENCE_BYTES,
+    120_000,
+    runtime.signal,
+    'ComfyUI inpaint output',
+  );
+  if (bytes.length <= 0 || bytes.length > MAX_EDIT_REFERENCE_BYTES || !isPng(bytes)) {
+    throw new Error('ComfyUI inpaint output must be a PNG smaller than 50 MB');
+  }
+  const outputPath = await saveGeneratedAsset(bytes, {
+    rootDir: runtime.rootDir,
+    dirName: 'images',
+    prefix: 'image-edit',
+    extension: 'png',
+    createId: runtime.createId,
+  });
+  const sourceReference = sanitizeImageSourceReference(input.sourceRef) ?? redactDataUrl(input.imageUrl);
+  await writeMediaSidecar(outputPath, {
+    kind: 'image-edit',
+    prompt: input.prompt,
+    provider: 'comfyui',
+    model: config.model,
+    source: sourceReference,
+    masked: true,
+    maskMode: 'alpha',
+    selections: input.selections,
+    generatedAt,
+  });
+  return {
+    kind: 'image_edit_result',
+    success: true,
+    image: outputPath,
+    outputPath,
+    mediaPath: `MEDIA:${outputPath}`,
+    provider: 'comfyui',
+    model: config.model,
+    prompt: input.prompt,
+    generatedAt,
+    source: sourceReference,
+    masked: true,
+    maskMode: 'alpha',
+    selections: input.selections,
+  };
+}
+
+async function loadComfyInpaintTemplate(runtime: MediaGenerationRuntime): Promise<ComfyInpaintTemplate> {
+  const envSource = runtime.env ?? process.env;
+  const configuredPath = env(envSource, 'CODEBUDDY_COMFYUI_INPAINT_WORKFLOW');
+  const inline = env(envSource, 'CODEBUDDY_COMFYUI_INPAINT_WORKFLOW_JSON');
+  if (configuredPath && inline) {
+    throw new Error('Configure either CODEBUDDY_COMFYUI_INPAINT_WORKFLOW or CODEBUDDY_COMFYUI_INPAINT_WORKFLOW_JSON, not both');
+  }
+  if (!configuredPath && !inline) {
+    throw new Error('ComfyUI image editing requires an explicit inpaint workflow (CODEBUDDY_COMFYUI_INPAINT_WORKFLOW or CODEBUDDY_COMFYUI_INPAINT_WORKFLOW_JSON)');
+  }
+
+  let raw: string;
+  if (inline) {
+    if (Buffer.byteLength(inline) > MAX_COMFY_WORKFLOW_BYTES) throw new Error('ComfyUI inpaint workflow JSON exceeds 1 MB');
+    raw = inline;
+  } else {
+    const requested = configuredPath!;
+    if (requested.includes('\0')) throw new Error('ComfyUI inpaint workflow path is invalid');
+    const workflowPath = path.resolve(runtime.rootDir ?? process.cwd(), requested);
+    const metadata = await fs.lstat(workflowPath);
+    if (!metadata.isFile() || metadata.isSymbolicLink() || metadata.size > MAX_COMFY_WORKFLOW_BYTES) {
+      throw new Error('ComfyUI inpaint workflow must be a regular JSON file smaller than 1 MB');
+    }
+    raw = await fs.readFile(workflowPath, 'utf8');
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw) as unknown;
+  } catch (error) {
+    throw new Error(`ComfyUI inpaint workflow is invalid JSON: ${error instanceof Error ? error.message : String(error)}`);
+  }
+  if (!isPlainRecord(parsed)) throw new Error('ComfyUI inpaint workflow must be a JSON object');
+
+  let workflowValue: unknown;
+  let bindingsValue: unknown;
+  if ('workflow' in parsed || 'bindings' in parsed) {
+    if (!('workflow' in parsed) || !('bindings' in parsed)) {
+      throw new Error('ComfyUI inpaint workflow bundle requires both workflow and bindings');
+    }
+    if (Object.keys(parsed).some((key) => !['schemaVersion', 'workflow', 'bindings'].includes(key))
+      || (parsed.schemaVersion !== undefined && parsed.schemaVersion !== 1)) {
+      throw new Error('ComfyUI inpaint workflow bundle contains unsupported fields or schemaVersion');
+    }
+    workflowValue = parsed.workflow;
+    bindingsValue = parsed.bindings;
+    if (env(envSource, 'CODEBUDDY_COMFYUI_INPAINT_BINDINGS_JSON')) {
+      throw new Error('Do not combine bundled ComfyUI bindings with CODEBUDDY_COMFYUI_INPAINT_BINDINGS_JSON');
+    }
+  } else {
+    workflowValue = parsed;
+    const bindingsJson = env(envSource, 'CODEBUDDY_COMFYUI_INPAINT_BINDINGS_JSON');
+    if (!bindingsJson || Buffer.byteLength(bindingsJson) > 32_768) {
+      throw new Error('A direct ComfyUI API workflow requires bounded CODEBUDDY_COMFYUI_INPAINT_BINDINGS_JSON');
+    }
+    try {
+      bindingsValue = JSON.parse(bindingsJson) as unknown;
+    } catch (error) {
+      throw new Error(`ComfyUI inpaint bindings are invalid JSON: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+  return validateComfyInpaintTemplate(workflowValue, bindingsValue);
+}
+
+function validateComfyInpaintTemplate(workflowValue: unknown, bindingsValue: unknown): ComfyInpaintTemplate {
+  if (!isPlainRecord(workflowValue)) throw new Error('ComfyUI inpaint workflow graph must be an object');
+  const entries = Object.entries(workflowValue);
+  if (entries.length === 0 || entries.length > MAX_COMFY_WORKFLOW_NODES) {
+    throw new Error(`ComfyUI inpaint workflow must contain 1..${MAX_COMFY_WORKFLOW_NODES} nodes`);
+  }
+  const workflow: Record<string, ComfyWorkflowNode> = Object.create(null) as Record<string, ComfyWorkflowNode>;
+  for (const [nodeId, rawNode] of entries) {
+    if (!SAFE_COMFY_ID.test(nodeId) || isDangerousKey(nodeId) || !isPlainRecord(rawNode)
+      || typeof rawNode.class_type !== 'string' || !SAFE_COMFY_ID.test(rawNode.class_type) || isDangerousKey(rawNode.class_type)
+      || !isPlainRecord(rawNode.inputs)) {
+      throw new Error(`ComfyUI inpaint workflow node ${nodeId.slice(0, 80)} is invalid`);
+    }
+    if (Object.keys(rawNode).some((key) => !['class_type', 'inputs', '_meta'].includes(key))) {
+      throw new Error(`ComfyUI inpaint workflow node ${nodeId} contains unsupported fields`);
+    }
+    validateSafeJson(rawNode.inputs, `node ${nodeId} inputs`, 0);
+    if (rawNode._meta !== undefined) {
+      if (!isPlainRecord(rawNode._meta)) throw new Error(`ComfyUI node ${nodeId} metadata is invalid`);
+      validateSafeJson(rawNode._meta, `node ${nodeId} metadata`, 0);
+    }
+    workflow[nodeId] = {
+      class_type: rawNode.class_type,
+      inputs: cloneJsonRecord(rawNode.inputs),
+      ...(rawNode._meta ? { _meta: cloneJsonRecord(rawNode._meta) } : {}),
+    };
+  }
+  validateComfyNodeReferences(workflow);
+  const bindings = parseComfyBindings(bindingsValue);
+  validateComfyBinding(workflow, bindings.source, 'source', 'LoadImage', COMFY_INPAINT_PLACEHOLDERS.source);
+  validateComfyBinding(workflow, bindings.mask, 'mask', 'LoadImage', COMFY_INPAINT_PLACEHOLDERS.mask);
+  validateComfyBinding(workflow, bindings.prompt, 'prompt', 'CLIPTextEncode', COMFY_INPAINT_PLACEHOLDERS.prompt);
+  if (bindings.negativePrompt) {
+    validateComfyBinding(workflow, bindings.negativePrompt, 'negativePrompt', 'CLIPTextEncode', COMFY_INPAINT_PLACEHOLDERS.negativePrompt);
+  }
+  validateComfyBinding(workflow, bindings.output, 'output', 'SaveImage', COMFY_INPAINT_PLACEHOLDERS.output);
+  if (bindings.source.nodeId === bindings.mask.nodeId) {
+    throw new Error('ComfyUI inpaint source and mask require distinct LoadImage nodes');
+  }
+  const outputNode = workflow[bindings.output.nodeId]!;
+  if (!isComfyNodeReference(outputNode.inputs.images) || !workflow[outputNode.inputs.images[0]]) {
+    throw new Error('Configured ComfyUI SaveImage output must reference an existing image-producing node');
+  }
+  validateComfyInpaintDataflow(workflow, bindings);
+
+  const expected = new Set<string>([
+    COMFY_INPAINT_PLACEHOLDERS.source,
+    COMFY_INPAINT_PLACEHOLDERS.mask,
+    COMFY_INPAINT_PLACEHOLDERS.prompt,
+    COMFY_INPAINT_PLACEHOLDERS.output,
+    ...(bindings.negativePrompt ? [COMFY_INPAINT_PLACEHOLDERS.negativePrompt] : []),
+  ]);
+  const placeholders = collectComfyPlaceholders(workflow);
+  if (placeholders.length !== expected.size || placeholders.some((placeholder) => !expected.has(placeholder))) {
+    throw new Error('ComfyUI inpaint workflow contains missing, duplicate, or unsupported CODEBUDDY placeholders');
+  }
+  return { workflow, bindings };
+}
+
+function parseComfyBindings(value: unknown): ComfyInpaintBindings {
+  if (!isPlainRecord(value) || Object.keys(value).some((key) => !['source', 'mask', 'prompt', 'negativePrompt', 'output'].includes(key))) {
+    throw new Error('ComfyUI inpaint bindings must define only source, mask, prompt, optional negativePrompt, and output');
+  }
+  return {
+    source: parseComfyBinding(value.source, 'source'),
+    mask: parseComfyBinding(value.mask, 'mask'),
+    prompt: parseComfyBinding(value.prompt, 'prompt'),
+    ...(value.negativePrompt !== undefined ? { negativePrompt: parseComfyBinding(value.negativePrompt, 'negativePrompt') } : {}),
+    output: parseComfyBinding(value.output, 'output'),
+  };
+}
+
+function parseComfyBinding(value: unknown, label: string): ComfyWorkflowBinding {
+  if (!isPlainRecord(value) || Object.keys(value).some((key) => !['nodeId', 'input'].includes(key))
+    || typeof value.nodeId !== 'string' || !SAFE_COMFY_ID.test(value.nodeId) || isDangerousKey(value.nodeId)
+    || typeof value.input !== 'string' || !SAFE_COMFY_INPUT.test(value.input) || isDangerousKey(value.input)) {
+    throw new Error(`ComfyUI ${label} binding must contain safe nodeId and input fields`);
+  }
+  return { nodeId: value.nodeId, input: value.input };
+}
+
+function validateComfyBinding(
+  workflow: Record<string, ComfyWorkflowNode>,
+  binding: ComfyWorkflowBinding,
+  label: string,
+  expectedClass: string,
+  placeholder: string,
+): void {
+  const node = workflow[binding.nodeId];
+  if (!node || node.class_type !== expectedClass || node.inputs[binding.input] !== placeholder) {
+    throw new Error(`ComfyUI ${label} binding must target ${expectedClass}.${binding.input} containing ${placeholder}`);
+  }
+}
+
+function instantiateComfyInpaintWorkflow(
+  template: ComfyInpaintTemplate,
+  values: { source: string; mask: string; prompt: string; negativePrompt: string; outputPrefix: string },
+): Record<string, unknown> {
+  const workflow = cloneJsonRecord(template.workflow) as Record<string, ComfyWorkflowNode>;
+  setComfyBinding(workflow, template.bindings.source, values.source);
+  setComfyBinding(workflow, template.bindings.mask, values.mask);
+  setComfyBinding(workflow, template.bindings.prompt, values.prompt);
+  if (template.bindings.negativePrompt) setComfyBinding(workflow, template.bindings.negativePrompt, values.negativePrompt);
+  setComfyBinding(workflow, template.bindings.output, values.outputPrefix);
+  return workflow;
+}
+
+function setComfyBinding(
+  workflow: Record<string, ComfyWorkflowNode>,
+  binding: ComfyWorkflowBinding,
+  value: string,
+): void {
+  workflow[binding.nodeId]!.inputs[binding.input] = value;
+}
+
+async function uploadComfyInput(options: {
+  baseUrl: string;
+  dataUrl: string;
+  filename: string;
+  fetchImpl: typeof fetch;
+  signal?: AbortSignal;
+  maskFor?: ComfyUploadedImage;
+}): Promise<ComfyUploadedImage> {
+  throwIfAborted(options.signal);
+  const match = options.dataUrl.match(/^data:(image\/(?:png|jpe?g|webp));base64,([A-Za-z0-9+/=]+)$/i);
+  if (!match) throw new Error('ComfyUI upload requires a bounded PNG, JPEG, or WebP data URL');
+  const mime = match[1]!.toLowerCase();
+  if (options.maskFor && mime !== 'image/png') throw new Error('ComfyUI mask upload requires PNG');
+  const extension = mime === 'image/png' ? 'png' : mime === 'image/webp' ? 'webp' : 'jpg';
+  const bytes = Buffer.from(match[2]!, 'base64');
+  if (bytes.length <= 0 || bytes.length > MAX_EDIT_REFERENCE_BYTES) throw new Error('ComfyUI upload exceeds 50 MB');
+  if (!isImageBytesForMime(bytes, mime)) throw new Error(`ComfyUI upload content does not match ${mime}`);
+  const form = new FormData();
+  form.append('image', new Blob([bytes], { type: mime }), `${options.filename}.${extension}`);
+  form.append('type', 'input');
+  if (options.maskFor) {
+    form.append('subfolder', options.maskFor.subfolder);
+    form.append('original_ref', JSON.stringify({
+      filename: options.maskFor.filename,
+      subfolder: options.maskFor.subfolder,
+      type: 'input',
+    }));
+  } else {
+    form.append('overwrite', 'false');
+  }
+  const endpoint = options.maskFor ? '/upload/mask' : '/upload/image';
+  const response = await fetchWithTimeout(options.fetchImpl, joinUrl(options.baseUrl, endpoint), {
+    method: 'POST',
+    body: form,
+  }, 120_000, options.signal);
+  const body = await readJsonResponse(response, joinUrl(options.baseUrl, endpoint));
+  const filename = stringField(body, 'name') ?? stringField(body, 'filename');
+  const subfolder = stringField(body, 'subfolder') ?? '';
+  const type = stringField(body, 'type') ?? 'input';
+  if (!filename || !isSafeComfyFilename(filename) || !isSafeComfySubfolder(subfolder) || type !== 'input') {
+    throw new Error(`ComfyUI ${endpoint} returned an unsafe file reference`);
+  }
+  return {
+    filename,
+    subfolder,
+    type,
+    workflowPath: subfolder ? `${subfolder.replace(/\\/g, '/')}/${filename}` : filename,
+  };
+}
+
+async function pollComfyOutput(options: {
+  baseUrl: string;
+  promptId: string;
+  outputNodeId: string;
+  fetchImpl: typeof fetch;
+  signal?: AbortSignal;
+  timeoutMs: number;
+  intervalMs: number;
+  now: () => Date;
+}): Promise<ComfyImageRef> {
+  const deadline = options.now().getTime() + options.timeoutMs;
+  for (;;) {
+    throwIfAborted(options.signal);
+    const history = await getJson(options.fetchImpl, joinUrl(options.baseUrl, `/history/${options.promptId}`), {
+      Accept: 'application/json',
+    }, 60_000, options.signal);
+    const entry = history[options.promptId] as { outputs?: unknown; status?: { status_str?: string; completed?: boolean; messages?: unknown } } | undefined;
+    const status = entry?.status?.status_str?.toLowerCase();
+    if (status && ['error', 'failed', 'cancelled', 'canceled'].includes(status)) {
+      throw new Error(`ComfyUI inpaint execution failed (${status}): ${JSON.stringify(entry?.status?.messages ?? '').slice(0, 300)}`);
+    }
+    if (entry?.outputs) {
+      const output = (entry.outputs as Record<string, unknown>)[options.outputNodeId];
+      if (output !== undefined) {
+        const image = firstComfyImage({ [options.outputNodeId]: output });
+        if (!image || image.type !== 'output' || !isSafeComfyFilename(image.filename) || !isSafeComfySubfolder(image.subfolder)) {
+          throw new Error('Configured ComfyUI inpaint output node finished without a safe SaveImage output');
+        }
+        return image;
+      }
+    }
+    if (entry?.status?.completed) {
+      throw new Error('ComfyUI inpaint completed without the configured SaveImage output');
+    }
+    if (options.now().getTime() >= deadline) {
+      throw new Error(`ComfyUI inpainting timed out after ${options.timeoutMs}ms (prompt ${options.promptId})`);
+    }
+    await comfyDelay(options.intervalMs, options.signal);
+  }
+}
+
+function comfyDuration(
+  envSource: NodeJS.ProcessEnv,
+  key: string,
+  fallback: number,
+  min: number,
+  max: number,
+): number {
+  const raw = env(envSource, key);
+  if (!raw) return fallback;
+  const value = Number(raw);
+  return Number.isFinite(value) ? Math.max(min, Math.min(max, Math.round(value))) : fallback;
+}
+
+function validateComfyNodeReferences(workflow: Record<string, ComfyWorkflowNode>): void {
+  for (const [nodeId, node] of Object.entries(workflow)) {
+    const references: Array<[string, number]> = [];
+    collectComfyNodeReferences(node.inputs, references);
+    for (const [dependency] of references) {
+      if (!workflow[dependency]) {
+        throw new Error(`ComfyUI node ${nodeId} references missing node ${dependency}`);
+      }
+    }
+  }
+}
+
+function validateComfyInpaintDataflow(
+  workflow: Record<string, ComfyWorkflowNode>,
+  bindings: ComfyInpaintBindings,
+): void {
+  const reachable = new Set<string>();
+  const pending = [bindings.output.nodeId];
+  while (pending.length > 0) {
+    const nodeId = pending.pop()!;
+    if (reachable.has(nodeId)) continue;
+    reachable.add(nodeId);
+    const node = workflow[nodeId];
+    if (!node) continue;
+    const dependencies: Array<[string, number]> = [];
+    collectComfyNodeReferences(node.inputs, dependencies);
+    for (const [dependency] of dependencies) {
+      if (!reachable.has(dependency)) pending.push(dependency);
+    }
+  }
+  const reachableReferences: Array<[string, number]> = [];
+  for (const nodeId of reachable) {
+    collectComfyNodeReferences(workflow[nodeId]!.inputs, reachableReferences);
+  }
+  const required: Array<[string, number, string]> = [
+    [bindings.source.nodeId, 0, 'source image'],
+    [bindings.mask.nodeId, 1, 'alpha mask'],
+    [bindings.prompt.nodeId, 0, 'positive prompt'],
+    ...(bindings.negativePrompt ? [[bindings.negativePrompt.nodeId, 0, 'negative prompt'] as [string, number, string]] : []),
+  ];
+  for (const [nodeId, outputIndex, label] of required) {
+    if (!reachableReferences.some(([candidateId, candidateIndex]) => candidateId === nodeId && candidateIndex === outputIndex)) {
+      throw new Error(`ComfyUI inpaint ${label} is not connected to the configured SaveImage output`);
+    }
+  }
+}
+
+function collectComfyNodeReferences(value: unknown, output: Array<[string, number]>): void {
+  if (isComfyNodeReference(value)) {
+    output.push(value);
+    return;
+  }
+  if (Array.isArray(value)) {
+    for (const entry of value) collectComfyNodeReferences(entry, output);
+  } else if (isPlainRecord(value)) {
+    for (const entry of Object.values(value)) collectComfyNodeReferences(entry, output);
+  }
+}
+
+function isComfyNodeReference(value: unknown): value is [string, number] {
+  return Array.isArray(value) && value.length === 2 && typeof value[0] === 'string'
+    && typeof value[1] === 'number' && Number.isInteger(value[1]) && value[1] >= 0;
+}
+
+function collectComfyPlaceholders(value: unknown, output: string[] = []): string[] {
+  if (typeof value === 'string') {
+    const matches = value.match(/\{\{CODEBUDDY_[A-Z0-9_]+\}\}/g);
+    if (matches) output.push(...matches);
+  } else if (Array.isArray(value)) {
+    for (const entry of value) collectComfyPlaceholders(entry, output);
+  } else if (isPlainRecord(value)) {
+    for (const entry of Object.values(value)) collectComfyPlaceholders(entry, output);
+  }
+  return output;
+}
+
+function validateSafeJson(value: unknown, label: string, depth: number): void {
+  if (depth > 12) throw new Error(`${label} exceeds the maximum nesting depth`);
+  if (value === null || typeof value === 'string' || typeof value === 'boolean') return;
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value)) throw new Error(`${label} contains a non-finite number`);
+    return;
+  }
+  if (Array.isArray(value)) {
+    if (value.length > 10_000) throw new Error(`${label} contains an oversized array`);
+    for (const entry of value) validateSafeJson(entry, label, depth + 1);
+    return;
+  }
+  if (!isPlainRecord(value)) throw new Error(`${label} contains a non-JSON value`);
+  const keys = Object.keys(value);
+  if (keys.length > 10_000 || keys.some((key) => !SAFE_COMFY_INPUT.test(key) || isDangerousKey(key))) {
+    throw new Error(`${label} contains an unsafe key`);
+  }
+  for (const entry of Object.values(value)) validateSafeJson(entry, label, depth + 1);
+}
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
+}
+
+function cloneJsonRecord<T extends Record<string, unknown>>(value: T): T {
+  return JSON.parse(JSON.stringify(value)) as T;
+}
+
+function isDangerousKey(key: string): boolean {
+  return key === '__proto__' || key === 'prototype' || key === 'constructor';
+}
+
+function isSafeComfyFilename(value: string): boolean {
+  return value.length <= 255 && value !== '.' && value !== '..' && /^[A-Za-z0-9_.-]+$/.test(value);
+}
+
+function isSafeComfySubfolder(value: string): boolean {
+  if (!value) return true;
+  if (value.length > 256 || value.startsWith('/') || value.startsWith('\\')) return false;
+  return value.replace(/\\/g, '/').split('/').every((segment) => SAFE_COMFY_ID.test(segment) && segment !== '.' && segment !== '..');
+}
+
+function isPng(bytes: Buffer): boolean {
+  return bytes.length >= 8 && bytes.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+}
+
+function isImageBytesForMime(bytes: Buffer, mime: string): boolean {
+  if (mime === 'image/png') return isPng(bytes);
+  if (mime === 'image/jpeg' || mime === 'image/jpg') {
+    return bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;
+  }
+  return mime === 'image/webp'
+    && bytes.length >= 12
+    && bytes.subarray(0, 4).toString('ascii') === 'RIFF'
+    && bytes.subarray(8, 12).toString('ascii') === 'WEBP';
+}
+
+async function readBoundedResponseBytes(
+  response: Response,
+  maxBytes: number,
+  timeoutMs: number,
+  signal: AbortSignal | undefined,
+  label: string,
+): Promise<Buffer> {
+  const declaredLength = Number(response.headers.get('content-length') ?? '0');
+  if (Number.isFinite(declaredLength) && declaredLength > maxBytes) {
+    throw new Error(`${label} exceeds ${Math.round(maxBytes / (1024 * 1024))} MB`);
+  }
+  if (!response.body) throw new Error(`${label} returned an empty body`);
+  const reader = response.body.getReader();
+  let timedOut = false;
+  const timer = setTimeout(() => {
+    timedOut = true;
+    void reader.cancel(`${label} timed out`);
+  }, timeoutMs);
+  const onAbort = () => { void reader.cancel('aborted'); };
+  signal?.addEventListener('abort', onAbort, { once: true });
+  const chunks: Buffer[] = [];
+  let total = 0;
+  try {
+    for (;;) {
+      throwIfAborted(signal);
+      const part = await reader.read();
+      throwIfAborted(signal);
+      if (timedOut) throw new Error(`${label} body timed out after ${timeoutMs}ms`);
+      if (part.done) break;
+      const chunk = Buffer.from(part.value);
+      total += chunk.length;
+      if (total > maxBytes) {
+        await reader.cancel(`${label} too large`);
+        throw new Error(`${label} exceeds ${Math.round(maxBytes / (1024 * 1024))} MB`);
+      }
+      chunks.push(chunk);
+    }
+    return Buffer.concat(chunks, total);
+  } finally {
+    clearTimeout(timer);
+    signal?.removeEventListener('abort', onAbort);
+    reader.releaseLock();
+  }
+}
+
+function throwIfAborted(signal?: AbortSignal): void {
+  if (signal?.aborted) throw abortError(signal);
+}
+
+function abortError(signal?: AbortSignal): Error {
+  const error = new Error(typeof signal?.reason === 'string' ? signal.reason : 'Media generation aborted');
+  error.name = 'AbortError';
+  return error;
 }
 
 async function generateComfyUIImage(
@@ -736,6 +1580,65 @@ function resolveImageAspect(value: string | undefined): ImageAspectRatio {
   return 'landscape';
 }
 
+const MAX_EDIT_REFERENCE_BYTES = 50 * 1024 * 1024;
+
+function validateImageReference(value: string, label: string): string {
+  const trimmed = value.trim();
+  if (/^data:image\/(?:png|jpe?g|webp);base64,/i.test(trimmed)) {
+    validateDataImage(trimmed, label);
+    return trimmed;
+  }
+  if (/^https:\/\//i.test(trimmed)) return trimmed;
+  throw new Error(`${label} must be an HTTPS URL or a base64 image data URL`);
+}
+
+function validateDataImage(value: string, label: string): string {
+  const match = value.match(/^data:(image\/(?:png|jpe?g|webp));base64,([A-Za-z0-9+/=]+)$/i);
+  if (!match) throw new Error(`${label} must be a PNG, JPEG, or WebP base64 data URL`);
+  const estimatedBytes = Math.floor((match[2]!.length * 3) / 4);
+  if (estimatedBytes <= 0 || estimatedBytes > MAX_EDIT_REFERENCE_BYTES) {
+    throw new Error(`${label} must be smaller than 50 MB`);
+  }
+  return value;
+}
+
+function dataUrlToBlob(value: string, label: string): Blob {
+  validateDataImage(value, label);
+  const comma = value.indexOf(',');
+  const mime = value.slice(5, value.indexOf(';'));
+  const bytes = Buffer.from(value.slice(comma + 1), 'base64');
+  return new Blob([bytes], { type: mime });
+}
+
+function normalizeEditSelections(value: ImageEditSelection[] | undefined): ImageEditSelection[] {
+  return (value ?? []).slice(0, 20).flatMap((selection) => {
+    const x = clampUnit(selection?.x);
+    const y = clampUnit(selection?.y);
+    const width = Math.min(clampUnit(selection?.width), 1 - x);
+    const height = Math.min(clampUnit(selection?.height), 1 - y);
+    if (width < 0.002 || height < 0.002) return [];
+    return [{ x, y, width, height }];
+  });
+}
+
+function clampUnit(value: number): number {
+  if (!Number.isFinite(value)) return 0;
+  return Math.max(0, Math.min(1, value));
+}
+
+function redactDataUrl(value: string): string {
+  return value.startsWith('data:') ? `[inline image ${Math.round(value.length / 1024)} KiB]` : value;
+}
+
+function sanitizeImageSourceReference(value: string | undefined): string | undefined {
+  const reference = value?.trim();
+  if (!reference || reference.length > 4_096
+    || [...reference].some((character) => character.charCodeAt(0) < 0x20 || character.charCodeAt(0) === 0x7f)) {
+    return undefined;
+  }
+  return reference.startsWith('data:') ? undefined : reference;
+}
+
 function aspectToProviderRatio(aspect: ImageAspectRatio): string {
   if (aspect === 'square') return '1:1';
   if (aspect === 'portrait') return '9:16';
@@ -752,13 +1655,18 @@ function authHeaders(apiKey: string, scheme: 'Bearer' | 'Key' = 'Bearer'): Recor
 async function postJson(
   fetchImpl: typeof fetch,
   url: string,
-  options: { headers: Record<string, string>; body: Record<string, unknown>; timeoutMs?: number },
+  options: {
+    headers: Record<string, string>;
+    body: Record<string, unknown>;
+    timeoutMs?: number;
+    signal?: AbortSignal;
+  },
 ): Promise<Record<string, unknown>> {
   const response = await fetchWithTimeout(fetchImpl, url, {
     method: 'POST',
     headers: options.headers,
     body: JSON.stringify(options.body),
-  }, options.timeoutMs ?? 120_000);
+  }, options.timeoutMs ?? 120_000, options.signal);
   return readJsonResponse(response, url);
 }
 
@@ -766,8 +1674,10 @@ async function getJson(
   fetchImpl: typeof fetch,
   url: string,
   headers: Record<string, string>,
+  timeoutMs = 60_000,
+  signal?: AbortSignal,
 ): Promise<Record<string, unknown>> {
-  const response = await fetchWithTimeout(fetchImpl, url, { headers }, 60_000);
+  const response = await fetchWithTimeout(fetchImpl, url, { headers }, timeoutMs, signal);
   return readJsonResponse(response, url);
 }
 
@@ -889,12 +1799,54 @@ async function saveGeneratedAsset(
   },
 ): Promise<string> {
   const rootDir = path.resolve(options.rootDir ?? process.cwd());
+  const rootReal = await fs.realpath(rootDir);
   const id = sanitizeId(options.createId?.() ?? `${Date.now()}-${randomUUID()}`);
-  const outputDir = path.join(rootDir, '.codebuddy', 'media-generation', options.dirName);
-  await fs.mkdir(outputDir, { recursive: true });
+  if (!/^[A-Za-z0-9_.-]{1,64}$/.test(options.dirName)
+    || !/^[A-Za-z0-9_.-]{1,64}$/.test(options.prefix)
+    || !/^[A-Za-z0-9]{2,5}$/.test(options.extension)) {
+    throw new Error('Generated media output configuration is invalid');
+  }
+  const outputDir = await ensureConfinedMediaDirectory(rootDir, rootReal, [
+    '.codebuddy',
+    'media-generation',
+    options.dirName,
+  ]);
   const outputPath = path.join(outputDir, `${options.prefix}-${id}.${options.extension}`);
-  await fs.writeFile(outputPath, bytes);
+  const flags = fsConstants.O_WRONLY | fsConstants.O_CREAT | fsConstants.O_EXCL | (fsConstants.O_NOFOLLOW ?? 0);
+  const handle = await fs.open(outputPath, flags, 0o600);
+  try {
+    await handle.writeFile(bytes);
+    await handle.sync();
+  } finally {
+    await handle.close();
+  }
   return outputPath;
+}
+
+async function ensureConfinedMediaDirectory(
+  rootPath: string,
+  rootReal: string,
+  segments: string[],
+): Promise<string> {
+  let cursor = rootPath;
+  for (const segment of segments) {
+    cursor = path.join(cursor, segment);
+    try {
+      await fs.mkdir(cursor, { mode: 0o700 });
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+    }
+    const metadata = await fs.lstat(cursor);
+    if (!metadata.isDirectory() || metadata.isSymbolicLink()) {
+      throw new Error('Generated media output directory contains a symbolic link');
+    }
+    const cursorReal = await fs.realpath(cursor);
+    const child = path.relative(rootReal, cursorReal);
+    if (child === '..' || child.startsWith(`..${path.sep}`) || path.isAbsolute(child)) {
+      throw new Error('Generated media output directory escapes its workspace');
+    }
+  }
+  return fs.realpath(cursor);
 }
 
 async function fetchWithTimeout(
@@ -902,13 +1854,18 @@ async function fetchWithTimeout(
   url: string,
   init: RequestInit,
   timeoutMs: number,
+  signal?: AbortSignal,
 ): Promise<Response> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  const onAbort = () => controller.abort();
+  if (signal?.aborted) controller.abort();
+  else signal?.addEventListener('abort', onAbort, { once: true });
   try {
     return await fetchImpl(url, { ...init, signal: controller.signal });
   } finally {
     clearTimeout(timeout);
+    signal?.removeEventListener('abort', onAbort);
   }
 }
 

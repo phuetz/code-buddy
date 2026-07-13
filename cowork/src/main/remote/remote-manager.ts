@@ -306,9 +306,12 @@ export class RemoteManager extends EventEmitter {
       };
     }
 
+    const gatewayStatus = this.gateway.getStatus();
+    const tunnel = tunnelManager.getStatus();
     return {
-      ...this.gateway.getStatus(),
-      tunnel: tunnelManager.getStatus(),
+      ...gatewayStatus,
+      publicUrl: tunnel.url ?? gatewayStatus.publicUrl,
+      tunnel,
     };
   }
 

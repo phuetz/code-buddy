@@ -12,6 +12,7 @@ import * as path from 'node:path';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 
 import {
+  createPeerChatClientForProvider,
   createPeerChatClientFromEnv,
   _getDetectionOrderForTests,
 } from '../../src/fleet/peer-chat-client-factory.js';
@@ -20,16 +21,33 @@ import {
 const ENV_KEYS_TO_PRESERVE = [
   'CODEBUDDY_PEER_PROVIDER',
   'CODEBUDDY_PEER_MODEL',
+  'CODEBUDDY_FALLBACK_PROVIDERS',
+  'CODEBUDDY_FALLBACK_PROVIDER',
+  'CODEBUDDY_FALLBACK_MODEL',
   'CHATGPT_MODEL',
   'CODEBUDDY_CODEX_AUTH_PATH',
   'OLLAMA_HOST',
+  'OLLAMA_MODEL',
+  'LMSTUDIO_HOST',
+  'LMSTUDIO_MODEL',
   'GROK_API_KEY',
+  'XAI_API_KEY',
+  'XAI_BASE_URL',
+  'XAI_MODEL',
   'GROK_BASE_URL',
+  'MISTRAL_API_KEY',
+  'MISTRAL_MODEL',
   'ANTHROPIC_API_KEY',
   'GOOGLE_API_KEY',
   'GEMINI_API_KEY',
   'OPENAI_API_KEY',
   'GEMINI_CLI_PATH',
+  'AGY_CLI_PATH',
+  'LEMONADE_HOST',
+  'LEMONADE_MODEL',
+  'LEMONADE_API_KEY',
+  'OPENROUTER_API_KEY',
+  'OPENROUTER_MODEL',
 ];
 
 let originalEnv: Record<string, string | undefined>;
@@ -48,6 +66,7 @@ beforeEach(() => {
   // installed on the test host. A non-existent path short-circuits
   // the PATH walk in `resolveGeminiCliBinary()`.
   process.env.GEMINI_CLI_PATH = '/tmp/__no_gemini_cli_in_tests__';
+  process.env.AGY_CLI_PATH = '/tmp/__no_agy_cli_in_tests__';
 });
 
 afterEach(() => {
@@ -66,9 +85,14 @@ describe('peer-chat-client-factory — Phase (d).16a', () => {
     it('exposes the documented priority order (local/subscription first)', () => {
       expect(_getDetectionOrderForTests()).toEqual([
         'ollama',
+        'lmstudio',
         'chatgpt-oauth',
+        'agy-cli',
         'gemini-cli',
+        'lemonade',
+        'openrouter',
         'grok',
+        'mistral',
         'anthropic',
         'gemini',
         'openai',
@@ -149,6 +173,16 @@ describe('peer-chat-client-factory — Phase (d).16a', () => {
       expect(createPeerChatClientFromEnv()!.info.provider).toBe('grok');
     });
 
+    it('accepts XAI_API_KEY and XAI_MODEL aliases for Grok', () => {
+      process.env.XAI_API_KEY = 'xai-test';
+      process.env.XAI_MODEL = 'grok-4-1-fast';
+
+      expect(createPeerChatClientFromEnv()?.info).toMatchObject({
+        provider: 'grok',
+        model: 'grok-4-1-fast',
+      });
+    });
+
     it('Anthropic beats Gemini + OpenAI when grok not set', () => {
       process.env.ANTHROPIC_API_KEY = 'sk-ant-x';
       process.env.GOOGLE_API_KEY = 'AIza-x';
@@ -213,6 +247,81 @@ describe('peer-chat-client-factory — Phase (d).16a', () => {
       process.env.GEMINI_CLI_PATH = process.execPath;
       const result = createPeerChatClientFromEnv();
       expect(result!.info.provider).toBe('gemini-cli');
+    });
+  });
+
+  describe('Antigravity + local/free provider routing', () => {
+    it('prefers an available agy subscription over Gemini CLI', () => {
+      process.env.AGY_CLI_PATH = process.execPath;
+      process.env.GEMINI_CLI_PATH = process.execPath;
+      const result = createPeerChatClientFromEnv();
+      expect(result?.info).toMatchObject({
+        provider: 'agy-cli',
+        model: 'Gemini 3.1 Pro (High)',
+        isLocal: false,
+      });
+    });
+
+    it('routes explicitly to Lemonade over its local API', () => {
+      process.env.CODEBUDDY_PEER_PROVIDER = 'lemonade';
+      process.env.LEMONADE_MODEL = 'Qwen3.6-35B-A3B-MTP-GGUF';
+      const result = createPeerChatClientFromEnv();
+      expect(result?.info).toMatchObject({
+        provider: 'lemonade',
+        model: 'Qwen3.6-35B-A3B-MTP-GGUF',
+        isLocal: true,
+      });
+      expect(result?.client.getBaseURL()).toBe('http://127.0.0.1:13305/api/v1');
+    });
+
+    it('uses OpenRouter free when explicitly selected', () => {
+      process.env.CODEBUDDY_PEER_PROVIDER = 'openrouter';
+      process.env.OPENROUTER_API_KEY = 'or-test';
+      const result = createPeerChatClientFromEnv();
+      expect(result?.info).toMatchObject({
+        provider: 'openrouter',
+        model: 'openrouter/free',
+        isLocal: false,
+      });
+    });
+
+    it('builds an exact alternate provider without leaking the boot model override', () => {
+      process.env.CODEBUDDY_PEER_MODEL = 'Gemini 3.5 Flash (Low)';
+      const result = createPeerChatClientForProvider(
+        'lemonade',
+        'Qwen2.5-1.5B-Instruct-GGUF-Q4_K_M',
+      );
+
+      expect(result?.info).toEqual({
+        provider: 'lemonade',
+        model: 'Qwen2.5-1.5B-Instruct-GGUF-Q4_K_M',
+        isLocal: true,
+      });
+      expect(result?.client.getBaseURL()).toBe('http://127.0.0.1:13305/api/v1');
+    });
+
+    it('disables CodeBuddyClient fallbacks for an exactly routed provider', () => {
+      process.env.OPENAI_API_KEY = 'sk-test-fallback-key';
+      process.env.CODEBUDDY_FALLBACK_PROVIDERS = 'openai:gpt-4o';
+
+      const result = createPeerChatClientForProvider('lemonade', 'local-exact');
+      const clientState = result?.client as unknown as {
+        credentialPoolProviders: unknown[];
+        fallbackProviders: unknown[];
+      };
+
+      expect(clientState.credentialPoolProviders).toEqual([]);
+      expect(clientState.fallbackProviders).toEqual([]);
+    });
+
+    it('supports advertised LM Studio and Mistral backends explicitly', () => {
+      const lmstudio = createPeerChatClientForProvider('lmstudio', 'local-model');
+      expect(lmstudio?.client.getBaseURL()).toBe('http://127.0.0.1:1234/v1');
+
+      process.env.MISTRAL_API_KEY = 'mistral-test';
+      const mistral = createPeerChatClientForProvider('mistral', 'mistral-small-latest');
+      expect(mistral?.info.provider).toBe('mistral');
+      expect(mistral?.client.getBaseURL()).toBe('https://api.mistral.ai/v1');
     });
   });
 

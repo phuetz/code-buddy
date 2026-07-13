@@ -23,7 +23,12 @@ pub(crate) fn rms_i16(frame: &[i16]) -> f64 {
 
 /// Pure VAD: split samples into frames, RMS threshold with hysteresis, emit
 /// speech_start / speech_end events with frame-accurate timestamps.
-pub fn vad_events(samples: &[i16], sample_rate: u32, frame_ms: u64, threshold: f64) -> Vec<SensoryEvent> {
+pub fn vad_events(
+    samples: &[i16],
+    sample_rate: u32,
+    frame_ms: u64,
+    threshold: f64,
+) -> Vec<SensoryEvent> {
     let frame_len = ((sample_rate as u64 * frame_ms) / 1000) as usize;
     if frame_len == 0 {
         return vec![];
@@ -124,9 +129,15 @@ pub mod neural {
     const FRAME_MS: u64 = 100;
 
     /// Speech_start/end events from 16 kHz mono PCM using Silero VAD.
-    pub fn vad_events_neural(samples: &[i16], sample_rate: u32, model_path: &str) -> Result<Vec<SensoryEvent>, String> {
+    pub fn vad_events_neural(
+        samples: &[i16],
+        sample_rate: u32,
+        model_path: &str,
+    ) -> Result<Vec<SensoryEvent>, String> {
         if sample_rate != 16_000 {
-            return Err(format!("neural VAD requires 16 kHz mono (got {sample_rate})"));
+            return Err(format!(
+                "neural VAD requires 16 kHz mono (got {sample_rate})"
+            ));
         }
         let mut vad = Vad::new(model_path, 16_000).map_err(|e| e.to_string())?;
         let mut out = Vec::new();
@@ -207,8 +218,19 @@ mod tests {
         assert_eq!(kinds, vec!["speech_start", "speech_end"]);
     }
 
-    fn write_wav(path: &std::path::Path, channels: u16, bits: u16, fmt: hound::SampleFormat, samples: &[i32]) {
-        let spec = hound::WavSpec { channels, sample_rate: 16_000, bits_per_sample: bits, sample_format: fmt };
+    fn write_wav(
+        path: &std::path::Path,
+        channels: u16,
+        bits: u16,
+        fmt: hound::SampleFormat,
+        samples: &[i32],
+    ) {
+        let spec = hound::WavSpec {
+            channels,
+            sample_rate: 16_000,
+            bits_per_sample: bits,
+            sample_format: fmt,
+        };
         let mut w = hound::WavWriter::create(path, spec).unwrap();
         for &s in samples {
             w.write_sample(s).unwrap();
@@ -227,7 +249,13 @@ mod tests {
         std::fs::remove_file(&mono).ok();
 
         let stereo = dir.join("bs_test_stereo.wav");
-        write_wav(&stereo, 2, 16, hound::SampleFormat::Int, &[100, 200, -100, 100]); // L,R interleaved
+        write_wav(
+            &stereo,
+            2,
+            16,
+            hound::SampleFormat::Int,
+            &[100, 200, -100, 100],
+        ); // L,R interleaved
         let (mono_samples, _) = read_wav_mono(stereo.to_str().unwrap()).unwrap();
         assert_eq!(mono_samples, vec![150, 0]); // downmixed to mono (averaged)
         std::fs::remove_file(&stereo).ok();
@@ -259,6 +287,9 @@ mod tests {
         let (samples, rate) = read_wav_mono(&wav).unwrap();
         let evs = neural::vad_events_neural(&samples, rate, &model).unwrap();
         eprintln!("neural VAD → {} event(s)", evs.len());
-        assert!(evs.iter().any(|e| e.kind == "speech_start"), "expected speech in a real speech WAV");
+        assert!(
+            evs.iter().any(|e| e.kind == "speech_start"),
+            "expected speech in a real speech WAV"
+        );
     }
 }

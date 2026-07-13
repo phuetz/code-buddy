@@ -31,6 +31,7 @@ import * as path from 'path';
 import { BaseTool, ParameterDefinition } from './base-tool.js';
 import { ToolResult } from '../types/index.js';
 import { logger } from '../utils/logger.js';
+import { WorkspaceIsolation } from '../workspace/workspace-isolation.js';
 
 // ============================================================================
 // Types
@@ -244,6 +245,77 @@ export interface ComputedPatch {
   errors: string[];
 }
 
+interface ResolvedPatchPaths {
+  source: string;
+  destination?: string;
+}
+
+interface PatchPathPreflight {
+  paths: ResolvedPatchPaths[];
+  errors: string[];
+}
+
+/**
+ * Resolve every patch target against the canonical workspace root before any
+ * read or write. `path.resolve(cwd, candidate)` alone is not a boundary check:
+ * `../outside`, an absolute path, or a symlinked parent can otherwise escape.
+ *
+ * The whole patch is preflighted at once so a later invalid operation cannot
+ * leave earlier operations partially applied. Strict mode deliberately
+ * disables WorkspaceIsolation's read-only system whitelist for this write
+ * surface: apply_patch may only mutate descendants of its supplied cwd.
+ */
+function preflightPatchPaths(ops: FileOp[], cwd: string): PatchPathPreflight {
+  const lexicalRoot = path.resolve(cwd);
+  let workspaceRoot: string;
+  try {
+    workspaceRoot = fs.realpathSync(lexicalRoot);
+    if (!fs.statSync(workspaceRoot).isDirectory()) {
+      return { paths: [], errors: [`Patch workspace is not a directory: ${cwd}`] };
+    }
+  } catch (error) {
+    return {
+      paths: [],
+      errors: [
+        `Patch workspace is unavailable: ${cwd} (${error instanceof Error ? error.message : String(error)})`,
+      ],
+    };
+  }
+
+  const isolation = new WorkspaceIsolation({
+    workspaceRoot,
+    enabled: true,
+    strictMode: true,
+    additionalAllowedPaths: [],
+  });
+  const paths: ResolvedPatchPaths[] = [];
+  const errors: string[] = [];
+
+  for (const op of ops) {
+    const sourceCandidate = path.resolve(workspaceRoot, op.path);
+    const source = isolation.validatePath(sourceCandidate, `apply_patch ${op.type}`);
+    let destination: ReturnType<WorkspaceIsolation['validatePath']> | undefined;
+    if (op.moveTo) {
+      const destinationCandidate = path.resolve(workspaceRoot, op.moveTo);
+      destination = isolation.validatePath(destinationCandidate, 'apply_patch move destination');
+    }
+
+    if (!source.valid) {
+      errors.push(`${op.type} ${op.path}: ${source.error ?? 'path is outside the patch workspace'}`);
+    }
+    if (op.moveTo && destination && !destination.valid) {
+      errors.push(`move ${op.path} -> ${op.moveTo}: ${destination.error ?? 'destination is outside the patch workspace'}`);
+    }
+
+    paths.push({
+      source: source.resolved,
+      ...(destination?.valid ? { destination: destination.resolved } : {}),
+    });
+  }
+
+  return { paths, errors };
+}
+
 /**
  * Compute the FULL resulting content of every file the patch touches, without
  * writing anything — the input the diff-review gate needs. STRICTER than
@@ -256,8 +328,18 @@ export function computePatchedFiles(ops: FileOp[], cwd: string = process.cwd()):
   const changes: ComputedPatch['changes'] = [];
   const errors: string[] = [];
 
-  for (const op of ops) {
-    const fullPath = path.resolve(cwd, op.path);
+  const preflight = preflightPatchPaths(ops, cwd);
+  if (preflight.errors.length > 0) {
+    return { changes, errors: preflight.errors };
+  }
+
+  for (const [index, op] of ops.entries()) {
+    const resolvedPaths = preflight.paths[index];
+    if (!resolvedPaths) {
+      errors.push(`Internal patch path resolution failure for: ${op.path}`);
+      continue;
+    }
+    const fullPath = resolvedPaths.source;
     if (op.type === 'add') {
       changes.push({ path: op.path, newContent: op.content ?? '' });
       continue;
@@ -309,8 +391,19 @@ export function computePatchedFiles(ops: FileOp[], cwd: string = process.cwd()):
 export function applyPatchOps(ops: FileOp[], cwd: string = process.cwd()): PatchResult {
   const result: PatchResult = { filesAdded: [], filesDeleted: [], filesUpdated: [], errors: [] };
 
-  for (const op of ops) {
-    const fullPath = path.resolve(cwd, op.path);
+  const preflight = preflightPatchPaths(ops, cwd);
+  if (preflight.errors.length > 0) {
+    result.errors.push(...preflight.errors);
+    return result;
+  }
+
+  for (const [index, op] of ops.entries()) {
+    const resolvedPaths = preflight.paths[index];
+    if (!resolvedPaths) {
+      result.errors.push(`Internal patch path resolution failure for: ${op.path}`);
+      continue;
+    }
+    const fullPath = resolvedPaths.source;
     try {
       if (op.type === 'add') {
         const dir = path.dirname(fullPath);
@@ -348,7 +441,11 @@ export function applyPatchOps(ops: FileOp[], cwd: string = process.cwd()): Patch
         }
 
         if (op.moveTo) {
-          const newPath = path.resolve(cwd, op.moveTo);
+          const newPath = resolvedPaths.destination;
+          if (!newPath) {
+            result.errors.push(`Move destination was not resolved: ${op.moveTo}`);
+            continue;
+          }
           const newDir = path.dirname(newPath);
           if (!fs.existsSync(newDir)) fs.mkdirSync(newDir, { recursive: true });
           fs.writeFileSync(newPath, fileLines.join('\n'));

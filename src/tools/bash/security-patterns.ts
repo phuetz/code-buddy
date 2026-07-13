@@ -19,8 +19,7 @@ import os from 'os';
  */
 export const BLOCKED_PATTERNS: RegExp[] = [
   // Filesystem destruction
-  /rm\s+(-rf?|--recursive)\s+[/~]/i,  // rm -rf / or ~
-  /rm\s+.*\/\s*$/i,                      // rm something/
+  /\brm\b(?=[^|;&\n]*(?:\s-[a-z]*r[a-z]*\b|--recursive\b))[^|;&\n]*\s(?:\/|\/home\/?|~\/?|\$\{?HOME\}?)\s*$/i,
   />\s*\/dev\/sd[a-z]/i,                 // Write to disk device
   /dd\s+.*if=.*of=\/dev/i,              // dd to device
   /mkfs/i,                               // Format filesystem
@@ -229,6 +228,9 @@ export const SAFE_ENV_VARS: Set<string> = new Set([
   // Current working directory
   'PWD',
   'OLDPWD',
+  // User-session service control (`systemctl --user`) without exposing keys.
+  'XDG_RUNTIME_DIR',
+  'DBUS_SESSION_BUS_ADDRESS',
 ]);
 
 /**

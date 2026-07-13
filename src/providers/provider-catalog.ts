@@ -23,7 +23,9 @@ export type ProviderAuthMode =
 
 export type RuntimeProviderId =
   | 'chatgpt'
+  | 'agy-cli'
   | 'ollama'
+  | 'lemonade'
   | 'ollama-cloud'
   | 'lmstudio'
   | 'grok'
@@ -127,9 +129,33 @@ export const RUNTIME_PROVIDER_CATALOG: RuntimeProviderCatalogEntry[] = [
     baseUrlEnvKeys: [],
     modelEnvKeys: ['CHATGPT_MODEL'],
     defaultBaseURL: 'https://chatgpt.com/backend-api/codex',
-    defaultModel: 'gpt-5.5',
+    defaultModel: 'gpt-5.6-sol',
     apiKeyPlaceholder: 'oauth-chatgpt',
-    models: ['gpt-5.5', 'gpt-5.1-codex', 'gpt-5-codex', 'codex-1'],
+    models: [
+      'gpt-5.6-sol',
+      'gpt-5.6-terra',
+      'gpt-5.6-luna',
+      'gpt-5.5',
+      'gpt-5.4',
+      'gpt-5.4-mini',
+    ],
+  },
+  {
+    id: 'agy-cli',
+    aliases: ['agy', 'antigravity'],
+    label: 'Google Antigravity (subscription)',
+    authMode: 'none',
+    apiMode: 'openai-compatible',
+    runtimeSupport: 'direct',
+    priority: 11,
+    apiKeyEnvKeys: [],
+    baseUrlEnvKeys: [],
+    modelEnvKeys: ['AGY_MODEL'],
+    defaultBaseURL: 'agy-cli://local',
+    defaultModel: 'Gemini 3.1 Pro (High)',
+    apiKeyPlaceholder: 'agy-cli',
+    models: ['Gemini 3.1 Pro (High)'],
+    notes: 'Subscription CLI bridge; availability and model names are discovered from `agy models`.',
   },
   {
     id: 'ollama',
@@ -145,6 +171,23 @@ export const RUNTIME_PROVIDER_CATALOG: RuntimeProviderCatalogEntry[] = [
     defaultModel: 'qwen2.5-coder:7b',
     apiKeyPlaceholder: 'ollama',
     models: ['qwen2.5-coder:7b', 'llama3.2', 'mistral', 'devstral-small-2'],
+  },
+  {
+    id: 'lemonade',
+    aliases: ['lemond'],
+    label: 'Lemonade Server',
+    authMode: 'local',
+    apiMode: 'openai-compatible',
+    runtimeSupport: 'direct',
+    priority: 19,
+    apiKeyEnvKeys: ['LEMONADE_API_KEY'],
+    baseUrlEnvKeys: ['LEMONADE_HOST'],
+    modelEnvKeys: ['LEMONADE_MODEL'],
+    defaultBaseURL: 'http://127.0.0.1:13305/api/v1',
+    defaultModel: 'Qwen3.6-35B-A3B-MTP-GGUF',
+    apiKeyPlaceholder: 'lemonade',
+    models: ['Qwen3.6-35B-A3B-MTP-GGUF'],
+    notes: 'Local Ryzen AI runtime; installed models are discovered from /v1/models.',
   },
   {
     id: 'lmstudio',
@@ -205,7 +248,7 @@ export const RUNTIME_PROVIDER_CATALOG: RuntimeProviderCatalogEntry[] = [
     modelEnvKeys: ['OPENAI_MODEL'],
     defaultBaseURL: 'https://api.openai.com/v1',
     defaultModel: 'gpt-4o',
-    models: ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo', 'o1', 'o3-mini'],
+    models: ['gpt-5.6-sol', 'gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo', 'o1', 'o3-mini'],
   },
   {
     id: 'anthropic',
@@ -311,8 +354,21 @@ export const RUNTIME_PROVIDER_CATALOG: RuntimeProviderCatalogEntry[] = [
     baseUrlEnvKeys: ['OPENROUTER_BASE_URL'],
     modelEnvKeys: ['OPENROUTER_MODEL'],
     defaultBaseURL: 'https://openrouter.ai/api/v1',
-    defaultModel: 'openai/gpt-4o',
-    models: ['openai/gpt-4o', 'anthropic/claude-sonnet-4', 'google/gemini-2.5-pro'],
+    defaultModel: 'openrouter/free',
+    // Curated zero-cost council pool. Availability of a pinned :free endpoint
+    // can fluctuate, so openrouter/free stays first as the resilient default.
+    models: [
+      'openrouter/free',
+      'openai/gpt-oss-20b:free',
+      'cohere/north-mini-code:free',
+      'qwen/qwen3-coder:free',
+      'qwen/qwen3-next-80b-a3b-instruct:free',
+      'google/gemma-4-26b-a4b-it:free',
+      'nvidia/nemotron-3-super-120b-a12b:free',
+      'nvidia/nemotron-3-ultra-550b-a55b:free',
+      'meta-llama/llama-3.3-70b-instruct:free',
+      'poolside/laguna-xs-2.1:free',
+    ],
   },
   {
     id: 'novita',

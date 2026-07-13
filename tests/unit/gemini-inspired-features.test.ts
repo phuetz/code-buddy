@@ -426,6 +426,7 @@ describe('Plan Mode', () => {
     expect(planMode.isToolAllowedInCurrentMode('read_file')).toBe(true);
     expect(planMode.isToolAllowedInCurrentMode('grep')).toBe(true);
     expect(planMode.isToolAllowedInCurrentMode('reason')).toBe(true);
+    expect(planMode.isToolAllowedInCurrentMode('mixture_of_agents')).toBe(true);
   });
 
   it('should allow restricted write tools for .md only', () => {
@@ -457,11 +458,13 @@ describe('Plan Mode', () => {
       { function: { name: 'read_file', description: 'Read a file' } },
       { function: { name: 'bash', description: 'Run command' } },
       { function: { name: 'grep', description: 'Search' } },
+      { function: { name: 'mixture_of_agents', description: 'Consult several LLMs' } },
     ];
     const filtered = planMode.filterToolsForMode(tools);
-    expect(filtered).toHaveLength(2); // bash filtered out
+    expect(filtered).toHaveLength(3); // bash filtered out
     expect(filtered.map(t => t.function.name)).toContain('read_file');
     expect(filtered.map(t => t.function.name)).toContain('grep');
+    expect(filtered.map(t => t.function.name)).toContain('mixture_of_agents');
   });
 
   it('should return plan mode prompt', () => {

@@ -6,6 +6,7 @@
 import { Presentation } from 'lucide-react';
 import { useState } from 'react';
 import { SlideDeckPreview } from './SlideDeckPreview.js';
+import { DeckDesignEditor } from './DesignViewEditors.js';
 import { DeliverableStudioPanel, type DeliverableStudioConfig } from './DeliverableStudioPanel.js';
 import {
   buildDeckExportPrompt,
@@ -34,6 +35,7 @@ export function DeckStudioPanel() {
     renderPreview: (deck) => (
       <SlideDeckPreview slides={deck?.slides ?? []} activeIndex={activeIndex} onSelect={setActiveIndex} />
     ),
+    renderDesign: (deck, onChange) => <DeckDesignEditor value={deck} onChange={onChange} />,
     testId: 'deck-studio',
   };
 

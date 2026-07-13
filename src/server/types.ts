@@ -182,6 +182,8 @@ export interface AuthenticatedRequest {
     userId?: string;
     scopes: ApiScope[];
     type: 'api_key' | 'user';
+    /** True only when the server itself synthesized access for --no-auth mode. */
+    anonymous?: boolean;
   };
 }
 

@@ -143,7 +143,7 @@ Persistent memory lives at `.codebuddy/CODEBUDDY_MEMORY.md` (project) and `~/.co
 - `src/config/constants.ts` — `SUPPORTED_MODELS`, `TOKEN_LIMITS`
 - `src/config/toml-config.ts` — config profiles (`[profiles.<name>]` deep-merged; `buddy --profile <name>`). Also `[model_pairs]` for architect/editor split.
 - `src/config/advanced-config.ts` — effort levels (low/medium/high) → temperature + token params
-- `.codebuddy/settings.json` — local model + thinking-level defaults (current repo: `gpt-5.5` + `high`)
+- `.codebuddy/settings.json` — local model + thinking-level defaults (current repo: `gpt-5.6-sol` + `high`)
 
 ## Coding Conventions
 

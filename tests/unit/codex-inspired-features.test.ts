@@ -222,6 +222,34 @@ describe('Ghost Snapshot Manager', () => {
     expect(typeof mod.getGhostSnapshotManager).toBe('function');
     expect(typeof mod.resetGhostSnapshotManager).toBe('function');
   });
+
+  it('skips git add when the workspace is already clean', async () => {
+    const mgr = new GhostSnapshotManager('/tmp/test');
+    const git = vi.fn(async (args: string[]) => {
+      const command = args.join(' ');
+      if (command === 'rev-parse --git-dir') return '.git\n';
+      if (command === 'status --porcelain') return '';
+      if (command === 'rev-parse HEAD') return 'abc123\n';
+      throw new Error(`Unexpected git command: ${command}`);
+    });
+    (mgr as unknown as { git: typeof git }).git = git;
+
+    const snapshot = await mgr.createSnapshot('clean turn');
+
+    expect(snapshot?.commitHash).toBe('abc123');
+    expect(git).not.toHaveBeenCalledWith(['add', '-A']);
+  });
+
+  it('keeps independent managers for different Cowork workspaces', async () => {
+    const mod = await import('@/checkpoints/ghost-snapshot.js');
+    mod.resetGhostSnapshotManager();
+    const first = mod.getGhostSnapshotManager('/tmp/project-a');
+    const same = mod.getGhostSnapshotManager('/tmp/project-a');
+    const other = mod.getGhostSnapshotManager('/tmp/project-b');
+
+    expect(same).toBe(first);
+    expect(other).not.toBe(first);
+  });
 });
 
 // ============================================================================

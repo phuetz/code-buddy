@@ -57,6 +57,46 @@
 | `DISCORD_TOKEN` | Discord bot token |
 | `SLACK_BOT_TOKEN` | Slack bot token |
 | `FEISHU_APP_ID` / `FEISHU_APP_SECRET` | Feishu/Lark app credentials |
+| `CODEBUDDY_CONVERSATION_BRIDGE` | Share one companion thread between resident voice and a configured channel |
+| `CODEBUDDY_CONVERSATION_CHANNEL` / `_CHANNEL_ID` | Target transport and chat/room ID for voice ↔ channel continuity |
+| `CODEBUDDY_CONVERSATION_CHANNEL_THREAD` | Optional topic/thread inside the configured channel |
+| `CODEBUDDY_CONVERSATION_THREAD_ID` | Stable logical companion thread name (default: robot name) |
+| `CODEBUDDY_CONVERSATION_MIRROR_VOICE` | Publish recognized voice and companion speech to the target channel |
+| `CODEBUDDY_CONVERSATION_COWORK` | Let explicitly linked Cowork sessions join the companion thread (default: true) |
+| `CODEBUDDY_CONVERSATION_MIRROR_COWORK` | Publish linked Cowork turns to the configured channel (default: true) |
+| `CODEBUDDY_CONVERSATION_COWORK_HISTORY` | Recent shared turns imported by a linked Cowork session, clamped to 4-80 (default: 24) |
+| `CODEBUDDY_CONVERSATION_PERSIST` | Persist the bounded shared thread in a private local JSONL journal |
+| `CODEBUDDY_EPISODE_JOURNAL` / `_EVERY` | Consolidate the complete thread into a deduplicated where-we-were memory (opt-in, default every 40 beats) |
+| `CODEBUDDY_CONVERSATION_EVAL` | Evaluate complete user/Lisa exchanges locally and learn only from recurring weaknesses (default: true) |
+| `CODEBUDDY_CONVERSATION_EVAL_EVERY` | Heartbeat interval for aggregate conversation evaluation (default: 30) |
+| `CODEBUDDY_CONVERSATION_EVAL_MIN_STREAK` | Consecutive detections required before a reversible guidance change (default: 2) |
+| `CODEBUDDY_CONVERSATION_EVAL_COOLDOWN_MS` | Minimum delay between learned guidance changes (default: 21600000 / 6 h) |
+| `CODEBUDDY_AVATAR_BRIDGE` | Publish scoped `avatar:event` performance cues for Unreal/MetaHuman (default: true) |
+| `CODEBUDDY_AVATAR_STREAM_AUDIO` | `auto` streams bounded WAV only while a compatible renderer is alive; `true`/`false` force the behavior (default: `auto`) |
+
+### Voice Rendering
+
+| Variable | Description | Default |
+|:---------|:------------|:--------|
+| `CODEBUDDY_TTS_ENGINE` | Renderer selection: `pocket`, `voicebox`, or `piper` | `pocket` |
+| `CODEBUDDY_POCKET_VOICE` / `_LANG` | Realtime Pocket voice and language | `estelle` / `french` |
+| `CODEBUDDY_POCKET_URL` / `_SERVER` | Resident Pocket endpoint and auto-start toggle | `http://127.0.0.1:8766` / `true` |
+| `CODEBUDDY_VOICEBOX_URL` | Trusted Voicebox REST endpoint; prefer Tailscale for Darkstar | `http://127.0.0.1:17493` |
+| `CODEBUDDY_VOICEBOX_PROFILE` | Required Voicebox profile name or id | unset |
+| `CODEBUDDY_VOICEBOX_ENGINE` | Voicebox backend (`qwen`, `qwen_custom_voice`, `luxtts`, `chatterbox`, `chatterbox_turbo`, `tada`, `kokoro`) | `qwen` |
+| `CODEBUDDY_VOICEBOX_LANGUAGE` / `_MODEL_SIZE` | Voicebox language and model size | `fr` / `1.7B` |
+| `CODEBUDDY_VOICEBOX_INSTRUCT` | Acoustic delivery instruction only, maximum 500 characters | unset |
+| `CODEBUDDY_VOICEBOX_AUDIO_STREAM` | Pipe returned WAV directly to speakers/avatar | `true` |
+| `CODEBUDDY_TTS_VOLUME` | Assistant-only normalized output volume (0–100) | `100` |
+
+Code Buddy always sends `personality: false` to Voicebox: the renderer cannot rewrite Lisa's
+answer. Voicebox falls back to Pocket and then Piper. Diagnose without changing configuration with
+`buddy assistant voicebox`; add `--benchmark` to compare the cold/warm Voicebox and Pocket latency.
+Use `buddy assistant latency --engine both` to measure the real prefetched-answer path to first PCM
+without opening speakers or publishing to Telegram/MetaHuman.
+For a remote desktop install, Voicebox is loopback-only by default. Prefer a private Tailscale TCP
+forwarder (`tailscale serve --bg --tcp=17493 tcp://127.0.0.1:17493`) over binding the unauthenticated
+API to a public interface.
 
 ### Runtime
 
@@ -72,8 +112,20 @@
 | `CODEBUDDY_RTK` | Enable RTK shell command rewriting | false |
 | `CODEBUDDY_RTK_REWRITE` | Alias flag for RTK shell command rewriting | false |
 | `CODEBUDDY_RTK_TIMEOUT_MS` | Timeout for `rtk rewrite` before fallback | 1000 |
+| `CODEBUDDY_LM_RESIZER` | Enable recoverable post-execution compression of large tool outputs | false (Cowork: auto) |
+| `CODEBUDDY_LM_RESIZER_BIN` | Override path to the `lm-resizer` binary | local release build, then PATH |
+| `CODEBUDDY_LM_RESIZER_STORE` | Override the CCR SQLite store used by Code Buddy | `~/.codebuddy/lm-resizer.db` |
+| `CODEBUDDY_LM_RESIZER_URL` / `LM_RESIZER_URL` | HTTP sidecar URL (preferred low-latency transport; CLI is the fallback) | `http://127.0.0.1:8787` |
+| `CODEBUDDY_LM_RESIZER_TOKEN_FILE` | Private sidecar-token file; rejected when group/world-readable on Unix | `~/.codebuddy/lm-resizer/server-token` |
+| `CODEBUDDY_LM_RESIZER_SERVER_TOKEN` / `CODEBUDDY_LM_RESIZER_TOKEN` | Direct sidecar-token override (sensitive; prefer the token file) | unset |
 | `CODEBUDDY_FALLBACK_PROVIDERS` | Comma-separated provider/model fallbacks, for example `openai:gpt-4o,glm:glm-5-code` | unset |
 | `CODEBUDDY_FALLBACK_PROVIDER` / `CODEBUDDY_FALLBACK_MODEL` | Single provider/model fallback pair | unset |
+| `CODEBUDDY_VOICE_RESPONSE_STYLE` | Adaptive spoken response depth: `natural`, `concise`, or `developed` | natural |
+| `CODEBUDDY_PREFETCH` | Preload structured news, agenda, date, and configured weather evidence | true |
+| `CODEBUDDY_PREFETCH_INTERVAL_MS` | Wall-clock fresh-context refresh interval | 900000 |
+| `CODEBUDDY_NEWS_QUERY` | Preferred news topics; the default is balanced into general and technology lanes | France/world/technology/AI |
+| `CODEBUDDY_NEWS_LOCALE` | Search language and country used for the grounded bulletin | fr-FR |
+| `CODEBUDDY_NEWS_SEARCH_PACE_MS` | Delay between free-provider news lanes to respect request-rate limits | 1100 |
 | `OPENROUTER_PROVIDER_*` | OpenRouter provider routing options | unset |
 | `CODEBUDDY_AUXILIARY_<TASK>_*` | Hermes-style auxiliary provider/model/base URL/API key/timeout overrides | unset |
 | `AUXILIARY_VISION_MODEL` | Hermes-compatible vision model override | unset |
@@ -128,7 +180,8 @@ temperature = 0.2
 maxTokens = 4096
 
 [integrations]
-rtk_enabled = true
+# Legacy pre-execution command rewriting; explicit opt-in only.
+rtk_enabled = false
 
 [profiles.fast]
 model = "grok-code-fast-1"

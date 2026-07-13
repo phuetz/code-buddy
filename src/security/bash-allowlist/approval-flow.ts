@@ -65,9 +65,10 @@ export class ApprovalFlowManager extends EventEmitter {
     options?: Partial<ApprovalPromptOptions>
   ): Promise<{ approved: boolean; reason: string; pattern?: ApprovalPattern }> {
     await this.initialize();
+    const cwd = options?.cwd || process.cwd();
 
     // First check stored patterns
-    const checkResult = this.store.checkCommand(command);
+    const checkResult = this.store.checkCommand(command, cwd);
 
     if (checkResult.matched) {
       const approved = checkResult.decision === 'allow';
@@ -86,7 +87,7 @@ export class ApprovalFlowManager extends EventEmitter {
 
     // No pattern match - need to prompt
     if (checkResult.decision === 'prompt') {
-      const promptResult = await this.promptUser(command, options);
+      const promptResult = await this.promptUser(command, { ...options, cwd });
 
       if (promptResult.timedOut) {
         return {
@@ -108,6 +109,7 @@ export class ApprovalFlowManager extends EventEmitter {
             pattern: promptResult.pattern,
             patternType: promptResult.patternType,
             description: promptResult.description,
+            cwd,
           }
         );
       }
@@ -131,7 +133,7 @@ export class ApprovalFlowManager extends EventEmitter {
    * @param command Command to check
    * @returns Check result
    */
-  quickCheck(command: string): AllowlistCheckResult {
+  quickCheck(command: string, cwd: string = process.cwd()): AllowlistCheckResult {
     if (!this.store.isInitialized()) {
       // Store not initialized - return prompt
       return {
@@ -141,7 +143,7 @@ export class ApprovalFlowManager extends EventEmitter {
       };
     }
 
-    const result = this.store.checkCommand(command);
+    const result = this.store.checkCommand(command, cwd);
 
     return {
       matched: result.matched,
@@ -169,7 +171,7 @@ export class ApprovalFlowManager extends EventEmitter {
 
     const promptOptions: ApprovalPromptOptions = {
       command,
-      cwd: process.cwd(),
+      cwd: options?.cwd || process.cwd(),
       timeout: options?.timeout || config.defaults.timeout,
       showAlwaysAllow: options?.showAlwaysAllow ?? config.defaults.showAlwaysAllow,
       showAlwaysDeny: options?.showAlwaysDeny ?? config.defaults.showAlwaysDeny,
@@ -183,7 +185,7 @@ export class ApprovalFlowManager extends EventEmitter {
         operation: 'Execute bash command',
         filename: command,
         showVSCodeOpen: false,
-        content: this.formatPromptContent(command, suggestion),
+        content: this.formatPromptContent(command, suggestion, promptOptions.cwd),
       },
       'bash'
     );
@@ -216,11 +218,12 @@ export class ApprovalFlowManager extends EventEmitter {
    */
   private formatPromptContent(
     command: string,
-    suggestion: { pattern: string; type: string }
+    suggestion: { pattern: string; type: string },
+    cwd: string,
   ): string {
     return [
       `Command: ${command}`,
-      `Working directory: ${process.cwd()}`,
+      `Working directory: ${cwd}`,
       '',
       `Suggested pattern: ${suggestion.pattern}`,
       `Pattern type: ${suggestion.type}`,

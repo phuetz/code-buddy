@@ -88,8 +88,19 @@ describe('ToolSelectionStrategy lite-profile overrides', () => {
     const callArgs = ragMock.getRelevantToolsMock.mock.calls[0]!;
     expect(callArgs[1]).toMatchObject({
       maxTools: 5,
-      alwaysInclude: ['view_file', 'bash', 'search'],
+      alwaysInclude: ['view_file', 'bash', 'search', 'restore_context'],
     });
+  });
+
+  it('always includes exact context recovery even when the caller overrides the core set', async () => {
+    const strategy = new ToolSelectionStrategy({ enableCaching: false });
+    await strategy.selectToolsForQuery('continue from the compact result', {
+      maxTools: 3,
+      alwaysInclude: ['view_file'],
+    });
+
+    const alwaysInclude = ragMock.getRelevantToolsMock.mock.calls[0]![1]?.alwaysInclude;
+    expect(alwaysInclude).toEqual(['view_file', 'restore_context']);
   });
 
   it('keeps the default 15-tool budget when no override is passed', async () => {
@@ -125,6 +136,7 @@ describe('ToolSelectionStrategy lite-profile overrides', () => {
     expect(alwaysInclude).toContain('memory_propose');
     expect(alwaysInclude).toContain('lessons_add');
     expect(alwaysInclude).toContain('lessons_search');
+    expect(alwaysInclude).toContain('restore_context');
   });
 
   it('options object can override maxTools without overriding alwaysInclude', async () => {

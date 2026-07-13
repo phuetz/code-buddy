@@ -279,7 +279,7 @@ describe('Fleet loopback smoke', () => {
 
     const out = result.entry?.content ?? '';
     expect(out).toContain('Fleet route recommendation');
-    expect(out).toContain('Primary: loopback / gpt-5.1-codex');
+    expect(out).toContain('Primary: loopback / chatgpt-oauth / gpt-5.1-codex');
     expect(out).toContain('Profile: review');
     expect(out).toContain('Tool policy: minimal / confirm');
     expect(out).toContain('peer_delegate');

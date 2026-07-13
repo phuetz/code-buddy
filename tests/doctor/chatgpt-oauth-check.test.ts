@@ -45,6 +45,22 @@ function makeJwt(claims: Record<string, unknown>): string {
   return `${header}.${payload}.`;
 }
 
+function mockModelDiscovery(): void {
+  vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+    new Response(JSON.stringify({
+      models: [{
+        slug: 'gpt-5.6-sol',
+        priority: 1,
+        visibility: 'list',
+        supported_in_api: true,
+        use_responses_lite: true,
+        default_reasoning_level: 'medium',
+        supported_reasoning_levels: [{ effort: 'medium' }, { effort: 'ultra' }],
+      }],
+    }), { status: 200, headers: { etag: 'W/"doctor"' } }),
+  );
+}
+
 describe('doctor — ChatGPT OAuth check', () => {
   it('returns warn when no credentials are on disk', async () => {
     const { runDoctorChecks } = await import('../../src/doctor/index.js');
@@ -57,6 +73,7 @@ describe('doctor — ChatGPT OAuth check', () => {
   }, 15_000);
 
   it('returns ok with email + plan when credentials are valid and recent', async () => {
+    mockModelDiscovery();
     writeAuthFile({
       tokens: {
         id_token: makeJwt({
@@ -80,9 +97,11 @@ describe('doctor — ChatGPT OAuth check', () => {
     expect(chatgpt?.status).toBe('ok');
     expect(chatgpt?.message).toContain('patrice@example.com');
     expect(chatgpt?.message).toContain('Plan: plus');
+    expect(chatgpt?.message).toContain('Model: gpt-5.6-sol');
   }, 15_000);
 
   it('flags FedRAMP marker in the ok message when present', async () => {
+    mockModelDiscovery();
     writeAuthFile({
       tokens: {
         id_token: makeJwt({

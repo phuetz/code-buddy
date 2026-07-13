@@ -69,6 +69,13 @@ export function EnrollmentDialog({ isOpen, onClose, onEnrolled }: EnrollmentDial
   const stagedEmbeddings = useRef<number[][]>([]);
   const personIdRef = useRef<string | null>(null);
   const rafRef = useRef<number | null>(null);
+  const onCloseRef = useRef(onClose);
+  const setShowModelInstallDialogRef = useRef(setShowModelInstallDialog);
+
+  useEffect(() => {
+    onCloseRef.current = onClose;
+    setShowModelInstallDialogRef.current = setShowModelInstallDialog;
+  }, [onClose, setShowModelInstallDialog]);
 
   // Bootstrap: webcam + detector. Tear down on close/unmount.
   useEffect(() => {
@@ -88,8 +95,8 @@ export function EnrollmentDialog({ isOpen, onClose, onEnrolled }: EnrollmentDial
         const hm = await window.electronAPI?.presence?.hasModel();
         if (cancelled) return;
         if (hm && !hm.installed) {
-          setShowModelInstallDialog(true);
-          onClose();
+          setShowModelInstallDialogRef.current(true);
+          onCloseRef.current();
           return;
         }
         const stream = await navigator.mediaDevices.getUserMedia({

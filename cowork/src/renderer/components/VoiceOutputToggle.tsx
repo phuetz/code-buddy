@@ -1,11 +1,9 @@
 /**
  * VoiceOutputToggle — text-to-speech for assistant responses.
  *
- * Originally browser-only via SpeechSynthesis API. As of the voice
- * upgrade (2026-05), the renderer first asks the main process to
- * synthesise via Piper (offline, French-native voice ~22 kHz mono PCM).
- * Browser SpeechSynthesis stays as a fallback for environments where
- * the Piper binary is missing.
+ * The renderer first asks the main process to synthesize through resident
+ * Pocket TTS. Piper remains the legacy local fallback, then browser
+ * SpeechSynthesis is used only if neither local engine is available.
  *
  * State persisted to localStorage so the preference survives reloads.
  *
@@ -16,9 +14,10 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Volume2, VolumeX } from 'lucide-react';
 import type { VoiceConversationEvent } from '../types';
-import { condenseForSpeech } from '../utils/speech-text';
+import { cleanForSpeech, condenseForSpeech } from '../utils/speech-text';
 
 const STORAGE_KEY = 'cowork.voice.tts.enabled';
+const TTS_RATE_KEY = 'cowork.voice.ttsRate';
 
 export function isTtsEnabled(): boolean {
   try {
@@ -33,8 +32,13 @@ export function hasVoiceOutputSupport(): boolean {
   return Boolean(window.speechSynthesis || window.electronAPI?.voice?.speak);
 }
 
-/** Currently-playing audio element so subsequent speak() can interrupt. */
+/** Currently-playing local TTS audio so subsequent speech can interrupt it. */
 let activeAudio: HTMLAudioElement | null = null;
+/** Resolves the promise waiting for the current local/browser playback. */
+let activePlaybackCompletion: (() => void) | null = null;
+let speechQueue: Promise<void> = Promise.resolve();
+let speechQueueGeneration = 0;
+let activeSpeechStreamKey: string | null = null;
 
 export type VoiceInterruptionReason = 'barge_in' | 'manual' | 'new_speech' | 'stop';
 
@@ -88,6 +92,7 @@ function recordVoiceEvent(payload: VoiceConversationEvent) {
 
 function cancelActivePlayback(): boolean {
   let hadPlayback = false;
+  const completePlayback = activePlaybackCompletion;
   if (activeAudio) {
     try {
       hadPlayback = hadPlayback || !activeAudio.paused;
@@ -106,9 +111,28 @@ function cancelActivePlayback(): boolean {
       /* ignore */
     }
   }
+  // `pause()` and SpeechSynthesis.cancel() are not required to emit an
+  // `ended`/`error` event. Resolve an awaiting acknowledgement explicitly so
+  // an interrupted voice mission can always reopen the microphone.
+  completePlayback?.();
   // Playback stopped — tell the auto-barge-in VAD to close the mic.
   emitSpeakingState(false);
   return hadPlayback;
+}
+
+function invalidateSpeechQueue(): void {
+  speechQueueGeneration += 1;
+  speechQueue = Promise.resolve();
+  activeSpeechStreamKey = null;
+}
+
+function getTtsLengthScale(): number {
+  try {
+    const value = Number.parseFloat(localStorage.getItem(TTS_RATE_KEY) ?? '1');
+    return Number.isFinite(value) && value >= 0.5 && value <= 2 ? value : 1;
+  } catch {
+    return 1;
+  }
 }
 
 /**
@@ -116,6 +140,7 @@ function cancelActivePlayback(): boolean {
  * browsers own playback handles, so barge-in can happen immediately without an IPC round-trip.
  */
 export function interruptSpeech(reason: VoiceInterruptionReason = 'manual'): boolean {
+  invalidateSpeechQueue();
   const hadPlayback = cancelActivePlayback();
   const timestamp = Date.now();
   if (typeof window !== 'undefined') {
@@ -137,81 +162,129 @@ export function interruptSpeech(reason: VoiceInterruptionReason = 'manual'): boo
   return hadPlayback;
 }
 
-async function speakViaPiper(text: string): Promise<boolean> {
+interface LocalSpeakOptions {
+  interruptExisting?: boolean;
+  waitForEnd?: boolean;
+  generation?: number;
+}
+
+async function speakViaLocalTts(
+  text: string,
+  options: LocalSpeakOptions = {}
+): Promise<boolean> {
   const api = window.electronAPI?.voice;
   if (!api?.speak) return false;
   try {
-    interruptSpeech('new_speech');
-    const result = await api.speak(text);
+    if (options.interruptExisting !== false) interruptSpeech('new_speech');
+    const result = await api.speak(text, { lengthScale: getTtsLengthScale() });
+    if (
+      options.generation !== undefined &&
+      options.generation !== speechQueueGeneration
+    ) {
+      return false;
+    }
     if (!result.ok || !result.audio) {
       if (result.error) {
-        console.warn('[VoiceOutputToggle] piper unavailable:', result.error);
+        console.warn('[VoiceOutputToggle] local TTS unavailable:', result.error);
       }
       return false;
     }
     const blob = new Blob([result.audio], { type: 'audio/wav' });
     const url = URL.createObjectURL(blob);
     const audio = new Audio(url);
+    // The main process already applies CODEBUDDY_TTS_VOLUME to the PCM. Keep
+    // Chromium's final playback stage at unity so it cannot attenuate Lisa a
+    // second time (the default is 1, set explicitly as a regression guard).
+    audio.volume = 1;
     activeAudio = audio;
     recordVoiceEvent({ type: 'assistant_speech_started' });
     emitSpeakingState(true);
     let finished = false;
+    let resolvePlayback: (() => void) | null = null;
+    const playbackFinished = new Promise<void>((resolve) => {
+      resolvePlayback = resolve;
+    });
     const finishSpeech = () => {
       if (finished) return;
       finished = true;
       recordVoiceEvent({ type: 'assistant_speech_finished' });
       emitSpeakingState(false);
+      resolvePlayback?.();
     };
     const cleanup = () => {
       URL.revokeObjectURL(url);
       if (activeAudio === audio) activeAudio = null;
+      if (activePlaybackCompletion === completePlayback) {
+        activePlaybackCompletion = null;
+      }
     };
-    audio.addEventListener('ended', () => {
+    const completePlayback = () => {
       finishSpeech();
       cleanup();
+    };
+    activePlaybackCompletion = completePlayback;
+    audio.addEventListener('ended', () => {
+      completePlayback();
     });
     audio.addEventListener('error', () => {
-      finishSpeech();
-      cleanup();
+      completePlayback();
     });
     try {
       await audio.play();
+      if (options.waitForEnd) await playbackFinished;
     } catch (err) {
-      finishSpeech();
-      cleanup();
+      completePlayback();
       throw err;
     }
     return true;
   } catch (err) {
-    console.warn('[VoiceOutputToggle] piper synth failed:', err);
+    console.warn('[VoiceOutputToggle] local TTS synth failed:', err);
     return false;
   }
 }
 
-function speakViaBrowser(text: string): void {
+async function speakViaBrowser(
+  text: string,
+  waitForEnd = false,
+  interruptExisting = true
+): Promise<void> {
   if (typeof window === 'undefined' || !window.speechSynthesis) return;
-  try {
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.rate = 1.0;
-    utterance.pitch = 1.0;
-    utterance.volume = 1.0;
-    utterance.lang = 'fr-FR';
-    interruptSpeech('new_speech');
-    recordVoiceEvent({ type: 'assistant_speech_started' });
-    emitSpeakingState(true);
-    utterance.onend = () => {
-      recordVoiceEvent({ type: 'assistant_speech_finished' });
-      emitSpeakingState(false);
-    };
-    window.speechSynthesis.speak(utterance);
-  } catch (err) {
-    console.warn('[VoiceOutputToggle] browser tts failed:', err);
-  }
+  await new Promise<void>((resolve) => {
+    try {
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.rate = 1 / getTtsLengthScale();
+      utterance.pitch = 1.0;
+      utterance.volume = 1.0;
+      utterance.lang = 'fr-FR';
+      if (interruptExisting) interruptSpeech('new_speech');
+      recordVoiceEvent({ type: 'assistant_speech_started' });
+      emitSpeakingState(true);
+      let finished = false;
+      const completePlayback = () => {
+        if (finished) return;
+        finished = true;
+        recordVoiceEvent({ type: 'assistant_speech_finished' });
+        emitSpeakingState(false);
+        if (activePlaybackCompletion === completePlayback) {
+          activePlaybackCompletion = null;
+        }
+        resolve();
+      };
+      activePlaybackCompletion = completePlayback;
+      utterance.onend = completePlayback;
+      utterance.onerror = completePlayback;
+      window.speechSynthesis.speak(utterance);
+      if (!waitForEnd) resolve();
+    } catch (err) {
+      console.warn('[VoiceOutputToggle] browser tts failed:', err);
+      resolve();
+    }
+  });
 }
 
 /**
- * Speak `text` if TTS is enabled. Tries the local Piper bridge first,
- * falls back to browser SpeechSynthesis if Piper isn't available.
+ * Speak `text` if TTS is enabled. Tries Pocket/Piper through the local bridge,
+ * then falls back to browser SpeechSynthesis.
  * Awaitable — resolves once playback has started (not finished), so
  * callers don't block the UI while audio plays.
  */
@@ -220,9 +293,53 @@ export async function speakText(text: string): Promise<void> {
   // Condense to a spoken-length digest — reading a full markdown answer aloud is unusable.
   const clean = condenseForSpeech(text);
   if (!clean) return;
-  const piperOk = await speakViaPiper(clean);
-  if (piperOk) return;
-  speakViaBrowser(clean);
+  const localTtsOk = await speakViaLocalTts(clean);
+  if (localTtsOk) return;
+  await speakViaBrowser(clean);
+}
+
+/**
+ * Speak a short acknowledgement and resolve only after playback finishes.
+ * VoiceChatOverlay uses this before reopening the microphone, preventing the
+ * assistant from transcribing its own acknowledgement as the next request.
+ */
+export async function speakTextAndWait(text: string): Promise<void> {
+  if (!isTtsEnabled()) return;
+  const clean = condenseForSpeech(text);
+  if (!clean) return;
+  const localTtsOk = await speakViaLocalTts(clean, { waitForEnd: true });
+  if (localTtsOk) return;
+  await speakViaBrowser(clean, true);
+}
+
+/**
+ * Queue a completed sentence from the live LLM stream. The first sentence
+ * interrupts stale playback; subsequent sentences wait for the previous clip.
+ * A barge-in invalidates the generation so already queued clips never resume.
+ */
+export function queueStreamingSpeech(streamKey: string, text: string): void {
+  if (!isTtsEnabled()) return;
+  const clean = cleanForSpeech(text).replace(/\s+/g, ' ').trim();
+  if (!streamKey || !clean) return;
+
+  if (activeSpeechStreamKey !== streamKey) {
+    interruptSpeech('new_speech');
+    activeSpeechStreamKey = streamKey;
+  }
+  const generation = speechQueueGeneration;
+  speechQueue = speechQueue
+    .catch(() => undefined)
+    .then(async () => {
+      if (generation !== speechQueueGeneration) return;
+      const localTtsOk = await speakViaLocalTts(clean, {
+        interruptExisting: false,
+        waitForEnd: true,
+        generation,
+      });
+      if (!localTtsOk && generation === speechQueueGeneration) {
+        await speakViaBrowser(clean, true, false);
+      }
+    });
 }
 
 export const VoiceOutputToggle: React.FC = () => {

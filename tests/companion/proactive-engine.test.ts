@@ -25,6 +25,7 @@ import { saveRelationshipState, loadRelationshipState } from '../../src/companio
 import { _resetConductorForTests } from '../../src/companion/orchestrator.js';
 
 const DAY = 24 * 3600_000;
+const ORIGINAL_TIMEZONE = process.env.CODEBUDDY_TIMEZONE;
 
 function ctx(over: Partial<ProactiveContext> = {}): ProactiveContext {
   return {
@@ -112,6 +113,8 @@ describe('runProactiveTick — end to end (injected delivery seams, no model)', 
   });
   afterEach(() => {
     delete process.env.CODEBUDDY_COMPANION_PROACTIVE;
+    if (ORIGINAL_TIMEZONE === undefined) delete process.env.CODEBUDDY_TIMEZONE;
+    else process.env.CODEBUDDY_TIMEZONE = ORIGINAL_TIMEZONE;
     rmSync(tmp, { recursive: true, force: true });
   });
 
@@ -127,6 +130,22 @@ describe('runProactiveTick — end to end (injected delivery seams, no model)', 
     const quiet = Date.parse('2026-07-02T23:30:00');
     const line = await runProactiveTick({ now: () => quiet, statePath, relationshipStatePath: relPath, recentHearing: async () => [], present: async () => true, say: async () => {} });
     expect(line).toBeNull();
+  });
+
+  it('uses the household timezone for quiet hours instead of the host timezone', async () => {
+    process.env.CODEBUDDY_TIMEZONE = 'Pacific/Auckland';
+    const householdNight = Date.parse('2026-07-12T10:30:00.000Z'); // 22:30 in Auckland
+    const say = vi.fn(async () => {});
+    const line = await runProactiveTick({
+      now: () => householdNight,
+      statePath,
+      relationshipStatePath: relPath,
+      recentHearing: async () => [],
+      present: async () => true,
+      say,
+    });
+    expect(line).toBeNull();
+    expect(say).not.toHaveBeenCalled();
   });
 
   it('speaks aloud when present, and throttles the next immediate tick', async () => {
@@ -155,6 +174,79 @@ describe('runProactiveTick — end to end (injected delivery seams, no model)', 
     expect(line).toContain('3');
     expect(tg).toHaveBeenCalledTimes(1);
     expect(say).not.toHaveBeenCalled();
+  });
+
+  it('honours household silent mode before either local or remote delivery', async () => {
+    saveRelationshipState({ firstSeenAt: NOW - 10 * DAY, lastPresentAt: NOW - 3 * DAY, celebratedMilestones: [7] }, relPath);
+    const tg = vi.fn(async () => true);
+    const line = await runProactiveTick({
+      now: () => NOW,
+      present: async () => false,
+      telegramVoice: tg,
+      statePath,
+      relationshipStatePath: relPath,
+      recentHearing: async () => [],
+      homePolicy: async () => ({
+        allowed: false,
+        spontaneousDailyLimit: 0,
+        privateContentAllowed: true,
+        reason: 'silent',
+      }),
+    });
+    expect(line).toBeNull();
+    expect(tg).not.toHaveBeenCalled();
+    expect(loadProactiveState(statePath).lastSentAt).toBeUndefined();
+  });
+
+  it('shares the daily invitation cap with the presence loop', async () => {
+    saveRelationshipState({ firstSeenAt: NOW - 10 * DAY, lastPresentAt: NOW - 3 * DAY, celebratedMilestones: [7] }, relPath);
+    const tg = vi.fn(async () => true);
+    const claimDailyBudget = vi.fn(async () => ({
+      granted: false,
+      release: async () => undefined,
+    }));
+    const line = await runProactiveTick({
+      now: () => NOW,
+      present: async () => false,
+      telegramVoice: tg,
+      statePath,
+      relationshipStatePath: relPath,
+      recentHearing: async () => [],
+      homePolicy: async () => ({
+        allowed: true,
+        spontaneousDailyLimit: 2,
+        privateContentAllowed: true,
+        reason: 'free day',
+      }),
+      claimDailyBudget,
+    });
+    expect(line).toBeNull();
+    expect(claimDailyBudget).toHaveBeenCalledWith(2, new Date(NOW));
+    expect(tg).not.toHaveBeenCalled();
+    expect(loadProactiveState(statePath).lastSentAt).toBeUndefined();
+  });
+
+  it('releases the budget and cooldown when remote delivery reports failure', async () => {
+    saveRelationshipState({ firstSeenAt: NOW - 10 * DAY, lastPresentAt: NOW - 3 * DAY, celebratedMilestones: [7] }, relPath);
+    const release = vi.fn(async () => undefined);
+    const line = await runProactiveTick({
+      now: () => NOW,
+      present: async () => false,
+      telegramVoice: async () => false,
+      statePath,
+      relationshipStatePath: relPath,
+      recentHearing: async () => [],
+      homePolicy: async () => ({
+        allowed: true,
+        spontaneousDailyLimit: 2,
+        privateContentAllowed: true,
+        reason: 'free day',
+      }),
+      claimDailyBudget: async () => ({ granted: true, release }),
+    });
+    expect(line).toBeNull();
+    expect(release).toHaveBeenCalledTimes(1);
+    expect(loadProactiveState(statePath).lastSentAt).toBeUndefined();
   });
 
   it('yields to the conductor when present (another voice has the floor)', async () => {

@@ -199,7 +199,7 @@ describe('public README screenshots', () => {
     }
 
     expect(targetsByFile.get(path.join(repoRoot, 'README.md'))?.length).toBeGreaterThan(30);
-    expect(targetsByFile.get(path.join(repoRoot, 'docs', 'screenshots', 'README.md'))).toHaveLength(18);
+    expect(targetsByFile.get(path.join(repoRoot, 'docs', 'screenshots', 'README.md'))).toHaveLength(21);
   });
 
   it('keeps GitHub-visible README anchor links resolvable', () => {
@@ -243,8 +243,8 @@ describe('public README screenshots', () => {
       }
     }
 
-    expect(targetsByFile.get(path.join(repoRoot, 'README.md'))).toHaveLength(20);
-    expect(targetsByFile.get(screenshotGalleryReadme)).toHaveLength(15);
+    expect(targetsByFile.get(path.join(repoRoot, 'README.md'))).toHaveLength(23);
+    expect(targetsByFile.get(screenshotGalleryReadme)).toHaveLength(18);
   });
 
   it('keeps every tracked screenshot gallery image listed in the gallery README', () => {
@@ -260,7 +260,7 @@ describe('public README screenshots', () => {
       .filter((target) => !target.startsWith('../'))
       .sort();
 
-    expect(trackedTargets).toHaveLength(14);
+    expect(trackedTargets).toHaveLength(17);
     expect(readmeTargets).toEqual(trackedTargets);
   });
 });

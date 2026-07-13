@@ -15,6 +15,7 @@
 // =============================================================================
 
 import { vi } from 'vitest';
+import path from 'path';
 
 // Hoist mock variables so they are available inside vi.mock() factories
 const {
@@ -204,6 +205,7 @@ jest.mock("../../src/memory/knowledge-graph.js", () => ({
 
 import { CodeBuddyAgent } from "../../src/agent/codebuddy-agent";
 import type { ChatEntry, StreamingChunk } from "../../src/agent/types";
+import { ConfirmationService } from "../../src/utils/confirmation-service.js";
 
 jest.mock("../../src/codebuddy/client.js", () => ({
   CodeBuddyClient: jest.fn().mockImplementation(function() { return {
@@ -869,7 +871,13 @@ describe("Agent Core Module Tests", () => {
   // ===========================================================================
   describe("Tool Execution", () => {
     beforeEach(() => {
+      ConfirmationService.getInstance().setSessionFlag("allOperations", true);
       agent = new CodeBuddyAgent("test-api-key");
+      (agent as any).toolHandler.setConfirmationCallback(async () => true);
+    });
+
+    afterEach(() => {
+      ConfirmationService.getInstance().setSessionFlag("allOperations", false);
     });
 
     describe("Basic Tool Execution", () => {
@@ -904,30 +912,32 @@ describe("Agent Core Module Tests", () => {
       });
 
       it("should execute create_file with checkpoint", async () => {
+        const filePath = path.join(process.cwd(), "test-new.ts");
         const result = await (agent as any).executeTool({
           id: "call_3",
           type: "function",
           function: {
             name: "create_file",
             arguments: JSON.stringify({
-              path: "/test/new.ts",
+              path: filePath,
               content: "const x = 1;",
             }),
           },
         });
         expect(result.success).toBe(true);
-        expect(mockCheckpointBeforeCreate).toHaveBeenCalledWith("/test/new.ts");
-        expect(mockCreateFile).toHaveBeenCalledWith("/test/new.ts", "const x = 1;");
+        expect(mockCheckpointBeforeCreate).toHaveBeenCalledWith(filePath);
+        expect(mockCreateFile).toHaveBeenCalledWith(filePath, "const x = 1;");
       });
 
       it("should execute str_replace_editor with checkpoint", async () => {
+        const filePath = path.join(process.cwd(), "test-file.ts");
         const result = await (agent as any).executeTool({
           id: "call_4",
           type: "function",
           function: {
             name: "str_replace_editor",
             arguments: JSON.stringify({
-              path: "/test/file.ts",
+              path: filePath,
               old_str: "old",
               new_str: "new",
               replace_all: true,
@@ -935,9 +945,9 @@ describe("Agent Core Module Tests", () => {
           },
         });
         expect(result.success).toBe(true);
-        expect(mockCheckpointBeforeEdit).toHaveBeenCalledWith("/test/file.ts");
+        expect(mockCheckpointBeforeEdit).toHaveBeenCalledWith(filePath);
         expect(mockStrReplace).toHaveBeenCalledWith(
-          "/test/file.ts",
+          filePath,
           "old",
           "new",
           true
@@ -954,7 +964,11 @@ describe("Agent Core Module Tests", () => {
           },
         });
         expect(result.success).toBe(true);
-        expect(mockBashExecute).toHaveBeenCalledWith(expect.stringContaining("ls -la"));
+        expect(mockBashExecute).toHaveBeenCalledWith(
+          expect.stringContaining("ls -la"),
+          undefined,
+          expect.any(String)
+        );
         expect(mockExecuteHooks).toHaveBeenCalledWith("pre-bash", expect.objectContaining({ command: expect.stringContaining("ls -la") }));
         expect(mockExecuteHooks).toHaveBeenCalledWith("post-bash", expect.objectContaining({
           command: expect.stringContaining("ls -la"),

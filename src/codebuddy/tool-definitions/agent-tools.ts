@@ -66,13 +66,13 @@ export const RESTORE_CONTEXT_TOOL: CodeBuddyTool = {
   type: 'function',
   function: {
     name: 'restore_context',
-    description: 'Restore compressed context content by identifier (file path or URL). When context is compressed, identifiers are preserved — use this to retrieve the full original content.',
+    description: 'Restore context removed from the model-facing observation. Pass the exact originating tool call ID (call_… or toolu_…) to retrieve the raw output persisted before optimization. Preserved file-path and URL identifiers remain supported.',
     parameters: {
       type: 'object',
       properties: {
         identifier: {
           type: 'string',
-          description: 'File path (e.g. "src/agent/types.ts") or URL to restore',
+          description: 'Exact tool call ID (preferred), or a preserved file path/URL identifier',
         },
       },
       required: ['identifier'],
@@ -1294,7 +1294,7 @@ export const BROWSER_OPERATOR_TOOL: CodeBuddyTool = {
   function: {
     name: 'browser_operator',
     description:
-      'Propose a consent-gated Browser Operator session for a live web goal that web_search/web_fetch cannot satisfy (interaction, login-gated, multi-step). Returns a reviewable plan — action log, consent scopes, stop control, proof export — WITHOUT launching a browser. The operator reviews and runs it; local/interactive/login-gated sessions require explicit consent. Prefer web_search/web_fetch for read-only lookups; use this only when a live, interactive browser session is genuinely needed.',
+      'Propose a consent-gated Browser Operator session for a live web goal that web_search/web_fetch cannot satisfy (interaction, login-gated, multi-step). Returns a reviewable plan — action log, consent scopes, stop control, proof export — WITHOUT launching a browser. Resolve and pass sourceUrl for an executable runtime; drafts without it remain review-only. The operator reviews and runs it; local/interactive/login-gated sessions require explicit consent. Prefer web_search/web_fetch for read-only lookups; use this only when a live, interactive browser session is genuinely needed.',
     parameters: {
       type: 'object',
       properties: {
@@ -1309,7 +1309,8 @@ export const BROWSER_OPERATOR_TOOL: CodeBuddyTool = {
         },
         sourceUrl: {
           type: 'string',
-          description: 'Optional known starting URL for the session.',
+          description:
+            'Explicit credential-free HTTP(S) starting URL. Required by the executable runtime; resolve it with web_search first when unknown.',
         },
         intent: {
           type: 'string',
@@ -1320,12 +1321,17 @@ export const BROWSER_OPERATOR_TOOL: CodeBuddyTool = {
           type: 'string',
           enum: ['isolated', 'local'],
           description:
-            'Browser surface. "isolated" (default) uses a fresh public surface; "local" reuses the operator\'s logged-in browser and therefore requires consent.',
+            'Browser surface. "isolated" (default) is headless; "local" opens a fresh visible dedicated browser owned by Code Buddy. Attaching existing logged-in tabs is not yet supported.',
         },
         requiresInteraction: {
           type: 'boolean',
           description:
             'Set true when the goal needs clicking/typing (mutating interaction). Adds an interact stage and consent scope.',
+        },
+        interactionInstruction: {
+          type: 'string',
+          description:
+            'Exact single visible browser action to bind to the reviewed plan and confirm again immediately before execution. Defaults to goal.',
         },
         allowLoginPages: {
           type: 'boolean',

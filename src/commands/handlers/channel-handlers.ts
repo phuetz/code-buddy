@@ -164,8 +164,11 @@ export async function startConfiguredChannels(configPath?: string, onlyType?: st
 }
 
 function getChannelConfigPaths(configPath?: string): string[] {
+  const envConfigPath = process.env.CODEBUDDY_CHANNEL_CONFIG?.trim();
   return configPath
     ? [configPath]
+    : envConfigPath
+      ? [envConfigPath]
     : [
         path.join(process.cwd(), '.codebuddy', 'channels.json'),
         path.join(process.env.HOME || process.env.USERPROFILE || '', '.codebuddy', 'channels.json'),
@@ -786,6 +789,12 @@ export async function registerAIMessageHandler(manager: import('../../channels/i
       const resolved = resolveProviderFromEnv(preferredProvider as never);
       if (!resolved) {
         logger.warn('No LLM provider for channel chat — set CODEBUDDY_PROVIDER + a provider key/env');
+        const { conversationFailureReply } = await import('../../conversation/conversation-orchestrator.js');
+        await channel.send({
+          channelId: message.channel.id,
+          content: conversationFailureReply(message.content),
+          replyTo: message.id,
+        });
         return;
       }
 
@@ -837,12 +846,74 @@ export async function registerAIMessageHandler(manager: import('../../channels/i
       // persists in-memory across messages; restored from disk on a cold start.
       // botId selects the per-bot persona and is already baked into sessionKey,
       // so different bots keep separate agents + histories.
+      const { getCrossChannelConversationBridge } = await import(
+        '../../conversation/cross-channel-bridge.js'
+      );
+      const conversationBridge = getCrossChannelConversationBridge();
+      const continuesVoiceConversation =
+        !message.isCommand &&
+        !message.content.trim().startsWith('/') &&
+        conversationBridge.matchesChannel(
+          channel.type,
+          message.channel.id,
+          message.threadId
+        );
+      // Snapshot BEFORE appending the current user turn. The current message is
+      // supplied separately to the agent and must not appear twice in its prompt.
+      const sharedConversationHistory = continuesVoiceConversation
+        ? conversationBridge.history()
+        : [];
+      if (continuesVoiceConversation) {
+        conversationBridge.recordChannelTurn({
+          role: 'user',
+          content: message.content,
+          channel: channel.type,
+          channelId: message.channel.id,
+          ...(message.threadId ? { threadId: message.threadId } : {}),
+          externalId: message.id,
+        });
+      }
       const agent = await getOrCreateChannelAgent(sessionKey, resolved, agentConfig, botId, routeModel);
 
-      const entries = await agent.processUserMessage(message.content);
+      const channelPersona = botId ? channelBotPersonas.get(botId) : undefined;
+      const companionConversation =
+        (Boolean(channelPersona?.systemPrompt) || continuesVoiceConversation) &&
+        process.env.CODEBUDDY_CHANNEL_CONVERSATION !== 'false';
+      let agentInput = message.content;
+      if (companionConversation) {
+        const { buildConversationTurnEnvelope } = await import(
+          '../../conversation/conversation-orchestrator.js'
+        );
+        const history = sharedConversationHistory.length
+          ? sharedConversationHistory.slice(-12)
+          : agent
+              .getChatHistory()
+              .filter((entry) => entry.type === 'user' || entry.type === 'assistant')
+              .slice(-12)
+              .map((entry) => {
+                const content = String(entry.content ?? '')
+                  .replace(/<companion_turn>[\s\S]*?<\/companion_turn>\s*/g, '')
+                  .replace(/^Message de l'utilisateur\s*:\s*/i, '')
+                  .trim();
+                return {
+                  role: entry.type === 'user' ? ('user' as const) : ('assistant' as const),
+                  content,
+                };
+              })
+              .filter((entry) => entry.content);
+        agentInput = buildConversationTurnEnvelope(message.content, history);
+      }
+
+      const entries = await agent.processUserMessage(agentInput);
       const lastEntry = entries[entries.length - 1];
-      const response = lastEntry ? String(lastEntry.content) : '';
-      let deliveryMode = response.trim() ? 'native' : 'empty';
+      let response = lastEntry ? String(lastEntry.content) : '';
+      if (!response.trim()) {
+        const { conversationFailureReply } = await import(
+          '../../conversation/conversation-orchestrator.js'
+        );
+        response = conversationFailureReply(message.content);
+      }
+      let deliveryMode = response.trim() ? 'native' : 'fallback';
       let deliveredChunks = 0;
 
       // 6. Deliver the reply. On Telegram, render the agent's markdown to the
@@ -891,6 +962,15 @@ export async function registerAIMessageHandler(manager: import('../../channels/i
         deliveryMode,
         deliveredChunks,
       });
+      if (continuesVoiceConversation) {
+        conversationBridge.recordChannelTurn({
+          role: 'assistant',
+          content: response,
+          channel: channel.type,
+          channelId: message.channel.id,
+          ...(message.threadId ? { threadId: message.threadId } : {}),
+        });
+      }
 
       // 7. If the user SPOKE (voice note), answer by voice too — mirror the
       //    modality. Best-effort: the text reply already landed, so a TTS/upload
@@ -936,6 +1016,18 @@ export async function registerAIMessageHandler(manager: import('../../channels/i
       await persistChannelSession(agent, sessionKey);
     } catch (err) {
       logger.error('Channel AI response failed', { error: err instanceof Error ? err.message : String(err) });
+      try {
+        const { conversationFailureReply } = await import(
+          '../../conversation/conversation-orchestrator.js'
+        );
+        await channel.send({
+          channelId: message.channel.id,
+          content: conversationFailureReply(message.content),
+          replyTo: message.id,
+        });
+      } catch {
+        /* delivery itself is unavailable; the error is already logged */
+      }
     }
   });
 }

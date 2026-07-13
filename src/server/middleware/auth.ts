@@ -5,6 +5,7 @@
  */
 
 import type { Request, Response, NextFunction } from 'express';
+import type { IncomingHttpHeaders } from 'http';
 import { validateApiKey, hasScope as _hasScope } from '../auth/api-keys.js';
 import { verifyToken } from '../auth/jwt.js';
 import type { ApiScope, AuthenticatedRequest, ServerConfig } from '../types.js';
@@ -69,6 +70,7 @@ export function createAuthMiddleware(config: ServerConfig) {
       req.auth = {
         scopes: ['admin'] as ApiScope[],
         type: 'api_key',
+        anonymous: true,
       };
       return next();
     }
@@ -119,6 +121,64 @@ export function createAuthMiddleware(config: ServerConfig) {
 
     return next();
   };
+}
+
+function normalizeRemoteAddress(value: string): string {
+  return value.trim().replace(/^\[|\]$/g, '').replace(/^::ffff:/i, '');
+}
+
+/** True only for IPv4/IPv6 loopback addresses (not RFC1918/LAN addresses). */
+export function isLoopbackRemoteAddress(value: string | undefined): boolean {
+  if (!value) return false;
+  const address = normalizeRemoteAddress(value.split('%')[0] ?? value);
+  if (address === '::1' || address === '0:0:0:0:0:0:0:1') return true;
+  const pieces = address.split('.');
+  if (
+    pieces.length !== 4 ||
+    pieces.some((piece) => !/^\d{1,3}$/.test(piece) || Number(piece) > 255)
+  ) {
+    return false;
+  }
+  return pieces[0] === '127';
+}
+
+export function hasProxyForwardingHeaders(headers: IncomingHttpHeaders): boolean {
+  return [
+    'forwarded',
+    'via',
+    'x-forwarded-for',
+    'x-forwarded-host',
+    'x-forwarded-proto',
+    'x-real-ip',
+  ].some((header) => headers[header] !== undefined);
+}
+
+export function isDirectLoopbackRequest(
+  remoteAddress: string | undefined,
+  headers: IncomingHttpHeaders,
+): boolean {
+  return isLoopbackRemoteAddress(remoteAddress) && !hasProxyForwardingHeaders(headers);
+}
+
+/**
+ * Fail closed for privileged routes when `--no-auth` synthesized an anonymous
+ * admin. Direct loopback clients remain compatible; LAN/WAN clients and all
+ * proxied requests are denied until authentication is enabled.
+ */
+export function requireLocalAnonymousAccess(req: Request, res: Response, next: NextFunction) {
+  if (!req.auth?.anonymous) return next();
+
+  // In anonymous-admin mode, do not trust *any* proxy assertion. A public
+  // client can spoof a loopback X-Forwarded-For when a proxy appends/preserves
+  // headers. Operators behind a reverse proxy must enable authentication.
+  if (!isDirectLoopbackRequest(req.socket.remoteAddress, req.headers)) {
+    return res.status(403).json({
+      ...API_ERRORS.FORBIDDEN,
+      message:
+        'Anonymous tool access is local-only. Enable authentication for network clients.',
+    });
+  }
+  return next();
 }
 
 /**

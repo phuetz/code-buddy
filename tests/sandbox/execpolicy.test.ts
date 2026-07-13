@@ -9,6 +9,9 @@ import {
   resetExecPolicy,
   PolicyAction,
 } from "../../src/sandbox/execpolicy";
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
 
 describe("ExecPolicy", () => {
   let policy: ExecPolicy;
@@ -16,7 +19,7 @@ describe("ExecPolicy", () => {
   beforeEach(async () => {
     resetExecPolicy();
     policy = new ExecPolicy({
-      defaultAction: "ask",
+      defaultAction: "sandbox",
       auditLog: true,
       detectDangerous: true,
     });
@@ -43,12 +46,12 @@ describe("ExecPolicy", () => {
       expect(safeReadRule?.action).toBe("allow");
     });
 
-    it("should have dangerous commands rule", async () => {
+    it("should confine useful workspace mutations instead of hard-disabling them", async () => {
       const rules = policy.getRules();
       const dangerousRule = rules.find(r => r.id === "builtin-dangerous");
 
       expect(dangerousRule).toBeDefined();
-      expect(dangerousRule?.action).toBe("deny");
+      expect(dangerousRule?.action).toBe("sandbox");
     });
   });
 
@@ -78,10 +81,56 @@ describe("ExecPolicy", () => {
       expect(evaluation.action).toBe("sandbox");
     });
 
-    it("should return default action for unknown commands", () => {
+    it("should sandbox unknown commands instead of running them directly", () => {
       const evaluation = policy.evaluate("unknowncommand123", []);
 
-      expect(evaluation.action).toBe("ask"); // default action
+      expect(evaluation.action).toBe("sandbox");
+    });
+  });
+
+  describe("Complete shell evaluation", () => {
+    it.each([
+      ["cat README.md", "allow"],
+      ["cat README.md > out", "sandbox"],
+      ["find . -delete", "sandbox"],
+      ["rg --pre helper pattern", "sandbox"],
+      ["git status", "allow"],
+      ["git branch -D main", "ask"],
+      ["git push origin main", "ask"],
+      ["git status && rm -rf dist", "sandbox"],
+      ["git status | bash", "sandbox"],
+      ["npm test", "sandbox"],
+      ["npm install", "ask"],
+      ["rm -rf dist", "sandbox"],
+      ["rm -rf /", "deny"],
+      ["chmod +x script.sh", "sandbox"],
+      ["systemctl --user restart lisa.service", "ask"],
+    ])("classifies %s as %s", (command, expected) => {
+      expect(policy.evaluateShellCommand(command).action).toBe(expected);
+    });
+
+    it("evaluates every segment and keeps the strictest decision", () => {
+      const result = policy.evaluateShellCommand("git status && npm install && rm -rf dist");
+      expect(result.parsedSegments).toHaveLength(3);
+      expect(result.action).toBe("ask");
+    });
+
+    it("does not trust an executable merely because its basename is git", () => {
+      expect(policy.evaluateShellCommand("/usr/bin/git status").action).toBe("allow");
+      expect(policy.evaluateShellCommand("/tmp/git status").action).toBe("sandbox");
+    });
+
+    it("lets a strict prefix denial beat a broader allow", () => {
+      policy.addPrefixRule({ prefix: ["git", "status"], action: "allow", enabled: true });
+      policy.addPrefixRule({ prefix: ["git", "status", "--short"], action: "deny", enabled: true });
+      expect(policy.evaluateShellCommand("git status --short").action).toBe("deny");
+    });
+
+    it("refuses persistent rules that grant a bare interpreter or launcher", () => {
+      for (const prefix of ["bash", "python", "node", "sudo", "env", "git"]) {
+        expect(() => policy.addPrefixRule({ prefix: [prefix], action: "allow", enabled: true }))
+          .toThrow(/over-broad prefix/i);
+      }
     });
   });
 
@@ -221,6 +270,28 @@ describe("ExecPolicy", () => {
 
       const count = policy.importRules(JSON.stringify(customRules));
       expect(count).toBe(1);
+    });
+
+    it("persists prefix rules atomically and reloads the versioned document", async () => {
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), "codebuddy-execpolicy-"));
+      const file = path.join(dir, "execpolicy.json");
+      try {
+        policy.addPrefixRule({
+          prefix: ["git", "status"],
+          action: "allow",
+          enabled: true,
+        });
+        await policy.saveRules(file);
+        const document = JSON.parse(fs.readFileSync(file, "utf8"));
+        expect(document.version).toBe(2);
+        expect(document.prefixRules).toHaveLength(1);
+
+        const reloaded = new ExecPolicy({ rulesPath: file, defaultAction: "sandbox" });
+        await reloaded.initialize();
+        expect(reloaded.evaluateShellCommand("git status --short").action).toBe("allow");
+      } finally {
+        fs.rmSync(dir, { recursive: true, force: true });
+      }
     });
   });
 

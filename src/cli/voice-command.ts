@@ -5,9 +5,9 @@
  * the sensory daemon: STT (faster-whisper) → makeAgentReply (full agent turn under a
  * permission posture) → condensed spoken reply (Piper).
  *
- * Safety: defaults to the 'plan' posture (read-only). `--mode dontAsk|bypassPermissions`
- * lets the agent edit/run — opt-in, loud. Everything is injectable for tests; never
- * crashes the loop on a single failed turn.
+ * Voice defaults to the normal guarded posture.  Collaboration/plan state is
+ * independent: an explicit `--mode plan` remains read-only, but a previous
+ * planning session can no longer silently disable Lisa's everyday actions.
  *
  * @module cli/voice-command
  */
@@ -16,7 +16,7 @@ import { logger } from '../utils/logger.js';
 import type { PermissionMode } from '../security/permission-modes.js';
 
 export interface VoiceCommandOptions {
-  /** Voice ACT posture. Default 'plan' (read-only). */
+  /** Voice ACT posture. Default 'default' (guarded workspace actions). */
   permissionMode?: PermissionMode;
   /** Record one utterance, return the WAV path. Default: voice-input.recordAudio (Enter to stop). */
   record?: () => Promise<string>;
@@ -34,26 +34,40 @@ export interface VoiceCommandOptions {
 
 /** Run the push-to-talk loop. Resolves when the user exits (Ctrl-C) or `once`/`maxRounds` is hit. */
 export async function runVoiceCommand(options: VoiceCommandOptions = {}): Promise<void> {
-  const mode: PermissionMode = options.permissionMode ?? 'plan';
+  const mode: PermissionMode = options.permissionMode ?? 'default';
   const print = options.print ?? ((s: string) => console.log(s));
 
-  const record = options.record ?? (async () => {
-    const { recordAudio } = await import('../tools/voice-input.js');
-    return recordAudio(0); // 0 = manual stop (Enter)
-  });
-  const transcribe = options.transcribe ?? (async (wav: string) => {
-    const { transcribeWav } = await import('../sensory/speech-reaction.js');
-    return transcribeWav(wav);
-  });
-  const onHeard = options.onHeard ?? (await (async () => {
-    const { makeVoiceReply } = await import('../sensory/voice-loop.js');
-    const { makeAgentReply } = await import('../sensory/agent-reply.js');
-    return makeVoiceReply({ replyFn: makeAgentReply({ permissionMode: mode }) });
-  })());
+  const record =
+    options.record ??
+    (async () => {
+      const { recordAudio } = await import('../tools/voice-input.js');
+      return recordAudio(0); // 0 = manual stop (Enter)
+    });
+  const transcribe =
+    options.transcribe ??
+    (async (wav: string) => {
+      const { transcribeWav } = await import('../sensory/speech-reaction.js');
+      return transcribeWav(wav);
+    });
+  const onHeard =
+    options.onHeard ??
+    (await (async () => {
+      const { makeVoiceReply } = await import('../sensory/voice-loop.js');
+      const { makeAgentReply } = await import('../sensory/agent-reply.js');
+      return makeVoiceReply({ replyFn: makeAgentReply({ permissionMode: mode }) });
+    })());
 
+  const postureLabel =
+    mode === 'plan'
+      ? ' (read-only)'
+      : mode === 'default'
+        ? ' (guarded workspace sandbox)'
+        : mode === 'acceptEdits'
+          ? ' (edits allowed, shell guarded)'
+          : ' — CAN EDIT/RUN';
   print(
-    `🎙️  Voice commands — posture: ${mode}${mode === 'plan' ? ' (read-only)' : ' — CAN EDIT/RUN'}.` +
-      `${options.once ? '' : ' Ctrl-C to quit.'}`,
+    `🎙️  Voice commands — posture: ${mode}${postureLabel}.` +
+      `${options.once ? '' : ' Ctrl-C to quit.'}`
   );
 
   let round = 0;

@@ -15,6 +15,8 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import { homedir } from 'os';
 import { logger } from '../utils/logger.js';
+import { canonicalizeTimeZone } from '../life-rhythm/day-context.js';
+import { findNextZonedMinute } from '../life-rhythm/zoned-minute.js';
 import type { CronPreCheck } from './pre-check-runner.js';
 import type { CronWatchdog } from './watchdog-handlers.js';
 
@@ -226,13 +228,17 @@ function parseCronExpression(expr: string): CronFields {
     string,
   ];
 
-  return {
+  const fields = {
     minute: parseField(minuteField, 0, 59),
     hour: parseField(hourField, 0, 23),
     dayOfMonth: parseField(domField, 1, 31),
     month: parseField(monthField, 1, 12),
     dayOfWeek: parseField(dowField, 0, 6),
   };
+  if (Object.values(fields).some((field) => field.length === 0)) {
+    throw new Error(`Invalid cron expression: one or more fields contain no valid value (${expr})`);
+  }
+  return fields;
 }
 
 function parseField(field: string, min: number, max: number): number[] {
@@ -270,29 +276,129 @@ function parseField(field: string, min: number, max: number): number[] {
   return Array.from(values).filter(v => v >= min && v <= max).sort((a, b) => a - b);
 }
 
-function getNextCronTime(fields: CronFields, after: Date = new Date()): Date {
+interface ZonedCronParts {
+  localDate: string;
+  minute: number;
+  hour: number;
+  dayOfMonth: number;
+  month: number;
+  dayOfWeek: number;
+}
+
+const CRON_WEEKDAY_INDEX: Record<string, number> = {
+  Sun: 0,
+  Mon: 1,
+  Tue: 2,
+  Wed: 3,
+  Thu: 4,
+  Fri: 5,
+  Sat: 6,
+};
+const cronFormatterCache = new Map<string, Intl.DateTimeFormat>();
+
+function cronFormatter(timezone: string): Intl.DateTimeFormat {
+  let formatter = cronFormatterCache.get(timezone);
+  if (!formatter) {
+    formatter = new Intl.DateTimeFormat('en-CA-u-ca-iso8601-nu-latn', {
+      timeZone: timezone,
+      calendar: 'iso8601',
+      numberingSystem: 'latn',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      weekday: 'short',
+      hour: '2-digit',
+      minute: '2-digit',
+      hourCycle: 'h23',
+    });
+    cronFormatterCache.set(timezone, formatter);
+  }
+  return formatter;
+}
+
+function zonedCronParts(date: Date, timezone?: string): ZonedCronParts {
+  if (!timezone) {
+    return {
+      localDate: `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`,
+      minute: date.getMinutes(),
+      hour: date.getHours(),
+      dayOfMonth: date.getDate(),
+      month: date.getMonth() + 1,
+      dayOfWeek: date.getDay(),
+    };
+  }
+
+  const values = new Map(
+    cronFormatter(timezone).formatToParts(date)
+      .filter((part) => part.type !== 'literal')
+      .map((part) => [part.type, part.value])
+  );
+  const year = Number(values.get('year'));
+  const month = Number(values.get('month'));
+  const dayOfMonth = Number(values.get('day'));
+  const hour = Number(values.get('hour'));
+  const minute = Number(values.get('minute'));
+  const dayOfWeek = CRON_WEEKDAY_INDEX[values.get('weekday') ?? ''];
+  if ([year, month, dayOfMonth, hour, minute, dayOfWeek].some((value) => !Number.isInteger(value))) {
+    throw new Error(`Unable to resolve cron civil time in ${timezone}`);
+  }
+  return {
+    localDate: `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}-${String(dayOfMonth).padStart(2, '0')}`,
+    minute,
+    hour,
+    dayOfMonth,
+    month,
+    dayOfWeek: dayOfWeek!,
+  };
+}
+
+function localMinuteKey(parts: ZonedCronParts): string {
+  return `${parts.localDate}T${String(parts.hour).padStart(2, '0')}:${String(parts.minute).padStart(2, '0')}`;
+}
+
+function isUnrestrictedDaily(fields: CronFields): boolean {
+  return fields.dayOfMonth.length === 31
+    && fields.month.length === 12
+    && fields.dayOfWeek.length === 7;
+}
+
+function getNextCronTime(
+  fields: CronFields,
+  after: Date = new Date(),
+  timezone?: string,
+  previousLocalMinute?: string
+): Date {
+  const canonicalTimeZone = timezone ? canonicalizeTimeZone(timezone) : undefined;
+  const dailyCandidates = fields.hour.length * fields.minute.length;
+  if (canonicalTimeZone && isUnrestrictedDaily(fields) && dailyCandidates <= 64) {
+    const candidates = fields.hour.flatMap((hour) => fields.minute.map((minute) => (
+      findNextZonedMinute(after, canonicalTimeZone, hour, minute).instant
+    ))).filter((candidate) => (
+      localMinuteKey(zonedCronParts(candidate, canonicalTimeZone)) !== previousLocalMinute
+    ));
+    candidates.sort((left, right) => left.getTime() - right.getTime());
+    if (candidates[0]) return candidates[0];
+  }
   const next = new Date(after);
-  next.setSeconds(0, 0);
-  next.setMinutes(next.getMinutes() + 1);
+  next.setUTCSeconds(0, 0);
+  next.setUTCMinutes(next.getUTCMinutes() + 1);
 
   for (let iteration = 0; iteration < 366 * 24 * 60; iteration++) {
-    const month = next.getMonth() + 1;
-    const dayOfMonth = next.getDate();
-    const dayOfWeek = next.getDay();
-    const hour = next.getHours();
-    const minute = next.getMinutes();
+    const parts = zonedCronParts(next, canonicalTimeZone);
+    const { month, dayOfMonth, dayOfWeek, hour, minute } = parts;
 
     if (
       fields.month.includes(month) &&
       fields.dayOfMonth.includes(dayOfMonth) &&
       fields.dayOfWeek.includes(dayOfWeek) &&
       fields.hour.includes(hour) &&
-      fields.minute.includes(minute)
+      fields.minute.includes(minute) &&
+      localMinuteKey(parts) !== previousLocalMinute
     ) {
       return next;
     }
 
-    next.setMinutes(next.getMinutes() + 1);
+    next.setUTCMinutes(next.getUTCMinutes() + 1);
   }
 
   throw new Error('Could not find next cron time within a year');
@@ -307,6 +413,7 @@ export class CronScheduler extends EventEmitter {
   private jobs: Map<string, CronJob> = new Map();
   private timers: Map<string, NodeJS.Timeout> = new Map();
   private tickTimer: NodeJS.Timeout | null = null;
+  private tickInFlight = false;
   private running: boolean = false;
   private taskExecutor?: (job: CronJob, inputData?: string) => Promise<unknown>;
 
@@ -358,7 +465,9 @@ export class CronScheduler extends EventEmitter {
     }
 
     // Start tick timer for cron jobs
-    this.tickTimer = setInterval(() => this.tick(), this.config.tickIntervalMs);
+    this.tickTimer = setInterval(() => {
+      void this.tick().catch((error) => this.emit('error', error));
+    }, this.config.tickIntervalMs);
     this.running = true;
   }
 
@@ -630,8 +739,25 @@ export class CronScheduler extends EventEmitter {
         if (!job.schedule.cron) return undefined;
         try {
           const fields = parseCronExpression(job.schedule.cron);
-          return getNextCronTime(fields, now);
-        } catch {
+          const zone = job.schedule.timezone || this.config.defaultTimezone;
+          const previousLocalMinute = job.lastRunAt
+            ? localMinuteKey(zonedCronParts(job.lastRunAt, canonicalizeTimeZone(zone)))
+            : undefined;
+          return getNextCronTime(
+            fields,
+            now,
+            zone,
+            previousLocalMinute
+          );
+        } catch (error) {
+          job.status = 'error';
+          job.lastError = `Invalid or unschedulable cron: ${error instanceof Error ? error.message : String(error)}`;
+          logger.warn('Cron job could not be scheduled', {
+            jobId: job.id,
+            cron: job.schedule.cron,
+            timezone: job.schedule.timezone || this.config.defaultTimezone,
+            error: job.lastError,
+          });
           return undefined;
         }
 
@@ -848,22 +974,26 @@ export class CronScheduler extends EventEmitter {
   // ==========================================================================
 
   private async tick(): Promise<void> {
+    if (this.tickInFlight) return;
+    this.tickInFlight = true;
     const now = new Date();
-
-    for (const job of this.jobs.values()) {
-      if (
-        job.type === 'cron' &&
-        job.enabled &&
-        job.status === 'active' &&
-        job.nextRunAt &&
-        job.nextRunAt <= now
-      ) {
-        // Execute and reschedule
-        await this.executeJob(job);
-        if (job.enabled && job.status === 'active') {
-          job.nextRunAt = this.calculateNextRun(job);
+    try {
+      for (const job of this.jobs.values()) {
+        if (
+          job.type === 'cron' &&
+          job.enabled &&
+          job.status === 'active' &&
+          job.nextRunAt &&
+          job.nextRunAt <= now
+        ) {
+          await this.executeJob(job);
+          if (job.enabled && job.status === 'active') {
+            job.nextRunAt = this.calculateNextRun(job);
+          }
         }
       }
+    } finally {
+      this.tickInFlight = false;
     }
   }
 

@@ -27,6 +27,7 @@ const hoisted = vi.hoisted(() => {
     getChatHistory: vi.fn(),
     constructorCalls: [] as any[][],
     setModelCalls: [] as string[],
+    managerSend: vi.fn(),
   };
 });
 
@@ -35,6 +36,7 @@ vi.mock('../../src/channels/core.js', () => ({
   resolveRoute: hoisted.resolveRoute,
   getRouteAgentConfig: hoisted.getRouteAgentConfig,
   getDMPairing: hoisted.getDMPairing,
+  getChannelManager: () => ({ send: hoisted.managerSend }),
 }));
 
 vi.mock('../../src/agent/codebuddy-agent.js', () => {
@@ -75,6 +77,10 @@ import {
   registerChannelBotPersona,
   __resetChannelAIHandlerForTests,
 } from '../../src/commands/handlers/channel-handlers.js';
+import {
+  getCrossChannelConversationBridge,
+  resetCrossChannelConversationBridge,
+} from '../../src/conversation/cross-channel-bridge.js';
 
 type InboundHandler = (message: any, channel: any) => Promise<void>;
 
@@ -105,6 +111,11 @@ describe('registerAIMessageHandler inbound roundtrip (GAP-7)', () => {
     hoisted.sessions.clear();
     hoisted.constructorCalls.length = 0;
     hoisted.setModelCalls.length = 0;
+    delete process.env.CODEBUDDY_CONVERSATION_CHANNEL_ID;
+    delete process.env.CODEBUDDY_CONVERSATION_CHANNEL;
+    delete process.env.CODEBUDDY_SENSORY_ALERT_CHAT;
+    process.env.CODEBUDDY_CONVERSATION_PERSIST = 'false';
+    resetCrossChannelConversationBridge();
     process.env.GROK_API_KEY = 'test-key';
 
     // Default happy path: approved pairing, simple route, in-memory session store.
@@ -121,6 +132,7 @@ describe('registerAIMessageHandler inbound roundtrip (GAP-7)', () => {
       { type: 'user', content: 'latest question', timestamp: new Date('2026-01-01T00:00:00.000Z') },
       { type: 'assistant', content: 'Here is your answer.', timestamp: new Date('2026-01-01T00:00:01.000Z') },
     ]);
+    hoisted.managerSend.mockResolvedValue({ success: true, timestamp: new Date() });
   });
 
   it('runs message → pairing → route → agent → reply and delivers the response', async () => {
@@ -176,6 +188,37 @@ describe('registerAIMessageHandler inbound roundtrip (GAP-7)', () => {
     expect(hoisted.resumeSession).not.toHaveBeenCalled();
     expect(hoisted.processUserMessage).toHaveBeenNthCalledWith(1, 'first');
     expect(hoisted.processUserMessage).toHaveBeenNthCalledWith(2, 'follow-up');
+  });
+
+  it('continues a resident voice thread on Telegram and stores the Telegram reply for voice', async () => {
+    process.env.CODEBUDDY_CONVERSATION_CHANNEL = 'telegram';
+    process.env.CODEBUDDY_CONVERSATION_CHANNEL_ID = 'chan-42';
+    resetCrossChannelConversationBridge();
+    const bridge = getCrossChannelConversationBridge();
+    await bridge.recordVoiceTurn({ role: 'user', content: 'Nous parlions du libre arbitre.' });
+    await bridge.recordVoiceTurn({ role: 'assistant', content: 'Je distinguais choix et causalité.' });
+
+    const manager = makeManager();
+    await registerAIMessageHandler(manager as any);
+    const send = vi.fn().mockResolvedValue({ success: true, timestamp: new Date() });
+    await manager.emit(makeMessage('Et la responsabilité ?', 'sess-bridge'), {
+      type: 'telegram',
+      send,
+    });
+
+    const agentInput = String(hoisted.processUserMessage.mock.calls.at(-1)?.[0]);
+    expect(agentInput).toContain('<companion_turn>');
+    expect(agentInput).toContain('libre arbitre');
+    expect(agentInput).toContain('choix et causalité');
+    expect(agentInput).toContain('Message de l\'utilisateur : Et la responsabilité ?');
+    expect(bridge.history().at(-2)).toEqual({
+      role: 'user',
+      content: 'Et la responsabilité ?',
+    });
+    expect(bridge.history().at(-1)).toEqual({
+      role: 'assistant',
+      content: 'Here is your answer.',
+    });
   });
 
   it('restores prior history when resuming a session that already has messages', async () => {

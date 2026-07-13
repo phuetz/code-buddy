@@ -39,7 +39,12 @@ function resolveServerEnv(server: MCPServerConfig): MCPServerConfig {
  * Load MCP configuration from multiple sources (Advanced enterprise architecture for)
  * Priority: Project .codebuddy/mcp.json > .codebuddy/settings.json > ~/.codebuddy/mcp.json
  */
-export function loadMCPConfig(): MCPConfig {
+export interface LoadMCPConfigOptions {
+  /** Include disabled entries for inventory and diagnostics. Runtime callers omit this. */
+  includeDisabled?: boolean;
+}
+
+export function loadMCPConfig(options: LoadMCPConfigOptions = {}): MCPConfig {
   const servers: MCPServerConfig[] = [];
   const seenServers = new Set<string>();
 
@@ -54,7 +59,7 @@ export function loadMCPConfig(): MCPConfig {
         if (!seenServers.has(name)) {
           const serverConfig = resolveServerEnv({ ...(config as MCPServerConfig), name });
           // Skip disabled servers at load time
-          if (serverConfig.enabled === false) {
+          if (serverConfig.enabled === false && !options.includeDisabled) {
             seenServers.add(name);
             continue;
           }
@@ -73,7 +78,10 @@ export function loadMCPConfig(): MCPConfig {
   if (projectSettings.mcpServers) {
     for (const [name, config] of Object.entries(projectSettings.mcpServers)) {
       if (!seenServers.has(name)) {
-        servers.push(resolveServerEnv(config as MCPServerConfig));
+        const serverConfig = resolveServerEnv({ ...(config as MCPServerConfig), name });
+        if (serverConfig.enabled !== false || options.includeDisabled) {
+          servers.push(serverConfig);
+        }
         seenServers.add(name);
       }
     }
@@ -88,7 +96,10 @@ export function loadMCPConfig(): MCPConfig {
 
       for (const [name, config] of Object.entries(mcpServers)) {
         if (!seenServers.has(name)) {
-          servers.push(resolveServerEnv({ ...(config as MCPServerConfig), name }));
+          const serverConfig = resolveServerEnv({ ...(config as MCPServerConfig), name });
+          if (serverConfig.enabled !== false || options.includeDisabled) {
+            servers.push(serverConfig);
+          }
           seenServers.add(name);
         }
       }
@@ -136,6 +147,56 @@ export function getMCPServer(serverName: string): MCPServerConfig | undefined {
   const manager = getSettingsManager();
   const projectSettings = manager.loadProjectSettings();
   return projectSettings.mcpServers?.[serverName] as MCPServerConfig | undefined;
+}
+
+export interface MCPServerEnabledUpdate {
+  updated: boolean;
+  source?: 'project-mcp' | 'project-settings' | 'user-mcp';
+  path?: string;
+}
+
+function updateEnabledInJsonFile(
+  filePath: string,
+  serverName: string,
+  enabled: boolean,
+): boolean {
+  if (!fs.existsSync(filePath)) return false;
+  const parsed = JSON.parse(fs.readFileSync(filePath, 'utf-8')) as Record<string, unknown>;
+  const key = parsed.mcpServers && typeof parsed.mcpServers === 'object' ? 'mcpServers' : 'servers';
+  const servers = parsed[key];
+  if (!servers || typeof servers !== 'object' || Array.isArray(servers)) return false;
+  const record = servers as Record<string, unknown>;
+  const existing = record[serverName];
+  if (!existing || typeof existing !== 'object' || Array.isArray(existing)) return false;
+  record[serverName] = { ...existing, enabled };
+  fs.writeFileSync(filePath, `${JSON.stringify(parsed, null, 2)}\n`);
+  return true;
+}
+
+/** Update the highest-priority source that actually defines the server. */
+export function setMCPServerEnabled(serverName: string, enabled: boolean): MCPServerEnabledUpdate {
+  const projectPath = path.join(process.cwd(), '.codebuddy', 'mcp.json');
+  if (updateEnabledInJsonFile(projectPath, serverName, enabled)) {
+    return { updated: true, source: 'project-mcp', path: projectPath };
+  }
+
+  const manager = getSettingsManager();
+  const settings = manager.loadProjectSettings();
+  const settingsServers = settings.mcpServers;
+  if (settingsServers?.[serverName]) {
+    manager.updateProjectSetting('mcpServers', {
+      ...settingsServers,
+      [serverName]: { ...(settingsServers[serverName] as MCPServerConfig), enabled },
+    });
+    return { updated: true, source: 'project-settings' };
+  }
+
+  const userPath = path.join(os.homedir(), '.codebuddy', 'mcp.json');
+  if (updateEnabledInJsonFile(userPath, serverName, enabled)) {
+    return { updated: true, source: 'user-mcp', path: userPath };
+  }
+
+  return { updated: false };
 }
 
 // Predefined server configurations (disabled by default — user activates with API key)

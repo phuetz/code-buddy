@@ -111,6 +111,106 @@ describe('ConfirmationService', () => {
       const flags = service.getSessionFlags();
       expect(flags.bashCommands).toBe(true);
     });
+
+    it('caches an exact approval key without granting every Bash command', async () => {
+      let prompts = 0;
+      service.setInteractiveBridge(async () => {
+        prompts += 1;
+        return { confirmed: true, dontAskAgain: true };
+      });
+
+      const base = {
+        operation: 'Run command outside sandbox',
+        filename: 'systemctl --user restart lisa.service',
+        riskLevel: 'high' as const,
+        approvalKey: 'shell:/workspace:systemctl\0--user\0restart\0lisa.service',
+      };
+      expect((await service.requestConfirmation(base, 'bash')).confirmed).toBe(true);
+      expect((await service.requestConfirmation(base, 'bash')).confirmed).toBe(true);
+      expect(prompts).toBe(1);
+
+      expect((await service.requestConfirmation({
+        ...base,
+        approvalKey: 'shell:/other:systemctl\0--user\0restart\0lisa.service',
+      }, 'bash')).confirmed).toBe(true);
+      expect(prompts).toBe(2);
+      expect(service.getSessionFlags().bashCommands).toBe(false);
+    });
+
+    it('does not let a legacy allOperations flag bypass an exact boundary grant', async () => {
+      service.setSessionFlag('allOperations', true);
+      let prompts = 0;
+      service.setInteractiveBridge(async () => {
+        prompts += 1;
+        return { confirmed: false };
+      });
+      const result = await service.requestConfirmation({
+        operation: 'Run command outside sandbox',
+        filename: 'npm publish',
+        riskLevel: 'high',
+        approvalKey: 'shell:/workspace:npm\0publish',
+      }, 'bash');
+      expect(result.confirmed).toBe(false);
+      expect(prompts).toBe(1);
+    });
+
+    it('isolates identical exact grants between concurrent session contexts', async () => {
+      let prompts = 0;
+      service.setInteractiveBridge(async () => {
+        prompts += 1;
+        return { confirmed: true, dontAskAgain: true };
+      });
+      const request = {
+        operation: 'Run command outside sandbox',
+        filename: 'npm install',
+        riskLevel: 'high' as const,
+        approvalKey: 'shell:same-command-and-cwd',
+      };
+
+      await service.withApprovalContextAsync('session-a', () => service.requestConfirmation(request, 'bash'));
+      await service.withApprovalContextAsync('session-a', () => service.requestConfirmation(request, 'bash'));
+      await service.withApprovalContextAsync('session-b', () => service.requestConfirmation(request, 'bash'));
+      expect(prompts).toBe(2);
+    });
+
+    it('caches generic tool approvals by exact arguments without widening legacy flags', async () => {
+      const { getPermissionModeManager, resetPermissionModeManager } = await import('../../src/security/permission-modes.js');
+      resetPermissionModeManager();
+      getPermissionModeManager().setMode('default');
+      let prompts = 0;
+      service.setInteractiveBridge(async () => {
+        prompts += 1;
+        return { confirmed: true, dontAskAgain: true };
+      });
+      const base = {
+        operation: 'Execute tool: browser_click',
+        filename: 'browser_click @ /workspace',
+        toolName: 'browser_click',
+        toolArgs: { selector: '#publish' },
+        approvalKey: 'tool-action:click-publish',
+        riskLevel: 'high' as const,
+      };
+
+      try {
+        expect((await service.requestConfirmation(base, 'tool')).confirmed).toBe(true);
+        expect((await service.requestConfirmation(base, 'tool')).confirmed).toBe(true);
+        expect(prompts).toBe(1);
+
+        expect((await service.requestConfirmation({
+          ...base,
+          toolArgs: { selector: '#delete' },
+          approvalKey: 'tool-action:click-delete',
+        }, 'tool')).confirmed).toBe(true);
+        expect(prompts).toBe(2);
+        expect(service.getSessionFlags()).toEqual({
+          fileOperations: false,
+          bashCommands: false,
+          allOperations: false,
+        });
+      } finally {
+        resetPermissionModeManager();
+      }
+    });
   });
 
   describe('Confirmation Response', () => {
@@ -230,7 +330,7 @@ describe('ConfirmationService', () => {
 
         const bashResult = await service.requestConfirmation({
           operation: 'run_command',
-          filename: 'echo hello',
+          filename: 'find . -delete',
           riskLevel: 'low' as any,
         }, 'bash');
         expect(bashResult.confirmed).toBe(false);

@@ -60,8 +60,10 @@ export interface ResponseDecider {
    *  expose it so a caller can explicitly start a conversation (e.g. a wake-word from another
    *  channel). NOTE: do NOT call this after every reply — that would make the window slide on
    *  ambient cross-talk and the robot would answer the whole room. */
-  markEngaged(): void;
+  markEngaged(source?: EngagementSource): void;
 }
+
+export type EngagementSource = 'addressed' | 'greeting' | 'arrival';
 
 // ── fuzzy name match ──────────────────────────────────────────────────
 
@@ -142,10 +144,6 @@ function normWords(text: string): string {
     .replace(/[^\p{L}\p{N}\s]/gu, ' ')
     .replace(/\s+/g, ' ')
     .trim();
-}
-
-function tokenizeWords(text: string): string[] {
-  return normWords(text).split(' ').filter(Boolean);
 }
 
 /** Indices where the (possibly multi-word) name appears (fuzzy). */
@@ -261,9 +259,28 @@ export function isDirectedFollowUp(text: string): boolean {
   if (!(text ?? '').trim()) return false;
   if (text.includes('?')) return true;
   const t = normWords(text);
-  if (SECOND_PERSON.test(t)) return true;
+  const words = t.split(' ').filter(Boolean);
+  // Broadcast narration frequently starts with a first-person statement and
+  // later contains a generic "vous" plus a verb that is also an imperative
+  // spelling ("je vous attends"). Do this check before IMPERATIVE so that
+  // grammatical collision cannot reopen the microphone conversation.
+  if (
+    words.length > 14 &&
+    SECOND_PERSON.test(t) &&
+    /^(je|j|nous|on)\b/.test(t) &&
+    !hasResponseCue(text)
+  ) {
+    return false;
+  }
   if (IMPERATIVE.test(t) || hasResponseCue(text)) return true;
-  return CONTINUATION.test(t);
+  if (CONTINUATION.test(t)) return true;
+  // A long radio/TV sentence often contains a generic "vous" without being
+  // addressed to the robot. Inside an open engagement window that used to be
+  // enough to trigger an expensive grounded turn. Keep second-person-only
+  // continuity for short conversational replies; long turns need a stronger
+  // signal above (question, request, imperative, or continuation opener).
+  if (SECOND_PERSON.test(t)) return words.length <= 14;
+  return false;
 }
 
 /** Cheap pre-attentive cue: does the utterance look like it invites a response at all? */
@@ -364,12 +381,14 @@ export function createResponseDecider(opts: ResponseDeciderOptions = {}): Respon
 
   let lastEngagedAt = Number.NEGATIVE_INFINITY;
   let dialogueStartedAt = Number.NEGATIVE_INFINITY;
-  const markEngaged = (): void => {
+  let engagementSource: EngagementSource = 'addressed';
+  const markEngaged = (source: EngagementSource = 'addressed'): void => {
     const t = now();
     // A fresh dialogue when the previous window had lapsed; otherwise keep the original
     // dialogue anchor so the total cap measures from the FIRST address, not each extension.
     if (t - lastEngagedAt >= engageWindowMs) dialogueStartedAt = t;
     lastEngagedAt = t;
+    engagementSource = source;
   };
   async function resolveRobotNameForTurn(): Promise<string> {
     if (explicitRobotName) return explicitRobotName;
@@ -394,7 +413,7 @@ export function createResponseDecider(opts: ResponseDeciderOptions = {}): Respon
       // engagement window — so it decays from the address, NOT from whatever was said next.
       const robotName = await resolveRobotNameForTurn();
       if (isVocativeAddress(text, robotName, nameMatch)) {
-        markEngaged();
+        markEngaged('addressed');
         return { respond: true, reason: 'addressed' };
       }
 
@@ -406,10 +425,20 @@ export function createResponseDecider(opts: ResponseDeciderOptions = {}): Respon
       // it and the robot would answer the whole room forever. The window is a bounded grace
       // period after each address; re-address to extend.
       if (now() - lastEngagedAt < engageWindowMs) {
+        const wordCount = normWords(text).split(' ').filter(Boolean).length;
+        if (engagementSource !== 'addressed' && wordCount > 16) {
+          // Arrival/direct-greeting windows are tentative: they exist for a natural
+          // short reply such as "salut, ça va ?", not for a nearby TV monologue or
+          // rhetorical broadcast question. Once a concise reply lands below, the
+          // conversation becomes explicitly engaged and normal long follow-ups work.
+          return { respond: false, reason: 'ambient-in-window' };
+        }
         if (isDirectedFollowUp(text)) {
           // A follow-up aimed at the robot → respond, and (conversation mode) keep the dialogue
           // alive by extending the window, up to the total cap (re-address required past it).
-          if (conversationMode && now() - dialogueStartedAt < conversationMaxMs) markEngaged();
+          if (conversationMode && now() - dialogueStartedAt < conversationMaxMs) {
+            markEngaged('addressed');
+          }
           return { respond: true, reason: 'engaged' };
         }
         // Ambient cross-talk INSIDE the window → stay silent (don't answer the room). The window
@@ -421,7 +450,7 @@ export function createResponseDecider(opts: ResponseDeciderOptions = {}): Respon
       // when the mic loop is active. Keep it narrow so human-to-human greetings such as
       // "bonjour Patrice" or a longer sentence do not wake the robot.
       if (respondToGreeting && isDirectGreeting(text)) {
-        markEngaged();
+        markEngaged('greeting');
         return { respond: true, reason: 'greeting' };
       }
 

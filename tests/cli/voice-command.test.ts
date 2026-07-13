@@ -2,6 +2,30 @@ import { describe, it, expect } from 'vitest';
 import { runVoiceCommand } from '../../src/cli/voice-command.js';
 
 describe('buddy voice — push-to-talk loop', () => {
+  it('uses the guarded default posture unless plan is explicitly requested', async () => {
+    const output: string[] = [];
+    await runVoiceCommand({
+      once: true,
+      print: (line) => output.push(line),
+      record: async () => '/tmp/x.wav',
+      transcribe: async () => '',
+      onHeard: async () => {},
+    });
+    expect(output[0]).toContain('posture: default');
+    expect(output[0]).toContain('guarded workspace sandbox');
+
+    output.length = 0;
+    await runVoiceCommand({
+      once: true,
+      permissionMode: 'plan',
+      print: (line) => output.push(line),
+      record: async () => '/tmp/x.wav',
+      transcribe: async () => '',
+      onHeard: async () => {},
+    });
+    expect(output[0]).toContain('posture: plan (read-only)');
+  });
+
   it('records → transcribes → handles (in order), once', async () => {
     const order: string[] = [];
     await runVoiceCommand({

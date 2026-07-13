@@ -45,6 +45,7 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(import.meta.dirname, './src'),
+      '@codebuddy': path.resolve(import.meta.dirname, '../src'),
     },
   },
 });

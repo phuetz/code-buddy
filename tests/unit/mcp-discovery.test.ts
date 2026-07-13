@@ -9,8 +9,6 @@
 
 // Mock fs
 
-import path from 'path';
-import os from 'os';
 import fs from 'fs';
 import { MCPServerConfig } from '../../src/mcp/client';
 import { logger } from '../../src/utils/logger';
@@ -65,6 +63,7 @@ import {
   createMCPConfigTemplate,
   hasProjectMCPConfig,
   getMCPConfigPaths,
+  setMCPServerEnabled,
 } from '../../src/mcp/config';
 
 describe('loadMCPConfig', () => {
@@ -106,6 +105,26 @@ describe('loadMCPConfig', () => {
 
       expect(config.servers).toHaveLength(1);
       expect(config.servers[0].name).toBe('project-server');
+    });
+
+    it('should hide disabled servers at runtime but include them in inventory mode', () => {
+      const projectConfig = {
+        mcpServers: {
+          paused: {
+            transport: { type: 'stdio', command: 'node' },
+            enabled: false,
+          },
+        },
+      };
+      (fs.existsSync as jest.Mock).mockImplementation((p: string) =>
+        p.includes('.codebuddy') && p.includes('mcp.json') && !p.includes('testuser')
+      );
+      (fs.readFileSync as jest.Mock).mockReturnValue(JSON.stringify(projectConfig));
+
+      expect(loadMCPConfig().servers).toEqual([]);
+      expect(loadMCPConfig({ includeDisabled: true }).servers).toEqual([
+        expect.objectContaining({ name: 'paused', enabled: false }),
+      ]);
     });
 
     it('should support servers key in project mcp.json', () => {
@@ -443,6 +462,56 @@ describe('getMCPServer', () => {
   });
 });
 
+describe('setMCPServerEnabled', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    (fs.existsSync as jest.Mock).mockReturnValue(false);
+    mockLoadProjectSettings.mockReturnValue({});
+  });
+
+  it('updates a server stored in project settings', () => {
+    mockLoadProjectSettings.mockReturnValue({
+      mcpServers: {
+        social: { name: 'social', transport: { type: 'stdio', command: 'node' } },
+      },
+    });
+
+    expect(setMCPServerEnabled('social', false)).toEqual({
+      updated: true,
+      source: 'project-settings',
+    });
+    expect(mockUpdateProjectSetting).toHaveBeenCalledWith('mcpServers', {
+      social: expect.objectContaining({ enabled: false }),
+    });
+  });
+
+  it('updates the highest-priority project mcp.json without resolving secrets', () => {
+    const projectConfig = {
+      mcpServers: {
+        social: {
+          transport: { type: 'stdio', command: 'node', env: { TOKEN: '${SOCIAL_TOKEN}' } },
+          enabled: true,
+        },
+      },
+    };
+    (fs.existsSync as jest.Mock).mockImplementation((p: string) => !p.includes('testuser'));
+    (fs.readFileSync as jest.Mock).mockReturnValue(JSON.stringify(projectConfig));
+
+    const result = setMCPServerEnabled('social', false);
+
+    expect(result).toEqual(expect.objectContaining({ updated: true, source: 'project-mcp' }));
+    const written = JSON.parse((fs.writeFileSync as jest.Mock).mock.calls[0][1]);
+    expect(written.mcpServers.social.enabled).toBe(false);
+    expect(written.mcpServers.social.transport.env.TOKEN).toBe('${SOCIAL_TOKEN}');
+  });
+
+  it('reports when no source defines the server', () => {
+    expect(setMCPServerEnabled('missing', true)).toEqual({ updated: false });
+    expect(fs.writeFileSync).not.toHaveBeenCalled();
+    expect(mockUpdateProjectSetting).not.toHaveBeenCalled();
+  });
+});
+
 describe('PREDEFINED_SERVERS', () => {
   it('should have all predefined servers disabled by default', () => {
     for (const server of Object.values(PREDEFINED_SERVERS)) {
@@ -700,7 +769,7 @@ describe('Integration Scenarios', () => {
   describe('Full workflow', () => {
     it('should add, get, and remove server', () => {
       // Setup initial state
-      let currentServers: Record<string, any> = {};
+      let currentServers: Record<string, MCPServerConfig> = {};
       mockLoadProjectSettings.mockImplementation(function() { return {
         mcpServers: currentServers,
       }; });
@@ -779,7 +848,7 @@ describe('Integration Scenarios', () => {
       expect(hasProjectMCPConfig()).toBe(false);
 
       // Create template (mock writeFileSync to update existsSync behavior)
-      (fs.existsSync as jest.Mock).mockImplementation((p: string) => {
+      (fs.existsSync as jest.Mock).mockImplementation((_p: string) => {
         // After first write, return true for directory check
         return (fs.writeFileSync as jest.Mock).mock.calls.length > 0;
       });

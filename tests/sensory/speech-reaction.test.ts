@@ -1,8 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { mkdtemp, readFile, writeFile } from 'fs/promises';
+import { access, mkdir, mkdtemp, readFile, writeFile } from 'fs/promises';
 import os from 'os';
 import path from 'path';
 import {
+  DEFAULT_SPEECH_DEBOUNCE_MS,
+  SPEECH_KEEP_WAV_ENV,
+  isBargeInTranscript,
+  resolveSpeechDebounceMs,
   normalizeSpeechTranscript,
   resolveFasterWhisperOptions,
   wireSpeechReaction,
@@ -27,9 +31,144 @@ function transcriptFinal(text: string, payload: Record<string, unknown> = {}): v
   });
 }
 
+function speechStart(payload: Record<string, unknown> = {}): void {
+  getGlobalEventBus().emit('sensory:perception', {
+    source: 'test',
+    metadata: { modality: 'audio', kind: 'speech_start', payload },
+  });
+}
+
 const tick = (): Promise<void> => new Promise((r) => setTimeout(r, 30));
 
+async function fileExists(file: string): Promise<boolean> {
+  try {
+    await access(file);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 describe('speech reaction — speech_end → STT → percept', () => {
+  it('starts predictive preparation on VAD open without hearing or responding', async () => {
+    const starts: Array<Record<string, unknown>> = [];
+    const heard: string[] = [];
+    const unwire = wireSpeechReaction({
+      debounceMs: 0,
+      onSpeechStart: async (payload) => {
+        starts.push(payload);
+      },
+      onHeard: async (text) => {
+        heard.push(text);
+      },
+    });
+    try {
+      speechStart({ rms: 0.08, rmsOn: 0.04, adaptiveVad: true });
+      await tick();
+      expect(starts).toEqual([{ rms: 0.08, rmsOn: 0.04, adaptiveVad: true }]);
+      expect(heard).toEqual([]);
+    } finally {
+      unwire();
+    }
+  });
+
+  it('recognizes explicit, echo-safe barge-in phrases', () => {
+    expect(isBargeInTranscript('Lisa, attends, nouvelle question')).toBe(true);
+    expect(isBargeInTranscript('Arrête de parler')).toBe(true);
+    expect(isBargeInTranscript('une seconde')).toBe(true);
+    expect(isBargeInTranscript('le ciel est bleu')).toBe(false);
+  });
+
+  it('interrupts an in-flight turn and queues the explicit replacement transcript', async () => {
+    const tmp = await mkdtemp(path.join(os.tmpdir(), 'speech-barge-in-'));
+    let releaseFirst!: () => void;
+    const firstHeld = new Promise<void>((resolve) => { releaseFirst = resolve; });
+    const heard: string[] = [];
+    const barged: string[] = [];
+    const unwire = wireSpeechReaction({
+      debounceMs: 0,
+      cwd: tmp,
+      onHeard: async (text) => {
+        heard.push(text);
+        if (heard.length === 1) await firstHeld;
+      },
+      onBargeIn: (text) => {
+        barged.push(text);
+        releaseFirst();
+      },
+    });
+    try {
+      transcriptFinal('Lisa, raconte-moi quelque chose');
+      await tick();
+      transcriptFinal('Lisa, attends, nouvelle question');
+      await tick();
+      await tick();
+      expect(barged).toEqual(['Lisa, attends, nouvelle question']);
+      expect(heard).toEqual([
+        'Lisa, raconte-moi quelque chose',
+        'Lisa, attends, nouvelle question',
+      ]);
+    } finally {
+      releaseFirst();
+      unwire();
+    }
+  });
+
+  it('joins a short VAD split when the first final ends on an unfinished phrase', async () => {
+    const tmp = await mkdtemp(path.join(os.tmpdir(), 'speech-turn-join-'));
+    const heard: string[] = [];
+    const unwire = wireSpeechReaction({
+      debounceMs: 0,
+      incompleteTurnHoldMs: 100,
+      cwd: tmp,
+      onHeard: async (text) => {
+        heard.push(text);
+      },
+    });
+    try {
+      transcriptFinal('Lisa, je voulais te dire que');
+      await tick();
+      expect(heard).toEqual([]);
+      transcriptFinal('le test est terminé.');
+      await tick();
+      expect(heard).toEqual(['Lisa, je voulais te dire que le test est terminé.']);
+    } finally {
+      unwire();
+    }
+  });
+
+  it('trusts the audio-native Smart Turn decision instead of applying the text fallback twice', async () => {
+    const tmp = await mkdtemp(path.join(os.tmpdir(), 'speech-smart-turn-'));
+    const heard: string[] = [];
+    const unwire = wireSpeechReaction({
+      debounceMs: 0,
+      incompleteTurnHoldMs: 500,
+      cwd: tmp,
+      onHeard: async (text) => {
+        heard.push(text);
+      },
+    });
+    try {
+      transcriptFinal('Lisa, vérifie ce que', {
+        turnDetector: 'smart-turn-v3.2',
+        turnProbability: 0.82,
+        turnDetectionMs: 60,
+      });
+      await tick();
+      expect(heard).toEqual(['Lisa, vérifie ce que']);
+    } finally {
+      unwire();
+    }
+  });
+
+  it('uses a short, validated debounce so follow-up turns are not blocked for seconds', () => {
+    expect(DEFAULT_SPEECH_DEBOUNCE_MS).toBe(800);
+    expect(resolveSpeechDebounceMs({})).toBe(800);
+    expect(resolveSpeechDebounceMs({ CODEBUDDY_SPEECH_DEBOUNCE_MS: '250' })).toBe(250);
+    expect(resolveSpeechDebounceMs({ CODEBUDDY_SPEECH_DEBOUNCE_MS: '0' })).toBe(0);
+    expect(resolveSpeechDebounceMs({ CODEBUDDY_SPEECH_DEBOUNCE_MS: 'invalid' })).toBe(800);
+  });
+
   it('defaults faster-whisper to French assistant comprehension settings', () => {
     const previous = {
       lang: process.env.CODEBUDDY_SPEECH_LANG,
@@ -324,6 +463,16 @@ describe('speech reaction — speech_end → STT → percept', () => {
       onHeard: async () => {
         clock += 250;
       },
+      getResponseTiming: () => ({
+        mode: 'streamed',
+        firstTextMs: 5,
+        firstSegmentMs: 35,
+        firstAudioMs: 80,
+        firstContentAudioMs: 140,
+        streamFallbackSegments: 2,
+        totalMs: 250,
+        spoke: true,
+      }),
     });
     try {
       speechEnd('/tmp/x.wav', {
@@ -336,6 +485,12 @@ describe('speech reaction — speech_end → STT → percept', () => {
         rmsOff: 0.012,
         writeMs: 7,
         ms: 820,
+        endpointMs: 420,
+        turnDetector: 'smart-turn-v3.2',
+        turnProbability: 0.91,
+        turnDetectionMs: 65,
+        turnForcedAfterHold: false,
+        decodeMs: 75,
         sampleRate: 16000,
       });
       await tick();
@@ -344,14 +499,30 @@ describe('speech reaction — speech_end → STT → percept', () => {
       const percept = JSON.parse(raw.trim()) as { payload: { responded: boolean; latency: Record<string, number>; capture: Record<string, unknown> } };
       expect(percept.payload.responded).toBe(true);
       expect(percept.payload.latency.sttMs).toBe(120);
+      expect(percept.payload.latency.endpointMs).toBe(420);
+      expect(percept.payload.latency.turnDetectionMs).toBe(65);
+      expect(percept.payload.latency.decodeMs).toBe(75);
+      expect(percept.payload.latency.inputReadyMs).toBe(680);
       expect(percept.payload.latency.decisionMs).toBe(30);
       expect(percept.payload.latency.actionMs).toBe(250);
       expect(percept.payload.latency.totalMs).toBe(400);
+      expect(percept.payload.latency.firstTextMs).toBe(5);
+      expect(percept.payload.latency.firstSegmentMs).toBe(35);
+      expect(percept.payload.latency.firstAudioMs).toBe(80);
+      expect(percept.payload.latency.firstContentAudioMs).toBe(140);
+      expect(percept.payload.latency.perceivedResponseMs).toBe(790);
+      expect(percept.payload.latency.perceivedContentResponseMs).toBe(850);
+      expect(percept.payload.latency.streamFallbackSegments).toBe(2);
+      expect(percept.payload.latency.voiceTotalMs).toBe(250);
       expect(percept.payload.capture.device).toBe('plughw:CARD=BRIO,DEV=0');
       expect(percept.payload.capture.peakRms).toBe(0.08);
       expect(percept.payload.capture.avgRms).toBe(0.035);
       expect(percept.payload.capture.rmsOn).toBe(0.02);
       expect(percept.payload.capture.writeMs).toBe(7);
+      expect(percept.payload.capture.endpointMs).toBe(420);
+      expect(percept.payload.capture.decodeMs).toBe(75);
+      expect(percept.payload.capture.turnDetector).toBe('smart-turn-v3.2');
+      expect(percept.payload.capture.turnProbability).toBe(0.91);
     } finally {
       unwire();
     }
@@ -411,6 +582,156 @@ describe('speech reaction — speech_end → STT → percept', () => {
       expect(calls).toBe(0);
     } finally {
       unwire();
+    }
+  });
+
+  it.each([
+    ['successful STT', async () => 'Bonjour Patrice'],
+    ['empty STT', async () => ''],
+    ['failed STT', async () => { throw new Error('decoder failed'); }],
+  ])('removes a managed fallback WAV after %s', async (_label, transcriber) => {
+    const tmp = await mkdtemp(path.join(os.tmpdir(), 'speech-wav-cleanup-'));
+    const companionDir = path.join(tmp, 'companion');
+    const wav = path.join(companionDir, `utt-${Date.now()}.wav`);
+    await mkdir(companionDir, { recursive: true });
+    await writeFile(wav, 'temporary audio');
+    const previousDir = process.env.BUDDY_EAR_WAV_DIR;
+    const previousKeep = process.env[SPEECH_KEEP_WAV_ENV];
+    process.env.BUDDY_EAR_WAV_DIR = companionDir;
+    delete process.env[SPEECH_KEEP_WAV_ENV];
+    const unwire = wireSpeechReaction({ transcriber, debounceMs: 0, cwd: tmp });
+    try {
+      speechEnd(wav);
+      await tick();
+      expect(await fileExists(wav)).toBe(false);
+    } finally {
+      unwire();
+      if (previousDir === undefined) delete process.env.BUDDY_EAR_WAV_DIR;
+      else process.env.BUDDY_EAR_WAV_DIR = previousDir;
+      if (previousKeep === undefined) delete process.env[SPEECH_KEEP_WAV_ENV];
+      else process.env[SPEECH_KEEP_WAV_ENV] = previousKeep;
+    }
+  });
+
+  it('removes the active managed WAV when teardown happens during STT', async () => {
+    const tmp = await mkdtemp(path.join(os.tmpdir(), 'speech-wav-abort-'));
+    const companionDir = path.join(tmp, 'companion');
+    const wav = path.join(companionDir, `utt-${Date.now()}.wav`);
+    await mkdir(companionDir, { recursive: true });
+    await writeFile(wav, 'temporary audio');
+    let release!: () => void;
+    const blocked = new Promise<void>((resolve) => { release = resolve; });
+    const previousDir = process.env.BUDDY_EAR_WAV_DIR;
+    const previousKeep = process.env[SPEECH_KEEP_WAV_ENV];
+    process.env.BUDDY_EAR_WAV_DIR = companionDir;
+    delete process.env[SPEECH_KEEP_WAV_ENV];
+    const unwire = wireSpeechReaction({
+      debounceMs: 0,
+      cwd: tmp,
+      transcriber: async () => {
+        await blocked;
+        throw new Error('aborted');
+      },
+    });
+    try {
+      speechEnd(wav);
+      await tick();
+      unwire();
+      release();
+      await tick();
+      expect(await fileExists(wav)).toBe(false);
+    } finally {
+      release();
+      unwire();
+      if (previousDir === undefined) delete process.env.BUDDY_EAR_WAV_DIR;
+      else process.env.BUDDY_EAR_WAV_DIR = previousDir;
+      if (previousKeep === undefined) delete process.env[SPEECH_KEEP_WAV_ENV];
+      else process.env[SPEECH_KEEP_WAV_ENV] = previousKeep;
+    }
+  });
+
+  it('removes a superseded pending WAV without touching the latest queued one', async () => {
+    const tmp = await mkdtemp(path.join(os.tmpdir(), 'speech-wav-pending-'));
+    const companionDir = path.join(tmp, 'companion');
+    const wavs = [1, 2, 3].map(index => path.join(companionDir, `utt-${Date.now() + index}.wav`));
+    await mkdir(companionDir, { recursive: true });
+    await Promise.all(wavs.map(wav => writeFile(wav, 'temporary audio')));
+    let release!: () => void;
+    const blocked = new Promise<void>((resolve) => { release = resolve; });
+    const previousDir = process.env.BUDDY_EAR_WAV_DIR;
+    const previousKeep = process.env[SPEECH_KEEP_WAV_ENV];
+    process.env.BUDDY_EAR_WAV_DIR = companionDir;
+    delete process.env[SPEECH_KEEP_WAV_ENV];
+    const calls: string[] = [];
+    const unwire = wireSpeechReaction({
+      debounceMs: 0,
+      cwd: tmp,
+      transcriber: async (wav) => {
+        calls.push(wav);
+        if (wav === wavs[0]) await blocked;
+        return 'texte';
+      },
+    });
+    try {
+      speechEnd(wavs[0]);
+      await tick();
+      speechEnd(wavs[1]);
+      speechEnd(wavs[2]);
+      await tick();
+      expect(await fileExists(wavs[1]!)).toBe(false);
+      expect(await fileExists(wavs[2]!)).toBe(true);
+      release();
+      await tick();
+      await tick();
+      expect(calls).toEqual([wavs[0], wavs[2]]);
+      expect(await fileExists(wavs[0]!)).toBe(false);
+      expect(await fileExists(wavs[2]!)).toBe(false);
+    } finally {
+      release();
+      unwire();
+      if (previousDir === undefined) delete process.env.BUDDY_EAR_WAV_DIR;
+      else process.env.BUDDY_EAR_WAV_DIR = previousDir;
+      if (previousKeep === undefined) delete process.env[SPEECH_KEEP_WAV_ENV];
+      else process.env[SPEECH_KEEP_WAV_ENV] = previousKeep;
+    }
+  });
+
+  it('never deletes arbitrary paths and honours the debug retention switch', async () => {
+    const tmp = await mkdtemp(path.join(os.tmpdir(), 'speech-wav-guard-'));
+    const companionDir = path.join(tmp, 'companion');
+    const outsideDir = path.join(tmp, 'outside');
+    const wrongName = path.join(companionDir, 'recording.wav');
+    const outside = path.join(outsideDir, `utt-${Date.now()}.wav`);
+    const retained = path.join(companionDir, `utt-${Date.now() + 1}.wav`);
+    await mkdir(companionDir, { recursive: true });
+    await mkdir(outsideDir, { recursive: true });
+    await Promise.all([
+      writeFile(wrongName, 'keep'),
+      writeFile(outside, 'keep'),
+      writeFile(retained, 'keep'),
+    ]);
+    const previousDir = process.env.BUDDY_EAR_WAV_DIR;
+    const previousKeep = process.env[SPEECH_KEEP_WAV_ENV];
+    process.env.BUDDY_EAR_WAV_DIR = companionDir;
+    delete process.env[SPEECH_KEEP_WAV_ENV];
+    const unwire = wireSpeechReaction({ transcriber: async () => 'texte', debounceMs: 0, cwd: tmp });
+    try {
+      speechEnd(wrongName);
+      await tick();
+      speechEnd(outside);
+      await tick();
+      process.env[SPEECH_KEEP_WAV_ENV] = 'true';
+      speechEnd(retained);
+      await tick();
+      expect(await fileExists(wrongName)).toBe(true);
+      expect(await fileExists(outside)).toBe(true);
+      expect(await fileExists(retained)).toBe(true);
+    } finally {
+      unwire();
+      if (previousDir === undefined) delete process.env.BUDDY_EAR_WAV_DIR;
+      else process.env.BUDDY_EAR_WAV_DIR = previousDir;
+      if (previousKeep === undefined) delete process.env[SPEECH_KEEP_WAV_ENV];
+      else process.env[SPEECH_KEEP_WAV_ENV] = previousKeep;
     }
   });
 });

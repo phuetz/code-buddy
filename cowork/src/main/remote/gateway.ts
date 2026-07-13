@@ -52,8 +52,6 @@ export class RemoteGateway extends EventEmitter {
   private pairedUsers: Map<string, PairedUser> = new Map();
 
   private _running: boolean = false;
-  private publicUrl?: string;
-
   // Rate limiting for WebSocket auth
   private authAttempts: Map<string, { count: number; resetTime: number }> = new Map();
 
@@ -122,28 +120,9 @@ export class RemoteGateway extends EventEmitter {
 
       this._running = true;
 
-      // Start tunnel if enabled
-      if (this.config.tunnel?.enabled) {
-        if (this.config.tunnel.type === 'ngrok' && this.config.tunnel.ngrok?.authToken) {
-          try {
-            log('[Gateway] Starting ngrok tunnel...');
-            const ngrokModule = await import('ngrok');
-            const ngrok = ngrokModule.default || ngrokModule;
-            this.publicUrl = await ngrok.connect({
-              addr: this.config.port,
-              authtoken: this.config.tunnel.ngrok.authToken,
-              region: (this.config.tunnel.ngrok.region || 'us') as 'us' | 'eu' | 'au' | 'ap' | 'sa' | 'jp' | 'in',
-            });
-            log(`[Gateway] Ngrok tunnel established at ${this.publicUrl}`);
-          } catch (err) {
-            logError('[Gateway] Failed to start ngrok tunnel:', err);
-          }
-        } else {
-          logWarn('[Gateway] Tunnel enabled but no valid ngrok config found or unsupported type');
-        }
-      }
-
-      this.emitEvent('gateway.started', { port: this.config.port, publicUrl: this.publicUrl });
+      // Tunnel lifecycle is owned by TunnelManager. Keeping it out of the
+      // gateway prevents two concurrent public tunnels from being created.
+      this.emitEvent('gateway.started', { port: this.config.port });
       log('[Gateway] Gateway started successfully');
     } catch (error) {
       logError('[Gateway] Failed to start gateway:', error);
@@ -193,19 +172,6 @@ export class RemoteGateway extends EventEmitter {
         this.httpServer!.close(() => resolve());
       });
       this.httpServer = undefined;
-    }
-
-    // Stop tunnel if running
-    if (this.publicUrl && this.config.tunnel?.type === 'ngrok') {
-      try {
-        const ngrokModule = await import('ngrok');
-        const ngrok = ngrokModule.default || ngrokModule;
-        await ngrok.kill();
-        log('[Gateway] Ngrok tunnel stopped');
-      } catch (err) {
-        logError('[Gateway] Error stopping ngrok tunnel:', err);
-      }
-      this.publicUrl = undefined;
     }
 
     this._running = false;
@@ -263,7 +229,6 @@ export class RemoteGateway extends EventEmitter {
     return {
       running: this._running,
       port: this._running ? this.config.port : undefined,
-      publicUrl: this.publicUrl,
       channels: channelStatuses,
       activeSessions: this.messageRouter.getActiveSessionCount(),
       pendingPairings: this.pairingRequests.size,

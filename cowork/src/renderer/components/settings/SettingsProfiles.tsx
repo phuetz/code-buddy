@@ -9,7 +9,7 @@
  */
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { AlertCircle, CheckCircle2, Layers, Plus, RotateCcw } from 'lucide-react';
+import { AlertCircle, CheckCircle2, Download, Layers, Plus, RotateCcw, Upload } from 'lucide-react';
 
 interface ProfileSummary {
   name: string;
@@ -103,6 +103,38 @@ export function SettingsProfiles() {
     }
   };
 
+  const handleExport = async (name: string) => {
+    const result = await window.electronAPI?.profiles?.export(name);
+    if (!result?.ok || !result.profile) {
+      setError(result?.error ?? 'Export failed');
+      return;
+    }
+    const blob = new Blob([JSON.stringify(result.profile, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `${name}.codebuddy-profile.json`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+    setNotice(`Profil « ${name} » exporté et signé.`);
+  };
+
+  const handleImport = async (file?: File) => {
+    if (!file) return;
+    try {
+      const result = await window.electronAPI?.profiles?.import(JSON.parse(await file.text()));
+      if (!result?.ok) {
+        setError(result?.error ?? 'Import failed');
+        return;
+      }
+      setProfiles(result.profiles ?? []);
+      setActive(result.active ?? null);
+      setNotice('Signature vérifiée. Profil importé sans secret embarqué.');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  };
+
   return (
     <div className="p-4 space-y-4 max-w-2xl">
       <div className="flex items-center gap-2">
@@ -116,6 +148,11 @@ export function SettingsProfiles() {
           'Profiles are named, isolated sets of config overrides ([profiles.<name>] in your user config.toml) deep-merged over the base config. The CLI activates one with `buddy --profile <name>`. Switching here selects the profile for Cowork\'s embedded agent runtime.',
         )}
       </p>
+
+      <label className="inline-flex cursor-pointer items-center gap-1.5 rounded border border-border-muted px-2.5 py-1.5 text-xs text-text-secondary hover:bg-surface-hover">
+        <Upload size={12} /> Importer un profil signé
+        <input type="file" accept="application/json" className="hidden" onChange={(event) => void handleImport(event.target.files?.[0])} />
+      </label>
 
       {/* Restart notice (mirrors SettingsCoreEngine) */}
       <div className="p-2 rounded bg-warning/10 border border-warning/30 text-warning text-[11px] flex gap-2 items-start">
@@ -194,15 +231,18 @@ export function SettingsProfiles() {
                 </span>
               )}
             </div>
-            <button
-              type="button"
-              onClick={() => void handleSwitch(profile.name)}
-              disabled={busy || profile.active}
-              className="px-2.5 py-1 text-xs rounded border border-border-muted text-text-secondary hover:bg-surface-hover disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-              data-testid={`profiles-switch-${profile.name}`}
-            >
-              {t('profiles.switch', 'Switch')}
-            </button>
+            <div className="flex items-center gap-1.5">
+              <button type="button" onClick={() => void handleExport(profile.name)} className="rounded border border-border-muted p-1.5 text-text-muted hover:bg-surface-hover" title="Exporter et signer"><Download size={12} /></button>
+              <button
+                type="button"
+                onClick={() => void handleSwitch(profile.name)}
+                disabled={busy || profile.active}
+                className="px-2.5 py-1 text-xs rounded border border-border-muted text-text-secondary hover:bg-surface-hover disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                data-testid={`profiles-switch-${profile.name}`}
+              >
+                {t('profiles.switch', 'Switch')}
+              </button>
+            </div>
           </div>
         ))}
       </div>

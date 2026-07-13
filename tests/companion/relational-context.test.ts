@@ -11,7 +11,10 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mkdtempSync, rmSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
-import { buildRelationalContext } from '../../src/companion/relational-context.js';
+import {
+  buildRelationalContext,
+  RelationalContextCache,
+} from '../../src/companion/relational-context.js';
 import { getUserModel, resetUserModels } from '../../src/memory/user-model.js';
 import { buildLlmArrivalOpener } from '../../src/sensory/arrival-opener.js';
 
@@ -108,6 +111,129 @@ describe('buildRelationalContext — composition', () => {
       presenceBlock: async () => '<presence>seul</presence>',
     });
     expect(ctx).toBe('<presence>seul</presence>');
+  });
+
+  it('starts episode and presence reads concurrently while preserving prompt order', async () => {
+    let episodeStarted = false;
+    let presenceStarted = false;
+    let resolveEpisode!: (value: string) => void;
+    let resolvePresence!: (value: string) => void;
+    const episode = new Promise<string>((resolve) => {
+      resolveEpisode = resolve;
+    });
+    const presence = new Promise<string>((resolve) => {
+      resolvePresence = resolve;
+    });
+
+    const pending = buildRelationalContext({
+      includeFacts: false,
+      includeGuidance: false,
+      includePersonality: false,
+      episodeBlock: () => {
+        episodeStarted = true;
+        return episode;
+      },
+      presenceBlock: () => {
+        presenceStarted = true;
+        return presence;
+      },
+    });
+    await Promise.resolve();
+
+    expect(episodeStarted).toBe(true);
+    expect(presenceStarted).toBe(true);
+    resolvePresence('<presence>présent</presence>');
+    resolveEpisode('épisode récent');
+    const ctx = await pending;
+    expect(ctx.indexOf('recent_episode')).toBeLessThan(ctx.indexOf('presence'));
+  });
+});
+
+describe('RelationalContextCache — latency-bounded stale-while-revalidate', () => {
+  const settle = async (): Promise<void> => {
+    await Promise.resolve();
+    await Promise.resolve();
+  };
+
+  it('does not block a cold turn when its budget is zero, then serves the warmed value', async () => {
+    let resolveBuild!: (value: string) => void;
+    let builds = 0;
+    const cache = new RelationalContextCache(() => {
+      builds += 1;
+      return new Promise<string>((resolve) => {
+        resolveBuild = resolve;
+      });
+    });
+
+    await expect(cache.get({ coldBudgetMs: 0 })).resolves.toBe('');
+    expect(builds).toBe(1);
+    resolveBuild('contexte chaud');
+    await settle();
+    await expect(cache.get()).resolves.toBe('contexte chaud');
+    expect(builds).toBe(1);
+  });
+
+  it('returns stale context immediately and deduplicates the background refresh', async () => {
+    let now = 0;
+    let builds = 0;
+    const resolvers: Array<(value: string) => void> = [];
+    const cache = new RelationalContextCache(
+      () => {
+        builds += 1;
+        return new Promise<string>((resolve) => resolvers.push(resolve));
+      },
+      () => now
+    );
+
+    await cache.get({ coldBudgetMs: 0, ttlMs: 5 });
+    resolvers.shift()?.('version 1');
+    await settle();
+    now = 10;
+
+    await expect(cache.get({ ttlMs: 5 })).resolves.toBe('version 1');
+    await expect(cache.get({ ttlMs: 5 })).resolves.toBe('version 1');
+    expect(builds).toBe(2);
+    resolvers.shift()?.('version 2');
+    await settle();
+    await expect(cache.get({ ttlMs: 5 })).resolves.toBe('version 2');
+  });
+
+  it('discards an in-flight generation after invalidation', async () => {
+    const resolvers: Array<(value: string) => void> = [];
+    const cache = new RelationalContextCache(
+      () => new Promise<string>((resolve) => resolvers.push(resolve))
+    );
+
+    await cache.get({ coldBudgetMs: 0 });
+    cache.invalidate();
+    await cache.get({ coldBudgetMs: 0 });
+    expect(resolvers).toHaveLength(2);
+    resolvers[0]?.('ancienne humeur');
+    resolvers[1]?.('nouvelle humeur');
+    await settle();
+    await expect(cache.get()).resolves.toBe('nouvelle humeur');
+  });
+
+  it('keeps the prior value as an instant stale fallback after invalidation', async () => {
+    let value = 'humeur sereine';
+    let builds = 0;
+    let resolveRefresh!: (value: string) => void;
+    const cache = new RelationalContextCache(async () => {
+      builds += 1;
+      if (builds === 1) return value;
+      return new Promise<string>((resolve) => {
+        resolveRefresh = resolve;
+      });
+    });
+
+    await expect(cache.get()).resolves.toBe('humeur sereine');
+    cache.invalidate();
+    value = 'humeur joyeuse';
+    await expect(cache.get()).resolves.toBe('humeur sereine');
+    expect(builds).toBe(2);
+    resolveRefresh(value);
+    await settle();
+    await expect(cache.get()).resolves.toBe('humeur joyeuse');
   });
 });
 

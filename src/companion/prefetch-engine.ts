@@ -15,26 +15,43 @@ import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { logger } from '../utils/logger.js';
 import {
+  formatNewsDigest,
+  type FreshContextPayload,
+  type NewsDigest,
+} from '../conversation/fresh-context.js';
+import {
+  DEFAULT_NEWS_QUERY,
+  DEFAULT_NEWS_SEARCH_LANES,
   loadPrefetchItems,
   prefetchItemKey,
   type PrefetchItem,
   type PrefetchKind,
 } from './prefetch-config.js';
+import type { SearchResult } from '../tools/web-search.js';
 
 export interface PrefetchEntry {
   key: string;
   kind: PrefetchKind;
   answer: string;
   at: number;
+  /** Structured evidence used to formulate contextual answers and follow-ups. */
+  context?: FreshContextPayload;
 }
 
-/** Max age (ms) a cached answer stays servable, per kind. The heartbeat refreshes
- *  far more often; this is just a staleness backstop. */
-const TTL_MS: Record<PrefetchKind, number> = {
-  weather: 45 * 60_000,
-  news: 4 * 60 * 60_000,
-  agenda: 6 * 60 * 60_000,
+/** Fresh window: ordinary cache hits never need a disclosure. */
+export const FRESH_TTL_MS: Record<PrefetchKind, number> = {
+  weather: 30 * 60_000,
+  news: 15 * 60_000,
+  agenda: 10 * 60_000,
   date: 12 * 60 * 60_000,
+};
+
+/** Last-known-good window used only when live refresh failed. */
+export const STALE_TTL_MS: Record<PrefetchKind, number> = {
+  weather: 45 * 60_000,
+  news: 60 * 60_000,
+  agenda: 6 * 60 * 60_000,
+  date: 24 * 60 * 60_000,
 };
 
 export interface PrefetchDeps {
@@ -45,6 +62,8 @@ export interface PrefetchDeps {
   fetchWeather?: (city: string) => Promise<string | null>;
   /** query → spoken headlines text. Default: WebSearchTool. */
   fetchNews?: (query: string) => Promise<string | null>;
+  /** query → structured headlines evidence. Default: WebSearchTool. */
+  fetchNewsContext?: (query: string) => Promise<NewsDigest | null>;
   /** now → spoken agenda text. Default: reminders. */
   fetchAgenda?: (now: number) => Promise<string | null>;
   /** now → spoken French date. Default: inline. */
@@ -140,8 +159,48 @@ export function matchPrefetched(
   if (!key) return null;
   const entry = args.cache.find((e) => e.key === key);
   if (!entry) return null;
-  const ttl = TTL_MS[entry.kind] ?? 60 * 60_000;
+  const ttl = FRESH_TTL_MS[entry.kind] ?? 60 * 60_000;
   return args.now - entry.at < ttl ? entry.answer : null;
+}
+
+export interface PrefetchMatch {
+  entry: PrefetchEntry;
+  answer: string;
+  freshness: 'fresh' | 'stale';
+  ageMs: number;
+}
+
+/**
+ * Rich match for conversation surfaces. Unlike the legacy string matcher this
+ * can use a bounded stale value after a refresh outage and discloses its age.
+ */
+export function matchPrefetchedDetailed(
+  heard: string,
+  args: { cache: PrefetchEntry[]; items: PrefetchItem[]; now: number; allowStale?: boolean }
+): PrefetchMatch | null {
+  const key = intentKeyForQuery(heard, args.items);
+  if (!key) return null;
+  const entry = args.cache.find((candidate) => candidate.key === key);
+  if (!entry) return null;
+  const ageMs = Math.max(0, args.now - entry.at);
+  if (ageMs < FRESH_TTL_MS[entry.kind]) {
+    return { entry, answer: entry.answer, freshness: 'fresh', ageMs };
+  }
+  if (!args.allowStale || ageMs >= STALE_TTL_MS[entry.kind]) return null;
+
+  if (entry.kind === 'news' && entry.context?.kind === 'news') {
+    const formatted = formatNewsDigest(entry.context, { stale: true, now: args.now });
+    if (formatted.speech) {
+      return { entry, answer: formatted.speech, freshness: 'stale', ageMs };
+    }
+  }
+  const minutes = Math.max(1, Math.round(ageMs / 60_000));
+  return {
+    entry,
+    answer: `Je n'ai pas pu rafraîchir cette information. La dernière version date d'environ ${minutes} minutes. ${entry.answer}`,
+    freshness: 'stale',
+    ageMs,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -179,24 +238,88 @@ async function defaultFetchWeather(city: string): Promise<string | null> {
   }
 }
 
-async function defaultFetchNews(query: string): Promise<string | null> {
+/** Build dated topic lanes so one broad query cannot collapse the whole bulletin onto AI. */
+export function buildNewsSearchQueries(
+  baseQuery: string,
+  fetchedAt: number,
+  locale: string,
+  env: NodeJS.ProcessEnv = process.env
+): string[] {
+  const timezone = env.CODEBUDDY_TIMEZONE?.trim() || env.TZ?.trim() || 'Europe/Paris';
+  let dateLabel = new Date(fetchedAt).toISOString().slice(0, 10);
+  try {
+    dateLabel = new Intl.DateTimeFormat(locale, {
+      dateStyle: 'long',
+      timeZone: timezone,
+    }).format(new Date(fetchedAt));
+  } catch {
+    /* Invalid locale/timezone: the stable ISO date remains safe for search. */
+  }
+  const lanes = baseQuery === DEFAULT_NEWS_QUERY
+    ? DEFAULT_NEWS_SEARCH_LANES
+    : [baseQuery];
+  return lanes.map((lane) => `${lane} ${dateLabel}`);
+}
+
+function interleaveSearchResults(batches: SearchResult[][], limit = 8): SearchResult[] {
+  const output: SearchResult[] = [];
+  const seen = new Set<string>();
+  const width = Math.max(0, ...batches.map((batch) => batch.length));
+  for (let index = 0; index < width && output.length < limit; index += 1) {
+    for (const batch of batches) {
+      const row = batch[index];
+      if (!row) continue;
+      const key = row.url.trim().toLowerCase();
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      output.push(row);
+      if (output.length >= limit) break;
+    }
+  }
+  return output;
+}
+
+async function defaultFetchNewsContext(query: string): Promise<NewsDigest | null> {
   try {
     const { WebSearchTool } = await import('../tools/web-search.js');
-    const rows = await new WebSearchTool().searchStructured(
-      query || "actualités France aujourd'hui gros titres",
-      {
+    const fetchedAt = Date.now();
+    const locale = process.env.CODEBUDDY_NEWS_LOCALE?.trim() || 'fr-FR';
+    const [language = 'fr', country = 'FR'] = locale.split('-');
+    const effectiveQuery =
+      query ||
+      process.env.CODEBUDDY_NEWS_QUERY?.trim() ||
+      DEFAULT_NEWS_QUERY;
+    const datedQueries = buildNewsSearchQueries(effectiveQuery, fetchedAt, locale);
+    const tool = new WebSearchTool();
+    const batches: SearchResult[][] = [];
+    const paceMs = Math.max(
+      250,
+      Math.min(5_000, Number(process.env.CODEBUDDY_NEWS_SEARCH_PACE_MS) || 1_100)
+    );
+    for (const [index, datedQuery] of datedQueries.entries()) {
+      if (index > 0) await new Promise((resolve) => setTimeout(resolve, paceMs));
+      batches.push(await tool.searchStructured(datedQuery, {
         maxResults: 5,
-        search_lang: 'fr',
+        search_lang: language.toLowerCase(),
+        country: country.toUpperCase(),
         freshness: 'pd',
         mode: 'live',
-      }
-    );
-    const titles = (rows ?? [])
-      .map((r) => (r?.title ?? '').trim())
-      .filter(Boolean)
-      .slice(0, 5);
-    if (titles.length === 0) return null;
-    return `Voici les gros titres du jour : ${titles.join(' ; ')}.`;
+      }));
+    }
+    const rows = interleaveSearchResults(batches);
+    const items = (rows ?? [])
+      .filter((row) => (row?.title ?? '').trim() && (row?.url ?? '').trim())
+      .slice(0, 5)
+      .map((row) => ({
+        title: row.title.trim(),
+        url: row.url.trim(),
+        ...(row.siteName?.trim() ? { source: row.siteName.trim() } : {}),
+        ...(row.published?.trim() ? { publishedAt: row.published.trim() } : {}),
+        ...(row.snippet?.trim() ? { summary: row.snippet.trim() } : {}),
+      }));
+    return items.length > 0
+      ? { kind: 'news', query: datedQueries.join(' | '), locale, fetchedAt, items }
+      : null;
   } catch {
     return null;
   }
@@ -220,13 +343,24 @@ export async function computeAnswer(
   const now = deps.now ?? Date.now();
   const key = prefetchItemKey(item);
   let answer: string | null = null;
+  let context: FreshContextPayload | undefined;
   try {
     switch (item.kind) {
       case 'weather':
         answer = await (deps.fetchWeather ?? defaultFetchWeather)((item.param ?? '').trim());
         break;
       case 'news':
-        answer = await (deps.fetchNews ?? defaultFetchNews)((item.param ?? '').trim());
+        if (deps.fetchNews) {
+          answer = await deps.fetchNews((item.param ?? '').trim());
+        } else {
+          const digest = await (deps.fetchNewsContext ?? defaultFetchNewsContext)(
+            (item.param ?? '').trim()
+          );
+          if (digest) {
+            context = digest;
+            answer = formatNewsDigest(digest, { now }).speech;
+          }
+        }
         break;
       case 'agenda':
         answer = await (deps.fetchAgenda ?? defaultFetchAgenda)(now);
@@ -239,7 +373,9 @@ export async function computeAnswer(
     answer = null;
   }
   const clean = (answer ?? '').trim();
-  return clean ? { key, kind: item.kind, answer: clean, at: now } : null;
+  return clean
+    ? { key, kind: item.kind, answer: clean, at: now, ...(context ? { context } : {}) }
+    : null;
 }
 
 export interface PrefetchCycleResult {
@@ -258,8 +394,9 @@ export async function runPrefetchCycle(deps: PrefetchDeps = {}): Promise<Prefetc
   const byKey = new Map(cache.map((e) => [e.key, e]));
   const result: PrefetchCycleResult = { computed: [], failed: [] };
 
-  for (const item of items) {
-    const entry = await computeAnswer(item, deps);
+  const computedEntries = await Promise.all(items.map((item) => computeAnswer(item, deps)));
+  for (const [index, item] of items.entries()) {
+    const entry = computedEntries[index] ?? null;
     if (entry) {
       byKey.set(entry.key, entry);
       result.computed.push(entry.key);

@@ -31,11 +31,16 @@ import { validateCommand, getFilteredEnv } from './command-validator.js';
 import { getShellEnvPolicy } from '../../security/shell-env-policy.js';
 import { executeStreaming as executeStreamingImpl } from './streaming-executor.js';
 import { parseBashCommand } from '../../security/bash-parser.js';
-import { SafeBinariesChecker } from '../../security/safe-binaries.js';
 import { getCheckpointManager } from '../../checkpoints/checkpoint-manager.js';
 import { auditLogger } from '../../security/audit-logger.js';
 import { buildBashEnvPrelude, CONTROLLED_SUBPROCESS_ENV } from './env-overrides.js';
 import { rewriteCommandWithRtk } from './rtk-rewrite.js';
+import {
+  evaluateShellExecution,
+  executableIdentitiesStillMatch,
+  executeInWorkspaceSandbox,
+  isSandboxBoundaryFailure,
+} from './execution-policy.js';
 
 export class BashTool implements Disposable {
   private currentDirectory: string = process.cwd();
@@ -263,9 +268,19 @@ export class BashTool implements Disposable {
    *   run in `currentDirectory` (= host process cwd), which is right for the
    *   CLI but wrong for embedded sessions: a Cowork deck export wrote its
    *   .pptx into cowork/ instead of the session dir.
-   */
+  */
   async execute(command: string, timeout: number = 30000, cwd?: string): Promise<ToolResult> {
+    return this.executeInternal(command, timeout, cwd, true);
+  }
+
+  private async executeInternal(
+    command: string,
+    timeout: number,
+    cwd: string | undefined,
+    allowSelfHealing: boolean,
+  ): Promise<ToolResult> {
     try {
+      const effectiveCwd = cwd ?? this.currentDirectory;
       // Validate input with schema (enhanced validation)
       const schemaValidation = validateWithSchema(
         bashToolSchemas.execute,
@@ -298,88 +313,11 @@ export class BashTool implements Disposable {
         };
       }
 
-      // Auto-sandbox routing: route dangerous commands to Docker sandbox
-      try {
-        const { getAutoSandboxRouter } = await import('../../sandbox/auto-sandbox.js');
-        const router = getAutoSandboxRouter();
-        const routing = await router.route(command);
-        if (routing.mode === 'blocked') {
-          return {
-            success: false,
-            error: `Command blocked by auto-sandbox: ${routing.reason}`,
-          };
-        }
-        if (routing.mode === 'sandbox') {
-          try {
-            const { DockerSandbox } = await import('../../sandbox/docker-sandbox.js');
-            const sandbox = new DockerSandbox();
-            const sbResult = await sandbox.execute(command, { timeout });
-            // Build a rich error message so the LLM can self-correct instead
-            // of seeing only "Sandbox exit code 127". We combine stderr
-            // (sbResult.error) with the exit code, and — if both are empty —
-            // fall back to the tail of stdout as a hint (some commands write
-            // their diagnostic to stdout rather than stderr).
-            let errorMsg: string | undefined;
-            if (sbResult.exitCode !== 0) {
-              const parts: string[] = [];
-              if (sbResult.error) parts.push(sbResult.error.trim());
-              parts.push(`exit code ${sbResult.exitCode}`);
-              if (!sbResult.error && sbResult.output) {
-                const tail = sbResult.output.trim().split('\n').slice(-5).join('\n');
-                if (tail) parts.push(`stdout tail: ${tail}`);
-              }
-              errorMsg = parts.join(' | ');
-            }
-            return {
-              success: sbResult.exitCode === 0,
-              output: sbResult.output || undefined,
-              error: errorMsg,
-            };
-          } catch (error) {
-            if (router.getConfig().failClosedOnUnavailable) {
-              return {
-                success: false,
-                error: `Command blocked by auto-sandbox: sandbox execution failed (${error instanceof Error ? error.message : String(error)})`,
-              };
-            }
-            // Docker sandbox unavailable, fall through to direct execution
-          }
-        }
-      } catch { /* auto-sandbox module unavailable, continue normally */ }
-
-      // Skip confirmation for safe read-only commands (ls, cat, grep, etc.)
-      const safeBinCheck = SafeBinariesChecker.getInstance();
-      const isSafeCommand = safeBinCheck.isSafe(command);
-
-      // Check if user has already accepted bash commands for this session
-      const sessionFlags = this.confirmationService.getSessionFlags();
-      if (!isSafeCommand && !sessionFlags.bashCommands && !sessionFlags.allOperations) {
-        // Request confirmation showing the command
-        const confirmationResult = await this.confirmationService.requestConfirmation(
-          {
-            operation: 'Run bash command',
-            filename: command,
-            showVSCodeOpen: false,
-            content: `Command: ${command}\nWorking directory: ${this.currentDirectory}`,
-          },
-          'bash'
-        );
-
-        if (!confirmationResult.confirmed) {
-          return {
-            success: false,
-            error: confirmationResult.feedback || 'Command execution cancelled by user',
-          };
-        }
-      }
-
-      // Checkpoint files targeted by destructive commands (rm, mv, etc.)
-      this.checkpointDestructiveTargets(command);
-
-      // Handle cd command separately
+      // `cd` changes the tool/session working directory rather than executing
+      // a child process. Keep it out of the shell sandbox, which cannot persist
+      // a directory change back to the parent process.
       if (command.startsWith('cd ')) {
         const newDir = command.substring(3).trim();
-        // Remove quotes if present
         const cleanDir = newDir.replace(/^["']|["']$/g, '');
         try {
           process.chdir(cleanDir);
@@ -397,8 +335,84 @@ export class BashTool implements Disposable {
         }
       }
 
+      // RTK is a command transformer. Freeze its output before policy,
+      // approval and sandboxing so the command the user sees is exactly the
+      // command that will execute.
       const executionCommand = await this.resolveRtkCommand(command);
-      const effectiveCwd = cwd ?? this.currentDirectory;
+      const policy = await evaluateShellExecution(executionCommand, effectiveCwd);
+      if (policy.action === 'deny') {
+        return {
+          success: false,
+          error: `Command blocked by execution policy: ${policy.reason}`,
+        };
+      }
+
+      let requiresDirectApproval = policy.action === 'ask';
+      let escalationReason = policy.reason;
+
+      if (policy.action === 'sandbox') {
+        const sandboxed = await executeInWorkspaceSandbox(executionCommand, effectiveCwd, timeout);
+        if (sandboxed.available && sandboxed.result) {
+          if (sandboxed.result.exitCode === 0) {
+            return this.formatProcessResult(
+              sandboxed.result.stdout,
+              sandboxed.result.stderr,
+              sandboxed.result.exitCode,
+              `sandbox:${sandboxed.result.backend}`,
+            );
+          }
+          if (!isSandboxBoundaryFailure(sandboxed.result)) {
+            return this.formatProcessResult(
+              sandboxed.result.stdout,
+              sandboxed.result.stderr,
+              sandboxed.result.exitCode,
+              `sandbox:${sandboxed.result.backend}`,
+            );
+          }
+          requiresDirectApproval = true;
+          escalationReason = `Sandbox boundary denied the command: ${sandboxed.result.stderr || sandboxed.result.stdout}`;
+        } else {
+          requiresDirectApproval = true;
+          escalationReason = sandboxed.reason || 'Workspace sandbox unavailable';
+        }
+      }
+
+      if (requiresDirectApproval) {
+        const confirmationResult = await this.confirmationService.requestConfirmation(
+          {
+            operation: 'Run command outside the workspace sandbox',
+            filename: executionCommand,
+            showVSCodeOpen: false,
+            content:
+              (executionCommand === command
+                ? `Command: ${executionCommand}\n`
+                : `Original command: ${command}\nTransformed command: ${executionCommand}\n`) +
+              `Working directory: ${effectiveCwd}\n` +
+              `Boundary: ${escalationReason}`,
+            approvalKey: policy.approvalKey,
+            riskLevel: 'high',
+            detail: { cwd: effectiveCwd },
+          },
+          'bash',
+        );
+
+        if (!confirmationResult.confirmed) {
+          return {
+            success: false,
+            error: confirmationResult.feedback || 'Command execution cancelled by user',
+          };
+        }
+      }
+
+      if (!executableIdentitiesStillMatch(policy, effectiveCwd)) {
+        return {
+          success: false,
+          error: 'Executable identity changed after policy evaluation; retry the command for a fresh decision.',
+        };
+      }
+
+      // Checkpoint files targeted by destructive commands (rm, mv, etc.)
+      this.checkpointDestructiveTargets(executionCommand);
 
       // Execute using spawn (safer than exec)
       const result = await this.executeWithSpawn(executionCommand, {
@@ -410,27 +424,16 @@ export class BashTool implements Disposable {
         const errorMessage = result.stderr || `Command exited with code ${result.exitCode}`;
 
         // Attempt self-healing if enabled
-        if (this.selfHealingEnabled) {
+        if (this.selfHealingEnabled && allowSelfHealing) {
           const healingResult = await this.selfHealingEngine.attemptHealing(
             executionCommand,
             errorMessage,
             async (fixCmd: string) => {
-              // Execute fix command without self-healing to avoid recursion
-              const fixResult = await this.executeWithSpawn(fixCmd, {
-                timeout: timeout * 2, // Give more time for fix commands
-                cwd: effectiveCwd,
-              });
-
-              if (fixResult.exitCode === 0) {
-                return {
-                  success: true,
-                  output: fixResult.stdout || 'Fix applied successfully',
-                };
-              }
-              return {
-                success: false,
-                error: fixResult.stderr || `Fix failed with code ${fixResult.exitCode}`,
-              };
+              // A model-proposed repair is a new command, not a continuation
+              // of the approved one. Route it through validation, RTK freeze,
+              // policy, sandbox and exact approval again; only disable nested
+              // healing to keep the retry budget bounded.
+              return this.executeInternal(fixCmd, timeout * 2, effectiveCwd, false);
             }
           );
 
@@ -498,6 +501,36 @@ export class BashTool implements Disposable {
     if (!validation.valid) return command;
 
     return rewrite.command;
+  }
+
+  /** Format buffered sandbox output consistently with the direct spawn path. */
+  private formatProcessResult(
+    stdout: string,
+    stderr: string,
+    exitCode: number,
+    source: string,
+  ): ToolResult {
+    if (exitCode !== 0) {
+      const diagnostic = stderr.trim() || stdout.trim() || `Command exited with code ${exitCode}`;
+      return {
+        success: false,
+        error: `${diagnostic}\n[${source}; exit code ${exitCode}]`,
+      };
+    }
+
+    const combined = stdout + (stderr ? `\nSTDERR: ${stderr}` : '');
+    const output = combined.trim() || 'Command executed successfully (no output)';
+    if (isLikelyTestOutput(output)) {
+      const parsed = parseTestOutput(output);
+      if (parsed.isTestOutput && parsed.data) {
+        return {
+          success: true,
+          output: JSON.stringify(parsed.data),
+          data: { type: 'test-results', framework: parsed.data.framework },
+        };
+      }
+    }
+    return { success: true, output };
   }
 
   /**

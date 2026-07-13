@@ -28,7 +28,7 @@ export interface ChatEntry {
   toolCall?: CodeBuddyToolCall;
   
   /** Result of tool execution (populated for `tool_result` type) */
-  toolResult?: { success: boolean; output?: string; error?: string };
+  toolResult?: ToolResult;
   
   /** Whether this entry is currently being streamed/updated */
   isStreaming?: boolean;

@@ -28,7 +28,11 @@ pub fn motion_score(prev: &[u8], frame: &[u8]) -> f64 {
 /// Detect motion across a frame sequence. Emits a `vision/motion` event when the
 /// score crosses `threshold` upward (hysteresis: re-arms only after it drops back
 /// below), so a sustained scene change yields one event, not a storm.
-pub fn detect_motion_events(frames: &[Vec<u8>], threshold: f64, frame_ms: u64) -> Vec<SensoryEvent> {
+pub fn detect_motion_events(
+    frames: &[Vec<u8>],
+    threshold: f64,
+    frame_ms: u64,
+) -> Vec<SensoryEvent> {
     let mut out = Vec::new();
     let mut moving = false;
     let mut ts: u64 = 0;
@@ -71,9 +75,20 @@ pub mod live {
     fn capture_gray(device: &str) -> Option<Vec<u8>> {
         let out = Command::new("ffmpeg")
             .args([
-                "-hide_banner", "-loglevel", "error", "-f", "v4l2", "-i", device,
-                "-frames:v", "1", "-vf", &format!("scale={W}x{H},format=gray"),
-                "-f", "rawvideo", "pipe:1",
+                "-hide_banner",
+                "-loglevel",
+                "error",
+                "-f",
+                "v4l2",
+                "-i",
+                device,
+                "-frames:v",
+                "1",
+                "-vf",
+                &format!("scale={W}x{H},format=gray"),
+                "-f",
+                "rawvideo",
+                "pipe:1",
             ])
             .output()
             .ok()?;
@@ -87,8 +102,17 @@ pub mod live {
     fn capture_keyframe(device: &str, path: &str) -> bool {
         Command::new("ffmpeg")
             .args([
-                "-hide_banner", "-loglevel", "error", "-y", "-f", "v4l2", "-i", device,
-                "-frames:v", "1", path,
+                "-hide_banner",
+                "-loglevel",
+                "error",
+                "-y",
+                "-f",
+                "v4l2",
+                "-i",
+                device,
+                "-frames:v",
+                "1",
+                path,
             ])
             .status()
             .map(|s| s.success())
@@ -100,7 +124,11 @@ pub mod live {
         let base = std::env::var("BUDDY_SENSE_FRAME_DIR")
             .ok()
             .map(std::path::PathBuf::from)
-            .or_else(|| std::env::var("HOME").ok().map(|h| std::path::Path::new(&h).join(".codebuddy/companion")))
+            .or_else(|| {
+                std::env::var("HOME")
+                    .ok()
+                    .map(|h| std::path::Path::new(&h).join(".codebuddy/companion"))
+            })
             .unwrap_or_else(std::env::temp_dir);
         let _ = std::fs::create_dir_all(&base);
         base
@@ -108,11 +136,17 @@ pub mod live {
 
     /// Capture every `interval_ms`; emit `vision/motion` (+ keyframe) on rising
     /// motion (hysteresis → one event per sustained change, not a storm).
-    pub async fn run(tx: mpsc::Sender<SensoryEvent>, device: String, interval_ms: u64, threshold: f64) {
+    pub async fn run(
+        tx: mpsc::Sender<SensoryEvent>,
+        device: String,
+        interval_ms: u64,
+        threshold: f64,
+    ) {
         let camera = device.rsplit('/').next().unwrap_or("camera").to_string();
         let mut prev: Option<Vec<u8>> = None;
         let mut moving = false;
-        let mut ticker = tokio::time::interval(std::time::Duration::from_millis(interval_ms.max(200)));
+        let mut ticker =
+            tokio::time::interval(std::time::Duration::from_millis(interval_ms.max(200)));
         loop {
             ticker.tick().await;
             let dev = device.clone();
@@ -128,15 +162,17 @@ pub mod live {
                         let path = frame_dir().join(format!("cam-{}.jpg", now_ms()));
                         let path_str = path.to_string_lossy().to_string();
                         let (dev2, cap_path) = (device.clone(), path_str.clone());
-                        let ok = tokio::task::spawn_blocking(move || capture_keyframe(&dev2, &cap_path))
-                            .await
-                            .unwrap_or(false);
+                        let ok =
+                            tokio::task::spawn_blocking(move || capture_keyframe(&dev2, &cap_path))
+                                .await
+                                .unwrap_or(false);
                         let payload = serde_json::json!({
                             "score": score,
                             "camera": camera,
                             "imagePath": if ok { Some(path_str) } else { None },
                         });
-                        let ev = SensoryEvent::new(Modality::Vision, "motion", MOTION_SALIENCE, payload);
+                        let ev =
+                            SensoryEvent::new(Modality::Vision, "motion", MOTION_SALIENCE, payload);
                         if tx.send(ev).await.is_err() {
                             break;
                         }

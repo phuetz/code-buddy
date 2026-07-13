@@ -186,6 +186,13 @@ export const TOOL_METADATA: ToolMetadata[] = [
     priority: 8,
     description: 'Execute a bounded code snippet as a real subprocess and persist run artifacts',
   },
+  {
+    name: 'code_exec',
+    category: 'utility',
+    keywords: ['code_exec', 'code mode', 'javascript', 'orchestration', 'tool bridge', 'responses lite', 'exec'],
+    priority: 9,
+    description: 'Run bounded JavaScript orchestration whose nested effects retain Code Buddy policies and confirmations',
+  },
 
   // Git operations
   {
@@ -281,6 +288,29 @@ export const TOOL_METADATA: ToolMetadata[] = [
     ],
     priority: 7,
     description: 'Grounded, cited QA over a local corpus of scientific PDFs (page/section provenance, honest refusal)',
+  },
+  {
+    name: 'meeting_notes',
+    category: 'document',
+    keywords: [
+      'meeting', 'notes', 'minutes', 'transcript', 'transcription', 'audio', 'video',
+      'summary', 'decisions', 'actions', 'speakers', 'evidence', 'timestamp',
+      'réunion', 'compte rendu', 'résumé', 'décisions', 'tâches', 'horodatage',
+    ],
+    priority: 8,
+    description: 'Create private, grounded meeting notes from a workspace-local transcript, audio, or video file',
+  },
+  {
+    name: 'comfy_recipe',
+    category: 'media',
+    keywords: [
+      'comfyui', 'comfy', 'recipe', 'workflow', 'local generation', 'image', 'reference image',
+      'avatar', 'character consistency', 'cohérence personnage', 'video',
+      'audio', 'music', '3d', 'storyboard', 'book cover', 'trailer', 'animation',
+      'génération locale', 'couverture', 'bande annonce',
+    ],
+    priority: 9,
+    description: 'List, preflight, or run a registered local ComfyUI recipe with declared workspace-local image references and confined outputs',
   },
   {
     name: 'web_fetch',
@@ -460,7 +490,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
     category: 'web',
     keywords: ['browser operator', 'browser', 'web automation', 'live web', 'navigate', 'login', 'interaction', 'consent', 'stagehand', 'computer use', 'session', 'stop control', 'proof export', 'operator', 'propose'],
     priority: 6,
-    description: 'Propose a consent-gated Browser Operator session (action log, consent scopes, stop control, proof export) for live web goals beyond web_search/web_fetch — without launching a browser'
+    description: 'Propose a consent-gated Browser Operator session for a reviewed sourceUrl (action log, consent scopes, stop control, proof export) — without launching a browser'
   },
   {
     name: 'computer_control',
@@ -829,6 +859,13 @@ export const TOOL_METADATA: ToolMetadata[] = [
     description: 'Generate an image through the configured image backend and cache returned media when possible'
   },
   {
+    name: 'image_edit',
+    category: 'media',
+    keywords: ['image', 'edit', 'inpaint', 'mask', 'mark', 'design', 'retouch', 'modifier', 'zone'],
+    priority: 8,
+    description: 'Create a new edited image from a confirmed workspace source and optional PNG alpha mask'
+  },
+  {
     name: 'video',
     category: 'media',
     keywords: ['video', 'movie', 'frames', 'thumbnail', 'mp4', 'extract'],
@@ -1008,9 +1045,9 @@ export const TOOL_METADATA: ToolMetadata[] = [
   {
     name: 'restore_context',
     category: 'utility',
-    keywords: ['restore', 'context', 'memory', 'compressed', 'retrieve', 'earlier'],
+    keywords: ['restore', 'context', 'memory', 'compressed', 'retrieve', 'earlier', 'callId', 'raw', 'exact'],
     priority: 7,
-    description: 'Restore compressed context content by identifier',
+    description: 'Restore exact persisted tool output by callId, with legacy identifier fallback',
     fleetSafe: true,
   },
   {

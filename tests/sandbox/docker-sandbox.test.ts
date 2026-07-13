@@ -19,7 +19,7 @@ vi.mock('child_process', () => ({
   spawnSync: mockSpawnSync,
 }));
 
-import { DockerSandbox, type SandboxConfig, type SandboxResult } from '../../src/sandbox/docker-sandbox.js';
+import { DockerSandbox } from '../../src/sandbox/docker-sandbox.js';
 
 /**
  * Create a mock ChildProcess with stdout/stderr event emitters.
@@ -72,6 +72,24 @@ describe('DockerSandbox', () => {
     });
   });
 
+  describe('hasLocalImage', () => {
+    it('checks a local image without invoking a shell', () => {
+      mockSpawnSync.mockReturnValue({ status: 0, stdout: Buffer.from(''), stderr: Buffer.from('') });
+      expect(DockerSandbox.hasLocalImage('codebuddy-workspace-sandbox:1')).toBe(true);
+      expect(mockSpawnSync).toHaveBeenCalledWith(
+        'docker',
+        ['image', 'inspect', 'codebuddy-workspace-sandbox:1'],
+        expect.objectContaining({ stdio: 'ignore' }),
+      );
+    });
+
+    it('rejects malformed or missing images', () => {
+      expect(DockerSandbox.hasLocalImage('bad\nimage')).toBe(false);
+      mockSpawnSync.mockReturnValue({ status: 1, stdout: Buffer.from(''), stderr: Buffer.from('') });
+      expect(DockerSandbox.hasLocalImage('missing:latest')).toBe(false);
+    });
+  });
+
   describe('execute', () => {
     it('should build correct docker command args', async () => {
       const proc = createMockProcess();
@@ -98,9 +116,12 @@ describe('DockerSandbox', () => {
         expect.arrayContaining([
           'run', '--rm',
           '--label', 'codebuddy-sandbox=true',
+          '--cap-drop', 'ALL',
+          '--security-opt', 'no-new-privileges:true',
           '-m', '512m',
           '--cpus', '1.0',
           '--network', 'none',
+          '--',
           'node:22-slim', 'sh', '-c', 'echo hello',
         ]),
         expect.anything(),
@@ -155,6 +176,45 @@ describe('DockerSandbox', () => {
       expect(args).toContain('/home/user/project:/workspace');
       expect(args).toContain('-w');
       expect(args).toContain('/workspace');
+    });
+
+    it('can preserve the host workspace path for compatible tool output', async () => {
+      const proc = createMockProcess();
+      mockSpawn.mockReturnValue(proc);
+
+      const sandbox = new DockerSandbox({
+        workspaceMount: '/home/user/project',
+        preserveWorkspacePath: true,
+      });
+      const promise = sandbox.execute('pwd');
+
+      proc.emit('close', 0);
+      await promise;
+
+      const args = mockSpawn.mock.calls[0][1] as string[];
+      if (process.platform === 'win32') {
+        expect(args).toContain('/home/user/project:/workspace');
+      } else {
+        expect(args).toContain('/home/user/project:/home/user/project');
+        expect(args).toContain('/home/user/project');
+      }
+    });
+
+    it('passes validated environment entries and ignores invalid keys', async () => {
+      const proc = createMockProcess();
+      mockSpawn.mockReturnValue(proc);
+
+      const sandbox = new DockerSandbox({
+        environment: { HOME: '/tmp/home', 'BAD-KEY': 'ignored' },
+      });
+      const promise = sandbox.execute('env');
+
+      proc.emit('close', 0);
+      await promise;
+
+      const args = mockSpawn.mock.calls[0][1] as string[];
+      expect(args).toContain('HOME=/tmp/home');
+      expect(args).not.toContain('BAD-KEY=ignored');
     });
 
     it('should handle timeout by killing container', async () => {

@@ -7,6 +7,7 @@
  */
 
 import { logger } from '../utils/logger.js';
+import { parseBashCommand, type ParsedCommand } from './bash-parser.js';
 
 // ============================================================================
 // Safe Binaries List
@@ -16,11 +17,40 @@ export const SAFE_BINARIES: readonly string[] = [
   'ls', 'cat', 'head', 'tail', 'wc', 'grep', 'rg', 'find',
   'which', 'whoami', 'pwd', 'echo', 'date', 'uname', 'hostname',
   'env', 'printenv', 'file', 'stat', 'du', 'df', 'free', 'uptime',
-  'id', 'groups', 'locale', 'tty', 'stty', 'basename', 'dirname',
+  'id', 'groups', 'locale', 'tty', 'basename', 'dirname',
   'realpath', 'readlink', 'md5sum', 'sha256sum', 'sort', 'uniq',
-  'tr', 'cut', 'paste', 'diff', 'comm', 'tee', 'xargs', 'seq',
-  'yes', 'true', 'false', 'test', 'expr',
+  'tr', 'cut', 'paste', 'diff', 'comm', 'seq', 'true', 'false',
+  'test', 'expr',
+  'git',
 ] as const;
+
+/**
+ * Options that turn an otherwise read-only command into a mutating command or
+ * an arbitrary command runner. These are deliberately matched after quote
+ * removal because quoted shell arguments still reach the binary unchanged.
+ */
+const UNSAFE_FIND_ACTIONS = new Set([
+  '-delete',
+  '-exec',
+  '-execdir',
+  '-ok',
+  '-okdir',
+  '-fls',
+  '-fprint',
+  '-fprint0',
+  '-fprintf',
+]);
+
+const SAFE_ENV_OPTIONS_WITH_VALUE = new Set(['-u', '--unset', '-C', '--chdir']);
+const SAFE_ENV_OPTIONS = new Set([
+  '-i',
+  '--ignore-environment',
+  '-0',
+  '--null',
+  '--debug',
+  '--help',
+  '--version',
+]);
 
 // ============================================================================
 // SafeBinariesChecker
@@ -51,26 +81,14 @@ export class SafeBinariesChecker {
     const trimmed = command.trim();
     if (!trimmed) return false;
 
-    const firstWord = this.extractFirstWord(trimmed);
-    return this.safeBinaries.has(firstWord);
+    return this.isEntireExpressionSafe(trimmed);
   }
 
   isSafeChain(command: string): boolean {
     const trimmed = command.trim();
     if (!trimmed) return false;
 
-    // Split on pipes, &&, ||, and ;
-    const parts = trimmed.split(/\s*(?:\|{1,2}|&&|;)\s*/);
-
-    for (const part of parts) {
-      const cleaned = part.trim();
-      if (!cleaned) continue;
-      if (!this.isSafe(cleaned)) {
-        return false;
-      }
-    }
-
-    return true;
+    return this.isEntireExpressionSafe(trimmed);
   }
 
   getSafeBinaries(): string[] {
@@ -93,26 +111,207 @@ export class SafeBinariesChecker {
     return this.customized;
   }
 
-  private extractFirstWord(command: string): string {
-    // Handle env var prefixes like FOO=bar cmd
-    let cmd = command;
-    while (/^\w+=\S*\s+/.test(cmd)) {
-      cmd = cmd.replace(/^\w+=\S*\s+/, '');
+  private isEntireExpressionSafe(command: string): boolean {
+    // The AST parser identifies every command in pipelines/chains. A lexical
+    // pre-pass covers shell constructs that the fallback parser intentionally
+    // normalizes away (notably redirects and command substitutions).
+    if (this.hasUnsafeShellSyntax(command)) return false;
+
+    const parsed = parseBashCommand(command);
+    if (parsed.warnings.length > 0 || parsed.commands.length === 0) return false;
+
+    return parsed.commands.every(parsedCommand => this.isParsedCommandSafe(parsedCommand));
+  }
+
+  private isParsedCommandSafe(parsedCommand: ParsedCommand): boolean {
+    if (parsedCommand.isSubshell) return false;
+
+    const binary = this.basename(parsedCommand.command);
+    if (!this.safeBinaries.has(binary)) return false;
+
+    const args = parsedCommand.args.map(arg => this.stripOuterQuotes(arg));
+
+    switch (binary) {
+      case 'find':
+        return !args.some(arg => UNSAFE_FIND_ACTIONS.has(arg.toLowerCase()));
+      case 'rg':
+        return !args.some(arg => {
+          const option = arg.toLowerCase();
+          return option === '--pre'
+            || option.startsWith('--pre=')
+            || option === '--hostname-bin'
+            || option.startsWith('--hostname-bin=')
+            // Compressed search delegates to external decompression tools.
+            || option === '--search-zip'
+            || option === '-z';
+        });
+      case 'sort':
+        return !args.some(arg => {
+          const option = arg.toLowerCase();
+          return option === '-o'
+            || /^-o.+/.test(option)
+            || option === '--output'
+            || option.startsWith('--output=')
+            || option === '--compress-program'
+            || option.startsWith('--compress-program=');
+        });
+      case 'file':
+        return !args.some(arg => arg === '-C' || arg === '--compile');
+      case 'hostname':
+        return this.isHostnameQuery(args);
+      case 'date':
+        return !args.some(arg => arg === '-s' || arg === '--set' || arg.startsWith('--set='));
+      case 'env':
+        return this.isEnvironmentQuery(args);
+      case 'git':
+        return this.isGitQuery(args);
+      default:
+        return true;
+    }
+  }
+
+  /**
+   * Reject syntax that can write, spawn hidden commands, or hide additional
+   * commands from a simple command list. Quote-aware scanning avoids treating
+   * literals such as `echo "a > b"` as redirections.
+   */
+  private hasUnsafeShellSyntax(command: string): boolean {
+    let quote: 'none' | 'single' | 'double' = 'none';
+    let escaped = false;
+
+    for (let index = 0; index < command.length; index++) {
+      const char = command[index];
+      const next = command[index + 1];
+
+      if (escaped) {
+        if (char === '\n' || char === '\r') return true;
+        escaped = false;
+        continue;
+      }
+
+      if (quote === 'single') {
+        if (char === "'") quote = 'none';
+        continue;
+      }
+
+      if (char === '\\') {
+        escaped = true;
+        continue;
+      }
+
+      if (quote === 'double') {
+        if (char === '"') {
+          quote = 'none';
+          continue;
+        }
+        if (char === '`' || (char === '$' && next === '(')) return true;
+        continue;
+      }
+
+      if (char === "'") {
+        quote = 'single';
+        continue;
+      }
+      if (char === '"') {
+        quote = 'double';
+        continue;
+      }
+
+      if (char === '`' || (char === '$' && next === '(')) return true;
+      if ((char === '<' || char === '>') && next === '(') return true;
+      if (char === '(' || char === ')') return true;
+
+      // Any output redirect can create/truncate a file. Input redirects remain
+      // eligible, except heredocs/FD duplication which have richer semantics.
+      if (char === '>') return true;
+      if (char === '<' && (next === '<' || next === '&')) return true;
+
+      // The fallback AST parser does not split newlines or background jobs.
+      if (char === '\n' || char === '\r') return true;
+      if (char === '&') {
+        if (next !== '&') return true;
+        index++;
+      }
     }
 
-    // Handle sudo/command prefixes
-    const prefixes = ['sudo', 'command', 'builtin'];
-    const parts = cmd.split(/\s+/);
-    // String.split always returns at least one element, so parts[0] is defined;
-    // fall back to '' to satisfy the type checker without changing behavior.
-    let firstWord = parts[0] ?? '';
+    return escaped || quote !== 'none';
+  }
 
-    if (prefixes.includes(firstWord) && parts.length > 1) {
-      firstWord = parts[1] ?? firstWord;
+  private isEnvironmentQuery(args: string[]): boolean {
+    for (let index = 0; index < args.length; index++) {
+      const arg = args[index] ?? '';
+
+      if (/^[A-Za-z_][A-Za-z0-9_]*=/.test(arg)) continue;
+      if (SAFE_ENV_OPTIONS.has(arg)) continue;
+      if (arg.startsWith('--unset=') || arg.startsWith('--chdir=')) continue;
+
+      if (SAFE_ENV_OPTIONS_WITH_VALUE.has(arg)) {
+        if (index + 1 >= args.length) return false;
+        index++;
+        continue;
+      }
+
+      // `env -S`/`--split-string` and the first non-option argument launch a
+      // utility, so they cannot inherit env's read-only classification.
+      return false;
     }
 
-    // Strip path prefix (e.g., /usr/bin/ls -> ls)
-    const basename = firstWord.split('/').pop() || firstWord;
-    return basename;
+    return true;
+  }
+
+  private isHostnameQuery(args: string[]): boolean {
+    const mutatingOptions = new Set(['-b', '--boot', '-F', '--file']);
+    if (args.some(arg => mutatingOptions.has(arg) || arg.startsWith('--file='))) {
+      return false;
+    }
+
+    // A positional hostname asks the utility to change the system hostname.
+    return args.every(arg => arg.startsWith('-'));
+  }
+
+  private isGitQuery(args: string[]): boolean {
+    const [subcommand, ...rest] = args;
+    if (!subcommand || subcommand.startsWith('-')) return false;
+    const safe = new Set([
+      'status', 'diff', 'show', 'rev-parse', 'describe', 'ls-files',
+      'ls-tree', 'cat-file', 'blame', 'shortlog',
+    ]);
+    if (safe.has(subcommand)) return true;
+    if (subcommand === 'log') {
+      return !rest.some(arg => arg === '--output' || arg.startsWith('--output='));
+    }
+    if (subcommand === 'remote') {
+      return rest.length === 0 || (rest.length === 1 && rest[0] === '-v');
+    }
+    if (subcommand === 'branch') {
+      const readOnlyOptions = new Set([
+        '--list', '--show-current', '--contains', '--no-contains',
+        '--merged', '--no-merged',
+      ]);
+      return rest.length === 0 || rest.every(arg => arg.startsWith('-') && readOnlyOptions.has(arg));
+    }
+    if (subcommand === 'tag') {
+      return rest.length === 0 || rest[0] === '--list';
+    }
+    return false;
+  }
+
+  private stripOuterQuotes(value: string): string {
+    if (value.length >= 2) {
+      const first = value[0];
+      const last = value[value.length - 1];
+      if ((first === "'" && last === "'") || (first === '"' && last === '"')) {
+        return value.slice(1, -1);
+      }
+    }
+    return value;
+  }
+
+  private basename(command: string): string {
+    if (!command.includes('/') && !command.includes('\\')) return command;
+    const normalized = command.replace(/\\/g, '/');
+    const trustedPrefixes = ['/bin/', '/usr/bin/', '/usr/local/bin/', '/sbin/', '/usr/sbin/'];
+    if (!trustedPrefixes.some(prefix => normalized.startsWith(prefix))) return normalized;
+    return normalized.split('/').pop() || normalized;
   }
 }

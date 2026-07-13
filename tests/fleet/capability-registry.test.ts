@@ -24,6 +24,7 @@ vi.mock('../../src/utils/logger.js', () => ({
 
 import {
   getLocalCapabilities,
+  parseAgyModelsOutput,
   resetCapabilityCache,
 } from '../../src/fleet/capability-registry';
 
@@ -39,6 +40,7 @@ function clearProviderEnv() {
     'GEMINI_API_KEY',
     'GOOGLE_API_KEY',
     'GROK_API_KEY',
+    'XAI_API_KEY',
     'MISTRAL_API_KEY',
     'CHATGPT_MODEL',
     'CODEBUDDY_CODEX_AUTH_PATH',
@@ -48,6 +50,10 @@ function clearProviderEnv() {
     'CODEBUDDY_FLEET_RAM_GB',
     'CODEBUDDY_FLEET_MAX_CONCURRENCY',
     'CODEBUDDY_FLEET_ROLES',
+    'AGY_CLI_PATH',
+    'LEMONADE_HOST',
+    'LEMONADE_API_KEY',
+    'OPENROUTER_API_KEY',
   ]) {
     delete process.env[k];
   }
@@ -63,6 +69,7 @@ beforeEach(() => {
   // and break "no env vars" assertions). Tests that exercise gemini-cli
   // detection must override this to a real path.
   process.env.GEMINI_CLI_PATH = '/tmp/__no_gemini_cli_in_tests__';
+  process.env.AGY_CLI_PATH = '/tmp/__no_agy_cli_in_tests__';
   // Default: deny every fetch (Ollama / LM Studio probes return [])
   global.fetch = vi.fn(async () => {
     throw new Error('econn refused');
@@ -101,12 +108,25 @@ describe('capability-registry — env-based detection', () => {
     const ids = cap.models.map((m) => m.id);
     expect(ids).toContain('gpt-5-codex');
     expect(cap.models.find((m) => m.id === 'gpt-5-codex')?.strengths).toContain('code');
+    const sol = cap.models.find((m) => m.id === 'gpt-5.6-sol');
+    expect(sol).toMatchObject({
+      contextWindow: 1_050_000,
+      costInputUsdPerMtok: 5,
+      costOutputUsdPerMtok: 30,
+      provider: 'openai',
+    });
+    expect(sol?.strengths).toEqual(expect.arrayContaining([
+      'code',
+      'reasoning',
+      'vision',
+      'tool-calling',
+      'long-context',
+    ]));
   });
 
   it('detects ChatGPT OAuth credentials as zero-marginal-cost Codex models', async () => {
     const authPath = path.join(tempAuthDir!, 'codex-auth.json');
     process.env.CODEBUDDY_CODEX_AUTH_PATH = authPath;
-    process.env.CHATGPT_MODEL = 'gpt-5.1-codex';
     fs.writeFileSync(
       authPath,
       JSON.stringify({ tokens: { access_token: 'tok_test' } }),
@@ -115,8 +135,17 @@ describe('capability-registry — env-based detection', () => {
 
     const cap = await getLocalCapabilities();
     const chatgptModels = cap.models.filter((m) => m.provider === 'chatgpt-oauth');
-    expect(chatgptModels.map((m) => m.id)).toContain('gpt-5.1-codex');
-    expect(chatgptModels.find((m) => m.id === 'gpt-5.1-codex')?.strengths).toContain('code');
+    expect(chatgptModels.map((m) => m.id)).toEqual(expect.arrayContaining([
+      'gpt-5.6-sol',
+      'gpt-5.6-terra',
+      'gpt-5.6-luna',
+      'gpt-5.5',
+    ]));
+    expect(chatgptModels.map((m) => m.id)).not.toContain('terra');
+    expect(chatgptModels.map((m) => m.id)).not.toContain('luna');
+    expect(chatgptModels.map((m) => m.id)).not.toContain('gpt-5.1-codex');
+    expect(chatgptModels.find((m) => m.id === 'gpt-5.6-sol')?.contextWindow).toBe(372_000);
+    expect(chatgptModels.find((m) => m.id === 'gpt-5.6-sol')?.strengths).toContain('code');
     expect(chatgptModels.every((m) => m.costInputUsdPerMtok === 0)).toBe(true);
     expect(chatgptModels.every((m) => m.costOutputUsdPerMtok === 0)).toBe(true);
     expect(cap.egress).toBe('cloud');
@@ -138,6 +167,28 @@ describe('capability-registry — env-based detection', () => {
     expect(cliModels[0].costInputUsdPerMtok).toBe(0);
     expect(cliModels[0].costOutputUsdPerMtok).toBe(0);
     // Egress still 'cloud' for privacy routing.
+    expect(cap.egress).toBe('cloud');
+  });
+
+  it('parses dynamic agy display names as opaque de-duplicated values', () => {
+    expect(parseAgyModelsOutput(
+      'Gemini 3.5 Flash (High)\nClaude Opus 4.6 (Thinking)\nGemini 3.5 Flash (High)\n',
+    )).toEqual(['Gemini 3.5 Flash (High)', 'Claude Opus 4.6 (Thinking)']);
+  });
+
+  it('advertises the OpenRouter free pool at zero marginal cost', async () => {
+    process.env.OPENROUTER_API_KEY = 'or-test';
+    const cap = await getLocalCapabilities();
+    const free = cap.models.filter((model) => model.provider === 'openrouter');
+    expect(free.map((model) => model.id)).toContain('openrouter/free');
+    expect(free.every((model) => model.costInputUsdPerMtok === 0)).toBe(true);
+    expect(cap.egress).toBe('cloud');
+  });
+
+  it('advertises Grok when configured through XAI_API_KEY', async () => {
+    process.env.XAI_API_KEY = 'xai-test';
+    const cap = await getLocalCapabilities();
+    expect(cap.models.some((model) => model.provider === 'grok')).toBe(true);
     expect(cap.egress).toBe('cloud');
   });
 
@@ -221,6 +272,27 @@ describe('capability-registry — Ollama probe', () => {
     }) as unknown as typeof fetch;
     const cap = await getLocalCapabilities();
     expect(cap.models).toEqual([]);
+    expect(cap.egress).toBe('local');
+  });
+});
+
+describe('capability-registry — Lemonade probe', () => {
+  it('discovers downloaded models from the local OpenAI-compatible endpoint', async () => {
+    global.fetch = vi.fn(async (url: RequestInfo | URL) => {
+      if (String(url).includes(':13305/v1/models')) {
+        return new Response(JSON.stringify({
+          data: [
+            { id: 'Qwen3.6-35B-A3B-MTP-GGUF' },
+            { id: 'gemma-4-31B-it-GGUF-Q4_K_M' },
+          ],
+        }), { status: 200 });
+      }
+      throw new Error('econn');
+    }) as unknown as typeof fetch;
+
+    const cap = await getLocalCapabilities();
+    const lemonade = cap.models.filter((model) => model.provider === 'lemonade');
+    expect(lemonade.map((model) => model.id)).toContain('Qwen3.6-35B-A3B-MTP-GGUF');
     expect(cap.egress).toBe('local');
   });
 });

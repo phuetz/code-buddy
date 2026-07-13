@@ -42,6 +42,7 @@ describe('apply_patch registration (V2)', () => {
   describe('ApplyPatchExecuteTool applies a real patch', () => {
     let dir: string;
     let prevCwd: string;
+    const outsidePaths: string[] = [];
     beforeEach(() => {
       prevCwd = process.cwd();
       dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cb-applypatch-'));
@@ -50,6 +51,9 @@ describe('apply_patch registration (V2)', () => {
     afterEach(() => {
       process.chdir(prevCwd);
       fs.rmSync(dir, { recursive: true, force: true });
+      for (const outsidePath of outsidePaths.splice(0)) {
+        fs.rmSync(outsidePath, { recursive: true, force: true });
+      }
     });
 
     it('adds a new file from a Codex-style patch', async () => {
@@ -64,6 +68,70 @@ describe('apply_patch registration (V2)', () => {
       const tool = new ApplyPatchExecuteTool();
       const result = await tool.execute({ patch: '' });
       expect(result.success).toBe(false);
+    });
+
+    it('preflights every target and rejects lexical workspace escapes atomically', async () => {
+      const outsideFile = path.join(path.dirname(dir), `${path.basename(dir)}-escape.txt`);
+      outsidePaths.push(outsideFile);
+      const tool = new ApplyPatchExecuteTool();
+      const patch = [
+        '*** Begin Patch',
+        '*** Add File: inside.txt',
+        '+must not be partially applied',
+        `*** Add File: ../${path.basename(outsideFile)}`,
+        '+outside',
+        '*** End Patch',
+      ].join('\n');
+
+      const result = await tool.execute({ patch });
+
+      expect(result.success).toBe(false);
+      expect(result.error).toMatch(/outside workspace/i);
+      expect(fs.existsSync(path.join(dir, 'inside.txt'))).toBe(false);
+      expect(fs.existsSync(outsideFile)).toBe(false);
+    });
+
+    it('rejects absolute targets and move destinations outside the workspace', async () => {
+      const absoluteTarget = path.join(path.dirname(dir), `${path.basename(dir)}-absolute.txt`);
+      const movedTarget = path.join(path.dirname(dir), `${path.basename(dir)}-moved.txt`);
+      outsidePaths.push(absoluteTarget, movedTarget);
+      fs.writeFileSync(path.join(dir, 'source.txt'), 'before\n');
+      const tool = new ApplyPatchExecuteTool();
+
+      const absoluteResult = await tool.execute({
+        patch: `*** Begin Patch\n*** Add File: ${absoluteTarget}\n+outside\n*** End Patch`,
+      });
+      const moveResult = await tool.execute({
+        patch: [
+          '*** Begin Patch',
+          '*** Update File: source.txt',
+          `*** Move to: ../${path.basename(movedTarget)}`,
+          '@@',
+          '-before',
+          '+after',
+          '*** End Patch',
+        ].join('\n'),
+      });
+
+      expect(absoluteResult.success).toBe(false);
+      expect(moveResult.success).toBe(false);
+      expect(fs.existsSync(absoluteTarget)).toBe(false);
+      expect(fs.existsSync(movedTarget)).toBe(false);
+      expect(fs.readFileSync(path.join(dir, 'source.txt'), 'utf-8')).toBe('before\n');
+    });
+
+    it('rejects a missing target below a symlinked parent that escapes the workspace', async () => {
+      const outsideDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cb-applypatch-outside-'));
+      outsidePaths.push(outsideDir);
+      fs.symlinkSync(outsideDir, path.join(dir, 'escape'), 'dir');
+      const tool = new ApplyPatchExecuteTool();
+      const patch = '*** Begin Patch\n*** Add File: escape/new.txt\n+outside\n*** End Patch';
+
+      const result = await tool.execute({ patch });
+
+      expect(result.success).toBe(false);
+      expect(result.error).toMatch(/symlink/i);
+      expect(fs.existsSync(path.join(outsideDir, 'new.txt'))).toBe(false);
     });
   });
 });

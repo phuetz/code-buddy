@@ -1,6 +1,11 @@
 import { CodeBuddyClient, CodeBuddyMessage, CodeBuddyToolCall } from "../codebuddy/client.js";
 import { EventEmitter } from "events";
 import { ToolResult, getErrorMessage } from "../types/index.js";
+import { formatToolResultForRecovery } from "../context/restorable-compression.js";
+import {
+  commandFromToolArguments,
+  prepareToolObservationForPrompt,
+} from "./prompt-tool-observation.js";
 
 export interface SubagentConfig {
   name: string;
@@ -254,6 +259,8 @@ export class Subagent extends EventEmitter {
     options?: {
       progressCallback?: (round: number, maxRounds: number) => void;
       sharedContext?: Map<string, string>;
+      /** Workspace used for lossless raw-observation persistence. */
+      workspaceRoot?: string;
     }
   ): Promise<SubagentResult> {
     this.isRunning = true;
@@ -287,6 +294,19 @@ export class Subagent extends EventEmitter {
       filteredTools = filteredTools.filter(
         (t) => !this.config.disallowedTools!.includes(t.function?.name || "")
       );
+    }
+
+    // Historical subagent whitelists predate lossless observation recovery.
+    // Add the host-supplied read-only recovery schema unless explicitly
+    // denied. If it is absent, the boundary below persists raw output but
+    // deliberately skips optimization rather than stranding the model.
+    const restoreContext = tools?.find((tool) => tool.function?.name === "restore_context");
+    if (
+      restoreContext &&
+      !this.config.disallowedTools?.includes("restore_context") &&
+      !filteredTools?.some((tool) => tool.function?.name === "restore_context")
+    ) {
+      filteredTools = [...(filteredTools ?? []), restoreContext];
     }
 
     // Build context including shared context from orchestrator
@@ -351,11 +371,26 @@ export class Subagent extends EventEmitter {
 
             if (executeTool) {
               const result = await executeTool(toolCall);
+              const rawContent = formatToolResultForRecovery(result);
+              const observation = await prepareToolObservationForPrompt({
+                toolName: toolCall.function.name,
+                toolCallId: toolCall.id,
+                content: rawContent,
+                success: result.success,
+                exitCode: result.success ? 0 : 1,
+                ...(result.error === undefined ? {} : { error: result.error }),
+                command: commandFromToolArguments(toolCall.function.arguments),
+                query: task,
+                workspaceRoot: options?.workspaceRoot ?? process.cwd(),
+                model: this.config.model ?? "grok-code-fast-1",
+                messages,
+                allowOptimization: Boolean(
+                  filteredTools?.some((tool) => tool.function?.name === "restore_context"),
+                ),
+              });
               messages.push({
                 role: "tool",
-                content: result.success
-                  ? result.output || "Success"
-                  : result.error || "Error",
+                content: observation.content,
                 tool_call_id: toolCall.id,
               });
             }
@@ -469,6 +504,7 @@ export class SubagentManager {
       context?: string;
       tools?: import("../codebuddy/client.js").CodeBuddyTool[];
       executeTool?: (toolCall: CodeBuddyToolCall) => Promise<ToolResult>;
+      workspaceRoot?: string;
     } = {}
   ): Promise<SubagentResult> {
     const agent = this.createSubagent(name);
@@ -486,7 +522,8 @@ export class SubagentManager {
       task,
       options.context,
       options.tools,
-      options.executeTool
+      options.executeTool,
+      options.workspaceRoot ? { workspaceRoot: options.workspaceRoot } : undefined,
     );
   }
 
@@ -569,6 +606,7 @@ export class ParallelSubagentRunner extends EventEmitter {
     sharedOptions: {
       tools?: import("../codebuddy/client.js").CodeBuddyTool[];
       executeTool?: (toolCall: CodeBuddyToolCall) => Promise<ToolResult>;
+      workspaceRoot?: string;
     } = {}
   ): Promise<ParallelExecutionResult> {
     const startTime = Date.now();
@@ -613,6 +651,7 @@ export class ParallelSubagentRunner extends EventEmitter {
               context: task.context,
               tools: sharedOptions.tools,
               executeTool: sharedOptions.executeTool,
+              workspaceRoot: sharedOptions.workspaceRoot,
             });
 
             results.set(task.id, result);
@@ -694,6 +733,7 @@ export class ParallelSubagentRunner extends EventEmitter {
     sharedOptions: {
       tools?: import("../codebuddy/client.js").CodeBuddyTool[];
       executeTool?: (toolCall: CodeBuddyToolCall) => Promise<ToolResult>;
+      workspaceRoot?: string;
     } = {}
   ): Promise<ParallelExecutionResult> {
     const tasks: ParallelTask[] = agentTypes.map((agentType, index) => ({

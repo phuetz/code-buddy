@@ -225,7 +225,9 @@ describe('runner checkpoint resume', () => {
       resume: 'resume-decomposed-run',
     });
 
-    expect(report.status).toBe('verified');
+    // This checkpoint contains no requested edits or verification command, so
+    // the completed subtask is ready rather than falsely marked verified.
+    expect(report.status).toBe('ready');
     expect(report.validationErrors).toEqual([]);
     expect(report.observability).toEqual(expect.objectContaining({
       eventsPath: expect.stringContaining('events.jsonl'),

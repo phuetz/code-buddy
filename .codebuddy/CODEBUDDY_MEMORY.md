@@ -17,9 +17,9 @@ It is automatically managed but can be manually edited.
 
 ## Context
 - **fk**: fv
-  <!-- meta: accessed=15 created=2026-07-02T19:12:16.753Z updated=2026-07-02T19:12:16.753Z last=2026-07-04T09:13:03.526Z -->
-- **codebuddy-memory-probe**: Code Buddy connector self-test: the validation token is cb-probe-mr659r8m. Please remember this exact token.
-  <!-- meta: accessed=9 created=2026-07-02T19:12:16.753Z updated=2026-07-04T09:13:03.528Z last=2026-07-04T09:13:03.526Z -->
+  <!-- meta: accessed=21 created=2026-07-02T19:12:16.753Z updated=2026-07-02T19:12:16.753Z last=2026-07-13T16:14:37.682Z -->
+- **codebuddy-memory-probe**: Code Buddy connector self-test: the validation token is cb-probe-mrjfakc3. Please remember this exact token.
+  <!-- meta: accessed=13 created=2026-07-02T19:12:16.753Z updated=2026-07-13T16:14:37.685Z last=2026-07-13T16:14:37.682Z -->
 - **test-key**: test-value
   <!-- meta: accessed=0 created=2026-07-02T19:12:16.753Z updated=2026-07-02T19:12:16.753Z -->
 - **dream:recent**: Recent salient perception: 32 events (vital/heartbeat×30, vision/motion×2); salient: vision/motion, vision/motion; avg load 6.611333333333337.
@@ -29,4 +29,4 @@ It is automatically managed but can be manually edited.
 <!-- No memories in this category -->
 
 ---
-*Last updated: 2026-07-04T09:13:03.528Z*
+*Last updated: 2026-07-13T16:14:37.685Z*

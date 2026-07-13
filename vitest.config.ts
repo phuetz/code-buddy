@@ -71,7 +71,8 @@ function jestCompatTransform() {
   };
 }
 
-// Real, no-mock integration tests (`*.real.test.ts`) hit live services
+// Real, no-mock integration tests (`*.real.test.ts`, `*-real*.test.ts`, and
+// `real-*.test.ts`) hit live services
 // (Ollama, Hermes, a browser, …) — they are slow and environment-dependent, so
 // the default `npm test` skips them. Opt in with RUN_REAL_TESTS=1 to run them
 // (e.g. locally with the services up, or on a real-environment runner).
@@ -111,14 +112,10 @@ export default defineConfig({
       '.cache',
       'tests/_archived/**',
       // Skip the slow, env-dependent real-integration tests unless opted in.
-      ...(RUN_REAL_TESTS ? [] : ['tests/**/*.real.test.ts']),
+      ...(RUN_REAL_TESTS ? [] : ['**/*real*.test.ts']),
     ],
     pool: 'forks',
-    poolOptions: {
-      forks: {
-        execArgv: ['--max-old-space-size=8192'],
-      },
-    },
+    execArgv: ['--max-old-space-size=8192'],
   },
   resolve: {
     alias: {

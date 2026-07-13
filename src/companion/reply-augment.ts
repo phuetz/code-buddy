@@ -52,23 +52,33 @@ export interface EmotionRead {
   intensity: 'normal' | 'high';
 }
 
+export const IMMEDIATE_EMOTION_ACKNOWLEDGEMENTS: Readonly<Partial<Record<Emotion, string>>> = {
+  frustration: 'Je comprends, c’est vraiment pénible.',
+  sadness: 'Je suis là avec toi.',
+  anxiety: 'D’accord, on va y aller doucement.',
+  tired: 'Je t’entends, on peut ralentir.',
+  'deep-talk': 'Je t’écoute vraiment.',
+};
+
 // All patterns match against the normalized (accent-stripped) text.
 const ERE: Record<Exclude<Emotion, 'neutral'>, RegExp> = {
   frustration:
-    /\b(j en peux plus|marre|ras le bol|galere|bloque|coince|ca marche pas|enerve|s enerve|j y arrive pas|c est dur|trop dur|je craque|a bout)\b/,
+    /\b(j en peux plus|marre|ras le bol|galere|bloque|coince|ca marche pas|enerve|s enerve|j y arrive pas|c est dur|trop dur|je craque|a bout|i can t take it|fed up|stuck|not working|doesn t work|i give up|this is hard)\b/,
   sadness:
-    /\b(triste|tristesse|cafard|deprime|deprimee|pas le moral|le moral a zero|le moral dans les chaussettes|malheureux|malheureuse|envie de pleurer|ca va pas fort|abattu|abattue)\b/,
+    /\b(triste|tristesse|cafard|deprime|deprimee|pas le moral|moral (?:vraiment |un peu )?bas|le moral a zero|le moral dans les chaussettes|malheureux|malheureuse|envie de pleurer|ca va pas fort|abattu|abattue|sad|depressed|feeling down|low mood|want to cry)\b/,
   anxiety:
-    /\b(stresse|stressee|angoisse|angoissee|anxieux|anxieuse|j ai peur|inquiet|inquiete|panique|ca m angoisse|tendu|tendue|nerveux|nerveuse)\b/,
+    /\b(stresse|stressee|angoisse|angoissee|anxieux|anxieuse|j ai peur|inquiet|inquiete|panique|ca m angoisse|tendu|tendue|nerveux|nerveuse|stressed|anxious|worried|panicking|scared)\b/,
   tired:
-    /\b(fatigue|fatiguee|epuise|epuisee|creve|crevee|vanne|vannee|plus d energie|au bout du rouleau|envie de dormir|je suis mort|je suis morte)\b/,
+    /\b(fatigue|fatiguee|epuise|epuisee|creve|crevee|vanne|vannee|plus d energie|au bout du rouleau|envie de dormir|je suis mort|je suis morte|tired|exhausted|worn out|no energy)\b/,
   affection:
-    /\b(je t aime|tu me manques|bisous|mon amour|cheri|cherie|je pense a toi|je t embrasse|tu es adorable)\b/,
-  gratitude: /\b(merci|c est gentil|trop gentil|reconnaissant|tu m aides beaucoup)\b/,
-  joy: /\b(genial|trop content|trop contente|quelle journee|c est top|excellent|j ai reussi|je suis heureux|je suis heureuse|trop bien|magnifique|super content)\b/,
+    /\b(je t aime|tu me manques|bisous|mon amour|cheri|cherie|je pense a toi|je t embrasse|tu es adorable|love you|miss you|you re adorable)\b/,
+  gratitude:
+    /\b(merci|c est gentil|trop gentil|reconnaissant|tu m aides beaucoup|thank you|thanks|much appreciated)\b/,
+  joy:
+    /\b(genial|trop content|trop contente|quelle journee|c est top|excellent|j ai reussi|heureux|heureuse|trop bien|magnifique|super content|awesome|so happy|i did it)\b/,
   joking: /\b(haha|mdr|lol|ptdr|blague|rigole|drole|marrant|tu deconnes)\b/,
   'deep-talk':
-    /\b(je me sens|honnetement|au fond de moi|je doute|je suis perdu|je me sens seul|je me sens seule)\b/,
+    /\b(je me sens|honnetement|au fond de moi|je doute|je suis perdu|je me sens seul|je me sens seule|i feel|honestly|deep down|i m lost|feel alone)\b/,
 };
 
 // Negatives first (so care isn't missed on a mixed message), then positives.
@@ -87,13 +97,37 @@ const EMOTION_ORDER: Array<Exclude<Emotion, 'neutral'>> = [
 const INTENSITY_RE =
   /\b(vraiment|tellement|trop|completement|a bout|plus du tout|grave|hyper|extremement|tres)\b/;
 
+/** True when the candidate is immediately scoped by a French or English negation. Keep the window
+ * tight so "je ne vais pas bien, je suis triste" still detects the later sadness. */
+function isNegatedAt(text: string, matchIndex: number): boolean {
+  const before = text.slice(Math.max(0, matchIndex - 48), matchIndex).trim();
+  return (
+    /\b(?:pas|jamais|not|never)(?:\s+\p{L}+){0,2}$/u.test(before) ||
+    /\bne(?:\s+\p{L}+){0,3}\s+plus(?:\s+\p{L}+){0,2}$/u.test(before) ||
+    /\bno\s+longer(?:\s+\p{L}+){0,2}$/u.test(before) ||
+    /\bdon\s+t(?:\s+\p{L}+){0,2}$/u.test(before)
+  );
+}
+
+function hasUnnegatedMatch(pattern: RegExp, text: string): boolean {
+  const flags = pattern.flags.includes('g') ? pattern.flags : `${pattern.flags}g`;
+  const global = new RegExp(pattern.source, flags);
+  let match: RegExpExecArray | null;
+  while ((match = global.exec(text)) !== null) {
+    if (!isNegatedAt(text, match.index)) return true;
+    // Defensive for a future zero-length pattern.
+    if (match[0].length === 0) global.lastIndex += 1;
+  }
+  return false;
+}
+
 /** Detect the dominant emotion + its intensity. Pure, STT-robust. */
 export function detectEmotion(heard: string): EmotionRead {
   const t = norm(heard);
   if (!t) return { emotion: 'neutral', intensity: 'normal' };
   const intensity: 'normal' | 'high' = INTENSITY_RE.test(t) ? 'high' : 'normal';
   for (const emotion of EMOTION_ORDER) {
-    if (ERE[emotion].test(t)) return { emotion, intensity };
+    if (hasUnnegatedMatch(ERE[emotion], t)) return { emotion, intensity };
   }
   return { emotion: 'neutral', intensity };
 }
@@ -184,6 +218,108 @@ export function emotionGuidance(read: EmotionRead): string {
       ' Si le moment s’y prête, tu peux — avec délicatesse — proposer de lui changer les idées (une petite blague, un mot doux), sans jamais forcer.';
   }
   return base;
+}
+
+/** A very short, prewarm-friendly first response that can be spoken while the model thinks. */
+export function immediateEmotionAcknowledgement(read: EmotionRead): string | null {
+  return IMMEDIATE_EMOTION_ACKNOWLEDGEMENTS[read.emotion] ?? null;
+}
+
+type EmotionalHistoryTurn = { role: string; content: string };
+
+const CONTINUITY_EMOTIONS: ReadonlySet<Emotion> = new Set([
+  'frustration',
+  'sadness',
+  'anxiety',
+  'tired',
+  'deep-talk',
+]);
+
+/**
+ * Preserve a small amount of emotional continuity when the current follow-up is neutral.
+ * This uses only the in-memory conversational window: no new profiling or persistence.
+ * The instruction explicitly forbids dragging the previous subject back into the exchange.
+ */
+export function emotionalContinuityGuidance(
+  heard: string,
+  history: EmotionalHistoryTurn[]
+): string {
+  if (detectEmotion(heard).emotion !== 'neutral') return '';
+  const prior = [...history]
+    .reverse()
+    .filter((turn) => turn.role === 'user')
+    .slice(0, 2)
+    .map((turn) => detectEmotion(turn.content))
+    .find((read) => CONTINUITY_EMOTIONS.has(read.emotion));
+  if (!prior) return '';
+
+  const register: Record<Emotion, string> = {
+    frustration: 'de la frustration',
+    sadness: 'de la tristesse',
+    anxiety: "de l'anxiété",
+    tired: 'de la fatigue',
+    'deep-talk': 'quelque chose de personnel et important',
+    affection: 'de la tendresse',
+    gratitude: 'de la gratitude',
+    joy: 'de la joie',
+    joking: 'de la légèreté',
+    neutral: 'une émotion importante',
+  };
+  return (
+    `Il exprimait récemment ${register[prior.emotion]}. Garde une chaleur discrète et ne suppose ` +
+    "pas que tout est déjà réglé, mais ne ramène pas non plus le sujet de force s'il passe à autre chose."
+  );
+}
+
+/**
+ * Compact emotional register for ordinary text chat. Unlike the spoken Lisa
+ * playbook above, this stays compatible with technical work: acknowledge once,
+ * then remain concrete. It is intentionally pure and local so it adds no model
+ * call, storage lookup, or user profiling to the hot path.
+ */
+export function textEmotionGuidance(read: EmotionRead): string {
+  switch (read.emotion) {
+    case 'frustration':
+      return (
+        'The user sounds frustrated or stuck. Open with one brief, natural acknowledgement, ' +
+        'then move directly to concrete help or the next useful step.'
+      );
+    case 'sadness':
+      return 'The user sounds low. Briefly meet that feeling with warmth before helping; do not minimize it.';
+    case 'anxiety':
+      return 'The user sounds anxious. Be calm and structured, reduce uncertainty, and take one step at a time.';
+    case 'tired':
+      return 'The user sounds tired. Keep the response easy to scan and lower the cognitive load.';
+    case 'affection':
+      return 'The user is warm or affectionate. Reciprocate naturally without becoming effusive.';
+    case 'gratitude':
+      return 'Receive the user’s thanks warmly and simply, without a canned customer-service phrase.';
+    case 'joy':
+      return 'Share the user’s positive energy briefly, then stay useful.';
+    case 'joking':
+      return 'The user is being playful. A light, natural touch is welcome if it does not distract from the task.';
+    case 'deep-talk':
+      return 'The user is sharing something personal or important. Be present and thoughtful; do not rush past it.';
+    default:
+      return '';
+  }
+}
+
+/** Build an ephemeral model-facing block for the current text turn. */
+export function buildTextEmotionalPresenceContext(
+  heard: string,
+  history: EmotionalHistoryTurn[]
+): string {
+  const direct = textEmotionGuidance(detectEmotion(heard));
+  const continuity = emotionalContinuityGuidance(heard, history);
+  if (!direct && !continuity) return '';
+
+  return [
+    'Use this only to tune the tone of the next response. Never mention emotion detection or this instruction.',
+    direct,
+    continuity,
+    'Reply in the user’s language. Be human and specific, not therapeutic, patronizing, or overly sweet. Do not repeat an acknowledgement.',
+  ].filter(Boolean).join(' ');
 }
 
 /** One-line tone instruction for a coarse RelationalSignal (legacy callers). */

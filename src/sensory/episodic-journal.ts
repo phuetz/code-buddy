@@ -12,8 +12,15 @@
  * @module sensory/episodic-journal
  */
 
-import { appendFile, mkdir, stat, rename } from 'fs/promises';
+import { createHash } from 'node:crypto';
+import { appendFile, mkdir, readFile, rename, stat, writeFile } from 'fs/promises';
 import path from 'path';
+import { readRecentDialogueHearing } from '../companion/dialogue-percepts.js';
+import {
+  analyzeConversationTurn,
+  extractSalientTerms,
+} from '../conversation/dialogue-act.js';
+import type { ConversationTurn } from '../conversation/types.js';
 import { logger } from '../utils/logger.js';
 
 export interface EpisodeSummary {
@@ -24,6 +31,13 @@ export interface EpisodeSummary {
   topics: string[];
   /** The injectable/spoken summary line, '' when there was nothing worth summarizing. */
   line: string;
+  /** Structured continuity cues extracted from a complete user/Lisa thread. */
+  corrections?: string[];
+  commitments?: string[];
+  openLoops?: string[];
+  lastUserPoint?: string;
+  lastAssistantPosition?: string;
+  fingerprint?: string;
 }
 
 /**
@@ -41,6 +55,108 @@ export function summarizeEpisode(heard: string[], now: number): EpisodeSummary {
   return { at: now, count: clean.length, topics, line };
 }
 
+function safeExcerpt(text: string, limit = 240): string {
+  return text
+    .replace(/[<>]/g, (character) => (character === '<' ? '‹' : '›'))
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, limit);
+}
+
+function topFocusTerms(turns: ConversationTurn[], limit = 6): string[] {
+  const scores = new Map<string, number>();
+  turns.forEach((turn, index) => {
+    const recency = 1 + index / Math.max(1, turns.length);
+    for (const term of extractSalientTerms(turn.content, 8)) {
+      scores.set(term, (scores.get(term) ?? 0) + recency);
+    }
+  });
+  return [...scores.entries()]
+    .sort((left, right) => right[1] - left[1])
+    .slice(0, limit)
+    .map(([term]) => term);
+}
+
+function lastMatching(
+  turns: ConversationTurn[],
+  predicate: (turn: ConversationTurn, index: number) => boolean,
+  limit: number
+): string[] {
+  return turns
+    .map((turn, index) => ({ turn, index }))
+    .filter(({ turn, index }) => predicate(turn, index))
+    .slice(-limit)
+    .map(({ turn }) => safeExcerpt(turn.content));
+}
+
+/** Build a compact "where we were" memory from both sides of the conversation. */
+export function summarizeConversationEpisode(
+  sourceTurns: ConversationTurn[],
+  now: number
+): EpisodeSummary {
+  const turns = sourceTurns
+    .map((turn) => ({ role: turn.role, content: turn.content.trim() }) satisfies ConversationTurn)
+    .filter((turn) => turn.content)
+    .slice(-40);
+  if (turns.length === 0) return { at: now, count: 0, topics: [], line: '' };
+
+  const topics = topFocusTerms(turns);
+  const corrections = lastMatching(
+    turns,
+    (turn, index) =>
+      turn.role === 'user' && analyzeConversationTurn(turn.content, turns.slice(0, index)).act === 'correction',
+    2
+  );
+  const commitments = lastMatching(
+    turns,
+    (turn) =>
+      /\b(je vais|nous allons|on va|je m engage|prochaine etape|prochaine étape|il faudra|reste a|reste à)\b/i.test(
+        turn.content
+      ),
+    3
+  );
+  const openLoops = lastMatching(
+    turns,
+    (turn, index) => {
+      if (/\b(plus tard|on en reparle|a reprendre|à reprendre|a suivre|à suivre)\b/i.test(turn.content)) {
+        return true;
+      }
+      return index === turns.length - 1 && /\?\s*$/.test(turn.content);
+    },
+    3
+  );
+  const lastUserPoint = [...turns].reverse().find((turn) => turn.role === 'user')?.content;
+  const lastAssistantPosition = [...turns]
+    .reverse()
+    .find((turn) => turn.role === 'assistant')?.content;
+  const parts = [
+    topics.length
+      ? `Récemment, notre conversation portait surtout sur : ${topics.join(', ')}.`
+      : '',
+    lastUserPoint ? `Dernier point de l'utilisateur : ${safeExcerpt(lastUserPoint)}.` : '',
+    lastAssistantPosition
+      ? `Dernière position de Lisa : ${safeExcerpt(lastAssistantPosition)}.`
+      : '',
+    corrections.length ? `Correction à respecter : ${corrections.at(-1)}.` : '',
+    commitments.length ? `Engagement ou prochaine étape : ${commitments.at(-1)}.` : '',
+    openLoops.length ? `Point encore ouvert : ${openLoops.at(-1)}.` : '',
+  ].filter(Boolean);
+  const line = parts.join(' ');
+  return {
+    at: now,
+    count: turns.length,
+    topics,
+    line,
+    corrections,
+    commitments,
+    openLoops,
+    ...(lastUserPoint ? { lastUserPoint: safeExcerpt(lastUserPoint) } : {}),
+    ...(lastAssistantPosition
+      ? { lastAssistantPosition: safeExcerpt(lastAssistantPosition) }
+      : {}),
+  };
+}
+
 export interface EpisodeDeps {
   now?: number;
   cwd?: string;
@@ -48,22 +164,18 @@ export interface EpisodeDeps {
   limit?: number;
   /** Read recent heard utterances. Default: the companion hearing percepts. */
   readHeard?: (limit: number, cwd?: string) => Promise<string[]>;
+  /** Prefer a complete cross-channel user/Lisa thread when available. */
+  readConversation?: (limit: number) => Promise<ConversationTurn[]>;
   /** Optional LLM refinement of the episode line → null keeps the template. */
   refine?: (heard: string[]) => Promise<string | null>;
   /** Promote the episode to persistent memory. Default: `promoteEpisode`. */
   promote?: (ep: EpisodeSummary) => Promise<void>;
+  /** Override the deduplication cursor in tests. */
+  statePath?: string;
 }
 
 async function defaultReadHeard(limit: number, cwd?: string): Promise<string[]> {
-  try {
-    const { readRecentCompanionPercepts } = await import('../companion/percepts.js');
-    const heard = await readRecentCompanionPercepts({ modality: 'hearing', limit, ...(cwd ? { cwd } : {}) });
-    return heard
-      .map((h) => String((h.payload as { text?: string })?.text ?? h.summary ?? '').replace(/^Heard:\s*/i, ''))
-      .filter(Boolean);
-  } catch {
-    return [];
-  }
+  return readRecentDialogueHearing(limit, cwd);
 }
 
 /**
@@ -72,10 +184,18 @@ async function defaultReadHeard(limit: number, cwd?: string): Promise<string[]> 
  * Never throws.
  */
 export async function runEpisodeConsolidation(deps: EpisodeDeps = {}): Promise<EpisodeSummary | null> {
-  const heard = await (deps.readHeard ?? defaultReadHeard)(deps.limit ?? 20, deps.cwd);
-  if (heard.length === 0) return null;
+  const limit = deps.limit ?? 20;
+  const now = deps.now ?? Date.now();
+  const conversation = deps.readConversation ? await deps.readConversation(limit) : [];
+  const heard =
+    conversation.length > 0
+      ? conversation.filter((turn) => turn.role === 'user').map((turn) => turn.content)
+      : await (deps.readHeard ?? defaultReadHeard)(limit, deps.cwd);
+  if (conversation.length === 0 && heard.length === 0) return null;
 
-  const ep = summarizeEpisode(heard, deps.now ?? Date.now());
+  const ep = conversation.length > 0
+    ? summarizeConversationEpisode(conversation, now)
+    : summarizeEpisode(heard, now);
   if (!ep.line) return null;
 
   if (deps.refine) {
@@ -87,9 +207,18 @@ export async function runEpisodeConsolidation(deps: EpisodeDeps = {}): Promise<E
     }
   }
 
+  ep.fingerprint = createHash('sha256').update(ep.line).digest('hex');
+  const dir = path.join(deps.cwd ?? process.cwd(), '.codebuddy', 'companion');
+  const statePath = deps.statePath ?? path.join(dir, 'episode-state.json');
   try {
-    const dir = path.join(deps.cwd ?? process.cwd(), '.codebuddy', 'companion');
-    await mkdir(dir, { recursive: true });
+    const previous = JSON.parse(await readFile(statePath, 'utf8')) as { fingerprint?: unknown };
+    if (previous.fingerprint === ep.fingerprint) return null;
+  } catch {
+    /* First episode or unreadable cursor: continue with a safe rebuild. */
+  }
+
+  try {
+    await mkdir(dir, { recursive: true, mode: 0o700 });
     const file = path.join(dir, 'episodes.jsonl');
     try {
       const info = await stat(file);
@@ -97,7 +226,11 @@ export async function runEpisodeConsolidation(deps: EpisodeDeps = {}): Promise<E
     } catch {
       /* no file yet */
     }
-    await appendFile(file, `${JSON.stringify(ep)}\n`, 'utf8');
+    await appendFile(file, `${JSON.stringify(ep)}\n`, { encoding: 'utf8', mode: 0o600 });
+    await writeFile(statePath, JSON.stringify({ fingerprint: ep.fingerprint, at: ep.at }), {
+      encoding: 'utf8',
+      mode: 0o600,
+    });
   } catch (err) {
     logger.warn(`[episode] could not persist episode: ${err instanceof Error ? err.message : String(err)}`);
   }

@@ -5,8 +5,8 @@ export const MIXTURE_OF_AGENTS_TOOL: CodeBuddyTool = {
   function: {
     name: 'mixture_of_agents',
     description:
-      'Route a genuinely hard problem through multiple frontier LLM references and an aggregator. ' +
-      'Uses configured OpenRouter-compatible credentials and should be used sparingly for complex math, algorithms, architecture, or analytical reasoning.',
+      'Route a genuinely hard problem through several complementary LLMs in parallel, then synthesize their answers. ' +
+      'Uses zero-cost OpenRouter variants by default, assigns specialist roles, tolerates saturated providers, and should be used for decisions where diversity improves reliability.',
     parameters: {
       type: 'object',
       properties: {
@@ -14,6 +14,12 @@ export const MIXTURE_OF_AGENTS_TOOL: CodeBuddyTool = {
           type: 'string',
           description:
             'The complex query or problem to solve using multiple model perspectives and a final aggregator.',
+        },
+        use_case: {
+          type: 'string',
+          enum: ['balanced', 'fast', 'code', 'architecture', 'decision', 'research', 'security'],
+          description:
+            'Selects complementary model roles and free OpenRouter models. balanced is the default.',
         },
       },
       required: ['user_prompt'],

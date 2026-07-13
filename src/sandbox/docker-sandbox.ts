@@ -5,10 +5,12 @@
  * Provides filesystem isolation, network restrictions, and resource limits.
  */
 
-import { execSync, spawn, spawnSync, ChildProcess } from 'child_process';
+import { execSync, spawn, spawnSync } from 'child_process';
 import { randomUUID } from 'crypto';
 import { EventEmitter } from 'events';
-import type { SandboxBackendInterface, SandboxExecOptions, SandboxExecResult } from './sandbox-backend.js';
+import * as fs from 'fs';
+import * as path from 'path';
+import type { SandboxBackendInterface, SandboxExecOptions } from './sandbox-backend.js';
 // Re-export SandboxExecResult to unify with the local SandboxResult shape
 export type { SandboxExecOptions, SandboxExecResult } from './sandbox-backend.js';
 
@@ -21,6 +23,10 @@ export interface SandboxConfig {
   image: string;
   /** Host path to mount as /workspace */
   workspaceMount?: string;
+  /** Preserve the host's absolute workspace path inside Linux containers. */
+  preserveWorkspacePath: boolean;
+  /** Workspace subpaths that must be overlaid read-only (for example .git). */
+  workspaceReadOnly?: string[];
   /** Command timeout in ms */
   timeout: number;
   /** Memory limit (e.g., '512m') */
@@ -31,6 +37,10 @@ export interface SandboxConfig {
   networkEnabled: boolean;
   /** Whether the root filesystem is read-only */
   readOnly: boolean;
+  /** Run with the current Unix uid/gid so generated files remain user-owned. */
+  runAsHostUser: boolean;
+  /** Extra environment variables passed as literal Docker argv entries. */
+  environment: Record<string, string>;
   /** Timezone override (IANA format e.g. 'America/New_York') — Native Engine v2026.3.8 alignment */
   timezone?: string;
 }
@@ -44,6 +54,13 @@ export interface SandboxResult {
   containerId?: string;
 }
 
+export interface DockerProbeOptions {
+  /** Successful probe lifetime. Defaults to 30 seconds; 0 disables caching. */
+  ttlMs?: number;
+  /** Ignore a cached success while still joining an identical in-flight probe. */
+  force?: boolean;
+}
+
 // ============================================================================
 // Default Configuration
 // ============================================================================
@@ -55,7 +72,57 @@ const DEFAULT_CONFIG: SandboxConfig = {
   cpuLimit: '1.0',
   networkEnabled: false,
   readOnly: false,
+  runAsHostUser: true,
+  environment: {},
+  preserveWorkspacePath: false,
 };
+
+const DEFAULT_DOCKER_PROBE_TTL_MS = 30_000;
+const MAX_IMAGE_PROBE_CACHE_ENTRIES = 32;
+
+interface PositiveProbeCacheEntry {
+  expiresAt: number;
+}
+
+let availabilityProbeCache: { key: string; expiresAt: number } | null = null;
+let availabilityProbeInFlight: { key: string; promise: Promise<boolean> } | null = null;
+const imageProbeCache = new Map<string, PositiveProbeCacheEntry>();
+const imageProbeInFlight = new Map<string, Promise<boolean>>();
+let probeCacheGeneration = 0;
+
+function dockerProbeContextKey(): string {
+  return JSON.stringify([
+    process.env.DOCKER_HOST || '',
+    process.env.DOCKER_CONTEXT || '',
+    process.env.DOCKER_TLS_VERIFY || '',
+    process.env.DOCKER_CERT_PATH || '',
+    process.env.DOCKER_CONFIG || '',
+  ]);
+}
+
+function resolveProbeTtlMs(options: DockerProbeOptions): number {
+  const ttlMs = options.ttlMs ?? DEFAULT_DOCKER_PROBE_TTL_MS;
+  if (!Number.isFinite(ttlMs)) return DEFAULT_DOCKER_PROBE_TTL_MS;
+  return Math.max(0, Math.min(300_000, Math.trunc(ttlMs)));
+}
+
+/** Defer the synchronous compatibility probe so concurrent callers can join it. */
+function runSingleFlightProbe(probe: () => boolean): Promise<boolean> {
+  return new Promise(resolve => {
+    setImmediate(() => resolve(probe()));
+  });
+}
+
+function pruneImageProbeCache(now: number): void {
+  for (const [key, entry] of imageProbeCache) {
+    if (entry.expiresAt <= now) imageProbeCache.delete(key);
+  }
+  while (imageProbeCache.size > MAX_IMAGE_PROBE_CACHE_ENTRIES) {
+    const oldestKey = imageProbeCache.keys().next().value as string | undefined;
+    if (!oldestKey) break;
+    imageProbeCache.delete(oldestKey);
+  }
+}
 
 // ============================================================================
 // Docker Sandbox
@@ -121,6 +188,109 @@ export class DockerSandbox extends EventEmitter implements SandboxBackendInterfa
   }
 
   /**
+   * Cached Docker daemon probe for hot command paths. Only successful probes
+   * are cached, and a launcher failure invalidates that success immediately.
+   */
+  static async isAvailableCached(options: DockerProbeOptions = {}): Promise<boolean> {
+    const key = dockerProbeContextKey();
+    const now = Date.now();
+    const ttlMs = resolveProbeTtlMs(options);
+    if (
+      !options.force &&
+      availabilityProbeCache?.key === key &&
+      availabilityProbeCache.expiresAt > now
+    ) {
+      return true;
+    }
+    if (availabilityProbeInFlight?.key === key) {
+      return availabilityProbeInFlight.promise;
+    }
+
+    const generation = probeCacheGeneration;
+    const promise = runSingleFlightProbe(() => DockerSandbox.isAvailable())
+      .then(available => {
+        if (available && ttlMs > 0 && generation === probeCacheGeneration) {
+          availabilityProbeCache = { key, expiresAt: Date.now() + ttlMs };
+        }
+        return available;
+      })
+      .finally(() => {
+        if (availabilityProbeInFlight?.promise === promise) {
+          availabilityProbeInFlight = null;
+        }
+      });
+    availabilityProbeInFlight = { key, promise };
+    return promise;
+  }
+
+  /** Check for a pre-built local image without pulling or invoking a shell. */
+  static hasLocalImage(image: string): boolean {
+    if (!image || image.includes('\0') || image.includes('\n') || image.includes('\r')) {
+      return false;
+    }
+    try {
+      const result = spawnSync('docker', ['image', 'inspect', image], {
+        stdio: 'ignore',
+        timeout: 10000,
+      });
+      return result.status === 0;
+    } catch {
+      return false;
+    }
+  }
+
+  /** Cached, single-flight variant used by the workspace fallback selector. */
+  static async hasLocalImageCached(
+    image: string,
+    options: DockerProbeOptions = {},
+  ): Promise<boolean> {
+    if (!image || image.includes('\0') || image.includes('\n') || image.includes('\r')) {
+      return false;
+    }
+    const key = `${dockerProbeContextKey()}\0${image}`;
+    const now = Date.now();
+    const ttlMs = resolveProbeTtlMs(options);
+    pruneImageProbeCache(now);
+    if (!options.force && (imageProbeCache.get(key)?.expiresAt ?? 0) > now) {
+      return true;
+    }
+    const inFlight = imageProbeInFlight.get(key);
+    if (inFlight) return inFlight;
+
+    const generation = probeCacheGeneration;
+    const promise = runSingleFlightProbe(() => DockerSandbox.hasLocalImage(image))
+      .then(available => {
+        if (available && ttlMs > 0 && generation === probeCacheGeneration) {
+          imageProbeCache.delete(key);
+          imageProbeCache.set(key, { expiresAt: Date.now() + ttlMs });
+          pruneImageProbeCache(Date.now());
+        }
+        return available;
+      })
+      .finally(() => {
+        if (imageProbeInFlight.get(key) === promise) imageProbeInFlight.delete(key);
+      });
+    imageProbeInFlight.set(key, promise);
+    return promise;
+  }
+
+  /** Drop cached Docker assumptions after a daemon/launcher failure. */
+  static invalidateProbeCache(image?: string): void {
+    probeCacheGeneration++;
+    availabilityProbeCache = null;
+    availabilityProbeInFlight = null;
+    imageProbeInFlight.clear();
+    if (!image) {
+      imageProbeCache.clear();
+      return;
+    }
+    const suffix = `\0${image}`;
+    for (const key of imageProbeCache.keys()) {
+      if (key.endsWith(suffix)) imageProbeCache.delete(key);
+    }
+  }
+
+  /**
    * Instance-level availability check (satisfies SandboxBackendInterface).
    */
   async isAvailable(): Promise<boolean> {
@@ -130,7 +300,10 @@ export class DockerSandbox extends EventEmitter implements SandboxBackendInterfa
   /**
    * Execute a command in a sandboxed container.
    */
-  async execute(command: string, opts?: Partial<SandboxConfig> | SandboxExecOptions): Promise<SandboxResult> {
+  async execute(
+    command: string,
+    opts?: Partial<SandboxConfig> | SandboxExecOptions
+  ): Promise<SandboxResult> {
     const merged = { ...this.config, ...opts };
     const containerName = `codebuddy-sandbox-${randomUUID().slice(0, 8)}`;
     const startTime = Date.now();
@@ -142,7 +315,6 @@ export class DockerSandbox extends EventEmitter implements SandboxBackendInterfa
       let stdout = '';
       let stderr = '';
       let timedOut = false;
-      let killed = false;
 
       this.activeContainers.add(containerName);
       globalActiveContainers.add(containerName);
@@ -158,7 +330,6 @@ export class DockerSandbox extends EventEmitter implements SandboxBackendInterfa
 
       const timer = setTimeout(() => {
         timedOut = true;
-        killed = true;
         // Kill the container on timeout
         try {
           spawnSync('docker', ['kill', containerName], { stdio: 'pipe', timeout: 5000 });
@@ -175,6 +346,7 @@ export class DockerSandbox extends EventEmitter implements SandboxBackendInterfa
         this.emit('container:stopped', containerName);
 
         const exitCode = code ?? 1;
+        if (exitCode === 125) DockerSandbox.invalidateProbeCache(merged.image);
         const durationMs = Date.now() - startTime;
 
         if (timedOut) {
@@ -203,6 +375,7 @@ export class DockerSandbox extends EventEmitter implements SandboxBackendInterfa
         this.activeContainers.delete(containerName);
         globalActiveContainers.delete(containerName);
         this.emit('container:stopped', containerName);
+        DockerSandbox.invalidateProbeCache(merged.image);
 
         resolve({
           success: false,
@@ -219,7 +392,10 @@ export class DockerSandbox extends EventEmitter implements SandboxBackendInterfa
   /**
    * Execute with streaming output. Yields stdout chunks as they arrive.
    */
-  async *executeStreaming(command: string, opts?: Partial<SandboxConfig>): AsyncGenerator<string, SandboxResult> {
+  async *executeStreaming(
+    command: string,
+    opts?: Partial<SandboxConfig>
+  ): AsyncGenerator<string, SandboxResult> {
     const merged = { ...this.config, ...opts };
     const containerName = `codebuddy-sandbox-${randomUUID().slice(0, 8)}`;
     const startTime = Date.now();
@@ -272,6 +448,7 @@ export class DockerSandbox extends EventEmitter implements SandboxBackendInterfa
         this.activeContainers.delete(containerName);
         globalActiveContainers.delete(containerName);
         this.emit('container:stopped', containerName);
+        if ((code ?? 1) === 125) DockerSandbox.invalidateProbeCache(merged.image);
         if (resolveChunk) {
           const r = resolveChunk;
           resolveChunk = null;
@@ -286,6 +463,7 @@ export class DockerSandbox extends EventEmitter implements SandboxBackendInterfa
         this.activeContainers.delete(containerName);
         globalActiveContainers.delete(containerName);
         this.emit('container:stopped', containerName);
+        DockerSandbox.invalidateProbeCache(merged.image);
         if (resolveChunk) {
           const r = resolveChunk;
           resolveChunk = null;
@@ -300,7 +478,9 @@ export class DockerSandbox extends EventEmitter implements SandboxBackendInterfa
       if (chunks.length > 0) {
         yield chunks.shift()!;
       } else if (!streamDone) {
-        await new Promise<void>((r) => { resolveChunk = r; });
+        await new Promise<void>((r) => {
+          resolveChunk = r;
+        });
       }
     }
 
@@ -310,7 +490,7 @@ export class DockerSandbox extends EventEmitter implements SandboxBackendInterfa
     return {
       success: timedOut ? false : exitCode === 0,
       output: stdout,
-      error: timedOut ? `Command timed out after ${merged.timeout}ms` : (stderr || undefined),
+      error: timedOut ? `Command timed out after ${merged.timeout}ms` : stderr || undefined,
       exitCode,
       durationMs,
       containerId: containerName,
@@ -337,10 +517,10 @@ export class DockerSandbox extends EventEmitter implements SandboxBackendInterfa
    */
   async prune(): Promise<number> {
     try {
-      const output = execSync(
-        'docker container prune -f --filter label=codebuddy-sandbox=true',
-        { stdio: 'pipe', timeout: 30000 }
-      ).toString();
+      const output = execSync('docker container prune -f --filter label=codebuddy-sandbox=true', {
+        stdio: 'pipe',
+        timeout: 30000,
+      }).toString();
 
       const match = output.match(/Deleted Containers:\n([\s\S]*?)\n\n/);
       if (match && match[1]) {
@@ -388,13 +568,38 @@ export class DockerSandbox extends EventEmitter implements SandboxBackendInterfa
    * Build docker run arguments.
    */
   private buildDockerArgs(containerName: string, config: SandboxConfig, command: string): string[] {
+    const workspace = config.workspaceMount ? path.resolve(config.workspaceMount) : null;
+    const containerWorkspace = workspace
+      ? config.preserveWorkspacePath && process.platform !== 'win32'
+        ? workspace
+        : '/workspace'
+      : null;
     const args = [
-      'run', '--rm',
-      '--name', containerName,
-      '--label', 'codebuddy-sandbox=true',
-      '-m', config.memoryLimit,
-      '--cpus', config.cpuLimit,
+      'run',
+      '--rm',
+      '--name',
+      containerName,
+      '--label',
+      'codebuddy-sandbox=true',
+      '--init',
+      '--cap-drop',
+      'ALL',
+      '--security-opt',
+      'no-new-privileges:true',
+      '--pids-limit',
+      '512',
+      '-m',
+      config.memoryLimit,
+      '--cpus',
+      config.cpuLimit,
     ];
+
+    // A caller may intentionally select /tmp itself as the workspace. Docker
+    // rejects two mounts with that exact destination, so in that one case the
+    // bind mount supplies writable temporary storage instead of a tmpfs.
+    if (containerWorkspace !== '/tmp') {
+      args.push('--tmpfs', '/tmp:rw,nosuid,nodev,size=512m');
+    }
 
     if (!config.networkEnabled) {
       args.push('--network', 'none');
@@ -404,17 +609,50 @@ export class DockerSandbox extends EventEmitter implements SandboxBackendInterfa
       args.push('--read-only');
     }
 
+    if (
+      config.runAsHostUser &&
+      process.platform !== 'win32' &&
+      typeof process.getuid === 'function' &&
+      typeof process.getgid === 'function'
+    ) {
+      args.push('--user', `${process.getuid()}:${process.getgid()}`);
+    }
+
     if (config.workspaceMount) {
       if (config.workspaceMount.includes('..') || config.workspaceMount.includes('\0')) {
         throw new Error('Invalid workspace mount path');
       }
-      args.push('-v', `${config.workspaceMount}:/workspace`, '-w', '/workspace');
+      if (!workspace || !containerWorkspace) {
+        throw new Error('Failed to resolve workspace mount path');
+      }
+      args.push('-v', `${workspace}:${containerWorkspace}`, '-w', containerWorkspace);
+      for (const relativePath of config.workspaceReadOnly ?? []) {
+        const normalizedRelative = relativePath.replace(/\\/g, '/').replace(/^\/+/, '');
+        if (
+          !normalizedRelative ||
+          normalizedRelative.includes('..') ||
+          normalizedRelative.includes('\0')
+        ) {
+          continue;
+        }
+        const hostPath = path.resolve(workspace, normalizedRelative);
+        const relative = path.relative(workspace, hostPath);
+        if (relative.startsWith('..') || path.isAbsolute(relative) || !fs.existsSync(hostPath)) {
+          continue;
+        }
+        args.push('-v', `${hostPath}:${containerWorkspace}/${normalizedRelative}:ro`);
+      }
     }
 
     // Inject CODEBUDDY_CLI env vars so child processes know they're inside Code Buddy
     args.push('-e', `CODEBUDDY_CLI=${process.env.CODEBUDDY_CLI || '1'}`);
     if (process.env.CODEBUDDY_CLI_VERSION) {
       args.push('-e', `CODEBUDDY_CLI_VERSION=${process.env.CODEBUDDY_CLI_VERSION}`);
+    }
+    for (const [key, value] of Object.entries(config.environment ?? {})) {
+      if (/^[A-Za-z_][A-Za-z0-9_]*$/.test(key) && !value.includes('\0')) {
+        args.push('-e', `${key}=${value}`);
+      }
     }
 
     // Timezone override (Native Engine v2026.3.8 — CODEBUDDY_TZ env)
@@ -426,7 +664,10 @@ export class DockerSandbox extends EventEmitter implements SandboxBackendInterfa
       }
     }
 
-    args.push(config.image, 'sh', '-c', command);
+    // End Docker option parsing before the configurable image name. This
+    // prevents a value such as `--privileged` from being interpreted as a
+    // daemon flag even though spawn() itself does not invoke a shell.
+    args.push('--', config.image, 'sh', '-c', command);
 
     return args;
   }

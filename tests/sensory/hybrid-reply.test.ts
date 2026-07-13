@@ -1,6 +1,7 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import {
   isSubstantiveQuery,
+  requiresGroundedAgentQuery,
   buildContextPreamble,
   makeHybridReply,
   type HybridTurn,
@@ -17,6 +18,8 @@ describe('hybrid reply — intent classifier (isSubstantiveQuery)', () => {
       'bonne nuit',
       'comment vas-tu',
       'tu me manques',
+      "ce soir j'ai le moral un peu bas et j'aimerais juste un peu de compagnie",
+      'je suis vraiment anxieux et je voudrais simplement en parler avec toi',
     ]) {
       expect(isSubstantiveQuery(s), s).toBe(false);
     }
@@ -65,6 +68,32 @@ describe('hybrid reply — intent classifier (isSubstantiveQuery)', () => {
   });
 });
 
+describe('hybrid reply — realtime grounded-agent gate', () => {
+  it('keeps ordinary static questions on the fast streaming model', () => {
+    for (const s of [
+      'pourquoi le ciel est bleu ?',
+      'explique-moi la photosynthèse',
+      'quel est le sens de ce proverbe ?',
+      'aide-moi, je ne sais pas quoi choisir',
+    ]) {
+      expect(requiresGroundedAgentQuery(s), s).toBe(false);
+    }
+  });
+
+  it('keeps tools, repository state, private data, and fresh facts grounded', () => {
+    for (const s of [
+      'vérifie les logs du service',
+      'corrige le bug dans ce fichier',
+      'cherche les dernières actualités',
+      'quel est mon prochain rendez-vous ?',
+      'combien de tests passent actuellement ?',
+      'qui est le président actuellement ?',
+    ]) {
+      expect(requiresGroundedAgentQuery(s), s).toBe(true);
+    }
+  });
+});
+
 describe('hybrid reply — context preamble', () => {
   it('is empty with no history', () => {
     expect(buildContextPreamble([])).toBe('');
@@ -81,6 +110,22 @@ describe('hybrid reply — context preamble', () => {
 });
 
 describe('hybrid reply — routing & memory', () => {
+  it('forwards predictive preparation and teardown to the grounded lane only', async () => {
+    const prewarm = vi.fn(async () => undefined);
+    const dispose = vi.fn();
+    const grounded = Object.assign(async () => 'Grounded.', { prewarm, dispose });
+    const hybrid = makeHybridReply({
+      fastReply: () => null,
+      chitchat: async () => 'Warm.',
+      agentReply: grounded,
+      classify: () => true,
+    });
+    await hybrid.prewarm();
+    hybrid.dispose();
+    expect(prewarm).toHaveBeenCalledOnce();
+    expect(dispose).toHaveBeenCalledOnce();
+  });
+
   function harness() {
     const calls: string[] = [];
     const reply = makeHybridReply({
@@ -113,6 +158,13 @@ describe('hybrid reply — routing & memory', () => {
     expect(calls.some((c) => c.startsWith('agent:'))).toBe(true);
   });
 
+  it('uses the fast lane for an ordinary question in realtime mode', async () => {
+    const { reply, calls } = harness();
+    await reply('pourquoi le ciel est bleu ?');
+    expect(calls.some((c) => c.startsWith('chitchat:'))).toBe(true);
+    expect(calls.some((c) => c.startsWith('agent:'))).toBe(false);
+  });
+
   it('feeds prior exchanges back: chitchat gets history, the agent gets a context preamble', async () => {
     const { reply, calls } = harness();
     await reply('je t’aime'); // records one exchange
@@ -127,7 +179,32 @@ describe('hybrid reply — routing & memory', () => {
     expect(lastChit.endsWith('hist=0')).toBe(false);
   });
 
-  it('never-throws: an agent failure becomes silence (empty string)', async () => {
+  it('continues channel history on voice without duplicating the current transcript', async () => {
+    let groundedInput = '';
+    const reply = makeHybridReply({
+      fastReply: () => null,
+      prefetch: () => null,
+      jokes: () => null,
+      classify: () => true,
+      chitchat: async () => 'unused',
+      agentReply: async (input) => {
+        groundedInput = input;
+        return 'Je reprends le même raisonnement.';
+      },
+      sharedHistory: () => [
+        { role: 'user', content: 'Sur Telegram, nous parlions de conscience.' },
+        { role: 'assistant', content: 'Je distinguais conscience et mémoire.' },
+        { role: 'user', content: 'Et la réciprocité ?' },
+      ],
+    });
+
+    await reply('Et la réciprocité ?');
+    expect(groundedInput).toContain('Sur Telegram, nous parlions de conscience.');
+    expect(groundedInput).toContain('Je distinguais conscience et mémoire.');
+    expect(groundedInput.match(/Et la réciprocité \?/g)).toHaveLength(1);
+  });
+
+  it('never-throws: an agent failure becomes an honest non-empty recovery', async () => {
     const reply = makeHybridReply({
       fastReply: () => null,
       chitchat: async () => 'x',
@@ -135,6 +212,84 @@ describe('hybrid reply — routing & memory', () => {
         throw new Error('boom');
       },
     });
-    expect(await reply('vérifie les logs')).toBe('');
+    expect(await reply('vérifie les logs')).toContain("Je n'ai pas réussi");
+  });
+
+  it('streams warm small talk and shares that completed turn with the grounded path', async () => {
+    const calls: string[] = [];
+    const reply = makeHybridReply({
+      fastReply: () => null,
+      prefetch: () => null,
+      jokes: () => null,
+      chitchat: async () => {
+        calls.push('blocking-chitchat');
+        return 'blocking';
+      },
+      chitchatStream: async function* (_heard, hist) {
+        calls.push(`stream:hist=${hist.length}`);
+        yield 'Je suis là. ';
+        yield 'Raconte-moi.';
+      },
+      agentReply: async (heard) => {
+        calls.push(`agent:${heard}`);
+        return 'vérifié';
+      },
+    });
+
+    const chunks: string[] = [];
+    for await (const chunk of reply.stream('je suis triste')) chunks.push(chunk);
+    expect(chunks.join('')).toBe('Je suis là. Raconte-moi.');
+    expect(calls).toEqual(['stream:hist=0']);
+
+    // A technical follow-up remains grounded and receives the streamed exchange as context.
+    expect(await reply('vérifie les logs')).toBe('vérifié');
+    expect(calls.at(-1)).toContain('Contexte récent');
+    expect(calls.at(-1)).toContain('Je suis là. Raconte-moi.');
+  });
+
+  it('keeps substantive turns out of the chat stream so the real agent handles them', async () => {
+    const calls: string[] = [];
+    const reply = makeHybridReply({
+      fastReply: () => null,
+      prefetch: () => null,
+      jokes: () => null,
+      chitchat: async () => 'chitchat',
+      chitchatStream: async function* () {
+        calls.push('stream');
+        yield 'wrong path';
+      },
+      agentReply: async () => {
+        calls.push('agent');
+        return 'résultat vérifié';
+      },
+    });
+
+    const chunks: string[] = [];
+    for await (const chunk of reply.stream('vérifie les logs')) chunks.push(chunk);
+    expect(chunks).toEqual([]);
+    expect(calls).toEqual([]);
+    expect(await reply('vérifie les logs')).toBe('résultat vérifié');
+    expect(calls).toEqual(['agent']);
+  });
+
+  it('streams an instant shortcut and preserves it for an immediate blocking fallback', async () => {
+    let jokeCalls = 0;
+    const reply = makeHybridReply({
+      fastReply: () => null,
+      prefetch: () => null,
+      jokes: () => `blague-${++jokeCalls}`,
+      chitchat: async () => 'blocking',
+      chitchatStream: async function* () {
+        yield 'should not stream';
+      },
+      agentReply: async () => 'agent',
+      classify: () => false,
+    });
+
+    const chunks: string[] = [];
+    for await (const chunk of reply.stream('raconte une blague')) chunks.push(chunk);
+    expect(chunks).toEqual(['blague-1']);
+    expect(await reply('raconte une blague')).toBe('blague-1');
+    expect(jokeCalls).toBe(1);
   });
 });

@@ -43,7 +43,7 @@ describe('onboarding', () => {
     it('should have default models for all providers', () => {
       expect(PROVIDER_DEFAULT_MODEL['grok']).toBe('grok-3');
       expect(PROVIDER_DEFAULT_MODEL['claude']).toBe('claude-sonnet-4-20250514');
-      expect(PROVIDER_DEFAULT_MODEL['chatgpt']).toBe('gpt-5.5');
+      expect(PROVIDER_DEFAULT_MODEL['chatgpt']).toBe('gpt-5.6-sol');
       expect(PROVIDER_DEFAULT_MODEL['gemini']).toBe('gemini-2.0-flash');
       expect(PROVIDER_DEFAULT_MODEL['ollama']).toBe('llama3');
     });

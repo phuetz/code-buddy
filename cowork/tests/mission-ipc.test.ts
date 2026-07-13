@@ -52,6 +52,7 @@ function makeBridge(overrides: Partial<MissionBridge> = {}): MissionBridge {
     listMissions: vi.fn(() => [mission]),
     getMission: vi.fn(() => mission),
     createMission: vi.fn(async () => mission),
+    createVoiceMission: vi.fn(async () => mission),
     updateStatus: vi.fn(async () => ({ ...mission, status: MissionStatus.Completed })),
     cancel: vi.fn(async () => ({ ...mission, status: MissionStatus.Cancelled })),
     readySubTasks: vi.fn(() => [readySubTask]),
@@ -94,6 +95,12 @@ describe('mission IPC handlers', () => {
       electronMock.handlers.get('mission.create')?.({}, { title: 'Wire IPC' })
     ).resolves.toEqual({ ok: true, mission });
     await expect(
+      electronMock.handlers.get('mission.createVoice')?.({}, {
+        prompt: 'Prépare une recherche approfondie.',
+        cwd: '/workspace',
+      })
+    ).resolves.toEqual({ ok: true, mission });
+    await expect(
       electronMock.handlers.get('mission.updateStatus')?.({}, {
         missionId: mission.id,
         status: MissionStatus.Completed,
@@ -112,6 +119,10 @@ describe('mission IPC handlers', () => {
     ).resolves.toEqual({ ok: true, missions: [mission] });
 
     expect(bridge.createMission).toHaveBeenCalledWith({ title: 'Wire IPC' });
+    expect(bridge.createVoiceMission).toHaveBeenCalledWith({
+      prompt: 'Prépare une recherche approfondie.',
+      cwd: '/workspace',
+    });
     expect(bridge.updateStatus).toHaveBeenCalledWith(mission.id, MissionStatus.Completed);
     expect(bridge.cancel).toHaveBeenCalledWith(mission.id);
     expect(bridge.readySubTasks).toHaveBeenCalledWith(mission.id);
@@ -129,6 +140,12 @@ describe('mission IPC handlers', () => {
       error: 'title is required',
     });
     await expect(
+      electronMock.handlers.get('mission.createVoice')?.({}, { prompt: '   ' })
+    ).resolves.toMatchObject({
+      ok: false,
+      error: 'prompt is required',
+    });
+    await expect(
       electronMock.handlers.get('mission.updateStatus')?.({}, { missionId: mission.id })
     ).resolves.toMatchObject({
       ok: false,
@@ -139,6 +156,7 @@ describe('mission IPC handlers', () => {
       error: 'missionId is required',
     });
     expect(bridge.createMission).not.toHaveBeenCalled();
+    expect(bridge.createVoiceMission).not.toHaveBeenCalled();
     expect(bridge.updateStatus).not.toHaveBeenCalled();
     expect(bridge.readySubTasks).not.toHaveBeenCalled();
   });
@@ -150,10 +168,13 @@ describe('mission IPC handlers', () => {
 
     expect(mainSource).toContain("import { MissionBridge } from './missions/mission-bridge'");
     expect(mainSource).toContain("import { registerMissionIpcHandlers } from './ipc/mission-ipc'");
-    expect(mainSource).toContain('missionBridge = new MissionBridge({ sendToRenderer })');
+    expect(mainSource).toContain('executeVoiceMission: async');
+    expect(mainSource).toContain('startBackgroundSession(');
+    expect(mainSource).toContain('onBackgroundSessionLifecycle');
     expect(mainSource).toContain('registerMissionIpcHandlers(() => missionBridge)');
     expect(preloadSource).toContain('missions: {');
     expect(preloadSource).toContain("ipcRenderer.invoke('mission.list'");
     expect(preloadSource).toContain("ipcRenderer.invoke('mission.updateStatus'");
+    expect(preloadSource).toContain("ipcRenderer.invoke('mission.createVoice'");
   });
 });

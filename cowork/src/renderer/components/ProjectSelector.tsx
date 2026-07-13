@@ -180,6 +180,10 @@ export const ProjectSelector: React.FC = () => {
                 </div>
                 <button
                   onClick={(e) => handleDeleteProject(project, e)}
+                  aria-label={t('project.deleteNamed', {
+                    name: project.name,
+                    defaultValue: `Delete ${project.name}`,
+                  })}
                   className="opacity-0 group-hover:opacity-100 p-1 text-text-muted hover:text-error transition-opacity"
                   title={t('project.deleteTitle')}
                 >
@@ -217,6 +221,7 @@ export const ProjectSelector: React.FC = () => {
               </h2>
               <button
                 onClick={() => setShowNewDialog(false)}
+                aria-label={t('project.closeNewProject', 'Close new Project dialog')}
                 className="text-text-muted hover:text-text-primary"
               >
                 <X size={18} />

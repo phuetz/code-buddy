@@ -31,6 +31,9 @@
  */
 
 import { randomUUID } from 'crypto';
+import { readdirSync } from 'fs';
+import { homedir } from 'os';
+import { join } from 'path';
 import type { IncomingMessage, Server as HttpServer } from 'http';
 import type { Duplex } from 'stream';
 import type { WebSocket, WebSocketServer } from 'ws';
@@ -38,8 +41,14 @@ import type { ServerConfig } from '../types.js';
 import type { JwtPayload } from '../types.js';
 import { isOriginAllowed } from '../origin-check.js';
 import { verifyToken } from '../auth/jwt.js';
+import { isDirectLoopbackRequest } from '../middleware/auth.js';
 import { logger } from '../../utils/logger.js';
+import {
+  parseContextOptimizationMetadata,
+  type ContextOptimizationMetadata,
+} from '../../shared/context-optimization-metadata.js';
 import { createServerAgent, type ServerAgent } from '../agent-adapter.js';
+import { getConnectionStats } from './handler.js';
 
 /** Path the desktop endpoint listens on. */
 export const DESKTOP_WS_PATH = '/desktop';
@@ -68,6 +77,7 @@ interface ToolResultBlock {
   toolUseId: string;
   content: string;
   isError?: boolean;
+  contextOptimization?: ContextOptimizationMetadata;
 }
 type CoworkContentBlock = TextBlock | ToolUseBlock | ToolResultBlock;
 
@@ -90,6 +100,13 @@ interface CoworkSession {
   allowedTools: string[];
   memoryEnabled: boolean;
   model?: string;
+  intelligence?: {
+    thinkingLevel: 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+    fastMode: boolean;
+    executionLocation: 'cloud';
+    latencyBudgetMs: number;
+    cacheState: 'unknown';
+  };
   projectId?: string | null;
   createdAt: number;
   updatedAt: number;
@@ -123,6 +140,7 @@ export type DesktopServerEvent =
   | { type: 'session.list'; payload: { sessions: CoworkSession[] } }
   | { type: 'trace.step'; payload: { sessionId: string; step: TraceStep } }
   | { type: 'trace.update'; payload: { sessionId: string; stepId: string; updates: Partial<TraceStep> } }
+  | { type: 'control.result'; payload: { requestId: string; ok: boolean; result?: unknown; error?: string } }
   | { type: 'error'; payload: { message: string; sessionId?: string } };
 
 /** Inbound chat-core `ClientEvent`s this endpoint accepts. */
@@ -131,7 +149,49 @@ const ACCEPTED_CLIENT_EVENTS = new Set<string>([
   'session.continue',
   'session.stop',
   'session.list',
+  'control.describe',
+  'control.invoke',
 ]);
+
+const CONTROL_CAPABILITIES = [
+  'system.snapshot',
+  'skills.list',
+  'fleet.status',
+] as const;
+
+function listSkillNames(): string[] {
+  const roots = [join(homedir(), '.codebuddy', 'skills'), join(process.cwd(), '.codebuddy', 'skills')];
+  const names = new Set<string>();
+  for (const root of roots) {
+    try {
+      for (const entry of readdirSync(root, { withFileTypes: true })) {
+        if (entry.isDirectory() && !entry.name.startsWith('.')) names.add(entry.name);
+      }
+    } catch {
+      // An absent skills directory is a valid empty state.
+    }
+  }
+  return [...names].sort();
+}
+
+function controlResult(method: string): unknown {
+  switch (method) {
+    case 'system.snapshot':
+      return {
+        node: process.version,
+        platform: process.platform,
+        uptimeSeconds: Math.round(process.uptime()),
+        memory: process.memoryUsage(),
+        desktopClients: desktopConnections.size,
+      };
+    case 'skills.list':
+      return { skills: listSkillNames() };
+    case 'fleet.status':
+      return getConnectionStats();
+    default:
+      throw new Error(`control capability not allowed: ${method}`);
+  }
+}
 
 /** Per-connection runtime state. */
 interface DesktopConnectionState {
@@ -218,6 +278,13 @@ function authenticateUpgrade(
 
   // When auth is disabled (dev only), accept with a synthetic identity.
   if (!config.authEnabled) {
+    if (!isDirectLoopbackRequest(req.socket.remoteAddress, req.headers)) {
+      return {
+        ok: false,
+        status: 403,
+        reason: 'anonymous desktop access is local-only',
+      };
+    }
     return { ok: true, payload: { sub: 'local-dev', scopes: ['chat'] } as JwtPayload };
   }
 
@@ -349,6 +416,9 @@ async function runTurn(
           if (chunk.toolCall) {
             const isError = chunk.toolResult ? !chunk.toolResult.success : false;
             const output = chunk.toolResult?.output ?? chunk.toolResult?.error ?? '';
+            const contextOptimization = parseContextOptimizationMetadata(
+              chunk.toolResult?.metadata?.contextOptimization,
+            );
             sendEvent(ws, {
               type: 'trace.update',
               payload: {
@@ -367,6 +437,7 @@ async function runTurn(
               toolUseId: chunk.toolCall.id,
               content: output,
               isError,
+              ...(contextOptimization ? { contextOptimization } : {}),
             });
           }
           break;
@@ -444,6 +515,13 @@ async function handleSessionStart(
       ? (payload.allowedTools.filter((t) => typeof t === 'string') as string[])
       : [],
     memoryEnabled: payload.memoryEnabled === true,
+    intelligence: {
+      thinkingLevel: 'off',
+      fastMode: false,
+      executionLocation: 'cloud',
+      latencyBudgetMs: 900,
+      cacheState: 'unknown',
+    },
     projectId: typeof payload.projectId === 'string' ? payload.projectId : null,
     createdAt: now,
     updatedAt: now,
@@ -513,7 +591,8 @@ async function dispatchClientEvent(
   ws: WebSocket,
   state: DesktopConnectionState,
   type: string,
-  payload: Record<string, unknown>
+  payload: Record<string, unknown>,
+  requestId?: string,
 ): Promise<void> {
   switch (type) {
     case 'session.start':
@@ -528,6 +607,34 @@ async function dispatchClientEvent(
     case 'session.list':
       handleSessionList(ws, state);
       break;
+    case 'control.describe':
+      sendEvent(ws, {
+        type: 'control.result',
+        payload: {
+          requestId: requestId ?? randomUUID(),
+          ok: true,
+          result: {
+            protocol: 2,
+            mode: 'capability-scoped',
+            capabilities: CONTROL_CAPABILITIES,
+            mutationsRequireLocalApproval: true,
+          },
+        },
+      });
+      break;
+    case 'control.invoke': {
+      const method = typeof payload.method === 'string' ? payload.method : '';
+      try {
+        const result = controlResult(method);
+        sendEvent(ws, { type: 'control.result', payload: { requestId: requestId ?? randomUUID(), ok: true, result } });
+      } catch (error) {
+        sendEvent(ws, {
+          type: 'control.result',
+          payload: { requestId: requestId ?? randomUUID(), ok: false, error: error instanceof Error ? error.message : String(error) },
+        });
+      }
+      break;
+    }
     default:
       sendEvent(ws, { type: 'error', payload: { message: `unsupported event type: ${type}` } });
   }
@@ -548,7 +655,7 @@ async function processFrame(ws: WebSocket, state: DesktopConnectionState, data: 
     return;
   }
 
-  const { type, payload } = parsed as { type?: unknown; payload?: unknown };
+  const { type, payload, requestId } = parsed as { type?: unknown; payload?: unknown; requestId?: unknown };
   if (typeof type !== 'string') {
     sendEvent(ws, { type: 'error', payload: { message: 'ClientEvent.type is required' } });
     return;
@@ -563,7 +670,7 @@ async function processFrame(ws: WebSocket, state: DesktopConnectionState, data: 
       : {};
 
   try {
-    await dispatchClientEvent(ws, state, type, safePayload);
+    await dispatchClientEvent(ws, state, type, safePayload, typeof requestId === 'string' ? requestId : undefined);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     logger.error('[desktop-ws] handler error', { type, error: message });

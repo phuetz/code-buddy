@@ -9,7 +9,7 @@ import { createSearchTools, resetSearchInstance } from '../../src/tools/registry
 import { createTextEditorTools, resetTextEditorInstance } from '../../src/tools/registry/text-editor-tools.js';
 import { createWebTools, resetWebSearchInstance } from '../../src/tools/registry/web-tools.js';
 import { createAliasTools } from '../../src/tools/registry/tool-aliases.js';
-import type { ITool } from '../../src/tools/registry/types.js';
+import type { ITool, IToolExecutionContext } from '../../src/tools/registry/types.js';
 import { ConfirmationService } from '../../src/utils/confirmation-service.js';
 import { getSSRFGuard, resetSSRFGuard } from '../../src/security/ssrf-guard.js';
 
@@ -108,4 +108,32 @@ describe('Hermes core aliases use real tool implementations', () => {
       });
     }
   }, 30_000);
+
+  it('forwards the complete execution context to the primary tool', async () => {
+    let receivedContext: IToolExecutionContext | undefined;
+    const primary: ITool = {
+      name: 'bash',
+      description: 'context probe',
+      getSchema: () => ({
+        name: 'bash',
+        description: 'context probe',
+        parameters: { type: 'object', properties: {} },
+      }),
+      async execute(_input, context) {
+        receivedContext = context;
+        return { success: true, output: 'ok' };
+      },
+    };
+    const terminal = createAliasTools([primary]).find((tool) => tool.name === 'terminal');
+    const context: IToolExecutionContext = {
+      cwd: tempDir,
+      botId: 'lisa',
+      sessionId: 'session-context',
+      dryRun: true,
+    };
+
+    await terminal!.execute({ command: 'pwd' }, context);
+
+    expect(receivedContext).toBe(context);
+  });
 });

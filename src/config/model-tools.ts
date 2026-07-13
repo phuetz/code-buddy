@@ -10,6 +10,8 @@
 import { logger } from '../utils/logger.js';
 import type { ModelStrength } from './model-strengths.js';
 
+export type ReasoningEffort = 'none' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+
 export interface ModelToolConfig {
   /** Model name pattern (glob-like matching) */
   model: string;
@@ -29,6 +31,8 @@ export interface ModelToolConfig {
   maxToolRounds?: number;
   /** Whether this model supports extended thinking/reasoning */
   supportsReasoning?: boolean;
+  /** Reasoning efforts accepted by the model API, when explicitly documented. */
+  supportedReasoningEfforts?: readonly ReasoningEffort[];
   /** Whether this model supports structured tool calls (function calling) */
   supportsToolCalls?: boolean;
   /** Whether this model supports vision/images */
@@ -61,6 +65,99 @@ export interface ModelToolConfig {
  * Models are matched by prefix — first match wins.
  */
 const DEFAULT_MODEL_CONFIGS: ModelToolConfig[] = [
+  // OpenRouter free pool — full provider-qualified IDs. These must precede
+  // local bare-name globs such as qwen3* / gemma4*. The output caps are
+  // intentionally below provider maxima to keep free councils responsive.
+  {
+    model: 'openrouter/free',
+    strengths: ['cheap'],
+    supportsReasoning: true,
+    supportsToolCalls: true,
+    supportsVision: true,
+    contextWindow: 200000,
+    maxOutputTokens: 4096,
+    patchFormat: 'search_replace',
+  },
+  {
+    model: 'openai/gpt-oss-*:free',
+    strengths: ['thinking', 'cheap'],
+    supportsReasoning: true,
+    supportsToolCalls: true,
+    supportsVision: false,
+    contextWindow: 131072,
+    maxOutputTokens: 4096,
+    patchFormat: 'search_replace',
+  },
+  {
+    model: 'cohere/north-mini-code:free',
+    strengths: ['code', 'fast', 'cheap'],
+    supportsReasoning: true,
+    supportsToolCalls: true,
+    supportsVision: false,
+    contextWindow: 256000,
+    maxOutputTokens: 8192,
+    patchFormat: 'search_replace',
+  },
+  {
+    model: 'qwen/qwen3-coder:free',
+    strengths: ['code', 'french', 'cheap'],
+    supportsReasoning: false,
+    supportsToolCalls: true,
+    supportsVision: false,
+    contextWindow: 1048576,
+    maxOutputTokens: 8192,
+    patchFormat: 'search_replace',
+  },
+  {
+    model: 'qwen/qwen3-next-80b-a3b-instruct:free',
+    strengths: ['french', 'fast', 'cheap'],
+    supportsReasoning: false,
+    supportsToolCalls: true,
+    supportsVision: false,
+    contextWindow: 262144,
+    maxOutputTokens: 8192,
+    patchFormat: 'search_replace',
+  },
+  {
+    model: 'google/gemma-4-*:free',
+    strengths: ['french', 'cheap'],
+    supportsReasoning: true,
+    supportsToolCalls: true,
+    supportsVision: true,
+    contextWindow: 262144,
+    maxOutputTokens: 8192,
+    patchFormat: 'search_replace',
+  },
+  {
+    model: 'nvidia/nemotron-3-*:free',
+    strengths: ['thinking', 'cheap'],
+    supportsReasoning: true,
+    supportsToolCalls: true,
+    supportsVision: false,
+    contextWindow: 1000000,
+    maxOutputTokens: 8192,
+    patchFormat: 'search_replace',
+  },
+  {
+    model: 'meta-llama/llama-3.3-70b-instruct:free',
+    strengths: ['cheap'],
+    supportsReasoning: false,
+    supportsToolCalls: true,
+    supportsVision: false,
+    contextWindow: 131072,
+    maxOutputTokens: 4096,
+    patchFormat: 'search_replace',
+  },
+  {
+    model: 'poolside/laguna-*:free',
+    strengths: ['code', 'fast', 'cheap'],
+    supportsReasoning: true,
+    supportsToolCalls: true,
+    supportsVision: false,
+    contextWindow: 262144,
+    maxOutputTokens: 8192,
+    patchFormat: 'search_replace',
+  },
   // GPT-4.1 (1M context)
   {
     model: 'gpt-4.1*',
@@ -205,9 +302,37 @@ const DEFAULT_MODEL_CONFIGS: ModelToolConfig[] = [
     patchFormat: 'search_replace',
   },
 
-  // ChatGPT Codex backend (Phase d.23) — exposed via OAuth subscription
-  // auth at chatgpt.com/backend-api/codex/responses. `gpt-5.5` matches the
-  // CodeExplorer helper default; `gpt-5.2` remains the known-good fallback.
+  // GPT-5.6 Sol — public OpenAI API capabilities. Keep the official `gpt-5.6`
+  // alias exact so it cannot absorb sibling ChatGPT subscription slugs such as
+  // `gpt-5.6-terra` or `gpt-5.6-luna`. Versioned Sol snapshots may still use
+  // the canonical glob.
+  {
+    model: 'gpt-5.6-sol*',
+    strengths: ['code', 'thinking'],
+    supportsReasoning: true,
+    supportedReasoningEfforts: ['none', 'low', 'medium', 'high', 'xhigh', 'max'],
+    supportsToolCalls: true,
+    supportsVision: true,
+    contextWindow: 1_050_000,
+    maxOutputTokens: 128_000,
+    patchFormat: 'unified',
+    promptProfile: 'rich',
+  },
+  {
+    model: 'gpt-5.6',
+    strengths: ['code', 'thinking'],
+    supportsReasoning: true,
+    supportedReasoningEfforts: ['none', 'low', 'medium', 'high', 'xhigh', 'max'],
+    supportsToolCalls: true,
+    supportsVision: true,
+    contextWindow: 1_050_000,
+    maxOutputTokens: 128_000,
+    patchFormat: 'unified',
+    promptProfile: 'rich',
+  },
+
+  // ChatGPT Codex backend (Phase d.23) — exposed via OAuth subscription.
+  // GPT-5.5 remains the historical fallback for older accounts/backends.
   {
     model: 'gpt-5.5*',
     strengths: ['code', 'thinking'],
@@ -483,17 +608,20 @@ const DEFAULT_MODEL_CONFIGS: ModelToolConfig[] = [
     patchFormat: 'full_file',
     promptProfile: 'lite',
   },
-  // Gemma 4 (Ollama, e2b/e4b) — local model with tool support. Keep the
-  // lite prompt/tool profile, but do not gate off tool calls: real `buddy goal`
-  // smoke with gemma4:12b only succeeds when the selected tools are preserved.
+  // Gemma 4 (Ollama) — local multimodal model with thinking and tool support.
+  // Keep the lite prompt/tool profile, but expose the capabilities reported by
+  // current Ollama builds so Cowork can accept images and enable reasoning UI.
+  // Real `buddy goal` smoke with gemma4:12b only succeeds when the selected
+  // tools are preserved. Use a conservative 32K working context on local RAM
+  // even though the model advertises a substantially larger maximum.
   {
     model: 'gemma4*',
     strengths: ['french'],
-    supportsReasoning: false,
+    supportsReasoning: true,
     supportsToolCalls: true,
-    supportsVision: false,
-    contextWindow: 8192,
-    maxOutputTokens: 2048,
+    supportsVision: true,
+    contextWindow: 32768,
+    maxOutputTokens: 4096,
     maxToolRounds: 10,
     disabledTools: ['apply_patch', 'browser', 'computer_control'],
     patchFormat: 'full_file',

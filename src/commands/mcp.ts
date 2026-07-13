@@ -1,11 +1,51 @@
 import { Command } from 'commander';
-import { addMCPServer, removeMCPServer, loadMCPConfig, PREDEFINED_SERVERS } from '../mcp/config.js';
+import {
+  addMCPServer,
+  removeMCPServer,
+  loadMCPConfig,
+  PREDEFINED_SERVERS,
+  setMCPServerEnabled,
+} from '../mcp/config.js';
 import { getMCPManager } from '../codebuddy/tools.js';
 import { MCPServerConfig } from '../mcp/client.js';
 import { getErrorMessage } from '../types/index.js';
 import chalk from 'chalk';
 import { logger } from "../utils/logger.js";
 import readline from 'readline';
+import { measureMCPPromptFootprint } from '../mcp/prompt-footprint.js';
+import {
+  loadMCPProfiles,
+  removeMCPProfile,
+  setActiveMCPProfile,
+  upsertMCPProfile,
+} from '../mcp/profiles.js';
+
+function printPromptFootprint(tools: ReturnType<ReturnType<typeof getMCPManager>['getTools']>): void {
+  const footprint = measureMCPPromptFootprint(tools);
+  console.log(
+    `  Prompt footprint: ~${footprint.estimatedTokens.toLocaleString()} tokens ` +
+    `(${footprint.characters.toLocaleString()} chars, exact catalog before RAG selection)`,
+  );
+}
+
+function buildPromptFootprintReport(
+  serverName: string,
+  enabled: boolean,
+  tools: ReturnType<ReturnType<typeof getMCPManager>['getTools']>,
+) {
+  const footprint = measureMCPPromptFootprint(tools);
+  return {
+    server: serverName,
+    enabled,
+    toolCount: footprint.toolCount,
+    characters: footprint.characters,
+    bytes: footprint.bytes,
+    estimatedTokens: footprint.estimatedTokens,
+    heaviestTools: [...footprint.tools]
+      .sort((left, right) => right.estimatedTokens - left.estimatedTokens)
+      .slice(0, 5),
+  };
+}
 
 export function confirmPrompt(prompt: string): Promise<boolean> {
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
@@ -20,6 +60,116 @@ export function confirmPrompt(prompt: string): Promise<boolean> {
 export function createMCPCommand(): Command {
   const mcpCommand = new Command('mcp');
   mcpCommand.description('Manage MCP (Model Context Protocol) servers');
+
+  for (const action of ['enable', 'disable'] as const) {
+    mcpCommand
+      .command(`${action} <name>`)
+      .description(`${action === 'enable' ? 'Enable' : 'Disable'} a configured MCP server`)
+      .action(async (name: string) => {
+        const enabled = action === 'enable';
+        const result = setMCPServerEnabled(name, enabled);
+        if (!result.updated) {
+          logger.error(chalk.red(`MCP server ${name} not found in any configuration source`));
+          process.exit(1);
+        }
+        if (!enabled) {
+          const manager = getMCPManager();
+          if (manager.getServers().includes(name)) await manager.removeServer(name);
+        }
+        console.log(chalk.green(`✓ ${enabled ? 'Enabled' : 'Disabled'} MCP server: ${name}`));
+        console.log(`  Source: ${result.path ?? result.source}`);
+      });
+  }
+
+  const profileCommand = mcpCommand
+    .command('profile')
+    .description('Manage mission-specific MCP server sets');
+
+  profileCommand
+    .command('list')
+    .description('List MCP profiles')
+    .option('--json', 'Output machine-readable JSON')
+    .action((options: { json?: boolean }) => {
+      const config = loadMCPProfiles();
+      if (options.json) {
+        console.log(JSON.stringify(config, null, 2));
+        return;
+      }
+      const profiles = Object.values(config.profiles);
+      if (profiles.length === 0) {
+        console.log(chalk.yellow('No MCP profiles configured'));
+        return;
+      }
+      console.log(chalk.bold('MCP profiles:'));
+      for (const profile of profiles) {
+        const active = config.activeProfile === profile.name ? chalk.green(' (active)') : '';
+        console.log(`  ${chalk.bold(profile.name)}${active}: ${profile.servers.join(', ')}`);
+        if (profile.description) console.log(`    ${profile.description}`);
+      }
+    });
+
+  profileCommand
+    .command('create <name> <servers...>')
+    .description('Create or replace a profile from configured server names')
+    .option('-d, --description <text>', 'Profile description')
+    .action((name: string, servers: string[], options: { description?: string }) => {
+      const available = new Set(loadMCPConfig({ includeDisabled: true }).servers.map(server => server.name));
+      const unknown = servers.filter(server => !available.has(server));
+      if (unknown.length > 0) {
+        logger.error(chalk.red(`Unknown MCP server(s): ${unknown.join(', ')}`));
+        process.exit(1);
+      }
+      const profile = upsertMCPProfile(name, servers, options.description);
+      console.log(chalk.green(`✓ Saved MCP profile: ${profile.name}`));
+      console.log(`  Servers: ${profile.servers.join(', ')}`);
+    });
+
+  profileCommand
+    .command('use <name>')
+    .description('Activate exactly the servers in a profile')
+    .action(async (name: string) => {
+      const profiles = loadMCPProfiles();
+      const profile = profiles.profiles[name];
+      if (!profile) {
+        logger.error(chalk.red(`Unknown MCP profile: ${name}`));
+        process.exit(1);
+      }
+
+      const inventory = loadMCPConfig({ includeDisabled: true }).servers;
+      const available = new Set(inventory.map(server => server.name));
+      const missing = profile.servers.filter(server => !available.has(server));
+      if (missing.length > 0) {
+        logger.error(chalk.red(`Profile references missing server(s): ${missing.join(', ')}`));
+        process.exit(1);
+      }
+
+      const desired = new Set(profile.servers);
+      for (const server of inventory) {
+        const shouldEnable = desired.has(server.name);
+        if ((server.enabled !== false) === shouldEnable) continue;
+        const result = setMCPServerEnabled(server.name, shouldEnable);
+        if (!result.updated) throw new Error(`Could not update MCP server: ${server.name}`);
+      }
+
+      const manager = getMCPManager();
+      for (const connected of manager.getServers()) {
+        if (!desired.has(connected)) await manager.removeServer(connected);
+      }
+      setActiveMCPProfile(name);
+      console.log(chalk.green(`✓ Activated MCP profile: ${name}`));
+      console.log(`  Enabled: ${profile.servers.join(', ')}`);
+    });
+
+  profileCommand
+    .command('delete <name>')
+    .description('Delete a profile without deleting its servers')
+    .action((name: string) => {
+      if (!removeMCPProfile(name)) {
+        logger.error(chalk.red(`Unknown MCP profile: ${name}`));
+        process.exit(1);
+      }
+      console.log(chalk.green(`✓ Deleted MCP profile: ${name}`));
+    });
 
   // Add server command
   mcpCommand
@@ -241,7 +391,7 @@ export function createMCPCommand(): Command {
     .command('list')
     .description('List configured MCP servers')
     .action(() => {
-      const config = loadMCPConfig();
+      const config = loadMCPConfig({ includeDisabled: true });
       const manager = getMCPManager();
       
       if (config.servers.length === 0) {
@@ -254,9 +404,11 @@ export function createMCPCommand(): Command {
 
       for (const server of config.servers) {
         const isConnected = manager.getServers().includes(server.name);
-        const status = isConnected 
-          ? chalk.green('✓ Connected') 
-          : chalk.red('✗ Disconnected');
+        const status = server.enabled === false
+          ? chalk.yellow('○ Disabled')
+          : isConnected
+            ? chalk.green('✓ Connected')
+            : chalk.red('✗ Disconnected');
         
         console.log(`${chalk.bold(server.name)}: ${status}`);
         
@@ -281,6 +433,7 @@ export function createMCPCommand(): Command {
           
           const tools = manager.getTools().filter(t => t.serverName === server.name);
           console.log(`  Tools: ${tools.length}`);
+          printPromptFootprint(tools);
           if (tools.length > 0) {
             tools.forEach(tool => {
               const displayName = tool.name.replace(`mcp__${server.name}__`, '');
@@ -293,11 +446,75 @@ export function createMCPCommand(): Command {
       }
     });
 
+  mcpCommand
+    .command('audit [name]')
+    .description('Measure MCP prompt footprint by server and tool')
+    .option('--all', 'Include disabled servers')
+    .option('--json', 'Output machine-readable JSON')
+    .action(async (name: string | undefined, options: { all?: boolean; json?: boolean }) => {
+      const inventory = loadMCPConfig({ includeDisabled: true }).servers;
+      const selected = name
+        ? inventory.filter(server => server.name === name)
+        : inventory.filter(server => options.all || server.enabled !== false);
+
+      if (selected.length === 0) {
+        logger.error(chalk.red(name ? `MCP server ${name} not found` : 'No MCP servers selected'));
+        process.exit(1);
+      }
+
+      const manager = getMCPManager();
+      const reports: Array<ReturnType<typeof buildPromptFootprintReport> & { error?: string }> = [];
+      for (const server of selected) {
+        const wasConnected = manager.getServers().includes(server.name);
+        try {
+          if (!wasConnected) await manager.addServer(server);
+          const tools = manager.getTools().filter(tool => tool.serverName === server.name);
+          reports.push(buildPromptFootprintReport(server.name, server.enabled !== false, tools));
+        } catch (error) {
+          reports.push({
+            ...buildPromptFootprintReport(server.name, server.enabled !== false, []),
+            error: getErrorMessage(error),
+          });
+        } finally {
+          if (!wasConnected && manager.getServers().includes(server.name)) {
+            await manager.removeServer(server.name);
+          }
+        }
+      }
+
+      if (options.json) {
+        console.log(JSON.stringify({ servers: reports }, null, 2));
+        return;
+      }
+
+      console.log(chalk.bold('MCP prompt footprint audit:'));
+      for (const report of reports) {
+        console.log(`\n${chalk.bold(report.server)}${report.enabled ? '' : ' (disabled)'}`);
+        if (report.error) {
+          console.log(chalk.red(`  Error: ${report.error}`));
+          continue;
+        }
+        console.log(`  Tools: ${report.toolCount}`);
+        console.log(`  Full catalog: ~${report.estimatedTokens.toLocaleString()} tokens (${report.characters.toLocaleString()} chars)`);
+        if (report.heaviestTools.length > 0) {
+          console.log('  Heaviest tools:');
+          for (const tool of report.heaviestTools) {
+            const displayName = tool.name.replace(`mcp__${report.server}__`, '');
+            console.log(`    - ${displayName}: ~${tool.estimatedTokens.toLocaleString()} tokens`);
+          }
+        }
+      }
+      const total = reports.reduce((sum, report) => sum + report.estimatedTokens, 0);
+      console.log(`\nTotal full catalogs: ~${total.toLocaleString()} tokens before RAG selection`);
+    });
+
   // Test server command
   mcpCommand
     .command('test <name>')
     .description('Test connection to an MCP server')
     .action(async (name: string) => {
+      const manager = getMCPManager();
+      let connected = false;
       try {
         const config = loadMCPConfig();
         const serverConfig = config.servers.find(s => s.name === name);
@@ -309,12 +526,13 @@ export function createMCPCommand(): Command {
 
         console.log(chalk.blue(`Testing connection to ${name}...`));
         
-        const manager = getMCPManager();
         await manager.addServer(serverConfig);
+        connected = true;
         
         const tools = manager.getTools().filter(t => t.serverName === name);
         console.log(chalk.green(`✓ Successfully connected to ${name}`));
         console.log(chalk.blue(`  Available tools: ${tools.length}`));
+        printPromptFootprint(tools);
         
         if (tools.length > 0) {
           console.log('  Tools:');
@@ -327,6 +545,13 @@ export function createMCPCommand(): Command {
       } catch (error: unknown) {
         logger.error(chalk.red(`✗ Failed to connect to ${name}: ${getErrorMessage(error)}`));
         process.exit(1);
+      } finally {
+        // `mcp test` is a probe, not a long-lived session. Always tear down the
+        // transport so stdio children and their database/network handles do not
+        // keep the CLI process alive after a successful discovery.
+        if (connected) {
+          await manager.removeServer(name);
+        }
       }
     });
 

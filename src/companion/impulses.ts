@@ -71,6 +71,7 @@ const HEARING_STALE_HOURS = 12;
 const SELF_STALE_HOURS = 8;
 const VOICE_STT_SLOW_MS = 2_500;
 const VOICE_LOOP_SLOW_MS = 5_000;
+const VOICE_RESPONSE_SLOW_MS = 3_000;
 const VOICE_SIGNAL_MARGIN = 1.35;
 
 function resolveCwd(cwd?: string): string {
@@ -158,6 +159,9 @@ interface VoiceLoopMetrics {
   totalMs?: number;
   decisionMs?: number;
   actionMs?: number;
+  firstAudioMs?: number;
+  perceivedResponseMs?: number;
+  voiceTotalMs?: number;
   captureMs?: number;
   writeMs?: number;
   sampleRate?: number;
@@ -180,6 +184,9 @@ function extractVoiceLoopMetrics(percept: CompanionPercept | undefined): VoiceLo
     totalMs: finiteNumberValue(latency?.totalMs),
     decisionMs: finiteNumberValue(latency?.decisionMs),
     actionMs: finiteNumberValue(latency?.actionMs),
+    firstAudioMs: finiteNumberValue(latency?.firstAudioMs),
+    perceivedResponseMs: finiteNumberValue(latency?.perceivedResponseMs),
+    voiceTotalMs: finiteNumberValue(latency?.voiceTotalMs),
     captureMs: finiteNumberValue(capture?.ms),
     writeMs: finiteNumberValue(capture?.writeMs),
     sampleRate: finiteNumberValue(capture?.sampleRate),
@@ -208,11 +215,14 @@ function buildVoiceLatencyImpulse(
   const metrics = extractVoiceLoopMetrics(latestHearing);
   if (!metrics) return;
   const slowStt = typeof metrics.sttMs === 'number' && metrics.sttMs >= VOICE_STT_SLOW_MS;
-  const slowLoop = typeof metrics.totalMs === 'number' && metrics.totalMs >= VOICE_LOOP_SLOW_MS;
+  const responseLatency = metrics.perceivedResponseMs ?? metrics.totalMs;
+  const responseBudget =
+    metrics.perceivedResponseMs !== undefined ? VOICE_RESPONSE_SLOW_MS : VOICE_LOOP_SLOW_MS;
+  const slowLoop = typeof responseLatency === 'number' && responseLatency >= responseBudget;
   if (!slowStt && !slowLoop) return;
 
   const priority: CompanionImpulsePriority =
-    (metrics.totalMs || 0) >= VOICE_LOOP_SLOW_MS * 1.6 ||
+    (responseLatency || 0) >= responseBudget * 1.6 ||
     (metrics.sttMs || 0) >= VOICE_STT_SLOW_MS * 1.6
       ? 'high'
       : 'medium';
@@ -222,10 +232,12 @@ function buildVoiceLatencyImpulse(
     priority,
     title: 'Reduce voice latency',
     message:
-      'Tune the voice loop: prefer the webcam or USB microphone, use a smaller faster-whisper model if needed, and keep VAD filtering enabled.',
+      'Tune perceived voice latency: keep the warm reply stream active, prefer a fast routed model, and use a smaller speech-recognition model if STT dominates.',
     command: 'buddy companion percepts recent --limit 5 --modality hearing',
     evidence: [
       { label: 'stt', value: formatMs(metrics.sttMs) },
+      { label: 'first audio', value: formatMs(metrics.firstAudioMs) },
+      { label: 'perceived response', value: formatMs(metrics.perceivedResponseMs) },
       { label: 'loop', value: formatMs(metrics.totalMs) },
       { label: 'capture', value: formatMs(metrics.captureMs) },
       { label: 'device', value: metrics.device || 'unknown' },

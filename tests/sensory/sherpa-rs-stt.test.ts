@@ -10,6 +10,7 @@ import {
 const ENV_KEYS = [
   'CODEBUDDY_SPEECH_ENGINE',
   'CODEBUDDY_SPEECH_STT_BIN',
+  'CODEBUDDY_SPEECH_STT_READY_TIMEOUT_MS',
   'CODEBUDDY_SPEECH_FALLBACK',
   'BUDDY_SENSE_STT_MODEL_DIR',
 ];
@@ -63,11 +64,14 @@ describe('sherpa-rs STT end-to-end (real binary)', () => {
     setEnv({
       CODEBUDDY_SPEECH_ENGINE: 'sherpa-rs',
       CODEBUDDY_SPEECH_STT_BIN: bin!,
+      // Model initialization can be slower while the complete Vitest suite is
+      // saturating the machine. Keep the production fail-fast default unchanged.
+      CODEBUDDY_SPEECH_STT_READY_TIMEOUT_MS: '20000',
       CODEBUDDY_SPEECH_FALLBACK: 'false', // assert the Rust path itself, no python fallback
       BUDDY_SENSE_STT_MODEL_DIR: modelDir,
     });
     const text = await transcribeWav(frWav);
     expect(text.toLowerCase()).toContain('pays');
     expect(text.toLowerCase()).toContain('demand');
-  }, 30_000);
+  }, 45_000);
 });

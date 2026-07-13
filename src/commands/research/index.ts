@@ -6,17 +6,30 @@
  *
  * Usage:
  *   buddy research "quantum computing breakthroughs in 2025"
- *   buddy research "best practices for TypeScript monorepos" --workers 8
- *   buddy research "competitor analysis for Manus AI" --workers 5 --output report.md
+ *   buddy research "best practices for TypeScript monorepos" --items 100 --concurrency 10
+ *   buddy research "competitor analysis for Manus AI" --items 25 --report report.md
  */
 
 import { Command } from 'commander';
-import { WideResearchOrchestrator } from '../../agent/wide-research.js';
+import {
+  computeWideResearchDefaultOverallTimeoutMs,
+  WideResearchOrchestrator,
+} from '../../agent/wide-research.js';
 import * as fs from 'fs/promises';
 import * as fsSync from 'fs';
 import path from 'path';
 import { resolveCommandProvider } from '../llm-provider-resolution.js';
 import { addKnowledgeSubcommands } from './knowledge-ingest.js';
+import {
+  redactWideResearchResult,
+  redactWideResearchText,
+  resolveWideResearchCheckpointPath,
+} from '../../agent/wide-research-checkpoint.js';
+import {
+  assertWideResearchFilesDistinct,
+  writeWideResearchTextAtomic,
+  writeWideResearchTextAtomicSync,
+} from '../../agent/wide-research-files.js';
 
 async function runDirectResearch(
   topic: string,
@@ -71,14 +84,27 @@ function detectReportPathFromArgv(argv: string[]): string | undefined {
   return undefined;
 }
 
+function parseClampedInteger(
+  value: unknown,
+  fallback: number,
+  minimum: number,
+  maximum?: number,
+): number {
+  const parsed = typeof value === 'string' ? Number.parseInt(value, 10) : Number.NaN;
+  const normalized = Number.isFinite(parsed) ? Math.floor(parsed) : fallback;
+  return Math.max(minimum, maximum === undefined ? normalized : Math.min(maximum, normalized));
+}
+
 export function createResearchCommand(): Command {
   const cmd = new Command('research')
     .description('Wide Research: spawn parallel agent workers to research a topic comprehensively')
     .argument('<topic>', 'The topic to research')
-    .option('-w, --workers <n>', 'Number of parallel research workers (default: 5, max: 20)', '5')
+    .option('-w, --workers <n>', 'Legacy shorthand: set both items and concurrency (max: 20)')
+    .option('--items <n>', 'Total independent research items (default: 5, max: 250)')
+    .option('--concurrency <n>', 'Maximum parallel workers per wave (default: 5, max: 20)')
     .option('-r, --rounds <n>', 'Max tool rounds per worker (default: 15)', '15')
     .option('--worker-timeout-ms <n>', 'Per-worker timeout in milliseconds (default: 90000)', '90000')
-    .option('--timeout-ms <n>', 'Overall research timeout in milliseconds (default: 300000)', '300000')
+    .option('--timeout-ms <n>', 'Overall research timeout in milliseconds (default: auto-scaled by waves)')
     .option('-f, --report <file>', 'Save the report to a Markdown file')
     .option('--context <text>', 'Additional context injected into each worker')
     .option('-m, --model <model>', 'Override the model for this research run')
@@ -88,12 +114,45 @@ export function createResearchCommand(): Command {
     .option('--perspectives <n>', 'Deep Research (Phase C, STORM): research the topic from N diversified personas (praticien/sceptique/historique/architecte…) in parallel, then co-write an outline-first cited article. Default 0 = off. Implies --deep. Takes precedence over --iterations. Clamped [2,6]', '0')
     .option('--storm', 'Deep Research (Phase C, STORM) with the default perspective count (4). Alias for --perspectives 4. Implies --deep', false)
     .option('--ckg', 'Deep Research (Phase D): bridge the run to the Collective Knowledge Graph — recall prior collective knowledge (injected as a distinct "Mémoire collective" section) and ingest the deduped sources for cross-run/agent accumulation. Also enabled by CODEBUDDY_COLLECTIVE_MEMORY=true. Rides on --deep; combinable with --iterations/--perspectives', false)
+    .option('--checkpoint <file>', 'Persist a resumable Wide Research checkpoint (atomic JSON)')
+    .option('--resume <file>', 'Resume a compatible Wide Research checkpoint in place')
+    .option('--json', 'Emit one structured Wide Research JSON result (implies --wide)', false)
     .action(async (topic: string, opts, command) => {
+      const jsonOutput = Boolean(opts.json);
+      const checkpointRequested = typeof opts.checkpoint === 'string';
+      const resumeRequested = typeof opts.resume === 'string';
+      const durabilityRequested = checkpointRequested || resumeRequested;
+      const optionError = checkpointRequested && resumeRequested
+        ? 'Use either --checkpoint or --resume, not both.'
+        : durabilityRequested && (Boolean(opts.deep) || Boolean(opts.storm) || Number(opts.perspectives) > 0)
+          ? '--checkpoint/--resume currently apply to Wide Research only; remove --deep/--storm/--perspectives.'
+          : jsonOutput && (Boolean(opts.deep) || Boolean(opts.storm) || Number(opts.perspectives) > 0)
+            ? '--json currently emits the Wide Research result; remove --deep/--storm/--perspectives.'
+            : null;
+      if (optionError) {
+        if (jsonOutput) {
+          console.log(JSON.stringify({ kind: 'wide_research_run', status: 'failed', error: optionError }));
+        } else {
+          console.error(`❌ ${optionError}`);
+        }
+        process.exitCode = 1;
+        return;
+      }
+
       // The root program also declares a global `-m, --model`; depending on
       // argv order Commander can bind it there — merge so either wins.
       const modelOverride: string | undefined = opts.model ?? command?.optsWithGlobals?.()?.model;
       const resolved = resolveCommandProvider({ explicitModel: modelOverride });
       if (!resolved) {
+        if (jsonOutput) {
+          console.log(JSON.stringify({
+            kind: 'wide_research_run',
+            status: 'failed',
+            error: 'No provider available.',
+          }));
+          process.exitCode = 1;
+          return;
+        }
         console.error(
           '❌ No provider available — set an API key, run `buddy login`, or point CODEBUDDY_PROVIDER=ollama at a local Ollama.',
         );
@@ -105,20 +164,71 @@ export function createResearchCommand(): Command {
         baseURL: resolved.baseURL,
       };
 
-      const workers = Math.min(parseInt(opts.workers, 10) || 5, 20);
-      const maxRoundsPerWorker = parseInt(opts.rounds, 10) || 15;
+      const legacyWorkers = opts.workers === undefined
+        ? undefined
+        : parseClampedInteger(opts.workers, 5, 1, 20);
+      const items = parseClampedInteger(opts.items, legacyWorkers ?? 5, 1, 250);
+      const concurrency = Math.min(
+        items,
+        parseClampedInteger(opts.concurrency, legacyWorkers ?? 5, 1, 20),
+      );
+      const maxRoundsPerWorker = parseClampedInteger(opts.rounds, 15, 1);
       const workerTimeoutMs = Math.max(5_000, parseInt(opts.workerTimeoutMs, 10) || 90_000);
-      const overallTimeoutMs = Math.max(30_000, parseInt(opts.timeoutMs, 10) || 300_000);
+      const explicitOverallTimeout = typeof opts.timeoutMs === 'string';
+      const overallTimeoutMs = explicitOverallTimeout
+        ? Math.max(30_000, parseInt(opts.timeoutMs, 10) || 30_000)
+        : computeWideResearchDefaultOverallTimeoutMs({
+            items,
+            concurrency,
+            workerTimeoutMs,
+          });
       const hardStopTimeoutMs = overallTimeoutMs + 2_000;
       const argvReportPath = detectReportPathFromArgv(process.argv.slice(2));
       const reportPath: string | undefined = opts.report || argvReportPath;
+      let checkpointPath: string | undefined;
+      if (durabilityRequested) {
+        try {
+          checkpointPath = resolveWideResearchCheckpointPath(
+            resumeRequested ? opts.resume : opts.checkpoint,
+          );
+          if (reportPath) {
+            await assertWideResearchFilesDistinct(checkpointPath, path.resolve(reportPath));
+          }
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          if (jsonOutput) {
+            console.log(JSON.stringify({ kind: 'wide_research_run', status: 'failed', error: message }));
+          } else {
+            console.error(`❌ Checkpoint error: ${message}`);
+          }
+          process.exitCode = 1;
+          return;
+        }
+      }
+      const safeTopic = redactWideResearchText(topic, [apiKey]);
 
-      console.log(`\n🔬 Wide Research: "${topic}"`);
-      console.log(`   Provider: ${resolved.providerLabel} | Model: ${providerConfig.model}`);
-      console.log(`   Workers: ${workers}  |  Max rounds per worker: ${maxRoundsPerWorker}`);
-      console.log('─'.repeat(60));
+      if (!jsonOutput) {
+        console.log(`\n🔬 Wide Research: "${safeTopic}"`);
+        console.log(`   Provider: ${resolved.providerLabel} | Model: ${providerConfig.model}`);
+        console.log(
+          `   Items: ${items}  |  Concurrency: ${concurrency} per wave` +
+            `  |  Max rounds per worker: ${maxRoundsPerWorker}`,
+        );
+        console.log(
+          `   Overall timeout: ${Math.ceil(overallTimeoutMs / 60_000)} min` +
+            `${explicitOverallTimeout ? ' (user override)' : ' (auto-scaled)'}`,
+        );
+        if (checkpointPath) {
+          console.log(
+            resumeRequested
+              ? `   Resume checkpoint: ${checkpointPath}`
+              : `   Checkpoint: ${checkpointPath}`,
+          );
+        }
+        console.log('─'.repeat(60));
+      }
 
-      if (!opts.report && reportPath) {
+      if (!jsonOutput && !opts.report && reportPath) {
         console.warn(`⚠️ Legacy output flag detected. Use "--report ${reportPath}" for research report files.`);
       }
 
@@ -157,12 +267,16 @@ export function createResearchCommand(): Command {
       // This avoids long-lived worker handles and makes output deterministic for automation.
       // `--wide` opts back into the parallel-worker mode (a GUI subprocess is
       // non-TTY but may legitimately want the full Manus-style fan-out).
-      if (!opts.wide && (!process.stdin.isTTY || !process.stdout.isTTY)) {
+      const forceWide = Boolean(opts.wide) || durabilityRequested || jsonOutput;
+      if (!forceWide && (!process.stdin.isTTY || !process.stdout.isTTY)) {
         console.log('ℹ️ Non-interactive mode detected, using direct research mode.');
         try {
-          const report = await runDirectResearch(topic, apiKey, providerConfig, Math.min(overallTimeoutMs, 120_000));
+          const report = redactWideResearchText(
+            await runDirectResearch(topic, apiKey, providerConfig, Math.min(overallTimeoutMs, 120_000)),
+            [apiKey],
+          );
           const reportContent = [
-            `# Research Report: ${topic}`,
+            `# Research Report: ${safeTopic}`,
             ``,
             `Generated: ${new Date().toISOString()}`,
             `Mode: direct`,
@@ -184,14 +298,17 @@ export function createResearchCommand(): Command {
           }
           return;
         } catch (err) {
-          const message = err instanceof Error ? err.message : String(err);
+          const message = redactWideResearchText(
+            err instanceof Error ? err.message : String(err),
+            [apiKey],
+          );
           if (reportPath) {
             const outputPath = path.resolve(reportPath);
             await fs.mkdir(path.dirname(outputPath), { recursive: true });
             await fs.writeFile(
               outputPath,
               [
-                `# Research Report: ${topic}`,
+                `# Research Report: ${safeTopic}`,
                 ``,
                 `Generated: ${new Date().toISOString()}`,
                 `Mode: direct`,
@@ -213,14 +330,19 @@ export function createResearchCommand(): Command {
       await ensureResearchWorkerFactory();
 
       const orchestrator = new WideResearchOrchestrator({
-        workers,
+        items,
+        concurrency,
         maxRoundsPerWorker,
         context: opts.context,
         workerTimeoutMs,
         overallTimeoutMs,
       });
 
-      if (reportPath) {
+      // A resumable run validates/creates its checkpoint inside research(). Do
+      // not overwrite an existing Markdown report with a "Running" placeholder
+      // before that validation succeeds. Historical non-durable behavior stays
+      // unchanged.
+      if (reportPath && !durabilityRequested) {
         const outputPath = path.resolve(reportPath);
         await fs.mkdir(path.dirname(outputPath), { recursive: true });
         await fs.writeFile(
@@ -238,84 +360,213 @@ export function createResearchCommand(): Command {
       }
 
       // Hard-stop guard: avoid hanging forever because of dangling I/O handles in workers.
+      let researchSettled = false;
       const hardStopTimer = setTimeout(() => {
+        if (researchSettled) {
+          // A timed-out provider operation outlived the completed CLI result.
+          // Keep stdout single-document-safe and terminate silently.
+          process.exit(1);
+          return;
+        }
         try {
           if (reportPath) {
             const outputPath = path.resolve(reportPath);
-            fsSync.mkdirSync(path.dirname(outputPath), { recursive: true });
-            fsSync.writeFileSync(
-              outputPath,
-              [
-                `# Research Report: ${topic}`,
+            const timeoutReport = [
+                `# Research Report: ${safeTopic}`,
                 '',
                 `Generated: ${new Date().toISOString()}`,
                 `Status: Timed out after ${overallTimeoutMs}ms`,
                 '',
                 'The research process exceeded the configured timeout and was terminated.',
-              ].join('\n'),
-              'utf-8'
-            );
+              ].join('\n');
+            if (durabilityRequested) {
+              writeWideResearchTextAtomicSync(outputPath, timeoutReport);
+            } else {
+              fsSync.mkdirSync(path.dirname(outputPath), { recursive: true });
+              fsSync.writeFileSync(outputPath, timeoutReport, 'utf-8');
+            }
           }
         } catch {
           // Best effort: if writing fallback report fails, still terminate the hanging process.
         }
 
-        console.error(`\n❌ Research hard-timeout reached (${overallTimeoutMs}ms). Terminating process.`);
+        if (jsonOutput) {
+          console.log(JSON.stringify({
+            kind: 'wide_research_run',
+            status: 'failed',
+            error: `Research hard-timeout reached (${overallTimeoutMs}ms).`,
+            ...(checkpointPath ? { checkpointPath } : {}),
+          }));
+        } else {
+          console.error(`\n❌ Research hard-timeout reached (${overallTimeoutMs}ms). Terminating process.`);
+        }
         process.exit(1);
       }, hardStopTimeoutMs);
 
       // Stream progress events
-      orchestrator.on('progress', (event: { type: string; subtopics?: string[]; workerIndex?: number; subtopic?: string; success?: boolean }) => {
-        switch (event.type) {
-          case 'decomposed':
-            console.log(`\n📋 Subtopics (${event.subtopics?.length}):`);
-            event.subtopics?.forEach((s, i) => console.log(`  ${i + 1}. ${s}`));
-            console.log('');
-            break;
-          case 'worker_start':
-            console.log(`  ▶ [${event.workerIndex! + 1}] Starting: ${event.subtopic}`);
-            break;
-          case 'worker_done':
-            const icon = event.success ? '✅' : '❌';
-            console.log(`  ${icon} [${event.workerIndex! + 1}] Done: ${event.subtopic}`);
-            break;
-          case 'aggregating':
-            console.log('\n🔗 Aggregating results into final report...');
-            break;
-        }
-      });
+      if (!jsonOutput) {
+        orchestrator.on('progress', (event: { type: string; subtopics?: string[]; workerIndex?: number; subtopic?: string; success?: boolean; successCount?: number; pendingCount?: number; waveIndex?: number; waveCount?: number; itemCount?: number; completedCount?: number }) => {
+          switch (event.type) {
+            case 'resumed':
+              console.log(
+                `\n↻ Resume: ${event.successCount ?? 0} worker(s) already successful, ` +
+                  `${event.pendingCount ?? 0} pending.`,
+              );
+              break;
+            case 'decomposed':
+              console.log(`\n📋 Subtopics (${event.subtopics?.length}):`);
+              event.subtopics?.forEach((s, i) =>
+                console.log(`  ${i + 1}. ${redactWideResearchText(s, [apiKey])}`),
+              );
+              console.log('');
+              break;
+            case 'wave_start':
+              console.log(
+                `\n🌊 Wave ${event.waveIndex ?? 0}/${event.waveCount ?? 0}` +
+                  ` — ${event.itemCount ?? 0} item(s)`,
+              );
+              break;
+            case 'wave_done':
+              console.log(
+                `  💾 Wave ${event.waveIndex ?? 0}/${event.waveCount ?? 0} checkpointed` +
+                  ` — ${event.completedCount ?? 0} successful item(s)`,
+              );
+              break;
+            case 'worker_start':
+              console.log(
+                `  ▶ [${event.workerIndex! + 1}] Starting: ` +
+                  redactWideResearchText(event.subtopic ?? '', [apiKey]),
+              );
+              break;
+            case 'worker_done': {
+              const icon = event.success ? '✅' : '❌';
+              console.log(
+                `  ${icon} [${event.workerIndex! + 1}] Done: ` +
+                  redactWideResearchText(event.subtopic ?? '', [apiKey]),
+              );
+              break;
+            }
+            case 'aggregating':
+              console.log('\n🔗 Aggregating results into final report...');
+              break;
+          }
+        });
+      }
 
       try {
-        const result = await orchestrator.research(topic, apiKey, providerConfig);
+        const result = checkpointPath
+          ? await orchestrator.research(topic, apiKey, providerConfig, {
+              ...(resumeRequested
+                ? { resumePath: checkpointPath }
+                : { checkpointPath }),
+            })
+          : await orchestrator.research(topic, apiKey, providerConfig);
+        const safeResult = redactWideResearchResult(result, [apiKey]);
+        const totalWorkers = safeResult.subtopics.length;
+        const succeededWorkers = Math.min(
+          Math.max(0, safeResult.successCount),
+          totalWorkers,
+        );
+        const failedWorkers = totalWorkers - succeededWorkers;
+        const runStatus = totalWorkers > 0 && failedWorkers === 0
+          ? 'completed'
+          : succeededWorkers > 0
+            ? 'partial'
+            : 'failed';
 
-        console.log('\n' + '─'.repeat(60));
-        console.log(`✅ Research complete!`);
-        console.log(`   Workers succeeded: ${result.successCount}/${result.subtopics.length}`);
-        console.log(`   Duration: ${(result.durationMs / 1000).toFixed(1)}s`);
+        if (!jsonOutput) {
+          console.log('\n' + '─'.repeat(60));
+          if (durabilityRequested && runStatus !== 'completed') {
+            console.log(
+              runStatus === 'partial'
+                ? '⚠️ Research partial — resume is still useful.'
+                : '❌ Research workers failed — resume is required.',
+            );
+          } else {
+            console.log(`✅ Research complete!`);
+          }
+          console.log(`   Workers succeeded: ${succeededWorkers}/${totalWorkers}`);
+          console.log(`   Duration: ${(safeResult.durationMs / 1000).toFixed(1)}s`);
+        }
 
         if (reportPath) {
           const reportContent = [
-            `# Research Report: ${topic}`,
+            `# Research Report: ${safeResult.topic}`,
             ``,
             `Generated: ${new Date().toISOString()}`,
-            `Workers: ${result.successCount}/${result.subtopics.length} succeeded`,
-            `Duration: ${(result.durationMs / 1000).toFixed(1)}s`,
+            ...(durabilityRequested || jsonOutput ? [`Status: ${runStatus}`] : []),
+            `Workers: ${succeededWorkers}/${totalWorkers} succeeded`,
+            `Duration: ${(safeResult.durationMs / 1000).toFixed(1)}s`,
             ``,
             `---`,
             ``,
-            result.report,
+            safeResult.report,
           ].join('\n');
 
-          await fs.writeFile(reportPath, reportContent, 'utf-8');
-          console.log(`\n📄 Report saved: ${reportPath}`);
-        } else {
-          console.log('\n' + result.report);
+          const outputPath = path.resolve(reportPath);
+          if (durabilityRequested) {
+            await writeWideResearchTextAtomic(outputPath, reportContent);
+          } else {
+            await fs.mkdir(path.dirname(outputPath), { recursive: true });
+            await fs.writeFile(outputPath, reportContent, 'utf-8');
+          }
+          if (!jsonOutput) console.log(`\n📄 Report saved: ${reportPath}`);
+        } else if (!jsonOutput) {
+          console.log('\n' + safeResult.report);
+        }
+        if (!jsonOutput && checkpointPath) {
+          console.log(
+            `\n💾 Checkpoint ${runStatus === 'completed' ? 'complete' : 'saved for resume'}: ` +
+              checkpointPath,
+          );
+        }
+        if (jsonOutput) {
+          console.log(JSON.stringify({
+            kind: 'wide_research_run',
+            status: runStatus,
+            summary: {
+              succeeded: succeededWorkers,
+              failed: failedWorkers,
+              total: totalWorkers,
+            },
+            resumeAvailable: Boolean(checkpointPath && failedWorkers > 0),
+            checkpoint: checkpointPath
+              ? { path: checkpointPath, mode: resumeRequested ? 'resumed' : 'created' }
+              : null,
+            result: safeResult,
+          }, null, 2));
+        }
+        if ((jsonOutput || durabilityRequested) && runStatus !== 'completed') {
+          process.exitCode = 1;
         }
       } catch (err) {
-        console.error(`\n❌ Research failed: ${err instanceof Error ? err.message : String(err)}`);
-        process.exit(1);
+        const message = redactWideResearchText(
+          err instanceof Error ? err.message : String(err),
+          [apiKey],
+        );
+        if (jsonOutput) {
+          console.log(JSON.stringify({
+            kind: 'wide_research_run',
+            status: 'failed',
+            error: message,
+            ...(checkpointPath ? { checkpointPath } : {}),
+          }));
+          process.exitCode = 1;
+        } else if (durabilityRequested) {
+          console.error(`\n❌ Research checkpoint failed: ${message}`);
+          process.exitCode = 1;
+        } else {
+          console.error(`\n❌ Research failed: ${message}`);
+          process.exit(1);
+        }
       } finally {
-        clearTimeout(hardStopTimer);
+        researchSettled = true;
+        if (orchestrator.hasPendingTimedOutOperations?.()) {
+          orchestrator.once('timed_out_operations_settled', () => clearTimeout(hardStopTimer));
+          hardStopTimer.unref();
+        } else {
+          clearTimeout(hardStopTimer);
+        }
       }
     });
 

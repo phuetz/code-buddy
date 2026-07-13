@@ -27,6 +27,8 @@ import { v4 as uuidv4 } from 'uuid';
 import { PathResolver } from '../sandbox/path-resolver';
 import { MCPManager } from '../mcp/mcp-manager';
 import { mcpConfigStore } from '../mcp/mcp-config-store';
+import { AgentBaseBridge } from '../mcp/agentbase-bridge';
+import { loadCoreModule } from '../utils/core-loader';
 import {
   log,
   logWarn,
@@ -272,6 +274,69 @@ async function enrichProcessPathForBuild(): Promise<void> {
  */
 function buildMcpCustomTools(mcpManager: MCPManager): ToolDefinition[] {
   const mcpTools = mcpManager.getTools();
+  // The agent and the Settings playground must cross the same AgentBase
+  // permission, confirmation, and durable-audit boundary. Building this gate
+  // next to the custom tools prevents pi-coding-agent from retaining the old
+  // direct `mcpManager.callTool()` bypass in a cached session.
+  const agentBase = new AgentBaseBridge(
+    path.join(app.getPath('userData'), 'agentbase'),
+    {
+      listServers: () => mcpConfigStore.getServers(),
+      listStatuses: () => mcpManager.getServerStatus(),
+      listTools: () => mcpManager.getTools(),
+      listMarketplace: () => [],
+      hasOAuthState: (serverId) => Boolean(mcpConfigStore.getOAuthState(serverId)),
+      invokeTool: async (toolName, args) => {
+        const startedAt = Date.now();
+        try {
+          const result = await mcpManager.callTool(toolName, args);
+          return {
+            success: true,
+            durationMs: Date.now() - startedAt,
+            result,
+          };
+        } catch (error) {
+          return {
+            success: false,
+            durationMs: Date.now() - startedAt,
+            error: error instanceof Error ? error.message : String(error),
+          };
+        }
+      },
+      confirmExternalAction: async ({ connector, tool, argumentKeys, argumentPreview }) => {
+        const module = await loadCoreModule<{
+          ConfirmationService: {
+            getInstance(): {
+              requestConfirmation(
+                options: {
+                  operation: string;
+                  filename: string;
+                  content?: string;
+                  forcePrompt?: boolean;
+                },
+                operationType?: 'file' | 'bash'
+              ): Promise<{ confirmed: boolean; feedback?: string }>;
+            };
+          };
+        }>('utils/confirmation-service.js');
+        if (!module) {
+          return { confirmed: false, feedback: 'Confirmation service unavailable' };
+        }
+        return module.ConfirmationService.getInstance().requestConfirmation(
+          {
+            operation: `Agent MCP action: ${connector.name} / ${tool.name}`,
+            filename: `mcp://${connector.id}/${encodeURIComponent(tool.name)}`,
+            content:
+              `Permission: ${tool.permission}\n`
+              + `Argument keys: ${argumentKeys.join(', ') || '(none)'}\n`
+              + `Reviewed arguments:\n${argumentPreview}`,
+            forcePrompt: true,
+          },
+          'file'
+        );
+      },
+    }
+  );
   return mcpTools.map((mcpTool) => {
     // Wrap the raw JSON Schema inputSchema as a TypeBox TSchema
     const parameters = Type.Unsafe<Record<string, unknown>>(
@@ -285,7 +350,15 @@ function buildMcpCustomTools(mcpManager: MCPManager): ToolDefinition[] {
       parameters,
       async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
         try {
-          const result = await mcpManager.callTool(mcpTool.name, params as Record<string, unknown>);
+          const invocation = await agentBase.invoke({
+            connectorId: mcpTool.serverId,
+            toolName: mcpTool.name,
+            args: params as Record<string, unknown>,
+          });
+          if (!invocation.success) {
+            throw new Error(invocation.error ?? 'AgentBase denied the MCP tool invocation');
+          }
+          const result = invocation.result;
           // MCP callTool returns { content: [...] } — extract text
           const textParts: string[] = [];
           const resultObj = result as Record<string, unknown>;
@@ -1284,8 +1357,10 @@ ${hints.join('\n')}
       logTiming('before pi-ai model resolution', runStartTime);
 
       // Resolve model via pi-ai
-      const runtimeConfig = configStore.getAll();
-      const modelString = this.getCurrentModelString(runtimeConfig.model);
+      const runtimeConfig = session.intelligence?.configSetId
+        ? configStore.getConfigForSet(session.intelligence.configSetId)
+        : configStore.getAll();
+      const modelString = this.getCurrentModelString(session.model || runtimeConfig.model);
       const configProtocol = resolvePiRouteProtocol(
         runtimeConfig.provider,
         runtimeConfig.customProtocol
@@ -1516,7 +1591,7 @@ ${hints.join('\n')}
       ];
       // `thinkingLevel` is a P1.3 addition not yet in the AppConfig type
       // (lives in the runtime config store). Cast via unknown to read it.
-      const explicitLevel = (configStore as unknown as { get: (k: string) => unknown }).get(
+      const explicitLevel = session.intelligence?.thinkingLevel ?? (configStore as unknown as { get: (k: string) => unknown }).get(
         'thinkingLevel'
       ) as PiThinkingLevel | undefined;
       const enableThinking = configStore.get('enableThinking') ?? false;

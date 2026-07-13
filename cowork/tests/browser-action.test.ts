@@ -63,4 +63,16 @@ describe('buildBrowserActionPayload', () => {
     expect(p.action).toBe('browser');
     expect(p.details).toEqual({});
   });
+
+  it('forwards only the structured browser_operator draft needed by the review gate', () => {
+    const operatorDraft = { schemaVersion: 1, sessionId: 'proposal', goal: 'Open docs' };
+    const payload = buildBrowserActionPayload({
+      ...base,
+      toolName: 'browser_operator',
+      data: { draft: operatorDraft, plan: { privatePlanningDetail: true } },
+    });
+
+    expect(payload.details?.operatorDraft).toEqual(operatorDraft);
+    expect(payload.details).not.toHaveProperty('plan');
+  });
 });

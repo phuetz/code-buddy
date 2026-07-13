@@ -14,9 +14,12 @@ reprenables.
 
 ## 6.2 Projets
 
-Un **projet** est un profil d'espace de travail — un dossier plus ses propres réglages et sa mémoire.
-Créez et changez de projet depuis le sélecteur de la barre latérale ou **Réglages → Projects**.
-Utilisez les projets pour garder séparées des codebases sans rapport (et leurs mémoires).
+Un **projet** est un Hub local — un dossier plus ses propres réglages, son instruction maître, sa
+petite base documentaire et sa mémoire. Créez et changez de projet depuis le sélecteur de la barre
+latérale ou **Réglages → Projects**. Chaque session du projet reçoit automatiquement l'instruction
+et les fichiers texte explicitement listés. Les chemins restent confinés au dossier du projet ;
+Cowork refuse les sorties de dossier, les binaires et les fichiers sensibles comme `.env` ou les
+clés privées. Le mode mémoire manuel coupe la mémoire apprise, pas l'instruction explicite.
 
 ## 6.3 Reprendre le travail
 
@@ -39,7 +42,24 @@ Mettez une étoile sur n'importe quel message pour le mettre en **favori**. Le p
 (icône étoile) les rassemble entre projets, avec recherche et navigation en un clic vers le message
 d'origine — pratique pour garder de bons extraits, des décisions ou des résultats.
 
-## 6.6 Insights, coût & audit
+## 6.6 Branches de conversation
+
+Survolez un message utilisateur ou assistant puis cliquez sur l'icône de
+**bifurcation** pour créer une branche à cet endroit. Le message sélectionné
+est inclus dans la nouvelle branche. Cowork sauvegarde les historiques dans la
+même base SQLite que la conversation active, puis restaure réellement les
+messages du checkout — ce n'est pas un simple libellé visuel.
+
+Le sélecteur de branche dans l'en-tête permet de revenir à `main` ou à une
+alternative. Avant chaque changement, l'historique sortant est sauvegardé dans
+une transaction ; les identifiants de thread distants et le cache du moteur
+sont invalidés pour éviter que le contexte caché d'une branche contamine
+l'autre. Le journal de reprise de la branche sortante est archivé hors du
+chemin de récupération avant le commit SQLite : un redémarrage ne peut donc
+pas réinjecter un ancien tour dans la nouvelle branche. Un checkout/fork est
+refusé pendant un tour actif ou en attente.
+
+## 6.7 Insights, coût & audit
 
 - **Insights de session** (`Cmd/Ctrl+Maj+I`) — un résumé par session : usage de tokens, coût, appels
   d'outils, temps passé, et une trace rejouable.
@@ -54,7 +74,7 @@ d'origine — pratique pour garder de bons extraits, des décisions ou des résu
 
 > _[capture : insights de session]_
 
-## 6.7 Export & partage
+## 6.8 Export & partage
 
 Exportez une session depuis la barre latérale (survol → télécharger) ou la commande `/export` — en
 **JSON** (données complètes), **Markdown** (transcription lisible), ou d'autres formats. Une option

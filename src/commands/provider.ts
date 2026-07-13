@@ -33,7 +33,9 @@ interface ProviderInfo {
 
 const PROVIDER_COMMAND_KEYS: Record<RuntimeProviderId, string> = {
   chatgpt: 'chatgpt',
+  'agy-cli': 'agy-cli',
   ollama: 'ollama',
+  lemonade: 'lemonade',
   'ollama-cloud': 'ollama-cloud',
   lmstudio: 'lmstudio',
   grok: 'grok',

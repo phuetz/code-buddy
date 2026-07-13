@@ -77,7 +77,8 @@ interface MockHealingResult {
   fixedCommand?: string;
   finalResult?: { success: boolean; output?: string; error?: string };
 }
-const mockAttemptHealing = jest.fn((): Promise<MockHealingResult> =>
+type MockFixExecutor = (command: string) => Promise<{ success: boolean; output?: string; error?: string }>;
+const mockAttemptHealing = jest.fn((_command?: string, _error?: string, _executeFix?: MockFixExecutor): Promise<MockHealingResult> =>
   Promise.resolve({ success: false, attempts: [] })
 );
 
@@ -146,6 +147,55 @@ jest.mock('../../src/sandbox/auto-sandbox', () => ({
   getAutoSandboxRouter: jest.fn(function() { return {
     route: jest.fn().mockResolvedValue({ mode: 'direct' }),
   }; }),
+}));
+
+const { mockEvaluateShellExecution, mockExecuteInWorkspaceSandbox } = vi.hoisted(() => ({
+  mockEvaluateShellExecution: vi.fn(async (command: string) => ({
+    action: /^(?:npm install|sudo|su |netcat|chown|mount|crontab)/.test(command) ? 'ask'
+      : /(?:^|\s)(?:rm|chmod|touch)(?:\s|$)/.test(command) ? 'sandbox'
+      : 'allow',
+    reason: 'unit-test policy',
+    approvalKey: `unit:${command}`,
+    parsedSegments: [],
+    segmentEvaluations: [],
+    complex: false,
+    command,
+    args: [],
+    workDir: '/workspace',
+    matchedRule: null,
+    constraints: {},
+    timestamp: 1,
+  })),
+  mockExecuteInWorkspaceSandbox: vi.fn(async () => ({
+    available: true,
+    result: {
+      exitCode: 0,
+      stdout: '',
+      stderr: '',
+      duration: 1,
+      timedOut: false,
+      backend: 'docker',
+      sandboxed: true,
+    },
+  })),
+}));
+
+const mockRewriteCommandWithRtk = vi.hoisted(() => vi.fn(async (command: string) => ({
+  originalCommand: command,
+  command,
+  rewritten: false,
+  reason: 'disabled',
+})));
+
+jest.mock('../../src/tools/bash/rtk-rewrite', () => ({
+  rewriteCommandWithRtk: mockRewriteCommandWithRtk,
+}));
+
+jest.mock('../../src/tools/bash/execution-policy', () => ({
+  evaluateShellExecution: mockEvaluateShellExecution,
+  executableIdentitiesStillMatch: jest.fn(() => true),
+  executeInWorkspaceSandbox: mockExecuteInWorkspaceSandbox,
+  isSandboxBoundaryFailure: jest.fn(() => false),
 }));
 
 // Mock command-validator
@@ -668,8 +718,7 @@ describe('BashTool', () => {
         feedback: 'User declined',
       });
 
-      // Use a safe command that isn't blocked
-      const result = await bashTool.execute('touch newfile.txt');
+      const result = await bashTool.execute('npm install');
 
       expect(result.success).toBe(false);
       expect(result.error).toContain('User declined');
@@ -679,11 +728,33 @@ describe('BashTool', () => {
       mockGetSessionFlags.mockReturnValueOnce({ bashCommands: false, allOperations: false });
       mockRequestConfirmation.mockResolvedValueOnce({ confirmed: false });
 
-      // Use a safe command that isn't blocked
-      const result = await bashTool.execute('touch newfile.txt');
+      const result = await bashTool.execute('npm install');
 
       expect(result.success).toBe(false);
       expect(result.error).toContain('cancelled by user');
+    });
+
+    it('authorizes the RTK-transformed command rather than the original text', async () => {
+      mockRewriteCommandWithRtk.mockResolvedValueOnce({
+        originalCommand: 'echo harmless',
+        command: 'npm install',
+        rewritten: true,
+      });
+      mockRequestConfirmation.mockResolvedValueOnce({ confirmed: false, feedback: 'deny transformed' });
+
+      const result = await bashTool.execute('echo harmless');
+
+      expect(mockEvaluateShellExecution).toHaveBeenCalledWith('npm install', expect.any(String));
+      expect(mockRequestConfirmation).toHaveBeenCalledWith(
+        expect.objectContaining({
+          filename: 'npm install',
+          content: expect.stringContaining('Transformed command: npm install'),
+          approvalKey: 'unit:npm install',
+        }),
+        'bash',
+      );
+      expect(result).toMatchObject({ success: false, error: 'deny transformed' });
+      expect(mockSpawn).not.toHaveBeenCalled();
     });
   });
 
@@ -830,6 +901,36 @@ describe('BashTool', () => {
       expect(result.success).toBe(true);
       expect(result.output).toContain('Self-healed');
       expect(result.output).toContain('fixed-command');
+    });
+
+    it('routes a proposed fix through policy and blocks it before host spawn when denied', async () => {
+      const mockProcess = createMockChildProcess();
+      mockSpawn.mockReturnValue(mockProcess);
+      mockRequestConfirmation.mockResolvedValueOnce({
+        confirmed: false,
+        feedback: 'repair escalation denied',
+      });
+      mockAttemptHealing.mockImplementationOnce(async (_command, _error, executeFix) => {
+        const finalResult = await executeFix!('npm install');
+        return {
+          success: false,
+          attempts: [{ pattern: 'repair', fix: 'npm install' }],
+          fixedCommand: 'npm install',
+          finalResult,
+        };
+      });
+
+      emitAfterSpawn(mockProcess, { stderr: 'original failure', exitCode: 1 });
+      const result = await bashTool.execute('broken-command');
+
+      expect(mockEvaluateShellExecution).toHaveBeenCalledWith('npm install', expect.any(String));
+      expect(mockRequestConfirmation).toHaveBeenCalledWith(
+        expect.objectContaining({ filename: 'npm install' }),
+        'bash',
+      );
+      expect(mockSpawn).toHaveBeenCalledTimes(1);
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('Self-healing attempted');
     });
 
     it('should include healing attempt info on failed healing', async () => {
@@ -1273,22 +1374,12 @@ describe('BashTool Security Bypass Prevention', () => {
 
   describe('Base Command Blocklist', () => {
     const blockedCmds = [
-      { cmd: 'rm file.txt', name: 'rm' },
-      { cmd: '/bin/rm file.txt', name: 'rm with path' },
-      { cmd: './rm file.txt', name: 'rm with ./' },
-      { cmd: 'sudo ls', name: 'sudo' },
-      { cmd: 'su - root', name: 'su' },
       { cmd: 'nc -l 8080', name: 'nc listen' },
-      { cmd: 'netcat localhost 80', name: 'netcat' },
       { cmd: 'dd if=/dev/zero', name: 'dd' },
-      { cmd: 'chmod 777 file', name: 'chmod' },
-      { cmd: 'chown root file', name: 'chown' },
       { cmd: 'mkfs.ext4 /dev/sda', name: 'mkfs' },
-      { cmd: 'mount /dev/sda /mnt', name: 'mount' },
       { cmd: 'reboot', name: 'reboot' },
       { cmd: 'shutdown -h now', name: 'shutdown' },
       { cmd: 'passwd user', name: 'passwd' },
-      { cmd: 'crontab -e', name: 'crontab' },
     ];
 
     test.each(blockedCmds)(
@@ -1435,17 +1526,16 @@ describe('BashTool Security Bypass Prevention', () => {
   });
 
   describe('Command with Environment Variable Prefix', () => {
-    it('should extract base command after env var assignments', async () => {
-      // ENV=value rm should still block rm
+    it('should sandbox a mutation after an env assignment', async () => {
       const result = await bashTool.execute('PATH=/tmp rm file.txt');
-      expect(result.success).toBe(false);
-      expect(result.error).toContain('blocked');
+      expect(result.success).toBe(true);
+      expect(mockExecuteInWorkspaceSandbox).toHaveBeenCalled();
     });
 
-    it('should handle multiple env var assignments', async () => {
+    it('should sandbox a mutation after multiple env assignments', async () => {
       const result = await bashTool.execute('VAR1=a VAR2=b VAR3=c rm file');
-      expect(result.success).toBe(false);
-      expect(result.error).toContain('blocked');
+      expect(result.success).toBe(true);
+      expect(mockExecuteInWorkspaceSandbox).toHaveBeenCalled();
     });
   });
 });

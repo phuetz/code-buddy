@@ -756,6 +756,7 @@ export function LLMConfigPanel({
                   <button
                     type="button"
                     onClick={controller.toggleCustomModel}
+                    data-testid="llm-toggle-model-preset"
                     className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs transition-colors ${
                       controller.useCustomModel
                         ? 'bg-accent-muted text-accent'

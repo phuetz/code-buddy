@@ -15,6 +15,7 @@ export const OPENROUTER_PROVIDER_ID = 'bundled-openrouter';
 export function createOpenRouterProvider(): PluginProvider | null {
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) return null;
+  const model = process.env.OPENROUTER_MODEL?.trim() || 'openrouter/free';
 
   return {
     id: OPENROUTER_PROVIDER_ID,
@@ -44,7 +45,7 @@ export function createOpenRouterProvider(): PluginProvider | null {
           'X-Title': 'Code Buddy',
         },
         body: JSON.stringify({
-          model: 'openai/gpt-4o',
+          model,
           messages,
           max_tokens: 4096,
           stream: false,

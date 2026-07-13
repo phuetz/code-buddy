@@ -136,16 +136,212 @@ function extractPrimaryArg(toolName: string, toolArgs: Record<string, unknown>):
   );
 }
 
+interface BashCommandAnalysis {
+  /** Top-level commands separated by shell control operators. */
+  commands: string[];
+  /** Commands nested in executable substitutions, used for strict deny matching. */
+  nestedCommands: string[];
+  /** Syntax that must never be auto-approved by a broad allow rule. */
+  unsafeForAllow: boolean;
+}
+
+type ShellQuote = 'none' | 'single' | 'double' | 'backtick';
+
+/** Find the closing parenthesis for a shell substitution starting at `openIndex`. */
+function findClosingParen(input: string, openIndex: number): number {
+  let depth = 0;
+  let quote: ShellQuote = 'none';
+  let escaped = false;
+
+  for (let i = openIndex; i < input.length; i++) {
+    const ch = input[i];
+
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+    if (ch === '\\' && quote !== 'single') {
+      escaped = true;
+      continue;
+    }
+
+    if (quote === 'single') {
+      if (ch === "'") quote = 'none';
+      continue;
+    }
+    if (quote === 'double') {
+      if (ch === '"') quote = 'none';
+      continue;
+    }
+    if (quote === 'backtick') {
+      if (ch === '`') quote = 'none';
+      continue;
+    }
+
+    if (ch === "'") {
+      quote = 'single';
+    } else if (ch === '"') {
+      quote = 'double';
+    } else if (ch === '`') {
+      quote = 'backtick';
+    } else if (ch === '(') {
+      depth++;
+    } else if (ch === ')') {
+      depth--;
+      if (depth === 0) return i;
+    }
+  }
+
+  return -1;
+}
+
+function findClosingBacktick(input: string, openIndex: number): number {
+  let escaped = false;
+  for (let i = openIndex + 1; i < input.length; i++) {
+    const ch = input[i];
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+    if (ch === '\\') {
+      escaped = true;
+      continue;
+    }
+    if (ch === '`') return i;
+  }
+  return -1;
+}
+
 /**
- * For compound bash commands (e.g. "npm test && git push"),
- * split into individual commands for per-command matching.
+ * Analyze shell control operators without treating quoted text as executable.
+ *
+ * Command/process substitutions are deliberately never auto-approved: a rule
+ * matching the visible outer command cannot describe the command executed by
+ * the shell at runtime. Their contents are still collected so deny rules keep
+ * strict precedence.
  */
-function splitBashCommands(command: string): string[] {
-  // Split on && || ; |
-  return command
-    .split(/\s*(?:&&|\|\||;)\s*/)
-    .map(c => c.trim())
-    .filter(c => c.length > 0);
+function analyzeBashCommand(command: string, depth: number = 0): BashCommandAnalysis {
+  if (depth > 8) {
+    return { commands: [command.trim()].filter(Boolean), nestedCommands: [], unsafeForAllow: true };
+  }
+
+  const commands: string[] = [];
+  const nestedCommands: string[] = [];
+  let current = '';
+  let quote: Exclude<ShellQuote, 'backtick'> = 'none';
+  let escaped = false;
+  let unsafeForAllow = false;
+  let justSplit = false;
+
+  const pushCurrent = (): void => {
+    const segment = current.trim();
+    if (segment) {
+      commands.push(segment);
+    } else {
+      unsafeForAllow = true;
+    }
+    current = '';
+    justSplit = true;
+  };
+
+  for (let i = 0; i < command.length; i++) {
+    const ch = command[i];
+    const next = command[i + 1];
+
+    if (escaped) {
+      current += ch;
+      escaped = false;
+      justSplit = false;
+      continue;
+    }
+    if (ch === '\\' && quote !== 'single') {
+      current += ch;
+      escaped = true;
+      justSplit = false;
+      continue;
+    }
+
+    if (quote === 'single') {
+      current += ch;
+      if (ch === "'") quote = 'none';
+      justSplit = false;
+      continue;
+    }
+    if (ch === "'" && quote === 'none') {
+      quote = 'single';
+      current += ch;
+      justSplit = false;
+      continue;
+    }
+    if (ch === '"') {
+      quote = quote === 'double' ? 'none' : 'double';
+      current += ch;
+      justSplit = false;
+      continue;
+    }
+
+    // Backticks execute even inside double quotes, but are literals in single quotes.
+    if (ch === '`') {
+      unsafeForAllow = true;
+      const closing = findClosingBacktick(command, i);
+      if (closing < 0) {
+        current += command.slice(i);
+        i = command.length;
+        break;
+      }
+      const inner = analyzeBashCommand(command.slice(i + 1, closing), depth + 1);
+      nestedCommands.push(...inner.commands, ...inner.nestedCommands);
+      current += command.slice(i, closing + 1);
+      i = closing;
+      justSplit = false;
+      continue;
+    }
+
+    const isCommandSubstitution = ch === '$' && next === '(';
+    const isProcessSubstitution = quote === 'none' && (ch === '<' || ch === '>') && next === '(';
+    if (isCommandSubstitution || isProcessSubstitution) {
+      unsafeForAllow = true;
+      const openIndex = i + 1;
+      const closing = findClosingParen(command, openIndex);
+      if (closing < 0) {
+        current += command.slice(i);
+        i = command.length;
+        break;
+      }
+      const inner = analyzeBashCommand(command.slice(openIndex + 1, closing), depth + 1);
+      nestedCommands.push(...inner.commands, ...inner.nestedCommands);
+      current += command.slice(i, closing + 1);
+      i = closing;
+      justSplit = false;
+      continue;
+    }
+
+    if (quote === 'none') {
+      if ((ch === '&' && next === '&') || (ch === '|' && next === '|')) {
+        pushCurrent();
+        i++;
+        continue;
+      }
+      if (ch === '|' || ch === ';' || ch === '\n' || (ch === '&' && next !== '>')) {
+        pushCurrent();
+        continue;
+      }
+      // Parenthesized groups and subshells need a richer policy than a prefix glob.
+      if (ch === '(' || ch === ')') unsafeForAllow = true;
+    }
+
+    current += ch;
+    justSplit = false;
+  }
+
+  if (current.trim()) {
+    commands.push(current.trim());
+  } else if (justSplit) {
+    unsafeForAllow = true;
+  }
+  if (quote !== 'none' || escaped || commands.length === 0) unsafeForAllow = true;
+
+  return { commands, nestedCommands, unsafeForAllow };
 }
 
 // ============================================================================
@@ -199,7 +395,12 @@ export function loadPermissions(projectRoot: string = process.cwd()): Declarativ
 /**
  * Check a single rule against a tool call.
  */
-function matchesRule(rule: string, toolName: string, primaryArg: string | null): boolean {
+function matchesRule(
+  rule: string,
+  toolName: string,
+  primaryArg: string | null,
+  projectRoot: string,
+): boolean {
   const parsed = parseRule(rule);
 
   // Tool name must match (case-insensitive)
@@ -242,8 +443,6 @@ function matchesRule(rule: string, toolName: string, primaryArg: string | null):
   if (isPathTool && (parsed.argPattern.includes('/') || parsed.argPattern.startsWith('~') || parsed.argPattern.includes('**'))) {
     // Parse comma-separated patterns with potential negation
     const patterns = parsed.argPattern.split(',').map(p => p.trim());
-    const projectRoot = process.cwd();
-
     // Resolve path prefixes (~/, //, /)
     const resolvedPatterns = patterns.map(p => {
       const isNeg = p.startsWith('!');
@@ -284,51 +483,64 @@ export function explainDeclarativePermission(
   projectRoot: string = process.cwd(),
 ): DeclarativePermissionExplanation {
   const permissions = loadPermissions(projectRoot);
-  return explainDeclarativePermissionFromPermissions(toolName, toolArgs, permissions);
+  return explainDeclarativePermissionFromPermissions(toolName, toolArgs, permissions, projectRoot);
 }
 
 export function explainDeclarativePermissionFromPermissions(
   toolName: string,
   toolArgs: Record<string, unknown>,
   permissions: DeclarativePermissions,
+  projectRoot: string = process.cwd(),
 ): DeclarativePermissionExplanation {
   const primaryArg = extractPrimaryArg(toolName, toolArgs);
 
-  // For compound bash commands, ALL sub-commands must be allowed
+  // Bash control operators are evaluated command by command. Deny rules are
+  // checked against the raw command too, so parsing can never weaken a deny.
   if ((toolName.toLowerCase() === 'bash' || toolName.toLowerCase() === 'shell_exec') && primaryArg) {
-    const subCommands = splitBashCommands(primaryArg);
-    if (subCommands.length > 1) {
-      // Check deny first — any denied sub-command blocks everything
-      for (const sub of subCommands) {
-        const subResult = explainSingleCommand(toolName, sub, permissions);
-        if (subResult.decision === 'deny') {
-          logger.debug(`Declarative deny: compound command blocked by "${sub}"`);
-          return subResult;
-        }
+    const analysis = analyzeBashCommand(primaryArg);
+    const denyCandidates = [primaryArg, ...analysis.commands, ...analysis.nestedCommands];
+
+    for (const candidate of [...new Set(denyCandidates)]) {
+      const deniedBy = findMatchingRule(permissions.deny, toolName, candidate, projectRoot);
+      if (deniedBy) {
+        logger.debug(`Declarative deny: Bash command blocked by "${candidate}"`);
+        return { decision: 'deny', matchedRule: deniedBy };
       }
-      // Then check allow — all must be allowed
-      let matchedRule: string | undefined;
-      for (const sub of subCommands) {
-        const subResult = explainSingleCommand(toolName, sub, permissions);
-        if (subResult.decision !== 'allow') return { decision: 'ask' };
-        matchedRule ||= subResult.matchedRule;
-      }
-      return { decision: 'allow', matchedRule };
     }
+
+    if (analysis.unsafeForAllow) return { decision: 'ask' };
+
+    let matchedRule: string | undefined;
+    for (const command of analysis.commands) {
+      const allowedBy = findMatchingRule(permissions.allow, toolName, command, projectRoot);
+      if (!allowedBy) return { decision: 'ask' };
+      matchedRule ||= allowedBy;
+    }
+    return matchedRule ? { decision: 'allow', matchedRule } : { decision: 'ask' };
   }
 
-  return explainSingleCommand(toolName, primaryArg, permissions);
+  return explainSingleCommand(toolName, primaryArg, permissions, projectRoot);
+}
+
+function findMatchingRule(
+  rules: string[] | undefined,
+  toolName: string,
+  primaryArg: string | null,
+  projectRoot: string,
+): string | undefined {
+  return rules?.find((rule) => matchesRule(rule, toolName, primaryArg, projectRoot));
 }
 
 function explainSingleCommand(
   toolName: string,
   primaryArg: string | null,
   permissions: DeclarativePermissions,
+  projectRoot: string,
 ): DeclarativePermissionExplanation {
   // Deny rules take precedence
   if (permissions.deny) {
     for (const rule of permissions.deny) {
-      if (matchesRule(rule, toolName, primaryArg)) {
+      if (matchesRule(rule, toolName, primaryArg, projectRoot)) {
         logger.debug(`Declarative deny: ${toolName} matched rule "${rule}"`);
         return { decision: 'deny', matchedRule: rule };
       }
@@ -338,7 +550,7 @@ function explainSingleCommand(
   // Then check allow rules
   if (permissions.allow) {
     for (const rule of permissions.allow) {
-      if (matchesRule(rule, toolName, primaryArg)) {
+      if (matchesRule(rule, toolName, primaryArg, projectRoot)) {
         logger.debug(`Declarative allow: ${toolName} matched rule "${rule}"`);
         return { decision: 'allow', matchedRule: rule };
       }

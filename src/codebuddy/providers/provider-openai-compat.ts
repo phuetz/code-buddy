@@ -58,6 +58,7 @@ interface ChatRequestPayload extends Omit<ChatCompletionCreateParamsNonStreaming
   search_parameters?: SearchParameters;
   thinking?: { type: 'enabled'; budget_tokens: number };
   service_tier?: 'auto' | 'default' | 'flex';
+  chat_template_kwargs?: { enable_thinking: boolean };
 }
 
 interface ChatRequestPayloadStreaming extends Omit<ChatCompletionCreateParamsStreaming, 'tools' | 'tool_choice'> {
@@ -66,6 +67,7 @@ interface ChatRequestPayloadStreaming extends Omit<ChatCompletionCreateParamsStr
   search_parameters?: SearchParameters;
   thinking?: { type: 'enabled'; budget_tokens: number };
   service_tier?: 'auto' | 'default' | 'flex';
+  chat_template_kwargs?: { enable_thinking: boolean };
 }
 
 export interface OpenAICompatProviderOptions {
@@ -262,6 +264,23 @@ export class OpenAICompatProvider implements Provider {
       if (value) return value;
     }
     return undefined;
+  }
+
+  /**
+   * Qwen reasoning models served by Lemonade enable hidden thinking by
+   * default. That is useful for deep work but disastrous for a conversational
+   * fast path: a short answer can spend tens of seconds in reasoning before
+   * emitting visible text. Disable it by default on Lemonade; an operator can
+   * opt back in for deliberate jobs with CODEBUDDY_LEMONADE_THINKING=1.
+   */
+  private getLemonadeChatTemplateKwargs(): { enable_thinking: boolean } | undefined {
+    const url = this.baseURL.toLowerCase().replace(/\/+$/, '');
+    const configured = process.env.LEMONADE_HOST?.trim().toLowerCase().replace(/\/+$/, '');
+    const isLemonade = /:13305(?:\/|$)/.test(url) || Boolean(configured && url.startsWith(configured));
+    if (!isLemonade) return undefined;
+    return {
+      enable_thinking: this.readBooleanEnv('CODEBUDDY_LEMONADE_THINKING') ?? false,
+    };
   }
 
   /**
@@ -636,6 +655,7 @@ export class OpenAICompatProvider implements Provider {
         temperature: opts.temperature ?? 0.7,
         max_tokens: opts.maxTokens ?? this.defaultMaxTokens,
       };
+      requestPayload.chat_template_kwargs = this.getLemonadeChatTemplateKwargs();
       const openRouterProviderRouting = this.getOpenRouterProviderRouting();
       if (openRouterProviderRouting) {
         (requestPayload as unknown as Record<string, unknown>).provider = openRouterProviderRouting;
@@ -681,14 +701,13 @@ export class OpenAICompatProvider implements Provider {
         const response = await this.withCircuitBreaker(opts.circuitBreaker, () =>
           retry(
             async () => {
-              return await this.client.chat.completions.create(
-                requestPayload as unknown as ChatCompletionCreateParamsNonStreaming,
-                // Additive: thread the caller's AbortSignal to the transport so a
-                // barge-in / cancellation aborts the in-flight HTTP request. When
-                // opts.signal is undefined this is `create(payload, undefined)` —
-                // byte-identical to the pre-signal `create(payload)`.
-                opts.signal ? { signal: opts.signal } : undefined,
-              );
+              const payload = requestPayload as unknown as ChatCompletionCreateParamsNonStreaming;
+              // Preserve the one-argument SDK call when there is no signal. Apart
+              // from keeping existing adapters compatible, this avoids presenting
+              // `undefined` as an intentional transport-options override.
+              return opts.signal
+                ? await this.client.chat.completions.create(payload, { signal: opts.signal })
+                : await this.client.chat.completions.create(payload);
             },
             {
               ...RetryStrategies.llmApi,
@@ -806,6 +825,11 @@ export class OpenAICompatProvider implements Provider {
         temperature: opts.temperature ?? 0.7,
         max_tokens: opts.maxTokens ?? this.defaultMaxTokens,
       };
+      const lemonadeChatTemplateKwargs = this.getLemonadeChatTemplateKwargs();
+      if (lemonadeChatTemplateKwargs) {
+        (requestPayload as unknown as Record<string, unknown>).chat_template_kwargs =
+          lemonadeChatTemplateKwargs;
+      }
       const openRouterProviderRouting = this.getOpenRouterProviderRouting();
       if (openRouterProviderRouting) {
         (requestPayload as unknown as Record<string, unknown>).provider = openRouterProviderRouting;
@@ -836,11 +860,10 @@ export class OpenAICompatProvider implements Provider {
       const stream = await this.withCircuitBreaker(opts.circuitBreaker, () =>
         retry(
           async () => {
-            return await this.client.chat.completions.create(
-              streamingPayload as unknown as ChatCompletionCreateParamsStreaming,
-              // Additive AbortSignal threading (see chat()). Undefined ⇒ unchanged.
-              opts.signal ? { signal: opts.signal } : undefined,
-            );
+            const payload = streamingPayload as unknown as ChatCompletionCreateParamsStreaming;
+            return opts.signal
+              ? await this.client.chat.completions.create(payload, { signal: opts.signal })
+              : await this.client.chat.completions.create(payload);
           },
           {
             ...RetryStrategies.llmApi,

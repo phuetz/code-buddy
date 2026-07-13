@@ -28,7 +28,7 @@ files:
   - node_modules/electron-updater/**/*
   - node_modules/chokidar/**/*
   - node_modules/archiver/**/*
-  - node_modules/ngrok/**/*
+  - node_modules/@ngrok/**/*
   - node_modules/ws/**/*
   - node_modules/glob/**/*
   - node_modules/dotenv/**/*
@@ -63,6 +63,7 @@ asarUnpack:
   - node_modules/better-sqlite3/**/*.node
   - node_modules/bufferutil/**/*.node
   - node_modules/utf-8-validate/**/*.node
+  - node_modules/@ngrok/**/*.node
 
 win:
   icon: resources/icon.ico

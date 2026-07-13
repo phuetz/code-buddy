@@ -86,12 +86,12 @@ function makeDb(): DatabaseInstance {
 }
 
 describe('SessionManager memory strategy', () => {
-  it('skips automated memory injection and writeback in manual mode', async () => {
+  it('keeps explicit project context but skips learned-memory recall and writeback in manual mode', async () => {
     const db = makeDb();
     const manager = new SessionManager(db, vi.fn());
 
     const projectMemory = {
-      loadProjectContext: vi.fn(async () => '<project_memory>ctx</project_memory>'),
+      loadProjectContext: vi.fn(async () => '<project_instructions>ctx</project_instructions>'),
       consolidateSessionMemory: vi.fn(async () => ({ added: 1, duplicatesSkipped: 0, memoryDir: '/tmp' })),
     };
     const icmIntegration = {
@@ -129,7 +129,9 @@ describe('SessionManager memory strategy', () => {
       processPrompt(session: Session, prompt: string, content?: ContentBlock[]): Promise<void>;
     }).processPrompt(session, 'Remember this exact fact.', content);
 
-    expect(projectMemory.loadProjectContext).not.toHaveBeenCalled();
+    expect(projectMemory.loadProjectContext).toHaveBeenCalledWith('project-1', {
+      includeMemory: false,
+    });
     expect(projectMemory.consolidateSessionMemory).not.toHaveBeenCalled();
     expect(icmIntegration.searchRelevantMemories).not.toHaveBeenCalled();
     expect(icmIntegration.storeEpisode).not.toHaveBeenCalled();

@@ -247,6 +247,15 @@ export const VOICE_INTERACTIONS: VoiceInteraction[] = [
     ],
   },
   {
+    id: 'stop-speaking',
+    category: 'voice-control',
+    examples: ['Lisa, stop', 'Arrête', 'Attends une seconde'],
+    reply: 'D’accord, je m’arrête.',
+    patterns: [
+      lisaCommand('stop|arrete|arrete de parler|attends|attends une seconde|une seconde|tais toi'),
+    ],
+  },
+  {
     id: 'repeat',
     category: 'voice-control',
     examples: ['Répète', 'Je n’ai pas compris'],

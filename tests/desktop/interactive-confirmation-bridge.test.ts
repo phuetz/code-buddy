@@ -23,6 +23,7 @@ beforeEach(() => {
 
 afterEach(() => {
   Object.defineProperty(process.stdin, 'isTTY', { value: originalIsTTY, configurable: true });
+  delete process.env.CODEBUDDY_AUTO_CONFIRM;
   (ConfirmationService as unknown as { instance?: ConfirmationService }).instance = undefined;
 });
 
@@ -74,6 +75,29 @@ describe('ConfirmationService.setInteractiveBridge', () => {
     expect(second.confirmed).toBe(true);
     expect(bridgeCalls).toBe(0);
     service.dispose();
+  });
+
+  it('forcePrompt bypasses auto-confirm and session flags for externally visible effects', async () => {
+    const service = freshService();
+    process.env.CODEBUDDY_AUTO_CONFIRM = 'true';
+    service.setSessionFlag('allOperations', true);
+    let bridgeCalls = 0;
+    service.setInteractiveBridge(async () => {
+      bridgeCalls++;
+      return { confirmed: false, feedback: 'interaction refusée' };
+    });
+
+    const result = await service.requestConfirmation({
+      operation: 'browser_write',
+      filename: 'click',
+      content: 'Cliquer sur le bouton relu',
+      forcePrompt: true,
+    });
+
+    expect(result).toMatchObject({ confirmed: false, feedback: 'interaction refusée' });
+    expect(bridgeCalls).toBe(1);
+    service.dispose();
+    delete process.env.CODEBUDDY_AUTO_CONFIRM;
   });
 });
 

@@ -10,12 +10,20 @@ import { EventEmitter } from 'events';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
+import { createHash } from 'node:crypto';
+import { parseBashCommand } from '../security/bash-parser.js';
 
 // ============================================================================
 // Types
 // ============================================================================
 
 export type PolicyAction = 'allow' | 'deny' | 'ask' | 'sandbox';
+
+const UNSAFE_BARE_PREFIXES = new Set([
+  'bash', 'sh', 'zsh', 'fish', 'dash', 'ksh',
+  'python', 'python3', 'node', 'deno', 'bun', 'ruby', 'perl',
+  'sudo', 'su', 'doas', 'env', 'git',
+]);
 
 /**
  * Prefix rule — Codex-inspired token-array prefix matching.
@@ -90,6 +98,21 @@ export interface PolicyEvaluation {
   timestamp: number;
 }
 
+/**
+ * Result of evaluating a complete shell expression.
+ *
+ * Shell strings are never authorised from argv[0] alone: every parsed segment
+ * contributes a decision and the most restrictive one wins.  This mirrors the
+ * Codex exec-policy boundary and prevents an allowed prefix such as
+ * `git status` from hiding a later `rm`, a pipe to a shell, or a substitution.
+ */
+export interface ShellPolicyEvaluation extends PolicyEvaluation {
+  parsedSegments: string[][];
+  segmentEvaluations: PolicyEvaluation[];
+  complex: boolean;
+  approvalKey: string;
+}
+
 export interface ExecPolicyConfig {
   /** Default action when no rules match */
   defaultAction: PolicyAction;
@@ -108,7 +131,9 @@ export interface ExecPolicyConfig {
 // ============================================================================
 
 const DEFAULT_CONFIG: ExecPolicyConfig = {
-  defaultAction: 'ask',
+  // Unknown does not mean forbidden. The runtime executes this decision in a
+  // workspace-write OS sandbox and only asks to leave that boundary.
+  defaultAction: 'sandbox',
   auditLog: true,
   maxAuditEntries: 1000,
   detectDangerous: true,
@@ -124,10 +149,44 @@ const BUILTIN_RULES: PolicyRule[] = [
     id: 'builtin-read-safe',
     name: 'Safe Read Commands',
     description: 'Allow safe read-only commands',
-    pattern: '^(ls|cat|head|tail|less|more|grep|find|which|whereis|file|stat|wc|pwd|whoami|hostname|uname|date|echo|printf)$',
+    pattern: '^(ls|cat|head|tail|less|more|grep|sort|uniq|cut|paste|diff|comm|wc|pwd|whoami|hostname|uname|date|echo|printf|printenv|which|whereis|file|stat|du|df|free|uptime|id|groups|basename|dirname|realpath|readlink|sha256sum|md5sum|jq|tree)$',
     isRegex: true,
     action: 'allow',
     priority: 100,
+    enabled: true,
+    createdAt: Date.now(),
+    tags: ['builtin', 'safe', 'read-only'],
+  },
+
+  // Read-oriented search tools have options that can execute or delete.  They
+  // therefore need their own option-aware rules rather than the generic
+  // read-only bucket above.
+  {
+    id: 'builtin-find-safe',
+    name: 'Safe find',
+    description: 'Allow find only when it cannot delete or execute commands',
+    pattern: '^find$',
+    isRegex: true,
+    action: 'allow',
+    constraints: {
+      deniedArgs: ['(^|\\s)-(delete|exec|execdir|ok|okdir)(\\s|$)'],
+    },
+    priority: 105,
+    enabled: true,
+    createdAt: Date.now(),
+    tags: ['builtin', 'safe', 'read-only'],
+  },
+  {
+    id: 'builtin-ripgrep-safe',
+    name: 'Safe ripgrep',
+    description: 'Allow ripgrep unless an option can launch a helper program',
+    pattern: '^(rg|ripgrep)$',
+    isRegex: true,
+    action: 'allow',
+    constraints: {
+      deniedArgs: ['(^|\\s)--(pre|hostname-bin)(=|\\s|$)'],
+    },
+    priority: 105,
     enabled: true,
     createdAt: Date.now(),
     tags: ['builtin', 'safe', 'read-only'],
@@ -143,16 +202,64 @@ const BUILTIN_RULES: PolicyRule[] = [
     action: 'allow',
     constraints: {
       allowedArgs: [
-        '^(status|log|diff|show|branch|tag|remote|config|fetch|pull|clone).*',
+        '^(?:status|log|diff|show|rev-parse|describe|ls-files|ls-tree|cat-file|blame|shortlog)(?:\\s|$).*',
+        '^remote(?:\\s+-v)?$',
+        '^branch(?:\\s+(?:--list|--show-current|--contains|--no-contains|--merged|--no-merged)(?:\\s.*)?)?$',
+        '^tag(?:\\s+--list(?:\\s.*)?)?$',
       ],
       deniedArgs: [
-        '^(push|reset.*--hard|clean|-f|--force).*',
+        '(^|\\s)(?:-C|--git-dir|--work-tree|--paginate)(?:\\s|=|$)',
+        '(^|\\s)(?:branch\\s+-(?:D|d)|log\\s+--output|push|reset.*--hard|clean|commit|merge|rebase|checkout|switch|restore|tag\\s+-d)(?:\\s|$).*',
       ],
     },
     priority: 90,
     enabled: true,
     createdAt: Date.now(),
     tags: ['builtin', 'git'],
+  },
+  {
+    id: 'builtin-git-boundary',
+    name: 'Git mutations and network',
+    description: 'Ask before changing repository metadata or contacting a remote',
+    pattern: '^git$',
+    isRegex: true,
+    action: 'ask',
+    constraints: {
+      allowedArgs: [
+        '^(?:add|commit|push|fetch|pull|clone|merge|rebase|checkout|switch|restore|reset|clean|config|worktree|submodule|remote\\s+(?:add|remove|rename|set-url|update)|log\\s+--output)(?:\\s|$).*',
+        '^branch\\s+(?:-[dDmMcC]|--delete|--move|--copy|--edit-description|--set-upstream-to|--unset-upstream|--create-reflog)(?:\\s|$).*',
+        '^tag\\s+(?!--list(?:\\s|$)).*',
+        '^(?:-C|--git-dir|--work-tree|--paginate)(?:\\s|=|$).*',
+      ],
+    },
+    priority: 115,
+    enabled: true,
+    createdAt: Date.now(),
+    tags: ['builtin', 'git', 'boundary', 'approval'],
+  },
+
+  // Reversible development tasks can proceed autonomously inside the
+  // workspace sandbox. Package installation/publishing still falls through to
+  // the generic package-manager prompt below because it needs network and may
+  // execute lifecycle scripts.
+  {
+    id: 'builtin-pkg-routines',
+    name: 'Package development routines',
+    description: 'Run tests, builds and static checks in the workspace sandbox',
+    pattern: '^(npm|npx|yarn|pnpm|bun|cargo|go)$',
+    isRegex: true,
+    action: 'sandbox',
+    constraints: {
+      allowedArgs: [
+        '^(?:run\\s+)?(?:test|build|lint|typecheck|check|verify|format|fmt|clippy|vet)(?:\\s|$).*',
+      ],
+      requireSandbox: true,
+      allowNetwork: false,
+    },
+    priority: 95,
+    enabled: true,
+    createdAt: Date.now(),
+    tags: ['builtin', 'development', 'sandbox'],
   },
 
   // Package managers - ask
@@ -163,6 +270,11 @@ const BUILTIN_RULES: PolicyRule[] = [
     pattern: '^(npm|yarn|pnpm|pip|pip3|cargo|go|bundle|gem|composer|apt|apt-get|brew|yum|dnf|pacman)$',
     isRegex: true,
     action: 'ask',
+    constraints: {
+      deniedArgs: [
+        '^(?:run\\s+)?(?:test|build|lint|typecheck|check|verify|format|fmt|clippy|vet)(?:\\s|$).*',
+      ],
+    },
     priority: 80,
     enabled: true,
     createdAt: Date.now(),
@@ -186,18 +298,39 @@ const BUILTIN_RULES: PolicyRule[] = [
     tags: ['builtin', 'build'],
   },
 
-  // Dangerous commands - deny
+  // Workspace mutations are useful and reversible. They run without a prompt
+  // only inside the workspace-write sandbox; catastrophic targets are still
+  // caught by DANGEROUS_PATTERNS before this rule is considered.
   {
     id: 'builtin-dangerous',
-    name: 'Dangerous Commands',
-    description: 'Block dangerous commands',
-    pattern: '^(rm|rmdir|dd|mkfs|fdisk|parted|shutdown|reboot|init|systemctl|chmod|chown)$',
+    name: 'Workspace mutations',
+    description: 'Confine file mutations to the workspace',
+    pattern: '^(rm|rmdir|mkdir|cp|mv|touch|truncate|chmod)$',
     isRegex: true,
-    action: 'deny',
-    priority: 200,
+    action: 'sandbox',
+    constraints: {
+      requireSandbox: true,
+      allowNetwork: false,
+    },
+    priority: 110,
     enabled: true,
     createdAt: Date.now(),
-    tags: ['builtin', 'dangerous'],
+    tags: ['builtin', 'mutation', 'sandbox'],
+  },
+
+  // Operations that cross the workspace/process boundary are possible, but
+  // require a precise approval rather than being hard-disabled by binary name.
+  {
+    id: 'builtin-system-boundary',
+    name: 'System boundary commands',
+    description: 'Ask before changing services, processes, ownership or system state',
+    pattern: '^(chown|chgrp|systemctl|service|kill|killall|pkill|mount|umount|crontab|at|sudo|su|doas|gpg|openssl|ssh-keygen|ssh-add|nmap|tcpdump|strace|gdb|lldb)$',
+    isRegex: true,
+    action: 'ask',
+    priority: 120,
+    enabled: true,
+    createdAt: Date.now(),
+    tags: ['builtin', 'boundary', 'approval'],
   },
 
   // Shell interpreters - sandbox
@@ -215,6 +348,23 @@ const BUILTIN_RULES: PolicyRule[] = [
     enabled: true,
     createdAt: Date.now(),
     tags: ['builtin', 'shell'],
+  },
+
+  {
+    id: 'builtin-dev-tools',
+    name: 'Development tools',
+    description: 'Run local compilers, test runners and linters in the workspace sandbox',
+    pattern: '^(vitest|jest|mocha|pytest|tsc|eslint|prettier|biome|rustc|gcc|g\\+\\+|clang|javac|gradle|mvn|ant|make|cmake|ninja)$',
+    isRegex: true,
+    action: 'sandbox',
+    constraints: {
+      requireSandbox: true,
+      allowNetwork: false,
+    },
+    priority: 76,
+    enabled: true,
+    createdAt: Date.now(),
+    tags: ['builtin', 'development', 'sandbox'],
   },
 
   // Network tools - ask
@@ -370,6 +520,7 @@ export class ExecPolicy extends EventEmitter {
 
     // Sort rules by priority
     this.rules.sort((a, b) => b.priority - a.priority);
+    this.prefixRules.sort((a, b) => b.prefix.length - a.prefix.length);
 
     this.initialized = true;
     this.emit('initialized', { rulesCount: this.rules.length });
@@ -400,12 +551,20 @@ export class ExecPolicy extends EventEmitter {
       }
     }
 
-    // Find matching rule
-    for (const rule of this.rules) {
-      if (!rule.enabled) continue;
-
-      const matches = this.matchesRule(command, args, workDir, rule);
-      if (matches) {
+    // Keep every matching rule and let the most restrictive decision win.
+    // Priority only breaks ties between rules with the same decision. This is
+    // safer than first-match wins: a broad allow can no longer hide a precise
+    // deny/prompt rule loaded later.
+    const matchingRules = this.rules.filter(
+      (rule) => rule.enabled && this.matchesRule(command, args, workDir, rule),
+    );
+    if (matchingRules.length > 0) {
+      matchingRules.sort((a, b) => {
+        const actionDelta = this.actionRank(b.action) - this.actionRank(a.action);
+        return actionDelta !== 0 ? actionDelta : b.priority - a.priority;
+      });
+      const rule = matchingRules[0];
+      if (rule) {
         const evaluation: PolicyEvaluation = {
           command,
           args,
@@ -446,24 +605,22 @@ export class ExecPolicy extends EventEmitter {
 
   /**
    * Check argv against prefix rules (token-array matching).
-   * Returns the matching rule with the longest matching prefix, or null.
+   * Returns the strictest matching rule, then the longest prefix on ties.
    *
    * This is evaluated BEFORE regex/glob rules to give prefix rules higher
    * specificity. Call this from evaluate() or use checkPrefix() standalone.
    */
   checkPrefix(argv: string[]): PrefixRule | null {
-    let best: PrefixRule | null = null;
-    for (const rule of this.prefixRules) {
-      if (!rule.enabled) continue;
-      if (argv.length < rule.prefix.length) continue;
-      const matches = rule.prefix.every((tok, i) => tok === argv[i]);
-      if (matches) {
-        if (!best || rule.prefix.length > best.prefix.length) {
-          best = rule;
-        }
-      }
-    }
-    return best;
+    const matches = this.prefixRules.filter((rule) =>
+      rule.enabled &&
+      argv.length >= rule.prefix.length &&
+      rule.prefix.every((token, index) => token === argv[index]),
+    );
+    matches.sort((a, b) => {
+      const actionDelta = this.actionRank(b.action) - this.actionRank(a.action);
+      return actionDelta !== 0 ? actionDelta : b.prefix.length - a.prefix.length;
+    });
+    return matches[0] ?? null;
   }
 
   /**
@@ -472,8 +629,19 @@ export class ExecPolicy extends EventEmitter {
    * so that more-specific rules are evaluated first.
    */
   addPrefixRule(rule: Omit<PrefixRule, 'id' | 'createdAt'>): PrefixRule {
+    const prefix = rule.prefix.map((token) => token.trim()).filter(Boolean);
+    if (prefix.length === 0) {
+      throw new Error('Prefix rules require at least one non-empty argv token');
+    }
+    if (prefix.length === 1 && UNSAFE_BARE_PREFIXES.has(prefix[0] ?? '')) {
+      throw new Error(`Refusing an over-broad prefix rule for interpreter/launcher: ${prefix[0]}`);
+    }
+    if (prefix.some((token) => token.includes('\0') || token.includes('\n') || token.includes('\r'))) {
+      throw new Error('Prefix rule tokens cannot contain control characters');
+    }
     const newRule: PrefixRule = {
       ...rule,
+      prefix,
       id: `prefix-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       createdAt: Date.now(),
     };
@@ -525,6 +693,77 @@ export class ExecPolicy extends EventEmitter {
 
     // 2. Fall through to pattern-based evaluation
     return this.evaluate(command, args, workDir);
+  }
+
+  /**
+   * Evaluate a complete shell expression, not just its first binary.
+   *
+   * Every AST segment is checked independently. Unknown commands and shell
+   * constructs with write redirections/substitutions are confined to the OS
+   * sandbox; explicit prompts and denials remain stronger.
+   */
+  evaluateShellCommand(shellCommand: string, workDir: string = process.cwd()): ShellPolicyEvaluation {
+    const parsed = parseBashCommand(shellCommand);
+    const parsedSegments: string[][] = [];
+    const segmentEvaluations: PolicyEvaluation[] = [];
+
+    for (const segment of parsed.commands) {
+      const normalizedCommand = this.normalizeCommandName(segment.command);
+      const argv = [normalizedCommand, ...segment.args];
+      parsedSegments.push(argv);
+      segmentEvaluations.push(this.evaluateArgv(argv, workDir));
+    }
+
+    if (segmentEvaluations.length === 0) {
+      const fallback = this.makeEvaluation(
+        '',
+        [],
+        workDir,
+        'ask',
+        'Shell command could not be parsed safely',
+      );
+      return {
+        ...fallback,
+        parsedSegments,
+        segmentEvaluations,
+        complex: true,
+        approvalKey: this.buildApprovalKey(shellCommand, workDir, parsedSegments),
+      };
+    }
+
+    const complex = parsed.warnings.length > 0 || this.hasComplexShellSyntax(shellCommand);
+    const hasWriteRedirection = this.hasUnquotedWriteRedirection(shellCommand);
+
+    const ordered = [...segmentEvaluations].sort(
+      (a, b) => this.actionRank(b.action) - this.actionRank(a.action),
+    );
+    const strongest = ordered[0] ?? segmentEvaluations[0];
+    let action = strongest?.action ?? 'ask';
+    let reason = strongest?.reason ?? 'No policy decision';
+
+    if ((complex || hasWriteRedirection) && this.actionRank(action) < this.actionRank('sandbox')) {
+      action = 'sandbox';
+      reason = complex
+        ? 'Complex shell syntax requires workspace sandboxing'
+        : 'Output redirection requires workspace sandboxing';
+    }
+
+    const result: ShellPolicyEvaluation = {
+      command: strongest?.command ?? '',
+      args: strongest?.args ?? [],
+      workDir,
+      matchedRule: strongest?.matchedRule ?? null,
+      action,
+      reason,
+      constraints: strongest?.constraints ?? {},
+      timestamp: Date.now(),
+      parsedSegments,
+      segmentEvaluations,
+      complex,
+      approvalKey: this.buildApprovalKey(shellCommand, workDir, parsedSegments),
+    };
+    this.recordAudit(result);
+    return result;
   }
 
   /**
@@ -650,12 +889,19 @@ export class ExecPolicy extends EventEmitter {
 
     // Ensure directory exists
     const dir = path.dirname(savePath);
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
-    }
+    await fs.promises.mkdir(dir, { recursive: true });
 
-    const customRules = this.getRules(false);
-    fs.writeFileSync(savePath, JSON.stringify(customRules, null, 2));
+    const document = {
+      version: 2,
+      rules: this.getRules(false),
+      prefixRules: this.getPrefixRules(),
+    };
+    const temporaryPath = `${savePath}.tmp-${process.pid}-${Date.now()}`;
+    await fs.promises.writeFile(temporaryPath, JSON.stringify(document, null, 2), {
+      encoding: 'utf-8',
+      mode: 0o600,
+    });
+    await fs.promises.rename(temporaryPath, savePath);
   }
 
   /**
@@ -705,6 +951,120 @@ export class ExecPolicy extends EventEmitter {
   // ============================================================================
   // Private Methods
   // ============================================================================
+
+  /** `deny > ask > sandbox > allow` — the shared aggregation order. */
+  private actionRank(action: PolicyAction): number {
+    switch (action) {
+      case 'deny': return 4;
+      case 'ask': return 3;
+      case 'sandbox': return 2;
+      case 'allow': return 1;
+    }
+  }
+
+  private makeEvaluation(
+    command: string,
+    args: string[],
+    workDir: string,
+    action: PolicyAction,
+    reason: string,
+  ): PolicyEvaluation {
+    return {
+      command,
+      args,
+      workDir,
+      matchedRule: null,
+      action,
+      reason,
+      constraints: {},
+      timestamp: Date.now(),
+    };
+  }
+
+  /**
+   * Match well-known system binary paths by basename, but never reinterpret an
+   * arbitrary executable such as `/tmp/git` as the trusted `git` command.
+   */
+  private normalizeCommandName(command: string): string {
+    if (!command.includes('/') && !command.includes('\\')) return command;
+    const normalized = command.replace(/\\/g, '/');
+    const trustedPrefixes = ['/bin/', '/usr/bin/', '/usr/local/bin/', '/sbin/', '/usr/sbin/'];
+    if (trustedPrefixes.some((prefix) => normalized.startsWith(prefix))) {
+      return path.posix.basename(normalized);
+    }
+    return normalized;
+  }
+
+  /** Detect substitutions/control structures that must never inherit a broad allow. */
+  private hasComplexShellSyntax(command: string): boolean {
+    let quote: 'none' | 'single' | 'double' = 'none';
+    let escaped = false;
+    for (let i = 0; i < command.length; i += 1) {
+      const char = command[i];
+      const next = command[i + 1];
+      if (escaped) {
+        escaped = false;
+        continue;
+      }
+      if (char === '\\') {
+        escaped = true;
+        continue;
+      }
+      if (char === "'" && quote !== 'double') {
+        quote = quote === 'single' ? 'none' : 'single';
+        continue;
+      }
+      if (char === '"' && quote !== 'single') {
+        quote = quote === 'double' ? 'none' : 'double';
+        continue;
+      }
+      if (quote === 'single') continue;
+      if (char === '`') return true;
+      if (char === '$' && next === '(') return true;
+      if ((char === '<' || char === '>') && next === '(') return true;
+      if (char === '<' && next === '<') return true;
+      if (char === '\n' || char === '\r') return true;
+    }
+    return quote !== 'none';
+  }
+
+  /** Detect unquoted `>`, `>>` and `&>` while ignoring descriptor duplication (`2>&1`). */
+  private hasUnquotedWriteRedirection(command: string): boolean {
+    let quote: 'none' | 'single' | 'double' = 'none';
+    let escaped = false;
+    for (let i = 0; i < command.length; i += 1) {
+      const char = command[i];
+      const next = command[i + 1];
+      if (escaped) {
+        escaped = false;
+        continue;
+      }
+      if (char === '\\') {
+        escaped = true;
+        continue;
+      }
+      if (char === "'" && quote !== 'double') {
+        quote = quote === 'single' ? 'none' : 'single';
+        continue;
+      }
+      if (char === '"' && quote !== 'single') {
+        quote = quote === 'double' ? 'none' : 'double';
+        continue;
+      }
+      if (quote !== 'none') continue;
+      if (char === '&' && next === '>') return true;
+      if (char === '>' && next !== '&' && next !== '(') return true;
+    }
+    return false;
+  }
+
+  private buildApprovalKey(command: string, workDir: string, segments: string[][]): string {
+    const canonicalCwd = path.resolve(workDir);
+    const digest = createHash('sha256')
+      .update(JSON.stringify({ cwd: canonicalCwd, command: command.trim(), segments }))
+      .digest('hex');
+    return `shell:${digest}`;
+  }
 
   private matchesRule(command: string, args: string[], workDir: string, rule: PolicyRule): boolean {
     // Match command pattern
@@ -797,16 +1157,34 @@ export class ExecPolicy extends EventEmitter {
     try {
       if (fs.existsSync(filePath)) {
         const content = fs.readFileSync(filePath, 'utf-8');
-        const customRules = JSON.parse(content) as PolicyRule[];
+        const parsed = JSON.parse(content) as
+          | PolicyRule[]
+          | { rules?: PolicyRule[]; prefixRules?: PrefixRule[] };
+        const customRules = Array.isArray(parsed) ? parsed : (parsed.rules ?? []);
+        const prefixRules = Array.isArray(parsed) ? [] : (parsed.prefixRules ?? []);
 
         for (const rule of customRules) {
-          if (!rule.tags?.includes('builtin')) {
+          if (rule && typeof rule.pattern === 'string' && !rule.tags?.includes('builtin')) {
             this.rules.push(rule);
+          }
+        }
+        for (const rule of prefixRules) {
+          if (
+            rule &&
+            Array.isArray(rule.prefix) &&
+            rule.prefix.length > 0 &&
+            !(rule.prefix.length === 1 && UNSAFE_BARE_PREFIXES.has(rule.prefix[0] ?? '')) &&
+            ['allow', 'deny', 'ask', 'sandbox'].includes(rule.action)
+          ) {
+            this.prefixRules.push(rule);
           }
         }
       }
     } catch (error) {
-      this.emit('error', { type: 'load', error });
+      // EventEmitter treats the literal `error` event as fatal when no listener
+      // is registered. A malformed/missing optional policy file must degrade to
+      // built-ins, not crash command execution.
+      this.emit('load:error', { type: 'load', error });
     }
   }
 }

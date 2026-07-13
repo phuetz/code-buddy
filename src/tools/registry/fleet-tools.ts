@@ -47,6 +47,7 @@ export class PeerDelegateTool implements ITool {
       peer: typeof input.peer === 'string' ? input.peer : '',
       prompt: typeof input.prompt === 'string' ? input.prompt : '',
       systemPrompt: typeof input.systemPrompt === 'string' ? input.systemPrompt : undefined,
+      provider: typeof input.provider === 'string' ? input.provider : undefined,
       model: typeof input.model === 'string' ? input.model : undefined,
       dispatchProfile: typeof input.dispatchProfile === 'string' ? input.dispatchProfile : undefined,
       timeoutMs: typeof input.timeoutMs === 'number' ? input.timeoutMs : undefined,
@@ -74,6 +75,12 @@ export class PeerDelegateTool implements ITool {
             type: 'string',
             description:
               'Optional system prompt override for the peer. Defaults to the peer\'s default brief-answer mode.',
+          },
+          provider: {
+            type: 'string',
+            enum: ['ollama', 'lmstudio', 'lemonade', 'chatgpt-oauth', 'agy-cli', 'gemini-cli', 'openrouter', 'grok', 'mistral', 'anthropic', 'gemini', 'openai'],
+            description:
+              'Exact backend to use. The peer refuses the request if this provider is unavailable; it never silently substitutes another backend.',
           },
           model: {
             type: 'string',

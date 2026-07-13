@@ -11,6 +11,7 @@ import type {
   ContentBlock,
   QueuedIntent,
 } from '../types';
+import { buildConversationTurnEnvelope } from '@codebuddy/conversation/conversation-orchestrator.js';
 import i18n from '../i18n/config';
 import { shouldAutoInferUserModel, toInferenceHistory } from '../components/user-model-inference';
 
@@ -227,6 +228,7 @@ export function useIPC() {
                       sessionId: event.payload.sessionId,
                       prompt: intent.prompt,
                       content: intent.content,
+                      permissionModeOverride: intent.permissionModeOverride,
                     },
                   });
                 }
@@ -712,7 +714,8 @@ export function useIPC() {
       promptOrContent: string | ContentBlock[],
       cwd?: string,
       projectId?: string | null,
-      memoryEnabled?: boolean
+      memoryEnabled?: boolean,
+      options?: { conversationMode?: 'default' | 'companion' },
     ) => {
       setLoading(true);
       console.log('[useIPC] Starting session:', title);
@@ -725,7 +728,11 @@ export function useIPC() {
 
       // Extract text for legacy backend and session title (if needed)
       const textContent = content.find((block) => block.type === 'text');
-      const prompt = textContent && 'text' in textContent ? textContent.text : '';
+      const rawPrompt = textContent && 'text' in textContent ? textContent.text : '';
+      const prompt =
+        options?.conversationMode === 'companion'
+          ? buildConversationTurnEnvelope(rawPrompt)
+          : rawPrompt;
 
       // Browser mode mock
       if (!isElectron) {
@@ -844,7 +851,14 @@ export function useIPC() {
 
   // Continue an existing session
   const continueSession = useCallback(
-    async (sessionId: string, promptOrContent: string | ContentBlock[]) => {
+    async (
+      sessionId: string,
+      promptOrContent: string | ContentBlock[],
+      options?: {
+        permissionModeOverride?: import('../types').PermissionMode;
+        conversationMode?: 'default' | 'companion';
+      },
+    ) => {
       console.log('[useIPC] Continuing session:', sessionId);
 
       // Normalize input to ContentBlock array
@@ -855,10 +869,26 @@ export function useIPC() {
 
       // Extract text for legacy backend (if needed)
       const textContent = content.find((block) => block.type === 'text');
-      const prompt = textContent && 'text' in textContent ? textContent.text : '';
+      const rawPrompt = textContent && 'text' in textContent ? textContent.text : '';
+      const store = useAppStore.getState();
+      const conversationHistory = (store.sessionStates[sessionId]?.messages ?? [])
+        .flatMap((message) => {
+          const text = message.content
+            .filter((block): block is Extract<ContentBlock, { type: 'text' }> => block.type === 'text')
+            .map((block) => block.text)
+            .join('\n')
+            .trim();
+          return text && (message.role === 'user' || message.role === 'assistant')
+            ? [{ role: message.role, content: text }]
+            : [];
+        })
+        .slice(-12);
+      const prompt =
+        options?.conversationMode === 'companion'
+          ? buildConversationTurnEnvelope(rawPrompt, conversationHistory)
+          : rawPrompt;
 
       // Immediately add user message to UI (for both modes)
-      const store = useAppStore.getState();
       const isSessionRunning =
         store.sessions.find((session) => session.id === sessionId)?.status === 'running';
       const ss = store.sessionStates[sessionId];
@@ -873,6 +903,7 @@ export function useIPC() {
           content,
           createdAt: Date.now(),
           source: 'queue',
+          permissionModeOverride: options?.permissionModeOverride,
         };
         enqueueQueuedIntent(intent);
         return;
@@ -925,6 +956,7 @@ export function useIPC() {
             sessionId,
             prompt,
             content, // Send full content blocks including images
+            permissionModeOverride: options?.permissionModeOverride,
           },
         });
         // Loading will be reset when we receive session.status event

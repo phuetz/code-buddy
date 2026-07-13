@@ -17,6 +17,7 @@
  *   re-runs after that turn.
  */
 
+import { createHash, randomUUID } from 'node:crypto';
 import type { GoalPlan } from './goal-decomposer.js';
 import {
   formatGoalPlan,
@@ -28,6 +29,8 @@ export type GoalStatus = 'active' | 'paused' | 'done' | 'cleared';
 export type GoalVerdict = 'done' | 'continue' | 'skipped';
 
 export interface GoalState {
+  /** Stable mission identity shared by the Intent Graph and Proof Ledger. */
+  goalId: string;
   goal: string;
   status: GoalStatus;
   turnsUsed: number;
@@ -194,6 +197,7 @@ export function createGoalState(goal: string, maxTurns: number = DEFAULT_MAX_TUR
     throw new Error('maxTurns must be a positive integer');
   }
   return {
+    goalId: `goal-${randomUUID()}`,
     goal,
     status: 'active',
     turnsUsed: 0,
@@ -228,12 +232,14 @@ export function normalizeGoalState(raw: unknown): GoalState | null {
     ? (data.lastVerdict as GoalVerdict)
     : undefined;
 
+  const createdAt = toNumber(data.createdAt, 0);
   const state: GoalState = {
+    goalId: normalizeGoalId(data.goalId) || legacyGoalId(goal, createdAt),
     goal,
     status,
     turnsUsed: toNonNegativeInt(data.turnsUsed, 0),
     maxTurns: toPositiveInt(data.maxTurns, DEFAULT_MAX_TURNS),
-    createdAt: toNumber(data.createdAt, 0),
+    createdAt,
     lastTurnAt: toNumber(data.lastTurnAt, 0),
     consecutiveParseFailures: toNonNegativeInt(data.consecutiveParseFailures, 0),
     subgoals,
@@ -248,7 +254,23 @@ export function normalizeGoalState(raw: unknown): GoalState | null {
   if (verdict) state.lastVerdict = verdict;
   if (typeof data.lastReason === 'string') state.lastReason = data.lastReason;
   if (typeof data.pausedReason === 'string') state.pausedReason = data.pausedReason;
+  if (typeof data.verifyGated === 'boolean') state.verifyGated = data.verifyGated;
   return state;
+}
+
+function normalizeGoalId(value: unknown): string {
+  if (typeof value !== 'string') return '';
+  const clean = value.trim();
+  return /^[a-zA-Z0-9._-]{1,128}$/.test(clean) ? clean : '';
+}
+
+/** Stable migration id for goal files created before Code Buddy 2.0. */
+function legacyGoalId(goal: string, createdAt: number): string {
+  const digest = createHash('sha256')
+    .update(`${createdAt}\0${goal}`)
+    .digest('hex')
+    .slice(0, 24);
+  return `goal-legacy-${digest}`;
 }
 
 function toPositiveInt(value: unknown, fallback: number): number {

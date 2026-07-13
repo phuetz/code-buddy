@@ -91,10 +91,9 @@ export class GhostSnapshotManager {
     const desc = rawDesc.substring(0, 200).replace(/[\x00-\x1f\x7f]/g, '');
 
     try {
-      // Stage all changes (including untracked, excluding .gitignored)
-      await this.git(['add', '-A']);
-
-      // Check if there are changes to commit
+      // The common case between turns is a clean workspace. Check it before
+      // touching the index so large repositories avoid an unnecessary
+      // `git add -A` on the first-token critical path.
       const status = await this.git(['status', '--porcelain']);
       if (!status.trim()) {
         // No changes — create a reference to HEAD
@@ -108,6 +107,10 @@ export class GhostSnapshotManager {
         this.currentIndex = this.snapshots.length - 1;
         return snapshot;
       }
+
+      // Stage all changes (including untracked, excluding .gitignored) only
+      // when there is actually something to capture.
+      await this.git(['add', '-A']);
 
       // Create a ghost commit (won't appear in regular git log)
       const commitHash = (await this.git([
@@ -245,16 +248,19 @@ export class GhostSnapshotManager {
   }
 }
 
-/** Singleton */
-let _instance: GhostSnapshotManager | null = null;
+/** One manager per workspace; Cowork can keep several projects open at once. */
+const _instances = new Map<string, GhostSnapshotManager>();
 
 export function getGhostSnapshotManager(cwd?: string): GhostSnapshotManager {
-  if (!_instance) {
-    _instance = new GhostSnapshotManager(cwd);
+  const key = cwd ?? process.cwd();
+  let instance = _instances.get(key);
+  if (!instance) {
+    instance = new GhostSnapshotManager(key);
+    _instances.set(key, instance);
   }
-  return _instance;
+  return instance;
 }
 
 export function resetGhostSnapshotManager(): void {
-  _instance = null;
+  _instances.clear();
 }

@@ -368,6 +368,7 @@ describe('/fleet slash handler — Phase (d).5 V0.4.1', () => {
           {
             sessionId: 'sess_review_123456',
             turnCount: 2,
+            provider: 'openrouter',
             model: 'gpt-5.1-codex',
             dispatchProfile: 'review',
             toolPolicy: {
@@ -411,6 +412,7 @@ describe('/fleet slash handler — Phase (d).5 V0.4.1', () => {
       const r = await handleFleet(['status', '--with-sessions']);
       const out = r.entry?.content ?? '';
       expect(out).toContain('Chat sessions (1):');
+      expect(out).toContain('provider openrouter');
       expect(out).toContain('profile review');
       expect(out).toContain('policy minimal / confirm');
       expect(out).toContain('toolset fleet.hermes.review');
@@ -849,7 +851,7 @@ describe('/fleet slash handler — Phase (d).5 V0.4.1', () => {
 
       const out = r.entry?.content ?? '';
       expect(out).toContain('Fleet route recommendation');
-      expect(out).toContain('Primary: chatgpt / gpt-5.1-codex');
+      expect(out).toContain('Primary: chatgpt / chatgpt-oauth / gpt-5.1-codex');
       expect(out).toContain('peer_delegate');
       expect(fleetListenerMock.requestMock).toHaveBeenCalledWith(
         'peer.describe',
@@ -928,6 +930,7 @@ describe('/fleet slash handler — Phase (d).5 V0.4.1', () => {
         if (method === 'peer.chat') {
           expect(params).toMatchObject({
             prompt: 'think deeply',
+            provider: 'chatgpt-oauth',
             model: 'gpt-5.1-codex',
           });
           return { text: 'delegated answer', modelRequested: 'gpt-5.1-codex' };
@@ -941,7 +944,7 @@ describe('/fleet slash handler — Phase (d).5 V0.4.1', () => {
       expect(out).toContain('delegated answer');
       expect(fleetListenerMock.requestMock).toHaveBeenCalledWith(
         'peer.chat',
-        { prompt: 'think deeply', model: 'gpt-5.1-codex' },
+        { prompt: 'think deeply', provider: 'chatgpt-oauth', model: 'gpt-5.1-codex' },
         { timeoutMs: 60_000 },
       );
     });
@@ -1147,6 +1150,60 @@ describe('/fleet slash handler — Phase (d).5 V0.4.1', () => {
       ]);
       expect(r.entry?.content).toContain('Peer "peer:3000" → view_file FAILED');
       expect(r.entry?.content).toContain('PATH_OUTSIDE_PEER_WORKSPACE');
+    });
+  });
+
+  describe('chat sessions with exact provider routing', () => {
+    it('normalizes, forwards, remembers, and reasserts the selected provider', async () => {
+      await handleFleet([
+        'listen', 'ws://brain:3000/ws', '--api-key', 'k', '--name', 'brain',
+      ]);
+      fleetListenerMock.requestMock.mockResolvedValueOnce({
+        sessionId: 'sess_fast_123456',
+        providerRequested: 'lmstudio',
+        providerResolved: 'lmstudio',
+      });
+
+      const started = await handleFleet([
+        'chat', 'start', 'brain', '--provider', 'lm-studio', '--model', 'local-fast', '--name', 'fast',
+      ]);
+
+      expect(started.entry?.content).toContain('Provider: lmstudio');
+      expect(fleetListenerMock.requestMock).toHaveBeenLastCalledWith(
+        'peer.chat-session.start',
+        { provider: 'lmstudio', model: 'local-fast' },
+        { timeoutMs: 30_000 },
+      );
+
+      fleetListenerMock.requestMock.mockResolvedValueOnce({
+        text: 'ready',
+        providerResolved: 'lmstudio',
+      });
+      const continued = await handleFleet(['chat', 'say', 'hello', '--session', 'fast']);
+      expect(continued.entry?.content).toContain('provider lmstudio');
+      expect(fleetListenerMock.requestMock).toHaveBeenLastCalledWith(
+        'peer.chat-session.continue',
+        { sessionId: 'sess_fast_123456', prompt: 'hello', provider: 'lmstudio' },
+        { timeoutMs: 120_000 },
+      );
+
+      const listed = await handleFleet(['chat', 'list']);
+      expect(listed.entry?.content).toContain('provider lmstudio');
+      expect(listed.entry?.content).toContain('model local-fast');
+    });
+
+    it('rejects an unknown provider before sending an RPC', async () => {
+      await handleFleet([
+        'listen', 'ws://brain:3000/ws', '--api-key', 'k', '--name', 'brain',
+      ]);
+      fleetListenerMock.requestMock.mockClear();
+
+      const result = await handleFleet([
+        'chat', 'start', 'brain', '--provider', 'invented-cloud',
+      ]);
+
+      expect(result.entry?.content).toContain('Unknown Fleet chat provider');
+      expect(fleetListenerMock.requestMock).not.toHaveBeenCalled();
     });
   });
 });

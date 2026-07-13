@@ -8,6 +8,7 @@ import { join } from 'node:path';
 import {
   normalizeReflection,
   runVoiceImprovementCycle,
+  selectLearnableHearingTexts,
   type VoiceReflection,
 } from '../../src/companion/voice-improvement-loop.js';
 import { loadVoiceGuidance } from '../../src/companion/voice-guidance.js';
@@ -36,6 +37,52 @@ describe('normalizeReflection', () => {
   });
 });
 
+describe('selectLearnableHearingTexts', () => {
+  it('keeps addressed dialogue and rejects ambient television transcripts', () => {
+    const heard = selectLearnableHearingTexts(
+      [
+        {
+          summary: 'Heard: Je vous attends après la publicité',
+          payload: { text: 'Je vous attends après la publicité', responded: false, decisionReason: 'ambient' },
+        },
+        {
+          summary: 'Heard: Buddy, prépare mon résumé',
+          payload: { text: 'Buddy, prépare mon résumé', responded: true, decisionReason: 'addressed' },
+        },
+        {
+          summary: 'Heard: Pour vous qui regardez cette émission',
+          payload: { text: 'Pour vous qui regardez cette émission', responded: false, decisionReason: 'ambient-in-window' },
+        },
+        {
+          summary: 'Speech captured; STT returned no text',
+          payload: { text: '', responded: true, sttEmpty: true },
+        },
+        {
+          summary: 'Heard: Oui, continue',
+          payload: { text: 'Oui, continue', responded: true, decisionReason: 'engaged' },
+        },
+      ],
+      20
+    );
+
+    expect(heard).toEqual(['Buddy, prépare mon résumé', 'Oui, continue']);
+  });
+
+  it('uses summaries for legacy addressed percepts and keeps the newest bounded sample', () => {
+    const heard = selectLearnableHearingTexts(
+      [
+        { summary: 'Heard: un', payload: { responded: true } },
+        { summary: 'Heard: deux', payload: { responded: true } },
+        { summary: 'Heard: trois', payload: { responded: true } },
+      ],
+      2
+    );
+
+    expect(heard).toEqual(['deux', 'trois']);
+    expect(selectLearnableHearingTexts([], 0)).toEqual([]);
+  });
+});
+
 describe('runVoiceImprovementCycle', () => {
   const reflection: VoiceReflection = {
     facts: ['préfère des réponses courtes'],
@@ -53,6 +100,7 @@ describe('runVoiceImprovementCycle', () => {
       cwd: dir,
       guidancePath: join(dir, 'voice-guidance.json'),
       relationshipStatePath: join(dir, 'relationship-state.json'),
+      dedupeStatePath: join(dir, 'voice-improvement-state.json'),
     };
   }
 
@@ -92,5 +140,46 @@ describe('runVoiceImprovementCycle', () => {
     const res = await runVoiceImprovementCycle({ mode: 'all', readHeard: heard, reflect, ...t });
     expect(res!.acceptedFacts).toEqual(['préfère des réponses courtes']);
     expect(getUserModel(t.cwd).getStats().byStatus.accepted).toBeGreaterThan(0);
+  });
+
+  it('reflects the same addressed dialogue only once in behavioral mode', async () => {
+    const t = tmp();
+    const reflectOnce = vi.fn(reflect);
+
+    const first = await runVoiceImprovementCycle({
+      mode: 'behavioral',
+      readHeard: heard,
+      reflect: reflectOnce,
+      ...t,
+    });
+    const repeated = await runVoiceImprovementCycle({
+      mode: 'behavioral',
+      readHeard: heard,
+      reflect: reflectOnce,
+      ...t,
+    });
+
+    expect(first?.conversationFingerprint).toMatch(/^[a-f0-9]{64}$/);
+    expect(repeated).toBeNull();
+    expect(reflectOnce).toHaveBeenCalledTimes(1);
+  });
+
+  it('reflects again when a new addressed turn changes the dialogue window', async () => {
+    const t = tmp();
+    const reflectTwice = vi.fn(reflect);
+    let dialogue = ['salut', 'raconte-moi une blague'];
+    const readHeard = async (): Promise<string[]> => dialogue;
+
+    await runVoiceImprovementCycle({ mode: 'behavioral', readHeard, reflect: reflectTwice, ...t });
+    dialogue = [...dialogue, 'merci'];
+    const updated = await runVoiceImprovementCycle({
+      mode: 'behavioral',
+      readHeard,
+      reflect: reflectTwice,
+      ...t,
+    });
+
+    expect(updated).not.toBeNull();
+    expect(reflectTwice).toHaveBeenCalledTimes(2);
   });
 });

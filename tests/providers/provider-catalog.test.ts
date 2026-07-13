@@ -13,7 +13,9 @@ describe('runtime provider catalog', () => {
 
     expect(ids).toEqual(expect.arrayContaining([
       'chatgpt',
+      'agy-cli',
       'ollama',
+      'lemonade',
       'lmstudio',
       'grok',
       'gemini',
@@ -83,9 +85,24 @@ describe('runtime provider catalog', () => {
     expect(resolved).toMatchObject({
       provider: 'chatgpt',
       apiKey: 'oauth-chatgpt',
-      defaultModel: 'gpt-5.5',
+      defaultModel: 'gpt-5.6-sol',
       source: 'oauth',
     });
+    expect(findRuntimeProvider('chatgpt')?.models).toEqual([
+      'gpt-5.6-sol',
+      'gpt-5.6-terra',
+      'gpt-5.6-luna',
+      'gpt-5.5',
+      'gpt-5.4',
+      'gpt-5.4-mini',
+    ]);
+    expect(findRuntimeProvider('chatgpt')?.models).not.toContain('terra');
+    expect(findRuntimeProvider('chatgpt')?.models).not.toContain('luna');
+    expect(findRuntimeProvider('chatgpt')?.models).not.toContain('gpt-5.1-codex');
+  });
+
+  it('adds canonical GPT-5.6 Sol to the direct OpenAI catalog', () => {
+    expect(findRuntimeProvider('openai')?.models).toContain('gpt-5.6-sol');
   });
 
   it('honors CODEBUDDY_PROVIDER over ChatGPT OAuth', () => {
@@ -114,7 +131,7 @@ describe('runtime provider catalog', () => {
       provider: 'openrouter',
       apiKey: 'or-key',
       baseURL: 'https://openrouter.ai/api/v1',
-      defaultModel: 'openai/gpt-4o',
+      defaultModel: 'openrouter/free',
     });
   });
 

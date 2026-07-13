@@ -217,6 +217,9 @@ describe('companion impulses', () => {
             sttMs: 3_200,
             decisionMs: 40,
             actionMs: 3_160,
+            firstAudioMs: 260,
+            perceivedResponseMs: 3_500,
+            voiceTotalMs: 3_160,
             totalMs: 6_400,
           },
           capture: {
@@ -245,6 +248,8 @@ describe('companion impulses', () => {
     expect(latencyImpulse?.tags).toEqual(expect.arrayContaining(['voice', 'latency', 'realtime']));
     expect(latencyImpulse?.evidence).toEqual(expect.arrayContaining([
       { label: 'stt', value: '3200ms' },
+      { label: 'first audio', value: '260ms' },
+      { label: 'perceived response', value: '3500ms' },
       { label: 'loop', value: '6400ms' },
       { label: 'device', value: 'plughw:CARD=BRIO,DEV=0' },
     ]));

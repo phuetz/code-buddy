@@ -47,6 +47,7 @@ export const WRITE_TOOL_NAMES = new Set([
   'edit_file',     // Morph Fast Apply
   'write_file',
   'extension_forge',
+  'meeting_notes', // ToolHandler gates this only when output_prefix is present.
 ]);
 
 // ──────────────────────────────────────────────────────────────────

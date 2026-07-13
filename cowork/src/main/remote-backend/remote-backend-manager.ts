@@ -157,6 +157,14 @@ class RemoteBackendManager {
     return this.backend?.forward(event) ?? false;
   }
 
+  describeControlPlane(): Promise<unknown> {
+    return this.backend?.requestControl('describe') ?? Promise.reject(new Error('Remote backend not initialized'));
+  }
+
+  invokeControl(method: string): Promise<unknown> {
+    return this.backend?.requestControl('invoke', { method }) ?? Promise.reject(new Error('Remote backend not initialized'));
+  }
+
   /**
    * Forward a `session.start` and resolve with the canonical Session once the
    * remote emits its `session.update`. The renderer awaits this via invoke()

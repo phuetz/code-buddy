@@ -32,7 +32,7 @@ import {
   type CompanionPerceptStats,
 } from './percepts.js';
 
-export const COMPANION_DEFAULT_MODEL = 'gpt-5.5';
+export const COMPANION_DEFAULT_MODEL = 'gpt-5.6-sol';
 export const COMPANION_DEFAULT_LANGUAGE = 'fr';
 export const COMPANION_DEFAULT_TTS_VOICE = 'fr-FR-HenriNeural';
 
@@ -744,7 +744,7 @@ async function buildVoiceAssistantBrief(
   };
   const readiness = describeVoiceReadiness(env);
   const permissionMode = readiness.permissionMode?.toLowerCase();
-  const safeActionMode = !readiness.act || permissionMode === 'plan';
+  const safeActionMode = !readiness.act || permissionMode === 'default';
   const responseMode = resolveVoiceResponseMode();
   const ready = speechEnabled
     && speakEnabled
@@ -771,7 +771,7 @@ async function buildVoiceAssistantBrief(
     missing.push('CODEBUDDY_TTS_VOICE or CODEBUDDY_TTS_PIPER_MODEL must point to a Piper .onnx model');
   }
   if (!safeActionMode) {
-    missing.push(`voice action mode is unsafe (${permissionMode}); use CODEBUDDY_SENSORY_SPEAK_PERMISSION_MODE=plan`);
+    missing.push(`voice action mode is unsafe (${permissionMode}); use CODEBUDDY_SENSORY_SPEAK_PERMISSION_MODE=default`);
   }
   if (!piperBinReady) {
     missing.push(`Piper binary not found: ${piperBin}`);
@@ -821,7 +821,7 @@ async function buildVoiceAssistantBrief(
       : missing.join('; '),
     next: ready
       ? undefined
-      : 'Enable CODEBUDDY_SENSORY_SPEECH=true CODEBUDDY_SENSORY_SPEAK=true, set CODEBUDDY_TTS_VOICE, install arecord plus an audio player, install websocket-client/numpy for ear.py, install faster-whisper for CODEBUDDY_SPEECH_PYTHON, and keep voice actions in CODEBUDDY_SENSORY_SPEAK_PERMISSION_MODE=plan.',
+      : 'Enable CODEBUDDY_SENSORY_SPEECH=true CODEBUDDY_SENSORY_SPEAK=true, set CODEBUDDY_TTS_VOICE, install arecord plus an audio player, install websocket-client/numpy for ear.py, install faster-whisper for CODEBUDDY_SPEECH_PYTHON, and keep resident voice actions in CODEBUDDY_SENSORY_SPEAK_PERMISSION_MODE=default.',
   };
 }
 
@@ -1063,7 +1063,7 @@ function buildLiveCommands(
         `CODEBUDDY_SENSORY_TOKEN=${tokenFallback} CODEBUDDY_SENSORY=true CODEBUDDY_SENSORY_CAMERA=true \\`,
         'CODEBUDDY_SENSORY_SPEECH=true CODEBUDDY_SENSORY_SPEAK=true \\',
         `CODEBUDDY_ROBOT_NAME=${shellArg(assistant.robotName)} CODEBUDDY_SENSORY_CHIME_IN=true \\`,
-        `CODEBUDDY_SENSORY_SPEAK_MODEL=${shellArg(voiceModel)} CODEBUDDY_SENSORY_SPEAK_ACT=true CODEBUDDY_SENSORY_SPEAK_PERMISSION_MODE=plan \\`,
+        `CODEBUDDY_SENSORY_SPEAK_MODEL=${shellArg(voiceModel)} CODEBUDDY_SENSORY_SPEAK_ACT=true CODEBUDDY_SENSORY_SPEAK_PERMISSION_MODE=default \\`,
         `${speechHotwordsFileEnv}${parakeetEnv}CODEBUDDY_SPEECH_ENGINE=${shellArg(speechEngine)} CODEBUDDY_SPEECH_PYTHON=${shellArg(assistant.speechPython)} CODEBUDDY_SPEECH_MODEL=${shellArg(speechModel)} CODEBUDDY_SPEECH_LANG=${shellArg(speechLanguage)} \\`,
         `CODEBUDDY_PIPER_BIN=${shellArg(assistant.piperBin)} \\`,
         `CODEBUDDY_TTS_VOICE=${shellArg(voice)} \\`,

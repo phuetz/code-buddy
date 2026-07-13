@@ -81,7 +81,7 @@ describe('arrival greeting — the robot notices and engages when someone arrive
     const greet = vi.fn(async () => {});
     const unwire = wireSemanticVisionReaction({
       greet,
-      onEngage: () => decider.markEngaged(), // exactly how server/index.ts wires it
+      onEngage: () => decider.markEngaged('arrival'), // exactly how server/index.ts wires it
       now: () => clock,
       cwd: tmp,
     });
@@ -90,7 +90,15 @@ describe('arrival greeting — the robot notices and engages when someone arrive
       await waitForCalls(greet, 1);
       expect(greet).toHaveBeenCalledTimes(1);
 
-      // The greeting opened the window → the visitor's reply is now engaged + answered.
+      // A nearby television can also say "vous" during that window. A long
+      // broadcast question must not hijack this still-tentative dialogue.
+      const broadcast = await decider.decide(
+        "Mais quel pays d'Europe est le plus propice pour accueillir le royaume de Mickey ? " +
+          "À la fin des années quatre-vingt, la société croule sous les candidatures.",
+      );
+      expect(broadcast).toEqual({ respond: false, reason: 'ambient-in-window' });
+
+      // The greeting opened the window → the visitor's concise reply is engaged + answered.
       const d = await decider.decide('salut, ça va ?');
       expect(d.respond).toBe(true);
       expect(d.reason).toBe('engaged');

@@ -9,6 +9,11 @@ import { EventEmitter } from 'events';
 import { AgentStateMachine, AgentStatus } from '../state-machine.js';
 import { TERMINATE_SIGNAL } from '../../tools/terminate-tool.js';
 import type { KnowledgeGraph } from '../../knowledge/knowledge-graph.js';
+import { formatToolResultForRecovery } from '../../context/restorable-compression.js';
+import {
+  commandFromToolArguments,
+  prepareToolObservationForPrompt,
+} from '../prompt-tool-observation.js';
 
 /** SWE Agent configuration */
 export interface SWEAgentConfig {
@@ -22,6 +27,12 @@ export interface SWEAgentConfig {
   executeTool: (name: string, args: Record<string, unknown>) => Promise<SWEToolResult>;
   /** Optional code graph for file context injection */
   graph?: KnowledgeGraph;
+  /** Model metadata used to allocate observation budgets. */
+  model?: string;
+  contextWindow?: number;
+  responseReserveTokens?: number;
+  /** Workspace used for disk-backed raw-observation recovery. */
+  workspaceRoot?: string;
 }
 
 export interface SWEMessage {
@@ -64,6 +75,7 @@ const SWE_SYSTEM_PROMPT = `You are a software engineering agent specialized in c
 ## Available Tools
 - **bash**: Execute shell commands (git, npm, grep, find, test runners, etc.)
 - **str_replace_editor**: View, create, and edit files with precise string replacement
+- **restore_context**: Recover an exact earlier tool result by its tool call ID
 - **terminate**: Signal when the task is complete
 
 ## Workflow
@@ -122,6 +134,20 @@ const SWE_TOOLS: SWETool[] = [
           file_text: { type: 'string', description: 'Full file content (for create)' },
         },
         required: ['command', 'path'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'restore_context',
+      description: 'Restore the exact raw output of an earlier tool call in this SWE run by call ID.',
+      parameters: {
+        type: 'object',
+        properties: {
+          identifier: { type: 'string', description: 'Exact earlier tool call ID' },
+        },
+        required: ['identifier'],
       },
     },
   },
@@ -250,6 +276,8 @@ export class SWEAgent extends EventEmitter {
   private config: SWEAgentConfig;
   private stateMachine: AgentStateMachine;
   private memory: SWEMessage[] = [];
+  private rawToolObservations = new Map<string, string>();
+  private currentRequest = '';
 
   constructor(config: SWEAgentConfig) {
     super();
@@ -271,6 +299,8 @@ export class SWEAgent extends EventEmitter {
   async run(request: string): Promise<string> {
     // Initialize
     this.memory = [{ role: 'system', content: SWE_SYSTEM_PROMPT }];
+    this.rawToolObservations.clear();
+    this.currentRequest = request;
 
     // Inject code graph context if available
     if (this.config.graph) {
@@ -383,7 +413,9 @@ export class SWEAgent extends EventEmitter {
         args = { raw: toolCall.function.arguments };
       }
 
-      const result = await this.config.executeTool(name, args);
+      const result = name === 'restore_context'
+        ? this.restoreCurrentRunObservation(args)
+        : await this.config.executeTool(name, args);
 
       // Check for terminate signal
       if (result.output?.startsWith(TERMINATE_SIGNAL)) {
@@ -397,13 +429,37 @@ export class SWEAgent extends EventEmitter {
         return status;
       }
 
-      // Truncate large outputs
-      let output = result.success
-        ? result.output || 'Success (no output)'
-        : `Error: ${result.error || 'Unknown error'}`;
+      const rawOutput = formatToolResultForRecovery(result);
 
-      if (output.length > this.config.maxObserve) {
-        output = output.substring(0, this.config.maxObserve) + `\n... (truncated, ${output.length} chars total)`;
+      const observation = await prepareToolObservationForPrompt({
+        toolName: name,
+        toolCallId: toolCall.id,
+        content: rawOutput,
+        fallbackContent: result.success ? rawOutput : `Error: ${rawOutput}`,
+        success: result.success,
+        exitCode: result.success ? 0 : 1,
+        ...(result.error === undefined ? {} : { error: result.error }),
+        command: commandFromToolArguments(args),
+        query: this.currentRequest,
+        workspaceRoot: this.config.workspaceRoot ?? process.cwd(),
+        model: this.config.model,
+        messages: this.memory,
+        contextWindow: this.config.contextWindow,
+        responseReserveTokens: this.config.responseReserveTokens,
+        allowOptimization: true,
+      });
+      if (name !== 'restore_context') {
+        this.rawToolObservations.set(toolCall.id, observation.rawContent);
+      }
+
+      // Keep the historical SWE observation ceiling as a last-resort bound,
+      // but preserve a recovery instruction instead of silently losing data.
+      let output = observation.content;
+
+      if (name !== 'restore_context' && output.length > this.config.maxObserve) {
+        const suffix = `\n... [truncated; exact raw output: restore_context(identifier=${JSON.stringify(toolCall.id)})]`;
+        const visibleChars = Math.max(0, this.config.maxObserve - suffix.length);
+        output = output.substring(0, visibleChars) + suffix;
       }
 
       this.memory.push({
@@ -419,6 +475,19 @@ export class SWEAgent extends EventEmitter {
     // Return to running state for next think-act cycle
     this.stateMachine.transition(AgentStatus.RUNNING, 'Tools executed');
     return null;
+  }
+
+  private restoreCurrentRunObservation(args: Record<string, unknown>): SWEToolResult {
+    const identifier = typeof args.identifier === 'string' ? args.identifier : '';
+    if (!identifier) return { success: false, error: 'identifier is required' };
+    const raw = this.rawToolObservations.get(identifier);
+    if (raw === undefined) {
+      return {
+        success: false,
+        error: `Tool call ${identifier} is not available in this SWE run`,
+      };
+    }
+    return { success: true, output: raw };
   }
 
   /** Get conversation memory */
@@ -441,11 +510,19 @@ export function createSWEAgent(config: {
   maxObserve?: number;
   llmCall: SWEAgentConfig['llmCall'];
   executeTool: SWEAgentConfig['executeTool'];
+  model?: string;
+  contextWindow?: number;
+  responseReserveTokens?: number;
+  workspaceRoot?: string;
 }): SWEAgent {
   return new SWEAgent({
     maxSteps: config.maxSteps ?? 20,
     maxObserve: config.maxObserve ?? 10000,
     llmCall: config.llmCall,
     executeTool: config.executeTool,
+    model: config.model,
+    contextWindow: config.contextWindow,
+    responseReserveTokens: config.responseReserveTokens,
+    workspaceRoot: config.workspaceRoot,
   });
 }

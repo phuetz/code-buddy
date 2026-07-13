@@ -30,4 +30,16 @@ describe('model-tools: local tool-call gating', () => {
       expect(getModelToolConfig(m).supportsToolCalls, m).toBe(false);
     }
   });
+
+  it('exposes Gemma 4 multimodal and thinking capabilities to Cowork', () => {
+    const config = getModelToolConfig('gemma4:12b');
+
+    expect(config).toMatchObject({
+      supportsVision: true,
+      supportsReasoning: true,
+      supportsToolCalls: true,
+      contextWindow: 32768,
+      maxOutputTokens: 4096,
+    });
+  });
 });

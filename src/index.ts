@@ -332,7 +332,7 @@ function _detectProviderFromEnvLegacy(): DetectedProvider | null {
             provider: 'chatgpt',
             apiKey: 'oauth-chatgpt', // sentinel consumed by CodeBuddyClient
             baseURL: 'https://chatgpt.com/backend-api/codex',
-            defaultModel: process.env.CHATGPT_MODEL || 'gpt-5.5',
+            defaultModel: process.env.CHATGPT_MODEL || 'gpt-5.6-sol',
           };
         }
       }
@@ -496,7 +496,7 @@ async function detectOnboardedLocalProvider(): Promise<DetectedProvider | null> 
       defaultModel: settings.model || (provider === 'ollama' ? 'llama3' : 'default'),
       source: 'environment',
     };
-  } catch {
+  } catch (_error) {
     return null;
   }
 }
@@ -2401,6 +2401,26 @@ addLazyCommand(
 
 addLazyCommand(
   program,
+  'campaign',
+  'Native editorial, book-promotion and PubCommander campaign workspace',
+  async () => {
+    const { createCampaignCommand } = await import('./commands/campaign.js');
+    return createCampaignCommand();
+  },
+);
+
+addLazyCommand(
+  program,
+  'maison',
+  'Household rhythm, holidays, quiet modes and private meal safety',
+  async () => {
+    const { createMaisonCommand } = await import('./commands/maison.js');
+    return createMaisonCommand();
+  },
+);
+
+addLazyCommand(
+  program,
   'pipeline',
   'Manage and run pipeline workflows',
   async () => {
@@ -2428,7 +2448,7 @@ program
   .description("Start the Code Buddy HTTP/WebSocket API server")
   .option("--port <port>", "server port", "3000")
   .option("--host <host>", "server host", "0.0.0.0")
-  .option("--no-auth", "disable JWT authentication")
+  .option("--no-auth", "disable JWT authentication (loopback development only)")
   .action(async (options) => {
     const { startServer } = await import("./server/index.js");
     try {
@@ -2448,23 +2468,25 @@ program
   .description("Push-to-talk voice commands — speak an instruction, the agent acts, the reply is spoken")
   .option(
     "--mode <mode>",
-    "voice ACT posture: plan (read-only, default) | dontAsk | bypassPermissions (can edit/run)",
-    "plan",
+    "voice ACT posture: default (guarded workspace, default) | plan (read-only) | acceptEdits | dontAsk | bypassPermissions",
+    "default",
   )
   .action(async (options) => {
-    const allowed = ["plan", "dontAsk", "bypassPermissions"] as const;
-    const mode = (allowed as readonly string[]).includes(options.mode) ? options.mode : "plan";
+    const allowed = ["default", "plan", "acceptEdits", "dontAsk", "bypassPermissions"] as const;
+    const mode = (allowed as readonly string[]).includes(options.mode) ? options.mode : "default";
     if (mode !== options.mode) {
-      cli.stdout(`⚠️  Unknown --mode '${options.mode}', falling back to 'plan' (read-only).`);
+      cli.stdout(`⚠️  Unknown --mode '${options.mode}', falling back to 'default' (guarded workspace).`);
     }
-    if (mode !== "plan") {
+    if (mode === "dontAsk" || mode === "bypassPermissions") {
       cli.stdout(
         `⚠️  Posture '${mode}': voice can EDIT FILES / RUN COMMANDS from a possibly-misheard transcript. Ctrl-C to abort.`,
       );
     }
     try {
       const { runVoiceCommand } = await import("./cli/voice-command.js");
-      await runVoiceCommand({ permissionMode: mode as "plan" | "dontAsk" | "bypassPermissions" });
+      await runVoiceCommand({
+        permissionMode: mode as "default" | "plan" | "acceptEdits" | "dontAsk" | "bypassPermissions",
+      });
     } catch (error) {
       logger.error("Voice command session failed", error instanceof Error ? error : new Error(String(error)));
       process.exit(1);
@@ -2855,7 +2877,17 @@ program
       if (auth.email) cli.stdout(`   Account:    ${auth.email}`);
       if (auth.plan_type) cli.stdout(`   Plan:       ${auth.plan_type}`);
       if (auth.is_fedramp) cli.stdout(`   FedRAMP:    yes`);
-      if (auth.account_id) cli.stdout(`   Account ID: ${auth.account_id}`);
+      const {
+        CHATGPT_OAUTH_DEFAULT_MODEL,
+        CHATGPT_OAUTH_SAFE_FALLBACK_MODEL,
+        discoverChatGptModels,
+        selectChatGptOAuthModel,
+      } = await import('./providers/chatgpt-models.js');
+      const catalog = await discoverChatGptModels(auth);
+      cli.stdout(
+        `   Model:      ${selectChatGptOAuthModel(CHATGPT_OAUTH_DEFAULT_MODEL, catalog)}`,
+      );
+      if (!catalog) cli.stdout(`   Safe fallback: ${CHATGPT_OAUTH_SAFE_FALLBACK_MODEL}`);
       cli.stdout(`\nTokens stored at: ${getCodexAuthFilePath()}`);
       cli.stdout("Run `buddy --print \"hello\"` to test, or just `buddy` for a chat session.");
     } catch (err) {
@@ -2896,7 +2928,7 @@ program
 
 program
   .command("whoami")
-  .description("Show current authentication status (email, plan, account)")
+  .description("Show current authentication status (email, plan, OAuth model)")
   .action(async () => {
     const { hasCodexCredentials, getChatGptAuth } = await import(
       "./providers/codex-oauth.js"
@@ -2914,8 +2946,16 @@ program
       cli.stdout("ChatGPT: ✅ connected");
       if (auth.email) cli.stdout(`  Account:    ${auth.email}`);
       if (auth.plan_type) cli.stdout(`  Plan:       ${auth.plan_type}`);
-      if (auth.account_id) cli.stdout(`  Account ID: ${auth.account_id}`);
       if (auth.is_fedramp) cli.stdout(`  FedRAMP:    yes`);
+      const {
+        CHATGPT_OAUTH_DEFAULT_MODEL,
+        CHATGPT_OAUTH_SAFE_FALLBACK_MODEL,
+        discoverChatGptModels,
+        selectChatGptOAuthModel,
+      } = await import('./providers/chatgpt-models.js');
+      const catalog = await discoverChatGptModels(auth);
+      cli.stdout(`  Model:      ${selectChatGptOAuthModel(CHATGPT_OAUTH_DEFAULT_MODEL, catalog)}`);
+      if (!catalog) cli.stdout(`  Safe fallback: ${CHATGPT_OAUTH_SAFE_FALLBACK_MODEL}`);
     } catch (err) {
       cli.error(`Error reading credentials: ${err instanceof Error ? err.message : String(err)}`);
       process.exit(1);
@@ -3316,6 +3356,17 @@ addLazyCommand(
   },
 );
 
+// Meeting intelligence — local transcript/media to grounded Markdown + JSON
+addLazyCommand(
+  program,
+  'meeting',
+  'Create grounded meeting notes from a local transcript, audio, or video file',
+  async () => {
+    const { createMeetingCommand } = await import('./commands/meeting.js');
+    return createMeetingCommand();
+  },
+);
+
 // Paper QA — grounded, cited answers over a local corpus of scientific PDFs
 addLazyCommand(
   program,
@@ -3399,6 +3450,47 @@ addLazyCommand(
   async argv => {
     const { validateLoopCommandNumericOptions } = await import('./commands/loop-cli.js');
     validateLoopCommandNumericOptions(argv);
+  },
+);
+
+// Code Buddy 2.0 — durable mission intent + proof-carrying completion
+addLazyCommand(
+  program,
+  'intent',
+  'Inspect the current Intent Graph and secret-redacted Proof Ledger',
+  async () => {
+    const { createIntentCommand } = await import('./commands/intent.js');
+    return createIntentCommand();
+  },
+);
+
+addLazyCommand(
+  program,
+  'forge',
+  'Counterfactual Forge: compare competing strategies against one proof contract',
+  async () => {
+    const { createForgeCommand } = await import('./commands/forge.js');
+    return createForgeCommand();
+  },
+);
+
+addLazyCommand(
+  program,
+  'exchange',
+  'Sovereign execution market: constitution, multi-LLM bids, Shadow Twin and proof-gated award',
+  async () => {
+    const { createExchangeCommand } = await import('./commands/exchange.js');
+    return createExchangeCommand();
+  },
+);
+
+addLazyCommand(
+  program,
+  'capsule',
+  'Compile proven outcomes into proof-backed, multi-runtime portable workflows',
+  async () => {
+    const { createCapsuleCommand } = await import('./commands/capsule.js');
+    return createCapsuleCommand();
   },
 );
 

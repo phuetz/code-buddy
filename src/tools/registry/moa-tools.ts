@@ -40,6 +40,21 @@ export class MixtureOfAgentsTool implements ITool {
     if (typeof data.user_prompt !== 'string' || !data.user_prompt.trim()) {
       return { valid: false, errors: ['user_prompt is required'] };
     }
+    const allowedUseCases = new Set([
+      'balanced',
+      'fast',
+      'code',
+      'architecture',
+      'decision',
+      'research',
+      'security',
+    ]);
+    if (
+      data.use_case !== undefined &&
+      (typeof data.use_case !== 'string' || !allowedUseCases.has(data.use_case))
+    ) {
+      return { valid: false, errors: ['use_case must be a supported multi-LLM profile'] };
+    }
     return { valid: true };
   }
 

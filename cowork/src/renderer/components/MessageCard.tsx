@@ -9,6 +9,7 @@ import { User } from 'lucide-react';
 import { ActivityGroupBlock } from './message/ActivityGroupBlock';
 import { detectArtifacts, type RenderableArtifact } from '../utils/artifact-detector';
 import { useAppStore } from '../store';
+import { ForkFromMessageButton } from './ForkFromMessageButton';
 
 type TranslateFn = (key: string, opts?: Record<string, unknown>) => string;
 
@@ -208,6 +209,12 @@ export const MessageCard = memo(function MessageCard({
                     <Pencil className="w-3 h-3 text-text-muted" />
                   </button>
                 )}
+                {!isStreaming ? (
+                  <ForkFromMessageButton
+                    message={message}
+                    className="flex h-6 w-6 items-center justify-center rounded-md bg-transparent opacity-0 transition-all hover:bg-surface-active group-hover:opacity-100"
+                  />
+                ) : null}
               </div>
               <div
                 className={`max-w-[85%] min-w-0 break-words text-right ${
@@ -305,6 +312,12 @@ export const MessageCard = memo(function MessageCard({
                       <RefreshCw className="w-3 h-3 text-text-muted" />
                     </button>
                   )}
+                  {!isStreaming ? (
+                    <ForkFromMessageButton
+                      message={message}
+                      className="flex h-6 w-6 items-center justify-center rounded-md bg-transparent opacity-0 transition-all hover:bg-surface-active group-hover/assistant:opacity-100"
+                    />
+                  ) : null}
                 </div>
                 {visibleBlocks.map((block, index) => (
                   <ContentBlockView

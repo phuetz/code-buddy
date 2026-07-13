@@ -21,6 +21,7 @@ import {
   ChatGptResponsesProvider,
 } from '../../../src/codebuddy/providers/provider-chatgpt-responses.js';
 import type { ChatGptAuth } from '../../../src/providers/codex-oauth.js';
+import type { ChatGptCodexModelCatalog } from '../../../src/providers/chatgpt-models.js';
 import type { CodeBuddyMessage, CodeBuddyTool } from '../../../src/codebuddy/client.js';
 import { reduceStreamChunk } from '../../../src/agent/streaming/message-reducer.js';
 
@@ -82,6 +83,33 @@ describe('convertMessages — chat/completions → Codex Responses input shape',
       type: 'function_call_output',
       call_id: 'call_1',
       output: 'result-text',
+    });
+  });
+
+  it('round-trips code_exec through Responses custom_tool_call items', () => {
+    const out = convertMessages([
+      {
+        role: 'assistant',
+        content: null,
+        tool_calls: [{
+          id: 'custom-1',
+          type: 'function',
+          function: { name: 'code_exec', arguments: JSON.stringify({ code: 'text(42);' }) },
+        }],
+      },
+      { role: 'tool', tool_call_id: 'custom-1', content: '42' },
+    ] as unknown as CodeBuddyMessage[]);
+
+    expect(out.input[0]).toEqual({
+      type: 'custom_tool_call',
+      name: 'exec',
+      call_id: 'custom-1',
+      input: 'text(42);',
+    });
+    expect(out.input[1]).toEqual({
+      type: 'custom_tool_call_output',
+      call_id: 'custom-1',
+      output: '42',
     });
   });
 
@@ -192,6 +220,23 @@ describe('flattenTools — chat/completions tool format → Codex Responses', ()
     });
     expect((out[0] as Record<string, unknown>).function).toBeUndefined();
   });
+
+  it('advertises code_exec as the Responses custom exec tool', () => {
+    const out = flattenTools([{
+      type: 'function',
+      function: {
+        name: 'code_exec',
+        description: 'Run orchestrator code',
+        parameters: { type: 'object', properties: { code: { type: 'string' } } },
+      },
+    }]);
+    expect(out[0]).toMatchObject({
+      type: 'custom',
+      name: 'exec',
+      format: { type: 'grammar', syntax: 'lark' },
+    });
+    expect((out[0] as { format: { definition: string } }).format.definition).toContain('plain_source');
+  });
 });
 
 describe('buildRequestBody — assembled body matches Codex Responses contract', () => {
@@ -281,6 +326,26 @@ describe('buildRequestBody — assembled body matches Codex Responses contract',
     });
     expect((body as Record<string, unknown>).max_output_tokens).toBeUndefined();
   });
+
+  it('uses the Responses Lite input contract when requested', () => {
+    const body = buildRequestBody({
+      model: 'gpt-5.6-sol',
+      instructions: 'Build safely.',
+      input: [{ type: 'message', role: 'user', content: [{ type: 'input_text', text: 'go' }] }],
+      tools: [],
+      reasoningEffort: 'ultra',
+      includeEncryptedReasoning: true,
+      useResponsesLite: true,
+    });
+    expect(body.instructions).toBeUndefined();
+    expect(body.tools).toBeUndefined();
+    expect(body.parallel_tool_calls).toBe(false);
+    expect(body.reasoning).toEqual({ effort: 'ultra', context: 'all_turns' });
+    expect(body.include).toEqual(['reasoning.encrypted_content']);
+    expect(body.input[0]).toEqual({ type: 'additional_tools', role: 'developer', tools: [] });
+    expect(body.input[1]).toMatchObject({ type: 'message', role: 'developer' });
+    expect(body.input[2]).toMatchObject({ type: 'message', role: 'user' });
+  });
 });
 
 // ─── 2. SSE parser ──────────────────────────────────────────────────
@@ -338,6 +403,27 @@ describe('parseSseStream — Codex SSE → OpenAI ChatCompletionChunk', () => {
       }
     }
     expect(toolCalls).toEqual([{ id: 'c1', name: 'search', args: '{"q":"X"}' }]);
+  });
+
+  it('accumulates custom exec input deltas and emits a code_exec tool call', async () => {
+    const stream = makeSseStream([
+      'data: {"type":"response.output_item.added","item":{"type":"custom_tool_call","id":"item-1","call_id":"call-1","name":"exec","input":""}}\n\n',
+      'data: {"type":"response.custom_tool_call_input.delta","item_id":"item-1","call_id":"call-1","delta":"text("}\n\n',
+      'data: {"type":"response.custom_tool_call_input.delta","item_id":"item-1","call_id":"call-1","delta":"42);"}\n\n',
+      'data: {"type":"response.output_item.done","item":{"type":"custom_tool_call","call_id":"call-1","name":"exec"}}\n\n',
+      'data: {"type":"response.completed"}\n\n',
+    ]);
+
+    const calls: Array<{ name?: string; args?: string }> = [];
+    for await (const chunk of parseSseStream(stream, 'gpt-5.6-sol')) {
+      for (const call of chunk.choices[0]?.delta?.tool_calls ?? []) {
+        calls.push({ name: call.function?.name, args: call.function?.arguments });
+      }
+    }
+    expect(calls).toEqual([{
+      name: 'code_exec',
+      args: JSON.stringify({ code: 'text(42);' }),
+    }]);
   });
 
   it('assigns a distinct index to each parallel function_call (regression: call_id concatenation)', async () => {
@@ -501,6 +587,35 @@ function streamingResponse(events: string[]): Response {
   });
 }
 
+function discoveredCatalog(): ChatGptCodexModelCatalog {
+  return {
+    fetchedAt: 1,
+    models: [
+      {
+        slug: 'gpt-5.6-sol',
+        priority: 1,
+        supportedReasoningEfforts: ['low', 'medium', 'high', 'xhigh', 'max', 'ultra'],
+        defaultReasoningEffort: 'medium',
+        useResponsesLite: true,
+      },
+      {
+        slug: 'gpt-5.6-terra',
+        priority: 2,
+        supportedReasoningEfforts: ['low', 'medium', 'high', 'xhigh', 'max', 'ultra'],
+        defaultReasoningEffort: 'medium',
+        useResponsesLite: true,
+      },
+      {
+        slug: 'gpt-5.5',
+        priority: 7,
+        supportedReasoningEfforts: ['low', 'medium', 'high', 'xhigh'],
+        defaultReasoningEffort: 'medium',
+        useResponsesLite: false,
+      },
+    ],
+  };
+}
+
 describe('ChatGptResponsesProvider — chatStream wiring', () => {
   it('sends Authorization, ChatGPT-Account-ID, and originator headers', async () => {
     const fetchMock = vi
@@ -560,6 +675,98 @@ describe('ChatGptResponsesProvider — chatStream wiring', () => {
     const [, init] = fetchMock.mock.calls[0]!;
     const headers = (init as RequestInit).headers as Record<string, string>;
     expect(headers['X-OpenAI-Fedramp']).toBe('true');
+  });
+
+  it('uses the discovered Sol Responses Lite contract and supports ultra reasoning', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(streamingResponse([
+      'data: {"type":"response.completed"}\n\n',
+    ]));
+    const provider = new ChatGptResponsesProvider({
+      authProvider: async () => authBundle(),
+      modelCatalogProvider: async () => discoveredCatalog(),
+      model: 'gpt-5.6',
+      defaultMaxTokens: 1000,
+    });
+    const tools: CodeBuddyTool[] = [{
+      type: 'function',
+      function: {
+        name: 'code_exec',
+        description: 'Run orchestrator code',
+        parameters: { type: 'object', properties: { code: { type: 'string' } } },
+      },
+    }];
+
+    for await (const _ of provider.chatStream(
+      [{ role: 'system', content: 'Be precise.' }, { role: 'user', content: 'work' }],
+      tools,
+      { codexReasoningEffort: 'ultra' },
+    )) { /* drain */ }
+
+    const [, init] = fetchMock.mock.calls[0]!;
+    const headers = (init as RequestInit).headers as Record<string, string>;
+    const body = JSON.parse((init as RequestInit).body as string);
+    expect(headers['x-openai-internal-codex-responses-lite']).toBe('true');
+    expect(body.model).toBe('gpt-5.6-sol');
+    expect(body.instructions).toBeUndefined();
+    expect(body.tools).toBeUndefined();
+    expect(body.parallel_tool_calls).toBe(false);
+    expect(body.reasoning).toEqual({ effort: 'ultra', context: 'all_turns' });
+    expect(body.include).toEqual(['reasoning.encrypted_content']);
+    expect(body.input[0]).toMatchObject({
+      type: 'additional_tools',
+      role: 'developer',
+      tools: [{ type: 'custom', name: 'exec' }],
+    });
+    expect(body.input[1]).toMatchObject({ type: 'message', role: 'developer' });
+  });
+
+  it('falls back in discovered account priority order on model compatibility errors', async () => {
+    const responses = [
+      new Response(JSON.stringify({ error: { code: 'model_not_supported' } }), { status: 400 }),
+      streamingResponse(['data: {"type":"response.completed"}\n\n']),
+    ];
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => (
+      responses.shift() ?? new Response('', { status: 500 })
+    ));
+    const provider = new ChatGptResponsesProvider({
+      authProvider: async () => authBundle(),
+      modelCatalogProvider: async () => discoveredCatalog(),
+      model: 'gpt-5.6-sol',
+      defaultMaxTokens: 1000,
+    });
+
+    for await (const _ of provider.chatStream(
+      [{ role: 'user', content: 'work' }],
+      [],
+      {},
+    )) { /* drain */ }
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const firstBody = JSON.parse((fetchMock.mock.calls[0]![1] as RequestInit).body as string);
+    const secondBody = JSON.parse((fetchMock.mock.calls[1]![1] as RequestInit).body as string);
+    expect(firstBody.model).toBe('gpt-5.6-sol');
+    expect(secondBody.model).toBe('gpt-5.6-terra');
+  });
+
+  it('never model-fallbacks on 429, even when the body mentions model_not_supported', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ error: { code: 'model_not_supported' } }), { status: 429 }),
+    );
+    const provider = new ChatGptResponsesProvider({
+      authProvider: async () => authBundle(),
+      modelCatalogProvider: async () => discoveredCatalog(),
+      model: 'gpt-5.6-sol',
+      defaultMaxTokens: 1000,
+    });
+
+    await expect(async () => {
+      for await (const _ of provider.chatStream(
+        [{ role: 'user', content: 'work' }],
+        [],
+        {},
+      )) { /* drain */ }
+    }).rejects.toThrow(/429/);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it('throws a helpful message when no auth on disk', async () => {
@@ -747,11 +954,11 @@ describe('ChatGptResponsesProvider — chatStream wiring', () => {
     expect(body.reasoning).toBeUndefined();
   });
 
-  it('auto-fallback: model_not_supported triggers retry with next FALLBACK_MODELS entry', async () => {
+  it('auto-fallback: model_not_supported retries the offline-safe gpt-5.5 model', async () => {
     const responses: Response[] = [
       // Round 1 with the user's chosen model → 400 model_not_supported
       new Response(
-        JSON.stringify({ detail: "The 'gpt-5.5' model is not supported when using Codex with a ChatGPT account." }),
+        JSON.stringify({ detail: "The 'gpt-5.6-sol' model is not supported when using Codex with a ChatGPT account." }),
         { status: 400, headers: { 'content-type': 'application/json' } },
       ),
       // Round 2 with the auto-fallback → success
@@ -766,7 +973,7 @@ describe('ChatGptResponsesProvider — chatStream wiring', () => {
 
     const provider = new ChatGptResponsesProvider({
       authProvider: async () => authBundle(),
-      model: 'gpt-5.5', // first FALLBACK_MODELS entry is 'gpt-5.2'
+      model: 'gpt-5.6-sol',
       defaultMaxTokens: 1000,
     });
 
@@ -782,9 +989,9 @@ describe('ChatGptResponsesProvider — chatStream wiring', () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(out.join('')).toBe('OK');
-    // 2nd request used the fallback model (first entry of FALLBACK_MODELS).
+    // With discovery unavailable, one conservative gpt-5.5 retry is allowed.
     const body2 = JSON.parse((fetchMock.mock.calls[1]![1] as RequestInit).body as string);
-    expect(body2.model).toBe('gpt-5.2');
+    expect(body2.model).toBe('gpt-5.5');
   });
 
   it('proactive remap: a mis-routed non-Codex model (grok-*) uses the configured model, no failed round-trip', async () => {
@@ -853,7 +1060,7 @@ describe('ChatGptResponsesProvider — chatStream wiring', () => {
     expect(caught!.message).toContain('gpt-5.5');
   });
 
-  it('auto-fallback: stops when current model is already a fallback candidate', async () => {
+  it('auto-fallback: makes at most one safe retry without a discovered catalog', async () => {
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
       new Response(
         JSON.stringify({ detail: "The 'gpt-5.1-codex' model is not supported." }),
@@ -879,9 +1086,9 @@ describe('ChatGptResponsesProvider — chatStream wiring', () => {
       caught = err as Error;
     }
 
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(caught).toBeTruthy();
-    expect(caught!.message).toContain('gpt-5.1-codex');
+    expect(caught!.message).toContain('gpt-5.5');
   });
 
   it('auto-fallback: skipped when disableModelFallback=true', async () => {
@@ -922,7 +1129,7 @@ describe('ChatGptResponsesProvider — chatStream wiring', () => {
 
     const provider = new ChatGptResponsesProvider({
       authProvider: async () => authBundle(),
-      model: 'gpt-5.5',
+      model: 'gpt-5.6-sol',
       defaultMaxTokens: 1000,
       // Disable auto-fallback so the rejection message references the
       // exact model the caller used, not the post-fallback retry slug.
@@ -940,8 +1147,8 @@ describe('ChatGptResponsesProvider — chatStream wiring', () => {
     } catch (err) {
       caught = err as Error;
     }
-    expect(caught?.message).toContain('gpt-5.5');
-    expect(caught?.message).toMatch(/gpt-5\.1-codex/);
+    expect(caught?.message).toContain('gpt-5.6-sol');
+    expect(caught?.message).toMatch(/gpt-5\.5/);
   });
 
   // Regression: prior versions called fetch() with no AbortController,

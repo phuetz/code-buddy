@@ -60,6 +60,17 @@ export class SWESpecializedAgent extends SpecializedAgent {
         maxObserve: (task.params?.maxObserve as number) ?? (configOptions.maxTokens as number | undefined) ?? 10000,
         llmCall: llmCall as SWEAgentOptions['llmCall'],
         executeTool: executeTool as SWEAgentOptions['executeTool'],
+        model: typeof task.params?.model === 'string' ? task.params.model : undefined,
+        contextWindow:
+          typeof task.params?.contextWindow === 'number' ? task.params.contextWindow : undefined,
+        responseReserveTokens:
+          typeof task.params?.responseReserveTokens === 'number'
+            ? task.params.responseReserveTokens
+            : undefined,
+        workspaceRoot:
+          typeof task.params?.workspaceRoot === 'string'
+            ? task.params.workspaceRoot
+            : process.cwd(),
       });
 
       const prompt = this.buildPrompt(task);

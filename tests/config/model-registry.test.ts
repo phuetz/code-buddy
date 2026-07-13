@@ -54,6 +54,17 @@ describe('ModelRegistry', () => {
       expect(pricing.outputPerMillion).toBe(10.0);
     });
 
+    it('should use GPT-5.6 Sol public API pricing before the GPT-5 prefix fallback', () => {
+      expect(registry.getPricing('gpt-5.6-sol')).toEqual({
+        inputPerMillion: 5,
+        outputPerMillion: 30,
+      });
+      expect(registry.getPricing('gpt-5.6')).toEqual({
+        inputPerMillion: 5,
+        outputPerMillion: 30,
+      });
+    });
+
     it('should return pricing for Claude models', () => {
       const pricing = registry.getPricing('claude-3-opus');
       expect(pricing.inputPerMillion).toBe(15.0);
@@ -79,6 +90,7 @@ describe('ModelRegistry', () => {
       expect(registry.resolveAlias('opus')).toBe('claude-opus-4-6');
       expect(registry.resolveAlias('haiku')).toBe('claude-haiku-4-5-20251001');
       expect(registry.resolveAlias('gpt4')).toBe('gpt-4o');
+      expect(registry.resolveAlias('gpt-5.6')).toBe('gpt-5.6-sol');
       expect(registry.resolveAlias('gemini')).toBe('gemini-2.5-flash');
       expect(registry.resolveAlias('grok')).toBe('grok-code-fast-1');
     });

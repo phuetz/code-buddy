@@ -50,6 +50,12 @@ function extractScreenshot(data: unknown): string | undefined {
   return undefined;
 }
 
+function extractOperatorDraft(toolName: string, data: unknown): unknown {
+  if (toolName !== 'browser_operator' || !data || typeof data !== 'object') return undefined;
+  const draft = (data as Record<string, unknown>).draft;
+  return draft && typeof draft === 'object' ? draft : undefined;
+}
+
 const EVIDENCE_MAX = 280;
 
 export interface BrowserActionInput {
@@ -85,6 +91,7 @@ export function buildBrowserActionPayload(args: BrowserActionInput): BrowserActi
     typeof args.output === 'string' && args.output.length > 0
       ? args.output.slice(0, EVIDENCE_MAX)
       : undefined;
+  const operatorDraft = extractOperatorDraft(args.toolName, args.data);
 
   return {
     sessionId: args.sessionId,
@@ -94,7 +101,10 @@ export function buildBrowserActionPayload(args: BrowserActionInput): BrowserActi
     target,
     evidence,
     screenshot: extractScreenshot(args.data),
-    details: input,
+    details: {
+      ...input,
+      ...(operatorDraft ? { operatorDraft } : {}),
+    },
     timestamp: args.now ?? Date.now(),
   };
 }

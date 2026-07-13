@@ -109,9 +109,15 @@ export class PolicyEngine {
         }
 
       case 'shell:safe':
+        if (req.risk === 'low') {
+          return {
+            decision: 'allow',
+            reason: 'Low-risk shell execution allowed.',
+          };
+        }
         return {
-          decision: 'allow',
-          reason: 'Safe shell execution allowed.',
+          decision: 'needs_approval',
+          reason: `${req.risk} risk shell execution requires approval.`,
         };
 
       case 'net:listed':

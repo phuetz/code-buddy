@@ -48,6 +48,12 @@ describe('ConfigStore provider profiles', () => {
     mocks.seed = {};
   });
 
+  it('ships GPT-5.6 Sol as the default ChatGPT profile', () => {
+    const store = new ConfigStore();
+
+    expect(store.getAll().profiles.chatgpt?.model).toBe('gpt-5.6-sol');
+  });
+
   it('migrates legacy single-profile fields into active profile', () => {
     mocks.seed = {
       provider: 'openai',

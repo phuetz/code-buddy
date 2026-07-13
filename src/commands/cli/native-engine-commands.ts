@@ -802,6 +802,7 @@ export function registerFleetAutonomyCommands(program: Command): void {
       dir?: string; outputDir?: string; json?: boolean;
     }) => {
       const { createDefaultAutonomousLoop, FleetAutonomousDaemon, watchFleetTasks } = await import('../../daemon/autonomous-daemon.js');
+      const { AutonomyBriefingJournal } = await import('../../daemon/autonomy-briefing.js');
       const path = await import('path');
       const loop = await createDefaultAutonomousLoop({
         ...(opts.dir ? { dir: opts.dir } : {}),
@@ -809,13 +810,23 @@ export function registerFleetAutonomyCommands(program: Command): void {
       });
       // Same dir resolution the store uses, so the watcher observes the live queue.
       const colabDir = opts.dir || process.env['CODEBUDDY_FLEET_COLAB_DIR'] || path.join(process.cwd(), '.codebuddy');
+      const briefing = new AutonomyBriefingJournal({ dir: colabDir });
+      let briefingErrorReported = false;
       const daemon = new FleetAutonomousDaemon({
         loop,
         intervalMs: parseInt(opts.interval, 10) || 30000,
         onTick: (result, n) => {
+          const recorded = briefing.recordTick(result, n);
+          if (!recorded.ok && !briefingErrorReported && !opts.json) {
+            briefingErrorReported = true;
+            console.warn(`Morning briefing degraded: ${recorded.error ?? 'unknown write error'}`);
+          }
           if (!opts.json) {
             const tier = result.model ? ` [${result.model.tier}${result.model.paid ? ' $' : ''}]` : '';
-            console.log(`tick ${n}: ${result.outcome}${result.taskTitle ? ` — ${result.taskTitle}` : ''}${tier}`);
+            const detail = result.detail && result.detail !== 'self-improve on cooldown'
+              ? ` (${result.detail})`
+              : '';
+            console.log(`tick ${n}: ${result.outcome}${result.taskTitle ? ` — ${result.taskTitle}` : ''}${tier}${detail}`);
           }
         },
         // Event-driven only for continuous runs: a write to the queue wakes the
@@ -839,6 +850,39 @@ export function registerFleetAutonomyCommands(program: Command): void {
       } else {
         console.log(`\nDone: ${summary.ticks} tick(s), ${JSON.stringify(summary.outcomes)} (${summary.stoppedReason}).`);
       }
+    });
+
+  fleet
+    .command('briefing')
+    .description('Build/show the evidence-first morning brief from the autonomy ledger')
+    .option('--date <yyyy-mm-dd>', 'morning date (default: current reporting window)')
+    .option('--dir <path>', 'colab dir')
+    .option('--json', 'output the machine-readable briefing')
+    .action(async (opts: { date?: string; dir?: string; json?: boolean }) => {
+      const path = await import('path');
+      const { AutonomyBriefingJournal, renderAutonomyMorningBrief } = await import('../../daemon/autonomy-briefing.js');
+      if (opts.date && !/^\d{4}-\d{2}-\d{2}$/.test(opts.date)) {
+        console.error('--date must use YYYY-MM-DD');
+        process.exit(1);
+        return;
+      }
+      const colabDir = opts.dir
+        || process.env['CODEBUDDY_FLEET_COLAB_DIR']
+        || path.join(process.cwd(), '.codebuddy');
+      const result = new AutonomyBriefingJournal({ dir: colabDir }).refresh(opts.date);
+      if (!result.ok || !result.brief) {
+        const message = `Unable to build autonomy briefing: ${result.error ?? 'unknown error'}`;
+        if (opts.json) console.log(JSON.stringify({ ok: false, error: message }, null, 2));
+        else console.error(message);
+        process.exit(1);
+        return;
+      }
+      if (opts.json) {
+        console.log(JSON.stringify(result.brief, null, 2));
+        return;
+      }
+      console.log(renderAutonomyMorningBrief(result.brief));
+      console.log(`Saved: ${result.markdownPath}`);
     });
 
   fleet
@@ -1415,6 +1459,138 @@ export function registerCompanionCommands(program: Command): void {
     .action(async () => {
       const { getCompanionStatus, formatCompanionStatus } = await import('../../companion/companion-mode.js');
       console.log(formatCompanionStatus(await getCompanionStatus()));
+    });
+
+  const continuity = companion
+    .command('continuity')
+    .description('Manage the integrity-protected companion lineage across models, machines, and future bodies');
+
+  continuity
+    .command('init')
+    .description('Create the continuity charter and first reviewed artifact snapshot')
+    .option('--json', 'Print the manifest as JSON')
+    .action(async (opts: { json?: boolean }) => {
+      const {
+        refreshCompanionContinuity,
+        getCompanionContinuityStatus,
+        formatCompanionContinuityStatus,
+      } = await import('../../companion/continuity.js');
+      const manifest = refreshCompanionContinuity();
+      console.log(opts.json
+        ? JSON.stringify(manifest, null, 2)
+        : formatCompanionContinuityStatus(getCompanionContinuityStatus()));
+    });
+
+  continuity
+    .command('status')
+    .description('Show lineage integrity, required anchors, and migration readiness')
+    .option('--json', 'Print structured JSON')
+    .action(async (opts: { json?: boolean }) => {
+      const {
+        getCompanionContinuityStatus,
+        formatCompanionContinuityStatus,
+      } = await import('../../companion/continuity.js');
+      const status = getCompanionContinuityStatus();
+      console.log(opts.json ? JSON.stringify(status, null, 2) : formatCompanionContinuityStatus(status));
+    });
+
+  continuity
+    .command('refresh')
+    .description('Accept reviewed artifact changes and refresh their integrity snapshot')
+    .option('--json', 'Print the refreshed manifest as JSON')
+    .action(async (opts: { json?: boolean }) => {
+      const {
+        refreshCompanionContinuity,
+        getCompanionContinuityStatus,
+        formatCompanionContinuityStatus,
+      } = await import('../../companion/continuity.js');
+      const manifest = refreshCompanionContinuity();
+      console.log(opts.json
+        ? JSON.stringify(manifest, null, 2)
+        : formatCompanionContinuityStatus(getCompanionContinuityStatus()));
+    });
+
+  continuity
+    .command('verify')
+    .description('Verify the charter and every recorded continuity artifact without changing them')
+    .option('--json', 'Print structured JSON')
+    .action(async (opts: { json?: boolean }) => {
+      const {
+        getCompanionContinuityStatus,
+        formatCompanionContinuityStatus,
+      } = await import('../../companion/continuity.js');
+      const status = getCompanionContinuityStatus();
+      console.log(opts.json ? JSON.stringify(status, null, 2) : formatCompanionContinuityStatus(status));
+      if (!status.valid) process.exitCode = 1;
+    });
+
+  const migration = companion
+    .command('migration')
+    .alias('migrate')
+    .description('Export, verify, and safely restore an encrypted companion lineage bundle');
+
+  migration
+    .command('export')
+    .description('Create an authenticated encrypted bundle of the reviewed companion lineage')
+    .option('-o, --output <path>', 'Destination .cbm bundle path')
+    .option('--key-file <path>', 'Recovery key file (defaults to ~/.codebuddy/companion/migration.key)')
+    .option('--json', 'Print structured JSON')
+    .action(async (opts: { output?: string; keyFile?: string; json?: boolean }) => {
+      const {
+        exportCompanionMigration,
+        formatCompanionMigrationResult,
+        getOrCreateCompanionMigrationPassphrase,
+        readCompanionMigrationPassphrase,
+      } = await import('../../companion/migration.js');
+      const key = opts.keyFile || process.env.CODEBUDDY_COMPANION_MIGRATION_KEY
+        ? readCompanionMigrationPassphrase({ keyFile: opts.keyFile })
+        : getOrCreateCompanionMigrationPassphrase();
+      const result = exportCompanionMigration({ passphrase: key.passphrase, bundlePath: opts.output });
+      console.log(opts.json
+        ? JSON.stringify({ ...result, keyPath: key.keyPath }, null, 2)
+        : formatCompanionMigrationResult(result, key.keyPath));
+    });
+
+  migration
+    .command('verify <bundle>')
+    .description('Decrypt and verify a migration bundle without writing any companion data')
+    .option('--key-file <path>', 'Recovery key file')
+    .option('--json', 'Print structured JSON')
+    .action(async (bundle: string, opts: { keyFile?: string; json?: boolean }) => {
+      const {
+        formatCompanionMigrationResult,
+        readCompanionMigrationPassphrase,
+        restoreCompanionMigration,
+      } = await import('../../companion/migration.js');
+      const key = readCompanionMigrationPassphrase({ keyFile: opts.keyFile });
+      const result = restoreCompanionMigration({ passphrase: key.passphrase, bundlePath: bundle });
+      console.log(opts.json ? JSON.stringify(result, null, 2) : formatCompanionMigrationResult(result, key.keyPath));
+      if (!result.valid) process.exitCode = 1;
+    });
+
+  migration
+    .command('restore <bundle>')
+    .description('Preview restoration by default; use --apply after reviewing the report')
+    .option('--apply', 'Write the verified artifacts to this machine')
+    .option('--overwrite', 'Replace differing existing artifacts (requires --apply)')
+    .option('--key-file <path>', 'Recovery key file')
+    .option('--json', 'Print structured JSON')
+    .action(async (bundle: string, opts: { apply?: boolean; overwrite?: boolean; keyFile?: string; json?: boolean }) => {
+      const {
+        formatCompanionMigrationResult,
+        readCompanionMigrationPassphrase,
+        restoreCompanionMigration,
+      } = await import('../../companion/migration.js');
+      if (opts.overwrite && !opts.apply) throw new Error('--overwrite requires --apply.');
+      const key = readCompanionMigrationPassphrase({ keyFile: opts.keyFile });
+      const result = restoreCompanionMigration({
+        passphrase: key.passphrase,
+        bundlePath: bundle,
+        apply: opts.apply,
+        overwrite: opts.overwrite,
+      });
+      console.log(opts.json ? JSON.stringify(result, null, 2) : formatCompanionMigrationResult(result, key.keyPath));
+      if (!result.valid || (opts.apply && !result.applied)) process.exitCode = 1;
     });
 
   companion

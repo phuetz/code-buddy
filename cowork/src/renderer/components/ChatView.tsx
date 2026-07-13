@@ -22,7 +22,12 @@ import type { MentionItem } from './MentionAutocomplete';
 import type { SlashCommandItem } from './SlashCommandPalette';
 import { ChatHeader } from './ChatHeader';
 import { GoalBanner } from './GoalBanner';
-import { interruptSpeech, speakText } from './VoiceOutputToggle';
+import {
+  interruptSpeech,
+  isTtsEnabled,
+  queueStreamingSpeech,
+  speakText,
+} from './VoiceOutputToggle';
 import { usePermissionMode, useSearchState } from '../store/selectors';
 import type { Message, ContentBlock, ScheduleCreateInput, ScheduleWeekday } from '../types';
 import {
@@ -44,10 +49,11 @@ import {
   CHAT_COMPOSER_INSERT_EVENT,
   type ChatComposerInsertDetail,
 } from '../utils/chat-composer-events';
-import { Eye, PanelRightOpen, X } from 'lucide-react';
-import { FlightPlanPanel } from './FlightPlanPanel';
+import { condenseForSpeech, extractCompleteSpeechChunks } from '../utils/speech-text';
+import { Eye } from 'lucide-react';
 import { StudioPreviewPane } from './studio-iterate/StudioPreviewPane';
 import { createStudioApis } from './studio/studio-api-bridge';
+import { UniversalPreviewRail } from './UniversalPreviewRail';
 
 function toScheduleCreateInput(
   input: {
@@ -97,10 +103,6 @@ export function ChatView() {
   const setGlobalNotice = useAppStore((s) => s.setGlobalNotice);
   const showMemoryEditor = useAppStore((s) => s.showMemoryEditor);
   const setShowMemoryEditor = useAppStore((s) => s.setShowMemoryEditor);
-  const showFlightPlan = useAppStore((s) => s.showFlightPlan);
-  const setShowFlightPlan = useAppStore((s) => s.setShowFlightPlan);
-  const showStudioPreview = useAppStore((s) => s.showStudioPreview);
-  const setShowStudioPreview = useAppStore((s) => s.setShowStudioPreview);
   const sessions = useAppStore((s) => s.sessions);
   const workingDir = useAppStore((s) => s.workingDir);
   // Project directory of the active session (App Studio generates into it) →
@@ -110,10 +112,6 @@ export function ChatView() {
     [sessions, activeSessionId, workingDir],
   );
   const studioApis = useMemo(() => createStudioApis(), []);
-  const openStudioPreview = useCallback(() => {
-    setShowFlightPlan(false);
-    setShowStudioPreview(true);
-  }, [setShowFlightPlan, setShowStudioPreview]);
   const setShowSettings = useAppStore((s) => s.setShowSettings);
   const setSettingsTab = useAppStore((s) => s.setSettingsTab);
   const setScheduleDraft = useAppStore((s) => s.setScheduleDraft);
@@ -339,6 +337,46 @@ export function ChatView() {
 
   // Phase 2 step 11: speak the latest assistant message when TTS is enabled.
   const lastSpokenIdRef = useRef<string | null>(null);
+  const streamingSpeechRef = useRef({
+    streamKey: '',
+    offset: 0,
+    chunks: 0,
+    characters: 0,
+  });
+
+  useEffect(() => {
+    const turnId = activeTurn?.userMessageId;
+    if (!activeSessionId || !turnId || !partialMessage || !isTtsEnabled()) return;
+
+    const streamKey = `${activeSessionId}:${turnId}`;
+    const state = streamingSpeechRef.current;
+    if (state.streamKey !== streamKey || partialMessage.length < state.offset) {
+      state.streamKey = streamKey;
+      state.offset = 0;
+      state.chunks = 0;
+      state.characters = 0;
+    }
+    if (state.chunks >= 3 || state.characters >= 350) return;
+
+    const result = extractCompleteSpeechChunks(
+      partialMessage,
+      state.offset,
+      3 - state.chunks
+    );
+    for (const chunk of result.chunks) {
+      const remaining = 350 - state.characters;
+      if (remaining <= 0) break;
+      const spoken = chunk.length > remaining
+        ? `${chunk.slice(0, Math.max(0, remaining - 1)).trim()}…`
+        : chunk;
+      if (!spoken) break;
+      queueStreamingSpeech(streamKey, spoken);
+      state.chunks += 1;
+      state.characters += spoken.length;
+    }
+    state.offset = result.nextOffset;
+  }, [activeSessionId, activeTurn?.userMessageId, partialMessage]);
+
   useEffect(() => {
     if (messages.length === 0) return;
     const last = messages[messages.length - 1];
@@ -352,7 +390,28 @@ export function ChatView() {
           .map((b) => b.text ?? '')
           .join(' ')
       : String(last.content ?? '');
-    if (text) void speakText(text);
+    if (!text) return;
+
+    const streamed = streamingSpeechRef.current;
+    if (streamed.chunks > 0) {
+      const remainingCharacters = Math.max(0, 350 - streamed.characters);
+      const remainingSentences = Math.max(0, 3 - streamed.chunks);
+      if (remainingCharacters > 0 && remainingSentences > 0) {
+        const remainder = condenseForSpeech(text.slice(streamed.offset), {
+          maxChars: remainingCharacters,
+          maxSentences: remainingSentences,
+        });
+        if (remainder) queueStreamingSpeech(streamed.streamKey, remainder);
+      }
+      streamingSpeechRef.current = {
+        streamKey: '',
+        offset: 0,
+        chunks: 0,
+        characters: 0,
+      };
+      return;
+    }
+    void speakText(text);
   }, [messages]);
 
   // Additional scroll trigger for content height changes (e.g., TodoWrite expand/collapse)
@@ -1097,50 +1156,10 @@ export function ChatView() {
       />
       </div>
 
-      {/* Right rail — mutually exclusive: live app preview, flight-plan timeline,
-          or a slim rail to (re)open either. Preview only offered for a project cwd. */}
-      {showStudioPreview && projectCwd ? (
-        <aside className="shrink-0 w-[460px] flex flex-col min-h-0 border-l border-border bg-surface">
-          <header className="flex items-center justify-between px-3 py-2 border-b border-border">
-            <span className="text-xs font-semibold uppercase tracking-wide text-text-muted">Aperçu de l’app</span>
-            <button
-              type="button"
-              onClick={() => setShowStudioPreview(false)}
-              title="Fermer l’aperçu"
-              aria-label="Fermer l’aperçu"
-              className="p-1 text-text-muted hover:text-text-primary transition-colors"
-            >
-              <X size={14} aria-hidden />
-            </button>
-          </header>
-          <StudioPreviewPane apis={studioApis} cwd={projectCwd} className="flex-1 p-2" />
-        </aside>
-      ) : showFlightPlan ? (
-        <FlightPlanPanel />
-      ) : (
-        <div className="shrink-0 w-8 flex flex-col items-center gap-2 border-l border-border bg-surface pt-3">
-          <button
-            type="button"
-            onClick={() => setShowFlightPlan(true)}
-            title="Afficher le plan de vol"
-            aria-label="Afficher le plan de vol"
-            className="p-1 hover:bg-accent/50 rounded transition-colors"
-          >
-            <PanelRightOpen size={16} className="text-text-muted" aria-hidden />
-          </button>
-          {projectCwd ? (
-            <button
-              type="button"
-              onClick={openStudioPreview}
-              title="Afficher l’aperçu de l’app"
-              aria-label="Afficher l’aperçu de l’app"
-              className="p-1 hover:bg-accent/50 rounded transition-colors"
-            >
-              <Eye size={16} className="text-text-muted" aria-hidden />
-            </button>
-          ) : null}
-        </div>
-      )}
+      <UniversalPreviewRail
+        appAvailable={Boolean(projectCwd)}
+        appPreview={projectCwd ? <StudioPreviewPane apis={studioApis} cwd={projectCwd} className="h-full p-2" /> : null}
+      />
     </div>
   );
 }

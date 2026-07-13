@@ -42,6 +42,12 @@ describe('ENV_SCHEMA', () => {
     expect(names).toContain('CODEBUDDY_AUXILIARY_VISION_PROVIDER');
     expect(names).toContain('AUXILIARY_VISION_MODEL');
     expect(names).toContain('CODEBUDDY_AUXILIARY_COMPRESSION_PROVIDER');
+    expect(names).toContain('CODEBUDDY_LM_RESIZER');
+    expect(names).toContain('CODEBUDDY_LM_RESIZER_BIN');
+    expect(names).toContain('CODEBUDDY_LM_RESIZER_STORE');
+    expect(names).toContain('CODEBUDDY_LM_RESIZER_URL');
+    expect(names).toContain('CODEBUDDY_LM_RESIZER_TOKEN_FILE');
+    expect(names).toContain('CODEBUDDY_LM_RESIZER_SERVER_TOKEN');
 
     // Provider
     expect(names).toContain('OPENAI_API_KEY');
@@ -147,6 +153,28 @@ describe('getEnvDef', () => {
 
   it('should return undefined for unknown variable', () => {
     expect(getEnvDef('TOTALLY_FAKE_VAR')).toBeUndefined();
+  });
+
+  it('defaults ChatGPT OAuth to GPT-5.6 Sol', () => {
+    expect(getEnvDef('CHATGPT_MODEL')).toMatchObject({
+      type: 'string',
+      default: 'gpt-5.6-sol',
+    });
+  });
+
+  it('keeps lm-resizer opt-in outside Cowork and documents its overrides', () => {
+    expect(getEnvDef('CODEBUDDY_LM_RESIZER')).toMatchObject({
+      type: 'boolean',
+      default: 'false',
+    });
+    expect(getEnvDef('CODEBUDDY_LM_RESIZER_BIN')?.type).toBe('string');
+    expect(getEnvDef('CODEBUDDY_LM_RESIZER_STORE')?.type).toBe('string');
+    expect(getEnvDef('CODEBUDDY_LM_RESIZER_URL')?.default).toBe('http://127.0.0.1:8787');
+    expect(getEnvDef('CODEBUDDY_LM_RESIZER_TOKEN_FILE')?.type).toBe('string');
+    expect(getEnvDef('CODEBUDDY_LM_RESIZER_SERVER_TOKEN')).toMatchObject({
+      type: 'string',
+      sensitive: true,
+    });
   });
 });
 

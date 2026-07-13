@@ -158,6 +158,8 @@ describe('/goal and /subgoal handlers', () => {
       const tokens = getEnhancedCommandHandler().getRegisteredTokens();
       expect(tokens).toContain('__GOAL__');
       expect(tokens).toContain('__SUBGOAL__');
-    }, 15000);
+    // Importing the complete slash-command catalog is intentionally broad and
+    // can contend with the full fork pool on loaded CI workers.
+    }, 30000);
   });
 });

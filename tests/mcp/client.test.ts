@@ -211,6 +211,36 @@ describe('MCPManager', () => {
       expect(listener).toHaveBeenCalledWith('evt-server', 2);
     });
 
+    it('is idempotent for an already connected server', async () => {
+      const config: MCPServerConfig = {
+        name: 'shared-server',
+        transport: { type: 'stdio', command: 'node', args: ['server.js'] },
+      };
+
+      await manager.addServer(config);
+      await manager.addServer(config);
+
+      expect(createTransport).toHaveBeenCalledTimes(1);
+      expect(mockClientConnect).toHaveBeenCalledTimes(1);
+      expect(manager.getServers()).toEqual(['shared-server']);
+    });
+
+    it('coalesces concurrent attempts to add the same server', async () => {
+      const config: MCPServerConfig = {
+        name: 'concurrent-server',
+        transport: { type: 'stdio', command: 'node', args: [] },
+      };
+
+      await Promise.all([
+        manager.addServer(config),
+        manager.addServer(config),
+        manager.addServer(config),
+      ]);
+
+      expect(createTransport).toHaveBeenCalledTimes(1);
+      expect(mockClientConnect).toHaveBeenCalledTimes(1);
+    });
+
     it('should set status to error when connection fails', async () => {
       mockTransportConnect.mockRejectedValueOnce(new Error('Connection refused'));
 
@@ -222,6 +252,27 @@ describe('MCPManager', () => {
       ).rejects.toThrow('Connection refused');
 
       expect(manager.getServerStatus('fail-server')).toBe('error');
+    });
+  });
+
+  describe('ensureServersInitialized', () => {
+    it('coalesces concurrent global initialization runs', async () => {
+      const config = {
+        servers: [{
+          name: 'boot-server',
+          transport: { type: 'stdio' as const, command: 'node', args: [] },
+        }],
+      };
+
+      await Promise.all([
+        manager.ensureServersInitialized(config),
+        manager.ensureServersInitialized(config),
+        manager.ensureServersInitialized(config),
+      ]);
+
+      expect(createTransport).toHaveBeenCalledTimes(1);
+      expect(mockClientConnect).toHaveBeenCalledTimes(1);
+      expect(manager.getServers()).toEqual(['boot-server']);
     });
   });
 

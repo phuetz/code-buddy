@@ -23,7 +23,9 @@ import {
   _listSessionsForTests,
   _unwireForTests,
   isPeerSessionBridgeWired,
+  unwirePeerSessionBridge,
   wirePeerSessionBridge,
+  type PeerSessionClientResolver,
 } from '../../src/fleet/peer-session-bridge.js';
 import {
   PeerSessionStore,
@@ -130,7 +132,7 @@ describe('peer-session-bridge — wiring', () => {
     _unwireForTests();
   });
 
-  it('registers all 5 peer.chat-session.* methods when wired', async () => {
+  it('registers all peer.chat-session.* methods when wired', async () => {
     expect(isPeerSessionBridgeWired()).toBe(false);
     await wirePeerSessionBridge(() => null);
     expect(isPeerSessionBridgeWired()).toBe(true);
@@ -138,8 +140,18 @@ describe('peer-session-bridge — wiring', () => {
     expect(methods).toContain('peer.chat-session.start');
     expect(methods).toContain('peer.chat-session.continue');
     expect(methods).toContain('peer.chat-session.continue-stream');
+    expect(methods).toContain('peer.chat-session.goal');
     expect(methods).toContain('peer.chat-session.list');
     expect(methods).toContain('peer.chat-session.end');
+  });
+
+  it('unregisters every peer.chat-session.* method when unwired', async () => {
+    await wirePeerSessionBridge(() => null);
+
+    unwirePeerSessionBridge();
+
+    expect(isPeerSessionBridgeWired()).toBe(false);
+    expect(listPeerMethods().filter((method) => method.startsWith('peer.chat-session.'))).toEqual([]);
   });
 
   it('second wire call is a no-op (idempotent)', async () => {
@@ -171,6 +183,79 @@ describe('peer.chat-session.start', () => {
     expect(response.ok).toBe(true);
     const payload = response.payload as { traceId: string };
     expect(payload.traceId).toBe('trace-xyz');
+  });
+
+  it('pins an explicit provider for every turn, persists it, and reports provenance', async () => {
+    const defaultClient = makeClient('wrong backend');
+    const lemonadeClient = makeClient('local answer');
+    const resolver = vi.fn((provider: string) => provider === 'lemonade'
+      ? {
+          client: lemonadeClient.client as never,
+          info: { provider: 'lemonade' as const, model: 'qwen-local', isLocal: true },
+        }
+      : null) as PeerSessionClientResolver;
+    await wirePeerSessionBridge(
+      () => defaultClient.client as never,
+      { provider: 'agy-cli', model: 'Gemini 3.1 Pro (High)', isLocal: false },
+      resolver,
+    );
+
+    const started = await dispatch('peer.chat-session.start', {
+      provider: 'lemonade',
+      model: 'qwen-local',
+    });
+    expect(started.ok).toBe(true);
+    expect(started.payload).toMatchObject({
+      providerRequested: 'lemonade',
+      providerResolved: 'lemonade',
+    });
+    const sessionId = (started.payload as { sessionId: string }).sessionId;
+
+    const continued = await dispatch('peer.chat-session.continue', {
+      sessionId,
+      prompt: 'bonjour',
+    });
+    expect(continued.ok).toBe(true);
+    expect(continued.payload).toMatchObject({
+      text: 'local answer',
+      providerRequested: 'lemonade',
+      providerResolved: 'lemonade',
+    });
+    expect(defaultClient.calls).toHaveLength(0);
+    expect(lemonadeClient.calls).toHaveLength(1);
+    expect(lemonadeClient.calls[0]?.opts).toEqual({ model: 'qwen-local' });
+
+    const listed = await dispatch('peer.chat-session.list', {});
+    expect(listed.payload).toMatchObject({
+      sessions: [expect.objectContaining({ sessionId, provider: 'lemonade' })],
+    });
+    expect((await new PeerSessionStore({ storeDir: storeTmpDir }).load(sessionId))?.provider)
+      .toBe('lemonade');
+
+    const mismatch = await dispatch('peer.chat-session.continue', {
+      sessionId,
+      prompt: 'suite',
+      provider: 'openrouter',
+    });
+    expect(mismatch.ok).toBe(false);
+    expect(mismatch.error?.message).toContain('does not match session provider');
+    expect(lemonadeClient.calls).toHaveLength(1);
+  });
+
+  it('fails closed when an explicit provider is unknown or unavailable', async () => {
+    await wirePeerSessionBridge(
+      () => makeClient().client as never,
+      null,
+      (() => null) as PeerSessionClientResolver,
+    );
+
+    const unknown = await dispatch('peer.chat-session.start', { provider: 'bogus' });
+    expect(unknown.ok).toBe(false);
+    expect(unknown.error?.message).toContain('unknown provider');
+
+    const unavailable = await dispatch('peer.chat-session.start', { provider: 'openrouter' });
+    expect(unavailable.ok).toBe(false);
+    expect(unavailable.error?.message).toContain('PROVIDER_UNAVAILABLE');
   });
 
   it('rejects unknown dispatchProfile values before creating a session', async () => {
@@ -846,6 +931,41 @@ describe('peer.chat-session.continue-stream', () => {
     expect(payload.text).toBe('Hello, world!');
     expect(payload.finishReason).toBe('stop');
     expect(payload.usage?.total_tokens).toBe(9);
+  });
+
+  it('keeps an explicit provider pinned on streamed turns', async () => {
+    const defaultClient = makeStreamingClient(['wrong']);
+    const openRouterClient = makeStreamingClient(['right ', 'backend']);
+    const resolver = vi.fn((provider: string) => provider === 'openrouter'
+      ? {
+          client: openRouterClient.client as never,
+          info: { provider: 'openrouter' as const, model: 'openrouter/free', isLocal: false },
+        }
+      : null) as PeerSessionClientResolver;
+    await wirePeerSessionBridge(
+      () => defaultClient.client as never,
+      { provider: 'agy-cli', model: 'Gemini 3.1 Pro (High)', isLocal: false },
+      resolver,
+    );
+    const startRes = await dispatch('peer.chat-session.start', {
+      provider: 'openrouter',
+      model: 'openrouter/free',
+    });
+    const sessionId = (startRes.payload as { sessionId: string }).sessionId;
+
+    const response = await dispatch('peer.chat-session.continue-stream', {
+      sessionId,
+      prompt: 'answer',
+    });
+
+    expect(response.ok).toBe(true);
+    expect(response.payload).toMatchObject({
+      text: 'right backend',
+      providerRequested: 'openrouter',
+      providerResolved: 'openrouter',
+    });
+    expect(defaultClient.captured).toHaveLength(0);
+    expect(openRouterClient.captured[0]?.opts).toEqual({ model: 'openrouter/free' });
   });
 
   it('returns session dispatchProfile policy metadata on streamed turns', async () => {

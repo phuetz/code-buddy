@@ -166,6 +166,7 @@ export async function executeRoutePeer(params: RoutePeerParams): Promise<ToolRes
     const chainNextCalls = plan.chain?.map((lane) => buildPeerDelegateCall(
       lane.peerId,
       lane.model,
+      lane.provider,
       params.prompt,
       lane.role,
     ));
@@ -174,6 +175,7 @@ export async function executeRoutePeer(params: RoutePeerParams): Promise<ToolRes
       recommendation: {
         peer: plan.primary.peerId,
         model: plan.primary.model,
+        ...(plan.primary.provider ? { provider: plan.primary.provider } : {}),
         score: plan.primary.score,
         ...(plan.primary.role ? { role: plan.primary.role } : {}),
       },
@@ -181,6 +183,7 @@ export async function executeRoutePeer(params: RoutePeerParams): Promise<ToolRes
         ? {
             peer: plan.fallback.peerId,
             model: plan.fallback.model,
+            ...(plan.fallback.provider ? { provider: plan.fallback.provider } : {}),
             score: plan.fallback.score,
             ...(plan.fallback.role ? { role: plan.fallback.role } : {}),
           }
@@ -188,12 +191,14 @@ export async function executeRoutePeer(params: RoutePeerParams): Promise<ToolRes
       parallel: plan.parallel?.map((lane) => ({
         peer: lane.peerId,
         model: lane.model,
+        ...(lane.provider ? { provider: lane.provider } : {}),
         score: lane.score,
         ...(lane.role ? { role: lane.role } : {}),
       })),
       chain: plan.chain?.map((lane) => ({
         peer: lane.peerId,
         model: lane.model,
+        ...(lane.provider ? { provider: lane.provider } : {}),
         score: lane.score,
         ...(lane.role ? { role: lane.role } : {}),
       })),
@@ -212,6 +217,7 @@ export async function executeRoutePeer(params: RoutePeerParams): Promise<ToolRes
           peer: plan.primary.peerId,
           prompt: params.prompt,
           model: plan.primary.model,
+          ...(plan.primary.provider ? { provider: plan.primary.provider } : {}),
           ...(plan.primary.role
             ? { dispatchProfile: plan.primary.role }
             : shouldPropagateResolvedDispatchProfile(dispatchResolution)
@@ -260,6 +266,7 @@ export async function executeRoutePeer(params: RoutePeerParams): Promise<ToolRes
 function buildPeerDelegateCall(
   peer: string,
   model: string,
+  provider: string | undefined,
   prompt: string,
   dispatchProfile?: string,
 ): {
@@ -268,6 +275,7 @@ function buildPeerDelegateCall(
     peer: string;
     prompt: string;
     model: string;
+    provider?: string;
     dispatchProfile?: string;
   };
 } {
@@ -277,6 +285,7 @@ function buildPeerDelegateCall(
       peer,
       prompt,
       model,
+      ...(provider ? { provider } : {}),
       ...(dispatchProfile ? { dispatchProfile } : {}),
     },
   };

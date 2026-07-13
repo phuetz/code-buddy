@@ -214,4 +214,28 @@ describe('registerProfilesIpcHandlers', () => {
     const result = await call<{ active: string | null }>('profiles.list');
     expect(result.active).toBeNull();
   });
+
+  it('exports an Ed25519-signed profile and verifies it on import', async () => {
+    const fs = await import('fs');
+    fs.mkdirSync(join(tmpHome, '.codebuddy'), { recursive: true });
+    writeFileSync(CONFIG_FILE(), '[profiles.portable]\nactive_model = "gpt-5.5"\n');
+    const exported = await call<{ ok: boolean; profile?: Record<string, unknown> }>('profiles.export', 'portable');
+    expect(exported.ok).toBe(true);
+    expect(exported.profile?.signature).toBeTypeOf('string');
+    expect(exported.profile?.publicKey).toContain('BEGIN PUBLIC KEY');
+
+    writeFileSync(CONFIG_FILE(), 'active_model = "local"\n');
+    const imported = await call<{ ok: boolean; profiles?: Array<{ name: string }> }>('profiles.import', exported.profile);
+    expect(imported.ok).toBe(true);
+    expect(imported.profiles?.map((profile) => profile.name)).toContain('portable');
+  });
+
+  it('refuses to export a profile containing an embedded secret', async () => {
+    const fs = await import('fs');
+    fs.mkdirSync(join(tmpHome, '.codebuddy'), { recursive: true });
+    writeFileSync(CONFIG_FILE(), '[profiles.unsafe]\napi_key = "secret"\n');
+    const result = await call<{ ok: boolean; error?: string }>('profiles.export', 'unsafe');
+    expect(result.ok).toBe(false);
+    expect(result.error).toMatch(/secrets?/i);
+  });
 });

@@ -81,7 +81,7 @@ describe('detectProviderFromEnv — priority chain', () => {
     expect(detected?.provider).toBe('chatgpt');
     expect(detected?.apiKey).toBe('oauth-chatgpt');
     expect(detected?.baseURL).toBe('https://chatgpt.com/backend-api/codex');
-    expect(detected?.defaultModel).toBe('gpt-5.5');
+    expect(detected?.defaultModel).toBe('gpt-5.6-sol');
   });
 
   it('CODEBUDDY_PROVIDER override always wins (forces ollama even if chatgpt OAuth file exists)', async () => {
@@ -150,7 +150,7 @@ describe('detectProviderFromEnv — priority chain', () => {
     expect(detectProviderFromEnv()?.provider).toBe('ollama');
   });
 
-  it('CHATGPT_MODEL env overrides default gpt-5.5', async () => {
+  it('CHATGPT_MODEL env overrides the default GPT-5.6 Sol model', async () => {
     writeAuth();
     process.env.CHATGPT_MODEL = 'gpt-5.1-codex';
     const { detectProviderFromEnv } = await import('../../src/utils/provider-detector.js');

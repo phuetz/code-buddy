@@ -22,6 +22,18 @@ import type { GoalStatus } from '../../goals/goal-state.js';
 import { getAgentRegistry, initializeAgentRegistry } from '../specialized/agent-registry.js';
 import { getCostTracker } from '../../utils/cost-tracker.js';
 import { logger } from '../../utils/logger.js';
+import { buildIntentGraph, intentCriterionIds } from '../../goals/intent-graph.js';
+import {
+  ProofLedger,
+  type AppendProofInput,
+  type CriterionProofResult,
+  type ProofRecord,
+  type ProofRecorder,
+} from '../../goals/proof-ledger.js';
+import {
+  ProvenOutcomeStore,
+} from '../../goals/proven-outcome-memory.js';
+import { proposeLessonFromProvenOutcome } from '../../goals/proven-outcome-lessons.js';
 import {
   changedFilesBetween,
   formatStructuralEvidence,
@@ -45,6 +57,8 @@ export interface DevLoopAgent {
 export interface VerifyOutcome {
   verdict: VerifierVerdict;
   evidence: string;
+  /** Optional per-criterion verdicts from a capable verifier. */
+  criterionResults?: CriterionProofResult[];
 }
 
 /** Seam de vérification — injectable pour tester le gate sans le vrai registry. */
@@ -52,6 +66,7 @@ export type DevLoopVerifier = (ctx: {
   agent: DevLoopAgent;
   goal: string;
   evidence: string;
+  criteria?: Array<{ id: string; title: string }>;
 }) => Promise<VerifyOutcome>;
 
 export interface DevLoopOptions {
@@ -81,6 +96,12 @@ export interface DevLoopOptions {
   verify?: DevLoopVerifier;
   /** Lecteur de coût session (tests) ; défaut = getCostTracker. */
   currentCostUsd?: () => number;
+  /** Inject/disable durable proof recording. Defaults on for real cwd-owned runs. */
+  proofRecorder?: ProofRecorder | false;
+  /** Inject/disable proof-gated outcome memory. Defaults on for cwd-owned runs. */
+  outcomeStore?: ProvenOutcomeStore | false;
+  /** Propose a review-gated lesson after a proven outcome (default true). */
+  promoteOutcomeToLesson?: boolean;
   onMessage?: (text: string) => void;
 }
 
@@ -90,6 +111,8 @@ export interface DevLoopResult {
   lastReason?: string;
   lastVerifierVerdict: VerifierVerdict;
   costUsd: number;
+  outcomeId?: string;
+  lessonCandidateId?: string;
 }
 
 const TOOL_RESULT_SNIPPET_CHARS = 1600;
@@ -123,14 +146,19 @@ function summarizeTurn(entries: ChatEntry[]): string {
  * le tool `verify` (client de l'agent + executeToolByName). Fail-open : toute
  * erreur → 'unverified' (ne bloque jamais, mais ne CONFIRME pas non plus).
  */
-export const defaultDevLoopVerifier: DevLoopVerifier = async ({ agent, goal, evidence }) => {
+export const defaultDevLoopVerifier: DevLoopVerifier = async ({ agent, goal, evidence, criteria = [] }) => {
   try {
     const registry = getAgentRegistry();
     if (registry.getAll().length === 0) await initializeAgentRegistry();
     const instruction =
       `Verify that this goal is FULLY achieved by the work just done. ` +
       `Reproduce and run real oracles; show raw evidence.\n\nGoal:\n${goal}\n\n` +
-      `Agent's turn evidence:\n${evidence.slice(0, 3000)}`;
+      (criteria.length > 0
+        ? `Acceptance criteria:\n${criteria.map((criterion) => `- ${criterion.id}: ${criterion.title}`).join('\n')}\n\n`
+        : '') +
+      `Agent's turn evidence:\n${evidence.slice(0, 3000)}\n\n` +
+      `End with one machine-readable line: CRITERIA_JSON: ` +
+      `[{"criterionId":"<exact id>","status":"passed|failed|unknown","evidence":"short oracle result"}].`;
     const result = await registry.executeOn('verifier', {
       action: 'verify',
       params: {
@@ -148,7 +176,13 @@ export const defaultDevLoopVerifier: DevLoopVerifier = async ({ agent, goal, evi
     });
     if (!result.success) return { verdict: 'unverified', evidence: result.error ?? 'verifier failed' };
     const verdict: VerifierVerdict = (result.metadata?.verdict as string) === 'CONFIRMED' ? 'CONFIRMED' : 'NEEDS REVIEW';
-    return { verdict, evidence: result.output ?? '' };
+    const output = result.output ?? '';
+    const criterionResults = parseVerifierCriterionResults(output, criteria);
+    return {
+      verdict,
+      evidence: output,
+      ...(criterionResults.length > 0 ? { criterionResults } : {}),
+    };
   } catch (error) {
     logger.debug('dev-loop verifier failed (fail-open)', { error: String(error) });
     return { verdict: 'unverified', evidence: String(error) };
@@ -188,6 +222,42 @@ export function makeShellVerifier(
   };
 }
 
+/** Parse the verifier's explicit final criterion line without trusting prose. */
+export function parseVerifierCriterionResults(
+  evidence: string,
+  criteria: Array<{ id: string; title: string }>,
+): CriterionProofResult[] {
+  const line = evidence
+    .split('\n')
+    .reverse()
+    .find((candidate) => candidate.trim().startsWith('CRITERIA_JSON:'));
+  if (!line) return [];
+  try {
+    const raw = line.slice(line.indexOf(':') + 1).trim();
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    const knownIds = new Set(criteria.map((criterion) => criterion.id));
+    const results = new Map<string, CriterionProofResult>();
+    for (const value of parsed) {
+      if (!value || typeof value !== 'object') continue;
+      const record = value as Record<string, unknown>;
+      const criterionId = typeof record.criterionId === 'string' ? record.criterionId.trim() : '';
+      const status = record.status;
+      if (!knownIds.has(criterionId) || !['passed', 'failed', 'unknown'].includes(String(status))) continue;
+      results.set(criterionId, {
+        criterionId,
+        status: status as CriterionProofResult['status'],
+        ...(typeof record.evidence === 'string' && record.evidence.trim()
+          ? { evidence: record.evidence.trim().slice(0, 500) }
+          : {}),
+      });
+    }
+    return [...results.values()];
+  } catch {
+    return [];
+  }
+}
+
 /**
  * Drive the unified dev-loop headlessly on an in-process agent.
  * Sets the goal, (optionally) decomposes it, then per iteration:
@@ -206,7 +276,21 @@ export async function runDevLoop(
   const readCost = options.currentCostUsd ?? (() => getCostTracker().getReport().sessionCost);
 
   const manager = getGoalManager();
-  const state = manager.set(goalText, options.maxTurns !== undefined ? { maxTurns: options.maxTurns } : {});
+  const state = manager.set(goalText, {
+    ...(options.maxTurns !== undefined ? { maxTurns: options.maxTurns } : {}),
+    verifyGated: !options.noVerify,
+  });
+  const proofRecorder = options.proofRecorder === false
+    ? null
+    : options.proofRecorder
+      ?? (options.cwd && process.env.NODE_ENV !== 'test'
+        ? new ProofLedger(state.goalId, { artifactRoot: options.cwd })
+        : null);
+  const recordedProofs: ProofRecord[] = [];
+  const recordProof = (input: AppendProofInput): void => {
+    const record = proofRecorder?.append(input);
+    if (record) recordedProofs.push(record);
+  };
   emit(`⊙ Dev-loop démarrée (budget ${state.maxTurns} tours${options.budgetUsd ? `, $${options.budgetUsd}` : ''}) : ${state.goal}`);
 
   // Plan (itération 0) — réutilise goal-decomposer, best-effort.
@@ -246,27 +330,70 @@ export async function runDevLoop(
     // un fichier touché par le tour ⇒ NEEDS REVIEW direct, sans payer le
     // Verifier LLM. S'abstient hors dépôt git (snapshots null).
     let structuralEvidence: string | null = null;
+    let touchedFiles: string[] = [];
     if (structuralCwd && turnSummary.trim()) {
-      const touched = changedFilesBetween(preStatus, await gitStatusSnapshot(structuralCwd));
-      if (touched.length > 0) {
-        const issues = await structuralCheck(structuralCwd, touched);
+      touchedFiles = changedFilesBetween(preStatus, await gitStatusSnapshot(structuralCwd));
+      if (touchedFiles.length > 0) {
+        const issues = await structuralCheck(structuralCwd, touchedFiles);
         if (issues.length > 0) structuralEvidence = formatStructuralEvidence(issues);
       }
     }
 
     // 2b) VERIFY (indépendant) — gate le « done ».
     let evidence = turnSummary;
+    const graph = manager.state ? buildIntentGraph(manager.state) : null;
+    const criteria = graph?.nodes
+      .filter((node) => node.kind === 'criterion')
+      .map((node) => ({ id: node.id, title: node.title })) ?? [];
+    let criterionResults: CriterionProofResult[] = [];
     if (structuralEvidence) {
       lastVerifierVerdict = 'NEEDS REVIEW';
       lastVerifyEvidence = `Défauts structurels détectés (vérification déterministe) :\n${structuralEvidence}`;
       emit(`🔎 Verifier : NEEDS REVIEW (structurel, sans LLM)`);
       evidence = `${turnSummary}\n\n[Verifier verdict: NEEDS REVIEW]\n${lastVerifyEvidence.slice(0, 2000)}`;
+      criterionResults = criteria.map((criterion) => ({
+        criterionId: criterion.id,
+        status: 'unknown',
+        evidence: 'Structural verifier rejected the turn before criterion validation.',
+      }));
     } else if (!options.noVerify && turnSummary.trim()) {
-      const v = await verify({ agent, goal: state.goal, evidence: turnSummary });
+      const v = await verify({ agent, goal: state.goal, evidence: turnSummary, criteria });
       lastVerifierVerdict = v.verdict;
       lastVerifyEvidence = v.evidence;
+      criterionResults = v.criterionResults?.length
+        ? v.criterionResults
+        : criteria.map((criterion) => ({
+            criterionId: criterion.id,
+            status: v.verdict === 'CONFIRMED' ? 'passed' : 'unknown',
+            evidence: v.verdict === 'CONFIRMED'
+              ? 'Overall independent verifier confirmed every criterion.'
+              : 'Verifier did not provide a granular criterion verdict.',
+          }));
       emit(`🔎 Verifier : ${v.verdict}`);
       evidence = `${turnSummary}\n\n[Verifier verdict: ${v.verdict}]\n${v.evidence.slice(0, 2000)}`;
+    }
+
+    if (!options.noVerify && (structuralEvidence || turnSummary.trim())) {
+      recordProof({
+        turn: (manager.state?.turnsUsed ?? i) + 1,
+        kind: 'verification',
+        status:
+          lastVerifierVerdict === 'CONFIRMED'
+            ? 'pass'
+            : lastVerifierVerdict === 'NEEDS REVIEW'
+              ? 'fail'
+              : 'unknown',
+        assurance: structuralEvidence ? 'deterministic' : 'independent',
+        summary: structuralEvidence
+          ? 'Structural verifier rejected the turn.'
+          : `Independent verifier returned ${lastVerifierVerdict}.`,
+        evidence: lastVerifyEvidence,
+        criterionIds: criteria.map((criterion) => criterion.id),
+        criterionResults,
+        artifacts: touchedFiles,
+        sessionKey: manager.sessionKey,
+        source: 'buddy-loop',
+      });
     }
 
     // 3) JUDGE — un « done » du juge est ANNULÉ tant que le Verifier n'a pas CONFIRMED.
@@ -289,6 +416,24 @@ export async function runDevLoop(
 
     const decision = await manager.evaluateAfterTurn(evidence.trim() || turnSummary, { judge: gatedJudge });
     if (decision.message) emit(decision.message);
+    const currentState = manager.state;
+    const completedCriteria =
+      decision.verdict === 'done' && currentState
+        ? intentCriterionIds(buildIntentGraph(currentState))
+        : [];
+    recordProof({
+      turn: currentState?.turnsUsed ?? i + 1,
+      kind: 'decision',
+      status: decision.verdict === 'done' ? 'pass' : decision.verdict === 'continue' ? 'fail' : 'unknown',
+      assurance:
+        !options.noVerify && lastVerifierVerdict === 'CONFIRMED' ? 'independent' : 'judge',
+      summary: decision.reason,
+      evidence,
+      criterionIds: completedCriteria,
+      artifacts: touchedFiles,
+      sessionKey: manager.sessionKey,
+      source: 'buddy-loop',
+    });
 
     // 4) BUDGET COÛT — stop-condition indépendante du budget de tours.
     if (options.budgetUsd !== undefined && readCost() >= options.budgetUsd) {
@@ -315,11 +460,39 @@ export async function runDevLoop(
   }
 
   const final = manager.state;
+  let outcomeId: string | undefined;
+  let lessonCandidateId: string | undefined;
+  if (final?.status === 'done' && options.cwd && recordedProofs.length > 0 && options.outcomeStore !== false) {
+    try {
+      const outcomeStore = options.outcomeStore ?? new ProvenOutcomeStore();
+      const captured = outcomeStore.capture({
+        state: final,
+        graph: buildIntentGraph(final),
+        proofs: recordedProofs,
+        source: 'buddy-loop',
+        sessionKey: manager.sessionKey,
+      });
+      if (captured.outcome) {
+        outcomeId = captured.outcome.id;
+        emit(`◉ Outcome prouvé mémorisé : ${outcomeId} (confiance ${captured.outcome.trustScore.toFixed(2)}).`);
+        if (options.promoteOutcomeToLesson !== false) {
+          const proposed = proposeLessonFromProvenOutcome(captured.outcome, options.cwd);
+          lessonCandidateId = proposed.candidate.id;
+          outcomeStore.linkLessonCandidate(captured.outcome.id, lessonCandidateId);
+          emit(`↳ Candidat de leçon ${lessonCandidateId} en attente de revue humaine.`);
+        }
+      }
+    } catch (error) {
+      logger.debug('dev-loop proven outcome capture failed (non-fatal)', { error: String(error) });
+    }
+  }
   return {
     status: final?.status ?? 'unknown',
     turnsUsed: final?.turnsUsed ?? 0,
     ...(final?.lastReason ? { lastReason: final.lastReason } : {}),
     lastVerifierVerdict,
     costUsd: readCost(),
+    ...(outcomeId ? { outcomeId } : {}),
+    ...(lessonCandidateId ? { lessonCandidateId } : {}),
   };
 }

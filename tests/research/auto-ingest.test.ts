@@ -31,6 +31,20 @@ describe('auto-ingest — autonomous research into the CKG', () => {
     expect(ingested).toHaveLength(2);
   });
 
+  it('reports no new publications when the whole batch is already known', async () => {
+    const r = await runAutoResearchIngest({
+      topics: ['ai agents'],
+      fetchPublications: async () => [PUB, { ...PUB, id: 'arxiv:2' }],
+      ingestPublication: async () => null,
+      pickIndex: () => 0,
+    });
+
+    expect(r).toEqual({
+      applied: false,
+      detail: 'no new publications for "ai agents"',
+    });
+  });
+
   it('round-robins across cycles via pickIndex', async () => {
     const seen: string[] = [];
     const deps = {

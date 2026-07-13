@@ -75,7 +75,7 @@ Operations: `Add File`, `Delete File`, `Update File` (with `Move to`). The `seek
 
 ## RTK Shell Output Compression
 
-The `bash` tool can optionally route supported shell commands through
+The legacy `bash` integration can optionally route supported shell commands through
 [RTK](https://github.com/rtk-ai/rtk) before execution. Enable it with:
 
 ```bash
@@ -87,6 +87,19 @@ The integration is fail-open: if `rtk` is missing, returns no rewrite, times
 out, or proposes a command that fails Code Buddy's normal safety checks, the
 original command runs unchanged. Rewritten commands are revalidated before
 execution and the default rewrite timeout is `CODEBUDDY_RTK_TIMEOUT_MS=1000`.
+RTK is disabled by default. Existing environment flags and explicit
+`[integrations].rtk_enabled = true` configurations remain supported.
+
+For the preferred post-execution path, enable Patrice's recoverable
+`lm-resizer` integration with `CODEBUDDY_LM_RESIZER=true`. Optional
+`CODEBUDDY_LM_RESIZER_BIN` and `CODEBUDDY_LM_RESIZER_STORE` overrides select
+the binary and CCR store. The client first tries the low-latency local sidecar
+at `CODEBUDDY_LM_RESIZER_URL` (default `http://127.0.0.1:8787`) and falls back
+to the stdin-only CLI. For an authenticated sidecar, prefer a private
+`CODEBUDDY_LM_RESIZER_TOKEN_FILE` over a token stored directly in the
+environment. Because compression happens after the host has executed the
+logical command, it does not replace the executable evaluated by Code Buddy's
+permission and sandbox policies.
 
 ## Tool Aliases (Codex-style)
 

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { playWavFile } from '../../src/utils/audio-player.js';
+import { playWavFile, tryPlayWavFile } from '../../src/utils/audio-player.js';
 import { execFile } from 'child_process';
 import * as os from 'os';
 
@@ -44,5 +44,23 @@ describe('playWavFile', () => {
 
     const argsCalled = mockExecFile.mock.calls[0][1];
     expect(argsCalled).toContain(trickyPath);
+  });
+
+  it('reports whether a platform player successfully played the file', async () => {
+    const mockExecFile = execFile as any;
+    mockExecFile.mockImplementationOnce((_command: string, _args: string[], callback: Function) => {
+      callback(null);
+    });
+
+    await expect(tryPlayWavFile('preview.wav')).resolves.toBe(true);
+  });
+
+  it('returns false when every platform player fails', async () => {
+    const mockExecFile = execFile as any;
+    mockExecFile.mockImplementation((_command: string, _args: string[], callback: Function) => {
+      callback(new Error('player unavailable'));
+    });
+
+    await expect(tryPlayWavFile('preview.wav')).resolves.toBe(false);
   });
 });

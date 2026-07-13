@@ -27,6 +27,12 @@ const MINIMAL_PROFILE: ProfileDefinition = {
   description: 'Read-only mode. No file modifications or command execution.',
   customizable: true,
   rules: [
+    {
+      group: 'group:safe',
+      action: 'allow',
+      reason: 'Audited read-only and bounded tools are safe',
+      priority: 20,
+    },
     // Allow read operations
     {
       group: 'group:fs:read',
@@ -141,6 +147,12 @@ const CODING_PROFILE: ProfileDefinition = {
   description: 'Standard development. File edits allowed, commands require confirmation.',
   customizable: true,
   rules: [
+    {
+      group: 'group:safe',
+      action: 'allow',
+      reason: 'Audited read-only and bounded tools are allowed',
+      priority: 20,
+    },
     // Allow all file read
     {
       group: 'group:fs:read',
@@ -265,6 +277,12 @@ const MESSAGING_PROFILE: ProfileDefinition = {
   description: 'Communication focus. Web access allowed, limited file operations.',
   customizable: true,
   rules: [
+    {
+      group: 'group:safe',
+      action: 'allow',
+      reason: 'Audited read-only and bounded tools are allowed',
+      priority: 20,
+    },
     // Allow file read
     {
       group: 'group:fs:read',
@@ -382,6 +400,12 @@ const FULL_PROFILE: ProfileDefinition = {
   description: 'Full access. All operations allowed, dangerous ones require confirmation.',
   customizable: true,
   rules: [
+    {
+      group: 'group:safe',
+      action: 'allow',
+      reason: 'Audited read-only and bounded tools are allowed',
+      priority: 20,
+    },
     // Allow all file operations
     {
       group: 'group:fs',

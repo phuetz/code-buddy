@@ -29,6 +29,7 @@ import { logger } from '../utils/logger.js';
 import { getCodeBuddyPath } from '../utils/codebuddy-home.js';
 import type { FleetHermesToolsetDescriptor } from './dispatch-profile.js';
 import type { DispatchPlan } from './task-router.js';
+import type { FleetProvider } from './types.js';
 
 export type SagaStepStatus =
   | 'pending'
@@ -44,10 +45,34 @@ export type SagaStatus =
   | 'failed'
   | 'cancelled';
 
+/**
+ * Durable, secret-free provenance for one execution attempt of a saga step.
+ * Older saga JSON files simply omit `attempts`; callers must treat that as an
+ * empty history. Error text is redacted/truncated by the runner before write.
+ */
+export interface SagaStepAttempt {
+  peerId: string;
+  model: string;
+  providerRequested?: string;
+  providerResolved?: string;
+  runId?: string;
+  status: 'running' | 'completed' | 'failed';
+  failureDomain?: 'peer' | 'provider';
+  startedAt: number;
+  completedAt?: number;
+  error?: string;
+}
+
 /** A single dispatched step within a saga. */
 export interface SagaStep {
   peerId: string;
   model: string;
+  /** Exact backend selected by TaskRouter; absent on legacy persisted sagas. */
+  provider?: FleetProvider;
+  /** Every dispatch/failover attempt, in execution order. Legacy: absent. */
+  attempts?: SagaStepAttempt[];
+  /** One-retry cap used by the provider-aware chain runner. Legacy: absent. */
+  retried?: boolean;
   /**
    * Lane this step belongs to. `chain` is the Hermes-style sequential
    * collaboration lane (Draft→Review→Test) — chain steps run in order
@@ -427,6 +452,8 @@ export class SagaStore {
         steps.push({
           peerId: lane.peerId,
           model: lane.model,
+          provider: lane.provider,
+          attempts: [],
           lane: 'chain',
           role: lane.role,
           dependsOn: idx > 0 ? idx - 1 : undefined,
@@ -441,6 +468,8 @@ export class SagaStore {
         steps.push({
           peerId: lane.peerId,
           model: lane.model,
+          provider: lane.provider,
+          attempts: [],
           lane: 'parallel',
           status: 'pending',
         });
@@ -449,6 +478,8 @@ export class SagaStore {
       steps.push({
         peerId: plan.primary.peerId,
         model: plan.primary.model,
+        provider: plan.primary.provider,
+        attempts: [],
         lane: 'primary',
         status: 'pending',
       });
@@ -456,6 +487,8 @@ export class SagaStore {
         steps.push({
           peerId: plan.fallback.peerId,
           model: plan.fallback.model,
+          provider: plan.fallback.provider,
+          attempts: [],
           lane: 'fallback',
           status: 'pending',
         });

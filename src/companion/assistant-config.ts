@@ -12,10 +12,12 @@ import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'no
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { promisify } from 'node:util';
-import { PocketTTSProvider, PRESET_VOICES } from '../talk-mode/providers/pocket-tts.js';
+import { PRESET_VOICES } from '../talk-mode/providers/pocket-tts.js';
+import { synthesizePocketWav } from '../voice/local-tts.js';
+import { DEFAULT_NEWS_QUERY } from './prefetch-config.js';
 
 export type AssistantSettingGroup = 'voice' | 'speech' | 'behavior' | 'companion';
-export type AssistantSettingType = 'toggle' | 'enum' | 'text' | 'voice';
+export type AssistantSettingType = 'toggle' | 'enum' | 'text' | 'voice' | 'volume';
 export type AssistantEnvFile = 'vision' | 'lisa' | 'both';
 export type AssistantEnvFileName = 'vision' | 'lisa';
 
@@ -41,6 +43,11 @@ export interface AssistantServiceRestartResult {
   error?: string;
 }
 
+export interface AssistantVoicePreviewPlaybackResult {
+  path: string;
+  played: boolean;
+}
+
 const MANAGED_MARKER = '# --- assistant config (managed) ---';
 const execFileAsync = promisify(execFile);
 
@@ -50,10 +57,10 @@ export const ASSISTANT_SETTINGS: AssistantSetting[] = [
     label: 'TTS engine',
     group: 'voice',
     type: 'enum',
-    options: ['piper', 'pocket'],
-    default: 'piper',
+    options: ['pocket', 'voicebox', 'piper'],
+    default: 'pocket',
     envFile: 'both',
-    help: 'Selects the assistant speech synthesis engine.',
+    help: 'Pocket is realtime; Voicebox is expressive and GPU-ready; Piper is the final fallback.',
   },
   {
     key: 'CODEBUDDY_POCKET_VOICE',
@@ -72,6 +79,124 @@ export const ASSISTANT_SETTINGS: AssistantSetting[] = [
     default: 'french',
     envFile: 'both',
     help: 'Language token used by Pocket TTS.',
+  },
+  {
+    key: 'CODEBUDDY_POCKET_SERVER',
+    label: 'Persistent Pocket server',
+    group: 'voice',
+    type: 'toggle',
+    default: 'true',
+    envFile: 'both',
+    help: 'Keeps the Pocket model resident so uncached phrases do not reload it.',
+  },
+  {
+    key: 'CODEBUDDY_POCKET_URL',
+    label: 'Pocket server URL',
+    group: 'voice',
+    type: 'text',
+    default: 'http://127.0.0.1:8766',
+    envFile: 'both',
+    help: 'Loopback FastAPI endpoint used by the resident Pocket model.',
+  },
+  {
+    key: 'CODEBUDDY_POCKET_QUANTIZE',
+    label: 'Quantize Pocket TTS',
+    group: 'voice',
+    type: 'toggle',
+    default: 'false',
+    envFile: 'both',
+    help: 'Uses Pocket int8 inference to reduce CPU latency and memory with unchanged WER.',
+  },
+  {
+    key: 'CODEBUDDY_POCKET_AUDIO_STREAM',
+    label: 'Stream Pocket audio',
+    group: 'voice',
+    type: 'toggle',
+    default: 'true',
+    envFile: 'both',
+    help: 'Plays Pocket WAV chunks as they arrive instead of waiting for the full clip.',
+  },
+  {
+    key: 'CODEBUDDY_VOICEBOX_URL',
+    label: 'Voicebox URL',
+    group: 'voice',
+    type: 'text',
+    default: 'http://127.0.0.1:17493',
+    envFile: 'both',
+    help: 'Voicebox REST endpoint. On Darkstar, expose it only through the trusted Tailscale network.',
+  },
+  {
+    key: 'CODEBUDDY_VOICEBOX_PROFILE',
+    label: 'Voicebox profile',
+    group: 'voice',
+    type: 'text',
+    default: '',
+    envFile: 'both',
+    help: 'Voicebox voice profile name or id. Required when the Voicebox engine is selected.',
+  },
+  {
+    key: 'CODEBUDDY_VOICEBOX_ENGINE',
+    label: 'Voicebox renderer',
+    group: 'voice',
+    type: 'enum',
+    options: [
+      'qwen',
+      'qwen_custom_voice',
+      'luxtts',
+      'chatterbox',
+      'chatterbox_turbo',
+      'tada',
+      'kokoro',
+    ],
+    default: 'qwen',
+    envFile: 'both',
+    help: 'Voicebox synthesis backend. Qwen is the recommended multilingual starting point.',
+  },
+  {
+    key: 'CODEBUDDY_VOICEBOX_LANGUAGE',
+    label: 'Voicebox language',
+    group: 'voice',
+    type: 'text',
+    default: 'fr',
+    envFile: 'both',
+    help: 'Voicebox language code used for Lisa speech.',
+  },
+  {
+    key: 'CODEBUDDY_VOICEBOX_MODEL_SIZE',
+    label: 'Voicebox model size',
+    group: 'voice',
+    type: 'enum',
+    options: ['0.6B', '1.7B', '1B', '3B'],
+    default: '1.7B',
+    envFile: 'both',
+    help: 'Renderer size. 1.7B favors quality on Darkstar; 0.6B is the lower-latency option.',
+  },
+  {
+    key: 'CODEBUDDY_VOICEBOX_INSTRUCT',
+    label: 'Voicebox delivery instruction',
+    group: 'voice',
+    type: 'text',
+    default: '',
+    envFile: 'both',
+    help: 'Optional acoustic delivery only (tone, pace, warmth), capped at 500 characters.',
+  },
+  {
+    key: 'CODEBUDDY_VOICEBOX_AUDIO_STREAM',
+    label: 'Stream Voicebox audio',
+    group: 'voice',
+    type: 'toggle',
+    default: 'true',
+    envFile: 'both',
+    help: 'Pipes Voicebox WAV output directly to speakers and the avatar as soon as it arrives.',
+  },
+  {
+    key: 'CODEBUDDY_TTS_VOLUME',
+    label: 'Assistant output volume',
+    group: 'voice',
+    type: 'volume',
+    default: '100',
+    envFile: 'both',
+    help: 'Assistant-only loudness (0–100). At 100, local speech is safely normalized to -1 dBFS.',
   },
   {
     key: 'CODEBUDDY_TTS_VOICE',
@@ -105,10 +230,10 @@ export const ASSISTANT_SETTINGS: AssistantSetting[] = [
     label: 'Speech permission mode',
     group: 'speech',
     type: 'enum',
-    options: ['plan', 'dontAsk', 'bypassPermissions'],
-    default: 'plan',
+    options: ['default', 'dontAsk', 'bypassPermissions'],
+    default: 'default',
     envFile: 'vision',
-    help: 'Permission mode used by spoken action flows.',
+    help: 'Guarded per-turn posture used by spoken actions. Code planning stays scoped to its own session.',
   },
   {
     key: 'CODEBUDDY_SENSORY_SPEAK_MODEL',
@@ -118,6 +243,125 @@ export const ASSISTANT_SETTINGS: AssistantSetting[] = [
     default: 'auto',
     envFile: 'vision',
     help: 'Model used for spoken assistant replies.',
+  },
+  {
+    key: 'CODEBUDDY_SENSORY_SPEAK_BASE_URL',
+    label: 'Speech model endpoint',
+    group: 'speech',
+    type: 'text',
+    default: 'http://127.0.0.1:11434/v1',
+    envFile: 'vision',
+    help: 'OpenAI-compatible endpoint used by the low-latency speech model.',
+  },
+  {
+    key: 'CODEBUDDY_SENSORY_SPEAK_FACT_MODEL',
+    label: 'Factual speech model',
+    group: 'speech',
+    type: 'text',
+    default: '',
+    envFile: 'vision',
+    help: 'Optional larger local model for static factual questions; ordinary conversation stays on the fast model.',
+  },
+  {
+    key: 'CODEBUDDY_VOICE_MODEL_PREWARM',
+    label: 'Prewarm voice model',
+    group: 'speech',
+    type: 'toggle',
+    default: 'true',
+    envFile: 'vision',
+    help: 'Loads the selected local Ollama model before the first spoken turn.',
+  },
+  {
+    key: 'CODEBUDDY_VOICE_MAX_TOKENS',
+    label: 'Voice reply token cap',
+    group: 'speech',
+    type: 'text',
+    default: '48',
+    envFile: 'vision',
+    help: 'Base token budget. Natural/developed styles raise it dynamically for substantive turns.',
+  },
+  {
+    key: 'CODEBUDDY_VOICE_RESPONSE_STYLE',
+    label: 'Conversation depth',
+    group: 'speech',
+    type: 'enum',
+    options: ['natural', 'concise', 'developed'],
+    default: 'natural',
+    envFile: 'both',
+    help: 'Natural adapts to the dialogue act; developed gives arguments more room; concise keeps the legacy cap.',
+  },
+  {
+    key: 'CODEBUDDY_VOICE_TEMPERATURE',
+    label: 'Voice model temperature',
+    group: 'speech',
+    type: 'text',
+    default: '0.2',
+    envFile: 'vision',
+    help: 'Low temperature keeps short spoken facts stable and reduces hallucinations (0–1).',
+  },
+  {
+    key: 'CODEBUDDY_VOICE_ROUTING_MODE',
+    label: 'Voice routing mode',
+    group: 'speech',
+    type: 'enum',
+    options: ['realtime', 'grounded'],
+    default: 'realtime',
+    envFile: 'vision',
+    help: 'Realtime keeps ordinary questions on the fast model; grounded sends every question to the full agent.',
+  },
+  {
+    key: 'CODEBUDDY_VOICE_BACKCHANNEL',
+    label: 'Instant voice backchannel',
+    group: 'speech',
+    type: 'toggle',
+    default: 'false',
+    envFile: 'vision',
+    help: 'Optional spoken filler while a slow answer starts. Off by default because the local realtime lane reaches useful speech faster.',
+  },
+  {
+    key: 'CODEBUDDY_VOICE_SENTENCE_CAP',
+    label: 'Streaming segment chars',
+    group: 'speech',
+    type: 'text',
+    default: '96',
+    envFile: 'vision',
+    help: 'Maximum text segment sent to streaming TTS before a soft cut (32–240); 96 preserves natural French clauses.',
+  },
+  {
+    key: 'CODEBUDDY_VOICE_MODEL_KEEP_ALIVE',
+    label: 'Voice model keep-alive',
+    group: 'speech',
+    type: 'text',
+    default: '30m',
+    envFile: 'vision',
+    help: 'Ollama residency requested by voice prewarming.',
+  },
+  {
+    key: 'CODEBUDDY_VOICE_MODEL_REFRESH_MS',
+    label: 'Voice model refresh ms',
+    group: 'speech',
+    type: 'text',
+    default: '900000',
+    envFile: 'vision',
+    help: 'How often the daemon refreshes local voice-model residency; zero disables refresh.',
+  },
+  {
+    key: 'CODEBUDDY_TTS_PREWARM',
+    label: 'Prewarm common phrases',
+    group: 'speech',
+    type: 'toggle',
+    default: 'true',
+    envFile: 'vision',
+    help: 'Synthesizes the most common assistant phrases in the background at startup.',
+  },
+  {
+    key: 'CODEBUDDY_TTS_PREWARM_LIMIT',
+    label: 'TTS prewarm phrase count',
+    group: 'speech',
+    type: 'text',
+    default: '16',
+    envFile: 'vision',
+    help: 'Maximum common phrases warmed at startup (capped at 64).',
   },
   {
     key: 'CODEBUDDY_SENSORY_SPEECH',
@@ -201,6 +445,15 @@ export const ASSISTANT_SETTINGS: AssistantSetting[] = [
     help: 'Primary language code for speech recognition.',
   },
   {
+    key: 'CODEBUDDY_SPEECH_DEBOUNCE_MS',
+    label: 'Speech debounce ms',
+    group: 'behavior',
+    type: 'text',
+    default: '800',
+    envFile: 'vision',
+    help: 'Deduplicates repeated speech events; lower values make follow-up turns feel faster.',
+  },
+  {
     key: 'CODEBUDDY_SENSORY_GREET',
     label: 'Greeting',
     group: 'companion',
@@ -208,6 +461,15 @@ export const ASSISTANT_SETTINGS: AssistantSetting[] = [
     default: 'false',
     envFile: 'vision',
     help: 'Enables assistant greetings.',
+  },
+  {
+    key: 'CODEBUDDY_ROBOT_NAME',
+    label: 'Companion name',
+    group: 'companion',
+    type: 'text',
+    default: 'Lisa',
+    envFile: 'both',
+    help: 'Default identity of this companion prototype; other companions can reuse the same runtime.',
   },
   {
     key: 'CODEBUDDY_REMINDERS',
@@ -228,6 +490,169 @@ export const ASSISTANT_SETTINGS: AssistantSetting[] = [
     help: 'Injects relational context into companion replies.',
   },
   {
+    key: 'CODEBUDDY_CONVERSATION_BRIDGE',
+    label: 'Voice/channel continuity',
+    group: 'companion',
+    type: 'toggle',
+    default: 'true',
+    envFile: 'both',
+    help: 'Shares one Lisa conversation between resident voice and the configured messaging channel.',
+  },
+  {
+    key: 'CODEBUDDY_CONVERSATION_CHANNEL',
+    label: 'Conversation channel',
+    group: 'companion',
+    type: 'enum',
+    options: ['telegram', 'discord', 'slack', 'whatsapp', 'signal', 'matrix', 'teams', 'webchat'],
+    default: 'telegram',
+    envFile: 'both',
+    help: 'Transport that receives voice transcripts and can continue the same conversation.',
+  },
+  {
+    key: 'CODEBUDDY_CONVERSATION_CHANNEL_ID',
+    label: 'Conversation channel ID',
+    group: 'companion',
+    type: 'text',
+    default: '',
+    envFile: 'both',
+    help: 'Chat/room ID used for the shared conversation; Telegram falls back to the sensory alert chat.',
+  },
+  {
+    key: 'CODEBUDDY_CONVERSATION_CHANNEL_THREAD',
+    label: 'Channel topic/thread ID',
+    group: 'companion',
+    type: 'text',
+    default: '',
+    envFile: 'both',
+    help: 'Optional Telegram topic or channel thread; empty shares the whole configured chat.',
+  },
+  {
+    key: 'CODEBUDDY_CONVERSATION_THREAD_ID',
+    label: 'Lisa conversation ID',
+    group: 'companion',
+    type: 'text',
+    default: 'lisa',
+    envFile: 'both',
+    help: 'Stable logical thread name used for cross-channel history.',
+  },
+  {
+    key: 'CODEBUDDY_CONVERSATION_MIRROR_VOICE',
+    label: 'Mirror voice turns',
+    group: 'companion',
+    type: 'toggle',
+    default: 'true',
+    envFile: 'vision',
+    help: 'Posts both the recognized speech and Lisa reply to the configured channel.',
+  },
+  {
+    key: 'CODEBUDDY_CONVERSATION_COWORK',
+    label: 'Cowork companion continuity',
+    group: 'companion',
+    type: 'toggle',
+    default: 'true',
+    envFile: 'both',
+    help: 'Lets explicitly linked Cowork sessions continue the private Lisa thread.',
+  },
+  {
+    key: 'CODEBUDDY_CONVERSATION_MIRROR_COWORK',
+    label: 'Mirror Cowork turns',
+    group: 'companion',
+    type: 'toggle',
+    default: 'true',
+    envFile: 'both',
+    help: 'Posts linked Cowork user and Lisa turns to the configured conversation channel.',
+  },
+  {
+    key: 'CODEBUDDY_CONVERSATION_COWORK_HISTORY',
+    label: 'Cowork shared history turns',
+    group: 'companion',
+    type: 'text',
+    default: '24',
+    envFile: 'both',
+    help: 'Maximum recent cross-surface turns imported into a linked Cowork session (4-80).',
+  },
+  {
+    key: 'CODEBUDDY_CONVERSATION_PERSIST',
+    label: 'Persist shared history',
+    group: 'companion',
+    type: 'toggle',
+    default: 'true',
+    envFile: 'both',
+    help: 'Keeps the bounded shared thread in a private local JSONL journal across restarts.',
+  },
+  {
+    key: 'CODEBUDDY_PREFETCH',
+    label: 'Warm fresh context',
+    group: 'companion',
+    type: 'toggle',
+    default: 'true',
+    envFile: 'both',
+    help: 'Preloads structured news, agenda, date and configured weather context for instant grounded replies.',
+  },
+  {
+    key: 'CODEBUDDY_PREFETCH_INTERVAL_MS',
+    label: 'Fresh-context interval ms',
+    group: 'companion',
+    type: 'text',
+    default: '900000',
+    envFile: 'vision',
+    help: 'Wall-clock refresh interval for fresh context; defaults to fifteen minutes.',
+  },
+  {
+    key: 'CODEBUDDY_NEWS_QUERY',
+    label: 'Preferred news topics',
+    group: 'companion',
+    type: 'text',
+    default: DEFAULT_NEWS_QUERY,
+    envFile: 'both',
+    help: 'Query warmed in the background. Lisa can still search a different topic on demand.',
+  },
+  {
+    key: 'CODEBUDDY_NEWS_LOCALE',
+    label: 'News locale',
+    group: 'companion',
+    type: 'text',
+    default: 'fr-FR',
+    envFile: 'both',
+    help: 'Language and country used for fresh news sources.',
+  },
+  {
+    key: 'CODEBUDDY_COMPANION_RELATIONAL_BUDGET_MS',
+    label: 'Relational cold budget ms',
+    group: 'companion',
+    type: 'text',
+    default: '75',
+    envFile: 'both',
+    help: 'Maximum first-turn wait for relational memory; later turns use stale-while-revalidate.',
+  },
+  {
+    key: 'CODEBUDDY_COMPANION_RELATIONAL_TTL_MS',
+    label: 'Relational cache TTL ms',
+    group: 'companion',
+    type: 'text',
+    default: '5000',
+    envFile: 'both',
+    help: 'Freshness window for the cached relationship, episode, guidance, and presence context.',
+  },
+  {
+    key: 'CODEBUDDY_EPISODE_JOURNAL',
+    label: 'Conversation episodes',
+    group: 'companion',
+    type: 'toggle',
+    default: 'false',
+    envFile: 'vision',
+    help: 'Consolidates the complete cross-channel thread into a private where-we-were memory.',
+  },
+  {
+    key: 'CODEBUDDY_EPISODE_EVERY',
+    label: 'Episode consolidation beats',
+    group: 'companion',
+    type: 'text',
+    default: '40',
+    envFile: 'vision',
+    help: 'Heartbeat interval for deduplicated conversation episode consolidation.',
+  },
+  {
     key: 'CODEBUDDY_COMPANION_PROACTIVE',
     label: 'Proactive companion',
     group: 'companion',
@@ -244,6 +669,61 @@ export const ASSISTANT_SETTINGS: AssistantSetting[] = [
     default: 'false',
     envFile: 'vision',
     help: 'Enables the voice assistant improvement loop.',
+  },
+  {
+    key: 'CODEBUDDY_CONVERSATION_EVAL',
+    label: 'Conversation quality loop',
+    group: 'companion',
+    type: 'toggle',
+    default: 'true',
+    envFile: 'vision',
+    help: 'Scores complete user/Lisa exchanges locally and learns only from recurring weaknesses.',
+  },
+  {
+    key: 'CODEBUDDY_CONVERSATION_EVAL_EVERY',
+    label: 'Quality evaluation beats',
+    group: 'companion',
+    type: 'text',
+    default: '30',
+    envFile: 'vision',
+    help: 'Heartbeat interval between deterministic conversation-quality evaluations.',
+  },
+  {
+    key: 'CODEBUDDY_CONVERSATION_EVAL_MIN_STREAK',
+    label: 'Recurring issue threshold',
+    group: 'companion',
+    type: 'text',
+    default: '2',
+    envFile: 'vision',
+    help: 'Number of consecutive evaluations that must confirm a weakness before Lisa adapts.',
+  },
+  {
+    key: 'CODEBUDDY_CONVERSATION_EVAL_COOLDOWN_MS',
+    label: 'Quality guidance cooldown ms',
+    group: 'companion',
+    type: 'text',
+    default: '21600000',
+    envFile: 'vision',
+    help: 'Minimum delay between automatically learned conversation guidance lines.',
+  },
+  {
+    key: 'CODEBUDDY_AVATAR_BRIDGE',
+    label: 'Avatar performance bridge',
+    group: 'companion',
+    type: 'toggle',
+    default: 'true',
+    envFile: 'vision',
+    help: 'Publishes scoped speech, affect, gesture and interruption events for Unreal/MetaHuman.',
+  },
+  {
+    key: 'CODEBUDDY_AVATAR_STREAM_AUDIO',
+    label: 'Stream avatar audio',
+    group: 'companion',
+    type: 'enum',
+    options: ['auto', 'true', 'false'],
+    default: 'auto',
+    envFile: 'vision',
+    help: 'Auto streams bounded WAV only while a compatible authenticated renderer is alive.',
   },
 ];
 
@@ -275,8 +755,12 @@ function resolveEnvFilePath(which: AssistantEnvFileName, paths?: AssistantEnvPat
 }
 
 function validateSettingValue(setting: AssistantSetting, value: string): boolean {
-  if (setting.type !== 'enum') return true;
-  return setting.options?.includes(value) ?? false;
+  if (setting.type === 'enum') return setting.options?.includes(value) ?? false;
+  if (setting.type === 'volume') {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) && parsed >= 0 && parsed <= 100;
+  }
+  return true;
 }
 
 function validUpdateEntries(updates: Record<string, string>): Array<[AssistantSetting, string]> {
@@ -363,11 +847,40 @@ export function readAssistantConfig(paths?: AssistantEnvPaths): Record<string, s
             ? (lisa[setting.key] ?? setting.default)
             : setting.default;
       }
+
+      // `plan` was the historical always-on assistant default. Surface the new
+      // guarded resident posture immediately without mutating the user's env
+      // file; runtime applies the same migration. Explicit `/plan` code sessions
+      // are separate and remain untouched.
+      if (
+        setting.key === 'CODEBUDDY_SENSORY_SPEAK_PERMISSION_MODE' &&
+        config[setting.key]?.toLowerCase() === 'plan'
+      ) {
+        config[setting.key] = 'default';
+      }
     }
 
     return config;
   } catch {
     return Object.fromEntries(ASSISTANT_SETTINGS.map((setting) => [setting.key, setting.default]));
+  }
+}
+
+/**
+ * Privileged daemon environment for main-process integrations.
+ *
+ * Unlike `readAssistantConfig`, this includes operational keys that are not
+ * exposed by the schema (for example the Telegram bot token). Callers must
+ * keep the returned object inside a trusted Node/Electron main process and
+ * must never serialize it to a renderer or log it.
+ */
+export function readAssistantRuntimeEnv(paths?: AssistantEnvPaths): Record<string, string> {
+  try {
+    const lisa = parseEnv(readTextFile(resolveEnvFilePath('lisa', paths)));
+    const vision = parseEnv(readTextFile(resolveEnvFilePath('vision', paths)));
+    return { ...lisa, ...vision };
+  } catch {
+    return {};
   }
 }
 
@@ -441,8 +954,8 @@ export function voicePreviewCachePath(
 /**
  * Synthesize (or reuse) a short voice preview WAV, returning its path. Cached at
  * a stable path per (voice, text) so re-listening the same sentence is instant
- * (Pocket `french_24l` costs ~4-8 s per synth on CPU). `force` regenerates.
- * never-throws.
+ * (the resident Pocket server avoids paying model startup for every custom
+ * sentence). `force` regenerates. Never throws.
  */
 export async function previewVoice(
   name: string,
@@ -454,36 +967,56 @@ export async function previewVoice(
     if (!voiceName) return null;
     const effectiveText = (text ?? '').trim() || DEFAULT_VOICE_PREVIEW_TEXT;
     const outPath = voicePreviewCachePath(voiceName, effectiveText);
+    const assistantEnv = readAssistantConfig();
 
     // Cache hit: a non-empty WAV already exists for this voice+text → return instantly.
     if (!opts?.force) {
       try {
-        if (existsSync(outPath) && statSync(outPath).size > 44) return outPath;
+        if (existsSync(outPath) && statSync(outPath).size > 44) {
+          // Migrate previews synthesized before assistant loudness normalization.
+          const { normalizeWavFile } = await import('../voice/tts-volume.js');
+          await normalizeWavFile(outPath, { ...process.env, ...assistantEnv });
+          return outPath;
+        }
       } catch {
         /* fall through to (re)synthesis */
       }
     }
 
-    const provider = new PocketTTSProvider();
-    await provider.initialize({
-      provider: 'pocket',
-      enabled: true,
-      priority: 1,
-      settings: { voice: voiceName, language: 'french' },
-    });
-    if (!(await provider.isAvailable())) return null;
-
-    const result = await provider.synthesize(effectiveText, {
-      voice: voiceName,
-      language: 'french',
-      format: 'wav',
-    });
     mkdirSync(dirname(outPath), { recursive: true });
-    writeFileSync(outPath, result.audio, { mode: 0o600 });
+    const generated = await synthesizePocketWav(
+      effectiveText,
+      outPath,
+      {
+        ...process.env,
+        ...assistantEnv,
+        CODEBUDDY_TTS_ENGINE: 'pocket',
+        CODEBUDDY_POCKET_VOICE: voiceName,
+        CODEBUDDY_POCKET_LANG: assistantEnv.CODEBUDDY_POCKET_LANG ?? 'french',
+      },
+      180_000
+    );
+    if (!generated) return null;
     return outPath;
   } catch {
     return null;
   }
+}
+
+/**
+ * Generate (or reuse) a preview and play it through the platform audio player.
+ * Playback happens in the Node/Electron main process so Chromium file URL and
+ * autoplay policies cannot silently swallow the user's click.
+ */
+export async function playVoicePreview(
+  name: string,
+  text?: string
+): Promise<AssistantVoicePreviewPlaybackResult | null> {
+  const path = await previewVoice(name, text);
+  if (!path) return null;
+
+  const { tryPlayWavFile } = await import('../utils/audio-player.js');
+  return { path, played: await tryPlayWavFile(path) };
 }
 
 export async function restartAssistantServices(

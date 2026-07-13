@@ -11,7 +11,14 @@
  */
 
 import type { ToolResult } from '../../types/index.js';
-import type { ITool, ToolSchema, IToolMetadata, IValidationResult, ToolCategoryType } from './types.js';
+import type {
+  ITool,
+  ToolSchema,
+  IToolMetadata,
+  IValidationResult,
+  ToolCategoryType,
+  IToolExecutionContext,
+} from './types.js';
 import { getTodoTracker } from '../../agent/todo-tracker.js';
 import { getRestorableCompressor } from '../../context/restorable-compression.js';
 
@@ -27,9 +34,12 @@ export class TodoAttentionTool implements ITool {
     'The current task list is automatically appended to the end of the LLM context each turn to keep objectives in focus.',
   ].join(' ');
 
-  async execute(input: Record<string, unknown>): Promise<ToolResult> {
+  async execute(
+    input: Record<string, unknown>,
+    context?: IToolExecutionContext,
+  ): Promise<ToolResult> {
     const action = input.action as string;
-    const tracker = getTodoTracker(process.cwd());
+    const tracker = getTodoTracker(context?.cwd ?? process.cwd());
 
     try {
       switch (action) {
@@ -176,18 +186,20 @@ export class TodoAttentionTool implements ITool {
 export class RestoreContextTool implements ITool {
   readonly name = 'restore_context';
   readonly description = [
-    'Restore compressed context content by identifier (file path or URL).',
-    'When context is compressed, file paths and URLs are preserved as identifiers.',
-    'Use this tool to retrieve the full original content that was compressed away.',
-    'Provide the exact file path (e.g. "src/agent/types.ts") or URL seen in an earlier message.',
+    'Restore context that was compacted out of the model-facing observation.',
+    'For tool results, pass the exact originating tool call ID (for example call_abc123 or toolu_xyz) to retrieve the raw output persisted before optimization.',
+    'Legacy file-path and URL identifiers produced by restorable compression remain supported.',
   ].join(' ');
 
-  async execute(input: Record<string, unknown>): Promise<ToolResult> {
+  async execute(
+    input: Record<string, unknown>,
+    context?: IToolExecutionContext,
+  ): Promise<ToolResult> {
     const identifier = input.identifier as string;
     if (!identifier) return { success: false, error: 'identifier is required' };
 
     const compressor = getRestorableCompressor();
-    const result = compressor.restore(identifier);
+    const result = compressor.restore(identifier, context?.cwd ?? process.cwd());
 
     if (result.found) {
       return {
@@ -211,7 +223,7 @@ export class RestoreContextTool implements ITool {
         properties: {
           identifier: {
             type: 'string',
-            description: 'File path (e.g. "src/agent/types.ts") or URL to restore',
+            description: 'Exact tool call ID (preferred), or a preserved file path/URL identifier',
           },
         },
         required: ['identifier'],
@@ -233,7 +245,7 @@ export class RestoreContextTool implements ITool {
       version: '1.0.0',
       author: 'Code Buddy',
       category: 'context' as ToolCategoryType,
-      keywords: ['context', 'memory', 'compression', 'restore'],
+      keywords: ['context', 'memory', 'compression', 'restore', 'callId', 'raw output', 'exact'],
       priority: 70,
     };
   }

@@ -49,12 +49,19 @@ describe('PolicyEngine', () => {
     expect(resultHigh.decision).toBe('needs_approval');
   });
 
-  it('should evaluate shell:safe as allow', () => {
+  it('should allow only explicitly low-risk shell operations', () => {
     const result = policyEngine.evaluate({
       capability: 'shell:safe',
-      risk: 'medium',
+      risk: 'low',
     });
     expect(result.decision).toBe('allow');
+  });
+
+  it('should require approval for medium/high-risk shell operations', () => {
+    expect(policyEngine.evaluate({ capability: 'shell:safe', risk: 'medium' }).decision)
+      .toBe('needs_approval');
+    expect(policyEngine.evaluate({ capability: 'shell:safe', risk: 'high' }).decision)
+      .toBe('needs_approval');
   });
 
   it('should evaluate net:listed, fleet:listen, peer:invoke as needs_approval', () => {

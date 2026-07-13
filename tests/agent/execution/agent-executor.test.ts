@@ -230,6 +230,46 @@ describe('AgentExecutor', () => {
     });
   });
 
+  describe('ephemeral emotional presence', () => {
+    it('adds tone guidance to the model request without persisting it in history', async () => {
+      setupLLMFlow(deps, [{ content: 'Let’s unblock this.' }]);
+      const messages: CodeBuddyMessage[] = [
+        { role: 'system', content: 'Base system prompt' },
+        { role: 'user', content: 'I am completely stuck on this' },
+      ];
+
+      await collectChunks(
+        executor.processUserMessageStream('I am completely stuck on this', [], messages, null)
+      );
+
+      const prepared = (deps.client.chatStream as jest.Mock).mock.calls[0][0] as CodeBuddyMessage[];
+      const interaction = prepared.find((turn) =>
+        typeof turn.content === 'string' && turn.content.includes('<interaction_context')
+      );
+      expect(interaction?.content).toMatch(/brief, natural acknowledgement/i);
+      expect(messages.some((turn) =>
+        typeof turn.content === 'string' && turn.content.includes('<interaction_context')
+      )).toBe(false);
+    });
+
+    it('does not add an interaction block for a neutral task', async () => {
+      setupLLMFlow(deps, [{ content: 'Opening it.' }]);
+      const messages: CodeBuddyMessage[] = [
+        { role: 'system', content: 'Base system prompt' },
+        { role: 'user', content: 'Open package.json' },
+      ];
+
+      await collectChunks(
+        executor.processUserMessageStream('Open package.json', [], messages, null)
+      );
+
+      const prepared = (deps.client.chatStream as jest.Mock).mock.calls[0][0] as CodeBuddyMessage[];
+      expect(prepared.some((turn) =>
+        typeof turn.content === 'string' && turn.content.includes('<interaction_context')
+      )).toBe(false);
+    });
+  });
+
   // =========================================================================
   // Middleware Pipeline
   // =========================================================================

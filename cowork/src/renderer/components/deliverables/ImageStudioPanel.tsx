@@ -10,6 +10,7 @@ import {
   buildImageVariationPrompt,
   latestImagePath,
 } from './media-path-model.js';
+import { ImageDesignEditor } from './DesignViewEditors.js';
 
 export function ImageStudioPanel() {
   const config: DeliverableStudioConfig<string> = {
@@ -37,6 +38,7 @@ export function ImageStudioPanel() {
           L'image générée s'affichera ici.
         </div>
       ),
+    renderDesign: (path, onChange) => <ImageDesignEditor value={path} onChange={onChange} />,
     testId: 'image-studio',
   };
 

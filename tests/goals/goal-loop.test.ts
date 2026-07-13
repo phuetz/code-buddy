@@ -248,6 +248,31 @@ describe('maybeContinueGoalAfterTurn', () => {
       expect(outcome?.continuationPrompt).toBeUndefined();
     });
 
+    it('records interactive verifier and decision evidence through an injected ledger', async () => {
+      const manager = getGoalManager();
+      manager.set('Ship the fix and prove it', { maxTurns: 4, verifyGated: true });
+      const client = judgeClient('{"done": true, "reason": "proof accepted"}');
+      const append = vi.fn(() => null);
+
+      await maybeContinueGoalAfterTurn({
+        client: client as never,
+        lastResponse: 'Focused test passed.',
+        interrupted: false,
+        verify: async () => ({ verdict: 'CONFIRMED', evidence: '1 test passed' }),
+        proofRecorder: { append },
+      });
+
+      expect(append).toHaveBeenCalledTimes(2);
+      expect(append).toHaveBeenNthCalledWith(1, expect.objectContaining({
+        kind: 'verification',
+        source: 'interactive-loop',
+      }));
+      expect(append).toHaveBeenNthCalledWith(2, expect.objectContaining({
+        kind: 'decision',
+        status: 'pass',
+      }));
+    });
+
     it('never runs the Verifier for a classic /goal (not verifyGated)', async () => {
       const manager = getGoalManager();
       manager.set('Ship the fix and prove it', { maxTurns: 4 }); // no verifyGated

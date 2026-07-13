@@ -9,10 +9,15 @@
  */
 
 import { v4 as uuidv4 } from 'uuid';
-import { join } from 'path';
-import { existsSync, mkdirSync, writeFileSync } from 'fs';
+import { existsSync, writeFileSync } from 'fs';
+import { isAbsolute, normalize } from 'path';
 import { log, logError, logWarn } from '../utils/logger';
 import type { DatabaseInstance, ProjectRow } from '../db/database';
+import {
+  ensureProjectMemoryDirectory,
+  resolveProjectMemoryDirectory,
+  resolveProjectMemoryFile,
+} from './project-paths';
 
 export interface Project {
   id: string;
@@ -20,6 +25,7 @@ export interface Project {
   description?: string;
   workspacePath?: string;
   memoryConfig?: ProjectMemoryConfig;
+  contextConfig?: ProjectContextConfig;
   createdAt: number;
   updatedAt: number;
 }
@@ -31,11 +37,18 @@ export interface ProjectMemoryConfig {
   memoryStrategy?: 'auto' | 'manual' | 'rolling';
 }
 
+export interface ProjectContextConfig {
+  masterInstruction?: string;
+  knowledgeFiles?: string[];
+  maxKnowledgeChars?: number;
+}
+
 export interface ProjectCreateInput {
   name: string;
   description?: string;
   workspacePath?: string;
   memoryConfig?: ProjectMemoryConfig;
+  contextConfig?: ProjectContextConfig;
 }
 
 export interface ProjectUpdateInput {
@@ -43,6 +56,7 @@ export interface ProjectUpdateInput {
   description?: string;
   workspacePath?: string;
   memoryConfig?: ProjectMemoryConfig;
+  contextConfig?: ProjectContextConfig;
 }
 
 const DEFAULT_MEMORY_CONFIG: ProjectMemoryConfig = {
@@ -51,6 +65,83 @@ const DEFAULT_MEMORY_CONFIG: ProjectMemoryConfig = {
   includeICM: false,
   memoryStrategy: 'auto',
 };
+
+const DEFAULT_CONTEXT_CONFIG: ProjectContextConfig = {
+  knowledgeFiles: [],
+  maxKnowledgeChars: 16_000,
+};
+
+const MEMORY_STRATEGIES = new Set<ProjectMemoryConfig['memoryStrategy']>([
+  'auto', 'manual', 'rolling',
+]);
+
+function normalizeRequiredText(value: unknown, field: string, maxLength: number): string {
+  if (typeof value !== 'string') throw new TypeError(`${field} must be a string`);
+  const normalized = value.trim();
+  if (!normalized) throw new RangeError(`${field} must not be empty`);
+  return normalized.slice(0, maxLength);
+}
+
+function normalizeOptionalText(value: unknown, field: string, maxLength: number): string | undefined {
+  if (value === undefined || value === null || value === '') return undefined;
+  if (typeof value !== 'string') throw new TypeError(`${field} must be a string`);
+  const normalized = value.trim();
+  return normalized ? normalized.slice(0, maxLength) : undefined;
+}
+
+function normalizeWorkspacePath(value: unknown): string | undefined {
+  const workspacePath = normalizeOptionalText(value, 'workspacePath', 4_096);
+  if (!workspacePath) return undefined;
+  if (workspacePath.includes('\0') || !isAbsolute(workspacePath)) {
+    throw new RangeError('workspacePath must be an absolute path without null bytes');
+  }
+  return normalize(workspacePath);
+}
+
+function normalizeMemoryConfig(input?: ProjectMemoryConfig): ProjectMemoryConfig {
+  const requestedEntries = Number(input?.maxMemoryEntries ?? DEFAULT_MEMORY_CONFIG.maxMemoryEntries);
+  const strategy = input?.memoryStrategy;
+  return {
+    autoConsolidate: typeof input?.autoConsolidate === 'boolean'
+      ? input.autoConsolidate
+      : DEFAULT_MEMORY_CONFIG.autoConsolidate,
+    maxMemoryEntries: Number.isFinite(requestedEntries)
+      ? Math.max(1, Math.min(10_000, Math.trunc(requestedEntries)))
+      : DEFAULT_MEMORY_CONFIG.maxMemoryEntries,
+    includeICM: typeof input?.includeICM === 'boolean'
+      ? input.includeICM
+      : DEFAULT_MEMORY_CONFIG.includeICM,
+    memoryStrategy: strategy && MEMORY_STRATEGIES.has(strategy)
+      ? strategy
+      : DEFAULT_MEMORY_CONFIG.memoryStrategy,
+  };
+}
+
+function normalizeContextConfig(input?: ProjectContextConfig): ProjectContextConfig {
+  const masterInstruction = normalizeOptionalText(
+    input?.masterInstruction,
+    'masterInstruction',
+    12_000
+  );
+  const knowledgeFiles = Array.from(
+    new Set(
+      (input?.knowledgeFiles ?? [])
+        .filter((value): value is string => typeof value === 'string')
+        .map((value) => value.slice(0, 4_096).trim())
+        .filter(Boolean)
+        .slice(0, 32)
+    )
+  );
+  const requestedBudget = Number(input?.maxKnowledgeChars ?? DEFAULT_CONTEXT_CONFIG.maxKnowledgeChars);
+  const maxKnowledgeChars = Number.isFinite(requestedBudget)
+    ? Math.max(4_000, Math.min(64_000, Math.trunc(requestedBudget)))
+    : DEFAULT_CONTEXT_CONFIG.maxKnowledgeChars;
+  return {
+    ...(masterInstruction ? { masterInstruction } : {}),
+    knowledgeFiles,
+    maxKnowledgeChars,
+  };
+}
 
 export class ProjectManager {
   private db: DatabaseInstance;
@@ -68,16 +159,22 @@ export class ProjectManager {
 
   /** Create a new project */
   create(input: ProjectCreateInput): Project {
+    if (!input || typeof input !== 'object') throw new TypeError('Project input is required');
     const now = Date.now();
     const id = uuidv4();
-    const memoryConfig = { ...DEFAULT_MEMORY_CONFIG, ...input.memoryConfig };
+    const memoryConfig = normalizeMemoryConfig(input.memoryConfig);
+    const contextConfig = normalizeContextConfig(input.contextConfig);
+    const name = normalizeRequiredText(input.name, 'name', 200);
+    const description = normalizeOptionalText(input.description, 'description', 4_000);
+    const workspacePath = normalizeWorkspacePath(input.workspacePath);
 
     const project: Project = {
       id,
-      name: input.name,
-      description: input.description,
-      workspacePath: input.workspacePath,
+      name,
+      ...(description ? { description } : {}),
+      ...(workspacePath ? { workspacePath } : {}),
       memoryConfig,
+      contextConfig,
       createdAt: now,
       updatedAt: now,
     };
@@ -88,6 +185,7 @@ export class ProjectManager {
       description: project.description ?? null,
       workspace_path: project.workspacePath ?? null,
       memory_config: JSON.stringify(memoryConfig),
+      context_config: JSON.stringify(contextConfig),
       created_at: now,
       updated_at: now,
     });
@@ -103,6 +201,7 @@ export class ProjectManager {
 
   /** Update an existing project */
   update(id: string, updates: ProjectUpdateInput): Project | null {
+    if (!updates || typeof updates !== 'object') throw new TypeError('Project updates are required');
     const existing = this.get(id);
     if (!existing) {
       logWarn('[ProjectManager] Cannot update unknown project:', id);
@@ -110,21 +209,31 @@ export class ProjectManager {
     }
 
     const dbUpdates: Partial<ProjectRow> = {};
-    if (updates.name !== undefined) dbUpdates.name = updates.name;
-    if (updates.description !== undefined) dbUpdates.description = updates.description;
-    if (updates.workspacePath !== undefined) dbUpdates.workspace_path = updates.workspacePath;
+    if (updates.name !== undefined) dbUpdates.name = normalizeRequiredText(updates.name, 'name', 200);
+    if (updates.description !== undefined) {
+      dbUpdates.description = normalizeOptionalText(updates.description, 'description', 4_000) ?? null;
+    }
+    if (updates.workspacePath !== undefined) {
+      dbUpdates.workspace_path = normalizeWorkspacePath(updates.workspacePath) ?? null;
+    }
     if (updates.memoryConfig !== undefined) {
-      dbUpdates.memory_config = JSON.stringify({
+      dbUpdates.memory_config = JSON.stringify(normalizeMemoryConfig({
         ...existing.memoryConfig,
         ...updates.memoryConfig,
-      });
+      }));
+    }
+    if (updates.contextConfig !== undefined) {
+      dbUpdates.context_config = JSON.stringify(
+        normalizeContextConfig({ ...existing.contextConfig, ...updates.contextConfig })
+      );
     }
 
     this.db.projects.update(id, dbUpdates);
 
     // Re-initialize memory folder if workspace path changed
-    if (updates.workspacePath && updates.workspacePath !== existing.workspacePath) {
-      this.initMemoryFolder(updates.workspacePath);
+    const nextWorkspacePath = dbUpdates.workspace_path;
+    if (typeof nextWorkspacePath === 'string' && nextWorkspacePath !== existing.workspacePath) {
+      this.initMemoryFolder(nextWorkspacePath);
     }
 
     const updated = this.get(id)!;
@@ -208,20 +317,25 @@ export class ProjectManager {
         return;
       }
 
-      const memoryDir = join(workspacePath, '.codebuddy', 'memory');
-      if (!existsSync(memoryDir)) {
-        mkdirSync(memoryDir, { recursive: true });
+      const memoryDir = ensureProjectMemoryDirectory(workspacePath);
+      if (!memoryDir) {
+        logWarn('[ProjectManager] Refusing unsafe project memory path:', workspacePath);
+        return;
       }
 
       // Seed an empty MEMORY.md if missing
-      const memoryFile = join(memoryDir, 'MEMORY.md');
+      const memoryFile = resolveProjectMemoryFile(workspacePath, 'MEMORY.md');
+      if (!memoryFile) {
+        logWarn('[ProjectManager] Refusing unsafe project memory file:', workspacePath);
+        return;
+      }
       if (!existsSync(memoryFile)) {
         writeFileSync(
           memoryFile,
           '# Project Memory\n\n' +
             '<!-- This file is managed by Code Buddy Cowork. ' +
             'Entries are consolidated across sessions. -->\n\n',
-          'utf-8'
+          { encoding: 'utf-8', flag: 'wx', mode: 0o600 }
         );
       }
 
@@ -235,16 +349,36 @@ export class ProjectManager {
   getMemoryPath(projectId: string): string | null {
     const project = this.get(projectId);
     if (!project?.workspacePath) return null;
-    return join(project.workspacePath, '.codebuddy', 'memory');
+    return resolveProjectMemoryDirectory(project.workspacePath);
   }
 
   private rowToProject(row: ProjectRow): Project {
     let memoryConfig: ProjectMemoryConfig = { ...DEFAULT_MEMORY_CONFIG };
     if (row.memory_config) {
       try {
-        memoryConfig = { ...DEFAULT_MEMORY_CONFIG, ...JSON.parse(row.memory_config) };
+        memoryConfig = normalizeMemoryConfig(JSON.parse(row.memory_config) as ProjectMemoryConfig);
       } catch (err) {
         logWarn('[ProjectManager] Failed to parse memory_config for', row.id, err);
+      }
+    }
+
+    let contextConfig: ProjectContextConfig = { ...DEFAULT_CONTEXT_CONFIG };
+    if (row.context_config) {
+      try {
+        contextConfig = normalizeContextConfig(JSON.parse(row.context_config) as ProjectContextConfig);
+      } catch (err) {
+        logWarn('[ProjectManager] Failed to parse context_config for', row.id, err);
+      }
+    }
+
+    let workspacePath: string | undefined;
+    if (row.workspace_path) {
+      try {
+        workspacePath = normalizeWorkspacePath(row.workspace_path);
+      } catch (err) {
+        // Legacy databases and imported bundles predate strict IPC validation.
+        // Never resolve a relative stored path against Electron's process cwd.
+        logWarn('[ProjectManager] Ignoring unsafe workspace_path for', row.id, err);
       }
     }
 
@@ -252,8 +386,9 @@ export class ProjectManager {
       id: row.id,
       name: row.name,
       description: row.description ?? undefined,
-      workspacePath: row.workspace_path ?? undefined,
+      workspacePath,
       memoryConfig,
+      contextConfig,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     };

@@ -27,15 +27,14 @@ import {
   isFleetDispatchProfile,
   normalizeDispatchProfile,
 } from '../../fleet/dispatch-profile.js';
+import type { PeerChatProviderId } from '../../fleet/peer-chat-client-factory.js';
 import { logger } from '../../utils/logger.js';
 import {
   _clearPeerMethodsForTests,
   getPeerMethodHandler,
   listPeerMethods,
   registerPeerMethod,
-  unregisterPeerMethod,
   type PeerMethodContext,
-  type PeerMethodHandler,
 } from './peer-method-registry.js';
 
 export {
@@ -207,10 +206,11 @@ function registerBuiltInMethods(): void {
   // method is a thin async wrapper so the caller doesn't block waiting
   // for the LLM response.
   registerPeerMethod('peer.dispatch', async (params, ctx) => {
-    const { id, prompt, model, traceId, parentRunId, dispatchProfile } = (params ?? {}) as {
+    const { id, prompt, model, provider, traceId, parentRunId, dispatchProfile } = (params ?? {}) as {
       id?: string;
       prompt?: string;
       model?: string;
+      provider?: unknown;
       traceId?: string;
       parentRunId?: string;
       dispatchProfile?: unknown;
@@ -231,6 +231,16 @@ function registerBuiltInMethods(): void {
     const resolvedTraceId = typeof traceId === 'string' && traceId.length > 0
       ? traceId
       : ctx.traceId;
+    let resolvedProvider: PeerChatProviderId | undefined;
+    if (provider !== undefined && provider !== 'unknown') {
+      const { normalizePeerChatProviderId } = await import(
+        '../../fleet/peer-chat-client-factory.js'
+      );
+      resolvedProvider = normalizePeerChatProviderId(provider) ?? undefined;
+      if (!resolvedProvider) {
+        throw new Error(`peer.dispatch: unknown provider "${String(provider)}"`);
+      }
+    }
 
     // Lazy-import to avoid pulling the bridge at module load.
     const { dispatchPeerTask, getDispatchState } = await import('../../fleet/peer-chat-bridge.js');
@@ -239,6 +249,7 @@ function registerBuiltInMethods(): void {
       runId: dispatchId,
       prompt,
       model,
+      provider: resolvedProvider,
       dispatchProfile: resolvedDispatchProfile,
       traceId: resolvedTraceId,
       parentRunId,
@@ -248,6 +259,8 @@ function registerBuiltInMethods(): void {
       runId: dispatchId,
       acceptedAt: Date.now(),
       traceId: resolvedTraceId,
+      providerRequested: state?.provider,
+      providerResolved: state?.providerResolved,
       dispatchProfile: resolvedDispatchProfile,
       toolPolicy: state?.toolPolicy,
       toolDecisions: state?.toolDecisions,
@@ -273,6 +286,8 @@ function registerBuiltInMethods(): void {
       found: true,
       runId: state.runId,
       status: state.status,
+      providerRequested: state.provider,
+      providerResolved: state.providerResolved,
       dispatchProfile: state.dispatchProfile,
       toolPolicy: state.toolPolicy,
       toolDecisions: state.toolDecisions,

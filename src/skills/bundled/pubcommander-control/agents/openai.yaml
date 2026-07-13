@@ -1,0 +1,4 @@
+interface:
+  display_name: "PubCommander Control"
+  short_description: "Piloter PubCommander avec validation humaine"
+  default_prompt: "Prépare et pilote cette campagne PubCommander avec validation avant toute publication."

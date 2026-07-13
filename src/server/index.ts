@@ -26,9 +26,11 @@ try {
   /* ignore */
 }
 import type { ServerConfig } from './types.js';
-import { isOriginAllowed, isLoopbackHost, DEFAULT_LOCALHOST_ORIGINS } from './origin-check.js';
+import { isOriginAllowed, DEFAULT_LOCALHOST_ORIGINS } from './origin-check.js';
+import { diagnoseServerExposure } from './exposure-diagnostic.js';
 import {
   createAuthMiddleware,
+  requireLocalAnonymousAccess,
   requireScope,
   createRateLimitMiddleware,
   createLoggingMiddleware,
@@ -63,6 +65,10 @@ import { wireCompactionBridge, unwireCompactionBridge } from '../fleet/compactio
 import { wirePeerChatBridge, unwirePeerChatBridge } from '../fleet/peer-chat-bridge.js';
 import { wirePeerSessionBridge, unwirePeerSessionBridge } from '../fleet/peer-session-bridge.js';
 import { wirePeerToolBridge, unwirePeerToolBridge } from '../fleet/peer-tool-bridge.js';
+import {
+  wirePeerMissionExchangeBridge,
+  unwirePeerMissionExchangeBridge,
+} from '../fleet/peer-mission-exchange-bridge.js';
 import { logger } from '../utils/logger.js';
 import { initMetrics, getMetrics as _getMetrics } from '../metrics/index.js';
 import { CSRFProtection } from '../security/csrf-protection.js';
@@ -253,6 +259,11 @@ function createApp(config: ServerConfig): Application {
 
   // A2A routes (auth-based, exempt from CSRF) — must be mounted BEFORE CSRF middleware
   app.use('/api/a2a', createA2AProtocolRoutes());
+
+  // In --no-auth mode, only the deliberately constrained A2A surface remains
+  // network-reachable. All general agent/session/tool/workflow routes below are
+  // direct-loopback only; otherwise remote chat could invoke tools indirectly.
+  app.use(requireLocalAnonymousAccess);
 
   // CSRF protection for state-changing endpoints (POST/PUT/DELETE)
   // Applied AFTER A2A routes so they are never touched by CSRF middleware
@@ -1073,6 +1084,7 @@ export async function startServer(userConfig: Partial<ServerConfig> = {}): Promi
     // needed: the bridge wraps standalone executors and runs gates
     // (allowlist + fleetSafe + workspace root) per invocation.
     wirePeerToolBridge();
+    wirePeerMissionExchangeBridge();
     // Phase (d).16a — auto-detect the peer.chat client from env
     // (priority order: ollama > grok > anthropic > gemini > openai).
     // When no key is detected, peer.chat still wires but answers
@@ -1080,18 +1092,34 @@ export async function startServer(userConfig: Partial<ServerConfig> = {}): Promi
     // so remote Claudes know what they're talking to.
     (async () => {
       try {
-        const { createPeerChatClientFromEnv } =
+        const { createPeerChatClientFromEnv, createPeerChatClientForProvider } =
           await import('../fleet/peer-chat-client-factory.js');
         const factory = createPeerChatClientFromEnv();
         if (factory) {
-          wirePeerChatBridge(() => factory.client, factory.info);
-          await wirePeerSessionBridge(() => factory.client);
+          wirePeerChatBridge(
+            () => factory.client,
+            factory.info,
+            (provider, model) => createPeerChatClientForProvider(provider, model),
+          );
+          await wirePeerSessionBridge(
+            () => factory.client,
+            factory.info,
+            (provider, model) => createPeerChatClientForProvider(provider, model),
+          );
           logger.info(
             `[fleet] peer.chat wired: ${factory.info.provider} (${factory.info.model}${factory.info.isLocal ? ', local' : ''})`
           );
         } else {
-          wirePeerChatBridge(() => null);
-          await wirePeerSessionBridge(() => null);
+          wirePeerChatBridge(
+            () => null,
+            null,
+            (provider, model) => createPeerChatClientForProvider(provider, model),
+          );
+          await wirePeerSessionBridge(
+            () => null,
+            null,
+            (provider, model) => createPeerChatClientForProvider(provider, model),
+          );
           logger.info(
             '[fleet] peer.chat wired without provider — set GOOGLE_API_KEY / GROK_API_KEY / ... or OLLAMA_HOST to activate'
           );
@@ -1130,6 +1158,17 @@ export async function startServer(userConfig: Partial<ServerConfig> = {}): Promi
           const sensoryBridgeHandle = startSensoryBridge();
           const unwireReactions = wireSensoryReactions();
           sensoryTeardown.push(() => sensoryBridgeHandle.close(), unwireReactions);
+          if (config.websocketEnabled && process.env.CODEBUDDY_AVATAR_BRIDGE !== 'false') {
+            const [{ wireAvatarGatewayBridge }, { broadcast }] = await Promise.all([
+              import('../avatar/avatar-gateway-bridge.js'),
+              import('./websocket/handler.js'),
+            ]);
+            const unsubscribeAvatar = wireAvatarGatewayBridge(broadcast);
+            sensoryTeardown.push(unsubscribeAvatar);
+            logger.info(
+              'Avatar performance bridge: Enabled (Gateway avatar:event, scope avatar:read)'
+            );
+          }
           // Vision reaction (opt-in) — vision/motion → camera_analyze (local gemma).
           // Requires a shared token: a frame can trigger the webcam, so refuse to
           // wire it on an unauthenticated bridge.
@@ -1153,7 +1192,7 @@ export async function startServer(userConfig: Partial<ServerConfig> = {}): Promi
             if (shouldWireVisionReaction({ camera: process.env.CODEBUDDY_SENSORY_CAMERA, token: sensoryToken })) {
               const { wireSemanticVisionReaction } = await import('../sensory/semantic-vision-reaction.js');
               sensoryTeardown.push(
-                wireSemanticVisionReaction({ onEngage: () => responseDecider.markEngaged() }),
+                wireSemanticVisionReaction({ onEngage: () => responseDecider.markEngaged('arrival') }),
               );
               logger.info('Sensory semantic-vision reaction: Enabled (person/drowsy → alert + greet→engage)');
             }
@@ -1183,10 +1222,64 @@ export async function startServer(userConfig: Partial<ServerConfig> = {}): Promi
           if (process.env.CODEBUDDY_SENSORY_SPEECH === 'true') {
             const { wireSpeechReaction } = await import('../sensory/speech-reaction.js');
             if (process.env.CODEBUDDY_SENSORY_SPEAK === 'true') {
-              const { makeVoiceReply, describeVoiceReadiness } = await import('../sensory/voice-loop.js');
+              const {
+                makeVoiceReply,
+                describeVoiceReadiness,
+                prewarmVoiceModel,
+                prewarmVoiceRuntime,
+                resolveVoiceModel,
+              } = await import('../sensory/voice-loop.js');
               const readiness = describeVoiceReadiness();
               // Fail LOUD: a wired-but-silent robot looks broken. Name what to set.
               for (const w of readiness.warnings) logger.warn(`[voice] ${w}`);
+              // Pay the real cold costs (route probe, Ollama model load, common Piper clips)
+              // before somebody speaks. All work is background and never delays server readiness.
+              const prewarmFactLane = async (): Promise<void> => {
+                const factModel = process.env.CODEBUDDY_SENSORY_SPEAK_FACT_MODEL?.trim();
+                if (!factModel) return;
+                const route = await resolveVoiceModel('Pourquoi le ciel est-il bleu ?');
+                const result = await prewarmVoiceModel({ route });
+                logger.info(
+                  `[voice] factual model warm: model=${result.model} ` +
+                    `${result.warmed ? `${result.durationMs}ms` : result.reason || 'skipped'}`
+                );
+              };
+              void prewarmVoiceRuntime()
+                .then(async (result) => {
+                  logger.info(
+                    `[voice] runtime warm: model=${result.route.model} ` +
+                      `route=${result.routeMs}ms ollama=${result.model.warmed ? `${result.model.durationMs}ms` : result.model.reason || 'skipped'} ` +
+                      `tts=${result.tts.cached}/${result.tts.attempted} (${result.tts.durationMs}ms)`
+                  );
+                  await prewarmFactLane();
+                })
+                .catch((err) => {
+                  logger.warn(
+                    `[voice] runtime prewarm failed: ${err instanceof Error ? err.message : String(err)}`
+                  );
+                });
+              const refreshValue = Number(process.env.CODEBUDDY_VOICE_MODEL_REFRESH_MS);
+              const modelRefreshMs =
+                Number.isFinite(refreshValue) && refreshValue >= 0 ? refreshValue : 15 * 60_000;
+              if (
+                process.env.CODEBUDDY_VOICE_MODEL_PREWARM !== 'false' &&
+                modelRefreshMs > 0
+              ) {
+                const keepWarmTimer = setInterval(() => {
+                  void prewarmVoiceModel()
+                    .then(() => prewarmFactLane())
+                    .catch(() => undefined);
+                }, modelRefreshMs);
+                keepWarmTimer.unref();
+                sensoryTeardown.push(() => clearInterval(keepWarmTimer));
+              }
+              // Build the richer relationship graph before the first user turn. The cache remains
+              // latency-bounded if startup warming has not completed when somebody speaks.
+              if (process.env.CODEBUDDY_COMPANION_RELATIONAL === 'true') {
+                void import('../companion/relational-context.js')
+                  .then((m) => m.prewarmVoiceRelationalContext())
+                  .catch(() => undefined);
+              }
               // ACT (opt-in): a spoken command drives a REAL agent turn (can edit/run) under a
               // permission posture. Default off → today's chatty companion reply.
               // Both paths use the hybrid for conversational MEMORY + persona warmth + phatic
@@ -1194,6 +1287,13 @@ export async function startServer(userConfig: Partial<ServerConfig> = {}): Promi
               // turn (reads/searches under the posture); with ACT off, everything stays a fast warm
               // reply (no heavy agent) — the same memory, none of the latency.
               const { makeHybridReply } = await import('../sensory/hybrid-reply.js');
+              const { getCrossChannelConversationBridge } = await import(
+                '../conversation/cross-channel-bridge.js'
+              );
+              const conversationBridge = getCrossChannelConversationBridge();
+              const sharedHistory = conversationBridge.isActive()
+                ? () => conversationBridge.history()
+                : undefined;
               let replyFn;
               if (readiness.act) {
                 // Grounded turn can take a few seconds → speak a short ack first so a real
@@ -1202,18 +1302,38 @@ export async function startServer(userConfig: Partial<ServerConfig> = {}): Promi
                 const speakCwd = process.env.CODEBUDDY_SENSORY_SPEAK_CWD;
                 replyFn = makeHybridReply({
                   permissionMode: (readiness.permissionMode as
+                    | 'default'
                     | 'plan'
+                    | 'acceptEdits'
                     | 'dontAsk'
-                    | 'bypassPermissions') || 'plan',
+                    | 'bypassPermissions') || 'default',
                   ...(speakCwd ? { cwd: speakCwd } : {}),
+                  ...(sharedHistory ? { sharedHistory } : {}),
                   ack: async (_transcript, opts) => {
                     await sayNow("D'accord, je regarde ça.", { signal: opts?.signal });
                   },
                 });
               } else {
-                replyFn = makeHybridReply({ classify: () => false, agentReply: async () => '' });
+                replyFn = makeHybridReply({
+                  classify: () => false,
+                  agentReply: async () => '',
+                  ...(sharedHistory ? { sharedHistory } : {}),
+                });
               }
-              const reply = makeVoiceReply({ replyFn });
+              let latestVoiceTiming: import('../sensory/voice-loop.js').VoiceReplyTiming | undefined;
+              const reply = makeVoiceReply({
+                replyFn,
+                ...(conversationBridge.isActive()
+                  ? {
+                      onConversationTurn: (turn) => {
+                        void conversationBridge.recordVoiceTurn(turn);
+                      },
+                    }
+                  : {}),
+                onTiming: (timing) => {
+                  latestVoiceTiming = timing;
+                },
+              });
               // Human-like response gate: listen to everything, speak only when addressed or
               // (opt-in) when the conversation warrants it. ALWAYS_RESPOND reverts to replying
               // to every utterance. The engagement window is anchored to the last ADDRESS (the
@@ -1230,6 +1350,7 @@ export async function startServer(userConfig: Partial<ServerConfig> = {}): Promi
               // replace it with plain handlers, so type onHeard by the call contract they share.
               let onHeard: (t: string) => Promise<void> = reply;
               let reminderShortcut: ((t: string) => boolean) | undefined;
+              let maisonShortcut: ((t: string) => boolean) | undefined;
               if (process.env.CODEBUDDY_REMINDERS === 'true') {
                 const rem = await import('../companion/reminders.js');
                 const { sayNow } = await import('../sensory/voice-loop.js');
@@ -1286,6 +1407,20 @@ export async function startServer(userConfig: Partial<ServerConfig> = {}): Promi
                 };
               }
 
+              // Maison shortcuts are deterministic and local: quiet/focus/guest/cooking modes and
+              // named cooking timers do not wait for an LLM. Explicit wording only, so ordinary
+              // conversation still falls through to the normal hybrid reply.
+              {
+                const maison = await import('../companion/maison-voice-actions.js');
+                const { sayNow } = await import('../sensory/voice-loop.js');
+                maisonShortcut = maison.isMaisonVoiceCommand;
+                const inner = onHeard;
+                onHeard = async (t: string) => {
+                  if (await maison.handleMaisonVoiceCommand(t, { speak: sayNow })) return;
+                  await inner(t);
+                };
+              }
+
               // Event follow-ups (opt-in): when Patrice mentions a dated future event IN a real
               // conversation with Lisa, capture it and confirm aloud so a mis-hear is corrected on
               // the spot; the presence loop later asks how it went. Capture runs AFTER the reply and
@@ -1298,7 +1433,7 @@ export async function startServer(userConfig: Partial<ServerConfig> = {}): Promi
                 const inner = onHeard;
                 onHeard = async (t: string) => {
                   await inner(t);
-                  if (reminderShortcut?.(t)) return;
+                  if (reminderShortcut?.(t) || maisonShortcut?.(t)) return;
                   void (async () => {
                     try {
                       const captured = await ef.captureEventFollowUp(t, Date.now(), { extractor });
@@ -1314,16 +1449,32 @@ export async function startServer(userConfig: Partial<ServerConfig> = {}): Promi
                 logger.info('Event follow-ups: Enabled (CODEBUDDY_COMPANION_EVENT_FOLLOWUPS) — capture dated events from conversation, ask how they went');
               }
 
-              const wireOpts: Parameters<typeof wireSpeechReaction>[0] = { onHeard };
+              const wireOpts: Parameters<typeof wireSpeechReaction>[0] = {
+                onHeard,
+                // The Rust VAD publishes this before endpointing/STT. Prepare
+                // the grounded standby during the user's own speaking time;
+                // the transcript gate below remains the only authority to talk.
+                onSpeechStart: () => replyFn.prewarm(),
+                onBargeIn: () => reply.interrupt(),
+                getResponseTiming: () => {
+                  const timing = latestVoiceTiming;
+                  latestVoiceTiming = undefined;
+                  return timing;
+                },
+              };
               if (!alwaysRespond) {
                 // Reuse the session decider shared with the vision greeting above, so a
                 // person-arrival greeting's open engagement window carries into this gate.
                 wireOpts.shouldRespond = (t) =>
-                  reminderShortcut?.(t)
-                    ? Promise.resolve({ respond: true, reason: 'reminder' })
+                  reminderShortcut?.(t) || maisonShortcut?.(t)
+                    ? Promise.resolve({
+                        respond: true,
+                        reason: reminderShortcut?.(t) ? 'reminder' : 'maison',
+                      })
                     : responseDecider.decide(t);
               }
               sensoryTeardown.push(wireSpeechReaction(wireOpts));
+              sensoryTeardown.push(() => replyFn.dispose());
               const gateLabel = alwaysRespond
                 ? 'always-respond'
                 : chimeIn
@@ -1335,6 +1486,11 @@ export async function startServer(userConfig: Partial<ServerConfig> = {}): Promi
                 } → ${readiness.act ? `agent[${readiness.permissionMode}]` : `think[${readiness.model}]`} → speak` +
                   `${readiness.speakReady ? `[${readiness.voice}]` : ' — SILENT until CODEBUDDY_TTS_VOICE is set'})`,
               );
+              if (conversationBridge.isActive() && conversationBridge.config.target) {
+                logger.info(
+                  `Conversation bridge: voice ↔ ${conversationBridge.config.target.channel} (configured target, thread ${conversationBridge.config.conversationId})`
+                );
+              }
             } else {
               sensoryTeardown.push(wireSpeechReaction());
               logger.info('Sensory speech reaction: Enabled (speech_end → STT → percept)');
@@ -1375,7 +1531,13 @@ export async function startServer(userConfig: Partial<ServerConfig> = {}): Promi
               everyBeats: episodeEvery,
               handler: async () => {
                 const { runEpisodeConsolidation } = await import('../sensory/episodic-journal.js');
-                await runEpisodeConsolidation();
+                const { getCrossChannelConversationBridge } = await import(
+                  '../conversation/cross-channel-bridge.js'
+                );
+                await runEpisodeConsolidation({
+                  readConversation: async (limit) =>
+                    getCrossChannelConversationBridge().history(limit),
+                });
               },
             });
             logger.info(`Episodic journal: Enabled (CODEBUDDY_EPISODE_JOURNAL) — dialogue consolidation every ${episodeEvery} beats`);
@@ -1395,17 +1557,64 @@ export async function startServer(userConfig: Partial<ServerConfig> = {}): Promi
             });
             logger.info(`Voice improvement loop: Enabled (CODEBUDDY_VOICE_IMPROVE) — reflect + adapt every ${improveEvery} beats (behavioral; facts stay pending)`);
           }
-          // Prefetch (opt-in) — precompute common answers (weather/news/agenda/date) so the voice
-          // assistant serves them INSTANTLY (no LLM). Refreshed every N beats + once at startup.
-          if (process.env.CODEBUDDY_PREFETCH === 'true') {
-            const prefetchEvery = Math.max(1, Number(process.env.CODEBUDDY_PREFETCH_EVERY ?? 120));
+          // Deterministic conversation-quality loop — evaluates complete user/Lisa exchanges,
+          // stores aggregate metrics only, and applies a reversible guidance line only after the
+          // same weakness recurs. This has no model/API cost and is enabled by default.
+          if (process.env.CODEBUDDY_CONVERSATION_EVAL !== 'false') {
+            const configuredEvery = Number(process.env.CODEBUDDY_CONVERSATION_EVAL_EVERY ?? 30);
+            const evaluationEvery = Number.isFinite(configuredEvery)
+              ? Math.max(5, Math.floor(configuredEvery))
+              : 30;
+            const configuredStreak = Number(
+              process.env.CODEBUDDY_CONVERSATION_EVAL_MIN_STREAK ?? 2
+            );
+            const minIssueStreak = Number.isFinite(configuredStreak)
+              ? Math.max(2, Math.min(5, Math.floor(configuredStreak)))
+              : 2;
+            const configuredCooldown = Number(
+              process.env.CODEBUDDY_CONVERSATION_EVAL_COOLDOWN_MS ?? 6 * 60 * 60_000
+            );
+            const guidanceCooldownMs = Number.isFinite(configuredCooldown)
+              ? Math.max(60_000, configuredCooldown)
+              : 6 * 60 * 60_000;
+            heart.register({
+              name: 'conversation-quality',
+              everyBeats: evaluationEvery,
+              handler: async () => {
+                const { runConversationImprovementCycle } = await import(
+                  '../companion/conversation-improvement-loop.js'
+                );
+                await runConversationImprovementCycle({
+                  mode: 'behavioral',
+                  minIssueStreak,
+                  guidanceCooldownMs,
+                });
+              },
+            });
+            logger.info(
+              `Conversation quality: Enabled — aggregate evaluation every ${evaluationEvery} beats (adapt after ${minIssueStreak} recurring cycle(s))`
+            );
+          }
+          // Fresh-context warmer — structured evidence, not canned LLM prose. It runs on wall
+          // clock time so a changing sensory heartbeat cannot make news unexpectedly stale.
+          if (process.env.CODEBUDDY_PREFETCH !== 'false') {
+            const configuredInterval = Number(
+              process.env.CODEBUDDY_PREFETCH_INTERVAL_MS ?? 15 * 60_000
+            );
+            const prefetchIntervalMs = Number.isFinite(configuredInterval)
+              ? Math.max(60_000, configuredInterval)
+              : 15 * 60_000;
             const runPrefetch = async (): Promise<void> => {
               const { runPrefetchCycle } = await import('../companion/prefetch-engine.js');
               await runPrefetchCycle();
             };
-            heart.register({ name: 'prefetch', everyBeats: prefetchEvery, handler: () => runPrefetch() });
             void runPrefetch(); // warm the cache immediately, don't wait for the first beat
-            logger.info(`Prefetch: Enabled (CODEBUDDY_PREFETCH) — precompute common answers every ${prefetchEvery} beats`);
+            const prefetchTimer = setInterval(() => void runPrefetch(), prefetchIntervalMs);
+            prefetchTimer.unref();
+            sensoryTeardown.push(() => clearInterval(prefetchTimer));
+            logger.info(
+              `Fresh context: Enabled — structured refresh every ${Math.round(prefetchIntervalMs / 60_000)} minute(s)`
+            );
           }
           // Jokes top-up (opt-in) — generate a few fresh jokes in the background so Lisa's humour
           // stays varied. The curated list already works instantly WITHOUT this.
@@ -1426,6 +1635,18 @@ export async function startServer(userConfig: Partial<ServerConfig> = {}): Promi
           logger.info(`Sensory bridge: Enabled (buddy-sense → event bus; heartbeat treatments every ${everyBeats} beats)`);
         } catch (err) {
           logger.warn(`Sensory bridge failed to start: ${err instanceof Error ? err.message : String(err)}`);
+        }
+      }
+      // Persistent named cooking timers are user-requested alerts, not
+      // spontaneous companion speech. They reuse this server lifecycle and are
+      // enabled by default; set CODEBUDDY_COOKING_TIMERS=false to disable.
+      if (process.env.CODEBUDDY_COOKING_TIMERS !== 'false') {
+        try {
+          const { wireCookingTimerRunner } = await import('../companion/cooking-timer-runner.js');
+          sensoryTeardown.push(wireCookingTimerRunner());
+          logger.info('Cooking timers: Enabled — persistent named alerts, explicit acknowledgement');
+        } catch (err) {
+          logger.warn(`Cooking timers failed to start: ${err instanceof Error ? err.message : String(err)}`);
         }
       }
       // Reminders (opt-in, independent of the sensory daemon so Telegram delivery works without a
@@ -1478,7 +1699,10 @@ export async function startServer(userConfig: Partial<ServerConfig> = {}): Promi
         }
       }
       logger.info(`Auth: ${config.authEnabled ? 'Enabled' : 'Disabled'}`);
-      if (!isLoopbackHost(config.host)) {
+      const exposure = diagnoseServerExposure(config);
+      if (exposure.unsafe) {
+        logger.warn(exposure.message);
+      } else if (exposure.networkExposed) {
         logger.warn(
           `Server is bound to ${config.host} (non-loopback) and is reachable from the network. ` +
             `Auth is ${config.authEnabled ? 'ENABLED' : 'DISABLED'}; CORS origins: ${[config.corsOrigins ?? []].flat().join(', ') || '(none)'}. ` +
@@ -1571,6 +1795,7 @@ export async function stopServer(server: HttpServer): Promise<void> {
     unwirePeerSessionBridge();
     // Phase (d).23 — un-register peer.tool.invoke + .stream.
     unwirePeerToolBridge();
+    unwirePeerMissionExchangeBridge();
 
     // Detach the channel-A2A bridge handler + shut down the
     // ChannelManager so polling loops (Telegram, Discord, ...) stop.

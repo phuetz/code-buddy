@@ -17,8 +17,10 @@ import {
   Trash2,
   Play,
   Loader2,
+  Route,
 } from 'lucide-react';
 import { WorkflowEditor } from '../WorkflowEditor';
+import { WorkflowSupervisionPanel } from './WorkflowSupervisionPanel';
 
 interface WorkflowSummary {
   id: string;
@@ -44,6 +46,7 @@ export const SettingsWorkflows: React.FC = () => {
   const [creating, setCreating] = useState(false);
   const [runningId, setRunningId] = useState<string | null>(null);
   const [runResult, setRunResult] = useState<string | null>(null);
+  const [supervisingId, setSupervisingId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -204,6 +207,14 @@ export const SettingsWorkflows: React.FC = () => {
                   </div>
                 </div>
                 <button
+                  onClick={() => setSupervisingId(wf.id)}
+                  data-testid={`workflow-supervise-${wf.id}`}
+                  className="p-2 text-text-muted hover:text-accent transition-colors"
+                  title="Dry-run, historique et diagnostic"
+                >
+                  <Route size={12} />
+                </button>
+                <button
                   onClick={() => handleRun(wf.id)}
                   disabled={runningId === wf.id}
                   data-testid={`workflow-run-${wf.id}`}
@@ -243,6 +254,12 @@ export const SettingsWorkflows: React.FC = () => {
             {runResult}
           </div>
         )}
+        {supervisingId ? (
+          <WorkflowSupervisionPanel
+            workflowId={supervisingId}
+            onClose={() => setSupervisingId(null)}
+          />
+        ) : null}
       </div>
     </div>
   );

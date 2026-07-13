@@ -26,6 +26,7 @@ async function dismissOptionalModelDialogs(appPage: Page) {
 
 async function dismissOnboardingIfPresent(appPage: Page) {
   await appPage.evaluate(async () => {
+    localStorage.setItem('cowork.tourSeen', '1');
     await (window as unknown as { electronAPI?: { config?: { save?: (c: Record<string, unknown>) => Promise<unknown> } } })
       .electronAPI?.config?.save?.({ onboardingCompleted: true });
     const store = (
@@ -34,15 +35,17 @@ async function dismissOnboardingIfPresent(appPage: Page) {
           getState: () => {
             appConfig?: Record<string, unknown> | null;
             setAppConfig?: (config: Record<string, unknown>) => void;
+            setShowOnboardingTour?: (show: boolean) => void;
           };
         };
       }
     ).useAppStore?.getState();
     store?.setAppConfig?.({ ...(store.appConfig ?? {}), onboardingCompleted: true });
+    store?.setShowOnboardingTour?.(false);
   });
   const onboarding = appPage.getByTestId('onboarding-wizard');
   if (await onboarding.isVisible({ timeout: 3000 }).catch(() => false)) {
-    await appPage.getByTestId('onboarding-skip').click();
+    await onboarding.getByRole('button', { name: 'Passer' }).click();
     await expect(onboarding).toBeHidden();
   }
 }
@@ -173,6 +176,8 @@ test('/export opens the ExportDialog for the active session (DOM-event bridge)',
 test('/voice opens the voice-chat overlay (cowork:open-voice-chat bridge)', async ({ appPage }) => {
   await runSlash(appPage, '/voice');
   await expect(appPage.getByTestId('voice-overlay-mic')).toBeVisible({ timeout: 10_000 });
+  await expect(appPage.getByTestId('voice-realtime-hud')).toContainText('Budget');
+  await expect(appPage.getByTestId('voice-realtime-hud')).toContainText('STT');
 });
 
 test('/knowledge-graph opens the lessons-vault graph (rendered in Fleet Command Center)', async ({ appPage }) => {

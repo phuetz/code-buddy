@@ -17,7 +17,10 @@ export type FleetProvider =
   | 'openai'
   | 'gemini'
   | 'gemini-cli'   // wraps the local `gemini` binary (Ultra subscription)
+  | 'agy-cli'      // wraps Google Antigravity (cloud subscription)
   | 'ollama'
+  | 'lemonade'     // local Ryzen NPU/GPU/CPU OpenAI-compatible server
+  | 'openrouter'
   | 'lm-studio'
   | 'chatgpt-oauth'
   | 'grok'

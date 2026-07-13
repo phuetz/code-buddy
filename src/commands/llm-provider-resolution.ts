@@ -19,6 +19,11 @@ import { getSettingsManager } from '../utils/settings-manager.js';
 import { detectProviderFromEnv } from '../utils/provider-detector.js';
 import { inferProvider } from '../config/resolve-model.js';
 import { hasCodexCredentials } from '../providers/codex-oauth.js';
+import {
+  CHATGPT_OAUTH_DEFAULT_MODEL,
+  isChatGptSubscriptionModel,
+  normalizeChatGptOAuthModel,
+} from '../providers/chatgpt-models.js';
 import { resolveProviderFromCatalog } from '../providers/provider-catalog.js';
 import { PROVIDERS, resolveProviderCommandKey } from './provider.js';
 
@@ -127,9 +132,11 @@ export function reconcileModelForBackend(
 ): string | undefined {
   const isCodexBackend = !!baseURL && baseURL.includes('chatgpt.com/backend-api/codex');
   if (!isCodexBackend) return model;
-  if (model && isChatGptSubscriptionModel(model)) return model;
-  if (backendDefaultModel && isChatGptSubscriptionModel(backendDefaultModel)) return backendDefaultModel;
-  return 'gpt-5.5';
+  if (model && isChatGptSubscriptionModel(model)) return normalizeChatGptOAuthModel(model);
+  if (backendDefaultModel && isChatGptSubscriptionModel(backendDefaultModel)) {
+    return normalizeChatGptOAuthModel(backendDefaultModel);
+  }
+  return CHATGPT_OAUTH_DEFAULT_MODEL;
 }
 
 function resolveExplicitOllamaModel(explicitModel: string | undefined): ResolvedCommandProvider | null {
@@ -163,19 +170,7 @@ function resolveExplicitChatGptModel(explicitModel: string | undefined): Resolve
   return {
     apiKey: detected.apiKey,
     baseURL: detected.baseURL,
-    model,
+    model: normalizeChatGptOAuthModel(model),
     providerLabel: detected.provider,
   };
-}
-
-function isChatGptSubscriptionModel(model: string): boolean {
-  const m = model.trim().toLowerCase();
-  return (
-    m === 'gpt-5.2' ||
-    m === 'gpt-5.5' ||
-    m.startsWith('gpt-5.5-') ||
-    m.includes('-codex') ||
-    m === 'codex-1' ||
-    m.startsWith('codex-mini')
-  );
 }

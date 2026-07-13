@@ -60,6 +60,8 @@ const BUILTIN_PRICING: Record<string, ModelPricing> = {
   'grok-2-mini': { inputPerMillion: 0.20, outputPerMillion: 1.0 },
 
   // OpenAI
+  'gpt-5.6-sol': { inputPerMillion: 5.0, outputPerMillion: 30.0 },
+  'gpt-5.6': { inputPerMillion: 5.0, outputPerMillion: 30.0 },
   'gpt-5': { inputPerMillion: 5.0, outputPerMillion: 15.0 },
   'gpt-4.1': { inputPerMillion: 2.0, outputPerMillion: 8.0 },
   'gpt-4o': { inputPerMillion: 2.50, outputPerMillion: 10.0 },
@@ -211,6 +213,7 @@ export class ModelRegistry {
     this.aliases.set('opus', 'claude-opus-4-6');
     this.aliases.set('haiku', 'claude-haiku-4-5-20251001');
     this.aliases.set('gpt4', 'gpt-4o');
+    this.aliases.set('gpt-5.6', 'gpt-5.6-sol');
     this.aliases.set('gemini', 'gemini-2.5-flash');
     this.aliases.set('grok', 'grok-code-fast-1');
     this.aliases.set('flash', 'gemini-2.5-flash');

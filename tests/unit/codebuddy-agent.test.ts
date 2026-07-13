@@ -19,6 +19,8 @@
 
 import { CodeBuddyAgent } from "../../src/agent/codebuddy-agent";
 import type { ChatEntry, StreamingChunk } from "../../src/agent/types";
+import { ConfirmationService } from "../../src/utils/confirmation-service.js";
+import path from "path";
 
 jest.mock("../../src/codebuddy/client.js", () => ({
   CodeBuddyClient: jest.fn().mockImplementation(function() { return {
@@ -29,6 +31,7 @@ jest.mock("../../src/codebuddy/client.js", () => ({
     chatStream: jest.fn().mockImplementation(async function* () {
       yield { choices: [{ delta: { content: "Test " } }] };
       yield { choices: [{ delta: { content: "response" } }] };
+      yield { choices: [{ delta: {}, finish_reason: "stop" }] };
     }),
     getCurrentModel: jest.fn().mockReturnValue("grok-code-fast-1"),
     setModel: jest.fn(),
@@ -38,6 +41,100 @@ jest.mock("../../src/codebuddy/client.js", () => ({
   // in the runTurnLoop path. Mirror the real type guard so the loop doesn't throw.
   hasToolCalls: (msg: any) =>
     msg?.role === "assistant" && "tool_calls" in msg && Array.isArray(msg.tool_calls),
+}));
+
+jest.mock("../../src/memory/persistent-memory.js", () => ({
+  initializeMemory: jest.fn().mockResolvedValue(undefined),
+  getMemoryManager: jest.fn().mockReturnValue({
+    getRelevantMemories: jest.fn().mockResolvedValue([]),
+    addMemory: jest.fn().mockResolvedValue(undefined),
+  }),
+}));
+
+jest.mock("../../src/agent/specialized/agent-registry.js", () => ({
+  initializeAgentRegistry: jest.fn().mockResolvedValue(undefined),
+}));
+
+jest.mock("../../src/services/prompt-builder.js", () => ({
+  PromptBuilder: jest.fn().mockImplementation(function PromptBuilder() {
+    return {
+      buildSystemPrompt: jest.fn().mockResolvedValue("System prompt"),
+      buildForQuery: jest.fn().mockResolvedValue(null),
+      updateConfig: jest.fn(),
+    };
+  }),
+}));
+
+jest.mock("../../src/agent/repo-profiler.js", () => ({
+  getRepoProfiler: jest.fn().mockReturnValue({
+    getProfile: jest.fn().mockResolvedValue({}),
+  }),
+}));
+
+jest.mock("../../src/skills/index.js", () => ({
+  findSkill: jest.fn().mockReturnValue(null),
+  findStarterPack: jest.fn().mockReturnValue(null),
+  initializeSkills: jest.fn().mockResolvedValue(undefined),
+}));
+
+jest.mock("../../src/hooks/user-hooks.js", () => ({
+  getUserHooksManager: jest.fn().mockReturnValue({
+    executeHooks: jest.fn().mockResolvedValue([]),
+  }),
+}));
+
+jest.mock("../../src/tools/computer-control-tool.js", () => ({
+  setVisionGroundingProvider: jest.fn(),
+}));
+
+jest.mock("../../src/agent/multi-agent/agent-tools.js", () => ({
+  setContextEngineProvider: jest.fn(),
+  waitForSingleAgent: jest.fn().mockResolvedValue(null),
+}));
+
+jest.mock("../../src/agent/middleware/index.js", () => ({
+  MiddlewarePipeline: jest.fn().mockImplementation(function MiddlewarePipeline() {
+    return {
+      use: jest.fn().mockReturnThis(),
+      runBeforeTurn: jest.fn().mockResolvedValue({ action: "continue" }),
+      runAfterTurn: jest.fn().mockResolvedValue({ action: "continue" }),
+      getMiddlewareNames: jest.fn().mockReturnValue([]),
+    };
+  }),
+  WorkflowGuardMiddleware: jest.fn().mockImplementation(function WorkflowGuardMiddleware() {
+    return {};
+  }),
+}));
+
+jest.mock("../../src/agent/middleware/turn-limit.js", () => ({
+  TurnLimitMiddleware: jest.fn().mockImplementation(function TurnLimitMiddleware() { return {}; }),
+}));
+jest.mock("../../src/agent/middleware/cost-limit.js", () => ({
+  CostLimitMiddleware: jest.fn().mockImplementation(function CostLimitMiddleware() { return {}; }),
+}));
+jest.mock("../../src/agent/middleware/context-warning.js", () => ({
+  ContextWarningMiddleware: jest.fn().mockImplementation(function ContextWarningMiddleware() { return {}; }),
+}));
+jest.mock("../../src/agent/middleware/session-duration.js", () => ({
+  SessionDurationMiddleware: jest.fn().mockImplementation(function SessionDurationMiddleware() { return {}; }),
+}));
+jest.mock("../../src/agent/middleware/reasoning-middleware.js", () => ({
+  createReasoningMiddleware: jest.fn().mockReturnValue({}),
+}));
+jest.mock("../../src/agent/middleware/auto-repair-middleware.js", () => ({
+  createAutoRepairMiddleware: jest.fn().mockReturnValue({}),
+}));
+jest.mock("../../src/agent/middleware/verification-enforcement.js", () => ({
+  createVerificationEnforcementMiddleware: jest.fn().mockReturnValue({}),
+}));
+jest.mock("../../src/agent/middleware/visual-validation-middleware.js", () => ({
+  VisualValidationMiddleware: jest.fn().mockImplementation(function VisualValidationMiddleware() { return {}; }),
+}));
+jest.mock("../../src/agent/middleware/plan-completion-audit.js", () => ({
+  createPlanCompletionAuditMiddleware: jest.fn().mockReturnValue({}),
+}));
+jest.mock("../../src/agent/middleware/quality-gate-middleware.js", () => ({
+  createQualityGateMiddleware: jest.fn().mockReturnValue({}),
 }));
 
 // Mock codebuddy tools
@@ -610,7 +707,13 @@ describe("CodeBuddyAgent", () => {
   // =============================================================================
   describe("Tool Execution", () => {
     beforeEach(() => {
+      ConfirmationService.getInstance().setSessionFlag("allOperations", true);
       agent = new CodeBuddyAgent("test-api-key");
+      (agent as any).toolHandler.setConfirmationCallback(async () => true);
+    });
+
+    afterEach(() => {
+      ConfirmationService.getInstance().setSessionFlag("allOperations", false);
     });
 
     it("should execute view_file tool", async () => {
@@ -640,12 +743,13 @@ describe("CodeBuddyAgent", () => {
     });
 
     it("should execute create_file tool", async () => {
+      const filePath = path.join(process.cwd(), "test-new.ts");
       const result = await (agent as any).executeTool({
         id: "call_3",
         type: "function",
         function: {
           name: "create_file",
-          arguments: JSON.stringify({ path: "/test/new.ts", content: "const x = 1;" }),
+          arguments: JSON.stringify({ path: filePath, content: "const x = 1;" }),
         },
       });
 
@@ -653,13 +757,14 @@ describe("CodeBuddyAgent", () => {
     });
 
     it("should execute str_replace_editor tool", async () => {
+      const filePath = path.join(process.cwd(), "test-file.ts");
       const result = await (agent as any).executeTool({
         id: "call_4",
         type: "function",
         function: {
           name: "str_replace_editor",
           arguments: JSON.stringify({
-            path: "/test/file.ts",
+            path: filePath,
             old_str: "old",
             new_str: "new",
             replace_all: true,

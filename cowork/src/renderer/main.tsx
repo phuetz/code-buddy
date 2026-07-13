@@ -11,6 +11,7 @@ import {
   RendererDiagnosticsDeduper,
   shouldCaptureConsoleError,
 } from './utils/renderer-diagnostics';
+import { installVitePreloadRecovery } from './utils/vite-preload-recovery';
 
 function writeRendererDiagnostic(kind: string, args: unknown[]): void {
   const logApi = window.electronAPI?.logs?.write;
@@ -75,6 +76,11 @@ function installRendererDiagnostics(): void {
 }
 
 installRendererDiagnostics();
+installVitePreloadRecovery({
+  onEvent: (status, payload) => {
+    writeRendererDiagnostic(`vite.preloadError.${status}`, [payload]);
+  },
+});
 
 // Pilotage/e2e hook: expose the zustand store for CDP-driven computer-use
 // sessions (Runtime.evaluate on window.useAppStore). Local desktop app — the

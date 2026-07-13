@@ -89,4 +89,9 @@ describe('voice interactions catalog', () => {
       expect(VOICE_INTERACTION_PREWARM_PHRASES).toContain(reply);
     }
   });
+
+  it('answers an explicit barge-in with an instant stop confirmation', () => {
+    expect(matchVoiceInteraction('Lisa, attends.')).toBe('D’accord, je m’arrête.');
+    expect(matchVoiceInteraction('Arrête de parler')).toBe('D’accord, je m’arrête.');
+  });
 });

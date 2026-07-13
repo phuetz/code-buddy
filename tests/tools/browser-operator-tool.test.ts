@@ -61,7 +61,7 @@ describe('BrowserOperatorTool (D3)', () => {
     expect(data.draft.consent.scopes).toEqual([]);
   });
 
-  it('REQUIRES consent for a local-browser session (reuses logged-in tabs)', async () => {
+  it('REQUIRES consent for a fresh visible local-browser session', async () => {
     const tool = new BrowserOperatorTool();
     const result = await tool.execute({ goal: 'export my dashboard report', mode: 'local' });
     const data = result.data as { draft: { consent: { required: boolean; scopes: string[] } } };

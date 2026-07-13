@@ -111,13 +111,15 @@ registerSecretSource({ id: 'op', resolve: resolveOnePassword });
 
 /**
  * Resolve a single secret reference token via the registered sources.
- * Returns the resolved value or empty string on failure.
+ * Returns the resolved value, null for an unknown source, or an empty string
+ * when a known source fails. Keeping those cases distinct prevents a typo in a
+ * source id from silently erasing configuration text.
  */
-async function resolveToken(type: string, ref: string): Promise<string> {
+async function resolveToken(type: string, ref: string): Promise<string | null> {
   const source = sources.get(type);
   if (!source) {
     logger.warn(`SecretRef: unknown reference type "${type}"`, { source: 'SecretRef' });
-    return '';
+    return null;
   }
   try {
     return (await source.resolve(ref)) ?? '';
@@ -165,7 +167,7 @@ export async function resolveSecretRef(value: string): Promise<string> {
   let result = value;
   for (const m of matches) {
     const resolved = await resolveToken(m.type, m.ref);
-    result = result.replace(m.full, resolved);
+    if (resolved !== null) result = result.replace(m.full, resolved);
   }
 
   return result;

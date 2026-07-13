@@ -13,6 +13,7 @@ import { GeminiNativeProvider } from "./providers/provider-gemini-native.js";
 import { OpenAICompatProvider } from "./providers/provider-openai-compat.js";
 import { ChatGptResponsesProvider } from "./providers/provider-chatgpt-responses.js";
 import { GeminiCliProvider } from "./providers/provider-gemini-cli.js";
+import { AgyCliProvider } from './providers/provider-agy-cli.js';
 import { withStreamRetry } from "./stream-retry.js";
 import {
   recordRuntimeFallbackFailure,
@@ -35,6 +36,10 @@ export const CHATGPT_RESPONSES_BASE_URL = 'https://chatgpt.com/backend-api/codex
 export const GEMINI_CLI_SENTINEL = 'gemini-cli';
 /** Synthetic baseURL marker for the Gemini CLI subprocess strategy. */
 export const GEMINI_CLI_BASE_URL = 'gemini-cli://local';
+/** Sentinel apiKey selecting the local Antigravity CLI subprocess strategy. */
+export const AGY_CLI_SENTINEL = 'agy-cli';
+/** Synthetic baseURL marker for the Antigravity CLI subprocess strategy. */
+export const AGY_CLI_BASE_URL = 'agy-cli://local';
 
 export type CodeBuddyMessage = ChatCompletionMessageParam;
 
@@ -47,6 +52,7 @@ export interface JsonSchemaProperty {
   properties?: Record<string, JsonSchemaProperty>;
   required?: string[];
   default?: unknown;
+  additionalProperties?: boolean | JsonSchemaProperty;
 }
 
 export interface CodeBuddyTool {
@@ -58,6 +64,7 @@ export interface CodeBuddyTool {
       type: "object";
       properties: Record<string, JsonSchemaProperty>;
       required: string[];
+      additionalProperties?: boolean | JsonSchemaProperty;
     };
   };
 }
@@ -112,6 +119,8 @@ export interface ChatOptions {
   timeoutMs?: number;
   /** Gemini 3.x thinkingLevel — controls reasoning depth. Never mix with budget_tokens. */
   thinkingLevel?: GeminiThinkingLevel;
+  /** ChatGPT Codex reasoning effort. Sol additionally supports max/ultra. */
+  codexReasoningEffort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max' | 'ultra';
   /** Internal: retry counter for Gemini malformed function-call recovery */
   geminiMalformedRetryCount?: number;
   /** Internal: guard against infinite model fallback loops on Gemini */
@@ -219,6 +228,10 @@ export class CodeBuddyClient {
   private geminiCliProvider: GeminiCliProvider | null = null;
   /** True when routed through the Gemini CLI subprocess. */
   private isGeminiCliProvider: boolean = false;
+  /** Strategy that wraps the local Antigravity (`agy`) CLI. */
+  private agyCliProvider: AgyCliProvider | null = null;
+  /** True when routed through the Antigravity CLI subprocess. */
+  private isAgyCliProvider: boolean = false;
   /** Same-provider auth profile candidates, tried before cross-provider fallback. */
   private credentialPoolProviders: RuntimeFallbackProvider[] = [];
   /** Hermes-style cross-provider fallback candidates, tried per failed chat turn. */
@@ -235,6 +248,7 @@ export class CodeBuddyClient {
   setDefaultThinkingLevel(level: GeminiThinkingLevel): void {
     this.defaultThinkingLevel = level;
     this.geminiProvider?.setDefaultThinkingLevel(level);
+    this.chatgptProvider?.setDefaultReasoningEffort(level);
     logger.debug('Default Gemini thinkingLevel set from settings', { level });
   }
 
@@ -277,12 +291,15 @@ export class CodeBuddyClient {
     }
 
     const selectedBaseURL = baseURL ?? process.env.GROK_BASE_URL ?? DEFAULT_BASE_URL;
-    // Subprocess providers (gemini-cli) use synthetic baseURL strings that
+    // Subprocess providers use synthetic baseURL strings that
     // don't pass URL validation. Skip normalization in that case — the
     // baseURL is informational only, the actual transport is the local
     // child process.
     const isSubprocessProvider =
-      apiKey === GEMINI_CLI_SENTINEL || selectedBaseURL.startsWith('gemini-cli://');
+      apiKey === GEMINI_CLI_SENTINEL ||
+      selectedBaseURL.startsWith('gemini-cli://') ||
+      apiKey === AGY_CLI_SENTINEL ||
+      selectedBaseURL.startsWith('agy-cli://');
     this.baseURL = isSubprocessProvider
       ? selectedBaseURL.replace(/\/$/, '')
       : normalizeBaseURL(selectedBaseURL);
@@ -301,6 +318,9 @@ export class CodeBuddyClient {
     this.isGeminiCliProvider =
       apiKey === GEMINI_CLI_SENTINEL ||
       this.baseURL.startsWith('gemini-cli://');
+    this.isAgyCliProvider =
+      apiKey === AGY_CLI_SENTINEL ||
+      this.baseURL.startsWith('agy-cli://');
     const envGeminiTimeout = Number(
       process.env.CODEBUDDY_GEMINI_TIMEOUT_MS || process.env.CODEBUDDY_REQUEST_TIMEOUT_MS
     );
@@ -347,13 +367,18 @@ export class CodeBuddyClient {
           return getChatGptAuth();
         },
         refreshAuth: async () => {
-          // After a 401 we re-pull from disk — getChatGptAuth handles the
-          // refresh dance itself when last_refresh is stale.
-          const { getChatGptAuth } = await import('../providers/codex-oauth.js');
-          return getChatGptAuth();
+          // A 401 is authoritative even when last_refresh is recent: force
+          // token rotation instead of retrying the same rejected bearer.
+          const { refreshChatGptAuth } = await import('../providers/codex-oauth.js');
+          return refreshChatGptAuth();
+        },
+        modelCatalogProvider: async (auth) => {
+          const { discoverChatGptModels } = await import('../providers/chatgpt-models.js');
+          return discoverChatGptModels(auth);
         },
         model: model || this.currentModel,
         defaultMaxTokens: this.defaultMaxTokens,
+        defaultReasoningEffort: process.env.CODEBUDDY_CODEX_REASONING_EFFORT,
       });
     } else if (this.isGeminiCliProvider) {
       // Wrap the local `gemini` binary as a subprocess. The path comes
@@ -365,6 +390,18 @@ export class CodeBuddyClient {
         binaryPath,
         model: model || this.currentModel,
         defaultMaxTokens: this.defaultMaxTokens,
+      });
+    } else if (this.isAgyCliProvider) {
+      const binaryPath = process.env.AGY_CLI_PATH || 'agy';
+      const configuredTimeout = Number(process.env.CODEBUDDY_AGY_TIMEOUT_MS);
+      this.agyCliProvider = new AgyCliProvider({
+        binaryPath,
+        model: model || this.currentModel,
+        defaultMaxTokens: this.defaultMaxTokens,
+        requestTimeoutMs:
+          Number.isFinite(configuredTimeout) && configuredTimeout >= 5_000
+            ? configuredTimeout
+            : undefined,
       });
     } else {
       this.openaiCompatProvider = new OpenAICompatProvider({
@@ -464,6 +501,7 @@ export class CodeBuddyClient {
     this.openaiCompatProvider?.setModel(model);
     this.chatgptProvider?.setModel(model);
     this.geminiCliProvider?.setModel(model);
+    this.agyCliProvider?.setModel(model);
   }
 
   getCurrentModel(): string {
@@ -477,7 +515,7 @@ export class CodeBuddyClient {
    * client's `currentModel` can lag the actual Codex model. (smoke-test F8)
    */
   isSubscriptionAuth(): boolean {
-    return this.isChatGptProvider;
+    return this.isChatGptProvider || this.isGeminiCliProvider || this.isAgyCliProvider;
   }
 
   getBaseURL(): string {
@@ -490,6 +528,7 @@ export class CodeBuddyClient {
   getProviderName(): string {
     if (this.isChatGptProvider) return 'ChatGPT (OAuth)';
     if (this.isGeminiCliProvider) return 'Gemini CLI (Ultra)';
+    if (this.isAgyCliProvider) return 'Antigravity CLI (Ultra)';
     const url = this.baseURL.toLowerCase();
     if (url.includes('chatgpt.com')) return 'ChatGPT (OAuth)';
     if (url.includes('api.x.ai') || url.includes('xai')) return 'xAI';
@@ -576,6 +615,9 @@ export class CodeBuddyClient {
     }
     if (this.geminiCliProvider) {
       return this.geminiCliProvider.chat(messages, tools, opts);
+    }
+    if (this.agyCliProvider) {
+      return this.agyCliProvider.chat(messages, tools, opts);
     }
     return this.openaiCompatProvider!.chat(messages, tools, opts, searchOptions);
   }
@@ -696,6 +738,9 @@ export class CodeBuddyClient {
     }
     if (this.geminiCliProvider) {
       return this.geminiCliProvider.chatStream(messages, tools, opts);
+    }
+    if (this.agyCliProvider) {
+      return this.agyCliProvider.chatStream(messages, tools, opts);
     }
     return this.openaiCompatProvider!.chatStream(messages, tools, opts, searchOptions);
   }

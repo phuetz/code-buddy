@@ -28,6 +28,7 @@
 import type { TaskClassification } from '../optimization/model-routing.js';
 import type {
   FleetEgress,
+  FleetProvider,
   FleetModelDescriptor,
   ModelStrength,
   PeerCapability,
@@ -41,6 +42,8 @@ import {
 export interface DispatchLane {
   peerId: string;
   model: string;
+  /** Exact backend serving `model`. Optional only for legacy persisted plans. */
+  provider?: FleetProvider;
   /** 0..1 — diagnostic, lets the UI explain "why this peer". */
   score: number;
   /** Per-term breakdown for the rationale text. */
@@ -118,6 +121,13 @@ export interface DispatchConstraints {
    * entries are normalised; an empty array is a no-op.
    */
   excludePeerIds?: string[];
+  /**
+   * Provider failure-domain filter. Unlike `excludePeerIds`, this keeps the
+   * machine eligible and only removes models served by the failed backend.
+   * This is what lets a single robot peer fall back from (for example)
+   * OpenRouter to Lemonade without pretending they are separate machines.
+   */
+  excludeProviders?: FleetProvider[];
 }
 
 /** A peer entry as seen by the router (cap snapshot + dynamic load info). */
@@ -150,6 +160,7 @@ export class TaskRouter {
       constraints.estimatedTokens ?? classification.estimatedTokens ?? 0;
     const targetPeerIds = normalizeTargetPeerIds(constraints.targetPeerIds);
     const excludePeerIds = normalizeTargetPeerIds(constraints.excludePeerIds);
+    const excludeProviders = normalizeExcludedProviders(constraints.excludeProviders);
 
     // 1. Enumerate every (peer, model) candidate.
     const candidates: DispatchLane[] = [];
@@ -175,6 +186,7 @@ export class TaskRouter {
 
       for (const model of cap.models) {
         // Hard filters first — drop before scoring.
+        if (excludeProviders?.has(model.provider)) continue;
         if (model.contextWindow < minContextWindow) continue;
         if (
           constraints.maxLatencyMs !== undefined &&
@@ -209,6 +221,7 @@ export class TaskRouter {
         candidates.push({
           peerId: slot.peerId,
           model: model.id,
+          provider: model.provider,
           score,
           breakdown,
           role: roleHint && cap.roles?.includes(roleHint) ? roleHint : undefined,
@@ -240,9 +253,18 @@ export class TaskRouter {
         'No peer can satisfy the task (no candidate after scoring).',
       );
     }
-    const fallback = candidates.find(
-      (c) => c.peerId !== primary.peerId,
-    );
+    // A provider is a failure domain independent from its host peer. Prefer a
+    // lane that differs on both axes, then another provider on the same peer,
+    // and finally the historical different-peer/same-provider fallback. This
+    // keeps a one-machine, many-provider robot autonomous during an outage.
+    const fallback =
+      candidates.find(
+        (candidate) =>
+          candidate.peerId !== primary.peerId &&
+          candidate.provider !== primary.provider,
+      ) ??
+      candidates.find((candidate) => candidate.provider !== primary.provider) ??
+      candidates.find((candidate) => candidate.peerId !== primary.peerId);
 
     const plan: DispatchPlan = {
       primary,
@@ -293,6 +315,14 @@ function normalizeTargetPeerIds(peerIds: string[] | undefined): Set<string> | nu
   const normalized = peerIds
     .map((peerId) => peerId.trim())
     .filter(Boolean);
+  return normalized.length > 0 ? new Set(normalized) : null;
+}
+
+function normalizeExcludedProviders(
+  providers: FleetProvider[] | undefined,
+): Set<FleetProvider> | null {
+  if (!Array.isArray(providers)) return null;
+  const normalized = providers.filter((provider) => provider !== 'unknown');
   return normalized.length > 0 ? new Set(normalized) : null;
 }
 

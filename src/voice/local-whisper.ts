@@ -39,7 +39,8 @@ from faster_whisper import WhisperModel
 audio, model, lang = sys.argv[1], sys.argv[2], (sys.argv[3] or None)
 m = WhisperModel(model, device="cpu", compute_type="int8")
 segs, _info = m.transcribe(audio, language=lang, vad_filter=True, beam_size=1)
-print(json.dumps({"text": " ".join(s.text.strip() for s in segs).strip()}))
+segments = [{"startSeconds": float(s.start), "endSeconds": float(s.end), "text": s.text.strip()} for s in segs if s.text.strip()]
+print(json.dumps({"text": " ".join(s["text"] for s in segments).strip(), "segments": segments}))
 `;
 
 export interface LocalWhisperOptions {
@@ -48,11 +49,30 @@ export interface LocalWhisperOptions {
   timeoutMs?: number;
 }
 
+export interface LocalWhisperSegment {
+  startSeconds: number;
+  endSeconds: number;
+  text: string;
+}
+
+export interface LocalWhisperDetailedResult {
+  text: string;
+  segments: LocalWhisperSegment[];
+}
+
 /** Transcribe an audio file (wav/ogg/mp3/webm…) to text via local faster-whisper. */
 export async function transcribeFile(
   audioPath: string,
   options: LocalWhisperOptions = {},
 ): Promise<string> {
+  return (await transcribeFileDetailed(audioPath, options)).text;
+}
+
+/** Transcribe with local timestamps so downstream diarization can label real turns. */
+export async function transcribeFileDetailed(
+  audioPath: string,
+  options: LocalWhisperOptions = {},
+): Promise<LocalWhisperDetailedResult> {
   const language = options.language ?? 'fr';
   const model =
     options.model ||
@@ -65,7 +85,7 @@ export async function transcribeFile(
     throw new Error(`local-whisper: audio file not found: ${audioPath}`);
   }
 
-  return new Promise<string>((resolve, reject) => {
+  return new Promise<LocalWhisperDetailedResult>((resolve, reject) => {
     const py = resolvePython();
     const proc = spawn(py, ['-c', WHISPER_SCRIPT, audioPath, model, language], {
       stdio: ['ignore', 'pipe', 'pipe'],
@@ -91,8 +111,24 @@ export async function transcribeFile(
       }
       try {
         const line = stdout.trim().split('\n').filter(Boolean).pop() || '{}';
-        const parsed = JSON.parse(line) as { text?: string };
-        resolve((parsed.text || '').trim());
+        const parsed = JSON.parse(line) as {
+          text?: string;
+          segments?: LocalWhisperSegment[];
+        };
+        const segments = Array.isArray(parsed.segments)
+          ? parsed.segments.filter((segment) => (
+              Number.isFinite(segment.startSeconds)
+              && Number.isFinite(segment.endSeconds)
+              && segment.endSeconds >= segment.startSeconds
+              && typeof segment.text === 'string'
+              && segment.text.trim().length > 0
+            )).map((segment) => ({
+              startSeconds: segment.startSeconds,
+              endSeconds: segment.endSeconds,
+              text: segment.text.trim(),
+            }))
+          : [];
+        resolve({ text: (parsed.text || '').trim(), segments });
       } catch (e) {
         reject(new Error(`local-whisper: bad output: ${String(e)} :: ${stdout.slice(-200)}`));
       }

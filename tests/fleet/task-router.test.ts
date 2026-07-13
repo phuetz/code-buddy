@@ -74,7 +74,40 @@ describe('TaskRouter — basic plan', () => {
     const plan = router.plan(classify(), peers);
     expect(plan.primary.peerId).toBe('ministar');
     expect(plan.primary.model).toBe('qwen3.6:35b');
+    expect(plan.primary.provider).toBe('ollama');
     expect(plan.fallback).toBeUndefined(); // only one peer
+  });
+
+  it('uses another provider on the same peer as a failure-domain fallback', () => {
+    const peers: PeerSlot[] = [
+      peer('robot-brain', {
+        models: [
+          model('cloud-reasoner', {
+            provider: 'openrouter',
+            strengths: ['reasoning', 'thinking'],
+          }),
+          model('local-fast', {
+            provider: 'lemonade',
+            strengths: ['fast', 'cheap'],
+          }),
+        ],
+      }),
+    ];
+
+    const plan = router.plan(
+      classify({ complexity: 'reasoning_heavy', requiresReasoning: true }),
+      peers,
+    );
+
+    expect(plan.fallback).toBeDefined();
+    expect(plan.fallback?.peerId).toBe('robot-brain');
+    expect(plan.fallback?.provider).not.toBe(plan.primary.provider);
+
+    const rerouted = router.plan(classify(), peers, {
+      excludeProviders: [plan.primary.provider!],
+    });
+    expect(rerouted.primary.peerId).toBe('robot-brain');
+    expect(rerouted.primary.provider).toBe(plan.fallback?.provider);
   });
 
   it('throws NoPeerAvailableError when no peer satisfies', () => {

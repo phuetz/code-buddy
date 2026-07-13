@@ -11,6 +11,7 @@ import { validateApiKey } from '../auth/api-keys.js';
 import { logger } from "../../utils/logger.js";
 import { isOriginAllowed } from '../origin-check.js';
 import { verifyToken } from '../auth/jwt.js';
+import { isDirectLoopbackRequest } from '../middleware/auth.js';
 import { authenticateDevice, getGatewayPairingStore, isDevicePairingRequired } from '../../gateway/device-pairing.js';
 import { gatewayServerVersion, GATEWAY_PROTOCOL_VERSION } from '../../gateway/protocol.js';
 import { TIMEOUT_CONFIG, SERVER_CONFIG } from '../../config/constants.js';
@@ -20,6 +21,7 @@ import {
   streamAgentDeltas,
   type ServerAgent,
 } from '../agent-adapter.js';
+import { getAvatarRendererRegistry } from '../../avatar/avatar-renderer-registry.js';
 // Lazy import to avoid circular dependency through channels/index.ts
 let _enqueueMessage: typeof import('../../channels/index.js').enqueueMessage;
 async function getEnqueueMessage() {
@@ -47,6 +49,8 @@ interface ConnectionState {
   /** Paired device id when authenticated via the device-pairing flow. */
   deviceId?: string;
   scopes: string[];
+  /** No-auth network clients remain transport-visible but cannot run agent chat. */
+  anonymousRemote?: boolean;
   lastActivity: number;
   agent?: ServerAgent;
   agentInitializing?: Promise<void>;
@@ -239,6 +243,7 @@ messageHandlers.set('authenticate', async (ws, state, payload) => {
       state.authenticated = true;
       state.keyId = key.id;
       state.scopes = key.scopes;
+      state.anonymousRemote = false;
       send(ws, {
         type: 'authenticated',
         payload: { keyId: key.id, scopes: key.scopes },
@@ -260,6 +265,7 @@ messageHandlers.set('authenticate', async (ws, state, payload) => {
       state.authenticated = true;
       state.userId = decoded.userId;
       state.scopes = decoded.scopes || ['chat'];
+      state.anonymousRemote = false;
       send(ws, {
         type: 'authenticated',
         payload: { userId: decoded.userId, scopes: state.scopes },
@@ -284,6 +290,7 @@ messageHandlers.set('authenticate', async (ws, state, payload) => {
     state.authenticated = true;
     state.deviceId = deviceOutcome.deviceId;
     state.scopes = deviceOutcome.scopes ?? [];
+    state.anonymousRemote = false;
     send(ws, {
       type: 'authenticated',
       payload: { deviceId: deviceOutcome.deviceId, scopes: state.scopes, paired: true },
@@ -307,6 +314,10 @@ messageHandlers.set('authenticate', async (ws, state, payload) => {
  * Handle chat message
  */
 messageHandlers.set('chat', async (ws, state, payload) => {
+  if (state.anonymousRemote) {
+    sendError(ws, 'REMOTE_AUTH_REQUIRED', 'Remote agent chat requires authentication');
+    return;
+  }
   if (!state.authenticated) {
     sendError(ws, 'UNAUTHORIZED', 'Authentication required');
     return;
@@ -555,6 +566,114 @@ messageHandlers.set('status', async (ws, state, _payload) => {
   }));
 });
 
+/** Rebuild a MetaHuman renderer after reconnecting without replaying stale audio. */
+messageHandlers.set('avatar.sync', async (ws, state, _payload) => {
+  if (!state.authenticated) {
+    sendError(ws, 'UNAUTHORIZED', 'Authentication required');
+    return;
+  }
+  const { buildAvatarSyncMessage, canReadAvatarEvents } = await import(
+    '../../avatar/avatar-gateway-bridge.js'
+  );
+  if (!canReadAvatarEvents(state.scopes)) {
+    sendError(ws, 'FORBIDDEN', 'avatar:read scope required');
+    return;
+  }
+  const [{ getAvatarEventBus }, { getAvatarRendererRegistry }] = await Promise.all([
+    import('../../avatar/avatar-event-bus.js'),
+    import('../../avatar/avatar-renderer-registry.js'),
+  ]);
+  send(
+    ws,
+    buildAvatarSyncMessage(
+      getAvatarEventBus().history(24),
+      new Date(),
+      getAvatarRendererRegistry().list()
+    )
+  );
+});
+
+/** Register an Unreal/simulator renderer so Code Buddy knows its capabilities. */
+messageHandlers.set('avatar.renderer.hello', async (ws, state, payload) => {
+  if (!state.authenticated) {
+    sendError(ws, 'UNAUTHORIZED', 'Authentication required');
+    return;
+  }
+  if (state.anonymousRemote) {
+    sendError(ws, 'REMOTE_AUTH_REQUIRED', 'Remote avatar renderers require authentication');
+    return;
+  }
+  const { canReportAvatarStatus } = await import('../../avatar/avatar-gateway-bridge.js');
+  if (!canReportAvatarStatus(state.scopes)) {
+    sendError(ws, 'FORBIDDEN', 'avatar:write scope required');
+    return;
+  }
+  const { getAvatarRendererRegistry } = await import(
+    '../../avatar/avatar-renderer-registry.js'
+  );
+  const result = getAvatarRendererRegistry().register(state.id, payload);
+  if (!result.ok) {
+    sendError(ws, 'INVALID_AVATAR_RENDERER', result.error);
+    return;
+  }
+  send(ws, {
+    type: 'avatar.renderer.ack',
+    payload: { kind: 'hello', renderer: result.renderer },
+    timestamp: new Date().toISOString(),
+  });
+});
+
+/** Receive bounded playback/health feedback from the active MetaHuman renderer. */
+messageHandlers.set('avatar.renderer.status', async (ws, state, payload) => {
+  if (!state.authenticated) {
+    sendError(ws, 'UNAUTHORIZED', 'Authentication required');
+    return;
+  }
+  if (state.anonymousRemote) {
+    sendError(ws, 'REMOTE_AUTH_REQUIRED', 'Remote avatar renderers require authentication');
+    return;
+  }
+  const { canReportAvatarStatus } = await import('../../avatar/avatar-gateway-bridge.js');
+  if (!canReportAvatarStatus(state.scopes)) {
+    sendError(ws, 'FORBIDDEN', 'avatar:write scope required');
+    return;
+  }
+  const { getAvatarRendererRegistry } = await import(
+    '../../avatar/avatar-renderer-registry.js'
+  );
+  const result = getAvatarRendererRegistry().report(state.id, payload);
+  if (!result.ok) {
+    sendError(ws, 'INVALID_AVATAR_STATUS', result.error);
+    return;
+  }
+  send(ws, {
+    type: 'avatar.renderer.ack',
+    payload: { kind: 'status', renderer: result.renderer },
+    timestamp: new Date().toISOString(),
+  });
+});
+
+/** Inspect renderer readiness without exposing conversation or audio content. */
+messageHandlers.set('avatar.status', async (ws, state, _payload) => {
+  if (!state.authenticated) {
+    sendError(ws, 'UNAUTHORIZED', 'Authentication required');
+    return;
+  }
+  const { canReadAvatarEvents } = await import('../../avatar/avatar-gateway-bridge.js');
+  if (!canReadAvatarEvents(state.scopes)) {
+    sendError(ws, 'FORBIDDEN', 'avatar:read scope required');
+    return;
+  }
+  const { getAvatarRendererRegistry } = await import(
+    '../../avatar/avatar-renderer-registry.js'
+  );
+  send(ws, {
+    type: 'avatar.status',
+    payload: { renderers: getAvatarRendererRegistry().list() },
+    timestamp: new Date().toISOString(),
+  });
+});
+
 /**
  * Phase (d).13 — peer:request RPC handler. Routes to the peer-rpc
  * registry. Caller must hold the `peer:invoke` scope (analogous to
@@ -697,12 +816,16 @@ export async function setupWebSocket(
     },
   });
 
-  wss.on('connection', (ws: WebSocket, _req) => {
+  wss.on('connection', (ws: WebSocket, req) => {
     const now = Date.now();
     const state: ConnectionState = {
       id: generateConnectionId(),
       authenticated: !config.authEnabled, // Auto-auth if auth disabled
-      scopes: config.authEnabled ? [] : ['chat', 'tools', 'sessions', 'memory'],
+      scopes: config.authEnabled
+        ? []
+        : ['chat', 'tools', 'sessions', 'memory', 'avatar:read', 'avatar:write'],
+      anonymousRemote:
+        !config.authEnabled && !isDirectLoopbackRequest(req.socket.remoteAddress, req.headers),
       lastActivity: now,
       streaming: false,
       authAttempts: 0,
@@ -732,11 +855,13 @@ export async function setupWebSocket(
 
     ws.on('close', () => {
       connections.delete(ws);
+      getAvatarRendererRegistry().disconnectConnection(state.id);
     });
 
     ws.on('error', (error) => {
       logger.error(`WebSocket error [${state.id}]:`, error);
       connections.delete(ws);
+      getAvatarRendererRegistry().disconnectConnection(state.id);
     });
   });
 

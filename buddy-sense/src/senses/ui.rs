@@ -70,15 +70,28 @@ pub mod live {
                 // WHOLE resolve (proxy creation + name) so a slow proxy can't stall
                 // the loop; fall back to a generic label rather than dropping the event.
                 let resolved = tokio::time::timeout(std::time::Duration::from_millis(300), async {
-                    let proxy = change.item.clone().into_accessible_proxy(&conn).await.ok()?;
+                    let proxy = change
+                        .item
+                        .clone()
+                        .into_accessible_proxy(&conn)
+                        .await
+                        .ok()?;
                     proxy.name().await.ok()
                 })
                 .await
                 .ok()
                 .flatten()
                 .unwrap_or_default();
-                let name = if resolved.trim().is_empty() { "(focus)".to_string() } else { resolved };
-                if tx.send(map_signal(&UiSignal::ElementFocus { name })).await.is_err() {
+                let name = if resolved.trim().is_empty() {
+                    "(focus)".to_string()
+                } else {
+                    resolved
+                };
+                if tx
+                    .send(map_signal(&UiSignal::ElementFocus { name }))
+                    .await
+                    .is_err()
+                {
                     break;
                 }
             }
@@ -101,8 +114,16 @@ mod tests {
 
     #[test]
     fn maps_window_title_and_element_focus() {
-        assert_eq!(map_signal(&UiSignal::WindowTitle { title: "main.rs".into() }).kind, "window_title");
-        let ef = map_signal(&UiSignal::ElementFocus { name: "button".into() });
+        assert_eq!(
+            map_signal(&UiSignal::WindowTitle {
+                title: "main.rs".into()
+            })
+            .kind,
+            "window_title"
+        );
+        let ef = map_signal(&UiSignal::ElementFocus {
+            name: "button".into(),
+        });
         assert_eq!(ef.kind, "element_focus");
         assert_eq!(ef.payload["name"], "button");
     }

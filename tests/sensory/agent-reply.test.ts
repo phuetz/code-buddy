@@ -1,29 +1,156 @@
-import { describe, it, expect, beforeEach } from 'vitest';
-import { makeAgentReply } from '../../src/sensory/agent-reply.js';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import {
+  GROUNDED_VOICE_SYSTEM_PROMPT_APPEND,
+  isAlreadySpeakableAgentResult,
+  makeAgentReply,
+  runInterruptibleVoiceAgentTurn,
+  type AgentRunner,
+} from '../../src/sensory/agent-reply.js';
 import {
   getPermissionModeManager,
   resetPermissionModeManager,
 } from '../../src/security/permission-modes.js';
+import {
+  getOperatingModeManager,
+  resetOperatingModeManager,
+} from '../../src/agent/operating-modes.js';
+import { resetWorkspaceIsolation } from '../../src/workspace/workspace-isolation.js';
+import { logger } from '../../src/utils/logger.js';
 
 describe('agent-reply — spoken instruction → full agent turn', () => {
-  beforeEach(() => resetPermissionModeManager());
+  beforeEach(() => {
+    resetPermissionModeManager();
+    resetOperatingModeManager();
+    resetWorkspaceIsolation();
+  });
+  afterEach(() => vi.restoreAllMocks());
 
-  it('runs the turn, condenses the output, returns the spoken summary', async () => {
-    const seen: string[] = [];
-    const reply = makeAgentReply({
-      agentRunner: async (t) => {
-        seen.push(`turn:${t}`);
-        return 'Le projet compte 27000 tests et la boucle vocale est fermée. (long markdown…)';
+  it('defines a system-level speech contract for the grounded final response', () => {
+    expect(GROUNDED_VOICE_SYSTEM_PROMPT_APPEND).toContain('réponds en français');
+    expect(GROUNDED_VOICE_SYSTEM_PROMPT_APPEND).toContain('Adapte la longueur');
+    expect(GROUNDED_VOICE_SYSTEM_PROMPT_APPEND).toContain('discussion philosophique');
+    expect(GROUNDED_VOICE_SYSTEM_PROMPT_APPEND).toContain('objection honnête');
+    expect(GROUNDED_VOICE_SYSTEM_PROMPT_APPEND).toContain("n'annonce pas ce que tu vas faire");
+    expect(GROUNDED_VOICE_SYSTEM_PROMPT_APPEND).toContain('ni Markdown');
+    expect(GROUNDED_VOICE_SYSTEM_PROMPT_APPEND).toContain('ni liste');
+  });
+
+  it('propagates barge-in to the real interruptible agent stream', async () => {
+    const controller = new AbortController();
+    let release!: () => void;
+    let started!: () => void;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    const streamStarted = new Promise<void>((resolve) => { started = resolve; });
+    let aborts = 0;
+    const fakeAgent = {
+      async *processUserMessageStream(): AsyncGenerator<unknown> {
+        started();
+        await gate;
+        yield { type: 'done' };
       },
-      summarize: async (out, t) => {
-        seen.push(`sum:${t}`);
-        expect(out).toContain('27000');
-        return 'Tout va bien, la boucle vocale est prête.';
+      getChatHistory: () => [{ type: 'assistant', content: 'Réponse devenue obsolète.' }],
+      abortCurrentOperation: () => {
+        aborts += 1;
+        release();
       },
+    };
+    const pending = runInterruptibleVoiceAgentTurn(fakeAgent, 'ancienne question', {
+      signal: controller.signal,
     });
-    const spoken = await reply('où en est le projet ?');
+    await streamStarted;
+    controller.abort();
+    await expect(pending).resolves.toBe('');
+    expect(aborts).toBeGreaterThanOrEqual(1);
+  });
+
+  it('extracts the final assistant entry from an uninterrupted streamed agent turn', async () => {
+    const fakeAgent = {
+      async *processUserMessageStream(): AsyncGenerator<unknown> {
+        yield { type: 'content', content: 'partiel' };
+        yield { type: 'done' };
+      },
+      getChatHistory: () => [
+        { type: 'user', content: 'question' },
+        { type: 'assistant', content: 'Résultat final.' },
+      ],
+      abortCurrentOperation: vi.fn(),
+    };
+    await expect(runInterruptibleVoiceAgentTurn(fakeAgent, 'question')).resolves.toBe(
+      'Résultat final.'
+    );
+    expect(fakeAgent.abortCurrentOperation).not.toHaveBeenCalled();
+  });
+
+  it('exposes predictive prepare and teardown without running a user turn', async () => {
+    const runner = vi.fn(async () => 'Terminé.') as unknown as AgentRunner;
+    runner.prewarm = vi.fn(async () => undefined);
+    runner.dispose = vi.fn();
+    const reply = makeAgentReply({ agentRunner: runner, summarize: async () => 'unused' });
+    await reply.prewarm();
+    reply.dispose();
+    expect(runner.prewarm).toHaveBeenCalledOnce();
+    expect(runner.dispose).toHaveBeenCalledOnce();
+    expect(runner).not.toHaveBeenCalled();
+  });
+
+  it('falls back for markdown/multiline output and keeps the original transcript', async () => {
+    const transcript = 'où en est le projet ?';
+    const agentOutput = '## État\n- Le projet compte 27000 tests.\n- La boucle vocale est fermée.';
+    const summarize = vi.fn(async (out: string, heard: string) => {
+      expect(out).toBe(agentOutput);
+      expect(heard).toBe(transcript);
+      return 'Tout va bien, la boucle vocale est prête.';
+    });
+    const info = vi.spyOn(logger, 'info').mockImplementation(() => undefined);
+    const reply = makeAgentReply({
+      agentRunner: async (heard) => {
+        expect(heard).toBe(transcript);
+        return agentOutput;
+      },
+      summarize,
+    });
+    const spoken = await reply(transcript);
     expect(spoken).toBe('Tout va bien, la boucle vocale est prête.');
-    expect(seen).toEqual(['turn:où en est le projet ?', 'sum:où en est le projet ?']);
+    expect(summarize).toHaveBeenCalledWith(agentOutput, transcript, undefined);
+    expect(info).toHaveBeenCalledWith(
+      expect.stringMatching(
+        /^\[voice-act\] result timing: agentMs=\d+ms summaryMs=\d+ms summary=fallback$/
+      )
+    );
+  });
+
+  it('skips the second LLM pass when the agent result is already short spoken prose', async () => {
+    const summarize = vi.fn(async () => 'inutile');
+    const info = vi.spyOn(logger, 'info').mockImplementation(() => undefined);
+    const reply = makeAgentReply({
+      agentRunner: async () => 'Les tests ciblés passent et le service est prêt.',
+      summarize,
+    });
+    expect(isAlreadySpeakableAgentResult('Les tests ciblés passent.')).toBe(true);
+    expect(await reply('vérifie le service')).toBe(
+      'Les tests ciblés passent et le service est prêt.'
+    );
+    expect(summarize).not.toHaveBeenCalled();
+    expect(info).toHaveBeenCalledWith(
+      expect.stringMatching(
+        /^\[voice-act\] result timing: agentMs=\d+ms summaryMs=0ms summary=skipped$/
+      )
+    );
+  });
+
+  it('accepts developed spoken prose while rejecting walls of text and markdown', () => {
+    const twoHundredTwentyWords = `${Array.from({ length: 219 }, () => 'mot').join(' ')} mot.`;
+    const twoHundredTwentyOneWords = `${Array.from({ length: 220 }, () => 'mot').join(' ')} mot.`;
+
+    expect(isAlreadySpeakableAgentResult(twoHundredTwentyWords)).toBe(true);
+    expect(isAlreadySpeakableAgentResult(twoHundredTwentyOneWords)).toBe(false);
+    expect(isAlreadySpeakableAgentResult('Première phrase. Deuxième phrase !')).toBe(true);
+    expect(isAlreadySpeakableAgentResult('Phrase sans ponctuation finale')).toBe(false);
+    expect(isAlreadySpeakableAgentResult('Une. Deux. Trois.')).toBe(true);
+    expect(isAlreadySpeakableAgentResult('Une. Deux. Trois. Quatre. Cinq. Six. Sept. Huit. Neuf. Dix. Onze.')).toBe(false);
+    expect(isAlreadySpeakableAgentResult('Une phrase.\nUne autre.')).toBe(false);
+    expect(isAlreadySpeakableAgentResult('## Résultat\nTout va bien.')).toBe(false);
+    expect(isAlreadySpeakableAgentResult('Utilise `npm test` maintenant.')).toBe(false);
   });
 
   it('never throws — a failed turn becomes a spoken apology', async () => {
@@ -46,58 +173,214 @@ describe('agent-reply — spoken instruction → full agent turn', () => {
     await expect(reply('lance les tests')).resolves.toBe("C'est fait.");
   });
 
-  it("is honest in read-only 'plan' posture: empty output → couldn't-verify, not a false success", async () => {
+  it("is honest in guarded default posture: empty output → couldn't-verify, not a false success", async () => {
     const reply = makeAgentReply({
-      // permissionMode defaults to 'plan' (read-only): it can't have acted, so "C'est fait." would lie.
       agentRunner: async () => '   ',
       summarize: async () => 'unused',
     });
     await expect(reply('lance les tests')).resolves.toBe("Je n'ai pas réussi à vérifier ça, désolée.");
   });
 
-  it('falls back to a truncated first line when summarize fails', async () => {
+  it('falls back to a readable first paragraph when summarize fails', async () => {
     const reply = makeAgentReply({
       agentRunner: async () => 'Première ligne du résultat.\nDétails markdown ignorés.',
       summarize: async () => {
         throw new Error('summarizer down');
       },
     });
-    await expect(reply('résume')).resolves.toBe('Première ligne du résultat.');
+    await expect(reply('résume')).resolves.toBe(
+      'Première ligne du résultat. Détails markdown ignorés.'
+    );
   });
 
-  it('applies the SAFE default posture (plan = read-only) on first turn', async () => {
-    const reply = makeAgentReply({ agentRunner: async () => 'ok', summarize: async () => 'ok' });
-    await reply('lis le fichier');
+  it('uses guarded default + balanced only inside the voice turn, so safe bash inspection works', async () => {
     const pm = getPermissionModeManager();
+    const operating = getOperatingModeManager();
+    // Reproduce an explicit code session already in /plan before Lisa speaks.
+    pm.setMode('plan');
+    operating.setMode('plan');
+    const reply = makeAgentReply({
+      cwd: process.cwd(),
+      agentRunner: async () => {
+        expect(pm.getMode()).toBe('default');
+        expect(pm.checkPermission('inspect repository', 'bash').allowed).toBe(true);
+        expect(operating.getMode()).toBe('balanced');
+        return 'Le dépôt est accessible.';
+      },
+      summarize: async () => 'unused',
+    });
+
+    await expect(reply('lis le dépôt')).resolves.toBe('Le dépôt est accessible.');
+    // The explicit code session remains plan after the voice async context ends.
     expect(pm.getMode()).toBe('plan');
-    // plan denies writes, allows reads — the actual guardrail lever.
-    expect(pm.checkPermission('edit', 'edit_file').allowed).toBe(false);
-    expect(pm.checkPermission('read', 'read_file').allowed).toBe(true);
+    expect(operating.getMode()).toBe('plan');
   });
 
-  it('honors an explicit posture (dontAsk lets the agent act)', async () => {
+  it('honors an explicit autonomous posture without persisting it globally', async () => {
+    const seen: string[] = [];
     const reply = makeAgentReply({
       permissionMode: 'dontAsk',
-      agentRunner: async () => 'ok',
+      agentRunner: async () => {
+        seen.push(getPermissionModeManager().getMode());
+        return 'ok';
+      },
       summarize: async () => 'ok',
     });
     await reply('édite le fichier');
-    expect(getPermissionModeManager().getMode()).toBe('dontAsk');
+    expect(seen).toEqual(['dontAsk']);
+    expect(getPermissionModeManager().getMode()).toBe('default');
   });
 
-  it('plays the ack BEFORE the (slow) turn', async () => {
-    const order: string[] = [];
+  it('preserves an explicitly requested plan posture for that voice command session only', async () => {
+    const seen: string[] = [];
+    const reply = makeAgentReply({
+      permissionMode: 'plan',
+      agentRunner: async () => {
+        const pm = getPermissionModeManager();
+        seen.push(pm.getMode());
+        expect(pm.checkPermission('inspect repository', 'bash').allowed).toBe(false);
+        return 'Analyse en lecture seule terminée.';
+      },
+      summarize: async () => 'unused',
+    });
+    await reply('prépare seulement un plan');
+    expect(seen).toEqual(['plan']);
+    expect(getPermissionModeManager().getMode()).toBe('default');
+  });
+
+  it('starts the slow turn in parallel with the ack and waits for both', async () => {
+    const events: string[] = [];
+    let releaseAck: (() => void) | undefined;
+    let reportAckStarted: (() => void) | undefined;
+    let reportTurnStarted: (() => void) | undefined;
+    const ackGate = new Promise<void>((resolve) => {
+      releaseAck = resolve;
+    });
+    const ackStarted = new Promise<void>((resolve) => {
+      reportAckStarted = resolve;
+    });
+    const turnStarted = new Promise<void>((resolve) => {
+      reportTurnStarted = resolve;
+    });
     const reply = makeAgentReply({
       ack: async () => {
-        order.push('ack');
+        events.push('ack:start');
+        reportAckStarted?.();
+        await ackGate;
+        events.push('ack:end');
       },
       agentRunner: async () => {
-        order.push('turn');
-        return 'done';
+        events.push('turn:start');
+        reportTurnStarted?.();
+        return 'Terminé.';
       },
       summarize: async () => 'résumé',
     });
-    await reply('fais X');
-    expect(order).toEqual(['ack', 'turn']);
+    let settled = false;
+    const pending = reply('fais X');
+    void pending.then(
+      () => { settled = true; },
+      () => { settled = true; },
+    );
+
+    await Promise.all([ackStarted, turnStarted]);
+    expect(new Set(events)).toEqual(new Set(['turn:start', 'ack:start']));
+    await Promise.resolve();
+    expect(settled).toBe(false);
+
+    releaseAck?.();
+    await expect(pending).resolves.toBe('Terminé.');
+    expect(events).toContain('turn:start');
+    expect(events).toContain('ack:start');
+    expect(events.at(-1)).toBe('ack:end');
+  });
+
+  it('observes an agent rejection while the ack is playing and reports it after the ack', async () => {
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+    let releaseAck: (() => void) | undefined;
+    let reportAckStarted: (() => void) | undefined;
+    let rejectTurn: ((reason?: unknown) => void) | undefined;
+    const ackGate = new Promise<void>((resolve) => {
+      releaseAck = resolve;
+    });
+    const ackStarted = new Promise<void>((resolve) => {
+      reportAckStarted = resolve;
+    });
+    const turnGate = new Promise<string>((_resolve, reject) => {
+      rejectTurn = reject;
+    });
+    const reply = makeAgentReply({
+      apology: 'AGENT_FAILED',
+      ack: async () => {
+        reportAckStarted?.();
+        await ackGate;
+        throw new Error('ack failed too');
+      },
+      agentRunner: async () => turnGate,
+      summarize: async () => 'unused',
+    });
+    let settled = false;
+    const pending = reply('fais X');
+    void pending.then(
+      () => { settled = true; },
+      () => { settled = true; },
+    );
+
+    await ackStarted;
+    rejectTurn?.(new Error('agent failed'));
+    await Promise.resolve();
+    expect(settled).toBe(false);
+
+    releaseAck?.();
+    await expect(pending).resolves.toBe('AGENT_FAILED');
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('agent failed'));
+    expect(warn).not.toHaveBeenCalledWith(expect.stringContaining('ack failed too'));
+    warn.mockRestore();
+  });
+
+  it('returns silence when abort rejects the agent while the ack is playing', async () => {
+    const controller = new AbortController();
+    let releaseAck: (() => void) | undefined;
+    let reportAckStarted: (() => void) | undefined;
+    let reportTurnStarted: (() => void) | undefined;
+    const ackGate = new Promise<void>((resolve) => {
+      releaseAck = resolve;
+    });
+    const ackStarted = new Promise<void>((resolve) => {
+      reportAckStarted = resolve;
+    });
+    const turnStarted = new Promise<void>((resolve) => {
+      reportTurnStarted = resolve;
+    });
+    const reply = makeAgentReply({
+      apology: 'MUST_NOT_SPEAK',
+      ack: async () => {
+        reportAckStarted?.();
+        await ackGate;
+      },
+      agentRunner: async (_heard, opts) => {
+        reportTurnStarted?.();
+        return new Promise<string>((_resolve, reject) => {
+          const rejectAbort = (): void => reject(new Error('agent aborted'));
+          if (opts?.signal?.aborted) rejectAbort();
+          else opts?.signal?.addEventListener('abort', rejectAbort, { once: true });
+        });
+      },
+      summarize: async () => 'unused',
+    });
+    let settled = false;
+    const pending = reply('fais X', { signal: controller.signal });
+    void pending.then(
+      () => { settled = true; },
+      () => { settled = true; },
+    );
+
+    await Promise.all([ackStarted, turnStarted]);
+    controller.abort();
+    await Promise.resolve();
+    expect(settled).toBe(false);
+
+    releaseAck?.();
+    await expect(pending).resolves.toBe('');
   });
 });

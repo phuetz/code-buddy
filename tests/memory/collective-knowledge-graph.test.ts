@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { mkdtempSync, rmSync, existsSync } from 'fs';
+import { mkdtempSync, rmSync, existsSync, readFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import {
@@ -325,4 +325,67 @@ describe('CollectiveKnowledgeGraph — scientific discovery ingestion + auto-lin
     expect(hits[0]!.type).toBe('discovery');
     expect(hits[0]!.text.toLowerCase()).toContain('metformine');
   }, 90000);
+
+  it('ingestPublication is idempotent for an unchanged canonical publication', async () => {
+    let embedCalls = 0;
+    let classifierCalls = 0;
+    const ckg = new CollectiveKnowledgeGraph({
+      ledgerPath,
+      agentId: 'host/repo',
+      embedder: {
+        embed: async () => {
+          embedCalls += 1;
+          return { embedding: new Float32Array([1, 0]) };
+        },
+      },
+    });
+    const publication = {
+      id: 'arxiv:stable-v1',
+      title: 'Stable finding',
+      abstract: 'The canonical abstract is unchanged.',
+      source: 'arxiv',
+    };
+
+    const first = await ckg.ingestPublication(publication);
+    const ledgerAfterFirst = readFileSync(ledgerPath, 'utf8');
+    const embedsAfterFirst = embedCalls;
+    const second = await ckg.ingestPublication(publication, {
+      autoLinkThreshold: 0,
+      relationClassifier: async () => {
+        classifierCalls += 1;
+        return 'related_to';
+      },
+    });
+
+    expect(first).not.toBeNull();
+    expect(second).toBeNull();
+    expect(readFileSync(ledgerPath, 'utf8')).toBe(ledgerAfterFirst);
+    expect(embedCalls).toBe(embedsAfterFirst);
+    expect(classifierCalls).toBe(0);
+    expect(ckg.getEntity(publication.id).entity?.mentions).toBe(1);
+  });
+
+  it('ingestPublication keeps a changed abstract under the same id as a new version', async () => {
+    const ckg = new CollectiveKnowledgeGraph({
+      ledgerPath,
+      agentId: 'host/repo',
+      embedder: {
+        embed: async () => ({ embedding: new Float32Array([1, 0]) }),
+      },
+    });
+    const base = {
+      id: 'arxiv:versioned-v1',
+      title: 'An evolving result',
+      abstract: 'Initial result.',
+      source: 'arxiv',
+    };
+
+    await ckg.ingestPublication(base);
+    const updated = await ckg.ingestPublication({ ...base, abstract: 'Updated result.' });
+
+    expect(updated).not.toBeNull();
+    expect(updated?.text).toBe('An evolving result. Updated result.');
+    expect(ckg.getEntity(base.id).entity?.text).toBe('An evolving result. Updated result.');
+    expect(ckg.getSuperseded().some((entry) => entry.text === 'An evolving result. Initial result.')).toBe(true);
+  });
 });

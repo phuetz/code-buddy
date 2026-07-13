@@ -63,6 +63,7 @@ export type AppTheme =
   | 'codex'
   | 'anthropic';
 export type MemoryStrategy = 'auto' | 'manual' | 'rolling';
+export type ContextOptimizationMode = 'auto' | 'off';
 export type ProviderProfileKey =
   | 'chatgpt'
   | 'openrouter'
@@ -148,6 +149,10 @@ export interface AppConfig {
 
   // Memory retrieval preference
   memoryStrategy: MemoryStrategy;
+
+  // Recoverable tool-output optimization. `auto` enables lm-resizer with a
+  // graceful fallback when its local binary is unavailable.
+  contextOptimizationMode: ContextOptimizationMode;
 
   // Sandbox mode (WSL/Lima isolation)
   sandboxEnabled: boolean;
@@ -277,6 +282,7 @@ const DIRECT_READ_KEYS = new Set<keyof AppConfig>([
   'enableDevLogs',
   'theme',
   'memoryStrategy',
+  'contextOptimizationMode',
   'sandboxEnabled',
   'enableThinking',
   'thinkingLevel',
@@ -290,12 +296,12 @@ const defaultProfiles: Record<ProviderProfileKey, ProviderProfile> = {
     // routing in CodeBuddyClient. Real auth lives in ~/.codebuddy/codex-auth.json.
     apiKey: 'oauth-chatgpt',
     baseUrl: 'https://chatgpt.com/backend-api/codex',
-    model: 'gpt-5.5',
+    model: 'gpt-5.6-sol',
   },
   openrouter: {
     apiKey: '',
     baseUrl: 'https://openrouter.ai/api/v1',
-    model: 'anthropic/claude-sonnet-4-6',
+    model: 'openrouter/free',
   },
   anthropic: {
     apiKey: '',
@@ -397,6 +403,7 @@ const defaultConfig: AppConfig = {
   enableDevLogs: false,
   theme: 'light',
   memoryStrategy: 'auto',
+  contextOptimizationMode: 'auto',
   sandboxEnabled: false,
   enableThinking: false,
   thinkingLevel: 'off',
@@ -445,7 +452,21 @@ export async function getPiAiModelPresets(): Promise<typeof PROVIDER_PRESETS> {
         });
 
       if (picked.length > 0) {
-        result[providerKey] = { ...preset, models: picked };
+        // pi-ai's OpenRouter registry tracks its curated paid catalog but may
+        // omit OpenRouter's frequently changing zero-cost variants. Preserve
+        // our explicit free pool first, then append live registry choices.
+        const pinnedFree = providerKey === 'openrouter'
+          ? preset.models.filter(
+              (model) => model.id === 'openrouter/free' || model.id.endsWith(':free')
+            )
+          : [];
+        const seen = new Set<string>();
+        const models = [...pinnedFree, ...picked].filter((model) => {
+          if (seen.has(model.id)) return false;
+          seen.add(model.id);
+          return true;
+        });
+        result[providerKey] = { ...preset, models };
       }
     }
 
@@ -479,6 +500,7 @@ const VALID_THEMES: AppTheme[] = [
   'anthropic',
 ];
 const VALID_MEMORY_STRATEGIES: MemoryStrategy[] = ['auto', 'manual', 'rolling'];
+const VALID_CONTEXT_OPTIMIZATION_MODES: ContextOptimizationMode[] = ['auto', 'off'];
 
 function isProviderType(value: unknown): value is ProviderType {
   return (
@@ -507,6 +529,13 @@ function isAppTheme(value: unknown): value is AppTheme {
 
 function isMemoryStrategy(value: unknown): value is MemoryStrategy {
   return typeof value === 'string' && VALID_MEMORY_STRATEGIES.includes(value as MemoryStrategy);
+}
+
+function isContextOptimizationMode(value: unknown): value is ContextOptimizationMode {
+  return (
+    typeof value === 'string' &&
+    VALID_CONTEXT_OPTIMIZATION_MODES.includes(value as ContextOptimizationMode)
+  );
 }
 
 function profileKeyFromProvider(
@@ -1075,6 +1104,9 @@ export class ConfigStore {
       memoryStrategy: isMemoryStrategy(raw.memoryStrategy)
         ? raw.memoryStrategy
         : defaultConfig.memoryStrategy,
+      contextOptimizationMode: isContextOptimizationMode(raw.contextOptimizationMode)
+        ? raw.contextOptimizationMode
+        : defaultConfig.contextOptimizationMode,
       sandboxEnabled: toBoolean(raw.sandboxEnabled, defaultConfig.sandboxEnabled),
       enableThinking: projected.enableThinking,
       thinkingLevel: isThinkingLevel(raw.thinkingLevel) ? raw.thinkingLevel : defaultConfig.thinkingLevel,
@@ -1217,6 +1249,9 @@ export class ConfigStore {
           return defaultConfig[key];
         }
         if (key === 'memoryStrategy' && !isMemoryStrategy(rawValue)) {
+          return defaultConfig[key];
+        }
+        if (key === 'contextOptimizationMode' && !isContextOptimizationMode(rawValue)) {
           return defaultConfig[key];
         }
         if (key === 'thinkingLevel' && !isThinkingLevel(rawValue)) {
@@ -1365,6 +1400,18 @@ export class ConfigStore {
   }
 
   /**
+   * Resolve one configuration set without changing the process-global active
+   * set. Session runtimes use this to run different providers concurrently.
+   * The returned object is detached from persisted state and may be mutated by
+   * the caller without affecting another session.
+   */
+  getConfigForSet(id: string): AppConfig {
+    const current = this.getAll();
+    if (!current.configSets.some((set) => set.id === id)) return current;
+    return this.composeProjectedConfig(current, current.configSets, id);
+  }
+
+  /**
    * Update multiple config values
    */
   update(updates: Partial<AppConfig>): void {
@@ -1498,6 +1545,10 @@ export class ConfigStore {
       theme: updates.theme !== undefined ? updates.theme : current.theme,
       memoryStrategy:
         updates.memoryStrategy !== undefined ? updates.memoryStrategy : current.memoryStrategy,
+      contextOptimizationMode:
+        updates.contextOptimizationMode !== undefined
+          ? updates.contextOptimizationMode
+          : current.contextOptimizationMode,
       sandboxEnabled:
         updates.sandboxEnabled !== undefined ? updates.sandboxEnabled : current.sandboxEnabled,
       isConfigured:
@@ -1669,6 +1720,7 @@ export class ConfigStore {
     delete process.env.CLAUDE_CODE_PATH;
     delete process.env.COWORK_WORKDIR;
     delete process.env.CODEBUDDY_MEMORY_PROVIDER;
+    delete process.env.CODEBUDDY_LM_RESIZER;
 
     const useOpenAI =
       projectedConfig.provider === 'chatgpt' ||
@@ -1771,6 +1823,11 @@ export class ConfigStore {
       process.env.CODEBUDDY_MEMORY_PROVIDER = 'local';
     }
 
+    // The embedded engine reads this flag for every tool result, so the global
+    // Cowork preference applies immediately without recreating active sessions.
+    process.env.CODEBUDDY_LM_RESIZER =
+      projectedConfig.contextOptimizationMode === 'off' ? 'false' : 'true';
+
     log('[Config] Applied env vars for provider:', projectedConfig.provider, {
       ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY ? '✓ Set' : '(empty/unset)',
       ANTHROPIC_AUTH_TOKEN: process.env.ANTHROPIC_AUTH_TOKEN ? '✓ Set' : '(empty/unset)',
@@ -1782,6 +1839,7 @@ export class ConfigStore {
       OPENAI_ACCOUNT_ID: process.env.OPENAI_ACCOUNT_ID || '(not set)',
       GEMINI_API_KEY: process.env.GEMINI_API_KEY ? '✓ Set' : '(empty/unset)',
       GEMINI_BASE_URL: process.env.GEMINI_BASE_URL || '(default)',
+      CODEBUDDY_LM_RESIZER: process.env.CODEBUDDY_LM_RESIZER,
     });
   }
 

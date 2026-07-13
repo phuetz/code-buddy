@@ -18,12 +18,22 @@ import type {
   PatternSource,
 } from './types.js';
 import { DEFAULT_ALLOWLIST_CONFIG, DEFAULT_SAFE_PATTERNS, DEFAULT_DENY_PATTERNS } from './types.js';
-import { matchApprovalPattern, findBestMatch, validatePattern } from './pattern-matcher.js';
+import { findBestMatch, validatePattern } from './pattern-matcher.js';
 import { logger } from '../../utils/logger.js';
 
 // ============================================================================
 // Allowlist Store
 // ============================================================================
+
+/** Fresh nested state: never share the default patterns/stats across stores. */
+function createDefaultConfig(): AllowlistConfig {
+  return {
+    ...DEFAULT_ALLOWLIST_CONFIG,
+    patterns: [],
+    defaults: { ...DEFAULT_ALLOWLIST_CONFIG.defaults },
+    stats: { ...DEFAULT_ALLOWLIST_CONFIG.stats },
+  };
+}
 
 /**
  * Store for bash command approval patterns
@@ -36,7 +46,7 @@ export class AllowlistStore extends EventEmitter {
   constructor(configDir?: string) {
     super();
     this.configPath = this.getConfigPath(configDir);
-    this.config = { ...DEFAULT_ALLOWLIST_CONFIG };
+    this.config = createDefaultConfig();
   }
 
   /**
@@ -75,6 +85,8 @@ export class AllowlistStore extends EventEmitter {
       tags?: string[];
       source?: PatternSource;
       expiresAt?: Date | null;
+      /** Scope this pattern to one project. Omit for an explicit global rule. */
+      cwd?: string;
     }
   ): ApprovalPattern {
     // Validate pattern
@@ -84,7 +96,8 @@ export class AllowlistStore extends EventEmitter {
     }
 
     // Check for duplicate
-    const existing = this.findPatternByValue(pattern, type);
+    const scopedCwd = options?.cwd ? this.canonicalizeCwd(options.cwd) : undefined;
+    const existing = this.findPatternByValue(pattern, type, scopedCwd);
     if (existing) {
       // Update existing pattern
       existing.decision = decision;
@@ -107,6 +120,7 @@ export class AllowlistStore extends EventEmitter {
       enabled: true,
       tags: options?.tags,
       source: options?.source || 'user',
+      cwd: scopedCwd,
     };
 
     this.config.patterns.push(newPattern);
@@ -164,7 +178,10 @@ export class AllowlistStore extends EventEmitter {
       }
     }
 
-    Object.assign(pattern, updates);
+    Object.assign(pattern, {
+      ...updates,
+      ...(updates.cwd ? { cwd: this.canonicalizeCwd(updates.cwd) } : {}),
+    });
     this.saveConfig();
 
     return pattern;
@@ -180,9 +197,16 @@ export class AllowlistStore extends EventEmitter {
   /**
    * Find pattern by value and type
    */
-  findPatternByValue(pattern: string, type: PatternType): ApprovalPattern | undefined {
+  findPatternByValue(
+    pattern: string,
+    type: PatternType,
+    cwd?: string,
+  ): ApprovalPattern | undefined {
+    const scopedCwd = cwd ? this.canonicalizeCwd(cwd) : undefined;
     return this.config.patterns.find(
-      p => p.pattern === pattern && p.type === type
+      p => p.pattern === pattern
+        && p.type === type
+        && p.cwd === scopedCwd
     );
   }
 
@@ -232,7 +256,7 @@ export class AllowlistStore extends EventEmitter {
   /**
    * Check a command against stored patterns
    */
-  checkCommand(command: string): {
+  checkCommand(command: string, cwd: string = process.cwd()): {
     matched: boolean;
     pattern?: ApprovalPattern;
     decision: ApprovalDecision | 'prompt';
@@ -244,7 +268,11 @@ export class AllowlistStore extends EventEmitter {
     this.cleanExpiredPatterns();
 
     // Find best matching pattern
-    const match = findBestMatch(command, this.config.patterns);
+    const canonicalCwd = this.canonicalizeCwd(cwd);
+    const applicablePatterns = this.config.patterns.filter(
+      pattern => !pattern.cwd || pattern.cwd === canonicalCwd
+    );
+    const match = findBestMatch(command, applicablePatterns);
 
     if (match) {
       // Update pattern usage
@@ -286,6 +314,8 @@ export class AllowlistStore extends EventEmitter {
       pattern?: string;
       patternType?: PatternType;
       description?: string;
+      /** Defaults to the current project for prompt-created approvals. */
+      cwd?: string;
     }
   ): ApprovalPattern | undefined {
     if (!options?.pattern) {
@@ -300,6 +330,7 @@ export class AllowlistStore extends EventEmitter {
         description: options.description || `Auto-approved: ${command}`,
         source: 'user',
         tags: ['auto-created'],
+        cwd: options.cwd || process.cwd(),
       }
     );
   }
@@ -369,14 +400,18 @@ export class AllowlistStore extends EventEmitter {
           this.migrateConfig(loaded);
         } else {
           // Convert date strings back to Date objects
+          const defaults = createDefaultConfig();
           this.config = {
-            ...DEFAULT_ALLOWLIST_CONFIG,
+            ...defaults,
             ...loaded,
+            defaults: { ...defaults.defaults, ...loaded.defaults },
+            stats: { ...defaults.stats, ...loaded.stats },
             patterns: loaded.patterns.map(p => ({
               ...p,
               createdAt: new Date(p.createdAt),
               lastUsedAt: p.lastUsedAt ? new Date(p.lastUsedAt) : undefined,
               expiresAt: p.expiresAt ? new Date(p.expiresAt) : undefined,
+              cwd: p.cwd ? this.canonicalizeCwd(p.cwd) : undefined,
             })),
           };
         }
@@ -391,20 +426,29 @@ export class AllowlistStore extends EventEmitter {
    * Save configuration to file
    */
   private saveConfig(): void {
+    const tempPath = `${this.configPath}.tmp-${process.pid}-${randomUUID()}`;
     try {
       const dir = path.dirname(this.configPath);
       if (!fs.existsSync(dir)) {
-        fs.mkdirSync(dir, { recursive: true });
+        fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
       }
 
       fs.writeFileSync(
-        this.configPath,
-        JSON.stringify(this.config, null, 2)
+        tempPath,
+        `${JSON.stringify(this.config, null, 2)}\n`,
+        { encoding: 'utf-8', flag: 'wx', mode: 0o600 },
       );
+      fs.renameSync(tempPath, this.configPath);
 
       this.emit('config:saved', this.config);
     } catch (error) {
       logger.error('Failed to save allowlist config', error as Error);
+    } finally {
+      try {
+        fs.rmSync(tempPath, { force: true });
+      } catch {
+        // Best-effort cleanup after a failed write or rename.
+      }
     }
   }
 
@@ -413,10 +457,11 @@ export class AllowlistStore extends EventEmitter {
    */
   private migrateConfig(old: AllowlistConfig): void {
     // Currently only version 1, so just use defaults
+    const defaults = createDefaultConfig();
     this.config = {
-      ...DEFAULT_ALLOWLIST_CONFIG,
+      ...defaults,
       patterns: old.patterns || [],
-      stats: old.stats || DEFAULT_ALLOWLIST_CONFIG.stats,
+      stats: old.stats ? { ...old.stats } : defaults.stats,
     };
     this.saveConfig();
   }
@@ -492,6 +537,11 @@ export class AllowlistStore extends EventEmitter {
     }
   }
 
+  /** Match ExecPolicy's stable project boundary without requiring the path to exist. */
+  private canonicalizeCwd(cwd: string): string {
+    return path.resolve(cwd);
+  }
+
   // ============================================================================
   // Import/Export
   // ============================================================================
@@ -561,6 +611,7 @@ export class AllowlistStore extends EventEmitter {
           source: 'import' as PatternSource,
           createdAt: new Date(),
           useCount: 0,
+          cwd: pattern.cwd ? this.canonicalizeCwd(pattern.cwd) : undefined,
         });
         imported++;
       }

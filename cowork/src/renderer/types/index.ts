@@ -1,3 +1,5 @@
+import type { ContextOptimizationMetadata } from '@codebuddy/shared/context-optimization-metadata';
+
 // Session types
 export interface Session {
   id: string;
@@ -10,15 +12,51 @@ export interface Session {
   allowedTools: string[];
   memoryEnabled: boolean;
   model?: string;
+  /** Per-session runtime posture. Unlike AppConfig, this never changes another session. */
+  intelligence?: SessionIntelligence;
   projectId?: string | null;
   isBackground?: boolean;
   executionMode?: ExecutionMode;
+  /** Durable approval posture for this session (never process-global). */
+  permissionMode?: PermissionMode;
+  /** One-turn override used by voice/companion interactions; never persisted. */
+  permissionModeOverride?: PermissionMode;
   pinned?: boolean;
   archived?: boolean;
   tags?: string[];
   source?: 'cowork' | 'cli-import' | 'remote' | string;
   createdAt: number;
   updatedAt: number;
+}
+
+export type SessionThinkingLevel = 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+
+export interface SessionLatencyMetrics {
+  setupMs?: number;
+  firstTokenMs?: number;
+  totalMs?: number;
+  measuredAt: number;
+  /** Runtime identity lets FAST learn across sessions without mixing providers. */
+  configSetId?: string;
+  model?: string;
+}
+
+/**
+ * Session-scoped runtime configuration used by the Continuity Fabric.
+ * `configSetId` is a reference only: credentials remain in the encrypted
+ * config store and are never copied into the session database or renderer.
+ */
+export interface SessionIntelligence {
+  configSetId?: string;
+  profileId?: string;
+  thinkingLevel: SessionThinkingLevel;
+  fastMode: boolean;
+  executionLocation: 'local' | 'lan' | 'cloud';
+  latencyBudgetMs: number;
+  cacheState?: 'warm' | 'cold' | 'invalidated' | 'unknown';
+  lastLatency?: SessionLatencyMetrics;
+  /** Rolling, bounded first-signal history used by the per-session latency governor. */
+  latencyHistory?: SessionLatencyMetrics[];
 }
 
 export type SessionStatus = 'idle' | 'running' | 'completed' | 'error';
@@ -32,6 +70,7 @@ export interface Project {
   description?: string;
   workspacePath?: string;
   memoryConfig?: ProjectMemoryConfig;
+  contextConfig?: ProjectContextConfig;
   createdAt: number;
   updatedAt: number;
 }
@@ -43,11 +82,27 @@ export interface ProjectMemoryConfig {
   memoryStrategy?: 'auto' | 'manual' | 'rolling';
 }
 
+/**
+ * Durable context inherited by every new turn in a Cowork project.
+ *
+ * A Cowork project is the local-first equivalent of a Manus Project or a
+ * Genspark Hub: sessions share one explicit operating instruction and a small,
+ * reviewable knowledge base instead of relying on chat history alone.
+ */
+export interface ProjectContextConfig {
+  masterInstruction?: string;
+  /** Workspace-relative text files explicitly selected for prompt context. */
+  knowledgeFiles?: string[];
+  /** Total character budget for the selected knowledge files. */
+  maxKnowledgeChars?: number;
+}
+
 export interface ProjectCreateInput {
   name: string;
   description?: string;
   workspacePath?: string;
   memoryConfig?: ProjectMemoryConfig;
+  contextConfig?: ProjectContextConfig;
 }
 
 export interface ProjectUpdateInput {
@@ -55,6 +110,7 @@ export interface ProjectUpdateInput {
   description?: string;
   workspacePath?: string;
   memoryConfig?: ProjectMemoryConfig;
+  contextConfig?: ProjectContextConfig;
 }
 
 // Sub-agent types (Claude Cowork parity)
@@ -496,6 +552,8 @@ export interface VoiceConversationEvent {
   error?: string;
   reason?: string;
   hadPlayback?: boolean;
+  durationMs?: number;
+  provider?: string;
 }
 
 export interface VoiceConversationSnapshot {
@@ -514,6 +572,13 @@ export interface VoiceConversationSnapshot {
   resumedAfterInterruption?: boolean;
   resumeInstruction?: string;
   hadPlaybackDuringLastInterruption?: boolean;
+  lastSttMs?: number;
+  lastResponseMs?: number;
+  lastVoiceTurnMs?: number;
+  lastProvider?: string;
+  lastListeningStartedAt?: number;
+  lastTranscriptionStartedAt?: number;
+  lastUserMessageAt?: number;
 }
 
 export type CompanionCardKind =
@@ -1123,6 +1188,7 @@ export interface QueuedIntent {
   createdAt: number;
   updatedAt?: number;
   source?: 'queue' | 'leftover_steer';
+  permissionModeOverride?: PermissionMode;
 }
 
 export type ContentBlock =
@@ -1169,6 +1235,8 @@ export interface ToolResultContent {
   content: string;
   isError?: boolean;
   data?: unknown;
+  /** Compact recovery metadata only; the raw observation stays in Code Buddy's store. */
+  contextOptimization?: ContextOptimizationMetadata;
   images?: Array<{
     data: string;          // base64 encoded image data
     mimeType: string;      // e.g., 'image/png'
@@ -1481,7 +1549,7 @@ export type ClientEvent =
         memoryEnabled?: boolean;
       };
     }
-  | { type: 'session.continue'; payload: { sessionId: string; prompt: string; content?: ContentBlock[] } }
+  | { type: 'session.continue'; payload: { sessionId: string; prompt: string; content?: ContentBlock[]; permissionModeOverride?: PermissionMode } }
   | { type: 'session.steer'; payload: { sessionId: string; prompt: string; content?: ContentBlock[]; intentId?: string } }
   | { type: 'session.stop'; payload: { sessionId: string } }
   | { type: 'session.delete'; payload: { sessionId: string } }
@@ -1791,10 +1859,12 @@ export type ServerEvent =
 
 /** Autonomous goal-loop progress, surfaced by the chat goal banner. */
 export interface GoalStatusPayload {
+  goalId?: string;
   goal: string;
   status: 'active' | 'paused' | 'done' | 'cleared';
   turnsUsed: number;
   maxTurns: number;
+  verifyGated?: boolean;
   lastVerdict?: 'done' | 'continue' | 'skipped';
   lastReason?: string;
 }
@@ -1828,7 +1898,7 @@ export interface BrowserActionEvent {
   evidence?: string;
   /** Base64 data URI or absolute file path of a page screenshot if available */
   screenshot?: string;
-  /** Raw input parameters that produced this action */
+  /** Raw input parameters; browser_operator proposals also expose `operatorDraft`. */
   details?: Record<string, unknown>;
   timestamp: number;
 }
@@ -1953,6 +2023,7 @@ export interface AppConfig {
   globalSkillsPath?: string;
   theme?: AppTheme;
   memoryStrategy?: MemoryStrategy;
+  contextOptimizationMode?: 'auto' | 'off';
   sandboxEnabled?: boolean;
   enableThinking?: boolean;
   isConfigured: boolean;

@@ -45,6 +45,121 @@ export interface RelationalContextOptions {
   relationshipStatePath?: string;
 }
 
+export const DEFAULT_RELATIONAL_CONTEXT_TTL_MS = 5_000;
+export const DEFAULT_RELATIONAL_CONTEXT_COLD_BUDGET_MS = 75;
+
+export interface RelationalContextCacheGetOptions {
+  ttlMs?: number;
+  coldBudgetMs?: number;
+}
+
+interface RelationalContextCacheEntry {
+  value: string;
+  at: number;
+}
+
+interface RelationalContextRefresh {
+  generation: number;
+  promise: Promise<string>;
+}
+
+/**
+ * Small stale-while-revalidate cache for the latency-sensitive voice path.
+ *
+ * A warm or stale value is returned immediately while one background refresh updates it.
+ * On the very first turn, the caller waits only `coldBudgetMs`; if the richer memory graph
+ * needs longer, that turn stays emotionally aware through the local emotion guidance and
+ * the completed relational context becomes available to the next turn.
+ */
+export class RelationalContextCache {
+  private entry: RelationalContextCacheEntry | null = null;
+  private refresh: RelationalContextRefresh | null = null;
+  private generation = 0;
+
+  constructor(
+    private readonly build: () => Promise<string>,
+    private readonly now: () => number = () => Date.now()
+  ) {}
+
+  async get(options: RelationalContextCacheGetOptions = {}): Promise<string> {
+    const ttlMs = normalizeNonNegative(
+      options.ttlMs,
+      DEFAULT_RELATIONAL_CONTEXT_TTL_MS
+    );
+    const coldBudgetMs = normalizeNonNegative(
+      options.coldBudgetMs,
+      DEFAULT_RELATIONAL_CONTEXT_COLD_BUDGET_MS
+    );
+    const entry = this.entry;
+    if (entry && this.now() - entry.at <= ttlMs) return entry.value;
+
+    const refresh = this.startRefresh();
+    // Stale-while-revalidate: relationship context should never block an ordinary warm turn.
+    if (entry) return entry.value;
+    if (coldBudgetMs === 0) return '';
+
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    try {
+      return await Promise.race([
+        refresh.promise,
+        new Promise<string>((resolve) => {
+          timeout = setTimeout(() => resolve(''), coldBudgetMs);
+        }),
+      ]);
+    } finally {
+      if (timeout) clearTimeout(timeout);
+    }
+  }
+
+  /** Start/return the single in-flight refresh without applying a cold-start deadline. */
+  refreshNow(): Promise<string> {
+    return this.startRefresh().promise;
+  }
+
+  invalidate(): void {
+    this.generation += 1;
+    // Keep the last value as an immediate fallback, but make it stale so the next read
+    // refreshes it. This avoids turning every mood change into another cold-start wait.
+    if (this.entry) this.entry = { ...this.entry, at: Number.NEGATIVE_INFINITY };
+    // The old work may still finish, but its generation cannot repopulate this cache.
+    this.refresh = null;
+  }
+
+  private startRefresh(): RelationalContextRefresh {
+    if (this.refresh) return this.refresh;
+    const generation = this.generation;
+    const current: RelationalContextRefresh = {
+      generation,
+      promise: Promise.resolve(''),
+    };
+    current.promise = (async () => {
+      try {
+        const value = (await this.build()).trim();
+        if (generation === this.generation) {
+          this.entry = { value, at: this.now() };
+        }
+        return value;
+      } catch {
+        return '';
+      } finally {
+        if (this.refresh === current) this.refresh = null;
+      }
+    })();
+    this.refresh = current;
+    return current;
+  }
+}
+
+function normalizeNonNegative(value: number | undefined, fallback: number): number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : fallback;
+}
+
+function envNonNegative(name: string, fallback: number): number {
+  const raw = process.env[name]?.trim();
+  if (!raw) return fallback;
+  return normalizeNonNegative(Number(raw), fallback);
+}
+
 /** Read the consolidated recent conversation episode from persistent memory (see episodic-journal.ts). */
 async function defaultReadEpisode(): Promise<string | null> {
   try {
@@ -65,65 +180,94 @@ async function defaultReadEpisode(): Promise<string | null> {
 export async function buildRelationalContext(
   options: RelationalContextOptions = {}
 ): Promise<string> {
-  const parts: string[] = [];
-
-  if (options.includeFacts !== false) {
+  // Every source is independent. Start them together, then preserve the deliberate prompt
+  // order when joining their results. One slow memory/presence source now costs max(source),
+  // not the sum of all asynchronous sources.
+  const facts = Promise.resolve().then(() => {
+    if (options.includeFacts === false) return '';
     try {
-      const facts = options.factsBlock
+      const value = options.factsBlock
         ? options.factsBlock()
         : getUserModel(options.cwd ?? process.cwd()).summarize();
-      if (facts && facts.trim()) parts.push(facts.trim());
+      return value?.trim() ?? '';
     } catch {
-      /* best-effort — no facts is fine */
+      return '';
     }
-  }
-
-  if (options.includeGuidance !== false) {
+  });
+  const guidance = Promise.resolve().then(() => {
+    if (options.includeGuidance === false) return '';
     try {
-      const guidance = options.guidanceBlock
+      const value = options.guidanceBlock
         ? options.guidanceBlock()
         : formatVoiceGuidance(loadVoiceGuidance());
-      if (guidance && guidance.trim()) parts.push(guidance.trim());
+      return value?.trim() ?? '';
     } catch {
-      /* best-effort — no learned guidance is fine */
+      return '';
     }
-  }
-
-  if (options.includeEpisode !== false) {
+  });
+  const episode = Promise.resolve().then(async () => {
+    if (options.includeEpisode === false) return '';
     try {
-      const episode = options.episodeBlock
+      const value = options.episodeBlock
         ? await options.episodeBlock()
         : await defaultReadEpisode();
-      if (episode && episode.trim())
-        parts.push(`<recent_episode>\n${episode.trim()}\n</recent_episode>`);
+      return value?.trim() ? `<recent_episode>\n${value.trim()}\n</recent_episode>` : '';
     } catch {
-      /* best-effort — no episode is fine */
+      return '';
     }
-  }
-
-  if (options.includePersonality !== false) {
+  });
+  const personality = Promise.resolve().then(() => {
+    if (options.includePersonality === false) return '';
     try {
-      const summary = options.personalitySummary
+      const value = options.personalitySummary
         ? options.personalitySummary()
         : getPersonalitySummary(loadRelationshipState(options.relationshipStatePath));
-      if (summary && summary.trim()) parts.push(`<lisa_state>\n${summary.trim()}\n</lisa_state>`);
+      return value.trim() ? `<lisa_state>\n${value.trim()}\n</lisa_state>` : '';
     } catch {
-      /* best-effort */
+      return '';
     }
-  }
-
-  if (options.includePresence !== false) {
+  });
+  const presence = Promise.resolve().then(async () => {
+    if (options.includePresence === false) return '';
     try {
-      const presence = options.presenceBlock
+      const value = options.presenceBlock
         ? await options.presenceBlock()
         : await injectPresenceBlock();
-      if (presence && presence.trim()) parts.push(presence.trim());
+      return value.trim();
     } catch {
-      /* best-effort */
+      return '';
     }
-  }
+  });
 
-  return parts.join('\n\n');
+  return (await Promise.all([facts, guidance, episode, personality, presence]))
+    .filter(Boolean)
+    .join('\n\n');
+}
+
+const voiceRelationalContextCache = new RelationalContextCache(() => buildRelationalContext());
+
+/** Latency-bounded relational context for spoken turns. */
+export function getVoiceRelationalContext(): Promise<string> {
+  return voiceRelationalContextCache.get({
+    ttlMs: envNonNegative(
+      'CODEBUDDY_COMPANION_RELATIONAL_TTL_MS',
+      DEFAULT_RELATIONAL_CONTEXT_TTL_MS
+    ),
+    coldBudgetMs: envNonNegative(
+      'CODEBUDDY_COMPANION_RELATIONAL_BUDGET_MS',
+      DEFAULT_RELATIONAL_CONTEXT_COLD_BUDGET_MS
+    ),
+  });
+}
+
+/** Warm the relational graph at daemon startup without putting it on a user turn. */
+export function prewarmVoiceRelationalContext(): Promise<string> {
+  return voiceRelationalContextCache.refreshNow();
+}
+
+/** Call after mood/traits or accepted relationship inputs change. */
+export function invalidateVoiceRelationalContext(): void {
+  voiceRelationalContextCache.invalidate();
 }
 
 /** True when the relational-context injection is enabled (call sites gate on this). */

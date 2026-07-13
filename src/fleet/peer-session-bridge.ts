@@ -31,6 +31,11 @@
  */
 
 import type { CodeBuddyClient, ChatOptions } from '../codebuddy/client.js';
+import {
+  normalizePeerChatProviderId,
+  type PeerChatProviderId,
+  type PeerChatProviderInfo,
+} from './peer-chat-client-factory.js';
 import { beginFleetWork } from './fleet-load.js';
 import { registerPeerMethod, unregisterPeerMethod } from '../server/websocket/peer-rpc.js';
 import {
@@ -73,6 +78,10 @@ import {
 
 /** Closure that returns the CodeBuddyClient to use, or null if none is wired. */
 export type PeerChatClientGetter = () => CodeBuddyClient | null;
+export type PeerSessionClientResolver = (
+  provider: PeerChatProviderId,
+  model?: string,
+) => { client: CodeBuddyClient; info: PeerChatProviderInfo } | null;
 
 interface ChatSessionMessage {
   role: 'system' | 'user' | 'assistant';
@@ -82,6 +91,7 @@ interface ChatSessionMessage {
 interface ChatSession {
   sessionId: string;
   systemPrompt: string;
+  provider?: PeerChatProviderId;
   model?: string;
   dispatchProfile?: FleetDispatchProfile;
   toolPolicy?: FleetDispatchToolPolicy;
@@ -103,6 +113,12 @@ const DEFAULT_IDLE_MS = 30 * 60 * 1000;
 
 const sessions = new Map<string, ChatSession>();
 let cachedGetter: PeerChatClientGetter | null = null;
+let cachedProviderInfo: PeerChatProviderInfo | null = null;
+let cachedResolver: PeerSessionClientResolver | null = null;
+const providerClients = new Map<PeerChatProviderId, {
+  client: CodeBuddyClient;
+  info: PeerChatProviderInfo;
+}>();
 let wired = false;
 
 function resolvePeerSessionProfile(params: Record<string, unknown>): {
@@ -187,6 +203,68 @@ function assertPeerSessionContinueProfile(
   }
 }
 
+function parsePeerSessionProvider(value: unknown, methodName: string): PeerChatProviderId | undefined {
+  if (value === undefined) return undefined;
+  const normalized = normalizePeerChatProviderId(value);
+  if (!normalized) {
+    throw new Error(`${methodName}: unknown provider "${String(value)}"`);
+  }
+  return normalized;
+}
+
+function assertPeerSessionContinueProvider(
+  params: Record<string, unknown>,
+  session: ChatSession,
+  methodName: string,
+): void {
+  if (params.provider === undefined) return;
+  const requested = parsePeerSessionProvider(params.provider, methodName);
+  if (!session.provider) {
+    throw new Error(
+      `${methodName}: provider cannot be set on continue for a legacy/default session; start a new session with provider "${requested}"`,
+    );
+  }
+  if (requested !== session.provider) {
+    throw new Error(
+      `${methodName}: provider "${requested}" does not match session provider "${session.provider}"; start a new session to change provider`,
+    );
+  }
+}
+
+function resolvePeerSessionClient(
+  provider: PeerChatProviderId | undefined,
+  model: string | undefined,
+  methodName: string,
+): { client: CodeBuddyClient; providerResolved?: PeerChatProviderId } {
+  if (!provider) {
+    const client = cachedGetter?.() ?? null;
+    if (!client) {
+      throw new Error(
+        `CLIENT_UNAVAILABLE: no LLM client wired on this peer (${methodName} cannot answer)`,
+      );
+    }
+    return {
+      client,
+      ...(cachedProviderInfo ? { providerResolved: cachedProviderInfo.provider } : {}),
+    };
+  }
+  if (cachedProviderInfo?.provider === provider) {
+    const client = cachedGetter?.() ?? null;
+    if (client) return { client, providerResolved: provider };
+  }
+  let resolved = providerClients.get(provider);
+  if (!resolved && cachedResolver) {
+    resolved = cachedResolver(provider, model) ?? undefined;
+    if (resolved) providerClients.set(provider, resolved);
+  }
+  if (!resolved || resolved.info.provider !== provider) {
+    throw new Error(
+      `PROVIDER_UNAVAILABLE: ${provider} is not configured on this peer (${methodName})`,
+    );
+  }
+  return { client: resolved.client, providerResolved: resolved.info.provider };
+}
+
 function getIdleMs(): number {
   const raw = process.env.CODEBUDDY_PEER_SESSION_IDLE_MS;
   if (raw) {
@@ -244,6 +322,7 @@ function snapshot(session: ChatSession): PersistedChatSession {
   return {
     sessionId: session.sessionId,
     systemPrompt: session.systemPrompt,
+    provider: session.provider,
     model: session.model,
     dispatchProfile: session.dispatchProfile,
     toolPolicy: session.toolPolicy,
@@ -280,7 +359,8 @@ interface SessionGoalTurnReport {
  */
 async function evaluateSessionGoalAfterTurn(
   session: ChatSession,
-  assistantText: string
+  assistantText: string,
+  baseClient: CodeBuddyClient,
 ): Promise<SessionGoalTurnReport | null> {
   const goal = session.goal;
   if (!goal || goal.status !== 'active') return null;
@@ -308,7 +388,6 @@ async function evaluateSessionGoalAfterTurn(
   let report: SessionGoalTurnReport;
   try {
     const config = resolveGoalsConfig();
-    const baseClient = cachedGetter?.() ?? null;
     const judgeClient = await resolveGoalJudgeClientFailOpen(baseClient, config.judgeModel);
     const criteria = getGoalJudgeCriteria(goal);
     const outcome = await judgeGoal(judgeClient, {
@@ -355,12 +434,18 @@ async function evaluateSessionGoalAfterTurn(
  * Idempotent — a second call is a no-op (does NOT replace the cached
  * getter; un-wire first if you need to swap).
  */
-export async function wirePeerSessionBridge(getClient: PeerChatClientGetter): Promise<void> {
+export async function wirePeerSessionBridge(
+  getClient: PeerChatClientGetter,
+  providerInfo?: PeerChatProviderInfo | null,
+  resolveClient?: PeerSessionClientResolver,
+): Promise<void> {
   if (wired) {
     logger.debug('[peer-session-bridge] wire() called while already wired — no-op');
     return;
   }
   cachedGetter = getClient;
+  cachedProviderInfo = providerInfo ?? null;
+  cachedResolver = resolveClient ?? null;
 
   // V1.2-saga — replay sessions from disk that haven't idled out.
   // Best-effort: if the store can't be read (perms, corrupt dir), we
@@ -374,9 +459,11 @@ export async function wirePeerSessionBridge(getClient: PeerChatClientGetter): Pr
     for (const p of persisted) {
       if (now - p.lastUsedAt > idleMs) continue; // double-check vs the boundary
       const goal = p.goal ? normalizeGoalState(p.goal) : null;
+      const persistedProvider = normalizePeerChatProviderId(p.provider);
       sessions.set(p.sessionId, {
         sessionId: p.sessionId,
         systemPrompt: p.systemPrompt,
+        ...(persistedProvider ? { provider: persistedProvider } : {}),
         model: p.model,
         dispatchProfile: p.dispatchProfile,
         toolPolicy: p.toolPolicy,
@@ -409,11 +496,16 @@ export async function wirePeerSessionBridge(getClient: PeerChatClientGetter): Pr
     const systemPrompt = resolvePeerSessionSystemPrompt(params, profile.dispatchProfile);
     const model =
       typeof params.model === 'string' && params.model.length > 0 ? params.model : undefined;
+    const provider = parsePeerSessionProvider(params.provider, 'peer.chat-session.start');
+    const providerResolved = provider
+      ? resolvePeerSessionClient(provider, model, 'peer.chat-session.start').providerResolved
+      : undefined;
 
     const sessionId = newSessionId();
     const session: ChatSession = {
       sessionId,
       systemPrompt,
+      provider,
       model,
       dispatchProfile: profile.dispatchProfile,
       toolPolicy: profile.toolPolicy,
@@ -448,6 +540,8 @@ export async function wirePeerSessionBridge(getClient: PeerChatClientGetter): Pr
       sessionId,
       expiresAt: now + idleMs,
       traceId: ctx.traceId,
+      ...(provider ? { providerRequested: provider } : {}),
+      ...(providerResolved ? { providerResolved } : {}),
       ...(profile.dispatchProfile ? { dispatchProfile: profile.dispatchProfile } : {}),
       ...(profile.toolPolicy ? { toolPolicy: profile.toolPolicy } : {}),
       ...(profile.toolDecisions ? { toolDecisions: profile.toolDecisions } : {}),
@@ -486,6 +580,7 @@ export async function wirePeerSessionBridge(getClient: PeerChatClientGetter): Pr
       throw new Error(`SESSION_EXPIRED: session "${sessionId}" idled past ${idleMs}ms`);
     }
     assertPeerSessionContinueProfile(params, session, 'peer.chat-session.continue');
+    assertPeerSessionContinueProvider(params, session, 'peer.chat-session.continue');
 
     // FIFO serialise: chain onto the session's pending promise so
     // concurrent continue() calls run one after the other rather than
@@ -500,13 +595,15 @@ export async function wirePeerSessionBridge(getClient: PeerChatClientGetter): Pr
       toolPolicy?: FleetDispatchToolPolicy;
       toolDecisions?: FleetDispatchToolDecision[];
       toolset?: FleetHermesToolsetDescriptor;
+      providerRequested?: PeerChatProviderId;
+      providerResolved?: PeerChatProviderId;
     }> => {
-      const client = cachedGetter?.() ?? null;
-      if (!client) {
-        throw new Error(
-          'CLIENT_UNAVAILABLE: no LLM client wired on this peer (peer.chat-session.continue cannot answer)',
-        );
-      }
+      const selected = resolvePeerSessionClient(
+        session.provider,
+        session.model,
+        'peer.chat-session.continue',
+      );
+      const client = selected.client;
 
       session.messages.push({ role: 'user', content: prompt });
       const requestMessages = [
@@ -540,7 +637,7 @@ export async function wirePeerSessionBridge(getClient: PeerChatClientGetter): Pr
       // mutate the session goal state, and report the verdict to the caller
       // (who drives the continuation). Runs BEFORE the disk flush so the
       // snapshot below persists the updated goal counters.
-      const goalReport = await evaluateSessionGoalAfterTurn(session, text);
+      const goalReport = await evaluateSessionGoalAfterTurn(session, text, client);
 
       // V1.2-saga — flush the new turn to disk before returning so a
       // crash mid-conversation can be replayed on next boot. Failure
@@ -571,6 +668,8 @@ export async function wirePeerSessionBridge(getClient: PeerChatClientGetter): Pr
         finishReason: response?.choices?.[0]?.finish_reason,
         usage: response?.usage,
         traceId: ctx.traceId,
+        ...(session.provider ? { providerRequested: session.provider } : {}),
+        ...(selected.providerResolved ? { providerResolved: selected.providerResolved } : {}),
         ...(goalReport ? { goal: goalReport } : {}),
         ...sessionPolicyMetadata(session),
       };
@@ -618,6 +717,7 @@ export async function wirePeerSessionBridge(getClient: PeerChatClientGetter): Pr
       throw new Error(`SESSION_EXPIRED: session "${sessionId}" idled past ${idleMs}ms`);
     }
     assertPeerSessionContinueProfile(params, session, 'peer.chat-session.continue-stream');
+    assertPeerSessionContinueProvider(params, session, 'peer.chat-session.continue-stream');
 
     const run = async (): Promise<{
       text: string;
@@ -629,13 +729,15 @@ export async function wirePeerSessionBridge(getClient: PeerChatClientGetter): Pr
       toolPolicy?: FleetDispatchToolPolicy;
       toolDecisions?: FleetDispatchToolDecision[];
       toolset?: FleetHermesToolsetDescriptor;
+      providerRequested?: PeerChatProviderId;
+      providerResolved?: PeerChatProviderId;
     }> => {
-      const client = cachedGetter?.() ?? null;
-      if (!client) {
-        throw new Error(
-          'CLIENT_UNAVAILABLE: no LLM client wired on this peer (peer.chat-session.continue-stream cannot answer)',
-        );
-      }
+      const selected = resolvePeerSessionClient(
+        session.provider,
+        session.model,
+        'peer.chat-session.continue-stream',
+      );
+      const client = selected.client;
 
       session.messages.push({ role: 'user', content: prompt });
       const requestMessages = [
@@ -690,7 +792,7 @@ export async function wirePeerSessionBridge(getClient: PeerChatClientGetter): Pr
       session.lastUsedAt = Date.now();
 
       // Goal Ralph-loop — same server-side judge as the non-streaming path.
-      const goalReport = await evaluateSessionGoalAfterTurn(session, aggregate);
+      const goalReport = await evaluateSessionGoalAfterTurn(session, aggregate, client);
 
       try {
         await getPeerSessionStore().save(snapshot(session));
@@ -714,6 +816,8 @@ export async function wirePeerSessionBridge(getClient: PeerChatClientGetter): Pr
         finishReason,
         usage,
         traceId: ctx.traceId,
+        ...(session.provider ? { providerRequested: session.provider } : {}),
+        ...(selected.providerResolved ? { providerResolved: selected.providerResolved } : {}),
         ...(goalReport ? { goal: goalReport } : {}),
         ...sessionPolicyMetadata(session),
       };
@@ -740,6 +844,7 @@ export async function wirePeerSessionBridge(getClient: PeerChatClientGetter): Pr
       sessionId: s.sessionId,
       turnCount: Math.floor(s.messages.length / 2),
       model: s.model,
+      provider: s.provider,
       dispatchProfile: s.dispatchProfile,
       toolPolicy: s.toolPolicy,
       toolDecisions: s.toolDecisions,
@@ -938,8 +1043,12 @@ export function unwirePeerSessionBridge(): void {
   unregisterPeerMethod('peer.chat-session.continue');
   unregisterPeerMethod('peer.chat-session.continue-stream');
   unregisterPeerMethod('peer.chat-session.goal');
+  unregisterPeerMethod('peer.chat-session.list');
   unregisterPeerMethod('peer.chat-session.end');
   cachedGetter = null;
+  cachedProviderInfo = null;
+  cachedResolver = null;
+  providerClients.clear();
   wired = false;
   logger.debug('[peer-session-bridge] unwired');
 }
@@ -966,6 +1075,9 @@ export function _unwireForTests(): void {
     /* peer-rpc may not be initialised in some test setups */
   }
   cachedGetter = null;
+  cachedProviderInfo = null;
+  cachedResolver = null;
+  providerClients.clear();
   wired = false;
   sessions.clear();
 }
@@ -976,11 +1088,13 @@ export function _listSessionsForTests(): Array<{
   messageCount: number;
   lastUsedAt: number;
   dispatchProfile?: FleetDispatchProfile;
+  provider?: PeerChatProviderId;
 }> {
   return Array.from(sessions.values()).map((s) => ({
     sessionId: s.sessionId,
     messageCount: s.messages.length,
     lastUsedAt: s.lastUsedAt,
     dispatchProfile: s.dispatchProfile,
+    provider: s.provider,
   }));
 }

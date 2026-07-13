@@ -21,9 +21,10 @@
  *
  * Everything I/O is INJECTABLE (synth / play / guard / unlink) so the pipeline is
  * deterministically testable with no model, no Piper, no audio device. Never-throws: a
- * failure of one sentence is skipped, a stream error ends the pipeline (the caller then
- * falls back to the blocking path). No `Date.now()` / `Math.random()` here — the ordering
- * is a FIFO, not a clock.
+ * synthesis failure of one sentence is skipped, while a native Pocket stream failure
+ * switches the already-generated text to the WAV fallback without rerunning the LLM. A
+ * source-stream error ends the pipeline. No `Date.now()` / `Math.random()` here — the
+ * ordering is a FIFO, not a clock.
  *
  * @module sensory/voice-stream
  */
@@ -31,10 +32,17 @@
 import { logger } from '../utils/logger.js';
 import { prepareSpeech } from './speech-sanitizer.js';
 import { withSpeakingGuard } from './voice-activity.js';
-import type { SynthFn, PlayFn } from './voice-loop.js';
+import type { SynthFn, PlayFn, StreamSpeakFn } from './voice-loop.js';
 
-/** Default safety cap: force a sentence break after this many chars with no punctuation. */
-export const DEFAULT_SENTENCE_CAP = 200;
+/**
+ * Default safety cap: long enough to preserve natural French clauses, while
+ * still bounding punctuation-less model output. A real Pocket benchmark on a
+ * fixed news answer kept first PCM near 100 ms and removed artificial 48-char
+ * cuts at 96; punctuation and long commas can still release earlier.
+ */
+export const DEFAULT_SENTENCE_CAP = 96;
+/** Avoid tiny, choppy fragments such as "Oui," when cutting on soft punctuation. */
+const MIN_CLAUSE_CHARS = 24;
 
 const errMsg = (e: unknown): string => (e instanceof Error ? e.message : String(e));
 
@@ -120,10 +128,12 @@ export function safeCommitLength(buffer: string): number {
 
 /** Terminator run (`.` `!` `?` `…`, repeated) plus any trailing closing quote/bracket. */
 function findBoundary(working: string, from: number, flush: boolean): number {
-  const re = /[.!?…]+[)\]"'”»’]*/g;
+  const re = /[.!?…]+[)\]"'”»’]*|[,;:]+[)\]"'”»’]*/g;
   re.lastIndex = from;
   let m: RegExpExecArray | null;
   while ((m = re.exec(working)) !== null) {
+    const soft = /^[,;:]/.test(m[0]);
+    if (soft && m.index + m[0].length - from < MIN_CLAUSE_CHARS) continue;
     const after = m.index + m[0].length;
     if (after >= working.length) {
       // Terminator at the very end: a real boundary only once we know whitespace/EOS follows.
@@ -267,6 +277,13 @@ export interface StreamToSpeechParams {
   synth: SynthFn;
   /** Play one WAV (blocking until done); receives the barge-in signal. */
   play: PlayFn;
+  /**
+   * Optional native synth+play stream. Pocket TTS uses this to pipe its
+   * chunked WAV response directly to the audio player instead of waiting for
+   * a complete temporary file. When present, `synth`/`play` remain the safe
+   * fallback but are not used by the fast path.
+   */
+  streamSpeak?: StreamSpeakFn;
   /** Barge-in / cancellation. Aborting empties the queues and kills the current play. */
   signal?: AbortSignal;
   /** Per-sentence sanitizer. Default: `prepareSpeech` (strips leaked tokens, foreign script). */
@@ -288,6 +305,8 @@ export interface StreamToSpeechResult {
   aborted: boolean;
   /** Each sentence that was spoken, in order. */
   sentences: string[];
+  /** Segments recovered through WAV synthesis after the native audio stream failed. */
+  fallbackSegments?: number;
 }
 
 /**
@@ -319,6 +338,7 @@ export async function streamToSpeech(params: StreamToSpeechParams): Promise<Stre
   const wavQ = new AsyncQueue<{ text: string; wav: string }>();
   const spoken: string[] = [];
   let played = false;
+  let fallbackSegments = 0;
 
   // On barge-in, wake every parked worker so they re-check `stop()` and unwind.
   const onAbort = (): void => {
@@ -354,6 +374,87 @@ export async function streamToSpeech(params: StreamToSpeechParams): Promise<Stre
     }
   })();
 
+  // Native audio-streaming path — Pocket emits PCM while it is still
+  // synthesizing, so one worker consumes text segments and pipes each response
+  // straight to the player. The server is single-request/thread oriented; keep
+  // strict order and avoid synthesizing a later segment concurrently.
+  if (params.streamSpeak) {
+    const speakWorker = (async (): Promise<void> => {
+      const first = await sentenceQ.shift(stop);
+      if (first === null) return;
+      await guard(async () => {
+        let text: string | null = first;
+        let nativeStreamHealthy = true;
+        while (true) {
+          if (text === null) break;
+          let didPlay = false;
+          if (nativeStreamHealthy) {
+            try {
+              didPlay = await params.streamSpeak!(
+                text,
+                signal ? { signal } : undefined
+              );
+              if (!didPlay) {
+                nativeStreamHealthy = false;
+                logger.info(
+                  '[voice] native audio stream unavailable — switching this turn to WAV fallback'
+                );
+              }
+            } catch (err) {
+              nativeStreamHealthy = false;
+              logger.warn(
+                `[voice] native audio stream failed — switching this turn to WAV fallback: ${errMsg(err)}`
+              );
+            }
+          }
+
+          // Do not throw away text that the LLM already produced, and do not make the
+          // caller regenerate the whole answer through its blocking path. Once Pocket's
+          // native pipe fails, use the regular synth/player pair for this and all remaining
+          // segments. Staying on the fallback avoids repeating the same failed startup for
+          // every sentence in the turn.
+          if (!didPlay && !stop()) {
+            let wav = '';
+            try {
+              wav = await params.synth(text, { signal });
+              if (wav && !stop()) {
+                await params.play(wav, signal ? { signal } : {});
+                didPlay = !stop();
+                if (didPlay) fallbackSegments += 1;
+              }
+            } catch (err) {
+              logger.warn(`[voice] native-stream WAV fallback failed: ${errMsg(err)}`);
+            } finally {
+              if (wav) {
+                try {
+                  await unlink(wav);
+                } catch (err) {
+                  logger.debug(`[voice] native-stream WAV cleanup failed: ${errMsg(err)}`);
+                }
+              }
+            }
+          }
+
+          if (didPlay && !stop()) {
+            played = true;
+            spoken.push(text);
+          }
+          if (stop()) break;
+          text = await sentenceQ.shift(stop);
+        }
+      });
+    })();
+
+    await Promise.all([producer, speakWorker]);
+    return {
+      played,
+      spoken: spoken.join(' '),
+      aborted: stop(),
+      sentences: [...spoken],
+      ...(fallbackSegments > 0 ? { fallbackSegments } : {}),
+    };
+  }
+
   // Stage 2 — synthesize each ready sentence to a WAV, AHEAD of playback (buffered in wavQ).
   const synthWorker = (async (): Promise<void> => {
     try {
@@ -362,7 +463,7 @@ export async function streamToSpeech(params: StreamToSpeechParams): Promise<Stre
         if (text === null) break;
         let wav: string;
         try {
-          wav = await params.synth(text);
+          wav = await params.synth(text, { signal });
         } catch (err) {
           logger.warn(`[voice] stream synth failed (skipping sentence): ${errMsg(err)}`);
           continue;

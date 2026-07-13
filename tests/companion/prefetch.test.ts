@@ -7,18 +7,21 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
   addPrefetchItem,
+  DEFAULT_NEWS_QUERY,
+  DEFAULT_PREFETCH_ITEMS,
   loadPrefetchItems,
   prefetchItemKey,
   removePrefetchItem,
   savePrefetchItems,
-  DEFAULT_PREFETCH_ITEMS,
   type PrefetchItem,
 } from '../../src/companion/prefetch-config.js';
 import {
+  buildNewsSearchQueries,
   computeAnswer,
   frenchDate,
   intentKeyForQuery,
   matchPrefetched,
+  matchPrefetchedDetailed,
   normalizeQuery,
   runPrefetchCycle,
   loadPrefetchCache,
@@ -85,6 +88,27 @@ describe('intentKeyForQuery', () => {
   });
 });
 
+describe('news search lanes', () => {
+  it('balances the default bulletin across general and technology news with an exact date', () => {
+    const queries = buildNewsSearchQueries(
+      DEFAULT_NEWS_QUERY,
+      Date.parse('2026-07-13T12:00:00.000Z'),
+      'fr-FR',
+      { TZ: 'Europe/Paris' }
+    );
+    expect(queries).toHaveLength(2);
+    expect(queries[0]).toContain('France monde');
+    expect(queries[1]).toContain('intelligence artificielle');
+    expect(queries.every((query) => query.includes('13 juillet 2026'))).toBe(true);
+  });
+
+  it('keeps a custom topic in a single dated lane', () => {
+    expect(
+      buildNewsSearchQueries('actualité spatiale', Date.parse('2026-07-13T12:00:00Z'), 'fr-FR')
+    ).toEqual(['actualité spatiale 13 juillet 2026']);
+  });
+});
+
 describe('matchPrefetched', () => {
   const items: PrefetchItem[] = [{ kind: 'weather', param: 'Paris' }, { kind: 'date' }];
   const now = 1_000_000_000_000;
@@ -106,6 +130,34 @@ describe('matchPrefetched', () => {
 
   it('returns null when nothing matches', () => {
     expect(matchPrefetched('bonjour', { cache, items, now })).toBeNull();
+  });
+
+  it('serves bounded stale news with an explicit freshness disclosure', () => {
+    const newsItems: PrefetchItem[] = [{ kind: 'news' }];
+    const newsCache: PrefetchEntry[] = [
+      {
+        key: 'news',
+        kind: 'news',
+        answer: 'Ancien bulletin.',
+        at: now - 30 * 60_000,
+        context: {
+          kind: 'news',
+          query: 'actualité',
+          locale: 'fr-FR',
+          fetchedAt: now - 30 * 60_000,
+          items: [{ title: 'Titre vérifié', url: 'https://example.com', source: 'Exemple' }],
+        },
+      },
+    ];
+    const match = matchPrefetchedDetailed('les actualités', {
+      cache: newsCache,
+      items: newsItems,
+      now,
+      allowStale: true,
+    });
+    expect(match?.freshness).toBe('stale');
+    expect(match?.answer).toContain('30 minutes');
+    expect(match?.answer).toContain('Titre vérifié');
   });
 });
 
@@ -146,5 +198,23 @@ describe('computeAnswer + runPrefetchCycle (injected deps)', () => {
     expect(res.computed.sort()).toEqual(['date', 'weather:paris']);
     const cache = loadPrefetchCache(cachePath);
     expect(cache.find((e) => e.key === 'weather:paris')?.answer).toBe('Il fait 20°C.');
+  });
+
+  it('stores structured news evidence rather than only canned prose', async () => {
+    const entry = await computeAnswer(
+      { kind: 'news' },
+      {
+        now,
+        fetchNewsContext: async () => ({
+          kind: 'news',
+          query: 'actualité',
+          locale: 'fr-FR',
+          fetchedAt: now,
+          items: [{ title: 'Titre', url: 'https://example.com', source: 'Exemple' }],
+        }),
+      }
+    );
+    expect(entry?.context?.kind).toBe('news');
+    expect(entry?.answer).toContain('selon Exemple');
   });
 });

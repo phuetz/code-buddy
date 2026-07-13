@@ -211,6 +211,8 @@ export interface WorkflowStep {
   loopCondition?: string;
   /** Loop body */
   loopBody?: WorkflowStep[];
+  /** Per-loop iteration ceiling. Always clamped to the runtime hard cap (100). */
+  maxIterations?: number;
   /** Batch items expression */
   batchItemsExpression?: string;
   /** Batch variable name */

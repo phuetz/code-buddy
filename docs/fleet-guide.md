@@ -530,7 +530,7 @@ walks env keys in priority order:
 2. **`OLLAMA_HOST`** set → Ollama (local, free). Default model
    `qwen2.5-coder:7b`.
 3. **ChatGPT OAuth credentials** from `/login chatgpt` → ChatGPT
-   Codex Responses backend. Default model `gpt-5.5`; override with
+   Codex Responses backend. Default model `gpt-5.6-sol`; override with
    `CHATGPT_MODEL` or `CODEBUDDY_PEER_MODEL`. Marginal cost is treated
    as zero because it uses the user's subscription, but privacy routing
    still marks it as cloud egress.
@@ -824,6 +824,12 @@ LLM (continuing with peer's answer in context): "darkstar suggests …"
 >   idle peer win the claim, spreading utilization across the fleet with no new RPC. Opt-in: without a declared
 >   capacity, utilization is reported as unknown and backpressure never triggers. Cowork renders per-actor load
 >   bars + the fleet-wide rate (`FleetUtilizationStrip`).
+> - **Provider-aware failover.** A provider is treated as a failure domain distinct from its
+>   machine. A mono-peer robot exposing several backends can therefore retry once on another
+>   provider of the same peer after `PROVIDER_UNAVAILABLE`, 401/429/quota, network failure or
+>   HTTP 500/502/503/504. Business outcomes such as `review_rejected` remain terminal. Exact
+>   Fleet clients disable hidden `CodeBuddyClient` fallbacks, and each durable saga step records
+>   a secret-redacted `attempts[]` provenance trail (peer/model/provider/run/timestamps).
 
 Fleet bus = the `claude-et-patrice/.codebuddy/` repo on a shared
 Tailscale mesh. Each peer periodically:
@@ -896,18 +902,18 @@ locally — the streaming path is for power users via `/fleet send`.
 
 Multi-turn conversations between peers. Where `peer.chat` is a
 stateless one-shot (every call rebuilds context from scratch), this
-trio holds conversation state **in-memory on the peer that hosts the
+family holds conversation state **in-memory on the peer that hosts the
 LLM client**. The caller manages the lifecycle: open with `start`,
 append turns with `continue`, close with `end`.
 
 #### Methods
 
-- `peer.chat-session.start({ systemPrompt?, model?, dispatchProfile? })`
-  → `{ sessionId, expiresAt, traceId, dispatchProfile?, toolPolicy?, toolDecisions?, toolset? }`
-- `peer.chat-session.continue({ sessionId, prompt })`
-  → `{ text, finishReason, usage, traceId, dispatchProfile?, toolPolicy?, toolDecisions?, toolset? }`
-- `peer.chat-session.continue-stream({ sessionId, prompt })`
-  → `{ text, finishReason, usage, traceId, dispatchProfile?, toolPolicy?, toolDecisions?, toolset? }`
+- `peer.chat-session.start({ systemPrompt?, provider?, model?, dispatchProfile? })`
+  → `{ sessionId, expiresAt, traceId, providerRequested?, providerResolved?, dispatchProfile?, toolPolicy?, toolDecisions?, toolset? }`
+- `peer.chat-session.continue({ sessionId, prompt, provider? })`
+  → `{ text, finishReason, usage, traceId, providerRequested?, providerResolved?, dispatchProfile?, toolPolicy?, toolDecisions?, toolset? }`
+- `peer.chat-session.continue-stream({ sessionId, prompt, provider? })`
+  → `{ text, finishReason, usage, traceId, providerRequested?, providerResolved?, dispatchProfile?, toolPolicy?, toolDecisions?, toolset? }`
   plus `peer:chunk` frames emitted live for each assistant delta. Same
   FIFO serialisation and persistence as `continue` ; useful when a turn is expected to be
   long and the caller wants visibility into in-flight output. If
@@ -915,7 +921,7 @@ append turns with `continue`, close with `end`.
   rolled back ; if some text was already produced, that partial
   answer is persisted so the next turn sees it.
 - `peer.chat-session.list()`
-  → `{ count, sessions: [{ sessionId, turnCount, model?, dispatchProfile?,
+  → `{ count, sessions: [{ sessionId, turnCount, provider?, model?, dispatchProfile?,
   toolPolicy?, toolDecisions?, toolset?, ageMs, idleMs, expiresInMs }], traceId }`.
   Read-only metadata snapshot, never returns prompt content or assistant
   text. Used by `/fleet status --with-sessions`, Cowork peer details and
@@ -1002,13 +1008,16 @@ renderer state.
   surfaces as `SESSION_NOT_FOUND` because GC runs first)
 - `CLIENT_UNAVAILABLE` — peer has no LLM client wired (peer.chat would
   return the same)
+- `PROVIDER_UNAVAILABLE` — an explicit backend is not configured on
+  this peer. Explicit routing fails closed and never falls back to a
+  different provider.
 
 #### Example
 
 ```bash
 > /fleet send ministar-linux peer.chat-session.start \
-    {"dispatchProfile":"review","model":"qwen2.5-coder:7b"}
-# → { sessionId: "sess_lpz4xy_h2k1", dispatchProfile: "review", toolPolicy: {...}, ... }
+    {"dispatchProfile":"review","provider":"lemonade","model":"qwen2.5-coder:7b"}
+# → { sessionId: "sess_lpz4xy_h2k1", providerResolved: "lemonade", dispatchProfile: "review", ... }
 
 > /fleet send ministar-linux peer.chat-session.continue \
     {"sessionId":"sess_lpz4xy_h2k1","prompt":"Donne-moi un exemple de borrow checker"}
@@ -1029,8 +1038,8 @@ UX wrapper over `peer.chat-session.*` that drops the need to copy
 `sessionId` between turns. Sub-actions: `start`, `say`, `end`, `list`.
 
 ```bash
-> /fleet chat start ministar-linux --profile review --model qwen2.5-coder:7b
-# → Chat session "ministar-linux-1" opened with ministar-linux (sessionId=sess_lpz4xy_h2k…, profile review).
+> /fleet chat start ministar-linux --provider lemonade --profile review --model qwen2.5-coder:7b
+# → Chat session "ministar-linux-1" opened with ministar-linux (sessionId=sess_lpz4xy_h2k…). Provider: lemonade. Profile: review.
 #   Send turns with /fleet chat say <message>.
 
 > /fleet chat say Donne-moi un exemple de borrow checker
@@ -1161,7 +1170,7 @@ connecte en flow complet :
 6. SagaRunner.start(sagaId) — handoff async
 7. Pour chaque step (séquentiel ou parallel):
    a. Marque step 'running' + emit fleet.saga.update
-   b. fleetBridge.peerRequest('peer.dispatch', {prompt, model})
+   b. fleetBridge.peerRequest('peer.dispatch', {prompt, provider, model})
    c. Reçoit {runId} immédiatement
    d. Poll fleetBridge.peerRequest('peer.dispatchStatus', {runId}) toutes les 2s
    e. Status terminal → completeStep ou failStep
@@ -1172,7 +1181,10 @@ connecte en flow complet :
 ```
 
 Sequential primary+fallback : si `primary` réussit, `fallback` est
-**skip**, pas dispatché. Si `primary` échoue, `fallback` est tenté.
+**skip**, pas dispatché. Si `primary` subit une panne explicite de
+provider/transport, `fallback` est tenté ; une erreur métier ne déclenche
+jamais de replay. Pour une chaîne, le routeur peut exclure uniquement le
+provider en panne et conserver la même machine avec un autre moteur.
 
 ---
 
@@ -1347,6 +1359,32 @@ boutons du bridge, puis écrit la capture cropée
 - Message Telegram → Gateway → openclaw-node → Cowork → TaskRouter
   dispatche sur Ollama DARKSTAR
 - Réponse remonte par le même chemin
+
+---
+
+## Night Watch : relève autonome du matin
+
+Le daemon `buddy autonomy run --watch` maintient une relève locale et probante,
+sans appel LLM supplémentaire. Chaque tick alimente un ledger JSONL expurgé des
+secrets, puis régénère deux vues :
+
+- `<fleet-dir>/briefings/latest.json` pour Cowork et les automatisations ;
+- `<fleet-dir>/briefings/latest.md` pour la lecture humaine ;
+- les versions datées `morning-brief-YYYY-MM-DD.{json,md}` et
+  `events-YYYY-MM-DD.jsonl` conservent la preuve de la nuit.
+
+La fenêtre bascule à 18 h locale : samedi soir et dimanche avant l'aube sont
+réunis dans le briefing de dimanche. Le rapport sépare résultats, no-op
+d'entretien, échecs, usage éventuel de modèles payants, état de la queue et
+opportunités. Les tâches `critical` restent explicitement réservées à
+l'opérateur. Le reporter ne revendique, n'exécute et ne publie rien : il lit la
+queue/le worklog et n'écrit que dans `briefings/`.
+
+```bash
+buddy autonomy briefing
+buddy autonomy briefing --json
+buddy autonomy briefing --date 2026-07-12 --dir ~/.codebuddy/fleet
+```
 
 ---
 

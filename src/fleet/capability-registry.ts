@@ -29,6 +29,7 @@ import * as path from 'node:path';
 import { logger } from '../utils/logger.js';
 import { getFleetLoad } from './fleet-load.js';
 import { getModelStrengths } from '../config/model-tools.js';
+import { findRuntimeProvider } from '../providers/provider-catalog.js';
 import type {
   FleetModelDescriptor,
   ModelStrength,
@@ -41,6 +42,10 @@ let cached: PeerCapability | null = null;
 let lastRefreshAt = 0;
 /** Refresh window: 5 minutes — enough to catch a manual Ollama restart. */
 const REFRESH_INTERVAL_MS = 5 * 60 * 1000;
+const ANSI_ESCAPE_PATTERN = new RegExp(
+  `${String.fromCharCode(27)}(?:[@-Z\\-_]|\\[[0-?]*[ -/]*[@-~])`,
+  'g',
+);
 
 /**
  * Get the local peer's capability snapshot. Cached for 5 minutes
@@ -108,11 +113,15 @@ async function buildCapabilitySnapshot(): Promise<PeerCapability> {
   if (detectGeminiCliBinary()) {
     models.push(...buildGeminiCliCatalog());
   }
-  if (process.env.GROK_API_KEY) {
+  models.push(...await probeAgyCli());
+  if (process.env.GROK_API_KEY || process.env.XAI_API_KEY) {
     models.push(...buildGrokCatalog());
   }
   if (process.env.MISTRAL_API_KEY) {
     models.push(...buildMistralCatalog());
+  }
+  if (process.env.OPENROUTER_API_KEY) {
+    models.push(...buildOpenRouterCatalog());
   }
 
   // Layer 3 — local Ollama probe.
@@ -122,6 +131,10 @@ async function buildCapabilitySnapshot(): Promise<PeerCapability> {
   // Layer 4 — local LM Studio probe.
   const lmStudioModels = await probeLmStudio();
   models.push(...lmStudioModels);
+
+  // Layer 5 — local Lemonade Server (OpenAI-compatible, Ryzen NPU/GPU/CPU).
+  const lemonadeModels = await probeLemonade();
+  models.push(...lemonadeModels);
 
   const egress: PeerCapability['egress'] = models.some((m) =>
     isCloudProvider(m.provider)
@@ -193,8 +206,10 @@ function isCloudProvider(p: FleetProvider): boolean {
     p === 'openai' ||
     p === 'gemini' ||
     p === 'gemini-cli' ||
+    p === 'agy-cli' ||
     p === 'grok' ||
     p === 'mistral' ||
+    p === 'openrouter' ||
     p === 'chatgpt-oauth'
   );
 }
@@ -224,21 +239,26 @@ function hasChatGptOAuthCredentials(): boolean {
  * cross-module dependency between capability registry and the factory.
  */
 function detectGeminiCliBinary(): boolean {
-  const explicit = process.env.GEMINI_CLI_PATH;
+  return resolveLocalBinary('GEMINI_CLI_PATH', 'gemini') !== null;
+}
+
+function resolveLocalBinary(envName: string, binaryName: string): string | null {
+  const explicit = process.env[envName];
   if (explicit) {
-    try { return fs.existsSync(explicit); } catch { return false; }
+    try { return fs.existsSync(explicit) ? explicit : null; } catch { return null; }
   }
   const PATH = process.env.PATH ?? '';
-  if (!PATH) return false;
+  if (!PATH) return null;
   for (const dir of PATH.split(path.delimiter)) {
     if (!dir) continue;
     try {
-      if (fs.existsSync(path.join(dir, 'gemini'))) return true;
+      const candidate = path.join(dir, binaryName);
+      if (fs.existsSync(candidate)) return candidate;
     } catch {
       /* skip dir */
     }
   }
-  return false;
+  return null;
 }
 
 /**
@@ -280,31 +300,36 @@ function buildAnthropicCatalog(): FleetModelDescriptor[] {
 }
 
 function buildOpenAICatalog(): FleetModelDescriptor[] {
-  const ids = ['gpt-5', 'gpt-5-codex', 'gpt-5-mini'];
+  const ids = ['gpt-5.6-sol', 'gpt-5', 'gpt-5-codex', 'gpt-5-mini'];
   return ids.map((id) => ({
     id,
-    contextWindow: 200_000,
+    contextWindow: id === 'gpt-5.6-sol' ? 1_050_000 : 200_000,
     strengths: deriveStrengths(id, 'openai'),
     costInputUsdPerMtok: id.includes('mini') ? 0.4 : 5,
-    costOutputUsdPerMtok: id.includes('mini') ? 1.6 : 20,
+    costOutputUsdPerMtok: id.includes('mini') ? 1.6 : id === 'gpt-5.6-sol' ? 30 : 20,
     provider: 'openai',
   }));
 }
 
 function buildChatGptOAuthCatalog(): FleetModelDescriptor[] {
-  const preferred = process.env.CHATGPT_MODEL || 'gpt-5.5';
+  const preferred = process.env.CHATGPT_MODEL || 'gpt-5.6-sol';
   const ids = [
     preferred,
+    'gpt-5.6-sol',
+    'gpt-5.6-terra',
+    'gpt-5.6-luna',
     'gpt-5.5',
-    'gpt-5.2',
-    'gpt-5.1-codex',
-    'gpt-5.1-codex-max',
-    'gpt-5-codex',
+    'gpt-5.4',
+    'gpt-5.4-mini',
   ].filter((id, index, all) => all.indexOf(id) === index);
 
   return ids.map((id) => ({
     id,
-    contextWindow: 200_000,
+    contextWindow: id === 'gpt-5.6-sol'
+      ? 372_000
+      : /^gpt-5\.[45](?:-|$)/.test(id)
+        ? 272_000
+        : 200_000,
     strengths: deriveStrengths(id, 'chatgpt-oauth'),
     costInputUsdPerMtok: 0,
     costOutputUsdPerMtok: 0,
@@ -352,6 +377,99 @@ function buildGeminiCliCatalog(): FleetModelDescriptor[] {
   }));
 }
 
+/** Parse `agy models` output. Model display names are intentionally opaque. */
+export function parseAgyModelsOutput(stdout: string): string[] {
+  return Array.from(new Set(
+    stdout
+      .replace(ANSI_ESCAPE_PATTERN, '')
+      .split(/\r?\n|\r/)
+      .map((line) => line.replace(/^[\u2800-\u28ff]\s*/, '').trim())
+      .filter((line) =>
+        line.length > 0 &&
+        line.length <= 200 &&
+        !line.toLowerCase().includes('fetching available models'),
+      ),
+  ));
+}
+
+async function probeAgyCli(): Promise<FleetModelDescriptor[]> {
+  const binaryPath = resolveLocalBinary('AGY_CLI_PATH', 'agy');
+  if (!binaryPath) return [];
+  const names = await probeAgyModelsWithPty(binaryPath);
+  return names.map((id): FleetModelDescriptor => ({
+    id,
+    contextWindow: 1_000_000,
+    strengths: deriveAgyStrengths(id),
+    costInputUsdPerMtok: 0,
+    costOutputUsdPerMtok: 0,
+    provider: 'agy-cli',
+  }));
+}
+
+async function probeAgyModelsWithPty(binaryPath: string): Promise<string[]> {
+  try {
+    const pty = await import('node-pty');
+    return await new Promise<string[]>((resolve) => {
+      let output = '';
+      let settled = false;
+      let timer: NodeJS.Timeout | undefined;
+      const env = Object.fromEntries(
+        Object.entries(process.env).filter((entry): entry is [string, string] => entry[1] !== undefined),
+      );
+      const child = pty.spawn(binaryPath, ['models'], {
+        name: 'xterm-color',
+        cols: 120,
+        rows: 30,
+        cwd: process.cwd(),
+        env,
+      });
+      const finish = (models: string[]) => {
+        if (settled) return;
+        settled = true;
+        if (timer) clearTimeout(timer);
+        resolve(models);
+      };
+      child.onData((data) => {
+        if (output.length < 256 * 1024) output += data;
+      });
+      child.onExit(({ exitCode }) => {
+        finish(exitCode === 0 ? parseAgyModelsOutput(output) : []);
+      });
+      timer = setTimeout(() => {
+        try { child.kill(); } catch { /* process already exited */ }
+        finish([]);
+      }, 5_000);
+    });
+  } catch (error) {
+    logger.debug?.('[capability-registry] agy PTY discovery skipped', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return [];
+  }
+}
+
+function deriveAgyStrengths(modelId: string): ModelStrength[] {
+  const strengths = new Set<ModelStrength>(deriveStrengths(modelId, 'agy-cli'));
+  const normalized = modelId.toLowerCase();
+  strengths.add('long-context');
+  if (normalized.includes('flash')) {
+    strengths.add('fast');
+    strengths.add('cheap');
+  }
+  if (
+    normalized.includes('pro') ||
+    normalized.includes('thinking') ||
+    normalized.includes('opus')
+  ) {
+    strengths.add('reasoning');
+    strengths.add('thinking');
+  }
+  if (normalized.includes('claude') || normalized.includes('gpt-oss')) {
+    strengths.add('code');
+  }
+  return Array.from(strengths);
+}
+
 function buildGrokCatalog(): FleetModelDescriptor[] {
   const ids = ['grok-3-latest', 'grok-3-fast', 'grok-2-vision'];
   return ids.map((id) => ({
@@ -381,6 +499,19 @@ function buildMistralCatalog(): FleetModelDescriptor[] {
     costInputUsdPerMtok: id.includes('small') ? 0.2 : id.includes('medium') ? 1 : 4,
     costOutputUsdPerMtok: id.includes('small') ? 0.6 : id.includes('medium') ? 3 : 12,
     provider: 'mistral',
+  }));
+}
+
+function buildOpenRouterCatalog(): FleetModelDescriptor[] {
+  const entry = findRuntimeProvider('openrouter');
+  const ids = entry?.models ?? ['openrouter/free'];
+  return ids.map((id): FleetModelDescriptor => ({
+    id,
+    contextWindow: id === 'openrouter/free' ? 128_000 : 64_000,
+    strengths: deriveStrengths(id, 'openrouter'),
+    costInputUsdPerMtok: id === 'openrouter/free' || id.endsWith(':free') ? 0 : undefined,
+    costOutputUsdPerMtok: id === 'openrouter/free' || id.endsWith(':free') ? 0 : undefined,
+    provider: 'openrouter',
   }));
 }
 
@@ -430,6 +561,40 @@ async function probeLmStudio(): Promise<FleetModelDescriptor[]> {
   } catch (err) {
     logger.debug?.('[capability-registry] LM Studio probe skipped', {
       err: err instanceof Error ? err.message : String(err),
+    });
+    return [];
+  }
+}
+
+async function probeLemonade(): Promise<FleetModelDescriptor[]> {
+  const configured = process.env.LEMONADE_HOST?.trim();
+  const url = configured
+    ? (/^https?:\/\//i.test(configured) ? configured : `http://${configured}`)
+    : 'http://127.0.0.1:13305';
+  try {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 800);
+    const res = await fetch(`${url.replace(/\/+$/, '')}/v1/models`, {
+      signal: ctrl.signal,
+      headers: process.env.LEMONADE_API_KEY
+        ? { Authorization: `Bearer ${process.env.LEMONADE_API_KEY}` }
+        : undefined,
+    });
+    clearTimeout(timer);
+    if (!res.ok) return [];
+    const data = (await res.json()) as { data?: Array<{ id?: unknown }> };
+    if (!Array.isArray(data.data)) return [];
+    return data.data
+      .filter((model): model is { id: string } => typeof model.id === 'string' && model.id.length > 0)
+      .map((model): FleetModelDescriptor => ({
+        id: model.id,
+        contextWindow: 32_768,
+        strengths: deriveStrengths(model.id, 'lemonade'),
+        provider: 'lemonade',
+      }));
+  } catch (error) {
+    logger.debug?.('[capability-registry] Lemonade probe skipped', {
+      error: error instanceof Error ? error.message : String(error),
     });
     return [];
   }

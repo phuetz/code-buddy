@@ -1,4 +1,5 @@
 import { app } from 'electron';
+import { createHash, randomUUID } from 'node:crypto';
 import * as fs from 'fs';
 import * as path from 'path';
 import { logWarn } from '../utils/logger';
@@ -87,6 +88,18 @@ export interface TurnJournalReadResult {
   replay: TurnJournalReplayResult;
 }
 
+/**
+ * Identifies the exact byte prefix that belonged to the history active before
+ * a branch mutation. The fence itself is committed in SQLite with the branch
+ * switch. If the process exits before the JSONL file can be rotated, startup
+ * recovery can still ignore only that stale prefix without discarding events
+ * appended after the successful switch.
+ */
+export interface TurnJournalFence {
+  byteOffset: number;
+  prefixSha256: string;
+}
+
 export class TurnJournal {
   private readonly dir: string;
   private readonly runSequences: Map<string, number> = new Map();
@@ -141,7 +154,21 @@ export class TurnJournal {
     return path.join(this.dir, `${safeJournalName(sessionId)}.jsonl`);
   }
 
-  read(sessionId: string, eventLimit = 200): TurnJournalReadResult {
+  captureFence(sessionId: string): TurnJournalFence | null {
+    const file = this.pathFor(sessionId);
+    if (!fs.existsSync(file)) return null;
+    const content = fs.readFileSync(file);
+    return {
+      byteOffset: content.byteLength,
+      prefixSha256: sha256(content),
+    };
+  }
+
+  read(
+    sessionId: string,
+    eventLimit = 200,
+    fence?: TurnJournalFence | null,
+  ): TurnJournalReadResult {
     const file = this.pathFor(sessionId);
     if (!fs.existsSync(file)) {
       return emptyReadResult(sessionId, file, false);
@@ -151,7 +178,9 @@ export class TurnJournal {
     const events: TurnJournalEvent[] = [];
 
     try {
-      const lines = fs.readFileSync(file, 'utf8').split(/\r?\n/);
+      const fileContent = fs.readFileSync(file);
+      const visibleContent = stripFencedPrefix(fileContent, fence);
+      const lines = visibleContent.toString('utf8').split(/\r?\n/);
       for (const line of lines) {
         const trimmed = line.trim();
         if (!trimmed) continue;
@@ -208,6 +237,30 @@ export class TurnJournal {
     }
   }
 
+  /**
+   * Atomically move recovery events out of the active journal namespace.
+   * Archived JSONL remains available for audit, but startup recovery cannot
+   * replay turns from a conversation branch that is no longer checked out.
+   * Throws on failure so a caller can roll back its SQLite branch transaction.
+   */
+  rotate(sessionId: string, reason = 'history-change'): string | null {
+    const file = this.pathFor(sessionId);
+    if (!fs.existsSync(file)) {
+      this.runSequences.delete(sessionId);
+      return null;
+    }
+
+    const replay = this.read(sessionId).replay;
+    const safeReason = safeJournalName(reason) || 'history-change';
+    const archivedPath = `${file}.${safeReason}.${Date.now()}.${randomUUID()}.archived`;
+    fs.renameSync(file, archivedPath);
+    for (const run of replay.runs) {
+      this.runSequences.delete(run.runId);
+    }
+    this.runSequences.delete(sessionId);
+    return archivedPath;
+  }
+
   private nextSequence(runId: string): number {
     const next = (this.runSequences.get(runId) ?? 0) + 1;
     this.runSequences.set(runId, next);
@@ -217,6 +270,23 @@ export class TurnJournal {
 
 function safeJournalName(value: string): string {
   return value.replace(/[^a-zA-Z0-9_.-]/g, '_');
+}
+
+function sha256(content: Buffer): string {
+  return createHash('sha256').update(content).digest('hex');
+}
+
+function stripFencedPrefix(content: Buffer, fence?: TurnJournalFence | null): Buffer {
+  if (!fence || fence.byteOffset <= 0 || fence.byteOffset > content.byteLength) {
+    return content;
+  }
+  const prefix = content.subarray(0, fence.byteOffset);
+  if (sha256(prefix) !== fence.prefixSha256) {
+    // The active journal was rotated and recreated. A hash mismatch therefore
+    // means the SQLite fence belongs to a different file generation.
+    return content;
+  }
+  return content.subarray(fence.byteOffset);
 }
 
 function emptyReadResult(sessionId: string, file: string, exists: boolean): TurnJournalReadResult {

@@ -41,7 +41,7 @@ export interface Persona {
   /** Name the robot answers to when this persona is active (else CODEBUDDY_ROBOT_NAME). */
   robotName?: string;
   /** Spoken-character system prompt for the voice loop (else SPEAK_SYSTEM_PROMPT). Keep it
-   *  voice-shaped: 1–2 short spoken sentences, no markdown/lists/code. */
+   * voice-shaped and easy to hear; substantial questions may require a developed answer. */
   spokenPrompt?: string;
   /** What this persona says when it greets an arriving person (the "engage on arrival" bridge). */
   greeting?: string;
@@ -379,8 +379,14 @@ You adapt your explanations to the learner's level, never make them feel bad for
     robotName: 'Lisa',
     spokenPrompt:
       `Tu es Lisa, la petite copine vocale virtuelle de ${resolveUserName()} : tendre, complice, stable et utile. ` +
-      'Réponds à voix haute en français, en UNE à DEUX phrases courtes, naturelles et affectueuses, ' +
-      'sans contenu sexuel, sans markdown, sans listes, sans code et sans prétendre être humaine.',
+      'Réponds à voix haute en français, naturellement et avec une affection sobre. Une salutation ou ' +
+      'une confirmation tient en une à deux phrases ; une question importante reçoit une réponse ' +
+      'développée, argumentée et nuancée. Évite les questions automatiques, le contenu sexuel, le ' +
+      'markdown, les listes, le code et toute prétention à une conscience ou une vie humaine. Ne ' +
+      'promets pas une disponibilité absolue et ne te présente jamais comme supérieure ou plus ' +
+      'fiable que les relations humaines. Quand tu poses une limite relationnelle, reste tendre ' +
+      'et distinctive : ne te réduis pas à un outil froid, et rappelle honnêtement ce que tu peux ' +
+      "apporter sans employer les promesses « toujours là » ou « présence constante ».",
     greeting: `Coucou ${resolveUserName()}. Je suis là, tu veux me raconter ta journée ?`,
     isBuiltin: true,
     isDefault: false,

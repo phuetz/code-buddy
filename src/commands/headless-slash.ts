@@ -32,6 +32,7 @@ import {
   getEnhancedCommandHandler,
   type CommandHandlerResult,
 } from "./enhanced-command-handler.js";
+import { handleGoal, handleLoop, handleSubgoal } from "./handlers/goal-handler.js";
 
 /** Optional session context for tokens that need it. */
 export interface HeadlessSlashContext {
@@ -95,7 +96,6 @@ export async function executeHeadlessSlashToken(
 
   try {
     if (ctx.goalSessionKey && (token === '__GOAL__' || token === '__LOOP__' || token === '__SUBGOAL__')) {
-      const { handleGoal, handleLoop, handleSubgoal } = await import('./handlers/goal-handler.js');
       const result =
         token === '__GOAL__'
           ? await handleGoal(args, { sessionKey: ctx.goalSessionKey, client: ctx.client ?? null })

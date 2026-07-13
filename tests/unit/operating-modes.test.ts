@@ -562,6 +562,27 @@ describe("OperatingModeManager", () => {
       });
       expect(result).toBe(42);
     });
+
+    it("should not leak a temporary embedded mode into a concurrent code session", async () => {
+      manager.setMode("plan");
+      let releaseVoice!: () => void;
+      const gate = new Promise<void>((resolve) => { releaseVoice = resolve; });
+      let reportStarted!: () => void;
+      const started = new Promise<void>((resolve) => { reportStarted = resolve; });
+
+      const voice = manager.withModeAsync("balanced", async () => {
+        reportStarted();
+        expect(manager.getMode()).toBe("balanced");
+        await gate;
+        return manager.getMode();
+      });
+
+      await started;
+      expect(manager.getMode()).toBe("plan");
+      releaseVoice();
+      await expect(voice).resolves.toBe("balanced");
+      expect(manager.getMode()).toBe("plan");
+    });
   });
 
   describe("dispose", () => {

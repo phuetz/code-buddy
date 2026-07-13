@@ -14,7 +14,15 @@ const oauthMock = vi.hoisted(() => ({
   getCodexAuthFilePath: vi.fn(() => '/tmp/codex-auth.json'),
 }));
 
+const modelMock = vi.hoisted(() => ({
+  CHATGPT_OAUTH_DEFAULT_MODEL: 'gpt-5.6-sol',
+  CHATGPT_OAUTH_SAFE_FALLBACK_MODEL: 'gpt-5.5',
+  discoverChatGptModels: vi.fn(async () => ({ models: [], fetchedAt: 1 })),
+  selectChatGptOAuthModel: vi.fn(() => 'gpt-5.6-sol'),
+}));
+
 vi.mock('../../../src/providers/codex-oauth.js', () => oauthMock);
+vi.mock('../../../src/providers/chatgpt-models.js', () => modelMock);
 
 import {
   handleLogin,
@@ -47,6 +55,8 @@ describe('handleLogin', () => {
     expect(result.entry?.content).toContain('✅ Authenticated successfully');
     expect(result.entry?.content).toContain('patrice@example.com');
     expect(result.entry?.content).toContain('plus');
+    expect(result.entry?.content).toContain('gpt-5.6-sol');
+    expect(result.entry?.content).not.toContain('acct_1');
     expect(oauthMock.loginInteractive).toHaveBeenCalledTimes(1);
   });
 

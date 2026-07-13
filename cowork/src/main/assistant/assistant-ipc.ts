@@ -10,6 +10,7 @@ export const ASSISTANT_CHANNELS = {
   save: 'assistant.save',
   voices: 'assistant.voices',
   preview: 'assistant.preview',
+  playPreview: 'assistant.playPreview',
   restart: 'assistant.restart',
   getVolume: 'assistant.getVolume',
   setVolume: 'assistant.setVolume',
@@ -26,6 +27,9 @@ export function registerAssistantIpc(
   ipcMain.handle(ASSISTANT_CHANNELS.voices, async () => service.voices());
   ipcMain.handle(ASSISTANT_CHANNELS.preview, async (_event, name: string, text?: string) =>
     service.preview(name ?? '', text)
+  );
+  ipcMain.handle(ASSISTANT_CHANNELS.playPreview, async (_event, name: string, text?: string) =>
+    service.playPreview(name ?? '', text)
   );
   ipcMain.handle(ASSISTANT_CHANNELS.restart, async () => service.restart());
   ipcMain.handle(ASSISTANT_CHANNELS.getVolume, async () => service.getVolume());

@@ -7,6 +7,12 @@
  */
 
 import type { ToolGroup } from './types.js';
+import { TOOL_ALIASES } from '../../tools/registry/tool-aliases.js';
+import { TOOL_METADATA } from '../../tools/metadata.js';
+
+const FLEET_SAFE_TOOL_NAMES = new Set(
+  TOOL_METADATA.filter((metadata) => metadata.fleetSafe === true).map((metadata) => metadata.name),
+);
 
 // ============================================================================
 // Tool to Groups Mapping
@@ -46,6 +52,9 @@ export const TOOL_GROUPS: Record<string, ToolGroup[]> = {
   execute: ['group:runtime', 'group:runtime:shell'],
   run_command: ['group:runtime', 'group:runtime:shell'],
   execute_code: ['group:runtime', 'group:runtime:shell', 'group:dangerous'],
+  // Computation-only orchestrator. Every nested effect is independently sent
+  // through ToolHandler and inherits that tool's real policy groups.
+  code_exec: ['group:safe'],
 
   // Runtime - Process
   spawn_process: ['group:runtime', 'group:runtime:process'],
@@ -143,9 +152,9 @@ export const TOOL_GROUPS: Record<string, ToolGroup[]> = {
   extension_forge: ['group:system', 'group:system:modify', 'group:dangerous'],
 
   // Planning/Reasoning (no special groups - generally safe)
-  plan: [],
-  think: [],
-  reason: [],
+  plan: ['group:safe'],
+  think: ['group:safe'],
+  reason: ['group:safe'],
   todo_read: [],
   todo_write: [],
   spawn_parallel_agents: [],
@@ -184,6 +193,23 @@ export function getToolGroups(toolName: string): ToolGroup[] {
   const groups = TOOL_GROUPS[toolName];
   if (groups) {
     return [...groups];
+  }
+
+  // Canonical aliases must inherit the primary tool's policy groups. Without
+  // this, `shell_exec`, `file_write`, etc. fell back to the unknown-tool policy
+  // even though they dispatch to the exact same implementation.
+  const primaryName = TOOL_ALIASES[toolName];
+  if (primaryName && primaryName !== toolName) {
+    return getToolGroups(primaryName);
+  }
+
+  // fleetSafe is an opt-in, audited contract: no arbitrary execution, secret
+  // exfiltration, UI driving or unbounded effects. Treat it as the maintained
+  // common read-only group instead of forcing REST/batch callers to confirm
+  // harmless weather/status/search tools merely because a hand-written map
+  // forgot their name.
+  if (FLEET_SAFE_TOOL_NAMES.has(toolName)) {
+    return ['group:safe'];
   }
 
   // Unknown tool - return empty array

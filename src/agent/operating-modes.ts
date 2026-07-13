@@ -9,6 +9,7 @@
  * Allows users to control the quality/cost/speed tradeoff.
  */
 
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { EventEmitter } from 'events';
 import { loadAgentProfiles, mergeProfileWithMode } from './profiles/index.js';
 import type { AgentProfile } from './profiles/index.js';
@@ -170,7 +171,7 @@ const PLAN_MODE: ModeConfig = {
   ...BALANCED_MODE,
   name: 'Plan',
   description: 'Planning mode - AI explains approach without making changes',
-  allowedTools: ['view_file', 'search', 'web_search', 'web_fetch'],
+  allowedTools: ['view_file', 'search', 'web_search', 'web_fetch', 'mixture_of_agents'],
   systemPromptAddition: `
 CURRENT MODE: PLANNING MODE
 In this mode, you should:
@@ -179,7 +180,8 @@ In this mode, you should:
 - List all files that would need to be modified
 - Describe the changes you would make
 - DO NOT execute any file modifications or bash commands
-- Only use view_file and search to understand the codebase
+- Use mixture_of_agents for consequential architecture, security, research, or decision plans when diverse independent review materially improves confidence
+- Only use read/search tools and mixture_of_agents to understand the codebase
 - When ready to implement, tell the user to switch to /code mode`
 };
 
@@ -212,6 +214,9 @@ const MODE_CONFIGS: Record<OperatingMode, ModeConfig> = {
 
 export class OperatingModeManager extends EventEmitter {
   private currentMode: OperatingMode = 'balanced';
+  /** Session-local mode override; prevents one embedded actor from leaking its
+   * mode into another concurrent CLI, HTTP, Cowork, or voice turn. */
+  private readonly modeContext = new AsyncLocalStorage<OperatingMode>();
   private customConfig: Partial<ModeConfig> = {};
   private modeHistory: Array<{ mode: OperatingMode; timestamp: number; reason?: string }> = [];
   private userProfiles: Map<string, AgentProfile> = new Map();
@@ -226,17 +231,18 @@ export class OperatingModeManager extends EventEmitter {
    * Get current mode
    */
   getMode(): OperatingMode {
-    return this.currentMode;
+    return this.modeContext.getStore() ?? this.currentMode;
   }
 
   /**
    * Get current mode configuration
    */
   getModeConfig(): ModeConfig {
-    if (this.currentMode === 'custom') {
+    const mode = this.getMode();
+    if (mode === 'custom') {
       return { ...MODE_CONFIGS.balanced, ...this.customConfig } as ModeConfig;
     }
-    return MODE_CONFIGS[this.currentMode];
+    return MODE_CONFIGS[mode];
   }
 
   /**
@@ -412,6 +418,7 @@ export class OperatingModeManager extends EventEmitter {
    */
   formatModeStatus(): string {
     const config = this.getModeConfig();
+    const mode = this.getMode();
     const modeEmojis: Record<OperatingMode, string> = {
       quality: '💎',
       balanced: '⚖️',
@@ -420,7 +427,7 @@ export class OperatingModeManager extends EventEmitter {
       ask: '❓',
       custom: '⚙️'
     };
-    return `${modeEmojis[this.currentMode] || '🔄'} Mode: ${this.currentMode} - ${config.description}`;
+    return `${modeEmojis[mode] || '🔄'} Mode: ${mode} - ${config.description}`;
   }
 
   /**
@@ -440,28 +447,14 @@ export class OperatingModeManager extends EventEmitter {
    * Temporarily use a different mode for one operation
    */
   withMode<T>(mode: OperatingMode, fn: () => T): T {
-    const previousMode = this.currentMode;
-    this.currentMode = mode;
-
-    try {
-      return fn();
-    } finally {
-      this.currentMode = previousMode;
-    }
+    return this.modeContext.run(mode, fn);
   }
 
   /**
    * Async version of withMode
    */
   async withModeAsync<T>(mode: OperatingMode, fn: () => Promise<T>): Promise<T> {
-    const previousMode = this.currentMode;
-    this.currentMode = mode;
-
-    try {
-      return await fn();
-    } finally {
-      this.currentMode = previousMode;
-    }
+    return this.modeContext.run(mode, fn);
   }
 
   /**

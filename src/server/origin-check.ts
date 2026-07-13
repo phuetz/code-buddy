@@ -30,6 +30,13 @@ export function isOriginAllowed(origin: string | undefined, allowedOrigins: stri
 }
 
 /** True for loopback binds where network exposure is not a concern. */
-export function isLoopbackHost(host: string): boolean {
-  return host === '127.0.0.1' || host === 'localhost' || host === '::1';
+export function isLoopbackHost(hostname: string): boolean {
+  const host = hostname.trim().toLowerCase().replace(/^\[|\]$/g, '').replace(/\.$/, '');
+  if (host === 'localhost' || host.endsWith('.localhost')) return true;
+  if (host === '::1') return true;
+
+  const ipv4 = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(host);
+  if (!ipv4) return false;
+  const octets = ipv4.slice(1).map(Number);
+  return octets[0] === 127 && octets.every((octet) => octet >= 0 && octet <= 255);
 }

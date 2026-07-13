@@ -18,7 +18,11 @@ const SCREEN_SALIENCE: u8 = 140;
 /// Detect screen changes across a sequence of downsampled grayscale frames.
 /// Rising-edge hysteresis (one event per change, not a storm), emitting
 /// `screen/change`. Pure + testable headless.
-pub fn detect_change_events(frames: &[Vec<u8>], threshold: f64, frame_ms: u64) -> Vec<SensoryEvent> {
+pub fn detect_change_events(
+    frames: &[Vec<u8>],
+    threshold: f64,
+    frame_ms: u64,
+) -> Vec<SensoryEvent> {
     let mut out = Vec::new();
     let mut changed = false;
     let mut ts: u64 = 0;
@@ -75,7 +79,8 @@ pub mod live {
     pub async fn run(tx: mpsc::Sender<SensoryEvent>, interval_ms: u64, threshold: f64) {
         let mut prev: Option<Vec<u8>> = None;
         let mut changed = false;
-        let mut ticker = tokio::time::interval(std::time::Duration::from_millis(interval_ms.max(1)));
+        let mut ticker =
+            tokio::time::interval(std::time::Duration::from_millis(interval_ms.max(1)));
         loop {
             ticker.tick().await;
             let frame = match tokio::task::spawn_blocking(|| capture_primary_gray(8)).await {
@@ -87,7 +92,12 @@ pub mod live {
                     let score = motion_score(p, &frame);
                     if !changed && score >= threshold {
                         changed = true;
-                        let ev = SensoryEvent::new(Modality::Screen, "change", SCREEN_SALIENCE, serde_json::json!({ "score": score }));
+                        let ev = SensoryEvent::new(
+                            Modality::Screen,
+                            "change",
+                            SCREEN_SALIENCE,
+                            serde_json::json!({ "score": score }),
+                        );
                         if tx.send(ev).await.is_err() {
                             break;
                         }

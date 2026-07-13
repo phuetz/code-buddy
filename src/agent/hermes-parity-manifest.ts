@@ -783,7 +783,7 @@ export function buildHermesParityTodo(options: {
     deferred,
     notes: [
       'Derived from the same official Hermes feature parity manifest as `buddy hermes parity --json`.',
-      'OpenClaw migration is deferred for full-parity completion (an initial `claw migrate` is implemented); the deferred remainder is appended only after active work when --include-deferred is passed.',
+      'Covered-partial items retain their evidence and honest long-tail limitations in the parity manifest, but are not active implementation gaps.',
       'Each todo keeps one real verification command so the next agent can prove progress without relying on mocks.',
     ],
   };

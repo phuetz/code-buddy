@@ -2,7 +2,7 @@ import { execFile } from 'child_process';
 import * as os from 'os';
 import { logger } from './logger.js';
 
-export async function playWavFile(filePath: string): Promise<void> {
+export async function tryPlayWavFile(filePath: string): Promise<boolean> {
   const platform = os.platform();
 
   const candidates = platform === 'win32'
@@ -30,15 +30,21 @@ export async function playWavFile(filePath: string): Promise<void> {
     try {
       logger.debug(`[AudioPlayer] Playing audio file via command: ${candidate.command}`);
       await execFileAsync(candidate.command, candidate.args);
-      return;
-    } catch (error: any) {
-      lastError = error;
+      return true;
+    } catch (error: unknown) {
+      lastError = error instanceof Error ? error : new Error(String(error));
     }
   }
 
   if (lastError) {
     logger.warn(`[AudioPlayer] Failed to play audio file: ${lastError.message}`);
   }
+
+  return false;
+}
+
+export async function playWavFile(filePath: string): Promise<void> {
+  await tryPlayWavFile(filePath);
 }
 
 function execFileAsync(command: string, args: string[]): Promise<void> {

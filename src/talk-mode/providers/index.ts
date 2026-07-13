@@ -9,6 +9,7 @@ export { ElevenLabsProvider } from './elevenlabs.js';
 export { EdgeTTSProvider } from './edge-tts.js';
 export { AudioReaderTTSProvider } from './audioreader-tts.js';
 export { PocketTTSProvider } from './pocket-tts.js';
+export { VoiceboxTTSProvider } from './voicebox-tts.js';
 
 // Re-export types
 export type {
@@ -18,4 +19,5 @@ export type {
   EdgeTTSConfig,
   AudioReaderTTSConfig,
   PocketTTSConfig,
+  VoiceboxTTSConfig,
 } from '../types.js';

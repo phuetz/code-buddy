@@ -32,7 +32,8 @@
  */
 
 import { ipcMain } from 'electron';
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync, chmodSync } from 'fs';
+import { generateKeyPairSync, sign, verify } from 'crypto';
 import { homedir } from 'os';
 import { join, dirname } from 'path';
 import { logError, log } from '../utils/logger';
@@ -43,6 +44,8 @@ const CONFIG_DIR = join(homedir(), '.codebuddy');
 const USER_CONFIG_FILE = join(CONFIG_DIR, 'config.toml');
 /** Cowork-owned record of the selected profile (toml has no such field). */
 const ACTIVE_PROFILE_FILE = join(CONFIG_DIR, 'cowork-active-profile.json');
+const PROFILE_SIGNING_PRIVATE_KEY = join(CONFIG_DIR, 'profile-signing-key.pem');
+const PROFILE_SIGNING_PUBLIC_KEY = join(CONFIG_DIR, 'profile-signing-key.pub.pem');
 
 /**
  * Allowed profile name shape. Closes toml sub-table injection (`.`, `[`, `]`,
@@ -54,6 +57,61 @@ const PROFILE_NAME_RE = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
 type TomlMod = {
   parseTOML(content: string): Record<string, unknown>;
 };
+
+interface SignedProfilePackage {
+  format: 'code-buddy-profile/v1';
+  name: string;
+  createdAt: string;
+  toml: string;
+  publicKey: string;
+  signature: string;
+}
+
+function ensureProfileSigningKeys(): { privateKey: string; publicKey: string } {
+  if (!existsSync(PROFILE_SIGNING_PRIVATE_KEY) || !existsSync(PROFILE_SIGNING_PUBLIC_KEY)) {
+    mkdirSync(CONFIG_DIR, { recursive: true });
+    const pair = generateKeyPairSync('ed25519', {
+      privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
+      publicKeyEncoding: { type: 'spki', format: 'pem' },
+    });
+    writeFileSync(PROFILE_SIGNING_PRIVATE_KEY, pair.privateKey, { mode: 0o600 });
+    writeFileSync(PROFILE_SIGNING_PUBLIC_KEY, pair.publicKey, { mode: 0o644 });
+  }
+  chmodSync(PROFILE_SIGNING_PRIVATE_KEY, 0o600);
+  return {
+    privateKey: readFileSync(PROFILE_SIGNING_PRIVATE_KEY, 'utf-8'),
+    publicKey: readFileSync(PROFILE_SIGNING_PUBLIC_KEY, 'utf-8'),
+  };
+}
+
+function profilePackagePayload(input: Pick<SignedProfilePackage, 'format' | 'name' | 'createdAt' | 'toml'>): Buffer {
+  return Buffer.from(JSON.stringify(input), 'utf-8');
+}
+
+function extractProfileToml(name: string): string {
+  if (!existsSync(USER_CONFIG_FILE)) throw new Error('User config does not exist');
+  const lines = readFileSync(USER_CONFIG_FILE, 'utf-8').split(/\r?\n/);
+  const prefix = `[profiles.${name}`;
+  const result: string[] = [];
+  let capturing = false;
+  for (const line of lines) {
+    const header = line.trim().startsWith('[') ? line.trim() : null;
+    if (header) {
+      if (header.startsWith(prefix) && (header[prefix.length] === ']' || header[prefix.length] === '.')) {
+        capturing = true;
+      } else if (capturing) {
+        capturing = false;
+      }
+    }
+    if (capturing) result.push(line);
+  }
+  if (result.length === 0) throw new Error(`Profile not found: ${name}`);
+  const toml = `${result.join('\n').trim()}\n`;
+  if (/^\s*(api[_-]?key|token|secret|password)\s*=/im.test(toml)) {
+    throw new Error('Profile export refused: move secrets to SecretRef or the encrypted credential store first');
+  }
+  return toml;
+}
 
 export interface ProfileSummary {
   /** Profile name (the `<name>` in `[profiles.<name>]`). */
@@ -276,4 +334,53 @@ export function registerProfilesIpcHandlers(): void {
       }
     },
   );
+
+  ipcMain.handle('profiles.export', async (_event, name: string) => {
+    try {
+      const nameError = validateProfileName(name);
+      if (nameError) return { ok: false, error: nameError };
+      const toml = extractProfileToml(name.trim());
+      const unsigned = {
+        format: 'code-buddy-profile/v1' as const,
+        name: name.trim(),
+        createdAt: new Date().toISOString(),
+        toml,
+      };
+      const keys = ensureProfileSigningKeys();
+      const signature = sign(null, profilePackagePayload(unsigned), keys.privateKey).toString('base64');
+      return { ok: true, profile: { ...unsigned, publicKey: keys.publicKey, signature } satisfies SignedProfilePackage };
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    }
+  });
+
+  ipcMain.handle('profiles.import', async (_event, candidate: unknown): Promise<ProfilesMutationResult> => {
+    try {
+      if (!candidate || typeof candidate !== 'object') return { ok: false, error: 'Invalid profile package' };
+      const profile = candidate as Partial<SignedProfilePackage>;
+      if (profile.format !== 'code-buddy-profile/v1' || !profile.name || !profile.createdAt || !profile.toml || !profile.publicKey || !profile.signature) {
+        return { ok: false, error: 'Incomplete profile package' };
+      }
+      const nameError = validateProfileName(profile.name);
+      if (nameError) return { ok: false, error: nameError };
+      const unsigned = { format: profile.format, name: profile.name, createdAt: profile.createdAt, toml: profile.toml };
+      if (!verify(null, profilePackagePayload(unsigned), profile.publicKey, Buffer.from(profile.signature, 'base64'))) {
+        return { ok: false, error: 'Profile signature verification failed' };
+      }
+      if (/^\s*(api[_-]?key|token|secret|password)\s*=/im.test(profile.toml)) {
+        return { ok: false, error: 'Profile contains embedded secrets' };
+      }
+      const expectedHeader = `[profiles.${profile.name}]`;
+      if (!profile.toml.includes(expectedHeader)) return { ok: false, error: 'Profile name does not match TOML payload' };
+      const existing = await readProfileNames();
+      if (existing.includes(profile.name)) return { ok: false, error: `Profile "${profile.name}" already exists` };
+      mkdirSync(CONFIG_DIR, { recursive: true });
+      const current = existsSync(USER_CONFIG_FILE) ? readFileSync(USER_CONFIG_FILE, 'utf-8') : '';
+      writeFileSync(USER_CONFIG_FILE, `${current.trimEnd()}\n\n# Imported signed profile\n${profile.toml.trim()}\n`);
+      const list = await buildListResult();
+      return { ok: true, profiles: list.profiles, active: list.active };
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    }
+  });
 }

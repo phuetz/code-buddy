@@ -3,7 +3,20 @@
  * mapping, provider/model env overrides, and graceful error paths.
  */
 import { describe, expect, it } from 'vitest';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import { MediaGenService, aspectToRatio } from '../src/main/media/media-gen-service';
+
+const PNG_HEADER = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+
+function createGeneratedImage(workspace: string, name = 'source.png'): string {
+  const imagesDir = path.join(workspace, '.codebuddy', 'media-generation', 'images');
+  mkdirSync(imagesDir, { recursive: true });
+  const sourcePath = path.join(imagesDir, name);
+  writeFileSync(sourcePath, PNG_HEADER);
+  return sourcePath;
+}
 
 describe('aspectToRatio', () => {
   it('maps GUI aspects to core aspect ratios', () => {
@@ -64,5 +77,288 @@ describe('MediaGenService', () => {
     const res = await service.generateImage({ prompt: 'x' });
     expect(res.ok).toBe(false);
     expect(res.error).toMatch(/ComfyUI unreachable/);
+  });
+
+  it('uses the core capability probe so configured ComfyUI inpainting exposes real alpha masks', async () => {
+    const service = new MediaGenService(async () => ({
+      generateImage: async () => ({ image: null }),
+      editImage: async () => ({ image: null }),
+      getImageEditCapabilities: async () => ({
+        provider: 'comfyui',
+        available: true,
+        alphaMasking: true,
+      }),
+    }));
+
+    await expect(service.getCapabilities()).resolves.toMatchObject({
+      imageEditing: true,
+      imageReferences: true,
+      imageMasking: true,
+    });
+  });
+
+  it('passes a bounded local image, alpha mask, and marked regions to the real edit core', async () => {
+    const directory = mkdtempSync(path.join(tmpdir(), 'design-view-edit-'));
+    const sourcePath = createGeneratedImage(directory);
+    const editedPath = createGeneratedImage(directory, 'image-edit.png');
+    let captured: Record<string, unknown> | undefined;
+    const service = new MediaGenService(async () => ({
+      generateImage: async () => ({ image: null }),
+      editImage: async (input) => {
+        captured = input;
+        return { outputPath: editedPath, image: editedPath };
+      },
+    }), directory);
+    try {
+      const result = await service.editImage({
+        prompt: 'Change this region',
+        imagePath: sourcePath,
+        maskDataUrl: `data:image/png;base64,${PNG_HEADER.toString('base64')}`,
+        selections: [{ x: 0.1, y: 0.2, width: 0.3, height: 0.4 }],
+        provider: 'openai',
+      });
+      expect(result).toMatchObject({
+        ok: true,
+        outputPath: editedPath,
+        history: {
+          headVersionId: expect.any(String),
+          versions: [
+            expect.objectContaining({ path: sourcePath, parentId: null }),
+            expect.objectContaining({ path: editedPath, parentId: expect.any(String) }),
+          ],
+        },
+      });
+      expect(captured).toEqual({
+        prompt: 'Change this region',
+        imageUrl: `data:image/png;base64,${PNG_HEADER.toString('base64')}`,
+        sourceRef: sourcePath,
+        maskUrl: `data:image/png;base64,${PNG_HEADER.toString('base64')}`,
+        selections: [{ x: 0.1, y: 0.2, width: 0.3, height: 0.4 }],
+      });
+
+      const historyPath = path.join(directory, '.codebuddy', 'media-generation', '.design-view-history', 'index.json');
+      expect(statSync(path.dirname(historyPath)).mode & 0o777).toBe(0o700);
+      expect(statSync(historyPath).mode & 0o777).toBe(0o600);
+      expect(readFileSync(historyPath, 'utf8')).not.toContain('Change this region');
+
+      // A new main-process service instance recovers the same chain after an
+      // app reload; no renderer state participates in this lookup.
+      const reloaded = new MediaGenService(async () => ({
+        generateImage: async () => ({ image: null }),
+      }), directory);
+      await expect(reloaded.getImageEditHistory(sourcePath)).resolves.toMatchObject({
+        ok: true,
+        history: {
+          versions: [
+            expect.objectContaining({ path: sourcePath }),
+            expect.objectContaining({ path: editedPath }),
+          ],
+        },
+      });
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it('rejects malformed Design View masks before reaching the provider', async () => {
+    const directory = mkdtempSync(path.join(tmpdir(), 'design-view-mask-'));
+    const sourcePath = createGeneratedImage(directory);
+    let edited = false;
+    const service = new MediaGenService(async () => ({
+      generateImage: async () => ({ image: null }),
+      editImage: async () => {
+        edited = true;
+        return { image: null };
+      },
+    }), directory);
+    try {
+      const result = await service.editImage({
+        prompt: 'Change',
+        imagePath: sourcePath,
+        maskDataUrl: 'data:text/plain;base64,AQID',
+      });
+      expect(result).toMatchObject({ ok: false });
+      expect(result.error).toMatch(/mask must be a PNG/);
+      expect(edited).toBe(false);
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it('refuses arbitrary renderer paths outside trusted generated-media roots', async () => {
+    const directory = mkdtempSync(path.join(tmpdir(), 'design-view-boundary-'));
+    const outsidePath = path.join(directory, 'private.png');
+    writeFileSync(outsidePath, PNG_HEADER);
+    let edited = false;
+    const service = new MediaGenService(async () => ({
+      generateImage: async () => ({ image: null }),
+      editImage: async () => {
+        edited = true;
+        return { image: null };
+      },
+    }), directory);
+    try {
+      const result = await service.editImage({ prompt: 'Upload this', imagePath: outsidePath });
+      expect(result).toMatchObject({ ok: false });
+      expect(result.error).toMatch(/outside the generated-media roots/);
+      expect(edited).toBe(false);
+      await expect(service.getImageEditHistory(outsidePath)).resolves.toMatchObject({
+        ok: false,
+        error: expect.stringMatching(/outside the generated-media roots/),
+      });
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it('fails closed when a generated image path crosses a symbolic link', async () => {
+    const directory = mkdtempSync(path.join(tmpdir(), 'design-view-symlink-'));
+    const outsidePath = path.join(directory, 'private.png');
+    writeFileSync(outsidePath, PNG_HEADER);
+    const generatedPath = createGeneratedImage(directory, 'placeholder.png');
+    const linkPath = path.join(path.dirname(generatedPath), 'linked.png');
+    symlinkSync(outsidePath, linkPath);
+    let edited = false;
+    const service = new MediaGenService(async () => ({
+      generateImage: async () => ({ image: null }),
+      editImage: async () => {
+        edited = true;
+        return { image: null };
+      },
+    }), directory);
+    try {
+      const result = await service.editImage({ prompt: 'Upload this', imagePath: linkPath });
+      expect(result).toMatchObject({ ok: false });
+      expect(result.error).toMatch(/outside the generated-media roots/);
+      expect(edited).toBe(false);
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it('rejects renamed non-image content inside the generated image root', async () => {
+    const directory = mkdtempSync(path.join(tmpdir(), 'design-view-signature-'));
+    const sourcePath = createGeneratedImage(directory);
+    writeFileSync(sourcePath, 'not really a png');
+    let edited = false;
+    const service = new MediaGenService(async () => ({
+      generateImage: async () => ({ image: null }),
+      editImage: async () => {
+        edited = true;
+        return { image: null };
+      },
+    }), directory);
+    try {
+      const result = await service.editImage({ prompt: 'Change', imagePath: sourcePath });
+      expect(result).toMatchObject({ ok: false });
+      expect(result.error).toMatch(/does not match its image type/);
+      expect(edited).toBe(false);
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it('bounds persistent chains while retaining the original and current head', async () => {
+    const directory = mkdtempSync(path.join(tmpdir(), 'design-view-history-bound-'));
+    const sourcePath = createGeneratedImage(directory);
+    let sequence = 0;
+    const service = new MediaGenService(async () => ({
+      generateImage: async () => ({ image: null }),
+      editImage: async () => {
+        sequence += 1;
+        const outputPath = createGeneratedImage(directory, `edit-${sequence}.png`);
+        return { outputPath, image: outputPath };
+      },
+    }), directory);
+    try {
+      let currentPath = sourcePath;
+      for (let index = 0; index < 15; index += 1) {
+        const result = await service.editImage({ prompt: `Edit ${index}`, imagePath: currentPath });
+        expect(result.ok).toBe(true);
+        currentPath = result.outputPath!;
+      }
+      const history = await service.getImageEditHistory(sourcePath);
+      expect(history.ok).toBe(true);
+      expect(history.history?.versions).toHaveLength(12);
+      expect(history.history?.versions[0]?.path).toBe(sourcePath);
+      const head = history.history?.versions.find((version) => version.id === history.history?.headVersionId);
+      expect(head?.path).toBe(currentPath);
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it('revalidates every private-index path and fails closed on tampering', async () => {
+    const directory = mkdtempSync(path.join(tmpdir(), 'design-view-history-tamper-'));
+    const sourcePath = createGeneratedImage(directory);
+    const editedPath = createGeneratedImage(directory, 'edit.png');
+    const outsidePath = path.join(directory, 'private.png');
+    writeFileSync(outsidePath, PNG_HEADER);
+    const service = new MediaGenService(async () => ({
+      generateImage: async () => ({ image: null }),
+      editImage: async () => ({ outputPath: editedPath, image: editedPath }),
+    }), directory);
+    try {
+      expect((await service.editImage({ prompt: 'Edit', imagePath: sourcePath })).ok).toBe(true);
+      const indexPath = path.join(directory, '.codebuddy', 'media-generation', '.design-view-history', 'index.json');
+      const index = JSON.parse(readFileSync(indexPath, 'utf8')) as {
+        chains: Array<{ versions: Array<{ path: string }> }>;
+      };
+      index.chains[0]!.versions[1]!.path = outsidePath;
+      writeFileSync(indexPath, JSON.stringify(index), { mode: 0o600 });
+
+      await expect(service.getImageEditHistory(sourcePath)).resolves.toMatchObject({
+        ok: false,
+        error: expect.stringMatching(/outside the generated-media roots/),
+      });
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it('passes bounded local ingredients to video generation as data URLs', async () => {
+    const directory = mkdtempSync(path.join(tmpdir(), 'flow-video-'));
+    const referencePath = path.join(directory, 'lina.png');
+    writeFileSync(referencePath, Buffer.from([1, 2, 3]));
+    let captured: Record<string, unknown> | undefined;
+    const service = new MediaGenService(async () => ({
+      generateImage: async () => ({ image: null }),
+      generateVideo: async (input) => {
+        captured = input;
+        return { outputPath: '/tmp/video.mp4', video: '/tmp/video.mp4' };
+      },
+    }));
+    try {
+      const result = await service.generateVideo({
+        prompt: '@Lina marche',
+        aspect: '16:9',
+        duration: 6,
+        imagePath: referencePath,
+        referenceImagePaths: [referencePath],
+      });
+      expect(result).toMatchObject({ ok: true, url: 'file:///tmp/video.mp4' });
+      expect(captured?.imageUrl).toBe('data:image/png;base64,AQID');
+      expect(captured?.referenceImageUrls).toEqual(['data:image/png;base64,AQID']);
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it('assembles only ordered video clips through the core film assembler', async () => {
+    let captured: Record<string, unknown> | undefined;
+    const service = new MediaGenService(
+      async () => ({ generateImage: async () => ({ image: null }) }),
+      '/workspace',
+      async () => ({
+        assembleFilm: async (input) => {
+          captured = input;
+          return { success: true, outputPath: '/workspace/final.mp4', estimatedDuration: 11, warnings: [] };
+        },
+      }),
+    );
+    const result = await service.assembleVideo({ clips: ['/tmp/a.mp4', '/tmp/b.webm'], aspect: '16:9', name: 'Neon Story' });
+    expect(result).toMatchObject({ ok: true, outputPath: '/workspace/final.mp4', duration: 11 });
+    expect(captured).toMatchObject({ clips: ['/tmp/a.mp4', '/tmp/b.webm'], transitions: 'dissolve', name: 'Neon Story' });
+    await expect(service.assembleVideo({ clips: ['/tmp/a.mp4', '/tmp/frame.png'] })).resolves.toMatchObject({ ok: false });
   });
 });

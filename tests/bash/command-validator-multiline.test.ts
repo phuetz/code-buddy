@@ -60,7 +60,7 @@ describe('validateCommand — hard command blocklist stays blocked', () => {
     expect(validateCommand('rm -rf /').valid).toBe(false);
   });
 
-  it('blocks chmod', () => {
-    expect(validateCommand('chmod +x /tmp/x.sh').valid).toBe(false);
+  it('lets a local chmod continue to the workspace execution policy', () => {
+    expect(validateCommand('chmod +x /tmp/x.sh').valid).toBe(true);
   });
 });

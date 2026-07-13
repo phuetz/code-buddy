@@ -45,6 +45,12 @@ export const PEER_DELEGATE_TOOL_DEF: CodeBuddyTool = {
           description:
             "Optional system prompt override for the peer. Defaults to the peer's brief-answer mode.",
         },
+        provider: {
+          type: 'string',
+          enum: ['ollama', 'lmstudio', 'lemonade', 'chatgpt-oauth', 'agy-cli', 'gemini-cli', 'openrouter', 'grok', 'mistral', 'anthropic', 'gemini', 'openai'],
+          description:
+            'Exact backend to use on the peer. When set, the peer fails closed instead of sending the model to another provider.',
+        },
         model: {
           type: 'string',
           description:

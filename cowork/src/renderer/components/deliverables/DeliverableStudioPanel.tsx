@@ -7,7 +7,7 @@
  * streams → « Exporter » hands the parsed data to the real skill (pptx/xlsx/
  * docx) in a follow-up turn. Kind-specific bits are injected via config.
  */
-import { FileDown, Loader2, Send } from 'lucide-react';
+import { Eye, FileDown, Loader2, PenTool, Send } from 'lucide-react';
 import { useEffect, useMemo, useState, type ComponentType, type ReactNode } from 'react';
 import { useAppStore } from '../../store';
 import { useIPC } from '../../hooks/useIPC';
@@ -32,6 +32,8 @@ export interface DeliverableStudioConfig<T> {
   strip(text: string): string;
   describe(data: T): string;
   renderPreview(data: T | null): ReactNode;
+  /** Optional direct manipulation surface; edits feed the same real export path. */
+  renderDesign?: (data: T, onChange: (next: T) => void) => ReactNode;
   exportTooltip: string;
   testId: string;
 }
@@ -40,6 +42,8 @@ export function DeliverableStudioPanel<T>({ config }: { config: DeliverableStudi
   const [subject, setSubject] = useState('');
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [exportAsked, setExportAsked] = useState(false);
+  const [designOpen, setDesignOpen] = useState(false);
+  const [draft, setDraft] = useState<{ sourceKey: string; value: T } | null>(null);
 
   // Consume the one-shot subject carried from the Home composer (Genspark
   // flow: type the topic, pick the output type, land in a prefilled studio).
@@ -62,6 +66,16 @@ export function DeliverableStudioPanel<T>({ config }: { config: DeliverableStudi
     () => config.latest(st?.messages ?? [], st?.partialMessage),
     [config, st?.messages, st?.partialMessage],
   );
+  const sourceKey = useMemo(() => data === null ? '' : JSON.stringify(data), [data]);
+  useEffect(() => {
+    if (data === null || !sourceKey) {
+      setDraft(null);
+      setDesignOpen(false);
+      return;
+    }
+    setDraft((current) => current?.sourceKey === sourceKey ? current : { sourceKey, value: data });
+  }, [data, sourceKey]);
+  const effectiveData = draft?.sourceKey === sourceKey ? draft.value : data;
   const lastReply = useMemo(() => {
     const messages = st?.messages ?? [];
     for (let i = messages.length - 1; i >= 0; i--) {
@@ -82,6 +96,8 @@ export function DeliverableStudioPanel<T>({ config }: { config: DeliverableStudi
     const trimmed = subject.trim();
     if (!trimmed || busy) return;
     setExportAsked(false);
+    setDesignOpen(false);
+    setDraft(null);
     const session = await startSession(
       `${config.sessionTitlePrefix}${trimmed.slice(0, 48)}`,
       config.buildGenerationPrompt(trimmed),
@@ -93,9 +109,9 @@ export function DeliverableStudioPanel<T>({ config }: { config: DeliverableStudi
   };
 
   const exportFile = () => {
-    if (!sessionId || !data || busy) return;
+    if (!sessionId || !effectiveData || busy) return;
     setExportAsked(true);
-    void continueSession(sessionId, config.buildExportPrompt(data));
+    void continueSession(sessionId, config.buildExportPrompt(effectiveData));
   };
 
   const Icon = config.icon;
@@ -129,13 +145,30 @@ export function DeliverableStudioPanel<T>({ config }: { config: DeliverableStudi
         </button>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto">{config.renderPreview(data)}</div>
+      {config.renderDesign && effectiveData ? (
+        <div className="flex shrink-0 items-center justify-end gap-1">
+          <button type="button" onClick={() => setDesignOpen(false)} aria-pressed={!designOpen}
+            className={`inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs ${!designOpen ? 'bg-primary/15 text-primary' : 'text-muted-foreground hover:bg-muted'}`}>
+            <Eye className="h-3.5 w-3.5" /> Aperçu
+          </button>
+          <button type="button" onClick={() => setDesignOpen(true)} aria-pressed={designOpen} data-testid={`${config.testId}-design-toggle`}
+            className={`inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs ${designOpen ? 'bg-primary/15 text-primary' : 'text-muted-foreground hover:bg-muted'}`}>
+            <PenTool className="h-3.5 w-3.5" /> Design View
+          </button>
+        </div>
+      ) : null}
+
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        {designOpen && config.renderDesign && effectiveData
+          ? config.renderDesign(effectiveData, (next) => setDraft({ sourceKey, value: next }))
+          : config.renderPreview(effectiveData)}
+      </div>
 
       <div className="flex shrink-0 items-center gap-3">
         <button
           type="button"
           onClick={exportFile}
-          disabled={!data || busy}
+          disabled={!effectiveData || busy}
           title={config.exportTooltip}
           className="inline-flex h-9 items-center gap-2 rounded-md border border-border px-3 text-xs font-medium text-foreground hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
         >
@@ -143,7 +176,7 @@ export function DeliverableStudioPanel<T>({ config }: { config: DeliverableStudi
           {config.exportLabel}
         </button>
         <span className="min-w-0 truncate text-xs text-muted-foreground" title={lastReply}>
-          {busy ? 'Génération en cours…' : exportAsked ? lastReply || 'Export demandé…' : data ? config.describe(data) : ''}
+          {busy ? 'Génération en cours…' : exportAsked ? lastReply || 'Export demandé…' : effectiveData ? config.describe(effectiveData) : ''}
         </span>
       </div>
     </div>

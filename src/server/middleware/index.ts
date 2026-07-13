@@ -7,6 +7,10 @@
 export {
   hasScope,
   createAuthMiddleware,
+  requireLocalAnonymousAccess,
+  isLoopbackRemoteAddress,
+  hasProxyForwardingHeaders,
+  isDirectLoopbackRequest,
   requireScope,
   optionalAuth,
 } from './auth.js';

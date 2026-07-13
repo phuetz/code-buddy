@@ -31,6 +31,7 @@ const ENV_KEYS = [
   'CODEBUDDY_PEER_MODEL',
   'CODEBUDDY_CODEX_AUTH_PATH',
   'GEMINI_CLI_PATH',
+  'AGY_CLI_PATH',
 ];
 
 let saved: Record<string, string | undefined>;
@@ -48,6 +49,10 @@ beforeEach(() => {
   process.env.GEMINI_CLI_PATH = path.join(
     os.tmpdir(),
     `codebuddy-missing-gemini-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+  );
+  process.env.AGY_CLI_PATH = path.join(
+    os.tmpdir(),
+    `codebuddy-missing-agy-${Date.now()}-${Math.random().toString(16).slice(2)}`,
   );
 });
 

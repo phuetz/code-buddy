@@ -124,6 +124,7 @@ describe('WritePolicy', () => {
       expect(WRITE_TOOL_NAMES.has('multi_edit')).toBe(true);
       expect(WRITE_TOOL_NAMES.has('apply_patch')).toBe(true);
       expect(WRITE_TOOL_NAMES.has('extension_forge')).toBe(true);
+      expect(WRITE_TOOL_NAMES.has('meeting_notes')).toBe(true);
     });
   });
 

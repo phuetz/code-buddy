@@ -13,14 +13,27 @@ import {
   BLOCKED_PATTERNS,
   BLOCKED_CONTROL_CHARS,
   ANSI_ESCAPE_PATTERN,
-  BLOCKED_COMMANDS,
   SAFE_ENV_VARS,
   BLOCKED_PATHS,
 } from './security-patterns.js';
 import { parseBashCommand } from '../../security/bash-parser.js';
-import { isDangerousCommand } from '../../security/dangerous-patterns.js';
 import { auditLogger } from '../../security/audit-logger.js';
 import { checkUserDenyRules } from '../../security/bash-allowlist/deny-guard.js';
+
+/**
+ * Commands whose purpose is inherently host-wide and catastrophic.  Useful
+ * workspace operations such as rm/chmod and user-service control are no longer
+ * rejected merely by binary name; ExecPolicy confines or prompts for them.
+ */
+const HARD_BLOCKED_COMMANDS = new Set([
+  'wipefs', 'mkfs', 'fdisk', 'parted', 'dd',
+  'reboot', 'shutdown', 'poweroff', 'halt', 'init',
+  'iptables', 'ip6tables', 'nft', 'firewall-cmd',
+  'mount', 'umount',
+  'insmod', 'rmmod', 'modprobe', 'sysctl',
+  'useradd', 'userdel', 'usermod', 'groupadd',
+  'passwd', 'chpasswd', 'visudo',
+]);
 
 /**
  * Extract the base command from a command string
@@ -150,9 +163,10 @@ export function validateCommand(command: string): { valid: boolean; reason?: str
     };
   }
 
-  // Extract base command and check against blocklist
+  // Only inherently host-wide commands are blocked by binary name. Other
+  // dangerous-looking binaries continue to the argv-aware execution policy.
   const baseCmd = extractBaseCommand(command);
-  if (baseCmd && BLOCKED_COMMANDS.has(baseCmd)) {
+  if (baseCmd && HARD_BLOCKED_COMMANDS.has(baseCmd)) {
     return {
       valid: false,
       reason: `Blocked command: ${baseCmd}`
@@ -185,26 +199,21 @@ export function validateCommand(command: string): { valid: boolean; reason?: str
   try {
     const parsed = parseBashCommand(command);
     for (const cmd of parsed.commands) {
-      // Check each parsed command name against centralized dangerous commands
-      if (isDangerousCommand(cmd.command)) {
-        // Allow if it's already in the legacy BLOCKED_COMMANDS (already checked above)
-        // This catches commands the regex-based approach might miss
-        if (!BLOCKED_COMMANDS.has(cmd.command.toLowerCase())) {
-          auditLogger.logCommandValidation({
-            command,
-            valid: false,
-            reason: `Dangerous command detected by parser: ${cmd.command}`,
-            source: 'bash-parser',
-          });
-          return {
-            valid: false,
-            reason: `Blocked command (AST): ${cmd.command}`,
-          };
-        }
+      if (HARD_BLOCKED_COMMANDS.has(cmd.command.toLowerCase())) {
+        auditLogger.logCommandValidation({
+          command,
+          valid: false,
+          reason: `Host-destructive command detected by parser: ${cmd.command}`,
+          source: 'bash-parser',
+        });
+        return {
+          valid: false,
+          reason: `Blocked host-destructive command (AST): ${cmd.command}`,
+        };
       }
 
       // Check subshell commands too
-      if (cmd.isSubshell && isDangerousCommand(cmd.command)) {
+      if (cmd.isSubshell && HARD_BLOCKED_COMMANDS.has(cmd.command.toLowerCase())) {
         auditLogger.logCommandValidation({
           command,
           valid: false,

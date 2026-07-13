@@ -5,8 +5,10 @@
  * With managed setting to disable bypass, subagent-specific modes, and pattern-based allowlists.
  */
 
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { logger } from '../utils/logger.js';
 import { TOOL_METADATA } from '../tools/metadata.js';
+import { SafeBinariesChecker } from './safe-binaries.js';
 
 // ============================================================================
 // Types
@@ -79,6 +81,13 @@ const DESTRUCTIVE_TOOLS = new Set([
 export class PermissionModeManager {
   private config: PermissionModeConfig;
   private allowedPatterns: string[] = [];
+  /**
+   * Per-async-flow override used by embedded actors (voice, background jobs).
+   * A process-global temporary mutation lets one session silently change the
+   * permissions of every concurrent session; AsyncLocalStorage keeps the
+   * override attached to the turn that requested it.
+   */
+  private readonly modeContext = new AsyncLocalStorage<PermissionMode>();
 
   constructor(config?: Partial<PermissionModeConfig>) {
     this.config = {
@@ -112,7 +121,23 @@ export class PermissionModeManager {
   }
 
   getMode(): PermissionMode {
-    return this.config.mode;
+    return this.modeContext.getStore() ?? this.config.mode;
+  }
+
+  /** Run one synchronous operation under a session-local permission posture. */
+  withMode<T>(mode: PermissionMode, fn: () => T): T {
+    if (mode === 'bypassPermissions' && this.config.disableBypass) {
+      return this.modeContext.run('default', fn);
+    }
+    return this.modeContext.run(mode, fn);
+  }
+
+  /** Run one asynchronous operation under a session-local permission posture. */
+  withModeAsync<T>(mode: PermissionMode, fn: () => Promise<T>): Promise<T> {
+    if (mode === 'bypassPermissions' && this.config.disableBypass) {
+      return this.modeContext.run('default', fn);
+    }
+    return this.modeContext.run(mode, fn);
   }
 
   /**
@@ -124,7 +149,7 @@ export class PermissionModeManager {
       return { allowed: true, reason: 'Matched allowed pattern', prompted: false };
     }
 
-    switch (this.config.mode) {
+    switch (this.getMode()) {
       case 'default':
         return this.checkDefault(action, toolName);
       case 'plan':
@@ -153,9 +178,19 @@ export class PermissionModeManager {
   /**
    * Plan mode: only allow read-only tools, block edits and destructive
    */
-  private checkPlan(_action: string, toolName: string): PermissionDecision {
+  private checkPlan(action: string, toolName: string): PermissionDecision {
     if (this.isReadOnlyTool(toolName)) {
       return { allowed: true, reason: 'Read-only tool allowed in plan mode', prompted: false };
+    }
+    if (
+      (toolName.toLowerCase() === 'bash' || toolName.toLowerCase() === 'shell_exec') &&
+      SafeBinariesChecker.getInstance().isSafeChain(action)
+    ) {
+      return {
+        allowed: true,
+        reason: 'Read-only shell expression allowed in plan mode',
+        prompted: false,
+      };
     }
     return { allowed: false, reason: 'Only read-only tools allowed in plan mode', prompted: false };
   }
@@ -239,7 +274,7 @@ export class PermissionModeManager {
   }
 
   getSubagentMode(): PermissionMode {
-    return this.config.subagentMode || this.config.mode;
+    return this.config.subagentMode || this.getMode();
   }
 
   /**

@@ -7,6 +7,8 @@ import { SettingsImportExport } from './SettingsImportExport';
 export function SettingsGeneral() {
   const { i18n, t } = useTranslation();
   const settings = useAppStore((s) => s.settings);
+  const appConfig = useAppStore((s) => s.appConfig);
+  const setAppConfig = useAppStore((s) => s.setAppConfig);
   const updateSettings = useAppStore((s) => s.updateSettings);
   const setSettings = useAppStore((s) => s.setSettings);
   const currentLang = i18n.language.startsWith('zh')
@@ -15,6 +17,7 @@ export function SettingsGeneral() {
       ? 'fr'
       : 'en';
   const [appVer, setAppVer] = useState('');
+  const [savingContextOptimization, setSavingContextOptimization] = useState(false);
   useEffect(() => {
     try {
       const v = window.electronAPI?.getVersion?.();
@@ -98,6 +101,20 @@ export function SettingsGeneral() {
     }
   };
   const currentMemoryStrategy = settings.memoryStrategy ?? 'auto';
+  const contextOptimizationMode = appConfig?.contextOptimizationMode ?? 'auto';
+
+  const setContextOptimizationMode = async (mode: 'auto' | 'off') => {
+    if (!window.electronAPI?.config || savingContextOptimization) return;
+    setSavingContextOptimization(true);
+    try {
+      const result = await window.electronAPI.config.save({ contextOptimizationMode: mode });
+      if (result.success && result.config) {
+        setAppConfig(result.config);
+      }
+    } finally {
+      setSavingContextOptimization(false);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -213,6 +230,42 @@ export function SettingsGeneral() {
             </option>
           ))}
         </select>
+      </div>
+
+      {/* Recoverable context optimization */}
+      <div className="space-y-3 pt-4 border-t border-border">
+        <h4 className="text-sm font-medium text-text-primary">
+          {t('general.contextOptimization', 'Context optimization')}
+        </h4>
+        <p className="text-xs text-text-muted">
+          {t(
+            'general.contextOptimizationDesc',
+            'Auto uses local lm-resizer to reduce noisy tool output before it reaches the model. The exact raw result remains recoverable by tool call ID.'
+          )}
+        </p>
+        <div
+          className="flex gap-2"
+          role="group"
+          aria-label={t('general.contextOptimization', 'Context optimization')}
+        >
+          {(['auto', 'off'] as const).map((mode) => (
+            <button
+              key={mode}
+              type="button"
+              disabled={savingContextOptimization}
+              onClick={() => void setContextOptimizationMode(mode)}
+              className={`flex-1 px-4 py-2.5 rounded-lg border-2 text-sm font-medium transition-all disabled:opacity-50 ${
+                contextOptimizationMode === mode
+                  ? 'border-accent bg-accent/5 text-text-primary'
+                  : 'border-border bg-surface hover:border-accent/50 text-text-secondary'
+              }`}
+            >
+              {mode === 'auto'
+                ? t('general.contextOptimizationAuto', 'Auto (recommended)')
+                : t('general.contextOptimizationOff', 'Off')}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Settings sync (Phase 2 step 19) */}
