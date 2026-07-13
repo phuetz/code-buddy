@@ -49,6 +49,8 @@ interface RawSensoryFrame {
  * shape (no control chars / newlines, ≤64 chars) so a crafted local frame can't
  * inject content downstream (e.g. into CODEBUDDY_MEMORY.md via dreaming). */
 const KNOWN_MODALITIES = new Set(['audio', 'vision', 'screen', 'vital', 'ui']);
+const MAX_WEBSOCKET_PAYLOAD_BYTES = 256 * 1024;
+const MAX_FRAME_BYTES = 64 * 1024;
 
 let bridgeHealth: SensoryBridgeHealth = { status: 'disabled', ready: false };
 
@@ -67,7 +69,7 @@ export function startSensoryBridge(options: SensoryBridgeOptions = {}): SensoryB
   const token = options.token ?? process.env.CODEBUDDY_SENSORY_TOKEN;
   const bus = getGlobalEventBus();
 
-  const wss = new WebSocketServer({ host, port });
+  const wss = new WebSocketServer({ host, port, maxPayload: MAX_WEBSOCKET_PAYLOAD_BYTES });
   bridgeHealth = { status: 'starting', ready: false, port };
 
   let readySettled = false;
@@ -114,11 +116,18 @@ export function startSensoryBridge(options: SensoryBridgeOptions = {}): SensoryB
       return;
     }
     logger.info('[sensory] daemon connected');
+    // `ws` emits a socket-level error before closing oversized messages with
+    // code 1009. Always consume it so malformed local input cannot crash Node.
+    ws.on('error', (err) => {
+      logger.warn(`[sensory] daemon socket error: ${err instanceof Error ? err.message : String(err)}`);
+    });
 
     ws.on('message', (data) => {
+      const raw = String(data);
+      if (Buffer.byteLength(raw, 'utf8') > MAX_FRAME_BYTES) return;
       let frame: RawSensoryFrame;
       try {
-        frame = JSON.parse(String(data)) as RawSensoryFrame;
+        frame = JSON.parse(raw) as RawSensoryFrame;
       } catch {
         return; // ignore malformed
       }
