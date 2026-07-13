@@ -787,9 +787,11 @@ export class OpenAICompatProvider implements Provider {
       const useTools = !this.isLocalInference() && (tools?.length ?? 0) > 0;
 
       // Strict-template local runtimes (Ollama/LM Studio/vLLM) require a single
-      // leading system message — merge any late/duplicate system injections.
-      let finalMessages: CodeBuddyMessage[] = this.normalizeMessagesForRuntime(messages);
-      // Inject Anthropic prompt-cache breakpoints (Manus AI #20).
+      // leading system message — merge any late/duplicate system injections
+      // before the tool-role conversion below.
+      let finalMessages = this.convertToolMessagesForLocalModels(
+        this.normalizeMessagesForRuntime(messages),
+      );
       const modelInfo = getModelInfo(this.currentModel);
       if (modelInfo.provider === 'anthropic') {
         finalMessages = injectAnthropicCacheBreakpoints(finalMessages) as CodeBuddyMessage[];
