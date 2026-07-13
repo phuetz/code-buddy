@@ -1771,6 +1771,62 @@ describe('AgentExecutor', () => {
       expect(config.estimateSessionCostLimitReached).toHaveBeenCalledWith(300, 50);
     });
 
+    it('should include selected tool schemas in provider input cost', async () => {
+      const selectedTool = {
+        type: 'function' as const,
+        function: {
+          name: 'read_file',
+          description: 'Read a file',
+          parameters: {
+            type: 'object',
+            properties: { path: { type: 'string' } },
+            required: ['path'],
+          },
+        },
+      };
+      (deps.toolSelectionStrategy.selectToolsForQuery as jest.Mock).mockResolvedValue({
+        tools: [selectedTool],
+        selection: null,
+        fromCache: false,
+        query: 'Read a file',
+        timestamp: new Date(),
+      });
+      (deps.tokenCounter.countTokens as jest.Mock).mockReturnValue(25);
+
+      await executor.processUserMessage('Read a file', [], []);
+
+      expect(deps.tokenCounter.countTokens).toHaveBeenCalledWith(JSON.stringify([selectedTool]));
+      expect(config.recordSessionCost).toHaveBeenCalledWith(525, 50);
+    });
+
+    it('should account for a pre-compaction model request', async () => {
+      (deps.contextManager.shouldWarn as jest.Mock).mockReturnValue({
+        warn: true,
+        message: 'Context nearly full',
+      });
+      (deps.tokenCounter.countMessageTokens as jest.Mock)
+        .mockReturnValueOnce(10)  // Initial UI estimate
+        .mockReturnValueOnce(40)  // Pre-compaction request
+        .mockReturnValueOnce(100); // Main provider request
+      (deps.client.chat as jest.Mock).mockResolvedValueOnce({
+        choices: [{ message: { content: 'NO_REPLY' }, finish_reason: 'stop' }],
+        usage: { prompt_tokens: 40, completion_tokens: 5, total_tokens: 45 },
+      });
+      const messages: CodeBuddyMessage[] = [
+        { role: 'user', content: 'one' },
+        { role: 'assistant', content: 'two' },
+        { role: 'user', content: 'three' },
+        { role: 'assistant', content: 'four' },
+      ];
+
+      await executor.processUserMessage('Continue', [], messages);
+
+      expect(deps.client.chat).toHaveBeenCalledTimes(1);
+      expect(config.recordSessionCost).toHaveBeenCalledWith(140, 55);
+      expect(config.estimateSessionCostLimitReached).toHaveBeenCalledWith(40, 0);
+      expect(config.estimateSessionCostLimitReached).toHaveBeenCalledWith(140, 5);
+    });
+
     it('should remain the single cost recorder when the legacy middleware is present', async () => {
       const pipeline = new MiddlewarePipeline();
       pipeline.use(new CostLimitMiddleware({
@@ -1821,6 +1877,17 @@ describe('AgentExecutor', () => {
 
       const costChunk = chunks.find(c => c.content?.includes('cost limit'));
       expect(costChunk).toBeDefined();
+    });
+
+    it('should warn when the session reaches eighty percent of its budget', async () => {
+      (config.getSessionCost as jest.Mock).mockReturnValue(8.5);
+      (config.getSessionCostLimit as jest.Mock).mockReturnValue(10);
+
+      const chunks = await collectChunks(
+        executor.processUserMessageStream('Expensive', [], [], null),
+      );
+
+      expect(chunks.some(chunk => chunk.content?.includes('approaching limit'))).toBe(true);
     });
   });
 

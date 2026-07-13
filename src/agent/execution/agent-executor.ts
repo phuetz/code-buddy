@@ -866,6 +866,7 @@ export class AgentExecutor {
         const preparedMessages = prepareTurnMessages(this.deps.contextManager, messages);
         preparedMessages.push(...contextBlocks);
         const providerMessages = this.compactLargeToolResults(preparedMessages);
+        let precompactionBudgetExceeded = false;
 
         // Context warning — always check regardless of pipeline state
         {
@@ -884,11 +885,33 @@ export class AgentExecutor {
                   content: typeof m.content === 'string' ? m.content : '',
                 })),
                 async (flushMsgs) => {
+                  const flushProviderMessages = flushMsgs.map(m => ({
+                    role: m.role,
+                    content: m.content,
+                  }));
+                  const estimatedFlushInputTokens = this.deps.tokenCounter.countMessageTokens(
+                    flushProviderMessages as Parameters<typeof this.deps.tokenCounter.countMessageTokens>[0],
+                  );
+                  if (this.config.estimateSessionCostLimitReached(
+                    turnInputTokens + estimatedFlushInputTokens,
+                    totalOutputTokens,
+                  )) {
+                    precompactionBudgetExceeded = true;
+                    return 'NO_REPLY';
+                  }
+                  turnInputTokens += estimatedFlushInputTokens;
                   const r = await this.deps.client.chat(
-                    flushMsgs.map(m => ({ role: m.role, content: m.content })),
+                    flushProviderMessages,
                     [],
                   );
-                  return r.choices[0]?.message?.content ?? 'NO_REPLY';
+                  const flushContent = r.choices[0]?.message?.content ?? 'NO_REPLY';
+                  if (r.usage) {
+                    turnInputTokens += r.usage.prompt_tokens - estimatedFlushInputTokens;
+                    totalOutputTokens += r.usage.completion_tokens;
+                  } else {
+                    totalOutputTokens += this.deps.tokenCounter.countTokens(flushContent);
+                  }
+                  return flushContent;
                 }
               );
             } catch {
@@ -897,9 +920,24 @@ export class AgentExecutor {
           }
         }
 
-        const roundInputTokens = this.deps.tokenCounter.countMessageTokens(
+        if (precompactionBudgetExceeded) {
+          const sessionCost = this.config.getSessionCost();
+          const sessionCostLimit = this.config.getSessionCostLimit();
+          yield {
+            type: 'content',
+            content: `\n\nSession cost limit reached ($${sessionCost.toFixed(2)} / $${sessionCostLimit.toFixed(2)}). Stopping before the pre-compaction model request.`,
+          };
+          yield { type: 'done' };
+          return;
+        }
+
+        const messageInputTokens = this.deps.tokenCounter.countMessageTokens(
           providerMessages as Parameters<typeof this.deps.tokenCounter.countMessageTokens>[0]
         );
+        const toolSchemaTokens = tools.length > 0
+          ? this.deps.tokenCounter.countTokens(JSON.stringify(tools))
+          : 0;
+        const roundInputTokens = messageInputTokens + toolSchemaTokens;
 
         // Refuse a request whose input alone would cross the session budget.
         // It has not been sent yet, so do not add it to the billed turn total.
@@ -1443,7 +1481,8 @@ export class AgentExecutor {
           inputTokens = this.deps.tokenCounter.countMessageTokens(messages as Parameters<typeof this.deps.tokenCounter.countMessageTokens>[0]);
           yield { type: "token_count", tokenCount: inputTokens + totalOutputTokens };
 
-          // Run after_turn middleware (handles cost recording + limit)
+          // Run remaining after_turn middleware. Cost accounting is centralized
+          // in this loop and the duplicate legacy middleware was removed above.
           if (pipeline) {
             const ctx = this.buildMiddlewareContext(
               toolRounds, inputTokens, totalOutputTokens, history, messages, true, abortController
@@ -1595,6 +1634,15 @@ export class AgentExecutor {
           type: "content",
           content: `\n\n💸 Session cost limit reached ($${sessionCost.toFixed(2)} / $${sessionCostLimit.toFixed(2)}).`,
         };
+      } else {
+        const sessionCost = this.config.getSessionCost();
+        const sessionCostLimit = this.config.getSessionCostLimit();
+        if (sessionCostLimit > 0 && sessionCost >= sessionCostLimit * 0.8) {
+          yield {
+            type: 'content',
+            content: `\nSession cost approaching limit ($${sessionCost.toFixed(2)} / $${sessionCostLimit.toFixed(2)}).\n`,
+          };
+        }
       }
 
       // Process followup/collect messages if any are queued
