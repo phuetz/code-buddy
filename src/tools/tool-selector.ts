@@ -139,6 +139,22 @@ export class ToolSelector {
     }
   }
 
+  /** Normalize a tool's keyword set exactly like query scoring does. */
+  private normalizeKeywords(keywords: string[]): Set<string> {
+    return new Set(keywords.map(keyword =>
+      ToolSelector.foldDiacritics(keyword.toLowerCase())
+    ));
+  }
+
+  /** Recompute IDF after the indexed corpus or document frequencies change. */
+  private recalculateIdfScores(): void {
+    this.idfScores.clear();
+    for (const [keyword, df] of this.documentFrequency) {
+      const idf = Math.log(this.totalDocuments / (df + 1)) + 1;
+      this.idfScores.set(keyword, idf);
+    }
+  }
+
   /**
    * Fold diacritics so accented queries match ASCII keywords: « vidéo » →
    * "video", « génère » → "genere". Without this, the \W tokenizer split
@@ -474,20 +490,42 @@ export class ToolSelector {
       description
     };
 
-    this.toolIndex.set(name, metadata);
+    const existing = this.toolIndex.get(name);
+    const nextKeywords = this.normalizeKeywords(keywords);
+    if (existing) {
+      const previousKeywords = this.normalizeKeywords(existing.keywords);
+      const metadataChanged =
+        existing.category !== metadata.category ||
+        existing.priority !== metadata.priority ||
+        existing.description !== metadata.description ||
+        previousKeywords.size !== nextKeywords.size ||
+        [...previousKeywords].some(keyword => !nextKeywords.has(keyword));
 
-    // Update document frequency and IDF
-    this.totalDocuments++;
-    const uniqueKeywords = new Set(keywords.map(k => k.toLowerCase()));
-    for (const keyword of uniqueKeywords) {
-      this.documentFrequency.set(
-        keyword,
-        (this.documentFrequency.get(keyword) || 0) + 1
-      );
-      const df = this.documentFrequency.get(keyword) || 1;
-      const idf = Math.log(this.totalDocuments / (df + 1)) + 1;
-      this.idfScores.set(keyword, idf);
+      if (!metadataChanged) return;
+
+      this.toolIndex.set(name, metadata);
+      for (const keyword of previousKeywords) {
+        if (nextKeywords.has(keyword)) continue;
+        const nextDf = (this.documentFrequency.get(keyword) ?? 1) - 1;
+        if (nextDf <= 0) this.documentFrequency.delete(keyword);
+        else this.documentFrequency.set(keyword, nextDf);
+      }
+      for (const keyword of nextKeywords) {
+        if (previousKeywords.has(keyword)) continue;
+        this.documentFrequency.set(keyword, (this.documentFrequency.get(keyword) ?? 0) + 1);
+      }
+      this.recalculateIdfScores();
+      this.selectionCache.clear();
+      return;
     }
+
+    this.toolIndex.set(name, metadata);
+    this.totalDocuments++;
+    for (const keyword of nextKeywords) {
+      this.documentFrequency.set(keyword, (this.documentFrequency.get(keyword) ?? 0) + 1);
+    }
+    this.recalculateIdfScores();
+    this.selectionCache.clear();
   }
 
   /**

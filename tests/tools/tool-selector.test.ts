@@ -275,6 +275,51 @@ describe("ToolSelector", () => {
       expect(metadata).toBeDefined();
       expect(metadata?.category).toBe("mcp");
     });
+
+    it("should keep MCP scores stable when the same tool is registered repeatedly", () => {
+      const mcpTool = createMockTool("mcp__audit__quasar", "Quasar database action");
+      selector.registerMCPTool(mcpTool);
+      const selectionOptions = {
+        alwaysInclude: [],
+        minScore: 0,
+        useAdaptiveThreshold: false,
+      };
+      const initialScore = selector
+        .selectTools("quasar", [mcpTool], selectionOptions)
+        .scores.get(mcpTool.function.name);
+
+      for (let i = 0; i < 100; i++) {
+        selector.registerMCPTool(mcpTool);
+      }
+
+      const finalScore = selector
+        .selectTools("quasar", [mcpTool], selectionOptions)
+        .scores.get(mcpTool.function.name);
+      expect(initialScore).toBeDefined();
+      expect(finalScore).toBeCloseTo(initialScore!, 12);
+    });
+
+    it("should fold diacritics consistently when registering keywords", () => {
+      const accentedSelector = new ToolSelector();
+      const asciiSelector = new ToolSelector();
+      const tool = createMockTool("custom_video_tool", "Process media");
+      accentedSelector.registerTool(tool.function.name, "utility", ["vidéo"], tool.function.description);
+      asciiSelector.registerTool(tool.function.name, "utility", ["video"], tool.function.description);
+      const selectionOptions = {
+        alwaysInclude: [],
+        minScore: 0,
+        useAdaptiveThreshold: false,
+      };
+
+      const accentedScore = accentedSelector
+        .selectTools("video", [tool], selectionOptions)
+        .scores.get(tool.function.name);
+      const asciiScore = asciiSelector
+        .selectTools("video", [tool], selectionOptions)
+        .scores.get(tool.function.name);
+
+      expect(accentedScore).toBeCloseTo(asciiScore!, 12);
+    });
   });
 
   describe("Cache Management", () => {
