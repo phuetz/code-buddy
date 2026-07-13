@@ -40,6 +40,16 @@ export const CAMERA_MESSAGES: Record<string, string[]> = {
     '💤 La personne a l’air de somnoler',
     '😪 Yeux fermés — fatigue détectée',
   ],
+  offline: [
+    '📵 Caméra hors ligne — le flux vidéo est perdu',
+    '⚠️ Je ne reçois plus d’image de la caméra',
+    '🙈 Caméra indisponible — perception visuelle interrompue',
+  ],
+  online: [
+    '📷 Caméra de nouveau en ligne',
+    '✅ Le flux vidéo est rétabli',
+    '👁️ La perception visuelle fonctionne à nouveau',
+  ],
 };
 
 const lastMsgIdx: Record<string, number> = {};

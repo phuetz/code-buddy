@@ -76,6 +76,75 @@ pub mod live {
     const H: usize = 48;
     const FRAME_KEEP: usize = 500;
     const DEFAULT_FRAME_TTL_SECS: u64 = 7 * 24 * 60 * 60;
+    const DEFAULT_CAMERA_FAILURE_THRESHOLD: u32 = 20;
+    const DEFAULT_CAMERA_RETRY_MS: u64 = 500;
+    const CAMERA_STATUS_SALIENCE: u8 = 150;
+
+    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+    enum CameraTransition {
+        Offline,
+        Online,
+    }
+
+    #[derive(Debug)]
+    struct CameraHealth {
+        consecutive_failures: u32,
+        failure_threshold: u32,
+        offline: bool,
+    }
+
+    impl CameraHealth {
+        fn new(failure_threshold: u32) -> Self {
+            Self {
+                consecutive_failures: 0,
+                failure_threshold: failure_threshold.max(1),
+                offline: false,
+            }
+        }
+
+        fn capture_failed(&mut self) -> Option<CameraTransition> {
+            self.consecutive_failures = self.consecutive_failures.saturating_add(1);
+            if !self.offline && self.consecutive_failures >= self.failure_threshold {
+                self.offline = true;
+                Some(CameraTransition::Offline)
+            } else {
+                None
+            }
+        }
+
+        fn capture_succeeded(&mut self) -> Option<CameraTransition> {
+            self.consecutive_failures = 0;
+            if self.offline {
+                self.offline = false;
+                Some(CameraTransition::Online)
+            } else {
+                None
+            }
+        }
+    }
+
+    #[derive(Clone, Copy, Debug)]
+    struct CaptureRecoveryConfig {
+        failure_threshold: u32,
+        retry_delay: Duration,
+    }
+
+    fn configured_recovery(
+        failure_threshold: Option<&str>,
+        retry_ms: Option<&str>,
+    ) -> CaptureRecoveryConfig {
+        let failure_threshold = failure_threshold
+            .and_then(|value| value.parse::<u32>().ok())
+            .filter(|value| *value > 0)
+            .unwrap_or(DEFAULT_CAMERA_FAILURE_THRESHOLD);
+        let retry_ms = retry_ms
+            .and_then(|value| value.parse::<u64>().ok())
+            .unwrap_or(DEFAULT_CAMERA_RETRY_MS);
+        CaptureRecoveryConfig {
+            failure_threshold,
+            retry_delay: Duration::from_millis(retry_ms),
+        }
+    }
 
     fn ffmpeg_bin() -> String {
         std::env::var("BUDDY_SENSE_FFMPEG")
@@ -249,10 +318,69 @@ pub mod live {
     ) {
         let dir = frame_dir();
         let program = ffmpeg_bin();
+        let failure_threshold = std::env::var("BUDDY_SENSE_CAMERA_FAILURE_THRESHOLD").ok();
+        let retry_ms = std::env::var("BUDDY_SENSE_CAMERA_RETRY_MS").ok();
+        let recovery = configured_recovery(failure_threshold.as_deref(), retry_ms.as_deref());
         let _ = tokio::task::spawn_blocking(move || {
-            capture_loop(tx, &device, interval_ms, threshold, &dir, program.as_ref())
+            capture_loop(
+                tx,
+                &device,
+                interval_ms,
+                threshold,
+                &dir,
+                program.as_ref(),
+                recovery,
+            )
         })
         .await;
+    }
+
+    fn emit_camera_transition(
+        tx: &mpsc::Sender<SensoryEvent>,
+        camera: &str,
+        health: &CameraHealth,
+        transition: CameraTransition,
+    ) -> bool {
+        let kind = match transition {
+            CameraTransition::Offline => {
+                eprintln!(
+                    "[buddy-sense] live-vision: camera {camera} offline after {} consecutive capture failures",
+                    health.consecutive_failures
+                );
+                "offline"
+            }
+            CameraTransition::Online => {
+                eprintln!("[buddy-sense] live-vision: camera {camera} online");
+                "online"
+            }
+        };
+        let event = SensoryEvent::new(
+            Modality::Vision,
+            kind,
+            CAMERA_STATUS_SALIENCE,
+            serde_json::json!({
+                "camera": camera,
+                "consecutiveFailures": health.consecutive_failures,
+            }),
+        );
+        tx.blocking_send(event).is_ok()
+    }
+
+    fn note_capture_failure(
+        tx: &mpsc::Sender<SensoryEvent>,
+        camera: &str,
+        health: &mut CameraHealth,
+    ) -> bool {
+        match health.capture_failed() {
+            Some(transition) => emit_camera_transition(tx, camera, health, transition),
+            None => !tx.is_closed(),
+        }
+    }
+
+    fn wait_before_retry(delay: Duration) {
+        if !delay.is_zero() {
+            std::thread::sleep(delay);
+        }
     }
 
     fn capture_loop(
@@ -262,87 +390,116 @@ pub mod live {
         threshold: f64,
         dir: &Path,
         program: &OsStr,
+        recovery: CaptureRecoveryConfig,
     ) {
         let camera = device.rsplit('/').next().unwrap_or("camera").to_string();
         let safe_camera = camera_name(device);
         let latest_frame = dir.join(format!(".buddy-sense-{safe_camera}-latest.jpg"));
-        // Never use a stale keyframe if capture fails before ffmpeg's first JPEG.
-        let _ = std::fs::remove_file(&latest_frame);
+        let mut health = CameraHealth::new(recovery.failure_threshold);
 
-        let mut child = match Command::new(program)
-            .args(ffmpeg_args(device, interval_ms, &latest_frame))
-            .stdout(Stdio::piped())
-            .stderr(Stdio::inherit())
-            .spawn()
-        {
-            Ok(child) => child,
-            Err(error) => {
-                eprintln!(
-                    "[buddy-sense] live-vision: ffmpeg spawn failed ({error}); is ffmpeg installed? sense disabled"
-                );
-                return;
-            }
-        };
-        let mut stdout = match child.stdout.take() {
-            Some(stdout) => stdout,
-            None => {
-                eprintln!("[buddy-sense] live-vision: no ffmpeg stdout; sense disabled");
-                let _ = child.kill();
-                let _ = child.wait();
-                return;
-            }
-        };
+        while !tx.is_closed() {
+            // Never use a stale keyframe if capture fails before ffmpeg's first JPEG.
+            let _ = std::fs::remove_file(&latest_frame);
+            let mut child = match Command::new(program)
+                .args(ffmpeg_args(device, interval_ms, &latest_frame))
+                .stdout(Stdio::piped())
+                .stderr(Stdio::inherit())
+                .spawn()
+            {
+                Ok(child) => child,
+                Err(_) => {
+                    if !note_capture_failure(&tx, &camera, &mut health) {
+                        break;
+                    }
+                    wait_before_retry(recovery.retry_delay);
+                    continue;
+                }
+            };
+            let mut stdout = match child.stdout.take() {
+                Some(stdout) => stdout,
+                None => {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    if !note_capture_failure(&tx, &camera, &mut health) {
+                        break;
+                    }
+                    wait_before_retry(recovery.retry_delay);
+                    continue;
+                }
+            };
 
-        let mut prev: Option<Vec<u8>> = None;
-        let mut moving = false;
-        let mut frame = vec![0_u8; W * H];
-        loop {
-            if stdout.read_exact(&mut frame).is_err() {
+            let mut prev: Option<Vec<u8>> = None;
+            let mut moving = false;
+            let mut frame = vec![0_u8; W * H];
+            let mut receiver_open = true;
+            loop {
+                if stdout.read_exact(&mut frame).is_err() {
+                    break;
+                }
+                if let Some(transition) = health.capture_succeeded() {
+                    if !emit_camera_transition(&tx, &camera, &health, transition) {
+                        receiver_open = false;
+                        break;
+                    }
+                }
+                if let Some(p) = &prev {
+                    if p.len() == frame.len() {
+                        let score = motion_score(p, frame.as_slice());
+                        if !moving && score >= threshold {
+                            moving = true;
+                            let path = dir.join(format!("cam-{}.jpg", now_ms()));
+                            let path_str = path.to_string_lossy().to_string();
+                            let ok = retain_keyframe(&latest_frame, &path);
+                            if ok {
+                                let ttl_env = std::env::var("BUDDY_SENSE_FRAME_TTL").ok();
+                                let ttl = configured_frame_ttl(ttl_env.as_deref());
+                                if let Err(error) = prune_frames(dir, FRAME_KEEP, ttl) {
+                                    eprintln!(
+                                        "[buddy-sense] live-vision: keyframe pruning failed ({error})"
+                                    );
+                                }
+                            }
+                            let retained_path = if ok && path.is_file() {
+                                Some(path_str)
+                            } else {
+                                None
+                            };
+                            let payload = serde_json::json!({
+                                "score": score,
+                                "camera": camera,
+                                "imagePath": retained_path,
+                            });
+                            let event = SensoryEvent::new(
+                                Modality::Vision,
+                                "motion",
+                                MOTION_SALIENCE,
+                                payload,
+                            );
+                            if tx.blocking_send(event).is_err() {
+                                receiver_open = false;
+                                break;
+                            }
+                        } else if moving && score < threshold {
+                            moving = false;
+                        }
+                    } else {
+                        moving = false; // resolution change → re-baseline + re-arm
+                    }
+                }
+                prev = Some(frame.clone());
+            }
+
+            let _ = child.kill();
+            let _ = child.wait();
+            let _ = std::fs::remove_file(&latest_frame);
+            if !receiver_open || tx.is_closed() {
                 break;
             }
-            if let Some(p) = &prev {
-                if p.len() == frame.len() {
-                    let score = motion_score(p, frame.as_slice());
-                    if !moving && score >= threshold {
-                        moving = true;
-                        let path = dir.join(format!("cam-{}.jpg", now_ms()));
-                        let path_str = path.to_string_lossy().to_string();
-                        let ok = retain_keyframe(&latest_frame, &path);
-                        if ok {
-                            let ttl_env = std::env::var("BUDDY_SENSE_FRAME_TTL").ok();
-                            let ttl = configured_frame_ttl(ttl_env.as_deref());
-                            if let Err(error) = prune_frames(dir, FRAME_KEEP, ttl) {
-                                eprintln!(
-                                    "[buddy-sense] live-vision: keyframe pruning failed ({error})"
-                                );
-                            }
-                        }
-                        let retained_path = if ok && path.is_file() {
-                            Some(path_str)
-                        } else {
-                            None
-                        };
-                        let payload = serde_json::json!({
-                            "score": score,
-                            "camera": camera,
-                            "imagePath": retained_path,
-                        });
-                        let ev =
-                            SensoryEvent::new(Modality::Vision, "motion", MOTION_SALIENCE, payload);
-                        if tx.blocking_send(ev).is_err() {
-                            break;
-                        }
-                    } else if moving && score < threshold {
-                        moving = false;
-                    }
-                } else {
-                    moving = false; // resolution change → re-baseline + re-arm
-                }
+            if !note_capture_failure(&tx, &camera, &mut health) {
+                break;
             }
-            prev = Some(frame.clone());
+            wait_before_retry(recovery.retry_delay);
         }
-        let _ = child.kill();
-        let _ = child.wait();
         let _ = std::fs::remove_file(latest_frame);
         eprintln!("[buddy-sense] live-vision: capture ended");
     }
@@ -454,6 +611,51 @@ pub mod live {
             std::fs::remove_dir_all(dir).unwrap();
         }
 
+        #[test]
+        fn camera_health_emits_each_offline_online_transition_once() {
+            let mut health = CameraHealth::new(3);
+            assert_eq!(health.capture_failed(), None);
+            assert_eq!(health.capture_failed(), None);
+            assert_eq!(health.capture_failed(), Some(CameraTransition::Offline));
+            assert_eq!(health.capture_failed(), None);
+            assert_eq!(health.capture_failed(), None);
+
+            assert_eq!(health.capture_succeeded(), Some(CameraTransition::Online));
+            assert_eq!(health.capture_succeeded(), None);
+            assert_eq!(health.capture_failed(), None);
+        }
+
+        #[test]
+        fn camera_recovery_defaults_to_about_ten_seconds_and_is_configurable() {
+            let defaults = configured_recovery(None, None);
+            assert_eq!(defaults.failure_threshold, 20);
+            assert_eq!(defaults.retry_delay, Duration::from_millis(500));
+
+            let custom = configured_recovery(Some("4"), Some("25"));
+            assert_eq!(custom.failure_threshold, 4);
+            assert_eq!(custom.retry_delay, Duration::from_millis(25));
+
+            let invalid = configured_recovery(Some("0"), Some("invalid"));
+            assert_eq!(invalid.failure_threshold, 20);
+            assert_eq!(invalid.retry_delay, Duration::from_millis(500));
+        }
+
+        #[cfg(unix)]
+        fn recv_with_timeout(rx: &mut mpsc::Receiver<SensoryEvent>) -> SensoryEvent {
+            let deadline = std::time::Instant::now() + Duration::from_secs(3);
+            loop {
+                match rx.try_recv() {
+                    Ok(event) => return event,
+                    Err(mpsc::error::TryRecvError::Empty)
+                        if std::time::Instant::now() < deadline =>
+                    {
+                        std::thread::sleep(Duration::from_millis(5));
+                    }
+                    Err(error) => panic!("camera event not received before timeout: {error}"),
+                }
+            }
+        }
+
         #[cfg(unix)]
         #[test]
         fn capture_loop_spawns_once_and_retains_a_keyframe_without_reopening_device() {
@@ -466,11 +668,7 @@ pub mod live {
             let spawn_log = dir.join("spawns.log");
             let latest = dir.join(".buddy-sense-video0-latest.jpg");
             let script = format!(
-                "#!/bin/sh\n\
-                 printf 'spawn\\n' >> '{}'\n\
-                 printf 'jpeg-from-the-persistent-process' > '{}'\n\
-                 dd if=/dev/zero bs={} count=1 2>/dev/null\n\
-                 dd if=/dev/zero bs={} count=1 2>/dev/null | tr '\\000' '\\377'\n",
+                "#!/bin/sh\nprintf 'spawn\\n' >> '{}'\nprintf 'jpeg-from-the-persistent-process' > '{}'\ndd if=/dev/zero bs={} count=1 2>/dev/null\ndd if=/dev/zero bs={} count=1 2>/dev/null | tr '\\000' '\\377'\nsleep 0.2\n",
                 spawn_log.display(),
                 latest.display(),
                 W * H,
@@ -482,11 +680,24 @@ pub mod live {
             std::fs::set_permissions(&program, permissions).unwrap();
 
             let (tx, mut rx) = mpsc::channel(1);
-            capture_loop(tx, "/dev/video0", 1_500, 0.1, &dir, program.as_os_str());
+            let capture_dir = dir.clone();
+            let capture_program = program.clone();
+            let handle = std::thread::spawn(move || {
+                capture_loop(
+                    tx,
+                    "/dev/video0",
+                    1_500,
+                    0.1,
+                    &capture_dir,
+                    capture_program.as_os_str(),
+                    CaptureRecoveryConfig {
+                        failure_threshold: 3,
+                        retry_delay: Duration::from_millis(1),
+                    },
+                );
+            });
 
-            let event = rx
-                .blocking_recv()
-                .expect("the changed raw frame should emit motion");
+            let event = recv_with_timeout(&mut rx);
             assert_eq!(event.kind, "motion");
             let image_path = event.payload["imagePath"]
                 .as_str()
@@ -495,8 +706,69 @@ pub mod live {
                 std::fs::read(image_path).unwrap(),
                 b"jpeg-from-the-persistent-process"
             );
+            drop(rx);
+            handle.join().unwrap();
             assert_eq!(std::fs::read_to_string(spawn_log).unwrap(), "spawn\n");
 
+            std::fs::remove_dir_all(dir).unwrap();
+        }
+
+        #[cfg(unix)]
+        #[test]
+        fn capture_loop_emits_offline_then_online_across_reconnects() {
+            use std::os::unix::fs::PermissionsExt;
+
+            let nonce = format!("{}-{}", std::process::id(), now_ms());
+            let dir = std::env::temp_dir().join(format!("buddy-sense-recovery-test-{nonce}"));
+            std::fs::create_dir_all(&dir).unwrap();
+            let program = dir.join("recovering-ffmpeg.sh");
+            let spawn_log = dir.join("spawns.log");
+            let script = format!(
+                "#!/bin/sh\nprintf 'spawn\\n' >> '{}'\nattempts=$(wc -l < '{}')\nif [ \"$attempts\" -lt 3 ]; then exit 1; fi\ndd if=/dev/zero bs={} count=1 2>/dev/null\nsleep 0.2\n",
+                spawn_log.display(),
+                spawn_log.display(),
+                W * H,
+            );
+            std::fs::write(&program, script).unwrap();
+            let mut permissions = std::fs::metadata(&program).unwrap().permissions();
+            permissions.set_mode(0o755);
+            std::fs::set_permissions(&program, permissions).unwrap();
+
+            let (tx, mut rx) = mpsc::channel(4);
+            let capture_dir = dir.clone();
+            let capture_program = program.clone();
+            let handle = std::thread::spawn(move || {
+                capture_loop(
+                    tx,
+                    "/dev/video0",
+                    1_500,
+                    0.1,
+                    &capture_dir,
+                    capture_program.as_os_str(),
+                    CaptureRecoveryConfig {
+                        failure_threshold: 2,
+                        retry_delay: Duration::from_millis(1),
+                    },
+                );
+            });
+
+            let offline = recv_with_timeout(&mut rx);
+            let online = recv_with_timeout(&mut rx);
+            assert_eq!(offline.kind, "offline");
+            assert_eq!(offline.salience, CAMERA_STATUS_SALIENCE);
+            assert_eq!(offline.payload["camera"], "video0");
+            assert_eq!(offline.payload["consecutiveFailures"], 2);
+            assert_eq!(online.kind, "online");
+            assert_eq!(online.salience, CAMERA_STATUS_SALIENCE);
+            assert_eq!(online.payload["camera"], "video0");
+            assert_eq!(online.payload["consecutiveFailures"], 0);
+
+            drop(rx);
+            handle.join().unwrap();
+            assert_eq!(
+                std::fs::read_to_string(spawn_log).unwrap(),
+                "spawn\nspawn\nspawn\n"
+            );
             std::fs::remove_dir_all(dir).unwrap();
         }
     }
