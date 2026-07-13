@@ -170,9 +170,15 @@ export class BuddyMemoryClient {
 
   /** Stop the engine (test seam / shutdown). */
   close(): void {
+    const child = this.child;
     this.fail();
     try {
-      this.child?.kill();
+      if (child && !child.stdin.destroyed) child.stdin.end();
+    } catch {
+      /* ignore */
+    }
+    try {
+      child?.kill();
     } catch {
       /* ignore */
     }
