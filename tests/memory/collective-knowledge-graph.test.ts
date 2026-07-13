@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { mkdtempSync, rmSync, existsSync } from 'fs';
+import { mkdtempSync, rmSync, existsSync, readFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import {
@@ -135,11 +135,29 @@ describe('CollectiveKnowledgeGraph (Phase 0)', () => {
 
   it('redacts secrets before persisting (the lesson is kept, the secret is not)', () => {
     const ckg = new CollectiveKnowledgeGraph({ ledgerPath, agentId: 'host/repo' });
-    const token = `ghp_${'A'.repeat(36)}`;
-    ckg.remember({ text: `Le token de déploiement est ${token} — ne pas le perdre.`, type: 'fact' });
+    const textToken = `ghp_${'A'.repeat(36)}`;
+    const nameToken = `ghp_${'B'.repeat(36)}`;
+    const targetToken = `ghp_${'C'.repeat(36)}`;
+    const reasonToken = `ghp_${'D'.repeat(36)}`;
+    ckg.remember({
+      text: `Le token de déploiement est ${textToken} — ne pas le perdre.`,
+      name: `deployment-${nameToken}`,
+      type: 'fact',
+      relations: [{
+        predicate: 'related_to',
+        targetName: `remote-${targetToken}`,
+        reason: `configured with ${reasonToken}`,
+      }],
+    });
     const hits = ckg.recall('token de déploiement');
     expect(hits.length).toBe(1);
-    expect(hits[0]!.text).not.toContain(token);
+    const ledger = readFileSync(ledgerPath, 'utf8');
+    for (const token of [textToken, nameToken, targetToken, reasonToken]) {
+      expect(ledger).not.toContain(token);
+    }
+    expect(hits[0]!.text).not.toContain(textToken);
+    expect(hits[0]!.name).not.toContain(nameToken);
+    expect(hits[0]!.relations[0]!.reason ?? '').not.toContain(reasonToken);
     expect(hits[0]!.text.toLowerCase()).toContain('token'); // surrounding knowledge preserved
   });
 

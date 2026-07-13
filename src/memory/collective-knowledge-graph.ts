@@ -310,9 +310,9 @@ export class CollectiveKnowledgeGraph {
       const raw = (input.text ?? '').trim();
       if (!raw) return null;
       // Privacy: redact secrets before anything is persisted or shared.
-      const text = scanForSecrets(raw).hasSecrets ? redactSecrets(raw) : raw;
+      const text = redactSensitive(raw);
       const type: EntityType = input.type ?? 'fact';
-      const name = input.name?.trim() || normalizeName(text);
+      const name = redactSensitive(input.name?.trim() || normalizeName(text));
       const id = entityId(type, name);
       const recordedAt = new Date().toISOString();
       const agentId = input.agentId ?? this.agentId;
@@ -327,20 +327,22 @@ export class CollectiveKnowledgeGraph {
       this.append(entityEvent);
 
       for (const rel of input.relations ?? []) {
+        const targetName = redactSensitive(rel.targetName);
+        const reason = rel.reason ? redactSensitive(rel.reason) : undefined;
         const targetType: EntityType = rel.targetType ?? 'concept';
-        const targetId = entityId(targetType, rel.targetName);
+        const targetId = entityId(targetType, targetName);
         const relCh = contentHash('relation', `${id}|${rel.predicate}|${targetId}`);
         const relEvent: LedgerEvent = {
           v: 1, kind: 'relation', recordedAt, agentId, contentHash: relCh,
           sourceId: id, targetId, relType: rel.predicate,
-          ...(rel.reason ? { reason: rel.reason } : {}),
+          ...(reason ? { reason } : {}),
           ...(input.source ? { source: input.source } : {}),
         };
         this.append(relEvent);
         if (!this.current.has(targetId)) {
           const tEvent: LedgerEvent = {
-            v: 1, kind: 'entity', recordedAt, agentId, contentHash: contentHash(targetType, rel.targetName),
-            id: targetId, type: targetType, name: rel.targetName, text: rel.targetName, confidence: 0.5,
+            v: 1, kind: 'entity', recordedAt, agentId, contentHash: contentHash(targetType, targetName),
+            id: targetId, type: targetType, name: targetName, text: targetName, confidence: 0.5,
           };
           this.append(tEvent);
         }
@@ -663,7 +665,7 @@ export class CollectiveKnowledgeGraph {
         agentId: this.agentId,
         contentHash: contentHash('retraction', `${id}|${recordedAt}`),
         id,
-        ...(opts.reason ? { reason: opts.reason } : {}),
+        ...(opts.reason ? { reason: redactSensitive(opts.reason) } : {}),
       };
       this.append(event);
       return { retracted: true, id, status: 'retracted' };
@@ -1130,6 +1132,10 @@ export class CollectiveKnowledgeGraph {
 
 function clamp01(n: number): number {
   return Math.max(0, Math.min(1, Number.isFinite(n) ? n : 0.8));
+}
+
+function redactSensitive(value: string): string {
+  return scanForSecrets(value).hasSecrets ? redactSecrets(value) : value;
 }
 
 function parseEmbeddingCacheEvent(line: string): EmbeddingCacheEvent | null {
