@@ -450,11 +450,15 @@ export class SessionManager {
         });
       }
       if (event.type === 'trace.update') {
-        this.updateTraceStep(event.payload.stepId, event.payload.updates);
-        this.turnJournal.append(event.payload.sessionId, 'trace_update', {
-          stepId: event.payload.stepId,
-          updates: event.payload.updates,
-        });
+        const persistedUpdates = { ...event.payload.updates };
+        delete persistedUpdates.toolOutputDelta;
+        if (Object.keys(persistedUpdates).length > 0) {
+          this.updateTraceStep(event.payload.stepId, persistedUpdates);
+          this.turnJournal.append(event.payload.sessionId, 'trace_update', {
+            stepId: event.payload.stepId,
+            updates: persistedUpdates,
+          });
+        }
       }
       sendToRenderer(event);
     };
@@ -2570,6 +2574,10 @@ export class SessionManager {
     }
   }
 
+  dispose(): void {
+    this.turnJournal.close();
+  }
+
   // Request permission for a tool
   async requestPermission(
     sessionId: string,
@@ -2664,7 +2672,9 @@ export class SessionManager {
     if (updates.timestamp !== undefined) rowUpdates.timestamp = updates.timestamp;
     if (updates.duration !== undefined) rowUpdates.duration = updates.duration;
 
-    this.db.traceSteps.update(stepId, rowUpdates);
+    if (Object.keys(rowUpdates).length > 0) {
+      this.db.traceSteps.update(stepId, rowUpdates);
+    }
   }
 }
 

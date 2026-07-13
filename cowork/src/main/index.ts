@@ -2350,6 +2350,7 @@ async function cleanupSandboxResources(): Promise<void> {
     logError('[App] Error stopping clipboard watcher:', error);
   }
 
+  sessionManager?.dispose();
   try {
     closeDatabase();
   } catch (error) {
@@ -2414,6 +2415,7 @@ app.on('before-quit', async (event) => {
     // In dev mode, exit quickly — no need for async sandbox cleanup
     if (process.env.VITE_DEV_SERVER_URL) {
       stopNavServer();
+      sessionManager?.dispose();
       try {
         closeDatabase();
       } catch {

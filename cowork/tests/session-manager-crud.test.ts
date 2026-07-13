@@ -3,7 +3,7 @@ import { tmpdir } from 'os';
 import { join } from 'path';
 import { describe, expect, it, vi } from 'vitest';
 import type { DatabaseInstance } from '../src/main/db/database';
-import type { Session } from '../src/renderer/types';
+import type { ServerEvent, Session } from '../src/renderer/types';
 
 vi.mock('electron', () => ({
   app: {
@@ -804,6 +804,34 @@ describe('SessionManager.handlePermissionResponse', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe('SessionManager trace update persistence', () => {
+  it('forwards transient tool deltas without journaling or empty SQLite updates', () => {
+    const db = makeDb();
+    const sendToRenderer = vi.fn();
+    const manager = new SessionManager(db, sendToRenderer);
+    const internals = manager as unknown as {
+      sendToRenderer: (event: ServerEvent) => void;
+      turnJournal: TurnJournal;
+    };
+    const journalAppend = vi.spyOn(internals.turnJournal, 'append');
+    const event: ServerEvent = {
+      type: 'trace.update',
+      payload: {
+        sessionId: 's1',
+        stepId: 'step-1',
+        updates: { toolOutputDelta: 'stream chunk' },
+      },
+    };
+
+    internals.sendToRenderer(event);
+
+    expect(db.traceSteps.update).not.toHaveBeenCalled();
+    expect(journalAppend).not.toHaveBeenCalled();
+    expect(sendToRenderer).toHaveBeenCalledWith(event);
+    manager.dispose();
   });
 });
 
