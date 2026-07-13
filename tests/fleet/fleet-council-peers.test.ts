@@ -33,6 +33,35 @@ describe('gatherPeerAnswers — fold remote machines into the council', () => {
     expect(errors.find((e) => e.id === 'boom')!.message).toMatch(/timeout/);
   });
 
+  it('sanitizes peer output before it reaches the council judge', async () => {
+    const peers = [
+      peer('local-model', async () => ({
+        text: '<think>private reasoning</think>réponse',
+        modelRequested: 'qwen',
+      })),
+    ];
+
+    const { answers, errors } = await gatherPeerAnswers('q', peers, 1000);
+
+    expect(errors).toHaveLength(0);
+    expect(answers).toHaveLength(1);
+    expect(answers[0]!.content).toBe('réponse');
+  });
+
+  it('treats peer output emptied by sanitization as a failed answer', async () => {
+    const peers = [
+      peer('reasoning-only', async () => ({
+        text: '<think>private reasoning</think>',
+        modelRequested: 'qwen',
+      })),
+    ];
+
+    const { answers, errors } = await gatherPeerAnswers('q', peers, 1000);
+
+    expect(answers).toHaveLength(0);
+    expect(errors).toEqual([{ id: 'reasoning-only', message: 'réponse vide' }]);
+  });
+
   it('returns empty when there are no peers', async () => {
     const { answers, errors } = await gatherPeerAnswers('q', [], 1000);
     expect(answers).toHaveLength(0);
