@@ -166,6 +166,20 @@ describe('BashTool', () => {
       expect(Date.now() - startedAt).toBeLessThan(3000);
     });
 
+    it('does not start a command when its turn was already aborted', async () => {
+      const outputPath = path.join(os.tmpdir(), `bash-abort-${Date.now()}.txt`);
+      const abortController = new AbortController();
+      abortController.abort();
+
+      const result = await runWithToolAbortSignal(
+        abortController.signal,
+        () => bashTool.execute(`echo written > "${outputPath}"`),
+      );
+
+      expect(result).toEqual({ success: false, error: 'Command aborted' });
+      expect(fs.existsSync(outputPath)).toBe(false);
+    });
+
     // cat is not available on Windows
     (isWindows ? it.skip : it)('should execute cat command', async () => {
       const tmpFile = path.join(os.tmpdir(), `bash-test-${Date.now()}.txt`);

@@ -118,6 +118,11 @@ export class BashTool implements Disposable {
     command: string,
     options: { timeout: number; cwd: string }
   ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+    const abortSignal = getToolAbortSignal();
+    if (abortSignal?.aborted) {
+      return Promise.resolve({ stdout: '', stderr: 'Command aborted', exitCode: 130 });
+    }
+
     return new Promise((resolve) => {
       let stdout = '';
       let stderr = '';
@@ -175,7 +180,6 @@ export class BashTool implements Disposable {
         }
       };
 
-      const abortSignal = getToolAbortSignal();
       let aborted = false;
       let abortForceTimer: NodeJS.Timeout | null = null;
       const handleAbort = () => {
@@ -294,6 +298,10 @@ export class BashTool implements Disposable {
    *   .pptx into cowork/ instead of the session dir.
    */
   async execute(command: string, timeout: number = 30000, cwd?: string): Promise<ToolResult> {
+    if (getToolAbortSignal()?.aborted) {
+      return { success: false, error: 'Command aborted' };
+    }
+
     try {
       // Validate input with schema (enhanced validation)
       const schemaValidation = validateWithSchema(
@@ -332,6 +340,9 @@ export class BashTool implements Disposable {
         const { getAutoSandboxRouter } = await import('../../sandbox/auto-sandbox.js');
         const router = getAutoSandboxRouter();
         const routing = await router.route(command);
+        if (getToolAbortSignal()?.aborted) {
+          return { success: false, error: 'Command aborted' };
+        }
         if (routing.mode === 'blocked') {
           return {
             success: false,
