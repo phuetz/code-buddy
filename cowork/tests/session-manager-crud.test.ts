@@ -756,6 +756,49 @@ describe('SessionManager.getMessages content normalization', () => {
     const [msg] = manager.getMessages('s1');
     expect(msg.content).toEqual([{ type: 'text', text: 'not valid json {{{' }]);
   });
+
+  it('keeps the session readable when token usage or metadata JSON is malformed', () => {
+    const db = makeDb({
+      messages: {
+        create: vi.fn(),
+        delete: vi.fn(),
+        deleteBySessionId: vi.fn(),
+        getBySessionId: vi.fn(() => [
+          {
+            id: 'broken-token-usage',
+            session_id: 's1',
+            role: 'assistant',
+            content: JSON.stringify([{ type: 'text', text: 'first' }]),
+            timestamp: 1,
+            token_usage: '{broken',
+            execution_time_ms: null,
+            metadata: JSON.stringify({ turn: { id: 'turn-1', role: 'assistant' } }),
+          },
+          {
+            id: 'broken-metadata',
+            session_id: 's1',
+            role: 'assistant',
+            content: JSON.stringify([{ type: 'text', text: 'second' }]),
+            timestamp: 2,
+            token_usage: JSON.stringify({ input: 10, output: 20 }),
+            execution_time_ms: null,
+            metadata: '[broken',
+          },
+        ]),
+      } as any,
+    });
+
+    const manager = new SessionManager(db, vi.fn());
+    const messages = manager.getMessages('s1');
+
+    expect(messages).toHaveLength(2);
+    expect(messages[0].tokenUsage).toBeUndefined();
+    expect(messages[0].metadata).toEqual({
+      turn: { id: 'turn-1', role: 'assistant' },
+    });
+    expect(messages[1].tokenUsage).toEqual({ input: 10, output: 20 });
+    expect(messages[1].metadata).toBeUndefined();
+  });
 });
 
 // ------------------------------------------------------------------

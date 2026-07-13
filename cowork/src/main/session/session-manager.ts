@@ -2248,8 +2248,16 @@ export class SessionManager {
       role: row.role as Message['role'],
       content: this.normalizeContent(row.content),
       timestamp: row.timestamp,
-      tokenUsage: row.token_usage ? JSON.parse(row.token_usage) : undefined,
-      metadata: row.metadata ? JSON.parse(row.metadata) : undefined,
+      tokenUsage: this.parseOptionalMessageJson<Message['tokenUsage']>(
+        row.token_usage,
+        'token_usage',
+        row.id
+      ),
+      metadata: this.parseOptionalMessageJson<Message['metadata']>(
+        row.metadata,
+        'metadata',
+        row.id
+      ),
       executionTimeMs: row.execution_time_ms ?? undefined,
     }));
     this.messageCache.set(sessionId, messages);
@@ -2537,6 +2545,23 @@ export class SessionManager {
       return [{ type: 'text', text: String(parsed) } as TextContent];
     } catch {
       return [{ type: 'text', text: raw } as TextContent];
+    }
+  }
+
+  private parseOptionalMessageJson<T>(
+    raw: string | null | undefined,
+    field: 'token_usage' | 'metadata',
+    messageId: string
+  ): T | undefined {
+    if (!raw) return undefined;
+    try {
+      return JSON.parse(raw) as T;
+    } catch {
+      logWarn('[SessionManager] Ignoring malformed message JSON:', {
+        messageId,
+        field,
+      });
+      return undefined;
     }
   }
 
