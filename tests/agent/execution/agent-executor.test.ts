@@ -545,8 +545,7 @@ describe('AgentExecutor', () => {
     });
 
     it('should handle multi-round tool execution', async () => {
-      // Phase D: bash is in STREAMING_TOOLS (uses executeToolStreaming, not executeTool).
-      // Use two non-streaming tools to keep counting executeTool calls reliable.
+      // Use two non-streaming tools to keep execution-count assertions focused.
       const toolCall1 = makeToolCall('read_file', { path: '/a.txt' }, 'call_1');
       const toolCall2 = makeToolCall('read_file', { path: '/b.txt' }, 'call_2');
 
@@ -592,7 +591,7 @@ describe('AgentExecutor', () => {
       config.maxToolRounds = 2;
       executor = new AgentExecutor(deps, config);
 
-      // Phase D: use non-streaming tool (bash bypasses executeTool counter).
+      // Use a file tool so this test stays focused on failure propagation.
       const toolCall = makeToolCall('read_file', { path: '/x.txt' });
 
       // Always return tool calls (infinite loop scenario)
@@ -693,7 +692,7 @@ describe('AgentExecutor', () => {
     });
 
     it('should handle tool execution failure', async () => {
-      // Phase D: bash uses executeToolStreaming. Use a non-streaming tool to mock executeTool failure.
+      // Use a file tool to mock executeTool failure directly.
       const toolCall = makeToolCall('read_file', { path: '/missing.txt' });
 
       setupLLMFlow(deps, [
@@ -1098,7 +1097,7 @@ describe('AgentExecutor', () => {
       expect(cancelChunk).toBeDefined();
     });
 
-    it('should use bash streaming for bash tool calls', async () => {
+    it('should route bash through policy-aware dispatch before emitting output chunks', async () => {
       const toolCall = makeToolCall('bash', { command: 'echo hello' }, 'call_bash');
 
       (deps.streamingHandler.getAccumulatedMessage as jest.Mock)
@@ -1110,16 +1109,10 @@ describe('AgentExecutor', () => {
         remainingContent: '',
       });
 
-      // Mock bash streaming generator
-      const mockGen = {
-        next: jest.fn()
-          .mockResolvedValueOnce({ value: 'hello\n', done: false })
-          .mockResolvedValueOnce({ value: undefined, done: true }),
-        return: jest.fn().mockResolvedValue({ done: true }),
-        throw: jest.fn(),
-        [Symbol.asyncIterator]() { return this; },
-      };
-      (deps.toolHandler.executeToolStreaming as jest.Mock).mockReturnValue(mockGen);
+      (deps.toolHandler.executeTool as jest.Mock).mockResolvedValueOnce({
+        success: true,
+        output: 'hello\n',
+      });
 
       (deps.client.chatStream as jest.Mock)
         .mockImplementationOnce(async function* () {
@@ -1139,6 +1132,9 @@ describe('AgentExecutor', () => {
       const toolStreamChunk = chunks.find(c => c.type === 'tool_stream');
       expect(toolStreamChunk).toBeDefined();
       expect(toolStreamChunk!.toolStreamData!.toolName).toBe('bash');
+      expect(toolStreamChunk!.toolStreamData!.delta).toBe('hello\n');
+      expect(deps.toolHandler.executeTool).toHaveBeenCalledWith(toolCall);
+      expect(deps.toolHandler.executeToolStreaming).not.toHaveBeenCalled();
     });
 
     it('should emit token_count updates during tool rounds', async () => {
@@ -1452,8 +1448,7 @@ describe('AgentExecutor', () => {
       deps.laneQueue = mockLaneQueue as any;
       executor = new AgentExecutor(deps, config);
 
-      // Phase D: `bash` is in STREAMING_TOOLS and bypasses executeToolViaLane.
-      // Use create_file (write tool, non-streaming) to test the lane queue path.
+      // Use create_file (write tool) to test the lane queue path.
       const toolCall = makeToolCall('create_file', { path: '/x.txt', content: 'x' }, 'call_1');
 
       setupLLMFlow(deps, [
@@ -1701,7 +1696,7 @@ describe('AgentExecutor', () => {
     });
 
     it('should handle tool returning no output', async () => {
-      // Phase D: use non-streaming tool so executeTool mock applies.
+      // Use a file tool so the no-output behavior stays tool-agnostic.
       const toolCall = makeToolCall('read_file', { path: '/empty.txt' }, 'call_1');
 
       setupLLMFlow(deps, [

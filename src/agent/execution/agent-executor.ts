@@ -1059,10 +1059,14 @@ export class AgentExecutor {
             // or when the WS server isn't running.
             emitFleetToolStarted(toolCall);
 
-            // Use streaming execution for tools that support it (bash, reason, + adapter-based)
+            // Use dedicated streaming execution only for tools whose streaming
+            // implementation follows the same authorization/observability path
+            // as normal dispatch. Bash deliberately goes through executeToolViaLane
+            // below so PolicyManager, lifecycle hooks, RunStore and auto-repair
+            // cannot be bypassed; the adapter still emits its completed output.
             let result;
             const _streamToolStartMs = Date.now();
-            const STREAMING_TOOLS = ['bash', 'reason', 'generate_document'];
+            const STREAMING_TOOLS = ['reason', 'generate_document'];
             if (STREAMING_TOOLS.includes(toolCall.function.name)) {
               const gen = this.deps.toolHandler.executeToolStreaming(toolCall);
               let genResult = await gen.next();
