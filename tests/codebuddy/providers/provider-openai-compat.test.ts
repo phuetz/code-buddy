@@ -150,3 +150,48 @@ describe('OpenAICompatProvider request payloads', () => {
     expect(payload).not.toHaveProperty('max_completion_tokens');
   });
 });
+
+describe('OpenAICompatProvider tool-support probe', () => {
+  it('re-probes after a transient failure instead of caching false', async () => {
+    providerMocks.getModelInfo.mockReturnValue({ provider: 'unknown' });
+    const networkError = new Error('socket hang up');
+    Object.assign(networkError, { code: 'ECONNRESET' });
+    providerMocks.create
+      .mockRejectedValueOnce(networkError)
+      .mockResolvedValueOnce({
+        choices: [{
+          message: {
+            tool_calls: [{ id: 'call-1', function: { name: 'get_current_time', arguments: '{}' } }],
+          },
+        }],
+      });
+    const provider = createProvider('https://example.test/v1', 'plain-model-a');
+
+    await expect(provider.probeToolSupport()).resolves.toBe(false);
+    await expect(provider.probeToolSupport()).resolves.toBe(true);
+
+    expect(providerMocks.create).toHaveBeenCalledTimes(2);
+  });
+
+  it('invalidates the cached result when the model changes', async () => {
+    providerMocks.getModelInfo.mockReturnValue({ provider: 'unknown' });
+    providerMocks.create
+      .mockResolvedValueOnce({ choices: [{ message: { content: 'no tool call' } }] })
+      .mockResolvedValueOnce({
+        choices: [{
+          message: {
+            tool_calls: [{ id: 'call-2', function: { name: 'get_current_time', arguments: '{}' } }],
+          },
+        }],
+      });
+    const provider = createProvider('https://example.test/v1', 'plain-model-a');
+
+    await expect(provider.probeToolSupport()).resolves.toBe(false);
+    provider.setModel('plain-model-b');
+    await expect(provider.probeToolSupport()).resolves.toBe(true);
+
+    expect(providerMocks.create).toHaveBeenCalledTimes(2);
+    expect((providerMocks.create.mock.calls[1]?.[0] as Record<string, unknown>).model)
+      .toBe('plain-model-b');
+  });
+});
