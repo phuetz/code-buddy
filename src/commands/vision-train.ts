@@ -18,6 +18,10 @@ import path from 'path';
 import { logger } from '../utils/logger.js';
 import { buildCurriculum, type SceneSpec } from '../vision-train/curriculum.js';
 import { runVisionTrain, type VisionTrainDeps } from '../vision-train/engine.js';
+import {
+  formatMissingGroundTruthWarning,
+  selectLabeledFolderScenes,
+} from '../vision-train/folder-labels.js';
 import { renderReport } from '../vision-train/report.js';
 import type { ScenePerception } from '../vision-train/scorer.js';
 
@@ -32,6 +36,7 @@ interface VisionTrainOpts {
   minConfidence?: string;
   out?: string;
   ckg?: boolean;
+  strict?: boolean;
 }
 
 export function createVisionTrainCommand(): Command {
@@ -47,6 +52,7 @@ export function createVisionTrainCommand(): Command {
     .option('--model <ckpt>', 'generate mode: image model/checkpoint')
     .option('--min-confidence <n>', 'YOLO min confidence', '0.35')
     .option('--ckg', 'publish weak spots to the Collective Knowledge Graph (needs CODEBUDDY_COLLECTIVE_MEMORY=true)')
+    .option('--strict', 'labeled folder mode: fail if any image has no ground-truth entry')
     .option('--out <dir>', 'report output directory', '.codebuddy/vision-train')
     .action(async (opts: VisionTrainOpts) => {
       // ── OPT-IN gate (default OFF = zero behaviour change) ──────────────────
@@ -158,7 +164,22 @@ export function createVisionTrainCommand(): Command {
           process.exitCode = 1;
           return;
         }
-        specs = files.map((f) => ({ id: f, prompt: '', expect: { counts: labelMap[f] ?? {} }, tags: [] }));
+        const selection = selectLabeledFolderScenes(files, labelMap);
+        if (selection.missingFiles.length > 0) {
+          const message = formatMissingGroundTruthWarning(selection.missingFiles.length);
+          if (opts.strict) {
+            logger.error(`${message} Aborting because --strict requires ground truth for every image.`);
+            process.exitCode = 1;
+            return;
+          }
+          logger.warn(message);
+        }
+        specs = selection.specs;
+        if (specs.length === 0) {
+          logger.error(`No labeled images found in ${dir}`);
+          process.exitCode = 1;
+          return;
+        }
         obtainImage = async (spec) => path.join(dir, spec.id);
         source = `folder ${dir}`;
       } else {

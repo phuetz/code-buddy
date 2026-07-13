@@ -23,8 +23,17 @@ export interface SensoryBridgeOptions {
 }
 
 export interface SensoryBridgeHandle {
-  port: number;
+  readonly port: number;
+  /** Resolves only after the socket is bound; rejects on bind failure. */
+  ready: Promise<void>;
   close(): Promise<void>;
+}
+
+export interface SensoryBridgeHealth {
+  status: 'disabled' | 'starting' | 'listening' | 'error' | 'closed';
+  ready: boolean;
+  port?: number;
+  error?: string;
 }
 
 interface RawSensoryFrame {
@@ -40,6 +49,15 @@ interface RawSensoryFrame {
  * shape (no control chars / newlines, ≤64 chars) so a crafted local frame can't
  * inject content downstream (e.g. into CODEBUDDY_MEMORY.md via dreaming). */
 const KNOWN_MODALITIES = new Set(['audio', 'vision', 'screen', 'vital', 'ui']);
+const MAX_WEBSOCKET_PAYLOAD_BYTES = 256 * 1024;
+const MAX_FRAME_BYTES = 64 * 1024;
+
+let bridgeHealth: SensoryBridgeHealth = { status: 'disabled', ready: false };
+
+/** Lightweight process-local status consumed by the HTTP health endpoints. */
+export function getSensoryBridgeHealth(): SensoryBridgeHealth {
+  return { ...bridgeHealth };
+}
 
 function sanitizeKind(kind: string): string {
   return kind.replace(/[^a-zA-Z0-9_:.-]/g, '').slice(0, 64);
@@ -51,7 +69,37 @@ export function startSensoryBridge(options: SensoryBridgeOptions = {}): SensoryB
   const token = options.token ?? process.env.CODEBUDDY_SENSORY_TOKEN;
   const bus = getGlobalEventBus();
 
-  const wss = new WebSocketServer({ host, port });
+  const wss = new WebSocketServer({ host, port, maxPayload: MAX_WEBSOCKET_PAYLOAD_BYTES });
+  bridgeHealth = { status: 'starting', ready: false, port };
+
+  let readySettled = false;
+  const ready = new Promise<void>((resolve, reject) => {
+    wss.once('listening', () => {
+      readySettled = true;
+      const address = wss.address();
+      const boundPort = typeof address === 'object' && address ? address.port : port;
+      bridgeHealth = { status: 'listening', ready: true, port: boundPort };
+      logger.info(`[sensory] bridge listening on ws://${host}:${boundPort}`);
+      resolve();
+    });
+
+    wss.on('error', (err) => {
+      const code = (err as NodeJS.ErrnoException).code;
+      const message = err instanceof Error ? err.message : String(err);
+      bridgeHealth = { status: 'error', ready: false, port, error: message };
+      if (code === 'EADDRINUSE') {
+        logger.error(
+          `[sensory] bridge cannot bind ws://${host}:${port}: port already in use; sensory input is unavailable`,
+        );
+      } else {
+        logger.error(`[sensory] bridge error on ws://${host}:${port}: ${message}`);
+      }
+      if (!readySettled) {
+        readySettled = true;
+        reject(err);
+      }
+    });
+  });
 
   wss.on('connection', (ws, req) => {
     // Reject cross-origin (CSWSH): the Rust daemon sends NO Origin header; a
@@ -68,11 +116,18 @@ export function startSensoryBridge(options: SensoryBridgeOptions = {}): SensoryB
       return;
     }
     logger.info('[sensory] daemon connected');
+    // `ws` emits a socket-level error before closing oversized messages with
+    // code 1009. Always consume it so malformed local input cannot crash Node.
+    ws.on('error', (err) => {
+      logger.warn(`[sensory] daemon socket error: ${err instanceof Error ? err.message : String(err)}`);
+    });
 
     ws.on('message', (data) => {
+      const raw = String(data);
+      if (Buffer.byteLength(raw, 'utf8') > MAX_FRAME_BYTES) return;
       let frame: RawSensoryFrame;
       try {
-        frame = JSON.parse(String(data)) as RawSensoryFrame;
+        frame = JSON.parse(raw) as RawSensoryFrame;
       } catch {
         return; // ignore malformed
       }
@@ -101,11 +156,18 @@ export function startSensoryBridge(options: SensoryBridgeOptions = {}): SensoryB
     });
   });
 
-  wss.on('error', (err) => logger.warn(`[sensory] bridge error: ${err instanceof Error ? err.message : String(err)}`));
-  logger.info(`[sensory] bridge listening on ws://${host}:${port}`);
-
   return {
-    port,
-    close: () => new Promise<void>((resolve) => wss.close(() => resolve())),
+    get port() {
+      const address = wss.address();
+      return typeof address === 'object' && address ? address.port : port;
+    },
+    ready,
+    close: () =>
+      new Promise<void>((resolve) => {
+        wss.close(() => {
+          bridgeHealth = { status: 'closed', ready: false, port };
+          resolve();
+        });
+      }),
   };
 }

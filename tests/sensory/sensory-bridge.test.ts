@@ -15,6 +15,7 @@ async function open(port: number): Promise<WebSocket> {
 describe('sensory bridge → event bus → reaction', () => {
   it('a daemon frame reaches the bus and fires the reaction', async () => {
     const bridge = startSensoryBridge({ port: 18231 });
+    await bridge.ready;
     const received: Perception[] = [];
     const unwire = wireSensoryReactions((p) => received.push(p));
     try {
@@ -41,6 +42,7 @@ describe('sensory bridge → event bus → reaction', () => {
 
   it('ignores malformed, token-mismatched, and modality-less frames', async () => {
     const bridge = startSensoryBridge({ port: 18232, token: 'secret' });
+    await bridge.ready;
     const received: Perception[] = [];
     const unwire = wireSensoryReactions((p) => received.push(p));
     try {
@@ -59,6 +61,7 @@ describe('sensory bridge → event bus → reaction', () => {
 
   it('rejects cross-origin connections (CSWSH defence)', async () => {
     const bridge = startSensoryBridge({ port: 18233 });
+    await bridge.ready;
     const received: Perception[] = [];
     const unwire = wireSensoryReactions((p) => received.push(p));
     try {
@@ -84,6 +87,7 @@ describe('sensory bridge → event bus → reaction', () => {
 
   it('clamps out-of-range salience and drops a negative ts_ms (UI frame)', async () => {
     const bridge = startSensoryBridge({ port: 18234 });
+    await bridge.ready;
     const received: Perception[] = [];
     const unwire = wireSensoryReactions((p) => received.push(p));
     try {
@@ -102,6 +106,67 @@ describe('sensory bridge → event bus → reaction', () => {
       expect(received[0]!.salience).toBe(255); // clamped from 999
       expect(received[0]!.tsMs).toBeUndefined(); // negative ts_ms is rejected
     } finally {
+      unwire();
+      await bridge.close();
+    }
+  });
+
+  it('rejects ready and reports unhealthy when the port is already in use', async () => {
+    const first = startSensoryBridge({ port: 0 });
+    await first.ready;
+    const second = startSensoryBridge({ port: first.port });
+    try {
+      await expect(second.ready).rejects.toMatchObject({ code: 'EADDRINUSE' });
+      const { getSensoryBridgeHealth } = await import('../../src/sensory/sensory-bridge.js');
+      expect(getSensoryBridgeHealth()).toMatchObject({ status: 'error', ready: false });
+    } finally {
+      await second.close();
+      await first.close();
+    }
+  });
+
+  it('drops an application frame larger than 64 KiB before parsing or emitting it', async () => {
+    const bridge = startSensoryBridge({ port: 18235 });
+    await bridge.ready;
+    const received: Perception[] = [];
+    const unwire = wireSensoryReactions((p) => received.push(p));
+    const ws = await open(18235);
+    try {
+      ws.send(
+        JSON.stringify({
+          modality: 'vision',
+          kind: 'oversized',
+          payload: { blob: 'x'.repeat(70 * 1024) },
+        }),
+      );
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      expect(received).toHaveLength(0);
+    } finally {
+      ws.close();
+      unwire();
+      await bridge.close();
+    }
+  });
+
+  it('closes transport payloads larger than 256 KiB without crashing or emitting', async () => {
+    const bridge = startSensoryBridge({ port: 18236 });
+    await bridge.ready;
+    const received: Perception[] = [];
+    const unwire = wireSensoryReactions((p) => received.push(p));
+    const ws = await open(18236);
+    try {
+      const closed = new Promise<number>((resolve) => ws.once('close', (code) => resolve(code)));
+      ws.send(
+        JSON.stringify({
+          modality: 'vision',
+          kind: 'transport_oversized',
+          payload: { blob: 'x'.repeat(300 * 1024) },
+        }),
+      );
+      expect(await closed).toBe(1009);
+      expect(received).toHaveLength(0);
+    } finally {
+      ws.close();
       unwire();
       await bridge.close();
     }

@@ -1125,11 +1125,13 @@ export async function startServer(userConfig: Partial<ServerConfig> = {}): Promi
         sensoryWired = true; // wire once per process (a 2nd start would double listeners + re-bind the port)
         try {
           const { startSensoryBridge } = await import('../sensory/sensory-bridge.js');
-          const { wireSensoryReactions } = await import('../sensory/reactions.js');
+          const { shouldWireSpeechReaction, wireSensoryReactions } = await import('../sensory/reactions.js');
           const { getHeartbeatScheduler } = await import('../sensory/heartbeat-scheduler.js');
           const sensoryBridgeHandle = startSensoryBridge();
+          sensoryTeardown.push(() => sensoryBridgeHandle.close());
+          await sensoryBridgeHandle.ready;
           const unwireReactions = wireSensoryReactions();
-          sensoryTeardown.push(() => sensoryBridgeHandle.close(), unwireReactions);
+          sensoryTeardown.push(unwireReactions);
           // Vision reaction (opt-in) — vision/motion → camera_analyze (local gemma).
           // Requires a shared token: a frame can trigger the webcam, so refuse to
           // wire it on an unauthenticated bridge.
@@ -1180,7 +1182,12 @@ export async function startServer(userConfig: Partial<ServerConfig> = {}): Promi
           }
           // Speech reaction (opt-in) — speech_end → STT → 'hearing' percept (+ onHeard hook).
           // With CODEBUDDY_SENSORY_SPEAK=true the loop closes: STT → think (local $0) → speak (Piper).
-          if (process.env.CODEBUDDY_SENSORY_SPEECH === 'true') {
+          if (
+            shouldWireSpeechReaction({
+              speech: process.env.CODEBUDDY_SENSORY_SPEECH,
+              token: sensoryToken,
+            })
+          ) {
             const { wireSpeechReaction } = await import('../sensory/speech-reaction.js');
             if (process.env.CODEBUDDY_SENSORY_SPEAK === 'true') {
               const { makeVoiceReply, describeVoiceReadiness } = await import('../sensory/voice-loop.js');
@@ -1339,6 +1346,10 @@ export async function startServer(userConfig: Partial<ServerConfig> = {}): Promi
               sensoryTeardown.push(wireSpeechReaction());
               logger.info('Sensory speech reaction: Enabled (speech_end → STT → percept)');
             }
+          } else if (process.env.CODEBUDDY_SENSORY_SPEECH === 'true') {
+            logger.warn(
+              'Sensory speech reaction NOT enabled: set CODEBUDDY_SENSORY_TOKEN (speech can trigger an agent turn).',
+            );
           }
           // Privacy: camera/screen descriptions land in percepts.jsonl — warn if not encrypted at rest.
           if (
