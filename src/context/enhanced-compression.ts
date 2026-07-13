@@ -192,8 +192,9 @@ export class EnhancedContextCompressor {
     // Classify messages by content type
     const classified = this.classifyMessages(messages);
 
-    // Separate system message
-    const systemMsg = messages.find(m => m.role === 'system');
+    // Preserve every system message. The context pipeline injects multiple
+    // independent blocks (base prompt, lessons, todo, decisions, etc.).
+    const systemMsgs = messages.filter(m => m.role === 'system');
     const conversationMsgs = messages.filter(m => m.role !== 'system');
 
     let compressed: CodeBuddyMessage[] = [...conversationMsgs];
@@ -233,9 +234,9 @@ export class EnhancedContextCompressor {
       strategiesApplied.push('hard_truncation');
     }
 
-    // Reconstruct with system message
-    if (systemMsg) {
-      compressed = [systemMsg, ...compressed];
+    // Reconstruct with all system messages first, in their original order.
+    if (systemMsgs.length > 0) {
+      compressed = [...systemMsgs, ...compressed];
     }
 
     return this.createResult(
