@@ -34,7 +34,14 @@ function makeSelection(toolNames: string[]) {
 }
 
 const ragMock = vi.hoisted(() => ({
-  getRelevantToolsMock: vi.fn(async (_query: string, _opts: { maxTools?: number; useRAG?: boolean; alwaysInclude?: string[]; modelName?: string }) => ({
+  getRelevantToolsMock: vi.fn(async (_query: string, _opts: {
+    maxTools?: number;
+    minScore?: number;
+    useRAG?: boolean;
+    alwaysInclude?: string[];
+    useAdaptiveThreshold?: boolean;
+    modelName?: string;
+  }) => ({
     selectedTools: [],
     classification: { categories: [], confidence: 0 },
     scores: new Map<string, number>(),
@@ -98,6 +105,20 @@ describe('ToolSelectionStrategy lite-profile overrides', () => {
 
     const callArgs = ragMock.getRelevantToolsMock.mock.calls[0]!;
     expect(callArgs[1]?.maxTools).toBe(15);
+  });
+
+  it('passes minimum-score and adaptive-threshold configuration to RAG', async () => {
+    const strategy = new ToolSelectionStrategy({
+      enableCaching: false,
+      minScore: 0.83,
+      useAdaptiveThreshold: false,
+    });
+    await strategy.selectToolsForQuery('hello world');
+
+    expect(ragMock.getRelevantToolsMock.mock.calls[0]?.[1]).toMatchObject({
+      minScore: 0.83,
+      useAdaptiveThreshold: false,
+    });
   });
 
   it('drops memory-tool inclusions from alwaysInclude on lite override', async () => {

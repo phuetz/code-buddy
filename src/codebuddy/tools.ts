@@ -14,7 +14,8 @@ import {
   selectRelevantTools,
   ToolSelectionResult,
   QueryClassification,
-  ToolCategory
+  ToolCategory,
+  ToolSelectionOptions,
 } from "../tools/tool-selector.js";
 import { logger } from "../utils/logger.js";
 
@@ -715,6 +716,7 @@ export async function getRelevantTools(
     includeCategories?: ToolCategory[];
     excludeCategories?: ToolCategory[];
     alwaysInclude?: string[];
+    useAdaptiveThreshold?: boolean;
     useRAG?: boolean;
   } = {}
 ): Promise<ToolSelectionResult> {
@@ -741,7 +743,15 @@ export async function getRelevantTools(
     };
   }
 
-  return selectRelevantTools(query, allTools, maxTools, options.alwaysInclude);
+  const selectionOptions: ToolSelectionOptions = {
+    maxTools,
+    minScore: options.minScore,
+    includeCategories: options.includeCategories,
+    excludeCategories: options.excludeCategories,
+    alwaysInclude: options.alwaysInclude,
+    useAdaptiveThreshold: options.useAdaptiveThreshold,
+  };
+  return selectRelevantTools(query, allTools, selectionOptions);
 }
 
 /**

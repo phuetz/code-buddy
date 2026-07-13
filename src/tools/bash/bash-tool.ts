@@ -36,6 +36,7 @@ import { getCheckpointManager } from '../../checkpoints/checkpoint-manager.js';
 import { auditLogger } from '../../security/audit-logger.js';
 import { buildBashEnvPrelude, CONTROLLED_SUBPROCESS_ENV } from './env-overrides.js';
 import { rewriteCommandWithRtk } from './rtk-rewrite.js';
+import { getToolAbortSignal } from '../tool-abort-context.js';
 
 export class BashTool implements Disposable {
   private currentDirectory: string = process.cwd();
@@ -117,6 +118,11 @@ export class BashTool implements Disposable {
     command: string,
     options: { timeout: number; cwd: string }
   ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+    const abortSignal = getToolAbortSignal();
+    if (abortSignal?.aborted) {
+      return Promise.resolve({ stdout: '', stderr: 'Command aborted', exitCode: 130 });
+    }
+
     return new Promise((resolve) => {
       let stdout = '';
       let stderr = '';
@@ -174,6 +180,19 @@ export class BashTool implements Disposable {
         }
       };
 
+      let aborted = false;
+      let abortForceTimer: NodeJS.Timeout | null = null;
+      const handleAbort = () => {
+        aborted = true;
+        killProcess('SIGTERM');
+        abortForceTimer = setTimeout(() => killProcess('SIGKILL'), gracePeriod);
+      };
+      if (abortSignal?.aborted) {
+        handleAbort();
+      } else {
+        abortSignal?.addEventListener('abort', handleAbort, { once: true });
+      }
+
       const timer = setTimeout(() => {
         timedOut = true;
         // Try graceful termination first (SIGTERM)
@@ -207,7 +226,17 @@ export class BashTool implements Disposable {
         if (gracefulTerminationTimer) {
           clearTimeout(gracefulTerminationTimer);
         }
-        if (timedOut) {
+        if (abortForceTimer) {
+          clearTimeout(abortForceTimer);
+        }
+        abortSignal?.removeEventListener('abort', handleAbort);
+        if (aborted) {
+          resolve({
+            stdout: stdout.trim(),
+            stderr: 'Command aborted',
+            exitCode: 130,
+          });
+        } else if (timedOut) {
           resolve({
             stdout: stdout.trim(),
             stderr: 'Command timed out (graceful termination attempted)',
@@ -228,6 +257,10 @@ export class BashTool implements Disposable {
         if (gracefulTerminationTimer) {
           clearTimeout(gracefulTerminationTimer);
         }
+        if (abortForceTimer) {
+          clearTimeout(abortForceTimer);
+        }
+        abortSignal?.removeEventListener('abort', handleAbort);
         resolve({
           stdout: '',
           stderr: error.message,
@@ -265,6 +298,10 @@ export class BashTool implements Disposable {
    *   .pptx into cowork/ instead of the session dir.
    */
   async execute(command: string, timeout: number = 30000, cwd?: string): Promise<ToolResult> {
+    if (getToolAbortSignal()?.aborted) {
+      return { success: false, error: 'Command aborted' };
+    }
+
     try {
       // Validate input with schema (enhanced validation)
       const schemaValidation = validateWithSchema(
@@ -303,6 +340,9 @@ export class BashTool implements Disposable {
         const { getAutoSandboxRouter } = await import('../../sandbox/auto-sandbox.js');
         const router = getAutoSandboxRouter();
         const routing = await router.route(command);
+        if (getToolAbortSignal()?.aborted) {
+          return { success: false, error: 'Command aborted' };
+        }
         if (routing.mode === 'blocked') {
           return {
             success: false,
@@ -313,7 +353,20 @@ export class BashTool implements Disposable {
           try {
             const { DockerSandbox } = await import('../../sandbox/docker-sandbox.js');
             const sandbox = new DockerSandbox();
-            const sbResult = await sandbox.execute(command, { timeout });
+            const abortSignal = getToolAbortSignal();
+            const disposeOnAbort = () => {
+              void sandbox.dispose();
+            };
+            abortSignal?.addEventListener('abort', disposeOnAbort, { once: true });
+            let sbResult;
+            try {
+              sbResult = await sandbox.execute(command, { timeout });
+            } finally {
+              abortSignal?.removeEventListener('abort', disposeOnAbort);
+            }
+            if (abortSignal?.aborted) {
+              return { success: false, error: 'Command aborted' };
+            }
             // Build a rich error message so the LLM can self-correct instead
             // of seeing only "Sandbox exit code 127". We combine stderr
             // (sbResult.error) with the exit code, and — if both are empty —
@@ -336,6 +389,9 @@ export class BashTool implements Disposable {
               error: errorMsg,
             };
           } catch (error) {
+            if (getToolAbortSignal()?.aborted) {
+              return { success: false, error: 'Command aborted' };
+            }
             if (router.getConfig().failClosedOnUnavailable) {
               return {
                 success: false,
@@ -371,6 +427,10 @@ export class BashTool implements Disposable {
             error: confirmationResult.feedback || 'Command execution cancelled by user',
           };
         }
+      }
+
+      if (getToolAbortSignal()?.aborted) {
+        return { success: false, error: 'Command aborted' };
       }
 
       // Checkpoint files targeted by destructive commands (rm, mv, etc.)

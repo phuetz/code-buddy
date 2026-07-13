@@ -41,6 +41,7 @@ export interface StreamingToolAdapter {
  * Set of tool names that support streaming output.
  */
 const STREAMABLE_TOOLS = new Set([
+  'bash',
   'view_file',
   'read_file',
   'file_read',

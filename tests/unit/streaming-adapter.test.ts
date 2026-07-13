@@ -53,8 +53,11 @@ describe('StreamingToolAdapter', () => {
       expect(adapter.supportsStreaming('tree')).toBe(true);
     });
 
+    it('should return true for guarded bash output', () => {
+      expect(adapter.supportsStreaming('bash')).toBe(true);
+    });
+
     it('should return false for non-streaming tools', () => {
-      expect(adapter.supportsStreaming('bash')).toBe(false);
       expect(adapter.supportsStreaming('reason')).toBe(false);
       expect(adapter.supportsStreaming('create_file')).toBe(false);
       expect(adapter.supportsStreaming('str_replace_editor')).toBe(false);
@@ -63,6 +66,20 @@ describe('StreamingToolAdapter', () => {
   });
 
   describe('wrapWithStreaming', () => {
+    it('should emit completed bash output after guarded execution', async () => {
+      const execute = vi.fn<() => Promise<ToolResult>>().mockResolvedValue({
+        success: true,
+        output: 'command output',
+      });
+      const chunks: string[] = [];
+
+      const result = await adapter.wrapWithStreaming('bash', execute, chunk => chunks.push(chunk));
+
+      expect(execute).toHaveBeenCalledOnce();
+      expect(result).toEqual({ success: true, output: 'command output' });
+      expect(chunks).toEqual(['command output']);
+    });
+
     it('should stream file content in chunks', async () => {
       // Create a large file content (~2000 chars)
       const lines: string[] = [];

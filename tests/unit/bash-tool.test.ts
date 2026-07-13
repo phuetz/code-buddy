@@ -22,6 +22,7 @@ import { BashTool } from '../../src/tools/bash';
 import { validateWithSchema, validateCommand as validateCommandSafety, sanitizeForShell } from '../../src/utils/input-validator';
 import { isLikelyTestOutput, parseTestOutput } from '../../src/utils/test-output-parser';
 import { registerDisposable } from '../../src/utils/disposable';
+import { runWithToolAbortSignal } from '../../src/tools/tool-abort-context.js';
 
 jest.mock('child_process', () => ({
   spawn: jest.fn(),
@@ -142,9 +143,20 @@ jest.mock('../../src/security/safe-binaries', () => ({
 }));
 
 // Mock auto-sandbox (dynamic import in execute())
+const mockAutoSandboxRoute = jest.fn().mockResolvedValue({ mode: 'direct' });
 jest.mock('../../src/sandbox/auto-sandbox', () => ({
   getAutoSandboxRouter: jest.fn(function() { return {
-    route: jest.fn().mockResolvedValue({ mode: 'direct' }),
+    route: mockAutoSandboxRoute,
+    getConfig: jest.fn().mockReturnValue({ failClosedOnUnavailable: true }),
+  }; }),
+}));
+
+const mockDockerExecute = jest.fn();
+const mockDockerDispose = jest.fn().mockResolvedValue(undefined);
+jest.mock('../../src/sandbox/docker-sandbox', () => ({
+  DockerSandbox: jest.fn(function() { return {
+    execute: mockDockerExecute,
+    dispose: mockDockerDispose,
   }; }),
 }));
 
@@ -293,6 +305,51 @@ describe('BashTool', () => {
   });
 
   describe('Command Execution', () => {
+    it('should stop after confirmation when the turn was cancelled', async () => {
+      const abortController = new AbortController();
+      mockGetSessionFlags.mockReturnValueOnce({ bashCommands: false, allOperations: false });
+      mockRequestConfirmation.mockImplementationOnce(async () => {
+        abortController.abort();
+        return { confirmed: true };
+      });
+
+      const result = await runWithToolAbortSignal(
+        abortController.signal,
+        () => bashTool.execute('npm test'),
+      );
+
+      expect(result).toEqual({ success: false, error: 'Command aborted' });
+      expect(mockSpawn).not.toHaveBeenCalled();
+    });
+
+    it('should dispose an auto-sandboxed command when the turn is cancelled', async () => {
+      const abortController = new AbortController();
+      mockAutoSandboxRoute.mockResolvedValueOnce({ mode: 'sandbox' });
+      let resolveSandbox: ((result: {
+        output: string;
+        exitCode: number;
+        durationMs: number;
+      }) => void) | undefined;
+      mockDockerExecute.mockImplementationOnce(() => new Promise(resolve => {
+        resolveSandbox = resolve;
+      }));
+      mockDockerDispose.mockImplementationOnce(async () => {
+        resolveSandbox?.({ output: '', exitCode: 130, durationMs: 1 });
+      });
+
+      const pending = runWithToolAbortSignal(
+        abortController.signal,
+        () => bashTool.execute('npm test'),
+      );
+      await vi.waitFor(() => expect(mockDockerExecute).toHaveBeenCalledOnce());
+      abortController.abort();
+      const result = await pending;
+
+      expect(mockDockerDispose).toHaveBeenCalledOnce();
+      expect(result).toEqual({ success: false, error: 'Command aborted' });
+      expect(mockSpawn).not.toHaveBeenCalled();
+    });
+
     it('should execute a simple command successfully', async () => {
       const mockProcess = createMockChildProcess();
       mockSpawn.mockReturnValue(mockProcess);

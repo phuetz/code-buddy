@@ -63,6 +63,7 @@ import { formatTokenUsage, estimateCost } from "../../utils/token-display.js";
 import { classifyQuery } from "./query-classifier.js";
 import { getModelToolConfig } from "../../config/model-tools.js";
 import { getLatencyOptimizer, getStreamingOptimizer } from "../../optimization/latency-optimizer.js";
+import { runWithToolAbortSignal } from "../../tools/tool-abort-context.js";
 
 /**
  * Tools whose (verbose, prose/HTML) output TokenJuice may losslessly compress before it
@@ -363,10 +364,17 @@ export class AgentExecutor {
    * Execute a tool call, optionally through the LaneQueue for serialization.
    * Supports LLM-controlled parallelism via `wait_for_previous` parameter.
    */
-  private executeToolViaLane(toolCall: Parameters<ToolHandler['executeTool']>[0]): ReturnType<ToolHandler['executeTool']> {
+  private executeToolViaLane(
+    toolCall: Parameters<ToolHandler['executeTool']>[0],
+    abortSignal?: AbortSignal,
+  ): ReturnType<ToolHandler['executeTool']> {
     const laneQueue = this.deps.laneQueue;
+    const execute = () => runWithToolAbortSignal(
+      abortSignal,
+      () => this.deps.toolHandler.executeTool(toolCall),
+    );
     if (!laneQueue) {
-      return this.deps.toolHandler.executeTool(toolCall);
+      return execute();
     }
 
     const laneId = this.deps.laneId ?? 'default';
@@ -375,7 +383,7 @@ export class AgentExecutor {
 
     return laneQueue.enqueue(
       laneId,
-      () => this.deps.toolHandler.executeTool(toolCall),
+      execute,
       {
         parallel: isParallel,
         category: toolCall.function.name,
@@ -392,7 +400,6 @@ export class AgentExecutor {
   private getAdaptiveCompactionThreshold(): number {
     try {
       const modelName = this.deps.client.getCurrentModel();
-      const { getModelToolConfig } = require('../../config/model-tools.js');
       const config = getModelToolConfig(modelName);
       const contextChars = (config.contextWindow ?? 128_000) * 4; // ~4 chars/token
       // Allocate 30% of context window for tool results
@@ -685,7 +692,18 @@ export class AgentExecutor {
 
     const maxToolRounds = this.config.maxToolRounds;
     let toolRounds = 0;
+    let turnInputTokens = 0;
     let totalOutputTokens = 0;
+    let uncommittedRoundOutputTokens = 0;
+    let sessionCostRecorded = false;
+    const recordTurnCost = (): void => {
+      if (sessionCostRecorded) return;
+      sessionCostRecorded = true;
+      this.config.recordSessionCost(
+        turnInputTokens,
+        totalOutputTokens + uncommittedRoundOutputTokens,
+      );
+    };
 
     // In-loop recovery budgets (Hermes parity): bound re-prompts WITHIN a turn
     // so a length-truncated or post-tool-empty response is recovered instead of
@@ -713,6 +731,14 @@ export class AgentExecutor {
 
     try {
       const pipeline = this.deps.middlewarePipeline;
+      // Cost accounting is centralized in this loop so every provider request
+      // is counted exactly once, including early returns. The legacy middleware
+      // recorded cumulative snapshots after tool rounds and the executor then
+      // recorded them again at the end of the turn.
+      if (pipeline?.getMiddlewareNames?.().includes('cost-limit')) {
+        pipeline.remove?.('cost-limit');
+        logger.debug('[agent-executor] removed duplicate cost-limit middleware');
+      }
       // New task: clear per-task middleware latching (quality-gate run count,
       // auto-repair attempts, verification one-shot warning). The pipeline is
       // built once and reused across tasks while toolRound restarts at 0, so
@@ -839,10 +865,12 @@ export class AgentExecutor {
 
         const preparedMessages = prepareTurnMessages(this.deps.contextManager, messages);
         preparedMessages.push(...contextBlocks);
+        const providerMessages = this.compactLargeToolResults(preparedMessages);
+        let precompactionBudgetExceeded = false;
 
         // Context warning — always check regardless of pipeline state
         {
-          const contextWarning = this.deps.contextManager.shouldWarn(preparedMessages);
+          const contextWarning = this.deps.contextManager.shouldWarn(providerMessages);
           if (contextWarning.warn) {
             logger.warn(contextWarning.message);
             yield { type: "content", content: `\n${contextWarning.message}\n` };
@@ -852,16 +880,39 @@ export class AgentExecutor {
               const { getPrecompactionFlusher } = await import('../../context/precompaction-flush.js');
               const flusher = getPrecompactionFlusher();
               await flusher.flush(
-                preparedMessages.filter(m => m.role !== 'system').map(m => ({
+                providerMessages.filter(m => m.role !== 'system').map(m => ({
                   role: m.role as 'user' | 'assistant',
                   content: typeof m.content === 'string' ? m.content : '',
                 })),
                 async (flushMsgs) => {
-                  const r = await this.deps.client.chat(
-                    flushMsgs.map(m => ({ role: m.role, content: m.content })),
-                    [],
+                  const flushProviderMessages = flushMsgs.map(m => ({
+                    role: m.role,
+                    content: m.content,
+                  }));
+                  const estimatedFlushInputTokens = this.deps.tokenCounter.countMessageTokens(
+                    flushProviderMessages as Parameters<typeof this.deps.tokenCounter.countMessageTokens>[0],
                   );
-                  return r.choices[0]?.message?.content ?? 'NO_REPLY';
+                  if (this.config.estimateSessionCostLimitReached(
+                    turnInputTokens + estimatedFlushInputTokens,
+                    totalOutputTokens,
+                  )) {
+                    precompactionBudgetExceeded = true;
+                    return 'NO_REPLY';
+                  }
+                  turnInputTokens += estimatedFlushInputTokens;
+                  const r = await this.deps.client.chat(
+                    flushProviderMessages,
+                    [],
+                    abortController ? { signal: abortController.signal } : undefined,
+                  );
+                  const flushContent = r.choices[0]?.message?.content ?? 'NO_REPLY';
+                  if (r.usage) {
+                    turnInputTokens += r.usage.prompt_tokens - estimatedFlushInputTokens;
+                    totalOutputTokens += r.usage.completion_tokens;
+                  } else {
+                    totalOutputTokens += this.deps.tokenCounter.countTokens(flushContent);
+                  }
+                  return flushContent;
                 }
               );
             } catch {
@@ -870,10 +921,48 @@ export class AgentExecutor {
           }
         }
 
+        if (precompactionBudgetExceeded) {
+          const sessionCost = this.config.getSessionCost();
+          const sessionCostLimit = this.config.getSessionCostLimit();
+          yield {
+            type: 'content',
+            content: `\n\nSession cost limit reached ($${sessionCost.toFixed(2)} / $${sessionCostLimit.toFixed(2)}). Stopping before the pre-compaction model request.`,
+          };
+          yield { type: 'done' };
+          return;
+        }
+
+        const messageInputTokens = this.deps.tokenCounter.countMessageTokens(
+          providerMessages as Parameters<typeof this.deps.tokenCounter.countMessageTokens>[0]
+        );
+        const toolSchemaTokens = tools.length > 0
+          ? this.deps.tokenCounter.countTokens(JSON.stringify(tools))
+          : 0;
+        const roundInputTokens = messageInputTokens + toolSchemaTokens;
+
+        // Refuse a request whose input alone would cross the session budget.
+        // It has not been sent yet, so do not add it to the billed turn total.
+        if (this.config.estimateSessionCostLimitReached(
+          turnInputTokens + roundInputTokens,
+          totalOutputTokens,
+        )) {
+          const sessionCost = this.config.getSessionCost();
+          const sessionCostLimit = this.config.getSessionCostLimit();
+          yield {
+            type: "content",
+            content: `\n\nSession cost limit reached ($${sessionCost.toFixed(2)} / $${sessionCostLimit.toFixed(2)}). Stopping before the next model request.`,
+          };
+          yield { type: "done" };
+          return;
+        }
+
+        inputTokens = roundInputTokens;
+        turnInputTokens += roundInputTokens;
+
         const stream = this.deps.client.chatStream(
-          preparedMessages,
+          providerMessages,
           tools,
-          undefined,
+          abortController ? { signal: abortController.signal } : undefined,
           this.config.isGrokModel() && this.deps.toolSelectionStrategy.shouldUseSearchFor(message)
             ? { search_parameters: { mode: "auto" } }
             : { search_parameters: { mode: "off" } }
@@ -893,6 +982,10 @@ export class AgentExecutor {
           }
 
           const result = this.deps.streamingHandler.accumulateChunk(chunk as RawStreamingChunk);
+          uncommittedRoundOutputTokens = Math.max(
+            uncommittedRoundOutputTokens,
+            result.tokenCount ?? this.deps.streamingHandler.getTokenCount() ?? 0,
+          );
 
           if (result.reasoningContent) {
             yield { type: "reasoning", reasoning: result.reasoningContent };
@@ -944,27 +1037,42 @@ export class AgentExecutor {
             'Use a tool-capable model such as qwen3.5-ctx32k or gpt-5.5 for goals that need shell/tools.';
           yield { type: "content", content: `${rawStreamedContent}\n` };
         }
-        if (!rawStreamedContent) rawStreamedContent = "Using tools to help you...";
+        if (!rawStreamedContent && hasToolCalls) {
+          rawStreamedContent = "Using tools to help you...";
+        }
         const content = sanitizeAssistantOutput(rawStreamedContent);
+        const emptyNoToolResponse = !hasToolCalls && content.trim().length === 0;
 
-        const assistantEntry: ChatEntry = {
-          type: "assistant",
-          content: content,
-          timestamp: new Date(),
-          toolCalls: toolCalls,
-        };
-        history.push(assistantEntry);
-        messages.push({ role: "assistant", content: content, tool_calls: toolCalls });
+        if (!emptyNoToolResponse) {
+          const assistantEntry: ChatEntry = {
+            type: "assistant",
+            content: content,
+            timestamp: new Date(),
+            toolCalls: toolCalls,
+          };
+          history.push(assistantEntry);
+          messages.push({ role: "assistant", content: content, tool_calls: toolCalls });
+        }
 
-        const currentOutputTokens = this.deps.streamingHandler.getTokenCount() || 0;
+        const currentOutputTokens = Math.max(
+          uncommittedRoundOutputTokens,
+          this.deps.streamingHandler.getTokenCount() || 0,
+        );
         totalOutputTokens += currentOutputTokens;
+        uncommittedRoundOutputTokens = 0;
         yield { type: "token_count", tokenCount: inputTokens + totalOutputTokens };
 
         if (toolCalls && toolCalls.length > 0) {
+          // Feedback for the RAG selector tracks what the model requested,
+          // regardless of whether policy, steering or single-tool mode later
+          // blocks/defers execution.
+          for (const requestedToolCall of toolCalls) {
+            this.deps.toolSelectionStrategy.recordToolRequest(requestedToolCall.function.name);
+          }
           toolRounds++;
 
           // Pre-check cost limit before executing tools (estimate only — no side effects)
-          if (this.config.estimateSessionCostLimitReached(inputTokens, totalOutputTokens)) {
+          if (this.config.estimateSessionCostLimitReached(turnInputTokens, totalOutputTokens)) {
             const sessionCost = this.config.getSessionCost();
             const sessionCostLimit = this.config.getSessionCostLimit();
             yield { type: "content", content: `\n\nSession cost limit reached ($${sessionCost.toFixed(2)} / $${sessionCostLimit.toFixed(2)}). Stopping before tool execution.` };
@@ -1012,6 +1120,11 @@ export class AgentExecutor {
 
           // Buffer for streaming adapter chunks (cannot yield from inside a callback)
           const streamChunkBuffer: Array<{ type: "tool_stream"; toolStreamData: { toolCallId: string; toolName: string; delta: string } }> = [];
+          // JIT context must persist into the next provider request, but only
+          // after every result in this assistant tool-call batch. Inserting a
+          // system message between sibling tool results violates provider
+          // transcript ordering requirements.
+          const jitContextMessages: CodeBuddyMessage[] = [];
 
           for (const toolCall of streamToolCallsToExecute) {
             if (abortController?.signal.aborted) {
@@ -1059,10 +1172,14 @@ export class AgentExecutor {
             // or when the WS server isn't running.
             emitFleetToolStarted(toolCall);
 
-            // Use streaming execution for tools that support it (bash, reason, + adapter-based)
+            // Use dedicated streaming execution only for tools whose streaming
+            // implementation follows the same authorization/observability path
+            // as normal dispatch. Bash deliberately goes through executeToolViaLane
+            // below so PolicyManager, lifecycle hooks, RunStore and auto-repair
+            // cannot be bypassed; the adapter still emits its completed output.
             let result;
             const _streamToolStartMs = Date.now();
-            const STREAMING_TOOLS = ['bash', 'reason', 'generate_document'];
+            const STREAMING_TOOLS = ['reason', 'generate_document'];
             if (STREAMING_TOOLS.includes(toolCall.function.name)) {
               const gen = this.deps.toolHandler.executeToolStreaming(toolCall);
               let genResult = await gen.next();
@@ -1093,7 +1210,7 @@ export class AgentExecutor {
                 const tc = toolCall; // capture for closure
                 result = await streamingAdapter.wrapWithStreaming(
                   tc.function.name,
-                  () => this.executeToolViaLane(tc),
+                  () => this.executeToolViaLane(tc, abortController?.signal),
                   (chunk: string) => {
                     // We cannot yield from inside a callback, so we accumulate
                     // chunks and emit them after. Instead, use a buffer approach.
@@ -1113,7 +1230,7 @@ export class AgentExecutor {
                 }
                 streamChunkBuffer.length = 0;
               } else {
-                result = await this.executeToolViaLane(toolCall);
+                result = await this.executeToolViaLane(toolCall, abortController?.signal);
               }
             }
 
@@ -1201,8 +1318,9 @@ export class AgentExecutor {
             // --- JIT context discovery: load subdirectory context files ---
             // Décision #2 du plan task #5 — promu du sequential vers streaming
             // pour parité d'enrichissement après chaque tool qui touche un path.
-            for (const msg of await runJitContextDiscovery(toolCall)) {
-              preparedMessages.push(msg);
+            // A denied/failed path access must not become an indirect context read.
+            if (result.success) {
+              jitContextMessages.push(...await runJitContextDiscovery(toolCall));
             }
 
             // Check abort after tool execution completes
@@ -1357,12 +1475,15 @@ export class AgentExecutor {
             }
           }
 
+          messages.push(...jitContextMessages);
+
           if (terminateDetectedStreaming) break;
 
           inputTokens = this.deps.tokenCounter.countMessageTokens(messages as Parameters<typeof this.deps.tokenCounter.countMessageTokens>[0]);
           yield { type: "token_count", tokenCount: inputTokens + totalOutputTokens };
 
-          // Run after_turn middleware (handles cost recording + limit)
+          // Run remaining after_turn middleware. Cost accounting is centralized
+          // in this loop and the duplicate legacy middleware was removed above.
           if (pipeline) {
             const ctx = this.buildMiddlewareContext(
               toolRounds, inputTokens, totalOutputTokens, history, messages, true, abortController
@@ -1439,6 +1560,10 @@ export class AgentExecutor {
             }
           }
 
+          if (emptyNoToolResponse) {
+            throw new Error('Assistant stream returned no content or tool calls');
+          }
+
           // Fire-and-forget auto-capture on final assistant response (streaming)
           try {
             const { getAutoCaptureManager } = await import('../../memory/auto-capture.js');
@@ -1479,7 +1604,7 @@ export class AgentExecutor {
         yield { type: "content", content: "\n\nMaximum tool execution rounds reached." };
       }
 
-      this.config.recordSessionCost(inputTokens, totalOutputTokens);
+      recordTurnCost();
 
       // Display per-turn token usage (streaming path). Pass the model
       // name so estimateCost can zero out subscription-billed models
@@ -1489,13 +1614,17 @@ export class AgentExecutor {
       const streamTurnCost = this.deps.client.isSubscriptionAuth?.()
         ? 0
         : estimateCost(
-            inputTokens,
+            turnInputTokens,
             totalOutputTokens,
             undefined,
             undefined,
             this.deps.client.getCurrentModel(),
           );
-      const streamUsageDisplay = formatTokenUsage({ inputTokens, outputTokens: totalOutputTokens, cost: streamTurnCost });
+      const streamUsageDisplay = formatTokenUsage({
+        inputTokens: turnInputTokens,
+        outputTokens: totalOutputTokens,
+        cost: streamTurnCost,
+      });
       logger.info(`Token usage: ${streamUsageDisplay}`);
       yield { type: "content", content: `\n${streamUsageDisplay}` };
 
@@ -1506,6 +1635,15 @@ export class AgentExecutor {
           type: "content",
           content: `\n\n💸 Session cost limit reached ($${sessionCost.toFixed(2)} / $${sessionCostLimit.toFixed(2)}).`,
         };
+      } else {
+        const sessionCost = this.config.getSessionCost();
+        const sessionCostLimit = this.config.getSessionCostLimit();
+        if (sessionCostLimit > 0 && sessionCost >= sessionCostLimit * 0.8) {
+          yield {
+            type: 'content',
+            content: `\nSession cost approaching limit ($${sessionCost.toFixed(2)} / $${sessionCostLimit.toFixed(2)}).\n`,
+          };
+        }
       }
 
       // Process followup/collect messages if any are queued
@@ -1548,6 +1686,8 @@ export class AgentExecutor {
       messages.push({ role: "assistant", content: errorEntry.content });
       yield { type: "content", content: errorEntry.content };
       yield { type: "done" };
+    } finally {
+      recordTurnCost();
     }
   }
 }
