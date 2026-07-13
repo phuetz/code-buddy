@@ -22,7 +22,11 @@ import { join } from 'path';
 import { logger } from '../utils/logger.js';
 import { commandExists } from '../utils/command-exists.js';
 import { inferTaskType } from '../fleet/model-capability-heuristics.js';
-import { withSpeakingGuard, interruptSpeaking } from './voice-activity.js';
+import {
+  withSpeakingGuard,
+  interruptSpeaking,
+  registerActivePlayKiller,
+} from './voice-activity.js';
 import { prepareSpeech } from './speech-sanitizer.js';
 import { matchVoiceInteraction, VOICE_INTERACTION_PREWARM_PHRASES } from './voice-interactions.js';
 import { streamToSpeech } from './voice-stream.js';
@@ -853,6 +857,11 @@ export async function sayNow(
     }
     return;
   }
+  const controller = new AbortController();
+  const abort = (): void => controller.abort();
+  if (options.signal?.aborted) abort();
+  else options.signal?.addEventListener('abort', abort, { once: true });
+  const unregisterKiller = registerActivePlayKiller(abort);
   // The active personality picks its own Piper voice (.onnx) if it set one (else the env default).
   let voice = options.voice;
   if (!voice && !options.synth) {
@@ -868,8 +877,8 @@ export async function sayNow(
     const synth = options.synth ?? makeDefaultSynth(voice, options.rootDir);
     const play = options.play ?? defaultPlay;
     const wav = await synth(t);
-    if (wav) {
-      await withSpeakingGuard(() => play(wav, { signal: options.signal }));
+    if (wav && !controller.signal.aborted) {
+      await withSpeakingGuard(() => play(wav, { signal: controller.signal }));
       try {
         const { unlink } = await import('fs/promises');
         await unlink(wav);
@@ -881,6 +890,12 @@ export async function sayNow(
     logger.warn(
       `[voice] sayNow (local) failed: ${err instanceof Error ? err.message : String(err)}`
     );
+  } finally {
+    unregisterKiller();
+    options.signal?.removeEventListener('abort', abort);
+    // withSpeakingGuard normally arms an echo tail when the player resolves. A killed player
+    // must instead reopen the ear immediately.
+    if (controller.signal.aborted) interruptSpeaking();
   }
   // 2. Phone — when traveling, push the same line as a Telegram VOICE NOTE so it reaches you
   //    even with no one at the speakers. Opt-in, best-effort.
@@ -957,6 +972,7 @@ export function makeVoiceReply(options: VoiceReplyOptions = {}): VoiceReplyHandl
   const handler = async (heard: string): Promise<void> => {
     const controller = new AbortController();
     currentAbort = controller;
+    const unregisterKiller = registerActivePlayKiller(() => controller.abort());
     const { signal } = controller;
     const startedAt = Date.now();
     let replyMs = 0;
@@ -1056,6 +1072,7 @@ export function makeVoiceReply(options: VoiceReplyOptions = {}): VoiceReplyHandl
         }
       }
       if (currentAbort === controller) currentAbort = null;
+      unregisterKiller();
     }
   };
 
@@ -1063,7 +1080,7 @@ export function makeVoiceReply(options: VoiceReplyOptions = {}): VoiceReplyHandl
     const controller = currentAbort;
     if (!controller) return; // nothing in flight → clean no-op
     try {
-      controller.abort();
+      interruptSpeaking();
     } catch {
       /* never-throws */
     }

@@ -4,6 +4,7 @@ import os from 'os';
 import path from 'path';
 import {
   normalizeSpeechTranscript,
+  isBargeInTranscript,
   resolveFasterWhisperOptions,
   wireSpeechReaction,
   type Transcriber,
@@ -30,6 +31,12 @@ function transcriptFinal(text: string, payload: Record<string, unknown> = {}): v
 const tick = (): Promise<void> => new Promise((r) => setTimeout(r, 30));
 
 describe('speech reaction — speech_end → STT → percept', () => {
+  it('recognizes only explicit spoken stop commands as barge-in', () => {
+    expect(isBargeInTranscript('Lisa, arrête !')).toBe(true);
+    expect(isBargeInTranscript('Stop maintenant')).toBe(true);
+    expect(isBargeInTranscript('Lisa stop le serveur')).toBe(false);
+  });
+
   it('defaults faster-whisper to French assistant comprehension settings', () => {
     const previous = {
       lang: process.env.CODEBUDDY_SPEECH_LANG,

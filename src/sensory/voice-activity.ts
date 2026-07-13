@@ -13,6 +13,7 @@
  */
 let activePlays = 0;
 let speakingUntilMs = 0;
+const activePlayKillers = new Set<() => void>();
 
 /** Echo tail after playback ends, ms (room reverberation + buffered audio). */
 const TAIL_MS = Number(process.env.CODEBUDDY_SENSORY_ECHO_TAIL_MS) || 1200;
@@ -31,6 +32,12 @@ export function endSpeaking(now: number = Date.now()): void {
 /** True while the robot is speaking or within the echo tail — the ear should be ignored. */
 export function isSpeaking(now: number = Date.now()): boolean {
   return activePlays > 0 || now < speakingUntilMs;
+}
+
+/** Register an abort/kill handle for spoken work that may not have reached playback yet. */
+export function registerActivePlayKiller(kill: () => void): () => void {
+  activePlayKillers.add(kill);
+  return () => activePlayKillers.delete(kill);
 }
 
 /** Serializes the mouth: the tail of the last queued spoken output. */
@@ -66,6 +73,15 @@ export async function withSpeakingGuard(play: () => Promise<void>): Promise<void
  * which arms the tail for a normal end-of-utterance. Idempotent, never-throws.
  */
 export function interruptSpeaking(): void {
+  const killers = [...activePlayKillers];
+  activePlayKillers.clear();
+  for (const kill of killers) {
+    try {
+      kill();
+    } catch {
+      /* never-throws */
+    }
+  }
   activePlays = 0;
   speakingUntilMs = 0;
   mouthChain = Promise.resolve();
@@ -75,5 +91,6 @@ export function interruptSpeaking(): void {
 export function _resetVoiceActivityForTests(): void {
   activePlays = 0;
   speakingUntilMs = 0;
+  activePlayKillers.clear();
   mouthChain = Promise.resolve();
 }
