@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { randomUUID } from 'crypto';
@@ -40,7 +41,7 @@ function setup() {
   mutator.create({ name: 'authored-git-bisect', description: 'b', content: '# B\ngit bisect good bad' });
   mutator.create({ name: 'authored-safe-delete', description: 'd', content: '# D\nbackup dry run confirm' });
   const cluster = buildClusterFromInstalled(mutator, [BISECT, DELETE]);
-  return { mutator, archive, cluster };
+  return { root, mutator, archive, cluster };
 }
 
 describe('skill consolidation — coverage-gated', () => {
@@ -123,5 +124,57 @@ describe('skill consolidation — coverage-gated', () => {
     expect(mutator.has('authored-git-bisect')).toBe(true);
     expect(mutator.has('authored-safe-delete')).toBe(true);
     expect(mutator.has('authored-dev-procedures')).toBe(false);
+  });
+
+  it('preserves the first umbrella when a later consolidation proposes the same name', async () => {
+    const { root, mutator, archive, cluster } = setup();
+    const first = await consolidateCluster(
+      cluster,
+      new StaticUmbrellaProposer(UMBRELLA_GOOD),
+      mutator,
+      archive,
+      { keepOnAccept: true },
+    );
+    const firstName = first.umbrellaName!;
+    const firstFile = path.join(root, firstName, 'SKILL.md');
+    const firstContent = fs.readFileSync(firstFile, 'utf8');
+
+    const cacheScenario = {
+      id: 'cache-safety',
+      query: 'avoid stale cache reads',
+      expectIncludes: ['cache key', 'invalidate'],
+      description: 'safe cache invalidation',
+    };
+    const retryScenario = {
+      id: 'retry-policy',
+      query: 'retry transient requests',
+      expectIncludes: ['backoff', 'jitter'],
+      description: 'bounded retry policy',
+    };
+    mutator.create({ name: 'authored-cache-safety', description: 'cache', content: '# Cache\ncache key invalidate' });
+    mutator.create({ name: 'authored-retry-policy', description: 'retry', content: '# Retry\nbackoff jitter' });
+    const secondCluster = buildClusterFromInstalled(mutator, [cacheScenario, retryScenario]);
+    const second = await consolidateCluster(
+      secondCluster,
+      new StaticUmbrellaProposer({
+        name: UMBRELLA_GOOD.name,
+        content: '# Reliability\nUse a cache key and invalidate stale data. Apply backoff with jitter.',
+      }),
+      mutator,
+      archive,
+      { keepOnAccept: true },
+    );
+
+    expect(second.accepted).toBe(true);
+    expect(second.umbrellaName).toMatch(/^authored-dev-procedures-[a-f0-9]{8}$/);
+    expect(mutator.has(firstName)).toBe(true);
+    expect(mutator.has(second.umbrellaName!)).toBe(true);
+    expect(fs.readFileSync(firstFile, 'utf8')).toBe(firstContent);
+    const installedGuidance = mutator.listAuthored()
+      .map((name) => fs.readFileSync(path.join(root, name, 'SKILL.md'), 'utf8'))
+      .join('\n');
+    for (const term of [...BISECT.expectIncludes, ...DELETE.expectIncludes]) {
+      expect(installedGuidance.toLowerCase()).toContain(term);
+    }
   });
 });

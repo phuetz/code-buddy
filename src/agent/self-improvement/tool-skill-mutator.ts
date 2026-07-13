@@ -20,6 +20,7 @@ export interface ToolMutatorPort {
   register(spec: AuthoredToolSpec): { name: string };
   unregister(name: string): boolean;
   has(name: string): boolean;
+  getSpec(name: string): AuthoredToolSpec | null;
 }
 
 export interface LiveToolMutatorOptions {
@@ -32,6 +33,7 @@ export interface LiveToolMutatorOptions {
 export class LiveToolMutator implements ToolMutatorPort {
   private readonly persist: boolean;
   private readonly store: AuthoredToolStore;
+  private readonly registeredSpecs = new Map<string, AuthoredToolSpec>();
 
   constructor(options: LiveToolMutatorOptions = {}) {
     this.persist = options.persist ?? true;
@@ -76,6 +78,7 @@ export class LiveToolMutator implements ToolMutatorPort {
       description: spec.description,
     };
     getToolRegistry().registerTool(definition, metadata);
+    this.registeredSpecs.set(spec.name, spec);
     if (this.persist) this.store.add(spec);
     return { name: spec.name };
   }
@@ -83,12 +86,17 @@ export class LiveToolMutator implements ToolMutatorPort {
   unregister(name: string): boolean {
     const a = FormalToolRegistry.getInstance().unregister(name);
     const b = getToolRegistry().removeTool(name);
+    this.registeredSpecs.delete(name);
     if (this.persist) this.store.remove(name);
     return a || b;
   }
 
   has(name: string): boolean {
     return FormalToolRegistry.getInstance().has(name) || getToolRegistry().getTool(name) !== undefined;
+  }
+
+  getSpec(name: string): AuthoredToolSpec | null {
+    return this.registeredSpecs.get(name) ?? this.store.list().find((spec) => spec.name === name) ?? null;
   }
 }
 

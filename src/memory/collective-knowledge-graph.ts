@@ -30,7 +30,17 @@
  * @module memory/collective-knowledge-graph
  */
 
-import { appendFileSync, existsSync, mkdirSync, readFileSync } from 'fs';
+import {
+  appendFileSync,
+  closeSync,
+  existsSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  readSync,
+  statSync,
+  type Stats,
+} from 'fs';
 import { dirname, join } from 'path';
 import { logger } from '../utils/logger.js';
 import { contentHash, computeSalience, type EntityType, type RelationType } from './knowledge-graph.js';
@@ -40,6 +50,7 @@ import { getCodeBuddyHome } from '../utils/codebuddy-home.js';
 import { EmbeddingProvider } from '../embeddings/embedding-provider.js';
 import { BM25Index } from '../search/bm25.js';
 import { cosineSimilarityF32, hybridMmrRank, type HybridCandidate } from './hybrid-mmr.js';
+import { withTimeout } from '../utils/errors.js';
 import {
   canonicalObject,
   factMatchKey,
@@ -169,16 +180,23 @@ interface LedgerEvent {
   reason?: string;
 }
 
+interface EmbeddingCacheEvent {
+  hash: string;
+  model: string;
+  vec: number[];
+}
+
 const SCOPE = 'collective';
 
 function normalizeName(s: string): string {
-  return s
+  const normalized = s
     .toLowerCase()
     .normalize('NFD')
     .replace(/\p{M}+/gu, '')
     .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 80);
+    .replace(/^-+|-+$/g, '');
+  if (normalized.length <= 80) return normalized;
+  return `${normalized.slice(0, 71)}-${contentHash('name', normalized).slice(0, 8)}`;
 }
 
 /** Code-Explorer id convention: `Type:scope:name`. */
@@ -221,14 +239,23 @@ export interface CkgEmbedder {
  */
 export class CollectiveKnowledgeGraph {
   private readonly ledgerPath: string;
+  private readonly embeddingCachePath: string;
   private readonly agentId: string;
   /** Currently-true nodes (validTo === null), keyed by logical id. */
   private readonly current = new Map<string, CkgEntity>();
   /** Invalidated (superseded) versions, keyed by `id@contentHash`. */
   private readonly superseded = new Map<string, CkgEntity>();
   private readonly relations = new Map<string, CkgRelation>();
+  /** Byte position immediately after the last complete JSONL line applied to the view. */
+  private ledgerOffset = 0;
+  /** Last observed file metadata, used to make unchanged loads an O(1) stat. */
+  private ledgerSize = 0;
+  private ledgerMtimeMs = 0;
+  private ledgerDevice: number | null = null;
+  private ledgerInode: number | null = null;
   /** contentHash → embedding vector. Content-addressed, so it survives ledger reloads. */
   private readonly embCache = new Map<string, Float32Array>();
+  private embeddingCacheLoaded = false;
   private readonly embeddingModel: string;
   private embedder: CkgEmbedder | null = null;
   /** Rust engine client (lazy) — used only when CODEBUDDY_CKG_ENGINE=rust and the binary exists.
@@ -238,6 +265,7 @@ export class CollectiveKnowledgeGraph {
 
   constructor(options: CollectiveKnowledgeGraphOptions = {}) {
     this.ledgerPath = options.ledgerPath ?? join(getCodeBuddyHome(), 'collective', 'ckg-ledger.jsonl');
+    this.embeddingCachePath = `${this.ledgerPath}.emb.jsonl`;
     this.agentId = options.agentId ?? safeAgentId();
     this.embeddingModel = options.embeddingModel ?? CKG_EMBEDDING_MODEL;
     this.embedder = options.embedder ?? null;
@@ -283,9 +311,9 @@ export class CollectiveKnowledgeGraph {
       const raw = (input.text ?? '').trim();
       if (!raw) return null;
       // Privacy: redact secrets before anything is persisted or shared.
-      const text = scanForSecrets(raw).hasSecrets ? redactSecrets(raw) : raw;
+      const text = redactSensitive(raw);
       const type: EntityType = input.type ?? 'fact';
-      const name = input.name?.trim() || normalizeName(text);
+      const name = redactSensitive(input.name?.trim() || normalizeName(text));
       const id = entityId(type, name);
       const recordedAt = new Date().toISOString();
       const agentId = input.agentId ?? this.agentId;
@@ -298,27 +326,26 @@ export class CollectiveKnowledgeGraph {
         ...(input.source ? { source: input.source } : {}),
       };
       this.append(entityEvent);
-      this.applyEntity(entityEvent);
 
       for (const rel of input.relations ?? []) {
+        const targetName = redactSensitive(rel.targetName);
+        const reason = rel.reason ? redactSensitive(rel.reason) : undefined;
         const targetType: EntityType = rel.targetType ?? 'concept';
-        const targetId = entityId(targetType, rel.targetName);
+        const targetId = entityId(targetType, targetName);
         const relCh = contentHash('relation', `${id}|${rel.predicate}|${targetId}`);
         const relEvent: LedgerEvent = {
           v: 1, kind: 'relation', recordedAt, agentId, contentHash: relCh,
           sourceId: id, targetId, relType: rel.predicate,
-          ...(rel.reason ? { reason: rel.reason } : {}),
+          ...(reason ? { reason } : {}),
           ...(input.source ? { source: input.source } : {}),
         };
         this.append(relEvent);
-        this.applyRelation(relEvent);
         if (!this.current.has(targetId)) {
           const tEvent: LedgerEvent = {
-            v: 1, kind: 'entity', recordedAt, agentId, contentHash: contentHash(targetType, rel.targetName),
-            id: targetId, type: targetType, name: rel.targetName, text: rel.targetName, confidence: 0.5,
+            v: 1, kind: 'entity', recordedAt, agentId, contentHash: contentHash(targetType, targetName),
+            id: targetId, type: targetType, name: targetName, text: targetName, confidence: 0.5,
           };
           this.append(tEvent);
-          this.applyEntity(tEvent);
         }
       }
       return this.toResult(this.current.get(id)!);
@@ -362,16 +389,12 @@ export class CollectiveKnowledgeGraph {
       const self = this.current.get(stored.id);
       if (!self) return stored;
       const provider = this.getEmbedder();
-      const selfVec = (await provider.embed(`${self.name}. ${self.text}`)).embedding;
-      this.embCache.set(self.contentHash, selfVec);
+      this.loadEmbeddingCache();
+      const selfVec = await this.embedEntity(provider, self);
       const sims: Array<{ e: CkgEntity; sim: number }> = [];
       for (const e of this.current.values()) {
         if (e.id === self.id) continue;
-        let v = this.embCache.get(e.contentHash);
-        if (!v) {
-          v = (await provider.embed(`${e.name}. ${e.text}`)).embedding;
-          this.embCache.set(e.contentHash, v);
-        }
+        const v = await this.embedEntity(provider, e);
         sims.push({ e, sim: cosineSimilarityF32(selfVec, v) });
       }
       sims.sort((a, b) => b.sim - a.sim);
@@ -465,13 +488,12 @@ export class CollectiveKnowledgeGraph {
     if (candidates.length === 0) return [];
 
     const provider = this.getEmbedder();
+    this.loadEmbeddingCache();
     let qVec: Float32Array | null = null;
     try {
       qVec = (await provider.embed(query)).embedding;
       for (const e of candidates) {
-        if (!this.embCache.has(e.contentHash)) {
-          this.embCache.set(e.contentHash, (await provider.embed(`${e.name}. ${e.text}`)).embedding);
-        }
+        await this.embedEntity(provider, e);
       }
     } catch (err) {
       // Embeddings unavailable → degrade gracefully to keyword recall (still useful, $0, no crash).
@@ -522,8 +544,20 @@ export class CollectiveKnowledgeGraph {
 
   /** A `<collective_knowledge>` system block for prompt injection (token-budgeted).
    *  Uses hybrid (semantic+keyword) retrieval; degrades to keyword if embeddings are unavailable. */
-  async formatCollectiveContext(query: string, maxChars = 600): Promise<string> {
-    const hits = await this.recallHybrid(query, { limit: 8 });
+  async formatCollectiveContext(query: string, maxChars = 600, timeoutMs = 3_000): Promise<string> {
+    let hits: CkgRecallResult[];
+    try {
+      hits = await withTimeout(
+        this.recallHybrid(query, { limit: 8 }),
+        timeoutMs,
+        'Collective knowledge recall timed out',
+      );
+    } catch (err) {
+      logger.debug(
+        `[ckg] collective context skipped: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      return '';
+    }
     if (hits.length === 0) return '';
     const lines: string[] = [];
     let used = 0;
@@ -632,10 +666,9 @@ export class CollectiveKnowledgeGraph {
         agentId: this.agentId,
         contentHash: contentHash('retraction', `${id}|${recordedAt}`),
         id,
-        ...(opts.reason ? { reason: opts.reason } : {}),
+        ...(opts.reason ? { reason: redactSensitive(opts.reason) } : {}),
       };
       this.append(event);
-      this.applyRetraction(event);
       return { retracted: true, id, status: 'retracted' };
     } catch (err) {
       logger.warn(`[ckg] retract failed: ${err instanceof Error ? err.message : String(err)}`);
@@ -823,25 +856,133 @@ export class CollectiveKnowledgeGraph {
 
   // -- internals ------------------------------------------------------------
 
+  /** Load vectors written by previous processes, accepting only this instance's model. */
+  private loadEmbeddingCache(): void {
+    if (this.embeddingCacheLoaded) return;
+    this.embeddingCacheLoaded = true;
+    if (!existsSync(this.embeddingCachePath)) return;
+    let content: string;
+    try {
+      content = readFileSync(this.embeddingCachePath, 'utf8');
+    } catch (err) {
+      logger.debug(`[ckg] embedding cache unavailable: ${err instanceof Error ? err.message : String(err)}`);
+      return;
+    }
+    for (const line of content.split('\n')) {
+      const event = parseEmbeddingCacheEvent(line);
+      if (!event || event.model !== this.embeddingModel || this.embCache.has(event.hash)) continue;
+      this.embCache.set(event.hash, Float32Array.from(event.vec));
+    }
+  }
+
+  private async embedEntity(provider: CkgEmbedder, entity: CkgEntity): Promise<Float32Array> {
+    const cached = this.embCache.get(entity.contentHash);
+    if (cached) return cached;
+    // The vector input depends only on the content-addressed hash (type + text), not the
+    // mutable display name, so persisted vectors remain valid across processes/reloads.
+    const vector = (await provider.embed(entity.text)).embedding;
+    this.embCache.set(entity.contentHash, vector);
+    this.persistEmbedding(entity.contentHash, vector);
+    return vector;
+  }
+
+  private persistEmbedding(hash: string, vector: Float32Array): void {
+    try {
+      const dir = dirname(this.embeddingCachePath);
+      if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+      const event: EmbeddingCacheEvent = { hash, model: this.embeddingModel, vec: Array.from(vector) };
+      appendFileSync(this.embeddingCachePath, `${JSON.stringify(event)}\n`, 'utf8');
+    } catch (err) {
+      // Persistence is an optimisation: semantic recall remains available in-memory.
+      logger.debug(`[ckg] embedding cache write skipped: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
   private append(event: LedgerEvent): void {
     const dir = dirname(this.ledgerPath);
     if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
     // O_APPEND keeps concurrent small-line writes from interleaving (POSIX atomic append).
     appendFileSync(this.ledgerPath, `${JSON.stringify(event)}\n`, 'utf8');
+    // `load` is the single event-application path. This avoids double-applying a local
+    // append while still picking up writes that another process raced in before ours.
+    this.load();
   }
 
-  /** Rebuild the in-memory view by replaying the whole ledger (Phase 0/1; SQLite index in Phase 2). */
+  /**
+   * Bring the in-memory view up to date from the append-only ledger. Unchanged files cost
+   * one stat; growth reads only bytes after the last complete JSONL line. Truncation,
+   * replacement, or an in-place rewrite falls back to a full replay.
+   */
   private load(): void {
-    this.current.clear();
-    this.superseded.clear();
-    this.relations.clear();
-    if (!existsSync(this.ledgerPath)) return;
-    let content: string;
+    if (!existsSync(this.ledgerPath)) {
+      if (this.ledgerSize > 0 || this.ledgerOffset > 0) this.resetLedgerView();
+      return;
+    }
+
+    let stats: Stats;
     try {
-      content = readFileSync(this.ledgerPath, 'utf8');
+      stats = statSync(this.ledgerPath);
     } catch {
       return;
     }
+
+    const sameFile =
+      this.ledgerDevice === null ||
+      (this.ledgerDevice === stats.dev && this.ledgerInode === stats.ino);
+    const unchanged =
+      sameFile && stats.size === this.ledgerSize && stats.mtimeMs === this.ledgerMtimeMs;
+    if (unchanged) return;
+
+    const requiresFullReplay =
+      !sameFile ||
+      stats.size < this.ledgerSize ||
+      stats.size < this.ledgerOffset ||
+      (stats.size === this.ledgerSize && stats.mtimeMs !== this.ledgerMtimeMs);
+    if (requiresFullReplay) this.resetLedgerView();
+
+    const bytesToRead = stats.size - this.ledgerOffset;
+    if (bytesToRead <= 0) {
+      this.rememberLedgerMetadata(stats);
+      return;
+    }
+
+    const chunk = Buffer.allocUnsafe(bytesToRead);
+    let fd: number | null = null;
+    let bytesRead = 0;
+    try {
+      fd = openSync(this.ledgerPath, 'r');
+      while (bytesRead < bytesToRead) {
+        const count = readSync(
+          fd,
+          chunk,
+          bytesRead,
+          bytesToRead - bytesRead,
+          this.ledgerOffset + bytesRead,
+        );
+        if (count === 0) break;
+        bytesRead += count;
+      }
+    } catch {
+      return;
+    } finally {
+      if (fd !== null) {
+        try {
+          closeSync(fd);
+        } catch {
+          // The bytes already read remain usable; a close failure must not break recall.
+        }
+      }
+    }
+
+    // Do not advance past a torn final line. A later append completes it and the next
+    // incremental read starts from the same byte offset.
+    const completeEnd = chunk.subarray(0, bytesRead).lastIndexOf(0x0a) + 1;
+    if (completeEnd === 0) {
+      this.rememberLedgerMetadata(stats);
+      return;
+    }
+
+    const content = chunk.subarray(0, completeEnd).toString('utf8');
     for (const line of content.split('\n')) {
       const trimmed = line.trim();
       if (!trimmed) continue;
@@ -855,6 +996,26 @@ export class CollectiveKnowledgeGraph {
       else if (event.kind === 'relation') this.applyRelation(event);
       else if (event.kind === 'retraction') this.applyRetraction(event);
     }
+    this.ledgerOffset += completeEnd;
+    this.rememberLedgerMetadata(stats);
+  }
+
+  private resetLedgerView(): void {
+    this.current.clear();
+    this.superseded.clear();
+    this.relations.clear();
+    this.ledgerOffset = 0;
+    this.ledgerSize = 0;
+    this.ledgerMtimeMs = 0;
+    this.ledgerDevice = null;
+    this.ledgerInode = null;
+  }
+
+  private rememberLedgerMetadata(stats: Stats): void {
+    this.ledgerSize = stats.size;
+    this.ledgerMtimeMs = stats.mtimeMs;
+    this.ledgerDevice = stats.dev;
+    this.ledgerInode = stats.ino;
   }
 
   /**
@@ -934,7 +1095,6 @@ export class CollectiveKnowledgeGraph {
       sourceId, targetId, relType, reason: `semantic neighbour (${sim.toFixed(2)})`,
     };
     this.append(event);
-    this.applyRelation(event);
   }
 
   private applyRelation(e: LedgerEvent): void {
@@ -973,6 +1133,27 @@ export class CollectiveKnowledgeGraph {
 
 function clamp01(n: number): number {
   return Math.max(0, Math.min(1, Number.isFinite(n) ? n : 0.8));
+}
+
+function redactSensitive(value: string): string {
+  return scanForSecrets(value).hasSecrets ? redactSecrets(value) : value;
+}
+
+function parseEmbeddingCacheEvent(line: string): EmbeddingCacheEvent | null {
+  const trimmed = line.trim();
+  if (!trimmed) return null;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(trimmed) as unknown;
+  } catch {
+    return null;
+  }
+  if (typeof parsed !== 'object' || parsed === null) return null;
+  const candidate = parsed as Record<string, unknown>;
+  if (typeof candidate.hash !== 'string' || typeof candidate.model !== 'string') return null;
+  if (!Array.isArray(candidate.vec) || candidate.vec.length === 0) return null;
+  if (!candidate.vec.every((value) => typeof value === 'number' && Number.isFinite(value))) return null;
+  return { hash: candidate.hash, model: candidate.model, vec: [...candidate.vec] as number[] };
 }
 
 /** Recover the fact category from a fact node's match-key name. */

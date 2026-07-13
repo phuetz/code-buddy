@@ -19,6 +19,7 @@ import { getSkillRegistry } from '../../skills/registry.js';
 import { scanSkillFirewall } from '../../security/skill-scanner.js';
 import { inspectAuthoredCode } from './authored-artifact-gate.js';
 import type { SkillSpec } from './skill-types.js';
+import { logger } from '../../utils/logger.js';
 
 export const AUTHORED_SKILL_PREFIX = 'authored-';
 const ARCHIVE_DIR = '.archive';
@@ -119,6 +120,7 @@ export interface SkillMutatorPort {
   create(spec: SkillSpec): { name: string };
   remove(name: string): boolean;
   has(name: string): boolean;
+  getContent(name: string): string | null;
 }
 
 export interface MutationResult {
@@ -152,7 +154,7 @@ export class LiveSkillMutator implements SkillMutatorPort {
     void getSkillRegistry().registerSkillFile(file, 'workspace').catch(() => {});
   }
 
-  private readContent(name: string): string | null {
+  getContent(name: string): string | null {
     const f = this.skillFile(name);
     return fs.existsSync(f) ? fs.readFileSync(f, 'utf-8') : null;
   }
@@ -162,7 +164,7 @@ export class LiveSkillMutator implements SkillMutatorPort {
   }
 
   isPinned(name: string): boolean {
-    const c = this.readContent(name);
+    const c = this.getContent(name);
     return c ? readPinned(c) : false;
   }
 
@@ -205,7 +207,7 @@ export class LiveSkillMutator implements SkillMutatorPort {
 
   /** Find/replace within an authored skill body (exact; fail on multiple unless replaceAll). */
   patch(name: string, oldStr: string, newStr: string, opts: { replaceAll?: boolean } = {}): MutationResult {
-    const content = this.readContent(name);
+    const content = this.getContent(name);
     if (content === null) return { ok: false, reasons: ['skill does not exist'] };
     if (this.isPinned(name)) return { ok: false, reasons: ['skill is pinned'] };
     const count = content.split(oldStr).length - 1;
@@ -251,6 +253,22 @@ export class LiveSkillMutator implements SkillMutatorPort {
     if (!fs.existsSync(src)) return false;
     const dir = this.dirFor(name);
     if (fs.existsSync(dir)) return false; // don't clobber a live skill
+    let content: string;
+    try {
+      content = fs.readFileSync(path.join(src, 'SKILL.md'), 'utf-8');
+    } catch (err) {
+      logger.warn(
+        `[self-improve] refusing to restore skill "${name}": archived SKILL.md unreadable (${err instanceof Error ? err.message : String(err)})`,
+      );
+      return false;
+    }
+    const gate = safetyGateSkill(content);
+    if (!gate.ok) {
+      logger.warn(
+        `[self-improve] refusing to restore unsafe skill "${name}": ${gate.reasons.join('; ')}`,
+      );
+      return false;
+    }
     fs.renameSync(src, dir);
     this.reload(name);
     return true;
@@ -268,7 +286,7 @@ export class LiveSkillMutator implements SkillMutatorPort {
     // pin/unpin rewrite the SKILL.md frontmatter — authored-only, like every
     // other mutating op, so a user's hand-placed skill is never rewritten.
     if (!isAuthoredSkillName(name)) return false;
-    const content = this.readContent(name);
+    const content = this.getContent(name);
     if (content === null) return false;
     const withFm = ensureFrontmatter(name, '', content);
     fs.writeFileSync(this.skillFile(name), setPinned(withFm, value), 'utf-8');

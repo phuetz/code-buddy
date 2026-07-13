@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { mkdtempSync, rmSync, existsSync } from 'fs';
+import { mkdtempSync, rmSync, existsSync, readFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import {
@@ -82,6 +82,43 @@ describe('CollectiveKnowledgeGraph (Phase 0)', () => {
     expect(hits[0]!.mentions).toBe(2); // both contributions counted (replay-from-ledger)
   });
 
+  it('keeps the incremental view identical to a full replay after 5k cross-instance writes', () => {
+    const writer = new CollectiveKnowledgeGraph({ ledgerPath, agentId: 'writer/repo' });
+    const incremental = new CollectiveKnowledgeGraph({ ledgerPath, agentId: 'reader/repo' });
+
+    for (let i = 0; i < 2_500; i++) {
+      writer.remember({ name: `fact-${i}`, text: `shared ledger fact batch one ${i}`, type: 'fact' });
+    }
+    expect(incremental.getStats().entities).toBe(2_500); // establish the replay offset
+
+    for (let i = 2_500; i < 5_000; i++) {
+      writer.remember({ name: `fact-${i}`, text: `shared ledger fact batch two ${i}`, type: 'fact' });
+    }
+    writer.remember({
+      name: 'fact-10',
+      text: 'shared ledger fact ten was updated',
+      type: 'fact',
+      relations: [{ predicate: 'related_to', targetName: 'fact-12', targetType: 'fact' }],
+    });
+    writer.retract('fact-11', { reason: 'obsolete fixture' });
+
+    // `incremental` consumes only the appended half; `fullReplay` starts from byte zero.
+    const incrementalStats = incremental.getStats();
+    const fullReplay = new CollectiveKnowledgeGraph({ ledgerPath, agentId: 'fresh/repo' });
+    expect(incrementalStats).toEqual(fullReplay.getStats());
+    expect(incremental.listEntities({ limit: 6_000 })).toEqual(fullReplay.listEntities({ limit: 6_000 }));
+    const incrementalHistory = incremental.getSuperseded()
+      .map(({ salience: _timeDependentSalience, ...hit }) => hit);
+    const fullReplayHistory = fullReplay.getSuperseded()
+      .map(({ salience: _timeDependentSalience, ...hit }) => hit);
+    expect(incrementalHistory).toEqual(fullReplayHistory);
+    const recallView = (ckg: CollectiveKnowledgeGraph) =>
+      ckg.recall('', { limit: 6_000 })
+        .map(({ salience: _timeDependentSalience, ...hit }) => hit)
+        .sort((a, b) => a.id.localeCompare(b.id));
+    expect(recallView(incremental)).toEqual(recallView(fullReplay));
+  });
+
   it('stores typed relations (Code-Explorer edge shape) and returns them on recall', () => {
     const ckg = new CollectiveKnowledgeGraph({ ledgerPath, agentId: 'host/repo' });
     ckg.remember({
@@ -98,16 +135,38 @@ describe('CollectiveKnowledgeGraph (Phase 0)', () => {
 
   it('redacts secrets before persisting (the lesson is kept, the secret is not)', () => {
     const ckg = new CollectiveKnowledgeGraph({ ledgerPath, agentId: 'host/repo' });
-    const token = `ghp_${'A'.repeat(36)}`;
-    ckg.remember({ text: `Le token de déploiement est ${token} — ne pas le perdre.`, type: 'fact' });
+    const textToken = `ghp_${'A'.repeat(36)}`;
+    const nameToken = `ghp_${'B'.repeat(36)}`;
+    const targetToken = `ghp_${'C'.repeat(36)}`;
+    const reasonToken = `ghp_${'D'.repeat(36)}`;
+    ckg.remember({
+      text: `Le token de déploiement est ${textToken} — ne pas le perdre.`,
+      name: `deployment-${nameToken}`,
+      type: 'fact',
+      relations: [{
+        predicate: 'related_to',
+        targetName: `remote-${targetToken}`,
+        reason: `configured with ${reasonToken}`,
+      }],
+    });
     const hits = ckg.recall('token de déploiement');
     expect(hits.length).toBe(1);
-    expect(hits[0]!.text).not.toContain(token);
+    const ledger = readFileSync(ledgerPath, 'utf8');
+    for (const token of [textToken, nameToken, targetToken, reasonToken]) {
+      expect(ledger).not.toContain(token);
+    }
+    expect(hits[0]!.text).not.toContain(textToken);
+    expect(hits[0]!.name).not.toContain(nameToken);
+    expect(hits[0]!.relations[0]!.reason ?? '').not.toContain(reasonToken);
     expect(hits[0]!.text.toLowerCase()).toContain('token'); // surrounding knowledge preserved
   });
 
   it('formats a <collective_knowledge> prompt block', async () => {
-    const ckg = new CollectiveKnowledgeGraph({ ledgerPath, agentId: 'host/repo' });
+    const ckg = new CollectiveKnowledgeGraph({
+      ledgerPath,
+      agentId: 'host/repo',
+      embedder: { async embed() { return { embedding: Float32Array.from([1, 0]) }; } },
+    });
     ckg.remember(lesson);
     const block = await ckg.formatCollectiveContext('mode vocal devstral');
     expect(block).toContain('<collective_knowledge>');
@@ -122,6 +181,25 @@ describe('CollectiveKnowledgeGraph (Phase 0)', () => {
     const onlyLessons = ckg.recall('tokens', { types: ['lesson'] });
     expect(onlyLessons.length).toBe(1);
     expect(onlyLessons[0]!.type).toBe('lesson');
+  });
+
+  it('keeps long names with the same 80-character prefix as distinct entities', () => {
+    const ckg = new CollectiveKnowledgeGraph({ ledgerPath, agentId: 'host/repo' });
+    const sharedPrefix = 'A'.repeat(90);
+    const first = ckg.remember({
+      name: `${sharedPrefix} first publication`,
+      text: 'first long-title discovery',
+      type: 'discovery',
+    });
+    const second = ckg.remember({
+      name: `${sharedPrefix} second publication`,
+      text: 'second long-title discovery',
+      type: 'discovery',
+    });
+
+    expect(first!.id).not.toBe(second!.id);
+    expect(ckg.listEntities({ type: 'discovery' })).toHaveLength(2);
+    expect(ckg.getSuperseded()).toHaveLength(0);
   });
 
   it('empty text is ignored (never-throws)', () => {

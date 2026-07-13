@@ -51,6 +51,23 @@ describe('RunExperienceSource', () => {
     await source.collect();
     expect(calls).toEqual(['r1', 'r2']); // only first 2
   });
+
+  it('passes limits above the RunStore default through to the dependency seam', async () => {
+    const allRuns = Array.from({ length: 30 }, (_, index) => `run-${index}`);
+    const listRunIds = vi.fn((limit: number) => allRuns.slice(0, limit));
+    const source = new RunExperienceSource(
+      {
+        listRunIds,
+        buildRetrospective: (runId) => ({
+          frictionPoints: [{ detail: runId, evidence: 'fixture', severity: 'low' }],
+        }),
+      },
+      { limit: 25 },
+    );
+
+    await expect(source.collect()).resolves.toHaveLength(25);
+    expect(listRunIds).toHaveBeenCalledWith(25);
+  });
 });
 
 describe('SensorExperienceSource (world-model surprise → experiences)', () => {
