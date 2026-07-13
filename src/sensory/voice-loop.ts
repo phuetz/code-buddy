@@ -858,10 +858,14 @@ export async function sayNow(
     return;
   }
   const controller = new AbortController();
-  const abort = (): void => controller.abort();
-  if (options.signal?.aborted) abort();
-  else options.signal?.addEventListener('abort', abort, { once: true });
-  const unregisterKiller = registerActivePlayKiller(abort);
+  const abortLocal = (): void => controller.abort();
+  const interruptFromSignal = (): void => {
+    abortLocal();
+    interruptSpeaking();
+  };
+  if (options.signal?.aborted) interruptFromSignal();
+  else options.signal?.addEventListener('abort', interruptFromSignal, { once: true });
+  const unregisterKiller = registerActivePlayKiller(abortLocal);
   // The active personality picks its own Piper voice (.onnx) if it set one (else the env default).
   let voice = options.voice;
   if (!voice && !options.synth) {
@@ -874,6 +878,7 @@ export async function sayNow(
   }
   // 1. Home speakers (best-effort — a missing audio device must not block the phone push).
   try {
+    if (controller.signal.aborted) return;
     const synth = options.synth ?? makeDefaultSynth(voice, options.rootDir);
     const play = options.play ?? defaultPlay;
     const wav = await synth(t);
@@ -892,10 +897,7 @@ export async function sayNow(
     );
   } finally {
     unregisterKiller();
-    options.signal?.removeEventListener('abort', abort);
-    // withSpeakingGuard normally arms an echo tail when the player resolves. A killed player
-    // must instead reopen the ear immediately.
-    if (controller.signal.aborted) interruptSpeaking();
+    options.signal?.removeEventListener('abort', interruptFromSignal);
   }
   // 2. Phone — when traveling, push the same line as a Telegram VOICE NOTE so it reaches you
   //    even with no one at the speakers. Opt-in, best-effort.
@@ -1061,16 +1063,6 @@ export function makeVoiceReply(options: VoiceReplyOptions = {}): VoiceReplyHandl
         `[voice] reply→speak failed: ${err instanceof Error ? err.message : String(err)}`
       );
     } finally {
-      // If THIS turn was interrupted, hard-reset the half-duplex guard so the ear re-opens NOW
-      // (barge-in), overriding the echo tail that withSpeakingGuard's finally just armed. Runs
-      // last, so it wins the race against that endSpeaking(). Never re-arms after a normal turn.
-      if (signal.aborted) {
-        try {
-          interruptSpeaking();
-        } catch {
-          /* never-throws */
-        }
-      }
       if (currentAbort === controller) currentAbort = null;
       unregisterKiller();
     }
