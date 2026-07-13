@@ -190,15 +190,11 @@ function heuristicLatencyMs(c: LlmCandidate): number {
  * estimate and gives more signal than one task type alone).
  */
 function measuredLatencyMs(
-  sb: ModelScoreboard,
-  taskType: string,
+  scoped: ReadonlyMap<string, number>,
+  global: ReadonlyMap<string, number>,
   model: string,
 ): number | null {
-  const scoped = sb.ranking(taskType).find((s) => s.model === model);
-  if (scoped && scoped.runs > 0) return scoped.avgLatencyMs;
-  const any = sb.ranking().find((s) => s.model === model);
-  if (any && any.runs > 0) return any.avgLatencyMs;
-  return null;
+  return scoped.get(model) ?? global.get(model) ?? null;
 }
 
 /**
@@ -224,9 +220,11 @@ export async function selectFastestModel(
     }
     if (candidates.length === 0) return null;
 
+    const scopedLatencies = new Map(sb.ranking(taskType).map((stat) => [stat.model, stat.avgLatencyMs]));
+    const globalLatencies = new Map(sb.ranking().map((stat) => [stat.model, stat.avgLatencyMs]));
     const ranked = candidates
       .map((c) => {
-        const measured = measuredLatencyMs(sb, taskType, c.model);
+        const measured = measuredLatencyMs(scopedLatencies, globalLatencies, c.model);
         return { c, estLatencyMs: measured ?? heuristicLatencyMs(c), measured: measured !== null };
       })
       .sort(
