@@ -4,6 +4,30 @@ import { getMainWindow } from './window-management';
 import { remoteManager as remoteManagerInstance } from './remote/remote-manager'; // Import the remoteManager instance
 import { log, logError } from './utils/logger'; // Import logger
 
+type PermissionResponse = 'allow' | 'allow_always' | 'deny';
+type PermissionResponder = (
+  toolUseId: string,
+  response: PermissionResponse,
+  bridgeId?: string
+) => void;
+
+let permissionResponder: PermissionResponder | null = null;
+
+export function setPermissionResponder(responder: PermissionResponder | null): void {
+  permissionResponder = responder;
+}
+
+function sendToLocalRenderer(event: ServerEvent): void {
+  const mainWindow = getMainWindow();
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('server-event', event);
+    return;
+  }
+  logError(
+    `[ipc-main-bridge] dropped ${event.type} — mainWindow=${!!mainWindow} destroyed=${mainWindow?.isDestroyed()}`
+  );
+}
+
 /**
  * Sends an event to the renderer process of the main window.
  * This function also intercepts remote session events and handles them appropriately.
@@ -74,11 +98,20 @@ export function sendToRenderer(event: ServerEvent) {
           payload.toolName as string,
           (payload.input as Record<string, unknown> | undefined) ?? {}
         )
-        .then(() => {
-          // This part requires sessionManager, so it will need to be passed or accessed via a bridge
-          // For now, we'll assume sessionManager is accessible from where this is handled
-          // Placeholder:
-          // if (result !== null && sessionManager) { ... sessionManager.handlePermissionResponse(...) }
+        .then((result) => {
+          if (result === null) {
+            sendToLocalRenderer(event);
+            return;
+          }
+          if (!permissionResponder) {
+            logError('[Remote] Permission response dropped: responder is not configured');
+            return;
+          }
+          permissionResponder(
+            payload.toolUseId as string,
+            result.allow ? (result.remember ? 'allow_always' : 'allow') : 'deny',
+            typeof payload.bridgeId === 'string' ? payload.bridgeId : undefined
+          );
         })
         .catch((err) => {
           logError('[Remote] Failed to handle permission request:', err);
@@ -88,15 +121,8 @@ export function sendToRenderer(event: ServerEvent) {
   }
 
   // Send to local UI
-  const mainWindow = getMainWindow();
-  if (mainWindow && !mainWindow.isDestroyed()) {
-    mainWindow.webContents.send('server-event', event);
-  } else {
-    // Helps catch regressions of the "main/index.ts and window-management.ts
-    // each held a separate `let mainWindow` so getMainWindow() always
-    // returned null" bug — kept as a warning rather than spam.
-    logError(
-      `[ipc-main-bridge] dropped ${event.type} — mainWindow=${!!mainWindow} destroyed=${mainWindow?.isDestroyed()}`
-    );
-  }
+  // Helps catch regressions of the "main/index.ts and window-management.ts
+  // each held a separate `let mainWindow` so getMainWindow() always
+  // returned null" bug — sendToLocalRenderer logs dropped events.
+  sendToLocalRenderer(event);
 }

@@ -34,11 +34,13 @@ export { getModelInputGuidance } from '../../shared/api-model-presets';
 interface UseApiConfigStateOptions {
   enabled?: boolean;
   initialConfig?: AppConfig | null;
-  onSave?: (config: Partial<AppConfig>) => Promise<void>;
+  onSave?: (config: Partial<AppConfig>) => Promise<AppConfig | void>;
 }
 
 interface UIProviderProfile {
   apiKey: string;
+  hasStoredApiKey: boolean;
+  apiKeyTail: string;
   baseUrl: string;
   model: string;
   customModel: string;
@@ -263,6 +265,8 @@ function defaultProfileForKey(
   const prefersCustomInput = profileKey.startsWith('custom:');
   return {
     apiKey: '',
+    hasStoredApiKey: false,
+    apiKeyTail: '',
     baseUrl: preset.baseUrl,
     model: profileKey === 'ollama' ? '' : (preset.models[0]?.id || ''),
     customModel: '',
@@ -350,7 +354,12 @@ function isPristineCustomProfile(
   const baseUrl = profile.baseUrl?.trim() || fallback.baseUrl;
   const model = profile.model?.trim() || fallback.model;
 
-  return apiKey === '' && baseUrl === fallback.baseUrl && model === fallback.model;
+  return (
+    apiKey === '' &&
+    !profile.hasKey &&
+    baseUrl === fallback.baseUrl &&
+    model === fallback.model
+  );
 }
 
 function normalizeProfile(
@@ -367,6 +376,8 @@ function normalizeProfile(
     return {
       ...fallback,
       apiKey: '',
+      hasStoredApiKey: false,
+      apiKeyTail: '',
       baseUrl: fallback.baseUrl,
       customModel: '',
       useCustomModel: true,
@@ -382,6 +393,8 @@ function normalizeProfile(
   );
   return {
     apiKey: profile?.apiKey || '',
+    hasStoredApiKey: Boolean(profile?.hasKey || profile?.apiKey?.trim()),
+    apiKeyTail: profile?.keyTail || '',
     baseUrl: profileKey === 'ollama'
       ? (normalizeOllamaBaseUrl(rawBaseUrl) || fallback.baseUrl)
       : profileKey === 'lmstudio'
@@ -485,6 +498,9 @@ function toPersistedProfiles(
       : profile.model;
     persisted[key] = {
       apiKey: profile.apiKey,
+      ...(profile.hasStoredApiKey && !profile.apiKey.trim()
+        ? { hasKey: true, keyTail: profile.apiKeyTail || undefined }
+        : {}),
       baseUrl: profile.baseUrl.trim() || undefined,
       model: finalModel,
       contextWindow: profile.contextWindow ? Number(profile.contextWindow) : undefined,
@@ -556,6 +572,9 @@ export function buildApiConfigSets(
         const uiProfile = normalizeProfile(key, set.profiles?.[key], presets);
         normalizedProfiles[key] = {
           apiKey: uiProfile.apiKey,
+          ...(uiProfile.hasStoredApiKey && !uiProfile.apiKey.trim()
+            ? { hasKey: true, keyTail: uiProfile.apiKeyTail || undefined }
+            : {}),
           baseUrl: uiProfile.baseUrl,
           model: uiProfile.useCustomModel
             ? uiProfile.customModel.trim() || uiProfile.model
@@ -571,6 +590,9 @@ export function buildApiConfigSets(
         );
         normalizedProfiles.ollama = {
           apiKey: ollamaProfile.apiKey,
+          ...(ollamaProfile.hasStoredApiKey && !ollamaProfile.apiKey.trim()
+            ? { hasKey: true, keyTail: ollamaProfile.apiKeyTail || undefined }
+            : {}),
           baseUrl: ollamaProfile.baseUrl,
           model: ollamaProfile.useCustomModel
             ? ollamaProfile.customModel.trim() || ollamaProfile.model
@@ -585,6 +607,9 @@ export function buildApiConfigSets(
         );
         normalizedProfiles.lmstudio = {
           apiKey: lmStudioProfile.apiKey,
+          ...(lmStudioProfile.hasStoredApiKey && !lmStudioProfile.apiKey.trim()
+            ? { hasKey: true, keyTail: lmStudioProfile.apiKeyTail || undefined }
+            : {}),
           baseUrl: lmStudioProfile.baseUrl,
           model: lmStudioProfile.useCustomModel
             ? lmStudioProfile.customModel.trim() || lmStudioProfile.model
@@ -1122,6 +1147,10 @@ export function useApiConfigState(options: UseApiConfigStateOptions = {}) {
   );
 
   const apiKey = currentProfile.apiKey;
+  const hasUsableApiKey = Boolean(apiKey.trim() || currentProfile.hasStoredApiKey);
+  const apiKeyPlaceholder = currentProfile.hasStoredApiKey
+    ? `•••• ${currentProfile.apiKeyTail}`
+    : currentPreset.keyPlaceholder;
   const baseUrl = currentProfile.baseUrl;
   const model = currentProfile.model;
   const customModel = currentProfile.customModel;
@@ -1535,7 +1564,7 @@ export function useApiConfigState(options: UseApiConfigStateOptions = {}) {
   }, [activeProfileKey, baseUrl, isLocalOpenAIProvider, provider, presets]);
 
   const handleTest = useCallback(async () => {
-    if (requiresApiKey && !apiKey.trim()) {
+    if (requiresApiKey && !hasUsableApiKey) {
       showErrorKey('api.testError.missing_key');
       return;
     }
@@ -1562,7 +1591,7 @@ export function useApiConfigState(options: UseApiConfigStateOptions = {}) {
 
       const result = await window.electronAPI.config.test({
         provider,
-        apiKey: apiKey.trim(),
+        apiKey: apiKey.trim() || undefined,
         baseUrl: resolvedBaseUrl || undefined,
         customProtocol,
         model: finalModel,
@@ -1595,6 +1624,7 @@ export function useApiConfigState(options: UseApiConfigStateOptions = {}) {
     isLocalOpenAIProvider,
     requiresApiKey,
     hasUnsavedChanges,
+    hasUsableApiKey,
     clearError,
     clearSuccessMessage,
     useCustomModel,
@@ -1603,7 +1633,7 @@ export function useApiConfigState(options: UseApiConfigStateOptions = {}) {
   ]);
 
   const handleDiagnose = useCallback(async (verificationLevel: 'fast' | 'deep' = 'fast') => {
-    if (requiresApiKey && !apiKey.trim()) {
+    if (requiresApiKey && !hasUsableApiKey) {
       showErrorKey('api.testError.missing_key');
       return;
     }
@@ -1622,7 +1652,7 @@ export function useApiConfigState(options: UseApiConfigStateOptions = {}) {
 
       const result = await window.electronAPI.config.diagnose({
         provider,
-        apiKey: apiKey.trim(),
+        apiKey: apiKey.trim() || undefined,
         baseUrl: resolvedBaseUrl || undefined,
         customProtocol,
         model: finalModel || undefined,
@@ -1636,6 +1666,7 @@ export function useApiConfigState(options: UseApiConfigStateOptions = {}) {
     }
   }, [
     requiresApiKey,
+    hasUsableApiKey,
     apiKey,
     baseUrl,
     provider,
@@ -1676,7 +1707,7 @@ export function useApiConfigState(options: UseApiConfigStateOptions = {}) {
       if (models.length === 0) {
         models = await window.electronAPI.config.listModels({
           provider,
-          apiKey: apiKey.trim(),
+          apiKey: apiKey.trim() || undefined,
           baseUrl: requestedBaseUrl || undefined,
         });
       }
@@ -2056,7 +2087,7 @@ export function useApiConfigState(options: UseApiConfigStateOptions = {}) {
 
   const handleSave = useCallback(
     async (options?: { silentSuccess?: boolean }) => {
-      if (requiresApiKey && !apiKey.trim()) {
+      if (requiresApiKey && !hasUsableApiKey) {
         showErrorKey('api.testError.missing_key');
         return false;
       }
@@ -2084,7 +2115,7 @@ export function useApiConfigState(options: UseApiConfigStateOptions = {}) {
 
         const payload: Partial<AppConfig> = {
           provider,
-          apiKey: apiKey.trim(),
+          ...(apiKey.trim() ? { apiKey: apiKey.trim() } : {}),
           baseUrl: resolvedBaseUrl || undefined,
           customProtocol,
           model: finalModel,
@@ -2094,14 +2125,19 @@ export function useApiConfigState(options: UseApiConfigStateOptions = {}) {
           enableThinking,
         };
 
+        let persistedConfig: AppConfig | void;
         if (onSave) {
-          await onSave(payload);
+          persistedConfig = await onSave(payload);
         } else {
           const result = await window.electronAPI.config.save(payload);
-          applyPersistedConfigToStore(result.config, presets);
+          persistedConfig = result.config;
         }
 
-        dispatch({ type: 'SET_SAVED_DRAFT_SIGNATURE', payload: currentDraftSignature });
+        if (persistedConfig) {
+          applyPersistedConfigToStore(persistedConfig, presets);
+        } else {
+          dispatch({ type: 'SET_SAVED_DRAFT_SIGNATURE', payload: currentDraftSignature });
+        }
         if (!options?.silentSuccess) {
           showSuccessKey('common.saved');
           dispatch({ type: 'SET_LAST_SAVE_COMPLETED_AT', payload: Date.now() });
@@ -2137,6 +2173,7 @@ export function useApiConfigState(options: UseApiConfigStateOptions = {}) {
       provider,
       isLocalOpenAIProvider,
       requiresApiKey,
+      hasUsableApiKey,
       clearError,
       clearSuccessMessage,
       showErrorKey,
@@ -2399,6 +2436,8 @@ export function useApiConfigState(options: UseApiConfigStateOptions = {}) {
     modelOptions,
     currentPreset,
     apiKey,
+    apiKeyPlaceholder,
+    hasUsableApiKey,
     baseUrl,
     model,
     customModel,

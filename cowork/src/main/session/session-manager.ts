@@ -385,6 +385,8 @@ interface RecoveredQueuedPromptSnapshot {
 }
 
 export class SessionManager {
+  private static readonly LOCAL_PERMISSION_TIMEOUT_MS = 60_000;
+  private static readonly REMOTE_PERMISSION_TIMEOUT_MS = 5 * 60_000 + 30_000;
   private db: DatabaseInstance;
   private sendToRenderer: (event: ServerEvent) => void;
   private pathResolver: PathResolver;
@@ -406,6 +408,7 @@ export class SessionManager {
   private static readonly MAX_CACHE_SIZE = 100;
   private turnJournal = new TurnJournal();
   private activeTurnJournalIds: Map<string, string> = new Map();
+  private isRemoteSession: (sessionId: string) => boolean;
 
   /** Optional Code Buddy engine adapter for in-process execution */
   private engineAdapter?: EngineAdapterLike;
@@ -430,9 +433,11 @@ export class SessionManager {
     sendToRenderer: (event: ServerEvent) => void,
     pluginRuntimeService?: PluginRuntimeService,
     engineAdapter?: EngineAdapterLike,
+    isRemoteSession: (sessionId: string) => boolean = () => false,
   ) {
     this.db = db;
     this.engineAdapter = engineAdapter;
+    this.isRemoteSession = isRemoteSession;
     this.sendToRenderer = (event) => {
       if (event.type === 'trace.step') {
         this.saveTraceStep(event.payload.sessionId, event.payload.step);
@@ -445,11 +450,15 @@ export class SessionManager {
         });
       }
       if (event.type === 'trace.update') {
-        this.updateTraceStep(event.payload.stepId, event.payload.updates);
-        this.turnJournal.append(event.payload.sessionId, 'trace_update', {
-          stepId: event.payload.stepId,
-          updates: event.payload.updates,
-        });
+        const persistedUpdates = { ...event.payload.updates };
+        delete persistedUpdates.toolOutputDelta;
+        if (Object.keys(persistedUpdates).length > 0) {
+          this.updateTraceStep(event.payload.stepId, persistedUpdates);
+          this.turnJournal.append(event.payload.sessionId, 'trace_update', {
+            stepId: event.payload.stepId,
+            updates: persistedUpdates,
+          });
+        }
       }
       sendToRenderer(event);
     };
@@ -2239,8 +2248,16 @@ export class SessionManager {
       role: row.role as Message['role'],
       content: this.normalizeContent(row.content),
       timestamp: row.timestamp,
-      tokenUsage: row.token_usage ? JSON.parse(row.token_usage) : undefined,
-      metadata: row.metadata ? JSON.parse(row.metadata) : undefined,
+      tokenUsage: this.parseOptionalMessageJson<Message['tokenUsage']>(
+        row.token_usage,
+        'token_usage',
+        row.id
+      ),
+      metadata: this.parseOptionalMessageJson<Message['metadata']>(
+        row.metadata,
+        'metadata',
+        row.id
+      ),
       executionTimeMs: row.execution_time_ms ?? undefined,
     }));
     this.messageCache.set(sessionId, messages);
@@ -2531,6 +2548,23 @@ export class SessionManager {
     }
   }
 
+  private parseOptionalMessageJson<T>(
+    raw: string | null | undefined,
+    field: 'token_usage' | 'metadata',
+    messageId: string
+  ): T | undefined {
+    if (!raw) return undefined;
+    try {
+      return JSON.parse(raw) as T;
+    } catch {
+      logWarn('[SessionManager] Ignoring malformed message JSON:', {
+        messageId,
+        field,
+      });
+      return undefined;
+    }
+  }
+
   getTraceSteps(sessionId: string): TraceStep[] {
     const rows = this.db.traceSteps.getBySessionId(sessionId);
     const parseToolInput = (value: string | null): Record<string, unknown> | undefined => {
@@ -2565,6 +2599,10 @@ export class SessionManager {
     }
   }
 
+  dispose(): void {
+    this.turnJournal.close();
+  }
+
   // Request permission for a tool
   async requestPermission(
     sessionId: string,
@@ -2573,11 +2611,14 @@ export class SessionManager {
     input: Record<string, unknown>
   ): Promise<PermissionResult> {
     return new Promise((resolve) => {
+      const timeoutMs = this.isRemoteSession(sessionId)
+        ? SessionManager.REMOTE_PERMISSION_TIMEOUT_MS
+        : SessionManager.LOCAL_PERMISSION_TIMEOUT_MS;
       const timeoutId = setTimeout(() => {
         this.pendingPermissions.delete(toolUseId);
         resolve('deny');
         this.sendToRenderer({ type: 'permission.dismiss', payload: { toolUseId } });
-      }, 60_000);
+      }, timeoutMs);
       this.pendingPermissions.set(toolUseId, (result: PermissionResult) => {
         clearTimeout(timeoutId);
         resolve(result);
@@ -2656,7 +2697,9 @@ export class SessionManager {
     if (updates.timestamp !== undefined) rowUpdates.timestamp = updates.timestamp;
     if (updates.duration !== undefined) rowUpdates.duration = updates.duration;
 
-    this.db.traceSteps.update(stepId, rowUpdates);
+    if (Object.keys(rowUpdates).length > 0) {
+      this.db.traceSteps.update(stepId, rowUpdates);
+    }
   }
 }
 

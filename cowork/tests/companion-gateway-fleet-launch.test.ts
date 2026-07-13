@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 
 const companionPanelPath = path.resolve(__dirname, '../src/renderer/components/CompanionPanel.tsx');
 const preloadPath = path.resolve(__dirname, '../src/preload/index.ts');
+const companionPreloadPath = path.resolve(__dirname, '../src/preload/api/companion.ts');
 
 describe('companion gateway Fleet launch surface', () => {
   it('keeps gateway Fleet launch operator-approved and routed through fleet.dispatch', () => {
@@ -28,7 +29,7 @@ describe('companion gateway Fleet launch surface', () => {
 
   it('keeps outbound channel replies as local drafts instead of direct sends', () => {
     const panel = readFileSync(companionPanelPath, 'utf8');
-    const preload = readFileSync(preloadPath, 'utf8');
+    const preload = readFileSync(companionPreloadPath, 'utf8');
 
     expect(panel).toContain('Reply draft');
     expect(panel).toContain('window.prompt(');
@@ -41,7 +42,7 @@ describe('companion gateway Fleet launch surface', () => {
 
   it('requires explicit confirmation before sending approved gateway replies', () => {
     const panel = readFileSync(companionPanelPath, 'utf8');
-    const preload = readFileSync(preloadPath, 'utf8');
+    const preload = readFileSync(companionPreloadPath, 'utf8');
 
     expect(panel).toContain('Send reply');
     expect(panel).toContain('sendGatewayOutboundReply');
@@ -54,7 +55,7 @@ describe('companion gateway Fleet launch surface', () => {
 
   it('surfaces gateway lifecycle diagnostics in the Companion panel', () => {
     const panel = readFileSync(companionPanelPath, 'utf8');
-    const preload = readFileSync(preloadPath, 'utf8');
+    const preload = readFileSync(companionPreloadPath, 'utf8');
 
     expect(panel).toContain('Gateway lifecycle');
     expect(panel).toContain('companion-gateway-lifecycle');
@@ -67,7 +68,7 @@ describe('companion gateway Fleet launch surface', () => {
 
   it('surfaces gateway admin plans and replay diagnostics in the Companion panel', () => {
     const panel = readFileSync(companionPanelPath, 'utf8');
-    const preload = readFileSync(preloadPath, 'utf8');
+    const preload = readFileSync(companionPreloadPath, 'utf8');
 
     expect(panel).toContain('Gateway admin');
     expect(panel).toContain('companion-gateway-admin-plan');
@@ -85,7 +86,7 @@ describe('companion gateway Fleet launch surface', () => {
 
   it('surfaces the OpenClaw bridge with dry-run previews and explicit live approvals', () => {
     const panel = readFileSync(companionPanelPath, 'utf8');
-    const preload = readFileSync(preloadPath, 'utf8');
+    const preload = readFileSync(companionPreloadPath, 'utf8');
 
     expect(panel).toContain('OpenClaw bridge');
     expect(panel).toContain('companion-openclaw-bridge');
