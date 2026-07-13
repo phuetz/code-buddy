@@ -1011,6 +1011,12 @@ export class AgentExecutor {
         yield { type: "token_count", tokenCount: inputTokens + totalOutputTokens };
 
         if (toolCalls && toolCalls.length > 0) {
+          // Feedback for the RAG selector tracks what the model requested,
+          // regardless of whether policy, steering or single-tool mode later
+          // blocks/defers execution.
+          for (const requestedToolCall of toolCalls) {
+            this.deps.toolSelectionStrategy.recordToolRequest(requestedToolCall.function.name);
+          }
           toolRounds++;
 
           // Pre-check cost limit before executing tools (estimate only — no side effects)

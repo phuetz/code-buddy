@@ -109,6 +109,7 @@ function createMockDeps(overrides: Partial<ExecutorDependencies> = {}): Executor
         timestamp: new Date(),
       }),
       cacheTools: jest.fn(),
+      recordToolRequest: jest.fn(),
       shouldUseSearchFor: jest.fn().mockReturnValue(false),
       clearCache: jest.fn(),
       setActiveSkill: jest.fn(),
@@ -548,6 +549,8 @@ describe('AgentExecutor', () => {
       const toolResults = entries.filter(e => e.type === 'tool_result');
       expect(toolResults.length).toBe(2);
       expect(deps.toolHandler.executeTool).toHaveBeenCalledTimes(2);
+      expect(deps.toolSelectionStrategy.recordToolRequest).toHaveBeenNthCalledWith(1, 'read_file');
+      expect(deps.toolSelectionStrategy.recordToolRequest).toHaveBeenNthCalledWith(2, 'read_file');
     });
 
     it('should persist JIT context into the next request after all sibling tool results', async () => {
