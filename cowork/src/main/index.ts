@@ -23,14 +23,10 @@ import {
   Tray,
   globalShortcut,
   session,
-  clipboard,
-  nativeImage,
 } from 'electron';
 import { join, resolve, dirname, isAbsolute, basename } from 'path';
 import { fileURLToPath, pathToFileURL } from 'url';
 import * as fs from 'fs';
-import { execFile } from 'child_process';
-import { promisify } from 'util';
 import { config } from 'dotenv';
 import { registerProjectIpcHandlers } from './ipc/project-ipc';
 import { registerSubAgentIpcHandlers } from './ipc/subagent-ipc';
@@ -88,7 +84,11 @@ import { registerCostIpcHandlers } from './ipc/cost-ipc';
 import { registerRulesIpcHandlers } from './ipc/rules-ipc';
 import { registerGitIpcHandlers } from './ipc/git-ipc';
 import { registerCheckpointIpcHandlers } from './ipc/checkpoint-ipc';
-import { findFileByName } from './ipc/shell-file-discovery';
+import { registerMediaLibraryIpcHandlers } from './ipc/media-library-ipc';
+import {
+  createRevealFileInFolder,
+  registerShellIpcHandlers,
+} from './ipc/shell-ipc';
 import { initDatabase, getDatabase, closeDatabase } from './db/database';
 import { SessionManager, type EngineAdapterLike } from './session/session-manager';
 import {
@@ -211,11 +211,8 @@ import {
   buildScheduledTaskTitle,
 } from '../shared/schedule/task-title';
 import {
-  isUncPath,
-  isWindowsDrivePath,
   localPathFromAppUrlPathname,
   localPathFromFileUrl,
-  decodePathSafely,
 } from '../shared/local-file-path';
 import { eventRequiresSessionManager } from './client-event-utils';
 import { getUnsupportedWorkspacePathReason } from './workspace-path-constraints';
@@ -349,7 +346,6 @@ moduleWithResolver._resolveFilename = function (
 };
 
 const APP_NAME = 'Code Buddy Studio';
-const execFileAsync = promisify(execFile);
 
 app.setName(APP_NAME);
 
@@ -1161,6 +1157,10 @@ function initializeDefaultWorkingDir(): string {
 function getWorkingDir(): string | null {
   return currentWorkingDir;
 }
+
+// One revealer is shared by shell.showItemInFolder and the BrowserWindow
+// navigation hooks so both entry points preserve identical path handling.
+const revealFileInFolder = createRevealFileInFolder({ getWorkingDir });
 
 function getWorkspacePathUnsupportedReason(workspacePath?: string): string | null {
   return getUnsupportedWorkspacePathReason({
@@ -2470,6 +2470,13 @@ ipcMain.handle('get-version', () => {
 // ── Checkpoint IPC handlers ────────────────────────────────────────────
 registerCheckpointIpcHandlers();
 
+registerMediaLibraryIpcHandlers({
+  getSessionManager: () => sessionManager,
+  getDatabase,
+  getMainWindow,
+});
+registerShellIpcHandlers({ revealFileInFolder });
+
 // ── Workspace IPC handlers ────────────────────────────────────────────
 ipcMain.handle('workspace.readDir', async (_event, dirPath: string) => {
   try {
@@ -2875,104 +2882,6 @@ ipcMain.handle('studio.exportZip', async (_event, { root }: { root: string }) =>
   }
 });
 
-// Media library (ChatGPT-library parity): every generated media across all
-// session roots; export = native Save-As dialog + copy.
-ipcMain.handle('media.list', async () => {
-  try {
-    const { scanMediaLibrary } = await import('./media-library');
-    const roots = new Set<string>();
-    roots.add(join(app.getPath('userData'), 'default_working_dir'));
-    if (sessionManager) {
-      for (const s of sessionManager.listSessions()) {
-        if (s.cwd) roots.add(s.cwd);
-      }
-    }
-    const items = scanMediaLibrary([...roots]);
-    // Link each media to the conversation that generated it: its basename is
-    // echoed in that session's assistant message (the MEDIA: marker).
-    if (sessionManager && items.length > 0) {
-      const { buildMediaSessionIndex, basenameOf } = await import('./session/media-session-index');
-      const { queryMediaMessageBlobs } = await import('./session/media-message-query');
-      const blobs = queryMediaMessageBlobs(getDatabase());
-      const index = buildMediaSessionIndex(blobs);
-      for (const item of items) {
-        const sid = index.get(basenameOf(item.path));
-        if (sid) (item as { sessionId?: string }).sessionId = sid;
-      }
-    }
-    return items;
-  } catch (err) {
-    logWarn('[media.list] failed:', err);
-    return [];
-  }
-});
-
-ipcMain.handle('media.copyToClipboard', async (_event, { sourcePath }: { sourcePath: string }) => {
-  try {
-    const { kindOf } = await import('./media-library');
-    const kind = kindOf(sourcePath);
-    if (kind === 'image') {
-      const img = nativeImage.createFromPath(sourcePath);
-      if (img.isEmpty()) return { ok: false, error: 'image illisible' };
-      clipboard.writeImage(img);
-      return { ok: true, mode: 'image' as const };
-    }
-    // Non-image (video/audio): copy the absolute path (the clipboard has no
-    // portable video type across apps).
-    clipboard.writeText(sourcePath);
-    return { ok: true, mode: 'path' as const };
-  } catch (err) {
-    logWarn('[media.copyToClipboard] failed:', err);
-    return { ok: false, error: String(err) };
-  }
-});
-
-ipcMain.handle('media.exportMany', async (_event, { paths }: { paths: string[] }) => {
-  try {
-    const { kindOf } = await import('./media-library');
-    const valid = (paths ?? []).filter((p) => kindOf(p));
-    if (valid.length === 0) return { ok: false, error: 'no media selected' };
-    const win = getMainWindow();
-    const picked = win
-      ? await dialog.showOpenDialog(win, { title: 'Exporter la sélection vers…', properties: ['openDirectory', 'createDirectory'] })
-      : await dialog.showOpenDialog({ title: 'Exporter la sélection vers…', properties: ['openDirectory', 'createDirectory'] });
-    if (picked.canceled || !picked.filePaths[0]) return { ok: false, canceled: true };
-    const destDir = picked.filePaths[0];
-    const fsp = await import('fs/promises');
-    let copied = 0;
-    for (const src of valid) {
-      try {
-        await fsp.copyFile(src, join(destDir, basename(src)));
-        copied += 1;
-      } catch (err) {
-        logWarn('[media.exportMany] copy failed:', src, err);
-      }
-    }
-    return { ok: true, copied, destDir };
-  } catch (err) {
-    logWarn('[media.exportMany] failed:', err);
-    return { ok: false, error: String(err) };
-  }
-});
-
-ipcMain.handle('media.export', async (_event, { sourcePath }: { sourcePath: string }) => {
-  try {
-    const { kindOf } = await import('./media-library');
-    if (!kindOf(sourcePath)) return { ok: false, error: 'not a media file' };
-    const fsp = await import('fs/promises');
-    const win = getMainWindow();
-    const result = win
-      ? await dialog.showSaveDialog(win, { defaultPath: basename(sourcePath), title: 'Exporter le média' })
-      : await dialog.showSaveDialog({ defaultPath: basename(sourcePath), title: 'Exporter le média' });
-    if (result.canceled || !result.filePath) return { ok: false, canceled: true };
-    await fsp.copyFile(sourcePath, result.filePath);
-    return { ok: true, savedTo: result.filePath };
-  } catch (err) {
-    logWarn('[media.export] failed:', err);
-    return { ok: false, error: String(err) };
-  }
-});
-
 // Bulk session prune (Hermes parity): preview matches + age span, then
 // archive them in one pass. Pinned/archived/active sessions never match.
 ipcMain.handle(
@@ -3127,150 +3036,6 @@ ipcMain.handle('system.getTheme', () => {
     logError('[IPC] Error getting theme:', error);
     return { shouldUseDarkColors: true };
   }
-});
-
-ipcMain.handle('shell.openExternal', async (_event, url: string) => {
-  if (!url) {
-    return false;
-  }
-
-  try {
-    const parsed = new URL(url);
-    if (!['http:', 'https:', 'mailto:'].includes(parsed.protocol)) {
-      logWarn('[shell.openExternal] Blocked URL with disallowed protocol:', parsed.protocol);
-      return false;
-    }
-  } catch {
-    logWarn('[shell.openExternal] Blocked invalid URL:', url);
-    return false;
-  }
-
-  return shell.openExternal(url);
-});
-
-async function revealFileInFolder(filePath: string, cwd?: string): Promise<boolean> {
-  if (!filePath) {
-    return false;
-  }
-
-  const trimInput = filePath.trim();
-  if (!trimInput) {
-    return false;
-  }
-
-  let normalizedPath = decodePathSafely(trimInput);
-
-  if (normalizedPath.startsWith('file://')) {
-    const localPath = localPathFromFileUrl(normalizedPath);
-    if (!localPath) {
-      logWarn('[shell.showItemInFolder] could not parse file URL:', normalizedPath);
-      return false;
-    }
-    normalizedPath = localPath;
-  }
-
-  const baseDir = cwd && isAbsolute(cwd) ? cwd : getWorkingDir() || app.getPath('home');
-  if (
-    !isAbsolute(normalizedPath) &&
-    !isWindowsDrivePath(normalizedPath) &&
-    !isUncPath(normalizedPath)
-  ) {
-    normalizedPath = resolve(baseDir, normalizedPath);
-  }
-
-  if (
-    normalizedPath.startsWith('/workspace/') ||
-    /^[A-Za-z]:[/\\]workspace[/\\]/i.test(normalizedPath)
-  ) {
-    const relativePart = normalizedPath.startsWith('/workspace/')
-      ? normalizedPath.slice('/workspace/'.length)
-      : normalizedPath.replace(/^[A-Za-z]:[/\\]workspace[/\\]/i, '');
-    normalizedPath = resolve(baseDir, relativePart);
-  }
-
-  if (!isUncPath(normalizedPath)) {
-    normalizedPath = resolve(normalizedPath);
-  }
-  log('[shell.showItemInFolder] request:', { filePath, cwd, resolved: normalizedPath });
-
-  try {
-    const stat = await fs.promises.stat(normalizedPath).catch(() => null);
-    if (stat) {
-      if (stat.isDirectory()) {
-        const openDirResult = await shell.openPath(normalizedPath);
-        if (openDirResult) {
-          logWarn('[shell.showItemInFolder] openPath returned warning:', openDirResult);
-        }
-      } else {
-        if (process.platform === 'darwin') {
-          try {
-            await execFileAsync('open', ['-R', normalizedPath]);
-          } catch (error) {
-            logWarn(
-              '[shell.showItemInFolder] open -R failed, fallback to shell.showItemInFolder:',
-              error
-            );
-            shell.showItemInFolder(normalizedPath);
-          }
-        } else {
-          shell.showItemInFolder(normalizedPath);
-        }
-      }
-      return true;
-    }
-
-    const fileName = basename(normalizedPath);
-    const defaultWorkingDir = getWorkingDir() || '';
-    const discoveredPath = await findFileByName(fileName, [
-      cwd || '',
-      defaultWorkingDir,
-      join(app.getPath('userData'), 'default_working_dir'),
-    ]);
-
-    if (discoveredPath) {
-      logWarn('[shell.showItemInFolder] resolved path not found, discovered by filename:', {
-        requested: normalizedPath,
-        discoveredPath,
-      });
-      if (process.platform === 'darwin') {
-        try {
-          await execFileAsync('open', ['-R', discoveredPath]);
-        } catch (error) {
-          logWarn(
-            '[shell.showItemInFolder] open -R discovered file failed, fallback to shell.showItemInFolder:',
-            error
-          );
-          shell.showItemInFolder(discoveredPath);
-        }
-      } else {
-        shell.showItemInFolder(discoveredPath);
-      }
-      return true;
-    }
-
-    const parentDir = dirname(normalizedPath);
-    const parentStat = parentDir
-      ? await fs.promises.stat(parentDir).catch(() => null)
-      : null;
-    if (parentStat?.isDirectory()) {
-      logWarn('[shell.showItemInFolder] file not found, opening parent directory:', parentDir);
-      const openParentResult = await shell.openPath(parentDir);
-      if (openParentResult) {
-        logWarn('[shell.showItemInFolder] openPath parent returned warning:', openParentResult);
-      }
-      return true;
-    }
-
-    logWarn('[shell.showItemInFolder] path and parent directory do not exist:', normalizedPath);
-    return false;
-  } catch (error) {
-    logError('[shell.showItemInFolder] failed:', error);
-    return false;
-  }
-}
-
-ipcMain.handle('shell.showItemInFolder', async (_event, filePath: string, cwd?: string) => {
-  return revealFileInFolder(filePath, cwd);
 });
 
 ipcMain.handle(
