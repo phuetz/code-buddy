@@ -1792,8 +1792,7 @@ describe('AgentExecutor', () => {
     });
 
     it('should handle null content in assistant message', async () => {
-      // Streaming flow: getAccumulatedMessage returns null content; runTurnLoop
-      // applies a fallback "Using tools to help you..." when content is empty.
+      // Streaming flow: getAccumulatedMessage returns null content and no tools.
       (deps.client.chatStream as jest.Mock).mockImplementationOnce(async function* () {
         // No content
       });
@@ -1811,9 +1810,24 @@ describe('AgentExecutor', () => {
 
       const entries = await executor.processUserMessage('Hello', history, messages);
 
-      // Should use fallback content
       expect(entries.length).toBe(1);
-      expect(entries[0].content).toBeDefined();
+      expect(entries[0].content).toContain('Assistant stream returned no content or tool calls');
+      expect(entries[0].content).not.toContain('Using tools to help you');
+      expect(messages.some(message =>
+        message.role === 'assistant' && String(message.content).includes('Using tools to help you'))).toBe(false);
+    });
+
+    it('should keep the tool-progress placeholder for an empty tool-call response', async () => {
+      const toolCall = makeToolCall('read_file', { path: '/empty.txt' }, 'empty_with_tool');
+      setupLLMFlow(deps, [
+        { content: '', tool_calls: [toolCall] },
+        { content: 'Done.' },
+      ]);
+
+      const entries = await executor.processUserMessage('Read the file', [], []);
+
+      expect(entries.some(entry => entry.content === 'Using tools to help you...')).toBe(true);
+      expect(entries.some(entry => entry.content === 'Done.')).toBe(true);
     });
 
     it('should handle tool returning no output', async () => {

@@ -990,17 +990,22 @@ export class AgentExecutor {
             'Use a tool-capable model such as qwen3.5-ctx32k or gpt-5.5 for goals that need shell/tools.';
           yield { type: "content", content: `${rawStreamedContent}\n` };
         }
-        if (!rawStreamedContent) rawStreamedContent = "Using tools to help you...";
+        if (!rawStreamedContent && hasToolCalls) {
+          rawStreamedContent = "Using tools to help you...";
+        }
         const content = sanitizeAssistantOutput(rawStreamedContent);
+        const emptyNoToolResponse = !hasToolCalls && content.trim().length === 0;
 
-        const assistantEntry: ChatEntry = {
-          type: "assistant",
-          content: content,
-          timestamp: new Date(),
-          toolCalls: toolCalls,
-        };
-        history.push(assistantEntry);
-        messages.push({ role: "assistant", content: content, tool_calls: toolCalls });
+        if (!emptyNoToolResponse) {
+          const assistantEntry: ChatEntry = {
+            type: "assistant",
+            content: content,
+            timestamp: new Date(),
+            toolCalls: toolCalls,
+          };
+          history.push(assistantEntry);
+          messages.push({ role: "assistant", content: content, tool_calls: toolCalls });
+        }
 
         const currentOutputTokens = Math.max(
           uncommittedRoundOutputTokens,
@@ -1502,6 +1507,10 @@ export class AgentExecutor {
               });
               continue;
             }
+          }
+
+          if (emptyNoToolResponse) {
+            throw new Error('Assistant stream returned no content or tool calls');
           }
 
           // Fire-and-forget auto-capture on final assistant response (streaming)
