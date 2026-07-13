@@ -9,6 +9,7 @@
 import { ContextManagerV2, createContextManager } from '../../src/context/context-manager-v2';
 import type { CodeBuddyMessage } from '../../src/codebuddy/client';
 import { RunStore } from '../../src/observability/run-store';
+import { IMAGE_URL_TOKEN_ESTIMATE } from '../../src/context/token-counter.js';
 
 describe('ContextManagerV2 (gap coverage)', () => {
   // Helper: create a manager with small limits for fast tests
@@ -289,6 +290,30 @@ describe('ContextManagerV2 (gap coverage)', () => {
   // --------------------------------------------------------------------------
   // shouldAutoCompact()
   // --------------------------------------------------------------------------
+
+  describe('multimodal token counting', () => {
+    it('counts text parts and a conservative budget for each image_url part', () => {
+      const mgr = createManager({ autoCompactThreshold: 999999 });
+      const textOnly = [{
+        role: 'user',
+        content: [{ type: 'text', text: 'describe this image' }],
+      }] as unknown as CodeBuddyMessage[];
+      const withImage = [{
+        role: 'user',
+        content: [
+          { type: 'text', text: 'describe this image' },
+          { type: 'image_url', image_url: { url: 'data:image/png;base64,AAAA' } },
+        ],
+      }] as unknown as CodeBuddyMessage[];
+
+      const textTokens = mgr.countTokens(textOnly);
+      const multimodalTokens = mgr.countTokens(withImage);
+
+      expect(textTokens).toBeGreaterThan(0);
+      expect(multimodalTokens - textTokens).toBeGreaterThanOrEqual(IMAGE_URL_TOKEN_ESTIMATE);
+      mgr.dispose();
+    });
+  });
 
   describe('shouldAutoCompact()', () => {
     it('should return true when tokens exceed autoCompactThreshold', () => {
