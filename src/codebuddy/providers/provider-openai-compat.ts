@@ -68,6 +68,29 @@ interface ChatRequestPayloadStreaming extends Omit<ChatCompletionCreateParamsStr
   service_tier?: 'auto' | 'default' | 'flex';
 }
 
+type ReasoningCompatiblePayload = {
+  model: string;
+  temperature?: number | null;
+  max_tokens?: number | null;
+  max_completion_tokens?: number | null;
+};
+
+function adaptPayloadForOpenAIReasoningModel<T extends ReasoningCompatiblePayload>(
+  payload: T,
+  baseURL: string,
+): T {
+  if (!baseURL.toLowerCase().includes('openai.com') || !/^(?:o\d|gpt-5)/i.test(payload.model)) {
+    return payload;
+  }
+
+  if (payload.max_tokens !== undefined) {
+    payload.max_completion_tokens = payload.max_tokens;
+    delete payload.max_tokens;
+  }
+  delete payload.temperature;
+  return payload;
+}
+
 export interface OpenAICompatProviderOptions {
   apiKey: string;
   baseURL: string;
@@ -354,13 +377,15 @@ export class OpenAICompatProvider implements Provider {
         },
       };
 
-      const response = await this.client.chat.completions.create({
+      const probePayload: ChatCompletionCreateParamsNonStreaming = {
         model: this.currentModel,
         messages: [{ role: 'user', content: 'What time is it? Use the get_current_time tool.' }],
         tools: [testTool as unknown as OpenAI.ChatCompletionTool],
         tool_choice: 'auto',
         max_tokens: 50,
-      });
+      };
+      adaptPayloadForOpenAIReasoningModel(probePayload, this.baseURL);
+      const response = await this.client.chat.completions.create(probePayload);
 
       if (!response.choices || response.choices.length === 0) {
         logger.warn('Tool support probe returned empty choices array');
@@ -635,6 +660,7 @@ export class OpenAICompatProvider implements Provider {
         temperature: opts.temperature ?? 0.7,
         max_tokens: opts.maxTokens ?? this.defaultMaxTokens,
       };
+      adaptPayloadForOpenAIReasoningModel(requestPayload, this.baseURL);
       const openRouterProviderRouting = this.getOpenRouterProviderRouting();
       if (openRouterProviderRouting) {
         (requestPayload as unknown as Record<string, unknown>).provider = openRouterProviderRouting;
@@ -804,6 +830,7 @@ export class OpenAICompatProvider implements Provider {
         temperature: opts.temperature ?? 0.7,
         max_tokens: opts.maxTokens ?? this.defaultMaxTokens,
       };
+      adaptPayloadForOpenAIReasoningModel(requestPayload, this.baseURL);
       const openRouterProviderRouting = this.getOpenRouterProviderRouting();
       if (openRouterProviderRouting) {
         (requestPayload as unknown as Record<string, unknown>).provider = openRouterProviderRouting;
