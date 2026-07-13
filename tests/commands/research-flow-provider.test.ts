@@ -15,6 +15,11 @@ const detectedState = vi.hoisted(() => ({
   chatgptCredentials: false,
 }));
 
+const xaiState = vi.hoisted(() => ({
+  credentials: false,
+  token: null as string | null,
+}));
+
 vi.mock('../../src/utils/settings-manager.js', () => ({
   getSettingsManager: () => ({
     loadUserSettings: () => ({ provider: settingsState.provider }),
@@ -50,7 +55,16 @@ vi.mock('../../src/utils/provider-detector.js', () => ({
   },
 }));
 
-import { resolveCommandProvider } from '../../src/commands/llm-provider-resolution';
+vi.mock('../../src/providers/xai-oauth.js', () => ({
+  XAI_OAUTH_BASE_URL: 'https://api.x.ai/v1',
+  hasXaiCredentials: () => xaiState.credentials,
+  getValidXaiAccessToken: async () => xaiState.token,
+}));
+
+import {
+  resolveCommandProvider,
+  resolveCommandProviderWithOAuth,
+} from '../../src/commands/llm-provider-resolution';
 
 const PROVIDER_ENV_KEYS = [
   'CODEBUDDY_PROVIDER',
@@ -82,6 +96,8 @@ beforeEach(() => {
   settingsState.provider = 'grok';
   settingsState.model = undefined;
   detectedState.chatgptCredentials = false;
+  xaiState.credentials = false;
+  xaiState.token = null;
 });
 
 afterEach(() => {
@@ -197,6 +213,21 @@ describe('resolveCommandProvider', () => {
       baseURL: 'https://chatgpt.com/backend-api/codex',
       model: 'gpt-5.5',
       providerLabel: 'chatgpt',
+    });
+  });
+
+  it('routes a newly published explicit Grok model through xAI OAuth before catalog updates', async () => {
+    settingsState.provider = 'openai';
+    xaiState.credentials = true;
+    xaiState.token = 'xai-oauth-token';
+
+    const resolved = await resolveCommandProviderWithOAuth({ explicitModel: 'grok-4.5-preview' });
+
+    expect(resolved).toEqual({
+      apiKey: 'xai-oauth-token',
+      baseURL: 'https://api.x.ai/v1',
+      model: 'grok-4.5-preview',
+      providerLabel: 'grok-oauth',
     });
   });
 

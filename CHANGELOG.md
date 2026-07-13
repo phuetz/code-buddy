@@ -58,6 +58,13 @@ once it reaches `1.0.0`.
 ## [Unreleased]
 
 ### Added
+- **Lisa peut sélectionner son cerveau sur un véritable pilote aveugle et privé.**
+  `buddy assistant corpus-init` crée un corpus local versionné, annoté par risque, canal et critères;
+  `buddy assistant compare --models …` exécute les mêmes tours et graines sur 2 à 12 modèles,
+  mélange leur ordre pour chaque essai et mesure qualité, sécurité, latence, tokens et coût marginal.
+  Le paquet contenant les conversations est séparé d'une clé scellée, tous deux en `0600`, tandis
+  que l'agrégat ne conserve aucun prompt ni réponse. Après classement humain, `compare-reveal`
+  calcule la préférence Borda sans réintroduire le texte privé.
 - **Lisa partage le même contexte frais entre voix, Telegram et Cowork.** Le cache structuré
   (date, résumé, source et URL) alimente maintenant les trois surfaces. Les bulletins simples restent
   instantanés, tandis que les demandes d'analyse et leurs suivis elliptiques passent au raisonnement

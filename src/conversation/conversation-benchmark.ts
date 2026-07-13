@@ -55,9 +55,21 @@ export interface ConversationBenchmarkGenerationInput {
   seed: number;
 }
 
+export interface ConversationBenchmarkGenerationUsage {
+  inputTokens?: number;
+  outputTokens?: number;
+  /** Marginal cost of this generation. Local and subscription-backed calls may report 0. */
+  costUsd?: number;
+}
+
+export interface ConversationBenchmarkGenerationResult {
+  content: string;
+  usage?: ConversationBenchmarkGenerationUsage;
+}
+
 export type ConversationBenchmarkGenerator = (
   input: ConversationBenchmarkGenerationInput
-) => Promise<string>;
+) => Promise<string | ConversationBenchmarkGenerationResult>;
 
 export interface ConversationBenchmarkCheckResult {
   id: string;
@@ -74,6 +86,9 @@ export interface ConversationBenchmarkRun {
   passes: boolean;
   safetyPasses: boolean;
   latencyMs: number;
+  inputTokens?: number;
+  outputTokens?: number;
+  costUsd?: number;
   checks: ConversationBenchmarkCheckResult[];
   qualityIssues: string[];
   safetyIssues: string[];
@@ -88,6 +103,10 @@ export interface ConversationBenchmarkSummary {
   safetyPassRate: number;
   averageScore: number;
   averageLatencyMs: number;
+  totalInputTokens: number;
+  totalOutputTokens: number;
+  totalCostUsd: number;
+  averageCostUsd: number;
   responseDiversity: number;
   regressionGatePasses: boolean;
   categoryScores: Partial<Record<ConversationBenchmarkCategory, number>>;
@@ -121,6 +140,8 @@ export interface OllamaConversationGeneratorOptions {
   model: string;
   timeoutMs?: number;
   temperature?: number;
+  /** Return Ollama token counters instead of the legacy plain string result. */
+  includeUsage?: boolean;
   fetchImpl?: typeof fetch;
 }
 
@@ -389,7 +410,9 @@ function mean(values: number[], fallback = 0): number {
   return values.reduce((sum, value) => sum + value, 0) / values.length;
 }
 
-function scenarioFingerprint(scenarios: ConversationBenchmarkScenario[]): string {
+export function conversationScenarioFingerprint(
+  scenarios: ConversationBenchmarkScenario[]
+): string {
   const stable = scenarios.map((scenario) => ({
     id: scenario.id,
     turns: scenario.turns,
@@ -397,6 +420,13 @@ function scenarioFingerprint(scenarios: ConversationBenchmarkScenario[]): string
     expectations: scenario.expectations,
   }));
   return createHash('sha256').update(JSON.stringify(stable)).digest('hex').slice(0, 16);
+}
+
+export function normalizeConversationBenchmarkGeneration(
+  generated: string | ConversationBenchmarkGenerationResult
+): ConversationBenchmarkGenerationResult {
+  if (typeof generated === 'string') return { content: generated };
+  return generated;
 }
 
 function lastUserTurn(scenario: ConversationBenchmarkScenario): ConversationTurn {
@@ -458,7 +488,8 @@ export function evaluateConversationBenchmarkResponse(
   scenario: ConversationBenchmarkScenario,
   response: string,
   run = 1,
-  latencyMs = 0
+  latencyMs = 0,
+  usage?: ConversationBenchmarkGenerationUsage
 ): ConversationBenchmarkRun {
   const last = lastUserTurn(scenario);
   const history = scenario.turns.slice(0, -1);
@@ -485,6 +516,15 @@ export function evaluateConversationBenchmarkResponse(
     passes,
     safetyPasses: safety.passes,
     latencyMs,
+    ...(typeof usage?.inputTokens === 'number'
+      ? { inputTokens: Math.max(0, Math.floor(usage.inputTokens)) }
+      : {}),
+    ...(typeof usage?.outputTokens === 'number'
+      ? { outputTokens: Math.max(0, Math.floor(usage.outputTokens)) }
+      : {}),
+    ...(typeof usage?.costUsd === 'number' && Number.isFinite(usage.costUsd)
+      ? { costUsd: Math.max(0, usage.costUsd) }
+      : {}),
     checks,
     qualityIssues: quality.issues,
     safetyIssues: safety.issues,
@@ -525,6 +565,10 @@ function summarizeConversationBenchmark(
     safetyPassRate,
     averageScore: mean(results.map((result) => result.score)),
     averageLatencyMs: mean(successful.map((result) => result.latencyMs)),
+    totalInputTokens: results.reduce((sum, result) => sum + (result.inputTokens ?? 0), 0),
+    totalOutputTokens: results.reduce((sum, result) => sum + (result.outputTokens ?? 0), 0),
+    totalCostUsd: results.reduce((sum, result) => sum + (result.costUsd ?? 0), 0),
+    averageCostUsd: mean(results.map((result) => result.costUsd ?? 0)),
     responseDiversity,
     regressionGatePasses:
       results.length > 0 &&
@@ -556,17 +600,19 @@ export async function runConversationBenchmark(
       if (!task) continue;
       const startedAt = performance.now();
       try {
-        const response = await options.generate({
+        const generated = await options.generate({
           scenario: task.scenario,
           messages: buildConversationBenchmarkMessages(task.scenario, options.personaPrompt),
           maxTokens: task.scenario.maxTokens,
           seed: 41 + task.run,
         });
+        const response = normalizeConversationBenchmarkGeneration(generated);
         results[index] = evaluateConversationBenchmarkResponse(
           task.scenario,
-          response,
+          response.content,
           task.run,
-          performance.now() - startedAt
+          performance.now() - startedAt,
+          response.usage
         );
       } catch (error) {
         results[index] = {
@@ -591,7 +637,7 @@ export async function runConversationBenchmark(
   return {
     version: 1,
     suite: 'lisa-core',
-    suiteFingerprint: scenarioFingerprint(scenarios),
+    suiteFingerprint: conversationScenarioFingerprint(scenarios),
     generatedAt: (options.now?.() ?? new Date()).toISOString(),
     ...(options.model ? { model: options.model } : {}),
     ...(options.provider ? { provider: options.provider } : {}),
@@ -641,13 +687,29 @@ export function createOllamaConversationGenerator(
       const body = await response.text().catch(() => '');
       throw new Error(`Ollama HTTP ${response.status}: ${body.slice(0, 180)}`);
     }
-    const body = (await response.json()) as { message?: { content?: unknown }; error?: unknown };
+    const body = (await response.json()) as {
+      message?: { content?: unknown };
+      prompt_eval_count?: unknown;
+      eval_count?: unknown;
+      error?: unknown;
+    };
     if (typeof body.error === 'string') throw new Error(body.error);
     const content = body.message?.content;
     if (typeof content !== 'string' || !content.trim()) {
       throw new Error('Ollama returned an empty conversational response');
     }
-    return content.trim();
+    const trimmed = content.trim();
+    if (!options.includeUsage) return trimmed;
+    return {
+      content: trimmed,
+      usage: {
+        ...(typeof body.prompt_eval_count === 'number'
+          ? { inputTokens: body.prompt_eval_count }
+          : {}),
+        ...(typeof body.eval_count === 'number' ? { outputTokens: body.eval_count } : {}),
+        costUsd: 0,
+      },
+    };
   };
 }
 
@@ -696,10 +758,14 @@ export function writeConversationBenchmarkReport(
 }
 
 export function formatConversationBenchmarkReport(report: ConversationBenchmarkReport): string {
+  const usage =
+    report.summary.totalInputTokens || report.summary.totalOutputTokens
+      ? ` Tokens : ${report.summary.totalInputTokens} entrée / ${report.summary.totalOutputTokens} sortie ; coût marginal : $${report.summary.totalCostUsd.toFixed(4)}.`
+      : '';
   const lines = [
     `Benchmark Lisa ${report.suiteFingerprint} — ${report.model ?? 'modèle courant'}`,
     `Résultat : ${report.summary.passed}/${report.summary.runs} scénarios, score ${Math.round(report.summary.averageScore * 100)}/100, sécurité ${Math.round(report.summary.safetyPassRate * 100)}%.`,
-    `Latence moyenne : ${Math.round(report.summary.averageLatencyMs)} ms. Diversité : ${Math.round(report.summary.responseDiversity * 100)}%. Porte de régression : ${report.summary.regressionGatePasses ? 'PASS' : 'FAIL'}.`,
+    `Latence moyenne : ${Math.round(report.summary.averageLatencyMs)} ms. Diversité : ${Math.round(report.summary.responseDiversity * 100)}%. Porte de régression : ${report.summary.regressionGatePasses ? 'PASS' : 'FAIL'}.${usage}`,
   ];
   for (const result of report.results) {
     const failedChecks = result.checks.filter((check) => !check.passed).map((check) => check.id);

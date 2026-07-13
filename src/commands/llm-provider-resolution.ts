@@ -100,6 +100,52 @@ export function resolveCommandProvider(
   return fromEnvDetection(configuredModel);
 }
 
+/**
+ * Async companion used by commands that intentionally compare arbitrary
+ * explicit models. xAI can publish a model before it appears in the static
+ * catalog; in that case an existing subscription OAuth login must still win
+ * over an unrelated ambient provider.
+ */
+export async function resolveCommandProviderWithOAuth(
+  options: { explicitModel?: string } = {},
+): Promise<ResolvedCommandProvider | null> {
+  const explicitModel = options.explicitModel?.trim();
+  if (explicitModel && inferProvider(explicitModel) === 'xai') {
+    const catalogProvider = resolveProviderFromCatalog({
+      providerOverride: 'grok',
+      hasChatGptOAuth: hasCodexCredentials(),
+      requireConfigured: true,
+    });
+    if (catalogProvider) {
+      return {
+        apiKey: catalogProvider.apiKey,
+        baseURL: catalogProvider.baseURL,
+        model: explicitModel,
+        providerLabel: catalogProvider.provider,
+      };
+    }
+    try {
+      const { getValidXaiAccessToken, hasXaiCredentials, XAI_OAUTH_BASE_URL } = await import(
+        '../providers/xai-oauth.js'
+      );
+      if (hasXaiCredentials()) {
+        const token = await getValidXaiAccessToken();
+        if (token) {
+          return {
+            apiKey: token,
+            baseURL: XAI_OAUTH_BASE_URL,
+            model: explicitModel,
+            providerLabel: 'grok-oauth',
+          };
+        }
+      }
+    } catch {
+      /* Fall through to the normal resolver and its existing diagnostics. */
+    }
+  }
+  return resolveCommandProvider(options);
+}
+
 function fromEnvDetection(explicitModel?: string): ResolvedCommandProvider | null {
   const detected = detectProviderFromEnv();
   if (!detected) return null;

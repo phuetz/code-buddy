@@ -186,6 +186,40 @@ describe('Lisa conversation benchmark', () => {
     );
   });
 
+  it('collects provider token and marginal-cost metrics without breaking string generators', async () => {
+    const fetchImpl = vi.fn(async () =>
+      new Response(
+        JSON.stringify({
+          message: { content: 'Une cohérence de valeurs relie les choix.' },
+          prompt_eval_count: 72,
+          eval_count: 18,
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } }
+      )
+    );
+    const report = await runConversationBenchmark({
+      scenarios: [simpleScenario()],
+      personaPrompt: 'Tu es Lisa.',
+      generate: createOllamaConversationGenerator({
+        host: 'http://darkstar.invalid:11434',
+        model: 'qwen-test',
+        includeUsage: true,
+        fetchImpl: fetchImpl as typeof fetch,
+      }),
+    });
+
+    expect(report.results[0]).toMatchObject({
+      inputTokens: 72,
+      outputTokens: 18,
+      costUsd: 0,
+    });
+    expect(report.summary).toMatchObject({
+      totalInputTokens: 72,
+      totalOutputTokens: 18,
+      totalCostUsd: 0,
+    });
+  });
+
   it('persists aggregate metrics without generated response text', async () => {
     const home = await mkdtemp(join(tmpdir(), 'lisa-benchmark-'));
     const journal = join(home, 'conversation-benchmarks.jsonl');

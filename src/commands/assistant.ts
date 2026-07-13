@@ -490,10 +490,15 @@ export function registerAssistantCommand(program: Command): void {
             host: ollamaHost,
             model,
             timeoutMs: Math.max(5_000, Number(opts.timeout) || 120_000),
+            includeUsage: true,
           });
         } else {
-          const { resolveCommandProvider } = await import('./llm-provider-resolution.js');
-          const resolved = resolveCommandProvider({ ...(model ? { explicitModel: model } : {}) });
+          const { resolveCommandProviderWithOAuth } = await import(
+            './llm-provider-resolution.js'
+          );
+          const resolved = await resolveCommandProviderWithOAuth({
+            ...(model ? { explicitModel: model } : {}),
+          });
           if (!resolved) {
             console.error(
               'Aucun modèle disponible. Fournis --base-url pour Darkstar, lance `buddy login`, ou configure un fournisseur.'
@@ -502,6 +507,7 @@ export function registerAssistantCommand(program: Command): void {
             return;
           }
           const { CodeBuddyClient } = await import('../codebuddy/client.js');
+          const { getModelPricing } = await import('../config/model-pricing.js');
           model = model || resolved.model || 'modèle courant';
           provider = resolved.providerLabel;
           const client = new CodeBuddyClient(resolved.apiKey, resolved.model, resolved.baseURL);
@@ -513,7 +519,30 @@ export function registerAssistantCommand(program: Command): void {
             });
             const content = response.choices[0]?.message.content;
             if (!content?.trim()) throw new Error('Le modèle a renvoyé une réponse vide');
-            return content.trim();
+            const usage = response.usage;
+            const subscriptionBacked =
+              resolved.apiKey === 'ollama' ||
+              resolved.apiKey === 'oauth-chatgpt' ||
+              /oauth/i.test(resolved.providerLabel) ||
+              /^(ollama|lmstudio|lemonade)$/i.test(resolved.providerLabel) ||
+              resolved.baseURL?.includes('chatgpt.com/backend-api/codex');
+            const pricing = getModelPricing(model ?? resolved.model ?? 'unknown');
+            return {
+              content: content.trim(),
+              usage: {
+                ...(usage ? { inputTokens: usage.prompt_tokens } : {}),
+                ...(usage ? { outputTokens: usage.completion_tokens } : {}),
+                ...(usage
+                  ? {
+                      costUsd: subscriptionBacked
+                        ? 0
+                        : (usage.prompt_tokens * pricing.inputPerMillion +
+                            usage.completion_tokens * pricing.outputPerMillion) /
+                          1_000_000,
+                    }
+                  : {}),
+              },
+            };
           };
         }
 
@@ -539,6 +568,259 @@ export function registerAssistantCommand(program: Command): void {
           console.log(`Mesures agrégées : ${defaultConversationBenchmarkPaths().latest}`);
         }
         if (!report.summary.regressionGatePasses) process.exitCode = 2;
+      }
+    );
+
+  assistant
+    .command('corpus-init')
+    .description('Create Lisa’s private annotated pilot corpus (mode 0600)')
+    .option('--path <file>', 'Corpus path')
+    .option('--force', 'Replace an existing corpus')
+    .action(async (opts: { path?: string; force?: boolean }) => {
+      const {
+        conversationPilotCorpusFingerprint,
+        defaultConversationPilotCorpusPath,
+        initializeConversationPilotCorpus,
+      } = await import('../conversation/conversation-pilot-corpus.js');
+      const path = opts.path?.trim() || defaultConversationPilotCorpusPath();
+      try {
+        const corpus = initializeConversationPilotCorpus(path, { force: opts.force });
+        console.log(
+          `Corpus pilote créé : ${path}\n${corpus.scenarios.length} scénarios annotés — empreinte ${conversationPilotCorpusFingerprint(corpus)}.\nTu peux maintenant remplacer ou compléter les exemples synthétiques par tes échanges privés.`
+        );
+      } catch (error) {
+        console.error(error instanceof Error ? error.message : String(error));
+        process.exitCode = 1;
+      }
+    });
+
+  assistant
+    .command('compare')
+    .description('Compare 2-12 Lisa models with anonymized responses and a private review packet')
+    .requiredOption('--models <csv>', 'Comma-separated model names')
+    .option('--base-url <url>', 'Shared Ollama host, for example http://darkstar:11434')
+    .option('--corpus <file>', 'Private annotated corpus path')
+    .option('--runs <n>', 'Repeat every scenario N times', '1')
+    .option('--concurrency <n>', 'Global concurrent generations (1-8)', '2')
+    .option('--timeout <ms>', 'Timeout for each Ollama generation', '120000')
+    .option('--json', 'Print the aggregate machine-readable report')
+    .option('--no-write', 'Do not write the private review, key and aggregate files')
+    .action(
+      async (opts: {
+        models: string;
+        baseUrl?: string;
+        corpus?: string;
+        runs: string;
+        concurrency: string;
+        timeout: string;
+        json?: boolean;
+        write?: boolean;
+      }) => {
+        const models = opts.models
+          .split(',')
+          .map((value) => value.trim())
+          .filter(Boolean);
+        if (models.length < 2 || models.length > 12 || new Set(models).size !== models.length) {
+          console.error('--models doit contenir 2 à 12 noms de modèles uniques.');
+          process.exitCode = 1;
+          return;
+        }
+        const [
+          {
+            defaultConversationPilotCorpusPath,
+            readConversationPilotCorpus,
+          },
+          {
+            defaultBlindComparisonDirectory,
+            formatBlindConversationAggregate,
+            runBlindConversationComparison,
+            writeBlindComparisonArtifacts,
+          },
+          { createOllamaConversationGenerator },
+          { getActivePersonaVoiceAsync },
+          { SPEAK_SYSTEM_PROMPT },
+        ] = await Promise.all([
+          import('../conversation/conversation-pilot-corpus.js'),
+          import('../conversation/conversation-blind-comparison.js'),
+          import('../conversation/conversation-benchmark.js'),
+          import('../personas/persona-manager.js'),
+          import('../sensory/voice-loop.js'),
+        ]);
+        const corpusPath = opts.corpus?.trim() || defaultConversationPilotCorpusPath();
+        let corpus: import('../conversation/conversation-pilot-corpus.js').ConversationPilotCorpus;
+        try {
+          corpus = readConversationPilotCorpus(corpusPath);
+        } catch (error) {
+          console.error(
+            `Impossible de lire le corpus ${corpusPath}: ${error instanceof Error ? error.message : String(error)}\nLance d’abord \`buddy assistant corpus-init\`.`
+          );
+          process.exitCode = 1;
+          return;
+        }
+        const personaPrompt = (await getActivePersonaVoiceAsync()).spokenPrompt || SPEAK_SYSTEM_PROMPT;
+        const ollamaHost = opts.baseUrl?.trim();
+        const candidates: import('../conversation/conversation-blind-comparison.js').BlindConversationCandidate[] = [];
+        if (ollamaHost) {
+          for (const [index, model] of models.entries()) {
+            candidates.push({
+              id: `candidate-${index + 1}`,
+              model,
+              provider: 'ollama',
+              generate: createOllamaConversationGenerator({
+                host: ollamaHost,
+                model,
+                timeoutMs: Math.max(5_000, Number(opts.timeout) || 120_000),
+                includeUsage: true,
+              }),
+            });
+          }
+        } else {
+          const [
+            { resolveCommandProviderWithOAuth },
+            { CodeBuddyClient },
+            { getModelPricing },
+            { listActiveLlmModelPool },
+          ] =
+            await Promise.all([
+              import('./llm-provider-resolution.js'),
+              import('../codebuddy/client.js'),
+              import('../config/model-pricing.js'),
+              import('../providers/active-llm-model-pool.js'),
+            ]);
+          const activePool = await listActiveLlmModelPool();
+          for (const [index, requestedModel] of models.entries()) {
+            const active = activePool.find(
+              (candidate) => candidate.model.toLowerCase() === requestedModel.toLowerCase()
+            );
+            const grokResolution = requestedModel.toLowerCase().startsWith('grok-')
+              ? await resolveCommandProviderWithOAuth({ explicitModel: requestedModel })
+              : null;
+            const resolved =
+              grokResolution && /grok|xai/i.test(grokResolution.providerLabel)
+                ? grokResolution
+                : active?.apiKey
+                  ? {
+                      apiKey: active.apiKey,
+                      baseURL: active.baseURL,
+                      model: active.model,
+                      providerLabel: active.provider,
+                    }
+                  : await resolveCommandProviderWithOAuth({ explicitModel: requestedModel });
+            if (!resolved) {
+              console.error(`Aucun fournisseur disponible pour ${requestedModel}.`);
+              process.exitCode = 1;
+              return;
+            }
+            const model = resolved.model || requestedModel;
+            const client = new CodeBuddyClient(resolved.apiKey, model, resolved.baseURL);
+            const pricing = getModelPricing(model);
+            const subscriptionBacked =
+              active?.costInputUsdPerMtok === 0 ||
+              resolved.apiKey === 'ollama' ||
+              resolved.apiKey === 'oauth-chatgpt' ||
+              /oauth/i.test(resolved.providerLabel) ||
+              /^(ollama|lmstudio|lemonade)$/i.test(resolved.providerLabel) ||
+              resolved.baseURL?.includes('chatgpt.com/backend-api/codex');
+            candidates.push({
+              id: `candidate-${index + 1}`,
+              model,
+              provider: resolved.providerLabel,
+              generate: async (input) => {
+                const response = await client.chat(input.messages as never, [], {
+                  temperature: 0.25,
+                  maxTokens: input.maxTokens,
+                  disableProviderFallback: true,
+                });
+                const content = response.choices[0]?.message.content;
+                if (!content?.trim()) throw new Error('Le modèle a renvoyé une réponse vide');
+                const usage = response.usage;
+                return {
+                  content: content.trim(),
+                  usage: {
+                    ...(usage ? { inputTokens: usage.prompt_tokens } : {}),
+                    ...(usage ? { outputTokens: usage.completion_tokens } : {}),
+                    ...(usage
+                      ? {
+                          costUsd: subscriptionBacked
+                            ? 0
+                            : (usage.prompt_tokens * pricing.inputPerMillion +
+                                usage.completion_tokens * pricing.outputPerMillion) /
+                              1_000_000,
+                        }
+                      : {}),
+                  },
+                };
+              },
+            });
+          }
+        }
+        const comparison = await runBlindConversationComparison({
+          corpus,
+          candidates,
+          personaPrompt,
+          runs: Math.max(1, Math.min(10, Number(opts.runs) || 1)),
+          concurrency: Math.max(1, Math.min(8, Number(opts.concurrency) || 2)),
+        });
+        console.log(
+          opts.json
+            ? JSON.stringify(comparison.report, null, 2)
+            : formatBlindConversationAggregate(comparison.report)
+        );
+        if (opts.write !== false) {
+          const paths = writeBlindComparisonArtifacts(comparison);
+          console.log(
+            `\nRevue aveugle privée : ${paths.reviewPacket}\nClé scellée : ${paths.key}\nMesures sans contenu brut : ${paths.aggregate}\n\nRemplis les tableaux "ranking" sans ouvrir la clé, puis lance :\nbuddy assistant compare-reveal --packet "${paths.reviewPacket}" --key "${paths.key}"`
+          );
+        } else if (!opts.json) {
+          console.log(`\nAucun fichier écrit (répertoire habituel : ${defaultBlindComparisonDirectory()}).`);
+        }
+      }
+    );
+
+  assistant
+    .command('compare-reveal')
+    .description('Reveal model identities after a human has ranked the blind review packet')
+    .requiredOption('--packet <file>', 'Completed .review.json file')
+    .requiredOption('--key <file>', 'Matching sealed .key.json file')
+    .option('--output <file>', 'Preference report path')
+    .option('--json', 'Print machine-readable preferences')
+    .option('--no-write', 'Do not persist the raw-free preference report')
+    .action(
+      async (opts: {
+        packet: string;
+        key: string;
+        output?: string;
+        json?: boolean;
+        write?: boolean;
+      }) => {
+        const {
+          formatBlindPreferenceReport,
+          readBlindComparisonKey,
+          readBlindReviewPacket,
+          revealBlindConversationPreferences,
+          writeBlindPreferenceReport,
+        } = await import('../conversation/conversation-blind-comparison.js');
+        try {
+          const report = revealBlindConversationPreferences(
+            readBlindReviewPacket(opts.packet),
+            readBlindComparisonKey(opts.key)
+          );
+          console.log(
+            opts.json ? JSON.stringify(report, null, 2) : formatBlindPreferenceReport(report)
+          );
+          if (opts.write !== false) {
+            const output =
+              opts.output?.trim() ||
+              (opts.packet.endsWith('.review.json')
+                ? opts.packet.replace(/\.review\.json$/, '.preferences.json')
+                : `${opts.packet}.preferences.json`);
+            writeBlindPreferenceReport(report, output);
+            if (!opts.json) console.log(`\nPréférences sans contenu brut : ${output}`);
+          }
+        } catch (error) {
+          console.error(error instanceof Error ? error.message : String(error));
+          process.exitCode = 1;
+        }
       }
     );
 }

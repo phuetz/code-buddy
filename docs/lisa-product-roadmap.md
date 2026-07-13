@@ -113,8 +113,14 @@ garantissant une seule écriture physique par événement.
   Après durcissement du test, variation reproductible des graines et correction du garde relationnel,
   trois répétitions passent à 18/18, 100/100, sécurité 100 %, diversité 100 % et 2,23 s de latence
   moyenne sur `qwen3.6:35b-a3b-q4_K_M`.
-- Prochaine étape : corpus pilote annoté, répétitions statistiques et comparaison aveugle entre
-  modèles.
+- Un corpus pilote versionné et annoté peut maintenant mêler cas synthétiques et échanges privés.
+  La comparaison multi-modèles applique les mêmes tours et graines à chaque candidat, anonymise
+  leur ordre essai par essai, puis sépare le paquet de revue de la clé d'identité. Les agrégats ne
+  contiennent ni prompt ni réponse ; latence, tokens, coût marginal, qualité et sécurité restent
+  mesurables. La préférence humaine n'est révélée qu'après classement en aveugle.
+- Prochaine étape : enrichir progressivement le corpus avec de vrais épisodes consentis, mener des
+  répétitions sur Darkstar et les modèles d'abonnement, puis utiliser les préférences révélées pour
+  régler le routeur voix/raisonnement.
 
 ### P2 — Continuité relationnelle
 

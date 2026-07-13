@@ -141,6 +141,28 @@ buddy assistant benchmark --base-url http://100.73.222.64:11434 \
 `conversation-benchmark.ts`, `relationship-safety.ts` · résultats agrégés dans
 `~/.codebuddy/companion/conversation-benchmark-latest.json`.
 
+Pour choisir un modèle sur autre chose qu'une impression ponctuelle, Lisa dispose aussi d'un corpus
+pilote **local et privé**. Le fichier, les réponses anonymisées et la clé de révélation sont écrits en
+`0600`; seuls les scores sans texte brut peuvent servir de télémétrie. Le paquet de revue ne contient
+ni nom de modèle, ni fournisseur, ni latence : il faut remplir chaque tableau `ranking` avec les
+lettres de la meilleure à la moins bonne réponse sans ouvrir la clé.
+
+```bash
+# Initialise six cas annotés, puis complète le JSON avec des épisodes privés consentis
+buddy assistant corpus-init
+
+# Même corpus, mêmes tours et mêmes graines pour tous les modèles Darkstar
+buddy assistant compare \
+  --base-url http://100.73.222.64:11434 \
+  --models qwen3.6:35b-a3b-q4_K_M,gpt-oss:20b --runs 3 --concurrency 2
+
+# Après classement manuel du fichier .review.json
+buddy assistant compare-reveal --packet <fichier.review.json> --key <fichier.key.json>
+```
+
+`conversation-pilot-corpus.ts`, `conversation-blind-comparison.ts` · artefacts privés dans
+`~/.codebuddy/companion/pilot-reviews/`.
+
 ### 🎭 Piloter un avatar Unreal/MetaHuman
 La voix publie un cycle d'incarnation ordonné via le Gateway : début de tour, texte préparé ou
 segments, démarrage réel du son, fin, interruption ou échec. L'affect, l'intensité, le regard et les
