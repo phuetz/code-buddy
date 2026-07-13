@@ -619,7 +619,7 @@ export class OpenAICompatProvider implements Provider {
     searchOptions?: SearchOptions,
   ): Promise<CodeBuddyResponse> {
     try {
-      const useTools = !this.isLocalInference() && tools && tools.length > 0;
+      const useTools = !this.isLocalInference() && (tools?.length ?? 0) > 0;
 
       // Inject Anthropic prompt-cache breakpoints (Manus AI #20).
       let finalMessages: CodeBuddyMessage[] = messages;
@@ -631,8 +631,7 @@ export class OpenAICompatProvider implements Provider {
       const requestPayload: ChatRequestPayload = {
         model: opts.model || this.currentModel,
         messages: finalMessages,
-        tools: useTools ? tools : [],
-        tool_choice: useTools ? 'auto' : undefined,
+        ...(useTools ? { tools, tool_choice: 'auto' as const } : {}),
         temperature: opts.temperature ?? 0.7,
         max_tokens: opts.maxTokens ?? this.defaultMaxTokens,
       };
@@ -782,7 +781,7 @@ export class OpenAICompatProvider implements Provider {
     searchOptions?: SearchOptions,
   ): AsyncGenerator<ChatCompletionChunk, void, unknown> {
     try {
-      const useTools = !this.isLocalInference() && tools && tools.length > 0;
+      const useTools = !this.isLocalInference() && (tools?.length ?? 0) > 0;
 
       // Convert tool messages for local models that don't support tool role.
       let finalMessages = this.convertToolMessagesForLocalModels(messages);
@@ -801,8 +800,7 @@ export class OpenAICompatProvider implements Provider {
       const requestPayload = {
         model: opts.model || this.currentModel,
         messages: finalMessages,
-        tools: useTools ? tools : [],
-        tool_choice: useTools ? 'auto' as const : undefined,
+        ...(useTools ? { tools, tool_choice: 'auto' as const } : {}),
         temperature: opts.temperature ?? 0.7,
         max_tokens: opts.maxTokens ?? this.defaultMaxTokens,
       };
