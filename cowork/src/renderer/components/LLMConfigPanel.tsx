@@ -283,9 +283,9 @@ export function LLMConfigPanel({
   const saveChoiceDisabled =
     controller.isSaving ||
     !controller.hasUnsavedChanges ||
-    (controller.requiresApiKey && !controller.apiKey.trim());
+    (controller.requiresApiKey && !controller.hasUsableApiKey);
   const testChoiceDisabled =
-    controller.isTesting || (controller.requiresApiKey && !controller.apiKey.trim());
+    controller.isTesting || (controller.requiresApiKey && !controller.hasUsableApiKey);
 
   const providerStatus = useMemo(() => {
     if (controller.provider === 'chatgpt') {
@@ -293,13 +293,13 @@ export function LLMConfigPanel({
         ? t('api.llm.connected', 'Connected')
         : t('api.llm.oauthRequired', 'Sign in');
     }
-    if (!controller.requiresApiKey || controller.apiKey.trim()) {
+    if (!controller.requiresApiKey || controller.hasUsableApiKey) {
       return t('api.llm.ready', 'Ready');
     }
     return t('api.llm.needsKey', 'Needs key');
   }, [
     chatgptStatus.signedIn,
-    controller.apiKey,
+    controller.hasUsableApiKey,
     controller.provider,
     controller.requiresApiKey,
     t,
@@ -465,7 +465,7 @@ export function LLMConfigPanel({
                   ? t('api.llm.saveChoice', 'Save this choice')
                   : t('api.llm.choiceSaved', 'Choice saved')}
             </button>
-            {controller.requiresApiKey && !controller.apiKey.trim() && (
+            {controller.requiresApiKey && !controller.hasUsableApiKey && (
               <div className="basis-full text-right text-[11px] text-warning">
                 {t('api.testError.missing_key')}
               </div>
@@ -660,7 +660,7 @@ export function LLMConfigPanel({
                 type="password"
                 value={controller.apiKey}
                 onChange={(event) => controller.setApiKey(event.target.value)}
-                placeholder={controller.currentPreset?.keyPlaceholder || t('api.enterApiKey')}
+                placeholder={controller.apiKeyPlaceholder || t('api.enterApiKey')}
                 className="w-full rounded-lg border border-border bg-background px-4 py-3 text-text-primary placeholder-text-muted transition-all focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/30"
               />
               {apiKeyHint(controller, t) && (
@@ -865,7 +865,7 @@ export function LLMConfigPanel({
                 type="password"
                 value={controller.apiKey}
                 onChange={(event) => controller.setApiKey(event.target.value)}
-                placeholder={controller.currentPreset?.keyPlaceholder || t('api.enterApiKey')}
+                placeholder={controller.apiKeyPlaceholder || t('api.enterApiKey')}
                 className="w-full rounded-lg border border-border bg-background px-4 py-3 text-text-primary placeholder-text-muted transition-all focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/30"
               />
               {apiKeyHint(controller, t) && (

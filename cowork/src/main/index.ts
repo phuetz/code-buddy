@@ -1116,7 +1116,7 @@ function createWindow() {
       type: 'config.status',
       payload: {
         isConfigured,
-        config: configStore.getAll(),
+        config: configStore.getAllRedacted(),
       },
     });
 
@@ -3343,7 +3343,7 @@ ipcMain.handle('dialog.selectFiles', async () => {
 // Config IPC handlers
 ipcMain.handle('config.get', () => {
   try {
-    return configStore.getAll();
+    return configStore.getAllRedacted();
   } catch (error) {
     logError('[Config] Error getting config:', error);
     return {};
@@ -3426,15 +3426,15 @@ const syncConfigAfterMutation = async (previousConfig: AppConfig) => {
     type: 'config.status',
     payload: {
       isConfigured,
-      config: updatedConfig,
+      config: configStore.getAllRedacted(),
     },
   });
   log('[Config] Notified renderer of config update, isConfigured:', isConfigured);
-  return updatedConfig;
+  return configStore.getAllRedacted();
 };
 
 ipcMain.handle('config.save', async (_event, newConfig: Partial<AppConfig>) => {
-  log('[Config] Saving config:', { ...newConfig, apiKey: newConfig.apiKey ? '***' : '' });
+  log('[Config] Saving config fields:', Object.keys(newConfig));
 
   const previousConfig = configStore.getAll();
   // Update config
@@ -3502,7 +3502,7 @@ ipcMain.handle(
   'config.listModels',
   async (
     _event,
-    payload: { provider: AppConfig['provider']; apiKey: string; baseUrl?: string }
+    payload: { provider: AppConfig['provider']; apiKey?: string; baseUrl?: string }
   ): Promise<ProviderModelInfo[]> => {
     if (payload.provider === 'ollama') {
       return listOllamaModels(payload);
@@ -3517,7 +3517,11 @@ ipcMain.handle(
 ipcMain.handle('config.diagnose', async (_event, payload: DiagnosticInput) => {
   try {
     const { runDiagnostics } = await import('./config/api-diagnostics');
-    return await runDiagnostics(payload);
+    const storedConfig = configStore.getAll();
+    return await runDiagnostics({
+      ...payload,
+      apiKey: payload.apiKey?.trim() || storedConfig.apiKey,
+    });
   } catch (error) {
     logError('[Config] Error running diagnostics:', error);
     throw error;
@@ -5464,7 +5468,7 @@ ipcMain.handle('skills.setStoragePath', async (_event, targetPath: string, migra
     type: 'config.status',
     payload: {
       isConfigured: configStore.isConfigured(),
-      config: configStore.getAll(),
+      config: configStore.getAllRedacted(),
     },
   });
   return { success: true, ...result };
@@ -6157,7 +6161,7 @@ async function handleClientEvent(event: ClientEvent): Promise<unknown> {
           type: 'config.status',
           payload: {
             isConfigured: configStore.isConfigured(),
-            config: configStore.getAll(),
+            config: configStore.getAllRedacted(),
           },
         });
         }
@@ -6173,7 +6177,7 @@ async function handleClientEvent(event: ClientEvent): Promise<unknown> {
         type: 'config.status',
         payload: {
           isConfigured: configStore.isConfigured(),
-          config: configStore.getAll(),
+          config: configStore.getAllRedacted(),
         },
       });
       return null;

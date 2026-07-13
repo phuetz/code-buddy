@@ -91,6 +91,8 @@ export interface CreateConfigSetPayload {
 
 export interface ProviderProfile {
   apiKey: string;
+  hasKey?: boolean;
+  keyTail?: string;
   baseUrl?: string;
   model: string;
   contextWindow?: number;
@@ -115,6 +117,8 @@ export interface AppConfig {
 
   // API credentials
   apiKey: string;
+  hasKey?: boolean;
+  keyTail?: string;
   baseUrl?: string;
   customProtocol?: CustomProtocolType;
 
@@ -1196,6 +1200,39 @@ export class ConfigStore {
     return this.normalizeConfig(this.store.store as Partial<AppConfig>);
   }
 
+  /** Renderer-safe config view. Provider secrets never cross the IPC boundary. */
+  getAllRedacted(): AppConfig {
+    const config = this.getAll();
+    const redactProfile = (profile: ProviderProfile): ProviderProfile => {
+      const apiKey = profile.apiKey.trim();
+      return {
+        ...profile,
+        apiKey: '',
+        hasKey: apiKey.length > 0,
+        keyTail: apiKey ? apiKey.slice(-4) : undefined,
+      };
+    };
+    const redactProfiles = (
+      profiles: Partial<Record<ProviderProfileKey, ProviderProfile>>
+    ): Partial<Record<ProviderProfileKey, ProviderProfile>> =>
+      Object.fromEntries(
+        Object.entries(profiles).map(([key, profile]) => [key, redactProfile(profile)])
+      ) as Partial<Record<ProviderProfileKey, ProviderProfile>>;
+    const activeApiKey = config.apiKey.trim();
+
+    return {
+      ...config,
+      apiKey: '',
+      hasKey: activeApiKey.length > 0,
+      keyTail: activeApiKey ? activeApiKey.slice(-4) : undefined,
+      profiles: redactProfiles(config.profiles),
+      configSets: config.configSets.map((configSet) => ({
+        ...configSet,
+        profiles: redactProfiles(configSet.profiles),
+      })),
+    };
+  }
+
   /**
    * Get a specific config value
    */
@@ -1372,7 +1409,19 @@ export class ConfigStore {
     let nextConfigSets = current.configSets.map((set) => this.cloneConfigSet(set));
 
     if (Array.isArray(updates.configSets) && updates.configSets.length > 0) {
-      const normalizedSets = this.normalizeConfigSets(updates.configSets, {
+      const setsWithPreservedKeys = updates.configSets.map((configSet) => {
+        const existingSet = current.configSets.find((existing) => existing.id === configSet.id);
+        const profiles = { ...configSet.profiles };
+        for (const key of PROFILE_KEYS) {
+          const incomingProfile = profiles[key];
+          const existingApiKey = existingSet?.profiles[key]?.apiKey;
+          if (incomingProfile && !incomingProfile.apiKey.trim() && existingApiKey) {
+            profiles[key] = { ...incomingProfile, apiKey: existingApiKey };
+          }
+        }
+        return { ...configSet, profiles };
+      });
+      const normalizedSets = this.normalizeConfigSets(setsWithPreservedKeys, {
         provider: current.provider,
         customProtocol: normalizeCustomProtocol(
           current.customProtocol,
@@ -1419,7 +1468,13 @@ export class ConfigStore {
       if (updates.profiles) {
         for (const key of PROFILE_KEYS) {
           if (updates.profiles[key]) {
-            nextProfiles[key] = this.normalizeProfile(key, updates.profiles[key]);
+            const incomingProfile = updates.profiles[key];
+            nextProfiles[key] = this.normalizeProfile(key, {
+              ...incomingProfile,
+              apiKey: incomingProfile.apiKey.trim()
+                ? incomingProfile.apiKey
+                : nextProfiles[key].apiKey,
+            });
           }
         }
       }
@@ -1450,7 +1505,7 @@ export class ConfigStore {
       const nextActiveProfile = {
         ...nextProfiles[nextActiveProfileKey],
       };
-      if (updates.apiKey !== undefined) {
+      if (updates.apiKey?.trim()) {
         nextActiveProfile.apiKey = updates.apiKey;
       }
       if (updates.baseUrl !== undefined) {

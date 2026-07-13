@@ -178,6 +178,32 @@ describe('api config state helpers', () => {
     expect(snapshot.profiles['custom:anthropic'].apiKey).toBe('sk-custom-anthropic');
   });
 
+  it('keeps redacted stored keys write-only in renderer state', () => {
+    const config = {
+      provider: 'openai',
+      activeProfileKey: 'openai',
+      apiKey: '',
+      hasKey: true,
+      keyTail: '1234',
+      model: 'gpt-5.4',
+      profiles: {
+        openai: {
+          apiKey: '',
+          hasKey: true,
+          keyTail: '1234',
+          baseUrl: 'https://api.openai.com/v1',
+          model: 'gpt-5.4',
+        },
+      },
+      isConfigured: true,
+    } as AppConfig;
+
+    const snapshot = buildApiConfigSnapshot(config, FALLBACK_PROVIDER_PRESETS);
+    expect(snapshot.profiles.openai.apiKey).toBe('');
+    expect(snapshot.profiles.openai.hasStoredApiKey).toBe(true);
+    expect(snapshot.profiles.openai.apiKeyTail).toBe('1234');
+  });
+
   it('applies defaults only for missing profiles', () => {
     const config = {
       provider: 'openai',

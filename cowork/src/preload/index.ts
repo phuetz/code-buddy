@@ -416,7 +416,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.invoke('config.test', config),
     listModels: (payload: {
       provider: AppConfig['provider'];
-      apiKey: string;
+      apiKey?: string;
       baseUrl?: string;
     }): Promise<ProviderModelInfo[]> => ipcRenderer.invoke('config.listModels', payload),
     diagnose: (input: DiagnosticInput): Promise<DiagnosticResult> =>
@@ -5017,7 +5017,7 @@ declare global {
         test: (config: ApiTestInput) => Promise<ApiTestResult>;
         listModels: (payload: {
           provider: AppConfig['provider'];
-          apiKey: string;
+          apiKey?: string;
           baseUrl?: string;
         }) => Promise<ProviderModelInfo[]>;
         diagnose: (input: DiagnosticInput) => Promise<DiagnosticResult>;
