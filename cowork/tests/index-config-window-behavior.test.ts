@@ -3,6 +3,7 @@ import path from 'node:path';
 import fs from 'node:fs';
 
 const indexPath = path.resolve(process.cwd(), 'src/main/index.ts');
+const configIpcPath = path.resolve(process.cwd(), 'src/main/ipc/config-ipc.ts');
 const windowManagementPath = path.resolve(process.cwd(), 'src/main/window-management.ts');
 
 describe('Main process window/config behavior', () => {
@@ -40,11 +41,14 @@ describe('Main process window/config behavior', () => {
 
   it('only exposes redacted provider config to the renderer', () => {
     const indexSource = fs.readFileSync(indexPath, 'utf8');
+    const configIpcSource = fs.readFileSync(configIpcPath, 'utf8');
     const windowSource = fs.readFileSync(windowManagementPath, 'utf8');
 
-    expect(indexSource).toContain("ipcMain.handle('config.get'");
-    expect(indexSource).toContain('return configStore.getAllRedacted();');
-    expect(indexSource).not.toContain('config: configStore.getAll(),');
+    expect(indexSource).toContain('registerConfigIpcHandlers({');
+    expect(indexSource).not.toContain("ipcMain.handle('config.get'");
+    expect(configIpcSource).toContain("ipcMain.handle('config.get'");
+    expect(configIpcSource).toContain('return configStore.getAllRedacted();');
+    expect(configIpcSource).not.toContain('config: configStore.getAll(),');
     expect(windowSource).not.toContain('config: configStore.getAll(),');
     expect(windowSource).toContain('config: configStore.getAllRedacted(),');
   });

@@ -89,6 +89,8 @@ import {
   createRevealFileInFolder,
   registerShellIpcHandlers,
 } from './ipc/shell-ipc';
+import { registerSessionExportIpcHandlers } from './ipc/session-export-ipc';
+import { registerConfigIpcHandlers } from './ipc/config-ipc';
 import { initDatabase, getDatabase, closeDatabase } from './db/database';
 import { SessionManager, type EngineAdapterLike } from './session/session-manager';
 import {
@@ -171,15 +173,9 @@ import { PluginRuntimeService } from './skills/plugin-runtime-service';
 import { loadCoreModule } from './utils/core-loader';
 import {
   configStore,
-  getPiAiModelPresets,
-  type AppConfig,
   type AppTheme,
-  type CreateConfigSetPayload,
 } from './config/config-store';
-import { runConfigApiTest } from './config/config-test-routing';
 import { resolveEngineRuntimeConfig } from './config/engine-runtime-config';
-import { listLmStudioModels } from './config/lmstudio-api';
-import { listOllamaModels } from './config/ollama-api';
 import { mcpConfigStore } from './mcp/mcp-config-store';
 import { getSandboxAdapter, shutdownSandbox } from './sandbox/sandbox-adapter';
 import { SandboxSync } from './sandbox/sandbox-sync';
@@ -187,13 +183,7 @@ import { WSLBridge } from './sandbox/wsl-bridge';
 import { LimaBridge } from './sandbox/lima-bridge';
 import { getSandboxBootstrap } from './sandbox/sandbox-bootstrap';
 import type { MCPServerConfig } from './mcp/mcp-manager';
-import type {
-  ClientEvent,
-  ApiTestInput,
-  ApiTestResult,
-  DiagnosticInput,
-  ProviderModelInfo,
-} from '../renderer/types';
+import type { ClientEvent } from '../renderer/types';
 import { remoteManager, type AgentExecutor } from './remote/remote-manager';
 import { remoteConfigStore } from './remote/remote-config-store';
 import type { GatewayConfig, FeishuChannelConfig, SlackChannelConfig, ChannelType } from './remote/types';
@@ -2476,6 +2466,17 @@ registerMediaLibraryIpcHandlers({
   getMainWindow,
 });
 registerShellIpcHandlers({ revealFileInFolder });
+registerSessionExportIpcHandlers({
+  getSessionManager: () => sessionManager,
+  getSessionExportService: () => sessionExportService,
+});
+registerConfigIpcHandlers({
+  getEngineAdapter: () => engineAdapter,
+  getSessionManager: () => sessionManager,
+  getCurrentWorkingDir: getWorkingDir,
+  getConfigExportService: () => configExportService,
+  sendToRenderer,
+});
 
 // ── Workspace IPC handlers ────────────────────────────────────────────
 ipcMain.handle('workspace.readDir', async (_event, dirPath: string) => {
@@ -2882,152 +2883,7 @@ ipcMain.handle('studio.exportZip', async (_event, { root }: { root: string }) =>
   }
 });
 
-// Bulk session prune (Hermes parity): preview matches + age span, then
-// archive them in one pass. Pinned/archived/active sessions never match.
-ipcMain.handle(
-  'session.prunePreview',
-  async (_event, filter: { olderThanDays?: number; titleMatch?: string; excludeId?: string }) => {
-    const { previewPrune } = await import('../shared/session-prune');
-    if (!sessionManager) return { matches: [], ageSpan: null };
-    const sessions = sessionManager
-      .listSessions()
-      .filter((s) => s.id !== filter.excludeId)
-      .map((s) => ({ id: s.id, title: s.title, pinned: s.pinned, archived: s.archived, updatedAt: s.updatedAt }));
-    const preview = previewPrune(sessions, filter, Date.now());
-    return {
-      matches: preview.matches.map((m) => ({ id: m.id, title: m.title ?? '', updatedAt: m.updatedAt })),
-      ageSpan: preview.ageSpan,
-    };
-  }
-);
-
-ipcMain.handle('session.pruneApply', async (_event, { ids }: { ids: string[] }) => {
-  if (!sessionManager) return { ok: false, archived: 0 };
-  let archived = 0;
-  for (const id of ids) {
-    if (sessionManager.updateSessionSettings(id, { archived: true })) archived += 1;
-  }
-  return { ok: true, archived };
-});
-
-ipcMain.handle('session.export', async (_event, sessionId: string, format: 'md' | 'json') => {
-  try {
-    if (!sessionManager) return null;
-    const messages = (
-      sessionManager as unknown as { getMessages?: (id: string) => unknown[] }
-    ).getMessages?.(sessionId);
-    return { messages, format };
-  } catch {
-    return null;
-  }
-});
-
-// Phase 2 step 16: enhanced session export with format/redaction options
-ipcMain.handle(
-  'session.exportFull',
-  async (
-    _event,
-    sessionId: string,
-    options: {
-      format: 'markdown' | 'json' | 'html';
-      redactSecrets?: boolean;
-      includeCheckpoints?: boolean;
-    }
-  ) => {
-    if (!sessionExportService) {
-      return { success: false, content: '', filename: '', error: 'Export service unavailable' };
-    }
-    return sessionExportService.exportSession(sessionId, options);
-  }
-);
-
 registerWorkflowServiceIpcHandlers();
-
-// Export a conversation as PDF: render the standalone HTML export in an
-// offscreen window and print it (native Save-As).
-ipcMain.handle('session.exportPdf', async (_event, sessionId: string) => {
-  try {
-    if (!sessionManager) return { success: false, error: 'Session manager unavailable' };
-    const session = sessionManager.listSessions().find((sess) => sess.id === sessionId);
-    const rawMessages = sessionManager.getMessages(sessionId);
-    const { buildConversationPdfHtml } = await import('./session/conversation-pdf-template');
-    const pdfMessages = rawMessages
-      .filter((message) => message.role === 'user' || message.role === 'assistant')
-      .map((message) => ({
-        role: message.role,
-        timestamp: message.timestamp,
-        text: (Array.isArray(message.content) ? message.content : [])
-          .filter((block): block is { type: 'text'; text: string } => (block as { type?: string }).type === 'text')
-          .map((block) => block.text)
-          .join('\n\n'),
-      }))
-      .filter((message) => message.text.trim().length > 0);
-    const htmlContent = buildConversationPdfHtml({
-      title: session?.title || 'Conversation',
-      model: session?.model,
-      exportedAt: new Date(),
-      messages: pdfMessages,
-    });
-    const win = getMainWindow();
-    const safeName = (session?.title || 'conversation').replace(/[^\w\u00C0-\u017F -]+/g, '').trim().slice(0, 60) || 'conversation';
-    const dialogResult = win
-      ? await dialog.showSaveDialog(win, {
-          title: 'Exporter la conversation en PDF',
-          defaultPath: `${safeName}.pdf`,
-          filters: [{ name: 'PDF', extensions: ['pdf'] }],
-        })
-      : await dialog.showSaveDialog({ title: 'Exporter la conversation en PDF', defaultPath: 'conversation.pdf' });
-    if (dialogResult.canceled || !dialogResult.filePath) return { success: false, canceled: true };
-    const offscreen = new BrowserWindow({ show: false, webPreferences: { sandbox: true } });
-    try {
-      await offscreen.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(htmlContent));
-      const pdf = await offscreen.webContents.printToPDF({ printBackground: true, margins: { marginType: 'default' } });
-      const fsp = await import('fs/promises');
-      await fsp.writeFile(dialogResult.filePath, pdf);
-    } finally {
-      offscreen.destroy();
-    }
-    return { success: true, savedTo: dialogResult.filePath };
-  } catch (err) {
-    logWarn('[session.exportPdf] failed:', err);
-    return { success: false, error: String(err) };
-  }
-});
-
-ipcMain.handle(
-  'session.exportToFile',
-  async (
-    _event,
-    sessionId: string,
-    options: {
-      format: 'markdown' | 'json' | 'html';
-      redactSecrets?: boolean;
-      includeCheckpoints?: boolean;
-    }
-  ) => {
-    if (!sessionExportService) {
-      return { success: false, error: 'Export service unavailable' };
-    }
-    const result = sessionExportService.exportSession(sessionId, options);
-    if (!result.success) return { success: false, error: result.error };
-    const dialogResult = await dialog.showSaveDialog({
-      title: 'Export session',
-      defaultPath: result.filename,
-      filters: [
-        options.format === 'markdown'
-          ? { name: 'Markdown', extensions: ['md'] }
-          : options.format === 'html'
-            ? { name: 'HTML', extensions: ['html'] }
-            : { name: 'JSON', extensions: ['json'] },
-      ],
-    });
-    if (dialogResult.canceled || !dialogResult.filePath) {
-      return { success: false, error: 'Cancelled' };
-    }
-    const writeResult = sessionExportService.saveToFile(dialogResult.filePath, result.content);
-    return { success: writeResult.success, error: writeResult.error, path: dialogResult.filePath };
-  }
-);
 
 ipcMain.handle('system.getTheme', () => {
   try {
@@ -3059,243 +2915,6 @@ ipcMain.handle('dialog.selectFiles', async () => {
   }
 
   return result.filePaths;
-});
-
-// Config IPC handlers
-ipcMain.handle('config.get', () => {
-  try {
-    return configStore.getAllRedacted();
-  } catch (error) {
-    logError('[Config] Error getting config:', error);
-    return {};
-  }
-});
-
-ipcMain.handle('config.getPresets', () => {
-  try {
-    return getPiAiModelPresets();
-  } catch (error) {
-    logError('[Config] Error getting presets:', error);
-    return [];
-  }
-});
-
-const buildAgentRuntimeSignature = (config: AppConfig): string =>
-  JSON.stringify({
-    provider: config.provider,
-    apiKey: config.apiKey,
-    baseUrl: config.baseUrl,
-    customProtocol: config.customProtocol,
-    model: config.model,
-    enableThinking: config.enableThinking,
-  });
-
-const syncConfigAfterMutation = async (previousConfig: AppConfig) => {
-  // Mark as configured if any config set has usable credentials
-  configStore.set('isConfigured', configStore.hasAnyUsableCredentials());
-
-  // Apply to environment
-  configStore.applyToEnv();
-
-  const updatedConfig = configStore.getAll();
-  const shouldReloadRunner =
-    buildAgentRuntimeSignature(previousConfig) !== buildAgentRuntimeSignature(updatedConfig);
-  const shouldReloadSandbox = previousConfig.sandboxEnabled !== updatedConfig.sandboxEnabled;
-
-  if (shouldReloadRunner && engineAdapter?.updateConfig) {
-    const runtimeConfig = resolveEngineRuntimeConfig(updatedConfig);
-    engineAdapter.updateConfig({
-      apiKey: runtimeConfig.apiKey || process.env.GROK_API_KEY || '',
-      baseURL: runtimeConfig.baseURL || process.env.GROK_BASE_URL,
-      model: runtimeConfig.model,
-      workingDirectory: currentWorkingDir || process.cwd(),
-    });
-  }
-
-  // Hot-swap the reasoning/thinking level WITHOUT a runner reload — the engine
-  // adapter updates the global extended-thinking budget (read per-turn by the
-  // OpenAI-compat/Grok/Ollama providers) and the Gemini default on live agents.
-  if (
-    previousConfig.thinkingLevel !== updatedConfig.thinkingLevel &&
-    engineAdapter?.setThinkingLevel
-  ) {
-    await engineAdapter
-      .setThinkingLevel(updatedConfig.thinkingLevel)
-      .catch((err) => logError('[Config] thinkingLevel hot-swap failed:', err));
-  }
-
-  if (sessionManager) {
-    if (shouldReloadRunner) {
-      sessionManager.reloadConfig();
-    }
-    if (shouldReloadSandbox) {
-      await sessionManager
-        .reloadSandbox()
-        .catch((err) => logError('[Config] Sandbox reload failed:', err));
-    }
-    if (shouldReloadRunner || shouldReloadSandbox) {
-      log(
-        '[Config] Session manager config synced:',
-        JSON.stringify({ runnerReloaded: shouldReloadRunner, sandboxReloaded: shouldReloadSandbox })
-      );
-    }
-  }
-
-  // Notify renderer of config update
-  const isConfigured = configStore.isConfigured();
-  sendToRenderer({
-    type: 'config.status',
-    payload: {
-      isConfigured,
-      config: configStore.getAllRedacted(),
-    },
-  });
-  log('[Config] Notified renderer of config update, isConfigured:', isConfigured);
-  return configStore.getAllRedacted();
-};
-
-ipcMain.handle('config.save', async (_event, newConfig: Partial<AppConfig>) => {
-  log('[Config] Saving config fields:', Object.keys(newConfig));
-
-  const previousConfig = configStore.getAll();
-  // Update config
-  configStore.update(newConfig);
-  const updatedConfig = await syncConfigAfterMutation(previousConfig);
-
-  return { success: true, config: updatedConfig };
-});
-
-ipcMain.handle('config.createSet', async (_event, payload: CreateConfigSetPayload) => {
-  log('[Config] Creating config set:', payload);
-  const previousConfig = configStore.getAll();
-  configStore.createSet(payload);
-  const updatedConfig = await syncConfigAfterMutation(previousConfig);
-  return { success: true, config: updatedConfig };
-});
-
-ipcMain.handle('config.renameSet', async (_event, payload: { id: string; name: string }) => {
-  log('[Config] Renaming config set:', payload);
-  const previousConfig = configStore.getAll();
-  configStore.renameSet(payload);
-  const updatedConfig = await syncConfigAfterMutation(previousConfig);
-  return { success: true, config: updatedConfig };
-});
-
-ipcMain.handle('config.deleteSet', async (_event, payload: { id: string }) => {
-  log('[Config] Deleting config set:', payload);
-  const previousConfig = configStore.getAll();
-  configStore.deleteSet(payload);
-  const updatedConfig = await syncConfigAfterMutation(previousConfig);
-  return { success: true, config: updatedConfig };
-});
-
-ipcMain.handle('config.switchSet', async (_event, payload: { id: string }) => {
-  log('[Config] Switching config set:', payload);
-  const previousConfig = configStore.getAll();
-  configStore.switchSet(payload);
-  const updatedConfig = await syncConfigAfterMutation(previousConfig);
-  return { success: true, config: updatedConfig };
-});
-
-ipcMain.handle('config.isConfigured', () => {
-  try {
-    return configStore.isConfigured();
-  } catch (error) {
-    logError('[Config] Error checking configured status:', error);
-    return false;
-  }
-});
-
-ipcMain.handle('config.test', async (_event, payload: ApiTestInput): Promise<ApiTestResult> => {
-  try {
-    return await runConfigApiTest(payload, configStore.getAll());
-  } catch (error) {
-    logError('[Config] API test failed:', error);
-    return {
-      ok: false,
-      errorType: 'unknown',
-      details: error instanceof Error ? error.message : String(error),
-    };
-  }
-});
-
-ipcMain.handle(
-  'config.listModels',
-  async (
-    _event,
-    payload: { provider: AppConfig['provider']; apiKey?: string; baseUrl?: string }
-  ): Promise<ProviderModelInfo[]> => {
-    if (payload.provider === 'ollama') {
-      return listOllamaModels(payload);
-    }
-    if (payload.provider === 'lmstudio') {
-      return listLmStudioModels(payload);
-    }
-    return [];
-  }
-);
-
-ipcMain.handle('config.diagnose', async (_event, payload: DiagnosticInput) => {
-  try {
-    const { runDiagnostics } = await import('./config/api-diagnostics');
-    const storedConfig = configStore.getAll();
-    return await runDiagnostics({
-      ...payload,
-      apiKey: payload.apiKey?.trim() || storedConfig.apiKey,
-    });
-  } catch (error) {
-    logError('[Config] Error running diagnostics:', error);
-    throw error;
-  }
-});
-
-ipcMain.handle('config.discover-local', async (_event, payload?: { baseUrl?: string }) => {
-  try {
-    const { discoverLocalOllama } = await import('./config/api-diagnostics');
-    return await discoverLocalOllama(payload);
-  } catch (error) {
-    logError('[Config] Error discovering local services:', error);
-    return [];
-  }
-});
-
-ipcMain.handle('config.discover-lmstudio-local', async (_event, payload?: { baseUrl?: string }) => {
-  try {
-    const { discoverLocalLmStudio } = await import('./config/api-diagnostics');
-    return await discoverLocalLmStudio(payload);
-  } catch (error) {
-    logError('[Config] Error discovering local LM Studio:', error);
-    return {
-      available: false,
-      baseUrl: payload?.baseUrl || 'http://localhost:1234/v1',
-      status: 'unavailable',
-    };
-  }
-});
-
-ipcMain.handle('config.model-inventory', async (_event, payload?: { includeTailnetPeers?: boolean }) => {
-  try {
-    // Load the core module dynamically (the pattern used by every other main→core access) rather
-    // than a static `@codebuddy/*` import — a static value import bundles core TS into the main
-    // build and rollup can't resolve the aliased `.js`→`.ts`, which broke `vite build` entirely.
-    const mod = await loadCoreModule<typeof import('@codebuddy/fleet/model-inventory.js')>(
-      'fleet/model-inventory.js',
-    );
-    if (!mod) {
-      return { updatedAt: new Date().toISOString(), machineLabel: '', entries: [] };
-    }
-    return await mod.buildModelInventory({
-      includeTailnetPeers: payload?.includeTailnetPeers ?? true,
-      forceCapabilityRefresh: true,
-    });
-  } catch (error) {
-    logError('[Config] Error building model inventory:', error);
-    return {
-      updatedAt: new Date().toISOString(),
-      machineLabel: '',
-      entries: [],
-    };
-  }
 });
 
 // Evolution: list the code variants (versions of Code Buddy) the recursive self-improvement loop
@@ -3392,68 +3011,6 @@ ipcMain.handle(
   }
 );
 
-// Config export/import — Claude Cowork parity Phase 2 step 19
-ipcMain.handle('config.export', async () => {
-  if (!configExportService) {
-    return { success: false, error: 'Export service unavailable' };
-  }
-  try {
-    const bundle = configExportService.exportBundle();
-    return { success: true, bundle };
-  } catch (err) {
-    logError('[config.export] failed:', err);
-    return { success: false, error: (err as Error).message };
-  }
-});
-
-ipcMain.handle('config.exportToFile', async () => {
-  if (!configExportService) {
-    return { success: false, error: 'Export service unavailable' };
-  }
-  const dialogResult = await dialog.showSaveDialog({
-    title: 'Export settings',
-    defaultPath: `cowork-settings-${new Date().toISOString().slice(0, 10)}.json`,
-    filters: [{ name: 'JSON', extensions: ['json'] }],
-  });
-  if (dialogResult.canceled || !dialogResult.filePath) {
-    return { success: false, error: 'Cancelled' };
-  }
-  return configExportService.saveToFile(dialogResult.filePath);
-});
-
-ipcMain.handle('config.importFromFile', async () => {
-  if (!configExportService) {
-    return { success: false, error: 'Export service unavailable' };
-  }
-  const dialogResult = await dialog.showOpenDialog({
-    title: 'Import settings',
-    filters: [{ name: 'JSON', extensions: ['json'] }],
-    properties: ['openFile'],
-  });
-  if (dialogResult.canceled || dialogResult.filePaths.length === 0) {
-    return { success: false, error: 'Cancelled' };
-  }
-  const loaded = configExportService.loadFromFile(dialogResult.filePaths[0]);
-  if (!loaded.success || !loaded.bundle) {
-    return { success: false, error: loaded.error };
-  }
-  const preview = configExportService.diffBundle(loaded.bundle);
-  return { success: true, preview };
-});
-
-ipcMain.handle(
-  'config.applyImport',
-  async (_event, bundle: Record<string, unknown>, strategy: 'skip' | 'overwrite') => {
-    if (!configExportService) {
-      return {
-        success: false,
-        imported: { projects: 0, mcpServers: 0, apiUpdated: false },
-        errors: ['Export service unavailable'],
-      };
-    }
-    return configExportService.importBundle(bundle as never, strategy);
-  }
-);
 
 // Activity feed — Claude Cowork parity Phase 2 step 18
 ipcMain.handle('activity.recent', async (_event, limit?: number, projectId?: string) => {
