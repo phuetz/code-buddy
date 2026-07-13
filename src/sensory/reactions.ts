@@ -22,6 +22,12 @@ export interface Perception {
   payload?: unknown;
 }
 
+/** Speech can initiate a real agent turn, so it must never be wired on an
+ * unauthenticated sensory bridge. Keep this invariant pure and easy to test. */
+export function shouldWireSpeechReaction(env: { speech?: string; token?: string }): boolean {
+  return env.speech === 'true' && Boolean(env.token);
+}
+
 export function perceptionOf(evt: BaseEvent): Perception {
   const meta = (evt.metadata as Perception | undefined) ?? {};
   return { ...meta, receivedAt: evt.timestamp };
