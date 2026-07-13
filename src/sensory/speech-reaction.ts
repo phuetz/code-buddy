@@ -1064,14 +1064,54 @@ export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => v
   let activeWav: string | undefined;
   let disposed = false;
   let liveSeq = 0; // unique dedup key for live-mic finals (there's no WAV to key on)
-  let pendingSpeech: {
+  type SpeechJob = {
     p: ReturnType<typeof perceptionOf>;
     wav: string;
     presetText?: string;
-  } | null = null;
+  };
+  let pendingSpeech: SpeechJob | null = null;
+
+  const recordSupersededWav = (job: SpeechJob): void => {
+    void import('../companion/percepts.js')
+      .then(({ recordCompanionPercept }) =>
+        recordCompanionPercept(
+          {
+            modality: 'hearing',
+            source: 'sensory_speech_reaction',
+            summary: 'Speech captured but superseded before transcription',
+            confidence: 0.2,
+            payload: { wav: job.wav, responded: false, superseded: true },
+            tags: ['speech', 'superseded'],
+          },
+          options.cwd ? { cwd: options.cwd } : {},
+        ),
+      )
+      .catch((err: unknown) => {
+        logger.debug(
+          `[speech] superseded percept failed: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      });
+  };
+
+  const queuePendingSpeech = (job: SpeechJob): void => {
+    const superseded = pendingSpeech;
+    if (superseded?.presetText !== undefined && job.presetText !== undefined) {
+      pendingSpeech = {
+        ...job,
+        presetText: `${superseded.presetText.trim()} ${job.presetText.trim()}`
+          .replace(/\s+/g, ' ')
+          .trim(),
+      };
+      return;
+    }
+    pendingSpeech = job;
+    if (superseded && superseded.presetText === undefined && superseded.wav !== job.wav) {
+      recordSupersededWav(superseded);
+    }
+  };
 
   const startSpeechJob = (
-    job: { p: ReturnType<typeof perceptionOf>; wav: string; presetText?: string },
+    job: SpeechJob,
     bypassDebounce = false
   ): void => {
     const t = now();
@@ -1262,7 +1302,7 @@ export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => v
       }
       const key = `live:${liveSeq++}`;
       if (inFlight) {
-        if (key !== activeWav) pendingSpeech = { p, wav: key, presetText: text };
+        if (key !== activeWav) queuePendingSpeech({ p, wav: key, presetText: text });
         return;
       }
       startSpeechJob({ p, wav: key, presetText: text });
@@ -1275,7 +1315,7 @@ export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => v
 
     if (inFlight) {
       if (wav !== activeWav) {
-        pendingSpeech = { p, wav };
+        queuePendingSpeech({ p, wav });
       }
       return;
     }

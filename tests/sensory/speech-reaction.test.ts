@@ -478,6 +478,37 @@ describe('speech reaction — live transcript_final (buddy-sense live-audio)', (
     }
   });
 
+  it('merges live fragments superseded while a turn is in flight', async () => {
+    const tmp = await mkdtemp(path.join(os.tmpdir(), 'speech-live-'));
+    let releaseFirst!: () => void;
+    const firstBlocked = new Promise<void>((resolve) => (releaseFirst = resolve));
+    const heard: string[] = [];
+    const unwire = wireSpeechReaction({
+      debounceMs: 0,
+      cwd: tmp,
+      onHeard: async (text) => {
+        heard.push(text);
+        if (heard.length === 1) await firstBlocked;
+      },
+    });
+    try {
+      transcriptFinal('première demande');
+      await tick();
+      transcriptFinal('deuxième fragment');
+      transcriptFinal('et troisième fragment');
+      releaseFirst();
+      await tick();
+      await tick();
+
+      expect(heard).toEqual([
+        'première demande',
+        'deuxième fragment et troisième fragment',
+      ]);
+    } finally {
+      unwire();
+    }
+  });
+
   it('ignores an empty live transcript', async () => {
     const tmp = await mkdtemp(path.join(os.tmpdir(), 'speech-live-'));
     let heard = 0;
