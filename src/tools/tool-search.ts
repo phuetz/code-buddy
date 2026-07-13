@@ -79,15 +79,15 @@ export class BM25Index {
 
     // Compute IDF for all terms
     const N = this.documents.length;
-    const allTerms = new Set<string>();
+    const documentFrequencies = new Map<string, number>();
     for (const doc of this.documents) {
       for (const token of doc.tf.keys()) {
-        allTerms.add(token);
+        documentFrequencies.set(token, (documentFrequencies.get(token) ?? 0) + 1);
       }
     }
 
-    for (const term of allTerms) {
-      const df = this.documents.filter(d => d.tf.has(term)).length;
+    this.idf.clear();
+    for (const [term, df] of documentFrequencies) {
       this.idf.set(term, Math.log((N - df + 0.5) / (df + 0.5) + 1));
     }
   }
@@ -127,13 +127,31 @@ export class BM25Index {
 
 /** Singleton index */
 let _index: BM25Index | null = null;
+let _indexSignature: string | null = null;
+
+function getIndexSignature(
+  tools: Array<{ name: string; description: string; keywords?: string[] }>,
+): string {
+  return tools
+    .map(tool => [
+      tool.name,
+      tool.description,
+      [...(tool.keywords ?? [])].sort().join('\u0001'),
+    ].join('\u0002'))
+    .sort()
+    .join('\u0003');
+}
 
 /**
  * Initialize the BM25 index with available tools.
  */
 export function initToolSearchIndex(tools: Array<{ name: string; description: string; keywords?: string[] }>): void {
+  const signature = getIndexSignature(tools);
+  if (_index && _indexSignature === signature) return;
+
   _index = new BM25Index();
   _index.index(tools);
+  _indexSignature = signature;
 }
 
 /**
