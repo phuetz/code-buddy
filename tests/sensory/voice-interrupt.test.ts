@@ -269,6 +269,24 @@ describe('voice interrupt — barge-in capability', () => {
     }
   });
 
+  it('does not synthesize a sayNow whose signal is already aborted', async () => {
+    const controller = new AbortController();
+    controller.abort();
+    let synthCalls = 0;
+
+    await sayNow('Annonce annulée.', {
+      signal: controller.signal,
+      synth: async () => {
+        synthCalls += 1;
+        return '/tmp/cancelled.wav';
+      },
+      play: async () => {},
+    });
+
+    expect(synthCalls).toBe(0);
+    expect(isSpeaking()).toBe(false);
+  });
+
   it('never-throws: interrupt() with nothing in flight is a clean no-op, and is idempotent', async () => {
     const onHeard = makeVoiceReply({
       replyFn: async () => 'ok',

@@ -859,7 +859,10 @@ export async function sayNow(
   }
   const controller = new AbortController();
   const abortLocal = (): void => controller.abort();
-  const interruptFromSignal = (): void => interruptSpeaking();
+  const interruptFromSignal = (): void => {
+    abortLocal();
+    interruptSpeaking();
+  };
   if (options.signal?.aborted) interruptFromSignal();
   else options.signal?.addEventListener('abort', interruptFromSignal, { once: true });
   const unregisterKiller = registerActivePlayKiller(abortLocal);
@@ -875,6 +878,7 @@ export async function sayNow(
   }
   // 1. Home speakers (best-effort — a missing audio device must not block the phone push).
   try {
+    if (controller.signal.aborted) return;
     const synth = options.synth ?? makeDefaultSynth(voice, options.rootDir);
     const play = options.play ?? defaultPlay;
     const wav = await synth(t);
