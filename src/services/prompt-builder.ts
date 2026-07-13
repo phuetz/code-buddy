@@ -81,6 +81,8 @@ const ALL_BLOCKS: Required<BuildOptions> = {
   includeVariation: true,
 };
 
+const CODING_STYLE_CACHE_TTL_MS = 10 * 60 * 1000;
+
 const EXTERNAL_PROMPT_MANAGER_TOOLS = [
   'view_file',
   'str_replace_editor',
@@ -120,6 +122,7 @@ export class PromptBuilder {
    * re-injected when a tool later touches a file in the same tree.
    */
   private contextRegistry: ContextRegistry | null = null;
+  private codingStyleCache: { cwd: string; styleBlock: string; analyzedAt: number } | null = null;
 
   constructor(
     private config: PromptBuilderConfig,
@@ -690,15 +693,25 @@ Output formatting discipline:
       // Inject auto-detected coding style conventions
       if (gates.includeCodingStyle) {
         try {
-          const { getCodingStyleAnalyzer } = await import('../memory/coding-style-analyzer.js');
-          const analyzer = getCodingStyleAnalyzer();
-          const profile = await analyzer.analyzeDirectory(this.config.cwd);
-          if (profile) {
-            const styleBlock = analyzer.buildPromptSnippet(profile);
-            if (styleBlock) {
-              systemPrompt += `\n\n${styleBlock}`;
-              logger.debug('Injected coding style conventions into system prompt');
-            }
+          const now = Date.now();
+          const cached = this.codingStyleCache;
+          let styleBlock: string;
+          if (
+            cached &&
+            cached.cwd === this.config.cwd &&
+            now - cached.analyzedAt < CODING_STYLE_CACHE_TTL_MS
+          ) {
+            styleBlock = cached.styleBlock;
+          } else {
+            const { getCodingStyleAnalyzer } = await import('../memory/coding-style-analyzer.js');
+            const analyzer = getCodingStyleAnalyzer();
+            const profile = await analyzer.analyzeDirectory(this.config.cwd);
+            styleBlock = profile ? analyzer.buildPromptSnippet(profile) : '';
+            this.codingStyleCache = { cwd: this.config.cwd, styleBlock, analyzedAt: now };
+          }
+          if (styleBlock) {
+            systemPrompt += `\n\n${styleBlock}`;
+            logger.debug('Injected coding style conventions into system prompt');
           }
         } catch { /* coding-style module optional */ }
       }
