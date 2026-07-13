@@ -1062,6 +1062,11 @@ export class AgentExecutor {
 
           // Buffer for streaming adapter chunks (cannot yield from inside a callback)
           const streamChunkBuffer: Array<{ type: "tool_stream"; toolStreamData: { toolCallId: string; toolName: string; delta: string } }> = [];
+          // JIT context must persist into the next provider request, but only
+          // after every result in this assistant tool-call batch. Inserting a
+          // system message between sibling tool results violates provider
+          // transcript ordering requirements.
+          const jitContextMessages: CodeBuddyMessage[] = [];
 
           for (const toolCall of streamToolCallsToExecute) {
             if (abortController?.signal.aborted) {
@@ -1255,9 +1260,7 @@ export class AgentExecutor {
             // --- JIT context discovery: load subdirectory context files ---
             // Décision #2 du plan task #5 — promu du sequential vers streaming
             // pour parité d'enrichissement après chaque tool qui touche un path.
-            for (const msg of await runJitContextDiscovery(toolCall)) {
-              preparedMessages.push(msg);
-            }
+            jitContextMessages.push(...await runJitContextDiscovery(toolCall));
 
             // Check abort after tool execution completes
             if (abortController?.signal.aborted) {
@@ -1410,6 +1413,8 @@ export class AgentExecutor {
               await processYieldSignal(streamYieldChildId, messages);
             }
           }
+
+          messages.push(...jitContextMessages);
 
           if (terminateDetectedStreaming) break;
 

@@ -65,6 +65,7 @@ jest.mock('../../../src/agent/execution/context-pipeline.js', async () => {
     ...actual,
     injectInitialContext: jest.fn(actual.injectInitialContext),
     injectNextRoundContext: jest.fn(actual.injectNextRoundContext),
+    runJitContextDiscovery: jest.fn(actual.runJitContextDiscovery),
   };
 });
 
@@ -72,6 +73,7 @@ jest.mock('../../../src/agent/execution/context-pipeline.js', async () => {
 import {
   injectInitialContext as injectInitialContextMock,
   injectNextRoundContext as injectNextRoundContextMock,
+  runJitContextDiscovery as runJitContextDiscoveryMock,
 } from '../../../src/agent/execution/context-pipeline.js';
 
 // ---------------------------------------------------------------------------
@@ -546,6 +548,40 @@ describe('AgentExecutor', () => {
       const toolResults = entries.filter(e => e.type === 'tool_result');
       expect(toolResults.length).toBe(2);
       expect(deps.toolHandler.executeTool).toHaveBeenCalledTimes(2);
+    });
+
+    it('should persist JIT context into the next request after all sibling tool results', async () => {
+      const toolCall1 = makeToolCall('read_file', { path: '/project/a.ts' }, 'jit_1');
+      const toolCall2 = makeToolCall('read_file', { path: '/project/b.ts' }, 'jit_2');
+      setupLLMFlow(deps, [
+        { content: 'Reading files...', tool_calls: [toolCall1, toolCall2] },
+        { content: 'Done.' },
+      ]);
+      const jitMock = runJitContextDiscoveryMock as unknown as jest.Mock;
+      jitMock.mockImplementation(async (toolCall: ReturnType<typeof makeToolCall>) => [{
+        role: 'system',
+        content: `JIT_CONTEXT:${toolCall.id}`,
+      }]);
+
+      await executor.processUserMessage('Read both files', [], []);
+
+      const providerCalls = (deps.client.chatStream as jest.Mock).mock.calls;
+      const firstRequest = providerCalls[0][0] as CodeBuddyMessage[];
+      const secondRequest = providerCalls[1][0] as CodeBuddyMessage[];
+      expect(firstRequest.some(message => String(message.content).includes('JIT_CONTEXT:'))).toBe(false);
+      expect(secondRequest.some(message => message.content === 'JIT_CONTEXT:jit_1')).toBe(true);
+      expect(secondRequest.some(message => message.content === 'JIT_CONTEXT:jit_2')).toBe(true);
+
+      const assistantIndex = secondRequest.findIndex(message =>
+        message.role === 'assistant' && message.tool_calls?.some(call => call.id === 'jit_1'));
+      const firstToolIndex = secondRequest.findIndex(message =>
+        message.role === 'tool' && message.tool_call_id === 'jit_1');
+      const secondToolIndex = secondRequest.findIndex(message =>
+        message.role === 'tool' && message.tool_call_id === 'jit_2');
+      const firstJitIndex = secondRequest.findIndex(message => message.content === 'JIT_CONTEXT:jit_1');
+      expect(assistantIndex).toBeLessThan(firstToolIndex);
+      expect(firstToolIndex).toBeLessThan(secondToolIndex);
+      expect(secondToolIndex).toBeLessThan(firstJitIndex);
     });
 
     it('should handle multi-round tool execution', async () => {
