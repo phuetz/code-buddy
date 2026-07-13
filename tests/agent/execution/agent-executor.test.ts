@@ -504,6 +504,31 @@ describe('AgentExecutor', () => {
       expect(deps.contextManager.prepareMessages).toHaveBeenCalled();
     });
 
+    it('should compact oversized tool results with the model-aware threshold', async () => {
+      (deps.client.getCurrentModel as jest.Mock).mockReturnValue('qwen2.5-coder:7b');
+      const toolCalls = [
+        makeToolCall('read_file', { path: '/tmp/a.ts' }, 'compact_1'),
+        makeToolCall('read_file', { path: '/tmp/b.ts' }, 'compact_2'),
+        makeToolCall('read_file', { path: '/tmp/c.ts' }, 'compact_3'),
+      ];
+      const messages: CodeBuddyMessage[] = [
+        { role: 'assistant', content: '', tool_calls: toolCalls },
+        ...toolCalls.map((toolCall, index) => ({
+          role: 'tool' as const,
+          tool_call_id: toolCall.id,
+          content: `/tmp/result-${index}.ts\n${'x'.repeat(15_000)}`,
+        })),
+      ];
+
+      await executor.processUserMessage('Summarize the results', [], messages);
+
+      const providerMessages = (deps.client.chatStream as jest.Mock).mock.calls[0][0] as CodeBuddyMessage[];
+      expect(providerMessages.some(message =>
+        message.role === 'tool' && String(message.content).includes('[Content compressed'))).toBe(true);
+      expect(messages.filter(message => message.role === 'tool').every(message =>
+        String(message.content).length > 15_000)).toBe(true);
+    });
+
     it('should record session cost', async () => {
       const history: ChatEntry[] = [];
       const messages: CodeBuddyMessage[] = [];

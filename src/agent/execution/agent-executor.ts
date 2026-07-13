@@ -392,7 +392,6 @@ export class AgentExecutor {
   private getAdaptiveCompactionThreshold(): number {
     try {
       const modelName = this.deps.client.getCurrentModel();
-      const { getModelToolConfig } = require('../../config/model-tools.js');
       const config = getModelToolConfig(modelName);
       const contextChars = (config.contextWindow ?? 128_000) * 4; // ~4 chars/token
       // Allocate 30% of context window for tool results
@@ -858,10 +857,11 @@ export class AgentExecutor {
 
         const preparedMessages = prepareTurnMessages(this.deps.contextManager, messages);
         preparedMessages.push(...contextBlocks);
+        const providerMessages = this.compactLargeToolResults(preparedMessages);
 
         // Context warning — always check regardless of pipeline state
         {
-          const contextWarning = this.deps.contextManager.shouldWarn(preparedMessages);
+          const contextWarning = this.deps.contextManager.shouldWarn(providerMessages);
           if (contextWarning.warn) {
             logger.warn(contextWarning.message);
             yield { type: "content", content: `\n${contextWarning.message}\n` };
@@ -871,7 +871,7 @@ export class AgentExecutor {
               const { getPrecompactionFlusher } = await import('../../context/precompaction-flush.js');
               const flusher = getPrecompactionFlusher();
               await flusher.flush(
-                preparedMessages.filter(m => m.role !== 'system').map(m => ({
+                providerMessages.filter(m => m.role !== 'system').map(m => ({
                   role: m.role as 'user' | 'assistant',
                   content: typeof m.content === 'string' ? m.content : '',
                 })),
@@ -890,7 +890,7 @@ export class AgentExecutor {
         }
 
         const roundInputTokens = this.deps.tokenCounter.countMessageTokens(
-          preparedMessages as Parameters<typeof this.deps.tokenCounter.countMessageTokens>[0]
+          providerMessages as Parameters<typeof this.deps.tokenCounter.countMessageTokens>[0]
         );
 
         // Refuse a request whose input alone would cross the session budget.
@@ -913,7 +913,7 @@ export class AgentExecutor {
         turnInputTokens += roundInputTokens;
 
         const stream = this.deps.client.chatStream(
-          preparedMessages,
+          providerMessages,
           tools,
           undefined,
           this.config.isGrokModel() && this.deps.toolSelectionStrategy.shouldUseSearchFor(message)
