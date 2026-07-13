@@ -85,17 +85,23 @@ vi.mock('../../src/agent/codebuddy-agent.js', () => {
   return { CodeBuddyAgent: FakeCodeBuddyAgent };
 });
 
-import { makeAgentReply } from '../../src/sensory/agent-reply.js';
+import {
+  makeAgentReply,
+  resetGroundedAgentRouteCache,
+} from '../../src/sensory/agent-reply.js';
 
 const SAVED_ENV = {
   agentModel: process.env.CODEBUDDY_SENSORY_SPEAK_AGENT_MODEL,
   localOnly: process.env.CODEBUDDY_SENSORY_SPEAK_LOCAL_ONLY,
+  routeTtl: process.env.CODEBUDDY_SENSORY_SPEAK_ROUTE_TTL_MS,
 };
 
 describe('agent-reply ACT model routing', () => {
   beforeEach(() => {
+    resetGroundedAgentRouteCache();
     delete process.env.CODEBUDDY_SENSORY_SPEAK_AGENT_MODEL;
     delete process.env.CODEBUDDY_SENSORY_SPEAK_LOCAL_ONLY;
+    delete process.env.CODEBUDDY_SENSORY_SPEAK_ROUTE_TTL_MS;
     routingState.candidates.length = 0;
     routingState.routes.length = 0;
     routingState.selectOptions.length = 0;
@@ -112,6 +118,11 @@ describe('agent-reply ACT model routing', () => {
       delete process.env.CODEBUDDY_SENSORY_SPEAK_LOCAL_ONLY;
     } else {
       process.env.CODEBUDDY_SENSORY_SPEAK_LOCAL_ONLY = SAVED_ENV.localOnly;
+    }
+    if (SAVED_ENV.routeTtl === undefined) {
+      delete process.env.CODEBUDDY_SENSORY_SPEAK_ROUTE_TTL_MS;
+    } else {
+      process.env.CODEBUDDY_SENSORY_SPEAK_ROUTE_TTL_MS = SAVED_ENV.routeTtl;
     }
   });
 
@@ -167,5 +178,25 @@ describe('agent-reply ACT model routing', () => {
         baseURL: 'http://127.0.0.1:11434/v1',
       },
     ]);
+  });
+
+  it('reuses the grounded route during the voice route TTL', async () => {
+    routingState.candidates.push({
+      provider: 'ollama',
+      model: 'qwen3:14b',
+      apiKey: 'ollama',
+      baseURL: 'http://127.0.0.1:11434/v1',
+      isLocal: true,
+      costInputUsdPerMtok: 0,
+      strengths: ['tool-calling'],
+    });
+
+    const reply = makeAgentReply({ summarize: async (output) => output });
+    await expect(reply('inspecte le dépôt')).resolves.toBe('Route prête.');
+    await expect(reply('lis le journal')).resolves.toBe('Route prête.');
+
+    expect(routingState.selectOptions).toHaveLength(1);
+    expect(routingState.routes).toHaveLength(2);
+    expect(routingState.routes[0]).toEqual(routingState.routes[1]);
   });
 });

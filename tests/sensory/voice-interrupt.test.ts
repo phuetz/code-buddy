@@ -8,6 +8,8 @@ import {
 } from '../../src/sensory/voice-loop.js';
 import { makeAgentReply } from '../../src/sensory/agent-reply.js';
 import { isSpeaking, _resetVoiceActivityForTests } from '../../src/sensory/voice-activity.js';
+import { wireSpeechReaction } from '../../src/sensory/speech-reaction.js';
+import { getGlobalEventBus } from '../../src/events/event-bus.js';
 
 /**
  * Barge-in foundation (Lot 1): `makeVoiceReply().interrupt()` must cancel the in-flight
@@ -207,6 +209,81 @@ describe('voice interrupt — barge-in capability', () => {
     await turn;
 
     expect(abortKillCount).toBe(1);
+    expect(isSpeaking()).toBe(false);
+  });
+
+  it('interrupts an active sayNow from a live "Lisa stop" transcript', async () => {
+    let markPlaying!: () => void;
+    const playing = new Promise<void>((resolve) => (markPlaying = resolve));
+    let playAborted = false;
+    const heard: string[] = [];
+    const unwire = wireSpeechReaction({
+      debounceMs: 0,
+      onHeard: (text) => heard.push(text),
+    });
+    const announcement = sayNow('Voici une annonce volontairement longue.', {
+      synth: async () => '/tmp/announcement.wav',
+      play: async (_wav, opts) =>
+        new Promise<void>((resolve) => {
+          markPlaying();
+          opts?.signal?.addEventListener(
+            'abort',
+            () => {
+              playAborted = true;
+              resolve();
+            },
+            { once: true },
+          );
+        }),
+    });
+
+    try {
+      await playing;
+      expect(isSpeaking()).toBe(true);
+      getGlobalEventBus().emit('sensory:perception', {
+        source: 'test',
+        metadata: {
+          modality: 'audio',
+          kind: 'transcript_final',
+          payload: { text: 'Lisa stop' },
+        },
+      });
+      await announcement;
+
+      expect(playAborted).toBe(true);
+      expect(isSpeaking()).toBe(false);
+      expect(heard).toEqual([]);
+
+      getGlobalEventBus().emit('sensory:perception', {
+        source: 'test',
+        metadata: {
+          modality: 'audio',
+          kind: 'transcript_final',
+          payload: { text: 'Lisa tu es là' },
+        },
+      });
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      expect(heard).toEqual(['Lisa tu es là']);
+    } finally {
+      unwire();
+    }
+  });
+
+  it('does not synthesize a sayNow whose signal is already aborted', async () => {
+    const controller = new AbortController();
+    controller.abort();
+    let synthCalls = 0;
+
+    await sayNow('Annonce annulée.', {
+      signal: controller.signal,
+      synth: async () => {
+        synthCalls += 1;
+        return '/tmp/cancelled.wav';
+      },
+      play: async () => {},
+    });
+
+    expect(synthCalls).toBe(0);
     expect(isSpeaking()).toBe(false);
   });
 

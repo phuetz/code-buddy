@@ -19,7 +19,8 @@ import type { ChildProcessWithoutNullStreams } from 'child_process';
 import type { Interface as ReadlineInterface } from 'readline';
 import { getGlobalEventBus } from '../events/event-bus.js';
 import { logger } from '../utils/logger.js';
-import { isSpeaking } from './voice-activity.js';
+import { interruptSpeaking, isSpeaking } from './voice-activity.js';
+import { normalizeVoiceInteractionText } from './voice-interactions.js';
 import type { BaseEvent } from '../events/types.js';
 import { perceptionOf } from './reactions.js';
 import {
@@ -50,6 +51,37 @@ export interface SpeechReactionOptions {
    * everything (today's behavior). See `respond-decider.ts`.
    */
   shouldRespond?: (text: string) => Promise<{ respond: boolean; reason: string }>;
+  /** Optional notification after a spoken stop command interrupts all active playback. */
+  onBargeIn?: (text: string) => void | Promise<void>;
+}
+
+/** A deliberately narrow stop-intent matcher: never treat a business command as barge-in. */
+export function isBargeInTranscript(text: string): boolean {
+  let normalized = normalizeVoiceInteractionText(text);
+  if (!normalized) return false;
+  const names = new Set(
+    ['lisa', 'buddy', 'code buddy', process.env.CODEBUDDY_ROBOT_NAME ?? '']
+      .map(normalizeVoiceInteractionText)
+      .filter(Boolean),
+  );
+  for (const name of names) {
+    if (normalized.startsWith(`${name} `)) normalized = normalized.slice(name.length + 1);
+    else if (normalized.endsWith(` ${name}`)) normalized = normalized.slice(0, -(name.length + 1));
+  }
+  return new Set([
+    'stop',
+    'stop maintenant',
+    'arrete',
+    'arrete toi',
+    'arrete maintenant',
+    'arrete de parler',
+    'tais toi',
+    'tais toi maintenant',
+    'silence',
+    'silence maintenant',
+    'chut',
+    'ca suffit',
+  ]).has(normalized);
 }
 
 function resolveSpeechPython(): string {
@@ -1032,14 +1064,54 @@ export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => v
   let activeWav: string | undefined;
   let disposed = false;
   let liveSeq = 0; // unique dedup key for live-mic finals (there's no WAV to key on)
-  let pendingSpeech: {
+  type SpeechJob = {
     p: ReturnType<typeof perceptionOf>;
     wav: string;
     presetText?: string;
-  } | null = null;
+  };
+  let pendingSpeech: SpeechJob | null = null;
+
+  const recordSupersededWav = (job: SpeechJob): void => {
+    void import('../companion/percepts.js')
+      .then(({ recordCompanionPercept }) =>
+        recordCompanionPercept(
+          {
+            modality: 'hearing',
+            source: 'sensory_speech_reaction',
+            summary: 'Speech captured but superseded before transcription',
+            confidence: 0.2,
+            payload: { wav: job.wav, responded: false, superseded: true },
+            tags: ['speech', 'superseded'],
+          },
+          options.cwd ? { cwd: options.cwd } : {},
+        ),
+      )
+      .catch((err: unknown) => {
+        logger.debug(
+          `[speech] superseded percept failed: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      });
+  };
+
+  const queuePendingSpeech = (job: SpeechJob): void => {
+    const superseded = pendingSpeech;
+    if (superseded?.presetText !== undefined && job.presetText !== undefined) {
+      pendingSpeech = {
+        ...job,
+        presetText: `${superseded.presetText.trim()} ${job.presetText.trim()}`
+          .replace(/\s+/g, ' ')
+          .trim(),
+      };
+      return;
+    }
+    pendingSpeech = job;
+    if (superseded && superseded.presetText === undefined && superseded.wav !== job.wav) {
+      recordSupersededWav(superseded);
+    }
+  };
 
   const startSpeechJob = (
-    job: { p: ReturnType<typeof perceptionOf>; wav: string; presetText?: string },
+    job: SpeechJob,
     bypassDebounce = false
   ): void => {
     const t = now();
@@ -1210,9 +1282,27 @@ export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => v
     if (p.kind === 'transcript_final') {
       const text = (p.payload as { text?: string } | undefined)?.text?.trim();
       if (!text) return;
+      if (isSpeaking(now()) && isBargeInTranscript(text)) {
+        interruptSpeaking();
+        try {
+          const notified = options.onBargeIn?.(text);
+          if (notified) {
+            void Promise.resolve(notified).catch((err: unknown) => {
+              logger.debug(
+                `[speech] barge-in callback failed: ${err instanceof Error ? err.message : String(err)}`,
+              );
+            });
+          }
+        } catch (err) {
+          logger.debug(
+            `[speech] barge-in callback failed: ${err instanceof Error ? err.message : String(err)}`,
+          );
+        }
+        return;
+      }
       const key = `live:${liveSeq++}`;
       if (inFlight) {
-        if (key !== activeWav) pendingSpeech = { p, wav: key, presetText: text };
+        if (key !== activeWav) queuePendingSpeech({ p, wav: key, presetText: text });
         return;
       }
       startSpeechJob({ p, wav: key, presetText: text });
@@ -1225,7 +1315,7 @@ export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => v
 
     if (inFlight) {
       if (wav !== activeWav) {
-        pendingSpeech = { p, wav };
+        queuePendingSpeech({ p, wav });
       }
       return;
     }

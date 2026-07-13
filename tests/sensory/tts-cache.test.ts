@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { TtsCache } from '../../src/sensory/tts-cache.js';
@@ -72,5 +72,56 @@ describe('TtsCache — reuse repeated syntheses + count usage', () => {
     const c = cache();
     expect(() => c.store('x', 'v', path.join(tmp, 'does-not-exist.wav'))).not.toThrow();
     expect(c.lookup('x', 'v')).toBeNull();
+  });
+
+  it('automatically caps entries and evicts old one-offs before reused phrases', () => {
+    const c = new TtsCache({ dir, tmpDir: tmp, now: () => clock, maxEntries: 2 });
+    c.store('keep', 'v', src);
+    c.lookup('keep', 'v'); // pending hit is folded into the next store → keep has 2 uses
+    clock += 1000;
+    c.store('old one-off', 'v', src);
+    clock += 1000;
+    c.store('new one-off', 'v', src);
+
+    expect(c.stats().map((entry) => entry.text)).toEqual(['keep', 'new one-off']);
+    expect(c.lookup('old one-off', 'v')).toBeNull();
+  });
+
+  it('caps total cached WAV bytes', async () => {
+    const largerSrc = path.join(tmp, 'larger.wav');
+    await writeFile(largerSrc, Buffer.alloc(24, 1));
+    const c = new TtsCache({ dir, tmpDir: tmp, now: () => clock, maxBytes: 30 });
+    c.store('old', 'v', largerSrc);
+    clock += 1000;
+    c.store('new', 'v', largerSrc);
+
+    expect(c.stats()).toHaveLength(1);
+    expect(c.stats()[0]!.text).toBe('new');
+  });
+
+  it('defers and batches manifest hit updates off the lookup hot path', () => {
+    const deferred: Array<() => void> = [];
+    const c = new TtsCache({
+      dir,
+      tmpDir: tmp,
+      now: () => clock,
+      defer: (task) => deferred.push(task),
+    });
+    c.store('Bonjour', 'v', src);
+    clock += 1000;
+
+    expect(c.lookup('Bonjour', 'v')).not.toBeNull();
+    expect(c.lookup('Bonjour', 'v')).not.toBeNull();
+    const beforeFlush = JSON.parse(readFileSync(path.join(dir, 'manifest.json'), 'utf-8')) as {
+      entries: Record<string, { hits: number }>;
+    };
+    expect(Object.values(beforeFlush.entries)[0]!.hits).toBe(1);
+    expect(deferred).toHaveLength(1);
+
+    deferred[0]!();
+    const afterFlush = JSON.parse(readFileSync(path.join(dir, 'manifest.json'), 'utf-8')) as {
+      entries: Record<string, { hits: number }>;
+    };
+    expect(Object.values(afterFlush.entries)[0]!.hits).toBe(3);
   });
 });

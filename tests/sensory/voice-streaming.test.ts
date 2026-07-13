@@ -40,6 +40,11 @@ describe('SentenceAssembler — sentence cutting', () => {
     expect(a.push('exactement. ')).toEqual(['La valeur est 3.14 exactement.']);
   });
 
+  it('does not split a sentence after a common title abbreviation', () => {
+    const a = new SentenceAssembler();
+    expect(a.push('M. Dupont arrive. ')).toEqual(['M. Dupont arrive.']);
+  });
+
   it('force-cuts a punctuation-less run at the safety cap', () => {
     const a = new SentenceAssembler(200);
     const out: string[] = [];
