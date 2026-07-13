@@ -4,6 +4,7 @@ import {
   endSpeaking,
   isSpeaking,
   withSpeakingGuard,
+  interruptSpeaking,
   _resetVoiceActivityForTests,
 } from '../../src/sensory/voice-activity.js';
 
@@ -62,5 +63,32 @@ describe('voice-activity — half-duplex speaking guard', () => {
     releaseA();
     await Promise.all([pA, pB]);
     expect(order).toEqual(['A-start', 'A-end', 'B-start']); // B started only after A finished
+  });
+
+  it('drops plays queued before an interrupt and accepts fresh playback', async () => {
+    const order: string[] = [];
+    let releaseA!: () => void;
+    let markAStarted!: () => void;
+    const aBlocked = new Promise<void>((resolve) => (releaseA = resolve));
+    const aStarted = new Promise<void>((resolve) => (markAStarted = resolve));
+    const pA = withSpeakingGuard(async () => {
+      order.push('A-start');
+      markAStarted();
+      await aBlocked;
+      order.push('A-end');
+    });
+    const pB = withSpeakingGuard(async () => {
+      order.push('B-start');
+    });
+
+    await aStarted;
+    interruptSpeaking();
+    releaseA();
+    const pC = withSpeakingGuard(async () => {
+      order.push('C-start');
+    });
+    await Promise.all([pA, pB, pC]);
+
+    expect(order).toEqual(['A-start', 'A-end', 'C-start']);
   });
 });
