@@ -20,7 +20,7 @@
  */
 
 import type { CodeBuddyClient, ChatOptions } from '../codebuddy/client.js';
-import { beginFleetWork } from './fleet-load.js';
+import { beginFleetWork, isFleetSaturated } from './fleet-load.js';
 import { registerPeerMethod, unregisterPeerMethod } from '../server/websocket/peer-method-registry.js';
 import { logger } from '../utils/logger.js';
 import {
@@ -50,6 +50,13 @@ let cachedProviderInfo: PeerChatProviderInfo | null = null;
 let wired = false;
 
 const DEFAULT_SYSTEM_PROMPT = 'Answer this side question briefly. Do not use tools.';
+
+function assertFleetCapacity(method: string): void {
+  if (!isFleetSaturated()) return;
+  const error = new Error(`${method}: fleet concurrency limit reached`);
+  (error as Error & { code: 'SATURATED' }).code = 'SATURATED';
+  throw error;
+}
 
 export type { FleetDispatchProfile as PeerDispatchProfile } from './dispatch-profile.js';
 
@@ -126,6 +133,7 @@ export function wirePeerChatBridge(
       // dispatchPeerRequest wraps thrown errors as METHOD_ERROR.
       throw new Error('peer.chat: prompt is required (string)');
     }
+    assertFleetCapacity('peer.chat');
     const client = cachedGetter?.() ?? null;
     if (!client) {
       throw new Error(
@@ -180,6 +188,7 @@ export function wirePeerChatBridge(
     if (!prompt) {
       throw new Error('peer.chat-stream: prompt is required (string)');
     }
+    assertFleetCapacity('peer.chat-stream');
     const client = cachedGetter?.() ?? null;
     if (!client) {
       throw new Error(

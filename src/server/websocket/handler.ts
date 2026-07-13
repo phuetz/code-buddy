@@ -36,6 +36,7 @@ const RATE_LIMITS = {
   authWindowMs: 60000,      // 1 minute window for auth
   messagesPerMinute: 60,    // Max messages per minute
   toolExecutionsPerMinute: 20, // Max tool executions per minute
+  peerRequestsPerMinute: 30, // LLM-capable peer RPC calls per minute
 };
 
 // Connection state
@@ -58,6 +59,8 @@ interface ConnectionState {
   messageWindowStart: number;
   toolCount: number;
   toolWindowStart: number;
+  peerRequestCount: number;
+  peerWindowStart: number;
   // Phase (d).7 — count of broadcast() calls skipped for this client
   // because its ws.bufferedAmount exceeded SERVER_CONFIG.WS_BROADCAST_BUFFER_LIMIT.
   // Reset only on disconnect; surfaced via getConnectionStats().totalBroadcastsDropped.
@@ -196,8 +199,8 @@ function send(ws: WebSocket, message: WebSocketResponse): void {
  */
 function checkRateLimit(
   state: ConnectionState,
-  counter: 'authAttempts' | 'messageCount' | 'toolCount',
-  windowField: 'authWindowStart' | 'messageWindowStart' | 'toolWindowStart',
+  counter: 'authAttempts' | 'messageCount' | 'toolCount' | 'peerRequestCount',
+  windowField: 'authWindowStart' | 'messageWindowStart' | 'toolWindowStart' | 'peerWindowStart',
   maxCount: number,
   windowMs: number
 ): boolean {
@@ -569,7 +572,6 @@ messageHandlers.set('peer:request', async (ws, state, payload) => {
     sendError(ws, 'FORBIDDEN', 'peer:invoke scope required');
     return;
   }
-  const { dispatchPeerRequest } = await import('./peer-rpc.js');
   // payload is the request frame { id, method, params, traceId?, depth? }
   const frame = (payload ?? {}) as {
     id?: string;
@@ -579,6 +581,28 @@ messageHandlers.set('peer:request', async (ws, state, payload) => {
     depth?: number;
   };
   const requestId = frame.id ?? '';
+  if (!checkRateLimit(
+    state,
+    'peerRequestCount',
+    'peerWindowStart',
+    RATE_LIMITS.peerRequestsPerMinute,
+    60_000,
+  )) {
+    send(ws, {
+      type: 'peer:response',
+      payload: {
+        id: requestId || 'unknown',
+        ok: false,
+        error: {
+          code: 'RATE_LIMITED',
+          message: 'Peer request rate limit exceeded. Please slow down.',
+        },
+      },
+      timestamp: new Date().toISOString(),
+    });
+    return;
+  }
+  const { dispatchPeerRequest } = await import('./peer-rpc.js');
   // Phase (d).19 — emitChunk forwards a partial result delta to the
   // caller as a `peer:chunk` frame keyed by the same request id. The
   // caller's FleetListener routes chunks to its onChunk callback. We
@@ -711,6 +735,8 @@ export async function setupWebSocket(
       messageWindowStart: now,
       toolCount: 0,
       toolWindowStart: now,
+      peerRequestCount: 0,
+      peerWindowStart: now,
       droppedBroadcasts: 0,
     };
 
