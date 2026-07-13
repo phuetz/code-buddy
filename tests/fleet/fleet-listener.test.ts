@@ -1058,5 +1058,27 @@ describe('FleetListener — Phase (d).5 V0.4.1', () => {
       expect(l.getPendingRequestCount()).toBe(0);
       await l.disconnect();
     });
+
+    it('ignores a peer:chunk that arrives after the request has resolved', async () => {
+      const { l, fake } = await authedListener();
+      const onChunk = vi.fn();
+      const request = l.requestStream('peer.chat-stream', { prompt: 'hello' }, onChunk);
+      const sent = fake.sentMessages.map((message) => JSON.parse(message));
+      const frame = sent.find((message) => message.type === 'peer:request');
+
+      fake.receive({
+        type: 'peer:response',
+        payload: { id: frame.payload.id, ok: true, payload: { text: 'done' } },
+      });
+      await expect(request).resolves.toEqual({ text: 'done' });
+
+      expect(() => fake.receive({
+        type: 'peer:chunk',
+        payload: { id: frame.payload.id, delta: 'late' },
+      })).not.toThrow();
+      expect(onChunk).not.toHaveBeenCalled();
+      expect(l.getPendingRequestCount()).toBe(0);
+      await l.disconnect();
+    });
   });
 });
