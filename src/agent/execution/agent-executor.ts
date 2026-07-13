@@ -903,6 +903,7 @@ export class AgentExecutor {
                   const r = await this.deps.client.chat(
                     flushProviderMessages,
                     [],
+                    abortController ? { signal: abortController.signal } : undefined,
                   );
                   const flushContent = r.choices[0]?.message?.content ?? 'NO_REPLY';
                   if (r.usage) {
@@ -961,7 +962,7 @@ export class AgentExecutor {
         const stream = this.deps.client.chatStream(
           providerMessages,
           tools,
-          undefined,
+          abortController ? { signal: abortController.signal } : undefined,
           this.config.isGrokModel() && this.deps.toolSelectionStrategy.shouldUseSearchFor(message)
             ? { search_parameters: { mode: "auto" } }
             : { search_parameters: { mode: "off" } }

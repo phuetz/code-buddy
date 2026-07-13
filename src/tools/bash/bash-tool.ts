@@ -353,7 +353,20 @@ export class BashTool implements Disposable {
           try {
             const { DockerSandbox } = await import('../../sandbox/docker-sandbox.js');
             const sandbox = new DockerSandbox();
-            const sbResult = await sandbox.execute(command, { timeout });
+            const abortSignal = getToolAbortSignal();
+            const disposeOnAbort = () => {
+              void sandbox.dispose();
+            };
+            abortSignal?.addEventListener('abort', disposeOnAbort, { once: true });
+            let sbResult;
+            try {
+              sbResult = await sandbox.execute(command, { timeout });
+            } finally {
+              abortSignal?.removeEventListener('abort', disposeOnAbort);
+            }
+            if (abortSignal?.aborted) {
+              return { success: false, error: 'Command aborted' };
+            }
             // Build a rich error message so the LLM can self-correct instead
             // of seeing only "Sandbox exit code 127". We combine stderr
             // (sbResult.error) with the exit code, and — if both are empty —
@@ -376,6 +389,9 @@ export class BashTool implements Disposable {
               error: errorMsg,
             };
           } catch (error) {
+            if (getToolAbortSignal()?.aborted) {
+              return { success: false, error: 'Command aborted' };
+            }
             if (router.getConfig().failClosedOnUnavailable) {
               return {
                 success: false,
@@ -411,6 +427,10 @@ export class BashTool implements Disposable {
             error: confirmationResult.feedback || 'Command execution cancelled by user',
           };
         }
+      }
+
+      if (getToolAbortSignal()?.aborted) {
+        return { success: false, error: 'Command aborted' };
       }
 
       // Checkpoint files targeted by destructive commands (rm, mv, etc.)

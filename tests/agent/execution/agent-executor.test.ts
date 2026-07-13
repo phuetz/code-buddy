@@ -2480,6 +2480,12 @@ describe('AgentExecutor', () => {
       // The request was sent, so an abort still records it exactly once.
       expect(streamConfig.recordSessionCost).toHaveBeenCalledTimes(1);
       expect(streamConfig.recordSessionCost).toHaveBeenCalledWith(500, 50);
+      expect(depsStream.client.chatStream).toHaveBeenCalledWith(
+        expect.any(Array),
+        expect.any(Array),
+        { signal: abortController.signal },
+        expect.any(Object),
+      );
     });
 
     it('starts prompt building, tool selection, and context lookup before awaiting any one', async () => {
