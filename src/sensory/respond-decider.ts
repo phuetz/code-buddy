@@ -171,6 +171,15 @@ function nameMatchIndices(words: string[], name: string): number[] {
   return [...new Set(idxs)].sort((a, b) => a - b);
 }
 
+function matchedNameSpan(words: string[], name: string, index: number): number {
+  const nameWords = tokenizeWords(name);
+  if (nameWords.length <= 1) return 1;
+  if (fuzzyWordMatch(words[index] ?? '', nameWords.join(''))) return 1;
+  return nameWords.every((part, offset) => fuzzyWordMatch(words[index + offset] ?? '', part))
+    ? nameWords.length
+    : 1;
+}
+
 const SECOND_PERSON = /\b(tu|te|toi|vous|ton|ta|tes)\b/;
 // Common request/imperative verbs directed at the assistant (broader than the chime-in cue).
 const IMPERATIVE =
@@ -234,20 +243,25 @@ export function isVocativeAddress(
   nameMatch: (t: string, n: string) => boolean = fuzzyNameMatch
 ): boolean {
   if (!nameMatch(text, name)) return false;
-  // Strong directed intent anywhere in the utterance → addressed.
-  if (text.includes('?')) return true;
   const t = normWords(text);
-  if (SECOND_PERSON.test(t)) return true;
-  if (IMPERATIVE.test(t) || hasResponseCue(text)) return true;
   const words = t.split(' ').filter(Boolean);
+  // Strong directed intent anywhere in the utterance → addressed.
+  if (SECOND_PERSON.test(t)) return true;
+  if (IMPERATIVE.test(t)) return true;
+  const indices = nameMatchIndices(words, name);
+  const isMention = (index: number): boolean => {
+    const prev = words[index - 1];
+    const next = words[index + matchedNameSpan(words, name, index)];
+    return (!!prev && MENTION_PREP.has(prev)) || (!!next && THIRD_PERSON_VERB.has(next));
+  };
+  // A question ABOUT the named person is still only a mention ("Lisa est rentrée ?").
+  if (indices.length > 0 && indices.every(isMention)) return false;
+  if (text.includes('?') || hasResponseCue(text)) return true;
   if (words.length <= 3) return true; // "hey Lisa", "Lisa !"
   // No directed marker: only a name at start/end that isn't a 3rd-person statement is a call.
-  for (const i of nameMatchIndices(words, name)) {
-    const prev = words[i - 1];
-    const next = words[i + 1];
-    const mention = (!!prev && MENTION_PREP.has(prev)) || (!!next && THIRD_PERSON_VERB.has(next));
-    if (mention) continue;
-    if (i === 0 || i === words.length - 1) return true;
+  for (const i of indices) {
+    if (isMention(i)) continue;
+    if (i === 0 || i + matchedNameSpan(words, name, i) === words.length) return true;
   }
   return false;
 }
