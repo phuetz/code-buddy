@@ -53,6 +53,13 @@ describe('isVocativeAddress — addressed vs merely mentioned', () => {
       false
     );
     expect(isVocativeAddress('et donc Lisa a dit que le projet avancait bien', 'Lisa')).toBe(false); // TV/radio line
+    expect(isVocativeAddress('Est-ce que Lisa est rentrée ?', 'Lisa')).toBe(false);
+    expect(isVocativeAddress('Lisa est partie ?', 'Lisa')).toBe(false);
+  });
+
+  it('keeps direct and short questions addressed to the robot', () => {
+    expect(isVocativeAddress('Lisa, tu es là ?', 'Lisa')).toBe(true);
+    expect(isVocativeAddress('Lisa ?', 'Lisa')).toBe(true);
   });
 
   it('requires a name match at all', () => {
