@@ -324,6 +324,26 @@ describe('respond-decider — chime-in (LLM only on a cue)', () => {
     });
   });
 
+  it('judge timeout → silent before the speech queue can stall', async () => {
+    vi.useFakeTimers();
+    try {
+      const d = createResponseDecider({
+        robotName: 'Lisa',
+        chimeIn: true,
+        now: () => 0,
+        recentContext: async () => [],
+        judge: () => new Promise<boolean>(() => {}),
+        judgeTimeoutMs: 25,
+      });
+      const decision = d.decide('comment compiler ce projet ?');
+      await vi.advanceTimersByTimeAsync(25);
+
+      await expect(decision).resolves.toEqual({ respond: false, reason: 'judge-error' });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('empty transcript → silent', async () => {
     const d = createResponseDecider({ now: () => 0, recentContext: async () => [] });
     expect(await d.decide('   ')).toEqual({ respond: false, reason: 'empty' });
