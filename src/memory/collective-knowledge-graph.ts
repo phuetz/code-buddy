@@ -30,7 +30,16 @@
  * @module memory/collective-knowledge-graph
  */
 
-import { appendFileSync, existsSync, mkdirSync, readFileSync } from 'fs';
+import {
+  appendFileSync,
+  closeSync,
+  existsSync,
+  mkdirSync,
+  openSync,
+  readSync,
+  statSync,
+  type Stats,
+} from 'fs';
 import { dirname, join } from 'path';
 import { logger } from '../utils/logger.js';
 import { contentHash, computeSalience, type EntityType, type RelationType } from './knowledge-graph.js';
@@ -227,6 +236,13 @@ export class CollectiveKnowledgeGraph {
   /** Invalidated (superseded) versions, keyed by `id@contentHash`. */
   private readonly superseded = new Map<string, CkgEntity>();
   private readonly relations = new Map<string, CkgRelation>();
+  /** Byte position immediately after the last complete JSONL line applied to the view. */
+  private ledgerOffset = 0;
+  /** Last observed file metadata, used to make unchanged loads an O(1) stat. */
+  private ledgerSize = 0;
+  private ledgerMtimeMs = 0;
+  private ledgerDevice: number | null = null;
+  private ledgerInode: number | null = null;
   /** contentHash → embedding vector. Content-addressed, so it survives ledger reloads. */
   private readonly embCache = new Map<string, Float32Array>();
   private readonly embeddingModel: string;
@@ -298,7 +314,6 @@ export class CollectiveKnowledgeGraph {
         ...(input.source ? { source: input.source } : {}),
       };
       this.append(entityEvent);
-      this.applyEntity(entityEvent);
 
       for (const rel of input.relations ?? []) {
         const targetType: EntityType = rel.targetType ?? 'concept';
@@ -311,14 +326,12 @@ export class CollectiveKnowledgeGraph {
           ...(input.source ? { source: input.source } : {}),
         };
         this.append(relEvent);
-        this.applyRelation(relEvent);
         if (!this.current.has(targetId)) {
           const tEvent: LedgerEvent = {
             v: 1, kind: 'entity', recordedAt, agentId, contentHash: contentHash(targetType, rel.targetName),
             id: targetId, type: targetType, name: rel.targetName, text: rel.targetName, confidence: 0.5,
           };
           this.append(tEvent);
-          this.applyEntity(tEvent);
         }
       }
       return this.toResult(this.current.get(id)!);
@@ -635,7 +648,6 @@ export class CollectiveKnowledgeGraph {
         ...(opts.reason ? { reason: opts.reason } : {}),
       };
       this.append(event);
-      this.applyRetraction(event);
       return { retracted: true, id, status: 'retracted' };
     } catch (err) {
       logger.warn(`[ckg] retract failed: ${err instanceof Error ? err.message : String(err)}`);
@@ -828,20 +840,86 @@ export class CollectiveKnowledgeGraph {
     if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
     // O_APPEND keeps concurrent small-line writes from interleaving (POSIX atomic append).
     appendFileSync(this.ledgerPath, `${JSON.stringify(event)}\n`, 'utf8');
+    // `load` is the single event-application path. This avoids double-applying a local
+    // append while still picking up writes that another process raced in before ours.
+    this.load();
   }
 
-  /** Rebuild the in-memory view by replaying the whole ledger (Phase 0/1; SQLite index in Phase 2). */
+  /**
+   * Bring the in-memory view up to date from the append-only ledger. Unchanged files cost
+   * one stat; growth reads only bytes after the last complete JSONL line. Truncation,
+   * replacement, or an in-place rewrite falls back to a full replay.
+   */
   private load(): void {
-    this.current.clear();
-    this.superseded.clear();
-    this.relations.clear();
-    if (!existsSync(this.ledgerPath)) return;
-    let content: string;
+    if (!existsSync(this.ledgerPath)) {
+      if (this.ledgerSize > 0 || this.ledgerOffset > 0) this.resetLedgerView();
+      return;
+    }
+
+    let stats: Stats;
     try {
-      content = readFileSync(this.ledgerPath, 'utf8');
+      stats = statSync(this.ledgerPath);
     } catch {
       return;
     }
+
+    const sameFile =
+      this.ledgerDevice === null ||
+      (this.ledgerDevice === stats.dev && this.ledgerInode === stats.ino);
+    const unchanged =
+      sameFile && stats.size === this.ledgerSize && stats.mtimeMs === this.ledgerMtimeMs;
+    if (unchanged) return;
+
+    const requiresFullReplay =
+      !sameFile ||
+      stats.size < this.ledgerSize ||
+      stats.size < this.ledgerOffset ||
+      (stats.size === this.ledgerSize && stats.mtimeMs !== this.ledgerMtimeMs);
+    if (requiresFullReplay) this.resetLedgerView();
+
+    const bytesToRead = stats.size - this.ledgerOffset;
+    if (bytesToRead <= 0) {
+      this.rememberLedgerMetadata(stats);
+      return;
+    }
+
+    const chunk = Buffer.allocUnsafe(bytesToRead);
+    let fd: number | null = null;
+    let bytesRead = 0;
+    try {
+      fd = openSync(this.ledgerPath, 'r');
+      while (bytesRead < bytesToRead) {
+        const count = readSync(
+          fd,
+          chunk,
+          bytesRead,
+          bytesToRead - bytesRead,
+          this.ledgerOffset + bytesRead,
+        );
+        if (count === 0) break;
+        bytesRead += count;
+      }
+    } catch {
+      return;
+    } finally {
+      if (fd !== null) {
+        try {
+          closeSync(fd);
+        } catch {
+          // The bytes already read remain usable; a close failure must not break recall.
+        }
+      }
+    }
+
+    // Do not advance past a torn final line. A later append completes it and the next
+    // incremental read starts from the same byte offset.
+    const completeEnd = chunk.subarray(0, bytesRead).lastIndexOf(0x0a) + 1;
+    if (completeEnd === 0) {
+      this.rememberLedgerMetadata(stats);
+      return;
+    }
+
+    const content = chunk.subarray(0, completeEnd).toString('utf8');
     for (const line of content.split('\n')) {
       const trimmed = line.trim();
       if (!trimmed) continue;
@@ -855,6 +933,26 @@ export class CollectiveKnowledgeGraph {
       else if (event.kind === 'relation') this.applyRelation(event);
       else if (event.kind === 'retraction') this.applyRetraction(event);
     }
+    this.ledgerOffset += completeEnd;
+    this.rememberLedgerMetadata(stats);
+  }
+
+  private resetLedgerView(): void {
+    this.current.clear();
+    this.superseded.clear();
+    this.relations.clear();
+    this.ledgerOffset = 0;
+    this.ledgerSize = 0;
+    this.ledgerMtimeMs = 0;
+    this.ledgerDevice = null;
+    this.ledgerInode = null;
+  }
+
+  private rememberLedgerMetadata(stats: Stats): void {
+    this.ledgerSize = stats.size;
+    this.ledgerMtimeMs = stats.mtimeMs;
+    this.ledgerDevice = stats.dev;
+    this.ledgerInode = stats.ino;
   }
 
   /**
@@ -934,7 +1032,6 @@ export class CollectiveKnowledgeGraph {
       sourceId, targetId, relType, reason: `semantic neighbour (${sim.toFixed(2)})`,
     };
     this.append(event);
-    this.applyRelation(event);
   }
 
   private applyRelation(e: LedgerEvent): void {
