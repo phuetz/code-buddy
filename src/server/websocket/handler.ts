@@ -4,7 +4,7 @@
  * Handles WebSocket connections for real-time streaming and bidirectional communication.
  */
 
-import type { Server as HttpServer } from 'http';
+import type { IncomingMessage, Server as HttpServer } from 'http';
 import type { WebSocket, WebSocketServer, RawData } from 'ws';
 import type { ServerConfig, WebSocketMessage, WebSocketResponse } from '../types.js';
 import { validateApiKey } from '../auth/api-keys.js';
@@ -122,6 +122,8 @@ export interface ConnectedGreetingOptions {
   protocolVersion: number;
   /** Supported message types, advertised for client capability discovery. */
   methods: string[];
+  /** Scopes granted immediately when authentication is disabled. */
+  scopes?: string[];
 }
 
 /**
@@ -140,9 +142,34 @@ export function buildConnectedGreeting(opts: ConnectedGreetingOptions): WebSocke
       protocolVersion: opts.protocolVersion,
       server: { version: opts.serverVersion },
       capabilities: { methods: [...new Set(opts.methods)].sort() },
+      ...(opts.scopes ? { scopes: [...opts.scopes] } : {}),
     },
     timestamp: new Date().toISOString(),
   };
+}
+
+const NO_AUTH_SCOPES = ['chat', 'tools', 'sessions', 'memory'];
+const LOOPBACK_NO_AUTH_SCOPES = [
+  'chat',
+  'tools',
+  'tools:execute',
+  'sessions',
+  'memory',
+  'fleet:listen',
+  'peer:invoke',
+];
+
+/**
+ * Resolve automatic scopes from the kernel-reported peer address only. Proxy
+ * headers are deliberately ignored so a remote client cannot claim loopback.
+ */
+export function resolveNoAuthScopes(remoteAddress: string | undefined): string[] {
+  const address = remoteAddress ?? '';
+  const loopback = address === '127.0.0.1'
+    || address === '::1'
+    || address.startsWith('127.')
+    || address.startsWith('::ffff:127.');
+  return [...(loopback ? LOOPBACK_NO_AUTH_SCOPES : NO_AUTH_SCOPES)];
 }
 
 export interface GatewayStatusInput {
@@ -802,12 +829,15 @@ export async function setupWebSocket(
     },
   });
 
-  wss.on('connection', (ws: WebSocket, _req) => {
+  wss.on('connection', (ws: WebSocket, req: IncomingMessage) => {
     const now = Date.now();
+    const automaticScopes = config.authEnabled
+      ? []
+      : resolveNoAuthScopes(req.socket.remoteAddress);
     const state: ConnectionState = {
       id: generateConnectionId(),
       authenticated: !config.authEnabled, // Auto-auth if auth disabled
-      scopes: config.authEnabled ? [] : ['chat', 'tools', 'sessions', 'memory'],
+      scopes: automaticScopes,
       lastActivity: now,
       streaming: false,
       authAttempts: 0,
@@ -833,6 +863,7 @@ export async function setupWebSocket(
       serverVersion: gatewayServerVersion(),
       protocolVersion: GATEWAY_PROTOCOL_VERSION,
       methods: Array.from(messageHandlers.keys()),
+      ...(!config.authEnabled ? { scopes: state.scopes } : {}),
     }));
 
     ws.on('message', async (data: RawData) => {
