@@ -144,6 +144,25 @@ describe("ToolSelector", () => {
       expect(result.selectedTools.length).toBeLessThanOrEqual(3);
     });
 
+    it("should respect a caller-supplied minimum score", () => {
+      const unknownTool = createMockTool("external_zero_score", "Unrelated capability");
+      const lowThreshold = selector.selectTools("quasar", [unknownTool], {
+        alwaysInclude: [],
+        maxTools: 1,
+        minScore: 0,
+        useAdaptiveThreshold: false,
+      });
+      const highThreshold = selector.selectTools("quasar", [unknownTool], {
+        alwaysInclude: [],
+        maxTools: 1,
+        minScore: 0.5,
+        useAdaptiveThreshold: false,
+      });
+
+      expect(lowThreshold.selectedTools).toHaveLength(1);
+      expect(highThreshold.selectedTools).toHaveLength(0);
+    });
+
     it("should include category information", () => {
       const result = selector.selectTools("edit the file", mockTools);
       expect(result.classification).toBeDefined();
@@ -178,16 +197,24 @@ describe("ToolSelector", () => {
     });
 
     it("should respect excludeCategories option", () => {
-      // When excluding a category, tools in that category should not be selected
-      // Note: the git keyword still scores the git tool, but category exclusion prevents selection
       const result = selector.selectTools("read a file", mockTools, {
         excludeCategories: ["file_read"],
         alwaysInclude: [],
         maxTools: 5,
       });
-      // The view_file tool (file_read category) should have lower priority due to exclusion
-      // Since we're asking about file operations but excluding file_read, other tools take priority
-      expect(result.classification).toBeDefined();
+
+      expect(result.selectedTools.some(tool => tool.function.name === "view_file")).toBe(false);
+    });
+
+    it("should not bypass minScore in the category fallback", () => {
+      const result = selector.selectTools("read a file", mockTools, {
+        alwaysInclude: [],
+        maxTools: 5,
+        minScore: 999,
+        useAdaptiveThreshold: false,
+      });
+
+      expect(result.selectedTools).toHaveLength(0);
     });
   });
 
@@ -343,6 +370,31 @@ describe("ToolSelector", () => {
       expect(stats.selectionCache.size).toBe(0);
     });
 
+    it("should cache repeated selections without sharing mutable results", () => {
+      const first = selector.selectTools("read package.json", mockTools);
+      first.scores.clear();
+      const second = selector.selectTools("read package.json", mockTools);
+
+      expect(selector.getCacheStats().selectionCache.size).toBe(1);
+      expect(second.scores.size).toBeGreaterThan(0);
+    });
+
+    it("should use distinct cache entries for selection options", () => {
+      selector.selectTools("read package.json", mockTools, { minScore: 0.1 });
+      selector.selectTools("read package.json", mockTools, { minScore: 0.9 });
+
+      expect(selector.getCacheStats().selectionCache.size).toBe(2);
+    });
+
+    it("should invalidate cached selections when metadata changes", () => {
+      selector.selectTools("read package.json", mockTools);
+      expect(selector.getCacheStats().selectionCache.size).toBe(1);
+
+      selector.registerTool("cache_invalidator", "utility", ["cache"], "Invalidate cache");
+
+      expect(selector.getCacheStats().selectionCache.size).toBe(0);
+    });
+
     it("should clear all caches", () => {
       selector.classifyQuery("test");
       selector.clearAllCaches();
@@ -398,6 +450,30 @@ describe("Singleton Functions", () => {
     it("should respect maxTools parameter", () => {
       const result = selectRelevantTools("do everything", mockTools, 3);
       expect(result.selectedTools.length).toBeLessThanOrEqual(3);
+    });
+
+    it("should accept the full selection options object", () => {
+      const unknownTool = createMockTool("singleton_zero_score", "Unrelated capability");
+      const result = selectRelevantTools("quasar", [unknownTool], {
+        alwaysInclude: [],
+        maxTools: 1,
+        minScore: 0.5,
+        useAdaptiveThreshold: false,
+      });
+
+      expect(result.selectedTools).toHaveLength(0);
+    });
+
+    it("should preserve the legacy alwaysInclude argument when maxTools is undefined", () => {
+      const unknownTool = createMockTool("legacy_always_include", "Unrelated capability");
+      const result = selectRelevantTools(
+        "quasar",
+        [unknownTool],
+        undefined,
+        ["legacy_always_include"],
+      );
+
+      expect(result.selectedTools.map(tool => tool.function.name)).toContain("legacy_always_include");
     });
   });
 
