@@ -195,3 +195,42 @@ describe('OpenAICompatProvider tool-support probe', () => {
       .toBe('plain-model-b');
   });
 });
+
+describe('OpenAICompatProvider local transcript conversion', () => {
+  it('normalizes tool messages in non-streaming chat requests', async () => {
+    providerMocks.getModelInfo.mockReturnValue({ provider: 'lmstudio' });
+    providerMocks.create.mockResolvedValueOnce(successResponse());
+    const messages = [
+      { role: 'user', content: 'read the file' },
+      {
+        role: 'assistant',
+        content: null,
+        tool_calls: [{
+          id: 'call-1',
+          type: 'function',
+          function: { name: 'read_file', arguments: '{"path":"a.ts"}' },
+        }],
+      },
+      { role: 'tool', tool_call_id: 'call-1', name: 'read_file', content: 'file contents' },
+    ];
+
+    await createProvider('http://127.0.0.1:1234/v1', 'plain-local').chat(
+      messages as Parameters<OpenAICompatProvider['chat']>[0],
+      [],
+    );
+
+    const payload = providerMocks.create.mock.calls[0]?.[0] as {
+      messages: Array<{ role: string; content: string | null; tool_calls?: unknown[] }>;
+    };
+    expect(payload.messages.every(message => message.role !== 'tool')).toBe(true);
+    expect(payload.messages[1]).toMatchObject({
+      role: 'assistant',
+      content: '[Tools Used]\nCalled read_file({"path":"a.ts"})',
+    });
+    expect(payload.messages[1]).not.toHaveProperty('tool_calls');
+    expect(payload.messages[2]).toEqual({
+      role: 'user',
+      content: '[Tool Result]\nfile contents',
+    });
+  });
+});

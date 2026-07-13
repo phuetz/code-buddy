@@ -55,4 +55,31 @@ describe('GeminiNativeProvider request body', () => {
       { text: '<context type="todo">todo</context>' },
     ]);
   });
+
+  it('drops an orphan function response', () => {
+    const body = buildBody(createProvider(), [
+      { role: 'user', content: 'continue' },
+      {
+        role: 'tool',
+        tool_call_id: 'call-orphan',
+        name: 'read_file',
+        content: 'orphaned result',
+      } as unknown as CodeBuddyMessage,
+    ]);
+
+    const parts = body.contents?.flatMap(content => content.parts) ?? [];
+    expect(parts.some(part => 'functionResponse' in part)).toBe(false);
+    expect(body.contents?.map(content => content.role)).toEqual(['user']);
+  });
+
+  it('inserts a user turn when the transcript starts with the model', () => {
+    const body = buildBody(createProvider(), [
+      { role: 'assistant', content: 'previous answer' },
+    ]);
+
+    expect(body.contents?.map(content => content.role)).toEqual(['user', 'model']);
+    expect(body.contents?.[0]?.parts).toEqual([
+      { text: '(continuing previous conversation)' },
+    ]);
+  });
 });

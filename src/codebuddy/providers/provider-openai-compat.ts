@@ -664,11 +664,11 @@ export class OpenAICompatProvider implements Provider {
     try {
       const useTools = !this.isLocalInference() && (tools?.length ?? 0) > 0;
 
-      // Inject Anthropic prompt-cache breakpoints (Manus AI #20).
-      let finalMessages: CodeBuddyMessage[] = messages;
+      // Normalize local transcripts before provider-specific prompt hooks.
+      let finalMessages = this.convertToolMessagesForLocalModels(messages);
       const modelInfo = getModelInfo(this.currentModel);
       if (modelInfo.provider === 'anthropic') {
-        finalMessages = injectAnthropicCacheBreakpoints(messages) as CodeBuddyMessage[];
+        finalMessages = injectAnthropicCacheBreakpoints(finalMessages) as CodeBuddyMessage[];
       }
 
       const requestPayload: ChatRequestPayload = {
