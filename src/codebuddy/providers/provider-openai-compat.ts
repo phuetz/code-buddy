@@ -43,7 +43,7 @@ import { getCircuitBreaker, CircuitOpenError } from '../../providers/circuit-bre
 import type { CircuitBreakerConfig } from '../../providers/circuit-breaker.js';
 import { parseRateLimitHeaders, storeRateLimitInfo } from '../../utils/rate-limit-display.js';
 import { mapProviderError } from '../../errors/index.js';
-import { preserveProviderErrorMetadata } from '../provider-error-classifier.js';
+import { classifyProviderError, preserveProviderErrorMetadata } from '../provider-error-classifier.js';
 import { getModelInfo } from '../../utils/model-utils.js';
 import {
   injectAnthropicCacheBreakpoints,
@@ -66,6 +66,29 @@ interface ChatRequestPayloadStreaming extends Omit<ChatCompletionCreateParamsStr
   search_parameters?: SearchParameters;
   thinking?: { type: 'enabled'; budget_tokens: number };
   service_tier?: 'auto' | 'default' | 'flex';
+}
+
+type ReasoningCompatiblePayload = {
+  model: string;
+  temperature?: number | null;
+  max_tokens?: number | null;
+  max_completion_tokens?: number | null;
+};
+
+function adaptPayloadForOpenAIReasoningModel<T extends ReasoningCompatiblePayload>(
+  payload: T,
+  baseURL: string,
+): T {
+  if (!baseURL.toLowerCase().includes('openai.com') || !/^(?:o\d|gpt-5)/i.test(payload.model)) {
+    return payload;
+  }
+
+  if (payload.max_tokens !== undefined) {
+    payload.max_completion_tokens = payload.max_tokens;
+    delete payload.max_tokens;
+  }
+  delete payload.temperature;
+  return payload;
 }
 
 export interface OpenAICompatProviderOptions {
@@ -133,6 +156,7 @@ export class OpenAICompatProvider implements Provider {
   private toolSupportProbed: boolean = false;
   private toolSupportDetected: boolean | null = null;
   private probePromise: Promise<boolean> | null = null;
+  private probeGeneration = 0;
 
   // Prompt cache stats (OpenAI/xAI surface `cached_tokens`; provider-specific)
   private _promptCacheHits: number = 0;
@@ -176,7 +200,12 @@ export class OpenAICompatProvider implements Provider {
   }
 
   setModel(model: string): void {
+    if (model === this.currentModel) return;
     this.currentModel = model;
+    this.toolSupportProbed = false;
+    this.toolSupportDetected = null;
+    this.probePromise = null;
+    this.probeGeneration++;
   }
 
   /**
@@ -334,12 +363,24 @@ export class OpenAICompatProvider implements Provider {
 
     // Synchronous assignment of probePromise BEFORE any await closes the race
     // window — concurrent callers see the same in-flight promise.
-    const probe = this.performToolProbe();
+    const model = this.currentModel;
+    const generation = this.probeGeneration;
+    const probe = this.performToolProbe(model, generation).finally(() => {
+      if (this.probePromise === probe) {
+        this.probePromise = null;
+      }
+    });
     this.probePromise = probe;
     return probe;
   }
 
-  private async performToolProbe(): Promise<boolean> {
+  private cacheToolSupport(result: boolean, model: string, generation: number): void {
+    if (generation !== this.probeGeneration || model !== this.currentModel) return;
+    this.toolSupportProbed = true;
+    this.toolSupportDetected = result;
+  }
+
+  private async performToolProbe(model: string, generation: number): Promise<boolean> {
     try {
       const testTool: CodeBuddyTool = {
         type: 'function',
@@ -354,35 +395,37 @@ export class OpenAICompatProvider implements Provider {
         },
       };
 
-      const response = await this.client.chat.completions.create({
-        model: this.currentModel,
+      const probePayload: ChatCompletionCreateParamsNonStreaming = {
+        model,
         messages: [{ role: 'user', content: 'What time is it? Use the get_current_time tool.' }],
         tools: [testTool as unknown as OpenAI.ChatCompletionTool],
         tool_choice: 'auto',
         max_tokens: 50,
-      });
+      };
+      adaptPayloadForOpenAIReasoningModel(probePayload, this.baseURL);
+      const response = await this.client.chat.completions.create(probePayload);
 
       if (!response.choices || response.choices.length === 0) {
         logger.warn('Tool support probe returned empty choices array');
-        this.toolSupportProbed = true;
-        this.toolSupportDetected = false;
+        this.cacheToolSupport(false, model, generation);
         return false;
       }
 
       const message = response.choices[0]?.message;
       const hasToolCall = !!(message?.tool_calls && message.tool_calls.length > 0);
 
-      this.toolSupportProbed = true;
-      this.toolSupportDetected = hasToolCall;
+      this.cacheToolSupport(hasToolCall, model, generation);
 
       if (hasToolCall) {
         logger.debug('Tool support detected: model supports function calling');
       }
 
       return hasToolCall;
-    } catch (_error) {
-      this.toolSupportProbed = true;
-      this.toolSupportDetected = false;
+    } catch (error) {
+      const classification = classifyProviderError(error);
+      if (classification.status === 400 || classification.status === 422) {
+        this.cacheToolSupport(false, model, generation);
+      }
       return false;
     }
   }
@@ -619,23 +662,23 @@ export class OpenAICompatProvider implements Provider {
     searchOptions?: SearchOptions,
   ): Promise<CodeBuddyResponse> {
     try {
-      const useTools = !this.isLocalInference() && tools && tools.length > 0;
+      const useTools = !this.isLocalInference() && (tools?.length ?? 0) > 0;
 
-      // Inject Anthropic prompt-cache breakpoints (Manus AI #20).
-      let finalMessages: CodeBuddyMessage[] = messages;
+      // Normalize local transcripts before provider-specific prompt hooks.
+      let finalMessages = this.convertToolMessagesForLocalModels(messages);
       const modelInfo = getModelInfo(this.currentModel);
       if (modelInfo.provider === 'anthropic') {
-        finalMessages = injectAnthropicCacheBreakpoints(messages) as CodeBuddyMessage[];
+        finalMessages = injectAnthropicCacheBreakpoints(finalMessages) as CodeBuddyMessage[];
       }
 
       const requestPayload: ChatRequestPayload = {
         model: opts.model || this.currentModel,
         messages: finalMessages,
-        tools: useTools ? tools : [],
-        tool_choice: useTools ? 'auto' : undefined,
+        ...(useTools ? { tools, tool_choice: 'auto' as const } : {}),
         temperature: opts.temperature ?? 0.7,
         max_tokens: opts.maxTokens ?? this.defaultMaxTokens,
       };
+      adaptPayloadForOpenAIReasoningModel(requestPayload, this.baseURL);
       const openRouterProviderRouting = this.getOpenRouterProviderRouting();
       if (openRouterProviderRouting) {
         (requestPayload as unknown as Record<string, unknown>).provider = openRouterProviderRouting;
@@ -782,7 +825,7 @@ export class OpenAICompatProvider implements Provider {
     searchOptions?: SearchOptions,
   ): AsyncGenerator<ChatCompletionChunk, void, unknown> {
     try {
-      const useTools = !this.isLocalInference() && tools && tools.length > 0;
+      const useTools = !this.isLocalInference() && (tools?.length ?? 0) > 0;
 
       // Convert tool messages for local models that don't support tool role.
       let finalMessages = this.convertToolMessagesForLocalModels(messages);
@@ -801,11 +844,11 @@ export class OpenAICompatProvider implements Provider {
       const requestPayload = {
         model: opts.model || this.currentModel,
         messages: finalMessages,
-        tools: useTools ? tools : [],
-        tool_choice: useTools ? 'auto' as const : undefined,
+        ...(useTools ? { tools, tool_choice: 'auto' as const } : {}),
         temperature: opts.temperature ?? 0.7,
         max_tokens: opts.maxTokens ?? this.defaultMaxTokens,
       };
+      adaptPayloadForOpenAIReasoningModel(requestPayload, this.baseURL);
       const openRouterProviderRouting = this.getOpenRouterProviderRouting();
       if (openRouterProviderRouting) {
         (requestPayload as unknown as Record<string, unknown>).provider = openRouterProviderRouting;

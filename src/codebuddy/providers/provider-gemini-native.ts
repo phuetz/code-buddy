@@ -31,6 +31,7 @@ import type {
   GeminiThinkingLevel,
 } from '../client.js';
 import type { Provider } from './provider-interface.js';
+import { combineAbortSignals, createAbortError } from '../abort-signal.js';
 
 export interface GeminiNativeProviderOptions {
   apiKey: string;
@@ -145,7 +146,8 @@ export class GeminiNativeProvider implements Provider {
     for (const msg of messages) {
       if (msg.role === 'system') {
         // Gemini uses systemInstruction instead of system message
-        systemInstruction = { parts: [{ text: String(msg.content) }] };
+        systemInstruction ??= { parts: [] };
+        systemInstruction.parts.push({ text: String(msg.content) });
       } else if (msg.role === 'user') {
         const parts = this.convertContentToGeminiParts(msg.content);
         contents.push({ role: 'user', parts });
@@ -395,6 +397,7 @@ export class GeminiNativeProvider implements Provider {
           async () => {
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), requestTimeoutMs);
+            const requestSignal = combineAbortSignals(opts?.signal, controller.signal);
             let res: Response;
             try {
               res = await fetch(url, {
@@ -404,7 +407,7 @@ export class GeminiNativeProvider implements Provider {
                   'x-goog-api-key': this.apiKey,
                 },
                 body: JSON.stringify(body),
-                signal: controller.signal,
+                signal: requestSignal,
               });
             } finally {
               clearTimeout(timeoutId);
@@ -426,6 +429,7 @@ export class GeminiNativeProvider implements Provider {
           {
             ...RetryStrategies.llmApi,
             timeout: requestTimeoutMs * 2,
+            signal: opts?.signal,
             isRetryable: RetryPredicates.llmApiError,
             onRetry: (error, attempt, delay) => {
               logger.warn(`Gemini API call failed, retrying (attempt ${attempt}) in ${delay}ms...`, {
@@ -437,6 +441,9 @@ export class GeminiNativeProvider implements Provider {
           }
         ));
       } catch (error) {
+        if (opts?.signal?.aborted) {
+          throw createAbortError('Gemini request aborted by caller');
+        }
         const message = error instanceof Error ? error.message : String(error);
         const looksLikeModel404 =
           message.includes('404') &&
@@ -744,45 +751,71 @@ export class GeminiNativeProvider implements Provider {
    * Parse Gemini SSE stream into individual JSON chunks
    */
   private async *parseGeminiSSE(
-    reader: ReadableStreamDefaultReader<Uint8Array>
+    reader: ReadableStreamDefaultReader<Uint8Array>,
+    signal?: AbortSignal,
   ): AsyncGenerator<Record<string, unknown>, void, unknown> {
     const decoder = new TextDecoder();
     let buffer = '';
+    let onAbort: (() => void) | undefined;
+    const abortPromise = new Promise<never>((_resolve, reject) => {
+      if (!signal) return;
+      onAbort = () => {
+        reject(createAbortError('Gemini stream aborted by caller'));
+        void reader.cancel().catch(() => { /* stream may already be closed */ });
+      };
+      if (!signal.aborted) {
+        signal.addEventListener('abort', onAbort, { once: true });
+      }
+    });
 
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
+    try {
+      while (true) {
+        if (signal?.aborted) {
+          throw createAbortError('Gemini stream aborted by caller');
+        }
+        const { done, value } = await Promise.race([reader.read(), abortPromise]);
+        if (signal?.aborted) {
+          throw createAbortError('Gemini stream aborted by caller');
+        }
+        if (done) break;
 
-      buffer += decoder.decode(value, { stream: true });
+        buffer += decoder.decode(value, { stream: true });
 
-      // Split on SSE boundaries
-      const lines = buffer.split('\n');
-      buffer = lines.pop() || '';
+        // Split on SSE boundaries
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
 
-      for (const line of lines) {
-        const trimmed = line.trim();
-        if (trimmed.startsWith('data: ')) {
-          const jsonStr = trimmed.slice(6);
-          if (jsonStr === '[DONE]') return;
-          try {
-            yield JSON.parse(jsonStr);
-          } catch {
-            // Skip malformed JSON lines
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (trimmed.startsWith('data: ')) {
+            const jsonStr = trimmed.slice(6);
+            if (jsonStr === '[DONE]') return;
+            try {
+              yield JSON.parse(jsonStr);
+            } catch {
+              // Skip malformed JSON lines
+            }
           }
         }
       }
-    }
 
-    // Process remaining buffer
-    if (buffer.trim().startsWith('data: ')) {
-      const jsonStr = buffer.trim().slice(6);
-      if (jsonStr !== '[DONE]') {
-        try {
-          yield JSON.parse(jsonStr);
-        } catch {
-          // Skip malformed JSON
+      // Process remaining buffer
+      if (buffer.trim().startsWith('data: ')) {
+        const jsonStr = buffer.trim().slice(6);
+        if (jsonStr !== '[DONE]') {
+          try {
+            yield JSON.parse(jsonStr);
+          } catch {
+            // Skip malformed JSON
+          }
         }
       }
+    } finally {
+      if (onAbort) signal?.removeEventListener('abort', onAbort);
+      if (signal?.aborted) {
+        try { await reader.cancel(); } catch { /* stream may already be closed */ }
+      }
+      try { reader.releaseLock(); } catch { /* ignore */ }
     }
   }
 
@@ -804,6 +837,7 @@ export class GeminiNativeProvider implements Provider {
       const body = this.buildGeminiBody(messages, tools, opts);
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), requestTimeoutMs);
+      const requestSignal = combineAbortSignals(opts?.signal, controller.signal);
 
       let res: Response;
       try {
@@ -814,7 +848,7 @@ export class GeminiNativeProvider implements Provider {
             'x-goog-api-key': this.apiKey,
           },
           body: JSON.stringify(body),
-          signal: controller.signal,
+          signal: requestSignal,
         }));
       } finally {
         clearTimeout(timeoutId);
@@ -839,7 +873,7 @@ export class GeminiNativeProvider implements Provider {
       let chunkIndex = 0;
       let lastGroundingMetadata: unknown = null;
 
-      for await (const chunk of this.parseGeminiSSE(reader)) {
+      for await (const chunk of this.parseGeminiSSE(reader, opts?.signal)) {
         const candidates = (chunk as Record<string, unknown>).candidates as Array<Record<string, unknown>> | undefined;
         if (!candidates || candidates.length === 0) continue;
 
@@ -957,6 +991,9 @@ export class GeminiNativeProvider implements Provider {
         }],
       };
     } catch (error) {
+      if (opts?.signal?.aborted) {
+        throw createAbortError('Gemini stream aborted by caller');
+      }
       logger.warn('Gemini streaming error, falling back to non-streaming', {
         source: 'GeminiNativeProvider',
         error: error instanceof Error ? error.message : String(error),

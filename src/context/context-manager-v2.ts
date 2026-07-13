@@ -17,7 +17,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { CodeBuddyMessage } from '../codebuddy/client.js';
 import { redactSecrets } from '../fleet/privacy-lint.js';
-import { createTokenCounter, TokenCounter } from './token-counter.js';
+import { createTokenCounter, estimateImageUrlTokens, TokenCounter } from './token-counter.js';
 import { logger } from '../utils/logger.js';
 import { getModelToolConfig } from '../config/model-tools.js';
 import { RunStore } from '../observability/run-store.js';
@@ -296,10 +296,14 @@ export class ContextManagerV2 {
     // Map CodeBuddyMessage to the format expected by TokenCounter
     const tokenMessages = messages.map(msg => ({
       role: msg.role,
-      content: typeof msg.content === 'string' ? msg.content : null,
+      content: typeof msg.content === 'string' || Array.isArray(msg.content) ? msg.content : null,
       tool_calls: 'tool_calls' in msg ? msg.tool_calls : undefined,
     }));
-    return this.tokenCounter.countMessageTokens(tokenMessages);
+    const imageTokens = messages.reduce(
+      (total, message) => total + estimateImageUrlTokens(message.content),
+      0,
+    );
+    return this.tokenCounter.countMessageTokens(tokenMessages) + imageTokens;
   }
 
   /**

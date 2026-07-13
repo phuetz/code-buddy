@@ -316,6 +316,24 @@ describe('parseSseStream — Codex SSE → OpenAI ChatCompletionChunk', () => {
     expect(finished).toBe(true);
   });
 
+  it('maps Responses usage onto the final completion chunk', async () => {
+    const stream = makeSseStream([
+      'data: {"type":"response.completed","response":{"usage":{"input_tokens":120,"output_tokens":30,"total_tokens":150,"input_tokens_details":{"cached_tokens":80}}}}\n\n',
+    ]);
+
+    const chunks = [];
+    for await (const chunk of parseSseStream(stream, 'gpt-5.5')) {
+      chunks.push(chunk);
+    }
+
+    expect(chunks.at(-1)?.usage).toEqual({
+      prompt_tokens: 120,
+      completion_tokens: 30,
+      total_tokens: 150,
+      cached_tokens: 80,
+    });
+  });
+
   it('emits tool_calls on output_item.done with type=function_call', async () => {
     const stream = makeSseStream([
       'data: {"type":"response.output_item.done","item":{"type":"function_call","name":"search","arguments":"{\\"q\\":\\"X\\"}","call_id":"c1"}}\n\n',
@@ -478,6 +496,31 @@ describe('parseSseStream — Codex SSE → OpenAI ChatCompletionChunk', () => {
       if (c) chunks.push(c);
     }
     expect(chunks).toEqual(['ok']);
+  });
+
+  it('cancels a stalled reader immediately when the caller aborts', async () => {
+    const cancel = vi.fn();
+    const stallingStream = new ReadableStream<Uint8Array>({
+      start() { /* intentionally idle */ },
+      cancel,
+    });
+    const controller = new AbortController();
+    const generator = parseSseStream(
+      stallingStream,
+      'gpt-5.5',
+      undefined,
+      10_000,
+      controller.signal,
+    );
+    const pending = generator.next();
+    await Promise.resolve();
+
+    const startedAt = Date.now();
+    controller.abort();
+
+    await expect(pending).rejects.toMatchObject({ name: 'AbortError' });
+    expect(Date.now() - startedAt).toBeLessThan(100);
+    expect(cancel).toHaveBeenCalledOnce();
   });
 });
 
