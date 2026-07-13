@@ -87,7 +87,7 @@ import { registerCostIpcHandlers } from './ipc/cost-ipc';
 import { registerRulesIpcHandlers } from './ipc/rules-ipc';
 import { registerGitIpcHandlers } from './ipc/git-ipc';
 import { registerCheckpointIpcHandlers } from './ipc/checkpoint-ipc';
-import { initDatabase, closeDatabase } from './db/database';
+import { initDatabase, getDatabase, closeDatabase } from './db/database';
 import { SessionManager, type EngineAdapterLike } from './session/session-manager';
 import {
   classifyEngineLoadError,
@@ -2887,18 +2887,10 @@ ipcMain.handle('media.list', async () => {
     const items = scanMediaLibrary([...roots]);
     // Link each media to the conversation that generated it: its basename is
     // echoed in that session's assistant message (the MEDIA: marker).
-    if (sessionManager) {
+    if (sessionManager && items.length > 0) {
       const { buildMediaSessionIndex, basenameOf } = await import('./session/media-session-index');
-      const blobs = sessionManager.listSessions().map((sess) => ({
-        sessionId: sess.id,
-        text: sessionManager!
-          .getMessages(sess.id)
-          .map((m) => (Array.isArray(m.content) ? m.content : [])
-            .filter((b): b is { type: 'text'; text: string } => (b as { type?: string }).type === 'text')
-            .map((b) => b.text)
-            .join(' '))
-          .join(' '),
-      }));
+      const { queryMediaMessageBlobs } = await import('./session/media-message-query');
+      const blobs = queryMediaMessageBlobs(getDatabase());
       const index = buildMediaSessionIndex(blobs);
       for (const item of items) {
         const sid = index.get(basenameOf(item.path));
