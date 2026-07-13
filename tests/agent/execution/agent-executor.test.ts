@@ -17,6 +17,10 @@ import {
   getStreamingOptimizer,
   resetOptimizers,
 } from '../../../src/optimization/latency-optimizer.js';
+import {
+  CostLimitMiddleware,
+  MiddlewarePipeline,
+} from '../../../src/agent/middleware/index.js';
 
 // ---------------------------------------------------------------------------
 // Mock modules
@@ -1634,6 +1638,59 @@ describe('AgentExecutor', () => {
       expect(config.recordSessionCost).toHaveBeenCalled();
     });
 
+    it('should accumulate the input tokens sent in every model round', async () => {
+      const toolCall = makeToolCall('read_file', { path: '/test.txt' }, 'cost_round_1');
+      setupLLMFlow(deps, [
+        { content: 'Reading...', tool_calls: [toolCall] },
+        { content: 'Done.' },
+      ]);
+      (deps.tokenCounter.countMessageTokens as jest.Mock)
+        .mockReturnValueOnce(10)  // Initial UI estimate
+        .mockReturnValueOnce(100) // First provider request
+        .mockReturnValueOnce(150) // Transcript after the tool result
+        .mockReturnValueOnce(200); // Second provider request
+
+      await executor.processUserMessage('Read the file', [], []);
+
+      expect(config.recordSessionCost).toHaveBeenCalledTimes(1);
+      expect(config.recordSessionCost).toHaveBeenCalledWith(300, 100);
+      expect(config.estimateSessionCostLimitReached).toHaveBeenCalledWith(300, 50);
+    });
+
+    it('should remain the single cost recorder when the legacy middleware is present', async () => {
+      const pipeline = new MiddlewarePipeline();
+      pipeline.use(new CostLimitMiddleware({
+        recordSessionCost: config.recordSessionCost,
+        isSessionCostLimitReached: config.isSessionCostLimitReached,
+      }));
+      deps.middlewarePipeline = pipeline;
+      executor = new AgentExecutor(deps, config);
+      const toolCall = makeToolCall('read_file', { path: '/test.txt' }, 'cost_middleware');
+      setupLLMFlow(deps, [
+        { content: 'Reading...', tool_calls: [toolCall] },
+        { content: 'Done.' },
+      ]);
+
+      await executor.processUserMessage('Read the file', [], []);
+
+      expect(pipeline.getMiddlewareNames()).not.toContain('cost-limit');
+      expect(config.recordSessionCost).toHaveBeenCalledTimes(1);
+    });
+
+    it('should record the attempted request when streaming fails', async () => {
+      (deps.tokenCounter.countMessageTokens as jest.Mock)
+        .mockReturnValueOnce(10)
+        .mockReturnValueOnce(120);
+      (deps.client.chatStream as jest.Mock).mockImplementationOnce(async function* () {
+        throw new Error('Network error');
+      });
+
+      await collectChunks(executor.processUserMessageStream('Hello', [], [], null));
+
+      expect(config.recordSessionCost).toHaveBeenCalledTimes(1);
+      expect(config.recordSessionCost).toHaveBeenCalledWith(120, 0);
+    });
+
     it('should stop streaming when cost limit exceeded at end of loop', async () => {
       // Cost is now only recorded at end-of-loop (not in legacy inline path)
       // This tests that end-of-loop recording detects cost limit
@@ -2225,8 +2282,9 @@ describe('AgentExecutor', () => {
         )
       );
 
-      // Exactly 1 call regardless of abort — cost recording happens once at end of loop.
-      expect((streamConfig.recordSessionCost as jest.Mock).mock.calls.length).toBeLessThanOrEqual(1);
+      // The request was sent, so an abort still records it exactly once.
+      expect(streamConfig.recordSessionCost).toHaveBeenCalledTimes(1);
+      expect(streamConfig.recordSessionCost).toHaveBeenCalledWith(500, 50);
     });
 
     it('starts prompt building, tool selection, and context lookup before awaiting any one', async () => {

@@ -685,7 +685,18 @@ export class AgentExecutor {
 
     const maxToolRounds = this.config.maxToolRounds;
     let toolRounds = 0;
+    let turnInputTokens = 0;
     let totalOutputTokens = 0;
+    let uncommittedRoundOutputTokens = 0;
+    let sessionCostRecorded = false;
+    const recordTurnCost = (): void => {
+      if (sessionCostRecorded) return;
+      sessionCostRecorded = true;
+      this.config.recordSessionCost(
+        turnInputTokens,
+        totalOutputTokens + uncommittedRoundOutputTokens,
+      );
+    };
 
     // In-loop recovery budgets (Hermes parity): bound re-prompts WITHIN a turn
     // so a length-truncated or post-tool-empty response is recovered instead of
@@ -713,6 +724,14 @@ export class AgentExecutor {
 
     try {
       const pipeline = this.deps.middlewarePipeline;
+      // Cost accounting is centralized in this loop so every provider request
+      // is counted exactly once, including early returns. The legacy middleware
+      // recorded cumulative snapshots after tool rounds and the executor then
+      // recorded them again at the end of the turn.
+      if (pipeline?.getMiddlewareNames?.().includes('cost-limit')) {
+        pipeline.remove?.('cost-limit');
+        logger.debug('[agent-executor] removed duplicate cost-limit middleware');
+      }
       // New task: clear per-task middleware latching (quality-gate run count,
       // auto-repair attempts, verification one-shot warning). The pipeline is
       // built once and reused across tasks while toolRound restarts at 0, so
@@ -870,6 +889,29 @@ export class AgentExecutor {
           }
         }
 
+        const roundInputTokens = this.deps.tokenCounter.countMessageTokens(
+          preparedMessages as Parameters<typeof this.deps.tokenCounter.countMessageTokens>[0]
+        );
+
+        // Refuse a request whose input alone would cross the session budget.
+        // It has not been sent yet, so do not add it to the billed turn total.
+        if (this.config.estimateSessionCostLimitReached(
+          turnInputTokens + roundInputTokens,
+          totalOutputTokens,
+        )) {
+          const sessionCost = this.config.getSessionCost();
+          const sessionCostLimit = this.config.getSessionCostLimit();
+          yield {
+            type: "content",
+            content: `\n\nSession cost limit reached ($${sessionCost.toFixed(2)} / $${sessionCostLimit.toFixed(2)}). Stopping before the next model request.`,
+          };
+          yield { type: "done" };
+          return;
+        }
+
+        inputTokens = roundInputTokens;
+        turnInputTokens += roundInputTokens;
+
         const stream = this.deps.client.chatStream(
           preparedMessages,
           tools,
@@ -893,6 +935,10 @@ export class AgentExecutor {
           }
 
           const result = this.deps.streamingHandler.accumulateChunk(chunk as RawStreamingChunk);
+          uncommittedRoundOutputTokens = Math.max(
+            uncommittedRoundOutputTokens,
+            result.tokenCount ?? this.deps.streamingHandler.getTokenCount() ?? 0,
+          );
 
           if (result.reasoningContent) {
             yield { type: "reasoning", reasoning: result.reasoningContent };
@@ -956,15 +1002,19 @@ export class AgentExecutor {
         history.push(assistantEntry);
         messages.push({ role: "assistant", content: content, tool_calls: toolCalls });
 
-        const currentOutputTokens = this.deps.streamingHandler.getTokenCount() || 0;
+        const currentOutputTokens = Math.max(
+          uncommittedRoundOutputTokens,
+          this.deps.streamingHandler.getTokenCount() || 0,
+        );
         totalOutputTokens += currentOutputTokens;
+        uncommittedRoundOutputTokens = 0;
         yield { type: "token_count", tokenCount: inputTokens + totalOutputTokens };
 
         if (toolCalls && toolCalls.length > 0) {
           toolRounds++;
 
           // Pre-check cost limit before executing tools (estimate only — no side effects)
-          if (this.config.estimateSessionCostLimitReached(inputTokens, totalOutputTokens)) {
+          if (this.config.estimateSessionCostLimitReached(turnInputTokens, totalOutputTokens)) {
             const sessionCost = this.config.getSessionCost();
             const sessionCostLimit = this.config.getSessionCostLimit();
             yield { type: "content", content: `\n\nSession cost limit reached ($${sessionCost.toFixed(2)} / $${sessionCostLimit.toFixed(2)}). Stopping before tool execution.` };
@@ -1483,7 +1533,7 @@ export class AgentExecutor {
         yield { type: "content", content: "\n\nMaximum tool execution rounds reached." };
       }
 
-      this.config.recordSessionCost(inputTokens, totalOutputTokens);
+      recordTurnCost();
 
       // Display per-turn token usage (streaming path). Pass the model
       // name so estimateCost can zero out subscription-billed models
@@ -1493,13 +1543,17 @@ export class AgentExecutor {
       const streamTurnCost = this.deps.client.isSubscriptionAuth?.()
         ? 0
         : estimateCost(
-            inputTokens,
+            turnInputTokens,
             totalOutputTokens,
             undefined,
             undefined,
             this.deps.client.getCurrentModel(),
           );
-      const streamUsageDisplay = formatTokenUsage({ inputTokens, outputTokens: totalOutputTokens, cost: streamTurnCost });
+      const streamUsageDisplay = formatTokenUsage({
+        inputTokens: turnInputTokens,
+        outputTokens: totalOutputTokens,
+        cost: streamTurnCost,
+      });
       logger.info(`Token usage: ${streamUsageDisplay}`);
       yield { type: "content", content: `\n${streamUsageDisplay}` };
 
@@ -1552,6 +1606,8 @@ export class AgentExecutor {
       messages.push({ role: "assistant", content: errorEntry.content });
       yield { type: "content", content: errorEntry.content };
       yield { type: "done" };
+    } finally {
+      recordTurnCost();
     }
   }
 }
