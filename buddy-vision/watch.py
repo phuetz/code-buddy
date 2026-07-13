@@ -20,6 +20,7 @@ import cv2
 import numpy as np
 
 from camera_health import CameraHealthState
+from detectors import DrowsyState, PersonState, parse_yolo_classes
 from storage import append_rotating_jsonl, prune_frames
 
 BRIDGE_URL = os.environ.get("BUDDY_SENSE_BRIDGE_URL", "ws://127.0.0.1:8129")
@@ -199,55 +200,6 @@ class YoloPersonDetector:
         return VisionSample(best is not None, None, evidence)
 
 
-class PersonState:
-    """Face present/absent → person_entered / person_left (absence grace period)."""
-
-    def __init__(self):
-        self.present = False
-        self.absent = 0
-        self.grace = int(os.environ.get("BUDDY_VISION_PERSON_GRACE", "8"))
-
-    def update(self, face_present: bool):
-        if face_present:
-            self.absent = 0
-            if not self.present:
-                self.present = True
-                return ("person_entered", 200)
-        elif self.present:
-            self.absent += 1
-            if self.absent >= self.grace:
-                self.present = False
-                return ("person_left", 120)
-        return None
-
-
-class DrowsyState:
-    """Vigil pattern: eyes closed (eyeBlink blendshape ≥ thresh) for `secs` → drowsy.
-    Re-arms when the eyes reopen (hysteresis). `eye_closed` is 0..1 or None (no face)."""
-
-    def __init__(self):
-        self.thresh = float(os.environ.get("BUDDY_VISION_BLINK", "0.5"))
-        self.secs = float(os.environ.get("BUDDY_VISION_DROWSY_SECS", "2.0"))
-        self.closed_since = None
-        self.drowsy = False
-
-    def update(self, eye_closed):
-        if eye_closed is None:
-            self.closed_since = None
-            self.drowsy = False
-            return None
-        if eye_closed >= self.thresh:
-            if self.closed_since is None:
-                self.closed_since = time.time()
-            elif not self.drowsy and (time.time() - self.closed_since) >= self.secs:
-                self.drowsy = True
-                return ("drowsy", 230)
-        else:
-            self.closed_since = None
-            self.drowsy = False
-        return None
-
-
 def motion_score(prev, gray) -> float:
     if prev is None or prev.shape != gray.shape:
         return 0.0
@@ -260,19 +212,6 @@ def parse_enabled_detectors() -> set[str]:
         for item in os.environ.get("BUDDY_VISION_DETECTORS", "person,drowsy").split(",")
         if item.strip()
     }
-
-
-def parse_yolo_classes(value: str) -> list[int]:
-    classes = []
-    for raw in value.split(","):
-        token = raw.strip()
-        if not token:
-            continue
-        if not token.isdigit():
-            print(f"[vision] ignoring non-numeric YOLO class '{token}' (use COCO ids; person=0)", file=sys.stderr)
-            continue
-        classes.append(int(token))
-    return classes or [0]
 
 
 def resolve_yolo_model() -> str:
