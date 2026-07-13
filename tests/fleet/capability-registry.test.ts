@@ -285,6 +285,27 @@ describe('capability-registry — Hermes role tags', () => {
 });
 
 describe('capability-registry — caching', () => {
+  it('deduplicates concurrent snapshot builds', async () => {
+    const fetchSpy = vi.fn(async () => {
+      throw new Error('econn');
+    });
+    global.fetch = fetchSpy as unknown as typeof fetch;
+
+    const snapshots = await Promise.all(
+      Array.from({ length: 5 }, () => getLocalCapabilities()),
+    );
+
+    // One build probes Ollama and LM Studio once each. Five independent
+    // builds would make ten calls.
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+    expect(snapshots).toHaveLength(5);
+    expect(
+      snapshots.every(
+        (snapshot) => snapshot.machineLabel === snapshots[0].machineLabel,
+      ),
+    ).toBe(true);
+  });
+
   it('caches the snapshot — second call does not re-probe', async () => {
     process.env.ANTHROPIC_API_KEY = 'k';
     const fetchSpy = vi.fn(async () => {

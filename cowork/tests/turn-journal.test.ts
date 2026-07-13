@@ -1,18 +1,48 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { TurnJournal } from '../src/main/session/turn-journal';
 
+const fsCallCounts = vi.hoisted(() => ({ open: 0, fsync: 0, close: 0 }));
+
+vi.mock('fs', async () => {
+  const actual = await vi.importActual<typeof import('fs')>('fs');
+  return {
+    ...actual,
+    openSync: (...args: Parameters<typeof actual.openSync>) => {
+      fsCallCounts.open += 1;
+      return actual.openSync(...args);
+    },
+    fsyncSync: (fd: number) => {
+      fsCallCounts.fsync += 1;
+      return actual.fsyncSync(fd);
+    },
+    closeSync: (fd: number) => {
+      fsCallCounts.close += 1;
+      return actual.closeSync(fd);
+    },
+  };
+});
+
 const tempDirs: string[] = [];
+const journals: TurnJournal[] = [];
 
 function makeJournal(): TurnJournal {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cowork-turn-journal-'));
   tempDirs.push(dir);
-  return new TurnJournal(dir);
+  const journal = new TurnJournal(dir);
+  journals.push(journal);
+  return journal;
 }
 
 afterEach(() => {
+  for (const journal of journals.splice(0)) journal.close();
+  vi.useRealTimers();
+  vi.restoreAllMocks();
+  fsCallCounts.open = 0;
+  fsCallCounts.fsync = 0;
+  fsCallCounts.close = 0;
   while (tempDirs.length > 0) {
     const dir = tempDirs.pop();
     if (dir) fs.rmSync(dir, { recursive: true, force: true });
@@ -102,5 +132,35 @@ describe('TurnJournal', () => {
     expect(result.events.map((event) => event.type)).toEqual(['message_saved', 'turn_failed']);
     expect(result.pendingTurnCount).toBe(0);
     expect(result.turns[0]?.status).toBe('failed');
+  });
+
+  it('coalesces a streaming burst into one open and one delayed fsync', async () => {
+    vi.useFakeTimers();
+    const journal = makeJournal();
+
+    for (let index = 0; index < 1_000; index += 1) {
+      journal.append('streaming', 'trace_update', { index });
+    }
+
+    expect(fsCallCounts.open).toBe(1);
+    expect(fsCallCounts.fsync).toBe(0);
+    expect(journal.read('streaming').totalEventCount).toBe(1_000);
+
+    await vi.advanceTimersByTimeAsync(100);
+    expect(fsCallCounts.fsync).toBe(1);
+    expect(fsCallCounts.close).toBe(1);
+  });
+
+  it('fsyncs and closes immediately at a turn boundary', async () => {
+    vi.useFakeTimers();
+    const journal = makeJournal();
+
+    journal.append('s1', 'trace_step', { stepId: 'step-1' });
+    journal.append('s1', 'turn_completed', {}, 'turn-1');
+
+    expect(fsCallCounts.fsync).toBe(1);
+    expect(fsCallCounts.close).toBe(1);
+    await vi.advanceTimersByTimeAsync(100);
+    expect(fsCallCounts.fsync).toBe(1);
   });
 });

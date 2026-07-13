@@ -41,6 +41,7 @@ cat > /tmp/_bs_recv.mts <<EOF
 const { startSensoryBridge } = await import('$ROOT/src/sensory/sensory-bridge.js');
 const { getGlobalEventBus } = await import('$ROOT/src/events/event-bus.js');
 const b = startSensoryBridge({ port: $PORT });
+await b.ready;
 getGlobalEventBus().on('sensory:perception', (e) => {
   const m = e.metadata ?? {};
   console.log('  Code Buddy ◂ ' + m.modality + '/' + m.kind + '  ' + JSON.stringify(m.payload ?? {}));

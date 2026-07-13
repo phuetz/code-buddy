@@ -27,6 +27,18 @@ export interface CodeExplorerStats {
   stale: boolean;
 }
 
+export interface CodeExplorerFreshness {
+  indexed: boolean;
+  /** Commit the index was built from (real `.gitnexus` schema only). */
+  lastCommit?: string;
+  /** ISO timestamp the index was built (real `.gitnexus` schema only). */
+  indexedAt?: string;
+  /** Commits on HEAD since the index was built (undefined if uncomputable). */
+  commitsBehind?: number;
+  /** The graph no longer matches HEAD (or the legacy `stale` flag was set). */
+  stale: boolean;
+}
+
 const DEFAULT_STATS: CodeExplorerStats = {
   symbols: 0,
   relations: 0,
@@ -51,6 +63,7 @@ const CODE_EXPLORER_BINARIES = ['code-explorer', 'gitnexus'] as const;
 export class CodeExplorerManager {
   private repoPath: string;
   private mcpProcess: ChildProcess | null = null;
+  private autoIndexAttemptedFor: string | null = null;
   /** Resolved binary name; undefined = not probed yet, null = none found. */
   private binaryName: string | null | undefined;
 
@@ -83,9 +96,37 @@ export class CodeExplorerManager {
     return this.resolveBinary() !== null;
   }
 
-  /** Check whether the repo has been indexed (`.codeexplorer/` directory exists). */
+  /**
+   * Check whether the repo has been indexed. The engine writes its index under
+   * `.gitnexus/` (real, current) — the legacy `.codeexplorer/` name is still
+   * probed first for back-compat.
+   */
   isRepoIndexed(): boolean {
-    return fs.existsSync(path.join(this.repoPath, '.codeexplorer'));
+    return (
+      fs.existsSync(path.join(this.repoPath, '.codeexplorer')) ||
+      fs.existsSync(path.join(this.repoPath, '.gitnexus'))
+    );
+  }
+
+  /**
+   * Read the index `meta.json`, trying the legacy `.codeexplorer/` layout first
+   * then the real `.gitnexus/` one. Returns the raw parsed object, or null if
+   * absent/malformed (callers fall back to defaults).
+   */
+  private readMeta(): Record<string, unknown> | null {
+    for (const dir of ['.codeexplorer', '.gitnexus']) {
+      const metaPath = path.join(this.repoPath, dir, 'meta.json');
+      if (!fs.existsSync(metaPath)) continue;
+      try {
+        return JSON.parse(fs.readFileSync(metaPath, 'utf-8')) as Record<string, unknown>;
+      } catch (err) {
+        logger.warn('CodeExplorer: failed to read meta.json', {
+          error: err instanceof Error ? err.message : String(err),
+        });
+        return null;
+      }
+    }
+    return null;
   }
 
   /**
@@ -145,32 +186,120 @@ export class CodeExplorerManager {
   }
 
   /**
-   * Read stats from `.codeexplorer/meta.json`.
-   * Returns defaults if the index does not exist.
+   * Read stats from the index `meta.json`. Supports BOTH on-disk schemas:
+   *   - legacy flat `.codeexplorer` shape: `{symbols, relations, processes, clusters, stale}`
+   *   - real `.gitnexus` shape: `{lastCommit, indexedAt, stats:{nodes, edges, communities, processes}}`
+   * Returns defaults if the index is absent or malformed. Cheap (no git) — use
+   * getFreshness() to compare against HEAD.
    */
   getStats(): CodeExplorerStats {
-    const metaPath = path.join(this.repoPath, '.codeexplorer', 'meta.json');
-    if (!fs.existsSync(metaPath)) {
-      return { ...DEFAULT_STATS };
-    }
+    const meta = this.readMeta();
+    if (!meta) return { ...DEFAULT_STATS };
 
-    try {
-      const raw = fs.readFileSync(metaPath, 'utf-8');
-      const meta = JSON.parse(raw) as Record<string, unknown>;
+    const num = (v: unknown): number => (typeof v === 'number' ? v : 0);
+    const nested =
+      meta.stats && typeof meta.stats === 'object' ? (meta.stats as Record<string, unknown>) : null;
 
+    if (nested) {
       return {
-        symbols: typeof meta.symbols === 'number' ? meta.symbols : 0,
-        relations: typeof meta.relations === 'number' ? meta.relations : 0,
-        processes: typeof meta.processes === 'number' ? meta.processes : 0,
-        clusters: typeof meta.clusters === 'number' ? meta.clusters : 0,
+        symbols: num(nested.nodes),
+        relations: num(nested.edges),
+        processes: num(nested.processes),
+        clusters: num(nested.communities),
         indexed: true,
         stale: meta.stale === true,
       };
+    }
+
+    return {
+      symbols: num(meta.symbols),
+      relations: num(meta.relations),
+      processes: num(meta.processes),
+      clusters: num(meta.clusters),
+      indexed: true,
+      stale: meta.stale === true,
+    };
+  }
+
+  /**
+   * Compare the index's `lastCommit` (real `.gitnexus` schema) against the
+   * repo's current git HEAD to detect a stale graph — the fix for "the agent
+   * reasons over an index N commits behind without knowing it". Unlike
+   * getStats() this may shell out to git, so it's a deliberate call.
+   * `runGit` is injectable for testing.
+   */
+  getFreshness(
+    runGit: (args: string, cwd: string) => string = (args, cwd) =>
+      execSync(`git ${args}`, { cwd, stdio: 'pipe', timeout: 10_000 }).toString().trim(),
+  ): CodeExplorerFreshness {
+    const meta = this.readMeta();
+    if (!meta) return { indexed: false, stale: false };
+
+    const lastCommit = typeof meta.lastCommit === 'string' ? meta.lastCommit : undefined;
+    const indexedAt = typeof meta.indexedAt === 'string' ? meta.indexedAt : undefined;
+
+    // Legacy flat schema: no commit recorded, trust the explicit stale flag.
+    if (!lastCommit) {
+      const freshness = {
+        indexed: true,
+        stale: meta.stale === true,
+        ...(indexedAt ? { indexedAt } : {}),
+      };
+      this.maybeAutoIndex(freshness);
+      return freshness;
+    }
+
+    let commitsBehind: number | undefined;
+    try {
+      const out = runGit(`rev-list --count ${lastCommit}..HEAD`, this.repoPath);
+      const n = Number.parseInt(out, 10);
+      if (Number.isFinite(n)) commitsBehind = n;
+    } catch {
+      // Not a git repo, unknown commit, or git unavailable → leave undefined.
+    }
+
+    const freshness = {
+      indexed: true,
+      lastCommit,
+      ...(indexedAt ? { indexedAt } : {}),
+      ...(commitsBehind !== undefined ? { commitsBehind } : {}),
+      stale: (commitsBehind ?? 0) > 0,
+    };
+    this.maybeAutoIndex(freshness);
+    return freshness;
+  }
+
+  /** Launch one detached incremental refresh per stale index revision when explicitly enabled. */
+  private maybeAutoIndex(freshness: CodeExplorerFreshness): void {
+    if (!freshness.stale || process.env.CODEBUDDY_CODE_EXPLORER_AUTOINDEX !== 'true') return;
+
+    const revision = freshness.lastCommit ?? freshness.indexedAt ?? 'legacy';
+    if (this.autoIndexAttemptedFor === revision) return;
+    this.autoIndexAttemptedFor = revision;
+
+    try {
+      const child = spawn('gitnexus', ['analyze', '--incremental'], {
+        cwd: this.repoPath,
+        detached: true,
+        stdio: 'ignore',
+        windowsHide: true,
+      });
+      child.on('error', (err) => {
+        logger.warn('CodeExplorer: background auto-index failed', { error: err.message });
+      });
+      child.on('close', (code) => {
+        if (code === 0) {
+          logger.info('CodeExplorer: background auto-index complete');
+        } else {
+          logger.warn('CodeExplorer: background auto-index exited unsuccessfully', { code });
+        }
+      });
+      child.unref();
+      logger.info('CodeExplorer: background auto-index started');
     } catch (err) {
-      logger.warn('CodeExplorer: failed to read meta.json', {
+      logger.warn('CodeExplorer: failed to launch background auto-index', {
         error: err instanceof Error ? err.message : String(err),
       });
-      return { ...DEFAULT_STATS };
     }
   }
 

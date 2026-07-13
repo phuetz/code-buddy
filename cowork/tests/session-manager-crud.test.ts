@@ -3,7 +3,7 @@ import { tmpdir } from 'os';
 import { join } from 'path';
 import { describe, expect, it, vi } from 'vitest';
 import type { DatabaseInstance } from '../src/main/db/database';
-import type { Session } from '../src/renderer/types';
+import type { ServerEvent, Session } from '../src/renderer/types';
 
 vi.mock('electron', () => ({
   app: {
@@ -756,6 +756,49 @@ describe('SessionManager.getMessages content normalization', () => {
     const [msg] = manager.getMessages('s1');
     expect(msg.content).toEqual([{ type: 'text', text: 'not valid json {{{' }]);
   });
+
+  it('keeps the session readable when token usage or metadata JSON is malformed', () => {
+    const db = makeDb({
+      messages: {
+        create: vi.fn(),
+        delete: vi.fn(),
+        deleteBySessionId: vi.fn(),
+        getBySessionId: vi.fn(() => [
+          {
+            id: 'broken-token-usage',
+            session_id: 's1',
+            role: 'assistant',
+            content: JSON.stringify([{ type: 'text', text: 'first' }]),
+            timestamp: 1,
+            token_usage: '{broken',
+            execution_time_ms: null,
+            metadata: JSON.stringify({ turn: { id: 'turn-1', role: 'assistant' } }),
+          },
+          {
+            id: 'broken-metadata',
+            session_id: 's1',
+            role: 'assistant',
+            content: JSON.stringify([{ type: 'text', text: 'second' }]),
+            timestamp: 2,
+            token_usage: JSON.stringify({ input: 10, output: 20 }),
+            execution_time_ms: null,
+            metadata: '[broken',
+          },
+        ]),
+      } as any,
+    });
+
+    const manager = new SessionManager(db, vi.fn());
+    const messages = manager.getMessages('s1');
+
+    expect(messages).toHaveLength(2);
+    expect(messages[0].tokenUsage).toBeUndefined();
+    expect(messages[0].metadata).toEqual({
+      turn: { id: 'turn-1', role: 'assistant' },
+    });
+    expect(messages[1].tokenUsage).toEqual({ input: 10, output: 20 });
+    expect(messages[1].metadata).toBeUndefined();
+  });
 });
 
 // ------------------------------------------------------------------
@@ -782,6 +825,56 @@ describe('SessionManager.handlePermissionResponse', () => {
     const manager = new SessionManager(db, vi.fn());
     // Should not throw
     expect(() => manager.handlePermissionResponse('nonexistent', 'deny')).not.toThrow();
+  });
+
+  it('keeps remote permission requests pending beyond the channel timeout', async () => {
+    vi.useFakeTimers();
+    try {
+      const db = makeDb();
+      const sendToRenderer = vi.fn();
+      const manager = new SessionManager(db, sendToRenderer, undefined, undefined, () => true);
+      const permissionPromise = manager.requestPermission('remote-s1', 'tool-remote', 'bash', {
+        command: 'pwd',
+      });
+      const resolved = vi.fn();
+      void permissionPromise.then(resolved);
+
+      await vi.advanceTimersByTimeAsync(5 * 60_000);
+      expect(resolved).not.toHaveBeenCalled();
+
+      manager.handlePermissionResponse('tool-remote', 'allow');
+      await expect(permissionPromise).resolves.toBe('allow');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe('SessionManager trace update persistence', () => {
+  it('forwards transient tool deltas without journaling or empty SQLite updates', () => {
+    const db = makeDb();
+    const sendToRenderer = vi.fn();
+    const manager = new SessionManager(db, sendToRenderer);
+    const internals = manager as unknown as {
+      sendToRenderer: (event: ServerEvent) => void;
+      turnJournal: TurnJournal;
+    };
+    const journalAppend = vi.spyOn(internals.turnJournal, 'append');
+    const event: ServerEvent = {
+      type: 'trace.update',
+      payload: {
+        sessionId: 's1',
+        stepId: 'step-1',
+        updates: { toolOutputDelta: 'stream chunk' },
+      },
+    };
+
+    internals.sendToRenderer(event);
+
+    expect(db.traceSteps.update).not.toHaveBeenCalled();
+    expect(journalAppend).not.toHaveBeenCalled();
+    expect(sendToRenderer).toHaveBeenCalledWith(event);
+    manager.dispose();
   });
 });
 

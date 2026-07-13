@@ -966,6 +966,29 @@ describe('FleetListener — Phase (d).5 V0.4.1', () => {
       expect(l.getPendingRequestCount()).toBe(0);
     });
 
+    it('rejects in-flight requests immediately when the socket closes unexpectedly', async () => {
+      const { l, fake } = await authedListener();
+      const request = l.request('peer.chat', { prompt: 'slow answer' }, { timeoutMs: 30_000 });
+      const outcome = request.then(
+        () => ({ ok: true as const }),
+        (error: Error & { code?: string }) => ({
+          ok: false as const,
+          code: error.code,
+          message: error.message,
+        }),
+      );
+
+      expect(l.getPendingRequestCount()).toBe(1);
+      fake.close();
+
+      await expect(outcome).resolves.toMatchObject({
+        ok: false,
+        code: 'DISCONNECTED',
+        message: expect.stringContaining('connection closed'),
+      });
+      expect(l.getPendingRequestCount()).toBe(0);
+    });
+
     it('two concurrent requests get matching responses by id (no swap)', async () => {
       const { l, fake } = await authedListener();
       const p1 = l.request('peer.echo', { which: 'first' });
@@ -1032,6 +1055,28 @@ describe('FleetListener — Phase (d).5 V0.4.1', () => {
           payload: { id: 'never-sent', ok: true, payload: 'ghost' },
         });
       }).not.toThrow();
+      expect(l.getPendingRequestCount()).toBe(0);
+      await l.disconnect();
+    });
+
+    it('ignores a peer:chunk that arrives after the request has resolved', async () => {
+      const { l, fake } = await authedListener();
+      const onChunk = vi.fn();
+      const request = l.requestStream('peer.chat-stream', { prompt: 'hello' }, onChunk);
+      const sent = fake.sentMessages.map((message) => JSON.parse(message));
+      const frame = sent.find((message) => message.type === 'peer:request');
+
+      fake.receive({
+        type: 'peer:response',
+        payload: { id: frame.payload.id, ok: true, payload: { text: 'done' } },
+      });
+      await expect(request).resolves.toEqual({ text: 'done' });
+
+      expect(() => fake.receive({
+        type: 'peer:chunk',
+        payload: { id: frame.payload.id, delta: 'late' },
+      })).not.toThrow();
+      expect(onChunk).not.toHaveBeenCalled();
       expect(l.getPendingRequestCount()).toBe(0);
       await l.disconnect();
     });

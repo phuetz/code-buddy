@@ -3,6 +3,8 @@ import path from 'node:path';
 import fs from 'node:fs';
 
 const indexPath = path.resolve(process.cwd(), 'src/main/index.ts');
+const configIpcPath = path.resolve(process.cwd(), 'src/main/ipc/config-ipc.ts');
+const windowManagementPath = path.resolve(process.cwd(), 'src/main/window-management.ts');
 
 describe('Main process window/config behavior', () => {
   it('second-instance path focuses existing window and only recreates when none found', () => {
@@ -35,5 +37,19 @@ describe('Main process window/config behavior', () => {
 
     expect(continueGuard).toContain('hasUsableCredentialsForActiveSet');
     expect(continueGuard).toContain('sendActiveSetConfigRequiredError(event.payload.sessionId)');
+  });
+
+  it('only exposes redacted provider config to the renderer', () => {
+    const indexSource = fs.readFileSync(indexPath, 'utf8');
+    const configIpcSource = fs.readFileSync(configIpcPath, 'utf8');
+    const windowSource = fs.readFileSync(windowManagementPath, 'utf8');
+
+    expect(indexSource).toContain('registerConfigIpcHandlers({');
+    expect(indexSource).not.toContain("ipcMain.handle('config.get'");
+    expect(configIpcSource).toContain("ipcMain.handle('config.get'");
+    expect(configIpcSource).toContain('return configStore.getAllRedacted();');
+    expect(configIpcSource).not.toContain('config: configStore.getAll(),');
+    expect(windowSource).not.toContain('config: configStore.getAll(),');
+    expect(windowSource).toContain('config: configStore.getAllRedacted(),');
   });
 });

@@ -1,6 +1,12 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { spawn } from 'child_process';
-import { makeVoiceReply, type ReplyFn, type PlayFn } from '../../src/sensory/voice-loop.js';
+import {
+  makeVoiceReply,
+  sayNow,
+  type ReplyFn,
+  type PlayFn,
+} from '../../src/sensory/voice-loop.js';
+import { makeAgentReply } from '../../src/sensory/agent-reply.js';
 import { isSpeaking, _resetVoiceActivityForTests } from '../../src/sensory/voice-activity.js';
 
 /**
@@ -141,6 +147,67 @@ describe('voice interrupt — barge-in capability', () => {
 
     expect(killCount).toBe(1); // the audio child was SIGKILLed on demand
     expect(isSpeaking()).toBe(false); // guard hard-reset (no echo tail) → ear re-opens now
+  });
+
+  it('interrupt() during the ACT acknowledgement SIGKILLs its audio child', async () => {
+    let abortKillCount = 0;
+    let markAckPlaying!: () => void;
+    const ackPlaying = new Promise<void>((resolve) => (markAckPlaying = resolve));
+
+    const ackPlay: PlayFn = (_wav, opts) =>
+      new Promise<void>((resolve) => {
+        const child = spawn(process.execPath, ['-e', 'setTimeout(() => {}, 30000)'], {
+          stdio: 'ignore',
+        });
+        const failSafe = setTimeout(() => child.kill('SIGKILL'), 1_000);
+        failSafe.unref();
+        opts?.signal?.addEventListener(
+          'abort',
+          () => {
+            try {
+              child.kill('SIGKILL');
+            } catch {
+              /* already gone */
+            }
+            abortKillCount += 1;
+          },
+          { once: true }
+        );
+        child.on('close', () => {
+          clearTimeout(failSafe);
+          resolve();
+        });
+        child.on('error', () => {
+          clearTimeout(failSafe);
+          resolve();
+        });
+        markAckPlaying();
+      });
+
+    const agentReply = makeAgentReply({
+      ack: async (_heard, opts) =>
+        sayNow("D'accord, je regarde ça.", {
+          signal: opts?.signal,
+          synth: async () => '/tmp/ack.wav',
+          play: ackPlay,
+        }),
+      agentRunner: async () => 'Terminé.',
+      summarize: async () => 'unused',
+    });
+    const onHeard = makeVoiceReply({
+      replyFn: agentReply,
+      synth: async () => '/tmp/reply.wav',
+      play: async () => {},
+    });
+
+    const turn = onHeard('lance le diagnostic complet');
+    await ackPlaying;
+    expect(isSpeaking()).toBe(true);
+    onHeard.interrupt();
+    await turn;
+
+    expect(abortKillCount).toBe(1);
+    expect(isSpeaking()).toBe(false);
   });
 
   it('never-throws: interrupt() with nothing in flight is a clean no-op, and is idempotent', async () => {

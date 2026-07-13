@@ -18,6 +18,10 @@ import path from 'path';
 import { logger } from '../utils/logger.js';
 import { buildCurriculum, type SceneSpec } from '../vision-train/curriculum.js';
 import { runVisionTrain, type VisionTrainDeps } from '../vision-train/engine.js';
+import {
+  formatMissingGroundTruthWarning,
+  selectLabeledFolderScenes,
+} from '../vision-train/folder-labels.js';
 import { renderReport } from '../vision-train/report.js';
 import type { ScenePerception } from '../vision-train/scorer.js';
 
@@ -26,11 +30,13 @@ interface VisionTrainOpts {
   prop?: string;
   images?: string;
   labels?: string;
+  coco?: string;
   provider?: string;
   model?: string;
   minConfidence?: string;
   out?: string;
   ckg?: boolean;
+  strict?: boolean;
 }
 
 export function createVisionTrainCommand(): Command {
@@ -41,10 +47,12 @@ export function createVisionTrainCommand(): Command {
     .option('--prop <name>', 'generate mode: labeled prop in peopled scenes (desk|chair|none)', 'desk')
     .option('--images <dir>', 'folder mode: perceive images from a directory instead of generating')
     .option('--labels <file>', 'folder mode: JSON mapping filename -> {label: count} ground truth')
+    .option('--coco <file>', 'folder mode: derive ground truth from a COCO annotations file (e.g. BlenderProc output) instead of --labels')
     .option('--provider <name>', 'generate mode: image provider (comfyui|openai|xai)')
     .option('--model <ckpt>', 'generate mode: image model/checkpoint')
     .option('--min-confidence <n>', 'YOLO min confidence', '0.35')
     .option('--ckg', 'publish weak spots to the Collective Knowledge Graph (needs CODEBUDDY_COLLECTIVE_MEMORY=true)')
+    .option('--strict', 'labeled folder mode: fail if any image has no ground-truth entry')
     .option('--out <dir>', 'report output directory', '.codebuddy/vision-train')
     .action(async (opts: VisionTrainOpts) => {
       // ── OPT-IN gate (default OFF = zero behaviour change) ──────────────────
@@ -79,9 +87,9 @@ export function createVisionTrainCommand(): Command {
       let obtainImage: VisionTrainDeps['obtainImage'];
       let source: string;
 
-      // Folder mode without labels → detection-only AUDIT (what does the robot
-      // see?). Useful for real footage you can't hand-label.
-      if (opts.images && !opts.labels) {
+      // Folder mode without any ground truth → detection-only AUDIT (what does
+      // the robot see?). Useful for real footage you can't hand-label.
+      if (opts.images && !opts.labels && !opts.coco) {
         const dir = path.resolve(opts.images);
         let files: string[];
         try {
@@ -120,16 +128,28 @@ export function createVisionTrainCommand(): Command {
         return;
       }
 
-      if (opts.images && opts.labels) {
+      if (opts.images && (opts.labels || opts.coco)) {
         const dir = path.resolve(opts.images);
-        const labelsFile = opts.labels;
         let labelMap: Record<string, Record<string, number>>;
-        try {
-          labelMap = JSON.parse(await fs.readFile(path.resolve(labelsFile), 'utf8'));
-        } catch (err) {
-          logger.error(`Could not read --labels file: ${err instanceof Error ? err.message : String(err)}`);
-          process.exitCode = 1;
-          return;
+        if (opts.coco) {
+          // COCO → {filename: {label: count}} (BlenderProc/Kubric/any sim export).
+          try {
+            const { cocoToVisionTrainLabels } = await import('../vision-train/coco-to-labels.js');
+            const coco = JSON.parse(await fs.readFile(path.resolve(opts.coco), 'utf8'));
+            labelMap = cocoToVisionTrainLabels(coco);
+          } catch (err) {
+            logger.error(`Could not read/parse --coco file: ${err instanceof Error ? err.message : String(err)}`);
+            process.exitCode = 1;
+            return;
+          }
+        } else {
+          try {
+            labelMap = JSON.parse(await fs.readFile(path.resolve(opts.labels!), 'utf8'));
+          } catch (err) {
+            logger.error(`Could not read --labels file: ${err instanceof Error ? err.message : String(err)}`);
+            process.exitCode = 1;
+            return;
+          }
         }
         let files: string[];
         try {
@@ -144,7 +164,22 @@ export function createVisionTrainCommand(): Command {
           process.exitCode = 1;
           return;
         }
-        specs = files.map((f) => ({ id: f, prompt: '', expect: { counts: labelMap[f] ?? {} }, tags: [] }));
+        const selection = selectLabeledFolderScenes(files, labelMap);
+        if (selection.missingFiles.length > 0) {
+          const message = formatMissingGroundTruthWarning(selection.missingFiles.length);
+          if (opts.strict) {
+            logger.error(`${message} Aborting because --strict requires ground truth for every image.`);
+            process.exitCode = 1;
+            return;
+          }
+          logger.warn(message);
+        }
+        specs = selection.specs;
+        if (specs.length === 0) {
+          logger.error(`No labeled images found in ${dir}`);
+          process.exitCode = 1;
+          return;
+        }
         obtainImage = async (spec) => path.join(dir, spec.id);
         source = `folder ${dir}`;
       } else {

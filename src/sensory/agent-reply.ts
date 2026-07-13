@@ -44,7 +44,7 @@ export interface AgentReplyOptions {
   summarize?: SummarizeFn;
   /** Optional spoken acknowledgement played BEFORE the (slow) turn, e.g. "d'accord, je regarde…".
    *  Default: none (the ReplyFn contract returns one string; wire this where synth+play exist). */
-  ack?: (transcript: string) => Promise<void>;
+  ack?: (transcript: string, opts?: VoiceStepOptions) => Promise<void>;
   /** Spoken when the turn fails (never-throws). Default: a short FR apology. */
   apology?: string;
 }
@@ -93,7 +93,7 @@ function makeDefaultAgentRunner(cwd: string): AgentRunner {
         route = { model: pinned, apiKey: 'oauth-chatgpt', baseURL: CHATGPT_RESPONSES_BASE_URL };
       } else {
         const fallback = await resolveVoiceModel(transcript);
-        route = { model: pinned, apiKey: fallback.apiKey, baseURL: fallback.baseURL };
+        route = { model: fallback.model, apiKey: fallback.apiKey, baseURL: fallback.baseURL };
         logger.warn(
           `[voice-act] '${pinned}' is a ChatGPT model but no OAuth creds (~/.codebuddy/codex-auth.json) — ` +
             'run `buddy login`; falling back to the local route (likely wrong/slow).',
@@ -105,7 +105,10 @@ function makeDefaultAgentRunner(cwd: string): AgentRunner {
     } else {
       const { selectFastestModel } = await import('../fleet/model-selector.js');
       // The turn needs reliable tool calls; fall back to the fast reply route if none qualifies.
-      const sel = await selectFastestModel(transcript, { requireToolCalling: true });
+      const sel = await selectFastestModel(transcript, {
+        requireToolCalling: true,
+        localOnly: process.env.CODEBUDDY_SENSORY_SPEAK_LOCAL_ONLY === 'true',
+      });
       if (sel) {
         route = { model: sel.model, apiKey: sel.apiKey ?? 'ollama', ...(sel.baseURL ? { baseURL: sel.baseURL } : {}) };
       } else {
@@ -188,7 +191,7 @@ export function makeAgentReply(options: AgentReplyOptions = {}): ReplyFn {
       await ensurePosture();
       if (options.ack) {
         try {
-          await options.ack(heard);
+          await options.ack(heard, replyOpts);
         } catch {
           /* ack is best-effort */
         }

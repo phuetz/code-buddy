@@ -215,3 +215,4 @@ docs/qa/code-buddy-studio/screenshots/49-test-runner-server-real-gpt55.png
 
 # Auto-generated docs mirror (regenerable) — not tracked
 docs-generated-full/
+__pycache__/

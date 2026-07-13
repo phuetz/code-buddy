@@ -51,14 +51,12 @@ BENCH_MODEL=gpt-5.5 REPEATS=3 node docs/code-explorer-benchmark/run.mjs
 > respect an explicit setting) — without it, **both** conditions run without the
 > graph and the A/B is meaningless.
 >
-> **Known gap, not yet closed:** even with MCP enabled in headless, the gitnexus
-> tools are **not surfaced to the agent as native `mcp__gitnexus__*` tools** —
-> `initializeMCP()` is fire-and-forget and the headless turn starts before the
-> server finishes connecting (no `mcpReady` to await). In a real run the agent
-> either ignores the graph (uses the built-in `code_graph`/`search`) or
-> hand-rolls an MCP client over `bash` to reach it. **Until that is fixed, this
-> benchmark cannot fairly measure the lift through the native tool path.** Track
-> with the bridge owner before running the full sweep.
+> **Gap closed (verified 2026-07-12):** headless MCP is no longer fire-and-forget.
+> The agent now awaits `getMCPReady()` (`src/agent/facades/infrastructure-facade.ts:147`
+> → `src/agent/base-agent.ts:449`, awaited at `src/index.ts:1012` behind the headless
+> opt-in) before the first turn, so the Code Explorer tools ARE surfaced as native
+> `mcp__code-explorer__*` / `mcp__gitnexus__*` tools in the with-graph run. Still
+> confirm per run (headless MCP can be slow to connect) and keep `REPEATS ≥ 3`.
 
 Env knobs: `BENCH_MODEL` (model pin, default = repo setting), `REPEATS`
 (runs per condition, **use ≥3** — single runs are noisy), `BENCH_BUDDY`

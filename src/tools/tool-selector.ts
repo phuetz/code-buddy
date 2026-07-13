@@ -43,6 +43,21 @@ export interface ToolRequestEvent {
   wasSelected: boolean;
 }
 
+export interface ToolSelectionOptions {
+  /** Maximum number of tools to return (default: 10) */
+  maxTools?: number;
+  /** Minimum relevance score to include a tool */
+  minScore?: number;
+  /** Only include tools in these categories */
+  includeCategories?: ToolCategory[];
+  /** Exclude tools in these categories */
+  excludeCategories?: ToolCategory[];
+  /** Tool names to always include regardless of score */
+  alwaysInclude?: string[];
+  /** Whether to use dynamic thresholding based on success rate */
+  useAdaptiveThreshold?: boolean;
+}
+
 /**
  * Cache entry for query classification
  */
@@ -137,6 +152,72 @@ export class ToolSelector {
       const idf = Math.log(this.totalDocuments / (df + 1)) + 1;
       this.idfScores.set(keyword, idf);
     }
+  }
+
+  /** Normalize a tool's keyword set exactly like query scoring does. */
+  private normalizeKeywords(keywords: string[]): Set<string> {
+    return new Set(keywords.map(keyword =>
+      ToolSelector.foldDiacritics(keyword.toLowerCase())
+    ));
+  }
+
+  /** Recompute IDF after the indexed corpus or document frequencies change. */
+  private recalculateIdfScores(): void {
+    this.idfScores.clear();
+    for (const [keyword, df] of this.documentFrequency) {
+      const idf = Math.log(this.totalDocuments / (df + 1)) + 1;
+      this.idfScores.set(keyword, idf);
+    }
+  }
+
+  private cloneSelectionResult(result: ToolSelectionResult): ToolSelectionResult {
+    return {
+      ...result,
+      selectedTools: [...result.selectedTools],
+      scores: new Map(result.scores),
+      classification: {
+        ...result.classification,
+        categories: [...result.classification.categories],
+        keywords: [...result.classification.keywords],
+      },
+    };
+  }
+
+  private getToolSetSignature(allTools: CodeBuddyTool[]): string {
+    let hash = 0x811c9dc5;
+    for (const tool of allTools) {
+      const definition = [
+        tool.function.name,
+        tool.function.description,
+        JSON.stringify(tool.function.parameters),
+      ].join('\u0001');
+      for (let index = 0; index < definition.length; index++) {
+        hash ^= definition.charCodeAt(index);
+        hash = Math.imul(hash, 0x01000193);
+      }
+    }
+    return `${allTools.length}:${(hash >>> 0).toString(36)}`;
+  }
+
+  private getSelectionCacheKey(
+    query: string,
+    allTools: CodeBuddyTool[],
+    options: Required<Pick<ToolSelectionOptions,
+      'maxTools' | 'minScore' | 'alwaysInclude' | 'useAdaptiveThreshold'>> &
+      Pick<ToolSelectionOptions, 'includeCategories' | 'excludeCategories'>,
+    effectiveMinScore: number,
+  ): string {
+    return JSON.stringify({
+      query: query.toLowerCase().trim(),
+      toolSignature: this.getToolSetSignature(allTools),
+      maxTools: options.maxTools,
+      minScore: options.minScore,
+      effectiveMinScore,
+      includeCategories: options.includeCategories ?? [],
+      excludeCategories: options.excludeCategories ?? [],
+      alwaysInclude: options.alwaysInclude,
+      useAdaptiveThreshold: options.useAdaptiveThreshold,
+    });
   }
 
   /**
@@ -290,20 +371,7 @@ export class ToolSelector {
   selectTools(
     query: string,
     allTools: CodeBuddyTool[],
-    options: {
-      /** Maximum number of tools to return (default: 10) */
-      maxTools?: number;
-      /** Minimum relevance score (0-1) to include a tool */
-      minScore?: number;
-      /** Only include tools in these categories */
-      includeCategories?: ToolCategory[];
-      /** Exclude tools in these categories */
-      excludeCategories?: ToolCategory[];
-      /** List of tool names to always include regardless of score */
-      alwaysInclude?: string[];
-      /** Whether to use dynamic thresholding based on success rate */
-      useAdaptiveThreshold?: boolean;
-    } = {}
+    options: ToolSelectionOptions = {}
   ): ToolSelectionResult {
     const {
       maxTools = 10,
@@ -318,6 +386,25 @@ export class ToolSelector {
     const effectiveMinScore = useAdaptiveThreshold && this.metrics.totalSelections > 10
       ? this.adaptiveMinScore
       : minScore;
+
+    const cacheOptions = {
+      maxTools,
+      minScore,
+      includeCategories,
+      excludeCategories,
+      alwaysInclude,
+      useAdaptiveThreshold,
+    };
+    const cacheKey = this.getSelectionCacheKey(
+      query,
+      allTools,
+      cacheOptions,
+      effectiveMinScore,
+    );
+    const cachedSelection = this.selectionCache.get(cacheKey);
+    if (cachedSelection) {
+      return this.cloneSelectionResult(cachedSelection);
+    }
 
     const classification = this.classifyQuery(query);
     const queryTokens = this.tokenize(query);
@@ -405,7 +492,13 @@ export class ToolSelector {
 
         for (const toolName of categoryTools) {
           if (selectedToolNames.length >= maxTools) break;
-          if (toolMap.has(toolName) && !selectedToolNames.includes(toolName)) {
+          const score = scores.get(toolName);
+          if (
+            toolMap.has(toolName)
+            && score !== undefined
+            && score >= effectiveMinScore
+            && !selectedToolNames.includes(toolName)
+          ) {
             selectedToolNames.push(toolName);
           }
         }
@@ -425,7 +518,7 @@ export class ToolSelector {
     const maxScore = sortedTools[0]?.[1] ?? 0;
     const confidence = Math.min(1, maxScore / 10);
 
-    return {
+    const result: ToolSelectionResult = {
       selectedTools,
       scores,
       classification,
@@ -433,6 +526,8 @@ export class ToolSelector {
       originalTokens,
       confidence,
     };
+    this.selectionCache.set(cacheKey, this.cloneSelectionResult(result));
+    return result;
   }
 
   /**
@@ -474,20 +569,42 @@ export class ToolSelector {
       description
     };
 
-    this.toolIndex.set(name, metadata);
+    const existing = this.toolIndex.get(name);
+    const nextKeywords = this.normalizeKeywords(keywords);
+    if (existing) {
+      const previousKeywords = this.normalizeKeywords(existing.keywords);
+      const metadataChanged =
+        existing.category !== metadata.category ||
+        existing.priority !== metadata.priority ||
+        existing.description !== metadata.description ||
+        previousKeywords.size !== nextKeywords.size ||
+        [...previousKeywords].some(keyword => !nextKeywords.has(keyword));
 
-    // Update document frequency and IDF
-    this.totalDocuments++;
-    const uniqueKeywords = new Set(keywords.map(k => k.toLowerCase()));
-    for (const keyword of uniqueKeywords) {
-      this.documentFrequency.set(
-        keyword,
-        (this.documentFrequency.get(keyword) || 0) + 1
-      );
-      const df = this.documentFrequency.get(keyword) || 1;
-      const idf = Math.log(this.totalDocuments / (df + 1)) + 1;
-      this.idfScores.set(keyword, idf);
+      if (!metadataChanged) return;
+
+      this.toolIndex.set(name, metadata);
+      for (const keyword of previousKeywords) {
+        if (nextKeywords.has(keyword)) continue;
+        const nextDf = (this.documentFrequency.get(keyword) ?? 1) - 1;
+        if (nextDf <= 0) this.documentFrequency.delete(keyword);
+        else this.documentFrequency.set(keyword, nextDf);
+      }
+      for (const keyword of nextKeywords) {
+        if (previousKeywords.has(keyword)) continue;
+        this.documentFrequency.set(keyword, (this.documentFrequency.get(keyword) ?? 0) + 1);
+      }
+      this.recalculateIdfScores();
+      this.selectionCache.clear();
+      return;
     }
+
+    this.toolIndex.set(name, metadata);
+    this.totalDocuments++;
+    for (const keyword of nextKeywords) {
+      this.documentFrequency.set(keyword, (this.documentFrequency.get(keyword) ?? 0) + 1);
+    }
+    this.recalculateIdfScores();
+    this.selectionCache.clear();
   }
 
   /**
@@ -621,6 +738,7 @@ export class ToolSelector {
    */
   setAdaptiveThreshold(threshold: number): void {
     this.adaptiveMinScore = Math.max(0.1, Math.min(1.0, threshold));
+    this.selectionCache.clear();
   }
 
   /**
@@ -637,6 +755,7 @@ export class ToolSelector {
     };
     this.requestHistory = [];
     this.adaptiveMinScore = this.baseMinScore;
+    this.selectionCache.clear();
   }
 
   /**
@@ -673,6 +792,7 @@ export class ToolSelector {
    */
   clearClassificationCache(): void {
     this.classificationCache.clear();
+    this.selectionCache.clear();
   }
 
   /**
@@ -727,10 +847,27 @@ export function getToolSelector(): ToolSelector {
 export function selectRelevantTools(
   query: string,
   allTools: CodeBuddyTool[],
-  maxTools: number = 10,
-  alwaysInclude?: string[]
+  options?: ToolSelectionOptions,
+): ToolSelectionResult;
+export function selectRelevantTools(
+  query: string,
+  allTools: CodeBuddyTool[],
+  maxTools?: number,
+  alwaysInclude?: string[],
+): ToolSelectionResult;
+export function selectRelevantTools(
+  query: string,
+  allTools: CodeBuddyTool[],
+  optionsOrMaxTools: ToolSelectionOptions | number = {},
+  legacyAlwaysInclude?: string[],
 ): ToolSelectionResult {
-  return getToolSelector().selectTools(query, allTools, { maxTools, alwaysInclude });
+  const options = typeof optionsOrMaxTools === 'number' || legacyAlwaysInclude !== undefined
+    ? {
+        maxTools: typeof optionsOrMaxTools === 'number' ? optionsOrMaxTools : 10,
+        alwaysInclude: legacyAlwaysInclude,
+      }
+    : optionsOrMaxTools;
+  return getToolSelector().selectTools(query, allTools, options);
 }
 
 /**

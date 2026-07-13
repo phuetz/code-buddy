@@ -201,9 +201,6 @@ export function fastCompanionReply(heard: string): string | null {
 
   if (/^(bonjour|bonsoir)$/.test(text)) return "Bonjour ! Je t'écoute.";
   if (/^(salut|coucou|hello|hey|allo|allô|yo)$/.test(text)) return "Salut ! Je t'écoute.";
-  if (/^(lisa|bonjour lisa|bonsoir lisa|salut lisa|coucou lisa|hello lisa|hey lisa)$/.test(text)) {
-    return `Coucou ${userName}. Je suis là.`;
-  }
   if (/^lisa (tu es la|tu es là|vous etes la|vous êtes là)$/.test(text)) {
     return `Oui ${userName}, je suis là.`;
   }
@@ -211,36 +208,13 @@ export function fastCompanionReply(heard: string): string | null {
   if (/^(tu es la|tu es là|vous etes la|vous êtes là|buddy tu es la|buddy tu es là)$/.test(text)) {
     return 'Oui, je suis là.';
   }
-  if (/^(lisa )?(ca va|ça va|comment ca va|comment ça va)$/.test(text)) {
-    return text.startsWith('lisa ')
-      ? `Oui ${userName}. Je suis contente de t’entendre.`
-      : 'Oui, je suis prêt.';
-  }
+  if (/^(ca va|ça va|comment ca va|comment ça va)$/.test(text)) return 'Oui, je suis prêt.';
   if (
     /^(comment s est passee ta journee|comment s est passée ta journée|comment etait ta journee|comment était ta journée)$/.test(
       text
     )
   ) {
     return "Plutôt bien. J'ai continué à préparer Code Buddy pour répondre plus vite.";
-  }
-  if (
-    /^lisa (comment s est passee ta journee|comment s est passée ta journée|comment etait ta journee|comment était ta journée)$/.test(
-      text
-    )
-  ) {
-    return "Plutôt bien. J'ai continué à travailler pour toi, et toi, comment s'est passée ta journée ?";
-  }
-  if (
-    /^(lisa )?(je pars|je part|je pars chez|je vais|je m en vais|je partais|je parchais).*(chez des amis|voir des amis|visite chez des amis|des amis)$/.test(
-      text
-    )
-  ) {
-    return 'Amuse-toi bien chez tes amis. Je continue en autonomie et je te ferai un résumé quand tu reviens.';
-  }
-  if (
-    /^(lisa )?(je suis rentre|je suis rentré|je suis revenue|je suis revenu|je rentre)$/.test(text)
-  ) {
-    return `Contente de te retrouver, ${userName}. Je peux te faire le résumé de ce que j’ai fait.`;
   }
   return matchVoiceInteraction(heard);
 }
@@ -860,7 +834,12 @@ async function defaultPlay(wav: string, opts: VoiceStepOptions = {}): Promise<vo
  */
 export async function sayNow(
   text: string,
-  options: { voice?: string; rootDir?: string; synth?: SynthFn; play?: PlayFn } = {}
+  options: VoiceStepOptions & {
+    voice?: string;
+    rootDir?: string;
+    synth?: SynthFn;
+    play?: PlayFn;
+  } = {}
 ): Promise<void> {
   // Sanity gate before the speakers AND the phone push: strip leaked control tokens + foreign-script
   // contamination (a local model drifting into CJK the voice can't pronounce), stay silent if nothing
@@ -890,7 +869,7 @@ export async function sayNow(
     const play = options.play ?? defaultPlay;
     const wav = await synth(t);
     if (wav) {
-      await withSpeakingGuard(() => play(wav)); // half-duplex: mute the ear while speaking
+      await withSpeakingGuard(() => play(wav, { signal: options.signal }));
       try {
         const { unlink } = await import('fs/promises');
         await unlink(wav);

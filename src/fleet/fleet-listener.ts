@@ -304,6 +304,10 @@ export class FleetListener extends EventEmitter {
         this.connected = false;
         this.authenticated = false;
         this.emit('disconnected');
+        // Responses sent to the old socket can never arrive on a replacement
+        // connection. Reject immediately instead of leaving callers blocked
+        // until their individual request timeouts expire.
+        this.rejectPendingRequests('connection closed');
         // If we never settled, the connection died before auth — reject.
         settle(new Error('Connection closed before authentication'));
         // Phase (d).6 — schedule auto-reconnect only if:

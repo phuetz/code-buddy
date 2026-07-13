@@ -1,11 +1,12 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { existsSync, mkdtempSync, rmSync } from 'fs';
+import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs';
 import { homedir, tmpdir } from 'os';
 import { join } from 'path';
 import {
   CollectiveKnowledgeGraph,
   resetCollectiveKnowledgeGraph,
 } from '../../src/memory/collective-knowledge-graph.js';
+import { BuddyMemoryClient } from '../../src/memory/buddy-memory-client.js';
 
 // The Rust engine MVP (Phase 1): keyword recall over the shared JSONL ledger via a sidecar.
 // Skips cleanly where the binary isn't built.
@@ -91,4 +92,94 @@ describe('CKG Rust engine (CODEBUDDY_CKG_ENGINE=rust)', () => {
     const hits = await b.recallHybrid('journal pertes concurrentes', { limit: 1 });
     expect(hits[0]?.corroborations).toBe(2);
   }, 30000);
+
+  it.skipIf(process.platform === 'win32')('close terminates the spawned sidecar process', async () => {
+    const fakeBin = join(dir, 'fake-buddy-memory.cjs');
+    const pidFile = join(dir, 'sidecar.pid');
+    writeFileSync(
+      fakeBin,
+      "#!/usr/bin/env node\nrequire('node:fs').writeFileSync(process.env.BUDDY_MEMORY_TEST_PID_FILE, String(process.pid));\nprocess.stdin.resume();\n",
+      'utf8',
+    );
+    chmodSync(fakeBin, 0o755);
+    const previousBin = process.env.CODEBUDDY_BUDDY_MEMORY_BIN;
+    const previousPidFile = process.env.BUDDY_MEMORY_TEST_PID_FILE;
+    process.env.CODEBUDDY_BUDDY_MEMORY_BIN = fakeBin;
+    process.env.BUDDY_MEMORY_TEST_PID_FILE = pidFile;
+    let pid: number | null = null;
+    let client: BuddyMemoryClient | null = null;
+    try {
+      client = new BuddyMemoryClient({ ledgerPath, agentId: 'test/agent' });
+      expect(client.available()).toBe(true);
+      await waitUntil(() => existsSync(pidFile));
+      pid = Number(readFileSync(pidFile, 'utf8'));
+      expect(Number.isInteger(pid)).toBe(true);
+      expect(isProcessAlive(pid)).toBe(true);
+
+      client.close();
+      await waitUntil(() => !isProcessAlive(pid!));
+      expect(isProcessAlive(pid)).toBe(false);
+    } finally {
+      client?.close();
+      if (pid !== null && isProcessAlive(pid)) {
+        try { process.kill(pid, 'SIGKILL'); } catch { /* already exited */ }
+      }
+      if (previousBin === undefined) delete process.env.CODEBUDDY_BUDDY_MEMORY_BIN;
+      else process.env.CODEBUDDY_BUDDY_MEMORY_BIN = previousBin;
+      if (previousPidFile === undefined) delete process.env.BUDDY_MEMORY_TEST_PID_FILE;
+      else process.env.BUDDY_MEMORY_TEST_PID_FILE = previousPidFile;
+    }
+  });
+
+  it.skipIf(process.platform === 'win32')('redacts nested names and reasons before JSON-RPC writes', async () => {
+    const fakeBin = join(dir, 'capturing-buddy-memory.cjs');
+    const captureFile = join(dir, 'request.json');
+    writeFileSync(
+      fakeBin,
+      "#!/usr/bin/env node\nconst fs=require('node:fs');const rl=require('node:readline').createInterface({input:process.stdin});rl.on('line',(line)=>{fs.writeFileSync(process.env.BUDDY_MEMORY_TEST_CAPTURE,line);const req=JSON.parse(line);process.stdout.write(JSON.stringify({id:req.id,result:null})+'\\n');});\n",
+      'utf8',
+    );
+    chmodSync(fakeBin, 0o755);
+    const previousBin = process.env.CODEBUDDY_BUDDY_MEMORY_BIN;
+    const previousCapture = process.env.BUDDY_MEMORY_TEST_CAPTURE;
+    process.env.CODEBUDDY_BUDDY_MEMORY_BIN = fakeBin;
+    process.env.BUDDY_MEMORY_TEST_CAPTURE = captureFile;
+    const tokens = ['E', 'F', 'G'].map((letter) => `ghp_${letter.repeat(36)}`);
+    const client = new BuddyMemoryClient({ ledgerPath, agentId: 'test/agent' });
+    try {
+      await client.call('remember', {
+        text: 'safe fact',
+        name: `name-${tokens[0]}`,
+        reason: `reason-${tokens[1]}`,
+        relations: [{ targetName: `target-${tokens[2]}`, reason: `nested-${tokens[1]}` }],
+      });
+      const rawRequest = readFileSync(captureFile, 'utf8');
+      for (const token of tokens) expect(rawRequest).not.toContain(token);
+      expect(rawRequest).toContain('[REDACTED:env-key]');
+    } finally {
+      client.close();
+      if (previousBin === undefined) delete process.env.CODEBUDDY_BUDDY_MEMORY_BIN;
+      else process.env.CODEBUDDY_BUDDY_MEMORY_BIN = previousBin;
+      if (previousCapture === undefined) delete process.env.BUDDY_MEMORY_TEST_CAPTURE;
+      else process.env.BUDDY_MEMORY_TEST_CAPTURE = previousCapture;
+    }
+  });
 });
+
+function isProcessAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function waitUntil(predicate: () => boolean, timeoutMs = 2_000): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (predicate()) return;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  throw new Error('Timed out waiting for sidecar process state');
+}

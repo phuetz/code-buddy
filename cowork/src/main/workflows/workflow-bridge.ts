@@ -138,13 +138,30 @@ export class WorkflowBridge {
       this.cache = [];
       return this.cache;
     }
+    let raw: string;
     try {
-      const raw = fs.readFileSync(this.filePath, 'utf-8');
+      raw = fs.readFileSync(this.filePath, 'utf-8');
+    } catch (err) {
+      logWarn('[WorkflowBridge] failed to read workflows:', err);
+      this.cache = [];
+      return this.cache;
+    }
+    try {
       const parsed = JSON.parse(raw);
-      this.cache = Array.isArray(parsed) ? (parsed as WorkflowDefinition[]) : [];
+      if (!Array.isArray(parsed)) {
+        throw new Error('workflows.json must contain an array');
+      }
+      this.cache = parsed as WorkflowDefinition[];
       return this.cache;
     } catch (err) {
-      logWarn('[WorkflowBridge] failed to load workflows:', err);
+      const corruptPath = `${this.filePath}.corrupt-${Date.now()}`;
+      try {
+        fs.renameSync(this.filePath, corruptPath);
+        logWarn('[WorkflowBridge] quarantined corrupt workflows file:', corruptPath);
+      } catch (quarantineError) {
+        logWarn('[WorkflowBridge] failed to quarantine corrupt workflows file:', quarantineError);
+      }
+      logWarn('[WorkflowBridge] failed to parse workflows:', err);
       this.cache = [];
       return this.cache;
     }
@@ -162,9 +179,7 @@ export class WorkflowBridge {
       createdAt: now,
       updatedAt: now,
     };
-    const all = this.list();
-    all.push(definition);
-    this.persist(all);
+    this.persist([...this.list(), definition]);
     return definition;
   }
 
@@ -173,8 +188,9 @@ export class WorkflowBridge {
     const index = all.findIndex((w) => w.id === id);
     if (index === -1) return null;
     const updated = { ...all[index], ...patch, id, updatedAt: Date.now() };
-    all[index] = updated;
-    this.persist(all);
+    const next = [...all];
+    next[index] = updated;
+    this.persist(next);
     return updated;
   }
 
@@ -497,7 +513,7 @@ export class WorkflowBridge {
           const bodyNodes = this.loopBodyNodes.get(evt.stepId) ?? [];
           for (const nodeId of bodyNodes) {
             this.emitWorkflowEvent({
-              type: 'node_reset' as never,
+              type: 'node_reset',
               workflowId: wfId,
               instanceId: evt.instanceId,
               nodeId,
@@ -615,11 +631,19 @@ export class WorkflowBridge {
   }
 
   private persist(workflows: WorkflowDefinition[]): void {
+    const tempPath = `${this.filePath}.tmp`;
     try {
-      fs.writeFileSync(this.filePath, JSON.stringify(workflows, null, 2), 'utf-8');
-      this.cache = workflows;
+      fs.writeFileSync(tempPath, JSON.stringify(workflows, null, 2), 'utf-8');
+      fs.renameSync(tempPath, this.filePath);
+      this.cache = [...workflows];
     } catch (err) {
+      try {
+        if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
+      } catch {
+        // Preserve the original persistence error.
+      }
       logWarn('[WorkflowBridge] persist failed:', err);
+      throw err;
     }
   }
 }

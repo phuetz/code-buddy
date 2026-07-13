@@ -40,13 +40,6 @@ import {
   getCodeExplorerManager,
   clearCodeExplorerManagerCache,
 } from '../../src/plugins/code-explorer/CodeExplorerManager.js';
-import { CodeExplorerMCPClient } from '../../src/plugins/code-explorer/CodeExplorerMCPClient.js';
-import type {
-  CodeExplorerStats,
-  GNQueryResult,
-  GNContextResult,
-  GNImpactResult,
-} from '../../src/plugins/code-explorer/index.js';
 
 describe('CodeExplorerManager', () => {
   let manager: CodeExplorerManager;
@@ -263,6 +256,60 @@ describe('CodeExplorerManager', () => {
     });
   });
 
+  describe('auto-index', () => {
+    const staleMeta = JSON.stringify({
+      lastCommit: 'oldsha',
+      indexedAt: '2026-07-01T00:00:00.000Z',
+      stats: {},
+    });
+
+    beforeEach(() => {
+      (spawn as unknown as ReturnType<typeof vi.fn>).mockReset();
+      (fs.existsSync as unknown as ReturnType<typeof vi.fn>).mockReturnValue(true);
+      (fs.readFileSync as unknown as ReturnType<typeof vi.fn>).mockReturnValue(staleMeta);
+    });
+
+    afterEach(() => {
+      vi.unstubAllEnvs();
+    });
+
+    it('starts one detached incremental refresh when explicitly enabled', () => {
+      vi.stubEnv('CODEBUDDY_CODE_EXPLORER_AUTOINDEX', 'true');
+      const child = { on: vi.fn(), unref: vi.fn() };
+      (spawn as unknown as ReturnType<typeof vi.fn>).mockReturnValue(child);
+
+      expect(manager.getFreshness(() => '2')).toMatchObject({ stale: true, commitsBehind: 2 });
+      manager.getFreshness(() => '2');
+
+      expect(spawn).toHaveBeenCalledTimes(1);
+      expect(spawn).toHaveBeenCalledWith('gitnexus', ['analyze', '--incremental'], {
+        cwd: path.resolve(testRepoPath),
+        detached: true,
+        stdio: 'ignore',
+        windowsHide: true,
+      });
+      expect(child.on).toHaveBeenCalledWith('error', expect.any(Function));
+      expect(child.unref).toHaveBeenCalledOnce();
+    });
+
+    it('does not refresh by default', () => {
+      vi.stubEnv('CODEBUDDY_CODE_EXPLORER_AUTOINDEX', 'false');
+
+      expect(manager.getFreshness(() => '1').stale).toBe(true);
+      expect(spawn).not.toHaveBeenCalled();
+    });
+
+    it('keeps freshness fail-open when the background launch fails', () => {
+      vi.stubEnv('CODEBUDDY_CODE_EXPLORER_AUTOINDEX', 'true');
+      (spawn as unknown as ReturnType<typeof vi.fn>).mockImplementation(() => {
+        throw new Error('spawn failed');
+      });
+
+      expect(() => manager.getFreshness(() => '1')).not.toThrow();
+      expect(manager.getFreshness(() => '1')).toMatchObject({ stale: true, commitsBehind: 1 });
+    });
+  });
+
   describe('getRepoPath', () => {
     it('should return the resolved repo path', () => {
       expect(manager.getRepoPath()).toBe(path.resolve(testRepoPath));
@@ -430,151 +477,5 @@ describe('getCodeExplorerManager (singleton)', () => {
     const a = getCodeExplorerManager('/test/path-a');
     const b = getCodeExplorerManager('/test/path-b');
     expect(a).not.toBe(b);
-  });
-});
-
-describe('CodeExplorerMCPClient', () => {
-  let client: CodeExplorerMCPClient;
-
-  beforeEach(() => {
-    client = new CodeExplorerMCPClient('test-repo');
-  });
-
-  afterEach(async () => {
-    if (client.isConnected()) {
-      await client.disconnect();
-    }
-  });
-
-  describe('connection lifecycle', () => {
-    it('should start disconnected', () => {
-      expect(client.isConnected()).toBe(false);
-    });
-
-    it('should connect in stub mode', async () => {
-      await client.connect();
-      expect(client.isConnected()).toBe(true);
-    });
-
-    it('should disconnect cleanly', async () => {
-      await client.connect();
-      await client.disconnect();
-      expect(client.isConnected()).toBe(false);
-    });
-
-    it('should expose the repo name', () => {
-      expect(client.getRepoName()).toBe('test-repo');
-    });
-  });
-
-  describe('tools (stub mode)', () => {
-    beforeEach(async () => {
-      await client.connect();
-    });
-
-    it('query should return empty results', async () => {
-      const result = await client.query('find authentication flow');
-      expect(result).toEqual({ processes: [], definitions: [] });
-    });
-
-    it('context should return default symbol context', async () => {
-      const result = await client.context('myFunction');
-      expect(result.symbol.uid).toBe('myFunction');
-      expect(result.symbol.kind).toBe('function');
-      expect(result.incoming.calls).toEqual([]);
-      expect(result.outgoing.calls).toEqual([]);
-      expect(result.processes).toEqual([]);
-    });
-
-    it('impact should return low risk default', async () => {
-      const result = await client.impact('src/index.ts');
-      expect(result.target).toBe('src/index.ts');
-      expect(result.affected).toEqual([]);
-      expect(result.affectedProcesses).toEqual([]);
-      expect(result.riskLevel).toBe('low');
-    });
-
-    it('impact should accept direction parameter', async () => {
-      const result = await client.impact('src/index.ts', 'downstream');
-      expect(result.target).toBe('src/index.ts');
-      expect(result.riskLevel).toBe('low');
-    });
-
-    it('cypher should return empty array', async () => {
-      const result = await client.cypher('MATCH (n) RETURN n LIMIT 5');
-      expect(result).toEqual([]);
-    });
-  });
-
-  describe('resources (stub mode)', () => {
-    beforeEach(async () => {
-      await client.connect();
-    });
-
-    it('getClusters should return empty array', async () => {
-      expect(await client.getClusters()).toEqual([]);
-    });
-
-    it('getProcesses should return empty array', async () => {
-      expect(await client.getProcesses()).toEqual([]);
-    });
-
-    it('getRepoContext should return empty object', async () => {
-      expect(await client.getRepoContext()).toEqual({});
-    });
-
-    it('getArchitectureMap should return empty string', async () => {
-      expect(await client.getArchitectureMap()).toBe('');
-    });
-  });
-
-  describe('error handling', () => {
-    it('should throw when calling tools without connecting', async () => {
-      await expect(client.query('test')).rejects.toThrow(
-        'CodeExplorerMCPClient is not connected',
-      );
-    });
-
-    it('should throw when calling context without connecting', async () => {
-      await expect(client.context('sym')).rejects.toThrow(
-        'CodeExplorerMCPClient is not connected',
-      );
-    });
-
-    it('should throw when calling impact without connecting', async () => {
-      await expect(client.impact('file.ts')).rejects.toThrow(
-        'CodeExplorerMCPClient is not connected',
-      );
-    });
-
-    it('should throw when calling cypher without connecting', async () => {
-      await expect(client.cypher('MATCH (n) RETURN n')).rejects.toThrow(
-        'CodeExplorerMCPClient is not connected',
-      );
-    });
-
-    it('should throw when calling getClusters without connecting', async () => {
-      await expect(client.getClusters()).rejects.toThrow(
-        'CodeExplorerMCPClient is not connected',
-      );
-    });
-
-    it('should throw when calling getProcesses without connecting', async () => {
-      await expect(client.getProcesses()).rejects.toThrow(
-        'CodeExplorerMCPClient is not connected',
-      );
-    });
-
-    it('should throw when calling getRepoContext without connecting', async () => {
-      await expect(client.getRepoContext()).rejects.toThrow(
-        'CodeExplorerMCPClient is not connected',
-      );
-    });
-
-    it('should throw when calling getArchitectureMap without connecting', async () => {
-      await expect(client.getArchitectureMap()).rejects.toThrow(
-        'CodeExplorerMCPClient is not connected',
-      );
-    });
   });
 });

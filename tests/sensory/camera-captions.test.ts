@@ -38,6 +38,11 @@ describe('camera alert captions are varied', () => {
     expect(pickCameraMessage('unknown-kind')).toBe('unknown-kind');
   });
 
+  it('has user-facing alerts for camera loss and recovery', () => {
+    expect(CAMERA_MESSAGES.offline).toContain(pickCameraMessage('offline', () => 0));
+    expect(CAMERA_MESSAGES.online).toContain(pickCameraMessage('online', () => 0));
+  });
+
   it('pickMotionPrefix rotates without consecutive repeats', () => {
     const rng = seeded(3);
     let prev = '';

@@ -27,6 +27,7 @@ import {
   isFleetDispatchProfile,
   normalizeDispatchProfile,
 } from '../../fleet/dispatch-profile.js';
+import { isFleetSaturated } from '../../fleet/fleet-load.js';
 import { logger } from '../../utils/logger.js';
 import {
   _clearPeerMethodsForTests,
@@ -223,6 +224,11 @@ function registerBuiltInMethods(): void {
         `peer.dispatch: dispatchProfile must be one of ${FLEET_DISPATCH_PROFILES.join(', ')}`,
       );
     }
+    if (isFleetSaturated()) {
+      const error = new Error('peer.dispatch: fleet concurrency limit reached');
+      (error as Error & { code: 'SATURATED' }).code = 'SATURATED';
+      throw error;
+    }
     const dispatchId =
       typeof id === 'string' && id.length > 0
         ? id
@@ -366,11 +372,14 @@ export async function dispatchPeerRequest(
     return { id: frame.id, ok: true, payload };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
+    const code = err instanceof Error && 'code' in err && err.code === 'SATURATED'
+      ? 'SATURATED'
+      : 'METHOD_ERROR';
     logger.debug(`[peer-rpc] method "${frame.method}" threw`, { error: message, traceId, depth });
     return {
       id: frame.id,
       ok: false,
-      error: { code: 'METHOD_ERROR', message },
+      error: { code, message },
     };
   }
 }

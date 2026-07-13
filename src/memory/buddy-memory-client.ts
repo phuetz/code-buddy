@@ -161,20 +161,40 @@ export class BuddyMemoryClient {
 
   private redactParams(params: Record<string, unknown>): Record<string, unknown> {
     const out = { ...params };
-    for (const key of ['text', 'abstract', 'title']) {
-      const v = out[key];
-      if (typeof v === 'string' && scanForSecrets(v).hasSecrets) out[key] = redactSecrets(v);
+    redactRecordFields(out, ['text', 'abstract', 'title', 'name', 'reason', 'targetName']);
+    if (Array.isArray(out.relations)) {
+      out.relations = out.relations.map((relation) => {
+        if (typeof relation !== 'object' || relation === null || Array.isArray(relation)) return relation;
+        const safeRelation = { ...(relation as Record<string, unknown>) };
+        redactRecordFields(safeRelation, ['targetName', 'reason', 'name']);
+        return safeRelation;
+      });
     }
     return out;
   }
 
   /** Stop the engine (test seam / shutdown). */
   close(): void {
+    const child = this.child;
     this.fail();
     try {
-      this.child?.kill();
+      if (child && !child.stdin.destroyed) child.stdin.end();
     } catch {
       /* ignore */
+    }
+    try {
+      child?.kill();
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
+function redactRecordFields(record: Record<string, unknown>, fields: string[]): void {
+  for (const field of fields) {
+    const value = record[field];
+    if (typeof value === 'string' && scanForSecrets(value).hasSecrets) {
+      record[field] = redactSecrets(value);
     }
   }
 }

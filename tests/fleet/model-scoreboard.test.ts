@@ -11,7 +11,7 @@ vi.mock('../../src/utils/logger.js', () => ({
   logger: { info: vi.fn(), warn: vi.fn(), debug: vi.fn(), error: vi.fn() },
 }));
 
-import { ModelScoreboard, type OutcomeRecord } from '../../src/fleet/model-scoreboard';
+import { ModelScoreboard, type OutcomeRecord } from '../../src/fleet/model-scoreboard.js';
 
 let tmpFile: string;
 
@@ -35,6 +35,8 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.useRealTimers();
+  vi.restoreAllMocks();
   try {
     fs.rmSync(path.dirname(tmpFile), { recursive: true, force: true });
   } catch {
@@ -257,14 +259,32 @@ describe('ModelScoreboard v2 — JSONL ledger', () => {
     expect(fs.existsSync(legacy)).toBe(true);
   });
 
-  it('picks up records appended by another instance (cross-process reload)', () => {
+  it('picks up cross-process appends after the throttled reload-check window', () => {
+    vi.useFakeTimers();
     const writer = new ModelScoreboard(tmpFile);
     const reader = new ModelScoreboard(tmpFile);
     expect(reader.runCount('code', 'grok-3')).toBe(0);
 
     writer.recordOutcome(rec({ won: true }));
+    expect(reader.runCount('code', 'grok-3')).toBe(0);
+    vi.advanceTimersByTime(249);
+    expect(reader.runCount('code', 'grok-3')).toBe(0);
+    vi.advanceTimersByTime(1);
     expect(reader.runCount('code', 'grok-3')).toBe(1);
     expect(reader.winRate('code', 'grok-3')).toBe(1);
+  });
+
+  it('reloads before writes so a throttled check cannot mask another writer', () => {
+    vi.useFakeTimers();
+    const first = new ModelScoreboard(tmpFile);
+    const second = new ModelScoreboard(tmpFile);
+    expect(second.runCount('code', 'grok-3')).toBe(0);
+
+    first.recordOutcome(rec({ model: 'grok-3', won: true }));
+    second.recordOutcome(rec({ model: 'gpt-5.5', won: false }));
+
+    expect(second.runCount('code', 'grok-3')).toBe(1);
+    expect(second.runCount('code', 'gpt-5.5')).toBe(1);
   });
 
   it('survives a torn/corrupt line without losing the ledger', () => {

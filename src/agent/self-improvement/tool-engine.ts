@@ -11,6 +11,7 @@
  */
 
 import { EvolutionaryArchive } from './evolutionary-archive.js';
+import { toAuthoredName } from './authored-tool-runtime.js';
 import { resolveAutonomy, type Autonomy } from './engine.js';
 import { validateToolProposal } from './tool-gate.js';
 import { LiveToolMutator, type ToolMutatorPort } from './tool-skill-mutator.js';
@@ -65,12 +66,30 @@ export class ToolImprovementEngine {
       // Coverage is per-scenario: once a tool has satisfied this scenario's gate,
       // don't re-author it (even if the model would pick a different name).
       if (this.covered.has(scenario.id)) continue;
-      const proposal = await this.proposer.propose(toProposerView(scenario));
-      if (!proposal) continue;
-      // A tool with this exact name already exists — skip (avoid dup-register).
+      const proposed = await this.proposer.propose(toProposerView(scenario));
+      if (!proposed) continue;
+      let proposal = proposed;
       if (this.mutator.has(proposal.spec.name)) {
-        this.covered.add(scenario.id);
-        continue;
+        const existing = this.mutator.getSpec(proposal.spec.name);
+        if (existing) {
+          const existingGate = await validateToolProposal(
+            { ...proposal, spec: existing },
+            scenario,
+            this.mutator,
+            { keepOnAccept: false },
+          );
+          if (existingGate.accepted) {
+            this.covered.add(scenario.id);
+            continue;
+          }
+        }
+        proposal = {
+          ...proposal,
+          spec: {
+            ...proposal.spec,
+            name: this.availableName(proposal.spec.name, scenario.id),
+          },
+        };
       }
 
       const gate = await validateToolProposal(proposal, scenario, this.mutator, {
@@ -109,6 +128,14 @@ export class ToolImprovementEngine {
       applied: false,
       notes: ['no uncovered tool scenario with an available proposal'],
     };
+  }
+
+  private availableName(baseName: string, scenarioId: string): string {
+    const candidate = toAuthoredName(`${baseName}_${scenarioId}`);
+    if (!this.mutator.has(candidate)) return candidate;
+    let suffix = 2;
+    while (this.mutator.has(`${candidate}_${suffix}`)) suffix += 1;
+    return `${candidate}_${suffix}`;
   }
 
   /** Run cycles until nothing new is applied (or maxCycles). */

@@ -165,6 +165,12 @@ export type WorkflowEventPayload =
       error: string;
     }
   | {
+      type: 'node_reset';
+      workflowId: string;
+      instanceId: string;
+      nodeId: string;
+    }
+  | {
       type: 'completed';
       workflowId: string;
       instanceId: string;

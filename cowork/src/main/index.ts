@@ -23,13 +23,10 @@ import {
   Tray,
   globalShortcut,
   session,
-  clipboard,
-  nativeImage,
 } from 'electron';
 import { join, resolve, dirname, isAbsolute, basename } from 'path';
 import { fileURLToPath, pathToFileURL } from 'url';
 import * as fs from 'fs';
-import { execFileSync } from 'child_process';
 import { config } from 'dotenv';
 import { registerProjectIpcHandlers } from './ipc/project-ipc';
 import { registerSubAgentIpcHandlers } from './ipc/subagent-ipc';
@@ -87,7 +84,14 @@ import { registerCostIpcHandlers } from './ipc/cost-ipc';
 import { registerRulesIpcHandlers } from './ipc/rules-ipc';
 import { registerGitIpcHandlers } from './ipc/git-ipc';
 import { registerCheckpointIpcHandlers } from './ipc/checkpoint-ipc';
-import { initDatabase, closeDatabase } from './db/database';
+import { registerMediaLibraryIpcHandlers } from './ipc/media-library-ipc';
+import {
+  createRevealFileInFolder,
+  registerShellIpcHandlers,
+} from './ipc/shell-ipc';
+import { registerSessionExportIpcHandlers } from './ipc/session-export-ipc';
+import { registerConfigIpcHandlers } from './ipc/config-ipc';
+import { initDatabase, getDatabase, closeDatabase } from './db/database';
 import { SessionManager, type EngineAdapterLike } from './session/session-manager';
 import {
   classifyEngineLoadError,
@@ -169,15 +173,9 @@ import { PluginRuntimeService } from './skills/plugin-runtime-service';
 import { loadCoreModule } from './utils/core-loader';
 import {
   configStore,
-  getPiAiModelPresets,
-  type AppConfig,
   type AppTheme,
-  type CreateConfigSetPayload,
 } from './config/config-store';
-import { runConfigApiTest } from './config/config-test-routing';
 import { resolveEngineRuntimeConfig } from './config/engine-runtime-config';
-import { listLmStudioModels } from './config/lmstudio-api';
-import { listOllamaModels } from './config/ollama-api';
 import { mcpConfigStore } from './mcp/mcp-config-store';
 import { getSandboxAdapter, shutdownSandbox } from './sandbox/sandbox-adapter';
 import { SandboxSync } from './sandbox/sandbox-sync';
@@ -185,13 +183,7 @@ import { WSLBridge } from './sandbox/wsl-bridge';
 import { LimaBridge } from './sandbox/lima-bridge';
 import { getSandboxBootstrap } from './sandbox/sandbox-bootstrap';
 import type { MCPServerConfig } from './mcp/mcp-manager';
-import type {
-  ClientEvent,
-  ApiTestInput,
-  ApiTestResult,
-  DiagnosticInput,
-  ProviderModelInfo,
-} from '../renderer/types';
+import type { ClientEvent } from '../renderer/types';
 import { remoteManager, type AgentExecutor } from './remote/remote-manager';
 import { remoteConfigStore } from './remote/remote-config-store';
 import type { GatewayConfig, FeishuChannelConfig, SlackChannelConfig, ChannelType } from './remote/types';
@@ -209,11 +201,8 @@ import {
   buildScheduledTaskTitle,
 } from '../shared/schedule/task-title';
 import {
-  isUncPath,
-  isWindowsDrivePath,
   localPathFromAppUrlPathname,
   localPathFromFileUrl,
-  decodePathSafely,
 } from '../shared/local-file-path';
 import { eventRequiresSessionManager } from './client-event-utils';
 import { getUnsupportedWorkspacePathReason } from './workspace-path-constraints';
@@ -386,6 +375,10 @@ app.disableHardwareAcceleration();
 let mainWindow: BrowserWindow | null = null;
 let engineAdapter: EngineAdapterLike | undefined;
 let sessionManager: SessionManager | null = null;
+const REMOTE_PERMISSION_TIMEOUT_MS = 5 * 60_000 + 30_000;
+let respondToEnginePermission:
+  | ((id: string, response: 'allow' | 'allow_always' | 'deny') => void)
+  | null = null;
 let skillsManager: SkillsManager | null = null;
 let pluginRuntimeService: PluginRuntimeService | null = null;
 let scheduledTaskManager: ScheduledTaskManager | null = null;
@@ -1112,7 +1105,7 @@ function createWindow() {
       type: 'config.status',
       payload: {
         isConfigured,
-        config: configStore.getAll(),
+        config: configStore.getAllRedacted(),
       },
     });
 
@@ -1154,6 +1147,10 @@ function initializeDefaultWorkingDir(): string {
 function getWorkingDir(): string | null {
   return currentWorkingDir;
 }
+
+// One revealer is shared by shell.showItemInFolder and the BrowserWindow
+// navigation hooks so both entry points preserve identical path handling.
+const revealFileInFolder = createRevealFileInFolder({ getWorkingDir });
 
 function getWorkspacePathUnsupportedReason(workspacePath?: string): string | null {
   return getUnsupportedWorkspacePathReason({
@@ -1292,7 +1289,7 @@ async function startSandboxBootstrap(): Promise<void> {
   }
 }
 
-import { sendToRenderer } from './ipc-main-bridge';
+import { sendToRenderer, setPermissionResponder } from './ipc-main-bridge';
 import { remoteBackendManager } from './remote-backend/remote-backend-manager';
 import { remoteBackendConfigStore } from './remote-backend/remote-backend-config-store';
 
@@ -1465,7 +1462,12 @@ app
           const { DesktopPermissionBridge } = await import(
             /* webpackIgnore: true */ /* @vite-ignore */ permBridgeUrl
           );
-          const permissionBridge = new DesktopPermissionBridge(sendToRenderer);
+          const permissionBridge = new DesktopPermissionBridge(
+            sendToRenderer,
+            REMOTE_PERMISSION_TIMEOUT_MS
+          );
+          respondToEnginePermission = (id, response) =>
+            permissionBridge.handleResponse(id, response);
           const adapterWithPerm = engineAdapter as unknown as {
             setPermissionCallback?: (cb: unknown) => void;
           };
@@ -1603,7 +1605,20 @@ app
 
     // Initialize session manager before creating an interactive window.
     // This avoids session.start racing the startup path and hitting a null manager.
-    sessionManager = new SessionManager(db, sendToRenderer, pluginRuntimeService, engineAdapter);
+    sessionManager = new SessionManager(
+      db,
+      sendToRenderer,
+      pluginRuntimeService,
+      engineAdapter,
+      (sessionId) => remoteManager.isRemoteSession(sessionId)
+    );
+    setPermissionResponder((toolUseId, response, bridgeId) => {
+      if (bridgeId && respondToEnginePermission) {
+        respondToEnginePermission(bridgeId, response);
+        return;
+      }
+      sessionManager?.handlePermissionResponse(toolUseId, response);
+    });
 
     // Cowork is a trusted local GUI driving a headless engine: auto-approve tool
     // operations so the agent's own bash/file work — e.g. running the bundled
@@ -2328,6 +2343,7 @@ async function cleanupSandboxResources(): Promise<void> {
     logError('[App] Error stopping clipboard watcher:', error);
   }
 
+  sessionManager?.dispose();
   try {
     closeDatabase();
   } catch (error) {
@@ -2392,6 +2408,7 @@ app.on('before-quit', async (event) => {
     // In dev mode, exit quickly — no need for async sandbox cleanup
     if (process.env.VITE_DEV_SERVER_URL) {
       stopNavServer();
+      sessionManager?.dispose();
       try {
         closeDatabase();
       } catch {
@@ -2442,6 +2459,24 @@ ipcMain.handle('get-version', () => {
 
 // ── Checkpoint IPC handlers ────────────────────────────────────────────
 registerCheckpointIpcHandlers();
+
+registerMediaLibraryIpcHandlers({
+  getSessionManager: () => sessionManager,
+  getDatabase,
+  getMainWindow,
+});
+registerShellIpcHandlers({ revealFileInFolder });
+registerSessionExportIpcHandlers({
+  getSessionManager: () => sessionManager,
+  getSessionExportService: () => sessionExportService,
+});
+registerConfigIpcHandlers({
+  getEngineAdapter: () => engineAdapter,
+  getSessionManager: () => sessionManager,
+  getCurrentWorkingDir: getWorkingDir,
+  getConfigExportService: () => configExportService,
+  sendToRenderer,
+});
 
 // ── Workspace IPC handlers ────────────────────────────────────────────
 ipcMain.handle('workspace.readDir', async (_event, dirPath: string) => {
@@ -2848,258 +2883,7 @@ ipcMain.handle('studio.exportZip', async (_event, { root }: { root: string }) =>
   }
 });
 
-// Media library (ChatGPT-library parity): every generated media across all
-// session roots; export = native Save-As dialog + copy.
-ipcMain.handle('media.list', async () => {
-  try {
-    const { scanMediaLibrary } = await import('./media-library');
-    const roots = new Set<string>();
-    roots.add(join(app.getPath('userData'), 'default_working_dir'));
-    if (sessionManager) {
-      for (const s of sessionManager.listSessions()) {
-        if (s.cwd) roots.add(s.cwd);
-      }
-    }
-    const items = scanMediaLibrary([...roots]);
-    // Link each media to the conversation that generated it: its basename is
-    // echoed in that session's assistant message (the MEDIA: marker).
-    if (sessionManager) {
-      const { buildMediaSessionIndex, basenameOf } = await import('./session/media-session-index');
-      const blobs = sessionManager.listSessions().map((sess) => ({
-        sessionId: sess.id,
-        text: sessionManager!
-          .getMessages(sess.id)
-          .map((m) => (Array.isArray(m.content) ? m.content : [])
-            .filter((b): b is { type: 'text'; text: string } => (b as { type?: string }).type === 'text')
-            .map((b) => b.text)
-            .join(' '))
-          .join(' '),
-      }));
-      const index = buildMediaSessionIndex(blobs);
-      for (const item of items) {
-        const sid = index.get(basenameOf(item.path));
-        if (sid) (item as { sessionId?: string }).sessionId = sid;
-      }
-    }
-    return items;
-  } catch (err) {
-    logWarn('[media.list] failed:', err);
-    return [];
-  }
-});
-
-ipcMain.handle('media.copyToClipboard', async (_event, { sourcePath }: { sourcePath: string }) => {
-  try {
-    const { kindOf } = await import('./media-library');
-    const kind = kindOf(sourcePath);
-    if (kind === 'image') {
-      const img = nativeImage.createFromPath(sourcePath);
-      if (img.isEmpty()) return { ok: false, error: 'image illisible' };
-      clipboard.writeImage(img);
-      return { ok: true, mode: 'image' as const };
-    }
-    // Non-image (video/audio): copy the absolute path (the clipboard has no
-    // portable video type across apps).
-    clipboard.writeText(sourcePath);
-    return { ok: true, mode: 'path' as const };
-  } catch (err) {
-    logWarn('[media.copyToClipboard] failed:', err);
-    return { ok: false, error: String(err) };
-  }
-});
-
-ipcMain.handle('media.exportMany', async (_event, { paths }: { paths: string[] }) => {
-  try {
-    const { kindOf } = await import('./media-library');
-    const valid = (paths ?? []).filter((p) => kindOf(p));
-    if (valid.length === 0) return { ok: false, error: 'no media selected' };
-    const win = getMainWindow();
-    const picked = win
-      ? await dialog.showOpenDialog(win, { title: 'Exporter la sélection vers…', properties: ['openDirectory', 'createDirectory'] })
-      : await dialog.showOpenDialog({ title: 'Exporter la sélection vers…', properties: ['openDirectory', 'createDirectory'] });
-    if (picked.canceled || !picked.filePaths[0]) return { ok: false, canceled: true };
-    const destDir = picked.filePaths[0];
-    const fsp = await import('fs/promises');
-    let copied = 0;
-    for (const src of valid) {
-      try {
-        await fsp.copyFile(src, join(destDir, basename(src)));
-        copied += 1;
-      } catch (err) {
-        logWarn('[media.exportMany] copy failed:', src, err);
-      }
-    }
-    return { ok: true, copied, destDir };
-  } catch (err) {
-    logWarn('[media.exportMany] failed:', err);
-    return { ok: false, error: String(err) };
-  }
-});
-
-ipcMain.handle('media.export', async (_event, { sourcePath }: { sourcePath: string }) => {
-  try {
-    const { kindOf } = await import('./media-library');
-    if (!kindOf(sourcePath)) return { ok: false, error: 'not a media file' };
-    const fsp = await import('fs/promises');
-    const win = getMainWindow();
-    const result = win
-      ? await dialog.showSaveDialog(win, { defaultPath: basename(sourcePath), title: 'Exporter le média' })
-      : await dialog.showSaveDialog({ defaultPath: basename(sourcePath), title: 'Exporter le média' });
-    if (result.canceled || !result.filePath) return { ok: false, canceled: true };
-    await fsp.copyFile(sourcePath, result.filePath);
-    return { ok: true, savedTo: result.filePath };
-  } catch (err) {
-    logWarn('[media.export] failed:', err);
-    return { ok: false, error: String(err) };
-  }
-});
-
-// Bulk session prune (Hermes parity): preview matches + age span, then
-// archive them in one pass. Pinned/archived/active sessions never match.
-ipcMain.handle(
-  'session.prunePreview',
-  async (_event, filter: { olderThanDays?: number; titleMatch?: string; excludeId?: string }) => {
-    const { previewPrune } = await import('../shared/session-prune');
-    if (!sessionManager) return { matches: [], ageSpan: null };
-    const sessions = sessionManager
-      .listSessions()
-      .filter((s) => s.id !== filter.excludeId)
-      .map((s) => ({ id: s.id, title: s.title, pinned: s.pinned, archived: s.archived, updatedAt: s.updatedAt }));
-    const preview = previewPrune(sessions, filter, Date.now());
-    return {
-      matches: preview.matches.map((m) => ({ id: m.id, title: m.title ?? '', updatedAt: m.updatedAt })),
-      ageSpan: preview.ageSpan,
-    };
-  }
-);
-
-ipcMain.handle('session.pruneApply', async (_event, { ids }: { ids: string[] }) => {
-  if (!sessionManager) return { ok: false, archived: 0 };
-  let archived = 0;
-  for (const id of ids) {
-    if (sessionManager.updateSessionSettings(id, { archived: true })) archived += 1;
-  }
-  return { ok: true, archived };
-});
-
-ipcMain.handle('session.export', async (_event, sessionId: string, format: 'md' | 'json') => {
-  try {
-    if (!sessionManager) return null;
-    const messages = (
-      sessionManager as unknown as { getMessages?: (id: string) => unknown[] }
-    ).getMessages?.(sessionId);
-    return { messages, format };
-  } catch {
-    return null;
-  }
-});
-
-// Phase 2 step 16: enhanced session export with format/redaction options
-ipcMain.handle(
-  'session.exportFull',
-  async (
-    _event,
-    sessionId: string,
-    options: {
-      format: 'markdown' | 'json' | 'html';
-      redactSecrets?: boolean;
-      includeCheckpoints?: boolean;
-    }
-  ) => {
-    if (!sessionExportService) {
-      return { success: false, content: '', filename: '', error: 'Export service unavailable' };
-    }
-    return sessionExportService.exportSession(sessionId, options);
-  }
-);
-
 registerWorkflowServiceIpcHandlers();
-
-// Export a conversation as PDF: render the standalone HTML export in an
-// offscreen window and print it (native Save-As).
-ipcMain.handle('session.exportPdf', async (_event, sessionId: string) => {
-  try {
-    if (!sessionManager) return { success: false, error: 'Session manager unavailable' };
-    const session = sessionManager.listSessions().find((sess) => sess.id === sessionId);
-    const rawMessages = sessionManager.getMessages(sessionId);
-    const { buildConversationPdfHtml } = await import('./session/conversation-pdf-template');
-    const pdfMessages = rawMessages
-      .filter((message) => message.role === 'user' || message.role === 'assistant')
-      .map((message) => ({
-        role: message.role,
-        timestamp: message.timestamp,
-        text: (Array.isArray(message.content) ? message.content : [])
-          .filter((block): block is { type: 'text'; text: string } => (block as { type?: string }).type === 'text')
-          .map((block) => block.text)
-          .join('\n\n'),
-      }))
-      .filter((message) => message.text.trim().length > 0);
-    const htmlContent = buildConversationPdfHtml({
-      title: session?.title || 'Conversation',
-      model: session?.model,
-      exportedAt: new Date(),
-      messages: pdfMessages,
-    });
-    const win = getMainWindow();
-    const safeName = (session?.title || 'conversation').replace(/[^\w\u00C0-\u017F -]+/g, '').trim().slice(0, 60) || 'conversation';
-    const dialogResult = win
-      ? await dialog.showSaveDialog(win, {
-          title: 'Exporter la conversation en PDF',
-          defaultPath: `${safeName}.pdf`,
-          filters: [{ name: 'PDF', extensions: ['pdf'] }],
-        })
-      : await dialog.showSaveDialog({ title: 'Exporter la conversation en PDF', defaultPath: 'conversation.pdf' });
-    if (dialogResult.canceled || !dialogResult.filePath) return { success: false, canceled: true };
-    const offscreen = new BrowserWindow({ show: false, webPreferences: { sandbox: true } });
-    try {
-      await offscreen.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(htmlContent));
-      const pdf = await offscreen.webContents.printToPDF({ printBackground: true, margins: { marginType: 'default' } });
-      const fsp = await import('fs/promises');
-      await fsp.writeFile(dialogResult.filePath, pdf);
-    } finally {
-      offscreen.destroy();
-    }
-    return { success: true, savedTo: dialogResult.filePath };
-  } catch (err) {
-    logWarn('[session.exportPdf] failed:', err);
-    return { success: false, error: String(err) };
-  }
-});
-
-ipcMain.handle(
-  'session.exportToFile',
-  async (
-    _event,
-    sessionId: string,
-    options: {
-      format: 'markdown' | 'json' | 'html';
-      redactSecrets?: boolean;
-      includeCheckpoints?: boolean;
-    }
-  ) => {
-    if (!sessionExportService) {
-      return { success: false, error: 'Export service unavailable' };
-    }
-    const result = sessionExportService.exportSession(sessionId, options);
-    if (!result.success) return { success: false, error: result.error };
-    const dialogResult = await dialog.showSaveDialog({
-      title: 'Export session',
-      defaultPath: result.filename,
-      filters: [
-        options.format === 'markdown'
-          ? { name: 'Markdown', extensions: ['md'] }
-          : options.format === 'html'
-            ? { name: 'HTML', extensions: ['html'] }
-            : { name: 'JSON', extensions: ['json'] },
-      ],
-    });
-    if (dialogResult.canceled || !dialogResult.filePath) {
-      return { success: false, error: 'Cancelled' };
-    }
-    const writeResult = sessionExportService.saveToFile(dialogResult.filePath, result.content);
-    return { success: writeResult.success, error: writeResult.error, path: dialogResult.filePath };
-  }
-);
 
 ipcMain.handle('system.getTheme', () => {
   try {
@@ -3108,189 +2892,6 @@ ipcMain.handle('system.getTheme', () => {
     logError('[IPC] Error getting theme:', error);
     return { shouldUseDarkColors: true };
   }
-});
-
-ipcMain.handle('shell.openExternal', async (_event, url: string) => {
-  if (!url) {
-    return false;
-  }
-
-  try {
-    const parsed = new URL(url);
-    if (!['http:', 'https:', 'mailto:'].includes(parsed.protocol)) {
-      logWarn('[shell.openExternal] Blocked URL with disallowed protocol:', parsed.protocol);
-      return false;
-    }
-  } catch {
-    logWarn('[shell.openExternal] Blocked invalid URL:', url);
-    return false;
-  }
-
-  return shell.openExternal(url);
-});
-
-async function revealFileInFolder(filePath: string, cwd?: string): Promise<boolean> {
-  if (!filePath) {
-    return false;
-  }
-
-  const trimInput = filePath.trim();
-  if (!trimInput) {
-    return false;
-  }
-
-  let normalizedPath = decodePathSafely(trimInput);
-
-  if (normalizedPath.startsWith('file://')) {
-    const localPath = localPathFromFileUrl(normalizedPath);
-    if (!localPath) {
-      logWarn('[shell.showItemInFolder] could not parse file URL:', normalizedPath);
-      return false;
-    }
-    normalizedPath = localPath;
-  }
-
-  const baseDir = cwd && isAbsolute(cwd) ? cwd : getWorkingDir() || app.getPath('home');
-  if (
-    !isAbsolute(normalizedPath) &&
-    !isWindowsDrivePath(normalizedPath) &&
-    !isUncPath(normalizedPath)
-  ) {
-    normalizedPath = resolve(baseDir, normalizedPath);
-  }
-
-  if (
-    normalizedPath.startsWith('/workspace/') ||
-    /^[A-Za-z]:[/\\]workspace[/\\]/i.test(normalizedPath)
-  ) {
-    const relativePart = normalizedPath.startsWith('/workspace/')
-      ? normalizedPath.slice('/workspace/'.length)
-      : normalizedPath.replace(/^[A-Za-z]:[/\\]workspace[/\\]/i, '');
-    normalizedPath = resolve(baseDir, relativePart);
-  }
-
-  if (!isUncPath(normalizedPath)) {
-    normalizedPath = resolve(normalizedPath);
-  }
-  log('[shell.showItemInFolder] request:', { filePath, cwd, resolved: normalizedPath });
-
-  const findFileByName = (fileName: string, roots: string[]): string | null => {
-    if (!fileName) {
-      return null;
-    }
-
-    const visited = new Set<string>();
-    const queue = roots
-      .map((root) => resolve(root))
-      .filter((root) => !!root && fs.existsSync(root) && fs.statSync(root).isDirectory());
-
-    let scannedDirs = 0;
-    const MAX_DIRS = 2000;
-
-    while (queue.length > 0 && scannedDirs < MAX_DIRS) {
-      const dir = queue.shift()!;
-      if (visited.has(dir)) {
-        continue;
-      }
-      visited.add(dir);
-      scannedDirs += 1;
-
-      let entries: fs.Dirent[] = [];
-      try {
-        entries = fs.readdirSync(dir, { withFileTypes: true });
-      } catch {
-        continue;
-      }
-
-      for (const entry of entries) {
-        const fullPath = join(dir, entry.name);
-        if (entry.isFile() && entry.name === fileName) {
-          return fullPath;
-        }
-        if (entry.isDirectory()) {
-          queue.push(fullPath);
-        }
-      }
-    }
-
-    return null;
-  };
-
-  try {
-    if (fs.existsSync(normalizedPath)) {
-      const stat = fs.statSync(normalizedPath);
-      if (stat.isDirectory()) {
-        const openDirResult = await shell.openPath(normalizedPath);
-        if (openDirResult) {
-          logWarn('[shell.showItemInFolder] openPath returned warning:', openDirResult);
-        }
-      } else {
-        if (process.platform === 'darwin') {
-          try {
-            execFileSync('open', ['-R', normalizedPath]);
-          } catch (error) {
-            logWarn(
-              '[shell.showItemInFolder] open -R failed, fallback to shell.showItemInFolder:',
-              error
-            );
-            shell.showItemInFolder(normalizedPath);
-          }
-        } else {
-          shell.showItemInFolder(normalizedPath);
-        }
-      }
-      return true;
-    }
-
-    const fileName = basename(normalizedPath);
-    const defaultWorkingDir = getWorkingDir() || '';
-    const discoveredPath = findFileByName(fileName, [
-      cwd || '',
-      defaultWorkingDir,
-      join(app.getPath('userData'), 'default_working_dir'),
-    ]);
-
-    if (discoveredPath) {
-      logWarn('[shell.showItemInFolder] resolved path not found, discovered by filename:', {
-        requested: normalizedPath,
-        discoveredPath,
-      });
-      if (process.platform === 'darwin') {
-        try {
-          execFileSync('open', ['-R', discoveredPath]);
-        } catch (error) {
-          logWarn(
-            '[shell.showItemInFolder] open -R discovered file failed, fallback to shell.showItemInFolder:',
-            error
-          );
-          shell.showItemInFolder(discoveredPath);
-        }
-      } else {
-        shell.showItemInFolder(discoveredPath);
-      }
-      return true;
-    }
-
-    const parentDir = dirname(normalizedPath);
-    if (parentDir && fs.existsSync(parentDir)) {
-      logWarn('[shell.showItemInFolder] file not found, opening parent directory:', parentDir);
-      const openParentResult = await shell.openPath(parentDir);
-      if (openParentResult) {
-        logWarn('[shell.showItemInFolder] openPath parent returned warning:', openParentResult);
-      }
-      return true;
-    }
-
-    logWarn('[shell.showItemInFolder] path and parent directory do not exist:', normalizedPath);
-    return false;
-  } catch (error) {
-    logError('[shell.showItemInFolder] failed:', error);
-    return false;
-  }
-}
-
-ipcMain.handle('shell.showItemInFolder', async (_event, filePath: string, cwd?: string) => {
-  return revealFileInFolder(filePath, cwd);
 });
 
 ipcMain.handle(
@@ -3314,239 +2915,6 @@ ipcMain.handle('dialog.selectFiles', async () => {
   }
 
   return result.filePaths;
-});
-
-// Config IPC handlers
-ipcMain.handle('config.get', () => {
-  try {
-    return configStore.getAll();
-  } catch (error) {
-    logError('[Config] Error getting config:', error);
-    return {};
-  }
-});
-
-ipcMain.handle('config.getPresets', () => {
-  try {
-    return getPiAiModelPresets();
-  } catch (error) {
-    logError('[Config] Error getting presets:', error);
-    return [];
-  }
-});
-
-const buildAgentRuntimeSignature = (config: AppConfig): string =>
-  JSON.stringify({
-    provider: config.provider,
-    apiKey: config.apiKey,
-    baseUrl: config.baseUrl,
-    customProtocol: config.customProtocol,
-    model: config.model,
-    enableThinking: config.enableThinking,
-  });
-
-const syncConfigAfterMutation = async (previousConfig: AppConfig) => {
-  // Mark as configured if any config set has usable credentials
-  configStore.set('isConfigured', configStore.hasAnyUsableCredentials());
-
-  // Apply to environment
-  configStore.applyToEnv();
-
-  const updatedConfig = configStore.getAll();
-  const shouldReloadRunner =
-    buildAgentRuntimeSignature(previousConfig) !== buildAgentRuntimeSignature(updatedConfig);
-  const shouldReloadSandbox = previousConfig.sandboxEnabled !== updatedConfig.sandboxEnabled;
-
-  if (shouldReloadRunner && engineAdapter?.updateConfig) {
-    const runtimeConfig = resolveEngineRuntimeConfig(updatedConfig);
-    engineAdapter.updateConfig({
-      apiKey: runtimeConfig.apiKey || process.env.GROK_API_KEY || '',
-      baseURL: runtimeConfig.baseURL || process.env.GROK_BASE_URL,
-      model: runtimeConfig.model,
-      workingDirectory: currentWorkingDir || process.cwd(),
-    });
-  }
-
-  // Hot-swap the reasoning/thinking level WITHOUT a runner reload — the engine
-  // adapter updates the global extended-thinking budget (read per-turn by the
-  // OpenAI-compat/Grok/Ollama providers) and the Gemini default on live agents.
-  if (
-    previousConfig.thinkingLevel !== updatedConfig.thinkingLevel &&
-    engineAdapter?.setThinkingLevel
-  ) {
-    await engineAdapter
-      .setThinkingLevel(updatedConfig.thinkingLevel)
-      .catch((err) => logError('[Config] thinkingLevel hot-swap failed:', err));
-  }
-
-  if (sessionManager) {
-    if (shouldReloadRunner) {
-      sessionManager.reloadConfig();
-    }
-    if (shouldReloadSandbox) {
-      await sessionManager
-        .reloadSandbox()
-        .catch((err) => logError('[Config] Sandbox reload failed:', err));
-    }
-    if (shouldReloadRunner || shouldReloadSandbox) {
-      log(
-        '[Config] Session manager config synced:',
-        JSON.stringify({ runnerReloaded: shouldReloadRunner, sandboxReloaded: shouldReloadSandbox })
-      );
-    }
-  }
-
-  // Notify renderer of config update
-  const isConfigured = configStore.isConfigured();
-  sendToRenderer({
-    type: 'config.status',
-    payload: {
-      isConfigured,
-      config: updatedConfig,
-    },
-  });
-  log('[Config] Notified renderer of config update, isConfigured:', isConfigured);
-  return updatedConfig;
-};
-
-ipcMain.handle('config.save', async (_event, newConfig: Partial<AppConfig>) => {
-  log('[Config] Saving config:', { ...newConfig, apiKey: newConfig.apiKey ? '***' : '' });
-
-  const previousConfig = configStore.getAll();
-  // Update config
-  configStore.update(newConfig);
-  const updatedConfig = await syncConfigAfterMutation(previousConfig);
-
-  return { success: true, config: updatedConfig };
-});
-
-ipcMain.handle('config.createSet', async (_event, payload: CreateConfigSetPayload) => {
-  log('[Config] Creating config set:', payload);
-  const previousConfig = configStore.getAll();
-  configStore.createSet(payload);
-  const updatedConfig = await syncConfigAfterMutation(previousConfig);
-  return { success: true, config: updatedConfig };
-});
-
-ipcMain.handle('config.renameSet', async (_event, payload: { id: string; name: string }) => {
-  log('[Config] Renaming config set:', payload);
-  const previousConfig = configStore.getAll();
-  configStore.renameSet(payload);
-  const updatedConfig = await syncConfigAfterMutation(previousConfig);
-  return { success: true, config: updatedConfig };
-});
-
-ipcMain.handle('config.deleteSet', async (_event, payload: { id: string }) => {
-  log('[Config] Deleting config set:', payload);
-  const previousConfig = configStore.getAll();
-  configStore.deleteSet(payload);
-  const updatedConfig = await syncConfigAfterMutation(previousConfig);
-  return { success: true, config: updatedConfig };
-});
-
-ipcMain.handle('config.switchSet', async (_event, payload: { id: string }) => {
-  log('[Config] Switching config set:', payload);
-  const previousConfig = configStore.getAll();
-  configStore.switchSet(payload);
-  const updatedConfig = await syncConfigAfterMutation(previousConfig);
-  return { success: true, config: updatedConfig };
-});
-
-ipcMain.handle('config.isConfigured', () => {
-  try {
-    return configStore.isConfigured();
-  } catch (error) {
-    logError('[Config] Error checking configured status:', error);
-    return false;
-  }
-});
-
-ipcMain.handle('config.test', async (_event, payload: ApiTestInput): Promise<ApiTestResult> => {
-  try {
-    return await runConfigApiTest(payload, configStore.getAll());
-  } catch (error) {
-    logError('[Config] API test failed:', error);
-    return {
-      ok: false,
-      errorType: 'unknown',
-      details: error instanceof Error ? error.message : String(error),
-    };
-  }
-});
-
-ipcMain.handle(
-  'config.listModels',
-  async (
-    _event,
-    payload: { provider: AppConfig['provider']; apiKey: string; baseUrl?: string }
-  ): Promise<ProviderModelInfo[]> => {
-    if (payload.provider === 'ollama') {
-      return listOllamaModels(payload);
-    }
-    if (payload.provider === 'lmstudio') {
-      return listLmStudioModels(payload);
-    }
-    return [];
-  }
-);
-
-ipcMain.handle('config.diagnose', async (_event, payload: DiagnosticInput) => {
-  try {
-    const { runDiagnostics } = await import('./config/api-diagnostics');
-    return await runDiagnostics(payload);
-  } catch (error) {
-    logError('[Config] Error running diagnostics:', error);
-    throw error;
-  }
-});
-
-ipcMain.handle('config.discover-local', async (_event, payload?: { baseUrl?: string }) => {
-  try {
-    const { discoverLocalOllama } = await import('./config/api-diagnostics');
-    return await discoverLocalOllama(payload);
-  } catch (error) {
-    logError('[Config] Error discovering local services:', error);
-    return [];
-  }
-});
-
-ipcMain.handle('config.discover-lmstudio-local', async (_event, payload?: { baseUrl?: string }) => {
-  try {
-    const { discoverLocalLmStudio } = await import('./config/api-diagnostics');
-    return await discoverLocalLmStudio(payload);
-  } catch (error) {
-    logError('[Config] Error discovering local LM Studio:', error);
-    return {
-      available: false,
-      baseUrl: payload?.baseUrl || 'http://localhost:1234/v1',
-      status: 'unavailable',
-    };
-  }
-});
-
-ipcMain.handle('config.model-inventory', async (_event, payload?: { includeTailnetPeers?: boolean }) => {
-  try {
-    // Load the core module dynamically (the pattern used by every other main→core access) rather
-    // than a static `@codebuddy/*` import — a static value import bundles core TS into the main
-    // build and rollup can't resolve the aliased `.js`→`.ts`, which broke `vite build` entirely.
-    const mod = await loadCoreModule<typeof import('@codebuddy/fleet/model-inventory.js')>(
-      'fleet/model-inventory.js',
-    );
-    if (!mod) {
-      return { updatedAt: new Date().toISOString(), machineLabel: '', entries: [] };
-    }
-    return await mod.buildModelInventory({
-      includeTailnetPeers: payload?.includeTailnetPeers ?? true,
-      forceCapabilityRefresh: true,
-    });
-  } catch (error) {
-    logError('[Config] Error building model inventory:', error);
-    return {
-      updatedAt: new Date().toISOString(),
-      machineLabel: '',
-      entries: [],
-    };
-  }
 });
 
 // Evolution: list the code variants (versions of Code Buddy) the recursive self-improvement loop
@@ -3643,68 +3011,6 @@ ipcMain.handle(
   }
 );
 
-// Config export/import — Claude Cowork parity Phase 2 step 19
-ipcMain.handle('config.export', async () => {
-  if (!configExportService) {
-    return { success: false, error: 'Export service unavailable' };
-  }
-  try {
-    const bundle = configExportService.exportBundle();
-    return { success: true, bundle };
-  } catch (err) {
-    logError('[config.export] failed:', err);
-    return { success: false, error: (err as Error).message };
-  }
-});
-
-ipcMain.handle('config.exportToFile', async () => {
-  if (!configExportService) {
-    return { success: false, error: 'Export service unavailable' };
-  }
-  const dialogResult = await dialog.showSaveDialog({
-    title: 'Export settings',
-    defaultPath: `cowork-settings-${new Date().toISOString().slice(0, 10)}.json`,
-    filters: [{ name: 'JSON', extensions: ['json'] }],
-  });
-  if (dialogResult.canceled || !dialogResult.filePath) {
-    return { success: false, error: 'Cancelled' };
-  }
-  return configExportService.saveToFile(dialogResult.filePath);
-});
-
-ipcMain.handle('config.importFromFile', async () => {
-  if (!configExportService) {
-    return { success: false, error: 'Export service unavailable' };
-  }
-  const dialogResult = await dialog.showOpenDialog({
-    title: 'Import settings',
-    filters: [{ name: 'JSON', extensions: ['json'] }],
-    properties: ['openFile'],
-  });
-  if (dialogResult.canceled || dialogResult.filePaths.length === 0) {
-    return { success: false, error: 'Cancelled' };
-  }
-  const loaded = configExportService.loadFromFile(dialogResult.filePaths[0]);
-  if (!loaded.success || !loaded.bundle) {
-    return { success: false, error: loaded.error };
-  }
-  const preview = configExportService.diffBundle(loaded.bundle);
-  return { success: true, preview };
-});
-
-ipcMain.handle(
-  'config.applyImport',
-  async (_event, bundle: Record<string, unknown>, strategy: 'skip' | 'overwrite') => {
-    if (!configExportService) {
-      return {
-        success: false,
-        imported: { projects: 0, mcpServers: 0, apiUpdated: false },
-        errors: ['Export service unavailable'],
-      };
-    }
-    return configExportService.importBundle(bundle as never, strategy);
-  }
-);
 
 // Activity feed — Claude Cowork parity Phase 2 step 18
 ipcMain.handle('activity.recent', async (_event, limit?: number, projectId?: string) => {
@@ -5440,7 +4746,7 @@ ipcMain.handle('skills.setStoragePath', async (_event, targetPath: string, migra
     type: 'config.status',
     payload: {
       isConfigured: configStore.isConfigured(),
-      config: configStore.getAll(),
+      config: configStore.getAllRedacted(),
     },
   });
   return { success: true, ...result };
@@ -6133,7 +5439,7 @@ async function handleClientEvent(event: ClientEvent): Promise<unknown> {
           type: 'config.status',
           payload: {
             isConfigured: configStore.isConfigured(),
-            config: configStore.getAll(),
+            config: configStore.getAllRedacted(),
           },
         });
         }
@@ -6149,7 +5455,7 @@ async function handleClientEvent(event: ClientEvent): Promise<unknown> {
         type: 'config.status',
         payload: {
           isConfigured: configStore.isConfigured(),
-          config: configStore.getAll(),
+          config: configStore.getAllRedacted(),
         },
       });
       return null;

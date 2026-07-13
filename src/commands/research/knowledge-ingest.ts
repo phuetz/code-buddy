@@ -13,6 +13,7 @@
 import type { Command } from 'commander';
 import type { Publication, PublicationSource } from '../../research/publication-sources.js';
 import type { RelationClassifier } from '../../memory/collective-knowledge-graph.js';
+import { logger } from '../../utils/logger.js';
 
 export interface KnowledgeIngestDeps {
   fetchPublications: (topic: string, opts: { source?: PublicationSource; limit?: number }) => Promise<Publication[]>;
@@ -37,6 +38,8 @@ export interface KnowledgeIngestDeps {
   makeClassifier?: () => RelationClassifier;
   /** Pull Code Explorer code-graph insights as discoveries (for `ingest-code`). */
   fetchCodeInsights?: (opts: { repo?: string }) => Promise<Publication[]>;
+  /** Pull read-only MCP connector content as discoveries (for `ingest-connector`). */
+  fetchConnectorContent?: (name: string, opts: { query?: string }) => Promise<Publication[]>;
   /** Inspect one node (id or name) incl. bi-temporal status. For `research show`. */
   getEntity: (idOrName: string) => {
     status: 'current' | 'retracted' | 'not_found';
@@ -72,6 +75,7 @@ async function defaultDeps(): Promise<KnowledgeIngestDeps> {
   const { getCollectiveKnowledgeGraph } = await import('../../memory/collective-knowledge-graph.js');
   const { makeLlmRelationClassifier } = await import('../../research/relation-classifier.js');
   const { fetchCodeExplorerInsights } = await import('../../research/code-explorer-source.js');
+  const { fetchConnectorContent } = await import('../../research/connector-source.js');
   const ckg = getCollectiveKnowledgeGraph();
   return {
     fetchPublications,
@@ -81,6 +85,7 @@ async function defaultDeps(): Promise<KnowledgeIngestDeps> {
     listEntities: (opts) => ckg.listEntities(opts as { limit?: number; type?: import('../../memory/knowledge-graph.js').EntityType }),
     makeClassifier: () => makeLlmRelationClassifier(),
     fetchCodeInsights: (opts) => fetchCodeExplorerInsights(opts),
+    fetchConnectorContent: (name, opts) => fetchConnectorContent(name, opts),
     getEntity: (idOrName) => ckg.getEntity(idOrName),
     retract: (idOrName, opts) => ckg.retract(idOrName, opts ?? {}),
     rememberFact: (input) => ckg.rememberFact(input),
@@ -161,6 +166,60 @@ export async function runIngestCode(
   }
   const s = deps.getStats();
   deps.log(`\n✅ Graphe : ${s.entities} découvertes, ${s.relations} liens.`);
+  return { ingested, linksCreated };
+}
+
+/** Ingest read-only content from a personal MCP connector into the CKG as discoveries. */
+export async function runIngestConnector(
+  name: string,
+  opts: { query?: string },
+  deps: KnowledgeIngestDeps,
+): Promise<{ ingested: number; linksCreated: number }> {
+  if (process.env.CODEBUDDY_COLLECTIVE_MEMORY !== 'true') {
+    deps.log(
+      'Ingestion connecteur refusée : définis CODEBUDDY_COLLECTIVE_MEMORY=true pour activer explicitement la mémoire collective.',
+    );
+    return { ingested: 0, linksCreated: 0 };
+  }
+  if (!deps.fetchConnectorContent) {
+    deps.log('Source connecteur MCP indisponible.');
+    return { ingested: 0, linksCreated: 0 };
+  }
+
+  let ingested = 0;
+  let linksCreated = 0;
+  try {
+    deps.log(`🔎 Contenu ${name}${opts.query ? ` pour « ${opts.query} »` : ''}…`);
+    const pubs = await deps.fetchConnectorContent(name, opts.query ? { query: opts.query } : {});
+    if (pubs.length === 0) {
+      deps.log(`Aucun contenu récupéré depuis ${name} (connecteur absent, non configuré ou injoignable).`);
+      return { ingested, linksCreated };
+    }
+
+    deps.log(`📚 ${pubs.length} résultat(s) ${name} → ingestion + auto-liage dans le graphe…\n`);
+    for (const publication of pubs) {
+      try {
+        const result = await deps.ingestPublication(publication, {});
+        if (!result) continue;
+        ingested++;
+        const links = result.relations.filter((relation) =>
+          ['related_to', 'supports', 'contradicts'].includes(relation.predicate),
+        ).length;
+        linksCreated += links;
+        deps.log(`  • ${publication.title}${links ? `  ↔ ${links} lien(s)` : ''}`);
+      } catch (err) {
+        logger.warn(
+          `[research ingest-connector] Failed to ingest ${publication.id}: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    }
+
+    const stats = deps.getStats();
+    deps.log(`\n✅ Graphe : ${stats.entities} découvertes, ${stats.relations} liens.`);
+  } catch (err) {
+    logger.warn(`[research ingest-connector] ${err instanceof Error ? err.message : String(err)}`);
+    deps.log(`Ingestion connecteur interrompue sans modifier le connecteur ${name}.`);
+  }
   return { ingested, linksCreated };
 }
 
@@ -245,6 +304,33 @@ export function addKnowledgeSubcommands(cmd: Command, depsFactory: () => Promise
         await runIngestCode(opts, await depsFactory());
       } finally {
         // ingest-code spawns the Code Explorer MCP server; shut it down so this one-shot CLI
+        // process exits instead of hanging on the open child-process handle.
+        try {
+          const { getMCPManager } = await import('../../codebuddy/tools.js');
+          await getMCPManager().shutdown();
+        } catch {
+          /* best effort */
+        }
+      }
+    });
+
+  cmd
+    .command('ingest-connector <name>')
+    .description('Ingest read-only content from a personal MCP connector into the knowledge graph')
+    .option('--query <q>', 'Optional connector search query')
+    .action(async (name: string, opts: { query?: string }) => {
+      if (process.env.CODEBUDDY_COLLECTIVE_MEMORY !== 'true') {
+        logger.warn(
+          'Ingestion connecteur refusée : définis CODEBUDDY_COLLECTIVE_MEMORY=true pour activer explicitement la mémoire collective.',
+        );
+        return;
+      }
+      try {
+        await runIngestConnector(name, opts, await depsFactory());
+      } catch (err) {
+        logger.warn(`[research ingest-connector] ${err instanceof Error ? err.message : String(err)}`);
+      } finally {
+        // Like ingest-code, this one-shot command may spawn an MCP server. Close it so the
         // process exits instead of hanging on the open child-process handle.
         try {
           const { getMCPManager } = await import('../../codebuddy/tools.js');

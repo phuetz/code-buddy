@@ -51,6 +51,10 @@ jobs:
     - name: Run tests
       run: npm test
 
+    - name: Run buddy-vision state-machine tests
+      if: matrix.os == 'ubuntu-latest' && matrix.node-version == '20.x'
+      run: python -m unittest discover buddy-vision
+
     - name: Build project
       run: npm run build
 

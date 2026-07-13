@@ -12,11 +12,16 @@ import type { CodeBuddyMessage } from '../../../src/codebuddy/client';
 import { logger } from '../../../src/utils/logger.js';
 import { YIELD_SIGNAL } from '../../../src/agent/execution/yield-coordinator.js';
 import { INTERACTIVE_SHELL_SIGNAL } from '../../../src/agent/execution/turn-signals.js';
+import { getToolAbortSignal } from '../../../src/tools/tool-abort-context.js';
 import {
   getLatencyOptimizer,
   getStreamingOptimizer,
   resetOptimizers,
 } from '../../../src/optimization/latency-optimizer.js';
+import {
+  CostLimitMiddleware,
+  MiddlewarePipeline,
+} from '../../../src/agent/middleware/index.js';
 
 // ---------------------------------------------------------------------------
 // Mock modules
@@ -61,6 +66,7 @@ jest.mock('../../../src/agent/execution/context-pipeline.js', async () => {
     ...actual,
     injectInitialContext: jest.fn(actual.injectInitialContext),
     injectNextRoundContext: jest.fn(actual.injectNextRoundContext),
+    runJitContextDiscovery: jest.fn(actual.runJitContextDiscovery),
   };
 });
 
@@ -68,6 +74,7 @@ jest.mock('../../../src/agent/execution/context-pipeline.js', async () => {
 import {
   injectInitialContext as injectInitialContextMock,
   injectNextRoundContext as injectNextRoundContextMock,
+  runJitContextDiscovery as runJitContextDiscoveryMock,
 } from '../../../src/agent/execution/context-pipeline.js';
 
 // ---------------------------------------------------------------------------
@@ -103,6 +110,7 @@ function createMockDeps(overrides: Partial<ExecutorDependencies> = {}): Executor
         timestamp: new Date(),
       }),
       cacheTools: jest.fn(),
+      recordToolRequest: jest.fn(),
       shouldUseSearchFor: jest.fn().mockReturnValue(false),
       clearCache: jest.fn(),
       setActiveSkill: jest.fn(),
@@ -497,6 +505,31 @@ describe('AgentExecutor', () => {
       expect(deps.contextManager.prepareMessages).toHaveBeenCalled();
     });
 
+    it('should compact oversized tool results with the model-aware threshold', async () => {
+      (deps.client.getCurrentModel as jest.Mock).mockReturnValue('qwen2.5-coder:7b');
+      const toolCalls = [
+        makeToolCall('read_file', { path: '/tmp/a.ts' }, 'compact_1'),
+        makeToolCall('read_file', { path: '/tmp/b.ts' }, 'compact_2'),
+        makeToolCall('read_file', { path: '/tmp/c.ts' }, 'compact_3'),
+      ];
+      const messages: CodeBuddyMessage[] = [
+        { role: 'assistant', content: '', tool_calls: toolCalls },
+        ...toolCalls.map((toolCall, index) => ({
+          role: 'tool' as const,
+          tool_call_id: toolCall.id,
+          content: `/tmp/result-${index}.ts\n${'x'.repeat(15_000)}`,
+        })),
+      ];
+
+      await executor.processUserMessage('Summarize the results', [], messages);
+
+      const providerMessages = (deps.client.chatStream as jest.Mock).mock.calls[0][0] as CodeBuddyMessage[];
+      expect(providerMessages.some(message =>
+        message.role === 'tool' && String(message.content).includes('[Content compressed'))).toBe(true);
+      expect(messages.filter(message => message.role === 'tool').every(message =>
+        String(message.content).length > 15_000)).toBe(true);
+    });
+
     it('should record session cost', async () => {
       const history: ChatEntry[] = [];
       const messages: CodeBuddyMessage[] = [];
@@ -542,11 +575,95 @@ describe('AgentExecutor', () => {
       const toolResults = entries.filter(e => e.type === 'tool_result');
       expect(toolResults.length).toBe(2);
       expect(deps.toolHandler.executeTool).toHaveBeenCalledTimes(2);
+      expect(deps.toolSelectionStrategy.recordToolRequest).toHaveBeenNthCalledWith(1, 'read_file');
+      expect(deps.toolSelectionStrategy.recordToolRequest).toHaveBeenNthCalledWith(2, 'read_file');
+    });
+
+    it('should persist JIT context into the next request after all sibling tool results', async () => {
+      const toolCall1 = makeToolCall('read_file', { path: '/project/a.ts' }, 'jit_1');
+      const toolCall2 = makeToolCall('read_file', { path: '/project/b.ts' }, 'jit_2');
+      setupLLMFlow(deps, [
+        { content: 'Reading files...', tool_calls: [toolCall1, toolCall2] },
+        { content: 'Done.' },
+      ]);
+      const jitMock = runJitContextDiscoveryMock as unknown as jest.Mock;
+      jitMock.mockImplementation(async (toolCall: ReturnType<typeof makeToolCall>) => [{
+        role: 'system',
+        content: `JIT_CONTEXT:${toolCall.id}`,
+      }]);
+
+      await executor.processUserMessage('Read both files', [], []);
+
+      const providerCalls = (deps.client.chatStream as jest.Mock).mock.calls;
+      const firstRequest = providerCalls[0][0] as CodeBuddyMessage[];
+      const secondRequest = providerCalls[1][0] as CodeBuddyMessage[];
+      expect(firstRequest.some(message => String(message.content).includes('JIT_CONTEXT:'))).toBe(false);
+      expect(secondRequest.some(message => message.content === 'JIT_CONTEXT:jit_1')).toBe(true);
+      expect(secondRequest.some(message => message.content === 'JIT_CONTEXT:jit_2')).toBe(true);
+
+      const assistantIndex = secondRequest.findIndex(message =>
+        message.role === 'assistant' && message.tool_calls?.some(call => call.id === 'jit_1'));
+      const firstToolIndex = secondRequest.findIndex(message =>
+        message.role === 'tool' && message.tool_call_id === 'jit_1');
+      const secondToolIndex = secondRequest.findIndex(message =>
+        message.role === 'tool' && message.tool_call_id === 'jit_2');
+      const firstJitIndex = secondRequest.findIndex(message => message.content === 'JIT_CONTEXT:jit_1');
+      expect(assistantIndex).toBeLessThan(firstToolIndex);
+      expect(firstToolIndex).toBeLessThan(secondToolIndex);
+      expect(secondToolIndex).toBeLessThan(firstJitIndex);
+    });
+
+    it('should not discover JIT context after a failed tool access', async () => {
+      const toolCall = makeToolCall('read_file', { path: '/denied/secret.ts' }, 'jit_denied');
+      setupLLMFlow(deps, [
+        { content: 'Reading file...', tool_calls: [toolCall] },
+        { content: 'Access denied.' },
+      ]);
+      (deps.toolHandler.executeTool as jest.Mock).mockResolvedValueOnce({
+        success: false,
+        error: 'Denied by policy',
+      });
+      const jitMock = runJitContextDiscoveryMock as unknown as jest.Mock;
+      jitMock.mockResolvedValue([{
+        role: 'system',
+        content: 'JIT_CONTEXT:SHOULD_NOT_BE_READ',
+      }]);
+
+      await executor.processUserMessage('Read the protected file', [], []);
+
+      expect(jitMock).not.toHaveBeenCalled();
+      const providerCalls = (deps.client.chatStream as jest.Mock).mock.calls;
+      const secondRequest = providerCalls[1][0] as CodeBuddyMessage[];
+      expect(secondRequest.some(message =>
+        String(message.content).includes('JIT_CONTEXT:SHOULD_NOT_BE_READ'))).toBe(false);
+    });
+
+    it('should propagate cancellation through guarded bash dispatch', async () => {
+      const toolCall = makeToolCall('bash', { command: 'sleep 10' }, 'bash_abort');
+      setupLLMFlow(deps, [
+        { content: 'Running...', tool_calls: [toolCall] },
+      ]);
+      const abortController = new AbortController();
+      (deps.toolHandler.executeTool as jest.Mock).mockImplementationOnce(async () => {
+        const signal = getToolAbortSignal();
+        return await new Promise(resolve => {
+          signal?.addEventListener('abort', () => {
+            resolve({ success: false, error: 'Command aborted' });
+          }, { once: true });
+        });
+      });
+      setTimeout(() => abortController.abort(), 10);
+
+      const chunks = await collectChunks(
+        executor.processUserMessageStream('Run the command', [], [], abortController),
+      );
+
+      expect(deps.toolHandler.executeTool).toHaveBeenCalledWith(toolCall);
+      expect(chunks.some(chunk => chunk.content?.includes('cancelled by user'))).toBe(true);
     });
 
     it('should handle multi-round tool execution', async () => {
-      // Phase D: bash is in STREAMING_TOOLS (uses executeToolStreaming, not executeTool).
-      // Use two non-streaming tools to keep counting executeTool calls reliable.
+      // Use two non-streaming tools to keep execution-count assertions focused.
       const toolCall1 = makeToolCall('read_file', { path: '/a.txt' }, 'call_1');
       const toolCall2 = makeToolCall('read_file', { path: '/b.txt' }, 'call_2');
 
@@ -592,7 +709,7 @@ describe('AgentExecutor', () => {
       config.maxToolRounds = 2;
       executor = new AgentExecutor(deps, config);
 
-      // Phase D: use non-streaming tool (bash bypasses executeTool counter).
+      // Use a file tool so this test stays focused on failure propagation.
       const toolCall = makeToolCall('read_file', { path: '/x.txt' });
 
       // Always return tool calls (infinite loop scenario)
@@ -693,7 +810,7 @@ describe('AgentExecutor', () => {
     });
 
     it('should handle tool execution failure', async () => {
-      // Phase D: bash uses executeToolStreaming. Use a non-streaming tool to mock executeTool failure.
+      // Use a file tool to mock executeTool failure directly.
       const toolCall = makeToolCall('read_file', { path: '/missing.txt' });
 
       setupLLMFlow(deps, [
@@ -1098,7 +1215,7 @@ describe('AgentExecutor', () => {
       expect(cancelChunk).toBeDefined();
     });
 
-    it('should use bash streaming for bash tool calls', async () => {
+    it('should route bash through policy-aware dispatch before emitting output chunks', async () => {
       const toolCall = makeToolCall('bash', { command: 'echo hello' }, 'call_bash');
 
       (deps.streamingHandler.getAccumulatedMessage as jest.Mock)
@@ -1110,16 +1227,10 @@ describe('AgentExecutor', () => {
         remainingContent: '',
       });
 
-      // Mock bash streaming generator
-      const mockGen = {
-        next: jest.fn()
-          .mockResolvedValueOnce({ value: 'hello\n', done: false })
-          .mockResolvedValueOnce({ value: undefined, done: true }),
-        return: jest.fn().mockResolvedValue({ done: true }),
-        throw: jest.fn(),
-        [Symbol.asyncIterator]() { return this; },
-      };
-      (deps.toolHandler.executeToolStreaming as jest.Mock).mockReturnValue(mockGen);
+      (deps.toolHandler.executeTool as jest.Mock).mockResolvedValueOnce({
+        success: true,
+        output: 'hello\n',
+      });
 
       (deps.client.chatStream as jest.Mock)
         .mockImplementationOnce(async function* () {
@@ -1139,6 +1250,9 @@ describe('AgentExecutor', () => {
       const toolStreamChunk = chunks.find(c => c.type === 'tool_stream');
       expect(toolStreamChunk).toBeDefined();
       expect(toolStreamChunk!.toolStreamData!.toolName).toBe('bash');
+      expect(toolStreamChunk!.toolStreamData!.delta).toBe('hello\n');
+      expect(deps.toolHandler.executeTool).toHaveBeenCalledWith(toolCall);
+      expect(deps.toolHandler.executeToolStreaming).not.toHaveBeenCalled();
     });
 
     it('should emit token_count updates during tool rounds', async () => {
@@ -1452,8 +1566,7 @@ describe('AgentExecutor', () => {
       deps.laneQueue = mockLaneQueue as any;
       executor = new AgentExecutor(deps, config);
 
-      // Phase D: `bash` is in STREAMING_TOOLS and bypasses executeToolViaLane.
-      // Use create_file (write tool, non-streaming) to test the lane queue path.
+      // Use create_file (write tool) to test the lane queue path.
       const toolCall = makeToolCall('create_file', { path: '/x.txt', content: 'x' }, 'call_1');
 
       setupLLMFlow(deps, [
@@ -1639,6 +1752,115 @@ describe('AgentExecutor', () => {
       expect(config.recordSessionCost).toHaveBeenCalled();
     });
 
+    it('should accumulate the input tokens sent in every model round', async () => {
+      const toolCall = makeToolCall('read_file', { path: '/test.txt' }, 'cost_round_1');
+      setupLLMFlow(deps, [
+        { content: 'Reading...', tool_calls: [toolCall] },
+        { content: 'Done.' },
+      ]);
+      (deps.tokenCounter.countMessageTokens as jest.Mock)
+        .mockReturnValueOnce(10)  // Initial UI estimate
+        .mockReturnValueOnce(100) // First provider request
+        .mockReturnValueOnce(150) // Transcript after the tool result
+        .mockReturnValueOnce(200); // Second provider request
+
+      await executor.processUserMessage('Read the file', [], []);
+
+      expect(config.recordSessionCost).toHaveBeenCalledTimes(1);
+      expect(config.recordSessionCost).toHaveBeenCalledWith(300, 100);
+      expect(config.estimateSessionCostLimitReached).toHaveBeenCalledWith(300, 50);
+    });
+
+    it('should include selected tool schemas in provider input cost', async () => {
+      const selectedTool = {
+        type: 'function' as const,
+        function: {
+          name: 'read_file',
+          description: 'Read a file',
+          parameters: {
+            type: 'object',
+            properties: { path: { type: 'string' } },
+            required: ['path'],
+          },
+        },
+      };
+      (deps.toolSelectionStrategy.selectToolsForQuery as jest.Mock).mockResolvedValue({
+        tools: [selectedTool],
+        selection: null,
+        fromCache: false,
+        query: 'Read a file',
+        timestamp: new Date(),
+      });
+      (deps.tokenCounter.countTokens as jest.Mock).mockReturnValue(25);
+
+      await executor.processUserMessage('Read a file', [], []);
+
+      expect(deps.tokenCounter.countTokens).toHaveBeenCalledWith(JSON.stringify([selectedTool]));
+      expect(config.recordSessionCost).toHaveBeenCalledWith(525, 50);
+    });
+
+    it('should account for a pre-compaction model request', async () => {
+      (deps.contextManager.shouldWarn as jest.Mock).mockReturnValue({
+        warn: true,
+        message: 'Context nearly full',
+      });
+      (deps.tokenCounter.countMessageTokens as jest.Mock)
+        .mockReturnValueOnce(10)  // Initial UI estimate
+        .mockReturnValueOnce(40)  // Pre-compaction request
+        .mockReturnValueOnce(100); // Main provider request
+      (deps.client.chat as jest.Mock).mockResolvedValueOnce({
+        choices: [{ message: { content: 'NO_REPLY' }, finish_reason: 'stop' }],
+        usage: { prompt_tokens: 40, completion_tokens: 5, total_tokens: 45 },
+      });
+      const messages: CodeBuddyMessage[] = [
+        { role: 'user', content: 'one' },
+        { role: 'assistant', content: 'two' },
+        { role: 'user', content: 'three' },
+        { role: 'assistant', content: 'four' },
+      ];
+
+      await executor.processUserMessage('Continue', [], messages);
+
+      expect(deps.client.chat).toHaveBeenCalledTimes(1);
+      expect(config.recordSessionCost).toHaveBeenCalledWith(140, 55);
+      expect(config.estimateSessionCostLimitReached).toHaveBeenCalledWith(40, 0);
+      expect(config.estimateSessionCostLimitReached).toHaveBeenCalledWith(140, 5);
+    });
+
+    it('should remain the single cost recorder when the legacy middleware is present', async () => {
+      const pipeline = new MiddlewarePipeline();
+      pipeline.use(new CostLimitMiddleware({
+        recordSessionCost: config.recordSessionCost,
+        isSessionCostLimitReached: config.isSessionCostLimitReached,
+      }));
+      deps.middlewarePipeline = pipeline;
+      executor = new AgentExecutor(deps, config);
+      const toolCall = makeToolCall('read_file', { path: '/test.txt' }, 'cost_middleware');
+      setupLLMFlow(deps, [
+        { content: 'Reading...', tool_calls: [toolCall] },
+        { content: 'Done.' },
+      ]);
+
+      await executor.processUserMessage('Read the file', [], []);
+
+      expect(pipeline.getMiddlewareNames()).not.toContain('cost-limit');
+      expect(config.recordSessionCost).toHaveBeenCalledTimes(1);
+    });
+
+    it('should record the attempted request when streaming fails', async () => {
+      (deps.tokenCounter.countMessageTokens as jest.Mock)
+        .mockReturnValueOnce(10)
+        .mockReturnValueOnce(120);
+      (deps.client.chatStream as jest.Mock).mockImplementationOnce(async function* () {
+        throw new Error('Network error');
+      });
+
+      await collectChunks(executor.processUserMessageStream('Hello', [], [], null));
+
+      expect(config.recordSessionCost).toHaveBeenCalledTimes(1);
+      expect(config.recordSessionCost).toHaveBeenCalledWith(120, 0);
+    });
+
     it('should stop streaming when cost limit exceeded at end of loop', async () => {
       // Cost is now only recorded at end-of-loop (not in legacy inline path)
       // This tests that end-of-loop recording detects cost limit
@@ -1655,6 +1877,17 @@ describe('AgentExecutor', () => {
 
       const costChunk = chunks.find(c => c.content?.includes('cost limit'));
       expect(costChunk).toBeDefined();
+    });
+
+    it('should warn when the session reaches eighty percent of its budget', async () => {
+      (config.getSessionCost as jest.Mock).mockReturnValue(8.5);
+      (config.getSessionCostLimit as jest.Mock).mockReturnValue(10);
+
+      const chunks = await collectChunks(
+        executor.processUserMessageStream('Expensive', [], [], null),
+      );
+
+      expect(chunks.some(chunk => chunk.content?.includes('approaching limit'))).toBe(true);
     });
   });
 
@@ -1676,8 +1909,7 @@ describe('AgentExecutor', () => {
     });
 
     it('should handle null content in assistant message', async () => {
-      // Streaming flow: getAccumulatedMessage returns null content; runTurnLoop
-      // applies a fallback "Using tools to help you..." when content is empty.
+      // Streaming flow: getAccumulatedMessage returns null content and no tools.
       (deps.client.chatStream as jest.Mock).mockImplementationOnce(async function* () {
         // No content
       });
@@ -1695,13 +1927,28 @@ describe('AgentExecutor', () => {
 
       const entries = await executor.processUserMessage('Hello', history, messages);
 
-      // Should use fallback content
       expect(entries.length).toBe(1);
-      expect(entries[0].content).toBeDefined();
+      expect(entries[0].content).toContain('Assistant stream returned no content or tool calls');
+      expect(entries[0].content).not.toContain('Using tools to help you');
+      expect(messages.some(message =>
+        message.role === 'assistant' && String(message.content).includes('Using tools to help you'))).toBe(false);
+    });
+
+    it('should keep the tool-progress placeholder for an empty tool-call response', async () => {
+      const toolCall = makeToolCall('read_file', { path: '/empty.txt' }, 'empty_with_tool');
+      setupLLMFlow(deps, [
+        { content: '', tool_calls: [toolCall] },
+        { content: 'Done.' },
+      ]);
+
+      const entries = await executor.processUserMessage('Read the file', [], []);
+
+      expect(entries.some(entry => entry.content === 'Using tools to help you...')).toBe(true);
+      expect(entries.some(entry => entry.content === 'Done.')).toBe(true);
     });
 
     it('should handle tool returning no output', async () => {
-      // Phase D: use non-streaming tool so executeTool mock applies.
+      // Use a file tool so the no-output behavior stays tool-agnostic.
       const toolCall = makeToolCall('read_file', { path: '/empty.txt' }, 'call_1');
 
       setupLLMFlow(deps, [
@@ -2230,8 +2477,15 @@ describe('AgentExecutor', () => {
         )
       );
 
-      // Exactly 1 call regardless of abort — cost recording happens once at end of loop.
-      expect((streamConfig.recordSessionCost as jest.Mock).mock.calls.length).toBeLessThanOrEqual(1);
+      // The request was sent, so an abort still records it exactly once.
+      expect(streamConfig.recordSessionCost).toHaveBeenCalledTimes(1);
+      expect(streamConfig.recordSessionCost).toHaveBeenCalledWith(500, 50);
+      expect(depsStream.client.chatStream).toHaveBeenCalledWith(
+        expect.any(Array),
+        expect.any(Array),
+        { signal: abortController.signal },
+        expect.any(Object),
+      );
     });
 
     it('starts prompt building, tool selection, and context lookup before awaiting any one', async () => {

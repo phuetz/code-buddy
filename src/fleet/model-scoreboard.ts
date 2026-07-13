@@ -94,10 +94,17 @@ function normalizeRole(role: string): string {
 
 /** History weight saturation: with K=5, 5 runs ≈ half-trust, 20 runs ≈ 0.8. */
 const HISTORY_WEIGHT_K = 5;
+/** Avoid a synchronous filesystem stat for every scoreboard lookup in hot paths. */
+const RELOAD_CHECK_INTERVAL_MS = 250;
+const INDEX_SEPARATOR = '\u0000';
 
 export class ModelScoreboard {
   private records: OutcomeRecord[] = [];
+  private recordsByTaskModel = new Map<string, OutcomeRecord[]>();
+  private recordsByTaskRoleModel = new Map<string, OutcomeRecord[]>();
+  private recordsByModel = new Map<string, OutcomeRecord[]>();
   private cachedMtimeMs = -1;
+  private lastReloadCheckAt: number | null = null;
 
   constructor(private readonly file: string = defaultLedgerPath()) {
     this.load();
@@ -117,9 +124,52 @@ export class ModelScoreboard {
   }
 
   /** Pick up records appended by OTHER processes since our last read. */
-  private maybeReload(): void {
+  private maybeReload(force = false): void {
+    const now = Date.now();
+    if (
+      !force &&
+      this.lastReloadCheckAt !== null &&
+      now >= this.lastReloadCheckAt &&
+      now - this.lastReloadCheckAt < RELOAD_CHECK_INTERVAL_MS
+    ) {
+      return;
+    }
+    this.lastReloadCheckAt = now;
     const mtime = this.statMtimeMs();
     if (mtime !== this.cachedMtimeMs) this.load();
+  }
+
+  private taskModelKey(taskType: string, model: string): string {
+    return `${taskType}${INDEX_SEPARATOR}${model}`;
+  }
+
+  private taskRoleModelKey(taskType: string, role: string, model: string): string {
+    return `${taskType}${INDEX_SEPARATOR}${normalizeRole(role)}${INDEX_SEPARATOR}${model}`;
+  }
+
+  private indexRecord(record: OutcomeRecord): void {
+    const taskModelKey = this.taskModelKey(record.taskType, record.model);
+    const taskModelRecords = this.recordsByTaskModel.get(taskModelKey) ?? [];
+    taskModelRecords.push(record);
+    this.recordsByTaskModel.set(taskModelKey, taskModelRecords);
+
+    const modelRecords = this.recordsByModel.get(record.model) ?? [];
+    modelRecords.push(record);
+    this.recordsByModel.set(record.model, modelRecords);
+
+    if (record.role !== undefined) {
+      const taskRoleModelKey = this.taskRoleModelKey(record.taskType, record.role, record.model);
+      const taskRoleModelRecords = this.recordsByTaskRoleModel.get(taskRoleModelKey) ?? [];
+      taskRoleModelRecords.push(record);
+      this.recordsByTaskRoleModel.set(taskRoleModelKey, taskRoleModelRecords);
+    }
+  }
+
+  private rebuildIndexes(): void {
+    this.recordsByTaskModel = new Map();
+    this.recordsByTaskRoleModel = new Map();
+    this.recordsByModel = new Map();
+    for (const record of this.records) this.indexRecord(record);
   }
 
   private load(): void {
@@ -135,6 +185,7 @@ export class ModelScoreboard {
       }
       if (!raw) {
         this.records = [];
+        this.rebuildIndexes();
         this.cachedMtimeMs = this.statMtimeMs();
         return;
       }
@@ -156,12 +207,14 @@ export class ModelScoreboard {
             }
           });
       }
+      this.rebuildIndexes();
       this.cachedMtimeMs = this.statMtimeMs();
     } catch (err) {
       logger.warn?.('[model-scoreboard] could not read ledger, starting empty', {
         err: err instanceof Error ? err.message : String(err),
       });
       this.records = [];
+      this.rebuildIndexes();
     }
   }
 
@@ -180,8 +233,11 @@ export class ModelScoreboard {
   /** Append one model's outcome for a run and persist (O(1), concurrent-safe append). */
   recordOutcome(rec: OutcomeRecord): void {
     const normalized: OutcomeRecord = rec.role ? { ...rec, role: normalizeRole(rec.role) } : rec;
-    this.maybeReload();
+    // Writes must not let a throttled check hide another process's append:
+    // updating cachedMtimeMs after our append would otherwise mask that record forever.
+    this.maybeReload(true);
     this.records.push(normalized);
+    this.indexRecord(normalized);
     try {
       fs.mkdirSync(path.dirname(this.file), { recursive: true });
       fs.appendFileSync(this.file, JSON.stringify(normalized) + '\n', 'utf-8');
@@ -195,7 +251,7 @@ export class ModelScoreboard {
 
   private runsFor(taskType: string, model: string): OutcomeRecord[] {
     this.maybeReload();
-    return this.records.filter((r) => r.taskType === taskType && r.model === model);
+    return this.recordsByTaskModel.get(this.taskModelKey(taskType, model)) ?? [];
   }
 
   /** Raw historical win rate (0-1) of a model for a task type. 0 when never seen. Display only. */
@@ -247,9 +303,8 @@ export class ModelScoreboard {
   roleScore(taskType: string, role: string, model: string): number {
     const wanted = normalizeRole(role);
     this.maybeReload();
-    const runs = this.records.filter(
-      (r) =>
-        !r.failed && r.taskType === taskType && r.role !== undefined && normalizeRole(r.role) === wanted && r.model === model,
+    const runs = (this.recordsByTaskRoleModel.get(this.taskRoleModelKey(taskType, wanted, model)) ?? []).filter(
+      (r) => !r.failed,
     );
     if (runs.length === 0) return 0;
     const wins = runs.filter((r) => r.won).length;
@@ -266,10 +321,10 @@ export class ModelScoreboard {
    */
   consecutiveRecentFailures(model: string): number {
     this.maybeReload();
+    const records = this.recordsByModel.get(model) ?? [];
     let count = 0;
-    for (let i = this.records.length - 1; i >= 0; i--) {
-      const r = this.records[i]!;
-      if (r.model !== model) continue;
+    for (let i = records.length - 1; i >= 0; i--) {
+      const r = records[i]!;
       if (!r.failed) break;
       count++;
     }

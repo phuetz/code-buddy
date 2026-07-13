@@ -54,8 +54,13 @@ jest.mock('../../src/tools/tool-selector', async () => {
   return {
     ...originalModule,
     getToolSelector: jest.fn().mockReturnValue(mockSelector),
-    selectRelevantTools: jest.fn().mockImplementation((query, tools, maxTools) => ({
-      selectedTools: tools.slice(0, maxTools || 10),
+    selectRelevantTools: jest.fn().mockImplementation((query, tools, optionsOrMaxTools) => ({
+      selectedTools: tools.slice(
+        0,
+        (typeof optionsOrMaxTools === 'number'
+          ? optionsOrMaxTools
+          : optionsOrMaxTools?.maxTools) || 10,
+      ),
       scores: new Map(),
       classification: {
         categories: ['file_read'],

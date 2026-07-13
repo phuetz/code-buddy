@@ -22,6 +22,12 @@ export interface Perception {
   payload?: unknown;
 }
 
+/** Speech can initiate a real agent turn, so it must never be wired on an
+ * unauthenticated sensory bridge. Keep this invariant pure and easy to test. */
+export function shouldWireSpeechReaction(env: { speech?: string; token?: string }): boolean {
+  return env.speech === 'true' && Boolean(env.token);
+}
+
 export function perceptionOf(evt: BaseEvent): Perception {
   const meta = (evt.metadata as Perception | undefined) ?? {};
   return { ...meta, receivedAt: evt.timestamp };
@@ -35,7 +41,9 @@ export function wireSensoryReactions(onPerception?: (p: Perception, evt: BaseEve
   const bus = getGlobalEventBus();
   const id = bus.on('sensory:perception', (evt: BaseEvent) => {
     const p = perceptionOf(evt);
-    logger.info(`[sensory] ${p.modality}/${p.kind} (salience ${p.salience ?? 0})`);
+    const message = `[sensory] ${p.modality}/${p.kind} (salience ${p.salience ?? 0})`;
+    if ((p.salience ?? 0) < 128) logger.debug(message);
+    else logger.info(message);
     getSensoryMemory().push(p); // short-term memory → consolidated by dreaming
     onPerception?.(p, evt);
   });

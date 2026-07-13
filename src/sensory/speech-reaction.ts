@@ -622,6 +622,7 @@ async function transcribeWavWithWorker(
     const timeout = setTimeout(() => {
       worker.pending.delete(id);
       logger.warn(`[speech] STT worker request timed out after ${timeoutMs}ms`);
+      disposeFasterWhisperWorker(worker);
       resolve('');
     }, timeoutMs);
     worker.pending.set(id, { resolve, timeout });
@@ -649,6 +650,7 @@ async function transcribeWavWithParakeetWorker(
     const timeout = setTimeout(() => {
       worker.pending.delete(id);
       logger.warn(`[speech] Parakeet worker request timed out after ${timeoutMs}ms`);
+      disposeParakeetWorker(worker);
       resolve('');
     }, timeoutMs);
     worker.pending.set(id, { resolve, timeout });
@@ -912,6 +914,7 @@ async function transcribeWavWithSherpaRustWorker(
     const timeout = setTimeout(() => {
       worker.pending.delete(id);
       logger.warn(`[speech] sherpa-rs worker request timed out after ${timeoutMs}ms`);
+      disposeSherpaRustWorker(worker);
       resolve('');
     }, timeoutMs);
     worker.pending.set(id, { resolve, timeout });
@@ -988,9 +991,7 @@ async function transcribeWavRaw(
   // binary is built, then python Parakeet when its model dir exists, else faster-whisper.
   if (resolveSherpaRustBin() && existsSync(resolveParakeetModelDir())) {
     try {
-      const text = await transcribeWavWithSherpaRustRaw(wav);
-      if (text) return text;
-      logger.warn('[speech] auto STT: sherpa-rs returned empty; trying Parakeet/faster-whisper');
+      return await transcribeWavWithSherpaRustRaw(wav);
     } catch (err) {
       logger.warn(
         `[speech] auto STT: sherpa-rs unavailable; trying Parakeet/faster-whisper: ${err instanceof Error ? err.message : String(err)}`
@@ -999,9 +1000,7 @@ async function transcribeWavRaw(
   }
   if (existsSync(resolveParakeetModelDir())) {
     try {
-      const text = await transcribeWavWithParakeetRaw(wav);
-      if (text) return text;
-      logger.warn('[speech] auto STT: Parakeet returned empty; trying faster-whisper');
+      return await transcribeWavWithParakeetRaw(wav);
     } catch (err) {
       logger.warn(
         `[speech] auto STT: Parakeet unavailable; trying faster-whisper: ${err instanceof Error ? err.message : String(err)}`

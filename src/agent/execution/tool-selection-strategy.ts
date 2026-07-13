@@ -213,8 +213,10 @@ export class ToolSelectionStrategy {
       // Use RAG-based selection
       const result = await getRelevantTools(query, {
         maxTools: effectiveConfig.maxTools,
+        minScore: effectiveConfig.minScore,
         useRAG: true,
         alwaysInclude: effectiveConfig.alwaysInclude,
+        useAdaptiveThreshold: effectiveConfig.useAdaptiveThreshold,
       });
 
       tools = result.selectedTools;

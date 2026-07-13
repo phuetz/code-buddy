@@ -23,6 +23,7 @@ import {
   _resetPeerRpcForTests,
   type PeerMethodContext,
 } from '../../src/server/websocket/peer-rpc.js';
+import { _resetFleetLoadForTests } from '../../src/fleet/fleet-load.js';
 
 // ---- helpers ---------------------------------------------------------
 
@@ -63,6 +64,7 @@ describe('peer-chat-bridge — Phase (d).15', () => {
   beforeEach(() => {
     _unwireForTests();
     _resetPeerRpcForTests();
+    _resetFleetLoadForTests();
   });
 
   describe('wire / unwire', () => {
@@ -89,6 +91,52 @@ describe('peer-chat-bridge — Phase (d).15', () => {
   });
 
   describe('peer.chat — error paths', () => {
+    it('rejects chat, stream, and dispatch with SATURATED while capacity is full', async () => {
+      const previousCapacity = process.env.CODEBUDDY_FLEET_MAX_CONCURRENCY;
+      process.env.CODEBUDDY_FLEET_MAX_CONCURRENCY = '1';
+      let release: (() => void) | undefined;
+      const chat = vi.fn(() => new Promise((resolve) => {
+        release = () => resolve({
+          choices: [{ message: { role: 'assistant', content: 'done' }, finish_reason: 'stop' }],
+        });
+      }));
+      wirePeerChatBridge(() => ({ chat } as never));
+
+      try {
+        const inFlight = dispatchPeerRequest(
+          { id: 'saturation-holder', method: 'peer.chat', params: { prompt: 'hold' } },
+          baseCtx,
+        );
+        await vi.waitFor(() => expect(chat).toHaveBeenCalledOnce());
+
+        for (const [method, params] of [
+          ['peer.chat', { prompt: 'second' }],
+          ['peer.chat-stream', { prompt: 'stream' }],
+          ['peer.dispatch', { id: 'saturated-dispatch', prompt: 'dispatch' }],
+        ] as const) {
+          const response = await dispatchPeerRequest(
+            { id: `blocked-${method}`, method, params },
+            baseCtx,
+          );
+          expect(response).toMatchObject({
+            ok: false,
+            error: { code: 'SATURATED' },
+          });
+        }
+
+        expect(getDispatchState('saturated-dispatch')).toBeNull();
+        release?.();
+        await expect(inFlight).resolves.toMatchObject({ ok: true });
+      } finally {
+        if (previousCapacity === undefined) {
+          delete process.env.CODEBUDDY_FLEET_MAX_CONCURRENCY;
+        } else {
+          process.env.CODEBUDDY_FLEET_MAX_CONCURRENCY = previousCapacity;
+        }
+        _resetFleetLoadForTests();
+      }
+    });
+
     it('METHOD_ERROR when prompt is missing or empty', async () => {
       wirePeerChatBridge(() => null);
       const r1 = await dispatchPeerRequest(
