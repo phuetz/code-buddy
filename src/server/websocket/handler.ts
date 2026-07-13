@@ -734,6 +734,13 @@ export async function setupWebSocket(
       connections.delete(ws);
     });
 
+    // Protocol-level pong frames are activity too. Fleet listeners can stay
+    // silent for long periods while still answering server pings; without
+    // this update the idle sweep terminates healthy passive listeners.
+    ws.on('pong', () => {
+      state.lastActivity = Date.now();
+    });
+
     ws.on('error', (error) => {
       logger.error(`WebSocket error [${state.id}]:`, error);
       connections.delete(ws);
