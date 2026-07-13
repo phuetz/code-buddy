@@ -291,8 +291,9 @@ export function _unwireForTests(): void {
  * RPC handler) return immediately while the LLM call runs in the
  * background; remote peers can later poll status via `peer.dispatchStatus`.
  *
- * Stays in memory for the lifetime of the process — durable
- * persistence is the saga store (Fleet P4).
+ * Retained briefly in memory for polling — durable persistence is the saga
+ * store (Fleet P4). Terminal entries are TTL-pruned and the map has a hard
+ * capacity so dispatch traffic cannot grow process memory without bound.
  */
 interface DispatchState {
   runId: string;
@@ -312,6 +313,55 @@ interface DispatchState {
 }
 
 const dispatchedTasks: Map<string, DispatchState> = new Map();
+const DEFAULT_DISPATCH_TTL_MS = 30 * 60 * 1000;
+const MAX_DISPATCH_TASKS = 500;
+
+function dispatchTtlMs(): number {
+  const configured = Number(process.env.CODEBUDDY_PEER_DISPATCH_TTL_MS);
+  return Number.isFinite(configured) && configured > 0
+    ? configured
+    : DEFAULT_DISPATCH_TTL_MS;
+}
+
+function isTerminalDispatch(state: DispatchState): boolean {
+  return state.status === 'completed' || state.status === 'failed';
+}
+
+/**
+ * Prune expired terminal tasks, then make room for one new run. Completed
+ * tasks are evicted oldest-first before live tasks; the latter fallback is
+ * necessary to preserve the hard memory bound during a burst of slow calls.
+ */
+function retainDispatchCapacity(runId: string, now: number): void {
+  const ttlMs = dispatchTtlMs();
+  for (const [id, state] of dispatchedTasks) {
+    if (
+      isTerminalDispatch(state)
+      && state.completedAt !== undefined
+      && now - state.completedAt >= ttlMs
+    ) {
+      dispatchedTasks.delete(id);
+    }
+  }
+
+  const additionalEntry = dispatchedTasks.has(runId) ? 0 : 1;
+  while (dispatchedTasks.size + additionalEntry > MAX_DISPATCH_TASKS) {
+    let oldestTerminal: DispatchState | undefined;
+    for (const state of dispatchedTasks.values()) {
+      if (
+        isTerminalDispatch(state)
+        && (oldestTerminal === undefined
+          || (state.completedAt ?? state.startedAt) < (oldestTerminal.completedAt ?? oldestTerminal.startedAt))
+      ) {
+        oldestTerminal = state;
+      }
+    }
+
+    const evictionId = oldestTerminal?.runId ?? dispatchedTasks.keys().next().value;
+    if (typeof evictionId !== 'string') break;
+    dispatchedTasks.delete(evictionId);
+  }
+}
 
 /**
  * Fire-and-forget LLM call for `peer.dispatch`. Returns immediately
@@ -327,6 +377,8 @@ export function dispatchPeerTask(input: {
   traceId?: string;
   parentRunId?: string;
 }): void {
+  const startedAt = Date.now();
+  retainDispatchCapacity(input.runId, startedAt);
   const dispatchProfile = input.dispatchProfile ?? 'balanced';
   const toolset = buildHermesToolsetDescriptor(
     dispatchProfile,
@@ -343,7 +395,7 @@ export function dispatchPeerTask(input: {
     traceId: input.traceId,
     parentRunId: input.parentRunId,
     status: 'pending',
-    startedAt: Date.now(),
+    startedAt,
   };
   dispatchedTasks.set(input.runId, state);
 
