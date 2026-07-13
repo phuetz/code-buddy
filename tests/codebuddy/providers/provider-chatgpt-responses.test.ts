@@ -316,6 +316,24 @@ describe('parseSseStream — Codex SSE → OpenAI ChatCompletionChunk', () => {
     expect(finished).toBe(true);
   });
 
+  it('maps Responses usage onto the final completion chunk', async () => {
+    const stream = makeSseStream([
+      'data: {"type":"response.completed","response":{"usage":{"input_tokens":120,"output_tokens":30,"total_tokens":150,"input_tokens_details":{"cached_tokens":80}}}}\n\n',
+    ]);
+
+    const chunks = [];
+    for await (const chunk of parseSseStream(stream, 'gpt-5.5')) {
+      chunks.push(chunk);
+    }
+
+    expect(chunks.at(-1)?.usage).toEqual({
+      prompt_tokens: 120,
+      completion_tokens: 30,
+      total_tokens: 150,
+      cached_tokens: 80,
+    });
+  });
+
   it('emits tool_calls on output_item.done with type=function_call', async () => {
     const stream = makeSseStream([
       'data: {"type":"response.output_item.done","item":{"type":"function_call","name":"search","arguments":"{\\"q\\":\\"X\\"}","call_id":"c1"}}\n\n',
