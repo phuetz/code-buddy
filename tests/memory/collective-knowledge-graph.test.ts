@@ -183,6 +183,25 @@ describe('CollectiveKnowledgeGraph (Phase 0)', () => {
     expect(onlyLessons[0]!.type).toBe('lesson');
   });
 
+  it('keeps long names with the same 80-character prefix as distinct entities', () => {
+    const ckg = new CollectiveKnowledgeGraph({ ledgerPath, agentId: 'host/repo' });
+    const sharedPrefix = 'A'.repeat(90);
+    const first = ckg.remember({
+      name: `${sharedPrefix} first publication`,
+      text: 'first long-title discovery',
+      type: 'discovery',
+    });
+    const second = ckg.remember({
+      name: `${sharedPrefix} second publication`,
+      text: 'second long-title discovery',
+      type: 'discovery',
+    });
+
+    expect(first!.id).not.toBe(second!.id);
+    expect(ckg.listEntities({ type: 'discovery' })).toHaveLength(2);
+    expect(ckg.getSuperseded()).toHaveLength(0);
+  });
+
   it('empty text is ignored (never-throws)', () => {
     const ckg = new CollectiveKnowledgeGraph({ ledgerPath, agentId: 'host/repo' });
     expect(ckg.remember({ text: '   ' })).toBeNull();
