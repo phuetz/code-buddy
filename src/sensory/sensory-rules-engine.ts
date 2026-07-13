@@ -11,7 +11,7 @@
  */
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import { readFile, writeFile, appendFile, mkdir, stat } from 'node:fs/promises';
+import { readFile, writeFile, appendFile, mkdir, stat, rename, rm } from 'node:fs/promises';
 import { getGlobalEventBus } from '../events/event-bus.js';
 import { logger } from '../utils/logger.js';
 import type { BaseEvent } from '../events/types.js';
@@ -39,6 +39,24 @@ function rulesPath(): string {
 }
 function auditPath(): string {
   return process.env.CODEBUDDY_RULE_RUNS_FILE || join(homedir(), '.codebuddy', 'companion', 'rule-runs.jsonl');
+}
+
+const RULE_RUNS_MAX_BYTES = 512 * 1024;
+
+/** Append one rule audit entry while keeping the sidecar bounded to one backup. */
+export async function appendRuleRun(run: RuleRun, path = auditPath()): Promise<void> {
+  await mkdir(join(path, '..'), { recursive: true });
+  let size = 0;
+  try {
+    size = (await stat(path)).size;
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
+  }
+  if (size > RULE_RUNS_MAX_BYTES) {
+    await rm(`${path}.1`, { force: true });
+    await rename(path, `${path}.1`);
+  }
+  await appendFile(path, `${JSON.stringify(run)}\n`, 'utf8');
 }
 
 export async function loadSensoryRules(path = rulesPath()): Promise<SensoryRule[]> {
@@ -243,12 +261,14 @@ export function wireSensoryRules(
         const res = await execute(rule.action, ctx).catch((e) => ({ ok: false, detail: String(e) }));
         logger.info(`[rules] ${rule.id} (${rule.action.type}) → ${res.ok ? 'ok' : 'FAIL'}${res.detail ? `: ${res.detail.slice(0, 80)}` : ''}`);
         try {
-          const ap = auditPath();
-          await mkdir(join(ap, '..'), { recursive: true });
-          await appendFile(
-            ap,
-            JSON.stringify({ ts: t, rule: rule.id, action: rule.action.type, kind: p.kind, ok: res.ok, detail: res.detail }) + '\n',
-          );
+          await appendRuleRun({
+            ts: t,
+            rule: rule.id,
+            action: rule.action.type,
+            kind: p.kind,
+            ok: res.ok,
+            detail: res.detail,
+          });
         } catch {
           /* best-effort audit */
         }

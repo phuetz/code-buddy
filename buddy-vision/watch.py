@@ -19,6 +19,8 @@ import time
 import cv2
 import numpy as np
 
+from storage import append_rotating_jsonl, prune_frames
+
 BRIDGE_URL = os.environ.get("BUDDY_SENSE_BRIDGE_URL", "ws://127.0.0.1:8129")
 TOKEN = os.environ.get("BUDDY_SENSE_TOKEN", "")
 CAMERA_INDEX = int(os.environ.get("BUDDY_SENSE_CAMERA_INDEX", "0"))
@@ -34,6 +36,8 @@ YOLO_CONF = float(os.environ.get("BUDDY_VISION_YOLO_CONF", "0.35"))
 YOLO_IOU = float(os.environ.get("BUDDY_VISION_YOLO_IOU", "0.7"))
 YOLO_DEVICE = os.environ.get("BUDDY_VISION_YOLO_DEVICE", "").strip()
 YOLO_CLASSES = os.environ.get("BUDDY_VISION_YOLO_CLASSES", "0")
+FRAME_TTL = float(os.environ.get("BUDDY_SENSE_FRAME_TTL", str(7 * 24 * 60 * 60)))
+FRAME_KEEP = 500
 os.makedirs(FRAME_DIR, exist_ok=True)
 
 
@@ -81,8 +85,7 @@ class Bridge:
 
 def log_event(rec: dict) -> None:
     try:
-        with open(EVENTS_LOG, "a") as f:
-            f.write(json.dumps(rec) + "\n")
+        append_rotating_jsonl(EVENTS_LOG, rec)
     except Exception:
         pass
 
@@ -90,10 +93,15 @@ def log_event(rec: dict) -> None:
 def save_keyframe(frame) -> str | None:
     path = os.path.join(FRAME_DIR, f"cam-{now_ms()}.jpg")
     try:
-        cv2.imwrite(path, frame)
-        return path
+        if not cv2.imwrite(path, frame):
+            return None
     except Exception:
         return None
+    try:
+        prune_frames(FRAME_DIR, FRAME_KEEP, FRAME_TTL)
+    except Exception:
+        pass
+    return path
 
 
 class VisionSample:

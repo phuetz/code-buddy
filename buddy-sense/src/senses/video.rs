@@ -66,13 +66,16 @@ pub mod live {
     use super::{motion_score, MOTION_SALIENCE};
     use crate::event::{now_ms, Modality, SensoryEvent};
     use std::ffi::OsStr;
-    use std::io::Read;
+    use std::io::{self, Read};
     use std::path::{Path, PathBuf};
     use std::process::{Command, Stdio};
+    use std::time::{Duration, SystemTime};
     use tokio::sync::mpsc;
 
     const W: usize = 64;
     const H: usize = 48;
+    const FRAME_KEEP: usize = 500;
+    const DEFAULT_FRAME_TTL_SECS: u64 = 7 * 24 * 60 * 60;
 
     fn ffmpeg_bin() -> String {
         std::env::var("BUDDY_SENSE_FFMPEG")
@@ -163,6 +166,78 @@ pub mod live {
             .unwrap_or(false)
     }
 
+    fn configured_frame_ttl(value: Option<&str>) -> Duration {
+        value
+            .and_then(|seconds| seconds.parse::<u64>().ok())
+            .map(Duration::from_secs)
+            .unwrap_or_else(|| Duration::from_secs(DEFAULT_FRAME_TTL_SECS))
+    }
+
+    /// Remove expired camera keyframes and cap the survivors to the `keep` most
+    /// recently modified files. Files outside the `cam-*.jpg` namespace are
+    /// deliberately ignored, including ffmpeg's fixed `.buddy-sense-*-latest`
+    /// working image.
+    pub fn prune_frames(dir: &Path, keep: usize, ttl: Duration) -> io::Result<Vec<PathBuf>> {
+        prune_frames_at(dir, keep, ttl, SystemTime::now())
+    }
+
+    fn prune_frames_at(
+        dir: &Path,
+        keep: usize,
+        ttl: Duration,
+        now: SystemTime,
+    ) -> io::Result<Vec<PathBuf>> {
+        let mut frames = Vec::new();
+        for entry in std::fs::read_dir(dir)? {
+            let entry = match entry {
+                Ok(entry) => entry,
+                Err(error) if error.kind() == io::ErrorKind::NotFound => continue,
+                Err(error) => return Err(error),
+            };
+            let file_type = match entry.file_type() {
+                Ok(file_type) => file_type,
+                Err(error) if error.kind() == io::ErrorKind::NotFound => continue,
+                Err(error) => return Err(error),
+            };
+            if !file_type.is_file() {
+                continue;
+            }
+            let name = entry.file_name();
+            let Some(name) = name.to_str() else {
+                continue;
+            };
+            if !name.starts_with("cam-") || !name.ends_with(".jpg") {
+                continue;
+            }
+            let modified = match entry.metadata().and_then(|metadata| metadata.modified()) {
+                Ok(modified) => modified,
+                Err(error) if error.kind() == io::ErrorKind::NotFound => continue,
+                Err(error) => return Err(error),
+            };
+            frames.push((modified, entry.path()));
+        }
+
+        // Newest first. The path provides deterministic ordering when a
+        // filesystem exposes coarse, equal modification timestamps.
+        frames.sort_by(|a, b| b.cmp(a));
+        let mut removed = Vec::new();
+        for (index, (modified, path)) in frames.into_iter().enumerate() {
+            let expired = now
+                .duration_since(modified)
+                .map(|age| age > ttl)
+                .unwrap_or(false);
+            if index < keep && !expired {
+                continue;
+            }
+            match std::fs::remove_file(&path) {
+                Ok(()) => removed.push(path),
+                Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+                Err(error) => return Err(error),
+            }
+        }
+        Ok(removed)
+    }
+
     /// Capture continuously at the configured cadence; emit `vision/motion`
     /// (+ a keyframe from the current stream) on rising motion. Hysteresis keeps
     /// a sustained scene change to one event rather than an event storm.
@@ -233,10 +308,24 @@ pub mod live {
                         let path = dir.join(format!("cam-{}.jpg", now_ms()));
                         let path_str = path.to_string_lossy().to_string();
                         let ok = retain_keyframe(&latest_frame, &path);
+                        if ok {
+                            let ttl_env = std::env::var("BUDDY_SENSE_FRAME_TTL").ok();
+                            let ttl = configured_frame_ttl(ttl_env.as_deref());
+                            if let Err(error) = prune_frames(dir, FRAME_KEEP, ttl) {
+                                eprintln!(
+                                    "[buddy-sense] live-vision: keyframe pruning failed ({error})"
+                                );
+                            }
+                        }
+                        let retained_path = if ok && path.is_file() {
+                            Some(path_str)
+                        } else {
+                            None
+                        };
                         let payload = serde_json::json!({
                             "score": score,
                             "camera": camera,
-                            "imagePath": if ok { Some(path_str) } else { None },
+                            "imagePath": retained_path,
                         });
                         let ev =
                             SensoryEvent::new(Modality::Vision, "motion", MOTION_SALIENCE, payload);
@@ -294,6 +383,74 @@ pub mod live {
                 &dir.join("never.jpg")
             ));
 
+            std::fs::remove_dir_all(dir).unwrap();
+        }
+
+        fn write_frame_with_mtime(path: &Path, modified: SystemTime) {
+            let file = std::fs::File::create(path).unwrap();
+            file.set_times(std::fs::FileTimes::new().set_modified(modified))
+                .unwrap();
+        }
+
+        #[test]
+        fn configured_ttl_defaults_to_seven_days_and_accepts_seconds() {
+            assert_eq!(
+                configured_frame_ttl(None),
+                Duration::from_secs(7 * 24 * 60 * 60)
+            );
+            assert_eq!(configured_frame_ttl(Some("60")), Duration::from_secs(60));
+            assert_eq!(
+                configured_frame_ttl(Some("invalid")),
+                Duration::from_secs(7 * 24 * 60 * 60)
+            );
+        }
+
+        #[test]
+        fn prune_frames_removes_expired_camera_jpegs_only() {
+            let nonce = format!("{}-{}", std::process::id(), now_ms());
+            let dir = std::env::temp_dir().join(format!("buddy-sense-prune-ttl-{nonce}"));
+            std::fs::create_dir_all(&dir).unwrap();
+            let now = SystemTime::UNIX_EPOCH + Duration::from_secs(1_000);
+            let expired = dir.join("cam-expired.jpg");
+            let fresh = dir.join("cam-fresh.jpg");
+            let unrelated = dir.join("portrait.jpg");
+            write_frame_with_mtime(&expired, SystemTime::UNIX_EPOCH + Duration::from_secs(799));
+            write_frame_with_mtime(&fresh, SystemTime::UNIX_EPOCH + Duration::from_secs(900));
+            write_frame_with_mtime(
+                &unrelated,
+                SystemTime::UNIX_EPOCH + Duration::from_secs(100),
+            );
+
+            let removed = prune_frames_at(&dir, 500, Duration::from_secs(200), now).unwrap();
+
+            assert_eq!(removed, vec![expired.clone()]);
+            assert!(!expired.exists());
+            assert!(fresh.exists());
+            assert!(unrelated.exists());
+            std::fs::remove_dir_all(dir).unwrap();
+        }
+
+        #[test]
+        fn prune_frames_keeps_only_the_newest_requested_count() {
+            let nonce = format!("{}-{}", std::process::id(), now_ms());
+            let dir = std::env::temp_dir().join(format!("buddy-sense-prune-count-{nonce}"));
+            std::fs::create_dir_all(&dir).unwrap();
+            let now = SystemTime::UNIX_EPOCH + Duration::from_secs(1_000);
+            let mut frames = Vec::new();
+            for second in 996..=1_000 {
+                let path = dir.join(format!("cam-{second}.jpg"));
+                write_frame_with_mtime(&path, SystemTime::UNIX_EPOCH + Duration::from_secs(second));
+                frames.push(path);
+            }
+
+            let removed = prune_frames_at(&dir, 2, Duration::from_secs(1_000), now).unwrap();
+
+            assert_eq!(removed.len(), 3);
+            assert!(!frames[0].exists());
+            assert!(!frames[1].exists());
+            assert!(!frames[2].exists());
+            assert!(frames[3].exists());
+            assert!(frames[4].exists());
             std::fs::remove_dir_all(dir).unwrap();
         }
 
