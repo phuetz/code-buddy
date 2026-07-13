@@ -14,6 +14,7 @@ import { OpenAICompatProvider } from "./providers/provider-openai-compat.js";
 import { ChatGptResponsesProvider } from "./providers/provider-chatgpt-responses.js";
 import { GeminiCliProvider } from "./providers/provider-gemini-cli.js";
 import { withStreamRetry } from "./stream-retry.js";
+import { createAbortError } from './abort-signal.js';
 import {
   recordRuntimeFallbackFailure,
   recordRuntimeFallbackSuccess,
@@ -128,9 +129,8 @@ export interface ChatOptions {
   disableProviderFallback?: boolean;
   /**
    * Abort this request mid-flight (barge-in / cancellation). Threaded to the
-   * transport (undici/fetch) via the OpenAI SDK's per-request `RequestOptions.signal`
-   * on the OpenAI-compat strategy. Additive: when omitted, the call is unchanged.
-   * (Gemini-native / ChatGPT-Responses / Gemini-CLI strategies currently ignore it.)
+   * OpenAI-compatible, Gemini-native, and ChatGPT Responses transports.
+   * Additive: when omitted, the call is unchanged.
    */
   signal?: AbortSignal;
   /**
@@ -558,6 +558,9 @@ export class CodeBuddyClient {
     try {
       return await this.dispatchChat(messages, tools, opts, searchOptions);
     } catch (error) {
+      if (opts.signal?.aborted) {
+        throw createAbortError('Chat request aborted by caller');
+      }
       return await this.chatWithProviderFallback(error, messages, tools, opts, searchOptions);
     }
   }
@@ -630,6 +633,9 @@ export class CodeBuddyClient {
         recordRuntimeFallbackSuccess(fallback);
         return response;
       } catch (fallbackError) {
+        if (opts.signal?.aborted) {
+          throw createAbortError('Chat request aborted by caller');
+        }
         recordRuntimeFallbackFailure(fallback, fallbackError);
         logger.warn('Fallback provider failed', {
           source: 'CodeBuddyClient',
@@ -665,7 +671,7 @@ export class CodeBuddyClient {
     const primaryFactory = (): AsyncGenerator<ChatCompletionChunk, void, unknown> =>
       this.dispatchChatStream(messages, tools, opts, searchOptions);
     const primaryStream = retryEnabled
-      ? withStreamRetry(primaryFactory, retryOpts)
+      ? withStreamRetry(primaryFactory, { ...retryOpts, signal: opts.signal })
       : primaryFactory();
 
     let yieldedAnyChunk = false;
@@ -675,6 +681,9 @@ export class CodeBuddyClient {
         yield chunk;
       }
     } catch (error) {
+      if (opts.signal?.aborted) {
+        throw createAbortError('Chat stream aborted by caller');
+      }
       if (yieldedAnyChunk) {
         throw error;
       }
@@ -752,6 +761,9 @@ export class CodeBuddyClient {
         recordRuntimeFallbackSuccess(fallback);
         return;
       } catch (fallbackError) {
+        if (opts.signal?.aborted) {
+          throw createAbortError('Chat stream aborted by caller');
+        }
         recordRuntimeFallbackFailure(fallback, fallbackError);
         logger.warn('Fallback provider stream failed', {
           source: 'CodeBuddyClient',

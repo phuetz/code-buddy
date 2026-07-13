@@ -36,6 +36,7 @@ import type { Provider } from './provider-interface.js';
 import type { ChatGptAuth } from '../../providers/codex-oauth.js';
 import { logger } from '../../utils/logger.js';
 import { getInstallationId } from '../../utils/installation-id.js';
+import { combineAbortSignals, createAbortError } from '../abort-signal.js';
 
 const RESPONSES_URL = 'https://chatgpt.com/backend-api/codex/responses';
 const ORIGINATOR = 'codex_cli_rs';
@@ -330,7 +331,7 @@ export class ChatGptResponsesProvider implements Provider {
       );
     }
 
-    let response = await this.postResponses(body, auth);
+    let response = await this.postResponses(body, auth, opts.signal);
 
     // 401 → refresh and retry once.
     if (response.status === 401) {
@@ -341,7 +342,7 @@ export class ChatGptResponsesProvider implements Provider {
           'ChatGPT auth expired or revoked. Run `/login chatgpt` to re-authenticate.',
         );
       }
-      response = await this.postResponses(body, auth);
+      response = await this.postResponses(body, auth, opts.signal);
     }
 
     // 400 / 404 with `model_not_supported` (or `model_not_found`) →
@@ -366,7 +367,7 @@ export class ChatGptResponsesProvider implements Provider {
           );
           body.model = fallback;
           this.currentModel = fallback;
-          response = await this.postResponses(body, auth);
+          response = await this.postResponses(body, auth, opts.signal);
         }
       }
     }
@@ -393,7 +394,7 @@ export class ChatGptResponsesProvider implements Provider {
     try {
       yield* parseSseStream(response.body, body.model, (item) => {
         capturedReasoning.push(item);
-      });
+      }, STREAM_IDLE_TIMEOUT_MS, opts.signal);
     } finally {
       // Whatever we captured (even partially on error) replaces the
       // previous turn's blobs — fresher data is always more correct.
@@ -416,7 +417,8 @@ export class ChatGptResponsesProvider implements Provider {
 
   private async postResponses(
     body: ResponsesRequestBody,
-    auth: ChatGptAuth
+    auth: ChatGptAuth,
+    callerSignal?: AbortSignal,
   ): Promise<Response> {
     const headers: Record<string, string> = {
       Authorization: `Bearer ${auth.access_token}`,
@@ -450,15 +452,19 @@ export class ChatGptResponsesProvider implements Provider {
       () => controller.abort(),
       CONNECT_TIMEOUT_MS,
     );
+    const requestSignal = combineAbortSignals(callerSignal, controller.signal);
     try {
       return await fetch(RESPONSES_URL, {
         method: 'POST',
         headers,
         body: JSON.stringify(body),
-        signal: controller.signal,
+        signal: requestSignal,
       });
     } catch (err) {
       if ((err as Error)?.name === 'AbortError') {
+        if (callerSignal?.aborted) {
+          throw createAbortError('ChatGPT Responses request aborted by caller');
+        }
         throw new Error(
           `ChatGPT Responses backend did not respond within ${CONNECT_TIMEOUT_MS}ms. ` +
             `Likely a network issue or stalled backend — try again, or run \`/login chatgpt\` to refresh credentials.`,
@@ -697,11 +703,23 @@ export async function* parseSseStream(
   model: string,
   onReasoningItem?: (item: ResponsesReasoningItem) => void,
   idleTimeoutMs: number = STREAM_IDLE_TIMEOUT_MS,
+  signal?: AbortSignal,
 ): AsyncGenerator<ChatCompletionChunk, void, unknown> {
   const reader = body.getReader();
   const decoder = new TextDecoder();
   let buffer = '';
   let chunkIndex = 0;
+  let onAbort: (() => void) | undefined;
+  const abortPromise = new Promise<never>((_resolve, reject) => {
+    if (!signal) return;
+    onAbort = () => {
+      reject(createAbortError('ChatGPT Responses stream aborted by caller'));
+      void reader.cancel().catch(() => { /* stream may already be closed */ });
+    };
+    if (!signal.aborted) {
+      signal.addEventListener('abort', onAbort, { once: true });
+    }
+  });
   // Monotonic index per function_call so the downstream message-reducer keeps
   // parallel tool calls in separate slots. Hardcoding 0 made every parallel
   // call merge into one — names/call_ids/arguments concatenated — producing a
@@ -722,6 +740,9 @@ export async function* parseSseStream(
 
   try {
     while (true) {
+      if (signal?.aborted) {
+        throw createAbortError('ChatGPT Responses stream aborted by caller');
+      }
       // Idle timeout: race reader.read() against a timer. If no SSE event
       // arrives within idleTimeoutMs we cancel the reader (releases the
       // socket) and surface a clear error instead of hanging.
@@ -738,12 +759,15 @@ export async function* parseSseStream(
       });
       let readResult: ReadableStreamReadResult<Uint8Array>;
       try {
-        readResult = await Promise.race([reader.read(), idlePromise]);
+        readResult = await Promise.race([reader.read(), idlePromise, abortPromise]);
       } catch (err) {
         try { await reader.cancel(); } catch { /* socket may already be dead */ }
         throw err;
       } finally {
         if (idleTimer) clearTimeout(idleTimer);
+      }
+      if (signal?.aborted) {
+        throw createAbortError('ChatGPT Responses stream aborted by caller');
       }
       const { value, done } = readResult;
       if (done) break;
@@ -858,6 +882,10 @@ export async function* parseSseStream(
       }
     }
   } finally {
+    if (onAbort) signal?.removeEventListener('abort', onAbort);
+    if (signal?.aborted) {
+      try { await reader.cancel(); } catch { /* stream may already be closed */ }
+    }
     try { reader.releaseLock(); } catch { /* ignore */ }
   }
 }

@@ -479,6 +479,31 @@ describe('parseSseStream — Codex SSE → OpenAI ChatCompletionChunk', () => {
     }
     expect(chunks).toEqual(['ok']);
   });
+
+  it('cancels a stalled reader immediately when the caller aborts', async () => {
+    const cancel = vi.fn();
+    const stallingStream = new ReadableStream<Uint8Array>({
+      start() { /* intentionally idle */ },
+      cancel,
+    });
+    const controller = new AbortController();
+    const generator = parseSseStream(
+      stallingStream,
+      'gpt-5.5',
+      undefined,
+      10_000,
+      controller.signal,
+    );
+    const pending = generator.next();
+    await Promise.resolve();
+
+    const startedAt = Date.now();
+    controller.abort();
+
+    await expect(pending).rejects.toMatchObject({ name: 'AbortError' });
+    expect(Date.now() - startedAt).toBeLessThan(100);
+    expect(cancel).toHaveBeenCalledOnce();
+  });
 });
 
 // ─── 3. End-to-end (mocked fetch) ───────────────────────────────────
