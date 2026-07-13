@@ -39,6 +39,8 @@ import type {
 /** Cached snapshot — rebuilt every refresh interval. */
 let cached: PeerCapability | null = null;
 let lastRefreshAt = 0;
+/** In-flight rebuild shared by concurrent callers after cache expiry. */
+let building: Promise<PeerCapability> | null = null;
 /** Refresh window: 5 minutes — enough to catch a manual Ollama restart. */
 const REFRESH_INTERVAL_MS = 5 * 60 * 1000;
 
@@ -60,9 +62,20 @@ export async function getLocalCapabilities(
     // would make the router's load term worse than useless.
     return { ...cached, activeRequests: getFleetLoad().activeRequests };
   }
-  cached = await buildCapabilitySnapshot();
-  lastRefreshAt = now;
-  return { ...cached, activeRequests: getFleetLoad().activeRequests };
+  if (!building) {
+    building = buildCapabilitySnapshot()
+      .then((snapshot) => {
+        cached = snapshot;
+        lastRefreshAt = Date.now();
+        return snapshot;
+      })
+      .finally(() => {
+        building = null;
+      });
+  }
+
+  const snapshot = await building;
+  return { ...snapshot, activeRequests: getFleetLoad().activeRequests };
 }
 
 /** Sync getter — returns last cached snapshot or empty stub. */
