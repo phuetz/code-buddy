@@ -1206,8 +1206,8 @@ export async function startServer(userConfig: Partial<ServerConfig> = {}): Promi
                     | 'dontAsk'
                     | 'bypassPermissions') || 'plan',
                   ...(speakCwd ? { cwd: speakCwd } : {}),
-                  ack: async () => {
-                    await sayNow("D'accord, je regarde ça.");
+                  ack: async (_transcript, opts) => {
+                    await sayNow("D'accord, je regarde ça.", { signal: opts?.signal });
                   },
                 });
               } else {

@@ -331,8 +331,14 @@ export class SSRFGuard {
   }
 
   /**
-   * Synchronous check for IP literals only (no DNS).
-   * Use for fast path when URL is already an IP literal.
+   * Synchronous SSRF check for IP-literal URLs only (no DNS).
+   *
+   * SECURITY: fails CLOSED for domain hostnames. A domain can only be validated
+   * by resolving it (see the async {@link isSafeUrl}); returning `{safe:true}` here
+   * for any non-IP host would hand a future caller ZERO SSRF protection on the
+   * common case (domain URLs). Callers that may see domains MUST use the async path.
+   *
+   * Use only for a genuine fast path where the URL is known to be an IP literal.
    */
   isSafeUrlSync(rawUrl: string): SSRFCheckResult {
     let parsed: URL;
@@ -347,11 +353,15 @@ export class SSRFGuard {
     }
 
     const host = parsed.hostname;
+
+    // Allowlisted hosts pass the sync path (operator-configured, trusted).
+    if (this.isAllowedHost(host)) return { safe: true };
+
     const ipCheck = this.checkIpLiteral(host);
     if (ipCheck !== null) return ipCheck;
 
-    // Cannot verify hostname without DNS — return safe (async version required)
-    return { safe: true };
+    // Domain hostname: cannot verify without DNS → fail closed (do NOT assume safe).
+    return { safe: false, reason: 'Hostname requires async DNS validation (use isSafeUrl)' };
   }
 
   private isAllowedHost(host: string): boolean {
@@ -418,7 +428,18 @@ export class SSRFGuard {
 let _guard: SSRFGuard | null = null;
 
 export function getSSRFGuard(config?: SSRFGuardConfig): SSRFGuard {
-  if (!_guard) _guard = new SSRFGuard(config);
+  if (!_guard) {
+    _guard = new SSRFGuard(config);
+  } else if (config) {
+    // The singleton already exists: a config passed now would be silently dropped,
+    // making a caller believe an allowedHost / extraBlockedHosts / resolveDns change
+    // took effect when it did not. Warn loudly so the divergence is visible; callers
+    // that must reconfigure should resetSSRFGuard() first.
+    logger.warn(
+      'getSSRFGuard: ignoring config passed after first construction — the existing ' +
+        'guard keeps its original config. Call resetSSRFGuard() before reconfiguring.',
+    );
+  }
   return _guard;
 }
 

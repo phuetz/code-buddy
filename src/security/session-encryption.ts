@@ -11,6 +11,7 @@ import * as crypto from 'crypto';
 import fs from 'fs-extra';
 import * as path from 'path';
 import * as os from 'os';
+import { logger } from '../utils/logger.js';
 
 // AES-256-GCM parameters
 const ALGORITHM = 'aes-256-gcm';
@@ -19,6 +20,11 @@ const IV_LENGTH = 16; // 128 bits
 const AUTH_TAG_LENGTH = 16; // 128 bits
 const SALT_LENGTH = 32;
 const PBKDF2_ITERATIONS = 100000;
+// HKDF turns the per-record `salt` into a real per-record subkey (it was stored
+// but unused before v2). `info` domain-separates this use of the master key.
+const HKDF_DIGEST = 'sha256';
+const HKDF_INFO = 'codebuddy-session-encryption/v2';
+const ENCRYPTION_VERSION = 2;
 
 export interface EncryptedData {
   /** Encrypted ciphertext (base64) */
@@ -128,8 +134,12 @@ export class SessionEncryption {
 
     const iv = crypto.randomBytes(IV_LENGTH);
     const salt = crypto.randomBytes(SALT_LENGTH);
+    // v2: derive a per-record subkey from (masterKey, salt) so the stored salt is
+    // meaningful and no two records share an AES-GCM key. v1 blobs (direct master
+    // key) stay decryptable — see decrypt().
+    const subkey = this.deriveSubkey(salt);
 
-    const cipher = crypto.createCipheriv(ALGORITHM, this.key, iv, {
+    const cipher = crypto.createCipheriv(ALGORITHM, subkey, iv, {
       authTagLength: AUTH_TAG_LENGTH,
     });
 
@@ -143,8 +153,19 @@ export class SessionEncryption {
       iv: iv.toString('base64'),
       authTag: cipher.getAuthTag().toString('base64'),
       salt: salt.toString('base64'),
-      version: 1,
+      version: ENCRYPTION_VERSION,
     };
+  }
+
+  /**
+   * Derive a per-record AES key via HKDF-SHA256 from the master key and the
+   * record's salt. Deterministic: the same (masterKey, salt) always yields the
+   * same subkey, so decrypt() can reconstruct it from the stored salt.
+   */
+  private deriveSubkey(salt: Buffer): Buffer {
+    // this.key is non-null at every call site (guarded by the caller).
+    const master = this.key as Buffer;
+    return Buffer.from(crypto.hkdfSync(HKDF_DIGEST, master, salt, HKDF_INFO, KEY_LENGTH));
   }
 
   /**
@@ -160,7 +181,14 @@ export class SessionEncryption {
     const authTag = Buffer.from(encrypted.authTag, 'base64');
     const ciphertext = Buffer.from(encrypted.ciphertext, 'base64');
 
-    const decipher = crypto.createDecipheriv(ALGORITHM, this.key, iv, {
+    // v2 records derive a per-record subkey via HKDF(masterKey, salt); v1 records
+    // used the master key directly. Pick the right key by version for compat.
+    const key =
+      encrypted.version >= 2 && encrypted.salt
+        ? this.deriveSubkey(Buffer.from(encrypted.salt, 'base64'))
+        : this.key;
+
+    const decipher = crypto.createDecipheriv(ALGORITHM, key, iv, {
       authTagLength: AUTH_TAG_LENGTH,
     });
 
@@ -231,8 +259,16 @@ export class SessionEncryption {
   }
 
   /**
-   * Rotate encryption key
-   * Re-encrypts all data with a new key
+   * Rotate the master encryption key.
+   *
+   * ⚠️ DATA-LOSS CAVEAT: this does NOT re-encrypt existing data — SessionEncryption
+   * does not own the session store, so it cannot. Every blob already encrypted with
+   * the OLD key becomes permanently undecryptable once the old key is discarded
+   * (GCM auth-tag failure). The caller that owns the stored blobs MUST, BEFORE
+   * dropping the returned `oldKey`: decrypt each blob with the old key (a fresh
+   * SessionEncryption seeded with `oldKey`) and re-encrypt it with the new key.
+   * The returned `oldKey` is the only escape hatch — persist it until re-encryption
+   * of every stored session completes.
    */
   async rotateKey(): Promise<{ oldKey: string; newKey: string }> {
     if (!this.key) {
@@ -248,6 +284,12 @@ export class SessionEncryption {
     await fs.writeFile(this.config.keyPath, newKey, { mode: 0o600 });
 
     this.key = newKey;
+
+    logger.warn(
+      'SessionEncryption.rotateKey: master key rotated but existing sessions were NOT ' +
+        're-encrypted. Callers MUST re-encrypt stored blobs with the returned oldKey ' +
+        'before discarding it, or those sessions become undecryptable.',
+    );
 
     return {
       oldKey,

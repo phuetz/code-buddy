@@ -30,6 +30,12 @@ export const BLOCKED_ENV_VARS: Set<string> = new Set([
   // Python
   'PYTHONBREAKPOINT',
 
+  // Node.js — NODE_OPTIONS supports --require/--import (arbitrary JS at startup);
+  // NODE_PATH hijacks module resolution. The single most dangerous vars to inherit
+  // for a Node/Bun agent. Also removed from SAFE_ENV_VARS (security-patterns.ts).
+  'NODE_OPTIONS',
+  'NODE_PATH',
+
   // Shared library injection
   'LD_PRELOAD',
   'LD_LIBRARY_PATH',

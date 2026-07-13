@@ -22,6 +22,7 @@
  */
 
 import { logger } from '../utils/logger.js';
+import { withTimeout } from '../council/with-timeout.js';
 
 export interface ResponseDecision {
   respond: boolean;
@@ -52,6 +53,8 @@ export interface ResponseDeciderOptions {
   judge?: JudgeFn;
   /** Injectable recent-conversation context. Default: the sensory-memory hearing buffer. */
   recentContext?: () => string[] | Promise<string[]>;
+  /** Maximum total time for recent context + chime-in judgment. Default 2500ms. */
+  judgeTimeoutMs?: number;
 }
 
 export interface ResponseDecider {
@@ -168,6 +171,15 @@ function nameMatchIndices(words: string[], name: string): number[] {
   return [...new Set(idxs)].sort((a, b) => a - b);
 }
 
+function matchedNameSpan(words: string[], name: string, index: number): number {
+  const nameWords = tokenizeWords(name);
+  if (nameWords.length <= 1) return 1;
+  if (fuzzyWordMatch(words[index] ?? '', nameWords.join(''))) return 1;
+  return nameWords.every((part, offset) => fuzzyWordMatch(words[index + offset] ?? '', part))
+    ? nameWords.length
+    : 1;
+}
+
 const SECOND_PERSON = /\b(tu|te|toi|vous|ton|ta|tes)\b/;
 // Common request/imperative verbs directed at the assistant (broader than the chime-in cue).
 const IMPERATIVE =
@@ -231,20 +243,25 @@ export function isVocativeAddress(
   nameMatch: (t: string, n: string) => boolean = fuzzyNameMatch
 ): boolean {
   if (!nameMatch(text, name)) return false;
-  // Strong directed intent anywhere in the utterance → addressed.
-  if (text.includes('?')) return true;
   const t = normWords(text);
-  if (SECOND_PERSON.test(t)) return true;
-  if (IMPERATIVE.test(t) || hasResponseCue(text)) return true;
   const words = t.split(' ').filter(Boolean);
+  // Strong directed intent anywhere in the utterance → addressed.
+  if (SECOND_PERSON.test(t)) return true;
+  if (IMPERATIVE.test(t)) return true;
+  const indices = nameMatchIndices(words, name);
+  const isMention = (index: number): boolean => {
+    const prev = words[index - 1];
+    const next = words[index + matchedNameSpan(words, name, index)];
+    return (!!prev && MENTION_PREP.has(prev)) || (!!next && THIRD_PERSON_VERB.has(next));
+  };
+  // A question ABOUT the named person is still only a mention ("Lisa est rentrée ?").
+  if (indices.length > 0 && indices.every(isMention)) return false;
+  if (text.includes('?') || hasResponseCue(text)) return true;
   if (words.length <= 3) return true; // "hey Lisa", "Lisa !"
   // No directed marker: only a name at start/end that isn't a 3rd-person statement is a call.
-  for (const i of nameMatchIndices(words, name)) {
-    const prev = words[i - 1];
-    const next = words[i + 1];
-    const mention = (!!prev && MENTION_PREP.has(prev)) || (!!next && THIRD_PERSON_VERB.has(next));
-    if (mention) continue;
-    if (i === 0 || i === words.length - 1) return true;
+  for (const i of indices) {
+    if (isMention(i)) continue;
+    if (i === 0 || i + matchedNameSpan(words, name, i) === words.length) return true;
   }
   return false;
 }
@@ -297,7 +314,7 @@ function isDirectGreeting(text: string): boolean {
 
 // ── default judge (rare, only on a cue with chime-in on) ──────────────
 
-function makeDefaultJudge(): JudgeFn {
+function makeDefaultJudge(timeoutMs: number): JudgeFn {
   return async (transcript: string, context: string[]): Promise<boolean> => {
     const { CodeBuddyClient } = await import('../codebuddy/client.js');
     const { resolveVoiceModel } = await import('./voice-loop.js');
@@ -319,7 +336,8 @@ function makeDefaultJudge(): JudgeFn {
           content: `${ctx ? `Contexte récent:\n${ctx}\n\n` : ''}Dernière phrase: ${transcript}\n\nIntervenir ?`,
         },
       ] as never,
-      []
+      [],
+      { temperature: 0, maxTokens: 8, timeoutMs },
     );
     const out = (resp?.choices?.[0]?.message?.content ?? '').trim().toLowerCase();
     return /\boui\b|\byes\b/.test(out) && !/\bnon\b|\bno\b/.test(out);
@@ -359,7 +377,13 @@ export function createResponseDecider(opts: ResponseDeciderOptions = {}): Respon
     opts.respondToGreeting ?? env.CODEBUDDY_SENSORY_RESPOND_TO_GREETING !== 'false';
   const now = opts.now ?? (() => Date.now());
   const nameMatch = opts.nameMatch ?? fuzzyNameMatch;
-  const judge = opts.judge ?? makeDefaultJudge();
+  const configuredJudgeTimeout =
+    opts.judgeTimeoutMs ?? Number(env.CODEBUDDY_SENSORY_RESPOND_JUDGE_TIMEOUT_MS);
+  const judgeTimeoutMs =
+    Number.isFinite(configuredJudgeTimeout) && configuredJudgeTimeout > 0
+      ? configuredJudgeTimeout
+      : 2500;
+  const judge = opts.judge ?? makeDefaultJudge(judgeTimeoutMs);
   const recentContext = opts.recentContext ?? defaultRecentContext;
 
   let lastEngagedAt = Number.NEGATIVE_INFINITY;
@@ -435,8 +459,11 @@ export function createResponseDecider(opts: ResponseDeciderOptions = {}): Respon
       // open a window (each is judged independently — keeps the risky path conservative).
       let warranted = false;
       try {
-        const ctx = await recentContext();
-        warranted = await judge(text, ctx);
+        warranted = await withTimeout(
+          (async () => judge(text, await recentContext()))(),
+          judgeTimeoutMs,
+          'respond-judge',
+        );
       } catch (err) {
         logger.debug(
           `[respond] judge failed → silent: ${err instanceof Error ? err.message : String(err)}`

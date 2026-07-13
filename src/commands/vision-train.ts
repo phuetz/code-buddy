@@ -26,6 +26,7 @@ interface VisionTrainOpts {
   prop?: string;
   images?: string;
   labels?: string;
+  coco?: string;
   provider?: string;
   model?: string;
   minConfidence?: string;
@@ -41,6 +42,7 @@ export function createVisionTrainCommand(): Command {
     .option('--prop <name>', 'generate mode: labeled prop in peopled scenes (desk|chair|none)', 'desk')
     .option('--images <dir>', 'folder mode: perceive images from a directory instead of generating')
     .option('--labels <file>', 'folder mode: JSON mapping filename -> {label: count} ground truth')
+    .option('--coco <file>', 'folder mode: derive ground truth from a COCO annotations file (e.g. BlenderProc output) instead of --labels')
     .option('--provider <name>', 'generate mode: image provider (comfyui|openai|xai)')
     .option('--model <ckpt>', 'generate mode: image model/checkpoint')
     .option('--min-confidence <n>', 'YOLO min confidence', '0.35')
@@ -79,9 +81,9 @@ export function createVisionTrainCommand(): Command {
       let obtainImage: VisionTrainDeps['obtainImage'];
       let source: string;
 
-      // Folder mode without labels → detection-only AUDIT (what does the robot
-      // see?). Useful for real footage you can't hand-label.
-      if (opts.images && !opts.labels) {
+      // Folder mode without any ground truth → detection-only AUDIT (what does
+      // the robot see?). Useful for real footage you can't hand-label.
+      if (opts.images && !opts.labels && !opts.coco) {
         const dir = path.resolve(opts.images);
         let files: string[];
         try {
@@ -120,16 +122,28 @@ export function createVisionTrainCommand(): Command {
         return;
       }
 
-      if (opts.images && opts.labels) {
+      if (opts.images && (opts.labels || opts.coco)) {
         const dir = path.resolve(opts.images);
-        const labelsFile = opts.labels;
         let labelMap: Record<string, Record<string, number>>;
-        try {
-          labelMap = JSON.parse(await fs.readFile(path.resolve(labelsFile), 'utf8'));
-        } catch (err) {
-          logger.error(`Could not read --labels file: ${err instanceof Error ? err.message : String(err)}`);
-          process.exitCode = 1;
-          return;
+        if (opts.coco) {
+          // COCO → {filename: {label: count}} (BlenderProc/Kubric/any sim export).
+          try {
+            const { cocoToVisionTrainLabels } = await import('../vision-train/coco-to-labels.js');
+            const coco = JSON.parse(await fs.readFile(path.resolve(opts.coco), 'utf8'));
+            labelMap = cocoToVisionTrainLabels(coco);
+          } catch (err) {
+            logger.error(`Could not read/parse --coco file: ${err instanceof Error ? err.message : String(err)}`);
+            process.exitCode = 1;
+            return;
+          }
+        } else {
+          try {
+            labelMap = JSON.parse(await fs.readFile(path.resolve(opts.labels!), 'utf8'));
+          } catch (err) {
+            logger.error(`Could not read --labels file: ${err instanceof Error ? err.message : String(err)}`);
+            process.exitCode = 1;
+            return;
+          }
         }
         let files: string[];
         try {

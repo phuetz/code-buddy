@@ -44,7 +44,7 @@ export interface AgentReplyOptions {
   summarize?: SummarizeFn;
   /** Optional spoken acknowledgement played BEFORE the (slow) turn, e.g. "d'accord, je regarde…".
    *  Default: none (the ReplyFn contract returns one string; wire this where synth+play exist). */
-  ack?: (transcript: string) => Promise<void>;
+  ack?: (transcript: string, opts?: VoiceStepOptions) => Promise<void>;
   /** Spoken when the turn fails (never-throws). Default: a short FR apology. */
   apology?: string;
 }
@@ -53,6 +53,27 @@ const DEFAULT_APOLOGY = "Désolé, je n'ai pas réussi à traiter ta demande.";
 const DEFAULT_DONE = "C'est fait.";
 /** Read-only posture can't act, so empty output means "couldn't answer", NOT "did it silently". */
 const DEFAULT_PLAN_NOANSWER = "Je n'ai pas réussi à vérifier ça, désolée.";
+
+interface GroundedAgentRoute {
+  model: string;
+  apiKey: string;
+  baseURL?: string;
+}
+
+/** Grounded routing probes every configured provider, so keep it off the spoken hot path. */
+const groundedRouteCache = new Map<string, { route: GroundedAgentRoute; at: number }>();
+const groundedRouteRefreshes = new Map<string, Promise<GroundedAgentRoute>>();
+
+function groundedRouteTtlMs(): number {
+  const configured = Number(process.env.CODEBUDDY_SENSORY_SPEAK_ROUTE_TTL_MS);
+  return Number.isFinite(configured) && configured >= 0 ? configured : 60_000;
+}
+
+/** Test seam — production callers share the cache for the lifetime of the process. */
+export function resetGroundedAgentRouteCache(): void {
+  groundedRouteCache.clear();
+  groundedRouteRefreshes.clear();
+}
 
 function msg(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
@@ -73,6 +94,82 @@ function isChatGptSubscriptionModel(model: string): boolean {
   );
 }
 
+async function probeGroundedAgentRoute(transcript: string): Promise<GroundedAgentRoute> {
+  const { resolveVoiceModel } = await import('./voice-loop.js');
+  const pinned = process.env.CODEBUDDY_SENSORY_SPEAK_AGENT_MODEL;
+  if (pinned && isChatGptSubscriptionModel(pinned)) {
+    // Fast + correct + $0: route the grounded turn to the ChatGPT OAuth / Codex Responses
+    // backend (the same brain as the Telegram companion), NOT the slow local Ollama path.
+    const { hasCodexCredentials } = await import('../providers/codex-oauth.js');
+    const { CHATGPT_RESPONSES_BASE_URL } = await import('../codebuddy/client.js');
+    if (hasCodexCredentials()) {
+      return { model: pinned, apiKey: 'oauth-chatgpt', baseURL: CHATGPT_RESPONSES_BASE_URL };
+    }
+    const fallback = await resolveVoiceModel(transcript);
+    logger.warn(
+      `[voice-act] '${pinned}' is a ChatGPT model but no OAuth creds (~/.codebuddy/codex-auth.json) — ` +
+        'run `buddy login`; falling back to the local route (likely wrong/slow).',
+    );
+    return { model: fallback.model, apiKey: fallback.apiKey, baseURL: fallback.baseURL };
+  }
+  if (pinned) {
+    const fallback = await resolveVoiceModel(transcript);
+    return { model: pinned, apiKey: fallback.apiKey, baseURL: fallback.baseURL };
+  }
+
+  const { selectFastestModel } = await import('../fleet/model-selector.js');
+  // The turn needs reliable tool calls; fall back to the fast reply route if none qualifies.
+  const sel = await selectFastestModel(transcript, {
+    requireToolCalling: true,
+    localOnly: process.env.CODEBUDDY_SENSORY_SPEAK_LOCAL_ONLY === 'true',
+  });
+  if (sel) {
+    return {
+      model: sel.model,
+      apiKey: sel.apiKey ?? 'ollama',
+      ...(sel.baseURL ? { baseURL: sel.baseURL } : {}),
+    };
+  }
+  const fallback = await resolveVoiceModel(transcript);
+  logger.warn('[voice-act] no tool-calling model available — using the fast reply model (tool use may be unreliable)');
+  return fallback;
+}
+
+function refreshGroundedAgentRoute(key: string, transcript: string): Promise<GroundedAgentRoute> {
+  const active = groundedRouteRefreshes.get(key);
+  if (active) return active;
+  const refresh = probeGroundedAgentRoute(transcript)
+    .then((route) => {
+      groundedRouteCache.set(key, { route, at: Date.now() });
+      return route;
+    })
+    .finally(() => {
+      groundedRouteRefreshes.delete(key);
+    });
+  groundedRouteRefreshes.set(key, refresh);
+  return refresh;
+}
+
+/**
+ * Resolve the tool-capable voice route with stale-while-revalidate semantics. A stale route is
+ * still immediately usable for speech; the provider probe refreshes it for the next command.
+ */
+async function resolveGroundedAgentRoute(transcript: string): Promise<GroundedAgentRoute> {
+  const pinned = process.env.CODEBUDDY_SENSORY_SPEAK_AGENT_MODEL?.trim() || 'auto';
+  const localOnly = process.env.CODEBUDDY_SENSORY_SPEAK_LOCAL_ONLY === 'true';
+  const key = `${pinned}|${localOnly}`;
+  const ttlMs = groundedRouteTtlMs();
+  if (ttlMs === 0) return refreshGroundedAgentRoute(key, transcript);
+  const cached = groundedRouteCache.get(key);
+  if (!cached) return refreshGroundedAgentRoute(key, transcript);
+  if (Date.now() - cached.at >= ttlMs) {
+    void refreshGroundedAgentRoute(key, transcript).catch((err: unknown) => {
+      logger.debug(`[voice-act] route refresh failed: ${msg(err)}`);
+    });
+  }
+  return cached.route;
+}
+
 /** Default agent turn: a headless CodeBuddyAgent.
  *  Model: `CODEBUDDY_SENSORY_SPEAK_AGENT_MODEL` if pinned, else the fastest TOOL-CALLING
  *  model. NOTE the trade-off: an agent turn reads/reasons/acts, so it wants CAPABILITY +
@@ -81,38 +178,7 @@ function isChatGptSubscriptionModel(model: string): boolean {
  *  (e.g. devstral-small-2:24b-instruct or qwen3.6:27b) via the env var. */
 function makeDefaultAgentRunner(cwd: string): AgentRunner {
   return async (transcript: string): Promise<string> => {
-    const { resolveVoiceModel } = await import('./voice-loop.js');
-    const pinned = process.env.CODEBUDDY_SENSORY_SPEAK_AGENT_MODEL;
-    let route: { model: string; apiKey: string; baseURL?: string };
-    if (pinned && isChatGptSubscriptionModel(pinned)) {
-      // Fast + correct + $0: route the grounded turn to the ChatGPT OAuth / Codex Responses
-      // backend (the same brain as the Telegram companion), NOT the slow local Ollama path.
-      const { hasCodexCredentials } = await import('../providers/codex-oauth.js');
-      const { CHATGPT_RESPONSES_BASE_URL } = await import('../codebuddy/client.js');
-      if (hasCodexCredentials()) {
-        route = { model: pinned, apiKey: 'oauth-chatgpt', baseURL: CHATGPT_RESPONSES_BASE_URL };
-      } else {
-        const fallback = await resolveVoiceModel(transcript);
-        route = { model: pinned, apiKey: fallback.apiKey, baseURL: fallback.baseURL };
-        logger.warn(
-          `[voice-act] '${pinned}' is a ChatGPT model but no OAuth creds (~/.codebuddy/codex-auth.json) — ` +
-            'run `buddy login`; falling back to the local route (likely wrong/slow).',
-        );
-      }
-    } else if (pinned) {
-      const fallback = await resolveVoiceModel(transcript);
-      route = { model: pinned, apiKey: fallback.apiKey, baseURL: fallback.baseURL };
-    } else {
-      const { selectFastestModel } = await import('../fleet/model-selector.js');
-      // The turn needs reliable tool calls; fall back to the fast reply route if none qualifies.
-      const sel = await selectFastestModel(transcript, { requireToolCalling: true });
-      if (sel) {
-        route = { model: sel.model, apiKey: sel.apiKey ?? 'ollama', ...(sel.baseURL ? { baseURL: sel.baseURL } : {}) };
-      } else {
-        route = await resolveVoiceModel(transcript);
-        logger.warn('[voice-act] no tool-calling model available — using the fast reply model (tool use may be unreliable)');
-      }
-    }
+    const route = await resolveGroundedAgentRoute(transcript);
     logger.info(`[voice-act] agent turn on ${route.model}`);
     const { CodeBuddyAgent } = await import('../agent/codebuddy-agent.js');
     const agent = new CodeBuddyAgent(route.apiKey, route.baseURL, route.model, undefined, true, undefined, cwd);
@@ -188,7 +254,7 @@ export function makeAgentReply(options: AgentReplyOptions = {}): ReplyFn {
       await ensurePosture();
       if (options.ack) {
         try {
-          await options.ack(heard);
+          await options.ack(heard, replyOpts);
         } catch {
           /* ack is best-effort */
         }

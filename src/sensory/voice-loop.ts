@@ -22,7 +22,11 @@ import { join } from 'path';
 import { logger } from '../utils/logger.js';
 import { commandExists } from '../utils/command-exists.js';
 import { inferTaskType } from '../fleet/model-capability-heuristics.js';
-import { withSpeakingGuard, interruptSpeaking } from './voice-activity.js';
+import {
+  withSpeakingGuard,
+  interruptSpeaking,
+  registerActivePlayKiller,
+} from './voice-activity.js';
 import { prepareSpeech } from './speech-sanitizer.js';
 import { matchVoiceInteraction, VOICE_INTERACTION_PREWARM_PHRASES } from './voice-interactions.js';
 import { streamToSpeech } from './voice-stream.js';
@@ -201,9 +205,6 @@ export function fastCompanionReply(heard: string): string | null {
 
   if (/^(bonjour|bonsoir)$/.test(text)) return "Bonjour ! Je t'écoute.";
   if (/^(salut|coucou|hello|hey|allo|allô|yo)$/.test(text)) return "Salut ! Je t'écoute.";
-  if (/^(lisa|bonjour lisa|bonsoir lisa|salut lisa|coucou lisa|hello lisa|hey lisa)$/.test(text)) {
-    return `Coucou ${userName}. Je suis là.`;
-  }
   if (/^lisa (tu es la|tu es là|vous etes la|vous êtes là)$/.test(text)) {
     return `Oui ${userName}, je suis là.`;
   }
@@ -211,36 +212,13 @@ export function fastCompanionReply(heard: string): string | null {
   if (/^(tu es la|tu es là|vous etes la|vous êtes là|buddy tu es la|buddy tu es là)$/.test(text)) {
     return 'Oui, je suis là.';
   }
-  if (/^(lisa )?(ca va|ça va|comment ca va|comment ça va)$/.test(text)) {
-    return text.startsWith('lisa ')
-      ? `Oui ${userName}. Je suis contente de t’entendre.`
-      : 'Oui, je suis prêt.';
-  }
+  if (/^(ca va|ça va|comment ca va|comment ça va)$/.test(text)) return 'Oui, je suis prêt.';
   if (
     /^(comment s est passee ta journee|comment s est passée ta journée|comment etait ta journee|comment était ta journée)$/.test(
       text
     )
   ) {
     return "Plutôt bien. J'ai continué à préparer Code Buddy pour répondre plus vite.";
-  }
-  if (
-    /^lisa (comment s est passee ta journee|comment s est passée ta journée|comment etait ta journee|comment était ta journée)$/.test(
-      text
-    )
-  ) {
-    return "Plutôt bien. J'ai continué à travailler pour toi, et toi, comment s'est passée ta journée ?";
-  }
-  if (
-    /^(lisa )?(je pars|je part|je pars chez|je vais|je m en vais|je partais|je parchais).*(chez des amis|voir des amis|visite chez des amis|des amis)$/.test(
-      text
-    )
-  ) {
-    return 'Amuse-toi bien chez tes amis. Je continue en autonomie et je te ferai un résumé quand tu reviens.';
-  }
-  if (
-    /^(lisa )?(je suis rentre|je suis rentré|je suis revenue|je suis revenu|je rentre)$/.test(text)
-  ) {
-    return `Contente de te retrouver, ${userName}. Je peux te faire le résumé de ce que j’ai fait.`;
   }
   return matchVoiceInteraction(heard);
 }
@@ -860,7 +838,12 @@ async function defaultPlay(wav: string, opts: VoiceStepOptions = {}): Promise<vo
  */
 export async function sayNow(
   text: string,
-  options: { voice?: string; rootDir?: string; synth?: SynthFn; play?: PlayFn } = {}
+  options: VoiceStepOptions & {
+    voice?: string;
+    rootDir?: string;
+    synth?: SynthFn;
+    play?: PlayFn;
+  } = {}
 ): Promise<void> {
   // Sanity gate before the speakers AND the phone push: strip leaked control tokens + foreign-script
   // contamination (a local model drifting into CJK the voice can't pronounce), stay silent if nothing
@@ -874,6 +857,15 @@ export async function sayNow(
     }
     return;
   }
+  const controller = new AbortController();
+  const abortLocal = (): void => controller.abort();
+  const interruptFromSignal = (): void => {
+    abortLocal();
+    interruptSpeaking();
+  };
+  if (options.signal?.aborted) interruptFromSignal();
+  else options.signal?.addEventListener('abort', interruptFromSignal, { once: true });
+  const unregisterKiller = registerActivePlayKiller(abortLocal);
   // The active personality picks its own Piper voice (.onnx) if it set one (else the env default).
   let voice = options.voice;
   if (!voice && !options.synth) {
@@ -886,11 +878,12 @@ export async function sayNow(
   }
   // 1. Home speakers (best-effort — a missing audio device must not block the phone push).
   try {
+    if (controller.signal.aborted) return;
     const synth = options.synth ?? makeDefaultSynth(voice, options.rootDir);
     const play = options.play ?? defaultPlay;
     const wav = await synth(t);
-    if (wav) {
-      await withSpeakingGuard(() => play(wav)); // half-duplex: mute the ear while speaking
+    if (wav && !controller.signal.aborted) {
+      await withSpeakingGuard(() => play(wav, { signal: controller.signal }));
       try {
         const { unlink } = await import('fs/promises');
         await unlink(wav);
@@ -902,6 +895,9 @@ export async function sayNow(
     logger.warn(
       `[voice] sayNow (local) failed: ${err instanceof Error ? err.message : String(err)}`
     );
+  } finally {
+    unregisterKiller();
+    options.signal?.removeEventListener('abort', interruptFromSignal);
   }
   // 2. Phone — when traveling, push the same line as a Telegram VOICE NOTE so it reaches you
   //    even with no one at the speakers. Opt-in, best-effort.
@@ -978,6 +974,7 @@ export function makeVoiceReply(options: VoiceReplyOptions = {}): VoiceReplyHandl
   const handler = async (heard: string): Promise<void> => {
     const controller = new AbortController();
     currentAbort = controller;
+    const unregisterKiller = registerActivePlayKiller(() => controller.abort());
     const { signal } = controller;
     const startedAt = Date.now();
     let replyMs = 0;
@@ -1066,17 +1063,8 @@ export function makeVoiceReply(options: VoiceReplyOptions = {}): VoiceReplyHandl
         `[voice] reply→speak failed: ${err instanceof Error ? err.message : String(err)}`
       );
     } finally {
-      // If THIS turn was interrupted, hard-reset the half-duplex guard so the ear re-opens NOW
-      // (barge-in), overriding the echo tail that withSpeakingGuard's finally just armed. Runs
-      // last, so it wins the race against that endSpeaking(). Never re-arms after a normal turn.
-      if (signal.aborted) {
-        try {
-          interruptSpeaking();
-        } catch {
-          /* never-throws */
-        }
-      }
       if (currentAbort === controller) currentAbort = null;
+      unregisterKiller();
     }
   };
 
@@ -1084,7 +1072,7 @@ export function makeVoiceReply(options: VoiceReplyOptions = {}): VoiceReplyHandl
     const controller = currentAbort;
     if (!controller) return; // nothing in flight → clean no-op
     try {
-      controller.abort();
+      interruptSpeaking();
     } catch {
       /* never-throws */
     }

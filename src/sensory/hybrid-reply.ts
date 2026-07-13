@@ -78,7 +78,7 @@ export interface HybridReplyOptions {
   classify?: (heard: string) => boolean;
   /** Spoken filler played BEFORE a (slower) agent turn, e.g. "d'accord, je regarde…", so a real
    *  question isn't met with dead silence. Only used by the default agent path. */
-  ack?: (heard: string) => Promise<void>;
+  ack?: (heard: string, opts?: VoiceStepOptions) => Promise<void>;
   /** Injectable: instant precomputed answer for a common question (null ⇒ none).
    *  Default: the prefetch cache when CODEBUDDY_PREFETCH is on. */
   prefetch?: (heard: string) => string | null;

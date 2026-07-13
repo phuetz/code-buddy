@@ -7,6 +7,7 @@
  */
 
 import { EventEmitter } from 'events';
+import { randomUUID } from 'crypto';
 import { logger } from '../utils/logger.js';
 
 // ============================================================================
@@ -26,6 +27,12 @@ export interface ApprovalRequest {
   expiresAt: Date;
   /** Current status */
   status: 'pending' | 'approved' | 'denied' | 'expired';
+  /**
+   * Identity that initiated the request (e.g. paired chat/session id). When set,
+   * only a response from the SAME identity may approve/deny it — a different paired
+   * user cannot approve someone else's pending high-risk tool call.
+   */
+  initiator?: string;
 }
 
 export type ChannelSendFn = (message: string) => Promise<void>;
@@ -38,7 +45,6 @@ export class RemoteApprovalService extends EventEmitter {
   private pending = new Map<string, ApprovalRequest>();
   private resolvers = new Map<string, (approved: boolean) => void>();
   private channels = new Map<string, ChannelSendFn>();
-  private nextId = 1;
   private defaultTimeoutMs = 120_000; // 2 minutes
 
   /**
@@ -71,8 +77,12 @@ export class RemoteApprovalService extends EventEmitter {
     toolName: string;
     summary: string;
     timeoutMs?: number;
+    /** Identity that initiated this request; only it may respond (see handleResponse). */
+    initiator?: string;
   }): Promise<boolean> {
-    const id = `approval-${this.nextId++}`;
+    // Unguessable ID: a sequential `approval-N` lets anyone with a paired DM approve
+    // a request whose number they simply guessed.
+    const id = `approval-${randomUUID()}`;
     const timeoutMs = req.timeoutMs ?? this.defaultTimeoutMs;
 
     const request: ApprovalRequest = {
@@ -82,6 +92,7 @@ export class RemoteApprovalService extends EventEmitter {
       requestedAt: new Date(),
       expiresAt: new Date(Date.now() + timeoutMs),
       status: 'pending',
+      ...(req.initiator !== undefined ? { initiator: req.initiator } : {}),
     };
 
     this.pending.set(id, request);
@@ -126,14 +137,25 @@ export class RemoteApprovalService extends EventEmitter {
   }
 
   /**
-   * Handle an approval response (called when user sends /approve or /deny)
+   * Handle an approval response (called when user sends /approve or /deny).
+   *
+   * @param responder Identity of the sender of the /approve|/deny. When the request
+   *   carries an `initiator`, the responder MUST match it — a response from any other
+   *   paired identity is refused, so one user cannot approve another's pending request.
    */
-  handleResponse(requestId: string, approved: boolean): void {
+  handleResponse(requestId: string, approved: boolean, responder?: string): void {
     const request = this.pending.get(requestId);
     const resolver = this.resolvers.get(requestId);
 
     if (!request || !resolver) {
       logger.warn(`Unknown or expired approval request: ${requestId}`);
+      return;
+    }
+
+    if (request.initiator !== undefined && responder !== undefined && responder !== request.initiator) {
+      logger.warn(
+        `Remote approval ${requestId} rejected: responder does not match the initiating identity`,
+      );
       return;
     }
 

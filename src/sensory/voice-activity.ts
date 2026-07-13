@@ -13,6 +13,7 @@
  */
 let activePlays = 0;
 let speakingUntilMs = 0;
+const activePlayKillers = new Set<() => void>();
 
 /** Echo tail after playback ends, ms (room reverberation + buffered audio). */
 const TAIL_MS = Number(process.env.CODEBUDDY_SENSORY_ECHO_TAIL_MS) || 1200;
@@ -33,8 +34,15 @@ export function isSpeaking(now: number = Date.now()): boolean {
   return activePlays > 0 || now < speakingUntilMs;
 }
 
+/** Register an abort/kill handle for spoken work that may not have reached playback yet. */
+export function registerActivePlayKiller(kill: () => void): () => void {
+  activePlayKillers.add(kill);
+  return () => activePlayKillers.delete(kill);
+}
+
 /** Serializes the mouth: the tail of the last queued spoken output. */
 let mouthChain: Promise<void> = Promise.resolve();
+let mouthGeneration = 0;
 
 /**
  * Run a blocking play under the speaking guard, SERIALIZED against every other spoken output — so
@@ -44,12 +52,16 @@ let mouthChain: Promise<void> = Promise.resolve();
  * queued plays, so the ear stays muted across the whole spoken sequence.
  */
 export async function withSpeakingGuard(play: () => Promise<void>): Promise<void> {
+  const generation = mouthGeneration;
   const run = mouthChain.then(async () => {
+    // A barge-in invalidates every play that was already queued on the old mouth chain.
+    if (generation !== mouthGeneration) return;
     beginSpeaking();
     try {
       await play();
     } finally {
-      endSpeaking();
+      // An interrupted player must not re-arm the echo tail after interruptSpeaking reopened it.
+      if (generation === mouthGeneration) endSpeaking();
     }
   });
   // Keep the chain alive even if this play throws, so one failure doesn't wedge the mouth; the
@@ -66,6 +78,16 @@ export async function withSpeakingGuard(play: () => Promise<void>): Promise<void
  * which arms the tail for a normal end-of-utterance. Idempotent, never-throws.
  */
 export function interruptSpeaking(): void {
+  mouthGeneration += 1;
+  const killers = [...activePlayKillers];
+  activePlayKillers.clear();
+  for (const kill of killers) {
+    try {
+      kill();
+    } catch {
+      /* never-throws */
+    }
+  }
   activePlays = 0;
   speakingUntilMs = 0;
   mouthChain = Promise.resolve();
@@ -73,7 +95,9 @@ export function interruptSpeaking(): void {
 
 /** Test helper: reset the guard state. */
 export function _resetVoiceActivityForTests(): void {
+  mouthGeneration += 1;
   activePlays = 0;
   speakingUntilMs = 0;
+  activePlayKillers.clear();
   mouthChain = Promise.resolve();
 }

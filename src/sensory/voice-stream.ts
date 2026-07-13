@@ -119,11 +119,19 @@ export function safeCommitLength(buffer: string): number {
 }
 
 /** Terminator run (`.` `!` `?` `…`, repeated) plus any trailing closing quote/bracket. */
+function isKnownAbbreviationDot(working: string, match: RegExpExecArray): boolean {
+  if (match[0] !== '.') return false;
+  const token = working.slice(0, match.index).match(/(?:^|\s)([\p{L}]+)$/u)?.[1]?.toLowerCase();
+  return token !== undefined && ['m', 'mme', 'mlle', 'dr', 'pr', 'me', 'st', 'ste'].includes(token);
+}
+
 function findBoundary(working: string, from: number, flush: boolean): number {
   const re = /[.!?…]+[)\]"'”»’]*/g;
   re.lastIndex = from;
   let m: RegExpExecArray | null;
   while ((m = re.exec(working)) !== null) {
+    // Common titles are not sentence ends: "M. Dupont" must stay in one spoken segment.
+    if (isKnownAbbreviationDot(working, m)) continue;
     const after = m.index + m[0].length;
     if (after >= working.length) {
       // Terminator at the very end: a real boundary only once we know whitespace/EOS follows.

@@ -4,6 +4,7 @@ import os from 'os';
 import path from 'path';
 import {
   normalizeSpeechTranscript,
+  isBargeInTranscript,
   resolveFasterWhisperOptions,
   wireSpeechReaction,
   type Transcriber,
@@ -30,6 +31,12 @@ function transcriptFinal(text: string, payload: Record<string, unknown> = {}): v
 const tick = (): Promise<void> => new Promise((r) => setTimeout(r, 30));
 
 describe('speech reaction — speech_end → STT → percept', () => {
+  it('recognizes only explicit spoken stop commands as barge-in', () => {
+    expect(isBargeInTranscript('Lisa, arrête !')).toBe(true);
+    expect(isBargeInTranscript('Stop maintenant')).toBe(true);
+    expect(isBargeInTranscript('Lisa stop le serveur')).toBe(false);
+  });
+
   it('defaults faster-whisper to French assistant comprehension settings', () => {
     const previous = {
       lang: process.env.CODEBUDDY_SPEECH_LANG,
@@ -466,6 +473,37 @@ describe('speech reaction — live transcript_final (buddy-sense live-audio)', (
       expect(heard).toBe(0); // vetoed → silent, but still observed
       const percepts = await readFile(path.join(tmp, '.codebuddy', 'companion', 'percepts.jsonl'), 'utf8');
       expect(percepts).toContain('il fait beau');
+    } finally {
+      unwire();
+    }
+  });
+
+  it('merges live fragments superseded while a turn is in flight', async () => {
+    const tmp = await mkdtemp(path.join(os.tmpdir(), 'speech-live-'));
+    let releaseFirst!: () => void;
+    const firstBlocked = new Promise<void>((resolve) => (releaseFirst = resolve));
+    const heard: string[] = [];
+    const unwire = wireSpeechReaction({
+      debounceMs: 0,
+      cwd: tmp,
+      onHeard: async (text) => {
+        heard.push(text);
+        if (heard.length === 1) await firstBlocked;
+      },
+    });
+    try {
+      transcriptFinal('première demande');
+      await tick();
+      transcriptFinal('deuxième fragment');
+      transcriptFinal('et troisième fragment');
+      releaseFirst();
+      await tick();
+      await tick();
+
+      expect(heard).toEqual([
+        'première demande',
+        'deuxième fragment et troisième fragment',
+      ]);
     } finally {
       unwire();
     }

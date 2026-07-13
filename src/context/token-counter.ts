@@ -29,6 +29,28 @@ export type { TokenCounterMessage } from '../utils/token-counter.js';
 /** Re-exported for callers that used the context/ interface name. */
 export type TokenCounter = CanonicalTokenCounter;
 
+/** Conservative context-budget estimate for one OpenAI-style image part. */
+export const IMAGE_URL_TOKEN_ESTIMATE = 1100;
+
+/** Count the fixed token budget contributed by multimodal `image_url` parts. */
+export function estimateImageUrlTokens(content: unknown): number {
+  if (!Array.isArray(content)) return 0;
+
+  let imageCount = 0;
+  for (const part of content) {
+    if (!part || typeof part !== 'object') continue;
+    const candidate = part as { type?: unknown; image_url?: unknown };
+    if (candidate.type !== 'image_url' || !candidate.image_url || typeof candidate.image_url !== 'object') {
+      continue;
+    }
+    const imageUrl = candidate.image_url as { url?: unknown };
+    if (typeof imageUrl.url === 'string' && imageUrl.url.length > 0) {
+      imageCount++;
+    }
+  }
+  return imageCount * IMAGE_URL_TOKEN_ESTIMATE;
+}
+
 /**
  * Create a token counter instance.
  * Returns the canonical lazy-loaded counter from utils/token-counter.ts
@@ -103,6 +125,7 @@ function tokensForMessage(message: TokenCounterMessage, model: string): number {
           n += countTokens((part as { text: string }).text, model);
         }
       }
+      n += estimateImageUrlTokens(message.content);
     }
   }
   if (message.tool_calls) {

@@ -1,7 +1,7 @@
 /**
  * Code Explorer client — a real, programmatic TS accessor to the Code Explorer / gitnexus
- * code-knowledge-graph, driving the live MCP path (`MCPManager.callTool`). Replaces the old
- * `CodeExplorerMCPClient` stub (which returned empty) and the dead HTTP `CodeExplorerTool`.
+ * code-knowledge-graph, driving the live MCP path (`MCPManager.callTool`). This is the real
+ * client, replacing the deleted empty placeholder and the dead HTTP `CodeExplorerTool`.
  *
  * Works regardless of which MCP server name is wired (`code-explorer` or `gitnexus`) via
  * `codeExplorerToolPrefix()`. Never-throws: returns '' (or null available()) when not connected

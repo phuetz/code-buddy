@@ -81,6 +81,8 @@ const ALL_BLOCKS: Required<BuildOptions> = {
   includeVariation: true,
 };
 
+const CODING_STYLE_CACHE_TTL_MS = 10 * 60 * 1000;
+
 const EXTERNAL_PROMPT_MANAGER_TOOLS = [
   'view_file',
   'str_replace_editor',
@@ -120,6 +122,7 @@ export class PromptBuilder {
    * re-injected when a tool later touches a file in the same tree.
    */
   private contextRegistry: ContextRegistry | null = null;
+  private codingStyleCache: { cwd: string; styleBlock: string; analyzedAt: number } | null = null;
 
   constructor(
     private config: PromptBuilderConfig,
@@ -432,6 +435,21 @@ export class PromptBuilder {
         const { codeExplorerToolPrefix } = await import('../codebuddy/tools.js');
         const p = codeExplorerToolPrefix(); // 'mcp__code-explorer__' | 'mcp__gitnexus__' | null
         if (p) {
+          // Best-effort staleness check: warn the agent when the index lags HEAD
+          // so it doesn't silently reason over an out-of-date graph.
+          let staleNote = '';
+          try {
+            const { getCodeExplorerManager } = await import('../plugins/code-explorer/CodeExplorerManager.js');
+            const fresh = getCodeExplorerManager(this.config.cwd).getFreshness();
+            if (fresh.stale) {
+              const behind =
+                fresh.commitsBehind !== undefined ? `${fresh.commitsBehind} commit(s)` : 'some commits';
+              staleNote =
+                `\n⚠️ The Code Explorer index is STALE — built at commit ${fresh.lastCommit?.slice(0, 8) ?? '?'}, ` +
+                `now ${behind} behind HEAD. Its answers may miss recent code; treat relationship results as ` +
+                `approximate and suggest re-running \`code-explorer analyze --incremental\` if they look wrong.`;
+            }
+          } catch { /* freshness best-effort */ }
           systemPrompt +=
             `\n\n<code_explorer_priority>\n` +
             `Code Explorer is connected. For ANY question about code relationships — ` +
@@ -444,8 +462,9 @@ export class PromptBuilder {
             `\`${p}impact\` with the REQUIRED \`target\` = the symbol name (e.g. \`target: "executePlan"\`, ` +
             `optionally \`direction: "both"\`) and \`repo\` = that path; or \`${p}context\` with \`name\` = ` +
             `the symbol. Always include \`target\`/\`name\` — never call these tools with empty arguments. ` +
-            `Use the built-in \`code_graph\`/\`codebase_map\` only as a fallback if it errors.\n` +
-            `</code_explorer_priority>`;
+            `Use the built-in \`code_graph\`/\`codebase_map\` only as a fallback if it errors.` +
+            staleNote +
+            `\n</code_explorer_priority>`;
           logger.debug('Injected Code Explorer priority directive');
         }
       } catch { /* tools module optional */ }
@@ -674,15 +693,25 @@ Output formatting discipline:
       // Inject auto-detected coding style conventions
       if (gates.includeCodingStyle) {
         try {
-          const { getCodingStyleAnalyzer } = await import('../memory/coding-style-analyzer.js');
-          const analyzer = getCodingStyleAnalyzer();
-          const profile = await analyzer.analyzeDirectory(this.config.cwd);
-          if (profile) {
-            const styleBlock = analyzer.buildPromptSnippet(profile);
-            if (styleBlock) {
-              systemPrompt += `\n\n${styleBlock}`;
-              logger.debug('Injected coding style conventions into system prompt');
-            }
+          const now = Date.now();
+          const cached = this.codingStyleCache;
+          let styleBlock: string;
+          if (
+            cached &&
+            cached.cwd === this.config.cwd &&
+            now - cached.analyzedAt < CODING_STYLE_CACHE_TTL_MS
+          ) {
+            styleBlock = cached.styleBlock;
+          } else {
+            const { getCodingStyleAnalyzer } = await import('../memory/coding-style-analyzer.js');
+            const analyzer = getCodingStyleAnalyzer();
+            const profile = await analyzer.analyzeDirectory(this.config.cwd);
+            styleBlock = profile ? analyzer.buildPromptSnippet(profile) : '';
+            this.codingStyleCache = { cwd: this.config.cwd, styleBlock, analyzedAt: now };
+          }
+          if (styleBlock) {
+            systemPrompt += `\n\n${styleBlock}`;
+            logger.debug('Injected coding style conventions into system prompt');
           }
         } catch { /* coding-style module optional */ }
       }

@@ -192,8 +192,11 @@ export const SAFE_ENV_VARS: Set<string> = new Set([
   'TMP',
   // Node.js
   'NODE_ENV',
-  'NODE_PATH',
-  'NODE_OPTIONS',
+  // SECURITY: NODE_PATH / NODE_OPTIONS are deliberately NOT allowed. NODE_OPTIONS
+  // supports --require/--import, so an inherited value would execute arbitrary JS
+  // inside every node/npm/npx subprocess the agent spawns; NODE_PATH hijacks module
+  // resolution. Both are also in BLOCKED_ENV_VARS (env-blocklist.ts) so the denylist
+  // path strips them even if a future edit re-adds them here.
   // Development tools
   'EDITOR',
   'VISUAL',

@@ -2,6 +2,7 @@ import axios, { type AxiosRequestConfig } from 'axios';
 import { ToolResult, getErrorMessage } from '../types/index.js';
 import { logger } from '../utils/logger.js';
 import { assertSafeUrl } from '../security/ssrf-guard.js';
+import { safeAxiosGet } from '../security/safe-fetch.js';
 
 // ============================================================================
 // Types
@@ -898,13 +899,14 @@ export class WebSearchTool {
         };
       }
 
-      const response = await axios.get(url, {
+      // SSRF-safe: safeAxiosGet re-validates every redirect hop (a 302 to a
+      // metadata/loopback IP is refused mid-chain, not silently followed).
+      const response = await safeAxiosGet(axios, url, {
         headers: {
           'User-Agent': 'Mozilla/5.0 (compatible; CodeBuddyCLI/1.0; +https://github.com/code-buddy)',
           'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
         },
         timeout: DEFAULT_TIMEOUT_MS,
-        maxRedirects: 5,
       });
 
       const html = response.data;

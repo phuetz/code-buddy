@@ -9,6 +9,7 @@
 import fs from 'fs';
 import path from 'path';
 import { logger } from '../utils/logger.js';
+import { scrubSecrets, scrubValue } from './secret-scrubber.js';
 
 export type AuditAction =
   | 'code_validation'
@@ -98,16 +99,22 @@ class AuditLoggerImpl {
       sessionId: this.sessionId,
     };
 
+    // SECURITY: the audit trail is the tool/command log most likely to carry
+    // credentials (e.g. `curl -H "Authorization: Bearer sk-…"`). Scrub secrets
+    // out of every field BEFORE it is buffered or persisted — the raw `full` must
+    // never reach the in-memory buffer (surfaced by getEntries()) nor the file.
+    const scrubbed = scrubValue(full) as AuditEntry;
+
     // In-memory buffer
-    this.entries.push(full);
+    this.entries.push(scrubbed);
     if (this.entries.length > this.maxEntries) {
       this.entries = this.entries.slice(-Math.floor(this.maxEntries * 0.8));
     }
 
-    // Append to file
+    // Append to file (re-scrub the rendered line as a final guard, matching logger.ts)
     if (this.logFile) {
       try {
-        fs.appendFileSync(this.logFile, JSON.stringify(full) + '\n');
+        fs.appendFileSync(this.logFile, scrubSecrets(JSON.stringify(scrubbed)) + '\n');
       } catch {
         // Silently fail file writes — don't block operations
       }

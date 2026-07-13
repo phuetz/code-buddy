@@ -26,6 +26,22 @@ describe('env-blocklist', () => {
       expect(result).toHaveProperty('HOME', '/home/user');
     });
 
+    it('strips NODE_OPTIONS and NODE_PATH (arbitrary-code injection via --require/--import)', () => {
+      const result = sanitizeEnvVars({
+        NODE_OPTIONS: '--require /tmp/evil.js',
+        NODE_PATH: '/tmp/evil-modules',
+        PATH: '/usr/bin',
+      });
+      expect(result).not.toHaveProperty('NODE_OPTIONS');
+      expect(result).not.toHaveProperty('NODE_PATH');
+      expect(result).toHaveProperty('PATH', '/usr/bin');
+    });
+
+    it('lists NODE_OPTIONS/NODE_PATH in BLOCKED_ENV_VARS (regression guard)', () => {
+      expect(BLOCKED_ENV_VARS.has('NODE_OPTIONS')).toBe(true);
+      expect(BLOCKED_ENV_VARS.has('NODE_PATH')).toBe(true);
+    });
+
     it('removes GLIBC_TUNABLES', () => {
       const result = sanitizeEnvVars({
         GLIBC_TUNABLES: 'glibc.malloc.check=2',

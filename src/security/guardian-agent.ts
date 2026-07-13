@@ -289,17 +289,30 @@ function quickEval(ctx: GuardianContext): GuardianEvaluation | null {
  *
  * @returns GuardianEvaluation with risk score and decision
  */
+/**
+ * Fail-closed decision: honour the module's documented "deny on any error" contract.
+ * When the posture is non-interactive OR YOLO/auto-confirm is active, a `prompt_user`
+ * verdict is auto-resolved to "proceed" by the caller — so the SAFE default there is
+ * `deny`. Only when a human is actually at an interactive TTY do we fall back to
+ * `prompt_user` (they can adjudicate).
+ */
+function failClosedDecision(ctx: GuardianContext): GuardianEvaluation['decision'] {
+  const nonInteractive = !process.stdout.isTTY || !process.stdin.isTTY;
+  return ctx.yoloMode || nonInteractive ? 'deny' : 'prompt_user';
+}
+
 export async function evaluateToolCall(ctx: GuardianContext): Promise<GuardianEvaluation> {
   // Quick heuristic check first
   const quick = quickEval(ctx);
   if (quick) return quick;
 
-  // If no LLM call configured, fail-open for non-dangerous operations
+  // If no LLM call configured, fail CLOSED (deny under autonomy/non-interactive).
   if (!_llmCall) {
+    const decision = failClosedDecision(ctx);
     return {
       riskScore: 50,
-      reasoning: 'Guardian LLM not configured — defaulting to prompt user',
-      decision: 'prompt_user',
+      reasoning: `Guardian LLM not configured — failing ${decision === 'deny' ? 'closed (deny)' : 'to prompt user'}`,
+      decision,
       risks: ['No guardian LLM available'],
     };
   }
@@ -325,7 +338,7 @@ export async function evaluateToolCall(ctx: GuardianContext): Promise<GuardianEv
     const jsonMatch = response.match(/\{[\s\S]*?\}/);
     if (!jsonMatch) {
       logger.debug('Guardian: failed to parse LLM response');
-      return { riskScore: 50, reasoning: 'Failed to parse guardian response', decision: 'prompt_user', risks: [] };
+      return { riskScore: 50, reasoning: 'Failed to parse guardian response', decision: failClosedDecision(ctx), risks: [] };
     }
 
     const parsed = JSON.parse(jsonMatch[0]);
@@ -344,12 +357,12 @@ export async function evaluateToolCall(ctx: GuardianContext): Promise<GuardianEv
 
     return { riskScore, reasoning, decision, risks };
   } catch (err) {
-    // Fail-closed: on any error, prompt the user
+    // Fail-closed: deny under autonomy/non-interactive, prompt only at an interactive TTY.
     logger.debug(`Guardian evaluation failed: ${err instanceof Error ? err.message : String(err)}`);
     return {
       riskScore: 50,
       reasoning: `Guardian evaluation failed: ${err instanceof Error ? err.message : 'unknown error'}`,
-      decision: 'prompt_user',
+      decision: failClosedDecision(ctx),
       risks: ['Guardian evaluation failed'],
     };
   }

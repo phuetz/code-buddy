@@ -11,7 +11,7 @@
  */
 
 import { CodeBuddyMessage } from '../codebuddy/client.js';
-import { TokenCounter } from './token-counter.js';
+import { estimateImageUrlTokens, TokenCounter } from './token-counter.js';
 import {
   CompressionResult,
   ContentType,
@@ -192,8 +192,9 @@ export class EnhancedContextCompressor {
     // Classify messages by content type
     const classified = this.classifyMessages(messages);
 
-    // Separate system message
-    const systemMsg = messages.find(m => m.role === 'system');
+    // Preserve every system message. The context pipeline injects multiple
+    // independent blocks (base prompt, lessons, todo, decisions, etc.).
+    const systemMsgs = messages.filter(m => m.role === 'system');
     const conversationMsgs = messages.filter(m => m.role !== 'system');
 
     let compressed: CodeBuddyMessage[] = [...conversationMsgs];
@@ -233,9 +234,9 @@ export class EnhancedContextCompressor {
       strategiesApplied.push('hard_truncation');
     }
 
-    // Reconstruct with system message
-    if (systemMsg) {
-      compressed = [systemMsg, ...compressed];
+    // Reconstruct with all system messages first, in their original order.
+    if (systemMsgs.length > 0) {
+      compressed = [...systemMsgs, ...compressed];
     }
 
     return this.createResult(
@@ -824,10 +825,14 @@ export class EnhancedContextCompressor {
   private countTokens(messages: CodeBuddyMessage[]): number {
     const tokenMessages = messages.map(msg => ({
       role: msg.role,
-      content: typeof msg.content === 'string' ? msg.content : null,
+      content: typeof msg.content === 'string' || Array.isArray(msg.content) ? msg.content : null,
       tool_calls: 'tool_calls' in msg ? msg.tool_calls : undefined,
     }));
-    return this.tokenCounter.countMessageTokens(tokenMessages);
+    const imageTokens = messages.reduce(
+      (total, message) => total + estimateImageUrlTokens(message.content),
+      0,
+    );
+    return this.tokenCounter.countMessageTokens(tokenMessages) + imageTokens;
   }
 
   /**

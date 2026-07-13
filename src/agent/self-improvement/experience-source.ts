@@ -12,6 +12,7 @@
  * @module agent/self-improvement/experience-source
  */
 
+import { logger } from '../../utils/logger.js';
 import type { Experience } from './types.js';
 
 export interface ExperienceSource {
@@ -105,20 +106,121 @@ export function createDefaultRunExperienceSource(
 }
 
 /**
- * SENSOR SEAM (robot future, interface-only). When the robot grants senses, a
- * world-model (JEPA) encodes each modality into a latent z and predicts z_{t+1};
- * the prediction error / latent surprise becomes the Experience signal here, and
- * the engine improves the policies/skills that reduce that surprise — the exact
- * same observe→propose→validate→keep loop, no engine change. NOT implemented in
- * V1: it must not silently emit experiences.
+ * SENSOR SEAM (the robot's 5 senses → the learning engine). The world-model
+ * (JEPA) encodes each modality into a latent z and predicts z_{t+1}; the
+ * prediction error ‖z_pred − z_target‖ is SURPRISE — the signal that the
+ * robot's model of the world was wrong. Each surprise becomes an Experience,
+ * and the engine improves the policies/skills that reduce it — the exact same
+ * observe→propose→validate→keep loop, no engine change.
+ */
+export interface SensorSurprise {
+  /** Modality that produced the surprise (vision, audio, screen, …). */
+  modality?: string;
+  /** Short machine label (e.g. `novel-scene`, `motion-unexpected`). */
+  kind?: string;
+  /** Human-readable description of what was (un)expected. */
+  detail?: string;
+  /** Prediction error magnitude ‖z_pred − z_target‖ (unnormalized, > 0). */
+  predictionError: number;
+  /** Wall-clock or sense-relative timestamp (ms) — used for the stable id. */
+  tsMs?: number;
+  /** Free-text context (scene/env id, frame path, …). */
+  context?: string;
+}
+
+export interface SensorExperienceSourceDeps {
+  /**
+   * Pull recent surprise events from the world model (A2A spoke / ONNX
+   * side-car). Injected so the class stays unit-testable and transport-free.
+   */
+  fetchSurprises: () => Promise<SensorSurprise[]>;
+  /** predictionError at or above this maps to severity 1 (default 1.0). */
+  errorScale?: number;
+  /** Cap on experiences per collect (default 50). */
+  limit?: number;
+}
+
+/**
+ * Turns world-model latent surprise into Experiences. NEVER throws: a dead or
+ * missing world-model endpoint yields [] (the engine simply learns from other
+ * sources), and malformed entries (non-finite / non-positive error) are
+ * skipped — a broken sensor must not poison the curriculum.
  */
 export class SensorExperienceSource implements ExperienceSource {
   readonly id = 'sensor-surprise';
 
+  constructor(private readonly deps: SensorExperienceSourceDeps) {}
+
   async collect(): Promise<Experience[]> {
-    throw new Error(
-      'SensorExperienceSource is the robot 5-senses seam and is not implemented in V1. ' +
-        'Wire a world-model (JEPA) latent prediction-error stream here when sensors are available.',
-    );
+    const scale = this.deps.errorScale && this.deps.errorScale > 0 ? this.deps.errorScale : 1;
+    const limit = Math.max(1, this.deps.limit ?? 50);
+    let surprises: SensorSurprise[];
+    try {
+      surprises = await this.deps.fetchSurprises();
+    } catch (err) {
+      logger.warn(
+        `SensorExperienceSource: world-model surprise fetch failed — no sensor experiences this cycle: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+      return [];
+    }
+    if (!Array.isArray(surprises)) return [];
+
+    const experiences: Experience[] = [];
+    for (const [index, s] of surprises.entries()) {
+      if (experiences.length >= limit) break;
+      const err = typeof s?.predictionError === 'number' ? s.predictionError : NaN;
+      if (!Number.isFinite(err) || err <= 0) continue;
+      const modality = s.modality ?? 'unknown';
+      experiences.push({
+        id: `sensor:${modality}:${s.tsMs ?? index}`,
+        source: 'sensor',
+        kind: s.kind ?? modality,
+        detail: s.detail ?? `world-model prediction error ${err.toFixed(4)} on ${modality}`,
+        context: s.context ?? '',
+        severity: Math.min(1, err / scale),
+      });
+    }
+    return experiences;
   }
+}
+
+/**
+ * Wire SensorExperienceSource to the live world model.
+ *
+ * Opt-in & fail-open: unless `CODEBUDDY_WORLD_MODEL=true`, collect() returns []
+ * (the seam must not silently emit experiences). When enabled it polls the
+ * world-model side-car over HTTP — `CODEBUDDY_WORLD_MODEL_URL` (default
+ * `http://127.0.0.1:3061`), REST contract:
+ *
+ *   GET {base}/surprises →
+ *     { "surprises": [ { "modality": "vision", "kind": "novel-scene",
+ *       "predictionError": 0.42, "tsMs": 1760000000000,
+ *       "detail": "...", "context": "..." } ] }
+ *
+ * The DARKSTAR world-model spoke (encoder ONNX + dynamics) serves this; any
+ * error/timeout (3 s) yields [] so a dead spoke never blocks the engine.
+ */
+export function createDefaultSensorExperienceSource(
+  options: { errorScale?: number; limit?: number } = {},
+): ExperienceSource {
+  return {
+    id: 'sensor-surprise',
+    async collect(): Promise<Experience[]> {
+      if (process.env.CODEBUDDY_WORLD_MODEL !== 'true') return [];
+      const base = (process.env.CODEBUDDY_WORLD_MODEL_URL ?? 'http://127.0.0.1:3061').replace(/\/$/, '');
+      const source = new SensorExperienceSource({
+        ...(options.errorScale !== undefined ? { errorScale: options.errorScale } : {}),
+        ...(options.limit !== undefined ? { limit: options.limit } : {}),
+        fetchSurprises: async () => {
+          const res = await fetch(`${base}/surprises`, { signal: AbortSignal.timeout(3000) });
+          if (!res.ok) throw new Error(`world-model spoke HTTP ${res.status}`);
+          const body = (await res.json()) as { surprises?: SensorSurprise[] };
+          return Array.isArray(body?.surprises) ? body.surprises : [];
+        },
+      });
+      return source.collect();
+    },
+  };
 }

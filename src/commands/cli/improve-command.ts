@@ -17,7 +17,10 @@ import {
   createWorkspaceRuleEngine,
 } from '../../agent/self-improvement/index.js';
 import { EvolutionaryArchive } from '../../agent/self-improvement/evolutionary-archive.js';
-import { createDefaultRunExperienceSource } from '../../agent/self-improvement/experience-source.js';
+import {
+  createDefaultRunExperienceSource,
+  createDefaultSensorExperienceSource,
+} from '../../agent/self-improvement/experience-source.js';
 import { CorpusStore } from '../../agent/self-improvement/rule-store.js';
 import { summarizeTrajectory } from '../../agent/self-improvement/execution-gate.js';
 import { runPairedGate } from '../../agent/self-improvement/paired-gate.js';
@@ -25,16 +28,27 @@ import { createHeadlessRunner, SEED_GRADED_TASKS } from '../../agent/self-improv
 import type { Experience } from '../../agent/self-improvement/types.js';
 
 /**
- * Collect real run-friction experiences (best-effort) so the LLM proposer can
- * ground its drafts in what actually went wrong. Never throws — an empty list
- * just means the proposer relies on the scenario alone.
+ * Collect real experiences (best-effort) so the LLM proposer can ground its
+ * drafts in what actually went wrong: run friction always, plus world-model
+ * sensor surprise when `CODEBUDDY_WORLD_MODEL=true` (the robot seam — off by
+ * default, in which case that source contributes nothing). Never throws — an
+ * empty list just means the proposer relies on the scenario alone.
  */
 async function collectExperiences(): Promise<Experience[]> {
-  try {
-    return await createDefaultRunExperienceSource({ limit: 10 }).collect();
-  } catch {
-    return [];
-  }
+  const sources = [
+    createDefaultRunExperienceSource({ limit: 10 }),
+    createDefaultSensorExperienceSource({ limit: 10 }),
+  ];
+  const collected = await Promise.all(
+    sources.map(async (source) => {
+      try {
+        return await source.collect();
+      } catch {
+        return [] as Experience[];
+      }
+    }),
+  );
+  return collected.flat();
 }
 
 interface ImproveOptions {

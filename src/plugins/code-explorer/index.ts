@@ -10,14 +10,4 @@ export {
   clearCodeExplorerManagerCache,
 } from './CodeExplorerManager.js';
 
-export { CodeExplorerMCPClient } from './CodeExplorerMCPClient.js';
-
-export type {
-  GNQueryResult,
-  GNContextResult,
-  GNImpactResult,
-  GNCluster,
-  GNProcess,
-} from './CodeExplorerMCPClient.js';
-
-export type { CodeExplorerStats } from './CodeExplorerManager.js';
+export type { CodeExplorerStats, CodeExplorerFreshness } from './CodeExplorerManager.js';

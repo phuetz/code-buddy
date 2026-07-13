@@ -53,6 +53,13 @@ describe('isVocativeAddress — addressed vs merely mentioned', () => {
       false
     );
     expect(isVocativeAddress('et donc Lisa a dit que le projet avancait bien', 'Lisa')).toBe(false); // TV/radio line
+    expect(isVocativeAddress('Est-ce que Lisa est rentrée ?', 'Lisa')).toBe(false);
+    expect(isVocativeAddress('Lisa est partie ?', 'Lisa')).toBe(false);
+  });
+
+  it('keeps direct and short questions addressed to the robot', () => {
+    expect(isVocativeAddress('Lisa, tu es là ?', 'Lisa')).toBe(true);
+    expect(isVocativeAddress('Lisa ?', 'Lisa')).toBe(true);
   });
 
   it('requires a name match at all', () => {
@@ -322,6 +329,26 @@ describe('respond-decider — chime-in (LLM only on a cue)', () => {
       respond: false,
       reason: 'judge-error',
     });
+  });
+
+  it('judge timeout → silent before the speech queue can stall', async () => {
+    vi.useFakeTimers();
+    try {
+      const d = createResponseDecider({
+        robotName: 'Lisa',
+        chimeIn: true,
+        now: () => 0,
+        recentContext: async () => [],
+        judge: () => new Promise<boolean>(() => {}),
+        judgeTimeoutMs: 25,
+      });
+      const decision = d.decide('comment compiler ce projet ?');
+      await vi.advanceTimersByTimeAsync(25);
+
+      await expect(decision).resolves.toEqual({ respond: false, reason: 'judge-error' });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('empty transcript → silent', async () => {
