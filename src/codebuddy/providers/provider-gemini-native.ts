@@ -145,7 +145,8 @@ export class GeminiNativeProvider implements Provider {
     for (const msg of messages) {
       if (msg.role === 'system') {
         // Gemini uses systemInstruction instead of system message
-        systemInstruction = { parts: [{ text: String(msg.content) }] };
+        systemInstruction ??= { parts: [] };
+        systemInstruction.parts.push({ text: String(msg.content) });
       } else if (msg.role === 'user') {
         const parts = this.convertContentToGeminiParts(msg.content);
         contents.push({ role: 'user', parts });
