@@ -24,6 +24,7 @@ import { ConfirmationService } from '../../src/utils/confirmation-service';
 import path from 'path';
 import os from 'os';
 import fs from 'fs';
+import { runWithToolAbortSignal } from '../../src/tools/tool-abort-context.js';
 
 jest.mock('../../src/utils/logger.js', () => ({
   logger: {
@@ -146,6 +147,23 @@ describe('BashTool', () => {
       const legacy = await bashTool.execute('pwd');
       expect(fs.realpathSync(legacy.output!.trim())).not.toBe(real);
       fs.rmSync(dir, { recursive: true, force: true });
+    });
+
+    (isWindows ? it.skip : it)('terminates a running command when its turn is aborted', async () => {
+      bashTool.setSelfHealing(false);
+      const abortController = new AbortController();
+      const startedAt = Date.now();
+      const pending = runWithToolAbortSignal(
+        abortController.signal,
+        () => bashTool.execute('sleep 10', 30000),
+      );
+      setTimeout(() => abortController.abort(), 50);
+
+      const result = await pending;
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('Command aborted');
+      expect(Date.now() - startedAt).toBeLessThan(3000);
     });
 
     // cat is not available on Windows

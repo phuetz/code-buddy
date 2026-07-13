@@ -36,6 +36,7 @@ import { getCheckpointManager } from '../../checkpoints/checkpoint-manager.js';
 import { auditLogger } from '../../security/audit-logger.js';
 import { buildBashEnvPrelude, CONTROLLED_SUBPROCESS_ENV } from './env-overrides.js';
 import { rewriteCommandWithRtk } from './rtk-rewrite.js';
+import { getToolAbortSignal } from '../tool-abort-context.js';
 
 export class BashTool implements Disposable {
   private currentDirectory: string = process.cwd();
@@ -174,6 +175,20 @@ export class BashTool implements Disposable {
         }
       };
 
+      const abortSignal = getToolAbortSignal();
+      let aborted = false;
+      let abortForceTimer: NodeJS.Timeout | null = null;
+      const handleAbort = () => {
+        aborted = true;
+        killProcess('SIGTERM');
+        abortForceTimer = setTimeout(() => killProcess('SIGKILL'), gracePeriod);
+      };
+      if (abortSignal?.aborted) {
+        handleAbort();
+      } else {
+        abortSignal?.addEventListener('abort', handleAbort, { once: true });
+      }
+
       const timer = setTimeout(() => {
         timedOut = true;
         // Try graceful termination first (SIGTERM)
@@ -207,7 +222,17 @@ export class BashTool implements Disposable {
         if (gracefulTerminationTimer) {
           clearTimeout(gracefulTerminationTimer);
         }
-        if (timedOut) {
+        if (abortForceTimer) {
+          clearTimeout(abortForceTimer);
+        }
+        abortSignal?.removeEventListener('abort', handleAbort);
+        if (aborted) {
+          resolve({
+            stdout: stdout.trim(),
+            stderr: 'Command aborted',
+            exitCode: 130,
+          });
+        } else if (timedOut) {
           resolve({
             stdout: stdout.trim(),
             stderr: 'Command timed out (graceful termination attempted)',
@@ -228,6 +253,10 @@ export class BashTool implements Disposable {
         if (gracefulTerminationTimer) {
           clearTimeout(gracefulTerminationTimer);
         }
+        if (abortForceTimer) {
+          clearTimeout(abortForceTimer);
+        }
+        abortSignal?.removeEventListener('abort', handleAbort);
         resolve({
           stdout: '',
           stderr: error.message,

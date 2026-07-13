@@ -12,6 +12,7 @@ import type { CodeBuddyMessage } from '../../../src/codebuddy/client';
 import { logger } from '../../../src/utils/logger.js';
 import { YIELD_SIGNAL } from '../../../src/agent/execution/yield-coordinator.js';
 import { INTERACTIVE_SHELL_SIGNAL } from '../../../src/agent/execution/turn-signals.js';
+import { getToolAbortSignal } from '../../../src/tools/tool-abort-context.js';
 import {
   getLatencyOptimizer,
   getStreamingOptimizer,
@@ -635,6 +636,30 @@ describe('AgentExecutor', () => {
       const secondRequest = providerCalls[1][0] as CodeBuddyMessage[];
       expect(secondRequest.some(message =>
         String(message.content).includes('JIT_CONTEXT:SHOULD_NOT_BE_READ'))).toBe(false);
+    });
+
+    it('should propagate cancellation through guarded bash dispatch', async () => {
+      const toolCall = makeToolCall('bash', { command: 'sleep 10' }, 'bash_abort');
+      setupLLMFlow(deps, [
+        { content: 'Running...', tool_calls: [toolCall] },
+      ]);
+      const abortController = new AbortController();
+      (deps.toolHandler.executeTool as jest.Mock).mockImplementationOnce(async () => {
+        const signal = getToolAbortSignal();
+        return await new Promise(resolve => {
+          signal?.addEventListener('abort', () => {
+            resolve({ success: false, error: 'Command aborted' });
+          }, { once: true });
+        });
+      });
+      setTimeout(() => abortController.abort(), 10);
+
+      const chunks = await collectChunks(
+        executor.processUserMessageStream('Run the command', [], [], abortController),
+      );
+
+      expect(deps.toolHandler.executeTool).toHaveBeenCalledWith(toolCall);
+      expect(chunks.some(chunk => chunk.content?.includes('cancelled by user'))).toBe(true);
     });
 
     it('should handle multi-round tool execution', async () => {

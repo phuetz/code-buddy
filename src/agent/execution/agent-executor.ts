@@ -63,6 +63,7 @@ import { formatTokenUsage, estimateCost } from "../../utils/token-display.js";
 import { classifyQuery } from "./query-classifier.js";
 import { getModelToolConfig } from "../../config/model-tools.js";
 import { getLatencyOptimizer, getStreamingOptimizer } from "../../optimization/latency-optimizer.js";
+import { runWithToolAbortSignal } from "../../tools/tool-abort-context.js";
 
 /**
  * Tools whose (verbose, prose/HTML) output TokenJuice may losslessly compress before it
@@ -363,10 +364,17 @@ export class AgentExecutor {
    * Execute a tool call, optionally through the LaneQueue for serialization.
    * Supports LLM-controlled parallelism via `wait_for_previous` parameter.
    */
-  private executeToolViaLane(toolCall: Parameters<ToolHandler['executeTool']>[0]): ReturnType<ToolHandler['executeTool']> {
+  private executeToolViaLane(
+    toolCall: Parameters<ToolHandler['executeTool']>[0],
+    abortSignal?: AbortSignal,
+  ): ReturnType<ToolHandler['executeTool']> {
     const laneQueue = this.deps.laneQueue;
+    const execute = () => runWithToolAbortSignal(
+      abortSignal,
+      () => this.deps.toolHandler.executeTool(toolCall),
+    );
     if (!laneQueue) {
-      return this.deps.toolHandler.executeTool(toolCall);
+      return execute();
     }
 
     const laneId = this.deps.laneId ?? 'default';
@@ -375,7 +383,7 @@ export class AgentExecutor {
 
     return laneQueue.enqueue(
       laneId,
-      () => this.deps.toolHandler.executeTool(toolCall),
+      execute,
       {
         parallel: isParallel,
         category: toolCall.function.name,
@@ -1163,7 +1171,7 @@ export class AgentExecutor {
                 const tc = toolCall; // capture for closure
                 result = await streamingAdapter.wrapWithStreaming(
                   tc.function.name,
-                  () => this.executeToolViaLane(tc),
+                  () => this.executeToolViaLane(tc, abortController?.signal),
                   (chunk: string) => {
                     // We cannot yield from inside a callback, so we accumulate
                     // chunks and emit them after. Instead, use a buffer approach.
@@ -1183,7 +1191,7 @@ export class AgentExecutor {
                 }
                 streamChunkBuffer.length = 0;
               } else {
-                result = await this.executeToolViaLane(toolCall);
+                result = await this.executeToolViaLane(toolCall, abortController?.signal);
               }
             }
 
