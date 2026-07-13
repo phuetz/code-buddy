@@ -39,6 +39,7 @@ import {
   readFileSync,
   readSync,
   statSync,
+  type Stats,
 } from 'fs';
 import { dirname, join } from 'path';
 import { logger } from '../utils/logger.js';
@@ -918,7 +919,7 @@ export class CollectiveKnowledgeGraph {
       return;
     }
 
-    let stats: ReturnType<typeof statSync>;
+    let stats: Stats;
     try {
       stats = statSync(this.ledgerPath);
     } catch {
@@ -1010,7 +1011,7 @@ export class CollectiveKnowledgeGraph {
     this.ledgerInode = null;
   }
 
-  private rememberLedgerMetadata(stats: ReturnType<typeof statSync>): void {
+  private rememberLedgerMetadata(stats: Stats): void {
     this.ledgerSize = stats.size;
     this.ledgerMtimeMs = stats.mtimeMs;
     this.ledgerDevice = stats.dev;
