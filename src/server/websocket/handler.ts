@@ -61,11 +61,22 @@ interface ConnectionState {
   toolWindowStart: number;
   peerRequestCount: number;
   peerWindowStart: number;
+  peerHandlersActive: number;
+  peerHandlerQueue: PeerHandlerTask[];
   // Phase (d).7 — count of broadcast() calls skipped for this client
   // because its ws.bufferedAmount exceeded SERVER_CONFIG.WS_BROADCAST_BUFFER_LIMIT.
   // Reset only on disconnect; surfaced via getConnectionStats().totalBroadcastsDropped.
   droppedBroadcasts: number;
 }
+
+interface PeerHandlerTask {
+  run: () => Promise<void>;
+  resolve: () => void;
+  reject: (error: Error) => void;
+}
+
+const MAX_PARALLEL_PEER_HANDLERS = 3;
+const MAX_PENDING_PEER_HANDLERS = 200;
 
 // Active connections
 const connections = new Map<WebSocket, ConnectionState>();
@@ -223,6 +234,48 @@ function sendError(ws: WebSocket, code: string, message: string, id?: string): v
     error: { code, message },
     timestamp: new Date().toISOString(),
   });
+}
+
+function startPeerHandler(state: ConnectionState, task: PeerHandlerTask): void {
+  state.peerHandlersActive += 1;
+  void task.run()
+    .then(task.resolve, task.reject)
+    .finally(() => {
+      state.peerHandlersActive = Math.max(0, state.peerHandlersActive - 1);
+      const next = state.peerHandlerQueue.shift();
+      if (next) startPeerHandler(state, next);
+    });
+}
+
+/**
+ * Bound peer RPC concurrency independently from serial chat/tool messages.
+ * The shared LaneQueue only admits parallel work that was pending in the same
+ * batch, so requests arriving while a long handler is running also need this
+ * small per-connection scheduler to preserve true RPC multiplexing.
+ */
+function enqueuePeerHandler(
+  state: ConnectionState,
+  run: () => Promise<void>,
+): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    const task: PeerHandlerTask = { run, resolve, reject };
+    if (state.peerHandlersActive < MAX_PARALLEL_PEER_HANDLERS) {
+      startPeerHandler(state, task);
+      return;
+    }
+    if (state.peerHandlerQueue.length >= MAX_PENDING_PEER_HANDLERS) {
+      reject(new Error('Peer request queue has too many pending tasks'));
+      return;
+    }
+    state.peerHandlerQueue.push(task);
+  });
+}
+
+function rejectQueuedPeerHandlers(state: ConnectionState, reason: string): void {
+  const error = new Error(reason);
+  for (const task of state.peerHandlerQueue.splice(0)) {
+    task.reject(error);
+  }
 }
 
 /**
@@ -676,9 +729,37 @@ async function processMessage(ws: WebSocket, state: ConnectionState, data: RawDa
 
   try {
     const enqueueMessage = await getEnqueueMessage();
-    await enqueueMessage(sessionKey, () => handler(ws, state, payload || {}));
+    if (type === 'peer:request') {
+      const frame = payload && typeof payload === 'object'
+        ? payload as { id?: unknown }
+        : {};
+      const requestId = typeof frame.id === 'string' ? frame.id : 'unknown';
+      await enqueuePeerHandler(state, () => enqueueMessage(
+        `${sessionKey}:peer:${requestId}`,
+        () => handler(ws, state, payload || {}),
+        { parallel: true },
+      ));
+    } else {
+      await enqueueMessage(sessionKey, () => handler(ws, state, payload || {}));
+    }
   } catch (error) {
-    sendError(ws, 'HANDLER_ERROR', error instanceof Error ? error.message : String(error), id);
+    const message = error instanceof Error ? error.message : String(error);
+    if (type === 'peer:request') {
+      const frame = payload && typeof payload === 'object'
+        ? payload as { id?: unknown }
+        : {};
+      send(ws, {
+        type: 'peer:response',
+        payload: {
+          id: typeof frame.id === 'string' ? frame.id : 'unknown',
+          ok: false,
+          error: { code: 'HANDLER_ERROR', message },
+        },
+        timestamp: new Date().toISOString(),
+      });
+    } else {
+      sendError(ws, 'HANDLER_ERROR', message, id);
+    }
   }
 }
 
@@ -737,6 +818,8 @@ export async function setupWebSocket(
       toolWindowStart: now,
       peerRequestCount: 0,
       peerWindowStart: now,
+      peerHandlersActive: 0,
+      peerHandlerQueue: [],
       droppedBroadcasts: 0,
     };
 
@@ -757,6 +840,7 @@ export async function setupWebSocket(
     });
 
     ws.on('close', () => {
+      rejectQueuedPeerHandlers(state, 'WebSocket closed before peer request execution');
       connections.delete(ws);
     });
 
@@ -769,6 +853,7 @@ export async function setupWebSocket(
 
     ws.on('error', (error) => {
       logger.error(`WebSocket error [${state.id}]:`, error);
+      rejectQueuedPeerHandlers(state, 'WebSocket failed before peer request execution');
       connections.delete(ws);
     });
   });

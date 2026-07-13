@@ -57,6 +57,8 @@ function buildState(opts: {
     toolWindowStart: Date.now(),
     peerRequestCount: 0,
     peerWindowStart: Date.now(),
+    peerHandlersActive: 0,
+    peerHandlerQueue: [],
     droppedBroadcasts: 0,
   };
 }
