@@ -386,6 +386,10 @@ app.disableHardwareAcceleration();
 let mainWindow: BrowserWindow | null = null;
 let engineAdapter: EngineAdapterLike | undefined;
 let sessionManager: SessionManager | null = null;
+const REMOTE_PERMISSION_TIMEOUT_MS = 5 * 60_000 + 30_000;
+let respondToEnginePermission:
+  | ((id: string, response: 'allow' | 'allow_always' | 'deny') => void)
+  | null = null;
 let skillsManager: SkillsManager | null = null;
 let pluginRuntimeService: PluginRuntimeService | null = null;
 let scheduledTaskManager: ScheduledTaskManager | null = null;
@@ -1292,7 +1296,7 @@ async function startSandboxBootstrap(): Promise<void> {
   }
 }
 
-import { sendToRenderer } from './ipc-main-bridge';
+import { sendToRenderer, setPermissionResponder } from './ipc-main-bridge';
 import { remoteBackendManager } from './remote-backend/remote-backend-manager';
 import { remoteBackendConfigStore } from './remote-backend/remote-backend-config-store';
 
@@ -1465,7 +1469,12 @@ app
           const { DesktopPermissionBridge } = await import(
             /* webpackIgnore: true */ /* @vite-ignore */ permBridgeUrl
           );
-          const permissionBridge = new DesktopPermissionBridge(sendToRenderer);
+          const permissionBridge = new DesktopPermissionBridge(
+            sendToRenderer,
+            REMOTE_PERMISSION_TIMEOUT_MS
+          );
+          respondToEnginePermission = (id, response) =>
+            permissionBridge.handleResponse(id, response);
           const adapterWithPerm = engineAdapter as unknown as {
             setPermissionCallback?: (cb: unknown) => void;
           };
@@ -1603,7 +1612,20 @@ app
 
     // Initialize session manager before creating an interactive window.
     // This avoids session.start racing the startup path and hitting a null manager.
-    sessionManager = new SessionManager(db, sendToRenderer, pluginRuntimeService, engineAdapter);
+    sessionManager = new SessionManager(
+      db,
+      sendToRenderer,
+      pluginRuntimeService,
+      engineAdapter,
+      (sessionId) => remoteManager.isRemoteSession(sessionId)
+    );
+    setPermissionResponder((toolUseId, response, bridgeId) => {
+      if (bridgeId && respondToEnginePermission) {
+        respondToEnginePermission(bridgeId, response);
+        return;
+      }
+      sessionManager?.handlePermissionResponse(toolUseId, response);
+    });
 
     // Cowork is a trusted local GUI driving a headless engine: auto-approve tool
     // operations so the agent's own bash/file work — e.g. running the bundled

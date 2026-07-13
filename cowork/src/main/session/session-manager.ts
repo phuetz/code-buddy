@@ -385,6 +385,8 @@ interface RecoveredQueuedPromptSnapshot {
 }
 
 export class SessionManager {
+  private static readonly LOCAL_PERMISSION_TIMEOUT_MS = 60_000;
+  private static readonly REMOTE_PERMISSION_TIMEOUT_MS = 5 * 60_000 + 30_000;
   private db: DatabaseInstance;
   private sendToRenderer: (event: ServerEvent) => void;
   private pathResolver: PathResolver;
@@ -406,6 +408,7 @@ export class SessionManager {
   private static readonly MAX_CACHE_SIZE = 100;
   private turnJournal = new TurnJournal();
   private activeTurnJournalIds: Map<string, string> = new Map();
+  private isRemoteSession: (sessionId: string) => boolean;
 
   /** Optional Code Buddy engine adapter for in-process execution */
   private engineAdapter?: EngineAdapterLike;
@@ -430,9 +433,11 @@ export class SessionManager {
     sendToRenderer: (event: ServerEvent) => void,
     pluginRuntimeService?: PluginRuntimeService,
     engineAdapter?: EngineAdapterLike,
+    isRemoteSession: (sessionId: string) => boolean = () => false,
   ) {
     this.db = db;
     this.engineAdapter = engineAdapter;
+    this.isRemoteSession = isRemoteSession;
     this.sendToRenderer = (event) => {
       if (event.type === 'trace.step') {
         this.saveTraceStep(event.payload.sessionId, event.payload.step);
@@ -2573,11 +2578,14 @@ export class SessionManager {
     input: Record<string, unknown>
   ): Promise<PermissionResult> {
     return new Promise((resolve) => {
+      const timeoutMs = this.isRemoteSession(sessionId)
+        ? SessionManager.REMOTE_PERMISSION_TIMEOUT_MS
+        : SessionManager.LOCAL_PERMISSION_TIMEOUT_MS;
       const timeoutId = setTimeout(() => {
         this.pendingPermissions.delete(toolUseId);
         resolve('deny');
         this.sendToRenderer({ type: 'permission.dismiss', payload: { toolUseId } });
-      }, 60_000);
+      }, timeoutMs);
       this.pendingPermissions.set(toolUseId, (result: PermissionResult) => {
         clearTimeout(timeoutId);
         resolve(result);

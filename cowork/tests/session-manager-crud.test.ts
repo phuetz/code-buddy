@@ -783,6 +783,28 @@ describe('SessionManager.handlePermissionResponse', () => {
     // Should not throw
     expect(() => manager.handlePermissionResponse('nonexistent', 'deny')).not.toThrow();
   });
+
+  it('keeps remote permission requests pending beyond the channel timeout', async () => {
+    vi.useFakeTimers();
+    try {
+      const db = makeDb();
+      const sendToRenderer = vi.fn();
+      const manager = new SessionManager(db, sendToRenderer, undefined, undefined, () => true);
+      const permissionPromise = manager.requestPermission('remote-s1', 'tool-remote', 'bash', {
+        command: 'pwd',
+      });
+      const resolved = vi.fn();
+      void permissionPromise.then(resolved);
+
+      await vi.advanceTimersByTimeAsync(5 * 60_000);
+      expect(resolved).not.toHaveBeenCalled();
+
+      manager.handlePermissionResponse('tool-remote', 'allow');
+      await expect(permissionPromise).resolves.toBe('allow');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
 
 // ------------------------------------------------------------------
