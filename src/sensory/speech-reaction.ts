@@ -1105,7 +1105,7 @@ export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => v
       return;
     }
     pendingSpeech = job;
-    if (superseded?.presetText === undefined && superseded?.wav !== job.wav) {
+    if (superseded && superseded.presetText === undefined && superseded.wav !== job.wav) {
       recordSupersededWav(superseded);
     }
   };
