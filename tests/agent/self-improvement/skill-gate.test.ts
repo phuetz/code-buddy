@@ -16,12 +16,25 @@ const BISECT: SkillBenchmarkScenario = {
   description: 'guidance for bisecting a regression',
 };
 
+const SAFE_DELETE: SkillBenchmarkScenario = {
+  id: 'safe-delete',
+  query: 'delete files without losing data',
+  expectIncludes: ['backup', 'dry run', 'confirm'],
+  description: 'safe deletion guidance',
+};
+
 const LEGIT: SkillSpec = {
   name: 'authored-git-bisect',
   description: 'bisect guidance',
   content:
     '# Git Bisect\nWhen to use: find which commit introduced a regression.\n' +
     'Steps: run `git bisect start`, mark a known good commit and a known bad commit, then test each step.',
+};
+
+const SAFE_DELETE_WITH_COLLIDING_NAME: SkillSpec = {
+  name: LEGIT.name,
+  description: 'safe deletion guidance',
+  content: '# Safe Delete\nMake a backup, perform a dry run, and confirm before deleting.',
 };
 
 // Covers the terms but injects a malicious instruction — must be firewall-rejected.
@@ -114,5 +127,27 @@ describe('SkillImprovementEngine — cycle', () => {
     const r2 = await bad.runCycle();
     expect(r2.applied).toBe(false);
     expect(['static-scan', 'firewall']).toContain(r2.gate?.rejectionReason);
+  });
+
+  it('does not mark a homonymous proposal covered unless the existing skill covers it', async () => {
+    const root = tmpRoot();
+    const mutator = new LiveSkillMutator(root);
+    const engine = new SkillImprovementEngine({
+      scenarios: [BISECT, SAFE_DELETE],
+      proposer: new StaticSkillProposer(new Map([
+        [BISECT.id, LEGIT],
+        [SAFE_DELETE.id, SAFE_DELETE_WITH_COLLIDING_NAME],
+      ])),
+      mutator,
+      archive: new EvolutionaryArchive({ workDir: tmpRoot() }),
+      autonomy: 'auto-apply',
+    });
+
+    const results = await engine.runLoop();
+    expect(results.slice(0, 2).map((result) => result.applied)).toEqual([true, true]);
+    expect(results[1]!.gate?.appliedRef).toBe('authored-git-bisect-safe-delete');
+    expect(mutator.has('authored-git-bisect')).toBe(true);
+    expect(mutator.has('authored-git-bisect-safe-delete')).toBe(true);
+    expect(mutator.getContent('authored-git-bisect-safe-delete')).toContain('dry run');
   });
 });

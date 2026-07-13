@@ -8,8 +8,13 @@
 
 import { EvolutionaryArchive } from './evolutionary-archive.js';
 import { resolveAutonomy, type Autonomy } from './engine.js';
-import { validateSkillProposal } from './skill-gate.js';
-import { LiveSkillMutator, type SkillMutatorPort } from './skill-mutator.js';
+import { coversScenario, validateSkillProposal } from './skill-gate.js';
+import {
+  LiveSkillMutator,
+  safetyGateSkill,
+  toAuthoredSkillName,
+  type SkillMutatorPort,
+} from './skill-mutator.js';
 import type { SkillProposer } from './skill-proposer.js';
 import type { SkillBenchmarkScenario, SkillGateOutcome } from './skill-types.js';
 
@@ -57,11 +62,22 @@ export class SkillImprovementEngine {
 
     for (const scenario of this.scenarios) {
       if (this.covered.has(scenario.id)) continue;
-      const proposal = await this.proposer.propose(scenario);
-      if (!proposal) continue;
+      const proposed = await this.proposer.propose(scenario);
+      if (!proposed) continue;
+      let proposal = proposed;
       if (this.mutator.has(proposal.spec.name)) {
-        this.covered.add(scenario.id);
-        continue;
+        const existing = this.mutator.getContent(proposal.spec.name);
+        if (existing && safetyGateSkill(existing).ok && coversScenario(existing, scenario)) {
+          this.covered.add(scenario.id);
+          continue;
+        }
+        proposal = {
+          ...proposal,
+          spec: {
+            ...proposal.spec,
+            name: this.availableName(proposal.spec.name, scenario.id),
+          },
+        };
       }
 
       const gate = validateSkillProposal(proposal, scenario, this.mutator, {
@@ -100,6 +116,14 @@ export class SkillImprovementEngine {
       applied: false,
       notes: ['no uncovered skill scenario with an available proposal'],
     };
+  }
+
+  private availableName(baseName: string, scenarioId: string): string {
+    const candidate = toAuthoredSkillName(`${baseName}-${scenarioId}`);
+    if (!this.mutator.has(candidate)) return candidate;
+    let suffix = 2;
+    while (this.mutator.has(`${candidate}-${suffix}`)) suffix += 1;
+    return `${candidate}-${suffix}`;
   }
 
   async runLoop(maxCycles?: number): Promise<SkillCycleResult[]> {

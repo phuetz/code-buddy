@@ -119,6 +119,7 @@ export interface SkillMutatorPort {
   create(spec: SkillSpec): { name: string };
   remove(name: string): boolean;
   has(name: string): boolean;
+  getContent(name: string): string | null;
 }
 
 export interface MutationResult {
@@ -152,7 +153,7 @@ export class LiveSkillMutator implements SkillMutatorPort {
     void getSkillRegistry().registerSkillFile(file, 'workspace').catch(() => {});
   }
 
-  private readContent(name: string): string | null {
+  getContent(name: string): string | null {
     const f = this.skillFile(name);
     return fs.existsSync(f) ? fs.readFileSync(f, 'utf-8') : null;
   }
@@ -162,7 +163,7 @@ export class LiveSkillMutator implements SkillMutatorPort {
   }
 
   isPinned(name: string): boolean {
-    const c = this.readContent(name);
+    const c = this.getContent(name);
     return c ? readPinned(c) : false;
   }
 
@@ -205,7 +206,7 @@ export class LiveSkillMutator implements SkillMutatorPort {
 
   /** Find/replace within an authored skill body (exact; fail on multiple unless replaceAll). */
   patch(name: string, oldStr: string, newStr: string, opts: { replaceAll?: boolean } = {}): MutationResult {
-    const content = this.readContent(name);
+    const content = this.getContent(name);
     if (content === null) return { ok: false, reasons: ['skill does not exist'] };
     if (this.isPinned(name)) return { ok: false, reasons: ['skill is pinned'] };
     const count = content.split(oldStr).length - 1;
@@ -268,7 +269,7 @@ export class LiveSkillMutator implements SkillMutatorPort {
     // pin/unpin rewrite the SKILL.md frontmatter — authored-only, like every
     // other mutating op, so a user's hand-placed skill is never rewritten.
     if (!isAuthoredSkillName(name)) return false;
-    const content = this.readContent(name);
+    const content = this.getContent(name);
     if (content === null) return false;
     const withFm = ensureFrontmatter(name, '', content);
     fs.writeFileSync(this.skillFile(name), setPinned(withFm, value), 'utf-8');
