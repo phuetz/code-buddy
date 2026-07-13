@@ -22,6 +22,7 @@
  */
 
 import { logger } from '../utils/logger.js';
+import { withTimeout } from '../council/with-timeout.js';
 
 export interface ResponseDecision {
   respond: boolean;
@@ -52,6 +53,8 @@ export interface ResponseDeciderOptions {
   judge?: JudgeFn;
   /** Injectable recent-conversation context. Default: the sensory-memory hearing buffer. */
   recentContext?: () => string[] | Promise<string[]>;
+  /** Maximum total time for recent context + chime-in judgment. Default 2500ms. */
+  judgeTimeoutMs?: number;
 }
 
 export interface ResponseDecider {
@@ -297,7 +300,7 @@ function isDirectGreeting(text: string): boolean {
 
 // ── default judge (rare, only on a cue with chime-in on) ──────────────
 
-function makeDefaultJudge(): JudgeFn {
+function makeDefaultJudge(timeoutMs: number): JudgeFn {
   return async (transcript: string, context: string[]): Promise<boolean> => {
     const { CodeBuddyClient } = await import('../codebuddy/client.js');
     const { resolveVoiceModel } = await import('./voice-loop.js');
@@ -319,7 +322,8 @@ function makeDefaultJudge(): JudgeFn {
           content: `${ctx ? `Contexte récent:\n${ctx}\n\n` : ''}Dernière phrase: ${transcript}\n\nIntervenir ?`,
         },
       ] as never,
-      []
+      [],
+      { temperature: 0, maxTokens: 8, timeoutMs },
     );
     const out = (resp?.choices?.[0]?.message?.content ?? '').trim().toLowerCase();
     return /\boui\b|\byes\b/.test(out) && !/\bnon\b|\bno\b/.test(out);
@@ -359,7 +363,13 @@ export function createResponseDecider(opts: ResponseDeciderOptions = {}): Respon
     opts.respondToGreeting ?? env.CODEBUDDY_SENSORY_RESPOND_TO_GREETING !== 'false';
   const now = opts.now ?? (() => Date.now());
   const nameMatch = opts.nameMatch ?? fuzzyNameMatch;
-  const judge = opts.judge ?? makeDefaultJudge();
+  const configuredJudgeTimeout =
+    opts.judgeTimeoutMs ?? Number(env.CODEBUDDY_SENSORY_RESPOND_JUDGE_TIMEOUT_MS);
+  const judgeTimeoutMs =
+    Number.isFinite(configuredJudgeTimeout) && configuredJudgeTimeout > 0
+      ? configuredJudgeTimeout
+      : 2500;
+  const judge = opts.judge ?? makeDefaultJudge(judgeTimeoutMs);
   const recentContext = opts.recentContext ?? defaultRecentContext;
 
   let lastEngagedAt = Number.NEGATIVE_INFINITY;
@@ -435,8 +445,11 @@ export function createResponseDecider(opts: ResponseDeciderOptions = {}): Respon
       // open a window (each is judged independently — keeps the risky path conservative).
       let warranted = false;
       try {
-        const ctx = await recentContext();
-        warranted = await judge(text, ctx);
+        warranted = await withTimeout(
+          (async () => judge(text, await recentContext()))(),
+          judgeTimeoutMs,
+          'respond-judge',
+        );
       } catch (err) {
         logger.debug(
           `[respond] judge failed → silent: ${err instanceof Error ? err.message : String(err)}`
