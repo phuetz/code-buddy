@@ -29,7 +29,8 @@ import {
 import { join, resolve, dirname, isAbsolute, basename } from 'path';
 import { fileURLToPath, pathToFileURL } from 'url';
 import * as fs from 'fs';
-import { execFileSync } from 'child_process';
+import { execFile } from 'child_process';
+import { promisify } from 'util';
 import { config } from 'dotenv';
 import { registerProjectIpcHandlers } from './ipc/project-ipc';
 import { registerSubAgentIpcHandlers } from './ipc/subagent-ipc';
@@ -87,6 +88,7 @@ import { registerCostIpcHandlers } from './ipc/cost-ipc';
 import { registerRulesIpcHandlers } from './ipc/rules-ipc';
 import { registerGitIpcHandlers } from './ipc/git-ipc';
 import { registerCheckpointIpcHandlers } from './ipc/checkpoint-ipc';
+import { findFileByName } from './ipc/shell-file-discovery';
 import { initDatabase, getDatabase, closeDatabase } from './db/database';
 import { SessionManager, type EngineAdapterLike } from './session/session-manager';
 import {
@@ -347,6 +349,7 @@ moduleWithResolver._resolveFilename = function (
 };
 
 const APP_NAME = 'Code Buddy Studio';
+const execFileAsync = promisify(execFile);
 
 app.setName(APP_NAME);
 
@@ -3190,51 +3193,9 @@ async function revealFileInFolder(filePath: string, cwd?: string): Promise<boole
   }
   log('[shell.showItemInFolder] request:', { filePath, cwd, resolved: normalizedPath });
 
-  const findFileByName = (fileName: string, roots: string[]): string | null => {
-    if (!fileName) {
-      return null;
-    }
-
-    const visited = new Set<string>();
-    const queue = roots
-      .map((root) => resolve(root))
-      .filter((root) => !!root && fs.existsSync(root) && fs.statSync(root).isDirectory());
-
-    let scannedDirs = 0;
-    const MAX_DIRS = 2000;
-
-    while (queue.length > 0 && scannedDirs < MAX_DIRS) {
-      const dir = queue.shift()!;
-      if (visited.has(dir)) {
-        continue;
-      }
-      visited.add(dir);
-      scannedDirs += 1;
-
-      let entries: fs.Dirent[] = [];
-      try {
-        entries = fs.readdirSync(dir, { withFileTypes: true });
-      } catch {
-        continue;
-      }
-
-      for (const entry of entries) {
-        const fullPath = join(dir, entry.name);
-        if (entry.isFile() && entry.name === fileName) {
-          return fullPath;
-        }
-        if (entry.isDirectory()) {
-          queue.push(fullPath);
-        }
-      }
-    }
-
-    return null;
-  };
-
   try {
-    if (fs.existsSync(normalizedPath)) {
-      const stat = fs.statSync(normalizedPath);
+    const stat = await fs.promises.stat(normalizedPath).catch(() => null);
+    if (stat) {
       if (stat.isDirectory()) {
         const openDirResult = await shell.openPath(normalizedPath);
         if (openDirResult) {
@@ -3243,7 +3204,7 @@ async function revealFileInFolder(filePath: string, cwd?: string): Promise<boole
       } else {
         if (process.platform === 'darwin') {
           try {
-            execFileSync('open', ['-R', normalizedPath]);
+            await execFileAsync('open', ['-R', normalizedPath]);
           } catch (error) {
             logWarn(
               '[shell.showItemInFolder] open -R failed, fallback to shell.showItemInFolder:',
@@ -3260,7 +3221,7 @@ async function revealFileInFolder(filePath: string, cwd?: string): Promise<boole
 
     const fileName = basename(normalizedPath);
     const defaultWorkingDir = getWorkingDir() || '';
-    const discoveredPath = findFileByName(fileName, [
+    const discoveredPath = await findFileByName(fileName, [
       cwd || '',
       defaultWorkingDir,
       join(app.getPath('userData'), 'default_working_dir'),
@@ -3273,7 +3234,7 @@ async function revealFileInFolder(filePath: string, cwd?: string): Promise<boole
       });
       if (process.platform === 'darwin') {
         try {
-          execFileSync('open', ['-R', discoveredPath]);
+          await execFileAsync('open', ['-R', discoveredPath]);
         } catch (error) {
           logWarn(
             '[shell.showItemInFolder] open -R discovered file failed, fallback to shell.showItemInFolder:',
@@ -3288,7 +3249,10 @@ async function revealFileInFolder(filePath: string, cwd?: string): Promise<boole
     }
 
     const parentDir = dirname(normalizedPath);
-    if (parentDir && fs.existsSync(parentDir)) {
+    const parentStat = parentDir
+      ? await fs.promises.stat(parentDir).catch(() => null)
+      : null;
+    if (parentStat?.isDirectory()) {
       logWarn('[shell.showItemInFolder] file not found, opening parent directory:', parentDir);
       const openParentResult = await shell.openPath(parentDir);
       if (openParentResult) {
