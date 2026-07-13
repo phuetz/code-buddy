@@ -19,6 +19,7 @@ import time
 import cv2
 import numpy as np
 
+from camera_health import CameraHealthState
 from storage import append_rotating_jsonl, prune_frames
 
 BRIDGE_URL = os.environ.get("BUDDY_SENSE_BRIDGE_URL", "ws://127.0.0.1:8129")
@@ -328,10 +329,31 @@ def main() -> None:
     print(f"[vision] watching camera {CAMERA_INDEX} ({CAMERA_NAME}); detectors={sorted(enabled)} person_backend={backend}", flush=True)
 
     prev_gray = None
+    camera_health = CameraHealthState()
     interval = 1.0 / max(FPS, 0.5)
     while True:
         t0 = time.time()
         ok, frame = cap.read()
+        camera_transition = camera_health.update(ok)
+        if camera_transition:
+            kind, salience = camera_transition
+            payload = {"camera": CAMERA_NAME}
+            bridge.emit(kind, salience, payload)
+            log_event({"ts_ms": now_ms(), "kind": kind, **payload})
+            if kind == "offline":
+                print(
+                    f"[vision] camera {CAMERA_INDEX} ({CAMERA_NAME}) offline after "
+                    f"{camera_health.failure_threshold} consecutive capture failures",
+                    file=sys.stderr,
+                    flush=True,
+                )
+            else:
+                print(
+                    f"[vision] camera {CAMERA_INDEX} ({CAMERA_NAME}) online — capture resumed",
+                    file=sys.stderr,
+                    flush=True,
+                )
+                prev_gray = None
         if not ok:
             time.sleep(0.5)
             continue
