@@ -1,9 +1,35 @@
 import { describe, expect, it } from 'vitest';
 import type { CodeBuddyMessage } from '../../src/codebuddy/client.js';
 import { EnhancedContextCompressor } from '../../src/context/enhanced-compression.js';
-import { createTokenCounter } from '../../src/context/token-counter.js';
+import {
+  createTokenCounter,
+  IMAGE_URL_TOKEN_ESTIMATE,
+} from '../../src/context/token-counter.js';
 
 describe('EnhancedContextCompressor', () => {
+  it('includes image_url parts in original token metrics', () => {
+    const compressor = new EnhancedContextCompressor(createTokenCounter('gpt-4'), {
+      enableArchiving: false,
+    });
+    const textOnly = [{
+      role: 'user',
+      content: [{ type: 'text', text: 'describe this image' }],
+    }] as unknown as CodeBuddyMessage[];
+    const withImage = [{
+      role: 'user',
+      content: [
+        { type: 'text', text: 'describe this image' },
+        { type: 'image_url', image_url: { url: 'data:image/png;base64,AAAA' } },
+      ],
+    }] as unknown as CodeBuddyMessage[];
+
+    const textResult = compressor.compress(textOnly, 100_000);
+    const imageResult = compressor.compress(withImage, 100_000);
+
+    expect(imageResult.metrics.originalTokens - textResult.metrics.originalTokens)
+      .toBeGreaterThanOrEqual(IMAGE_URL_TOKEN_ESTIMATE);
+  });
+
   it('preserves every system message in order during compression', () => {
     const compressor = new EnhancedContextCompressor(createTokenCounter('gpt-4'), {
       enableArchiving: false,
