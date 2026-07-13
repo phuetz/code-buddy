@@ -144,7 +144,11 @@ describe('CollectiveKnowledgeGraph (Phase 0)', () => {
   });
 
   it('formats a <collective_knowledge> prompt block', async () => {
-    const ckg = new CollectiveKnowledgeGraph({ ledgerPath, agentId: 'host/repo' });
+    const ckg = new CollectiveKnowledgeGraph({
+      ledgerPath,
+      agentId: 'host/repo',
+      embedder: { async embed() { return { embedding: Float32Array.from([1, 0]) }; } },
+    });
     ckg.remember(lesson);
     const block = await ckg.formatCollectiveContext('mode vocal devstral');
     expect(block).toContain('<collective_knowledge>');

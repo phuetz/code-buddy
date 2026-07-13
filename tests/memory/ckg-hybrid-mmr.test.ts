@@ -61,6 +61,50 @@ async function seededGraph(): Promise<CollectiveKnowledgeGraph> {
 }
 
 describe('CKG recallHybrid — BM25 + RRF + MMR', () => {
+  it('persists corpus vectors so a new instance only embeds the query', async () => {
+    const ledgerPath = path.join(dir, 'ckg-ledger.jsonl');
+    const firstEmbed = vi.fn(async () => ({ embedding: Float32Array.from([1, 0, 0]) }));
+    const first = new CollectiveKnowledgeGraph({
+      ledgerPath,
+      agentId: 'first/agent',
+      embeddingModel: 'test/cache-model',
+      embedder: { embed: firstEmbed },
+    });
+    first.remember({ name: 'sqlite', text: 'sqlite concurrent writes require WAL' });
+    first.remember({ name: 'timeout', text: 'busy timeout prevents lock failures' });
+    await first.recallHybrid('database reliability');
+
+    expect(firstEmbed).toHaveBeenCalledTimes(3); // query + two corpus entities
+    const cachePath = `${ledgerPath}.emb.jsonl`;
+    expect(fs.existsSync(cachePath)).toBe(true);
+    expect(fs.readFileSync(cachePath, 'utf8').trim().split('\n')).toHaveLength(2);
+
+    const secondEmbed = vi.fn(async () => ({ embedding: Float32Array.from([1, 0, 0]) }));
+    const second = new CollectiveKnowledgeGraph({
+      ledgerPath,
+      agentId: 'second/agent',
+      embeddingModel: 'test/cache-model',
+      embedder: { embed: secondEmbed },
+    });
+    await second.recallHybrid('database reliability');
+    expect(secondEmbed).toHaveBeenCalledTimes(1); // query only; corpus came from the sidecar
+  });
+
+  it('bounds collective-context recall when the embedder hangs', async () => {
+    const hanging: CkgEmbedder = {
+      embed: () => new Promise<{ embedding: Float32Array }>(() => undefined),
+    };
+    const ckg = new CollectiveKnowledgeGraph({
+      ledgerPath: path.join(dir, 'ckg-ledger.jsonl'),
+      agentId: 'test/agent',
+      embedder: hanging,
+    });
+    ckg.remember({ text: 'sqlite exige WAL' });
+    const startedAt = Date.now();
+    await expect(ckg.formatCollectiveContext('sqlite', 600, 20)).resolves.toBe('');
+    expect(Date.now() - startedAt).toBeLessThan(500);
+  });
+
   it('λ=1 (naive top-k) returns the near-duplicate cluster; default λ covers distinct facts', async () => {
     const ckg = await seededGraph();
     const query = 'sqlite écritures concurrentes process';
