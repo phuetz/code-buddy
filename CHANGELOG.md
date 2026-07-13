@@ -58,6 +58,12 @@ once it reaches `1.0.0`.
 ## [Unreleased]
 
 ### Added
+- **Lisa partage le même contexte frais entre voix, Telegram et Cowork.** Le cache structuré
+  (date, résumé, source et URL) alimente maintenant les trois surfaces. Les bulletins simples restent
+  instantanés, tandis que les demandes d'analyse et leurs suivis elliptiques passent au raisonnement
+  avec la même preuve. Le miroir Telegram d'une réponse vocale ajoute des sources datées et
+  cliquables sans faire lire les URL à voix haute; les chaînes Web sont neutralisées comme données
+  non fiables avant injection dans le prompt.
 - **Several Code Buddy machines collaborate on one question — `council --fleet`.** The fleet WS mesh
   (`peer.chat` across machines) was real but only proven cross-host once and never as a repeatable
   two-instance test; the collaboration verbs (`council`/`swarm`) were in-process. Now `buddy council

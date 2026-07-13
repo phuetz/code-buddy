@@ -8,6 +8,10 @@ import type { ChannelType, ContentType } from '../channels/core.js';
 import { getChannelManager } from '../channels/core.js';
 import { resolveUserName } from '../companion/user-name.js';
 import { logger } from '../utils/logger.js';
+import {
+  resolvePrefetchedTurnContextForConversation,
+  type PrefetchedTurnContext,
+} from './prefetched-turn-context.js';
 import type { ConversationTurn } from './types.js';
 
 export type ConversationOrigin = 'voice' | 'channel' | 'cowork';
@@ -51,6 +55,10 @@ export interface CrossChannelBridgeDependencies {
   ) => Promise<boolean>;
   now?: () => Date;
   createId?: () => string;
+  voiceMirrorContent?: (
+    event: CrossChannelConversationEvent,
+    history: CrossChannelConversationEvent[],
+  ) => string;
 }
 
 const CHANNEL_TYPES = new Set<ChannelType>([
@@ -167,6 +175,55 @@ function mirroredLabel(event: CrossChannelConversationEvent, companionName: stri
   return `${icon} ${speaker} (voix)\n${event.content}`;
 }
 
+type FreshContextResolver = (
+  heard: string,
+  history: ConversationTurn[],
+) => Pick<
+  PrefetchedTurnContext,
+  'speech' | 'text' | 'citations' | 'fetchedAt' | 'freshness'
+> | null;
+
+function comparableText(value: string): string {
+  return value.replace(/\s+/g, ' ').trim().toLocaleLowerCase('fr');
+}
+
+/** Keep spoken prose natural while giving the mirrored text turn dated, clickable evidence. */
+export function voiceMirrorContentForEvent(
+  event: CrossChannelConversationEvent,
+  history: CrossChannelConversationEvent[],
+  resolveFreshContext: FreshContextResolver = resolvePrefetchedTurnContextForConversation,
+): string {
+  if (event.role !== 'assistant') return event.content;
+  const priorEvents = history.filter((candidate) => candidate.id !== event.id);
+  const previousUser = [...priorEvents]
+    .reverse()
+    .find((candidate) => candidate.role === 'user' && candidate.origin === 'voice');
+  if (!previousUser) return event.content;
+  const context = resolveFreshContext(
+    previousUser.content,
+    priorEvents.map(({ role, content }) => ({ role, content })),
+  );
+  if (!context?.citations.length) return event.content;
+  const collectedAt = new Date(context.fetchedAt).toISOString();
+  if (comparableText(event.content) === comparableText(context.speech)) {
+    return [
+      `Bulletin ${context.freshness}, collecte ${collectedAt}.`,
+      context.text,
+    ].join('\n');
+  }
+  if (/https?:\/\//i.test(event.content)) return event.content;
+  const sources = context.citations
+    .slice(0, 5)
+    .map((citation, index) => `${index + 1}. ${citation.title} — ${citation.url}`)
+    .join('\n');
+  return [
+    event.content,
+    '',
+    `Sources du bulletin (${context.freshness}, collecte ${collectedAt}) :`,
+    sources,
+  ].join('\n');
+}
+
 async function defaultDeliver(
   target: CrossChannelTarget,
   content: string,
@@ -208,6 +265,9 @@ export class CrossChannelConversationBridge {
   private readonly deliver: NonNullable<CrossChannelBridgeDependencies['deliver']>;
   private readonly now: NonNullable<CrossChannelBridgeDependencies['now']>;
   private readonly createId: NonNullable<CrossChannelBridgeDependencies['createId']>;
+  private readonly voiceMirrorContent: NonNullable<
+    CrossChannelBridgeDependencies['voiceMirrorContent']
+  >;
   private lastHistoryMtimeMs = -1;
   private persistenceQueue: Promise<void> = Promise.resolve();
 
@@ -218,6 +278,7 @@ export class CrossChannelConversationBridge {
     this.deliver = dependencies.deliver ?? defaultDeliver;
     this.now = dependencies.now ?? (() => new Date());
     this.createId = dependencies.createId ?? randomUUID;
+    this.voiceMirrorContent = dependencies.voiceMirrorContent ?? voiceMirrorContentForEvent;
     this.loadPersistedHistory();
   }
 
@@ -266,9 +327,10 @@ export class CrossChannelConversationBridge {
     if (!event) return false;
     if (!this.config.mirrorVoice || !this.config.target) return true;
     try {
+      const deliveryContent = this.voiceMirrorContent(event, this.events);
       return await this.deliver(
         this.config.target,
-        mirroredLabel(event, this.config.companionName),
+        mirroredLabel({ ...event, content: deliveryContent }, this.config.companionName),
         'text'
       );
     } catch (error) {

@@ -27,7 +27,6 @@ import type { PermissionMode } from '../security/permission-modes.js';
 import {
   intentKeyForQuery,
   loadPrefetchCache,
-  matchPrefetchedDetailed,
   runPrefetchCycle,
 } from '../companion/prefetch-engine.js';
 import { loadPrefetchItems } from '../companion/prefetch-config.js';
@@ -37,6 +36,11 @@ import {
   conversationFailureReply,
   prepareConversationTurn,
 } from '../conversation/conversation-orchestrator.js';
+import {
+  resolvePrefetchedTurnContext,
+  resolvePrefetchedTurnContextForConversation,
+  shouldUsePrefetchedAnswerDirectly,
+} from '../conversation/prefetched-turn-context.js';
 import { assessConversationResponse } from '../conversation/conversation-quality.js';
 
 /** Instant joke when the user asks for one (no LLM, no agent). null otherwise. */
@@ -57,17 +61,18 @@ function defaultPrefetchMatch(heard: string): string | null {
   if (process.env.CODEBUDDY_PREFETCH === 'false') return null;
   try {
     const items = loadPrefetchItems();
-    const match = matchPrefetchedDetailed(heard, {
+    const context = resolvePrefetchedTurnContext(heard, {
       cache: loadPrefetchCache(),
       items,
-      now: Date.now(),
       allowStale: true,
     });
     // Stale-while-revalidate: answer immediately, refresh evidence in the background.
-    if (match?.freshness === 'stale' || (!match && intentKeyForQuery(heard, items))) {
+    if (context?.freshness === 'stale' || (!context && intentKeyForQuery(heard, items))) {
       void runPrefetchCycle().catch(() => undefined);
     }
-    return match?.answer ?? null;
+    return context && shouldUsePrefetchedAnswerDirectly(heard, context)
+      ? context.speech
+      : null;
   } catch {
     return null;
   }
@@ -351,7 +356,17 @@ export function makeHybridReply(options: HybridReplyOptions = {}): HybridReplyHa
       const recentHistory = conversationHistory(heard);
       if (substantive) {
         const preamble = buildContextPreamble(recentHistory);
-        const prepared = prepareConversationTurn(heard, recentHistory);
+        const freshContext = process.env.CODEBUDDY_PREFETCH === 'false'
+          ? null
+          : resolvePrefetchedTurnContextForConversation(heard, recentHistory, {
+              allowStale: true,
+            });
+        if (freshContext?.freshness === 'stale') {
+          void runPrefetchCycle().catch(() => undefined);
+        }
+        const prepared = prepareConversationTurn(heard, recentHistory, {
+          ...(freshContext ? { freshContext: freshContext.promptGuidance } : {}),
+        });
         const input = [preamble, prepared.systemGuidance, `Demande actuelle : ${heard}`]
           .filter(Boolean)
           .join('\n\n');

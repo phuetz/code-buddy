@@ -169,6 +169,40 @@ describe('Cowork cross-channel continuity adapter', () => {
     );
   });
 
+  it('injects the shared fresh context even when no Telegram bridge is configured', async () => {
+    const refresh = vi.fn(async () => undefined);
+    const loader = vi.fn(async (modulePath: string) => {
+      if (modulePath === 'conversation/prefetched-turn-context.js') {
+        return {
+          resolvePrefetchedTurnContextForConversation: () => ({
+            freshness: 'fresh' as const,
+            promptGuidance:
+              '<fresh_context>Actualité datée, sourcée: https://example.test/news</fresh_context>',
+          }),
+          isPrefetchedTurnRequest: () => true,
+        };
+      }
+      if (modulePath === 'companion/prefetch-engine.js') {
+        return { runPrefetchCycle: refresh };
+      }
+      return null;
+    });
+    const continuity = new CoworkCrossChannelContinuity(loader as never);
+
+    const prepared = await continuity.prepare(
+      session(['companion']),
+      [],
+      'Quelles sont les actualités ?',
+      'fresh-message',
+    );
+
+    expect(prepared.active).toBe(false);
+    expect(prepared.messages).toEqual([]);
+    expect(prepared.systemPrompt).toContain('<fresh_context>');
+    expect(prepared.systemPrompt).toContain('https://example.test/news');
+    expect(refresh).not.toHaveBeenCalled();
+  });
+
   it('never opens the private journal for an ordinary Cowork session', async () => {
     const loader = vi.fn(async () => null);
     const continuity = new CoworkCrossChannelContinuity(loader as never);

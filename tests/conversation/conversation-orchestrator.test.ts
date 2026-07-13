@@ -51,6 +51,18 @@ describe('human conversation planning', () => {
     expect(envelope).toContain('Foyer actuel');
   });
 
+  it('injects the same bounded fresh evidence without replacing dialogue planning', () => {
+    const envelope = buildConversationTurnEnvelope('Pourquoi ce sujet compte-t-il ?', [], {
+      freshContext:
+        '<fresh_context>Collecte 2026-07-13. Source: https://example.test/news</fresh_context>',
+    });
+    expect(envelope).toContain('<conversation_response_plan ');
+    expect(envelope).toContain('<fresh_context>Collecte 2026-07-13');
+    expect(envelope).toContain(
+      "Message de l'utilisateur : Pourquoi ce sujet compte-t-il ?"
+    );
+  });
+
   it('never returns an empty recovery for an accepted turn', () => {
     expect(conversationFailureReply('Donne-moi les actualités')).toContain('sources');
     expect(conversationFailureReply('Je suis triste')).not.toBe('');

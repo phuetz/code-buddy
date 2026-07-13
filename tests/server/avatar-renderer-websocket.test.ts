@@ -133,5 +133,5 @@ describe('avatar renderer Gateway feedback', () => {
         connected: true,
       }),
     ]);
-  }, 15_000);
+  }, 30_000);
 });

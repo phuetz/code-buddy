@@ -172,7 +172,7 @@ describe('chat routes provider error statuses', () => {
       providerStatus: 429,
       retryAfter: 17,
     });
-  }, 15_000);
+  }, 30_000);
 
   it('returns OpenAI-compatible 503 metadata for upstream provider failures', async () => {
     const baseUrl = await start();

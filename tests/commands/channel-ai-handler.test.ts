@@ -8,6 +8,9 @@
  * driving a fake ChannelManager/channel against fully-mocked core + agent.
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 const hoisted = vi.hoisted(() => {
   return {
@@ -81,6 +84,8 @@ import {
   getCrossChannelConversationBridge,
   resetCrossChannelConversationBridge,
 } from '../../src/conversation/cross-channel-bridge.js';
+import { savePrefetchCache } from '../../src/companion/prefetch-engine.js';
+import { savePrefetchItems } from '../../src/companion/prefetch-config.js';
 
 type InboundHandler = (message: any, channel: any) => Promise<void>;
 
@@ -114,6 +119,9 @@ describe('registerAIMessageHandler inbound roundtrip (GAP-7)', () => {
     delete process.env.CODEBUDDY_CONVERSATION_CHANNEL_ID;
     delete process.env.CODEBUDDY_CONVERSATION_CHANNEL;
     delete process.env.CODEBUDDY_SENSORY_ALERT_CHAT;
+    delete process.env.CODEBUDDY_PREFETCH_CACHE_FILE;
+    delete process.env.CODEBUDDY_PREFETCH_ITEMS_FILE;
+    delete process.env.CODEBUDDY_PREFETCH;
     process.env.CODEBUDDY_CONVERSATION_PERSIST = 'false';
     resetCrossChannelConversationBridge();
     process.env.GROK_API_KEY = 'test-key';
@@ -219,6 +227,71 @@ describe('registerAIMessageHandler inbound roundtrip (GAP-7)', () => {
       role: 'assistant',
       content: 'Here is your answer.',
     });
+  });
+
+  it('injects the same dated news evidence into an analytical Telegram turn', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'codebuddy-channel-fresh-'));
+    const cachePath = join(directory, 'cache.json');
+    const itemsPath = join(directory, 'items.json');
+    process.env.CODEBUDDY_CONVERSATION_CHANNEL = 'telegram';
+    process.env.CODEBUDDY_CONVERSATION_CHANNEL_ID = 'chan-42';
+    process.env.CODEBUDDY_PREFETCH_CACHE_FILE = cachePath;
+    process.env.CODEBUDDY_PREFETCH_ITEMS_FILE = itemsPath;
+    process.env.CODEBUDDY_PREFETCH = 'true';
+    savePrefetchItems([{ kind: 'news' }], itemsPath);
+    savePrefetchCache(
+      [
+        {
+          key: 'news',
+          kind: 'news',
+          answer: 'Bulletin vocal.',
+          at: Date.now() - 1_000,
+          context: {
+            kind: 'news',
+            query: 'actualités France',
+            locale: 'fr-FR',
+            fetchedAt: Date.now() - 1_000,
+            items: [
+              {
+                title: 'Lyon publie des mesures horaires de qualité de l’air',
+                url: 'https://example.test/lyon-air',
+                source: 'Exemple Info',
+                summary: 'Ces données peuvent guider les décisions sanitaires locales.',
+              },
+            ],
+          },
+        },
+      ],
+      cachePath,
+    );
+    resetCrossChannelConversationBridge();
+
+    try {
+      const manager = makeManager();
+      await registerAIMessageHandler(manager as any);
+      const send = vi.fn().mockResolvedValue({ success: true, timestamp: new Date() });
+      await manager.emit(
+        makeMessage(
+          'Quelles sont les actualités, et pourquoi celle sur Lyon compte-t-elle ?',
+          'sess-fresh-news',
+        ),
+        { type: 'telegram', send },
+      );
+
+      const agentInput = String(hoisted.processUserMessage.mock.calls.at(-1)?.[0]);
+      expect(agentInput).toContain('<fresh_context>');
+      expect(agentInput).toContain('https://example.test/lyon-air');
+      expect(agentInput).toContain('décisions sanitaires locales');
+      expect(agentInput).toContain(
+        "Message de l'utilisateur : Quelles sont les actualités, et pourquoi celle sur Lyon compte-t-elle ?",
+      );
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+      delete process.env.CODEBUDDY_PREFETCH_CACHE_FILE;
+      delete process.env.CODEBUDDY_PREFETCH_ITEMS_FILE;
+      delete process.env.CODEBUDDY_PREFETCH;
+      resetCrossChannelConversationBridge();
+    }
   });
 
   it('restores prior history when resuming a session that already has messages', async () => {

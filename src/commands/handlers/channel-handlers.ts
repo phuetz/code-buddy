@@ -881,9 +881,11 @@ export async function registerAIMessageHandler(manager: import('../../channels/i
         process.env.CODEBUDDY_CHANNEL_CONVERSATION !== 'false';
       let agentInput = message.content;
       if (companionConversation) {
-        const { buildConversationTurnEnvelope } = await import(
-          '../../conversation/conversation-orchestrator.js'
-        );
+        const [conversation, prefetchedContext, prefetchEngine] = await Promise.all([
+          import('../../conversation/conversation-orchestrator.js'),
+          import('../../conversation/prefetched-turn-context.js'),
+          import('../../companion/prefetch-engine.js'),
+        ]);
         const history = sharedConversationHistory.length
           ? sharedConversationHistory.slice(-12)
           : agent
@@ -901,7 +903,23 @@ export async function registerAIMessageHandler(manager: import('../../channels/i
                 };
               })
               .filter((entry) => entry.content);
-        agentInput = buildConversationTurnEnvelope(message.content, history);
+        const freshContext = process.env.CODEBUDDY_PREFETCH === 'false'
+          ? null
+          : prefetchedContext.resolvePrefetchedTurnContextForConversation(
+              message.content,
+              history,
+              { allowStale: true },
+            );
+        if (
+          process.env.CODEBUDDY_PREFETCH !== 'false' &&
+          (freshContext?.freshness === 'stale' ||
+            (!freshContext && prefetchedContext.isPrefetchedTurnRequest(message.content)))
+        ) {
+          void prefetchEngine.runPrefetchCycle().catch(() => undefined);
+        }
+        agentInput = conversation.buildConversationTurnEnvelope(message.content, history, {
+          ...(freshContext ? { freshContext: freshContext.promptGuidance } : {}),
+        });
       }
 
       const entries = await agent.processUserMessage(agentInput);

@@ -90,6 +90,15 @@ audio. Cette séparation permet de changer d'avatar sans fragmenter l'identité 
   daté du jour et débarrassé des pages d'accueil génériques.
 - Réponses de récupération honnêtes et jamais vides.
 
+État au 13 juillet 2026 : le contexte préchargé est désormais résolu par un contrat unique pour la
+voix, Telegram et les sessions Cowork explicitement reliées à Lisa. Une demande de bulletin simple
+reste instantanée ; une demande de cause, d'impact, de comparaison ou un suivi elliptique comme
+« pourquoi celui-là compte ? » reprend la même preuve mais passe par le planificateur de dialogue.
+Le contexte injecté conserve date, résumés et URL, traite les résultats Web comme des données non
+fiables (jamais comme des instructions), et le miroir Telegram d'un tour vocal ajoute les sources
+cliquables sans faire prononcer les URL. Le journal intercanal possède aussi un test au niveau JSONL
+garantissant une seule écriture physique par événement.
+
 ### P1 — Qualité mesurable
 
 - Banc déterministe au niveau du tour et de l'épisode, complété par six scénarios synthétiques

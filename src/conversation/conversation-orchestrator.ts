@@ -9,6 +9,11 @@ export interface PreparedConversationTurn {
   envelopedPrompt: string;
 }
 
+export interface PrepareConversationTurnOptions {
+  /** Bounded, already-sanitized evidence shared by all companion surfaces. */
+  freshContext?: string;
+}
+
 /**
  * Pure conversation preparation shared by the resident voice and Cowork.
  * It plans discourse and common ground; provider/tool routing stays with the
@@ -16,12 +21,15 @@ export interface PreparedConversationTurn {
  */
 export function prepareConversationTurn(
   heard: string,
-  history: ConversationTurn[] = []
+  history: ConversationTurn[] = [],
+  options: PrepareConversationTurnOptions = {}
 ): PreparedConversationTurn {
   const state = new ConversationStateManager(history);
   const plan = planConversationResponse(heard, history);
   const commonGround = state.renderForPrompt();
-  const systemGuidance = [plan.guidance, commonGround].filter(Boolean).join('\n\n');
+  const systemGuidance = [plan.guidance, commonGround, options.freshContext]
+    .filter(Boolean)
+    .join('\n\n');
   const envelopedPrompt = [
     '<companion_turn>',
     systemGuidance,
@@ -34,9 +42,10 @@ export function prepareConversationTurn(
 
 export function buildConversationTurnEnvelope(
   heard: string,
-  history: ConversationTurn[] = []
+  history: ConversationTurn[] = [],
+  options: PrepareConversationTurnOptions = {}
 ): string {
-  return prepareConversationTurn(heard, history).envelopedPrompt;
+  return prepareConversationTurn(heard, history, options).envelopedPrompt;
 }
 
 /** Non-empty, honest recovery for accepted turns. Cancellation remains the caller's concern. */

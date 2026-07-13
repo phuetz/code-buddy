@@ -1,12 +1,14 @@
 import { describe, expect, it, vi } from 'vitest';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import {
   CrossChannelConversationBridge,
   resolveCrossChannelBridgeConfig,
+  voiceMirrorContentForEvent,
   type CrossChannelBridgeConfig,
+  type CrossChannelConversationEvent,
 } from '../../src/conversation/cross-channel-bridge.js';
 
 function config(overrides: Partial<CrossChannelBridgeConfig> = {}): CrossChannelBridgeConfig {
@@ -61,6 +63,44 @@ describe('cross-channel companion conversation', () => {
     expect(deliver).toHaveBeenCalledTimes(2);
     expect(deliver.mock.calls[0]?.[1]).toContain('(voix)');
     expect(deliver.mock.calls[1]?.[1]).toContain('Lisa (voix)');
+  });
+
+  it('keeps voice natural but enriches its Telegram mirror with dated clickable sources', () => {
+    const events: CrossChannelConversationEvent[] = [
+      {
+        id: 'voice-user',
+        conversationId: 'lisa-test',
+        role: 'user',
+        content: 'Quelles sont les actualités ?',
+        origin: 'voice',
+        timestamp: '2026-07-13T12:00:00.000Z',
+      },
+      {
+        id: 'voice-assistant',
+        conversationId: 'lisa-test',
+        role: 'assistant',
+        content: 'Voici le bulletin parlé.',
+        origin: 'voice',
+        timestamp: '2026-07-13T12:00:01.000Z',
+      },
+    ];
+    const resolver = vi.fn(() => ({
+      speech: 'Voici le bulletin parlé.',
+      text: '1. Titre vérifié\nhttps://example.test/news',
+      citations: [{ title: 'Titre vérifié', url: 'https://example.test/news' }],
+      fetchedAt: Date.parse('2026-07-13T11:59:00.000Z'),
+      freshness: 'fresh' as const,
+    }));
+
+    const mirrored = voiceMirrorContentForEvent(events[1]!, events, resolver);
+
+    expect(mirrored).toContain('Titre vérifié');
+    expect(mirrored).toContain('https://example.test/news');
+    expect(mirrored).toContain('2026-07-13T11:59:00.000Z');
+    expect(resolver).toHaveBeenCalledWith(
+      'Quelles sont les actualités ?',
+      expect.arrayContaining([{ role: 'user', content: 'Quelles sont les actualités ?' }]),
+    );
   });
 
   it('accepts replies from the configured channel without echoing them back', () => {
@@ -169,6 +209,10 @@ describe('cross-channel companion conversation', () => {
       );
       await voice.recordVoiceTurn({ role: 'user', content: 'Tour écrit par le service vocal.' });
       await voice.flush();
+      const persistedLines = (await readFile(historyPath, 'utf8'))
+        .split(/\r?\n/)
+        .filter(Boolean);
+      expect(persistedLines).toHaveLength(1);
 
       const channel = new CrossChannelConversationBridge(
         config({ target: undefined, persist: true, historyPath })

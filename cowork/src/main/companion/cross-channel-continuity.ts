@@ -66,6 +66,19 @@ interface CoreCompanionIdentityModule {
   LISA_COMPANION_SYSTEM_PROMPT?: string;
 }
 
+interface CorePrefetchedContextModule {
+  resolvePrefetchedTurnContextForConversation?: (
+    heard: string,
+    history?: Array<{ role: 'user' | 'assistant'; content: string }>,
+    options?: { allowStale?: boolean },
+  ) => { freshness: 'fresh' | 'stale'; promptGuidance: string } | null;
+  isPrefetchedTurnRequest?: (heard: string) => boolean;
+}
+
+interface CorePrefetchEngineModule {
+  runPrefetchCycle?: () => Promise<unknown>;
+}
+
 type CoreLoader = <T>(relativePath: string) => Promise<T | null>;
 
 export interface PreparedCoworkContinuity {
@@ -177,9 +190,14 @@ export class CoworkCrossChannelContinuity {
     if (!isCompanionThreadTags(session.tags)) return EMPTY_CONTINUITY;
 
     try {
-      const state = await this.resolveBridge();
+      const [state, freshContextPrompt] = await Promise.all([
+        this.resolveBridge(),
+        this.resolveFreshContext(currentPrompt, localMessages),
+      ]);
       if (!state || !state.config.coworkEnabled || !state.bridge.isActive()) {
-        return EMPTY_CONTINUITY;
+        return freshContextPrompt
+          ? { ...EMPTY_CONTINUITY, systemPrompt: freshContextPrompt }
+          : EMPTY_CONTINUITY;
       }
 
       const localFingerprints = new Set(
@@ -208,6 +226,7 @@ export class CoworkCrossChannelContinuity {
           `Cette session Cowork est reliée au fil personnel de ${companionName}.`,
           'Les messages antérieurs injectés peuvent provenir de la voix, de Telegram ou d\'une autre session Cowork reliée.',
           'Reprends naturellement le dernier sujet utile sans annoncer un changement de canal. Ne confonds jamais ce fil avec une session Cowork non reliée.',
+          freshContextPrompt,
         ].filter(Boolean).join('\n\n'),
         recordAssistant: (messageId, content) => {
           this.recordTurn(state.bridge, session.id, messageId, 'assistant', content);
@@ -248,6 +267,42 @@ export class CoworkCrossChannelContinuity {
       identityPrompt: identityModule?.LISA_COMPANION_SYSTEM_PROMPT?.trim() ?? '',
     };
     return this.cached;
+  }
+
+  private async resolveFreshContext(
+    prompt: string,
+    history: CoworkEngineMessage[],
+  ): Promise<string> {
+    if (process.env.CODEBUDDY_PREFETCH === 'false') return '';
+    const [contextModule, engineModule] = await Promise.all([
+      this.coreLoader<CorePrefetchedContextModule>(
+        'conversation/prefetched-turn-context.js',
+      ),
+      this.coreLoader<CorePrefetchEngineModule>('companion/prefetch-engine.js'),
+    ]);
+    const conversationHistory = history.flatMap(
+      (message): Array<{ role: 'user' | 'assistant'; content: string }> =>
+        message.role === 'user' || message.role === 'assistant'
+          ? [{ role: message.role, content: message.content }]
+          : [],
+    );
+    const context = contextModule?.resolvePrefetchedTurnContextForConversation?.(
+      prompt,
+      conversationHistory,
+      { allowStale: true },
+    );
+    if (
+      context?.freshness === 'stale' ||
+      (!context && contextModule?.isPrefetchedTurnRequest?.(prompt))
+    ) {
+      void engineModule?.runPrefetchCycle?.().catch((error) =>
+        logWarn(
+          '[CoworkContinuity] fresh-context refresh failed:',
+          error instanceof Error ? error.message : String(error),
+        ),
+      );
+    }
+    return context?.promptGuidance?.trim() ?? '';
   }
 
   private recordTurn(
