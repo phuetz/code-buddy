@@ -612,6 +612,31 @@ describe('AgentExecutor', () => {
       expect(secondToolIndex).toBeLessThan(firstJitIndex);
     });
 
+    it('should not discover JIT context after a failed tool access', async () => {
+      const toolCall = makeToolCall('read_file', { path: '/denied/secret.ts' }, 'jit_denied');
+      setupLLMFlow(deps, [
+        { content: 'Reading file...', tool_calls: [toolCall] },
+        { content: 'Access denied.' },
+      ]);
+      (deps.toolHandler.executeTool as jest.Mock).mockResolvedValueOnce({
+        success: false,
+        error: 'Denied by policy',
+      });
+      const jitMock = runJitContextDiscoveryMock as unknown as jest.Mock;
+      jitMock.mockResolvedValue([{
+        role: 'system',
+        content: 'JIT_CONTEXT:SHOULD_NOT_BE_READ',
+      }]);
+
+      await executor.processUserMessage('Read the protected file', [], []);
+
+      expect(jitMock).not.toHaveBeenCalled();
+      const providerCalls = (deps.client.chatStream as jest.Mock).mock.calls;
+      const secondRequest = providerCalls[1][0] as CodeBuddyMessage[];
+      expect(secondRequest.some(message =>
+        String(message.content).includes('JIT_CONTEXT:SHOULD_NOT_BE_READ'))).toBe(false);
+    });
+
     it('should handle multi-round tool execution', async () => {
       // Use two non-streaming tools to keep execution-count assertions focused.
       const toolCall1 = makeToolCall('read_file', { path: '/a.txt' }, 'call_1');

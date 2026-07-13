@@ -1271,7 +1271,10 @@ export class AgentExecutor {
             // --- JIT context discovery: load subdirectory context files ---
             // Décision #2 du plan task #5 — promu du sequential vers streaming
             // pour parité d'enrichissement après chaque tool qui touche un path.
-            jitContextMessages.push(...await runJitContextDiscovery(toolCall));
+            // A denied/failed path access must not become an indirect context read.
+            if (result.success) {
+              jitContextMessages.push(...await runJitContextDiscovery(toolCall));
+            }
 
             // Check abort after tool execution completes
             if (abortController?.signal.aborted) {
