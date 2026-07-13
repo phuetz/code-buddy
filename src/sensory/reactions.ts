@@ -41,7 +41,9 @@ export function wireSensoryReactions(onPerception?: (p: Perception, evt: BaseEve
   const bus = getGlobalEventBus();
   const id = bus.on('sensory:perception', (evt: BaseEvent) => {
     const p = perceptionOf(evt);
-    logger.info(`[sensory] ${p.modality}/${p.kind} (salience ${p.salience ?? 0})`);
+    const message = `[sensory] ${p.modality}/${p.kind} (salience ${p.salience ?? 0})`;
+    if ((p.salience ?? 0) < 128) logger.debug(message);
+    else logger.info(message);
     getSensoryMemory().push(p); // short-term memory → consolidated by dreaming
     onPerception?.(p, evt);
   });
