@@ -54,9 +54,15 @@ import {
   createDashboardRouter,
   createCloudTaskRoutes,
   createWebhookRoutes,
+  createCognitionRoutes,
   mobileRoutes,
 } from './routes/index.js';
-import { setupWebSocket, closeAllConnections, getConnectionStats } from './websocket/index.js';
+import {
+  setupWebSocket,
+  closeAllConnections,
+  getConnectionStats,
+  wireCognitionBridge,
+} from './websocket/index.js';
 import { setupDesktopWebSocket, closeDesktopWebSocket } from './websocket/desktop-handler.js';
 import { startFleetHeartbeat, stopFleetHeartbeat } from '../fleet/heartbeat-broadcaster.js';
 import { startAutonomousTick, stopAutonomousTick } from '../fleet/autonomous-tick-broadcaster.js';
@@ -76,6 +82,7 @@ import { initializeDatabase } from '../database/database-manager.js';
 import type { InboundMessage } from '../channels/index.js';
 import { SERVER_CONFIG, TIMEOUT_CONFIG, LIMIT_CONFIG } from '../config/constants.js';
 import { listServerModels } from './agent-adapter.js';
+import { CognitiveHub } from '../cognition/cognitive-hub.js';
 
 // Lazy import to avoid circular dependency: channels/index.ts re-exports
 // TelegramChannel/DiscordChannel which import BaseChannel from channels/index.ts
@@ -185,7 +192,7 @@ function wantsStatusReport(query: Record<string, unknown>): boolean {
 /**
  * Create and configure the Express application
  */
-function createApp(config: ServerConfig): Application {
+function createApp(config: ServerConfig, cognitiveHub: CognitiveHub): Application {
   const app = express();
 
   // Trust proxy (for rate limiting behind reverse proxy)
@@ -289,6 +296,7 @@ function createApp(config: ServerConfig): Application {
   app.use('/api/sessions', sessionsRoutes);
   app.use('/api/memory', memoryRoutes);
   app.use('/api/lessons', lessonsRoutes);
+  app.use('/api/cognition', createCognitionRoutes(cognitiveHub));
   app.use('/api/workflows', createWorkflowApiRouter());
   app.use('/api/acp', createACPRoutes());
   app.use('/api/cloud/tasks', createCloudTaskRoutes());
@@ -1082,7 +1090,8 @@ export async function startServer(userConfig: Partial<ServerConfig> = {}): Promi
     /* prometheus exporter optional */
   }
 
-  const app = createApp(config);
+  const cognitiveHub = new CognitiveHub();
+  const app = createApp(config, cognitiveHub);
   // Optional TLS: serve the API (including /api/mobile) over HTTPS when
   // CODEBUDDY_HTTPS / CODEBUDDY_MOBILE_TLS is set so the mobile-supervision
   // endpoint can be exposed off-device securely. Default (no env) is plain HTTP,
@@ -1094,6 +1103,7 @@ export async function startServer(userConfig: Partial<ServerConfig> = {}): Promi
   const server: HttpServer = tlsOptions
     ? (createHttpsServer(tlsOptions, app) as unknown as HttpServer)
     : createServer(app);
+  (server as unknown as { _cognitiveHub?: CognitiveHub })._cognitiveHub = cognitiveHub;
 
   const startChannelBridge = async (baseUrl: string): Promise<void> => {
     try {
@@ -1146,7 +1156,11 @@ export async function startServer(userConfig: Partial<ServerConfig> = {}): Promi
   // Setup WebSocket if enabled
   if (config.websocketEnabled) {
     await setupWebSocket(server, config);
+    const unwireCognition = wireCognitionBridge(cognitiveHub);
+    (server as unknown as { _unwireCognition?: () => void })._unwireCognition =
+      unwireCognition;
     logger.info('WebSocket server enabled at /ws');
+    logger.info('Cognitive bus enabled at /ws (bounded, scoped, resumable)');
     // Dedicated desktop (Cowork) endpoint for the conversational core only
     // (chat / sessions / live stream events). Speaks the Cowork ClientEvent
     // /ServerEvent protocol, auth at handshake (JWT), origin-hardened. Mounted
@@ -1255,7 +1269,10 @@ export async function startServer(userConfig: Partial<ServerConfig> = {}): Promi
           const sensoryBridgeHandle = startSensoryBridge();
           const unwireReactions = wireSensoryReactions();
           const { wireSensoryWorkspace } = await import('../cognition/sensory-workspace.js');
-          const embodiedCognition = wireSensoryWorkspace();
+          const embodiedCognition = wireSensoryWorkspace({
+            workspace: cognitiveHub.workspace,
+            mesh: cognitiveHub.mesh,
+          });
           const { CognitiveContextProjector } = await import('../cognition/context-renderer.js');
           const cognitiveContextProjector = new CognitiveContextProjector(
             embodiedCognition.workspace,
@@ -2041,6 +2058,8 @@ export async function stopServer(server: HttpServer): Promise<void> {
     }
   }
   sensoryWired = false;
+  const cognitiveHub = (server as unknown as { _cognitiveHub?: CognitiveHub })._cognitiveHub;
+  cognitiveHub?.close();
   return new Promise((resolve, reject) => {
     // Phase (d).9 — cancel the heartbeat timer so it doesn't keep
     // emitting against a half-shut server. Idempotent.
@@ -2058,6 +2077,10 @@ export async function stopServer(server: HttpServer): Promise<void> {
     // Phase (d).23 — un-register peer.tool.invoke + .stream.
     unwirePeerToolBridge();
     unwirePeerMissionExchangeBridge();
+
+    const unwireCognition = (server as unknown as { _unwireCognition?: () => void })
+      ._unwireCognition;
+    unwireCognition?.();
 
     // Detach the channel-A2A bridge handler + shut down the
     // ChannelManager so polling loops (Telegram, Discord, ...) stop.

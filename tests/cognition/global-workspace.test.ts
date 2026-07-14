@@ -17,6 +17,22 @@ function draft(overrides: Partial<WorkspaceDraft> = {}): WorkspaceDraft {
 }
 
 describe('GlobalWorkspace', () => {
+  it('notifies subscribers asynchronously with canonical immutable items', async () => {
+    const workspace = new GlobalWorkspace();
+    const received: WorkspaceDraft[] = [];
+    const unsubscribe = workspace.subscribe((item) => received.push(item));
+    const published = workspace.publish(draft());
+    expect(received).toEqual([]);
+    await Promise.resolve();
+    expect(received).toHaveLength(1);
+    expect(received[0]).toMatchObject({ id: published?.id, revision: 1 });
+    expect(Object.isFrozen(received[0])).toBe(true);
+    unsubscribe();
+    workspace.publish(draft({ correlationId: 'turn-2' }));
+    await Promise.resolve();
+    expect(received).toHaveLength(1);
+  });
+
   it('stores immutable clones instead of caller-owned objects', () => {
     const workspace = new GlobalWorkspace();
     const payload = { nested: { label: 'cup' } };

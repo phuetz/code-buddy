@@ -67,6 +67,12 @@ interface ConnectionState {
   // because its ws.bufferedAmount exceeded SERVER_CONFIG.WS_BROADCAST_BUFFER_LIMIT.
   // Reset only on disconnect; surfaced via getConnectionStats().totalBroadcastsDropped.
   droppedBroadcasts: number;
+  /** Transport facts captured from the server-side upgrade request. */
+  loopback?: boolean;
+  secure?: boolean;
+  /** Opaque extension lifecycle hooks. Never exposed with the socket itself. */
+  extensionCloseHandlers?: Set<() => void>;
+  extensionsCleaned?: boolean;
 }
 
 interface ConnectionTurn {
@@ -84,10 +90,152 @@ let serverStartedAt = 0;
 type MessageHandler = (
   ws: WebSocket,
   state: ConnectionState,
-  payload: unknown
+  payload: unknown,
+  envelope: WebSocketExtensionEnvelope,
 ) => Promise<void>;
 
 const messageHandlers = new Map<string, MessageHandler>();
+const laneBypassMessageTypes = new Set<string>(['stop']);
+
+export interface WebSocketExtensionEnvelope {
+  readonly id?: string;
+  readonly requestId?: string;
+}
+
+export interface WebSocketExtensionPrincipal {
+  /** Server-derived principal id; request payloads cannot override it. */
+  readonly id: string;
+  readonly source: string;
+  readonly scopes: readonly string[];
+  readonly loopback: boolean;
+  readonly secure: boolean;
+}
+
+export interface WebSocketExtensionContext {
+  readonly connectionId: string;
+  readonly principal: WebSocketExtensionPrincipal;
+  /** Sends only while the connection remains open. */
+  send(message: WebSocketResponse): boolean;
+  /** Transport-level backpressure signal without exposing the WebSocket. */
+  isBackpressured(maxBufferedBytes: number): boolean;
+  /** Registers connection cleanup and returns a local deregistration function. */
+  onClose(listener: () => void): () => void;
+}
+
+export interface WebSocketExtensionRegistration {
+  readonly type: string;
+  readonly bypassLane?: boolean;
+  handle(
+    context: WebSocketExtensionContext,
+    payload: unknown,
+    envelope: WebSocketExtensionEnvelope,
+  ): Promise<void> | void;
+}
+
+function extensionPrincipal(state: ConnectionState): WebSocketExtensionPrincipal {
+  let id = `connection:${state.id}`;
+  let source = 'websocket:connection';
+  if (state.userId) {
+    id = `user:${state.userId}`;
+    source = 'websocket:user';
+  } else if (state.keyId) {
+    id = `key:${state.keyId}`;
+    source = 'websocket:api-key';
+  } else if (state.deviceId) {
+    id = `device:${state.deviceId}`;
+    source = 'websocket:device';
+  }
+  return Object.freeze({
+    id,
+    source,
+    scopes: Object.freeze(state.authenticated ? [...state.scopes] : []),
+    loopback: state.loopback === true,
+    secure: state.secure === true,
+  });
+}
+
+function createExtensionContext(
+  ws: WebSocket,
+  state: ConnectionState,
+): WebSocketExtensionContext {
+  return Object.freeze({
+    connectionId: state.id,
+    principal: extensionPrincipal(state),
+    send(message: WebSocketResponse): boolean {
+      if (ws.readyState !== 1) return false;
+      ws.send(JSON.stringify(message));
+      return true;
+    },
+    isBackpressured(maxBufferedBytes: number): boolean {
+      if (ws.readyState !== 1) return true;
+      return ws.bufferedAmount >= Math.max(0, maxBufferedBytes);
+    },
+    onClose(listener: () => void): () => void {
+      if (state.extensionsCleaned) {
+        listener();
+        return () => undefined;
+      }
+      const listeners = state.extensionCloseHandlers ?? new Set<() => void>();
+      state.extensionCloseHandlers = listeners;
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+  });
+}
+
+function cleanupWebSocketExtensions(state: ConnectionState): void {
+  if (state.extensionsCleaned) return;
+  state.extensionsCleaned = true;
+  const listeners = state.extensionCloseHandlers;
+  state.extensionCloseHandlers = undefined;
+  if (!listeners) return;
+  for (const listener of listeners) {
+    try {
+      listener();
+    } catch (error) {
+      logger.warn('[ws] extension close hook failed', {
+        connectionId: state.id,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+  listeners.clear();
+}
+
+function resetWebSocketExtensionsForIdentityChange(state: ConnectionState): void {
+  cleanupWebSocketExtensions(state);
+  state.extensionsCleaned = false;
+}
+
+/**
+ * Add a message type without leaking the underlying socket or ConnectionState.
+ * The returned function removes exactly this registration and is idempotent.
+ */
+export function registerWebSocketExtension(
+  registration: WebSocketExtensionRegistration,
+): () => void {
+  if (!/^[a-z][a-z0-9_.:-]{0,127}$/.test(registration.type)) {
+    throw new Error(`Invalid WebSocket extension type: ${registration.type}`);
+  }
+  if (messageHandlers.has(registration.type)) {
+    throw new Error(`WebSocket message type already registered: ${registration.type}`);
+  }
+  const handler: MessageHandler = async (ws, state, payload, envelope) => {
+    await registration.handle(createExtensionContext(ws, state), payload, envelope);
+  };
+  messageHandlers.set(registration.type, handler);
+  if (registration.bypassLane) laneBypassMessageTypes.add(registration.type);
+
+  let registered = true;
+  return () => {
+    if (!registered) return;
+    registered = false;
+    if (messageHandlers.get(registration.type) === handler) {
+      messageHandlers.delete(registration.type);
+    }
+    if (registration.bypassLane) laneBypassMessageTypes.delete(registration.type);
+  };
+}
 
 /**
  * Cancel the current turn without throwing from a socket lifecycle callback.
@@ -271,8 +419,11 @@ messageHandlers.set('authenticate', async (ws, state, payload) => {
   if (apiKey) {
     const key = validateApiKey(apiKey);
     if (key) {
+      resetWebSocketExtensionsForIdentityChange(state);
       state.authenticated = true;
       state.keyId = key.id;
+      state.userId = undefined;
+      state.deviceId = undefined;
       state.scopes = key.scopes;
       state.anonymousRemote = false;
       send(ws, {
@@ -293,13 +444,16 @@ messageHandlers.set('authenticate', async (ws, state, payload) => {
     }
     const decoded = verifyToken(token, jwtSecret);
     if (decoded) {
+      resetWebSocketExtensionsForIdentityChange(state);
       state.authenticated = true;
-      state.userId = decoded.userId;
+      state.userId = decoded.userId ?? decoded.sub;
+      state.keyId = undefined;
+      state.deviceId = undefined;
       state.scopes = decoded.scopes || ['chat'];
       state.anonymousRemote = false;
       send(ws, {
         type: 'authenticated',
-        payload: { userId: decoded.userId, scopes: state.scopes },
+        payload: { userId: state.userId, scopes: state.scopes },
         timestamp: new Date().toISOString(),
       });
       return;
@@ -318,8 +472,11 @@ messageHandlers.set('authenticate', async (ws, state, payload) => {
     ...(auth.requestedScopes ? { requestedScopes: auth.requestedScopes } : {}),
   });
   if (deviceOutcome.outcome === 'authenticated') {
+    resetWebSocketExtensionsForIdentityChange(state);
     state.authenticated = true;
     state.deviceId = deviceOutcome.deviceId;
+    state.userId = undefined;
+    state.keyId = undefined;
     state.scopes = deviceOutcome.scopes ?? [];
     state.anonymousRemote = false;
     send(ws, {
@@ -808,20 +965,29 @@ messageHandlers.set('peer:request', async (ws, state, payload) => {
  * Process incoming message
  */
 async function processMessage(ws: WebSocket, state: ConnectionState, data: RawData): Promise<void> {
-  let message: WebSocketMessage;
+  let decoded: unknown;
 
   try {
-    message = JSON.parse(data.toString());
+    decoded = JSON.parse(data.toString());
   } catch {
     sendError(ws, 'INVALID_JSON', 'Invalid JSON message');
     return;
   }
+  if (!decoded || typeof decoded !== 'object' || Array.isArray(decoded)) {
+    sendError(ws, 'INVALID_MESSAGE', 'Message must be a JSON object');
+    return;
+  }
+  const message = decoded as WebSocketMessage;
 
   state.lastActivity = Date.now();
 
-  const { type, id, payload } = message;
+  const { type, payload } = message;
+  const id = typeof message.id === 'string' ? message.id.slice(0, 256) : undefined;
+  const requestId = typeof message.requestId === 'string'
+    ? message.requestId.slice(0, 256)
+    : undefined;
 
-  if (!type) {
+  if (typeof type !== 'string' || type.length === 0 || type.length > 128) {
     sendError(ws, 'INVALID_MESSAGE', 'Message type is required', id);
     return;
   }
@@ -834,9 +1000,13 @@ async function processMessage(ws: WebSocket, state: ConnectionState, data: RawDa
 
   // Cancellation must not wait behind the active chat turn in the per-socket
   // lane queue; otherwise a blocked provider can never receive its abort.
-  if (type === 'stop') {
+  const envelope: WebSocketExtensionEnvelope = {
+    ...(id ? { id } : {}),
+    ...(requestId ? { requestId } : {}),
+  };
+  if (laneBypassMessageTypes.has(type)) {
     try {
-      await handler(ws, state, payload || {});
+      await handler(ws, state, payload ?? {}, envelope);
     } catch (error) {
       sendError(ws, 'HANDLER_ERROR', error instanceof Error ? error.message : String(error), id);
     }
@@ -850,7 +1020,7 @@ async function processMessage(ws: WebSocket, state: ConnectionState, data: RawDa
 
   try {
     const enqueueMessage = await getEnqueueMessage();
-    await enqueueMessage(sessionKey, () => handler(ws, state, payload || {}));
+    await enqueueMessage(sessionKey, () => handler(ws, state, payload ?? {}, envelope));
   } catch (error) {
     sendError(ws, 'HANDLER_ERROR', error instanceof Error ? error.message : String(error), id);
   }
@@ -897,14 +1067,33 @@ export async function setupWebSocket(
 
   wss.on('connection', (ws: WebSocket, req) => {
     const now = Date.now();
+    const loopback = isDirectLoopbackRequest(req.socket.remoteAddress, req.headers);
     const state: ConnectionState = {
       id: generateConnectionId(),
       authenticated: !config.authEnabled, // Auto-auth if auth disabled
       scopes: config.authEnabled
         ? []
-        : ['chat', 'tools', 'sessions', 'memory', 'avatar:read', 'avatar:write'],
-      anonymousRemote:
-        !config.authEnabled && !isDirectLoopbackRequest(req.socket.remoteAddress, req.headers),
+        : [
+          'chat',
+          'tools',
+          'sessions',
+          'memory',
+          'avatar:read',
+          'avatar:write',
+          ...(loopback
+            ? [
+              'cognition:write',
+              'cognition:write-local',
+              'cognition:sense',
+              'cognition:read',
+              'cognition:read-local',
+              'cognition:raw',
+            ]
+            : []),
+        ],
+      anonymousRemote: !config.authEnabled && !loopback,
+      loopback,
+      secure: Boolean((req.socket as typeof req.socket & { encrypted?: boolean }).encrypted),
       lastActivity: now,
       streaming: false,
       authAttempts: 0,
@@ -934,6 +1123,7 @@ export async function setupWebSocket(
 
     ws.on('close', () => {
       abortActiveTurn(state);
+      cleanupWebSocketExtensions(state);
       connections.delete(ws);
       getAvatarRendererRegistry().disconnectConnection(state.id);
     });
@@ -941,6 +1131,7 @@ export async function setupWebSocket(
     ws.on('error', (error) => {
       logger.error(`WebSocket error [${state.id}]:`, error);
       abortActiveTurn(state);
+      cleanupWebSocketExtensions(state);
       connections.delete(ws);
       getAvatarRendererRegistry().disconnectConnection(state.id);
     });
@@ -953,6 +1144,7 @@ export async function setupWebSocket(
     for (const [ws, state] of connections.entries()) {
       if (now - state.lastActivity > TIMEOUT_CONFIG.WS_IDLE_TIMEOUT) {
         abortActiveTurn(state);
+        cleanupWebSocketExtensions(state);
         ws.terminate();
         connections.delete(ws);
       } else {
@@ -1056,6 +1248,7 @@ export function broadcast(message: WebSocketResponse, scopeFilter?: string): voi
 export function closeAllConnections(): void {
   for (const [ws, state] of connections.entries()) {
     abortActiveTurn(state);
+    cleanupWebSocketExtensions(state);
     ws.close(1001, 'Server shutting down');
   }
   connections.clear();
@@ -1076,5 +1269,6 @@ export function _registerConnectionForTests(ws: WebSocket, state: ConnectionStat
  * a close method). Use in beforeEach/afterEach.
  */
 export function _resetConnectionsForTests(): void {
+  for (const state of connections.values()) cleanupWebSocketExtensions(state);
   connections.clear();
 }

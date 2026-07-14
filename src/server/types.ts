@@ -159,7 +159,17 @@ export type ApiScope =
    *  routed through the peer-rpc registry). Active routing — caller can
    *  trigger work on the receiver. Pair this scope with fleet:listen if
    *  the caller also wants to observe events. */
-  | 'peer:invoke';
+  | 'peer:invoke'
+  | 'cognition:write'
+  | 'cognition:write-local'
+  | 'cognition:write-lan'
+  | 'cognition:write-foreign'
+  | 'cognition:sense'
+  | 'cognition:read'
+  | 'cognition:read-local'
+  | 'cognition:read-lan'
+  | 'cognition:raw'
+  | 'cognition:admin';
 
 export interface JwtPayload {
   /** Subject (user ID or key ID) */

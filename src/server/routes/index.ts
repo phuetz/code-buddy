@@ -19,3 +19,4 @@ export { createDashboardRouter } from './dashboard.js';
 export { createCloudTaskRoutes } from './cloud-tasks.js';
 export { createWebhookRoutes } from './webhooks.js';
 export { default as mobileRoutes } from './mobile.js';
+export { createCognitionRoutes } from './cognition.js';

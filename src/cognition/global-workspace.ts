@@ -46,6 +46,8 @@ export interface GlobalWorkspaceOptions {
   now?: () => number;
 }
 
+export type WorkspaceSubscriber = (item: WorkspaceItem) => void;
+
 /**
  * In-memory, immutable and bounded cognitive blackboard.
  *
@@ -58,6 +60,7 @@ export class GlobalWorkspace {
   private readonly capacity: number;
   private readonly defaultTtlMs: number;
   private readonly now: () => number;
+  private readonly subscribers = new Set<WorkspaceSubscriber>();
   private sequence = 0;
   private revision = 0;
   private counters = { published: 0, rejected: 0, evicted: 0, expired: 0 };
@@ -124,7 +127,22 @@ export class GlobalWorkspace {
     this.items.set(id, item);
     if (slot) this.slots.set(slot, id);
     this.counters.published++;
+    this.notify(item);
     return cloneAndFreeze(item);
+  }
+
+  /**
+   * Observe canonical publications without transferring ownership of workspace
+   * state to the listener. Delivery is asynchronous so a slow bridge cannot
+   * block sensory producers; every listener receives its own immutable clone.
+   */
+  subscribe(listener: WorkspaceSubscriber): () => void {
+    this.subscribers.add(listener);
+    return () => this.subscribers.delete(listener);
+  }
+
+  currentRevision(): number {
+    return this.revision;
   }
 
   get(id: string): WorkspaceItem | undefined {
@@ -172,5 +190,19 @@ export class GlobalWorkspace {
     if (!item.dedupeKey) return;
     const slot = `${item.producerId}:${item.dedupeKey}`;
     if (this.slots.get(slot) === item.id) this.slots.delete(slot);
+  }
+
+  private notify(item: WorkspaceItem): void {
+    for (const listener of this.subscribers) {
+      queueMicrotask(() => {
+        if (!this.subscribers.has(listener)) return;
+        try {
+          listener(cloneAndFreeze(item));
+        } catch {
+          // Subscribers are isolated from the workspace write path. Bridges
+          // report their own delivery failures and can recover from snapshots.
+        }
+      });
+    }
   }
 }

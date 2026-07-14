@@ -34,8 +34,27 @@ The body can see, hear, maintain memory and deliberate concurrently, but it stil
 - A transactional `CognitiveContextProjector` selects a small relevant snapshot for the next local voice turn. It separates deterministic evidence from tentative LLM thoughts, allowlists payload fields, enforces route privacy and character budgets, and commits consumption only after a successful generation.
 - Cognitive context is acquired only after the actual voice route is known. A non-loopback route receives only `cloud-ok` items; current voice transcripts and specialist conclusions remain `local-only` and therefore fail closed.
 - Fleet and the active-model pool now classify egress per model instead of only per machine. A mixed Darkstar peer can advertise local Ollama and cloud Claude simultaneously without making them share one privacy label; subscription CLIs remain `cloud` even though their child process is local. The router applies privacy and token-based cost admission per lane and hard-excludes saturated peers.
+- `CognitiveHub` is now the process authority for canonical IDs, revisions, server epoch, derived provenance, correlation ownership, idempotent network retries, cancellation and transactional context leases. Network drafts cannot forge producer identity, timestamps, depth or provenance, and executable `action` items are not accepted by the wire contract.
+- The existing `/ws` gateway exposes a versioned cognitive bus with server-derived principals, scopes and transport facts. `local-only` requires direct loopback; `trusted-lan` requires loopback or actual TLS in addition to its scope. Each subscription is bounded and emits `cognition.gap` when a slow consumer must resynchronise.
+- `GET /api/cognition/snapshot` provides bounded revision recovery after a gap or reconnect. Raw media, local paths and arbitrary payload fields remain outside both transport surfaces.
 
-The workspace is currently process-local. The resident sensory/voice server benefits from these specialists; Telegram and Cowork keep conversation continuity through their existing bridge, but do not yet share this in-memory cognitive blackboard. Cross-process cognition requires an authenticated, encrypted event transport before it can be claimed as coherent.
+The live workspace remains intentionally ephemeral and owned by one server process, but authenticated external processes can now reach that authority through the bounded bus instead of creating competing blackboards. Telegram and Cowork still use their existing conversation continuity bridge until their adapters adopt cognitive projections and transactional leases; raw cognitive items must never cross into the Electron renderer.
+
+## Two timescales of continuity
+
+The cognitive workspace is short-term working memory, not Lisa's durable identity. Its percepts, tentative hypotheses and transient plans expire by design. Long-term continuity is a separate consolidation pipeline:
+
+```text
+live workspace (seconds/minutes)
+        │ selective, sourced consolidation
+        ▼
+facts + decisions + lessons + relationship memory (months/years)
+        │ indexes, embeddings and knowledge graph
+        ▼
+future sessions, models and robot versions
+```
+
+This separation is the "octopus principle" captured in the `claude-et-patrice` project: intelligence without transmissible memory repeatedly rediscovers the same lessons. The goal is not to persist every internal thought. It is to preserve verified knowledge, decisions, preferences and useful experience with provenance, revision and forgetting policies, then retrieve them at the right time. Code Explorer supplies technical indexing; persistent memory and lessons supply personal/operational continuity; the cognitive workspace supplies the present moment.
 
 ## Safety and scheduling invariants
 
@@ -63,9 +82,9 @@ Add anonymous tracker ids, 2D observations and explicit camera liveness refreshe
 
 The local dialogue reflector and critic are implemented. Add memory, planner and prospective specialists with structured proposal schemas. Fleet sessions require propagated cancellation, bounded/compacted history and encrypted persistence before they may carry private transcripts.
 
-### 4. Extend selective workspace context
+### 4. Attach cross-surface cognitive clients
 
-The local voice path now uses relevance, privacy, freshness and hard character limits with transactional consumption. Add token-aware selection for specialist inputs, then an authenticated cross-process projection for Telegram and Cowork. Keep `fact` evidence structurally separate from `hypothesis|proposal|plan` at every semantic review gate.
+The central transport and snapshot recovery are implemented. Add a reconnecting client with epoch/cursor recovery, then attach Telegram and Cowork to projected context rather than raw items. Commit the lease only after durable delivery, release it on failure, and propagate cancellation. Keep `fact` evidence structurally separate from `hypothesis|proposal|plan` at every semantic review gate.
 
 ### 5. Cowork observability
 
