@@ -193,4 +193,52 @@ describe('conversation quality and fresh context', () => {
     expect(formatted.speech).not.toContain('The rise');
     expect(formatted.citations).toHaveLength(2);
   });
+
+  it('extracts concrete emphasized headlines from real-world homepage snippets', () => {
+    const formatted = formatNewsDigest({
+      kind: 'news',
+      query: 'actualités importantes France monde | actualités technologie IA',
+      locale: 'fr-FR',
+      fetchedAt: Date.parse('2026-07-14T12:00:00Z'),
+      items: [
+        {
+          title: 'franceinfo - Actualités en temps réel et info en direct',
+          url: 'https://www.franceinfo.fr/',
+          source: 'www.franceinfo.fr',
+          summary:
+            '&quot;Ce sera massif&quot; : Emmanuel Macron ... du théâtre à Emmanuel Macron · <strong>Dernier défilé d&#x27;Emmanuel Macron, démonstrations militaires inédites, 7 000 policiers mobilisés</strong>......',
+        },
+        {
+          title: 'Intelligence artificielle - Actualités, vidéos et infos en direct',
+          url: 'https://www.lemonde.fr/intelligence-artificielle/',
+          source: 'www.lemonde.fr',
+          summary:
+            'La présidente d’une start-up américaine d’intelligence artificielle expose sa vision de la sécurité, de la souveraineté et de l’emploi. · Publié le 02 juillet 2026.',
+        },
+        {
+          title:
+            "Ouest-France : toute l'actualité en direct, l'info en continu en France, dans les régions et dans le monde",
+          url: 'https://www.ouest-france.fr/',
+          source: 'www.ouest-france.fr',
+          summary:
+            'DIRECT VIDÉO. 14-Juillet : <strong>suivez le défilé militaire sur les Champs-Élysées à Paris</strong> ... Tour de France 2026.',
+        },
+        {
+          title: 'IA : le problème de l’Europe n’est plus la technologie, c’est le marché',
+          url: 'https://www.maddyness.com/ia-marche',
+          source: 'www.maddyness.com',
+        },
+      ],
+    });
+
+    expect(formatted.speech).toContain('Dernier défilé');
+    expect(formatted.speech).toContain('La présidente d’une start-up');
+    expect(formatted.speech).toContain('Suivez le défilé militaire');
+    expect(formatted.speech).toContain('le problème de l’Europe');
+    expect(formatted.speech).not.toContain('Ce sera massif');
+    expect(formatted.speech).not.toContain('Actualités en temps réel');
+    expect(formatted.speech).not.toContain('Actualités, vidéos et infos en direct');
+    expect(formatted.speech).toContain('collectés le 14 juillet 2026');
+    expect(formatted.citations).toHaveLength(4);
+  });
 });

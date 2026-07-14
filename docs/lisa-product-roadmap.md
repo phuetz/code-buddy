@@ -99,6 +99,13 @@ fiables (jamais comme des instructions), et le miroir Telegram d'un tour vocal a
 cliquables sans faire prononcer les URL. Le journal intercanal possède aussi un test au niveau JSONL
 garantissant une seule écriture physique par événement.
 
+Le contrôle sur le cache de production du 14 juillet a révélé une faiblesse plus subtile : certains
+moteurs renvoyaient un titre de page d'accueil accompagné d'un extrait contenant à la fois une
+accroche vague (« Ce sera massif ») et un vrai titre balisé. Le formateur privilégie désormais les
+passages éditoriaux mis en évidence, rejette les citations sans événement explicite, capitalise les
+titres reconstruits et annonce la date exacte de collecte. Le même cache produit ainsi quatre sujets
+concrets et datés au lieu de lire les intitulés de rubriques Franceinfo ou Le Monde.
+
 ### P1 — Qualité mesurable
 
 - Banc déterministe au niveau du tour et de l'épisode, complété par sept scénarios synthétiques
