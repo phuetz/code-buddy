@@ -103,8 +103,9 @@ ffmpeg the camera sense uses — so no `cpal`, no `libasound2-dev`, no sudo), ru
 streaming energy-VAD endpointer to carve the stream into utterances, decodes each
 one in-process (`stt`, ~120 ms) and broadcasts an `audio/transcript_final` event
 whose payload already carries the text — the Code Buddy side consumes it directly,
-no WAV round-trip. The model is OFFLINE, so there is no frame-by-frame
-`transcript_partial`; latency is set by the endpoint silence, not the decode.
+no WAV round-trip. For utterances longer than 1200 ms, one bounded offline
+snapshot may also emit `transcript_partial`. It is explicitly unstable and used
+only to retarget model/tool prewarming; it never triggers a reply or action.
 
 ```bash
 cargo build --release --features live-audio   # implies stt
@@ -125,6 +126,8 @@ exact fixed-threshold behavior (then `BUDDY_SENSE_MIC_THRESHOLD` is the open
 threshold and 60% of it is the close threshold). `BUDDY_SENSE_MIC_ENDPOINT_MS`
 sets silence to close an utterance (default `420`; confirmed silence is trimmed
 to an 80 ms acoustic tail before STT),
+`BUDDY_SENSE_MIC_PARTIAL_MS` sets the one-shot early snapshot threshold (default
+`1200`; `0` disables it),
 `BUDDY_SENSE_MIC_DEBUG=1` (echo each final to stderr), `BUDDY_SENSE_FFMPEG` (ffmpeg path).
 
 Each `transcript_final` includes additive endpoint diagnostics: `endedReason`

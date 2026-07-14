@@ -160,7 +160,7 @@ export interface HybridReplyOptions {
 export interface HybridReplyHandler extends ReplyFn {
   stream: StreamReplyFn;
   /** Prepare the grounded standby without classifying or answering audio. */
-  prewarm(): Promise<void>;
+  prewarm(transcriptHint?: string): Promise<void>;
   /** Release any unused predictive standby. */
   dispose(): void;
 }
@@ -642,9 +642,11 @@ export function makeHybridReply(options: HybridReplyOptions = {}): HybridReplyHa
     }
   };
 
-  reply.prewarm = async (): Promise<void> => {
+  reply.prewarm = async (transcriptHint?: string): Promise<void> => {
     await ensureDeps();
-    await (agentReply as ReplyFn & { prewarm?: () => Promise<void> }).prewarm?.();
+    await (
+      agentReply as ReplyFn & { prewarm?: (hint?: string) => Promise<void> }
+    ).prewarm?.(transcriptHint);
   };
   reply.dispose = (): void => {
     (agentReply as ReplyFn & { dispose?: () => void } | undefined)?.dispose?.();

@@ -41,8 +41,8 @@ import {
  *  `opts.signal` (optional) lets a barge-in abort the turn's LLM calls. */
 export interface AgentRunner {
   (transcript: string, opts?: VoiceStepOptions): Promise<string>;
-  /** Build a transcript-free standby while the human is still speaking. */
-  prewarm?: () => Promise<void>;
+  /** Build or retarget a standby while the human is still speaking. */
+  prewarm?: (transcriptHint?: string) => Promise<void>;
   /** Release an unused standby during server teardown. */
   dispose?: () => void;
 }
@@ -71,7 +71,7 @@ export interface AgentReplyOptions {
 
 /** Reply function plus the predictive lifecycle used by the live VAD hook. */
 export interface AgentReplyHandler extends ReplyFn {
-  prewarm(): Promise<void>;
+  prewarm(transcriptHint?: string): Promise<void>;
   dispose(): void;
 }
 
@@ -373,10 +373,27 @@ function makeDefaultAgentRunner(cwd: string): AgentRunner {
     }
   };
 
-  runner.prewarm = async (): Promise<void> => {
+  runner.prewarm = async (transcriptHint?: string): Promise<void> => {
+    if (disposed || active) return;
+    const hint = transcriptHint?.trim() || VOICE_AGENT_PREWARM_UTTERANCE;
+    const existing = standby;
+    const desiredRoute = await resolveGroundedAgentRoute(hint);
+    if (disposed || active) return;
+    if (existing && standby === existing) {
+      try {
+        const prepared = await existing;
+        if (disposed || active || standby !== existing) return;
+        if (routeKey(prepared.route) === routeKey(desiredRoute)) return;
+        standby = null;
+        prepared.agent.dispose({ skipSessionLearning: true });
+      } catch {
+        if (standby === existing) standby = null;
+      }
+    } else if (standby) {
+      return;
+    }
     if (disposed || active || standby) return;
-    const pending = resolveGroundedAgentRoute(VOICE_AGENT_PREWARM_UTTERANCE)
-      .then((route) => createPrepared(route));
+    const pending = createPrepared(desiredRoute);
     standby = pending;
     try {
       await pending;
@@ -576,9 +593,9 @@ export function makeAgentReply(options: AgentReplyOptions = {}): AgentReplyHandl
   };
 
   const handler = reply as AgentReplyHandler;
-  handler.prewarm = async (): Promise<void> => {
+  handler.prewarm = async (transcriptHint?: string): Promise<void> => {
     if (agentRunner.prewarm) {
-      await runInVoiceTurn(() => agentRunner.prewarm!());
+      await runInVoiceTurn(() => agentRunner.prewarm!(transcriptHint));
     }
   };
   handler.dispose = (): void => {

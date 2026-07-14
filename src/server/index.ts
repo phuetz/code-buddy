@@ -1716,6 +1716,10 @@ export async function startServer(userConfig: Partial<ServerConfig> = {}): Promi
                 // the grounded standby during the user's own speaking time;
                 // the transcript gate below remains the only authority to talk.
                 onSpeechStart: () => replyFn.prewarm(),
+                // One local offline partial may retarget the prepared model and
+                // MCP set. It is never published, remembered, or treated as a
+                // committed request; only transcript_final can enter cognition.
+                onSpeechPartial: ({ text }) => replyFn.prewarm(text),
                 onBargeIn: (_text, interruptedTurnId) => {
                   reply.interrupt();
                   if (interruptedTurnId) {

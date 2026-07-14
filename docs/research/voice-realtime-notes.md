@@ -25,6 +25,12 @@ Date: 2026-06-28
 
 ## Next technical steps
 
-- Replace energy VAD with Silero or TEN VAD when a lightweight runtime dependency is acceptable.
-- Add an optional streaming partial-transcript path so Code Buddy can start planning before end-of-utterance.
-- Track rolling p50/p95 voice loop latency in the companion journal.
+- Livré : Silero est disponible derrière la feature Rust `neural-vad`, avec
+  repli énergétique local.
+- Livré le 15 juillet 2026 : les phrases longues produisent au plus un brouillon
+  STT local borné pour retargeter le préchauffage du cerveau. Il n'a aucune
+  autorité de réponse ou d'action et n'est pas mémorisé.
+- Livré : le journal compagnon calcule les p50/p95 STT, premier son, réponse
+  perçue et reprise après lecture sans conserver le verbatim dans ces agrégats.
+- Prochaine mesure : comparer sur le pilote réel la latence premier son avec et
+  sans anticipation, puis ajuster `BUDDY_SENSE_MIC_PARTIAL_MS`.

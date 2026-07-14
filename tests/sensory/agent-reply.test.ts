@@ -151,9 +151,10 @@ describe('agent-reply — spoken instruction → full agent turn', () => {
     runner.prewarm = vi.fn(async () => undefined);
     runner.dispose = vi.fn();
     const reply = makeAgentReply({ agentRunner: runner, summarize: async () => 'unused' });
-    await reply.prewarm();
+    await reply.prewarm('cherche les actualités');
     reply.dispose();
     expect(runner.prewarm).toHaveBeenCalledOnce();
+    expect(runner.prewarm).toHaveBeenCalledWith('cherche les actualités');
     expect(runner.dispose).toHaveBeenCalledOnce();
     expect(runner).not.toHaveBeenCalled();
   });

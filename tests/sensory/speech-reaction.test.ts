@@ -37,6 +37,13 @@ function transcriptFinal(text: string, payload: Record<string, unknown> = {}): v
   });
 }
 
+function transcriptPartial(text: string, payload: Record<string, unknown> = {}): void {
+  getGlobalEventBus().emit('sensory:perception', {
+    source: 'test',
+    metadata: { modality: 'audio', kind: 'transcript_partial', payload: { text, ...payload } },
+  });
+}
+
 function speechStart(payload: Record<string, unknown> = {}): void {
   getGlobalEventBus().emit('sensory:perception', {
     source: 'test',
@@ -56,6 +63,37 @@ async function fileExists(file: string): Promise<boolean> {
 }
 
 describe('speech reaction — speech_end → STT → percept', () => {
+  it('uses a partial transcript only for preparation and waits for the final before cognition', async () => {
+    const partials: Array<{ text: string; audioMs?: number; decodeMs?: number }> = [];
+    const heard: string[] = [];
+    const unwire = wireSpeechReaction({
+      debounceMs: 0,
+      onSpeechPartial: async (partial) => {
+        partials.push(partial);
+      },
+      onHeard: async (text) => {
+        heard.push(text);
+      },
+    });
+    try {
+      speechStart({ rms: 0.08 });
+      transcriptPartial('cherche les actualités', { audioMs: 1200, decodeMs: 95 });
+      await tick();
+      expect(partials).toEqual([{
+        text: 'cherche les actualités',
+        audioMs: 1200,
+        decodeMs: 95,
+      }]);
+      expect(heard).toEqual([]);
+
+      transcriptFinal('cherche les actualités françaises');
+      await tick();
+      expect(heard).toEqual(['cherche les actualités françaises']);
+    } finally {
+      unwire();
+    }
+  });
+
   it('starts predictive preparation on VAD open without hearing or responding', async () => {
     const starts: Array<Record<string, unknown>> = [];
     const heard: string[] = [];

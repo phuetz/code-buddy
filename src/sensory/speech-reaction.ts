@@ -54,6 +54,12 @@ export interface RecognizedVoiceTurn {
   context: VoiceTurnContext;
 }
 
+export interface PartialVoiceTranscript {
+  text: string;
+  audioMs?: number;
+  decodeMs?: number;
+}
+
 export interface SpeechReactionOptions {
   /** Injectable STT (tests / custom). Default: faster-whisper via python ($0). */
   transcriber?: Transcriber;
@@ -75,6 +81,11 @@ export interface SpeechReactionOptions {
    * prompt/MCP warmup); it must never be interpreted as permission to reply.
    */
   onSpeechStart?: (payload: Record<string, unknown>) => void | Promise<void>;
+  /**
+   * Unstable local transcript used only to retarget predictive preparation.
+   * It must never trigger a reply, tool, memory write, or response decision.
+   */
+  onSpeechPartial?: (partial: PartialVoiceTranscript) => void | Promise<void>;
   /** Interrupt the active think/speak turn when an explicit barge-in transcript arrives. */
   onBargeIn?: (text: string, interruptedTurnId?: string) => void;
   /**
@@ -1512,6 +1523,26 @@ export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => v
           });
         });
       }
+      return;
+    }
+
+    if (p.kind === 'transcript_partial') {
+      const payload = (p.payload as Record<string, unknown> | undefined) ?? {};
+      const text = typeof payload.text === 'string' ? payload.text.trim() : '';
+      if (!text || !options.onSpeechPartial) return;
+      const audioMs = finiteTimestamp(payload.audioMs);
+      const decodeMs = finiteTimestamp(payload.decodeMs);
+      void Promise.resolve()
+        .then(() => options.onSpeechPartial!({
+          text,
+          ...(audioMs !== undefined ? { audioMs } : {}),
+          ...(decodeMs !== undefined ? { decodeMs } : {}),
+        }))
+        .catch((error) => {
+          logger.debug('[speech] partial transcript prewarm skipped', {
+            error: error instanceof Error ? error.message : String(error),
+          });
+        });
       return;
     }
 

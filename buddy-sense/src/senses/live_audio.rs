@@ -9,10 +9,11 @@
 //! already carries the text — so the Code Buddy side consumes it directly with
 //! no WAV round-trip and no python.
 //!
-//! The recognizer model is OFFLINE (NeMo Parakeet-TDT), so there is no
-//! frame-by-frame `transcript_partial`; we emit the final per utterance only.
-//! Latency is dominated by the VAD endpoint silence (`BUDDY_SENSE_MIC_ENDPOINT_MS`),
-//! not by the ~120 ms decode.
+//! The recognizer model is OFFLINE (NeMo Parakeet-TDT). For a long utterance we
+//! optionally decode one bounded early snapshot and emit `transcript_partial` so
+//! the brain can select/prewarm the right route while the human is still talking.
+//! That unstable text is never an authority to reply or act; `transcript_final`
+//! remains the only committed utterance.
 //!
 //! Capture + decode run on a dedicated blocking thread (via `spawn_blocking`):
 //! the recognizer is `!Send`, so keeping it off the async runtime avoids holding
@@ -29,6 +30,7 @@ use std::time::{Duration, Instant};
 use tokio::sync::mpsc;
 
 const SPEECH_SALIENCE: u8 = 200; // a final transcript is salient → never coalesced
+const PARTIAL_SALIENCE: u8 = 120; // preparation hint only; never owns cognition/actions
 const SAMPLE_RATE: u32 = 16_000;
 const FRAME_MS: u64 = 20; // 20 ms frames → 320 samples @ 16 kHz
 /// Default energy-VAD threshold (normalized RMS) to OPEN an utterance. Biased low
@@ -50,6 +52,9 @@ const PREROLL_MS: u64 = 300;
 const MIN_SPEECH_MS: u64 = 200;
 /// Hard cap on a single utterance → force a decode (bounds memory + latency).
 const MAX_UTTERANCE_MS: u64 = 15_000;
+/// Decode at most one early transcript after this much buffered audio. Set
+/// `BUDDY_SENSE_MIC_PARTIAL_MS=0` to disable.
+const DEFAULT_PARTIAL_TRANSCRIPT_MS: u64 = 1_200;
 /// If Smart Turn judges a pause incomplete but no more speech arrives, fail
 /// open after this bound rather than leaving the user unanswered.
 const DEFAULT_SMART_TURN_MAX_HOLD_MS: u64 = 1_200;
@@ -350,6 +355,11 @@ impl Segmenter {
         self.speaking
     }
 
+    fn partial_samples(&self) -> Option<&[i16]> {
+        (self.speaking && self.voiced_frames >= self.min_voiced_frames)
+            .then_some(self.buf.as_slice())
+    }
+
     fn adaptive_calibrated(&self) -> bool {
         self.gate.enabled && self.gate.calibrated()
     }
@@ -637,6 +647,8 @@ fn capture_loop(
         "BUDDY_SENSE_SMART_TURN_MAX_HOLD_MS",
         DEFAULT_SMART_TURN_MAX_HOLD_MS,
     ));
+    let partial_ms = env_u64("BUDDY_SENSE_MIC_PARTIAL_MS", DEFAULT_PARTIAL_TRANSCRIPT_MS);
+    let mut partial_emitted = false;
     eprintln!("[buddy-sense] live-audio: listening (pulse:{source})");
 
     loop {
@@ -651,9 +663,30 @@ fn capture_loop(
         let frame_rms = rms_i16(&frame);
         let segment = seg.push(&frame);
         if !was_speaking && seg.is_speaking() {
+            partial_emitted = false;
             let event = speech_start_event(frame_rms, seg.effective_thresholds(), adaptive);
             if tx.blocking_send(event).is_err() {
                 break;
+            }
+        }
+        if !partial_emitted && partial_ms > 0 {
+            if let Some(samples) = seg.partial_samples() {
+                let audio_ms = (samples.len() as u64 * 1000) / SAMPLE_RATE as u64;
+                if audio_ms >= partial_ms {
+                    // Exactly one speculative decode per utterance. Blocking for
+                    // ~120 ms is bounded and ffmpeg's pipe buffers the live PCM.
+                    partial_emitted = true;
+                    let decode_started = Instant::now();
+                    let text = stt.transcribe_pcm(SAMPLE_RATE, samples);
+                    let decode_ms = decode_started.elapsed().as_millis() as u64;
+                    if !text.is_empty()
+                        && tx
+                            .blocking_send(partial_transcript_event(&text, audio_ms, decode_ms))
+                            .is_err()
+                    {
+                        break;
+                    }
+                }
             }
         }
         if !calibration_logged && seg.adaptive_calibrated() {
@@ -810,6 +843,21 @@ fn add_endpoint_payload(
     }
 }
 
+fn partial_transcript_event(text: &str, audio_ms: u64, decode_ms: u64) -> SensoryEvent {
+    SensoryEvent::new(
+        Modality::Audio,
+        "transcript_partial",
+        PARTIAL_SALIENCE,
+        serde_json::json!({
+            "text": text,
+            "audioMs": audio_ms,
+            "decodeMs": decode_ms,
+            "stable": false,
+            "prewarmOnly": true,
+        }),
+    )
+}
+
 fn emit_utterance(
     stt: &mut crate::senses::stt::Stt,
     tx: &mpsc::Sender<SensoryEvent>,
@@ -919,6 +967,17 @@ mod tests {
         assert_eq!(event.payload["adaptiveVad"], true);
         assert_eq!(event.payload["sampleRate"], SAMPLE_RATE);
         assert!(event.payload.get("respond").is_none());
+    }
+
+    #[test]
+    fn partial_transcript_is_explicitly_unstable_and_prewarm_only() {
+        let event = partial_transcript_event("cherche la météo", 1_200, 87);
+        assert_eq!(event.kind, "transcript_partial");
+        assert_eq!(event.payload["text"], "cherche la météo");
+        assert_eq!(event.payload["audioMs"], 1_200);
+        assert_eq!(event.payload["decodeMs"], 87);
+        assert_eq!(event.payload["stable"], false);
+        assert_eq!(event.payload["prewarmOnly"], true);
     }
 
     #[test]

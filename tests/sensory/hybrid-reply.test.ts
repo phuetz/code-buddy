@@ -198,9 +198,10 @@ describe('hybrid reply — routing & memory', () => {
       agentReply: grounded,
       classify: () => true,
     });
-    await hybrid.prewarm();
+    await hybrid.prewarm('regarde le calendrier');
     hybrid.dispose();
     expect(prewarm).toHaveBeenCalledOnce();
+    expect(prewarm).toHaveBeenCalledWith('regarde le calendrier');
     expect(dispose).toHaveBeenCalledOnce();
   });
 

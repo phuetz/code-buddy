@@ -505,6 +505,11 @@ défaut et retire le silence confirmé avant la transcription. Une petite garde
 sémantique retient jusqu'à 900 ms les phrases manifestement inachevées (« parce
 que… », « et… », virgule finale) pour les fusionner avec la suite. Réglages :
 `BUDDY_SENSE_MIC_ENDPOINT_MS` et `CODEBUDDY_VOICE_INCOMPLETE_HOLD_MS`.
+Après 1200 ms de parole, l'oreille peut produire un unique transcript partiel
+local pour préparer le modèle et les outils adaptés avant la fin de la phrase.
+Ce brouillon n'entre ni dans la mémoire, ni dans le fil partagé, ni dans le
+garde de réponse et ne peut lancer aucune action. Seul `transcript_final` engage
+la cognition. `BUDDY_SENSE_MIC_PARTIAL_MS=0` désactive cette anticipation.
 Si Smart Turn v3.2 est installé (`node scripts/install-smart-turn.mjs`), sa
 lecture directe de l'intonation remplace automatiquement cette heuristique pour
 les événements de l'oreille Rust. Toute panne revient au VAD sans rendre Lisa sourde.
