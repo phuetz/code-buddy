@@ -10,7 +10,10 @@ import { useCallback, useMemo, useState } from 'react';
 import { usePolling } from './util/use-polling';
 
 import { useAppStore } from '../../store';
-import { AutonomyControlPanel, type AutonomyControlState } from '../os-actions/AutonomyControlPanel';
+import {
+  AutonomyControlPanel,
+  type AutonomyControlState,
+} from '../os-actions/AutonomyControlPanel';
 import type { AutonomyPosture } from '../os-actions/utils/autonomy-control-model.js';
 import { CouncilArenaView } from './CouncilArenaView';
 import { FleetLoadStrip } from './FleetLoadStrip';
@@ -18,11 +21,17 @@ import { FleetTopologyView } from './FleetTopologyView';
 import { IntentProofPanel } from './IntentProofPanel';
 import { PeerCapabilityMatrix } from './PeerCapabilityMatrix';
 import { KnowledgeGraphView } from '../os-panels/KnowledgeGraphView';
-import type { KnowledgeGraphEdge, KnowledgeGraphNode } from '../os-panels/knowledge-graph-view-model.js';
+import type {
+  KnowledgeGraphEdge,
+  KnowledgeGraphNode,
+} from '../os-panels/knowledge-graph-view-model.js';
 import { OsStatusBar } from '../os-panels/OsStatusBar';
 import type { OsStatusItem } from '../os-panels/os-status-bar-model.js';
 import { AutonomyQueueBoard } from '../os-panels/AutonomyQueueBoard';
-import { summarizeAutonomyQueue, type AutonomySnapshot } from '../os-panels/autonomy-queue-model.js';
+import {
+  summarizeAutonomyQueue,
+  type AutonomySnapshot,
+} from '../os-panels/autonomy-queue-model.js';
 import { Sparkline } from '../viz/Sparkline';
 import type { CouncilSession } from './util/council-model';
 import type { FleetLoad } from './util/fleet-load-model';
@@ -37,7 +46,13 @@ import type {
   OsIntentProofPayload,
 } from '../../../shared/intent-proof-types';
 
-const EMPTY_LOAD: FleetLoad = { queued: 0, running: 0, capacity: 0, backpressure: 0, utilization: 0 };
+const EMPTY_LOAD: FleetLoad = {
+  queued: 0,
+  running: 0,
+  capacity: 0,
+  backpressure: 0,
+  utilization: 0,
+};
 const EMPTY_COUNCIL: CouncilSession = { id: 'council', title: 'Council', dhi: 0, verdicts: [] };
 const DEFAULT_COST_CAP_USD = 10;
 
@@ -58,7 +73,9 @@ function toOsPeer(peer: FleetStorePeer): Peer {
   const capacity = Math.max(1, capability?.maxConcurrency ?? 1);
   const running = Math.max(0, Math.min(capacity, capability?.activeRequests ?? 0));
   const utilization = running / capacity;
-  const models = capability?.models.map((model) => model.id) ?? (peer.peerChatProvider ? [peer.peerChatProvider.model] : []);
+  const models =
+    capability?.models.map((model) => model.id) ??
+    (peer.peerChatProvider ? [peer.peerChatProvider.model] : []);
   const strengths = capability?.models.flatMap((model) => model.strengths) ?? [];
 
   return {
@@ -67,7 +84,8 @@ function toOsPeer(peer: FleetStorePeer): Peer {
     status: toOsPeerStatus(peer.status, utilization),
     role: capability?.egress ?? (peer.peerChatProvider?.isLocal ? 'local' : 'peer'),
     utilization,
-    latencyMs: capability?.models.find((model) => typeof model.avgLatencyMs === 'number')?.avgLatencyMs,
+    latencyMs: capability?.models.find((model) => typeof model.avgLatencyMs === 'number')
+      ?.avgLatencyMs,
     models,
     tools: [],
     capabilities: Array.from(new Set(strengths)),
@@ -92,14 +110,20 @@ function deriveFleetLoad(peers: Peer[]): FleetLoad {
 }
 
 function deriveCapabilities(peers: Peer[]): string[] {
-  return Array.from(new Set(peers.flatMap((peer) => [
-    ...(peer.models ?? []),
-    ...(peer.tools ?? []),
-    ...(peer.capabilities ?? []),
-  ]))).sort((left, right) => left.localeCompare(right));
+  return Array.from(
+    new Set(
+      peers.flatMap((peer) => [
+        ...(peer.models ?? []),
+        ...(peer.tools ?? []),
+        ...(peer.capabilities ?? []),
+      ])
+    )
+  ).sort((left, right) => left.localeCompare(right));
 }
 
-function postureFromPermissionMode(permissionMode: ReturnType<typeof useAppStore.getState>['permissionMode']): AutonomyPosture {
+function postureFromPermissionMode(
+  permissionMode: ReturnType<typeof useAppStore.getState>['permissionMode']
+): AutonomyPosture {
   if (permissionMode === 'bypassPermissions') {
     return 'full';
   }
@@ -144,161 +168,218 @@ export function MissionControlView() {
     refreshIntent();
   }, [refreshIntent]);
 
-  const performIntentAction = useCallback(async (
-    action: string,
-    run: () => Promise<OsIntentActionResult>,
-  ) => {
-    setIntentAction(action);
-    setIntentActionError(null);
-    try {
-      const result = await run();
-      setIntentProof(result.payload);
-      if (!result.ok) setIntentActionError(result.error ?? 'Action impossible.');
-    } catch (error) {
-      setIntentActionError(error instanceof Error ? error.message : String(error));
-    } finally {
-      setIntentAction(null);
-    }
-  }, []);
+  const performIntentAction = useCallback(
+    async (action: string, run: () => Promise<OsIntentActionResult>) => {
+      setIntentAction(action);
+      setIntentActionError(null);
+      try {
+        const result = await run();
+        setIntentProof(result.payload);
+        if (!result.ok) setIntentActionError(result.error ?? 'Action impossible.');
+      } catch (error) {
+        setIntentActionError(error instanceof Error ? error.message : String(error));
+      } finally {
+        setIntentAction(null);
+      }
+    },
+    []
+  );
 
-  const createForgeBranch = useCallback(async (input: Omit<OsForgeCreateInput, 'sessionId'>) => {
-    const api = window.electronAPI?.os?.intentForgeCreate;
-    if (!api) {
-      setIntentActionError('Le pont Counterfactual Forge n’est pas disponible.');
-      return;
-    }
-    await performIntentAction('create', () => api({
-      ...input,
-      ...(activeSessionId ? { sessionId: activeSessionId } : {}),
-    }));
-  }, [activeSessionId, performIntentAction]);
+  const createForgeBranch = useCallback(
+    async (input: Omit<OsForgeCreateInput, 'sessionId'>) => {
+      const api = window.electronAPI?.os?.intentForgeCreate;
+      if (!api) {
+        setIntentActionError('Le pont Counterfactual Forge n’est pas disponible.');
+        return;
+      }
+      await performIntentAction('create', () =>
+        api({
+          ...input,
+          ...(activeSessionId ? { sessionId: activeSessionId } : {}),
+        })
+      );
+    },
+    [activeSessionId, performIntentAction]
+  );
 
-  const evaluateForgeBranch = useCallback(async (branchId: string) => {
-    const api = window.electronAPI?.os?.intentForgeEvaluate;
-    if (!api) {
-      setIntentActionError('Le pont Counterfactual Forge n’est pas disponible.');
-      return;
-    }
-    await performIntentAction(`evaluate:${branchId}`, () => api({
-      branchId,
-      ...(activeSessionId ? { sessionId: activeSessionId } : {}),
-    }));
-  }, [activeSessionId, performIntentAction]);
+  const evaluateForgeBranch = useCallback(
+    async (branchId: string) => {
+      const api = window.electronAPI?.os?.intentForgeEvaluate;
+      if (!api) {
+        setIntentActionError('Le pont Counterfactual Forge n’est pas disponible.');
+        return;
+      }
+      await performIntentAction(`evaluate:${branchId}`, () =>
+        api({
+          branchId,
+          ...(activeSessionId ? { sessionId: activeSessionId } : {}),
+        })
+      );
+    },
+    [activeSessionId, performIntentAction]
+  );
 
-  const selectForgeBranch = useCallback(async (branchId: string) => {
-    const api = window.electronAPI?.os?.intentForgeSelect;
-    if (!api) {
-      setIntentActionError('Le pont Counterfactual Forge n’est pas disponible.');
-      return;
-    }
-    await performIntentAction(`select:${branchId}`, () => api({
-      branchId,
-      ...(activeSessionId ? { sessionId: activeSessionId } : {}),
-    }));
-  }, [activeSessionId, performIntentAction]);
+  const selectForgeBranch = useCallback(
+    async (branchId: string) => {
+      const api = window.electronAPI?.os?.intentForgeSelect;
+      if (!api) {
+        setIntentActionError('Le pont Counterfactual Forge n’est pas disponible.');
+        return;
+      }
+      await performIntentAction(`select:${branchId}`, () =>
+        api({
+          branchId,
+          ...(activeSessionId ? { sessionId: activeSessionId } : {}),
+        })
+      );
+    },
+    [activeSessionId, performIntentAction]
+  );
 
-  const updateConstitution = useCallback(async (input: Omit<OsConstitutionUpdateInput, 'sessionId'>) => {
-    const api = window.electronAPI?.os?.intentConstitutionUpdate;
-    if (!api) {
-      setIntentActionError('Le pont de constitution n’est pas disponible.');
-      return;
-    }
-    await performIntentAction('constitution', () => api({
-      ...input,
-      ...(activeSessionId ? { sessionId: activeSessionId } : {}),
-    }));
-  }, [activeSessionId, performIntentAction]);
+  const updateConstitution = useCallback(
+    async (input: Omit<OsConstitutionUpdateInput, 'sessionId'>) => {
+      const api = window.electronAPI?.os?.intentConstitutionUpdate;
+      if (!api) {
+        setIntentActionError('Le pont de constitution n’est pas disponible.');
+        return;
+      }
+      await performIntentAction('constitution', () =>
+        api({
+          ...input,
+          ...(activeSessionId ? { sessionId: activeSessionId } : {}),
+        })
+      );
+    },
+    [activeSessionId, performIntentAction]
+  );
 
-  const submitExchangeBid = useCallback(async (input: Omit<OsExchangeBidInput, 'sessionId'>) => {
-    const api = window.electronAPI?.os?.intentExchangeBid;
-    if (!api) {
-      setIntentActionError('Le pont Mission Exchange n’est pas disponible.');
-      return;
-    }
-    await performIntentAction('exchange:bid', () => api({
-      ...input,
-      ...(activeSessionId ? { sessionId: activeSessionId } : {}),
-    }));
-  }, [activeSessionId, performIntentAction]);
+  const submitExchangeBid = useCallback(
+    async (input: Omit<OsExchangeBidInput, 'sessionId'>) => {
+      const api = window.electronAPI?.os?.intentExchangeBid;
+      if (!api) {
+        setIntentActionError('Le pont Mission Exchange n’est pas disponible.');
+        return;
+      }
+      await performIntentAction('exchange:bid', () =>
+        api({
+          ...input,
+          ...(activeSessionId ? { sessionId: activeSessionId } : {}),
+        })
+      );
+    },
+    [activeSessionId, performIntentAction]
+  );
 
-  const rehearseExchangeBid = useCallback(async (input: Omit<OsExchangeRehearseInput, 'sessionId'>) => {
-    const api = window.electronAPI?.os?.intentExchangeRehearse;
-    if (!api) {
-      setIntentActionError('Le pont Shadow Twin n’est pas disponible.');
-      return;
-    }
-    await performIntentAction(`exchange:shadow:${input.bidId}`, () => api({
-      ...input,
-      ...(activeSessionId ? { sessionId: activeSessionId } : {}),
-    }));
-  }, [activeSessionId, performIntentAction]);
+  const rehearseExchangeBid = useCallback(
+    async (input: Omit<OsExchangeRehearseInput, 'sessionId'>) => {
+      const api = window.electronAPI?.os?.intentExchangeRehearse;
+      if (!api) {
+        setIntentActionError('Le pont Shadow Twin n’est pas disponible.');
+        return;
+      }
+      await performIntentAction(`exchange:shadow:${input.bidId}`, () =>
+        api({
+          ...input,
+          ...(activeSessionId ? { sessionId: activeSessionId } : {}),
+        })
+      );
+    },
+    [activeSessionId, performIntentAction]
+  );
 
-  const awardExchangeBid = useCallback(async (bidId: string) => {
-    const api = window.electronAPI?.os?.intentExchangeAward;
-    if (!api) {
-      setIntentActionError('Le pont de règlement n’est pas disponible.');
-      return;
-    }
-    await performIntentAction(`exchange:award:${bidId}`, () => api({
-      bidId,
-      humanApproved: true,
-      ...(activeSessionId ? { sessionId: activeSessionId } : {}),
-    }));
-  }, [activeSessionId, performIntentAction]);
+  const awardExchangeBid = useCallback(
+    async (bidId: string) => {
+      const api = window.electronAPI?.os?.intentExchangeAward;
+      if (!api) {
+        setIntentActionError('Le pont de règlement n’est pas disponible.');
+        return;
+      }
+      await performIntentAction(`exchange:award:${bidId}`, () =>
+        api({
+          bidId,
+          humanApproved: true,
+          ...(activeSessionId ? { sessionId: activeSessionId } : {}),
+        })
+      );
+    },
+    [activeSessionId, performIntentAction]
+  );
 
-  const rejectExchangeBid = useCallback(async (bidId: string) => {
-    const api = window.electronAPI?.os?.intentExchangeReject;
-    if (!api) {
-      setIntentActionError('Le pont de règlement n’est pas disponible.');
-      return;
-    }
-    await performIntentAction(`exchange:reject:${bidId}`, () => api({
-      bidId,
-      ...(activeSessionId ? { sessionId: activeSessionId } : {}),
-    }));
-  }, [activeSessionId, performIntentAction]);
+  const rejectExchangeBid = useCallback(
+    async (bidId: string) => {
+      const api = window.electronAPI?.os?.intentExchangeReject;
+      if (!api) {
+        setIntentActionError('Le pont de règlement n’est pas disponible.');
+        return;
+      }
+      await performIntentAction(`exchange:reject:${bidId}`, () =>
+        api({
+          bidId,
+          ...(activeSessionId ? { sessionId: activeSessionId } : {}),
+        })
+      );
+    },
+    [activeSessionId, performIntentAction]
+  );
 
-  const createCapsule = useCallback(async (input: Omit<OsCapsuleCreateInput, 'sessionId'>) => {
-    const api = window.electronAPI?.os?.intentCapsuleCreate;
-    if (!api) {
-      setIntentActionError('Le pont Outcome Capsules n’est pas disponible.');
-      return;
-    }
-    await performIntentAction('capsule:create', () => api({
-      ...input,
-      ...(activeSessionId ? { sessionId: activeSessionId } : {}),
-    }));
-  }, [activeSessionId, performIntentAction]);
+  const createCapsule = useCallback(
+    async (input: Omit<OsCapsuleCreateInput, 'sessionId'>) => {
+      const api = window.electronAPI?.os?.intentCapsuleCreate;
+      if (!api) {
+        setIntentActionError('Le pont Outcome Capsules n’est pas disponible.');
+        return;
+      }
+      await performIntentAction('capsule:create', () =>
+        api({
+          ...input,
+          ...(activeSessionId ? { sessionId: activeSessionId } : {}),
+        })
+      );
+    },
+    [activeSessionId, performIntentAction]
+  );
 
-  const activateCapsule = useCallback(async (capsuleId: string) => {
-    const api = window.electronAPI?.os?.intentCapsuleActivate;
-    if (!api) {
-      setIntentActionError('Le pont Outcome Capsules n’est pas disponible.');
-      return;
-    }
-    await performIntentAction(`capsule:activate:${capsuleId}`, () => api({
-      capsuleId,
-      humanApproved: true,
-      ...(activeSessionId ? { sessionId: activeSessionId } : {}),
-    }));
-  }, [activeSessionId, performIntentAction]);
+  const activateCapsule = useCallback(
+    async (capsuleId: string) => {
+      const api = window.electronAPI?.os?.intentCapsuleActivate;
+      if (!api) {
+        setIntentActionError('Le pont Outcome Capsules n’est pas disponible.');
+        return;
+      }
+      await performIntentAction(`capsule:activate:${capsuleId}`, () =>
+        api({
+          capsuleId,
+          humanApproved: true,
+          ...(activeSessionId ? { sessionId: activeSessionId } : {}),
+        })
+      );
+    },
+    [activeSessionId, performIntentAction]
+  );
 
-  const revokeCapsule = useCallback(async (capsuleId: string) => {
-    const api = window.electronAPI?.os?.intentCapsuleRevoke;
-    if (!api) {
-      setIntentActionError('Le pont Outcome Capsules n’est pas disponible.');
-      return;
-    }
-    await performIntentAction(`capsule:revoke:${capsuleId}`, () => api({
-      capsuleId,
-      ...(activeSessionId ? { sessionId: activeSessionId } : {}),
-    }));
-  }, [activeSessionId, performIntentAction]);
+  const revokeCapsule = useCallback(
+    async (capsuleId: string) => {
+      const api = window.electronAPI?.os?.intentCapsuleRevoke;
+      if (!api) {
+        setIntentActionError('Le pont Outcome Capsules n’est pas disponible.');
+        return;
+      }
+      await performIntentAction(`capsule:revoke:${capsuleId}`, () =>
+        api({
+          capsuleId,
+          ...(activeSessionId ? { sessionId: activeSessionId } : {}),
+        })
+      );
+    },
+    [activeSessionId, performIntentAction]
+  );
 
   // Real council data: the latest CLI council run read from the
   // ~/.codebuddy JSONL ledgers (os.councilHealth IPC). Null → honest empty.
   const [council, setCouncil] = useState<CouncilSession | null>(null);
-  const [dhiHistory, setDhiHistory] = useState<Array<{ at: string; taskType: string; dhi: number }>>([]);
+  const [dhiHistory, setDhiHistory] = useState<
+    Array<{ at: string; taskType: string; dhi: number }>
+  >([]);
   const refreshCouncil = useCallback(() => {
     void window.electronAPI?.os
       ?.councilHealth()
@@ -318,7 +399,11 @@ export function MissionControlView() {
       ?.snapshot()
       .then((snap) => {
         if (!snap?.ok) return;
-        setDaemonSnapshot({ tasks: snap.tasks ?? [], worklog: snap.worklog ?? [], presence: snap.presence ?? {} });
+        setDaemonSnapshot({
+          tasks: snap.tasks ?? [],
+          worklog: snap.worklog ?? [],
+          presence: snap.presence ?? {},
+        });
       })
       .catch(() => {});
   }, []);
@@ -326,7 +411,10 @@ export function MissionControlView() {
 
   // Real Collective Knowledge Graph (the robot's shared memory), folded from
   // the append-only ledger by the os.knowledgeGraph IPC.
-  const [knowledge, setKnowledge] = useState<{ nodes: KnowledgeGraphNode[]; edges: KnowledgeGraphEdge[] }>({ nodes: [], edges: [] });
+  const [knowledge, setKnowledge] = useState<{
+    nodes: KnowledgeGraphNode[];
+    edges: KnowledgeGraphEdge[];
+  }>({ nodes: [], edges: [] });
   const refreshKnowledge = useCallback(() => {
     void window.electronAPI?.os
       ?.knowledgeGraph()
@@ -347,6 +435,21 @@ export function MissionControlView() {
   }, []);
   usePolling(refreshDaemon, 30_000);
 
+  // The core CostTracker owns and persists this guardrail. Reading it back
+  // keeps Mission Control, Settings and the runtime on one source of truth.
+  const [costCapUsd, setCostCapUsd] = useState(DEFAULT_COST_CAP_USD);
+  const [costCapError, setCostCapError] = useState<string | null>(null);
+  const refreshCostCap = useCallback(() => {
+    void window.electronAPI?.cost
+      ?.summary()
+      .then((summary) => {
+        if (summary.budgetLimit !== undefined) setCostCapUsd(summary.budgetLimit);
+        setCostCapError(null);
+      })
+      .catch(() => setCostCapError('Plafond de coût indisponible'));
+  }, []);
+  usePolling(refreshCostCap, 30_000);
+
   const controlDaemon = useCallback(
     (action: 'start' | 'stop') => {
       void window.electronAPI?.autonomy
@@ -357,7 +460,7 @@ export function MissionControlView() {
         })
         .catch(() => refreshDaemon());
     },
-    [refreshDaemon],
+    [refreshDaemon]
   );
 
   const peers = useMemo(() => Object.values(fleetPeers).map(toOsPeer), [fleetPeers]);
@@ -367,15 +470,44 @@ export function MissionControlView() {
     posture: postureFromPermissionMode(permissionMode),
     // Honest: paused when the real daemon service is not running (unknown → paused).
     daemonPaused: daemonRunning !== true,
-    costCapUsd: DEFAULT_COST_CAP_USD,
+    costCapUsd,
   };
 
   const setPosture = (posture: AutonomyPosture) => {
-    setPermissionMode(posture === 'full' ? 'bypassPermissions' : posture === 'auto' ? 'acceptEdits' : 'plan');
+    setPermissionMode(
+      posture === 'full' ? 'bypassPermissions' : posture === 'auto' ? 'acceptEdits' : 'plan'
+    );
   };
 
-  // TODO(os-wiring): no cost-cap IPC exists in the renderer bridge yet.
-  const noop = () => {};
+  const updateCostCap = useCallback(
+    (nextCostCapUsd: number) => {
+      if (!Number.isFinite(nextCostCapUsd) || nextCostCapUsd < 0) {
+        setCostCapError('Le plafond doit être un montant positif ou nul');
+        return;
+      }
+      const setBudget = window.electronAPI?.cost?.setBudget;
+      if (!setBudget) {
+        setCostCapError('Service de coût indisponible');
+        return;
+      }
+
+      setCostCapError(null);
+      void setBudget(nextCostCapUsd)
+        .then((result) => {
+          if (!result.success) {
+            setCostCapError(result.error ?? 'Le plafond n’a pas pu être enregistré');
+            refreshCostCap();
+            return;
+          }
+          setCostCapUsd(nextCostCapUsd);
+        })
+        .catch(() => {
+          setCostCapError('Le plafond n’a pas pu être enregistré');
+          refreshCostCap();
+        });
+    },
+    [refreshCostCap]
+  );
 
   // Status bar composed from the REAL signals this view already loads —
   // one glance: daemon, council health, collective memory, fleet.
@@ -392,7 +524,10 @@ export function MissionControlView() {
     },
     {
       label: 'Mémoire collective',
-      value: knowledge.nodes.length > 0 ? `${knowledge.nodes.length} nœuds · ${knowledge.edges.length} liens` : 'vide',
+      value:
+        knowledge.nodes.length > 0
+          ? `${knowledge.nodes.length} nœuds · ${knowledge.edges.length} liens`
+          : 'vide',
       tone: knowledge.nodes.length > 0 ? 'ok' : 'muted',
     },
     {
@@ -412,6 +547,11 @@ export function MissionControlView() {
           : intentProof.state.status === 'paused'
             ? 'warn'
             : 'ok',
+    },
+    {
+      label: 'Cap coût mensuel',
+      value: `${costCapUsd.toFixed(2)} $`,
+      tone: costCapError ? 'error' : 'ok',
     },
   ];
 
@@ -456,11 +596,15 @@ export function MissionControlView() {
                   values={dhiHistory.map((h) => Math.round(h.dhi * 100))}
                   width={160}
                   height={36}
-                  tone={(dhiHistory[dhiHistory.length - 1]?.dhi ?? 0) > 0.75 ? 'success' : 'warning'}
+                  tone={
+                    (dhiHistory[dhiHistory.length - 1]?.dhi ?? 0) > 0.75 ? 'success' : 'warning'
+                  }
                 />
                 <div className="min-w-0 text-xs text-muted-foreground">
-                  <span className="font-medium text-foreground">Tendance DHI</span> — {dhiHistory.length} runs,
-                  dernier {Math.round((dhiHistory[dhiHistory.length - 1]?.dhi ?? 0) * 100)} ({dhiHistory[dhiHistory.length - 1]?.taskType})
+                  <span className="font-medium text-foreground">Tendance DHI</span> —{' '}
+                  {dhiHistory.length} runs, dernier{' '}
+                  {Math.round((dhiHistory[dhiHistory.length - 1]?.dhi ?? 0) * 100)} (
+                  {dhiHistory[dhiHistory.length - 1]?.taskType})
                 </div>
               </div>
             ) : null}
@@ -475,9 +619,16 @@ export function MissionControlView() {
           onPostureChange={setPosture}
           onDaemonPause={() => controlDaemon('stop')}
           onDaemonResume={() => controlDaemon('start')}
-          onCostCapChange={noop}
+          onCostCapChange={updateCostCap}
         />
-        {daemonSnapshot ? <AutonomyQueueBoard summary={summarizeAutonomyQueue(daemonSnapshot, new Date())} /> : null}
+        {costCapError ? (
+          <p className="text-sm text-destructive" role="alert">
+            {costCapError}
+          </p>
+        ) : null}
+        {daemonSnapshot ? (
+          <AutonomyQueueBoard summary={summarizeAutonomyQueue(daemonSnapshot, new Date())} />
+        ) : null}
       </div>
     </div>
   );

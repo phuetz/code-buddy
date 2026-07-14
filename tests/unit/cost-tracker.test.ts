@@ -407,12 +407,14 @@ describe('CostTracker', () => {
       tracker.setBudgetLimit(100);
 
       expect(mockFs.writeJsonSync).toHaveBeenCalled();
+      expect(tracker.getReport().budgetLimit).toBe(100);
     });
 
     it('should set daily limit', () => {
       tracker.setDailyLimit(10);
 
       expect(mockFs.writeJsonSync).toHaveBeenCalled();
+      expect(tracker.getReport().dailyLimit).toBe(10);
     });
 
     it('should emit budget:warning when threshold reached', () => {

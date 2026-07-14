@@ -1,7 +1,12 @@
 import { PauseCircle, PlayCircle, ShieldCheck } from 'lucide-react';
+import { useEffect, useState } from 'react';
 
 import { Pill } from '../ui/Pill.js';
-import { guardrailsFor, validatePosture, type AutonomyPosture } from './utils/autonomy-control-model.js';
+import {
+  guardrailsFor,
+  validatePosture,
+  type AutonomyPosture,
+} from './utils/autonomy-control-model.js';
 
 export interface AutonomyControlState {
   posture: AutonomyPosture;
@@ -19,9 +24,26 @@ export interface AutonomyControlPanelProps {
 
 const postures: AutonomyPosture[] = ['plan', 'auto', 'full'];
 
-export function AutonomyControlPanel({ state, onPostureChange, onDaemonPause, onDaemonResume, onCostCapChange }: AutonomyControlPanelProps) {
+export function AutonomyControlPanel({
+  state,
+  onPostureChange,
+  onDaemonPause,
+  onDaemonResume,
+  onCostCapChange,
+}: AutonomyControlPanelProps) {
   const validation = validatePosture(state.posture);
   const guardrails = guardrailsFor(state.posture);
+  const [costCapDraft, setCostCapDraft] = useState(String(state.costCapUsd));
+  const parsedCostCap = Number(costCapDraft);
+  const validCostCap =
+    costCapDraft.trim() !== '' &&
+    Number.isFinite(parsedCostCap) &&
+    parsedCostCap >= 0 &&
+    parsedCostCap <= 1_000_000;
+
+  useEffect(() => {
+    setCostCapDraft(String(state.costCapUsd));
+  }, [state.costCapUsd]);
 
   return (
     <section className="rounded-xl border border-border bg-surface p-4">
@@ -30,7 +52,9 @@ export function AutonomyControlPanel({ state, onPostureChange, onDaemonPause, on
           <div className="text-xs uppercase tracking-wide text-muted-foreground">Autonomie</div>
           <h3 className="mt-1 text-base font-semibold text-foreground">Posture de contrôle</h3>
         </div>
-        <Pill tone={state.daemonPaused ? 'warning' : 'success'}>{state.daemonPaused ? 'daemon en pause' : 'daemon actif'}</Pill>
+        <Pill tone={state.daemonPaused ? 'warning' : 'success'}>
+          {state.daemonPaused ? 'daemon en pause' : 'daemon actif'}
+        </Pill>
       </div>
       <div className="mt-4 grid gap-3 md:grid-cols-3">
         {postures.map((posture) => (
@@ -45,22 +69,46 @@ export function AutonomyControlPanel({ state, onPostureChange, onDaemonPause, on
         ))}
       </div>
       {!validation.valid && <p className="mt-2 text-sm text-destructive">{validation.reason}</p>}
-      <label className="mt-4 block text-sm text-muted-foreground">
-        Cap coût ($)
-        <input
-          className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-2 text-foreground"
-          min={0}
-          step={1}
-          type="number"
-          value={state.costCapUsd}
-          onChange={(event) => onCostCapChange(Number(event.target.value))}
-        />
-      </label>
+      <form
+        className="mt-4"
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (validCostCap) onCostCapChange(parsedCostCap);
+        }}
+      >
+        <label className="block text-sm text-muted-foreground">
+          Cap coût mensuel ($)
+          <input
+            className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-2 text-foreground"
+            max={1_000_000}
+            min={0}
+            step={1}
+            type="number"
+            value={costCapDraft}
+            onChange={(event) => setCostCapDraft(event.target.value)}
+          />
+        </label>
+        <button
+          type="submit"
+          disabled={!validCostCap}
+          className="mt-2 rounded-lg border border-border px-3 py-2 text-sm text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          Enregistrer le plafond
+        </button>
+      </form>
       <div className="mt-4 flex flex-wrap gap-2">
-        <button type="button" onClick={onDaemonPause} className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm">
+        <button
+          type="button"
+          onClick={onDaemonPause}
+          className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm"
+        >
           <PauseCircle className="h-4 w-4" /> Pause daemon
         </button>
-        <button type="button" onClick={onDaemonResume} className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm">
+        <button
+          type="button"
+          onClick={onDaemonResume}
+          className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm"
+        >
           <PlayCircle className="h-4 w-4" /> Reprise daemon
         </button>
       </div>

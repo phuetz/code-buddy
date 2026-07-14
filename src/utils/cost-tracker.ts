@@ -67,6 +67,10 @@ export interface CostReport {
   sessionTokens: { input: number; output: number };
   modelBreakdown: Record<string, { cost: number; calls: number }>;
   recentUsage: TokenUsage[];
+  /** Persisted monthly guardrail, when configured. */
+  budgetLimit?: number;
+  /** Persisted daily guardrail, when configured. */
+  dailyLimit?: number;
 }
 
 export interface CostConfig {
@@ -362,6 +366,8 @@ export class CostTracker extends EventEmitter {
       sessionTokens,
       modelBreakdown,
       recentUsage: this.sessionUsage.slice(-10),
+      budgetLimit: this.config.budgetLimit,
+      dailyLimit: this.config.dailyLimit,
     };
   }
 

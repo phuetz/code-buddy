@@ -20,6 +20,12 @@ export interface CostIpcDeps {
   getCostBridge: () => CostBridge | null;
 }
 
+const MAX_COST_LIMIT_USD = 1_000_000;
+
+function isValidCostLimit(value: number): boolean {
+  return Number.isFinite(value) && value >= 0 && value <= MAX_COST_LIMIT_USD;
+}
+
 export function registerCostIpcHandlers(deps: CostIpcDeps): void {
   const { getCostBridge } = deps;
 
@@ -52,17 +58,25 @@ export function registerCostIpcHandlers(deps: CostIpcDeps): void {
   });
 
   ipcMain.handle('cost.setBudget', async (_event, monthlyLimit: number) => {
+    if (!isValidCostLimit(monthlyLimit)) {
+      return { success: false, error: 'Budget must be between $0 and $1,000,000' };
+    }
     const costBridge = getCostBridge();
-    if (!costBridge) return { success: false };
-    await costBridge.setBudget(monthlyLimit);
-    return { success: true };
+    if (!costBridge) return { success: false, error: 'Cost service is not ready' };
+    const success = await costBridge.setBudget(monthlyLimit);
+    return success ? { success: true } : { success: false, error: 'Budget could not be persisted' };
   });
 
   ipcMain.handle('cost.setDailyLimit', async (_event, limit: number) => {
+    if (!isValidCostLimit(limit)) {
+      return { success: false, error: 'Daily limit must be between $0 and $1,000,000' };
+    }
     const costBridge = getCostBridge();
-    if (!costBridge) return { success: false };
-    await costBridge.setDailyLimit(limit);
-    return { success: true };
+    if (!costBridge) return { success: false, error: 'Cost service is not ready' };
+    const success = await costBridge.setDailyLimit(limit);
+    return success
+      ? { success: true }
+      : { success: false, error: 'Daily limit could not be persisted' };
   });
 
   ipcMain.handle(

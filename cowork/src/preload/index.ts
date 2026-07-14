@@ -2025,9 +2025,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
         outputTokens: number;
       }>
     > => ipcRenderer.invoke('cost.modelBreakdown', days),
-    setBudget: (monthlyLimit: number): Promise<{ success: boolean }> =>
+    setBudget: (monthlyLimit: number): Promise<{ success: boolean; error?: string }> =>
       ipcRenderer.invoke('cost.setBudget', monthlyLimit),
-    setDailyLimit: (limit: number): Promise<{ success: boolean }> =>
+    setDailyLimit: (limit: number): Promise<{ success: boolean; error?: string }> =>
       ipcRenderer.invoke('cost.setDailyLimit', limit),
     record: (
       inputTokens: number,
@@ -6035,18 +6035,12 @@ declare global {
         perceptStats: (
           projectId?: string
         ) => Promise<{ ok: boolean; stats?: CompanionPerceptStats; error?: string }>;
-        qualityInsights: (input?: {
-          projectId?: string;
-          windowSize?: number;
-        }) => Promise<{
+        qualityInsights: (input?: { projectId?: string; windowSize?: number }) => Promise<{
           ok: boolean;
           insights?: CompanionConversationQualityInsights;
           error?: string;
         }>;
-        measureConversationQuality: (input?: {
-          projectId?: string;
-          limit?: number;
-        }) => Promise<{
+        measureConversationQuality: (input?: { projectId?: string; limit?: number }) => Promise<{
           ok: boolean;
           measurement?: CompanionConversationQualitySnapshot | null;
           error?: string;
@@ -6489,8 +6483,8 @@ declare global {
             outputTokens: number;
           }>
         >;
-        setBudget: (monthlyLimit: number) => Promise<{ success: boolean }>;
-        setDailyLimit: (limit: number) => Promise<{ success: boolean }>;
+        setBudget: (monthlyLimit: number) => Promise<{ success: boolean; error?: string }>;
+        setDailyLimit: (limit: number) => Promise<{ success: boolean; error?: string }>;
         record: (
           inputTokens: number,
           outputTokens: number,

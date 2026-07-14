@@ -51,11 +51,7 @@ export interface ModelBreakdownEntry {
 
 type CoreCostTrackerModule = {
   getCostTracker: (config?: Record<string, unknown>) => {
-    recordUsage: (
-      inputTokens: number,
-      outputTokens: number,
-      model: string
-    ) => TokenUsageEntry;
+    recordUsage: (inputTokens: number, outputTokens: number, model: string) => TokenUsageEntry;
     getReport: () => {
       sessionCost: number;
       dailyCost: number;
@@ -71,6 +67,8 @@ type CoreCostTrackerModule = {
         cost: number;
         timestamp: Date;
       }>;
+      budgetLimit?: number;
+      dailyLimit?: number;
     };
     setBudgetLimit: (limit: number) => void;
     setDailyLimit: (limit: number) => void;
@@ -123,9 +121,11 @@ function ensureCostHistorySchema(database: {
 export class CostBridge {
   constructor(private readonly db: DatabaseInstance) {
     try {
-      ensureCostHistorySchema(this.db.raw as unknown as {
-        prepare: (sql: string) => { run: (...params: unknown[]) => unknown };
-      });
+      ensureCostHistorySchema(
+        this.db.raw as unknown as {
+          prepare: (sql: string) => { run: (...params: unknown[]) => unknown };
+        }
+      );
     } catch (err) {
       logWarn('[CostBridge] schema init failed:', err);
     }
@@ -190,6 +190,8 @@ export class CostBridge {
         totalCost: report.totalCost,
         sessionTokens: report.sessionTokens,
         modelBreakdown: report.modelBreakdown,
+        budgetLimit: report.budgetLimit,
+        dailyLimit: report.dailyLimit,
       };
     } catch (err) {
       logWarn('[CostBridge] getSummary failed:', err);
@@ -282,24 +284,28 @@ export class CostBridge {
   }
 
   /** Set a monthly budget limit (persisted by CostTracker). */
-  async setBudget(monthlyLimit: number): Promise<void> {
+  async setBudget(monthlyLimit: number): Promise<boolean> {
     const mod = await loadModule();
-    if (!mod) return;
+    if (!mod) return false;
     try {
       mod.getCostTracker().setBudgetLimit(monthlyLimit);
+      return true;
     } catch (err) {
       logWarn('[CostBridge] setBudget failed:', err);
+      return false;
     }
   }
 
   /** Set a daily limit (persisted by CostTracker). */
-  async setDailyLimit(limit: number): Promise<void> {
+  async setDailyLimit(limit: number): Promise<boolean> {
     const mod = await loadModule();
-    if (!mod) return;
+    if (!mod) return false;
     try {
       mod.getCostTracker().setDailyLimit(limit);
+      return true;
     } catch (err) {
       logWarn('[CostBridge] setDailyLimit failed:', err);
+      return false;
     }
   }
 }
