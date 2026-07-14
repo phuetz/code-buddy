@@ -12,6 +12,7 @@ Events go to Code Buddy's sensory bridge (ws://127.0.0.1:8129) as SensoryEvents
 AND to ~/.codebuddy/companion/events.jsonl (audit/stats). 100% local, $0.
 """
 import json
+import math
 import os
 import secrets
 import sys
@@ -39,6 +40,8 @@ YOLO_CONF = float(os.environ.get("BUDDY_VISION_YOLO_CONF", "0.35"))
 YOLO_IOU = float(os.environ.get("BUDDY_VISION_YOLO_IOU", "0.7"))
 YOLO_DEVICE = os.environ.get("BUDDY_VISION_YOLO_DEVICE", "").strip()
 YOLO_CLASSES = os.environ.get("BUDDY_VISION_YOLO_CLASSES", "0")
+MAX_PERSONS = min(8, max(1, int(os.environ.get("BUDDY_VISION_MAX_PERSONS", "1"))))
+TRACK_IOU = min(0.9, max(0.05, float(os.environ.get("BUDDY_VISION_TRACK_IOU", "0.2"))))
 EPISODE_SESSION = secrets.token_hex(4)
 MOTION_FRAME_SLOTS = min(128, max(16, int(os.environ.get("BUDDY_VISION_MOTION_FRAME_SLOTS", "32"))))
 SEMANTIC_FRAME_SLOTS = min(256, max(64, int(os.environ.get("BUDDY_VISION_SEMANTIC_FRAME_SLOTS", "64"))))
@@ -134,10 +137,11 @@ def save_motion_keyframe(frame) -> str | None:
 
 
 class VisionSample:
-    def __init__(self, present: bool, eye_closed=None, evidence=None):
+    def __init__(self, present: bool, eye_closed=None, evidence=None, detections=None):
         self.present = present
         self.eye_closed = eye_closed
         self.evidence = evidence or {}
+        self.detections = detections or []
 
 
 def normalized_box(x1: float, y1: float, x2: float, y2: float, width: int, height: int) -> dict | None:
@@ -161,7 +165,7 @@ def normalized_box(x1: float, y1: float, x2: float, y2: float, width: int, heigh
 class MediaPipeFaceDetector:
     """MediaPipe face presence + eye-blink evidence for person/drowsy detectors."""
 
-    def __init__(self, model_path: str):
+    def __init__(self, model_path: str, max_faces: int = MAX_PERSONS):
         if not os.path.exists(model_path):
             print(f"[vision] missing model {model_path} — download face_landmarker.task", file=sys.stderr)
             sys.exit(1)
@@ -173,7 +177,7 @@ class MediaPipeFaceDetector:
         opts = mp_vision.FaceLandmarkerOptions(
             base_options=mp_python.BaseOptions(model_asset_path=model_path),
             output_face_blendshapes=True,
-            num_faces=1,
+            num_faces=min(8, max(1, max_faces)),
             running_mode=mp_vision.RunningMode.IMAGE,
         )
         self.landmarker = mp_vision.FaceLandmarker.create_from_options(opts)
@@ -182,14 +186,15 @@ class MediaPipeFaceDetector:
         rgb = np.ascontiguousarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
         result = self.landmarker.detect(self.mp.Image(image_format=self.mp.ImageFormat.SRGB, data=rgb))
         face_present = len(result.face_landmarks) > 0
+        all_blendshapes = result.face_blendshapes or []
         eye_closed = None
         height, width = frame.shape[:2]
-        if face_present and result.face_blendshapes:
-            bs = {c.category_name: c.score for c in result.face_blendshapes[0]}
+        if len(result.face_landmarks) == 1 and all_blendshapes:
+            bs = {c.category_name: c.score for c in all_blendshapes[0]}
             eye_closed = (bs.get("eyeBlinkLeft", 0.0) + bs.get("eyeBlinkRight", 0.0)) / 2.0
         evidence = {"detector": "mediapipe_face", "frameWidth": width, "frameHeight": height}
-        if face_present:
-            landmarks = result.face_landmarks[0]
+        detections = []
+        for index, landmarks in enumerate(result.face_landmarks):
             box = normalized_box(
                 min(point.x for point in landmarks) * width,
                 min(point.y for point in landmarks) * height,
@@ -199,10 +204,31 @@ class MediaPipeFaceDetector:
                 height,
             )
             if box:
-                evidence["box2d"] = box
+                detection_eye_closed = None
+                if index < len(all_blendshapes):
+                    blendshapes = {
+                        category.category_name: category.score
+                        for category in all_blendshapes[index]
+                    }
+                    detection_eye_closed = (
+                        blendshapes.get("eyeBlinkLeft", 0.0)
+                        + blendshapes.get("eyeBlinkRight", 0.0)
+                    ) / 2.0
+                detections.append({
+                    "box2d": box,
+                    "confidence": 0.8,
+                    "eyeClosed": detection_eye_closed,
+                })
+        detections.sort(key=lambda item: (
+            item["box2d"]["x"], item["box2d"]["y"],
+            item["box2d"]["width"], item["box2d"]["height"],
+        ))
+        if detections:
+            evidence["box2d"] = detections[0]["box2d"]
+            evidence["confidence"] = detections[0]["confidence"]
         if eye_closed is not None:
             evidence["eyeClosed"] = round(float(eye_closed), 4)
-        return VisionSample(face_present, eye_closed, evidence)
+        return VisionSample(face_present, eye_closed, evidence, detections)
 
 
 class YoloPersonDetector:
@@ -233,22 +259,23 @@ class YoloPersonDetector:
         if YOLO_DEVICE:
             kwargs["device"] = YOLO_DEVICE
         result = self.model.predict(**kwargs)[0]
-        best = None
+        detections = []
         height, width = frame.shape[:2]
         if result.boxes is not None:
             for item in result.boxes:
                 conf = float(item.conf[0].item())
-                if best is None or conf > best["confidence"]:
-                    xyxy = [float(v) for v in item.xyxy[0].tolist()]
-                    best = {
-                        "confidence": conf,
-                        "box": {
-                            "x1": round(xyxy[0], 2),
-                            "y1": round(xyxy[1], 2),
-                            "x2": round(xyxy[2], 2),
-                            "y2": round(xyxy[3], 2),
-                        },
-                    }
+                xyxy = [float(v) for v in item.xyxy[0].tolist()]
+                box2d = normalized_box(xyxy[0], xyxy[1], xyxy[2], xyxy[3], width, height)
+                if box2d:
+                    detections.append({
+                        "confidence": round(conf, 4),
+                        "box2d": box2d,
+                    })
+        detections.sort(key=lambda item: (
+            -item["confidence"], item["box2d"]["x"], item["box2d"]["y"],
+        ))
+        detections = detections[:MAX_PERSONS]
+        best = detections[0] if detections else None
         evidence = {
             "detector": "yolov8",
             "model": self.model_path,
@@ -257,12 +284,8 @@ class YoloPersonDetector:
             "frameHeight": height,
         }
         if best:
-            evidence["box"] = best["box"]
-            box = best["box"]
-            evidence["box2d"] = normalized_box(
-                box["x1"], box["y1"], box["x2"], box["y2"], width, height
-            )
-        return VisionSample(best is not None, None, evidence)
+            evidence["box2d"] = best["box2d"]
+        return VisionSample(best is not None, None, evidence, detections)
 
 
 class PersonState:
@@ -294,6 +317,190 @@ class PersonState:
                 # the physical room. The brain records this as unknown.
                 return ("person_lost", 120, presence_episode_id)
         return None
+
+
+def box_iou(left: dict, right: dict) -> float:
+    """Intersection-over-union in normalized image space."""
+    x1 = max(left["x"], right["x"])
+    y1 = max(left["y"], right["y"])
+    x2 = min(left["x"] + left["width"], right["x"] + right["width"])
+    y2 = min(left["y"] + left["height"], right["y"] + right["height"])
+    intersection = max(0.0, x2 - x1) * max(0.0, y2 - y1)
+    union = left["width"] * left["height"] + right["width"] * right["height"] - intersection
+    return intersection / union if union > 0 else 0.0
+
+
+def safe_detection(value) -> dict | None:
+    """Allowlist one anonymous detection; reject identity/depth/landmarks."""
+    if not isinstance(value, dict) or not isinstance(value.get("box2d"), dict):
+        return None
+    raw_box = value["box2d"]
+    fields = [raw_box.get(name) for name in ("x", "y", "width", "height")]
+    if not all(type(item) in (int, float) and math.isfinite(item) for item in fields):
+        return None
+    x, y, width, height = (float(item) for item in fields)
+    if (
+        x < 0 or y < 0 or width <= 0 or height <= 0
+        or x > 1 or y > 1 or width > 1 or height > 1
+        or x + width > 1.000001 or y + height > 1.000001
+    ):
+        return None
+    confidence = value.get("confidence", 0.8)
+    if type(confidence) not in (int, float) or not math.isfinite(confidence):
+        return None
+    confidence = min(1.0, max(0.01, float(confidence)))
+    eye_closed = value.get("eyeClosed")
+    if type(eye_closed) not in (int, float) or not math.isfinite(eye_closed):
+        eye_closed = None
+    elif eye_closed < 0 or eye_closed > 1:
+        eye_closed = None
+    return {
+        "box2d": {
+            "x": round(x, 6),
+            "y": round(y, 6),
+            "width": round(width, 6),
+            "height": round(height, 6),
+        },
+        "confidence": round(confidence, 4),
+        "eyeClosed": round(float(eye_closed), 4) if eye_closed is not None else None,
+    }
+
+
+class AnonymousMultiTracker:
+    """Bounded IoU continuity tracker; episodes are not biometric identities."""
+
+    def __init__(
+        self,
+        episode_prefix: str = EPISODE_SESSION,
+        max_persons: int = MAX_PERSONS,
+        grace: int | None = None,
+        iou_threshold: float = TRACK_IOU,
+    ):
+        self.episode_prefix = episode_prefix
+        self.max_persons = min(8, max(1, int(max_persons)))
+        self.grace = max(1, grace if grace is not None else int(
+            os.environ.get("BUDDY_VISION_PERSON_GRACE", "8")
+        ))
+        self.iou_threshold = min(0.9, max(0.05, float(iou_threshold)))
+        self.episode_sequence = 0
+        self.tracks = {}
+
+    @property
+    def present(self) -> bool:
+        """Keep inference armed while a track is inside its loss grace."""
+        return bool(self.tracks)
+
+    def update(self, raw_detections) -> dict:
+        detections = [
+            detection
+            for detection in (safe_detection(item) for item in (raw_detections or []))
+            if detection is not None
+        ]
+        detections.sort(key=lambda item: (
+            item["box2d"]["x"], item["box2d"]["y"],
+            item["box2d"]["width"], item["box2d"]["height"],
+        ))
+        detections = detections[:self.max_persons]
+        previous = sorted(self.tracks.values(), key=lambda item: item["episodeId"])
+        candidates = []
+        for track_index, track in enumerate(previous):
+            for detection_index, detection in enumerate(detections):
+                score = box_iou(track["box2d"], detection["box2d"])
+                if score >= self.iou_threshold:
+                    candidates.append((-score, track_index, detection_index))
+        candidates.sort()
+        used_tracks = set()
+        used_detections = set()
+        next_tracks = {}
+        for _, track_index, detection_index in candidates:
+            if track_index in used_tracks or detection_index in used_detections:
+                continue
+            track = previous[track_index]
+            detection = detections[detection_index]
+            used_tracks.add(track_index)
+            used_detections.add(detection_index)
+            refreshed = {
+                **detection,
+                "episodeId": track["episodeId"],
+                "misses": 0,
+            }
+            next_tracks[refreshed["episodeId"]] = refreshed
+
+        entered = []
+        for detection_index, detection in enumerate(detections):
+            if detection_index in used_detections:
+                continue
+            self.episode_sequence += 1
+            episode_id = f"anon-{self.episode_prefix}-{self.episode_sequence}"
+            track = {**detection, "episodeId": episode_id, "misses": 0}
+            next_tracks[episode_id] = track
+            entered.append(track)
+
+        lost = []
+        for track_index, track in enumerate(previous):
+            if track_index in used_tracks:
+                continue
+            missed = {**track, "misses": track["misses"] + 1}
+            if missed["misses"] >= self.grace or len(next_tracks) >= self.max_persons:
+                lost.append(missed)
+            else:
+                next_tracks[missed["episodeId"]] = missed
+
+        self.tracks = next_tracks
+        visible = sorted(
+            (track for track in next_tracks.values() if track["misses"] == 0),
+            key=lambda item: (
+                item["box2d"]["x"], item["box2d"]["y"], item["episodeId"],
+            ),
+        )
+        return {"visible": visible, "entered": entered, "lost": lost}
+
+
+def classify_presence_transitions(batch: dict, had_presence: bool, has_presence: bool) -> list:
+    """Emit at most one human-facing arrival/loss; keep track changes internal."""
+    transitions = []
+    for index, track in enumerate(batch["entered"]):
+        is_arrival = not had_presence and index == 0
+        transitions.append((
+            "person_entered" if is_arrival else "person_observed",
+            200 if is_arrival else 80,
+            track,
+        ))
+    for index, track in enumerate(batch["lost"]):
+        is_total_loss = had_presence and not has_presence and index == 0
+        transitions.append((
+            "person_lost" if is_total_loss else "person_track_lost",
+            120 if is_total_loss else 60,
+            track,
+        ))
+    return transitions
+
+
+def select_drowsy_track(visible_tracks: list, face_sample, person_tracking: bool):
+    """Select blink evidence only when attribution to one episode is unambiguous."""
+    if len(visible_tracks) == 1:
+        track = dict(visible_tracks[0])
+        if track.get("eyeClosed") is None and face_sample and len(face_sample.detections) == 1:
+            track["eyeClosed"] = face_sample.detections[0].get("eyeClosed")
+        return track
+    if not person_tracking and face_sample and face_sample.present:
+        return {
+            "episodeId": None,
+            "confidence": face_sample.evidence.get("confidence", 0.8),
+            "box2d": face_sample.evidence.get("box2d"),
+            "eyeClosed": face_sample.eye_closed,
+        }
+    return None
+
+
+def detector_evidence_for(kind: str, person_sample: VisionSample, face_sample) -> dict:
+    """Attribute drowsiness to the face detector, never to the presence backend."""
+    sample = face_sample if kind == "drowsy" and face_sample else person_sample
+    return {
+        key: value
+        for key, value in sample.evidence.items()
+        if key in ("detector", "model", "frameWidth", "frameHeight")
+    }
 
 
 class CameraLivenessState:
@@ -462,7 +669,7 @@ def main() -> None:
     bridge = Bridge(BRIDGE_URL, TOKEN)
     bridge.connect()
     enabled = parse_enabled_detectors()
-    person = PersonState() if "person" in enabled else None
+    person = AnonymousMultiTracker() if "person" in enabled else None
     drowsy = DrowsyState() if "drowsy" in enabled else None
     liveness = CameraLivenessState()
     motion_events = MotionEventState()
@@ -482,7 +689,11 @@ def main() -> None:
         )
         print(f"[vision] cannot open camera index {CAMERA_INDEX}", file=sys.stderr)
         sys.exit(1)
-    print(f"[vision] watching camera {CAMERA_INDEX} ({CAMERA_NAME}); detectors={sorted(enabled)} person_backend={backend}", flush=True)
+    print(
+        f"[vision] watching camera {CAMERA_INDEX} ({CAMERA_NAME}); "
+        f"detectors={sorted(enabled)} person_backend={backend} max_persons={MAX_PERSONS}",
+        flush=True,
+    )
 
     prev_gray = None
     interval = 1.0 / max(FPS, 0.5)
@@ -539,46 +750,95 @@ def main() -> None:
             else:
                 person_sample = person_detector.detect(frame)
 
-            transitions = []
+            presence_batch = {"visible": [], "entered": [], "lost": []}
+            had_presence = person.present if person else False
             if person:
-                t = person.update(person_sample.present)
-                if t:
-                    transitions.append((t[0], t[1], person_sample.evidence, t[2]))
+                presence_batch = person.update(person_sample.detections)
+            visible_tracks = presence_batch["visible"]
+            visible_count = len(visible_tracks)
+            transitions = classify_presence_transitions(
+                presence_batch,
+                had_presence,
+                person.present if person else False,
+            )
             if drowsy:
-                eye_closed = face_sample.eye_closed if face_sample and face_sample.present else None
+                # With multiple faces, attributing a blink to one anonymous
+                # episode is ambiguous. Reset instead of guessing.
+                drowsy_track = select_drowsy_track(
+                    visible_tracks,
+                    face_sample,
+                    person is not None,
+                )
+                eye_closed = drowsy_track.get("eyeClosed") if drowsy_track else None
                 t = drowsy.update(eye_closed)
-                if t:
-                    transitions.append((
-                        t[0],
-                        t[1],
-                        face_sample.evidence if face_sample else {"detector": "mediapipe_face"},
-                        person.presence_episode_id if person else None,
-                    ))
-            for kind, salience, evidence, presence_episode_id in transitions:
-                keyframe = save_keyframe(frame)
-                payload = {"camera": CAMERA_NAME, "imagePath": keyframe, **evidence}
-                if presence_episode_id:
-                    payload["presenceEpisodeId"] = presence_episode_id
+                if t and drowsy_track:
+                    transitions.append((t[0], t[1], drowsy_track))
+
+            keyframe = save_keyframe(frame) if transitions else None
+            detector_evidence = detector_evidence_for(
+                "person_observed",
+                person_sample,
+                face_sample,
+            )
+            for kind, salience, track in transitions:
+                event_detector_evidence = detector_evidence_for(
+                    kind,
+                    person_sample,
+                    face_sample,
+                )
+                payload = {
+                    "camera": CAMERA_NAME,
+                    "confidence": track["confidence"],
+                    **event_detector_evidence,
+                }
+                if track.get("episodeId"):
+                    payload["presenceEpisodeId"] = track["episodeId"]
+                if person is not None:
+                    payload["occupancyCount"] = visible_count
+                if keyframe:
+                    payload["imagePath"] = keyframe
+                if kind not in ("person_lost", "person_track_lost") and track.get("box2d"):
+                    payload["box2d"] = track["box2d"]
+                if kind == "drowsy" and track.get("eyeClosed") is not None:
+                    payload["eyeClosed"] = track["eyeClosed"]
                 bridge.emit(kind, salience, payload)
                 log_event({"ts_ms": now_ms(), "kind": kind, **payload})
                 print(f"[vision] event {kind} → bridge", flush=True)
-            if (
-                person
-                and person.present
-                and person_sample.present
-                and person.presence_episode_id
-                and t0 - last_observation_at >= observation_secs
-            ):
+
+            if presence_batch["entered"] and visible_count > 0:
                 last_observation_at = t0
-                bridge.emit(
-                    "person_observed",
-                    20,
-                    {
+            observation_due = visible_count > 0 and t0 - last_observation_at >= observation_secs
+            refresh_tracks = observation_due and not presence_batch["entered"]
+            if refresh_tracks:
+                last_observation_at = t0
+                for track in visible_tracks:
+                    payload = {
                         "camera": CAMERA_NAME,
-                        "presenceEpisodeId": person.presence_episode_id,
-                        **person_sample.evidence,
-                    },
+                        "presenceEpisodeId": track["episodeId"],
+                        "confidence": track["confidence"],
+                        "occupancyCount": visible_count,
+                        "box2d": track["box2d"],
+                        **detector_evidence,
+                    }
+                    bridge.emit("person_observed", 20, payload)
+
+            emit_aggregate = person is not None and (bool(transitions) or refresh_tracks)
+            if emit_aggregate:
+                aggregate_confidence = min(
+                    (track["confidence"] for track in visible_tracks),
+                    default=0.0,
                 )
+                aggregate_payload = {
+                    "camera": CAMERA_NAME,
+                    "occupancyCount": visible_count,
+                    "visiblePersonCount": visible_count,
+                    "confidence": aggregate_confidence,
+                    **detector_evidence,
+                }
+                # The aggregate is emitted last so it deterministically repairs
+                # occupancy after any per-track loss in the same frame.
+                bridge.emit("people_observed", 20, aggregate_payload)
+                log_event({"ts_ms": now_ms(), "kind": "people_observed", **aggregate_payload})
         dt = time.time() - t0
         if dt < interval:
             time.sleep(interval - dt)

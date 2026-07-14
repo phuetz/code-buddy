@@ -174,6 +174,23 @@ function observationsOf(
     departureConfirmed,
     observation2d,
   } = trigger.payload;
+  if (trigger.payload.kind === 'people_observed' && occupancyCount !== undefined) {
+    const entityId = `person-occupancy:${sensorId}`;
+    const visibility = occupancyCount > 0 ? 'visible' : 'unknown';
+    return [{
+      eventId: observationId(trigger.payload, entityId),
+      entityId,
+      entityType: 'person-occupancy',
+      visibility,
+      observedAt: trigger.payload.observedAt,
+      receivedAt: trigger.createdAt,
+      confidence: trigger.payload.confidence,
+      source: trigger.provenance.source,
+      kind: trigger.payload.kind,
+      ttlMs: visibility === 'visible' ? 15_000 : 5_000,
+      ...(occupancyCount > 0 ? { attributes: { count: occupancyCount } } : {}),
+    }];
+  }
   const cameraVisibility = trigger.payload.kind === 'camera_alive'
     ? 'visible'
     : trigger.payload.kind === 'camera_unavailable'
@@ -199,6 +216,7 @@ function observationsOf(
     trigger.payload.kind === 'person_observed'
     ? 'visible'
     : trigger.payload.kind === 'person_lost' ||
+      trigger.payload.kind === 'person_track_lost' ||
       (trigger.payload.kind === 'person_left' && !confirmedDeparture)
       ? 'unknown'
     : confirmedDeparture

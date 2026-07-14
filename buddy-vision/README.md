@@ -47,6 +47,7 @@ and loop latency from companion percepts.
 | event | how |
 |-------|-----|
 | `person_entered` / `person_observed` / `person_lost` | MediaPipe FaceLandmarker by default, or optional YOLOv8 person detection (`BUDDY_VISION_PERSON_BACKEND=yolo`). A loss means `unknown`, never proof that the room is empty. |
+| `people_observed` | One bounded aggregate emitted after the per-track batch. A positive detector count proves visible presence; zero detections means `unknown`, never an empty room. |
 | `camera_alive` / `camera_unavailable` | Low-rate camera liveness refresh and explicit read/open failure. |
 | `motion` | Rate-limited keyframe for the brain's local VLM scene refresh. |
 | `drowsy` | `eyeBlink` blendshape closed ≥ `BUDDY_VISION_DROWSY_SECS` (Vigil) |
@@ -57,13 +58,20 @@ line is appended to `~/.codebuddy/companion/events.jsonl` (audit/stats).
 Motion refreshes and semantic transitions use separate bounded JPEG rings with
 atomic replacement rather than accumulating one file per event.
 
-Each presence episode gets a random, process-local `presenceEpisodeId`. It
-preserves continuity of the detector episode only; it is not individual
-tracking, a name, face identity or biometric re-identification. The current
-producer deliberately exposes no exact occupancy count. `person_observed` carries a
-strict normalized 2D box (`x`, `y`, `width`, `height`) for qualitative image
-position. It does not claim metric distance, depth or 3D geometry. The current
-producer tracks one best person; multi-person tracking remains future work.
+Each presence episode gets a random, process-local `presenceEpisodeId`. A
+deterministic greedy IoU association preserves approximate detector continuity
+through short occlusions. It is not a name, face identity or biometric
+re-identification; crossings and large movements may rotate an episode. Set
+`BUDDY_VISION_MAX_PERSONS=1..8` (default `1`, canary recommendation `4`) to bound
+the FaceLandmarker and tracker together. Per-track events carry only confidence
+and a strict normalized 2D box (`x`, `y`, `width`, `height`). No crop, embedding,
+landmark, depth or identity crosses the bridge. Drowsiness is deliberately
+suppressed when several faces are visible because blink attribution would be
+ambiguous. One `people_observed` aggregate is emitted last so the final visible
+detector count repairs occupancy after per-track transitions in the same frame.
+Each inference batch emits at most one human-facing arrival or total-loss event;
+additional arrivals are ordinary observations and partial losses remain internal
+`person_track_lost` uncertainty updates, avoiding duplicate companion messages.
 
 ## YOLOv8 presence backend
 
@@ -96,6 +104,8 @@ YOLO env knobs: `BUDDY_VISION_YOLO_MODEL`, `BUDDY_VISION_YOLO_CONF`,
 (person,drowsy), `BUDDY_VISION_PERSON_BACKEND` (mediapipe,yolo),
 `BUDDY_VISION_FPS`, `BUDDY_VISION_MOTION`, `BUDDY_VISION_BLINK`,
 `BUDDY_VISION_DROWSY_SECS`, `BUDDY_VISION_PERSON_GRACE`,
+`BUDDY_VISION_MAX_PERSONS` (1..8, default 1),
+`BUDDY_VISION_TRACK_IOU` (0.05..0.9, default 0.2),
 `BUDDY_VISION_HEARTBEAT_SECS`, `BUDDY_VISION_CAMERA_FAILURE_GRACE`,
 `BUDDY_VISION_OBSERVATION_SECS`, `BUDDY_VISION_MOTION_EVENT_SECS`,
 `BUDDY_VISION_MOTION_FRAME_SLOTS`, `BUDDY_VISION_SEMANTIC_FRAME_SLOTS`,

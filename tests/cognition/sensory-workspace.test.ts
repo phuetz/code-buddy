@@ -170,6 +170,47 @@ describe('sensory cognitive workspace shadow adapter', () => {
     }
   });
 
+  it('reduces one atomic visible-person aggregate and treats zero detections as unknown', async () => {
+    const cognition = wireSensoryWorkspace({ worldSweepMs: 0 });
+    const emit = async (occupancyCount: number, confidence: number) => {
+      getGlobalEventBus().emit('sensory:perception', {
+        source: 'test',
+        metadata: {
+          modality: 'vision',
+          kind: 'people_observed',
+          salience: 40,
+          payload: {
+            camera: 'Room',
+            occupancyCount,
+            visiblePersonCount: occupancyCount,
+            confidence,
+            landmarks: [{ x: 1, y: 2, z: 3 }],
+          },
+        },
+      });
+      await new Promise((resolve) => setTimeout(resolve, 15));
+    };
+    try {
+      await emit(2, 0.8);
+      expect(cognition.worldModel.get('person-occupancy:room')).toMatchObject({
+        visibility: 'visible',
+        attributes: { count: 2 },
+      });
+      expect(JSON.stringify(cognition.workspace.snapshot())).not.toContain('landmarks');
+      expect(JSON.stringify(cognition.workspace.snapshot())).not.toContain('"z"');
+
+      await emit(0, 0);
+      expect(cognition.worldModel.get('person-occupancy:room')).toMatchObject({
+        visibility: 'unknown',
+        confidence: 0,
+      });
+      expect(cognition.worldModel.get('person-occupancy:room')?.attributes)
+        .not.toHaveProperty('count');
+    } finally {
+      cognition.close();
+    }
+  });
+
   it('treats detector loss as unknown rather than inventing physical departure', async () => {
     const cognition = wireSensoryWorkspace({ worldSweepMs: 0 });
     const emit = async (kind: string, occupancyCount?: number) => {
@@ -225,6 +266,44 @@ describe('sensory cognitive workspace shadow adapter', () => {
       await emit('person_entered', 1);
       await emit('person_left', 0);
       expect(cognition.worldModel.get('person-occupancy:room')?.visibility).toBe('unknown');
+    } finally {
+      cognition.close();
+    }
+  });
+
+  it('marks one partially lost anonymous track unknown while occupancy stays visible', async () => {
+    const cognition = wireSensoryWorkspace({ worldSweepMs: 0 });
+    const emit = async (kind: string, episode: string, occupancyCount: number) => {
+      getGlobalEventBus().emit('sensory:perception', {
+        source: 'test',
+        metadata: {
+          modality: 'vision',
+          kind,
+          salience: 60,
+          payload: {
+            camera: 'Room',
+            presenceEpisodeId: episode,
+            occupancyCount,
+            confidence: 0.8,
+            box2d: { x: 0.2, y: 0.1, width: 0.2, height: 0.5 },
+          },
+        },
+      });
+      await new Promise((resolve) => setTimeout(resolve, 15));
+    };
+    try {
+      await emit('person_entered', 'left', 2);
+      await emit('person_observed', 'right', 2);
+      await emit('person_track_lost', 'left', 1);
+
+      const tracks = cognition.snapshotWorld().filter((entity) => entity.type === 'person-track');
+      expect(tracks).toHaveLength(2);
+      expect(tracks.find((entity) => entity.visibility === 'unknown')).toBeDefined();
+      expect(tracks.find((entity) => entity.visibility === 'visible')).toBeDefined();
+      expect(cognition.worldModel.get('person-occupancy:room')).toMatchObject({
+        visibility: 'visible',
+        attributes: { count: 1 },
+      });
     } finally {
       cognition.close();
     }
