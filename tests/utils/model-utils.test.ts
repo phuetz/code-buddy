@@ -65,6 +65,14 @@ describe('Model Utilities', () => {
       expect(info.provider).toBe('ollama');
     });
 
+    it('recognizes the local Moondream vision model and its measured context', () => {
+      expect(getModelInfo('moondream:latest')).toEqual({
+        maxTokens: 2048,
+        provider: 'ollama',
+        isSupported: true,
+      });
+    });
+
     it('should return Ollama info for the local Devstral Small 2 tag', () => {
       const info = getModelInfo('devstral-small-2:24b-instruct-2512-q4_K_M');
       expect(info.isSupported).toBe(true);

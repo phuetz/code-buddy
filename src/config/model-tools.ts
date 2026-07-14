@@ -538,6 +538,21 @@ const DEFAULT_MODEL_CONFIGS: ModelToolConfig[] = [
   // `ollama/qwen2.5-coder:7b`. So `ollama/*` alone misses it. We list
   // the common Ollama-shipped families directly so the conservative
   // config is picked up regardless of how the request was routed.
+  // Moondream2 profile verified against the local Ollama manifest on
+  // 2026-07-14: Phi-2 + CLIP, 2,048-token context, completion + vision only.
+  {
+    model: 'moondream*',
+    strengths: ['fast', 'cheap'],
+    supportsReasoning: false,
+    supportsToolCalls: false,
+    supportsVision: true,
+    contextWindow: 2048,
+    maxOutputTokens: 512,
+    maxToolRounds: 0,
+    enabledTools: [],
+    patchFormat: 'full_file',
+    promptProfile: 'lite',
+  },
   {
     model: 'ollama/*',
     supportsReasoning: false,

@@ -168,6 +168,7 @@ export const SUPPORTED_MODELS = {
   'qwen3.5:35b': { maxTokens: 32768, provider: 'ollama' },
   'qwen3.6:27b': { maxTokens: 32768, provider: 'ollama' },
   'qwen3.6:35b-a3b-q4_K_M': { maxTokens: 32768, provider: 'ollama' },
+  'moondream': { maxTokens: 2048, provider: 'ollama' },
   'devstral-small-2': { maxTokens: 131072, provider: 'ollama' },
   'devstral-small-2:24b-instruct-2512-q4_K_M': { maxTokens: 131072, provider: 'ollama' },
   'phi3': { maxTokens: 4096, provider: 'ollama' },

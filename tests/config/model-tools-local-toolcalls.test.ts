@@ -42,4 +42,17 @@ describe('model-tools: local tool-call gating', () => {
       maxOutputTokens: 4096,
     });
   });
+
+  it('keeps Moondream as a bounded vision-only perception model', () => {
+    expect(getModelToolConfig('moondream:latest')).toMatchObject({
+      supportsVision: true,
+      supportsReasoning: false,
+      supportsToolCalls: false,
+      contextWindow: 2048,
+      maxOutputTokens: 512,
+      maxToolRounds: 0,
+      enabledTools: [],
+      promptProfile: 'lite',
+    });
+  });
 });
