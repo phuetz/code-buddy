@@ -61,9 +61,11 @@ supplémentaire pour agir à l'extérieur.
    le planificateur. Le chemin ADB expose également les instances structurées au
    tool `device_manage` (`action: calendar`) ; une erreur de permission reste
    distincte d'un calendrier réellement vide.
-6. Les routines apprises sont des candidats de skills, pas des occurrences
-   calendaires. Leur fonction de promotion ne fait pas respecter complètement
-   le statut de revue annoncé.
+6. Corrigé le 14 juillet 2026 : une routine apprise reste un candidat de skill
+   distinct d'une occurrence calendaire. La promotion exige maintenant une
+   revue humaine nommée et une empreinte exacte du contenu ; toute évolution de
+   la routine invalide la revue et la replace en brouillon. CLI et Cowork
+   séparent explicitement `Review` puis `Promote`.
 7. Corrigé : `src/meals/` fournit profil alimentaire privé, inventaire,
    normalisation et compatibilité des recettes, classement conservateur et plan
    de repas civil dans le fuseau Maison. `buddy maison food` expose ces contrats

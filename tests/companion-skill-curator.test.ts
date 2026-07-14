@@ -8,6 +8,7 @@ import {
   getCompanionSkillCandidatePath,
   promoteCompanionSkillCandidate,
   readCompanionSkillCandidates,
+  reviewCompanionSkillCandidate,
 } from '../src/companion/skill-curator.js';
 import {
   getCompanionMissionBoardPath,
@@ -115,6 +116,14 @@ describe('companion skill curator', () => {
       now: new Date('2026-05-24T11:00:00.000Z'),
       recordSuggestions: false,
     });
+    await reviewCompanionSkillCandidate('skill-companion-voice-barge-in', {
+      reviewedBy: 'Patrice',
+      note: 'Routine relue et limitée aux actions explicites.',
+    }, {
+      cwd: tempDir,
+      now: new Date('2026-05-24T11:30:00.000Z'),
+      recordPercept: false,
+    });
 
     const promoted = await promoteCompanionSkillCandidate('skill-companion-voice-barge-in', {
       cwd: tempDir,
@@ -127,6 +136,7 @@ describe('companion skill curator', () => {
     const markdown = await readFile(promoted.artifactPath, 'utf8');
     expect(markdown).toContain('# Companion Skill: multimodal: voice barge-in');
     expect(markdown).toContain('## Safety Contract');
+    expect(markdown).toContain('Reviewed by: Patrice');
 
     const store = await readCompanionSkillCandidates({ cwd: tempDir });
     expect(store.candidates.find(candidate => candidate.id === 'skill-companion-voice-barge-in')).toMatchObject({
@@ -139,6 +149,28 @@ describe('companion skill curator', () => {
 
     const safety = await readRecentCompanionSafetyEvents({ cwd: tempDir, kind: 'data' });
     expect(safety.some(event => event.action === 'companion_skill_promote')).toBe(true);
+  });
+
+  it('blocks draft promotion and invalidates review when generated content changes', async () => {
+    await writeBoard(tempDir, [mission()]);
+    await curateCompanionSkills({ cwd: tempDir, recordSuggestions: false });
+    await expect(promoteCompanionSkillCandidate('skill-companion-voice-barge-in', { cwd: tempDir }))
+      .rejects.toThrow('must be reviewed before promotion');
+
+    const reviewed = await reviewCompanionSkillCandidate('skill-companion-voice-barge-in', {
+      reviewedBy: 'Patrice',
+    }, { cwd: tempDir, recordPercept: false });
+    expect(reviewed).toMatchObject({ status: 'reviewed', reviewedBy: 'Patrice' });
+
+    await writeBoard(tempDir, [mission({ recommendation: 'Use a newly revised safe barge-in routine.' })]);
+    const refreshed = await curateCompanionSkills({ cwd: tempDir, recordSuggestions: false });
+    const changed = refreshed.store.candidates.find(
+      candidate => candidate.id === 'skill-companion-voice-barge-in',
+    );
+    expect(changed?.status).toBe('draft');
+    expect(changed?.reviewedBy).toBeUndefined();
+    await expect(promoteCompanionSkillCandidate('skill-companion-voice-barge-in', { cwd: tempDir }))
+      .rejects.toThrow('must be reviewed before promotion');
   });
 
   it('dismisses candidates so they cannot be promoted by accident', async () => {

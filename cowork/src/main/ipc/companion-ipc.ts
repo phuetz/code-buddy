@@ -564,6 +564,10 @@ interface CompanionSkillCandidate {
   updatedAt: string;
   promotedAt?: string;
   artifactPath?: string;
+  reviewedAt?: string;
+  reviewedBy?: string;
+  reviewNote?: string;
+  reviewedContentHash?: string;
 }
 
 interface CompanionSkillCandidateStore {
@@ -1080,6 +1084,11 @@ type CompanionSkillCuratorMod = {
     cwd?: string;
     recordSuggestions?: boolean;
   }) => Promise<CompanionSkillCuratorResult>;
+  reviewCompanionSkillCandidate: (
+    candidateId: string,
+    input: { reviewedBy: string; note?: string },
+    options: { cwd?: string },
+  ) => Promise<CompanionSkillCandidate>;
   promoteCompanionSkillCandidate: (
     candidateId: string,
     options: { cwd?: string },
@@ -2299,6 +2308,37 @@ export function registerCompanionIpcHandlers(projectManagerSource: ProjectManage
         };
       } catch (err) {
         logError('[companion.skills.curate] failed:', err);
+        return { ok: false as const, error: errorMessage(err) };
+      }
+    },
+  );
+
+  ipcMain.handle(
+    'companion.skills.review',
+    async (_e, input?: {
+      projectId?: string;
+      candidateId?: string;
+      reviewedBy?: string;
+      note?: string;
+    }) => {
+      const { cwd, error } = await companionWorkDir(projectManagerSource, input?.projectId);
+      if (!cwd) return { ok: false as const, error };
+      if (!input?.candidateId) return { ok: false as const, error: 'candidateId is required' };
+      if (!input.reviewedBy?.trim()) return { ok: false as const, error: 'reviewedBy is required' };
+      try {
+        const mod = await loadSkillCurator();
+        if (!mod?.reviewCompanionSkillCandidate) {
+          return { ok: false as const, error: 'core companion skill review module unavailable' };
+        }
+        return {
+          ok: true as const,
+          candidate: await mod.reviewCompanionSkillCandidate(input.candidateId, {
+            reviewedBy: input.reviewedBy,
+            note: input.note,
+          }, { cwd }),
+        };
+      } catch (err) {
+        logError('[companion.skills.review] failed:', err);
         return { ok: false as const, error: errorMessage(err) };
       }
     },

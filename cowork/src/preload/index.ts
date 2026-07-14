@@ -1723,6 +1723,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
       recordSuggestions?: boolean;
     }): Promise<{ ok: boolean; result?: CompanionSkillCuratorResult; error?: string }> =>
       ipcRenderer.invoke('companion.skills.curate', input),
+    reviewSkillCandidate: (input: {
+      projectId?: string;
+      candidateId: string;
+      reviewedBy: string;
+      note?: string;
+    }): Promise<{ ok: boolean; candidate?: CompanionSkillCandidate; error?: string }> =>
+      ipcRenderer.invoke('companion.skills.review', input),
     promoteSkillCandidate: (input: {
       projectId?: string;
       candidateId: string;
@@ -6263,6 +6270,12 @@ declare global {
           projectId?: string;
           recordSuggestions?: boolean;
         }) => Promise<{ ok: boolean; result?: CompanionSkillCuratorResult; error?: string }>;
+        reviewSkillCandidate: (input: {
+          projectId?: string;
+          candidateId: string;
+          reviewedBy: string;
+          note?: string;
+        }) => Promise<{ ok: boolean; candidate?: CompanionSkillCandidate; error?: string }>;
         promoteSkillCandidate: (input: {
           projectId?: string;
           candidateId: string;

@@ -1208,6 +1208,10 @@ export interface CompanionSkillCandidate {
   updatedAt: string;
   promotedAt?: string;
   artifactPath?: string;
+  reviewedAt?: string;
+  reviewedBy?: string;
+  reviewNote?: string;
+  reviewedContentHash?: string;
 }
 
 export interface CompanionSkillCandidateStore {

@@ -1215,7 +1215,7 @@ function CompanionCardRow({
               className="rounded border border-border px-2 py-1 text-[10px] text-text-secondary hover:bg-surface disabled:opacity-50"
             >
               Dismiss
-                                      </button>
+            </button>
           </div>
         )}
       </div>
@@ -1758,11 +1758,13 @@ function OpenClawBridgePreview({
 function SkillCandidateRow({
   candidate,
   busy,
+  onReview,
   onPromote,
   onDismiss,
 }: {
   candidate: CompanionSkillCandidate;
   busy: boolean;
+  onReview: (candidateId: string) => void;
   onPromote: (candidateId: string) => void;
   onDismiss: (candidateId: string) => void;
 }) {
@@ -1795,16 +1797,32 @@ function SkillCandidateRow({
               <span className="truncate">{candidate.artifactPath}</span>
             </button>
           )}
+          {candidate.reviewedBy && (
+            <p className="mt-2 text-[10px] text-text-muted">
+              Reviewed by {candidate.reviewedBy}
+              {candidate.reviewedAt ? ` · ${new Date(candidate.reviewedAt).toLocaleString()}` : ''}
+            </p>
+          )}
         </div>
         {candidate.status !== 'promoted' && candidate.status !== 'dismissed' && (
           <div className="flex shrink-0 flex-col gap-1">
-            <button
-              disabled={busy}
-              onClick={() => onPromote(candidate.id)}
-              className="rounded border border-border px-2 py-1 text-[10px] text-text-secondary hover:bg-surface disabled:opacity-50"
-            >
-              Promote
-                                      </button>
+            {candidate.status === 'draft' ? (
+              <button
+                disabled={busy}
+                onClick={() => onReview(candidate.id)}
+                className="rounded border border-accent/50 px-2 py-1 text-[10px] text-accent hover:bg-accent/10 disabled:opacity-50"
+              >
+                Review
+              </button>
+            ) : (
+              <button
+                disabled={busy || candidate.status !== 'reviewed'}
+                onClick={() => onPromote(candidate.id)}
+                className="rounded border border-border px-2 py-1 text-[10px] text-text-secondary hover:bg-surface disabled:opacity-50"
+              >
+                Promote
+              </button>
+            )}
             <button
               disabled={busy}
               onClick={() => onDismiss(candidate.id)}
@@ -2737,6 +2755,25 @@ export function CompanionPanel() {
     setBusyAction(null);
     if (!res.ok) {
       setError(res.error ?? 'Skill promotion failed');
+      return;
+    }
+    await refresh();
+  };
+
+  const reviewSkill = async (candidateId: string) => {
+    const reviewedBy = window.prompt('Reviewer name for this companion routine');
+    if (!reviewedBy?.trim()) return;
+    const note = window.prompt('Optional review note');
+    setBusyAction('skill');
+    setError(null);
+    const res = await window.electronAPI.companion.reviewSkillCandidate({
+      candidateId,
+      reviewedBy: reviewedBy.trim(),
+      note: note?.trim() || undefined,
+    });
+    setBusyAction(null);
+    if (!res.ok) {
+      setError(res.error ?? 'Skill review failed');
       return;
     }
     await refresh();
@@ -3801,6 +3838,7 @@ export function CompanionPanel() {
                     key={candidate.id}
                     candidate={candidate}
                     busy={busyAction !== null}
+                    onReview={(candidateId) => void reviewSkill(candidateId)}
                     onPromote={(candidateId) => void promoteSkill(candidateId)}
                     onDismiss={(candidateId) => void dismissSkill(candidateId)}
                   />

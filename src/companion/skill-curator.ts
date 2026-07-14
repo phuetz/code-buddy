@@ -1,5 +1,6 @@
 import { mkdir, readFile, writeFile } from 'fs/promises';
 import * as path from 'path';
+import { createHash } from 'node:crypto';
 import { readCompanionMissionBoard, type CompanionMission } from './mission-board.js';
 import {
   readRecentCompanionPercepts,
@@ -34,6 +35,10 @@ export interface CompanionSkillCandidate {
   updatedAt: string;
   promotedAt?: string;
   artifactPath?: string;
+  reviewedAt?: string;
+  reviewedBy?: string;
+  reviewNote?: string;
+  reviewedContentHash?: string;
 }
 
 export interface CompanionSkillCandidateStore {
@@ -68,6 +73,11 @@ export interface CompanionSkillPromotionOptions {
   storePath?: string;
   skillsDir?: string;
   recordPercept?: boolean;
+}
+
+export interface CompanionSkillReviewInput {
+  reviewedBy: string;
+  note?: string;
 }
 
 export interface CompanionSkillPromotionResult {
@@ -193,7 +203,23 @@ function parseCandidate(value: unknown): CompanionSkillCandidate | null {
     updatedAt: typeof raw.updatedAt === 'string' ? raw.updatedAt : new Date().toISOString(),
     promotedAt: raw.promotedAt,
     artifactPath: raw.artifactPath,
+    reviewedAt: raw.reviewedAt,
+    reviewedBy: raw.reviewedBy,
+    reviewNote: raw.reviewNote,
+    reviewedContentHash: raw.reviewedContentHash,
   };
+}
+
+function candidateContentHash(candidate: CompanionSkillCandidate): string {
+  return createHash('sha256').update(JSON.stringify({
+    title: candidate.title,
+    score: candidate.score,
+    trigger: candidate.trigger,
+    routine: candidate.routine,
+    command: candidate.command ?? null,
+    sourceTags: candidate.sourceTags,
+    evidence: candidate.evidence,
+  })).digest('hex');
 }
 
 function sortCandidates(candidates: CompanionSkillCandidate[]): CompanionSkillCandidate[] {
@@ -396,12 +422,26 @@ function mergeCandidate(
     return { candidate: generated, changed: true, created: true };
   }
 
+  if (existing.status === 'promoted' || existing.status === 'dismissed') {
+    return { candidate: existing, changed: false, created: false };
+  }
+
+  const contentChanged = !sameCandidateContent(generated, existing);
+
   const candidate: CompanionSkillCandidate = {
     ...generated,
-    status: existing.status,
+    status: existing.status === 'reviewed' && contentChanged ? 'draft' : existing.status,
     createdAt: existing.createdAt,
     promotedAt: existing.promotedAt,
     artifactPath: existing.artifactPath,
+    ...(existing.status === 'reviewed' && !contentChanged
+      ? {
+          reviewedAt: existing.reviewedAt,
+          reviewedBy: existing.reviewedBy,
+          reviewNote: existing.reviewNote,
+          reviewedContentHash: existing.reviewedContentHash,
+        }
+      : {}),
   };
 
   if (sameCandidateContent(candidate, existing)) {
@@ -506,6 +546,8 @@ function buildSkillMarkdown(candidate: CompanionSkillCandidate, now: Date): stri
     `Candidate: ${candidate.id}`,
     `Score: ${candidate.score}/100`,
     `Tags: ${tags}`,
+    `Reviewed by: ${candidate.reviewedBy ?? 'unknown'}`,
+    `Reviewed at: ${candidate.reviewedAt ?? 'unknown'}`,
     '',
     '## Trigger',
     candidate.trigger,
@@ -527,6 +569,46 @@ function buildSkillMarkdown(candidate: CompanionSkillCandidate, now: Date): stri
     '- Append a safety event for sensitive tools, sensory capture, or autonomous follow-up.',
     '',
   ].join('\n');
+}
+
+export async function reviewCompanionSkillCandidate(
+  candidateId: string,
+  input: CompanionSkillReviewInput,
+  options: CompanionSkillPromotionOptions = {},
+): Promise<CompanionSkillCandidate> {
+  const reviewedBy = input.reviewedBy.trim();
+  if (!reviewedBy) throw new Error('reviewedBy is required to review a companion skill candidate');
+  if (reviewedBy.length > 120) throw new Error('reviewedBy must be 120 characters or fewer');
+  const cwd = resolveCwd(options.cwd);
+  const now = options.now || new Date();
+  const store = await readCompanionSkillCandidates({ cwd, storePath: options.storePath, now });
+  const candidate = store.candidates.find((item) => item.id === candidateId);
+  if (!candidate) throw new Error(`Companion skill candidate not found: ${candidateId}`);
+  if (candidate.status === 'promoted' || candidate.status === 'dismissed') {
+    throw new Error(`Cannot review ${candidate.status} companion skill candidate: ${candidateId}`);
+  }
+  const reviewNote = input.note?.trim();
+  const reviewed: CompanionSkillCandidate = {
+    ...candidate,
+    status: 'reviewed',
+    reviewedAt: now.toISOString(),
+    reviewedBy,
+    ...(reviewNote ? { reviewNote: reviewNote.slice(0, 1_000) } : {}),
+    reviewedContentHash: candidateContentHash(candidate),
+    updatedAt: now.toISOString(),
+  };
+  await updateCandidateInStore(store, reviewed);
+  if (options.recordPercept !== false) {
+    await recordCompanionPercept({
+      modality: 'tool',
+      source: 'companion_skill_curator',
+      summary: `Reviewed companion skill candidate ${reviewed.id}.`,
+      confidence: 1,
+      payload: { candidateId: reviewed.id, reviewedBy },
+      tags: ['skill-curator', 'skill-reviewed'],
+    }, { cwd, now });
+  }
+  return reviewed;
 }
 
 async function updateCandidateInStore(
@@ -557,6 +639,13 @@ export async function promoteCompanionSkillCandidate(
   }
   if (candidate.status === 'dismissed') {
     throw new Error(`Cannot promote dismissed companion skill candidate: ${candidateId}`);
+  }
+  if (candidate.status !== 'reviewed') {
+    throw new Error(`Companion skill candidate must be reviewed before promotion: ${candidateId}`);
+  }
+  if (!candidate.reviewedBy || !candidate.reviewedAt ||
+      candidate.reviewedContentHash !== candidateContentHash(candidate)) {
+    throw new Error(`Companion skill candidate review is missing or stale: ${candidateId}`);
   }
 
   const skillsDir = resolveSkillsDir({ ...options, cwd });

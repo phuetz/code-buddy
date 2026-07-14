@@ -1855,8 +1855,22 @@ export function registerCompanionCommands(program: Command): void {
     });
 
   skills
+    .command('review <id>')
+    .description('Review a companion skill candidate before promotion')
+    .requiredOption('--reviewed-by <name>', 'Human reviewer identity')
+    .option('--note <text>', 'Optional review note')
+    .action(async (id: string, opts: { reviewedBy: string; note?: string }) => {
+      const { reviewCompanionSkillCandidate } = await import('../../companion/skill-curator.js');
+      const candidate = await reviewCompanionSkillCandidate(id, {
+        reviewedBy: opts.reviewedBy,
+        note: opts.note,
+      });
+      console.log(`Companion skill candidate reviewed: ${candidate.id} by ${candidate.reviewedBy}`);
+    });
+
+  skills
     .command('promote <id>')
-    .description('Promote a companion skill candidate into a workspace-local skill artifact')
+    .description('Promote a reviewed companion skill candidate into a workspace-local skill artifact')
     .action(async (id: string) => {
       const {
         formatCompanionSkillPromotion,
