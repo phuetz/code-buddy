@@ -36,6 +36,10 @@ import {
   type TransitionSpec,
   type AssembleFilmDeps,
 } from '../video/film-assemble.js';
+import {
+  gpuMediaWorkerFromEnv,
+  type GpuMediaJobKind,
+} from '../gpu-media-worker.js';
 
 // ============================================================================
 // Lazy-loaded tool instances
@@ -691,6 +695,111 @@ export class UnderstandVideoTool implements ITool {
   }
 
   isAvailable(): boolean { return true; }
+}
+
+// ============================================================================
+// GpuMediaJobTool — isolated Darkstar jobs (PanoWorld / LongCat)
+// ============================================================================
+
+export class GpuMediaJobTool implements ITool {
+  readonly name = 'gpu_media_job';
+  readonly description =
+    'Inspect, submit, monitor, or cancel isolated GPU media jobs on the configured Darkstar worker. Supports bounded PanoWorld reconstruction and asynchronous LongCat avatar video rendering.';
+
+  async execute(input: Record<string, unknown>): Promise<ToolResult> {
+    try {
+      const client = gpuMediaWorkerFromEnv();
+      const operation = requiredString(input, 'operation');
+      let result: unknown;
+      switch (operation) {
+        case 'capabilities':
+          result = await client.capabilities();
+          break;
+        case 'submit': {
+          const kind = requiredString(input, 'job_kind');
+          if (kind !== 'panoworld_reconstruct' && kind !== 'avatar_video_render') {
+            throw new Error('job_kind must be panoworld_reconstruct or avatar_video_render');
+          }
+          result = await client.submit(kind as GpuMediaJobKind, input.payload);
+          break;
+        }
+        case 'status':
+          result = await client.status(requiredString(input, 'job_id'));
+          break;
+        case 'cancel':
+          result = await client.cancel(requiredString(input, 'job_id'));
+          break;
+        default:
+          throw new Error('operation must be capabilities, submit, status, or cancel');
+      }
+      return { success: true, output: JSON.stringify(result, null, 2), data: result };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : String(error) };
+    }
+  }
+
+  getSchema(): ToolSchema {
+    return {
+      name: this.name,
+      description: this.description,
+      parameters: {
+        type: 'object',
+        properties: {
+          operation: {
+            type: 'string',
+            enum: ['capabilities', 'submit', 'status', 'cancel'],
+            description: 'Worker operation.',
+          },
+          job_kind: {
+            type: 'string',
+            enum: ['panoworld_reconstruct', 'avatar_video_render'],
+            description: 'Required for submit.',
+          },
+          payload: {
+            type: 'object',
+            description:
+              'Validated job payload. PanoWorld accepts single-2048 (1 view) or multi-1024 (max 6); avatar rendering is restricted to 480p.',
+          },
+          job_id: { type: 'string', description: 'Required for status or cancel.' },
+        },
+        required: ['operation'],
+      },
+    };
+  }
+
+  validate(input: unknown): IValidationResult {
+    if (!input || typeof input !== 'object' || Array.isArray(input)) {
+      return { valid: false, errors: ['Input must be an object'] };
+    }
+    const data = input as Record<string, unknown>;
+    if (!['capabilities', 'submit', 'status', 'cancel'].includes(String(data.operation))) {
+      return { valid: false, errors: ['operation is invalid'] };
+    }
+    if (data.operation === 'submit' && (typeof data.job_kind !== 'string' || !data.payload)) {
+      return { valid: false, errors: ['job_kind and payload are required for submit'] };
+    }
+    if ((data.operation === 'status' || data.operation === 'cancel') && typeof data.job_id !== 'string') {
+      return { valid: false, errors: ['job_id is required'] };
+    }
+    return { valid: true };
+  }
+
+  getMetadata(): IToolMetadata {
+    return {
+      name: this.name,
+      description: this.description,
+      category: 'media',
+      keywords: ['darkstar', 'gpu', 'panoworld', 'longcat', 'avatar', '3dgs', 'world model'],
+      priority: 8,
+      requiresConfirmation: true,
+      modifiesFiles: true,
+      makesNetworkRequests: true,
+    };
+  }
+
+  isAvailable(): boolean {
+    return Boolean(process.env.CODEBUDDY_GPU_WORKER_URL);
+  }
 }
 
 // ============================================================================
@@ -1547,6 +1656,7 @@ export function createMultimodalTools(): ITool[] {
     new ImageEditTool(),
     new VideoAnalyzeTool(),
     new UnderstandVideoTool(),
+    new GpuMediaJobTool(),
     new VideoGenerateTool(),
     new VideoStitchTool(),
     new VideoExecuteTool(),

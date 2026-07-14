@@ -901,6 +901,13 @@ export const TOOL_METADATA: ToolMetadata[] = [
     description: 'Understand a video: transcript + research card + unverified experiment backlog + optional local visual or opt-in Gemini analysis'
   },
   {
+    name: 'gpu_media_job',
+    category: 'media',
+    keywords: ['darkstar', 'gpu', 'panoworld', 'longcat', 'avatar', '3dgs', 'world model', 'reconstruction', 'render'],
+    priority: 8,
+    description: 'Submit and monitor isolated PanoWorld or LongCat jobs on a configured GPU worker'
+  },
+  {
     name: 'ocr',
     category: 'media',
     keywords: ['ocr', 'text', 'extract', 'image', 'recognize', 'read'],

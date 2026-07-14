@@ -316,6 +316,7 @@ export {
   ImageGenerateTool,
   ImageEditTool,
   VideoAnalyzeTool,
+  GpuMediaJobTool,
   VideoGenerateTool,
   VideoExecuteTool,
   PDFExecuteTool,

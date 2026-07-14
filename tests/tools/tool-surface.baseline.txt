@@ -72,6 +72,7 @@ generate_document
 get_todo_list
 git
 git_summary
+gpu_media_job
 ha_call_service
 ha_get_state
 ha_list_entities

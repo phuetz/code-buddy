@@ -304,6 +304,40 @@ export const UNDERSTAND_VIDEO_TOOL: CodeBuddyTool = {
   }
 };
 
+export const GPU_MEDIA_JOB_TOOL: CodeBuddyTool = {
+  type: 'function',
+  function: {
+    name: 'gpu_media_job',
+    description:
+      'Inspect, submit, monitor, or cancel isolated GPU jobs on the configured Darkstar worker. Supports bounded PanoWorld reconstruction and asynchronous LongCat avatar video rendering.',
+    parameters: {
+      type: 'object',
+      properties: {
+        operation: {
+          type: 'string',
+          enum: ['capabilities', 'submit', 'status', 'cancel'],
+          description: 'Worker operation.',
+        },
+        job_kind: {
+          type: 'string',
+          enum: ['panoworld_reconstruct', 'avatar_video_render'],
+          description: 'Required for submit.',
+        },
+        payload: {
+          type: 'object',
+          description:
+            'Validated job payload. PanoWorld accepts single-2048 (1 view) or multi-1024 (max 6); avatar rendering is restricted to 480p.',
+        },
+        job_id: {
+          type: 'string',
+          description: 'Required for status or cancel.',
+        },
+      },
+      required: ['operation'],
+    },
+  },
+};
+
 // Hermes Video Generation Tool - Generate videos through the configured backend
 export const VIDEO_GENERATE_TOOL: CodeBuddyTool = {
   type: "function",
@@ -1082,6 +1116,7 @@ export const MULTIMODAL_TOOLS: CodeBuddyTool[] = [
   VIDEO_TOOL,
   VIDEO_ANALYZE_TOOL,
   UNDERSTAND_VIDEO_TOOL,
+  GPU_MEDIA_JOB_TOOL,
   VIDEO_GENERATE_TOOL,
   VIDEO_STITCH_TOOL,
   SCREENSHOT_TOOL,
