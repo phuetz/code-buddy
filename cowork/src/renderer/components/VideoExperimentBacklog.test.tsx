@@ -15,7 +15,7 @@ const result: VideoExperimentListResult = {
       confidence: 'medium',
       evidence: { t_start: 420, t_end: 430, transcript: 'Une visite 3D spatialement cohérente.' },
       namesToVerify: ['PanoWorld'],
-      links: [],
+      links: ['https://github.com/jjrCN/PanoWorld'],
       requirements: ['dépôt officiel'],
       risks: ['coût GPU'],
       minimumExperiment: 'Générer une petite scène multi-vues.',
@@ -62,6 +62,10 @@ describe('VideoExperimentBacklog', () => {
     expect(await screen.findByText('PanoWorld')).toBeTruthy();
     expect(screen.getByText('Une visite 3D spatialement cohérente.')).toBeTruthy();
     expect(screen.getByText(/Générer une petite scène/)).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'github.com/jjrCN/PanoWorld' })).toHaveProperty(
+      'href',
+      'https://github.com/jjrCN/PanoWorld'
+    );
 
     fireEvent.change(screen.getByLabelText('Rechercher une découverte vidéo'), {
       target: { value: 'robotique' },

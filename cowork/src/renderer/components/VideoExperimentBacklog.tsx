@@ -142,6 +142,26 @@ function ExperimentRow({
         >
           Artefact : {experiment.artifactPath}
         </div>
+        {experiment.links.length > 0 && (
+          <div className="mt-3">
+            <div className="font-medium">Sources primaires à vérifier</div>
+            <ul className="mt-1 space-y-1">
+              {experiment.links.map((link) => (
+                <li key={link} className="min-w-0">
+                  <a
+                    className="block truncate text-blue-500 hover:underline"
+                    href={link}
+                    rel="noreferrer"
+                    target="_blank"
+                    title={link}
+                  >
+                    {sourceLabel(link)}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
         <div className="mt-3 space-y-1.5">
           <label className="block font-medium" htmlFor={`review-note-${experiment.id}`}>
             Note de vérification
