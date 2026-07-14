@@ -1254,7 +1254,16 @@ export async function startServer(userConfig: Partial<ServerConfig> = {}): Promi
           const { getHeartbeatScheduler } = await import('../sensory/heartbeat-scheduler.js');
           const sensoryBridgeHandle = startSensoryBridge();
           const unwireReactions = wireSensoryReactions();
-          sensoryTeardown.push(() => sensoryBridgeHandle.close(), unwireReactions);
+          const { wireSensoryWorkspace } = await import('../cognition/sensory-workspace.js');
+          const embodiedCognition = wireSensoryWorkspace();
+          sensoryTeardown.push(
+            () => sensoryBridgeHandle.close(),
+            unwireReactions,
+            () => embodiedCognition.close(),
+          );
+          logger.info(
+            'Embodied cognition: Enabled in shadow mode (bounded workspace + parallel specialist mailboxes)',
+          );
           if (config.websocketEnabled && process.env.CODEBUDDY_AVATAR_BRIDGE !== 'false') {
             const [{ wireAvatarGatewayBridge }, { broadcast }] = await Promise.all([
               import('../avatar/avatar-gateway-bridge.js'),

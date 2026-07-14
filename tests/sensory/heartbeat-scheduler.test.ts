@@ -75,7 +75,7 @@ describe('HeartbeatScheduler — heartbeat-paced treatments', () => {
     expect(() => s.register({ name: 'bad', everyBeats: 0, handler: () => {} })).toThrow();
   });
 
-  it('skips a beat while a slow treatment is still running (no self-overlap)', async () => {
+  it('skips only the slow treatment while it is still running (no self-overlap)', async () => {
     const s = new HeartbeatScheduler();
     const runs: number[] = [];
     let release!: () => void;
@@ -104,6 +104,61 @@ describe('HeartbeatScheduler — heartbeat-paced treatments', () => {
       expect(runs).toEqual([1, 3]);
     } finally {
       release();
+      s.stop();
+    }
+  });
+
+  it('starts due organs in parallel and lets fast organs keep receiving beats', async () => {
+    const s = new HeartbeatScheduler();
+    const started: string[] = [];
+    const fastBeats: number[] = [];
+    let releaseVision!: () => void;
+    let releaseMemory!: () => void;
+    const visionGate = new Promise<void>((resolve) => {
+      releaseVision = resolve;
+    });
+    const memoryGate = new Promise<void>((resolve) => {
+      releaseMemory = resolve;
+    });
+    s.register({
+      name: 'vision-organ',
+      everyBeats: 1,
+      handler: async () => {
+        started.push('vision');
+        await visionGate;
+      },
+    });
+    s.register({
+      name: 'memory-organ',
+      everyBeats: 1,
+      handler: async () => {
+        started.push('memory');
+        await memoryGate;
+      },
+    });
+    s.register({
+      name: 'reflex-organ',
+      everyBeats: 1,
+      handler: (ctx) => {
+        fastBeats.push(ctx.beat);
+      },
+    });
+    s.start();
+    try {
+      beat(1);
+      await tick();
+      expect(started).toEqual(['vision', 'memory']);
+      expect(fastBeats).toEqual([1]);
+
+      // Both long organs are still busy. Their own duplicate run is skipped,
+      // but the independent reflex organ continues on the next heartbeat.
+      beat(2);
+      await tick();
+      expect(started).toEqual(['vision', 'memory']);
+      expect(fastBeats).toEqual([1, 2]);
+    } finally {
+      releaseVision();
+      releaseMemory();
       s.stop();
     }
   });

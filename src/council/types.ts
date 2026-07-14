@@ -86,7 +86,10 @@ export interface CouncilChatResult {
  * to this in the presenter; tests inject plain objects.
  */
 export interface CouncilChatClient {
-  chat(messages: Array<{ role: 'system' | 'user'; content: string }>): Promise<CouncilChatResult>;
+  chat(
+    messages: Array<{ role: 'system' | 'user'; content: string }>,
+    options?: { signal?: AbortSignal },
+  ): Promise<CouncilChatResult>;
 }
 
 // --- answers ---

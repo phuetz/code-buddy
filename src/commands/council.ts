@@ -62,8 +62,8 @@ type Emit = (s: string) => void;
 function toCouncilClient(c: CouncilCandidate): CouncilChatClient {
   const client = new CodeBuddyClient(c.apiKey ?? '', c.model, c.baseURL);
   return {
-    async chat(messages) {
-      const resp = await client.chat(messages, []);
+    async chat(messages, options) {
+      const resp = await client.chat(messages, [], { signal: options?.signal });
       return {
         content: resp?.choices?.[0]?.message?.content ?? '',
         promptTokens: resp?.usage?.prompt_tokens ?? 0,

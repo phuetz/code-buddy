@@ -199,12 +199,24 @@ export async function runCouncilPipeline(
 
   // 4. parallel fan-out with per-model timeout — one slow model never blocks
   // the council; timed-out / failed models are simply dropped from the panel.
-  const settled = await Promise.allSettled(
+  if (opts.fleet) {
+    if (peers.length === 0) onProgress({ type: 'fleet_no_peers' });
+    else onProgress({ type: 'fleet_consulting', peerCount: peers.length });
+  }
+  // Start local models and Fleet peers in one wave. The old two-wave layout
+  // waited for every local timeout before even contacting another machine.
+  const localRound = Promise.allSettled(
     picked.map(async (p, index): Promise<CouncilAnswer> => {
       const client = deps.clientFactory(p.c);
       const t0 = Date.now();
       const prompt = buildCouncilPrompt(task, plan, index);
-      const resp = await withTimeout(client.chat([{ role: 'user', content: prompt }]), timeoutMs, p.c.model);
+      const controller = new AbortController();
+      const resp = await withTimeout(
+        client.chat([{ role: 'user', content: prompt }], { signal: controller.signal }),
+        timeoutMs,
+        p.c.model,
+        controller,
+      );
       // Council answers bypass the agent-executor, so leakage tokens
       // (<think>, CJK artifacts, zero-width chars) must be stripped here.
       const content = sanitizeModelOutput(resp.content);
@@ -220,6 +232,23 @@ export async function runCouncilPipeline(
       };
     }),
   );
+  const peerRound =
+    opts.fleet && peers.length > 0
+      ? gatherPeerAnswers(
+          task,
+          peers,
+          deps.peerTimeoutMs ?? opts.peerTimeoutMs ?? timeoutMs,
+          {
+            promptForPeer: (_peer, index) =>
+              buildCouncilPrompt(task, plan, picked.length + index),
+            roleForPeer: (_peer, index) => plan.roles[picked.length + index],
+          },
+        )
+      : Promise.resolve({
+          answers: [],
+          errors: [] as Array<{ id: string; message: string }>,
+        });
+  const [settled, peerResult] = await Promise.all([localRound, peerRound]);
   const answers: CouncilAnswer[] = [];
   const failures: Array<{ source: string; error: string }> = [];
   settled.forEach((s, i) => {
@@ -255,35 +284,21 @@ export async function runCouncilPipeline(
 
   // Fleet — fold peer answers into the SAME judged set (judge/consensus/
   // scoreboard are source-agnostic: they score answers, not their origin).
-  if (opts.fleet) {
-    if (peers.length === 0) {
-      onProgress({ type: 'fleet_no_peers' });
-    } else {
-      onProgress({ type: 'fleet_consulting', peerCount: peers.length });
-      const { answers: peerAnswers, errors } = await gatherPeerAnswers(
-        task,
-        peers,
-        deps.peerTimeoutMs ?? opts.peerTimeoutMs ?? timeoutMs,
-        {
-          promptForPeer: (_peer, index) => buildCouncilPrompt(task, plan, picked.length + index),
-          roleForPeer: (_peer, index) => plan.roles[picked.length + index],
-        },
-      );
-      for (const a of peerAnswers) {
-        answers.push({
-          source: { kind: 'peer', peerId: a.modelId, model: a.modelName },
-          displayName: a.modelName,
-          ...(a.role ? { role: a.role } : {}),
-          content: a.content,
-          latencyMs: a.latency,
-          tokensUsed: a.tokensUsed,
-          costUsd: a.cost,
-        });
-      }
-      for (const e of errors) {
-        failures.push({ source: e.id, error: e.message });
-        onProgress({ type: 'answer_failed', source: e.id, error: e.message });
-      }
+  if (opts.fleet && peers.length > 0) {
+    for (const a of peerResult.answers) {
+      answers.push({
+        source: { kind: 'peer', peerId: a.modelId, model: a.modelName },
+        displayName: a.modelName,
+        ...(a.role ? { role: a.role } : {}),
+        content: a.content,
+        latencyMs: a.latency,
+        tokensUsed: a.tokensUsed,
+        costUsd: a.cost,
+      });
+    }
+    for (const e of peerResult.errors) {
+      failures.push({ source: e.id, error: e.message });
+      onProgress({ type: 'answer_failed', source: e.id, error: e.message });
     }
   }
 

@@ -379,6 +379,67 @@ describe('runCouncilPipeline', () => {
     expect(result.answers[1]!.role).toBeDefined();
     expect(peerPrompts[0]).toContain('Code Buddy Council');
   });
+
+  it('starts Fleet peers in the same wave while a local model is still running', async () => {
+    const candidates = [candidate('prov-a', 'coder-a'), candidate('prov-j', 'gpt-5-arbiter')];
+    let releaseLocal!: () => void;
+    const localGate = new Promise<void>((resolve) => (releaseLocal = resolve));
+    let peerStarted = false;
+    const deps = makeDeps(
+      candidates,
+      {
+        'coder-a': fakeClient('coder-a', {
+          answer: async () => {
+            await localGate;
+            return 'local answer';
+          },
+        }),
+        'gpt-5-arbiter': fakeClient('gpt-5-arbiter', {
+          judgeJson: '{"scores":{"A":0.8,"B":0.6},"winner":"A","why":"ok"}',
+          synthesis: 'merged answer',
+        }),
+      },
+      {
+        peers: [
+          {
+            id: 'peer-parallel',
+            listener: {
+              request: async () => {
+                peerStarted = true;
+                return { text: 'peer answer', modelRequested: 'qwen' };
+              },
+            },
+          },
+        ],
+      },
+    );
+
+    const run = runCouncilPipeline(TASK, { count: 1, fleet: true }, deps);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(peerStarted).toBe(true);
+    releaseLocal();
+    const result = await run;
+    expect(result.answers).toHaveLength(2);
+  });
+
+  it('aborts the local transport when a panel seat exceeds its deadline', async () => {
+    const candidates = [candidate('prov-a', 'coder-a')];
+    let aborted = false;
+    const client: CouncilChatClient = {
+      chat: async (_messages, options) =>
+        new Promise((_resolve, reject) => {
+          options?.signal?.addEventListener('abort', () => {
+            aborted = true;
+            reject(new Error('aborted'));
+          });
+        }),
+    };
+    const deps = makeDeps(candidates, { 'coder-a': client }, { timeoutMs: 15 });
+    await expect(runCouncilPipeline(TASK, { count: 1 }, deps)).rejects.toMatchObject({
+      code: 'all-failed',
+    });
+    expect(aborted).toBe(true);
+  });
 });
 
 describe('conductor role stability', () => {

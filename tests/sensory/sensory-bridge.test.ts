@@ -106,4 +106,26 @@ describe('sensory bridge → event bus → reaction', () => {
       await bridge.close();
     }
   });
+
+  it('preserves slash-separated canonical event kinds from the Rust daemon', async () => {
+    const bridge = startSensoryBridge({ port: 18235 });
+    const received: Perception[] = [];
+    const unwire = wireSensoryReactions((p) => received.push(p));
+    try {
+      const ws = await open(18235);
+      ws.send(JSON.stringify({ modality: 'vital', kind: 'memory/digest', salience: 3 }));
+      await new Promise<void>((resolve) => {
+        const timer = setInterval(() => {
+          if (!received.length) return;
+          clearInterval(timer);
+          resolve();
+        }, 10);
+      });
+      ws.close();
+      expect(received[0]!.kind).toBe('memory/digest');
+    } finally {
+      unwire();
+      await bridge.close();
+    }
+  });
 });

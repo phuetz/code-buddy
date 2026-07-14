@@ -40,8 +40,12 @@ interface HeartbeatPayload {
 export class HeartbeatScheduler {
   private readonly tasks = new Map<string, HeartbeatTask>();
   private listenerId?: string;
-  /** True while a beat's treatments are still running — prevents a slow beat overlapping the next. */
-  private beatInFlight = false;
+  /**
+   * One independent lock per organ. A slow memory/LLM treatment must not
+   * overlap itself, but it must never stop vision, quality, prefetch or other
+   * autonomous organs from receiving the next heartbeat.
+   */
+  private readonly inFlight = new Map<string, { beat: number; startedAt: number }>();
 
   /** Register a treatment to run every N beats. Re-registering replaces it. */
   register(task: HeartbeatTask): void {
@@ -68,17 +72,7 @@ export class HeartbeatScheduler {
       if (m?.modality !== 'vital' || m?.kind !== 'heartbeat') return;
       const beat = Number(m.payload?.beat ?? 0);
       if (!Number.isFinite(beat) || beat < 1) return;
-      // Don't let a slow beat's treatments (e.g. dreaming draining the shared sensory buffer)
-      // overlap the next beat — two concurrent onBeat runs race on that shared buffer. Skip beats
-      // while one is still in flight; the pacemaker resumes on the next non-overlapping beat.
-      if (this.beatInFlight) {
-        logger.debug(`[heartbeat] beat ${beat} skipped — previous beat still processing`);
-        return;
-      }
-      this.beatInFlight = true;
-      void this.onBeat({ beat, uptimeMs: m.payload?.uptime_ms, load1: m.payload?.load1 }).finally(() => {
-        this.beatInFlight = false;
-      });
+      this.onBeat({ beat, uptimeMs: m.payload?.uptime_ms, load1: m.payload?.load1 });
     });
   }
 
@@ -89,14 +83,34 @@ export class HeartbeatScheduler {
     }
   }
 
-  private async onBeat(ctx: HeartbeatContext): Promise<void> {
+  private onBeat(ctx: HeartbeatContext): void {
     for (const task of this.tasks.values()) {
       if (ctx.beat % task.everyBeats !== 0) continue;
-      try {
-        await task.handler(ctx);
-      } catch (err) {
-        logger.warn(`[heartbeat] treatment "${task.name}" failed: ${err instanceof Error ? err.message : String(err)}`);
+      const active = this.inFlight.get(task.name);
+      if (active) {
+        logger.debug(
+          `[heartbeat] treatment "${task.name}" skipped on beat ${ctx.beat} — ` +
+            `its beat ${active.beat} run is still active`,
+        );
+        continue;
       }
+
+      this.inFlight.set(task.name, { beat: ctx.beat, startedAt: Date.now() });
+      // Schedule every due organ before any handler starts. Async IO (model,
+      // network, disk, device) can then progress concurrently; CPU-heavy work
+      // remains cooperative and can later move to a worker process.
+      queueMicrotask(() => {
+        void Promise.resolve()
+          .then(() => task.handler(ctx))
+          .catch((err) => {
+            logger.warn(
+              `[heartbeat] treatment "${task.name}" failed: ${err instanceof Error ? err.message : String(err)}`,
+            );
+          })
+          .finally(() => {
+            this.inFlight.delete(task.name);
+          });
+      });
     }
   }
 }
