@@ -1090,6 +1090,20 @@ export class ToolHandler {
 
     if (decision.source !== 'default') return decision;
 
+    // Sharing a video is already an explicit request to inspect that media.
+    // The default path only reads captions/media and writes disposable local
+    // cache artifacts, so a second approval adds friction without granting new
+    // authority. Keep cloud:true behind the normal confirmation gate because
+    // it sends the URL/video to an external model provider.
+    if (toolName === 'understand_video' && args.cloud !== true) {
+      return {
+        action: 'allow',
+        reason: 'Local-first video understanding is read-only media analysis',
+        source: 'default',
+        timestamp: new Date(),
+      };
+    }
+
     const modifiesFiles = registryMetadata?.modifiesFiles;
     const makesNetworkRequests = registryMetadata?.makesNetworkRequests;
     const fleetSafe = registryMetadata?.fleetSafe === true || legacyMetadata?.fleetSafe === true;

@@ -106,6 +106,39 @@ describe('ToolHandler central confirmation gate', () => {
     expect(executed).toHaveBeenCalledTimes(3);
   });
 
+  it('does not prompt again for local-first shared video analysis', () => {
+    const handler = makeHandler();
+
+    expect(handler.getToolPolicy('understand_video', {
+      source: 'https://youtu.be/pmQKXepA0-c',
+      visual: true,
+    })).toMatchObject({
+      action: 'allow',
+      source: 'default',
+    });
+  });
+
+  it('keeps cloud video disclosure behind confirmation', () => {
+    const handler = makeHandler();
+
+    expect(handler.getToolPolicy('understand_video', {
+      source: 'https://youtu.be/pmQKXepA0-c',
+      cloud: true,
+    }).action).toBe('confirm');
+  });
+
+  it('preserves an explicit confirmation override for local video analysis', () => {
+    getPolicyManager().setSessionOverride('understand_video', 'confirm');
+    try {
+      const handler = makeHandler();
+      expect(handler.getToolPolicy('understand_video', {
+        source: 'https://youtu.be/pmQKXepA0-c',
+      }).action).toBe('confirm');
+    } finally {
+      getPolicyManager().clearSessionOverride('understand_video');
+    }
+  });
+
   it('reauthorizes arguments changed by a before-tool hook before dispatch', async () => {
     let prompts = 0;
     ConfirmationService.getInstance().setInteractiveBridge(async () => {
