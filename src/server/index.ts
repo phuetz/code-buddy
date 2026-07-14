@@ -1256,6 +1256,10 @@ export async function startServer(userConfig: Partial<ServerConfig> = {}): Promi
           const unwireReactions = wireSensoryReactions();
           const { wireSensoryWorkspace } = await import('../cognition/sensory-workspace.js');
           const embodiedCognition = wireSensoryWorkspace();
+          const { CognitiveContextProjector } = await import('../cognition/context-renderer.js');
+          const cognitiveContextProjector = new CognitiveContextProjector(
+            embodiedCognition.workspace,
+          );
           sensoryTeardown.push(
             () => sensoryBridgeHandle.close(),
             unwireReactions,
@@ -1338,6 +1342,51 @@ export async function startServer(userConfig: Partial<ServerConfig> = {}): Promi
               const readiness = describeVoiceReadiness();
               // Fail LOUD: a wired-but-silent robot looks broken. Name what to set.
               for (const w of readiness.warnings) logger.warn(`[voice] ${w}`);
+              const { registerDefaultVoiceSpecialists, isLoopbackCognitiveRoute } = await import(
+                '../cognition/voice-specialists.js'
+              );
+              void resolveVoiceModel('Bonjour Lisa', {
+                  forceFastLane: true,
+                })
+                .then((specialistRoute) => {
+                  const registration = registerDefaultVoiceSpecialists(
+                    embodiedCognition.mesh,
+                    specialistRoute,
+                    {
+                      enabled: process.env.CODEBUDDY_COGNITIVE_SPECIALISTS !== 'false',
+                      maxActivationsPerHour: Number(
+                        process.env.CODEBUDDY_COGNITIVE_SPECIALIST_MAX_PER_HOUR ?? 30,
+                      ),
+                    },
+                  );
+                  logger.info(
+                    `[cognition] voice specialists ${registration.enabled ? 'enabled' : 'disabled'} ` +
+                      `reason=${registration.reason} models=${specialistRoute.model} ` +
+                      `ids=${registration.specialistIds.join(',') || 'none'}`,
+                  );
+                })
+                .catch((error) => {
+                  logger.warn(
+                    `[cognition] voice specialists unavailable: ${
+                      error instanceof Error ? error.message : String(error)
+                    }`,
+                  );
+                });
+              const acquireCognitiveContext: NonNullable<
+                import('../sensory/voice-loop.js').VoiceStepOptions['acquireCognitiveContext']
+              > = (route, heard) => {
+                const privacyClearance = route.baseURL && isLoopbackCognitiveRoute(route.baseURL)
+                  ? 'local-only' as const
+                  : 'cloud-ok' as const;
+                const lease = cognitiveContextProjector.begin({
+                  consumerId: 'voice:resident',
+                  privacyClearance,
+                  query: heard,
+                  maxItems: 4,
+                  maxChars: 1_200,
+                });
+                return lease.leaseId ? lease : null;
+              };
               // Pay the real cold costs (route probe, Ollama model load, common Piper clips)
               // before somebody speaks. All work is background and never delays server readiness.
               const prewarmFactLane = async (): Promise<void> => {
@@ -1422,6 +1471,7 @@ export async function startServer(userConfig: Partial<ServerConfig> = {}): Promi
                     | 'bypassPermissions') || 'default',
                   ...(speakCwd ? { cwd: speakCwd } : {}),
                   sharedHistory,
+                  acquireCognitiveContext,
                   ack: async (_transcript, opts) => {
                     await sayNow("D'accord, je regarde ça.", {
                       signal: opts?.signal,
@@ -1437,6 +1487,7 @@ export async function startServer(userConfig: Partial<ServerConfig> = {}): Promi
                   ...(speakCwd ? { cwd: speakCwd } : {}),
                   classify: (heard) => classifyLisaIntrospection(heard) !== null,
                   sharedHistory,
+                  acquireCognitiveContext,
                   ack: async (_transcript, opts) => {
                     await sayNow("D'accord, je regarde ça.", {
                       signal: opts?.signal,

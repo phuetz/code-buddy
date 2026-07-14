@@ -101,6 +101,21 @@ export interface VoiceStepOptions {
   onProviderResolved?: (route: { model: string; apiKey: string; baseURL?: string }) => void;
   /** Raw-free cadence/length profile derived from the human's current spoken turn. */
   delivery?: VoiceDeliveryProfile;
+  /**
+   * Route-aware, transactional cognitive context. The caller is responsible
+   * for enforcing the route's real egress clearance before returning a lease.
+   */
+  acquireCognitiveContext?: (
+    route: { model: string; apiKey: string; baseURL?: string },
+    heard: string,
+  ) => VoiceCognitiveContextLease | null;
+}
+
+export interface VoiceCognitiveContextLease {
+  turnContext: string;
+  evidence?: string;
+  commit(): void;
+  release(): void;
 }
 
 /** Think: turn what was heard into a short spoken reply ('' → stay silent). */
@@ -1166,10 +1181,12 @@ async function prepareSpokenTurn(
   history: VoiceHistoryTurn[] = [],
   spokenPrefix?: string,
   delivery?: VoiceDeliveryProfile,
+  replyOpts?: VoiceStepOptions,
 ): Promise<{
   CodeBuddyClient: typeof import('../codebuddy/client.js').CodeBuddyClient;
   route: VoiceModelRoute;
   systemPrompt: string;
+  cognitiveLease?: VoiceCognitiveContextLease;
 }> {
   // These sources are independent. Resolving them concurrently removes avoidable serial
   // disk/import/routing time before the model request can start.
@@ -1180,10 +1197,23 @@ async function prepareSpokenTurn(
     buildSpokenPromptAugmentation(heard, history, spokenPrefix, delivery),
   ]);
   const basePrompt = personaVoice.spokenPrompt || SPEAK_SYSTEM_PROMPT;
+  let cognitiveLease: VoiceCognitiveContextLease | undefined;
+  try {
+    cognitiveLease = replyOpts?.acquireCognitiveContext?.(route, heard) ?? undefined;
+  } catch (error) {
+    logger.warn(
+      `[voice] cognitive context skipped: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+  const cognitivePrompt = [cognitiveLease?.turnContext, cognitiveLease?.evidence]
+    .filter(Boolean)
+    .join('\n\n');
+  const systemPrompt = [basePrompt, augmentation, cognitivePrompt].filter(Boolean).join('\n\n');
   return {
     CodeBuddyClient: clientModule.CodeBuddyClient,
     route,
-    systemPrompt: augmentation ? `${basePrompt}\n\n${augmentation}` : basePrompt,
+    systemPrompt,
+    ...(cognitiveLease ? { cognitiveLease } : {}),
   };
 }
 
@@ -1197,14 +1227,18 @@ export async function defaultReply(
     logger.info(`[voice] fast reply chars=${fast.length}`);
     return fast;
   }
+  let cognitiveLease: VoiceCognitiveContextLease | undefined;
   try {
     const delivery = replyOpts?.delivery ?? deriveVoiceDeliveryProfile(heard);
-    const { CodeBuddyClient, route, systemPrompt } = await prepareSpokenTurn(
+    const prepared = await prepareSpokenTurn(
       heard,
       history,
       undefined,
       delivery,
+      replyOpts,
     );
+    const { CodeBuddyClient, route, systemPrompt } = prepared;
+    cognitiveLease = prepared.cognitiveLease;
     replyOpts?.onProviderResolved?.(route);
     logger.debug(`[voice] reply model: ${route.model} — ${route.reason}`);
     const client = new CodeBuddyClient(route.apiKey, route.model, route.baseURL);
@@ -1224,8 +1258,11 @@ export async function defaultReply(
       }
     );
     const reply = (resp?.choices?.[0]?.message?.content ?? '').trim();
+    if (reply && !replyOpts?.signal?.aborted) cognitiveLease?.commit();
+    else cognitiveLease?.release();
     return reply || conversationFailureReply(heard, history);
   } catch (err) {
+    cognitiveLease?.release();
     logger.warn(`[voice] local reply failed: ${err instanceof Error ? err.message : String(err)}`);
     return replyOpts?.signal?.aborted ? '' : conversationFailureReply(heard, history);
   }
@@ -1257,6 +1294,8 @@ export async function* streamCompanionReply(
 ): AsyncGenerator<string, void, unknown> {
   // Phatic → let the blocking path answer with the instant canned reply (non-streamed).
   if (fastCompanionReply(heard)) return;
+  let cognitiveLease: VoiceCognitiveContextLease | undefined;
+  let cognitiveLeaseSettled = false;
   try {
     const acknowledgement =
       immediateEmotionAcknowledgement(detectEmotion(heard)) ??
@@ -1267,12 +1306,15 @@ export async function* streamCompanionReply(
       yield full;
     }
     const delivery = replyOpts?.delivery ?? deriveVoiceDeliveryProfile(heard);
-    const { CodeBuddyClient, route, systemPrompt } = await prepareSpokenTurn(
+    const prepared = await prepareSpokenTurn(
       heard,
       history,
       acknowledgement ?? undefined,
       delivery,
+      replyOpts,
     );
+    const { CodeBuddyClient, route, systemPrompt } = prepared;
+    cognitiveLease = prepared.cognitiveLease;
     replyOpts?.onProviderResolved?.(route);
     logger.debug(`[voice] stream reply model: ${route.model} — ${route.reason}`);
     const client = new CodeBuddyClient(route.apiKey, route.model, route.baseURL);
@@ -1323,9 +1365,20 @@ export async function* streamCompanionReply(
         }
       }
     }
+    if (!replyOpts?.signal?.aborted && (full.trim() || continuation.trim())) {
+      cognitiveLease?.commit();
+      cognitiveLeaseSettled = true;
+    } else {
+      cognitiveLease?.release();
+      cognitiveLeaseSettled = true;
+    }
   } catch (err) {
+    cognitiveLease?.release();
+    cognitiveLeaseSettled = true;
     logger.warn(`[voice] stream reply failed: ${err instanceof Error ? err.message : String(err)}`);
     // Yields nothing → the pipeline falls back to the blocking reply.
+  } finally {
+    if (!cognitiveLeaseSettled) cognitiveLease?.release();
   }
 }
 

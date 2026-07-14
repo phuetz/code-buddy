@@ -3,3 +3,7 @@ export * from './global-workspace.js';
 export * from './cognitive-mesh.js';
 export * from './sensory-workspace.js';
 export * from './world-model.js';
+export * from './budget-reservations.js';
+export * from './llm-specialist.js';
+export * from './context-renderer.js';
+export * from './voice-specialists.js';

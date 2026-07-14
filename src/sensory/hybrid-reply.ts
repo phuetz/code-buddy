@@ -152,6 +152,8 @@ export interface HybridReplyOptions {
    * accepted or revised response is returned before voice memory is updated.
    */
   semanticReview?: HybridSemanticReviewer;
+  /** Resident-process cognitive context, acquired only after the actual LLM route is known. */
+  acquireCognitiveContext?: VoiceStepOptions['acquireCognitiveContext'];
 }
 
 /** A normal ReplyFn with its matching streaming path attached for `makeVoiceReply`. */
@@ -464,6 +466,9 @@ export function makeHybridReply(options: HybridReplyOptions = {}): HybridReplyHa
       let responseMainProvider: HybridSemanticReviewInput['mainProvider'];
       const stepOpts: VoiceStepOptions = {
         ...(replyOpts ?? {}),
+        ...(options.acquireCognitiveContext
+          ? { acquireCognitiveContext: options.acquireCognitiveContext }
+          : {}),
         onProviderResolved: (route) => {
           replyOpts?.onProviderResolved?.(route);
           if (!route.baseURL) return;
@@ -568,6 +573,9 @@ export function makeHybridReply(options: HybridReplyOptions = {}): HybridReplyHa
       let responseMainProvider: HybridSemanticReviewInput['mainProvider'];
       const streamOptions: VoiceStepOptions = {
         ...(replyOpts ?? {}),
+        ...(options.acquireCognitiveContext
+          ? { acquireCognitiveContext: options.acquireCognitiveContext }
+          : {}),
         onProviderResolved: (route) => {
           replyOpts?.onProviderResolved?.(route);
           if (!route.baseURL) return;

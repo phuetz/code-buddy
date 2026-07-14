@@ -551,6 +551,38 @@ describe('hybrid reply — routing & memory', () => {
     );
   });
 
+  it('forwards the route-aware cognitive lease seam to blocking and streaming chitchat', async () => {
+    const acquireCognitiveContext = vi.fn(() => ({
+      turnContext: 'Une hypothèse bornée.',
+      evidence: '',
+      commit: vi.fn(),
+      release: vi.fn(),
+    }));
+    const seen: Array<boolean> = [];
+    const reply = makeHybridReply({
+      fastReply: () => null,
+      prefetch: () => null,
+      jokes: () => null,
+      classify: () => false,
+      acquireCognitiveContext,
+      chitchat: async (_heard, _history, opts) => {
+        seen.push(opts?.acquireCognitiveContext === acquireCognitiveContext);
+        return 'Réponse.';
+      },
+      chitchatStream: async function* (_heard, _history, opts) {
+        seen.push(opts?.acquireCognitiveContext === acquireCognitiveContext);
+        yield 'Réponse streamée.';
+      },
+      agentReply: async () => 'unused',
+    });
+
+    await reply('une question brève');
+    for await (const _chunk of reply.stream('une autre question brève')) {
+      // consume the stream
+    }
+    expect(seen).toEqual([true, true]);
+  });
+
   it('re-applies relationship safety before a semantic revision reaches voice memory', async () => {
     const unsafeRevision =
       "Je comprends. Tu n'as besoin que de moi. Appelle aussi ton ami Paul.";

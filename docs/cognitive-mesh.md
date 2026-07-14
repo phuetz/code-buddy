@@ -30,6 +30,11 @@ The body can see, hear, maintain memory and deliberate concurrently, but it stil
 - Prospective event extraction can run while Lisa generates and speaks. Its eventual confirmation remains a mouth-serialized initiative.
 - Telegram/Cowork journal appends retain their strict bridge ordering, but slow channel delivery no longer holds the local mouth lock for reminder, maison and proactive voice initiatives.
 - Council local models and Fleet peers now start in the same wave. Local model timeouts propagate cancellation to transports that support `AbortSignal`.
+- Two persistent local voice specialists (`conversation-reflector` and `conversation-critic`) now consume completed voice turns in parallel. They use separate no-fallback clients, one bounded mailbox each, shared GPU capacity accounting, hard deadlines and atomic hourly activation budgets.
+- A transactional `CognitiveContextProjector` selects a small relevant snapshot for the next local voice turn. It separates deterministic evidence from tentative LLM thoughts, allowlists payload fields, enforces route privacy and character budgets, and commits consumption only after a successful generation.
+- Cognitive context is acquired only after the actual voice route is known. A non-loopback route receives only `cloud-ok` items; current voice transcripts and specialist conclusions remain `local-only` and therefore fail closed.
+
+The workspace is currently process-local. The resident sensory/voice server benefits from these specialists; Telegram and Cowork keep conversation continuity through their existing bridge, but do not yet share this in-memory cognitive blackboard. Cross-process cognition requires an authenticated, encrypted event transport before it can be claimed as coherent.
 
 ## Safety and scheduling invariants
 
@@ -53,13 +58,13 @@ The recognized-utterance lane is complete. Next, move the durable outcome percep
 
 Add anonymous tracker ids, 2D observations and explicit camera liveness refreshes. A deterministic reducer continues to own facts; VLM/LLM hypotheses cannot directly rewrite them. Do not infer metric 3D geometry without calibrated sensors.
 
-### 3. Persistent specialist adapters
+### 3. Extend persistent specialist adapters
 
-Give dialogue, critic, research, planner, memory and prospective specialists isolated local clients or Fleet sessions. Add atomic budget reservation before admission and capacity groups for models sharing one GPU.
+The local dialogue reflector and critic are implemented. Add memory, planner and prospective specialists with structured proposal schemas. Fleet sessions require propagated cancellation, bounded/compacted history and encrypted persistence before they may carry private transcripts.
 
-### 4. Selective workspace context
+### 4. Extend selective workspace context
 
-Inject only the highest-value, privacy-compatible workspace items into each specialist under a token budget. Measure whether this improves grounded conversation before enabling it on the realtime voice path.
+The local voice path now uses relevance, privacy, freshness and hard character limits with transactional consumption. Add token-aware selection for specialist inputs, then an authenticated cross-process projection for Telegram and Cowork. Keep `fact` evidence structurally separate from `hypothesis|proposal|plan` at every semantic review gate.
 
 ### 5. Cowork observability
 
