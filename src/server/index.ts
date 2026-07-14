@@ -82,7 +82,14 @@ import { initializeDatabase } from '../database/database-manager.js';
 import type { InboundMessage } from '../channels/index.js';
 import { SERVER_CONFIG, TIMEOUT_CONFIG, LIMIT_CONFIG } from '../config/constants.js';
 import { listServerModels } from './agent-adapter.js';
-import { CognitiveHub } from '../cognition/cognitive-hub.js';
+import {
+  CognitiveHub,
+  createInternalCognitivePrincipal,
+} from '../cognition/cognitive-hub.js';
+import {
+  InProcessCognitivePort,
+  type CognitivePort,
+} from '../cognition/cognitive-port.js';
 
 // Lazy import to avoid circular dependency: channels/index.ts re-exports
 // TelegramChannel/DiscordChannel which import BaseChannel from channels/index.ts
@@ -1049,6 +1056,8 @@ export async function startServer(userConfig: Partial<ServerConfig> = {}): Promi
   app: Application;
   server: HttpServer;
   config: ServerConfig;
+  /** Main-process-only authority; never serialize this through HTTP or IPC. */
+  cognitionPort: CognitivePort;
 }> {
   const mergedConfig = { ...DEFAULT_CONFIG, ...userConfig };
   const config: ServerConfig = {
@@ -1091,6 +1100,10 @@ export async function startServer(userConfig: Partial<ServerConfig> = {}): Promi
   }
 
   const cognitiveHub = new CognitiveHub();
+  const cognitionPort = new InProcessCognitivePort(
+    cognitiveHub,
+    createInternalCognitivePrincipal('embedded-cowork'),
+  );
   const app = createApp(config, cognitiveHub);
   // Optional TLS: serve the API (including /api/mobile) over HTTPS when
   // CODEBUDDY_HTTPS / CODEBUDDY_MOBILE_TLS is set so the mobile-supervision
@@ -1104,6 +1117,7 @@ export async function startServer(userConfig: Partial<ServerConfig> = {}): Promi
     ? (createHttpsServer(tlsOptions, app) as unknown as HttpServer)
     : createServer(app);
   (server as unknown as { _cognitiveHub?: CognitiveHub })._cognitiveHub = cognitiveHub;
+  (server as unknown as { _cognitionPort?: InProcessCognitivePort })._cognitionPort = cognitionPort;
 
   const startChannelBridge = async (baseUrl: string): Promise<void> => {
     try {
@@ -2037,7 +2051,7 @@ export async function startServer(userConfig: Partial<ServerConfig> = {}): Promi
         logger.info('Peer Routing: not initialized');
       }
 
-      resolve({ app, server, config });
+      resolve({ app, server, config, cognitionPort });
     });
 
     server.on('error', reject);
@@ -2059,6 +2073,9 @@ export async function stopServer(server: HttpServer): Promise<void> {
   }
   sensoryWired = false;
   const cognitiveHub = (server as unknown as { _cognitiveHub?: CognitiveHub })._cognitiveHub;
+  const cognitionPort = (server as unknown as { _cognitionPort?: InProcessCognitivePort })
+    ._cognitionPort;
+  cognitionPort?.close();
   cognitiveHub?.close();
   return new Promise((resolve, reject) => {
     // Phase (d).9 — cancel the heartbeat timer so it doesn't keep

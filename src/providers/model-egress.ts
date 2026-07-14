@@ -1,5 +1,13 @@
 export type ModelEgress = 'local' | 'lan' | 'cloud';
 
+const CLOUD_SUBPROCESS_PROVIDERS = new Set([
+  'agy-cli',
+  'gemini-cli',
+  'chatgpt',
+  'chatgpt-oauth',
+  'grok-oauth',
+]);
+
 function isPrivateIpv4(hostname: string): boolean {
   const parts = hostname.split('.').map(Number);
   if (parts.length !== 4 || parts.some((part) => !Number.isInteger(part) || part < 0 || part > 255)) {
@@ -43,4 +51,15 @@ export function classifyModelEgress(
   } catch {
     return 'cloud';
   }
+}
+
+/** Provider-aware guard for CLIs whose process is local but inference is not. */
+export function classifyProviderModelEgress(
+  provider: string | undefined,
+  baseURL: string | undefined,
+  providerIsLocal: boolean,
+): ModelEgress {
+  const normalized = provider?.trim().toLowerCase().replace(/_/g, '-');
+  if (normalized && CLOUD_SUBPROCESS_PROVIDERS.has(normalized)) return 'cloud';
+  return classifyModelEgress(baseURL, providerIsLocal);
 }

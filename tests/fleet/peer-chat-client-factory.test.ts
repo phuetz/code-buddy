@@ -14,6 +14,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import {
   createPeerChatClientForProvider,
   createPeerChatClientFromEnv,
+  resolveProviderFromEnv,
   _getDetectionOrderForTests,
 } from '../../src/fleet/peer-chat-client-factory.js';
 
@@ -218,6 +219,7 @@ describe('peer-chat-client-factory — Phase (d).16a', () => {
       expect(result!.info.provider).toBe('gemini-cli');
       expect(result!.info.isLocal).toBe(true);
       expect(result!.info.model).toBe('gemini-3.1-pro-preview');
+      expect(resolveProviderFromEnv('gemini-cli')?.egress).toBe('cloud');
     });
 
     it('returns null when GEMINI_CLI_PATH points at a missing file', () => {

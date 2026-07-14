@@ -286,9 +286,14 @@ export class CognitiveHub {
   acquireContext(principal: CognitivePrincipal, input: unknown): CognitiveContextAck {
     this.requireScope(principal, 'cognition:read');
     const request = parseOrThrow(cognitiveContextAcquireRequestSchema.safeParse(input));
+    const principalClearance = this.readClearance(principal);
+    const requestedClearance = request.maxPrivacy ?? principalClearance;
+    const privacyClearance = PRIVACY_RANK[requestedClearance] <= PRIVACY_RANK[principalClearance]
+      ? requestedClearance
+      : principalClearance;
     const lease = this.projector.begin({
       consumerId: `cognitive-bus:${principal.id}`,
-      privacyClearance: this.readClearance(principal),
+      privacyClearance,
       query: request.query,
       excludeCorrelationId: request.excludeCorrelationId,
       maxItems: request.maxItems,

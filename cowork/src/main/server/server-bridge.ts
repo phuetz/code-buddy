@@ -15,11 +15,30 @@ import * as crypto from 'crypto';
 import { log, logError } from '../utils/logger';
 import { loadCoreModule } from '../utils/core-loader';
 
+export interface CoreCognitiveContext {
+  leaseId: string | null;
+  turnContext: string;
+  evidence: string;
+  itemIds: readonly string[];
+  commit(): Promise<void>;
+  release(): Promise<void>;
+}
+
+export interface CoreCognitionPort {
+  publish(draft: Record<string, unknown>, clientEventId?: string): Promise<{
+    replayed: boolean;
+    revision: number;
+  }>;
+  cancel(correlationId: string): Promise<boolean>;
+  acquireContext(options?: Record<string, unknown>): Promise<CoreCognitiveContext>;
+}
+
 interface CoreServerModule {
   startServer: (config?: Record<string, unknown>) => Promise<{
     app: unknown;
     server: { close: (cb?: (err?: Error) => void) => void; address(): unknown };
     config: { port: number; host: string; websocketEnabled?: boolean };
+    cognitionPort: CoreCognitionPort;
   }>;
   stopServer: (server: { close: (cb?: (err?: Error) => void) => void }) => Promise<void>;
 }
@@ -68,6 +87,12 @@ export class ServerBridge {
   private websocket = false;
   private lastError: string | null = null;
   private bootInFlight: Promise<ServerStatus> | null = null;
+  private cognitionPort: CoreCognitionPort | null = null;
+
+  /** Main-process-only projection authority. Never forward it through Electron IPC. */
+  getCognitionPort(): CoreCognitionPort | null {
+    return this.cognitionPort;
+  }
 
   async status(): Promise<ServerStatus> {
     return {
@@ -167,6 +192,7 @@ export class ServerBridge {
         }
         const result = await this.module.startServer(userConfig);
         this.instance = result.server;
+        this.cognitionPort = result.cognitionPort;
         this.port = result.config.port;
         this.host = result.config.host;
         this.websocket = !!result.config.websocketEnabled;
@@ -202,6 +228,7 @@ export class ServerBridge {
       this.host = null;
       this.startedAt = null;
       this.websocket = false;
+      this.cognitionPort = null;
     }
     return this.status();
   }

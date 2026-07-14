@@ -21,6 +21,7 @@ import { planConversationResponse } from './discourse-planner.js';
 import type { ConversationTurn } from './types.js';
 import { detectEmotion } from '../companion/reply-augment.js';
 import { classifyLisaIntrospection } from '../identity/lisa-introspection.js';
+import { classifyModelEgress, type ModelEgress } from '../providers/model-egress.js';
 
 export type CompanionRoutingSurface = 'voice' | 'telegram' | 'cowork';
 export type CompanionRoutingLane = 'fast' | 'factual' | 'deep' | 'emotional' | 'action';
@@ -75,6 +76,8 @@ export interface CompanionRoutingDecision {
 export interface CompanionRuntimeRoute extends CompanionRoutingDecision {
   apiKey: string;
   baseURL: string;
+  /** Actual inference destination; subscription CLIs remain cloud egress. */
+  egress: ModelEgress;
   reason: string;
 }
 
@@ -94,6 +97,7 @@ export interface RuntimeCandidate {
   model: string;
   apiKey?: string;
   baseURL?: string;
+  egress?: ModelEgress;
 }
 
 export interface ResolveCompanionModelRouteOptions {
@@ -1108,6 +1112,7 @@ export async function resolveCompanionModelRoute(
     provider: selected.provider,
     apiKey: selected.apiKey,
     baseURL: selected.baseURL,
+    egress: selected.egress ?? classifyModelEgress(selected.baseURL, isLocalCandidate(selected)),
     reason: `blind pilot ${decision.profileId} (${decision.lane}, ${decision.surface})`,
   };
 }

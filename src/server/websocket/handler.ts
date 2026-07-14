@@ -1041,6 +1041,7 @@ export async function setupWebSocket(
   const wss = new WebSocketServer({
     server,
     path: '/ws',
+    maxPayload: SERVER_CONFIG.WS_MAX_PAYLOAD_BYTES,
     verifyClient: (info, cb) => {
       // Non-browser clients (CLI, fleet peers via the `ws` library) send no Origin
       // header — allow them. Browser clients must present an allowed Origin, which

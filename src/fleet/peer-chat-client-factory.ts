@@ -34,6 +34,7 @@ import {
   AGY_CLI_BASE_URL,
 } from '../codebuddy/client.js';
 import { logger } from '../utils/logger.js';
+import { classifyProviderModelEgress, type ModelEgress } from '../providers/model-egress.js';
 
 export type PeerChatProviderId =
   | 'ollama'
@@ -443,6 +444,7 @@ export interface ResolvedProvider {
   baseUrl: string;
   model: string;
   isLocal: boolean;
+  egress: ModelEgress;
 }
 
 /**
@@ -473,6 +475,7 @@ export function resolveProviderFromEnv(
       baseUrl: resolved.baseUrl,
       model: process.env.CODEBUDDY_PEER_MODEL || providerModel(preferred) || spec.defaultModel,
       isLocal: spec.isLocal,
+      egress: classifyProviderModelEgress(preferred, resolved.baseUrl, spec.isLocal),
     };
   }
   // Auto-detect with override fallthrough
@@ -494,6 +497,7 @@ export function resolveProviderFromEnv(
         baseUrl: resolved.baseUrl,
         model: process.env.CODEBUDDY_PEER_MODEL || providerModel(id) || spec.defaultModel,
         isLocal: spec.isLocal,
+        egress: classifyProviderModelEgress(id, resolved.baseUrl, spec.isLocal),
       };
     }
   }

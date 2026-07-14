@@ -25,6 +25,11 @@ import {
 } from '../../channels/channel-model-override.js';
 import { logger } from '../../utils/logger.js';
 import { resolveChannelSecret } from '../../channels/resolve-channel-secret.js';
+import type { ModelEgress } from '../../providers/model-egress.js';
+import {
+  getChannelCognitivePort,
+  type ChannelCognitiveTurn,
+} from '../../channels/channel-cognitive-port.js';
 
 interface ChannelOptions {
   type?: string;
@@ -656,14 +661,14 @@ async function persistChannelSession(
 
 async function getOrCreateChannelAgent(
   sessionKey: string,
-  resolved: { apiKey: string; baseUrl: string; model: string },
+  resolved: { apiKey: string; baseUrl: string; model: string; egress?: ModelEgress },
   agentConfig: { model?: string; systemPrompt?: string; maxToolRounds?: number },
   botId?: string,
   routeModel?: string,
   companionRoute?: CompanionRuntimeRoute,
 ): Promise<{
   agent: import('../../agent/codebuddy-agent.js').CodeBuddyAgent;
-  effectiveRuntime: { apiKey: string; baseUrl: string; model: string };
+  effectiveRuntime: { apiKey: string; baseUrl: string; model: string; egress: ModelEgress };
 }> {
   const now = Date.now();
   // Evict idle agents first.
@@ -689,6 +694,7 @@ async function getOrCreateChannelAgent(
           apiKey: companionRoute.apiKey,
           baseUrl: companionRoute.baseURL,
           model: companionRoute.model,
+          egress: companionRoute.egress,
         }
       : resolved;
   const runtimeIdentity = createHash('sha256')
@@ -703,7 +709,7 @@ async function getOrCreateChannelAgent(
     if (hit.agent.getCurrentModel() !== model) hit.agent.setModel(model);
     return {
       agent: hit.agent,
-      effectiveRuntime: { ...runtimeResolved, model },
+      effectiveRuntime: { ...runtimeResolved, model, egress: runtimeResolved.egress ?? 'cloud' },
     };
   }
   // A provider/endpoint change cannot be applied through setModel(). Recreate
@@ -762,7 +768,7 @@ async function getOrCreateChannelAgent(
   channelAgentCache.set(sessionKey, { agent, lastUsed: now, runtimeIdentity });
   return {
     agent,
-    effectiveRuntime: { ...runtimeResolved, model },
+    effectiveRuntime: { ...runtimeResolved, model, egress: runtimeResolved.egress ?? 'cloud' },
   };
 }
 
@@ -774,6 +780,7 @@ export async function registerAIMessageHandler(manager: import('../../channels/i
     let releaseTranscriptSnapshotHold: (() => void) | undefined;
     let generativeSessionKey: string | undefined;
     let generativeTurnEngaged = false;
+    let cognitiveTurn: ChannelCognitiveTurn | null = null;
     try {
       // 1. DM pairing gate — unapproved senders get a code, then we stop.
       const { checkDMPairing, getDMPairing } = await import('../../channels/core.js');
@@ -1050,6 +1057,7 @@ export async function registerAIMessageHandler(manager: import('../../channels/i
               apiKey: companionRoute.apiKey,
               baseUrl: companionRoute.baseURL,
               model: companionRoute.model,
+              egress: companionRoute.egress,
             }
           : null);
       if (!runtimeResolved) {
@@ -1074,6 +1082,16 @@ export async function registerAIMessageHandler(manager: import('../../channels/i
         routeModel,
         companionRoute
       );
+
+      if (companionConversation) {
+        cognitiveTurn = await getChannelCognitivePort().begin({
+          channelType: channel.type,
+          sessionKey,
+          messageId: message.id,
+          content: message.content,
+          egress: effectiveRuntime.egress,
+        });
+      }
 
       const agentInput = message.content;
       let transientConversationContext: string | undefined;
@@ -1126,7 +1144,11 @@ export async function registerAIMessageHandler(manager: import('../../channels/i
             : {}),
           ...(freshContext ? { freshContext: freshContext.promptGuidance } : {}),
         });
-        transientConversationContext = preparedConversation.systemGuidance;
+        transientConversationContext = [
+          preparedConversation.systemGuidance,
+          cognitiveTurn?.turnContext,
+          cognitiveTurn?.evidence,
+        ].filter((part): part is string => Boolean(part?.trim())).join('\n\n') || undefined;
       }
 
       const semanticReviewPlanned =
@@ -1175,6 +1197,10 @@ export async function registerAIMessageHandler(manager: import('../../channels/i
         semanticReviewPlanned &&
         hasGeneratedResponse &&
         preparedConversation !== undefined;
+      // The semantic reviewer may resolve to a different provider/egress than
+      // the main model. Cognitive evidence was projected for the main route,
+      // so it cannot cross this second model boundary without a new projection.
+      const semanticEvidence = companionFreshEvidence?.trim() || undefined;
       if (semanticReviewEligible && preparedConversation) {
         try {
           const { reviewSemanticResponse } = await import(
@@ -1186,7 +1212,7 @@ export async function registerAIMessageHandler(manager: import('../../channels/i
             draft: unreviewedResponse,
             plan: preparedConversation.plan,
             history: companionConversationHistory,
-            ...(companionFreshEvidence ? { evidence: companionFreshEvidence } : {}),
+            ...(semanticEvidence ? { evidence: semanticEvidence } : {}),
             mainProvider: {
               apiKey: effectiveRuntime.apiKey,
               baseURL: effectiveRuntime.baseUrl,
@@ -1379,6 +1405,28 @@ export async function registerAIMessageHandler(manager: import('../../channels/i
         }
       }
 
+      if (cognitiveTurn) {
+        // Remove ownership before awaiting: a post-delivery network failure is
+        // a commit-uncertain state and must never fall through to release.
+        const turnToSettle = cognitiveTurn;
+        cognitiveTurn = null;
+        try {
+          if (delivered) {
+            await turnToSettle.complete(deliveredAssistantContent);
+          } else if (deliveredAssistantContent) {
+            await turnToSettle.complete(deliveredAssistantContent, { cancelAfter: true });
+          } else {
+            await turnToSettle.fail();
+          }
+        } catch (error) {
+          logger.warn('Channel cognitive settlement uncertain', {
+            channelType: channel.type,
+            sessionHash: hashForLog(sessionKey),
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
+
       // 7. If the user SPOKE (voice note), answer by voice too — mirror the
       //    modality. Best-effort: the text reply already landed, so a TTS/upload
       //    failure (or a channel without voice support) is a no-op, never fatal.
@@ -1428,6 +1476,8 @@ export async function registerAIMessageHandler(manager: import('../../channels/i
       if (shouldPersistChannelSession) await persistChannelSession(agent, sessionKey);
       });
     } catch (err) {
+      await (cognitiveTurn as ChannelCognitiveTurn | null)?.fail().catch(() => undefined);
+      cognitiveTurn = null;
       releaseTranscriptSnapshotHold?.();
       releaseTranscriptSnapshotHold = undefined;
       if (generativeTurnEngaged && generativeSessionKey) {

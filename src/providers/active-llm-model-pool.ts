@@ -29,7 +29,7 @@
 
 import { buildActiveLlmRegistry, type ActiveLlm } from './active-llm-registry.js';
 import { findRuntimeProvider } from './provider-catalog.js';
-import { classifyModelEgress, type ModelEgress } from './model-egress.js';
+import { classifyProviderModelEgress, type ModelEgress } from './model-egress.js';
 
 export { classifyModelEgress } from './model-egress.js';
 
@@ -57,7 +57,7 @@ function toEntry(c: ActiveLlm): ActiveLlmModelPoolEntry {
     model: c.model ?? '',
     ...(c.apiKey ? { apiKey: c.apiKey } : {}),
     ...(c.baseURL ? { baseURL: c.baseURL } : {}),
-    egress: classifyModelEgress(c.baseURL, c.isLocal),
+    egress: classifyProviderModelEgress(c.provider, c.baseURL, c.isLocal),
     costInputUsdPerMtok: c.costInputUsdPerMtok,
   };
 }

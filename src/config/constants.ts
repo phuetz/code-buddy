@@ -211,6 +211,11 @@ export const SERVER_CONFIG = {
    * CODEBUDDY_FLEET_BROADCAST_BUFFER_LIMIT (bytes) for tests / tuning.
    */
   WS_BROADCAST_BUFFER_LIMIT: 2 * 1024 * 1024,
+  /**
+   * Hard ceiling for one inbound WebSocket frame. The ws package otherwise
+   * accepts frames far larger than any Code Buddy protocol message needs.
+   */
+  WS_MAX_PAYLOAD_BYTES: 2 * 1024 * 1024,
 } as const;
 
 // === Timeouts ===

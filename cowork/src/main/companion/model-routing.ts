@@ -7,6 +7,7 @@ import type { Session } from '../../renderer/types';
 import { isCompanionThreadTags } from '../../shared/companion-thread';
 import { loadCoreModule } from '../utils/core-loader';
 import { logWarn } from '../utils/logger';
+import type { ModelEgress } from '@codebuddy/providers/model-egress';
 
 export interface CoworkCompanionRuntimeConfig {
   model?: string;
@@ -21,6 +22,7 @@ export interface CoworkCompanionModelRoute {
   provider: string;
   apiKey: string;
   baseURL: string;
+  egress?: ModelEgress;
   reason: string;
 }
 

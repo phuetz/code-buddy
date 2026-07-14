@@ -202,6 +202,44 @@ describe('CognitiveHub', () => {
     expect(hub.acquireContext(actor, { version: 1 }).itemIds).toEqual([]);
   });
 
+  it('clamps projected context to the route egress privacy ceiling', () => {
+    const hub = new CognitiveHub();
+    const actor = principal('egress');
+    hub.workspace.publish({
+      kind: 'hypothesis',
+      producerId: 'reflector',
+      correlationId: 'local-egress-secret',
+      salience: 0.9,
+      confidence: 0.8,
+      privacy: 'local-only',
+      provenance: { source: 'llm-specialist:test' },
+      ttlMs: 60_000,
+      payload: { summary: 'Observation physique strictement locale.' },
+    });
+    hub.workspace.publish({
+      kind: 'hypothesis',
+      producerId: 'reflector',
+      correlationId: 'cloud-egress-context',
+      salience: 0.9,
+      confidence: 0.8,
+      privacy: 'cloud-ok',
+      provenance: { source: 'llm-specialist:test' },
+      ttlMs: 60_000,
+      payload: { summary: 'Observation transmissible au cloud.' },
+    });
+
+    const cloud = hub.acquireContext(actor, {
+      version: 1,
+      maxPrivacy: 'cloud-ok',
+      maxItems: 8,
+    });
+
+    expect(cloud.turnContext).toContain('Observation transmissible au cloud.');
+    expect(cloud.turnContext).not.toContain('Observation physique strictement locale.');
+    hub.releaseContext(actor, { version: 1, leaseId: cloud.leaseId });
+    hub.close();
+  });
+
   it('enforces correlation ownership and rejects late publications after cancellation', () => {
     const hub = new CognitiveHub();
     const voice = principal('voice');

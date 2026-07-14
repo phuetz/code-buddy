@@ -390,4 +390,295 @@ describe('CodeBuddyEngineRunner companion continuity', () => {
     expect(JSON.stringify(events)).toContain('Option 1');
     expect(JSON.stringify(events)).toContain('companion-safety');
   });
+
+  it('acquires route-bounded cognition and commits it after saving the accepted answer', async () => {
+    const order: string[] = [];
+    const cognitiveTurn = {
+      correlationId: 'cowork:session:message',
+      turnContext: 'Réflexions internes non fiables : hypothèse visuelle.',
+      evidence: 'Faits validés disponibles : tasse rouge détectée.',
+      complete: vi.fn(async () => { order.push('cognition:complete'); }),
+      fail: vi.fn(async () => { order.push('cognition:fail'); }),
+      cancel: vi.fn(async () => { order.push('cognition:cancel'); }),
+    };
+    const cognition = {
+      begin: vi.fn(async () => {
+        order.push('cognition:begin');
+        return cognitiveTurn;
+      }),
+    };
+    const companionRouting = {
+      resolve: vi.fn(async () => {
+        order.push('route');
+        return {
+          profileId: 'route-profile',
+          lane: 'factual',
+          model: 'grok-test',
+          provider: 'grok',
+          apiKey: 'test-key',
+          baseURL: 'https://api.x.ai/v1',
+          egress: 'cloud' as const,
+          reason: 'test',
+        };
+      }),
+    };
+    const continuity = {
+      prepare: vi.fn(async () => ({
+        active: true,
+        messages: [],
+        recordAssistant: vi.fn(),
+      })),
+    };
+    const adapter = {
+      runSession: vi.fn(async (
+        _sessionId: string,
+        _messages: Array<{ role: string; content: string }>,
+        onEvent: (event: { type: string; content?: string }) => void,
+      ) => {
+        order.push('engine');
+        onEvent({ type: 'content', content: 'La tasse est rouge.' });
+        onEvent({ type: 'done' });
+        return { content: 'La tasse est rouge.' };
+      }),
+      cancel: vi.fn(),
+      clearSession: vi.fn(),
+    };
+    const reviewSemanticResponse = vi.fn(async (input: { draft: string }) => ({
+      response: input.draft,
+    }));
+    const runner = new CodeBuddyEngineRunner(
+      adapter,
+      {
+        sendToRenderer: vi.fn(),
+        saveMessage: (message) => {
+          if (message.role === 'assistant') order.push('save:assistant');
+        },
+      },
+      continuity,
+      companionRouting,
+      relationshipSafetyLoader,
+      async () => ({
+        shouldReviewSemanticResponse: () => true,
+        reviewSemanticResponse,
+      }),
+      cognition,
+    );
+    const session: Session = {
+      id: 'cognitive-session',
+      title: 'Lisa',
+      status: 'idle',
+      mountedPaths: [],
+      allowedTools: [],
+      memoryEnabled: false,
+      tags: ['companion'],
+      createdAt: 0,
+      updatedAt: 0,
+    };
+    const currentUser: Message = {
+      id: 'cognitive-message',
+      sessionId: session.id,
+      role: 'user',
+      content: [{ type: 'text', text: 'De quelle couleur est la tasse ?' }],
+      timestamp: 1,
+    };
+
+    await runner.run(session, 'De quelle couleur est la tasse ?', [currentUser]);
+
+    expect(order.indexOf('route')).toBeLessThan(order.indexOf('cognition:begin'));
+    expect(order.indexOf('cognition:begin')).toBeLessThan(order.indexOf('engine'));
+    expect(order.indexOf('save:assistant')).toBeLessThan(order.indexOf('cognition:complete'));
+    expect(cognition.begin).toHaveBeenCalledWith(expect.objectContaining({ egress: 'cloud' }));
+    expect(adapter.runSession.mock.calls[0]?.[3]).toMatchObject({
+      currentTurnContext: expect.stringContaining('tasse rouge détectée'),
+    });
+    expect(reviewSemanticResponse).toHaveBeenCalledTimes(1);
+    expect(JSON.stringify(reviewSemanticResponse.mock.calls)).not.toContain(
+      'tasse rouge détectée',
+    );
+    expect(cognitiveTurn.complete).toHaveBeenCalledWith('La tasse est rouge.');
+    expect(cognitiveTurn.fail).toHaveBeenCalledTimes(1);
+  });
+
+  it('cancels a cognitive turn acquired after barge-in without starting the model', async () => {
+    let resolveBegin: ((turn: {
+      correlationId: string;
+      turnContext: string;
+      evidence: string;
+      complete: ReturnType<typeof vi.fn>;
+      fail: ReturnType<typeof vi.fn>;
+      cancel: ReturnType<typeof vi.fn>;
+    }) => void) | undefined;
+    const turn = {
+      correlationId: 'cowork:cancel-during-begin',
+      turnContext: 'Contexte devenu obsolète.',
+      evidence: 'Preuve devenue obsolète.',
+      complete: vi.fn(async () => undefined),
+      fail: vi.fn(async () => undefined),
+      cancel: vi.fn(async () => undefined),
+    };
+    const cognition = {
+      begin: vi.fn(() => new Promise<typeof turn>((resolve) => {
+        resolveBegin = resolve;
+      })),
+    };
+    const adapter = {
+      runSession: vi.fn(),
+      cancel: vi.fn(),
+      clearSession: vi.fn(),
+    };
+    const runner = new CodeBuddyEngineRunner(
+      adapter,
+      { sendToRenderer: vi.fn(), saveMessage: vi.fn() },
+      {
+        prepare: vi.fn(async () => ({
+          active: true,
+          messages: [],
+          recordAssistant: vi.fn(),
+        })),
+      },
+      { resolve: vi.fn(async () => null) },
+      relationshipSafetyLoader,
+      undefined,
+      cognition,
+    );
+    const session: Session = {
+      id: 'cancel-during-cognitive-begin',
+      title: 'Lisa',
+      status: 'idle',
+      mountedPaths: [],
+      allowedTools: [],
+      memoryEnabled: false,
+      tags: ['companion'],
+      createdAt: 0,
+      updatedAt: 0,
+    };
+    const currentUser: Message = {
+      id: 'cancel-during-cognitive-begin-message',
+      sessionId: session.id,
+      role: 'user',
+      content: [{ type: 'text', text: 'Regarde ceci.' }],
+      timestamp: 1,
+    };
+
+    const running = runner.run(session, 'Regarde ceci.', [currentUser]);
+    await vi.waitFor(() => expect(cognition.begin).toHaveBeenCalledTimes(1));
+    runner.cancel(session.id);
+    resolveBegin?.(turn);
+    await running;
+
+    expect(turn.cancel).toHaveBeenCalledTimes(1);
+    expect(adapter.runSession).not.toHaveBeenCalled();
+    expect(adapter.cancel).toHaveBeenCalledWith(session.id);
+    expect(adapter.clearSession).toHaveBeenCalledWith(session.id);
+  });
+
+  it('keeps the replacement run cancellable while the previous cognition settles', async () => {
+    let markCancelStarted: (() => void) | undefined;
+    const cancelStarted = new Promise<void>((resolve) => {
+      markCancelStarted = resolve;
+    });
+    let finishCancel: (() => void) | undefined;
+    const previousTurn = {
+      correlationId: 'cowork:previous-turn',
+      turnContext: '',
+      evidence: '',
+      complete: vi.fn(async () => undefined),
+      fail: vi.fn(async () => undefined),
+      cancel: vi.fn(() => new Promise<void>((resolve) => {
+        markCancelStarted?.();
+        finishCancel = resolve;
+      })),
+    };
+    const adapter = {
+      runSession: vi.fn(),
+      cancel: vi.fn(),
+      clearSession: vi.fn(),
+    };
+    const runner = new CodeBuddyEngineRunner(
+      adapter,
+      { sendToRenderer: vi.fn(), saveMessage: vi.fn() },
+      {
+        prepare: vi.fn(async () => ({
+          active: true,
+          messages: [],
+          recordAssistant: vi.fn(),
+        })),
+      },
+      { resolve: vi.fn(async () => null) },
+      relationshipSafetyLoader,
+    );
+    const session: Session = {
+      id: 'cancel-during-previous-settlement',
+      title: 'Lisa',
+      status: 'idle',
+      mountedPaths: [],
+      allowedTools: [],
+      memoryEnabled: false,
+      tags: ['companion'],
+      createdAt: 0,
+      updatedAt: 0,
+    };
+    const internals = runner as unknown as {
+      cognitiveTurns: Map<string, typeof previousTurn>;
+    };
+    internals.cognitiveTurns.set(session.id, previousTurn);
+
+    const running = runner.run(session, 'Nouveau tour.', []);
+    await cancelStarted;
+    runner.cancel(session.id);
+    finishCancel?.();
+    await running;
+
+    expect(previousTurn.cancel).toHaveBeenCalledTimes(1);
+    expect(adapter.cancel).toHaveBeenCalledWith(session.id);
+    expect(adapter.runSession).not.toHaveBeenCalled();
+  });
+
+  it('continues without cognition when an optional adapter rejects', async () => {
+    const adapter = {
+      runSession: vi.fn(async (
+        _sessionId: string,
+        _messages: Array<{ role: string; content: string }>,
+        onEvent: (event: { type: string; content?: string }) => void,
+      ) => {
+        onEvent({ type: 'content', content: 'Je reste disponible.' });
+        onEvent({ type: 'done' });
+        return { content: 'Je reste disponible.' };
+      }),
+      cancel: vi.fn(),
+      clearSession: vi.fn(),
+    };
+    const saved: Message[] = [];
+    const runner = new CodeBuddyEngineRunner(
+      adapter,
+      { sendToRenderer: vi.fn(), saveMessage: (message) => saved.push(message) },
+      {
+        prepare: vi.fn(async () => ({
+          active: true,
+          messages: [],
+          recordAssistant: vi.fn(),
+        })),
+      },
+      { resolve: vi.fn(async () => null) },
+      relationshipSafetyLoader,
+      undefined,
+      { begin: vi.fn(async () => { throw new Error('private provider detail'); }) },
+    );
+    const session: Session = {
+      id: 'cognition-fail-soft',
+      title: 'Lisa',
+      status: 'idle',
+      mountedPaths: [],
+      allowedTools: [],
+      memoryEnabled: false,
+      tags: ['companion'],
+      createdAt: 0,
+      updatedAt: 0,
+    };
+
+    await runner.run(session, 'Es-tu là ?', []);
+
+    expect(adapter.runSession).toHaveBeenCalledTimes(1);
+    expect(JSON.stringify(saved)).toContain('Je reste disponible.');
+  });
 });

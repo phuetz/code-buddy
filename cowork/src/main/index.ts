@@ -98,6 +98,8 @@ import { registerGitIpcHandlers } from './ipc/git-ipc';
 import { registerCheckpointIpcHandlers } from './ipc/checkpoint-ipc';
 import { initDatabase, closeDatabase } from './db/database';
 import { SessionManager, type EngineAdapterLike } from './session/session-manager';
+import { InProcessCoworkCognition } from './companion/cognitive-context';
+import { getServerBridge } from './server/server-bridge';
 import { getExternalSession, listExternalSessions } from './session/cli-session-continuity';
 import {
   classifyEngineLoadError,
@@ -1627,7 +1629,13 @@ app
 
     // Initialize session manager before creating an interactive window.
     // This avoids session.start racing the startup path and hitting a null manager.
-    sessionManager = new SessionManager(db, sendToRenderer, pluginRuntimeService, engineAdapter);
+    sessionManager = new SessionManager(
+      db,
+      sendToRenderer,
+      pluginRuntimeService,
+      engineAdapter,
+      new InProcessCoworkCognition(() => getServerBridge().getCognitionPort()),
+    );
 
     // Do not grant `allOperations` process-wide. The engine adapter wires
     // ConfirmationService to Cowork's real permission dialog, while routine

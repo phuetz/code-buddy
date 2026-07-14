@@ -288,7 +288,9 @@ describe('CoworkCompanionModelRouting', () => {
         timestamp: 2,
       },
     ];
-    await runner.run(session, 'Approfondis cette idée.', priorMessages);
+    await runner.run(session, 'Approfondis cette idée.', priorMessages, {
+      text: 'Approfondis cette idée.',
+    });
 
     expect(companionRouting.resolve).toHaveBeenCalledWith(
       session,

@@ -68,6 +68,7 @@ import {
 import { generateTitleWithClaudeSdk } from '../claude/claude-sdk-one-shot';
 import { buildScheduledTaskTitle } from '../../shared/schedule/task-title';
 import { CodeBuddyEngineRunner } from '../engine/codebuddy-engine-runner';
+import type { CoworkCognitionPort } from '../companion/cognitive-context';
 import {
   classifyCoworkCanonicalAttachment,
   type CoworkCanonicalTurn,
@@ -522,6 +523,7 @@ export class SessionManager {
     sendToRenderer: (event: ServerEvent) => void,
     pluginRuntimeService?: PluginRuntimeService,
     engineAdapter?: EngineAdapterLike,
+    private readonly cognition?: CoworkCognitionPort,
   ) {
     this.db = db;
     this.engineAdapter = engineAdapter;
@@ -601,6 +603,11 @@ export class SessionManager {
           sendToRenderer: this.sendToRenderer,
           saveMessage: (message: Message) => this.saveMessage(message),
         },
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        this.cognition,
       );
       log('[SessionManager] Using Code Buddy engine runner (embedded)');
     } else {

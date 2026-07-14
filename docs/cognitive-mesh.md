@@ -37,8 +37,11 @@ The body can see, hear, maintain memory and deliberate concurrently, but it stil
 - `CognitiveHub` is now the process authority for canonical IDs, revisions, server epoch, derived provenance, correlation ownership, idempotent network retries, cancellation and transactional context leases. Network drafts cannot forge producer identity, timestamps, depth or provenance, and executable `action` items are not accepted by the wire contract.
 - The existing `/ws` gateway exposes a versioned cognitive bus with server-derived principals, scopes and transport facts. `local-only` requires direct loopback; `trusted-lan` requires loopback or actual TLS in addition to its scope. Each subscription is bounded and emits `cognition.gap` when a slow consumer must resynchronise.
 - `GET /api/cognition/snapshot` provides bounded revision recovery after a gap or reconnect. Raw media, local paths and arbitrary payload fields remain outside both transport surfaces.
+- `CognitiveBusClient` now subscribes before snapshot recovery, buffers live events during the race, deduplicates revisions, detects server epochs, resynchronises after `cognition.gap`, bounds every queue and invalidates leases when their owning socket disappears. Non-loopback plaintext transport is rejected.
+- Telegram and embedded Cowork now consume projected context transactionally. Acquisition happens after the real model egress is known; the hub clamps the projection to the route's `maxPrivacy`. The projected hypotheses and evidence guide only that main route. A semantic reviewer is a separate model boundary and receives only evidence independently qualified for its circuit; cognitive evidence is withheld until reviewer egress has its own projection. Cowork commits after the accepted message is saved; Telegram commits after confirmed delivery and records only the visible prefix after a partial chunk failure.
+- A hard 2 MiB WebSocket frame limit complements the existing outbound backpressure ceiling.
 
-The live workspace remains intentionally ephemeral and owned by one server process, but authenticated external processes can now reach that authority through the bounded bus instead of creating competing blackboards. Telegram and Cowork still use their existing conversation continuity bridge until their adapters adopt cognitive projections and transactional leases; raw cognitive items must never cross into the Electron renderer.
+The live workspace remains intentionally ephemeral and owned by one server process, but authenticated external processes can now reach that authority through the bounded bus instead of creating competing blackboards. Telegram and Cowork retain their existing conversation continuity bridge as the unique durable transcript; cognitive items remain short-lived working memory and never cross into the Electron renderer.
 
 ## Two timescales of continuity
 
@@ -82,9 +85,9 @@ Add anonymous tracker ids, 2D observations and explicit camera liveness refreshe
 
 The local dialogue reflector and critic are implemented. Add memory, planner and prospective specialists with structured proposal schemas. Fleet sessions require propagated cancellation, bounded/compacted history and encrypted persistence before they may carry private transcripts.
 
-### 4. Attach cross-surface cognitive clients
+### 4. Harden cross-surface transaction identity
 
-The central transport and snapshot recovery are implemented. Add a reconnecting client with epoch/cursor recovery, then attach Telegram and Cowork to projected context rather than raw items. Commit the lease only after durable delivery, release it on failure, and propagate cancellation. Keep `fact` evidence structurally separate from `hypothesis|proposal|plan` at every semantic review gate.
+The reconnecting client and Telegram/Cowork projection adapters are implemented. Next, provision stable scoped credentials for every long-running channel process, add a durable `received → generated → delivered` ledger for exactly-once visible Telegram delivery, and propagate `AbortSignal` through the sequential agent path. Bring the remote `/desktop` path to the same save-before-commit contract before enabling cognition there.
 
 ### 5. Cowork observability
 

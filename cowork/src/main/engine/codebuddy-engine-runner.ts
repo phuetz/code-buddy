@@ -22,6 +22,11 @@ import {
   type CoworkCanonicalTurn,
 } from '../companion/cross-channel-continuity';
 import { CoworkCompanionModelRouting } from '../companion/model-routing';
+import {
+  resolveCoworkModelEgress,
+  type CoworkCognitionPort,
+  type CoworkCognitiveTurn,
+} from '../companion/cognitive-context';
 import { loadCoreModule } from '../utils/core-loader';
 import type { ContextOptimizationMetadata } from '@codebuddy/shared/context-optimization-metadata';
 import { isCompanionThreadTags } from '../../shared/companion-thread';
@@ -246,6 +251,7 @@ export class CodeBuddyEngineRunner {
   private relationshipSafetyLoader: RelationshipSafetyLoader;
   private semanticResponseLoader: SemanticResponseLoader;
   private postProcessingControllers = new Map<string, AbortController>();
+  private cognitiveTurns = new Map<string, CoworkCognitiveTurn>();
 
   constructor(
     adapter: EngineAdapter,
@@ -267,6 +273,7 @@ export class CodeBuddyEngineRunner {
         runtimeEnv: assistantConfig?.readAssistantRuntimeEnv?.() ?? {},
       };
     },
+    private readonly cognition?: CoworkCognitionPort,
   ) {
     this.adapter = adapter;
     this.callbacks = callbacks;
@@ -294,8 +301,24 @@ export class CodeBuddyEngineRunner {
     const turnStartedAt = Date.now();
     const previousPostProcessing = this.postProcessingControllers.get(session.id);
     previousPostProcessing?.abort();
+    // Register this run before awaiting cleanup from the previous one. Barge-in
+    // must always have a current controller to abort, even during handover.
     const postProcessingController = new AbortController();
     this.postProcessingControllers.set(session.id, postProcessingController);
+    const previousCognitiveTurn = this.cognitiveTurns.get(session.id);
+    if (previousCognitiveTurn) {
+      this.cognitiveTurns.delete(session.id);
+      await previousCognitiveTurn.cancel().catch(() => undefined);
+    }
+    if (
+      postProcessingController.signal.aborted ||
+      this.postProcessingControllers.get(session.id) !== postProcessingController
+    ) {
+      if (this.postProcessingControllers.get(session.id) === postProcessingController) {
+        this.postProcessingControllers.delete(session.id);
+      }
+      return;
+    }
 
     // Notify session is running
     sendToRenderer({
@@ -410,13 +433,48 @@ export class CodeBuddyEngineRunner {
     const engineMessages = sharedContinuity.active
       ? [...sharedContinuity.messages, ...localEngineMessages]
       : localEngineMessages;
-    const turnContext = sharedContinuity.turnContext?.trim();
     const systemPromptAppend = [personaPrompt, sharedContinuity.systemPrompt]
       .filter((part): part is string => Boolean(part?.trim()))
       .join('\n\n') || undefined;
     const effectiveModel = companionRoute?.model ?? session.model ?? runtimeConfig.model;
     const effectiveApiKey = companionRoute?.apiKey ?? runtimeConfig.apiKey;
     const effectiveBaseURL = companionRoute?.baseURL ?? runtimeConfig.baseUrl;
+    let cognitiveTurn: CoworkCognitiveTurn | null = null;
+    if (companionThread && this.cognition) {
+      try {
+        cognitiveTurn = await this.cognition.begin({
+          sessionId: session.id,
+          messageId: userMessageId,
+          query: canonicalPrompt,
+          egress: resolveCoworkModelEgress(companionRoute?.egress, effectiveBaseURL),
+        });
+      } catch {
+        // Cognition enriches a turn but never owns dialogue availability. Keep
+        // provider errors and potentially private fragments out of logs.
+        log('[CoworkCognition] context unavailable', { sessionId: session.id });
+      }
+    }
+    if (cognitiveTurn) this.cognitiveTurns.set(session.id, cognitiveTurn);
+    if (postProcessingController.signal.aborted) {
+      if (this.cognitiveTurns.get(session.id) === cognitiveTurn) {
+        this.cognitiveTurns.delete(session.id);
+      }
+      await cognitiveTurn?.cancel().catch(() => undefined);
+      this.discardEngineSession(session.id);
+      if (this.postProcessingControllers.get(session.id) === postProcessingController) {
+        this.postProcessingControllers.delete(session.id);
+      }
+      sendToRenderer({
+        type: 'session.status',
+        payload: { sessionId: session.id, status: 'idle' },
+      } as ServerEvent);
+      return;
+    }
+    const turnContext = [
+      sharedContinuity.turnContext?.trim(),
+      cognitiveTurn?.turnContext.trim(),
+      cognitiveTurn?.evidence.trim(),
+    ].filter((part): part is string => Boolean(part)).join('\n\n') || undefined;
     const semanticHistory = this.buildSemanticReviewHistory(
       sharedContinuity.messages,
       historyMessages,
@@ -425,6 +483,10 @@ export class CodeBuddyEngineRunner {
       request: canonicalPrompt,
       ...(semanticHistory.length > 0 ? { history: semanticHistory } : {}),
     };
+    // Cognition was projected for the main route. The semantic reviewer can
+    // independently select another provider, so only its pre-qualified fresh
+    // evidence may cross that separate model boundary.
+    const semanticEvidence = sharedContinuity.freshEvidence?.trim() || undefined;
     const semanticRuntimeOptions: SemanticRuntimeOptions | undefined = semanticResponseModule
       ? { env: { ...process.env, ...(semanticResponseModule.runtimeEnv ?? {}) } }
       : undefined;
@@ -874,9 +936,7 @@ export class CodeBuddyEngineRunner {
               {
                 ...semanticReviewCandidate,
                 draft: reviewedDraft,
-                ...(sharedContinuity.freshEvidence
-                  ? { evidence: sharedContinuity.freshEvidence }
-                  : {}),
+                ...(semanticEvidence ? { evidence: semanticEvidence } : {}),
                 ...(semanticMainProvider ? { mainProvider: semanticMainProvider } : {}),
                 signal: postProcessingController.signal,
               },
@@ -957,6 +1017,17 @@ export class CodeBuddyEngineRunner {
       };
       saveMessage(assistantMessage);
       if (!runtimeError && fullContent.trim()) {
+        try {
+          await cognitiveTurn?.complete(fullContent);
+        } catch (error) {
+          // The visible response is already durable. A failed commit is
+          // uncertain; never release and re-inject that context.
+          logError('[CoworkCognition] post-save commit uncertain', error);
+        }
+      } else {
+        await cognitiveTurn?.fail().catch(() => undefined);
+      }
+      if (!runtimeError && fullContent.trim()) {
         sharedContinuity.recordAssistant(assistantMessageId, fullContent);
       }
 
@@ -969,6 +1040,7 @@ export class CodeBuddyEngineRunner {
         },
       } as ServerEvent);
     } catch (error) {
+      await cognitiveTurn?.fail().catch(() => undefined);
       if (postProcessingController.signal.aborted) {
         this.discardEngineSession(session.id);
         return;
@@ -982,6 +1054,10 @@ export class CodeBuddyEngineRunner {
         },
       } as ServerEvent);
     } finally {
+      await cognitiveTurn?.fail().catch(() => undefined);
+      if (this.cognitiveTurns.get(session.id) === cognitiveTurn) {
+        this.cognitiveTurns.delete(session.id);
+      }
       if (semanticReviewPending) {
         this.adapter.resumeTranscriptSnapshots?.(session.id);
       }
@@ -1009,6 +1085,9 @@ export class CodeBuddyEngineRunner {
   cancel(sessionId: string): void {
     try {
       this.postProcessingControllers.get(sessionId)?.abort();
+      const cognitiveTurn = this.cognitiveTurns.get(sessionId);
+      this.cognitiveTurns.delete(sessionId);
+      void cognitiveTurn?.cancel().catch(() => undefined);
       this.adapter.cancel(sessionId);
       log('[CodeBuddyEngineRunner] cancelled', sessionId);
     } catch (error) {
@@ -1030,6 +1109,9 @@ export class CodeBuddyEngineRunner {
   clearSdkSession(sessionId: string): void {
     this.postProcessingControllers.get(sessionId)?.abort();
     this.postProcessingControllers.delete(sessionId);
+    const cognitiveTurn = this.cognitiveTurns.get(sessionId);
+    this.cognitiveTurns.delete(sessionId);
+    void cognitiveTurn?.cancel().catch(() => undefined);
     this.adapter.clearSession(sessionId);
     log('[CodeBuddyEngineRunner] cleared', sessionId);
   }

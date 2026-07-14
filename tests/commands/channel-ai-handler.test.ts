@@ -39,6 +39,10 @@ const hoisted = vi.hoisted(() => {
     resolveProviderFromEnv: vi.fn(),
     resolveCompanionModelRoute: vi.fn(),
     reviewSemanticResponse: vi.fn(),
+    cognitiveBegin: vi.fn(),
+    cognitiveComplete: vi.fn(),
+    cognitiveFail: vi.fn(),
+    cognitiveCancel: vi.fn(),
   };
 });
 
@@ -102,6 +106,13 @@ vi.mock('../../src/conversation/companion-model-routing.js', () => ({
 
 vi.mock('../../src/conversation/semantic-response-runtime.js', () => ({
   reviewSemanticResponse: hoisted.reviewSemanticResponse,
+}));
+
+vi.mock('../../src/channels/channel-cognitive-port.js', () => ({
+  getChannelCognitivePort: () => ({
+    begin: hoisted.cognitiveBegin,
+    close: vi.fn(),
+  }),
 }));
 
 import {
@@ -190,6 +201,7 @@ describe('registerAIMessageHandler inbound roundtrip (GAP-7)', () => {
       apiKey: 'test-key',
       baseUrl: 'https://api.x.ai/v1',
       model: 'grok-default',
+      egress: 'cloud',
     });
     hoisted.resolveCompanionModelRoute.mockResolvedValue(null);
     hoisted.reviewSemanticResponse.mockImplementation(async (input: { draft: string }) => ({
@@ -198,6 +210,10 @@ describe('registerAIMessageHandler inbound roundtrip (GAP-7)', () => {
       reason: 'ineligible',
       revisionAttempts: 0,
     }));
+    hoisted.cognitiveBegin.mockResolvedValue(null);
+    hoisted.cognitiveComplete.mockResolvedValue(undefined);
+    hoisted.cognitiveFail.mockResolvedValue(undefined);
+    hoisted.cognitiveCancel.mockResolvedValue(undefined);
   });
 
   it('runs message → pairing → route → agent → reply and delivers the response', async () => {
@@ -450,6 +466,56 @@ describe('registerAIMessageHandler inbound roundtrip (GAP-7)', () => {
     expect(hoisted.constructorCalls).toHaveLength(2);
   });
 
+  it('injects route-bounded cognitive context and settles after Telegram delivery', async () => {
+    const order: string[] = [];
+    registerChannelBotPersona('lisa-cognitive', {
+      name: 'Lisa',
+      systemPrompt: 'Tu es Lisa, compagne conversationnelle.',
+    });
+    hoisted.cognitiveBegin.mockImplementation(async () => {
+      order.push('cognition:begin');
+      return {
+        correlationId: 'channel:telegram:test',
+        turnContext: 'Réflexions internes non fiables : hypothèse visuelle.',
+        evidence: 'Faits validés disponibles : objet rouge détecté.',
+        complete: async (content: string) => {
+          order.push(`cognition:complete:${content}`);
+          await hoisted.cognitiveComplete(content);
+        },
+        fail: hoisted.cognitiveFail,
+        cancel: hoisted.cognitiveCancel,
+      };
+    });
+    const manager = makeManager();
+    await registerAIMessageHandler(manager as any);
+    const send = vi.fn(async () => {
+      order.push('telegram:delivered');
+      return { success: true, timestamp: new Date() };
+    });
+    const message = makeMessage('Que vois-tu ?', 'sess-cognitive', 'lisa-cognitive');
+
+    await manager.emit(message, { type: 'telegram', send });
+
+    expect(hoisted.cognitiveBegin).toHaveBeenCalledWith(expect.objectContaining({
+      channelType: 'telegram',
+      messageId: message.id,
+      content: 'Que vois-tu ?',
+      egress: 'cloud',
+    }));
+    expect(hoisted.processUserMessage).toHaveBeenCalledWith(
+      'Que vois-tu ?',
+      expect.objectContaining({
+        surface: 'telegram',
+        transientContext: expect.stringContaining('objet rouge détecté'),
+      }),
+    );
+    expect(order.indexOf('telegram:delivered')).toBeLessThan(
+      order.indexOf('cognition:complete:Here is your answer.'),
+    );
+    expect(hoisted.cognitiveComplete).toHaveBeenCalledWith('Here is your answer.');
+    expect(hoisted.cognitiveFail).not.toHaveBeenCalled();
+  });
+
   it('keeps a generated turn when plain fallback succeeds after an HTML transport rejection', async () => {
     const manager = makeManager();
     await registerAIMessageHandler(manager as any);
@@ -503,6 +569,15 @@ describe('registerAIMessageHandler inbound roundtrip (GAP-7)', () => {
       ...makeMessage('Réponse longue', 'sess-partial-html'),
       attachments: [{ type: 'voice' }],
     };
+    const partialComplete = vi.fn(async () => undefined);
+    hoisted.cognitiveBegin.mockResolvedValue({
+      correlationId: 'channel:telegram:partial',
+      turnContext: '',
+      evidence: '',
+      complete: partialComplete,
+      fail: hoisted.cognitiveFail,
+      cancel: hoisted.cognitiveCancel,
+    });
 
     await manager.emit(message, {
       type: 'telegram',
@@ -521,6 +596,10 @@ describe('registerAIMessageHandler inbound roundtrip (GAP-7)', () => {
       content: visiblePrefix.replace(/\s+/g, ' ').trim(),
     });
     expect(bridge.history().some((turn) => turn.content === longResponse)).toBe(false);
+    expect(partialComplete).toHaveBeenCalledWith(
+      visiblePrefix.trim(),
+      { cancelAfter: true },
+    );
   });
 
   it('preserves an accepted Telegram prefix when the next chunk throws', async () => {
@@ -653,6 +732,14 @@ describe('registerAIMessageHandler inbound roundtrip (GAP-7)', () => {
       { type: 'assistant', content: rejected, timestamp: new Date() },
     ];
     hoisted.getChatHistory.mockReturnValue(mutableHistory);
+    hoisted.cognitiveBegin.mockResolvedValue({
+      correlationId: 'channel:telegram:semantic-boundary',
+      turnContext: 'Hypothèse cognitive réservée au modèle principal.',
+      evidence: 'COGNITIVE_EVIDENCE_MAIN_ROUTE_ONLY',
+      complete: hoisted.cognitiveComplete,
+      fail: hoisted.cognitiveFail,
+      cancel: hoisted.cognitiveCancel,
+    });
     hoisted.reviewSemanticResponse.mockResolvedValue({
       response: revised,
       outcome: 'revised',
@@ -692,6 +779,15 @@ describe('registerAIMessageHandler inbound roundtrip (GAP-7)', () => {
     expect(hoisted.replaceLastAssistantResponse).toHaveBeenCalledWith(rejected, revised);
     expect(hoisted.suspendTranscriptSnapshots).toHaveBeenCalledTimes(1);
     expect(hoisted.resumeTranscriptSnapshots).toHaveBeenCalledTimes(1);
+    expect(hoisted.processUserMessage).toHaveBeenCalledWith(
+      "Penses-tu qu'une IA peut aimer ?",
+      expect.objectContaining({
+        transientContext: expect.stringContaining('COGNITIVE_EVIDENCE_MAIN_ROUTE_ONLY'),
+      }),
+    );
+    expect(JSON.stringify(hoisted.reviewSemanticResponse.mock.calls)).not.toContain(
+      'COGNITIVE_EVIDENCE_MAIN_ROUTE_ONLY',
+    );
     expect(JSON.stringify(hoisted.saveSession.mock.calls.at(-1)?.[0])).toContain(revised);
     expect(JSON.stringify(hoisted.saveSession.mock.calls.at(-1)?.[0])).not.toContain('La lune');
     expect(hoisted.reviewSemanticResponse).toHaveBeenCalledWith(

@@ -106,6 +106,8 @@ export const cognitiveContextAcquireRequestSchema = z.object({
   version: z.literal(COGNITIVE_WIRE_VERSION),
   query: z.string().max(4_000).optional(),
   excludeCorrelationId: identifier.optional(),
+  /** Maximum classification that may cross the consumer's actual egress. */
+  maxPrivacy: z.enum(WORKSPACE_PRIVACY).optional(),
   maxItems: z.number().int().min(0).max(16).optional(),
   maxChars: z.number().int().min(0).max(8_000).optional(),
   minSalience: z.number().finite().min(0).max(1).optional(),
