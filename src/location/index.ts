@@ -85,10 +85,18 @@ export interface LocationConfig {
   autoUpdateIntervalMs: number;
   /** Enable reverse geocoding */
   reverseGeocode: boolean;
-  /** IP geolocation API URL */
+  /** Explicit IP geolocation API URL. No network location is guessed when omitted. */
   ipGeoApiUrl?: string;
   /** Default location (fallback) */
   defaultLocation?: GeoCoordinates;
+}
+
+interface IpGeoPayload {
+  latitude: number;
+  longitude: number;
+  name?: string;
+  address?: AddressComponents;
+  timezoneId?: string;
 }
 
 export const DEFAULT_LOCATION_CONFIG: LocationConfig = {
@@ -185,6 +193,116 @@ function toRadians(degrees: number): number {
  */
 function toDegrees(radians: number): number {
   return radians * (180 / Math.PI);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function finiteNumber(value: unknown): number | undefined {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string' && value.trim() !== '') {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return undefined;
+}
+
+function nonEmptyString(value: unknown): string | undefined {
+  return typeof value === 'string' && value.trim() !== '' ? value.trim() : undefined;
+}
+
+function firstString(...values: unknown[]): string | undefined {
+  for (const value of values) {
+    const parsed = nonEmptyString(value);
+    if (parsed) return parsed;
+  }
+  return undefined;
+}
+
+function parseIpGeoPayload(value: unknown): IpGeoPayload {
+  if (!isRecord(value)) throw new Error('IP geolocation response must be a JSON object');
+  if (value.success === false || value.status === 'fail' || value.error === true) {
+    const reason = firstString(value.message, value.reason) ?? 'provider rejected the request';
+    throw new Error(`IP geolocation failed: ${reason}`);
+  }
+
+  const latitude = finiteNumber(value.latitude) ?? finiteNumber(value.lat);
+  const longitude = finiteNumber(value.longitude) ?? finiteNumber(value.lon);
+  if (latitude === undefined || latitude < -90 || latitude > 90) {
+    throw new Error('IP geolocation response has an invalid latitude');
+  }
+  if (longitude === undefined || longitude < -180 || longitude > 180) {
+    throw new Error('IP geolocation response has an invalid longitude');
+  }
+
+  const timezone = isRecord(value.timezone) ? value.timezone : undefined;
+  const city = firstString(value.city);
+  const state = firstString(value.region, value.regionName, value.region_name);
+  const country = firstString(value.country, value.country_name);
+  const countryCode = firstString(value.country_code, value.countryCode);
+  const postalCode = firstString(value.postal, value.zip);
+  const formatted = [city, state, country].filter(Boolean).join(', ') || undefined;
+  const address = city || state || country || countryCode || postalCode
+    ? { city, state, country, countryCode, postalCode, formatted }
+    : undefined;
+
+  return {
+    latitude,
+    longitude,
+    name: formatted,
+    address,
+    timezoneId: firstString(timezone?.id, value.timezone),
+  };
+}
+
+function timezoneOffsetMinutes(timeZone: string, instant: Date): number {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(instant);
+  const fields = new Map(parts.map((part) => [part.type, part.value]));
+  const wallClockUtc = Date.UTC(
+    Number(fields.get('year')),
+    Number(fields.get('month')) - 1,
+    Number(fields.get('day')),
+    Number(fields.get('hour')),
+    Number(fields.get('minute')),
+    Number(fields.get('second')),
+  );
+  return Math.round((wallClockUtc - instant.getTime()) / 60_000);
+}
+
+function timezoneInfo(timeZone: string, instant: Date): TimezoneInfo {
+  let formatter: Intl.DateTimeFormat;
+  try {
+    formatter = new Intl.DateTimeFormat('en-US', {
+      timeZone,
+      timeZoneName: 'short',
+    });
+  } catch {
+    throw new Error(`IP geolocation response has an invalid IANA timezone: ${timeZone}`);
+  }
+  const id = formatter.resolvedOptions().timeZone;
+  const abbreviation = formatter.formatToParts(instant)
+    .find((part) => part.type === 'timeZoneName')?.value ?? id;
+  const offsetMinutes = timezoneOffsetMinutes(id, instant);
+  const year = instant.getUTCFullYear();
+  const januaryOffset = timezoneOffsetMinutes(id, new Date(Date.UTC(year, 0, 15, 12)));
+  const julyOffset = timezoneOffsetMinutes(id, new Date(Date.UTC(year, 6, 15, 12)));
+
+  return {
+    id,
+    abbreviation,
+    offsetMinutes,
+    isDST: offsetMinutes !== Math.min(januaryOffset, julyOffset),
+  };
 }
 
 /**
@@ -316,16 +434,6 @@ export class LocationService extends EventEmitter {
           location = await this.getLocationByIP();
       }
 
-      // Reverse geocode if enabled
-      if (this.config.reverseGeocode && !location.address) {
-        location.address = await this.reverseGeocode(location);
-      }
-
-      // Add timezone
-      if (!location.timezone) {
-        location.timezone = this.getTimezone(location);
-      }
-
       // Update cache
       if (this.config.cacheEnabled) {
         this.cachedLocation = location;
@@ -341,23 +449,38 @@ export class LocationService extends EventEmitter {
     }
   }
 
-  /**
-   * Get location by IP (mock implementation)
-   */
+  /** Get a measured IP location from an explicitly configured provider. */
   private async getLocationByIP(): Promise<GeoLocation> {
-    // Mock IP geolocation response
-    // In real implementation, this would call an IP geolocation API
-    await new Promise(resolve => setTimeout(resolve, 50));
+    const endpoint = this.config.ipGeoApiUrl?.trim();
+    if (!endpoint) {
+      throw new Error('IP geolocation is not configured; set ipGeoApiUrl or use an explicit manual location');
+    }
+    let url: URL;
+    try {
+      url = new URL(endpoint);
+    } catch {
+      throw new Error('ipGeoApiUrl must be an absolute HTTP or HTTPS URL');
+    }
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+      throw new Error('ipGeoApiUrl must use HTTP or HTTPS');
+    }
 
-    return this.createLocation(
-      {
-        latitude: 48.8566,
-        longitude: 2.3522,
-        accuracy: 1000, // 1km accuracy for IP-based
-      },
-      'ip',
-      'Paris, France'
-    );
+    const response = await fetch(url, {
+      headers: { accept: 'application/json' },
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (!response.ok) throw new Error(`IP geolocation provider returned HTTP ${response.status}`);
+    const measured = parseIpGeoPayload(await response.json());
+    const timestamp = new Date();
+    return {
+      latitude: measured.latitude,
+      longitude: measured.longitude,
+      timestamp,
+      source: 'ip',
+      name: measured.name,
+      address: this.config.reverseGeocode ? measured.address : undefined,
+      timezone: measured.timezoneId ? timezoneInfo(measured.timezoneId, timestamp) : undefined,
+    };
   }
 
   /**
@@ -373,48 +496,6 @@ export class LocationService extends EventEmitter {
       timestamp: new Date(),
       source,
       name,
-    };
-  }
-
-  /**
-   * Reverse geocode coordinates to address
-   */
-  private async reverseGeocode(location: GeoLocation): Promise<AddressComponents | undefined> {
-    // Mock reverse geocoding
-    // In real implementation, this would call a geocoding API
-    await new Promise(resolve => setTimeout(resolve, 50));
-
-    // Return mock address based on known locations
-    if (Math.abs(location.latitude - 48.8566) < 0.1 &&
-        Math.abs(location.longitude - 2.3522) < 0.1) {
-      return {
-        city: 'Paris',
-        state: 'Île-de-France',
-        country: 'France',
-        countryCode: 'FR',
-        postalCode: '75001',
-        formatted: 'Paris, France',
-      };
-    }
-
-    return {
-      formatted: `${location.latitude.toFixed(4)}, ${location.longitude.toFixed(4)}`,
-    };
-  }
-
-  /**
-   * Get timezone for location
-   */
-  private getTimezone(location: GeoLocation): TimezoneInfo {
-    // Simple timezone estimation based on longitude
-    // Real implementation would use a timezone database
-    const offsetHours = Math.round(location.longitude / 15);
-
-    return {
-      id: 'Europe/Paris', // Mock
-      abbreviation: 'CET',
-      offsetMinutes: offsetHours * 60,
-      isDST: false,
     };
   }
 

@@ -151,17 +151,35 @@ describe('Location Utilities', () => {
 describe('LocationService', () => {
   let service: LocationService;
 
+  const ipPayload = {
+    success: true,
+    latitude: 48.8566,
+    longitude: 2.3522,
+    city: 'Paris',
+    region: 'Île-de-France',
+    country: 'France',
+    country_code: 'FR',
+    postal: '75001',
+    timezone: { id: 'Europe/Paris' },
+  };
+
   beforeEach(() => {
     resetLocationService();
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(ipPayload), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    })));
     service = new LocationService({
       cacheEnabled: false,
       reverseGeocode: false,
+      ipGeoApiUrl: 'https://location.test/me',
     });
   });
 
   afterEach(() => {
     service.shutdown();
     resetLocationService();
+    vi.unstubAllGlobals();
   });
 
   describe('Configuration', () => {
@@ -187,6 +205,27 @@ describe('LocationService', () => {
       expect(location.longitude).toBeDefined();
       expect(location.timestamp).toBeInstanceOf(Date);
       expect(location.source).toBe('ip');
+      expect(fetch).toHaveBeenCalledWith(
+        new URL('https://location.test/me'),
+        expect.objectContaining({ headers: { accept: 'application/json' } }),
+      );
+    });
+
+    it('fails closed instead of inventing Paris when no IP provider is configured', async () => {
+      const unconfigured = new LocationService({ cacheEnabled: false });
+
+      await expect(unconfigured.getCurrentLocation()).rejects.toThrow('IP geolocation is not configured');
+      expect(fetch).not.toHaveBeenCalled();
+      unconfigured.shutdown();
+    });
+
+    it('rejects invalid coordinates returned by an IP provider', async () => {
+      vi.mocked(fetch).mockResolvedValueOnce(new Response(JSON.stringify({
+        latitude: 200,
+        longitude: 2,
+      }), { status: 200 }));
+
+      await expect(service.getCurrentLocation()).rejects.toThrow('invalid latitude');
     });
 
     it('should use mock location', async () => {
@@ -261,11 +300,35 @@ describe('LocationService', () => {
   });
 
   describe('Timezone', () => {
-    it('should add timezone to location', async () => {
-      const location = await service.getCurrentLocation();
+    it('resolves the provider IANA timezone with the real seasonal offset', async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-07-14T12:00:00.000Z'));
+      try {
+        const location = await service.getCurrentLocation();
 
-      expect(location.timezone).toBeDefined();
-      expect(location.timezone?.id).toBeDefined();
+        expect(location.timezone?.id).toBe('Europe/Paris');
+        expect(location.timezone?.offsetMinutes).toBe(120);
+        expect(location.timezone?.isDST).toBe(true);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('rejects a provider timezone that is not a valid IANA identifier', async () => {
+      vi.mocked(fetch).mockResolvedValueOnce(new Response(JSON.stringify({
+        ...ipPayload,
+        timezone: { id: 'Mars/Olympus' },
+      }), { status: 200 }));
+
+      await expect(service.getCurrentLocation()).rejects.toThrow('invalid IANA timezone');
+    });
+
+    it('does not derive a timezone from longitude for manual coordinates', async () => {
+      service.updateConfig({ defaultLocation: { latitude: 35.6762, longitude: 139.6503 } });
+
+      const location = await service.getCurrentLocation({ source: 'manual' });
+
+      expect(location.timezone).toBeUndefined();
     });
   });
 

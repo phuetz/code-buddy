@@ -46,8 +46,12 @@ supplémentaire pour agir à l'extérieur.
 2. Le fuseau est configurable ou affiché, mais l'exécution de `daily-reset`, du
    cron et de plusieurs rappels utilise encore l'heure locale implicite. Le champ
    `schedule.timezone` n'est pas réellement appliqué partout.
-3. `src/location/index.ts` contient des valeurs simulées autour de Paris et un
-   DST figé. Cette source ne doit jamais déterminer le domicile ou le fuseau.
+3. Corrigé le 14 juillet 2026 : `src/location/index.ts` ne fabrique plus Paris,
+   une adresse, une précision ou un fuseau à partir du vide. La localisation IP
+   exige désormais une source HTTP explicitement configurée, valide strictement
+   ses coordonnées et ne retient qu'un fuseau IANA fourni par cette source ; le
+   décalage et le DST sont calculés pour l'instant réel. Sans source ou position
+   manuelle confirmée, le service échoue fermé.
 4. Il n'existe aucun service de jours fériés ou de jours ouvrés.
 5. La capacité Android `calendar.list` ne renvoie pas encore de résultat métier
    au planificateur ; le connecteur Google Calendar présent n'est qu'un gabarit.
