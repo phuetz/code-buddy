@@ -199,6 +199,41 @@ describe('companion IPC', () => {
     });
   });
 
+  it('exposes raw-free quality insights and side-effect-free manual measurement', async () => {
+    const readConversationQualityInsights = vi.fn(() => ({
+      schemaVersion: 1,
+      available: true,
+      sampleCount: 3,
+      trend: { direction: 'improving' },
+      privacy: { verbatimIncluded: false, fingerprintsIncluded: false },
+    }));
+    const measureConversationQualityNow = vi.fn(async () => ({
+      at: 2_000,
+      overallScore: 0.84,
+    }));
+    coreLoaderMock.loadCoreModule.mockResolvedValue({
+      readConversationQualityInsights,
+      measureConversationQualityNow,
+    });
+    registerCompanionIpcHandlers(projectSource('/tmp/proj'));
+
+    const insights = (await electronMock.handlers.get('companion.quality.insights')?.(
+      {},
+      { windowSize: 12 },
+    )) as { ok: boolean; insights?: { sampleCount: number } };
+    const measurement = (await electronMock.handlers.get('companion.quality.measure')?.(
+      {},
+      { limit: 50 },
+    )) as { ok: boolean; measurement?: { overallScore: number } };
+
+    expect(insights.ok).toBe(true);
+    expect(insights.insights?.sampleCount).toBe(3);
+    expect(measurement.ok).toBe(true);
+    expect(measurement.measurement?.overallScore).toBe(0.84);
+    expect(readConversationQualityInsights).toHaveBeenCalledWith({ windowSize: 12 });
+    expect(measureConversationQualityNow).toHaveBeenCalledWith({ limit: 50 });
+  });
+
   it('records companion self-state through the core module', async () => {
     const recordCompanionSelfState = vi.fn(async () => ({ id: 'self-1', modality: 'self' }));
     coreLoaderMock.loadCoreModule.mockResolvedValue({ recordCompanionSelfState });

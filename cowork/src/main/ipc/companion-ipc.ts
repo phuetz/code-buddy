@@ -51,6 +51,18 @@ interface CompanionPerceptStats {
   latestTimestamp?: string;
 }
 
+interface ConversationQualityInsights {
+  schemaVersion: 1;
+  available: boolean;
+  sampleCount: number;
+  windowSize: number;
+  latest?: Record<string, unknown>;
+  trend: Record<string, unknown>;
+  recurringIssues: Array<Record<string, unknown>>;
+  activeGuidance?: Record<string, unknown>;
+  privacy: { verbatimIncluded: false; fingerprintsIncluded: false };
+}
+
 interface CompanionSelfEvaluationFinding {
   id: string;
   area: string;
@@ -638,6 +650,15 @@ type CompanionPerceptsMod = {
   getCompanionPerceptStats: (options: { cwd?: string }) => Promise<CompanionPerceptStats>;
 };
 
+type ConversationQualityInsightsMod = {
+  readConversationQualityInsights: (options?: {
+    windowSize?: number;
+  }) => ConversationQualityInsights;
+  measureConversationQualityNow: (options?: {
+    limit?: number;
+  }) => Promise<Record<string, unknown> | null>;
+};
+
 type CompanionCameraMod = {
   checkCameraAvailability: () => Promise<Record<string, unknown>>;
   importCameraSnapshot: (options: {
@@ -1086,6 +1107,12 @@ async function loadPercepts(): Promise<CompanionPerceptsMod | null> {
   return loadCoreModule<CompanionPerceptsMod>('companion/percepts.js');
 }
 
+async function loadConversationQualityInsights(): Promise<ConversationQualityInsightsMod | null> {
+  return loadCoreModule<ConversationQualityInsightsMod>(
+    'companion/conversation-quality-insights.js',
+  );
+}
+
 async function loadCamera(): Promise<CompanionCameraMod | null> {
   return loadCoreModule<CompanionCameraMod>('companion/camera.js');
 }
@@ -1249,6 +1276,48 @@ export function registerCompanionIpcHandlers(projectManagerSource: ProjectManage
       return { ok: false as const, error: errorMessage(err) };
     }
   });
+
+  ipcMain.handle(
+    'companion.quality.insights',
+    async (_e, input?: { projectId?: string; windowSize?: number }) => {
+      const { cwd, error } = await companionWorkDir(projectManagerSource, input?.projectId);
+      if (!cwd) return { ok: false as const, error };
+      try {
+        const mod = await loadConversationQualityInsights();
+        if (!mod?.readConversationQualityInsights) {
+          return { ok: false as const, error: 'core conversation quality module unavailable' };
+        }
+        return {
+          ok: true as const,
+          insights: mod.readConversationQualityInsights({ windowSize: input?.windowSize }),
+        };
+      } catch (err) {
+        logError('[companion.quality.insights] failed:', err);
+        return { ok: false as const, error: errorMessage(err) };
+      }
+    },
+  );
+
+  ipcMain.handle(
+    'companion.quality.measure',
+    async (_e, input?: { projectId?: string; limit?: number }) => {
+      const { cwd, error } = await companionWorkDir(projectManagerSource, input?.projectId);
+      if (!cwd) return { ok: false as const, error };
+      try {
+        const mod = await loadConversationQualityInsights();
+        if (!mod?.measureConversationQualityNow) {
+          return { ok: false as const, error: 'core conversation quality module unavailable' };
+        }
+        return {
+          ok: true as const,
+          measurement: await mod.measureConversationQualityNow({ limit: input?.limit }),
+        };
+      } catch (err) {
+        logError('[companion.quality.measure] failed:', err);
+        return { ok: false as const, error: errorMessage(err) };
+      }
+    },
+  );
 
   ipcMain.handle('companion.self.record', async (_e, projectId?: string) => {
     const { cwd, error } = await companionWorkDir(projectManagerSource, projectId);

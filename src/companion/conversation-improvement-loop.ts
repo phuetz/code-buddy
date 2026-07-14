@@ -136,11 +136,11 @@ const GUIDANCE_BY_ISSUE: Partial<Record<ConversationEpisodeIssue, string>> = {
     "Adapte la longueur à l'intention du tour et laisse une place naturelle à la réponse de l'utilisateur.",
 };
 
-function defaultStatePath(): string {
+export function defaultConversationQualityStatePath(): string {
   return join(homedir(), '.codebuddy', 'companion', 'conversation-quality-state.json');
 }
 
-function defaultJournalPath(): string {
+export function defaultConversationQualityJournalPath(): string {
   return join(homedir(), '.codebuddy', 'companion', 'conversation-quality.jsonl');
 }
 
@@ -158,7 +158,9 @@ function fingerprint(turns: ConversationTurn[]): string {
   return createHash('sha256').update(canonical).digest('hex');
 }
 
-export function loadConversationImprovementState(path = defaultStatePath()): ConversationImprovementState {
+export function loadConversationImprovementState(
+  path = defaultConversationQualityStatePath(),
+): ConversationImprovementState {
   try {
     if (!existsSync(path)) return { issueStreaks: {} };
     const parsed = JSON.parse(readFileSync(path, 'utf8')) as Record<string, unknown>;
@@ -307,7 +309,7 @@ export async function runConversationImprovementCycle(
   if (report.metrics.exchangeCount < 2) return null;
 
   const conversationFingerprint = fingerprint(turns);
-  const statePath = deps.statePath ?? defaultStatePath();
+  const statePath = deps.statePath ?? defaultConversationQualityStatePath();
   const previous = loadConversationImprovementState(statePath);
   if (mode !== 'dry' && previous.lastFingerprint === conversationFingerprint) return null;
 
@@ -399,7 +401,7 @@ export async function runConversationImprovementCycle(
       },
       statePath
     );
-    appendAggregateJournal(result, deps.journalPath ?? defaultJournalPath());
+    appendAggregateJournal(result, deps.journalPath ?? defaultConversationQualityJournalPath());
   }
 
   logger.info(

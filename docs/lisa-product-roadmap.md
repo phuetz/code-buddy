@@ -235,6 +235,14 @@ requis pour ce flux ; 5.8 convient donc au projet.
 - Comparaisons aveugles de modèles sur le même contexte, avec coût et latence.
 - Tableau de bord local : qualité, latence, erreurs factuelles, souvenirs corrigés et actions réussies.
 
+Le premier volet de ce tableau de bord est disponible dans **Cowork → Companion → Sensory
+journal** sous le nom **Pouls conversationnel**. Il expose le score courant, la tendance, le taux de
+réussite, la sécurité relationnelle et huit dimensions de conversation sur une fenêtre bornée. Les
+défauts récurrents et l'état d'une consigne corrective réversible peuvent y être administrés. Le
+bouton **Mesurer maintenant** analyse le fil partagé en mémoire sans déclencher l'auto-amélioration
+ni écrire un nouvel événement. L'IPC n'expose que les agrégats autorisés : aucun verbatim, aucune
+empreinte de conversation et aucun texte de consigne ne traverse le pont Electron.
+
 ### P6 — Produit commercial
 
 Cette phase vient après la preuve d'usage personnel durable : isolation multi-utilisateur, chiffrement

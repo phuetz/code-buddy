@@ -37,6 +37,7 @@ import {
 } from '../services/companion/mediapipe-vision';
 import { speakText } from './VoiceOutputToggle';
 import { CompanionVoiceMetrics } from './companion/CompanionVoiceMetrics';
+import { CompanionConversationQuality } from './companion/CompanionConversationQuality';
 import type {
   CameraSnapshotInspectionResult,
   CameraSnapshotResult,
@@ -66,6 +67,8 @@ import type {
   CompanionPercept,
   CompanionPerceptModality,
   CompanionPerceptStats,
+  CompanionConversationQualityInsights,
+  CompanionConversationQualitySnapshot,
   CompanionPrivacyExportResult,
   CompanionPrivacyPurgeResult,
   CompanionPrivacyReport,
@@ -1821,6 +1824,8 @@ export function CompanionPanel() {
 
   const [status, setStatus] = useState<CompanionStatus | null>(null);
   const [stats, setStats] = useState<CompanionPerceptStats | null>(null);
+  const [conversationQuality, setConversationQuality] = useState<CompanionConversationQualityInsights | null>(null);
+  const [conversationMeasurement, setConversationMeasurement] = useState<CompanionConversationQualitySnapshot | null>(null);
   const [percepts, setPercepts] = useState<CompanionPercept[]>([]);
   const [evaluation, setEvaluation] = useState<CompanionSelfEvaluation | null>(null);
   const [radar, setRadar] = useState<CompanionCompetitiveRadar | null>(null);
@@ -1856,7 +1861,7 @@ export function CompanionPanel() {
   const [privacyPurge, setPrivacyPurge] = useState<CompanionPrivacyPurgeResult | null>(null);
   const [modality, setModality] = useState<CompanionPerceptModality | 'all'>('all');
   const [loading, setLoading] = useState(false);
-  const [busyAction, setBusyAction] = useState<'setup' | 'self' | 'camera' | 'cameraInspect' | 'voiceDiagnostics' | 'evaluate' | 'radar' | 'improve' | 'impulses' | 'checkIn' | 'missions' | 'runNext' | 'mission' | 'card' | 'gateway' | 'gatewayAdmin' | 'gatewayDraft' | 'gatewayFleetDraft' | 'gatewayFleetLaunch' | 'gatewayOutboundReplyDraft' | 'gatewayOutboundReplySend' | 'openClawBridge' | 'skills' | 'skill' | 'privacyExport' | 'privacyPurge' | null>(null);
+  const [busyAction, setBusyAction] = useState<'setup' | 'self' | 'camera' | 'cameraInspect' | 'voiceDiagnostics' | 'quality' | 'evaluate' | 'radar' | 'improve' | 'impulses' | 'checkIn' | 'missions' | 'runNext' | 'mission' | 'card' | 'gateway' | 'gatewayAdmin' | 'gatewayDraft' | 'gatewayFleetDraft' | 'gatewayFleetLaunch' | 'gatewayOutboundReplyDraft' | 'gatewayOutboundReplySend' | 'openClawBridge' | 'skills' | 'skill' | 'privacyExport' | 'privacyPurge' | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [lastSnapshot, setLastSnapshot] = useState<CompanionCameraSnapshotResult | null>(null);
   const [lastInspection, setLastInspection] = useState<CompanionCameraInspectionResult | null>(null);
@@ -1902,6 +1907,7 @@ export function CompanionPanel() {
         statusRes,
         recentRes,
         statsRes,
+        qualityRes,
         impulsesRes,
         missionsRes,
         safetyRecentRes,
@@ -1921,6 +1927,7 @@ export function CompanionPanel() {
         window.electronAPI.companion.status(),
         window.electronAPI.companion.recentPercepts({ limit: 30, modality: selected }),
         window.electronAPI.companion.perceptStats(),
+        window.electronAPI.companion.qualityInsights({ windowSize: 30 }),
         window.electronAPI.companion.impulses({ recordSuggestions: false }),
         window.electronAPI.companion.listMissions(),
         window.electronAPI.companion.recentSafetyEvents({ limit: 8 }),
@@ -1940,6 +1947,7 @@ export function CompanionPanel() {
 
       const partialFailure = !recentRes.ok
         || !statsRes.ok
+        || !qualityRes.ok
         || !impulsesRes.ok
         || !missionsRes.ok
         || !safetyRecentRes.ok
@@ -1966,6 +1974,8 @@ export function CompanionPanel() {
         if (statusRes.error === 'NO_ACTIVE_PROJECT') {
           setStatus(null);
           setStats(null);
+          setConversationQuality(null);
+          setConversationMeasurement(null);
           setPercepts([]);
           setEvaluation(null);
           setRadar(null);
@@ -2010,6 +2020,7 @@ export function CompanionPanel() {
       setStatus(statusRes.status ?? null);
       setPercepts(recentRes.ok ? recentRes.items : []);
       setStats(statsRes.ok ? statsRes.stats ?? null : null);
+      setConversationQuality(qualityRes.ok ? qualityRes.insights ?? null : null);
       setImpulses(impulsesRes.ok ? impulsesRes.brief ?? null : null);
       setMissions(missionsRes.ok ? missionsRes.items : []);
       setSafetyEvents(safetyRecentRes.ok ? safetyRecentRes.items : []);
@@ -2028,6 +2039,7 @@ export function CompanionPanel() {
       if (partialFailure) {
         setError(recentRes.error
           ?? statsRes.error
+          ?? qualityRes.error
           ?? impulsesRes.error
           ?? missionsRes.error
           ?? safetyRecentRes.error
@@ -2222,6 +2234,23 @@ export function CompanionPanel() {
       }
     } catch (err) {
       setError(`Voice diagnostics failed: ${cameraErrorMessage(err)}`);
+    } finally {
+      setBusyAction(null);
+    }
+  };
+
+  const measureConversationQuality = async () => {
+    setBusyAction('quality');
+    setError(null);
+    try {
+      const res = await window.electronAPI.companion.measureConversationQuality({ limit: 80 });
+      if (!res.ok) {
+        setError(res.error ?? 'Conversation quality measurement failed');
+        return;
+      }
+      setConversationMeasurement(res.measurement ?? null);
+    } catch (err) {
+      setError(`Conversation quality measurement failed: ${cameraErrorMessage(err)}`);
     } finally {
       setBusyAction(null);
     }
@@ -3892,6 +3921,12 @@ export function CompanionPanel() {
               </div>
             )}
             {stats?.voice ? <CompanionVoiceMetrics voice={stats.voice} /> : null}
+            <CompanionConversationQuality
+              insights={conversationQuality}
+              measurement={conversationMeasurement}
+              busy={busyAction === 'quality'}
+              onMeasure={() => void measureConversationQuality()}
+            />
           </section>
 
           <section className="space-y-2">

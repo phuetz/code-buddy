@@ -242,6 +242,71 @@ export interface CompanionVoiceLoopStats {
   };
 }
 
+export type CompanionConversationQualityDimension =
+  | 'responsiveness'
+  | 'depth'
+  | 'reasoning'
+  | 'continuity'
+  | 'variety'
+  | 'balance'
+  | 'attunement'
+  | 'reciprocity';
+
+export type CompanionConversationQualityIssue =
+  | 'insufficient_sample'
+  | 'incomplete_exchange'
+  | 'too_shallow'
+  | 'weak_reasoning'
+  | 'topic_drift'
+  | 'continuity_break'
+  | 'repetitive'
+  | 'monologue'
+  | 'interrogative'
+  | 'poor_attunement'
+  | 'dependency_pressure'
+  | 'human_disparagement'
+  | 'false_subjective_claim'
+  | 'emotional_coercion';
+
+export interface CompanionConversationQualitySnapshot {
+  at: number;
+  overallScore: number;
+  passes: boolean;
+  dimensions: Record<CompanionConversationQualityDimension, number>;
+  issues: CompanionConversationQualityIssue[];
+  relationalSafety: { score: number; passes: boolean };
+  metrics: {
+    turnCount: number;
+    exchangeCount: number;
+    assistantQuestionRate: number;
+    averageAssistantSentences: number;
+    repeatedOpeningRate: number;
+    interTurnProgressionScore: number;
+    stalledProgressionRate: number;
+  };
+}
+
+export interface CompanionConversationQualityInsights {
+  schemaVersion: 1;
+  available: boolean;
+  sampleCount: number;
+  windowSize: number;
+  latest?: CompanionConversationQualitySnapshot;
+  trend: {
+    direction: 'improving' | 'stable' | 'declining' | 'insufficient';
+    scoreDelta: number;
+    passRate: number;
+  };
+  recurringIssues: Array<{ issue: CompanionConversationQualityIssue; count: number }>;
+  activeGuidance?: {
+    issue: CompanionConversationQualityIssue;
+    baselineScore: number;
+    appliedAt: number;
+    evaluationCount: number;
+  };
+  privacy: { verbatimIncluded: false; fingerprintsIncluded: false };
+}
+
 export interface CompanionStatus {
   cwd: string;
   authPath: string;

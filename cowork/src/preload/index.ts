@@ -26,6 +26,8 @@ import type {
   CompanionPercept,
   CompanionPerceptModality,
   CompanionPerceptStats,
+  CompanionConversationQualityInsights,
+  CompanionConversationQualitySnapshot,
   CompanionStatus,
   CompanionSelfEvaluation,
   CompanionCompetitiveRadar,
@@ -1446,6 +1448,22 @@ contextBridge.exposeInMainWorld('electronAPI', {
       projectId?: string
     ): Promise<{ ok: boolean; stats?: CompanionPerceptStats; error?: string }> =>
       ipcRenderer.invoke('companion.percepts.stats', projectId),
+    qualityInsights: (input?: {
+      projectId?: string;
+      windowSize?: number;
+    }): Promise<{
+      ok: boolean;
+      insights?: CompanionConversationQualityInsights;
+      error?: string;
+    }> => ipcRenderer.invoke('companion.quality.insights', input),
+    measureConversationQuality: (input?: {
+      projectId?: string;
+      limit?: number;
+    }): Promise<{
+      ok: boolean;
+      measurement?: CompanionConversationQualitySnapshot | null;
+      error?: string;
+    }> => ipcRenderer.invoke('companion.quality.measure', input),
     recordSelf: (
       projectId?: string
     ): Promise<{ ok: boolean; percept?: CompanionPercept; error?: string }> =>
@@ -5999,6 +6017,22 @@ declare global {
         perceptStats: (
           projectId?: string
         ) => Promise<{ ok: boolean; stats?: CompanionPerceptStats; error?: string }>;
+        qualityInsights: (input?: {
+          projectId?: string;
+          windowSize?: number;
+        }) => Promise<{
+          ok: boolean;
+          insights?: CompanionConversationQualityInsights;
+          error?: string;
+        }>;
+        measureConversationQuality: (input?: {
+          projectId?: string;
+          limit?: number;
+        }) => Promise<{
+          ok: boolean;
+          measurement?: CompanionConversationQualitySnapshot | null;
+          error?: string;
+        }>;
         recordSelf: (
           projectId?: string
         ) => Promise<{ ok: boolean; percept?: CompanionPercept; error?: string }>;

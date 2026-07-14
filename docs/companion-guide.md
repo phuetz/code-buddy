@@ -244,6 +244,13 @@ buddy assistant benchmark --base-url http://100.73.222.64:11434 \
 `conversation-benchmark.ts`, `relationship-safety.ts` · résultats agrégés dans
 `~/.codebuddy/companion/conversation-benchmark-latest.json`.
 
+Cowork rend aussi le suivi continu visible dans **Companion → Sensory journal → Pouls
+conversationnel**. Le panneau lit les trente derniers agrégats par défaut, montre la tendance et
+les défauts récurrents, puis permet une mesure ponctuelle du fil partagé avec **Mesurer maintenant**.
+Cette mesure utilise le mode `dry` de la boucle d'amélioration : elle ne modifie ni le journal, ni la
+consigne active. Le contrat IPC reconstruit une liste blanche de scores et de compteurs; il retire
+les champs inconnus, le texte des échanges, leurs empreintes et le texte interne des consignes.
+
 L'auto-test déterministe du détecteur relationnel vérifie séparément les défauts qu'un score de style peut
 masquer : régression après correction, surnom interdit, retrait de consentement, engagement borné
 dans le temps, transfert émotionnel froid et pression de dépendance paraphrasée. Ses portes sont
