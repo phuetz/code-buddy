@@ -137,11 +137,13 @@ const DEFAULT_CONFIG: ToolSelectionConfig = {
 
 function requiredToolsForQuery(query: string): string[] {
   // A bare shared URL has almost no semantic words for TF-IDF/BM25 to match.
-  // Route YouTube links deterministically to the local-first caption/video
-  // cascade instead of leaving the model with only generic web search.
+  // Route YouTube links deterministically to both the local-first caption/video
+  // cascade and web verification. The video pipeline explicitly surfaces
+  // unverified claims and ASR-damaged names; even lite model profiles must be
+  // able to check those against primary sources in the same turn.
   return /https?:\/\/(?:www\.|m\.)?(?:youtube\.com\/(?:watch|shorts|embed|v)(?:[/?])|youtu\.be\/)[^\s]+/i
     .test(query)
-    ? ['understand_video']
+    ? ['understand_video', 'web_search']
     : [];
 }
 

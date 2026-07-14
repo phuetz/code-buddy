@@ -118,6 +118,24 @@ describe('ToolSelectionStrategy lite-profile overrides', () => {
     ]);
   });
 
+  it('keeps web verification available for YouTube links on lite overrides', async () => {
+    const strategy = new ToolSelectionStrategy({ enableCaching: false });
+    await strategy.selectToolsForQuery(
+      'https://youtube.com/shorts/pmQKXepA0-c',
+      { maxTools: 5, alwaysInclude: ['view_file', 'bash', 'search'] },
+    );
+
+    const alwaysInclude = ragMock.getRelevantToolsMock.mock.calls[0]![1]?.alwaysInclude;
+    expect(alwaysInclude).toEqual([
+      'view_file',
+      'bash',
+      'search',
+      'restore_context',
+      'understand_video',
+      'web_search',
+    ]);
+  });
+
   it('does not add video understanding to unrelated web links', async () => {
     const strategy = new ToolSelectionStrategy({ enableCaching: false });
     await strategy.selectToolsForQuery('https://example.com/article', {
