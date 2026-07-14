@@ -46,6 +46,10 @@ export class TelegramChannel extends BaseChannel {
   private botInfo: TelegramUser | null = null;
   private reconnectionManager: ReconnectionManager;
   private consecutiveErrors = 0;
+  private readonly mediaGroups = new Map<string, {
+    messages: TelegramMessage[];
+    timer: NodeJS.Timeout;
+  }>();
 
   // Lazy-loaded pro features bundle
   private _pro?: ProFeatures;
@@ -207,6 +211,8 @@ export class TelegramChannel extends BaseChannel {
       clearTimeout(this.pollingTimeout);
       this.pollingTimeout = null;
     }
+    for (const batch of this.mediaGroups.values()) clearTimeout(batch.timer);
+    this.mediaGroups.clear();
 
     // Delete webhook if set
     if (this.telegramConfig.webhookUrl) {
@@ -497,7 +503,51 @@ export class TelegramChannel extends BaseChannel {
       return;
     }
 
-    const message = this.convertMessage(msg);
+    // Telegram delivers an album as several independent updates and usually
+    // keeps the caption only on the first one. Debounce the shared media group
+    // so downstream perception receives every photo in ONE multimodal turn.
+    if (msg.media_group_id) {
+      this.queueMediaGroup(msg);
+      return;
+    }
+
+    await this.processAllowedMessages([msg]);
+  }
+
+  private queueMediaGroup(msg: TelegramMessage): void {
+    const groupId = `${this.botId}:${msg.chat.id}:${msg.media_group_id!}`;
+    const current = this.mediaGroups.get(groupId);
+    if (current) clearTimeout(current.timer);
+    const messages = current?.messages ?? [];
+    messages.push(msg);
+    const timer = setTimeout(() => {
+      this.mediaGroups.delete(groupId);
+      void this.processAllowedMessages(messages).catch((error) => {
+        logger.error('Telegram media group handler error', {
+          mediaCount: messages.length,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      });
+    }, 450);
+    timer.unref?.();
+    this.mediaGroups.set(groupId, { messages, timer });
+  }
+
+  private async processAllowedMessages(messages: TelegramMessage[]): Promise<void> {
+    const representative = messages.find((item) => item.text?.trim() || item.caption?.trim()) ?? messages[0];
+    if (!representative) return;
+    const userId = representative.from?.id?.toString() ?? '';
+    const chatId = representative.chat.id.toString();
+
+    const message = this.convertMessage(representative);
+    if (messages.length > 1) {
+      message.attachments = messages.flatMap((item) => this.extractAttachments(item));
+      message.contentType = message.attachments.some((attachment) => attachment.type === 'image')
+        ? 'image'
+        : message.contentType;
+      message.raw = messages;
+      if (!message.content.trim()) message.content = `Analyse ces ${message.attachments.length} photos.`;
+    }
     // Voice note → text: transcribe locally (faster-whisper, $0, offline) so you
     // can TALK to the bot — the agent then sees a normal text message.
     await this.maybeTranscribeVoice(message);
@@ -702,7 +752,7 @@ export class TelegramChannel extends BaseChannel {
    * Convert Telegram message to InboundMessage
    */
   private convertMessage(msg: TelegramMessage): InboundMessage {
-    const content = msg.text || msg.caption || '';
+    const content = msg.text || msg.caption || (msg.photo ? 'Analyse cette photo.' : '');
     const attachments = this.extractAttachments(msg);
 
     return {

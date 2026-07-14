@@ -156,6 +156,8 @@ export interface TelegramMessageEntity {
 export interface TelegramMessage {
   message_id: number;
   message_thread_id?: number;
+  /** Shared by every photo/video in a Telegram album. */
+  media_group_id?: string;
   from?: TelegramUser;
   sender_chat?: TelegramChat;
   date: number;

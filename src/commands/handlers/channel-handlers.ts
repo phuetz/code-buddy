@@ -1161,6 +1161,32 @@ export async function registerAIMessageHandler(manager: import('../../channels/i
         companionRoute
       );
 
+      let attachedImageEvidence: string | undefined;
+      const imageAttachmentCount = message.attachments?.filter((attachment) => attachment.type === 'image').length ?? 0;
+      if (imageAttachmentCount > 0) {
+        const {
+          groundAttachedImages,
+          renderAttachedImageEvidence,
+        } = await import('../../companion/attached-image-grounding.js');
+        const telegramFileResolver = channel.type === 'telegram' &&
+          typeof (channel as unknown as { getFileUrl?: unknown }).getFileUrl === 'function'
+          ? (reference: string) => (channel as unknown as { getFileUrl: (fileId: string) => Promise<string> }).getFileUrl(reference)
+          : undefined;
+        const visual = await groundAttachedImages(message.attachments, message.content, {
+          ...(telegramFileResolver ? { resolveUrl: telegramFileResolver } : {}),
+        });
+        attachedImageEvidence = renderAttachedImageEvidence(visual) || undefined;
+        logger.info('Channel attached-image perception completed', {
+          channelType: channel.type,
+          sessionHash: hashForLog(sessionKey),
+          messageHash: hashForLog(message.id),
+          imageCount: visual.imageCount,
+          status: visual.status,
+          model: visual.model,
+          reason: visual.reason,
+        });
+      }
+
       if (companionConversation) {
         cognitiveTurn = await getChannelCognitivePort().begin({
           channelType: channel.type,
@@ -1171,7 +1197,12 @@ export async function registerAIMessageHandler(manager: import('../../channels/i
         });
       }
 
-      const agentInput = message.content;
+      const agentInput = attachedImageEvidence
+        ? `${message.content}\n\n${attachedImageEvidence}\n\n` +
+          'Réponds à la demande en t’appuyant sur cette fiche visuelle. Distingue les faits visibles des incertitudes.'
+        : imageAttachmentCount > 0
+          ? `${message.content}\n\nL’analyse des images jointes a échoué. Dis-le honnêtement et demande un nouvel envoi net si nécessaire.`
+          : message.content;
       let transientConversationContext: string | undefined;
       let preparedConversation: PreparedConversationTurn | undefined;
       let companionConversationHistory: ConversationTurn[] = [];
@@ -1217,6 +1248,9 @@ export async function registerAIMessageHandler(manager: import('../../channels/i
         }
         companionFreshEvidence =
           prefetchedContext.semanticReviewEvidenceFromPrefetch(freshContext);
+        companionFreshEvidence = [companionFreshEvidence, attachedImageEvidence]
+          .filter((part): part is string => Boolean(part?.trim()))
+          .join('\n\n') || undefined;
         if (
           freshContext &&
           prefetchedContext.shouldUsePrefetchedAnswerDirectly(
@@ -1265,6 +1299,9 @@ export async function registerAIMessageHandler(manager: import('../../channels/i
       generativeTurnEngaged = true;
       const entries = await agent.processUserMessage(agentInput, {
         surface: channel.type,
+        ...(attachedImageEvidence || imageAttachmentCount > 0
+          ? { introspectionText: message.content }
+          : {}),
         ...(transientConversationContext
           ? {
               transientContext: transientConversationContext,

@@ -407,6 +407,61 @@ describe('TelegramChannel', () => {
       expect(message.attachments[0].type).toBe('image');
     });
 
+    it('keeps a photo without a caption actionable', async () => {
+      const messageSpy = jest.fn();
+      channel.on('message', messageSpy);
+
+      await channel.handleWebhook({
+        update_id: 3,
+        message: {
+          message_id: 3,
+          date: Math.floor(Date.now() / 1000),
+          chat: { id: 1, type: 'private' },
+          from: { id: 1, is_bot: false, first_name: 'Test' },
+          photo: [{ file_id: 'photo', file_unique_id: '3', width: 800, height: 600 }],
+        },
+      });
+
+      expect(messageSpy).toHaveBeenCalledOnce();
+      expect(messageSpy.mock.calls[0][0].content).toBe('Analyse cette photo.');
+    });
+
+    it('groups every photo in a Telegram album into one multimodal turn', async () => {
+      const messageSpy = jest.fn();
+      channel.on('message', messageSpy);
+      const base = {
+        date: Math.floor(Date.now() / 1000),
+        chat: { id: 1, type: 'private' as const },
+        from: { id: 1, is_bot: false, first_name: 'Test' },
+        media_group_id: 'album-1',
+      };
+
+      await channel.handleWebhook({
+        update_id: 4,
+        message: {
+          ...base,
+          message_id: 4,
+          caption: 'Analyse ce produit thaïlandais',
+          photo: [{ file_id: 'front', file_unique_id: '4', width: 800, height: 600 }],
+        },
+      });
+      await channel.handleWebhook({
+        update_id: 5,
+        message: {
+          ...base,
+          message_id: 5,
+          photo: [{ file_id: 'back', file_unique_id: '5', width: 800, height: 600 }],
+        },
+      });
+      await new Promise((resolve) => setTimeout(resolve, 520));
+
+      expect(messageSpy).toHaveBeenCalledOnce();
+      const message = messageSpy.mock.calls[0][0];
+      expect(message.content).toBe('Analyse ce produit thaïlandais');
+      expect(message.attachments).toHaveLength(2);
+      expect(message.raw).toHaveLength(2);
+    });
+
     it('should detect location messages', async () => {
       const messageSpy = jest.fn();
       channel.on('message', messageSpy);
