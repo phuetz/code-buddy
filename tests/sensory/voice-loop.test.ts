@@ -596,27 +596,70 @@ describe('voice loop — heard → think → speak', () => {
     ]);
   });
 
-  it('asks for explicit one-shot consent instead of opening on an unknown target', async () => {
+  it('asks naturally, then grounds the original visual target after a simple confirmation', async () => {
     const visualGrounding = vi.fn();
-    let spoken = '';
+    const spoken: string[] = [];
+    const sharedTurns: Array<{ role: 'user' | 'assistant'; content: string }> = [];
     const onHeard = makeVoiceReply({
-      visualGrounding,
+      visualGrounding: async (heard) => {
+        visualGrounding(heard);
+        return {
+          matched: true,
+          status: 'analyzed',
+          response: 'Je vois un tournevis rouge sur la table.',
+        };
+      },
       streamFn: async function* () {
         yield 'mauvaise branche';
       },
       replyFn: async () => 'mauvaise branche',
       synth: async (text) => {
-        spoken = text;
+        spoken.push(text);
         return '/tmp/visual-consent.wav';
+      },
+      play: async () => {},
+      onConversationTurn: (turn) => {
+        sharedTurns.push(turn);
+      },
+    });
+
+    await onHeard('regarde mon tournevis');
+    await onHeard('oui, vas-y');
+
+    expect(visualGrounding).toHaveBeenCalledOnce();
+    expect(visualGrounding).toHaveBeenCalledWith('regarde mon tournevis');
+    expect(spoken[0]).toContain("Tu veux que j'ouvre la caméra");
+    expect(spoken[1]).toContain('tournevis rouge');
+    expect(sharedTurns).toEqual([
+      { role: 'user', content: 'regarde mon tournevis' },
+      { role: 'assistant', content: spoken[0]! },
+      { role: 'user', content: 'oui, vas-y' },
+      { role: 'assistant', content: 'Je vois un tournevis rouge sur la table.' },
+    ]);
+    expect(JSON.stringify(sharedTurns)).not.toContain('imagePath');
+    expect(JSON.stringify(sharedTurns)).not.toContain('base64');
+  });
+
+  it('accepts a visual refusal without capturing or entering the normal brain path', async () => {
+    const visualGrounding = vi.fn();
+    const replyFn = vi.fn(async () => 'mauvaise branche');
+    const spoken: string[] = [];
+    const onHeard = makeVoiceReply({
+      visualGrounding,
+      replyFn,
+      synth: async (text) => {
+        spoken.push(text);
+        return '/tmp/visual-decline.wav';
       },
       play: async () => {},
     });
 
     await onHeard('regarde mon tournevis');
+    await onHeard("non, ne l'ouvre pas");
 
     expect(visualGrounding).not.toHaveBeenCalled();
-    expect(spoken).toContain("je n'ouvre pas la caméra");
-    expect(spoken).toContain('ouvre la caméra une fois');
+    expect(replyFn).not.toHaveBeenCalled();
+    expect(spoken.at(-1)).toBe("D'accord, je n'ouvre pas la caméra.");
   });
 
   it('thinks a reply, synthesizes it, and plays the synthesized wav', async () => {

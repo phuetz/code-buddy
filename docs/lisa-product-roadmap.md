@@ -166,6 +166,13 @@ la consigne acoustique par tour, tandis que les autres moteurs suivent la ponctu
 du texte. Les percepts et Cowork affichent uniquement les agrégats `humanWpm`, `targetWpm`, rythme et
 forme appliquée, sans recopier la phrase.
 
+La vision ponctuelle suit maintenant une vraie paire adjacente de conversation. Si l'objet demandé
+n'est pas dans l'allowlist de consentement direct, Lisa demande simplement si elle peut ouvrir la
+caméra pour une image ; « oui, vas-y » reprend la cible du tour précédent au lieu d'analyser cette
+seule confirmation. La demande reste en mémoire vive au maximum 45 secondes et un seul tour : un
+refus, un changement de sujet ou l'expiration la détruit. Seuls la question et le résultat textuel
+rejoignent le fil voix/Telegram/Cowork ; ni chemin local ni image brute n'y est ajouté.
+
 ### P4 — Lisa MetaHuman
 
 - Définir une identité visuelle originale dans une bible d'avatar.

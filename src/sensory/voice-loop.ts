@@ -83,6 +83,7 @@ import {
   isExplicitVisualGroundingRequest,
   type VisualGroundingFn,
 } from '../companion/visual-grounding.js';
+import { VisualConsentGate } from '../companion/visual-consent.js';
 
 /**
  * Cancellation handle threaded into the two interruptible steps of a spoken turn: the
@@ -1829,6 +1830,7 @@ export function makeVoiceReply(options: VoiceReplyOptions = {}): VoiceReplyHandl
       ...(groundingOptions?.signal ? { signal: groundingOptions.signal } : {}),
     })
   );
+  const visualConsent = new VisualConsentGate();
 
   // Resolve any persona-specific fallback voice per reply. Shared by the streaming and
   // blocking paths so synthesis selection has one source of truth.
@@ -1866,6 +1868,7 @@ export function makeVoiceReply(options: VoiceReplyOptions = {}): VoiceReplyHandl
     let mode: VoiceReplyTiming['mode'] = 'silent';
     let spoke = false;
     let assistantTurnPublished = false;
+    let armedVisualConsent: number | undefined;
     let avatarPrepared = false;
     let avatarSpeechStarted = false;
     let avatarAudioStreamIndex = 0;
@@ -2062,14 +2065,27 @@ export function makeVoiceReply(options: VoiceReplyOptions = {}): VoiceReplyHandl
       // the phatic/prefetch shortcut and whose grounded branch depends on
       // SPEAK_ACT. Seeing is a perception capability, not an action-mode perk.
       let visualReply: string | undefined;
-      if (isAmbiguousVisualGroundingRequest(heard)) {
+      let visualRequest = heard;
+      const consent = visualConsent.consume(heard);
+      if (consent.decision === 'confirmed') {
+        visualRequest = consent.utterance;
+      } else if (consent.decision === 'declined') {
+        visualReply = "D'accord, je n'ouvre pas la caméra.";
+      } else if (consent.decision === 'expired') {
         visualReply =
-          "Je peux regarder, mais je n'ouvre pas la caméra sur une phrase ambiguë. " +
-          "Dis « ouvre la caméra une fois » et je prendrai une seule image.";
-      } else if (isExplicitVisualGroundingRequest(heard)) {
+          "J'ai laissé expirer l'autorisation. Redis-moi simplement ce que tu veux me montrer.";
+      } else if (isAmbiguousVisualGroundingRequest(heard)) {
+        armedVisualConsent = visualConsent.request(heard);
+        visualReply =
+          "Oui, je peux regarder. Tu veux que j'ouvre la caméra juste le temps de prendre une image ?";
+      }
+      const shouldGroundVisual =
+        consent.decision === 'confirmed' ||
+        (visualReply === undefined && isExplicitVisualGroundingRequest(heard));
+      if (shouldGroundVisual) {
         const visualStartedAt = Date.now();
         try {
-          const result = await visualGrounding(heard, {
+          const result = await visualGrounding(visualRequest, {
             cwd: options.rootDir ?? process.cwd(),
             signal,
           });
@@ -2283,6 +2299,12 @@ export function makeVoiceReply(options: VoiceReplyOptions = {}): VoiceReplyHandl
         `[voice] reply→speak failed: ${err instanceof Error ? err.message : String(err)}`
       );
     } finally {
+      // A permission question that never reached the speakers cannot authorize
+      // a later camera capture. A barge-in confirmation consumes the pending
+      // request before this older turn reaches its finally block.
+      if (armedVisualConsent !== undefined && !spoke) {
+        visualConsent.cancel(armedVisualConsent);
+      }
       // If THIS turn was interrupted, hard-reset the half-duplex guard so the ear re-opens NOW
       // (barge-in), overriding the echo tail that withSpeakingGuard's finally just armed. Runs
       // last, so it wins the race against that endSpeaking(). Never re-arms after a normal turn.
