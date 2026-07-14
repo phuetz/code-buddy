@@ -181,6 +181,72 @@ describe('companion IPC', () => {
     expect(getCompanionStatus).toHaveBeenCalledWith({ cwd: '/tmp/proj' });
   });
 
+  it('exposes raw-free live avatar readiness without requiring an active project', async () => {
+    const renderers = [
+      {
+        rendererId: 'darkstar-metahuman-lisa',
+        displayName: 'Lisa MetaHuman on Darkstar',
+        protocolVersion: 1,
+        runtime: 'unreal',
+        runtimeVersion: '5.8',
+        project: 'D:/DEV/AvatarStudio',
+        capabilities: {
+          audioDrivenAnimation: true,
+          wavStream: true,
+          affect: true,
+          gestures: true,
+          gaze: true,
+          interruptionAck: true,
+        },
+        phase: 'ready',
+        lastSequence: 41,
+        fps: 60,
+        mouthLatencyMs: 73,
+        droppedAudioChunks: 0,
+        connected: true,
+        connectedAt: '2026-07-14T12:00:00.000Z',
+        lastSeenAt: '2026-07-14T12:00:10.000Z',
+      },
+    ];
+    const list = vi.fn(() => renderers);
+    const shouldStreamAvatarAudio = vi.fn(() => true);
+    coreLoaderMock.loadCoreModule.mockResolvedValue({
+      getAvatarRendererRegistry: () => ({ list }),
+      shouldStreamAvatarAudio,
+    });
+    registerCompanionIpcHandlers(projectSource(null));
+
+    const handler = electronMock.handlers.get('companion.avatar.renderers');
+    const response = (await handler?.({})) as {
+      ok: boolean;
+      snapshot?: {
+        connectedCount: number;
+        readyCount: number;
+        audioStreamingActive: boolean;
+        renderers: Array<{ rendererId: string }>;
+        privacy: Record<string, boolean>;
+      };
+    };
+
+    expect(response.ok).toBe(true);
+    expect(response.snapshot).toMatchObject({
+      connectedCount: 1,
+      readyCount: 1,
+      audioStreamingActive: true,
+      privacy: {
+        textIncluded: false,
+        audioIncluded: false,
+        connectionCredentialsIncluded: false,
+      },
+    });
+    expect(response.snapshot?.renderers[0]?.rendererId).toBe('darkstar-metahuman-lisa');
+    expect(list).toHaveBeenCalledOnce();
+    expect(shouldStreamAvatarAudio).toHaveBeenCalledWith(process.env, renderers);
+    expect(coreLoaderMock.loadCoreModule).toHaveBeenCalledWith(
+      'avatar/avatar-renderer-registry.js',
+    );
+  });
+
   it('returns recent percepts from the active project journal', async () => {
     const readRecentCompanionPercepts = vi.fn(async () => [
       { id: 'p1', modality: 'vision', source: 'camera_snapshot' },

@@ -22,6 +22,10 @@ import {
   sendOpenClawBridgeResponseForReview,
 } from '../tools/hermes-openclaw-bridge';
 import { resolveWorkDir, errorMessage, type ProjectManagerSource } from './ipc-workdir';
+import type {
+  CompanionAvatarRendererSnapshot,
+  CompanionAvatarRendererView,
+} from '../../shared/avatar-renderer';
 
 type CompanionPerceptModality =
   | 'vision'
@@ -659,6 +663,16 @@ type ConversationQualityInsightsMod = {
   }) => Promise<Record<string, unknown> | null>;
 };
 
+type AvatarRendererRegistryMod = {
+  getAvatarRendererRegistry: () => {
+    list: () => CompanionAvatarRendererView[];
+  };
+  shouldStreamAvatarAudio: (
+    env?: NodeJS.ProcessEnv,
+    renderers?: CompanionAvatarRendererView[],
+  ) => boolean;
+};
+
 type CompanionCameraMod = {
   checkCameraAvailability: () => Promise<Record<string, unknown>>;
   importCameraSnapshot: (options: {
@@ -1113,6 +1127,10 @@ async function loadConversationQualityInsights(): Promise<ConversationQualityIns
   );
 }
 
+async function loadAvatarRendererRegistry(): Promise<AvatarRendererRegistryMod | null> {
+  return loadCoreModule<AvatarRendererRegistryMod>('avatar/avatar-renderer-registry.js');
+}
+
 async function loadCamera(): Promise<CompanionCameraMod | null> {
   return loadCoreModule<CompanionCameraMod>('companion/camera.js');
 }
@@ -1230,6 +1248,45 @@ export function registerCompanionIpcHandlers(projectManagerSource: ProjectManage
       return { ok: true as const, status: await mod.getCompanionStatus({ cwd }) };
     } catch (err) {
       logError('[companion.status] failed:', err);
+      return { ok: false as const, error: errorMessage(err) };
+    }
+  });
+
+  ipcMain.handle('companion.avatar.renderers', async () => {
+    try {
+      const mod = await loadAvatarRendererRegistry();
+      if (!mod?.getAvatarRendererRegistry || !mod.shouldStreamAvatarAudio) {
+        return { ok: false as const, error: 'core avatar renderer registry unavailable' };
+      }
+      const renderers = mod.getAvatarRendererRegistry().list();
+      const configured = process.env.CODEBUDDY_AVATAR_STREAM_AUDIO?.trim().toLowerCase();
+      const audioPolicy = configured === 'true'
+        ? 'forced_on' as const
+        : configured === 'false'
+          ? 'forced_off' as const
+          : 'auto' as const;
+      const bridgeEnabled = process.env.CODEBUDDY_AVATAR_BRIDGE?.trim().toLowerCase() !== 'false';
+      const snapshot: CompanionAvatarRendererSnapshot = {
+        generatedAt: new Date().toISOString(),
+        bridgeEnabled,
+        audioPolicy,
+        audioStreamingActive: bridgeEnabled && mod.shouldStreamAvatarAudio(process.env, renderers),
+        connectedCount: renderers.filter((renderer) => renderer.connected).length,
+        readyCount: renderers.filter((renderer) =>
+          renderer.connected
+          && renderer.capabilities.wavStream
+          && renderer.capabilities.audioDrivenAnimation
+        ).length,
+        renderers,
+        privacy: {
+          textIncluded: false,
+          audioIncluded: false,
+          connectionCredentialsIncluded: false,
+        },
+      };
+      return { ok: true as const, snapshot };
+    } catch (err) {
+      logError('[companion.avatar.renderers] failed:', err);
       return { ok: false as const, error: errorMessage(err) };
     }
   });

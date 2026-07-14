@@ -89,6 +89,7 @@ import type {
 } from '../main/missions/mission-types';
 import type { VoiceBackgroundMissionInput } from '../shared/voice-background-mission';
 import type { LiveLauncherRunView, LiveLauncherStartInput } from '../shared/live-launcher-types';
+import type { CompanionAvatarRendererSnapshot } from '../shared/avatar-renderer';
 import type {
   WorkflowDryRunResult,
   WorkflowRunComparison,
@@ -1438,6 +1439,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
       projectId?: string
     ): Promise<{ ok: boolean; status?: CompanionStatus; error?: string }> =>
       ipcRenderer.invoke('companion.status', projectId),
+    avatarRenderers: (): Promise<{
+      ok: boolean;
+      snapshot?: CompanionAvatarRendererSnapshot;
+      error?: string;
+    }> => ipcRenderer.invoke('companion.avatar.renderers'),
     recentPercepts: (input?: {
       limit?: number;
       modality?: CompanionPerceptModality;
@@ -6009,6 +6015,11 @@ declare global {
         status: (
           projectId?: string
         ) => Promise<{ ok: boolean; status?: CompanionStatus; error?: string }>;
+        avatarRenderers: () => Promise<{
+          ok: boolean;
+          snapshot?: CompanionAvatarRendererSnapshot;
+          error?: string;
+        }>;
         recentPercepts: (input?: {
           limit?: number;
           modality?: CompanionPerceptModality;

@@ -38,6 +38,8 @@ import {
 import { speakText } from './VoiceOutputToggle';
 import { CompanionVoiceMetrics } from './companion/CompanionVoiceMetrics';
 import { CompanionConversationQuality } from './companion/CompanionConversationQuality';
+import { CompanionAvatarRendererStatus } from './companion/CompanionAvatarRendererStatus';
+import type { CompanionAvatarRendererSnapshot } from '../../shared/avatar-renderer';
 import type {
   CameraSnapshotInspectionResult,
   CameraSnapshotResult,
@@ -1826,6 +1828,8 @@ export function CompanionPanel() {
   const [stats, setStats] = useState<CompanionPerceptStats | null>(null);
   const [conversationQuality, setConversationQuality] = useState<CompanionConversationQualityInsights | null>(null);
   const [conversationMeasurement, setConversationMeasurement] = useState<CompanionConversationQualitySnapshot | null>(null);
+  const [avatarRenderers, setAvatarRenderers] = useState<CompanionAvatarRendererSnapshot | null>(null);
+  const [avatarRendererError, setAvatarRendererError] = useState<string | null>(null);
   const [percepts, setPercepts] = useState<CompanionPercept[]>([]);
   const [evaluation, setEvaluation] = useState<CompanionSelfEvaluation | null>(null);
   const [radar, setRadar] = useState<CompanionCompetitiveRadar | null>(null);
@@ -1903,8 +1907,12 @@ export function CompanionPanel() {
     try {
       const activeModality = modalityOverride ?? modality;
       const selected = activeModality === 'all' ? undefined : activeModality;
+      const avatarRendererPromise = window.electronAPI.companion.avatarRenderers
+        ? window.electronAPI.companion.avatarRenderers()
+        : Promise.resolve({ ok: false as const, error: 'Pont avatar Cowork indisponible.' });
       const [
         statusRes,
+        avatarRendererRes,
         recentRes,
         statsRes,
         qualityRes,
@@ -1925,6 +1933,7 @@ export function CompanionPanel() {
         privacyRes,
       ] = await Promise.all([
         window.electronAPI.companion.status(),
+        avatarRendererPromise,
         window.electronAPI.companion.recentPercepts({ limit: 30, modality: selected }),
         window.electronAPI.companion.perceptStats(),
         window.electronAPI.companion.qualityInsights({ windowSize: 30 }),
@@ -1944,6 +1953,9 @@ export function CompanionPanel() {
         window.electronAPI.voice.ttsStatus().catch(() => null),
         window.electronAPI.companion.privacyReport(),
       ]);
+
+      setAvatarRenderers(avatarRendererRes.ok ? avatarRendererRes.snapshot ?? null : null);
+      setAvatarRendererError(avatarRendererRes.ok ? null : avatarRendererRes.error ?? 'État avatar indisponible.');
 
       const partialFailure = !recentRes.ok
         || !statsRes.ok
@@ -3919,6 +3931,10 @@ export function CompanionPanel() {
               </div>
             )}
             {stats?.voice ? <CompanionVoiceMetrics voice={stats.voice} /> : null}
+            <CompanionAvatarRendererStatus
+              snapshot={avatarRenderers}
+              error={avatarRendererError}
+            />
             <CompanionConversationQuality
               insights={conversationQuality}
               measurement={conversationMeasurement}

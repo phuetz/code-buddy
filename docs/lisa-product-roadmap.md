@@ -221,6 +221,13 @@ multi-segment, l'interruption et les événements Blueprint. Il ne vaut pas enco
 MetaHuman : le build UE 5.8, les tests Automation et le branchement Audio Live Link doivent être
 exécutés sur Darkstar avant d'activer `audioDrivenAnimation`.
 
+Cowork expose maintenant ce verrou de façon vérifiable dans **Companion → Sensory journal →
+Incarnation MetaHuman**. Le panneau lit directement le registre vivant du Gateway et affiche la
+connexion, la phase, les capacités déclarées, les FPS, la latence bouche/audio et les chunks perdus.
+Il n'affiche ni texte, ni audio, ni identifiant de connexion. L'état « voix → visage active » ne peut
+apparaître que si le pont est activé et qu'un renderer connecté annonce à la fois `wavStream` et
+`audioDrivenAnimation`; l'absence de preuve Darkstar reste donc visible au lieu d'être simulée.
+
 La documentation Epic indique que MetaHuman Animator sait générer une animation faciale en temps
 réel depuis une source audio, une caméra mono ou Live Link Face. L'animation audio hors ligne permet
 également d'influencer mouvement de tête, clignements et humeur. Unreal Engine 5.6 ou ultérieur est

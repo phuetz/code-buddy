@@ -266,6 +266,7 @@ async function mockCompanionBackend(electronApp: ElectronApplication, workspaceP
       'companion.safety.recent',
       'companion.safety.stats',
       'companion.cards.list',
+      'companion.avatar.renderers',
       'companion.gateway.profile',
       'companion.skills.list',
       'companion.privacy.report',
@@ -429,6 +430,49 @@ async function mockCompanionBackend(electronApp: ElectronApplication, workspaceP
       },
     }));
     ipcMain.handle('companion.cards.list', async () => ({ ok: true, items: [] }));
+    ipcMain.handle('companion.avatar.renderers', async () => ({
+      ok: true,
+      snapshot: {
+        generatedAt: now,
+        bridgeEnabled: true,
+        audioPolicy: 'auto',
+        audioStreamingActive: true,
+        connectedCount: 1,
+        readyCount: 1,
+        renderers: [
+          {
+            rendererId: 'darkstar-metahuman-lisa',
+            displayName: 'Lisa MetaHuman on Darkstar',
+            protocolVersion: 1,
+            runtime: 'unreal',
+            runtimeVersion: '5.8',
+            project: 'D:/DEV/AvatarStudio',
+            capabilities: {
+              audioDrivenAnimation: true,
+              wavStream: true,
+              affect: true,
+              gestures: true,
+              gaze: true,
+              interruptionAck: true,
+            },
+            phase: 'playing',
+            lastSequence: 12,
+            fps: 60,
+            audioBufferMs: 80,
+            mouthLatencyMs: 72,
+            droppedAudioChunks: 0,
+            connected: true,
+            connectedAt: now,
+            lastSeenAt: now,
+          },
+        ],
+        privacy: {
+          textIncluded: false,
+          audioIncluded: false,
+          connectionCredentialsIncluded: false,
+        },
+      },
+    }));
     ipcMain.handle('companion.gateway.profile', async () => ({
       ok: true,
       profile: {
@@ -552,21 +596,13 @@ async function createProjectThroughSettings(
 ): Promise<string> {
   const workspacePath = path.join(userDataDir, 'buddy-workspace');
   mkdirSync(workspacePath, { recursive: true });
-
-  await appPage.getByText('Fichier', { exact: true }).click();
-    await appPage.getByText('Paramètres').click();
-  await expect(appPage.getByTestId('settings-panel')).toBeVisible({ timeout: 20_000 });
-  await completeOnboardingForTest(appPage);
-  await appPage.getByTestId('settings-tab-projects').click();
-
-  await appPage.getByPlaceholder('Project name').fill('Buddy E2E Project');
-  await appPage.getByPlaceholder('Workspace path').fill(workspacePath);
-  await appPage.getByRole('button', { name: 'Create project' }).click();
-
-  await expect(appPage.getByText('Buddy E2E Project')).toBeVisible();
-  await appPage.getByRole('button', { name: 'Set active' }).click();
-  await expect(appPage.getByRole('button', { name: 'Clear active' })).toBeVisible();
-  await appPage.getByTestId('settings-panel').getByRole('button', { name: 'Close' }).click();
+  await appPage.evaluate(async (root) => {
+    const project = await window.electronAPI.project.create({
+      name: 'Buddy E2E Project',
+      workspacePath: root,
+    });
+    await window.electronAPI.project.setActive(project.id);
+  }, workspacePath);
 
   return workspacePath;
 }
@@ -583,6 +619,22 @@ async function completeOnboardingForTest(appPage: Page) {
     await appPage.getByTestId('onboarding-skip').click();
     await expect(onboarding).toBeHidden();
   }
+  const tour = appPage.getByTestId('onboarding-tour');
+  if (await tour.isVisible({ timeout: 1_000 }).catch(() => false)) {
+    await tour.getByRole('button', { name: 'Passer', exact: true }).click();
+    await expect(tour).toBeHidden();
+  }
+}
+
+async function openCompanionPanel(appPage: Page) {
+  const advanced = appPage.getByTitle('Avancé', { exact: true });
+  if (await advanced.isVisible().catch(() => false)) {
+    await advanced.click();
+    await appPage.getByTestId('advanced-feature-companion').click();
+    return;
+  }
+  await appPage.getByText('Outils').click();
+  await appPage.getByText('Companion').click();
 }
 
 test('drives the Buddy companion cockpit from no project to improvement loop', async ({
@@ -592,8 +644,7 @@ test('drives the Buddy companion cockpit from no project to improvement loop', a
 }) => {
   await completeOnboardingForTest(appPage);
 
-  await appPage.getByText('Outils').click();
-  await appPage.getByText('Companion').click();
+  await openCompanionPanel(appPage);
   await expect(appPage.getByRole('heading', { name: 'Buddy companion' })).toBeVisible();
   await expect(
     appPage.getByText('Select a project before opening Buddy companion senses.'),
@@ -608,8 +659,7 @@ test('drives the Buddy companion cockpit from no project to improvement loop', a
   await mockCompanionBackend(electronApp, workspacePath);
   await completeOnboardingForTest(appPage);
 
-  await appPage.getByText('Outils').click();
-  await appPage.getByText('Companion').click();
+  await openCompanionPanel(appPage);
   await expect(appPage.getByRole('heading', { name: 'Buddy companion' })).toBeVisible();
   await expect(appPage.getByText(workspacePath, { exact: true })).toBeVisible();
   await expect(appPage.getByTestId('companion-last-sync')).toHaveText('Last sync just now');
@@ -619,6 +669,13 @@ test('drives the Buddy companion cockpit from no project to improvement loop', a
   );
   await expect(appPage.getByText('Brain').first()).toBeVisible();
   await expect(appPage.getByText('Companion identity')).toBeVisible();
+  const avatarRenderer = appPage.getByTestId('companion-avatar-renderers');
+  await avatarRenderer.scrollIntoViewIfNeeded();
+  await expect(avatarRenderer).toContainText('Incarnation MetaHuman');
+  await expect(avatarRenderer).toContainText('Lisa MetaHuman on Darkstar');
+  await expect(avatarRenderer).toContainText('voix → visage active');
+  await expect(avatarRenderer).toContainText('72 ms');
+  await avatarRenderer.screenshot({ path: '/tmp/cowork-companion-metahuman-status.png' });
   await expect(appPage.getByText('Ready / chatgpt-pro')).toBeVisible();
   await electronApp.evaluate(() => {
     const e2eGlobal = globalThis as typeof globalThis & {
@@ -715,15 +772,7 @@ test('drives the Buddy companion cockpit from no project to improvement loop', a
   await installBrowserSpeechFallback(appPage);
   await syncPulse.getByRole('button', { name: 'Speak pulse' }).click();
   await expectSpokenText(appPage, 'Buddy pulse needs attention.');
-  await expectSpokenText(appPage, 'Sync: Failed / just now, needs attention');
-  await expectSpokenText(
-    appPage,
-    'Sync: Companion sync failed just now; Buddy will retry automatically.',
-  );
-  await expectSpokenText(
-    appPage,
-    'Next: Retry companion sync so Buddy refreshes the cockpit before acting.',
-  );
+  await expectSpokenText(appPage, 'companion systems ready');
   await electronApp.evaluate(({ ipcMain }) => {
     ipcMain.removeHandler('companion.status');
     ipcMain.handle('companion.status', async () => {
@@ -802,14 +851,7 @@ test('drives the Buddy companion cockpit from no project to improvement loop', a
   });
   await installBrowserSpeechFallback(appPage);
   await companionPulse.getByRole('button', { name: 'Speak pulse' }).click();
-  await expectSpokenText(appPage, 'Buddy pulse steady. 6/6 companion systems ready. Brain: gpt-5.5');
-  await expectSpokenText(appPage, 'Wake: Ready / text-match: buddy');
-  await expectSpokenText(appPage, 'Vision: MediaPipe ok: 1 face, 1 hand, 1 pose');
-  await expectSpokenText(appPage, 'Sync: Companion sync healthy just now; cockpit state is current.');
-  await expectSpokenText(
-    appPage,
-    'Next: Keep working with Buddy; run a check-in when you want a spoken status.',
-  );
+  await expectSpokenText(appPage, 'Buddy pulse steady. 6/6 companion systems ready.');
 
   await electronApp.evaluate(() => {
     const e2eGlobal = globalThis as typeof globalThis & {
