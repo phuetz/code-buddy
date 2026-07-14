@@ -245,12 +245,12 @@ const FEATURES: readonly FeatureDefinition[] = [
   {
     id: 'science',
     label: 'AI-Scientist',
-    description: 'Consulter les expériences et leurs preuves sans les modifier.',
+    description: 'Consulter les expériences et administrer les pistes découvertes dans les vidéos.',
     command: 'buddy science',
     group: 'Orchestration',
     icon: FlaskConical,
     panel: 'science',
-    badge: 'Lecture seule',
+    badge: 'Supervisé',
   },
   {
     id: 'evolution',

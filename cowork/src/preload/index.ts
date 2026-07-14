@@ -860,6 +860,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
     status: (cwd?: string) => ipcRenderer.invoke('science.status', cwd),
   },
 
+  videoExperiments: {
+    list: (cwd?: string) => ipcRenderer.invoke('videoExperiments.list', cwd),
+    review: (input: {
+      cwd?: string;
+      key: string;
+      status: 'candidate' | 'planned' | 'running' | 'validated' | 'rejected';
+      note?: string;
+    }) => ipcRenderer.invoke('videoExperiments.review', input),
+  },
+
   // Media generation — delegates to the core image_generate tool via
   // src/main/media/media-gen-ipc.ts.
   comfyLab: {
@@ -5719,6 +5729,15 @@ declare global {
       science: {
         listVariants: (cwd?: string) => Promise<unknown>;
         status: (cwd?: string) => Promise<unknown>;
+      };
+      videoExperiments: {
+        list: (cwd?: string) => Promise<unknown>;
+        review: (input: {
+          cwd?: string;
+          key: string;
+          status: 'candidate' | 'planned' | 'running' | 'validated' | 'rejected';
+          note?: string;
+        }) => Promise<{ ok: boolean; error?: string }>;
       };
       studio: {
         exportZip: (

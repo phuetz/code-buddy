@@ -1,5 +1,5 @@
 /**
- * SciencePanel — the READ-ONLY window onto Code Buddy's AI-Scientist-lite loop (`buddy science`).
+ * SciencePanel — laboratory control for scored AI-Scientist variants and video discoveries.
  *
  * The core runs a best-first search over experiment variants: each variant tests a hypothesis, runs
  * sandboxed code, is scored on a measured metric, and is gated (passedAll / no regressions / a human
@@ -12,6 +12,7 @@
  */
 import { useCallback, useEffect, useState } from 'react';
 import { useAppStore } from '../store';
+import { VideoExperimentBacklog } from './VideoExperimentBacklog';
 
 interface ScienceVariantView {
   id: string;
@@ -24,7 +25,13 @@ interface ScienceVariantView {
   kept: boolean;
   createdAt: string;
   metric: { name: string; value: number | null; score: number; detail?: string };
-  execution: { ok: boolean; exitCode: number | null; timedOut: boolean; durationMs: number; runId: string };
+  execution: {
+    ok: boolean;
+    exitCode: number | null;
+    timedOut: boolean;
+    durationMs: number;
+    runId: string;
+  };
   detail?: string;
   codeBytes: number;
   codePreview: string;
@@ -75,32 +82,44 @@ function VariantRow({ v, isBest }: { v: ScienceVariantView; isBest: boolean }) {
     <li className="rounded-md border border-border p-2.5 text-sm">
       <div className="flex items-center gap-2">
         {isBest && (
-          <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-500" title="Meilleur variant éligible">
+          <span
+            className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-500"
+            title="Meilleur variant éligible"
+          >
             ★ meilleur
           </span>
         )}
         {v.passedAll && v.regressions.length === 0 ? (
-          <span className="text-[10px] px-1.5 py-0.5 rounded bg-green-500/15 text-green-500">✓ passe</span>
+          <span className="text-[10px] px-1.5 py-0.5 rounded bg-green-500/15 text-green-500">
+            ✓ passe
+          </span>
         ) : (
           <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/15 text-red-500">
             ✗ {v.regressions.length ? `regr: ${v.regressions.join(', ')}` : 'échec'}
           </span>
         )}
         {v.kept && (
-          <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/15 text-blue-500" title="Approuvé par le keep-gate humain">
+          <span
+            className="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/15 text-blue-500"
+            title="Approuvé par le keep-gate humain"
+          >
             gardé
           </span>
         )}
         <span className="ml-auto text-xs tabular-nums">score {v.score.toFixed(3)}</span>
       </div>
 
-      <div className="mt-1 text-sm">{v.hypothesis || <span className="text-muted-foreground">(hypothèse vide)</span>}</div>
+      <div className="mt-1 text-sm">
+        {v.hypothesis || <span className="text-muted-foreground">(hypothèse vide)</span>}
+      </div>
 
       <div className="mt-1 text-xs text-muted-foreground flex flex-wrap gap-x-3 gap-y-0.5">
         <span className="font-mono">{v.id.slice(0, 8) || '?'}</span>
         <span>{metricLabel(v.metric)}</span>
         {v.language && <span>{v.language}</span>}
-        <span title={`exit ${v.execution.exitCode ?? '?'}${v.execution.timedOut ? ', timeout' : ''}`}>
+        <span
+          title={`exit ${v.execution.exitCode ?? '?'}${v.execution.timedOut ? ', timeout' : ''}`}
+        >
           {v.execution.ok ? 'exéc ok' : 'exéc ko'}
           {v.execution.durationMs ? ` · ${v.execution.durationMs}ms` : ''}
         </span>
@@ -126,6 +145,7 @@ function VariantRow({ v, isBest }: { v: ScienceVariantView; isBest: boolean }) {
 
 export function SciencePanel({ onClose }: { onClose: () => void }) {
   const workingDir = useAppStore((s) => s.workingDir);
+  const [activeTab, setActiveTab] = useState<'variants' | 'video'>('variants');
   const [data, setData] = useState<ScienceListResult | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -159,14 +179,17 @@ export function SciencePanel({ onClose }: { onClose: () => void }) {
   const bestId = data?.best?.id ?? null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose}>
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+      onClick={onClose}
+    >
       <div
         className="bg-background border border-border rounded-lg shadow-xl w-[860px] max-w-[93vw] max-h-[86vh] flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center gap-3 px-4 py-3 border-b border-border">
-          <span className="font-semibold">AI-Scientist — expériences</span>
-          {summary && (
+          <span className="font-semibold">Laboratoire IA</span>
+          {activeTab === 'variants' && summary && (
             <span className="text-xs text-muted-foreground">
               {summary.total} variant(s) · {summary.passed} passent
               {summary.kept > 0 ? ` · ${summary.kept} gardé(s)` : ''}
@@ -174,13 +197,15 @@ export function SciencePanel({ onClose }: { onClose: () => void }) {
             </span>
           )}
           <div className="ml-auto flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => void load()}
-              className="text-xs px-2 py-1 rounded-md border border-border hover:bg-accent"
-            >
-              ↻ Rafraîchir
-            </button>
+            {activeTab === 'variants' && (
+              <button
+                type="button"
+                onClick={() => void load()}
+                className="text-xs px-2 py-1 rounded-md border border-border hover:bg-accent"
+              >
+                ↻ Rafraîchir
+              </button>
+            )}
             <button
               type="button"
               onClick={onClose}
@@ -191,54 +216,98 @@ export function SciencePanel({ onClose }: { onClose: () => void }) {
           </div>
         </div>
 
-        <div className="flex-1 min-h-0 overflow-auto p-4 space-y-5">
-          {/* Read-only reminder: execution is CLI-only by design. */}
-          <div className="text-xs text-muted-foreground rounded-md border border-border bg-muted/30 px-3 py-2">
-            Suivi en lecture seule. Lancer une expérience reste une action CLI :{' '}
-            <code className="text-[11px]">buddy science &quot;&lt;objectif&gt;&quot; --score</code>. Cette vue n’exécute
-            jamais de code.
-          </div>
+        <div
+          className="flex gap-1 border-b border-border px-4 pt-2"
+          role="tablist"
+          aria-label="Vues du laboratoire IA"
+        >
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === 'variants'}
+            className={`rounded-t-md px-3 py-2 text-xs ${activeTab === 'variants' ? 'border border-b-background border-border bg-background font-medium' : 'text-muted-foreground hover:text-foreground'}`}
+            onClick={() => setActiveTab('variants')}
+          >
+            Variants scorés
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === 'video'}
+            className={`rounded-t-md px-3 py-2 text-xs ${activeTab === 'video' ? 'border border-b-background border-border bg-background font-medium' : 'text-muted-foreground hover:text-foreground'}`}
+            onClick={() => setActiveTab('video')}
+          >
+            Découvertes vidéo
+          </button>
+        </div>
 
-          {loading ? (
-            <div className="text-sm text-muted-foreground">Chargement…</div>
-          ) : error ? (
-            <div className="text-sm text-red-500">{error}</div>
-          ) : !summary || summary.total === 0 ? (
-            <div className="text-sm text-muted-foreground">
-              Aucune expérience pour ce workspace.
-              <br />
-              Lance la boucle AI-Scientist en CLI :{' '}
-              <code className="text-xs">buddy science &quot;&lt;objectif&gt;&quot; --score --metric accuracy</code>.
-            </div>
+        <div className="flex-1 min-h-0 overflow-auto p-4 space-y-5">
+          {activeTab === 'video' ? (
+            <VideoExperimentBacklog workingDir={workingDir || undefined} />
           ) : (
             <>
-              {data?.best && (
-                <section>
-                  <h3 className="text-sm font-semibold mb-2">Meilleur variant</h3>
-                  <ul className="space-y-1.5">
-                    <VariantRow v={data.best} isBest />
-                  </ul>
-                </section>
+              {/* Read-only reminder: execution is CLI-only by design. */}
+              <div className="text-xs text-muted-foreground rounded-md border border-border bg-muted/30 px-3 py-2">
+                Suivi en lecture seule. Lancer une expérience reste une action CLI :{' '}
+                <code className="text-[11px]">
+                  buddy science &quot;&lt;objectif&gt;&quot; --score
+                </code>
+                . Cette vue n’exécute jamais de code.
+              </div>
+
+              {loading ? (
+                <div className="text-sm text-muted-foreground">Chargement…</div>
+              ) : error ? (
+                <div className="text-sm text-red-500">{error}</div>
+              ) : !summary || summary.total === 0 ? (
+                <div className="text-sm text-muted-foreground">
+                  Aucune expérience pour ce workspace.
+                  <br />
+                  Lance la boucle AI-Scientist en CLI :{' '}
+                  <code className="text-xs">
+                    buddy science &quot;&lt;objectif&gt;&quot; --score --metric accuracy
+                  </code>
+                  .
+                </div>
+              ) : (
+                <>
+                  {data?.best && (
+                    <section>
+                      <h3 className="text-sm font-semibold mb-2">Meilleur variant</h3>
+                      <ul className="space-y-1.5">
+                        <VariantRow v={data.best} isBest />
+                      </ul>
+                    </section>
+                  )}
+
+                  <section>
+                    <h3 className="text-sm font-semibold mb-2">
+                      Tous les variants{' '}
+                      <span className="font-normal text-muted-foreground">· {variants.length}</span>
+                    </h3>
+                    <ul className="space-y-1.5">
+                      {variants.map((v) => (
+                        <VariantRow
+                          key={v.id || v.createdAt}
+                          v={v}
+                          isBest={!!bestId && v.id === bestId}
+                        />
+                      ))}
+                    </ul>
+                  </section>
+                </>
               )}
 
-              <section>
-                <h3 className="text-sm font-semibold mb-2">
-                  Tous les variants <span className="font-normal text-muted-foreground">· {variants.length}</span>
-                </h3>
-                <ul className="space-y-1.5">
-                  {variants.map((v) => (
-                    <VariantRow key={v.id || v.createdAt} v={v} isBest={!!bestId && v.id === bestId} />
-                  ))}
-                </ul>
-              </section>
+              {summary?.storePath && (
+                <div
+                  className="text-[10px] text-muted-foreground/70 truncate"
+                  title={summary.storePath}
+                >
+                  Store : {summary.storePath}
+                  {!summary.exists ? ' (absent)' : ''}
+                </div>
+              )}
             </>
-          )}
-
-          {summary?.storePath && (
-            <div className="text-[10px] text-muted-foreground/70 truncate" title={summary.storePath}>
-              Store : {summary.storePath}
-              {!summary.exists ? ' (absent)' : ''}
-            </div>
           )}
         </div>
       </div>
@@ -247,5 +316,13 @@ export function SciencePanel({ onClose }: { onClose: () => void }) {
 }
 
 function emptySummary(): ScienceSummary {
-  return { total: 0, passed: 0, kept: 0, bestScore: null, latestAt: null, storePath: '', exists: false };
+  return {
+    total: 0,
+    passed: 0,
+    kept: 0,
+    bestScore: null,
+    latestAt: null,
+    storePath: '',
+    exists: false,
+  };
 }

@@ -164,6 +164,7 @@ import { registerClipboardIpcHandlers } from './ipc/clipboard-ipc';
 import { registerA2aIpcHandlers } from './ipc/a2a-ipc';
 import { registerCkgIpcHandlers } from './ipc/ckg-ipc';
 import { registerScienceIpcHandlers } from './ipc/science-ipc';
+import { registerVideoExperimentIpcHandlers } from './ipc/video-experiments-ipc';
 import { registerAuditIpcHandlers } from './ipc/audit-ipc';
 import { registerPersonaIpcHandlers } from './ipc/persona-ipc';
 import { registerSessionInsightsIpcHandlers } from './ipc/session-insights-ipc';
@@ -3722,6 +3723,7 @@ registerCkgIpcHandlers();
 // scored experiment variants from `buddy science`). No run/execute handler: launching an
 // experiment stays CLI-only — extracted to ipc/science-ipc.ts.
 registerScienceIpcHandlers();
+registerVideoExperimentIpcHandlers();
 
 // MCP Server + marketplace IPC handlers — extracted to ipc/mcp-ipc.ts
 // (accessor injection for the runtime-reassigned sessionManager +
