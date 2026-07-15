@@ -248,6 +248,38 @@ describe('respond-decider — addressed + engagement window (no LLM)', () => {
     expect(judge).not.toHaveBeenCalled();
   });
 
+  it('fails closed on generic questions during an ambient burst, then recovers after quiet', async () => {
+    let t = 0;
+    const judge = vi.fn(async () => true);
+    const d = createResponseDecider({
+      robotName: 'Lisa',
+      now: () => t,
+      chimeIn: true,
+      ambientBurstWindowMs: 10_000,
+      ambientBurstMinTurns: 3,
+      judge,
+      recentContext: async () => [],
+    });
+
+    for (const ambient of ['It is fun.', 'And actually.', 'The rest of the press.']) {
+      expect(await d.decide(ambient)).toMatchObject({ respond: false, reason: 'no-cue' });
+      t += 1_000;
+    }
+
+    await expect(d.decide('How many?')).resolves.toEqual({
+      respond: false,
+      reason: 'ambient-burst',
+    });
+    expect(judge).not.toHaveBeenCalled();
+
+    t = 20_000;
+    await expect(d.decide('Tu vois le hamburger ?')).resolves.toEqual({
+      respond: true,
+      reason: 'directed-request',
+    });
+    expect(judge).toHaveBeenCalledOnce();
+  });
+
   it.each([
     "Je vous attends pour comprendre l'actualité du jour, l'éclairer, l'analyser, " +
       'tenter de la mettre en perspective, sans parti et sans concession.',

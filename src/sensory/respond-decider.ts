@@ -121,6 +121,10 @@ export interface ResponseDeciderOptions {
   chimeIn?: boolean;
   /** Reply to short direct greetings even without the robot name. Default true. */
   respondToGreeting?: boolean;
+  /** Window used to recognize continuous nearby broadcast/cross-talk. Default 15000 ms. */
+  ambientBurstWindowMs?: number;
+  /** Silent turns inside the window before all name-free cues fail closed. Default 3. */
+  ambientBurstMinTurns?: number;
   now?: () => number;
   /** Injectable fuzzy name matcher. Default: word-level Levenshtein-tolerant. */
   nameMatch?: (text: string, name: string) => boolean;
@@ -475,6 +479,14 @@ export function createResponseDecider(opts: ResponseDeciderOptions = {}): Respon
   const chimeIn = opts.chimeIn ?? env.CODEBUDDY_SENSORY_CHIME_IN === 'true';
   const respondToGreeting =
     opts.respondToGreeting ?? env.CODEBUDDY_SENSORY_RESPOND_TO_GREETING !== 'false';
+  const ambientBurstWindowMs = Math.max(
+    1_000,
+    opts.ambientBurstWindowMs ?? Number(env.CODEBUDDY_SENSORY_AMBIENT_BURST_MS ?? 15_000),
+  );
+  const ambientBurstMinTurns = Math.max(
+    2,
+    opts.ambientBurstMinTurns ?? Number(env.CODEBUDDY_SENSORY_AMBIENT_BURST_TURNS ?? 3),
+  );
   const now = opts.now ?? (() => Date.now());
   const nameMatch = opts.nameMatch ?? fuzzyNameMatch;
   const judge = opts.judge ?? makeDefaultJudge();
@@ -483,6 +495,20 @@ export function createResponseDecider(opts: ResponseDeciderOptions = {}): Respon
   let lastEngagedAt = Number.NEGATIVE_INFINITY;
   let dialogueStartedAt = Number.NEGATIVE_INFINITY;
   let engagementSource: EngagementSource = 'addressed';
+  let recentAmbientAt: number[] = [];
+  const pruneAmbient = (): void => {
+    const cutoff = now() - ambientBurstWindowMs;
+    recentAmbientAt = recentAmbientAt.filter((timestamp) => timestamp >= cutoff);
+  };
+  const staySilent = (reason: string): ResponseDecision => {
+    pruneAmbient();
+    recentAmbientAt.push(now());
+    return { respond: false, reason };
+  };
+  const ambientBurstActive = (): boolean => {
+    pruneAmbient();
+    return recentAmbientAt.length >= ambientBurstMinTurns;
+  };
   const markEngaged = (source: EngagementSource = 'addressed'): void => {
     const t = now();
     // A fresh dialogue when the previous window had lapsed; otherwise keep the original
@@ -490,6 +516,7 @@ export function createResponseDecider(opts: ResponseDeciderOptions = {}): Respon
     if (t - lastEngagedAt >= engageWindowMs) dialogueStartedAt = t;
     lastEngagedAt = t;
     engagementSource = source;
+    recentAmbientAt = [];
   };
   async function resolveRobotNameForTurn(): Promise<string> {
     if (explicitRobotName) return explicitRobotName;
@@ -532,7 +559,7 @@ export function createResponseDecider(opts: ResponseDeciderOptions = {}): Respon
           // short reply such as "salut, ça va ?", not for a nearby TV monologue or
           // rhetorical broadcast question. Once a concise reply lands below, the
           // conversation becomes explicitly engaged and normal long follow-ups work.
-          return { respond: false, reason: 'ambient-in-window' };
+          return staySilent('ambient-in-window');
         }
         if (isDirectedFollowUp(text)) {
           // A follow-up aimed at the robot → respond, and (conversation mode) keep the dialogue
@@ -544,7 +571,7 @@ export function createResponseDecider(opts: ResponseDeciderOptions = {}): Respon
         }
         // Ambient cross-talk INSIDE the window → stay silent (don't answer the room). The window
         // still expires on its own if no directed follow-up extends it.
-        return { respond: false, reason: 'ambient-in-window' };
+        return staySilent('ambient-in-window');
       }
 
       // Voice-assistant affordance: a short standalone greeting is directed at the assistant
@@ -562,20 +589,26 @@ export function createResponseDecider(opts: ResponseDeciderOptions = {}): Respon
       // request together with recent hearing percepts below.
       const clearlyDirectedRequest = isClearlyDirectedStandaloneRequest(text);
       if (clearlyDirectedRequest && !chimeIn) {
-        return { respond: false, reason: 'ambient' };
+        return staySilent('ambient');
       }
 
       // Fail closed before the optional chime-in judge: a long broadcast question must not
       // become expensive merely because it contains a generic "vous" or "you".
       if (isLongStandaloneSecondPersonSpeech(text)) {
-        return { respond: false, reason: 'ambient-long' };
+        return staySilent('ambient-long');
       }
 
       // Not addressed, not in a conversation.
-      if (!chimeIn) return { respond: false, reason: 'ambient' };
+      if (!chimeIn) return staySilent('ambient');
 
       // Tier 2 — cheap cue gate (no LLM unless a cue fires).
-      if (!hasResponseCue(text)) return { respond: false, reason: 'no-cue' };
+      if (!hasResponseCue(text)) return staySilent('no-cue');
+
+      // Several rejected turns in a short interval are strong evidence of a television,
+      // radio or nearby human conversation. A generic question inside that burst must not
+      // reach a judge that lacks acoustic direction; saying the robot name remains an
+      // immediate escape hatch and clears this state through markEngaged().
+      if (ambientBurstActive()) return staySilent('ambient-burst');
 
       // Tier 3 — rare LLM judgment, high bar, error → silent. A spontaneous chime-in does NOT
       // open a window (each is judged independently — keeps the risky path conservative).
@@ -587,7 +620,7 @@ export function createResponseDecider(opts: ResponseDeciderOptions = {}): Respon
         logger.debug(
           `[respond] judge failed → silent: ${err instanceof Error ? err.message : String(err)}`
         );
-        return { respond: false, reason: 'judge-error' };
+        return staySilent('judge-error');
       }
       if (warranted) {
         if (clearlyDirectedRequest) {
@@ -596,7 +629,7 @@ export function createResponseDecider(opts: ResponseDeciderOptions = {}): Respon
         }
         return { respond: true, reason: 'chime-in' };
       }
-      return { respond: false, reason: 'not-warranted' };
+      return staySilent('not-warranted');
     } catch (err) {
       // Never-throws — and a failure means stay silent (conservative).
       logger.warn(
