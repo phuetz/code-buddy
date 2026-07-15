@@ -312,8 +312,9 @@ describe('formatQuoteSummary', () => {
   });
 
   it('summarizes a down index in points', () => {
-    const s = formatQuoteSummary({ type: 'market', name: 'CAC 40', symbol: '^FCHI', price: 7654.2, change: -42.8, changePercent: -0.56 });
+    const s = formatQuoteSummary({ type: 'market', name: 'CAC 40', symbol: '^FCHI', price: 7654.2, change: -42.8, changePercent: -0.56, currency: 'EUR' });
     expect(s).toContain('654,20 pts'); // fr-FR thousands sep is U+202F
+    expect(s).not.toContain('EUR');
     expect(s).toContain('en baisse');
     expect(s).toContain('-42,80');
   });

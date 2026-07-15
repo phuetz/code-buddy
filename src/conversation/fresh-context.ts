@@ -268,7 +268,9 @@ function formatCollectionTimestamp(fetchedAt: number, locale: string): string {
 function marketItemSentence(item: MarketDigestItem): string {
   const price = marketNumber(item.price);
   if (price == null) return '';
-  const unit = item.currency || (item.type === 'market' || item.type === 'bourse' ? 'points' : '');
+  const unit = item.type === 'market' || item.type === 'bourse'
+    ? 'points'
+    : item.currency || '';
   const percent = marketNumber(item.changePercent);
   const change = marketNumber(item.change);
   const directionValue = percent ?? change;

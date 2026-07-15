@@ -441,7 +441,11 @@ export function parseStooqCsv(text: string, symbolInput: string): StockWidgetDat
 
 /** Deterministic French one-line summary from a StockWidgetData. Pure. */
 export function formatQuoteSummary(d: StockWidgetData): string {
-  const unit = d.currency ? ` ${d.currency}` : d.type === 'market' || d.type === 'bourse' ? ' pts' : '';
+  const unit = d.type === 'market' || d.type === 'bourse'
+    ? ' pts'
+    : d.currency
+      ? ` ${d.currency}`
+      : '';
   const priceStr = d.price != null ? `${fmtFr(num(d.price))}${unit}` : '—';
   const parts = [`${d.name ?? d.symbol ?? 'Cours'}${d.symbol ? ` (${d.symbol})` : ''} : ${priceStr}`];
   const pct = num(d.changePercent);

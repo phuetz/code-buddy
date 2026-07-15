@@ -61,6 +61,7 @@ function marketEntry(at = now - 60_000): PrefetchEntry {
         price: 7654.2,
         change: -42.8,
         changePercent: -0.56,
+        currency: 'EUR',
         fetchedAt: at + 500,
         quoteTime: '17:35',
       }],
@@ -145,6 +146,8 @@ describe('shared prefetched turn context', () => {
     });
 
     expect(context?.speech).toContain('CAC 40');
+    expect(context?.speech).toContain('points');
+    expect(context?.speech).not.toContain('EUR');
     expect(context?.speech).toContain('cotation 17:35');
     expect(context?.text).toContain('L\'heure de collecte est distincte');
     expect(context?.text).toContain('https://quotes.example.test/cac40');
