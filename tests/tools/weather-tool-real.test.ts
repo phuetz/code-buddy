@@ -43,18 +43,20 @@ describe('WeatherTool (real loopback Open-Meteo)', () => {
   let forecastStatus: number;
   let forecastBody: unknown;
   let geocodeBody: unknown;
+  let geocodeBodyByName: Map<string, unknown>;
 
   beforeEach(async () => {
     captured = [];
     forecastStatus = 200;
     forecastBody = FORECAST_OK;
     geocodeBody = GEOCODE_PARIS;
+    geocodeBodyByName = new Map();
     server = http.createServer((req, res) => {
       const url = new URL(req.url ?? '/', 'http://localhost');
       captured.push({ path: url.pathname, url });
       res.setHeader('Content-Type', 'application/json');
       if (url.pathname === '/v1/search') {
-        res.end(JSON.stringify(geocodeBody));
+        res.end(JSON.stringify(geocodeBodyByName.get(url.searchParams.get('name') ?? '') ?? geocodeBody));
       } else if (url.pathname === '/v1/forecast') {
         res.statusCode = forecastStatus;
         res.end(JSON.stringify(forecastBody));
@@ -80,7 +82,7 @@ describe('WeatherTool (real loopback Open-Meteo)', () => {
     // Wire params asserted for real.
     const geo = captured.find((c) => c.path === '/v1/search')!;
     expect(geo.url.searchParams.get('name')).toBe('Paris');
-    expect(geo.url.searchParams.get('count')).toBe('1');
+    expect(geo.url.searchParams.get('count')).toBe('5');
     const fc = captured.find((c) => c.path === '/v1/forecast')!;
     expect(fc.url.searchParams.get('timezone')).toBe('auto');
     expect(fc.url.searchParams.get('forecast_days')).toBe('1');
@@ -127,6 +129,27 @@ describe('WeatherTool (real loopback Open-Meteo)', () => {
     captured = [];
     await tool().getWeather('Besançon');
     expect(captured.find((c) => c.path === '/v1/search')!.url.searchParams.get('name')).toBe('Besançon');
+  });
+
+  it('recovers a punctuation-sensitive city from an unaccented spoken form', async () => {
+    geocodeBody = { results: [] };
+    geocodeBodyByName.set('epinay', {
+      results: [
+        { name: 'Épinay-sur-Seine', country: 'France', latitude: 48.9535, longitude: 2.31514 },
+        { name: 'Épinay', country: 'France', latitude: 49.0, longitude: 2.0 },
+      ],
+    });
+
+    const result = await tool().getWeather('epinay sur seine');
+
+    expect(result.success).toBe(true);
+    expect(result.output).toContain('Épinay-sur-Seine');
+    const geocodes = captured.filter((request) => request.path === '/v1/search');
+    expect(geocodes.map((request) => request.url.searchParams.get('name'))).toEqual([
+      'epinay sur seine',
+      'epinay',
+    ]);
+    expect(geocodes[1]!.url.searchParams.get('count')).toBe('10');
   });
 
   it('location not found → fail-soft French error, zero forecast calls', async () => {

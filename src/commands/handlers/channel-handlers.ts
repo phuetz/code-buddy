@@ -1262,7 +1262,8 @@ export async function registerAIMessageHandler(manager: import('../../channels/i
       let preparedConversation: PreparedConversationTurn | undefined;
       let companionConversationHistory: ConversationTurn[] = [];
       let companionFreshEvidence: string | undefined;
-      let prefetchedDirectFallback: string | undefined;
+      let prefetchedGroundedFallback: string | undefined;
+      let prefetchedDirectResponse: string | undefined;
       if (companionConversation) {
         const [conversation, prefetchedContext, prefetchEngine] = await Promise.all([
           import('../../conversation/conversation-orchestrator.js'),
@@ -1306,6 +1307,9 @@ export async function registerAIMessageHandler(manager: import('../../channels/i
         companionFreshEvidence = [companionFreshEvidence, attachedImageEvidence]
           .filter((part): part is string => Boolean(part?.trim()))
           .join('\n\n') || undefined;
+        prefetchedGroundedFallback = freshContext
+          ? freshContext.text.trim() || freshContext.speech.trim() || undefined
+          : undefined;
         if (
           freshContext &&
           prefetchedContext.shouldUsePrefetchedAnswerDirectly(
@@ -1313,8 +1317,7 @@ export async function registerAIMessageHandler(manager: import('../../channels/i
             freshContext,
           )
         ) {
-          prefetchedDirectFallback =
-            freshContext.text.trim() || freshContext.speech.trim() || undefined;
+          prefetchedDirectResponse = prefetchedGroundedFallback;
         }
         preparedConversation = conversation.prepareConversationTurn(message.content, history, {
           ...(sharedRelationshipContext
@@ -1331,6 +1334,7 @@ export async function registerAIMessageHandler(manager: import('../../channels/i
 
       const semanticReviewPlanned =
         companionConversation &&
+        !prefetchedDirectResponse &&
         preparedConversation !== undefined &&
         shouldRunSemanticResponseGate({ plan: preparedConversation.plan }) &&
         deriveArgumentObligations(preparedConversation.plan, message.content).length > 0;
@@ -1352,34 +1356,50 @@ export async function registerAIMessageHandler(manager: import('../../channels/i
       // persistence complete normally.
       generativeSessionKey = sessionKey;
       generativeTurnEngaged = true;
-      const entries = await agent.processUserMessage(agentInput, {
-        surface: channel.type,
-        ...(attachedImageEvidence || imageAttachmentCount > 0
-          ? { introspectionText: message.content }
-          : {}),
-        ...(transientConversationContext
-          ? {
-              transientContext: transientConversationContext,
-              relationshipSafety: companionConversation,
-            }
-          : {}),
-      });
-      const lastEntry = entries[entries.length - 1];
-      let response = lastEntry ? String(lastEntry.content) : '';
-      const rawAgentFailure = isAgentFailureResponse(response);
-      const hasGeneratedResponse = response.trim() !== '' && !rawAgentFailure;
+      let response = '';
+      let rawAgentFailure = false;
+      let hasGeneratedResponse = false;
       let shouldPersistChannelSession = true;
+      if (prefetchedDirectResponse) {
+        response = prefetchedDirectResponse;
+        if (!agent.recordTrustedExternalConversationTurn(agentInput, response)) {
+          throw new Error('trusted prefetched turn could not be recorded');
+        }
+        logger.info('Channel served trusted prefetched companion response directly', {
+          channelType: channel.type,
+          sessionHash: hashForLog(sessionKey),
+          messageHash: hashForLog(message.id),
+          responseLength: response.length,
+        });
+      } else {
+        const entries = await agent.processUserMessage(agentInput, {
+          surface: channel.type,
+          ...(attachedImageEvidence || imageAttachmentCount > 0
+            ? { introspectionText: message.content }
+            : {}),
+          ...(transientConversationContext
+            ? {
+                transientContext: transientConversationContext,
+                relationshipSafety: companionConversation,
+              }
+            : {}),
+        });
+        const lastEntry = entries[entries.length - 1];
+        response = lastEntry ? String(lastEntry.content) : '';
+        rawAgentFailure = isAgentFailureResponse(response);
+        hasGeneratedResponse = response.trim() !== '' && !rawAgentFailure;
+      }
       if (!response.trim() || rawAgentFailure) {
         const { conversationFailureReply } = await import(
           '../../conversation/conversation-orchestrator.js'
         );
         const replacement =
-          prefetchedDirectFallback ??
+          prefetchedGroundedFallback ??
           conversationFailureReply(
             message.content,
             companionConversationHistory,
           );
-        if (prefetchedDirectFallback) {
+        if (prefetchedGroundedFallback) {
           logger.info('Channel provider failure recovered from prefetched companion context', {
             channelType: channel.type,
             sessionHash: hashForLog(sessionKey),
@@ -1432,7 +1452,7 @@ export async function registerAIMessageHandler(manager: import('../../channels/i
             (reviewed.audit?.issueCodes.includes('ungrounded_fresh_claim') === true ||
               reviewed.verificationAudit?.issueCodes.includes('ungrounded_fresh_claim') === true);
           const groundedRecovery = rejectedFreshGrounding
-            ? prefetchedDirectFallback ??
+            ? prefetchedGroundedFallback ??
               "Je n’ai pas réussi à vérifier cette information fraîche avec une source exploitable. " +
               'Je préfère ne pas l’inventer ; redemande-moi dans un instant.'
             : undefined;
@@ -1453,7 +1473,7 @@ export async function registerAIMessageHandler(manager: import('../../channels/i
             logger.warn('Companion rejected ungrounded fresh response before delivery', {
               channelType: channel.type,
               sessionHash: hashForLog(sessionKey),
-              recovery: prefetchedDirectFallback ? 'prefetched_evidence' : 'honest_retry',
+              recovery: prefetchedGroundedFallback ? 'prefetched_evidence' : 'honest_retry',
             });
           }
           logger.info('Companion semantic response gate completed', {

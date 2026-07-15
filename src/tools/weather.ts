@@ -35,6 +35,16 @@ interface GeocodeHit {
   longitude: number;
 }
 
+function normalizePlaceName(value: string): string {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/gu, '')
+    .toLocaleLowerCase('fr')
+    .replace(/[^a-z0-9]+/gu, ' ')
+    .trim()
+    .replace(/\s+/gu, ' ');
+}
+
 export class WeatherTool {
   private readonly geocodingBaseUrl: string;
   private readonly forecastBaseUrl: string;
@@ -61,11 +71,21 @@ export class WeatherTool {
     //    everywhere so a wrong disambiguation is visible and correctable.
     let hit: GeocodeHit;
     try {
-      const geoUrl =
-        `${this.geocodingBaseUrl}/v1/search?name=${encodeURIComponent(query)}` + `&count=1&language=fr&format=json`;
-      const geo = await axios.get(geoUrl, { timeout: this.timeoutMs });
-      const results = (geo.data as { results?: GeocodeHit[] })?.results;
-      if (!Array.isArray(results) || results.length === 0 || !results[0]) {
+      let results = await this.geocode(query, 5);
+      if (results.length === 0) {
+        const fallbackToken = normalizePlaceName(query)
+          .split(' ')
+          .filter((token) => token.length >= 3)
+          .sort((left, right) => right.length - left.length)[0];
+        if (fallbackToken && fallbackToken !== normalizePlaceName(query)) {
+          const fallbackResults = await this.geocode(fallbackToken, 10);
+          const normalizedQuery = normalizePlaceName(query);
+          results = fallbackResults.filter(
+            (candidate) => normalizePlaceName(candidate.name) === normalizedQuery,
+          );
+        }
+      }
+      if (results.length === 0 || !results[0]) {
         return {
           success: false,
           error: `Lieu introuvable : « ${query} ». Vérifiez l'orthographe ou précisez (ville, pays).`,
@@ -147,6 +167,15 @@ export class WeatherTool {
     }
 
     return { success: true, output: parts.join('\n'), data };
+  }
+
+  private async geocode(query: string, count: number): Promise<GeocodeHit[]> {
+    const geoUrl =
+      `${this.geocodingBaseUrl}/v1/search?name=${encodeURIComponent(query)}` +
+      `&count=${count}&language=fr&format=json`;
+    const geo = await axios.get(geoUrl, { timeout: this.timeoutMs });
+    const results = (geo.data as { results?: GeocodeHit[] })?.results;
+    return Array.isArray(results) ? results : [];
   }
 
   /** Zip Open-Meteo's parallel daily arrays into WeatherForecast rows; empty/mismatched → []. */

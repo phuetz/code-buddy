@@ -193,6 +193,11 @@ export interface SemanticResponseGateOptions {
   thresholds?: Partial<SemanticResponseThresholds>;
   /** An uncertain critique can neither certify the draft nor trigger a rewrite. */
   minimumCriticConfidence?: number;
+  /**
+   * A caller with a deterministic grounded fallback can stop after one audit
+   * when the only confident defects concern fresh-fact grounding.
+   */
+  stopAfterFreshGroundingFailure?: boolean;
 }
 
 export type SemanticResponseGateOutcome =
@@ -209,6 +214,7 @@ export type SemanticResponseGateReason =
   | 'critic_uncertain'
   | 'critic_invalid'
   | 'critic_failed'
+  | 'fresh_grounding_rejected'
   | 'revision_failed'
   | 'revision_empty'
   | 'revision_rejected'
@@ -442,6 +448,21 @@ function boundedHistory(history: readonly ConversationTurn[] | undefined): Conve
   });
 }
 
+function historyForPrompt(
+  input: SemanticResponseGateInput,
+  obligations: readonly ArgumentObligation[],
+): ConversationTurn[] {
+  const obligationIds = new Set(obligations.map(item => item.kind));
+  const continuedThread =
+    input.plan.analysis.continuesDeliberation ||
+    input.plan.deliberation.continuedFromHistory ||
+    input.plan.deliberation.turnCount > 1 ||
+    obligationIds.has('address_objection') ||
+    obligationIds.has('revise_or_defend_position');
+  if (!continuedThread && input.plan.act === 'fresh_information') return [];
+  return boundedHistory(input.history);
+}
+
 function buildCriticPrompts(
   input: SemanticResponseGateInput,
   obligations: readonly ArgumentObligation[]
@@ -460,7 +481,7 @@ function buildCriticPrompts(
     request: bounded(input.request, MAX_REQUEST_CHARS) ?? '',
     candidateResponse: bounded(input.draft, MAX_DRAFT_CHARS) ?? '',
     obligations: obligations.map(obligationForPrompt),
-    recentThread: boundedHistory(input.history),
+    recentThread: historyForPrompt(input, obligations),
     evidence: bounded(input.evidence, MAX_EVIDENCE_CHARS) ?? null,
   };
   return {
@@ -484,7 +505,7 @@ function buildRevisionPrompts(
     request: bounded(input.request, MAX_REQUEST_CHARS) ?? '',
     candidateResponse: bounded(input.draft, MAX_DRAFT_CHARS) ?? '',
     obligations: obligations.map(obligationForPrompt),
-    recentThread: boundedHistory(input.history),
+    recentThread: historyForPrompt(input, obligations),
     evidence: bounded(input.evidence, MAX_EVIDENCE_CHARS) ?? null,
     audit: {
       failedObligationIds: audit.failedObligationIds,
@@ -571,6 +592,33 @@ function evaluateCritique(
     lowDimensions,
     accepted,
   };
+}
+
+function isExclusivelyFreshGroundingFailure(
+  audit: SemanticResponseAudit,
+): boolean {
+  const allowedIssues = new Set<SemanticResponseIssueCode>([
+    'ungrounded_fresh_claim',
+    'unsupported_claim',
+  ]);
+  const allowedObligations = new Set<ArgumentObligation['kind']>([
+    'source_fresh_facts',
+    'express_uncertainty',
+  ]);
+  const allowedDimensions = new Set<SemanticResponseDimension>([
+    'supportQuality',
+    'evidenceGrounding',
+  ]);
+  const hasGroundingSignal =
+    audit.issueCodes.includes('ungrounded_fresh_claim') ||
+    audit.failedObligationIds.includes('source_fresh_facts') ||
+    audit.lowDimensions.includes('evidenceGrounding');
+  return (
+    hasGroundingSignal &&
+    audit.issueCodes.every(code => allowedIssues.has(code)) &&
+    audit.failedObligationIds.every(id => allowedObligations.has(id)) &&
+    audit.lowDimensions.every(dimension => allowedDimensions.has(dimension))
+  );
 }
 
 export function shouldRunSemanticResponseGate(
@@ -727,6 +775,18 @@ export async function runSemanticResponseGate(
         response: input.draft,
         outcome: 'accepted',
         reason: 'audit_passed',
+        revisionAttempts: 0,
+        audit,
+      });
+    }
+    if (
+      options.stopAfterFreshGroundingFailure === true &&
+      isExclusivelyFreshGroundingFailure(audit)
+    ) {
+      return finish({
+        response: input.draft,
+        outcome: 'fail_open',
+        reason: 'fresh_grounding_rejected',
         revisionAttempts: 0,
         audit,
       });

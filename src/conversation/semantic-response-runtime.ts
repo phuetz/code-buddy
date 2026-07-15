@@ -68,6 +68,7 @@ const SAFE_GATE_REASONS = new Set<SemanticResponseGateReason>([
   'critic_uncertain',
   'critic_invalid',
   'critic_failed',
+  'fresh_grounding_rejected',
   'revision_failed',
   'revision_empty',
   'revision_rejected',
@@ -303,6 +304,9 @@ export async function reviewSemanticResponse(
       },
       {
         timeoutMs: provider.timeoutMs,
+        ...(profile === 'factual_analytical' && input.evidence?.trim()
+          ? { stopAfterFreshGroundingFailure: true }
+          : {}),
         ...(input.signal ? { signal: input.signal } : {}),
       }
     );

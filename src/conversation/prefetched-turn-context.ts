@@ -27,6 +27,8 @@ export interface PrefetchedTurnContext {
   text: string;
   citations: FreshContextCitation[];
   promptGuidance: string;
+  /** Compact public evidence for an optional second-model review. */
+  semanticReviewEvidence?: string;
 }
 
 export interface ResolvePrefetchedTurnContextOptions {
@@ -42,10 +44,17 @@ export interface ResolvePrefetchedTurnContextOptions {
  * precise location; date needs no external evidence bundle.
  */
 export function semanticReviewEvidenceFromPrefetch(
-  context: Pick<PrefetchedTurnContext, 'kind' | 'promptGuidance'> | null | undefined,
+  context:
+    | Pick<PrefetchedTurnContext, 'kind' | 'promptGuidance' | 'semanticReviewEvidence'>
+    | null
+    | undefined,
 ): string | undefined {
   if (context?.kind !== 'news') return undefined;
-  const evidence = context.promptGuidance.trim();
+  // The answering model needs the defensive wrapper and instructions in
+  // `promptGuidance`. A semantic critic only needs the public source data.
+  // Avoid charging a second model for the same wrapper and prose again.
+  const evidence =
+    context.semanticReviewEvidence?.trim() || context.promptGuidance.trim();
   return evidence || undefined;
 }
 
@@ -147,6 +156,7 @@ export function resolvePrefetchedTurnContext(
   let text = match.answer;
   let citations: FreshContextCitation[] = [];
   let fetchedAt = match.entry.at;
+  let semanticReviewEvidence: string | undefined;
   if (match.entry.context?.kind === 'news') {
     fetchedAt = match.entry.context.fetchedAt;
     const formatted = formatNewsDigest(match.entry.context, {
@@ -156,6 +166,9 @@ export function resolvePrefetchedTurnContext(
     speech = formatted.speech || speech;
     text = formatted.text || text;
     citations = formatted.citations;
+    semanticReviewEvidence = safeJson(
+      newsEvidence(match.entry.context, citations),
+    );
   }
 
   return {
@@ -168,6 +181,7 @@ export function resolvePrefetchedTurnContext(
     text,
     citations,
     promptGuidance: buildPromptGuidance(match, fetchedAt, text, citations),
+    ...(semanticReviewEvidence ? { semanticReviewEvidence } : {}),
   };
 }
 

@@ -214,6 +214,50 @@ describe('semantic response runtime', () => {
     });
   });
 
+  it('enables the one-audit grounding fallback only for factual responses with evidence', async () => {
+    const runGate = vi.fn(async (input: { draft: string }) => ({
+      response: input.draft,
+      outcome: 'accepted' as const,
+      reason: 'audit_passed' as const,
+      revisionAttempts: 0 as const,
+    }));
+    const { client } = chatClient([]);
+    const result = await reviewSemanticResponse(
+      {
+        request: 'Quelles sont les actualités importantes aujourd’hui ?',
+        draft: 'Un bulletin daté et sourcé.',
+        profile: 'factual_analytical',
+        evidence: '{"url":"https://example.test/source"}',
+      },
+      {
+        resolveProvider: () => ({
+          task: 'semantic_review',
+          provider: 'openrouter',
+          label: 'OpenRouter',
+          apiMode: 'openai-compatible',
+          authMode: 'api-key',
+          apiKey: 'key',
+          baseURL: 'https://openrouter.ai/api/v1',
+          defaultModel: 'openrouter/free',
+          source: 'override',
+          model: 'openrouter/free',
+          timeoutMs: 12_000,
+          providerSetting: 'openrouter',
+        }),
+        createClient: () => client,
+        runGate,
+      },
+      { enabled: true, env: { NODE_ENV: 'test' } },
+    );
+
+    expect(result.outcome).toBe('accepted');
+    expect(runGate).toHaveBeenCalledTimes(1);
+    expect(runGate.mock.calls[0]?.[2]).toMatchObject({
+      timeoutMs: 12_000,
+      stopAfterFreshGroundingFailure: true,
+    });
+  });
+
   it('sanitizes model-internal tokens from the single revised answer', async () => {
     const { client } = chatClient([
       rejectedCritique(),

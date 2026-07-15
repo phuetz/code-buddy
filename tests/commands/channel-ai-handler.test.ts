@@ -30,6 +30,7 @@ const hoisted = vi.hoisted(() => {
     setRecoverySessionId: vi.fn(),
     getChatHistory: vi.fn(),
     replaceLastAssistantResponse: vi.fn(),
+    recordTrustedExternalConversationTurn: vi.fn(),
     suspendTranscriptSnapshots: vi.fn(),
     resumeTranscriptSnapshots: vi.fn(),
     dispose: vi.fn(),
@@ -82,6 +83,7 @@ vi.mock('../../src/agent/codebuddy-agent.js', () => {
     }
     processUserMessage = hoisted.processUserMessage;
     replaceLastAssistantResponse = hoisted.replaceLastAssistantResponse;
+    recordTrustedExternalConversationTurn = hoisted.recordTrustedExternalConversationTurn;
     suspendTranscriptSnapshots = hoisted.suspendTranscriptSnapshots;
     resumeTranscriptSnapshots = hoisted.resumeTranscriptSnapshots;
     dispose = hoisted.dispose;
@@ -196,6 +198,7 @@ describe('registerAIMessageHandler inbound roundtrip (GAP-7)', () => {
         return true;
       },
     );
+    hoisted.recordTrustedExternalConversationTurn.mockReturnValue(true);
     hoisted.managerSend.mockResolvedValue({ success: true, timestamp: new Date() });
     hoisted.resolveProviderFromEnv.mockReturnValue({
       apiKey: 'test-key',
@@ -1032,11 +1035,10 @@ describe('registerAIMessageHandler inbound roundtrip (GAP-7)', () => {
     }
   });
 
-  it('delivers a sourced prefetched bulletin when the provider fails on direct news', async () => {
+  it('delivers a sourced prefetched bulletin without invoking the provider or semantic gate', async () => {
     const directory = mkdtempSync(join(tmpdir(), 'codebuddy-channel-news-fallback-'));
     const cachePath = join(directory, 'cache.json');
     const itemsPath = join(directory, 'items.json');
-    const rawFailure = 'Sorry, I encountered an error: provider unavailable.';
     process.env.CODEBUDDY_CONVERSATION_CHANNEL = 'telegram';
     process.env.CODEBUDDY_CONVERSATION_CHANNEL_ID = 'chan-42';
     process.env.CODEBUDDY_PREFETCH_CACHE_FILE = cachePath;
@@ -1068,14 +1070,6 @@ describe('registerAIMessageHandler inbound roundtrip (GAP-7)', () => {
       ],
       cachePath,
     );
-    hoisted.processUserMessage.mockResolvedValue([
-      { role: 'assistant', content: rawFailure },
-    ]);
-    hoisted.getChatHistory.mockReturnValue([
-      { type: 'user', content: 'Quelles sont les actualités ?', timestamp: new Date() },
-      { type: 'assistant', content: rawFailure, timestamp: new Date() },
-    ]);
-
     try {
       const manager = makeManager();
       await registerAIMessageHandler(manager as any);
@@ -1090,11 +1084,11 @@ describe('registerAIMessageHandler inbound roundtrip (GAP-7)', () => {
         .join('\n');
       expect(delivered).toContain('Lyon publie des mesures horaires');
       expect(delivered).toContain('https://example.test/lyon-air');
-      expect(delivered).not.toContain('provider unavailable');
-      expect(delivered).not.toContain("Je n'ai pas réussi");
-      expect(hoisted.replaceLastAssistantResponse).toHaveBeenCalledWith(
-        rawFailure,
-        expect.stringContaining('Lyon publie des mesures horaires'),
+      expect(hoisted.processUserMessage).not.toHaveBeenCalled();
+      expect(hoisted.reviewSemanticResponse).not.toHaveBeenCalled();
+      expect(hoisted.recordTrustedExternalConversationTurn).toHaveBeenCalledWith(
+        'Quelles sont les actualités ?',
+        expect.stringContaining('https://example.test/lyon-air'),
       );
     } finally {
       rmSync(directory, { recursive: true, force: true });
@@ -1169,7 +1163,10 @@ describe('registerAIMessageHandler inbound roundtrip (GAP-7)', () => {
       await registerAIMessageHandler(manager as any);
       const send = makeSuccessfulSend();
       await manager.emit(
-        makeMessage('Quelles sont les actualités ?', 'sess-news-grounding'),
+        makeMessage(
+          'Quelles sont les actualités, et pourquoi celle de Lyon compte-t-elle ?',
+          'sess-news-grounding',
+        ),
         { type: 'telegram', send },
       );
 

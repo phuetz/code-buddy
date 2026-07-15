@@ -206,6 +206,84 @@ describe('semantic response gate', () => {
     expect(revise).toHaveBeenCalledTimes(1);
   });
 
+  it('stops after one audit for an exclusively ungrounded fresh answer when a grounded fallback exists', async () => {
+    const critic = vi.fn(async () =>
+      critique({
+        dimensions: { supportQuality: 0.3, evidenceGrounding: 0.1 },
+        failedObligationIds: ['source_fresh_facts'],
+        issueCodes: ['ungrounded_fresh_claim', 'unsupported_claim'],
+      }),
+    );
+    const revise = vi.fn();
+    const result = await runSemanticResponseGate(
+      makeInput({
+        request: 'Quelles sont les actualités importantes aujourd’hui ?',
+        plan: makePlan({
+          depth: 'developed',
+          act: 'fresh_information',
+          moves: ['direct_answer', 'evidence', 'significance'],
+        }),
+        obligations: [
+          { kind: 'source_fresh_facts', mode: 'required' },
+          {
+            kind: 'express_uncertainty',
+            mode: 'conditional',
+            when: 'fresh_context_unavailable',
+          },
+        ],
+        evidence: '{"title":"Titre vérifié","url":"https://example.test/source"}',
+        history: [
+          { role: 'user', content: 'HISTORIQUE_INUTILE' },
+          { role: 'assistant', content: 'ANCIENNE_REPONSE_INUTILE' },
+        ],
+      }),
+      { critic, revise },
+      { stopAfterFreshGroundingFailure: true },
+    );
+
+    expect(result).toMatchObject({
+      response: ORIGINAL_DRAFT,
+      outcome: 'fail_open',
+      reason: 'fresh_grounding_rejected',
+      revisionAttempts: 0,
+    });
+    expect(critic).toHaveBeenCalledTimes(1);
+    expect(revise).not.toHaveBeenCalled();
+    const criticPrompt = String(critic.mock.calls[0]?.[0]?.userPrompt ?? '');
+    expect(criticPrompt).toContain('https://example.test/source');
+    expect(criticPrompt).not.toContain('HISTORIQUE_INUTILE');
+    expect(criticPrompt).not.toContain('ANCIENNE_REPONSE_INUTILE');
+  });
+
+  it('keeps revision and independent verification for non-grounding defects on fresh answers', async () => {
+    const critic = vi
+      .fn()
+      .mockResolvedValueOnce(
+        critique({
+          dimensions: { logicalCoherence: 0.1 },
+          issueCodes: ['non_sequitur'],
+        }),
+      )
+      .mockResolvedValueOnce(critique({ dimensions: { evidenceGrounding: 0.95 } }));
+    const revise = vi.fn(async () => 'Analyse fraîche corrigée et sourcée.');
+    const result = await runSemanticResponseGate(
+      makeInput({
+        plan: makePlan({ depth: 'developed', act: 'fresh_information' }),
+        evidence: '{"url":"https://example.test/source"}',
+      }),
+      { critic, revise },
+      { stopAfterFreshGroundingFailure: true },
+    );
+
+    expect(result).toMatchObject({
+      outcome: 'revised',
+      reason: 'revision_completed',
+      revisionAttempts: 1,
+    });
+    expect(critic).toHaveBeenCalledTimes(2);
+    expect(revise).toHaveBeenCalledTimes(1);
+  });
+
   it('keeps the original draft when the one revision is still semantic nonsense', async () => {
     const critic = vi
       .fn()

@@ -1243,6 +1243,28 @@ Look at the screenshot and find the element matching the user's intent. Output o
     return true;
   }
 
+  /**
+   * Record a deterministic response produced by a trusted local companion
+   * source (for example a dated prefetch digest) without invoking the LLM.
+   * Both projections are updated together so persistence and later follow-ups
+   * see exactly what the person received.
+   */
+  recordTrustedExternalConversationTurn(
+    userContent: string,
+    assistantContent: string,
+  ): boolean {
+    const user = userContent.trim();
+    const assistant = assistantContent.trim();
+    if (!user || !assistant) return false;
+    const now = new Date();
+    this.chatHistory.push({ type: 'user', content: user, timestamp: now });
+    this.chatHistory.push({ type: 'assistant', content: assistant, timestamp: now });
+    this.messages.push({ role: 'user', content: user });
+    this.messages.push({ role: 'assistant', content: assistant });
+    this.trimHistory();
+    return true;
+  }
+
   async *processUserMessageStream(
     message: string,
     options: {
