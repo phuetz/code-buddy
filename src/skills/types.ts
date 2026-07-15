@@ -39,6 +39,10 @@ export interface SkillMetadata {
   imported?: boolean;
   /** Provenance: label of the source it was imported from (e.g. "hermes"). */
   source?: string;
+  /** Signed exchange provenance marker. */
+  exchange?: boolean;
+  /** ISO timestamp recorded by the signed exchange installer. */
+  installedAt?: string;
 }
 
 export interface SkillRequirements {

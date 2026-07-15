@@ -120,6 +120,8 @@ function parseMetadata(yamlContent: string, sourcePath: string): SkillMetadata {
       pinned: parsed.pinned === true,
       imported: parsed.imported === true,
       source: parsed.source as string | undefined,
+      exchange: parsed.exchange === true,
+      installedAt: parsed.installedAt as string | undefined,
     };  } catch (error) {
     throw new Error(
       `Failed to parse YAML frontmatter in ${sourcePath}: ${error instanceof Error ? error.message : String(error)}`

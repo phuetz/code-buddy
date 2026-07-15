@@ -16,7 +16,8 @@ import { logger } from '../utils/logger.js';
 
 export interface SkillSource {
   name: string;
-  type: 'dir' | 'git';
+  /** Exchange registries are local directories in P0 (no network access). */
+  type: 'dir' | 'exchange' | 'git';
   location: string;
 }
 
@@ -77,7 +78,11 @@ export function getSource(name: string): SkillSource | undefined {
   return read().sources.find((s) => s.name === name);
 }
 
-export function addSource(name: string, location: string, type: 'dir' | 'git' = location.endsWith('.git') || location.includes('://') ? 'git' : 'dir'): SkillSource {
+export function addSource(
+  name: string,
+  location: string,
+  type: 'dir' | 'exchange' | 'git' = location.endsWith('.git') || location.includes('://') ? 'git' : 'dir',
+): SkillSource {
   const file = read();
   const source: SkillSource = { name, type, location };
   file.sources = file.sources.filter((s) => s.name !== name);
@@ -97,7 +102,7 @@ export function removeSource(name: string): boolean {
 
 /** Resolve a source to a local directory (clone/pull a git source into the cache). */
 export function resolveSourceDir(source: SkillSource): string {
-  if (source.type === 'dir') return source.location;
+  if (source.type === 'dir' || source.type === 'exchange') return source.location;
   // git: shallow clone or pull into the cache.
   const dir = path.join(cacheRoot(), source.name);
   fs.mkdirSync(cacheRoot(), { recursive: true });

@@ -863,6 +863,80 @@ export function registerSkillsCommands(program: Command): void {
       console.log(items.length ? items.map((s) => `  ${s.pinned ? '📌' : '  '} ${s.name}${s.source ? ` (source: ${s.source})` : ''}`).join('\n') : 'No imported skills');
     });
 
+  // ── Signed skill exchange (local-only, explicit env opt-in) ───────────────
+  const exchange = skills
+    .command('exchange')
+    .description('Export, verify and install locally signed skill packages');
+
+  exchange
+    .command('export <name>')
+    .description('Export an authored or bundled skill as a signed package')
+    .option('--out <dir>', 'package registry/output directory', path.join(process.cwd(), 'skill-exchange'))
+    .option('--json', 'output JSON')
+    .action(async (name: string, opts: { json?: boolean; out: string }) => {
+      const { exportSkill } = await import('../../skills/skill-exchange.js');
+      const manifest = exportSkill(name, expandHome(opts.out));
+      const packagePath = path.resolve(expandHome(opts.out), name);
+      if (opts.json) {
+        console.log(JSON.stringify({ manifest, path: packagePath }, null, 2));
+        return;
+      }
+      console.log(`Exported ${manifest.name} v${manifest.version} → ${packagePath}`);
+      console.log(`Author: ${manifest.author}`);
+    });
+
+  exchange
+    .command('install <dir>')
+    .description('Verify and install a signed skill package')
+    .option('--trust', 'explicitly trust an unknown author key (TOFU)')
+    .option('--json', 'output JSON')
+    .action(async (dir: string, opts: { json?: boolean; trust?: boolean }) => {
+      const { installSkill } = await import('../../skills/skill-exchange.js');
+      const result = installSkill(expandHome(dir), { trust: opts.trust === true });
+      if (opts.json) {
+        console.log(JSON.stringify(result, null, 2));
+        return;
+      }
+      console.log(`Installed ${result.name} v${result.version} from author ${result.author}`);
+    });
+
+  exchange
+    .command('verify <dir>')
+    .description('Verify a signed package without installing it')
+    .option('--json', 'output JSON')
+    .action(async (dir: string, opts: { json?: boolean }) => {
+      const { verifySkill } = await import('../../skills/skill-exchange.js');
+      const result = verifySkill(expandHome(dir));
+      if (opts.json) {
+        console.log(JSON.stringify(result, null, 2));
+        return;
+      }
+      console.log(`Valid signed package: ${result.name} v${result.version}`);
+      console.log(`Author: ${result.author} (${result.trusted ? 'trusted' : 'not trusted'})`);
+    });
+
+  exchange
+    .command('keys')
+    .description('Show the local public key and trusted exchange author keys')
+    .option('--json', 'output JSON')
+    .action(async (opts: { json?: boolean }) => {
+      const exchangeModule = await import('../../skills/skill-exchange.js');
+      if (!exchangeModule.isSkillExchangeEnabled()) {
+        throw new Error(`Skill exchange is disabled; set ${exchangeModule.SKILL_EXCHANGE_ENV}=true to opt in`);
+      }
+      const signing = await import('../../skills/skill-signing.js');
+      const local = { id: signing.getPublicKeyId(), publicKey: signing.getPublicKey() };
+      const trusted = exchangeModule.listTrustedKeys();
+      if (opts.json) {
+        console.log(JSON.stringify({ local, trusted }, null, 2));
+        return;
+      }
+      console.log(`Local public key (${local.id}):\n${local.publicKey.trim()}`);
+      console.log(trusted.length
+        ? `Trusted keys:\n${trusted.map((key) => `  ${key.id}  trusted ${key.trustedAt}`).join('\n')}`
+        : 'Trusted keys: none');
+    });
+
   const sources = skills.command('sources').description('Manage skill sources (the import referential)');
   sources
     .command('list')
@@ -878,11 +952,11 @@ export function registerSkillsCommands(program: Command): void {
     });
   sources
     .command('add <name> <location>')
-    .description('Register a skill source (a local dir or a git url)')
-    .option('--type <type>', "'dir' or 'git'")
-    .action(async (name: string, location: string, opts: { type?: 'dir' | 'git' }) => {
+    .description('Register a skill source (local dir, local exchange registry, or git url)')
+    .option('--type <type>', "'dir', 'exchange', or 'git'")
+    .action(async (name: string, location: string, opts: { type?: string }) => {
       const { addSource } = await import('../../skills/skill-sources.js');
-      const src = addSource(name, location, opts.type);
+      const src = addSource(name, location, parseSkillSourceType(opts.type));
       console.log(`Added source ${src.name} [${src.type}] → ${src.location}`);
     });
   sources
@@ -891,6 +965,18 @@ export function registerSkillsCommands(program: Command): void {
       const { removeSource } = await import('../../skills/skill-sources.js');
       console.log(removeSource(name) ? `Removed source ${name}` : `No such source: ${name}`);
     });
+}
+
+function expandHome(value: string): string {
+  return value === '~' || value.startsWith(`~${path.sep}`)
+    ? path.join(os.homedir(), value.slice(2))
+    : value;
+}
+
+function parseSkillSourceType(value?: string): 'dir' | 'exchange' | 'git' | undefined {
+  if (value === undefined) return undefined;
+  if (value === 'dir' || value === 'exchange' || value === 'git') return value;
+  throw new Error(`Invalid skill source type '${value}'. Use dir, exchange, or git.`);
 }
 
 async function toggleSkill(
