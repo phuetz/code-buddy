@@ -15,7 +15,12 @@
  * @module companion/orchestrator
  */
 
-export type CompanionSurface = 'arrival' | 'presence' | 'proactive' | 'reminder';
+export type CompanionSurface =
+  | 'arrival'
+  | 'presence'
+  | 'proactive'
+  | 'reminder'
+  | 'error-watch';
 
 export interface Conductor {
   /** May `surface` speak now? Records the grant (so the next claimant waits out the gap). */

@@ -1364,6 +1364,18 @@ export async function startServer(userConfig: Partial<ServerConfig> = {}): Promi
               logger.warn('Sensory screen reaction NOT enabled: set CODEBUDDY_SENSORY_TOKEN.');
             }
           }
+          // Perceptive pair (opt-in) — existing screen text/keyframes → one
+          // conductor-arbitrated local voice suggestion. No capture, agent turn,
+          // edit or remote notification is performed.
+          if (process.env.CODEBUDDY_SENSORY_ERRORWATCH === 'true') {
+            const { wireErrorWatchReaction } = await import(
+              '../sensory/error-watch-reaction.js'
+            );
+            sensoryTeardown.push(wireErrorWatchReaction());
+            logger.info(
+              'Sensory error watch: Enabled (screen error → local voice suggestion)',
+            );
+          }
           // Speech reaction (opt-in) — speech_end → STT → 'hearing' percept (+ onHeard hook).
           // With CODEBUDDY_SENSORY_SPEAK=true the loop closes: STT → think (local $0) → speak (Piper).
           if (process.env.CODEBUDDY_SENSORY_SPEECH === 'true') {
