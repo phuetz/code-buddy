@@ -32,6 +32,7 @@ import { BaseTool, ParameterDefinition } from './base-tool.js';
 import { ToolResult } from '../types/index.js';
 import { logger } from '../utils/logger.js';
 import { WorkspaceIsolation } from '../workspace/workspace-isolation.js';
+import { maybeReviewGatedWrite } from './review-gate-helper.js';
 
 // ============================================================================
 // Types
@@ -500,26 +501,18 @@ export class ApplyPatchTool extends BaseTool {
         return this.error('No valid operations found in patch.');
       }
 
-      // Diff-review gate (CODEBUDDY_DIFF_REVIEW=static|full, default off).
-      // The env check is inlined so the off path never loads the review
-      // module graph (lazy-loading is load-bearing in this repo) — keep in
-      // sync with resolveReviewMode() in src/review/review-engine.ts.
+      // Shared write gates. Their heavy module graphs remain dynamically
+      // loaded by review-gate-helper; both env vars off keeps this legacy path.
       const rawMode = (process.env.CODEBUDDY_DIFF_REVIEW ?? 'off').toLowerCase();
-      if (rawMode === 'static' || rawMode === 'full') {
-        return await this.executeGated(ops, rawMode, typeof input.intent === 'string' ? input.intent : undefined, cwd);
+      if (
+        rawMode === 'static'
+        || rawMode === 'full'
+        || process.env.CODEBUDDY_SHADOW_WORKSPACE === 'true'
+      ) {
+        return await this.executeGated(ops, typeof input.intent === 'string' ? input.intent : undefined, cwd);
       }
 
-      const patchResult = applyPatchOps(ops, cwd ?? process.cwd());
-      const lines: string[] = [];
-      if (patchResult.filesAdded.length > 0) lines.push(`Added: ${patchResult.filesAdded.join(', ')}`);
-      if (patchResult.filesDeleted.length > 0) lines.push(`Deleted: ${patchResult.filesDeleted.join(', ')}`);
-      if (patchResult.filesUpdated.length > 0) lines.push(`Updated: ${patchResult.filesUpdated.join(', ')}`);
-      if (patchResult.errors.length > 0) lines.push(`Errors: ${patchResult.errors.join('; ')}`);
-      logger.debug(`apply_patch: +${patchResult.filesAdded.length} -${patchResult.filesDeleted.length} ~${patchResult.filesUpdated.length} !${patchResult.errors.length}`);
-      const onlyLine = lines[0];
-      return patchResult.errors.length > 0 && lines.length === 1 && onlyLine !== undefined
-        ? this.error(onlyLine)
-        : this.success(lines.join('\n'));
+      return this.executeLegacy(ops, cwd);
     } catch (err) {
       return this.error(`Patch failed: ${err instanceof Error ? err.message : String(err)}`);
     }
@@ -532,26 +525,44 @@ export class ApplyPatchTool extends BaseTool {
    * comes back as a tool ERROR carrying the annotations, so the agent can
    * revise the patch instead of silently losing the edit.
    */
-  private async executeGated(ops: FileOp[], mode: 'static' | 'full', intent?: string, baseCwd?: string): Promise<ToolResult> {
+  private async executeGated(ops: FileOp[], intent?: string, baseCwd?: string): Promise<ToolResult> {
     const cwd = baseCwd ?? process.cwd();
     const { changes, errors } = computePatchedFiles(ops, cwd);
+    const gateLabel = process.env.CODEBUDDY_SHADOW_WORKSPACE === 'true' ? 'write gate' : 'review gate';
     if (errors.length > 0) {
-      return this.error(`review gate: patch does not resolve against the working tree (fail-closed, nothing applied):\n${errors.join('\n')}`);
+      return this.error(`${gateLabel}: patch does not resolve against the working tree (fail-closed, nothing applied):\n${errors.join('\n')}`);
     }
     if (changes.length === 0) {
-      return this.error('review gate: patch resolves to no effective change.');
+      return this.error(`${gateLabel}: patch resolves to no effective change.`);
     }
-    const { reviewGatedWrite } = await import('../review/write-gate.js');
-    const outcome = await reviewGatedWrite(
-      {
-        changes,
-        cwd,
-        intent: intent ?? `apply_patch (${ops.length} operation${ops.length > 1 ? 's' : ''})`,
-        originLabel: 'apply_patch',
-      },
-      { mode },
-    );
-    logger.debug(`apply_patch review gate: ${outcome.ok ? 'applied' : 'blocked'} (${mode})`);
-    return outcome.ok ? this.success(outcome.summary) : this.error(outcome.summary);
+    const gate = await maybeReviewGatedWrite({
+      changes,
+      baseDirectory: cwd,
+      intent: intent ?? `apply_patch (${ops.length} operation${ops.length > 1 ? 's' : ''})`,
+      originLabel: 'apply_patch',
+    });
+    if (gate.gated && !gate.ok) {
+      logger.debug('apply_patch write gate: blocked');
+      return this.error(gate.error);
+    }
+    if (gate.gated && gate.ok) {
+      logger.debug('apply_patch write gate: applied');
+      return this.success(gate.summary);
+    }
+    return this.executeLegacy(ops, cwd);
+  }
+
+  private executeLegacy(ops: FileOp[], cwd?: string): ToolResult {
+    const patchResult = applyPatchOps(ops, cwd ?? process.cwd());
+    const lines: string[] = [];
+    if (patchResult.filesAdded.length > 0) lines.push(`Added: ${patchResult.filesAdded.join(', ')}`);
+    if (patchResult.filesDeleted.length > 0) lines.push(`Deleted: ${patchResult.filesDeleted.join(', ')}`);
+    if (patchResult.filesUpdated.length > 0) lines.push(`Updated: ${patchResult.filesUpdated.join(', ')}`);
+    if (patchResult.errors.length > 0) lines.push(`Errors: ${patchResult.errors.join('; ')}`);
+    logger.debug(`apply_patch: +${patchResult.filesAdded.length} -${patchResult.filesDeleted.length} ~${patchResult.filesUpdated.length} !${patchResult.errors.length}`);
+    const onlyLine = lines[0];
+    return patchResult.errors.length > 0 && lines.length === 1 && onlyLine !== undefined
+      ? this.error(onlyLine)
+      : this.success(lines.join('\n'));
   }
 }

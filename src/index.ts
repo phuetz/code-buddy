@@ -3345,6 +3345,17 @@ addLazyCommand(
   },
 );
 
+// Speculative shadow-workspace diagnostics
+addLazyCommand(
+  program,
+  'shadow',
+  'Inspect or run speculative validation in the persistent shadow worktree',
+  async () => {
+    const { createShadowCommand } = await import('./commands/shadow.js');
+    return createShadowCommand();
+  },
+);
+
 // Knowledge base management — add, list, show, search, remove, context
 addLazyCommand(
   program,
