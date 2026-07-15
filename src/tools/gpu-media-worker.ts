@@ -66,6 +66,7 @@ export interface GpuMediaWorkerDeps {
 
 const JOB_ID_PATTERN = /^[A-Za-z0-9._-]{1,128}$/;
 const DEFAULT_TIMEOUT_MS = 15_000;
+const ARTIFACT_LIMIT = 512 * 1024 * 1024;
 
 function hasControlCharacters(value: string): boolean {
   return [...value].some((character) => {
@@ -328,6 +329,57 @@ export class GpuMediaWorkerClient {
     const id = requiredText(jobId, 'job_id', 128);
     if (!JOB_ID_PATTERN.test(id)) throw new Error('job_id contains invalid characters');
     return parseJob(await this.request(`/v1/jobs/${encodeURIComponent(id)}`, { method: 'DELETE' }));
+  }
+
+  async downloadArtifact(jobId: string, artifactName = 'avatar.mp4'): Promise<Uint8Array> {
+    const id = requiredText(jobId, 'job_id', 128);
+    if (!JOB_ID_PATTERN.test(id)) throw new Error('job_id contains invalid characters');
+    if (artifactName !== 'avatar.mp4') throw new Error('artifact_name must be avatar.mp4');
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), this.timeoutMs);
+    try {
+      const basePath = this.baseUrl.pathname === '/' ? '' : this.baseUrl.pathname;
+      const pathname = `${basePath}/v1/jobs/${encodeURIComponent(id)}/artifacts/avatar.mp4`;
+      const response = await this.fetchFn(new URL(pathname, this.baseUrl), {
+        headers: {
+          accept: 'video/mp4',
+          ...(this.config.token ? { authorization: `Bearer ${this.config.token}` } : {}),
+        },
+        signal: controller.signal,
+      });
+      if (!response.ok) {
+        let message = `HTTP ${response.status}`;
+        try {
+          const data = (await response.json()) as unknown;
+          const workerError =
+            data && typeof data === 'object'
+              ? (data as Record<string, unknown>).error
+              : undefined;
+          if (typeof workerError === 'string') {
+            message = workerError;
+          }
+        } catch {
+          // Keep the bounded HTTP status fallback for a non-JSON proxy response.
+        }
+        throw new Error(`GPU worker artifact request failed: ${message}`);
+      }
+      const declaredSize = Number(response.headers.get('content-length'));
+      if (!Number.isFinite(declaredSize) || declaredSize <= 0 || declaredSize > ARTIFACT_LIMIT) {
+        throw new Error('GPU worker artifact has an invalid content length');
+      }
+      const bytes = new Uint8Array(await response.arrayBuffer());
+      if (bytes.byteLength !== declaredSize || bytes.byteLength > ARTIFACT_LIMIT) {
+        throw new Error('GPU worker artifact length does not match the response');
+      }
+      return bytes;
+    } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') {
+        throw new Error(`GPU worker artifact request timed out after ${this.timeoutMs} ms`);
+      }
+      throw error;
+    } finally {
+      clearTimeout(timer);
+    }
   }
 }
 

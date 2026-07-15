@@ -1,4 +1,5 @@
-import { readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { dirname, join } from 'node:path';
 
 const requestPath = process.argv.at(-1);
 const resultPath = process.env.CODEBUDDY_GPU_JOB_RESULT;
@@ -19,6 +20,11 @@ if (request.payload?.sceneId?.includes('failure')) {
 }
 if (request.payload?.prompt?.includes('[delay]')) {
   await new Promise((resolve) => setTimeout(resolve, 2_000));
+}
+if (request.kind === 'avatar_video_render') {
+  const artifactDirectory = join(dirname(requestPath), 'artifacts');
+  await mkdir(artifactDirectory, { recursive: true });
+  await writeFile(join(artifactDirectory, 'avatar.mp4'), 'synthetic-avatar-video');
 }
 await writeFile(
   resultPath,

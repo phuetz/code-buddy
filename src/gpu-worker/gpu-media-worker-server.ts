@@ -2,8 +2,9 @@
 
 import { spawn as realSpawn, type ChildProcessWithoutNullStreams } from 'child_process';
 import { timingSafeEqual, randomUUID } from 'crypto';
+import { createReadStream } from 'fs';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'http';
-import { mkdir, readFile, readdir, realpath, writeFile } from 'fs/promises';
+import { mkdir, readFile, readdir, realpath, stat, writeFile } from 'fs/promises';
 import { isAbsolute, join, relative, resolve } from 'path';
 import {
   parseAvatarVideoPayload,
@@ -55,6 +56,7 @@ export interface GpuMediaWorkerServer {
 
 const BODY_LIMIT = 1024 * 1024;
 const LOG_LIMIT = 1024 * 1024;
+const ARTIFACT_LIMIT = 512 * 1024 * 1024;
 const JOB_ID_PATTERN = /^[A-Za-z0-9._-]{1,128}$/;
 const PROGRESS_LINE_PATTERN = /^CODEBUDDY_PROGRESS\s+([0-9]+(?:\.[0-9]+)?)\s*(.*)$/u;
 
@@ -443,6 +445,42 @@ export function createGpuMediaWorkerServer(
         }
         const job = await submit(input.kind, input.payload);
         json(response, 202, publicJob(job));
+        return;
+      }
+      const artifactMatch = url.pathname.match(
+        /^\/v1\/jobs\/([A-Za-z0-9._-]{1,128})\/artifacts\/(avatar\.mp4)$/u
+      );
+      if (request.method === 'GET' && artifactMatch) {
+        const id = artifactMatch[1]!;
+        const artifactName = artifactMatch[2]!;
+        const job = jobs.get(id);
+        if (!job) {
+          json(response, 404, { error: 'job not found' });
+          return;
+        }
+        if (job.kind !== 'avatar_video_render' || job.status !== 'succeeded') {
+          json(response, 409, { error: 'avatar artifact is not ready' });
+          return;
+        }
+        const directory = await realpath(jobDir(id));
+        const artifactPath = await realpath(join(directory, 'artifacts', artifactName));
+        if (!isWithin(artifactPath, directory)) {
+          throw new Error('artifact resolves outside its job directory');
+        }
+        const artifactStat = await stat(artifactPath);
+        if (!artifactStat.isFile() || artifactStat.size <= 0 || artifactStat.size > ARTIFACT_LIMIT) {
+          throw new Error('artifact is empty, invalid, or exceeds 512 MiB');
+        }
+        response.writeHead(200, {
+          'content-type': 'video/mp4',
+          'content-length': artifactStat.size,
+          'content-disposition': 'attachment; filename="avatar.mp4"',
+          'cache-control': 'no-store',
+          'x-content-type-options': 'nosniff',
+        });
+        const stream = createReadStream(artifactPath);
+        stream.once('error', () => response.destroy());
+        stream.pipe(response);
         return;
       }
       const match = url.pathname.match(/^\/v1\/jobs\/([A-Za-z0-9._-]{1,128})$/u);

@@ -71,9 +71,15 @@ The worker implements four JSON endpoints:
 | `POST` | `/v1/jobs` | Submit a validated job |
 | `GET` | `/v1/jobs/:id` | Read status, progress and output manifest |
 | `DELETE` | `/v1/jobs/:id` | Request cancellation |
+| `GET` | `/v1/jobs/:id/artifacts/avatar.mp4` | Download a completed avatar video |
 
 `/v1/capabilities` reports `protocolVersion: 1`; clients fail closed on an unknown
 version instead of guessing a payload shape.
+
+Avatar MP4 transfer uses the same bearer authentication. The worker serves only the
+fixed `avatar.mp4` name from a successful job, resolves the canonical path back inside
+that job directory, rejects empty files and caps responses at 512 MiB. The client checks
+the declared and received lengths before exposing the bytes to a channel adapter.
 
 Job states are `queued`, `running`, `succeeded`, `failed`, or `cancelled`. A worker must
 serialize incompatible loads: PanoWorld and LongCat must not occupy the same RTX 3090 at

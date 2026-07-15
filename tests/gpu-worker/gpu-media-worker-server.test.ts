@@ -190,6 +190,27 @@ describe('GPU media worker server', () => {
     }
   });
 
+  it('downloads a completed avatar artifact through the authenticated worker', async () => {
+    const context = await fixture();
+    try {
+      const client = new GpuMediaWorkerClient({ baseUrl: context.baseUrl, token: TOKEN });
+      const submitted = await client.submit('avatar_video_render', {
+        turn_id: 'turn-artifact',
+        audio_path: join(context.data, 'audio.wav'),
+        reference_image_path: join(context.data, 'lisa.png'),
+        prompt: 'Lisa répond face caméra.',
+        resolution: '480p',
+      });
+      await expect(waitForTerminal(client, submitted.id)).resolves.toMatchObject({
+        status: 'succeeded',
+      });
+      const artifact = await client.downloadArtifact(submitted.id);
+      expect(Buffer.from(artifact).toString('utf8')).toBe('synthetic-avatar-video');
+    } finally {
+      await context.worker.close();
+    }
+  });
+
   it('reloads completed jobs from the persistent store after restart', async () => {
     const context = await fixture();
     const firstClient = new GpuMediaWorkerClient({ baseUrl: context.baseUrl, token: TOKEN });
