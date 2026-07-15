@@ -25,6 +25,8 @@ export interface StockQuoteToolOptions {
   yahooBaseUrl?: string;
   /** Nasdaq API base (default `https://api.nasdaq.com`). */
   nasdaqBaseUrl?: string;
+  /** CNBC quote API base (default `https://quote.cnbc.com`). */
+  cnbcBaseUrl?: string;
   /** Stooq base (default `https://stooq.com`). */
   stooqBaseUrl?: string;
   /** Euronext Live base (default `https://live.euronext.com`). */
@@ -39,6 +41,7 @@ export interface StockQuoteToolOptions {
 export type StockQuoteProvider =
   | 'Finnhub'
   | 'Yahoo Finance'
+  | 'CNBC'
   | 'Nasdaq'
   | 'Euronext Live'
   | 'Stooq';
@@ -343,6 +346,44 @@ export function parseNasdaqQuote(raw: unknown, symbolInput: string): StockWidget
   };
 }
 
+/** Parse CNBC's public formatted-quote response. Pure. */
+export function parseCnbcQuote(raw: unknown, symbolInput: string): StockWidgetData | null {
+  const quotes = (raw as {
+    FormattedQuoteResult?: { FormattedQuote?: unknown[] };
+  })?.FormattedQuoteResult?.FormattedQuote;
+  if (!Array.isArray(quotes)) return null;
+  const d = quotes.find((item) => {
+    if (!item || typeof item !== 'object') return false;
+    return num((item as Record<string, unknown>).code) === 0;
+  }) as Record<string, unknown> | undefined;
+  const price = usNum(d?.last);
+  if (!d || price == null) return null;
+  const change = usNum(d.change);
+  const changePercent = usNum(d.change_pct);
+  const previousClose = change != null ? round(price - change) : usNum(d.previous_day_closing);
+  const type: StockWidgetData['type'] = d.type === 'INDEX' ? 'market' : 'stock';
+  const name =
+    (typeof d.shortName === 'string' && d.shortName) ||
+    (typeof d.name === 'string' && d.name) ||
+    symbolInput.toUpperCase();
+  return {
+    type,
+    symbol: symbolInput.toUpperCase(),
+    name,
+    price,
+    ...(change != null ? { change } : {}),
+    ...(changePercent != null ? { changePercent } : {}),
+    ...(typeof d.currencyCode === 'string' ? { currency: d.currencyCode } : {}),
+    ...(usNum(d.open) != null ? { open: usNum(d.open)! } : {}),
+    ...(usNum(d.high) != null ? { high: usNum(d.high)! } : {}),
+    ...(usNum(d.low) != null ? { low: usNum(d.low)! } : {}),
+    ...(previousClose != null ? { previousClose } : {}),
+    ...(usNum(d.volume) != null ? { volume: usNum(d.volume)! } : {}),
+    ...(typeof d.exchange === 'string' ? { market: d.exchange } : {}),
+    ...(typeof d.last_timedate === 'string' ? { time: d.last_timedate } : {}),
+  };
+}
+
 /** Parse a Finnhub `/quote` (+ optional `/stock/profile2`) response. Pure. null if unusable. */
 export function parseFinnhubQuote(quote: unknown, profile: unknown, symbolInput: string): StockWidgetData | null {
   const q = (quote ?? {}) as Record<string, unknown>;
@@ -433,6 +474,7 @@ function quoteResult(
 
 export class StockQuoteTool {
   private readonly yahooBaseUrl: string;
+  private readonly cnbcBaseUrl: string;
   private readonly nasdaqBaseUrl: string;
   private readonly stooqBaseUrl: string;
   private readonly euronextBaseUrl: string;
@@ -443,6 +485,8 @@ export class StockQuoteTool {
   constructor(options: StockQuoteToolOptions = {}) {
     this.yahooBaseUrl =
       options.yahooBaseUrl ?? process.env.CODEBUDDY_YAHOO_FINANCE_BASE ?? 'https://query1.finance.yahoo.com';
+    this.cnbcBaseUrl =
+      options.cnbcBaseUrl ?? process.env.CODEBUDDY_CNBC_QUOTE_BASE ?? 'https://quote.cnbc.com';
     this.nasdaqBaseUrl = options.nasdaqBaseUrl ?? process.env.CODEBUDDY_NASDAQ_BASE ?? 'https://api.nasdaq.com';
     this.stooqBaseUrl = options.stooqBaseUrl ?? process.env.CODEBUDDY_STOOQ_BASE ?? 'https://stooq.com';
     this.euronextBaseUrl = options.euronextBaseUrl ?? process.env.CODEBUDDY_EURONEXT_BASE ?? 'https://live.euronext.com';
@@ -498,6 +542,43 @@ export class StockQuoteTool {
       if (data) return quoteResult(data, 'Yahoo Finance', url);
     } catch {
       /* fall through to Nasdaq */
+    }
+
+    // Index fallback ($0): CNBC's public quote cache is independent from
+    // Yahoo's aggressive per-IP rate limit and covers the two US indices in
+    // the default companion briefing.
+    const cnbcSymbols: Record<string, string> = {
+      '^GSPC': '.SPX',
+      '^IXIC': '.IXIC',
+    };
+    const cnbcSymbol = cnbcSymbols[s.toUpperCase()];
+    if (cnbcSymbol) {
+      try {
+        const url = `${this.cnbcBaseUrl}/quote-html-webservice/restQuote/symbolType/symbol`;
+        const resp = await axios.get(url, {
+          timeout: this.timeoutMs,
+          params: {
+            symbols: cnbcSymbol,
+            requestMethod: 'quick',
+            noform: 1,
+            partnerId: 2,
+            fund: 1,
+            exthrs: 1,
+            output: 'json',
+          },
+          headers: { 'User-Agent': UA, Accept: 'application/json' },
+        });
+        const data = parseCnbcQuote(resp.data, s);
+        if (data) {
+          return quoteResult(
+            data,
+            'CNBC',
+            `https://www.cnbc.com/quotes/${encodeURIComponent(cnbcSymbol)}`,
+          );
+        }
+      } catch {
+        /* fall through to Nasdaq/Euronext/Stooq */
+      }
     }
 
     // Fallback ($0, works from datacenter IPs where Yahoo/Stooq block): Nasdaq API.

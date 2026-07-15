@@ -10,6 +10,7 @@ import {
   parseStooqCsv,
   parseFinnhubQuote,
   parseNasdaqQuote,
+  parseCnbcQuote,
   parseEuronextSearch,
   decryptEuronextPayload,
   parseEuronextQuoteHtml,
@@ -47,6 +48,28 @@ const yahooEquity = {
       },
     ],
     error: null,
+  },
+};
+
+const cnbcSp500 = {
+  FormattedQuoteResult: {
+    FormattedQuote: [{
+      symbol: '.SPX',
+      code: 0,
+      name: 'S&P 500 Index',
+      shortName: 'S&P 500',
+      last: '7,543.59',
+      last_timedate: '07/14/26 EDT',
+      type: 'INDEX',
+      exchange: 'INDEX',
+      open: '7,536.70',
+      high: '7,557.44',
+      low: '7,513.23',
+      change: '+28.25',
+      change_pct: '+0.38%',
+      currencyCode: 'USD',
+      volume: '2,804,670,000',
+    }],
   },
 };
 
@@ -209,6 +232,32 @@ describe('parseNasdaqQuote', () => {
   });
 });
 
+describe('parseCnbcQuote', () => {
+  it('parses a public index quote with movement and provider time', () => {
+    const d = parseCnbcQuote(cnbcSp500, '^GSPC')!;
+    expect(d).toMatchObject({
+      type: 'market',
+      symbol: '^GSPC',
+      name: 'S&P 500',
+      price: 7543.59,
+      change: 28.25,
+      changePercent: 0.38,
+      previousClose: 7515.34,
+      currency: 'USD',
+      time: '07/14/26 EDT',
+    });
+    expect(d.high).toBe(7557.44);
+    expect(d.low).toBe(7513.23);
+  });
+
+  it('returns null for a missing or failed quote', () => {
+    expect(parseCnbcQuote({}, '^GSPC')).toBeNull();
+    expect(parseCnbcQuote({
+      FormattedQuoteResult: { FormattedQuote: [{ code: 1, last: '7,543.59' }] },
+    }, '^GSPC')).toBeNull();
+  });
+});
+
 describe('Euronext fallback parsers', () => {
   const search = [
     {
@@ -312,5 +361,29 @@ describe('StockQuoteTool provenance', () => {
       sourceUrl: 'https://finnhub.example.test/api/v1/quote?symbol=AAPL',
     });
     expect(JSON.stringify(result.metadata)).not.toContain('super-secret-token');
+  });
+
+  it('falls back to CNBC for default US indices when Yahoo is rate-limited', async () => {
+    axiosGet
+      .mockRejectedValueOnce(Object.assign(new Error('rate limited'), { response: { status: 429 } }))
+      .mockResolvedValueOnce({ data: cnbcSp500 });
+    const result = await new StockQuoteTool({
+      yahooBaseUrl: 'https://yahoo.example.test',
+      cnbcBaseUrl: 'https://cnbc.example.test',
+      timeoutMs: 100,
+    }).getQuote('^GSPC');
+
+    expect(result.success).toBe(true);
+    expect(result.data).toMatchObject({ symbol: '^GSPC', name: 'S&P 500', price: 7543.59 });
+    expect(result.metadata).toMatchObject({
+      provider: 'CNBC',
+      sourceUrl: 'https://www.cnbc.com/quotes/.SPX',
+      quoteTime: '07/14/26 EDT',
+    });
+    expect(axiosGet).toHaveBeenNthCalledWith(
+      2,
+      'https://cnbc.example.test/quote-html-webservice/restQuote/symbolType/symbol',
+      expect.objectContaining({ params: expect.objectContaining({ symbols: '.SPX' }) }),
+    );
   });
 });
