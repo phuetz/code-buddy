@@ -1,6 +1,6 @@
 /**
- * Stock quote tool — real market quotes via Yahoo Finance's public chart API
- * (free, NO API key), with a Stooq CSV fallback (also free, no key). Returns BOTH
+ * Stock quote tool — real market quotes through a free-first provider ladder:
+ * optional Finnhub, Yahoo, CNBC indices, Nasdaq, Euronext and Stooq. Returns BOTH
  * a deterministic French summary and a structured `data` payload of shape
  * `StockWidgetData` (`type: 'stock' | 'market'`) so the curated stock widget
  * renders inline.
@@ -541,7 +541,7 @@ export class StockQuoteTool {
       const data = parseYahooQuote(resp.data, s);
       if (data) return quoteResult(data, 'Yahoo Finance', url);
     } catch {
-      /* fall through to Nasdaq */
+      /* fall through to CNBC/Nasdaq */
     }
 
     // Index fallback ($0): CNBC's public quote cache is independent from

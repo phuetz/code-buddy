@@ -1,5 +1,5 @@
 /**
- * Stock quote tool — pure parsers (Yahoo chart JSON, Stooq CSV) + French summary.
+ * Stock quote tool — pure provider parsers, provenance and French summary.
  * No network: tests run against captured payload shapes.
  */
 import axios from 'axios';
