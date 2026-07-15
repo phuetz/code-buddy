@@ -1,3 +1,23 @@
+## Unreleased — « Code Buddy 2 » campaign (2026-07-16)
+
+Ten opt-in innovations landed as one campaign — each spec'd (`docs/specs/cb2/`), developed by an
+autonomous Codex (gpt-5.6-sol) wave in an isolated worktree, independently verified (typecheck +
+209 targeted tests), then merged sequentially. Without their env vars, behavior is unchanged.
+Index: [`docs/cb2/README.md`](docs/cb2/README.md).
+
+### Features
+
+* **speculative:** Shadow Workspace — proposed writes are validated (typecheck/tests) in a ghost git worktree BEFORE touching the working tree; failures come back as structured tool errors (`CODEBUDDY_SHADOW_WORKSPACE`, `buddy shadow status|run`).
+* **sessions:** Time-Travel — per-turn timeline (JSONL), `buddy replay <session> [--at N] [--fork id]`: inspect, restore checkpointed file state (confirmed), fork a session at any turn (`CODEBUDDY_TIMELINE`).
+* **intents:** Intent Ledger — tasks captured as falsifiable versioned specs with shell-verifiable criteria; `buddy intents new|list|show|check|drift|done|archive` re-proves "done" months later (`CODEBUDDY_INTENTS`).
+* **fleet:** CKG federation — `peer.ckg.sync`: pull-only, delta-based sync of the collective knowledge graph between fleet peers (type allowlist, first-hand-only anti-gossip, fail-closed both sides, `buddy research sync <peer>`; `CODEBUDDY_CKG_SYNC`).
+* **self-improvement:** continuous Self-Benchmark — capability scores per active model over time (JSONL history), moving-average regression detection, feeds the council ModelScoreboard (`buddy improve bench --run|--history|--report`; `CODEBUDDY_SELF_BENCH`).
+* **context:** zoom-in — compaction becomes lossless-recoverable: originals archived per segment, summaries tagged `[segment:<id>]`, new `context_expand` tool lets the LLM recover exact content on demand (`CODEBUDDY_CONTEXT_ZOOM`).
+* **widgets:** generative UI by default — structured answers (data payloads, markdown tables) auto-propose a server-rendered widget, reusing authored templates by declared `dataTypes` before generating (generation stays separately gated; `CODEBUDDY_WIDGETS_AUTO`).
+* **sensory:** perceptive pair-programming — the screen sense recognizes on-screen errors (fast text heuristics + optional local-vision stage) and offers help by voice through the companion conductor — debounced, hourly-capped, never acts on its own (`CODEBUDDY_SENSORY_ERRORWATCH`).
+* **skills:** Skill Exchange — export/install skills as ed25519-signed packages (per-file sha256, TOFU trust store, firewall re-scan at install, fail-closed on any mismatch; `buddy skills exchange export|verify|install|keys`; `CODEBUDDY_SKILL_EXCHANGE`).
+* **workspace:** multi-repo — `workspace.json` federates N repos; read-only `workspace_search`/`workspace_read` tools with realpath containment, size caps and timeouts; `buddy ws list|add|rm|search` (`CODEBUDDY_WORKSPACE`).
+
 ## [1.8.0](https://github.com/phuetz/code-buddy/compare/v1.7.0...v1.8.0) (2026-07-01)
 
 ### Features

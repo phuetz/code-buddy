@@ -127,6 +127,26 @@ Stateful WebSocket mesh letting Code Buddy peers observe each other's events liv
 
 **Code Explorer** (renamed from GitNexus) is an optional standalone Rust code-intelligence engine that pre-indexes repositories into a queryable knowledge graph. Code Buddy wires it through the MCP server configured in `.codebuddy/mcp.json`, the native `code_explorer_ask` tool, the bundled `code-explorer` skill, and the CKG ingestion bridge (`buddy research ingest-code`). Stale-index refresh stays opt-in via `CODEBUDDY_CODE_EXPLORER_AUTOINDEX=true`. See [`docs/code-explorer-integration.md`](docs/code-explorer-integration.md).
 
+## Code Buddy 2 — 10 opt-in innovations (2026-07-16)
+
+Ten differentiating features landed as one campaign (each developed by a Codex wave in an
+isolated worktree, independently verified, merged sequentially). **All strictly opt-in — without
+their env var the behavior is byte-identical** (asserted by tests). Index + per-feature docs:
+[`docs/cb2/README.md`](docs/cb2/README.md); vision/audit: `docs/audits/2026-07-15-code-buddy-2-vision.md`.
+
+| Feature | Gate | Surface |
+|---|---|---|
+| Shadow Workspace (speculative execution: writes validated in a ghost worktree BEFORE touching files) | `CODEBUDDY_SHADOW_WORKSPACE` | `src/speculative/`, `buddy shadow` |
+| Time-Travel Sessions (per-turn timeline; replay/restore/fork) | `CODEBUDDY_TIMELINE` | `src/sessions/timeline.ts`, `buddy replay` |
+| Intent Ledger (falsifiable versioned specs; drift detection) | `CODEBUDDY_INTENTS` | `src/intents/`, `buddy intents` |
+| CKG federation (pull-only `peer.ckg.sync` between fleet peers, fail-closed) | `CODEBUDDY_CKG_SYNC` | `src/fleet/peer-ckg-bridge.ts`, `buddy research sync` |
+| Self-Benchmark (capability history + regression detection → scoreboard) | `CODEBUDDY_SELF_BENCH` | `continuous-benchmark.ts`, `buddy improve bench` |
+| Context zoom-in (lossless-recoverable compaction + `context_expand` tool) | `CODEBUDDY_CONTEXT_ZOOM` | `src/context/segment-archive.ts` |
+| Generative UI (auto-proposed server-rendered widgets, authored reuse) | `CODEBUDDY_WIDGETS_AUTO` | `src/widgets/` |
+| Perceptive pair (screen errors → debounced voice suggestion, no auto-action) | `CODEBUDDY_SENSORY_ERRORWATCH` | `src/sensory/error-watch-reaction.ts` |
+| Skill Exchange (ed25519-signed skill packages, TOFU + firewall re-scan, fail-closed) | `CODEBUDDY_SKILL_EXCHANGE` | `src/skills/skill-exchange.ts`, `buddy skills exchange` |
+| Multi-repo workspace (read-only `workspace_search`/`workspace_read` tools) | `CODEBUDDY_WORKSPACE` + `workspace.json` | `src/workspace/`, `buddy ws` |
+
 ## Sensory nervous system — `buddy-sense/` (Rust) + `src/sensory/`
 
 A brain-inspired perception layer (for the companion/robot vision). Diagrams: [`buddy-sense/docs/architecture.svg`](buddy-sense/docs/architecture.svg) + [`dreaming.svg`](buddy-sense/docs/dreaming.svg). **`buddy-sense/`** is a Rust monorepo subdir (tokio) with **five sense modules** emitting `SensoryEvent`s over bounded channels: **audio** (`senses/audio.rs`, energy VAD + optional Silero via `neural-vad`; WAV input — no live mic yet), **vital** (`senses/vital.rs`, the always-on heartbeat), **vision** (`senses/video.rs`, motion detector + **live camera capture** behind the `live-vision` feature — ffmpeg grabs grayscale frames, emits `vision/motion` + a JPEG keyframe), **screen** (`senses/screen.rs`, xcap diff, `live-screen`), **ui** (`senses/ui.rs`, AT-SPI focus, `live-ui`). **The default daemon spawns only the heartbeat** (+ audio when passed a WAV path); screen/ui run only under their live features. Senses feed a **thalamus** (`bus.rs`) that coalesces high-rate events and lets salient ones bypass coalescing (an attention **gate** — it does NOT reorder by priority; vital is never coalesced), then **broadcasts** (the "global workspace") → a WebSocket **bridge** (`bridge.rs`, token-aware, ping keepalive). (A per-modality ring buffer in the thalamus is Phase-2/3 scaffolding, not yet read by the binary; the real short-term memory lives on the Code Buddy side.) Heavy analysis (STT, vision, OCR) is delegated to Code Buddy. `cd buddy-sense && cargo test` (20 tests, no hardware). Opt-in Cargo features (core builds without them): `live-screen` (xcap), `live-ui` (atspi/zbus), `neural-vad` (Silero/ONNX — needs a model + onnxruntime, see `buddy-sense/models/README.md`; falls back to the energy VAD on any error). All deps permissive (MIT/Apache); `ui-events`/Screenpipe were NOT copied (clean-room — proprietary/stub).
