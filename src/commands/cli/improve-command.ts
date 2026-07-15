@@ -10,6 +10,7 @@
  */
 
 import type { Command } from 'commander';
+import { logger } from '../../utils/logger.js';
 
 import {
   createWorkspaceEngine,
@@ -64,6 +65,15 @@ interface ImproveOptions {
   fail?: boolean;
 }
 
+interface ImproveBenchOptions extends ImproveOptions {
+  run?: boolean;
+  history?: boolean | string;
+  report?: boolean;
+  models?: string;
+  provider?: string;
+  scenarios?: string;
+}
+
 function print(payload: unknown, options: ImproveOptions, text: string): void {
   if (options.json) {
     console.log(JSON.stringify(payload, null, 2));
@@ -76,6 +86,107 @@ export function registerImproveCommands(program: Command): void {
   const improve = program
     .command('improve')
     .description('Recursive self-improvement: empirically validate and apply reversible learning improvements');
+
+  improve
+    .command('bench')
+    .description('Measure active models on the curated capability benchmark (opt-in)')
+    .option('--run', 'run the benchmark against the selected active models')
+    .option('--history [model]', 'show the ASCII score history, optionally for one model')
+    .option('--report', 'show latest model scores, regressions, and a recommendation')
+    .option('--models <models>', 'comma-separated model ids to benchmark')
+    .option('--provider <provider>', 'benchmark only one active provider')
+    .option('--scenarios <n>', 'maximum number of curated scenarios')
+    .option('--json', 'output JSON')
+    .action(async (options: ImproveBenchOptions) => {
+      if (process.env.CODEBUDDY_SELF_BENCH !== 'true') {
+        logger.error(
+          'Self-benchmark is opt-in. Set CODEBUDDY_SELF_BENCH=true to run or inspect it.'
+        );
+        process.exitCode = 1;
+        return;
+      }
+      if (!options.run && options.history === undefined && !options.report) {
+        logger.error('Choose at least one mode: --run, --history [model], or --report.');
+        process.exitCode = 1;
+        return;
+      }
+
+      const benchmark = await import('../../agent/self-improvement/continuous-benchmark.js');
+      const run = options.run
+        ? await benchmark.runBenchmark({
+            ...(options.models ? { models: options.models } : {}),
+            ...(options.provider ? { provider: options.provider } : {}),
+            ...(options.scenarios ? { scenarios: Number.parseInt(options.scenarios, 10) } : {}),
+          })
+        : undefined;
+      const history = await benchmark.readBenchmarkHistory();
+      const report = options.report
+        ? benchmark.createBenchmarkReport(
+            history,
+            (() => {
+              const configured = Number(process.env.CODEBUDDY_SELF_BENCH_DROP);
+              return Number.isFinite(configured) && configured >= 0
+                ? configured
+                : benchmark.DEFAULT_SELF_BENCH_DROP;
+            })()
+          )
+        : undefined;
+
+      if (options.json) {
+        console.log(
+          JSON.stringify(
+            {
+              kind: 'continuous_capability_benchmark',
+              ...(run ? { run } : {}),
+              ...(options.history !== undefined ? { history } : {}),
+              ...(report ? { report } : {}),
+            },
+            null,
+            2
+          )
+        );
+        return;
+      }
+
+      const sections: string[] = [];
+      if (run) {
+        sections.push(
+          [
+            `Benchmark run ${run.runId}:`,
+            ...run.models.map(
+              (model) =>
+                `  ${model.model}: ${(model.score * 100).toFixed(0)}% ` +
+                `(${model.scenarios} scenario(s), ${Math.round(model.latencyMs)}ms)`
+            ),
+            run.models.length === 0 ? '  No active model matched the filters.' : '',
+          ]
+            .filter(Boolean)
+            .join('\n')
+        );
+      }
+      if (options.history !== undefined) {
+        const model = typeof options.history === 'string' ? options.history : undefined;
+        sections.push(benchmark.renderBenchmarkHistory(history, model));
+      }
+      if (report) {
+        sections.push(
+          [
+            'Latest capability state:',
+            ...report.latest.map(
+              (model) =>
+                `  ${model.model}: ${(model.score * 100).toFixed(0)}% (${Math.round(model.latencyMs)}ms)`
+            ),
+            report.regressions.length > 0
+              ? `Regressions: ${report.regressions
+                  .map((entry) => `${entry.model} ${(entry.drop * 100).toFixed(1)}%`)
+                  .join(', ')}`
+              : 'Regressions: none detected',
+            `Recommendation: ${report.recommendation}`,
+          ].join('\n')
+        );
+      }
+      console.log(sections.join('\n\n'));
+    });
 
   improve
     .command('status')
