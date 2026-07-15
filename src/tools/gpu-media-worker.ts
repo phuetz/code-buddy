@@ -364,11 +364,28 @@ export class GpuMediaWorkerClient {
         throw new Error(`GPU worker artifact request failed: ${message}`);
       }
       const declaredSize = Number(response.headers.get('content-length'));
-      if (!Number.isFinite(declaredSize) || declaredSize <= 0 || declaredSize > ARTIFACT_LIMIT) {
+      if (
+        !Number.isInteger(declaredSize) ||
+        declaredSize <= 0 ||
+        declaredSize > ARTIFACT_LIMIT
+      ) {
         throw new Error('GPU worker artifact has an invalid content length');
       }
-      const bytes = new Uint8Array(await response.arrayBuffer());
-      if (bytes.byteLength !== declaredSize || bytes.byteLength > ARTIFACT_LIMIT) {
+      if (!response.body) throw new Error('GPU worker artifact response has no body');
+      const bytes = new Uint8Array(declaredSize);
+      const reader = response.body.getReader();
+      let offset = 0;
+      for (;;) {
+        const chunk = await reader.read();
+        if (chunk.done) break;
+        if (offset + chunk.value.byteLength > declaredSize) {
+          await reader.cancel();
+          throw new Error('GPU worker artifact exceeds its declared content length');
+        }
+        bytes.set(chunk.value, offset);
+        offset += chunk.value.byteLength;
+      }
+      if (offset !== declaredSize) {
         throw new Error('GPU worker artifact length does not match the response');
       }
       return bytes;

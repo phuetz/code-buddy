@@ -127,6 +127,20 @@ describe('gpu media worker contracts', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  it('rejects an avatar artifact that exceeds its declared response length', async () => {
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(
+      new Response('too-long', {
+        status: 200,
+        headers: { 'content-type': 'video/mp4', 'content-length': '2' },
+      })
+    );
+    const client = new GpuMediaWorkerClient(
+      { baseUrl: 'https://gpu.example.com' },
+      { fetch: fetchMock }
+    );
+    await expect(client.downloadArtifact('job-123')).rejects.toThrow(/exceeds its declared/);
+  });
+
   it('reads worker capabilities and queue state', async () => {
     const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(
       new Response(

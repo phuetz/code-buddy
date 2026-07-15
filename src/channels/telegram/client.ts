@@ -148,7 +148,12 @@ export class TelegramChannel extends BaseChannel {
     fileParam: string,
     attachment: MessageAttachment
   ): Promise<T> {
-    if (!attachment.data || !/^[A-Za-z0-9+/]*={0,2}$/u.test(attachment.data)) {
+    const maximumBase64Length = Math.ceil(TELEGRAM_UPLOAD_LIMIT / 3) * 4 + 4;
+    if (
+      !attachment.data ||
+      attachment.data.length > maximumBase64Length ||
+      !/^[A-Za-z0-9+/]*={0,2}$/u.test(attachment.data)
+    ) {
       throw new Error('Telegram attachment data must be valid base64');
     }
     const bytes = Buffer.from(attachment.data, 'base64');
