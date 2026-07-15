@@ -1165,6 +1165,14 @@ export interface VoiceHistoryTurn {
   content: string;
 }
 
+export interface SpokenPromptAugmentationOptions {
+  /**
+   * A/B seam: true restores the legacy duplicate `<recent_dialogue>` block.
+   * Default false because voice already sends the bounded raw history.
+   */
+  includeRecentDialogue?: boolean;
+}
+
 /** Default think: a short companion reply from the fastest capable LLM ($0 when local).
  *  Mirrors the local-inference pattern of vision-reaction.ts. Best-effort: any failure → '' (silence).
  *  `history` (optional) carries recent spoken turns so follow-ups have context. Exported so the
@@ -1187,9 +1195,13 @@ export async function buildSpokenPromptAugmentation(
   history: VoiceHistoryTurn[] = [],
   spokenPrefix?: string,
   delivery?: VoiceDeliveryProfile,
+  options: SpokenPromptAugmentationOptions = {},
 ): Promise<string> {
+  const includeRecentDialogue =
+    options.includeRecentDialogue ??
+    process.env.CODEBUDDY_VOICE_INCLUDE_RECENT_DIALOGUE === 'true';
   const guidance = [
-    prepareConversationTurn(heard, history).systemGuidance,
+    prepareConversationTurn(heard, history, { includeRecentDialogue }).systemGuidance,
     delivery ? voiceDeliveryGuidance(delivery) : '',
     emotionGuidance(detectEmotion(heard)),
     emotionalContinuityGuidance(heard, history),

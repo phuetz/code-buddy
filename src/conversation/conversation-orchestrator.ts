@@ -23,6 +23,11 @@ export interface PrepareConversationTurnOptions {
    * provenance and privacy boundaries visible in the prompt.
    */
   relationshipContext?: string;
+  /**
+   * Include recent raw excerpts inside common ground. Default true; voice sets
+   * false because those turns are already sent as separate provider messages.
+   */
+  includeRecentDialogue?: boolean;
 }
 
 /**
@@ -45,6 +50,9 @@ export function prepareConversationTurn(
   // into both the context block and the explicit user-message envelope.
   const commonGround = state.renderForPrompt(undefined, {
     suppressHistoricalContext,
+    ...(options.includeRecentDialogue === undefined
+      ? {}
+      : { includeRecentDialogue: options.includeRecentDialogue }),
   });
   const systemGuidance = [
     plan.guidance,

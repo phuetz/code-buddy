@@ -14,6 +14,17 @@ const MAX_RECENT_TURNS = MAX_DELIBERATION_TURNS;
 const MAX_GROUND_ITEMS = 12;
 const MAX_COMMON_GROUND_PROMPT_CHARS = 5_200;
 
+export interface CommonGroundPromptOptions {
+  /** Omit every historical derivative (actions, closings and real topic shifts). */
+  suppressHistoricalContext?: boolean;
+  /**
+   * Repeat recent raw excerpts inside `<common_ground>`. Default true for
+   * surfaces that do not otherwise send message history. Voice disables this
+   * because it already sends the same bounded turns as first-class messages.
+   */
+  includeRecentDialogue?: boolean;
+}
+
 function boundedUnique(values: string[], limit = MAX_GROUND_ITEMS): string[] {
   return [...new Set(values.map((value) => value.trim()).filter(Boolean))].slice(-limit);
 }
@@ -84,11 +95,11 @@ export class ConversationStateManager {
 
   renderForPrompt(
     deliberationOverride?: DeliberationThreadSnapshot,
-    options: { suppressHistoricalContext?: boolean } = {}
+    options: CommonGroundPromptOptions = {}
   ): string {
     const snapshot = this.snapshot();
     const includeHistory = !options.suppressHistoricalContext;
-    const recentDialogue = includeHistory
+    const recentDialogue = includeHistory && options.includeRecentDialogue !== false
       ? snapshot.recentTurns
           .slice(-6)
           .map(

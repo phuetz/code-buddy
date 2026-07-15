@@ -440,6 +440,7 @@ describe('voice loop — emotional prompt defaults', () => {
   const savedChannel = process.env.CODEBUDDY_CONVERSATION_CHANNEL;
   const savedChannelId = process.env.CODEBUDDY_CONVERSATION_CHANNEL_ID;
   const savedPersist = process.env.CODEBUDDY_CONVERSATION_PERSIST;
+  const savedIncludeRecentDialogue = process.env.CODEBUDDY_VOICE_INCLUDE_RECENT_DIALOGUE;
 
   afterEach(() => {
     if (savedRelational === undefined) delete process.env.CODEBUDDY_COMPANION_RELATIONAL;
@@ -450,6 +451,11 @@ describe('voice loop — emotional prompt defaults', () => {
     else process.env.CODEBUDDY_CONVERSATION_CHANNEL_ID = savedChannelId;
     if (savedPersist === undefined) delete process.env.CODEBUDDY_CONVERSATION_PERSIST;
     else process.env.CODEBUDDY_CONVERSATION_PERSIST = savedPersist;
+    if (savedIncludeRecentDialogue === undefined) {
+      delete process.env.CODEBUDDY_VOICE_INCLUDE_RECENT_DIALOGUE;
+    } else {
+      process.env.CODEBUDDY_VOICE_INCLUDE_RECENT_DIALOGUE = savedIncludeRecentDialogue;
+    }
     resetCrossChannelConversationBridge();
   });
 
@@ -481,6 +487,38 @@ describe('voice loop — emotional prompt defaults', () => {
     expect(prompt).toContain('déjà dit à voix haute');
     expect(prompt).toContain('Je suis là avec toi.');
     expect(prompt).toMatch(/sans r[ée]p[ée]ter/i);
+  });
+
+  it('does not duplicate raw voice history but exposes the legacy A/B variant', async () => {
+    process.env.CODEBUDDY_COMPANION_RELATIONAL = 'false';
+    delete process.env.CODEBUDDY_VOICE_INCLUDE_RECENT_DIALOGUE;
+    const history = [
+      {
+        role: 'user' as const,
+        content: 'Je pense que la mémoire suffit à fonder une identité.',
+      },
+      {
+        role: 'assistant' as const,
+        content:
+          'La responsabilité compte aussi parce qu’elle engage une personne dans la durée.',
+      },
+    ];
+
+    const optimized = await buildSpokenPromptAugmentation('Pourquoi ?', history);
+    const baseline = await buildSpokenPromptAugmentation(
+      'Pourquoi ?',
+      history,
+      undefined,
+      undefined,
+      { includeRecentDialogue: true },
+    );
+
+    expect(optimized).not.toContain('<recent_dialogue');
+    expect(optimized).not.toContain('Utilisateur : Je pense que la mémoire');
+    expect(optimized).toContain('<conversation_response_plan');
+    expect(optimized).toContain('<deliberation_thread');
+    expect(baseline).toContain('<recent_dialogue');
+    expect(baseline).toContain('Utilisateur : Je pense que la mémoire');
   });
 
   it('receives the same raw-free support handoff from Telegram without long-term memory', async () => {

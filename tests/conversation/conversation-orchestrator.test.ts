@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { deriveArgumentObligations } from '../../src/conversation/argument-obligations.js';
 import {
   analyzeConversationTurn,
   isPureAcknowledgement,
@@ -89,6 +90,51 @@ describe('human conversation planning', () => {
 
     expect(envelope.match(/Et la réciprocité \?/g)).toHaveLength(1);
     expect(envelope).toContain(`Message de l'utilisateur : ${current}`);
+  });
+
+  it('can omit duplicate recent dialogue while preserving philosophical continuity', () => {
+    const history = [
+      {
+        role: 'user' as const,
+        content: 'Je pense que la mémoire suffit à fonder une identité.',
+      },
+      {
+        role: 'assistant' as const,
+        content:
+          'La mémoire relie les expériences, mais la responsabilité pourrait aussi compter. Laquelle te paraît décisive ?',
+      },
+      {
+        role: 'user' as const,
+        content: 'Non, je voulais surtout parler de la responsabilité envers une promesse.',
+      },
+      {
+        role: 'assistant' as const,
+        content:
+          'Cette correction déplace le débat vers ce que la personne accepte d’assumer. Jusqu’où cette promesse nous définit-elle ?',
+      },
+    ];
+
+    const baseline = prepareConversationTurn('Continue.', history);
+    const optimized = prepareConversationTurn('Continue.', history, {
+      includeRecentDialogue: false,
+    });
+
+    expect(baseline.commonGround).toContain('<recent_dialogue');
+    expect(optimized.commonGround).not.toContain('<recent_dialogue');
+    expect(optimized.commonGround).not.toContain('Utilisateur : Je pense que la mémoire');
+    expect(optimized.commonGround).toContain('Foyer actuel');
+    expect(optimized.commonGround).toContain('<deliberation_thread');
+    expect(optimized.commonGround).toContain('Correction qui remplace la position antérieure');
+    expect(optimized.commonGround).toContain('Question encore ouverte');
+    expect(optimized.plan).toMatchObject({
+      depth: 'deliberative',
+      analysis: { continuesDeliberation: true },
+    });
+    expect(optimized.plan.moves).toEqual(baseline.plan.moves);
+    expect(deriveArgumentObligations(optimized.plan, 'Continue.')).toEqual(
+      deriveArgumentObligations(baseline.plan, 'Continue.'),
+    );
+    expect(optimized.systemGuidance).toContain('<conversation_response_plan');
   });
 
   it('injects the same bounded fresh evidence without replacing dialogue planning', () => {
