@@ -173,6 +173,13 @@ la consigne acoustique par tour, tandis que les autres moteurs suivent la ponctu
 du texte. Les percepts et Cowork affichent uniquement les agrégats `humanWpm`, `targetWpm`, rythme et
 forme appliquée, sans recopier la phrase.
 
+Le mode résident distingue désormais une parole explicitement adressée, un suivi plausible et une
+conversation de télévision. Un court burst de tours rejetés ferme temporairement le juge contextuel :
+les questions de l'écran restent observables dans le journal brut mais ne contaminent ni le cerveau,
+ni la mémoire, ni les initiatives de Lisa. En parallèle, le pilote de première proposition mesure
+séparément génération, audit et continuation, avec des codes de rejet sans verbatim. Il reste coupé
+par défaut jusqu'à atteindre une fiabilité reproductible sur un banc local sans audio ni coût cloud.
+
 La vision ponctuelle suit maintenant une vraie paire adjacente de conversation. Si l'objet demandé
 n'est pas dans l'allowlist de consentement direct, Lisa demande simplement si elle peut ouvrir la
 caméra pour une image ; « oui, vas-y » reprend la cible du tour précédent au lieu d'analyser cette

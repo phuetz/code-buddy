@@ -584,7 +584,10 @@ Le prompt vocal ne recopie plus les six extraits de `<recent_dialogue>` déjà e
 `CODEBUDDY_VOICE_INCLUDE_RECENT_DIALOGUE=true` restaure cette duplication uniquement pour un A/B.
 Une première proposition autonome, bornée et validée avant la réponse longue est disponible en pilote
 avec `CODEBUDDY_VOICE_SPOKEN_PREFIX=true`. Elle reste désactivée par défaut tant que ses mesures de
-latence et de qualité ne justifient pas son activation.
+latence et de qualité ne justifient pas son activation. Le pilote sépare maintenant les phases du
+préfixe de celles de la continuation et conserve uniquement des causes techniques bornées
+(`too_long`, `multi_sentence`, `review_rejected`, etc.), jamais la question ni le texte généré. Une
+expérience rejetée peut donc être expliquée et comparée sans exposer la conversation privée.
 Seul le texte accepté rejoint la continuité canonique gérée par la voix, Telegram ou Cowork. Les
 observateurs mémoire génériques du cœur (AutoCapture, ICM et hooks de plugins) ne sont pas rejoués
 sur ces tours protégés : ils ont leurs propres politiques de stockage et ne reçoivent donc jamais
