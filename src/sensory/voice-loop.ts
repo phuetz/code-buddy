@@ -2572,12 +2572,19 @@ export function makeVoiceReply(options: VoiceReplyOptions = {}): VoiceReplyHandl
             // Preserve only sentences whose playback completed before the
             // interruption. The partial in-flight segment is deliberately
             // absent from `result.spoken` and must not enter continuity.
-            if (result.spoken.trim()) publishAssistantTurn(result.spoken);
+            if (result.spoken.trim()) {
+              noteSpokenText(result.spoken);
+              publishAssistantTurn(result.spoken);
+            }
             return;
           }
           if (result.played) {
             mode = 'streamed';
             spoke = true;
+            // Segment references protect the live playback edge; the complete
+            // canonical turn protects the acoustic tail and STT transcripts
+            // that merge several spoken segments into one utterance.
+            noteSpokenText(result.spoken);
             recentReplyOpeners = pushOpener(recentReplyOpeners, result.spoken);
             publishAssistantTurn(result.spoken);
             logger.info(`[voice] spoke (streamed) chars=${result.spoken.length}`);

@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { access, mkdir, mkdtemp, readFile, writeFile } from 'fs/promises';
 import os from 'os';
 import path from 'path';
@@ -9,6 +9,7 @@ import {
   resolveSpeechDebounceMs,
   normalizeSpeechTranscript,
   resolveFasterWhisperOptions,
+  shouldSuppressPlaybackCapture,
   wireSpeechReaction,
   type Transcriber,
 } from '../../src/sensory/speech-reaction.js';
@@ -18,6 +19,7 @@ import {
   _resetVoiceActivityForTests,
   beginSpeaking,
   endSpeaking,
+  interruptSpeaking,
   noteSpokenText,
 } from '../../src/sensory/voice-activity.js';
 
@@ -63,6 +65,17 @@ async function fileExists(file: string): Promise<boolean> {
 }
 
 describe('speech reaction — speech_end → STT → percept', () => {
+  it('fails closed for non-explicit captures during playback', () => {
+    expect(shouldSuppressPlaybackCapture('during_playback', 'echo', true)).toBe(true);
+    expect(shouldSuppressPlaybackCapture('during_playback', 'distinct', false)).toBe(true);
+    expect(shouldSuppressPlaybackCapture('during_playback', 'unknown', false)).toBe(true);
+    expect(shouldSuppressPlaybackCapture('during_playback', 'distinct', true)).toBe(false);
+    expect(shouldSuppressPlaybackCapture('during_playback', 'unknown', true)).toBe(false);
+    expect(shouldSuppressPlaybackCapture('echo_tail', 'echo', true)).toBe(true);
+    expect(shouldSuppressPlaybackCapture('echo_tail', 'unknown', true)).toBe(true);
+    expect(shouldSuppressPlaybackCapture('echo_tail', 'distinct', false)).toBe(false);
+  });
+
   it('uses a partial transcript only for preparation and waits for the final before cognition', async () => {
     const partials: Array<{ text: string; audioMs?: number; decodeMs?: number }> = [];
     const heard: string[] = [];
@@ -849,6 +862,117 @@ describe('speech reaction — speech_end → STT → percept', () => {
         },
       });
     } finally {
+      unwire();
+      _resetVoiceActivityForTests();
+    }
+  });
+
+  it('suppresses a queued transcript captured during playback after the tail expires', async () => {
+    const tmp = await mkdtemp(path.join(os.tmpdir(), 'speech-delayed-playback-echo-'));
+    let clock = 1_000;
+    let releaseFirst!: () => void;
+    const firstTurnHeld = new Promise<void>((resolve) => (releaseFirst = resolve));
+    const heard: string[] = [];
+    const recognized: string[] = [];
+    const decisions: string[] = [];
+    _resetVoiceActivityForTests();
+    const unwire = wireSpeechReaction({
+      debounceMs: 0,
+      cwd: tmp,
+      now: () => clock,
+      shouldRespond: async (text) => {
+        decisions.push(text);
+        return { respond: true, reason: 'addressed' };
+      },
+      onRecognizedTurn: ({ text }) => {
+        recognized.push(text);
+      },
+      onHeard: async (text) => {
+        heard.push(text);
+        if (heard.length === 1) await firstTurnHeld;
+      },
+      getResponseTiming: () => ({ mode: 'test', totalMs: 0, spoke: false }),
+    });
+    try {
+      transcriptFinal('Lisa, explique le filtre anti-écho.', { startedAtMs: 1_000 });
+      await vi.waitFor(() => expect(heard).toHaveLength(1));
+
+      clock = 1_100;
+      beginSpeaking(clock);
+      noteSpokenText('La réponse prononcée par le haut-parleur.', 1_150);
+      transcriptFinal('La réponse prononcée par le haut-parleur.', { startedAtMs: 1_250 });
+      await tick();
+
+      clock = 2_000;
+      endSpeaking(clock);
+      // Reproduce the production race: the queued final is only processed
+      // after generation/housekeeping, once the acoustic tail has expired.
+      clock = 3_500;
+      releaseFirst();
+      await vi.waitFor(async () => {
+        const raw = await readFile(
+          path.join(tmp, '.codebuddy', 'companion', 'percepts.jsonl'),
+          'utf8',
+        );
+        expect(raw).toContain('during_playback_echo');
+      });
+
+      expect(heard).toEqual(['Lisa, explique le filtre anti-écho.']);
+      expect(recognized).toEqual(['Lisa, explique le filtre anti-écho.']);
+      expect(decisions).toEqual(['Lisa, explique le filtre anti-écho.']);
+      const raw = await readFile(
+        path.join(tmp, '.codebuddy', 'companion', 'percepts.jsonl'),
+        'utf8',
+      );
+      expect(raw).not.toContain('La réponse prononcée par le haut-parleur.');
+    } finally {
+      releaseFirst();
+      unwire();
+      _resetVoiceActivityForTests();
+    }
+  });
+
+  it('keeps an explicit distinct human barge-in captured during playback', async () => {
+    const tmp = await mkdtemp(path.join(os.tmpdir(), 'speech-explicit-playback-barge-in-'));
+    let clock = 5_000;
+    let releaseFirst!: () => void;
+    const firstTurnHeld = new Promise<void>((resolve) => (releaseFirst = resolve));
+    const heard: string[] = [];
+    const bargeIns: string[] = [];
+    _resetVoiceActivityForTests();
+    const unwire = wireSpeechReaction({
+      debounceMs: 0,
+      cwd: tmp,
+      now: () => clock,
+      onBargeIn: (text) => {
+        bargeIns.push(text);
+        interruptSpeaking(clock);
+        releaseFirst();
+      },
+      onHeard: async (text) => {
+        heard.push(text);
+        if (heard.length === 1) await firstTurnHeld;
+      },
+      getResponseTiming: () => ({ mode: 'test', totalMs: 0, spoke: false }),
+    });
+    try {
+      transcriptFinal('Lisa, commence une longue explication.', { startedAtMs: 5_000 });
+      await vi.waitFor(() => expect(heard).toHaveLength(1));
+
+      clock = 5_100;
+      beginSpeaking(clock);
+      noteSpokenText('Voici une longue explication technique.', 5_150);
+      clock = 5_300;
+      transcriptFinal('Lisa, stop maintenant.', { startedAtMs: 5_250 });
+
+      await vi.waitFor(() => expect(heard).toHaveLength(2));
+      expect(bargeIns).toEqual(['Lisa, stop maintenant.']);
+      expect(heard).toEqual([
+        'Lisa, commence une longue explication.',
+        'Lisa, stop maintenant.',
+      ]);
+    } finally {
+      releaseFirst();
       unwire();
       _resetVoiceActivityForTests();
     }

@@ -165,6 +165,24 @@ export function isBargeInTranscript(
  */
 export const DEFAULT_SPEECH_DEBOUNCE_MS = 800;
 
+/**
+ * Decide whether a transcript captured around loudspeaker playback is safe to
+ * treat as a human turn. During playback we deliberately fail closed: without
+ * acoustic echo cancellation, only an explicit barge-in (Lisa/stop/attends…)
+ * may pass, and never when it matches the loudspeaker. In the short acoustic
+ * tail, the existing similarity classifier remains authoritative.
+ */
+export function shouldSuppressPlaybackCapture(
+  kind: 'during_playback' | 'echo_tail',
+  classification: 'echo' | 'distinct' | 'unknown',
+  explicitBargeIn: boolean,
+): boolean {
+  if (kind === 'during_playback') {
+    return classification === 'echo' || !explicitBargeIn;
+  }
+  return classification !== 'distinct';
+}
+
 /** Debug kill switch: keep fallback utterance WAVs instead of deleting them. */
 export const SPEECH_KEEP_WAV_ENV = 'CODEBUDDY_SENSORY_KEEP_WAV';
 
@@ -1344,29 +1362,49 @@ export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => v
           );
           return;
         }
-        const echoClassification = voiceResume?.kind === 'echo_tail'
+        const playbackCaptureKind = voiceResume?.kind === 'during_playback'
+          || voiceResume?.kind === 'echo_tail'
+          ? voiceResume.kind
+          : undefined;
+        const echoClassification = playbackCaptureKind
           ? classifyRecentVoiceEcho(text, captureStartedAtMs ?? transcribeStartMs)
           : undefined;
-        if (
-          voiceResume?.kind === 'echo_tail'
-          && echoClassification !== 'distinct'
-        ) {
-          logger.info(`[speech] suppressed ${echoClassification} playback echo during acoustic tail`);
+        const explicitBargeIn = playbackCaptureKind ? isBargeInTranscript(text) : false;
+        const suppressPlaybackCapture = playbackCaptureKind && echoClassification
+          ? shouldSuppressPlaybackCapture(
+              playbackCaptureKind,
+              echoClassification,
+              explicitBargeIn,
+            )
+          : false;
+        if (suppressPlaybackCapture && playbackCaptureKind && echoClassification) {
+          const suppressionReason = playbackCaptureKind === 'during_playback'
+            ? echoClassification === 'echo'
+              ? 'during_playback_echo'
+              : 'during_playback_non_explicit'
+            : `echo_tail_${echoClassification}`;
+          logger.info(
+            `[speech] suppressed playback capture reason=${suppressionReason}`,
+          );
           await recordCompanionPercept(
             {
               modality: 'hearing',
               source: 'sensory_speech_reaction',
-              summary: 'Likely loudspeaker echo suppressed',
-              confidence: echoClassification === 'echo' ? 0.95 : 0.6,
+              summary: playbackCaptureKind === 'during_playback'
+                ? 'Speech captured during loudspeaker playback suppressed'
+                : 'Likely loudspeaker echo suppressed',
+              confidence: echoClassification === 'echo' ? 0.95 : 0.75,
               payload: {
                 responded: false,
-                playbackEcho: true,
+                playbackEcho: echoClassification === 'echo',
+                playbackCaptureSuppressed: true,
+                suppressionReason,
                 echoClassification,
                 turnTaking: voiceResume,
                 latency: latencyPayload,
                 capture: capturePayload,
               },
-              tags: ['speech', 'echo', 'turn-taking'],
+              tags: ['speech', 'echo', 'playback-capture', 'turn-taking'],
             },
             options.cwd ? { cwd: options.cwd } : {},
           );

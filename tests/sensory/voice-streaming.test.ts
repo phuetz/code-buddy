@@ -11,7 +11,11 @@ import {
   SentenceAssembler,
   safeCommitLength,
 } from '../../src/sensory/voice-stream.js';
-import { isSpeaking, _resetVoiceActivityForTests } from '../../src/sensory/voice-activity.js';
+import {
+  classifyRecentVoiceEcho,
+  isSpeaking,
+  _resetVoiceActivityForTests,
+} from '../../src/sensory/voice-activity.js';
 import { makeHybridReply } from '../../src/sensory/hybrid-reply.js';
 import { logger } from '../../src/utils/logger.js';
 
@@ -279,6 +283,36 @@ describe('streamToSpeech — never-throws', () => {
 
 describe('makeVoiceReply — streaming integration', () => {
   beforeEach(() => _resetVoiceActivityForTests());
+
+  it('retains the complete streamed turn for merged STT echo detection', async () => {
+    const segments = [
+      'La mémoire conserve les détails essentiels de chaque conversation.',
+      'Le contexte relie ensuite ces souvenirs aux questions présentes.',
+      'Cette continuité permet enfin une réponse cohérente et naturelle.',
+    ];
+    const onHeard = makeVoiceReply({
+      streamFn: async function* () {
+        yield segments.join(' ');
+      },
+      streamSpeak: async (_text, options) => {
+        options?.onFirstAudio?.();
+        return true;
+      },
+      synth: async () => '',
+      play: async () => undefined,
+      avatarEnabled: false,
+    });
+
+    await onHeard('Comment gardes-tu le fil de notre conversation ?');
+
+    expect(
+      classifyRecentVoiceEcho(
+        'La mémoire conserve les détails essentiels de la conversation. ' +
+          'Le contexte relie ces souvenirs aux questions présentes. ' +
+          'Cette continuité permet une réponse cohérente et naturelle.',
+      ),
+    ).toBe('echo');
+  });
 
   it('speaks a deterministic backchannel before the guarded model answer finishes', async () => {
     let releaseModel!: () => void;

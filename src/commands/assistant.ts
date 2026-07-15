@@ -417,6 +417,50 @@ export function registerAssistantCommand(program: Command): void {
     });
 
   assistant
+    .command('repair-voice-incident')
+    .description(
+      'Quarantine a bounded acoustic-feedback incident; dry-run unless --apply is explicit',
+    )
+    .requiredOption('--from <iso>', 'Inclusive incident start (ISO timestamp)')
+    .option('--to <iso>', 'Inclusive incident end (defaults to now)')
+    .option('--runtime-cwd <path>', 'Runtime workspace containing percepts and user-model')
+    .option('--apply', 'Back up files, quarantine incident events, and reset contaminated learning')
+    .option('--json', 'Output the raw-free repair report as JSON')
+    .action(async (opts: {
+      from: string;
+      to?: string;
+      runtimeCwd?: string;
+      apply?: boolean;
+      json?: boolean;
+    }) => {
+      const { repairVoiceIncident } = await import(
+        '../companion/voice-incident-repair.js'
+      );
+      const report = repairVoiceIncident({
+        from: opts.from,
+        ...(opts.to ? { to: opts.to } : {}),
+        ...(opts.runtimeCwd ? { runtimeCwd: opts.runtimeCwd } : {}),
+        apply: opts.apply === true,
+      });
+      if (opts.json) {
+        console.log(JSON.stringify(report, null, 2));
+        return;
+      }
+      console.log(
+        `${report.mode}: ${report.conversation.quarantined} conversation turn(s), ` +
+          `${report.percepts.quarantined} hearing percept(s), ` +
+          `${report.pendingObservationsDiscarded} pending observation(s)`,
+      );
+      if (report.mode === 'dry-run') {
+        console.log('No file changed. Re-run with --apply after reviewing this report.');
+      } else {
+        console.log(
+          `Backups: ${report.backups.length}; quarantine files: ${report.quarantines.length}.`,
+        );
+      }
+    });
+
+  assistant
     .command('quality')
     .description('Evaluate recent user/Lisa exchanges without exposing their raw content')
     .option('--apply', 'Apply one reversible guidance if the same weakness is recurring')
