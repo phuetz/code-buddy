@@ -939,7 +939,7 @@ describe('hybrid reply — routing & memory', () => {
     expect(groundedInput).toContain('sans remplacer les personnes');
   });
 
-  it('buffers a deep stream so no rejected draft is emitted before semantic revision', async () => {
+  it('streams a deep draft immediately and follows a semantic revision with a correction', async () => {
     const rejectedParts = ['La lune est morale. ', 'Les triangles aiment le bleu.'];
     const revised =
       "Je distinguerais le comportement d'attachement d'une expérience subjective, car nous n'avons pas de preuve suffisante de la seconde.";
@@ -968,13 +968,14 @@ describe('hybrid reply — routing & memory', () => {
       chunks.push(chunk);
     }
 
-    expect(chunks).toEqual([revised]);
-    expect(chunks.join('')).not.toContain('La lune');
-    expect(chunks.join('')).not.toContain('triangles');
+    expect(chunks).toEqual([
+      ...rejectedParts,
+      ` Pardon, plus exactement : ${revised}`,
+    ]);
     expect(semanticReview).toHaveBeenCalledOnce();
   });
 
-  it('reports the real provider delta before a semantically buffered draft is released', async () => {
+  it('reports draft release before the non-blocking semantic review completes', async () => {
     const phases: string[] = [];
     const chunks: string[] = [];
     const reply = makeHybridReply({
@@ -1005,10 +1006,14 @@ describe('hybrid reply — routing & memory', () => {
       phases.push('released_to_voice');
     }
 
-    expect(chunks).toEqual(['Réponse révisée et vérifiée.']);
+    expect(chunks).toEqual([
+      'Brouillon qui doit rester inaudible.',
+      ' Pardon, plus exactement : Réponse révisée et vérifiée.',
+    ]);
     expect(phases).toEqual([
       'prompt_ready',
       'provider_first_delta',
+      'released_to_voice',
       'generation_complete',
       'semantic_review_complete',
       'released_to_voice',
@@ -1089,7 +1094,7 @@ describe('hybrid reply — routing & memory', () => {
     expect(semanticReview).not.toHaveBeenCalled();
   });
 
-  it('still buffers a genuine continuation of a deep shared conversation', async () => {
+  it('streams a genuine deep continuation before its semantic correction', async () => {
     const revised = 'Je poursuis le raisonnement avec une distinction plus précise.';
     const semanticReview = vi.fn(async () => ({
       response: revised,
@@ -1117,7 +1122,10 @@ describe('hybrid reply — routing & memory', () => {
     const chunks: string[] = [];
     for await (const chunk of reply.stream('Continue.')) chunks.push(chunk);
 
-    expect(chunks).toEqual([revised]);
+    expect(chunks).toEqual([
+      'Brouillon profond qui doit rester inaudible.',
+      ` Pardon, plus exactement : ${revised}`,
+    ]);
     expect(semanticReview).toHaveBeenCalledOnce();
   });
 });

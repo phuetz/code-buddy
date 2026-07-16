@@ -515,6 +515,46 @@ describe('makeVoiceReply — streaming integration', () => {
     expect(spoke).toBe('Réponse de secours.');
   });
 
+  it('plays a blocking fallback before its registered semantic correction resolves', async () => {
+    let resolveCorrection!: (value: string) => void;
+    const correction = new Promise<string>((resolve) => {
+      resolveCorrection = resolve;
+    });
+    let firstPlayed!: () => void;
+    const initialPlayback = new Promise<void>((resolve) => {
+      firstPlayed = resolve;
+    });
+    const synthesized: string[] = [];
+    const onHeard = makeVoiceReply({
+      streamFn: async function* () {
+        /* force the blocking fallback */
+      },
+      replyFn: async (_heard, options) => {
+        options?.onSemanticCorrection?.(correction);
+        return 'Réponse initiale.';
+      },
+      synth: async (text) => {
+        synthesized.push(text);
+        return `wav:${text}`;
+      },
+      play: async (wav) => {
+        if (wav.includes('initiale')) firstPlayed();
+      },
+      avatarEnabled: false,
+    });
+
+    const turn = onHeard('Question avec fallback.');
+    await initialPlayback;
+    expect(synthesized).toEqual(['Réponse initiale.']);
+    resolveCorrection('Pardon, voici la correction.');
+    await turn;
+
+    expect(synthesized).toEqual([
+      'Réponse initiale.',
+      'Pardon, voici la correction.',
+    ]);
+  });
+
   it('never throws when the stream and the blocking fallback both fail', async () => {
     // eslint-disable-next-line require-yield -- models a provider that throws when streaming starts
     async function* stream(): AsyncGenerator<string> {
@@ -742,6 +782,77 @@ describe('makeVoiceReply — streaming integration', () => {
       if (savedPrebuffer === undefined) delete process.env.CODEBUDDY_VOICE_AUDIO_PREBUFFER_MS;
       else process.env.CODEBUDDY_VOICE_AUDIO_PREBUFFER_MS = savedPrebuffer;
     }
+  });
+
+  it('starts synthesis before semantic review resolves and speaks a rejection correction', async () => {
+    let releaseReview!: () => void;
+    const reviewGate = new Promise<void>((resolve) => {
+      releaseReview = resolve;
+    });
+    let reviewStarted!: () => void;
+    const reviewPending = new Promise<void>((resolve) => {
+      reviewStarted = resolve;
+    });
+    let firstSynthesized!: () => void;
+    const firstSynth = new Promise<void>((resolve) => {
+      firstSynthesized = resolve;
+    });
+    let reviewResolved = false;
+    let firstSynthBeforeReview = false;
+    const synthesized: string[] = [];
+    const hybrid = makeHybridReply({
+      fastReply: () => null,
+      prefetch: () => null,
+      jokes: () => null,
+      classify: () => false,
+      chitchat: async () => 'fallback',
+      chitchatStream: async function* () {
+        yield 'Première affirmation. ';
+        yield 'Deuxième affirmation. ';
+        yield 'Troisième affirmation.';
+      },
+      agentReply: async () => 'unused',
+      semanticReview: async ({ draft }) => {
+        reviewStarted();
+        await reviewGate;
+        reviewResolved = true;
+        return {
+          response: draft,
+          outcome: 'fail_open',
+          reason: 'fresh_grounding_rejected',
+          revisionAttempts: 0,
+        };
+      },
+    });
+    const onHeard = makeVoiceReply({
+      replyFn: hybrid,
+      synth: async (text) => {
+        synthesized.push(text);
+        if (synthesized.length === 1) {
+          firstSynthBeforeReview = !reviewResolved;
+          firstSynthesized();
+        }
+        return `wav:${text}`;
+      },
+      play: async () => undefined,
+      avatarEnabled: false,
+    });
+
+    const turn = onHeard("Penses-tu qu'une IA peut aimer ?");
+    await Promise.all([reviewPending, firstSynth]);
+    expect(firstSynthBeforeReview).toBe(true);
+    expect(reviewResolved).toBe(false);
+    releaseReview();
+    await turn;
+
+    expect(synthesized.slice(0, 3)).toEqual([
+      'Première affirmation.',
+      'Deuxième affirmation.',
+      'Troisième affirmation.',
+    ]);
+    expect(synthesized.slice(3).join(' ')).toBe(
+      "Pardon, je dois nuancer : je n'ai pas pu confirmer cette réponse de façon fiable.",
+    );
   });
 
   it('records provider, review, relationship-release and content-audio phases independently', async () => {

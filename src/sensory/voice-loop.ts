@@ -127,6 +127,8 @@ export interface VoiceStepOptions {
   onReplyTimingPhase?: (phase: VoiceReplyTimingPhase) => void;
   /** Raw-free pilot telemetry. Never carries the transcript or generated candidate. */
   onSpokenPrefixTelemetry?: (cause: SpokenPrefixTelemetryCause) => void;
+  /** Register a non-blocking semantic correction for playback after the initial answer. */
+  onSemanticCorrection?: (correction: Promise<string>) => void;
 }
 
 export type VoiceReplyTimingPhase =
@@ -2432,6 +2434,7 @@ export function makeVoiceReply(options: VoiceReplyOptions = {}): VoiceReplyHandl
     let firstContentAudioMs: number | undefined;
     let streamFallbackSegments = 0;
     let streamRouteRemote = false;
+    let semanticCorrectionPromise: Promise<string> | undefined;
     let mode: VoiceReplyTiming['mode'] = 'silent';
     let spoke = false;
     let assistantTurnPublished = false;
@@ -2686,6 +2689,40 @@ export function makeVoiceReply(options: VoiceReplyOptions = {}): VoiceReplyHandl
             }
           }
       : undefined;
+    const speakSemanticCorrection = async (): Promise<string> => {
+      const pending = semanticCorrectionPromise;
+      semanticCorrectionPromise = undefined;
+      if (!pending || signal.aborted) return '';
+      try {
+        const correction = prepareSpeech(await pending);
+        if (!correction || signal.aborted) return '';
+        const guarded = guardRelationshipReply(correction).response.trim();
+        if (!guarded || signal.aborted) return '';
+        if (timedStreamSpeak) {
+          let streamed = false;
+          await withSpeakingGuard(async () => {
+            streamed = await timedStreamSpeak(guarded, { signal, delivery });
+          });
+          if (streamed && !signal.aborted) return guarded;
+        }
+        const correctionSynth = await resolveSynth(turnTtsEngine);
+        const wav = await correctionSynth(guarded, { signal, delivery });
+        if (!wav || signal.aborted) return '';
+        await withSpeakingGuard(() => timedPlay(wav, { signal, delivery }));
+        try {
+          const { unlink } = await import('fs/promises');
+          await unlink(wav);
+        } catch {
+          /* throwaway correction WAV */
+        }
+        return signal.aborted ? '' : guarded;
+      } catch (error) {
+        logger.warn(
+          `[voice] semantic correction unavailable: ${error instanceof Error ? error.message : String(error)}`,
+        );
+        return '';
+      }
+    };
     try {
       // ---- VISUAL GROUNDING: explicit one-shot camera request ----
       // This must precede both the stream and blocking reply functions. In
@@ -2912,6 +2949,9 @@ export function makeVoiceReply(options: VoiceReplyOptions = {}): VoiceReplyHandl
           signal,
           delivery,
           onReplyTimingPhase: markReplyTimingPhase,
+          onSemanticCorrection: (correction) => {
+            semanticCorrectionPromise = correction.catch(() => '');
+          },
         });
         replyMs = Date.now() - replyStart;
       }
@@ -2972,6 +3012,7 @@ export function makeVoiceReply(options: VoiceReplyOptions = {}): VoiceReplyHandl
         if (streamed) {
           if (!emptyReplyRecovery) mode = 'blocking';
           spoke = true;
+          const correction = await speakSemanticCorrection();
           logger.info(
             `[voice] spoke (${turnTtsEngine} audio stream) chars=${reply.length}`
           );
@@ -2979,7 +3020,7 @@ export function makeVoiceReply(options: VoiceReplyOptions = {}): VoiceReplyHandl
             `[voice] timings: reply=${replyMs}ms firstAudio=${firstAudioMs ?? -1}ms ` +
               `streamPlay=${playMs}ms total=${Date.now() - startedAt}ms`
           );
-          options.onSpoke?.(reply);
+          options.onSpoke?.([reply, correction].filter(Boolean).join(' '));
           return;
         }
         logger.debug(
@@ -3003,11 +3044,12 @@ export function makeVoiceReply(options: VoiceReplyOptions = {}): VoiceReplyHandl
       if (signal.aborted) return;
       if (!emptyReplyRecovery) mode = 'blocking';
       spoke = true;
+      const correction = await speakSemanticCorrection();
       logger.info(`[voice] spoke chars=${reply.length}`);
       logger.info(
         `[voice] timings: reply=${replyMs}ms synth=${synthMs}ms play=${playMs}ms total=${Date.now() - startedAt}ms`
       );
-      options.onSpoke?.(reply);
+      options.onSpoke?.([reply, correction].filter(Boolean).join(' '));
       // Best-effort cleanup of the synthesized WAV.
       try {
         const { unlink } = await import('fs/promises');

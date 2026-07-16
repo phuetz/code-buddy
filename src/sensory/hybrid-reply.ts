@@ -497,6 +497,29 @@ export function makeHybridReply(options: HybridReplyOptions = {}): HybridReplyHa
     }
   }
 
+  function briefSemanticCorrection(
+    draft: string,
+    reviewed: SemanticResponseGateResult | null,
+  ): string {
+    if (!reviewed || reviewed.outcome === 'accepted' || reviewed.outcome === 'skipped') return '';
+    if (reviewed.outcome === 'revised') {
+      const safeRevision = guardBeforeMemory(reviewed.response.trim());
+      if (!safeRevision || norm(safeRevision) === norm(draft)) return '';
+      const firstSentence = safeRevision.match(/^.*?[.!?…](?:\s|$)/u)?.[0]?.trim();
+      const concise = (firstSentence || safeRevision).slice(0, 280).trim();
+      return concise ? `Pardon, plus exactement : ${concise}` : '';
+    }
+    if (
+      reviewed.reason === 'fresh_grounding_rejected' ||
+      reviewed.reason === 'revision_failed' ||
+      reviewed.reason === 'revision_empty' ||
+      reviewed.reason === 'revision_rejected'
+    ) {
+      return "Pardon, je dois nuancer : je n'ai pas pu confirmer cette réponse de façon fiable.";
+    }
+    return '';
+  }
+
   function guardBeforeMemory(response: string): string {
     const guarded = guardRelationshipReply(response);
     if (guarded.intervened) {
@@ -707,7 +730,7 @@ export function makeHybridReply(options: HybridReplyOptions = {}): HybridReplyHa
       if (out && !signal?.aborted) {
         out = guardBeforeMemory(out);
         const reviewEvidence = mergeEvidence(freshEvidence, cognitiveEvidence);
-        const reviewed = await reviewBeforeDelivery({
+        const reviewInput: HybridSemanticReviewInput = {
           request: heard,
           draft: out,
           plan: prepared.plan,
@@ -715,8 +738,20 @@ export function makeHybridReply(options: HybridReplyOptions = {}): HybridReplyHa
           ...(reviewEvidence ? { evidence: reviewEvidence } : {}),
           ...(responseMainProvider ? { mainProvider: responseMainProvider } : {}),
           ...(signal ? { signal } : {}),
-        }, stepOpts);
-        if (reviewed) out = guardBeforeMemory(reviewed.response.trim() || out);
+        };
+        if (replyOpts?.onSemanticCorrection && shouldReviewPlan(prepared.plan, heard)) {
+          const correction = reviewBeforeDelivery(reviewInput, stepOpts)
+            .then((reviewed) => briefSemanticCorrection(out, reviewed))
+            .catch(() => '');
+          try {
+            replyOpts.onSemanticCorrection(correction);
+          } catch {
+            /* the audio correction channel is optional; initial delivery stays non-blocking */
+          }
+        } else {
+          const reviewed = await reviewBeforeDelivery(reviewInput, stepOpts);
+          if (reviewed) out = guardBeforeMemory(reviewed.response.trim() || out);
+        }
       }
       if (signal?.aborted) return '';
       remember(heard, out);
@@ -838,7 +873,6 @@ export function makeHybridReply(options: HybridReplyOptions = {}): HybridReplyHa
           const prepared = prepareConversationTurn(heard, recent, {
             ...(freshContext ? { freshContext: freshContext.promptGuidance } : {}),
           });
-          const semanticBuffer = shouldReviewPlan(prepared.plan, heard);
           let responseMainProvider: HybridSemanticReviewInput['mainProvider'];
           let cognitiveEvidence: string | undefined;
           const streamOptions: VoiceStepOptions = {
@@ -871,11 +905,12 @@ export function makeHybridReply(options: HybridReplyOptions = {}): HybridReplyHa
             if (replyOpts?.signal?.aborted) return;
             if (typeof delta !== 'string' || delta.length === 0) continue;
             full += delta;
-            if (!semanticBuffer) yield delta;
+            yield delta;
           }
           if (replyOpts?.signal?.aborted) return;
-          let completed = guardBeforeMemory(full.trim());
-          if (completed && semanticBuffer) {
+          const completed = guardBeforeMemory(full.trim());
+          let correction = '';
+          if (completed && shouldReviewPlan(prepared.plan, heard)) {
             const reviewEvidence = mergeEvidence(freshEvidence, cognitiveEvidence);
             const reviewed = await reviewBeforeDelivery({
               request: heard,
@@ -886,14 +921,15 @@ export function makeHybridReply(options: HybridReplyOptions = {}): HybridReplyHa
               ...(responseMainProvider ? { mainProvider: responseMainProvider } : {}),
               ...(replyOpts?.signal ? { signal: replyOpts.signal } : {}),
             }, streamOptions);
-            if (reviewed) completed = guardBeforeMemory(reviewed.response.trim() || completed);
+            correction = briefSemanticCorrection(completed, reviewed);
             if (replyOpts?.signal?.aborted) return;
-            if (completed) yield completed;
+            if (correction) yield ` ${correction}`;
           }
           if (completed) {
             await evolveRelationship(heard);
-            remember(heard, completed);
-            logger.info(`[voice-hybrid] route=agent-stream responseChars=${completed.length}`);
+            const canonical = [completed, correction].filter(Boolean).join(' ');
+            remember(heard, canonical);
+            logger.info(`[voice-hybrid] route=agent-stream responseChars=${canonical.length}`);
           }
           return;
         }
@@ -937,44 +973,25 @@ export function makeHybridReply(options: HybridReplyOptions = {}): HybridReplyHa
         })).trim();
         if (replyOpts?.signal?.aborted) return;
         completed = guardBeforeMemory(removeRepeatedPrefix(spokenPrefix, completed));
+        if (completed) yield completed;
 
+        let correction = '';
         if (completed && shouldReviewPlan(prepared.plan, heard)) {
-          try {
-            const reviewEvidence = mergeEvidence(freshEvidence, cognitiveEvidence);
-            const reviewed = await reviewSemantics({
-              request: heard,
-              draft: completed,
-              plan: prepared.plan,
-              history: [...recent, { role: 'assistant', content: spokenPrefix }],
-              ...(reviewEvidence ? { evidence: reviewEvidence } : {}),
-              ...(responseMainProvider ? { mainProvider: responseMainProvider } : {}),
-              ...(replyOpts?.signal ? { signal: replyOpts.signal } : {}),
-            });
-            continuationOptions.onReplyTimingPhase?.('continuation_semantic_review_complete');
-            if (
-              reviewed.outcome !== 'accepted' &&
-              reviewed.outcome !== 'revised'
-            ) {
-              logger.warn(
-                `[voice-hybrid] prefixed continuation rejected outcome=${reviewed.outcome} reason=${reviewed.reason}`,
-              );
-              completed = '';
-            } else {
-              completed = guardBeforeMemory(
-                removeRepeatedPrefix(spokenPrefix, reviewed.response),
-              );
-            }
-          } catch (error) {
-            continuationOptions.onReplyTimingPhase?.('continuation_semantic_review_complete');
-            logger.warn(
-              `[voice-hybrid] prefixed continuation review failed closed (${error instanceof Error ? error.name : 'unknown'})`,
-            );
-            completed = '';
-          }
+          const reviewEvidence = mergeEvidence(freshEvidence, cognitiveEvidence);
+          const reviewed = await reviewBeforeDelivery({
+            request: heard,
+            draft: completed,
+            plan: prepared.plan,
+            history: [...recent, { role: 'assistant', content: spokenPrefix }],
+            ...(reviewEvidence ? { evidence: reviewEvidence } : {}),
+            ...(responseMainProvider ? { mainProvider: responseMainProvider } : {}),
+            ...(replyOpts?.signal ? { signal: replyOpts.signal } : {}),
+          }, continuationOptions);
+          correction = briefSemanticCorrection(completed, reviewed);
+          if (correction && !replyOpts?.signal?.aborted) yield ` ${correction}`;
         }
         if (replyOpts?.signal?.aborted) return;
-        if (completed) yield completed;
-        const canonical = [spokenPrefix, completed].filter(Boolean).join(' ');
+        const canonical = [spokenPrefix, completed, correction].filter(Boolean).join(' ');
         if (canonical) {
           await evolveRelationship(heard);
           remember(heard, canonical);
@@ -988,7 +1005,7 @@ export function makeHybridReply(options: HybridReplyOptions = {}): HybridReplyHa
       const prepared = prepareConversationTurn(heard, recent);
       // A prefixed continuation must be buffered even when no semantic critic is required:
       // this lets us remove an accidental repeated prefix before any continuation is emitted.
-      const semanticBuffer = Boolean(replyOpts?.spokenPrefix) || shouldReviewPlan(prepared.plan, heard);
+      const prefixBuffer = Boolean(replyOpts?.spokenPrefix);
       let full = '';
       let responseMainProvider: HybridSemanticReviewInput['mainProvider'];
       let cognitiveEvidence: string | undefined;
@@ -1015,10 +1032,7 @@ export function makeHybridReply(options: HybridReplyOptions = {}): HybridReplyHa
         if (replyOpts?.signal?.aborted) return;
         if (typeof delta !== 'string' || delta.length === 0) continue;
         full += delta;
-        // A candidate selected for semantic review must not leak partial text
-        // before the accepted/revised answer is known. Brief/standard turns
-        // retain their original first-token streaming path.
-        if (!semanticBuffer) yield delta;
+        if (!prefixBuffer) yield delta;
       }
       let completed = full.trim();
       if (completed) {
@@ -1026,7 +1040,11 @@ export function makeHybridReply(options: HybridReplyOptions = {}): HybridReplyHa
           removeRepeatedPrefix(replyOpts?.spokenPrefix ?? '', completed),
         );
       }
-      if (completed && semanticBuffer && !replyOpts?.signal?.aborted) {
+      if (completed && prefixBuffer && !replyOpts?.signal?.aborted) {
+        yield completed;
+      }
+      let correction = '';
+      if (completed && shouldReviewPlan(prepared.plan, heard) && !replyOpts?.signal?.aborted) {
         const reviewed = await reviewBeforeDelivery({
           request: heard,
           draft: completed,
@@ -1038,22 +1056,15 @@ export function makeHybridReply(options: HybridReplyOptions = {}): HybridReplyHa
           ...(responseMainProvider ? { mainProvider: responseMainProvider } : {}),
           ...(replyOpts?.signal ? { signal: replyOpts.signal } : {}),
         }, streamOptions);
-        if (reviewed) {
-          completed = guardBeforeMemory(
-            removeRepeatedPrefix(
-              replyOpts?.spokenPrefix ?? '',
-              reviewed.response.trim() || completed,
-            ),
-          );
-        }
+        correction = briefSemanticCorrection(completed, reviewed);
         if (replyOpts?.signal?.aborted) return;
-        yield completed;
+        if (correction) yield ` ${correction}`;
       }
       if (completed && !replyOpts?.signal?.aborted) {
         await evolveRelationship(heard);
         remember(
           heard,
-          [replyOpts?.spokenPrefix, completed].filter(Boolean).join(' '),
+          [replyOpts?.spokenPrefix, completed, correction].filter(Boolean).join(' '),
         );
         logger.info(`[voice-hybrid] route=chitchat-stream responseChars=${completed.length}`);
       }
