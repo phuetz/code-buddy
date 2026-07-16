@@ -51,7 +51,17 @@ export type Emotion =
 export interface EmotionRead {
   emotion: Emotion;
   intensity: 'normal' | 'high';
+  /**
+   * How confident the read is (0..1), from marker count + intensity + corroborating signals.
+   * Optional so `{ emotion, intensity }` literals still satisfy the type. Mirrors MySoulmate's
+   * confidence gate: a weak lone token stays low, a strong/corroborated read climbs — used to gate
+   * the strong-register escalation without over-committing on an ambiguous word.
+   */
+  confidence?: number;
 }
+
+/** Confidence at/above which a read is strong enough to escalate the register on its own. */
+export const STRONG_EMOTION_CONFIDENCE = 0.8;
 
 export const IMMEDIATE_EMOTION_ACKNOWLEDGEMENTS: Readonly<Partial<Record<Emotion, string>>> = {
   frustration: 'Je comprends, c’est vraiment pénible.',
@@ -122,15 +132,42 @@ function hasUnnegatedMatch(pattern: RegExp, text: string): boolean {
   return false;
 }
 
-/** Detect the dominant emotion + its intensity. Pure, STT-robust. */
+/** Count unnegated matches of a pattern in the normalized text (corroboration signal). */
+function countUnnegatedMatches(pattern: RegExp, text: string): number {
+  const flags = pattern.flags.includes('g') ? pattern.flags : `${pattern.flags}g`;
+  const global = new RegExp(pattern.source, flags);
+  let match: RegExpExecArray | null;
+  let count = 0;
+  while ((match = global.exec(text)) !== null) {
+    if (!isNegatedAt(text, match.index)) count += 1;
+    if (match[0].length === 0) global.lastIndex += 1;
+  }
+  return count;
+}
+
+/**
+ * Confidence (0..1) that the detected emotion is real: a lone token starts modest, an intensity
+ * marker and repeated/corroborating markers push it up. Kept simple + monotonic so it's predictable.
+ */
+function emotionConfidence(emotion: Exclude<Emotion, 'neutral'>, text: string, intensityHigh: boolean): number {
+  const hits = countUnnegatedMatches(ERE[emotion], text);
+  let c = 0.55 + Math.min(2, hits - 1) * 0.15; // 1 hit → .55, 2 → .70, 3+ → .85
+  if (intensityHigh) c += 0.2;
+  return Math.max(0, Math.min(1, c));
+}
+
+/** Detect the dominant emotion + its intensity + a confidence score. Pure, STT-robust. */
 export function detectEmotion(heard: string): EmotionRead {
   const t = norm(heard);
-  if (!t) return { emotion: 'neutral', intensity: 'normal' };
-  const intensity: 'normal' | 'high' = INTENSITY_RE.test(t) ? 'high' : 'normal';
+  if (!t) return { emotion: 'neutral', intensity: 'normal', confidence: 0 };
+  const intensityHigh = INTENSITY_RE.test(t);
+  const intensity: 'normal' | 'high' = intensityHigh ? 'high' : 'normal';
   for (const emotion of EMOTION_ORDER) {
-    if (hasUnnegatedMatch(ERE[emotion], t)) return { emotion, intensity };
+    if (hasUnnegatedMatch(ERE[emotion], t)) {
+      return { emotion, intensity, confidence: emotionConfidence(emotion, t, intensityHigh) };
+    }
   }
-  return { emotion: 'neutral', intensity };
+  return { emotion: 'neutral', intensity, confidence: 0 };
 }
 
 /** Map a fine Emotion to the coarse RelationalSignal used for trait drift. Pure. */
@@ -170,7 +207,9 @@ const HUMOR_WELCOME: ReadonlySet<Emotion> = new Set(['frustration', 'sadness', '
 /** Rich, emotion-aware tone instruction for the reply system prompt. Empty for neutral. */
 export function emotionGuidance(read: EmotionRead): string {
   const { emotion, intensity } = read;
-  const strong = intensity === 'high';
+  // Escalate on an explicit intensity marker OR a strongly-corroborated read (MySoulmate's
+  // confidence gate) — a lone ambiguous token stays at the gentler register.
+  const strong = intensity === 'high' || (read.confidence ?? 0) >= STRONG_EMOTION_CONFIDENCE;
   let base = '';
   switch (emotion) {
     case 'frustration':
