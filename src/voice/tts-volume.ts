@@ -18,6 +18,8 @@ export const DEFAULT_TARGET_RMS_DBFS = -18;
 
 const TARGET_PEAK_DBFS = -1;
 const MAX_NORMALIZE_GAIN_DB = 12;
+const MAX_SPEECH_NORMALIZE_GAIN_DB = 30;
+const MIN_SPEECH_RMS_DBFS = -60;
 const MAX_STREAM_GAIN_DB = 18;
 const MIN_STREAM_GAIN_DB = 0;
 const MIN_TARGET_RMS_DBFS = -40;
@@ -140,6 +142,7 @@ function transformPcm16(payload: Buffer, factor: number, limit = TARGET_PEAK): B
 interface Pcm16Level {
   peak: number;
   rms: number;
+  zeroCrossingRate: number;
 }
 
 function measurePcm16(payload: Buffer): Pcm16Level {
@@ -147,16 +150,33 @@ function measurePcm16(payload: Buffer): Pcm16Level {
   let peak = 0;
   let sumSquares = 0;
   let samples = 0;
+  let zeroCrossings = 0;
+  let previousSign = 0;
   for (let offset = 0; offset < pairedLength; offset += 2) {
     const sample = payload.readInt16LE(offset);
     peak = Math.max(peak, Math.abs(sample));
     sumSquares += sample * sample;
     samples += 1;
+    const sign = Math.sign(sample);
+    if (sign !== 0) {
+      if (previousSign !== 0 && sign !== previousSign) zeroCrossings += 1;
+      previousSign = sign;
+    }
   }
   return {
     peak,
     rms: samples > 0 ? Math.sqrt(sumSquares / samples) : 0,
+    zeroCrossingRate: samples > 1 ? zeroCrossings / (samples - 1) : 0,
   };
+}
+
+function looksLikeWeakSpeech(level: Pcm16Level): boolean {
+  const minimumSpeechRms = PCM16_MAX * 10 ** (MIN_SPEECH_RMS_DBFS / 20);
+  if (level.rms < minimumSpeechRms) return false;
+  // Voiced speech has an energy envelope and comparatively sparse polarity
+  // changes. Reject flat hum and high-frequency stationary noise.
+  const crestFactor = level.peak / level.rms;
+  return crestFactor >= 1.2 && level.zeroCrossingRate <= 0.35;
 }
 
 interface NormalizationPlan {
@@ -174,14 +194,17 @@ function planNormalization(
   const peakLimit = Math.max(1, Math.min(PCM16_MAX, TARGET_PEAK * volumeFactor * targetBoost));
   if (volumeFactor === 0) return { factor: 0, peakLimit };
 
-  const { rms } = measurePcm16(payload);
-  if (rms === 0) return { factor: 1, peakLimit };
+  const level = measurePcm16(payload);
+  if (level.rms === 0) return { factor: 1, peakLimit };
   const targetRms = PCM16_MAX * 10 ** (resolveTargetRmsDbfs(env) / 20) * volumeFactor * targetBoost;
-  const factor = targetRms / rms;
+  const factor = targetRms / level.rms;
   const maxGain = 10 ** (MAX_NORMALIZE_GAIN_DB / 20);
-  // At C1, the existing conservative ceiling remains the silence/noise guard.
-  // C5 refines that decision for genuine low-energy speech.
-  if (factor > maxGain) return { factor: 1, peakLimit };
+  if (factor > maxGain) {
+    const maxSpeechGain = 10 ** (MAX_SPEECH_NORMALIZE_GAIN_DB / 20);
+    if (factor > maxSpeechGain || !looksLikeWeakSpeech(level)) {
+      return { factor: 1, peakLimit };
+    }
+  }
   // Avoid re-rounding already-normalized cache files on every playback.
   if (factor >= 0.98 && factor <= 1.02) return { factor: 1, peakLimit };
   return { factor, peakLimit };
@@ -356,6 +379,7 @@ export class Pcm16WavStreamGain {
 export const __test = {
   probePcm16Wav,
   measurePcm16,
+  looksLikeWeakSpeech,
   softLimit,
   targetPeak: TARGET_PEAK,
   targetRms: PCM16_MAX * 10 ** (DEFAULT_TARGET_RMS_DBFS / 20),

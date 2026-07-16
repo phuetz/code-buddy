@@ -168,9 +168,17 @@ describe('assistant TTS volume', () => {
     const blocking = readFileSync(blockingPath);
     rmSync(dir, { recursive: true, force: true });
 
-    const levels = [cache, streaming, blocking].map((wav) => rms(samplesFrom(wav)));
-    expect(levelDifferenceDb(levels[0]!, levels[1]!)).toBeLessThan(1);
-    expect(levelDifferenceDb(levels[0]!, levels[2]!)).toBeLessThan(1);
+    const levels = [cache, streaming, blocking].map((wav) => {
+      const samples = samplesFrom(wav);
+      return {
+        peak: Math.max(...samples.map(Math.abs)),
+        rms: rms(samples),
+      };
+    });
+    expect(levelDifferenceDb(levels[0]!.rms, levels[1]!.rms)).toBeLessThan(1);
+    expect(levelDifferenceDb(levels[0]!.rms, levels[2]!.rms)).toBeLessThan(1);
+    expect(levelDifferenceDb(levels[0]!.peak, levels[1]!.peak)).toBeLessThan(1);
+    expect(levelDifferenceDb(levels[0]!.peak, levels[2]!.peak)).toBeLessThan(1);
   });
 
   it('normalizes different native streaming levels without amplifying silence or noise', () => {
@@ -188,6 +196,30 @@ describe('assistant TTS volume', () => {
       .toBeLessThan(1);
     expect(streamWav(silence).equals(silence)).toBe(true);
     expect(streamWav(noise).equals(noise)).toBe(true);
+  });
+
+  it('normalizes genuinely weak speech beyond 12 dB but leaves silence and noise alone', () => {
+    const weakSpeechSamples = Array.from(
+      { length: 3_000 },
+      (_, index) => Math.round(250 * Math.sin((2 * Math.PI * index) / 120)),
+    );
+    const noiseSamples = Array.from(
+      { length: 3_000 },
+      (_, index) => index % 2 === 0 ? 200 : -200,
+    );
+    const weakSpeech = pcm16Wav(weakSpeechSamples);
+    const noise = pcm16Wav(noiseSamples);
+    const silence = pcm16Wav(Array.from({ length: 3_000 }, () => 0));
+    const blockingSpeech = normalizePcm16Wav(weakSpeech);
+    const streamingSpeech = streamWav(weakSpeech);
+
+    expect(levelDifferenceDb(rms(samplesFrom(blockingSpeech)), __test.targetRms))
+      .toBeLessThan(0.2);
+    expect(levelDifferenceDb(rms(samplesFrom(streamingSpeech)), __test.targetRms))
+      .toBeLessThan(0.2);
+    expect(streamWav(noise).equals(noise)).toBe(true);
+    expect(normalizePcm16Wav(noise).equals(noise)).toBe(true);
+    expect(streamWav(silence).equals(silence)).toBe(true);
   });
 
   it('can release a partial streaming head without waiting for more network data', () => {
