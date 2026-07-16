@@ -90,6 +90,7 @@ import {
 } from '../companion/visual-grounding.js';
 import { VisualConsentGate } from '../companion/visual-consent.js';
 import { getVoiceTurnCoordinator } from './voice-turn-coordinator.js';
+import { resolvePocketLanguage } from '../talk-mode/providers/pocket-tts.js';
 
 /**
  * Cancellation handle threaded into the two interruptible steps of a spoken turn: the
@@ -1367,11 +1368,7 @@ function shortSegmentVoiceIdentity(
   env: NodeJS.ProcessEnv,
   engine: LocalTtsEngine = resolveTtsEngine(env),
 ): string {
-  if (engine === 'pocket') return `pocket:${env.CODEBUDDY_POCKET_VOICE || 'estelle'}`;
-  if (engine === 'voicebox') {
-    return `voicebox:${env.CODEBUDDY_VOICEBOX_PROFILE?.trim() || 'default'}`;
-  }
-  return `piper:${voice || env.CODEBUDDY_TTS_VOICE || env.CODEBUDDY_TTS_PIPER_MODEL || 'default'}`;
+  return resolveBaseCacheVoice(engine, voice, env);
 }
 
 function cacheShortSegments(
@@ -1802,7 +1799,12 @@ function resolveBaseCacheVoice(
   voice?: string,
   env: NodeJS.ProcessEnv = process.env,
 ): string {
-  if (engine === 'pocket') return `pocket:${env.CODEBUDDY_POCKET_VOICE ?? 'estelle'}`;
+  if (engine === 'pocket') {
+    const pocketVoice = env.CODEBUDDY_POCKET_VOICE?.trim() || 'estelle';
+    const language = resolvePocketLanguage(env.CODEBUDDY_POCKET_LANG ?? 'french');
+    const quantize = env.CODEBUDDY_POCKET_QUANTIZE === 'true';
+    return `pocket:${pocketVoice}:language=${language}:quantize=${quantize}`;
+  }
   if (engine === 'voicebox') {
     const voicebox = resolveVoiceboxConfig(env);
     return [

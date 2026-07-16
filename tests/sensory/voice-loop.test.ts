@@ -145,7 +145,9 @@ describe('voice loop — instant backchannel cache', () => {
       },
     );
     expect(hit).toBe('/tmp/alors.wav');
-    expect(calls).toEqual([['Alors…', 'pocket:estelle']]);
+    expect(calls).toEqual([
+      ['Alors…', 'pocket:estelle:language=french_24l:quantize=false'],
+    ]);
   });
 
   it('looks up an instant acknowledgement under the locked Voicebox identity', async () => {
@@ -178,6 +180,35 @@ describe('voice loop — instant backchannel cache', () => {
     expect(await lookupInstantBackchannelWav('Le ciel est bleu.', {}, lookup)).toBeNull();
     expect(await lookupInstantBackchannelWav('Alors…', { CODEBUDDY_TTS_CACHE: 'false' }, lookup)).toBeNull();
     expect(calls).toBe(0);
+  });
+
+  it('separates Pocket cache entries by quantization and language', async () => {
+    const voices: string[] = [];
+    const lookup = (_text: string, voice: string): string => {
+      voices.push(voice);
+      return '/tmp/cache.wav';
+    };
+
+    await lookupInstantBackchannelWav(
+      'Alors…',
+      { CODEBUDDY_POCKET_LANG: 'fr', CODEBUDDY_POCKET_QUANTIZE: 'false' },
+      lookup,
+    );
+    await lookupInstantBackchannelWav(
+      'Alors…',
+      { CODEBUDDY_POCKET_LANG: 'fr', CODEBUDDY_POCKET_QUANTIZE: 'true' },
+      lookup,
+    );
+    await lookupInstantBackchannelWav(
+      'Alors…',
+      { CODEBUDDY_POCKET_LANG: 'english', CODEBUDDY_POCKET_QUANTIZE: 'true' },
+      lookup,
+    );
+
+    expect(new Set(voices).size).toBe(3);
+    expect(voices[0]).toContain('language=french_24l:quantize=false');
+    expect(voices[1]).toContain('language=french_24l:quantize=true');
+    expect(voices[2]).toContain('language=english:quantize=true');
   });
 });
 
