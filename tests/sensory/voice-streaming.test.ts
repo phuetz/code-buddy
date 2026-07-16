@@ -211,6 +211,51 @@ describe('streamToSpeech — pipeline (time-to-first-audio)', () => {
     expect(result.sentences).toEqual(['Un.', 'Deux.']);
     expect(result.fallbackSegments).toBe(2);
   });
+
+  it('releases a partial cloud prebuffer on timeout instead of waiting indefinitely', async () => {
+    let firstPlayed!: () => void;
+    const played = new Promise<void>((resolve) => {
+      firstPlayed = resolve;
+    });
+    async function* stream(): AsyncGenerator<string> {
+      yield 'Phrase disponible. ';
+      await played;
+    }
+
+    const result = await streamToSpeech({
+      stream: stream(),
+      synth: async (text) => `wav:${text}`,
+      play: async () => {
+        firstPlayed();
+      },
+      audioPrebufferMs: () => 10,
+      guard: passthroughGuard,
+      unlink: noUnlink,
+    });
+
+    expect(result).toMatchObject({
+      played: true,
+      spoken: 'Phrase disponible.',
+      aborted: false,
+    });
+  });
+
+  it('never throws when audio prebuffer configuration fails', async () => {
+    async function* stream(): AsyncGenerator<string> {
+      yield 'Phrase intacte.';
+    }
+
+    await expect(streamToSpeech({
+      stream: stream(),
+      synth: async (text) => `wav:${text}`,
+      play: async () => undefined,
+      audioPrebufferMs: () => {
+        throw new Error('configuration indisponible');
+      },
+      guard: passthroughGuard,
+      unlink: noUnlink,
+    })).resolves.toMatchObject({ played: true, spoken: 'Phrase intacte.' });
+  });
 });
 
 describe('streamToSpeech — per-sentence sanitize across deltas', () => {
@@ -587,6 +632,115 @@ describe('makeVoiceReply — streaming integration', () => {
     } finally {
       if (savedSemanticGate === undefined) delete process.env.CODEBUDDY_SEMANTIC_GATE;
       else process.env.CODEBUDDY_SEMANTIC_GATE = savedSemanticGate;
+    }
+  });
+
+  it('prebuffers cloud audio until a second segment is ready', async () => {
+    const savedPrebuffer = process.env.CODEBUDDY_VOICE_AUDIO_PREBUFFER_MS;
+    process.env.CODEBUDDY_VOICE_AUDIO_PREBUFFER_MS = '1000';
+    let releaseThird!: () => void;
+    const thirdGate = new Promise<void>((resolve) => {
+      releaseThird = resolve;
+    });
+    let firstSynthesized!: () => void;
+    const firstSynth = new Promise<void>((resolve) => {
+      firstSynthesized = resolve;
+    });
+    const events: string[] = [];
+    const onHeard = makeVoiceReply({
+      streamFn: async function* (_heard, options) {
+        options?.onProviderResolved?.({
+          model: 'cloud-agent',
+          apiKey: 'cloud-key',
+          baseURL: 'https://voice.example/v1',
+        });
+        yield 'Première phrase distante. ';
+        yield 'Deuxième phrase distante. ';
+        await thirdGate;
+        yield 'Troisième phrase distante.';
+      },
+      replyFn: async () => 'fallback',
+      synth: async (text) => {
+        events.push(`synth:${text}`);
+        if (text.startsWith('Première')) firstSynthesized();
+        return `wav:${text}`;
+      },
+      play: async (wav) => {
+        events.push(`play:${wav.slice(4)}`);
+      },
+      avatarEnabled: false,
+    });
+
+    try {
+      const turn = onHeard('Question distante.');
+      await firstSynth;
+      await Promise.resolve();
+      expect(events).toEqual(['synth:Première phrase distante.']);
+      releaseThird();
+      await turn;
+
+      const firstPlay = events.indexOf('play:Première phrase distante.');
+      const secondSynth = events.indexOf('synth:Deuxième phrase distante.');
+      expect(secondSynth).toBeGreaterThanOrEqual(0);
+      expect(firstPlay).toBeGreaterThan(secondSynth);
+      expect(events.filter((event) => event.startsWith('play:'))).toEqual([
+        'play:Première phrase distante.',
+        'play:Deuxième phrase distante.',
+        'play:Troisième phrase distante.',
+      ]);
+    } finally {
+      if (savedPrebuffer === undefined) delete process.env.CODEBUDDY_VOICE_AUDIO_PREBUFFER_MS;
+      else process.env.CODEBUDDY_VOICE_AUDIO_PREBUFFER_MS = savedPrebuffer;
+    }
+  });
+
+  it('starts local playback immediately without cloud prebuffer', async () => {
+    const savedPrebuffer = process.env.CODEBUDDY_VOICE_AUDIO_PREBUFFER_MS;
+    process.env.CODEBUDDY_VOICE_AUDIO_PREBUFFER_MS = '1000';
+    let releaseThird!: () => void;
+    const thirdGate = new Promise<void>((resolve) => {
+      releaseThird = resolve;
+    });
+    let firstPlayed!: () => void;
+    const firstPlay = new Promise<void>((resolve) => {
+      firstPlayed = resolve;
+    });
+    const played: string[] = [];
+    const onHeard = makeVoiceReply({
+      streamFn: async function* (_heard, options) {
+        options?.onProviderResolved?.({
+          model: 'local-agent',
+          apiKey: 'ollama',
+          baseURL: 'http://127.0.0.1:11434/v1',
+        });
+        yield 'Première phrase locale. ';
+        yield 'Deuxième phrase locale. ';
+        await thirdGate;
+        yield 'Troisième phrase locale.';
+      },
+      replyFn: async () => 'fallback',
+      synth: async (text) => `wav:${text}`,
+      play: async (wav) => {
+        played.push(wav.slice(4));
+        if (played.length === 1) firstPlayed();
+      },
+      avatarEnabled: false,
+    });
+
+    try {
+      const turn = onHeard('Question locale.');
+      await firstPlay;
+      expect(played).toEqual(['Première phrase locale.']);
+      releaseThird();
+      await turn;
+      expect(played).toEqual([
+        'Première phrase locale.',
+        'Deuxième phrase locale.',
+        'Troisième phrase locale.',
+      ]);
+    } finally {
+      if (savedPrebuffer === undefined) delete process.env.CODEBUDDY_VOICE_AUDIO_PREBUFFER_MS;
+      else process.env.CODEBUDDY_VOICE_AUDIO_PREBUFFER_MS = savedPrebuffer;
     }
   });
 

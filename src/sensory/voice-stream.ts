@@ -256,6 +256,29 @@ class AsyncQueue<T> {
     }
   }
 
+  /** Wait until `depth` queued items are ready, the queue closes, or the timeout expires. */
+  async waitForDepth(depth: number, timeoutMs: number, stop: () => boolean): Promise<void> {
+    if (depth <= 0 || timeoutMs <= 0) return;
+    const deadline = Date.now() + timeoutMs;
+    while (this.items.length < depth && !this.closed && !stop()) {
+      const remaining = deadline - Date.now();
+      if (remaining <= 0) return;
+      await new Promise<void>((resolve) => {
+        let settled = false;
+        const finish = (): void => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
+          const index = this.waiters.indexOf(finish);
+          if (index >= 0) this.waiters.splice(index, 1);
+          resolve();
+        };
+        const timer = setTimeout(finish, remaining);
+        this.waiters.push(finish);
+      });
+    }
+  }
+
   /** Take everything left (for cleanup of unplayed items after an interrupt). */
   drainRemaining(): T[] {
     const rest = this.items;
@@ -284,6 +307,11 @@ export interface StreamToSpeechParams {
    * fallback but are not used by the fast path.
    */
   streamSpeak?: StreamSpeakFn;
+  /**
+   * Route-aware audio prebuffer. A positive value switches to synthesized WAV buffering and
+   * waits for a second ready segment (or this timeout) before the first playback.
+   */
+  audioPrebufferMs?: () => number;
   /** Barge-in / cancellation. Aborting empties the queues and kills the current play. */
   signal?: AbortSignal;
   /** Per-sentence sanitizer. Default: `prepareSpeech` (strips leaked tokens, foreign script). */
@@ -374,16 +402,26 @@ export async function streamToSpeech(params: StreamToSpeechParams): Promise<Stre
     }
   })();
 
+  // Wait for the first complete text segment before choosing the audio path. By this point the
+  // reply stream has resolved its provider route, so cloud-only anti-jitter can be selected
+  // without penalising loopback models.
+  const firstSentence = await sentenceQ.shift(stop);
+  let audioPrebufferMs = 0;
+  try {
+    audioPrebufferMs = Math.max(0, params.audioPrebufferMs?.() ?? 0);
+  } catch (error) {
+    logger.warn(`[voice] audio prebuffer configuration ignored: ${errMsg(error)}`);
+  }
+
   // Native audio-streaming path — Pocket emits PCM while it is still
   // synthesizing, so one worker consumes text segments and pipes each response
   // straight to the player. The server is single-request/thread oriented; keep
   // strict order and avoid synthesizing a later segment concurrently.
-  if (params.streamSpeak) {
+  if (params.streamSpeak && audioPrebufferMs <= 0) {
     const speakWorker = (async (): Promise<void> => {
-      const first = await sentenceQ.shift(stop);
-      if (first === null) return;
+      if (firstSentence === null) return;
       await guard(async () => {
-        let text: string | null = first;
+        let text: string | null = firstSentence;
         let nativeStreamHealthy = true;
         while (true) {
           if (text === null) break;
@@ -458,21 +496,21 @@ export async function streamToSpeech(params: StreamToSpeechParams): Promise<Stre
   // Stage 2 — synthesize each ready sentence to a WAV, AHEAD of playback (buffered in wavQ).
   const synthWorker = (async (): Promise<void> => {
     try {
+      let text: string | null = firstSentence;
       while (true) {
-        const text = await sentenceQ.shift(stop);
         if (text === null) break;
-        let wav: string;
+        let wav = '';
         try {
           wav = await params.synth(text, { signal });
         } catch (err) {
           logger.warn(`[voice] stream synth failed (skipping sentence): ${errMsg(err)}`);
-          continue;
         }
         if (stop()) {
-          await unlink(wav);
+          if (wav) await unlink(wav);
           break;
         }
         if (wav) wavQ.push({ text, wav });
+        text = await sentenceQ.shift(stop);
       }
     } finally {
       wavQ.close();
@@ -484,6 +522,11 @@ export async function streamToSpeech(params: StreamToSpeechParams): Promise<Stre
   const playWorker = (async (): Promise<void> => {
     const first = await wavQ.shift(stop);
     if (!first) return; // nothing to play → never raise the guard (no spurious echo tail)
+    if (audioPrebufferMs > 0) {
+      // `first` is already removed, so depth 1 means a second segment is synthesized and ready.
+      // A one-sentence answer or stalled provider releases on queue close / timeout.
+      await wavQ.waitForDepth(1, audioPrebufferMs, stop);
+    }
     await guard(async () => {
       let item: { text: string; wav: string } | null = first;
       while (item) {

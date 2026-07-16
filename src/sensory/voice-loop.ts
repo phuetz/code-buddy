@@ -459,6 +459,13 @@ export function isRemoteVoiceRoute(baseURL: string | undefined): boolean {
   }
 }
 
+/** Cloud text routes trade a small bounded startup buffer for continuous sentence playback. */
+export function voiceAudioPrebufferMs(env: NodeJS.ProcessEnv = process.env): number {
+  const configured = Number(env.CODEBUDDY_VOICE_AUDIO_PREBUFFER_MS);
+  if (!Number.isFinite(configured)) return 400;
+  return Math.max(0, Math.min(5_000, Math.floor(configured)));
+}
+
 /** Explicit true/false wins; otherwise latency buffers follow the resolved route. */
 export function voiceLatencyBufferEnabled(
   configured: string | undefined,
@@ -2424,6 +2431,7 @@ export function makeVoiceReply(options: VoiceReplyOptions = {}): VoiceReplyHandl
     let firstAudioMs: number | undefined;
     let firstContentAudioMs: number | undefined;
     let streamFallbackSegments = 0;
+    let streamRouteRemote = false;
     let mode: VoiceReplyTiming['mode'] = 'silent';
     let spoke = false;
     let assistantTurnPublished = false;
@@ -2770,6 +2778,9 @@ export function makeVoiceReply(options: VoiceReplyOptions = {}): VoiceReplyHandl
               delivery,
               ...(spokenPrefix ? { spokenPrefix } : {}),
               onReplyTimingPhase: markReplyTimingPhase,
+              onProviderResolved: (route) => {
+                streamRouteRemote = isRemoteVoiceRoute(route.baseURL);
+              },
             })) {
               // Provider first-token latency is measured on the raw delta. The
               // safety gate intentionally waits for a sentence boundary before
@@ -2843,6 +2854,7 @@ export function makeVoiceReply(options: VoiceReplyOptions = {}): VoiceReplyHandl
             ...(timedStreamSpeak ? { streamSpeak: timedStreamSpeak } : {}),
             signal,
             cap: options.sentenceCap ?? voiceSentenceCap(),
+            audioPrebufferMs: () => streamRouteRemote ? voiceAudioPrebufferMs(env) : 0,
           });
           streamFallbackSegments = result.fallbackSegments ?? 0;
           if (signal.aborted) {
