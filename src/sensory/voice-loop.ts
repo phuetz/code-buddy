@@ -261,7 +261,7 @@ export interface VoiceReplyOptions {
   sentenceCap?: number;
   /** Injectable "synthesize" step. Default: resident Pocket TTS, Piper fallback. */
   synth?: SynthFn;
-  /** Injectable "speak" step. Default: aplay / pw-play / ffplay (blocking). */
+  /** Injectable "speak" step. Default: one aplay / ffplay backend per turn. */
   play?: PlayFn;
   /**
    * Injectable progressive synth+play path. This is also the diagnostic seam
@@ -1900,29 +1900,29 @@ function makeDefaultSynth(voice?: string, rootDir?: string): SynthFn {
   };
 }
 
-interface StdinAudioPlayer {
+interface VoiceAudioPlayer {
   cmd: string;
-  args: string[];
+  stdinArgs: string[];
+  fileArgs: (file: string) => string[];
 }
 
-let stdinAudioPlayerPromise: Promise<StdinAudioPlayer | null> | null = null;
-
-async function resolveStdinAudioPlayer(): Promise<StdinAudioPlayer | null> {
-  stdinAudioPlayerPromise ??= (async () => {
-    const candidates: StdinAudioPlayer[] = [
-      { cmd: 'aplay', args: ['-q', '-'] },
-      { cmd: 'pw-play', args: ['-'] },
-      {
-        cmd: 'ffplay',
-        args: ['-nodisp', '-autoexit', '-loglevel', 'quiet', '-i', 'pipe:0'],
-      },
-    ];
-    for (const candidate of candidates) {
-      if (await commandExists(candidate.cmd)) return candidate;
-    }
-    return null;
-  })();
-  return stdinAudioPlayerPromise;
+async function resolveVoiceAudioPlayer(): Promise<VoiceAudioPlayer | null> {
+  const candidates: VoiceAudioPlayer[] = [
+    {
+      cmd: 'aplay',
+      stdinArgs: ['-q', '-'],
+      fileArgs: (file) => ['-q', file],
+    },
+    {
+      cmd: 'ffplay',
+      stdinArgs: ['-nodisp', '-autoexit', '-loglevel', 'quiet', '-i', 'pipe:0'],
+      fileArgs: (file) => ['-nodisp', '-autoexit', '-loglevel', 'quiet', file],
+    },
+  ];
+  for (const candidate of candidates) {
+    if (await commandExists(candidate.cmd)) return candidate;
+  }
+  return null;
 }
 
 function waitForPlayerDrain(
@@ -1953,7 +1953,9 @@ function waitForPlayerDrain(
  * complete clip. Any setup/runtime failure returns false and the caller uses
  * the established temporary-WAV/Piper fallback.
  */
-function makeDefaultStreamSpeak(): StreamSpeakFn | undefined {
+function makeDefaultStreamSpeak(
+  playerPromise: Promise<VoiceAudioPlayer | null> = resolveVoiceAudioPlayer()
+): StreamSpeakFn | undefined {
   const engine = resolveTtsEngine();
   const streamEnabled = engine === 'voicebox'
     ? process.env.CODEBUDDY_VOICEBOX_AUDIO_STREAM !== 'false'
@@ -1965,7 +1967,7 @@ function makeDefaultStreamSpeak(): StreamSpeakFn | undefined {
   return async (text, opts = {}): Promise<boolean> => {
     const signal = opts.signal;
     if (signal?.aborted) return false;
-    const player = await resolveStdinAudioPlayer();
+    const player = await playerPromise;
     if (!player) return false;
 
     const cachedBackchannel = engine === 'pocket'
@@ -1976,7 +1978,7 @@ function makeDefaultStreamSpeak(): StreamSpeakFn | undefined {
         // The player starts reading a ready local WAV immediately: no HTTP,
         // model queue, or synthesis step remains on this acknowledgement.
         opts.onFirstAudio?.();
-        await defaultPlay(cachedBackchannel, { signal });
+        await defaultPlay(cachedBackchannel, { signal }, playerPromise);
         logger.info('[voice] instant backchannel cache hit');
         return !signal?.aborted;
       } finally {
@@ -2005,7 +2007,7 @@ function makeDefaultStreamSpeak(): StreamSpeakFn | undefined {
         })();
     if (!stream || signal?.aborted) return false;
 
-    const child = spawn(player.cmd, player.args, { stdio: ['pipe', 'ignore', 'ignore'] });
+    const child = spawn(player.cmd, player.stdinArgs, { stdio: ['pipe', 'ignore', 'ignore'] });
     const stdin = child.stdin;
     if (!stdin) {
       try {
@@ -2131,65 +2133,71 @@ function makeDefaultStreamSpeak(): StreamSpeakFn | undefined {
 /** Default speak: play a WAV with the first available local player, blocking until done.
  *  Interruptible: when `opts.signal` aborts (barge-in), the audio child is SIGKILLed and
  *  the play resolves immediately so the ear can re-open. */
-async function defaultPlay(wav: string, opts: VoiceStepOptions = {}): Promise<void> {
+async function defaultPlay(
+  wav: string,
+  opts: VoiceStepOptions = {},
+  playerPromise: Promise<VoiceAudioPlayer | null> = resolveVoiceAudioPlayer()
+): Promise<void> {
   const signal = opts.signal;
   // Already interrupted before we even start → don't spawn anything.
   if (signal?.aborted) return;
   // This also migrates old, quiet cache entries on first playback. New Pocket
   // and Piper files are already normalized, so the operation is idempotent.
   await normalizeWavFile(wav, process.env);
-  const candidates: Array<{ cmd: string; args: (f: string) => string[] }> = [
-    { cmd: 'aplay', args: (f) => ['-q', f] },
-    { cmd: 'pw-play', args: (f) => [f] },
-    { cmd: 'ffplay', args: (f) => ['-nodisp', '-autoexit', '-loglevel', 'quiet', f] },
-  ];
+  const player = await playerPromise;
+  if (!player) {
+    logger.warn('[voice] no audio player available (aplay/ffplay) — staying silent');
+    return;
+  }
   // A player that blocks instead of exiting (malformed WAV with a huge declared duration, an ALSA
   // device that hangs) would never resolve this promise. Under withSpeakingGuard that latches
   // isSpeaking()=true forever, so the speech reaction would drop every utterance and the robot goes
   // permanently deaf. A generous timeout (far beyond any real spoken line) kills the child and
   // recovers.
   const playTimeoutMs = Number(process.env.CODEBUDDY_VOICE_PLAY_TIMEOUT_MS) || 60_000;
-  for (const c of candidates) {
-    if (!(await commandExists(c.cmd))) continue;
-    await new Promise<void>((resolve) => {
-      const child = spawn(c.cmd, c.args(wav), { stdio: 'ignore' });
-      let settled = false;
-      const finish = (): void => {
-        if (settled) return;
-        settled = true;
-        clearTimeout(killTimer);
-        signal?.removeEventListener('abort', onAbort);
-        resolve();
-      };
-      const killTimer = setTimeout(() => {
-        logger.warn(
-          `[voice] player ${c.cmd} exceeded ${playTimeoutMs}ms — killing to avoid latching the speaking guard`
-        );
-        try {
-          child.kill('SIGKILL');
-        } catch {
-          /* already gone */
-        }
-        finish();
-      }, playTimeoutMs);
-      // Barge-in: the same SIGKILL, but on demand instead of only on timeout.
-      const onAbort = (): void => {
-        logger.info(`[voice] playback interrupted — killing ${c.cmd}`);
-        try {
-          child.kill('SIGKILL');
-        } catch {
-          /* already gone */
-        }
-        finish();
-      };
-      signal?.addEventListener('abort', onAbort, { once: true });
-      child.on('error', finish);
-      child.on('close', finish);
-    });
-    return;
-  }
-  logger.warn('[voice] no audio player available (aplay/pw-play/ffplay) — staying silent');
+  await new Promise<void>((resolve) => {
+    const child = spawn(player.cmd, player.fileArgs(wav), { stdio: 'ignore' });
+    let settled = false;
+    const finish = (): void => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(killTimer);
+      signal?.removeEventListener('abort', onAbort);
+      resolve();
+    };
+    const killTimer = setTimeout(() => {
+      logger.warn(
+        `[voice] player ${player.cmd} exceeded ${playTimeoutMs}ms — killing to avoid latching the speaking guard`
+      );
+      try {
+        child.kill('SIGKILL');
+      } catch {
+        /* already gone */
+      }
+      finish();
+    }, playTimeoutMs);
+    // Barge-in: the same SIGKILL, but on demand instead of only on timeout.
+    const onAbort = (): void => {
+      logger.info(`[voice] playback interrupted — killing ${player.cmd}`);
+      try {
+        child.kill('SIGKILL');
+      } catch {
+        /* already gone */
+      }
+      finish();
+    };
+    signal?.addEventListener('abort', onAbort, { once: true });
+    child.on('error', finish);
+    child.on('close', finish);
+  });
 }
+
+/** Narrow test seam for verifying the shared per-turn player contract. */
+export const __voiceAudioPlayerTest = {
+  resolveVoiceAudioPlayer,
+  makeDefaultStreamSpeak,
+  defaultPlay,
+};
 
 /**
  * Speak an arbitrary string aloud RIGHT NOW (proactively), not as a reply to something heard.
@@ -2311,14 +2319,6 @@ export function makeVoiceReply(options: VoiceReplyOptions = {}): VoiceReplyHandl
   const spokenPrefixFn = embeddedReply?.spokenPrefix;
   const streamFn: StreamReplyFn | undefined =
     options.streamFn ?? embeddedStream ?? (options.replyFn ? undefined : defaultStreamReply);
-  const play = options.play ?? defaultPlay;
-  // An explicit progressive path wins even when synth/play are also injected:
-  // diagnostics can consume the real HTTP stream into a null sink while
-  // retaining deterministic fallbacks. Otherwise preserve the production-only
-  // native stream rule so older injected synth/player tests keep their contract.
-  const nativeStreamSpeak = options.streamSpeak ?? (
-    !options.synth && !options.play ? makeDefaultStreamSpeak() : undefined
-  );
   const visualGrounding: VisualGroundingFn = options.visualGrounding ?? (
     (utterance, groundingOptions) => groundExplicitVisualRequest(utterance, {
       cwd: groundingOptions?.cwd ?? options.rootDir ?? process.cwd(),
@@ -2360,6 +2360,21 @@ export function makeVoiceReply(options: VoiceReplyOptions = {}): VoiceReplyHandl
     const controller = new AbortController();
     currentAbort = controller;
     const { signal } = controller;
+    // Resolve one WAV-aware backend for the complete turn. Cached files,
+    // progressive stdin audio, and blocking fallbacks all share this promise.
+    const playerPromise = options.play
+      ? Promise.resolve<VoiceAudioPlayer | null>(null)
+      : resolveVoiceAudioPlayer();
+    const play: PlayFn = options.play ?? (
+      (wav, opts) => defaultPlay(wav, opts, playerPromise)
+    );
+    // An explicit progressive path wins even when synth/play are also injected:
+    // diagnostics can consume the real HTTP stream into a null sink while
+    // retaining deterministic fallbacks. Otherwise preserve the production-only
+    // native stream rule so older injected synth/player tests keep their contract.
+    const nativeStreamSpeak = options.streamSpeak ?? (
+      !options.synth && !options.play ? makeDefaultStreamSpeak(playerPromise) : undefined
+    );
     const delivery = deriveVoiceDeliveryProfile(heard, context);
     const startedAt = Date.now();
     let replyMs = 0;
