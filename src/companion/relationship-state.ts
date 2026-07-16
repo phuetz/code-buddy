@@ -198,6 +198,7 @@ export type RelationalSignal =
   | 'deep-talk' // real / vulnerable talk → depth up
   | 'debugging-together' // heads-down work together → depth + warmth up, slight energy cost
   | 'frustration' // he's stuck/stressed → she softens (warmth up) and her mood dips in empathy
+  | 'self-time' // her OWN time (inner-life tick, no user) → mood drifts a touch on its own
   | 'neutral'; // nothing notable → decay only
 
 /** Per-signal nudges (points, pre-clamp). Small on purpose — personality drifts slowly. */
@@ -208,6 +209,9 @@ const SIGNAL_DELTAS: Record<RelationalSignal, Partial<RelationshipTraits> & { mo
   'deep-talk': { depth: 5, warmth: 1 },
   'debugging-together': { depth: 3, warmth: 2, energy: -1 },
   frustration: { warmth: 3, mood: -4, energy: -2 },
+  // Lisa having a moment to herself (an inner-life tick, not driven by him). A small, self-driven
+  // mood drift — she has an interior that moves a little on its own, without ratcheting.
+  'self-time': { mood: 2, energy: 1 },
   neutral: {},
 };
 
