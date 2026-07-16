@@ -30,6 +30,7 @@ import { getFleetRegistry } from '../fleet/fleet-registry.js';
 import { classifyTaskComplexity } from '../optimization/model-routing.js';
 import type { ToolResult } from '../types/index.js';
 import { getGlobalEventBus } from '../events/event-bus.js';
+import { scanForSecrets } from '../fleet/privacy-lint.js';
 
 export interface RoutePeerParams {
   prompt: string;
@@ -133,6 +134,11 @@ export async function executeRoutePeer(params: RoutePeerParams): Promise<ToolRes
     };
   }
 
+  const privacyLint = scanForSecrets(params.prompt);
+  const privacyTag = privacyLint.hasSecrets ? 'sensitive' : params.privacyTag;
+  const routablePeers = privacyLint.highConfidence
+    ? keepLocalOnly(peers)
+    : peers;
   const classification = classifyTaskComplexity(params.prompt);
   const dispatchResolution = resolveActiveCustomAgentDispatchProfile(params.dispatchProfile);
   const dispatchProfile = dispatchResolution.dispatchProfile;
@@ -143,7 +149,7 @@ export async function executeRoutePeer(params: RoutePeerParams): Promise<ToolRes
   );
   const toolDecisions = toolset.decisions;
   const constraints: DispatchConstraints = {
-    ...(params.privacyTag ? { privacyTag: params.privacyTag } : {}),
+    ...(privacyTag ? { privacyTag } : {}),
     ...(typeof params.maxCostUsd === 'number' ? { maxCostUsd: params.maxCostUsd } : {}),
     ...(typeof params.maxLatencyMs === 'number' ? { maxLatencyMs: params.maxLatencyMs } : {}),
     ...(typeof params.parallelism === 'number' && params.parallelism > 0
@@ -158,11 +164,11 @@ export async function executeRoutePeer(params: RoutePeerParams): Promise<ToolRes
   try {
     const router = new TaskRouter();
     const plan = chainRolesResult.roles
-      ? planChainDispatch(classification, peers, {
+      ? planChainDispatch(classification, routablePeers, {
           chainRoles: chainRolesResult.roles,
           constraints,
         })
-      : router.plan(classification, peers, constraints);
+      : router.plan(classification, routablePeers, constraints);
     const chainNextCalls = plan.chain?.map((lane) => buildPeerDelegateCall(
       lane.peerId,
       lane.model,
@@ -208,6 +214,12 @@ export async function executeRoutePeer(params: RoutePeerParams): Promise<ToolRes
       toolPolicy,
       toolDecisions,
       toolset,
+      privacyTag: privacyTag ?? 'public',
+      privacyLint: {
+        hasSecrets: privacyLint.hasSecrets,
+        highConfidence: privacyLint.highConfidence,
+        matchKinds: privacyLint.matches.map((match) => match.kind),
+      },
       rationale: plan.rationale,
       classification,
       describeErrors,
@@ -252,7 +264,16 @@ export async function executeRoutePeer(params: RoutePeerParams): Promise<ToolRes
       return {
         success: false,
         error: err.message,
-        data: { classification, describeErrors },
+        data: {
+          classification,
+          describeErrors,
+          privacyTag: privacyTag ?? 'public',
+          privacyLint: {
+            hasSecrets: privacyLint.hasSecrets,
+            highConfidence: privacyLint.highConfidence,
+            matchKinds: privacyLint.matches.map((match) => match.kind),
+          },
+        },
       };
     }
     return {
@@ -261,6 +282,20 @@ export async function executeRoutePeer(params: RoutePeerParams): Promise<ToolRes
       data: { classification, describeErrors },
     };
   }
+}
+
+function keepLocalOnly(peers: PeerSlot[]): PeerSlot[] {
+  return peers
+    .map((slot) => ({
+      ...slot,
+      capability: {
+        ...slot.capability,
+        models: slot.capability.models.filter(
+          (model) => (model.egress ?? slot.capability.egress) === 'local',
+        ),
+      },
+    }))
+    .filter((slot) => slot.capability.models.length > 0);
 }
 
 function buildPeerDelegateCall(
@@ -337,7 +372,7 @@ function normalizeCapability(raw: unknown): PeerCapability | null {
       Array.isArray(model.strengths) &&
       typeof model.provider === 'string'
     )),
-    egress: candidate.egress ?? 'local',
+    egress: candidate.egress ?? 'cloud',
     machineLabel: candidate.machineLabel ?? '',
     machineSpec: candidate.machineSpec,
     maxConcurrency: candidate.maxConcurrency,

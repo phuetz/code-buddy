@@ -16,6 +16,7 @@ import {
 import type { ToolResult } from '../types/index.js';
 import { executePeerDelegate } from './peer-delegate-tool.js';
 import { executeRoutePeer } from './route-peer-tool.js';
+import { scanForSecrets } from '../fleet/privacy-lint.js';
 
 export interface PeerChainParams {
   prompt: string;
@@ -71,11 +72,13 @@ export async function executePeerChain(params: PeerChainParams): Promise<ToolRes
     return { success: false, error: rolesResult.error };
   }
   const roles = rolesResult.roles!;
+  const privacyLint = scanForSecrets(params.prompt);
+  const privacyTag = privacyLint.hasSecrets ? 'sensitive' : params.privacyTag;
 
   const routeResult = await executeRoutePeer({
     prompt: params.prompt,
     chainRoles: roles,
-    ...(params.privacyTag ? { privacyTag: params.privacyTag } : {}),
+    ...(privacyTag ? { privacyTag } : {}),
     ...(typeof params.maxCostUsd === 'number' ? { maxCostUsd: params.maxCostUsd } : {}),
     ...(typeof params.maxLatencyMs === 'number' ? { maxLatencyMs: params.maxLatencyMs } : {}),
     ...(typeof params.estimatedTokens === 'number' ? { estimatedTokens: params.estimatedTokens } : {}),
