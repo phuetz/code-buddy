@@ -2017,10 +2017,42 @@ function makeDefaultStreamSpeak(): StreamSpeakFn | undefined {
     }
     const reader = stream.getReader();
     const gain = new Pcm16WavStreamGain(process.env);
-    let bytes = 0;
     let firstAudio = false;
     let closedOk = false;
     let settled = false;
+    let headReleaseTimer: NodeJS.Timeout | undefined;
+    const configuredHeadTimeoutMs = Number(process.env.CODEBUDDY_TTS_STREAM_HEAD_TIMEOUT_MS);
+    const headTimeoutMs = Number.isFinite(configuredHeadTimeoutMs) && configuredHeadTimeoutMs > 0
+      ? Math.max(50, Math.min(1_000, configuredHeadTimeoutMs))
+      : 250;
+    const writeGainParts = (parts: Buffer[]): boolean => {
+      let accepted = true;
+      for (const part of parts) {
+        opts.onAudioChunk?.(part);
+        accepted = stdin.write(part) && accepted;
+      }
+      if (!firstAudio && gain.hasOutputAudio()) {
+        firstAudio = true;
+        opts.onFirstAudio?.();
+      }
+      return accepted;
+    };
+    const scheduleHeadRelease = (): void => {
+      if (headReleaseTimer || gain.hasOutputAudio()) return;
+      headReleaseTimer = setTimeout(() => {
+        headReleaseTimer = undefined;
+        if (settled || signal?.aborted) return;
+        try {
+          // A slow/stalled HTTP body must not hold the look-ahead forever.
+          // The small partial head is safe to write without awaiting backpressure.
+          writeGainParts(gain.releaseHead());
+        } catch (err) {
+          logger.debug(
+            `[voice] streaming head release failed open: ${err instanceof Error ? err.message : String(err)}`
+          );
+        }
+      }, headTimeoutMs);
+    };
     const closed = new Promise<void>((resolve) => {
       const finish = (ok: boolean): void => {
         if (settled) return;
@@ -2061,24 +2093,13 @@ function makeDefaultStreamSpeak(): StreamSpeakFn | undefined {
       while (!signal?.aborted && !settled) {
         const { done, value } = await reader.read();
         if (done) break;
-        bytes += value.byteLength;
-        let accepted = true;
-        for (const part of gain.push(value)) {
-          opts.onAudioChunk?.(part);
-          accepted = stdin.write(part) && accepted;
-        }
-        // A canonical WAV header is 44 bytes. The renderer normally delivers header
-        // and initial PCM together; only mark perceived audio once PCM exists.
-        if (!firstAudio && bytes > 44) {
-          firstAudio = true;
-          opts.onFirstAudio?.();
-        }
+        const accepted = writeGainParts(gain.push(value));
+        scheduleHeadRelease();
         if (!accepted) await waitForPlayerDrain(child, stdin, signal);
       }
-      for (const part of gain.flush()) {
-        opts.onAudioChunk?.(part);
-        if (!stdin.write(part)) await waitForPlayerDrain(child, stdin, signal);
-      }
+      if (headReleaseTimer) clearTimeout(headReleaseTimer);
+      headReleaseTimer = undefined;
+      if (!writeGainParts(gain.flush())) await waitForPlayerDrain(child, stdin, signal);
       if (!stdin.destroyed) stdin.end();
       await closed;
       return firstAudio && closedOk && !signal?.aborted;
@@ -2096,6 +2117,7 @@ function makeDefaultStreamSpeak(): StreamSpeakFn | undefined {
       return false;
     } finally {
       clearTimeout(killTimer);
+      if (headReleaseTimer) clearTimeout(headReleaseTimer);
       signal?.removeEventListener('abort', onAbort);
       try {
         await reader.cancel();

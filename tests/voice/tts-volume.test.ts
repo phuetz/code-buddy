@@ -8,6 +8,7 @@ import {
   normalizeWavFile,
   Pcm16WavStreamGain,
   resolveStreamGainDb,
+  resolveTargetRmsDbfs,
   resolveTtsVolumePercent,
 } from '../../src/voice/tts-volume.js';
 
@@ -50,6 +51,29 @@ function samplesFrom(wav: Buffer): number[] {
   return samples;
 }
 
+function rms(samples: number[]): number {
+  return Math.sqrt(samples.reduce((sum, sample) => sum + sample * sample, 0) / samples.length);
+}
+
+function levelDifferenceDb(left: number, right: number): number {
+  return Math.abs(20 * Math.log10(left / right));
+}
+
+function streamWav(source: Buffer, env: NodeJS.ProcessEnv = {}): Buffer {
+  const processor = new Pcm16WavStreamGain(env);
+  const pieces: Buffer[] = [];
+  const splitSizes = [1, 11, 17, 20, 3, 5, 2, 701, 997, 2_003];
+  let offset = 0;
+  for (const size of splitSizes) {
+    if (offset >= source.length) break;
+    pieces.push(...processor.push(source.subarray(offset, Math.min(source.length, offset + size))));
+    offset += size;
+  }
+  if (offset < source.length) pieces.push(...processor.push(source.subarray(offset)));
+  pieces.push(...processor.flush());
+  return Buffer.concat(pieces);
+}
+
 describe('assistant TTS volume', () => {
   it('defaults to 100 and preserves an explicit bounded preference', () => {
     expect(resolveTtsVolumePercent({})).toBe(100);
@@ -58,16 +82,18 @@ describe('assistant TTS volume', () => {
     expect(resolveTtsVolumePercent({ CODEBUDDY_TTS_VOLUME: '140' })).toBe(100);
     expect(resolveTtsVolumePercent({ CODEBUDDY_TTS_VOLUME: 'invalid' })).toBe(100);
     expect(resolveStreamGainDb({})).toBe(0);
+    expect(resolveTargetRmsDbfs({})).toBe(-18);
+    expect(resolveTargetRmsDbfs({ CODEBUDDY_TTS_TARGET_RMS: '-20' })).toBe(-20);
+    expect(resolveTargetRmsDbfs({ CODEBUDDY_TTS_TARGET_RMS: 'invalid' })).toBe(-18);
   });
 
-  it('normalizes a quiet Pocket PCM16 WAV near -1 dBFS and is byte-idempotent', () => {
+  it('normalizes a Pocket PCM16 WAV to the shared RMS target and is byte-idempotent', () => {
     const source = pcm16Wav([0, 4_000, -8_000, 12_000, -12_000], true);
     const once = normalizePcm16Wav(source, {});
     const twice = normalizePcm16Wav(once, {});
-    const peak = Math.max(...samplesFrom(once).map(Math.abs));
+    const outputRms = rms(samplesFrom(once));
 
-    expect(peak).toBeGreaterThan(__test.targetPeak * 0.94);
-    expect(peak).toBeLessThanOrEqual(__test.targetPeak);
+    expect(levelDifferenceDb(outputRms, __test.targetRms)).toBeLessThan(0.1);
     expect(twice.equals(once)).toBe(true);
     expect(once.subarray(0, 4).toString('ascii')).toBe('RIFF');
   });
@@ -76,10 +102,9 @@ describe('assistant TTS volume', () => {
     const source = pcm16Wav([10_000, -10_000]);
     const half = normalizePcm16Wav(source, { CODEBUDDY_TTS_VOLUME: '50' });
     const muted = normalizePcm16Wav(source, { CODEBUDDY_TTS_VOLUME: '0' });
-    const halfPeak = Math.max(...samplesFrom(half).map(Math.abs));
+    const halfRms = rms(samplesFrom(half));
 
-    expect(halfPeak).toBeGreaterThan(__test.targetPeak * 0.47);
-    expect(halfPeak).toBeLessThanOrEqual(__test.targetPeak * 0.5);
+    expect(levelDifferenceDb(halfRms, __test.targetRms * 0.5)).toBeLessThan(0.1);
     expect(samplesFrom(muted)).toEqual([0, 0]);
   });
 
@@ -107,43 +132,74 @@ describe('assistant TTS volume', () => {
     }
   });
 
-  it('amplifies streaming PCM across split headers and odd sample boundaries', () => {
-    const source = pcm16Wav([1_000, -2_000, 20_000, -20_000], true);
-    const processor = new Pcm16WavStreamGain({
+  it('normalizes streaming PCM across split headers and odd sample boundaries', () => {
+    const pattern = [1_000, -2_000, 5_000, -5_000];
+    const source = pcm16Wav(
+      Array.from({ length: 3_001 }, (_, index) => pattern[index % pattern.length]!),
+      true,
+    );
+    const env = {
       CODEBUDDY_TTS_VOLUME: '100',
       CODEBUDDY_TTS_STREAM_GAIN_DB: '8',
-    });
-    const pieces: Buffer[] = [];
-    const splitSizes = [1, 11, 17, 20, 3, 5, 2, 99];
-    let offset = 0;
-    for (const size of splitSizes) {
-      if (offset >= source.length) break;
-      pieces.push(...processor.push(source.subarray(offset, Math.min(source.length, offset + size))));
-      offset += size;
-    }
-    if (offset < source.length) pieces.push(...processor.push(source.subarray(offset)));
-    pieces.push(...processor.flush());
-
-    const output = Buffer.concat(pieces);
+    };
+    const output = streamWav(source, env);
     const transformed = samplesFrom(output);
     expect(output.length).toBe(source.length);
     expect(output.subarray(0, output.indexOf(Buffer.from('data')) + 8))
       .toEqual(source.subarray(0, source.indexOf(Buffer.from('data')) + 8));
-    expect(transformed[0]).toBeGreaterThan(2_400);
-    expect(transformed[1]).toBeLessThan(-4_800);
-    expect(Math.max(...transformed.map(Math.abs))).toBeLessThanOrEqual(__test.targetPeak);
+    expect(levelDifferenceDb(rms(transformed), __test.targetRms * 10 ** (8 / 20)))
+      .toBeLessThan(0.2);
+    expect(Math.max(...transformed.map(Math.abs))).toBeLessThanOrEqual(32_767);
   });
 
-  it('leaves streaming PCM byte-for-byte unchanged at the default unit gain', () => {
-    const source = pcm16Wav([1_000, -2_000, 20_000, -20_000], true);
-    const processor = new Pcm16WavStreamGain({});
-    const output = Buffer.concat([
-      ...processor.push(source.subarray(0, 47)),
-      ...processor.push(source.subarray(47)),
-      ...processor.flush(),
-    ]);
+  it('aligns cache, streaming, and blocking PCM levels within one decibel', async () => {
+    const pattern = [0, 1_000, -2_000, 3_000, -3_000];
+    const samples = Array.from(
+      { length: 3_000 },
+      (_, index) => pattern[index % pattern.length]!,
+    );
+    const source = pcm16Wav(samples);
+    const cache = normalizePcm16Wav(source, {});
+    const streaming = streamWav(source);
+    const dir = mkdtempSync(join(tmpdir(), 'tts-level-'));
+    const blockingPath = join(dir, 'blocking.wav');
+    writeFileSync(blockingPath, source);
+    expect(await normalizeWavFile(blockingPath, {})).toBe(true);
+    const blocking = readFileSync(blockingPath);
+    rmSync(dir, { recursive: true, force: true });
 
-    expect(output.equals(source)).toBe(true);
+    const levels = [cache, streaming, blocking].map((wav) => rms(samplesFrom(wav)));
+    expect(levelDifferenceDb(levels[0]!, levels[1]!)).toBeLessThan(1);
+    expect(levelDifferenceDb(levels[0]!, levels[2]!)).toBeLessThan(1);
+  });
+
+  it('normalizes different native streaming levels without amplifying silence or noise', () => {
+    const shape = [0, 1_000, -2_000, 3_000, -3_000];
+    const quiet = pcm16Wav(Array.from({ length: 3_000 }, (_, index) => shape[index % 5]!));
+    const loud = pcm16Wav(
+      Array.from({ length: 3_000 }, (_, index) => shape[index % 5]! * 3),
+    );
+    const quietOutput = streamWav(quiet);
+    const loudOutput = streamWav(loud);
+    const silence = pcm16Wav(Array.from({ length: 3_000 }, () => 0));
+    const noise = pcm16Wav(Array.from({ length: 3_000 }, (_, index) => index % 2 ? 1 : -1));
+
+    expect(levelDifferenceDb(rms(samplesFrom(quietOutput)), rms(samplesFrom(loudOutput))))
+      .toBeLessThan(1);
+    expect(streamWav(silence).equals(silence)).toBe(true);
+    expect(streamWav(noise).equals(noise)).toBe(true);
+  });
+
+  it('can release a partial streaming head without waiting for more network data', () => {
+    const source = pcm16Wav([1_000, -2_000, 3_000, -3_000]);
+    const processor = new Pcm16WavStreamGain({});
+    const header = processor.push(source);
+    const released = processor.releaseHead();
+    const output = Buffer.concat([...header, ...released, ...processor.flush()]);
+
+    expect(output.length).toBe(source.length);
+    expect(processor.hasOutputAudio()).toBe(true);
+    expect(levelDifferenceDb(rms(samplesFrom(output)), __test.targetRms)).toBeLessThan(0.1);
   });
 
   it('streams unsupported input byte-for-byte', () => {
