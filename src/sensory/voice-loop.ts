@@ -511,14 +511,14 @@ export async function lookupInstantBackchannelWav(
   text: string,
   env: NodeJS.ProcessEnv = process.env,
   lookup?: (text: string, voice: string) => string | null,
+  cacheVoice = resolveBaseCacheVoice(resolveTtsEngine(env), undefined, env),
 ): Promise<string | null> {
   const clean = text.trim();
   if (env.CODEBUDDY_TTS_CACHE === 'false' || !INSTANT_BACKCHANNELS.has(clean)) return null;
-  const voice = `pocket:${env.CODEBUDDY_POCKET_VOICE || 'estelle'}`;
-  if (lookup) return lookup(clean, voice);
+  if (lookup) return lookup(clean, cacheVoice);
   try {
     const { getTtsCache } = await import('./tts-cache.js');
-    return getTtsCache().lookup(clean, voice);
+    return getTtsCache().lookup(clean, cacheVoice);
   } catch {
     return null;
   }
@@ -1362,8 +1362,11 @@ export function rewriteRepeatedVoiceOpener(
 const SHORT_SEGMENT_CACHE_MAX_CHARS = 60;
 const SHORT_SEGMENT_CACHE_MAX_ENTRIES = 64;
 
-function shortSegmentVoiceIdentity(voice: string | undefined, env: NodeJS.ProcessEnv): string {
-  const engine = resolveTtsEngine(env);
+function shortSegmentVoiceIdentity(
+  voice: string | undefined,
+  env: NodeJS.ProcessEnv,
+  engine: LocalTtsEngine = resolveTtsEngine(env),
+): string {
   if (engine === 'pocket') return `pocket:${env.CODEBUDDY_POCKET_VOICE || 'estelle'}`;
   if (engine === 'voicebox') {
     return `voicebox:${env.CODEBUDDY_VOICEBOX_PROFILE?.trim() || 'default'}`;
@@ -1794,26 +1797,36 @@ export async function* streamCompanionReply(
  * Pocket TTS is the realtime default. Voicebox can render a more expressive
  * voice locally or on Darkstar; Pocket and Piper remain fail-open fallbacks.
  */
-function makeDefaultSynth(voice?: string, rootDir?: string): SynthFn {
-  const engine = resolveTtsEngine();
+function resolveBaseCacheVoice(
+  engine: LocalTtsEngine,
+  voice?: string,
+  env: NodeJS.ProcessEnv = process.env,
+): string {
+  if (engine === 'pocket') return `pocket:${env.CODEBUDDY_POCKET_VOICE ?? 'estelle'}`;
+  if (engine === 'voicebox') {
+    const voicebox = resolveVoiceboxConfig(env);
+    return [
+      'voicebox',
+      voicebox.baseUrl,
+      voicebox.profile,
+      voicebox.engine,
+      voicebox.language,
+      voicebox.modelSize,
+      voicebox.instruct ?? '',
+    ].join(':');
+  }
+  return voice || resolveDefaultPiperVoiceModel() || 'piper:default';
+}
+
+function makeDefaultSynth(
+  voice?: string,
+  rootDir?: string,
+  engine: LocalTtsEngine = resolveTtsEngine(),
+): SynthFn {
   const resolvedVoice = voice || resolveDefaultPiperVoiceModel();
-  const pocketVoice = process.env.CODEBUDDY_POCKET_VOICE ?? 'estelle';
-  const voicebox = resolveVoiceboxConfig();
   // Cache identity covers every acoustic input. `TtsCache` hashes this string,
   // so even a long Voicebox instruction never appears in the cache filename.
-  const baseCacheVoice = engine === 'pocket'
-    ? `pocket:${pocketVoice}`
-    : engine === 'voicebox'
-      ? [
-          'voicebox',
-          voicebox.baseUrl,
-          voicebox.profile,
-          voicebox.engine,
-          voicebox.language,
-          voicebox.modelSize,
-          voicebox.instruct ?? '',
-        ].join(':')
-      : resolvedVoice;
+  const baseCacheVoice = resolveBaseCacheVoice(engine, resolvedVoice);
 
   const synthFresh = async (
     text: string,
@@ -1833,19 +1846,14 @@ function makeDefaultSynth(voice?: string, rootDir?: string): SynthFn {
         return { wav: wavPath, cacheable: true };
       }
       if (opts.signal?.aborted) throw new Error('TTS synthesis was interrupted');
-      logger.info('[voice] Voicebox unavailable/failed — falling back to Pocket TTS');
-      const { synthesizePocketWav } = await import('../voice/local-tts.js');
-      if (await synthesizePocketWav(text, wavPath, process.env, 180_000, opts.signal)) {
-        // Never cache fallback audio under the Voicebox identity.
-        return { wav: wavPath, cacheable: false };
-      }
-      logger.info('[voice] Pocket TTS fallback unavailable — falling back to Piper');
+      throw new Error('Voicebox TTS synthesis failed');
     } else if (engine === 'pocket') {
       const { synthesizePocketWav } = await import('../voice/local-tts.js');
       if (await synthesizePocketWav(text, wavPath, process.env, 180_000, opts.signal)) {
         return { wav: wavPath, cacheable: true };
       }
-      logger.info('[voice] Pocket TTS unavailable/failed — falling back to Piper');
+      if (opts.signal?.aborted) throw new Error('TTS synthesis was interrupted');
+      throw new Error('Pocket TTS synthesis failed');
     }
     if (opts.signal?.aborted) throw new Error('TTS synthesis was interrupted');
     const { synthesizeTextToSpeech } = await import('../tools/text-to-speech-tool.js');
@@ -1859,7 +1867,7 @@ function makeDefaultSynth(voice?: string, rootDir?: string): SynthFn {
       rootDir ? { rootDir } : {}
     );
     await normalizeWavFile(res.outputPath, process.env);
-    return { wav: res.outputPath, cacheable: engine === 'piper' };
+    return { wav: res.outputPath, cacheable: true };
   };
   // Reuse the synthesized WAV for repeated phrases (greeting, "oui je t'entends", …) so
   // neither engine regenerates common speech. Best-effort: any cache error falls back to a fresh
@@ -1954,9 +1962,9 @@ function waitForPlayerDrain(
  * the established temporary-WAV/Piper fallback.
  */
 function makeDefaultStreamSpeak(
-  playerPromise: Promise<VoiceAudioPlayer | null> = resolveVoiceAudioPlayer()
+  playerPromise: Promise<VoiceAudioPlayer | null> = resolveVoiceAudioPlayer(),
+  engine: LocalTtsEngine = resolveTtsEngine(),
 ): StreamSpeakFn | undefined {
-  const engine = resolveTtsEngine();
   const streamEnabled = engine === 'voicebox'
     ? process.env.CODEBUDDY_VOICEBOX_AUDIO_STREAM !== 'false'
     : process.env.CODEBUDDY_POCKET_AUDIO_STREAM !== 'false';
@@ -1970,9 +1978,16 @@ function makeDefaultStreamSpeak(
     const player = await playerPromise;
     if (!player) return false;
 
-    const cachedBackchannel = engine === 'pocket'
-      ? await lookupInstantBackchannelWav(text)
-      : null;
+    const baseCacheVoice = resolveBaseCacheVoice(engine);
+    const cacheVoice = opts.delivery && engine === 'voicebox'
+      ? `${baseCacheVoice}:${voiceRendererDeliveryInstruction(opts.delivery)}`
+      : baseCacheVoice;
+    const cachedBackchannel = await lookupInstantBackchannelWav(
+      text,
+      process.env,
+      undefined,
+      cacheVoice,
+    );
     if (cachedBackchannel) {
       try {
         // The player starts reading a ready local WAV immediately: no HTTP,
@@ -2195,6 +2210,8 @@ async function defaultPlay(
 /** Narrow test seam for verifying the shared per-turn player contract. */
 export const __voiceAudioPlayerTest = {
   resolveVoiceAudioPlayer,
+  resolveBaseCacheVoice,
+  makeDefaultSynth,
   makeDefaultStreamSpeak,
   defaultPlay,
 };
@@ -2333,7 +2350,7 @@ export function makeVoiceReply(options: VoiceReplyOptions = {}): VoiceReplyHandl
 
   // Resolve any persona-specific fallback voice per reply. Shared by the streaming and
   // blocking paths so synthesis selection has one source of truth.
-  const resolveSynth = async (): Promise<SynthFn> => {
+  const resolveSynth = async (engine: LocalTtsEngine): Promise<SynthFn> => {
     let voice = options.voice;
     if (!options.synth && !voice) {
       try {
@@ -2343,10 +2360,10 @@ export function makeVoiceReply(options: VoiceReplyOptions = {}): VoiceReplyHandl
         /* keep env default */
       }
     }
-    const baseSynth = options.synth ?? makeDefaultSynth(voice, options.rootDir);
+    const baseSynth = options.synth ?? makeDefaultSynth(voice, options.rootDir, engine);
     return cacheShortSegments(
       baseSynth,
-      shortSegmentVoiceIdentity(voice, env),
+      shortSegmentVoiceIdentity(voice, env, engine),
       shortSegmentCache,
       () => ++shortSegmentTempSequence,
       env,
@@ -2360,6 +2377,7 @@ export function makeVoiceReply(options: VoiceReplyOptions = {}): VoiceReplyHandl
     const controller = new AbortController();
     currentAbort = controller;
     const { signal } = controller;
+    const turnTtsEngine = resolveTtsEngine(env);
     // Resolve one WAV-aware backend for the complete turn. Cached files,
     // progressive stdin audio, and blocking fallbacks all share this promise.
     const playerPromise = options.play
@@ -2373,7 +2391,9 @@ export function makeVoiceReply(options: VoiceReplyOptions = {}): VoiceReplyHandl
     // retaining deterministic fallbacks. Otherwise preserve the production-only
     // native stream rule so older injected synth/player tests keep their contract.
     const nativeStreamSpeak = options.streamSpeak ?? (
-      !options.synth && !options.play ? makeDefaultStreamSpeak(playerPromise) : undefined
+      !options.synth && !options.play
+        ? makeDefaultStreamSpeak(playerPromise, turnTtsEngine)
+        : undefined
     );
     const delivery = deriveVoiceDeliveryProfile(heard, context);
     const startedAt = Date.now();
@@ -2789,11 +2809,11 @@ export function makeVoiceReply(options: VoiceReplyOptions = {}): VoiceReplyHandl
           // streamed sentence without asking the LLM to generate the answer a second time.
           let baseSynthPromise: Promise<SynthFn> | undefined = timedStreamSpeak
             ? undefined
-            : resolveSynth();
+            : resolveSynth(turnTtsEngine);
           const synth: SynthFn = async (text, synthOpts) => {
             if (firstSegmentMs === undefined) firstSegmentMs = Date.now() - startedAt;
             emitAvatarSegment(text);
-            baseSynthPromise ??= resolveSynth();
+            baseSynthPromise ??= resolveSynth(turnTtsEngine);
             const baseSynth = await baseSynthPromise;
             const wav = await baseSynth(text, { ...(synthOpts ?? {}), delivery });
             if (wav) {
@@ -2939,7 +2959,7 @@ export function makeVoiceReply(options: VoiceReplyOptions = {}): VoiceReplyHandl
           if (!emptyReplyRecovery) mode = 'blocking';
           spoke = true;
           logger.info(
-            `[voice] spoke (${resolveTtsEngine()} audio stream) chars=${reply.length}`
+            `[voice] spoke (${turnTtsEngine} audio stream) chars=${reply.length}`
           );
           logger.info(
             `[voice] timings: reply=${replyMs}ms firstAudio=${firstAudioMs ?? -1}ms ` +
@@ -2949,10 +2969,10 @@ export function makeVoiceReply(options: VoiceReplyOptions = {}): VoiceReplyHandl
           return;
         }
         logger.debug(
-          `[voice] ${resolveTtsEngine()} audio stream unavailable — using WAV synthesis fallback`
+          `[voice] ${turnTtsEngine} audio stream unavailable — using WAV synthesis fallback`
         );
       }
-      const synth = await resolveSynth();
+      const synth = await resolveSynth(turnTtsEngine);
       const synthStart = Date.now();
       const wav = await synth(reply, { signal, delivery });
       synthMs = Date.now() - synthStart;

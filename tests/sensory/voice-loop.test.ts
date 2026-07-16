@@ -148,6 +148,27 @@ describe('voice loop — instant backchannel cache', () => {
     expect(calls).toEqual([['Alors…', 'pocket:estelle']]);
   });
 
+  it('looks up an instant acknowledgement under the locked Voicebox identity', async () => {
+    const voices: string[] = [];
+    await lookupInstantBackchannelWav(
+      'Alors…',
+      {
+        CODEBUDDY_TTS_ENGINE: 'voicebox',
+        CODEBUDDY_VOICEBOX_PROFILE: 'Lisa',
+        CODEBUDDY_VOICEBOX_LANGUAGE: 'fr',
+      },
+      (_text, voice) => {
+        voices.push(voice);
+        return '/tmp/alors-voicebox.wav';
+      },
+    );
+
+    expect(voices).toHaveLength(1);
+    expect(voices[0]).toContain('voicebox:');
+    expect(voices[0]).toContain(':Lisa:');
+    expect(voices[0]).not.toContain('pocket:');
+  });
+
   it('does not consult the cache for generated answer text or when disabled', async () => {
     let calls = 0;
     const lookup = () => {
