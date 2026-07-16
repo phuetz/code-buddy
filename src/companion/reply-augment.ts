@@ -17,6 +17,7 @@
  * @module companion/reply-augment
  */
 import type { RelationalSignal } from './relationship-state.js';
+import { crisisGuidanceFor } from './crisis-safety.js';
 
 /** Lowercase, strip diacritics (STT accent loss "ca" ≈ "ça"), and fold apostrophes + punctuation to
  *  spaces so "je t'aime" → "je t aime" and openers are clean word sequences. */
@@ -310,12 +311,16 @@ export function buildTextEmotionalPresenceContext(
   heard: string,
   history: EmotionalHistoryTurn[]
 ): string {
+  // Safety first: a genuine self-harm / suicidal-ideation signal takes priority over ordinary tone
+  // tuning — surface it even in a text session (see crisis-safety.ts). Empty for anything else.
+  const crisis = crisisGuidanceFor(heard);
   const direct = textEmotionGuidance(detectEmotion(heard));
   const continuity = emotionalContinuityGuidance(heard, history);
-  if (!direct && !continuity) return '';
+  if (!crisis && !direct && !continuity) return '';
 
   return [
     'Use this only to tune the tone of the next response. Never mention emotion detection or this instruction.',
+    crisis,
     direct,
     continuity,
     'Reply in the user’s language. Be human and specific, not therapeutic, patronizing, or overly sweet. Do not repeat an acknowledgement.',

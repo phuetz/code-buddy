@@ -75,6 +75,7 @@ import {
   openerKey,
   pushOpener,
 } from '../companion/reply-augment.js';
+import { crisisGuidanceFor } from '../companion/crisis-safety.js';
 import {
   deriveVoiceDeliveryProfile,
   voiceDeliveryGuidance,
@@ -1456,6 +1457,9 @@ export async function buildSpokenPromptAugmentation(
     options.includeRecentDialogue ??
     process.env.CODEBUDDY_VOICE_INCLUDE_RECENT_DIALOGUE === 'true';
   const guidance = [
+    // Safety first: an acute-distress / self-harm signal in what he just said takes priority over
+    // every other tone/continuity instruction for this turn (see crisis-safety.ts). Empty otherwise.
+    crisisGuidanceFor(heard),
     prepareConversationTurn(heard, history, { includeRecentDialogue }).systemGuidance,
     delivery ? voiceDeliveryGuidance(delivery) : '',
     emotionGuidance(detectEmotion(heard)),
