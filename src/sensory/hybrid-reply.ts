@@ -147,7 +147,7 @@ export interface HybridReplyOptions {
     history: HybridTurn[],
     opts?: VoiceStepOptions,
   ) => Promise<string>;
-  /** Injectable: grounded agent turn → spoken summary. Default `makeAgentReply`. */
+  /** Injectable: grounded agent turn → spoken summary. A `.stream` property enables B3. */
   agentReply?: ReplyFn;
   /** Injectable: true ⇒ route to the grounded agent; false ⇒ fast companion model.
    *  Default is latency-first `requiresGroundedAgentQuery`; set
@@ -815,13 +815,88 @@ export function makeHybridReply(options: HybridReplyOptions = {}): HybridReplyHa
         return;
       }
       const substantive = introspectionIntent !== null || classify(heard, recent);
-      // Technical introspection never receives a speculative prefix. Other substantive turns
-      // keep the proven blocking fallback unless makeVoiceReply supplied an accepted prefix.
+      // Technical introspection stays on its deterministic whole-answer guard. Other grounded
+      // turns use the agent's text-delta stream when available; an absent/failed stream yields
+      // nothing so makeVoiceReply retains the proven blocking fallback.
       if (introspectionIntent !== null) return;
-      if (substantive && !replyOpts?.spokenPrefix) return;
 
       await ensureDeps(true);
       if (substantive) {
+        if (!replyOpts?.spokenPrefix) {
+          const agentStream = (
+            agentReply as (ReplyFn & { stream?: StreamReplyFn }) | undefined
+          )?.stream;
+          if (!agentStream) return;
+          const preamble = buildContextPreamble(recent);
+          const freshContext = process.env.CODEBUDDY_PREFETCH === 'false'
+            ? null
+            : resolvePrefetchedTurnContextForConversation(heard, recent, { allowStale: true });
+          if (freshContext?.freshness === 'stale') {
+            void runPrefetchCycle().catch(() => undefined);
+          }
+          const freshEvidence = semanticReviewEvidenceFromPrefetch(freshContext);
+          const prepared = prepareConversationTurn(heard, recent, {
+            ...(freshContext ? { freshContext: freshContext.promptGuidance } : {}),
+          });
+          const semanticBuffer = shouldReviewPlan(prepared.plan, heard);
+          let responseMainProvider: HybridSemanticReviewInput['mainProvider'];
+          let cognitiveEvidence: string | undefined;
+          const streamOptions: VoiceStepOptions = {
+            ...(replyOpts ?? {}),
+            ...(options.acquireCognitiveContext
+              ? { acquireCognitiveContext: options.acquireCognitiveContext }
+              : {}),
+            onProviderResolved: (route) => {
+              replyOpts?.onProviderResolved?.(route);
+              if (!route.baseURL) return;
+              responseMainProvider = {
+                apiKey: route.apiKey,
+                baseURL: route.baseURL,
+                model: route.model,
+              };
+            },
+            onCognitiveContextResolved: (context) => {
+              replyOpts?.onCognitiveContextResolved?.(context);
+              cognitiveEvidence = context.evidence || undefined;
+            },
+          };
+          const input = [preamble, prepared.systemGuidance, `Demande actuelle : ${heard}`]
+            .filter(Boolean)
+            .join('\n\n');
+          let full = '';
+          for await (const delta of agentStream(input, {
+            ...streamOptions,
+            introspectionText: heard,
+          })) {
+            if (replyOpts?.signal?.aborted) return;
+            if (typeof delta !== 'string' || delta.length === 0) continue;
+            full += delta;
+            if (!semanticBuffer) yield delta;
+          }
+          if (replyOpts?.signal?.aborted) return;
+          let completed = guardBeforeMemory(full.trim());
+          if (completed && semanticBuffer) {
+            const reviewEvidence = mergeEvidence(freshEvidence, cognitiveEvidence);
+            const reviewed = await reviewBeforeDelivery({
+              request: heard,
+              draft: completed,
+              plan: prepared.plan,
+              history: recent,
+              ...(reviewEvidence ? { evidence: reviewEvidence } : {}),
+              ...(responseMainProvider ? { mainProvider: responseMainProvider } : {}),
+              ...(replyOpts?.signal ? { signal: replyOpts.signal } : {}),
+            }, streamOptions);
+            if (reviewed) completed = guardBeforeMemory(reviewed.response.trim() || completed);
+            if (replyOpts?.signal?.aborted) return;
+            if (completed) yield completed;
+          }
+          if (completed) {
+            await evolveRelationship(heard);
+            remember(heard, completed);
+            logger.info(`[voice-hybrid] route=agent-stream responseChars=${completed.length}`);
+          }
+          return;
+        }
         const spokenPrefix = replyOpts!.spokenPrefix!.trim();
         const preamble = buildContextPreamble(recent);
         const freshContext = process.env.CODEBUDDY_PREFETCH === 'false'

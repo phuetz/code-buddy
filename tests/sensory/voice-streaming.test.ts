@@ -529,6 +529,67 @@ describe('makeVoiceReply — streaming integration', () => {
     expect(timing?.firstAudioMs).toEqual(expect.any(Number));
   });
 
+  it('synthesizes the first substantive agent sentence before the third arrives', async () => {
+    const savedSemanticGate = process.env.CODEBUDDY_SEMANTIC_GATE;
+    process.env.CODEBUDDY_SEMANTIC_GATE = 'false';
+    let releaseThird!: () => void;
+    const firstSynthesized = new Promise<void>((resolve) => {
+      releaseThird = resolve;
+    });
+    let thirdArrived = false;
+    let thirdArrivedAtFirstSynth = true;
+    const blockingAgent = vi.fn(async () => 'fallback bloquant');
+    const agentReply = Object.assign(blockingAgent, {
+      stream: async function* (): AsyncGenerator<string> {
+        yield 'Première phrase vérifiée. ';
+        yield 'Deuxième phrase vérifiée. ';
+        await firstSynthesized;
+        thirdArrived = true;
+        yield 'Troisième phrase vérifiée.';
+      },
+    });
+    const synthesized: string[] = [];
+    const hybrid = makeHybridReply({
+      fastReply: () => null,
+      prefetch: () => null,
+      jokes: () => null,
+      chitchat: async () => 'unused',
+      chitchatStream: async function* () {
+        yield 'unused';
+      },
+      agentReply,
+      classify: () => true,
+    });
+    const onHeard = makeVoiceReply({
+      replyFn: hybrid,
+      synth: async (text) => {
+        synthesized.push(text);
+        if (synthesized.length === 1) {
+          thirdArrivedAtFirstSynth = thirdArrived;
+          releaseThird();
+        }
+        return `wav:${text}`;
+      },
+      play: async () => undefined,
+      avatarEnabled: false,
+    });
+
+    try {
+      await onHeard('Vérifie le statut du service.');
+
+      expect(thirdArrivedAtFirstSynth).toBe(false);
+      expect(synthesized).toEqual([
+        'Première phrase vérifiée.',
+        'Deuxième phrase vérifiée.',
+        'Troisième phrase vérifiée.',
+      ]);
+      expect(blockingAgent).not.toHaveBeenCalled();
+    } finally {
+      if (savedSemanticGate === undefined) delete process.env.CODEBUDDY_SEMANTIC_GATE;
+      else process.env.CODEBUDDY_SEMANTIC_GATE = savedSemanticGate;
+    }
+  });
+
   it('records provider, review, relationship-release and content-audio phases independently', async () => {
     let clock = 1_000;
     const now = vi.spyOn(Date, 'now').mockImplementation(() => clock);

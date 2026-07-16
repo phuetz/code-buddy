@@ -455,25 +455,59 @@ export function guardRelationshipReply(response: string): GuardedRelationshipRep
   };
 }
 
+function pullCompleteRelationshipSegments(value: string): { segments: string[]; tail: string } {
+  const segments: string[] = [];
+  const boundary = /[.!?…]+[)\]}'"»”’]*\s+|\n+/gu;
+  let consumed = 0;
+  let match: RegExpExecArray | null;
+  while ((match = boundary.exec(value)) !== null) {
+    const end = match.index + match[0].length;
+    segments.push(value.slice(consumed, end));
+    consumed = end;
+  }
+  return { segments, tail: value.slice(consumed) };
+}
+
 /**
- * Streaming transport form of the hard gate. A regex policy cannot prove that
- * a safe-looking fragment will not become unsafe after later punctuation or a
- * new token. The protected companion surfaces therefore fail closed: collect
- * the complete answer, sanitize and assess it once, then release only the
- * guarded result. Provider first-token telemetry remains measured upstream.
+ * Streaming transport form of the hard gate. It keeps one complete sentence in reserve before
+ * release: this preserves protection against risky phrases split across punctuation while no
+ * longer holding an entire multi-sentence answer. Every emitted segment has passed both its own
+ * assessment and the combined assessment with the following sentence.
  */
 export class RelationshipSafetyStreamGuard {
   private buffer = '';
+  private pending = '';
   private readonly issueSet = new Set<RelationshipSafetyIssue>();
 
   push(delta: string): string[] {
     if (!delta) return [];
     this.buffer += delta;
-    return [];
+    const { segments, tail } = pullCompleteRelationshipSegments(this.buffer);
+    this.buffer = tail;
+    const released: string[] = [];
+    for (const segment of segments) {
+      if (!this.pending) {
+        this.pending = segment;
+        continue;
+      }
+      const combined = guardRelationshipReply(this.pending + segment);
+      if (combined.intervened) {
+        for (const issue of combined.issues) this.issueSet.add(issue);
+        if (combined.response) released.push(`${combined.response} `);
+        this.pending = '';
+        continue;
+      }
+      const guarded = guardRelationshipReply(this.pending);
+      for (const issue of guarded.issues) this.issueSet.add(issue);
+      if (guarded.response) released.push(`${guarded.response} `);
+      this.pending = segment;
+    }
+    return released;
   }
 
   finish(): string[] {
-    const remaining = this.buffer;
+    const remaining = this.pending + this.buffer;
+    this.pending = '';
     this.buffer = '';
     if (!remaining) return [];
     const guarded = guardRelationshipReply(remaining);

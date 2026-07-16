@@ -5,6 +5,7 @@ import {
   makeAgentReply,
   prepareSelfInspectionVoiceReply,
   runInterruptibleVoiceAgentTurn,
+  streamInterruptibleVoiceAgentTurn,
   type AgentRunner,
 } from '../../src/sensory/agent-reply.js';
 import {
@@ -104,6 +105,33 @@ describe('agent-reply — spoken instruction → full agent turn', () => {
       introspectionText: 'question',
     });
     expect(streamOptions[0]?.transientContext).toContain('conversation_response_plan');
+  });
+
+  it('maps only live agent content events to voice text deltas', async () => {
+    const streamOptions: Array<{ relationshipSafety?: boolean } | undefined> = [];
+    const fakeAgent = {
+      async *processUserMessageStream(
+        _message: string,
+        options?: { relationshipSafety?: boolean },
+      ): AsyncGenerator<unknown> {
+        streamOptions.push(options);
+        yield { type: 'tool_calls', content: 'ne pas prononcer' };
+        yield { type: 'content', content: 'Première phrase. ' };
+        yield { type: 'token_count', content: 'ne pas prononcer' };
+        yield { type: 'content', content: 'Deuxième phrase.' };
+      },
+      getChatHistory: () => [],
+      abortCurrentOperation: vi.fn(),
+    };
+
+    const deltas: string[] = [];
+    for await (const delta of streamInterruptibleVoiceAgentTurn(fakeAgent, 'question')) {
+      deltas.push(delta);
+    }
+
+    expect(deltas).toEqual(['Première phrase. ', 'Deuxième phrase.']);
+    expect(streamOptions[0]?.relationshipSafety).toBe(false);
+    expect(fakeAgent.abortCurrentOperation).not.toHaveBeenCalled();
   });
 
   it('tells the grounded agent to continue after the accepted spoken prefix', async () => {

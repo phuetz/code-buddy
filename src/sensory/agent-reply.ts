@@ -27,7 +27,7 @@
  */
 
 import { logger } from '../utils/logger.js';
-import type { ReplyFn, VoiceStepOptions } from './voice-loop.js';
+import type { ReplyFn, StreamReplyFn, VoiceStepOptions } from './voice-loop.js';
 import { voiceDeliveryGuidance } from './voice-entrainment.js';
 import type { PermissionMode } from '../security/permission-modes.js';
 import { conversationFailureReply, prepareConversationTurn } from '../conversation/conversation-orchestrator.js';
@@ -41,6 +41,8 @@ import {
  *  `opts.signal` (optional) lets a barge-in abort the turn's LLM calls. */
 export interface AgentRunner {
   (transcript: string, opts?: VoiceStepOptions): Promise<string>;
+  /** Stream final-answer text deltas from the agent lane. */
+  stream?: StreamReplyFn;
   /** Build or retarget a standby while the human is still speaking. */
   prewarm?: (transcriptHint?: string) => Promise<void>;
   /** Release an unused standby during server teardown. */
@@ -71,6 +73,8 @@ export interface AgentReplyOptions {
 
 /** Reply function plus the predictive lifecycle used by the live VAD hook. */
 export interface AgentReplyHandler extends ReplyFn {
+  /** Token-delta path used by the sentence-level voice pipeline. */
+  stream: StreamReplyFn;
   prewarm(transcriptHint?: string): Promise<void>;
   dispose(): void;
 }
@@ -308,6 +312,54 @@ export async function runInterruptibleVoiceAgentTurn(
   }
 }
 
+function agentEventContent(event: unknown): string {
+  if (typeof event !== 'object' || event === null) return '';
+  const candidate = event as { type?: unknown; content?: unknown };
+  return candidate.type === 'content' && typeof candidate.content === 'string'
+    ? candidate.content
+    : '';
+}
+
+/**
+ * Yield the grounded agent's real text deltas as they arrive. The voice loop owns the
+ * sentence-level relationship guard and sanitizer, so this path asks the executor for raw
+ * display deltas instead of its whole-answer relationship buffer. Tool permission and command
+ * safety remain enforced by the normal agent turn. A thrown/empty stream is intentionally left
+ * observable to the caller, which can then use the blocking fallback.
+ */
+export async function* streamInterruptibleVoiceAgentTurn(
+  agent: InterruptibleVoiceAgent,
+  transcript: string,
+  opts?: VoiceStepOptions,
+): AsyncGenerator<string, void, unknown> {
+  const signal = opts?.signal;
+  const abort = (): void => agent.abortCurrentOperation();
+  if (signal?.aborted) return;
+  signal?.addEventListener('abort', abort, { once: true });
+  try {
+    const transientContext = [
+      prepareConversationTurn(transcript).systemGuidance,
+      spokenPrefixContinuationGuidance(opts?.spokenPrefix),
+      opts?.delivery ? voiceDeliveryGuidance(opts.delivery) : '',
+    ].filter(Boolean).join('\n\n');
+    for await (const event of agent.processUserMessageStream(transcript, {
+      transientContext,
+      relationshipSafety: false,
+      surface: 'voice',
+      introspectionText: opts?.introspectionText ?? transcript,
+    })) {
+      if (signal?.aborted) {
+        abort();
+        return;
+      }
+      const content = agentEventContent(event);
+      if (content) yield content;
+    }
+  } finally {
+    signal?.removeEventListener('abort', abort);
+  }
+}
+
 /** Default agent turn: a headless CodeBuddyAgent.
  *  Model: `CODEBUDDY_SENSORY_SPEAK_AGENT_MODEL` if pinned, else the fastest TOOL-CALLING
  *  model. NOTE the trade-off: an agent turn reads/reasons/acts, so it wants CAPABILITY +
@@ -395,6 +447,60 @@ function makeDefaultAgentRunner(cwd: string): AgentRunner {
       // The MCP manager is process-global and stays warm, but everything owned
       // by this one-shot agent (watchers, listeners, abort controller, memory)
       // must be released even when the turn fails or is interrupted.
+      prepared?.agent.dispose({ skipSessionLearning: true });
+      active = false;
+    }
+  };
+
+  runner.stream = async function* (
+    transcript: string,
+    opts?: VoiceStepOptions,
+  ): AsyncGenerator<string, void, unknown> {
+    if (disposed || opts?.signal?.aborted) return;
+    active = true;
+    const claimedStandby = standby;
+    standby = null;
+    let prepared: PreparedVoiceAgent | null = null;
+    try {
+      const desiredRoute = await resolveGroundedAgentRoute(transcript);
+      if (claimedStandby) {
+        try {
+          prepared = await claimedStandby;
+        } catch (error) {
+          logger.debug('[voice-act] predictive standby unavailable', { error: msg(error) });
+        }
+      }
+      if (prepared && routeKey(prepared.route) !== routeKey(desiredRoute)) {
+        prepared.agent.dispose({ skipSessionLearning: true });
+        prepared = null;
+      }
+      prepared ??= await createPrepared(desiredRoute);
+      opts?.onProviderResolved?.(prepared.route);
+      try {
+        opts?.onReplyTimingPhase?.(
+          opts.spokenPrefix ? 'continuation_prompt_ready' : 'prompt_ready',
+        );
+      } catch {
+        /* telemetry must never alter the agent turn */
+      }
+      logger.info(`[voice-act] streaming agent turn on ${prepared.route.model}`);
+      for await (const delta of streamInterruptibleVoiceAgentTurn(
+        prepared.agent,
+        transcript,
+        opts,
+      )) {
+        yield delta;
+      }
+      if (!opts?.signal?.aborted) {
+        try {
+          opts?.onReplyTimingPhase?.(
+            opts.spokenPrefix ? 'continuation_generation_complete' : 'generation_complete',
+          );
+        } catch {
+          /* telemetry must never alter the agent turn */
+        }
+      }
+    } finally {
       prepared?.agent.dispose({ skipSessionLearning: true });
       active = false;
     }
@@ -623,6 +729,39 @@ export function makeAgentReply(options: AgentReplyOptions = {}): AgentReplyHandl
   };
 
   const handler = reply as AgentReplyHandler;
+  handler.stream = async function* (
+    heard: string,
+    replyOpts?: VoiceStepOptions,
+  ): AsyncGenerator<string, void, unknown> {
+    if (!agentRunner.stream || replyOpts?.signal?.aborted) return;
+    let agentProvider: Parameters<NonNullable<VoiceStepOptions['onProviderResolved']>>[0] | undefined;
+    const iterator = agentRunner.stream(heard, {
+      ...(replyOpts ?? {}),
+      onProviderResolved: (route) => {
+        agentProvider = route;
+      },
+    })[Symbol.asyncIterator]();
+    try {
+      while (true) {
+        const next = await runInVoiceTurn(() => iterator.next());
+        if (next.done || replyOpts?.signal?.aborted) break;
+        if (next.value) yield next.value;
+      }
+      if (!replyOpts?.signal?.aborted && agentProvider) {
+        replyOpts?.onProviderResolved?.(agentProvider);
+      }
+    } catch (error) {
+      logger.warn(`[voice-act] agent stream failed: ${msg(error)}`);
+    } finally {
+      try {
+        await runInVoiceTurn(async () => {
+          await iterator.return?.();
+        });
+      } catch {
+        /* teardown is best-effort and must never escape the voice pipeline */
+      }
+    }
+  };
   handler.prewarm = async (transcriptHint?: string): Promise<void> => {
     if (agentRunner.prewarm) {
       await runInVoiceTurn(() => agentRunner.prewarm!(transcriptHint));
