@@ -2321,15 +2321,15 @@ export interface VoiceReplyHandler {
    * queue drain the next utterance with no blocked state. Idempotent, never-throws; a no-op when
    * nothing is in flight.
    */
-  interrupt(): void;
+  interrupt(turnId?: string): void;
 }
 
 /**
  * Build an `onHeard` handler that thinks then speaks, with a programmatic `interrupt()`.
  * Never-throws. Wire it into `wireSpeechReaction({ onHeard: makeVoiceReply() })`.
  *
- * Interruption is driven by ONE `AbortController` per turn: `interrupt()` aborts it, which both
- * cancels the think step (signal → provider transport) and kills the TTS child (signal → play).
+ * Interruption is driven by one correlated `AbortController` per turn: `interrupt(turnId)`
+ * targets it, cancels the think step (signal → provider transport), and kills the TTS child.
  * Without an `interrupt()` call the controller is never aborted, so the turn runs exactly as
  * before (tour-par-tour bloquant) — the signal threading is inert.
  */
@@ -2381,12 +2381,16 @@ export function makeVoiceReply(options: VoiceReplyOptions = {}): VoiceReplyHandl
     );
   };
 
-  // The single in-flight turn's cancellation handle. null while idle.
-  let currentAbort: AbortController | null = null;
+  // Concurrent ingress can briefly overlap turns. Keep cancellation handles correlated instead
+  // of letting the newest turn overwrite the previous controller.
+  const activeAborts = new Map<string, AbortController>();
+  let latestTurnId: string | undefined;
 
   const handler = async (heard: string, context?: VoiceTurnContext): Promise<void> => {
     const controller = new AbortController();
-    currentAbort = controller;
+    const voiceTurnId = context?.turnId ?? createAvatarTurnId();
+    activeAborts.set(voiceTurnId, controller);
+    latestTurnId = voiceTurnId;
     const { signal } = controller;
     const turnTtsEngine = resolveTtsEngine(env);
     // Resolve one WAV-aware backend for the complete turn. Cached files,
@@ -2485,7 +2489,7 @@ export function makeVoiceReply(options: VoiceReplyOptions = {}): VoiceReplyHandl
           break;
       }
     };
-    const avatarTurnId = context?.turnId ?? createAvatarTurnId();
+    const avatarTurnId = voiceTurnId;
     turnCoordinator.transition(avatarTurnId, 'thinking');
     const avatarCue = planAvatarPerformance(heard, delivery);
     const avatarEnabled = options.avatarEnabled ?? (
@@ -3217,12 +3221,17 @@ export function makeVoiceReply(options: VoiceReplyOptions = {}): VoiceReplyHandl
       } catch {
         /* observability must never break the voice loop */
       }
-      if (currentAbort === controller) currentAbort = null;
+      if (activeAborts.get(voiceTurnId) === controller) activeAborts.delete(voiceTurnId);
+      if (latestTurnId === voiceTurnId) latestTurnId = [...activeAborts.keys()].at(-1);
     }
   };
 
-  (handler as VoiceReplyHandler).interrupt = (): void => {
-    const controller = currentAbort;
+  (handler as VoiceReplyHandler).interrupt = (turnId?: string): void => {
+    const controller = turnId
+      ? activeAborts.get(turnId)
+      : latestTurnId
+        ? activeAborts.get(latestTurnId)
+        : undefined;
     if (!controller) return; // nothing in flight → clean no-op
     try {
       controller.abort();

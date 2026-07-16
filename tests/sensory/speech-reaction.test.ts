@@ -6,6 +6,8 @@ import {
   DEFAULT_SPEECH_DEBOUNCE_MS,
   SPEECH_KEEP_WAV_ENV,
   isBargeInTranscript,
+  resolveVoiceBargeInMinMs,
+  shouldTriggerVoiceBargeIn,
   resolveSpeechDebounceMs,
   normalizeSpeechTranscript,
   resolveFasterWhisperOptions,
@@ -239,6 +241,64 @@ describe('speech reaction — speech_end → STT → percept', () => {
     expect(isBargeInTranscript('Arrête de parler')).toBe(true);
     expect(isBargeInTranscript('une seconde')).toBe(true);
     expect(isBargeInTranscript('le ciel est bleu')).toBe(false);
+  });
+
+  it('allows sustained natural speech only when AEC is active', () => {
+    expect(resolveVoiceBargeInMinMs({})).toBe(500);
+    expect(resolveVoiceBargeInMinMs({ CODEBUDDY_VOICE_BARGEIN_MIN_MS: '650' })).toBe(650);
+    expect(shouldTriggerVoiceBargeIn('je voudrais ajouter un détail', {
+      aecActive: true,
+      audioMs: 700,
+    })).toBe(true);
+    expect(shouldTriggerVoiceBargeIn('je voudrais ajouter un détail', {
+      aecActive: true,
+      audioMs: 300,
+    })).toBe(false);
+    expect(shouldTriggerVoiceBargeIn('je voudrais ajouter un détail', {
+      aecActive: false,
+      audioMs: 900,
+    })).toBe(false);
+    expect(shouldTriggerVoiceBargeIn('Lisa, attends', {
+      aecActive: false,
+      audioMs: 100,
+    })).toBe(true);
+  });
+
+  it('interrupts an in-flight turn on sustained AEC speech without a wake word', async () => {
+    const tmp = await mkdtemp(path.join(os.tmpdir(), 'speech-aec-barge-in-'));
+    let releaseFirst!: () => void;
+    const firstHeld = new Promise<void>((resolve) => { releaseFirst = resolve; });
+    const heard: string[] = [];
+    const interruptions: Array<{ text: string; turnId?: string }> = [];
+    const unwire = wireSpeechReaction({
+      debounceMs: 0,
+      cwd: tmp,
+      onHeard: async (text) => {
+        heard.push(text);
+        if (heard.length === 1) await firstHeld;
+      },
+      onBargeIn: (text, turnId) => {
+        interruptions.push({ text, turnId });
+        releaseFirst();
+      },
+    });
+    try {
+      transcriptFinal('Lisa, raconte-moi quelque chose');
+      await tick();
+      transcriptFinal('je voudrais ajouter un détail', { aecActive: true, audioMs: 700 });
+      await tick();
+      await tick();
+      expect(interruptions).toHaveLength(1);
+      expect(interruptions[0]).toMatchObject({ text: 'je voudrais ajouter un détail' });
+      expect(interruptions[0]?.turnId).toMatch(/^voice_/);
+      expect(heard).toEqual([
+        'Lisa, raconte-moi quelque chose',
+        'je voudrais ajouter un détail',
+      ]);
+    } finally {
+      releaseFirst();
+      unwire();
+    }
   });
 
   it('interrupts an in-flight turn and queues the explicit replacement transcript', async () => {

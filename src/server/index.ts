@@ -1741,7 +1741,7 @@ export async function startServer(userConfig: Partial<ServerConfig> = {}): Promi
                 // committed request; only transcript_final can enter cognition.
                 onSpeechPartial: ({ text }) => replyFn.prewarm(text),
                 onBargeIn: (_text, interruptedTurnId) => {
-                  reply.interrupt();
+                  reply.interrupt(interruptedTurnId);
                   if (interruptedTurnId) {
                     embodiedCognition.mesh.cancelCorrelation(interruptedTurnId);
                   }

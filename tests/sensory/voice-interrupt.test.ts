@@ -220,7 +220,7 @@ describe('voice interrupt — barge-in capability', () => {
     // Before any turn.
     expect(() => onHeard.interrupt()).not.toThrow();
 
-    // A normal turn, then interrupt after it finished (currentAbort cleared).
+    // A normal turn, then interrupt after its correlated controller was removed.
     await onHeard('bonjour');
     expect(() => onHeard.interrupt()).not.toThrow();
     expect(() => onHeard.interrupt()).not.toThrow(); // idempotent
@@ -290,5 +290,38 @@ describe('voice interrupt — barge-in capability', () => {
     });
     await onHeard2('deuxième demande');
     expect(spoke).toBe('Deuxième réponse.');
+  });
+
+  it('interrupt(turnId) aborts only the matching controller when turns overlap', async () => {
+    const signals = new Map<string, AbortSignal>();
+    let markStarted!: () => void;
+    let startedCount = 0;
+    const bothStarted = new Promise<void>((resolve) => {
+      markStarted = resolve;
+    });
+    const onHeard = makeVoiceReply({
+      replyFn: (heard, options) => new Promise<string>((resolve) => {
+        if (options?.signal) signals.set(heard, options.signal);
+        startedCount += 1;
+        if (startedCount === 2) markStarted();
+        options?.signal?.addEventListener('abort', () => resolve(''), { once: true });
+      }),
+      synth: async () => '/tmp/unused.wav',
+      play: async () => undefined,
+      avatarEnabled: false,
+    });
+
+    const first = onHeard('premier', { turnId: 'turn-1' });
+    const second = onHeard('deuxième', { turnId: 'turn-2' });
+    await bothStarted;
+
+    onHeard.interrupt('turn-1');
+    await first;
+    expect(signals.get('premier')?.aborted).toBe(true);
+    expect(signals.get('deuxième')?.aborted).toBe(false);
+
+    onHeard.interrupt('turn-2');
+    await second;
+    expect(signals.get('deuxième')?.aborted).toBe(true);
   });
 });

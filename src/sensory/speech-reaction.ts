@@ -168,6 +168,39 @@ export function isBargeInTranscript(
   return /^(stop|arrete|tais toi|attends|une seconde|laisse moi parler)(\s|$)/.test(normalized);
 }
 
+export const DEFAULT_VOICE_BARGEIN_MIN_MS = 500;
+
+export function resolveVoiceBargeInMinMs(env: NodeJS.ProcessEnv = process.env): number {
+  const configured = Number(env.CODEBUDDY_VOICE_BARGEIN_MIN_MS);
+  if (!Number.isFinite(configured) || configured < 0) return DEFAULT_VOICE_BARGEIN_MIN_MS;
+  return Math.min(10_000, Math.floor(configured));
+}
+
+function capturedSpeechMs(payload: Record<string, unknown>): number | undefined {
+  const durations = [
+    finiteTimestamp(payload.audioMs),
+    finiteTimestamp(payload.ms),
+    finiteTimestamp(payload.durationMs),
+  ].filter((value): value is number => value !== undefined && value >= 0);
+  const startedAtMs = finiteTimestamp(payload.startedAtMs);
+  const endedAtMs = finiteTimestamp(payload.endedAtMs);
+  if (startedAtMs !== undefined && endedAtMs !== undefined && endedAtMs >= startedAtMs) {
+    durations.push(endedAtMs - startedAtMs);
+  }
+  return durations.length > 0 ? Math.max(...durations) : undefined;
+}
+
+/** Explicit wake/stop always works; AEC additionally permits sustained natural speech. */
+export function shouldTriggerVoiceBargeIn(
+  text: string,
+  payload: Record<string, unknown> = {},
+  env: NodeJS.ProcessEnv = process.env,
+): boolean {
+  if (isBargeInTranscript(text)) return true;
+  if (payload.aecActive !== true) return false;
+  return (capturedSpeechMs(payload) ?? 0) >= resolveVoiceBargeInMinMs(env);
+}
+
 /**
  * Deduplicate repeated `speech_end` events without imposing a multi-second pause between
  * human turns. Playback echo is already covered independently by `voice-activity`'s
@@ -179,15 +212,18 @@ export const DEFAULT_SPEECH_DEBOUNCE_MS = 800;
  * Decide whether a transcript captured around loudspeaker playback is safe to
  * treat as a human turn. During playback we deliberately fail closed: without
  * acoustic echo cancellation, only an explicit barge-in (Lisa/stop/attends…)
- * may pass, and never when it matches the loudspeaker. In the short acoustic
- * tail, the existing similarity classifier remains authoritative.
+ * may pass. With AEC, sustained speech is trusted as human input even while
+ * playback is active. In the short acoustic tail, the existing similarity
+ * classifier remains authoritative.
  */
 export function shouldSuppressPlaybackCapture(
   kind: 'during_playback' | 'echo_tail',
   classification: 'echo' | 'distinct' | 'unknown',
   explicitBargeIn: boolean,
+  aecActive = false,
 ): boolean {
   if (kind === 'during_playback') {
+    if (aecActive && explicitBargeIn) return false;
     return classification === 'echo' || !explicitBargeIn;
   }
   return classification !== 'distinct';
@@ -1233,6 +1269,7 @@ export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => v
   let turnSeq = 0;
   let pendingSpeechStartedAtMs: number | undefined;
   let pendingSpeechTurnId: string | undefined;
+  let bargedSpeechTurnId: string | undefined;
   type SpeechJob = {
     p: ReturnType<typeof perceptionOf>;
     wav: string;
@@ -1273,7 +1310,8 @@ export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => v
       ? measureVoiceResumeTiming(job.speechStartedAtMs)
       : undefined;
     const quickPostPlaybackResume = voiceResume?.kind === 'echo_tail';
-    if (isSpeaking(t) && !quickPostPlaybackResume) {
+    const aecActive = (job.p.payload as Record<string, unknown> | undefined)?.aecActive === true;
+    if (isSpeaking(t) && !quickPostPlaybackResume && !aecActive) {
       void cleanupSpeechJob(job);
       return; // half-duplex: ignore the mic while the robot is speaking (+ echo tail)
     }
@@ -1396,12 +1434,15 @@ export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => v
         const echoClassification = playbackCaptureKind
           ? classifyRecentVoiceEcho(text, captureStartedAtMs ?? transcribeStartMs)
           : undefined;
-        const explicitBargeIn = playbackCaptureKind ? isBargeInTranscript(text) : false;
+        const explicitBargeIn = playbackCaptureKind
+          ? shouldTriggerVoiceBargeIn(text, payload)
+          : false;
         const suppressPlaybackCapture = playbackCaptureKind && echoClassification
           ? shouldSuppressPlaybackCapture(
               playbackCaptureKind,
               echoClassification,
               explicitBargeIn,
+              payload.aecActive === true,
             )
           : false;
         if (suppressPlaybackCapture && playbackCaptureKind && echoClassification) {
@@ -1689,6 +1730,7 @@ export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => v
         ?? finiteTimestamp(p.receivedAt)
         ?? now();
       pendingSpeechTurnId = `voice_${pendingSpeechStartedAtMs}_${++turnSeq}`;
+      bargedSpeechTurnId = undefined;
       turnCoordinator.transition(pendingSpeechTurnId, 'listening', {
         aecActive: payload.aecActive === true,
       });
@@ -1705,7 +1747,21 @@ export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => v
     if (p.kind === 'transcript_partial') {
       const payload = (p.payload as Record<string, unknown> | undefined) ?? {};
       const text = typeof payload.text === 'string' ? payload.text.trim() : '';
-      if (!text || !options.onSpeechPartial) return;
+      if (!text) return;
+      if (
+        inFlight &&
+        options.onBargeIn &&
+        shouldTriggerVoiceBargeIn(text, payload) &&
+        (pendingSpeechTurnId === undefined || bargedSpeechTurnId !== pendingSpeechTurnId)
+      ) {
+        if (pendingSpeechTurnId !== undefined) bargedSpeechTurnId = pendingSpeechTurnId;
+        try {
+          options.onBargeIn(text, activeTurnId);
+        } catch {
+          /* interruption is best-effort */
+        }
+      }
+      if (!options.onSpeechPartial) return;
       const audioMs = finiteTimestamp(payload.audioMs);
       const decodeMs = finiteTimestamp(payload.decodeMs);
       void Promise.resolve()
@@ -1778,7 +1834,13 @@ export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => v
         return;
       }
       if (inFlight) {
-        if (options.onBargeIn && isBargeInTranscript(text)) {
+        const payload = (p.payload as Record<string, unknown> | undefined) ?? {};
+        if (
+          options.onBargeIn &&
+          shouldTriggerVoiceBargeIn(text, payload) &&
+          (turnId === undefined || bargedSpeechTurnId !== turnId)
+        ) {
+          if (turnId !== undefined) bargedSpeechTurnId = turnId;
           logger.info(`[speech] barge-in → ${text}`);
           try {
             options.onBargeIn(text, activeTurnId);
