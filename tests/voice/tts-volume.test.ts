@@ -57,7 +57,7 @@ describe('assistant TTS volume', () => {
     expect(resolveTtsVolumePercent({ CODEBUDDY_TTS_VOLUME: '0' })).toBe(0);
     expect(resolveTtsVolumePercent({ CODEBUDDY_TTS_VOLUME: '140' })).toBe(100);
     expect(resolveTtsVolumePercent({ CODEBUDDY_TTS_VOLUME: 'invalid' })).toBe(100);
-    expect(resolveStreamGainDb({})).toBe(8);
+    expect(resolveStreamGainDb({})).toBe(0);
   });
 
   it('normalizes a quiet Pocket PCM16 WAV near -1 dBFS and is byte-idempotent', () => {
@@ -132,6 +132,18 @@ describe('assistant TTS volume', () => {
     expect(transformed[0]).toBeGreaterThan(2_400);
     expect(transformed[1]).toBeLessThan(-4_800);
     expect(Math.max(...transformed.map(Math.abs))).toBeLessThanOrEqual(__test.targetPeak);
+  });
+
+  it('leaves streaming PCM byte-for-byte unchanged at the default unit gain', () => {
+    const source = pcm16Wav([1_000, -2_000, 20_000, -20_000], true);
+    const processor = new Pcm16WavStreamGain({});
+    const output = Buffer.concat([
+      ...processor.push(source.subarray(0, 47)),
+      ...processor.push(source.subarray(47)),
+      ...processor.flush(),
+    ]);
+
+    expect(output.equals(source)).toBe(true);
   });
 
   it('streams unsupported input byte-for-byte', () => {

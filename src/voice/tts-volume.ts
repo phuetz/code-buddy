@@ -13,7 +13,7 @@
 import { readFile, writeFile } from 'node:fs/promises';
 
 export const DEFAULT_TTS_VOLUME_PERCENT = 100;
-export const DEFAULT_STREAM_GAIN_DB = 8;
+export const DEFAULT_STREAM_GAIN_DB = 0;
 
 const TARGET_PEAK_DBFS = -1;
 const MAX_NORMALIZE_GAIN_DB = 12;
@@ -97,7 +97,13 @@ function transformPcm16(payload: Buffer, factor: number): Buffer {
   const pairedLength = payload.length - (payload.length & 1);
   for (let offset = 0; offset < pairedLength; offset += 2) {
     const sample = payload.readInt16LE(offset);
-    output.writeInt16LE(softLimit(sample * factor), offset);
+    const transformed = sample * factor;
+    output.writeInt16LE(
+      factor > 1
+        ? softLimit(transformed)
+        : Math.max(-PCM16_MAX - 1, Math.min(PCM16_MAX, Math.round(transformed))),
+      offset
+    );
   }
   if (pairedLength < payload.length) output[pairedLength] = payload[pairedLength] ?? 0;
   return output;
