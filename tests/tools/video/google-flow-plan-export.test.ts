@@ -52,6 +52,8 @@ async function fixture() {
         imageManifestSha256: 'a'.repeat(64),
         imageCatalogSha256: 'b'.repeat(64),
         factoryConfigSha256: 'c'.repeat(64),
+        assetApprovalsSha256: 'd'.repeat(64),
+        productionLedgerSha256: 'e'.repeat(64),
       },
       policy: {
         contentTier: 'safe',
@@ -120,5 +122,19 @@ describe('Google Flow plan export', () => {
     const { root, plan } = await fixture();
     plan.schemaVersion = 2;
     await expect(exportGoogleFlowHandoffFromPlan(plan, options(root))).rejects.toThrow('not safe');
+  });
+
+  it('requires exactly the five source digests accepted by the renderer', async () => {
+    const missing = await fixture();
+    delete (missing.plan.sourceDigests as Record<string, string>).assetApprovalsSha256;
+    await expect(exportGoogleFlowHandoffFromPlan(missing.plan, options(missing.root))).rejects.toThrow('not safe');
+
+    const extra = await fixture();
+    (extra.plan.sourceDigests as Record<string, string>).legacyDigest = 'f'.repeat(64);
+    await expect(exportGoogleFlowHandoffFromPlan(extra.plan, options(extra.root))).rejects.toThrow('not safe');
+
+    const malformed = await fixture();
+    malformed.plan.sourceDigests.productionLedgerSha256 = 'not-a-sha256';
+    await expect(exportGoogleFlowHandoffFromPlan(malformed.plan, options(malformed.root))).rejects.toThrow('not safe');
   });
 });

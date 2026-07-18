@@ -41,7 +41,13 @@ interface PlannedShort {
 
 interface ShortPlan {
   schemaVersion: 3;
-  sourceDigests: Record<string, string>;
+  sourceDigests: {
+    imageManifestSha256: string;
+    imageCatalogSha256: string;
+    factoryConfigSha256: string;
+    assetApprovalsSha256: string;
+    productionLedgerSha256: string;
+  };
   policy: {
     contentTier: 'safe';
     qaStatus: 'approved';
@@ -50,6 +56,24 @@ interface ShortPlan {
     syntheticMediaDisclosureRequired: true;
   };
   shorts: PlannedShort[];
+}
+
+const REQUIRED_SOURCE_DIGEST_KEYS = [
+  'assetApprovalsSha256',
+  'factoryConfigSha256',
+  'imageCatalogSha256',
+  'imageManifestSha256',
+  'productionLedgerSha256',
+] as const;
+
+function hasExactSourceDigests(value: unknown): value is ShortPlan['sourceDigests'] {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const record = value as Record<string, unknown>;
+  const keys = Object.keys(record).sort();
+  return keys.length === REQUIRED_SOURCE_DIGEST_KEYS.length &&
+    keys.every((key, index) => key === REQUIRED_SOURCE_DIGEST_KEYS[index]) &&
+    REQUIRED_SOURCE_DIGEST_KEYS.every((key) =>
+      typeof record[key] === 'string' && /^[a-f0-9]{64}$/u.test(record[key]));
 }
 
 export interface GoogleFlowPlanExportOptions {
@@ -72,8 +96,7 @@ function assertShortPlan(value: unknown): asserts value is ShortPlan {
   const plan = value as Partial<ShortPlan>;
   if (
     plan.schemaVersion !== 3 ||
-    !plan.sourceDigests || !Object.keys(plan.sourceDigests).length ||
-    Object.values(plan.sourceDigests).some((digest) => !/^[a-f0-9]{64}$/u.test(digest)) ||
+    !hasExactSourceDigests(plan.sourceDigests) ||
     plan.policy?.contentTier !== 'safe' ||
     plan.policy.qaStatus !== 'approved' ||
     plan.policy.autoPublish !== false ||
