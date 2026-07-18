@@ -11,6 +11,10 @@ import {
   setupCompanionMode,
 } from '../../companion/companion-mode.js';
 import {
+  formatCompanionDoctorReport,
+  runLiveCompanionDoctor,
+} from '../../companion/companion-doctor.js';
+import {
   captureCameraSnapshot,
   checkCameraAvailability,
   formatCameraStatus,
@@ -211,6 +215,7 @@ export async function handleCompanion(args: string[]): Promise<CommandHandlerRes
         'Usage: /companion percepts recent [--limit <n>] [--modality <vision|hearing|screen|self|memory|tool|suggestion>]',
         '       /companion percepts stats',
         '       /companion live [--no-record]',
+        '       /companion doctor [--json]',
         '       /companion listen-check [--wav <path>]',
         '       /companion evaluate [--no-record]',
         '       /companion improve [--dry-run] [--no-record] [--no-run-mission]',
@@ -220,6 +225,20 @@ export async function handleCompanion(args: string[]): Promise<CommandHandlerRes
         '       /companion missions sync|list|run-next|start|done|dismiss',
         '       /companion safety recent|stats',
       ].join('\n')),
+    };
+  }
+
+  if (action === 'doctor' || action === 'diag' || action === 'diagnose') {
+    const report = await runLiveCompanionDoctor();
+    if (args.includes('--json')) {
+      return {
+        handled: true,
+        entry: entry(JSON.stringify(report, null, 2)),
+      };
+    }
+    return {
+      handled: true,
+      entry: entry(formatCompanionDoctorReport(report)),
     };
   }
 

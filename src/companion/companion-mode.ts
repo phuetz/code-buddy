@@ -24,6 +24,10 @@ import {
   engineUsesParakeetModel,
 } from '../sensory/speech-engine-config.js';
 import { getActivePersonaVoiceAsync } from '../personas/persona-manager.js';
+import {
+  doctorInputFromPersonaVoice,
+  runCompanionDoctor,
+} from './companion-doctor.js';
 import { DEFAULT_WAKE_WORD_CONFIG } from '../voice/types.js';
 import { hasCodexCredentials, getCodexAuthFilePath } from '../providers/codex-oauth.js';
 import { commandExists } from '../utils/command-exists.js';
@@ -1259,6 +1263,36 @@ export async function buildCompanionLiveBrief(
       next: status.percepts.total > 0 ? undefined : 'Run `buddy companion self` or capture camera/voice percepts.',
     },
   ];
+
+  // Persona / spokenPrompt doctor (required when robot is Lisa)
+  try {
+    const voice = await getActivePersonaVoiceAsync();
+    const doctor = runCompanionDoctor(doctorInputFromPersonaVoice(voice));
+    const wantsLisa =
+      /^(lisa|companion-lisa)$/i.test((process.env.CODEBUDDY_ROBOT_NAME ?? '').trim()) ||
+      /^(lisa|companion-lisa)$/i.test((process.env.CODEBUDDY_COMPANION_VOICE_FALLBACK ?? '').trim()) ||
+      /^(lisa|companion-lisa)$/i.test((voice.robotName ?? '').trim());
+    capabilities.push({
+      id: 'persona_voice',
+      label: 'Persona / spoken character',
+      ready: doctor.ok,
+      required: wantsLisa,
+      detail: doctor.summary,
+      next: doctor.ok
+        ? undefined
+        : doctor.checks.find((c) => c.severity === 'error')?.next ||
+          'Run `buddy companion doctor` and pin persona lisa.',
+    });
+  } catch {
+    capabilities.push({
+      id: 'persona_voice',
+      label: 'Persona / spoken character',
+      ready: false,
+      required: false,
+      detail: 'Persona doctor could not run.',
+      next: 'Run `buddy companion doctor`.',
+    });
+  }
 
   const required = capabilities.filter(capability => capability.required);
   const requiredReady = required.filter(capability => capability.ready).length;

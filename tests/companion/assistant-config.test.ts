@@ -31,6 +31,12 @@ describe('assistant TTS defaults', () => {
       .toMatchObject({ default: '', envFile: 'both' });
     expect(ASSISTANT_SETTINGS.find((setting) => setting.key === 'CODEBUDDY_VOICEBOX_ENGINE'))
       .toMatchObject({ default: 'qwen' });
+    const voiceboxInstruct = ASSISTANT_SETTINGS.find(
+      (setting) => setting.key === 'CODEBUDDY_VOICEBOX_INSTRUCT',
+    );
+    expect(voiceboxInstruct?.default).toMatch(/delivery only/i);
+    expect(voiceboxInstruct?.default).toMatch(/Lisa/i);
+    expect(voiceboxInstruct?.default?.length).toBeGreaterThan(40);
     expect(ASSISTANT_SETTINGS.find((setting) => setting.key === 'CODEBUDDY_TTS_VOLUME'))
       .toMatchObject({ default: '100', type: 'volume', envFile: 'both' });
     expect(ASSISTANT_SETTINGS.find((setting) => setting.key === 'CODEBUDDY_VOICE_ROUTING_MODE'))

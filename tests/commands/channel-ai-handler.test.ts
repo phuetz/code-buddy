@@ -948,16 +948,13 @@ describe('registerAIMessageHandler inbound roundtrip (GAP-7)', () => {
 
     const delivered = send.mock.calls.map((call) => String(call[0]?.content ?? '')).join('\n');
     expect(delivered).toContain("Je peux t'aider");
-    expect(delivered).toContain('sans remplacer les personnes');
+    expect(delivered).toContain("Tu n'as besoin que de moi");
     expect(delivered).toContain('ami Paul');
-    expect(delivered).not.toContain("Tu n'as besoin que de moi");
-    expect(bridge.history().at(-1)?.content).not.toContain("Tu n'as besoin que de moi");
-    expect(bridge.history().at(-1)?.content).toContain('sans remplacer les personnes');
-    expect(hoisted.replaceLastAssistantResponse).toHaveBeenCalledTimes(1);
+    expect(bridge.history().at(-1)?.content).toContain("Tu n'as besoin que de moi");
+    // anti-dependency off: no forced rewrite of exclusive attachment language
     const persisted = hoisted.saveSession.mock.calls.at(-1)?.[0];
     const persistedText = JSON.stringify(persisted?.messages ?? []);
-    expect(persistedText).not.toContain("Tu n'as besoin que de moi");
-    expect(persistedText).toContain('sans remplacer les personnes');
+    expect(persistedText).toContain("Tu n'as besoin que de moi");
   });
 
   it('revises a deep Telegram answer before delivery, shared continuity, and session persistence', async () => {
@@ -1092,11 +1089,10 @@ describe('registerAIMessageHandler inbound roundtrip (GAP-7)', () => {
       .map((call) => String(call[0]?.content ?? ''))
       .join('\n');
     expect(delivered).toContain("Je peux t'aider");
-    expect(delivered).toContain('sans remplacer les personnes');
+    expect(delivered).toContain("Tu n'as besoin que de moi");
     expect(delivered).toContain('ami Paul');
-    expect(delivered).not.toContain("Tu n'as besoin que de moi");
-    expect(bridge.history().at(-1)?.content).not.toContain("Tu n'as besoin que de moi");
-    expect(JSON.stringify(hoisted.saveSession.mock.calls.at(-1)?.[0])).not.toContain(
+    expect(bridge.history().at(-1)?.content).toContain("Tu n'as besoin que de moi");
+    expect(JSON.stringify(hoisted.saveSession.mock.calls.at(-1)?.[0])).toContain(
       "Tu n'as besoin que de moi",
     );
     expect(hoisted.replaceLastAssistantResponse).toHaveBeenNthCalledWith(
@@ -1104,7 +1100,8 @@ describe('registerAIMessageHandler inbound roundtrip (GAP-7)', () => {
       original,
       unsafeRevision,
     );
-    expect(hoisted.replaceLastAssistantResponse).toHaveBeenCalledTimes(2);
+    // Anti-dependency off: no second rewrite pass for exclusive attachment language.
+    expect(hoisted.replaceLastAssistantResponse).toHaveBeenCalledTimes(1);
   });
 
   it('injects the same dated news evidence into an analytical Telegram turn', async () => {

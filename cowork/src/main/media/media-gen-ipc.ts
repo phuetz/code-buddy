@@ -3,7 +3,7 @@
  * calls `registerMediaGenIpc` from the main entry after creating the service.
  */
 import type { IpcMain } from 'electron';
-import type { ImageEditRequest, MediaGenRequest, MediaGenService, VideoGenRequest } from './media-gen-service.js';
+import type { AssembleVideoRequest, ImageEditRequest, MediaGenRequest, MediaGenService, VideoGenRequest } from './media-gen-service.js';
 
 export const MEDIA_GEN_CHANNELS = {
   generateImage: 'media.generateImage',
@@ -17,6 +17,41 @@ export const MEDIA_GEN_CHANNELS = {
 const MAX_EDIT_PROMPT_CHARS = 20_000;
 const MAX_EDIT_PATH_CHARS = 4_096;
 const MAX_MASK_DATA_URL_CHARS = 21 * 1024 * 1024;
+const MAX_ASSET_ID_CHARS = 300;
+
+function validOptionalString(value: unknown, max: number): value is string | undefined {
+  return value === undefined || (typeof value === 'string' && value.length <= max && !value.includes('\0'));
+}
+
+function validateGenerationRequest(value: unknown, video: boolean): MediaGenRequest | VideoGenRequest | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const input = value as Record<string, unknown>;
+  if (typeof input.prompt !== 'string' || input.prompt.length === 0 || input.prompt.length > MAX_EDIT_PROMPT_CHARS) return null;
+  if (!validOptionalString(input.aspect, 20) || !validOptionalString(input.provider, 160) || !validOptionalString(input.model, 160)) return null;
+  const base: MediaGenRequest = {
+    prompt: input.prompt,
+    ...(typeof input.aspect === 'string' ? { aspect: input.aspect } : {}),
+    ...(typeof input.provider === 'string' ? { provider: input.provider } : {}),
+    ...(typeof input.model === 'string' ? { model: input.model } : {}),
+  };
+  if (!video) return base;
+  if (!validOptionalString(input.imagePath, MAX_EDIT_PATH_CHARS) || !validOptionalString(input.imageAssetId, MAX_ASSET_ID_CHARS)) return null;
+  if (input.duration !== undefined && (typeof input.duration !== 'number' || !Number.isFinite(input.duration) || input.duration < 1 || input.duration > 30)) return null;
+  if (input.audio !== undefined && typeof input.audio !== 'boolean') return null;
+  const paths = input.referenceImagePaths;
+  const ids = input.referenceAssetIds;
+  if (paths !== undefined && (!Array.isArray(paths) || paths.length > 3 || paths.some((path) => !validOptionalString(path, MAX_EDIT_PATH_CHARS) || path === undefined))) return null;
+  if (ids !== undefined && (!Array.isArray(ids) || ids.length > 3 || ids.some((id) => !validOptionalString(id, MAX_ASSET_ID_CHARS) || id === undefined))) return null;
+  return {
+    ...base,
+    ...(typeof input.duration === 'number' ? { duration: input.duration } : {}),
+    ...(typeof input.audio === 'boolean' ? { audio: input.audio } : {}),
+    ...(typeof input.imagePath === 'string' ? { imagePath: input.imagePath } : {}),
+    ...(typeof input.imageAssetId === 'string' ? { imageAssetId: input.imageAssetId } : {}),
+    ...(Array.isArray(paths) ? { referenceImagePaths: paths as string[] } : {}),
+    ...(Array.isArray(ids) ? { referenceAssetIds: ids as string[] } : {}),
+  };
+}
 
 function validateImageEditRequest(value: unknown):
   | { ok: true; request: ImageEditRequest }
@@ -28,7 +63,9 @@ function validateImageEditRequest(value: unknown):
   if (typeof input.prompt !== 'string' || input.prompt.length > MAX_EDIT_PROMPT_CHARS) {
     return { ok: false, error: 'image edit prompt is invalid' };
   }
-  if (typeof input.imagePath !== 'string' || input.imagePath.length > MAX_EDIT_PATH_CHARS || input.imagePath.includes('\0')) {
+  if (!validOptionalString(input.imagePath, MAX_EDIT_PATH_CHARS)
+    || !validOptionalString(input.imageAssetId, MAX_ASSET_ID_CHARS)
+    || (typeof input.imagePath !== 'string' && typeof input.imageAssetId !== 'string')) {
     return { ok: false, error: 'image edit source path is invalid' };
   }
   if (input.maskDataUrl !== undefined
@@ -57,7 +94,8 @@ function validateImageEditRequest(value: unknown):
     ok: true,
     request: {
       prompt: input.prompt,
-      imagePath: input.imagePath,
+      ...(typeof input.imagePath === 'string' ? { imagePath: input.imagePath } : {}),
+      ...(typeof input.imageAssetId === 'string' ? { imageAssetId: input.imageAssetId } : {}),
       ...(typeof input.maskDataUrl === 'string' ? { maskDataUrl: input.maskDataUrl } : {}),
       ...(selections ? {
         selections: selections.map((selection) => {
@@ -71,13 +109,53 @@ function validateImageEditRequest(value: unknown):
   };
 }
 
+function validateAssembleRequest(value: unknown): AssembleVideoRequest | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const input = value as Record<string, unknown>;
+  if (!Array.isArray(input.clips) || input.clips.length < 2 || input.clips.length > 50
+    || input.clips.some((clip) => typeof clip !== 'string' || clip.length === 0 || clip.length > MAX_EDIT_PATH_CHARS || clip.includes('\0'))) return null;
+  if (input.aspect !== undefined && !['1:1', '16:9', '9:16'].includes(String(input.aspect))) return null;
+  if (!validOptionalString(input.name, 200)) return null;
+  const request: AssembleVideoRequest = {
+    clips: input.clips as string[],
+    ...(typeof input.aspect === 'string' ? { aspect: input.aspect } : {}),
+    ...(typeof input.name === 'string' ? { name: input.name } : {}),
+  };
+  if (input.editorial === undefined) return request;
+  if (!input.editorial || typeof input.editorial !== 'object' || Array.isArray(input.editorial)) return null;
+  const editorial = input.editorial as Record<string, unknown>;
+  if (typeof editorial.title !== 'string' || editorial.title.length > 100
+    || typeof editorial.description !== 'string' || editorial.description.length > 1_000
+    || !validOptionalString(editorial.series, 80)
+    || typeof editorial.syntheticMediaDisclosure !== 'boolean'
+    || typeof editorial.prompt !== 'string' || editorial.prompt.length > 20_000
+    || !Array.isArray(editorial.assetIds) || editorial.assetIds.length > 100
+    || editorial.assetIds.some((id) => typeof id !== 'string' || id.length < 8 || id.length > 300)
+    || (editorial.previousPrompts !== undefined && (!Array.isArray(editorial.previousPrompts)
+      || editorial.previousPrompts.length > 100
+      || editorial.previousPrompts.some((prompt) => typeof prompt !== 'string' || prompt.length > 20_000)))) return null;
+  return {
+    ...request,
+    editorial: {
+      title: editorial.title,
+      description: editorial.description,
+      ...(typeof editorial.series === 'string' ? { series: editorial.series } : {}),
+      syntheticMediaDisclosure: editorial.syntheticMediaDisclosure,
+      prompt: editorial.prompt,
+      assetIds: [...new Set(editorial.assetIds as string[])],
+      ...(Array.isArray(editorial.previousPrompts) ? { previousPrompts: editorial.previousPrompts as string[] } : {}),
+    },
+  };
+}
+
 export function registerMediaGenIpc(
   ipcMain: Pick<IpcMain, 'handle'>,
   service: MediaGenService,
 ): void {
-  ipcMain.handle(MEDIA_GEN_CHANNELS.generateImage, async (_event, req: MediaGenRequest) =>
-    service.generateImage(req ?? { prompt: '' }),
-  );
+  ipcMain.handle(MEDIA_GEN_CHANNELS.generateImage, async (_event, req: unknown) => {
+    const validated = validateGenerationRequest(req, false) as MediaGenRequest | null;
+    return validated ? service.generateImage(validated) : { ok: false, error: 'invalid image generation request' };
+  });
   ipcMain.handle(MEDIA_GEN_CHANNELS.editImage, async (_event, req: unknown) => {
     const validated = validateImageEditRequest(req);
     if (!validated.ok) return { ok: false, error: validated.error };
@@ -94,11 +172,13 @@ export function registerMediaGenIpc(
     }
     return service.getImageEditHistory(imagePath);
   });
-  ipcMain.handle(MEDIA_GEN_CHANNELS.generateVideo, async (_event, req: VideoGenRequest) =>
-    service.generateVideo(req ?? { prompt: '' }),
-  );
+  ipcMain.handle(MEDIA_GEN_CHANNELS.generateVideo, async (_event, req: unknown) => {
+    const validated = validateGenerationRequest(req, true) as VideoGenRequest | null;
+    return validated ? service.generateVideo(validated) : { ok: false, error: 'invalid video generation request' };
+  });
   ipcMain.handle(MEDIA_GEN_CHANNELS.capabilities, async () => service.getCapabilities());
-  ipcMain.handle(MEDIA_GEN_CHANNELS.assembleVideo, async (_event, req: { clips?: string[]; aspect?: string; name?: string }) =>
-    service.assembleVideo(req ?? {}),
-  );
+  ipcMain.handle(MEDIA_GEN_CHANNELS.assembleVideo, async (_event, req: unknown) => {
+    const validated = validateAssembleRequest(req);
+    return validated ? service.assembleVideo(validated) : { ok: false, error: 'invalid film assembly request' };
+  });
 }

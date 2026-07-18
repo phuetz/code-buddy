@@ -21,6 +21,9 @@ export interface GpuMediaWorkerCapabilities {
   jobs: GpuMediaJobKind[];
   gpus?: Array<{ name: string; vramMb: number; busy: boolean }>;
   queueDepth?: number;
+  activeJobs?: number;
+  availableSlots?: number;
+  runnerRevisions?: Partial<Record<GpuMediaJobKind, string>>;
 }
 
 export interface GpuMediaJobView {
@@ -34,6 +37,10 @@ export interface GpuMediaJobView {
   completedAt?: string;
   output?: Record<string, unknown>;
   error?: string;
+  requestHash?: string;
+  runnerRevision?: string;
+  attempt?: number;
+  retryOf?: string;
 }
 
 export interface PanoWorldPayload {
@@ -51,6 +58,8 @@ export interface AvatarVideoPayload {
   turnId: string;
   audioPath: string;
   referenceImagePath: string;
+  audioSha256?: string;
+  referenceImageSha256?: string;
   prompt: string;
   resolution: '480p';
   channelTarget?: {
@@ -62,6 +71,11 @@ export interface AvatarVideoPayload {
 
 export interface GpuMediaWorkerDeps {
   fetch?: typeof fetch;
+}
+
+export interface GpuMediaUploadedAsset {
+  path: string;
+  bytes: number;
 }
 
 const JOB_ID_PATTERN = /^[A-Za-z0-9._-]{1,128}$/;
@@ -215,6 +229,20 @@ export function parseAvatarVideoPayload(value: unknown): AvatarVideoPayload {
       ...(threadId ? { threadId } : {}),
     };
   }
+  const audioSha256 = input.audio_sha256 ?? input.audioSha256;
+  const referenceImageSha256 = input.reference_image_sha256 ?? input.referenceImageSha256;
+  if (audioSha256 !== undefined && (typeof audioSha256 !== 'string' || !/^[a-f0-9]{64}$/u.test(audioSha256))) {
+    throw new Error('audio_sha256 must be a lowercase SHA-256 digest');
+  }
+  if (
+    referenceImageSha256 !== undefined &&
+    (typeof referenceImageSha256 !== 'string' || !/^[a-f0-9]{64}$/u.test(referenceImageSha256))
+  ) {
+    throw new Error('reference_image_sha256 must be a lowercase SHA-256 digest');
+  }
+  if ((audioSha256 === undefined) !== (referenceImageSha256 === undefined)) {
+    throw new Error('audio and reference image SHA-256 digests must be supplied together');
+  }
   return {
     turnId: requiredText(input.turn_id ?? input.turnId, 'turn_id', 128),
     audioPath: requiredText(input.audio_path ?? input.audioPath, 'audio_path'),
@@ -222,6 +250,8 @@ export function parseAvatarVideoPayload(value: unknown): AvatarVideoPayload {
       input.reference_image_path ?? input.referenceImagePath,
       'reference_image_path'
     ),
+    ...(typeof audioSha256 === 'string' ? { audioSha256 } : {}),
+    ...(typeof referenceImageSha256 === 'string' ? { referenceImageSha256 } : {}),
     prompt: requiredText(input.prompt, 'prompt', 8_000),
     resolution: '480p',
     ...(channelTarget ? { channelTarget } : {}),
@@ -306,7 +336,11 @@ export class GpuMediaWorkerClient {
     return data as unknown as GpuMediaWorkerCapabilities;
   }
 
-  async submit(kind: GpuMediaJobKind, rawPayload: unknown): Promise<GpuMediaJobView> {
+  async submit(
+    kind: GpuMediaJobKind,
+    rawPayload: unknown,
+    options: { retryTerminal?: boolean } = {},
+  ): Promise<GpuMediaJobView> {
     const payload =
       kind === 'panoworld_reconstruct'
         ? parsePanoWorldPayload(rawPayload)
@@ -314,9 +348,27 @@ export class GpuMediaWorkerClient {
     return parseJob(
       await this.request('/v1/jobs', {
         method: 'POST',
-        body: JSON.stringify({ kind, payload }),
+        body: JSON.stringify({ kind, payload, retryTerminal: options.retryTerminal === true }),
       })
     );
+  }
+
+  async uploadAsset(name: string, bytes: Uint8Array, mediaType: 'image/png' | 'image/jpeg' | 'image/webp' | 'audio/wav'): Promise<GpuMediaUploadedAsset> {
+    if (!/^[A-Za-z0-9][A-Za-z0-9_.-]{0,199}$/u.test(name)) throw new Error('asset_name is invalid');
+    if (!(bytes instanceof Uint8Array) || bytes.byteLength <= 0 || bytes.byteLength > 64 * 1024 * 1024) {
+      throw new Error('asset must contain at most 64 MiB');
+    }
+    const body = new ArrayBuffer(bytes.byteLength);
+    new Uint8Array(body).set(bytes);
+    const data = parseObject(await this.request(`/v1/assets?name=${encodeURIComponent(name)}`, {
+      method: 'POST',
+      headers: { 'content-type': mediaType, 'content-length': String(bytes.byteLength) },
+      body: new Blob([body], { type: mediaType }),
+    }), 'uploaded asset');
+    return {
+      path: requiredText(data.path, 'uploaded asset path'),
+      bytes: typeof data.bytes === 'number' ? data.bytes : bytes.byteLength,
+    };
   }
 
   async status(jobId: string): Promise<GpuMediaJobView> {

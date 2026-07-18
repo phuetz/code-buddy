@@ -557,10 +557,24 @@ function makeDefaultSummarize(): SummarizeFn {
     const route = await resolveVoiceModel(transcript, { forceFastLane: true });
     opts?.onProviderResolved?.(route);
     const client = new CodeBuddyClient(route.apiKey, route.model, route.baseURL);
-    // Inherit the active personality's spoken character (else the default companion prompt).
+    // Inherit the active personality's spoken character (else the default companion prompt),
+    // plus the xAI/Lisa spine when the voice layer is companion-shaped.
+    const personaVoice = await getActivePersonaVoiceAsync();
+    let characterBlock = '';
+    try {
+      const voiceChar = await import('../companion/companion-voice-character.js');
+      characterBlock = voiceChar.buildCompanionVoiceCharacterBlock({
+        personaId: personaVoice.personaId,
+        robotName: personaVoice.robotName,
+        spokenPrompt: personaVoice.spokenPrompt,
+        turnIndex: voiceChar.nextSpokenTurnIndex(),
+      });
+    } catch {
+      /* best-effort */
+    }
     const sys =
-      ((await getActivePersonaVoiceAsync()).spokenPrompt || SPEAK_SYSTEM_PROMPT) +
-      " On te donne ce que tu viens de faire ou de trouver en réponse à une demande parlée. " +
+      [personaVoice.spokenPrompt || SPEAK_SYSTEM_PROMPT, characterBlock].filter(Boolean).join('\n\n') +
+      "\n\nOn te donne ce que tu viens de faire ou de trouver en réponse à une demande parlée. " +
       "Restitue le RÉSULTAT à voix haute en suivant ce plan, sans perdre les faits, les sources ni les nuances utiles.\n" +
       prepareConversationTurn(transcript).systemGuidance +
       (opts?.spokenPrefix ? `\n\n${spokenPrefixContinuationGuidance(opts.spokenPrefix)}` : '') +

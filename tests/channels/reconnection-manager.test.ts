@@ -42,6 +42,7 @@ describe('ReconnectionManager', () => {
       expect(config.maxDelayMs).toBe(60000);
       expect(config.backoffMultiplier).toBe(2);
       expect(config.jitterMs).toBe(500);
+      expect(config.keepProcessAlive).toBe(false);
     });
 
     it('should accept partial config overrides', () => {
@@ -55,6 +56,20 @@ describe('ReconnectionManager', () => {
 
     it('should store the channel name', () => {
       expect(manager.getName()).toBe('test-channel');
+    });
+
+    it('should keep a daemon process alive while its reconnect is pending', () => {
+      const m = new ReconnectionManager('test-daemon', {
+        initialDelayMs: 5000,
+        jitterMs: 0,
+        keepProcessAlive: true,
+      });
+
+      m.scheduleReconnect(jest.fn().mockResolvedValue(undefined));
+
+      const pendingTimer = (m as unknown as { pendingTimer: NodeJS.Timeout }).pendingTimer;
+      expect(pendingTimer.hasRef()).toBe(true);
+      m.cancel();
     });
   });
 

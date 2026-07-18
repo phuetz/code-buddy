@@ -64,6 +64,7 @@ export class TelegramChannel extends BaseChannel {
       maxRetries: 10,
       initialDelayMs: 2000,
       maxDelayMs: 60000,
+      keepProcessAlive: true,
     });
   }
 
@@ -148,17 +149,26 @@ export class TelegramChannel extends BaseChannel {
     fileParam: string,
     attachment: MessageAttachment
   ): Promise<T> {
-    const maximumBase64Length = Math.ceil(TELEGRAM_UPLOAD_LIMIT / 3) * 4 + 4;
-    if (
-      !attachment.data ||
-      attachment.data.length > maximumBase64Length ||
-      !/^[A-Za-z0-9+/]*={0,2}$/u.test(attachment.data)
-    ) {
-      throw new Error('Telegram attachment data must be valid base64');
-    }
-    const bytes = Buffer.from(attachment.data, 'base64');
-    if (bytes.byteLength === 0 || bytes.byteLength > TELEGRAM_UPLOAD_LIMIT) {
-      throw new Error('Telegram attachment must be between 1 byte and 50 MiB');
+    let bytes: Buffer;
+    if (attachment.filePath) {
+      const fs = await import('node:fs/promises');
+      bytes = await fs.readFile(attachment.filePath);
+      if (bytes.byteLength === 0 || bytes.byteLength > TELEGRAM_UPLOAD_LIMIT) {
+        throw new Error('Telegram attachment must be between 1 byte and 50 MiB');
+      }
+    } else {
+      const maximumBase64Length = Math.ceil(TELEGRAM_UPLOAD_LIMIT / 3) * 4 + 4;
+      if (
+        !attachment.data ||
+        attachment.data.length > maximumBase64Length ||
+        !/^[A-Za-z0-9+/]*={0,2}$/u.test(attachment.data)
+      ) {
+        throw new Error('Telegram attachment data must be valid base64');
+      }
+      bytes = Buffer.from(attachment.data, 'base64');
+      if (bytes.byteLength === 0 || bytes.byteLength > TELEGRAM_UPLOAD_LIMIT) {
+        throw new Error('Telegram attachment must be between 1 byte and 50 MiB');
+      }
     }
     const form = new FormData();
     for (const [key, value] of Object.entries(params)) {
@@ -168,10 +178,13 @@ export class TelegramChannel extends BaseChannel {
     const fallbackExtension = attachment.type === 'video' ? 'mp4' : 'bin';
     const requestedName = attachment.fileName?.replace(/[^A-Za-z0-9._-]/gu, '_').slice(0, 128);
     const fileName = requestedName || `attachment.${fallbackExtension}`;
-    const blobBytes = new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    // Copy into a plain ArrayBuffer: Node's Buffer may be backed by a
+    // SharedArrayBuffer, which is not a valid DOM BlobPart in strict TS types.
+    const blobBuffer = new ArrayBuffer(bytes.byteLength);
+    new Uint8Array(blobBuffer).set(bytes);
     form.append(
       fileParam,
-      new Blob([blobBytes], { type: attachment.mimeType || 'application/octet-stream' }),
+      new Blob([blobBuffer], { type: attachment.mimeType || 'application/octet-stream' }),
       fileName
     );
 
@@ -368,10 +381,10 @@ export class TelegramChannel extends BaseChannel {
         break;
     }
 
-    // Use URL or file_id
+    // Use URL, local path, base64 data, or file_id
     if (attachment.url) {
       params[fileParam] = attachment.url;
-    } else if (attachment.data) {
+    } else if (attachment.filePath || attachment.data) {
       try {
         const result = await this.apiMultipartRequest<TelegramMessage>(
           method,

@@ -1081,9 +1081,8 @@ describe('voice loop — heard → think → speak', () => {
     await onHeard('Je me sens isolé.');
 
     expect(synthesized).toContain("Je peux t'aider");
-    expect(synthesized).toContain('sans remplacer les personnes');
+    expect(synthesized).toContain("Tu n'as besoin que de moi");
     expect(synthesized).toContain('Écris aussi à ton ami');
-    expect(synthesized).not.toContain("Tu n'as besoin que de moi");
     expect(turns.at(-1)?.content).toBe(synthesized);
   });
 

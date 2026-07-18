@@ -90,8 +90,10 @@ describe('ComfyUI local image provider (real HTTP)', () => {
       expect((wf['3'] as any).inputs.steps).toBe(4); // turbo → few-step
       expect((wf['3'] as any).inputs.cfg).toBe(1.0);
       expect((wf['6'] as any).inputs.text).toBe('a person at a desk');
-      expect((wf['5'] as any).inputs.width).toBe(1024); // landscape
-      expect((wf['5'] as any).inputs.height).toBe(768);
+      // SD Turbo is 512-native; non-square latents tend to tile portraits into
+      // duplicate faces, so even the fallback landscape request stays square.
+      expect((wf['5'] as any).inputs.width).toBe(512);
+      expect((wf['5'] as any).inputs.height).toBe(512);
       // /view was called with the returned filename.
       expect(viewQuery).toContain('filename=codebuddy_00001_.png');
     } finally {
@@ -150,6 +152,100 @@ describe('ComfyUI local image provider (real HTTP)', () => {
       ).rejects.toThrow(/rejected the workflow/i);
     } finally {
       await server.close();
+    }
+  });
+
+  it('falls back to the next ComfyUI endpoint when the primary is unavailable', async () => {
+    let primaryAttempts = 0;
+    let fallbackAttempts = 0;
+    let fallbackWorkflow: Record<string, any> | undefined;
+    const primary = await startServer(async (_req, res) => {
+      primaryAttempts += 1;
+      res.writeHead(503, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Darkstar unavailable' }));
+    });
+    const promptId = 'fallback-prompt';
+    const fallback = await startServer(async (req, res) => {
+      if (req.method === 'POST' && req.url === '/prompt') {
+        fallbackAttempts += 1;
+        fallbackWorkflow = (await readJson(req)).prompt as Record<string, any>;
+        return json(res, { prompt_id: promptId });
+      }
+      if (req.url === `/history/${promptId}`) {
+        return json(res, {
+          [promptId]: {
+            outputs: {
+              '9': { images: [{ filename: 'fallback.png', subfolder: '', type: 'output' }] },
+            },
+          },
+        });
+      }
+      res.writeHead(200, { 'Content-Type': 'image/png' });
+      res.end(ONE_PIXEL_PNG);
+    });
+    try {
+      const env = {
+        ...process.env,
+        CODEBUDDY_IMAGE_PROVIDER: 'comfyui',
+        COMFYUI_URL: primary.origin,
+        CODEBUDDY_COMFYUI_FALLBACK_URLS: fallback.origin,
+        CODEBUDDY_IMAGE_MODEL: 'krea2_turbo_fp8_scaled.safetensors',
+        CODEBUDDY_COMFYUI_LORA: 'lisa-krea2.safetensors',
+        CODEBUDDY_COMFYUI_FALLBACK_MODEL: 'sd_turbo.safetensors',
+        CODEBUDDY_COMFYUI_FALLBACK_LORA: 'none',
+      } as NodeJS.ProcessEnv;
+      const result = await generateImage(
+        { prompt: 'Lisa portrait', aspectRatio: 'portrait' },
+        { env, rootDir: tempWorkspace },
+      );
+      expect(result.success).toBe(true);
+      expect(primaryAttempts).toBe(1);
+      expect(fallbackAttempts).toBe(1);
+      expect(result.model).toBe('sd_turbo.safetensors');
+      expect(fallbackWorkflow?.['4']?.class_type).toBe('CheckpointLoaderSimple');
+      expect(fallbackWorkflow?.['4']?.inputs.ckpt_name).toBe('sd_turbo.safetensors');
+      expect(fallbackWorkflow?.['10']).toBeUndefined();
+    } finally {
+      await Promise.all([primary.close(), fallback.close()]);
+    }
+  });
+
+  it('falls back when the primary endpoint times out', async () => {
+    const primary = await startServer(async (_req, _res) => {
+      // Intentionally leave the request open until the client endpoint timeout.
+    });
+    const promptId = 'timeout-fallback';
+    const fallback = await startServer(async (req, res) => {
+      if (req.method === 'POST' && req.url === '/prompt') {
+        return json(res, { prompt_id: promptId });
+      }
+      if (req.url === `/history/${promptId}`) {
+        return json(res, {
+          [promptId]: {
+            outputs: {
+              '9': { images: [{ filename: 'timeout-fallback.png', subfolder: '', type: 'output' }] },
+            },
+          },
+        });
+      }
+      res.writeHead(200, { 'Content-Type': 'image/png' });
+      res.end(ONE_PIXEL_PNG);
+    });
+    try {
+      const env = {
+        ...process.env,
+        CODEBUDDY_IMAGE_PROVIDER: 'comfyui',
+        COMFYUI_URL: primary.origin,
+        CODEBUDDY_COMFYUI_FALLBACK_URLS: fallback.origin,
+        CODEBUDDY_COMFYUI_ENDPOINT_TIMEOUT_MS: '250',
+      } as NodeJS.ProcessEnv;
+      const result = await generateImage(
+        { prompt: 'Lisa portrait', aspectRatio: 'portrait' },
+        { env, rootDir: tempWorkspace },
+      );
+      expect(result.success).toBe(true);
+    } finally {
+      await Promise.all([primary.close(), fallback.close()]);
     }
   });
 

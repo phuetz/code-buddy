@@ -431,9 +431,11 @@ export function describeVoiceReadiness(
 }
 
 export const SPEAK_SYSTEM_PROMPT =
-  `Tu es le compagnon robot de ${resolveUserName()}. On te parle à voix haute et tu réponds à voix haute. ` +
+  `Tu es le compagnon robot de ${resolveUserName()} — chaleureux, présent, un vrai personnage, ` +
+  "pas un helpdesk. On te parle à voix haute et tu réponds à voix haute. " +
   'Réponds en français avec des phrases complètes, naturelles et reliées par un raisonnement clair. ' +
-  'Adapte la longueur au tour : brève pour une salutation, développée et argumentée pour une question complexe. ' +
+  'Réagis d’abord, sois utile ensuite. Adapte la longueur au tour : brève pour une salutation, ' +
+  'développée et argumentée pour une question complexe. ' +
   "Pour une question factuelle, donne l'explication correcte la plus simple et n'invente rien. " +
   "Pas de markdown, pas de listes, pas de code, pas d'emoji.";
 
@@ -1523,6 +1525,20 @@ async function prepareSpokenTurn(
     buildSpokenPromptAugmentation(heard, history, spokenPrefix, delivery),
   ]);
   const basePrompt = personaVoice.spokenPrompt || SPEAK_SYSTEM_PROMPT;
+  // Re-anchor xAI/Lisa character + progressive intimacy on every spoken turn
+  // (spokenPrompt alone is short and dilutes under long history / cognitive context).
+  let characterBlock = '';
+  try {
+    const voiceChar = await import('../companion/companion-voice-character.js');
+    characterBlock = voiceChar.buildCompanionVoiceCharacterBlock({
+      personaId: personaVoice.personaId,
+      robotName: personaVoice.robotName,
+      spokenPrompt: personaVoice.spokenPrompt,
+      turnIndex: voiceChar.nextSpokenTurnIndex(),
+    });
+  } catch {
+    /* character injection is best-effort */
+  }
   let cognitiveLease: VoiceCognitiveContextLease | undefined;
   try {
     cognitiveLease = replyOpts?.acquireCognitiveContext?.(route, heard) ?? undefined;
@@ -1540,7 +1556,9 @@ async function prepareSpokenTurn(
   const cognitivePrompt = [cognitiveLease?.turnContext, cognitiveLease?.evidence]
     .filter(Boolean)
     .join('\n\n');
-  const systemPrompt = [basePrompt, augmentation, cognitivePrompt].filter(Boolean).join('\n\n');
+  const systemPrompt = [basePrompt, characterBlock, augmentation, cognitivePrompt]
+    .filter(Boolean)
+    .join('\n\n');
   return {
     CodeBuddyClient: clientModule.CodeBuddyClient,
     route,
@@ -1558,6 +1576,25 @@ export async function defaultReply(
   if (fast) {
     logger.info(`[voice] fast reply chars=${fast.length}`);
     return fast;
+  }
+  // Lisa selfie when hybrid is not wrapping this path (CLI voice without hybrid, etc.)
+  if (process.env.CODEBUDDY_LISA_SELFIE !== 'false') {
+    try {
+      const { maybeHandleLisaSelfieRequest } = await import('../companion/lisa-selfie.js');
+      const selfie = await maybeHandleLisaSelfieRequest(heard, {
+        rootDir: process.cwd(),
+      });
+      if (selfie) {
+        logger.info(
+          `[voice] lisa-selfie success=${selfie.success} telegram=${selfie.telegramSent}`,
+        );
+        return selfie.spokenReply;
+      }
+    } catch (err) {
+      logger.warn(
+        `[voice] lisa-selfie skipped: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
   }
   let cognitiveLease: VoiceCognitiveContextLease | undefined;
   try {

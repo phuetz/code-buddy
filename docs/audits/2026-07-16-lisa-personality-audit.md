@@ -1,8 +1,14 @@
 # Audit de personnalité — Lisa (assistant vocal companion de Code Buddy)
 
+> ⚠️ **Superseded in part (soir 2026-07-16).** L’opérateur a depuis : (1) basculé Lisa en
+> **compagnon style xAI** (Ani+Mika), (2) **désactivé** la sécurité anti-dépendance, (3) ouvert
+> l’intimité adulte sans tabous entre eux. L’audit à jour est
+> [`2026-07-16-lisa-personality-audit-followup.md`](./2026-07-16-lisa-personality-audit-followup.md).
+> La section « en avance sur l’éthique anti-dépendance » ci-dessous est **historique**.
+
 > **Date** : 2026-07-16 · **Périmètre** : la personnalité et le prompt système de « Lisa », comparés
 > aux assistants companion du marché 2026, avec récolte d'idées de l'app **MySoulmate**
-> (`github.com/phuetz/MySoulmate`, privée). **Verdict court** : Lisa est **en avance sur l'éthique**
+> (`github.com/phuetz/MySoulmate`, privée). **Verdict court (matin)** : Lisa est **en avance sur l'éthique**
 > (anti-dépendance, anti-gamification, garde-fou runtime) et **était en retard sur le « sentiment de
 > vie »** — comblé dans cet audit (vie intérieure honnête) — avec **un trou de sécurité réel** (aucune
 > orientation de crise) désormais corrigé.

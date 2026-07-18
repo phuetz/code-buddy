@@ -46,6 +46,7 @@ import {
 // ============================================================================
 
 export type TransitionEngine = 'xfade' | 'gl';
+export type FilmFit = 'contain' | 'cover';
 
 /** ffprobe result for a single input clip. */
 export interface ClipProbe {
@@ -89,6 +90,8 @@ export interface AssembleFilmInput {
   aspectRatio?: string;
   /** Output frame rate (default: first clip's fps, else 30). */
   fps?: number;
+  /** Fit clips inside the target canvas: letterbox (`contain`) or center-crop (`cover`). */
+  fit?: FilmFit;
   /** Optional background music path (looped + trimmed to film length). */
   music?: string;
   /** Music volume 0..1 (default 0.25). */
@@ -261,6 +264,22 @@ export function computeXfadeOffsets(durations: number[], transitions: number[]):
   return offsets;
 }
 
+/** Duration of a timeline after subtracting every effective crossfade. */
+export function computeCrossfadedDuration(durations: number[], transitions: number[]): number {
+  if (
+    durations.length === 0 ||
+    durations.some((duration) => !Number.isFinite(duration) || duration <= 0) ||
+    transitions.some((duration) => !Number.isFinite(duration) || duration < 0) ||
+    transitions.length > Math.max(0, durations.length - 1)
+  ) {
+    throw new Error('Crossfaded duration requires positive clips and valid transition durations.');
+  }
+  return round2(
+    durations.reduce((total, duration) => total + duration, 0) -
+      transitions.reduce((total, duration) => total + duration, 0),
+  );
+}
+
 /**
  * Normalize the `transitions` input into exactly `boundaries` specs, then clamp
  * each transition duration so it fits inside both adjacent clips (xfade requires
@@ -373,8 +392,19 @@ function parseAspectRatio(ar: string | undefined): { a: number; b: number } | nu
 }
 
 /** Per-input video normalization filter → label `[v{i}]` (pure). */
-export function buildVideoNormalizeSegment(index: number, profile: OutputProfile): string {
+export function buildVideoNormalizeSegment(
+  index: number,
+  profile: OutputProfile,
+  fit: FilmFit = 'contain'
+): string {
   const { width: w, height: h, fps } = profile;
+  if (fit === 'cover') {
+    return (
+      `[${index}:v]scale=${w}:${h}:force_original_aspect_ratio=increase,` +
+      `crop=${w}:${h}:(iw-ow)/2:(ih-oh)/2,setsar=1,fps=${fps},` +
+      `format=yuv420p,setpts=PTS-STARTPTS[v${index}]`
+    );
+  }
   return (
     `[${index}:v]scale=${w}:${h}:force_original_aspect_ratio=decrease,` +
     `pad=${w}:${h}:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1,fps=${fps},` +
@@ -541,6 +571,7 @@ export function buildFilmArgs(
     musicVolume: number;
     ducking: boolean;
     voiceover?: string;
+    fit?: FilmFit;
   }
 ): FilmArgvPlan {
   const n = probes.length;
@@ -588,7 +619,9 @@ export function buildFilmArgs(
 
   // --- Filter graph ---
   const segments: string[] = [];
-  for (let i = 0; i < n; i++) segments.push(buildVideoNormalizeSegment(i, profile));
+  for (let i = 0; i < n; i++) {
+    segments.push(buildVideoNormalizeSegment(i, profile, opts.fit));
+  }
   for (let i = 0; i < n; i++) segments.push(buildAudioNormalizeSegment(i, audioRefForClip[i]!));
 
   const glFilter = opts.engine === 'gl' ? opts.glFilter : null;
@@ -884,10 +917,9 @@ export async function assembleFilm(
   }
 
   const usingXfade = specs.some((s) => s.type !== 'cut' && s.duration > 0);
-  const estimatedDuration = round2(
-    usingXfade
-      ? durations.reduce((a, b) => a + b, 0) - specs.reduce((a, s) => a + s.duration, 0)
-      : durations.reduce((a, b) => a + b, 0)
+  const estimatedDuration = computeCrossfadedDuration(
+    durations,
+    usingXfade ? specs.map((spec) => spec.duration) : [],
   );
 
   // 5. Build argv + render.
@@ -900,6 +932,7 @@ export async function assembleFilm(
     musicVolume: input.musicVolume ?? DEFAULT_MUSIC_VOLUME,
     ducking: input.ducking ?? true,
     voiceover: input.voiceover,
+    fit: input.fit,
   });
 
   logger.info(

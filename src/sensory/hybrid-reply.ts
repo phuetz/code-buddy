@@ -221,6 +221,28 @@ const MEDICAL_OR_HEALTH_STAKES =
   /\b(sante|health|medical|medecin|doctor|docteur|diagnosis|diagnostic|diagnostiquer|symptoms?|symptome|disease|maladie|treatment|traitement|medicine|medication|medicament|dosage|dose|posologie|douleur|blessure|urgence|grossesse|therapie|suicide|suicidaire|cancer|diabete|infection|vaccin|antibiotique|antidepresseur|ordonnance|chirurgie|cholesterol|cardiaque|psychiatre|psychologue|depression)\b/;
 const FINANCIAL_STAKES =
   /\b(finance|financial|financier|argent|budget|epargne|invest|investir|investment|investissement|placement|portfolio|portefeuille|stocks?|actions? boursieres?|bonds?|obligation|crypto|bitcoin|credit|loan|pret|mortgage|hypotheque|tax|impot|fiscal|assurance vie|retirement|retraite|buy|acheter|sell|vendre|dividende|rendement)\b/;
+// Photo/camera/screen of the *world* (not Lisa selfie — that has its own intercept).
+const WORLD_VISION =
+  /\b(camera|webcam|ecran|screenshot|capture d ecran|ce que tu vois|regarde ici|regarde ca|object detect|detecte|yolo|buddy vision|vision)\b/;
+// Diagnostics / companion doctor / system health spoken commands.
+const DIAGNOSTIC =
+  /\b(diagnosti\w*|preflight|companion doctor|buddy doctor|etat du systeme|sante du systeme|status du serveur|status du compagnon|lora status|health check)\b/;
+// Explicit coding / repo work beyond the TECH noun list.
+const CODING_TASK =
+  /\b(pull request|merge request|refactor|implemente|implementer|implement|patch|unit test|typecheck|lint|commit message|ouvre le fichier|dans le depot|dans le repo)\b/;
+
+/**
+ * True when the utterance needs a grounded agent turn for photo-of-world,
+ * diagnostic, or coding work (Lisa selfies are handled earlier by lisa-selfie).
+ */
+export function isGroundedModernizationIntent(raw: string): boolean {
+  const t = norm(raw);
+  if (!t) return false;
+  if (WORLD_VISION.test(t)) return true;
+  if (DIAGNOSTIC.test(t)) return true;
+  if (CODING_TASK.test(t)) return true;
+  return false;
+}
 
 /**
  * Conservative V1 eligibility gate for an independently spoken proposition. Fresh/private,
@@ -259,6 +281,7 @@ export function isSubstantiveQuery(raw: string): boolean {
   if (!t) return false;
   const wordCount = t.split(' ').length;
   if (isTechnicalSelfInspectionRequest(raw)) return true;
+  if (isGroundedModernizationIntent(raw)) return true;
   // Pure social/emotional, with no command/tech → keep it warm and instant.
   if (SOCIAL.test(t) && !COMMAND_VERBS.test(t) && !TECH.test(t)) return false;
   if (HELP_REQUEST.test(t)) return true;
@@ -284,7 +307,10 @@ export function requiresGroundedAgentQuery(
   const t = norm(raw);
   if (!t) return false;
   if (isTechnicalSelfInspectionRequest(raw)) return true;
-  if (SOCIAL.test(t) && !TECH.test(t) && !GROUNDED_ACTION.test(t)) return false;
+  if (isGroundedModernizationIntent(raw)) return true;
+  if (SOCIAL.test(t) && !TECH.test(t) && !GROUNDED_ACTION.test(t) && !WORLD_VISION.test(t)) {
+    return false;
+  }
   if (TECH.test(t)) return true;
   if (CURRENT_OR_PRIVATE_DATA.test(t)) return true;
   if (GROUNDED_ACTION.test(t)) return true;
@@ -671,6 +697,34 @@ export function makeHybridReply(options: HybridReplyOptions = {}): HybridReplyHa
         const safeShortcut = guardBeforeMemory(shortcut);
         remember(heard, safeShortcut);
         return safeShortcut;
+      }
+      // Lisa selfie → generate portrait (LoRA trigger) + optional Telegram photo.
+      // Opt-out: CODEBUDDY_LISA_SELFIE=false. Default on when image backend exists.
+      if (
+        process.env.CODEBUDDY_LISA_SELFIE !== 'false' &&
+        !introspectionIntent
+      ) {
+        try {
+          const { maybeHandleLisaSelfieRequest } = await import(
+            '../companion/lisa-selfie.js'
+          );
+          const selfie = await maybeHandleLisaSelfieRequest(heard, {
+            rootDir: options.cwd ?? process.cwd(),
+          });
+          if (selfie) {
+            void evolveRelationship(heard);
+            const line = guardBeforeMemory(selfie.spokenReply);
+            remember(heard, line);
+            logger.info(
+              `[voice-hybrid] lisa-selfie success=${selfie.success} telegram=${selfie.telegramSent}`,
+            );
+            return line;
+          }
+        } catch (err) {
+          logger.warn(
+            `[voice-hybrid] lisa-selfie skipped: ${err instanceof Error ? err.message : String(err)}`,
+          );
+        }
       }
       await evolveRelationship(heard);
       await ensureDeps();

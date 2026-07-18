@@ -6,6 +6,7 @@ import {
   ingredientNameFromPath,
   insertIngredientReference,
   removeIngredientReference,
+  sourceVideoClips,
   type FlowIngredient,
 } from '../src/renderer/components/videostudio/flow-studio-model';
 
@@ -51,5 +52,18 @@ describe('Flow Studio model', () => {
 
   it('turns imported filenames into reference-safe display names', () => {
     expect(ingredientNameFromPath('/tmp/rue pluie_final.png')).toBe('RuePluieFinal');
+  });
+
+  it('does not reassemble a previous final master into the next final master', () => {
+    expect(sourceVideoClips([
+      { ...createFlowScene(1), mediaType: 'video', path: '/tmp/clip-1.mp4', status: 'done' },
+      {
+        ...createFlowScene(2),
+        mediaType: 'video',
+        path: '/tmp/final.mp4',
+        youtubeMetadataPath: '/tmp/final.mp4.youtube.json',
+        status: 'done',
+      },
+    ])).toEqual(['/tmp/clip-1.mp4']);
   });
 });

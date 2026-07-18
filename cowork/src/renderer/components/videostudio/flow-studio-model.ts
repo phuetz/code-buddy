@@ -6,8 +6,13 @@ export interface FlowIngredient {
   id: string;
   name: string;
   kind: 'character' | 'object' | 'place' | 'style';
-  path: string;
+  path?: string;
   url: string;
+  assetId?: string;
+  source?: 'workspace' | 'avatar-bible' | 'mysoulmate';
+  contentTier?: 'safe' | 'sensual' | 'explicit';
+  qaStatus?: 'pending' | 'approved' | 'rejected';
+  companionId?: string;
   /** Opaque provenance only; the private bible filesystem path is never stored here. */
   avatarBibleId?: string;
 }
@@ -20,6 +25,7 @@ export interface FlowScene {
   status: 'draft' | 'generating' | 'done' | 'error';
   url?: string;
   path?: string;
+  youtubeMetadataPath?: string;
   mediaType?: FlowMediaMode;
   parentSceneId?: string;
 }
@@ -32,6 +38,7 @@ export interface FlowPromptInput {
   endFrame?: FlowIngredient;
   audioEnabled: boolean;
   voiceEnabled: boolean;
+  publication?: boolean;
 }
 
 const CAMERA_LABEL: Record<FlowCameraMove, string> = {
@@ -74,6 +81,7 @@ export function buildFlowPrompt(input: FlowPromptInput): string {
     frames ? `Contraintes de transition : ${frames}.` : '',
     `Mouvement caméra : ${CAMERA_LABEL[input.camera]}.`,
     input.audioEnabled ? `Audio : ambiance synchronisée${input.voiceEnabled ? ' et voix cohérente' : ', sans voix'}.` : 'Audio désactivé.',
+    input.publication ? 'Publication : ajouter dans les métadonnées ou la légende une divulgation claire indiquant que le personnage et les images sont générés par IA.' : '',
     'Préserver strictement l’identité, les vêtements, la palette, la lumière et la géométrie des références entre les plans.',
   ].filter(Boolean).join('\n');
 }
@@ -96,4 +104,10 @@ export function extendFlowScene(scene: FlowScene, index: number): FlowScene {
     url: scene.url,
     mediaType: scene.mediaType,
   };
+}
+
+/** Source clips only; an already assembled master must never feed the next assembly. */
+export function sourceVideoClips(scenes: readonly FlowScene[]): string[] {
+  return scenes.flatMap((scene) =>
+    scene.mediaType === 'video' && scene.path && !scene.youtubeMetadataPath ? [scene.path] : []);
 }

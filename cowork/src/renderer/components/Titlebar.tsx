@@ -50,7 +50,7 @@ export function Titlebar() {
 
   return (
     <div
-      className={`h-10 bg-background-secondary border-b border-border flex items-center titlebar-drag shrink-0 ${
+      className={`h-10 overflow-hidden bg-background-secondary border-b border-border flex items-center titlebar-drag shrink-0 ${
         isMac ? 'justify-start pl-20' : 'justify-start'
       }`}
     >
@@ -66,20 +66,20 @@ export function Titlebar() {
       <TitlebarModelCost />
 
       {/* Presence indicator (face memory) — opens EnrollmentDialog on click. */}
-      <div className="titlebar-no-drag px-2 flex items-center ml-auto">
+      <div className="titlebar-no-drag ml-auto hidden items-center px-2 lg:flex">
         <PresenceIndicator
           onEnrollClicked={() => useAppStore.getState().setShowEnrollmentDialog(true)}
         />
       </div>
 
       {/* Runner badge — shows engine vs pi status (Cowork-on-core migration P3) */}
-      <RunnerBadge />
+      <div className="hidden h-full lg:block"><RunnerBadge /></div>
 
       {/* Clipboard summary (Lisa-derived) */}
-      <ClipboardButton />
+      <div className="hidden h-full md:block"><ClipboardButton /></div>
 
       {/* Voice chat overlay (Lisa-derived) */}
-      <VoiceOverlayButton />
+      <div className="hidden h-full md:block"><VoiceOverlayButton /></div>
 
       {/* Remote backend indicator (Phase B3) — shows when chat/sessions run remotely */}
       <RemoteBackendIndicator />
@@ -88,7 +88,7 @@ export function Titlebar() {
       <ServerToggle />
 
       {/* Documentation */}
-      <Tooltip label={t('helpDocs.title', 'Documentation')} side="bottom" className="h-full">
+      <Tooltip label={t('helpDocs.title', 'Documentation')} side="bottom" className="hidden h-full md:block">
         <button
           onClick={() => useAppStore.getState().setShowHelpDocs(true)}
           className="w-10 h-full flex items-center justify-center titlebar-no-drag hover:bg-surface transition-colors"
@@ -100,7 +100,7 @@ export function Titlebar() {
       </Tooltip>
 
       {/* Keyboard shortcuts help (Ctrl+/) */}
-      <Tooltip label={t('shortcutsDialog.title', 'Keyboard shortcuts (Ctrl+/)')} side="bottom" className="h-full">
+      <Tooltip label={t('shortcutsDialog.title', 'Keyboard shortcuts (Ctrl+/)')} side="bottom" className="hidden h-full sm:block">
         <button
           onClick={() => useAppStore.getState().setShowShortcutsDialog(true)}
           className="w-10 h-full flex items-center justify-center titlebar-no-drag hover:bg-surface transition-colors"
@@ -134,14 +134,14 @@ export function Titlebar() {
         <div className="flex items-center titlebar-no-drag h-full">
           <button
             onClick={handleMinimize}
-            className="w-12 h-full flex items-center justify-center hover:bg-surface transition-colors"
+            className="hidden w-12 h-full items-center justify-center hover:bg-surface transition-colors sm:flex"
             title={t('window.minimize')}
           >
             <Minus className="w-4 h-4 text-text-secondary" />
           </button>
           <button
             onClick={handleMaximize}
-            className="w-12 h-full flex items-center justify-center hover:bg-surface transition-colors"
+            className="hidden w-12 h-full items-center justify-center hover:bg-surface transition-colors sm:flex"
             title={isMaximized ? t('window.restore') : t('window.maximize')}
           >
             {isMaximized ? (
@@ -178,7 +178,7 @@ function TitlebarModelCost() {
   if (!newShellEnabled || activeSessionId) return null;
 
   return (
-    <div className="titlebar-no-drag flex items-center gap-1.5 px-2 h-full">
+    <div className="titlebar-no-drag hidden items-center gap-1.5 px-2 h-full xl:flex">
       <LiveBudgetMeter />
       {appConfig?.model && (
         <ModelSwitcher
@@ -332,7 +332,7 @@ function RemoteBackendIndicator() {
 
   return (
     <div
-      className="titlebar-no-drag flex items-center gap-1 px-2 h-full text-success"
+      className="titlebar-no-drag hidden items-center gap-1 px-2 h-full text-success lg:flex"
       title={t('remoteBackend.indicatorTooltip', 'Chat/sessions run on a remote backend')}
       data-testid="remote-backend-indicator"
     >

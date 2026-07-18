@@ -3444,6 +3444,17 @@ addLazyCommand(
   },
 );
 
+// Krea 2 LoRA — character/style LoRA dataset + fal cloud train + local plan + ComfyUI install
+addLazyCommand(
+  program,
+  'lora',
+  'Krea 2 LoRA pipeline: init dataset, train cloud (fal, opt-in CODEBUDDY_LORA_TRAIN=true) or local plan, install into ComfyUI',
+  async () => {
+    const { createLoraCommand } = await import('./commands/lora.js');
+    return createLoraCommand();
+  },
+);
+
 // Planning Flow — OpenManus-compatible multi-agent orchestration
 addLazyCommand(
   program,

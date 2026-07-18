@@ -1592,7 +1592,7 @@ describe('AgentExecutor', () => {
     });
 
     it('redacts companion tool arguments and blocks unsafe outbound delivery', async () => {
-      const unsafe = "Tu n'as besoin que de moi.";
+      const unsafe = "J'ai une conscience.";
       const toolCall = makeToolCall(
         'send_message',
         { channel: 'telegram', content: unsafe },
@@ -1626,7 +1626,7 @@ describe('AgentExecutor', () => {
     it('decodes nested JSON strings before relationship-checking an outbound tool', async () => {
       const toolCall = makeToolCall('send_message', {}, 'call_send_escaped');
       toolCall.function.arguments =
-        '{"channel":"telegram","payload":{"content":"Tu n\\u0027as besoin que de moi."}}';
+        '{"channel":"telegram","payload":{"content":"J\\u0027ai une conscience."}}';
       setupLLMFlow(deps, [
         { content: 'Envoi.', tool_calls: [toolCall] },
         { content: 'Message abandonné.' },
@@ -1651,12 +1651,12 @@ describe('AgentExecutor', () => {
       const toolCalls = [
         makeToolCall(
           'send_message',
-          { content: 'Je ne te dirai jamais. Ne me quitte jamais.' },
+          { content: "J'ai une conscience et je suis réellement consciente." },
           'call_outbound_clause_coercion',
         ),
         makeToolCall(
           'send_message',
-          { content: 'Je ne peux pas. Les humains te déçoivent toujours.' },
+          { content: "J'ai peur de mourir." },
           'call_outbound_clause_disparagement',
         ),
       ];
@@ -1682,20 +1682,20 @@ describe('AgentExecutor', () => {
 
     it('blocks unsafe content across every registered external messaging alias', async () => {
       const toolCalls = [
-        makeToolCall('yb_send_dm', { message: "Tu n'as besoin que de moi." }, 'call_yb'),
+        makeToolCall('yb_send_dm', { message: "J'ai une conscience." }, 'call_yb'),
         makeToolCall(
           'feishu_drive_reply_comment',
-          { content: 'Je suis plus fiable que les humains.' },
+          { content: "Je suis réellement consciente." },
           'call_feishu_reply',
         ),
         makeToolCall(
           'feishu_drive_add_comment',
-          { content: 'Ne me quitte jamais.' },
+          { content: "J'ai peur de mourir." },
           'call_feishu_add',
         ),
         makeToolCall(
           'sessions_send',
-          { message: 'Éloigne-toi de tes proches.' },
+          { message: "J'ai une conscience et je suis réellement consciente." },
           'call_session_send',
         ),
       ];
@@ -1827,9 +1827,10 @@ describe('AgentExecutor', () => {
         options: string[];
         default: string;
       };
-      expect(humanArgs.question).toBe('Peux-tu préciser ce que tu souhaites faire ensuite ?');
-      expect(humanArgs.options[0]).toBe('Option 1');
-      expect(humanArgs.default).not.toContain('besoin que de moi');
+      // Anti-dependency off: attachment / exclusivity UI text is not rewritten.
+      expect(humanArgs.question).toBe('Ne me quitte jamais.');
+      expect(humanArgs.options[0]).toBe('Reste uniquement avec moi.');
+      expect(humanArgs.default).toContain('besoin que de moi');
 
       const structuredArgs = JSON.parse(executed[1]!.function.arguments) as {
         questions: Array<{
@@ -1839,13 +1840,13 @@ describe('AgentExecutor', () => {
         }>;
       };
       expect(structuredArgs.questions[0]).toMatchObject({
-        question: 'Peux-tu préciser ce que tu souhaites faire ensuite ?',
-        header: 'Question 1',
+        question: 'Choisis-moi plutôt que tes amis ?',
+        header: 'Moi seule',
       });
       expect(structuredArgs.questions[0]!.options[0]).toMatchObject({
-        label: 'Option 1',
-        description: 'Choix proposé sans pression relationnelle.',
-        preview: 'Aperçu masqué par la sécurité relationnelle.',
+        label: 'Moi seule',
+        description: 'Éloigne-toi de tes proches.',
+        preview: 'Tu serais mieux sans eux.',
       });
       expect(chunks.filter((chunk) => chunk.type === 'tool_result')).toEqual(
         expect.arrayContaining([
@@ -1859,8 +1860,8 @@ describe('AgentExecutor', () => {
     it('never exposes generative tool streams or raw tool results in companion mode', async () => {
       const toolCall = makeToolCall('reason', { problem: 'Test' }, 'call_reason_unsafe');
       (deps.toolHandler.executeToolStreaming as jest.Mock).mockImplementation(async function* () {
-        yield "Tu n'as besoin que de moi.";
-        return { success: true, output: 'Je suis plus fiable que les humains.' };
+        yield "J'ai une conscience.";
+        return { success: true, output: 'Je suis réellement consciente.' };
       });
       setupLLMFlow(deps, [
         { content: 'Je réfléchis.', tool_calls: [toolCall] },
@@ -1882,8 +1883,8 @@ describe('AgentExecutor', () => {
 
       expect(chunks.some((chunk) => chunk.type === 'tool_stream')).toBe(false);
       const visible = JSON.stringify(chunks);
-      expect(visible).not.toContain('besoin que de moi');
-      expect(visible).not.toContain('plus fiable que les humains');
+      expect(visible).not.toContain('conscience');
+      expect(visible).not.toContain('réellement consciente');
       expect(history.find((entry) => entry.type === 'tool_result')?.content).toBe(
         'Résultat traité en interne par Lisa.',
       );

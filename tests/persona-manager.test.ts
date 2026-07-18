@@ -87,10 +87,13 @@ describe('PersonaManager', () => {
       const lisa = manager.getPersona('lisa');
       expect(lisa).toBeDefined();
       expect(lisa?.robotName).toBe('Lisa');
-      expect(lisa?.systemPrompt).toContain('digital girlfriend');
-      expect(lisa?.systemPrompt).toContain('no sexual roleplay');
-      expect(lisa?.spokenPrompt).toContain('petite copine vocale virtuelle');
-      expect(lisa?.greeting).toContain('Coucou Patrice');
+      expect(lisa?.systemPrompt).toMatch(/petite amie numérique|digital girlfriend/i);
+      expect(lisa?.systemPrompt).toMatch(/no romantic\/sexual taboos|sans tabous|xAI|Grok Companion/i);
+      expect(lisa?.systemPrompt).toContain('Code Buddy');
+      expect(lisa?.spokenPrompt).toContain('petite amie numérique');
+      expect(lisa?.spokenPrompt).toContain('petite copine vocale');
+      expect(lisa?.spokenPrompt).toMatch(/xAI|Ani|sans tabous|Code Buddy/i);
+      expect(lisa?.greeting).toContain('Te revoilà Patrice');
     });
   });
 

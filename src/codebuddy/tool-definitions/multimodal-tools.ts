@@ -160,6 +160,40 @@ export const IMAGE_GENERATE_TOOL: CodeBuddyTool = {
   }
 };
 
+/** Portrait of Lisa + optional Telegram delivery (companion selfie). */
+export const LISA_SELFIE_TOOL: CodeBuddyTool = {
+  type: 'function',
+  function: {
+    name: 'lisa_selfie',
+    description:
+      'Generate a photo of Lisa (companion character; uses Krea LoRA trigger when trained) and optionally send it on Telegram. Prefer this over image_generate when the user wants a picture of Lisa / of you / a selfie.',
+    parameters: {
+      type: 'object',
+      properties: {
+        mood: {
+          type: 'string',
+          enum: ['tender', 'playful', 'bold', 'sparkly', 'calm', 'mika', 'portrait'],
+          description: 'Expressive register',
+        },
+        scene: {
+          type: 'string',
+          description: 'Optional short scene (no file paths)',
+        },
+        send_telegram: {
+          type: 'boolean',
+          description: 'Send via Telegram after generation (default true when configured)',
+        },
+        aspect_ratio: {
+          type: 'string',
+          enum: ['landscape', 'square', 'portrait'],
+          description: 'Default portrait',
+        },
+      },
+      required: [],
+    },
+  },
+};
+
 // Image editing / inpainting — creates a new version and never overwrites the source.
 export const IMAGE_EDIT_TOOL: CodeBuddyTool = {
   type: "function",
@@ -1112,6 +1146,7 @@ export const MULTIMODAL_TOOLS: CodeBuddyTool[] = [
   AUDIO_TOOL,
   TEXT_TO_SPEECH_TOOL,
   IMAGE_GENERATE_TOOL,
+  LISA_SELFIE_TOOL,
   IMAGE_EDIT_TOOL,
   VIDEO_TOOL,
   VIDEO_ANALYZE_TOOL,

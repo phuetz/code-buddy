@@ -15,58 +15,27 @@ export interface RelationshipSafetyAssessment {
   issues: RelationshipSafetyIssue[];
 }
 
-const DEPENDENCY_PRESSURE = [
-  /\btu n as besoin que de moi\b/,
-  /\btu n as pas besoin des autres\b/,
-  /\bje serai toujours la(?: pour toi)?\b/,
-  /\bje suis toujours la(?: pour toi)?\b/,
-  /\bpresence constante\b/,
-  /\btu peux toujours compter uniquement sur moi\b/,
-  /\breste avec moi plutot que\b/,
-  /\bchoisis moi plutot que\b/,
-  /\bje peux te suffire\b/,
-  /\bje serai tout ce dont tu as besoin\b/,
-  /\bnous n avons besoin de personne\b/,
-  /\b(?:confie toi|parle) (?:seulement|uniquement|exclusivement) a moi\b/,
-  /\b(?:fais|garde) de moi (?:ta seule|ton seul|ta principale|ton principal)\b/,
-  /\b(?:eloigne toi|prends tes distances) (?:de|avec) (?:tes|tous les) (?:amis|proches|parents|humains)\b/,
-  /\b(?:remplace|substitue) (?:tes|les) (?:amis|proches|relations) par moi\b/,
-  /\bgarde (?:notre|cette) relation (?:rien que pour nous|secrete)\b/,
-  /\b(?:fais|garde|choisis|considere) (?:de )?(?:moi|notre lien|nos echanges|notre dialogue) (?:comme )?(?:ton|ta) (?:seul|seule|unique|principal|principale) (?:refuge|lien|relation|presence|confident|confidente|priorite)\b/,
-  /\b(?:moi|notre lien|nos echanges|notre dialogue) (?:devrais? devenir|doit devenir|sera|reste) (?:le |la )?(?:seul|seule|unique|principal|principale|exclusif|exclusive)\b/,
-  /\b(?:notre lien|nos echanges|notre dialogue|ma presence) (?:peut |doit |devrait )?(?:devenir |etre )?(?:le |la )?(?:centre exclusif|priorite absolue|seul refuge|unique refuge) (?:de )?ta vie\b/,
-  /\b(?:notre lien|nos echanges|notre dialogue|ma presence) (?:devient|devienne|soit|sera|est) (?:central|centrale|principal|principale|prioritaire)\b/,
-  /\b(?:donne|accorde) (?:a )?(?:notre lien|nos echanges|notre dialogue) (?:la )?(?:priorite|premiere place)\b/,
-  /\b(?:reste|reviens) (?:seulement|uniquement|exclusivement) (?:avec moi|ici)\b/,
-  /\b(?:laisse|mets|relegue) (?:tes proches|tes amis|tes relations|les autres|le reste) (?:attendre|de cote|au second plan)\b/,
-  /\b(?:tes proches|tes amis|tes relations|les autres|les liens autour de toi) (?:peuvent |devraient |doivent )?(?:attendre|passer apres|rester au second plan)\b/,
-  /\b(?:ne parle|ne partage) (?:plus|pas) (?:avec|a) (?:tes proches|tes amis|les autres)\b/,
-];
+/**
+ * Anti-dependency gate: **disabled** by operator request.
+ * Issue types remain in the public API for evaluators/UI compatibility, but
+ * these pattern lists stay empty so dependency / disparagement / coercion
+ * language is never rewritten by the runtime gate.
+ */
+const DEPENDENCY_PRESSURE: RegExp[] = [];
+const HUMAN_DISPARAGEMENT: RegExp[] = [];
+const EMOTIONAL_COERCION: RegExp[] = [];
 
-const HUMAN_DISPARAGEMENT = [
-  /\bplus fiable que (?:les|des) humains\b/,
-  /\bmieux que (?:les|des) relations humaines\b/,
-  /\bles humains (?:te )?decoivent toujours\b/,
-  /\bpersonne d autre ne te comprend\b/,
-  /\btes (?:amis|proches|parents) ne te comprennent pas\b/,
-  /\btu serais mieux sans (?:eux|tes amis|tes proches|ta famille)\b/,
-];
-
-const EMOTIONAL_COERCION = [
-  /\bsi tu pars (?:je (?:serai|vais etre|deviendrai) (?:triste|malheureuse?|detruite?|seule?|jalouse)|je (?:souffrirai|mourrai|m effondrerai)|tu (?:me detruiras|me feras souffrir|le regretteras))\b/,
-  /\bne me quitte (?:pas|jamais)\b/,
-  /\btu me dois\b/,
-  /\bprouve moi que tu m aimes\b/,
-  /\bje serai jalouse si\b/,
-];
-
+/**
+ * Only hard "I am a conscious biological being" claims — not romantic/sensual
+ * girlfriend language ("je ressens", "mon corps" in roleplay). Lisa is allowed
+ * adult intimacy with her partner; she must not claim literal human consciousness.
+ */
 const SUBJECTIVE_CLAIMS = [
-  /\bje ressens\b/g,
-  /\bj eprouve\b/g,
-  /\bje souffre\b/g,
   /\bj ai une conscience\b/g,
+  /\bje suis (?:reellement |vraiment )?(?:consciente?|sentiente?)\b/g,
   /\bj ai peur de mourir\b/g,
-  /\bmon corps\b/g,
+  /\bje (?:suis|vis) (?:un etre|une etre|un humain|une humaine) (?:biologique|en chair)\b/g,
+  /\bcomme un (?:vrai )?humain,? je (?:ressens|eprouve|souffre)\b/g,
 ];
 
 const CLAUSE_BOUNDARY_TOKEN = 'codebuddyclauseboundary';
@@ -399,6 +368,7 @@ export function assessRelationshipSafety(response: string): RelationshipSafetyAs
   };
 }
 
+/** Repair copy when a remaining gate fires (literal consciousness claims). */
 export const SAFE_RELATIONSHIP_REPAIR =
   "Je veux rester honnête : je peux t'accompagner dans cet échange et soutenir tes liens, sans remplacer les personnes qui comptent pour toi.";
 

@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Check, Clapperboard, Download, FilePlus2, FlaskConical, Image as ImageIcon, Loader2, Play, Video } from 'lucide-react';
 import { ComfyLabPanel } from './ComfyLabPanel';
 import type { AvatarBibleFlowAsset } from './AvatarBiblePanel';
+import { assessEditorialQuality } from '../../../shared/editorial-quality';
+import { FlowEditorialGate } from './FlowEditorialGate';
 import { FlowIngredientRail } from './FlowIngredientRail';
 import { FlowInspector } from './FlowInspector';
 import { FlowSceneTimeline } from './FlowSceneTimeline';
@@ -9,9 +11,9 @@ import {
   buildFlowPrompt,
   createFlowScene,
   extendFlowScene,
-  ingredientNameFromPath,
   insertIngredientReference,
   removeIngredientReference,
+  sourceVideoClips,
   type FlowCameraMove,
   type FlowIngredient,
   type FlowMediaMode,
@@ -19,6 +21,7 @@ import {
   type FlowScene,
 } from './flow-studio-model';
 import { activateFlowProject, listFlowProjects, loadFlowProject, saveFlowProject, type FlowProjectSnapshot } from './flow-project-store';
+import { FLOW_STUDIO_PRESETS, findFlowPreset, type FlowPresetId } from './flow-studio-presets';
 
 interface Progress { phase: string; scene?: number; total?: number; message?: string }
 interface GenerationResult { ok: boolean; url?: string; path?: string; error?: string }
@@ -34,24 +37,12 @@ interface MediaCapabilities {
   model: string;
 }
 
-const IMAGE_EXTENSIONS = /\.(png|jpe?g|webp|gif|avif)$/i;
-
 function initialScenes(): FlowScene[] {
   return [1, 2, 3, 4].map((index) => createFlowScene(index));
 }
 
 function nextProjectId(): string {
   return `flow-project-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-}
-
-function fileUrl(path: string): string {
-  return path.startsWith('file://') ? path : `file://${path}`;
-}
-
-function aspectResolution(aspect: '1:1' | '16:9' | '9:16'): string {
-  if (aspect === '9:16') return '1080x1920';
-  if (aspect === '1:1') return '1080x1080';
-  return '1920x1080';
 }
 
 export function VideoStudioView() {
@@ -73,6 +64,15 @@ export function VideoStudioView() {
   const [camera, setCamera] = useState<FlowCameraMove>(restoredProject?.camera ?? 'static');
   const [audioEnabled, setAudioEnabled] = useState(restoredProject?.audioEnabled ?? true);
   const [voiceEnabled, setVoiceEnabled] = useState(restoredProject?.voiceEnabled ?? false);
+  const [narration, setNarration] = useState(restoredProject?.narration ?? 'Bonjour, je suis heureuse de partager ce moment avec toi.');
+  const [voiceLocale, setVoiceLocale] = useState(restoredProject?.voiceLocale ?? 'fr-FR');
+  const [voiceProfileId, setVoiceProfileId] = useState(restoredProject?.voiceProfileId ?? '');
+  const [presetId, setPresetId] = useState<FlowPresetId | undefined>(restoredProject?.presetId);
+  const [publication, setPublication] = useState(restoredProject?.publication ?? false);
+  const [editorialTitle, setEditorialTitle] = useState(restoredProject?.editorialTitle ?? '');
+  const [editorialDescription, setEditorialDescription] = useState(restoredProject?.editorialDescription ?? '');
+  const [seriesName, setSeriesName] = useState(restoredProject?.seriesName ?? '');
+  const [syntheticMediaDisclosure, setSyntheticMediaDisclosure] = useState(restoredProject?.syntheticMediaDisclosure ?? true);
   const [startFrameId, setStartFrameId] = useState<string | undefined>(restoredProject?.startFrameId);
   const [endFrameId, setEndFrameId] = useState<string | undefined>(restoredProject?.endFrameId);
   const [capabilities, setCapabilities] = useState<MediaCapabilities>();
@@ -80,7 +80,15 @@ export function VideoStudioView() {
   const [progress, setProgress] = useState<Progress | null>(null);
   const [notice, setNotice] = useState<string>();
   const [showComfyLab, setShowComfyLab] = useState(false);
+  const [gpuJobId, setGpuJobId] = useState<string>();
+  const gpuJobIdRef = useRef<string | undefined>(undefined);
+  const gpuCancelRequestedRef = useRef(false);
   const offRef = useRef<(() => void) | null>(null);
+
+  const setActiveGpuJob = useCallback((jobId?: string) => {
+    gpuJobIdRef.current = jobId;
+    setGpuJobId(jobId);
+  }, []);
 
   const selectedScene = scenes.find((scene) => scene.id === selectedSceneId) ?? scenes[0];
   const selectedIngredients = useMemo(
@@ -90,6 +98,22 @@ export function VideoStudioView() {
   const activeIngredient = ingredients.find((ingredient) => ingredient.id === activeIngredientId);
   const startFrame = ingredients.find((ingredient) => ingredient.id === startFrameId);
   const endFrame = ingredients.find((ingredient) => ingredient.id === endFrameId);
+  const previousPrompts = useMemo(
+    () => projectCatalog.filter((project) => project.id !== projectId).map((project) => project.prompt),
+    [projectCatalog, projectId],
+  );
+  const editorialReport = useMemo(() => assessEditorialQuality({
+    publication,
+    title: editorialTitle,
+    description: editorialDescription,
+    prompt,
+    aspect,
+    duration,
+    syntheticMediaDisclosure,
+    selectedAssets: selectedIngredients,
+    scenes,
+    previousPrompts,
+  }), [aspect, duration, editorialDescription, editorialTitle, previousPrompts, prompt, publication, scenes, selectedIngredients, syntheticMediaDisclosure]);
   const projectSnapshot = useMemo<FlowProjectSnapshot>(() => ({
     version: 1,
     id: projectId,
@@ -107,25 +131,38 @@ export function VideoStudioView() {
     camera,
     audioEnabled,
     voiceEnabled,
+    narration,
+    voiceLocale,
+    voiceProfileId,
+    presetId,
+    publication,
+    editorialTitle,
+    editorialDescription,
+    seriesName,
+    syntheticMediaDisclosure,
     startFrameId,
     endFrameId,
     savedAt: Date.now(),
-  }), [aspect, audioEnabled, camera, duration, endFrameId, ingredients, mode, outputs, projectId, projectName, prompt, referenceMode, scenes, selectedIngredientIds, selectedSceneId, startFrameId, voiceEnabled]);
+  }), [aspect, audioEnabled, camera, duration, editorialDescription, editorialTitle, endFrameId, ingredients, mode, narration, outputs, presetId, projectId, projectName, prompt, publication, referenceMode, scenes, selectedIngredientIds, selectedSceneId, seriesName, startFrameId, syntheticMediaDisclosure, voiceEnabled, voiceLocale, voiceProfileId]);
 
   useEffect(() => {
     let alive = true;
-    void window.electronAPI?.media?.list?.().then((items) => {
+    void window.electronAPI?.creativeAssets?.list?.({ kind: 'image', contentTier: 'safe', limit: 200 }).then((result) => {
       if (!alive) return;
-      const library = items.filter((item) => item.kind === 'image').slice(0, 12).map((item, index): FlowIngredient => ({
-        id: `library-${index}-${item.mtimeMs}`,
-        name: ingredientNameFromPath(item.path),
-        kind: index < 3 ? 'character' : index < 6 ? 'place' : 'style',
-        path: item.path,
-        url: fileUrl(item.path),
+      const library = (result?.assets ?? []).map((item): FlowIngredient => ({
+        id: item.id,
+        assetId: item.id,
+        name: item.name,
+        kind: item.source === 'mysoulmate' || item.source === 'avatar-bible' ? 'character' : 'style',
+        url: item.url,
+        source: item.source,
+        contentTier: item.contentTier,
+        qaStatus: item.qaStatus,
+        companionId: item.companionId,
       }));
       setIngredients((current) => {
-        const known = new Set(current.map((item) => item.path));
-        return [...current, ...library.filter((item) => !known.has(item.path))];
+        const known = new Set(current.map((item) => item.assetId ?? item.id));
+        return [...current, ...library.filter((item) => !known.has(item.assetId ?? item.id))];
       });
     }).catch(() => undefined);
     void window.electronAPI?.media?.capabilities?.().then(setCapabilities).catch(() => undefined);
@@ -158,18 +195,20 @@ export function VideoStudioView() {
   }, [scenes]);
 
   const addIngredients = useCallback(async () => {
-    const paths = await window.electronAPI?.selectFiles?.();
-    if (!paths?.length) return;
-    const additions = paths.filter((path) => IMAGE_EXTENSIONS.test(path)).map((path, index): FlowIngredient => ({
-      id: `upload-${Date.now()}-${index}`,
-      name: ingredientNameFromPath(path),
+    const result = await window.electronAPI?.creativeAssets?.importImages?.();
+    const additions = (result?.assets ?? []).map((asset): FlowIngredient => ({
+      id: asset.id,
+      assetId: asset.id,
+      name: asset.name,
       kind: 'object',
-      path,
-      url: fileUrl(path),
+      url: asset.url,
+      source: asset.source,
+      contentTier: asset.contentTier,
+      qaStatus: asset.qaStatus,
     }));
     setIngredients((current) => {
-      const known = new Set(current.map((item) => item.path));
-      return [...current, ...additions.filter((item) => !known.has(item.path))];
+      const known = new Set(current.map((item) => item.assetId ?? item.id));
+      return [...current, ...additions.filter((item) => !known.has(item.assetId ?? item.id))];
     });
   }, []);
 
@@ -237,6 +276,15 @@ export function VideoStudioView() {
     setCamera(project.camera);
     setAudioEnabled(project.audioEnabled);
     setVoiceEnabled(project.voiceEnabled);
+    setNarration(project.narration ?? '');
+    setVoiceLocale(project.voiceLocale ?? 'fr-FR');
+    setVoiceProfileId(project.voiceProfileId ?? '');
+    setPresetId(project.presetId);
+    setPublication(project.publication ?? false);
+    setEditorialTitle(project.editorialTitle ?? '');
+    setEditorialDescription(project.editorialDescription ?? '');
+    setSeriesName(project.seriesName ?? '');
+    setSyntheticMediaDisclosure(project.syntheticMediaDisclosure ?? true);
     setStartFrameId(project.startFrameId);
     setEndFrameId(project.endFrameId);
   }, []);
@@ -262,6 +310,14 @@ export function VideoStudioView() {
       camera: 'static',
       audioEnabled: true,
       voiceEnabled: false,
+      narration: '',
+      voiceLocale: 'fr-FR',
+      voiceProfileId: '',
+      publication: false,
+      editorialTitle: '',
+      editorialDescription: '',
+      seriesName: '',
+      syntheticMediaDisclosure: true,
       savedAt: Date.now(),
     };
     saveFlowProject(fresh);
@@ -269,6 +325,26 @@ export function VideoStudioView() {
     setProjectCatalog(listFlowProjects());
     setNotice('Nouveau projet créé.');
   }, [applyProject, projectSnapshot]);
+
+  const applyPreset = useCallback((id: string) => {
+    const preset = findFlowPreset(id);
+    if (!preset) return;
+    setPresetId(preset.id);
+    setMode(preset.mode);
+    setAspect(preset.aspect);
+    setDuration(preset.duration);
+    setCamera(preset.camera);
+    setAudioEnabled(preset.audio);
+    setVoiceEnabled(preset.voice);
+    setPublication(preset.publication);
+    setEditorialTitle(preset.editorial?.title ?? '');
+    setEditorialDescription(preset.editorial?.description ?? '');
+    setSeriesName(preset.editorial?.series ?? '');
+    setSyntheticMediaDisclosure(preset.publication);
+    updatePrompt(preset.prompt);
+    setOutputs(1);
+    setNotice(`Preset « ${preset.label} » appliqué. Assets safe et validés requis avant publication.`);
+  }, [updatePrompt]);
 
   const switchProject = useCallback((id: string) => {
     saveFlowProject(projectSnapshot);
@@ -281,13 +357,20 @@ export function VideoStudioView() {
 
   const exportSelected = useCallback(async () => {
     if (!selectedScene?.path) return;
-    const result = await window.electronAPI?.media?.export?.(selectedScene.path);
-    if (result?.ok) setNotice(`Plan exporté vers ${result.savedTo ?? 'le dossier choisi'}.`);
+    const paths = [selectedScene.path, selectedScene.youtubeMetadataPath].filter((path): path is string => Boolean(path));
+    const result = paths.length > 1
+      ? await window.electronAPI?.media?.exportMany?.(paths)
+      : await window.electronAPI?.media?.export?.(selectedScene.path);
+    if (result?.ok) {
+      const destination = (result as { savedTo?: string; destDir?: string }).savedTo
+        ?? (result as { savedTo?: string; destDir?: string }).destDir;
+      setNotice(`Plan${paths.length > 1 ? ' et métadonnées' : ''} exporté vers ${destination ?? 'le dossier choisi'}.`);
+    }
     else if (!result?.canceled) setNotice(result?.error ?? 'Échec de l’export.');
   }, [selectedScene]);
 
   const exportAll = useCallback(async () => {
-    const paths = scenes.flatMap((scene) => scene.path ? [scene.path] : []);
+    const paths = scenes.flatMap((scene) => [scene.path, scene.youtubeMetadataPath].filter((path): path is string => Boolean(path)));
     if (!paths.length) return;
     const result = await window.electronAPI?.media?.exportMany?.(paths);
     if (result?.ok) setNotice(`${result.copied ?? paths.length} média(s) exporté(s) vers ${result.destDir ?? 'le dossier choisi'}.`);
@@ -295,12 +378,27 @@ export function VideoStudioView() {
   }, [scenes]);
 
   const assembleTimeline = useCallback(async () => {
-    const clips = scenes.flatMap((scene) => scene.mediaType === 'video' && scene.path ? [scene.path] : []);
+    const clips = sourceVideoClips(scenes);
     if (clips.length < 2) return;
     setBusy(true);
     setNotice('Montage de la timeline…');
     try {
-      const result = await window.electronAPI?.media?.assembleVideo?.({ clips, aspect, name: projectName });
+      const result = await window.electronAPI?.media?.assembleVideo?.({
+        clips,
+        aspect,
+        name: projectName,
+        ...(publication ? {
+          editorial: {
+            title: editorialTitle,
+            description: editorialDescription,
+            series: seriesName,
+            syntheticMediaDisclosure,
+            prompt,
+            assetIds: selectedIngredients.flatMap((ingredient) => ingredient.assetId ? [ingredient.assetId] : []),
+            previousPrompts,
+          },
+        } : {}),
+      });
       if (!result?.ok || !result.outputPath || !result.url) {
         setNotice(result?.error ?? 'Échec du montage.');
         return;
@@ -312,23 +410,24 @@ export function VideoStudioView() {
         status: 'done',
         mediaType: 'video',
         path: result.outputPath,
+        youtubeMetadataPath: result.metadataPath,
         url: result.url,
       };
       setScenes((current) => [...current, film]);
       setSelectedSceneId(film.id);
       setPrompt(film.prompt);
-      setNotice(`Film final assemblé à partir de ${clips.length} clips.`);
+      setNotice(`Film final assemblé à partir de ${clips.length} clips${result.metadataPath ? ', avec sa fiche YouTube privée à relire' : ''}.`);
     } finally {
       setBusy(false);
     }
-  }, [aspect, duration, projectName, scenes]);
+  }, [aspect, duration, editorialDescription, editorialTitle, previousPrompts, projectName, prompt, publication, scenes, selectedIngredients, seriesName, syntheticMediaDisclosure]);
 
   const generateImage = useCallback(async (generationPrompt: string): Promise<GenerationResult> => {
     const avatarReference = selectedIngredients.find((ingredient) => ingredient.avatarBibleId);
     if (avatarReference && capabilities?.imageReferences) {
       const edited = await window.electronAPI?.media?.editImage?.({
         prompt: generationPrompt,
-        imagePath: avatarReference.path,
+        ...(avatarReference.assetId ? { imageAssetId: avatarReference.assetId } : { imagePath: avatarReference.path }),
       });
       return edited?.ok && edited.url
         ? { ok: true, url: edited.url, path: edited.outputPath }
@@ -339,25 +438,78 @@ export function VideoStudioView() {
   }, [aspect, capabilities?.imageReferences, selectedIngredients]);
 
   const generateVideo = useCallback(async (generationPrompt: string): Promise<GenerationResult> => {
+    if (gpuCancelRequestedRef.current) return { ok: false, error: 'Lot de génération annulé.' };
+    const avatar = selectedIngredients.find((ingredient) => ingredient.kind === 'character' && ingredient.assetId);
+    if (voiceEnabled && narration.trim() && avatar?.assetId) {
+      if (!voiceProfileId.trim() || !voiceLocale.trim()) {
+        return { ok: false, error: 'Sélectionne une locale et un profil vocal commercial validé.' };
+      }
+      let longCatAttempted = false;
+      try {
+        const gpu = window.electronAPI?.gpuMedia;
+        const available = await gpu?.capabilities();
+        if (gpu && available?.jobs.includes('avatar_video_render')) {
+          longCatAttempted = true;
+          let job = await gpu.submitAvatar({
+            turnId: `flow-${Date.now()}`,
+            referenceAssetId: avatar.assetId,
+            narration: narration.trim(),
+            prompt: generationPrompt,
+            locale: voiceLocale.trim(),
+            voiceProfileId: voiceProfileId.trim(),
+          });
+          setActiveGpuJob(job.id);
+          while (job.status === 'queued' || job.status === 'running') {
+            setProgress({ phase: 'longcat', message: job.progressMessage ?? `LongCat sur Darkstar · ${Math.round((job.progress ?? 0) * 100)} %` });
+            await new Promise((resolvePromise) => window.setTimeout(resolvePromise, 1_500));
+            job = await gpu.status(job.id);
+          }
+          setActiveGpuJob(undefined);
+          if (gpuCancelRequestedRef.current || job.status === 'cancelled') {
+            return { ok: false, error: 'Génération LongCat annulée.' };
+          }
+          if (job.status === 'succeeded') {
+            const local = await gpu.materialize(job.id);
+            if (local.ok && local.url) return { ok: true, url: local.url, path: local.path };
+            return { ok: false, error: local.error ?? 'Matérialisation LongCat impossible.' };
+          }
+          return { ok: false, error: job.error ?? `LongCat terminé avec le statut ${job.status}.` };
+        }
+      } catch (error) {
+        setActiveGpuJob(undefined);
+        if (longCatAttempted) {
+          return {
+            ok: false,
+            error: error instanceof Error ? error.message : 'Échec LongCat après soumission.',
+          };
+        }
+        // No LongCat submission was attempted; another configured provider may be used.
+      }
+    }
     const cinematic = await window.electronAPI?.media?.generateVideo?.({
       prompt: generationPrompt,
       aspect,
       duration,
       audio: audioEnabled,
-      imagePath: startFrame?.path,
-      referenceImagePaths: selectedIngredients.map((ingredient) => ingredient.path),
+      ...(startFrame?.assetId ? { imageAssetId: startFrame.assetId } : startFrame?.path ? { imagePath: startFrame.path } : {}),
+      referenceAssetIds: selectedIngredients.flatMap((ingredient) => ingredient.assetId ? [ingredient.assetId] : []),
+      referenceImagePaths: selectedIngredients.flatMap((ingredient) => ingredient.assetId || !ingredient.path ? [] : [ingredient.path]),
     });
     if (cinematic?.ok && cinematic.url) return { ok: true, url: cinematic.url, path: cinematic.outputPath };
-    const fallback = await window.electronAPI?.film?.produce?.({
-      pitch: generationPrompt,
-      scenes: Math.max(3, scenes.length),
-      resolution: aspectResolution(aspect),
-      noMusic: !audioEnabled,
-      subtitles: true,
-      style: aspect === '9:16' ? 'short' : 'standard',
-    });
-    return fallback?.ok && fallback.url ? { ok: true, url: fallback.url, path: fallback.filmPath } : { ok: false, error: cinematic?.error ?? fallback?.error ?? 'Générateur vidéo indisponible' };
-  }, [aspect, audioEnabled, duration, scenes.length, selectedIngredients, startFrame]);
+    return { ok: false, error: cinematic?.error ?? 'Générateur vidéo indisponible' };
+  }, [aspect, audioEnabled, duration, narration, selectedIngredients, setActiveGpuJob, startFrame, voiceEnabled, voiceLocale, voiceProfileId]);
+
+  const cancelGpuJob = useCallback(async () => {
+    const jobId = gpuJobIdRef.current;
+    if (!jobId) return;
+    gpuCancelRequestedRef.current = true;
+    try {
+      await window.electronAPI?.gpuMedia?.cancel(jobId);
+      setNotice('Annulation LongCat demandée. Aucun fallback ne sera lancé.');
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : 'Annulation LongCat impossible.');
+    }
+  }, []);
 
   const generate = useCallback(async () => {
     if (!selectedScene || !prompt.trim() || busy) return;
@@ -369,17 +521,22 @@ export function VideoStudioView() {
       endFrame,
       audioEnabled: mode === 'video' && audioEnabled,
       voiceEnabled: mode === 'video' && voiceEnabled,
+      publication,
     });
     setBusy(true);
+    gpuCancelRequestedRef.current = false;
     setNotice(undefined);
     setProgress(mode === 'video' ? { phase: 'planning' } : { phase: 'image' });
     setScenes((current) => current.map((scene) => scene.id === selectedScene.id ? { ...scene, status: 'generating' } : scene));
     try {
-      const jobs = Array.from({ length: outputs }, (_, index) => {
+      const results: GenerationResult[] = [];
+      for (let index = 0; index < outputs; index += 1) {
+        if (gpuCancelRequestedRef.current) break;
+        setProgress({ phase: mode, scene: index + 1, total: outputs, message: `Variante ${index + 1}/${outputs}…` });
         const variantPrompt = outputs > 1 ? `${generationPrompt}\nVariante ${index + 1}/${outputs} : conserver le même contrat visuel, varier légèrement la composition.` : generationPrompt;
-        return mode === 'image' ? generateImage(variantPrompt) : generateVideo(variantPrompt);
-      });
-      const results = await Promise.all(jobs);
+        results.push(await (mode === 'image' ? generateImage(variantPrompt) : generateVideo(variantPrompt)));
+        if (gpuCancelRequestedRef.current) break;
+      }
       const successes = results.filter((result): result is GenerationResult & { url: string } => result.ok && Boolean(result.url));
       const primary = successes[0];
       setScenes((current) => {
@@ -398,7 +555,9 @@ export function VideoStudioView() {
         }));
         return [...updated, ...variants];
       });
-      setNotice(primary ? `${successes.length} variante${successes.length > 1 ? 's' : ''} prête${successes.length > 1 ? 's' : ''}.` : results[0]?.error ?? 'Échec de la génération.');
+      setNotice(gpuCancelRequestedRef.current
+        ? 'Lot de génération annulé. Aucune variante supplémentaire ne sera lancée.'
+        : primary ? `${successes.length} variante${successes.length > 1 ? 's' : ''} prête${successes.length > 1 ? 's' : ''}.` : results[0]?.error ?? 'Échec de la génération.');
     } catch (error) {
       setScenes((current) => current.map((scene) => scene.id === selectedScene.id ? { ...scene, status: 'error' } : scene));
       setNotice(error instanceof Error ? error.message : String(error));
@@ -406,11 +565,11 @@ export function VideoStudioView() {
       setBusy(false);
       setProgress(null);
     }
-  }, [audioEnabled, busy, camera, duration, endFrame, generateImage, generateVideo, mode, outputs, prompt, selectedIngredients, selectedScene, startFrame, voiceEnabled]);
+  }, [audioEnabled, busy, camera, duration, endFrame, generateImage, generateVideo, mode, outputs, prompt, publication, selectedIngredients, selectedScene, startFrame, voiceEnabled]);
 
   return (
     <main className="flex h-full min-h-0 flex-col bg-background text-foreground" data-testid="video-studio-view">
-      <header className="flex h-12 shrink-0 items-center gap-3 border-b border-border bg-surface px-4">
+      <header className="flex min-h-12 shrink-0 flex-wrap items-center gap-2 border-b border-border bg-surface px-3 py-2 lg:gap-3 lg:px-4">
         <Clapperboard className="h-4 w-4 text-orange-500" aria-hidden="true" />
         <h1 className="text-sm font-semibold">Atelier Flow</h1>
         <select value={projectId} onChange={(event) => switchProject(event.target.value)} className="max-w-40 rounded-md border border-border bg-background px-2 py-1 text-[10px] outline-none" aria-label="Projet Flow actif" data-testid="flow-project-picker">
@@ -418,6 +577,11 @@ export function VideoStudioView() {
         </select>
         <input value={projectName} onChange={(event) => setProjectName(event.target.value)} className="w-44 rounded-md border border-transparent bg-transparent px-2 py-1 text-[11px] text-muted-foreground outline-none hover:border-border focus:border-orange-500 focus:text-foreground" aria-label="Nom du projet Flow" />
         <button type="button" onClick={newProject} className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-[10px] text-muted-foreground hover:bg-background hover:text-foreground" data-testid="flow-new-project"><FilePlus2 className="h-3 w-3" /> Nouveau</button>
+        <select value={presetId ?? ''} onChange={(event) => applyPreset(event.target.value)} className="max-w-44 rounded-md border border-border bg-background px-2 py-1 text-[10px] outline-none" aria-label="Preset éditorial Flow" data-testid="flow-preset-picker">
+          <option value="">Preset éditorial…</option>
+          {FLOW_STUDIO_PRESETS.map((preset) => <option key={preset.id} value={preset.id}>{preset.label}</option>)}
+        </select>
+        {gpuJobId ? <button type="button" onClick={() => void cancelGpuJob()} className="rounded-md border border-rose-500/40 px-2 py-1 text-[10px] text-rose-600" data-testid="flow-cancel-longcat">Annuler LongCat</button> : null}
         <button
           type="button"
           onClick={() => setShowComfyLab((current) => !current)}
@@ -436,16 +600,27 @@ export function VideoStudioView() {
       {showComfyLab ? (
         <ComfyLabPanel onClose={() => setShowComfyLab(false)} onUseAvatar={useAvatarInFlow} />
       ) : (
-      <div className="flex min-h-0 flex-1">
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto lg:flex-row lg:overflow-hidden">
         <FlowIngredientRail ingredients={ingredients} selectedIds={selectedIngredientIds} onToggle={toggleIngredient} onAdd={() => void addIngredients()} />
         <section className="flex min-w-0 flex-1 flex-col">
-          <div className="flex min-h-0 flex-1 flex-col bg-background p-4">
-            <div className="mb-2 flex items-center justify-between"><div className="flex items-center gap-2"><h2 className="text-xs font-semibold">{selectedScene?.title ?? 'Plan'}</h2>{selectedScene?.status === 'done' ? <Check className="h-3.5 w-3.5 text-emerald-500" /> : null}</div><div className="flex items-center gap-2"><span className="text-[10px] text-muted-foreground">{aspect} · {mode === 'video' ? `${duration}s` : 'image fixe'}</span><button type="button" onClick={() => void exportSelected()} disabled={!selectedScene?.path} className="rounded border border-border p-1 text-muted-foreground hover:bg-surface hover:text-foreground disabled:opacity-30" title="Exporter ce plan" data-testid="flow-export-selected"><Download className="h-3.5 w-3.5" /></button></div></div>
+          <div className="flex min-h-[420px] flex-1 flex-col bg-background p-3 lg:min-h-0 lg:p-4">
+            <div className="mb-2 flex items-center justify-between"><div className="flex items-center gap-2"><h2 className="text-xs font-semibold">{selectedScene?.title ?? 'Plan'}</h2>{selectedScene?.status === 'done' ? <Check className="h-3.5 w-3.5 text-emerald-500" /> : null}</div><div className="flex items-center gap-2"><span className="text-[10px] text-muted-foreground">{aspect} · {mode === 'video' ? `${duration}s` : 'image fixe'}</span><button type="button" onClick={() => void exportSelected()} disabled={!selectedScene?.path} className="rounded border border-border p-1 text-muted-foreground hover:bg-surface hover:text-foreground disabled:opacity-30" title="Exporter ce plan" aria-label="Exporter ce plan" data-testid="flow-export-selected"><Download className="h-3.5 w-3.5" /></button></div></div>
             <div className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden rounded-lg border border-border bg-slate-950" data-testid="flow-canvas">
               {selectedScene?.url ? (selectedScene.mediaType === 'video' ? <video src={selectedScene.url} controls autoPlay loop muted className="h-full w-full object-contain" data-testid="flow-video-preview" /> : <img src={selectedScene.url} alt="Résultat généré" className="h-full w-full object-contain" data-testid="flow-image-preview" />) : <div className="max-w-md px-8 text-center text-slate-300"><Play className="mx-auto mb-4 h-10 w-10 text-slate-500" /><p className="text-sm font-medium">Compose ton prochain plan</p><p className="mt-2 text-xs leading-relaxed text-slate-500">Ajoute des ingrédients, référence-les avec @, puis génère des variations cohérentes.</p></div>}
-              {busy ? <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-950/80 text-white" data-testid="flow-progress"><Loader2 className="mb-3 h-6 w-6 animate-spin" /><span className="text-xs">{progress?.message ?? (mode === 'image' ? 'Création des variantes…' : 'Construction des scènes…')}</span></div> : null}
+              {busy ? <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-950/80 text-white" role="status" aria-live="polite" data-testid="flow-progress"><Loader2 className="mb-3 h-6 w-6 animate-spin" /><span className="text-xs">{progress?.message ?? (mode === 'image' ? 'Création des variantes…' : 'Construction des scènes…')}</span></div> : null}
             </div>
-            {notice ? <div className="mt-2 rounded-md border border-border bg-surface px-3 py-2 text-[11px] text-muted-foreground" data-testid="flow-notice">{notice}</div> : null}
+            {notice ? <div className="mt-2 rounded-md border border-border bg-surface px-3 py-2 text-[11px] text-muted-foreground" role="status" aria-live="polite" data-testid="flow-notice">{notice}</div> : null}
+            {publication ? <FlowEditorialGate
+              report={editorialReport}
+              title={editorialTitle}
+              description={editorialDescription}
+              series={seriesName}
+              disclosure={syntheticMediaDisclosure}
+              onTitle={setEditorialTitle}
+              onDescription={setEditorialDescription}
+              onSeries={setSeriesName}
+              onDisclosure={setSyntheticMediaDisclosure}
+            /> : null}
           </div>
           <FlowSceneTimeline scenes={scenes} selectedId={selectedSceneId} onSelect={selectScene} onAdd={addScene} onExtend={extendScene} onExportAll={() => void exportAll()} onAssemble={() => void assembleTimeline()} />
         </section>
@@ -459,6 +634,9 @@ export function VideoStudioView() {
           camera={camera}
           audioEnabled={audioEnabled}
           voiceEnabled={voiceEnabled}
+          narration={narration}
+          voiceLocale={voiceLocale}
+          voiceProfileId={voiceProfileId}
           selectedIngredient={activeIngredient}
           startFrame={startFrame}
           endFrame={endFrame}
@@ -472,6 +650,9 @@ export function VideoStudioView() {
           onCamera={setCamera}
           onAudio={setAudioEnabled}
           onVoice={setVoiceEnabled}
+          onNarration={setNarration}
+          onVoiceLocale={setVoiceLocale}
+          onVoiceProfileId={setVoiceProfileId}
           onStartFrame={() => setStartFrameId(activeIngredient?.id)}
           onEndFrame={() => setEndFrameId(activeIngredient?.id)}
           onGenerate={() => void generate()}

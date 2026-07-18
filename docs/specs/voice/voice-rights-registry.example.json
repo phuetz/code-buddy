@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 2,
+  "profiles": [
+    {
+      "id": "lisa-fr-pocket-v1",
+      "locale": "fr-FR",
+      "provider": "pocket",
+      "voice": "estelle",
+      "language": "french",
+      "highQuality": true,
+      "status": "pending",
+      "revoked": false,
+      "scopes": [],
+      "reviewer": "REPLACE_AFTER_HUMAN_REVIEW",
+      "reviewedAt": "1970-01-01T00:00:00.000Z",
+      "provenance": {
+        "ref": "REPLACE_WITH_REVIEWED_LICENSE_REFERENCE",
+        "evidencePath": "/absolute/path/to/reviewed-license-evidence.pdf",
+        "evidenceSha256": "REPLACE_WITH_64_CHARACTER_LOWERCASE_SHA256"
+      }
+    },
+    {
+      "id": "lisa-fr-piper-v1",
+      "locale": "fr-FR",
+      "provider": "piper",
+      "modelPath": "/absolute/path/to/reviewed-voice.onnx",
+      "modelSha256": "REPLACE_WITH_64_CHARACTER_LOWERCASE_SHA256",
+      "status": "pending",
+      "revoked": false,
+      "scopes": [],
+      "reviewer": "REPLACE_AFTER_HUMAN_REVIEW",
+      "reviewedAt": "1970-01-01T00:00:00.000Z",
+      "provenance": {
+        "ref": "REPLACE_WITH_REVIEWED_LICENSE_REFERENCE",
+        "evidencePath": "/absolute/path/to/reviewed-license-evidence.pdf",
+        "evidenceSha256": "REPLACE_WITH_64_CHARACTER_LOWERCASE_SHA256"
+      }
+    }
+  ]
+}

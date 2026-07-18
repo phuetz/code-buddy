@@ -71,4 +71,38 @@ describe('media generation IPC', () => {
     await expect(history({}, { imagePath: 42, root: '/workspace' })).resolves.toMatchObject({ ok: false });
     expect(service.getImageEditHistory).not.toHaveBeenCalled();
   });
+
+  it('validates and forwards bounded editorial metadata for film assembly', async () => {
+    service.assembleVideo.mockResolvedValueOnce({ ok: true });
+    const assemble = handlers.get(MEDIA_GEN_CHANNELS.assembleVideo)!;
+    const request = {
+      clips: ['/workspace/a.mp4', '/workspace/b.mp4'],
+      aspect: '9:16',
+      name: 'Lisa Short',
+      editorial: {
+        title: 'Une journée avec Lisa',
+        description: 'Un épisode original préparé pour une vérification humaine avant publication.',
+        series: 'Journal de Lisa',
+        syntheticMediaDisclosure: true,
+        prompt: 'Lisa traverse la ville au lever du soleil puis retrouve ses amis dans un café chaleureux et partage un moment joyeux.',
+        assetIds: ['asset:lisa-main', 'asset:lisa-main'],
+        previousPrompts: ['Lisa lit un livre dans une bibliothèque silencieuse.'],
+      },
+    };
+
+    await expect(assemble({}, request)).resolves.toMatchObject({ ok: true });
+    expect(service.assembleVideo).toHaveBeenCalledWith({
+      ...request,
+      editorial: { ...request.editorial, assetIds: ['asset:lisa-main'] },
+    });
+  });
+
+  it('rejects malformed editorial metadata before assembly', async () => {
+    const assemble = handlers.get(MEDIA_GEN_CHANNELS.assembleVideo)!;
+    await expect(assemble({}, {
+      clips: ['/workspace/a.mp4', '/workspace/b.mp4'],
+      editorial: { title: 'x', description: 'y', syntheticMediaDisclosure: 'yes', prompt: '', assetIds: [] },
+    })).resolves.toMatchObject({ ok: false });
+    expect(service.assembleVideo).not.toHaveBeenCalled();
+  });
 });

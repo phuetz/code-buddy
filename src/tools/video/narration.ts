@@ -22,6 +22,39 @@ export interface NarrationResult {
   path: string;
   /** Duration in seconds (from ffprobe). */
   duration: number;
+  /** Present for localized commercial renders. */
+  locale?: string;
+  /** Logical profile ID, never a raw model path. */
+  voiceProfileId?: string;
+  /** Provider that produced a localized track. */
+  provider?: 'pocket' | 'piper';
+}
+
+export interface VoiceProfileBase {
+  id: string;
+  locale: string;
+  commercialUseApproved: boolean;
+  provenanceRef: string;
+}
+
+export type ResolvedVoiceProfile =
+  | (VoiceProfileBase & {
+      provider: 'pocket';
+      voice: string;
+      language: string;
+      highQuality?: boolean;
+    })
+  | (VoiceProfileBase & {
+      provider: 'piper';
+      modelPath: string;
+    });
+
+export interface LocalizedNarrationRequest {
+  text: string;
+  outputPath: string;
+  locale: string;
+  voiceProfileId: string;
+  fallbackPolicy: 'none' | 'legacy';
 }
 
 export interface NarrationDeps {
@@ -30,6 +63,11 @@ export interface NarrationDeps {
   ffprobeBin?: string;
   env?: NodeJS.ProcessEnv;
   timeoutMs?: number;
+  resolveVoiceProfile?: (id: string) => Promise<ResolvedVoiceProfile | null>;
+  pocketSynthesize?: (
+    text: string,
+    options: { voice: string; language: string; highQuality?: boolean },
+  ) => Promise<Buffer>;
 }
 
 const SAMPLE_RATE = 48_000;
@@ -219,6 +257,106 @@ export async function synthesizeNarration(
     return null;
   }
   return { path: outPath, duration };
+}
+
+/**
+ * Synthesize a commercial localized track from an explicit logical voice
+ * profile. The function never silently substitutes a voice from another
+ * language. Legacy environment fallback is available only when requested.
+ */
+export async function synthesizeLocalizedNarration(
+  request: LocalizedNarrationRequest,
+  deps: NarrationDeps = {},
+): Promise<NarrationResult | null> {
+  const { canonicalizeLocale } = await import('./localized-media.js');
+  const locale = canonicalizeLocale(request.locale);
+  const profile = await deps.resolveVoiceProfile?.(request.voiceProfileId);
+  if (!profile) {
+    if (request.fallbackPolicy === 'legacy') {
+      return synthesizeNarration(request.text, request.outputPath, deps);
+    }
+    logger.warn(`[narration] voice profile ${request.voiceProfileId} is unavailable`);
+    return null;
+  }
+  const profileLocale = canonicalizeLocale(profile.locale);
+  if (profile.id !== request.voiceProfileId || profileLocale !== locale) {
+    logger.warn(`[narration] voice profile ${request.voiceProfileId} does not match locale ${locale}`);
+    return null;
+  }
+  if (!profile.commercialUseApproved || !profile.provenanceRef.trim()) {
+    logger.warn(`[narration] voice profile ${request.voiceProfileId} is not cleared for commercial use`);
+    return null;
+  }
+  const trimmed = request.text.trim();
+  if (!trimmed) return null;
+  const spawn = deps.spawn ?? realSpawn;
+  const ffprobeBin = deps.ffprobeBin ?? 'ffprobe';
+
+  if (profile.provider === 'pocket') {
+    let audio: Buffer;
+    try {
+      if (deps.pocketSynthesize) {
+        audio = await deps.pocketSynthesize(trimmed, {
+          voice: profile.voice,
+          language: profile.language,
+          ...(profile.highQuality === undefined ? {} : { highQuality: profile.highQuality }),
+        });
+      } else {
+        const { PocketTTSProvider } = await import('../../talk-mode/providers/pocket-tts.js');
+        const provider = new PocketTTSProvider();
+        await provider.initialize({
+          provider: 'pocket',
+          enabled: true,
+          priority: 1,
+          settings: {
+            voice: profile.voice,
+            language: profile.language,
+            highQuality: profile.highQuality ?? false,
+            timeoutMs: deps.timeoutMs ?? 180_000,
+          },
+        });
+        if (!(await provider.isAvailable())) return null;
+        const result = await provider.synthesize(trimmed, {
+          voice: profile.voice,
+          language: profile.language,
+        });
+        audio = result.audio;
+      }
+      if (!audio.length) return null;
+      const { writeFile } = await import('node:fs/promises');
+      await writeFile(request.outputPath, audio);
+    } catch (error) {
+      logger.warn(
+        `[narration] Pocket profile ${request.voiceProfileId} failed: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      return null;
+    }
+  } else {
+    const piperBin = deps.piperBin ?? deps.env?.CODEBUDDY_PIPER_BIN ?? 'piper';
+    const { code, stderr } = await run(
+      spawn,
+      piperBin,
+      buildPiperArgs(profile.modelPath, request.outputPath),
+      deps.timeoutMs ?? 60_000,
+      `${trimmed}\n`,
+    );
+    if (code !== 0) {
+      logger.warn(
+        `[narration] Piper profile ${request.voiceProfileId} failed (exit ${code}): ${stderr.trim().split('\n').slice(-2).join(' ')}`,
+      );
+      return null;
+    }
+  }
+
+  const duration = await probeDuration(spawn, ffprobeBin, request.outputPath);
+  if (duration == null) return null;
+  return {
+    path: request.outputPath,
+    duration,
+    locale,
+    voiceProfileId: request.voiceProfileId,
+    provider: profile.provider,
+  };
 }
 
 /**

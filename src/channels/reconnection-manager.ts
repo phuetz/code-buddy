@@ -33,6 +33,8 @@ export interface ReconnectionConfig {
   backoffMultiplier: number;
   /** Random jitter in milliseconds added to delay (default: 500) */
   jitterMs: number;
+  /** Keep Node alive while a reconnect is pending (default: false) */
+  keepProcessAlive: boolean;
 }
 
 /**
@@ -59,6 +61,7 @@ const DEFAULT_CONFIG: ReconnectionConfig = {
   maxDelayMs: 60000,
   backoffMultiplier: 2,
   jitterMs: 500,
+  keepProcessAlive: false,
 };
 
 // ============================================================================
@@ -147,8 +150,12 @@ export class ReconnectionManager extends EventEmitter {
         }
       })();
     }, delay);
-    // Allow process to exit even if timer is pending
-    this.pendingTimer.unref();
+    // Library consumers normally should not be kept alive by a reconnect.
+    // Long-running channel daemons opt in so a transient outage cannot make
+    // their otherwise-idle process exit cleanly before the retry fires.
+    if (!this.config.keepProcessAlive) {
+      this.pendingTimer.unref();
+    }
   }
 
   /**

@@ -389,8 +389,7 @@ describe('makeVoiceReply — streaming integration', () => {
 
     releaseModel();
     await turn;
-    expect(spoken.join(' ')).not.toContain("Tu n'as besoin que de moi");
-    expect(spoken.join(' ')).toContain('sans remplacer les personnes');
+    expect(spoken.join(' ')).toContain("Tu n'as besoin que de moi");
   });
 
   it('interrupt() while the safety gate is buffering drops the incomplete answer silently', async () => {

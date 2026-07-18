@@ -5,6 +5,7 @@ import path from 'path';
 
 import { getImageGenerationModel } from '../config/agent-defaults.js';
 import { resolveToolGatewayRoute } from '../agent/tool-gateway-router.js';
+import { logger } from '../utils/logger.js';
 
 export type ImageAspectRatio = 'landscape' | 'square' | 'portrait';
 export type MediaProvider = 'openai' | 'xai' | 'fal' | 'comfyui';
@@ -166,7 +167,7 @@ export async function generateImage(
 
   // ComfyUI has a workflow-submit/poll/view API, not /images/generations.
   if (config.provider === 'comfyui') {
-    return generateComfyUIImage(prompt, aspect, config, runtime, generatedAt);
+    return generateComfyUIImageWithFallback(prompt, aspect, config, runtime, generatedAt);
   }
 
   const size = IMAGE_SIZES[aspect];
@@ -394,9 +395,45 @@ const COMFY_DIMS: Record<ImageAspectRatio, { width: number; height: number }> = 
   portrait: { width: 768, height: 1024 },
 };
 
+const SD_TURBO_DIMS: Record<ImageAspectRatio, { width: number; height: number }> = {
+  // SD Turbo is strictly 512-native. Its non-square latents frequently tile a
+  // portrait into two faces, even at 512x768. The CPU fallback favours a clean
+  // square selfie over honoring the requested ratio with a broken image.
+  landscape: { width: 512, height: 512 },
+  square: { width: 512, height: 512 },
+  portrait: { width: 512, height: 512 },
+};
+
+const KREA2_DIMS: Record<ImageAspectRatio, { width: number; height: number }> = {
+  landscape: { width: 1344, height: 1024 },
+  square: { width: 1024, height: 1024 },
+  portrait: { width: 1024, height: 1344 },
+};
+
+function isKrea2Model(model: string): boolean {
+  return /krea.?2/i.test(model);
+}
+
+function comfyDimensionsForModel(
+  model: string,
+  aspect: ImageAspectRatio,
+): { width: number; height: number } {
+  // SD Turbo is a 512-native model. Non-square latents commonly tile a close
+  // portrait into stacked/duplicate faces, which is unacceptable for Lisa.
+  if (isKrea2Model(model)) return KREA2_DIMS[aspect];
+  return /(?:^|[/_-])sd[_-]?turbo(?:[._-]|$)/i.test(model)
+    ? SD_TURBO_DIMS[aspect]
+    : COMFY_DIMS[aspect];
+}
+
 /** Sampler/step defaults keyed off the checkpoint family (turbo → few-step). */
 function comfyParamsForModel(model: string): ComfyParams {
   const m = model.toLowerCase();
+  if (isKrea2Model(model)) {
+    // Krea 2 Turbo is distilled for eight Euler/simple steps with CFG disabled.
+    // In ComfyUI, cfg=1 plus ConditioningZeroOut matches the official workflow.
+    return { steps: 8, cfg: 1.0, sampler: 'euler', scheduler: 'simple' };
+  }
   if (m.includes('turbo') || m.includes('lightning') || m.includes('lcm') || m.includes('hyper')) {
     return { steps: 4, cfg: 1.0, sampler: 'euler', scheduler: 'sgm_uniform' };
   }
@@ -406,37 +443,196 @@ function comfyParamsForModel(model: string): ComfyParams {
   return { steps: 20, cfg: 7.0, sampler: 'euler', scheduler: 'normal' };
 }
 
-function buildComfyWorkflow(
+/**
+ * Resolve ComfyUI LoRA filename from env.
+ * Accepts `lisa`, `lisa.safetensors`, path basename, or `auto`
+ * (picks `lisa.safetensors` / first `*lisa*.safetensors` under models/loras).
+ * Empty / "none" / "off" → no LoRA.
+ */
+export function resolveComfyLoraName(
+  envSource: NodeJS.ProcessEnv = process.env,
+): string | undefined {
+  const raw = (env(envSource, 'CODEBUDDY_COMFYUI_LORA') ?? '').trim();
+  if (!raw || /^(none|off|false|0)$/i.test(raw)) return undefined;
+  if (/^auto$/i.test(raw)) {
+    return detectInstalledLisaLoraSync(envSource) ?? 'lisa.safetensors';
+  }
+  const base = raw.split(/[/\\]/).pop()!.trim();
+  if (!base) return undefined;
+  return base.endsWith('.safetensors') ? base : `${base}.safetensors`;
+}
+
+/** Best-effort sync scan of ComfyUI models/loras for a Lisa LoRA (never throws). */
+export function detectInstalledLisaLoraSync(
+  envSource: NodeJS.ProcessEnv = process.env,
+): string | undefined {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const fsSync = require('node:fs') as typeof import('node:fs');
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const pathMod = require('node:path') as typeof import('node:path');
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const osMod = require('node:os') as typeof import('node:os');
+    const roots: string[] = [];
+    if (envSource.COMFYUI_ROOT?.trim()) roots.push(envSource.COMFYUI_ROOT.trim());
+    const home = osMod.homedir();
+    roots.push(
+      pathMod.join(home, 'ComfyUI'),
+      pathMod.join(home, 'DEV', 'ComfyUI'),
+      pathMod.join(home, '.codebuddy', 'comfyui'),
+    );
+    for (const root of roots) {
+      const dir = pathMod.join(root, 'models', 'loras');
+      if (!fsSync.existsSync(dir)) continue;
+      const names = fsSync.readdirSync(dir).filter((n: string) => n.endsWith('.safetensors'));
+      const exact = names.find((n: string) => n.toLowerCase() === 'lisa.safetensors');
+      if (exact) return exact;
+      const fuzzy = names.find((n: string) => /lisa/i.test(n));
+      if (fuzzy) return fuzzy;
+    }
+  } catch {
+    /* ignore */
+  }
+  return undefined;
+}
+
+export function resolveComfyLoraStrength(envSource: NodeJS.ProcessEnv = process.env): number {
+  const n = Number(env(envSource, 'CODEBUDDY_COMFYUI_LORA_STRENGTH') ?? '0.85');
+  if (!Number.isFinite(n)) return 0.85;
+  return Math.min(1.5, Math.max(0, n));
+}
+
+/**
+ * Classic SD1.5/SDXL-style graph. Optional LoraLoader (node 10) when loraName is set.
+ * Exported for unit tests.
+ */
+export function buildComfyWorkflow(
   prompt: string,
   negative: string,
   ckpt: string,
   dims: { width: number; height: number },
   params: ComfyParams,
   seed: number,
+  lora?: { name: string; strength: number },
 ): Record<string, unknown> {
-  return {
-    '3': {
-      class_type: 'KSampler',
-      inputs: {
-        seed,
-        steps: params.steps,
-        cfg: params.cfg,
-        sampler_name: params.sampler,
-        scheduler: params.scheduler,
-        denoise: 1.0,
-        model: ['4', 0],
-        positive: ['6', 0],
-        negative: ['7', 0],
-        latent_image: ['5', 0],
-      },
-    },
+  // Default: checkpoint feeds KSampler + CLIP encode directly.
+  let modelRef: [string, number] = ['4', 0];
+  let clipRef: [string, number] = ['4', 1];
+  const graph: Record<string, unknown> = {
     '4': { class_type: 'CheckpointLoaderSimple', inputs: { ckpt_name: ckpt } },
-    '5': { class_type: 'EmptyLatentImage', inputs: { width: dims.width, height: dims.height, batch_size: 1 } },
-    '6': { class_type: 'CLIPTextEncode', inputs: { text: prompt, clip: ['4', 1] } },
-    '7': { class_type: 'CLIPTextEncode', inputs: { text: negative, clip: ['4', 1] } },
+    '5': {
+      class_type: 'EmptyLatentImage',
+      inputs: { width: dims.width, height: dims.height, batch_size: 1 },
+    },
     '8': { class_type: 'VAEDecode', inputs: { samples: ['3', 0], vae: ['4', 2] } },
-    '9': { class_type: 'SaveImage', inputs: { filename_prefix: 'codebuddy', images: ['8', 0] } },
+    '9': {
+      class_type: 'SaveImage',
+      inputs: { filename_prefix: 'codebuddy', images: ['8', 0] },
+    },
   };
+
+  if (lora?.name) {
+    graph['10'] = {
+      class_type: 'LoraLoader',
+      inputs: {
+        lora_name: lora.name,
+        strength_model: lora.strength,
+        strength_clip: lora.strength,
+        model: ['4', 0],
+        clip: ['4', 1],
+      },
+    };
+    modelRef = ['10', 0];
+    clipRef = ['10', 1];
+  }
+
+  graph['6'] = { class_type: 'CLIPTextEncode', inputs: { text: prompt, clip: clipRef } };
+  graph['7'] = { class_type: 'CLIPTextEncode', inputs: { text: negative, clip: clipRef } };
+  graph['3'] = {
+    class_type: 'KSampler',
+    inputs: {
+      seed,
+      steps: params.steps,
+      cfg: params.cfg,
+      sampler_name: params.sampler,
+      scheduler: params.scheduler,
+      denoise: 1.0,
+      model: modelRef,
+      positive: ['6', 0],
+      negative: ['7', 0],
+      latent_image: ['5', 0],
+    },
+  };
+  return graph;
+}
+
+/**
+ * Native Krea 2 graph from ComfyUI's official Krea 2 Turbo template.
+ * Krea 2 ships its diffusion model, Qwen3-VL encoder, and Qwen Image VAE as
+ * separate files. Its LoRAs are model-only and must not be applied to CLIP.
+ */
+export function buildKrea2ComfyWorkflow(
+  prompt: string,
+  unet: string,
+  textEncoder: string,
+  vae: string,
+  dims: { width: number; height: number },
+  params: ComfyParams,
+  seed: number,
+  lora?: { name: string; strength: number },
+): Record<string, unknown> {
+  let modelRef: [string, number] = ['4', 0];
+  const graph: Record<string, unknown> = {
+    '4': {
+      class_type: 'UNETLoader',
+      inputs: { unet_name: unet, weight_dtype: 'default' },
+    },
+    '5': {
+      class_type: 'EmptyLatentImage',
+      inputs: { width: dims.width, height: dims.height, batch_size: 1 },
+    },
+    '6': {
+      class_type: 'CLIPLoader',
+      inputs: { clip_name: textEncoder, type: 'krea2', device: 'default' },
+    },
+    '7': { class_type: 'VAELoader', inputs: { vae_name: vae } },
+    '8': { class_type: 'CLIPTextEncode', inputs: { text: prompt, clip: ['6', 0] } },
+    '10': { class_type: 'ConditioningZeroOut', inputs: { conditioning: ['8', 0] } },
+    '11': { class_type: 'VAEDecode', inputs: { samples: ['3', 0], vae: ['7', 0] } },
+    '9': {
+      class_type: 'SaveImage',
+      inputs: { filename_prefix: 'codebuddy-krea2', images: ['11', 0] },
+    },
+  };
+
+  if (lora?.name) {
+    graph['12'] = {
+      class_type: 'LoraLoaderModelOnly',
+      inputs: {
+        lora_name: lora.name,
+        strength_model: lora.strength,
+        model: ['4', 0],
+      },
+    };
+    modelRef = ['12', 0];
+  }
+
+  graph['3'] = {
+    class_type: 'KSampler',
+    inputs: {
+      seed,
+      steps: params.steps,
+      cfg: params.cfg,
+      sampler_name: params.sampler,
+      scheduler: params.scheduler,
+      denoise: 1.0,
+      model: modelRef,
+      positive: ['8', 0],
+      negative: ['10', 0],
+      latent_image: ['5', 0],
+    },
+  };
+  return graph;
 }
 
 interface ComfyImageRef {
@@ -1165,14 +1361,35 @@ async function generateComfyUIImage(
   const base = config.baseUrl;
   const negative = (env(envSource, 'CODEBUDDY_IMAGE_NEGATIVE') ?? 'blurry, low quality, deformed, watermark').trim();
   const params = comfyParamsForModel(config.model);
-  const dims = COMFY_DIMS[aspect];
-  const seed = Math.floor(now().getTime() % 2_000_000_000);
+  const dims = comfyDimensionsForModel(config.model, aspect);
+  const configuredSeed = Number(env(envSource, 'CODEBUDDY_COMFYUI_SEED'));
+  const seed = Number.isFinite(configuredSeed) && configuredSeed >= 0
+    ? Math.floor(configuredSeed % 2_000_000_000)
+    : Math.floor(now().getTime() % 2_000_000_000);
   const clientId = runtime.createId?.() ?? randomUUID();
-  const workflow = buildComfyWorkflow(prompt, negative, config.model, dims, params, seed);
+  const loraName = resolveComfyLoraName(envSource);
+  const loraStrength = resolveComfyLoraStrength(envSource);
+  const lora = loraName ? { name: loraName, strength: loraStrength } : undefined;
+  const workflow = isKrea2Model(config.model)
+    ? buildKrea2ComfyWorkflow(
+      prompt,
+      config.model,
+      (env(envSource, 'CODEBUDDY_COMFYUI_KREA2_TEXT_ENCODER')
+        ?? 'qwen3vl_4b_fp8_scaled.safetensors').trim(),
+      (env(envSource, 'CODEBUDDY_COMFYUI_KREA2_VAE')
+        ?? 'qwen_image_vae.safetensors').trim(),
+      dims,
+      params,
+      seed,
+      lora,
+    )
+    : buildComfyWorkflow(prompt, negative, config.model, dims, params, seed, lora);
 
   const submit = await postJson(fetchImpl, joinUrl(base, '/prompt'), {
     headers: { 'Content-Type': 'application/json' },
     body: { prompt: workflow, client_id: clientId },
+    timeoutMs: comfyEndpointTimeout(envSource),
+    signal: runtime.signal,
   });
   const promptId = stringField(submit, 'prompt_id');
   if (!promptId) {
@@ -1188,7 +1405,7 @@ async function generateComfyUIImage(
   for (;;) {
     const history = await getJson(fetchImpl, joinUrl(base, `/history/${promptId}`), {
       Accept: 'application/json',
-    });
+    }, comfyEndpointTimeout(envSource), runtime.signal);
     const entry = history[promptId] as { outputs?: unknown; status?: { status_str?: string } } | undefined;
     if (entry?.outputs) {
       image = firstComfyImage(entry.outputs);
@@ -1247,6 +1464,76 @@ async function generateComfyUIImage(
     aspect_ratio: aspect,
     generatedAt,
   };
+}
+
+function comfyEndpointTimeout(envSource: NodeJS.ProcessEnv): number {
+  const configured = Number(env(envSource, 'CODEBUDDY_COMFYUI_ENDPOINT_TIMEOUT_MS') ?? '10000');
+  return Number.isFinite(configured) && configured >= 250 ? configured : 10_000;
+}
+
+function comfyBaseUrls(config: ProviderConfig, envSource: NodeJS.ProcessEnv): string[] {
+  const fallbacks = (env(envSource, 'CODEBUDDY_COMFYUI_FALLBACK_URLS') ?? '')
+    .split(/[\s,;]+/)
+    .map((value) => value.trim().replace(/\/+$/, ''))
+    .filter(Boolean);
+  return [...new Set([config.baseUrl.replace(/\/+$/, ''), ...fallbacks])];
+}
+
+async function generateComfyUIImageWithFallback(
+  prompt: string,
+  aspect: ImageAspectRatio,
+  config: ProviderConfig,
+  runtime: MediaGenerationRuntime,
+  generatedAt: string,
+): Promise<ImageGenerateResult> {
+  const envSource = runtime.env ?? process.env;
+  const endpoints = comfyBaseUrls(config, envSource);
+  const failures: string[] = [];
+
+  for (const [index, baseUrl] of endpoints.entries()) {
+    try {
+      const isFallback = index > 0;
+      const fallbackModel = env(envSource, 'CODEBUDDY_COMFYUI_FALLBACK_MODEL')?.trim();
+      const fallbackLora = env(envSource, 'CODEBUDDY_COMFYUI_FALLBACK_LORA')?.trim();
+      const endpointConfig = isFallback && fallbackModel
+        ? { ...config, model: fallbackModel, baseUrl }
+        : { ...config, baseUrl };
+      const endpointRuntime = isFallback && fallbackLora !== undefined
+        ? {
+          ...runtime,
+          env: {
+            ...envSource,
+            CODEBUDDY_COMFYUI_LORA: fallbackLora,
+          },
+        }
+        : runtime;
+      return await generateComfyUIImage(
+        prompt,
+        aspect,
+        endpointConfig,
+        endpointRuntime,
+        generatedAt,
+      );
+    } catch (error) {
+      // A per-endpoint fetch timeout also surfaces as AbortError. Only a caller
+      // cancellation should stop the chain; endpoint timeouts must fail over.
+      if (runtime.signal?.aborted) {
+        throw error;
+      }
+      const message = error instanceof Error ? error.message : String(error);
+      failures.push(`${baseUrl}: ${message}`);
+      const next = endpoints[index + 1];
+      if (next) {
+        logger.warn(`[comfyui] ${baseUrl} failed; trying fallback ${next}: ${message}`);
+      }
+    }
+  }
+
+  throw new Error(
+    endpoints.length > 1
+      ? `All ComfyUI endpoints failed: ${failures.join(' | ')}`
+      : failures[0] ?? 'ComfyUI generation failed',
+  );
 }
 
 export async function generateVideo(
@@ -1515,15 +1802,28 @@ async function materializeVideoResult(
 }
 
 function resolveImageProvider(envSource: NodeJS.ProcessEnv): ProviderConfig {
-  const requested = (envSource.CODEBUDDY_IMAGE_PROVIDER ?? '').trim().toLowerCase();
+  let requested = (envSource.CODEBUDDY_IMAGE_PROVIDER ?? '').trim().toLowerCase();
+  // Prefer ComfyUI when explicitly requested OR when COMFYUI_URL is set and no
+  // other provider was chosen (selfie / local-first companion path).
+  if (
+    !requested &&
+    (envSource.COMFYUI_URL?.trim() || envSource.CODEBUDDY_IMAGE_BASE_URL?.includes('8188'))
+  ) {
+    requested = 'comfyui';
+  }
   // Local ComfyUI backend (offline, GPU) — no API key, workflow-based API.
   if (requested === 'comfyui') {
     const baseUrl = (envSource.COMFYUI_URL
       ?? envSource.CODEBUDDY_IMAGE_BASE_URL
       ?? 'http://127.0.0.1:8188').trim().replace(/\/+$/, '');
-    const model = (envSource.CODEBUDDY_IMAGE_MODEL
+    // Prefer CODEBUDDY_LORA_INFER_CHECKPOINT when set so LoRA train/infer stay monostack
+    // (e.g. both Krea 2). Falls back to CODEBUDDY_IMAGE_MODEL / COMFYUI_CHECKPOINT / sd_turbo.
+    const model = (
+      envSource.CODEBUDDY_LORA_INFER_CHECKPOINT
+      ?? envSource.CODEBUDDY_IMAGE_MODEL
       ?? envSource.COMFYUI_CHECKPOINT
-      ?? 'sd_turbo.safetensors').trim();
+      ?? 'sd_turbo.safetensors'
+    ).trim();
     if (!baseUrl) {
       throw new Error('No ComfyUI base URL configured (set COMFYUI_URL)');
     }

@@ -1,4 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'fs/promises';
+import os from 'os';
+import path from 'path';
 
 vi.mock('electron', () => ({ dialog: { showSaveDialog: vi.fn() }, app: {} }));
 
@@ -121,5 +124,72 @@ describe('GpuMediaAdminBridge', () => {
       ok: false,
       cancelled: true,
     });
+  });
+
+  it('stages LongCat with exact voice-rights evidence and materializes its bound receipt', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'cowork-longcat-'));
+    const reference = path.join(root, 'lisa.png');
+    await writeFile(reference, Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+    const wav = new Uint8Array(44);
+    wav.set(Buffer.from('RIFF'), 0);
+    wav.set(Buffer.from('WAVE'), 8);
+    const rights = {
+      voiceProfileId: 'lisa-fr-v1', locale: 'fr-FR', provider: 'piper' as const,
+      provenanceRef: 'contract:voice-lisa-fr', profileRevision: 'a'.repeat(64),
+      registryRevision: 'b'.repeat(64), evidenceSha256: 'c'.repeat(64), commercialUseApproved: true as const,
+    };
+    const client = {
+      capabilities: vi.fn(),
+      submit: vi.fn().mockResolvedValue(avatarJob),
+      status: vi.fn().mockResolvedValue(avatarJob),
+      cancel: vi.fn(),
+      downloadArtifact: vi.fn().mockResolvedValue(new Uint8Array([1, 2, 3])),
+      uploadAsset: vi.fn().mockImplementation(async (name: string) => ({ path: `/staged/${name}`, bytes: 44 })),
+    };
+    const bridge = new GpuMediaAdminBridge({
+      client: async () => client,
+      resolveAssetPath: async () => reference,
+      synthesize: async () => ({ audio: wav.buffer, rights }),
+      activeRoot: () => root,
+    });
+    try {
+      await expect(bridge.submitAvatar({
+        turnId: 'turn-1', referenceAssetId: 'asset:lisa', narration: 'Bonjour', prompt: 'Lisa sourit',
+        locale: 'fr-FR', voiceProfileId: 'lisa-fr-v1',
+      })).resolves.toEqual(avatarJob);
+      const materialized = await bridge.materialize(avatarJob.id);
+      expect(materialized).toMatchObject({ ok: true, narrationRights: rights });
+      await expect(readFile(materialized.rightsPath!, 'utf8')).resolves.toContain('contract:voice-lisa-fr');
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('rejects a symlink in the confined LongCat output tree', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'cowork-longcat-link-'));
+    const outside = await mkdtemp(path.join(os.tmpdir(), 'cowork-longcat-outside-'));
+    await writeFile(path.join(root, 'lisa.png'), Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+    await mkdir(path.join(root, '.codebuddy'));
+    await symlink(outside, path.join(root, '.codebuddy', 'media-generation'));
+    const wav = new Uint8Array(44); wav.set(Buffer.from('RIFF')); wav.set(Buffer.from('WAVE'), 8);
+    const bridge = new GpuMediaAdminBridge({
+      client: async () => ({
+        capabilities: vi.fn(), submit: vi.fn().mockResolvedValue(avatarJob), status: vi.fn(), cancel: vi.fn(),
+        downloadArtifact: vi.fn(), uploadAsset: vi.fn().mockResolvedValue({ path: '/staged/file', bytes: 44 }),
+      }),
+      resolveAssetPath: async () => path.join(root, 'lisa.png'),
+      synthesize: async () => ({
+        audio: wav.buffer,
+        rights: { voiceProfileId: 'lisa-fr-v1', locale: 'fr-FR', provider: 'piper', provenanceRef: 'contract:x',
+          profileRevision: 'a'.repeat(64), registryRevision: 'b'.repeat(64), evidenceSha256: 'c'.repeat(64), commercialUseApproved: true },
+      }),
+      activeRoot: () => root,
+    });
+    try {
+      await expect(bridge.submitAvatar({ turnId: 'turn-1', referenceAssetId: 'asset:lisa', narration: 'Bonjour',
+        prompt: 'Lisa sourit', locale: 'fr-FR', voiceProfileId: 'lisa-fr-v1' })).rejects.toThrow(/lien symbolique/);
+    } finally {
+      await Promise.all([rm(root, { recursive: true, force: true }), rm(outside, { recursive: true, force: true })]);
+    }
   });
 });

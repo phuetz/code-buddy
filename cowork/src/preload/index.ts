@@ -92,9 +92,11 @@ import type { LiveLauncherRunView, LiveLauncherStartInput } from '../shared/live
 import type {
   GpuMediaAdminApi,
   GpuMediaAdminSubmitInput,
+  AvatarVideoStagedInput,
   GpuMediaDownloadResult,
   GpuMediaCapabilities,
   GpuMediaJobView,
+  GpuMediaMaterializeResult,
 } from '../shared/gpu-media-admin';
 import type { CompanionAvatarRendererSnapshot } from '../shared/avatar-renderer';
 import type {
@@ -204,6 +206,12 @@ import {
   type AvatarBibleMetadataInput,
   type AvatarBibleUpdateInput,
 } from '../shared/avatar-bible';
+import {
+  CREATIVE_ASSET_CHANNELS,
+  type CreativeAssetApi,
+  type CreativeAssetListInput,
+  type CreativeAssetMaterializeInput,
+} from '../shared/creative-assets';
 
 type AssistantSettingGroup = 'voice' | 'speech' | 'behavior' | 'companion';
 type AssistantSettingType = 'toggle' | 'enum' | 'text' | 'voice' | 'volume';
@@ -1024,6 +1032,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.invoke(AVATAR_BIBLE_CHANNELS.materializeForFlow, input),
   } satisfies AvatarBibleApi,
 
+  creativeAssets: {
+    list: (input?: CreativeAssetListInput) => ipcRenderer.invoke(CREATIVE_ASSET_CHANNELS.list, input),
+    importImages: () => ipcRenderer.invoke(CREATIVE_ASSET_CHANNELS.importImages),
+    materialize: (input: CreativeAssetMaterializeInput) =>
+      ipcRenderer.invoke(CREATIVE_ASSET_CHANNELS.materialize, input),
+  } satisfies CreativeAssetApi,
+
   media: {
     generateImage: (request: {
       prompt: string;
@@ -1034,7 +1049,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.invoke('media.generateImage', request),
     editImage: (request: {
       prompt: string;
-      imagePath: string;
+      imagePath?: string;
+      imageAssetId?: string;
       maskDataUrl?: string;
       selections?: Array<{ x: number; y: number; width: number; height: number }>;
       provider?: string;
@@ -1069,6 +1085,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
       model?: string;
       imagePath?: string;
       referenceImagePaths?: string[];
+      imageAssetId?: string;
+      referenceAssetIds?: string[];
     }): Promise<{ ok: boolean; outputPath?: string; url?: string; error?: string }> =>
       ipcRenderer.invoke('media.generateVideo', request),
     capabilities: (): Promise<{
@@ -1088,9 +1106,19 @@ contextBridge.exposeInMainWorld('electronAPI', {
       clips: string[];
       aspect?: string;
       name?: string;
+      editorial?: {
+        title: string;
+        description: string;
+        series?: string;
+        syntheticMediaDisclosure: boolean;
+        prompt: string;
+        assetIds: string[];
+        previousPrompts?: string[];
+      };
     }): Promise<{
       ok: boolean;
       outputPath?: string;
+      metadataPath?: string;
       url?: string;
       duration?: number;
       warnings?: string[];
@@ -5130,12 +5158,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
     capabilities: (): Promise<GpuMediaCapabilities> => ipcRenderer.invoke('gpuMedia.capabilities'),
     submit: (input: GpuMediaAdminSubmitInput): Promise<GpuMediaJobView> =>
       ipcRenderer.invoke('gpuMedia.submit', input),
+    submitAvatar: (input: AvatarVideoStagedInput): Promise<GpuMediaJobView> =>
+      ipcRenderer.invoke('gpuMedia.submitAvatar', input),
     status: (jobId: string): Promise<GpuMediaJobView> =>
       ipcRenderer.invoke('gpuMedia.status', jobId),
     cancel: (jobId: string): Promise<GpuMediaJobView> =>
       ipcRenderer.invoke('gpuMedia.cancel', jobId),
     download: (jobId: string): Promise<GpuMediaDownloadResult> =>
       ipcRenderer.invoke('gpuMedia.download', jobId),
+    materialize: (jobId: string): Promise<GpuMediaMaterializeResult> =>
+      ipcRenderer.invoke('gpuMedia.materialize', jobId),
   } satisfies GpuMediaAdminApi,
 
   // Knowledge base (Claude Cowork parity)
@@ -5423,7 +5455,8 @@ declare global {
         }>;
         editImage: (request: {
           prompt: string;
-          imagePath: string;
+          imagePath?: string;
+          imageAssetId?: string;
           maskDataUrl?: string;
           selections?: Array<{ x: number; y: number; width: number; height: number }>;
           provider?: string;
@@ -5452,6 +5485,8 @@ declare global {
           model?: string;
           imagePath?: string;
           referenceImagePaths?: string[];
+          imageAssetId?: string;
+          referenceAssetIds?: string[];
         }) => Promise<{ ok: boolean; outputPath?: string; url?: string; error?: string }>;
         capabilities: () => Promise<{
           imageGeneration: boolean;
@@ -5466,9 +5501,23 @@ declare global {
           provider: string;
           model: string;
         }>;
-        assembleVideo: (request: { clips: string[]; aspect?: string; name?: string }) => Promise<{
+        assembleVideo: (request: {
+          clips: string[];
+          aspect?: string;
+          name?: string;
+          editorial?: {
+            title: string;
+            description: string;
+            series?: string;
+            syntheticMediaDisclosure: boolean;
+            prompt: string;
+            assetIds: string[];
+            previousPrompts?: string[];
+          };
+        }) => Promise<{
           ok: boolean;
           outputPath?: string;
+          metadataPath?: string;
           url?: string;
           duration?: number;
           warnings?: string[];
@@ -6564,6 +6613,7 @@ declare global {
       meetingLive: MeetingLiveApi;
       comfyLab: ComfyLabApi;
       avatarBible: AvatarBibleApi;
+      creativeAssets: CreativeAssetApi;
       missions: {
         list: (filter?: MissionFilter) => Promise<{
           ok: boolean;

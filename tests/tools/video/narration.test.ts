@@ -14,6 +14,7 @@ import {
   buildPiperArgs,
   buildMuxNarrationArgs,
   synthesizeNarration,
+  synthesizeLocalizedNarration,
 } from '../../../src/tools/video/narration.js';
 
 function makeSpawn(
@@ -108,5 +109,109 @@ describe('synthesizeNarration (injected)', () => {
     expect(
       await synthesizeNarration('hello', '/tmp/n.wav', { spawn: makeSpawn({ piperCode: 1 }), env })
     ).toBeNull();
+  });
+});
+
+describe('synthesizeLocalizedNarration', () => {
+  it('uses an explicit Piper profile instead of the global environment voice', async () => {
+    const seen: string[][] = [];
+    const result = await synthesizeLocalizedNarration(
+      {
+        text: 'Hello',
+        outputPath: '/tmp/localized.wav',
+        locale: 'en-us',
+        voiceProfileId: 'lisa-en-v1',
+        fallbackPolicy: 'none',
+      },
+      {
+        spawn: makeSpawn({ seen }),
+        env: { CODEBUDDY_TTS_VOICE: '/wrong-global.onnx' } as NodeJS.ProcessEnv,
+        resolveVoiceProfile: async () => ({
+          id: 'lisa-en-v1',
+          locale: 'en-US',
+          provider: 'piper',
+          modelPath: '/approved/lisa-en.onnx',
+          commercialUseApproved: true,
+          provenanceRef: 'voice-rights/lisa-en-v1',
+        }),
+      },
+    );
+    expect(result).toMatchObject({
+      locale: 'en-US',
+      voiceProfileId: 'lisa-en-v1',
+      provider: 'piper',
+    });
+    expect(seen.some((args) => args.includes('/approved/lisa-en.onnx'))).toBe(true);
+    expect(seen.some((args) => args.includes('/wrong-global.onnx'))).toBe(false);
+  });
+
+  it('passes the approved voice and language to Pocket', async () => {
+    const seen: unknown[] = [];
+    const result = await synthesizeLocalizedNarration(
+      {
+        text: 'Bonjour',
+        outputPath: '/tmp/pocket-localized.wav',
+        locale: 'fr-FR',
+        voiceProfileId: 'lisa-fr-v1',
+        fallbackPolicy: 'none',
+      },
+      {
+        spawn: makeSpawn(),
+        resolveVoiceProfile: async () => ({
+          id: 'lisa-fr-v1',
+          locale: 'fr-FR',
+          provider: 'pocket',
+          voice: 'estelle',
+          language: 'french',
+          highQuality: true,
+          commercialUseApproved: true,
+          provenanceRef: 'voice-rights/lisa-fr-v1',
+        }),
+        pocketSynthesize: async (text, options) => {
+          seen.push(text, options);
+          return Buffer.from('fake wav');
+        },
+      },
+    );
+    expect(seen).toEqual([
+      'Bonjour',
+      { voice: 'estelle', language: 'french', highQuality: true },
+    ]);
+    expect(result).toMatchObject({ locale: 'fr-FR', provider: 'pocket' });
+  });
+
+  it('fails closed for mismatched locale, missing rights or missing profile', async () => {
+    const request = {
+      text: 'Hello',
+      outputPath: '/tmp/no.wav',
+      locale: 'en-US',
+      voiceProfileId: 'voice-v1',
+      fallbackPolicy: 'none' as const,
+    };
+    expect(
+      await synthesizeLocalizedNarration(request, {
+        resolveVoiceProfile: async () => ({
+          id: 'voice-v1',
+          locale: 'fr-FR',
+          provider: 'piper',
+          modelPath: '/voice.onnx',
+          commercialUseApproved: true,
+          provenanceRef: 'rights/voice-v1',
+        }),
+      }),
+    ).toBeNull();
+    expect(
+      await synthesizeLocalizedNarration(request, {
+        resolveVoiceProfile: async () => ({
+          id: 'voice-v1',
+          locale: 'en-US',
+          provider: 'piper',
+          modelPath: '/voice.onnx',
+          commercialUseApproved: false,
+          provenanceRef: '',
+        }),
+      }),
+    ).toBeNull();
+    expect(await synthesizeLocalizedNarration(request)).toBeNull();
   });
 });

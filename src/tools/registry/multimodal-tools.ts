@@ -1655,11 +1655,101 @@ export class ArchiveExecuteTool implements ITool {
 /**
  * Create all multimodal tool instances
  */
+/** Generate a portrait of Lisa (LoRA trigger) and optionally send it on Telegram. */
+export class LisaSelfieTool implements ITool {
+  readonly name = 'lisa_selfie';
+  readonly description =
+    'Generate a photo/selfie of Lisa (companion character, Krea LoRA when installed) and optionally send it on Telegram. Use when the user asks for a picture of Lisa / photo of you / selfie.';
+
+  constructor(private readonly options: { rootDir?: string } = {}) {}
+
+  async execute(input: Record<string, unknown>, context?: IToolExecutionContext): Promise<ToolResult> {
+    try {
+      const { createAndMaybeSendLisaSelfie } = await import('../../companion/lisa-selfie.js');
+      const moodRaw = optionalString(input, 'mood') ?? 'portrait';
+      const mood = (
+        ['tender', 'playful', 'bold', 'sparkly', 'calm', 'mika', 'portrait'] as const
+      ).includes(moodRaw as 'tender')
+        ? (moodRaw as 'tender' | 'playful' | 'bold' | 'sparkly' | 'calm' | 'mika' | 'portrait')
+        : 'portrait';
+      const sendTelegram = input.send_telegram !== false && input.sendTelegram !== false;
+      const result = await createAndMaybeSendLisaSelfie({
+        mood,
+        ...(optionalString(input, 'scene') ? { scene: optionalString(input, 'scene') } : {}),
+        sendTelegram,
+        aspectRatio: (optionalString(input, 'aspect_ratio') as 'portrait') || 'portrait',
+        rootDir: this.options.rootDir ?? context?.cwd ?? process.cwd(),
+        force: input.force === true,
+      });
+      return {
+        success: result.success,
+        output: JSON.stringify(result, null, 2),
+        data: result,
+        ...(result.error && !result.success ? { error: result.error } : {}),
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
+      };
+    }
+  }
+
+  getSchema(): ToolSchema {
+    return {
+      name: this.name,
+      description: this.description,
+      parameters: {
+        type: 'object',
+        properties: {
+          mood: {
+            type: 'string',
+            enum: ['tender', 'playful', 'bold', 'sparkly', 'calm', 'mika', 'portrait'],
+            description: 'Expressive register for the portrait.',
+          },
+          scene: {
+            type: 'string',
+            description: 'Optional short scene description (no paths).',
+          },
+          send_telegram: {
+            type: 'boolean',
+            description: 'Send the photo on Telegram after generation (default true when configured).',
+          },
+          aspect_ratio: {
+            type: 'string',
+            enum: ['landscape', 'square', 'portrait'],
+            description: 'Default portrait.',
+          },
+        },
+        required: [],
+      },
+    };
+  }
+
+  getMetadata() {
+    return {
+      name: this.name,
+      description: this.description,
+      category: 'media' as ToolCategoryType,
+      keywords: ['lisa', 'selfie', 'photo', 'telegram', 'portrait', 'companion', 'lora'],
+      priority: 8,
+      requiresConfirmation: false,
+      modifiesFiles: true,
+      makesNetworkRequests: true,
+    };
+  }
+
+  isAvailable(): boolean {
+    return true;
+  }
+}
+
 export function createMultimodalTools(): ITool[] {
   return [
     new AudioExecuteTool(),
     new TextToSpeechTool(),
     new ImageGenerateTool(),
+    new LisaSelfieTool(),
     new ImageEditTool(),
     new VideoAnalyzeTool(),
     new UnderstandVideoTool(),

@@ -190,9 +190,14 @@ export const ASSISTANT_SETTINGS: AssistantSetting[] = [
     label: 'Voicebox delivery instruction',
     group: 'voice',
     type: 'text',
-    default: '',
+    // Acoustic only — never rewrite words. Lisa default: warm intimate FR companion.
+    default:
+      'Speak as Lisa: warm intimate French girlfriend energy, soft smile in the voice, ' +
+      'natural mid tempo, slight breathiness, never rewrite or invent words — delivery only.',
     envFile: 'both',
-    help: 'Optional acoustic delivery only (tone, pace, warmth), capped at 500 characters.',
+    help:
+      'Acoustic delivery only (tone, pace, warmth), capped at 500 characters. ' +
+      'Does not rewrite Lisa’s words (personality stays false on Voicebox).',
   },
   {
     key: 'CODEBUDDY_VOICEBOX_AUDIO_STREAM',

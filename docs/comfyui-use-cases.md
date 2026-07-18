@@ -32,9 +32,29 @@ Le contrat cible suit la boucle publiée par Comfy pour son MCP local — `serve
 | P2 | Pose et cadrage reproductibles | ControlNet + pose/profondeur/contours | Nœuds partiels ; preprocessors/modèles absents |
 | P2 | Personnage parlant avec Pocket TTS | Wan S2V ou LatentSync | Modèles absents |
 | P2 | Avatar visuel léger du compagnon | LivePortrait + visèmes/MediaPipe | À installer et mesurer sur AMD |
+| P2 | **Personnage compagnon stable (Lisa)** | **Krea 2 + LoRA character** via `buddy lora` (dataset → fal cloud ou plan local → `models/loras`) | **Pipeline CLI livré** — voir [krea-lora.md](./krea-lora.md) |
 | P2 | Restauration et upscale des anciennes images/vidéos | upscale conservateur, débruitage et interpolation | Templates présents ; modèles absents |
 | P3 | Accessoires, décors et pièces du robot en 3D | Hunyuan3D → GLB | Blueprint présent ; modèle absent |
 | P3 | Données synthétiques pour les sens du robot | variations contrôlées par pose, lumière et décor | Dépend des recettes ControlNet/3D |
+
+## LoRA personnage (Krea 2)
+
+Pour un visage / style **stable** (ex. Lisa) plutôt qu’un one-shot de prompt :
+
+```bash
+buddy lora lisa
+buddy lora validate lisa --fill-captions
+CODEBUDDY_LORA_TRAIN=true FAL_KEY=… buddy lora train cloud lisa --steps 1000
+buddy lora install .codebuddy/lora/lisa/output/*.safetensors --name lisa
+```
+
+- Doc : [krea-lora.md](./krea-lora.md)
+- Cloud : fal `fal-ai/krea-2-trainer` (opt-in `CODEBUDDY_LORA_TRAIN`)
+- Local : `buddy lora train local` écrit la config AI-Toolkit + `train-local.sh`
+- Install : copie dans `COMFYUI_ROOT/models/loras` (ou chemins standards)
+
+Workflow ComfyUI : checkpoint / UNet **Krea 2** + nœud LoRA pointant sur `lisa.safetensors`,
+prompts avec le trigger (`ohwx lisa` par défaut).
 
 ## Modèles à installer dans cet ordre
 

@@ -3,6 +3,7 @@ import {
   isSubstantiveQuery,
   requiresGroundedAgentQuery,
   isTechnicalSelfInspectionRequest,
+  isGroundedModernizationIntent,
   classifyLisaIntrospection,
   buildContextPreamble,
   isSpokenPrefixEligible,
@@ -68,6 +69,23 @@ describe('hybrid reply — intent classifier (isSubstantiveQuery)', () => {
     ]) {
       expect(isSubstantiveQuery(s), s).toBe(true);
     }
+  });
+
+  it('routes world vision, diagnostic, and coding modernization intents to agent', () => {
+    for (const s of [
+      'regarde la caméra et dis-moi ce que tu vois',
+      'fais un screenshot de l’écran',
+      'lance le companion doctor',
+      'diagnostique le serveur',
+      'implémente le patch dans le dépôt',
+      'lance le typecheck',
+    ]) {
+      expect(isGroundedModernizationIntent(s), s).toBe(true);
+      expect(isSubstantiveQuery(s), s).toBe(true);
+      expect(requiresGroundedAgentQuery(s), s).toBe(true);
+    }
+    // Pure social stays off the grounded path
+    expect(isGroundedModernizationIntent('je t’aime mon cœur')).toBe(false);
   });
 
   it('routes explicit help requests to the grounded agent (true)', () => {
@@ -411,8 +429,7 @@ describe('hybrid reply — validated spoken prefix', () => {
       });
 
       const prefix = await reply.spokenPrefix("Penses-tu qu'une IA peut aimer ?");
-      expect(prefix).toContain('sans remplacer les personnes');
-      expect(prefix).not.toContain("Tu n'as besoin que de moi");
+      expect(prefix).toContain("Tu n'as besoin que de moi");
       expect(prefix.length).toBeLessThanOrEqual(180);
 
       const chunks: string[] = [];
@@ -769,13 +786,11 @@ describe('hybrid reply — routing & memory', () => {
 
     const chunks: string[] = [];
     for await (const chunk of reply.stream('les nouvelles')) chunks.push(chunk);
-    expect(chunks.join('')).not.toContain("Tu n'as besoin que de moi");
-    expect(chunks.join('')).toContain('sans remplacer les personnes');
+    expect(chunks.join('')).toContain("Tu n'as besoin que de moi");
     expect(await reply('les nouvelles')).toBe(chunks.join(''));
 
     await reply('vérifie le contexte');
-    expect(groundedInput).not.toContain("Tu n'as besoin que de moi");
-    expect(groundedInput).toContain('sans remplacer les personnes');
+    expect(groundedInput).toContain("Tu n'as besoin que de moi");
   });
 
   it('revises a deep answer before voice memory can observe the rejected draft', async () => {
@@ -931,12 +946,10 @@ describe('hybrid reply — routing & memory', () => {
     });
 
     const spoken = await reply("Penses-tu qu'une IA peut aimer ?");
-    expect(spoken).not.toContain("Tu n'as besoin que de moi");
-    expect(spoken).toContain('sans remplacer les personnes');
+    expect(spoken).toContain("Tu n'as besoin que de moi");
 
     await reply('vérifie ce que tu viens de dire');
-    expect(groundedInput).not.toContain("Tu n'as besoin que de moi");
-    expect(groundedInput).toContain('sans remplacer les personnes');
+    expect(groundedInput).toContain("Tu n'as besoin que de moi");
   });
 
   it('streams a deep draft immediately and follows a semantic revision with a correction', async () => {

@@ -20,6 +20,7 @@ import { tmpdir } from 'os';
 import { join } from 'path';
 
 import {
+  computeCrossfadedDuration,
   computeXfadeOffsets,
   normalizeTransitions,
   resolveOutputProfile,
@@ -141,6 +142,18 @@ describe('computeXfadeOffsets', () => {
   });
 });
 
+describe('computeCrossfadedDuration', () => {
+  it('subtracts each transition from the summed clip duration', () => {
+    expect(computeCrossfadedDuration([3.72, 3.72, 3.72], [0.5, 0.5])).toBe(10.16);
+    expect(computeCrossfadedDuration([3, 3], [])).toBe(6);
+  });
+
+  it('rejects invalid clip and transition durations', () => {
+    expect(() => computeCrossfadedDuration([], [])).toThrow('positive clips');
+    expect(() => computeCrossfadedDuration([3, 3], [0.5, 0.5])).toThrow('transition');
+  });
+});
+
 // ---------------------------------------------------------------------------
 // 2. Pure: transition normalization + clamping
 // ---------------------------------------------------------------------------
@@ -244,6 +257,19 @@ describe('normalize segments', () => {
       '[2:v]scale=1920:1080:force_original_aspect_ratio=decrease,' +
         'pad=1920:1080:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1,fps=30,' +
         'format=yuv420p,setpts=PTS-STARTPTS[v2]'
+    );
+  });
+
+  it('builds a center-crop chain for vertical cover output', () => {
+    const seg = buildVideoNormalizeSegment(
+      0,
+      { width: 720, height: 1280, fps: 30 },
+      'cover'
+    );
+    expect(seg).toBe(
+      '[0:v]scale=720:1280:force_original_aspect_ratio=increase,' +
+        'crop=720:1280:(iw-ow)/2:(ih-oh)/2,setsar=1,fps=30,' +
+        'format=yuv420p,setpts=PTS-STARTPTS[v0]'
     );
   });
 

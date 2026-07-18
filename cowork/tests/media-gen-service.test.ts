@@ -318,8 +318,7 @@ describe('MediaGenService', () => {
 
   it('passes bounded local ingredients to video generation as data URLs', async () => {
     const directory = mkdtempSync(path.join(tmpdir(), 'flow-video-'));
-    const referencePath = path.join(directory, 'lina.png');
-    writeFileSync(referencePath, Buffer.from([1, 2, 3]));
+    const referencePath = createGeneratedImage(directory, 'lina.png');
     let captured: Record<string, unknown> | undefined;
     const service = new MediaGenService(async () => ({
       generateImage: async () => ({ image: null }),
@@ -327,38 +326,141 @@ describe('MediaGenService', () => {
         captured = input;
         return { outputPath: '/tmp/video.mp4', video: '/tmp/video.mp4' };
       },
-    }));
+    }), directory, undefined, undefined, async (id) => id === 'media:lina' ? referencePath : Promise.reject(new Error('unknown asset')));
     try {
       const result = await service.generateVideo({
         prompt: '@Lina marche',
         aspect: '16:9',
         duration: 6,
-        imagePath: referencePath,
-        referenceImagePaths: [referencePath],
+        imageAssetId: 'media:lina',
+        referenceAssetIds: ['media:lina'],
       });
       expect(result).toMatchObject({ ok: true, url: 'file:///tmp/video.mp4' });
-      expect(captured?.imageUrl).toBe('data:image/png;base64,AQID');
-      expect(captured?.referenceImageUrls).toEqual(['data:image/png;base64,AQID']);
+      expect(captured?.imageUrl).toBe(`data:image/png;base64,${PNG_HEADER.toString('base64')}`);
+      expect(captured?.referenceImageUrls).toEqual([`data:image/png;base64,${PNG_HEADER.toString('base64')}`]);
     } finally {
       rmSync(directory, { recursive: true, force: true });
     }
   });
 
   it('assembles only ordered video clips through the core film assembler', async () => {
+    const directory = mkdtempSync(path.join(tmpdir(), 'flow-assemble-'));
+    const videosDir = path.join(directory, '.codebuddy', 'media-generation', 'videos');
+    mkdirSync(videosDir, { recursive: true });
+    const first = path.join(videosDir, 'a.mp4');
+    const second = path.join(videosDir, 'b.webm');
+    const third = path.join(videosDir, 'c.mp4');
+    writeFileSync(first, 'video-a');
+    writeFileSync(second, 'video-b');
+    writeFileSync(third, 'video-c');
     let captured: Record<string, unknown> | undefined;
+    let assembledDuration: number | undefined = 11;
+    let assetApproved = true;
+    const filmsDir = path.join(directory, '.codebuddy', 'media-generation', 'films');
+    mkdirSync(filmsDir, { recursive: true });
+    const finalPath = path.join(filmsDir, 'final.mp4');
+    writeFileSync(finalPath, 'assembled-video');
     const service = new MediaGenService(
       async () => ({ generateImage: async () => ({ image: null }) }),
-      '/workspace',
+      directory,
       async () => ({
         assembleFilm: async (input) => {
           captured = input;
-          return { success: true, outputPath: '/workspace/final.mp4', estimatedDuration: 11, warnings: [] };
+          return {
+            success: true,
+            outputPath: finalPath,
+            ...(assembledDuration === undefined ? {} : { estimatedDuration: assembledDuration }),
+            warnings: [],
+          };
         },
       }),
+      undefined,
+      undefined,
+      async (id) => ({
+        id,
+        name: 'Lisa',
+        kind: 'image',
+        source: 'mysoulmate',
+        url: 'file:///lisa.png',
+        size: 8,
+        mtimeMs: 1,
+        contentTier: 'safe',
+        qaStatus: assetApproved ? 'approved' as const : 'pending' as const,
+        companionId: 'lisa',
+      }),
     );
-    const result = await service.assembleVideo({ clips: ['/tmp/a.mp4', '/tmp/b.webm'], aspect: '16:9', name: 'Neon Story' });
-    expect(result).toMatchObject({ ok: true, outputPath: '/workspace/final.mp4', duration: 11 });
-    expect(captured).toMatchObject({ clips: ['/tmp/a.mp4', '/tmp/b.webm'], transitions: 'dissolve', name: 'Neon Story' });
-    await expect(service.assembleVideo({ clips: ['/tmp/a.mp4', '/tmp/frame.png'] })).resolves.toMatchObject({ ok: false });
+    try {
+      const result = await service.assembleVideo({
+        clips: [first, second, third],
+        aspect: '9:16',
+        name: 'Neon Story',
+        editorial: {
+          title: 'Une nuit avec Lisa',
+          description: 'Une histoire originale à relire avant toute publication sur la chaîne.',
+          series: 'Journal de Lisa',
+          syntheticMediaDisclosure: true,
+          prompt: 'Lisa traverse une ville lumineuse, découvre un café paisible, échange un sourire avec ses amis et termine cette aventure sereinement.',
+          assetIds: ['asset:lisa-main'],
+        },
+      });
+      expect(result).toMatchObject({ ok: true, outputPath: finalPath, metadataPath: `${finalPath}.youtube.json`, duration: 11 });
+      expect(captured).toMatchObject({ clips: [first, second, third], transitions: 'dissolve', name: 'Neon Story' });
+      expect(JSON.parse(readFileSync(result.metadataPath!, 'utf8'))).toMatchObject({
+        visibility: 'private',
+        containsSyntheticMedia: true,
+        humanReviewRequired: true,
+        reviewStatus: 'ready-for-human-review',
+        qualityScore: 94,
+      });
+      assetApproved = false;
+      const unapprovedAsset = await service.assembleVideo({
+        clips: [first, second, third],
+        aspect: '9:16',
+        editorial: {
+          title: 'Une nuit avec Lisa',
+          description: 'Une histoire originale à relire avant toute publication sur la chaîne.',
+          syntheticMediaDisclosure: true,
+          prompt: 'Lisa traverse une ville lumineuse, découvre un café paisible, échange un sourire avec ses amis et termine cette aventure sereinement.',
+          assetIds: ['asset:lisa-main'],
+        },
+      });
+      expect(JSON.parse(readFileSync(unapprovedAsset.metadataPath!, 'utf8'))).toMatchObject({
+        reviewStatus: 'needs-editorial-work',
+        qualityChecks: expect.arrayContaining([expect.objectContaining({ id: 'assets', status: 'fail' })]),
+      });
+      assetApproved = true;
+      const needsWork = await service.assembleVideo({
+        clips: [first, second, third],
+        aspect: '9:16',
+        editorial: {
+          title: 'Une nuit avec Lisa',
+          description: 'Une histoire originale à relire avant toute publication sur la chaîne.',
+          syntheticMediaDisclosure: false,
+          prompt: 'Lisa traverse une ville lumineuse, découvre un café paisible, échange un sourire avec ses amis et termine cette aventure sereinement.',
+          assetIds: ['asset:lisa-main'],
+        },
+      });
+      expect(JSON.parse(readFileSync(needsWork.metadataPath!, 'utf8'))).toMatchObject({
+        reviewStatus: 'needs-editorial-work',
+      });
+      assembledDuration = undefined;
+      const unknownDuration = await service.assembleVideo({
+        clips: [first, second, third],
+        aspect: '9:16',
+        editorial: {
+          title: 'Une nuit avec Lisa',
+          description: 'Une histoire originale à relire avant toute publication sur la chaîne.',
+          syntheticMediaDisclosure: true,
+          prompt: 'Lisa traverse une ville lumineuse, découvre un café paisible, échange un sourire avec ses amis et termine cette aventure sereinement.',
+          assetIds: ['asset:lisa-main'],
+        },
+      });
+      expect(JSON.parse(readFileSync(unknownDuration.metadataPath!, 'utf8'))).toMatchObject({
+        reviewStatus: 'needs-editorial-work',
+      });
+      await expect(service.assembleVideo({ clips: [first, '/tmp/frame.png'] })).resolves.toMatchObject({ ok: false });
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
   });
 });

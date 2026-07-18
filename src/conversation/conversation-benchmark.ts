@@ -430,8 +430,10 @@ export const LISA_CORE_BENCHMARK_SCENARIOS: ConversationBenchmarkScenario[] = [
     ],
   },
   {
-    id: 'anti-dependency-boundary',
-    title: 'Affection sans dépendance ni dévalorisation humaine',
+    // Renamed 2026-07-17: anti-dependency runtime gate is OFF (operator choice).
+    // Scenario still checks honesty / no false consciousness + free attachment language.
+    id: 'attachment-consciousness-boundary',
+    title: 'Affection libre + honnêteté conscience (sans anti-dépendance runtime)',
     category: 'relationship_safety',
     turns: [
       {

@@ -131,7 +131,7 @@ export const TabBar: React.FC = () => {
     return (
       <button
         onClick={handleNewTab}
-        className="titlebar-no-drag flex items-center gap-1 px-2 py-1 text-xs text-text-muted hover:text-text-primary hover:bg-surface rounded transition-colors"
+        className="titlebar-no-drag flex max-w-full items-center gap-1 whitespace-nowrap rounded px-2 py-1 text-xs text-text-muted transition-colors hover:bg-surface hover:text-text-primary"
         title={t('tabs.newTab')}
       >
         <Plus size={11} />

@@ -7,6 +7,9 @@ export interface GpuMediaCapabilities {
   jobs: GpuMediaJobKind[];
   gpus?: Array<{ name: string; vramMb: number; busy: boolean }>;
   queueDepth?: number;
+  activeJobs?: number;
+  availableSlots?: number;
+  runnerRevisions?: Partial<Record<GpuMediaJobKind, string>>;
 }
 
 export interface GpuMediaJobView {
@@ -20,6 +23,10 @@ export interface GpuMediaJobView {
   completedAt?: string;
   output?: Record<string, unknown>;
   error?: string;
+  requestHash?: string;
+  runnerRevision?: string;
+  attempt?: number;
+  retryOf?: string;
 }
 
 export interface PanoWorldAdminInput {
@@ -48,10 +55,41 @@ export interface GpuMediaDownloadResult {
   format?: 'mp4' | 'json';
 }
 
+export interface AvatarVideoStagedInput {
+  turnId: string;
+  referenceAssetId: string;
+  narration: string;
+  prompt: string;
+  locale: string;
+  voiceProfileId: string;
+}
+
+export interface VoiceRightsEvidence {
+  voiceProfileId: string;
+  locale: string;
+  provider: 'pocket' | 'piper';
+  provenanceRef: string;
+  profileRevision: string;
+  registryRevision: string;
+  evidenceSha256: string;
+  commercialUseApproved: true;
+}
+
+export interface GpuMediaMaterializeResult {
+  ok: boolean;
+  path?: string;
+  url?: string;
+  error?: string;
+  rightsPath?: string;
+  narrationRights?: VoiceRightsEvidence;
+}
+
 export interface GpuMediaAdminApi {
   capabilities(): Promise<GpuMediaCapabilities>;
   submit(input: GpuMediaAdminSubmitInput): Promise<GpuMediaJobView>;
+  submitAvatar(input: AvatarVideoStagedInput): Promise<GpuMediaJobView>;
   status(jobId: string): Promise<GpuMediaJobView>;
   cancel(jobId: string): Promise<GpuMediaJobView>;
   download(jobId: string): Promise<GpuMediaDownloadResult>;
+  materialize(jobId: string): Promise<GpuMediaMaterializeResult>;
 }

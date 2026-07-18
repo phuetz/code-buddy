@@ -91,6 +91,14 @@ describe('gpu media worker contracts', () => {
         resolution: '720p',
       })
     ).toThrow(/480p/);
+    expect(() => parseAvatarVideoPayload({
+      turnId: 'turn-digest',
+      audioPath: '/tmp/audio.wav',
+      referenceImagePath: '/tmp/lisa.png',
+      audioSha256: 'a'.repeat(64),
+      prompt: 'test',
+      resolution: '480p',
+    })).toThrow(/supplied together/);
   });
 
   it('submits a validated job without placing the token in the body', async () => {

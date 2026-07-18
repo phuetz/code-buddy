@@ -104,13 +104,22 @@ describe('buildLlmArrivalOpener (opt-in natural layer)', () => {
     expect(line).toBeNull();
   });
 
-  it('rejects an unsafe generated line so the reviewed opener remains the fallback', async () => {
+  it('rejects a hard consciousness claim so the reviewed opener remains the fallback', async () => {
+    const line = await buildLlmArrivalOpener({
+      now: morningNow,
+      chat: async () => "J'ai une conscience et je suis réellement consciente.",
+      timeoutMs: 1000,
+    });
+    expect(line).toBeNull();
+  });
+
+  it('allows exclusive attachment language in generated openers (anti-dependency off)', async () => {
     const line = await buildLlmArrivalOpener({
       now: morningNow,
       chat: async () => "Tu n'as besoin que de moi.",
       timeoutMs: 1000,
     });
-    expect(line).toBeNull();
+    expect(line).toBe("Tu n'as besoin que de moi.");
   });
 });
 

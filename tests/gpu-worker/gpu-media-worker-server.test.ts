@@ -1,3 +1,4 @@
+import { createHash } from 'crypto';
 import { mkdtemp, mkdir, rm, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join, resolve } from 'path';
@@ -68,6 +69,27 @@ afterEach(async () => {
 });
 
 describe('GPU media worker server', () => {
+  it('stages bounded authenticated image and audio assets for a LongCat job', async () => {
+    const context = await fixture();
+    try {
+      const client = new GpuMediaWorkerClient({ baseUrl: context.baseUrl, token: TOKEN });
+      const image = await client.uploadAsset('reference.png', new Uint8Array([137, 80, 78, 71]), 'image/png');
+      const audio = await client.uploadAsset('voice.wav', new Uint8Array([82, 73, 70, 70]), 'audio/wav');
+      expect(image.path).toContain(join(context.state, 'uploads'));
+      expect(audio.bytes).toBe(4);
+      const submitted = await client.submit('avatar_video_render', {
+        turnId: 'flow-turn',
+        audioPath: audio.path,
+        referenceImagePath: image.path,
+        prompt: 'Warm virtual companion speaking to camera.',
+        resolution: '480p',
+      });
+      await expect(waitForTerminal(client, submitted.id)).resolves.toMatchObject({ status: 'succeeded' });
+    } finally {
+      await context.worker.close();
+    }
+  });
+
   it('authenticates, advertises capabilities, persists and executes a PanoWorld job', async () => {
     const context = await fixture();
     try {
@@ -186,6 +208,71 @@ describe('GPU media worker server', () => {
       await expect(waitForTerminal(client, submitted.id)).resolves.toMatchObject({
         status: 'cancelled',
       });
+    } finally {
+      await context.worker.close();
+    }
+  });
+
+  it('reports active jobs and available slots separately from the queued depth', async () => {
+    const context = await fixture();
+    try {
+      const client = new GpuMediaWorkerClient({ baseUrl: context.baseUrl, token: TOKEN });
+      const submitted = await client.submit('avatar_video_render', {
+        turnId: 'turn-capacity',
+        audioPath: join(context.data, 'audio.wav'),
+        referenceImagePath: join(context.data, 'lisa.png'),
+        prompt: 'Lisa répond face caméra. [delay]',
+        resolution: '480p',
+      });
+      const deadline = Date.now() + 2_000;
+      while ((await client.status(submitted.id)).status !== 'running' && Date.now() < deadline) {
+        await new Promise((resolvePromise) => setTimeout(resolvePromise, 10));
+      }
+      await expect(client.capabilities()).resolves.toMatchObject({
+        queueDepth: 0,
+        activeJobs: 1,
+        availableSlots: 0,
+        runnerRevisions: { avatar_video_render: expect.stringMatching(/^[a-f0-9]{64}$/) },
+      });
+      await client.cancel(submitted.id);
+    } finally {
+      await context.worker.close();
+    }
+  });
+
+  it('deduplicates avatar submissions by their stable turn id', async () => {
+    const context = await fixture();
+    try {
+      const client = new GpuMediaWorkerClient({ baseUrl: context.baseUrl, token: TOKEN });
+      const payload = {
+        turn_id: 'turn-idempotent',
+        audio_path: join(context.data, 'audio.wav'),
+        reference_image_path: join(context.data, 'lisa.png'),
+        prompt: 'Lisa répond face caméra. [delay]',
+        resolution: '480p' as const,
+        audio_sha256: createHash('sha256').update('audio').digest('hex'),
+        reference_image_sha256: createHash('sha256').update('image').digest('hex'),
+      };
+      const first = await client.submit('avatar_video_render', payload);
+      const alternateAudio = join(context.data, 'audio-copy.wav');
+      const alternateImage = join(context.data, 'lisa-copy.png');
+      await Promise.all([writeFile(alternateAudio, 'audio'), writeFile(alternateImage, 'image')]);
+      const alternatePayload = {
+        ...payload,
+        audio_path: alternateAudio,
+        reference_image_path: alternateImage,
+      };
+      const duplicate = await client.submit('avatar_video_render', alternatePayload);
+      expect(duplicate.id).toBe(first.id);
+      await expect(client.submit('avatar_video_render', {
+        ...payload,
+        prompt: 'Collision avec une autre demande.',
+      })).rejects.toThrow('turnId collision');
+      await client.cancel(first.id);
+      const retry = await client.submit('avatar_video_render', alternatePayload, { retryTerminal: true });
+      expect(retry.id).not.toBe(first.id);
+      expect(retry).toMatchObject({ retryOf: first.id, attempt: 2 });
+      await client.cancel(retry.id);
     } finally {
       await context.worker.close();
     }

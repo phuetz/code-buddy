@@ -1,4 +1,4 @@
-import { Layers, LayoutGrid, Palette, Send, Sparkles, Wand2 } from 'lucide-react';
+import { ImagePlus, Layers, LayoutGrid, Palette, Send, Sparkles, Wand2 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { suggestTemplate, type StudioTemplateId } from './utils/studio-intent.js';
 import { designSystemsByCategory, findDesignSystem } from './design-systems-catalog.js';
@@ -20,6 +20,8 @@ export interface StudioScaffoldRequest {
   vars: Record<string, string>;
   designSystem?: string;
   stack?: string;
+  assetIds?: string[];
+  materializedAssets?: Array<{ id: string; name: string; relativePath: string; kind: 'image' | 'video' | 'audio'; contentTier: 'safe' | 'sensual' | 'explicit' }>;
 }
 
 export interface StudioComposerProps {
@@ -75,6 +77,8 @@ export function StudioComposer({ templates, onScaffold, onGenerateWithAI, onProm
   const [designSystem, setDesignSystem] = useState('');
   const [stack, setStack] = useState('static');
   const [showGallery, setShowGallery] = useState(false);
+  const [creativeAssets, setCreativeAssets] = useState<Array<{ id: string; name: string; url: string; source: string }>>([]);
+  const [selectedAssetIds, setSelectedAssetIds] = useState<string[]>([]);
   const selectedTemplate = useMemo(
     () => templates.find((item) => item.id === template) ?? templates[0],
     [template, templates],
@@ -93,6 +97,14 @@ export function StudioComposer({ templates, onScaffold, onGenerateWithAI, onProm
       setTemplate(templates[0]?.id ?? 'react-ts');
     }
   }, [template, templates]);
+
+  useEffect(() => {
+    let active = true;
+    void window.electronAPI?.creativeAssets?.list({ kind: 'image', contentTier: 'safe', limit: 24 })
+      .then((result) => { if (active && result.ok) setCreativeAssets(result.assets); })
+      .catch(() => undefined);
+    return () => { active = false; };
+  }, []);
 
   useEffect(() => {
     if (targetEdited) return;
@@ -154,6 +166,8 @@ export function StudioComposer({ templates, onScaffold, onGenerateWithAI, onProm
       targetDir: targetDir.trim(),
       vars,
       ...(designSystem ? { designSystem } : {}),
+      ...(stack ? { stack } : {}),
+      ...(selectedAssetIds.length ? { assetIds: selectedAssetIds } : {}),
     });
   };
 
@@ -171,6 +185,7 @@ export function StudioComposer({ templates, onScaffold, onGenerateWithAI, onProm
       vars,
       ...(designSystem ? { designSystem } : {}),
       ...(stack ? { stack } : {}),
+      ...(selectedAssetIds.length ? { assetIds: selectedAssetIds } : {}),
     });
   };
 
@@ -265,6 +280,20 @@ export function StudioComposer({ templates, onScaffold, onGenerateWithAI, onProm
             ))}
           </select>
         </div>
+        {creativeAssets.length ? (
+          <div className="rounded-md border border-border bg-background p-2" data-testid="studio-creative-assets">
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <span className="inline-flex items-center gap-1.5 text-xs font-medium"><ImagePlus className="h-3.5 w-3.5" /> Assets visuels validés</span>
+              <span className="text-[10px] text-muted-foreground">safe + approved · {selectedAssetIds.length} sélectionné(s)</span>
+            </div>
+            <div className="flex gap-2 overflow-x-auto pb-1">
+              {creativeAssets.map((asset) => {
+                const selected = selectedAssetIds.includes(asset.id);
+                return <button key={asset.id} type="button" onClick={() => setSelectedAssetIds((current) => selected ? current.filter((id) => id !== asset.id) : [...current, asset.id])} className={`w-20 shrink-0 overflow-hidden rounded-md border text-left ${selected ? 'border-primary ring-2 ring-primary/20' : 'border-border'}`} aria-pressed={selected} title={`${asset.name} · ${asset.source}`}><img src={asset.url} alt="" className="h-14 w-full object-cover" /><span className="block truncate px-1.5 py-1 text-[9px]">{asset.name}</span></button>;
+              })}
+            </div>
+          </div>
+        ) : null}
         <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]">
           <div className="flex items-center gap-2 rounded-md border border-border bg-background px-2">
             <Palette className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />

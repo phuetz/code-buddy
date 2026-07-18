@@ -883,6 +883,24 @@ export const TOOL_METADATA: ToolMetadata[] = [
     description: 'Generate an image through the configured image backend and cache returned media when possible'
   },
   {
+    name: 'lisa_selfie',
+    category: 'media',
+    keywords: [
+      'lisa',
+      'selfie',
+      'photo',
+      'portrait',
+      'telegram',
+      'companion',
+      'lora',
+      'photo de toi',
+      'envoie photo',
+    ],
+    priority: 9,
+    description:
+      'Generate a portrait of Lisa (LoRA when installed) and optionally send it on Telegram',
+  },
+  {
     name: 'image_edit',
     category: 'media',
     keywords: ['image', 'edit', 'inpaint', 'mask', 'mark', 'design', 'retouch', 'modifier', 'zone'],

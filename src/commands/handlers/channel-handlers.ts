@@ -1102,6 +1102,77 @@ export async function registerAIMessageHandler(manager: import('../../channels/i
         return;
       }
 
+      // Lisa selfie on Telegram (photo of herself) — before the full agent turn.
+      if (
+        process.env.CODEBUDDY_LISA_SELFIE !== 'false' &&
+        (channel.type === 'telegram' || process.env.CODEBUDDY_LISA_SELFIE_CHANNELS === 'all')
+      ) {
+        try {
+          const { isLisaSelfieRequest, createAndMaybeSendLisaSelfie, inferSelfieMood } =
+            await import('../../companion/lisa-selfie.js');
+          if (isLisaSelfieRequest(message.content)) {
+            await channel.send({
+              channelId: message.channel.id,
+              content: 'Un instant mon cœur — je me prépare une photo…',
+              replyTo: message.id,
+            });
+            const mood = inferSelfieMood(message.content);
+            const result = await createAndMaybeSendLisaSelfie({
+              mood,
+              sendTelegram: true,
+              deliverPhoto: async (caption, imagePath) => {
+                const ch = channel as {
+                  sendImageFile?: (id: string, p: string, c?: string) => Promise<void>;
+                  send: (m: {
+                    channelId: string;
+                    content: string;
+                    attachments?: Array<{
+                      type: 'image';
+                      filePath?: string;
+                      data?: string;
+                      fileName?: string;
+                      mimeType?: string;
+                    }>;
+                    replyTo?: string;
+                  }) => Promise<{ success: boolean }>;
+                };
+                if (typeof ch.sendImageFile === 'function') {
+                  await ch.sendImageFile(message.channel.id, imagePath, caption);
+                  return true;
+                }
+                const path = await import('node:path');
+                const ext = path.extname(imagePath).slice(1) || 'png';
+                const r = await ch.send({
+                  channelId: message.channel.id,
+                  content: caption,
+                  replyTo: message.id,
+                  attachments: [
+                    {
+                      type: 'image',
+                      filePath: imagePath,
+                      fileName: path.basename(imagePath),
+                      mimeType: ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : `image/${ext}`,
+                    },
+                  ],
+                });
+                return Boolean(r?.success);
+              },
+            });
+            await channel.send({
+              channelId: message.channel.id,
+              content: result.spokenReply,
+              replyTo: message.id,
+            });
+            return;
+          }
+        } catch (selfieErr) {
+          logger.warn('Lisa selfie channel path failed', {
+            error: selfieErr instanceof Error ? selfieErr.message : String(selfieErr),
+          });
+          // fall through to normal AI handler
+        }
+      }
+
       const sessionKey = message.sessionKey || 'default-global';
       const botId = message.channel?.botId;
       logger.info('Channel inbound message', {
