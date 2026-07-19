@@ -366,6 +366,44 @@ async function sha256(filename: string): Promise<string> {
   return createHash('sha256').update(await fs.readFile(filename)).digest('hex');
 }
 
+export async function verifiedAudioDigest(
+  audioPath: string,
+  digestPath = `${audioPath}.sha256`,
+): Promise<string | null> {
+  try {
+    const [audioInfo, digestInfo, recordedDigest] = await Promise.all([
+      fs.lstat(audioPath),
+      fs.lstat(digestPath),
+      fs.readFile(digestPath, 'utf8'),
+    ]);
+    const expected = recordedDigest.trim();
+    if (
+      audioInfo.isSymbolicLink() || !audioInfo.isFile() || audioInfo.size <= 1_024 ||
+      audioInfo.size > 512 * 1024 * 1024 || digestInfo.isSymbolicLink() || !digestInfo.isFile() ||
+      !/^[a-f0-9]{64}$/u.test(expected)
+    ) {
+      return null;
+    }
+    return await sha256(audioPath) === expected ? expected : null;
+  } catch {
+    return null;
+  }
+}
+
+export function narrationTurnId(
+  baseTurnId: string,
+  localeSlug: string,
+  cacheKey: string,
+  audioSha256: string,
+): string {
+  const identity = createHash('sha256')
+    .update(JSON.stringify({ baseTurnId, localeSlug, cacheKey, audioSha256 }))
+    .digest('hex')
+    .slice(0, 16);
+  const maximumPrefixLength = 128 - localeSlug.length - identity.length - 2;
+  return `${baseTurnId.slice(0, maximumPrefixLength)}-${localeSlug}-${identity}`;
+}
+
 async function normalizeAudio(
   source: string,
   destination: string,
@@ -592,35 +630,40 @@ async function renderShort(
     if (!job || retryTerminal) {
       const rawAudio = path.join(workDirectory, `voice-${number}-${localeSlug}-${cacheKey.slice(0, 16)}-raw.wav`);
       const audioPath = path.join(workDirectory, `voice-${number}-${localeSlug}-${cacheKey.slice(0, 16)}.wav`);
-      const narration = planned.narration
-        ? await synthesizeLocalizedNarration(
-            {
-              text: shot.voiceLine,
-              outputPath: rawAudio,
-              locale,
-              voiceProfileId,
-              fallbackPolicy: 'none',
-            },
-            { resolveVoiceProfile },
-          )
-        : await synthesizeNarration(shot.voiceLine, rawAudio);
-      if (!narration) throw new Error(`Local TTS is unavailable for ${planned.shortId} shot ${number}`);
-      await normalizeAudio(
-        rawAudio,
-        audioPath,
-        planned.render.clipDurationSeconds,
-        narration.duration,
-        planned.narration?.fitPolicy ?? {
-          leadInMs: 100,
-          tailOutMs: 100,
-          maxSpeedup: 1.08,
-          overflow: 'reject',
-        },
-      );
+      const audioDigestPath = `${audioPath}.sha256`;
+      let audioSha256 = await verifiedAudioDigest(audioPath, audioDigestPath);
+      if (!audioSha256) {
+        const narration = planned.narration
+          ? await synthesizeLocalizedNarration(
+              {
+                text: shot.voiceLine,
+                outputPath: rawAudio,
+                locale,
+                voiceProfileId,
+                fallbackPolicy: 'none',
+              },
+              { resolveVoiceProfile },
+            )
+          : await synthesizeNarration(shot.voiceLine, rawAudio);
+        if (!narration) throw new Error(`Local TTS is unavailable for ${planned.shortId} shot ${number}`);
+        await normalizeAudio(
+          rawAudio,
+          audioPath,
+          planned.render.clipDurationSeconds,
+          narration.duration,
+          planned.narration?.fitPolicy ?? {
+            leadInMs: 100,
+            tailOutMs: 100,
+            maxSpeedup: 1.08,
+            overflow: 'reject',
+          },
+        );
+        audioSha256 = await sha256(audioPath);
+        await atomicWrite(audioDigestPath, `${audioSha256}\n`);
+      }
       const imageExtension = source.contentType === 'image/jpeg'
         ? '.jpg'
         : source.contentType === 'image/webp' ? '.webp' : '.png';
-      const audioSha256 = await sha256(audioPath);
       const [remoteImage, remoteAudio] = await Promise.all([
         client.uploadAsset(
           `${planned.shortId}-${number}-${localeSlug}-${cacheKey.slice(0, 12)}${imageExtension}`,
@@ -636,7 +679,7 @@ async function renderShort(
         ),
       ]);
       job = await client.submit('avatar_video_render', {
-        turnId: `${shot.longCatPayload.turnId}-${localeSlug}-${cacheKey.slice(0, 12)}`,
+        turnId: narrationTurnId(shot.longCatPayload.turnId, localeSlug, cacheKey, audioSha256),
         audioPath: remoteAudio.path,
         referenceImagePath: remoteImage.path,
         audioSha256,

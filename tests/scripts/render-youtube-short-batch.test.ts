@@ -1,3 +1,7 @@
+import { createHash } from 'crypto';
+import { mkdtemp, rm, symlink, writeFile } from 'fs/promises';
+import { tmpdir } from 'os';
+import { join } from 'path';
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -5,8 +9,10 @@ import {
   assertPlan,
   assertVoiceProfiles,
   assessPlannedShort,
+  narrationTurnId,
   timelineStartsMs,
   type PlannedShort,
+  verifiedAudioDigest,
   voiceProfileRevision,
 } from '../../scripts/mysoulmate/render-youtube-short-batch.js';
 import type { ResolvedVoiceProfile } from '../../src/tools/video/narration.js';
@@ -177,5 +183,33 @@ describe('MySoulmate YouTube Short batch contract', () => {
       provenanceRef: 'voice-rights/lisa-fr-pocket-v1',
     };
     expect(voiceProfileRevision({ ...profile, voice: 'alba' })).not.toBe(voiceProfileRevision(profile));
+  });
+
+  it('reuses only a byte-verified normalized narration artifact', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'codebuddy-youtube-audio-'));
+    const audio = join(root, 'voice.wav');
+    const digestFile = `${audio}.sha256`;
+    const bytes = Buffer.alloc(2_048, 7);
+    const digest = createHash('sha256').update(bytes).digest('hex');
+    try {
+      await writeFile(audio, bytes);
+      await writeFile(digestFile, `${digest}\n`);
+      await expect(verifiedAudioDigest(audio)).resolves.toBe(digest);
+      await writeFile(audio, Buffer.alloc(2_048, 8));
+      await expect(verifiedAudioDigest(audio)).resolves.toBeNull();
+      await rm(audio);
+      await symlink('/dev/null', audio);
+      await expect(verifiedAudioDigest(audio)).resolves.toBeNull();
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('binds retry turn identity to the exact synthesized narration bytes', () => {
+    const base = 'museum-of-small-gestures-second-cup-lisa-fr-fr-01';
+    const first = narrationTurnId(base, 'fr-fr', 'a'.repeat(64), 'b'.repeat(64));
+    expect(first).toBe(narrationTurnId(base, 'fr-fr', 'a'.repeat(64), 'b'.repeat(64)));
+    expect(first).not.toBe(narrationTurnId(base, 'fr-fr', 'a'.repeat(64), 'c'.repeat(64)));
+    expect(first.length).toBeLessThanOrEqual(128);
   });
 });

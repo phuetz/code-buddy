@@ -37,6 +37,10 @@
 - Premier clip pilote lancé puis annulé à 72 % : GPU 0 à 95 °C, aucun MP4 produit
 - GPU 1 identifié comme le service ComfyUI MySoulmate et laissé intact
 - Runner renforcé avec arrêt thermique à 88 °C après deux mesures consécutives
+- Retry vocal renforcé : le WAV normalisé est conservé avec un SHA-256 local,
+  réutilisé seulement si les octets correspondent, et le `turnId` inclut
+  l'identité du WAV. Une nouvelle synthèse non déterministe ne peut donc plus
+  entrer en collision avec le job précédent ni se faire passer pour lui.
 
 Ne pas reconstruire `companion-image-cache/manifest.json` tant que le service de
 génération est actif. Ne jamais approuver les images en masse.
