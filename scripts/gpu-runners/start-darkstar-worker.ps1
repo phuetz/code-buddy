@@ -49,6 +49,7 @@ if ($BindHost -notin @('0.0.0.0', '127.0.0.1', '::', '::1') -and $BindWaitSecond
 }
 
 $env:CODEBUDDY_GPU_WORKER_TOKEN = $token
+$env:CODEBUDDY_GPU_MAX_TEMP_C = '88'
 $env:CODEBUDDY_PANOWORLD_RUNNER = 'C:\Windows\System32\wsl.exe'
 $env:CODEBUDDY_PANOWORLD_RUNNER_ARGS = @(
   '-d',
@@ -102,7 +103,7 @@ if (Test-Path -LiteralPath $LongCatReadyFile -PathType Leaf) {
     $revisionSha.Dispose()
   }
 }
-$forwarded = 'CODEBUDDY_GPU_JOB_REQUEST/p:CODEBUDDY_GPU_JOB_RESULT/p:CODEBUDDY_GPU_JOB_ID:CODEBUDDY_GPU_ALLOWED_ROOTS_JSON'
+$forwarded = 'CODEBUDDY_GPU_JOB_REQUEST/p:CODEBUDDY_GPU_JOB_RESULT/p:CODEBUDDY_GPU_JOB_ID:CODEBUDDY_GPU_ALLOWED_ROOTS_JSON:CODEBUDDY_GPU_MAX_TEMP_C'
 $env:WSLENV = if ($env:WSLENV) { "${env:WSLENV}:$forwarded" } else { $forwarded }
 
 New-Item -ItemType Directory -Path $StateDir -Force | Out-Null

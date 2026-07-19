@@ -218,6 +218,15 @@ source audio is reported as truncated in the result manifest rather than silentl
 presented as fully rendered. Video continuation remains disabled until its peak VRAM and
 identity drift have been measured on Darkstar.
 
+The runner also owns a fail-closed thermal guard. It reads the physical GPU selected by
+`CUDA_VISIBLE_DEVICES` before startup and every three seconds during inference. The
+Darkstar launcher sets `CODEBUDDY_GPU_MAX_TEMP_C=88`; startup is refused at or above that
+limit, and two consecutive hot samples terminate the complete inference process group.
+An unreadable sensor also stops the job. The limit may be configured only between 70 and
+92 °C, so a deployment cannot accidentally turn the guard into an unbounded value. This
+gate was added after a private pilot reached 95 °C on GPU 0; that attempt was cancelled
+before an MP4 was produced and must not be treated as a valid quality sample.
+
 The upstream saver assumes a GPL-enabled FFmpeg and tries to re-encode the already-H.264
 intermediate with `libx264`. The isolated Conda build intentionally omits that encoder.
 The hardened adapter therefore falls back to losslessly stream-copying the existing H.264
@@ -245,5 +254,6 @@ interface was ready and left the worker stopped.
 2. Load PyTorch pickle checkpoints only inside an isolated conversion environment.
 3. Restrict all input/output paths to configured worker roots.
 4. Use argument arrays, never a concatenated shell command.
-5. Limit one task per GPU, expose progress, support cancellation and enforce timeouts.
+5. Limit one task per GPU, expose progress, support cancellation, enforce timeouts and
+   stop inference before a sustained over-temperature condition.
 6. Keep household scans local by default and delete temporary inputs explicitly.

@@ -97,7 +97,53 @@ def probe_duration(audio_path: Path) -> float:
     return duration
 
 
-def stream_inference(command: list[str]) -> None:
+def read_gpu_temperature() -> int:
+    """Read the physical GPU selected for this one-process LongCat runner."""
+    visible = os.environ.get("CUDA_VISIBLE_DEVICES", "0").split(",", maxsplit=1)[0].strip()
+    if not visible:
+        visible = "0"
+    try:
+        completed = subprocess.run(
+            [
+                "nvidia-smi",
+                f"--id={visible}",
+                "--query-gpu=temperature.gpu",
+                "--format=csv,noheader,nounits",
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        return int(completed.stdout.strip().splitlines()[0])
+    except (FileNotFoundError, IndexError, ValueError, subprocess.CalledProcessError, subprocess.TimeoutExpired) as error:
+        raise RunnerError("LongCat thermal guard cannot read the selected GPU temperature") from error
+
+
+def configured_thermal_limit() -> int:
+    raw = os.environ.get("CODEBUDDY_GPU_MAX_TEMP_C", "88").strip()
+    try:
+        limit = int(raw)
+    except ValueError as error:
+        raise RunnerError("CODEBUDDY_GPU_MAX_TEMP_C must be an integer") from error
+    if not 70 <= limit <= 92:
+        raise RunnerError("CODEBUDDY_GPU_MAX_TEMP_C must be between 70 and 92")
+    return limit
+
+
+def stream_inference(
+    command: list[str],
+    *,
+    temperature_reader: Any = read_gpu_temperature,
+    thermal_limit_c: int | None = None,
+    thermal_poll_seconds: float = 3.0,
+) -> None:
+    limit = configured_thermal_limit() if thermal_limit_c is None else thermal_limit_c
+    initial_temperature = temperature_reader()
+    if initial_temperature >= limit:
+        raise RunnerError(
+            f"LongCat thermal guard refused startup: GPU is {initial_temperature} C (limit {limit} C)"
+        )
     child = subprocess.Popen(
         command,
         stdout=subprocess.PIPE,
@@ -107,8 +153,10 @@ def stream_inference(command: list[str]) -> None:
         start_new_session=True,
     )
     assert child.stdout is not None
-    cancelled = False
+    cancellation_reason: str | None = None
     forced_kill: threading.Timer | None = None
+    stop_watchdog = threading.Event()
+    cancellation_lock = threading.Lock()
 
     def kill_process_group(sig: signal.Signals) -> None:
         try:
@@ -116,18 +164,49 @@ def stream_inference(command: list[str]) -> None:
         except ProcessLookupError:
             pass
 
-    def forward_signal(signum: int, _frame: Any) -> None:
-        nonlocal cancelled, forced_kill
-        cancelled = True
-        forwarded = signal.Signals(signum)
-        kill_process_group(forwarded)
-        if forced_kill is None:
+    def request_stop(reason: str, forwarded: signal.Signals = signal.SIGTERM) -> None:
+        nonlocal cancellation_reason, forced_kill
+        with cancellation_lock:
+            if cancellation_reason is not None:
+                return
+            cancellation_reason = reason
+            kill_process_group(forwarded)
             forced_kill = threading.Timer(10.0, kill_process_group, args=(signal.SIGKILL,))
             forced_kill.daemon = True
             forced_kill.start()
 
+    def forward_signal(signum: int, _frame: Any) -> None:
+        request_stop("LongCat inference was cancelled", signal.Signals(signum))
+
+    def watch_temperature() -> None:
+        consecutive_hot_samples = 0
+        while not stop_watchdog.wait(thermal_poll_seconds):
+            try:
+                temperature = temperature_reader()
+            except Exception as error:  # noqa: BLE001 - hardware safety boundary
+                request_stop(f"LongCat thermal guard failed closed: {error}")
+                return
+            if temperature >= limit:
+                consecutive_hot_samples += 1
+                print(
+                    f"LONGCAT_THERMAL GPU {temperature} C, limit {limit} C "
+                    f"({consecutive_hot_samples}/2)",
+                    file=sys.stderr,
+                    flush=True,
+                )
+                if consecutive_hot_samples >= 2:
+                    request_stop(
+                        f"LongCat thermal guard stopped inference at {temperature} C "
+                        f"(limit {limit} C)"
+                    )
+                    return
+            else:
+                consecutive_hot_samples = 0
+
     previous_sigterm = signal.signal(signal.SIGTERM, forward_signal)
     previous_sigint = signal.signal(signal.SIGINT, forward_signal)
+    watchdog = threading.Thread(target=watch_temperature, name="longcat-thermal-guard", daemon=True)
+    watchdog.start()
     phase_progress = {
         "LONGCAT_PHASE text": (0.12, "encoding prompt"),
         "LONGCAT_PHASE audio": (0.28, "encoding audio"),
@@ -146,12 +225,14 @@ def stream_inference(command: list[str]) -> None:
                 progress(value, message)
         return_code = child.wait()
     finally:
+        stop_watchdog.set()
+        watchdog.join(timeout=max(thermal_poll_seconds * 2, 1.0))
         if forced_kill is not None:
             forced_kill.cancel()
         signal.signal(signal.SIGTERM, previous_sigterm)
         signal.signal(signal.SIGINT, previous_sigint)
-    if cancelled:
-        raise RunnerError("LongCat inference was cancelled")
+    if cancellation_reason is not None:
+        raise RunnerError(cancellation_reason)
     if return_code != 0:
         raise RunnerError(f"LongCat inference exited with code {return_code}")
 

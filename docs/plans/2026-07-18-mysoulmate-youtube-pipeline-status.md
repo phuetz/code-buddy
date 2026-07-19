@@ -1,13 +1,13 @@
 # Point de reprise — pipeline MySoulmate → YouTube
 
 **Date** : 2026-07-18
-**Statut** : pilote V2 préparé et sécurisé ; rendu bloqué volontairement sur les droits voix
+**Statut** : pilote V3 préparé ; droits voix et worker validés, rendu suspendu par garde thermique
 
 ## Résultat disponible
 
 - Plan local : `/home/patrice/DEV/MySoulmate/youtube-shorts-workspace/plan.json`
-- Six masters privés planifiés : trois histoires, chacune en `fr-FR` et `en-US`
-- 18 clips LongCat ; gate éditorial final : 100/100 pour les six masters
+- Trois masters privés FR planifiés : trois histoires Lisa
+- 9 clips LongCat ; gate éditorial final : 100/100 pour les trois masters
 - Manifeste Flow local : neuf plans `ambient-only`, 90 crédits Fast estimés,
   aucun appel Google et aucun crédit consommé
 - Sortie attendue : MP4 720×1280/30 FPS, VTT localisé, sidecar YouTube privé,
@@ -15,7 +15,7 @@
 
 ## Garde-fous livrés
 
-- Le renderer commercial accepte uniquement le schéma V2 et exige un registre
+- Le renderer commercial accepte uniquement le schéma V3 et exige un registre
   de voix explicitement approuvées, lié à la locale et à la provenance.
 - Les profils Piper sont liés au SHA-256 des poids ; le cache inclut la révision
   du profil vocal.
@@ -29,23 +29,26 @@
 
 ## État runtime observé
 
-- `mysoulmate-image-catalog.service` actif depuis le 17 juillet 20:25 CEST
-- Dernier journal observé : 3 690/17 280, `failed=0`
-- Cache observé : 3 739 PNG, 4,2 Go
+- `mysoulmate-image-catalog.service` reste indépendant du rendu vidéo et ne doit
+  pas être interrompu pour libérer l'autre GPU
 - Aucun master final rendu
-- Preflight réel : sources et éditorial valides, puis arrêt attendu car
-  `~/.codebuddy/voice-rights-registry.json` est absent
+- Preflight réel : 9 sources approuvées, profil voix FR commercial autorisé,
+  révision LongCat valide et file worker disponible
+- Premier clip pilote lancé puis annulé à 72 % : GPU 0 à 95 °C, aucun MP4 produit
+- GPU 1 identifié comme le service ComfyUI MySoulmate et laissé intact
+- Runner renforcé avec arrêt thermique à 88 °C après deux mesures consécutives
 
 Ne pas reconstruire `companion-image-cache/manifest.json` tant que le service de
 génération est actif. Ne jamais approuver les images en masse.
 
 ## Reprise opérateur
 
-1. Faire valider juridiquement les profils FR et EN et leur provenance.
-2. Créer `~/.codebuddy/voice-rights-registry.json` avec permissions `0600` à
-   partir du modèle, sans recopier les valeurs `commercialUseApproved: false`.
-3. Déployer/recharger le worker Darkstar avec l'idempotence `turnId` ajoutée.
-4. Lancer le preflight sur un seul Short FR.
+1. Déployer/recharger le worker Darkstar avec la garde thermique à 88 °C.
+2. Vérifier à froid que le preflight expose la nouvelle révision du runner.
+3. Diagnostiquer le refroidissement de la RTX 3090 n°0 avant un nouveau rendu
+   long : flux d'air, poussière, pâte/pads thermiques et température ambiante.
+4. Reprendre le même Short FR ; le journal idempotent recréera uniquement le job
+   annulé, sans valider l'essai incomplet.
 5. Rendre ce Short, puis contrôler manuellement voix, lip-sync, identité,
    anatomie, VTT, durée, codecs et sidecar.
 6. Seulement après cette revue, rendre son master EN puis étendre au lot.
@@ -60,7 +63,9 @@ génération est actif. Ne jamais approuver les images en masse.
 - Tests MySoulmate ciblés : 12 OK
 - Lints ciblés : OK
 - Build Cowork renderer/main/preload : OK
-- Preflight : arrêt fail-closed attendu sur le registre de droits absent
+- Preflight V3 : OK
+- Test garde thermique : OK, arrêt du groupe de processus après deux mesures
+- Pilote : annulation de sécurité à 95 °C, sortie non validée
 
 Le typecheck Cowork global conserve des diagnostics `noUnused` préexistants dans
 des modules hors pipeline ; les deux erreurs introduites sur la durée du montage
