@@ -35,6 +35,9 @@
 - Preflight réel : 9 sources approuvées, profil voix FR commercial autorisé,
   révision LongCat valide et file worker disponible
 - Premier clip pilote lancé puis annulé à 72 % : GPU 0 à 95 °C, aucun MP4 produit
+- Deux retries bornés ont confirmé le diagnostic : la garde a arrêté LongCat à
+  88 °C sous plafonds temporaires de 250/200 W puis 150/120 W. Aucun autre
+  essai n'est autorisé avant entretien physique du refroidissement.
 - GPU 1 identifié comme le service ComfyUI MySoulmate et laissé intact
 - Runner renforcé avec arrêt thermique à 88 °C après deux mesures consécutives
 - Retry vocal renforcé : le WAV normalisé est conservé avec un SHA-256 local,
@@ -69,7 +72,8 @@ génération est actif. Ne jamais approuver les images en masse.
 - Build Cowork renderer/main/preload : OK
 - Preflight V3 : OK
 - Test garde thermique : OK, arrêt du groupe de processus après deux mesures
-- Pilote : annulation de sécurité à 95 °C, sortie non validée
+- Pilote : trois tentatives de diagnostic, toutes arrêtées avant MP4 ; première
+  à 95 °C manuellement, deux suivantes automatiquement à 88 °C
 
 Le typecheck Cowork global conserve des diagnostics `noUnused` préexistants dans
 des modules hors pipeline ; les deux erreurs introduites sur la durée du montage

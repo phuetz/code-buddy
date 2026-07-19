@@ -225,7 +225,12 @@ limit, and two consecutive hot samples terminate the complete inference process 
 An unreadable sensor also stops the job. The limit may be configured only between 70 and
 92 °C, so a deployment cannot accidentally turn the guard into an unbounded value. This
 gate was added after a private pilot reached 95 °C on GPU 0; that attempt was cancelled
-before an MP4 was produced and must not be treated as a valid quality sample.
+before an MP4 was produced and must not be treated as a valid quality sample. Two later
+content-identical retries proved that the guard works: it stopped the process group after
+two 88 °C samples, including with a temporary 150 W then 120 W cap. Do not retry LongCat
+on this card until its airflow, dust, paste and thermal pads have been inspected. The
+power cap changes performance only, not generated pixels, but did not compensate for the
+observed cooling fault.
 
 The upstream saver assumes a GPL-enabled FFmpeg and tries to re-encode the already-H.264
 intermediate with `libx264`. The isolated Conda build intentionally omits that encoder.
