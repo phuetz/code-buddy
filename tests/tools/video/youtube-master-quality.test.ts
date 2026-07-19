@@ -8,6 +8,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import {
   createPrivateYouTubeBundle,
+  requestYouTubeMasterChanges,
   reviewYouTubeMaster,
   validateYouTubeMasterBundle,
 } from '../../../src/tools/video/youtube-master-quality.js';
@@ -89,6 +90,44 @@ describe('YouTube master quality gate', () => {
       report, expectedVideoSha256: report.videoSha256, reviewer: 'Patrice', reason: 'À revoir.',
       checks: { voice: false, lipSync: true, identity: true, anatomy: true, captions: true, disclosure: true, editorial: true },
     })).rejects.toThrow('Every');
+  });
+
+  it('records digest-bound change requests without granting upload readiness', async () => {
+    const videoPath = await fixture();
+    const report = await validateYouTubeMasterBundle({
+      videoPath,
+      probe: passingProbe,
+      analyze: passingSignals,
+    });
+    const checks = {
+      voice: true,
+      lipSync: true,
+      identity: false,
+      anatomy: true,
+      captions: true,
+      disclosure: true,
+      editorial: false,
+    };
+    await expect(requestYouTubeMasterChanges({
+      report,
+      expectedVideoSha256: report.videoSha256,
+      reviewer: 'Codex visual QA',
+      reason: 'Continuité visuelle et cohérence éditoriale à corriger.',
+      checks,
+      now: () => new Date('2026-07-19T08:35:00Z'),
+    })).resolves.toMatchObject({
+      status: 'changes-requested',
+      visibility: 'blocked',
+      autoPublish: false,
+      checks: { identity: false, editorial: false },
+    });
+    await expect(requestYouTubeMasterChanges({
+      report,
+      expectedVideoSha256: report.videoSha256,
+      reviewer: 'Codex visual QA',
+      reason: 'Aucune correction.',
+      checks: { ...checks, identity: true, editorial: true },
+    })).rejects.toThrow('at least one failed');
   });
 
   it('rejects silence, excessive black frames and incomplete source provenance', async () => {

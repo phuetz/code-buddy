@@ -9,6 +9,7 @@ import { fileURLToPath } from 'url';
 
 import {
   createPrivateYouTubeBundle,
+  requestYouTubeMasterChanges,
   reviewYouTubeMaster,
   validateYouTubeMasterBundle,
   type YouTubeHumanReviewReceipt,
@@ -22,10 +23,10 @@ function argument(name: string): string {
   return index >= 0 && process.argv[index + 1] ? process.argv[index + 1]!.trim() : '';
 }
 
-function command(): 'technical' | 'review' | 'bundle' {
+function command(): 'technical' | 'review' | 'request-changes' | 'bundle' {
   const value = process.argv[2];
-  if (value !== 'technical' && value !== 'review' && value !== 'bundle') {
-    throw new Error('Usage: review-youtube-master.ts technical|review|bundle --video /absolute/master.mp4 [...]');
+  if (value !== 'technical' && value !== 'review' && value !== 'request-changes' && value !== 'bundle') {
+    throw new Error('Usage: review-youtube-master.ts technical|review|request-changes|bundle --video /absolute/master.mp4 [...]');
   }
   return value;
 }
@@ -93,23 +94,43 @@ async function main(): Promise<void> {
   }
   const reviewer = argument('reviewer');
   const reason = argument('reason');
-  const selectedChecks = new Set(argument('checks').split(',').map((value) => value.trim()).filter(Boolean));
+  const checksArgument = action === 'request-changes' ? argument('failed-checks') : argument('checks');
+  const selectedChecks = new Set(checksArgument.split(',').map((value) => value.trim()).filter(Boolean));
   const unknown = [...selectedChecks].filter((value) => !REQUIRED_CHECKS.includes(value as typeof REQUIRED_CHECKS[number]));
-  if (unknown.length || REQUIRED_CHECKS.some((check) => !selectedChecks.has(check))) {
+  if (unknown.length || (action === 'review' && REQUIRED_CHECKS.some((check) => !selectedChecks.has(check)))) {
     throw new Error(`--checks must explicitly contain: ${REQUIRED_CHECKS.join(',')}`);
   }
-  const receipt = await reviewYouTubeMaster({
-    report: storedReport,
-    expectedVideoSha256: currentReport.videoSha256,
-    reviewer,
-    reason,
-    checks: Object.fromEntries(REQUIRED_CHECKS.map((check) => [check, true])) as Record<typeof REQUIRED_CHECKS[number], boolean>,
-  });
+  if (action === 'request-changes' && selectedChecks.size === 0) {
+    throw new Error(`--failed-checks must contain at least one of: ${REQUIRED_CHECKS.join(',')}`);
+  }
+  const checks = Object.fromEntries(REQUIRED_CHECKS.map((check) => [
+    check,
+    action === 'review' || !selectedChecks.has(check),
+  ])) as Record<typeof REQUIRED_CHECKS[number], boolean>;
+  const receipt = action === 'request-changes'
+    ? await requestYouTubeMasterChanges({
+      report: storedReport,
+      expectedVideoSha256: currentReport.videoSha256,
+      reviewer,
+      reason,
+      checks,
+    })
+    : await reviewYouTubeMaster({
+      report: storedReport,
+      expectedVideoSha256: currentReport.videoSha256,
+      reviewer,
+      reason,
+      checks,
+    });
   const output = argument('output')
     ? path.resolve(argument('output'))
-    : `${videoPath}.review.${currentReport.videoSha256.slice(0, 16)}.json`;
+    : action === 'request-changes'
+      ? `${videoPath}.changes.${currentReport.videoSha256.slice(0, 16)}.json`
+      : `${videoPath}.review.${currentReport.videoSha256.slice(0, 16)}.json`;
   await atomicCreate(output, `${JSON.stringify(receipt, null, 2)}\n`);
-  process.stdout.write(`Human-review receipt created for private upload only: ${output}\n`);
+  process.stdout.write(action === 'request-changes'
+    ? `Changes-requested receipt created; upload remains blocked: ${output}\n`
+    : `Human-review receipt created for private upload only: ${output}\n`);
 }
 
 const isMain = process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1]);

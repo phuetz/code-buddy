@@ -79,6 +79,21 @@ export interface YouTubeHumanReviewReceipt {
   autoPublish: false;
 }
 
+export interface YouTubeChangesRequestedReceipt {
+  schemaVersion: 1;
+  status: 'changes-requested';
+  videoSha256: string;
+  sidecarSha256: string;
+  captionSha256: string;
+  technicalReportSha256: string;
+  reviewer: string;
+  reason: string;
+  checks: YouTubeHumanReviewChecks;
+  reviewedAt: string;
+  visibility: 'blocked';
+  autoPublish: false;
+}
+
 export interface YouTubePrivateBundleManifest {
   schemaVersion: 1;
   status: 'ready-for-private-upload';
@@ -196,6 +211,44 @@ export async function reviewYouTubeMaster(input: {
     checks: input.checks,
     reviewedAt: (input.now ?? (() => new Date()))().toISOString(),
     visibility: 'private',
+    autoPublish: false,
+  };
+}
+
+/** Record a digest-bound negative visual review. This receipt can never authorize an upload bundle. */
+export async function requestYouTubeMasterChanges(input: {
+  report: YouTubeTechnicalReport;
+  expectedVideoSha256: string;
+  reviewer: string;
+  reason: string;
+  checks: YouTubeHumanReviewChecks;
+  now?: () => Date;
+}): Promise<YouTubeChangesRequestedReceipt> {
+  if (
+    input.report.schemaVersion !== 2 || input.report.status !== 'technical-approved' ||
+    !SHA256.test(input.expectedVideoSha256) || input.report.videoSha256 !== input.expectedVideoSha256
+  ) throw new Error('Change request must target the current technically approved master digest');
+  if (Object.values(input.checks).some((passed) => typeof passed !== 'boolean')) {
+    throw new Error('Every human review check must be recorded as true or false');
+  }
+  if (Object.values(input.checks).every((passed) => passed)) {
+    throw new Error('A change request must identify at least one failed human review check');
+  }
+  if (input.reviewer.trim().length < 2 || input.reason.trim().length < 3) {
+    throw new Error('Reviewer and reason are required');
+  }
+  return {
+    schemaVersion: 1,
+    status: 'changes-requested',
+    videoSha256: input.report.videoSha256,
+    sidecarSha256: input.report.sidecarSha256,
+    captionSha256: input.report.captionSha256,
+    technicalReportSha256: canonicalSha256(input.report),
+    reviewer: input.reviewer.trim(),
+    reason: input.reason.trim(),
+    checks: input.checks,
+    reviewedAt: (input.now ?? (() => new Date()))().toISOString(),
+    visibility: 'blocked',
     autoPublish: false,
   };
 }

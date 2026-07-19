@@ -227,10 +227,14 @@ An unreadable sensor also stops the job. The limit may be configured only betwee
 gate was added after a private pilot reached 95 °C on GPU 0; that attempt was cancelled
 before an MP4 was produced and must not be treated as a valid quality sample. Two later
 content-identical retries proved that the guard works: it stopped the process group after
-two 88 °C samples, including with a temporary 150 W then 120 W cap. Do not retry LongCat
-on this card until its airflow, dust, paste and thermal pads have been inspected. The
-power cap changes performance only, not generated pixels, but did not compensate for the
-observed cooling fault.
+two 88 °C samples, including with a temporary 150 W then 120 W cap. Opening and dusting
+the case and adding a large external fan resolved the observed airflow fault: the same
+three-clip pilot completed at a 150 W cap, with GPU 0 measuring roughly 58–67 °C under
+strong external airflow. Controlled comparison measured 76–78 °C with the external fan
+at one third and 81 °C with the case open but the external fan off. Unattended LongCat
+jobs must therefore retain external airflow and the 88 °C process-group guard; an open
+case alone is not the recommended overnight profile. The power cap changes performance
+only, not generated pixels.
 
 The upstream saver assumes a GPL-enabled FFmpeg and tries to re-encode the already-H.264
 intermediate with `libx264`. The isolated Conda build intentionally omits that encoder.
