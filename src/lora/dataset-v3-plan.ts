@@ -32,7 +32,12 @@ export type DatasetV3OutfitTag =
   | 'burgundy-sweater'
   | 'denim-casual'
   | 'ivory-blouse'
-  | 'navy-dress';
+  | 'navy-dress'
+  | 'knee-skirt-blouse'
+  | 'tailored-shorts'
+  | 'slit-evening-dress'
+  | 'short-summer-dress'
+  | 'backless-evening-dress';
 export type DatasetV3SettingTag =
   | 'gray-studio'
   | 'cream-studio'
@@ -65,6 +70,11 @@ const OUTFITS = {
   'denim-casual': 'dark denim jacket over a white top with the signature silver pendant',
   'ivory-blouse': 'modest ivory blouse with the signature silver pendant',
   'navy-dress': 'knee-length navy dress with the signature silver pendant and flat shoes',
+  'knee-skirt-blouse': 'fitted knee-length black skirt with a tucked ivory blouse, the signature silver pendant and classic heels',
+  'tailored-shorts': 'high-waisted tailored beige shorts with a fitted white top, the signature silver pendant and sandals',
+  'slit-evening-dress': 'elegant dark evening dress with a tasteful leg slit, the signature silver pendant and heels',
+  'short-summer-dress': 'flowing knee-length floral summer dress with the signature silver pendant and sandals',
+  'backless-evening-dress': 'elegant floor-length evening dress with an open back, the signature silver pendant and heels',
 } as const;
 
 const SETTINGS = {
@@ -156,6 +166,15 @@ const DRAFTS: readonly SlotDraft[] = [
 
   { slotId: 'back-straight', framing: 'back', angle: 'back', expression: 'pensive', lighting: 'studio-soft', outfitTag: 'navy-dress', settingTag: 'gray-studio', focalHint: '50mm', pose: 'standing fully turned away from camera', overgenCount: 3 },
   { slotId: 'back-threequarter-right', framing: 'back', angle: 'threequarter-back-right', expression: 'smile-closed', lighting: 'golden-hour', outfitTag: 'denim-casual', settingTag: 'garden-path', focalHint: '50mm', pose: 'walking away in a rear three-quarter right pose', overgenCount: 3 },
+
+  // Extension 2026-07-20 (demande Patrice) : plus de jambes visibles et de dos —
+  // toujours tier couvert (jupes/robes/short, dos nu élégant = fashion, pas d'explicite).
+  { slotId: 'full-skirt-walk-legs', framing: 'full', angle: 'front', expression: 'smile-closed', lighting: 'golden-hour', outfitTag: 'knee-skirt-blouse', settingTag: 'urban-overcast', focalHint: '35mm', pose: 'walking toward camera in a knee-length skirt, full legs and heels clearly visible', overgenCount: 4 },
+  { slotId: 'full-shorts-standing-legs', framing: 'full', angle: 'threequarter-right', expression: 'smile-open', lighting: 'window-daylight', outfitTag: 'tailored-shorts', settingTag: 'modern-interior', focalHint: '50mm', pose: 'standing relaxed in tailored shorts, long bare legs fully visible, one knee slightly bent', overgenCount: 4 },
+  { slotId: 'full-slit-dress-profile-legs', framing: 'full', angle: 'profile-left', expression: 'pensive', lighting: 'cinematic-side', outfitTag: 'slit-evening-dress', settingTag: 'gallery-hall', focalHint: '85mm', pose: 'standing in profile, elegant dress with a leg-revealing slit, one leg forward', overgenCount: 4 },
+  { slotId: 'full-seated-crossed-legs', framing: 'full', angle: 'front', expression: 'smile-closed', lighting: 'studio-soft', outfitTag: 'short-summer-dress', settingTag: 'gray-studio', focalHint: '50mm', pose: 'seated on a stool with legs elegantly crossed, calves and heels visible', overgenCount: 4 },
+  { slotId: 'back-backless-dress', framing: 'back', angle: 'back', expression: 'smile-closed', lighting: 'cinematic-side', outfitTag: 'backless-evening-dress', settingTag: 'gallery-hall', focalHint: '85mm', pose: 'standing turned away in an elegant backless evening dress, bare back visible, glancing over her shoulder', overgenCount: 4 },
+  { slotId: 'back-walk-away-legs', framing: 'back', angle: 'back', expression: 'neutral-closed', lighting: 'golden-hour', outfitTag: 'knee-skirt-blouse', settingTag: 'urban-overcast', focalHint: '35mm', pose: 'walking away from camera in a knee-length skirt, legs and heels visible mid-stride', overgenCount: 4 },
 ] as const;
 
 /** The frozen canonical plan. Callers may safely reuse it without I/O or randomness. */

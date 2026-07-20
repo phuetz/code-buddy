@@ -16,10 +16,10 @@ function countByFraming(plan: ReturnType<typeof createDatasetV3Plan>): Record<Da
 describe('dataset v3 slot plan', () => {
   it('encodes the exact target composition and over-generation bounds', () => {
     const plan = createDatasetV3Plan();
-    expect(plan).toHaveLength(33);
-    expect(countByFraming(plan)).toEqual({ face: 11, bust: 9, half: 6, full: 5, back: 2 });
+    expect(plan).toHaveLength(39);
+    expect(countByFraming(plan)).toEqual({ face: 11, bust: 9, half: 6, full: 9, back: 4 });
     expect(plan.every((slot) => slot.overgenCount === 3 || slot.overgenCount === 4)).toBe(true);
-    expect(plan.reduce((total, slot) => total + slot.overgenCount, 0)).toBe(115);
+    expect(plan.reduce((total, slot) => total + slot.overgenCount, 0)).toBe(139);
   });
 
   it('covers the normative face angles and reserves one third neutral closed-mouth slots', () => {
@@ -30,7 +30,7 @@ describe('dataset v3 slot plan', () => {
     expect(faceAngles.filter((angle) => angle.startsWith('profile-'))).toHaveLength(2);
     expect(faceAngles).toContain('gaze-up');
     expect(faceAngles).toContain('gaze-down');
-    expect(plan.filter((slot) => slot.expression === 'neutral-closed')).toHaveLength(11);
+    expect(plan.filter((slot) => slot.expression === 'neutral-closed')).toHaveLength(12);
     expect(new Set(plan.map((slot) => slot.expression))).toEqual(new Set([
       'neutral-closed', 'smile-closed', 'smile-open', 'pensive', 'laugh',
     ]));
@@ -40,7 +40,7 @@ describe('dataset v3 slot plan', () => {
     const plan = createDatasetV3Plan();
     expect(plan.some((slot) => slot.angle === 'profile-left')).toBe(true);
     expect(plan.some((slot) => slot.angle === 'profile-right')).toBe(true);
-    expect(plan.filter((slot) => slot.framing === 'back')).toHaveLength(2);
+    expect(plan.filter((slot) => slot.framing === 'back')).toHaveLength(4);
     expect(plan.filter((slot) => slot.framing === 'full').map((slot) => slot.slotId)).toEqual(expect.arrayContaining([
       'full-walking-front', 'full-seated-left', 'full-arms-raised-right',
     ]));
