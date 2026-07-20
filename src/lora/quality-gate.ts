@@ -97,16 +97,18 @@ export async function assessDatasetQuality(
     warnings.push(`${reject.length} image(s) flagged (too small / duplicate / unreadable).`);
   }
 
-  const hard = issues.filter((i) => i.kind === 'too_small' || i.kind === 'unreadable');
-  return {
+  const report: DatasetQualityReport = {
     // Hard fail only on corrupt/unreadable; exact duplicates are reject-list warnings.
-    ok: hard.length === 0 && kept.length > 0,
+    // `ok` is derived from the single shared predicate below to avoid drift.
+    ok: false,
     imageCount: names.length,
     issues,
     warnings,
     kept,
     reject,
   };
+  report.ok = qualityGatePassed(report);
+  return report;
 }
 
 /** Soft OK: no hard errors (unreadable/too_small); duplicates only warn. */
