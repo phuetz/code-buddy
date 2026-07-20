@@ -1,0 +1,89 @@
+{
+  "1": {
+    "class_type": "VHS_LoadVideo",
+    "inputs": {
+      "video": "input.mp4",
+      "force_rate": 0,
+      "custom_width": 0,
+      "custom_height": 0,
+      "frame_load_cap": 0,
+      "skip_first_frames": 0,
+      "select_every_nth": 1
+    },
+    "_meta": {
+      "title": "Load Video"
+    }
+  },
+  "2": {
+    "class_type": "SeedVR2LoadDiTModel",
+    "inputs": {
+      "model": "seedvr2_ema_3b_fp8_e4m3fn.safetensors",
+      "device": "cuda:0",
+      "blocks_to_swap": 16,
+      "cache_model": false
+    },
+    "_meta": {
+      "title": "SeedVR2 DiT"
+    }
+  },
+  "3": {
+    "class_type": "SeedVR2LoadVAEModel",
+    "inputs": {
+      "model": "ema_vae_fp16.safetensors",
+      "device": "cuda:0",
+      "encode_tiled": true,
+      "decode_tiled": true
+    },
+    "_meta": {
+      "title": "SeedVR2 VAE"
+    }
+  },
+  "4": {
+    "class_type": "SeedVR2VideoUpscaler",
+    "inputs": {
+      "image": [
+        "1",
+        0
+      ],
+      "dit": [
+        "2",
+        0
+      ],
+      "vae": [
+        "3",
+        0
+      ],
+      "seed": 1,
+      "resolution": 1080,
+      "max_resolution": 1920,
+      "batch_size": 33,
+      "uniform_batch_size": false,
+      "color_correction": "lab"
+    },
+    "_meta": {
+      "title": "SeedVR2 Upscale"
+    }
+  },
+  "5": {
+    "class_type": "VHS_VideoCombine",
+    "inputs": {
+      "images": [
+        "4",
+        0
+      ],
+      "frame_rate": 16,
+      "loop_count": 0,
+      "filename_prefix": "upscaled",
+      "format": "video/h264-mp4",
+      "pix_fmt": "yuv420p",
+      "crf": 17,
+      "save_metadata": true,
+      "trim_to_audio": false,
+      "pingpong": false,
+      "save_output": true
+    },
+    "_meta": {
+      "title": "Video Combine"
+    }
+  }
+}

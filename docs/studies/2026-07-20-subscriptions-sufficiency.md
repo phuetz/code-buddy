@@ -15,10 +15,15 @@ stockage). **Deux trous disqualifiants pour un usage commercial** :
    (« robotique, manque d'âme » — pattern pro documenté : Veo image +
    ElevenLabs VO). OpenAI TTS n'est PAS inclus dans l'abonnement ChatGPT
    (API pay-per-use ~0,02-0,05 $/trailer — plan B pour les Shorts).
-2. **Musique monétisable YouTube** → **Epidemic Sound Creator ~10 €/mois**
-   (annuel). Uppbeat sans avantage décisif ; **Suno/Udio déconseillés**
-   (output non protégeable, litige UMG/Sony en cours 04/2026, label
-   synthétique exigé — risque juridique pour ~0 € d'économie).
+2. **Musique monétisable YouTube** → **Epidemic Sound Pro ~17 €/mois**
+   (annuel). Révision 2026-07-20 après question de Patrice : le plan Creator
+   (~10 €) ne couvre qu'**1 chaîne par plateforme** et **interdit l'usage
+   publicitaire** — or plusieurs chaînes sont prévues ET les trailers
+   serviront de créas pub Meta/LinkedIn. Le Pro couvre **3 chaînes par
+   plateforme** + l'usage pub (au-delà : Enterprise). Uppbeat sans avantage
+   décisif ; **Suno/Udio déconseillés** (output non protégeable, litige
+   UMG/Sony en cours 04/2026, label synthétique exigé — risque juridique
+   pour ~0 € d'économie).
 
 ## Découverte tarifaire importante
 

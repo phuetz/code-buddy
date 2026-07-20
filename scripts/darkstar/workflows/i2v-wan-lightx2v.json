@@ -1,0 +1,408 @@
+{
+  "11": {
+    "inputs": {
+      "model_name": "umt5-xxl-enc-fp8_e4m3fn.safetensors",
+      "precision": "bf16",
+      "load_device": "offload_device",
+      "quantization": "fp8_e4m3fn"
+    },
+    "class_type": "LoadWanVideoT5TextEncoder",
+    "_meta": {
+      "title": "WanVideo T5 Text Encoder Loader"
+    }
+  },
+  "16": {
+    "inputs": {
+      "positive_prompt": "A man and a woman sit facing each other, their eyes locked in quiet affection. They lean forward and share a warm embrace, lingering for a moment before gently pulling apart. Smiling playfully, they then raise their hands, their fingers carefully curving to form a perfect heart shape against the golden afternoon light.",
+      "negative_prompt": "",
+      "force_offload": true,
+      "use_disk_cache": false,
+      "device": "gpu",
+      "t5": [
+        "11",
+        0
+      ]
+    },
+    "class_type": "WanVideoTextEncode",
+    "_meta": {
+      "title": "WanVideo TextEncode"
+    }
+  },
+  "22": {
+    "inputs": {
+      "model": "wan2.2_i2v_high_noise_14B_fp8_scaled.safetensors",
+      "base_precision": "bf16",
+      "quantization": "fp8_e4m3fn_scaled",
+      "load_device": "offload_device",
+      "attention_mode": "sdpa",
+      "rms_norm_function": "default"
+    },
+    "class_type": "WanVideoModelLoader",
+    "_meta": {
+      "title": "WanVideo Model Loader"
+    }
+  },
+  "27": {
+    "inputs": {
+      "steps": [
+        "94",
+        0
+      ],
+      "cfg": 1,
+      "shift": 1.0,
+      "seed": 42,
+      "force_offload": true,
+      "scheduler": "euler",
+      "riflex_freq_index": 0,
+      "denoise_strength": 1,
+      "batched_cfg": false,
+      "rope_function": "comfy",
+      "start_step": 0,
+      "end_step": [
+        "91",
+        0
+      ],
+      "add_noise_to_samples": "",
+      "model": [
+        "80",
+        0
+      ],
+      "image_embeds": [
+        "110",
+        0
+      ],
+      "text_embeds": [
+        "16",
+        0
+      ],
+      "sigmas": [
+        "99",
+        0
+      ]
+    },
+    "class_type": "WanVideoSampler",
+    "_meta": {
+      "title": "WanVideo Sampler"
+    }
+  },
+  "28": {
+    "inputs": {
+      "enable_vae_tiling": false,
+      "tile_x": 272,
+      "tile_y": 272,
+      "tile_stride_x": 144,
+      "tile_stride_y": 128,
+      "normalization": "default",
+      "vae": [
+        "109",
+        0
+      ],
+      "samples": [
+        "90",
+        0
+      ]
+    },
+    "class_type": "WanVideoDecode",
+    "_meta": {
+      "title": "WanVideo Decode"
+    }
+  },
+  "39": {
+    "inputs": {
+      "blocks_to_swap": 0,
+      "offload_img_emb": false,
+      "offload_txt_emb": false,
+      "use_non_blocking": false,
+      "vace_blocks_to_swap": 1,
+      "prefetch_blocks": 0,
+      "block_swap_debug": false
+    },
+    "class_type": "WanVideoBlockSwap",
+    "_meta": {
+      "title": "WanVideo Block Swap"
+    }
+  },
+  "56": {
+    "inputs": {
+      "lora": "wan2.2_i2v_lightx2v_4steps_lora_v1_high_noise.safetensors",
+      "strength": 1.0,
+      "low_mem_load": false,
+      "merge_loras": false
+    },
+    "class_type": "WanVideoLoraSelect",
+    "_meta": {
+      "title": "WanVideo Lora Select"
+    }
+  },
+  "60": {
+    "inputs": {
+      "frame_rate": 16,
+      "loop_count": 0,
+      "filename_prefix": "Wan2.2-Lightning-I2V-4steps",
+      "format": "video/h264-mp4",
+      "pix_fmt": "yuv420p",
+      "crf": 19,
+      "save_metadata": true,
+      "trim_to_audio": false,
+      "pingpong": false,
+      "save_output": false,
+      "images": [
+        "28",
+        0
+      ]
+    },
+    "class_type": "VHS_VideoCombine",
+    "_meta": {
+      "title": "Video Combine \ud83c\udfa5\ud83c\udd65\ud83c\udd57\ud83c\udd62"
+    }
+  },
+  "71": {
+    "inputs": {
+      "model": "wan2.2_i2v_low_noise_14B_fp8_scaled.safetensors",
+      "base_precision": "bf16",
+      "quantization": "fp8_e4m3fn_scaled",
+      "load_device": "offload_device",
+      "attention_mode": "sdpa",
+      "rms_norm_function": "default"
+    },
+    "class_type": "WanVideoModelLoader",
+    "_meta": {
+      "title": "WanVideo Model Loader"
+    }
+  },
+  "79": {
+    "inputs": {
+      "model": [
+        "93",
+        0
+      ],
+      "lora": [
+        "97",
+        0
+      ]
+    },
+    "class_type": "WanVideoSetLoRAs",
+    "_meta": {
+      "title": "WanVideo Set LoRAs"
+    }
+  },
+  "80": {
+    "inputs": {
+      "model": [
+        "92",
+        0
+      ],
+      "lora": [
+        "56",
+        0
+      ]
+    },
+    "class_type": "WanVideoSetLoRAs",
+    "_meta": {
+      "title": "WanVideo Set LoRAs"
+    }
+  },
+  "90": {
+    "inputs": {
+      "steps": [
+        "94",
+        0
+      ],
+      "cfg": 1,
+      "shift": 1.0,
+      "seed": 42,
+      "force_offload": true,
+      "scheduler": "euler",
+      "riflex_freq_index": 0,
+      "denoise_strength": 1,
+      "batched_cfg": false,
+      "rope_function": "comfy",
+      "start_step": [
+        "91",
+        0
+      ],
+      "end_step": -1,
+      "add_noise_to_samples": "",
+      "model": [
+        "79",
+        0
+      ],
+      "image_embeds": [
+        "110",
+        0
+      ],
+      "text_embeds": [
+        "16",
+        0
+      ],
+      "samples": [
+        "27",
+        0
+      ],
+      "sigmas": [
+        "99",
+        0
+      ]
+    },
+    "class_type": "WanVideoSampler",
+    "_meta": {
+      "title": "WanVideo Sampler"
+    }
+  },
+  "91": {
+    "inputs": {
+      "value": 2
+    },
+    "class_type": "INTConstant",
+    "_meta": {
+      "title": "Split_step"
+    }
+  },
+  "92": {
+    "inputs": {
+      "model": [
+        "22",
+        0
+      ],
+      "block_swap_args": [
+        "39",
+        0
+      ]
+    },
+    "class_type": "WanVideoSetBlockSwap",
+    "_meta": {
+      "title": "WanVideo Set BlockSwap"
+    }
+  },
+  "93": {
+    "inputs": {
+      "model": [
+        "71",
+        0
+      ],
+      "block_swap_args": [
+        "39",
+        0
+      ]
+    },
+    "class_type": "WanVideoSetBlockSwap",
+    "_meta": {
+      "title": "WanVideo Set BlockSwap"
+    }
+  },
+  "94": {
+    "inputs": {
+      "value": 4
+    },
+    "class_type": "INTConstant",
+    "_meta": {
+      "title": "Steps"
+    }
+  },
+  "97": {
+    "inputs": {
+      "lora": "wan2.2_i2v_lightx2v_4steps_lora_v1_low_noise.safetensors",
+      "strength": 1.0,
+      "low_mem_load": false,
+      "merge_loras": false
+    },
+    "class_type": "WanVideoLoraSelect",
+    "_meta": {
+      "title": "WanVideo Lora Select"
+    }
+  },
+  "99": {
+    "inputs": {
+      "float_list": [
+        "100",
+        0
+      ]
+    },
+    "class_type": "FloatToSigmas",
+    "_meta": {
+      "title": "Float To Sigmas"
+    }
+  },
+  "100": {
+    "inputs": {
+      "string": "1.0, 0.9375001, 0.8333333, 0.625, 0.0000"
+    },
+    "class_type": "StringToFloatList",
+    "_meta": {
+      "title": "String to Float List"
+    }
+  },
+  "106": {
+    "inputs": {
+      "image": "i2v_test_1.png"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "Load Image"
+    }
+  },
+  "108": {
+    "inputs": {
+      "width": 1280,
+      "height": 720,
+      "upscale_method": "lanczos",
+      "keep_proportion": "crop",
+      "pad_color": "0, 0, 0",
+      "crop_position": "center",
+      "divisible_by": 16,
+      "device": "cpu",
+      "image": [
+        "106",
+        0
+      ]
+    },
+    "class_type": "ImageResizeKJv2",
+    "_meta": {
+      "title": "Resize Image v2"
+    }
+  },
+  "109": {
+    "inputs": {
+      "model_name": "wan_2.1_vae.safetensors",
+      "precision": "bf16",
+      "use_cpu_cache": false,
+      "verbose": false
+    },
+    "class_type": "WanVideoVAELoader",
+    "_meta": {
+      "title": "WanVideo VAE Loader"
+    }
+  },
+  "110": {
+    "inputs": {
+      "width": [
+        "108",
+        1
+      ],
+      "height": [
+        "108",
+        2
+      ],
+      "num_frames": 81,
+      "noise_aug_strength": 0,
+      "start_latent_strength": 1,
+      "end_latent_strength": 1,
+      "force_offload": true,
+      "fun_or_fl2v_model": false,
+      "tiled_vae": false,
+      "augment_empty_frames": 0,
+      "vae": [
+        "109",
+        0
+      ],
+      "start_image": [
+        "108",
+        0
+      ]
+    },
+    "class_type": "WanVideoImageToVideoEncode",
+    "_meta": {
+      "title": "WanVideo ImageToVideo Encode"
+    }
+  }
+}
