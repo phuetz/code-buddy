@@ -37,3 +37,16 @@ Nodes MIT : gitlab.com/pixaroma/comfyui-pixaroma.
 
 *Source : playlists officielles Pixaroma, descriptions d'épisodes,
 workflows.pixaroma.com, GitLab pixaroma (MIT).*
+
+## Addendum 21/07 — verdicts de tests mesurés (vidéos partagées par Patrice)
+
+- **Krea2 « COMBO detail boost » (Aitrepreneur) : REJETÉ par mesure.** A/B sur
+  keyframe rue (seed identique, gate ArcFace + Laplacien) : standard 0,591/235 ;
+  combo denoise 0,30 → 0,536/202 (les deux dégradés) ; denoise 0,18 →
+  0,502/243 (netteté +3 %, identité −15 % = disqualifiant pour un dataset
+  d'identité). Le node Krea2T-Enhancer (MIT) reste installé pour essais
+  ponctuels hors dataset. IdeoKrea LoRA : écartée (sans licence).
+- Nodes environnements opérationnels après restart : IC-Light
+  (LoadAndApplyICLightUnet), BiRefNet, Krea2T-Enhancer.
+- Vidéo ASF « LoRA dataset from ONE photo (Qwen) » : méthode en cours
+  d'extraction — candidat second éditeur d'identité (spec v3).
