@@ -44,12 +44,9 @@
   },
   "27": {
     "inputs": {
-      "steps": [
-        "94",
-        0
-      ],
+      "steps": 6,
       "cfg": 1,
-      "shift": 1.0,
+      "shift": 5.0,
       "seed": 42,
       "force_offload": true,
       "scheduler": "euler",
@@ -204,12 +201,9 @@
   },
   "90": {
     "inputs": {
-      "steps": [
-        "94",
-        0
-      ],
+      "steps": 6,
       "cfg": 1,
-      "shift": 1.0,
+      "shift": 5.0,
       "seed": 42,
       "force_offload": true,
       "scheduler": "euler",

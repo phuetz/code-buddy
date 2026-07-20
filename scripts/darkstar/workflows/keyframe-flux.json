@@ -26,8 +26,8 @@
     "class_type": "CLIPTextEncode",
     "inputs": {
       "clip": [
-        "1",
-        1
+        "20",
+        0
       ],
       "text": "portrait of a young woman"
     },
@@ -39,8 +39,8 @@
     "class_type": "CLIPTextEncode",
     "inputs": {
       "clip": [
-        "1",
-        1
+        "20",
+        0
       ],
       "text": ""
     },
@@ -157,8 +157,8 @@
         0
       ],
       "vae": [
-        "1",
-        2
+        "21",
+        0
       ]
     },
     "_meta": {
@@ -176,6 +176,27 @@
     },
     "_meta": {
       "title": "SaveImage"
+    }
+  },
+  "20": {
+    "class_type": "DualCLIPLoader",
+    "inputs": {
+      "clip_name1": "clip_l.safetensors",
+      "clip_name2": "t5xxl_fp8_e4m3fn.safetensors",
+      "type": "flux",
+      "device": "default"
+    },
+    "_meta": {
+      "title": "DualCLIP"
+    }
+  },
+  "21": {
+    "class_type": "VAELoader",
+    "inputs": {
+      "vae_name": "flux_vae.safetensors"
+    },
+    "_meta": {
+      "title": "FluxVAE"
     }
   }
 }
