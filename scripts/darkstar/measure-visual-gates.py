@@ -14,8 +14,9 @@ Setup (Python 3.10+; use a dedicated virtual environment):
     ffprobe must also be available in PATH when --clip is used.
 
 The JSON report contains raw, deterministic measurements only. Thresholds and
-pass/fail decisions belong to the TypeScript consumer. A dependency failure
-exits with status 3; no partial report is written.
+pass/fail decisions belong to the TypeScript consumer. A measurement failure
+exits with status 2 and a dependency failure with status 3; no partial report
+is written.
 """
 
 from __future__ import annotations
@@ -34,6 +35,7 @@ from typing import Any, Sequence
 
 
 DEPENDENCY_EXIT = 3
+MEASUREMENT_EXIT = 2
 IDENTITY_INFORMATIONAL_THRESHOLD = 0.35
 LOW_VISIBILITY_THRESHOLD = 0.5
 TELEPORTATION_DELTA_THRESHOLD = 0.25
@@ -439,11 +441,18 @@ def infer_face_embeddings(
 
 def infer_pose_and_hands(frames: Any, deps: RuntimeDependencies) -> tuple[Any, Any, Any]:
     """Run MediaPipe Pose and Hands, returning arrays consumed by the pure metric."""
-    mp = deps.mediapipe
+    try:
+        pose_api = deps.mediapipe.solutions.pose
+        hands_api = deps.mediapipe.solutions.hands
+    except AttributeError as error:
+        raise MissingDependencyError(
+            "MediaPipe solutions API is unavailable. Install compatible versions with "
+            "`pip install mediapipe==0.10.14 'protobuf<5'`."
+        ) from error
     pose_positions: list[Any] = []
     pose_visibility: list[Any] = []
     hand_counts: list[list[int]] = []
-    with mp.solutions.pose.Pose(static_image_mode=True, model_complexity=2) as pose, mp.solutions.hands.Hands(
+    with pose_api.Pose(static_image_mode=True, model_complexity=2) as pose, hands_api.Hands(
         static_image_mode=True,
         max_num_hands=2,
         model_complexity=1,
@@ -656,7 +665,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         return DEPENDENCY_EXIT
     except Exception as error:  # The CLI must fail loudly and never leave a partial report.
         print(f"Visual gate measurement failed: {error}", file=sys.stderr)
-        return 1
+        return MEASUREMENT_EXIT
 
 
 if __name__ == "__main__":
