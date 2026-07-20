@@ -12,6 +12,7 @@ import {
   type NativeFashionSourceDigests,
 } from '../../scripts/mysoulmate/compile-native-fashion-plan.js';
 import { PILOT_FASHION_SCENES } from '../../src/companion/fashion-scene-catalog.js';
+import type { VisualGateReport } from '../../src/tools/video/visual-gate-report.js';
 import { assertPlan } from '../../scripts/mysoulmate/render-youtube-short-batch.js';
 
 const roots: string[] = [];
@@ -29,6 +30,58 @@ const passingProbe: NativeFashionClipProbe = {
   fps: 30,
 };
 
+function passingGateReport(sha256: string): VisualGateReport {
+  return {
+    schemaVersion: 1,
+    generatedAt: '2026-07-20T12:34:56.000Z',
+    clipSha256: sha256,
+    profile: 'native-fashion-v1',
+    sampleFps: 6,
+    metrics: {
+      identity: {
+        evaluatedFrameCount: 6,
+        detectedFaceCount: 6,
+        minSimilarity: 0.52,
+        meanSimilarity: 0.61,
+        stdDevSimilarity: 0.03,
+        lowSimilarityFrames: [],
+        noFace: [],
+      },
+      anatomy: {
+        evaluatedFrameCount: 6,
+        suspectFrameCount: 0,
+        suspiciousFrames: [],
+        teleportationFrames: [],
+      },
+      temporalStability: {
+        framePairCount: 359,
+        globalFlickerMean: 4.2,
+        thirdsFlickerMean: { top: 4.1, middle: 4.5, bottom: 5.2 },
+        exposureJitterVariance: 18,
+        localWarpGradientMean: 11,
+      },
+      sharpness: {
+        evaluatedFrameCount: 6,
+        minLaplacianVariance: 180,
+        meanLaplacianVariance: 260,
+        lowSharpnessFrames: [],
+      },
+      masterProperties: {
+        width: 1288,
+        height: 1920,
+        fps: 30,
+        durationSeconds: 12,
+        videoBitrateKbps: 15_000,
+        videoCodec: 'h264',
+        audioCodec: 'aac',
+        hasAudio: true,
+        nearBlackFrameRatio: 0.01,
+      },
+      loop: { normalizedAbsoluteDifference: 0.05, histogramCorrelation: 0.96 },
+    },
+  };
+}
+
 afterEach(async () => {
   await Promise.all(roots.splice(0).map((root) => fs.rm(root, { recursive: true, force: true })));
 });
@@ -38,6 +91,8 @@ async function fixture(): Promise<{
   clipPath: string;
   clipSha256: string;
   digestsPath: string;
+  gateReportPath: string;
+  gateReportSha256: string;
   outPath: string;
 }> {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'native-fashion-plan-'));
@@ -47,11 +102,17 @@ async function fixture(): Promise<{
   await fs.writeFile(clipPath, clipBytes);
   const digestsPath = path.join(root, 'digests.json');
   await fs.writeFile(digestsPath, JSON.stringify({ sourceDigests }));
+  const clipSha256 = createHash('sha256').update(clipBytes).digest('hex');
+  const gateReportPath = path.join(root, 'visual-gates.json');
+  const gateReportBytes = Buffer.from(`${JSON.stringify(passingGateReport(clipSha256), null, 2)}\n`);
+  await fs.writeFile(gateReportPath, gateReportBytes);
   return {
     root,
     clipPath,
-    clipSha256: createHash('sha256').update(clipBytes).digest('hex'),
+    clipSha256,
     digestsPath,
+    gateReportPath,
+    gateReportSha256: createHash('sha256').update(gateReportBytes).digest('hex'),
     outPath: path.join(root, 'plan.json'),
   };
 }
@@ -66,6 +127,9 @@ function optionsFor(value: Awaited<ReturnType<typeof fixture>>): CompileNativeFa
     description: 'Un pilote fashion vertical original de douze secondes, réservé à une revue humaine privée.',
     provenanceRef: 'mysoulmate/original-ambient-audio',
     profileRevision: 'a'.repeat(64),
+    gateReportPath: value.gateReportPath,
+    outfitConfirmed: true,
+    decorConfirmed: true,
     qaApproved: true,
     outPath: value.outPath,
   };
@@ -85,14 +149,51 @@ describe('native fashion plan compiler', () => {
       description: 'Un pilote fashion vertical original de douze secondes, réservé à une revue humaine privée.',
       provenanceRef: 'mysoulmate/original-ambient-audio',
       profileRevision: 'a'.repeat(64),
+      visualGateReportSha256: 'e'.repeat(64),
       qaApproved: true,
     });
     expect(() => assertPlan(plan)).not.toThrow();
     expect(plan).toMatchObject({
       schemaVersion: 4,
+      visualGateReportSha256: 'e'.repeat(64),
       policy: { qaStatus: 'approved', autoPublish: false },
       shorts: [{ render: { engine: 'approved-native-video' } }],
     });
+  });
+
+  it('requires a measured gate report for the native profile', async () => {
+    const value = await fixture();
+    await expect(compileNativeFashionPlan(
+      { ...optionsFor(value), gateReportPath: undefined },
+      { probe: async () => passingProbe },
+    )).rejects.toThrow(/--gate-report is required.*measure-visual-gates/u);
+  });
+
+  it('embeds the exact green report digest after explicit human confirmations', async () => {
+    const value = await fixture();
+    const result = await compileNativeFashionPlan(optionsFor(value), { probe: async () => passingProbe });
+    expect(result.plan.visualGateReportSha256).toBe(value.gateReportSha256);
+    expect(JSON.parse(await fs.readFile(value.outPath, 'utf8'))).toMatchObject({
+      visualGateReportSha256: value.gateReportSha256,
+    });
+  });
+
+  it('rejects a report when one measured gate fails', async () => {
+    const value = await fixture();
+    const report = passingGateReport(value.clipSha256);
+    report.metrics.identity.minSimilarity = 0.2;
+    report.metrics.identity.lowSimilarityFrames = [{ frameIndex: 42, timestampSeconds: 1.4, similarity: 0.2 }];
+    await fs.writeFile(value.gateReportPath, `${JSON.stringify(report, null, 2)}\n`);
+    await expect(compileNativeFashionPlan(optionsFor(value), { probe: async () => passingProbe }))
+      .rejects.toThrow(/identity.*42/u);
+  });
+
+  it('rejects missing human confirmations even when measured gates are green', async () => {
+    const value = await fixture();
+    await expect(compileNativeFashionPlan(
+      { ...optionsFor(value), decorConfirmed: false },
+      { probe: async () => passingProbe },
+    )).rejects.toThrow(/decor-framing.*human review required/u);
   });
 
   it('fails closed when the declared clip digest does not match', async () => {
@@ -126,6 +227,7 @@ describe('native fashion plan compiler', () => {
       description: 'Un pilote fashion vertical original de douze secondes, réservé à une revue humaine privée.',
       provenanceRef: 'mysoulmate/original-ambient-audio',
       profileRevision: 'a'.repeat(64),
+      visualGateReportSha256: 'e'.repeat(64),
       qaApproved: true,
     })).not.toThrow();
   });

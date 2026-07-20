@@ -116,6 +116,7 @@ export interface YouTubeHumanReviewReceipt {
   sidecarSha256: string;
   captionSha256: string;
   technicalReportSha256: string;
+  visualGateReportSha256?: string;
   reviewer: string;
   reason: string;
   checks: YouTubeHumanReviewChecks;
@@ -131,6 +132,7 @@ export interface YouTubeChangesRequestedReceipt {
   sidecarSha256: string;
   captionSha256: string;
   technicalReportSha256: string;
+  visualGateReportSha256?: string;
   reviewer: string;
   reason: string;
   checks: YouTubeHumanReviewChecks;

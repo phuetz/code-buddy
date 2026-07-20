@@ -235,6 +235,7 @@ export interface LegacyShortPlan extends PlanEnvelope {
 
 export interface NativeFashionPlan extends PlanEnvelope {
   schemaVersion: 4;
+  visualGateReportSha256: string;
   shorts: NativeFashionShort[];
 }
 
@@ -330,6 +331,9 @@ export function assertPlan(plan: unknown): asserts plan is ShortPlan {
       throw new Error(`${short.shortId} publication gate is unsafe`);
     }
     if (value.schemaVersion === 4) {
+      if (!/^[a-f0-9]{64}$/u.test(value.visualGateReportSha256 ?? '')) {
+        throw new Error('Native fashion plan visualGateReportSha256 must be a lowercase SHA-256');
+      }
       if (short.render?.engine !== 'approved-native-video') {
         throw new Error(`${short.shortId} must use the approved native-video engine`);
       }

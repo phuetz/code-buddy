@@ -14,6 +14,10 @@ import {
   type PilotFashionScene,
 } from '../../src/companion/fashion-scene-catalog.js';
 import {
+  loadAndEvaluateVisualGateReport,
+  type HumanConfirmedVisualGates,
+} from '../../src/tools/video/visual-gate-report.js';
+import {
   assertPlan,
   NATIVE_FASHION_PROFILE,
   type NativeFashionPlan,
@@ -48,6 +52,7 @@ export interface BuildNativeFashionPlanInput {
   description: string;
   provenanceRef: string;
   profileRevision: string;
+  visualGateReportSha256: string;
   qaApproved?: boolean;
 }
 
@@ -60,6 +65,9 @@ export interface CompileNativeFashionPlanOptions {
   description: string;
   provenanceRef: string;
   profileRevision: string;
+  gateReportPath?: string;
+  outfitConfirmed?: boolean;
+  decorConfirmed?: boolean;
   qaApproved?: boolean;
   outPath: string;
   force?: boolean;
@@ -121,9 +129,13 @@ export function buildNativeFashionPlan(input: BuildNativeFashionPlanInput): Nati
   if (!input.title.trim() || !input.description.trim()) throw new Error('Editorial title and description are required');
   if (!input.provenanceRef.trim()) throw new Error('Audio provenance reference is required');
   if (!SHA256.test(input.profileRevision)) throw new Error('Audio profile revision must be a lowercase SHA-256');
+  if (!SHA256.test(input.visualGateReportSha256)) {
+    throw new Error('Visual gate report SHA-256 must be a lowercase SHA-256');
+  }
 
   const plan: NativeFashionPlan = {
     schemaVersion: 4,
+    visualGateReportSha256: input.visualGateReportSha256,
     sourceDigests: { ...input.sourceDigests },
     policy: {
       contentTier: 'safe',
@@ -253,9 +265,32 @@ export async function compileNativeFashionPlan(
   if (options.qaApproved !== true) {
     throw new Error('Human QA approval is prerequisite; pass --qa-approved true only after frame-by-frame review');
   }
+  if (!options.gateReportPath?.trim()) {
+    throw new Error(
+      '--gate-report is required for native-fashion-v1; produce it with ' +
+      'python scripts/darkstar/measure-visual-gates.py --clip <mp4> --reference-dir <dir> ' +
+      '--output <report.json> --loop-check --profile native-fashion-v1',
+    );
+  }
   const scene = PILOT_FASHION_SCENES.find((candidate) => candidate.sceneId === options.sceneId);
   if (!scene) throw new Error(`Unknown pilot fashion scene: ${options.sceneId}`);
   const clip = await sha256RegularNoFollow(options.clipPath);
+  const humanConfirmed: HumanConfirmedVisualGates = {
+    ...(options.outfitConfirmed === true ? { outfit: true as const } : {}),
+    ...(options.decorConfirmed === true ? { decorFraming: true as const } : {}),
+  };
+  const gateEvaluation = await loadAndEvaluateVisualGateReport(
+    options.gateReportPath,
+    clip.sha256,
+    'native-fashion-v1',
+    humanConfirmed,
+  );
+  const failedGates = gateEvaluation.gateResults.filter((result) => !result.pass);
+  if (failedGates.length > 0) {
+    throw new Error(
+      `Native fashion visual gates failed: ${failedGates.map((result) => `${result.gate} (${result.evidence})`).join('; ')}`,
+    );
+  }
   const sourceDigests = await readSourceDigests(options.digestsPath);
   const probe = await (dependencies.probe ?? probeNativeFashionClip)(clip.path);
   const plan = buildNativeFashionPlan({
@@ -269,6 +304,7 @@ export async function compileNativeFashionPlan(
     description: options.description,
     provenanceRef: options.provenanceRef,
     profileRevision: options.profileRevision,
+    visualGateReportSha256: gateEvaluation.reportSha256,
     qaApproved: options.qaApproved,
   });
   const outPath = path.resolve(options.outPath);
@@ -306,6 +342,9 @@ export function parseCompileNativeFashionArgs(argv: readonly string[]): CompileN
     description: requiredArgument(argv, 'description'),
     provenanceRef: requiredArgument(argv, 'provenance-ref'),
     profileRevision: requiredArgument(argv, 'profile-revision'),
+    gateReportPath: requiredArgument(argv, 'gate-report'),
+    outfitConfirmed: argv.includes('--outfit-confirmed'),
+    decorConfirmed: argv.includes('--decor-confirmed'),
     qaApproved: argument(argv, 'qa-approved') === 'true',
     outPath: requiredArgument(argv, 'out'),
     force: argv.includes('--force'),

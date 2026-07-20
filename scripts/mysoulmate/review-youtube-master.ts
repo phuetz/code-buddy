@@ -2,7 +2,7 @@
 
 /** Create digest-bound technical and human-review receipts for a private YouTube master. */
 
-import { randomUUID } from 'crypto';
+import { createHash, randomUUID } from 'crypto';
 import { constants as fsConstants, promises as fs } from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -15,6 +15,10 @@ import {
   type YouTubeHumanReviewReceipt,
   type YouTubeTechnicalReport,
 } from '../../src/tools/video/youtube-master-quality.js';
+import {
+  assertReportMatchesClip,
+  parseVisualGateReport,
+} from '../../src/tools/video/visual-gate-report.js';
 
 const REQUIRED_CHECKS = ['voice', 'lipSync', 'identity', 'anatomy', 'captions', 'disclosure', 'editorial'] as const;
 
@@ -41,7 +45,7 @@ async function atomicCreate(filename: string, contents: string): Promise<void> {
   }
 }
 
-async function regularJson<T>(filename: string): Promise<T> {
+async function regularBytes(filename: string): Promise<Buffer> {
   if (!path.isAbsolute(filename) || filename.includes('\0')) throw new Error('Receipt path must be absolute');
   const handle = await fs.open(filename, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW);
   try {
@@ -49,10 +53,21 @@ async function regularJson<T>(filename: string): Promise<T> {
     if (!info.isFile() || info.size <= 0 || info.size > 1024 * 1024) {
       throw new Error('Receipt must be a regular non-symlink JSON file smaller than 1 MiB');
     }
-    return JSON.parse((await handle.readFile()).toString('utf8')) as T;
+    return await handle.readFile();
   } finally {
     await handle.close();
   }
+}
+
+async function regularJson<T>(filename: string): Promise<T> {
+  return JSON.parse((await regularBytes(filename)).toString('utf8')) as T;
+}
+
+async function visualGateReportDigest(filename: string, clipSha256: string): Promise<string> {
+  const bytes = await regularBytes(filename);
+  const report = parseVisualGateReport(JSON.parse(bytes.toString('utf8')) as unknown);
+  assertReportMatchesClip(report, clipSha256);
+  return createHash('sha256').update(bytes).digest('hex');
 }
 
 async function main(): Promise<void> {
@@ -122,12 +137,18 @@ async function main(): Promise<void> {
       reason,
       checks,
     });
+  const gateReportSha256 = argument('gate-report')
+    ? await visualGateReportDigest(path.resolve(argument('gate-report')), currentReport.videoSha256)
+    : undefined;
+  const journaledReceipt = gateReportSha256
+    ? { ...receipt, visualGateReportSha256: gateReportSha256 }
+    : receipt;
   const output = argument('output')
     ? path.resolve(argument('output'))
     : action === 'request-changes'
       ? `${videoPath}.changes.${currentReport.videoSha256.slice(0, 16)}.json`
       : `${videoPath}.review.${currentReport.videoSha256.slice(0, 16)}.json`;
-  await atomicCreate(output, `${JSON.stringify(receipt, null, 2)}\n`);
+  await atomicCreate(output, `${JSON.stringify(journaledReceipt, null, 2)}\n`);
   process.stdout.write(action === 'request-changes'
     ? `Changes-requested receipt created; upload remains blocked: ${output}\n`
     : `Human-review receipt created for private upload only: ${output}\n`);

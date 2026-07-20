@@ -112,6 +112,7 @@ describe('MySoulmate YouTube Short batch contract', () => {
     expect(() => assertPlan({
       ...(plan() as object),
       schemaVersion: 4,
+      visualGateReportSha256: '8'.repeat(64),
       shorts: [{ shortId: 'fashion-without-render', publication: plannedShort().publication }],
     })).toThrow('approved native-video engine');
   });
@@ -183,7 +184,12 @@ describe('MySoulmate YouTube Short batch contract', () => {
         commercialUseApproved: true,
       },
     };
-    const candidate = { ...(plan() as Record<string, unknown>), schemaVersion: 4, shorts: [native] };
+    const candidate = {
+      ...(plan() as Record<string, unknown>),
+      schemaVersion: 4,
+      visualGateReportSha256: '8'.repeat(64),
+      shorts: [native],
+    };
     expect(() => assertPlan(candidate)).not.toThrow();
 
     native.render.profile = {
