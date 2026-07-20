@@ -15,7 +15,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { EventEmitter } from 'events';
 import { spawn, spawnSync } from 'child_process';
-import { mkdtemp, rm, stat, readFile } from 'fs/promises';
+import { mkdtemp, rm, stat, readFile, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
 
@@ -30,6 +30,9 @@ import {
   buildClipAudioGraph,
   buildAudioMixGraph,
   buildFilmArgs,
+  buildLoudnormPass2Args,
+  buildLut3dFilter,
+  parseLoudnormMeasurement,
   assembleFilm,
   type ClipProbe,
   type TransitionSpec,
@@ -92,6 +95,8 @@ function makeFakeSpawn(
     const isVersion = args.includes('-version');
     const isFilters = args.includes('-filters');
     const isRender = args.includes('-filter_complex');
+    const isLoudnormMeasure = args.some((arg) => arg.includes('loudnorm=') && arg.includes('print_format=json'));
+    const isFinishing = !isRender && (args.includes('-af') || args.includes('-vf')) && !args.includes('null');
 
     // Defer events (pre-spawn logic runs first) — the BashTool gotcha applies here too.
     setImmediate(() => {
@@ -108,6 +113,21 @@ function makeFakeSpawn(
           );
         }
         child.emit('close', 0);
+      } else if (isLoudnormMeasure) {
+        child.stderr.emit('data', Buffer.from(JSON.stringify({
+          input_i: '-18.75',
+          input_tp: '-0.55',
+          input_lra: '7.20',
+          input_thresh: '-29.05',
+          target_offset: '-0.03',
+        })));
+        child.emit('close', 0);
+      } else if (isFinishing) {
+        const destination = args.at(-1)!;
+        void writeFile(destination, 'finished').then(
+          () => child.emit('close', opts.renderCode ?? 0),
+          () => child.emit('close', 1),
+        );
       } else if (isRender) {
         child.stderr.emit('data', Buffer.from('frame=  100 fps= 30'));
         child.emit('close', opts.renderCode ?? 0);
@@ -390,6 +410,27 @@ describe('buildAudioMixGraph', () => {
 // ---------------------------------------------------------------------------
 
 describe('buildFilmArgs', () => {
+  it('keeps the no-option ffmpeg argv byte-for-byte compatible', () => {
+    const plan = buildFilmArgs([clip('/a.mp4', 5)], { width: 1920, height: 1080, fps: 30 }, [], {
+      ffmpegBin: 'ffmpeg',
+      outputPath: '/out/film.mp4',
+      engine: 'xfade',
+      glFilter: null,
+      musicVolume: 0.25,
+      ducking: true,
+    });
+    expect(plan.args).toEqual([
+      '-y', '-hide_banner', '-i', '/a.mp4', '-filter_complex',
+      '[0:v]scale=1920:1080:force_original_aspect_ratio=decrease,' +
+        'pad=1920:1080:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1,fps=30,' +
+        'format=yuv420p,setpts=PTS-STARTPTS[v0];' +
+        '[0:a]aformat=sample_rates=48000:channel_layouts=stereo,asetpts=PTS-STARTPTS[a0]',
+      '-map', '[v0]', '-map', '[a0]', '-c:v', 'libx264', '-preset', 'medium', '-crf', '20',
+      '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '192k', '-movflags', '+faststart',
+      '/out/film.mp4',
+    ]);
+  });
+
   it('synthesizes a silent input for a clip without audio and wires its label', () => {
     const probes = [clip('/a.mp4', 5), clip('/b.mp4', 5, { hasAudio: false }), clip('/c.mp4', 5)];
     const specs: TransitionSpec[] = [
@@ -434,6 +475,56 @@ describe('buildFilmArgs', () => {
     expect(plan.args).toEqual(expect.arrayContaining(['-stream_loop', '-1', '-i', '/music.mp3']));
     expect(plan.filterComplex).toContain('sidechaincompress');
     expect(plan.audioLabel).toBe('aout');
+  });
+});
+
+describe('output mastering and grading builders', () => {
+  it('parses real loudnorm JSON embedded in ffmpeg stderr', () => {
+    const measurement = parseLoudnormMeasurement(`
+[Parsed_loudnorm_0 @ 0x123]
+{
+  "input_i" : "-18.75",
+  "input_tp" : "-0.55",
+  "input_lra" : "7.20",
+  "input_thresh" : "-29.05",
+  "output_i" : "-13.97",
+  "output_tp" : "-1.50",
+  "output_lra" : "7.10",
+  "output_thresh" : "-24.22",
+  "normalization_type" : "dynamic",
+  "target_offset" : "-0.03"
+}
+`);
+    expect(measurement).toEqual({
+      inputI: -18.75,
+      inputTruePeakDb: -0.55,
+      inputLra: 7.2,
+      inputThreshold: -29.05,
+      targetOffset: -0.03,
+    });
+  });
+
+  it('builds the second loudnorm pass with defaults and measured values', () => {
+    const args = buildLoudnormPass2Args('/assembled.mp4', '/mastered.mp4', {
+      inputI: -18.75,
+      inputTruePeakDb: -0.55,
+      inputLra: 7.2,
+      inputThreshold: -29.05,
+      targetOffset: -0.03,
+    });
+    expect(args).toEqual([
+      '-y', '-hide_banner', '-i', '/assembled.mp4', '-map', '0:v:0', '-map', '0:a:0',
+      '-c:v', 'copy', '-af',
+      'loudnorm=I=-14:TP=-1.5:LRA=11:measured_I=-18.75:measured_TP=-0.55:' +
+        'measured_LRA=7.2:measured_thresh=-29.05:offset=-0.03:linear=true:print_format=summary',
+      '-c:a', 'aac', '-b:a', '192k', '-movflags', '+faststart', '/mastered.mp4',
+    ]);
+  });
+
+  it('escapes a .cube path for the lut3d filtergraph', () => {
+    expect(buildLut3dFilter("/looks/book: warm, author's.cube")).toBe(
+      "lut3d=file='/looks/book\\: warm\\, author\\'s.cube'",
+    );
   });
 });
 
@@ -524,6 +615,44 @@ describe('assembleFilm — orchestration (injected)', () => {
     );
     expect(res.success).toBe(false);
     expect(res.error).toMatch(/ffmpeg is required/i);
+  });
+
+  it('fails closed when a requested LUT does not exist', async () => {
+    const res = await assembleFilm(
+      { clips: ['/a.mp4'], rootDir: root, lut: { path: 'missing.cube' } },
+      { spawn: makeFakeSpawn(), probeClips: async (p) => p.map((x) => clip(x, 4)) },
+    );
+    expect(res.success).toBe(false);
+    expect(res.error).toMatch(/existing regular \.cube/i);
+  });
+
+  it('applies a valid LUT only to the assembled output', async () => {
+    const lutPath = join(root, "book: warm, author's.cube");
+    await writeFile(lutPath, 'TITLE "identity"\nLUT_3D_SIZE 2\n');
+    const seen: string[][] = [];
+    const res = await assembleFilm(
+      { clips: ['/a.mp4'], rootDir: root, lut: { path: lutPath } },
+      { spawn: makeFakeSpawn({ seen }), probeClips: async (p) => p.map((x) => clip(x, 4)) },
+    );
+    expect(res.success, res.error).toBe(true);
+    const finish = seen.find((args) => args.includes('-vf'));
+    expect(finish).toEqual(expect.arrayContaining(['-i', res.outputPath, '-vf', buildLut3dFilter(lutPath)]));
+  });
+
+  it('runs both loudnorm passes against the assembled output', async () => {
+    const seen: string[][] = [];
+    const res = await assembleFilm(
+      { clips: ['/a.mp4'], rootDir: root, mastering: {} },
+      { spawn: makeFakeSpawn({ seen }), probeClips: async (p) => p.map((x) => clip(x, 4)) },
+    );
+    expect(res.success, res.error).toBe(true);
+    const renderIndex = seen.findIndex((args) => args.includes('-filter_complex'));
+    const measureIndex = seen.findIndex((args) => args.some((arg) => arg.includes('print_format=json')));
+    const finishIndex = seen.findIndex((args) => args.some((arg) => arg.includes('measured_I=')));
+    expect(renderIndex).toBeGreaterThanOrEqual(0);
+    expect(measureIndex).toBeGreaterThan(renderIndex);
+    expect(finishIndex).toBeGreaterThan(measureIndex);
+    expect(seen[measureIndex]).toContain(res.outputPath);
   });
 
   it('surfaces the ffmpeg stderr tail on a render failure', async () => {

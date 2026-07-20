@@ -75,6 +75,20 @@ export interface OutputProfile {
   fps: number;
 }
 
+export interface LoudnormMasteringOptions {
+  targetLufs?: number;
+  truePeakDb?: number;
+  lra?: number;
+}
+
+export interface LoudnormMeasurement {
+  inputI: number;
+  inputTruePeakDb: number;
+  inputLra: number;
+  inputThreshold: number;
+  targetOffset: number;
+}
+
 export interface AssembleFilmInput {
   /** Ordered clip paths to weld together. */
   clips: string[];
@@ -100,6 +114,10 @@ export interface AssembleFilmInput {
   ducking?: boolean;
   /** Optional full-length voiceover/narration path (mixed at full volume). */
   voiceover?: string;
+  /** Optional two-pass loudness mastering, applied to the assembled program output. */
+  mastering?: LoudnormMasteringOptions;
+  /** Optional .cube grade, applied to the assembled program output. */
+  lut?: { path: string };
   /** Explicit output path; otherwise auto-generated under .codebuddy/media-generation/films/. */
   output?: string;
   /** Project root (default cwd). */
@@ -212,6 +230,11 @@ const DEFAULT_TRANSITION = 'fade';
 const DEFAULT_TRANSITION_DURATION = 1;
 const DEFAULT_MUSIC_VOLUME = 0.25;
 const SAMPLE_RATE = 48_000;
+const DEFAULT_MASTERING = {
+  targetLufs: -14,
+  truePeakDb: -1.5,
+  lra: 11,
+} as const;
 
 // ============================================================================
 // Pure helpers (unit-tested)
@@ -246,6 +269,119 @@ function validateExplicitOutput(output: string | undefined): string | null {
     return 'Film output must name a file inside the media directory.';
   }
   return null;
+}
+
+function masteringTargets(options: LoudnormMasteringOptions = {}): Required<LoudnormMasteringOptions> {
+  return {
+    targetLufs: options.targetLufs ?? DEFAULT_MASTERING.targetLufs,
+    truePeakDb: options.truePeakDb ?? DEFAULT_MASTERING.truePeakDb,
+    lra: options.lra ?? DEFAULT_MASTERING.lra,
+  };
+}
+
+function validateMasteringOptions(options: LoudnormMasteringOptions): string | null {
+  const targets = masteringTargets(options);
+  if (
+    !Number.isFinite(targets.targetLufs) || targets.targetLufs >= 0 || targets.targetLufs < -70 ||
+    !Number.isFinite(targets.truePeakDb) || targets.truePeakDb > 0 || targets.truePeakDb < -9 ||
+    !Number.isFinite(targets.lra) || targets.lra < 1 || targets.lra > 50
+  ) return 'Film mastering targets are outside ffmpeg loudnorm limits.';
+  return null;
+}
+
+/** Parse the JSON object printed by ffmpeg's first loudnorm pass. */
+export function parseLoudnormMeasurement(output: string): LoudnormMeasurement {
+  const candidates = output.match(/\{[^{}]*"input_i"[^{}]*\}/gu) ?? [];
+  for (const candidate of candidates.reverse()) {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(candidate) as unknown;
+    } catch {
+      continue;
+    }
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) continue;
+    const record = parsed as Record<string, unknown>;
+    const measurement: LoudnormMeasurement = {
+      inputI: Number(record.input_i),
+      inputTruePeakDb: Number(record.input_tp),
+      inputLra: Number(record.input_lra),
+      inputThreshold: Number(record.input_thresh),
+      targetOffset: Number(record.target_offset),
+    };
+    if (Object.values(measurement).every(Number.isFinite)) return measurement;
+  }
+  throw new Error('ffmpeg loudnorm measurement JSON is missing or invalid.');
+}
+
+function loudnormPass1Filter(options: LoudnormMasteringOptions): string {
+  const targets = masteringTargets(options);
+  return `loudnorm=I=${targets.targetLufs}:TP=${targets.truePeakDb}:LRA=${targets.lra}:print_format=json`;
+}
+
+function buildLoudnormPass1Args(source: string, options: LoudnormMasteringOptions): string[] {
+  return [
+    '-hide_banner', '-nostats', '-i', source, '-map', '0:a:0',
+    '-af', loudnormPass1Filter(options), '-f', 'null', '-',
+  ];
+}
+
+function loudnormPass2Filter(
+  measurement: LoudnormMeasurement,
+  options: LoudnormMasteringOptions,
+): string {
+  const targets = masteringTargets(options);
+  return [
+    `loudnorm=I=${targets.targetLufs}`,
+    `TP=${targets.truePeakDb}`,
+    `LRA=${targets.lra}`,
+    `measured_I=${measurement.inputI}`,
+    `measured_TP=${measurement.inputTruePeakDb}`,
+    `measured_LRA=${measurement.inputLra}`,
+    `measured_thresh=${measurement.inputThreshold}`,
+    `offset=${measurement.targetOffset}`,
+    'linear=true',
+    'print_format=summary',
+  ].join(':');
+}
+
+/** Build the complete second-pass loudnorm argv for an assembled master. */
+export function buildLoudnormPass2Args(
+  source: string,
+  destination: string,
+  measurement: LoudnormMeasurement,
+  options: LoudnormMasteringOptions = {},
+  videoFilter?: string,
+): string[] {
+  const videoArgs = videoFilter
+    ? ['-vf', videoFilter, '-c:v', 'libx264', '-preset', 'medium', '-crf', '20', '-pix_fmt', 'yuv420p']
+    : ['-c:v', 'copy'];
+  return [
+    '-y', '-hide_banner', '-i', source, '-map', '0:v:0', '-map', '0:a:0',
+    ...videoArgs,
+    '-af', loudnormPass2Filter(measurement, options),
+    '-c:a', 'aac', '-b:a', '192k', '-movflags', '+faststart', destination,
+  ];
+}
+
+/** Escape a filesystem path for use as a lut3d filename inside a filtergraph. */
+export function buildLut3dFilter(lutPath: string): string {
+  const escaped = lutPath
+    .replace(/\\/gu, '\\\\')
+    .replace(/'/gu, "\\'")
+    .replace(/:/gu, '\\:')
+    .replace(/,/gu, '\\,')
+    .replace(/;/gu, '\\;')
+    .replace(/\[/gu, '\\[')
+    .replace(/\]/gu, '\\]');
+  return `lut3d=file='${escaped}'`;
+}
+
+function buildLutOutputArgs(source: string, destination: string, videoFilter: string): string[] {
+  return [
+    '-y', '-hide_banner', '-i', source, '-map', '0:v:0', '-map', '0:a:0',
+    '-vf', videoFilter, '-c:v', 'libx264', '-preset', 'medium', '-crf', '20', '-pix_fmt', 'yuv420p',
+    '-c:a', 'copy', '-movflags', '+faststart', destination,
+  ];
 }
 
 /**
@@ -838,6 +974,26 @@ export async function assembleFilm(
   if (outputValidationError) {
     return fail(outputValidationError);
   }
+  if (input.mastering) {
+    const masteringValidationError = validateMasteringOptions(input.mastering);
+    if (masteringValidationError) return fail(masteringValidationError);
+  }
+  let lutPath: string | undefined;
+  if (input.lut) {
+    if (path.extname(input.lut.path).toLowerCase() !== '.cube') {
+      return fail('Film LUT must be an existing regular .cube file.');
+    }
+    const candidate = path.resolve(input.rootDir ?? process.cwd(), input.lut.path);
+    try {
+      const info = await fs.lstat(candidate);
+      if (info.isSymbolicLink() || !info.isFile()) {
+        return fail('Film LUT must be an existing regular .cube file.');
+      }
+      lutPath = await fs.realpath(candidate);
+    } catch {
+      return fail('Film LUT must be an existing regular .cube file.');
+    }
+  }
   if (!(await ffmpegAvailable(spawn, ffmpegBin))) {
     return fail('ffmpeg is required for film assembly but was not found on PATH.');
   }
@@ -953,7 +1109,56 @@ export async function assembleFilm(
     });
   }
 
-  // 6. Verify + sidecar. `prompt`/`provider`/`model` mirror the video_generate
+  // 6. Optional output mastering/grading. These passes consume the completed
+  // montage, so clips, music and voiceover are measured and treated together.
+  if (input.mastering || lutPath) {
+    const finishedPath = path.join(
+      path.dirname(outputPath),
+      `.${path.basename(outputPath, path.extname(outputPath))}-${randomUUID()}-finished.mp4`,
+    );
+    let finishArgs: string[];
+    if (input.mastering) {
+      const measure = await runProcess(
+        spawn,
+        ffmpegBin,
+        buildLoudnormPass1Args(outputPath, input.mastering),
+        deps.timeoutMs ?? 30 * 60 * 1000,
+      );
+      if (measure.code !== 0) {
+        const tail = measure.stderr.trim().split('\n').slice(-6).join('\n');
+        return fail(`ffmpeg loudnorm measurement failed (exit ${measure.code}).\n${tail}`);
+      }
+      let measurement: LoudnormMeasurement;
+      try {
+        measurement = parseLoudnormMeasurement(measure.stderr);
+      } catch (error) {
+        return fail(error instanceof Error ? error.message : String(error));
+      }
+      finishArgs = buildLoudnormPass2Args(
+        outputPath,
+        finishedPath,
+        measurement,
+        input.mastering,
+        lutPath ? buildLut3dFilter(lutPath) : undefined,
+      );
+    } else {
+      finishArgs = buildLutOutputArgs(outputPath, finishedPath, buildLut3dFilter(lutPath!));
+    }
+    const finish = await runProcess(spawn, ffmpegBin, finishArgs, deps.timeoutMs ?? 30 * 60 * 1000);
+    if (finish.code !== 0) {
+      await fs.rm(finishedPath, { force: true });
+      const tail = finish.stderr.trim().split('\n').slice(-6).join('\n');
+      return fail(`ffmpeg film finishing failed (exit ${finish.code}).\n${tail}`);
+    }
+    try {
+      await fs.rename(finishedPath, outputPath);
+    } catch (error) {
+      await fs.rm(finishedPath, { force: true });
+      return fail(`Film finishing output could not be installed: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  // 7. Verify + sidecar. `prompt`/`provider`/`model` mirror the video_generate
   // sidecar shape so the media library shows a meaningful card for the film.
   const outProbe = await probeOne(spawn, ffprobeBin, outputPath);
   const effectiveEngine = glFilter ? 'gl' : 'xfade';
@@ -971,6 +1176,8 @@ export async function assembleFilm(
     estimatedDuration,
     music: input.music ?? null,
     voiceover: input.voiceover ?? null,
+    ...(input.mastering ? { mastering: masteringTargets(input.mastering) } : {}),
+    ...(lutPath ? { lut: { path: lutPath } } : {}),
     generatedAt: new Date().toISOString(),
   });
 
