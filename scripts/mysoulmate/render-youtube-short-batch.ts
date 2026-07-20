@@ -55,7 +55,7 @@ const SAFE_MEDIA_FILE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,199}$/u;
 const TRANSITION_SECONDS = 0.5;
 export const NATIVE_FASHION_PROFILE = {
   id: 'native-fashion-v1',
-  version: 1,
+  version: 2,
   master: { width: 1080, height: 1920, fps: 30, durationSeconds: 12 },
   source: { mode: 'native', minWidth: 1080, minHeight: 1920, allowUpscale: false },
 } as const;

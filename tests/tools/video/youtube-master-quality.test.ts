@@ -106,7 +106,7 @@ describe('YouTube master quality gate', () => {
     const videoPath = await fixture();
     const sidecarPath = `${videoPath}.youtube.json`;
     const sidecar = JSON.parse(await fs.readFile(sidecarPath, 'utf8')) as Record<string, unknown>;
-    sidecar.qualityProfile = { id: 'native-fashion-v1', version: 1 };
+    sidecar.qualityProfile = { id: 'native-fashion-v1', version: 2 };
     sidecar.video = { ...(sidecar.video as object), durationMs: 12_000 };
     sidecar.sourceClips = [{
       file: 'fashion-native.mp4',
@@ -127,14 +127,16 @@ describe('YouTube master quality gate', () => {
       videoCodec: 'h264',
       audioCodec: 'aac',
       hasAudio: true,
+      videoBitrateKbps: 16_000,
     });
     await expect(validateYouTubeMasterBundle({
       videoPath,
       probe: nativeProbe,
       analyze: passingSignals,
     })).resolves.toMatchObject({
-      qualityProfile: { id: 'native-fashion-v1', version: 1 },
-      probe: { width: 1080, height: 1920, fps: 30 },
+      schemaVersion: 4,
+      qualityProfile: { id: 'native-fashion-v1', version: 2 },
+      probe: { width: 1080, height: 1920, fps: 30, videoBitrateKbps: 16_000 },
     });
 
     (sidecar.sourceClips as Array<Record<string, unknown>>)[0]!.width = 720;
@@ -150,7 +152,7 @@ describe('YouTube master quality gate', () => {
     const videoPath = await fixture();
     const sidecarPath = `${videoPath}.youtube.json`;
     const sidecar = JSON.parse(await fs.readFile(sidecarPath, 'utf8')) as Record<string, unknown>;
-    sidecar.qualityProfile = { id: 'native-fashion-v1', version: 1 };
+    sidecar.qualityProfile = { id: 'native-fashion-v1', version: 2 };
     sidecar.video = { ...(sidecar.video as object), durationMs: 12_000 };
     sidecar.sourceClips = [{
       file: 'fashion-upscaled.mp4', sha256: 'e'.repeat(64), width: 1080, height: 1920,
@@ -162,6 +164,7 @@ describe('YouTube master quality gate', () => {
       probe: async () => ({
         duration: 12, width: 1080, height: 1920, fps: 30,
         videoCodec: 'h264', audioCodec: 'aac', hasAudio: true,
+        videoBitrateKbps: 16_000,
       }),
       analyze: passingSignals,
     })).rejects.toThrow('native-source');
@@ -174,9 +177,59 @@ describe('YouTube master quality gate', () => {
       probe: async () => ({
         duration: 14, width: 1080, height: 1920, fps: 30,
         videoCodec: 'h264', audioCodec: 'aac', hasAudio: true,
+        videoBitrateKbps: 16_000,
       }),
       analyze: passingSignals,
     })).rejects.toThrow('duration');
+  });
+
+  it('rejects native masters outside 12–20 Mb/s and reports an in-range bitrate', async () => {
+    const videoPath = await fixture();
+    const sidecarPath = `${videoPath}.youtube.json`;
+    const sidecar = JSON.parse(await fs.readFile(sidecarPath, 'utf8')) as Record<string, unknown>;
+    sidecar.qualityProfile = { id: 'native-fashion-v1', version: 2 };
+    sidecar.video = { ...(sidecar.video as object), durationMs: 12_000 };
+    sidecar.sourceClips = [{
+      file: 'fashion-native.mp4', sha256: 'f'.repeat(64), width: 1080, height: 1920,
+      fps: 30, durationMs: 12_000, generationMode: 'native', upscaled: false,
+    }];
+    await fs.writeFile(sidecarPath, JSON.stringify(sidecar));
+    const probe = (videoBitrateKbps: number) => async () => ({
+      duration: 12,
+      width: 1080,
+      height: 1920,
+      fps: 30,
+      videoCodec: 'h264',
+      audioCodec: 'aac',
+      hasAudio: true,
+      videoBitrateKbps,
+    });
+
+    await expect(validateYouTubeMasterBundle({
+      videoPath, probe: probe(11_999), analyze: passingSignals,
+    })).rejects.toThrow('bitrate');
+    await expect(validateYouTubeMasterBundle({
+      videoPath, probe: probe(20_001), analyze: passingSignals,
+    })).rejects.toThrow('bitrate');
+    await expect(validateYouTubeMasterBundle({
+      videoPath, probe: probe(15_500), analyze: passingSignals,
+    })).resolves.toMatchObject({
+      schemaVersion: 4,
+      qualityProfile: { id: 'native-fashion-v1', version: 2 },
+      probe: { videoBitrateKbps: 15_500 },
+    });
+  });
+
+  it('keeps the legacy profile valid without bitrate bounds', async () => {
+    const videoPath = await fixture();
+    await expect(validateYouTubeMasterBundle({
+      videoPath,
+      probe: passingProbe,
+      analyze: passingSignals,
+    })).resolves.toMatchObject({
+      qualityProfile: { id: 'legacy-localized-v1', version: 1 },
+      probe: { hasAudio: true },
+    });
   });
 
   it('records digest-bound change requests without granting upload readiness', async () => {

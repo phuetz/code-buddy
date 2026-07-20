@@ -34,9 +34,11 @@ export const YOUTUBE_MASTER_PROFILES = {
     requireNativeSources: false,
   },
   'native-fashion-v1': {
-    version: 1,
+    version: 2,
     minWidth: 1080,
     minHeight: 1920,
+    minVideoBitrateKbps: 12_000,
+    maxVideoBitrateKbps: 20_000,
     minDuration: 11,
     maxDuration: 13,
     maxBlackRatio: 0.05,
@@ -49,7 +51,7 @@ export type YouTubeMasterProfileId = keyof typeof YOUTUBE_MASTER_PROFILES;
 
 export interface YouTubeMasterProfileRef {
   id: YouTubeMasterProfileId;
-  version: 1;
+  version: 1 | 2;
 }
 
 export interface YouTubeSourceClipReceipt {
@@ -71,6 +73,7 @@ export interface YouTubeMasterProbe {
   videoCodec: string;
   audioCodec: string;
   hasAudio: boolean;
+  videoBitrateKbps?: number;
 }
 
 export interface YouTubeMasterSignalAnalysis {
@@ -80,7 +83,7 @@ export interface YouTubeMasterSignalAnalysis {
 }
 
 export interface YouTubeTechnicalReport {
-  schemaVersion: 3;
+  schemaVersion: 4;
   status: 'technical-approved';
   videoFile: string;
   sidecarFile: string;
@@ -234,18 +237,23 @@ export async function validateYouTubeMasterBundle(input: {
     clip.width >= probe.width && clip.height >= probe.height &&
     Math.abs(clip.fps - probe.fps) <= 0.1,
   );
+  const bitratePass = !('minVideoBitrateKbps' in profile) || (
+    typeof probe.videoBitrateKbps === 'number' && Number.isFinite(probe.videoBitrateKbps) &&
+    probe.videoBitrateKbps >= profile.minVideoBitrateKbps &&
+    probe.videoBitrateKbps <= profile.maxVideoBitrateKbps
+  );
   if (
     probe.width < profile.minWidth || probe.height < profile.minHeight || !isPortrait ||
     Math.abs(probe.fps - 30) > 0.05 || probe.duration < profile.minDuration ||
-    probe.duration > profile.maxDuration || !probe.hasAudio || !nativeSourcesPass ||
+    probe.duration > profile.maxDuration || !probe.hasAudio || !nativeSourcesPass || !bitratePass ||
     !['h264', 'hevc'].includes(probe.videoCodec) || !['aac', 'opus'].includes(probe.audioCodec) ||
     Math.abs(probe.duration * 1_000 - Number(video.durationMs)) > 250 ||
     signal.meanVolumeDb === null || signal.meanVolumeDb <= -60 || signal.maxVolumeDb === null ||
     signal.maxVolumeDb > 0 || !Number.isFinite(signal.blackSeconds) || signal.blackSeconds < 0 ||
     blackRatio > profile.maxBlackRatio
-  ) throw new Error('YouTube master failed profile, native-source, duration, FPS, codec, audio or black-frame checks');
+  ) throw new Error('YouTube master failed profile, native-source, bitrate, duration, FPS, codec, audio or black-frame checks');
   return {
-    schemaVersion: 3,
+    schemaVersion: 4,
     status: 'technical-approved',
     videoFile: path.basename(videoPath),
     sidecarFile: path.basename(sidecarPath),
@@ -274,7 +282,7 @@ export async function reviewYouTubeMaster(input: {
   now?: () => Date;
 }): Promise<YouTubeHumanReviewReceipt> {
   if (
-    input.report.schemaVersion !== 3 || input.report.status !== 'technical-approved' ||
+    input.report.schemaVersion !== 4 || input.report.status !== 'technical-approved' ||
     !SHA256.test(input.expectedVideoSha256) || input.report.videoSha256 !== input.expectedVideoSha256
   ) throw new Error('Human review must target the current technically approved master digest');
   if (Object.values(input.checks).some((passed) => passed !== true)) throw new Error('Every human review check must pass');
@@ -305,7 +313,7 @@ export async function requestYouTubeMasterChanges(input: {
   now?: () => Date;
 }): Promise<YouTubeChangesRequestedReceipt> {
   if (
-    input.report.schemaVersion !== 3 || input.report.status !== 'technical-approved' ||
+    input.report.schemaVersion !== 4 || input.report.status !== 'technical-approved' ||
     !SHA256.test(input.expectedVideoSha256) || input.report.videoSha256 !== input.expectedVideoSha256
   ) throw new Error('Change request must target the current technically approved master digest');
   if (Object.values(input.checks).some((passed) => typeof passed !== 'boolean')) {
@@ -344,7 +352,7 @@ export async function createPrivateYouTubeBundle(input: {
   now?: () => Date;
 }): Promise<{ directory: string; manifest: YouTubePrivateBundleManifest }> {
   if (
-    input.report.schemaVersion !== 3 || input.report.status !== 'technical-approved' ||
+    input.report.schemaVersion !== 4 || input.report.status !== 'technical-approved' ||
     input.review.schemaVersion !== 1 || input.review.status !== 'ready-for-private-upload' ||
     input.review.visibility !== 'private' || input.review.autoPublish !== false ||
     input.review.videoSha256 !== input.report.videoSha256 || input.review.sidecarSha256 !== input.report.sidecarSha256 ||
@@ -432,21 +440,32 @@ export async function createPrivateYouTubeBundle(input: {
 
 async function probeMaster(filename: string): Promise<YouTubeMasterProbe> {
   const { stdout } = await execFile('ffprobe', [
-    '-v', 'error', '-show_entries', 'format=duration:stream=codec_type,codec_name,width,height,r_frame_rate',
+    '-v', 'error', '-show_entries',
+    'format=duration,size:stream=codec_type,codec_name,width,height,r_frame_rate,bit_rate',
     '-of', 'json', filename,
   ], { timeout: 30_000, maxBuffer: 1024 * 1024 });
-  const parsed = JSON.parse(stdout) as { format?: { duration?: string }; streams?: Array<Record<string, unknown>> };
+  const parsed = JSON.parse(stdout) as {
+    format?: { duration?: string; size?: string };
+    streams?: Array<Record<string, unknown>>;
+  };
   const video = parsed.streams?.find((stream) => stream.codec_type === 'video');
   const audio = parsed.streams?.find((stream) => stream.codec_type === 'audio');
   const [rawNumerator = 0, rawDenominator = 1] = String(video?.r_frame_rate ?? '0/1').split('/').map(Number);
+  const duration = Number(parsed.format?.duration);
+  const streamBitrate = Number(video?.bit_rate);
+  const fallbackBitrate = Number(parsed.format?.size) * 8 / duration;
+  const videoBitrateKbps = Number.isFinite(streamBitrate) && streamBitrate > 0
+    ? streamBitrate / 1_000
+    : fallbackBitrate / 1_000;
   return {
-    duration: Number(parsed.format?.duration),
+    duration,
     width: Number(video?.width),
     height: Number(video?.height),
     fps: rawDenominator ? rawNumerator / rawDenominator : 0,
     videoCodec: String(video?.codec_name ?? ''),
     audioCodec: String(audio?.codec_name ?? ''),
     hasAudio: Boolean(audio),
+    videoBitrateKbps: Math.round(videoBitrateKbps * 1_000) / 1_000,
   };
 }
 
