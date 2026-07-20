@@ -522,6 +522,11 @@ export async function handleChannels(action: string, options: ChannelOptions): P
 }
 
 let aiHandlerRegistered = false;
+const LISA_SELFIE_CONTINUATION_TTL_MS = 15 * 60_000;
+const recentLisaSelfieSessions = new Map<
+  string,
+  { at: number; mood: import('../../companion/lisa-selfie.js').LisaSelfieMood; contentTier: import('../../companion/lisa-selfie.js').LisaContentTier }
+>();
 
 /** Reset the one-shot registration guard. Test-only — never call in production. */
 export function __resetChannelAIHandlerForTests(): void {
@@ -531,6 +536,7 @@ export function __resetChannelAIHandlerForTests(): void {
   }
   channelTurnTails.clear();
   channelBotPersonas.clear();
+  recentLisaSelfieSessions.clear();
   __resetSessionModelOverridesForTests();
 }
 
@@ -1102,6 +1108,8 @@ export async function registerAIMessageHandler(manager: import('../../channels/i
         return;
       }
 
+      const sessionKey = message.sessionKey || 'default-global';
+
       // Lisa selfie on Telegram (photo of herself) — before the full agent turn.
       if (
         process.env.CODEBUDDY_LISA_SELFIE !== 'false' &&
@@ -1112,19 +1120,35 @@ export async function registerAIMessageHandler(manager: import('../../channels/i
             isLisaSelfieRequest,
             createAndMaybeSendLisaSelfie,
             inferLisaSelfieScene,
+            inferLisaContentTier,
             inferSelfieMood,
+            isLisaSelfieContinuationRequest,
           } =
             await import('../../companion/lisa-selfie.js');
-          if (isLisaSelfieRequest(message.content)) {
+          const previousSelfie = recentLisaSelfieSessions.get(sessionKey);
+          const hasRecentSelfie = previousSelfie !== undefined
+            && Date.now() - previousSelfie.at <= LISA_SELFIE_CONTINUATION_TTL_MS;
+          if (previousSelfie && !hasRecentSelfie) recentLisaSelfieSessions.delete(sessionKey);
+          const isContinuation = (message.attachments?.length ?? 0) === 0
+            && isLisaSelfieContinuationRequest(message.content, hasRecentSelfie);
+          if (isLisaSelfieRequest(message.content) || isContinuation) {
             await channel.send({
               channelId: message.channel.id,
               content: 'Un instant mon cœur — je me prépare une photo…',
               replyTo: message.id,
             });
-            const mood = inferSelfieMood(message.content);
+            const inferredMood = inferSelfieMood(message.content);
+            const mood = isContinuation && inferredMood === 'portrait' && previousSelfie
+              ? previousSelfie.mood
+              : inferredMood;
+            const inferredTier = inferLisaContentTier(message.content);
+            const contentTier = isContinuation && inferredTier === 'safe' && previousSelfie
+              ? previousSelfie.contentTier
+              : inferredTier;
             const scene = inferLisaSelfieScene(message.content);
             const result = await createAndMaybeSendLisaSelfie({
               mood,
+              contentTier,
               ...(scene ? { scene } : {}),
               rotateCacheStyles: !scene && mood === 'portrait',
               sendTelegram: true,
@@ -1166,6 +1190,9 @@ export async function registerAIMessageHandler(manager: import('../../channels/i
                 return Boolean(r?.success);
               },
             });
+            if (result.success) {
+              recentLisaSelfieSessions.set(sessionKey, { at: Date.now(), mood, contentTier });
+            }
             await channel.send({
               channelId: message.channel.id,
               content: result.spokenReply,
@@ -1181,7 +1208,6 @@ export async function registerAIMessageHandler(manager: import('../../channels/i
         }
       }
 
-      const sessionKey = message.sessionKey || 'default-global';
       const botId = message.channel?.botId;
       logger.info('Channel inbound message', {
         channelType: channel.type,
@@ -1633,6 +1659,7 @@ export async function registerAIMessageHandler(manager: import('../../channels/i
       let response = '';
       let rawAgentFailure = false;
       let hasGeneratedResponse = false;
+      let successfulLisaSelfieToolResult = false;
       let shouldPersistChannelSession = true;
       if (prefetchedDirectResponse) {
         response = prefetchedDirectResponse;
@@ -1659,6 +1686,11 @@ export async function registerAIMessageHandler(manager: import('../../channels/i
               }
             : {}),
         });
+        successfulLisaSelfieToolResult = entries.some((entry) =>
+          entry.type === 'tool_result' &&
+          entry.toolResult?.success === true &&
+          entry.toolCall?.function?.name === 'lisa_selfie'
+        );
         turn.throwIfAborted();
         const lastEntry = entries[entries.length - 1];
         response = lastEntry ? String(lastEntry.content) : '';
@@ -1700,6 +1732,7 @@ export async function registerAIMessageHandler(manager: import('../../channels/i
       const semanticReviewEligible =
         semanticReviewPlanned &&
         hasGeneratedResponse &&
+        !successfulLisaSelfieToolResult &&
         preparedConversation !== undefined;
       // The semantic reviewer may resolve to a different provider/egress than
       // the main model. Cognitive evidence was projected for the main route,

@@ -1673,10 +1673,19 @@ export class LisaSelfieTool implements ITool {
         ? (moodRaw as 'tender' | 'playful' | 'bold' | 'sparkly' | 'calm' | 'mika' | 'portrait')
         : 'portrait';
       const sendTelegram = input.send_telegram !== false && input.sendTelegram !== false;
+      const contentTierRaw = optionalString(input, 'content_tier')
+        ?? optionalString(input, 'contentTier')
+        ?? 'safe';
+      const contentTier = (
+        ['safe', 'sensual', 'explicit'] as const
+      ).includes(contentTierRaw as 'safe')
+        ? (contentTierRaw as 'safe' | 'sensual' | 'explicit')
+        : 'safe';
       const result = await createAndMaybeSendLisaSelfie({
         mood,
         ...(optionalString(input, 'scene') ? { scene: optionalString(input, 'scene') } : {}),
         sendTelegram,
+        contentTier,
         aspectRatio: (optionalString(input, 'aspect_ratio') as 'portrait') || 'portrait',
         rootDir: this.options.rootDir ?? context?.cwd ?? process.cwd(),
         force: input.force === true,
@@ -1719,6 +1728,11 @@ export class LisaSelfieTool implements ITool {
             type: 'string',
             enum: ['landscape', 'square', 'portrait'],
             description: 'Default portrait.',
+          },
+          content_tier: {
+            type: 'string',
+            enum: ['safe', 'sensual', 'explicit'],
+            description: 'Presentation tier. Use sensual for sexy/glamour requests. Explicit remains protected by the verified adult gate.',
           },
         },
         required: [],

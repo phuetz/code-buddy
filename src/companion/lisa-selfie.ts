@@ -88,6 +88,18 @@ export interface LisaSelfieResult {
 const CACHED_SELFIE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.webp']);
 export type LisaContentTier = 'safe' | 'sensual' | 'explicit';
 
+/** Infer the requested presentation tier without weakening the explicit gate. */
+export function inferLisaContentTier(text: string): LisaContentTier {
+  const t = normalizeVoiceInteractionText(text);
+  if (/\b(?:nue?|naked|explicit|porn|sexe?|sexuel|sexuelle)\b/.test(t)) {
+    return 'explicit';
+  }
+  if (/\b(?:sexy|sensuell?e?s?|glamour|hot|coquine|audacieus)\b/.test(t)) {
+    return 'sensual';
+  }
+  return 'safe';
+}
+
 export function resolveLisaContentTier(
   env: NodeJS.ProcessEnv = process.env,
   requestedTier?: string,
@@ -188,7 +200,7 @@ export function isLisaSelfieRequest(text: string): boolean {
         // "montre-moi une image" naturally refers to her. Keep this narrow:
         // an object after "image/photo" (for example "une image de chat") is
         // left to the generic image tool instead.
-        /\b(?:montre moi|fais moi voir|envoie moi|show me|send me)\s+(?:une |la |ta |ton |an? )?(?:autre )?(?:photo|image|portrait|picture)\b\s*$/.test(t)));
+        /\b(?:montre moi|fais moi voir|envoie moi|show me|send me)\s+(?:une |la |ta |ton |an? )?(?:autre )?(?:photo|image|portrait|picture)\b(?:\s+(?:plus\s+)?(?:sexy|sensuell?e?|glamour|audacieus\w*|tendre|douce|nue?|explicit|porn|sexuel(?:le)?))?\s*$/.test(t)));
   const sendIntent =
     /\b(?:envoie|envoyer|envoi|envoies|send|show|telegram|telephone|phone|montre|montre moi|fais|fait|genere|prend|prends|capture)\b/.test(
       t,
@@ -198,6 +210,24 @@ export function isLisaSelfieRequest(text: string): boolean {
       t,
     );
   return aboutSelf && sendIntent && !negative;
+}
+
+/**
+ * Resolve elliptical follow-ups only after this session successfully produced
+ * a Lisa selfie. This deliberately does not classify arbitrary image requests:
+ * callers must provide the trusted, short-lived `hasRecentSelfie` state.
+ */
+export function isLisaSelfieContinuationRequest(
+  text: string,
+  hasRecentSelfie: boolean,
+): boolean {
+  if (!hasRecentSelfie) return false;
+  const t = normalizeVoiceInteractionText(text);
+  if (!t) return false;
+  if (/\b(?:image|photo|portrait|picture)\s+(?:de|du|des|of)\s+(?!(?:toi|lisa)\b)/.test(t)) {
+    return false;
+  }
+  return /^(?:(?:une|encore une)\s+autre(?:\s+(?:photo|image|selfie|portrait))?|(?:genere|cree|fais)\s+(?:moi\s+)?(?:la|cette|une)\s+(?:photo|image|selfie|portrait))(?:\s+(?:plus\s+)?(?:sexy|sensuell?e?|glamour|audacieus\w*|tendre|douce|nue?|explicit|porn|sexuel(?:le)?))?(?:\s+(?:s il te plait|stp|please))?$/.test(t);
 }
 
 export function inferSelfieMood(text: string): LisaSelfieMood {
@@ -272,6 +302,7 @@ export function buildLisaSelfiePrompt(options: {
   avatarId?: string;
   scene?: string;
   userName?: string;
+  contentTier?: LisaContentTier;
 }): string {
   const forWhom = options.userName?.trim() || resolveUserName();
   const avatarId = resolveAvatarId(options.avatarId);
@@ -286,11 +317,14 @@ export function buildLisaSelfiePrompt(options: {
     includeIdentity: true,
   });
   const trigger = options.trigger.trim() || profile.trigger;
-  if (base.startsWith(trigger)) return base;
+  const tierDirection = options.contentTier === 'sensual'
+    ? ', tasteful non-explicit sensual fashion editorial, adult woman, elegant fitted outfit, intimate areas fully covered'
+    : '';
+  if (base.startsWith(trigger)) return `${base}${tierDirection}`;
   // Swap leading trigger token block for custom triggers
   const firstComma = base.indexOf(',');
-  if (firstComma > 0) return `${trigger}${base.slice(firstComma)}`;
-  return `${trigger}, ${base}`;
+  if (firstComma > 0) return `${trigger}${base.slice(firstComma)}${tierDirection}`;
+  return `${trigger}, ${base}${tierDirection}`;
 }
 
 export async function createAndMaybeSendLisaSelfie(
@@ -302,6 +336,7 @@ export async function createAndMaybeSendLisaSelfie(
   const profile = getAvatarProfile(avatarId);
   const style = resolveAvatarStyle(options.style ?? options.mood, avatarId);
   const mood = (options.mood ?? style) as LisaSelfieMood;
+  const contentTier = resolveLisaContentTier(env, options.contentTier);
   const nowMs = (options.now ?? (() => new Date()))().getTime();
   if (!options.force) {
     const left = selfieCooldownRemainingMs(nowMs, env);
@@ -326,6 +361,7 @@ export async function createAndMaybeSendLisaSelfie(
     avatarId,
     ...(options.scene ? { scene: options.scene } : {}),
     userName: resolveUserName(),
+    contentTier,
   });
 
   try {
@@ -358,7 +394,6 @@ export async function createAndMaybeSendLisaSelfie(
     const aspect = options.aspectRatio ?? 'portrait';
     const cacheDir = env.CODEBUDDY_LISA_SELFIE_CACHE_DIR?.trim()
       || path.join(defaultLoraRoot(rootDir), 'lisa', 'selfie-cache');
-    const contentTier = resolveLisaContentTier(env, options.contentTier);
     if (options.contentTier === 'explicit' && contentTier !== 'explicit') {
       return {
         success: false,
@@ -508,9 +543,11 @@ export async function maybeHandleLisaSelfieRequest(
   if (!isLisaSelfieRequest(heard)) return null;
   const mood = inferSelfieMood(heard);
   const scene = inferLisaSelfieScene(heard);
+  const contentTier = inferLisaContentTier(heard);
   return createAndMaybeSendLisaSelfie({
     ...options,
     mood,
+    contentTier,
     ...(scene ? { scene } : {}),
     rotateCacheStyles: !scene && mood === 'portrait',
   });

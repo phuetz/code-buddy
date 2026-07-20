@@ -129,6 +129,7 @@ import {
 import { savePrefetchCache } from '../../src/companion/prefetch-engine.js';
 import { savePrefetchItems } from '../../src/companion/prefetch-config.js';
 import { telegramHtmlChunkToPlain } from '../../src/rendering/telegram-html.js';
+import * as lisaSelfieRuntime from '../../src/companion/lisa-selfie.js';
 
 type InboundHandler = (message: any, channel: any) => Promise<void>;
 
@@ -218,6 +219,51 @@ describe('registerAIMessageHandler inbound roundtrip (GAP-7)', () => {
     hoisted.cognitiveComplete.mockResolvedValue(undefined);
     hoisted.cognitiveFail.mockResolvedValue(undefined);
     hoisted.cognitiveCancel.mockResolvedValue(undefined);
+  });
+
+  it('keeps the real Lisa selfie follow-up sequence on the bounded media path', async () => {
+    const selfie = vi.spyOn(lisaSelfieRuntime, 'createAndMaybeSendLisaSelfie')
+      .mockImplementation(async (options) => ({
+        success: true,
+        prompt: 'ohwx lisa, portrait',
+        trigger: 'ohwx lisa',
+        imagePath: '/tmp/lisa.png',
+        telegramSent: true,
+        spokenReply: 'Voilà mon cœur.',
+        ...(options.contentTier === 'explicit'
+          ? { success: false, telegramSent: false, error: 'explicit gate' }
+          : {}),
+      }));
+    try {
+      const manager = makeManager();
+      await registerAIMessageHandler(manager as any);
+      const channel = { type: 'telegram', send: makeSuccessfulSend() };
+      const session = 'sess-lisa-selfie-sequence';
+
+      await manager.emit(makeMessage('Lisa, envoie-moi une photo de toi', session), channel);
+      await manager.emit(makeMessage("Une autre s'il te plaît", session), channel);
+      await manager.emit(makeMessage('Génère la photo', session), channel);
+      await manager.emit(makeMessage('Montre moi une autre photo plus sexy', session), channel);
+
+      expect(selfie).toHaveBeenCalledTimes(4);
+      expect(selfie.mock.calls.map(([options]) => options.contentTier)).toEqual([
+        'safe',
+        'safe',
+        'safe',
+        'sensual',
+      ]);
+      expect(selfie.mock.calls[3]?.[0]).toMatchObject({
+        mood: 'bold',
+        contentTier: 'sensual',
+      });
+      expect(hoisted.processUserMessage).not.toHaveBeenCalled();
+
+      await manager.emit(makeMessage('Génère une image de chat', session), channel);
+      expect(selfie).toHaveBeenCalledTimes(4);
+      expect(hoisted.processUserMessage).toHaveBeenCalledTimes(1);
+    } finally {
+      selfie.mockRestore();
+    }
   });
 
   it('runs message → pairing → route → agent → reply and delivers the response', async () => {
@@ -1577,6 +1623,50 @@ describe('registerAIMessageHandler inbound roundtrip (GAP-7)', () => {
           },
         }),
       );
+    });
+
+    it('does not replace a successful Lisa media result with semantic freshness recovery', async () => {
+      registerChannelBotPersona('lisa-bot', { name: 'Lisa' });
+      process.env.CODEBUDDY_PREFETCH = 'false';
+      process.env.CODEBUDDY_LISA_SELFIE = 'false';
+      const finalReply = "Voilà mon cœur, la photo est prête.";
+      hoisted.processUserMessage.mockResolvedValue([
+        {
+          type: 'tool_result',
+          content: 'selfie generated',
+          toolCall: {
+            id: 'selfie-1',
+            type: 'function',
+            function: { name: 'lisa_selfie', arguments: '{}' },
+          },
+          toolResult: { success: true, output: '{"telegramSent":true}' },
+        },
+        { type: 'assistant', content: finalReply },
+      ]);
+      hoisted.getChatHistory.mockReturnValue([
+        { type: 'user', content: 'Pourquoi cette photo est-elle plus glamour ?', timestamp: new Date() },
+        { type: 'assistant', content: finalReply, timestamp: new Date() },
+      ]);
+
+      try {
+        const manager = makeManager();
+        await registerAIMessageHandler(manager as any);
+        const send = makeSuccessfulSend();
+        await manager.emit(
+          makeMessage(
+            'Pourquoi cette photo est-elle plus glamour ?',
+            'sess-lisa-media-review',
+            'lisa-bot',
+          ),
+          { type: 'telegram', send },
+        );
+
+        expect(hoisted.reviewSemanticResponse).not.toHaveBeenCalled();
+        expect(send.mock.calls.map((call) => String(call[0]?.content ?? '')).join('\n'))
+          .toContain('Voilà mon cœur');
+      } finally {
+        delete process.env.CODEBUDDY_LISA_SELFIE;
+      }
     });
 
     it('keeps a Lisa persona model pin above the reviewed profile', async () => {

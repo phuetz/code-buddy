@@ -6,8 +6,10 @@ import path from 'path';
 import {
   buildLisaSelfiePrompt,
   createAndMaybeSendLisaSelfie,
+  inferLisaContentTier,
   inferLisaSelfieScene,
   inferSelfieMood,
+  isLisaSelfieContinuationRequest,
   isLisaSelfieRequest,
   maybeHandleLisaSelfieRequest,
   resetLisaSelfieCooldown,
@@ -26,9 +28,27 @@ describe('lisa-selfie', () => {
     expect(isLisaSelfieRequest('envoie ta photo sur mon téléphone')).toBe(true);
     expect(isLisaSelfieRequest('Lisa, montre-moi une image')).toBe(true);
     expect(isLisaSelfieRequest('show me a picture of you')).toBe(true);
+    expect(isLisaSelfieRequest('Montre moi une autre photo plus sexy')).toBe(true);
     expect(isLisaSelfieRequest('montre-moi une image de chat')).toBe(false);
     expect(isLisaSelfieRequest('regarde la photo que je te montre')).toBe(false);
     expect(isLisaSelfieRequest('bonjour lisa')).toBe(false);
+  });
+
+  it('resolves bounded follow-ups only with trusted recent-selfie context', () => {
+    expect(isLisaSelfieContinuationRequest("Une autre s'il te plaît", true)).toBe(true);
+    expect(isLisaSelfieContinuationRequest('Génère la photo', true)).toBe(true);
+    expect(isLisaSelfieContinuationRequest('Une autre photo nue', true)).toBe(true);
+    expect(isLisaSelfieContinuationRequest('Une autre', false)).toBe(false);
+    expect(isLisaSelfieContinuationRequest('Génère une image de chat', true)).toBe(false);
+    expect(isLisaSelfieContinuationRequest('Génère le logo', true)).toBe(false);
+  });
+
+  it('maps sexy wording to sensual while keeping explicit requests explicit', () => {
+    expect(inferLisaContentTier('Montre moi une autre photo plus sexy')).toBe('sensual');
+    expect(inferLisaContentTier('un portrait glamour')).toBe('sensual');
+    expect(inferLisaContentTier('une photo sensuelle')).toBe('sensual');
+    expect(inferLisaContentTier('une photo nue')).toBe('explicit');
+    expect(inferLisaContentTier('un portrait tendre')).toBe('safe');
   });
 
   it('infers mood from wording', () => {
@@ -171,6 +191,28 @@ describe('lisa-selfie', () => {
     });
     expect(r?.success).toBe(true);
     expect(r?.telegramSent).toBe(false);
+    await fs.rm(root, { recursive: true, force: true });
+  });
+
+  it('passes the inferred sensual tier through the request helper', async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'cb-selfie-sensual-'));
+    const fakeImg = path.join(root, 'sensual.png');
+    await fs.writeFile(fakeImg, Buffer.from([7, 8, 9]));
+    const r = await maybeHandleLisaSelfieRequest('Montre moi une autre photo plus sexy', {
+      rootDir: root,
+      generate: async (prompt) => {
+        expect(prompt).toMatch(/bold|confident/i);
+        expect(prompt).toMatch(/tasteful non-explicit sensual fashion editorial/i);
+        return { success: true, outputPath: fakeImg };
+      },
+      sendTelegram: false,
+      env: {} as NodeJS.ProcessEnv,
+      force: true,
+    });
+    expect(r?.success).toBe(true);
+    const sidecar = r?.imagePath?.replace(/\.[^.]+$/, '.json');
+    expect(sidecar).toBeTruthy();
+    await expect(fs.readFile(sidecar!, 'utf8')).resolves.toContain('"contentTier": "sensual"');
     await fs.rm(root, { recursive: true, force: true });
   });
 
