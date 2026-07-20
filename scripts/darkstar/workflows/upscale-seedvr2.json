@@ -20,7 +20,8 @@
       "model": "seedvr2_ema_3b_fp8_e4m3fn.safetensors",
       "device": "cuda:0",
       "blocks_to_swap": 16,
-      "cache_model": false
+      "cache_model": false,
+      "offload_device": "cpu"
     },
     "_meta": {
       "title": "SeedVR2 DiT"
