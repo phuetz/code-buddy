@@ -1108,7 +1108,12 @@ export async function registerAIMessageHandler(manager: import('../../channels/i
         (channel.type === 'telegram' || process.env.CODEBUDDY_LISA_SELFIE_CHANNELS === 'all')
       ) {
         try {
-          const { isLisaSelfieRequest, createAndMaybeSendLisaSelfie, inferSelfieMood } =
+          const {
+            isLisaSelfieRequest,
+            createAndMaybeSendLisaSelfie,
+            inferLisaSelfieScene,
+            inferSelfieMood,
+          } =
             await import('../../companion/lisa-selfie.js');
           if (isLisaSelfieRequest(message.content)) {
             await channel.send({
@@ -1117,8 +1122,11 @@ export async function registerAIMessageHandler(manager: import('../../channels/i
               replyTo: message.id,
             });
             const mood = inferSelfieMood(message.content);
+            const scene = inferLisaSelfieScene(message.content);
             const result = await createAndMaybeSendLisaSelfie({
               mood,
+              ...(scene ? { scene } : {}),
+              rotateCacheStyles: !scene && mood === 'portrait',
               sendTelegram: true,
               deliverPhoto: async (caption, imagePath) => {
                 const ch = channel as {

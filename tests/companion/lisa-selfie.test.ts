@@ -6,6 +6,7 @@ import path from 'path';
 import {
   buildLisaSelfiePrompt,
   createAndMaybeSendLisaSelfie,
+  inferLisaSelfieScene,
   inferSelfieMood,
   isLisaSelfieRequest,
   maybeHandleLisaSelfieRequest,
@@ -23,6 +24,9 @@ describe('lisa-selfie', () => {
     expect(isLisaSelfieRequest('Lisa, envoie-moi une photo de toi')).toBe(true);
     expect(isLisaSelfieRequest('fais un selfie et envoie sur telegram')).toBe(true);
     expect(isLisaSelfieRequest('envoie ta photo sur mon téléphone')).toBe(true);
+    expect(isLisaSelfieRequest('Lisa, montre-moi une image')).toBe(true);
+    expect(isLisaSelfieRequest('show me a picture of you')).toBe(true);
+    expect(isLisaSelfieRequest('montre-moi une image de chat')).toBe(false);
     expect(isLisaSelfieRequest('regarde la photo que je te montre')).toBe(false);
     expect(isLisaSelfieRequest('bonjour lisa')).toBe(false);
   });
@@ -31,6 +35,14 @@ describe('lisa-selfie', () => {
     expect(inferSelfieMood('un selfie espiègle')).toBe('playful');
     expect(inferSelfieMood('photo tendre mon amour')).toBe('tender');
     expect(inferSelfieMood('portrait simple')).toBe('portrait');
+  });
+
+  it('extracts a requested outfit so it is not replaced by an unrelated cache hit', () => {
+    expect(inferLisaSelfieScene('Lisa, envoie-moi une photo de toi en pyjama'))
+      .toMatch(/cozy pajamas.*en pyjama/i);
+    expect(inferLisaSelfieScene('envoie-moi un selfie dans la cuisine'))
+      .toMatch(/dans la cuisine/i);
+    expect(inferLisaSelfieScene('envoie-moi une photo de toi')).toBeUndefined();
   });
 
   it('allows request-level tiers while keeping explicit fail-closed', () => {
@@ -94,6 +106,35 @@ describe('lisa-selfie', () => {
     expect(result.success).toBe(true);
     expect(generate).not.toHaveBeenCalled();
     expect(result.imagePath).toBeTruthy();
+    await fs.rm(root, { recursive: true, force: true });
+  });
+
+  it('bypasses an unrelated cache image when a particular outfit is requested', async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'cb-selfie-outfit-'));
+    const cacheDir = path.join(root, 'cache');
+    const styleDir = path.join(cacheDir, 'safe', 'portrait');
+    await fs.mkdir(styleDir, { recursive: true });
+    await fs.writeFile(path.join(styleDir, 'portrait-001.png'), Buffer.from([1, 2, 3]));
+    const generated = path.join(root, 'pyjamas.png');
+    await fs.writeFile(generated, Buffer.from([4, 5, 6]));
+    const generate = vi.fn(async (prompt: string) => {
+      expect(prompt).toMatch(/cozy pajamas/i);
+      return { success: true, outputPath: generated };
+    });
+
+    const result = await maybeHandleLisaSelfieRequest(
+      'Lisa, envoie-moi une photo de toi en pyjama',
+      {
+        rootDir: root,
+        env: { CODEBUDDY_LISA_SELFIE_CACHE_DIR: cacheDir } as NodeJS.ProcessEnv,
+        generate,
+        sendTelegram: false,
+        force: true,
+      },
+    );
+
+    expect(result?.success).toBe(true);
+    expect(generate).toHaveBeenCalledOnce();
     await fs.rm(root, { recursive: true, force: true });
   });
 

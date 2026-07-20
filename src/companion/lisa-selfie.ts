@@ -43,6 +43,8 @@ export interface LisaSelfieOptions {
   env?: NodeJS.ProcessEnv;
   /** Bypass cooldown (CLI / tests). */
   force?: boolean;
+  /** Rotate a generic request across every cached presentation style. */
+  rotateCacheStyles?: boolean;
   /**
    * Optional channel deliverer (Telegram inbound): (caption, imagePath) → ok.
    * When set, preferred over sensory alert chat for the photo.
@@ -104,14 +106,32 @@ export async function selectCachedLisaSelfie(
   cacheDir: string,
   style: string,
   tier: LisaContentTier = 'safe',
+  options: { rotateAcrossStyles?: boolean } = {},
 ): Promise<string | undefined> {
   const candidates: Array<{ file: string; atimeMs: number }> = [];
   const tierDir = path.join(cacheDir, tier);
-  const directories = [
-    path.join(tierDir, style),
-    tierDir,
-    ...(tier === 'safe' ? [path.join(cacheDir, style), cacheDir] : []),
-  ];
+  let directories: string[];
+  if (options.rotateAcrossStyles) {
+    let styleDirectories: string[] = [];
+    try {
+      const entries = await fs.readdir(tierDir, { withFileTypes: true });
+      styleDirectories = entries
+        .filter((entry) => entry.isDirectory())
+        .map((entry) => path.join(tierDir, entry.name))
+        .sort();
+    } catch {
+      /* fall back to the legacy single-style layout below */
+    }
+    directories = styleDirectories.length > 0
+      ? styleDirectories
+      : [path.join(tierDir, style), ...(tier === 'safe' ? [path.join(cacheDir, style)] : [])];
+  } else {
+    directories = [
+      path.join(tierDir, style),
+      tierDir,
+      ...(tier === 'safe' ? [path.join(cacheDir, style), cacheDir] : []),
+    ];
+  }
   for (const directory of directories) {
     let entries: import('fs').Dirent[];
     try {
@@ -123,7 +143,7 @@ export async function selectCachedLisaSelfie(
       if (!entry.isFile() || !CACHED_SELFIE_EXTENSIONS.has(path.extname(entry.name).toLowerCase())) {
         continue;
       }
-      if ((directory === cacheDir || directory === tierDir)
+      if (!options.rotateAcrossStyles && (directory === cacheDir || directory === tierDir)
         && !entry.name.startsWith(`${style}-`)) continue;
       const file = path.join(directory, entry.name);
       try {
@@ -133,7 +153,7 @@ export async function selectCachedLisaSelfie(
         /* file disappeared while scanning */
       }
     }
-    if (candidates.length > 0) break;
+    if (!options.rotateAcrossStyles && candidates.length > 0) break;
   }
   candidates.sort((a, b) => a.atimeMs - b.atimeMs || a.file.localeCompare(b.file));
   const selected = candidates[0]?.file;
@@ -155,17 +175,22 @@ export function isLisaSelfieRequest(text: string): boolean {
   const t = normalizeVoiceInteractionText(text);
   if (!t) return false;
   // Must be about her image of herself, not camera of the room.
-  const media = /\b(?:photo|selfie|portrait|image|cliche)\b/.test(t);
+  const media = /\b(?:photo|selfie|portrait|image|picture|cliche)\b/.test(t);
   // "selfie" alone implies a photo of herself; "photo" needs a self-referent.
   const aboutSelf =
     /\bselfie\b/.test(t) ||
     (media &&
-      (/\b(?:toi|de toi|a toi|ta photo|ton selfie|ta tete|ton visage|toi meme|photo de lisa)\b/.test(
+      (/\b(?:toi|de toi|a toi|ta photo|ton selfie|ta tete|ton visage|toi meme|photo de lisa|you|your photo|your picture|picture of you|photo of you)\b/.test(
         t,
       ) ||
-        /\blisa\b/.test(t)));
+        /\blisa\b/.test(t) ||
+        // In Lisa's own conversation, a bare direct request such as
+        // "montre-moi une image" naturally refers to her. Keep this narrow:
+        // an object after "image/photo" (for example "une image de chat") is
+        // left to the generic image tool instead.
+        /\b(?:montre moi|fais moi voir|envoie moi|show me|send me)\s+(?:une |la |ta |ton |an? )?(?:autre )?(?:photo|image|portrait|picture)\b\s*$/.test(t)));
   const sendIntent =
-    /\b(?:envoie|envoyer|envoi|envoies|send|telegram|telephone|phone|montre|montre moi|fais|fait|genere|prend|prends|capture)\b/.test(
+    /\b(?:envoie|envoyer|envoi|envoies|send|show|telegram|telephone|phone|montre|montre moi|fais|fait|genere|prend|prends|capture)\b/.test(
       t,
     ) || /\b(?:selfie|photo de toi|photo a toi|ta photo)\b/.test(t);
   const negative =
@@ -184,6 +209,35 @@ export function inferSelfieMood(text: string): LisaSelfieMood {
   if (/\b(?:aventure|dynamique|action|mika|sport)\b/.test(t)) return 'mika';
   if (/\b(?:tendre|amour|coeur|doudou|c[aâ]lin)\b/.test(t)) return 'tender';
   return 'portrait';
+}
+
+/**
+ * Extract an explicitly requested look/location from a selfie utterance.
+ * A specific request deliberately bypasses the approximate cache so a phrase
+ * such as "en pyjama" reaches the image model instead of returning an
+ * unrelated ready-made portrait.
+ */
+export function inferLisaSelfieScene(text: string): string | undefined {
+  const normalized = normalizeVoiceInteractionText(text);
+  const media = /\b(?:photo|selfie|portrait|image|picture)\b/.exec(normalized);
+  if (!media) return undefined;
+  let detail = normalized.slice((media.index ?? 0) + media[0].length).trim();
+  detail = detail
+    .replace(/^(?:de toi|of you|de lisa)\b/, '')
+    .replace(/\b(?:s il te plait|stp|please)\b/g, '')
+    .trim();
+  if (!detail) return undefined;
+
+  // Keep inferred requests on the safe route. Explicit tiers continue to use
+  // their separate verified gate rather than being smuggled through a scene.
+  if (/\b(?:nue?|naked|explicit|porn|sexe?|sexuel|sexuelle)\b/.test(detail)) {
+    return undefined;
+  }
+  if (/\bpyjamas?\b/.test(detail)) {
+    return `at home, wearing tasteful cozy pajamas, fully covered, relaxed natural pose, ${detail}`
+      .slice(0, 220);
+  }
+  return `requested look and setting: ${detail}, tasteful and fully covered`.slice(0, 220);
 }
 
 export async function resolveLisaTrigger(
@@ -315,7 +369,14 @@ export async function createAndMaybeSendLisaSelfie(
         error: 'explicit content tier requires the verified adult-content gate',
       };
     }
-    const cachedImage = await selectCachedLisaSelfie(cacheDir, style, contentTier);
+    // A cache is suitable for a generic request. If the user asks for a
+    // particular outfit or location, generate that exact prompt instead of
+    // silently substituting an unrelated cached portrait.
+    const cachedImage = options.scene?.trim()
+      ? undefined
+      : await selectCachedLisaSelfie(cacheDir, style, contentTier, {
+          rotateAcrossStyles: options.rotateCacheStyles === true,
+        });
     logger.info(
       cachedImage
         ? `[lisa-selfie] cache hit tier=${contentTier} style=${style} image=${path.basename(cachedImage)}`
@@ -446,5 +507,11 @@ export async function maybeHandleLisaSelfieRequest(
 ): Promise<LisaSelfieResult | null> {
   if (!isLisaSelfieRequest(heard)) return null;
   const mood = inferSelfieMood(heard);
-  return createAndMaybeSendLisaSelfie({ ...options, mood });
+  const scene = inferLisaSelfieScene(heard);
+  return createAndMaybeSendLisaSelfie({
+    ...options,
+    mood,
+    ...(scene ? { scene } : {}),
+    rotateCacheStyles: !scene && mood === 'portrait',
+  });
 }
