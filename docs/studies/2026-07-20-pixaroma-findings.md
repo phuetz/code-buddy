@@ -50,3 +50,8 @@ workflows.pixaroma.com, GitLab pixaroma (MIT).*
   (LoadAndApplyICLightUnet), BiRefNet, Krea2T-Enhancer.
 - Vidéo ASF « LoRA dataset from ONE photo (Qwen) » : méthode en cours
   d'extraction — candidat second éditeur d'identité (spec v3).
+- Vidéo ASF « dataset from ONE photo » : verdict **redondant** — habillage
+  Patreon de la recette publique Qwen-Edit (notre plan second éditeur).
+  À retenir : passer à Qwen-Image-Edit **2511** si GGUF dispo ; LoRA
+  Qwen-Lightning 4-steps pour le batch ; 50 prompts de variations gratuits
+  (weirdwonderfulai.art) ; captioning structuré Qwen2.5-VL avec trigger.
