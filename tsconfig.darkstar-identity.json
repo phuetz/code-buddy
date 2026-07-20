@@ -1,0 +1,11 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "declaration": false,
+    "noEmit": true,
+    "outDir": "./dist-darkstar-identity",
+    "rootDir": "."
+  },
+  "include": ["scripts/darkstar/generate-krea2-identity-dataset.ts"],
+  "exclude": ["node_modules", "dist"]
+}
