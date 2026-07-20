@@ -30,7 +30,6 @@ $lines = @(
   'set TRAIN_EXIT=%ERRORLEVEL%',
   ('echo.>>"{0}"' -f $log),
   ('echo Training exit code: %TRAIN_EXIT%>>"{0}"' -f $log),
-  ('schtasks.exe /Run /TN "CodeBuddy-ComfyUI" >>"{0}" 2>&1' -f $log),
   'exit /b %TRAIN_EXIT%'
 )
 Set-Content -Path $runner -Value ($lines -join "`r`n") -Encoding Ascii
@@ -53,7 +52,7 @@ Register-ScheduledTask `
   -Action $action `
   -Principal $principal `
   -Settings $settings `
-  -Description 'Train Lisa identity LoRA on Krea 2 Raw; restart ComfyUI when complete' `
+  -Description 'Train Lisa identity LoRA on Krea 2 Raw; final promotion restarts ComfyUI' `
   -Force | Out-Null
 Start-ScheduledTask -TaskName $TaskName
 Start-Sleep -Seconds 2
