@@ -377,8 +377,16 @@ export function parseApparentAge(raw: string): number {
 }
 
 async function writeReportAtomically(destination: string, value: unknown): Promise<void> {
+  await writeTextAtomically(destination, serializeJson(value));
+}
+
+function serializeJson(value: unknown): string {
+  return `${JSON.stringify(value, null, 2)}\n`;
+}
+
+async function writeTextAtomically(destination: string, content: string): Promise<void> {
   const temporary = `${destination}.tmp-${randomUUID()}`;
-  await fs.writeFile(temporary, `${JSON.stringify(value, null, 2)}\n`);
+  await fs.writeFile(temporary, content);
   await fs.rename(temporary, destination);
 }
 
@@ -405,13 +413,19 @@ async function main(): Promise<void> {
     qualityReport: byteGate,
   });
   const ok = inputProblems.length === 0 && identity.ok;
+  const manifestText = serializeJson(built.manifest);
+  const manifestSha256 = createHash('sha256').update(manifestText).digest('hex');
 
   const report = {
-    schemaVersion: 1,
+    schemaVersion: 2,
     generatedAt: new Date().toISOString(),
     dir,
     ok,
     imageCount: built.manifest.images.length,
+    // Binds the human approvals and both gate results to the exact manifest
+    // bytes consumed by the promotion step. A later manifest edit invalidates
+    // this report instead of silently inheriting its approvals.
+    manifestSha256,
     excludedHeld: collected.excludedHeld,
     reinstatedHeld: [...includeHeld].sort(),
     inputProblems,
@@ -424,7 +438,7 @@ async function main(): Promise<void> {
     identity,
   };
 
-  await writeReportAtomically(path.join(dir, 'identity-manifest.json'), built.manifest);
+  await writeTextAtomically(path.join(dir, 'identity-manifest.json'), manifestText);
   await writeReportAtomically(path.join(dir, 'identity-gate-report.json'), report);
 
   console.log(`[identity-manifest] dir=${dir} images=${report.imageCount} ok=${ok}`);

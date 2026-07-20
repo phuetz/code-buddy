@@ -98,6 +98,36 @@ export function createLoraCommand(): Command {
     });
 
   cmd
+    .command('promote')
+    .description('Promote an approved identity manifest into the project images directory')
+    .argument('<nameOrPath>', 'project name or path')
+    .option('--candidates <dir>', 'identity candidates directory (default <project>/identity-candidates)')
+    .option('--replace', 'preserve a non-empty images directory as a timestamped backup')
+    .action(
+      async (
+        nameOrPath: string,
+        opts: { candidates?: string; replace?: boolean },
+      ) => {
+        try {
+          const dir = await resolveProjectDir(nameOrPath);
+          const { promoteIdentityDataset } = await import('../lora/identity-dataset-promotion.js');
+          const result = await promoteIdentityDataset(dir, {
+            ...(opts.candidates ? { candidatesDirectory: path.resolve(opts.candidates) } : {}),
+            replaceExisting: opts.replace === true,
+          });
+          logger.info(`Approved identity dataset promoted: ${result.imageCount} images`);
+          logger.info(`Images: ${result.imagesDirectory}`);
+          logger.info(`Receipt: ${result.receiptPath}`);
+          if (result.backupDirectory) logger.info(`Previous images preserved: ${result.backupDirectory}`);
+          logger.info(`Next: buddy lora validate ${nameOrPath} --quality`);
+        } catch (error) {
+          logger.error(error instanceof Error ? error.message : String(error));
+          process.exitCode = 1;
+        }
+      },
+    );
+
+  cmd
     .command('dataset')
     .description('Generate a synthetic training image set (ComfyUI/xAI/OpenAI)')
     .argument('[name]', 'project name', 'lisa')

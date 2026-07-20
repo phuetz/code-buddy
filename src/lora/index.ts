@@ -7,4 +7,5 @@ export * from './install-comfy.js';
 export * from './generate-training-set.js';
 export * from './quality-gate.js';
 export * from './identity-dataset-gate.js';
+export * from './identity-dataset-promotion.js';
 export * from './lisa-avatar-bible.js';

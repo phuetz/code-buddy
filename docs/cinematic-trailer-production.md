@@ -202,6 +202,21 @@ le premier passage échoue donc exactement sur `rights-not-cleared`,
 `identity-manifest.json` + `identity-gate-report.json` à côté des candidats,
 n'entraîne rien et ne publie rien (exit ≠ 0 tant que tout n'est pas vert).
 
+Une fois le rapport vert, la promotion vers le dossier réellement consommé par
+`buddy lora train` reste une opération distincte :
+
+```bash
+buddy lora promote lisa-hq-v2 --replace
+buddy lora validate lisa-hq-v2 --quality
+```
+
+`promote` exige un rapport de schéma 2 lié au SHA-256 exact du manifeste,
+re-hashe chaque PNG, relit chaque caption et rejoue les deux gates dans un
+staging privé. Le basculement de `images/` est atomique ; avec `--replace`, le
+dossier précédent est renommé en sauvegarde horodatée, jamais supprimé. Un
+`identity-training-receipt.json` fixe enfin le dataset et les approbateurs
+effectivement préparés. La commande ne lance ni entraînement ni upload.
+
 Chaque PNG reçoit une caption et un sidecar (seed, prompts, modèles, hashes,
 référence et statut). `claimedIdentityRightsBasis` est volontairement séparé de
 `rightsEvidenceStatus`: une option CLI ne constitue jamais une preuve. Le script
