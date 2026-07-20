@@ -40,6 +40,17 @@
 - Les montages restent privés et `humanReviewRequired`; une durée inconnue ou
   une métadonnée QA absente échoue en mode fermé.
 
+## Amont natif
+
+- `src/companion/fashion-scene-catalog.ts` définit les huit familles de poses
+  originales, leurs compatibilités, les prompts verticaux et les deux scènes
+  pilotes obligatoires.
+- `scripts/mysoulmate/compile-native-fashion-plan.ts` vérifie un clip candidat,
+  son SHA-256, son probe et les cinq empreintes avant d'émettre un plan V4
+  explicitement approuvé par revue humaine.
+- `src/tools/video/native-fashion-defects.ts` classe les gates bloquants et
+  conserve les reprises causales dans un journal JSONL borné et append-only.
+
 ## État runtime observé
 
 - `mysoulmate-image-catalog.service` reste indépendant du rendu vidéo et ne doit
