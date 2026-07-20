@@ -51,7 +51,14 @@ const assessEditorialQuality = (
 
 const execFile = promisify(realExecFile);
 const SAFE_ID = /^[a-z0-9](?:[a-z0-9-]{0,125}[a-z0-9])?$/u;
+const SAFE_MEDIA_FILE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,199}$/u;
 const TRANSITION_SECONDS = 0.5;
+export const NATIVE_FASHION_PROFILE = {
+  id: 'native-fashion-v1',
+  version: 1,
+  master: { width: 1080, height: 1920, fps: 30, durationSeconds: 12 },
+  source: { mode: 'native', minWidth: 1080, minHeight: 1920, allowUpscale: false },
+} as const;
 
 interface RenderJobJournal {
   schemaVersion: 1;
@@ -90,6 +97,11 @@ interface RenderedClipReceipt {
   retryOf?: string;
   completedAt?: string;
   output: Record<string, unknown>;
+  width: number;
+  height: number;
+  fps: number;
+  generationMode: 'legacy';
+  upscaled: true;
 }
 
 export interface PlannedShot {
@@ -152,8 +164,54 @@ export interface PlannedShort {
   };
 }
 
-export interface ShortPlan {
-  schemaVersion: 3;
+export interface NativeFashionShot {
+  index: 1;
+  assetId: string;
+  sourceSha256: string;
+  referenceVideoPath: string;
+  contentTier: 'safe';
+  qaStatus: 'approved';
+  motionPrompt: string;
+  nativeVideo: {
+    width: number;
+    height: number;
+    fps: 30;
+    durationSeconds: number;
+    generationMode: 'native';
+    upscaled: false;
+  };
+}
+
+export interface NativeFashionShort {
+  shortId: string;
+  contentGroupId?: string;
+  locale?: string;
+  editorial: {
+    title: string;
+    description: string;
+    translationStatus?: 'source' | 'approved';
+  };
+  delivery: {
+    mode: 'ambient-fashion-master';
+    visualSpeechMode: 'none';
+  };
+  render: {
+    engine: 'approved-native-video';
+    profile: typeof NATIVE_FASHION_PROFILE;
+    clipDurationSeconds: 12;
+    shots: [NativeFashionShot];
+  };
+  publication: PlannedShort['publication'];
+  audioRights: {
+    provenanceRef: string;
+    profileRevision: string;
+    commercialUseApproved: true;
+  };
+}
+
+type AnyPlannedShort = PlannedShort | NativeFashionShort;
+
+interface PlanEnvelope {
   sourceDigests: {
     imageManifestSha256: string;
     imageCatalogSha256: string;
@@ -168,8 +226,19 @@ export interface ShortPlan {
     initialVisibility: 'private';
     syntheticMediaDisclosureRequired: true;
   };
+}
+
+export interface LegacyShortPlan extends PlanEnvelope {
+  schemaVersion: 3;
   shorts: PlannedShort[];
 }
+
+export interface NativeFashionPlan extends PlanEnvelope {
+  schemaVersion: 4;
+  shorts: NativeFashionShort[];
+}
+
+export type ShortPlan = LegacyShortPlan | NativeFashionPlan;
 
 function argument(name: string, fallback = ''): string {
   const index = process.argv.indexOf(`--${name}`);
@@ -223,7 +292,7 @@ export function assertPlan(plan: unknown): asserts plan is ShortPlan {
   if (!plan || typeof plan !== 'object' || Array.isArray(plan)) throw new Error('Plan must be an object');
   const value = plan as Partial<ShortPlan>;
   if (
-    value.schemaVersion !== 3 ||
+    (value.schemaVersion !== 3 && value.schemaVersion !== 4) ||
     !value.sourceDigests ||
     ![
       value.sourceDigests.imageManifestSha256,
@@ -243,17 +312,14 @@ export function assertPlan(plan: unknown): asserts plan is ShortPlan {
   if (!Array.isArray(value.shorts)) throw new Error('Plan shorts must be an array');
   const shortIds = new Set<string>();
   const turnIds = new Set<string>();
-  for (const short of value.shorts) {
+  for (const candidate of value.shorts as unknown[]) {
+    if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) {
+      throw new Error('Plan contains a malformed Short entry');
+    }
+    const short = candidate as AnyPlannedShort;
     if (!SAFE_ID.test(short.shortId)) throw new Error(`Unsafe short ID: ${short.shortId}`);
     if (shortIds.has(short.shortId)) throw new Error(`Duplicate short ID: ${short.shortId}`);
     shortIds.add(short.shortId);
-    if (
-      short.render?.engine !== 'LongCat-Video-Avatar-1.5' ||
-      !Array.isArray(short.render.shots) ||
-      short.render.shots.length !== 3
-    ) {
-      throw new Error(`${short.shortId} must contain exactly three LongCat clips`);
-    }
     if (
       short.publication?.visibility !== 'private' ||
       short.publication.autoPublish !== false ||
@@ -263,37 +329,82 @@ export function assertPlan(plan: unknown): asserts plan is ShortPlan {
     ) {
       throw new Error(`${short.shortId} publication gate is unsafe`);
     }
-    const locale = canonicalizeLocale(short.locale ?? '');
+    if (value.schemaVersion === 4) {
+      if (short.render?.engine !== 'approved-native-video') {
+        throw new Error(`${short.shortId} must use the approved native-video engine`);
+      }
+      const native = short as NativeFashionShort;
+      const profile = native.render.profile;
+      const shots = Array.isArray(native.render.shots) ? native.render.shots : [];
+      const shot = shots[0];
+      if (
+        native.delivery?.mode !== 'ambient-fashion-master' || native.delivery.visualSpeechMode !== 'none' ||
+        typeof native.editorial?.title !== 'string' || native.editorial.title.trim().length < 8 ||
+        typeof native.editorial.description !== 'string' || native.editorial.description.trim().length < 30 ||
+        !['source', 'approved'].includes(native.editorial.translationStatus ?? '') ||
+        profile?.id !== NATIVE_FASHION_PROFILE.id || profile.version !== NATIVE_FASHION_PROFILE.version ||
+        profile.master?.width !== NATIVE_FASHION_PROFILE.master.width ||
+        profile.master.height !== NATIVE_FASHION_PROFILE.master.height ||
+        profile.master.fps !== NATIVE_FASHION_PROFILE.master.fps ||
+        profile.master.durationSeconds !== NATIVE_FASHION_PROFILE.master.durationSeconds ||
+        profile.source?.mode !== 'native' || profile.source.minWidth !== NATIVE_FASHION_PROFILE.source.minWidth ||
+        profile.source.minHeight !== NATIVE_FASHION_PROFILE.source.minHeight || profile.source.allowUpscale !== false ||
+        native.render.clipDurationSeconds !== NATIVE_FASHION_PROFILE.master.durationSeconds ||
+        shots.length !== 1 || !shot || shot.index !== 1 ||
+        shot.contentTier !== 'safe' || shot.qaStatus !== 'approved' || !path.isAbsolute(shot.referenceVideoPath) ||
+        !SAFE_MEDIA_FILE.test(path.basename(shot.referenceVideoPath)) ||
+        !/^[a-f0-9]{64}$/u.test(shot.sourceSha256 ?? '') || !shot.motionPrompt?.trim() ||
+        shot.nativeVideo?.generationMode !== 'native' || shot.nativeVideo.upscaled !== false ||
+        shot.nativeVideo.width < NATIVE_FASHION_PROFILE.source.minWidth ||
+        shot.nativeVideo.height < NATIVE_FASHION_PROFILE.source.minHeight ||
+        shot.nativeVideo.height <= shot.nativeVideo.width || shot.nativeVideo.fps !== 30 ||
+        Math.abs(shot.nativeVideo.durationSeconds - NATIVE_FASHION_PROFILE.master.durationSeconds) > 1 ||
+        native.audioRights?.commercialUseApproved !== true || !native.audioRights.provenanceRef?.trim() ||
+        !/^[a-f0-9]{64}$/u.test(native.audioRights.profileRevision ?? '')
+      ) {
+        throw new Error(`${short.shortId} has an incomplete native-fashion-v1 contract`);
+      }
+      continue;
+    }
     if (
-      short.narration?.locale !== locale ||
-      !short.narration.voiceProfileId?.trim() ||
-      short.narration.fitPolicy?.overflow !== 'reject' ||
-      !Number.isFinite(short.narration.fitPolicy.leadInMs) ||
-      short.narration.fitPolicy.leadInMs < 0 ||
-      short.narration.fitPolicy.leadInMs > 2_000 ||
-      !Number.isFinite(short.narration.fitPolicy.tailOutMs) ||
-      short.narration.fitPolicy.tailOutMs < 0 ||
-      short.narration.fitPolicy.tailOutMs > 2_000 ||
-      !Number.isFinite(short.narration.fitPolicy.maxSpeedup) ||
-      short.narration.fitPolicy.maxSpeedup < 1 ||
-      short.narration.fitPolicy.maxSpeedup > 1.25 ||
-      short.delivery?.mode !== 'localized-lipsync-masters' ||
-      short.delivery.visualSpeechMode !== 'localized-lipsync' ||
-      short.publication.defaultLanguage !== locale ||
-      short.publication.defaultAudioLanguage !== locale ||
-      short.rights?.voiceProfileId !== short.narration.voiceProfileId ||
-      short.rights?.validation !== 'registry-required' ||
-      !['source', 'approved'].includes(short.editorial.translationStatus ?? '')
+      short.render?.engine !== 'LongCat-Video-Avatar-1.5' ||
+      !Array.isArray(short.render.shots) ||
+      short.render.shots.length !== 3
+    ) {
+      throw new Error(`${short.shortId} must contain exactly three LongCat clips`);
+    }
+    const localized = short as PlannedShort;
+    const locale = canonicalizeLocale(localized.locale ?? '');
+    if (
+      localized.narration?.locale !== locale ||
+      !localized.narration.voiceProfileId?.trim() ||
+      localized.narration.fitPolicy?.overflow !== 'reject' ||
+      !Number.isFinite(localized.narration.fitPolicy.leadInMs) ||
+      localized.narration.fitPolicy.leadInMs < 0 ||
+      localized.narration.fitPolicy.leadInMs > 2_000 ||
+      !Number.isFinite(localized.narration.fitPolicy.tailOutMs) ||
+      localized.narration.fitPolicy.tailOutMs < 0 ||
+      localized.narration.fitPolicy.tailOutMs > 2_000 ||
+      !Number.isFinite(localized.narration.fitPolicy.maxSpeedup) ||
+      localized.narration.fitPolicy.maxSpeedup < 1 ||
+      localized.narration.fitPolicy.maxSpeedup > 1.25 ||
+      localized.delivery?.mode !== 'localized-lipsync-masters' ||
+      localized.delivery.visualSpeechMode !== 'localized-lipsync' ||
+      localized.publication.defaultLanguage !== locale ||
+      localized.publication.defaultAudioLanguage !== locale ||
+      localized.rights?.voiceProfileId !== localized.narration.voiceProfileId ||
+      localized.rights?.validation !== 'registry-required' ||
+      !['source', 'approved'].includes(localized.editorial.translationStatus ?? '')
     ) {
       throw new Error(`${short.shortId} has an incomplete localized narration or rights contract`);
     }
-    if (!Number.isFinite(short.render.clipDurationSeconds) || short.render.clipDurationSeconds <= 0) {
+    if (!Number.isFinite(localized.render.clipDurationSeconds) || localized.render.clipDurationSeconds <= 0) {
       throw new Error(`${short.shortId} has an invalid clip duration`);
     }
-    if (Math.abs(short.render.clipDurationSeconds - 3.72) > 0.001) {
+    if (Math.abs(localized.render.clipDurationSeconds - 3.72) > 0.001) {
       throw new Error(`${short.shortId} clip duration must match the current LongCat 3.72-second contract`);
     }
-    for (const [shotOffset, shot] of short.render.shots.entries()) {
+    for (const [shotOffset, shot] of localized.render.shots.entries()) {
       if (
         shot.index !== shotOffset + 1 ||
         shot.contentTier !== 'safe' ||
@@ -313,14 +424,18 @@ export function assertPlan(plan: unknown): asserts plan is ShortPlan {
 }
 
 export function assessPlannedShort(
-  planned: PlannedShort,
-  allShorts: PlannedShort[],
+  planned: AnyPlannedShort,
+  allShorts: AnyPlannedShort[],
 ): EditorialQualityReport {
-  const prompt = planned.render.shots.map((shot) => `${shot.motionPrompt} ${shot.voiceLine}`).join('\n');
-  const duration = computeCrossfadedDuration(
-    planned.render.shots.map(() => planned.render.clipDurationSeconds),
-    planned.render.shots.slice(1).map(() => TRANSITION_SECONDS),
-  );
+  const prompt = planned.render.engine === 'approved-native-video'
+    ? planned.render.shots.map((shot) => shot.motionPrompt).join('\n')
+    : planned.render.shots.map((shot) => `${shot.motionPrompt} ${shot.voiceLine}`).join('\n');
+  const duration = planned.render.engine === 'approved-native-video'
+    ? planned.render.clipDurationSeconds
+    : computeCrossfadedDuration(
+        planned.render.shots.map(() => planned.render.clipDurationSeconds),
+        planned.render.shots.slice(1).map(() => TRANSITION_SECONDS),
+      );
   return assessEditorialQuality({
     publication: true,
     title: planned.editorial.title,
@@ -337,17 +452,20 @@ export function assessPlannedShort(
     })),
     scenes: planned.render.shots.map((shot) => ({ prompt: shot.motionPrompt, status: 'done', mediaType: 'video' })),
     previousPrompts: allShorts.filter((candidate) => candidate.shortId !== planned.shortId)
-      .map((candidate) => candidate.render.shots.map((shot) => `${shot.motionPrompt} ${shot.voiceLine}`).join('\n')),
+      .map((candidate) => candidate.render.engine === 'approved-native-video'
+        ? candidate.render.shots.map((shot) => shot.motionPrompt).join('\n')
+        : candidate.render.shots.map((shot) => `${shot.motionPrompt} ${shot.voiceLine}`).join('\n')),
   });
 }
 
 export { voiceProfileRevision };
 
 export function assertVoiceProfiles(
-  shorts: readonly PlannedShort[],
+  shorts: readonly AnyPlannedShort[],
   profiles: ReadonlyMap<string, ResolvedVoiceProfile>,
 ): void {
   for (const planned of shorts) {
+    if (planned.render.engine === 'approved-native-video') continue;
     if (!planned.narration) continue;
     const profile = profiles.get(planned.narration.voiceProfileId);
     if (!profile) throw new Error(`Voice profile ${planned.narration.voiceProfileId} is missing`);
@@ -532,9 +650,147 @@ async function probeLongCatClip(filename: string): Promise<LongCatClipProbe> {
   };
 }
 
+export function assertNativeFashionClipProbe(
+  probe: LongCatClipProbe,
+  declared: NativeFashionShot['nativeVideo'],
+): void {
+  if (
+    !Number.isFinite(probe.duration) || probe.duration < 11 || probe.duration > 13 ||
+    !Number.isInteger(probe.width) || probe.width < NATIVE_FASHION_PROFILE.source.minWidth ||
+    !Number.isInteger(probe.height) || probe.height < NATIVE_FASHION_PROFILE.source.minHeight ||
+    probe.height <= probe.width || !Number.isFinite(probe.fps) || Math.abs(probe.fps - 30) > 0.1 ||
+    !probe.hasAudio || !['h264', 'hevc'].includes(probe.videoCodec) ||
+    !['aac', 'opus'].includes(probe.audioCodec) || declared.generationMode !== 'native' ||
+    declared.upscaled !== false || declared.width !== probe.width || declared.height !== probe.height ||
+    Math.abs(declared.fps - probe.fps) > 0.1 || Math.abs(declared.durationSeconds - probe.duration) > 0.2
+  ) {
+    throw new Error('Native fashion clip failed native resolution, duration, FPS, codec, audio or no-upscale checks');
+  }
+}
+
+async function approvedNativeVideo(filename: string, assetRoot: string, expectedSha256: string): Promise<string> {
+  if (!path.isAbsolute(filename) || !/^[a-f0-9]{64}$/u.test(expectedSha256)) {
+    throw new Error('Native fashion source path or digest is invalid');
+  }
+  const [root, sourceInfo] = await Promise.all([fs.realpath(assetRoot), fs.lstat(filename)]);
+  if (sourceInfo.isSymbolicLink() || !sourceInfo.isFile() || sourceInfo.size <= 1024) {
+    throw new Error('Native fashion source must be a non-empty regular non-symlink file');
+  }
+  const source = await fs.realpath(filename);
+  const relative = path.relative(root, source);
+  if (!relative || relative.startsWith('..') || path.isAbsolute(relative)) {
+    throw new Error('Native fashion source escapes the approved asset root');
+  }
+  if (await sha256(source) !== expectedSha256) throw new Error('Native fashion source digest does not match the plan');
+  return source;
+}
+
+async function renderNativeFashionShort(
+  planned: NativeFashionShort,
+  projectRoot: string,
+  assetRoot: string,
+  planRevision: string,
+  planSourceDigests: ShortPlan['sourceDigests'],
+): Promise<string> {
+  const shot = planned.render.shots[0];
+  const source = await approvedNativeVideo(shot.referenceVideoPath, assetRoot, shot.sourceSha256);
+  const probe = await probeLongCatClip(source);
+  assertNativeFashionClipProbe(probe, shot.nativeVideo);
+  const outputRelative = `youtube-shorts/${planned.shortId}/${planRevision}.mp4`;
+  const outputPath = path.join(projectRoot, '.codebuddy', 'media-generation', 'films', ...outputRelative.split('/'));
+  try {
+    const info = await fs.lstat(outputPath);
+    if (info.isSymbolicLink() || !info.isFile()) throw new Error(`Immutable master path is unsafe: ${outputPath}`);
+    await validateYouTubeMasterBundle({ videoPath: outputPath });
+    process.stdout.write(`[${planned.shortId}] reuse immutable native-fashion-v1 master ${planRevision}\n`);
+    return outputPath;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+  }
+
+  const result = await assembleFilm({
+    clips: [source],
+    transitions: [],
+    resolution: `${NATIVE_FASHION_PROFILE.master.width}x${NATIVE_FASHION_PROFILE.master.height}`,
+    aspectRatio: '9:16',
+    fps: NATIVE_FASHION_PROFILE.master.fps,
+    fit: 'cover',
+    rootDir: projectRoot,
+    name: planned.shortId,
+    output: outputRelative,
+  });
+  if (!result.success || !result.outputPath) throw new Error(result.error || 'Native fashion film assembly failed');
+  const actualDuration = result.probedDuration ?? result.estimatedDuration;
+  if (
+    result.clipCount !== 1 || result.transitionCount !== 0 || !result.hasAudio ||
+    result.targetWidth !== NATIVE_FASHION_PROFILE.master.width ||
+    result.targetHeight !== NATIVE_FASHION_PROFILE.master.height ||
+    result.fps !== NATIVE_FASHION_PROFILE.master.fps || actualDuration < 11 || actualDuration > 13
+  ) {
+    throw new Error('Final master failed the native-fashion-v1 1080x1920@30 ~12s audio contract');
+  }
+  const locale = canonicalizeLocale(planned.locale ?? 'fr-FR');
+  const durationMs = Math.round(actualDuration * 1_000);
+  const captionsPath = `${result.outputPath}.${locale}.vtt`;
+  await atomicWrite(captionsPath, buildWebVtt([{
+    id: 'ambient-audio',
+    startMs: 100,
+    endMs: Math.max(101, durationMs - 100),
+    text: '♪ Ambiance musicale ♪',
+  }], durationMs));
+  const [masterSha256, captionSha256] = await Promise.all([sha256(result.outputPath), sha256(captionsPath)]);
+  const sidecarPath = `${result.outputPath}.youtube.json`;
+  await atomicWrite(sidecarPath, `${JSON.stringify({
+    schemaVersion: 3,
+    qualityProfile: { id: NATIVE_FASHION_PROFILE.id, version: NATIVE_FASHION_PROFILE.version },
+    shortId: planned.shortId,
+    contentGroupId: planned.contentGroupId ?? planned.shortId,
+    locale,
+    video: { file: path.basename(result.outputPath), durationMs, sha256: masterSha256 },
+    captionTracks: [{
+      locale,
+      name: locale === 'fr-FR' ? 'Français' : locale,
+      format: 'webvtt',
+      file: path.basename(captionsPath),
+      sha256: captionSha256,
+      isDraft: true,
+    }],
+    youtube: {
+      snippet: {
+        title: planned.editorial.title,
+        description: planned.editorial.description,
+        defaultLanguage: locale,
+        defaultAudioLanguage: locale,
+      },
+      status: { privacyStatus: 'private', selfDeclaredMadeForKids: false },
+    },
+    containsSyntheticMedia: true,
+    autoPublish: false,
+    humanReviewRequired: true,
+    audioRights: planned.audioRights,
+    planRevision,
+    sourceDigests: planSourceDigests,
+    sourceClips: [{
+      file: path.basename(source),
+      sha256: shot.sourceSha256,
+      width: probe.width,
+      height: probe.height,
+      fps: probe.fps,
+      durationMs: Math.round(probe.duration * 1_000),
+      generationMode: 'native',
+      upscaled: false,
+    }],
+    renderedAt: new Date().toISOString(),
+  }, null, 2)}\n`);
+  await atomicWrite(`${sidecarPath}.sha256`, `${await sha256(sidecarPath)}\n`);
+  const technicalReport = await validateYouTubeMasterBundle({ videoPath: result.outputPath, sidecarPath });
+  await atomicWrite(`${result.outputPath}.technical.json`, `${JSON.stringify(technicalReport, null, 2)}\n`);
+  return result.outputPath;
+}
+
 async function renderShort(
-  planned: PlannedShort,
-  client: GpuMediaWorkerClient,
+  planned: AnyPlannedShort,
+  client: GpuMediaWorkerClient | null,
   projectRoot: string,
   assetRoot: string,
   resolveVoiceProfile?: (id: string) => Promise<ResolvedVoiceProfile | null>,
@@ -552,6 +808,10 @@ async function renderShort(
   activeJobIds: Set<string> = new Set(),
   retryTerminalJobs = false,
 ): Promise<string> {
+  if (planned.render.engine === 'approved-native-video') {
+    return renderNativeFashionShort(planned, projectRoot, assetRoot, planRevision, planSourceDigests);
+  }
+  if (!client) throw new Error('LongCat client is unavailable for the localized-lipsync profile');
   const locale = canonicalizeLocale(planned.locale ?? 'fr-FR');
   const localeSlug = localePathSlug(locale);
   const voiceProfileId = planned.narration?.voiceProfileId ?? 'legacy-env-fr-v1';
@@ -789,7 +1049,8 @@ async function renderShort(
   await atomicWrite(
     sidecarPath,
     `${JSON.stringify({
-      schemaVersion: 2,
+      schemaVersion: 3,
+      qualityProfile: { id: 'legacy-localized-v1', version: 1 },
       shortId: planned.shortId,
       contentGroupId: planned.contentGroupId ?? planned.shortId,
       locale,
@@ -873,7 +1134,8 @@ async function main(): Promise<void> {
   if (execute && preflight) throw new Error('--execute and --preflight are mutually exclusive');
   process.stdout.write(
     `${execute ? 'EXECUTE' : preflight ? 'PREFLIGHT' : 'DRY RUN'}: ${selected.length} Short(s), ` +
-      `${selected.length * 3} LongCat clip(s), private output only\n`,
+      `${selected.reduce((count, planned) => count + planned.render.shots.length, 0)} source clip(s), ` +
+      'private output only\n',
   );
   for (const planned of selected) {
     const quality = assessPlannedShort(planned, plan.shorts);
@@ -889,31 +1151,45 @@ async function main(): Promise<void> {
     }
   }
 
-  await Promise.all(selected.flatMap((planned) => planned.render.shots.map((shot) =>
-    loadApprovedImageSource(shot.referenceImagePath, assetRoot, shot.sourceSha256))));
+  await Promise.all(selected.flatMap((planned) => planned.render.engine === 'approved-native-video'
+    ? planned.render.shots.map(async (shot) => {
+        const source = await approvedNativeVideo(shot.referenceVideoPath, assetRoot, shot.sourceSha256);
+        assertNativeFashionClipProbe(await probeLongCatClip(source), shot.nativeVideo);
+      })
+    : planned.render.shots.map((shot) =>
+        loadApprovedImageSource(shot.referenceImagePath, assetRoot, shot.sourceSha256))));
 
-  const voiceProfiles = await loadVoiceRegistry(
-    path.resolve(
-      argument('voice-registry', path.join(homedir(), '.codebuddy', 'voice-rights-registry.json')),
-    ),
-  );
+  const localized = selected.filter((planned): planned is PlannedShort =>
+    planned.render.engine === 'LongCat-Video-Avatar-1.5');
+  const voiceProfiles = localized.length
+    ? await loadVoiceRegistry(path.resolve(
+        argument('voice-registry', path.join(homedir(), '.codebuddy', 'voice-rights-registry.json')),
+      ))
+    : new Map<string, ResolvedVoiceProfile>();
   assertVoiceProfiles(selected, voiceProfiles);
 
-  const clientEnv = await loadEnvironmentFile(
-    argument('worker-env', path.join(homedir(), '.codebuddy', 'gpu-worker-client.env')),
-  );
-  const baseUrl = process.env.CODEBUDDY_GPU_WORKER_URL || clientEnv.CODEBUDDY_GPU_WORKER_URL;
-  const token = process.env.CODEBUDDY_GPU_WORKER_TOKEN || clientEnv.CODEBUDDY_GPU_WORKER_TOKEN;
-  if (!baseUrl || !token) throw new Error('GPU worker URL and token are required');
-  const client = new GpuMediaWorkerClient({ baseUrl, token: token.replace(/^\uFEFF/u, ''), timeoutMs: 120_000 });
-  const capabilities = await client.capabilities();
-  if (!capabilities.jobs.includes('avatar_video_render')) throw new Error('Darkstar LongCat runner is unavailable');
-  if ((capabilities.queueDepth ?? 0) > 0 || (capabilities.activeJobs ?? 0) > 0 || capabilities.availableSlots === 0) {
-    throw new Error('Darkstar GPU worker has no immediately available render slot');
-  }
-  const workerRevision = capabilities.runnerRevisions?.avatar_video_render;
-  if (!workerRevision || !/^[a-f0-9]{64}$/u.test(workerRevision)) {
-    throw new Error('Darkstar worker does not expose a valid LongCat runner revision');
+  let client: GpuMediaWorkerClient | null = null;
+  let workerRevision = 'approved-native-video-v1';
+  let workerQueueDepth = 0;
+  if (localized.length) {
+    const clientEnv = await loadEnvironmentFile(
+      argument('worker-env', path.join(homedir(), '.codebuddy', 'gpu-worker-client.env')),
+    );
+    const baseUrl = process.env.CODEBUDDY_GPU_WORKER_URL || clientEnv.CODEBUDDY_GPU_WORKER_URL;
+    const token = process.env.CODEBUDDY_GPU_WORKER_TOKEN || clientEnv.CODEBUDDY_GPU_WORKER_TOKEN;
+    if (!baseUrl || !token) throw new Error('GPU worker URL and token are required');
+    client = new GpuMediaWorkerClient({ baseUrl, token: token.replace(/^\uFEFF/u, ''), timeoutMs: 120_000 });
+    const capabilities = await client.capabilities();
+    if (!capabilities.jobs.includes('avatar_video_render')) throw new Error('Darkstar LongCat runner is unavailable');
+    if ((capabilities.queueDepth ?? 0) > 0 || (capabilities.activeJobs ?? 0) > 0 || capabilities.availableSlots === 0) {
+      throw new Error('Darkstar GPU worker has no immediately available render slot');
+    }
+    const revision = capabilities.runnerRevisions?.avatar_video_render;
+    if (!revision || !/^[a-f0-9]{64}$/u.test(revision)) {
+      throw new Error('Darkstar worker does not expose a valid LongCat runner revision');
+    }
+    workerRevision = revision;
+    workerQueueDepth = capabilities.queueDepth ?? 0;
   }
 
   const resolveVoiceProfile = async (id: string): Promise<ResolvedVoiceProfile | null> =>
@@ -921,8 +1197,9 @@ async function main(): Promise<void> {
 
   if (preflight && !execute) {
     process.stdout.write(
-      `Preflight passed: ${selected.length * 3} approved source(s), ` +
-        `${voiceProfiles.size} voice profile(s), worker queue ${capabilities.queueDepth ?? 0}\n`,
+      `Preflight passed: ${selected.reduce((count, planned) => count + planned.render.shots.length, 0)} ` +
+        'approved source(s), ' +
+        `${voiceProfiles.size} voice profile(s), worker queue ${workerQueueDepth}\n`,
     );
     return;
   }
@@ -936,7 +1213,7 @@ async function main(): Promise<void> {
   const retryTerminalJobs = process.argv.includes('--retry-terminal-jobs');
   const interrupt = () => {
     abortController.abort();
-    for (const jobId of activeJobIds) void client.cancel(jobId).catch(() => undefined);
+    for (const jobId of activeJobIds) void client?.cancel(jobId).catch(() => undefined);
   };
   process.once('SIGINT', interrupt);
   process.once('SIGTERM', interrupt);
@@ -1008,6 +1285,11 @@ function receiptFromJob(
     file: path.basename(clipPath),
     sha256: digest,
     durationMs: Math.round(probe.duration * 1_000),
+    width: probe.width,
+    height: probe.height,
+    fps: probe.fps,
+    generationMode: 'legacy',
+    upscaled: true,
     jobId: job.id,
     requestHash: job.requestHash,
     runnerRevision: job.runnerRevision,

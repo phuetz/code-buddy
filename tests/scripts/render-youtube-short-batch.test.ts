@@ -6,10 +6,12 @@ import { describe, expect, it } from 'vitest';
 
 import {
   assertLongCatClipProbe,
+  assertNativeFashionClipProbe,
   assertPlan,
   assertVoiceProfiles,
   assessPlannedShort,
   narrationTurnId,
+  NATIVE_FASHION_PROFILE,
   timelineStartsMs,
   type PlannedShort,
   verifiedAudioDigest,
@@ -104,6 +106,16 @@ describe('MySoulmate YouTube Short batch contract', () => {
     expect(() => assertPlan(plan(short))).toThrow('unsafe or incomplete shot');
   });
 
+  it('fails closed with a clear plan error for malformed V4 entries', () => {
+    expect(() => assertPlan({ ...(plan() as object), schemaVersion: 4, shorts: [null] }))
+      .toThrow('malformed Short');
+    expect(() => assertPlan({
+      ...(plan() as object),
+      schemaVersion: 4,
+      shorts: [{ shortId: 'fashion-without-render', publication: plannedShort().publication }],
+    })).toThrow('approved native-video engine');
+  });
+
   it('rejects duplicate short and LongCat turn identities', () => {
     const first = plannedShort();
     const duplicate = plannedShort();
@@ -130,6 +142,80 @@ describe('MySoulmate YouTube Short batch contract', () => {
     expect(() => assertLongCatClipProbe({ ...valid, duration: 2.1 }, 3.72)).toThrow('duration');
     expect(() => assertLongCatClipProbe({ ...valid, width: 704, height: 544 }, 3.72)).toThrow('portrait');
     expect(() => assertLongCatClipProbe({ ...valid, hasAudio: false, audioCodec: '' }, 3.72)).toThrow('audio');
+  });
+
+  it('accepts a versioned native fashion plan without pretending LongCat 480p is HQ', () => {
+    const native = {
+      shortId: 'lisa-fashion-native-pilot',
+      locale: 'fr-FR',
+      editorial: {
+        title: 'Lisa en mouvement dans la ville',
+        description: 'Une scène fashion originale de douze secondes préparée pour une revue privée.',
+        translationStatus: 'source',
+      },
+      delivery: { mode: 'ambient-fashion-master', visualSpeechMode: 'none' },
+      render: {
+        engine: 'approved-native-video',
+        profile: NATIVE_FASHION_PROFILE,
+        clipDurationSeconds: 12,
+        shots: [{
+          index: 1,
+          assetId: 'lisa-fashion-native-01',
+          sourceSha256: 'f'.repeat(64),
+          referenceVideoPath: '/approved/lisa-fashion-native-01.mp4',
+          contentTier: 'safe',
+          qaStatus: 'approved',
+          motionPrompt: 'slow natural runway walk, stable identity, coherent hands and wardrobe',
+          nativeVideo: {
+            width: 1288,
+            height: 1920,
+            fps: 30,
+            durationSeconds: 12,
+            generationMode: 'native',
+            upscaled: false,
+          },
+        }],
+      },
+      publication: plannedShort().publication,
+      audioRights: {
+        provenanceRef: 'flow/original-ambient-audio',
+        profileRevision: '9'.repeat(64),
+        commercialUseApproved: true,
+      },
+    };
+    const candidate = { ...(plan() as Record<string, unknown>), schemaVersion: 4, shorts: [native] };
+    expect(() => assertPlan(candidate)).not.toThrow();
+
+    native.render.profile = {
+      ...NATIVE_FASHION_PROFILE,
+      source: { ...NATIVE_FASHION_PROFILE.source, allowUpscale: true },
+    } as typeof NATIVE_FASHION_PROFILE;
+    expect(() => assertPlan(candidate)).toThrow('native-fashion-v1');
+  });
+
+  it('rejects low-resolution, upscaled or mismatched native fashion clips', () => {
+    const declared = {
+      width: 1288,
+      height: 1920,
+      fps: 30 as const,
+      durationSeconds: 12,
+      generationMode: 'native' as const,
+      upscaled: false as const,
+    };
+    const probe = {
+      duration: 12,
+      width: 1288,
+      height: 1920,
+      fps: 30,
+      videoCodec: 'h264',
+      audioCodec: 'aac',
+      hasAudio: true,
+    };
+    expect(() => assertNativeFashionClipProbe(probe, declared)).not.toThrow();
+    expect(() => assertNativeFashionClipProbe({ ...probe, width: 720 }, { ...declared, width: 720 }))
+      .toThrow('native resolution');
+    expect(() => assertNativeFashionClipProbe(probe, { ...declared, upscaled: true as false }))
+      .toThrow('no-upscale');
   });
 
   it('derives caption starts from each actual clip duration', () => {

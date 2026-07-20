@@ -29,7 +29,8 @@ async function fixture() {
   await fs.writeFile(captionPath, 'WEBVTT\n\n00:00:00.100 --> 00:00:10.000\nBonjour\n');
   const sha = async (filename: string) => createHash('sha256').update(await fs.readFile(filename)).digest('hex');
   await fs.writeFile(`${videoPath}.youtube.json`, JSON.stringify({
-    schemaVersion: 2, autoPublish: false, humanReviewRequired: true, containsSyntheticMedia: true,
+    schemaVersion: 3, autoPublish: false, humanReviewRequired: true, containsSyntheticMedia: true,
+    qualityProfile: { id: 'legacy-localized-v1', version: 1 },
     video: { file: path.basename(videoPath), durationMs: 10_160, sha256: await sha(videoPath) },
     captionTracks: [{ file: path.basename(captionPath), sha256: await sha(captionPath) }],
     youtube: {
@@ -44,7 +45,16 @@ async function fixture() {
       provenanceRef: 'voice-rights/lisa-fr-v2',
       profileRevision: 'a'.repeat(64),
     },
-    sourceClips: [1, 2, 3].map((index) => ({ file: `clip-${index}.mp4`, sha256: String(index).repeat(64) })),
+    sourceClips: [1, 2, 3].map((index) => ({
+      file: `clip-${index}.mp4`,
+      sha256: String(index).repeat(64),
+      width: 544,
+      height: 704,
+      fps: 25,
+      durationMs: 3_720,
+      generationMode: 'legacy',
+      upscaled: true,
+    })),
   }));
   return videoPath;
 }
@@ -90,6 +100,83 @@ describe('YouTube master quality gate', () => {
       report, expectedVideoSha256: report.videoSha256, reviewer: 'Patrice', reason: 'À revoir.',
       checks: { voice: false, lipSync: true, identity: true, anatomy: true, captions: true, disclosure: true, editorial: true },
     })).rejects.toThrow('Every');
+  });
+
+  it('accepts the native fashion profile only with a native 1080x1920 source', async () => {
+    const videoPath = await fixture();
+    const sidecarPath = `${videoPath}.youtube.json`;
+    const sidecar = JSON.parse(await fs.readFile(sidecarPath, 'utf8')) as Record<string, unknown>;
+    sidecar.qualityProfile = { id: 'native-fashion-v1', version: 1 };
+    sidecar.video = { ...(sidecar.video as object), durationMs: 12_000 };
+    sidecar.sourceClips = [{
+      file: 'fashion-native.mp4',
+      sha256: 'f'.repeat(64),
+      width: 1288,
+      height: 1920,
+      fps: 30,
+      durationMs: 12_000,
+      generationMode: 'native',
+      upscaled: false,
+    }];
+    await fs.writeFile(sidecarPath, JSON.stringify(sidecar));
+    const nativeProbe = async () => ({
+      duration: 12,
+      width: 1080,
+      height: 1920,
+      fps: 30,
+      videoCodec: 'h264',
+      audioCodec: 'aac',
+      hasAudio: true,
+    });
+    await expect(validateYouTubeMasterBundle({
+      videoPath,
+      probe: nativeProbe,
+      analyze: passingSignals,
+    })).resolves.toMatchObject({
+      qualityProfile: { id: 'native-fashion-v1', version: 1 },
+      probe: { width: 1080, height: 1920, fps: 30 },
+    });
+
+    (sidecar.sourceClips as Array<Record<string, unknown>>)[0]!.width = 720;
+    await fs.writeFile(sidecarPath, JSON.stringify(sidecar));
+    await expect(validateYouTubeMasterBundle({
+      videoPath,
+      probe: nativeProbe,
+      analyze: passingSignals,
+    })).rejects.toThrow('native-source');
+  });
+
+  it('rejects a fake native receipt, simple upscale and loose fashion duration', async () => {
+    const videoPath = await fixture();
+    const sidecarPath = `${videoPath}.youtube.json`;
+    const sidecar = JSON.parse(await fs.readFile(sidecarPath, 'utf8')) as Record<string, unknown>;
+    sidecar.qualityProfile = { id: 'native-fashion-v1', version: 1 };
+    sidecar.video = { ...(sidecar.video as object), durationMs: 12_000 };
+    sidecar.sourceClips = [{
+      file: 'fashion-upscaled.mp4', sha256: 'e'.repeat(64), width: 1080, height: 1920,
+      fps: 30, durationMs: 12_000, generationMode: 'native', upscaled: true,
+    }];
+    await fs.writeFile(sidecarPath, JSON.stringify(sidecar));
+    await expect(validateYouTubeMasterBundle({
+      videoPath,
+      probe: async () => ({
+        duration: 12, width: 1080, height: 1920, fps: 30,
+        videoCodec: 'h264', audioCodec: 'aac', hasAudio: true,
+      }),
+      analyze: passingSignals,
+    })).rejects.toThrow('native-source');
+
+    (sidecar.sourceClips as Array<Record<string, unknown>>)[0]!.upscaled = false;
+    sidecar.video = { ...(sidecar.video as object), durationMs: 14_000 };
+    await fs.writeFile(sidecarPath, JSON.stringify(sidecar));
+    await expect(validateYouTubeMasterBundle({
+      videoPath,
+      probe: async () => ({
+        duration: 14, width: 1080, height: 1920, fps: 30,
+        videoCodec: 'h264', audioCodec: 'aac', hasAudio: true,
+      }),
+      analyze: passingSignals,
+    })).rejects.toThrow('duration');
   });
 
   it('records digest-bound change requests without granting upload readiness', async () => {
@@ -223,6 +310,7 @@ describe('YouTube master quality gate', () => {
     await fs.writeFile(sidecarPath, JSON.stringify(sidecar));
     await expect(validateYouTubeMasterBundle({ videoPath })).resolves.toMatchObject({
       status: 'technical-approved',
+      qualityProfile: { id: 'legacy-localized-v1', version: 1 },
       probe: { width: 720, height: 1280, videoCodec: 'h264', audioCodec: 'aac', hasAudio: true },
     });
   }, 30_000);

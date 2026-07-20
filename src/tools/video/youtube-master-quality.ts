@@ -22,6 +22,47 @@ const execFile = promisify(realExecFile);
 const SHA256 = /^[a-f0-9]{64}$/u;
 const SAFE_FILE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,199}$/u;
 
+export const YOUTUBE_MASTER_PROFILES = {
+  'legacy-localized-v1': {
+    version: 1,
+    minWidth: 720,
+    minHeight: 1280,
+    minDuration: 6,
+    maxDuration: 15,
+    maxBlackRatio: 0.15,
+    sourceCount: 3,
+    requireNativeSources: false,
+  },
+  'native-fashion-v1': {
+    version: 1,
+    minWidth: 1080,
+    minHeight: 1920,
+    minDuration: 11,
+    maxDuration: 13,
+    maxBlackRatio: 0.05,
+    sourceCount: 1,
+    requireNativeSources: true,
+  },
+} as const;
+
+export type YouTubeMasterProfileId = keyof typeof YOUTUBE_MASTER_PROFILES;
+
+export interface YouTubeMasterProfileRef {
+  id: YouTubeMasterProfileId;
+  version: 1;
+}
+
+export interface YouTubeSourceClipReceipt {
+  file: string;
+  sha256: string;
+  width: number;
+  height: number;
+  fps: number;
+  durationMs: number;
+  generationMode: 'legacy' | 'native';
+  upscaled: boolean;
+}
+
 export interface YouTubeMasterProbe {
   duration: number;
   width: number;
@@ -39,7 +80,7 @@ export interface YouTubeMasterSignalAnalysis {
 }
 
 export interface YouTubeTechnicalReport {
-  schemaVersion: 2;
+  schemaVersion: 3;
   status: 'technical-approved';
   videoFile: string;
   sidecarFile: string;
@@ -47,7 +88,8 @@ export interface YouTubeTechnicalReport {
   videoSha256: string;
   sidecarSha256: string;
   captionSha256: string;
-  sourceClips: Array<{ file: string; sha256: string }>;
+  qualityProfile: YouTubeMasterProfileRef;
+  sourceClips: YouTubeSourceClipReceipt[];
   checkedAt: string;
   probe: YouTubeMasterProbe;
   signal: YouTubeMasterSignalAnalysis;
@@ -125,25 +167,51 @@ export async function validateYouTubeMasterBundle(input: {
   const status = youtube?.status as Record<string, unknown> | undefined;
   const snippet = youtube?.snippet as Record<string, unknown> | undefined;
   const rights = sidecar.narrationRights as Record<string, unknown> | undefined;
+  const audioRights = sidecar.audioRights as Record<string, unknown> | undefined;
   const sourceClips = sidecar.sourceClips;
+  const qualityProfile = sidecar.qualityProfile as Record<string, unknown> | undefined;
+  const profile = qualityProfile && typeof qualityProfile.id === 'string'
+    ? YOUTUBE_MASTER_PROFILES[qualityProfile.id as YouTubeMasterProfileId]
+    : undefined;
+  const validatedRights = rights ?? audioRights;
   if (
-    sidecar.schemaVersion !== 2 || sidecar.autoPublish !== false || sidecar.humanReviewRequired !== true ||
+    sidecar.schemaVersion !== 3 || sidecar.autoPublish !== false || sidecar.humanReviewRequired !== true ||
     sidecar.containsSyntheticMedia !== true || !video || video.file !== path.basename(videoPath) ||
     !Array.isArray(captions) || captions.length !== 1 || status?.privacyStatus !== 'private' ||
     status.selfDeclaredMadeForKids !== false || typeof snippet?.title !== 'string' || snippet.title.trim().length < 8 ||
     typeof snippet.description !== 'string' || snippet.description.trim().length < 30 ||
-    rights?.commercialUseApproved !== true || typeof rights.provenanceRef !== 'string' || !rights.provenanceRef.trim() ||
-    typeof rights.profileRevision !== 'string' || !SHA256.test(rights.profileRevision) ||
-    !Array.isArray(sourceClips) || sourceClips.length !== 3
+    validatedRights?.commercialUseApproved !== true || typeof validatedRights.provenanceRef !== 'string' ||
+    !validatedRights.provenanceRef.trim() || typeof validatedRights.profileRevision !== 'string' ||
+    !SHA256.test(validatedRights.profileRevision) || !profile || qualityProfile?.version !== profile.version ||
+    !Array.isArray(sourceClips) || sourceClips.length !== profile.sourceCount
   ) throw new Error('YouTube sidecar contract, rights or private-publication gate is incomplete or unsafe');
   const validatedSourceClips = sourceClips.map((item, index) => {
     const clip = item as Record<string, unknown>;
-    if (typeof clip.file !== 'string' || !SAFE_FILE.test(clip.file) || typeof clip.sha256 !== 'string' || !SHA256.test(clip.sha256)) {
+    if (
+      typeof clip.file !== 'string' || !SAFE_FILE.test(clip.file) ||
+      typeof clip.sha256 !== 'string' || !SHA256.test(clip.sha256) ||
+      !Number.isInteger(clip.width) || Number(clip.width) <= 0 ||
+      !Number.isInteger(clip.height) || Number(clip.height) <= Number(clip.width) ||
+      typeof clip.fps !== 'number' || !Number.isFinite(clip.fps) || clip.fps <= 0 ||
+      !Number.isInteger(clip.durationMs) || Number(clip.durationMs) <= 0 ||
+      !['legacy', 'native'].includes(String(clip.generationMode)) || typeof clip.upscaled !== 'boolean'
+    ) {
       throw new Error(`YouTube source clip ${index + 1} is incomplete`);
     }
-    return { file: clip.file, sha256: clip.sha256 };
+    return {
+      file: clip.file,
+      sha256: clip.sha256,
+      width: Number(clip.width),
+      height: Number(clip.height),
+      fps: Number(clip.fps),
+      durationMs: Number(clip.durationMs),
+      generationMode: clip.generationMode as 'legacy' | 'native',
+      upscaled: clip.upscaled,
+    };
   });
-  if (new Set(validatedSourceClips.map((clip) => clip.file)).size !== 3) throw new Error('YouTube source clips must be distinct');
+  if (new Set(validatedSourceClips.map((clip) => clip.file)).size !== profile.sourceCount) {
+    throw new Error('YouTube source clips must be distinct');
+  }
 
   const videoSha256 = await sha256NoFollow(videoPath, 'YouTube master');
   if (video.sha256 !== videoSha256) throw new Error('YouTube master digest does not match its sidecar');
@@ -160,16 +228,24 @@ export async function validateYouTubeMasterBundle(input: {
     (input.analyze ?? analyzeMasterSignals)(videoPath),
   ]);
   const blackRatio = probe.duration > 0 ? signal.blackSeconds / probe.duration : 1;
+  const isPortrait = probe.height > probe.width;
+  const nativeSourcesPass = !profile.requireNativeSources || validatedSourceClips.every((clip) =>
+    clip.generationMode === 'native' && clip.upscaled === false &&
+    clip.width >= probe.width && clip.height >= probe.height &&
+    Math.abs(clip.fps - probe.fps) <= 0.1,
+  );
   if (
-    probe.width !== 720 || probe.height !== 1280 || Math.abs(probe.fps - 30) > 0.05 ||
-    probe.duration < 6 || probe.duration > 15 || !probe.hasAudio ||
+    probe.width < profile.minWidth || probe.height < profile.minHeight || !isPortrait ||
+    Math.abs(probe.fps - 30) > 0.05 || probe.duration < profile.minDuration ||
+    probe.duration > profile.maxDuration || !probe.hasAudio || !nativeSourcesPass ||
     !['h264', 'hevc'].includes(probe.videoCodec) || !['aac', 'opus'].includes(probe.audioCodec) ||
     Math.abs(probe.duration * 1_000 - Number(video.durationMs)) > 250 ||
     signal.meanVolumeDb === null || signal.meanVolumeDb <= -60 || signal.maxVolumeDb === null ||
-    signal.maxVolumeDb > 0 || !Number.isFinite(signal.blackSeconds) || signal.blackSeconds < 0 || blackRatio > 0.15
-  ) throw new Error('YouTube master failed resolution, duration, FPS, codec, audio or black-frame checks');
+    signal.maxVolumeDb > 0 || !Number.isFinite(signal.blackSeconds) || signal.blackSeconds < 0 ||
+    blackRatio > profile.maxBlackRatio
+  ) throw new Error('YouTube master failed profile, native-source, duration, FPS, codec, audio or black-frame checks');
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
     status: 'technical-approved',
     videoFile: path.basename(videoPath),
     sidecarFile: path.basename(sidecarPath),
@@ -177,6 +253,10 @@ export async function validateYouTubeMasterBundle(input: {
     videoSha256,
     sidecarSha256: await sha256NoFollow(sidecarPath, 'YouTube sidecar'),
     captionSha256,
+    qualityProfile: {
+      id: qualityProfile!.id as YouTubeMasterProfileId,
+      version: profile.version,
+    },
     sourceClips: validatedSourceClips,
     checkedAt: (input.now ?? (() => new Date()))().toISOString(),
     probe,
@@ -194,7 +274,7 @@ export async function reviewYouTubeMaster(input: {
   now?: () => Date;
 }): Promise<YouTubeHumanReviewReceipt> {
   if (
-    input.report.schemaVersion !== 2 || input.report.status !== 'technical-approved' ||
+    input.report.schemaVersion !== 3 || input.report.status !== 'technical-approved' ||
     !SHA256.test(input.expectedVideoSha256) || input.report.videoSha256 !== input.expectedVideoSha256
   ) throw new Error('Human review must target the current technically approved master digest');
   if (Object.values(input.checks).some((passed) => passed !== true)) throw new Error('Every human review check must pass');
@@ -225,7 +305,7 @@ export async function requestYouTubeMasterChanges(input: {
   now?: () => Date;
 }): Promise<YouTubeChangesRequestedReceipt> {
   if (
-    input.report.schemaVersion !== 2 || input.report.status !== 'technical-approved' ||
+    input.report.schemaVersion !== 3 || input.report.status !== 'technical-approved' ||
     !SHA256.test(input.expectedVideoSha256) || input.report.videoSha256 !== input.expectedVideoSha256
   ) throw new Error('Change request must target the current technically approved master digest');
   if (Object.values(input.checks).some((passed) => typeof passed !== 'boolean')) {
@@ -264,7 +344,7 @@ export async function createPrivateYouTubeBundle(input: {
   now?: () => Date;
 }): Promise<{ directory: string; manifest: YouTubePrivateBundleManifest }> {
   if (
-    input.report.schemaVersion !== 2 || input.report.status !== 'technical-approved' ||
+    input.report.schemaVersion !== 3 || input.report.status !== 'technical-approved' ||
     input.review.schemaVersion !== 1 || input.review.status !== 'ready-for-private-upload' ||
     input.review.visibility !== 'private' || input.review.autoPublish !== false ||
     input.review.videoSha256 !== input.report.videoSha256 || input.review.sidecarSha256 !== input.report.sidecarSha256 ||
