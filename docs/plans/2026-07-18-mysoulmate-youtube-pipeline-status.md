@@ -1,7 +1,13 @@
 # Point de reprise — pipeline MySoulmate → YouTube
 
-**Date** : 2026-07-19
+**Date** : 2026-07-20
 **Statut** : premier master V3 privé rendu ; preuve technique validée, corrections visuelles requises
+
+> Le master 720×1280 décrit ici est une preuve technique historique, pas la
+> cible de livraison. Le cahier des charges normatif est désormais
+> [`docs/mysoulmate-visual-quality-requirements.md`](../mysoulmate-visual-quality-requirements.md) :
+> qualité sans concession, génération verticale native 1080×1920 ou 1288×1920,
+> 30 FPS, environ 12 secondes et validation de tous les gates bloquants.
 
 ## Résultat disponible
 
@@ -10,13 +16,20 @@
 - 9 clips LongCat ; gate éditorial final : 100/100 pour les trois masters
 - Manifeste Flow local : neuf plans `ambient-only`, 90 crédits Fast estimés,
   aucun appel Google et aucun crédit consommé
-- Sortie attendue : MP4 720×1280/30 FPS, VTT localisé, sidecar YouTube privé,
-  SHA-256 du master, des captions et des clips, provenance de voix
+- Sortie historique de preuve : MP4 720×1280/30 FPS, VTT localisé, sidecar
+  YouTube privé, SHA-256 du master, des captions et des clips, provenance de
+  voix. Cette résolution doit être remplacée par le profil master natif du
+  cahier des charges avant toute validation produit.
 
 ## Garde-fous livrés
 
-- Le renderer commercial accepte uniquement le schéma V3 et exige un registre
-  de voix explicitement approuvées, lié à la locale et à la provenance.
+- Le renderer accepte le schéma V3 uniquement dans le profil historique
+  `legacy-localized-v1`, avec registre de voix approuvées lié à la locale et à
+  la provenance. Le schéma V4 `native-fashion-v1` est un chemin distinct : un
+  clip natif approuvé, 1080×1920, 30 FPS, environ 12 secondes, sans upscale,
+  avec droits audio et SHA-256 vérifiés.
+- La factory MySoulmate produit le contrat V4 et conserve la configuration V3
+  complète dans `config/youtube-short-factory-legacy-localized-v3.json`.
 - Les profils Piper sont liés au SHA-256 des poids ; le cache inclut la révision
   du profil vocal.
 - Les assets sont confinés, non symlinkés et revérifiés par empreinte avant usage.
@@ -57,14 +70,21 @@ génération est actif. Ne jamais approuver les images en masse.
 
 1. Conserver le boîtier ouvert, le ventilateur externe et la garde thermique à
    88 °C pour tout nouveau lot LongCat.
-2. Refaire les trois références du Short avec deux tasses réellement visibles,
-   une place vide lisible et un costume/décor continus.
-3. Recompiler le plan avec les nouveaux SHA-256 et refaire un seul master FR.
-4. Contrôler manuellement voix, lip-sync, identité, anatomie, VTT, durée, codecs
+2. Refaire les références pilotes avec identité, anatomie, tenue et décor
+   continus ; aucune moyenne de scores ne doit compenser l'échec d'un gate.
+3. Générer nativement au profil vertical 1080×1920 ou 1288×1920, à 30 FPS et
+   environ 12 secondes. Ne pas promouvoir un simple upscale de clips 480p.
+4. Valider d'abord les deux pilotes fashion originaux définis dans le cahier des
+   charges, dont une variante tier `sensual` adulte, couverte et non explicite.
+5. Recompiler le plan avec les nouveaux SHA-256 et refaire un seul master FR.
+6. Contrôler manuellement, frame par frame, voix si présente, lip-sync si
+   applicable, identité, anatomie, stabilité, tenue, décor, VTT, durée, codecs
    et sidecar ; enregistrer une approbation ou un nouveau reçu de corrections.
-5. Seulement après cette revue, produire une variante ou étendre au lot.
-6. Importer et vérifier les résultats Flow avant montage ; ne pas automatiser la
-   publication YouTube à ce stade.
+7. Reprendre par lots bornés et diagnostiqués jusqu'à validation complète ; ne
+   pas promouvoir automatiquement la meilleure sortie d'un lot non conforme.
+8. Seulement après validation des pilotes, produire une variante ou étendre au
+   lot. Importer et vérifier les résultats Flow avant montage ; ne pas
+   automatiser la publication YouTube à ce stade.
 
 ## Validation technique
 

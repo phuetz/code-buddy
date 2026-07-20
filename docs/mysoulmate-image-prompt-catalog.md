@@ -4,6 +4,12 @@ This catalog turns public companion-product patterns into original MySoulmate
 image moments. It does not copy competitor characters, private prompts, or
 visual assets.
 
+The normative image and video acceptance criteria live in
+[`docs/mysoulmate-visual-quality-requirements.md`](mysoulmate-visual-quality-requirements.md).
+In particular, public fashion references are used only as visual grammar. Their
+pixels, identities, and distinctive scenes must not enter Lisa's LoRA dataset or
+be reproduced as shots.
+
 ## Public product patterns reviewed
 
 - [Replika](https://help.replika.com/hc/en-us/articles/360032500052-What-is-Replika-Pro)
@@ -63,6 +69,12 @@ prompt.
   adult feature flag enabled, generation requires a separate policy-approved
   prompt provider, age verification, consent controls, moderation, and audit
   logs.
+
+For video pilots, the covered `sensual` tier may use original fashion actions
+such as a slow walk, a three-quarter weight shift, a controlled turn with an
+over-the-shoulder look, realistic dress movement, a staircase walk, or a stable
+handbag interaction. These actions are targets for future catalog expansion,
+not claims that the current 24 image moments already implement video motion.
 
 Existing cached images are never overwritten automatically. To deliberately
 regenerate a tier with the new catalog:
