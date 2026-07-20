@@ -6,7 +6,11 @@ import { promisify } from 'util';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { createGoogleFlowHandoff } from '../../../src/tools/video/google-flow-handoff.js';
-import { importGoogleFlowResults, reviewGoogleFlowImport } from '../../../src/tools/video/google-flow-result-import.js';
+import {
+  buildNormalizeFlowResultArgs,
+  importGoogleFlowResults,
+  reviewGoogleFlowImport,
+} from '../../../src/tools/video/google-flow-result-import.js';
 
 const roots: string[] = [];
 const execFile = promisify(rawExecFile);
@@ -37,6 +41,13 @@ function mp4(): Buffer {
 }
 
 describe('Google Flow result import', () => {
+  it('keeps the default normalization argv byte-for-byte compatible', () => {
+    expect(buildNormalizeFlowResultArgs('/input.mp4', '/output.mp4')).toEqual([
+      '-v', 'error', '-n', '-i', '/input.mp4', '-map', '0:v:0', '-an', '-c:v', 'copy',
+      '-movflags', '+faststart', '/output.mp4',
+    ]);
+  });
+
   it('copies content-addressed MP4s and leaves them pending human review', async () => {
     const input = await fixture();
     await fs.writeFile(path.join(input.resultsRoot, 'pilot-flow-01.mp4'), mp4());
@@ -82,6 +93,66 @@ describe('Google Flow result import', () => {
         safeContent: true,
       },
     })).toMatchObject({ status: 'approved-for-editing', autoPublish: false });
+  });
+
+  it('enforces an explicit minimum resolution and accepts a conforming result', async () => {
+    const tooSmall = await fixture();
+    await fs.writeFile(path.join(tooSmall.resultsRoot, 'pilot-flow-01.mp4'), mp4());
+    await expect(importGoogleFlowResults({
+      ...tooSmall,
+      minWidth: 1080,
+      minHeight: 1920,
+      normalize: async (source, destination) => fs.copyFile(source, destination),
+      probe: async () => ({
+        durationSeconds: 4, width: 720, height: 1280, hasVideo: true, hasAudio: false,
+      }),
+    })).rejects.toThrow('resolution');
+
+    const conforming = await fixture();
+    await fs.writeFile(path.join(conforming.resultsRoot, 'pilot-flow-01.mp4'), mp4());
+    await expect(importGoogleFlowResults({
+      ...conforming,
+      minWidth: 1080,
+      minHeight: 1920,
+      normalize: async (source, destination) => fs.copyFile(source, destination),
+      probe: async () => ({
+        durationSeconds: 4, width: 1080, height: 1920, hasVideo: true, hasAudio: false,
+      }),
+    })).resolves.toMatchObject({ jobs: [{ probe: { width: 1080, height: 1920 } }] });
+  });
+
+  it('preserves and re-encodes audio only when explicitly requested', async () => {
+    const input = await fixture();
+    await fs.writeFile(path.join(input.resultsRoot, 'pilot-flow-01.mp4'), mp4());
+    const args = buildNormalizeFlowResultArgs('/input.mp4', '/output.mp4', true);
+    expect(args).not.toContain('-an');
+    expect(args).toEqual(expect.arrayContaining(['-map', '0:a:0', '-c:a', 'aac']));
+
+    const receipt = await importGoogleFlowResults({
+      ...input,
+      preserveAudio: true,
+      normalize: async (source, destination) => fs.copyFile(source, destination),
+      probe: async () => ({
+        durationSeconds: 4,
+        width: 720,
+        height: 1280,
+        hasVideo: true,
+        hasAudio: true,
+        audioCodec: 'aac',
+        audioChannels: 2,
+        audioSampleRate: 48_000,
+      }),
+    });
+    expect(receipt).toMatchObject({
+      audioPolicy: 'preserved-on-import',
+      audioPreserved: true,
+      humanReviewRequired: true,
+      jobs: [{
+        audioPreserved: true,
+        probe: { hasAudio: true, audioCodec: 'aac', audioChannels: 2, audioSampleRate: 48_000 },
+        qaStatus: 'pending-human-review',
+      }],
+    });
   });
 
   it('rejects missing, disguised and symlinked results', async () => {

@@ -36,6 +36,9 @@ export interface GoogleFlowResultProbe {
   hasVideo: boolean;
   hasAudio: boolean;
   videoCodec?: string;
+  audioCodec?: string;
+  audioChannels?: number;
+  audioSampleRate?: number;
 }
 
 interface GoogleFlowImportedJob {
@@ -47,7 +50,8 @@ interface GoogleFlowImportedJob {
   outputFile: string;
   sha256: string;
   bytes: number;
-  probe: GoogleFlowResultProbe & { hasAudio: false };
+  probe: GoogleFlowResultProbe;
+  audioPreserved?: true;
   qaStatus: 'pending-human-review';
 }
 
@@ -59,7 +63,8 @@ interface UnsignedGoogleFlowImportReceipt {
   handoffSha256: string;
   handoffFileSha256: string;
   importedAt: string;
-  audioPolicy: 'removed-on-import';
+  audioPolicy: 'removed-on-import' | 'preserved-on-import';
+  audioPreserved?: true;
   autoPublish: false;
   humanReviewRequired: true;
   jobs: GoogleFlowImportedJob[];
@@ -98,17 +103,26 @@ export async function importGoogleFlowResults(input: {
   resultsRoot: string;
   outputRoot: string;
   now?: () => Date;
+  minWidth?: number;
+  minHeight?: number;
+  preserveAudio?: boolean;
   probe?: (filename: string) => Promise<GoogleFlowResultProbe>;
-  normalize?: (source: string, destination: string) => Promise<void>;
+  normalize?: (
+    source: string,
+    destination: string,
+    options: { preserveAudio: boolean },
+  ) => Promise<void>;
 }): Promise<GoogleFlowImportReceipt> {
   assertHandoff(input.handoff);
   assertHandoffBytes(input.handoff, input.handoffBytes);
+  assertImportOptions(input.minWidth, input.minHeight);
   const resultsRoot = await confinedRoot(input.resultsRoot, false);
   const outputRoot = await confinedRoot(input.outputRoot, true);
   await assertExactResultSet(resultsRoot, input.handoff.jobs.map((job) => `${job.id}.mp4`));
   const batchDirectory = await createConfinedBatchDirectory(outputRoot, input.handoff.batchId);
   const probe = input.probe ?? probeFlowResult;
   const normalize = input.normalize ?? normalizeFlowResult;
+  const preserveAudio = input.preserveAudio ?? false;
 
   const jobs: GoogleFlowImportedJob[] = [];
   for (const job of input.handoff.jobs) {
@@ -118,23 +132,35 @@ export async function importGoogleFlowResults(input: {
 
     const nonce = `${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
     const capturedSource = path.join(batchDirectory, `.${job.id}-${nonce}-source.mp4`);
-    const normalizedTemporary = path.join(batchDirectory, `.${job.id}-${nonce}-silent.mp4`);
+    const normalizedTemporary = path.join(
+      batchDirectory,
+      `.${job.id}-${nonce}-${preserveAudio ? 'audio' : 'silent'}.mp4`,
+    );
     await writeFile(capturedSource, sourceBytes, { flag: 'wx', mode: 0o600 });
     try {
       // Probe the immutable captured bytes, never the operator-controlled path
       // again, so a concurrent replacement cannot change what gets imported.
       const sourceProbe = await probe(capturedSource);
-      assertExpectedProbe(job.id, sourceProbe, job.settings.aspectRatio, job.settings.durationSeconds, false);
-      await normalize(capturedSource, normalizedTemporary);
+      assertExpectedProbe(job.id, sourceProbe, job.settings.aspectRatio, job.settings.durationSeconds, {
+        minWidth: input.minWidth,
+        minHeight: input.minHeight,
+        requireAudio: preserveAudio,
+      });
+      await normalize(capturedSource, normalizedTemporary, { preserveAudio });
       const normalizedBytes = await readRegularNoFollow(normalizedTemporary, `Normalized Flow result ${job.id}`);
       if (!hasMp4Signature(normalizedBytes)) throw new Error(`Normalized Flow result ${job.id} is not an MP4 file`);
       const normalizedProbe = await probe(normalizedTemporary);
-      assertExpectedProbe(job.id, normalizedProbe, job.settings.aspectRatio, job.settings.durationSeconds, true);
+      assertExpectedProbe(job.id, normalizedProbe, job.settings.aspectRatio, job.settings.durationSeconds, {
+        minWidth: input.minWidth,
+        minHeight: input.minHeight,
+        requireAudio: preserveAudio,
+        requireSilent: !preserveAudio,
+      });
       const sha256 = digest(normalizedBytes);
       const outputFile = `${job.id}-${sha256.slice(0, 16)}.mp4`;
       const destination = path.join(batchDirectory, outputFile);
       await installImmutableFile(normalizedTemporary, destination, sha256);
-      jobs.push({
+      const importedJob: GoogleFlowImportedJob = {
         id: job.id,
         role: job.role,
         sourceFile: path.basename(source),
@@ -143,9 +169,11 @@ export async function importGoogleFlowResults(input: {
         outputFile: path.relative(outputRoot, destination).split(path.sep).join('/'),
         sha256,
         bytes: normalizedBytes.length,
-        probe: { ...normalizedProbe, hasAudio: false },
+        probe: normalizedProbe,
         qaStatus: 'pending-human-review',
-      });
+      };
+      if (preserveAudio) importedJob.audioPreserved = true;
+      jobs.push(importedJob);
     } finally {
       await Promise.all([
         unlink(capturedSource).catch(() => undefined),
@@ -162,11 +190,12 @@ export async function importGoogleFlowResults(input: {
     handoffSha256: input.handoff.handoffSha256,
     handoffFileSha256: digest(input.handoffBytes),
     importedAt: (input.now ?? (() => new Date()))().toISOString(),
-    audioPolicy: 'removed-on-import',
+    audioPolicy: preserveAudio ? 'preserved-on-import' : 'removed-on-import',
     autoPublish: false,
     humanReviewRequired: true,
     jobs,
   };
+  if (preserveAudio) unsigned.audioPreserved = true;
   const receipt: GoogleFlowImportReceipt = { ...unsigned, receiptSha256: canonicalSha256(unsigned) };
   await writeImmutableJson(path.join(batchDirectory, 'receipt.json'), receipt);
   return receipt;
@@ -326,36 +355,82 @@ function assertExpectedProbe(
   probe: GoogleFlowResultProbe,
   aspectRatio: '9:16' | '16:9',
   durationSeconds: number,
-  requireSilent: boolean,
+  requirements: {
+    minWidth?: number;
+    minHeight?: number;
+    requireAudio?: boolean;
+    requireSilent?: boolean;
+  },
 ): void {
   const targetRatio = aspectRatio === '9:16' ? 9 / 16 : 16 / 9;
   const actualRatio = probe.width / probe.height;
   if (
     !probe.hasVideo || !Number.isFinite(probe.durationSeconds) ||
     !Number.isInteger(probe.width) || !Number.isInteger(probe.height) ||
-    probe.width < 480 || probe.height < 480 || Math.abs(actualRatio - targetRatio) > 0.01 ||
-    Math.abs(probe.durationSeconds - durationSeconds) > 0.75 || (requireSilent && probe.hasAudio)
-  ) throw new Error(`Flow result ${id} failed video, duration, aspect-ratio or silent-output validation`);
+    probe.width < (requirements.minWidth ?? 480) || probe.height < (requirements.minHeight ?? 480) ||
+    Math.abs(actualRatio - targetRatio) > 0.01 ||
+    Math.abs(probe.durationSeconds - durationSeconds) > 0.75 ||
+    (requirements.requireSilent && probe.hasAudio) ||
+    (requirements.requireAudio && (
+      !probe.hasAudio || !probe.audioCodec || !Number.isInteger(probe.audioChannels) ||
+      probe.audioChannels! <= 0 || !Number.isInteger(probe.audioSampleRate) || probe.audioSampleRate! <= 0
+    ))
+  ) throw new Error(`Flow result ${id} failed video, duration, aspect-ratio, resolution or audio validation`);
 }
 
-async function normalizeFlowResult(source: string, destination: string): Promise<void> {
-  await execFile('ffmpeg', [
-    '-v', 'error', '-n', '-i', source, '-map', '0:v:0', '-an', '-c:v', 'copy', '-movflags', '+faststart', destination,
-  ], { timeout: 5 * 60_000, maxBuffer: 4 * 1024 * 1024 });
+function assertImportOptions(minWidth: number | undefined, minHeight: number | undefined): void {
+  if (
+    (minWidth === undefined) !== (minHeight === undefined) ||
+    (minWidth !== undefined && (!Number.isInteger(minWidth) || minWidth < 1)) ||
+    (minHeight !== undefined && (!Number.isInteger(minHeight) || minHeight < 1))
+  ) throw new Error('Flow import minimum resolution requires positive integer minWidth and minHeight');
+}
+
+export function buildNormalizeFlowResultArgs(
+  source: string,
+  destination: string,
+  preserveAudio = false,
+): string[] {
+  if (!preserveAudio) {
+    return [
+      '-v', 'error', '-n', '-i', source, '-map', '0:v:0', '-an', '-c:v', 'copy',
+      '-movflags', '+faststart', destination,
+    ];
+  }
+  return [
+    '-v', 'error', '-n', '-i', source, '-map', '0:v:0', '-map', '0:a:0', '-c:v', 'copy',
+    '-c:a', 'aac', '-b:a', '192k', '-ar', '48000', '-movflags', '+faststart', destination,
+  ];
+}
+
+async function normalizeFlowResult(
+  source: string,
+  destination: string,
+  options: { preserveAudio: boolean },
+): Promise<void> {
+  await execFile('ffmpeg', buildNormalizeFlowResultArgs(source, destination, options.preserveAudio), {
+    timeout: 5 * 60_000,
+    maxBuffer: 4 * 1024 * 1024,
+  });
 }
 
 async function probeFlowResult(filename: string): Promise<GoogleFlowResultProbe> {
   const { stdout } = await execFile('ffprobe', [
-    '-v', 'error', '-show_entries', 'format=duration:stream=codec_type,codec_name,width,height', '-of', 'json', filename,
+    '-v', 'error', '-show_entries',
+    'format=duration:stream=codec_type,codec_name,width,height,channels,sample_rate', '-of', 'json', filename,
   ], { timeout: 30_000, maxBuffer: 1024 * 1024 });
   const parsed = JSON.parse(stdout) as { format?: { duration?: string }; streams?: Array<Record<string, unknown>> };
   const video = parsed.streams?.find((stream) => stream.codec_type === 'video');
+  const audio = parsed.streams?.find((stream) => stream.codec_type === 'audio');
   return {
     durationSeconds: Number(parsed.format?.duration),
     width: Number(video?.width),
     height: Number(video?.height),
     hasVideo: Boolean(video),
-    hasAudio: Boolean(parsed.streams?.some((stream) => stream.codec_type === 'audio')),
+    hasAudio: Boolean(audio),
     videoCodec: typeof video?.codec_name === 'string' ? video.codec_name : undefined,
+    audioCodec: typeof audio?.codec_name === 'string' ? audio.codec_name : undefined,
+    audioChannels: audio ? Number(audio.channels) : undefined,
+    audioSampleRate: audio ? Number(audio.sample_rate) : undefined,
   };
 }
