@@ -182,6 +182,26 @@ npx tsx scripts/darkstar/generate-krea2-identity-dataset.ts \
   --rights-basis synthetic-owned
 ```
 
+L'étape 5 est outillée par `scripts/darkstar/build-identity-manifest.ts`, qui
+assemble le manifeste depuis les sidecars et exécute les deux gates :
+
+```bash
+npx tsx scripts/darkstar/build-identity-manifest.ts \
+  [--dir .codebuddy/lora/lisa-hq-v2/identity-candidates] \
+  [--include lisa_identity_010] [--apparent-age 25] \
+  [--license-cleared] [--evidence-reviewed-by <nom>] [--identity-approved-by <nom>]
+```
+
+Fail-closed : les ids `holdForHumanDecision` du pré-QC sont exclus sauf
+`--include` explicite ; chaque PNG est re-hashé contre l'`outputSha256` de son
+sidecar (divergence = problème d'entrée, image écartée) ; les buckets de
+couverture sont appariés au prompt exact du sidecar, jamais à l'ordre des
+fichiers ; les approbations humaines valent `false` sans approbateur nommé —
+le premier passage échoue donc exactement sur `rights-not-cleared`,
+`rights-evidence-not-reviewed` et `identity-not-approved`. Le script écrit
+`identity-manifest.json` + `identity-gate-report.json` à côté des candidats,
+n'entraîne rien et ne publie rien (exit ≠ 0 tant que tout n'est pas vert).
+
 Chaque PNG reçoit une caption et un sidecar (seed, prompts, modèles, hashes,
 référence et statut). `claimedIdentityRightsBasis` est volontairement séparé de
 `rightsEvidenceStatus`: une option CLI ne constitue jamais une preuve. Le script

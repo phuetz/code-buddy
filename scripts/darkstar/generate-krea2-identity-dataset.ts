@@ -41,7 +41,7 @@ const RIGHTS_BASES = ['unverified', 'synthetic-owned', 'licensed', 'consented-pe
 
 type RightsBasis = typeof RIGHTS_BASES[number];
 
-const VARIATIONS = [
+export const VARIATIONS = [
   'Create a clean studio headshot of this same adult woman, front view, neutral expression, plain light gray background, soft even beauty-dish lighting, black crew-neck top.',
   'Create a clean studio portrait of this same adult woman, three-quarter view facing left, calm expression, plain warm gray background, soft window light, dark navy crew-neck top.',
   'Create a clean studio portrait of this same adult woman, three-quarter view facing right, subtle closed-mouth smile, plain cool gray background, diffused key light, charcoal crew-neck top.',

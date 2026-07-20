@@ -6,6 +6,9 @@
     "outDir": "./dist-darkstar-identity",
     "rootDir": "."
   },
-  "include": ["scripts/darkstar/generate-krea2-identity-dataset.ts"],
+  "include": [
+    "scripts/darkstar/generate-krea2-identity-dataset.ts",
+    "scripts/darkstar/build-identity-manifest.ts"
+  ],
   "exclude": ["node_modules", "dist"]
 }
