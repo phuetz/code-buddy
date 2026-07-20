@@ -51,6 +51,32 @@
 - `src/tools/video/native-fashion-defects.ts` classe les gates bloquants et
   conserve les reprises causales dans un journal JSONL borné et append-only.
 
+## Gates mesurés
+
+- `scripts/darkstar/measure-visual-gates.py` produit un rapport JSON V1 lié au
+  SHA-256 du clip. Dans un venv Python 3.10+ sur darkstar, installer exactement
+  `opencv-python`, `numpy`, `insightface`, `onnxruntime-gpu` et `mediapipe`, et
+  rendre `ffprobe` disponible dans le `PATH`.
+- Le mesureur compare les embeddings ArcFace au centroïde des références Lisa,
+  relève les défauts Pose/Hands, calcule flicker, jitter d'exposition et warp
+  local sur toutes les frames, mesure la netteté, les propriétés du master, le
+  ratio de frames quasi noires et, avec `--loop-check`, la jonction première ↔
+  dernière frame. Il ne rend jamais de verdict : les valeurs restent brutes.
+- `src/tools/video/visual-gate-report.ts` parse le rapport strictement, vérifie
+  son empreinte de clip et applique les seuils `native-fashion-v1`. Ces seuils
+  initiaux sont explicitement en attente de calibration sur les pilotes. Une
+  version inconnue, un champ absent, un rapport d'une autre vidéo ou une mesure
+  de boucle absente échoue en mode fermé.
+- La compilation native exige désormais `--gate-report`, `--qa-approved true`,
+  `--outfit-confirmed` et `--decor-confirmed`. Identité, anatomie, stabilité
+  temporelle et propriétés du master doivent être vertes ; tenue et décor ne
+  peuvent passer que par confirmation humaine explicite. Le plan V4 conserve
+  `visualGateReportSha256` pour lier la décision aux octets mesurés.
+- `review-youtube-master.ts` accepte aussi `--gate-report` pendant une revue ou
+  une demande de corrections et journalise son SHA-256 dans le reçu après avoir
+  vérifié qu'il cible le master courant. Le profil historique legacy ne requiert
+  aucun nouvel argument.
+
 ## État runtime observé
 
 - `mysoulmate-image-catalog.service` reste indépendant du rendu vidéo et ne doit
