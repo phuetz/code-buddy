@@ -233,7 +233,17 @@ export async function submitAndAwait(
         ? entry.status as Record<string, unknown>
         : undefined;
       const statusText = typeof status?.status_str === 'string' ? status.status_str.toLowerCase() : '';
-      const error = describeNodeError(entry.node_errors ?? status?.messages ?? entry.error);
+      // status.messages mixes benign lifecycle entries (execution_start/_cached/
+      // _success) with execution_error tuples; only the latter are error sources —
+      // recursing into benign entries surfaces their prompt_id as a phantom error.
+      const errorMessages = Array.isArray(status?.messages)
+        ? (status.messages as unknown[]).filter((item) => Array.isArray(item) && item[0] === 'execution_error')
+        : [];
+      const nodeErrors = entry.node_errors && typeof entry.node_errors === 'object'
+        && Object.keys(entry.node_errors as Record<string, unknown>).length > 0
+        ? entry.node_errors
+        : undefined;
+      const error = describeNodeError(nodeErrors ?? (errorMessages.length > 0 ? errorMessages : undefined) ?? entry.error);
       if (error || ['error', 'failed', 'cancelled', 'canceled'].includes(statusText)) {
         throw new Error(`ComfyUI prompt ${promptId} failed${error ? `: ${error}` : ` (${statusText})`}`);
       }
