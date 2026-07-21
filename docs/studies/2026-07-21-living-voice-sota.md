@@ -72,3 +72,19 @@ turn-taking). Le volet NSFW de MySoulmate reste hors périmètre.
 - **Pocket TTS actif** : italien ajouté 04/2026, voix FR supplémentaires (Estelle
   + CML 1406/2154/4724). Mettre à jour pocket-tts (≥2.1 + --quantize) sur le robot.
 - Voix : huggingface.co/kyutai/tts-voices. Démo : unmute.sh.
+
+## Addendum — carte des intégrations Kyutai dans code-buddy (21/07)
+**Câblé actif** : Pocket TTS 100M (moteur TTS défaut, serveur résident + streaming
+24 kHz, voix estelle FR) — `pocket-tts.ts` + `local-tts.ts`. **STT = Parakeet
+NVIDIA via sherpa-onnx (PAS Kyutai)** — `buddy-sense/stt.rs`, `speech-reaction.ts`.
+**Câblé mais OFF par défaut** : KyutaiBridge Cowork → moshi-server STT+TTS
+(`cowork/.../kyutai-bridge.ts`, gated `COWORK_*_PROVIDER=kyutai`) — séquentiel,
+PAS full-duplex, exige serveur externe.
+**Absents (leviers phase 2)** : Moshi full-duplex (~200 ms barge-in natif, GPU),
+Kyutai TTS 1.6B émotionnel (meilleures voix + variantes Calming/Sad/Whisper — notre
+voix plafonne au Pocket 100M ; le KyutaiBridge TTS pointe DÉJÀ vers moshi-server
+/api/tts_streaming, il suffirait de servir le 1.6B), Unmute pipeline, Mimi, Helium,
+Hibiki, MoshiVis (pertinent vu buddy-vision).
+**Décision phase 2** : soit pousser Pocket CPU avec multi-presets émotionnels
+(local, $0), soit monter au TTS 1.6B/Moshi si GPU accepté (Ministar CPU = non
+temps réel pour le 1.6B/Moshi). Le KyutaiBridge est le point d'accroche existant.
