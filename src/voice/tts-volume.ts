@@ -66,19 +66,20 @@ export function resolveTargetRmsDbfs(env: NodeJS.ProcessEnv = process.env): numb
   return Math.max(MIN_TARGET_RMS_DBFS, Math.min(MAX_TARGET_RMS_DBFS, parsed));
 }
 
-interface Pcm16WavLayout {
+export interface Pcm16WavLayout {
   dataOffset: number;
   byteRate: number;
   blockAlign: number;
+  sampleRate: number;
 }
 
-type LayoutProbe =
+export type Pcm16WavLayoutProbe =
   | { status: 'ready'; layout: Pcm16WavLayout }
   | { status: 'incomplete' }
   | { status: 'unsupported' };
 
 /** Locate PCM16 data without trusting the often-placeholder streaming RIFF sizes. */
-function probePcm16Wav(buffer: Buffer): LayoutProbe {
+export function probePcm16Wav(buffer: Buffer): Pcm16WavLayoutProbe {
   if (buffer.length < 12) return { status: 'incomplete' };
   if (buffer.toString('ascii', 0, 4) !== 'RIFF' || buffer.toString('ascii', 8, 12) !== 'WAVE') {
     return { status: 'unsupported' };
@@ -88,6 +89,7 @@ function probePcm16Wav(buffer: Buffer): LayoutProbe {
   let pcm16 = false;
   let byteRate = 0;
   let blockAlign = 0;
+  let sampleRate = 0;
   while (offset <= 1024 * 1024) {
     if (buffer.length < offset + 8) return { status: 'incomplete' };
     const id = buffer.toString('ascii', offset, offset + 4);
@@ -99,7 +101,7 @@ function probePcm16Wav(buffer: Buffer): LayoutProbe {
       if (buffer.length < payloadOffset + 16) return { status: 'incomplete' };
       const format = buffer.readUInt16LE(payloadOffset);
       const channels = buffer.readUInt16LE(payloadOffset + 2);
-      const sampleRate = buffer.readUInt32LE(payloadOffset + 4);
+      sampleRate = buffer.readUInt32LE(payloadOffset + 4);
       byteRate = buffer.readUInt32LE(payloadOffset + 8);
       blockAlign = buffer.readUInt16LE(payloadOffset + 12);
       const bitsPerSample = buffer.readUInt16LE(payloadOffset + 14);
@@ -113,7 +115,10 @@ function probePcm16Wav(buffer: Buffer): LayoutProbe {
       if (!pcm16) return { status: 'unsupported' };
     } else if (id === 'data') {
       if (!pcm16) return { status: 'unsupported' };
-      return { status: 'ready', layout: { dataOffset: payloadOffset, byteRate, blockAlign } };
+      return {
+        status: 'ready',
+        layout: { dataOffset: payloadOffset, byteRate, blockAlign, sampleRate },
+      };
     }
 
     // Only the `data` chunk is allowed to advertise an unknown/placeholder

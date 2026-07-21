@@ -19,6 +19,7 @@
 import { spawn } from 'child_process';
 import { createHash } from 'crypto';
 import { existsSync } from 'fs';
+import { readFile, writeFile } from 'fs/promises';
 import { homedir, tmpdir } from 'os';
 import { join } from 'path';
 import { logger } from '../utils/logger.js';
@@ -62,6 +63,7 @@ import {
 import type { TtsCache } from './tts-cache.js';
 import { resolveUserName } from '../companion/user-name.js';
 import { normalizeWavFile, Pcm16WavStreamGain } from '../voice/tts-volume.js';
+import { conditionPcm16Wav, Pcm16WavStreamEdges } from '../voice/pcm-edges.js';
 import { resolveTtsEngine, type LocalTtsEngine } from '../voice/local-tts.js';
 import { resolveVoiceboxConfig } from '../voice/voicebox-tts.js';
 import type { PermissionMode } from '../security/permission-modes.js';
@@ -105,6 +107,8 @@ export interface VoiceStepOptions {
   signal?: AbortSignal;
   /** Frozen gain measured from the first audio segment of this spoken turn. */
   ttsNormalizationFactor?: number;
+  /** Insert the pipeline-owned fixed gap before a non-first sentence. */
+  prependInterSentenceSilence?: boolean;
   /** Exact current utterance when the grounded agent input also carries history. */
   introspectionText?: string;
   /** Internal routing receipt used to keep post-processing on the exact provider. */
@@ -2111,6 +2115,9 @@ function makeDefaultStreamSpeak(
       process.env,
       opts.ttsNormalizationFactor ?? turnFactor,
     );
+    const edges = new Pcm16WavStreamEdges({
+      prependSilenceMs: opts.prependInterSentenceSilence ? 280 : 0,
+    });
     let firstAudio = false;
     let closedOk = false;
     let settled = false;
@@ -2119,16 +2126,21 @@ function makeDefaultStreamSpeak(
     const headTimeoutMs = Number.isFinite(configuredHeadTimeoutMs) && configuredHeadTimeoutMs > 0
       ? Math.max(50, Math.min(1_000, configuredHeadTimeoutMs))
       : 250;
-    const writeGainParts = (parts: Buffer[]): boolean => {
+    const writePlayerParts = (parts: Buffer[]): boolean => {
       let accepted = true;
       for (const part of parts) {
         opts.onAudioChunk?.(part);
         accepted = stdin.write(part) && accepted;
       }
-      if (!firstAudio && gain.hasOutputAudio()) {
+      if (!firstAudio && edges.hasOutputAudio()) {
         firstAudio = true;
         opts.onFirstAudio?.();
       }
+      return accepted;
+    };
+    const writeGainParts = (parts: Buffer[]): boolean => {
+      let accepted = true;
+      for (const part of parts) accepted = writePlayerParts(edges.push(part)) && accepted;
       if (turnFactor === undefined && gain.factor !== undefined) {
         turnFactor = gain.factor;
         opts.onTtsNormalizationFactor?.(turnFactor);
@@ -2198,6 +2210,7 @@ function makeDefaultStreamSpeak(
       if (headReleaseTimer) clearTimeout(headReleaseTimer);
       headReleaseTimer = undefined;
       if (!writeGainParts(gain.flush())) await waitForPlayerDrain(child, stdin, signal);
+      if (!writePlayerParts(edges.flush())) await waitForPlayerDrain(child, stdin, signal);
       if (!stdin.destroyed) stdin.end();
       await closed;
       return firstAudio && closedOk && !signal?.aborted;
@@ -2240,6 +2253,15 @@ async function defaultPlay(
   // This also migrates old, quiet cache entries on first playback. New Pocket
   // and Piper files are already normalized, so the operation is idempotent.
   await normalizeWavFile(wav, process.env);
+  try {
+    const source = await readFile(wav);
+    const conditioned = conditionPcm16Wav(source, {
+      prependSilenceMs: opts.prependInterSentenceSilence ? 280 : 0,
+    });
+    if (!conditioned.equals(source)) await writeFile(wav, conditioned, { mode: 0o600 });
+  } catch {
+    // Edge conditioning is best-effort; playback must retain its fail-open contract.
+  }
   const player = await playerPromise;
   if (!player) {
     logger.warn('[voice] no audio player available (aplay/ffplay) — staying silent');

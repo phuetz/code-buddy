@@ -147,6 +147,7 @@ describe('streamToSpeech — pipeline (time-to-first-audio)', () => {
 
   it('uses a native synth+play stream without creating temporary WAV files', async () => {
     const spoken: string[] = [];
+    const sentenceGaps: boolean[] = [];
     const synth = vi.fn(async () => 'unused.wav');
     const play = vi.fn(async () => undefined);
     async function* stream(): AsyncGenerator<string> {
@@ -157,8 +158,9 @@ describe('streamToSpeech — pipeline (time-to-first-audio)', () => {
       stream: stream(),
       synth,
       play,
-      streamSpeak: async (text) => {
+      streamSpeak: async (text, options) => {
         spoken.push(text);
+        sentenceGaps.push(options?.prependInterSentenceSilence === true);
         return true;
       },
       guard: passthroughGuard,
@@ -166,6 +168,7 @@ describe('streamToSpeech — pipeline (time-to-first-audio)', () => {
     });
 
     expect(spoken).toEqual(['Première phrase.', 'Deuxième phrase.']);
+    expect(sentenceGaps).toEqual([false, true]);
     expect(synth).not.toHaveBeenCalled();
     expect(play).not.toHaveBeenCalled();
     expect(result).toMatchObject({ played: true, aborted: false });

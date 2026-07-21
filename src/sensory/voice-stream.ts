@@ -446,6 +446,7 @@ export async function streamToSpeech(params: StreamToSpeechParams): Promise<Stre
       await guard(async () => {
         let text: string | null = firstSentence;
         let nativeStreamHealthy = true;
+        let segmentIndex = 0;
         while (true) {
           if (text === null) break;
           let didPlay = false;
@@ -456,6 +457,7 @@ export async function streamToSpeech(params: StreamToSpeechParams): Promise<Stre
                 ...(turnNormalizationFactor !== undefined
                   ? { ttsNormalizationFactor: turnNormalizationFactor }
                   : {}),
+                ...(segmentIndex > 0 ? { prependInterSentenceSilence: true } : {}),
                 onTtsNormalizationFactor: (factor) => {
                   if (turnNormalizationFactor === undefined) turnNormalizationFactor = factor;
                 },
@@ -489,7 +491,10 @@ export async function streamToSpeech(params: StreamToSpeechParams): Promise<Stre
                   : {}),
               });
               if (wav && !stop()) {
-                await params.play(wav, signal ? { signal } : {});
+                await params.play(wav, {
+                  ...(signal ? { signal } : {}),
+                  ...(segmentIndex > 0 ? { prependInterSentenceSilence: true } : {}),
+                });
                 didPlay = !stop();
                 if (didPlay) fallbackSegments += 1;
               }
@@ -511,6 +516,7 @@ export async function streamToSpeech(params: StreamToSpeechParams): Promise<Stre
             spoken.push(text);
           }
           if (stop()) break;
+          segmentIndex += 1;
           text = await sentenceQ.shift(stop);
         }
       });
@@ -562,13 +568,17 @@ export async function streamToSpeech(params: StreamToSpeechParams): Promise<Stre
     }
     await guard(async () => {
       let item: { text: string; wav: string } | null = first;
+      let segmentIndex = 0;
       while (item) {
         if (stop()) {
           await unlink(item.wav);
           break;
         }
         try {
-          await params.play(item.wav, signal ? { signal } : {});
+          await params.play(item.wav, {
+            ...(signal ? { signal } : {}),
+            ...(segmentIndex > 0 ? { prependInterSentenceSilence: true } : {}),
+          });
         } catch (err) {
           logger.warn(`[voice] stream play failed: ${errMsg(err)}`);
         }
@@ -576,6 +586,7 @@ export async function streamToSpeech(params: StreamToSpeechParams): Promise<Stre
         if (stop()) break;
         played = true;
         spoken.push(item.text);
+        segmentIndex += 1;
         item = await wavQ.shift(stop);
       }
     });
