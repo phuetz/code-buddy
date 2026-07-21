@@ -4,6 +4,11 @@
 The decision layer uses only Python's standard library and accepts injected
 embeddings. InsightFace, OpenCV and ONNX Runtime are imported only for a real
 curation run, never for ``--self-test``.
+
+Rear-view slots can be excluded from ArcFace with ``--face-exempt-slots``.
+This is necessary because the 2026-07-20 measurements showed that ArcFace
+incorrectly rejected every back framing as identity drift when no face was
+available. Exempt images always require human review and are never auto-kept.
 """
 
 from __future__ import annotations
@@ -17,7 +22,7 @@ import sys
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Iterable, Sequence
+from typing import AbstractSet, Any, Iterable, Sequence
 
 
 MIN_RETAINED = 30
@@ -131,6 +136,7 @@ def decide_candidates(
     min_retained: int = MIN_RETAINED,
     max_retained: int = MAX_RETAINED,
     max_per_slot: int = MAX_PER_SLOT,
+    face_exempt_slots: AbstractSet[str] = frozenset(),
 ) -> list[CandidateDecision]:
     """Pure centroid scoring, range filtering, deduplication and slot selection."""
     validate_thresholds(thresholds)
@@ -148,6 +154,17 @@ def decide_candidates(
         if candidate.path in seen_paths:
             raise ValueError(f"Duplicate candidate path: {candidate.path}")
         seen_paths.add(candidate.path)
+        if candidate.slot in face_exempt_slots:
+            scored[candidate.path] = (candidate, None)
+            decisions[candidate.path] = CandidateDecision(
+                candidate.path,
+                candidate.slot,
+                candidate.sha256,
+                None,
+                "human-review",
+                "no-face-framing",
+            )
+            continue
         similarity = (
             cosine_similarity(candidate.embedding, centroid)
             if candidate.embedding is not None
@@ -394,6 +411,16 @@ def parse_range(raw: str) -> tuple[float, float]:
         raise argparse.ArgumentTypeError("range bounds must be numbers") from error
 
 
+def parse_csv_slots(raw: str) -> frozenset[str]:
+    """Parse a non-empty, duplicate-free CSV of slot identifiers."""
+    slots = [value.strip() for value in raw.split(",") if value.strip()]
+    if not slots:
+        raise argparse.ArgumentTypeError("slot list must contain at least one identifier")
+    if len(set(slots)) != len(slots):
+        raise argparse.ArgumentTypeError("slot list must not contain duplicates")
+    return frozenset(slots)
+
+
 def parse_args(argv: Sequence[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--candidates", type=Path, help="v3 candidate root")
@@ -402,6 +429,12 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
     parser.add_argument("--keep-range", type=parse_range, default=(0.60, 0.80))
     parser.add_argument("--reject-below", type=float, default=0.55)
     parser.add_argument("--dedup-above", type=float, default=0.92)
+    parser.add_argument(
+        "--face-exempt-slots",
+        type=parse_csv_slots,
+        default=frozenset(),
+        help="comma-separated rear-view slot ids that bypass ArcFace and require human review",
+    )
     parser.add_argument("--self-test", action="store_true", help="run pure synthetic checks without ML dependencies")
     args = parser.parse_args(argv)
     if not args.self_test:
@@ -453,10 +486,16 @@ def run_self_test() -> None:
         CandidateEmbedding("d-margin.png", "slot-d", "e" * 64, (0.58, math.sqrt(1 - 0.58**2))),
         CandidateEmbedding("e-high.png", "slot-e", "f" * 64, (0.90, math.sqrt(1 - 0.90**2))),
         CandidateEmbedding("f-no-face.png", "slot-f", "0" * 64, None),
+        CandidateEmbedding("rear-view.png", "slot-back", "9" * 64, (1.0, 0.0)),
     ]
     decisions = {
         decision.path: decision
-        for decision in decide_candidates(candidates, reference_embeddings, min_retained=2)
+        for decision in decide_candidates(
+            candidates,
+            reference_embeddings,
+            min_retained=2,
+            face_exempt_slots=frozenset({"slot-back"}),
+        )
     }
     expected = {
         "a-best.png": ("keep", "selected"),
@@ -466,6 +505,7 @@ def run_self_test() -> None:
         "d-margin.png": ("reject", "below-keep-range"),
         "e-high.png": ("reject", "above-keep-range"),
         "f-no-face.png": ("reject", "no-face"),
+        "rear-view.png": ("human-review", "no-face-framing"),
     }
     actual = {
         path: (decision.verdict, decision.reason)
@@ -473,6 +513,8 @@ def run_self_test() -> None:
     }
     if actual != expected:
         raise AssertionError(f"Unexpected synthetic decisions: {actual}")
+    if decisions["rear-view.png"].similarity is not None:
+        raise AssertionError("Face-exempt rear view must not receive an ArcFace similarity")
     loo = leave_one_out_similarities(reference_embeddings)
     if loo != [1.0, 1.0]:
         raise AssertionError(f"Unexpected leave-one-out similarities: {loo}")
@@ -510,16 +552,36 @@ def run_curation(args: argparse.Namespace) -> int:
     candidate_records = load_candidate_records(candidates_root)
     reference_values = extract_embeddings(reference_paths, require_face=True)
     reference_embeddings = [embedding for embedding in reference_values if embedding is not None]
-    candidate_values = extract_embeddings(
-        [record[0] for record in candidate_records],
-        require_face=False,
-    )
-    candidates = [
-        CandidateEmbedding(str(record[0]), record[1], record[2], embedding)
-        for record, embedding in zip(candidate_records, candidate_values)
+    face_exempt_slots = args.face_exempt_slots
+    arcface_candidate_paths = [
+        record[0] for record in candidate_records if record[1] not in face_exempt_slots
     ]
-    decisions = decide_candidates(candidates, reference_embeddings, thresholds)
+    candidate_values = (
+        extract_embeddings(arcface_candidate_paths, require_face=False)
+        if arcface_candidate_paths
+        else []
+    )
+    embeddings_by_path = dict(zip(arcface_candidate_paths, candidate_values))
+    candidates = [
+        CandidateEmbedding(
+            str(record[0]),
+            record[1],
+            record[2],
+            embeddings_by_path.get(record[0]),
+        )
+        for record in candidate_records
+    ]
+    decisions = decide_candidates(
+        candidates,
+        reference_embeddings,
+        thresholds,
+        face_exempt_slots=face_exempt_slots,
+    )
     retained = sum(decision.verdict == "keep" for decision in decisions)
+    human_review = [
+        decision for decision in decisions if decision.verdict == "human-review"
+    ]
+    rejected = sum(decision.verdict == "reject" for decision in decisions)
     loo = leave_one_out_similarities(reference_embeddings)
     manifest = {
         "schemaVersion": 1,
@@ -539,10 +601,22 @@ def run_curation(args: argparse.Namespace) -> int:
             "targetRange": [MIN_RETAINED, MAX_RETAINED],
         },
         "retainedCount": retained,
+        "humanReviewCount": len(human_review),
+        "humanReviewImages": [
+            manifest_entry(decision, candidates_root) for decision in human_review
+        ],
+        "rejectedCount": rejected,
         "sufficient": MIN_RETAINED <= retained <= MAX_RETAINED,
         "images": [manifest_entry(decision, candidates_root) for decision in decisions],
     }
     write_manifest_atomic(args.out_manifest.resolve(), manifest)
+    print(
+        f"Curation summary: kept={retained}, human-review={len(human_review)}, rejected={rejected}"
+    )
+    if human_review:
+        print("Human-review no-face framings:")
+        for decision in human_review:
+            print(f"- {decision.slot}: {Path(decision.path).relative_to(candidates_root)}")
     if retained < MIN_RETAINED:
         print(
             f"Insufficient curated lot: retained {retained} < {MIN_RETAINED}; regenerate candidates without relaxing thresholds",
