@@ -62,3 +62,13 @@ heuristiques (« mmh » pré-synthétisé via le canal duplex du barge-in AEC).
 ## Note de périmètre
 Toutes ces améliorations sont non-explicites (présence émotionnelle, mémoire,
 turn-taking). Le volet NSFW de MySoulmate reste hors périmètre.
+
+## Addendum — page kyutai.org/tts (lien Patrice, 21/07)
+- **Kyutai TTS 1.6B a des voix émotionnelles nommées** (Calming, Angry, Sad,
+  Confused, Desire, Fearful, Whisper, Sarcastic, Narration…) — Kyutai fait donc
+  l'émotion par des VOIX distinctes, PAS par des tags. Confirme notre stratégie
+  phase 2 (multi-presets Pocket routés par émotion). ⚠️ le 1.6B est GPU (serveur
+  Rust/candle) → probablement pas temps réel sur Ministar CPU ; à valider.
+- **Pocket TTS actif** : italien ajouté 04/2026, voix FR supplémentaires (Estelle
+  + CML 1406/2154/4724). Mettre à jour pocket-tts (≥2.1 + --quantize) sur le robot.
+- Voix : huggingface.co/kyutai/tts-voices. Démo : unmute.sh.
