@@ -409,6 +409,32 @@ export interface LocalTtsOptions {
   signal?: AbortSignal;
 }
 
+/** Build the Telegram transcode arguments with the shared speech loudness target. */
+export function buildTelegramFfmpegArgs(
+  wav: string,
+  ogg: string,
+  env: NodeJS.ProcessEnv = process.env,
+): string[] {
+  const loudnorm = env.CODEBUDDY_TTS_TELEGRAM_LOUDNORM !== 'false'
+    ? ['-af', 'loudnorm=I=-16:TP=-1.5:LRA=11']
+    : [];
+  return [
+    '-y',
+    '-loglevel',
+    'error',
+    '-i',
+    wav,
+    ...loudnorm,
+    '-ac',
+    '1',
+    '-c:a',
+    'libopus',
+    '-b:a',
+    '32k',
+    ogg,
+  ];
+}
+
 /**
  * Turn Markdown into clean prose for speech, so the TTS doesn't literally read
  * out "asterisk asterisk", backticks, hashes or bullet dashes — it should sound
@@ -488,7 +514,7 @@ export async function synthesizeToOgg(text: string, options: LocalTtsOptions = {
     // Telegram voice notes want OGG/Opus mono. 32 kbps is plenty for speech.
     await run(
       ffmpeg,
-      ['-y', '-loglevel', 'error', '-i', wav, '-ac', '1', '-c:a', 'libopus', '-b:a', '32k', ogg],
+      buildTelegramFfmpegArgs(wav, ogg),
       { timeoutMs },
     );
     return ogg;

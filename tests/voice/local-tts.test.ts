@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
   buildPocketServerArgs,
+  buildTelegramFfmpegArgs,
   openPocketAudioStream,
   resetPocketServer,
   resolvePocketServerUrl,
@@ -18,6 +19,17 @@ describe('Pocket TTS selection', () => {
     expect(resolveTtsEngine({ CODEBUDDY_TTS_ENGINE: 'voicebox' })).toBe('voicebox');
     expect(resolveTtsEngine({ CODEBUDDY_TTS_ENGINE: 'piper' })).toBe('piper');
     expect(resolveTtsEngine({ CODEBUDDY_TTS_ENGINE: 'unknown' })).toBe('pocket');
+  });
+
+  it('applies Telegram loudnorm before Opus unless explicitly disabled', () => {
+    const normalized = buildTelegramFfmpegArgs('in.wav', 'out.ogg', {});
+    const disabled = buildTelegramFfmpegArgs('in.wav', 'out.ogg', {
+      CODEBUDDY_TTS_TELEGRAM_LOUDNORM: 'false',
+    });
+
+    expect(normalized).toContain('loudnorm=I=-16:TP=-1.5:LRA=11');
+    expect(normalized.indexOf('-af')).toBeLessThan(normalized.indexOf('-c:a'));
+    expect(disabled).not.toContain('-af');
   });
 
   it('builds a loopback resident-server command on the non-AudioReader port', () => {

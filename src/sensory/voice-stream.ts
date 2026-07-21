@@ -494,6 +494,7 @@ export async function streamToSpeech(params: StreamToSpeechParams): Promise<Stre
                 await params.play(wav, {
                   ...(signal ? { signal } : {}),
                   ...(segmentIndex > 0 ? { prependInterSentenceSilence: true } : {}),
+                  alreadyNormalized: true,
                 });
                 didPlay = !stop();
                 if (didPlay) fallbackSegments += 1;
@@ -578,6 +579,7 @@ export async function streamToSpeech(params: StreamToSpeechParams): Promise<Stre
           await params.play(item.wav, {
             ...(signal ? { signal } : {}),
             ...(segmentIndex > 0 ? { prependInterSentenceSilence: true } : {}),
+            alreadyNormalized: true,
           });
         } catch (err) {
           logger.warn(`[voice] stream play failed: ${errMsg(err)}`);

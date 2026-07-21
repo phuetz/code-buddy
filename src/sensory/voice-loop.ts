@@ -109,6 +109,8 @@ export interface VoiceStepOptions {
   ttsNormalizationFactor?: number;
   /** Insert the pipeline-owned fixed gap before a non-first sentence. */
   prependInterSentenceSilence?: boolean;
+  /** The producer already applied the shared loudness law to this WAV. */
+  alreadyNormalized?: boolean;
   /** Exact current utterance when the grounded agent input also carries history. */
   introspectionText?: string;
   /** Internal routing receipt used to keep post-processing on the exact provider. */
@@ -2071,7 +2073,7 @@ function makeDefaultStreamSpeak(
         // The player starts reading a ready local WAV immediately: no HTTP,
         // model queue, or synthesis step remains on this acknowledgement.
         opts.onFirstAudio?.();
-        await defaultPlay(cachedBackchannel, { signal }, playerPromise);
+        await defaultPlay(cachedBackchannel, { signal, alreadyNormalized: true }, playerPromise);
         logger.info('[voice] instant backchannel cache hit');
         return !signal?.aborted;
       } finally {
@@ -2250,9 +2252,7 @@ async function defaultPlay(
   const signal = opts.signal;
   // Already interrupted before we even start → don't spawn anything.
   if (signal?.aborted) return;
-  // This also migrates old, quiet cache entries on first playback. New Pocket
-  // and Piper files are already normalized, so the operation is idempotent.
-  await normalizeWavFile(wav, process.env);
+  if (!opts.alreadyNormalized) await normalizeWavFile(wav, process.env);
   try {
     const source = await readFile(wav);
     const conditioned = conditionPcm16Wav(source, {
@@ -2365,7 +2365,10 @@ export async function sayNow(
       // Half-duplex: mute the ear while speaking. The signal lets barge-in kill this player too.
       await withSpeakingGuard(() => {
         noteSpokenText(t);
-        return play(wav, { signal: options.signal });
+        return play(wav, {
+          signal: options.signal,
+          alreadyNormalized: options.synth === undefined,
+        });
       });
       try {
         const { unlink } = await import('fs/promises');
@@ -2749,7 +2752,11 @@ export function makeVoiceReply(options: VoiceReplyOptions = {}): VoiceReplyHandl
         firstContentAudioMs = Date.now() - startedAt;
       }
       try {
-        await play(wav, { ...(opts ?? {}), delivery });
+        await play(wav, {
+          ...(opts ?? {}),
+          delivery,
+          alreadyNormalized: options.synth === undefined,
+        });
       } finally {
         streamedWavMetadata.delete(wav);
       }
