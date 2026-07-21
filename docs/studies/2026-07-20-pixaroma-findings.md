@@ -55,3 +55,15 @@ workflows.pixaroma.com, GitLab pixaroma (MIT).*
   À retenir : passer à Qwen-Image-Edit **2511** si GGUF dispo ; LoRA
   Qwen-Lightning 4-steps pour le batch ; 50 prompts de variations gratuits
   (weirdwonderfulai.art) ; captioning structuré Qwen2.5-VL avec trigger.
+- Vidéo Alejavi Rivera (Flow) : verdict **impact moyen-fort trailers**. C'est
+  **Storyboard Studio** (Flow Tools, I/O mai 2026) : assets persistants
+  (personnages/décors/objets nommés) référencés par chaque frame du storyboard
+  → cohérence multi-plans systématique, ET itération d'images GRATUITE (crédits
+  Veo dépensés seulement sur les frames validées via Frames-to-Video). Bonus :
+  machine à transitions entre clips, Shot Explorer (multi-angles cohérents),
+  TTS Gemini gratuit dans AI Studio. Limites : clips toujours 4-10 s (le
+  « long » = montage), pas d'upload d'image perso dans le Storyboard officiel
+  (contournable via Create Tool). Impact chaîne Lisa : quasi nul (le local est
+  déjà $0 et la LoRA bat la cohérence par assets). → À intégrer au flux
+  trailers : storyboarder gratuitement dans Flow, ne payer que les plans
+  retenus.
