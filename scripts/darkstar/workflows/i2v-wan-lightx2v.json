@@ -34,7 +34,7 @@
       "base_precision": "bf16",
       "quantization": "fp8_e4m3fn_scaled",
       "load_device": "offload_device",
-      "attention_mode": "sdpa",
+      "attention_mode": "sageattn",
       "rms_norm_function": "default"
     },
     "class_type": "WanVideoModelLoader",
@@ -159,7 +159,7 @@
       "base_precision": "bf16",
       "quantization": "fp8_e4m3fn_scaled",
       "load_device": "offload_device",
-      "attention_mode": "sdpa",
+      "attention_mode": "sageattn",
       "rms_norm_function": "default"
     },
     "class_type": "WanVideoModelLoader",
