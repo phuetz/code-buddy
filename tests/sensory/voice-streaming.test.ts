@@ -437,7 +437,7 @@ describe('makeVoiceReply — streaming integration', () => {
 
     const turn = onHeard('explique-moi cela');
     await paused;
-    await vi.waitFor(() => expect(spoken).toEqual(['Alors…']));
+    await vi.waitFor(() => expect(spoken).toEqual(['Alors.']));
 
     releaseModel();
     await turn;
@@ -1109,9 +1109,9 @@ describe('makeVoiceReply — validated spoken prefix continuity', () => {
 
     await onHeard("Penses-tu qu'une IA peut aimer ?");
 
-    expect(seenPrefix).toEqual(['Une IA peut manifester un attachement fonctionnel.']);
+    expect(seenPrefix).toEqual(['Une I A peut manifester un attachement fonctionnel.']);
     expect(played).toEqual([
-      'Une IA peut manifester un attachement fonctionnel.',
+      'Une I A peut manifester un attachement fonctionnel.',
       "Cela ne prouve toutefois pas qu'elle possède une expérience subjective.",
     ]);
     expect(blocking).not.toHaveBeenCalled();
@@ -1125,7 +1125,7 @@ describe('makeVoiceReply — validated spoken prefix continuity', () => {
       {
         role: 'assistant',
         content:
-          "Une IA peut manifester un attachement fonctionnel. Cela ne prouve toutefois pas qu'elle possède une expérience subjective.",
+          "Une I A peut manifester un attachement fonctionnel. Cela ne prouve toutefois pas qu'elle possède une expérience subjective.",
       },
     ]);
   });

@@ -31,6 +31,81 @@ const NON_LATIN_SCRIPT_RUN =
 
 /** The floor for "this still says something speakable": at least one letter or digit. */
 const HAS_SPEAKABLE_CONTENT = /[\p{L}\p{N}]/u;
+const EMOJI_RUN = /(?:\p{Regional_Indicator}{2}|\p{Extended_Pictographic}(?:\uFE0F|\p{Emoji_Modifier})?(?:\u200D\p{Extended_Pictographic}(?:\uFE0F|\p{Emoji_Modifier})?)*)/gu;
+
+const SMALL_NUMBERS = [
+  'zéro', 'un', 'deux', 'trois', 'quatre', 'cinq', 'six', 'sept', 'huit', 'neuf',
+  'dix', 'onze', 'douze', 'treize', 'quatorze', 'quinze', 'seize',
+] as const;
+const TENS = ['', '', 'vingt', 'trente', 'quarante', 'cinquante', 'soixante'] as const;
+
+function underHundred(value: number): string {
+  if (value < SMALL_NUMBERS.length) return SMALL_NUMBERS[value] ?? '';
+  if (value < 20) return `dix-${SMALL_NUMBERS[value - 10]}`;
+  if (value < 70) {
+    const tens = Math.floor(value / 10);
+    const unit = value % 10;
+    if (unit === 0) return TENS[tens] ?? '';
+    return `${TENS[tens]}${unit === 1 ? ' et un' : `-${SMALL_NUMBERS[unit]}`}`;
+  }
+  if (value < 80) {
+    const remainder = value - 60;
+    return remainder === 11
+      ? 'soixante et onze'
+      : `soixante-${underHundred(remainder)}`;
+  }
+  const remainder = value - 80;
+  if (remainder === 0) return 'quatre-vingts';
+  return `quatre-vingt-${underHundred(remainder)}`;
+}
+
+/** Canonical French cardinal for the integer range supported by the TTS sanitizer. */
+export function frenchIntegerToWords(value: number): string {
+  if (!Number.isInteger(value) || value < 0 || value > 9_999) return String(value);
+  if (value < 100) return underHundred(value);
+  if (value < 1_000) {
+    const hundreds = Math.floor(value / 100);
+    const remainder = value % 100;
+    const head = hundreds === 1 ? 'cent' : `${SMALL_NUMBERS[hundreds]} cent${remainder === 0 ? 's' : ''}`;
+    return remainder === 0 ? head : `${head} ${underHundred(remainder)}`;
+  }
+  const thousands = Math.floor(value / 1_000);
+  const remainder = value % 1_000;
+  const head = thousands === 1 ? 'mille' : `${underHundred(thousands)} mille`;
+  return remainder === 0 ? head : `${head} ${frenchIntegerToWords(remainder)}`;
+}
+
+/** Normalize the bounded numeric forms that French local voices pronounce inconsistently. */
+export function normalizeFrenchNumbers(text: string): string {
+  let output = text;
+  output = output.replace(/\b(\d{1,2})\s*h\s*(\d{1,2})\b/giu, (_match, hour: string, minute: string) => {
+    const hourValue = Number(hour);
+    const minuteValue = Number(minute);
+    if (hourValue > 23 || minuteValue > 59) return _match;
+    return `${frenchIntegerToWords(hourValue)} heure${hourValue === 1 ? '' : 's'} ${frenchIntegerToWords(minuteValue)}`;
+  });
+  output = output.replace(/\b1(?:er|re)\b/giu, (match) =>
+    match.toLocaleLowerCase('fr-FR').endsWith('re') ? 'première' : 'premier');
+  output = output.replace(/\b2(?:e|ème)\b/giu, 'deuxième');
+  output = output.replace(/(?<![\d.,])(\d{1,4})\s*%/gu, (_match, digits: string) =>
+    `${frenchIntegerToWords(Number(digits))} pour cent`);
+  output = output.replace(/(?<![\d.,])(\d{1,4})(?![\d.,])/gu, (_match, digits: string) =>
+    frenchIntegerToWords(Number(digits)));
+  return output;
+}
+
+function stripSpeechMarkdown(text: string): string {
+  let output = text.replace(/```[\w-]*\n?/gu, '').replace(/```/gu, '');
+  output = output.replace(/`([^`]+)`/gu, '$1');
+  output = output.replace(/\*\*([^*]+)\*\*/gu, '$1').replace(/\*([^*]+)\*/gu, '$1');
+  output = output.replace(/__([^_]+)__/gu, '$1').replace(/_([^_]+)_/gu, '$1');
+  output = output.replace(/!\[([^\]]*)\]\([^)]*\)/gu, '$1');
+  output = output.replace(/\[([^\]]+)\]\([^)]*\)/gu, '$1');
+  output = output.replace(/^\s{0,3}#{1,6}\s+/gmu, '');
+  output = output.replace(/^\s*>\s?/gmu, '');
+  output = output.replace(/[*_`#>~]/gu, '');
+  return output;
+}
 
 /** Remove runs of unpronounceable (for a Latin voice) foreign script, leaving a space behind. */
 export function stripForeignScript(text: string): string {
@@ -46,10 +121,23 @@ export function prepareSpeech(raw: string): string | null {
   if (!raw || typeof raw !== 'string') return null;
   let t = sanitizeModelOutput(raw);
   t = stripInvisibleChars(t);
+  t = t.replace(/^\s*(?:[-*+•▪◦‣]|\d+[.)])\s+/gmu, ', ');
+  t = stripSpeechMarkdown(t);
+  t = t.replace(EMOJI_RUN, ' ');
+  t = t.replace(/…/gu, '.');
+  t = t.replace(/!+/gu, '!').replace(/\?+/gu, '?');
+  // Lists and standalone dashes become pauses, without breaking compounds such
+  // as "peut-être" or the hyphens produced by French number words.
+  t = t.replace(/\s+[–—-]\s+/gu, ', ');
+  t = t.replace(/\s*\n\s*,\s*/gu, ', ');
+  t = t.replace(/\n+/gu, '. ');
   // Replace foreign runs with a space (never ''), so Latin words on either side don't get glued
   // ("bonjour，patrice"), then collapse the doubles. We deliberately do NOT rewrite spacing around
   // punctuation: French keeps a space before ! ? : ; and touching it would mutate every clean reply.
-  t = stripForeignScript(t).replace(/\s{2,}/g, ' ').trim();
+  t = stripForeignScript(t);
+  t = normalizeFrenchNumbers(t);
+  t = t.replace(/\b([A-ZÀ-ÖØ-Þ]{2,4})\b/gu, (sigle) => [...sigle].join(' '));
+  t = t.replace(/\s{2,}/gu, ' ').replace(/^\s*[,.;:]+\s*/u, '').trim();
   if (!t) return null;
   if (!HAS_SPEAKABLE_CONTENT.test(t)) return null;
   return t;

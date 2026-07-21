@@ -42,11 +42,26 @@ recherche SOTA. Causes identifiées, classées, toutes localisées.
 
 ## Décisions d'implémentation (vague sol)
 
-1. Gain unique par tour (instance partagée, tête 400 ms, gating, gel).
+**Implémenté le 21/07/2026** sur `feat/mysoulmate-media-pipeline` :
+
+1. Gain unique par tour (tête 400 ms configurable, gating à −45 dBFS,
+   facteur gelé et propagé au fallback WAV).
 2. Découpage : 1er fragment rapide conservé, ensuite phrases entières
-   (plus de coupe `,;:` après le premier segment).
-3. Trim + fades 5 ms + silence inter-phrases fixe pipeline.
+   (plus de coupe `,;:` après le premier segment, caps 96 puis 160).
+3. Trim avec marge 20 ms + fades 5 ms + silence inter-phrases fixe de
+   280 ms, sur les flux PCM et les WAV complets.
 4. Loi unique inter-chemins ; suppression de la double normalisation de
-   `defaultPlay` ; fallback WAV réutilise le gain du tour ; Telegram loudnorm.
-5. Limiteur symétrique. 6. Sanitizer étendu (nombres/heures/sigles FR).
-7. Déploiement robot : maj pocket-tts + `--quantize`, rebuild dist, restart.
+   `defaultPlay` via marqueur explicite ; Telegram `loudnorm` annulable.
+5. Limiteur symétrique appliqué aussi aux facteurs inférieurs ou égaux à 1.
+6. Sanitizer étendu et partagé : nombres 0–9999, heures, pourcentages,
+   ordinaux, sigles de 2–4 majuscules, emojis et ponctuation canonique.
+7. Déploiement robot (maj pocket-tts, rebuild, restart) non exécuté dans ce
+   lot : le brief interdit de changer le moteur/la voix et demande uniquement
+   l'implémentation dépôt, sans action sur la machine de production.
+
+Écarts d'intégration justifiés : le timeout de libération anticipée de la tête
+reste actif pour ne pas augmenter la latence du premier son si le flux HTTP se
+bloque avant 400 ms ; le silence fixe est préfixé aux segments 2+ (donc placé
+exactement entre deux phrases) afin de ne jamais attendre le segment suivant
+avant de jouer le premier. Les WAV streaming annoncent une taille ouverte,
+nécessaire puisque trim et insertion de silence changent la longueur avant EOF.

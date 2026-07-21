@@ -1895,6 +1895,9 @@ function makeDefaultSynth(
     opts: VoiceStepOptions = {}
   ): Promise<{ wav: string; cacheable: boolean }> => {
     if (opts.signal?.aborted) throw new Error('TTS synthesis was interrupted');
+    const prepared = prepareSpeech(text);
+    if (!prepared) return { wav: '', cacheable: false };
+    text = prepared;
     const wavPath = join(tmpdir(), `cb-voice-${process.pid}-${Date.now()}.wav`);
     if (engine === 'voicebox') {
       const { synthesizeVoiceboxWav } = await import('../voice/voicebox-tts.js');
@@ -2085,6 +2088,10 @@ function makeDefaultStreamSpeak(
         }
       }
     }
+
+    const prepared = prepareSpeech(text);
+    if (!prepared) return false;
+    text = prepared;
 
     const stream = engine === 'voicebox'
       ? await (async () => {

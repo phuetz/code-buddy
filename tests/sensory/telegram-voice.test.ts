@@ -48,6 +48,23 @@ describe('sendTelegramVoice — voice note to the phone', () => {
     expect(calls[0]!.chat).toBe('123');
   });
 
+  it('sanitizes the Telegram synthesis entry point with the shared French rules', async () => {
+    process.env.CODEBUDDY_SENSORY_ALERT_TOKEN = 'tok';
+    process.env.CODEBUDDY_SENSORY_ALERT_CHAT = '123';
+    let synthesized = '';
+
+    const ok = await sendTelegramVoice('PDF à 9h30 👍', {
+      synthesize: async (text) => {
+        synthesized = text;
+        return ogg;
+      },
+      post: async () => ({ ok: true }),
+    });
+
+    expect(ok).toBe(true);
+    expect(synthesized).toBe('P D F à neuf heures trente');
+  });
+
   it('reports success when synthesis fails but the text fallback is delivered', async () => {
     process.env.CODEBUDDY_SENSORY_ALERT_TOKEN = 'tok';
     process.env.CODEBUDDY_SENSORY_ALERT_CHAT = '123';

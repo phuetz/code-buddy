@@ -16,6 +16,7 @@ import { unlink } from 'node:fs/promises';
 import { homedir, tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { logger } from '../utils/logger.js';
+import { prepareSpeech } from '../sensory/speech-sanitizer.js';
 import { normalizePcm16Wav, normalizeWavFile } from './tts-volume.js';
 
 export type LocalTtsEngine = 'pocket' | 'voicebox' | 'piper';
@@ -441,30 +442,7 @@ export function buildTelegramFfmpegArgs(
  * like a person talking, not a screen reader narrating syntax.
  */
 export function cleanForSpeech(text: string): string {
-  let t = text;
-  // Fenced code blocks: keep the inner text, drop the ``` fences/language tag.
-  t = t.replace(/```[\w-]*\n?/g, '').replace(/```/g, '');
-  // Inline code, bold, italic — keep the words, drop the markers.
-  t = t.replace(/`([^`]+)`/g, '$1');
-  t = t.replace(/\*\*([^*]+)\*\*/g, '$1').replace(/\*([^*]+)\*/g, '$1');
-  t = t.replace(/__([^_]+)__/g, '$1').replace(/_([^_]+)_/g, '$1');
-  // Links / images → spoken label only.
-  t = t.replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1');
-  t = t.replace(/\[([^\]]+)\]\([^)]*\)/g, '$1');
-  // Line-start markers: headings, blockquotes, list bullets, ordered items.
-  t = t.replace(/^\s{0,3}#{1,6}\s+/gm, '');
-  t = t.replace(/^\s*>\s?/gm, '');
-  t = t.replace(/^\s*[-*+]\s+/gm, '');
-  t = t.replace(/^\s*\d+[.)]\s+/gm, '');
-  // Horizontal rules.
-  t = t.replace(/^\s*([-*_])\1{2,}\s*$/gm, '');
-  // Any leftover Markdown punctuation a voice would mispronounce.
-  t = t.replace(/[*_`#>~]/g, '');
-  // Newlines → sentence breaks; collapse and de-duplicate punctuation/space.
-  t = t.replace(/\n{2,}/g, '. ').replace(/\n/g, '. ');
-  t = t.replace(/\s{2,}/g, ' ');
-  t = t.replace(/\s*\.(\s*\.)+\s*/g, '. ');
-  return t.trim();
+  return prepareSpeech(text) ?? '';
 }
 
 /**
@@ -489,6 +467,7 @@ export async function synthesizeToOgg(text: string, options: LocalTtsOptions = {
     // conversation keeps Lisa's voice when it moves between channels.
     const engine = resolveTtsEngine();
     const clean = cleanForSpeech(text);
+    if (!clean) throw new Error('TTS text is empty after speech sanitization');
     let rendered = false;
     if (engine === 'voicebox') {
       const { synthesizeVoiceboxWav } = await import('./voicebox-tts.js');
@@ -506,7 +485,7 @@ export async function synthesizeToOgg(text: string, options: LocalTtsOptions = {
     }
     if (!rendered) {
       if (options.signal?.aborted) throw new Error('TTS synthesis was interrupted');
-      await run(bin, piperArgs, { stdin: cleanForSpeech(text), timeoutMs });
+      await run(bin, piperArgs, { stdin: clean, timeoutMs });
       // Piper voices vary substantially in level too. Apply the same assistant
       // volume contract before encoding the Telegram voice note.
       await normalizeWavFile(wav, process.env);

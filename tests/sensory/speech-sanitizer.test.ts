@@ -1,11 +1,16 @@
 import { describe, it, expect } from 'vitest';
-import { prepareSpeech, stripForeignScript } from '../../src/sensory/speech-sanitizer.js';
+import {
+  frenchIntegerToWords,
+  normalizeFrenchNumbers,
+  prepareSpeech,
+  stripForeignScript,
+} from '../../src/sensory/speech-sanitizer.js';
 
 describe('prepareSpeech — the gate before text reaches the speakers', () => {
   it('keeps a clean French reply unchanged (modulo trim)', () => {
     expect(prepareSpeech('  Bonjour Patrice, tout va bien ?  ')).toBe('Bonjour Patrice, tout va bien ?');
     expect(prepareSpeech('Oui.')).toBe('Oui.');
-    expect(prepareSpeech('42')).toBe('42'); // a bare numeric answer is still speakable
+    expect(prepareSpeech('42')).toBe('quarante-deux');
   });
 
   it('strips a foreign-script (CJK) run that leaked mid-reply, keeping the French part', () => {
@@ -38,7 +43,23 @@ describe('prepareSpeech — the gate before text reaches the speakers', () => {
   });
 
   it('keeps a reply that mixes letters and emoji', () => {
-    expect(prepareSpeech('D’accord 👍')).toBe('D’accord 👍');
+    expect(prepareSpeech('D’accord 👍')).toBe('D’accord');
+  });
+
+  it('normalizes French numbers, hours, percentages, and ordinals', () => {
+    expect(normalizeFrenchNumbers('Le 1er à 9h30, en 2026 : 25 %, puis le 2e.')).toBe(
+      'Le premier à neuf heures trente, en deux mille vingt-six : vingt-cinq pour cent, puis le deuxième.',
+    );
+    expect(frenchIntegerToWords(9_999)).toBe('neuf mille neuf cent quatre-vingt-dix-neuf');
+  });
+
+  it('spaces short uppercase acronyms and canonicalizes vocal punctuation', () => {
+    expect(prepareSpeech('Le PDF… est prêt!!! 😄')).toBe('Le P D F. est prêt!');
+    expect(prepareSpeech('Alpha — bêta???')).toBe('Alpha, bêta?');
+  });
+
+  it('turns list bullets into spoken comma pauses', () => {
+    expect(prepareSpeech('- alpha\n- bêta')).toBe('alpha, bêta');
   });
 });
 
