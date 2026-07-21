@@ -9,6 +9,7 @@
   "include": [
     "scripts/darkstar/generate-krea2-identity-dataset.ts",
     "scripts/darkstar/generate-identity-dataset-v3.ts",
+    "scripts/darkstar/generate-location-plates.ts",
     "scripts/darkstar/build-identity-manifest.ts"
   ],
   "exclude": ["node_modules", "dist"]
