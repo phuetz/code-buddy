@@ -53,7 +53,8 @@ describe('SentenceAssembler — sentence cutting', () => {
     const out: string[] = [];
     for (const s of a.push('a'.repeat(500))) out.push(s);
     for (const s of a.flush()) out.push(s);
-    expect(out).toHaveLength(3);
+    expect(out).toHaveLength(4);
+    expect(out[0]).toHaveLength(96);
     expect(out.every((s) => s.length <= 200)).toBe(true);
     expect(out.join('').length).toBe(500);
   });
@@ -65,6 +66,24 @@ describe('SentenceAssembler — sentence cutting', () => {
       'puis je continue.',
     ]);
     expect(a.flush()).toEqual([]);
+  });
+
+  it('uses soft punctuation only for the first low-latency fragment', () => {
+    const a = new SentenceAssembler();
+    expect(a.push(
+      'Je vérifie rapidement cette première partie, puis cette deuxième clause reste entière, avant la fin. ',
+    )).toEqual([
+      'Je vérifie rapidement cette première partie,',
+      'puis cette deuxième clause reste entière, avant la fin.',
+    ]);
+  });
+
+  it('keeps the first hard cap at 96 and raises later segments to 160 characters', () => {
+    const a = new SentenceAssembler();
+    const out = a.push('a'.repeat(300));
+
+    expect(out.map((segment) => segment.length)).toEqual([96, 160]);
+    expect(a.flush()).toEqual(['a'.repeat(44)]);
   });
 });
 

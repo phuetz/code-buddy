@@ -35,12 +35,12 @@ import { withSpeakingGuard } from './voice-activity.js';
 import type { SynthFn, PlayFn, StreamSpeakFn } from './voice-loop.js';
 
 /**
- * Default safety cap: long enough to preserve natural French clauses, while
- * still bounding punctuation-less model output. A real Pocket benchmark on a
- * fixed news answer kept first PCM near 100 ms and removed artificial 48-char
- * cuts at 96; punctuation and long commas can still release earlier.
+ * After the first low-latency fragment, preserve longer natural French
+ * sentences while still bounding punctuation-less model output.
  */
-export const DEFAULT_SENTENCE_CAP = 96;
+export const DEFAULT_SENTENCE_CAP = 160;
+/** Keep the first fragment bounded exactly as before so first-audio latency does not regress. */
+export const FIRST_SENTENCE_CAP = 96;
 /** Avoid tiny, choppy fragments such as "Oui," when cutting on soft punctuation. */
 const MIN_CLAUSE_CHARS = 24;
 
@@ -127,12 +127,18 @@ export function safeCommitLength(buffer: string): number {
 }
 
 /** Terminator run (`.` `!` `?` `…`, repeated) plus any trailing closing quote/bracket. */
-function findBoundary(working: string, from: number, flush: boolean): number {
+function findBoundary(
+  working: string,
+  from: number,
+  flush: boolean,
+  allowSoftBoundary: boolean,
+): number {
   const re = /[.!?…]+[)\]"'”»’]*|[,;:]+[)\]"'”»’]*/g;
   re.lastIndex = from;
   let m: RegExpExecArray | null;
   while ((m = re.exec(working)) !== null) {
     const soft = /^[,;:]/.test(m[0]);
+    if (soft && !allowSoftBoundary) continue;
     if (soft && m.index + m[0].length - from < MIN_CLAUSE_CHARS) continue;
     const after = m.index + m[0].length;
     if (after >= working.length) {
@@ -161,6 +167,8 @@ function chooseCut(working: string, from: number, cap: number): number {
 function pull(
   working: string,
   cap: number,
+  firstCap: number,
+  emitted: number,
   flush: boolean,
 ): { sentences: string[]; consumed: number } {
   const sentences: string[] = [];
@@ -175,15 +183,17 @@ function pull(
     return np;
   };
   while (pos < working.length) {
-    const b = findBoundary(working, pos, flush);
-    if (b >= 0 && b - pos <= cap) {
+    const firstSegment = emitted + sentences.length === 0;
+    const activeCap = firstSegment ? firstCap : cap;
+    const b = findBoundary(working, pos, flush, firstSegment);
+    if (b >= 0 && b - pos <= activeCap) {
       const s = working.slice(pos, b).trim();
       if (s) sentences.push(s);
       pos = skipWs(b);
       continue;
     }
-    if (working.length - pos >= cap) {
-      const cut = chooseCut(working, pos, cap);
+    if (working.length - pos >= activeCap) {
+      const cut = chooseCut(working, pos, activeCap);
       const s = working.slice(pos, cut).trim();
       if (s) sentences.push(s);
       pos = skipWs(cut);
@@ -202,8 +212,12 @@ function pull(
  */
 export class SentenceAssembler {
   private buffer = '';
+  private emitted = 0;
 
-  constructor(private readonly cap: number = DEFAULT_SENTENCE_CAP) {}
+  constructor(
+    private readonly cap: number = DEFAULT_SENTENCE_CAP,
+    private readonly firstCap: number = FIRST_SENTENCE_CAP,
+  ) {}
 
   /** Feed one delta; returns zero or more RAW sentences ready to sanitize. */
   push(delta: string): string[] {
@@ -212,15 +226,23 @@ export class SentenceAssembler {
     const safeLen = safeCommitLength(this.buffer);
     if (safeLen <= 0) return [];
     const safe = this.buffer.slice(0, safeLen);
-    const { sentences, consumed } = pull(safe, this.cap, false);
+    const { sentences, consumed } = pull(safe, this.cap, this.firstCap, this.emitted, false);
     if (consumed > 0) this.buffer = this.buffer.slice(consumed);
+    this.emitted += sentences.length;
     return sentences;
   }
 
   /** End-of-stream: emit whatever remains (sanitizer strips any dangling artifact). */
   flush(): string[] {
-    const { sentences, consumed } = pull(this.buffer, this.cap, true);
+    const { sentences, consumed } = pull(
+      this.buffer,
+      this.cap,
+      this.firstCap,
+      this.emitted,
+      true,
+    );
     this.buffer = consumed >= this.buffer.length ? '' : this.buffer.slice(consumed);
+    this.emitted += sentences.length;
     return sentences;
   }
 }

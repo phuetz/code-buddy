@@ -265,7 +265,7 @@ export interface VoiceReplyOptions {
    * blocking contract is honored and no default stream is used).
    */
   streamFn?: StreamReplyFn;
-  /** Safety cap: force a sentence break after N chars with no punctuation (streaming). Default 200. */
+  /** Later-segment safety cap for punctuation-less text (streaming). Default 160. */
   sentenceCap?: number;
   /** Injectable "synthesize" step. Default: resident Pocket TTS, Piper fallback. */
   synth?: SynthFn;
