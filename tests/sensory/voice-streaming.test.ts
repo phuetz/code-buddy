@@ -212,6 +212,36 @@ describe('streamToSpeech — pipeline (time-to-first-audio)', () => {
     expect(result.fallbackSegments).toBe(2);
   });
 
+  it('propagates the first streamed gain to a later WAV fallback in the same turn', async () => {
+    let calls = 0;
+    const synthFactors: Array<number | undefined> = [];
+    async function* stream(): AsyncGenerator<string> {
+      yield 'Première phrase. Deuxième phrase.';
+    }
+
+    const result = await streamToSpeech({
+      stream: stream(),
+      streamSpeak: async (_text, options) => {
+        calls += 1;
+        if (calls === 1) {
+          options?.onTtsNormalizationFactor?.(1.75);
+          return true;
+        }
+        return false;
+      },
+      synth: async (text, options) => {
+        synthFactors.push(options?.ttsNormalizationFactor);
+        return `wav:${text}`;
+      },
+      play: async () => undefined,
+      guard: passthroughGuard,
+      unlink: noUnlink,
+    });
+
+    expect(synthFactors).toEqual([1.75]);
+    expect(result).toMatchObject({ played: true, fallbackSegments: 1 });
+  });
+
   it('releases a partial cloud prebuffer on timeout instead of waiting indefinitely', async () => {
     let firstPlayed!: () => void;
     const played = new Promise<void>((resolve) => {

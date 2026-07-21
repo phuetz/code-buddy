@@ -103,6 +103,8 @@ import { resolvePocketLanguage } from '../talk-mode/providers/pocket-tts.js';
 export interface VoiceStepOptions {
   /** Abort the in-flight step (barge-in / cancellation). */
   signal?: AbortSignal;
+  /** Frozen gain measured from the first audio segment of this spoken turn. */
+  ttsNormalizationFactor?: number;
   /** Exact current utterance when the grounded agent input also carries history. */
   introspectionText?: string;
   /** Internal routing receipt used to keep post-processing on the exact provider. */
@@ -197,6 +199,8 @@ export interface StreamSpeakOptions extends VoiceStepOptions {
   onFirstAudio?: () => void;
   /** Optional live copy of normalized WAV bytes for a remote avatar renderer. */
   onAudioChunk?: (chunk: Uint8Array) => void;
+  /** Publishes the first measured gain so WAV fallback can preserve the turn level. */
+  onTtsNormalizationFactor?: (factor: number) => void;
 }
 /** Synthesize and play one text segment progressively; false requests the WAV fallback. */
 export type StreamSpeakFn = (text: string, opts?: StreamSpeakOptions) => Promise<boolean>;
@@ -1893,6 +1897,9 @@ function makeDefaultSynth(
         : undefined;
       if (await synthesizeVoiceboxWav(text, wavPath, process.env, {
         signal: opts.signal,
+        ...(opts.ttsNormalizationFactor !== undefined
+          ? { frozenFactor: opts.ttsNormalizationFactor }
+          : {}),
         ...(deliveryInstruction ? { instruct: deliveryInstruction } : {}),
       })) {
         return { wav: wavPath, cacheable: true };
@@ -1901,7 +1908,14 @@ function makeDefaultSynth(
       throw new Error('Voicebox TTS synthesis failed');
     } else if (engine === 'pocket') {
       const { synthesizePocketWav } = await import('../voice/local-tts.js');
-      if (await synthesizePocketWav(text, wavPath, process.env, 180_000, opts.signal)) {
+      if (await synthesizePocketWav(
+        text,
+        wavPath,
+        process.env,
+        180_000,
+        opts.signal,
+        opts.ttsNormalizationFactor,
+      )) {
         return { wav: wavPath, cacheable: true };
       }
       if (opts.signal?.aborted) throw new Error('TTS synthesis was interrupted');
@@ -1918,7 +1932,7 @@ function makeDefaultSynth(
       },
       rootDir ? { rootDir } : {}
     );
-    await normalizeWavFile(res.outputPath, process.env);
+    await normalizeWavFile(res.outputPath, process.env, opts.ttsNormalizationFactor);
     return { wav: res.outputPath, cacheable: true };
   };
   // Reuse the synthesized WAV for repeated phrases (greeting, "oui je t'entends", …) so
@@ -1929,6 +1943,12 @@ function makeDefaultSynth(
   }
   return async (text: string, opts: VoiceStepOptions = {}): Promise<string> => {
     if (opts.signal?.aborted) throw new Error('TTS synthesis was interrupted');
+    // A cache entry carries the gain of the turn that created it. Once the
+    // current turn has frozen its own factor, synthesize fresh so it is applied
+    // to raw engine output instead of compounding two independent gains.
+    if (opts.ttsNormalizationFactor !== undefined) {
+      return (await synthFresh(text, opts)).wav;
+    }
     if (text.trim().length > SHORT_SEGMENT_CACHE_MAX_CHARS) {
       return (await synthFresh(text, opts)).wav;
     }
@@ -2024,6 +2044,8 @@ function makeDefaultStreamSpeak(
     return undefined;
   }
 
+  let turnFactor: number | undefined;
+
   return async (text, opts = {}): Promise<boolean> => {
     const signal = opts.signal;
     if (signal?.aborted) return false;
@@ -2085,7 +2107,10 @@ function makeDefaultStreamSpeak(
       return false;
     }
     const reader = stream.getReader();
-    const gain = new Pcm16WavStreamGain(process.env);
+    const gain = new Pcm16WavStreamGain(
+      process.env,
+      opts.ttsNormalizationFactor ?? turnFactor,
+    );
     let firstAudio = false;
     let closedOk = false;
     let settled = false;
@@ -2103,6 +2128,10 @@ function makeDefaultStreamSpeak(
       if (!firstAudio && gain.hasOutputAudio()) {
         firstAudio = true;
         opts.onFirstAudio?.();
+      }
+      if (turnFactor === undefined && gain.factor !== undefined) {
+        turnFactor = gain.factor;
+        opts.onTtsNormalizationFactor?.(turnFactor);
       }
       return accepted;
     };

@@ -367,6 +367,7 @@ export async function streamToSpeech(params: StreamToSpeechParams): Promise<Stre
   const spoken: string[] = [];
   let played = false;
   let fallbackSegments = 0;
+  let turnNormalizationFactor: number | undefined;
 
   // On barge-in, wake every parked worker so they re-check `stop()` and unwind.
   const onAbort = (): void => {
@@ -428,10 +429,15 @@ export async function streamToSpeech(params: StreamToSpeechParams): Promise<Stre
           let didPlay = false;
           if (nativeStreamHealthy) {
             try {
-              didPlay = await params.streamSpeak!(
-                text,
-                signal ? { signal } : undefined
-              );
+              didPlay = await params.streamSpeak!(text, {
+                ...(signal ? { signal } : {}),
+                ...(turnNormalizationFactor !== undefined
+                  ? { ttsNormalizationFactor: turnNormalizationFactor }
+                  : {}),
+                onTtsNormalizationFactor: (factor) => {
+                  if (turnNormalizationFactor === undefined) turnNormalizationFactor = factor;
+                },
+              });
               if (!didPlay) {
                 nativeStreamHealthy = false;
                 logger.info(
@@ -454,7 +460,12 @@ export async function streamToSpeech(params: StreamToSpeechParams): Promise<Stre
           if (!didPlay && !stop()) {
             let wav = '';
             try {
-              wav = await params.synth(text, { signal });
+              wav = await params.synth(text, {
+                signal,
+                ...(turnNormalizationFactor !== undefined
+                  ? { ttsNormalizationFactor: turnNormalizationFactor }
+                  : {}),
+              });
               if (wav && !stop()) {
                 await params.play(wav, signal ? { signal } : {});
                 didPlay = !stop();

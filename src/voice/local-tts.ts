@@ -250,7 +250,8 @@ async function synthesizePocketServerWav(
   wavPath: string,
   env: NodeJS.ProcessEnv,
   timeoutMs: number,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  frozenFactor?: number,
 ): Promise<boolean> {
   try {
     const stream = await openPocketAudioStream(text, env, { timeoutMs, signal });
@@ -266,7 +267,7 @@ async function synthesizePocketServerWav(
     }
     const audio = Buffer.concat(chunks.map((chunk) => Buffer.from(chunk)), total);
     if (audio.length <= 44) return false;
-    writeFileSync(wavPath, normalizePcm16Wav(audio, env), { mode: 0o600 });
+    writeFileSync(wavPath, normalizePcm16Wav(audio, env, frozenFactor), { mode: 0o600 });
     return true;
   } catch (err) {
     logger.debug(
@@ -288,12 +289,13 @@ export async function synthesizePocketWav(
   env: NodeJS.ProcessEnv = process.env,
   timeoutMs = 180_000,
   signal?: AbortSignal,
+  frozenFactor?: number,
 ): Promise<boolean> {
   try {
     if (signal?.aborted) return false;
     if (
       env.CODEBUDDY_POCKET_SERVER !== 'false' &&
-      await synthesizePocketServerWav(text, wavPath, env, timeoutMs, signal)
+      await synthesizePocketServerWav(text, wavPath, env, timeoutMs, signal, frozenFactor)
     ) {
       return true;
     }
@@ -314,7 +316,7 @@ export async function synthesizePocketWav(
     const res = await provider.synthesize(text);
     if (signal?.aborted) return false;
     if (!res?.audio?.length) return false;
-    writeFileSync(wavPath, normalizePcm16Wav(res.audio, env), { mode: 0o600 });
+    writeFileSync(wavPath, normalizePcm16Wav(res.audio, env, frozenFactor), { mode: 0o600 });
     return true;
   } catch {
     return false;
