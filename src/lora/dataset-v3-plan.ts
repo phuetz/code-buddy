@@ -180,7 +180,15 @@ const DRAFTS: readonly SlotDraft[] = [
 /** The frozen canonical plan. Callers may safely reuse it without I/O or randomness. */
 export const DATASET_V3_SLOTS: readonly DatasetV3Slot[] = Object.freeze(DRAFTS.map(slot));
 
-/** Return the canonical deterministic v3 slot sequence. */
-export function createDatasetV3Plan(): readonly DatasetV3Slot[] {
-  return DATASET_V3_SLOTS;
+/** Return the canonical deterministic v3 slot sequence.
+ * An optional trigger substitutes the persona trigger word in every prompt
+ * (multi-persona roster support) — same slots, same determinism. */
+export function createDatasetV3Plan(trigger: string = DATASET_V3_TRIGGER): readonly DatasetV3Slot[] {
+  if (trigger === DATASET_V3_TRIGGER) return DATASET_V3_SLOTS;
+  const normalized = trigger.trim();
+  if (!normalized) throw new Error('createDatasetV3Plan trigger must be non-empty');
+  return Object.freeze(DATASET_V3_SLOTS.map((slot) => Object.freeze({
+    ...slot,
+    prompt: slot.prompt.replace(DATASET_V3_TRIGGER, normalized),
+  })));
 }

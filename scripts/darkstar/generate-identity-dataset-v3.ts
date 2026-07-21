@@ -158,8 +158,8 @@ function validateComfyUrl(raw: string): string {
   return url.origin;
 }
 
-function selectSlots(raw: string): readonly DatasetV3Slot[] {
-  const plan = createDatasetV3Plan();
+function selectSlots(raw: string, trigger?: string): readonly DatasetV3Slot[] {
+  const plan = createDatasetV3Plan(trigger);
   if (raw.trim().toLowerCase() === 'all') return plan;
   const requested = raw.split(',').map((value) => value.trim()).filter(Boolean);
   if (requested.length === 0) throw new Error('--slots must be "all" or a comma-separated slot list');
@@ -173,7 +173,7 @@ function selectSlots(raw: string): readonly DatasetV3Slot[] {
 }
 
 export function parseIdentityDatasetV3Args(argv: readonly string[]): IdentityDatasetV3Options {
-  const knownFlags = new Set(['reference', 'comfy', 'out', 'resolution', 'slots', 'seed', 'force']);
+  const knownFlags = new Set(['reference', 'comfy', 'out', 'resolution', 'slots', 'seed', 'force', 'trigger']);
   for (const entry of argv) {
     if (!entry.startsWith('--')) continue;
     const name = entry.slice(2).split('=', 1)[0];
@@ -189,7 +189,7 @@ export function parseIdentityDatasetV3Args(argv: readonly string[]): IdentityDat
     comfyUrl: validateComfyUrl(valueAfter(argv, 'comfy') ?? DEFAULT_COMFY_URL),
     outputRoot: path.resolve(valueAfter(argv, 'out') ?? DEFAULT_OUTPUT),
     ...resolution,
-    slots: selectSlots(valueAfter(argv, 'slots') ?? 'all'),
+    slots: selectSlots(valueAfter(argv, 'slots') ?? 'all', valueAfter(argv, 'trigger') ?? undefined),
     baseSeed: parseBaseSeed(valueAfter(argv, 'seed') ?? String(DEFAULT_BASE_SEED)),
     force: forceEntries.length === 1,
   };
