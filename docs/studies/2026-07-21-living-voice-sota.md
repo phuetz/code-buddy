@@ -1,0 +1,64 @@
+# Étude — Voix compagnon « vivante » : état de l'art 2026 (2026-07-21)
+
+Complément de l'audit convergence. Leçon Sesame : **le TTS brut est résolu ;
+la présence vient de la prosodie CONTEXTUELLE** (sans contexte leur voix =
+humaine en CMOS ; avec contexte l'humain gagne encore). Notre trou n°1 exactement.
+
+## Ingrédients de la présence (par impact)
+
+1. **Prosodie contextuelle** (le ton dépend de ce qui vient d'être dit) — le
+   vrai front de l'uncanny valley.
+2. **Turn-taking** : ne pas couper les pauses de réflexion, réagir vite à la
+   vraie fin de tour (VAD seul se trompe). Latence cible modulaire < 500-800 ms.
+3. **Adaptation émotionnelle** : émotion utilisateur MESURÉE (pas devinée du
+   texte) → modulation différenciée (Hume : excuse ≠ sympathie ≠ enthousiasme).
+4. **Imperfections** bien placées (interjections, pauses, rires).
+5. **Full-duplex** (backchannels pendant que l'user parle) — Moshi, hors CPU.
+6. **Callbacks mémoriels** + disponibilité + effet miroir (Replika/Nature).
+
+## Faisabilité locale (Ministar CPU AMD)
+
+| Brique | Option | CPU ? |
+|---|---|---|
+| End-of-turn sémantique | **smart-turn** (Pipecat, 8M/8 Mo int8, BSD-2, FR) | OUI trivial |
+| SER émotion user | **emotion2vec+ base** (~90M, MIT, FR) — PAS audeering (CC-BY-NC) | OUI (fenêtre 2-3 s) |
+| Backchannels | heuristique VAD + « mmh » pré-synthétisé ; VAP (MIT) en v2 | OUI heuristique |
+| TTS émotionnel | Orpheus 3B / Chatterbox 500M — trop lourds CPU temps réel | LOURD |
+| Notre TTS Pocket | levier = TEXTE + choix de voix (pas de tags/silences) | OUI (déjà là) |
+| Full-duplex Moshi | 7B, Unmute exige 16 Go VRAM | NON (veille) |
+| Prosodie CSM | aucun open < 1B CPU | NON (approximer par texte) |
+
+## Le texte = notre canal de contrôle (Pocket autorégressif)
+
+- Ponctuation module la prosodie (virgules = micro-pauses, ? montée, ! énergie,
+  … suspension) — documenté Parler-TTS, vaut pour toute la famille autorégressive.
+- Longueur de phrase = rythme ; interjections écrites (« Ah ! », « Hmm. ») =
+  substitut $0 des tags Orpheus.
+- **Multi-presets Pocket** : même voix Lisa clonée en 3-4 états (neutre/enjouée/
+  douce/complice), routés par émotion cible = proxy d'émotion réel.
+- Mapping émotion→consigne d'écriture dans le prompt du reply (le Hume version
+  texte).
+
+## Plan priorisé (aligné sur les convergences)
+
+**Quick wins ($0, jours)** — c'est la phase 2A :
+1. Prosodie par le texte dans le prompt vocal (interjections, ponctuation
+   expressive, phrases courtes) + garde-fou sanitizer.
+2. Émotion/humeur → `deriveVoiceDeliveryProfile` (le trou n°1 de l'audit
+   convergence : pace/wpm/pauses modulés par emotion+moodBand).
+3. Callbacks vocaux depuis `episodic-journal` (ouverture « au fait, hier… »,
+   fréquence contrôlée) + activer proprement le contexte relationnel sur la voix.
+
+**SER léger (1-2 sem)** : 4. emotion2vec+ en sidecar sur la fenêtre STT →
+émotion mesurée injectée dans relational-context (remplace la détection
+texte-seul par un vrai signal acoustique).
+
+**Turn-taking (2-3 sem, gros gain perçu)** : 5. smart-turn int8 entre VAD et
+déclenchement (ne coupe plus les pauses, répond plus vite) ; 6. backchannels v1
+heuristiques (« mmh » pré-synthétisé via le canal duplex du barge-in AEC).
+
+**Veille** : full-duplex Moshi (non CPU), Orpheus 150/400M à surveiller.
+
+## Note de périmètre
+Toutes ces améliorations sont non-explicites (présence émotionnelle, mémoire,
+turn-taking). Le volet NSFW de MySoulmate reste hors périmètre.
