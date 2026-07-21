@@ -63,3 +63,44 @@ Prérequis : libérer de l'espace disque darkstar.
 *Sources vérifiées : dev.epicgames (MetaHuman Animator, Mesh-to-MetaHuman,
 Movie Render Queue), move.ai, rokoko.com. Licence/réalisme : à re-confirmer
 sur l'EULA live (non fetchable).*
+
+## Addendum — chaîne LoRA → MetaHuman (question Patrice « MetaHuman peut-il générer depuis les LoRA ? »)
+
+**Non directement** (LoRA = poids diffusion 2D ; MetaHuman = rig 3D). **Pas de
+flux Epic « photo/IA → MetaHuman » en 2026** (vérifié : MetaHuman hors Early
+Access depuis UE 5.6/06-2025, Creator in-engine, mais AUCUNE création depuis
+photo). Le pont = « Mesh to MetaHuman » qui exige un **maillage 3D de tête** en
+entrée ; la topologie de sortie est TOUJOURS le template MetaHuman propre (donc
+le mesh d'entrée n'a qu'à donner le volume/les proportions). Auto-rig + texture
+= services cloud Epic.
+
+### Reconstruire la tête 3D depuis nos portraits LoRA — classé
+1. **KeenTools FaceBuilder (RECOMMANDÉ)** : multi-photos (face/¾/profils = ce
+   que le LoRA produit) → topologie propre + texture blend + **transfert natif
+   forme+skin+UV vers MetaHuman**. 14,90 $/mois, commercial OK, Blender, GPU
+   léger. Le chemin le plus court et propre.
+2. Reallusion Headshot 3 + CC5 (photo→3D→export MetaHuman ; 149/329 $, pipeline
+   perso complet).
+3. RealityScan 2.0 (photogrammétrie, gratuit <1 M$) — mais images IA pas
+   métriquement cohérentes → alignement fragile. Repli.
+4. HRN (Apache-2.0, 3090 OK) / EMOCA-DECA (FLAME, licence NON-COMMERCIALE =
+   bloquant) — proxy de forme seulement.
+5. Hunyuan3D-2 (6-16 Go, 3090 OK) — bloc de volume, topologie soupe.
+
+### Voie hybride inverse (render MetaHuman → LoRA) — FAISABLE, la meilleure
+Aucun outil unique nommé, mais composition standard : MRQ rend le MetaHuman +
+passes **depth/normal/openpose** → ComfyUI FLUX **img2img + LoRA Lisa +
+ControlNet depth(0,75) + openpose(0,6), denoise ~0,45** → identité Lisa
+photoréaliste en gardant géométrie/pose/cohérence 3D. Vidéo = AnimateDiff/
+vidéo-diffusion conditionné structure (le point dur = cohérence temporelle).
+
+### POC (après priorités actuelles + espace disque désormais OK)
+- **POC-1 (ressemblance, priorité)** : 6 vues Lisa cohérentes → FaceBuilder
+  (essai 15 j) → tête 3D → transfert MetaHuman. Juge : ressemble-t-il de face/¾ ?
+- **POC-2 (photoréalisme)** : 1 frame MetaHuman → ComfyUI FLUX img2img + LoRA +
+  ControlNet depth, balayer denoise 0,35/0,45/0,6. Calibre la voie hybride.
+Faire POC-1 d'abord. Éviter RealityScan/reconstruction neuronale sur images IA.
+
+*Sources : metahuman.com, unrealengine.com (5.6), 80.lv, keentools.io,
+reallusion, realityscan.com, HRN/EMOCA/Hunyuan3D repos, workflows ComfyUI
+FLUX img2img+ControlNet.*
