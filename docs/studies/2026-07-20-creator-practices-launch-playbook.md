@@ -49,3 +49,20 @@ Bottle Rocket), ClipIQ/Likes.io/ReelNReel (algo Shorts 2026), Virvid (boucles),
 vidIQ (hooks), Versely (cheatsheet plateformes), Epidemic help, Sozee/Fanvue
 Academy, études parasociales 2025 (CHB, Media Psychology), cas Aitana/
 Pellegrini/Milla Sofia.*
+
+## Addendum 21/07 — analyse @margauxlikes (référence partagée par Patrice)
+
+Créatrice RÉELLE (Margaux Bornant, Paris, éducation IA en FR, ~60K IG en 73
+posts — ~820 abonnés/post). Sa formule = « jolie + contenu pertinent » (les
+mots de Patrice). Les 5 mécanismes à transposer au compte de Lisa :
+1. **Funnel commentaire→DM** : « commente LOOK pour recevoir [la fiche
+   tenue] » — 100 % automatisable pour un personnage AI.
+2. **Profil curé** : peu de posts, zéro remplissage, bio utilitaire, 1 CTA.
+3. **Titres à opinion** (« Ne porte JAMAIS ça avec du lin ») : le lookbook
+   passif devient contenu tranché — ×100 d'écart d'engagement mesuré chez elle
+   entre démo neutre et règle tranchée.
+4. **Multi-plateforme même handle**, même contenu recyclé, coût marginal nul.
+5. **Captions FR courtes, un seul CTA par post.**
+Ne se transpose pas : sa crédibilité d'identité réelle (→ Lisa : transparence
+« AI character » assumée), le face-caméra parlé, l'autorité d'expertise (→
+remplacée par la cohérence esthétique du personnage).
