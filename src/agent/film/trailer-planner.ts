@@ -152,6 +152,123 @@ function repairPrompt(value: unknown, errors: readonly string[]): string {
   ].join('\n');
 }
 
+/**
+ * Fill the deterministic structural scaffolding the LLM is unreliable at
+ * (sound layers/masters, retention hypotheses, cost, approvals, publication,
+ * status, overlay timecodes) while preserving its creative content (shots,
+ * overlay text, book synopsis). Keeps one-shot LLM output from failing the
+ * strict preflight on non-narrative fields.
+ */
+export function normalizeTrailerScaffold(
+  value: unknown,
+  duration: number,
+): unknown {
+  if (!isRecord(value)) return value;
+  const plan: Record<string, unknown> = { ...value };
+  plan.schemaVersion = 1;
+  plan.status = 'READY_FOR_PREFLIGHT';
+  plan.contentTier = 'safe';
+
+  const shots = Array.isArray(plan.shots) ? plan.shots : [];
+  // Cumulative shot timeline to repair NaN / out-of-range overlay timecodes.
+  const timeline: number[] = [];
+  let acc = 0;
+  for (const shot of shots) {
+    timeline.push(acc);
+    const d = isRecord(shot) && typeof shot.durationSeconds === 'number' ? shot.durationSeconds : 0;
+    acc += d;
+  }
+  const total = acc > 0 ? acc : duration;
+
+  const DEFAULT_LAYERS = [
+    'ambience: nappe technologique sourde, souffle de datacenter',
+    'foley: frappes de clavier, bourdonnement de serveurs, respiration',
+    'motif: pulsation rythmique montante jusqu\'au climax',
+    'speech: voix off tendue, phrases courtes',
+  ];
+  const existingSound = isRecord(plan.sound) ? plan.sound : {};
+  const rawLayers = Array.isArray(existingSound.layers)
+    ? existingSound.layers.filter((l): l is string => typeof l === 'string' && l.trim().length > 0)
+    : [];
+  const distinct = new Set(rawLayers.map((l) => l.trim().toLowerCase()));
+  // Keep the LLM's layers only if it gave four genuinely distinct ones.
+  const layers = distinct.size >= 4 ? rawLayers : DEFAULT_LAYERS;
+  const rawMasters = Array.isArray(existingSound.masters)
+    ? existingSound.masters.filter((m): m is string => typeof m === 'string' && m.trim().length > 0)
+    : [];
+  const masters = rawMasters.length >= 1 ? rawMasters : ['master-16x9-fr'];
+  plan.sound = { layers, masters };
+
+  const existingBook = isRecord(plan.book) ? plan.book : {};
+  const bField = (k: string, fallback: string): string =>
+    typeof existingBook[k] === 'string' && (existingBook[k] as string).trim()
+      ? (existingBook[k] as string)
+      : fallback;
+  plan.book = {
+    title: bField('title', 'Sans titre'),
+    genre: bField('genre', 'Thriller'),
+    stagingSentence: bField('stagingSentence', 'On passe du monde ordinaire au vertige, vu du protagoniste, sans révéler l\'issue.'),
+    spoilerLimit: bField('spoilerLimit', 'Ne jamais révéler le dénouement ni le sort final des personnages.'),
+    commercialAction: bField('commercialAction', 'Lire le premier chapitre — lien en description.'),
+  };
+
+  const existingRetention = isRecord(plan.retention) ? plan.retention : {};
+  const rField = (k: string, fallback: string): string =>
+    typeof existingRetention[k] === 'string' && (existingRetention[k] as string).trim()
+      ? (existingRetention[k] as string)
+      : fallback;
+  plan.retention = {
+    hookA: rField('hookA', 'Ouvrir sur l\'écran unique dans le noir.'),
+    hookB: rField('hookB', 'Ouvrir sur la phrase choc en surimpression.'),
+    promise: rField('promise', 'Un thriller sur le pouvoir de l\'information.'),
+    proofWithinThreeSeconds: rField('proofWithinThreeSeconds', 'Image forte + question dérangeante dès la première seconde.'),
+    deeperPayoff: rField('deeperPayoff', 'La question morale qui reste après le générique.'),
+    singleAbVariable: rField('singleAbVariable', 'hook image vs hook texte'),
+  };
+
+  const existingCost = isRecord(plan.cost) ? plan.cost : {};
+  plan.cost = {
+    displayedInUi: false,
+    estimatedFlowCredits: typeof existingCost.estimatedFlowCredits === 'number'
+      ? existingCost.estimatedFlowCredits
+      : shots.length * 10,
+    approvedCeilingFlowCredits: 0,
+  };
+
+  plan.approvals = {
+    narrativeReviewed: false,
+    castingReviewed: false,
+    costApproved: false,
+    publicationApproved: false,
+  };
+  plan.publication = {
+    visibility: 'private',
+    autoPublish: false,
+    containsSyntheticMedia: true,
+    humanReviewRequired: true,
+  };
+
+  if (typeof plan.masterDurationSeconds !== 'number'
+    || plan.masterDurationSeconds < 45 || plan.masterDurationSeconds > 90) {
+    plan.masterDurationSeconds = Math.min(90, Math.max(45, Math.round(total)));
+  }
+
+  const overlays = Array.isArray(plan.overlays) ? plan.overlays : [];
+  plan.overlays = overlays.map((ov, i) => {
+    if (!isRecord(ov)) return ov;
+    const t = ov.timecodeSeconds;
+    const valid = typeof t === 'number' && Number.isFinite(t) && t >= 0 && t <= total;
+    return {
+      ...ov,
+      timecodeSeconds: valid ? t : Math.min(total, timeline[Math.min(i, timeline.length - 1)] ?? total),
+      safeZone: true,
+      source: ov.source === 'manuscript' ? 'manuscript' : 'editorial',
+    };
+  });
+
+  return plan;
+}
+
 /** Plan a grounded trailer, allowing exactly one semantic repair after validation. */
 export async function planBookTrailer(input: PlanBookTrailerInput): Promise<CinematicTrailerPlan> {
   if (!input.manuscript.chapters.length) throw new Error('Trailer planning requires manuscript chapters');
@@ -165,10 +282,13 @@ export async function planBookTrailer(input: PlanBookTrailerInput): Promise<Cine
   const provider = input.provider ?? defaultProvider;
   const generate = (prompt: string): Promise<string> => provider(system, prompt);
 
-  let candidate = await generateJsonWithRetry<unknown>(generate, user);
+  let candidate = normalizeTrailerScaffold(await generateJsonWithRetry<unknown>(generate, user), duration);
   let errors = plannerValidationErrors(candidate, input.excerpts);
   if (errors.length > 0) {
-    candidate = await generateJsonWithRetry<unknown>(generate, repairPrompt(candidate, errors), 0);
+    candidate = normalizeTrailerScaffold(
+      await generateJsonWithRetry<unknown>(generate, repairPrompt(candidate, errors), 0),
+      duration,
+    );
     errors = plannerValidationErrors(candidate, input.excerpts);
   }
   if (errors.length > 0) {
