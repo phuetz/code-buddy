@@ -437,7 +437,7 @@ describe('makeVoiceReply — streaming integration', () => {
 
     const turn = onHeard('explique-moi cela');
     await paused;
-    await vi.waitFor(() => expect(spoken).toEqual(['Alors.']));
+    await vi.waitFor(() => expect(spoken).toEqual(['Alors…']));
 
     releaseModel();
     await turn;

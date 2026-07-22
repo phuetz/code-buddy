@@ -59,6 +59,21 @@ heuristiques (« mmh » pré-synthétisé via le canal duplex du barge-in AEC).
 
 **Veille** : full-duplex Moshi (non CPU), Orpheus 150/400M à surveiller.
 
+## Implémenté phase 2A (2026-07-22)
+
+- L’entrainment humain reste la base du profil vocal ; émotion utilisateur et bande d’humeur
+  relationnelle modulent désormais débit, WPM borné et style de pauses quand
+  `CODEBUDDY_COMPANION_RELATIONAL=true`.
+- La consigne de prosodie par le texte (ponctuation respirée, ellipse, interjections naturelles,
+  phrases courtes) est activable avec `CODEBUDDY_VOICE_EXPRESSIVE_TEXT`. Sans valeur explicite,
+  elle suit le gate relationnel ; le défaut nu reste inchangé. Le sanitizer préserve `…` et les
+  interjections destinées à Pocket TTS.
+- Les rappels vocaux occasionnels proviennent exclusivement de `episode:recent` (boucles ouvertes,
+  engagements ou dernier point utilisateur), avec hash de déduplication et une fenêtre par défaut
+  de deux heures (`CODEBUDDY_VOICE_CALLBACK_GAP_MS`).
+- La dérive d’humeur utilise un helper partagé dans les chemins hybride et vocal par défaut, sans
+  double application quand l’un enveloppe l’autre.
+
 ## Note de périmètre
 Toutes ces améliorations sont non-explicites (présence émotionnelle, mémoire,
 turn-taking). Le volet NSFW de MySoulmate reste hors périmètre.

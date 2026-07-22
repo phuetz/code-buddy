@@ -79,6 +79,7 @@ import {
   pushOpener,
 } from '../companion/reply-augment.js';
 import { crisisGuidanceFor } from '../companion/crisis-safety.js';
+import { evolveRelationshipFromUtterance } from '../companion/relationship-evolution.js';
 import {
   buildMemoryCallback,
   memoryCallbackHash,
@@ -154,6 +155,8 @@ export interface VoiceStepOptions {
   onProviderResolved?: (route: { model: string; apiKey: string; baseURL?: string }) => void;
   /** Raw-free cadence/length profile derived from the human's current spoken turn. */
   delivery?: VoiceDeliveryProfile;
+  /** Internal handoff: an outer reply router already applied relational drift for this turn. */
+  relationshipEvolutionHandled?: boolean;
   /**
    * Route-aware, transactional cognitive context. The caller is responsible
    * for enforcing the route's real egress clearance before returning a lease.
@@ -1670,6 +1673,7 @@ export async function defaultReply(
 ): Promise<string> {
   const fast = fastCompanionReply(heard);
   if (fast) {
+    if (!replyOpts?.relationshipEvolutionHandled) void evolveRelationshipFromUtterance(heard);
     logger.info(`[voice] fast reply chars=${fast.length}`);
     return fast;
   }
@@ -1681,6 +1685,7 @@ export async function defaultReply(
         rootDir: process.cwd(),
       });
       if (selfie) {
+        if (!replyOpts?.relationshipEvolutionHandled) void evolveRelationshipFromUtterance(heard);
         logger.info(
           `[voice] lisa-selfie success=${selfie.success} telegram=${selfie.telegramSent}`,
         );
@@ -1694,6 +1699,9 @@ export async function defaultReply(
   }
   let cognitiveLease: VoiceCognitiveContextLease | undefined;
   try {
+    if (!replyOpts?.relationshipEvolutionHandled) {
+      await evolveRelationshipFromUtterance(heard);
+    }
     const delivery = replyOpts?.delivery ?? deriveSpokenDeliveryProfile(heard);
     const prepared = await prepareSpokenTurn(
       heard,
@@ -1827,6 +1835,9 @@ export async function* streamCompanionReply(
   let cognitiveLease: VoiceCognitiveContextLease | undefined;
   let cognitiveLeaseSettled = false;
   try {
+    if (!replyOpts?.relationshipEvolutionHandled) {
+      await evolveRelationshipFromUtterance(heard);
+    }
     const resolvedRoute = await resolveVoiceModel(heard, { history });
     const acknowledgement = replyOpts?.spokenPrefix
       ? null

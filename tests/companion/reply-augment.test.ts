@@ -4,7 +4,7 @@
  * end-to-end through the REAL relationship-state file (env-routed temp, no mocks) — an affectionate
  * utterance actually nudges Lisa's warmth up.
  */
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { mkdtempSync, rmSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
@@ -24,6 +24,7 @@ import {
   avoidOpenersGuidance,
 } from '../../src/companion/reply-augment.js';
 import { makeHybridReply } from '../../src/sensory/hybrid-reply.js';
+import { defaultReply } from '../../src/sensory/voice-loop.js';
 import {
   loadRelationshipState,
   personalityOf,
@@ -271,6 +272,43 @@ describe('hybrid reply evolves Lisa’s traits per utterance (real state file, o
       );
     } finally {
       rmSync(tmp2, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('default voice reply evolves Lisa’s mood through the shared helper', () => {
+  it('drifts on a fast pure-voice reply without invoking a model', async () => {
+    const tmp = mkdtempSync(join(tmpdir(), 'replyaug-default-'));
+    const statePath = join(tmp, 'relationship-state.json');
+    process.env.CODEBUDDY_RELATIONSHIP_STATE_FILE = statePath;
+    process.env.CODEBUDDY_COMPANION_RELATIONAL = 'true';
+    try {
+      await expect(defaultReply('merci beaucoup')).resolves.toBe('Avec plaisir.');
+      await vi.waitFor(() => {
+        expect(personalityOf(loadRelationshipState(statePath)).mood).toBeGreaterThan(60);
+      });
+    } finally {
+      delete process.env.CODEBUDDY_RELATIONSHIP_STATE_FILE;
+      delete process.env.CODEBUDDY_COMPANION_RELATIONAL;
+      rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+
+  it('honors the hybrid handoff and does not apply drift a second time', async () => {
+    const tmp = mkdtempSync(join(tmpdir(), 'replyaug-handoff-'));
+    const statePath = join(tmp, 'relationship-state.json');
+    process.env.CODEBUDDY_RELATIONSHIP_STATE_FILE = statePath;
+    process.env.CODEBUDDY_COMPANION_RELATIONAL = 'true';
+    try {
+      await expect(
+        defaultReply('merci beaucoup', [], { relationshipEvolutionHandled: true }),
+      ).resolves.toBe('Avec plaisir.');
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(personalityOf(loadRelationshipState(statePath)).mood).toBe(60);
+    } finally {
+      delete process.env.CODEBUDDY_RELATIONSHIP_STATE_FILE;
+      delete process.env.CODEBUDDY_COMPANION_RELATIONAL;
+      rmSync(tmp, { recursive: true, force: true });
     }
   });
 });

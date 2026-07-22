@@ -39,6 +39,7 @@ import {
 import { loadPrefetchItems } from '../companion/prefetch-config.js';
 import { isJokeRequest, nextJoke } from '../companion/jokes.js';
 import { resolveUserName } from '../companion/user-name.js';
+import { evolveRelationshipFromUtterance } from '../companion/relationship-evolution.js';
 import {
   conversationFailureReply,
   prepareConversationTurn,
@@ -650,27 +651,6 @@ export function makeHybridReply(options: HybridReplyOptions = {}): HybridReplyHa
     }
   }
 
-  async function evolveRelationship(heard: string): Promise<void> {
-    if (process.env.CODEBUDDY_COMPANION_RELATIONAL !== 'true') return;
-    try {
-      const [augmentation, relationship, relationalContext] = await Promise.all([
-        import('../companion/reply-augment.js'),
-        import('../companion/relationship-state.js'),
-        import('../companion/relational-context.js'),
-      ]);
-      const { detectRelationalSignal } = augmentation;
-      const { loadRelationshipState, saveRelationshipState, evolveTraits } = relationship;
-      const signal = detectRelationalSignal(heard);
-      saveRelationshipState(evolveTraits(loadRelationshipState(), signal));
-      relationalContext.invalidateVoiceRelationalContext();
-      if (signal !== 'neutral') {
-        void relationalContext.prewarmVoiceRelationalContext().catch(() => undefined);
-      }
-    } catch {
-      /* trait drift is optional — never block a reply */
-    }
-  }
-
   const reply = async (heard: string, replyOpts?: VoiceStepOptions): Promise<string> => {
     const signal = replyOpts?.signal;
     try {
@@ -693,7 +673,7 @@ export function makeHybridReply(options: HybridReplyOptions = {}): HybridReplyHa
       if (shortcut) {
         // Relationship evolution is best-effort and must not delay an answer
         // that was explicitly precomputed for immediate delivery.
-        void evolveRelationship(heard);
+        void evolveRelationshipFromUtterance(heard);
         const safeShortcut = guardBeforeMemory(shortcut);
         remember(heard, safeShortcut);
         return safeShortcut;
@@ -712,7 +692,7 @@ export function makeHybridReply(options: HybridReplyOptions = {}): HybridReplyHa
             rootDir: options.cwd ?? process.cwd(),
           });
           if (selfie) {
-            void evolveRelationship(heard);
+            void evolveRelationshipFromUtterance(heard);
             const line = guardBeforeMemory(selfie.spokenReply);
             remember(heard, line);
             logger.info(
@@ -726,13 +706,14 @@ export function makeHybridReply(options: HybridReplyOptions = {}): HybridReplyHa
           );
         }
       }
-      await evolveRelationship(heard);
+      await evolveRelationshipFromUtterance(heard);
       await ensureDeps();
       const substantive = introspectionIntent !== null || classify(heard, recentHistory);
       let responseMainProvider: HybridSemanticReviewInput['mainProvider'];
       let cognitiveEvidence: string | undefined;
       const stepOpts: VoiceStepOptions = {
         ...(replyOpts ?? {}),
+        relationshipEvolutionHandled: true,
         ...(options.acquireCognitiveContext
           ? { acquireCognitiveContext: options.acquireCognitiveContext }
           : {}),
@@ -898,7 +879,7 @@ export function makeHybridReply(options: HybridReplyOptions = {}): HybridReplyHa
         pendingShortcut = { heard, reply: safeShortcut, expiresAt: Date.now() + 2_000 };
         yield safeShortcut;
         if (!replyOpts?.signal?.aborted) {
-          void evolveRelationship(heard);
+          void evolveRelationshipFromUtterance(heard);
           remember(heard, safeShortcut);
         }
         return;
@@ -931,6 +912,7 @@ export function makeHybridReply(options: HybridReplyOptions = {}): HybridReplyHa
           let cognitiveEvidence: string | undefined;
           const streamOptions: VoiceStepOptions = {
             ...(replyOpts ?? {}),
+            relationshipEvolutionHandled: true,
             ...(options.acquireCognitiveContext
               ? { acquireCognitiveContext: options.acquireCognitiveContext }
               : {}),
@@ -980,7 +962,7 @@ export function makeHybridReply(options: HybridReplyOptions = {}): HybridReplyHa
             if (correction) yield ` ${correction}`;
           }
           if (completed) {
-            await evolveRelationship(heard);
+            await evolveRelationshipFromUtterance(heard);
             const canonical = [completed, correction].filter(Boolean).join(' ');
             remember(heard, canonical);
             logger.info(`[voice-hybrid] route=agent-stream responseChars=${canonical.length}`);
@@ -1000,6 +982,7 @@ export function makeHybridReply(options: HybridReplyOptions = {}): HybridReplyHa
         let cognitiveEvidence: string | undefined;
         const continuationOptions: VoiceStepOptions = {
           ...(replyOpts ?? {}),
+          relationshipEvolutionHandled: true,
           ...(options.acquireCognitiveContext
             ? { acquireCognitiveContext: options.acquireCognitiveContext }
             : {}),
@@ -1047,7 +1030,7 @@ export function makeHybridReply(options: HybridReplyOptions = {}): HybridReplyHa
         if (replyOpts?.signal?.aborted) return;
         const canonical = [spokenPrefix, completed, correction].filter(Boolean).join(' ');
         if (canonical) {
-          await evolveRelationship(heard);
+          await evolveRelationshipFromUtterance(heard);
           remember(heard, canonical);
           logger.info(
             `[voice-hybrid] route=agent-prefixed responseChars=${canonical.length}`,
@@ -1065,6 +1048,7 @@ export function makeHybridReply(options: HybridReplyOptions = {}): HybridReplyHa
       let cognitiveEvidence: string | undefined;
       const streamOptions: VoiceStepOptions = {
         ...(replyOpts ?? {}),
+        relationshipEvolutionHandled: true,
         ...(options.acquireCognitiveContext
           ? { acquireCognitiveContext: options.acquireCognitiveContext }
           : {}),
@@ -1115,7 +1099,7 @@ export function makeHybridReply(options: HybridReplyOptions = {}): HybridReplyHa
         if (correction) yield ` ${correction}`;
       }
       if (completed && !replyOpts?.signal?.aborted) {
-        await evolveRelationship(heard);
+        await evolveRelationshipFromUtterance(heard);
         remember(
           heard,
           [replyOpts?.spokenPrefix, completed, correction].filter(Boolean).join(' '),
