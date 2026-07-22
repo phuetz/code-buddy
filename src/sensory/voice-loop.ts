@@ -72,6 +72,7 @@ import {
   detectEmotion,
   emotionalContinuityGuidance,
   emotionGuidance,
+  expressiveTextGuidance,
   immediateEmotionAcknowledgement,
   IMMEDIATE_EMOTION_ACKNOWLEDGEMENTS,
   openerKey,
@@ -1369,6 +1370,15 @@ export interface SpokenPromptAugmentationOptions {
    * Default false because voice already sends the bounded raw history.
    */
   includeRecentDialogue?: boolean;
+  /** Injectable environment for feature-gate tests. Defaults to `process.env`. */
+  env?: NodeJS.ProcessEnv;
+}
+
+/** Explicit override, otherwise expressive text follows the existing relational opt-in. */
+export function isExpressiveVoiceTextEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
+  const configured = env.CODEBUDDY_VOICE_EXPRESSIVE_TEXT;
+  if (configured !== undefined) return configured === 'true';
+  return env.CODEBUDDY_COMPANION_RELATIONAL === 'true';
 }
 
 /** Default think: a short companion reply from the fastest capable LLM ($0 when local).
@@ -1496,16 +1506,19 @@ export async function buildSpokenPromptAugmentation(
   delivery?: VoiceDeliveryProfile,
   options: SpokenPromptAugmentationOptions = {},
 ): Promise<string> {
+  const env = options.env ?? process.env;
   const includeRecentDialogue =
     options.includeRecentDialogue ??
-    process.env.CODEBUDDY_VOICE_INCLUDE_RECENT_DIALOGUE === 'true';
+    env.CODEBUDDY_VOICE_INCLUDE_RECENT_DIALOGUE === 'true';
+  const emotion = detectEmotion(heard);
   const guidance = [
     // Safety first: an acute-distress / self-harm signal in what he just said takes priority over
     // every other tone/continuity instruction for this turn (see crisis-safety.ts). Empty otherwise.
     crisisGuidanceFor(heard),
     prepareConversationTurn(heard, history, { includeRecentDialogue }).systemGuidance,
     delivery ? voiceDeliveryGuidance(delivery) : '',
-    emotionGuidance(detectEmotion(heard)),
+    emotionGuidance(emotion),
+    isExpressiveVoiceTextEnabled(env) ? expressiveTextGuidance(emotion) : '',
     emotionalContinuityGuidance(heard, history),
     spokenPrefix
       ? `Tu as déjà dit à voix haute : « ${spokenPrefix} » Enchaîne sans répéter cette idée ni cette formulation. Commence directement par la prochaine phrase utile du plan conversationnel.`

@@ -15,6 +15,7 @@ import {
   emotionToSignal,
   emotionGuidance,
   emotionalContinuityGuidance,
+  expressiveTextGuidance,
   textEmotionGuidance,
   buildTextEmotionalPresenceContext,
   immediateEmotionAcknowledgement,
@@ -137,6 +138,21 @@ describe('immediateEmotionAcknowledgement', () => {
     );
     expect(immediateEmotionAcknowledgement({ emotion: 'neutral', intensity: 'normal' })).toBeNull();
     expect(immediateEmotionAcknowledgement({ emotion: 'joy', intensity: 'normal' })).toBeNull();
+  });
+});
+
+describe('expressiveTextGuidance', () => {
+  it.each([
+    ['frustration', /excuse br[eè]ve|apaise/i],
+    ['sadness', /douceur|questions ouvertes/i],
+    ['joy', /enthousiasme/i],
+  ] as const)('maps %s to its spoken writing tone', (emotion, expected) => {
+    const guidance = expressiveTextGuidance({ emotion, intensity: 'normal' });
+
+    expect(guidance).toMatch(expected);
+    expect(guidance).toContain('Ah, Hmm, Oh');
+    expect(guidance).toContain('…');
+    expect(guidance).toMatch(/phrases courtes/i);
   });
 });
 

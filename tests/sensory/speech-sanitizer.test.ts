@@ -54,8 +54,14 @@ describe('prepareSpeech — the gate before text reaches the speakers', () => {
   });
 
   it('spaces short uppercase acronyms and canonicalizes vocal punctuation', () => {
-    expect(prepareSpeech('Le PDF… est prêt!!! 😄')).toBe('Le P D F. est prêt!');
+    expect(prepareSpeech('Le PDF… est prêt!!! 😄')).toBe('Le P D F… est prêt!');
     expect(prepareSpeech('Alpha — bêta???')).toBe('Alpha, bêta?');
+  });
+
+  it('preserves natural attack interjections and expressive punctuation for prosody', () => {
+    expect(prepareSpeech('Ah, oui… Hmm, on peut essayer ! Oh, attends.')).toBe(
+      'Ah, oui… Hmm, on peut essayer ! Oh, attends.',
+    );
   });
 
   it('turns list bullets into spoken comma pauses', () => {

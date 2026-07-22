@@ -260,6 +260,34 @@ export function emotionGuidance(read: EmotionRead): string {
   return base;
 }
 
+/**
+ * Text-level prosody controls for autoregressive local TTS. The directive changes only surface
+ * writing: punctuation, sentence length and an occasional natural attack interjection.
+ */
+export function expressiveTextGuidance(read: EmotionRead): string {
+  let emotionalTone = '';
+  switch (read.emotion) {
+    case 'frustration':
+      emotionalTone = 'Face à la frustration, ouvre par une excuse brève et sincère, puis apaise.';
+      break;
+    case 'sadness':
+      emotionalTone = 'Face à la tristesse, privilégie la douceur et les questions ouvertes.';
+      break;
+    case 'joy':
+      emotionalTone = "Face à la joie, laisse entendre un enthousiasme naturel.";
+      break;
+    default:
+      break;
+  }
+  return [
+    '<expressive_spoken_text>',
+    'Écris pour une voix autoregressive : ponctuation expressive (virgules pour respirer, … pour la suspension, ! avec parcimonie), interjections d’attaque quand c’est naturel (Ah, Hmm, Oh), phrases courtes quand l’émotion monte.',
+    emotionalTone,
+    'N’ajoute jamais une interjection mécaniquement : elle doit rester rare, naturelle et adaptée au sens.',
+    '</expressive_spoken_text>',
+  ].filter(Boolean).join('\n');
+}
+
 /** A very short, prewarm-friendly first response that can be spoken while the model thinks. */
 export function immediateEmotionAcknowledgement(read: EmotionRead): string | null {
   return IMMEDIATE_EMOTION_ACKNOWLEDGEMENTS[read.emotion] ?? null;

@@ -124,7 +124,8 @@ export function prepareSpeech(raw: string): string | null {
   t = t.replace(/^\s*(?:[-*+•▪◦‣]|\d+[.)])\s+/gmu, ', ');
   t = stripSpeechMarkdown(t);
   t = t.replace(EMOJI_RUN, ' ');
-  t = t.replace(/…/gu, '.');
+  // Keep the ellipsis and attack interjections generated as text-level prosody controls. Pocket
+  // TTS uses this punctuation to produce a real suspension rather than a plain sentence stop.
   t = t.replace(/!+/gu, '!').replace(/\?+/gu, '?');
   // Lists and standalone dashes become pauses, without breaking compounds such
   // as "peut-être" or the hyphens produced by French number words.
