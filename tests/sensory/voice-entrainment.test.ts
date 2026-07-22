@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  applyEmotionalModulation,
   deriveVoiceDeliveryProfile,
   voiceDeliveryGuidance,
   voiceRendererDeliveryInstruction,
@@ -65,5 +66,71 @@ describe('voice entrainment', () => {
 
     expect(instruction).toContain(`${profile.targetWpm} words per minute`);
     expect(instruction).not.toMatch(/Lisa|Patrice|personality/i);
+  });
+
+  it.each([
+    ['sadness', 132],
+    ['tired', 132],
+  ])('slows and softens a %s read', (label, targetWpm) => {
+    const profile = deriveVoiceDeliveryProfile('je prends un rythme régulier', {
+      emotion: { label, intensity: 1 },
+    });
+
+    expect(profile).toMatchObject({
+      pace: 'slow',
+      pauseStyle: 'reflective',
+      targetWpm,
+    });
+  });
+
+  it('uses a low mood as a reflective fallback for a neutral utterance', () => {
+    const profile = deriveVoiceDeliveryProfile('on continue', { mood: 'lasse' });
+
+    expect(profile).toMatchObject({ pace: 'slow', pauseStyle: 'reflective', targetWpm: 132 });
+  });
+
+  it.each(['joy', 'radieuse', 'joyeuse'])('makes a %s register brisk and light', (label) => {
+    const context = label === 'joy'
+      ? { emotion: { label, intensity: 1 } }
+      : { mood: label };
+    const profile = deriveVoiceDeliveryProfile('on continue', context);
+
+    expect(profile).toMatchObject({ pace: 'brisk', pauseStyle: 'light', targetWpm: 171 });
+  });
+
+  it('responds to frustration with calming pauses and only a slight WPM reduction', () => {
+    const profile = deriveVoiceDeliveryProfile('ça ne marche toujours pas', {
+      emotion: { label: 'frustration', intensity: 1 },
+    });
+
+    expect(profile).toMatchObject({ pace: 'slow', pauseStyle: 'reflective', targetWpm: 147 });
+  });
+
+  it('keeps emotionally modulated WPM inside the existing acoustic target bounds', () => {
+    const low = applyEmotionalModulation(
+      { ...deriveVoiceDeliveryProfile('un rythme neutre'), targetWpm: 105 },
+      { emotion: { label: 'sadness', intensity: 1 } },
+    );
+    const high = applyEmotionalModulation(
+      { ...deriveVoiceDeliveryProfile('un rythme neutre'), targetWpm: 195 },
+      { emotion: { label: 'joy', intensity: 1 } },
+    );
+
+    expect(low.targetWpm).toBe(105);
+    expect(high.targetWpm).toBe(195);
+  });
+
+  it('is byte-identical when neither emotion nor mood is supplied', () => {
+    const baseline = deriveVoiceDeliveryProfile('on parle à un rythme régulier', {
+      audioMs: 2_400,
+    });
+    const explicitEmpty = deriveVoiceDeliveryProfile('on parle à un rythme régulier', {
+      audioMs: 2_400,
+      emotion: undefined,
+      mood: undefined,
+    });
+
+    expect(JSON.stringify(explicitEmpty)).toBe(JSON.stringify(baseline));
+    expect(applyEmotionalModulation(baseline, {})).toBe(baseline);
   });
 });

@@ -79,6 +79,11 @@ import {
 } from '../companion/reply-augment.js';
 import { crisisGuidanceFor } from '../companion/crisis-safety.js';
 import {
+  loadRelationshipState,
+  moodBand,
+  personalityOf,
+} from '../companion/relationship-state.js';
+import {
   deriveVoiceDeliveryProfile,
   voiceDeliveryGuidance,
   voiceRendererDeliveryInstruction,
@@ -94,6 +99,32 @@ import {
 import { VisualConsentGate } from '../companion/visual-consent.js';
 import { getVoiceTurnCoordinator } from './voice-turn-coordinator.js';
 import { resolvePocketLanguage } from '../talk-mode/providers/pocket-tts.js';
+
+/** Derive relational prosody without changing the bare voice-loop default. */
+export function deriveSpokenDeliveryProfile(
+  heard: string,
+  context?: VoiceTurnContext,
+  env: NodeJS.ProcessEnv = process.env,
+): VoiceDeliveryProfile {
+  if (env.CODEBUDDY_COMPANION_RELATIONAL !== 'true') {
+    return deriveVoiceDeliveryProfile(heard, context);
+  }
+  const read = detectEmotion(heard);
+  let mood: string | undefined;
+  try {
+    mood = moodBand(personalityOf(loadRelationshipState()).mood);
+  } catch {
+    /* mood is best-effort; the local emotional read still tunes delivery */
+  }
+  return deriveVoiceDeliveryProfile(heard, {
+    ...context,
+    emotion: {
+      label: read.emotion,
+      intensity: read.intensity === 'high' ? 1 : 0.75,
+    },
+    ...(mood ? { mood } : {}),
+  });
+}
 
 /**
  * Cancellation handle threaded into the two interruptible steps of a spoken turn: the
@@ -1608,7 +1639,7 @@ export async function defaultReply(
   }
   let cognitiveLease: VoiceCognitiveContextLease | undefined;
   try {
-    const delivery = replyOpts?.delivery ?? deriveVoiceDeliveryProfile(heard);
+    const delivery = replyOpts?.delivery ?? deriveSpokenDeliveryProfile(heard);
     const prepared = await prepareSpokenTurn(
       heard,
       history,
@@ -1673,7 +1704,7 @@ export async function defaultSpokenPrefix(
 ): Promise<string> {
   try {
     if (replyOpts?.signal?.aborted) return '';
-    const delivery = replyOpts?.delivery ?? deriveVoiceDeliveryProfile(heard);
+    const delivery = replyOpts?.delivery ?? deriveSpokenDeliveryProfile(heard);
     // Prefix generation deliberately does not acquire/commit resident cognitive context: the
     // hybrid semantic gate has not accepted this private draft yet.
     const prepared = await prepareSpokenTurn(
@@ -1751,7 +1782,7 @@ export async function* streamCompanionReply(
       full = `${acknowledgement} `;
       yield full;
     }
-    const delivery = replyOpts?.delivery ?? deriveVoiceDeliveryProfile(heard);
+    const delivery = replyOpts?.delivery ?? deriveSpokenDeliveryProfile(heard);
     const prepared = await prepareSpokenTurn(
       heard,
       history,
@@ -2512,7 +2543,7 @@ export function makeVoiceReply(options: VoiceReplyOptions = {}): VoiceReplyHandl
         ? makeDefaultStreamSpeak(playerPromise, turnTtsEngine)
         : undefined
     );
-    const delivery = deriveVoiceDeliveryProfile(heard, context);
+    const delivery = deriveSpokenDeliveryProfile(heard, context, env);
     const startedAt = Date.now();
     let replyMs = 0;
     let synthMs = 0;
