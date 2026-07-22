@@ -80,6 +80,11 @@ import {
 } from '../companion/reply-augment.js';
 import { crisisGuidanceFor } from '../companion/crisis-safety.js';
 import {
+  buildMemoryCallback,
+  memoryCallbackHash,
+  shouldOfferCallback,
+} from '../companion/voice-callbacks.js';
+import {
   loadRelationshipState,
   moodBand,
   personalityOf,
@@ -1372,6 +1377,8 @@ export interface SpokenPromptAugmentationOptions {
   includeRecentDialogue?: boolean;
   /** Injectable environment for feature-gate tests. Defaults to `process.env`. */
   env?: NodeJS.ProcessEnv;
+  /** Injectable latency-bounded relational snapshot. */
+  relationalContext?: () => Promise<string>;
 }
 
 /** Explicit override, otherwise expressive text follows the existing relational opt-in. */
@@ -1387,6 +1394,32 @@ export function isExpressiveVoiceTextEnabled(env: NodeJS.ProcessEnv = process.en
  *  hybrid reply can reuse the exact same persona-voiced warm path for small talk. */
 /** Recent reply openings (first few words), so the companion doesn't reuse the same entry twice. */
 let recentReplyOpeners: string[] = [];
+let lastVoiceMemoryCallbackAt: number | undefined;
+let offeredVoiceMemoryCallbackHashes: string[] = [];
+
+function recentEpisodeFromRelationalContext(context: string): string | null {
+  return /<recent_episode>\s*([\s\S]*?)\s*<\/recent_episode>/u.exec(context)?.[1]?.trim() ?? null;
+}
+
+function memoryCallbackGuidance(relationalContext: string, env: NodeJS.ProcessEnv): string {
+  const now = Date.now();
+  if (!shouldOfferCallback(now, lastVoiceMemoryCallbackAt, env)) return '';
+  const callback = buildMemoryCallback(
+    recentEpisodeFromRelationalContext(relationalContext),
+    new Set(offeredVoiceMemoryCallbackHashes),
+  );
+  if (!callback) return '';
+
+  lastVoiceMemoryCallbackAt = now;
+  offeredVoiceMemoryCallbackHashes.push(memoryCallbackHash(callback));
+  offeredVoiceMemoryCallbackHashes = offeredVoiceMemoryCallbackHashes.slice(-64);
+  return [
+    '<spoken_memory_callback>',
+    `Ouvre naturellement la réponse par ce rappel issu du journal, sans le compléter ni inventer : « ${callback} »`,
+    'N’affirme aucun autre souvenir et poursuis seulement à partir de ce que l’utilisateur vient de dire.',
+    '</spoken_memory_callback>',
+  ].join('\n');
+}
 
 const REPEATED_OPENER_REWRITES: ReadonlyArray<{
   pattern: RegExp;
@@ -1529,10 +1562,19 @@ export async function buildSpokenPromptAugmentation(
     .join('\n');
 
   let relational = '';
-  if (process.env.CODEBUDDY_COMPANION_RELATIONAL === 'true') {
+  let memoryCallback = '';
+  if (env.CODEBUDDY_COMPANION_RELATIONAL === 'true') {
     try {
-      const { getVoiceRelationalContext } = await import('../companion/relational-context.js');
-      relational = await getVoiceRelationalContext();
+      const getRelationalContext = options.relationalContext ?? (async () => {
+        const { getVoiceRelationalContext } = await import('../companion/relational-context.js');
+        return getVoiceRelationalContext();
+      });
+      relational = await getRelationalContext();
+      // Reuse the already latency-bounded episode read embedded in relational context: no second
+      // storage access or model/audio round-trip is added to the first-sound path.
+      if (emotion.emotion === 'neutral') {
+        memoryCallback = memoryCallbackGuidance(relational, env);
+      }
     } catch {
       /* a missing relational source must never delay or break speech */
     }
@@ -1554,7 +1596,7 @@ export async function buildSpokenPromptAugmentation(
     /* continuity is best-effort and must never delay or break speech */
   }
 
-  return [relational, sharedRelationship, guidance].filter(Boolean).join('\n\n');
+  return [memoryCallback, relational, sharedRelationship, guidance].filter(Boolean).join('\n\n');
 }
 
 async function prepareSpokenTurn(

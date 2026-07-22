@@ -727,6 +727,30 @@ describe('voice loop — emotional prompt defaults', () => {
     expect(disabled).not.toContain('<expressive_spoken_text>');
   });
 
+  it('offers a journal-backed callback through the relational voice gate without another read', async () => {
+    const prompt = await buildSpokenPromptAugmentation(
+      'on continue ici',
+      [],
+      undefined,
+      undefined,
+      {
+        env: {
+          CODEBUDDY_COMPANION_RELATIONAL: 'true',
+          CODEBUDDY_VOICE_CALLBACK_GAP_MS: '0',
+        },
+        relationalContext: async () => [
+          '<recent_episode>',
+          "Dernier point de l'utilisateur : Le point courant. Point encore ouvert : Reprendre le test vocal demain.",
+          '</recent_episode>',
+        ].join('\n'),
+      },
+    );
+
+    expect(prompt).toContain('<spoken_memory_callback>');
+    expect(prompt).toContain('Reprendre le test vocal demain');
+    expect(prompt).toMatch(/sans le compl[ée]ter ni inventer/i);
+  });
+
   it('carries recent emotional context into a neutral follow-up without forcing it', async () => {
     process.env.CODEBUDDY_COMPANION_RELATIONAL = 'false';
     const prompt = await buildSpokenPromptAugmentation('oui, je comprends', [
