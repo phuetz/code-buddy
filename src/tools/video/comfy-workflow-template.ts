@@ -3,8 +3,11 @@
 export type WorkflowPatchRole =
   | 'seed'
   | 'prompt'
+  | 'insertPrompt'
   | 'negative'
   | 'inputImage'
+  | 'characterImage'
+  | 'locationImage'
   | 'endImage'
   | 'inputVideo'
   | 'frames'
@@ -36,7 +39,14 @@ export interface TemplateRoleSelector {
 }
 
 export interface TemplateContract {
-  id: 'keyframe-flux' | 'i2v-wan-lightx2v' | 'i2v-wan-flf2v' | 'upscale-seedvr2' | 'interpolate-rife';
+  id:
+    | 'keyframe-flux'
+    | 'insert-qwen-edit'
+    | 'insert-qwen-edit-relight'
+    | 'i2v-wan-lightx2v'
+    | 'i2v-wan-flf2v'
+    | 'upscale-seedvr2'
+    | 'interpolate-rife';
   required: readonly TemplateClassRequirement[];
   roles: Readonly<Partial<Record<WorkflowPatchRole, readonly TemplateRoleSelector[]>>>;
 }
@@ -54,7 +64,19 @@ export interface LoadedWorkflowTemplate {
 
 export type WorkflowPatch =
   | { role: 'seed'; value: number }
-  | { role: 'prompt' | 'negative' | 'inputImage' | 'endImage' | 'inputVideo' | 'outputPrefix'; value: string }
+  | {
+      role:
+        | 'prompt'
+        | 'insertPrompt'
+        | 'negative'
+        | 'inputImage'
+        | 'characterImage'
+        | 'locationImage'
+        | 'endImage'
+        | 'inputVideo'
+        | 'outputPrefix';
+      value: string;
+    }
   | { role: 'frames'; value: number }
   | { role: 'resolution'; value: { width: number; height: number } | number };
 
