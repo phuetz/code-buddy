@@ -2421,6 +2421,16 @@ addLazyCommand(
 
 addLazyCommand(
   program,
+  'influencer',
+  'Influencer & book-trailer media pipeline (scripts/influencer)',
+  async () => {
+    const { createInfluencerCommand } = await import('./commands/influencer.js');
+    return createInfluencerCommand();
+  },
+);
+
+addLazyCommand(
+  program,
   'maison',
   'Household rhythm, holidays, quiet modes and private meal safety',
   async () => {

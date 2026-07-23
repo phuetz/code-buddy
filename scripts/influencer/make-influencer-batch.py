@@ -9,8 +9,10 @@ import os, json, urllib.request, subprocess, sys
 SP=WORKDIR
 KEY=next(l.split('=',1)[1].strip() for l in open(os.path.expanduser('~/.codebuddy/media.env')) if l.startswith('ELEVENLABS_API_KEY='))
 LISA_VOICE='3fxbs2pB9bs8S6Z1N38A'  # Céline FR confident (persona Lisa)
-LISA_CLIPS=[os.path.expanduser('~/Videos/personas/lisa-hotel-soiree.mp4'),
-            os.path.expanduser('~/Videos/lisa-tests/07-pilote-v3-lora-production.mp4')]
+import glob as _glob
+LISA_CLIPS=[os.path.expanduser('~/Videos/personas/lisa-hotel-soiree.mp4')] \
+    + sorted(_glob.glob(os.path.expanduser('~/Videos/personas/lisa-flow/sc*.mp4'))) \
+    or [os.path.expanduser('~/Videos/lisa-tests/07-pilote-v3-lora-production.mp4')]
 MUSIC=os.path.expanduser("~/.codebuddy/media-audio/music/elegant/ES_Somewhat Elegant - Dye O.mp3")
 W,H=1080,1920; GAP=0.35; XF=0.3
 
