@@ -32,7 +32,18 @@ c.cmd('Browser.setDownloadBehavior',{'behavior':'allow','downloadPath':os.path.e
 def click(x,y,w=1.0):
     c.cmd('Input.dispatchMouseEvent',{'type':'mousePressed','x':x,'y':y,'button':'left','clickCount':1})
     c.cmd('Input.dispatchMouseEvent',{'type':'mouseReleased','x':x,'y':y,'button':'left','clickCount':1}); time.sleep(w)
-def vids(): return set(json.loads(c.ev("JSON.stringify([...document.querySelectorAll('video')].map(v=>v.currentSrc||v.src).filter(Boolean))") or '[]'))
+def vids(): return json.loads(c.ev("JSON.stringify([...document.querySelectorAll('video')].map(v=>v.currentSrc||v.src).filter(Boolean))") or '[]')
+def newest_matching(before, prompt):
+    """Anti-décalage Veo : prend la vidéo la plus récente (1re du DOM) et vérifie
+    que le prompt soumis apparaît dans le panneau (sinon on refuse le clip)."""
+    cur = vids()
+    fresh = [s for s in cur if s not in before]
+    if not fresh: return None
+    top = cur[0]                     # 1re du DOM = tuile la plus récente
+    if top not in fresh: return None # la plus récente n'est pas nouvelle -> retard d'un ancien job
+    frag = prompt[:38].replace("'", "’")
+    seen = c.ev(f"document.body.innerText.includes({json.dumps(frag)})")
+    return top if seen else None
 def errc(): return c.ev("[...document.querySelectorAll('*')].filter(e=>/Une erreur s.est produite|Échec/i.test(e.innerText||'')&&(e.innerText||'').length<40).length") or 0
 def fetch(src,out):
     r=c.cmd('Runtime.evaluate',{'expression':
@@ -51,7 +62,7 @@ for sid,prompt in SCENES:
     out=f'{OUT}/{sid}.mp4'
     if os.path.exists(out): print(f'{sid}: déjà',flush=True); done+=1; continue
     try:
-        before=vids(); e0=errc()
+        before=set(vids()); e0=errc()
         attach_lisa()
         click(700,772,0.6); c.cmd('Input.insertText',{'text':prompt+SUF}); time.sleep(1.2)
         click(1128,814,3)  # submit
@@ -59,8 +70,8 @@ for sid,prompt in SCENES:
         for _ in range(28):
             time.sleep(18)
             try:
-                fr=[s for s in vids() if s not in before]
-                if fr: new=fr[0]; break
+                new=newest_matching(before, prompt)
+                if new: break
                 if errc()>e0: failed=True; break
             except Exception as e: print(f'  poll {str(e)[:25]}'); continue
         if new and fetch(new,out): print(f'{sid}: OK',flush=True); done+=1
