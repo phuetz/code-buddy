@@ -1,11 +1,11 @@
 /**
- * Narration — Piper text-to-speech voiceover for the film producer.
+ * Narration — text-to-speech voiceover for the film producer.
  *
- * Turns a scene's narration TEXT into a spoken WAV via the local Piper binary
- * (offline, $0), then lets the producer bake it into that scene's clip. Design
- * mirrors the rest of `src/tools/video/`: pure argv builders + injectable spawn,
- * fail-open (no Piper / no voice / empty text ⇒ returns null, narration simply
- * skipped — never throws, never blocks a render).
+ * Turns a scene's narration TEXT into spoken audio via local Piper/Pocket TTS or
+ * explicitly selected ElevenLabs, then lets the producer bake it into that
+ * scene's clip. Design mirrors the rest of `src/tools/video/`: pure argv
+ * builders + injectable I/O, fail-open (missing provider / empty text ⇒ returns
+ * null, narration simply skipped — never throws, never blocks a render).
  *
  * The voice model is a Piper `.onnx` (with its `.onnx.json` beside it), resolved
  * from `CODEBUDDY_TTS_VOICE` / `CODEBUDDY_TTS_PIPER_MODEL`. The binary is `piper`
@@ -15,10 +15,15 @@
  */
 
 import { spawn as realSpawn } from 'child_process';
+import { readFile, unlink, writeFile } from 'node:fs/promises';
+import { homedir } from 'node:os';
+import { extname, join } from 'node:path';
 import { logger } from '../../utils/logger.js';
 
+export type NarrationProvider = 'auto' | 'elevenlabs' | 'pocket' | 'piper';
+
 export interface NarrationResult {
-  /** Path to the synthesized WAV. */
+  /** Path to the synthesized audio (WAV for film pipeline callers). */
   path: string;
   /** Duration in seconds (from ffprobe). */
   duration: number;
@@ -27,7 +32,7 @@ export interface NarrationResult {
   /** Logical profile ID, never a raw model path. */
   voiceProfileId?: string;
   /** Provider that produced a localized track. */
-  provider?: 'pocket' | 'piper';
+  provider?: 'elevenlabs' | 'pocket' | 'piper';
 }
 
 export interface VoiceProfileBase {
@@ -59,7 +64,12 @@ export interface LocalizedNarrationRequest {
 
 export interface NarrationDeps {
   spawn?: typeof realSpawn;
+  fetchImpl?: typeof fetch;
+  provider?: NarrationProvider;
+  elevenLabsVoiceId?: string;
+  mediaEnvPath?: string;
   piperBin?: string;
+  ffmpegBin?: string;
   ffprobeBin?: string;
   env?: NodeJS.ProcessEnv;
   timeoutMs?: number;
@@ -71,6 +81,8 @@ export interface NarrationDeps {
 }
 
 const SAMPLE_RATE = 48_000;
+const ELEVENLABS_API_URL = 'https://api.elevenlabs.io/v1';
+const ELEVENLABS_DEFAULT_VOICE = 'ecxPjiGTvAfpGEams6ec';
 
 /** Resolve the Piper voice model path from the environment (null if unset). */
 export function resolvePiperVoice(env: NodeJS.ProcessEnv = process.env): string | null {
@@ -81,6 +93,23 @@ export function resolvePiperVoice(env: NodeJS.ProcessEnv = process.env): string 
 /** Piper argv (pure). Reads text from stdin, writes a WAV to `outPath`. */
 export function buildPiperArgs(model: string, outPath: string): string[] {
   return ['--model', model, '--output_file', outPath];
+}
+
+/** ffmpeg argv to convert ElevenLabs' MP3 response to the film pipeline WAV. */
+export function buildElevenLabsWavArgs(mp3Path: string, outPath: string): string[] {
+  return [
+    '-y',
+    '-hide_banner',
+    '-loglevel',
+    'error',
+    '-i',
+    mp3Path,
+    '-ar',
+    String(SAMPLE_RATE),
+    '-ac',
+    '2',
+    outPath,
+  ];
 }
 
 /**
@@ -200,6 +229,130 @@ async function probeDuration(
   return Number.isFinite(n) && n > 0 ? Math.round(n * 100) / 100 : null;
 }
 
+function resolveNarrationProvider(
+  explicit: NarrationProvider | undefined,
+  env: NodeJS.ProcessEnv,
+): NarrationProvider {
+  if (explicit) return explicit;
+  const configured = (env.CODEBUDDY_TTS_ENGINE ?? '').trim().toLowerCase();
+  if (configured === 'elevenlabs' || configured === 'pocket' || configured === 'piper') {
+    return configured;
+  }
+  return 'auto';
+}
+
+async function resolveElevenLabsApiKey(
+  env: NodeJS.ProcessEnv,
+  mediaEnvPath: string,
+): Promise<string | null> {
+  const direct = env.ELEVENLABS_API_KEY?.replace(/\uFEFF/g, '').trim();
+  if (direct) return direct;
+
+  let contents: string;
+  try {
+    contents = await readFile(mediaEnvPath, 'utf8');
+  } catch {
+    return null;
+  }
+  for (const rawLine of contents.split(/\r?\n/)) {
+    const line = rawLine.replace(/\uFEFF/g, '').trim();
+    const separator = line.indexOf('=');
+    if (separator < 0 || line.slice(0, separator).trim() !== 'ELEVENLABS_API_KEY') continue;
+    const value = line.slice(separator + 1).replace(/\uFEFF/g, '').trim();
+    return value || null;
+  }
+  return null;
+}
+
+async function synthesizeElevenLabsNarration(
+  text: string,
+  outPath: string,
+  deps: NarrationDeps,
+  env: NodeJS.ProcessEnv,
+  spawn: typeof realSpawn,
+): Promise<boolean> {
+  const mediaEnvPath = deps.mediaEnvPath ?? join(homedir(), '.codebuddy', 'media.env');
+  const apiKey = await resolveElevenLabsApiKey(env, mediaEnvPath);
+  if (!apiKey) {
+    logger.warn(
+      '[narration] ElevenLabs selected but ELEVENLABS_API_KEY is unavailable — falling back to local TTS',
+    );
+    return false;
+  }
+
+  const voiceId =
+    deps.elevenLabsVoiceId?.trim() ||
+    env.CODEBUDDY_ELEVENLABS_VOICE?.trim() ||
+    ELEVENLABS_DEFAULT_VOICE;
+  const fetchImpl = deps.fetchImpl ?? fetch;
+  const timeoutMs = deps.timeoutMs ?? 60_000;
+
+  try {
+    const response = await fetchImpl(
+      `${ELEVENLABS_API_URL}/text-to-speech/${encodeURIComponent(voiceId)}`,
+      {
+        method: 'POST',
+        headers: {
+          'xi-api-key': apiKey,
+          'Content-Type': 'application/json',
+          Accept: 'audio/mpeg',
+        },
+        body: JSON.stringify({
+          text,
+          model_id: 'eleven_multilingual_v2',
+          voice_settings: {
+            stability: 0.45,
+            similarity_boost: 0.75,
+          },
+        }),
+        signal: AbortSignal.timeout(timeoutMs),
+      },
+    );
+    if (!response.ok) {
+      logger.warn(
+        `[narration] ElevenLabs synthesis failed (HTTP ${response.status}) — falling back to local TTS`,
+      );
+      return false;
+    }
+    const audio = Buffer.from(await response.arrayBuffer());
+    if (!audio.length) {
+      logger.warn('[narration] ElevenLabs returned empty audio — falling back to local TTS');
+      return false;
+    }
+
+    if (extname(outPath).toLowerCase() !== '.wav') {
+      await writeFile(outPath, audio);
+      return true;
+    }
+
+    const mp3Path = `${outPath}.elevenlabs.mp3`;
+    await writeFile(mp3Path, audio);
+    try {
+      const ffmpegBin = deps.ffmpegBin ?? env.CODEBUDDY_FFMPEG_BIN ?? 'ffmpeg';
+      const { code, stderr } = await run(
+        spawn,
+        ffmpegBin,
+        buildElevenLabsWavArgs(mp3Path, outPath),
+        timeoutMs,
+      );
+      if (code !== 0) {
+        logger.warn(
+          `[narration] ElevenLabs MP3 conversion failed (exit ${code}): ${stderr.trim().split('\n').slice(-2).join(' ')}`,
+        );
+        return false;
+      }
+      return true;
+    } finally {
+      await unlink(mp3Path).catch(() => undefined);
+    }
+  } catch (error) {
+    logger.warn(
+      `[narration] ElevenLabs synthesis failed: ${error instanceof Error ? error.message : String(error)} — falling back to local TTS`,
+    );
+    return false;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
@@ -220,10 +373,26 @@ export async function synthesizeNarration(
   const env = deps.env ?? process.env;
   const piperBin = deps.piperBin ?? env.CODEBUDDY_PIPER_BIN ?? 'piper';
   const ffprobeBin = deps.ffprobeBin ?? 'ffprobe';
+  const provider = resolveNarrationProvider(deps.provider, env);
+
+  // ElevenLabs is paid and therefore never selected by `auto`. A failed
+  // explicit request falls through to the existing local Piper/skip behavior.
+  if (provider === 'elevenlabs') {
+    const ok = await synthesizeElevenLabsNarration(trimmed, outPath, deps, env, spawn);
+    if (ok) {
+      const duration = await probeDuration(spawn, ffprobeBin, outPath);
+      if (duration != null) {
+        return { path: outPath, duration, provider: 'elevenlabs' };
+      }
+      logger.warn(
+        '[narration] could not probe ElevenLabs narration duration — falling back to local TTS',
+      );
+    }
+  }
 
   // Active engine: Pocket TTS (Lisa's estelle) when selected, else Piper. Pocket
   // is fail-open too — a failure falls through to Piper below.
-  if ((env.CODEBUDDY_TTS_ENGINE ?? '').trim().toLowerCase() === 'pocket') {
+  if (provider === 'pocket') {
     const ok = await synthesizePocketNarration(trimmed, outPath, env, deps.timeoutMs ?? 180_000);
     if (ok) {
       const duration = await probeDuration(spawn, ffprobeBin, outPath);

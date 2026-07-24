@@ -24,6 +24,7 @@ tech, 2 compilations YouTube, 49 plans B-roll Veo Quality, 12 Shorts influenceus
 | `broll-batch.py` | Banque B-roll premium via Flow/Veo (CDP) → `~/.codebuddy/media-video/broll/`. Idempotent (relancer = retenter les manquants). |
 | `lisa-clip-batch.py` | Clips persona Lisa via personnage Flow attaché (identité verrouillée). |
 | `hero-batch.py` | Régénère des plans hero de trailers en Veo Quality (écrase `shot-<id>.mp4`, backup `.omni.mp4`). |
+| `heygen-batch.py submit\|collect\|status` | Soumet et collecte les vidéos lipsync HeyGen via Brave CDP sur le port 9222. Prérequis : Brave lancé avec `--remote-debugging-port=9222` et session HeyGen déjà connectée. ⚠️ L’ordre de fin diffère de l’ordre de soumission : après collecte, QC obligatoire par transcription Whisper avant tout renommage. |
 | `en-narrations-all.py [livres…]` | Narrations anglaises (voix natives ElevenLabs) pour les trailers EN. |
 | `cdp-lib.py` | Mini client Chrome DevTools Protocol (WebSocket brut) : `get_tab(match)`, `CDP.ev/cmd`. |
 
