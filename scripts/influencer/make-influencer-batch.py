@@ -9,10 +9,12 @@ import os, json, urllib.request, subprocess, sys
 SP=WORKDIR
 KEY=next(l.split('=',1)[1].strip() for l in open(os.path.expanduser('~/.codebuddy/media.env')) if l.startswith('ELEVENLABS_API_KEY='))
 LISA_VOICE='3fxbs2pB9bs8S6Z1N38A'  # Céline FR confident (persona Lisa)
-# Avatar canonique = la Lisa du hall d'hôtel UNIQUEMENT (Flow character ne verrouille
-# pas l'identité de façon fiable -> ne pas mélanger de clips non vérifiés). Variété future
-# = via darkstar (LoRA ou qwen-edit character-in-location), pas Flow Ingredient.
-LISA_CLIPS=[os.path.expanduser('~/Videos/personas/lisa-hotel-soiree.mp4')]
+# Avatar canonique = la Lisa du hall d'hôtel. Banque de scènes vérifiées (identité
+# cohérente, générées via l'AGENT Flow + personnage « Lisa Officielle », 24/07) :
+# ~/Videos/personas/lisa-flow/ag*.mp4 — chaque clip contrôlé sur planche-contact.
+import glob as _glob
+LISA_CLIPS=[os.path.expanduser('~/Videos/personas/lisa-hotel-soiree.mp4')] \
+    + sorted(_glob.glob(os.path.expanduser('~/Videos/personas/lisa-flow/ag*.mp4')))
 MUSIC=os.path.expanduser("~/.codebuddy/media-audio/music/elegant/ES_Somewhat Elegant - Dye O.mp3")
 W,H=1080,1920; GAP=0.35; XF=0.3
 

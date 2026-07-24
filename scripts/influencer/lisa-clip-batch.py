@@ -10,17 +10,17 @@ if not _os.path.exists(_cdp): _cdp = '/tmp/cdp-lib.py'
 exec(open(_cdp).read().split("if __name__")[0])
 OUT=os.path.expanduser('~/Videos/personas/lisa-flow')
 os.makedirs(OUT,exist_ok=True)
-SUF=(" Photoréaliste, cinématographique, haute couture, éclairage flatteur, forte profondeur de champ, "
-     "elle regarde la caméra avec un léger sourire, vertical 9:16.")
+SUF=(" Elle a de longs cheveux bruns ondulés et une robe élégante. Photoréaliste, cinématographique, "
+     "haute couture, éclairage flatteur, forte profondeur de champ, elle regarde la caméra avec un léger sourire, vertical 9:16.")
 SCENES=[
  ('sc01',"Lisa marche vers la caméra sur le rooftop d'un bar la nuit, robe de cocktail noire, lumières de la ville derrière, glamour."),
  ('sc02',"Lisa sur le pont d'un yacht au coucher du soleil, robe d'été blanche légère, cheveux au vent, mer scintillante, luxe."),
  ('sc03',"Lisa dans une boutique de mode haut de gamme, elle effleure des vêtements, lumière douce, chic parisien."),
  ('sc04',"Lisa sur un balcon parisien au petit matin, peignoir de soie, une tasse de café à la main, toits de Paris dorés."),
- #('sc05',"Lisa dans une galerie d'art contemporain, tailleur élégant minimaliste, elle contemple une œuvre, raffinement."),
- #('sc06',"Lisa descend d'une berline de luxe le soir devant un palace, robe de soirée, ambiance red carpet floue, glamour."),
- #('sc07',"Lisa sur une terrasse de restaurant méditerranéen au crépuscule, robe estivale fluide, ambiance dolce vita."),
- #('sc08',"Lisa dans un penthouse moderne, loungewear chic beige, immense baie vitrée sur la skyline au soir."),
+ ('sc05',"Lisa dans une galerie d'art contemporain, tailleur élégant minimaliste, elle contemple une œuvre, raffinement."),
+ ('sc06',"Lisa descend d'une berline de luxe le soir devant un palace, robe de soirée, ambiance red carpet floue, glamour."),
+ ('sc07',"Lisa sur une terrasse de restaurant méditerranéen au crépuscule, robe estivale fluide, ambiance dolce vita."),
+ ('sc08',"Lisa dans un penthouse moderne, loungewear chic beige, immense baie vitrée sur la skyline au soir."),
 ]
 c=None
 for _a in range(6):
