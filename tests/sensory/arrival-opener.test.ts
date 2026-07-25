@@ -1,5 +1,13 @@
 import { describe, it, expect } from 'vitest';
-import { buildArrivalOpener, buildLlmArrivalOpener, pushRecent, ARRIVAL_RING_SIZE, ARRIVAL_TRIGGERS, templatePool } from '../../src/sensory/arrival-opener.js';
+import {
+  buildArrivalOpener,
+  buildLlmArrivalOpener,
+  isConfiguredUserIdentity,
+  pushRecent,
+  ARRIVAL_RING_SIZE,
+  ARRIVAL_TRIGGERS,
+  templatePool,
+} from '../../src/sensory/arrival-opener.js';
 
 // Local 08:00 → morning; constructed + read with local time so it's TZ-stable.
 const morningNow = new Date(2026, 5, 30, 8, 0, 0).getTime();
@@ -63,6 +71,18 @@ describe('buildArrivalOpener', () => {
     expect(withName.text).toContain('Patrice');
     expect(without.text).not.toContain('{{');
     expect(without.text).not.toContain('  '); // no double space left by the dropped token
+  });
+
+  it('uses a name only when the identity flag permits it', () => {
+    const opener = buildArrivalOpener({
+      now: morningNow,
+      name: 'Patrice',
+      recognizedUser: false,
+      rng: () => 0,
+    });
+    expect(opener.text).not.toContain('Patrice');
+    expect(isConfiguredUserIdentity('pAtRiCe', 'Patrice')).toBe(true);
+    expect(isConfiguredUserIdentity('Alice', 'Patrice')).toBe(false);
   });
 });
 

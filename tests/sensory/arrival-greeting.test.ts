@@ -24,6 +24,28 @@ function personEntered(): void {
   });
 }
 
+function identityPendingArrival(): void {
+  getGlobalEventBus().emit('sensory:perception', {
+    source: 'test',
+    metadata: {
+      modality: 'vision',
+      kind: 'person_entered',
+      payload: { identityPending: true },
+    },
+  });
+}
+
+function personIdentified(name: string, similarity = 0.7): void {
+  getGlobalEventBus().emit('sensory:perception', {
+    source: 'test',
+    metadata: {
+      modality: 'vision',
+      kind: 'person_identified',
+      payload: { name, similarity },
+    },
+  });
+}
+
 beforeEach(async () => {
   tmp = await mkdtemp(path.join(os.tmpdir(), 'greet-'));
 });
@@ -31,9 +53,35 @@ afterEach(async () => {
   await rm(tmp, { recursive: true, force: true });
   delete process.env.CODEBUDDY_SENSORY_GREET;
   delete process.env.CODEBUDDY_SENSORY_GREET_LLM;
+  delete process.env.CODEBUDDY_USER_NAME;
 });
 
 describe('arrival greeting — the robot notices and engages when someone arrives', () => {
+  it('waits for an opted-in identity result before greeting', async () => {
+    process.env.CODEBUDDY_SENSORY_GREET = 'true';
+    process.env.CODEBUDDY_USER_NAME = 'Patrice';
+    const greet = vi.fn(async () => {});
+    const random = vi.spyOn(Math, 'random').mockReturnValue(0);
+    const unwire = wireSemanticVisionReaction({
+      greet,
+      cwd: tmp,
+      now: () => new Date(2026, 5, 30, 8, 0, 0).getTime(),
+    });
+    try {
+      identityPendingArrival();
+      await tick();
+      expect(greet).not.toHaveBeenCalled();
+
+      personIdentified('PATRICE');
+      await waitForCalls(greet, 1);
+      expect(greet).toHaveBeenCalledTimes(1);
+      expect(greet.mock.calls[0]![0].length).toBeGreaterThan(0);
+    } finally {
+      unwire();
+      random.mockRestore();
+    }
+  });
+
   it('greets aloud on person_entered (opt-in) + opens the conversation window, with a cooldown', async () => {
     process.env.CODEBUDDY_SENSORY_GREET = 'true';
     const greet = vi.fn(async () => {});

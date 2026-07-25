@@ -28,6 +28,8 @@ export interface ArrivalContext {
   recent?: string[];
   /** Optional name to address (e.g. "Patrice"). */
   name?: string;
+  /** False when camera identity did not match the configured user. */
+  recognizedUser?: boolean;
   /** Detected state from the vision event (e.g. drowsy). */
   drowsy?: boolean;
   /** Randomness in [0,1). Default Math.random; inject for tests. */
@@ -151,7 +153,18 @@ export function buildArrivalOpener(ctx: ArrivalContext): ArrivalOpener {
   if (choices.length === 0) choices = pool; // pool of one — nothing else to pick
   const idx = Math.min(choices.length - 1, Math.floor(rng() * choices.length));
   const template = choices[idx] as string;
-  return { text: interpolate(template, ctx.name), trigger, template };
+  const safeName = ctx.recognizedUser === false ? undefined : ctx.name;
+  return { text: interpolate(template, safeName), trigger, template };
+}
+
+/** Pure identity gate used by the semantic camera reaction before naming an arrival. */
+export function isConfiguredUserIdentity(
+  identityName: string,
+  configuredName = process.env.CODEBUDDY_USER_NAME,
+): boolean {
+  const identity = identityName.trim().toLocaleLowerCase();
+  const configured = configuredName?.trim().toLocaleLowerCase() ?? '';
+  return Boolean(identity && configured && identity === configured);
 }
 
 // ---- Optional LLM opener (layered on top for real, non-scripted freshness) -------------------

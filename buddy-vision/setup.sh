@@ -20,6 +20,9 @@ else
   echo "[setup] optional YOLOv8 presence backend: BUDDY_VISION_INSTALL_YOLO=1 ./setup.sh"
 fi
 
+# Optional face identity recognition (explicit opt-in). Uncomment to install:
+# .venv/bin/pip install insightface onnxruntime
+
 mkdir -p models
 if [ ! -f models/face_landmarker.task ]; then
   curl -sL -o models/face_landmarker.task \

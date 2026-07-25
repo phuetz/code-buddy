@@ -12,7 +12,15 @@ import { logger } from '../utils/logger.js';
 import type { BaseEvent } from '../events/types.js';
 import { perceptionOf } from './reactions.js';
 import { sendTelegramAlert } from './alert.js';
-import { buildArrivalOpener, buildLlmArrivalOpener, loadArrivalState, saveArrivalState, pushRecent, type ArrivalChat } from './arrival-opener.js';
+import {
+  buildArrivalOpener,
+  buildLlmArrivalOpener,
+  isConfiguredUserIdentity,
+  loadArrivalState,
+  saveArrivalState,
+  pushRecent,
+  type ArrivalChat,
+} from './arrival-opener.js';
 import {
   safeCameraKeyframePath,
   telegramVisionPhotoPath,
@@ -73,6 +81,8 @@ export interface SemanticVisionOptions {
   now?: () => number;
   /** LLM chat seam for the opt-in natural opener (injectable for tests; default routes to the voice model). */
   llmChat?: ArrivalChat;
+  /** Local identity-presence hook. True only for CODEBUDDY_USER_NAME, compared case-insensitively. */
+  onIdentityChange?: (recognizedUserPresent: boolean) => void;
 }
 
 export function wireSemanticVisionReaction(options: SemanticVisionOptions = {}): () => void {
@@ -83,43 +93,119 @@ export function wireSemanticVisionReaction(options: SemanticVisionOptions = {}):
   const greetCooldownMs = Number(process.env.CODEBUDDY_SENSORY_GREET_COOLDOWN_MS) || 60_000;
   const now = options.now ?? (() => Date.now());
   let lastGreetAt = Number.NEGATIVE_INFINITY;
+  let awaitingIdentityGreeting = false;
+  let recognizedUserPresent = false;
 
   const id = bus.on('sensory:perception', (evt: BaseEvent) => {
     const p = perceptionOf(evt);
     // Own-property check (not `in`, and not bracket-access-!==-undefined — both walk the
     // prototype chain): a crafted frame with kind='toString'/'constructor' would otherwise pass
     // and interpolate an inherited Function into the alert/percept.
-    if (p.modality !== 'vision' || !p.kind || !Object.prototype.hasOwnProperty.call(CAMERA_MESSAGES, p.kind)) return;
+    const identityEvent = p.kind === 'person_identified';
+    if (
+      p.modality !== 'vision' ||
+      !p.kind ||
+      (!identityEvent && !Object.prototype.hasOwnProperty.call(CAMERA_MESSAGES, p.kind))
+    ) return;
     const kind = p.kind;
-    const payload = (p.payload ?? {}) as { imagePath?: string; camera?: string };
+    const payload = (p.payload ?? {}) as {
+      imagePath?: string;
+      camera?: string;
+      identityPending?: boolean;
+      name?: unknown;
+      similarity?: unknown;
+    };
+    if (kind === 'person_entered') {
+      recognizedUserPresent = false;
+      options.onIdentityChange?.(false);
+      awaitingIdentityGreeting = payload.identityPending === true;
+    } else if (kind === 'person_lost' || kind === 'person_left') {
+      recognizedUserPresent = false;
+      awaitingIdentityGreeting = false;
+      options.onIdentityChange?.(false);
+    }
+    const identityShouldOpenArrival = identityEvent && awaitingIdentityGreeting;
+    if (identityShouldOpenArrival) awaitingIdentityGreeting = false;
 
     void (async () => {
-      try {
-        const label = pickCameraMessage(kind);
-        const frame = await safeCameraKeyframePath(payload.imagePath);
-        const { recordCompanionPercept } = await import('../companion/percepts.js');
-        await recordCompanionPercept(
-          {
-            modality: 'vision',
-            source: 'semantic_vision_reaction',
-            summary: `${kind} → ${label}`,
-            confidence: 0.95,
-            payload: { event: kind, imagePath: frame, camera: payload.camera },
-            tags: ['vision', 'event', kind],
-          },
-          options.cwd ? { cwd: options.cwd } : {},
-        );
-        logger.info(`[vision] semantic event → ${kind}`);
-        await sendTelegramAlert(
-          `${label}${payload.camera ? ' (caméra locale)' : ''}`,
-          telegramVisionPhotoPath(frame),
-        );
-      } catch (err) {
-        logger.warn(`[vision] semantic reaction failed: ${err instanceof Error ? err.message : String(err)}`);
+      let arrivalName = kind === 'person_entered'
+        ? process.env.CODEBUDDY_USER_NAME?.trim()
+        : undefined;
+      let recognizedArrival = !identityEvent;
+      if (identityEvent) {
+        const rawName = typeof payload.name === 'string' ? payload.name.trim() : '';
+        const safeName = rawName &&
+          rawName.length <= 100 &&
+          !/[\u0000-\u001f\u007f-\u009f\u2028\u2029]/u.test(rawName)
+          ? rawName
+          : 'unknown';
+        const unknown = safeName.toLocaleLowerCase() === 'unknown';
+        const similarity = typeof payload.similarity === 'number' &&
+          Number.isFinite(payload.similarity)
+          ? Math.max(-1, Math.min(1, payload.similarity))
+          : undefined;
+        recognizedArrival = !unknown && isConfiguredUserIdentity(safeName);
+        recognizedUserPresent = recognizedArrival;
+        options.onIdentityChange?.(recognizedUserPresent);
+        arrivalName = recognizedArrival
+          ? process.env.CODEBUDDY_USER_NAME?.trim()
+          : undefined;
+        try {
+          const { recordCompanionPercept } = await import('../companion/percepts.js');
+          await recordCompanionPercept(
+            {
+              modality: 'vision',
+              source: 'semantic_vision_reaction',
+              summary: unknown ? 'personne inconnue' : `${safeName} est là`,
+              confidence: similarity ?? (unknown ? 0 : 1),
+              payload: {
+                event: kind,
+                name: safeName,
+                ...(similarity !== undefined ? { similarity } : {}),
+                camera: payload.camera,
+                recognizedUser: recognizedArrival,
+              },
+              tags: ['vision', 'identity', recognizedArrival ? 'configured-user' : 'other'],
+            },
+            options.cwd ? { cwd: options.cwd } : {},
+          );
+          logger.info(
+            `[vision] local identity percept → ${unknown ? 'unknown' : safeName}`,
+          );
+        } catch (err) {
+          logger.warn(`[vision] identity percept failed: ${err instanceof Error ? err.message : String(err)}`);
+        }
+      } else {
+        try {
+          const label = pickCameraMessage(kind);
+          const frame = await safeCameraKeyframePath(payload.imagePath);
+          const { recordCompanionPercept } = await import('../companion/percepts.js');
+          await recordCompanionPercept(
+            {
+              modality: 'vision',
+              source: 'semantic_vision_reaction',
+              summary: `${kind} → ${label}`,
+              confidence: 0.95,
+              payload: { event: kind, imagePath: frame, camera: payload.camera },
+              tags: ['vision', 'event', kind],
+            },
+            options.cwd ? { cwd: options.cwd } : {},
+          );
+          logger.info(`[vision] semantic event → ${kind}`);
+          await sendTelegramAlert(
+            `${label}${payload.camera ? ' (caméra locale)' : ''}`,
+            telegramVisionPhotoPath(frame),
+          );
+        } catch (err) {
+          logger.warn(`[vision] semantic reaction failed: ${err instanceof Error ? err.message : String(err)}`);
+        }
       }
 
       // Spoken greeting on arrival (separate guard so a Telegram/percept hiccup never mutes it).
-      if (kind === 'person_entered' && greetEnabled) {
+      const greetFromAnonymousArrival =
+        kind === 'person_entered' && payload.identityPending !== true;
+      const greetFromIdentity = identityShouldOpenArrival;
+      if ((greetFromAnonymousArrival || greetFromIdentity) && greetEnabled) {
         const t = now();
         if (t - lastGreetAt < greetCooldownMs) return;
         lastGreetAt = t;
@@ -133,7 +219,8 @@ export function wireSemanticVisionReaction(options: SemanticVisionOptions = {}):
             now: t,
             lastSeenAt: state.lastSeenAt ?? null,
             recent: state.recent,
-            ...(process.env.CODEBUDDY_USER_NAME ? { name: process.env.CODEBUDDY_USER_NAME } : {}),
+            ...(arrivalName ? { name: arrivalName } : {}),
+            recognizedUser: recognizedArrival,
           });
           let greeting = opener.text || persona.greeting || 'Bonjour ! Je suis là si tu as besoin.';
 
@@ -171,7 +258,7 @@ export function wireSemanticVisionReaction(options: SemanticVisionOptions = {}):
                 recentHeard,
                 ...(persona.spokenPrompt ? { personaPrompt: persona.spokenPrompt } : {}),
                 ...(relationalContext ? { relationalContext } : {}),
-                ...(process.env.CODEBUDDY_USER_NAME ? { name: process.env.CODEBUDDY_USER_NAME } : {}),
+                ...(arrivalName ? { name: arrivalName } : {}),
                 ...(options.llmChat ? { chat: options.llmChat } : {}),
               });
               if (llmLine) greeting = llmLine;
