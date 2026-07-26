@@ -145,6 +145,49 @@ HERO_KEPLER: list[tuple[str, str]] = [
     ('kepler05', 'A rotating black hole accretion disk bending starlight into a complete luminous ring while a tiny unmanned spacecraft crosses the foreground, scientifically inspired cinematic realism.' + COMMON_169),
 ]
 
+HERO_PATIENT_ZERO: list[tuple[str, str]] = [
+    (
+        'patient01',
+        'Inside a cramped sealed negative-pressure biocontainment laboratory deep underground, '
+        'dense stainless-steel benches, translucent containment curtains and dormant robotic '
+        'instruments press in around a single red warning beacon; cold cyan practical light, '
+        'faint condensation, a slow claustrophobic dolly through the narrow central aisle.'
+        + COMMON_169,
+    ),
+    (
+        'patient02',
+        'Extreme macro of one unlabelled cryogenic glass vial held upright in a dark sterile '
+        'sample rack, viscous crimson fluid stirring as a delicate red DNA double helix appears '
+        'only through optical refraction inside the liquid; frost crystals, laser-thin rim light, '
+        'slow controlled orbit, scientifically grounded medical-thriller tension.'
+        + COMMON_169,
+    ),
+    (
+        'patient03',
+        'A completely deserted European hospital isolation corridor after midnight, empty beds '
+        'and sealed plastic airlock doors receding into deep perspective, one red emergency light '
+        'pulsing at the far end while cold fluorescent fixtures extinguish sequentially toward '
+        'the camera; perfectly centered slow reverse dolly, no person or human silhouette.'
+        + COMMON_169,
+    ),
+    (
+        'patient04',
+        'Top-down cinematic view of a large physical world map table in a dark epidemiology '
+        'operations room, coastlines recognizable but every label absent; a single crimson point '
+        'blooms in Europe, then branching red transmission paths and hundreds of dim infection '
+        'clusters propagate organically across continents, subtle glass reflections, slow descent.'
+        + COMMON_169,
+    ),
+    (
+        'patient05',
+        'Moonlit interior of an abandoned Victorian glasshouse known as Le Jardin, ornate iron '
+        'ribs, wet panes, overgrown medicinal plants and drifting mist; at the distant end stands '
+        'one anonymous human silhouette in a long dark coat, seen only from behind with the face '
+        'fully hidden, motionless as red light slowly glows beneath the leaves; elegant slow push-in.'
+        + COMMON_169,
+    ),
+]
+
 RETRY_BROLL: list[tuple[str, str]] = [
     ('rb01', 'A dense wall of next-generation AI accelerator modules being cooled by transparent microfluidic channels, blue liquid moving through copper and glass, slow macro orbit.' + COMMON_169),
     ('rb02', 'Empty Paris financial district at dawn after rain, abstract market light reflected across glass towers and wet pavement, restrained aerial push forward.' + COMMON_169),
@@ -169,8 +212,19 @@ QUEUES = {
     'plates': (PLATES, '9:16', Path('~/.codebuddy/media-video/plates-916').expanduser(), 'p', 2),
     'hero-babel': (HERO_BABEL, '16:9', Path('~/Videos/babel-trailer/hero-v2').expanduser(), 'hero-', 2),
     'hero-kepler': (HERO_KEPLER, '16:9', Path('~/Videos/kepler-trailer/hero-v2').expanduser(), 'hero-', 2),
+    'hero-patient-zero': (
+        HERO_PATIENT_ZERO,
+        '16:9',
+        Path('~/Videos/patient-zero-trailer/hero-v2').expanduser(),
+        'hero-',
+        2,
+    ),
     'broll-retry': (RETRY_BROLL, '16:9', Path('~/.codebuddy/media-video/broll').expanduser(), 'b', 3),
     'plates-retry': (RETRY_PLATES, '9:16', Path('~/.codebuddy/media-video/plates-916').expanduser(), 'p', 2),
+}
+
+MICRO_RESERVES = {
+    'hero-patient-zero': 34,
 }
 
 
@@ -223,16 +277,23 @@ def save_state(state: dict[str, Any]) -> None:
     temp.replace(MISSION)
 
 
-def heygen_active() -> bool:
+def other_browser_batch_active() -> bool:
     own_pid = os.getpid()
     for proc in Path('/proc').iterdir():
         if not proc.name.isdigit() or int(proc.name) == own_pid:
             continue
         try:
-            cmd = (proc / 'cmdline').read_bytes().replace(b'\0', b' ').decode(errors='ignore')
+            args = [
+                arg.decode(errors='ignore')
+                for arg in (proc / 'cmdline').read_bytes().split(b'\0')
+                if arg
+            ]
         except (PermissionError, FileNotFoundError, ProcessLookupError):
             continue
-        if 'heygen-batch.py' in cmd:
+        if not args or not Path(args[0]).name.startswith('python'):
+            continue
+        script_names = {Path(arg).name for arg in args[1:]}
+        if {'heygen-batch.py', 'flow-veo-mission.py'} & script_names:
             return True
     return False
 
@@ -435,6 +496,7 @@ def valid_video(path: Path) -> bool:
 
 def run(category: str, limit: int | None) -> None:
     prompts, ratio, output_dir, prefix, width = QUEUES[category]
+    hard_reserve = MICRO_RESERVES.get(category, RESERVE_CREDITS)
     if limit is not None:
         prompts = prompts[:limit]
     state = load_state()
@@ -450,8 +512,8 @@ def run(category: str, limit: int | None) -> None:
     flow.configure(ratio)
 
     for prompt_id, prompt in prompts:
-        if heygen_active():
-            raise RuntimeError('ARRÊT GARDE-FOU : un processus heygen-batch.py est actif.')
+        if other_browser_batch_active():
+            raise RuntimeError('ARRÊT GARDE-FOU : un autre batch navigateur est actif.')
         attempt = len(state['records']) + 1
         if attempt > MAX_ATTEMPTS:
             print('BUDGET-STOP: plafond de sécurité des soumissions atteint.', flush=True)
@@ -466,7 +528,7 @@ def run(category: str, limit: int | None) -> None:
             # actually refunded. Read the live counter before every extra attempt.
             live_credits = flow.credits()
             print(f'CREDITS-AVANT-EXTRA-{attempt} {live_credits}', flush=True)
-            if live_credits < RESERVE_CREDITS + 100:
+            if live_credits < hard_reserve + 100:
                 print('BUDGET-STOP: compteur live protège la réserve.', flush=True)
                 break
             flow.configure(ratio)
@@ -538,7 +600,7 @@ def run(category: str, limit: int | None) -> None:
             record['creditsAfter'] = live_credits
             save_state(state)
             print(f'CREDITS-APRES-{attempt} {live_credits}', flush=True)
-            if live_credits < RESERVE_CREDITS + 100:
+            if live_credits < hard_reserve + 100:
                 print('BUDGET-STOP: compteur live protège la réserve.', flush=True)
                 break
             flow.configure(ratio)
