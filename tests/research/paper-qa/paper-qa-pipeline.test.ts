@@ -93,6 +93,7 @@ describe('runPaperQa (chained pipeline)', () => {
     expect(result.indexedPassages).toBeGreaterThanOrEqual(2);
     expect(result.pdfPathsConsidered).toBe(2);
     expect(result.retrievedPassages).toBeGreaterThan(0);
+    expect(result.indexedDocuments).toBe(2);
     expect(result.answer.sufficient).toBe(true);
     expect(result.answer.citations.length).toBeGreaterThan(0);
     // Semantic retrieval was available on this run (finding E).

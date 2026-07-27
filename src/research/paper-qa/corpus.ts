@@ -82,7 +82,7 @@ export async function buildCorpusIndex(
   const configFingerprint = fingerprintIndexConfiguration({
     // v2 excludes every cache/shard produced while simulated fallback vectors
     // were still possible.
-    schema: 2,
+    schema: 3,
     embeddingModel:
       indexOptions.embeddingModel ?? 'Xenova/paraphrase-multilingual-MiniLM-L12-v2',
     embedCharLimit: indexOptions.embedCharLimit ?? 2000,
@@ -111,7 +111,7 @@ export async function buildCorpusIndex(
       const doc = await parsePdfStructure(pdfPath, pdfDeps ?? {}, parseOptions ?? {});
       if (!doc) continue; // unreadable/encrypted/scanned → already logged by Phase 1
       await index.addDocument(doc);
-      if (persistent && sourceHash) {
+      if (persistent && sourceHash && index.lastAddedDocumentComplete) {
         persistent.save(
           pdfPath,
           sourceHash,
@@ -119,6 +119,7 @@ export async function buildCorpusIndex(
           index.exportDocument(doc.docId),
         );
       }
+      if (index.isFull()) break;
     } catch (err) {
       // Never let one bad PDF abort the corpus build.
       logger.debug(

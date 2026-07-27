@@ -185,4 +185,47 @@ describe('buildCorpusIndex', () => {
     const hits = await third.search('altered gait cadence protocol', { topN: 1 });
     expect(hits[0]!.passage.text).toContain('altered gait cadence');
   });
+
+  it('never persists a document shard truncated by the active passage cap', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'paper-qa-partial-'));
+    temporaryDirectories.push(directory);
+    const corpus: Record<string, string> = {
+      '/papers/large.pdf':
+        'First bounded sentence with enough prose to form one passage. ' +
+        'Second bounded sentence with enough prose to form another passage.',
+    };
+    let parseCalls = 0;
+    const deps: PdfStructureDeps = {
+      readFile: async (pdfPath) => Buffer.from(corpus[pdfPath] ?? '', 'utf8'),
+      parsePdf: async (data) => {
+        parseCalls += 1;
+        return {
+          pages: [{ num: 1, text: Buffer.from(data).toString('utf8') }],
+          total: 1,
+        };
+      },
+    };
+    const base = {
+      embedder: bowEmbedder(),
+      pdfDeps: deps,
+      persistentIndex: true,
+      persistentIndexDirectory: directory,
+      persistentEmbeddingCache: true,
+      chunkOptions: { targetChars: 50, overlapChars: 0 },
+    } as const;
+
+    const truncated = await buildCorpusIndex(['/papers/large.pdf'], {
+      ...base,
+      maxPassages: 1,
+    });
+    expect(truncated.size()).toBe(1);
+    expect(parseCalls).toBe(1);
+
+    const complete = await buildCorpusIndex(['/papers/large.pdf'], {
+      ...base,
+      maxPassages: 10,
+    });
+    expect(complete.size()).toBeGreaterThan(1);
+    expect(parseCalls).toBe(2);
+  });
 });

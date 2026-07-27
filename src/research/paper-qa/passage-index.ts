@@ -192,6 +192,8 @@ export class PassageIndex {
   private readonly embedCharLimit: number;
   private embedder: PassageEmbedder | null;
   private seq = 0;
+  private readonly indexedDocumentIds = new Set<string>();
+  private lastDocumentComplete = true;
   /** Whether the LAST {@link search} actually used its dense (semantic) leg. */
   private lastSearchSemanticAvailable = true;
   private semanticFallbackWarned = false;
@@ -225,6 +227,16 @@ export class PassageIndex {
     return this.passages.length >= this.maxPassages;
   }
 
+  /** Number of distinct documents that contributed at least one passage. */
+  documentCount(): number {
+    return this.indexedDocumentIds.size;
+  }
+
+  /** Whether the last `addDocument` fit completely and is safe to persist. */
+  get lastAddedDocumentComplete(): boolean {
+    return this.lastDocumentComplete;
+  }
+
   /**
    * Whether the LAST {@link search} used its dense (semantic) leg. `false` means
    * the embedder was unavailable and retrieval silently fell back to BM25
@@ -242,6 +254,7 @@ export class PassageIndex {
    * vector (they remain keyword-searchable). Respects the global passage cap.
    */
   async addDocument(doc: StructuredDoc): Promise<void> {
+    this.lastDocumentComplete = false;
     let chunks: Passage[];
     try {
       chunks = chunkDocument(doc, this.chunkOptions);
@@ -249,8 +262,16 @@ export class PassageIndex {
       logger.debug(`[paper-qa] chunkDocument failed, skipping doc: ${errText(err)}`);
       return;
     }
-    if (chunks.length === 0) return;
+    if (chunks.length === 0) {
+      this.lastDocumentComplete = true;
+      return;
+    }
+    if (chunks.length > this.maxPassages - this.passages.length) {
+      await this.addPassages(chunks);
+      return;
+    }
     await this.addPassages(chunks);
+    this.lastDocumentComplete = true;
   }
 
   /**
@@ -291,6 +312,7 @@ export class PassageIndex {
       const id = `p${this.seq++}`;
       this.bm25.addDocument({ id, content: passage.text });
       this.passages.push({ id, passage, embedding: vectors[i] ?? null });
+      this.indexedDocumentIds.add(passage.docId);
     }
   }
 

@@ -78,6 +78,8 @@ export interface PaperQaResult {
   pdfPathsConsidered: number;
   /** How many passages the corpus index actually holds (0 ⇒ nothing readable). */
   indexedPassages: number;
+  /** How many distinct documents contributed at least one indexed passage. */
+  indexedDocuments: number;
   /** How many passages the retrieval step surfaced before RCS filtering. */
   retrievedPassages: number;
   /**
@@ -150,6 +152,7 @@ export async function runPaperQa(
     answer,
     pdfPathsConsidered: paths.length,
     indexedPassages,
+    indexedDocuments: index.documentCount(),
     retrievedPassages: hits.length,
     // `lastSemanticAvailable` defaults to true when no search ran (empty index /
     // empty question), so those cases correctly report "not degraded".
@@ -206,7 +209,7 @@ export function formatPaperQaOutput(
   const header = [
     `# Paper QA : ${result.question}`,
     '',
-    `Corpus : ${result.indexedPassages} passage(s) indexé(s) depuis ${result.pdfPathsConsidered} PDF | ` +
+    `Corpus : ${result.indexedPassages} passage(s) indexé(s) depuis ${result.indexedDocuments}/${result.pdfPathsConsidered} PDF fourni(s) | ` +
       `récupérés : ${result.retrievedPassages} | retenus (RCS) : ${a.retainedCount}`,
     `Recherche : ${result.retrievalMode === 'hybrid' ? 'hybride (BM25 + sémantique)' : 'BM25 seul (MODE DÉGRADÉ)'}`,
     `Synthèse : ${a.llmUsed ? 'LLM' : 'indisponible'} | ` +
