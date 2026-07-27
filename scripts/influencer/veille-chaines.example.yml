@@ -1,51 +1,56 @@
-# Copiez ce fichier vers ~/.codebuddy/veille-chaines.yml pour personnaliser
-# les sources. Sans fichier local, veille-youtube.py utilise cette même liste.
+# Copier vers ~/.codebuddy/veille-chaines.yml pour remplacer la liste intégrée.
+# Vision IA reste volontairement en tête.
 channels:
-  - slug: vision-ia
-    name: Vision IA
+  - name: Vision IA
     channel_id: UCyc03X3uRuxM9n7fyRH_gIw
     language: fr
-    focus: Récapitulatifs IA, modèles, recherche et outils créatifs
+    focus: actualité IA, outils, science et biomédical
     enabled: true
-  - slug: parlons-ia-tech
-    name: Parlons IA & Tech
-    channel_id: UCrRlS6QE1DsKnLDksvaBkKA
-    language: fr
-    focus: Actualité IA hebdomadaire et nouveaux modèles
-    enabled: true
-  - slug: ludo-salenne
-    name: Ludo Salenne
+
+  - name: Ludo Salenne
     channel_id: UCnnYqSNKKygemgmxC9PyLTw
     language: fr
-    focus: Outils IA, automatisation et usages concrets
+    focus: outils IA concrets, automatisation et actualité
     enabled: true
-  - slug: le-turing-lab
-    name: Le Turing Lab
-    channel_id: UCbYzYnYEvYmMYjC2QV_QCOA
+
+  - name: Defend Intelligence
+    channel_id: UCnEHCrot2HkySxMTmDPhZyg
     language: fr
-    focus: Actualités, démonstrations et outils IA
+    focus: vulgarisation technique IA et machine learning
     enabled: true
-  - slug: matt-wolfe
-    name: Matt Wolfe
+
+  - name: Matt Wolfe
     channel_id: UChpleBmo18P08aKCIgti38g
     language: en
-    focus: Revue hebdomadaire des outils IA, dont image et vidéo
+    focus: revue hebdomadaire des outils et actualités IA
     enabled: true
-  - slug: ai-explained
-    name: AI Explained
-    channel_id: UCNJ1Ymd5yFuUPtn21xtRbbw
-    language: en
-    focus: Analyse critique des modèles et publications majeures
-    enabled: true
-  - slug: matthew-berman
-    name: Matthew Berman
+
+  - name: Matthew Berman
     channel_id: UCawZsQWqfGSbCI5yjkdVkTA
     language: en
-    focus: LLM, modèles ouverts, agents et tests rapides
+    focus: LLM ouverts, agents, code et benchmarks
     enabled: true
-  - slug: two-minute-papers
-    name: Two Minute Papers
+
+  - name: AI Explained
+    channel_id: UCNJ1Ymd5yFuUPtn21xtRbbw
+    language: en
+    focus: modèles, articles et analyse des annonces IA
+    enabled: true
+
+  - name: MattVidPro
+    channel_id: UC5Wz4fFacYuON6IKbhSa7Zw
+    language: en
+    focus: génération vidéo et image, modèles créatifs
+    enabled: true
+
+  - name: Theoretically Media
+    channel_id: UC9Ryt3XOGYBoAJVsBHNGDzA
+    language: en
+    focus: outils vidéo, image, voix et production média
+    enabled: true
+
+  - name: Two Minute Papers
     channel_id: UCbfYPyITQ-7l4upoX8nvctg
     language: en
-    focus: Recherche IA, vision, génération et robotique
+    focus: articles de recherche IA, vision et sciences
     enabled: true

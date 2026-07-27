@@ -1,10 +1,10 @@
 """Tests ciblés de la veille YouTube IA."""
 
-from contextlib import redirect_stderr
+import argparse
 import importlib.util
-import io
 from pathlib import Path
 import sys
+import tempfile
 import unittest
 
 
@@ -14,125 +14,201 @@ SCRIPT = (
     / 'influencer'
     / 'veille-youtube.py'
 )
-sys.path.insert(0, str(SCRIPT.parent))
 SPEC = importlib.util.spec_from_file_location('veille_youtube', SCRIPT)
 assert SPEC and SPEC.loader
-veille_youtube = importlib.util.module_from_spec(SPEC)
-sys.modules[SPEC.name] = veille_youtube
-SPEC.loader.exec_module(veille_youtube)
+veille = importlib.util.module_from_spec(SPEC)
+sys.modules[SPEC.name] = veille
+SPEC.loader.exec_module(veille)
 
 
 class VeilleYoutubeTest(unittest.TestCase):
-    def test_vision_ia_is_the_first_default_source(self) -> None:
-        first = veille_youtube.DEFAULT_CHANNELS[0]
-
-        self.assertEqual(first.name, 'Vision IA')
-        self.assertEqual(first.channel_id, 'UCyc03X3uRuxM9n7fyRH_gIw')
-
-    def test_vtt_cleanup_removes_tags_timestamps_and_duplicate_lines(
-        self,
-    ) -> None:
-        transcript = veille_youtube.clean_vtt(
-            'WEBVTT\n\n'
-            '00:00:00.000 --> 00:00:02.000\n'
-            '<c>Bonjour</c> le monde\n\n'
-            '00:00:02.000 --> 00:00:04.000\n'
-            '<00:00:02.100><c>Bonjour</c> le monde\n'
-            'Bernini &amp; LongCat\n'
+    def setUp(self) -> None:
+        self.channel = veille.Channel(
+            'Vision IA',
+            'UCyc03X3uRuxM9n7fyRH_gIw',
+            'fr',
+            'actualité IA',
+        )
+        self.video = veille.Video(
+            'HqIPj8HpwS0',
+            'Vision IA',
+            self.channel.channel_id,
+            "C'est fini pour Claude",
+            '2026-07-22T06:26:30+00:00',
+            'https://www.youtube.com/watch?v=HqIPj8HpwS0',
         )
 
+    def test_vtt_cleanup_removes_tags_timing_and_rolling_duplicates(self) -> None:
+        text = """WEBVTT
+Kind: captions
+Language: fr
+
+00:00:00.000 --> 00:00:02.000 align:start
+Voici <00:00:00.200><c>LongCat</c>
+
+00:00:02.000 --> 00:00:04.000 align:start
+Voici LongCat
+<c>pour générer des vidéos.</c>
+
+00:00:04.000 --> 00:00:06.000 align:start
+pour générer des vidéos.
+"""
         self.assertEqual(
-            transcript,
-            'Bonjour le monde\nBernini & LongCat',
+            veille.clean_vtt(text),
+            'Voici LongCat\npour générer des vidéos.\n',
         )
 
-    def test_youtube_atom_feed_is_parsed(self) -> None:
-        channel = veille_youtube.DEFAULT_CHANNELS[0]
-        videos = veille_youtube.parse_youtube_feed(
-            b'''<?xml version="1.0"?>
-            <feed xmlns="http://www.w3.org/2005/Atom"
+    def test_rss_parser_uses_known_channel_identity(self) -> None:
+        xml = b"""<?xml version="1.0"?>
+        <feed xmlns="http://www.w3.org/2005/Atom"
               xmlns:yt="http://www.youtube.com/xml/schemas/2015">
-              <entry>
-                <yt:videoId>HqIPj8HpwS0</yt:videoId>
-                <title>C'est fini pour Claude</title>
-                <published>2026-07-22T07:46:30+00:00</published>
-                <link rel="alternate"
-                  href="https://www.youtube.com/watch?v=HqIPj8HpwS0"/>
-              </entry>
-            </feed>''',
-            channel,
-        )
-
+          <entry>
+            <yt:videoId>HqIPj8HpwS0</yt:videoId>
+            <title>Une nouveaute IA</title>
+            <published>2026-07-22T06:26:30+00:00</published>
+          </entry>
+        </feed>"""
+        videos = veille.parse_feed(xml, self.channel)
         self.assertEqual(len(videos), 1)
+        self.assertEqual(videos[0].channel_name, 'Vision IA')
         self.assertEqual(videos[0].video_id, 'HqIPj8HpwS0')
-        self.assertEqual(videos[0].channel, channel)
 
-    def test_duplicate_tool_is_not_reported_twice(self) -> None:
-        state = veille_youtube.empty_state()
-        video = veille_youtube.Video(
-            'first',
-            'Première',
-            'https://example.test/first',
-            '2026-07-27',
-            veille_youtube.DEFAULT_CHANNELS[0],
+    def test_yaml_fallback_preserves_vision_ia_first(self) -> None:
+        parsed = veille.parse_simple_yaml(
+            """channels:
+  - name: Vision IA
+    channel_id: UCyc03X3uRuxM9n7fyRH_gIw
+    language: fr
+    focus: outils
+    enabled: true
+"""
         )
-        analysis = {
-            'video_summary': '',
-            'items': [{
-                'name': 'LongCat-Video',
-                'aliases': ['LongCat Video'],
-                'kind': 'video',
-                'what_it_does': 'Génère des vidéos longues.',
-                'use_case': 'Avatar.',
-                'code_buddy': {'score': 2, 'reason': 'Peu lié.'},
-                'media': {'score': 9, 'reason': 'Très utile.'},
-                'lisa_topic': {'score': 8, 'reason': 'Bon sujet.'},
-                'recommendation': 'a_tester',
-                'source_quote': '',
-            }],
+        self.assertEqual(parsed['channels'][0]['name'], 'Vision IA')
+        self.assertTrue(parsed['channels'][0]['enabled'])
+
+    def test_json_extraction_repairs_only_trailing_commas(self) -> None:
+        value = veille.extract_json(
+            '```json\n{"items": [{"name": "LongCat",},],}\n```'
+        )
+        self.assertEqual(value['items'][0]['name'], 'LongCat')
+
+    def test_report_video_guard_survives_a_lost_index(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'VEILLE-IA.md'
+            path.write_text(
+                '[source](https://www.youtube.com/watch?v=HqIPj8HpwS0)'
+            )
+            self.assertTrue(
+                veille.report_contains_video(path, 'HqIPj8HpwS0')
+            )
+            self.assertFalse(
+                veille.report_contains_video(path, 'abcdefghijk')
+            )
+
+    def test_targeted_video_is_not_reprocessed_without_force(self) -> None:
+        state = veille.default_state()
+        state['seen_videos'][self.video.video_id] = {
+            'analyzed_at': veille.now_iso()
         }
-        first, _ = veille_youtube.merge_analysis(
-            state,
-            video,
-            {},
-            analysis,
+        args = argparse.Namespace(
+            video_id=[self.video.video_id],
+            force=False,
         )
-        second_video = veille_youtube.Video(
-            'second',
-            'Deuxième',
-            'https://example.test/second',
-            '2026-07-28',
-            veille_youtube.DEFAULT_CHANNELS[0],
-        )
-        second, duplicates = veille_youtube.merge_analysis(
-            state,
-            second_video,
-            {},
-            analysis,
+        self.assertEqual(
+            veille.choose_videos((self.channel,), args, state),
+            [],
         )
 
+    def test_merge_deduplicates_family_across_videos(self) -> None:
+        raw = {
+            'items': [
+                {
+                    'name': 'Wan 2.2 Bernini',
+                    'family': 'Wan 2.2 Bernini',
+                    'kind': 'modèle',
+                    'description': 'Génère et assemble des vidéos.',
+                    'use_cases': ['montage'],
+                    'evidence': 'Bernini assemble la vidéo',
+                    'code_buddy': {'score': 2, 'justification': 'Peu direct.'},
+                    'media': {
+                        'score': 9,
+                        'justification': 'Très pertinent.',
+                        'a_tester': True,
+                    },
+                    'lisa': {'score': 8, 'justification': 'Bon sujet.'},
+                    'biomedical': {
+                        'score': 0,
+                        'justification': 'Aucun lien.',
+                    },
+                }
+            ]
+        }
+        items = veille.validate_analysis(raw)
+        state = veille.default_state()
+        first = veille.merge_items(state, self.video, items)
+        second_video = veille.Video(
+            'abcdefghijk',
+            'Vision IA',
+            self.channel.channel_id,
+            'Une autre vidéo',
+            '2026-07-23T00:00:00Z',
+            'https://www.youtube.com/watch?v=abcdefghijk',
+        )
+        second = veille.merge_items(state, second_video, items)
         self.assertEqual(len(first), 1)
         self.assertEqual(second, [])
-        self.assertEqual(duplicates, ['LongCat-Video'])
-        self.assertEqual(len(state['tools']), 1)
-
-    def test_simple_yaml_fallback_reads_channels(self) -> None:
-        value = veille_youtube.parse_simple_yaml(
-            'channels:\n'
-            '  - name: Vision IA\n'
-            '    channel_id: UCyc03X3uRuxM9n7fyRH_gIw\n'
-            '    enabled: true\n'
+        self.assertEqual(
+            state['items']['wan-2-2-bernini']['occurrences'],
+            2,
         )
 
-        self.assertEqual(value['channels'][0]['name'], 'Vision IA')
-        self.assertTrue(value['channels'][0]['enabled'])
-
-    def test_paid_or_non_gemini_model_is_rejected(self) -> None:
-        with redirect_stderr(io.StringIO()):
-            with self.assertRaises(SystemExit):
-                veille_youtube.parse_args(
-                    ['--model', 'claude-opus-4-6-thinking']
-                )
+    def test_biomedical_queue_contains_safety_notice_and_tag(self) -> None:
+        state = veille.default_state()
+        state['items']['alphagenome'] = {
+            'key': 'alphagenome',
+            'name': 'AlphaGenome',
+            'family': 'AlphaGenome',
+            'kind': 'modèle',
+            'description': "Prédit l'effet de variants.",
+            'use_cases': ['génomique'],
+            'evidence': 'analyse ADN',
+            'code_buddy': {
+                'score': 6,
+                'justification': 'RAG scientifique.',
+                'a_tester': False,
+            },
+            'media': {
+                'score': 0,
+                'justification': 'Aucun lien.',
+                'a_tester': False,
+            },
+            'lisa': {'score': 7, 'justification': 'Sujet science.'},
+            'biomedical': {
+                'score': 9,
+                'justification': 'Analyse de variants.',
+                'a_tester': True,
+            },
+            'first_seen': veille.now_iso(),
+            'last_seen': veille.now_iso(),
+            'occurrences': 1,
+            'sources': [
+                {
+                    'video_id': self.video.video_id,
+                    'title': self.video.title,
+                    'channel': self.video.channel_name,
+                    'published': self.video.published,
+                    'url': self.video.url,
+                }
+            ],
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'A-TESTER.md'
+            veille.write_test_queue(path, state)
+            output = path.read_text()
+        self.assertIn('Biomédical / recherche', output)
+        self.assertIn('Tag : `biomedical`', output)
+        self.assertIn('aucun avis médical', output)
+        self.assertIn('RGPD', output)
 
 
 if __name__ == '__main__':

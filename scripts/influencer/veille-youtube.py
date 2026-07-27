@@ -1,22 +1,27 @@
 #!/usr/bin/env python3
-"""Veille quotidienne des chaînes YouTube IA sans API payante.
+"""Veille YouTube IA gratuite pour Code Buddy, les médias et la recherche.
 
-Le script lit les flux RSS publics YouTube, télécharge les métadonnées et les
-sous-titres automatiques avec yt-dlp, puis confie l'extraction structurée à
-Gemini via ``agy``. Les vidéos et les outils déjà vus sont indexés afin que les
-relances et le timer systemd soient idempotents.
+Le collecteur lit les flux RSS publics des chaînes, télécharge uniquement les
+sous-titres automatiques avec yt-dlp, puis confie leur analyse à Gemini via
+``agy``. Aucune API YouTube ni API LLM payante n'est utilisée.
 
-Configuration facultative : ``~/.codebuddy/veille-chaines.yml``.
-Sorties : ``~/.codebuddy/veille/VEILLE-IA.md`` et ``A-TESTER.md``.
+Sorties par défaut :
+  ~/.codebuddy/veille/VEILLE-IA.md
+  ~/.codebuddy/veille/A-TESTER.md
+  ~/.codebuddy/veille/index.json
+  ~/.codebuddy/veille/journal.jsonl
+
+La configuration facultative ``~/.codebuddy/veille-chaines.yml`` remplace la
+liste intégrée. Voir ``veille-chaines.example.yml``.
 """
 
 from __future__ import annotations
 
 import argparse
+from collections import deque
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 import fcntl
-import hashlib
 import html
 import json
 import os
@@ -26,112 +31,114 @@ import shutil
 import subprocess
 import sys
 import tempfile
-from typing import Any, Iterable
+import time
+from typing import Any
 import unicodedata
+import urllib.error
 import urllib.request
 import xml.etree.ElementTree as ET
 
 
 DEFAULT_CONFIG = Path('~/.codebuddy/veille-chaines.yml').expanduser()
 DEFAULT_WORKDIR = Path('~/.codebuddy/veille').expanduser()
-DEFAULT_MODEL = 'gemini-3.6-flash-high'
-USER_AGENT = 'CodeBuddyYouTubeWatch/1.0 (+https://github.com/Patrice-Code/code-buddy)'
-ATOM_NS = {
-    'atom': 'http://www.w3.org/2005/Atom',
-    'yt': 'http://www.youtube.com/xml/schemas/2015',
-}
-VTT_TAG_RE = re.compile(r'<[^>]+>')
-VTT_TIME_RE = re.compile(
-    r'^(?:\d{1,2}:)?\d{2}:\d{2}[.,]\d{3}\s+-->\s+'
+DEFAULT_MODEL = 'gemini-3.6-flash-low'
+DEFAULT_DAYS = 14
+DEFAULT_MAX_VIDEOS = 2
+MAX_TRANSCRIPT_CHARS = 120_000
+USER_AGENT = 'CodeBuddy-YouTube-Watch/1.0 (+local RSS reader)'
+CHANNEL_ID = re.compile(r'^UC[A-Za-z0-9_-]{20,30}$')
+VIDEO_ID = re.compile(r'^[A-Za-z0-9_-]{11}$')
+TIMING_LINE = re.compile(
+    r'^\d{2}:\d{2}(?::\d{2})?[.,]\d{3}\s+-->\s+'
+    r'\d{2}:\d{2}(?::\d{2})?[.,]\d{3}'
 )
-SPACE_RE = re.compile(r'\s+')
-SCORE_FIELDS = ('code_buddy', 'media', 'lisa_topic')
-RECOMMENDATIONS = {'a_tester', 'surveiller', 'ignorer'}
+INLINE_TIMESTAMP = re.compile(r'<\d{2}:\d{2}(?::\d{2})?[.,]\d{3}>')
+TAG = re.compile(r'<[^>]+>')
+JSON_FENCE = re.compile(r'^```(?:json)?\s*|\s*```$', re.IGNORECASE)
+
+MEDICAL_NOTICE = (
+    "Cette veille ne donne aucun avis médical. Les sorties d'IA sur la "
+    'littérature biomédicale doivent être vérifiées par des professionnels. '
+    "Toute donnée de santé exige un cadre légal adapté (RGPD, accords d'accès "
+    'et interdiction de ré-identification).'
+)
 
 
 @dataclass(frozen=True)
 class Channel:
-    slug: str
     name: str
     channel_id: str
     language: str
     focus: str
     enabled: bool = True
 
-    @property
-    def feed_url(self) -> str:
-        return (
-            'https://www.youtube.com/feeds/videos.xml?channel_id='
-            f'{self.channel_id}'
-        )
-
 
 @dataclass(frozen=True)
 class Video:
     video_id: str
+    channel_name: str
+    channel_id: str
     title: str
-    url: str
     published: str
-    channel: Channel
+    url: str
+    description: str = ''
 
 
-# Ordre éditorial intentionnel : Vision IA reste toujours la première source.
+# Ordre éditorial intentionnel : Vision IA doit rester la première source.
 DEFAULT_CHANNELS = (
     Channel(
-        'vision-ia',
         'Vision IA',
         'UCyc03X3uRuxM9n7fyRH_gIw',
         'fr',
-        'Récapitulatifs IA, modèles, recherche et outils créatifs',
+        'actualité IA, outils, science et biomédical',
     ),
     Channel(
-        'parlons-ia-tech',
-        'Parlons IA & Tech',
-        'UCrRlS6QE1DsKnLDksvaBkKA',
-        'fr',
-        'Actualité IA hebdomadaire et nouveaux modèles',
-    ),
-    Channel(
-        'ludo-salenne',
         'Ludo Salenne',
         'UCnnYqSNKKygemgmxC9PyLTw',
         'fr',
-        'Outils IA, automatisation et usages concrets',
+        'outils IA concrets, automatisation et actualité',
     ),
     Channel(
-        'le-turing-lab',
-        'Le Turing Lab',
-        'UCbYzYnYEvYmMYjC2QV_QCOA',
+        'Defend Intelligence',
+        'UCnEHCrot2HkySxMTmDPhZyg',
         'fr',
-        'Actualités, démonstrations et outils IA',
+        'vulgarisation technique IA et machine learning',
     ),
     Channel(
-        'matt-wolfe',
         'Matt Wolfe',
         'UChpleBmo18P08aKCIgti38g',
         'en',
-        'Revue hebdomadaire des outils IA, dont image et vidéo',
+        'revue hebdomadaire des outils et actualités IA',
     ),
     Channel(
-        'ai-explained',
-        'AI Explained',
-        'UCNJ1Ymd5yFuUPtn21xtRbbw',
-        'en',
-        'Analyse critique des modèles et publications majeures',
-    ),
-    Channel(
-        'matthew-berman',
         'Matthew Berman',
         'UCawZsQWqfGSbCI5yjkdVkTA',
         'en',
-        'LLM, modèles ouverts, agents et tests rapides',
+        'LLM ouverts, agents, code et benchmarks',
     ),
     Channel(
-        'two-minute-papers',
+        'AI Explained',
+        'UCNJ1Ymd5yFuUPtn21xtRbbw',
+        'en',
+        'modèles, articles et analyse des annonces IA',
+    ),
+    Channel(
+        'MattVidPro',
+        'UC5Wz4fFacYuON6IKbhSa7Zw',
+        'en',
+        'génération vidéo et image, modèles créatifs',
+    ),
+    Channel(
+        'Theoretically Media',
+        'UC9Ryt3XOGYBoAJVsBHNGDzA',
+        'en',
+        'outils vidéo, image, voix et production média',
+    ),
+    Channel(
         'Two Minute Papers',
         'UCbfYPyITQ-7l4upoX8nvctg',
         'en',
-        'Recherche IA, vision, génération et robotique',
+        'articles de recherche IA, vision et sciences',
     ),
 )
 
@@ -140,1126 +147,1018 @@ def now_iso() -> str:
     return datetime.now().astimezone().isoformat(timespec='seconds')
 
 
-def atomic_write_text(path: Path, content: str) -> None:
+def atomic_json(path: Path, value: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    fd, temp_name = tempfile.mkstemp(
-        prefix=f'.{path.name}.',
-        suffix='.tmp',
-        dir=path.parent,
+    temporary = path.with_suffix(path.suffix + '.tmp')
+    temporary.write_text(
+        json.dumps(value, ensure_ascii=False, indent=2) + '\n',
+        encoding='utf-8',
     )
-    try:
-        with os.fdopen(fd, 'w', encoding='utf-8') as handle:
-            handle.write(content)
-        os.replace(temp_name, path)
-    except BaseException:
-        try:
-            os.unlink(temp_name)
-        except FileNotFoundError:
-            pass
-        raise
+    os.replace(temporary, path)
 
 
-def atomic_write_json(path: Path, value: dict[str, Any]) -> None:
-    atomic_write_text(
-        path,
-        json.dumps(value, ensure_ascii=False, indent=2, sort_keys=True) + '\n',
-    )
-
-
-def append_journal(path: Path, event: str, **values: Any) -> None:
+def journal(path: Path, event: str, **values: Any) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    entry = {'at': now_iso(), 'event': event, **values}
     with path.open('a', encoding='utf-8') as handle:
-        handle.write(json.dumps(entry, ensure_ascii=False) + '\n')
+        handle.write(
+            json.dumps(
+                {'at': now_iso(), 'event': event, **values},
+                ensure_ascii=False,
+            )
+            + '\n'
+        )
 
 
-def slugify(value: str) -> str:
-    normalized = unicodedata.normalize('NFKD', value)
-    ascii_value = normalized.encode('ascii', 'ignore').decode('ascii')
-    return re.sub(r'[^a-z0-9]+', '-', ascii_value.lower()).strip('-')
+def default_state() -> dict[str, Any]:
+    return {
+        'version': 1,
+        'created_at': now_iso(),
+        'seen_videos': {},
+        'items': {},
+    }
 
 
-def canonical_tool_key(value: str) -> str:
-    normalized = unicodedata.normalize('NFKD', value)
-    ascii_value = normalized.encode('ascii', 'ignore').decode('ascii')
-    return re.sub(r'[^a-z0-9]+', '', ascii_value.lower())
+def load_state(path: Path) -> dict[str, Any]:
+    if not path.exists():
+        return default_state()
+    value = json.loads(path.read_text(encoding='utf-8'))
+    if value.get('version') != 1:
+        raise ValueError(
+            f"version d'index inconnue : {value.get('version')!r}"
+        )
+    value.setdefault('seen_videos', {})
+    value.setdefault('items', {})
+    return value
 
 
-def default_config_text(channels: Iterable[Channel] = DEFAULT_CHANNELS) -> str:
-    lines = [
-        '# Chaînes suivies par veille-youtube.py.',
-        '# Vision IA doit rester en tête ; enabled: false désactive une source.',
-        'channels:',
-    ]
-    for channel in channels:
-        lines.extend([
-            f'  - slug: {channel.slug}',
-            f'    name: {channel.name}',
-            f'    channel_id: {channel.channel_id}',
-            f'    language: {channel.language}',
-            f'    focus: {channel.focus}',
-            f'    enabled: {str(channel.enabled).lower()}',
-        ])
-    return '\n'.join(lines) + '\n'
-
-
-def parse_scalar(value: str) -> Any:
+def scalar(value: str) -> Any:
     value = value.strip()
-    if not value:
-        return ''
-    if value.lower() in {'true', 'false'}:
-        return value.lower() == 'true'
     if (
         len(value) >= 2
         and value[0] == value[-1]
         and value[0] in {'"', "'"}
     ):
         return value[1:-1]
+    if value.lower() in {'true', 'yes', 'oui'}:
+        return True
+    if value.lower() in {'false', 'no', 'non'}:
+        return False
     return value
 
 
 def parse_simple_yaml(text: str) -> dict[str, Any]:
-    """Parse le sous-ensemble YAML documenté, sans dépendance obligatoire."""
-    channels: list[dict[str, Any]] = []
+    """Parse le sous-ensemble YAML utilisé par le fichier de chaînes.
+
+    Le repli garde le timer autonome avec le Python système, même sans PyYAML.
+    """
+    result: dict[str, Any] = {'channels': []}
     current: dict[str, Any] | None = None
     in_channels = False
-    for line_number, raw_line in enumerate(text.splitlines(), 1):
+    for number, raw_line in enumerate(text.splitlines(), 1):
         line = raw_line.split('#', 1)[0].rstrip()
         if not line.strip():
             continue
-        if line.strip() == 'channels:':
+        stripped = line.strip()
+        if stripped == 'channels:':
             in_channels = True
             continue
         if not in_channels:
-            raise ValueError(
-                f'ligne {line_number}: seule la clé channels est acceptée'
-            )
-        stripped = line.strip()
+            if ':' not in stripped:
+                raise ValueError(f'YAML invalide ligne {number}')
+            key, value = stripped.split(':', 1)
+            result[key.strip()] = scalar(value)
+            continue
         if stripped.startswith('- '):
-            if current is not None:
-                channels.append(current)
             current = {}
-            stripped = stripped[2:].strip()
+            result['channels'].append(current)
+            remainder = stripped[2:].strip()
+            if remainder:
+                if ':' not in remainder:
+                    raise ValueError(f'YAML invalide ligne {number}')
+                key, value = remainder.split(':', 1)
+                current[key.strip()] = scalar(value)
+            continue
         if current is None or ':' not in stripped:
-            raise ValueError(f'ligne YAML invalide {line_number}: {raw_line!r}')
+            raise ValueError(f'YAML invalide ligne {number}')
         key, value = stripped.split(':', 1)
-        current[key.strip()] = parse_scalar(value)
-    if current is not None:
-        channels.append(current)
-    return {'channels': channels}
+        current[key.strip()] = scalar(value)
+    return result
 
 
 def load_yaml(path: Path) -> dict[str, Any]:
     text = path.read_text(encoding='utf-8')
     try:
-        import yaml  # type: ignore[import-untyped]
+        import yaml  # type: ignore[import-not-found]
+
+        value = yaml.safe_load(text)
     except ImportError:
         value = parse_simple_yaml(text)
-    else:
-        value = yaml.safe_load(text)
     if not isinstance(value, dict):
-        raise ValueError('le fichier YAML doit contenir un objet')
+        raise ValueError('la configuration YAML doit être un objet')
     return value
 
 
-def load_channels(path: Path) -> tuple[Channel, ...]:
+def configured_channels(path: Path) -> tuple[Channel, ...]:
     if not path.exists():
         return DEFAULT_CHANNELS
-    raw = load_yaml(path).get('channels')
-    if not isinstance(raw, list) or not raw:
-        raise ValueError('channels doit être une liste non vide')
-    channels: list[Channel] = []
-    for index, value in enumerate(raw):
+    raw = load_yaml(path)
+    values = raw.get('channels')
+    if not isinstance(values, list) or not values:
+        raise ValueError('channels doit être une liste YAML non vide')
+    channels = []
+    for index, value in enumerate(values, 1):
         if not isinstance(value, dict):
             raise ValueError(f'channels[{index}] doit être un objet')
-        try:
-            name = str(value['name']).strip()
-            channel_id = str(value['channel_id']).strip()
-        except KeyError as error:
-            raise ValueError(
-                f'channels[{index}] ne contient pas {error.args[0]}'
-            ) from error
-        slug = str(value.get('slug') or slugify(name)).strip()
-        language = str(value.get('language') or 'fr').strip().lower()
-        focus = str(value.get('focus') or '').strip()
-        enabled = value.get('enabled', True)
-        if not isinstance(enabled, bool):
-            raise ValueError(f'channels[{index}].enabled doit être booléen')
-        if not name or not slug or not channel_id.startswith('UC'):
-            raise ValueError(f'channels[{index}] est incomplet ou invalide')
-        if language not in {'fr', 'en'}:
-            raise ValueError(
-                f'channels[{index}].language doit valoir fr ou en'
-            )
-        channels.append(
-            Channel(slug, name, channel_id, language, focus, enabled)
+        channel = Channel(
+            name=str(value.get('name', '')).strip(),
+            channel_id=str(value.get('channel_id', '')).strip(),
+            language=str(value.get('language', '')).strip() or 'fr',
+            focus=str(value.get('focus', '')).strip() or 'actualité IA',
+            enabled=bool(value.get('enabled', True)),
         )
-    if len({channel.slug for channel in channels}) != len(channels):
-        raise ValueError('les slugs de chaînes doivent être uniques')
+        if not channel.name or not CHANNEL_ID.fullmatch(channel.channel_id):
+            raise ValueError(
+                f'chaîne invalide à la position {index}: '
+                f'{channel.name!r}, {channel.channel_id!r}'
+            )
+        channels.append(channel)
     if len({channel.channel_id for channel in channels}) != len(channels):
-        raise ValueError('les channel_id doivent être uniques')
+        raise ValueError('la configuration contient des channel_id dupliqués')
     return tuple(channels)
 
 
-def fetch_url(url: str, timeout: int = 30) -> bytes:
-    request = urllib.request.Request(url, headers={'User-Agent': USER_AGENT})
-    with urllib.request.urlopen(request, timeout=timeout) as response:
-        return response.read()
+def fetch_bytes(url: str, attempts: int = 3) -> bytes:
+    request = urllib.request.Request(
+        url,
+        headers={
+            'Accept': 'application/atom+xml, application/xml, text/xml, */*',
+            'User-Agent': USER_AGENT,
+        },
+    )
+    last_error: Exception | None = None
+    for attempt in range(attempts):
+        try:
+            with urllib.request.urlopen(request, timeout=30) as response:
+                return response.read()
+        except (OSError, urllib.error.URLError) as error:
+            last_error = error
+            if attempt + 1 < attempts:
+                time.sleep(2**attempt)
+    assert last_error is not None
+    raise last_error
 
 
-def parse_youtube_feed(data: bytes, channel: Channel) -> list[Video]:
-    root = ET.fromstring(data)
-    videos: list[Video] = []
-    for entry in root.findall('atom:entry', ATOM_NS):
-        video_id = (entry.findtext('yt:videoId', '', ATOM_NS) or '').strip()
-        title = (entry.findtext('atom:title', '', ATOM_NS) or '').strip()
-        published = (
-            entry.findtext('atom:published', '', ATOM_NS) or ''
-        ).strip()
-        link_element = entry.find('atom:link[@rel="alternate"]', ATOM_NS)
-        url = (
-            link_element.attrib.get('href', '')
-            if link_element is not None
-            else ''
-        )
-        if video_id and title:
-            videos.append(
-                Video(
-                    video_id,
-                    title,
-                    url or f'https://www.youtube.com/watch?v={video_id}',
-                    published,
-                    channel,
-                )
+def node_text(node: ET.Element, local_name: str) -> str:
+    for child in node.iter():
+        if child.tag.rsplit('}', 1)[-1] == local_name:
+            return (child.text or '').strip()
+    return ''
+
+
+def parse_feed(xml: bytes, channel: Channel) -> list[Video]:
+    root = ET.fromstring(xml)
+    videos = []
+    for entry in root:
+        if entry.tag.rsplit('}', 1)[-1] != 'entry':
+            continue
+        video_id = node_text(entry, 'videoId')
+        if not VIDEO_ID.fullmatch(video_id):
+            continue
+        videos.append(
+            Video(
+                video_id=video_id,
+                channel_name=channel.name,
+                channel_id=channel.channel_id,
+                title=node_text(entry, 'title') or video_id,
+                published=node_text(entry, 'published'),
+                url=f'https://www.youtube.com/watch?v={video_id}',
+                description=node_text(entry, 'description'),
             )
+        )
     return videos
 
 
 def fetch_channel_videos(channel: Channel) -> list[Video]:
-    return parse_youtube_feed(fetch_url(channel.feed_url), channel)
+    url = (
+        'https://www.youtube.com/feeds/videos.xml?channel_id='
+        + channel.channel_id
+    )
+    return parse_feed(fetch_bytes(url), channel)
 
 
-def parse_published(value: str) -> datetime | None:
+def parse_date(value: str) -> datetime | None:
     if not value:
         return None
     try:
-        parsed = datetime.fromisoformat(value.replace('Z', '+00:00'))
+        result = datetime.fromisoformat(value.replace('Z', '+00:00'))
     except ValueError:
         return None
-    if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=timezone.utc)
-    return parsed
+    if result.tzinfo is None:
+        result = result.replace(tzinfo=timezone.utc)
+    return result.astimezone(timezone.utc)
+
+
+def yt_dlp_base() -> list[str]:
+    executable = shutil.which('yt-dlp')
+    if not executable:
+        raise RuntimeError('yt-dlp est introuvable dans PATH')
+    return [
+        executable,
+        '--extractor-args',
+        'youtube:player_client=web_embedded',
+        '--no-playlist',
+        '--skip-download',
+        '--ignore-no-formats-error',
+        '--no-warnings',
+    ]
+
+
+def add_auth_options(command: list[str], args: argparse.Namespace) -> None:
+    if args.cookies:
+        command.extend(['--cookies', str(args.cookies)])
+    elif args.cookies_from_browser:
+        command.extend(
+            ['--cookies-from-browser', args.cookies_from_browser]
+        )
+
+
+def targeted_video(
+    video_id: str,
+    channels: tuple[Channel, ...],
+    args: argparse.Namespace,
+) -> Video:
+    command = [
+        *yt_dlp_base(),
+        '--dump-single-json',
+        f'https://www.youtube.com/watch?v={video_id}',
+    ]
+    add_auth_options(command, args)
+    result = subprocess.run(
+        command,
+        capture_output=True,
+        text=True,
+        timeout=180,
+        check=False,
+    )
+    if result.returncode:
+        raise RuntimeError(
+            f'métadonnées yt-dlp indisponibles pour {video_id}: '
+            f'{result.stderr.strip()[-500:]}'
+        )
+    metadata = json.loads(result.stdout)
+    channel_id = str(metadata.get('channel_id', '')).strip()
+    known = next(
+        (channel for channel in channels if channel.channel_id == channel_id),
+        None,
+    )
+    upload_date = str(metadata.get('upload_date', '')).strip()
+    published = ''
+    if re.fullmatch(r'\d{8}', upload_date):
+        published = (
+            f'{upload_date[:4]}-{upload_date[4:6]}-{upload_date[6:]}T00:00:00Z'
+        )
+    return Video(
+        video_id=video_id,
+        channel_name=known.name if known else str(metadata.get('channel', 'YouTube')),
+        channel_id=channel_id,
+        title=str(metadata.get('title', video_id)),
+        published=published,
+        url=f'https://www.youtube.com/watch?v={video_id}',
+        description=str(metadata.get('description', '')),
+    )
 
 
 def clean_vtt(text: str) -> str:
-    """Supprime balises/horodatages et dédoublonne les lignes roulantes."""
-    cleaned: list[str] = []
-    seen: set[str] = set()
-    skip_note = False
-    for raw_line in text.splitlines():
+    """Supprime le balisage VTT et les répétitions glissantes de YouTube."""
+    output: list[str] = []
+    recent: deque[str] = deque(maxlen=24)
+    in_metadata_block = False
+    for raw_line in text.replace('\r\n', '\n').splitlines():
         line = raw_line.strip()
-        if line.startswith(('NOTE', 'STYLE', 'REGION')):
-            skip_note = True
+        if line.startswith(('STYLE', 'REGION', 'NOTE')):
+            in_metadata_block = True
             continue
-        if not line:
-            skip_note = False
-            continue
-        if skip_note:
+        if in_metadata_block:
+            if not line:
+                in_metadata_block = False
             continue
         if (
-            line == 'WEBVTT'
+            not line
+            or line == 'WEBVTT'
             or line.startswith(('Kind:', 'Language:'))
+            or TIMING_LINE.match(line)
             or line.isdigit()
-            or VTT_TIME_RE.match(line)
         ):
             continue
-        line = html.unescape(VTT_TAG_RE.sub('', line))
-        line = SPACE_RE.sub(' ', line).strip()
-        dedupe_key = unicodedata.normalize('NFKC', line).casefold()
-        if not line or dedupe_key in seen:
+        line = INLINE_TIMESTAMP.sub('', line)
+        line = TAG.sub('', line)
+        line = html.unescape(line).replace('\u200b', '').replace('\xa0', ' ')
+        line = re.sub(r'\s+', ' ', line).strip()
+        if not line:
             continue
-        seen.add(dedupe_key)
-        cleaned.append(line)
-    return '\n'.join(cleaned)
+        normalized = unicodedata.normalize('NFKC', line).casefold()
+        if normalized in recent:
+            continue
+        output.append(line)
+        recent.append(normalized)
+    return '\n'.join(output).strip() + '\n'
 
 
-def resolve_binary(env_name: str, default: str) -> str:
-    configured = os.environ.get(env_name)
-    if configured:
-        if not Path(configured).expanduser().exists():
-            raise RuntimeError(f'{env_name} pointe vers un fichier absent')
-        return str(Path(configured).expanduser())
-    binary = shutil.which(default)
-    if not binary:
-        raise RuntimeError(f'commande {default} introuvable dans PATH')
-    return binary
-
-
-def select_subtitle(paths: Iterable[Path], language: str) -> Path | None:
-    candidates = list(paths)
-    priorities = (f'.{language}.vtt', '.fr.vtt', '.en.vtt')
-    for suffix in priorities:
-        for path in candidates:
-            if path.name.endswith(suffix):
-                return path
-    return candidates[0] if candidates else None
-
-
-def acquire_video(
+def download_transcript(
     video: Video,
-    yt_dlp: str,
-) -> tuple[dict[str, Any], str]:
-    with tempfile.TemporaryDirectory(prefix='veille-youtube-') as directory:
-        temp_dir = Path(directory)
-        output = temp_dir / '%(id)s.%(ext)s'
-        base_command = [
-            yt_dlp,
-            '--skip-download',
-            '--no-playlist',
-            '--ignore-no-formats-error',
-            '--no-warnings',
-        ]
-        subtitle_options = [
-            '--write-info-json',
-            '--write-auto-subs',
-            '--sub-langs',
-            'fr,en',
-            '--sub-format',
-            'vtt',
-            '-o',
-            str(output),
-        ]
-        try:
-            primary = subprocess.run(
-                [*base_command, *subtitle_options, video.url],
-                check=False,
-                capture_output=True,
-                text=True,
-                timeout=180,
-            )
-        except subprocess.TimeoutExpired as error:
-            raise RuntimeError(
-                f'yt-dlp a dépassé 3 minutes pour {video.video_id}'
-            ) from error
-        info_paths = list(temp_dir.glob(f'{video.video_id}.info.json'))
-        subtitle_paths = list(temp_dir.glob(f'{video.video_id}*.vtt'))
+    args: argparse.Namespace,
+) -> tuple[str, str]:
+    with tempfile.TemporaryDirectory(prefix='codebuddy-veille-') as directory:
+        root = Path(directory)
+        template = str(root / '%(id)s.%(ext)s')
 
-        # YouTube peut imposer ponctuellement un contrôle anti-bot au client
-        # web par défaut. Le client web_safari reste public et ne nécessite ni
-        # cookie ni API ; il sert uniquement de repli à yt-dlp.
-        if not info_paths:
-            metadata_command = [
-                *base_command,
-                '--dump-single-json',
-                '--extractor-args',
-                'youtube:player_client=web_safari',
+        def download(languages: str) -> subprocess.CompletedProcess[str]:
+            command = [
+                *yt_dlp_base(),
+                '--write-auto-subs',
+                '--write-subs',
+                '--sub-langs',
+                languages,
+                '--sub-format',
+                'vtt',
+                '--output',
+                template,
                 video.url,
             ]
-            try:
-                metadata_result = subprocess.run(
-                    metadata_command,
-                    check=True,
-                    capture_output=True,
-                    text=True,
-                    timeout=180,
-                )
-                metadata = json.loads(metadata_result.stdout)
-            except (
-                subprocess.CalledProcessError,
-                subprocess.TimeoutExpired,
-                json.JSONDecodeError,
-            ) as error:
-                details = (
-                    getattr(error, 'stderr', '')
-                    or getattr(error, 'stdout', '')
-                    or primary.stderr
-                    or primary.stdout
-                    or ''
-                ).strip()
-                raise RuntimeError(
-                    f'yt-dlp a échoué pour {video.video_id}: '
-                    f'{details[-800:]}'
-                ) from error
-        else:
-            metadata = json.loads(info_paths[0].read_text(encoding='utf-8'))
-
-        if not subtitle_paths:
-            fallback = subprocess.run(
-                [
-                    *base_command,
-                    '--write-auto-subs',
-                    '--sub-langs',
-                    'fr,en',
-                    '--sub-format',
-                    'vtt',
-                    '--extractor-args',
-                    'youtube:player_client=web_safari',
-                    '-o',
-                    str(output),
-                    video.url,
-                ],
-                check=False,
+            add_auth_options(command, args)
+            return subprocess.run(
+                command,
                 capture_output=True,
                 text=True,
-                timeout=180,
+                timeout=240,
+                check=False,
             )
-            subtitle_paths = list(temp_dir.glob(f'{video.video_id}*.vtt'))
-            if not subtitle_paths:
-                details = (
-                    fallback.stderr
-                    or fallback.stdout
-                    or primary.stderr
-                    or primary.stdout
-                    or ''
-                ).strip()
-                raise RuntimeError(
-                    f'aucun transcript automatique fr/en pour '
-                    f'{video.video_id}: {details[-800:]}'
-                )
-        subtitle = select_subtitle(
-            subtitle_paths,
-            video.channel.language,
-        )
-        if subtitle is None:
+
+        result = download('fr-orig,en-orig')
+        files = sorted(root.glob(f'{video.video_id}.*.vtt'))
+        if not files:
+            result = download('fr,en')
+            files = sorted(root.glob(f'{video.video_id}.*.vtt'))
+        if not files:
+            detail = (result.stderr or result.stdout).strip()[-700:]
             raise RuntimeError(
-                f'aucun transcript automatique fr/en pour {video.video_id}'
+                f'aucun transcript fr/en pour {video.video_id}: {detail}'
             )
-        transcript = clean_vtt(subtitle.read_text(encoding='utf-8'))
-        if len(transcript) < 200:
+        preferred = sorted(
+            files,
+            key=lambda path: (
+                '-orig.' not in path.name,
+                '.fr' not in path.name,
+                path.name,
+            ),
+        )[0]
+        transcript = clean_vtt(preferred.read_text(encoding='utf-8'))
+        if len(transcript) < 80:
             raise RuntimeError(
                 f'transcript trop court pour {video.video_id} '
                 f'({len(transcript)} caractères)'
             )
-        return metadata, transcript
+        language = preferred.name.split('.')[-2]
+        return transcript[:MAX_TRANSCRIPT_CHARS], language
 
 
-def analysis_prompt(
-    video: Video,
-    metadata: dict[str, Any],
-    transcript: str,
-) -> str:
-    description = str(metadata.get('description') or '')[:16_000]
-    transcript = transcript[:120_000]
-    return f"""Tu assures une veille technique pour Code Buddy et deux chaînes
-YouTube : Lisa (actualité tech/IA) et Ambre (voyage). Analyse UNIQUEMENT les
-métadonnées et le transcript fournis. Les sous-titres automatiques peuvent
-déformer les noms propres : les chapitres de la description sont alors un
-indice prioritaire. N'invente aucun outil absent de la source.
+def analysis_prompt(video: Video, transcript: str) -> str:
+    return f"""Tu analyses factuellement le transcript automatique d'une vidéo YouTube de veille IA.
+Ne complète PAS avec ta mémoire et n'invente aucun produit. Corrige seulement les
+erreurs de transcription évidentes quand le contexte donne un nom identifiable.
+Une mention publicitaire sans nouveauté technique n'est pas une nouveauté.
 
-VIDÉO
-- chaîne : {video.channel.name}
-- titre : {metadata.get('title') or video.title}
-- URL : {video.url}
-- date : {metadata.get('upload_date') or video.published}
+VIDÉO: {video.title}
+CHAÎNE: {video.channel_name}
+DATE: {video.published or 'inconnue'}
+URL: {video.url}
 
-DESCRIPTION / CHAPITRES
-{description}
+DESCRIPTION / CHAPITRES (indice prioritaire pour les noms propres) :
+{video.description[:16_000]}
 
-TRANSCRIPT NETTOYÉ
-{transcript}
+Pour chaque outil, modèle, article, jeu de données, méthode ou nouveauté
+réellement mentionné, rends un objet. Utilise le nom officiel le plus probable
+dans "name" et une famille stable dans "family" pour dédupliquer les versions
+(exemples : "Wan 2.2 Bernini", "LongCat-Video", "PaperQA").
 
-Retourne seulement un objet JSON strict selon ce contrat :
+Évalue quatre axes indépendants de 0 à 10 :
+1. code_buddy : LLM, embeddings, RAG, agents, MCP, vision, voix, code.
+2. media : génération vidéo/image, avatar, lipsync, montage, voix, création.
+3. lisa : potentiel de sujet concret pour une vidéo de Lisa.
+4. biomedical : génomique, variants ADN, protéines, découverte/repositionnement
+   de médicaments, neurodégénérescence/Parkinson (alpha-synucléine, LRRK2,
+   GBA, SNCA, dopamine), analyse de littérature/PaperQA, cohortes ou données
+   ouvertes (GP2, AMP-PD, PPMI, Fox Insight).
+
+"a_tester" vaut true uniquement pour code_buddy, media ou biomedical si la
+piste est assez concrète et accessible pour une expérimentation. Une annonce
+non vérifiée ou un produit fermé sans accès testable vaut false. Reste prudent
+en biomédical : aucun avis médical, résultats à valider professionnellement,
+données de santé sous RGPD et accords d'accès.
+
+Réponds UNIQUEMENT avec un objet JSON strict, sans markdown :
 {{
-  "video_summary": "résumé factuel en français, 2 phrases maximum",
   "items": [
     {{
-      "name": "nom exact et canonique de l'outil/modèle/nouveauté",
-      "aliases": ["variantes réellement présentes dans la source"],
-      "kind": "llm|embedding|rag|agent|mcp|vision|voice|video|image|editing|robotics|research|other",
-      "what_it_does": "ce que c'est et ce que cela fait",
-      "use_case": "usage concret",
-      "code_buddy": {{
-        "score": 0,
-        "reason": "intégration possible ou raison de non-pertinence"
-      }},
-      "media": {{
-        "score": 0,
-        "reason": "utilité pour génération vidéo/avatar/lipsync/image/montage/voix"
-      }},
-      "lisa_topic": {{
-        "score": 0,
-        "reason": "potentiel de sujet et angle Lisa"
-      }},
-      "recommendation": "a_tester|surveiller|ignorer",
-      "source_quote": "court fragment paraphrasé ou cité du transcript"
+      "name": "nom",
+      "family": "famille stable",
+      "kind": "outil|modèle|recherche|jeu de données|méthode|annonce",
+      "description": "ce que c'est et ce que cela fait",
+      "use_cases": ["usage concret"],
+      "evidence": "court extrait ou paraphrase strictement ancrée au transcript",
+      "code_buddy": {{"score": 0, "justification": "...", "a_tester": false}},
+      "media": {{"score": 0, "justification": "...", "a_tester": false}},
+      "lisa": {{"score": 0, "justification": "..."}},
+      "biomedical": {{"score": 0, "justification": "...", "a_tester": false}}
     }}
   ]
 }}
 
-Les trois scores sont des entiers de 0 à 10. Classe "a_tester" seulement une
-piste concrète, accessible et suffisamment prometteuse pour justifier une
-expérience Code Buddy ou média. Inclus les nouveaux modèles même s'ils sont
-encore au stade recherche ; utilise alors "surveiller". Fusionne les mentions
-répétées d'un même outil dans un seul item."""
+TRANSCRIPT :
+{transcript}
+"""
 
 
-def extract_json(raw: str) -> dict[str, Any]:
-    decoder = json.JSONDecoder()
-    for match in re.finditer(r'\{', raw):
+def extract_json(text: str) -> dict[str, Any]:
+    candidate = JSON_FENCE.sub('', text.strip()).strip()
+    try:
+        value = json.loads(candidate)
+    except json.JSONDecodeError as initial_error:
+        # Gemini ajoute occasionnellement une virgule avant ``}`` ou ``]``.
+        # Cette réparation bornée ne complète ni ne réécrit le fond.
+        repaired = re.sub(r',\s*([}\]])', r'\1', candidate)
         try:
-            value, _ = decoder.raw_decode(raw[match.start():])
+            value = json.loads(repaired)
         except json.JSONDecodeError:
-            continue
-        if isinstance(value, dict):
-            return value
-    raise ValueError('la réponse LLM ne contient aucun objet JSON valide')
-
-
-def call_llm(prompt: str, agy: str, model: str) -> dict[str, Any]:
-    try:
-        result = subprocess.run(
-            [agy, '--model', model, '-p', prompt],
-            check=True,
-            capture_output=True,
-            text=True,
-            timeout=480,
-        )
-    except subprocess.TimeoutExpired as error:
-        raise RuntimeError('agy a dépassé le délai de 8 minutes') from error
-    except subprocess.CalledProcessError as error:
-        details = (error.stderr or error.stdout or '').strip()
-        raise RuntimeError(f'agy a échoué: {details[-1200:]}') from error
-    return extract_json(result.stdout)
-
-
-def normalize_score(value: Any, label: str) -> int:
-    if isinstance(value, bool):
-        raise ValueError(f'{label}.score doit être un entier')
-    try:
-        score = int(value)
-    except (TypeError, ValueError) as error:
-        raise ValueError(f'{label}.score doit être un entier') from error
-    if not 0 <= score <= 10:
-        raise ValueError(f'{label}.score doit être compris entre 0 et 10')
-    return score
-
-
-def normalize_analysis(value: dict[str, Any]) -> dict[str, Any]:
-    summary = str(value.get('video_summary') or '').strip()
-    raw_items = value.get('items')
-    if not isinstance(raw_items, list):
-        raise ValueError('items doit être une liste')
-    items: list[dict[str, Any]] = []
-    for index, raw in enumerate(raw_items):
-        if not isinstance(raw, dict):
-            raise ValueError(f'items[{index}] doit être un objet')
-        name = str(raw.get('name') or '').strip()
-        what_it_does = str(raw.get('what_it_does') or '').strip()
-        if not name or not what_it_does:
-            raise ValueError(f'items[{index}] doit avoir name et what_it_does')
-        item: dict[str, Any] = {
-            'name': name,
-            'aliases': [
-                str(alias).strip()
-                for alias in raw.get('aliases', [])
-                if str(alias).strip()
-            ] if isinstance(raw.get('aliases', []), list) else [],
-            'kind': str(raw.get('kind') or 'other').strip(),
-            'what_it_does': what_it_does,
-            'use_case': str(raw.get('use_case') or '').strip(),
-            'source_quote': str(raw.get('source_quote') or '').strip()[:500],
-        }
-        for field in SCORE_FIELDS:
-            axis = raw.get(field)
-            if not isinstance(axis, dict):
-                raise ValueError(f'items[{index}].{field} doit être un objet')
-            item[field] = {
-                'score': normalize_score(axis.get('score'), field),
-                'reason': str(axis.get('reason') or '').strip(),
-            }
-        recommendation = slugify(str(raw.get('recommendation') or ''))
-        recommendation = {
-            'a-tester': 'a_tester',
-            'tester': 'a_tester',
-        }.get(recommendation, recommendation.replace('-', '_'))
-        if recommendation not in RECOMMENDATIONS:
-            raise ValueError(
-                f'items[{index}].recommendation invalide: {recommendation!r}'
-            )
-        item['recommendation'] = recommendation
-        items.append(item)
-    return {'video_summary': summary, 'items': items}
-
-
-def empty_state() -> dict[str, Any]:
-    return {
-        'version': 1,
-        'created_at': now_iso(),
-        'videos': {},
-        'tools': {},
-        'aliases': {},
-        'reports': [],
-    }
-
-
-def load_state(path: Path) -> dict[str, Any]:
-    if not path.exists():
-        return empty_state()
-    value = json.loads(path.read_text(encoding='utf-8'))
-    if not isinstance(value, dict) or value.get('version') != 1:
-        raise ValueError('index de veille absent ou de version inconnue')
-    for key, default in (
-        ('videos', {}),
-        ('tools', {}),
-        ('aliases', {}),
-        ('reports', []),
-    ):
-        value.setdefault(key, default)
+            start = repaired.find('{')
+            if start < 0:
+                raise ValueError(
+                    "la réponse LLM ne contient pas d'objet JSON"
+                ) from initial_error
+            decoder = json.JSONDecoder()
+            value, _ = decoder.raw_decode(repaired[start:])
+    if not isinstance(value, dict):
+        raise ValueError('la réponse LLM JSON doit être un objet')
     return value
 
 
-def markdown_text(value: Any) -> str:
-    return SPACE_RE.sub(' ', str(value or '')).strip().replace('|', '\\|')
-
-
-def recommendation_label(value: str) -> str:
-    return {
-        'a_tester': 'À tester',
-        'surveiller': 'À surveiller',
-        'ignorer': 'Signal faible',
-    }.get(value, value)
-
-
-def merge_analysis(
-    state: dict[str, Any],
+def analyze_with_gemini(
     video: Video,
-    metadata: dict[str, Any],
-    analysis: dict[str, Any],
-) -> tuple[list[str], list[str]]:
-    new_keys: list[str] = []
-    duplicate_names: list[str] = []
-    aliases: dict[str, str] = state['aliases']
-    tools: dict[str, dict[str, Any]] = state['tools']
-    for item in analysis['items']:
-        names = [item['name'], *item['aliases']]
-        candidate_keys = [
-            canonical_tool_key(name) for name in names if canonical_tool_key(name)
-        ]
-        existing_key = next(
-            (aliases[key] for key in candidate_keys if key in aliases),
-            None,
-        )
-        if existing_key and existing_key in tools:
-            existing = tools[existing_key]
-            sightings = existing.setdefault('sightings', [])
-            if video.video_id not in sightings:
-                sightings.append(video.video_id)
-            duplicate_names.append(item['name'])
-            for key in candidate_keys:
-                aliases[key] = existing_key
-            continue
-        primary = candidate_keys[0] if candidate_keys else hashlib.sha256(
-            item['name'].encode()
-        ).hexdigest()[:16]
-        suffix = 2
-        base = primary
-        while primary in tools:
-            primary = f'{base}{suffix}'
-            suffix += 1
-        record = {
-            **item,
-            'first_seen_at': now_iso(),
-            'source': {
-                'video_id': video.video_id,
-                'video_title': str(metadata.get('title') or video.title),
-                'channel': video.channel.name,
-                'published': (
-                    str(metadata.get('upload_date') or video.published)
-                ),
-                'url': video.url,
-            },
-            'sightings': [video.video_id],
-        }
-        tools[primary] = record
-        for key in candidate_keys:
-            aliases[key] = primary
-        aliases[primary] = primary
-        new_keys.append(primary)
-    return new_keys, duplicate_names
-
-
-def render_watch_report(state: dict[str, Any]) -> str:
-    lines = [
-        '# Veille IA — chaînes YouTube',
-        '',
-        (
-            'Rapport cumulatif généré automatiquement depuis les flux RSS, '
-            'les métadonnées et les transcripts YouTube.'
-        ),
-        '',
-    ]
-    tools: dict[str, dict[str, Any]] = state['tools']
-    for report in state['reports']:
-        lines.extend([
-            (
-                f'## {markdown_text(report["analyzed_at"])} — '
-                f'{markdown_text(report["channel"])} — '
-                f'{markdown_text(report["title"])}'
-            ),
-            '',
-            (
-                f'**Source :** [{markdown_text(report["video_id"])}]'
-                f'({report["url"]})'
-            ),
-            '',
-        ])
-        summary = markdown_text(report.get('summary'))
-        if summary:
-            lines.extend([summary, ''])
-        new_keys = report.get('new_tool_keys', [])
-        if not new_keys:
-            lines.extend([
-                '_Aucune piste inédite : les mentions avaient déjà été '
-                'signalées ou la vidéo ne contenait pas de nouveauté '
-                'exploitable._',
-                '',
-            ])
-            continue
-        lines.extend(['### Nouvelles pistes', ''])
-        for key in new_keys:
-            item = tools.get(key)
-            if not item:
-                continue
-            lines.extend([
-                (
-                    f'#### {markdown_text(item["name"])} — '
-                    f'{recommendation_label(item["recommendation"])}'
-                ),
-                '',
-                f'- **Type :** `{markdown_text(item["kind"])}`',
-                f'- **Ce que ça fait :** {markdown_text(item["what_it_does"])}',
-                f'- **Usage :** {markdown_text(item["use_case"])}',
-                (
-                    f'- **Code Buddy — {item["code_buddy"]["score"]}/10 :** '
-                    f'{markdown_text(item["code_buddy"]["reason"])}'
-                ),
-                (
-                    f'- **Pipeline vidéo/média — '
-                    f'{item["media"]["score"]}/10 :** '
-                    f'{markdown_text(item["media"]["reason"])}'
-                ),
-                (
-                    f'- **Sujet Lisa — {item["lisa_topic"]["score"]}/10 :** '
-                    f'{markdown_text(item["lisa_topic"]["reason"])}'
-                ),
-            ])
-            if item.get('source_quote'):
-                lines.append(
-                    f'- **Signal source :** '
-                    f'{markdown_text(item["source_quote"])}'
-                )
-            lines.append('')
-    return '\n'.join(lines).rstrip() + '\n'
-
-
-def render_test_queue(state: dict[str, Any]) -> str:
-    candidates = [
-        item
-        for item in state['tools'].values()
-        if item.get('recommendation') == 'a_tester'
-    ]
-    candidates.sort(
-        key=lambda item: (
-            max(item['code_buddy']['score'], item['media']['score']),
-            item['lisa_topic']['score'],
-            item['first_seen_at'],
-        ),
-        reverse=True,
-    )
-    lines = [
-        '# File d’expérimentation IA',
-        '',
-        f'_Mise à jour : {now_iso()} — {len(candidates)} piste(s) à tester._',
-        '',
-    ]
-    if not candidates:
-        lines.extend([
-            'Aucune piste n’est encore classée « à tester ».',
-            '',
-        ])
-    for item in candidates:
-        source = item['source']
-        reasons = []
-        if item['code_buddy']['score'] >= item['media']['score']:
-            reasons.append(item['code_buddy']['reason'])
-        if item['media']['score'] > 0:
-            reasons.append(item['media']['reason'])
-        lines.extend([
-            (
-                f'## {markdown_text(item["name"])} — '
-                f'CB {item["code_buddy"]["score"]}/10 · '
-                f'Média {item["media"]["score"]}/10'
-            ),
-            '',
-            f'- **Objectif :** {markdown_text(item["use_case"])}',
-            f'- **Pourquoi tester :** {markdown_text(" ".join(reasons))}',
-            (
-                f'- **Signal initial :** {markdown_text(source["channel"])} — '
-                f'[{markdown_text(source["video_title"])}]({source["url"]})'
-            ),
-            f'- **Ajoutée le :** {markdown_text(item["first_seen_at"])}',
-            '',
-        ])
-    return '\n'.join(lines).rstrip() + '\n'
-
-
-def write_outputs(workdir: Path, state: dict[str, Any]) -> None:
-    atomic_write_text(
-        workdir / 'VEILLE-IA.md',
-        render_watch_report(state),
-    )
-    atomic_write_text(
-        workdir / 'A-TESTER.md',
-        render_test_queue(state),
-    )
-
-
-def match_channels(
-    channels: tuple[Channel, ...],
-    selectors: list[str],
-) -> tuple[Channel, ...]:
-    enabled = tuple(channel for channel in channels if channel.enabled)
-    if not selectors:
-        return enabled
-    wanted = {selector.casefold() for selector in selectors}
-    selected = tuple(
-        channel
-        for channel in enabled
-        if (
-            channel.slug.casefold() in wanted
-            or channel.channel_id.casefold() in wanted
-            or channel.name.casefold() in wanted
-        )
-    )
-    missing = wanted - {
-        value.casefold()
-        for channel in selected
-        for value in (channel.slug, channel.channel_id, channel.name)
-    }
-    if missing:
-        raise ValueError(f'chaîne(s) inconnue(s) : {", ".join(sorted(missing))}')
-    return selected
-
-
-def select_feed_videos(
-    channels: tuple[Channel, ...],
-    state: dict[str, Any],
-    max_videos: int,
-    days: int,
-    journal_path: Path,
-) -> list[Video]:
-    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
-    selected: list[Video] = []
-    for channel in channels:
-        try:
-            feed_videos = fetch_channel_videos(channel)
-        except Exception as error:
-            append_journal(
-                journal_path,
-                'feed_error',
-                channel=channel.name,
-                error=str(error),
-            )
-            print(f'ERREUR flux {channel.name}: {error}', file=sys.stderr)
-            continue
-        unseen = []
-        for video in feed_videos:
-            if video.video_id in state['videos']:
-                continue
-            published = parse_published(video.published)
-            if published is not None and published < cutoff:
-                continue
-            unseen.append(video)
-        # Le flux est antéchronologique. Limiter d'abord aux plus récentes,
-        # puis analyser du plus ancien au plus récent pour un rapport lisible.
-        selected.extend(reversed(unseen[:max_videos]))
-    return selected
-
-
-def explicit_videos(
-    video_ids: list[str],
-    channels: tuple[Channel, ...],
-) -> list[Video]:
-    fallback = channels[0] if channels else DEFAULT_CHANNELS[0]
-    return [
-        Video(
-            video_id,
-            f'Vidéo {video_id}',
-            f'https://www.youtube.com/watch?v={video_id}',
-            '',
-            fallback,
-        )
-        for video_id in dict.fromkeys(video_ids)
-    ]
-
-
-def channel_from_metadata(
-    video: Video,
-    metadata: dict[str, Any],
-    channels: tuple[Channel, ...],
-) -> Video:
-    channel_id = str(metadata.get('channel_id') or '')
-    actual = next(
-        (channel for channel in channels if channel.channel_id == channel_id),
-        video.channel,
-    )
-    return Video(
-        video.video_id,
-        str(metadata.get('title') or video.title),
-        video.url,
-        str(metadata.get('upload_date') or video.published),
-        actual,
-    )
-
-
-def process_video(
-    video: Video,
-    channels: tuple[Channel, ...],
-    state: dict[str, Any],
-    workdir: Path,
-    yt_dlp: str,
-    agy: str,
+    transcript: str,
     model: str,
-) -> None:
-    journal_path = workdir / 'journal.jsonl'
-    print(f'ANALYSE {video.channel.name} — {video.video_id} — {video.title}')
-    metadata, transcript = acquire_video(video, yt_dlp)
-    video = channel_from_metadata(video, metadata, channels)
-    raw_analysis = call_llm(
-        analysis_prompt(video, metadata, transcript),
-        agy,
-        model,
-    )
-    analysis = normalize_analysis(raw_analysis)
-    new_keys, duplicate_names = merge_analysis(
-        state,
-        video,
-        metadata,
-        analysis,
-    )
-    analyzed_at = now_iso()
-    state['videos'][video.video_id] = {
-        'status': 'analyzed',
-        'analyzed_at': analyzed_at,
-        'channel': video.channel.name,
-        'title': video.title,
-        'url': video.url,
-        'new_tool_keys': new_keys,
-        'duplicate_names': duplicate_names,
-        'transcript_sha256': hashlib.sha256(
-            transcript.encode('utf-8')
-        ).hexdigest(),
-        'model': model,
+) -> dict[str, Any]:
+    if not model.startswith('gemini-'):
+        raise ValueError(
+            'seuls les modèles Gemini gratuits via agy sont autorisés'
+        )
+    executable = shutil.which('agy')
+    if not executable:
+        raise RuntimeError('agy est introuvable dans PATH')
+
+    def invoke(prompt: str) -> str:
+        result = subprocess.run(
+            [
+                executable,
+                '-p',
+                prompt,
+                '--model',
+                model,
+                '--effort',
+                'low',
+                '--print-timeout',
+                '10m',
+            ],
+            capture_output=True,
+            text=True,
+            timeout=660,
+            check=False,
+        )
+        if result.returncode:
+            raise RuntimeError(
+                f'agy/Gemini a échoué ({result.returncode}): '
+                f'{result.stderr.strip()[-700:]}'
+            )
+        return result.stdout
+
+    raw = invoke(analysis_prompt(video, transcript))
+    try:
+        return extract_json(raw)
+    except (json.JSONDecodeError, ValueError) as initial_error:
+        repaired = invoke(
+            'Répare uniquement la syntaxe du JSON ci-dessous. Ne change, '
+            "n'ajoute et ne supprime aucune information. Réponds uniquement "
+            'avec le JSON strict valide, sans markdown.\n\n'
+            + raw
+        )
+        try:
+            return extract_json(repaired)
+        except (json.JSONDecodeError, ValueError) as repair_error:
+            raise ValueError(
+                f'JSON Gemini invalide après une réparation gratuite : '
+                f'{repair_error}'
+            ) from initial_error
+
+
+def score(value: Any) -> int:
+    try:
+        result = int(value)
+    except (TypeError, ValueError):
+        result = 0
+    return max(0, min(10, result))
+
+
+def axis(value: Any, *, testable: bool) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        value = {}
+    result = {
+        'score': score(value.get('score')),
+        'justification': str(value.get('justification', '')).strip()
+        or 'Aucune justification fournie.',
     }
-    state['reports'].append({
+    if testable:
+        result['a_tester'] = bool(value.get('a_tester', False))
+    return result
+
+
+def normalize_key(value: str) -> str:
+    value = unicodedata.normalize('NFKD', value)
+    value = ''.join(character for character in value if not unicodedata.combining(character))
+    return re.sub(r'[^a-z0-9]+', '-', value.casefold()).strip('-')
+
+
+def validate_analysis(value: dict[str, Any]) -> list[dict[str, Any]]:
+    raw_items = value.get('items', [])
+    if not isinstance(raw_items, list):
+        raise ValueError('items doit être un tableau JSON')
+    items = []
+    for raw in raw_items:
+        if not isinstance(raw, dict):
+            continue
+        name = str(raw.get('name', '')).strip()
+        family = str(raw.get('family', '')).strip() or name
+        description = str(raw.get('description', '')).strip()
+        key = normalize_key(family)
+        if not name or not key or not description:
+            continue
+        use_cases = raw.get('use_cases', [])
+        if not isinstance(use_cases, list):
+            use_cases = [str(use_cases)]
+        items.append(
+            {
+                'key': key,
+                'name': name,
+                'family': family,
+                'kind': str(raw.get('kind', 'nouveauté')).strip(),
+                'description': description,
+                'use_cases': [
+                    str(use_case).strip()
+                    for use_case in use_cases
+                    if str(use_case).strip()
+                ],
+                'evidence': str(raw.get('evidence', '')).strip(),
+                'code_buddy': axis(raw.get('code_buddy'), testable=True),
+                'media': axis(raw.get('media'), testable=True),
+                'lisa': axis(raw.get('lisa'), testable=False),
+                'biomedical': axis(raw.get('biomedical'), testable=True),
+            }
+        )
+    return items
+
+
+def merge_items(
+    state: dict[str, Any],
+    video: Video,
+    items: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    new_items = []
+    source = {
         'video_id': video.video_id,
         'title': video.title,
-        'channel': video.channel.name,
+        'channel': video.channel_name,
+        'published': video.published,
         'url': video.url,
-        'analyzed_at': analyzed_at,
-        'summary': analysis['video_summary'],
-        'new_tool_keys': new_keys,
-    })
-    atomic_write_json(workdir / 'index.json', state)
-    write_outputs(workdir, state)
-    append_journal(
-        journal_path,
-        'video_analyzed',
-        video_id=video.video_id,
-        channel=video.channel.name,
-        new_tools=len(new_keys),
-        duplicates=len(duplicate_names),
-        model=model,
+    }
+    for item in items:
+        key = item['key']
+        existing = state['items'].get(key)
+        if existing:
+            existing['last_seen'] = now_iso()
+            existing['occurrences'] = int(existing.get('occurrences', 1)) + 1
+            if not any(
+                value.get('video_id') == video.video_id
+                for value in existing.get('sources', [])
+            ):
+                existing.setdefault('sources', []).append(source)
+            continue
+        stored = {
+            **item,
+            'first_seen': now_iso(),
+            'last_seen': now_iso(),
+            'occurrences': 1,
+            'sources': [source],
+        }
+        state['items'][key] = stored
+        new_items.append(stored)
+    return new_items
+
+
+def format_axis(label: str, value: dict[str, Any]) -> str:
+    marker = ' — **à tester**' if value.get('a_tester') else ''
+    return (
+        f'- {label} : **{value["score"]}/10**{marker} — '
+        f'{value["justification"]}'
     )
-    print(
-        f'OK {video.video_id}: {len(new_keys)} nouvelle(s) piste(s), '
-        f'{len(duplicate_names)} doublon(s)'
+
+
+def report_header() -> str:
+    return (
+        '# Veille IA — chaînes YouTube\n\n'
+        'Rapport cumulatif dédupliqué. Une nouveauté déjà connue est comptée '
+        "dans l'index mais n'est pas re-signalée ici.\n\n"
+        f'> Prudence biomédicale — {MEDICAL_NOTICE}\n\n'
     )
+
+
+def report_block(
+    video: Video,
+    new_items: list[dict[str, Any]],
+    total_items: int,
+    transcript_language: str,
+) -> str:
+    timestamp = datetime.now().astimezone().strftime('%Y-%m-%d %H:%M %Z')
+    lines = [
+        f'## {timestamp} — {video.channel_name}',
+        '',
+        f'### [{video.title}]({video.url})',
+        '',
+        f'- Publication : {video.published or "date inconnue"}',
+        f'- Transcript automatique : `{transcript_language}`',
+        f'- Nouveautés extraites : {total_items} ; inédites : {len(new_items)}',
+        '',
+    ]
+    if not new_items:
+        lines.extend(
+            [
+                'Aucune nouveauté inédite à re-signaler après déduplication.',
+                '',
+            ]
+        )
+        return '\n'.join(lines)
+    lines.extend(['### Nouveautés inédites', ''])
+    for item in new_items:
+        uses = (
+            '; '.join(item['use_cases'])
+            if item['use_cases']
+            else 'usage à préciser'
+        )
+        lines.extend(
+            [
+                f'#### {item["name"]} — {item["kind"]}',
+                '',
+                item['description'],
+                '',
+                f'- Usages : {uses}',
+                f'- Ancrage transcript : {item["evidence"] or "mention explicite"}',
+                format_axis('Code Buddy', item['code_buddy']),
+                format_axis('Pipeline vidéo/média', item['media']),
+                format_axis('Sujet Lisa', item['lisa']),
+                format_axis('Biomédical / recherche', item['biomedical']),
+                '',
+            ]
+        )
+    biomedical = [
+        item for item in new_items if item['biomedical']['score'] >= 4
+    ]
+    lines.extend(['### Signal biomédical / recherche', ''])
+    if biomedical:
+        for item in biomedical:
+            lines.append(
+                f'- **{item["name"]}** ({item["biomedical"]["score"]}/10) — '
+                f'{item["biomedical"]["justification"]}'
+            )
+    else:
+        lines.append('- Aucun signal biomédical notable dans cette vidéo.')
+    lines.extend(['', f'> {MEDICAL_NOTICE}', ''])
+    return '\n'.join(lines)
+
+
+def append_report(path: Path, block: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if not path.exists():
+        path.write_text(report_header(), encoding='utf-8')
+    with path.open('a', encoding='utf-8') as handle:
+        handle.write(block.rstrip() + '\n\n')
+
+
+def report_contains_video(path: Path, video_id: str) -> bool:
+    if not path.exists():
+        return False
+    return video_id in path.read_text(encoding='utf-8')
+
+
+def test_priority(item: dict[str, Any], axis_name: str) -> int:
+    value = item.get(axis_name, {})
+    return int(value.get('score', 0))
+
+
+def queue_section(
+    title: str,
+    label: str,
+    items: list[dict[str, Any]],
+    axis_name: str,
+) -> list[str]:
+    lines = [f'## {title}', '']
+    selected = [
+        item for item in items if item.get(axis_name, {}).get('a_tester')
+    ]
+    selected.sort(
+        key=lambda item: (
+            -test_priority(item, axis_name),
+            item['name'].casefold(),
+        )
+    )
+    if not selected:
+        return [*lines, '- Aucune piste classée à tester.', '']
+    for item in selected:
+        source = item['sources'][0]
+        lines.extend(
+            [
+                f'### [ ] {item["name"]} — {label} '
+                f'{item[axis_name]["score"]}/10',
+                '',
+                f'- Pourquoi : {item[axis_name]["justification"]}',
+                f'- Fonction : {item["description"]}',
+                f'- Premier signal : [{source["channel"]} — '
+                f'{source["title"]}]({source["url"]})',
+                f'- Tag : `{axis_name}`',
+                '',
+            ]
+        )
+    return lines
+
+
+def write_test_queue(path: Path, state: dict[str, Any]) -> None:
+    items = list(state['items'].values())
+    lines = [
+        '# A tester — veille IA',
+        '',
+        'File dédupliquée, triée par score décroissant dans chaque axe. '
+        "Cocher une piste ne modifie pas l'index de veille.",
+        '',
+        f'> Prudence biomédicale — {MEDICAL_NOTICE}',
+        '',
+    ]
+    lines.extend(
+        queue_section('Code Buddy', 'Code Buddy', items, 'code_buddy')
+    )
+    lines.extend(
+        queue_section(
+            'Pipeline vidéo / média',
+            'média',
+            items,
+            'media',
+        )
+    )
+    lines.extend(
+        queue_section(
+            'Biomédical / recherche',
+            'biomédical',
+            items,
+            'biomedical',
+        )
+    )
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_suffix(path.suffix + '.tmp')
+    temporary.write_text('\n'.join(lines).rstrip() + '\n', encoding='utf-8')
+    os.replace(temporary, path)
+
+
+def choose_videos(
+    channels: tuple[Channel, ...],
+    args: argparse.Namespace,
+    state: dict[str, Any],
+) -> list[Video]:
+    if args.video_id:
+        return [
+            targeted_video(video_id, channels, args)
+            for video_id in args.video_id
+            if args.force or video_id not in state['seen_videos']
+        ]
+    threshold = datetime.now(timezone.utc) - timedelta(days=args.days)
+    selected = []
+    filter_value = (args.channel or '').casefold()
+    for channel in channels:
+        if not channel.enabled:
+            continue
+        if filter_value and filter_value not in {
+            channel.name.casefold(),
+            channel.channel_id.casefold(),
+        }:
+            continue
+        unseen = []
+        for video in fetch_channel_videos(channel):
+            published = parse_date(video.published)
+            if published and published < threshold:
+                continue
+            if video.video_id in state['seen_videos'] and not args.force:
+                continue
+            unseen.append(video)
+        selected.extend(unseen[: args.max_videos])
+    return selected
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--config', type=Path, default=DEFAULT_CONFIG)
+    parser.add_argument('--workdir', type=Path, default=DEFAULT_WORKDIR)
+    parser.add_argument('--days', type=int, default=DEFAULT_DAYS)
     parser.add_argument(
-        '--config',
-        type=Path,
-        default=DEFAULT_CONFIG,
-        help=f'configuration YAML (défaut : {DEFAULT_CONFIG})',
-    )
-    parser.add_argument(
-        '--workdir',
-        type=Path,
-        default=DEFAULT_WORKDIR,
-        help=f'répertoire des rapports (défaut : {DEFAULT_WORKDIR})',
+        '--max-videos',
+        type=int,
+        default=DEFAULT_MAX_VIDEOS,
+        help='maximum de vidéos nouvelles par chaîne (défaut : 2)',
     )
     parser.add_argument(
         '--channel',
-        action='append',
-        default=[],
-        help='slug, nom ou channel ID à traiter ; option répétable',
+        help='limite la collecte à un nom ou channel_id exact',
     )
     parser.add_argument(
         '--video-id',
         action='append',
         default=[],
-        help='analyse ciblée hors RSS ; option répétable',
-    )
-    parser.add_argument(
-        '--max-videos',
-        type=int,
-        default=1,
-        help='maximum de nouvelles vidéos par chaîne et par passe (défaut : 1)',
-    )
-    parser.add_argument(
-        '--days',
-        type=int,
-        default=14,
-        help='fraîcheur maximale des vidéos RSS en jours (défaut : 14)',
+        help='analyse ciblée par ID YouTube, répétable et hors fenêtre RSS',
     )
     parser.add_argument(
         '--model',
         default=os.environ.get('VEILLE_YOUTUBE_MODEL', DEFAULT_MODEL),
-        help=f'modèle agy gratuit (défaut : {DEFAULT_MODEL})',
     )
     parser.add_argument(
-        '--init-config',
-        action='store_true',
-        help='écrit la configuration par défaut sans écraser un fichier existant',
+        '--cookies',
+        type=Path,
+        default=(
+            Path(os.environ['VEILLE_YOUTUBE_COOKIES'])
+            if os.environ.get('VEILLE_YOUTUBE_COOKIES')
+            else None
+        ),
     )
     parser.add_argument(
-        '--list-channels',
-        action='store_true',
-        help='affiche les chaînes configurées puis quitte',
+        '--cookies-from-browser',
+        default=os.environ.get('VEILLE_YOUTUBE_COOKIES_FROM_BROWSER'),
     )
     parser.add_argument(
-        '--status',
+        '--force',
         action='store_true',
-        help='affiche uniquement le statut local puis quitte',
+        help='retraite les vidéos déjà vues sans re-signaler les doublons',
+    )
+    parser.add_argument(
+        '--list',
+        action='store_true',
+        help="liste les vidéos candidates sans transcript ni appel LLM",
     )
     args = parser.parse_args(argv)
     args.config = args.config.expanduser()
     args.workdir = args.workdir.expanduser()
-    if args.max_videos < 1:
-        parser.error('--max-videos doit être supérieur ou égal à 1')
-    if args.days < 1:
-        parser.error('--days doit être supérieur ou égal à 1')
-    if not args.model.casefold().startswith('gemini-'):
-        parser.error(
-            '--model doit désigner un modèle Gemini fourni par agy ; '
-            'les fournisseurs/API payants sont interdits'
-        )
+    if args.cookies:
+        args.cookies = args.cookies.expanduser()
+    if args.days < 1 or args.max_videos < 1:
+        parser.error('--days et --max-videos doivent être supérieurs à zéro')
+    for video_id in args.video_id:
+        if not VIDEO_ID.fullmatch(video_id):
+            parser.error(f'ID YouTube invalide : {video_id!r}')
+    if not args.model.startswith('gemini-'):
+        parser.error('le modèle doit être un Gemini gratuit via agy')
     return args
 
 
-def print_status(workdir: Path, state: dict[str, Any]) -> None:
-    tested = sum(
-        1
-        for item in state['tools'].values()
-        if item.get('recommendation') == 'a_tester'
-    )
-    print(f'Répertoire : {workdir}')
-    print(f'Vidéos analysées : {len(state["videos"])}')
-    print(f'Outils/nouveautés uniques : {len(state["tools"])}')
-    print(f'Pistes à tester : {tested}')
-    print(f'Rapport : {workdir / "VEILLE-IA.md"}')
-    print(f'File de tests : {workdir / "A-TESTER.md"}')
+def run(args: argparse.Namespace) -> int:
+    channels = configured_channels(args.config)
+    workdir = args.workdir
+    workdir.mkdir(parents=True, exist_ok=True)
+    state_path = workdir / 'index.json'
+    journal_path = workdir / 'journal.jsonl'
+    report_path = workdir / 'VEILLE-IA.md'
+    queue_path = workdir / 'A-TESTER.md'
+    lock_path = workdir / '.veille.lock'
 
-
-def main(argv: list[str] | None = None) -> int:
-    args = parse_args(argv)
-    if args.init_config:
-        if args.config.exists():
-            print(f'SKIP configuration existante : {args.config}')
-        else:
-            atomic_write_text(args.config, default_config_text())
-            print(f'OK configuration créée : {args.config}')
-        return 0
-    try:
-        channels = load_channels(args.config)
-        selected_channels = match_channels(channels, args.channel)
-    except (OSError, ValueError) as error:
-        print(f'Configuration invalide : {error}', file=sys.stderr)
-        return 2
-    if args.list_channels:
-        for index, channel in enumerate(channels, 1):
-            status = 'active' if channel.enabled else 'désactivée'
-            print(
-                f'{index}. {channel.name} [{channel.slug}] '
-                f'{channel.channel_id} — {channel.language} — {status}'
-            )
-        return 0
-
-    args.workdir.mkdir(parents=True, exist_ok=True)
-    lock_path = args.workdir / '.veille-youtube.lock'
-    with lock_path.open('w', encoding='utf-8') as lock_handle:
+    with lock_path.open('w', encoding='utf-8') as lock:
         try:
-            fcntl.flock(lock_handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
-            print('Une veille YouTube est déjà en cours ; arrêt idempotent.')
+            print('Une veille YouTube est déjà en cours.', file=sys.stderr)
             return 0
-        try:
-            state = load_state(args.workdir / 'index.json')
-        except (OSError, ValueError, json.JSONDecodeError) as error:
-            print(f'Index invalide : {error}', file=sys.stderr)
-            return 2
-        write_outputs(args.workdir, state)
-        if args.status:
-            print_status(args.workdir, state)
+        state = load_state(state_path)
+        videos = choose_videos(channels, args, state)
+        if args.list:
+            for video in videos:
+                print(
+                    f'{video.video_id}\t{video.published}\t'
+                    f'{video.channel_name}\t{video.title}'
+                )
             return 0
-        try:
-            yt_dlp = resolve_binary('YTDLP_BIN', 'yt-dlp')
-            agy = resolve_binary('AGY_BIN', 'agy')
-        except RuntimeError as error:
-            print(str(error), file=sys.stderr)
-            return 2
-        journal_path = args.workdir / 'journal.jsonl'
-        if args.video_id:
-            candidates = explicit_videos(args.video_id, selected_channels)
-        else:
-            candidates = select_feed_videos(
-                selected_channels,
-                state,
-                args.max_videos,
-                args.days,
-                journal_path,
-            )
-        candidates = [
-            video
-            for video in candidates
-            if video.video_id not in state['videos']
-        ]
-        if not candidates:
-            append_journal(journal_path, 'nothing_to_do')
+        if not videos:
+            journal(journal_path, 'run_empty')
             print('Aucune nouvelle vidéo à analyser.')
-            print_status(args.workdir, state)
             return 0
+
         failures = 0
-        for video in candidates:
+        analyzed = 0
+        for video in videos:
+            print(
+                f'[{video.channel_name}] {video.title} ({video.video_id})',
+                flush=True,
+            )
+            journal(
+                journal_path,
+                'video_started',
+                video_id=video.video_id,
+                channel=video.channel_name,
+                title=video.title,
+            )
             try:
-                process_video(
+                transcript, language = download_transcript(video, args)
+                analysis = analyze_with_gemini(
                     video,
-                    channels,
-                    state,
-                    args.workdir,
-                    yt_dlp,
-                    agy,
+                    transcript,
                     args.model,
                 )
-            except Exception as error:
-                failures += 1
-                append_journal(
+                items = validate_analysis(analysis)
+                new_items = merge_items(state, video, items)
+                if report_contains_video(report_path, video.video_id):
+                    journal(
+                        journal_path,
+                        'report_skipped_existing_video',
+                        video_id=video.video_id,
+                    )
+                else:
+                    append_report(
+                        report_path,
+                        report_block(
+                            video,
+                            new_items,
+                            len(items),
+                            language,
+                        ),
+                    )
+                state['seen_videos'][video.video_id] = {
+                    'analyzed_at': now_iso(),
+                    'channel': video.channel_name,
+                    'title': video.title,
+                    'published': video.published,
+                    'url': video.url,
+                    'transcript_language': language,
+                    'item_keys': [item['key'] for item in items],
+                }
+                atomic_json(state_path, state)
+                write_test_queue(queue_path, state)
+                analyzed += 1
+                journal(
                     journal_path,
-                    'video_error',
+                    'video_completed',
                     video_id=video.video_id,
-                    channel=video.channel.name,
+                    extracted=len(items),
+                    new=len(new_items),
+                )
+                print(
+                    f'  -> {len(items)} nouveauté(s), '
+                    f'{len(new_items)} inédite(s)',
+                    flush=True,
+                )
+            except (
+                json.JSONDecodeError,
+                OSError,
+                RuntimeError,
+                subprocess.TimeoutExpired,
+                ValueError,
+            ) as error:
+                failures += 1
+                journal(
+                    journal_path,
+                    'video_failed',
+                    video_id=video.video_id,
                     error=str(error),
                 )
                 print(
-                    f'ERREUR {video.video_id}: {error}',
+                    f'  ERREUR {video.video_id}: {error}',
                     file=sys.stderr,
+                    flush=True,
                 )
-        write_outputs(args.workdir, state)
-        print_status(args.workdir, state)
+        journal(
+            journal_path,
+            'run_completed',
+            analyzed=analyzed,
+            failures=failures,
+        )
+        print(f'Rapport : {report_path}')
+        print(f'File de tests : {queue_path}')
         return 1 if failures else 0
+
+
+def main(argv: list[str] | None = None) -> int:
+    try:
+        return run(parse_args(argv))
+    except (OSError, ValueError, RuntimeError) as error:
+        print(f'Erreur: {error}', file=sys.stderr)
+        return 2
 
 
 if __name__ == '__main__':
