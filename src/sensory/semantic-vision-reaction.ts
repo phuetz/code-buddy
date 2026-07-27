@@ -136,6 +136,7 @@ export function wireSemanticVisionReaction(options: SemanticVisionOptions = {}):
         const rawName = typeof payload.name === 'string' ? payload.name.trim() : '';
         const safeName = rawName &&
           rawName.length <= 100 &&
+          // eslint-disable-next-line no-control-regex -- identity input must reject C0/C1 controls
           !/[\u0000-\u001f\u007f-\u009f\u2028\u2029]/u.test(rawName)
           ? rawName
           : 'unknown';
