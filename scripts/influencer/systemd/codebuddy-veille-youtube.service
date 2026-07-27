@@ -1,0 +1,22 @@
+[Unit]
+Description=Veille quotidienne des chaînes YouTube IA pour Code Buddy et le pipeline média
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/code-buddy
+ExecStart=/usr/bin/python3 %h/code-buddy/scripts/influencer/veille-youtube.py
+Environment=PATH=%h/.local/bin:%h/miniforge3/bin:/usr/local/bin:/usr/bin:/bin
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONDONTWRITEBYTECODE=1
+Restart=on-failure
+RestartSec=15min
+TimeoutStartSec=2h
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=default.target
