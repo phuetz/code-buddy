@@ -17,6 +17,7 @@ export { chunkDocument } from './prose-chunker.js';
 export { findPageNo, findSectionTitle } from './provenance.js';
 export { PassageIndex, InMemoryEmbeddingCache } from './passage-index.js';
 export { DiskEmbeddingCache } from './disk-embedding-cache.js';
+export { PersistentCorpusIndex } from './persistent-corpus-index.js';
 export { buildCorpusIndex } from './corpus.js';
 export { summarizePassage, summarizePassages } from './rcs.js';
 export { answerFromPassages } from './answer.js';
@@ -42,8 +43,10 @@ export type {
   ScoredPassage,
   PassageIndexOptions,
   PassageSearchOptions,
+  PersistedPassageRecord,
 } from './passage-index.js';
 export type { DiskEmbeddingCacheOptions } from './disk-embedding-cache.js';
+export type { PersistentCorpusIndexOptions } from './persistent-corpus-index.js';
 export type { BuildCorpusOptions } from './corpus.js';
 export type { PassageLlmMessage, PassageQaLlm, PassageSummary, RcsOptions } from './rcs.js';
 export type {

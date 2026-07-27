@@ -6,7 +6,10 @@
  * No filesystem PDFs, no ONNX model, no network.
  */
 
-import { describe, it, expect } from 'vitest';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { afterEach, describe, it, expect } from 'vitest';
 import { buildCorpusIndex } from '../../../src/research/paper-qa/corpus.js';
 import type { PassageEmbedder } from '../../../src/research/paper-qa/passage-index.js';
 import type { ParsedPdf, PdfStructureDeps } from '../../../src/research/paper-qa/types.js';
@@ -52,6 +55,14 @@ function corpusDeps(corpus: Record<string, string[]>): PdfStructureDeps {
 }
 
 describe('buildCorpusIndex', () => {
+  const temporaryDirectories: string[] = [];
+
+  afterEach(() => {
+    for (const directory of temporaryDirectories.splice(0)) {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
   it('indexes ≥2 documents and preserves distinct docId provenance', async () => {
     const corpus: Record<string, string[]> = {
       '/papers/photosynthesis.pdf': [
@@ -121,5 +132,57 @@ describe('buildCorpusIndex', () => {
     });
     // Only the first 2 of 3 documents were parsed → exactly 2 passages.
     expect(index.size()).toBe(2);
+  });
+
+  it('persists document shards and reparses only PDFs whose content hash changed', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'paper-qa-index-'));
+    temporaryDirectories.push(directory);
+    const corpus: Record<string, string> = {
+      '/papers/a.pdf': 'Alpha paper describes dopamine neuron signalling in detail.',
+      '/papers/b.pdf': 'Beta paper describes gait measurements in a longitudinal cohort.',
+    };
+    let parseCalls = 0;
+    let embedCalls = 0;
+    const deps: PdfStructureDeps = {
+      readFile: async (pdfPath) => Buffer.from(corpus[pdfPath] ?? '', 'utf8'),
+      parsePdf: async (data) => {
+        parseCalls += 1;
+        const text = Buffer.from(data).toString('utf8');
+        return { pages: [{ num: 1, text }], total: 1 };
+      },
+    };
+    const embedder: PassageEmbedder = {
+      embed: async (text) => {
+        embedCalls += 1;
+        return bowEmbedder().embed(text);
+      },
+    };
+    const options = {
+      embedder,
+      pdfDeps: deps,
+      persistentIndex: true,
+      persistentIndexDirectory: directory,
+      persistentEmbeddingCache: true,
+      chunkOptions: { targetChars: 5000, overlapChars: 0 },
+    } as const;
+
+    const first = await buildCorpusIndex(Object.keys(corpus), options);
+    expect(first.size()).toBe(2);
+    expect(parseCalls).toBe(2);
+    expect(embedCalls).toBe(2);
+
+    const second = await buildCorpusIndex(Object.keys(corpus), options);
+    expect(second.size()).toBe(2);
+    expect(parseCalls).toBe(2);
+    expect(embedCalls).toBe(2);
+
+    corpus['/papers/b.pdf'] =
+      'Beta revision reports altered gait cadence after the protocol amendment.';
+    const third = await buildCorpusIndex(Object.keys(corpus), options);
+    expect(third.size()).toBe(2);
+    expect(parseCalls).toBe(3);
+    expect(embedCalls).toBe(3);
+    const hits = await third.search('altered gait cadence protocol', { topN: 1 });
+    expect(hits[0]!.passage.text).toContain('altered gait cadence');
   });
 });

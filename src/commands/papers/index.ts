@@ -36,7 +36,7 @@ export function createPapersCommand(): Command {
     .argument('<question>', 'The question to answer from the PDF corpus')
     .option('-p, --path <path>', 'PDF file or directory of papers (repeatable). Default: current directory', collectPath, [])
     .option('-k, --top-k <n>', 'Passages to retrieve before relevance filtering (1-50, default 8)', '8')
-    .option('--max-pdfs <n>', 'Cap on PDFs indexed for this run (1-200, default 25)', '25')
+    .option('--max-pdfs <n>', 'Cap on PDFs indexed for this run (1-100000, default 25)', '25')
     .option('-r, --report <file>', 'Save the answer to a Markdown file instead of stdout')
     .option('-m, --model <model>', 'Override the model for this run')
     .action(async (question: string, opts, command) => {

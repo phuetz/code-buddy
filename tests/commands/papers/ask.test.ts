@@ -112,6 +112,22 @@ describe('papers command surface', () => {
 // --- runPapersAskCli (injected pipeline, no network) ------------------------
 
 describe('runPapersAskCli (injected pipeline, no network)', () => {
+  it('does not silently clamp an explicitly requested corpus back to 200 PDFs', async () => {
+    const logs: string[] = [];
+    const paths = Array.from({ length: 250 }, (_, index) => `/papers/paper-${index}.pdf`);
+    await runPapersAskCli(
+      'How does photosynthesis convert light energy?',
+      ['/papers'],
+      { maxPdfs: 250 },
+      makeIo({
+        log: (message) => logs.push(message),
+        resolvePdfPaths: async () => paths,
+      }),
+    );
+
+    expect(logs.join('\n')).toContain('PDFs: 250');
+  });
+
   it('renders a grounded, cited answer to stdout', async () => {
     const logs: string[] = [];
     await runPapersAskCli(

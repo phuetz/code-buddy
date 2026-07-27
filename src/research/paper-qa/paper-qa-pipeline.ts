@@ -50,6 +50,10 @@ export interface PaperQaPipelineOptions {
   maxDocs?: number;
   /** Hard cap on total indexed passages (forwarded to the index). */
   maxPassages?: number;
+  /** Persist and incrementally reuse unchanged document shards (default for real PDFs). */
+  persistentIndex?: boolean;
+  /** Override the persistent corpus directory under `.codebuddy/`. */
+  persistentIndexDirectory?: string;
   /** Injected embedder (tests / alternative engines). Default: lazy local `EmbeddingProvider`. */
   embedder?: PassageEmbedder;
   /** Injectable PDF-parse / file-read boundaries (tests inject deterministic fakes). */
@@ -82,6 +86,10 @@ export interface PaperQaResult {
    * `true` when semantic ranking applied (or when nothing was searched).
    */
   semanticAvailable: boolean;
+  /** Retrieval mode actually used for this answer. */
+  retrievalMode: 'hybrid' | 'bm25-only';
+  /** True when a declared fallback reduced retrieval capability. */
+  degraded: boolean;
 }
 
 // ============================================================================
@@ -117,6 +125,10 @@ export async function runPaperQa(
   if (options.embedder) buildOptions.embedder = options.embedder;
   if (options.maxDocs !== undefined) buildOptions.maxDocs = options.maxDocs;
   if (options.maxPassages !== undefined) buildOptions.maxPassages = options.maxPassages;
+  if (options.persistentIndex !== undefined) buildOptions.persistentIndex = options.persistentIndex;
+  if (options.persistentIndexDirectory !== undefined) {
+    buildOptions.persistentIndexDirectory = options.persistentIndexDirectory;
+  }
   if (options.pdfDeps) buildOptions.pdfDeps = options.pdfDeps;
   if (options.parseOptions) buildOptions.parseOptions = options.parseOptions;
   if (options.chunkOptions) buildOptions.chunkOptions = options.chunkOptions;
@@ -132,6 +144,7 @@ export async function runPaperQa(
   // 3. Grounded, cited answer or honest refusal (Phase 3). Never-throws.
   const answer = await answerFromPassages(q, hits, llm, options.answerOptions ?? {});
 
+  const semanticAvailable = index.lastSemanticAvailable;
   return {
     question: q,
     answer,
@@ -140,7 +153,9 @@ export async function runPaperQa(
     retrievedPassages: hits.length,
     // `lastSemanticAvailable` defaults to true when no search ran (empty index /
     // empty question), so those cases correctly report "not degraded".
-    semanticAvailable: index.lastSemanticAvailable,
+    semanticAvailable,
+    retrievalMode: semanticAvailable ? 'hybrid' : 'bm25-only',
+    degraded: !semanticAvailable,
   };
 }
 
@@ -193,6 +208,7 @@ export function formatPaperQaOutput(
     '',
     `Corpus : ${result.indexedPassages} passage(s) indexé(s) depuis ${result.pdfPathsConsidered} PDF | ` +
       `récupérés : ${result.retrievedPassages} | retenus (RCS) : ${a.retainedCount}`,
+    `Recherche : ${result.retrievalMode === 'hybrid' ? 'hybride (BM25 + sémantique)' : 'BM25 seul (MODE DÉGRADÉ)'}`,
     `Synthèse : ${a.llmUsed ? 'LLM' : 'indisponible'} | ` +
       `Statut : ${a.sufficient ? 'répondu (ancré)' : 'refus honnête'} (${a.reason})`,
   ];

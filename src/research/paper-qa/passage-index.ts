@@ -115,11 +115,24 @@ export interface PassageSearchOptions {
   mmrLambda?: number;
 }
 
+/** Disk-safe passage row. The vector itself lives in {@link DiskEmbeddingCache}. */
+export interface PersistedPassageRecord {
+  passage: Passage;
+  /** Model-scoped key of the vector stored in the disk embedding cache. */
+  embeddingFingerprint: string;
+  /** Whether a vector existed when this document shard was written. */
+  vectorStored: boolean;
+}
+
 // ============================================================================
 // Defaults / bounds
 // ============================================================================
 
 const DEFAULT_EMBEDDING_MODEL = 'Xenova/paraphrase-multilingual-MiniLM-L12-v2';
+// Cache namespace v2 intentionally invalidates vectors written before mock
+// fallback was prohibited: an old simulated passage vector must never be mixed
+// with a newly restored real query vector.
+const EMBEDDING_CACHE_NAMESPACE = 'paper-qa-real-v2';
 const DEFAULT_MAX_PASSAGES = 20000;
 const MAX_PASSAGES_CAP = 200000;
 const DEFAULT_TOP_N = 8;
@@ -181,6 +194,7 @@ export class PassageIndex {
   private seq = 0;
   /** Whether the LAST {@link search} actually used its dense (semantic) leg. */
   private lastSearchSemanticAvailable = true;
+  private semanticFallbackWarned = false;
 
   constructor(options: PassageIndexOptions = {}) {
     this.embedder = options.embedder ?? null;
@@ -204,6 +218,11 @@ export class PassageIndex {
   /** Number of indexed passages. */
   size(): number {
     return this.passages.length;
+  }
+
+  /** True when the configured in-memory passage bound has been reached. */
+  isFull(): boolean {
+    return this.passages.length >= this.maxPassages;
   }
 
   /**
@@ -231,10 +250,39 @@ export class PassageIndex {
       return;
     }
     if (chunks.length === 0) return;
+    await this.addPassages(chunks);
+  }
 
+  /**
+   * Restore already chunked passages from a persistent document shard. The
+   * vectors are resolved lazily through the model-scoped disk cache; a missing
+   * vector is recomputed, while PDF parsing and chunking remain skipped.
+   */
+  async addPersistedPassages(records: PersistedPassageRecord[]): Promise<void> {
+    const passages: Passage[] = [];
+    for (const record of records) {
+      if (!isPersistedPassageRecord(record)) continue;
+      if (record.embeddingFingerprint !== this.fingerprint(record.passage.text)) continue;
+      passages.push(record.passage);
+    }
+    await this.addPassages(passages);
+  }
+
+  /** Snapshot one document without duplicating vectors already held by the disk cache. */
+  exportDocument(docId: string): PersistedPassageRecord[] {
+    return this.passages
+      .filter((entry) => entry.passage.docId === docId)
+      .map((entry) => ({
+        passage: entry.passage,
+        embeddingFingerprint: this.fingerprint(entry.passage.text),
+        vectorStored: entry.embedding !== null,
+      }));
+  }
+
+  private async addPassages(passages: Passage[]): Promise<void> {
     const remaining = this.maxPassages - this.passages.length;
     if (remaining <= 0) return;
-    const accepted = chunks.length > remaining ? chunks.slice(0, remaining) : chunks;
+    const accepted = passages.length > remaining ? passages.slice(0, remaining) : passages;
 
     const vectors = await this.embedPassages(accepted);
 
@@ -266,7 +314,7 @@ export class PassageIndex {
     try {
       qVec = await this.embedOne(question);
     } catch (err) {
-      logger.debug(`[paper-qa] query embedding unavailable, keyword-only: ${errText(err)}`);
+      this.warnSemanticFallback('query embedding failed', err);
     }
 
     // Lexical leg: BM25 over every indexed passage (raw scores, only ranks fused).
@@ -353,7 +401,7 @@ export class PassageIndex {
       }
     } catch (err) {
       // Degrade: leave misses as null (keyword-only for those passages).
-      logger.debug(`[paper-qa] passage embedding unavailable, keyword-only: ${errText(err)}`);
+      this.warnSemanticFallback('passage embedding failed', err);
     }
     return out;
   }
@@ -391,14 +439,25 @@ export class PassageIndex {
       this.embedder = new EmbeddingProvider({ provider: 'local', modelName: this.embeddingModel });
       return this.embedder;
     } catch (err) {
-      logger.debug(`[paper-qa] default embedder unavailable: ${errText(err)}`);
+      this.warnSemanticFallback('default embedder unavailable', err);
       return null;
     }
   }
 
+  private warnSemanticFallback(reason: string, error: unknown): void {
+    if (this.semanticFallbackWarned) return;
+    this.semanticFallbackWarned = true;
+    logger.warn(
+      '[paper-qa] semantic embeddings unavailable; retrieval is explicitly degraded to BM25-only',
+      { reason, error: errText(error) },
+    );
+  }
+
   /** Content fingerprint (model-scoped) for the embedding cache. */
   private fingerprint(text: string): string {
-    return createHash('sha1').update(`${this.embeddingModel}\n${text}`).digest('hex');
+    return createHash('sha1')
+      .update(`${EMBEDDING_CACHE_NAMESPACE}\n${this.embeddingModel}\n${text}`)
+      .digest('hex');
   }
 }
 
@@ -428,4 +487,22 @@ function clampInt(value: number | undefined, fallback: number, min: number, max:
 
 function errText(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
+}
+
+function isPersistedPassageRecord(value: unknown): value is PersistedPassageRecord {
+  if (!value || typeof value !== 'object') return false;
+  const record = value as Partial<PersistedPassageRecord>;
+  const passage = record.passage as Partial<Passage> | undefined;
+  return (
+    typeof record.embeddingFingerprint === 'string' &&
+    typeof record.vectorStored === 'boolean' &&
+    !!passage &&
+    typeof passage.docId === 'string' &&
+    Number.isInteger(passage.page) &&
+    Number.isInteger(passage.charStart) &&
+    Number.isInteger(passage.charEnd) &&
+    typeof passage.text === 'string' &&
+    Number.isInteger(passage.index) &&
+    (passage.section === undefined || typeof passage.section === 'string')
+  );
 }
