@@ -72,6 +72,8 @@ export interface NativeFashionRenderOptions {
   maxMinutes: number;
   workflowsDir: string;
   seedVr2Batch: number;
+  singlePingPong?: boolean;
+  anchorEndToKeyframe?: boolean;
 }
 
 export interface ProcessResult {
@@ -178,6 +180,8 @@ function requestDigest(options: NativeFashionRenderOptions, resolved: ResolvedRe
     skipUpscale: options.skipUpscale,
     skipInterpolate: options.skipInterpolate,
     seedVr2Batch: options.seedVr2Batch,
+    singlePingPong: options.singlePingPong ?? false,
+    anchorEndToKeyframe: options.anchorEndToKeyframe ?? false,
   }));
 }
 
@@ -363,10 +367,54 @@ function patched(template: LoadedWorkflowTemplate, patches: readonly WorkflowPat
   return graph;
 }
 
+function patchedI2v(
+  template: LoadedWorkflowTemplate,
+  patches: readonly WorkflowPatch[],
+  resolution: { width: number; height: number },
+): ComfyWorkflowGraph {
+  const graph = patched(template, patches);
+  for (const node of Object.values(graph)) {
+    if (node.class_type !== 'ImageResizeKJv2') continue;
+    if ('width' in node.inputs) node.inputs.width = resolution.width;
+    if ('height' in node.inputs) node.inputs.height = resolution.height;
+  }
+  return graph;
+}
+
 function firstOutput(result: SubmitAndAwaitResult, kinds: ReadonlyArray<'image' | 'video' | 'gif'>): string {
   const output = result.outputs.find((candidate) => kinds.includes(candidate.kind));
   if (!output) throw new Error(`ComfyUI prompt ${result.promptId} returned no ${kinds.join('/')} output`);
   return output.path;
+}
+
+function comfyEndpoint(baseUrl: string, suffix: string): string {
+  return `${baseUrl.replace(/\/+$/u, '')}${suffix}`;
+}
+
+async function uploadComfyInput(baseUrl: string, filename: string, remoteName: string): Promise<string> {
+  const bytes = await fs.readFile(filename);
+  const body = new FormData();
+  body.append('image', new Blob([new Uint8Array(bytes)]), remoteName);
+  body.append('type', 'input');
+  body.append('overwrite', 'true');
+  const response = await fetch(comfyEndpoint(baseUrl, '/upload/image'), { method: 'POST', body });
+  const raw = await response.text();
+  if (!response.ok) {
+    throw new Error(`ComfyUI input upload failed (${response.status}) for ${filename}: ${raw.slice(0, 500)}`);
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw new Error(`ComfyUI input upload returned invalid JSON for ${filename}`);
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error(`ComfyUI input upload returned a non-object response for ${filename}`);
+  }
+  const record = parsed as Record<string, unknown>;
+  const name = typeof record.name === 'string' ? record.name : remoteName;
+  const subfolder = typeof record.subfolder === 'string' ? record.subfolder.replace(/\\/gu, '/') : '';
+  return subfolder ? `${subfolder}/${name}` : name;
 }
 
 function continuityPrompt(prompt: string, segment: number, poseReference: string): string {
@@ -378,6 +426,19 @@ async function copyKeyframe(source: string, destination: string): Promise<void> 
   const info = await fs.stat(source);
   if (!info.isFile()) throw new Error(`Approved keyframe is not a regular file: ${source}`);
   await fs.copyFile(source, destination);
+}
+
+async function reusableMediaFile(directory: string): Promise<string | undefined> {
+  try {
+    const entries = await fs.readdir(directory, { withFileTypes: true });
+    const candidate = entries
+      .filter((entry) => entry.isFile() && /\.(?:gif|mkv|mov|mp4|webm)$/iu.test(entry.name))
+      .sort((left, right) => left.name.localeCompare(right.name))[0];
+    return candidate ? path.join(directory, candidate.name) : undefined;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
+    throw error;
+  }
 }
 
 async function readReceipts(journalPath: string): Promise<RetryReceipt[]> {
@@ -396,6 +457,17 @@ export async function renderNativeFashionClip(
 ): Promise<NativeFashionRenderResult> {
   const resolved = resolveRenderPrompt(options);
   if (!Number.isSafeInteger(options.segments) || options.segments < 1) throw new Error('--segments must be a positive integer');
+  if (options.singlePingPong && options.segments !== 1) {
+    throw new Error('--single-pingpong requires --segments 1');
+  }
+  if (options.anchorEndToKeyframe && options.segments !== 1) {
+    throw new Error('--anchor-end-to-keyframe requires --segments 1');
+  }
+  const expectedDurationSeconds = options.singlePingPong
+    ? (SEGMENT_FRAMES + SEGMENT_FRAMES - 2) / SOURCE_FPS
+    : options.segments === 1
+      ? resolved.targetDurationSeconds
+    : options.segments * SEGMENT_OUTPUT_FRAMES / SOURCE_FPS;
   if (!Number.isSafeInteger(options.seed) || options.seed < 0) throw new Error('--seed must be a non-negative safe integer');
   if (!Number.isFinite(options.maxMinutes) || options.maxMinutes <= 0) throw new Error('--max-minutes must be positive');
   if (!options.skipUpscale) assertSeedVr2Batch(options.seedVr2Batch);
@@ -453,10 +525,36 @@ export async function renderNativeFashionClip(
 
   const submit = dependencies.submitAndAwait ?? submitAndAwait;
   const clientId = dependencies.createClientId ?? randomUUID;
+  const shouldUploadRemoteInputs = dependencies.submitAndAwait === undefined;
+  const uploadedInputs = new Map<string, string>();
+  const materializeRemoteInputs = async (graph: ComfyWorkflowGraph): Promise<ComfyWorkflowGraph> => {
+    if (!shouldUploadRemoteInputs) return graph;
+    for (const node of Object.values(graph)) {
+      const field = node.class_type === 'LoadImage'
+        ? 'image'
+        : node.class_type === 'VHS_LoadVideo'
+          ? 'video'
+          : undefined;
+      if (!field) continue;
+      const candidate = node.inputs[field];
+      if (typeof candidate !== 'string' || !path.isAbsolute(candidate)) continue;
+      const absolute = path.resolve(candidate);
+      let remote = uploadedInputs.get(absolute);
+      if (!remote) {
+        const digest = (await sha256File(absolute)).slice(0, 16);
+        const remoteName = `${options.batchId}-${digest}-${path.basename(absolute)}`.replace(/[^A-Za-z0-9._-]/gu, '_');
+        remote = await uploadComfyInput(options.comfyUrl, absolute, remoteName);
+        uploadedInputs.set(absolute, remote);
+      }
+      node.inputs[field] = remote;
+    }
+    return graph;
+  };
   const submitGraph = async (graph: ComfyWorkflowGraph, outputDir: string): Promise<SubmitAndAwaitResult> => {
     await fs.rm(outputDir, { recursive: true, force: true });
     await fs.mkdir(outputDir, { recursive: true });
-    return submit(options.comfyUrl, graph, {
+    const remoteGraph = await materializeRemoteInputs(graph);
+    return submit(options.comfyUrl, remoteGraph, {
       clientId: clientId(), timeoutMs: 90 * 60_000, pollMs: 1500, workDir: outputDir,
     });
   };
@@ -490,20 +588,32 @@ export async function renderNativeFashionClip(
     for (let index = 0; index < options.segments; index += 1) {
       const ordinal = index + 1;
       const segmentSeed = options.seed + ordinal;
-      const provisional = await submitGraph(patched(templates.i2v, [
-        { role: 'seed', value: segmentSeed },
-        { role: 'prompt', value: resolved.prompt },
-        { role: 'negative', value: DEFAULT_NEGATIVE },
-        { role: 'inputImage', value: currentKeyframe },
-        { role: 'frames', value: SEGMENT_FRAMES },
-        { role: 'resolution', value: { width: 720, height: 1280 } },
-        { role: 'outputPrefix', value: `${options.batchId}/segment-${ordinal}-provisional` },
-      ]), path.join(options.workDir, 'comfy', `segment-${ordinal}-provisional`));
-      let finalSegmentSource = firstOutput(provisional, ['video', 'gif']);
+      const provisionalDir = path.join(options.workDir, 'comfy', `segment-${ordinal}-provisional`);
+      let finalSegmentSource = await reusableMediaFile(provisionalDir);
+      if (!finalSegmentSource) {
+        const template = options.anchorEndToKeyframe ? templates.flf2v : templates.i2v;
+        if (!template) {
+          throw new Error('--anchor-end-to-keyframe requires i2v-wan-flf2v.json');
+        }
+        const provisional = await submitGraph(patchedI2v(template, [
+          { role: 'seed', value: segmentSeed },
+          { role: 'prompt', value: resolved.prompt },
+          { role: 'negative', value: DEFAULT_NEGATIVE },
+          { role: 'inputImage', value: currentKeyframe },
+          ...(options.anchorEndToKeyframe ? [{ role: 'endImage' as const, value: currentKeyframe }] : []),
+          { role: 'frames', value: SEGMENT_FRAMES },
+          { role: 'resolution', value: { width: 720, height: 1280 } },
+          { role: 'outputPrefix', value: `${options.batchId}/segment-${ordinal}-provisional` },
+        ], { width: 720, height: 1280 }), provisionalDir);
+        finalSegmentSource = firstOutput(provisional, ['video', 'gif']);
+      }
 
       if (ordinal < options.segments) {
         const poseReference = path.join(options.workDir, `pose-reference-${ordinal}.png`);
-        await runProcess('ffmpeg', ['-y', '-sseof', '-0.001', '-i', finalSegmentSource, '-frames:v', '1', poseReference]);
+        // MP4 duration commonly extends one frame beyond the final decoded PTS;
+        // seeking only 1 ms from EOF can therefore select no frame while still
+        // exiting successfully. A quarter-second window is safe at 16 fps.
+        await runProcess('ffmpeg', ['-y', '-sseof', '-0.25', '-i', finalSegmentSource, '-frames:v', '1', poseReference]);
         await recordArtifact(state, `pose-reference-${ordinal}`, poseReference, STAGE.segments);
         if (!templates.keyframe) throw new Error('FLUX keyframe template is required for regenerated junction keyframes');
         const nextKeyframe = path.join(options.workDir, `keyframe-${String(ordinal).padStart(2, '0')}.png`);
@@ -518,7 +628,7 @@ export async function renderNativeFashionClip(
         await recordArtifact(state, `keyframe-${ordinal}`, nextKeyframe, STAGE.segments);
 
         if (templates.flf2v) {
-          const anchored = await submitGraph(patched(templates.flf2v, [
+          const anchored = await submitGraph(patchedI2v(templates.flf2v, [
             { role: 'seed', value: segmentSeed },
             { role: 'prompt', value: resolved.prompt },
             { role: 'negative', value: DEFAULT_NEGATIVE },
@@ -527,7 +637,7 @@ export async function renderNativeFashionClip(
             { role: 'frames', value: SEGMENT_FRAMES },
             { role: 'resolution', value: { width: 720, height: 1280 } },
             { role: 'outputPrefix', value: `${options.batchId}/segment-${ordinal}-flf2v` },
-          ]), path.join(options.workDir, 'comfy', `segment-${ordinal}-flf2v`));
+          ], { width: 720, height: 1280 }), path.join(options.workDir, 'comfy', `segment-${ordinal}-flf2v`));
           finalSegmentSource = firstOutput(anchored, ['video', 'gif']);
         } else {
           state.warnings.push(
@@ -557,21 +667,32 @@ export async function renderNativeFashionClip(
   const assembledPath = path.join(options.workDir, 'assembled-720x1280-16fps.mp4');
   if (state.completedStage < STAGE.assembly) {
     const inputs = segmentPaths.flatMap((segment) => ['-i', segment]);
-    const trims = segmentPaths.map((_, index) =>
-      `[${index}:v]trim=end_frame=${SEGMENT_OUTPUT_FRAMES},setpts=PTS-STARTPTS[v${index}]`,
-    );
-    const joins = segmentPaths.map((_, index) => `[v${index}]`).join('');
-    await runProcess('ffmpeg', [
-      '-y', ...inputs,
-      '-filter_complex', `${trims.join(';')};${joins}concat=n=${segmentPaths.length}:v=1:a=0[v]`,
-      '-map', '[v]', '-r', String(SOURCE_FPS), '-c:v', 'libx264', '-crf', '17', '-pix_fmt', 'yuv420p', assembledPath,
-    ]);
+    if (options.singlePingPong) {
+      await runProcess('ffmpeg', [
+        '-y', ...inputs,
+        '-filter_complex',
+        `[0:v]trim=end_frame=${SEGMENT_FRAMES},setpts=PTS-STARTPTS,split=2[forward][reverse_source];` +
+          `[reverse_source]reverse,trim=start_frame=1:end_frame=${SEGMENT_FRAMES - 1},setpts=PTS-STARTPTS[reverse];` +
+          '[forward][reverse]concat=n=2:v=1:a=0[v]',
+        '-map', '[v]', '-r', String(SOURCE_FPS), '-c:v', 'libx264', '-crf', '17', '-pix_fmt', 'yuv420p', assembledPath,
+      ]);
+    } else {
+      const trims = segmentPaths.map((_, index) =>
+        `[${index}:v]trim=end_frame=${SEGMENT_OUTPUT_FRAMES},setpts=PTS-STARTPTS[v${index}]`,
+      );
+      const joins = segmentPaths.map((_, index) => `[v${index}]`).join('');
+      await runProcess('ffmpeg', [
+        '-y', ...inputs,
+        '-filter_complex', `${trims.join(';')};${joins}concat=n=${segmentPaths.length}:v=1:a=0[v]`,
+        '-map', '[v]', '-r', String(SOURCE_FPS), '-c:v', 'libx264', '-crf', '17', '-pix_fmt', 'yuv420p', assembledPath,
+      ]);
+    }
     const i2vHasColorMatch = Object.values(templates.i2v.graph)
       .some((node) => node.class_type === 'ColorMatch' || node.class_type === 'ColorMatchV2');
     if (!i2vHasColorMatch) {
       state.warnings.push('ColorMatch node absent from the I2V template; assembly used no ffmpeg ColorMatch reimplementation.');
     }
-    await recordArtifact(state, 'assembled', assembledPath, STAGE.assembly, TARGET_DURATION_SECONDS);
+    await recordArtifact(state, 'assembled', assembledPath, STAGE.assembly, expectedDurationSeconds);
     await completeStage(STAGE.assembly);
   }
   const pausedAfterAssembly = await pauseIfExpired();
@@ -592,7 +713,7 @@ export async function renderNativeFashionClip(
       ]), path.join(options.workDir, 'comfy', 'upscale'));
       postUpscalePath = path.join(options.workDir, 'upscaled-1080x1920.mp4');
       await fs.copyFile(firstOutput(result, ['video', 'gif']), postUpscalePath);
-      await recordArtifact(state, 'upscaled', postUpscalePath, STAGE.upscale, TARGET_DURATION_SECONDS);
+      await recordArtifact(state, 'upscaled', postUpscalePath, STAGE.upscale, expectedDurationSeconds);
     }
     await completeStage(STAGE.upscale);
   } else if (state.artifacts.upscaled) {
@@ -611,7 +732,7 @@ export async function renderNativeFashionClip(
       if (options.segments === 1) {
         interpolationInputs.push(postUpscalePath);
       } else {
-        const secondsPerSegment = TARGET_DURATION_SECONDS / options.segments;
+        const secondsPerSegment = expectedDurationSeconds / options.segments;
         for (let index = 0; index < options.segments; index += 1) {
           const slicePath = path.join(options.workDir, `rife-input-${String(index + 1).padStart(2, '0')}.mp4`);
           await runProcess('ffmpeg', [
@@ -649,7 +770,7 @@ export async function renderNativeFashionClip(
       '-c:v', 'libx264', '-crf', '17', '-pix_fmt', 'yuv420p', '-movflags', '+faststart', options.outPath,
     ]);
     const finalProbe = await (dependencies.probeFinal ?? ((filename) => defaultProbeFinal(filename, runProcess)))(options.outPath);
-    assertFinalProbe(finalProbe, resolved.targetDurationSeconds);
+    assertFinalProbe(finalProbe, expectedDurationSeconds);
     await recordArtifact(state, 'final', options.outPath, STAGE.interpolation, finalProbe.durationSeconds);
     await completeStage(STAGE.interpolation);
   }
@@ -724,7 +845,9 @@ export function parseRenderArgs(argv: readonly string[], env: NodeJS.ProcessEnv 
     'scene', 'prompt', 'outfit', 'setting', 'keyframe', 'comfy', 'segments', 'seed', 'workdir', 'out',
     'batch-id', 'journal', 'max-minutes', 'workflows-dir', 'seedvr2-batch',
   ]);
-  const knownFlag = new Set(['skip-upscale', 'skip-interpolate', 'force']);
+  const knownFlag = new Set([
+    'skip-upscale', 'skip-interpolate', 'force', 'single-pingpong', 'anchor-end-to-keyframe',
+  ]);
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index]!;
     if (!argument.startsWith('--')) throw new Error(`Unexpected positional argument: ${argument}`);
@@ -757,6 +880,8 @@ export function parseRenderArgs(argv: readonly string[], env: NodeJS.ProcessEnv 
     maxMinutes: numericCliValue(argv, 'max-minutes', 120),
     workflowsDir: path.resolve(cliValue(argv, 'workflows-dir') ?? path.join(path.dirname(fileURLToPath(import.meta.url)), 'workflows')),
     seedVr2Batch: numericCliValue(argv, 'seedvr2-batch', 5),
+    singlePingPong: argv.includes('--single-pingpong'),
+    anchorEndToKeyframe: argv.includes('--anchor-end-to-keyframe'),
   };
 }
 
