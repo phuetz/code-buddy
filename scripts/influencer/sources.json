@@ -1,0 +1,287 @@
+{
+  "version": 1,
+  "description": "Référentiel de sources pour les preuves visuelles de Lisa, construit depuis les études Vision IA/Ninon AI et le catalogue de veille.",
+  "categories_juridiques": {
+    "official": {
+      "statut": "libre_couverture",
+      "regle": "Page officielle destinée à la couverture éditoriale. Citer la source ; ce statut n'est pas une licence de republication intégrale."
+    },
+    "press": {
+      "statut": "citation_partielle",
+      "regle": "Capture partielle uniquement, avec attribution visible. Ne jamais reproduire l'article entier ni contourner un paywall."
+    },
+    "own": {
+      "statut": "production_propre",
+      "regle": "Capture ou enregistrement produit par Patrice pendant son propre test."
+    },
+    "thirdparty": {
+      "statut": "accord_requis",
+      "regle": "Refus par défaut. Un crédit ne remplace pas l'accord du titulaire ; consigner l'accord explicite."
+    },
+    "agency": {
+      "statut": "interdit",
+      "regle": "Images et médias d'agence sous licence interdits à la collecte."
+    }
+  },
+  "sources": [
+    {
+      "acteur": "OpenAI",
+      "aliases": ["ChatGPT", "Codex", "Sora", "GPT"],
+      "url": "https://openai.com/news/",
+      "categorie": "official"
+    },
+    {
+      "acteur": "Google",
+      "aliases": ["Gemini", "Gemma", "Jules", "Stitch", "Nano Banana", "Google Labs"],
+      "url": "https://blog.google/technology/ai/",
+      "categorie": "official"
+    },
+    {
+      "acteur": "Google DeepMind",
+      "aliases": ["DeepMind", "AlphaFold", "Genie"],
+      "url": "https://deepmind.google/discover/blog/",
+      "categorie": "official"
+    },
+    {
+      "acteur": "Meta AI",
+      "aliases": ["Meta", "Llama", "Muse", "TRIBE"],
+      "url": "https://ai.meta.com/blog/",
+      "categorie": "official"
+    },
+    {
+      "acteur": "Anthropic",
+      "aliases": ["Claude", "Claude Code", "Opus", "Sonnet", "Haiku"],
+      "domains": ["claude.com"],
+      "url": "https://www.anthropic.com/news",
+      "categorie": "official"
+    },
+    {
+      "acteur": "Mistral AI",
+      "aliases": ["Mistral", "Le Chat", "Codestral"],
+      "url": "https://mistral.ai/news",
+      "categorie": "official"
+    },
+    {
+      "acteur": "Microsoft AI",
+      "aliases": ["Microsoft", "Copilot", "MAI", "Azure Quantum"],
+      "url": "https://microsoft.ai/news/",
+      "categorie": "official"
+    },
+    {
+      "acteur": "NVIDIA",
+      "aliases": ["Nvidia", "NeMo", "PyD"],
+      "url": "https://blogs.nvidia.com/blog/category/deep-learning/",
+      "categorie": "official"
+    },
+    {
+      "acteur": "Black Forest Labs",
+      "aliases": ["BFL", "FLUX", "Flux"],
+      "url": "https://bfl.ai/blog",
+      "categorie": "official"
+    },
+    {
+      "acteur": "Moonshot AI",
+      "aliases": ["Kimi", "Kimi K3"],
+      "url": "https://www.kimi.com/blog",
+      "categorie": "official"
+    },
+    {
+      "acteur": "Alibaba Qwen",
+      "aliases": ["Alibaba", "Qwen", "Wan"],
+      "url": "https://qwenlm.github.io/blog/",
+      "categorie": "official"
+    },
+    {
+      "acteur": "Kuaishou",
+      "aliases": ["Kling", "Kling AI"],
+      "url": "https://ir.kuaishou.com/news-releases",
+      "categorie": "official"
+    },
+    {
+      "acteur": "Krea",
+      "aliases": ["Krea AI", "Krea 2"],
+      "url": "https://www.krea.ai/blog",
+      "categorie": "official"
+    },
+    {
+      "acteur": "Runway",
+      "aliases": ["RunwayML", "Gen-4", "Media Router"],
+      "url": "https://runwayml.com/news",
+      "categorie": "official"
+    },
+    {
+      "acteur": "Higgsfield",
+      "aliases": ["Soul", "Higgsfield AI"],
+      "url": "https://higgsfield.ai/blog",
+      "categorie": "official"
+    },
+    {
+      "acteur": "Midjourney",
+      "aliases": ["Midjourney v7"],
+      "url": "https://updates.midjourney.com/",
+      "categorie": "official"
+    },
+    {
+      "acteur": "Genspark",
+      "aliases": ["Second Brain", "Second Brain Note"],
+      "url": "https://www.genspark.ai/blog",
+      "categorie": "official"
+    },
+    {
+      "acteur": "Hugging Face",
+      "aliases": ["HuggingFace"],
+      "url": "https://huggingface.co/blog",
+      "categorie": "official"
+    },
+    {
+      "acteur": "1X Technologies",
+      "aliases": ["1X", "NEO", "NEO robot"],
+      "url": "https://www.1x.tech/discover",
+      "categorie": "official"
+    },
+    {
+      "acteur": "Unitree",
+      "aliases": ["Unitree Robotics"],
+      "url": "https://www.unitree.com/news",
+      "categorie": "official"
+    },
+    {
+      "acteur": "Tesla",
+      "aliases": ["Optimus", "AI5", "HW5"],
+      "url": "https://www.tesla.com/AI",
+      "categorie": "official"
+    },
+    {
+      "acteur": "ARC Prize",
+      "aliases": ["ARC-AGI", "ARC AGI"],
+      "url": "https://arcprize.org/blog",
+      "categorie": "official"
+    },
+    {
+      "acteur": "n8n",
+      "aliases": ["n8n AI"],
+      "url": "https://blog.n8n.io/",
+      "categorie": "official"
+    },
+    {
+      "acteur": "Topaz Labs",
+      "aliases": ["Topaz", "Topaz Video AI"],
+      "url": "https://www.topazlabs.com/learn",
+      "categorie": "official"
+    },
+    {
+      "acteur": "Box",
+      "aliases": ["Box AI"],
+      "url": "https://blog.box.com/ai",
+      "categorie": "official"
+    },
+    {
+      "acteur": "Lambda",
+      "aliases": ["Lambda AI"],
+      "url": "https://lambda.ai/blog",
+      "categorie": "official"
+    },
+    {
+      "acteur": "Euronews",
+      "aliases": ["Euronews Next"],
+      "url": "https://www.euronews.com/next/artificial-intelligence",
+      "categorie": "press"
+    },
+    {
+      "acteur": "TechCrunch",
+      "aliases": ["Tech Crunch"],
+      "url": "https://techcrunch.com/category/artificial-intelligence/",
+      "categorie": "press"
+    },
+    {
+      "acteur": "Korben",
+      "aliases": [],
+      "url": "https://korben.info/",
+      "categorie": "press"
+    },
+    {
+      "acteur": "Numerama",
+      "aliases": [],
+      "url": "https://www.numerama.com/tech/",
+      "categorie": "press"
+    },
+    {
+      "acteur": "Frandroid",
+      "aliases": [],
+      "url": "https://www.frandroid.com/culture-tech/intelligence-artificielle",
+      "categorie": "press"
+    },
+    {
+      "acteur": "Next",
+      "aliases": ["Next.ink", "Next INpact"],
+      "url": "https://next.ink/",
+      "categorie": "press"
+    },
+    {
+      "acteur": "Journal du Geek",
+      "aliases": ["JDG"],
+      "url": "https://www.journaldugeek.com/category/technologie/intelligence-artificielle/",
+      "categorie": "press"
+    },
+    {
+      "acteur": "Clubic",
+      "aliases": [],
+      "url": "https://www.clubic.com/intelligence-artificielle/",
+      "categorie": "press"
+    },
+    {
+      "acteur": "01net",
+      "aliases": ["01Net"],
+      "url": "https://www.01net.com/actualites/intelligence-artificielle/",
+      "categorie": "press"
+    },
+    {
+      "acteur": "Usbek & Rica",
+      "aliases": ["Usbek et Rica"],
+      "url": "https://usbeketrica.com/fr/categorie/technologies",
+      "categorie": "press"
+    },
+    {
+      "acteur": "ZDNet France",
+      "aliases": ["ZDNet", "ZDNet.fr"],
+      "url": "https://www.zdnet.fr/actualites/intelligence-artificielle/",
+      "categorie": "press"
+    },
+    {
+      "acteur": "Nature",
+      "aliases": ["Nature Physics"],
+      "url": "https://www.nature.com/subjects/machine-learning",
+      "categorie": "press"
+    },
+    {
+      "acteur": "Science",
+      "aliases": ["Science Magazine", "AAAS"],
+      "url": "https://www.science.org/topic/artificial-intelligence",
+      "categorie": "press"
+    },
+    {
+      "acteur": "Reuters",
+      "aliases": ["Reuters Connect"],
+      "url": "https://www.reutersconnect.com/",
+      "categorie": "agency"
+    },
+    {
+      "acteur": "AFP",
+      "aliases": ["Agence France-Presse", "AFP Forum"],
+      "url": "https://www.afpforum.com/",
+      "categorie": "agency"
+    },
+    {
+      "acteur": "Associated Press",
+      "aliases": ["AP Images", "AP Newsroom"],
+      "url": "https://newsroom.ap.org/",
+      "categorie": "agency"
+    },
+    {
+      "acteur": "Getty Images",
+      "aliases": ["Getty"],
+      "url": "https://www.gettyimages.com/",
+      "categorie": "agency"
+    }
+  ]
+}

@@ -17,6 +17,7 @@ tech, 2 compilations YouTube, 49 plans B-roll Veo Quality, 12 Shorts influenceus
 
 | Script | Rôle |
 |---|---|
+| [`collect-evidence.py`](README-collect-evidence.md) | Capture des preuves réelles sourcées, masque les cookies, produit le plein cadre + le recadrage split 1080×960 et applique les règles juridiques. |
 | `make-influencer-batch.py [sujets…]` | Sujet → Short 9:16 « Lisa présente » : voix off persona (ElevenLabs FR), captions TikTok, musique duckée, master −14 LUFS. Ajouter un sujet = 3 lignes dans `SUBJECTS`. |
 | `short-assemble.py <book> <musique> [TITRE]` | Assembleur vertical générique : `short-<book>-shots/v0N.mp4` + `short-<book>-vo/*.mp3` → Short 1080×1920. |
 | `presenter-assemble.py` | Variante « présentatrice » (captions hautes, box). |
