@@ -1,5 +1,7 @@
 # Analyse transversale de la chaîne Ninon AI
 
+> **VALIDÉ par Patrice le 2026-07-28** — ces règles deviennent le standard des Shorts de Lisa.
+
 Date d’observation : **28 juillet 2026**. Corpus : **61 Shorts** publiés du
 15 septembre 2025 au 27 juillet 2026, inventoriés sans API YouTube payante avec
 `yt-dlp 2026.06.09`. Les vues sont un instantané de collecte : elles comparent
