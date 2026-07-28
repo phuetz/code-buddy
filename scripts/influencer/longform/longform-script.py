@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
-"""Génère et valide le plan éditorial d'une vidéo longue Lisa."""
+"""Génère et valide le plan éditorial d'une vidéo longue Lisa.
+
+RÈGLE ÉDITORIALE — aucun sujet où Patrice est personnellement partie prenante :
+France Travail / assurance chômage, CCAS, clients ou partenaires commerciaux.
+Le sujet est contrôlé avant l'appel LLM et la règle est répétée dans le prompt.
+"""
 
 import argparse
 import json
@@ -10,6 +15,15 @@ import sys
 import tempfile
 from pathlib import Path
 from typing import Any
+
+INFLUENCER_DIR = Path(__file__).resolve().parent.parent
+if str(INFLUENCER_DIR) not in sys.path:
+    sys.path.insert(0, str(INFLUENCER_DIR))
+
+from editorial_policy import (  # noqa: E402
+    exclusion_policy_for_prompt,
+    find_excluded_topic,
+)
 
 
 MODEL = 'gemini-3.6-flash-high'
@@ -241,6 +255,10 @@ Le JSON doit avoir cette forme exacte :
 }}
 
 Contraintes impératives :
+- Règle éditoriale absolue : ne traite jamais un sujet où Patrice est
+  personnellement partie prenante et ne l'introduis ni comme exemple, ni comme
+  comparaison, ni comme démonstration. Domaines exclus :
+{exclusion_policy_for_prompt()}
 - Couvrir exactement ces 7 phases, dans cet ordre, avec une ou plusieurs
   sections consécutives par phase : hook, cta_abo, contexte, decryptage,
   demos, nuance, outro.
@@ -352,6 +370,14 @@ def main() -> None:
         help='durée cible en minutes, entre 10 et 15 (défaut: 12)')
     parser.add_argument('--out', required=True, help='workdir de production')
     args = parser.parse_args()
+
+    exclusion = find_excluded_topic(args.sujet)
+    if exclusion:
+        reason, keyword = exclusion
+        sys.exit(
+            f'sujet refusé avant appel LLM — {reason} '
+            f'(mot-clé détecté : {keyword!r})'
+        )
 
     workdir = Path(args.out).expanduser().resolve()
     workdir.mkdir(parents=True, exist_ok=True)

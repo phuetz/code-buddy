@@ -5,6 +5,22 @@ Le format suit le gabarit éditorial validé : sept phases, environ 130 mots/min
 25–30 % d'avatar au maximum, voix off sur visuels et changements de plan toutes
 les 8 à 10 secondes.
 
+## Filtre éditorial obligatoire
+
+Une vidéo Lisa/Ambre ne traite jamais un sujet où Patrice est personnellement
+partie prenante : France Travail / Pôle emploi, assurance ou allocation chômage,
+contrôle des demandeurs d'emploi, ARE, radiation, CCAS / action sociale, clients
+et partenaires commerciaux. `longform-script.py` refuse un `--sujet` concerné
+avant l'appel au LLM et rappelle la règle dans le prompt pour empêcher sa
+réintroduction dans un exemple ou une démo.
+
+La liste partagée se trouve dans `../editorial_policy.py`. Les noms propres des
+clients et partenaires peuvent être ajoutés sans modifier le dépôt :
+
+```bash
+export INFLUENCER_EXCLUDED_TOPICS='Entreprise Exemple;Marque Partenaire'
+```
+
 ## Flux complet
 
 ```bash

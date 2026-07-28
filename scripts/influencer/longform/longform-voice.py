@@ -15,6 +15,7 @@ from typing import Any
 
 VOICE_ID = '3fxbs2pB9bs8S6Z1N38A'
 MODEL_ID = 'eleven_multilingual_v2'
+OUTPUT_FORMAT = 'mp3_44100_192'
 MEDIA_ENV = Path('~/.codebuddy/media.env').expanduser()
 
 
@@ -71,7 +72,7 @@ def media_duration(path: Path) -> float:
     return duration
 
 
-def tts_payload(text: str) -> bytes:
+def tts_payload(text: str, speed: float) -> bytes:
     return json.dumps({
         'text': text,
         'model_id': MODEL_ID,
@@ -79,16 +80,25 @@ def tts_payload(text: str) -> bytes:
             'stability': 0.45,
             'similarity_boost': 0.85,
             'style': 0.5,
+            'speed': speed,
             'use_speaker_boost': True,
         },
     }, ensure_ascii=False).encode('utf-8')
 
 
-def synthesize(text: str, destination: Path, api_key: str) -> None:
+def synthesize(
+    text: str,
+    destination: Path,
+    api_key: str,
+    speed: float,
+) -> None:
     destination.parent.mkdir(parents=True, exist_ok=True)
     request = urllib.request.Request(
-        f'https://api.elevenlabs.io/v1/text-to-speech/{VOICE_ID}',
-        data=tts_payload(text),
+        (
+            f'https://api.elevenlabs.io/v1/text-to-speech/{VOICE_ID}'
+            f'?output_format={OUTPUT_FORMAT}'
+        ),
+        data=tts_payload(text, speed),
         headers={
             'xi-api-key': api_key,
             'Content-Type': 'application/json',
@@ -172,7 +182,13 @@ def main() -> None:
                     api_key = load_env_value(
                         MEDIA_ENV, 'ELEVENLABS_API_KEY')
                 print(f'ElevenLabs: {section["id"]}…')
-                synthesize(section['texte'].strip(), audio_path, api_key)
+                speed = 0.93 if section.get('mode') == 'avatar' else 0.85
+                synthesize(
+                    section['texte'].strip(),
+                    audio_path,
+                    api_key,
+                    speed,
+                )
                 print(f'OK {audio_path}')
             duration = media_duration(audio_path)
             section['duree_reelle_s'] = round(duration, 3)

@@ -28,6 +28,11 @@ PHASE_TITLES = {
     'nuance': 'Mon avis nuancé',
     'outro': 'À retenir',
 }
+AVATAR_HEADLINES = {
+    '01-hook-avatar': 'META AI : DU CHAT À L’ACTION',
+    '11-nuance-avatar': 'LE PARADIGME CHANGE — PAS SANS LIMITES',
+    '13-outro-avatar': 'QUELLE TÂCHE DÉLÉGUERAIS-TU ?',
+}
 FONT_REGULAR = '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf'
 FONT_BOLD = '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf'
 LOUDNORM_TARGET = 'I=-14:TP=-1.5:LRA=11'
@@ -80,6 +85,23 @@ def media_duration(path: Path) -> float:
     if duration <= 0:
         raise AssemblyError(f'durée invalide: {path}')
     return duration
+
+
+def video_dimensions(path: Path) -> tuple[int, int]:
+    result = run([
+        'ffprobe', '-v', 'error', '-select_streams', 'v:0',
+        '-show_entries', 'stream=width,height',
+        '-of', 'json', str(path),
+    ], capture=True)
+    try:
+        streams = json.loads(result.stdout)['streams']
+        width = int(streams[0]['width'])
+        height = int(streams[0]['height'])
+    except (KeyError, IndexError, TypeError, ValueError, json.JSONDecodeError) as exc:
+        raise AssemblyError(f'dimensions vidéo illisibles: {path}') from exc
+    if width <= 0 or height <= 0:
+        raise AssemblyError(f'dimensions vidéo invalides: {path}')
+    return width, height
 
 
 def read_plan(path: Path) -> dict[str, Any]:
@@ -171,6 +193,7 @@ def render_card(
 
 
 def render_avatar(
+    section: dict[str, Any],
     source: Path,
     duration: float,
     destination: Path,
@@ -178,17 +201,53 @@ def render_avatar(
     if destination.exists():
         print(f'SKIP avatar rendu existant: {destination}')
         return
-    video_filter = (
-        f'scale={WIDTH}:{HEIGHT}:force_original_aspect_ratio=increase,'
-        f'crop={WIDTH}:{HEIGHT},setsar=1,fps={FPS},format=yuv420p'
-    )
-    atomic_ffmpeg([
+    source_width, source_height = video_dimensions(source)
+    command = [
         'ffmpeg', '-y', '-hide_banner', '-v', 'error',
         '-stream_loop', '-1', '-i', str(source),
-        '-vf', video_filter, '-t', f'{duration:.6f}', '-an',
+    ]
+    if source_height > source_width:
+        headline = drawtext_escape(
+            AVATAR_HEADLINES.get(
+                section['id'],
+                PHASE_TITLES.get(str(section.get('phase', '')), 'LISA'),
+            )
+        )
+        headline_size = 40 if section['id'] == '11-nuance-avatar' else 50
+        portrait_filter = (
+            f'[0:v]split=2[bg][fg];'
+            f'[bg]scale={WIDTH}:{HEIGHT}:force_original_aspect_ratio=increase,'
+            f'crop={WIDTH}:{HEIGHT},boxblur=32:12,'
+            f'eq=brightness=-0.28:saturation=0.75[bg2];'
+            f'[fg]scale=-2:{HEIGHT}[fg2];'
+            f'[bg2]drawbox=x=0:y=0:w=1180:h=ih:'
+            f'color=#0b1020@0.88:t=fill[panel];'
+            f'[panel][fg2]overlay=x=W-w-70:y=0,'
+            f"drawtext=fontfile={FONT_BOLD}:text='LISA • TECH & IA':"
+            f'fontcolor=#b9aaff:fontsize=34:x=110:y=340,'
+            f"drawtext=fontfile={FONT_BOLD}:text='{headline}':"
+            f'fontcolor=white:fontsize={headline_size}:x=110:y=425,'
+            f"drawtext=fontfile={FONT_REGULAR}:"
+            f"text='Décryptage documenté • opinion assumée':"
+            f'fontcolor=#bdc5d8:fontsize=28:x=110:y=515,'
+            f'drawbox=x=110:y=575:w=330:h=8:color=#9b87f5:t=fill,'
+            f'fps={FPS},setsar=1,format=yuv420p[v]'
+        )
+        command.extend([
+            '-filter_complex', portrait_filter, '-map', '[v]',
+        ])
+    else:
+        video_filter = (
+            f'scale={WIDTH}:{HEIGHT}:force_original_aspect_ratio=increase,'
+            f'crop={WIDTH}:{HEIGHT},setsar=1,fps={FPS},format=yuv420p'
+        )
+        command.extend(['-vf', video_filter])
+    command.extend([
+        '-t', f'{duration:.6f}', '-an',
         '-c:v', 'libx264', '-preset', 'medium', '-crf', '19',
         '-pix_fmt', 'yuv420p', '-r', str(FPS), '-movflags', '+faststart',
-    ], destination)
+    ])
+    atomic_ffmpeg(command, destination)
 
 
 def list_visuals(directory: Path) -> list[Path]:
@@ -562,7 +621,8 @@ def main() -> None:
             if section['mode'] == 'avatar':
                 avatar_path = workdir / 'avatar' / f'{section_id}.mp4'
                 if avatar_path.is_file():
-                    render_avatar(avatar_path, duration, destination)
+                    render_avatar(
+                        section, avatar_path, duration, destination)
                 else:
                     print(
                         f'AVERTISSEMENT {section_id}: avatar absent, '
