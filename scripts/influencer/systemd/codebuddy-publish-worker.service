@@ -1,0 +1,18 @@
+[Unit]
+Description=Planificateur de publications Lisa et Ambre
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/code-buddy
+# Sans la valeur exacte dans ce fichier hors dépôt, aucun envoi n'est possible.
+EnvironmentFile=-%h/.codebuddy/influencer-oauth/publication.env
+ExecStart=/usr/bin/python3 scripts/influencer/publish-worker.py --autoriser-envoi-reel
+Restart=on-failure
+RestartSec=30
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=default.target
