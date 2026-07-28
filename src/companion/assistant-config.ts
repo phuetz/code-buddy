@@ -219,12 +219,12 @@ export const ASSISTANT_SETTINGS: AssistantSetting[] = [
   },
   {
     key: 'CODEBUDDY_TTS_VOICE',
-    label: 'Piper fallback voice',
+    label: 'Robot voice',
     group: 'voice',
     type: 'text',
     default: '',
     envFile: 'both',
-    help: 'Fallback Piper .onnx voice model path.',
+    help: 'Use elevenlabs:<voice_id> for ElevenLabs, or a Piper .onnx model path.',
   },
   {
     key: 'CODEBUDDY_SENSORY_SPEAK',

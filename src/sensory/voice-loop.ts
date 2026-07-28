@@ -2,12 +2,13 @@
  * Voice loop — closes the perception→cognition→action loop into speech. Given a
  * transcript of what the robot HEARD (the `onHeard` hook of `speech-reaction.ts`),
  * THINK a short reply with a LOCAL LLM ($0, Ollama) and SPEAK it with a real neural
- * voice (Pocket TTS, with Piper fallback). The result is a thing you can talk to:
+ * voice (Pocket by default, optional budget-guarded ElevenLabs, Piper fallback).
+ * The result is a thing you can talk to:
  * hear → think → speak.
  *
  * Everything is INJECTABLE (reply / synth / play) so the loop is deterministically
  * testable with no model, no audio device. Opt-in (`CODEBUDDY_SENSORY_SPEAK=true`,
- * gated by the caller), $0, loopback, NEVER-THROWS (a failure is silence, not a crash).
+ * gated by the caller), NEVER-THROWS (a failure is silence, not a crash).
  *
  * The default `replyFn` is a lightweight companion reply. To make the robot *act* on
  * spoken commands (run tools, code), inject a `replyFn` that drives a full agent turn —
@@ -64,7 +65,12 @@ import type { TtsCache } from './tts-cache.js';
 import { resolveUserName } from '../companion/user-name.js';
 import { normalizeWavFile, Pcm16WavStreamGain } from '../voice/tts-volume.js';
 import { conditionPcm16Wav, Pcm16WavStreamEdges } from '../voice/pcm-edges.js';
-import { resolveTtsEngine, type LocalTtsEngine } from '../voice/local-tts.js';
+import {
+  resolveElevenLabsCacheVoice,
+  resolveElevenLabsFallbackEngine,
+  resolveTtsEngine,
+  type LocalTtsEngine,
+} from '../voice/local-tts.js';
 import { resolveVoiceboxConfig } from '../voice/voicebox-tts.js';
 import type { PermissionMode } from '../security/permission-modes.js';
 import {
@@ -662,8 +668,9 @@ function normalizeFastReplyInput(text: string): string {
 }
 
 function resolveDefaultPiperVoiceModel(): string | undefined {
+  const ttsVoice = process.env.CODEBUDDY_TTS_VOICE?.trim();
   const configured =
-    process.env.CODEBUDDY_TTS_VOICE ||
+    (ttsVoice?.toLowerCase().startsWith('elevenlabs:') ? undefined : ttsVoice) ||
     process.env.CODEBUDDY_TTS_PIPER_MODEL ||
     process.env.COWORK_PIPER_VOICE ||
     process.env.CODEBUDDY_PIPER_VOICE;
@@ -1974,6 +1981,9 @@ function resolveBaseCacheVoice(
       voicebox.instruct ?? '',
     ].join(':');
   }
+  if (engine === 'elevenlabs') {
+    return resolveElevenLabsCacheVoice(env);
+  }
   return voice || resolveDefaultPiperVoiceModel() || 'piper:default';
 }
 
@@ -1996,7 +2006,26 @@ function makeDefaultSynth(
     if (!prepared) return { wav: '', cacheable: false };
     text = prepared;
     const wavPath = join(tmpdir(), `cb-voice-${process.pid}-${Date.now()}.wav`);
-    if (engine === 'voicebox') {
+    let selectedEngine = engine;
+    if (selectedEngine === 'elevenlabs') {
+      const { synthesizeElevenLabsWav } = await import('../voice/local-tts.js');
+      if (await synthesizeElevenLabsWav(
+        text,
+        wavPath,
+        process.env,
+        6_000,
+        opts.signal,
+        opts.ttsNormalizationFactor,
+      )) {
+        return { wav: wavPath, cacheable: true };
+      }
+      if (opts.signal?.aborted) throw new Error('TTS synthesis was interrupted');
+      selectedEngine = resolveElevenLabsFallbackEngine(process.env);
+      if (selectedEngine === 'pocket') {
+        throw new Error('ElevenLabs and Pocket TTS synthesis failed');
+      }
+    }
+    if (selectedEngine === 'voicebox') {
       const { synthesizeVoiceboxWav } = await import('../voice/voicebox-tts.js');
       const deliveryInstruction = opts.delivery
         ? voiceRendererDeliveryInstruction(opts.delivery)
@@ -2012,7 +2041,7 @@ function makeDefaultSynth(
       }
       if (opts.signal?.aborted) throw new Error('TTS synthesis was interrupted');
       throw new Error('Voicebox TTS synthesis failed');
-    } else if (engine === 'pocket') {
+    } else if (selectedEngine === 'pocket') {
       const { synthesizePocketWav } = await import('../voice/local-tts.js');
       if (await synthesizePocketWav(
         text,
@@ -2022,7 +2051,9 @@ function makeDefaultSynth(
         opts.signal,
         opts.ttsNormalizationFactor,
       )) {
-        return { wav: wavPath, cacheable: true };
+        // A transient cloud failure must not pin Pocket audio under the
+        // ElevenLabs cache identity after the network recovers.
+        return { wav: wavPath, cacheable: engine !== 'elevenlabs' };
       }
       if (opts.signal?.aborted) throw new Error('TTS synthesis was interrupted');
       throw new Error('Pocket TTS synthesis failed');
@@ -2052,10 +2083,10 @@ function makeDefaultSynth(
     // A cache entry carries the gain of the turn that created it. Once the
     // current turn has frozen its own factor, synthesize fresh so it is applied
     // to raw engine output instead of compounding two independent gains.
-    if (opts.ttsNormalizationFactor !== undefined) {
+    if (opts.ttsNormalizationFactor !== undefined && engine !== 'elevenlabs') {
       return (await synthFresh(text, opts)).wav;
     }
-    if (text.trim().length > SHORT_SEGMENT_CACHE_MAX_CHARS) {
+    if (text.trim().length > SHORT_SEGMENT_CACHE_MAX_CHARS && engine !== 'elevenlabs') {
       return (await synthFresh(text, opts)).wav;
     }
     const cacheVoice = opts.delivery && engine === 'voicebox'
@@ -2146,7 +2177,7 @@ function makeDefaultStreamSpeak(
   const streamEnabled = engine === 'voicebox'
     ? process.env.CODEBUDDY_VOICEBOX_AUDIO_STREAM !== 'false'
     : process.env.CODEBUDDY_POCKET_AUDIO_STREAM !== 'false';
-  if (engine === 'piper' || !streamEnabled) {
+  if ((engine !== 'pocket' && engine !== 'voicebox') || !streamEnabled) {
     return undefined;
   }
 

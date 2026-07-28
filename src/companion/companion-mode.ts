@@ -606,12 +606,22 @@ function resolveDetectedPiperVoice(): string {
 }
 
 function resolveConfiguredPiperVoice(status: CompanionStatus): string {
-  const candidate = process.env.CODEBUDDY_TTS_VOICE
+  const selectedVoice = process.env.CODEBUDDY_TTS_VOICE?.trim();
+  const candidate = (selectedVoice?.toLowerCase().startsWith('elevenlabs:')
+    ? undefined
+    : selectedVoice)
     || process.env.CODEBUDDY_TTS_PIPER_MODEL
     || process.env.COWORK_PIPER_VOICE
     || process.env.CODEBUDDY_PIPER_VOICE
     || (status.tts.provider === 'piper' && status.tts.voice?.endsWith('.onnx') ? status.tts.voice : '');
   return candidate ? expandHome(candidate) : resolveDetectedPiperVoice();
+}
+
+function resolveConfiguredRobotVoice(status: CompanionStatus): string {
+  const selectedVoice = process.env.CODEBUDDY_TTS_VOICE?.trim();
+  return selectedVoice?.toLowerCase().startsWith('elevenlabs:')
+    ? selectedVoice
+    : resolveConfiguredPiperVoice(status);
 }
 
 function resolvePiperBin(): string {
@@ -746,7 +756,7 @@ async function buildVoiceAssistantBrief(
   const env = {
     ...process.env,
     CODEBUDDY_ROBOT_NAME: robotName,
-    CODEBUDDY_TTS_VOICE: piperVoice,
+    CODEBUDDY_TTS_VOICE: resolveConfiguredRobotVoice(status),
   };
   const readiness = describeVoiceReadiness(env);
   const permissionMode = readiness.permissionMode?.toLowerCase();
@@ -823,7 +833,7 @@ async function buildVoiceAssistantBrief(
     earDeviceAutoDetected: earDeviceSelection.autoDetected,
     ready,
     detail: ready
-      ? `Voice assistant loop ready: piper=${piperBin}, voice=${piperVoice}, ear=${earPython} (${earDevice}${earDeviceSelection.autoDetected ? ', webcam mic auto-selected' : ''}), STT=${speechPython}, player=${playerCommand}; responds as "${env.CODEBUDDY_ROBOT_NAME}" in ${responseMode} mode; model=${readiness.model}; ${actionDetail}.`
+      ? `Voice assistant loop ready: tts=${readiness.ttsEngine}, fallback=${piperVoice}, ear=${earPython} (${earDevice}${earDeviceSelection.autoDetected ? ', webcam mic auto-selected' : ''}), STT=${speechPython}, player=${playerCommand}; responds as "${env.CODEBUDDY_ROBOT_NAME}" in ${responseMode} mode; model=${readiness.model}; ${actionDetail}.`
       : missing.join('; '),
     next: ready
       ? undefined
@@ -1045,7 +1055,9 @@ function buildLiveCommands(
   bridge: CompanionSensoryBridgeBrief,
   assistant: CompanionVoiceAssistantBrief,
 ): CompanionLiveCommand[] {
-  const voice = assistant.piperVoice || resolvePiperVoicePath(status);
+  const voice = resolveConfiguredRobotVoice(status)
+    || assistant.piperVoice
+    || resolvePiperVoicePath(status);
   const tokenFallback = "${CODEBUDDY_SENSORY_TOKEN:-'<shared-sensory-token>'}";
   const sidecarTokenFallback = "${BUDDY_SENSE_TOKEN:-${CODEBUDDY_SENSORY_TOKEN:-'<shared-sensory-token>'}}";
   const voiceModel = process.env.CODEBUDDY_SENSORY_SPEAK_MODEL || assistant.readiness.model || 'auto';
@@ -1121,7 +1133,7 @@ export async function buildCompanionLiveBrief(
   const sensoryEnabled = isTruthyEnv('CODEBUDDY_SENSORY');
   const speechEnabled = isTruthyEnv('CODEBUDDY_SENSORY_SPEECH');
   const speakEnabled = isTruthyEnv('CODEBUDDY_SENSORY_SPEAK');
-  const resolvedTtsVoice = resolveConfiguredPiperVoice(status);
+  const resolvedTtsVoice = resolveConfiguredRobotVoice(status);
   const ttsVoicePresent = Boolean(resolvedTtsVoice);
   const voiceAssistant = await buildVoiceAssistantBrief(status, speechEnabled, speakEnabled, runtime);
   const telegramVoiceReady = isTruthyEnv('CODEBUDDY_VOICE_TO_TELEGRAM')

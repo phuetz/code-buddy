@@ -1,9 +1,10 @@
 /**
- * Local text-to-speech → Telegram-ready voice note, fully offline / $0.
+ * Text-to-speech → Telegram-ready voice note. Pocket is the unchanged local
+ * default; ElevenLabs is an explicit, budget-guarded opt-in.
  *
- * Pipeline: Pocket TTS (primary) writes a WAV, then ffmpeg transcodes it to
- * OGG/Opus (the format Telegram voice notes require). Piper remains the
- * compatibility fallback. Returns the .ogg path.
+ * Pipeline: the selected provider writes a mono 24 kHz WAV, then ffmpeg
+ * transcodes it to OGG/Opus (the format Telegram voice notes require).
+ * Pocket/Piper remain fail-open fallbacks. Returns the .ogg path.
  *
  * Resolution mirrors local-whisper.ts: explicit env wins, else the ai-stack
  * install is auto-discovered, else we fall back to `piper` on PATH. Never
@@ -17,9 +18,16 @@ import { homedir, tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { logger } from '../utils/logger.js';
 import { prepareSpeech } from '../sensory/speech-sanitizer.js';
+import type { TtsCache } from '../sensory/tts-cache.js';
+import { DEFAULT_ELEVENLABS_MODEL } from '../talk-mode/providers/elevenlabs-client.js';
 import { normalizePcm16Wav, normalizeWavFile } from './tts-volume.js';
+import {
+  DEFAULT_ELEVENLABS_TIMEOUT_MS,
+  synthesizeElevenLabsPcm24k,
+  type ElevenLabsVoiceSynthesisOptions,
+} from './elevenlabs-voice.js';
 
-export type LocalTtsEngine = 'pocket' | 'voicebox' | 'piper';
+export type LocalTtsEngine = 'elevenlabs' | 'pocket' | 'voicebox' | 'piper';
 
 const DEFAULT_POCKET_SERVER_URL = 'http://127.0.0.1:8766';
 const DEFAULT_POCKET_SERVER_START_TIMEOUT_MS = 120_000;
@@ -29,14 +37,41 @@ let pocketServerStartPromise: Promise<boolean> | null = null;
 let pocketCleanupRegistered = false;
 
 /**
- * TTS engine selector. Pocket is the modern default (better voices, cloning,
- * resident low-latency server); Piper is retained only when explicitly chosen
- * or as a fail-open fallback.
+ * TTS engine selector. `CODEBUDDY_TTS_VOICE=elevenlabs:<id>` is the sole cloud
+ * opt-in; otherwise Pocket remains the default and Piper stays explicit/fallback.
  */
 export function resolveTtsEngine(env: NodeJS.ProcessEnv = process.env): LocalTtsEngine {
+  if (resolveElevenLabsVoiceId(env)) return 'elevenlabs';
   const configured = (env.CODEBUDDY_TTS_ENGINE ?? '').trim().toLowerCase();
   if (configured === 'piper' || configured === 'voicebox') return configured;
   return 'pocket';
+}
+
+/** Voice id selected by CODEBUDDY_TTS_VOICE=elevenlabs:<voice_id>. */
+export function resolveElevenLabsVoiceId(
+  env: NodeJS.ProcessEnv = process.env
+): string | null {
+  const configured = env.CODEBUDDY_TTS_VOICE?.trim() ?? '';
+  if (!configured.toLowerCase().startsWith('elevenlabs:')) return null;
+  return configured.slice('elevenlabs:'.length).trim() || null;
+}
+
+/** Local engine used when the opt-in ElevenLabs route is unavailable. */
+export function resolveElevenLabsFallbackEngine(
+  env: NodeJS.ProcessEnv = process.env
+): 'pocket' | 'piper' {
+  return env.CODEBUDDY_TTS_ENGINE?.trim().toLowerCase() === 'piper'
+    ? 'piper'
+    : 'pocket';
+}
+
+/** Complete acoustic identity used by every ElevenLabs cache caller. */
+export function resolveElevenLabsCacheVoice(
+  env: NodeJS.ProcessEnv = process.env
+): string {
+  const selectedVoice = env.CODEBUDDY_TTS_VOICE?.trim() || 'elevenlabs:missing';
+  const model = env.CODEBUDDY_ELEVENLABS_MODEL?.trim() || DEFAULT_ELEVENLABS_MODEL;
+  return `${selectedVoice}:model=${model}:format=pcm_24000`;
 }
 
 /** Local Pocket server URL. Port 8766 avoids the common AudioReader port 8000. */
@@ -324,6 +359,100 @@ export async function synthesizePocketWav(
   }
 }
 
+/** Wrap signed 16-bit little-endian mono PCM in a standard 24 kHz WAV. */
+export function pcm16Mono24kToWav(pcm: Buffer): Buffer {
+  const wav = Buffer.alloc(44 + pcm.length);
+  wav.write('RIFF', 0, 4, 'ascii');
+  wav.writeUInt32LE(wav.length - 8, 4);
+  wav.write('WAVE', 8, 4, 'ascii');
+  wav.write('fmt ', 12, 4, 'ascii');
+  wav.writeUInt32LE(16, 16);
+  wav.writeUInt16LE(1, 20);
+  wav.writeUInt16LE(1, 22);
+  wav.writeUInt32LE(24_000, 24);
+  wav.writeUInt32LE(48_000, 28);
+  wav.writeUInt16LE(2, 32);
+  wav.writeUInt16LE(16, 34);
+  wav.write('data', 36, 4, 'ascii');
+  wav.writeUInt32LE(pcm.length, 40);
+  pcm.copy(wav, 44);
+  return wav;
+}
+
+/**
+ * Synthesize Lisa through ElevenLabs into the WAV contract used by the existing
+ * player. Never throws: false tells the caller to use Pocket/Piper immediately.
+ */
+export async function synthesizeElevenLabsWav(
+  text: string,
+  wavPath: string,
+  env: NodeJS.ProcessEnv = process.env,
+  timeoutMs = DEFAULT_ELEVENLABS_TIMEOUT_MS,
+  signal?: AbortSignal,
+  frozenFactor?: number,
+  options: ElevenLabsVoiceSynthesisOptions = {}
+): Promise<boolean> {
+  try {
+    const voiceId = resolveElevenLabsVoiceId(env);
+    if (!voiceId || signal?.aborted) return false;
+    const timeout = AbortSignal.timeout(timeoutMs);
+    const requestSignal = signal ? AbortSignal.any([signal, timeout]) : timeout;
+    const pcm = await synthesizeElevenLabsPcm24k(
+      text,
+      voiceId,
+      env,
+      requestSignal,
+      options
+    );
+    if (!pcm || pcm.length === 0 || pcm.length % 2 !== 0 || signal?.aborted) return false;
+    const wav = pcm16Mono24kToWav(pcm);
+    writeFileSync(wavPath, normalizePcm16Wav(wav, env, frozenFactor), { mode: 0o600 });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * ElevenLabs route with its fail-open local policy. Pocket is attempted after
+ * every cloud failure unless Piper was explicitly selected as the fallback.
+ */
+export async function synthesizeElevenLabsWithFallbackWav(
+  text: string,
+  wavPath: string,
+  env: NodeJS.ProcessEnv = process.env,
+  cloudTimeoutMs = DEFAULT_ELEVENLABS_TIMEOUT_MS,
+  localTimeoutMs = 180_000,
+  signal?: AbortSignal,
+  frozenFactor?: number,
+  options: ElevenLabsVoiceSynthesisOptions = {}
+): Promise<boolean> {
+  try {
+    if (await synthesizeElevenLabsWav(
+      text,
+      wavPath,
+      env,
+      cloudTimeoutMs,
+      signal,
+      frozenFactor,
+      options
+    )) {
+      return true;
+    }
+    if (signal?.aborted || resolveElevenLabsFallbackEngine(env) === 'piper') return false;
+    return await synthesizePocketWav(
+      text,
+      wavPath,
+      env,
+      localTimeoutMs,
+      signal,
+      frozenFactor
+    );
+  } catch {
+    return false;
+  }
+}
+
 /** Test/process teardown seam. */
 export function resetPocketServer(): void {
   stopPocketServer();
@@ -358,13 +487,18 @@ function resolvePiperVoice(): string | undefined {
 
 /** True when the selected local TTS path is resolvable or can be started. */
 export function localTtsAvailable(): boolean {
-  if (resolveTtsEngine() === 'voicebox') {
+  const engine = resolveTtsEngine();
+  if (engine === 'elevenlabs') {
+    // ElevenLabs is fail-open: Pocket/Piper remains the availability contract.
+    return true;
+  }
+  if (engine === 'voicebox') {
     // A live health/profile check is exposed by `buddy assistant voicebox`;
     // this synchronous compatibility API only reports whether it is configured.
     return Boolean(process.env.CODEBUDDY_VOICEBOX_PROFILE?.trim());
   }
   // Pocket auto-resolves through `uvx pocket-tts` and keeps its model resident.
-  if (resolveTtsEngine() === 'pocket') return true;
+  if (engine === 'pocket') return true;
   return (
     resolvePiperBin() !== 'piper' ||
     Boolean(process.env.COWORK_PIPER_BIN) ||
@@ -447,8 +581,8 @@ export function cleanForSpeech(text: string): string {
 
 /**
  * Synthesize `text` to an OGG/Opus file (Telegram voice-note format) and return
- * its path. Caller is responsible for deleting the file. Throws if Piper or
- * ffmpeg fail; callers should catch and fall back to a text-only reply.
+ * its path. Caller is responsible for deleting the file. Throws only when all
+ * speech fallbacks or ffmpeg fail; callers then use a text-only reply.
  */
 export async function synthesizeToOgg(text: string, options: LocalTtsOptions = {}): Promise<string> {
   const bin = resolvePiperBin();
@@ -456,7 +590,7 @@ export async function synthesizeToOgg(text: string, options: LocalTtsOptions = {
   const ffmpeg = options.ffmpeg || 'ffmpeg';
   const timeoutMs = options.timeoutMs ?? 60_000;
   const stamp = `${process.pid}-${Date.now()}`;
-  const wav = join(tmpdir(), `cb-tts-${stamp}.wav`);
+  let wav = join(tmpdir(), `cb-tts-${stamp}.wav`);
   const ogg = join(tmpdir(), `cb-tts-${stamp}.ogg`);
 
   const piperArgs = ['--output_file', wav];
@@ -469,7 +603,43 @@ export async function synthesizeToOgg(text: string, options: LocalTtsOptions = {
     const clean = cleanForSpeech(text);
     if (!clean) throw new Error('TTS text is empty after speech sanitization');
     let rendered = false;
-    if (engine === 'voicebox') {
+    let fallbackEngine: LocalTtsEngine = engine;
+    let elevenLabsRendered = false;
+    let elevenLabsCache: TtsCache | undefined;
+    if (engine === 'elevenlabs') {
+      if (process.env.CODEBUDDY_TTS_CACHE !== 'false') {
+        try {
+          const { getTtsCache } = await import('../sensory/tts-cache.js');
+          elevenLabsCache = getTtsCache();
+          const hit = elevenLabsCache.lookup(clean, resolveElevenLabsCacheVoice());
+          if (hit) {
+            wav = hit;
+            rendered = true;
+          }
+        } catch {
+          /* cache failures never delay or break speech */
+        }
+      }
+      if (!rendered) {
+        elevenLabsRendered = await synthesizeElevenLabsWav(
+          clean,
+          wav,
+          process.env,
+          Math.min(timeoutMs, DEFAULT_ELEVENLABS_TIMEOUT_MS),
+          options.signal
+        );
+        rendered = elevenLabsRendered;
+      }
+      if (elevenLabsRendered && elevenLabsCache) {
+        try {
+          elevenLabsCache.store(clean, resolveElevenLabsCacheVoice(), wav);
+        } catch {
+          /* best-effort cache */
+        }
+      }
+      fallbackEngine = resolveElevenLabsFallbackEngine();
+    }
+    if (!rendered && fallbackEngine === 'voicebox') {
       const { synthesizeVoiceboxWav } = await import('./voicebox-tts.js');
       rendered = await synthesizeVoiceboxWav(clean, wav, process.env, {
         timeoutMs,
@@ -480,7 +650,7 @@ export async function synthesizeToOgg(text: string, options: LocalTtsOptions = {
       if (!rendered && !options.signal?.aborted) {
         rendered = await synthesizePocketWav(clean, wav, process.env, timeoutMs, options.signal);
       }
-    } else if (engine === 'pocket') {
+    } else if (!rendered && fallbackEngine === 'pocket') {
       rendered = await synthesizePocketWav(clean, wav, process.env, timeoutMs, options.signal);
     }
     if (!rendered) {

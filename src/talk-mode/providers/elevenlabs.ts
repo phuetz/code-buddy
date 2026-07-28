@@ -13,8 +13,10 @@ import type {
   ElevenLabsConfig,
 } from '../types.js';
 import type { ITTSProvider } from '../tts-manager.js';
-
-const ELEVENLABS_API_URL = 'https://api.elevenlabs.io/v1';
+import {
+  ELEVENLABS_API_URL,
+  requestElevenLabsSpeech,
+} from './elevenlabs-client.js';
 
 /**
  * ElevenLabs voice from API
@@ -171,34 +173,18 @@ export class ElevenLabsProvider implements ITTSProvider {
     const voiceId = this.extractVoiceId(options?.voice) || this.config.voiceId || '21m00Tcm4TlvDq8ikWAM';
     const modelId = this.config.modelId || 'eleven_monolingual_v1';
 
-    const response = await fetch(
-      `${ELEVENLABS_API_URL}/text-to-speech/${voiceId}`,
-      {
-        method: 'POST',
-        headers: {
-          'xi-api-key': this.config.apiKey,
-          'Content-Type': 'application/json',
-          'Accept': 'audio/mpeg',
-        },
-        body: JSON.stringify({
-          text,
-          model_id: modelId,
-          voice_settings: {
-            stability: this.config.stability ?? 0.5,
-            similarity_boost: this.config.similarityBoost ?? 0.75,
-            style: this.config.style ?? 0,
-            use_speaker_boost: this.config.useSpeakerBoost ?? true,
-          },
-        }),
-      }
-    );
-
-    if (!response.ok) {
-      const error = await response.text();
-      throw new Error(`ElevenLabs TTS error: ${response.status} ${error}`);
-    }
-
-    const audioBuffer = Buffer.from(await response.arrayBuffer());
+    const { audio: audioBuffer } = await requestElevenLabsSpeech({
+      apiKey: this.config.apiKey,
+      voiceId,
+      text,
+      modelId,
+      voiceSettings: {
+        stability: this.config.stability ?? 0.5,
+        similarityBoost: this.config.similarityBoost ?? 0.75,
+        style: this.config.style ?? 0,
+        useSpeakerBoost: this.config.useSpeakerBoost ?? true,
+      },
+    });
 
     // Estimate duration
     const words = text.split(/\s+/).length;
