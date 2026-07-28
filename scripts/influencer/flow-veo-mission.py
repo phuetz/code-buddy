@@ -433,8 +433,15 @@ class Flow:
     def configure(self, ratio: str) -> None:
         self.ensure_video_controls()
         body = self.js('document.body.innerText') or ''
-        if 'Veo 3.1 - Quality' not in body or '100\xa0crédits' not in body:
-            self.click_button('Vidéo · 8s')
+        for attempt in range(3):
+            if 'Veo 3.1 - Quality' in body and '100\xa0crédits' in body:
+                break
+            if attempt:
+                # Un panneau de détail de clip peut capter le clic sur la
+                # puce : Échap le ferme, refocus l'éditeur, puis re-tenter.
+                self.press_escape()
+                self.focus_editor()
+            self.click_button('Vidéo · 8s', wait=1.5)
             body = self.js('document.body.innerText') or ''
         if 'Veo 3.1 - Quality' not in body or '100\xa0crédits' not in body:
             raise RuntimeError('Le réglage actif n’est pas Veo 3.1 Quality à 100 crédits.')
