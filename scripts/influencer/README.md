@@ -79,6 +79,8 @@ export INFLUENCER_RSS_FEEDS='[
 | `hero-batch.py` | Régénère des plans hero de trailers en Veo Quality (écrase `shot-<id>.mp4`, backup `.omni.mp4`). |
 | `flow-daily.py` | Brûle au plus 50 crédits/jour via le mode Agent Flow (15 crédits/plan), traite `~/.codebuddy/media-video/flow-queue.md`, reprend les échecs et produit une planche-contact. |
 | `heygen-batch.py submit\|collect\|status` | Soumet et collecte les vidéos lipsync HeyGen via Brave CDP sur le port 9222. Prérequis : Brave lancé avec `--remote-debugging-port=9222` et session HeyGen déjà connectée. ⚠️ L’ordre de fin diffère de l’ordre de soumission : après collecte, QC obligatoire par transcription Whisper avant tout renommage. |
+| `wrap-short.py <brut> <out> --hook … --cut …` | Habillage Short standard Ninon : sous-titres karaoké mot à mot (mot actif agrandi/coloré, `--subs cards` pour les cartes statiques), layout `split` B-roll haut / Lisa bas, cutaways déclenchés par mot. Un `--cut` image (capture `collect-evidence`) est bouclé et son attribution (`.meta.json` voisin) est incrustée automatiquement. |
+| `flow-veo-mission.py <catégorie> [--limit N]` | Pilote idempotent des campagnes Flow/Veo Quality (Brave CDP) : plafond + réserve dure lus sur le compteur live, journal de reprise, téléchargement immédiat, sidecars Cowork et planche-contact. Refuse de tourner si un batch HeyGen/Flow est déjà actif. |
 | `en-narrations-all.py [livres…]` | Narrations anglaises (voix natives ElevenLabs) pour les trailers EN. |
 | `cdp-lib.py` | Mini client Chrome DevTools Protocol (WebSocket brut) : `get_tab(match)`, `CDP.ev/cmd`. |
 
