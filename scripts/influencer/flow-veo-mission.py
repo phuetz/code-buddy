@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
-"""Mission Flow/Veo du 2026-07-26.
+"""Pilote idempotent des campagnes Flow/Veo.
 
 Pilote le projet Flow actuellement ouvert dans Brave CDP 9222. Le script :
-- refuse de soumettre si un processus HeyGen est actif ;
+- refuse de soumettre si un processus HeyGen ou un autre batch Flow est actif ;
 - vérifie Veo 3.1 Quality, 8 s, 100 crédits et le ratio demandé ;
-- ne dépasse jamais 75 soumissions / 7 500 crédits pour la mission ;
+- protège un plafond de dépense et une réserve dure depuis le compteur live ;
 - télécharge chaque réussite immédiatement ;
-- journalise les soumissions avant d'attendre leur résolution.
+- journalise les soumissions avant d'attendre leur résolution ;
+- écrit les sidecars Cowork et les planches-contact.
 
 Les identifiants de prompt servent uniquement au journal. Le catalogue final doit
 être établi visuellement depuis les planches-contact, pas depuis leur ordre.
@@ -25,14 +26,18 @@ import sys
 import time
 from typing import Any
 
+from flow_veo_campaign_2026_07_28 import CAMPAIGN_QUEUES
+
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 exec((SCRIPT_DIR / 'cdp-lib.py').read_text().split("if __name__")[0])
 
-MISSION = Path('~/.codebuddy/media-video/flow-mission-2026-07-26.json').expanduser()
-MAX_ATTEMPTS = 100
-STARTING_CREDITS = 8034
-RESERVE_CREDITS = 534
+MISSION = Path('~/.codebuddy/media-video/flow-mission-2026-07-28.json').expanduser()
+MAX_ATTEMPTS = 240
+EXPECTED_STARTING_CREDITS = 25_000
+MAX_CREDITS_TO_SPEND = 20_000
+RESERVE_CREDITS = 5_000
+CREDITS_PER_ATTEMPT = 100
 POLL_SECONDS = 8
 TIMEOUT_SECONDS = 12 * 60
 FAILURE_GRACE_SECONDS = 105
@@ -145,6 +150,49 @@ HERO_KEPLER: list[tuple[str, str]] = [
     ('kepler05', 'A rotating black hole accretion disk bending starlight into a complete luminous ring while a tiny unmanned spacecraft crosses the foreground, scientifically inspired cinematic realism.' + COMMON_169),
 ]
 
+HERO_PATIENT_ZERO: list[tuple[str, str]] = [
+    (
+        'patient01',
+        'Inside a cramped sealed negative-pressure biocontainment laboratory deep underground, '
+        'dense stainless-steel benches, translucent containment curtains and dormant robotic '
+        'instruments press in around a single red warning beacon; cold cyan practical light, '
+        'faint condensation, a slow claustrophobic dolly through the narrow central aisle.'
+        + COMMON_169,
+    ),
+    (
+        'patient02',
+        'Extreme macro of one unlabelled cryogenic glass vial held upright in a dark sterile '
+        'sample rack, viscous crimson fluid stirring as a delicate red DNA double helix appears '
+        'only through optical refraction inside the liquid; frost crystals, laser-thin rim light, '
+        'slow controlled orbit, scientifically grounded medical-thriller tension.'
+        + COMMON_169,
+    ),
+    (
+        'patient03',
+        'A completely deserted European hospital isolation corridor after midnight, empty beds '
+        'and sealed plastic airlock doors receding into deep perspective, one red emergency light '
+        'pulsing at the far end while cold fluorescent fixtures extinguish sequentially toward '
+        'the camera; perfectly centered slow reverse dolly, no person or human silhouette.'
+        + COMMON_169,
+    ),
+    (
+        'patient04',
+        'Top-down cinematic view of a large physical world map table in a dark epidemiology '
+        'operations room, coastlines recognizable but every label absent; a single crimson point '
+        'blooms in Europe, then branching red transmission paths and hundreds of dim infection '
+        'clusters propagate organically across continents, subtle glass reflections, slow descent.'
+        + COMMON_169,
+    ),
+    (
+        'patient05',
+        'Moonlit interior of an abandoned Victorian glasshouse known as Le Jardin, ornate iron '
+        'ribs, wet panes, overgrown medicinal plants and drifting mist; at the distant end stands '
+        'one anonymous human silhouette in a long dark coat, seen only from behind with the face '
+        'fully hidden, motionless as red light slowly glows beneath the leaves; elegant slow push-in.'
+        + COMMON_169,
+    ),
+]
+
 RETRY_BROLL: list[tuple[str, str]] = [
     ('rb01', 'A dense wall of next-generation AI accelerator modules being cooled by transparent microfluidic channels, blue liquid moving through copper and glass, slow macro orbit.' + COMMON_169),
     ('rb02', 'Empty Paris financial district at dawn after rain, abstract market light reflected across glass towers and wet pavement, restrained aerial push forward.' + COMMON_169),
@@ -169,8 +217,20 @@ QUEUES = {
     'plates': (PLATES, '9:16', Path('~/.codebuddy/media-video/plates-916').expanduser(), 'p', 2),
     'hero-babel': (HERO_BABEL, '16:9', Path('~/Videos/babel-trailer/hero-v2').expanduser(), 'hero-', 2),
     'hero-kepler': (HERO_KEPLER, '16:9', Path('~/Videos/kepler-trailer/hero-v2').expanduser(), 'hero-', 2),
+    'hero-patient-zero': (
+        HERO_PATIENT_ZERO,
+        '16:9',
+        Path('~/Videos/patient-zero-trailer/hero-v2').expanduser(),
+        'hero-',
+        2,
+    ),
     'broll-retry': (RETRY_BROLL, '16:9', Path('~/.codebuddy/media-video/broll').expanduser(), 'b', 3),
     'plates-retry': (RETRY_PLATES, '9:16', Path('~/.codebuddy/media-video/plates-916').expanduser(), 'p', 2),
+}
+QUEUES.update(CAMPAIGN_QUEUES)
+
+MICRO_RESERVES = {
+    'hero-patient-zero': 34,
 }
 
 
@@ -180,31 +240,13 @@ def now() -> str:
 
 def bootstrap_state() -> dict[str, Any]:
     return {
-        'mission': 'Flow/Veo credit burn 2026-07-26',
-        'startingCredits': STARTING_CREDITS,
-        'maxCreditsToSpend': 7500,
+        'mission': 'Flow/Veo Lisa + Ambre 2026-07-28',
+        'startingCredits': EXPECTED_STARTING_CREDITS,
+        'expectedStartingCredits': EXPECTED_STARTING_CREDITS,
+        'maxCreditsToSpend': MAX_CREDITS_TO_SPEND,
         'hardReserveCredits': RESERVE_CREDITS,
         'createdAt': now(),
-        'records': [
-            {
-                'attempt': 1,
-                'category': 'broll',
-                'promptId': 'ai01-bad-test',
-                'status': 'failed',
-                'estimatedCredits': 100,
-                'note': 'First UI calibration included stray TEST PROMPT; Flow failure.',
-                'submittedAt': now(),
-            },
-            {
-                'attempt': 2,
-                'category': 'broll',
-                'promptId': 'ai01-retry',
-                'status': 'success',
-                'estimatedCredits': 100,
-                'output': str(Path('~/.codebuddy/media-video/broll/b063.mp4').expanduser()),
-                'submittedAt': now(),
-            },
-        ],
+        'records': [],
     }
 
 
@@ -223,16 +265,23 @@ def save_state(state: dict[str, Any]) -> None:
     temp.replace(MISSION)
 
 
-def heygen_active() -> bool:
+def other_browser_batch_active() -> bool:
     own_pid = os.getpid()
     for proc in Path('/proc').iterdir():
         if not proc.name.isdigit() or int(proc.name) == own_pid:
             continue
         try:
-            cmd = (proc / 'cmdline').read_bytes().replace(b'\0', b' ').decode(errors='ignore')
+            args = [
+                arg.decode(errors='ignore')
+                for arg in (proc / 'cmdline').read_bytes().split(b'\0')
+                if arg
+            ]
         except (PermissionError, FileNotFoundError, ProcessLookupError):
             continue
-        if 'heygen-batch.py' in cmd:
+        if not args or not Path(args[0]).name.startswith('python'):
+            continue
+        script_names = {Path(arg).name for arg in args[1:]}
+        if {'heygen-batch.py', 'flow-veo-mission.py'} & script_names:
             return True
     return False
 
@@ -279,10 +328,27 @@ class Flow:
         role: str | None = None,
         wait: float = 0.6,
     ) -> dict[str, Any]:
-        for button in self.buttons():
+        for index, button in enumerate(self.buttons()):
             matches = button['text'] == text if exact else text in button['text']
             if matches and (role is None or button['role'] == role):
-                self.click(button['x'], button['y'], wait)
+                inner_width = float(self.js('window.innerWidth') or 0)
+                inner_height = float(self.js('window.innerHeight') or 0)
+                in_viewport = (
+                    0 <= button['x'] <= inner_width
+                    and 0 <= button['y'] <= inner_height
+                )
+                if in_viewport:
+                    self.click(button['x'], button['y'], wait)
+                else:
+                    # Barre d'en-tête parfois déportée hors du viewport (y<0) :
+                    # un clic souris CDP partirait dans le vide et toucherait
+                    # un autre élément. Clic DOM direct sur le même index.
+                    self.js(
+                        "[...document.querySelectorAll('button')]"
+                        ".filter(e=>e.getBoundingClientRect().width>0)"
+                        f"[{index}].click()"
+                    )
+                    time.sleep(wait)
                 return button
         raise RuntimeError(f'Bouton Flow introuvable : {text}')
 
@@ -292,27 +358,84 @@ class Flow:
                 self.click(button['x'], button['y'])
                 return
 
+    def press_escape(self) -> None:
+        for event_type in ('rawKeyDown', 'keyUp'):
+            self.c.cmd('Input.dispatchKeyEvent', {
+                'type': event_type,
+                'key': 'Escape',
+                'code': 'Escape',
+                'windowsVirtualKeyCode': 27,
+            })
+        time.sleep(1.5)
+
+    def recover_project_view(self) -> None:
+        # La vue plein écran d'un clip masque la barre d'abonnement (bouton
+        # ULTRA) et les contrôles de génération. Échap ramène à la vue projet ;
+        # en dernier recours on renavigue vers l'URL racine du projet.
+        if any(button['text'] == 'ULTRA' for button in self.buttons()):
+            return
+        self.press_escape()
+        if any(button['text'] == 'ULTRA' for button in self.buttons()):
+            return
+        url = str(self.js('location.href') or '')
+        match = re.match(r'(https://labs\.google/fx/.+?/project/[0-9a-f-]+)', url)
+        if match:
+            self.c.cmd('Page.navigate', {'url': match.group(1)})
+            time.sleep(12)
+
     def credits(self) -> int:
-        body = self.js('document.body.innerText') or ''
-        match = re.search(r'([0-9 ]+)\s*Crédits Google', body)
-        if not match:
-            self.click_button('ULTRA', exact=True, wait=1.0)
+        # D'autres panneaux Flow peuvent afficher un coût contenant « crédits ».
+        # Toujours ouvrir la boîte d'abonnement et cibler sa ligne complète.
+        last_error: Exception | None = None
+        for round_index in range(3):
+            if round_index:
+                time.sleep(3 * round_index)
+            try:
+                self.close_profile()
+                self.recover_project_view()
+                self.click_button('ULTRA', exact=True, wait=1.0)
+            except RuntimeError as error:
+                last_error = error
+                continue
             for _ in range(6):
                 body = self.js('document.body.innerText') or ''
-                match = re.search(r'([0-9 ]+)\s*Crédits Google', body)
+                match = re.search(
+                    r'^\s*([0-9][0-9 ]*)\s+Crédits Google\s*Flow\s*$',
+                    body,
+                    flags=re.MULTILINE,
+                )
                 if match:
-                    break
+                    value = int(match.group(1).replace(' ', ''))
+                    self.close_profile()
+                    return value
                 time.sleep(0.5)
-        if not match:
-            raise RuntimeError('Compteur de crédits Flow illisible.')
-        value = int(match.group(1).replace(' ', ''))
+            last_error = RuntimeError('ligne du compteur absente de la boîte ULTRA')
+        raise RuntimeError(f'Compteur de crédits Flow illisible. ({last_error})')
+
+    def ensure_video_controls(self) -> None:
         self.close_profile()
-        return value
+        self.recover_project_view()
+        if any(button['text'].startswith('Vidéo ·') for button in self.buttons()):
+            return
+        # Flow peut rouvrir le compositeur « Agent » sans les contrôles directs
+        # de génération. Fermer son panneau latéral puis réactiver son bouton
+        # expose le réglage vidéo, sans soumettre de contenu.
+        right_edge = float(self.js('window.innerWidth') or 0) * 0.75
+        for button in self.buttons():
+            if button['text'] == 'arrow_back\nRetour' and button['x'] > right_edge:
+                self.click(button['x'], button['y'])
+                break
+        if not any(button['text'].startswith('Vidéo ·') for button in self.buttons()):
+            self.click_button('Agent', exact=True)
+        if not any(button['text'].startswith('Vidéo ·') for button in self.buttons()):
+            raise RuntimeError('Contrôles de génération vidéo Flow introuvables.')
 
     def configure(self, ratio: str) -> None:
-        self.close_profile()
-        self.click_button('Vidéo · 8s')
+        self.ensure_video_controls()
         body = self.js('document.body.innerText') or ''
+        if 'Veo 3.1 - Quality' not in body or '100\xa0crédits' not in body:
+            self.click_button('Vidéo · 8s')
+            body = self.js('document.body.innerText') or ''
         if 'Veo 3.1 - Quality' not in body or '100\xa0crédits' not in body:
             raise RuntimeError('Le réglage actif n’est pas Veo 3.1 Quality à 100 crédits.')
         label = 'crop_16_9\n16:9' if ratio == '16:9' else 'crop_9_16\n9:16'
@@ -400,21 +523,13 @@ class Flow:
 
 def next_output(directory: Path, prefix: str, width: int) -> Path:
     directory.mkdir(parents=True, exist_ok=True)
-    if prefix in {'b', 'p'}:
-        numbers = []
-        for path in directory.glob(f'{prefix}*.mp4'):
-            match = re.fullmatch(rf'{re.escape(prefix)}(\d+)\.mp4', path.name)
-            if match:
-                numbers.append(int(match.group(1)))
-        number = max(numbers, default=0) + 1
-        return directory / f'{prefix}{number:0{width}d}.mp4'
     numbers = []
-    for path in directory.glob('hero-*.mp4'):
-        match = re.fullmatch(r'hero-(\d+)\.mp4', path.name)
+    for path in directory.glob(f'{prefix}*.mp4'):
+        match = re.fullmatch(rf'{re.escape(prefix)}(\d+)\.mp4', path.name)
         if match:
             numbers.append(int(match.group(1)))
     number = max(numbers, default=0) + 1
-    return directory / f'hero-{number:0{width}d}.mp4'
+    return directory / f'{prefix}{number:0{width}d}.mp4'
 
 
 def valid_video(path: Path) -> bool:
@@ -433,8 +548,127 @@ def valid_video(path: Path) -> bool:
         return False
 
 
+def write_sidecar(
+    output: Path,
+    *,
+    prompt: str,
+    ratio: str,
+    category: str,
+    prompt_id: str,
+    generated_at: str,
+) -> Path:
+    sidecar = Path(f'{output}.meta.json')
+    payload = {
+        'prompt': prompt,
+        'format': ratio,
+        'date': generated_at,
+        'model': 'Veo 3.1 - Quality',
+        'provider': 'Google Flow',
+        'category': category,
+        'promptId': prompt_id,
+    }
+    temp = sidecar.with_suffix('.tmp')
+    temp.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + '\n')
+    temp.replace(sidecar)
+    return sidecar
+
+
+def refresh_budget_state(state: dict[str, Any], live_credits: int) -> None:
+    gross = sum(
+        int(record.get('estimatedCredits', 0))
+        for record in state['records']
+        if record.get('status') != 'not-submitted'
+    )
+    starting = int(state['startingCredits'])
+    actual = max(0, starting - live_credits)
+    state['submittedCreditsGross'] = gross
+    state['actualCreditsSpent'] = actual
+    state['refundedCreditsEstimated'] = max(0, gross - actual)
+    state['finalCredits'] = live_credits
+    state['lastCreditsReadAt'] = now()
+
+
+def verify_live_budget(state: dict[str, Any], live_credits: int) -> None:
+    gross = int(state.get('submittedCreditsGross', 0))
+    actual = int(state.get('actualCreditsSpent', 0))
+    starting = int(state['startingCredits'])
+    expected_floor = starting - gross
+    if live_credits < expected_floor:
+        raise RuntimeError(
+            'ARRÊT BUDGET : solde live inférieur au solde attendu '
+            f'({live_credits} < {expected_floor}).'
+        )
+    if actual + CREDITS_PER_ATTEMPT > MAX_CREDITS_TO_SPEND:
+        raise RuntimeError('ARRÊT BUDGET : plafond de 20 000 crédits atteint.')
+    if live_credits - CREDITS_PER_ATTEMPT < RESERVE_CREDITS:
+        raise RuntimeError(
+            'ARRÊT BUDGET : la prochaine génération entamerait la réserve de 5 000 crédits.'
+        )
+
+
+def build_contact_sheet(
+    category: str,
+    output_dir: Path,
+    state: dict[str, Any],
+) -> Path | None:
+    records = [
+        record
+        for record in state['records']
+        if record.get('category') == category
+        and record.get('status') == 'success'
+        and record.get('output')
+    ]
+    if not records:
+        return None
+    contact_dir = output_dir / '.contact'
+    contact_dir.mkdir(parents=True, exist_ok=True)
+    frames: list[Path] = []
+    for record in records:
+        video = Path(record['output'])
+        if not video.exists():
+            continue
+        frame = contact_dir / f'{video.stem}.jpg'
+        result = subprocess.run(
+            [
+                'ffmpeg', '-y', '-v', 'error', '-ss', '0', '-i', str(video),
+                '-vf',
+                (
+                    'scale=320:180:force_original_aspect_ratio=decrease,'
+                    'pad=320:180:(ow-iw)/2:(oh-ih)/2:#111111'
+                ),
+                '-frames:v', '1', str(frame),
+            ],
+            check=False,
+        )
+        if result.returncode == 0 and frame.exists():
+            frames.append(frame)
+    if not frames:
+        return None
+    sheet = output_dir / f'planche-contact-{category}.jpg'
+    command = ['montage']
+    for frame in frames:
+        command.extend(['-label', frame.stem, str(frame)])
+    command.extend([
+        '-tile', '8x',
+        '-geometry', '320x180+8+24',
+        '-background', '#111111',
+        '-fill', 'white',
+        str(sheet),
+    ])
+    result = subprocess.run(command, check=False)
+    return sheet if result.returncode == 0 and sheet.exists() else None
+
+
 def run(category: str, limit: int | None) -> None:
-    prompts, ratio, output_dir, prefix, width = QUEUES[category]
+    raw_prompts, default_ratio, output_dir, prefix, width = QUEUES[category]
+    prompts = [
+        (
+            prompt_spec[0],
+            prompt_spec[1],
+            prompt_spec[2] if len(prompt_spec) == 3 else default_ratio,
+        )
+        for prompt_spec in raw_prompts
+    ]
     if limit is not None:
         prompts = prompts[:limit]
     state = load_state()
@@ -443,33 +677,52 @@ def run(category: str, limit: int | None) -> None:
         for record in state['records']
         if record.get('category') == category
     }
-    prompts = [(prompt_id, prompt) for prompt_id, prompt in prompts if prompt_id not in completed_ids]
+    prompts = [
+        (prompt_id, prompt, ratio)
+        for prompt_id, prompt, ratio in prompts
+        if prompt_id not in completed_ids
+    ]
     flow = Flow()
     live_credits = flow.credits()
+    if not state['records'] and not state.get('observedStartingCredits'):
+        state['observedStartingCredits'] = live_credits
+        if live_credits < EXPECTED_STARTING_CREDITS:
+            state['stopReason'] = (
+                f'solde initial inférieur à l’attendu: '
+                f'{live_credits} < {EXPECTED_STARTING_CREDITS}'
+            )
+            save_state(state)
+            raise RuntimeError(
+                'ARRÊT BUDGET : solde Flow initial inférieur aux 25 000 crédits attendus '
+                f'({live_credits}).'
+            )
+        state['startingCredits'] = live_credits
+    refresh_budget_state(state, live_credits)
+    save_state(state)
     print(f'CREDITS-DEPART {live_credits}', flush=True)
-    flow.configure(ratio)
+    current_ratio: str | None = None
 
-    for prompt_id, prompt in prompts:
-        if heygen_active():
-            raise RuntimeError('ARRÊT GARDE-FOU : un processus heygen-batch.py est actif.')
+    for prompt_id, prompt, ratio in prompts:
+        if other_browser_batch_active():
+            raise RuntimeError('ARRÊT GARDE-FOU : un autre batch navigateur est actif.')
         attempt = len(state['records']) + 1
         if attempt > MAX_ATTEMPTS:
             print('BUDGET-STOP: plafond de sécurité des soumissions atteint.', flush=True)
             break
-        if attempt <= 75:
-            estimated_remaining = STARTING_CREDITS - attempt * 100
-            if estimated_remaining < RESERVE_CREDITS:
-                print('BUDGET-STOP: réserve dure atteinte.', flush=True)
-                break
-        else:
-            # After the planned 75 submissions, only reinvest credits that Flow
-            # actually refunded. Read the live counter before every extra attempt.
-            live_credits = flow.credits()
-            print(f'CREDITS-AVANT-EXTRA-{attempt} {live_credits}', flush=True)
-            if live_credits < RESERVE_CREDITS + 100:
-                print('BUDGET-STOP: compteur live protège la réserve.', flush=True)
-                break
+        live_credits = flow.credits()
+        refresh_budget_state(state, live_credits)
+        save_state(state)
+        try:
+            verify_live_budget(state, live_credits)
+        except RuntimeError as error:
+            state['stopReason'] = str(error)
+            save_state(state)
+            print(f'BUDGET-STOP: {error}', flush=True)
+            break
+        print(f'CREDITS-AVANT-{attempt} {live_credits}', flush=True)
+        if current_ratio != ratio:
             flow.configure(ratio)
+            current_ratio = ratio
 
         before_videos = flow.videos()
         before_failures = flow.failure_count()
@@ -480,12 +733,14 @@ def run(category: str, limit: int | None) -> None:
             'category': category,
             'promptId': prompt_id,
             'status': 'submitted',
-            'estimatedCredits': 100,
+            'estimatedCredits': CREDITS_PER_ATTEMPT,
             'submittedAt': now(),
             'ratio': ratio,
             'model': 'Veo 3.1 - Quality',
+            'prompt': prompt,
         }
         state['records'].append(record)
+        refresh_budget_state(state, live_credits)
         save_state(state)
         print(f'{category}/{prompt_id}: SOUMIS tentative={attempt}', flush=True)
 
@@ -516,9 +771,20 @@ def run(category: str, limit: int | None) -> None:
                 flow.fetch_video(source, output)
                 if not valid_video(output):
                     raise RuntimeError('ffprobe n’a pas validé une durée de huit secondes.')
+                resolved_at = now()
+                sidecar = write_sidecar(
+                    output,
+                    prompt=prompt,
+                    ratio=ratio,
+                    category=category,
+                    prompt_id=prompt_id,
+                    generated_at=resolved_at,
+                )
                 record['status'] = 'success'
                 record['source'] = source
                 record['output'] = str(output)
+                record['sidecar'] = str(sidecar)
+                record['resolvedAt'] = resolved_at
                 print(f'{category}/{prompt_id}: OK -> {output}', flush=True)
             except Exception as error:
                 record['status'] = 'download-failed'
@@ -530,20 +796,22 @@ def run(category: str, limit: int | None) -> None:
         else:
             record['status'] = 'timeout'
             print(f'{category}/{prompt_id}: TIMEOUT', flush=True)
-        record['resolvedAt'] = now()
+        record.setdefault('resolvedAt', now())
         save_state(state)
 
-        if attempt % 5 == 0:
-            live_credits = flow.credits()
-            record['creditsAfter'] = live_credits
-            save_state(state)
-            print(f'CREDITS-APRES-{attempt} {live_credits}', flush=True)
-            if live_credits < RESERVE_CREDITS + 100:
-                print('BUDGET-STOP: compteur live protège la réserve.', flush=True)
-                break
-            flow.configure(ratio)
+        live_credits = flow.credits()
+        refresh_budget_state(state, live_credits)
+        record['creditsAfter'] = live_credits
+        save_state(state)
+        print(f'CREDITS-APRES-{attempt} {live_credits}', flush=True)
         time.sleep(3)
 
+    sheet = build_contact_sheet(category, output_dir, state)
+    if sheet:
+        state.setdefault('contactSheets', {})[category] = str(sheet)
+    live_credits = flow.credits()
+    refresh_budget_state(state, live_credits)
+    save_state(state)
     successes = sum(
         record.get('status') == 'success'
         for record in state['records']
@@ -553,7 +821,11 @@ def run(category: str, limit: int | None) -> None:
         record.get('category') == category
         for record in state['records']
     )
-    print(f'LOT-TERMINE {category}: {successes} succès / {attempts} soumissions', flush=True)
+    print(
+        f'LOT-TERMINE {category}: {successes} succès / {attempts} soumissions, '
+        f'crédits={live_credits}, planche={sheet}',
+        flush=True,
+    )
 
 
 def main() -> None:
