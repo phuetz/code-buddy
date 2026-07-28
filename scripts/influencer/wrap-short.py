@@ -13,8 +13,19 @@ Le déclencheur `mot` est cherché dans les word-timestamps whisper (1er match,
 insensible casse/accents simples) ; `@12.5:3` = temps absolu accepté aussi.
 En layout split, la durée de chaque `--cut` est ignorée : le premier B-roll
 commence à 0, puis chaque clip tient jusqu'au déclencheur du suivant.
+
+Sous-titres karaoké mot à mot par défaut (mot actif agrandi et coloré,
+standard Ninon) ; `--subs cards` restaure les cartes statiques historiques.
+Un `--cut` peut être une image (png/jpg/webp), notamment une capture de
+collect-evidence.py : son `.meta.json` voisin est détecté et l'attribution
+est incrustée automatiquement pendant la fenêtre d'affichage.
 """
-import argparse, os, re, subprocess, sys, tempfile, unicodedata
+import argparse, json, os, re, subprocess, sys, tempfile, unicodedata
+
+IMAGE_EXTENSIONS = {'.png', '.jpg', '.jpeg', '.webp'}
+
+def is_image(path):
+    return os.path.splitext(path)[1].lower() in IMAGE_EXTENSIONS
 
 def norm(w):
     w = unicodedata.normalize('NFD', w.lower())
@@ -57,21 +68,35 @@ def apply_fixes(words, extra):
         i += 1
     return [w for w in words if w['w']]
 
+def merge_apostrophes(words):
+    """Recolle les apostrophes éclatées par whisper (« qu 'elle » → « qu'elle »)."""
+    out = []
+    for w in words:
+        if out and (w['w'].startswith("'") or out[-1]['w'].endswith("'")):
+            out[-1] = {
+                't0': out[-1]['t0'],
+                't1': w['t1'],
+                'w': (out[-1]['w'] + w['w']).replace(" '", "'"),
+            }
+        else:
+            out.append(dict(w))
+    return out
+
 def cards(words, max_words=4, max_dur=2.6):
     """Groupe les mots en cartes de sous-titres courtes."""
+    words = merge_apostrophes(words)
     out, cur = [], []
     for w in words:
         cur.append(w)
         dur = cur[-1]['t1'] - cur[0]['t0']
-        text = ' '.join(x['w'] for x in cur)
         if (len(cur) >= max_words or dur >= max_dur
                 or re.search(r'[.!?…]$', w['w'])):
-            out.append({'t0': cur[0]['t0'], 't1': cur[-1]['t1'], 'text': text})
+            out.append({'t0': cur[0]['t0'], 't1': cur[-1]['t1'],
+                        'text': ' '.join(x['w'] for x in cur), 'words': cur})
             cur = []
     if cur:
-        out.append({'t0': cur[0]['t0'], 't1': cur[-1]['t1'], 'text': ' '.join(x['w'] for x in cur)})
-    for c in out:  # recolle les apostrophes éclatées par whisper (« qu 'elle » → « qu'elle »)
-        c['text'] = re.sub(r"\s+'\s*", "'", c['text']).replace(" ' ", "'")
+        out.append({'t0': cur[0]['t0'], 't1': cur[-1]['t1'],
+                    'text': ' '.join(x['w'] for x in cur), 'words': cur})
     # jointures : pas de trous < 0.3s
     for a, b in zip(out, out[1:]):
         if 0 < b['t0'] - a['t1'] < 0.3:
@@ -82,9 +107,32 @@ def ass_time(t):
     h = int(t // 3600); m = int(t % 3600 // 60); s = t % 60
     return f'{h}:{m:02d}:{s:05.2f}'
 
-def build_ass(cards_list, hook, hook_end, w=1080, h=1920, layout='standard'):
+ACTIVE_WORD_TAG = r'{\fscx116\fscy116\1c&H00FFFF&}'  # agrandi + jaune (BGR)
+
+def ass_escape(text):
+    return text.replace('{', '').replace('}', '').replace('\n', ' ')
+
+def karaoke_events(card):
+    """Un événement par mot : la carte entière, mot actif agrandi et coloré."""
+    events = []
+    words = card['words']
+    for j, w in enumerate(words):
+        start = card['t0'] if j == 0 else max(w['t0'], card['t0'])
+        end = words[j + 1]['t0'] if j + 1 < len(words) else card['t1']
+        if end - start < 0.01:
+            continue
+        parts = []
+        for k, x in enumerate(words):
+            token = ass_escape(x['w'])
+            parts.append(f'{ACTIVE_WORD_TAG}{token}{{\\r}}' if k == j else token)
+        events.append({'t0': start, 't1': end, 'text': ' '.join(parts)})
+    return events
+
+def build_ass(cards_list, hook, hook_end, w=1080, h=1920, layout='standard',
+              subs='karaoke', attributions=None):
     sub_margin_v = 430 if layout == 'standard' else 180
     hook_margin_v = 150 if layout == 'standard' else 90
+    attr_margin_v = 24 if layout == 'split' else 240
     head = f"""[Script Info]
 ScriptType: v4.00+
 PlayResX: {w}
@@ -95,17 +143,48 @@ WrapStyle: 0
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
 Style: Sub,DejaVu Sans,88,&H00FFFFFF,&H00FFFFFF,&H00101010,&H96000000,-1,0,0,0,100,100,0,0,1,7,0,2,60,60,{sub_margin_v},1
 Style: Hook,DejaVu Sans,72,&H00FFFFFF,&H00FFFFFF,&H00101010,&H78000000,-1,0,0,0,100,100,0,0,3,10,0,8,40,40,{hook_margin_v},1
+Style: Attr,DejaVu Sans,30,&H00E8E8E8,&H00E8E8E8,&H00101010,&H50000000,0,0,0,0,100,100,0,0,3,8,0,7,24,24,{attr_margin_v},1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 """
     lines = []
     if hook:
-        lines.append(f"Dialogue: 1,{ass_time(0.2)},{ass_time(hook_end)},Hook,,0,0,0,,{hook}")
+        lines.append(f"Dialogue: 1,{ass_time(0.2)},{ass_time(hook_end)},Hook,,0,0,0,,{ass_escape(hook)}")
+    for a in attributions or []:
+        lines.append(
+            f"Dialogue: 2,{ass_time(a['t0'])},{ass_time(a['t1'])},Attr,,0,0,0,,"
+            f"{ass_escape(a['text'])}")
     for c in cards_list:
-        txt = c['text'].replace('{', '').replace('}', '')
-        lines.append(f"Dialogue: 0,{ass_time(c['t0'])},{ass_time(c['t1'])},Sub,,0,0,0,,{txt}")
+        if subs == 'karaoke':
+            for e in karaoke_events(c):
+                lines.append(
+                    f"Dialogue: 0,{ass_time(e['t0'])},{ass_time(e['t1'])},Sub,,0,0,0,,{e['text']}")
+        else:
+            lines.append(
+                f"Dialogue: 0,{ass_time(c['t0'])},{ass_time(c['t1'])},Sub,,0,0,0,,{ass_escape(c['text'])}")
     return head + '\n'.join(lines) + '\n'
+
+def attribution_for_cut(path):
+    """Attribution d'une preuve collect-evidence : lit le .meta.json voisin.
+
+    Les fichiers de preuve s'appellent {stem}-full.png ou
+    {stem}-split-WxH.png ; les métadonnées sont dans {stem}.meta.json.
+    """
+    base = os.path.splitext(path)[0]
+    stems = [base, re.sub(r'-full$', '', base), re.sub(r'-split-\d+x\d+$', '', base)]
+    for stem in dict.fromkeys(stems):
+        meta_path = f'{stem}.meta.json'
+        if os.path.exists(meta_path):
+            try:
+                attribution = json.load(open(meta_path)).get('attribution')
+            except (OSError, json.JSONDecodeError) as e:
+                print(f'AVERTISSEMENT: métadonnées preuve illisibles {meta_path}: {e}',
+                      file=sys.stderr)
+                return None
+            if attribution:
+                return str(attribution)
+    return None
 
 def find_trigger(words, spec):
     """`mot` ou `mot+N` (Nème occurrence) → temps du mot ; nombre pur = temps absolu."""
@@ -169,8 +248,8 @@ def detect_baked_letterbox(path):
               file=sys.stderr)
     return None
 
-def build_split_video_filter(cuts, ass_path, total, face_crop):
-    """Construit le B-roll continu en haut et le présentateur recadré en bas."""
+def split_active_cuts(cuts, total):
+    """Ordonne les cuts du layout split et fixe leur fenêtre de départ."""
     ordered = sorted(cuts, key=lambda c: c['t0'])
     active = [ordered[0]]
     last_start = 0.0
@@ -186,7 +265,10 @@ def build_split_video_filter(cuts, ass_path, total, face_crop):
         active.append(c)
         last_start = start
     active[0]['split_t0'] = 0.0
+    return active
 
+def build_split_video_filter(active, ass_path, total, face_crop):
+    """Construit le B-roll continu en haut et le présentateur recadré en bas."""
     top, bottom = face_crop
     fc = [
         f'[0:v]trim=duration={total:.3f},setpts=PTS-STARTPTS,'
@@ -199,7 +281,7 @@ def build_split_video_filter(cuts, ass_path, total, face_crop):
         end = active[i + 1]['split_t0'] if i + 1 < len(active) else total
         seg_dur = end - start
         label = f'br{i}'
-        baked = detect_baked_letterbox(c['path'])
+        baked = None if is_image(c['path']) else detect_baked_letterbox(c['path'])
         pre_crop = f'crop={baked},' if baked else ''
         fc.append(
             f"[{c['input_index']}:v]{pre_crop}"
@@ -237,13 +319,17 @@ def main():
     ap.add_argument(
         '--music',
         help='musique optionnelle, bouclée et duckée sous la voix puis masterisée à -14 LUFS')
+    ap.add_argument(
+        '--subs', choices=('karaoke', 'cards'), default='karaoke',
+        help='karaoke = mot actif agrandi et coloré (défaut, standard Ninon) ; '
+             'cards = cartes statiques historiques')
     a = ap.parse_args()
 
     words = transcribe(a.src)
     if not words:
         sys.exit('transcription vide')
     words = apply_fixes(words, a.fix)
-    subs = cards(words)
+    sub_cards = cards(words)
 
     cuts = []
     for spec in a.cut:
@@ -260,13 +346,32 @@ def main():
     if a.layout == 'split' and not cuts:
         sys.exit('layout split: au moins un --cut avec déclencheur valide est requis')
 
+    total = media_duration(a.src)
+    active = split_active_cuts(cuts, total) if a.layout == 'split' else cuts
+    attributions = []
+    for i, c in enumerate(active):
+        text = attribution_for_cut(c['path'])
+        if not text:
+            continue
+        if a.layout == 'split':
+            t0 = c['split_t0']
+            t1 = active[i + 1]['split_t0'] if i + 1 < len(active) else total
+        else:
+            t0, t1 = c['t0'], min(total, c['t0'] + c['dur'])
+        attributions.append({'t0': t0, 't1': t1, 'text': text})
+
     with tempfile.NamedTemporaryFile('w', suffix='.ass', delete=False) as f:
-        f.write(build_ass(subs, a.hook, a.hook_end, layout=a.layout))
+        f.write(build_ass(sub_cards, a.hook, a.hook_end, layout=a.layout,
+                          subs=a.subs, attributions=attributions))
         ass_path = f.name
 
     inputs = ['-i', a.src]
     for i, c in enumerate(cuts):
-        inputs += ['-i', c['path']]
+        if is_image(c['path']):
+            span = total if a.layout == 'split' else c['dur']
+            inputs += ['-loop', '1', '-t', f'{span:.3f}', '-i', c['path']]
+        else:
+            inputs += ['-i', c['path']]
         c['input_index'] = i + 1
 
     if a.layout == 'standard':
@@ -279,14 +384,12 @@ def main():
             last = f'v{i}'
         fc.append(f"[{last}]ass={ass_path}[vout]")
     else:
-        total = media_duration(a.src)
-        fc = build_split_video_filter(cuts, ass_path, total, a.face_crop)
+        fc = build_split_video_filter(active, ass_path, total, a.face_crop)
 
     audio_args = ['-map', '0:a', '-c:a', 'aac', '-b:a', '192k']
     if a.music:
         music_index = len(cuts) + 1
         inputs += ['-stream_loop', '-1', '-i', a.music]
-        total = media_duration(a.src)
         fade_out = max(0.0, total - 1.0)
         fc.extend([
             f'[{music_index}:a]atrim=0:{total:.3f},asetpts=PTS-STARTPTS,'
