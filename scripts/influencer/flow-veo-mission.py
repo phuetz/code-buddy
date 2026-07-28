@@ -461,23 +461,31 @@ class Flow:
         self.click(x, y, 0.25)
 
     def fill_prompt(self, prompt: str) -> None:
-        self.focus_editor()
-        self.focus_editor()
-        self.c.cmd('Runtime.evaluate', {
-            'expression': (
-                "(()=>{let e=document.querySelector('[data-slate-editor=true]');"
-                "e.focus();let r=document.createRange();r.selectNodeContents(e);"
-                "let s=getSelection();s.removeAllRanges();s.addRange(r);return true})()"
-            ),
-            'returnByValue': True,
-        })
-        self.c.cmd('Input.insertText', {'text': prompt})
-        time.sleep(0.5)
-        actual = self.js("document.querySelector('[data-slate-editor=true]').innerText") or ''
-        if actual != prompt:
-            raise RuntimeError(
-                f'Prompt Slate divergent ({len(actual)} caractères au lieu de {len(prompt)}).'
-            )
+        # Le focus peut être volé entre la sélection et l'insertion (popover,
+        # rafraîchissement React) : re-tenter la saisie complète avant d'échouer.
+        actual = ''
+        for attempt in range(3):
+            if attempt:
+                time.sleep(2 * attempt)
+                self.recover_project_view()
+            self.focus_editor()
+            self.focus_editor()
+            self.c.cmd('Runtime.evaluate', {
+                'expression': (
+                    "(()=>{let e=document.querySelector('[data-slate-editor=true]');"
+                    "e.focus();let r=document.createRange();r.selectNodeContents(e);"
+                    "let s=getSelection();s.removeAllRanges();s.addRange(r);return true})()"
+                ),
+                'returnByValue': True,
+            })
+            self.c.cmd('Input.insertText', {'text': prompt})
+            time.sleep(0.5)
+            actual = self.js("document.querySelector('[data-slate-editor=true]').innerText") or ''
+            if actual == prompt:
+                return
+        raise RuntimeError(
+            f'Prompt Slate divergent ({len(actual)} caractères au lieu de {len(prompt)}).'
+        )
 
     def videos(self) -> set[str]:
         raw = self.js(
