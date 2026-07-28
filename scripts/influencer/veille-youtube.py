@@ -1,12 +1,15 @@
 #!/usr/bin/env python3
 """Veille YouTube IA gratuite pour Code Buddy, les médias et la recherche.
 
-Le collecteur lit les flux RSS publics des chaînes, télécharge uniquement les
-sous-titres automatiques avec yt-dlp, puis confie leur analyse à Gemini via
-``agy``. Aucune API YouTube ni API LLM payante n'est utilisée.
+Le collecteur lit les flux RSS publics des chaînes ou l'inventaire historique
+Vision IA, télécharge uniquement les sous-titres avec yt-dlp, puis confie leur
+analyse à Gemini via ``agy`` ou à Ollama local. Aucune API YouTube ni API LLM
+payante n'est utilisée.
 
 Sorties par défaut :
   ~/.codebuddy/veille/VEILLE-IA.md
+  ~/.codebuddy/veille/BASE-CONNAISSANCES-VISIONAI.md
+  ~/.codebuddy/veille/CATALOGUE-OUTILS.md
   ~/.codebuddy/veille/A-TESTER.md
   ~/.codebuddy/veille/index.json
   ~/.codebuddy/veille/journal.jsonl
@@ -19,6 +22,7 @@ from __future__ import annotations
 
 import argparse
 from collections import deque
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 import fcntl
@@ -42,9 +46,11 @@ import xml.etree.ElementTree as ET
 DEFAULT_CONFIG = Path('~/.codebuddy/veille-chaines.yml').expanduser()
 DEFAULT_WORKDIR = Path('~/.codebuddy/veille').expanduser()
 DEFAULT_MODEL = 'gemini-3.6-flash-low'
+DEFAULT_OLLAMA_MODEL = 'qwen3:4b-instruct'
 DEFAULT_DAYS = 14
 DEFAULT_MAX_VIDEOS = 2
 MAX_TRANSCRIPT_CHARS = 120_000
+VISION_IA_CHANNEL_ID = 'UCyc03X3uRuxM9n7fyRH_gIw'
 USER_AGENT = 'CodeBuddy-YouTube-Watch/1.0 (+local RSS reader)'
 CHANNEL_ID = re.compile(r'^UC[A-Za-z0-9_-]{20,30}$')
 VIDEO_ID = re.compile(r'^[A-Za-z0-9_-]{11}$')
@@ -82,6 +88,9 @@ class Video:
     published: str
     url: str
     description: str = ''
+    duration: int | None = None
+    view_count: int | None = None
+    upload_date: str = ''
 
 
 # Ordre éditorial intentionnel : Vision IA doit rester la première source.
@@ -425,7 +434,143 @@ def targeted_video(
         published=published,
         url=f'https://www.youtube.com/watch?v={video_id}',
         description=str(metadata.get('description', '')),
+        duration=int(metadata['duration']) if metadata.get('duration') else None,
+        view_count=(
+            int(metadata['view_count'])
+            if metadata.get('view_count') is not None
+            else None
+        ),
+        upload_date=upload_date,
     )
+
+
+def video_from_metadata(metadata: dict[str, Any]) -> Video | None:
+    video_id = str(metadata.get('id', '')).strip()
+    channel_id = str(metadata.get('channel_id', '')).strip()
+    if not VIDEO_ID.fullmatch(video_id):
+        return None
+    upload_date = str(metadata.get('upload_date', '')).strip()
+    published = ''
+    timestamp = metadata.get('timestamp')
+    if isinstance(timestamp, (int, float)):
+        published = datetime.fromtimestamp(
+            timestamp, tz=timezone.utc
+        ).isoformat()
+    elif re.fullmatch(r'\d{8}', upload_date):
+        published = (
+            f'{upload_date[:4]}-{upload_date[4:6]}-{upload_date[6:]}'
+            'T00:00:00+00:00'
+        )
+    duration = metadata.get('duration')
+    views = metadata.get('view_count')
+    return Video(
+        video_id=video_id,
+        channel_name=str(metadata.get('channel', 'Vision IA')).strip()
+        or 'Vision IA',
+        channel_id=channel_id or VISION_IA_CHANNEL_ID,
+        title=str(metadata.get('title', video_id)).strip() or video_id,
+        published=published,
+        url=f'https://www.youtube.com/watch?v={video_id}',
+        description=str(metadata.get('description', '') or ''),
+        duration=int(duration) if isinstance(duration, (int, float)) else None,
+        view_count=int(views) if isinstance(views, (int, float)) else None,
+        upload_date=upload_date,
+    )
+
+
+def inventory_record(video: Video) -> dict[str, Any]:
+    return {
+        'video_id': video.video_id,
+        'channel_name': video.channel_name,
+        'channel_id': video.channel_id,
+        'title': video.title,
+        'published': video.published,
+        'upload_date': video.upload_date,
+        'duration': video.duration,
+        'view_count': video.view_count,
+        'url': video.url,
+        'description': video.description,
+    }
+
+
+def video_from_inventory(value: dict[str, Any]) -> Video | None:
+    video_id = str(value.get('video_id', '')).strip()
+    if not VIDEO_ID.fullmatch(video_id):
+        return None
+    duration = value.get('duration')
+    views = value.get('view_count')
+    return Video(
+        video_id=video_id,
+        channel_name=str(value.get('channel_name', 'Vision IA')),
+        channel_id=str(value.get('channel_id', VISION_IA_CHANNEL_ID)),
+        title=str(value.get('title', video_id)),
+        published=str(value.get('published', '')),
+        url=str(value.get('url', f'https://www.youtube.com/watch?v={video_id}')),
+        description=str(value.get('description', '')),
+        duration=int(duration) if isinstance(duration, (int, float)) else None,
+        view_count=int(views) if isinstance(views, (int, float)) else None,
+        upload_date=str(value.get('upload_date', '')),
+    )
+
+
+def load_inventory(path: Path) -> list[Video]:
+    if not path.exists():
+        return []
+    value = json.loads(path.read_text(encoding='utf-8'))
+    records = value.get('videos', []) if isinstance(value, dict) else []
+    if not isinstance(records, list):
+        raise ValueError("l'inventaire doit contenir un tableau videos")
+    videos = [
+        video
+        for record in records
+        if isinstance(record, dict)
+        for video in [video_from_inventory(record)]
+        if video is not None
+    ]
+    return videos
+
+
+def write_inventory(path: Path, videos: list[Video]) -> None:
+    ordered = sorted(
+        {video.video_id: video for video in videos}.values(),
+        key=lambda video: (video.published, video.video_id),
+        reverse=True,
+    )
+    atomic_json(
+        path,
+        {
+            'version': 1,
+            'channel_id': VISION_IA_CHANNEL_ID,
+            'channel_name': 'Vision IA',
+            'uploads_playlist_id': f'UU{VISION_IA_CHANNEL_ID[2:]}',
+            'updated_at': now_iso(),
+            'count': len(ordered),
+            'videos': [inventory_record(video) for video in ordered],
+        },
+    )
+
+
+def import_inventory_jsonl(raw_path: Path, inventory_path: Path) -> list[Video]:
+    videos = []
+    for number, line in enumerate(
+        raw_path.read_text(encoding='utf-8').splitlines(), 1
+    ):
+        if not line.strip():
+            continue
+        try:
+            value = json.loads(line)
+        except json.JSONDecodeError as error:
+            raise ValueError(
+                f'JSONL inventaire invalide ligne {number}: {error}'
+            ) from error
+        if isinstance(value, dict):
+            video = video_from_metadata(value)
+            if video is not None:
+                videos.append(video)
+    if not videos:
+        raise ValueError(f'aucune vidéo valide dans {raw_path}')
+    write_inventory(inventory_path, videos)
+    return videos
 
 
 def clean_vtt(text: str) -> str:
@@ -468,6 +613,20 @@ def download_transcript(
     video: Video,
     args: argparse.Namespace,
 ) -> tuple[str, str]:
+    transcript_dir = args.workdir / 'transcripts'
+    transcript_dir.mkdir(parents=True, exist_ok=True)
+    transcript_path = transcript_dir / f'{video.video_id}.txt'
+    metadata_path = transcript_dir / f'{video.video_id}.json'
+    if transcript_path.exists() and transcript_path.stat().st_size >= 80:
+        language = 'cache'
+        if metadata_path.exists():
+            try:
+                metadata = json.loads(metadata_path.read_text(encoding='utf-8'))
+                language = str(metadata.get('language', language))
+            except (OSError, json.JSONDecodeError):
+                pass
+        return transcript_path.read_text(encoding='utf-8'), language
+
     with tempfile.TemporaryDirectory(prefix='codebuddy-veille-') as directory:
         root = Path(directory)
         template = str(root / '%(id)s.%(ext)s')
@@ -519,7 +678,20 @@ def download_transcript(
                 f'({len(transcript)} caractères)'
             )
         language = preferred.name.split('.')[-2]
-        return transcript[:MAX_TRANSCRIPT_CHARS], language
+        temporary = transcript_path.with_suffix('.txt.tmp')
+        temporary.write_text(transcript, encoding='utf-8')
+        os.replace(temporary, transcript_path)
+        atomic_json(
+            metadata_path,
+            {
+                'video_id': video.video_id,
+                'language': language,
+                'source': preferred.name,
+                'downloaded_at': now_iso(),
+                'characters': len(transcript),
+            },
+        )
+        return transcript, language
 
 
 def analysis_prompt(video: Video, transcript: str) -> str:
@@ -538,8 +710,11 @@ DESCRIPTION / CHAPITRES (indice prioritaire pour les noms propres) :
 
 Pour chaque outil, modèle, article, jeu de données, méthode ou nouveauté
 réellement mentionné, rends un objet. Utilise le nom officiel le plus probable
-dans "name" et une famille stable dans "family" pour dédupliquer les versions
-(exemples : "Wan 2.2 Bernini", "LongCat-Video", "PaperQA").
+dans "name" et une famille assez précise dans "family" pour dédupliquer les
+variantes orthographiques sans fusionner deux versions techniquement distinctes
+(exemples : "Wan 2.2 Bernini", "LongCat-Video", "PaperQA"). "publisher" est
+l'éditeur explicitement donné ou déductible sans ambiguïté du nom. "link" reste
+vide si aucune URL n'est citée dans la description ou le transcript.
 
 Évalue quatre axes indépendants de 0 à 10 :
 1. code_buddy : LLM, embeddings, RAG, agents, MCP, vision, voix, code.
@@ -558,10 +733,20 @@ données de santé sous RGPD et accords d'accès.
 
 Réponds UNIQUEMENT avec un objet JSON strict, sans markdown :
 {{
+  "main_subject": "sujet principal en une phrase",
+  "summary": "synthèse factuelle en 2 à 4 phrases",
+  "editorial": {{
+    "hook": "mécanique d'accroche observée",
+    "structure": ["séquence 1", "séquence 2"],
+    "cta": "appel à l'action ou vide",
+    "format": "décryptage|récapitulatif hebdomadaire|tutoriel|autre"
+  }},
   "items": [
     {{
       "name": "nom",
       "family": "famille stable",
+      "publisher": "éditeur ou inconnu",
+      "link": "URL citée ou chaîne vide",
       "kind": "outil|modèle|recherche|jeu de données|méthode|annonce",
       "description": "ce que c'est et ce que cela fait",
       "use_cases": ["usage concret"],
@@ -575,7 +760,7 @@ Réponds UNIQUEMENT avec un objet JSON strict, sans markdown :
 }}
 
 TRANSCRIPT :
-{transcript}
+{transcript[:MAX_TRANSCRIPT_CHARS]}
 """
 
 
@@ -659,6 +844,329 @@ def analyze_with_gemini(
             ) from initial_error
 
 
+def analyze_with_ollama(
+    video: Video,
+    transcript: str,
+    model: str,
+) -> dict[str, Any]:
+    endpoint = os.environ.get(
+        'OLLAMA_HOST', 'http://127.0.0.1:11434'
+    ).rstrip('/') + '/api/generate'
+    payload = {
+        'model': model,
+        'prompt': analysis_prompt(video, transcript),
+        'stream': False,
+        'format': 'json',
+        'keep_alive': '30m',
+        'options': {
+            'temperature': 0,
+            'num_ctx': 65536,
+            'num_predict': 8192,
+        },
+    }
+    request = urllib.request.Request(
+        endpoint,
+        data=json.dumps(payload, ensure_ascii=False).encode('utf-8'),
+        headers={'Content-Type': 'application/json'},
+        method='POST',
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=660) as response:
+            envelope = json.loads(response.read().decode('utf-8'))
+    except (OSError, urllib.error.URLError, json.JSONDecodeError) as error:
+        raise RuntimeError(f'Ollama a échoué avec {model}: {error}') from error
+    raw = str(envelope.get('response', '')).strip()
+    if not raw:
+        raise ValueError(f'Ollama {model} a renvoyé une réponse vide')
+    return extract_json(raw)
+
+
+def transcript_sample(transcript: str, budget: int = 3_000) -> str:
+    if len(transcript) <= budget:
+        return transcript
+    third = budget // 3
+    middle = len(transcript) // 2
+    return '\n[...]\n'.join(
+        [
+            transcript[:third],
+            transcript[middle - third // 2 : middle + third // 2],
+            transcript[-third:],
+        ]
+    )
+
+
+def compact_batch_prompt(
+    batch: list[tuple[Video, str]],
+) -> str:
+    sources = []
+    for video, transcript in batch:
+        sources.append(
+            {
+                'id': video.video_id,
+                'title': video.title,
+                'date': video.published,
+                'description': video.description[:1_500],
+                'transcript_sample': transcript_sample(transcript),
+            }
+        )
+    return """Analyse séparément chaque vidéo Vision IA. N'invente rien.
+Pour chaque vidéo, donne le sujet, le format (D=décryptage, H=hebdo,
+T=tutoriel, A=autre) et les outils/modèles/recherches/jeux de données/méthodes
+techniques nommés dans l'extrait (12 maximum, versions distinctes). Chaque item
+est [nom exact, éditeur ou "inconnu", fonction en 12 mots max, type].
+Les titres des chapitres de la description sont des mentions valides. EXCLUS
+Vision IA, sa formation, sa newsletter, YouTube et les appels à s'abonner.
+JSON strict ULTRA COMPACT uniquement, aucune autre clé ni prose :
+{"v":[{"id":"ID vidéo","s":"sujet","f":"D","i":[["nom","éditeur","fonction","type"]]}]}
+
+VIDÉOS :
+""" + json.dumps(sources, ensure_ascii=False)
+
+
+def expand_compact_analysis(value: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    compact_videos = value.get('v', [])
+    if isinstance(compact_videos, list) and compact_videos:
+        expanded: dict[str, dict[str, Any]] = {}
+        format_names = {
+            'D': 'décryptage',
+            'H': 'récapitulatif hebdomadaire',
+            'T': 'tutoriel',
+            'A': 'autre',
+        }
+        for raw_video in compact_videos:
+            if isinstance(raw_video, dict):
+                video_id = str(raw_video.get('id', ''))
+                if not VIDEO_ID.fullmatch(video_id):
+                    continue
+                subject = str(
+                    raw_video.get('s', raw_video.get('sujet', ''))
+                )
+                format_code = str(raw_video.get('f', 'A'))
+                raw_items = raw_video.get('i', [])
+                if not isinstance(raw_items, list):
+                    raw_items = []
+            elif isinstance(raw_video, list) and len(raw_video) >= 4:
+                video_id = str(raw_video[0])
+                if not VIDEO_ID.fullmatch(video_id):
+                    continue
+                subject = str(raw_video[1])
+                format_code = str(raw_video[2])
+                raw_items = (
+                    raw_video[3] if isinstance(raw_video[3], list) else []
+                )
+            else:
+                continue
+            items = []
+            for raw in raw_items:
+                if not isinstance(raw, list) or len(raw) < 3:
+                    continue
+                name = str(raw[0]).strip()
+                publisher = str(raw[1]).strip() or 'inconnu'
+                description = str(raw[2]).strip()
+                kind = str(raw[3]).strip() if len(raw) > 3 else 'nouveauté'
+                if not name or not description:
+                    continue
+                axes = heuristic_axes(
+                    f'{name} {publisher} {description} {kind}'
+                )
+                items.append(
+                    {
+                        'name': name,
+                        'family': name,
+                        'publisher': publisher,
+                        'link': '',
+                        'kind': kind,
+                        'description': description,
+                        'use_cases': [],
+                        'evidence': f'Mention dans la vidéo {video_id}.',
+                        **axes,
+                    }
+                )
+            expanded[video_id] = {
+                'main_subject': subject,
+                'summary': subject,
+                'editorial': {
+                    'format': format_names.get(format_code, 'autre'),
+                    'hook': '',
+                    'structure': [],
+                    'cta': '',
+                },
+                'items': items,
+            }
+        return expanded
+
+    raw_videos = value.get('videos', [])
+    if not isinstance(raw_videos, list):
+        raise ValueError('la réponse batch doit contenir videos[]')
+    expanded: dict[str, dict[str, Any]] = {}
+
+    def compact_axis(raw: Any, *, testable: bool) -> dict[str, Any]:
+        if not isinstance(raw, list):
+            raw = []
+        result = {
+            'score': score(raw[0] if len(raw) > 0 else 0),
+            'justification': str(
+                raw[1] if len(raw) > 1 else 'Non précisé.'
+            ),
+        }
+        if testable:
+            result['a_tester'] = bool(raw[2] if len(raw) > 2 else False)
+        return result
+
+    for raw_video in raw_videos:
+        if not isinstance(raw_video, dict):
+            continue
+        video_id = str(raw_video.get('id', ''))
+        if not VIDEO_ID.fullmatch(video_id):
+            continue
+        raw_items = raw_video.get('items', [])
+        items = []
+        if isinstance(raw_items, list):
+            for raw in raw_items:
+                if not isinstance(raw, dict):
+                    continue
+                items.append(
+                    {
+                        'name': raw.get('name', ''),
+                        'family': raw.get('family', raw.get('name', '')),
+                        'publisher': raw.get('publisher', 'inconnu'),
+                        'link': raw.get('link', ''),
+                        'kind': raw.get('kind', 'nouveauté'),
+                        'description': raw.get('description', ''),
+                        'use_cases': [],
+                        'evidence': raw.get('evidence', ''),
+                        'code_buddy': compact_axis(
+                            raw.get('cb'), testable=True
+                        ),
+                        'media': compact_axis(
+                            raw.get('media'), testable=True
+                        ),
+                        'biomedical': compact_axis(
+                            raw.get('bio'), testable=True
+                        ),
+                        'lisa': compact_axis(
+                            raw.get('lisa'), testable=False
+                        ),
+                    }
+                )
+        expanded[video_id] = {
+            'main_subject': str(raw_video.get('subject', '')),
+            'summary': str(raw_video.get('summary', '')),
+            'editorial': {
+                'format': str(raw_video.get('format', 'autre')),
+                'hook': str(raw_video.get('hook', '')),
+                'structure': raw_video.get('structure', []),
+                'cta': str(raw_video.get('cta', '')),
+            },
+            'items': items,
+        }
+    return expanded
+
+
+def heuristic_axes(text: str) -> dict[str, Any]:
+    normalized = unicodedata.normalize('NFKD', text).casefold()
+    groups = {
+        'code_buddy': (
+            'llm', 'model', 'modèle', 'agent', 'code', 'mcp', 'rag',
+            'embedding', 'reasoning', 'api', 'benchmark', 'voix', 'vision',
+        ),
+        'media': (
+            'vidéo', 'video', 'image', 'avatar', 'lipsync', 'lip sync',
+            'montage', 'voix', 'audio', 'génér', '3d', 'animation',
+        ),
+        'biomedical': (
+            'bio', 'médic', 'protein', 'protéin', 'génom', 'genom',
+            'adn', 'drug', 'médicament', 'parkinson', 'scientif',
+            'recherche', 'donnée', 'dataset',
+        ),
+    }
+    scores: dict[str, int] = {}
+    for axis_name, words in groups.items():
+        hits = sum(word in normalized for word in words)
+        scores[axis_name] = min(10, 2 + hits * 2) if hits else 0
+    lisa_score = min(
+        10,
+        5
+        + (2 if max(scores.values(), default=0) >= 6 else 0)
+        + (1 if any(word in normalized for word in ('nouveau', 'premier', 'gratuit', 'open')) else 0),
+    )
+    result: dict[str, Any] = {}
+    labels = {
+        'code_buddy': 'Intégration potentielle à évaluer pour Code Buddy.',
+        'media': 'Usage potentiel à mesurer dans le pipeline média.',
+        'biomedical': 'Signal de recherche à vérifier sur sources primaires.',
+    }
+    for axis_name, axis_score in scores.items():
+        result[axis_name] = {
+            'score': axis_score,
+            'justification': labels[axis_name],
+            'a_tester': axis_score >= 6,
+        }
+    result['lisa'] = {
+        'score': lisa_score,
+        'justification': 'Sujet explicable par une démonstration ou un décryptage.',
+    }
+    return result
+
+
+def analyze_batch_with_ollama(
+    batch: list[tuple[Video, str]],
+    model: str,
+) -> dict[str, dict[str, Any]]:
+    endpoint = os.environ.get(
+        'OLLAMA_HOST', 'http://127.0.0.1:11434'
+    ).rstrip('/') + '/api/generate'
+    payload = {
+        'model': model,
+        'prompt': compact_batch_prompt(batch),
+        'stream': False,
+        'format': 'json',
+        'keep_alive': '30m',
+        'options': {
+            'temperature': 0,
+            'num_ctx': 65536,
+            'num_predict': 16384,
+        },
+    }
+    request = urllib.request.Request(
+        endpoint,
+        data=json.dumps(payload, ensure_ascii=False).encode('utf-8'),
+        headers={'Content-Type': 'application/json'},
+        method='POST',
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=1200) as response:
+            envelope = json.loads(response.read().decode('utf-8'))
+    except (OSError, urllib.error.URLError, json.JSONDecodeError) as error:
+        raise RuntimeError(f'Ollama batch a échoué avec {model}: {error}') from error
+    return expand_compact_analysis(
+        extract_json(str(envelope.get('response', '')))
+    )
+
+
+def analyze_video(
+    video: Video,
+    transcript: str,
+    args: argparse.Namespace,
+) -> dict[str, Any]:
+    if args.engine == 'agy':
+        return analyze_with_gemini(video, transcript, args.model)
+    if args.engine == 'ollama':
+        return analyze_with_ollama(video, transcript, args.ollama_model)
+    if shutil.which('agy'):
+        try:
+            return analyze_with_gemini(video, transcript, args.model)
+        except (OSError, RuntimeError, subprocess.TimeoutExpired, ValueError):
+            journal(
+                args.workdir / 'journal.jsonl',
+                'engine_fallback',
+                video_id=video.video_id,
+                source='agy',
+                target='ollama',
+            )
+    return analyze_with_ollama(video, transcript, args.ollama_model)
+
+
 def score(value: Any) -> int:
     try:
         result = int(value)
@@ -690,7 +1198,7 @@ def validate_analysis(value: dict[str, Any]) -> list[dict[str, Any]]:
     raw_items = value.get('items', [])
     if not isinstance(raw_items, list):
         raise ValueError('items doit être un tableau JSON')
-    items = []
+    items_by_key: dict[str, dict[str, Any]] = {}
     for raw in raw_items:
         if not isinstance(raw, dict):
             continue
@@ -703,26 +1211,65 @@ def validate_analysis(value: dict[str, Any]) -> list[dict[str, Any]]:
         use_cases = raw.get('use_cases', [])
         if not isinstance(use_cases, list):
             use_cases = [str(use_cases)]
-        items.append(
-            {
-                'key': key,
-                'name': name,
-                'family': family,
-                'kind': str(raw.get('kind', 'nouveauté')).strip(),
-                'description': description,
-                'use_cases': [
-                    str(use_case).strip()
-                    for use_case in use_cases
-                    if str(use_case).strip()
-                ],
-                'evidence': str(raw.get('evidence', '')).strip(),
-                'code_buddy': axis(raw.get('code_buddy'), testable=True),
-                'media': axis(raw.get('media'), testable=True),
-                'lisa': axis(raw.get('lisa'), testable=False),
-                'biomedical': axis(raw.get('biomedical'), testable=True),
-            }
+        candidate = {
+            'key': key,
+            'name': name,
+            'family': family,
+            'publisher': str(raw.get('publisher', 'inconnu')).strip()
+            or 'inconnu',
+            'link': str(raw.get('link', '')).strip(),
+            'kind': str(raw.get('kind', 'nouveauté')).strip(),
+            'description': description,
+            'use_cases': [
+                str(use_case).strip()
+                for use_case in use_cases
+                if str(use_case).strip()
+            ],
+            'evidence': str(raw.get('evidence', '')).strip(),
+            'code_buddy': axis(raw.get('code_buddy'), testable=True),
+            'media': axis(raw.get('media'), testable=True),
+            'lisa': axis(raw.get('lisa'), testable=False),
+            'biomedical': axis(raw.get('biomedical'), testable=True),
+        }
+        existing = items_by_key.get(key)
+        if existing is None:
+            items_by_key[key] = candidate
+            continue
+        for axis_name in ('code_buddy', 'media', 'lisa', 'biomedical'):
+            if candidate[axis_name]['score'] > existing[axis_name]['score']:
+                existing[axis_name] = candidate[axis_name]
+        existing['use_cases'] = list(
+            dict.fromkeys([*existing['use_cases'], *candidate['use_cases']])
         )
-    return items
+    return list(items_by_key.values())
+
+
+def validate_editorial(value: Any) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        value = {}
+    structure = value.get('structure', [])
+    if not isinstance(structure, list):
+        structure = [str(structure)]
+    return {
+        'hook': str(value.get('hook', '')).strip(),
+        'structure': [
+            str(part).strip() for part in structure if str(part).strip()
+        ],
+        'cta': str(value.get('cta', '')).strip(),
+        'format': str(value.get('format', 'autre')).strip() or 'autre',
+    }
+
+
+def normalized_analysis(
+    value: dict[str, Any],
+    items: list[dict[str, Any]],
+) -> dict[str, Any]:
+    return {
+        'main_subject': str(value.get('main_subject', '')).strip(),
+        'summary': str(value.get('summary', '')).strip(),
+        'editorial': validate_editorial(value.get('editorial')),
+        'items': items,
+    }
 
 
 def merge_items(
@@ -743,12 +1290,34 @@ def merge_items(
         existing = state['items'].get(key)
         if existing:
             existing['last_seen'] = now_iso()
-            existing['occurrences'] = int(existing.get('occurrences', 1)) + 1
-            if not any(
+            is_new_source = not any(
                 value.get('video_id') == video.video_id
                 for value in existing.get('sources', [])
-            ):
+            )
+            if is_new_source:
                 existing.setdefault('sources', []).append(source)
+                existing['occurrences'] = int(
+                    existing.get('occurrences', 1)
+                ) + 1
+            if (
+                str(existing.get('publisher', 'inconnu')) == 'inconnu'
+                and item.get('publisher')
+            ):
+                existing['publisher'] = item['publisher']
+            if not existing.get('link') and item.get('link'):
+                existing['link'] = item['link']
+            for axis_name in (
+                'code_buddy',
+                'media',
+                'lisa',
+                'biomedical',
+            ):
+                current_axis = existing.get(axis_name, {})
+                if (
+                    item[axis_name]['score']
+                    > int(current_axis.get('score', 0))
+                ):
+                    existing[axis_name] = item[axis_name]
             continue
         stored = {
             **item,
@@ -898,37 +1467,296 @@ def queue_section(
 
 
 def write_test_queue(path: Path, state: dict[str, Any]) -> None:
-    items = list(state['items'].values())
+    items = [
+        item
+        for item in state['items'].values()
+        if catalogue_status(item)[0] == 'à tester'
+    ]
+    items.sort(
+        key=lambda item: (
+            -expected_gain(item),
+            item.get('name', '').casefold(),
+        )
+    )
     lines = [
-        '# A tester — veille IA',
+        '# À tester — Vision IA',
         '',
-        'File dédupliquée, triée par score décroissant dans chaque axe. '
-        "Cocher une piste ne modifie pas l'index de veille.",
+        'File dédupliquée, triée par gain attendu global. Les outils déjà '
+        'utilisés, écartés ou seulement à surveiller restent dans le catalogue.',
         '',
         f'> Prudence biomédicale — {MEDICAL_NOTICE}',
         '',
     ]
-    lines.extend(
-        queue_section('Code Buddy', 'Code Buddy', items, 'code_buddy')
-    )
-    lines.extend(
-        queue_section(
-            'Pipeline vidéo / média',
-            'média',
-            items,
-            'media',
+    if not items:
+        lines.extend(['- Aucune piste classée à tester.', ''])
+    for position, item in enumerate(items, 1):
+        source = sorted(
+            item.get('sources', []),
+            key=lambda value: value.get('published', ''),
+        )[0]
+        dominant = max(
+            ('code_buddy', 'media', 'biomedical', 'lisa'),
+            key=lambda axis_name: int(
+                item.get(axis_name, {}).get('score', 0)
+            ),
         )
-    )
-    lines.extend(
-        queue_section(
-            'Biomédical / recherche',
-            'biomédical',
-            items,
-            'biomedical',
+        reason = item.get(dominant, {}).get('justification', '')
+        lines.extend(
+            [
+                f'## {position}. [ ] {item["name"]} — gain '
+                f'{expected_gain(item)}/100',
+                '',
+                f'- Axe dominant : `{dominant}` '
+                f'({item.get(dominant, {}).get("score", 0)}/10)',
+                f'- Pourquoi : {reason or item.get("description", "")}',
+                f'- Expérience : valider accès/licence, lancer un cas réel '
+                f'court, mesurer qualité, coût, latence et reproductibilité.',
+                f'- Premier signal : [{source.get("title", "Vision IA")}]'
+                f'({source.get("url", "")})',
+                '',
+            ]
         )
-    )
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_suffix(path.suffix + '.tmp')
+    temporary.write_text('\n'.join(lines).rstrip() + '\n', encoding='utf-8')
+    os.replace(temporary, path)
+
+
+KNOWN_USED = (
+    'longcat',
+    'wan 2.2',
+    'krea',
+    'comfyui',
+    'cerebras',
+    'groq',
+)
+
+
+def catalogue_status(item: dict[str, Any]) -> tuple[str, str]:
+    haystack = ' '.join(
+        [
+            str(item.get('key', '')),
+            str(item.get('name', '')),
+            str(item.get('family', '')),
+        ]
+    ).casefold()
+    if 'bernini' in haystack:
+        return (
+            'écarté',
+            'Test local : identité ArcFace 0,269, sous le seuil requis 0,55.',
+        )
+    if any(name in haystack for name in KNOWN_USED):
+        return ('déjà utilisé chez nous', 'Présent dans le pipeline actuel.')
+    if any(
+        item.get(axis_name, {}).get('a_tester')
+        for axis_name in ('code_buddy', 'media', 'biomedical')
+    ):
+        return ('à tester', 'Expérimentation concrète proposée par la veille.')
+    return ('à surveiller', 'Signal utile, mais test immédiat non justifié.')
+
+
+def expected_gain(item: dict[str, Any]) -> int:
+    scores = sorted(
+        [
+            int(item.get(axis_name, {}).get('score', 0))
+            for axis_name in ('code_buddy', 'media', 'biomedical', 'lisa')
+        ],
+        reverse=True,
+    )
+    test_bonus = 10 if any(
+        item.get(axis_name, {}).get('a_tester')
+        for axis_name in ('code_buddy', 'media', 'biomedical')
+    ) else 0
+    return min(100, scores[0] * 6 + scores[1] * 3 + test_bonus)
+
+
+def markdown_cell(value: Any, limit: int = 180) -> str:
+    text = re.sub(r'\s+', ' ', str(value or '')).strip()
+    if len(text) > limit:
+        text = text[: limit - 1].rstrip() + '…'
+    return text.replace('|', r'\|').replace('\n', ' ')
+
+
+def first_source(item: dict[str, Any]) -> dict[str, Any]:
+    sources = item.get('sources', [])
+    if not sources:
+        return {}
+    return sorted(
+        sources,
+        key=lambda value: (
+            value.get('published') or '9999',
+            value.get('video_id', ''),
+        ),
+    )[0]
+
+
+def write_catalogue(path: Path, state: dict[str, Any]) -> None:
+    items = list(state['items'].values())
+    items.sort(
+        key=lambda item: (
+            first_source(item).get('published', ''),
+            item.get('name', '').casefold(),
+        )
+    )
+    lines = [
+        '# Catalogue des outils et modèles — Vision IA',
+        '',
+        f'{len(items)} entrées dédupliquées. Les scores vont de 0 à 10 : '
+        'CB = Code Buddy, média = pipeline média, bio = biomédical/recherche, '
+        'Lisa = potentiel de sujet.',
+        '',
+        '| Outil / modèle | Éditeur | Fonction | Lien cité | '
+        'CB | Média | Bio | Lisa | Première mention | Statut |',
+        '|---|---|---|---|---:|---:|---:|---:|---|---|',
+    ]
+    for item in items:
+        source = first_source(item)
+        source_date = str(source.get('published', ''))[:10] or 'inconnue'
+        source_link = (
+            f'[{source_date}]({source.get("url")})'
+            if source.get('url')
+            else source_date
+        )
+        cited_link = str(item.get('link', '')).strip()
+        link_cell = f'[source]({cited_link})' if cited_link else '—'
+        status, note = catalogue_status(item)
+        lines.append(
+            '| '
+            + ' | '.join(
+                [
+                    f'**{markdown_cell(item.get("name"))}**',
+                    markdown_cell(item.get('publisher', 'inconnu'), 80),
+                    markdown_cell(item.get('description'), 220),
+                    link_cell,
+                    str(item.get('code_buddy', {}).get('score', 0)),
+                    str(item.get('media', {}).get('score', 0)),
+                    str(item.get('biomedical', {}).get('score', 0)),
+                    str(item.get('lisa', {}).get('score', 0)),
+                    source_link,
+                    f'**{status}** — {markdown_cell(note, 120)}',
+                ]
+            )
+            + ' |'
+        )
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_suffix('.md.tmp')
+    temporary.write_text('\n'.join(lines) + '\n', encoding='utf-8')
+    os.replace(temporary, path)
+
+
+def read_cached_analysis(workdir: Path, video_id: str) -> dict[str, Any]:
+    path = workdir / 'analyses' / f'{video_id}.json'
+    if not path.exists():
+        return {}
+    try:
+        value = json.loads(path.read_text(encoding='utf-8'))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return value if isinstance(value, dict) else {}
+
+
+def write_knowledge_base(
+    path: Path,
+    inventory: list[Video],
+    state: dict[str, Any],
+    workdir: Path,
+) -> None:
+    ordered = sorted(
+        inventory,
+        key=lambda video: (video.published, video.video_id),
+        reverse=True,
+    )
+    analyzed_count = sum(
+        video.video_id in state.get('seen_videos', {}) for video in ordered
+    )
+    lines = [
+        '# Base de connaissances — chaîne Vision IA',
+        '',
+        f'- Chaîne : `Vision IA` (`{VISION_IA_CHANNEL_ID}`)',
+        f'- Playlist uploads : `UU{VISION_IA_CHANNEL_ID[2:]}`',
+        f'- Inventaire : **{len(ordered)} vidéos**',
+        f'- Fiches analysées : **{analyzed_count}**',
+        f'- Mise à jour : {now_iso()}',
+        '',
+        'Les transcripts nettoyés sont conservés dans `transcripts/` et les '
+        'analyses JSON dans `analyses/`. Une fiche « en attente » signale une '
+        'vidéo inventoriée que le rattrapage n’a pas encore analysée.',
+        '',
+        '## Inventaire chronologique',
+        '',
+        '| Date | Titre | Durée | Vues relevées | ID | État |',
+        '|---|---|---:|---:|---|---|',
+    ]
+    for video in ordered:
+        duration = (
+            f'{video.duration // 60}:{video.duration % 60:02d}'
+            if video.duration is not None
+            else '—'
+        )
+        views = (
+            f'{video.view_count:,}'.replace(',', ' ')
+            if video.view_count is not None
+            else '—'
+        )
+        state_label = (
+            'analysée'
+            if video.video_id in state.get('seen_videos', {})
+            else 'en attente'
+        )
+        lines.append(
+            f'| {video.published[:10] or "—"} | '
+            f'[{markdown_cell(video.title, 140)}]({video.url}) | '
+            f'{duration} | {views} | `{video.video_id}` | {state_label} |'
+        )
+    lines.extend(['', '## Fiches par vidéo', ''])
+    for video in ordered:
+        seen = state.get('seen_videos', {}).get(video.video_id)
+        if not seen:
+            continue
+        analysis = read_cached_analysis(workdir, video.video_id)
+        main_subject = (
+            analysis.get('main_subject')
+            or seen.get('main_subject')
+            or video.title
+        )
+        summary = analysis.get('summary') or seen.get('summary') or ''
+        item_keys = seen.get('item_keys', [])
+        items = [
+            state.get('items', {}).get(key)
+            for key in item_keys
+            if state.get('items', {}).get(key)
+        ]
+        lines.extend(
+            [
+                f'### {video.published[:10] or "date inconnue"} — '
+                f'[{video.title}]({video.url})',
+                '',
+                f'- ID : `{video.video_id}`',
+                f'- Durée : {video.duration or "inconnue"} s ; vues relevées : '
+                f'{video.view_count if video.view_count is not None else "inconnues"}',
+                f'- Sujet principal : {main_subject}',
+                f'- Synthèse : {summary or "voir les nouveautés ci-dessous"}',
+                f'- Transcript : `transcripts/{video.video_id}.txt`',
+                '',
+                '**Outils, modèles et nouveautés**',
+                '',
+            ]
+        )
+        if not items:
+            lines.extend(['- Aucun item structuré extrait.', ''])
+            continue
+        for item in items:
+            status, _ = catalogue_status(item)
+            lines.append(
+                f'- **{item.get("name")}** ({item.get("publisher", "inconnu")}) '
+                f'— {item.get("description", "")} '
+                f'[CB {item.get("code_buddy", {}).get("score", 0)}/10 · '
+                f'média {item.get("media", {}).get("score", 0)}/10 · '
+                f'bio {item.get("biomedical", {}).get("score", 0)}/10 · '
+                f'Lisa {item.get("lisa", {}).get("score", 0)}/10 · {status}]'
+            )
+        lines.append('')
+    temporary = path.with_suffix('.md.tmp')
     temporary.write_text('\n'.join(lines).rstrip() + '\n', encoding='utf-8')
     os.replace(temporary, path)
 
@@ -937,6 +1765,7 @@ def choose_videos(
     channels: tuple[Channel, ...],
     args: argparse.Namespace,
     state: dict[str, Any],
+    inventory: list[Video],
 ) -> list[Video]:
     if args.video_id:
         return [
@@ -944,6 +1773,20 @@ def choose_videos(
             for video_id in args.video_id
             if args.force or video_id not in state['seen_videos']
         ]
+    if args.backfill:
+        selected = [
+            video
+            for video in inventory
+            if (
+                video.channel_id == VISION_IA_CHANNEL_ID
+                and (args.force or video.video_id not in state['seen_videos'])
+            )
+        ]
+        selected.sort(
+            key=lambda video: (video.published, video.video_id),
+            reverse=True,
+        )
+        return selected[: args.max_videos]
     threshold = datetime.now(timezone.utc) - timedelta(days=args.days)
     selected = []
     filter_value = (args.channel or '').casefold()
@@ -993,6 +1836,50 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=os.environ.get('VEILLE_YOUTUBE_MODEL', DEFAULT_MODEL),
     )
     parser.add_argument(
+        '--engine',
+        choices=('auto', 'agy', 'ollama'),
+        default=os.environ.get('VEILLE_YOUTUBE_ENGINE', 'auto'),
+        help='moteur LLM gratuit (auto préfère agy puis Ollama)',
+    )
+    parser.add_argument(
+        '--ollama-model',
+        default=os.environ.get(
+            'VEILLE_YOUTUBE_OLLAMA_MODEL', DEFAULT_OLLAMA_MODEL
+        ),
+    )
+    parser.add_argument(
+        '--batch-size',
+        type=int,
+        default=1,
+        help='vidéos par appel Ollama historique (1 = analyse détaillée)',
+    )
+    parser.add_argument(
+        '--backfill',
+        action='store_true',
+        help="traite l'inventaire historique Vision IA, plus récent d'abord",
+    )
+    parser.add_argument(
+        '--inventory-jsonl',
+        type=Path,
+        help='importe le JSONL complet produit par yt-dlp',
+    )
+    parser.add_argument(
+        '--transcripts-only',
+        action='store_true',
+        help='remplit uniquement le cache de transcripts, sans LLM',
+    )
+    parser.add_argument(
+        '--workers',
+        type=int,
+        default=4,
+        help='téléchargements parallèles avec --transcripts-only (défaut : 4)',
+    )
+    parser.add_argument(
+        '--rebuild-outputs',
+        action='store_true',
+        help='régénère base, catalogue et file de tests depuis les caches',
+    )
+    parser.add_argument(
         '--cookies',
         type=Path,
         default=(
@@ -1020,14 +1907,140 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     args.workdir = args.workdir.expanduser()
     if args.cookies:
         args.cookies = args.cookies.expanduser()
-    if args.days < 1 or args.max_videos < 1:
-        parser.error('--days et --max-videos doivent être supérieurs à zéro')
+    if args.inventory_jsonl:
+        args.inventory_jsonl = args.inventory_jsonl.expanduser()
+    if (
+        args.days < 1
+        or args.max_videos < 1
+        or args.workers < 1
+        or args.batch_size < 1
+    ):
+        parser.error(
+            '--days, --max-videos, --workers et --batch-size doivent être '
+            'supérieurs à zéro'
+        )
     for video_id in args.video_id:
         if not VIDEO_ID.fullmatch(video_id):
             parser.error(f'ID YouTube invalide : {video_id!r}')
-    if not args.model.startswith('gemini-'):
+    if args.engine in {'auto', 'agy'} and not args.model.startswith('gemini-'):
         parser.error('le modèle doit être un Gemini gratuit via agy')
     return args
+
+
+def run_batch_backfill(
+    videos: list[Video],
+    inventory: list[Video],
+    state: dict[str, Any],
+    args: argparse.Namespace,
+) -> tuple[int, int]:
+    workdir = args.workdir
+    state_path = workdir / 'index.json'
+    journal_path = workdir / 'journal.jsonl'
+    analyses_dir = workdir / 'analyses'
+    queue_path = workdir / 'A-TESTER.md'
+    catalogue_path = workdir / 'CATALOGUE-OUTILS.md'
+    knowledge_path = workdir / 'BASE-CONNAISSANCES-VISIONAI.md'
+    analyzed = 0
+    failures = 0
+    for offset in range(0, len(videos), args.batch_size):
+        chunk = videos[offset : offset + args.batch_size]
+        inputs: list[tuple[Video, str]] = []
+        languages: dict[str, str] = {}
+        for video in chunk:
+            try:
+                transcript, language = download_transcript(video, args)
+                inputs.append((video, transcript))
+                languages[video.video_id] = language
+            except (
+                OSError,
+                RuntimeError,
+                subprocess.TimeoutExpired,
+                ValueError,
+            ) as error:
+                failures += 1
+                journal(
+                    journal_path,
+                    'video_failed',
+                    video_id=video.video_id,
+                    error=str(error),
+                )
+        if not inputs:
+            continue
+        try:
+            results = analyze_batch_with_ollama(
+                inputs, args.ollama_model
+            )
+        except (OSError, RuntimeError, ValueError) as error:
+            failures += len(inputs)
+            for video, _ in inputs:
+                journal(
+                    journal_path,
+                    'video_failed',
+                    video_id=video.video_id,
+                    error=f'échec batch: {error}',
+                )
+            print(f'ERREUR batch: {error}', file=sys.stderr, flush=True)
+            continue
+        for video, _ in inputs:
+            analysis = results.get(video.video_id)
+            if not analysis:
+                failures += 1
+                journal(
+                    journal_path,
+                    'video_failed',
+                    video_id=video.video_id,
+                    error='vidéo absente de la réponse Ollama batch',
+                )
+                continue
+            items = validate_analysis(analysis)
+            normalized = normalized_analysis(analysis, items)
+            atomic_json(
+                analyses_dir / f'{video.video_id}.json',
+                {
+                    'version': 1,
+                    'video': inventory_record(video),
+                    'engine': 'ollama-batch',
+                    'model': args.ollama_model,
+                    'analysis_level': 'historical-sampled-transcript',
+                    'analyzed_at': now_iso(),
+                    **normalized,
+                },
+            )
+            new_items = merge_items(state, video, items)
+            state['seen_videos'][video.video_id] = {
+                'analyzed_at': now_iso(),
+                'channel': video.channel_name,
+                'title': video.title,
+                'published': video.published,
+                'url': video.url,
+                'duration': video.duration,
+                'view_count': video.view_count,
+                'transcript_language': languages[video.video_id],
+                'analysis_level': 'historical-sampled-transcript',
+                'item_keys': [item['key'] for item in items],
+                'main_subject': normalized['main_subject'],
+                'summary': normalized['summary'],
+                'editorial': normalized['editorial'],
+            }
+            analyzed += 1
+            journal(
+                journal_path,
+                'video_completed',
+                video_id=video.video_id,
+                extracted=len(items),
+                new=len(new_items),
+                mode='ollama-batch',
+            )
+        atomic_json(state_path, state)
+        write_test_queue(queue_path, state)
+        write_catalogue(catalogue_path, state)
+        write_knowledge_base(knowledge_path, inventory, state, workdir)
+        print(
+            f'Lot {min(offset + len(chunk), len(videos))}/{len(videos)} '
+            f'— {analyzed} analysée(s), {failures} échec(s)',
+            flush=True,
+        )
+    return analyzed, failures
 
 
 def run(args: argparse.Namespace) -> int:
@@ -1038,6 +2051,11 @@ def run(args: argparse.Namespace) -> int:
     journal_path = workdir / 'journal.jsonl'
     report_path = workdir / 'VEILLE-IA.md'
     queue_path = workdir / 'A-TESTER.md'
+    inventory_path = workdir / 'inventaire-vision-ia.json'
+    knowledge_path = workdir / 'BASE-CONNAISSANCES-VISIONAI.md'
+    catalogue_path = workdir / 'CATALOGUE-OUTILS.md'
+    analyses_dir = workdir / 'analyses'
+    analyses_dir.mkdir(parents=True, exist_ok=True)
     lock_path = workdir / '.veille.lock'
 
     with lock_path.open('w', encoding='utf-8') as lock:
@@ -1047,7 +2065,101 @@ def run(args: argparse.Namespace) -> int:
             print('Une veille YouTube est déjà en cours.', file=sys.stderr)
             return 0
         state = load_state(state_path)
-        videos = choose_videos(channels, args, state)
+        raw_inventory = (
+            args.inventory_jsonl
+            or workdir / 'raw' / 'vision-ia-videos.jsonl'
+        )
+        if raw_inventory.exists() and (
+            args.inventory_jsonl or not inventory_path.exists()
+        ):
+            inventory = import_inventory_jsonl(
+                raw_inventory, inventory_path
+            )
+            journal(
+                journal_path,
+                'inventory_imported',
+                count=len(inventory),
+                source=str(raw_inventory),
+            )
+        else:
+            inventory = load_inventory(inventory_path)
+
+        if args.backfill and not inventory:
+            raise RuntimeError(
+                'inventaire Vision IA absent : fournis --inventory-jsonl '
+                'après la collecte yt-dlp'
+            )
+
+        if args.transcripts_only:
+            candidates = (
+                inventory
+                if args.backfill
+                else choose_videos(channels, args, state, inventory)
+            )
+            candidates = [
+                video
+                for video in candidates
+                if (
+                    args.force
+                    or not (
+                        workdir / 'transcripts' / f'{video.video_id}.txt'
+                    ).exists()
+                )
+            ][: args.max_videos]
+            if not candidates:
+                print('Tous les transcripts demandés sont déjà en cache.')
+                return 0
+            failures = 0
+            completed = 0
+            with ThreadPoolExecutor(max_workers=args.workers) as executor:
+                futures = {
+                    executor.submit(download_transcript, video, args): video
+                    for video in candidates
+                }
+                for future in as_completed(futures):
+                    video = futures[future]
+                    try:
+                        transcript, language = future.result()
+                        completed += 1
+                        journal(
+                            journal_path,
+                            'transcript_cached',
+                            video_id=video.video_id,
+                            language=language,
+                            characters=len(transcript),
+                        )
+                        print(
+                            f'[{completed}/{len(candidates)}] '
+                            f'{video.video_id} transcript en cache',
+                            flush=True,
+                        )
+                    except (
+                        OSError,
+                        RuntimeError,
+                        subprocess.TimeoutExpired,
+                        ValueError,
+                    ) as error:
+                        failures += 1
+                        journal(
+                            journal_path,
+                            'transcript_failed',
+                            video_id=video.video_id,
+                            error=str(error),
+                        )
+                        print(
+                            f'ERREUR transcript {video.video_id}: {error}',
+                            file=sys.stderr,
+                            flush=True,
+                        )
+            journal(
+                journal_path,
+                'transcripts_run_completed',
+                completed=completed,
+                failures=failures,
+            )
+            return 1 if failures else 0
+
+        videos = choose_videos(channels, args, state, inventory)
         if args.list:
             for video in videos:
                 print(
@@ -1057,8 +2169,39 @@ def run(args: argparse.Namespace) -> int:
             return 0
         if not videos:
             journal(journal_path, 'run_empty')
+            if args.rebuild_outputs or inventory:
+                write_test_queue(queue_path, state)
+                write_catalogue(catalogue_path, state)
+                write_knowledge_base(
+                    knowledge_path, inventory, state, workdir
+                )
             print('Aucune nouvelle vidéo à analyser.')
             return 0
+
+        by_id = {video.video_id: video for video in inventory}
+        by_id.update({video.video_id: video for video in videos})
+        inventory = list(by_id.values())
+        write_inventory(inventory_path, inventory)
+
+        if args.backfill and args.batch_size > 1:
+            if args.engine not in {'auto', 'ollama'}:
+                raise RuntimeError(
+                    '--batch-size > 1 exige --engine ollama ou auto'
+                )
+            analyzed, failures = run_batch_backfill(
+                videos, inventory, state, args
+            )
+            journal(
+                journal_path,
+                'run_completed',
+                analyzed=analyzed,
+                failures=failures,
+                mode='ollama-batch',
+            )
+            print(f'Base : {knowledge_path}')
+            print(f'Catalogue : {catalogue_path}')
+            print(f'File de tests : {queue_path}')
+            return 1 if failures else 0
 
         failures = 0
         analyzed = 0
@@ -1076,12 +2219,39 @@ def run(args: argparse.Namespace) -> int:
             )
             try:
                 transcript, language = download_transcript(video, args)
-                analysis = analyze_with_gemini(
-                    video,
-                    transcript,
-                    args.model,
-                )
+                analysis_path = analyses_dir / f'{video.video_id}.json'
+                if analysis_path.exists() and not args.force:
+                    analysis = json.loads(
+                        analysis_path.read_text(encoding='utf-8')
+                    )
+                    journal(
+                        journal_path,
+                        'analysis_cache_hit',
+                        video_id=video.video_id,
+                    )
+                else:
+                    analysis = analyze_video(video, transcript, args)
                 items = validate_analysis(analysis)
+                normalized = normalized_analysis(analysis, items)
+                atomic_json(
+                    analysis_path,
+                    {
+                        'version': 1,
+                        'video': inventory_record(video),
+                        'engine': args.engine,
+                        'model': (
+                            args.ollama_model
+                            if args.engine == 'ollama'
+                            or (
+                                args.engine == 'auto'
+                                and not shutil.which('agy')
+                            )
+                            else args.model
+                        ),
+                        'analyzed_at': now_iso(),
+                        **normalized,
+                    },
+                )
                 new_items = merge_items(state, video, items)
                 if report_contains_video(report_path, video.video_id):
                     journal(
@@ -1107,9 +2277,16 @@ def run(args: argparse.Namespace) -> int:
                     'url': video.url,
                     'transcript_language': language,
                     'item_keys': [item['key'] for item in items],
+                    'main_subject': normalized['main_subject'],
+                    'summary': normalized['summary'],
+                    'editorial': normalized['editorial'],
                 }
                 atomic_json(state_path, state)
                 write_test_queue(queue_path, state)
+                write_catalogue(catalogue_path, state)
+                write_knowledge_base(
+                    knowledge_path, inventory, state, workdir
+                )
                 analyzed += 1
                 journal(
                     journal_path,
@@ -1149,6 +2326,8 @@ def run(args: argparse.Namespace) -> int:
             failures=failures,
         )
         print(f'Rapport : {report_path}')
+        print(f'Base : {knowledge_path}')
+        print(f'Catalogue : {catalogue_path}')
         print(f'File de tests : {queue_path}')
         return 1 if failures else 0
 

@@ -115,7 +115,7 @@ pour générer des vidéos.
             force=False,
         )
         self.assertEqual(
-            veille.choose_videos((self.channel,), args, state),
+            veille.choose_videos((self.channel,), args, state, [self.video]),
             [],
         )
 
@@ -205,10 +205,39 @@ pour générer des vidéos.
             path = Path(directory) / 'A-TESTER.md'
             veille.write_test_queue(path, state)
             output = path.read_text()
-        self.assertIn('Biomédical / recherche', output)
-        self.assertIn('Tag : `biomedical`', output)
+        self.assertIn('Axe dominant : `biomedical`', output)
+        self.assertIn('AlphaGenome', output)
         self.assertIn('aucun avis médical', output)
         self.assertIn('RGPD', output)
+
+    def test_bernini_status_keeps_the_measured_rejection_reason(self) -> None:
+        status, note = veille.catalogue_status(
+            {
+                'key': 'wan-2-2-bernini',
+                'name': 'Wan 2.2 Bernini',
+                'family': 'Wan 2.2 Bernini',
+            }
+        )
+        self.assertEqual(status, 'écarté')
+        self.assertIn('0,269', note)
+        self.assertIn('0,55', note)
+
+    def test_inventory_round_trip_preserves_editorial_metrics(self) -> None:
+        enriched = veille.Video(
+            **{
+                **self.video.__dict__,
+                'duration': 1480,
+                'view_count': 83065,
+                'upload_date': '20260722',
+            }
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'inventory.json'
+            veille.write_inventory(path, [enriched])
+            loaded = veille.load_inventory(path)
+        self.assertEqual(len(loaded), 1)
+        self.assertEqual(loaded[0].duration, 1480)
+        self.assertEqual(loaded[0].view_count, 83065)
 
 
 if __name__ == '__main__':
