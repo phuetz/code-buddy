@@ -1205,8 +1205,14 @@ def validate_analysis(value: dict[str, Any]) -> list[dict[str, Any]]:
         name = str(raw.get('name', '')).strip()
         family = str(raw.get('family', '')).strip() or name
         description = str(raw.get('description', '')).strip()
+        publisher = str(raw.get('publisher', 'inconnu')).strip() or 'inconnu'
         key = normalize_key(family)
-        if not name or not key or not description:
+        if (
+            not name
+            or not key
+            or not description
+            or is_promotional_item(name, publisher)
+        ):
             continue
         use_cases = raw.get('use_cases', [])
         if not isinstance(use_cases, list):
@@ -1215,8 +1221,7 @@ def validate_analysis(value: dict[str, Any]) -> list[dict[str, Any]]:
             'key': key,
             'name': name,
             'family': family,
-            'publisher': str(raw.get('publisher', 'inconnu')).strip()
-            or 'inconnu',
+            'publisher': publisher,
             'link': str(raw.get('link', '')).strip(),
             'kind': str(raw.get('kind', 'nouveauté')).strip(),
             'description': description,
@@ -1242,6 +1247,17 @@ def validate_analysis(value: dict[str, Any]) -> list[dict[str, Any]]:
             dict.fromkeys([*existing['use_cases'], *candidate['use_cases']])
         )
     return list(items_by_key.values())
+
+
+def is_promotional_item(name: str, publisher: str) -> bool:
+    normalized = f'{name} {publisher}'.casefold()
+    return (
+        'vision ia' in normalized
+        and any(
+            word in normalized
+            for word in ('formation', 'programme', 'newsletter', 'communauté')
+        )
+    )
 
 
 def validate_editorial(value: Any) -> dict[str, Any]:
@@ -1470,7 +1486,13 @@ def write_test_queue(path: Path, state: dict[str, Any]) -> None:
     items = [
         item
         for item in state['items'].values()
-        if catalogue_status(item)[0] == 'à tester'
+        if (
+            catalogue_status(item)[0] == 'à tester'
+            and not is_promotional_item(
+                str(item.get('name', '')),
+                str(item.get('publisher', '')),
+            )
+        )
     ]
     items.sort(
         key=lambda item: (
@@ -1591,7 +1613,14 @@ def first_source(item: dict[str, Any]) -> dict[str, Any]:
 
 
 def write_catalogue(path: Path, state: dict[str, Any]) -> None:
-    items = list(state['items'].values())
+    items = [
+        item
+        for item in state['items'].values()
+        if not is_promotional_item(
+            str(item.get('name', '')),
+            str(item.get('publisher', '')),
+        )
+    ]
     items.sort(
         key=lambda item: (
             first_source(item).get('published', ''),

@@ -239,6 +239,15 @@ pour générer des vidéos.
         self.assertEqual(loaded[0].duration, 1480)
         self.assertEqual(loaded[0].view_count, 83065)
 
+    def test_channel_training_promotion_is_not_a_catalogue_item(self) -> None:
+        self.assertTrue(
+            veille.is_promotional_item(
+                'programme d’apprentissage Vision IA',
+                'Vision IA',
+            )
+        )
+        self.assertFalse(veille.is_promotional_item('N8N', 'n8n GmbH'))
+
 
 if __name__ == '__main__':
     unittest.main()
