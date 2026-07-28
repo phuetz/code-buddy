@@ -73,12 +73,15 @@ def resolve_music(spec):
     return random.choice(tracks)
 
 
-def audio_filter(duration, gain_music, scene, ambience, loudnorm):
+def audio_filter(
+    duration, gain_music, scene, ambience, loudnorm, music_input_index=0,
+):
     fade_in = min(0.8, duration / 4)
     fade_out = min(1.2, duration / 4)
     fade_out_start = max(fade_in, duration - fade_out)
     filters = [
-        f'[0:a:0]atrim=0:{duration:.6f},asetpts=PTS-STARTPTS,'
+        f'[{music_input_index}:a:0]atrim=0:{duration:.6f},'
+        'asetpts=PTS-STARTPTS,'
         'aresample=48000,'
         'aformat=sample_fmts=fltp:sample_rates=48000:channel_layouts=stereo,'
         f'volume={gain_music:g}dB,'
@@ -179,7 +182,7 @@ def main():
     second_pass = loudnorm_second_pass(measured)
     render_filter = audio_filter(
         duration, args.gain_music, args.scene, not args.no_ambience,
-        second_pass)
+        second_pass, music_input_index=1)
 
     print(f'Encodage et mastering loudnorm passe 2/2: {out}')
     run([

@@ -83,6 +83,47 @@ def body_text(c):
     return c.ev('document.body.innerText') or ''
 
 
+def select_resolution(c, target='1080p'):
+    """Sélectionne explicitement la résolution avant chaque soumission."""
+    js_current = """(()=>{
+      const values=new Set(['720p','1080p','4K']);
+      const els=[...document.querySelectorAll('div')];
+      for (const e of els) {
+        const t=(e.innerText||'').trim();
+        const r=e.getBoundingClientRect();
+        if (values.has(t) && r.width>4 && r.height>4
+            && e.className.includes('cursor-pointer'))
+          return JSON.stringify({x:Math.round(r.x+r.width/2),
+                                 y:Math.round(r.y+r.height/2),t});
+      }
+      return null;})()"""
+    value = c.ev(js_current)
+    current = json.loads(value) if value else None
+    if current and current['t'] == target:
+        print(f'résolution -> {target} (déjà active)')
+        return
+    if not current:
+        sys.exit('sélecteur de résolution HeyGen introuvable')
+    click(c, current['x'], current['y'], 1)
+    js_target = f"""(()=>{{
+      const els=[...document.querySelectorAll('div,span')];
+      const matches=els.map(e=>{{
+        const r=e.getBoundingClientRect();
+        return {{e,t:(e.innerText||'').trim(),x:Math.round(r.x+r.width/2),
+                 y:Math.round(r.y+r.height/2),w:r.width,h:r.height}};
+      }}).filter(v=>v.t==={json.dumps(target)} && v.w>4 && v.h>4);
+      matches.sort((a,b)=>(a.w*a.h)-(b.w*b.h));
+      const v=matches[0];
+      return v ? JSON.stringify({{x:v.x,y:v.y,t:v.t}}) : null;
+    }})()"""
+    value = c.ev(js_target)
+    choice = json.loads(value) if value else None
+    if not choice:
+        sys.exit(f'option de résolution {target} introuvable')
+    click(c, choice['x'], choice['y'], 1)
+    print(f'résolution -> {target}')
+
+
 def submit(audio_path, name='job'):
     audio_path = os.path.abspath(os.path.expanduser(audio_path))
     assert os.path.exists(audio_path), audio_path
@@ -92,6 +133,7 @@ def submit(audio_path, name='job'):
     # navigation soft sur la même URL = la position de scroll est conservée
     c.ev('window.scrollTo(0,0)'); time.sleep(1.5)
     shot(c, f'hg-{name}-0-page')
+    select_resolution(c, '1080p')
 
     # 2. upload/record
     b = find_button(c, 'upload/record|upload / record')
