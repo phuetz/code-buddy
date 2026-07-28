@@ -1,5 +1,7 @@
 # Ligne éditoriale de la chaîne YouTube « Ambre »
 
+> **VALIDÉ par Patrice le 2026-07-28** — positionnement retenu : proposition **A, « Le vestiaire des destinations »**.
+
 **Date :** 28 juillet 2026
 
 **Direction de Patrice :** « avec douceur, en arborant de belles tenues, faire
