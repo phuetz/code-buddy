@@ -11,6 +11,13 @@ import sys
 from pathlib import Path
 from typing import Any, Sequence
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from video_delivery_qc import (  # noqa: E402
+    DeliveryQCError,
+    assert_no_production_markers,
+    master_video_audio,
+    write_qc_sidecar,
+)
 
 WIDTH = 1920
 HEIGHT = 1080
@@ -592,6 +599,20 @@ def main() -> None:
 
     try:
         plan = read_plan(workdir / 'plan.json')
+        assert_no_production_markers(
+            {
+                'sections': [
+                    {
+                        key: section.get(key)
+                        for key in ('titre', 'texte', 'headline', 'caption')
+                        if section.get(key) is not None
+                    }
+                    for section in plan.get('sections', [])
+                    if isinstance(section, dict)
+                ]
+            },
+            'contenu visible Lisa long format',
+        )
         sections: list[dict[str, Any]] = plan['sections']
         audio_paths: list[Path] = []
         durations: list[float] = []
@@ -651,7 +672,9 @@ def main() -> None:
         mastered = render_root / 'mastered.wav'
         master_audio(mix, mastered)
         final_mux(joined_video, mastered, total_duration, output)
-    except AssemblyError as exc:
+        measurement = master_video_audio(output)
+        write_qc_sidecar(output, measurement)
+    except (AssemblyError, DeliveryQCError) as exc:
         sys.exit(str(exc))
 
     print(

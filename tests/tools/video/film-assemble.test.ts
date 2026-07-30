@@ -80,6 +80,7 @@ function makeFakeSpawn(
     seen?: string[][];
   } = {}
 ): typeof spawn {
+  let loudnormMeasurementCount = 0;
   return ((cmd: string, args: string[]) => {
     opts.seen?.push([cmd, ...args]);
     const child = new EventEmitter() as unknown as ReturnType<typeof spawn> & {
@@ -114,9 +115,10 @@ function makeFakeSpawn(
         }
         child.emit('close', 0);
       } else if (isLoudnormMeasure) {
+        loudnormMeasurementCount += 1;
         child.stderr.emit('data', Buffer.from(JSON.stringify({
-          input_i: '-18.75',
-          input_tp: '-0.55',
+          input_i: loudnormMeasurementCount === 1 ? '-18.75' : '-14.02',
+          input_tp: loudnormMeasurementCount === 1 ? '-0.55' : '-1.50',
           input_lra: '7.20',
           input_thresh: '-29.05',
           target_offset: '-0.03',
@@ -516,7 +518,7 @@ describe('output mastering and grading builders', () => {
       '-y', '-hide_banner', '-i', '/assembled.mp4', '-map', '0:v:0', '-map', '0:a:0',
       '-c:v', 'copy', '-af',
       'loudnorm=I=-14:TP=-1.5:LRA=11:measured_I=-18.75:measured_TP=-0.55:' +
-        'measured_LRA=7.2:measured_thresh=-29.05:offset=-0.03:linear=true:print_format=summary',
+        'measured_LRA=7.2:measured_thresh=-29.05:offset=-0.03:linear=false:print_format=summary',
       '-c:a', 'aac', '-b:a', '192k', '-movflags', '+faststart', '/mastered.mp4',
     ]);
   });

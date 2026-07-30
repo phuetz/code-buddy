@@ -13,6 +13,7 @@ import {
 import type { CinematicTrailerPlan, TrailerShot } from '../../src/tools/video/cinematic-trailer-plan.js';
 import { canonicalSha256, verifyGoogleFlowHandoffDigest } from '../../src/tools/video/google-flow-handoff.js';
 import type { GoogleFlowImportReceipt } from '../../src/tools/video/google-flow-result-import.js';
+import type { CommercialGateReceipt } from '../../scripts/trailers/trailer-commercial-gate.js';
 
 const temporaryDirectories: string[] = [];
 
@@ -32,6 +33,21 @@ afterEach(async () => {
 });
 
 const SOURCE = { file: '01.md', locator: 'chapter:1;lines:3-3' };
+const COMMERCIAL_GATE: CommercialGateReceipt = {
+  schemaVersion: 1,
+  titleId: 'les-veilleurs',
+  title: 'Les Veilleurs',
+  manuscriptStatus: 'approved',
+  expectedChapters: 40,
+  presentChapters: 40,
+  complete: true,
+  approvedContentSha256: 'a'.repeat(64),
+  measuredContentSha256: 'a'.repeat(64),
+  cta: 'Lire Les Veilleurs',
+  url: 'https://example.test/les-veilleurs',
+  status: 'approved-for-trailer-render',
+};
+const commercialGate = vi.fn(async () => COMMERCIAL_GATE);
 
 function shot(id: string, token: TrailerShot['token'], durationSeconds: number): TrailerShot {
   const editorial = token === 'brand' || token === 'cta';
@@ -117,14 +133,20 @@ describe('book trailer producer stages', () => {
     const { workspace, book } = await preparedWorkspace();
     const provider = vi.fn(async () => JSON.stringify(validPlan()));
 
-    const result = await runPlanStage({ bookDirectory: book, workspace }, { provider });
+    const result = await runPlanStage(
+      { bookDirectory: book, workspace },
+      { provider, commercialGate },
+    );
 
     expect(result.plan.shots).toHaveLength(8);
     expect(result.excerpts.excerpts[0]?.manuscriptSource).toEqual(SOURCE);
     await expect(fs.readFile(path.join(workspace, 'trailer-plan.json'), 'utf8')).resolves.toContain(
       'Les Veilleurs',
     );
-    await expect(runPlanStage({ bookDirectory: book, workspace }, { provider })).rejects.toThrow(
+    await expect(runPlanStage(
+      { bookDirectory: book, workspace },
+      { provider, commercialGate },
+    )).rejects.toThrow(
       /without --force/i,
     );
     expect(provider).toHaveBeenCalledTimes(1);
@@ -134,13 +156,22 @@ describe('book trailer producer stages', () => {
     const { workspace, book } = await preparedWorkspace();
     await runPlanStage(
       { bookDirectory: book, workspace },
-      { provider: async () => JSON.stringify(validPlan()) },
+      {
+        provider: async () => JSON.stringify(validPlan()),
+        commercialGate,
+      },
     );
 
-    await expect(runHandoffStage({ workspace, remainingFlowCredits: 799 })).rejects.toThrow(
+    await expect(runHandoffStage(
+      { workspace, remainingFlowCredits: 799 },
+      { commercialGate },
+    )).rejects.toThrow(
       /credit|engine|guardrail/i,
     );
-    const handoff = await runHandoffStage({ workspace, remainingFlowCredits: 800 });
+    const handoff = await runHandoffStage(
+      { workspace, remainingFlowCredits: 800 },
+      { commercialGate },
+    );
 
     expect(handoff.jobs).toHaveLength(validPlan().shots.length);
     expect(handoff.estimatedCredits).toBe(800);
@@ -148,7 +179,10 @@ describe('book trailer producer stages', () => {
     expect(handoff.jobs[0]?.settings.aspectRatio).toBe('16:9');
     expect(handoff.jobs[0]?.prompt).toContain('Single camera move: slow push-in');
     expect(verifyGoogleFlowHandoffDigest(handoff)).toBe(true);
-    await expect(runHandoffStage({ workspace, remainingFlowCredits: 800 })).rejects.toThrow(
+    await expect(runHandoffStage(
+      { workspace, remainingFlowCredits: 800 },
+      { commercialGate },
+    )).rejects.toThrow(
       /without --force/i,
     );
   });
@@ -157,9 +191,15 @@ describe('book trailer producer stages', () => {
     const { workspace, book } = await preparedWorkspace();
     await runPlanStage(
       { bookDirectory: book, workspace },
-      { provider: async () => JSON.stringify(validPlan()) },
+      {
+        provider: async () => JSON.stringify(validPlan()),
+        commercialGate,
+      },
     );
-    const handoff = await runHandoffStage({ workspace, remainingFlowCredits: 800 });
+    const handoff = await runHandoffStage(
+      { workspace, remainingFlowCredits: 800 },
+      { commercialGate },
+    );
     const resultsDirectory = path.join(path.dirname(workspace), 'raw-results');
     await fs.mkdir(resultsDirectory);
     const importResults = vi.fn(async (input: Parameters<typeof import('../../src/tools/video/google-flow-result-import.js').importGoogleFlowResults>[0]) => {
@@ -224,20 +264,57 @@ describe('book trailer producer stages', () => {
 
     const receipt = await runAssembleStage(
       { workspace, resultsDirectory, music: path.join(book, 'music.wav') },
-      { importResults, assemble, now: () => new Date('2026-07-20T11:00:00.000Z') },
+      {
+        importResults,
+        assemble,
+        commercialGate,
+        renderEndCard: async (_commercial, destination) => {
+          await fs.mkdir(path.dirname(destination), { recursive: true });
+          await fs.writeFile(destination, 'end-card');
+          return {
+            path: destination,
+            spec: {
+              width: 1920,
+              height: 1080,
+              durationSeconds: 4,
+              safeMarginX: 192,
+              safeMarginY: 108,
+              background: '#111827',
+              boxes: [],
+            },
+          };
+        },
+        registerAssets: async (filenames, options) => filenames.map((filename) => ({
+          titleId: options.titleId,
+          masterId: options.masterId,
+          language: options.language ?? 'und',
+          role: options.role ?? 'shot',
+          revision: options.revision ?? 1,
+          path: filename,
+          sha256: digest(filename),
+          perceptualFrames: ['0'.repeat(16)],
+        })),
+        now: () => new Date('2026-07-20T11:00:00.000Z'),
+      },
     );
 
     expect(importResults).toHaveBeenCalledTimes(1);
     expect(assemble).toHaveBeenCalledTimes(1);
     expect(assembledClips.map((clip) => path.basename(clip))).toEqual(
-      handoff.jobs.map((job) => `${job.id}.mp4`),
+      [
+        ...handoff.jobs.map((job) => `${job.id}.mp4`),
+        'trailer-end-card.mp4',
+      ],
     );
     expect(assemble.mock.calls[0]?.[0]).toMatchObject({
       transitionDuration: 0.3,
       ducking: true,
       aspectRatio: '16:9',
+      mastering: { targetLufs: -14, truePeakDb: -1.5, lra: 11 },
     });
+    expect(assemble.mock.calls[0]?.[0].clips.at(-1)).toMatch(/trailer-end-card\.mp4$/u);
     expect(receipt.status).toBe('pending-human-review');
+    expect(receipt.commercialGate.status).toBe('approved-for-trailer-render');
     expect(receipt.autoPublish).toBe(false);
     expect(receipt.clips).toHaveLength(handoff.jobs.length);
     expect(receipt.master.sha256).toBe(digest('master-bytes'));

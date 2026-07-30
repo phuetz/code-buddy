@@ -6,6 +6,8 @@ WORKDIR = _os.environ.get('INFLUENCER_WORKDIR', _os.path.expanduser('~/.codebudd
 _os.makedirs(WORKDIR, exist_ok=True)
 
 import os, json, urllib.request, subprocess, sys
+from pathlib import Path
+from video_delivery_qc import master_video_audio, write_qc_sidecar
 SP=WORKDIR
 KEY=next(l.split('=',1)[1].strip() for l in open(os.path.expanduser('~/.codebuddy/media.env')) if l.startswith('ELEVENLABS_API_KEY='))
 LISA_VOICE='3fxbs2pB9bs8S6Z1N38A'  # Céline FR confident (persona Lisa)
@@ -110,6 +112,8 @@ def build(key,spec):
     mst=f'{work}/mastered.wav'
     subprocess.run(['ffmpeg','-y','-v','error','-i',fa,'-af','loudnorm=I=-14:TP=-1.5:LRA=11','-ar','48000',mst],check=True)
     subprocess.run(['ffmpeg','-y','-v','error','-i',vid,'-i',mst,'-map','0:v','-map','1:a','-c:v','copy','-c:a','aac','-b:a','256k','-shortest',out],check=True)
+    measurement=master_video_audio(Path(out))
+    write_qc_sidecar(Path(out), measurement)
     print(f'TOPIC-OK {key} {total:.1f}s',flush=True)
 
 for k in (sys.argv[1:] or list(SUBJECTS)): build(k,SUBJECTS[k])

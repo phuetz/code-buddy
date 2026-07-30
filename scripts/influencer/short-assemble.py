@@ -6,6 +6,13 @@ WORKDIR = _os.environ.get('INFLUENCER_WORKDIR', _os.path.expanduser('~/.codebudd
 _os.makedirs(WORKDIR, exist_ok=True)
 
 import sys, os, subprocess, glob
+from pathlib import Path
+from video_delivery_qc import (
+    MIN_END_CARD_SECONDS,
+    master_video_audio,
+    short_title_layout,
+    write_qc_sidecar,
+)
 BASE=WORKDIR
 book=sys.argv[1]; MUSIC=sys.argv[2] if len(sys.argv)>2 else None
 TITLE=sys.argv[3] if len(sys.argv)>3 else book.upper()
@@ -13,6 +20,7 @@ SHOTS=f'{BASE}/short-{book}-shots'; VO=f'{BASE}/short-{book}-vo'
 WORK=f'{BASE}/short-{book}-work'; OUT=f'{BASE}/short-{book}.mp4'
 os.makedirs(WORK,exist_ok=True)
 W,H=1080,1920; GAP=0.55
+TITLE_LAYOUT=short_title_layout(W,H)
 def dur(f):
     r=subprocess.run(['ffprobe','-v','error','-show_entries','format=duration','-of','csv=p=0',f],capture_output=True,text=True)
     try: return float(r.stdout.strip())
@@ -31,15 +39,23 @@ segs=[]
 for idx,vof in enumerate(lines):
     sp=shot(plan[idx] if idx<len(plan) else 1)
     if not sp: print(f'seg {idx}: pas de plan'); continue
-    seg_len=round(dur(vof)+GAP,2)
+    is_title=(idx==len(lines)-1)
+    seg_len=round(max(
+        dur(vof)+GAP,
+        MIN_END_CARD_SECONDS if is_title else 0,
+    ),2)
     seg=f'{WORK}/seg-{idx:02d}.mp4'
     vf=f"scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},fps=30,format=yuv420p"
-    is_title=(idx==len(lines)-1)
     if is_title:
-        vf+=(f",drawtext=text='{esc(TITLE)}':fontcolor=white:fontsize=76:x=(w-text_w)/2:y=(h/2)-90:line_spacing=14"
+        title_box=TITLE_LAYOUT['title']; author_box=TITLE_LAYOUT['author']
+        vf+=(f",drawtext=text='{esc(TITLE)}':fontcolor=white:fontsize=70:"
+             f"x={title_box.x}+(w-{title_box.x * 2}-text_w)/2:"
+             f"y={title_box.y}+({title_box.height}-text_h)/2:line_spacing=14"
              f":box=0:shadowcolor=black@0.7:shadowx=3:shadowy=3"
              f":alpha='if(lt(t,0.4),t/0.4,1)'")
-        vf+=(f",drawtext=text='Roman de Patrice Huetz':fontcolor=0xC9A24B:fontsize=40:x=(w-text_w)/2:y=(h/2)+30"
+        vf+=(f",drawtext=text='Roman de Patrice Huetz':fontcolor=0xF5C451:"
+             f"fontsize=44:x={author_box.x}+(w-{author_box.x * 2}-text_w)/2:"
+             f"y={author_box.y}+({author_box.height}-text_h)/2"
              f":alpha='if(lt(t,0.7),max(0,(t-0.3)/0.4),1)'")
     subprocess.run(['ffmpeg','-y','-v','error','-stream_loop','-1','-i',sp,'-t',f'{seg_len}',
                     '-vf',vf,'-c:v','libx264','-crf','19','-r','30','-pix_fmt','yuv420p','-an',seg],check=True)
@@ -61,7 +77,10 @@ na_in=[]; na_fc=[]; off=0.0; ai=0
 for (_,vof,d) in segs:
     na_in+=['-i',vof]; delay=int(off*1000)
     na_fc.append(f'[{ai}:a]adelay={delay}|{delay},volume=1.0[a{ai}]'); ai+=1; off+=d-XF
-na_fc.append(''.join(f'[a{k}]' for k in range(ai))+f'amix=inputs={ai}:normalize=0[narr]')
+na_fc.append(
+    ''.join(f'[a{k}]' for k in range(ai))
+    + f'amix=inputs={ai}:normalize=0,apad,atrim=0:{total:.3f}[narr]'
+)
 narr=f'{WORK}/narr.wav'
 subprocess.run(['ffmpeg','-y','-v','error',*na_in,'-filter_complex',';'.join(na_fc),'-map','[narr]','-t',f'{total}',narr],check=True)
 # musique duckée + master -14 LUFS
@@ -74,5 +93,7 @@ if MUSIC and os.path.exists(MUSIC):
 else: fa=narr
 mst=f'{WORK}/mastered.wav'
 subprocess.run(['ffmpeg','-y','-v','error','-i',fa,'-af','loudnorm=I=-14:TP=-1.5:LRA=11','-ar','48000',mst],check=True)
-subprocess.run(['ffmpeg','-y','-v','error','-i',vid,'-i',mst,'-map','0:v','-map','1:a','-c:v','copy','-c:a','aac','-b:a','256k','-shortest',OUT],check=True)
+subprocess.run(['ffmpeg','-y','-v','error','-i',vid,'-i',mst,'-map','0:v','-map','1:a','-c:v','copy','-c:a','aac','-b:a','256k','-t',f'{total:.3f}',OUT],check=True)
+measurement=master_video_audio(Path(OUT))
+write_qc_sidecar(Path(OUT), measurement)
 print(f'SHORT-OK {OUT} ({total:.1f}s)')

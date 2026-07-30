@@ -20,6 +20,7 @@ import {
   type GoogleFlowHandoffJob,
 } from '../../src/tools/video/google-flow-handoff.js';
 import { importGoogleFlowResults } from '../../src/tools/video/google-flow-result-import.js';
+import { revalidateTrailerCommercialWorkspace } from './trailer-commercial-gate.js';
 
 export type FlowRunModel = 'fast' | 'quality';
 
@@ -97,6 +98,7 @@ export interface FlowRunDependencies {
   hashFile?: (filename: string) => Promise<string>;
   now?: () => Date;
   writeOutput?: (message: string) => void;
+  commercialGate?: typeof revalidateTrailerCommercialWorkspace;
 }
 
 export class FlowCreditBudgetError extends Error {
@@ -166,6 +168,11 @@ export async function runFlowGeneration(
   dependencies: FlowRunDependencies = {},
 ): Promise<FlowRunResult> {
   assertHandoffBytes(handoff, handoffBytes);
+  if (handoff.jobs.some((job) => job.consumerShortIds.includes('book-trailer'))) {
+    const commercialGate =
+      dependencies.commercialGate ?? revalidateTrailerCommercialWorkspace;
+    await commercialGate(path.dirname(path.resolve(options.handoffPath)));
+  }
   const plan = planFlowRun(handoff, options);
   const now = dependencies.now ?? (() => new Date());
   const writeOutput = dependencies.writeOutput ?? ((message) => process.stdout.write(message));

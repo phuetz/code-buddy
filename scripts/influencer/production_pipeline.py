@@ -15,6 +15,12 @@ import sys
 from typing import Any, Sequence
 
 from editorial_policy import find_excluded_topic
+from video_delivery_qc import (
+    DeliveryQCError,
+    assert_no_production_markers,
+    master_video_audio,
+    write_qc_sidecar,
+)
 from publish_queue import (
     DEFAULT_AUDIT_LOG,
     DEFAULT_DATABASE,
@@ -62,6 +68,7 @@ def require(value: dict[str, Any], *keys: str) -> None:
 
 def validate_editorial(manifest: dict[str, Any]) -> None:
     require(manifest, 'subject', 'persona')
+    assert_no_production_markers(manifest, 'manifeste de production')
     excluded = find_excluded_topic(
         ' '.join(
             str(manifest.get(key, ''))
@@ -292,6 +299,8 @@ def finalise(
         make_thumbnail(final_video, thumbnail, dry_run=dry_run)
     if dry_run:
         return []
+    measurement = master_video_audio(final_video)
+    write_qc_sidecar(final_video, measurement)
     duration = media_duration(final_video)
     if str(manifest['persona']).lower() == 'lisa' and (
         duration is None or not 50 <= duration <= 65
@@ -373,7 +382,12 @@ def main(argv: list[str] | None = None) -> int:
             )
             for identifier in identifiers:
                 print(identifier)
-    except (PipelineError, QueueError, subprocess.CalledProcessError) as error:
+    except (
+        PipelineError,
+        QueueError,
+        DeliveryQCError,
+        subprocess.CalledProcessError,
+    ) as error:
         print(f'ERREUR : {error}', file=sys.stderr)
         return 2
     return 0

@@ -21,6 +21,9 @@ collect-evidence.py : son `.meta.json` voisin est détecté et l'attribution
 est incrustée automatiquement pendant la fenêtre d'affichage.
 """
 import argparse, json, os, re, subprocess, sys, tempfile, unicodedata
+from pathlib import Path
+
+from video_delivery_qc import master_video_audio, write_qc_sidecar
 
 IMAGE_EXTENSIONS = {'.png', '.jpg', '.jpeg', '.webp'}
 
@@ -417,6 +420,8 @@ def main():
         subprocess.run(cmd, check=True)
     finally:
         os.unlink(ass_path)
+    measurement = master_video_audio(Path(a.out))
+    write_qc_sidecar(Path(a.out), measurement)
     print(f'OK {a.out} (cutaways: {[(c["path"].split("/")[-1], c["t0"]) for c in cuts]})')
 
 if __name__ == '__main__':

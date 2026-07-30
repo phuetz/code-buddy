@@ -69,17 +69,24 @@ class FrameSet:
     last_frame: Any
 
 
-def load_runtime_dependencies(require_ffprobe: bool) -> RuntimeDependencies:
+def load_runtime_dependencies(
+    require_ffprobe: bool,
+    require_identity: bool = True,
+) -> RuntimeDependencies:
     """Import all Python dependencies before any source data is processed."""
     missing: list[str] = []
     modules: dict[str, Any] = {}
-    for package, module_name in (
+    required_modules = [
         ("numpy", "numpy"),
         ("opencv-python", "cv2"),
-        ("insightface", "insightface"),
-        ("onnxruntime-gpu", "onnxruntime"),
         ("mediapipe", "mediapipe"),
-    ):
+    ]
+    if require_identity:
+        required_modules.extend([
+            ("insightface", "insightface"),
+            ("onnxruntime-gpu", "onnxruntime"),
+        ])
+    for package, module_name in required_modules:
         try:
             modules[module_name] = __import__(module_name)
         except (ImportError, OSError):
@@ -94,7 +101,7 @@ def load_runtime_dependencies(require_ffprobe: bool) -> RuntimeDependencies:
     return RuntimeDependencies(
         np=modules["numpy"],
         cv2=modules["cv2"],
-        insightface=modules["insightface"],
+        insightface=modules.get("insightface"),
         mediapipe=modules["mediapipe"],
     )
 
@@ -152,6 +159,23 @@ def measure_identity(
         "stdDevSimilarity": float(np.std(similarities)) if similarities.size else 0.0,
         "lowSimilarityFrames": low_frames,
         "noFace": no_face,
+    }
+
+
+def skipped_identity_metrics(shot_type: str) -> dict[str, Any]:
+    if shot_type not in {"broll", "slide"}:
+        raise ValueError("Identity may only be skipped for broll or slide")
+    return {
+        "status": "skipped_no_persona",
+        "shotType": shot_type,
+        "identityExpected": False,
+        "evaluatedFrameCount": 0,
+        "detectedFaceCount": 0,
+        "minSimilarity": None,
+        "meanSimilarity": None,
+        "stdDevSimilarity": None,
+        "lowSimilarityFrames": [],
+        "noFace": [],
     }
 
 
@@ -544,7 +568,17 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
     source = parser.add_mutually_exclusive_group(required=True)
     source.add_argument("--clip", type=Path, help="MP4 clip to measure")
     source.add_argument("--frames-dir", type=Path, help="Directory of ordered decoded frames")
-    parser.add_argument("--reference-dir", type=Path, required=True, help="Approved identity reference images")
+    parser.add_argument(
+        "--shot-type",
+        choices=("persona", "broll", "slide"),
+        default="persona",
+        help="ArcFace is measured only when a persona is expected",
+    )
+    parser.add_argument(
+        "--reference-dir",
+        type=Path,
+        help="Approved identity reference images (required for persona only)",
+    )
     parser.add_argument("--output", type=Path, default=Path("report.json"), help="Destination JSON report")
     parser.add_argument("--sample-fps", type=float, default=6.0, help="Sampling FPS for identity/anatomy/sharpness")
     parser.add_argument("--loop-check", action="store_true", help="Measure first/last similarity for loopable Shorts")
@@ -564,8 +598,12 @@ def validate_inputs(args: argparse.Namespace) -> None:
     source = args.clip if args.clip is not None else args.frames_dir
     if source is None or (args.clip is not None and not source.is_file()) or (args.frames_dir is not None and not source.is_dir()):
         raise RuntimeError(f"Input source does not exist or has the wrong type: {source}")
-    if not args.reference_dir.is_dir():
-        raise RuntimeError(f"Reference directory does not exist: {args.reference_dir}")
+    if args.shot_type == "persona" and (
+        args.reference_dir is None or not args.reference_dir.is_dir()
+    ):
+        raise RuntimeError(
+            "An existing --reference-dir is required for shot-type persona"
+        )
     if args.output.exists():
         raise RuntimeError(f"Output already exists; refusing to overwrite: {args.output}")
 
@@ -577,11 +615,23 @@ def build_report(args: argparse.Namespace, deps: RuntimeDependencies) -> dict[st
         if args.clip is not None
         else read_frame_directory(args.frames_dir, args.sample_fps, deps)
     )
-    embeddings, references, detected = infer_face_embeddings(
-        frame_set.sampled_frames,
-        args.reference_dir,
-        deps,
-    )
+    identity: dict[str, Any]
+    if args.shot_type == "persona":
+        embeddings, references, detected = infer_face_embeddings(
+            frame_set.sampled_frames,
+            args.reference_dir,
+            deps,
+        )
+        identity = measure_identity(
+            embeddings,
+            references,
+            detected,
+            frame_set.sampled_indices,
+            frame_set.sampled_timestamps,
+            deps.np,
+        )
+    else:
+        identity = skipped_identity_metrics(args.shot_type)
     pose_positions, pose_visibility, hand_counts = infer_pose_and_hands(frame_set.sampled_frames, deps)
     master = ffprobe_properties(args.clip) if args.clip is not None else master_properties_for_frames(frame_set)
     master["nearBlackFrameRatio"] = float(
@@ -597,16 +647,10 @@ def build_report(args: argparse.Namespace, deps: RuntimeDependencies) -> dict[st
         "generatedAt": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
         "clipSha256": file_sha256(args.clip) if args.clip is not None else None,
         "profile": args.profile,
+        "shotType": args.shot_type,
         "sampleFps": float(args.sample_fps),
         "metrics": {
-            "identity": measure_identity(
-                embeddings,
-                references,
-                detected,
-                frame_set.sampled_indices,
-                frame_set.sampled_timestamps,
-                deps.np,
-            ),
+            "identity": identity,
             "anatomy": measure_anatomy(
                 pose_positions,
                 pose_visibility,
@@ -656,7 +700,10 @@ def os_getpid() -> int:
 def main(argv: Sequence[str] | None = None) -> int:
     try:
         args = parse_args(argv if argv is not None else sys.argv[1:])
-        deps = load_runtime_dependencies(require_ffprobe=args.clip is not None)
+        deps = load_runtime_dependencies(
+            require_ffprobe=args.clip is not None,
+            require_identity=args.shot_type == "persona",
+        )
         report = build_report(args, deps)
         write_report_atomic(args.output.resolve(), report)
         return 0

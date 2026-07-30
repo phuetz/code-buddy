@@ -100,6 +100,19 @@ class VisualGateScoringTest(unittest.TestCase):
             (10, 30, 50, 70, 90),
         )
 
+    def test_shot_plan_skips_identity_where_no_persona_is_expected(self) -> None:
+        plan = visual_gate.validate_shot_plan(
+            [
+                {'start': 0, 'end': 5, 'shot_type': 'persona'},
+                {'start': 5, 'end': 10, 'shot_type': 'broll'},
+                {'start': 10, 'end': 15, 'shot_type': 'slide'},
+            ]
+        )
+        self.assertEqual(visual_gate.shot_type_at(2, plan, 'persona'), 'persona')
+        self.assertEqual(visual_gate.shot_type_at(7, plan, 'persona'), 'broll')
+        self.assertEqual(visual_gate.shot_type_at(12, plan, 'persona'), 'slide')
+        self.assertEqual(visual_gate.shot_type_at(20, plan, 'broll'), 'broll')
+
     def test_interframe_embedding_drift_rejects(self) -> None:
         result = visual_gate.interframe_stability(
             embeddings=((1.0, 0.0), (0.6, 0.8)),

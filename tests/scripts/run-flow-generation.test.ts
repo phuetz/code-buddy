@@ -29,7 +29,7 @@ async function temporaryDirectory(): Promise<string> {
   return directory;
 }
 
-function handoff(jobCount = 2): GoogleFlowHandoff {
+function handoff(jobCount = 2, consumerPrefix = 'trailer'): GoogleFlowHandoff {
   return createGoogleFlowHandoff(
     Array.from({ length: jobCount }, (_, index) => ({
       id: `trailer-shot-${index + 1}`,
@@ -39,8 +39,17 @@ function handoff(jobCount = 2): GoogleFlowHandoff {
       sourceSha256: String(index + 1).repeat(64),
       motionPrompt: `Cinematic movement ${index + 1}`,
       role: index === 0 ? 'hero' as const : 'b-roll' as const,
-      consumerShortIds: [`trailer-${index + 1}`],
-      consumers: [{ shortId: `trailer-${index + 1}`, shotIndex: index + 1 }],
+      consumerShortIds: [
+        consumerPrefix === 'book-trailer'
+          ? consumerPrefix
+          : `${consumerPrefix}-${index + 1}`,
+      ],
+      consumers: [{
+        shortId: consumerPrefix === 'book-trailer'
+          ? consumerPrefix
+          : `${consumerPrefix}-${index + 1}`,
+        shotIndex: index + 1,
+      }],
     })),
     {
       sourcePlanSha256: 'f'.repeat(64),
@@ -87,6 +96,30 @@ function bytes(value: GoogleFlowHandoff): Buffer {
 }
 
 describe('budget-gated Google Flow runner', () => {
+  it('revalidates a book manuscript before attaching to Flow', async () => {
+    const root = await temporaryDirectory();
+    const packet = handoff(1, 'book-trailer');
+    const driver = new FakeDriver([100]);
+    const commercialGate = vi.fn(async () => {
+      throw new Error('Trailer refused — manuscript incomplete: 1/40 chapters');
+    });
+    const attach = vi.fn(async () => ({ driver }));
+
+    await expect(runFlowGeneration(packet, bytes(packet), {
+      handoffPath: path.join(root, 'flow-handoff.json'),
+      resultsDirectory: path.join(root, 'results'),
+      maxCredits: 10,
+    }, {
+      attach,
+      commercialGate,
+      writeOutput: vi.fn(),
+    })).rejects.toThrow(/manuscript incomplete/i);
+
+    expect(commercialGate).toHaveBeenCalledWith(root);
+    expect(attach).not.toHaveBeenCalled();
+    expect(driver.submitPrompt).not.toHaveBeenCalled();
+  });
+
   it('plans deterministic result paths, prompt hashes, model and aspect', () => {
     const packet = handoff(2);
     const plan = planFlowRun(packet, {

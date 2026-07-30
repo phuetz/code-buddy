@@ -2,7 +2,13 @@
 
 ## État et garde-fous
 
-Le pipeline transforme les chapitres Markdown d'un livre en plan cinématique, en paquet de travail Google Flow, puis en master local assemblé. Il ne contient aucun appel d'API Flow, aucune génération automatique et aucune publication. Le paquet Flow est destiné à une session opérateur dans l'interface web officielle. Tous les reçus restent privés et portent le statut `pending-human-review`.
+Le pipeline transforme les chapitres Markdown d'un livre en plan cinématique, en paquet de travail Google Flow, puis en master local assemblé. Il ne contient aucune publication. Le paquet Flow est destiné à une session opérateur dans l'interface web officielle. Tous les reçus restent privés et portent le statut `pending-human-review`.
+
+Avant le planning, le pipeline exige un manuscrit complet et approuvé, son
+empreinte SHA-256 approuvée, ainsi qu'un CTA et une URL HTTPS. Cette porte est
+rejouée avant la création du handoff, avant toute génération Flow et avant
+l'assemblage. Un paquet ancien ne permet donc pas de contourner une source
+devenue incomplète ou modifiée.
 
 Le planificateur ne peut utiliser que les extraits déterministes présents dans `excerpts.json`. Chaque shot narratif conserve le couple exact `file`/`locator` du manuscrit. Le hook est limité à trois secondes, le master validé à 60–90 secondes, le texte incrusté est interdit et les titres restent des overlays éditoriaux.
 
@@ -19,6 +25,7 @@ Cette étape lit uniquement les fichiers Markdown du dossier, dans leur ordre na
 
 Sorties :
 
+- `commercial-gate.json` : reçu de complétude et d'approbation du manuscrit ;
 - `trailer-plan.json` : plan `CinematicTrailerPlan` validé ;
 - `excerpts.json` : extraits autorisés, provenance exacte, dossier source et couverture locale éventuelle.
 
@@ -62,8 +69,8 @@ npx tsx scripts/trailers/produce-book-trailer.ts \
 Le montage suit l'ordre du plan, applique des fondus d'environ 300 ms et active le ducking de la musique. Le master et son fichier `.meta.json` sont écrits dans la media library locale du workspace :
 
 ```text
-<workspace>/.codebuddy/media-generation/films/book-trailer-master.mp4
-<workspace>/.codebuddy/media-generation/films/book-trailer-master.mp4.meta.json
+<workspace>/.codebuddy/media-generation/films/<title-id>--und--master--r1--<master-id>.mp4
+<workspace>/.codebuddy/media-generation/films/<title-id>--und--master--r1--<master-id>.mp4.meta.json
 ```
 
 Autres sorties :

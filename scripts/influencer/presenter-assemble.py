@@ -5,6 +5,8 @@ WORKDIR = _os.environ.get('INFLUENCER_WORKDIR', _os.path.expanduser('~/.codebudd
 _os.makedirs(WORKDIR, exist_ok=True)
 
 import os, subprocess
+from pathlib import Path
+from video_delivery_qc import master_video_audio, write_qc_sidecar
 SP=WORKDIR
 VO=f'{SP}/lisa-topic-vo'
 CLIPS=[os.path.expanduser('~/Videos/personas/lisa3004-cafe.mp4'),
@@ -63,4 +65,6 @@ subprocess.run(['ffmpeg','-y','-v','error','-i',narr,'-stream_loop','-1','-i',MU
 mst=f'{WORK}/mastered.wav'
 subprocess.run(['ffmpeg','-y','-v','error','-i',fa,'-af','loudnorm=I=-14:TP=-1.5:LRA=11','-ar','48000',mst],check=True)
 subprocess.run(['ffmpeg','-y','-v','error','-i',vid,'-i',mst,'-map','0:v','-map','1:a','-c:v','copy','-c:a','aac','-b:a','256k','-shortest',OUT],check=True)
+measurement=master_video_audio(Path(OUT))
+write_qc_sidecar(Path(OUT), measurement)
 print(f'PRESENTER-OK {OUT} ({total:.1f}s)')

@@ -156,6 +156,14 @@ export interface AssembleFilmResult {
   /** ffprobe duration of the actual render (when it succeeded). */
   probedDuration?: number;
   hasAudio: boolean;
+  /** Measured on the final encoded file, never inferred from pass 2. */
+  outputLoudness?: {
+    integratedLufs: number;
+    truePeakDbtp: number;
+    targetLufs: number;
+    toleranceLu: number;
+    maxTruePeakDbtp: number;
+  };
   transitions: TransitionSpec[];
   warnings: string[];
   error?: string;
@@ -235,6 +243,8 @@ const DEFAULT_MASTERING = {
   truePeakDb: -1.5,
   lra: 11,
 } as const;
+const DELIVERY_LOUDNESS_TOLERANCE_LU = 1;
+const DELIVERY_MAX_TRUE_PEAK_DBTP = -1;
 
 // ============================================================================
 // Pure helpers (unit-tested)
@@ -339,7 +349,7 @@ function loudnormPass2Filter(
     `measured_LRA=${measurement.inputLra}`,
     `measured_thresh=${measurement.inputThreshold}`,
     `offset=${measurement.targetOffset}`,
-    'linear=true',
+    'linear=false',
     'print_format=summary',
   ].join(':');
 }
@@ -1158,7 +1168,50 @@ export async function assembleFilm(
     }
   }
 
-  // 7. Verify + sidecar. `prompt`/`provider`/`model` mirror the video_generate
+  // 7. Mastering is not trusted until the encoded AAC inside the final MP4 is
+  // measured again. This is deliberately after every finishing/grade pass.
+  let outputLoudness: AssembleFilmResult['outputLoudness'];
+  if (input.mastering) {
+    const verification = await runProcess(
+      spawn,
+      ffmpegBin,
+      buildLoudnormPass1Args(outputPath, input.mastering),
+      deps.timeoutMs ?? 30 * 60 * 1000,
+    );
+    if (verification.code !== 0) {
+      const tail = verification.stderr.trim().split('\n').slice(-6).join('\n');
+      return fail(`ffmpeg final loudness verification failed (exit ${verification.code}).\n${tail}`);
+    }
+    let measuredOutput: LoudnormMeasurement;
+    try {
+      measuredOutput = parseLoudnormMeasurement(verification.stderr);
+    } catch (error) {
+      return fail(`Final loudness verification is invalid: ${
+        error instanceof Error ? error.message : String(error)
+      }`);
+    }
+    const target = masteringTargets(input.mastering);
+    if (
+      Math.abs(measuredOutput.inputI - target.targetLufs) > DELIVERY_LOUDNESS_TOLERANCE_LU ||
+      measuredOutput.inputTruePeakDb > DELIVERY_MAX_TRUE_PEAK_DBTP
+    ) {
+      return fail(
+        `Final audio outside delivery spec: ${measuredOutput.inputI.toFixed(2)} LUFS ` +
+        `(target ${target.targetLufs} ±${DELIVERY_LOUDNESS_TOLERANCE_LU}), ` +
+        `${measuredOutput.inputTruePeakDb.toFixed(2)} dBTP ` +
+        `(max ${DELIVERY_MAX_TRUE_PEAK_DBTP}).`,
+      );
+    }
+    outputLoudness = {
+      integratedLufs: measuredOutput.inputI,
+      truePeakDbtp: measuredOutput.inputTruePeakDb,
+      targetLufs: target.targetLufs,
+      toleranceLu: DELIVERY_LOUDNESS_TOLERANCE_LU,
+      maxTruePeakDbtp: DELIVERY_MAX_TRUE_PEAK_DBTP,
+    };
+  }
+
+  // 8. Verify + sidecar. `prompt`/`provider`/`model` mirror the video_generate
   // sidecar shape so the media library shows a meaningful card for the film.
   const outProbe = await probeOne(spawn, ffprobeBin, outputPath);
   const effectiveEngine = glFilter ? 'gl' : 'xfade';
@@ -1177,6 +1230,7 @@ export async function assembleFilm(
     music: input.music ?? null,
     voiceover: input.voiceover ?? null,
     ...(input.mastering ? { mastering: masteringTargets(input.mastering) } : {}),
+    ...(outputLoudness ? { outputLoudness } : {}),
     ...(lutPath ? { lut: { path: lutPath } } : {}),
     generatedAt: new Date().toISOString(),
   });
@@ -1195,6 +1249,7 @@ export async function assembleFilm(
     estimatedDuration,
     probedDuration: outProbe.duration > 0 ? round2(outProbe.duration) : undefined,
     hasAudio: outProbe.hasAudio,
+    ...(outputLoudness ? { outputLoudness } : {}),
     transitions: specs,
     warnings,
   };

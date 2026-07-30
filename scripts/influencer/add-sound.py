@@ -12,6 +12,13 @@ import random
 import re
 import subprocess
 import sys
+from pathlib import Path
+
+from video_delivery_qc import (
+    DeliveryQCError,
+    assert_delivery_loudness,
+    write_qc_sidecar,
+)
 
 
 MUSIC_ROOT = os.path.expanduser('~/.codebuddy/media-audio/music')
@@ -136,7 +143,7 @@ def loudnorm_second_pass(measured):
         f'measured_LRA={measured["input_lra"]}:'
         f'measured_thresh={measured["input_thresh"]}:'
         f'offset={measured["target_offset"]}:'
-        'linear=true:print_format=summary'
+        'linear=false:print_format=summary'
     )
 
 
@@ -196,6 +203,11 @@ def main():
         '-c:a', 'aac', '-b:a', '192k', '-ar', '48000',
         '-t', f'{duration:.6f}', '-movflags', '+faststart', out,
     ])
+    try:
+        measurement = assert_delivery_loudness(Path(out))
+        write_qc_sidecar(Path(out), measurement)
+    except DeliveryQCError as error:
+        sys.exit(str(error))
     print(
         f'OK {out} (musique: {os.path.basename(music)}, '
         f'ambiance: {"aucune" if args.no_ambience else args.scene})')

@@ -1,0 +1,106 @@
+{
+  "schemaVersion": 1,
+  "policy": {
+    "completeWhen": "presentChapters >= expectedChapters",
+    "renderableWhen": "manuscriptStatus == approved AND approvedContentSha256 is set",
+    "failureMode": "fail-closed"
+  },
+  "titles": [
+    {
+      "titleId": "chair-des-machines",
+      "title": "La Chair des machines",
+      "sourceDirectoryName": "La_Chair_des_Machines",
+      "chapterGlob": "chapitres/*.md",
+      "expectedChapters": 40,
+      "presentChapters": 1,
+      "manuscriptStatus": "incomplete",
+      "approvedContentSha256": null,
+      "cta": null,
+      "url": null
+    },
+    {
+      "titleId": "code-rouge",
+      "title": "Code rouge",
+      "sourceDirectoryName": "Code_Rouge",
+      "chapterGlob": "chapitres/*.md",
+      "expectedChapters": 40,
+      "presentChapters": 1,
+      "manuscriptStatus": "incomplete",
+      "approvedContentSha256": null,
+      "cta": null,
+      "url": null
+    },
+    {
+      "titleId": "dernier-prompt",
+      "title": "Le Dernier Prompt",
+      "sourceDirectoryName": "Le_Dernier_Prompt",
+      "chapterGlob": "chapitres/*.md",
+      "expectedChapters": 40,
+      "presentChapters": 1,
+      "manuscriptStatus": "incomplete",
+      "approvedContentSha256": null,
+      "cta": null,
+      "url": null
+    },
+    {
+      "titleId": "eclipse-quantique",
+      "title": "L'Éclipse quantique",
+      "sourceDirectoryName": "L_Eclipse_Quantique",
+      "chapterGlob": "chapitres/*.md",
+      "expectedChapters": 40,
+      "presentChapters": 1,
+      "manuscriptStatus": "incomplete",
+      "approvedContentSha256": null,
+      "cta": null,
+      "url": null
+    },
+    {
+      "titleId": "heritiers-singularite",
+      "title": "Les Héritiers de la Singularité",
+      "sourceDirectoryName": "Les_Heritiers_de_la_Singularite",
+      "chapterGlob": "chapitres/*.md",
+      "expectedChapters": 40,
+      "presentChapters": 1,
+      "manuscriptStatus": "incomplete",
+      "approvedContentSha256": null,
+      "cta": null,
+      "url": null
+    },
+    {
+      "titleId": "memoire-noire",
+      "title": "Mémoire noire",
+      "sourceDirectoryName": "Memoire_Noire",
+      "chapterGlob": "chapitres/*.md",
+      "expectedChapters": 40,
+      "presentChapters": 1,
+      "manuscriptStatus": "incomplete",
+      "approvedContentSha256": null,
+      "cta": null,
+      "url": null
+    },
+    {
+      "titleId": "nomades-du-neant",
+      "title": "Les Nomades du Néant",
+      "sourceDirectoryName": "Les_Nomades_du_Neant",
+      "chapterGlob": "chapitres/*.md",
+      "expectedChapters": 40,
+      "presentChapters": 1,
+      "manuscriptStatus": "incomplete",
+      "approvedContentSha256": null,
+      "cta": null,
+      "url": null
+    },
+    {
+      "titleId": "seigneurs-energie",
+      "title": "Les Seigneurs de l'Énergie",
+      "sourceDirectoryName": "Les_Seigneurs_de_l_Energie",
+      "chapterGlob": "chapitres/*.md",
+      "expectedChapters": 40,
+      "presentChapters": 1,
+      "manuscriptStatus": "incomplete",
+      "approvedContentSha256": null,
+      "cta": null,
+      "url": null
+    }
+  ]
+}

@@ -55,11 +55,12 @@ from pathlib import Path
 from typing import Any, Iterable, Sequence
 
 
-VERSION = '2.0.0'
+VERSION = '2.1.0'
 IMAGE_SUFFIXES = frozenset({'.bmp', '.jpeg', '.jpg', '.png', '.webp'})
 VIDEO_SUFFIXES = frozenset({'.avi', '.m4v', '.mkv', '.mov', '.mp4', '.webm'})
 VERDICTS = frozenset({'OK', 'À REGARDER', 'REJET'})
 VERDICT_ALIASES = {'MINEUR': 'À REGARDER', 'A REGARDER': 'À REGARDER'}
+SHOT_TYPES = frozenset({'persona', 'broll', 'slide'})
 GRID_FIELDS = (
     'symetrie_vetement',
     'anatomie_mains',
@@ -358,6 +359,55 @@ def sample_indices(frame_count: int, count: int) -> tuple[int, ...]:
         min(frame_count - 1, max(0, round(fraction * (frame_count - 1))))
         for fraction in sample_fractions(count)
     )
+
+
+def validate_shot_plan(value: Any) -> tuple[dict[str, Any], ...]:
+    """Valide un plan [{start,end,shot_type}] sans chevauchements."""
+    if not isinstance(value, list):
+        raise GateError('shot plan : une liste JSON est attendue')
+    normalized: list[dict[str, Any]] = []
+    previous_end = 0.0
+    for index, item in enumerate(value):
+        if not isinstance(item, dict):
+            raise GateError(f'shot plan : plan {index + 1} invalide')
+        start = item.get('start')
+        end = item.get('end')
+        shot_type = item.get('shot_type')
+        if (
+            not isinstance(start, (int, float))
+            or not isinstance(end, (int, float))
+            or not math.isfinite(float(start))
+            or not math.isfinite(float(end))
+            or float(start) < 0
+            or float(end) <= float(start)
+            or shot_type not in SHOT_TYPES
+        ):
+            raise GateError(
+                f'shot plan : plan {index + 1} exige '
+                'start >= 0, end > start et shot_type persona|broll|slide'
+            )
+        if float(start) < previous_end:
+            raise GateError('shot plan : plans chevauchants')
+        normalized.append(
+            {
+                'start': float(start),
+                'end': float(end),
+                'shot_type': str(shot_type),
+            }
+        )
+        previous_end = float(end)
+    return tuple(normalized)
+
+
+def shot_type_at(
+    timestamp_seconds: float,
+    shot_plan: Sequence[dict[str, Any]],
+    default: str,
+) -> str:
+    for shot in shot_plan:
+        if shot['start'] <= timestamp_seconds < shot['end']:
+            return str(shot['shot_type'])
+    return default
 
 
 def bbox_stability(
@@ -1463,6 +1513,8 @@ def config_fingerprint(
     llm_enabled: bool,
     hand_model: Path,
     tesseract_executable: str | None,
+    default_shot_type: str = 'persona',
+    shot_plan: Sequence[dict[str, Any]] = (),
 ) -> str:
     raw = json.dumps(
         {
@@ -1472,6 +1524,10 @@ def config_fingerprint(
             'models': list(models),
             'frame_count': frame_count,
             'llm_enabled': llm_enabled,
+            'shot_policy': {
+                'default_shot_type': default_shot_type,
+                'plan': list(shot_plan),
+            },
             'hand_policy': {
                 'model': str(hand_model),
                 'model_sha256': (
@@ -1840,6 +1896,81 @@ def audit_image_data(
     }, face
 
 
+def audit_nonpersona_image_data(
+    image: Any,
+    runtime: Runtime,
+    thresholds: Thresholds,
+    hand_analyzer: HandAnalyzer | None,
+    hand_unavailable_reason: str | None,
+    text_analyzer: TesseractTextAnalyzer | None,
+    text_unavailable_reason: str | None,
+    shot_type: str,
+) -> dict[str, Any]:
+    """Contrôle un slide/B-roll sans créer de pseudo-mesure d'identité."""
+    sharpness = image_sharpness(image, runtime.cv2)
+    defects: list[str] = []
+    if sharpness < thresholds.sharpness_reject:
+        defects.append(
+            f'image trop floue (Laplacien {sharpness:.1f} '
+            f'< {thresholds.sharpness_reject:.1f})'
+        )
+    if shot_type == 'slide':
+        hands = {
+            'available': False,
+            'verdict': 'OK',
+            'warnings': [],
+            'skipped': 'aucune main attendue sur un slide',
+        }
+    elif hand_analyzer is None:
+        hands = unavailable_hand_metrics(
+            hand_unavailable_reason or 'raison inconnue'
+        )
+    else:
+        try:
+            hands = hand_analyzer.analyze(image, runtime.cv2)
+        except (GateError, OSError, RuntimeError, ValueError) as error:
+            hands = unavailable_hand_metrics(str(error))
+    if text_analyzer is None:
+        text = unavailable_text_metrics(
+            text_unavailable_reason or 'raison inconnue'
+        )
+    else:
+        try:
+            text = text_analyzer.analyze(image)
+        except (
+            GateError,
+            OSError,
+            RuntimeError,
+            ValueError,
+            subprocess.SubprocessError,
+        ) as error:
+            text = unavailable_text_metrics(str(error))
+    defects.extend(hands.get('warnings', []))
+    defects.extend(text.get('warnings', []))
+    verdict = 'REJET' if sharpness < thresholds.sharpness_reject else 'OK'
+    verdict = combine_verdict(verdict, hands['verdict'], text['verdict'])
+    return {
+        'shot_type': shot_type,
+        'deterministic': {
+            'identity_expected': False,
+            'identity_skipped': True,
+            'identity_skip_reason':
+                f'aucune persona attendue sur ce plan {shot_type}',
+            'identity_arcface': None,
+            'face_detected': None,
+            'sharpness_laplacian': sharpness,
+            'sharpness_threshold': thresholds.sharpness_reject,
+            'deterministic_verdict': verdict,
+        },
+        'hands': hands,
+        'text_ocr': text,
+        'llm_vision': None,
+        'authority': None,
+        'verdict': verdict,
+        'defauts': list(dict.fromkeys(defects)),
+    }
+
+
 def temporary_frame_path(image: Any, cv2: Any, directory: Path, index: int) -> Path:
     path = directory / f'frame-{index:03d}.jpg'
     if not cv2.imwrite(str(path), image, [cv2.IMWRITE_JPEG_QUALITY, 95]):
@@ -1923,22 +2054,35 @@ def evaluate_image(
     if image is None:
         raise GateError(f'Image illisible : {path}')
     media_hash = sha256_file(path)
-    result, _face = audit_image_data(
-        image,
-        path,
-        common.analyzer,
-        common.reference_embedding,
-        common.reference_signature,
-        common.runtime,
-        common.thresholds,
-        common.vision,
-        common.hand_analyzer,
-        common.hand_unavailable_reason,
-        common.text_analyzer,
-        common.text_unavailable_reason,
-        media_hash in KNOWN_APPROVED_MEDIA_SHA256,
-        common.authority_rejects.get(media_hash),
-    )
+    if common.default_shot_type == 'persona':
+        result, _face = audit_image_data(
+            image,
+            path,
+            common.analyzer,
+            common.reference_embedding,
+            common.reference_signature,
+            common.runtime,
+            common.thresholds,
+            common.vision,
+            common.hand_analyzer,
+            common.hand_unavailable_reason,
+            common.text_analyzer,
+            common.text_unavailable_reason,
+            media_hash in KNOWN_APPROVED_MEDIA_SHA256,
+            common.authority_rejects.get(media_hash),
+        )
+        result['shot_type'] = 'persona'
+    else:
+        result = audit_nonpersona_image_data(
+            image,
+            common.runtime,
+            common.thresholds,
+            common.hand_analyzer,
+            common.hand_unavailable_reason,
+            common.text_analyzer,
+            common.text_unavailable_reason,
+            common.default_shot_type,
+        )
     return {
         **common.report_header(path, 'image'),
         **result,
@@ -1951,9 +2095,12 @@ def evaluate_video(
     frame_count: int,
 ) -> dict[str, Any]:
     frames, metadata = read_video_samples(path, frame_count, common.runtime.cv2)
-    authority_reason = common.authority_rejects.get(sha256_file(path))
+    media_hash = sha256_file(path)
+    authority_reason = common.authority_rejects.get(media_hash)
+    authority_approved = media_hash in KNOWN_APPROVED_MEDIA_SHA256
     frame_reports: list[dict[str, Any]] = []
     faces: list[FaceMeasurement] = []
+    persona_frame_count = 0
     with tempfile.TemporaryDirectory(prefix='visual-gate-frames-') as temporary:
         temporary_root = Path(temporary)
         for position, (frame, source_index) in enumerate(
@@ -1965,38 +2112,65 @@ def evaluate_video(
                 temporary_root,
                 position,
             )
-            report, face = audit_image_data(
-                frame,
-                frame_path,
-                common.analyzer,
-                common.reference_embedding,
-                common.reference_signature,
-                common.runtime,
-                common.thresholds,
-                common.vision,
-                common.hand_analyzer,
-                common.hand_unavailable_reason,
-                common.text_analyzer,
-                common.text_unavailable_reason,
-                False,
-                authority_reason,
+            timestamp = (
+                source_index / metadata['fps']
+                if metadata['fps'] > 0
+                else 0.0
             )
+            shot_type = shot_type_at(
+                timestamp,
+                common.shot_plan,
+                common.default_shot_type,
+            )
+            face: FaceMeasurement | None = None
+            if shot_type == 'persona':
+                persona_frame_count += 1
+                report, face = audit_image_data(
+                    frame,
+                    frame_path,
+                    common.analyzer,
+                    common.reference_embedding,
+                    common.reference_signature,
+                    common.runtime,
+                    common.thresholds,
+                    common.vision,
+                    common.hand_analyzer,
+                    common.hand_unavailable_reason,
+                    common.text_analyzer,
+                    common.text_unavailable_reason,
+                    authority_approved,
+                    authority_reason,
+                )
+                report['shot_type'] = 'persona'
+            else:
+                report = audit_nonpersona_image_data(
+                    frame,
+                    common.runtime,
+                    common.thresholds,
+                    common.hand_analyzer,
+                    common.hand_unavailable_reason,
+                    common.text_analyzer,
+                    common.text_unavailable_reason,
+                    shot_type,
+                )
             frame_reports.append(
                 {
                     'sample_position': position,
                     'source_frame_index': source_index,
-                    'timestamp_seconds': (
-                        source_index / metadata['fps']
-                        if metadata['fps'] > 0
-                        else None
-                    ),
+                    'timestamp_seconds': timestamp,
                     **report,
                 }
             )
             if face is not None:
                 faces.append(face)
 
-    if len(faces) == len(frames):
+    if persona_frame_count == 0:
+        stability = {
+            'verdict': 'OK',
+            'status': 'skipped_no_persona',
+            'defauts': [],
+        }
+    elif len(faces) == persona_frame_count:
         stability = interframe_stability(
             [face.embedding for face in faces],
             [face.bbox for face in faces],
@@ -2008,14 +2182,15 @@ def evaluate_video(
         stability = {
             'verdict': 'À REGARDER',
             'defauts': [
-                f'visage absent sur {len(frames) - len(faces)}/{len(frames)} '
-                'frames : stabilité non mesurable'
+                f'visage absent sur {persona_frame_count - len(faces)}/'
+                f'{persona_frame_count} plans persona : stabilité non mesurable'
             ],
         }
     frame_verdict = 'OK'
     for report in frame_reports:
         frame_verdict = combine_verdict(frame_verdict, report['verdict'])
     verdict = combine_verdict(frame_verdict, None, stability['verdict'])
+    verdict = apply_approval_ceiling(verdict, authority_approved)
     defects = [
         defect
         for report in frame_reports
@@ -2025,6 +2200,12 @@ def evaluate_video(
     return {
         **common.report_header(path, 'video'),
         'video': metadata,
+        'shot_policy': {
+            'default_shot_type': common.default_shot_type,
+            'plan': list(common.shot_plan),
+            'persona_samples': persona_frame_count,
+            'identity_samples': len(faces),
+        },
         'frames': frame_reports,
         'stability': stability,
         'verdict': verdict,
@@ -2050,6 +2231,8 @@ class EvaluationContext:
     models: tuple[str, ...]
     fingerprint: str
     authority_rejects: dict[str, str]
+    default_shot_type: str = 'persona'
+    shot_plan: tuple[dict[str, Any], ...] = ()
 
     def report_header(self, path: Path, media_type: str) -> dict[str, Any]:
         return {
@@ -2058,6 +2241,7 @@ class EvaluationContext:
             'media': str(path.resolve()),
             'media_type': media_type,
             'persona': self.persona,
+            'shot_type': self.default_shot_type,
             'media_sha256': sha256_file(path),
             'config_fingerprint': self.fingerprint,
             'references': [
@@ -2121,6 +2305,20 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
     parser.add_argument('--reference', type=Path, help='image ou dossier de références')
     parser.add_argument('--recursive', action='store_true')
     parser.add_argument('--frames', type=int, default=5)
+    parser.add_argument(
+        '--shot-type',
+        choices=tuple(sorted(SHOT_TYPES)),
+        default='persona',
+        help=(
+            'type attendu si aucun --shot-plan ne couvre la frame ; '
+            'ArcFace ne tourne que pour persona'
+        ),
+    )
+    parser.add_argument(
+        '--shot-plan',
+        type=Path,
+        help='JSON [{start,end,shot_type}] pour les montages mixtes',
+    )
     parser.add_argument('--gate', action='store_true')
     parser.add_argument('--force', action='store_true')
     parser.add_argument(
@@ -2176,6 +2374,16 @@ def main(argv: Sequence[str] | None = None) -> int:
         models = tuple(args.ollama_models)
         hand_model = args.hand_model.expanduser().resolve()
         tesseract_executable = shutil.which(args.tesseract)
+        shot_plan: tuple[dict[str, Any], ...] = ()
+        if args.shot_plan is not None:
+            try:
+                shot_plan = validate_shot_plan(
+                    json.loads(
+                        args.shot_plan.expanduser().read_text(encoding='utf-8')
+                    )
+                )
+            except (OSError, json.JSONDecodeError) as error:
+                raise GateError(f'shot plan illisible : {error}') from error
         fingerprint = config_fingerprint(
             thresholds,
             hashes,
@@ -2184,6 +2392,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             not args.no_llm,
             hand_model,
             tesseract_executable,
+            args.shot_type,
+            shot_plan,
         )
         runtime = load_runtime()
         analyzer = FaceAnalyzer(runtime)
@@ -2237,6 +2447,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             models=models,
             fingerprint=fingerprint,
             authority_rejects=load_authority_rejects(),
+            default_shot_type=args.shot_type,
+            shot_plan=shot_plan,
         )
         reports: list[dict[str, Any]] = []
         for path in media:

@@ -38,9 +38,22 @@ import {
   type AssembleFilmInput,
   type AssembleFilmResult,
 } from '../../src/tools/video/film-assemble.js';
+import {
+  assertTrailerCommerciallyRenderable,
+  type CommercialGateReceipt,
+} from './trailer-commercial-gate.js';
+import {
+  renderTrailerEndCard,
+} from './trailer-end-card.js';
+import {
+  deliveryFilename,
+  registerVideoAssets,
+  type VideoAssetRecord,
+} from './video-asset-gate.js';
 
 const PLAN_FILENAME = 'trailer-plan.json';
 const EXCERPTS_FILENAME = 'excerpts.json';
+const COMMERCIAL_GATE_FILENAME = 'commercial-gate.json';
 const HANDOFF_FILENAME = 'flow-handoff.json';
 const TRAILER_RECEIPT_FILENAME = 'trailer-receipt.json';
 const OVERLAY_TODO_FILENAME = 'trailer-overlay-todo.json';
@@ -87,6 +100,9 @@ export interface BookTrailerProducerDependencies {
   createHandoff?: typeof createGoogleFlowHandoff;
   importResults?: typeof importGoogleFlowResults;
   assemble?: (input: AssembleFilmInput) => Promise<AssembleFilmResult>;
+  commercialGate?: typeof assertTrailerCommerciallyRenderable;
+  renderEndCard?: typeof renderTrailerEndCard;
+  registerAssets?: typeof registerVideoAssets;
   now?: () => Date;
 }
 
@@ -99,6 +115,7 @@ interface TrailerReceiptClip {
 interface UnsignedTrailerReceipt {
   schemaVersion: 1;
   status: 'pending-human-review';
+  commercialGate: CommercialGateReceipt;
   sourcePlanSha256: string;
   handoffSha256: string;
   importReceiptSha256: string;
@@ -113,6 +130,10 @@ interface UnsignedTrailerReceipt {
     status: 'pending-operator-render';
     todoFile: string;
     count: number;
+  };
+  physicalInventory: {
+    namingSchema: '<title-id>--<language>--<role>--r<revision>--<master-id>.mp4';
+    assets: VideoAssetRecord[];
   };
   autoPublish: false;
   humanReviewRequired: true;
@@ -131,6 +152,45 @@ function assertValidPlan(value: unknown): asserts value is CinematicTrailerPlan 
   ) {
     throw new Error(`Trailer plan is not valid for preflight: ${validation.blockers.join(', ')}`);
   }
+}
+
+function assertCommercialReceipt(value: unknown): asserts value is CommercialGateReceipt {
+  const receipt = value as Partial<CommercialGateReceipt> | null;
+  if (
+    !receipt ||
+    receipt.schemaVersion !== 1 ||
+    receipt.status !== 'approved-for-trailer-render' ||
+    receipt.manuscriptStatus !== 'approved' ||
+    receipt.complete !== true ||
+    !Number.isInteger(receipt.expectedChapters) ||
+    !Number.isInteger(receipt.presentChapters) ||
+    receipt.presentChapters! < receipt.expectedChapters! ||
+    !/^[a-f0-9]{64}$/u.test(receipt.approvedContentSha256 ?? '') ||
+    receipt.approvedContentSha256 !== receipt.measuredContentSha256 ||
+    !receipt.cta?.trim() ||
+    !receipt.url?.trim()
+  ) {
+    throw new Error('Commercial gate receipt is missing, stale, or not approved');
+  }
+}
+
+async function revalidateCommercialGate(
+  workspace: string,
+  excerpts: ExcerptsDocument,
+  dependencies: BookTrailerProducerDependencies,
+): Promise<CommercialGateReceipt> {
+  const stored = (await readJsonFile(path.join(workspace, COMMERCIAL_GATE_FILENAME))).value;
+  assertCommercialReceipt(stored);
+  const gate = dependencies.commercialGate ?? assertTrailerCommerciallyRenderable;
+  const current = await gate(excerpts.book.directory);
+  assertCommercialReceipt(current);
+  if (
+    current.titleId !== stored.titleId ||
+    current.measuredContentSha256 !== stored.measuredContentSha256
+  ) {
+    throw new Error('Commercial gate changed since trailer planning; restart from plan');
+  }
+  return current;
 }
 
 async function pathExists(filename: string): Promise<boolean> {
@@ -300,11 +360,15 @@ export async function runPlanStage(
   const workspace = path.resolve(options.workspace);
   const planPath = path.join(workspace, PLAN_FILENAME);
   const excerptsPath = path.join(workspace, EXCERPTS_FILENAME);
-  await assertTargetsWritable([planPath, excerptsPath], options.force ?? false);
+  const commercialGatePath = path.join(workspace, COMMERCIAL_GATE_FILENAME);
+  await assertTargetsWritable([planPath, excerptsPath, commercialGatePath], options.force ?? false);
   const load = dependencies.loadManuscript ?? loadBookManuscript;
   const extract = dependencies.extractExcerpts ?? extractCandidateExcerpts;
   const planner = dependencies.planTrailer ?? planBookTrailer;
   const bookDirectory = path.resolve(options.bookDirectory);
+  const gate = dependencies.commercialGate ?? assertTrailerCommerciallyRenderable;
+  const commercial = await gate(bookDirectory);
+  assertCommercialReceipt(commercial);
   const manuscript = await load(bookDirectory);
   const excerpts = extract(manuscript);
   if (excerpts.length === 0) throw new Error('No cinematic candidate excerpts were found in the manuscript');
@@ -329,6 +393,7 @@ export async function runPlanStage(
   await fs.mkdir(workspace, { recursive: true });
   await writeJson(planPath, plan, options.force ?? false);
   await writeJson(excerptsPath, document, options.force ?? false);
+  await writeJson(commercialGatePath, commercial, options.force ?? false);
   return { plan, excerpts: document };
 }
 
@@ -345,6 +410,7 @@ export async function runHandoffStage(
   ]);
   assertValidPlan(planValue);
   assertExcerptsDocument(excerptValue);
+  await revalidateCommercialGate(workspace, excerptValue, dependencies);
   const remainingCredits = options.remainingFlowCredits ?? 25_000;
   if (!Number.isInteger(remainingCredits) || remainingCredits < 0) {
     throw new Error('Remaining Flow credits must be a non-negative integer');
@@ -465,28 +531,42 @@ export async function runAssembleStage(
   const resultsDirectory = path.resolve(options.resultsDirectory);
   const receiptPath = path.join(workspace, TRAILER_RECEIPT_FILENAME);
   const overlayTodoPath = path.join(workspace, OVERLAY_TODO_FILENAME);
+  await assertTargetsWritable([receiptPath, overlayTodoPath], options.force ?? false);
+  const [{ value: planValue }, { value: excerptValue }, handoffFile] = await Promise.all([
+    readJsonFile(path.join(workspace, PLAN_FILENAME)),
+    readJsonFile(path.join(workspace, EXCERPTS_FILENAME)),
+    readJsonFile(path.join(workspace, HANDOFF_FILENAME)),
+  ]);
+  assertValidPlan(planValue);
+  assertExcerptsDocument(excerptValue);
+  const commercialGate = await revalidateCommercialGate(
+    workspace,
+    excerptValue,
+    dependencies,
+  );
+  const handoff = handoffFile.value as GoogleFlowHandoff;
+  if (!verifyGoogleFlowHandoffDigest(handoff) || handoff.sourcePlanSha256 !== canonicalSha256(planValue)) {
+    throw new Error('Flow handoff is invalid or does not match the trailer plan');
+  }
+  const masterId = handoff.handoffSha256.slice(0, 16);
+  const outputFilename = deliveryFilename({
+    titleId: commercialGate.titleId,
+    language: 'und',
+    role: 'master',
+    revision: 1,
+    masterId,
+  });
   const expectedMasterPath = path.join(
     workspace,
     '.codebuddy',
     'media-generation',
     'films',
-    'book-trailer-master.mp4',
+    outputFilename,
   );
   await assertTargetsWritable([
-    receiptPath,
-    overlayTodoPath,
     expectedMasterPath,
     `${expectedMasterPath}.meta.json`,
   ], options.force ?? false);
-  const [{ value: planValue }, handoffFile] = await Promise.all([
-    readJsonFile(path.join(workspace, PLAN_FILENAME)),
-    readJsonFile(path.join(workspace, HANDOFF_FILENAME)),
-  ]);
-  assertValidPlan(planValue);
-  const handoff = handoffFile.value as GoogleFlowHandoff;
-  if (!verifyGoogleFlowHandoffDigest(handoff) || handoff.sourcePlanSha256 !== canonicalSha256(planValue)) {
-    throw new Error('Flow handoff is invalid or does not match the trailer plan');
-  }
 
   let imported = await findExistingImportReceipt(resultsDirectory, handoff);
   if (!imported) {
@@ -503,16 +583,31 @@ export async function runAssembleStage(
     imported = { receipt, clipRoot: outputRoot };
   }
   const clips = await orderedImportedClips(imported.receipt, handoff, imported.clipRoot);
+  const registerAssets = dependencies.registerAssets ?? registerVideoAssets;
+  const shotAssets = await registerAssets(
+    clips.map((clip) => clip.path),
+    {
+      titleId: commercialGate.titleId,
+      masterId,
+      language: 'und',
+      role: 'shot',
+      revision: 1,
+    },
+  );
+  const endCardPath = path.join(workspace, 'render', 'trailer-end-card.mp4');
+  const renderEndCard = dependencies.renderEndCard ?? renderTrailerEndCard;
+  const endCard = await renderEndCard(commercialGate, endCardPath);
   const assemble = dependencies.assemble ?? ((input: AssembleFilmInput) => assembleFilm(input));
   const result = await assemble({
-    clips: clips.map((clip) => clip.path),
+    clips: [...clips.map((clip) => clip.path), endCard.path],
     transitions: 'fade',
     transitionDuration: 0.3,
     aspectRatio: handoff.jobs[0]!.settings.aspectRatio,
     resolution: '1080p',
     fit: 'cover',
+    mastering: { targetLufs: -14, truePeakDb: -1.5, lra: 11 },
     ...(options.music ? { music: path.resolve(options.music), musicVolume: 0.25, ducking: true } : {}),
-    output: 'book-trailer-master.mp4',
+    output: outputFilename,
     rootDir: workspace,
     name: planValue.book.title,
   });
@@ -520,6 +615,16 @@ export async function runAssembleStage(
     throw new Error(`Film assembly failed: ${result.error ?? 'no master output'}`);
   }
   const masterSha256 = await sha256RegularFile(result.outputPath, 10 * 1024 * 1024 * 1024);
+  const masterAssets = await registerAssets(
+    [result.outputPath],
+    {
+      titleId: commercialGate.titleId,
+      masterId,
+      language: 'und',
+      role: 'master',
+      revision: 1,
+    },
+  );
   const mediaSidecarPath = `${result.outputPath}.meta.json`;
   await sha256RegularFile(mediaSidecarPath, MAX_JSON_BYTES);
   const overlayTodo = {
@@ -532,6 +637,7 @@ export async function runAssembleStage(
   await writeJson(overlayTodoPath, overlayTodo, options.force ?? false);
 
   const receipt = createTrailerReceipt({
+    commercialGate,
     sourcePlanSha256: handoff.sourcePlanSha256,
     handoffSha256: handoff.handoffSha256,
     importReceiptSha256: imported.receipt.receiptSha256,
@@ -546,6 +652,10 @@ export async function runAssembleStage(
       status: 'pending-operator-render',
       todoFile: overlayTodoPath,
       count: planValue.overlays.length,
+    },
+    physicalInventory: {
+      namingSchema: '<title-id>--<language>--<role>--r<revision>--<master-id>.mp4',
+      assets: [...shotAssets, ...masterAssets],
     },
   });
   await writeJson(receiptPath, receipt, options.force ?? false);
