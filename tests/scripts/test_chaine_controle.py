@@ -4,10 +4,14 @@ from __future__ import annotations
 
 import importlib.util
 import inspect
+import json
 from pathlib import Path
+import subprocess
 import sys
+from unittest import mock
 
 import pytest
+from scripts import claude_forfait
 
 
 SCRIPT = (
@@ -261,6 +265,108 @@ def test_stage2_api_cannot_receive_stage1_verdict() -> None:
     parameters = inspect.signature(chaine.run_stage2_blind).parameters
     assert 'stage1' not in parameters
     assert 'stage1_results' not in parameters
+
+
+def test_stage3_defaults_to_claude_forfait() -> None:
+    args = chaine.build_parser().parse_args(['x.txt', '--type', 'texte'])
+    assert args.arbitre == 'claude-forfait'
+
+
+def test_claude_forfait_retries_once_and_counts_each_invocation() -> None:
+    events: list[dict] = []
+    runner = claude_forfait.ClaudeForfaitRunner(
+        max_calls=3,
+        min_interval_seconds=0,
+        event_sink=events.append,
+    )
+    responses = [
+        subprocess.CompletedProcess([], 1, '', 'erreur temporaire'),
+        subprocess.CompletedProcess([], 0, '{"items": []}', ''),
+    ]
+    with mock.patch.object(
+        claude_forfait.subprocess, 'run', side_effect=responses
+    ) as mocked:
+        result = runner.run('prompt', label='test')
+    assert result.content == '{"items": []}'
+    assert mocked.call_count == 2
+    assert runner.calls_started == 2
+    assert runner.calls_succeeded == 1
+    assert sum(
+        event.get('event') == 'claude_forfait_call_started'
+        for event in events
+    ) == 2
+
+
+def test_claude_quota_is_not_retried_and_large_prompt_uses_tempfile() -> None:
+    events: list[dict] = []
+    runner = claude_forfait.ClaudeForfaitRunner(
+        max_calls=2,
+        min_interval_seconds=0,
+        large_prompt_chars=1,
+        event_sink=events.append,
+    )
+    response = subprocess.CompletedProcess(
+        [], 1, '', "You've hit your usage limit; resets in 1 hour"
+    )
+    with mock.patch.object(
+        claude_forfait.subprocess, 'run', return_value=response
+    ) as mocked:
+        with pytest.raises(claude_forfait.ClaudeQuotaError):
+            runner.run('prompt volumineux', label='quota')
+    assert mocked.call_count == 1
+    assert mocked.call_args.kwargs['stdin'] is not None
+    assert any(
+        event.get('prompt_transport') == 'temporary_file_stdin'
+        for event in events
+    )
+
+
+def test_claude_local_call_cap_stops_cleanly() -> None:
+    runner = claude_forfait.ClaudeForfaitRunner(
+        max_calls=1,
+        min_interval_seconds=0,
+    )
+    response = subprocess.CompletedProcess([], 0, '{}', '')
+    with mock.patch.object(
+        claude_forfait.subprocess, 'run', return_value=response
+    ):
+        runner.run('premier', label='one')
+        with pytest.raises(claude_forfait.ClaudeCallLimitReached):
+            runner.run('second', label='two')
+
+
+def test_stage3_claude_quota_falls_back_to_warned_qwen(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    item = chaine.item_from_bytes('x', 'x.txt', b'contenu')
+    stage1 = decision('OK', 1)
+    stage2 = decision('À REGARDER', 2)
+    runner = mock.Mock()
+    runner.run.side_effect = chaine.ClaudeQuotaError('quota')
+    response = json.dumps({
+        'items': [{'id': 'x', 'verdict': 'OK', 'reasons': ['arbitré']}],
+    })
+    with mock.patch.object(
+        chaine,
+        'openrouter_chat',
+        return_value=(response, 0.001, 0.5, {'cost': 0.001}),
+    ) as fallback:
+        results = chaine.run_stage3(
+            [(item, stage1, stage2)],
+            'texte',
+            False,
+            'claude-forfait',
+            'opus',
+            'secret',
+            chaine.BudgetLedger(1.0, {3: 1.0}),
+            chaine.JsonlJournal(tmp_path / 'journal.jsonl'),
+            runner,
+        )
+    assert results['x'].status == 'completed'
+    assert chaine.DEFAULT_STAGE3_FALLBACK_MODEL in results['x'].actor
+    assert 'PAYANT' in capsys.readouterr().err
+    assert fallback.call_args.kwargs['model'] == chaine.DEFAULT_STAGE3_FALLBACK_MODEL
 
 
 def test_truncation_never_cuts_utf8_as_an_input_error() -> None:

@@ -27,8 +27,23 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable, Sequence
 
+try:
+    from claude_forfait import (
+        ClaudeCallLimitReached,
+        ClaudeForfaitError,
+        ClaudeForfaitRunner,
+        ClaudeQuotaError,
+    )
+except ModuleNotFoundError:
+    from scripts.claude_forfait import (
+        ClaudeCallLimitReached,
+        ClaudeForfaitError,
+        ClaudeForfaitRunner,
+        ClaudeQuotaError,
+    )
 
-VERSION = '1.0.0'
+
+VERSION = '1.1.0'
 VERDICTS = ('OK', 'À REGARDER', 'REJET')
 DEFAULT_REGISTRY = Path.home() / '.codebuddy/verdicts-humains.jsonl'
 DEFAULT_JOURNAL = Path.home() / '.codebuddy/chaine-controle.jsonl'
@@ -36,13 +51,17 @@ DEFAULT_STAGE1_MODEL = 'qwen/qwen3.7-flash'
 DEFAULT_STAGE2_MODEL = 'google/gemma-4-31b-it:free'
 DEFAULT_STAGE2_OLLAMA_MODEL = 'gemma4:12b'
 DEFAULT_STAGE2_AGY_MODEL = 'gemini-3.6-flash-high'
-DEFAULT_STAGE3_MODEL = 'moonshotai/kimi-k3'
+DEFAULT_STAGE3_ARBITER = 'claude-forfait'
+DEFAULT_STAGE3_MODEL = 'opus'
+DEFAULT_STAGE3_KIMI_MODEL = 'moonshotai/kimi-k3'
+DEFAULT_STAGE3_FALLBACK_MODEL = 'qwen/qwen3.7-flash'
 OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions'
 OLLAMA_URL = 'http://127.0.0.1:11434/api/chat'
 MODEL_RATES_USD_PER_MTOK = {
     DEFAULT_STAGE1_MODEL: (0.03, 0.13),
     DEFAULT_STAGE2_MODEL: (0.0, 0.0),
-    DEFAULT_STAGE3_MODEL: (3.0, 15.0),
+    DEFAULT_STAGE3_KIMI_MODEL: (3.0, 15.0),
+    DEFAULT_STAGE3_FALLBACK_MODEL: (0.03, 0.13),
 }
 # Qwen applique des paliers de contexte au-delà de 32k et 256k tokens. Le
 # comptage préventif par octets est volontairement pessimiste.
@@ -1201,20 +1220,31 @@ def run_stage3(
     disagreements: Sequence[tuple[Item, StageDecision, StageDecision]],
     content_type: str,
     strict: bool,
+    arbiter: str,
     model: str,
     api_key: str | None,
     ledger: BudgetLedger,
     journal: JsonlJournal,
+    claude_runner: ClaudeForfaitRunner | None,
 ) -> dict[str, StageDecision]:
     if not disagreements:
         return {}
-    actor = f'OpenRouter/{model}'
+    actor = (
+        f'claude-forfait/{model}'
+        if arbiter == 'claude-forfait'
+        else f'OpenRouter/{model}'
+    )
     items = [entry[0] for entry in disagreements]
-    if not api_key:
+    if arbiter == 'kimi' and not api_key:
         return unavailable_decisions(
             items, 3, actor, 'unavailable', 'OPENROUTER_API_KEY absent'
         )
+    if arbiter == 'claude-forfait' and claude_runner is None:
+        return unavailable_decisions(
+            items, 3, actor, 'unavailable', 'moteur Claude forfait non initialisé'
+        )
     results: dict[str, StageDecision] = {}
+    claude_quota_exhausted = False
     for offset in range(0, len(disagreements), MAX_BATCH_ITEMS):
         group = disagreements[offset:offset + MAX_BATCH_ITEMS]
         payload = {
@@ -1242,23 +1272,98 @@ def run_stage3(
         )
         batch_items = [entry[0] for entry in group]
         try:
-            raw, cost, elapsed, _ = openrouter_chat(
-                stage=3,
-                model=model,
-                prompt=prompt,
-                max_tokens=2500,
-                reasoning_max_tokens=0,
-                ledger=ledger,
-                api_key=api_key,
-                journal=journal,
-            )
+            if arbiter == 'claude-forfait' and not claude_quota_exhausted:
+                assert claude_runner is not None
+                try:
+                    claude_result = claude_runner.run(
+                        prompt,
+                        label=f'etage3/{offset // MAX_BATCH_ITEMS + 1}',
+                    )
+                    raw = claude_result.content
+                    cost = 0.0
+                    elapsed = claude_result.elapsed_seconds
+                except ClaudeQuotaError:
+                    claude_quota_exhausted = True
+                    journal.write({
+                        'event': 'paid_fallback_warning',
+                        'stage': 3,
+                        'from': f'claude-forfait/{model}',
+                        'to': f'openrouter/{DEFAULT_STAGE3_FALLBACK_MODEL}',
+                        'reason': 'quota du forfait Claude atteint',
+                        'paid_fallback': True,
+                    })
+                    print(
+                        'AVERTISSEMENT: quota Claude atteint; repli PAYANT '
+                        f'explicite sur {DEFAULT_STAGE3_FALLBACK_MODEL}.',
+                        file=sys.stderr,
+                        flush=True,
+                    )
+            if arbiter == 'kimi' or claude_quota_exhausted:
+                fallback_model = (
+                    model
+                    if arbiter == 'kimi'
+                    else DEFAULT_STAGE3_FALLBACK_MODEL
+                )
+                if not api_key:
+                    raise ControlError(
+                        'OPENROUTER_API_KEY absent; repli Qwen payant impossible'
+                    )
+                raw, cost, elapsed, _ = openrouter_chat(
+                    stage=3,
+                    model=fallback_model,
+                    prompt=prompt,
+                    max_tokens=2500,
+                    reasoning_max_tokens=0,
+                    ledger=ledger,
+                    api_key=api_key,
+                    journal=journal,
+                )
+                if claude_quota_exhausted:
+                    actor = f'OpenRouter/{fallback_model} (repli quota Claude)'
             results.update(decisions_from_response(
                 parse_model_json(raw), batch_items, 3, actor, cost, elapsed
+            ))
+        except ClaudeCallLimitReached as error:
+            journal.write({
+                'event': 'stage_stop',
+                'stage': 3,
+                'provider': 'claude-forfait',
+                'model': model,
+                'status': 'call_limit_reached',
+                'reason': str(error),
+            })
+            results.update(unavailable_decisions(
+                batch_items, 3, actor, 'call_limit_reached', str(error)
+            ))
+            remaining_items = [
+                entry[0]
+                for entry in disagreements[offset + MAX_BATCH_ITEMS:]
+            ]
+            results.update(unavailable_decisions(
+                remaining_items, 3, actor, 'call_limit_reached', str(error)
+            ))
+            break
+        except ClaudeForfaitError as error:
+            journal.write({
+                'event': 'stage_error',
+                'stage': 3,
+                'provider': 'claude-forfait',
+                'model': model,
+                'status': 'error',
+                'reason': str(error),
+            })
+            results.update(unavailable_decisions(
+                batch_items, 3, actor, 'error', str(error)
             ))
         except (BudgetError, ControlError) as error:
             journal.write({
                 'event': 'stage_error',
                 'stage': 3,
+                'provider': (
+                    'openrouter'
+                    if arbiter == 'kimi' or claude_quota_exhausted
+                    else 'claude-forfait'
+                ),
                 'model': model,
                 'status': 'budget_exhausted'
                 if isinstance(error, BudgetError) else 'error',
@@ -1358,11 +1463,13 @@ def execute_chain(
     stage1_model: str,
     stage2_provider: str,
     stage2_model: str,
+    stage3_arbiter: str = DEFAULT_STAGE3_ARBITER,
     stage3_model: str,
     registry_entries: dict[str, dict[str, Any]],
     ledger: BudgetLedger,
     journal: JsonlJournal,
     command_decision: StageDecision | None = None,
+    claude_runner: ClaudeForfaitRunner | None = None,
 ) -> dict[str, Any]:
     run_id = f'{int(time.time())}-{os.getpid()}'
     started = time.monotonic()
@@ -1409,8 +1516,8 @@ def execute_chain(
     ]
     stage3 = (
         run_stage3(
-            disagreements, content_type, strict, stage3_model, api_key,
-            ledger, journal,
+            disagreements, content_type, strict, stage3_arbiter, stage3_model,
+            api_key, ledger, journal, claude_runner,
         )
         if 3 in enabled_stages
         else {
@@ -1492,6 +1599,10 @@ def execute_chain(
             for verdict in VERDICTS
         },
         'disagreement_count': len(disagreements),
+        'stage3_arbiter': stage3_arbiter,
+        'claude_forfait': (
+            claude_runner.snapshot() if claude_runner is not None else None
+        ),
         'budget': ledger.snapshot(),
         'elapsed_seconds': time.monotonic() - started,
         'items': results,
@@ -1751,7 +1862,35 @@ def build_parser() -> argparse.ArgumentParser:
         default='openrouter',
     )
     parser.add_argument('--modele-verification')
-    parser.add_argument('--modele-arbitrage', default=DEFAULT_STAGE3_MODEL)
+    parser.add_argument(
+        '--arbitre',
+        choices=('claude-forfait', 'kimi'),
+        default=DEFAULT_STAGE3_ARBITER,
+        help='arbitre de l’étage 3; Claude forfait est gratuit par défaut',
+    )
+    parser.add_argument(
+        '--modele-arbitrage',
+        help='surcharge du modèle (opus|sonnet pour Claude, ID OpenRouter pour Kimi)',
+    )
+    parser.add_argument(
+        '--claude-max-appels',
+        type=int,
+        default=200,
+        help='plafond local d’invocations claude -p, retry inclus',
+    )
+    parser.add_argument(
+        '--claude-espacement',
+        type=float,
+        default=5.0,
+        metavar='SECONDES',
+        help='espacement minimal entre deux invocations Claude',
+    )
+    parser.add_argument(
+        '--claude-timeout',
+        type=int,
+        default=600,
+        metavar='SECONDES',
+    )
     parser.add_argument('--registre', type=Path, default=DEFAULT_REGISTRY)
     parser.add_argument('--journal', type=Path, default=DEFAULT_JOURNAL)
     parser.add_argument('--sortie', type=Path)
@@ -1785,6 +1924,21 @@ def main(argv: Sequence[str] | None = None) -> int:
         parser.error('--budget doit être fini et positif')
     if args.passes_detection < 1:
         parser.error('--passes-detection doit être >= 1')
+    if args.claude_max_appels < 1:
+        parser.error('--claude-max-appels doit être >= 1')
+    if not math.isfinite(args.claude_espacement) or args.claude_espacement < 0:
+        parser.error('--claude-espacement doit être fini et positif')
+    if args.claude_timeout < 1:
+        parser.error('--claude-timeout doit être >= 1')
+    stage3_model = args.modele_arbitrage or (
+        DEFAULT_STAGE3_MODEL
+        if args.arbitre == 'claude-forfait'
+        else DEFAULT_STAGE3_KIMI_MODEL
+    )
+    if args.arbitre == 'claude-forfait' and stage3_model not in {
+        'opus', 'sonnet',
+    }:
+        parser.error('--modele-arbitrage doit être opus ou sonnet avec Claude')
     try:
         ensure_auxiliary_paths_outside_target(
             args.cible,
@@ -1793,6 +1947,17 @@ def main(argv: Sequence[str] | None = None) -> int:
         stage_budgets = parse_stage_budgets(args.budget, args.budget_etage)
         ledger = BudgetLedger(args.budget, stage_budgets)
         journal = JsonlJournal(args.journal)
+        claude_runner = (
+            ClaudeForfaitRunner(
+                model=stage3_model,
+                max_calls=args.claude_max_appels,
+                min_interval_seconds=args.claude_espacement,
+                timeout_seconds=args.claude_timeout,
+                event_sink=journal.write,
+            )
+            if args.arbitre == 'claude-forfait' and 3 in args.etages
+            else None
+        )
         registry = HumanVerdictRegistry(args.registre)
         registry_entries = registry.load()
         truth: dict[str, dict[str, Any]] | None = None
@@ -1855,11 +2020,13 @@ def main(argv: Sequence[str] | None = None) -> int:
             stage1_model=args.modele_detection,
             stage2_provider=args.verificateur,
             stage2_model=verification_model,
-            stage3_model=args.modele_arbitrage,
+            stage3_arbiter=args.arbitre,
+            stage3_model=stage3_model,
             registry_entries=registry_entries,
             ledger=ledger,
             journal=journal,
             command_decision=command_decision,
+            claude_runner=claude_runner,
         )
         if truth is not None:
             report['calibration'] = calibration_metrics(report, truth)
