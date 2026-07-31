@@ -88,6 +88,90 @@ describe('trailer commercial gate', () => {
     );
   });
 
+  it('refuses a local manifest that declares a 1/40 manuscript complete', async () => {
+    // Le manifeste local vit dans le dossier même qu'il autorise : il ne peut
+    // donc pas se déclarer complet. La Chair des machines n'a qu'un chapitre
+    // sur quarante ; sans cette règle, ce fichier suffirait à publier une
+    // bande-annonce pour un roman qui n'existe pas.
+    const parent = await root();
+    const book = path.join(parent, 'La_Chair_des_Machines');
+    await fs.mkdir(path.join(book, 'chapitres'), { recursive: true });
+    const chapters = [{ name: 'chapitre-01.md', text: '# Chapitre 1\n' }];
+    await fs.writeFile(path.join(book, 'chapitres', chapters[0]!.name), chapters[0]!.text);
+    await fs.writeFile(path.join(book, LOCAL_MANIFEST_FILENAME), JSON.stringify({
+      titleId: 'chair-des-machines',
+      title: 'La Chair des machines',
+      sourceDirectoryName: 'La_Chair_des_Machines',
+      chapterGlob: 'chapitres/*.md',
+      expectedChapters: 1,
+      presentChapters: 1,
+      manuscriptStatus: 'approved',
+      approvedContentSha256: approvedDigest(chapters),
+      cta: 'Lire le livre',
+      url: 'https://example.test/chair-des-machines',
+    }));
+
+    await expect(assertTrailerCommerciallyRenderable(book)).rejects.toThrow(
+      /manuscript incomplete: 1\/40/iu,
+    );
+  });
+
+  it('keeps the catalog status when a local manifest claims approval', async () => {
+    // Même à quarante chapitres présents, un manuscrit que le catalogue tient
+    // pour incomplet ne peut pas s'auto-approuver.
+    const parent = await root();
+    const book = path.join(parent, 'Code_Rouge');
+    const directory = path.join(book, 'chapitres');
+    await fs.mkdir(directory, { recursive: true });
+    const chapters = Array.from({ length: 40 }, (_, index) => ({
+      name: `chapitre-${String(index + 1).padStart(2, '0')}.md`,
+      text: `# Chapitre ${index + 1}\n`,
+    }));
+    await Promise.all(chapters.map((chapter) =>
+      fs.writeFile(path.join(directory, chapter.name), chapter.text)));
+    await fs.writeFile(path.join(book, LOCAL_MANIFEST_FILENAME), JSON.stringify({
+      titleId: 'code-rouge',
+      title: 'Code rouge',
+      sourceDirectoryName: 'Code_Rouge',
+      chapterGlob: 'chapitres/*.md',
+      expectedChapters: 40,
+      presentChapters: 40,
+      manuscriptStatus: 'approved',
+      approvedContentSha256: approvedDigest(chapters),
+      cta: 'Lire le livre',
+      url: 'https://example.test/code-rouge',
+    }));
+
+    await expect(assertTrailerCommerciallyRenderable(book)).rejects.toThrow(
+      /status is incomplete, expected approved/iu,
+    );
+  });
+
+  it('lets a local manifest be stricter than the catalog', async () => {
+    // La règle est asymétrique : resserrer est permis, relâcher ne l'est pas.
+    const parent = await root();
+    const book = path.join(parent, 'Code_Rouge');
+    const directory = path.join(book, 'chapitres');
+    await fs.mkdir(directory, { recursive: true });
+    await fs.writeFile(path.join(directory, 'chapitre-01.md'), '# Chapitre 1\n');
+    await fs.writeFile(path.join(book, LOCAL_MANIFEST_FILENAME), JSON.stringify({
+      titleId: 'code-rouge',
+      title: 'Code rouge',
+      sourceDirectoryName: 'Code_Rouge',
+      chapterGlob: 'chapitres/*.md',
+      expectedChapters: 45,
+      presentChapters: 1,
+      manuscriptStatus: 'approved',
+      approvedContentSha256: 'a'.repeat(64),
+      cta: 'Lire le livre',
+      url: 'https://example.test/code-rouge',
+    }));
+
+    await expect(assertTrailerCommerciallyRenderable(book)).rejects.toThrow(
+      /manuscript incomplete: 1\/45/iu,
+    );
+  });
+
   it('refuses replaying a workspace after its approved manuscript changed', async () => {
     const book = await root();
     const workspace = await root();

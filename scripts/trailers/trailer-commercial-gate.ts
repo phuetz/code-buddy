@@ -99,27 +99,72 @@ async function loadCatalog(filename = DEFAULT_CATALOG_PATH): Promise<TrailerCata
   return value.titles;
 }
 
+const STATUS_PERMISSIVENESS: Record<ManuscriptStatus, number> = {
+  incomplete: 0,
+  major_revision: 1,
+  approved: 2,
+};
+
+/**
+ * Reconciles a book's own manifest with the shared catalog.
+ *
+ * The local manifest lives inside the very directory it authorises, so on its
+ * own it proves nothing: dropping `{expectedChapters: 1, status: 'approved'}`
+ * into a 1-of-40 manuscript would clear the gate and ship a trailer for a novel
+ * that does not exist. That is the same class of flaw as a licence whose
+ * verifying key is the local file that signs it.
+ *
+ * So the catalog is the authority: where both know a title, the STRICTER of the
+ * two wins. A local manifest may tighten the gate — never loosen it.
+ */
+function reconcileWithCatalog(
+  local: TrailerCatalogEntry,
+  catalog: TrailerCatalogEntry | undefined,
+): TrailerCatalogEntry {
+  if (!catalog) return local;
+  return {
+    ...local,
+    expectedChapters: Math.max(local.expectedChapters, catalog.expectedChapters),
+    manuscriptStatus:
+      STATUS_PERMISSIVENESS[catalog.manuscriptStatus] <
+      STATUS_PERMISSIVENESS[local.manuscriptStatus]
+        ? catalog.manuscriptStatus
+        : local.manuscriptStatus,
+  };
+}
+
 async function localOrCatalogEntry(
   bookDirectory: string,
   catalogPath?: string,
 ): Promise<TrailerCatalogEntry> {
+  const directoryName = path.basename(bookDirectory);
+  let entries: TrailerCatalogEntry[] = [];
+  let catalogError: unknown;
+  try {
+    entries = await loadCatalog(catalogPath);
+  } catch (error) {
+    catalogError = error;
+  }
+  const catalogEntry = entries.find(
+    (candidate) => candidate.sourceDirectoryName === directoryName,
+  );
+
   const localPath = path.join(bookDirectory, LOCAL_MANIFEST_FILENAME);
   try {
     const local = await readJson(localPath);
     assertEntry(local);
-    return local;
+    return reconcileWithCatalog(local, catalogEntry);
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
   }
-  const entries = await loadCatalog(catalogPath);
-  const directoryName = path.basename(bookDirectory);
-  const entry = entries.find((candidate) => candidate.sourceDirectoryName === directoryName);
-  if (!entry) {
+
+  if (!catalogEntry) {
+    if (catalogError) throw catalogError;
     throw new Error(
       `Trailer refused: missing ${LOCAL_MANIFEST_FILENAME}; manuscript completeness is unproven`,
     );
   }
-  return entry;
+  return catalogEntry;
 }
 
 function chapterPattern(glob: string): { directory: string; suffix: string } {
