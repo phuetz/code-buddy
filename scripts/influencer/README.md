@@ -155,6 +155,29 @@ Flow multi-frames ; une seule image ⇒ dérive d'identité prouvée).
   contient `Lisa Officielle`, au lieu de dépendre du dernier projet ouvert.
 - ElevenLabs : lire la clé ligne à ligne (`media.env` est multi-lignes).
 - Cartons drawtext : échapper `\n` littéralement (pas de heredoc).
+- `montage /tmp/*.jpg` trie **par nom**, pas par temps : `14, 26, 38, 4, 50…`.
+  Une planche-contact lue dans l'ordre supposé fait attribuer chaque mesure au
+  mauvais plan. Toujours `-label '%f'`.
+
+## Mesure du détourage — et son cas de contrôle
+
+`mesurer-detourage.py` compte la largeur de la bande de transition au sommet de
+la chevelure : ≥ 4 px naturel, 2-4 px suspect, < 2 px découpe franche. Il exige
+**un python muni de YOLO** (`~/vision_tests/venv/bin/python`) ; sans détecteur il
+mesure quand même mais **le dit**, car il ne peut plus garantir qu'un sujet est
+présent — sur un plan sans personne il mesurerait le décor.
+
+**Avant de croire une porte, prouver qu'elle sait trouver.** Le couple ci-dessous
+est le cas de contrôle : deux versions du même film, l'une que Patrice a rejetée
+à l'œil, l'autre réparée.
+
+```bash
+# plans AVEC sujet : v01 (défectueux) → 2 et 3 px ; v02 (réparé) → 6, 6 et 8 px
+~/vision_tests/venv/bin/python scripts/influencer/mesurer-detourage.py plan.png
+```
+
+Les plans sans personne des deux versions sortent « non applicable » : un B-roll
+sain ne doit jamais faire échouer la porte.
 
 ## Automatisation quotidienne Flow
 
