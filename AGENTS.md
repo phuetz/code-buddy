@@ -2,6 +2,10 @@
 
 This file provides guidance to Codex (Codex.ai/code) when working with code in this repository.
 
+## Coordination Fable 5 / Codex
+
+Avant tout travail, lire [`docs/FABLE5-CODEX-COORDINATION.md`](docs/FABLE5-CODEX-COORDINATION.md), y réserver le chantier visé et respecter les zones gelées. Mettre à jour le tableau avec la branche, le commit et les vérifications avant de passer la main.
+
 > **Status: 1.0.0-rc.8** (2026-05-09 → ongoing toward `1.0.0`). Multi-AI **fleet hub** (`peer.chat` + `peer.chat-session.*` + `peer.tool.invoke`) and the **Cowork** Electron GUI are the headline V1 features. ~27K Vitest tests. Read [`docs/getting-started.md`](docs/getting-started.md), [`docs/fleet-guide.md`](docs/fleet-guide.md), and [`CHANGELOG.md`](CHANGELOG.md). Keep this file short — it should capture what you *can't* derive by reading the source.
 
 ## Build, Test, Lint
