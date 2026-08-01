@@ -479,7 +479,7 @@ def main() -> int:
     print(f"{'image':44} {'largeur':>8}  {'colonnes':>8}  {'liseré':>7}  verdict")
     pire = 99.0
     sans_detecteur = False
-    sans_segmentation = False
+    sans_segmentation = None
     for chemin in arguments.images:
         if not chemin.is_file():
             print(f"{str(chemin)[:44]:44}      —          —        —  fichier introuvable")
@@ -493,13 +493,19 @@ def main() -> int:
             continue
         largeur, n = largeur_transition(chemin)
         note = verdict(largeur)
+        calcule = True
         try:
             part, _ = liseré_de_chevelure(chemin, arguments.mattes)
-        except (ImportError, FileNotFoundError):
-            part = float("nan")
-            sans_segmentation = True
+        except ImportError:
+            part, calcule = float("nan"), False
+            sans_segmentation = "ultralytics absent de cet interpréteur"
+        except FileNotFoundError:
+            part, calcule = float("nan"), False
+            sans_segmentation = f"{MODELE_YOLO_SEG} absent"
         colonne = "     —" if part != part else f"{part:6.1f}%"
-        if part != part:
+        if not calcule:
+            note = f"{note} · liseré NON CALCULÉ"
+        elif part != part:
             note = f"{note} · liseré NON MESURABLE (fond trop clair ou contour trop court)"
         else:
             note_liseré = verdict_liseré(part)
@@ -512,9 +518,9 @@ def main() -> int:
         if largeur == largeur:
             pire = min(pire, largeur)
     if sans_segmentation:
-        print(f"\n⚠ {MODELE_YOLO_SEG} absent : la colonne « liseré » n'a pas été\n"
-              "  calculée. Un liseré ÉLARGIT la bande de transition — la colonne\n"
-              "  « largeur » seule peut donc noter « naturel » une image défectueuse.")
+        print(f"\n⚠ {sans_segmentation} : la colonne « liseré » n'a pas été calculée.\n"
+              "  Un liseré ÉLARGIT la bande de transition — la colonne « largeur »\n"
+              "  seule peut donc noter « naturel » une image défectueuse.")
     if sans_detecteur:
         print("\n⚠ ultralytics absent de cet interpréteur : impossible de "
               "vérifier qu'un sujet est présent.\n  Les largeurs ci-dessus peuvent "
