@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { SIGNATURE_LOCATIONS } from '../../../src/companion/signature-locations.js';
 import {
   buildCharacterInLocationWorkflow,
+  buildFaceProtectedCharacterInLocationWorkflow,
   buildInsertionPrompt,
   INSERT_QWEN_TEMPLATE_CONTRACT,
 } from '../../../src/tools/video/character-in-location.js';
@@ -24,6 +25,7 @@ function insertionGraph(): ComfyWorkflowGraph {
     '8': { class_type: 'KSampler', inputs: { seed: -1, model: ['7', 0] } },
     '9': { class_type: 'VAEDecode', inputs: { samples: ['8', 0], vae: ['3', 0] } },
     '10': { class_type: 'SaveImage', inputs: { filename_prefix: '', images: ['9', 0] } },
+    '11': { class_type: 'VAEEncode', inputs: { pixels: ['5', 0] } },
   };
 }
 
@@ -75,5 +77,35 @@ describe('Qwen character-in-location workflow', () => {
     expect(first).not.toContain(location.description);
     expect(first).not.toContain(location.paletteTag);
     expect(first).not.toContain(location.lightingSpec);
+  });
+
+  it('can require a measurable frontal medium shot without changing the default prompt', () => {
+    expect(buildInsertionPrompt('cozy-loft-interior', { frontalMedium: true }))
+      .toContain('frontal medium shot looking directly at camera');
+  });
+
+  it('protects the canonical face in latent sampling and restores it after decode', () => {
+    const source = insertionGraph();
+    source['8']!.inputs.latent_image = ['11', 0];
+    const graph = buildFaceProtectedCharacterInLocationWorkflow(source, {
+      characterImage: 'uploads/ambre.png',
+      locationImage: 'uploads/protected-base.png',
+      editMaskImage: 'uploads/edit-mask.png',
+      location: 'cozy-loft-interior',
+      seed: 81_001,
+      outputPrefix: 'insertions/ambre-protected',
+    });
+    const latentMask = Object.values(graph).find((node) => node.class_type === 'SetLatentNoiseMask');
+    const composite = Object.values(graph).find((node) => node.class_type === 'ImageCompositeMasked');
+    const finalMask = Object.values(graph).find((node) => node.class_type === 'GrowMask');
+    expect(latentMask).toBeDefined();
+    expect(finalMask?.inputs.expand).toBe(-16);
+    expect(composite).toBeDefined();
+    expect(graph['8']?.inputs.latent_image).toEqual(
+      [Object.entries(graph).find(([, node]) => node === latentMask)?.[0], 0],
+    );
+    expect(graph['10']?.inputs.images).toEqual(
+      [Object.entries(graph).find(([, node]) => node === composite)?.[0], 0],
+    );
   });
 });

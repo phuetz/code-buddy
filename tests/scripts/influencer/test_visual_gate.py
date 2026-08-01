@@ -22,6 +22,14 @@ SPEC.loader.exec_module(visual_gate)
 
 
 class VisualGateScoringTest(unittest.TestCase):
+    def test_ambre_default_reference_is_canonical(self) -> None:
+        reference = visual_gate.DEFAULT_REFERENCES['ambre']
+        self.assertEqual(
+            reference,
+            Path.home() / '.codebuddy/personas/ambre/identity-kit',
+        )
+        self.assertNotIn('automne-composites', str(reference))
+
     def test_cosine_similarity(self) -> None:
         self.assertAlmostEqual(
             visual_gate.cosine_similarity((1.0, 0.0), (1.0, 0.0)),

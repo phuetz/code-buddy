@@ -20,6 +20,8 @@ export interface InsertionPromptOptions {
   preservePose?: boolean;
   /** Preserve the subject's apparent scale. Enabled by default. */
   preserveScale?: boolean;
+  /** Require a measurable frontal face when a distant placement is unsafe. */
+  frontalMedium?: boolean;
 }
 
 export interface CharacterInLocationWorkflowInput {
@@ -29,6 +31,12 @@ export interface CharacterInLocationWorkflowInput {
   seed: number;
   outputPrefix: string;
   promptOptions?: InsertionPromptOptions;
+}
+
+export interface FaceProtectedCharacterInLocationWorkflowInput
+  extends CharacterInLocationWorkflowInput {
+  /** White where Qwen may sample; black over the canonical face. */
+  editMaskImage: string;
 }
 
 export const INSERT_QWEN_TEMPLATE_CONTRACT: TemplateContract = Object.freeze({
@@ -87,6 +95,9 @@ export function buildInsertionPrompt(
   return [
     'place the woman from image 1 into the scene from image 2',
     `keep her ${identityParts.join('/')}`,
+    ...(options.frontalMedium
+      ? ['show her clearly in a frontal medium shot looking directly at camera']
+      : []),
     'match the scene lighting and perspective',
     'photorealistic',
   ].join(', ');
@@ -106,6 +117,99 @@ export function buildCharacterInLocationWorkflow(
     { role: 'seed', value: input.seed },
     { role: 'outputPrefix', value: input.outputPrefix },
   ]);
+  assertAllSeedsPinned(graph);
+  return graph;
+}
+
+function uniqueNodeId(graph: ComfyWorkflowGraph, classType: string): string {
+  const matches = Object.entries(graph)
+    .filter(([, node]) => node.class_type === classType)
+    .map(([nodeId]) => nodeId);
+  if (matches.length !== 1) {
+    throw new Error(`Face-protected insertion requires exactly 1 ${classType} node; found ${matches.length}`);
+  }
+  return matches[0]!;
+}
+
+function nextNodeIds(graph: ComfyWorkflowGraph, count: number): string[] {
+  const numericIds = Object.keys(graph)
+    .map((value) => Number(value))
+    .filter((value) => Number.isSafeInteger(value) && value >= 0);
+  let candidate = numericIds.length > 0 ? Math.max(...numericIds) + 1 : 1;
+  const values: string[] = [];
+  while (values.length < count) {
+    const id = String(candidate);
+    if (!graph[id]) values.push(id);
+    candidate += 1;
+  }
+  return values;
+}
+
+/**
+ * Add the same latent-mask + exact recomposition discipline as wardrobe repair.
+ * The supplied location image is already a draft containing canonical face
+ * pixels.  Qwen may resample every white part of editMaskImage, but the final
+ * ImageCompositeMasked restores the black face region from that draft.
+ */
+export function buildFaceProtectedCharacterInLocationWorkflow(
+  templateJson: unknown,
+  input: FaceProtectedCharacterInLocationWorkflowInput,
+  contract: TemplateContract = INSERT_QWEN_TEMPLATE_CONTRACT,
+): ComfyWorkflowGraph {
+  const graph = buildCharacterInLocationWorkflow(templateJson, input, contract);
+  const locationNodeId = Object.entries(graph).find(([, node]) => (
+    node.class_type === 'LoadImage' && node._meta?.title === 'Location'
+  ))?.[0];
+  if (!locationNodeId) throw new Error('Face-protected insertion cannot resolve the Location image');
+  const encoderId = uniqueNodeId(graph, 'TextEncodeQwenImageEditPlus');
+  const vaeEncodeId = uniqueNodeId(graph, 'VAEEncode');
+  const samplerId = uniqueNodeId(graph, 'KSampler');
+  const vaeDecodeId = uniqueNodeId(graph, 'VAEDecode');
+  const saveId = uniqueNodeId(graph, 'SaveImage');
+  const [maskImageId, imageToMaskId, latentMaskId, finalMaskId, compositeId] = nextNodeIds(graph, 5);
+  graph[maskImageId!] = {
+    class_type: 'LoadImage',
+    inputs: { image: input.editMaskImage },
+    _meta: { title: 'Face Edit Mask' },
+  };
+  graph[imageToMaskId!] = {
+    class_type: 'ImageToMask',
+    inputs: { image: [maskImageId, 0], channel: 'red' },
+    _meta: { title: 'White permits sampling; black protects canonical face' },
+  };
+  graph[latentMaskId!] = {
+    class_type: 'SetLatentNoiseMask',
+    inputs: { samples: [vaeEncodeId, 0], mask: [imageToMaskId, 0] },
+    _meta: { title: 'Never sample canonical face' },
+  };
+  graph[samplerId]!.inputs.latent_image = [latentMaskId, 0];
+  graph[finalMaskId!] = {
+    class_type: 'GrowMask',
+    inputs: {
+      mask: [imageToMaskId, 0],
+      expand: -16,
+      tapered_corners: true,
+    },
+    _meta: { title: 'Restore a clean margin around canonical face' },
+  };
+  graph[compositeId!] = {
+    class_type: 'ImageCompositeMasked',
+    inputs: {
+      destination: [locationNodeId, 0],
+      source: [vaeDecodeId, 0],
+      x: 0,
+      y: 0,
+      resize_source: false,
+      mask: [finalMaskId, 0],
+    },
+    _meta: { title: 'Restore canonical face after decode' },
+  };
+  graph[saveId]!.inputs.images = [compositeId, 0];
+  const prompt = graph[encoderId]!.inputs.prompt;
+  graph[encoderId]!.inputs.prompt =
+    `${typeof prompt === 'string' ? prompt : ''}, ` +
+    'the face inside the protected region is final, keep both eyes/eyebrows/forehead/cheeks/mouth unobstructed, ' +
+    'adapt hair/body/lighting around it without changing it or drawing a box/halo around it';
   assertAllSeedsPinned(graph);
   return graph;
 }

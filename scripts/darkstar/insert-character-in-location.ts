@@ -17,6 +17,7 @@ import {
 } from '../../src/companion/signature-locations.js';
 import {
   buildCharacterInLocationWorkflow,
+  buildFaceProtectedCharacterInLocationWorkflow,
   INSERT_QWEN_RELIGHT_TEMPLATE_CONTRACT,
   INSERT_QWEN_TEMPLATE_CONTRACT,
   type InsertionLocation,
@@ -47,10 +48,13 @@ export interface InsertCharacterOptions {
   characterPath: string;
   locationId?: SignatureLocationId;
   platePath?: string;
+  draftPath?: string;
   comfyUrl: string;
   outputDir: string;
   seed: number;
   relight: boolean;
+  faceTargetBbox?: readonly [number, number, number, number];
+  frontalMedium: boolean;
   gate: boolean;
   force: boolean;
   locationsRoot: string;
@@ -61,7 +65,7 @@ export interface UploadInsertionImageInput {
   baseUrl: string;
   sourcePath: string;
   bytes: Uint8Array;
-  role: 'character' | 'location';
+  role: 'character' | 'location' | 'protected-base' | 'edit-mask';
 }
 
 export interface SubmitInsertionInput {
@@ -82,8 +86,18 @@ export interface IdentityGateInput {
   reportPath: string;
 }
 
+export interface FaceProtectionInput {
+  characterPath: string;
+  compositePath: string;
+  outputPath: string;
+  reportPath: string;
+  editMaskPath: string;
+  targetFaceBbox?: readonly [number, number, number, number];
+}
+
 export interface CharacterInsertionDependencies {
   client?: CharacterInsertionClient;
+  runFaceProtection?: (input: FaceProtectionInput) => Promise<void>;
   runIdentityGate?: (input: IdentityGateInput) => Promise<void>;
 }
 
@@ -91,6 +105,7 @@ export interface CharacterInsertionResult {
   outputPath: string;
   platePath: string;
   promptIdPrefix: string;
+  faceProtectionReportPath: string;
   gateReportPath?: string;
 }
 
@@ -103,10 +118,12 @@ export interface ResolvedInsertionPlate {
 interface InsertionPreflight {
   characterBytes: Uint8Array;
   plateBytes: Uint8Array;
+  draftBytes?: Uint8Array;
   templateJson: unknown;
   contract: TemplateContract;
   plate: ResolvedInsertionPlate;
   outputPath: string;
+  faceProtectionReportPath: string;
   gateReportPath: string;
 }
 
@@ -127,6 +144,19 @@ function parseSeed(raw: string): number {
   return seed;
 }
 
+function parseFaceTargetBbox(raw: string): readonly [number, number, number, number] {
+  const values = raw.split(',').map(Number);
+  if (
+    values.length !== 4
+    || values.some((value) => !Number.isFinite(value) || value < 0)
+    || values[2]! <= values[0]!
+    || values[3]! <= values[1]!
+  ) {
+    throw new Error('--target-face-bbox must be left,top,right,bottom with ordered non-negative numbers');
+  }
+  return values as [number, number, number, number];
+}
+
 function validateComfyUrl(raw: string): string {
   const url = new URL(raw);
   if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.search || url.hash) {
@@ -145,8 +175,10 @@ export function parseInsertCharacterArgs(
   argv: readonly string[],
   env: NodeJS.ProcessEnv = process.env,
 ): InsertCharacterOptions {
-  const valueOptions = new Set(['character', 'location', 'plate', 'comfy', 'out', 'seed']);
-  const flags = new Set(['relight', 'gate', 'force']);
+  const valueOptions = new Set([
+    'character', 'location', 'plate', 'draft', 'comfy', 'out', 'seed', 'target-face-bbox',
+  ]);
+  const flags = new Set(['relight', 'frontal-medium', 'gate', 'force']);
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index]!;
     if (!argument.startsWith('--')) throw new Error(`Unexpected positional argument: ${argument}`);
@@ -172,10 +204,15 @@ export function parseInsertCharacterArgs(
     characterPath: path.resolve(character),
     ...(location ? { locationId: parseLocationId(location) } : {}),
     ...(plate ? { platePath: path.resolve(plate) } : {}),
+    ...(valueAfter(argv, 'draft') ? { draftPath: path.resolve(valueAfter(argv, 'draft')!) } : {}),
     comfyUrl: validateComfyUrl(valueAfter(argv, 'comfy') ?? env.COMFYUI_URL ?? DEFAULT_COMFY_URL),
     outputDir: path.resolve(valueAfter(argv, 'out') ?? DEFAULT_OUTPUT_DIR),
     seed: parseSeed(valueAfter(argv, 'seed') ?? String(DEFAULT_SEED)),
     relight: argv.includes('--relight'),
+    frontalMedium: argv.includes('--frontal-medium'),
+    ...(valueAfter(argv, 'target-face-bbox')
+      ? { faceTargetBbox: parseFaceTargetBbox(valueAfter(argv, 'target-face-bbox')!) }
+      : {}),
     gate: argv.includes('--gate'),
     force: argv.includes('--force'),
     locationsRoot: path.resolve('.codebuddy/locations'),
@@ -289,10 +326,11 @@ export async function preflightCharacterInsertion(
   const contract = options.relight
     ? INSERT_QWEN_RELIGHT_TEMPLATE_CONTRACT
     : INSERT_QWEN_TEMPLATE_CONTRACT;
-  const [characterBytes, plateBytes, templateBytes] = await Promise.all([
+  const [characterBytes, plateBytes, templateBytes, draftBytes] = await Promise.all([
     readPng(options.characterPath, 'Character image'),
     readPng(plate.platePath, 'Location plate'),
     readRegularFile(templatePath, 'ComfyUI API template', MAX_TEMPLATE_BYTES),
+    options.draftPath ? readPng(options.draftPath, 'Insertion draft') : Promise.resolve(undefined),
   ]);
   const templateJson = parseTemplate(templateBytes, templatePath);
   // Build once with inert upload names to validate multiplicities, titles,
@@ -310,8 +348,14 @@ export async function preflightCharacterInsertion(
     throw new Error(`Output directory must be a non-symlink directory: ${options.outputDir}`);
   }
   const outputPath = insertionOutputPath(options.outputDir);
+  const faceProtectionReportPath = path.join(options.outputDir, 'face-protection-report.json');
   const gateReportPath = path.join(options.outputDir, 'identity-gate-report.json');
-  for (const target of options.gate ? [outputPath, gateReportPath] : [outputPath]) {
+  const targets = [
+    outputPath,
+    faceProtectionReportPath,
+    ...(options.gate ? [gateReportPath] : []),
+  ];
+  for (const target of targets) {
     const targetInfo = await lstatIfPresent(target);
     if (targetInfo?.isSymbolicLink() || (targetInfo && !targetInfo.isFile())) {
       throw new Error(`Output target must be a regular non-symlink file: ${target}`);
@@ -320,7 +364,17 @@ export async function preflightCharacterInsertion(
   }
   const probe = await client.probe(options.comfyUrl);
   if (!probe.ok) throw new Error(`ComfyUI preflight failed at ${options.comfyUrl}`);
-  return { characterBytes, plateBytes, templateJson, contract, plate, outputPath, gateReportPath };
+  return {
+    characterBytes,
+    plateBytes,
+    ...(draftBytes ? { draftBytes } : {}),
+    templateJson,
+    contract,
+    plate,
+    outputPath,
+    faceProtectionReportPath,
+    gateReportPath,
+  };
 }
 
 function uploadReference(body: unknown, status: number, role: UploadInsertionImageInput['role']): string {
@@ -373,6 +427,33 @@ const DEFAULT_CLIENT: CharacterInsertionClient = {
   uploadImage: defaultUploadImage,
   submit: defaultSubmit,
 };
+
+async function defaultRunFaceProtection(input: FaceProtectionInput): Promise<void> {
+  const scriptPath = path.join(path.dirname(fileURLToPath(import.meta.url)), 'restore-canonical-face.py');
+  const helperArgs = [
+    scriptPath,
+    '--source', input.characterPath,
+    '--composite', input.compositePath,
+    '--output', input.outputPath,
+    '--report', input.reportPath,
+    '--edit-mask', input.editMaskPath,
+    ...(input.targetFaceBbox ? ['--target-bbox', input.targetFaceBbox.join(',')] : []),
+  ];
+  await execFileAsync(process.env.VISUAL_GATE_PYTHON ?? process.env.PYTHON ?? 'python3', helperArgs, {
+    maxBuffer: 4 * 1024 * 1024,
+  });
+  const [output, report] = await Promise.all([
+    readPng(input.outputPath, 'Face-protected composite'),
+    readRegularFile(input.reportPath, 'Face protection report', MAX_TEMPLATE_BYTES),
+  ]);
+  assertPng(output, 'Face-protected composite');
+  await readPng(input.editMaskPath, 'Face edit mask');
+  try {
+    JSON.parse(Buffer.from(report).toString('utf8')) as unknown;
+  } catch (error) {
+    throw new Error(`Invalid face protection report: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
 
 async function writeOutput(filename: string, bytes: Uint8Array, force: boolean): Promise<void> {
   const temporary = `${filename}.${process.pid}.${randomUUID()}.tmp`;
@@ -454,12 +535,64 @@ export async function insertCharacterInLocation(
     location: preflight.plate.location,
     seed: options.seed,
     outputPrefix: promptIdPrefix,
+    promptOptions: { frontalMedium: options.frontalMedium },
   }, preflight.contract);
   const comfyWorkDir = await fs.mkdtemp(path.join(os.tmpdir(), 'character-location-comfy-'));
   try {
-    const composite = await client.submit({ baseUrl: options.comfyUrl, workflow, workDir: comfyWorkDir });
+    const composite = preflight.draftBytes
+      ?? await client.submit({ baseUrl: options.comfyUrl, workflow, workDir: comfyWorkDir });
     assertPng(composite, 'Composite output');
-    await writeOutput(preflight.outputPath, composite, options.force);
+    const rawCompositePath = path.join(comfyWorkDir, 'model-composite.png');
+    const protectedCompositePath = path.join(comfyWorkDir, 'protected-composite.png');
+    const protectionReportPath = path.join(comfyWorkDir, 'face-protection-report.json');
+    const editMaskPath = path.join(comfyWorkDir, 'face-edit-mask.png');
+    await fs.writeFile(rawCompositePath, composite, { flag: 'wx' });
+    await (dependencies.runFaceProtection ?? defaultRunFaceProtection)({
+      characterPath: options.characterPath,
+      compositePath: rawCompositePath,
+      outputPath: protectedCompositePath,
+      reportPath: protectionReportPath,
+      editMaskPath,
+      ...(options.faceTargetBbox ? { targetFaceBbox: options.faceTargetBbox } : {}),
+    });
+    const [protectedComposite, protectionReport, editMask] = await Promise.all([
+      readPng(protectedCompositePath, 'Face-protected composite'),
+      readRegularFile(protectionReportPath, 'Face protection report', MAX_TEMPLATE_BYTES),
+      readPng(editMaskPath, 'Face edit mask'),
+    ]);
+    const [protectedBaseImage, editMaskImage] = await Promise.all([
+      client.uploadImage({
+        baseUrl: options.comfyUrl,
+        sourcePath: protectedCompositePath,
+        bytes: protectedComposite,
+        role: 'protected-base',
+      }),
+      client.uploadImage({
+        baseUrl: options.comfyUrl,
+        sourcePath: editMaskPath,
+        bytes: editMask,
+        role: 'edit-mask',
+      }),
+    ]);
+    const protectedWorkflow = buildFaceProtectedCharacterInLocationWorkflow(preflight.templateJson, {
+      characterImage,
+      locationImage: protectedBaseImage,
+      editMaskImage,
+      location: preflight.plate.location,
+      seed: options.seed,
+      outputPrefix: `${promptIdPrefix}-face-protected`,
+      promptOptions: { frontalMedium: options.frontalMedium },
+    }, preflight.contract);
+    const finalComposite = await client.submit({
+      baseUrl: options.comfyUrl,
+      workflow: protectedWorkflow,
+      workDir: comfyWorkDir,
+    });
+    assertPng(finalComposite, 'Masked face-protected composite');
+    await Promise.all([
+      writeOutput(preflight.outputPath, finalComposite, options.force),
+      writeOutput(preflight.faceProtectionReportPath, protectionReport, options.force),
+    ]);
   } finally {
     await fs.rm(comfyWorkDir, { recursive: true, force: true });
   }
@@ -475,6 +608,7 @@ export async function insertCharacterInLocation(
     outputPath: preflight.outputPath,
     platePath: preflight.plate.platePath,
     promptIdPrefix,
+    faceProtectionReportPath: preflight.faceProtectionReportPath,
     ...(options.gate ? { gateReportPath: preflight.gateReportPath } : {}),
   };
 }
@@ -482,6 +616,7 @@ export async function insertCharacterInLocation(
 export async function main(argv: readonly string[] = process.argv.slice(2)): Promise<void> {
   const result = await insertCharacterInLocation(parseInsertCharacterArgs(argv));
   console.log(`[character-in-location] composite=${result.outputPath}`);
+  console.log(`[character-in-location] face-protection=${result.faceProtectionReportPath}`);
   if (result.gateReportPath) console.log(`[character-in-location] identity-gate=${result.gateReportPath}`);
 }
 

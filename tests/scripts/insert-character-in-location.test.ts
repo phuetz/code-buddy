@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   insertCharacterInLocation,
+  parseInsertCharacterArgs,
   preflightCharacterInsertion,
   resolveInsertionPlate,
   type CharacterInsertionClient,
@@ -26,8 +27,10 @@ function insertionGraph(): ComfyWorkflowGraph {
     '2': { class_type: 'LoadImage', inputs: { image: '' }, _meta: { title: 'Character' } },
     '3': { class_type: 'LoadImage', inputs: { image: '' }, _meta: { title: 'Location' } },
     '4': { class_type: 'TextEncodeQwenImageEditPlus', inputs: { prompt: '' } },
-    '5': { class_type: 'KSampler', inputs: { seed: -1 } },
-    '6': { class_type: 'SaveImage', inputs: { filename_prefix: '' } },
+    '5': { class_type: 'KSampler', inputs: { seed: -1, latent_image: ['7', 0] } },
+    '6': { class_type: 'SaveImage', inputs: { filename_prefix: '', images: ['8', 0] } },
+    '7': { class_type: 'VAEEncode', inputs: { pixels: ['3', 0] } },
+    '8': { class_type: 'VAEDecode', inputs: { samples: ['5', 0] } },
   };
 }
 
@@ -54,6 +57,7 @@ async function fixture(): Promise<{ root: string; options: InsertCharacterOption
       outputDir: path.join(root, 'output'),
       seed: 61_000,
       relight: false,
+      frontalMedium: false,
       gate: false,
       force: false,
       locationsRoot,
@@ -72,6 +76,21 @@ function fakeClient(overrides: Partial<CharacterInsertionClient> = {}): Characte
 }
 
 describe('character-in-location CLI orchestration', () => {
+  it('enables face protection and resolves an optional measured draft', () => {
+    const options = parseInsertCharacterArgs([
+      '--character', 'character.png',
+      '--plate', 'plate.png',
+      '--draft', 'draft.png',
+    ], {});
+    expect(options.frontalMedium).toBe(false);
+    expect(options.draftPath).toBe(path.resolve('draft.png'));
+    expect(() => parseInsertCharacterArgs([
+      '--character', 'character.png',
+      '--plate', 'plate.png',
+      '--allow-face-rerender',
+    ], {})).toThrow(/Unknown option/u);
+  });
+
   it('resolves the canonical medium frontal plate from a location id', async () => {
     const value = await fixture();
     expect(resolveInsertionPlate(value.options)).toEqual({
@@ -117,13 +136,23 @@ describe('character-in-location CLI orchestration', () => {
         return PNG;
       }),
     });
-    const result = await insertCharacterInLocation(value.options, { client });
+    const runFaceProtection = vi.fn(async (input) => {
+      await fs.copyFile(input.compositePath, input.outputPath);
+      await fs.copyFile(input.compositePath, input.editMaskPath);
+      await fs.writeFile(input.reportPath, '{}');
+    });
+    const result = await insertCharacterInLocation(value.options, { client, runFaceProtection });
 
-    expect(client.uploadImage).toHaveBeenCalledTimes(2);
-    expect(submitted).toHaveLength(1);
+    expect(client.uploadImage).toHaveBeenCalledTimes(4);
+    expect(submitted).toHaveLength(2);
     expect(submitted[0]?.['2']?.inputs.image).toBe('uploaded/character.png');
     expect(submitted[0]?.['3']?.inputs.image).toBe('uploaded/location.png');
     expect(submitted[0]?.['5']?.inputs.seed).toBe(61_000);
+    expect(Object.values(submitted[1]!).some((node) => node.class_type === 'SetLatentNoiseMask')).toBe(true);
+    expect(Object.values(submitted[1]!).some((node) => node.class_type === 'GrowMask')).toBe(true);
+    expect(Object.values(submitted[1]!).some((node) => node.class_type === 'ImageCompositeMasked')).toBe(true);
     expect(await fs.readFile(result.outputPath)).toEqual(Buffer.from(PNG));
+    expect(runFaceProtection).toHaveBeenCalledOnce();
+    expect(JSON.parse(await fs.readFile(result.faceProtectionReportPath!, 'utf8'))).toEqual({});
   });
 });

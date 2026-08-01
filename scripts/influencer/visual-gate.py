@@ -153,8 +153,7 @@ DEFAULT_REFERENCES = {
     ),
     'ambre': (
         Path.home()
-        / 'Videos/personas/ambre-scenes/automne-composites/'
-        'ambre-002-chalet-exterieur-flanelle.png'
+        / '.codebuddy/personas/ambre/identity-kit'
     ),
 }
 
