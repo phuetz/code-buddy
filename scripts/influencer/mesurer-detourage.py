@@ -33,6 +33,14 @@ beauté : il compte des pixels.
 
 La mesure est indicative et ne remplace pas un œil. Elle sert à ATTRAPER ce qu'un
 œil fatigué laisse passer sur la centième vidéo, pas à autoriser une publication.
+
+## ⚠ Mesurer à la résolution native, jamais sur un agrandissement
+
+La largeur est comptée en pixels : elle suit donc l'échelle. Un recadrage à 320 %
+du plan v01-28 — celui dont le détourage se voit à l'œil — passe de 2,00 px
+« suspect » à 8,00 px « naturel ». **Un agrandissement maquille le défaut.**
+Conséquence directe : si un jour les rendus passent de 720p à 1080p, les seuils
+ci-dessus doivent être remontés d'autant (×1,5), sans quoi tout paraîtra sain.
 """
 
 from __future__ import annotations
@@ -47,6 +55,12 @@ from PIL import Image
 
 
 MODELE_YOLO = Path.home() / "vision_tests" / "yolov8n.pt"
+# Une détection faible est le plus souvent un objet du décor : nos vrais plans
+# d'Ambre sortent entre 0,88 et 0,93.
+CONFIANCE_MIN = 0.60
+# Fraction de la hauteur d'image en dessous de laquelle un sujet est trop petit
+# pour qu'une chevelure soit mesurable.
+HAUTEUR_SUJET_MIN = 0.35
 
 
 @lru_cache(maxsize=1)
@@ -77,13 +91,20 @@ def cadre_de_la_tete(chemin: Path) -> tuple[int, int, int, int] | None:
     perception éprouvée du dépôt (`CODEBUDDY_YOLO_PYTHON`, `object_detect`).
     """
     modele = _modele_charge()
-    resultats = modele.predict(str(chemin), classes=[0], conf=0.35,
+    resultats = modele.predict(str(chemin), classes=[0], conf=CONFIANCE_MIN,
                                device="cpu", verbose=False)
     boites = [b for r in resultats for b in r.boxes]
     if not boites:
         return None
     plus_grande = max(boites, key=lambda b: float(b.conf))
     x0, y0, x1, y1 = (float(v) for v in plus_grande.xyxy[0])
+    # Un sujet lointain n'a pas de chevelure mesurable : sa tête fait quelques
+    # pixels, et toute bordure y paraît franche. Le 1er août 2026, un étal de
+    # marché détecté à 0,44 de confiance a été noté « suspect » à 3,00 px —
+    # alors qu'Ambre, dans les plans voisins, sortait à 0,88 et 0,93.
+    hauteur_image = float(resultats[0].orig_shape[0])
+    if (y1 - y0) < HAUTEUR_SUJET_MIN * hauteur_image:
+        return None
     # La tête occupe le haut de la boîte : on garde le quart supérieur, resserré
     # sur la moitié centrale en largeur (les bras élargissent la boîte, pas la
     # tête). C'est là que la chevelure rencontre le fond.
