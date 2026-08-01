@@ -420,6 +420,26 @@ def subtitle_chunks(text: str, max_words: int = 11) -> list[str]:
     return chunks
 
 
+def fit_subtitle_chunks(
+    text: str,
+    available_seconds: float,
+    *,
+    minimum_seconds: float = 0.70,
+) -> list[str]:
+    """Réduit le nombre de cues pour garantir une durée lisible minimale."""
+    chunks = subtitle_chunks(text)
+    maximum_cues = max(1, int(available_seconds // minimum_seconds))
+    while len(chunks) > maximum_cues:
+        merge_at = min(
+            range(len(chunks) - 1),
+            key=lambda index: len(chunks[index]) + len(chunks[index + 1]),
+        )
+        chunks[merge_at:merge_at + 2] = [
+            f'{chunks[merge_at]} {chunks[merge_at + 1]}'
+        ]
+    return chunks
+
+
 def srt_time(seconds: float) -> str:
     milliseconds = max(0, round(seconds * 1000))
     hours, rem = divmod(milliseconds, 3_600_000)
@@ -446,16 +466,35 @@ def make_subtitles(
     srt_lines: list[str] = []
     events: list[str] = []
     cue = 1
-    for section, timing in zip(sections, timeline):
-        chunks = subtitle_chunks(str(section['texte']))
+    for section_index, (section, timing) in enumerate(zip(sections, timeline)):
+        window_start = timing['start'] + 0.08
+        window_end = timing['end'] - 0.08
+        if section_index:
+            previous = timeline[section_index - 1]
+            if previous['end'] > timing['start']:
+                boundary = (previous['end'] + timing['start']) / 2
+                window_start = max(window_start, boundary + 0.02)
+        if section_index + 1 < len(timeline):
+            following = timeline[section_index + 1]
+            if timing['end'] > following['start']:
+                boundary = (timing['end'] + following['start']) / 2
+                window_end = min(window_end, boundary - 0.02)
+        usable = window_end - window_start
+        if usable < 0.70:
+            raise PipelineError(
+                f'fenêtre de sous-titre trop courte : {section["id"]} '
+                f'({usable:.3f}s)'
+            )
+        chunks = fit_subtitle_chunks(str(section['texte']), usable)
         weights = [max(1, len(chunk.replace(' ', ''))) for chunk in chunks]
         total_weight = sum(weights)
-        cursor = timing['start'] + 0.08
-        usable = max(0.5, timing['duration'] - 0.16)
+        cursor = window_start
+        minimum_cue = 0.70
+        flexible = max(0.0, usable - minimum_cue * len(chunks))
         for index, (chunk, weight) in enumerate(zip(chunks, weights)):
-            chunk_duration = usable * weight / total_weight
+            chunk_duration = minimum_cue + flexible * weight / total_weight
             end = (
-                timing['end'] - 0.08
+                window_end
                 if index == len(chunks) - 1
                 else cursor + chunk_duration
             )
@@ -1777,7 +1816,17 @@ def produce(args: argparse.Namespace) -> dict[str, Any]:
                 section_work,
             )
         else:
-            shutil.copy2(base, final_section)
+            # Les anciennes réserves laissaient la première carte immobile
+            # pendant 40 à 60 secondes. Les autres visuels validés deviennent
+            # désormais de vrais plans de coupe, sans toucher aux sources.
+            broll_assets = section_assets[1:] if len(section_assets) > 1 else []
+            cutaway_report[section['id']] = overlay_cutaways(
+                base,
+                duration,
+                broll_assets,
+                final_section,
+                section_work,
+            )
         section_videos.append(final_section)
 
     video_only = render_dir / 'video.mp4'

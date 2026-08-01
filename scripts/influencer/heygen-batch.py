@@ -29,7 +29,7 @@ renommer. Ne jamais se fier à l'ordre des tuiles.
    le bouton texte disparaît) — fallback par position x>1260, y≈370-415
 6. attendre que « is generating » apparaisse dans le body
 """
-import sys, os, time, base64, json, re
+import sys, os, time, base64, json, re, shutil
 
 sys.path.insert(0, os.path.expanduser('~/code-buddy/scripts/influencer'))
 cdp = __import__('cdp-lib')
@@ -128,8 +128,9 @@ def submit(audio_path, name='job'):
     audio_path = os.path.abspath(os.path.expanduser(audio_path))
     assert os.path.exists(audio_path), audio_path
     c = connect()
-    c.cmd('Page.navigate', {'url': PAGE})
-    time.sleep(12)
+    if c.ev('location.href') != PAGE or 'upload/record' not in body_text(c):
+        c.cmd('Page.navigate', {'url': PAGE})
+        time.sleep(12)
     # navigation soft sur la même URL = la position de scroll est conservée
     c.ev('window.scrollTo(0,0)'); time.sleep(1.5)
     shot(c, f'hg-{name}-0-page')
@@ -143,29 +144,123 @@ def submit(audio_path, name='job'):
     click(c, b['x'], b['y'], 3)
     shot(c, f'hg-{name}-1-upload')
 
-    # 3. input file caché
-    doc = c.cmd('DOM.getDocument', {'depth': -1})
-    root = doc['result']['root']['nodeId']
-    q = c.cmd('DOM.querySelectorAll', {'nodeId': root, 'selector': 'input[type=file]'})
-    nodes = q['result']['nodeIds']
-    if not nodes:
-        shot(c, f'hg-{name}-ERR-noinput')
-        sys.exit('input[type=file] introuvable — voir screenshot')
-    c.cmd('DOM.setFileInputFiles', {'files': [audio_path], 'nodeId': nodes[-1]})
-    time.sleep(4)
+    # Le dialogue 2026 ouvre désormais l'onglet Record Audio par défaut.
+    # Basculer explicitement vers Upload Audio avant d'affecter le fichier.
+    upload_tab = c.ev("""(()=>{
+      const element=[...document.querySelectorAll('[role="dialog"] [role="tab"]')]
+        .find(e=>(e.innerText||'').trim()==='Upload Audio');
+      if(!element)return false;
+      element.click();
+      return true;
+    })()""")
+    if not upload_tab:
+        shot(c, f'hg-{name}-ERR-no-upload-tab')
+        sys.exit('onglet Upload Audio introuvable')
+    time.sleep(2)
+
+    # 3. input file caché. Un nom unique permet de reconnaître sans ambiguïté
+    # le nouvel asset dans la liste, puis de le sélectionner.
+    extension = os.path.splitext(audio_path)[1] or '.mp3'
+    upload_path = os.path.join(WORK, f'{name}{extension}')
+    shutil.copyfile(audio_path, upload_path)
+    upload_label = os.path.basename(upload_path)
+    # HeyGen normalise les tirets du nom d'asset en underscores.
+    heygen_label = re.sub(r'[^A-Za-z0-9_.]+', '_', upload_label)
+    selected = bool(c.ev(f"""(()=>{{
+      const element=[...document.querySelectorAll(
+        '[role="dialog"] [role="button"][aria-label]'
+      )].find(e=>e.getAttribute('aria-label')==={json.dumps(heygen_label)});
+      if(!element)return false;
+      element.click();
+      return true;
+    }})()"""))
+    if selected:
+        print(f'audio HeyGen en cache -> {heygen_label}')
+    for upload_attempt in range(1, 5):
+        if selected:
+            break
+        doc = c.cmd('DOM.getDocument', {'depth': -1})
+        root = doc['result']['root']['nodeId']
+        q = c.cmd(
+            'DOM.querySelectorAll',
+            {
+                'nodeId': root,
+                'selector': '[role="dialog"] input[type=file]',
+            },
+        )
+        nodes = q['result']['nodeIds']
+        if not nodes:
+            shot(c, f'hg-{name}-ERR-noinput')
+            sys.exit('input[type=file] introuvable — voir screenshot')
+        c.cmd(
+            'DOM.setFileInputFiles',
+            {'files': [], 'nodeId': nodes[-1]},
+        )
+        c.cmd(
+            'DOM.setFileInputFiles',
+            {'files': [upload_path], 'nodeId': nodes[-1]},
+        )
+        c.ev(
+            """(()=>{
+              const input=document.querySelector(
+                '[role="dialog"] input[type=file]'
+              );
+              if(!input)return false;
+              input.dispatchEvent(new Event('input',{bubbles:true}));
+              input.dispatchEvent(new Event('change',{bubbles:true}));
+              return true;
+            })()"""
+        )
+        print(f'upload audio -> tentative {upload_attempt}/4 : {upload_label}')
+        attempt_started = time.monotonic()
+        attempt_deadline = time.monotonic() + 65
+        time.sleep(1)
+        while time.monotonic() < attempt_deadline:
+            confirm_text = c.ev(
+                "document.querySelector('[role=\"dialog\"]')?.innerText"
+            ) or ''
+            if (
+                'Confirm Audio' in confirm_text
+                and 'Add audio' in confirm_text
+                and heygen_label in confirm_text
+            ):
+                selected = True
+                break
+            selected = bool(c.ev(f"""(()=>{{
+              const element=[...document.querySelectorAll(
+                '[role="dialog"] [role="button"][aria-label]'
+              )].find(e=>e.getAttribute('aria-label')==={json.dumps(heygen_label)});
+              if(!element)return false;
+              element.click();
+              return true;
+            }})()"""))
+            if selected:
+                break
+            dialog_text = c.ev(
+                "document.querySelector('[role=\"dialog\"]')?.innerText"
+            ) or ''
+            if (
+                'Uploading...' not in dialog_text
+                and time.monotonic() - attempt_started > 8
+            ):
+                time.sleep(2)
+                break
+            time.sleep(2)
+        if selected:
+            break
+        time.sleep(3)
+    if not selected:
+        shot(c, f'hg-{name}-ERR-upload')
+        sys.exit(f'upload audio HeyGen échoué après 4 tentatives : {heygen_label}')
+    time.sleep(3)
     shot(c, f'hg-{name}-2-file')
 
-    # 4. Add audio (coordonnée lue en live)
-    for attempt in range(10):
-        b = find_button(c, r'^\s*Add audio\s*$')
-        if b:
-            break
-        time.sleep(2)
+    # 4. L'interface historique utilisait un bouton Add audio. Le flux 2026
+    # ferme le dialogue dès que la ligne de l'asset est choisie.
+    b = find_button(c, r'^\s*Add audio\s*$')
     if b:
         print('Add audio ->', b)
         click(c, b['x'], b['y'], 4)
-    else:
-        print('AVERTISSEMENT: pas de bouton Add audio (peut-être auto-ajouté)')
     shot(c, f'hg-{name}-3-added')
 
     # 5. Generate OU flèche ↑ ronde

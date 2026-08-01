@@ -79,10 +79,63 @@ export INFLUENCER_RSS_FEEDS='[
 | `hero-batch.py` | Régénère des plans hero de trailers en Veo Quality (écrase `shot-<id>.mp4`, backup `.omni.mp4`). |
 | `flow-daily.py` | Brûle au plus 50 crédits/jour via le mode Agent Flow (15 crédits/plan), traite `~/.codebuddy/media-video/flow-queue.md`, reprend les échecs et produit une planche-contact. |
 | `heygen-batch.py submit\|collect\|status` | Soumet et collecte les vidéos lipsync HeyGen via Brave CDP sur le port 9222. Prérequis : Brave lancé avec `--remote-debugging-port=9222` et session HeyGen déjà connectée. ⚠️ L’ordre de fin diffère de l’ordre de soumission : après collecte, QC obligatoire par transcription Whisper avant tout renommage. |
+| `lisa-presentatrice.py inventaire\|plan\|produire` | Pipeline long format « journaliste face caméra » : répartit présentation et plans de coupe, réutilise les voix ElevenLabs en cache, génère les blocs parlés dans HeyGen sous plafond dur, puis assemble sous-titres, musique et habillage LISA IA. |
 | `wrap-short.py <brut> <out> --hook … --cut …` | Habillage Short standard Ninon : sous-titres karaoké mot à mot (mot actif agrandi/coloré, `--subs cards` pour les cartes statiques), layout `split` B-roll haut / Lisa bas, cutaways déclenchés par mot. Un `--cut` image (capture `collect-evidence`) est bouclé et son attribution (`.meta.json` voisin) est incrustée automatiquement. |
 | `flow-veo-mission.py <catégorie> [--limit N]` | Pilote idempotent des campagnes Flow/Veo Quality (Brave CDP) : plafond + réserve dure lus sur le compteur live, journal de reprise, téléchargement immédiat, sidecars Cowork et planche-contact. Refuse de tourner si un batch HeyGen/Flow est déjà actif. |
 | `en-narrations-all.py [livres…]` | Narrations anglaises (voix natives ElevenLabs) pour les trailers EN. |
 | `cdp-lib.py` | Mini client Chrome DevTools Protocol (WebSocket brut) : `get_tab(match)`, `CDP.ev/cmd`. |
+
+## Lisa présentatrice — long format avec lipsync
+
+Le pipeline lit un `*.script.md` et préfère automatiquement le
+`work/plan.json` voisin lorsqu’il existe. La règle éditoriale intégrée est :
+accroche, annonce du plan, transitions numérotées et conclusion face caméra ;
+faits détaillés en plans de coupe pendant que la même voix continue.
+
+Il ne synthétise jamais une voix implicitement. Chaque section doit déjà avoir
+son fichier `work/voice/<id>.mp3` ou `.wav`. Avant de les utiliser, le script lit
+`~/.codebuddy/elevenlabs-voice-usage.json` et reporte le compteur dans le plan
+et le manifeste. Les images sous
+`~/Videos/personas/lisa-scenes/reportage-japon/` sont uniquement lues.
+
+```bash
+# Inventaire non facturé : groupes, looks, voix privées et quota du plan
+python3 scripts/influencer/lisa-presentatrice.py inventaire \
+  --sortie /tmp/heygen-inventory.json
+
+# Plan de tournage sans appel HeyGen
+python3 scripts/influencer/lisa-presentatrice.py plan \
+  /chemin/video.script.md --sortie /tmp/lisa-plan
+
+# Production ; plafond dur de 100 crédits par défaut
+python3 scripts/influencer/lisa-presentatrice.py produire \
+  /chemin/video.script.md --sortie /chemin/master
+```
+
+Le backend `ui`, utilisé par défaut, exige Brave connecté à HeyGen avec CDP sur
+le port 9222. Avant de dépenser, il vérifie le fragment stable de la vignette du
+look sélectionné et le format paysage. `--avatar-id` sert au backend API ;
+`--ui-avatar-preview-token` verrouille le look du backend UI.
+
+Chaque requête et chaque génération sont inscrites dans
+`heygen-credits.json`. Une réserve configurable (`--reserve-par-appel`, 20 par
+défaut) est contrôlée avant soumission, puis remplacée par la consommation
+réelle mesurée sur le quota. Le script refuse l’appel qui dépasserait
+`--plafond-credits` (100 par défaut). Les segments HeyGen existants sont
+réutilisés. `--force-local` reconstruit seulement le montage, sans nouvel appel
+HeyGen.
+
+Les livrables comprennent :
+
+- `shot-plan.json` et `production-manifest.json` ;
+- `heygen-credits.json` ;
+- `sous-titres.fr.srt` et `.ass` ;
+- les segments bruts dans `avatar/` ;
+- le master 1920×1080 dans `lisa-presentatrice-demo.mp4`.
+
+Le contrôle recommandé avant publication est : transcription Whisper, ArcFace
+sur le segment brut face à la source et à la référence canonique, planche
+contact autour des raccords, détection d’images noires, puis écoute du master.
 
 ## Avatar canonique Lisa
 

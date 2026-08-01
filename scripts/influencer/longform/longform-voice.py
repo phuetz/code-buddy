@@ -7,6 +7,7 @@ import os
 import subprocess
 import sys
 import tempfile
+from datetime import datetime, timezone
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -17,6 +18,8 @@ VOICE_ID = '3fxbs2pB9bs8S6Z1N38A'
 MODEL_ID = 'eleven_multilingual_v2'
 OUTPUT_FORMAT = 'mp3_44100_192'
 MEDIA_ENV = Path('~/.codebuddy/media.env').expanduser()
+USAGE_PATH = Path('~/.codebuddy/elevenlabs-voice-usage.json').expanduser()
+MONTHLY_CAP = 200_000
 
 
 def load_env_value(path: Path, key: str) -> str:
@@ -34,6 +37,7 @@ def load_env_value(path: Path, key: str) -> str:
 
 
 def atomic_write_json(path: Path, value: Any) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
     fd, tmp_name = tempfile.mkstemp(
         prefix=f'.{path.name}.', suffix='.tmp', dir=path.parent)
     try:
@@ -47,6 +51,53 @@ def atomic_write_json(path: Path, value: Any) -> None:
         except FileNotFoundError:
             pass
         raise
+
+
+def current_month() -> str:
+    return datetime.now(timezone.utc).strftime('%Y-%m')
+
+
+def load_usage() -> dict[str, Any]:
+    try:
+        usage = json.loads(USAGE_PATH.read_text(encoding='utf-8'))
+    except FileNotFoundError:
+        usage = {
+            'version': 1,
+            'month': current_month(),
+            'characters': 0,
+            'warned': False,
+        }
+    except (OSError, json.JSONDecodeError) as exc:
+        raise RuntimeError(f'compteur ElevenLabs illisible: {USAGE_PATH}') from exc
+    if usage.get('month') != current_month():
+        usage = {
+            'version': 1,
+            'month': current_month(),
+            'characters': 0,
+            'warned': False,
+        }
+    characters = usage.get('characters')
+    if not isinstance(characters, int) or characters < 0:
+        raise RuntimeError('compteur ElevenLabs invalide')
+    return usage
+
+
+def reserve_usage(usage: dict[str, Any], text: str) -> None:
+    requested = len(text)
+    before = int(usage['characters'])
+    if before + requested > MONTHLY_CAP:
+        raise RuntimeError(
+            f'plafond ElevenLabs refusé avant appel: '
+            f'{before} + {requested} > {MONTHLY_CAP}'
+        )
+
+
+def settle_usage(usage: dict[str, Any], text: str) -> None:
+    usage['characters'] = int(usage['characters']) + len(text)
+    usage['updatedAt'] = datetime.now(timezone.utc).isoformat().replace(
+        '+00:00', 'Z')
+    usage['warned'] = int(usage['characters']) >= int(MONTHLY_CAP * 0.8)
+    atomic_write_json(USAGE_PATH, usage)
 
 
 def media_duration(path: Path) -> float:
@@ -173,22 +224,28 @@ def main() -> None:
     total = 0.0
     api_key: str | None = None
     try:
+        usage = load_usage()
+        network_characters = 0
         for section in sections:
             audio_path = voice_dir / f'{section["id"]}.mp3'
             if audio_path.exists():
                 print(f'SKIP audio existant: {audio_path}')
             else:
+                text = section['texte'].strip()
+                reserve_usage(usage, text)
                 if api_key is None:
                     api_key = load_env_value(
                         MEDIA_ENV, 'ELEVENLABS_API_KEY')
                 print(f'ElevenLabs: {section["id"]}…')
                 speed = 0.93 if section.get('mode') == 'avatar' else 0.85
                 synthesize(
-                    section['texte'].strip(),
+                    text,
                     audio_path,
                     api_key,
                     speed,
                 )
+                settle_usage(usage, text)
+                network_characters += len(text)
                 print(f'OK {audio_path}')
             duration = media_duration(audio_path)
             section['duree_reelle_s'] = round(duration, 3)
@@ -198,6 +255,12 @@ def main() -> None:
         sys.exit(str(exc))
 
     plan['duree_reelle_totale_s'] = round(total, 3)
+    plan['elevenlabs'] = {
+        'month': usage['month'],
+        'characters_after': usage['characters'],
+        'monthly_cap': MONTHLY_CAP,
+        'network_characters_this_run': network_characters,
+    }
     atomic_write_json(plan_path, plan)
     print(f'OK durées réelles écrites dans {plan_path} ({total:.3f}s)')
 

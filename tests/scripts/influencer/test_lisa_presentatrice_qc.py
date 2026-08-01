@@ -3,6 +3,7 @@ from __future__ import annotations
 import importlib.util
 from pathlib import Path
 import sys
+import tempfile
 import unittest
 
 
@@ -20,6 +21,17 @@ assert SPEC is not None and SPEC.loader is not None
 lisa = importlib.util.module_from_spec(SPEC)
 sys.modules[SPEC.name] = lisa
 SPEC.loader.exec_module(lisa)
+
+
+def srt_seconds(value: str) -> float:
+    hours, minutes, remainder = value.split(':')
+    seconds, milliseconds = remainder.split(',')
+    return (
+        int(hours) * 3600
+        + int(minutes) * 60
+        + int(seconds)
+        + int(milliseconds) / 1000
+    )
 
 
 class LisaVisualShotPlanTest(unittest.TestCase):
@@ -48,6 +60,53 @@ class LisaVisualShotPlanTest(unittest.TestCase):
                 {'start': 25.0, 'end': 35.0, 'shot_type': 'broll'},
             ],
         )
+
+    def test_subtitles_split_crossfades_without_short_cues(self) -> None:
+        sections = [
+            {
+                'id': 'intro',
+                'texte': 'Une phrase complète. Une seconde phrase lisible.',
+                'source_id': 'synthese',
+            },
+            {
+                'id': 'suite',
+                'texte': 'La suite reste claire et ne chevauche jamais la précédente.',
+                'source_id': 'synthese',
+            },
+        ]
+        timeline = [
+            {'start': 0.0, 'end': 4.0, 'duration': 4.0},
+            {'start': 3.75, 'end': 7.75, 'duration': 4.0},
+        ]
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            srt = root / 'captions.srt'
+            ass = root / 'captions.ass'
+            lisa.make_subtitles(
+                sections,
+                timeline,
+                {'synthese': {'label': 'Synthèse'}},
+                srt,
+                ass,
+            )
+            ranges = []
+            for line in srt.read_text(encoding='utf-8').splitlines():
+                if ' --> ' not in line:
+                    continue
+                start, end = line.split(' --> ')
+                ranges.append(
+                    (
+                        srt_seconds(start),
+                        srt_seconds(end),
+                    )
+                )
+            self.assertTrue(all(end - start >= 0.69 for start, end in ranges))
+            self.assertTrue(
+                all(
+                    current[1] <= following[0]
+                    for current, following in zip(ranges, ranges[1:])
+                )
+            )
 
 
 if __name__ == '__main__':

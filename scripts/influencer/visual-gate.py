@@ -55,7 +55,7 @@ from pathlib import Path
 from typing import Any, Iterable, Sequence
 
 
-VERSION = '2.1.0'
+VERSION = '2.2.0'
 IMAGE_SUFFIXES = frozenset({'.bmp', '.jpeg', '.jpg', '.png', '.webp'})
 VIDEO_SUFFIXES = frozenset({'.avi', '.m4v', '.mkv', '.mov', '.mp4', '.webm'})
 VERDICTS = frozenset({'OK', 'À REGARDER', 'REJET'})
@@ -88,6 +88,11 @@ OCR_DENSE_TOKEN_THRESHOLD = 8
 OCR_DENSE_LOW_CONFIDENCE_RATE = 0.65
 OCR_UNKNOWN_WORD_LENGTH = 5
 OCR_ISOLATED_CONFIDENCE_THRESHOLD = 10.0
+RESIDUAL_CONTOUR_WARNING_SCORE = 0.74
+RESIDUAL_CONTOUR_MAX_SIDE_DELTA = 24.0
+RESIDUAL_CONTOUR_MIN_CENTER_CONTRAST = 8.0
+RESIDUAL_CONTOUR_MIN_VERTICALITY = 0.78
+RESIDUAL_CONTOUR_MAX_REPORTED = 12
 DEFAULT_SAMPLE_FRACTIONS = (0.10, 0.30, 0.50, 0.70, 0.90)
 # moondream a été testé puis écarté pendant la calibration : malgré un JSON
 # syntaxiquement valide, il rejetait la référence humaine positive avec des
@@ -681,6 +686,240 @@ class FaceAnalyzer:
 def image_sharpness(image: Any, cv2: Any) -> float:
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     return float(cv2.Laplacian(gray, cv2.CV_64F).var())
+
+
+def classify_residual_contour_candidates(
+    candidates: Sequence[dict[str, Any]],
+) -> dict[str, Any]:
+    """Classe les segments fins isolés sans les confondre avec une certitude."""
+    ordered = sorted(
+        candidates,
+        key=lambda candidate: float(candidate.get('score', 0.0)),
+        reverse=True,
+    )
+    suspicious = [
+        candidate
+        for candidate in ordered
+        if float(candidate.get('score', 0.0))
+        >= RESIDUAL_CONTOUR_WARNING_SCORE
+    ][:RESIDUAL_CONTOUR_MAX_REPORTED]
+    maximum = (
+        max(float(candidate.get('score', 0.0)) for candidate in ordered)
+        if ordered
+        else 0.0
+    )
+    warning = (
+        'contour résiduel possible : '
+        f'{len(suspicious)} ligne(s) fine(s), rectiligne(s) et à fort gradient '
+        'dans une zone localement uniforme ; inspection au zoom requise'
+        if suspicious
+        else None
+    )
+    return {
+        'available': True,
+        'verdict': 'À REGARDER' if suspicious else 'OK',
+        'candidate_count': len(ordered),
+        'suspicious_count': len(suspicious),
+        'maximum_score': maximum,
+        'warning_threshold': RESIDUAL_CONTOUR_WARNING_SCORE,
+        'segments': suspicious,
+        'warnings': [warning] if warning else [],
+        'method': 'Canny + Sobel + HoughP + similarité chromatique bilatérale',
+    }
+
+
+def detect_residual_contours(
+    image: Any,
+    cv2: Any,
+    np: Any,
+    face_bbox: Sequence[float] | None = None,
+) -> dict[str, Any]:
+    """Détecte les liserés minces verticaux au milieu d'une matière uniforme.
+
+    Un bord normal sépare deux couleurs. Un contour fantôme porte au contraire
+    un pic de gradient étroit alors que les couleurs à quelques pixels de part
+    et d'autre restent proches. Canny localise le bord, Sobel confirme le pic
+    et HoughP impose une longueur et une rectilinéarité minimales.
+    """
+    height, width = image.shape[:2]
+    if height < 64 or width < 64:
+        return classify_residual_contour_candidates(())
+
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    blurred = cv2.GaussianBlur(gray, (3, 3), 0)
+    sobel_x = cv2.Sobel(blurred, cv2.CV_32F, 1, 0, ksize=3)
+    sobel_y = cv2.Sobel(blurred, cv2.CV_32F, 0, 1, ksize=3)
+    sobel = cv2.magnitude(sobel_x, sobel_y)
+    canny = cv2.Canny(blurred, 40, 120, L2gradient=True)
+    minimum_length = max(36, round(min(height, width) * 0.055))
+    maximum_gap = max(10, round(min(height, width) * 0.014))
+    lines = cv2.HoughLinesP(
+        canny,
+        1,
+        np.pi / 360,
+        threshold=max(24, round(minimum_length * 0.48)),
+        minLineLength=minimum_length,
+        maxLineGap=maximum_gap,
+    )
+    if lines is None:
+        return classify_residual_contour_candidates(())
+
+    sobel_threshold = max(45.0, float(np.percentile(sobel, 82)))
+    raw: list[dict[str, Any]] = []
+    for packed in lines:
+        x1, y1, x2, y2 = (int(value) for value in packed[0])
+        delta_x = x2 - x1
+        delta_y = y2 - y1
+        length = float(math.hypot(delta_x, delta_y))
+        if length < minimum_length:
+            continue
+        verticality = abs(delta_y) / length
+        if verticality < RESIDUAL_CONTOUR_MIN_VERTICALITY:
+            continue
+        if min(x1, x2) < width * 0.018 or max(x1, x2) > width * 0.982:
+            continue
+        if face_bbox is not None:
+            face_left, face_top, face_right, face_bottom = (
+                float(value) for value in face_bbox
+            )
+            face_width = max(1.0, face_right - face_left)
+            face_height = max(1.0, face_bottom - face_top)
+            face_center_x = (face_left + face_right) * 0.5
+            midpoint_x = (x1 + x2) * 0.5
+            midpoint_y = (y1 + y2) * 0.5
+            lateral_distance = abs(midpoint_x - face_center_x) / face_width
+            if not 0.55 <= lateral_distance <= 2.20:
+                continue
+            if not (
+                face_bottom - 0.15 * face_height
+                <= midpoint_y
+                <= face_bottom + 7.0 * face_height
+            ):
+                continue
+
+        direction_x = delta_x / length
+        direction_y = delta_y / length
+        normal_x = -direction_y
+        normal_y = direction_x
+        side_deltas: list[float] = []
+        center_contrasts: list[float] = []
+        gradient_hits = 0
+        sample_count = 0
+        for fraction in np.linspace(0.12, 0.88, 13):
+            x = x1 + float(fraction) * delta_x
+            y = y1 + float(fraction) * delta_y
+            colors: list[Any] = []
+            valid = True
+            for offset in (-8.0, -6.0, 0.0, 6.0, 8.0):
+                sample_x = int(round(x + normal_x * offset))
+                sample_y = int(round(y + normal_y * offset))
+                if not (0 <= sample_x < width and 0 <= sample_y < height):
+                    valid = False
+                    break
+                colors.append(image[sample_y, sample_x].astype(np.float32))
+            if not valid:
+                continue
+            negative_side = (colors[0] + colors[1]) * 0.5
+            positive_side = (colors[3] + colors[4]) * 0.5
+            side_deltas.append(
+                float(np.linalg.norm(negative_side - positive_side))
+            )
+            center_contrasts.append(
+                float(
+                    np.linalg.norm(
+                        colors[2] - (negative_side + positive_side) * 0.5
+                    )
+                )
+            )
+            local_gradient = 0.0
+            for offset in (-2.0, -1.0, 0.0, 1.0, 2.0):
+                sample_x = int(round(x + normal_x * offset))
+                sample_y = int(round(y + normal_y * offset))
+                if 0 <= sample_x < width and 0 <= sample_y < height:
+                    local_gradient = max(
+                        local_gradient,
+                        float(sobel[sample_y, sample_x]),
+                    )
+            gradient_hits += int(local_gradient >= sobel_threshold)
+            sample_count += 1
+
+        if sample_count < 7:
+            continue
+        side_delta = float(np.median(side_deltas))
+        center_contrast = float(np.median(center_contrasts))
+        gradient_support = gradient_hits / sample_count
+        if (
+            side_delta > RESIDUAL_CONTOUR_MAX_SIDE_DELTA
+            or center_contrast < RESIDUAL_CONTOUR_MIN_CENTER_CONTRAST
+            or gradient_support < 0.42
+        ):
+            continue
+
+        length_score = min(1.0, length / max(1.0, height * 0.085))
+        similarity_score = max(
+            0.0,
+            1.0 - side_delta / RESIDUAL_CONTOUR_MAX_SIDE_DELTA,
+        )
+        contrast_score = min(1.0, center_contrast / 24.0)
+        score = (
+            0.30 * length_score
+            + 0.35 * similarity_score
+            + 0.25 * contrast_score
+            + 0.10 * gradient_support
+        )
+        raw.append(
+            {
+                'score': float(score),
+                'start': [x1 / width, y1 / height],
+                'end': [x2 / width, y2 / height],
+                'length_pixels': length,
+                'verticality': verticality,
+                'side_color_delta': side_delta,
+                'center_contrast': center_contrast,
+                'gradient_support': gradient_support,
+            }
+        )
+
+    # Hough renvoie plusieurs fragments du même liseré : ce NMS spatial rend
+    # le rapport lisible tout en conservant le segment au score maximal.
+    merged: list[dict[str, Any]] = []
+    for candidate in sorted(
+        raw,
+        key=lambda value: float(value['score']),
+        reverse=True,
+    ):
+        start = candidate['start']
+        end = candidate['end']
+        midpoint = (
+            (float(start[0]) + float(end[0])) * 0.5,
+            (float(start[1]) + float(end[1])) * 0.5,
+        )
+        duplicate = False
+        for kept in merged:
+            kept_start = kept['start']
+            kept_end = kept['end']
+            kept_midpoint = (
+                (float(kept_start[0]) + float(kept_end[0])) * 0.5,
+                (float(kept_start[1]) + float(kept_end[1])) * 0.5,
+            )
+            distance = math.hypot(
+                (midpoint[0] - kept_midpoint[0]) * width,
+                (midpoint[1] - kept_midpoint[1]) * height,
+            )
+            if distance < max(
+                22.0,
+                min(
+                    float(candidate['length_pixels']),
+                    float(kept['length_pixels']),
+                )
+                * 0.45,
+            ):
+                duplicate = True
+                break
+        if not duplicate:
+            merged.append(candidate)
+
+    return classify_residual_contour_candidates(merged)
 
 
 HAND_CHAINS = (
@@ -1546,6 +1785,15 @@ def config_fingerprint(
                 'isolated_confidence':
                     OCR_ISOLATED_CONFIDENCE_THRESHOLD,
             },
+            'residual_contour_policy': {
+                'warning_score': RESIDUAL_CONTOUR_WARNING_SCORE,
+                'maximum_side_delta': RESIDUAL_CONTOUR_MAX_SIDE_DELTA,
+                'minimum_center_contrast':
+                    RESIDUAL_CONTOUR_MIN_CENTER_CONTRAST,
+                'minimum_verticality': RESIDUAL_CONTOUR_MIN_VERTICALITY,
+                'maximum_reported': RESIDUAL_CONTOUR_MAX_REPORTED,
+                'effect': 'À REGARDER',
+            },
             'vision_prompt_sha256': hashlib.sha256(
                 VISION_PROMPT.encode('utf-8')
             ).hexdigest(),
@@ -1794,6 +2042,12 @@ def audit_image_data(
         runtime.cv2,
         thresholds,
     )
+    residual_contours = detect_residual_contours(
+        image,
+        runtime.cv2,
+        runtime.np,
+        face.bbox if face is not None else None,
+    )
     if hand_analyzer is None:
         hands = unavailable_hand_metrics(
             hand_unavailable_reason or 'raison inconnue'
@@ -1831,6 +2085,7 @@ def audit_image_data(
         else None
     )
     defects = [*decision.defects, *decision.warnings]
+    defects.extend(residual_contours.get('warnings', []))
     defects.extend(hands.get('warnings', []))
     defects.extend(text.get('warnings', []))
     if authority_reason is not None:
@@ -1876,6 +2131,7 @@ def audit_image_data(
         decision.verdict,
         llm.get('verdict') if llm else None,
     )
+    verdict = combine_verdict(verdict, residual_contours['verdict'])
     verdict = combine_verdict(verdict, hands['verdict'], text['verdict'])
     if authority is not None:
         if authority.get('verdict') == 'REJET':
@@ -1887,6 +2143,7 @@ def audit_image_data(
             )
     return {
         'deterministic': metrics,
+        'residual_contours': residual_contours,
         'hands': hands,
         'text_ocr': text,
         'llm_vision': llm,
@@ -1908,6 +2165,11 @@ def audit_nonpersona_image_data(
 ) -> dict[str, Any]:
     """Contrôle un slide/B-roll sans créer de pseudo-mesure d'identité."""
     sharpness = image_sharpness(image, runtime.cv2)
+    residual_contours = detect_residual_contours(
+        image,
+        runtime.cv2,
+        runtime.np,
+    )
     defects: list[str] = []
     if sharpness < thresholds.sharpness_reject:
         defects.append(
@@ -1947,7 +2209,9 @@ def audit_nonpersona_image_data(
             text = unavailable_text_metrics(str(error))
     defects.extend(hands.get('warnings', []))
     defects.extend(text.get('warnings', []))
+    defects.extend(residual_contours.get('warnings', []))
     verdict = 'REJET' if sharpness < thresholds.sharpness_reject else 'OK'
+    verdict = combine_verdict(verdict, residual_contours['verdict'])
     verdict = combine_verdict(verdict, hands['verdict'], text['verdict'])
     return {
         'shot_type': shot_type,
@@ -1962,6 +2226,7 @@ def audit_nonpersona_image_data(
             'sharpness_threshold': thresholds.sharpness_reject,
             'deterministic_verdict': verdict,
         },
+        'residual_contours': residual_contours,
         'hands': hands,
         'text_ocr': text,
         'llm_vision': None,

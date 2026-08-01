@@ -223,3 +223,7 @@ __pycache__/
 .codebuddy/lora/**/output/
 .codebuddy/lora/**/dataset.zip
 .codebuddy/lora/**/selfies/
+
+# Preuves d’audit : captures de tableaux de bord privés (HeyGen, blogs).
+# Le dépôt est public — elles sont sauvegardées hors dépôt dans ~/Sauvegardes-git/.
+docs/audits/**/evidence/

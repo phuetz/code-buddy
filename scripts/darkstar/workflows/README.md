@@ -178,6 +178,33 @@ npx tsx scripts/darkstar/insert-character-in-location.ts \
 composition le mesureur ArcFace de `measure-visual-gates.py` avec la keyframe
 comme référence et refuse une identité sous les seuils `native-fashion-v1`.
 
+## `krea2-persona-edit.json`
+
+Workflow Krea 2 Turbo FP8 local pour comparer une édition guidée par référence
+avec ou sans LoRA d'identité de persona. Le graphe utilise :
+
+- `krea2_turbo_fp8_scaled.safetensors` ;
+- `qwen3vl_4b_fp8_scaled.safetensors`, type `krea2` ;
+- `qwen_image_vae.safetensors` ;
+- l'adaptateur générique `krea2_identity_edit_v1_2.safetensors` ;
+- un second `LoraLoaderModelOnly` pour `ambre-v3-best.safetensors` ou
+  `lisa-v3-best.safetensors`.
+
+Le benchmark supprime le second loader pour la configuration (a), puis
+l'active à force 1 avec le trigger appris pour la configuration (b). Il impose
+10 pas, CFG 1, Euler/simple, `ref_boost=4`, une sortie 1 MP au ratio de la
+référence et un seul rendu par seed.
+
+Lancer le protocole fixe Ambre/Lisa :
+
+```bash
+KREA2_COMFY_URL=http://127.0.0.1:8189 \
+  node scripts/darkstar/benchmark-krea2-local.mjs
+```
+
+La CLI refuse une instance autre que Windows et une file ComfyUI non vide.
+Elle ne démarre, n'arrête et ne relance aucun processus.
+
 ## Préflight sans rendu
 
 Le chargement et la validation des contrats ont lieu avant toute soumission à

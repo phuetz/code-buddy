@@ -147,6 +147,45 @@ class VisualGateScoringTest(unittest.TestCase):
             'REJET',
         )
 
+    def test_residual_contour_candidate_requires_zoom_review(self) -> None:
+        result = visual_gate.classify_residual_contour_candidates(
+            [
+                {
+                    'score': 0.82,
+                    'start': [0.81, 0.42],
+                    'end': [0.82, 0.73],
+                }
+            ]
+        )
+        self.assertEqual(result['verdict'], 'À REGARDER')
+        self.assertEqual(result['suspicious_count'], 1)
+        self.assertIn('inspection au zoom', result['warnings'][0])
+
+    def test_weak_residual_contour_signal_stays_ok(self) -> None:
+        result = visual_gate.classify_residual_contour_candidates(
+            [{'score': 0.45}]
+        )
+        self.assertEqual(result['verdict'], 'OK')
+        self.assertEqual(result['suspicious_count'], 0)
+        self.assertFalse(result['warnings'])
+
+    def test_residual_contour_candidates_are_score_sorted_and_capped(
+        self,
+    ) -> None:
+        candidates = [
+            {'score': 0.70 + index / 100}
+            for index in range(20)
+        ]
+        result = visual_gate.classify_residual_contour_candidates(candidates)
+        self.assertEqual(
+            len(result['segments']),
+            visual_gate.RESIDUAL_CONTOUR_MAX_REPORTED,
+        )
+        self.assertGreater(
+            result['segments'][0]['score'],
+            result['segments'][-1]['score'],
+        )
+
     def test_patrice_approval_prevents_automatic_rejection(self) -> None:
         self.assertEqual(
             visual_gate.apply_approval_ceiling('REJET', approved=True),
