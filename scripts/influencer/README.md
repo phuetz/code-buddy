@@ -179,6 +179,59 @@ est le cas de contrôle : deux versions du même film, l'une que Patrice a rejet
 Les plans sans personne des deux versions sortent « non applicable » : un B-roll
 sain ne doit jamais faire échouer la porte.
 
+## Seconde colonne : le liseré — et ce qu'elle ne prouve pas
+
+Le 1er août 2026, Patrice a vu un **liseré pâle autour des cheveux longs** sur
+des composites notés 4 à 8 px, donc « naturel ». Le piège est structurel : **un
+liseré ÉLARGIT la bande de transition**, il pousse la première colonne dans le
+bon sens. La porte n'était pas aveugle, elle était trompée.
+
+La colonne `liseré` compte, le long du contour capillaire (masque
+`yolov8n-seg`, du sommet du crâne à la ligne d'épaules), la part des traversées
+où le bord est plus clair **à la fois que le fond et que le cheveu**. Elle exige
+`~/vision_tests/yolov8n-seg.pt` ; sans lui, elle le dit au lieu de se taire.
+
+**Trois limites, toutes mesurées, à connaître avant de s'en servir :**
+
+1. elle **ne distingue pas un contre-jour d'un résidu de recomposition** — deux
+   portraits d'Ambre sans aucun composite, pris à contre-jour, sortent à 54 % et
+   84 %, plus haut que la plupart des composites ;
+2. le test « des deux côtés ⇒ matting » **ne tranche pas non plus** sur ce
+   matériel ;
+3. contre un fond surexposé elle ne peut rien voir : elle rend alors
+   **« — non mesurable »** plutôt qu'un zéro rassurant. C'est le cas de
+   `ambre-024-face-protected-direct.png`, dont 98 % des traversées ont un fond
+   au-dessus de 200.
+
+Une note élevée **convoque l'œil**, elle ne rejette pas.
+
+Pour lever le doute, `--mattes DIR` restreint la mesure à la bande
+semi-transparente, avec des mattes BiRefNet `Matting-HR` :
+
+```bash
+~/vision_tests/venv/bin/python scripts/influencer/mesurer-detourage.py \
+  --mattes /chemin/vers/alphas plan.png     # attend <nom>-alpha.png
+```
+
+## Réparer le liseré sans régénérer
+
+`reparer-lisere-chevelure.py` ré-estime la **couleur de premier plan**
+(Blur-Fusion) et recompose sur le fond réel de la scène. Il ne modifie que les
+pixels d'alpha fractionnaire — un contre-jour, qui vit sur du cheveu opaque,
+est recopié à l'identique, et le script **échoue** si un pixel d'alpha plein ou
+nul a bougé.
+
+```bash
+~/vision_tests/venv/bin/python scripts/influencer/reparer-lisere-chevelure.py \
+  --mattes DIR_ALPHAS --sortie DIR_SORTIE composite.png
+```
+
+Sur les six sources persona de la vidéo `ambre-chalet-automne-v02`, la part de
+traversées à pic baisse de 24 à 39 % sans dégrader la largeur de transition.
+**La réparation atténue, elle n'efface pas** : à l'œil le gain est discret.
+Preuves (planches ×4 et ×8, mesures avant/après, mattes) sous
+`~/Videos/personas/composites-cheveux-2026-08-01/preuve-lisere-2026-08-01/`.
+
 ## Automatisation quotidienne Flow
 
 La file persistante est `~/.codebuddy/media-video/flow-queue.md` (format dans

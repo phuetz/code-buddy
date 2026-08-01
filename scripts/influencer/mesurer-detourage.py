@@ -2,6 +2,7 @@
 """Mesure la dureté du détourage sur le contour d'une personne composée.
 
     python3 scripts/influencer/mesurer-detourage.py image.png [autres...]
+    python3 scripts/influencer/mesurer-detourage.py --mattes DIR image.png ...
 
 ## Pourquoi cet outil existe
 
@@ -41,6 +42,112 @@ du plan v01-28 — celui dont le détourage se voit à l'œil — passe de 2,00 
 « suspect » à 8,00 px « naturel ». **Un agrandissement maquille le défaut.**
 Conséquence directe : si un jour les rendus passent de 720p à 1080p, les seuils
 ci-dessus doivent être remontés d'autant (×1,5), sans quoi tout paraîtra sain.
+
+## Seconde colonne : le liseré clair — et pourquoi la première ne le voyait pas
+
+Le 1er août 2026, le propriétaire a vu à l'œil un **liseré pâle autour de la
+chevelure** sur des composites que la colonne « largeur » notait 4 à 8 px, donc
+« naturel ». Ce n'est pas un angle mort ordinaire : **un liseré ÉLARGIT la bande
+de transition**, il pousse donc la première mesure dans le bon sens. La porte
+n'était pas seulement aveugle à ce défaut, elle était trompée par lui.
+
+La seconde colonne compte, le long du contour de la chevelure, la **part des
+traversées présentant un pic de luminance plus clair à la fois que le fond et
+que le cheveu**. On ne prend ni moyenne ni médiane : un liseré est LOCALISÉ (il
+n'apparaît que là où le cheveu rencontre une zone claire) et une médiane sur
+tout le contour le dilue à néant — mesuré : 2 à 6 sur des images où le défaut
+est visible.
+
+Trois choix comptent, chacun payé par un échec :
+
+1. **Le contour vient d'un masque de personne** (`yolov8n-seg`), pas d'une
+   fenêtre supposée autour de la tête. Une première version cherchait le bord
+   par simple gradient dans une bande autour du cadre de tête : ses traversées
+   les plus fortes tombaient sur une **arête du visage**, sur un **montant de
+   fenêtre** et sur des **feuilles d'automne**. Elle notait 52 une image sans
+   aucun composite.
+2. **On s'arrête à la ligne d'épaules**, détectée comme la croissance la plus
+   brutale de la largeur du masque : au-delà, on mesure un col ou un manteau.
+3. **On exige un vrai contraste fond/cheveu** (≥ 20 niveaux) : sans contraste,
+   un « pic » ne veut rien dire.
+
+## ⚠ Cette colonne ne distingue PAS un contre-jour d'un résidu de recomposition
+
+Elle mesure un liseré clair, pas sa cause. Mesuré le 1er août 2026 :
+
+| image                                    | liseré | nature                       |
+|------------------------------------------|--------|------------------------------|
+| `ambre-promenade.jpg`                    |  0,0 % | bord propre                  |
+| `ambre-cafe-frontal.jpg`                 |  4,4 % | bord propre                  |
+| `ambre-027-salon-automne-velours.png`    | 24,8 % | composite                    |
+| `ambre-030-salon-dore-flanelle.png`      | 36,3 % | composite                    |
+| `ambre-028-salon-pluie-flanelle.png`     | 38,4 % | composite                    |
+| `ambre-rooftop-frontal.jpg`              | 54,1 % | **contre-jour, PAS un composite** |
+| `ambre-033-marche-automne-velours.png`   | 66,4 % | composite                    |
+| `ambre-038-marche-citrouilles.png`       | 70,1 % | composite                    |
+| `ambre-yacht-frontal.jpg`                | 84,4 % | **contre-jour, PAS un composite** |
+
+Deux portraits **non composites** pris à contre-jour sortent aussi haut que les
+composites, et plus haut que la plupart. Une note élevée est donc une
+**convocation de l'œil**, jamais un rejet automatique.
+
+Le test « liseré des deux côtés ⇒ matting, d'un seul côté ⇒ éclairage » a été
+essayé et **ne tranche pas non plus** sur ce matériel : `ambre-yacht` est
+symétrique (71 % / 75 %) alors qu'elle n'a aucun composite, et
+`ambre-027` est aussi dissymétrique (37 % / 12 %) que `ambre-rooftop`
+(55 % / 19 %).
+
+## ⚠ Un « 0 % » n'existe pas : soit c'est mesuré, soit c'est « — »
+
+Le pic est défini comme « plus clair que le fond ET que le cheveu ». Contre un
+fond déjà proche du blanc, il n'y a plus de place au-dessus : la mesure ne peut
+pas voir le défaut, elle peut seulement rendre zéro.
+
+C'est arrivé sur le cas de contrôle lui-même. `ambre-024-face-protected-direct.png`
+sortait **0,0 %**, ce qui semblait la disculper — mais **98,1 % de ses traversées
+ont un fond au-dessus de 200** (fenêtre en plein soleil). En écartant ces
+traversées il n'en reste que 20, et la part y monte à 50 %. Vingt relevés ne
+sont pas une mesure.
+
+D'où deux garde-fous : `PLAFOND_MESURABLE` écarte les traversées sur fond
+surexposé, `TRAVERSEES_MINIMUM` refuse de noter en dessous de 40 relevés. Cette
+image sort désormais **« — non mesurable »**, ce qui est la vérité.
+
+Corollaire : **la séparation « 024 propre / composites atteints » qui semblait
+nette n'existait pas.** Elle venait d'un fond brûlé, pas d'un bord sain.
+
+## Lever le doute : `--mattes DIR`
+
+Ce qui sépare le mieux les deux causes, c'est **où se trouve le pic dans
+l'alpha** :
+
+- un **contre-jour** éclaire du cheveu opaque : le pic est à alpha ≈ 0,9-1 ;
+- un **résidu de recomposition** vit dans les pixels semi-transparents.
+
+Alpha médian du pic, mesuré : `ambre-rooftop` 0,98 et `ambre-yacht` 0,86 (les
+deux contre-jours) contre 0,25 pour `ambre-031-foret` et 0,69 pour
+`ambre-025-grenier`. La séparation est réelle mais **incomplète** :
+`ambre-029-grenier` sort à 0,92, indistinguable d'un contre-jour.
+
+Avec `--mattes DIR`, le script cherche `<nom-du-fichier>-alpha.png` dans DIR et
+ne mesure que la **bande semi-transparente** (0,10 < alpha < 0,90). Les mattes
+se produisent avec BiRefNet `Matting-HR` (nœuds `ComfyUI_BiRefNet_ll` du
+ComfyUI de darkstar). C'est dans ce mode que se lit l'effet de
+`reparer-lisere-chevelure.py`, qui ne touche que cette bande :
+
+| image                        | avant  | après  |     Δ | nature          |
+|------------------------------|--------|--------|-------|-----------------|
+| `ambre-027-salon-automne`    | 18,3 % | 11,1 % | −39 % | composite       |
+| `ambre-028-salon-pluie`      | 29,9 % | 19,9 % | −33 % | composite       |
+| `ambre-030-salon-dore`       | 40,4 % | 30,1 % | −25 % | composite       |
+| `ambre-033-marche-automne`   | 55,5 % | 42,4 % | −24 % | composite       |
+| `ambre-038-marche-citrouil…` | 85,7 % | 57,0 % | −33 % | composite       |
+| `ambre-rooftop-frontal`      | 43,1 % | 36,1 % | −16 % | **contre-jour** |
+| `ambre-yacht-frontal`        | 72,6 % | 67,0 % |  −8 % | **contre-jour** |
+
+Les composites perdent 24 à 39 % de leurs traversées à pic, les deux
+contre-jours 8 et 16 %. Le sens est le bon ; **l'écart n'est pas assez large
+pour trancher une image isolée.**
 """
 
 from __future__ import annotations
@@ -55,6 +162,19 @@ from PIL import Image
 
 
 MODELE_YOLO = Path.home() / "vision_tests" / "yolov8n.pt"
+# Le masque de silhouette sert UNIQUEMENT à la colonne « liseré » : la colonne
+# « largeur » reste inchangée et n'a besoin que du détecteur de boîtes.
+MODELE_YOLO_SEG = Path.home() / "vision_tests" / "yolov8n-seg.pt"
+# Un pic « plus clair que le fond » n'a plus de sens quand le fond est déjà
+# proche du blanc : il n'y a plus de place au-dessus. Une traversée dont le fond
+# ou le cheveu dépasse ce niveau est ÉCARTÉE plutôt que notée zéro. Cela a été
+# imposé par un contre-exemple : `ambre-024-face-protected-direct.png` sortait
+# 0,0 %, ce qui semblait la disculper — mais 98,1 % de ses traversées ont un
+# fond au-dessus de 200 (fenêtre en plein soleil). La mesure ne la disculpait
+# pas : elle ne pouvait pas la voir. Un « 0 » non mesurable est un mensonge.
+PLAFOND_MESURABLE = 220.0
+# En dessous de ce nombre de traversées exploitables, on refuse de noter.
+TRAVERSEES_MINIMUM = 40
 # Une détection faible est le plus souvent un objet du décor : nos vrais plans
 # d'Ambre sortent entre 0,88 et 0,93.
 CONFIANCE_MIN = 0.60
@@ -184,6 +304,160 @@ def largeur_transition(chemin: Path, colonnes: int = 240) -> tuple[float, int]:
     return float(np.median(mesures)), len(mesures)
 
 
+@lru_cache(maxsize=1)
+def _modele_seg_charge():
+    """Charge le modèle de segmentation, une seule fois."""
+    from ultralytics import YOLO  # dépendance optionnelle, comme _modele_charge()
+
+    if not MODELE_YOLO_SEG.is_file():
+        raise FileNotFoundError(MODELE_YOLO_SEG)
+    return YOLO(str(MODELE_YOLO_SEG))
+
+
+def contour_de_chevelure(chemin: Path) -> list[tuple[int, int, int]] | None:
+    """Bords gauche et droit de la silhouette, du sommet du crâne aux épaules.
+
+    Rend une liste de `(y, x_gauche, x_droit)`, ou None sans sujet exploitable.
+
+    La ligne d'épaules est prise là où la largeur du masque croît le plus vite :
+    c'est le seul repère qui ne suppose ni cadrage ni pose. Au-dessous, on
+    mesurerait un col roulé ou un revers de trench, pas une chevelure.
+    """
+    resultats = _modele_seg_charge().predict(
+        str(chemin), classes=[0], conf=CONFIANCE_MIN, device="cpu",
+        verbose=False, retina_masks=True)
+    r = resultats[0]
+    if r.masks is None or len(r.boxes) == 0:
+        return None
+    i = int(np.argmax(r.boxes.conf.cpu().numpy()))
+    masque = r.masks.data[i].cpu().numpy() > 0.5
+    lignes_pleines = np.where(masque.any(axis=1))[0]
+    if len(lignes_pleines) < 60:
+        return None
+    bords: dict[int, tuple[int, int]] = {}
+    for y in range(int(lignes_pleines[0]), int(lignes_pleines[-1]) + 1):
+        xs = np.where(masque[y])[0]
+        if len(xs):
+            bords[y] = (int(xs[0]), int(xs[-1]))
+    ys = sorted(bords)
+    if len(ys) < 60:
+        return None
+    largeurs = np.array([bords[y][1] - bords[y][0] for y in ys], dtype=np.float32)
+    noyau = max(3, len(ys) // 40)
+    lisse = np.convolve(largeurs, np.ones(noyau) / noyau, mode="same")
+    pente = np.gradient(lisse)
+    debut, fin = int(0.12 * len(ys)), int(0.75 * len(ys))
+    y_epaule = ys[debut + int(np.argmax(pente[debut:fin]))]
+    haut = ys[0]
+    return [(y, bords[y][0], bords[y][1]) for y in ys if haut + 2 < y < y_epaule]
+
+
+def _matte(chemin: Path, dossier: Path | None) -> "np.ndarray | None":
+    if dossier is None:
+        return None
+    fichier = dossier / f"{chemin.stem}-alpha.png"
+    if not fichier.is_file():
+        return None
+    return np.asarray(Image.open(fichier).convert("L"), dtype=np.float32) / 255.0
+
+
+def liseré_de_chevelure(chemin: Path, mattes: Path | None = None,
+                        rayon: int = 7, seuil_pic: float = 8.0,
+                        ) -> tuple[float, int]:
+    """Part des traversées du contour capillaire montrant un pic clair, en %.
+
+    Pour chaque ligne du contour et de chaque côté, on relève le fond (4 à 10 px
+    dehors), le cheveu (4 à 10 px dedans) et le pixel le plus clair du bord. Le
+    pic vaut `luminance_max − max(fond, cheveu)` : il n'est positif que si le
+    bord est plus clair QUE LES DEUX, ce qui est la signature du liseré.
+
+    Avec un matte, le pic n'est cherché que dans la bande semi-transparente
+    (0,10 < alpha < 0,90) : c'est ce qui distingue un résidu de recomposition
+    d'un contre-jour, lequel éclaire du cheveu opaque.
+
+    Rend `(part_en_pourcent, nombre_de_traversées)`, `(nan, 0)` si rien de sûr.
+    """
+    lignes = contour_de_chevelure(chemin)
+    if not lignes:
+        return float("nan"), 0
+    rgb = np.asarray(Image.open(chemin).convert("RGB"), dtype=np.float32)
+    luminance = rgb.mean(axis=2)
+    alpha = _matte(chemin, mattes)
+    if alpha is not None and alpha.shape != luminance.shape:
+        alpha = None
+    hauteur, largeur = luminance.shape
+    pics: list[float] = []
+    for y, x_gauche, x_droit in lignes:
+        for x0, vers_la_droite in ((x_gauche, True), (x_droit, False)):
+            if alpha is not None:
+                mesure = _pic_dans_la_bande(luminance, alpha, y, x0, vers_la_droite)
+            else:
+                mesure = _pic_au_gradient(luminance, y, x0, vers_la_droite,
+                                          rayon, largeur)
+            if mesure is not None:
+                pics.append(mesure)
+    if len(pics) < TRAVERSEES_MINIMUM:
+        # Trop peu de traversées exploitables : on ne note pas. C'est le cas
+        # d'une silhouette entièrement détourée sur un fond surexposé. Sur
+        # `ambre-024-face-protected-direct.png`, il n'en restait que 20 : une
+        # part calculée sur 20 relevés n'est pas une mesure, c'est une rumeur.
+        return float("nan"), len(pics)
+    tableau = np.asarray(pics, dtype=np.float32)
+    return float(100.0 * (tableau >= seuil_pic).mean()), len(pics)
+
+
+def _pic_au_gradient(luminance, y, x0, vers_la_droite, rayon, largeur):
+    """Sans matte : le bord est le gradient le plus fort autour du masque."""
+    a, b = x0 - rayon, x0 + rayon + 1
+    if a < 12 or b > largeur - 12:
+        return None
+    i = int(np.argmax(np.abs(np.diff(luminance[y, a:b]))))
+    xb = a + i + (1 if vers_la_droite else 0)
+    if vers_la_droite:
+        dehors, dedans = (xb - 10, xb - 4), (xb + 4, xb + 10)
+    else:
+        dehors, dedans = (xb + 4, xb + 10), (xb - 10, xb - 4)
+    if dehors[0] < 0 or dedans[1] > largeur or dedans[0] < 0 or dehors[1] > largeur:
+        return None
+    fond = float(np.median(luminance[y, dehors[0]:dehors[1]]))
+    cheveu = float(np.median(luminance[y, dedans[0]:dedans[1]]))
+    if abs(fond - cheveu) < 20 or max(fond, cheveu) > PLAFOND_MESURABLE:
+        return None
+    pic = float(luminance[y, max(0, xb - 2):xb + 3].max())
+    return pic - max(fond, cheveu)
+
+
+def _pic_dans_la_bande(luminance, alpha, y, x0, vers_la_droite, portee: int = 24):
+    """Avec matte : le pic n'est retenu que s'il vit dans le semi-transparent."""
+    a, b = x0 - portee, x0 + portee + 1
+    if a < 12 or b > luminance.shape[1] - 12:
+        return None
+    profil_a, profil_l = alpha[y, a:b], luminance[y, a:b]
+    if not vers_la_droite:                       # oriente toujours dehors → dedans
+        profil_a, profil_l = profil_a[::-1], profil_l[::-1]
+    if profil_a[:6].mean() > 0.15 or profil_a[-6:].mean() < 0.85:
+        return None
+    dedans, dehors = profil_a >= 0.95, profil_a <= 0.05
+    bande = (profil_a > 0.10) & (profil_a < 0.90)
+    if bande.sum() < 1 or dedans.sum() < 4 or dehors.sum() < 4:
+        return None
+    cheveu = float(np.median(profil_l[dedans][:8]))
+    fond = float(np.median(profil_l[dehors][-8:]))
+    if abs(cheveu - fond) < 20 or max(cheveu, fond) > PLAFOND_MESURABLE:
+        return None
+    return float(profil_l[bande].max()) - max(cheveu, fond)
+
+
+def verdict_liseré(part: float) -> str:
+    """Le seuil convoque l'œil, il ne condamne pas — cf. le contre-exemple du
+    contre-jour documenté en tête de fichier."""
+    if part != part:
+        return ""
+    if part < 5:
+        return "bord propre"
+    return "LISERÉ — lever à l'œil (contre-jour ou résidu de recomposition)"
+
+
 def verdict(largeur: float) -> str:
     if largeur != largeur:  # NaN
         return "indéterminé — aucun contour franc trouvé"
@@ -197,30 +471,50 @@ def verdict(largeur: float) -> str:
 def main() -> int:
     analyseur = argparse.ArgumentParser(description=__doc__)
     analyseur.add_argument("images", nargs="+", type=Path)
+    analyseur.add_argument("--mattes", type=Path, default=None,
+                           help="dossier contenant <nom>-alpha.png ; restreint la "
+                                "mesure du liseré à la bande semi-transparente")
     arguments = analyseur.parse_args()
 
-    print(f"{'image':44} {'largeur':>8}  {'colonnes':>8}  verdict")
+    print(f"{'image':44} {'largeur':>8}  {'colonnes':>8}  {'liseré':>7}  verdict")
     pire = 99.0
     sans_detecteur = False
+    sans_segmentation = False
     for chemin in arguments.images:
         if not chemin.is_file():
-            print(f"{str(chemin)[:44]:44}      —          —  fichier introuvable")
+            print(f"{str(chemin)[:44]:44}      —          —        —  fichier introuvable")
             continue
         sujet = presence_du_sujet(chemin)
         if sujet is False:
             # Aucune personne : la mesure porterait sur le décor. On ne note pas,
             # et surtout on ne fait PAS échouer la porte pour un B-roll sain.
-            print(f"{chemin.name[:44]:44}        —         —  "
+            print(f"{chemin.name[:44]:44}        —         —        —  "
                   "non applicable — aucun sujet détecté")
             continue
         largeur, n = largeur_transition(chemin)
         note = verdict(largeur)
+        try:
+            part, _ = liseré_de_chevelure(chemin, arguments.mattes)
+        except (ImportError, FileNotFoundError):
+            part = float("nan")
+            sans_segmentation = True
+        colonne = "     —" if part != part else f"{part:6.1f}%"
+        if part != part:
+            note = f"{note} · liseré NON MESURABLE (fond trop clair ou contour trop court)"
+        else:
+            note_liseré = verdict_liseré(part)
+            if note_liseré != "bord propre":
+                note = f"{note} · {note_liseré}"
         if sujet is None:
             sans_detecteur = True
             note += "  [présence du sujet NON vérifiée]"
-        print(f"{chemin.name[:44]:44} {largeur:8.2f}  {n:8}  {note}")
+        print(f"{chemin.name[:44]:44} {largeur:8.2f}  {n:8}  {colonne:>7}  {note}")
         if largeur == largeur:
             pire = min(pire, largeur)
+    if sans_segmentation:
+        print(f"\n⚠ {MODELE_YOLO_SEG} absent : la colonne « liseré » n'a pas été\n"
+              "  calculée. Un liseré ÉLARGIT la bande de transition — la colonne\n"
+              "  « largeur » seule peut donc noter « naturel » une image défectueuse.")
     if sans_detecteur:
         print("\n⚠ ultralytics absent de cet interpréteur : impossible de "
               "vérifier qu'un sujet est présent.\n  Les largeurs ci-dessus peuvent "
