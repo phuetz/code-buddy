@@ -17,14 +17,27 @@
 # contexte) devient alors le juge de volume à coût nul — à préférer à Qwen dès
 # qu'on enchaîne les revues, et à doubler par un juge payant avant l'irréversible.
 # Le solde ne SERT PAS à payer ces requêtes : il sert de seuil d'éligibilité.
+#
+# TROIS LIGNÉES INDÉPENDANTES ET GRATUITES — la loi des « deux juges indépendants »
+# se satisfait désormais à coût nul, à condition de ne pas prendre deux juges de la
+# même famille (deux modèles du même entraîneur se trompent souvent ensemble) :
+#   JUGE=free  → NVIDIA Nemotron 3 Ultra 550B via OpenRouter (2 × 1000 req/jour)
+#   JUGE=agy   → Google Gemini 3.6 Flash High via le CLI Antigravity (abo AI Ultra)
+#   JUGE=cere  → OpenAI gpt-oss-120b via Cerebras (2400 req/jour, ~1580 tok/s)
+# `grok` est mort côté crédits (402 depuis 07/2026) et l'API Mistral est PAYANTE
+# à l'usage : ni l'un ni l'autre n'est une voie de volume.
 set -euo pipefail
 
 case "${JUGE:-qwen}" in
   free)  MODEL="nvidia/nemotron-3-ultra-550b-a55b:free"; MAXTOK=20000 ;;
+  agy)   MODEL="agy:gemini-3.6-flash-high";              MAXTOK=20000 ;;
+  cere)  MODEL="cerebras:gpt-oss-120b";                  MAXTOK=20000 ;;
   kimi)  MODEL="moonshotai/kimi-k3";    MAXTOK=30000 ;;
   qwen)  MODEL="qwen/qwen3.7-flash";    MAXTOK=20000 ;;
   *)     MODEL="${JUGE}";               MAXTOK=20000 ;;
 esac
+
+SYSTEME="Tu es un juge technique adversarial. Tu cherches ce qui cloche : promesses non tenues, tests complaisants, régressions, dette masquée. Tu es concis, factuel, en FRANÇAIS, et tu classes tes constats par gravité. Si tout est correct, tu le dis sans inventer de problème."
 
 # Deux comptes OpenRouter, donc deux quotas gratuits de 1000 requêtes/jour cumulables
 # (le seuil d'éligibilité est un solde > 10 $ sur CHAQUE compte, pas une dépense).
@@ -53,7 +66,40 @@ done
 
 CTXFILE=$(mktemp)
 printf '%s' "$CONTEXT" > "$CTXFILE"
-python3 - "$PROMPT" "$CTXFILE" "$KEY" "$MODEL" "$MAXTOK" "${KEY2:-}" <<'PY'
+
+# --- Lignées hors OpenRouter : même contrat d'entrée/sortie, autre fournisseur ---
+case "$MODEL" in
+  agy:*)
+    # Le CLI Antigravity porte l'abonnement Google AI Ultra : pas de clé à gérer.
+    # `agy -p` veut le prompt en ARGUMENT, pas sur stdin : piper ne fait qu'afficher l'aide.
+    agy --model "${MODEL#agy:}" -p "$(printf '%s\n\n%s\n%s' "$SYSTEME" "$PROMPT" "$(cat "$CTXFILE")")" 2>&1
+    echo; echo "--- $MODEL : \$0.0000 (abonnement Google AI Ultra)"
+    rm -f "$CTXFILE"; exit 0 ;;
+  cerebras:*)
+    CKEY=$(grep "^CEREBRAS_API_KEY=" "$KEYS_FILE" 2>/dev/null | cut -d= -f2)
+    python3 - "$PROMPT" "$CTXFILE" "$CKEY" "${MODEL#cerebras:}" "$MAXTOK" "$SYSTEME" <<'PY'
+import json, sys, urllib.request
+prompt, key, model, maxtok, systeme = sys.argv[1], sys.argv[3], sys.argv[4], int(sys.argv[5]), sys.argv[6]
+body = json.dumps({"model": model, "max_completion_tokens": maxtok, "messages": [
+    {"role": "system", "content": systeme},
+    {"role": "user", "content": prompt + open(sys.argv[2]).read()}]}).encode()
+# Cerebras renvoie 403 à l'agent utilisateur par défaut d'urllib — la même requête
+# passe en curl. On se présente donc explicitement.
+req = urllib.request.Request("https://api.cerebras.ai/v1/chat/completions", data=body,
+  headers={"Authorization": "Bearer " + key, "Content-Type": "application/json",
+           "User-Agent": "juge-code/1.0"})
+with urllib.request.urlopen(req, timeout=900) as r:
+    d = json.load(r)
+if "choices" not in d:
+    print("ERREUR Cerebras — aucun verdict rendu :", json.dumps(d, ensure_ascii=False)[:800]); sys.exit(2)
+m = d["choices"][0]["message"]
+# gpt-oss met parfois tout dans `reasoning` et laisse `content` vide : on ne perd pas le verdict.
+print(m.get("content") or m.get("reasoning") or "(réponse vide — augmenter max_tokens)")
+print(f"\n--- {model} via Cerebras : $0.0000 (palier gratuit) | {d.get('usage', {}).get('completion_tokens', 0)} tokens")
+PY
+    rm -f "$CTXFILE"; exit 0 ;;
+esac
+python3 - "$PROMPT" "$CTXFILE" "$KEY" "$MODEL" "$MAXTOK" "${KEY2:-}" "$SYSTEME" <<'PY'
 import json, sys, time, urllib.request, urllib.error
 prompt, key, model, maxtok = sys.argv[1], sys.argv[3], sys.argv[4], int(sys.argv[5])
 key_secours = sys.argv[6] if len(sys.argv) > 6 else ""
@@ -61,7 +107,7 @@ context = open(sys.argv[2]).read()
 body = json.dumps({
   "model": model,
   "messages": [
-    {"role": "system", "content": "Tu es un juge technique adversarial. Tu cherches ce qui cloche : promesses non tenues, tests complaisants, régressions, dette masquée. Tu es concis, factuel, en FRANÇAIS, et tu classes tes constats par gravité. Si tout est correct, tu le dis sans inventer de problème."},
+    {"role": "system", "content": sys.argv[7] if len(sys.argv) > 7 else "Tu es un juge technique adversarial, concis, factuel, en FRANÇAIS."},
     {"role": "user", "content": prompt + context},
   ],
   "max_tokens": maxtok,
