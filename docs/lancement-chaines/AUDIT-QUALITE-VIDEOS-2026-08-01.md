@@ -1,5 +1,10 @@
 # Audit qualité des masters vidéo — 1er août 2026
 
+**Mise à jour après correction :** le v3 refusé reste inchangé, mais il est
+remplacé pour la livraison par `lisa-vision-ia-5-signaux-v4.mp4`. Le v4 passe
+les contrôles vidéo, audio et de sous-titres. Preuves et méthode :
+`CORRECTION-LISA-5-SIGNAUX-V4-2026-08-01.md`.
+
 ## Verdict exécutif
 
 Sept masters candidats ont été décodés, mesurés et contrôlés à l'image.
@@ -162,25 +167,24 @@ faux positif de livraison.
 | AMBRE Shorts 02 et 03 v4 | **Bons techniquement**, à espacer et reconsidérer selon le retour du 01 |
 | LISA Meta AI v2 | **Bon pour validation humaine** |
 | LISA « 5 signaux » v3 | **Refusé — ne pas publier** |
+| LISA « 5 signaux » v4 | **Bon techniquement pour validation humaine** |
 
-## Correction requise pour « 5 signaux »
+## Correction effectuée pour « 5 signaux »
 
-La correction idéale repart d'un master intermédiaire antérieur à l'incrustation
-des sous-titres et place le rendu ASS **après** toutes les plaques de réparation
-dans la chaîne de filtres. Si seul le v2 déjà sous-titré est réutilisé, il faut
-reconstruire entièrement la zone des sous-titres sur les douze cartons avant de
-réincruster uniquement les repères concernés ; les fragments encore visibles ne
-doivent pas être doublés. Un simple nouveau ré-encodage du v3 ne restaure pas
-les pixels déjà détruits.
+La correction est repartie de `work/render/video.mp4`, le master intermédiaire
+antérieur à l'incrustation. Le rendu ASS a été placé **après** toutes les plaques
+de réparation. Le v4 conserve 542,467 s, 16 274 images et la piste AAC du v3 au
+bit près ; il mesure −14,01 LUFS et −1,40 dBTP.
 
-Avant de déclarer le prochain master livrable :
+Contrôles terminés :
 
-1. contrôler les douze intervalles ci-dessus sur le fichier final ;
-2. vérifier les 168 repères SRT, notamment leur visibilité complète sur les
-   cartons ;
-3. refaire durée, nombre d'images, loudness, true peak et synchronisation ;
-4. ajouter au contrôle d'habillage une mesure du **composite final**, pas
-   seulement des blocs nouvellement dessinés.
+1. les douze cartons ont été relus sur le composite final ;
+2. les 52 intersections concernées et les 168 repères SRT sont présents ;
+3. durée, images, loudness, true peak, audio et synchronisation passent ;
+4. 24 zones d'habillage sont mesurées sur le **MP4 final**.
+
+Le détail reproductible est dans
+`CORRECTION-LISA-5-SIGNAUX-V4-2026-08-01.md`.
 
 ## Limites de l'audit
 
