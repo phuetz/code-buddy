@@ -143,14 +143,18 @@ describe('character-in-location CLI orchestration', () => {
     });
     const result = await insertCharacterInLocation(value.options, { client, runFaceProtection });
 
-    expect(client.uploadImage).toHaveBeenCalledTimes(4);
-    expect(submitted).toHaveLength(2);
+    expect(client.uploadImage).toHaveBeenCalledTimes(5);
+    expect(submitted).toHaveLength(3);
     expect(submitted[0]?.['2']?.inputs.image).toBe('uploaded/character.png');
     expect(submitted[0]?.['3']?.inputs.image).toBe('uploaded/location.png');
     expect(submitted[0]?.['5']?.inputs.seed).toBe(61_000);
     expect(Object.values(submitted[1]!).some((node) => node.class_type === 'SetLatentNoiseMask')).toBe(true);
     expect(Object.values(submitted[1]!).some((node) => node.class_type === 'GrowMask')).toBe(true);
     expect(Object.values(submitted[1]!).some((node) => node.class_type === 'ImageCompositeMasked')).toBe(true);
+    expect(Object.values(submitted[2]!).some((node) => node.class_type === 'RembgByBiRefNetAdvanced')).toBe(true);
+    expect(Object.values(submitted[2]!).some((node) => node.class_type === 'BlurFusionForegroundEstimation')).toBe(true);
+    expect(Object.values(submitted[2]!).find((node) => node.class_type === 'RembgByBiRefNetAdvanced')?.inputs.mask_threshold)
+      .toBe(0);
     expect(await fs.readFile(result.outputPath)).toEqual(Buffer.from(PNG));
     expect(runFaceProtection).toHaveBeenCalledOnce();
     expect(JSON.parse(await fs.readFile(result.faceProtectionReportPath!, 'utf8'))).toEqual({});

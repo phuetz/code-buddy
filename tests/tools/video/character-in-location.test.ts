@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { SIGNATURE_LOCATIONS } from '../../../src/companion/signature-locations.js';
 import {
   buildCharacterInLocationWorkflow,
+  buildContinuousAlphaMatteWorkflow,
   buildFaceProtectedCharacterInLocationWorkflow,
   buildInsertionPrompt,
   INSERT_QWEN_TEMPLATE_CONTRACT,
@@ -107,5 +108,35 @@ describe('Qwen character-in-location workflow', () => {
     expect(graph['10']?.inputs.images).toEqual(
       [Object.entries(graph).find(([, node]) => node === composite)?.[0], 0],
     );
+  });
+
+  it('composites an estimated foreground with an unthresholded continuous alpha', () => {
+    const graph = buildContinuousAlphaMatteWorkflow({
+      compositeImage: 'uploads/generated.png',
+      locationImage: 'uploads/plate.png',
+      outputPrefix: 'insertions/ambre-continuous-alpha',
+    });
+
+    expect(graph['4']?.class_type).toBe('RembgByBiRefNetAdvanced');
+    expect(graph['4']?.inputs.mask_threshold).toBe(0);
+    expect(graph['5']?.class_type).toBe('BlurFusionForegroundEstimation');
+    expect(graph['5']?.inputs.images).toEqual(['1', 0]);
+    expect(graph['5']?.inputs.masks).toEqual(['4', 1]);
+    expect(graph['6']?.class_type).toBe('SplitImageWithAlpha');
+    expect(graph['7']?.inputs.destination).toEqual(['2', 0]);
+    expect(graph['7']?.inputs.source).toEqual(['6', 0]);
+    expect(graph['7']?.inputs.mask).toEqual(['5', 1]);
+    expect(graph['8']?.class_type).toBe('ThresholdMask');
+    expect(graph['8']?.inputs.mask).toEqual(['5', 1]);
+    expect(graph['8']?.inputs.value).toBe(0.5);
+    expect(graph['9']?.class_type).toBe('GrowMask');
+    expect(graph['9']?.inputs.expand).toBe(-16);
+    expect(graph['10']?.inputs.destination).toEqual(['7', 0]);
+    expect(graph['10']?.inputs.source).toEqual(['1', 0]);
+    expect(graph['10']?.inputs.mask).toEqual(['9', 0]);
+    expect(graph['11']?.inputs.images).toEqual(['10', 0]);
+    expect(Object.values(graph).some((node) => (
+      ['GrowMaskWithBlur', 'FeatherMask', 'MaskBlur+'].includes(node.class_type)
+    ))).toBe(false);
   });
 });

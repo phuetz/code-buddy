@@ -17,6 +17,7 @@ import {
 } from '../../src/companion/signature-locations.js';
 import {
   buildCharacterInLocationWorkflow,
+  buildContinuousAlphaMatteWorkflow,
   buildFaceProtectedCharacterInLocationWorkflow,
   INSERT_QWEN_RELIGHT_TEMPLATE_CONTRACT,
   INSERT_QWEN_TEMPLATE_CONTRACT,
@@ -65,7 +66,7 @@ export interface UploadInsertionImageInput {
   baseUrl: string;
   sourcePath: string;
   bytes: Uint8Array;
-  role: 'character' | 'location' | 'protected-base' | 'edit-mask';
+  role: 'character' | 'location' | 'protected-base' | 'edit-mask' | 'matte-source';
 }
 
 export interface SubmitInsertionInput {
@@ -99,6 +100,15 @@ export interface CharacterInsertionDependencies {
   client?: CharacterInsertionClient;
   runFaceProtection?: (input: FaceProtectionInput) => Promise<void>;
   runIdentityGate?: (input: IdentityGateInput) => Promise<void>;
+}
+
+export interface ContinuousAlphaMatteOptions {
+  compositePath: string;
+  platePath: string;
+  outputPath: string;
+  outputPrefix: string;
+  comfyUrl: string;
+  force: boolean;
 }
 
 export interface CharacterInsertionResult {
@@ -466,6 +476,63 @@ async function writeOutput(filename: string, bytes: Uint8Array, force: boolean):
   }
 }
 
+/** Apply only the final continuous-alpha pass, for deterministic replays. */
+export async function matteCompositeAgainstPlate(
+  options: ContinuousAlphaMatteOptions,
+  dependencies: Pick<CharacterInsertionDependencies, 'client'> = {},
+): Promise<string> {
+  const compositePath = path.resolve(options.compositePath);
+  const platePath = path.resolve(options.platePath);
+  const outputPath = path.resolve(options.outputPath);
+  if (outputPath === compositePath || outputPath === platePath) {
+    throw new Error('Continuous-alpha output must not overwrite an input image');
+  }
+  const [compositeBytes, plateBytes] = await Promise.all([
+    readPng(compositePath, 'Composite to matte'),
+    readPng(platePath, 'Untouched location plate'),
+  ]);
+  const outputInfo = await lstatIfPresent(outputPath);
+  if (outputInfo?.isSymbolicLink() || (outputInfo && !outputInfo.isFile())) {
+    throw new Error(`Output target must be a regular non-symlink file: ${outputPath}`);
+  }
+  if (outputInfo && !options.force) {
+    throw new Error(`Output already exists: ${outputPath}; use force to replace it`);
+  }
+  const client = dependencies.client ?? DEFAULT_CLIENT;
+  const comfyUrl = validateComfyUrl(options.comfyUrl);
+  const probe = await client.probe(comfyUrl);
+  if (!probe.ok) throw new Error(`ComfyUI preflight failed at ${comfyUrl}`);
+  await fs.mkdir(path.dirname(outputPath), { recursive: true });
+  const workDir = await fs.mkdtemp(path.join(os.tmpdir(), 'character-location-matte-'));
+  try {
+    const [compositeImage, locationImage] = await Promise.all([
+      client.uploadImage({
+        baseUrl: comfyUrl,
+        sourcePath: compositePath,
+        bytes: compositeBytes,
+        role: 'matte-source',
+      }),
+      client.uploadImage({
+        baseUrl: comfyUrl,
+        sourcePath: platePath,
+        bytes: plateBytes,
+        role: 'location',
+      }),
+    ]);
+    const workflow = buildContinuousAlphaMatteWorkflow({
+      compositeImage,
+      locationImage,
+      outputPrefix: options.outputPrefix,
+    });
+    const output = await client.submit({ baseUrl: comfyUrl, workflow, workDir });
+    assertPng(output, 'Continuous-alpha composite');
+    await writeOutput(outputPath, output, options.force);
+    return outputPath;
+  } finally {
+    await fs.rm(workDir, { recursive: true, force: true });
+  }
+}
+
 async function defaultRunIdentityGate(input: IdentityGateInput): Promise<void> {
   const temporaryRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'character-location-gate-'));
   try {
@@ -589,8 +656,25 @@ export async function insertCharacterInLocation(
       workDir: comfyWorkDir,
     });
     assertPng(finalComposite, 'Masked face-protected composite');
+    const matteSourceImage = await client.uploadImage({
+      baseUrl: options.comfyUrl,
+      sourcePath: protectedCompositePath,
+      bytes: finalComposite,
+      role: 'matte-source',
+    });
+    const matteWorkflow = buildContinuousAlphaMatteWorkflow({
+      compositeImage: matteSourceImage,
+      locationImage,
+      outputPrefix: `${promptIdPrefix}-continuous-alpha`,
+    });
+    const continuousAlphaComposite = await client.submit({
+      baseUrl: options.comfyUrl,
+      workflow: matteWorkflow,
+      workDir: comfyWorkDir,
+    });
+    assertPng(continuousAlphaComposite, 'Continuous-alpha composite');
     await Promise.all([
-      writeOutput(preflight.outputPath, finalComposite, options.force),
+      writeOutput(preflight.outputPath, continuousAlphaComposite, options.force),
       writeOutput(preflight.faceProtectionReportPath, protectionReport, options.force),
     ]);
   } finally {

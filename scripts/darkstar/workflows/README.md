@@ -139,6 +139,22 @@ image 1 into the scene from image 2, keep her identity/pose/scale, match the
 scene lighting and perspective, photorealistic ». La CLI le remplace de façon
 déterministe au rendu.
 
+Après la seconde passe Qwen protégée par le masque du visage, la CLI ajoute un
+graphe de matting programmatique obligatoire. Il ne fait pas partie de
+`insert-qwen-edit.json` : `AutoDownloadBiRefNetModel(Matting-HR)` alimente
+`RembgByBiRefNetAdvanced` en 2048 px avec `mask_threshold: 0`, puis
+`BlurFusionForegroundEstimation` estime les couleurs du premier plan dans les
+pixels semi-transparents. `SplitImageWithAlpha` évite d'appliquer deux fois
+l'alpha embarqué et `ImageCompositeMasked` repose le sujet sur la plaque
+intacte. Un masque du cœur opaque (`ThresholdMask` à 0,5, puis érosion de
+16 px) recopie enfin les pixels intérieurs exacts ; ce masque n'atteint jamais
+le bord des cheveux.
+
+Ne jamais remplacer cette chaîne par le flou d'un masque binaire : cela élargit
+la mesure sans restituer de mèches et conserve la contamination colorée du fond.
+Le rejeu déterministe des 12 plans chalet et 10 plans Japon utilise
+`scripts/darkstar/replay-hair-matte-composites.ts`.
+
 Sauvegarder d'abord le graphe UI sous un nom hors de ce dossier, puis l'exporter
 avec le frontend réel de l'instance cible :
 

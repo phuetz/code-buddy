@@ -39,6 +39,28 @@ export interface FaceProtectedCharacterInLocationWorkflowInput
   editMaskImage: string;
 }
 
+export interface ContinuousAlphaMatteWorkflowInput {
+  /** Generated composite whose subject must be extracted. */
+  compositeImage: string;
+  /** Original, subject-free plate restored behind the continuous alpha. */
+  locationImage: string;
+  outputPrefix: string;
+}
+
+export const CONTINUOUS_ALPHA_MATTE = Object.freeze({
+  model: 'Matting-HR',
+  width: 2048,
+  height: 2048,
+  upscaleMethod: 'bilinear',
+  foregroundBlurSize: 90,
+  foregroundBlurSizeTwo: 6,
+  /** Zero is structural: any positive value thresholds the BiRefNet matte. */
+  maskThreshold: 0,
+  /** The solid core is restored exactly; it never reaches the hair boundary. */
+  solidCoreThreshold: 0.5,
+  solidCoreInset: 16,
+});
+
 export const INSERT_QWEN_TEMPLATE_CONTRACT: TemplateContract = Object.freeze({
   id: 'insert-qwen-edit',
   required: Object.freeze([
@@ -212,4 +234,125 @@ export function buildFaceProtectedCharacterInLocationWorkflow(
     'adapt hair/body/lighting around it without changing it or drawing a box/halo around it';
   assertAllSeedsPinned(graph);
   return graph;
+}
+
+/**
+ * Extract the generated subject with a genuine, continuous alpha and restore
+ * it over the untouched plate.  BlurFusionForegroundEstimation estimates the
+ * foreground colour under semi-transparent hair pixels, removing the colour
+ * contamination that otherwise becomes a dark fringe after recomposition.
+ *
+ * Deliberately do not blur or grow the subject boundary: smoothing a binary
+ * silhouette can widen a metric without recovering individual hairs.  The
+ * only binary mask below is eroded inward and restores exact pixels in the
+ * already-opaque core; it never participates in the hair transition.
+ */
+export function buildContinuousAlphaMatteWorkflow(
+  input: ContinuousAlphaMatteWorkflowInput,
+): ComfyWorkflowGraph {
+  return {
+    '1': {
+      class_type: 'LoadImage',
+      inputs: { image: input.compositeImage },
+      _meta: { title: 'Generated Composite' },
+    },
+    '2': {
+      class_type: 'LoadImage',
+      inputs: { image: input.locationImage },
+      _meta: { title: 'Untouched Location Plate' },
+    },
+    '3': {
+      class_type: 'AutoDownloadBiRefNetModel',
+      inputs: {
+        model_name: CONTINUOUS_ALPHA_MATTE.model,
+        device: 'AUTO',
+        dtype: 'float32',
+      },
+      _meta: { title: 'High-resolution matting model' },
+    },
+    '4': {
+      class_type: 'RembgByBiRefNetAdvanced',
+      inputs: {
+        model: ['3', 0],
+        images: ['1', 0],
+        width: CONTINUOUS_ALPHA_MATTE.width,
+        height: CONTINUOUS_ALPHA_MATTE.height,
+        upscale_method: CONTINUOUS_ALPHA_MATTE.upscaleMethod,
+        blur_size: CONTINUOUS_ALPHA_MATTE.foregroundBlurSize,
+        blur_size_two: CONTINUOUS_ALPHA_MATTE.foregroundBlurSizeTwo,
+        fill_color: false,
+        color: 0,
+        mask_threshold: CONTINUOUS_ALPHA_MATTE.maskThreshold,
+      },
+      _meta: { title: 'Continuous subject alpha; never threshold' },
+    },
+    '5': {
+      class_type: 'BlurFusionForegroundEstimation',
+      inputs: {
+        images: ['1', 0],
+        masks: ['4', 1],
+        blur_size: CONTINUOUS_ALPHA_MATTE.foregroundBlurSize,
+        blur_size_two: CONTINUOUS_ALPHA_MATTE.foregroundBlurSizeTwo,
+        fill_color: false,
+        color: 0,
+      },
+      _meta: { title: 'Estimate uncontaminated semi-transparent foreground colours' },
+    },
+    '6': {
+      class_type: 'SplitImageWithAlpha',
+      inputs: { image: ['5', 0] },
+      // Comfy returns 1-alpha on this node's MASK socket. Use only its RGB;
+      // the non-inverted continuous mask remains output 1 of node 5.
+      _meta: { title: 'Extract estimated RGB; discard inverse-alpha mask' },
+    },
+    '7': {
+      class_type: 'ImageCompositeMasked',
+      inputs: {
+        destination: ['2', 0],
+        source: ['6', 0],
+        x: 0,
+        y: 0,
+        resize_source: false,
+        mask: ['5', 1],
+      },
+      _meta: { title: 'Composite with the unchanged continuous alpha' },
+    },
+    '8': {
+      class_type: 'ThresholdMask',
+      inputs: {
+        mask: ['5', 1],
+        value: CONTINUOUS_ALPHA_MATTE.solidCoreThreshold,
+      },
+      _meta: { title: 'Opaque subject core only; never used on the edge' },
+    },
+    '9': {
+      class_type: 'GrowMask',
+      inputs: {
+        mask: ['8', 0],
+        expand: -CONTINUOUS_ALPHA_MATTE.solidCoreInset,
+        tapered_corners: true,
+      },
+      _meta: { title: 'Keep the exact-pixel core away from the continuous edge' },
+    },
+    '10': {
+      class_type: 'ImageCompositeMasked',
+      inputs: {
+        destination: ['7', 0],
+        source: ['1', 0],
+        x: 0,
+        y: 0,
+        resize_source: false,
+        mask: ['9', 0],
+      },
+      _meta: { title: 'Restore exact generated pixels inside the subject' },
+    },
+    '11': {
+      class_type: 'SaveImage',
+      inputs: {
+        images: ['10', 0],
+        filename_prefix: input.outputPrefix,
+      },
+      _meta: { title: 'Continuous-alpha Composite' },
+    },
+  };
 }
