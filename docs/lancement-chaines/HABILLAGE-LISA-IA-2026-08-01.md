@@ -9,6 +9,11 @@ Ce document est un **compte rendu de correction**. Rien n'a été publié, aucun
 compte créé, aucun crédit Flow / HeyGen / ElevenLabs dépensé. Les masters
 d'origine sont intacts : les versions corrigées portent un nouveau nom.
 
+> **Rapport historique.** La correction « 5 signaux » v3 décrite ici a ensuite
+> été refusée parce que son pied de page masquait 52 repères SRT pendant
+> 109,167 s. Elle est remplacée par la v4. Pour le verdict courant, voir
+> [`CORRECTION-LISA-5-SIGNAUX-V4-2026-08-01.md`](CORRECTION-LISA-5-SIGNAUX-V4-2026-08-01.md).
+
 ---
 
 ## Ce qui a changé, en une page
@@ -43,7 +48,8 @@ Fichiers livrés :
 |---|---|
 | Master Meta corrigé | `~/.codebuddy/longform/meta-ai-agit-a-votre-place/meta-ai-agentique-master-v2.mp4` |
 | Miniatures corrigées | `…/meta-ai-agit-a-votre-place/publication/miniature-0{1,2,3}-*.jpg` |
-| Master « 5 signaux » corrigé | `~/Videos/publication-2026-07-30/lisa-vision-ia/lisa-vision-ia-5-signaux-v3.mp4` |
+| Master « 5 signaux » corrigé dans cette passe, **refusé ensuite** | `~/Videos/publication-2026-07-30/lisa-vision-ia/lisa-vision-ia-5-signaux-v3.mp4` |
+| Master de livraison actuel | `~/Videos/publication-2026-07-30/lisa-vision-ia/lisa-vision-ia-5-signaux-v4.mp4` |
 
 Les masters d'origine (`…-master-v1.mp4`, `…-5-signaux-v2.mp4`) n'ont pas été
 touchés.

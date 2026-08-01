@@ -7,11 +7,13 @@ les contrôles vidéo, audio et de sous-titres. Preuves et méthode :
 
 ## Verdict exécutif
 
-Sept masters candidats ont été décodés, mesurés et contrôlés à l'image.
+Sept masters actuels ont été décodés, mesurés et contrôlés à l'image. Une
+ancienne version refusée, LISA « 5 signaux » v3, est conservée dans ce rapport
+comme preuve de non-régression.
 
-- **Six masters passent le contrôle technique.** Ils restent soumis aux choix
+- **Les sept masters actuels passent le contrôle technique.** Ils restent soumis aux choix
   éditoriaux et aux gestes humains de publication déjà documentés.
-- **Un master échoue :**
+- **L'ancienne version v3 échoue :**
   `lisa-vision-ia-5-signaux-v3.mp4`. Sa retouche d'habillage efface une grande
   partie des sous-titres pendant les douze cartons d'ouverture de chapitre.
   **Ne pas publier ce fichier.**
@@ -32,7 +34,10 @@ dossier proscrit `.ecarte-france-travail` sont exclus. Les sept candidats sont :
 2. AMBRE — Japon v01 ;
 3. AMBRE — les trois Shorts v4 du 31 juillet ;
 4. LISA IA — Meta AI, master v2 ;
-5. LISA IA — « 5 signaux », master v3.
+5. LISA IA — « 5 signaux », master v4.
+
+Le master v3 est également contrôlé ci-dessous comme ancienne version refusée ;
+il ne compte pas parmi les sept candidats actuels.
 
 Contrôles refaits depuis les masters, sans se fier aux anciens verdicts JSON :
 
@@ -58,6 +63,7 @@ Contrôles refaits depuis les masters, sans se fier aux anciens verdicts JSON :
 | AMBRE Short 03 v4 | 55,900 s · 1080×1920 · 30 i/s | 6,21 Mb/s | −14,02 LUFS · −1,44 dBTP | **Passe** |
 | LISA Meta AI v2 | 675,300 s · 1920×1080 · 30 i/s | 8,54 Mb/s | −14,05 LUFS · −1,38 dBTP | **Passe** |
 | LISA « 5 signaux » v3 | 542,467 s · 1920×1080 · 30 i/s | 1,08 Mb/s | −14,01 LUFS · −1,40 dBTP | **Échec visuel** |
+| LISA « 5 signaux » v4 | 542,467 s · 1920×1080 · 30 i/s | 1,08 Mb/s | −14,01 LUFS · −1,40 dBTP | **Passe** |
 
 Tous les fichiers sont en H.264 High, `yuv420p`, avec audio AAC stéréo à
 48 kHz. L'écart de fin audio/vidéo est nul sur les cinq vidéos AMBRE et reste
