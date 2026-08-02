@@ -1,23 +1,23 @@
 # Portage des audits de juillet — matrice de reprise
 
-**État au 2 août 2026.** Le premier lot sécurité est porté et commité sur une
-branche isolée ; ce document n'autorise toujours aucun merge ou push. Les
+**État au 2 août 2026.** Le lot sécurité, deux sous-lots Tools/RAG et le
+sous-lot Fleet lifecycle sont portés et commités sur trois branches isolées ;
+ce document n'autorise toujours aucun merge ou push. Les
 branches sources et leurs rapports ont été protégés par la sauvegarde P0
 décrite dans `/home/patrice/Backups/code-buddy/2026-08-02-p0/MANIFESTE.md`.
 
 ## Cible de reprise
 
 La cible de fait est `feat/mysoulmate-media-pipeline`, prise au commit
-`c0dfa4ba` pour le lot sécurité. Elle contient `origin/main` et le
-`main` local ; elle est respectivement en avance de 185 et 181 commits. Elle est
-en avance de 74 commits sur son propre upstream et diffère d'`origin/main` sur
-513 fichiers.
+`c0dfa4ba` pour le lot sécurité puis au commit documentaire `33a0a41c` pour les
+lots Tools/RAG et Fleet. Aucun portage n'a été basé sur `main`, `origin/main`,
+`avatar-builder` ou `autopilot`.
 
-La branche `codex/portage-security-july-2026` et le worktree
-`/home/patrice/code-buddy-portage-security` ont été créés depuis ce commit,
-jamais depuis `main`, `origin/main`, `avatar-builder` ou `autopilot`. Le
-« continue » de Patrice a autorisé ce portage isolé, mais pas son intégration
-dans la branche média.
+La branche `codex/portage-security-july-2026` part de `c0dfa4ba`. Les branches
+`codex/portage-tools-rag-july-2026` et
+`codex/portage-fleet-lifecycle-july-2026` partent de `33a0a41c`. Le « continue »
+de Patrice a autorisé ces portages isolés, mais pas leur intégration dans la
+branche média.
 
 ## Lot 1 — sécurité
 
@@ -63,13 +63,51 @@ Seuls `53cc9b22` et le patch SSRF déjà remplacé ajoutaient des fichiers de te
 dans la branche source. Les cinq autres patchs retenus ont donc reçu une
 couverture de régression adaptée au code courant pendant le portage.
 
+## Lot 2 — Tools/RAG, premiers sous-lots
+
+Deux sous-lots indépendants ont été adaptés depuis `fix/tools-audit` sur
+`codex/portage-tools-rag-july-2026` :
+
+| Commit | Périmètre |
+|---|---|
+| `02735e6d` | Bash repasse par le dispatch central gardé (permissions, hooks, RunStore et lane non parallèle) ; l'annulation empêche le spawn avant et après confirmation et atteint la précompaction. La sortie Bash dite streaming est désormais émise une fois terminée. |
+| `fe04829f` | Enregistrement des outils externes idempotent, fréquences/IDF recalculées et cache invalidé ; index BM25 réutilisé à corpus équivalent, signature JSON déterministe et termes obsolètes purgés. |
+
+Preuves : **559/559** tests Tools/Bash élargis pour le premier sous-lot ;
+**136/136** tests Tools/RAG pour le second ; typecheck principal et Darkstar,
+lint ciblé sans erreur et `git diff --check` réussis. Deux contre-revues
+indépendantes ont donné **GO**. Le vrai flux stdout/stderr Bash reste une dette
+fonctionnelle explicite : il ne devra être réintroduit qu'à travers la voie
+gardée, jamais par appel direct à `BashTool`.
+
+Restent à reprendre séparément : JIT context, feedback/options de sélection,
+réponse finale vide et deltas de coût. La compression adaptative et l'ancienne
+implémentation d'annulation AsyncLocalStorage sont déjà remplacées dans la cible.
+
+## Lot 4 — Fleet lifecycle, premier sous-lot
+
+Le sous-lot autonome est commité sur
+`codex/portage-fleet-lifecycle-july-2026` :
+
+| Commit | Périmètre |
+|---|---|
+| `5d0e1589` | Les pongs WebSocket rafraîchissent l'activité des listeners passifs ; une fermeture inattendue rejette immédiatement les requêtes pendantes avec `DISCONNECTED` ; les chunks tardifs sont couverts et ignorés après résolution. |
+
+Preuves : **49/49** tests Fleet/lifecycle directs puis **95/95** tests WebSocket
+élargis ; typecheck principal et Darkstar, lint ciblé et diff-check réussis.
+Contre-revue indépendante : **GO**, sans double rejet, fuite de requête vers un
+socket reconnecté, changement d'auth/scopes ou fuite de ressource de test.
+
+Restent à reprendre séparément : saturation/rate-limit atomique, rétention
+bornée, assainissement Council, multiplexage borné et scopes no-auth loopback.
+
 ## Lots suivants
 
 | Ordre | Lot source | Tip | Patchs absents | Chevauchements estimés | Règle de reprise |
 |---:|---|---|---:|---:|---|
-| 2 | Tools/RAG | `064cdca1` | 14 | 24 | Porter annulation, sélection d'outils et correction JIT commit par commit ; réexaminer les deux correctifs de coût déjà partiellement remplacés. |
+| 2 | Tools/RAG | `064cdca1` | 14 | 24 | **Deux sous-lots portés** (`02735e6d`, `fe04829f`). Poursuivre par JIT, feedback/options, réponse vide et coûts, chacun séparément. |
 | 3 | Providers/context | `36ee15bd` | 11 | 19 | Prioriser compression des messages système, schémas `tools` et résultats synthétiques ; écarter les correctifs Gemini/annulation déjà équivalents. |
-| 4 | Fleet | `efe36039` | 11 | 8 | Traiter `pong`, requêtes pendantes, purge des tâches et nettoyage des réponses de pairs avant les fonctions nouvelles. |
+| 4 | Fleet | `efe36039` | 11 | 8 | **Lifecycle porté** (`5d0e1589`). Poursuivre par saturation/rétention, nettoyage Council, multiplexage et scopes loopback. |
 | 5 | Memory/self-improve | `d9b85fa0` | 10 | 10 | Porter les limites/gates et l'expurgation CKG ; ne pas intégrer la mémoire locale sale. |
 | 6 | Sensory | `d4edc8f2` | 9 | 11 | Sécurité d'abord, puis états de vision ; exécuter aussi les trois tests Python concernés. |
 | 7 | Voice | `5e388a64` | 8 | 20 | Compléter l'AEC courant par files audio, interruptions et faux vocatifs. |
