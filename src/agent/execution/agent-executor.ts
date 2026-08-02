@@ -708,7 +708,10 @@ export class AgentExecutor {
       : executionExtra;
 
     const execute = async (): Promise<{ result: ToolResult; streamChunks: string[] }> => {
-      const streamingTools = new Set(['bash', 'reason', 'generate_document']);
+      // Bash must use the normal ToolHandler dispatch below so central policy,
+      // hooks, RunStore telemetry and lane serialization cannot be bypassed.
+      // StreamingAdapter still emits the completed command output.
+      const streamingTools = new Set(['reason', 'generate_document']);
       if (streamingTools.has(toolCall.function.name)) {
         const generator = this.deps.toolHandler.executeToolStreaming(toolCall, extraWithSignal);
         let generated = await generator.next();
@@ -1430,6 +1433,9 @@ export class AgentExecutor {
                   const r = await this.deps.client.chat(
                     flushMsgs.map(m => ({ role: m.role, content: m.content })),
                     [],
+                    abortController?.signal
+                      ? { signal: abortController.signal }
+                      : undefined,
                   );
                   return r.choices[0]?.message?.content ?? 'NO_REPLY';
                 }

@@ -54,11 +54,25 @@ describe('StreamingToolAdapter', () => {
     });
 
     it('should return false for non-streaming tools', () => {
-      expect(adapter.supportsStreaming('bash')).toBe(false);
       expect(adapter.supportsStreaming('reason')).toBe(false);
       expect(adapter.supportsStreaming('create_file')).toBe(false);
       expect(adapter.supportsStreaming('str_replace_editor')).toBe(false);
       expect(adapter.supportsStreaming('unknown_tool')).toBe(false);
+    });
+
+    it('should emit completed guarded bash output', async () => {
+      expect(adapter.supportsStreaming('bash')).toBe(true);
+      const execute = vi.fn<() => Promise<ToolResult>>().mockResolvedValue({
+        success: true,
+        output: 'command output',
+      });
+      const chunks: string[] = [];
+
+      const result = await adapter.wrapWithStreaming('bash', execute, chunk => chunks.push(chunk));
+
+      expect(execute).toHaveBeenCalledOnce();
+      expect(result).toEqual({ success: true, output: 'command output' });
+      expect(chunks).toEqual(['command output']);
     });
   });
 

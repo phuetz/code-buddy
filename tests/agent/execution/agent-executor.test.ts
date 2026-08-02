@@ -667,7 +667,7 @@ describe('AgentExecutor', () => {
       expect((deps.toolSelectionStrategy.selectToolsForQuery as jest.Mock).mock.calls[0][0])
         .toBe('crée le fichier demandé');
       expect(options.allowedToolNames).toBeUndefined();
-      expect(deps.toolHandler.executeToolStreaming).toHaveBeenCalledWith(
+      expect(deps.toolHandler.executeTool).toHaveBeenCalledWith(
         expect.objectContaining({
           function: expect.objectContaining({ name: 'bash' }),
         }),
@@ -1134,8 +1134,7 @@ describe('AgentExecutor', () => {
     });
 
     it('should handle multi-round tool execution', async () => {
-      // Phase D: bash is in STREAMING_TOOLS (uses executeToolStreaming, not executeTool).
-      // Use two non-streaming tools to keep counting executeTool calls reliable.
+      // Use two file tools to keep execution-count assertions focused.
       const toolCall1 = makeToolCall('read_file', { path: '/a.txt' }, 'call_1');
       const toolCall2 = makeToolCall('read_file', { path: '/b.txt' }, 'call_2');
 
@@ -1181,7 +1180,7 @@ describe('AgentExecutor', () => {
       config.maxToolRounds = 2;
       executor = new AgentExecutor(deps, config);
 
-      // Phase D: use non-streaming tool (bash bypasses executeTool counter).
+      // Use a file tool so this test stays focused on failure propagation.
       const toolCall = makeToolCall('read_file', { path: '/x.txt' });
 
       // Always return tool calls (infinite loop scenario)
@@ -1289,7 +1288,7 @@ describe('AgentExecutor', () => {
     });
 
     it('should handle tool execution failure', async () => {
-      // Phase D: bash uses executeToolStreaming. Use a non-streaming tool to mock executeTool failure.
+      // Use a file tool to mock executeTool failure directly.
       const toolCall = makeToolCall('read_file', { path: '/missing.txt' });
 
       setupLLMFlow(deps, [
@@ -2041,7 +2040,7 @@ describe('AgentExecutor', () => {
       expect(cancelChunk).toBeDefined();
     });
 
-    it('should use bash streaming for bash tool calls', async () => {
+    it('should route bash through guarded dispatch before emitting its output', async () => {
       const toolCall = makeToolCall('bash', { command: 'echo hello' }, 'call_bash');
 
       (deps.streamingHandler.getAccumulatedMessage as jest.Mock)
@@ -2053,16 +2052,10 @@ describe('AgentExecutor', () => {
         remainingContent: '',
       });
 
-      // Mock bash streaming generator
-      const mockGen = {
-        next: jest.fn()
-          .mockResolvedValueOnce({ value: 'hello\n', done: false })
-          .mockResolvedValueOnce({ value: undefined, done: true }),
-        return: jest.fn().mockResolvedValue({ done: true }),
-        throw: jest.fn(),
-        [Symbol.asyncIterator]() { return this; },
-      };
-      (deps.toolHandler.executeToolStreaming as jest.Mock).mockReturnValue(mockGen);
+      (deps.toolHandler.executeTool as jest.Mock).mockResolvedValueOnce({
+        success: true,
+        output: 'hello\n',
+      });
 
       (deps.client.chatStream as jest.Mock)
         .mockImplementationOnce(async function* () {
@@ -2082,6 +2075,9 @@ describe('AgentExecutor', () => {
       const toolStreamChunk = chunks.find(c => c.type === 'tool_stream');
       expect(toolStreamChunk).toBeDefined();
       expect(toolStreamChunk!.toolStreamData!.toolName).toBe('bash');
+      expect(toolStreamChunk!.toolStreamData!.delta).toBe('hello\n');
+      expect(deps.toolHandler.executeTool).toHaveBeenCalledWith(toolCall, undefined);
+      expect(deps.toolHandler.executeToolStreaming).not.toHaveBeenCalled();
     });
 
     it('should emit token_count updates during tool rounds', async () => {
@@ -2484,16 +2480,14 @@ describe('AgentExecutor', () => {
       expect(enqueueCall[2].parallel).toBe(true);
     });
 
-    it('should mark write tools as non-parallel', async () => {
+    it('should route bash through the non-parallel lane', async () => {
       const mockLaneQueue = {
         enqueue: jest.fn().mockImplementation((_lane: string, fn: () => unknown) => fn()),
       };
       deps.laneQueue = mockLaneQueue as any;
       executor = new AgentExecutor(deps, config);
 
-      // Phase D: `bash` is in STREAMING_TOOLS and bypasses executeToolViaLane.
-      // Use create_file (write tool, non-streaming) to test the lane queue path.
-      const toolCall = makeToolCall('create_file', { path: '/x.txt', content: 'x' }, 'call_1');
+      const toolCall = makeToolCall('bash', { command: 'echo guarded' }, 'call_1');
 
       setupLLMFlow(deps, [
         { content: 'Writing...', tool_calls: [toolCall] },
@@ -2503,10 +2497,13 @@ describe('AgentExecutor', () => {
       const history: ChatEntry[] = [];
       const messages: CodeBuddyMessage[] = [];
 
-      await executor.processUserMessage('Delete file', history, messages);
+      await executor.processUserMessage('Run the command', history, messages);
 
       const enqueueCall = mockLaneQueue.enqueue.mock.calls[0];
       expect(enqueueCall[2].parallel).toBe(false);
+      expect(enqueueCall[2].category).toBe('bash');
+      expect(deps.toolHandler.executeTool).toHaveBeenCalledWith(toolCall, undefined);
+      expect(deps.toolHandler.executeToolStreaming).not.toHaveBeenCalled();
     });
 
     it('should fall back to direct execution without lane queue', async () => {
@@ -2623,7 +2620,7 @@ describe('AgentExecutor', () => {
       const steerChunk = chunks.find((c: any) => c.type === 'steer');
       expect(steerChunk).toBeDefined();
       expect((steerChunk as any).steer.content).toBe('Stop and do this instead');
-      expect(deps.toolHandler.executeToolStreaming).toHaveBeenCalledWith(
+      expect(deps.toolHandler.executeTool).toHaveBeenCalledWith(
         toolCall,
         undefined,
       );

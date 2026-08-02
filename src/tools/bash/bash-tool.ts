@@ -129,6 +129,13 @@ export class BashTool implements Disposable {
     command: string,
     options: { timeout: number; cwd: string; signal?: AbortSignal }
   ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+    if (options.signal?.aborted) {
+      return Promise.resolve({
+        stdout: '',
+        stderr: 'Command aborted by user',
+        exitCode: 130,
+      });
+    }
     return new Promise((resolve) => {
       let stdout = '';
       let stderr = '';
@@ -457,6 +464,12 @@ export class BashTool implements Disposable {
           success: false,
           error: 'Executable identity changed after policy evaluation; retry the command for a fresh decision.',
         };
+      }
+
+      // Confirmation and sandbox routing are asynchronous. Cancellation may
+      // arrive while either is pending; never checkpoint or spawn afterward.
+      if (signal?.aborted) {
+        return { success: false, error: 'Command aborted by user' };
       }
 
       // Checkpoint files targeted by destructive commands (rm, mv, etc.)

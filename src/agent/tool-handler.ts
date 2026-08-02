@@ -1441,46 +1441,13 @@ export class ToolHandler {
 
     // Bash: stream stdout/stderr in real-time
     if (toolName === 'bash') {
-      try {
-        const args = JSON.parse(toolCall.function.arguments);
-        const command = args.command as string;
-        const timeout = (args.timeout as number) || 30000;
-
-        // A weaker model can emit a `bash` call without a `command` (or a
-        // non-string one). Fail with a clear, recoverable message instead of
-        // crashing downstream on `command.trim()` (auto-repair can then re-prompt).
-        if (typeof command !== 'string' || command.trim() === '') {
-          return {
-            success: false,
-            error:
-              'bash: missing a non-empty "command" string argument. Put the shell command to run in the "command" field.',
-          };
-        }
-
-        const directoryChange = this.changeSessionDirectory(
-          command,
-          this.currentWorkingDirectory ?? process.cwd(),
-        );
-        if (directoryChange) return directoryChange;
-
-        // Session cwd override — the streaming path is what embedded hosts
-        // (Cowork) actually exercise; without it, streamed bash ran in the
-        // Electron process cwd regardless of the session workingDirectory.
-        const gen = this.bash.executeStreaming(
-          command,
-          timeout,
-          this.currentWorkingDirectory,
-          abortSignalFromExecutionExtra(executionExtra),
-        );
-        let result = await gen.next();
-        while (!result.done) {
-          yield result.value;
-          result = await gen.next();
-        }
-        return result.value;
-      } catch (error) {
-        return { success: false, error: `Streaming execution error: ${getErrorMessage(error)}` };
-      }
+      // Keep the public streaming API safe as well: bash goes through the same
+      // central authorization, lifecycle hooks, telemetry and registry path as
+      // executeTool(). The completed output remains stream-compatible.
+      const result = await this.executeTool(toolCall, executionExtra);
+      const output = result.output || result.content;
+      if (output) yield output;
+      return result;
     }
 
     // Reason: stream MCTS progress events in real-time

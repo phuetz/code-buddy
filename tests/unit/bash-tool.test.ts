@@ -344,6 +344,24 @@ describe('BashTool', () => {
   });
 
   describe('Command Execution', () => {
+    it('does not spawn after cancellation arrives during confirmation', async () => {
+      const abortController = new AbortController();
+      mockRequestConfirmation.mockImplementationOnce(async () => {
+        abortController.abort();
+        return { confirmed: true };
+      });
+
+      const result = await bashTool.execute(
+        'npm install',
+        30000,
+        undefined,
+        abortController.signal,
+      );
+
+      expect(result).toEqual({ success: false, error: 'Command aborted by user' });
+      expect(mockSpawn).not.toHaveBeenCalled();
+    });
+
     it('should execute a simple command successfully', async () => {
       const mockProcess = createMockChildProcess();
       mockSpawn.mockReturnValue(mockProcess);

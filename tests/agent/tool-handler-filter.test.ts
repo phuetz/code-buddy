@@ -122,6 +122,33 @@ describe('ToolHandler active tool filter enforcement', () => {
     });
   });
 
+  it('routes allowed streaming bash through the guarded executeTool path', async () => {
+    const { handler } = makeHandler();
+    const execute = vi.spyOn(handler, 'executeTool').mockResolvedValue({
+      success: true,
+      output: 'guarded output',
+    });
+    const call = {
+      id: 'call-guarded-bash',
+      type: 'function' as const,
+      function: {
+        name: 'bash',
+        arguments: JSON.stringify({ command: 'echo guarded' }),
+      },
+    };
+    const stream = handler.executeToolStreaming(call);
+
+    await expect(stream.next()).resolves.toEqual({
+      done: false,
+      value: 'guarded output',
+    });
+    await expect(stream.next()).resolves.toEqual({
+      done: true,
+      value: { success: true, output: 'guarded output' },
+    });
+    expect(execute).toHaveBeenCalledWith(call, undefined);
+  });
+
   it('records active filter blocks in run telemetry without marking the tool as used', async () => {
     setToolFilter({
       enabledPatterns: ['view_file'],
