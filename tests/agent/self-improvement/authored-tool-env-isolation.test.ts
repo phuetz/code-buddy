@@ -16,13 +16,21 @@ import { executeCode } from '../../../src/tools/execute-code-runner.js';
 
 const SECRET_KEY = 'CODEBUDDY_TEST_FAKE_API_KEY';
 const SECRET_VALUE = 'sk-must-never-leak-1234567890';
+const ORIGINAL_NODE_OPTIONS = process.env.NODE_OPTIONS;
+const ORIGINAL_NODE_PATH = process.env.NODE_PATH;
 
 beforeEach(() => {
   process.env[SECRET_KEY] = SECRET_VALUE;
+  process.env.NODE_OPTIONS = '--trace-warnings';
+  process.env.NODE_PATH = '/tmp/fake-node-path';
 });
 
 afterEach(() => {
   delete process.env[SECRET_KEY];
+  if (ORIGINAL_NODE_OPTIONS === undefined) delete process.env.NODE_OPTIONS;
+  else process.env.NODE_OPTIONS = ORIGINAL_NODE_OPTIONS;
+  if (ORIGINAL_NODE_PATH === undefined) delete process.env.NODE_PATH;
+  else process.env.NODE_PATH = ORIGINAL_NODE_PATH;
 });
 
 describe('authored tool sandbox — env isolation', () => {
@@ -69,6 +77,26 @@ describe('authored tool sandbox — env isolation', () => {
     const res = await tool.execute({ n: 21 });
     expect(res.success).toBe(true);
     expect(String(res.output).trim()).toBe('42');
+  }, 30_000);
+
+  it('drops inherited and caller-supplied Node injection variables in isolate mode', async () => {
+    const res = await executeCode({
+      code: `console.log(JSON.stringify({ options: process.env.NODE_OPTIONS ?? null, path: process.env.NODE_PATH ?? null, lowerOptions: process.env.node_options ?? null, lowerPath: process.env.node_path ?? null }));`,
+      language: 'javascript',
+      env: {
+        NODE_OPTIONS: '--import=/tmp/evil.mjs',
+        NODE_PATH: '/tmp/evil-modules',
+        node_options: '--require /tmp/lowercase.js',
+        node_path: '/tmp/lowercase-modules',
+      },
+    }, { envMode: 'isolate' });
+    expect(res.ok).toBe(true);
+    expect(JSON.parse(res.stdout.trim())).toEqual({
+      options: null,
+      path: null,
+      lowerOptions: null,
+      lowerPath: null,
+    });
   }, 30_000);
 
   it('inherit mode (default) still exposes the env for the user-facing execute_code tool', async () => {

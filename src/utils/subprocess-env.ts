@@ -76,6 +76,8 @@ const SAFE_ENV_KEYS = new Set([
 const SECRET_NAME_PATTERN =
   /(^|_)(KEY|SECRET|TOKEN|PASSWORD|PASSWD|CREDENTIAL|PRIVATE|AUTH|DATABASE_URL|DSN|COOKIE|SESSION)($|_)/i;
 
+const HARD_BLOCKED_ENV_KEYS = new Set(['NODE_OPTIONS', 'NODE_PATH']);
+
 const SECRET_VALUE_PATTERNS = [
   /^sk-[a-zA-Z0-9_-]{20,}$/,
   /^xai-[a-zA-Z0-9_-]{20,}$/,
@@ -110,14 +112,20 @@ export function buildFilteredSubprocessEnv(
   const env: NodeJS.ProcessEnv = {};
 
   for (const key of allowed) {
-    if (denied.has(key)) continue;
+    if (denied.has(key) || HARD_BLOCKED_ENV_KEYS.has(key.toUpperCase())) continue;
     const value = sourceEnv[key];
     if (value === undefined || !isValidEnvKey(key) || isSecretLikeEnv(key, value)) continue;
     env[key] = sanitizeEnvValue(value);
   }
 
   for (const [key, value] of Object.entries(options.extraEnv ?? {})) {
-    if (value === undefined || denied.has(key) || !isValidEnvKey(key) || SECRET_NAME_PATTERN.test(key)) continue;
+    if (
+      value === undefined ||
+      denied.has(key) ||
+      HARD_BLOCKED_ENV_KEYS.has(key.toUpperCase()) ||
+      !isValidEnvKey(key) ||
+      SECRET_NAME_PATTERN.test(key)
+    ) continue;
     env[key] = sanitizeEnvValue(value);
   }
 

@@ -31,7 +31,7 @@ import { SECRET_PATTERNS } from './secret-patterns.js';
  * running the (comparatively expensive) pattern battery.
  */
 const SENTINEL_RE =
-  /sk-|sk_|xox|AKIA|ghp_|github_pat_|glpat-|AIza|-----BEGIN|Bearer |eyJ/;
+  /sk-|sk_|xai-|gsk_|npm_|xox|AKIA|ghp_|github_pat_|glpat-|AIza|-----BEGIN|Bearer |eyJ/;
 
 // ============================================================================
 // Scrub patterns
@@ -100,6 +100,26 @@ const ADDED: ScrubPattern[] = [
   {
     regex: /(?<![A-Za-z0-9-])sk-proj-[A-Za-z0-9_-]{20,}/g,
     replacement: '[REDACTED:openai_key]',
+  },
+  // OpenRouter API key.
+  {
+    regex: /(?<![A-Za-z0-9-])sk-or-v1-[A-Za-z0-9_-]{20,}/g,
+    replacement: '[REDACTED:openrouter_key]',
+  },
+  // xAI API key.
+  {
+    regex: /(?<![A-Za-z0-9-])xai-[A-Za-z0-9_-]{20,}/g,
+    replacement: '[REDACTED:xai_key]',
+  },
+  // Groq API key.
+  {
+    regex: /(?<![A-Za-z0-9_])gsk_[A-Za-z0-9_-]{20,}/g,
+    replacement: '[REDACTED:groq_key]',
+  },
+  // npm access token.
+  {
+    regex: /(?<![A-Za-z0-9_])npm_[A-Za-z0-9]{36}(?![A-Za-z0-9_])/g,
+    replacement: '[REDACTED:npm_token]',
   },
   // OpenAI classic secret key (alphanumeric body — no internal hyphen).
   {

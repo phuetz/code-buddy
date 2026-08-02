@@ -191,8 +191,8 @@ export const SAFE_ENV_VARS: Set<string> = new Set([
   'TMP',
   // Node.js
   'NODE_ENV',
-  'NODE_PATH',
-  'NODE_OPTIONS',
+  // NODE_PATH and NODE_OPTIONS are deliberately excluded: both can execute or
+  // resolve attacker-controlled JavaScript in every spawned Node process.
   // Development tools
   'EDITOR',
   'VISUAL',

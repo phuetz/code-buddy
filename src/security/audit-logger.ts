@@ -9,6 +9,7 @@
 import fs from 'fs';
 import path from 'path';
 import { logger } from '../utils/logger.js';
+import { scrubSecrets, scrubValue } from './secret-scrubber.js';
 
 export type AuditAction =
   | 'code_validation'
@@ -98,8 +99,11 @@ class AuditLoggerImpl {
       sessionId: this.sessionId,
     };
 
+    // Never retain raw credentials in the in-memory audit buffer or JSONL.
+    const scrubbed = scrubValue(full) as AuditEntry;
+
     // In-memory buffer
-    this.entries.push(full);
+    this.entries.push(scrubbed);
     if (this.entries.length > this.maxEntries) {
       this.entries = this.entries.slice(-Math.floor(this.maxEntries * 0.8));
     }
@@ -107,7 +111,7 @@ class AuditLoggerImpl {
     // Append to file
     if (this.logFile) {
       try {
-        fs.appendFileSync(this.logFile, JSON.stringify(full) + '\n');
+        fs.appendFileSync(this.logFile, scrubSecrets(JSON.stringify(scrubbed)) + '\n');
       } catch {
         // Silently fail file writes — don't block operations
       }
@@ -115,10 +119,10 @@ class AuditLoggerImpl {
 
     // Also emit to structured logger
     logger.debug('audit', {
-      action: full.action,
-      decision: full.decision,
-      source: full.source,
-      target: full.target,
+      action: scrubbed.action,
+      decision: scrubbed.decision,
+      source: scrubbed.source,
+      target: scrubbed.target,
     });
   }
 

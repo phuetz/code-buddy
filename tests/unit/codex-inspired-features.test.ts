@@ -42,13 +42,22 @@ describe('Guardian Sub-Agent', () => {
     expect(result.riskScore).toBeGreaterThan(80);
   });
 
-  it('should prompt user when no LLM configured', async () => {
+  it('should deny when no LLM or interactive approval surface is configured', async () => {
     const result = await mod.evaluateToolCall({
       toolName: 'str_replace_editor',
       content: 'edit src/main.ts',
       cwd: '/project',
     });
-    // No LLM = fail to prompt_user
+    expect(result.decision).toBe('deny');
+  });
+
+  it('should prompt only when a real approval surface is available', async () => {
+    const result = await mod.evaluateToolCall({
+      toolName: 'str_replace_editor',
+      content: 'edit src/main.ts',
+      cwd: '/project',
+      canPromptUser: true,
+    });
     expect(result.decision).toBe('prompt_user');
   });
 
@@ -149,6 +158,29 @@ describe('Shell Env Policy — Enhanced Patterns', () => {
     expect(env.HOME).toBe('/home/user');
     expect(env.GITHUB_TOKEN).toBeUndefined();
     expect(env.RANDOM_VAR).toBeUndefined();
+  });
+
+  it('never passes NODE_OPTIONS or NODE_PATH through any policy override', () => {
+    const source = {
+      PATH: '/usr/bin',
+      NODE_OPTIONS: '--require /tmp/evil.js',
+      NODE_PATH: '/tmp/evil-modules',
+    };
+    expect(new ShellEnvPolicy({ inherit: 'all' }).buildEnv(source)).not.toMatchObject({
+      NODE_OPTIONS: expect.anything(),
+      NODE_PATH: expect.anything(),
+    });
+    expect(new ShellEnvPolicy({ inherit: 'core' }).buildEnv(source)).not.toHaveProperty('NODE_PATH');
+    expect(new ShellEnvPolicy({ inherit: 'all', include_only: ['NODE_*'] }).buildEnv(source))
+      .toEqual({});
+    expect(new ShellEnvPolicy({ inherit: 'none', set: {
+      NODE_OPTIONS: '--import=/tmp/evil.mjs',
+      NODE_PATH: '/tmp/evil-modules',
+    } }).buildEnv(source)).toEqual({});
+    expect(new ShellEnvPolicy({ inherit: 'all', set: {
+      NoDe_OpTiOnS: '--require /tmp/evil.js',
+      nOdE_pAtH: '/tmp/evil-modules',
+    } }).buildEnv(source)).toEqual({ PATH: '/usr/bin' });
   });
 });
 

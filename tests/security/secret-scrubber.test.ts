@@ -24,6 +24,10 @@ import { OtelTracer } from '../../src/telemetry/otel-tracer.js';
 // ---------------------------------------------------------------------------
 const SECRETS: Record<string, string> = {
   openai: 'sk-' + 'a'.repeat(48),
+  openrouter: 'sk-or-v1-' + 'o'.repeat(64),
+  xai: 'xai-' + 'x'.repeat(48),
+  groq: 'gsk_' + 'q'.repeat(48),
+  npm: 'npm_' + 'n'.repeat(36),
   anthropic: 'sk-ant-api03-' + 'b'.repeat(90),
   github_pat: 'ghp_' + 'c'.repeat(36),
   github_fine: 'github_pat_' + 'd'.repeat(82),
@@ -88,6 +92,14 @@ describe('scrubSecrets', () => {
       'disk-usage-monitoring and asks-questions. theyJumped over. ' +
       'Bearer of good news. AKIAA is too short. Nothing to redact here.';
     expect(scrubSecrets(normal)).toBe(normal);
+  });
+
+  it('does not mistake ordinary npm lifecycle variables for access tokens', () => {
+    expect(scrubSecrets('npm_package_dependencies_typescript'))
+      .toBe('npm_package_dependencies_typescript');
+    const tokenLikeVariable = `npm_${'a'.repeat(36)}_suffix`;
+    expect(scrubSecrets(tokenLikeVariable)).toBe(tokenLikeVariable);
+    expect(scrubSecrets(SECRETS.npm!)).toBe('[REDACTED:npm_token]');
   });
 
   it('returns an empty string unchanged (fast path)', () => {

@@ -33,6 +33,21 @@ describe('env-blocklist', () => {
       expect(result).not.toHaveProperty('GLIBC_TUNABLES');
     });
 
+    it('strips NODE_OPTIONS and NODE_PATH code-injection vectors', () => {
+      const result = sanitizeEnvVars({
+        NODE_OPTIONS: '--require /tmp/evil.js',
+        NODE_PATH: '/tmp/evil-modules',
+        node_options: '--import=/tmp/lowercase.mjs',
+        PATH: '/usr/bin',
+      });
+      expect(result).not.toHaveProperty('NODE_OPTIONS');
+      expect(result).not.toHaveProperty('NODE_PATH');
+      expect(result).not.toHaveProperty('node_options');
+      expect(result.PATH).toBe('/usr/bin');
+      expect(BLOCKED_ENV_VARS.has('NODE_OPTIONS')).toBe(true);
+      expect(BLOCKED_ENV_VARS.has('NODE_PATH')).toBe(true);
+    });
+
     it('removes _JAVA_OPTIONS and JAVA_TOOL_OPTIONS', () => {
       const result = sanitizeEnvVars({
         _JAVA_OPTIONS: '-Xmx512m',

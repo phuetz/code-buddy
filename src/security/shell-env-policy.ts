@@ -11,7 +11,7 @@
  *   inherit = "all"          # all | core | none
  *   exclude = ["*SECRET*", "*TOKEN*", "*KEY*", "*PASSWORD*"]
  *   include_only = []        # if set, only these vars pass (overrides exclude)
- *   # set = { NODE_ENV = "production" }  # always-injected overrides
+ *   # set = { NODE_ENV = "production" }  # forced overrides (except hard-blocked injection vars)
  *
  * Defaults strip variables matching common credential patterns while
  * preserving PATH, HOME, USER, SHELL, TERM, LANG, etc.
@@ -33,7 +33,7 @@ export interface ShellEnvPolicyConfig {
   exclude?: string[];
   /** If non-empty, ONLY these vars are passed (overrides exclude) */
   include_only?: string[];
-  /** Key/value pairs always injected into every subprocess env */
+  /** Forced key/value pairs, except hard-blocked runtime injection variables */
   set?: Record<string, string>;
 }
 
@@ -47,7 +47,7 @@ const CORE_VARS = new Set([
   'LANG', 'LC_ALL', 'LC_CTYPE', 'TZ', 'TMPDIR', 'TEMP', 'TMP',
   'PWD', 'OLDPWD', 'SHLVL', 'COLORTERM', 'CLICOLOR',
   // Node.js / npm
-  'NODE_ENV', 'NODE_PATH', 'NPM_CONFIG_PREFIX',
+  'NODE_ENV', 'NPM_CONFIG_PREFIX',
   // Common CI vars (non-sensitive)
   'CI', 'GITHUB_ACTIONS', 'GITLAB_CI',
 ]);
@@ -153,9 +153,17 @@ export class ShellEnvPolicy {
       }
     }
 
-    // Step 4: inject forced overrides
+    // Step 4: inject forced overrides; the hard invariant below still wins.
     for (const [key, value] of Object.entries(this.config.set)) {
       env[key] = value;
+    }
+
+    // Hard security invariant: user configuration must not re-enable Node's
+    // startup/module injection variables through inherit, include_only or set.
+    for (const key of Object.keys(env)) {
+      if (key.toUpperCase() === 'NODE_OPTIONS' || key.toUpperCase() === 'NODE_PATH') {
+        delete env[key];
+      }
     }
 
     return env;

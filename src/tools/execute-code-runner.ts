@@ -54,7 +54,8 @@ export interface ExecuteCodeRunnerOptions {
 /**
  * Build the child env under isolation: a minimal allowlist of the parent's
  * non-secret vars, a HOME redirected into the throwaway run dir, plus the
- * caller-supplied overrides. Nothing else from `process.env` crosses over.
+ * caller-supplied overrides except hard-blocked runtime injection variables.
+ * Nothing else from `process.env` crosses over.
  */
 function buildIsolatedEnv(runDir: string, callerEnv: Record<string, string>): Record<string, string> {
   const ALLOW = new Set([
@@ -62,7 +63,6 @@ function buildIsolatedEnv(runDir: string, callerEnv: Record<string, string>): Re
     'LANG', 'LC_ALL', 'LC_CTYPE', 'LANGUAGE', 'TZ', // locale / time
     'TMPDIR', 'TMP', 'TEMP', // temp dir
     'SYSTEMROOT', 'SystemRoot', 'COMSPEC', 'ComSpec', 'PATHEXT', 'WINDIR', // Windows runtime
-    'NODE_PATH',
   ]);
   const out: Record<string, string> = {};
   for (const [k, v] of Object.entries(process.env)) {
@@ -72,7 +72,13 @@ function buildIsolatedEnv(runDir: string, callerEnv: Record<string, string>): Re
   // (~/.codebuddy/*.json) cannot be read by path.
   out.HOME = runDir;
   out.USERPROFILE = runDir;
-  return { ...out, ...callerEnv };
+  const merged = { ...out, ...callerEnv };
+  for (const key of Object.keys(merged)) {
+    if (key.toUpperCase() === 'NODE_OPTIONS' || key.toUpperCase() === 'NODE_PATH') {
+      delete merged[key];
+    }
+  }
+  return merged;
 }
 
 export interface ExecuteCodeResult {

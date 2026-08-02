@@ -41,6 +41,16 @@ describe('getFilteredEnv — allowlist', () => {
     expect(env.AWS_SECRET_ACCESS_KEY).toBeUndefined();
     expect(env.SOME_RANDOM_APP_VAR).toBeUndefined();
   });
+
+  it('drops NODE_OPTIONS and NODE_PATH even when inherited', () => {
+    process.env.NODE_OPTIONS = '--require /tmp/evil.js';
+    process.env.NODE_PATH = '/tmp/evil-modules';
+
+    const env = getFilteredEnv();
+
+    expect(env.NODE_OPTIONS).toBeUndefined();
+    expect(env.NODE_PATH).toBeUndefined();
+  });
 });
 
 describe('getFilteredEnv — secret-value scan (even allowlisted names)', () => {

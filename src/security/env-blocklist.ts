@@ -30,6 +30,10 @@ export const BLOCKED_ENV_VARS: Set<string> = new Set([
   // Python
   'PYTHONBREAKPOINT',
 
+  // Node.js code/module injection
+  'NODE_OPTIONS',
+  'NODE_PATH',
+
   // Shared library injection
   'LD_PRELOAD',
   'LD_LIBRARY_PATH',
@@ -61,12 +65,13 @@ export function sanitizeEnvVars(env: Record<string, string>): Record<string, str
   const sanitized: Record<string, string> = {};
 
   for (const [key, value] of Object.entries(env)) {
-    if (BLOCKED_ENV_VARS.has(key)) {
+    const normalizedKey = key.toUpperCase();
+    if (BLOCKED_ENV_VARS.has(normalizedKey)) {
       logger.debug(`Blocked env var (exact match): ${key}`);
       continue;
     }
 
-    const prefixBlocked = BLOCKED_ENV_PREFIXES.some((prefix) => key.startsWith(prefix));
+    const prefixBlocked = BLOCKED_ENV_PREFIXES.some((prefix) => normalizedKey.startsWith(prefix));
     if (prefixBlocked) {
       logger.debug(`Blocked env var (prefix match): ${key}`);
       continue;
