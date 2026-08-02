@@ -1,7 +1,8 @@
 # Portage des audits de juillet — matrice de reprise
 
-**État au 2 août 2026.** Le lot sécurité, deux sous-lots Tools/RAG et le
-sous-lot Fleet lifecycle sont portés et commités sur trois branches isolées ;
+**État au 2 août 2026.** Le lot sécurité, deux sous-lots Tools/RAG, le
+sous-lot Fleet lifecycle, le premier sous-lot Providers/context et l'activation
+LM-Resizer + Code Explorer sont portés et commités sur cinq branches isolées ;
 ce document n'autorise toujours aucun merge ou push. Les
 branches sources et leurs rapports ont été protégés par la sauvegarde P0
 décrite dans `/home/patrice/Backups/code-buddy/2026-08-02-p0/MANIFESTE.md`.
@@ -15,7 +16,9 @@ lots Tools/RAG et Fleet. Aucun portage n'a été basé sur `main`, `origin/main`
 
 La branche `codex/portage-security-july-2026` part de `c0dfa4ba`. Les branches
 `codex/portage-tools-rag-july-2026` et
-`codex/portage-fleet-lifecycle-july-2026` partent de `33a0a41c`. Le « continue »
+`codex/portage-fleet-lifecycle-july-2026` partent de `33a0a41c`.
+`codex/portage-providers-context-july-2026` et
+`codex/activate-lm-resizer-code-explorer` partent de `b192eba3`. Le « continue »
 de Patrice a autorisé ces portages isolés, mais pas leur intégration dans la
 branche média.
 
@@ -101,12 +104,50 @@ socket reconnecté, changement d'auth/scopes ou fuite de ressource de test.
 Restent à reprendre séparément : saturation/rate-limit atomique, rétention
 bornée, assainissement Council, multiplexage borné et scopes no-auth loopback.
 
+## Lot 3 — Providers/context, premier sous-lot
+
+Le sous-lot autonome est commité sur
+`codex/portage-providers-context-july-2026` :
+
+| Commit | Périmètre |
+|---|---|
+| `029c53e1` | Conservation ordonnée de tous les messages système pendant la compression, comptage multimodal des images une seule fois et résultats synthétiques de réparation portant le nom de l'outil. |
+
+Preuves : **593/593** tests context/provider élargis ; typecheck principal et
+Darkstar, lint ciblé et diff-check réussis. Contre-revue indépendante : **GO**.
+Réserves non bloquantes : estimation fixe de 1 100 tokens par image, ventilation
+multimodale approximative dans le diagnostic de budget et possibilité qu'un
+prompt uniquement système dépasse un budget artificiellement minuscule.
+
+Restent à reprendre séparément : schémas `tools` et autres corrections provider
+qui ne sont pas déjà équivalentes dans la cible.
+
+## Lot transversal — LM-Resizer et Code Explorer
+
+L'activation réelle des deux moteurs est commitée sur
+`codex/activate-lm-resizer-code-explorer` :
+
+| Commit | Périmètre |
+|---|---|
+| `09e07313` | LM-Resizer activé par défaut avec opt-out et repli brut ; Code Explorer canonique sélectionné pour les questions de relations, résolution sûre du dépôt multi-index, chargement MCP headless borné et durci contre les commandes de dépôt usurpées. |
+
+Preuves : **542/542** tests ciblés sur 17 fichiers ; typecheck principal et
+Darkstar ; lint global sans erreur ; diff-check propre ; handshake réel du
+serveur canonique avec **31 outils**. Trois contre-revues indépendantes ont
+donné **GO** sur LM-Resizer, la barrière MCP headless et le routage multi-index.
+Le nom `gitnexus` ne subsiste que comme alias d'exécutable/préfixe historique de
+compatibilité ; le produit et le serveur sont nommés **Code Explorer**.
+
+L'index local Code Explorer de `/home/patrice/code-buddy` a ensuite été reconstruit
+au commit `b192eba3` : 6 130 fichiers, 124 583 nœuds, 298 368 arêtes, 10 328
+communautés et 75 processus. Cette reconstruction est locale et ignorée par Git.
+
 ## Lots suivants
 
 | Ordre | Lot source | Tip | Patchs absents | Chevauchements estimés | Règle de reprise |
 |---:|---|---|---:|---:|---|
 | 2 | Tools/RAG | `064cdca1` | 14 | 24 | **Deux sous-lots portés** (`02735e6d`, `fe04829f`). Poursuivre par JIT, feedback/options, réponse vide et coûts, chacun séparément. |
-| 3 | Providers/context | `36ee15bd` | 11 | 19 | Prioriser compression des messages système, schémas `tools` et résultats synthétiques ; écarter les correctifs Gemini/annulation déjà équivalents. |
+| 3 | Providers/context | `36ee15bd` | 11 | 19 | **Premier sous-lot porté** (`029c53e1`) : systèmes, multimodal et résultats synthétiques. Poursuivre par les schémas `tools` et écarts provider réellement absents. |
 | 4 | Fleet | `efe36039` | 11 | 8 | **Lifecycle porté** (`5d0e1589`). Poursuivre par saturation/rétention, nettoyage Council, multiplexage et scopes loopback. |
 | 5 | Memory/self-improve | `d9b85fa0` | 10 | 10 | Porter les limites/gates et l'expurgation CKG ; ne pas intégrer la mémoire locale sale. |
 | 6 | Sensory | `d4edc8f2` | 9 | 11 | Sécurité d'abord, puis états de vision ; exécuter aussi les trois tests Python concernés. |
