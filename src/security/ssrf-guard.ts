@@ -26,6 +26,8 @@ import { logger } from '../utils/logger.js';
 export interface SSRFCheckResult {
   safe: boolean;
   reason?: string;
+  /** A hostname needs the asynchronous DNS-aware check before it can be allowed. */
+  requiresDns?: boolean;
   /** DNS addresses that were resolved and validated for this check. */
   addresses?: Array<{ address: string; family: number }>;
 }
@@ -339,10 +341,7 @@ export class SSRFGuard {
     return { safe: true };
   }
 
-  /**
-   * Synchronous check for IP literals only (no DNS).
-   * Use for fast path when URL is already an IP literal.
-   */
+  /** Synchronous check. Hostnames fail closed with `requiresDns: true`. */
   isSafeUrlSync(rawUrl: string): SSRFCheckResult {
     let parsed: URL;
     try {
@@ -356,11 +355,17 @@ export class SSRFGuard {
     }
 
     const host = parsed.hostname;
+
+    if (this.isAllowedHost(host)) return { safe: true };
+
     const ipCheck = this.checkIpLiteral(host);
     if (ipCheck !== null) return ipCheck;
 
-    // Cannot verify hostname without DNS — return safe (async version required)
-    return { safe: true };
+    return {
+      safe: false,
+      requiresDns: true,
+      reason: 'Hostname requires asynchronous DNS validation',
+    };
   }
 
   private isAllowedHost(host: string): boolean {
@@ -427,7 +432,13 @@ export class SSRFGuard {
 let _guard: SSRFGuard | null = null;
 
 export function getSSRFGuard(config?: SSRFGuardConfig): SSRFGuard {
-  if (!_guard) _guard = new SSRFGuard(config);
+  if (!_guard) {
+    _guard = new SSRFGuard(config);
+  } else if (config) {
+    logger.warn(
+      'getSSRFGuard ignored configuration after initialization; call resetSSRFGuard() first',
+    );
+  }
   return _guard;
 }
 

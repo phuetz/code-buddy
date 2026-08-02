@@ -75,7 +75,11 @@ export function validateRule(rule: SensoryRule): { ok: boolean; errors: string[]
     if (!a.prompt?.trim()) errors.push('agent action needs a prompt');
   } else if (a.type === 'webhook') {
     const urlCheck = getSSRFGuard().isSafeUrlSync(a.url ?? '');
-    if (!urlCheck.safe) errors.push(`webhook url rejected by SSRF guard: ${urlCheck.reason}`);
+    // Hostnames require the async DNS-aware validation in validateRuleForUse().
+    // Structural validation still rejects protocols and unsafe IP literals here.
+    if (!urlCheck.safe && !urlCheck.requiresDns) {
+      errors.push(`webhook url rejected by SSRF guard: ${urlCheck.reason}`);
+    }
   } else if (a.type !== 'alert') {
     errors.push(`unknown action.type '${(a as { type?: string }).type}'`);
   }

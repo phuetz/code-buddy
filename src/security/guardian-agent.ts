@@ -38,6 +38,8 @@ export interface GuardianContext {
   recentFiles?: string[];
   /** Whether YOLO mode is active */
   yoloMode?: boolean;
+  /** Whether a real interactive surface can resolve a prompt_user decision. */
+  canPromptUser?: boolean;
 }
 
 /** LLM call function signature (injected to avoid circular deps) */
@@ -237,7 +239,7 @@ let _llmCall: GuardianLLMCall | null = null;
  * Set the LLM call function for the guardian.
  * Called during agent initialization.
  */
-export function setGuardianLLMCall(fn: GuardianLLMCall): void {
+export function setGuardianLLMCall(fn: GuardianLLMCall | null): void {
   _llmCall = fn;
 }
 
@@ -289,17 +291,22 @@ function quickEval(ctx: GuardianContext): GuardianEvaluation | null {
  *
  * @returns GuardianEvaluation with risk score and decision
  */
+function failClosedDecision(ctx: GuardianContext): GuardianEvaluation['decision'] {
+  return !ctx.yoloMode && ctx.canPromptUser === true ? 'prompt_user' : 'deny';
+}
+
 export async function evaluateToolCall(ctx: GuardianContext): Promise<GuardianEvaluation> {
   // Quick heuristic check first
   const quick = quickEval(ctx);
   if (quick) return quick;
 
-  // If no LLM call configured, fail-open for non-dangerous operations
+  // No reviewer means no automatic authorization.
   if (!_llmCall) {
+    const decision = failClosedDecision(ctx);
     return {
       riskScore: 50,
-      reasoning: 'Guardian LLM not configured — defaulting to prompt user',
-      decision: 'prompt_user',
+      reasoning: `Guardian LLM not configured — ${decision === 'deny' ? 'denying' : 'prompting user'}`,
+      decision,
       risks: ['No guardian LLM available'],
     };
   }
@@ -325,31 +332,45 @@ export async function evaluateToolCall(ctx: GuardianContext): Promise<GuardianEv
     const jsonMatch = response.match(/\{[\s\S]*?\}/);
     if (!jsonMatch) {
       logger.debug('Guardian: failed to parse LLM response');
-      return { riskScore: 50, reasoning: 'Failed to parse guardian response', decision: 'prompt_user', risks: [] };
+      return { riskScore: 50, reasoning: 'Failed to parse guardian response', decision: failClosedDecision(ctx), risks: [] };
     }
 
     const parsed = JSON.parse(jsonMatch[0]);
-    const riskScore = typeof parsed.risk_score === 'number'
-      ? Math.max(0, Math.min(100, parsed.risk_score))
-      : 50;
-    const reasoning = typeof parsed.reasoning === 'string' ? parsed.reasoning : '';
-    const risks = Array.isArray(parsed.risks) ? parsed.risks.filter((r: unknown) => typeof r === 'string') : [];
+    if (
+      typeof parsed.risk_score !== 'number' ||
+      !Number.isFinite(parsed.risk_score) ||
+      parsed.risk_score < 0 ||
+      parsed.risk_score > 100 ||
+      typeof parsed.reasoning !== 'string' ||
+      !Array.isArray(parsed.risks) ||
+      !parsed.risks.every((risk: unknown) => typeof risk === 'string')
+    ) {
+      return {
+        riskScore: 50,
+        reasoning: 'Guardian response did not match the required safety schema',
+        decision: failClosedDecision(ctx),
+        risks: ['Invalid guardian response schema'],
+      };
+    }
+    const riskScore = parsed.risk_score;
+    const reasoning = parsed.reasoning;
+    const risks = parsed.risks as string[];
 
     const decision: GuardianEvaluation['decision'] =
       riskScore < AUTO_APPROVE_THRESHOLD ? 'approve' :
       riskScore >= 90 ? 'deny' :
-      'prompt_user';
+      failClosedDecision(ctx);
 
     logger.debug(`Guardian: ${ctx.toolName} → risk=${riskScore}, decision=${decision}`);
 
     return { riskScore, reasoning, decision, risks };
   } catch (err) {
-    // Fail-closed: on any error, prompt the user
+    // Fail closed unless a real interactive surface can adjudicate.
     logger.debug(`Guardian evaluation failed: ${err instanceof Error ? err.message : String(err)}`);
     return {
       riskScore: 50,
       reasoning: `Guardian evaluation failed: ${err instanceof Error ? err.message : 'unknown error'}`,
-      decision: 'prompt_user',
+      decision: failClosedDecision(ctx),
       risks: ['Guardian evaluation failed'],
     };
   }

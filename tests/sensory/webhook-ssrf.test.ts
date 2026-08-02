@@ -11,6 +11,9 @@ import {
 import { getGlobalEventBus } from '../../src/events/event-bus.js';
 import { getSSRFGuard, resetSSRFGuard } from '../../src/security/ssrf-guard.js';
 
+const dnsMocks = vi.hoisted(() => ({ lookup: vi.fn() }));
+vi.mock('node:dns/promises', () => ({ lookup: dnsMocks.lookup }));
+
 function webhookRule(url: string): SensoryRule {
   return {
     id: 'webhook-rule',
@@ -29,6 +32,7 @@ describe('sensory webhook SSRF protection', () => {
     process.env.CODEBUDDY_SENSORY_RULES_FILE = path.join(tempDir, 'sensory-rules.json');
     process.env.CODEBUDDY_RULE_RUNS_FILE = path.join(tempDir, 'rule-runs.jsonl');
     resetSSRFGuard();
+    dnsMocks.lookup.mockReset();
     getSSRFGuard({ allowedHosts: ['hooks.example'], resolveDns: false });
   });
 
@@ -98,5 +102,26 @@ describe('sensory webhook SSRF protection', () => {
 
     expect(result).toEqual({ ok: true, detail: 'HTTP 204' });
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('persists a non-allowlisted hostname only after public DNS validation', async () => {
+    resetSSRFGuard();
+    getSSRFGuard();
+    dnsMocks.lookup.mockResolvedValue([{ address: '93.184.216.34', family: 4 }]);
+    const rule = webhookRule('https://public.example/events');
+
+    expect(validateRule(rule).ok).toBe(true);
+    await expect(saveSensoryRules([rule])).resolves.toBeUndefined();
+    expect(dnsMocks.lookup).toHaveBeenCalledWith('public.example', { all: true });
+  });
+
+  it('refuses a hostname that resolves to a private address', async () => {
+    resetSSRFGuard();
+    getSSRFGuard();
+    dnsMocks.lookup.mockResolvedValue([{ address: '10.0.0.8', family: 4 }]);
+    const rule = webhookRule('https://private.example/events');
+
+    expect(validateRule(rule).ok).toBe(true);
+    await expect(saveSensoryRules([rule])).rejects.toThrow('SSRF guard');
   });
 });
