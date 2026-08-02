@@ -85,6 +85,7 @@ describe('repairToolCallPairs', () => {
     );
     expect(syntheticResult).toBeDefined();
     expect(syntheticResult!.content).toBe('[result lost during compaction]');
+    expect((syntheticResult as { name?: string }).name).toBe('read_file');
   });
 
   it('should handle both orphaned results and missing results simultaneously', () => {
