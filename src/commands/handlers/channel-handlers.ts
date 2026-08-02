@@ -1086,6 +1086,7 @@ export async function registerAIMessageHandler(manager: import('../../channels/i
     let generativeTurnEngaged = false;
     let cognitiveTurn: ChannelCognitiveTurn | null = null;
     let deliveryState: 'not_started' | 'started' | 'delivered' = 'not_started';
+    let unregisterApprovalChannel: (() => void) | undefined;
     try {
       // 1. DM pairing gate — unapproved senders get a code, then we stop.
       const { checkDMPairing, getDMPairing } = await import('../../channels/core.js');
@@ -1109,6 +1110,12 @@ export async function registerAIMessageHandler(manager: import('../../channels/i
       }
 
       const sessionKey = message.sessionKey || 'default-global';
+      const remoteApprovalIdentity = JSON.stringify([
+        channel.type,
+        message.channel.botId ?? null,
+        message.channel.id,
+        message.sender?.id ?? null,
+      ]);
 
       // Lisa selfie on Telegram (photo of herself) — before the full agent turn.
       if (
@@ -1303,19 +1310,25 @@ export async function registerAIMessageHandler(manager: import('../../channels/i
       if (approvalCmd && approvalCmd[1] && approvalCmd[2]) {
         const ok = approvalCmd[1].toLowerCase() === 'approve';
         const reqId = approvalCmd[2];
-        approvalSvc.handleResponse(reqId, ok);
+        const approvalResult = approvalSvc.handleResponse(reqId, ok, remoteApprovalIdentity);
+        const responseText = approvalResult === 'accepted'
+          ? `${ok ? '✅ Approuvé' : '🚫 Refusé'} : ${reqId}`
+          : approvalResult === 'identity_mismatch'
+            ? `⛔ Réponse refusée : cette approbation appartient à une autre session.`
+            : `⚠️ Demande inconnue ou expirée : ${reqId}`;
         await channel.send({
           channelId: message.channel.id,
-          content: `${ok ? '✅ Approuvé' : '🚫 Refusé'} : ${reqId}`,
+          content: responseText,
           replyTo: message.id,
         });
         return;
       }
-      approvalSvc.registerChannel('telegram', async (msg) => {
+      unregisterApprovalChannel = approvalSvc.registerChannel(channel.type, async (msg) => {
         await channel.send({ channelId: message.channel.id, content: msg });
-      });
+      }, remoteApprovalIdentity);
       const { ConfirmationService } = await import('../../utils/confirmation-service.js');
-      ConfirmationService.getInstance().setRemoteApprovalService(approvalSvc);
+      const confirmationService = ConfirmationService.getInstance();
+      confirmationService.setRemoteApprovalService(approvalSvc);
 
       // 2. Context-adaptive agent reply (« comme Claude »): the agent's own
       //    query-classifier + buildForQuery scale the system prompt to the
@@ -1674,18 +1687,20 @@ export async function registerAIMessageHandler(manager: import('../../channels/i
         });
       } else {
         turn.phase('generation');
-        const entries = await agent.processUserMessage(agentInput, {
-          surface: channel.type,
-          ...(attachedImageEvidence || imageAttachmentCount > 0
-            ? { introspectionText: message.content }
-            : {}),
-          ...(transientConversationContext
-            ? {
-                transientContext: transientConversationContext,
-                relationshipSafety: companionConversation,
-              }
-            : {}),
-        });
+        const entries = await confirmationService.withApprovalContextAsync(remoteApprovalIdentity, () =>
+          agent.processUserMessage(agentInput, {
+            surface: channel.type,
+            ...(attachedImageEvidence || imageAttachmentCount > 0
+              ? { introspectionText: message.content }
+              : {}),
+            ...(transientConversationContext
+              ? {
+                  transientContext: transientConversationContext,
+                  relationshipSafety: companionConversation,
+                }
+              : {}),
+          }),
+        );
         successfulLisaSelfieToolResult = entries.some((entry) =>
           entry.type === 'tool_result' &&
           entry.toolResult?.success === true &&
@@ -2097,6 +2112,8 @@ export async function registerAIMessageHandler(manager: import('../../channels/i
       } catch {
         /* delivery itself is unavailable; the error is already logged */
       }
+    } finally {
+      unregisterApprovalChannel?.();
     }
   });
 }

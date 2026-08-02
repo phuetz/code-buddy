@@ -130,6 +130,10 @@ import { savePrefetchCache } from '../../src/companion/prefetch-engine.js';
 import { savePrefetchItems } from '../../src/companion/prefetch-config.js';
 import { telegramHtmlChunkToPlain } from '../../src/rendering/telegram-html.js';
 import * as lisaSelfieRuntime from '../../src/companion/lisa-selfie.js';
+import {
+  getRemoteApprovalService,
+  resetRemoteApprovalService,
+} from '../../src/security/remote-approval.js';
 
 type InboundHandler = (message: any, channel: any) => Promise<void>;
 
@@ -173,6 +177,7 @@ describe('registerAIMessageHandler inbound roundtrip (GAP-7)', () => {
     delete process.env.CODEBUDDY_CHANNEL_TURN_TIMEOUT_MS;
     process.env.CODEBUDDY_CONVERSATION_PERSIST = 'false';
     resetCrossChannelConversationBridge();
+    resetRemoteApprovalService();
     process.env.GROK_API_KEY = 'test-key';
 
     // Default happy path: approved pairing, simple route, in-memory session store.
@@ -285,6 +290,59 @@ describe('registerAIMessageHandler inbound roundtrip (GAP-7)', () => {
       content: 'Here is your answer.',
       replyTo: msg.id,
     });
+  });
+
+  it('binds real /approve handling to the initiating channel sender', async () => {
+    const manager = makeManager();
+    await registerAIMessageHandler(manager as any);
+    const approval = getRemoteApprovalService();
+    const aliceIdentity = JSON.stringify(['slack', null, 'chan-42', 'alice']);
+    let requestId = '';
+    const dispose = approval.registerChannel('slack', async (content) => {
+      requestId = content.match(/Request ID: `([^`]+)`/)?.[1] ?? '';
+    }, aliceIdentity);
+
+    try {
+      const pending = approval.requestApproval({
+        toolName: 'bash',
+        summary: 'npm publish',
+        initiator: aliceIdentity,
+        timeoutMs: 1_000,
+      });
+      await vi.waitFor(() => expect(requestId).not.toBe(''));
+
+      const bobSend = makeSuccessfulSend();
+      await manager.emit({
+        ...makeMessage(`/approve ${requestId}`),
+        sender: { id: 'bob' },
+      }, { type: 'slack', send: bobSend });
+      expect(String(bobSend.mock.calls[0]?.[0]?.content)).toContain('autre session');
+      expect(approval.getPending()).toHaveLength(1);
+
+      const aliceSend = makeSuccessfulSend();
+      await manager.emit({
+        ...makeMessage(`/approve ${requestId}`),
+        sender: { id: 'alice' },
+      }, { type: 'slack', send: aliceSend });
+      expect(String(aliceSend.mock.calls[0]?.[0]?.content)).toContain('Approuvé');
+      await expect(pending).resolves.toBe(true);
+    } finally {
+      dispose();
+    }
+  });
+
+  it('removes its scoped approval channel after a completed agent turn', async () => {
+    const manager = makeManager();
+    await registerAIMessageHandler(manager as any);
+    const message = {
+      ...makeMessage('hello'),
+      sender: { id: 'alice' },
+    };
+
+    await manager.emit(message, { type: 'slack', send: makeSuccessfulSend() });
+
+    const identity = JSON.stringify(['slack', null, 'chan-42', 'alice']);
+    expect(getRemoteApprovalService().hasChannelForIdentity(identity)).toBe(false);
   });
 
   it('reclassifies a natural Telegram slash prompt as conversation text', async () => {

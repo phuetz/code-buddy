@@ -5,6 +5,7 @@
 import {
   ConfirmationService,
 } from '../../src/utils/confirmation-service.js';
+import { RemoteApprovalService } from '../../src/security/remote-approval.js';
 
 describe('ConfirmationService', () => {
   let service: ConfirmationService;
@@ -171,6 +172,29 @@ describe('ConfirmationService', () => {
       await service.withApprovalContextAsync('session-a', () => service.requestConfirmation(request, 'bash'));
       await service.withApprovalContextAsync('session-b', () => service.requestConfirmation(request, 'bash'));
       expect(prompts).toBe(2);
+    });
+
+    it('binds a remote confirmation to the async session context', async () => {
+      Object.defineProperty(process.stdin, 'isTTY', { value: false, configurable: true });
+      const remote = new RemoteApprovalService();
+      let requestId = '';
+      remote.registerChannel('telegram', async (message) => {
+        requestId = message.match(/Request ID: `([^`]+)`/)?.[1] ?? '';
+      }, 'session-a');
+      service.setRemoteApprovalService(remote);
+
+      const pending = service.withApprovalContextAsync('session-a', () =>
+        service.requestConfirmation({
+          operation: 'Run command outside sandbox',
+          filename: 'npm publish',
+          riskLevel: 'high',
+          forcePrompt: true,
+        }, 'bash'),
+      );
+      await vi.waitFor(() => expect(requestId).not.toBe(''));
+      expect(remote.handleResponse(requestId, true, 'session-b')).toBe('identity_mismatch');
+      expect(remote.handleResponse(requestId, true, 'session-a')).toBe('accepted');
+      await expect(pending).resolves.toMatchObject({ confirmed: true });
     });
 
     it('caches generic tool approvals by exact arguments without widening legacy flags', async () => {

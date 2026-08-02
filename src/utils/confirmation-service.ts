@@ -422,7 +422,8 @@ export class ConfirmationService extends EventEmitter {
     // In non-interactive contexts, fail closed with a visible reason instead of
     // waiting on a prompt that cannot be answered.
     if (isSelfImprovement) {
-      if (!process.stdin.isTTY && !this.remoteApproval?.hasChannels()) {
+      const remoteIdentity = this.approvalContext.getStore();
+      if (!process.stdin.isTTY && !this.remoteApproval?.hasChannelForIdentity(remoteIdentity)) {
         return this.auditGate('self-improvement-no-channel', true, options, {
           confirmed: false,
           feedback:
@@ -459,10 +460,12 @@ export class ConfirmationService extends EventEmitter {
     }
 
     // Remote approval fallback: when not in interactive terminal, try channels
-    if (!process.stdin.isTTY && this.remoteApproval?.hasChannels()) {
+    const remoteIdentity = this.approvalContext.getStore();
+    if (!process.stdin.isTTY && this.remoteApproval?.hasChannelForIdentity(remoteIdentity)) {
       const approved = await this.remoteApproval.requestApproval({
         toolName: options.operation,
         summary: `${options.operation}: ${options.filename}`,
+        ...(remoteIdentity !== undefined ? { initiator: remoteIdentity } : {}),
       });
       return this.auditGate('remote-approval', false, options, { confirmed: approved });
     }

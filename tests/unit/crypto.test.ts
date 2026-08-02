@@ -19,6 +19,7 @@ const mockFsExtra = vi.hoisted(() => ({
   readFile: vi.fn(),
   writeFile: vi.fn(),
   ensureDir: vi.fn(),
+  remove: vi.fn(),
 }));
 vi.mock('fs-extra', () => ({ ...mockFsExtra, default: mockFsExtra }));
 
@@ -142,7 +143,7 @@ describe('SessionEncryption', () => {
       expect(encrypted).toHaveProperty('authTag');
       expect(encrypted).toHaveProperty('salt');
       expect(encrypted).toHaveProperty('version');
-      expect(encrypted.version).toBe(1);
+      expect(encrypted.version).toBe(2);
     });
 
     it('should encode data as base64', () => {
@@ -170,6 +171,35 @@ describe('SessionEncryption', () => {
       const decrypted = encryption.decrypt(encrypted);
 
       expect(decrypted).toBe(plaintext);
+    });
+
+    it('decrypts legacy v1 data with the master key', async () => {
+      const masterKey = crypto.randomBytes(32);
+      const iv = crypto.randomBytes(16);
+      const cipher = crypto.createCipheriv('aes-256-gcm', masterKey, iv);
+      const ciphertext = Buffer.concat([cipher.update('legacy', 'utf8'), cipher.final()]);
+      const legacy: EncryptedData = {
+        ciphertext: ciphertext.toString('base64'),
+        iv: iv.toString('base64'),
+        authTag: cipher.getAuthTag().toString('base64'),
+        salt: crypto.randomBytes(32).toString('base64'),
+        version: 1,
+      };
+      encryption.dispose();
+      encryption = new SessionEncryption({ keyPath: tempKeyPath, enabled: true });
+      encryption.initializeWithKey(masterKey);
+
+      expect(encryption.decrypt(legacy)).toBe('legacy');
+    });
+
+    it('rejects unknown versions and malformed v2 salts', () => {
+      const encrypted = encryption.encrypt('data');
+      expect(() => encryption.decrypt({ ...encrypted, version: 3 })).toThrow(
+        'Unsupported encrypted data version',
+      );
+      expect(() => encryption.decrypt({ ...encrypted, salt: '' })).toThrow(
+        'missing its salt',
+      );
     });
   });
 
@@ -419,6 +449,7 @@ describe('SessionEncryption', () => {
 
         expect(result).toHaveProperty('oldKey');
         expect(result).toHaveProperty('newKey');
+        expect(result.recoveryKeyPath).toBe(`${tempKeyPath}.previous`);
         expect(result.oldKey).not.toBe(result.newKey);
       });
 
@@ -458,8 +489,174 @@ describe('SessionEncryption', () => {
         expect(() => encryption.decrypt(encrypted)).toThrow();
       });
 
+      it('retains a usable recovery key before activating the new key', async () => {
+        await encryption.initialize();
+        const encrypted = encryption.encrypt('old data');
+        mockFsExtra.writeFile.mockClear();
+
+        const rotation = await encryption.rotateKey();
+
+        const recoveryWrite = mockFsExtra.writeFile.mock.calls.find(
+          ([file]) => file === rotation.recoveryKeyPath,
+        );
+        expect(recoveryWrite).toBeDefined();
+        const persistedRecoveryKey = recoveryWrite?.[1] as Buffer;
+        expect(persistedRecoveryKey.toString('base64')).toBe(rotation.oldKey);
+        expect(recoveryWrite?.[2]).toMatchObject({
+          mode: 0o600,
+          flag: 'wx',
+        });
+        const recovery = new SessionEncryption({ keyPath: tempKeyPath, enabled: true });
+        recovery.initializeWithKey(persistedRecoveryKey);
+        expect(recovery.decrypt(encrypted)).toBe('old data');
+        recovery.dispose();
+      });
+
+      it('rejects malformed explicit migration keys', () => {
+        expect(() => encryption.initializeWithKey(Buffer.alloc(31))).toThrow(
+          'exactly 32 bytes',
+        );
+      });
+
+      it('refuses to overwrite recovery material from a pending rotation', async () => {
+        await encryption.initialize();
+        mockFsExtra.writeFile
+          .mockResolvedValueOnce(undefined)
+          .mockRejectedValueOnce(Object.assign(new Error('exists'), { code: 'EEXIST' }));
+        await expect(encryption.rotateKey()).rejects.toThrow('still pending');
+      });
+
+      it('serializes concurrent rotations on the same instance', async () => {
+        await encryption.initialize();
+        let releaseRecoveryWrite!: () => void;
+        const recoveryWriteStarted = new Promise<void>((resolve) => {
+          mockFsExtra.writeFile.mockImplementationOnce(async () => {
+            resolve();
+            await new Promise<void>((release) => { releaseRecoveryWrite = release; });
+          });
+        });
+
+        const first = encryption.rotateKey();
+        await recoveryWriteStarted;
+        await expect(encryption.rotateKey()).rejects.toThrow('already in progress');
+        await expect(encryption.completeKeyRotation()).rejects.toThrow('already in progress');
+        releaseRecoveryWrite();
+        await expect(first).resolves.toHaveProperty('newKey');
+      });
+
+      it('protects recovery material from lifecycle mutation during rotation', async () => {
+        await encryption.initialize();
+        let releaseRecoveryWrite!: () => void;
+        let markRecoveryWriteStarted!: () => void;
+        let persistedRecoveryKey: Buffer | undefined;
+        const recoveryWriteStarted = new Promise<void>((resolve) => {
+          markRecoveryWriteStarted = resolve;
+        });
+        mockFsExtra.writeFile.mockImplementation(async (file, data) => {
+          if (String(file) !== `${tempKeyPath}.previous`) return;
+          markRecoveryWriteStarted();
+          await new Promise<void>((resolve) => { releaseRecoveryWrite = resolve; });
+          persistedRecoveryKey = Buffer.from(data as Buffer);
+        });
+
+        const rotation = encryption.rotateKey();
+        await recoveryWriteStarted;
+        expect(() => encryption.dispose()).toThrow('rotation is in progress');
+        expect(() => encryption.initializeWithKey(crypto.randomBytes(32)))
+          .toThrow('rotation is in progress');
+        await expect(encryption.initializeWithPassword('replacement'))
+          .rejects.toThrow('rotation is in progress');
+        releaseRecoveryWrite();
+        const result = await rotation;
+
+        expect(persistedRecoveryKey?.toString('base64')).toBe(result.oldKey);
+        expect(encryption.isReady()).toBe(true);
+      });
+
+      it('does not let rotation overtake an in-flight password initialization', async () => {
+        await encryption.initialize();
+
+        const passwordInitialization = encryption.initializeWithPassword('replacement-password');
+        await expect(encryption.rotateKey()).rejects.toThrow('initialization is already in progress');
+        await expect(encryption.completeKeyRotation())
+          .rejects.toThrow('initialization is already in progress');
+        expect(() => encryption.dispose()).toThrow('lifecycle operation is in progress');
+        await passwordInitialization;
+
+        expect(encryption.isReady()).toBe(true);
+      });
+
+      it('uses a shared filesystem lock across encryption instances', async () => {
+        await encryption.initialize();
+        const second = new SessionEncryption({ keyPath: tempKeyPath, enabled: true });
+        second.initializeWithKey(crypto.randomBytes(32));
+        const heldExclusivePaths = new Set<string>();
+        let releaseFirstLock!: () => void;
+        let firstLockHeld!: () => void;
+        const lockHeld = new Promise<void>((resolve) => { firstLockHeld = resolve; });
+        mockFsExtra.writeFile.mockImplementation(async (file, _data, options) => {
+          const filePath = String(file);
+          const exclusive = (options as { flag?: string } | undefined)?.flag === 'wx';
+          if (exclusive && heldExclusivePaths.has(filePath)) {
+            throw Object.assign(new Error('exists'), { code: 'EEXIST' });
+          }
+          if (exclusive) heldExclusivePaths.add(filePath);
+          if (filePath.endsWith('.rotation.lock')) {
+            firstLockHeld();
+            await new Promise<void>((resolve) => { releaseFirstLock = resolve; });
+          }
+        });
+        mockFsExtra.remove.mockImplementation(async (file) => {
+          heldExclusivePaths.delete(String(file));
+        });
+
+        const first = encryption.rotateKey();
+        await lockHeld;
+        await expect(second.completeKeyRotation()).rejects.toThrow('already in progress');
+        releaseFirstLock();
+        await expect(first).resolves.toHaveProperty('newKey');
+        second.dispose();
+      });
+
+      it('rejects a stale instance after another instance completed rotation', async () => {
+        const originalKey = crypto.randomBytes(32);
+        encryption.dispose();
+        encryption = new SessionEncryption({ keyPath: tempKeyPath, enabled: true });
+        encryption.initializeWithKey(originalKey);
+        const stale = new SessionEncryption({ keyPath: tempKeyPath, enabled: true });
+        stale.initializeWithKey(originalKey);
+        let activeKey = Buffer.from(originalKey);
+        mockFsExtra.pathExists.mockResolvedValue(true);
+        mockFsExtra.readFile.mockImplementation(async () => Buffer.from(activeKey));
+        mockFsExtra.writeFile.mockImplementation(async (file, data) => {
+          if (String(file) === tempKeyPath) activeKey = Buffer.from(data as Buffer);
+        });
+
+        await encryption.rotateKey();
+        await expect(stale.completeKeyRotation()).rejects.toThrow('instance is stale');
+        expect(mockFsExtra.remove).not.toHaveBeenCalledWith(`${tempKeyPath}.previous`);
+        await encryption.completeKeyRotation();
+        const recoveryWritesBefore = mockFsExtra.writeFile.mock.calls.filter(
+          ([file]) => String(file) === `${tempKeyPath}.previous`,
+        ).length;
+
+        await expect(stale.rotateKey()).rejects.toThrow('instance is stale');
+        const recoveryWritesAfter = mockFsExtra.writeFile.mock.calls.filter(
+          ([file]) => String(file) === `${tempKeyPath}.previous`,
+        ).length;
+        expect(recoveryWritesAfter).toBe(recoveryWritesBefore);
+        stale.dispose();
+      });
+
+      it('removes recovery material only on explicit completion', async () => {
+        await encryption.initialize();
+        await encryption.completeKeyRotation();
+        expect(mockFsExtra.remove).toHaveBeenCalledWith(`${tempKeyPath}.previous`);
+      });
+
       it('should throw if not initialized', async () => {
         await expect(encryption.rotateKey()).rejects.toThrow('Encryption not initialized');
+        await expect(encryption.completeKeyRotation()).rejects.toThrow('Encryption not initialized');
       });
     });
 

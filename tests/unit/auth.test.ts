@@ -54,6 +54,7 @@ jest.mock('fs-extra', () => {
   readFile: jest.fn(),
   writeFile: jest.fn(),
   ensureDir: jest.fn(),
+  remove: jest.fn(),
 };
   return { ...impl, default: impl };
 });
@@ -63,6 +64,7 @@ const mockFsExtra = fsExtra as {
   readFile: jest.Mock;
   writeFile: jest.Mock;
   ensureDir: jest.Mock;
+  remove: jest.Mock;
 };
 
 // ============================================================================
@@ -933,7 +935,7 @@ describe('Token Management - SessionEncryption', () => {
       expect(encrypted.ciphertext).toBeDefined();
       expect(encrypted.iv).toBeDefined();
       expect(encrypted.authTag).toBeDefined();
-      expect(encrypted.version).toBe(1);
+      expect(encrypted.version).toBe(2);
       expect(encrypted.ciphertext).not.toBe(plaintext);
     });
 
