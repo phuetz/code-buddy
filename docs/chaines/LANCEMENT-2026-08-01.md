@@ -1,4 +1,12 @@
-# Lancement des deux chaînes — dossier au 1er août 2026
+# Archive — lancement des deux chaînes au matin du 1er août 2026
+
+> **Document historique remplacé.** Il évalue Meta AI v1 et un état AMBRE
+> antérieur aux corrections et contrôles du 1er août. Ses injonctions de
+> publication et son ordre de lancement ne sont plus opérationnels. La source
+> canonique est [`../lancement-chaines/ETAT-2026-08-01.md`](../lancement-chaines/ETAT-2026-08-01.md) :
+> Meta v2 et « 5 signaux » v4 passent techniquement, le chalet v02 a son kit,
+> les Shorts ont été contrôlés, et aucune publication n'est autorisée sans les
+> décisions et gestes humains qui y sont listés.
 
 Rédigé pendant que tu dors, pour que le lancement annoncé sous deux jours ne
 bute sur rien d'imprévu. Tout ce qui suit est vérifié dans les fichiers, pas
@@ -100,10 +108,9 @@ et leur voix off dit « disponible prochainement ». Ce n'est pas une maladresse
 c'est une promesse qu'on ne peut pas tenir : il manque 39 chapitres à chacun.
 
 **La règle qui en découle** : un trailer ne sort que si le roman est **terminé**
-*et* **sur un chemin de publication réel**. Aujourd'hui, aucun des quatre romans
-terminés n'est publiable — le meilleur est à 6,5/10. Donc **zéro trailer au
-lancement**. Les chaînes démarrent sur le contenu tech et voyage, pas sur les
-livres.
+*et* **sur un chemin de publication réel**. Les relectures ultérieures ont
+refusé trois romans ; le statut éditorial du quatrième doit être vérifié au lieu
+d'être déduit d'une note. Aucun trailer n'est donc validé pour le lancement.
 
 ---
 
@@ -150,8 +157,9 @@ transmettre, et le résultat compte :
 | « Captures d'interface Meta sans licence, sur une vidéo monétisée » | Quatre fichiers, tous nommés `meta-officiel-*`, issus de la salle de presse Meta. Usage de courte citation pour une analyse critique. | ⚠️ **Risque résiduel réel**, mais défendable |
 | « Verbes à l'indicatif sur des démos non déployées » | Le script dit explicitement « démonstrations officielles » et « sans les faire passer pour un test déjà disponible en France ». | ⚠️ **Partiellement juste** — durcir au conditionnel ne coûterait rien |
 
-**Conclusion : la vidéo est publiable.** Aucun des deux « bloquants » n'en était
-un. Sans cette vérification, tu aurais reporté ton lancement pour rien.
+**Conclusion historique sur v1 :** aucun des deux « bloquants » factuels du
+juge n'en était un. Cela ne constitue plus un verdict de livraison : le master
+courant est v2 et reste soumis aux portes humaines du document canonique.
 
 C'est aussi la troisième fois aujourd'hui qu'un juge produit un faux positif
 faute de contexte. Un juge signale, il ne condamne pas — et **ce qu'il signale

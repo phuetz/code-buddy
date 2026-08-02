@@ -18,7 +18,7 @@ d'origine sont intacts : les versions corrigées portent un nouveau nom.
 
 ## Ce qui a changé, en une page
 
-| Défaut | Avant (mesuré) | Après (mesuré) | Fichier livré |
+| Défaut | Avant (mesuré) | Après (mesuré) | Fichier produit dans cette passe |
 |---|---|---|---|
 | 3 cartons d'attribution Meta illisibles | contraste **1,00:1** ; fond sous le texte étalé de 0,23 à **1,00** | **19,0:1** ; étalement **0,001** | `meta-ai-agentique-master-v2.mp4` |
 | 3 miniatures dont le texte déborde | ink hors cadre de **+17 / +13 / +23 px** | **0 px** hors cadre, contraste 4,9 → 19,3:1 | `miniature-0{1,2,3}-*.jpg` |
