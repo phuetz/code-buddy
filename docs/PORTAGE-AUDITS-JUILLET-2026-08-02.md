@@ -64,5 +64,16 @@ tests ciblés puis `npm run lint`, `npm run typecheck` et une validation élargi
 proportionnée. Aucun lot ne doit importer les rapports non suivis, les symlinks
 `node_modules`, les résultats d'outils ou `.codebuddy/autonomy.json`.
 
+Baseline avant portage sur la cible :
+
+```text
+npm test -- tests/security/env-blocklist.test.ts \
+  tests/security/audit-logger.test.ts \
+  tests/security/ssrf-dns-pinning.test.ts \
+  tests/tools/ssrf-redirect.test.ts
+
+4 fichiers réussis, 36 tests réussis, 0 échec (2 août 2026).
+```
+
 Les branches `avatar-builder` et `autopilot` restent des inventaires. Elles ne
 sont jamais des destinations ni des sources de merge global.
