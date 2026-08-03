@@ -8,6 +8,16 @@
  * Inspired by OpenAI Codex CLI's guardian.rs
  *
  * Timeout: 90 seconds, fail-closed (deny on any error).
+ *
+ * ⚠️ NOT WIRED. `evaluateToolCall()` has no production caller:
+ * `ConfirmationService` never consults this module, so nothing in a running
+ * agent is protected by it today. The fail-closed behaviour below is real and
+ * tested, but it is the behaviour of a component that is not in the path.
+ * Read any hardening of this file as work on a DORMANT component, not as a
+ * live protection — and do not cite it as evidence that approvals are guarded.
+ * Wiring it into the approval chain is a deliberate posture change (an LLM
+ * call inside every confirmation: latency, cost, availability) and belongs to
+ * its own reviewed decision.
  */
 
 import { logger } from '../utils/logger.js';
