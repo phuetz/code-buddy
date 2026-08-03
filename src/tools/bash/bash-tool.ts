@@ -103,10 +103,19 @@ export class BashTool implements Disposable {
    * Yields each line of stdout/stderr as it arrives.
    * Validates and confirms the command before execution.
    *
+   * @deprecated No production caller since bash was routed back through the
+   *   guarded `ToolHandler.executeTool()` dispatch. It still performs its own
+   *   command validation, sandbox check and approval, but it bypasses the
+   *   central layer above them: lifecycle hooks, RunStore telemetry and lane
+   *   serialization. Do not wire new callers to it. When real-time bash
+   *   streaming comes back, it must travel through the guarded dispatch, not
+   *   around it — at which point this method and `streaming-executor.ts` are
+   *   either rebuilt on that path or deleted.
+   *
    * @param cwd Working-directory override — the tool-execution context's cwd
-   *   (an embedded engine's session workingDirectory). THIS is the path Cowork
-   *   actually exercises (the executor streams tools), so it must honor the
-   *   session cwd exactly like the non-streaming `execute` does.
+   *   (an embedded engine's session workingDirectory). It must honor the
+   *   session cwd exactly like the non-streaming `execute` does. (Cowork used
+   *   to reach bash through here; it no longer does.)
    */
   async *executeStreaming(
     command: string,

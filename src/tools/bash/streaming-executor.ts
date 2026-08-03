@@ -3,6 +3,12 @@
  *
  * Contains the executeStreaming AsyncGenerator that yields output chunks
  * as they arrive from the spawned process.
+ *
+ * @deprecated Reached only through the deprecated `BashTool.executeStreaming`,
+ * which has no production caller since bash was routed back through the
+ * guarded ToolHandler dispatch. Kept — with its tests — because it is the
+ * working basis for bringing real-time bash output back THROUGH that guarded
+ * path. Do not add callers.
  */
 
 import { spawn } from 'child_process';
