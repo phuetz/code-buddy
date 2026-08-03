@@ -24,12 +24,12 @@ describe('WebSocket fleet transport lifecycle', () => {
   let listener: FleetListener | null = null;
   let keyId: string | null = null;
 
-  async function startClient(autoPong: boolean): Promise<WebSocket> {
+  async function startClient(autoPong: boolean, authEnabled = false): Promise<WebSocket> {
     vi.useFakeTimers({ toFake: ['Date', 'setInterval', 'clearInterval'] });
     server = createServer();
     wss = await setupWebSocket(server, {
       ...DEFAULT_SERVER_CONFIG,
-      authEnabled: false,
+      authEnabled,
     });
     await new Promise<void>((resolve) => server?.listen(0, '127.0.0.1', resolve));
     const address = server.address();
@@ -85,6 +85,24 @@ describe('WebSocket fleet transport lifecycle', () => {
 
   it('terminates a genuinely idle listener that does not pong', async () => {
     const socket = await startClient(false);
+    const closed = once(socket, 'close');
+
+    for (let sweep = 0; sweep < 3; sweep++) {
+      await vi.advanceTimersByTimeAsync(TIMEOUT_CONFIG.WS_HEARTBEAT_INTERVAL);
+      await new Promise<void>((resolve) => setImmediate(resolve));
+    }
+
+    await closed;
+    expect(socket.readyState).toBe(WebSocket.CLOSED);
+    expect(getConnectionCount()).toBe(0);
+  });
+
+  it('does not let a never-authenticated client hold its slot by answering pings', async () => {
+    // The `ws` library answers server pings on its own (RFC 6455 autoPong).
+    // Before the auth deadline, that automatic pong refreshed lastActivity, so
+    // a client that never sent a single frame of its own — and never
+    // authenticated — kept its connection slot indefinitely.
+    const socket = await startClient(true, true);
     const closed = once(socket, 'close');
 
     for (let sweep = 0; sweep < 3; sweep++) {

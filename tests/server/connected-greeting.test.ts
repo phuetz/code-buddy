@@ -43,6 +43,7 @@ describe('buildGatewayStatus', () => {
       scopes: ['chat'],
       streaming: false,
       lastActivity: 1_700_000_000_000,
+      connectedAt: 1_699_999_000_000,
     },
     server: { version: '1.0.0-test', protocolVersion: 2, uptimeMs: 5_000, pairingRequired: true },
     connections: { total: 3, authenticated: 2, streaming: 1 },
@@ -56,12 +57,16 @@ describe('buildGatewayStatus', () => {
       deviceId?: string;
       scopes: string[];
       connectedAt: string;
+      lastActivityAt: string;
       server: { version: string; protocolVersion: number; uptimeMs: number; pairingRequired: boolean; connections: { total: number } };
     };
     expect(payload.connectionId).toBe('ws_1');
     expect(payload.deviceId).toBe('dev-1');
     expect(payload.scopes).toEqual(['chat']);
-    expect(payload.connectedAt).toBe(new Date(1_700_000_000_000).toISOString());
+    // connectedAt reported the LAST ACTIVITY before this fix, so a listener
+    // connected hours ago looked like it had just connected.
+    expect(payload.connectedAt).toBe(new Date(1_699_999_000_000).toISOString());
+    expect(payload.lastActivityAt).toBe(new Date(1_700_000_000_000).toISOString());
     expect(payload.server).toMatchObject({
       version: '1.0.0-test',
       protocolVersion: 2,
@@ -74,7 +79,7 @@ describe('buildGatewayStatus', () => {
   it('omits optional identity fields when absent', () => {
     const status = buildGatewayStatus({
       ...input,
-      connection: { connectionId: 'ws_2', authenticated: false, scopes: [], streaming: false, lastActivity: 1 },
+      connection: { connectionId: 'ws_2', authenticated: false, scopes: [], streaming: false, lastActivity: 1, connectedAt: 1 },
     });
     const payload = status.payload as Record<string, unknown>;
     expect(payload.deviceId).toBeUndefined();

@@ -51,6 +51,8 @@ interface ConnectionState {
   /** No-auth network clients remain transport-visible but cannot run agent chat. */
   anonymousRemote?: boolean;
   lastActivity: number;
+  /** Accept time, used to bound how long a connection may stay unauthenticated. */
+  connectedAt: number;
   agent?: ServerAgent;
   agentInitializing?: Promise<void>;
   /** The in-flight chat turn, including non-streaming requests. */
@@ -324,6 +326,9 @@ export interface GatewayStatusInput {
     scopes: string[];
     streaming: boolean;
     lastActivity: number;
+    /** Accept time. Distinct from lastActivity — a long-lived idle listener
+     *  connected hours ago and answered a ping a second ago. */
+    connectedAt: number;
   };
   server: {
     version: string;
@@ -352,7 +357,8 @@ export function buildGatewayStatus(input: GatewayStatusInput): WebSocketResponse
       ...(c.deviceId ? { deviceId: c.deviceId } : {}),
       scopes: c.scopes,
       streaming: c.streaming,
-      connectedAt: new Date(c.lastActivity).toISOString(),
+      connectedAt: new Date(c.connectedAt).toISOString(),
+      lastActivityAt: new Date(c.lastActivity).toISOString(),
       server: {
         version: input.server.version,
         protocolVersion: input.server.protocolVersion,
@@ -780,6 +786,7 @@ messageHandlers.set('status', async (ws, state, _payload) => {
       scopes: state.scopes,
       streaming: state.streaming,
       lastActivity: state.lastActivity,
+      connectedAt: state.connectedAt,
     },
     server: {
       version: gatewayServerVersion(),
@@ -1096,6 +1103,7 @@ export async function setupWebSocket(
       loopback,
       secure: Boolean((req.socket as typeof req.socket & { encrypted?: boolean }).encrypted),
       lastActivity: now,
+      connectedAt: now,
       streaming: false,
       authAttempts: 0,
       authWindowStart: now,
@@ -1132,7 +1140,15 @@ export async function setupWebSocket(
     // Protocol-level pong frames are activity too. Fleet listeners can stay
     // silent for long periods while still answering server pings; without
     // this update the idle sweep terminates healthy passive listeners.
+    //
+    // But a pong is answered by the `ws` library automatically (RFC 6455
+    // autoPong), so it proves the socket is open — not that anyone is behind
+    // it. Counting it as activity for a connection that never authenticated
+    // would let an anonymous client hold its slot forever without ever
+    // sending a single frame of its own. Unauthenticated connections
+    // therefore keep ageing towards the idle sweep and the auth deadline.
     ws.on('pong', () => {
+      if (!state.authenticated) return;
       state.lastActivity = Date.now();
     });
 
@@ -1150,7 +1166,14 @@ export async function setupWebSocket(
     const now = Date.now();
 
     for (const [ws, state] of connections.entries()) {
-      if (now - state.lastActivity > TIMEOUT_CONFIG.WS_IDLE_TIMEOUT) {
+      // A connection that never authenticates has no reason to stay open.
+      // With auth disabled every connection is authenticated at accept time,
+      // so this deadline only ever fires on a server that requires auth.
+      const unauthenticatedTooLong =
+        !state.authenticated &&
+        now - state.connectedAt > TIMEOUT_CONFIG.WS_UNAUTHENTICATED_TIMEOUT;
+
+      if (unauthenticatedTooLong || now - state.lastActivity > TIMEOUT_CONFIG.WS_IDLE_TIMEOUT) {
         abortActiveTurn(state);
         cleanupWebSocketExtensions(state);
         ws.terminate();

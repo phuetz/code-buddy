@@ -233,6 +233,12 @@ export const TIMEOUT_CONFIG = {
   WS_HEARTBEAT_INTERVAL: 30000,
   /** Default WebSocket idle timeout (ms) */
   WS_IDLE_TIMEOUT: 60000,
+  /**
+   * How long a connection may stay open without authenticating (ms).
+   * Only applies when auth is enabled — with auth disabled every connection
+   * is authenticated at accept time.
+   */
+  WS_UNAUTHENTICATED_TIMEOUT: 30000,
   /** Default webhook request timeout (ms) */
   DEFAULT_WEBHOOK_TIMEOUT: 30000,
   /** Default rate limit window (ms) */
