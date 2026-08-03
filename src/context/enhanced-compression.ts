@@ -201,11 +201,25 @@ export class EnhancedContextCompressor {
     const systemMsgs = messages.filter(m => m.role === 'system');
     const conversationMsgs = messages.filter(m => m.role !== 'system');
 
+    // The system messages are reinstated after every strategy, so they are not
+    // negotiable: the conversation must fit in what is LEFT once they are paid
+    // for. Budgeting the body against the full tokenLimit would overshoot by
+    // exactly their cost — and that cost grows with each injected block
+    // (lessons, todo, decisions), i.e. precisely what preserving them all adds.
+    const systemTokens = systemMsgs.length > 0 ? this.countTokens(systemMsgs) : 0;
+    const bodyLimit = Math.max(0, tokenLimit - systemTokens);
+    if (systemTokens >= tokenLimit) {
+      logger.warn(
+        `Context compression: system messages alone need ${systemTokens} tokens for a ${tokenLimit}-token budget. ` +
+        'The conversation will be compressed to nothing and the result will still exceed the limit.',
+      );
+    }
+
     let compressed: CodeBuddyMessage[] = [...conversationMsgs];
     let currentTokens = this.countTokens(compressed);
 
     // Strategy 1: Sliding window with overlap
-    if (currentTokens > tokenLimit) {
+    if (currentTokens > bodyLimit) {
       compressed = this.applySlidingWindowWithOverlap(
         compressed,
         classified,
@@ -216,14 +230,14 @@ export class EnhancedContextCompressor {
     }
 
     // Strategy 2: Content-aware tool result truncation
-    if (currentTokens > tokenLimit) {
+    if (currentTokens > bodyLimit) {
       compressed = this.truncateToolResultsSmart(compressed, classified);
       currentTokens = this.countTokens(compressed);
       strategiesApplied.push('smart_tool_truncation');
     }
 
     // Strategy 3: Intelligent summarization
-    if (currentTokens > tokenLimit && this.config.summarization.minMessagesForSummarization <= compressed.length) {
+    if (currentTokens > bodyLimit && this.config.summarization.minMessagesForSummarization <= compressed.length) {
       compressed = this.applyIntelligentSummarization(
         compressed,
         classified,
@@ -235,15 +249,15 @@ export class EnhancedContextCompressor {
     }
 
     // Strategy 4: Importance-based removal
-    if (currentTokens > tokenLimit) {
-      compressed = this.removeByImportance(compressed, classified, tokenLimit);
+    if (currentTokens > bodyLimit) {
+      compressed = this.removeByImportance(compressed, classified, bodyLimit);
       currentTokens = this.countTokens(compressed);
       strategiesApplied.push('importance_removal');
     }
 
     // Strategy 5: Hard truncation as last resort
-    if (currentTokens > tokenLimit) {
-      compressed = this.hardTruncate(compressed, tokenLimit);
+    if (currentTokens > bodyLimit) {
+      compressed = this.hardTruncate(compressed, bodyLimit);
       strategiesApplied.push('hard_truncation');
     }
 

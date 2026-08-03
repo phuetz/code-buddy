@@ -96,7 +96,10 @@ export function repairToolCallPairs(messages: CodeBuddyMessage[]): CodeBuddyMess
           result.push({
             role: 'tool',
             tool_call_id: tc.id,
-            name: tc.function.name,
+            // Optional chaining on purpose: this function exists to repair
+            // CORRUPTED transcripts, so it must not be the thing that throws
+            // on one. `tc.id` is guarded a few lines above for the same reason.
+            ...(tc.function?.name ? { name: tc.function.name } : {}),
             content: '[result lost during compaction]',
           } as CodeBuddyMessage);
           injectedSynthetics++;

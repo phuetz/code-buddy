@@ -32,23 +32,32 @@ export type TokenCounter = CanonicalTokenCounter;
 /** Conservative context-budget estimate for one OpenAI-style image part. */
 export const IMAGE_URL_TOKEN_ESTIMATE = 1100;
 
+/**
+ * Budget for an image sent with `detail: 'low'`. OpenAI bills those at a flat
+ * 85 tokens regardless of size, so charging the full estimate would overstate
+ * the context by more than an order of magnitude on a low-detail conversation.
+ */
+export const IMAGE_URL_LOW_DETAIL_TOKEN_ESTIMATE = 85;
+
 /** Count the fixed token budget contributed by multimodal `image_url` parts. */
 export function estimateImageUrlTokens(content: unknown): number {
   if (!Array.isArray(content)) return 0;
 
-  let imageCount = 0;
+  let total = 0;
   for (const part of content) {
     if (!part || typeof part !== 'object') continue;
     const candidate = part as { type?: unknown; image_url?: unknown };
     if (candidate.type !== 'image_url' || !candidate.image_url || typeof candidate.image_url !== 'object') {
       continue;
     }
-    const imageUrl = candidate.image_url as { url?: unknown };
+    const imageUrl = candidate.image_url as { url?: unknown; detail?: unknown };
     if (typeof imageUrl.url === 'string' && imageUrl.url.length > 0) {
-      imageCount++;
+      total += imageUrl.detail === 'low'
+        ? IMAGE_URL_LOW_DETAIL_TOKEN_ESTIMATE
+        : IMAGE_URL_TOKEN_ESTIMATE;
     }
   }
-  return imageCount * IMAGE_URL_TOKEN_ESTIMATE;
+  return total;
 }
 
 /**

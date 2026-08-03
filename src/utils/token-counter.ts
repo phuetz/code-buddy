@@ -109,6 +109,15 @@ export class TokenCounter {
         } else if (Array.isArray(message.content)) {
           // Multimodal content parts — count the text parts; image parts
           // are tracked by the provider-specific pricing, not by us.
+          //
+          // ⚠️ This differs on purpose from the free functions in
+          // src/context/token-counter.ts, which DO add a per-image budget:
+          // pricing is the provider's business, context budgeting is ours.
+          // A caller that needs the context budget must therefore add
+          // `estimateImageUrlTokens(message.content)` itself — see how
+          // ContextManagerV2.countTokens and EnhancedContextCompressor do it.
+          // Do not "fix" this by adding images here without checking every
+          // cost-estimation caller of this class.
           for (const part of message.content) {
             if (typeof part === 'object' && part !== null && 'text' in part && typeof (part as { text: unknown }).text === 'string') {
               totalTokens += this.countTokens((part as { text: string }).text);

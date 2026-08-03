@@ -88,6 +88,27 @@ describe('repairToolCallPairs', () => {
     expect((syntheticResult as { name?: string }).name).toBe('read_file');
   });
 
+  it('repairs a tool_call that lost its function block instead of throwing', () => {
+    // This function exists to repair CORRUPTED transcripts, so a malformed
+    // tool_call is exactly its input, not an impossible case.
+    const messages: CodeBuddyMessage[] = [
+      { role: 'user', content: 'Test' },
+      {
+        role: 'assistant',
+        content: null,
+        tool_calls: [{ id: 'tc-broken', type: 'function' }],
+      } as unknown as CodeBuddyMessage,
+    ];
+
+    const result = repairToolCallPairs(messages);
+    const synthetic = result.find(
+      m => m.role === 'tool' && (m as { tool_call_id?: string }).tool_call_id === 'tc-broken'
+    );
+    expect(synthetic).toBeDefined();
+    expect(synthetic!.content).toBe('[result lost during compaction]');
+    expect((synthetic as { name?: string }).name).toBeUndefined();
+  });
+
   it('should handle both orphaned results and missing results simultaneously', () => {
     const messages: CodeBuddyMessage[] = [
       { role: 'user', content: 'Test' },
