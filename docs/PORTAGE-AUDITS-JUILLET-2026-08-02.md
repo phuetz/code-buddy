@@ -1,8 +1,8 @@
 # Portage des audits de juillet — matrice de reprise
 
-**État au 2 août 2026.** Le lot sécurité, deux sous-lots Tools/RAG, le
+**État au 3 août 2026.** Le lot sécurité, trois sous-lots Tools/RAG, le
 sous-lot Fleet lifecycle, le premier sous-lot Providers/context et l'activation
-LM-Resizer + Code Explorer sont portés et commités sur cinq branches isolées ;
+LM-Resizer + Code Explorer sont portés et commités sur six branches isolées ;
 ce document n'autorise toujours aucun merge ou push. Les
 branches sources et leurs rapports ont été protégés par la sauvegarde P0
 décrite dans `/home/patrice/Backups/code-buddy/2026-08-02-p0/MANIFESTE.md`.
@@ -76,6 +76,14 @@ Deux sous-lots indépendants ont été adaptés depuis `fix/tools-audit` sur
 | `02735e6d` | Bash repasse par le dispatch central gardé (permissions, hooks, RunStore et lane non parallèle) ; l'annulation empêche le spawn avant et après confirmation et atteint la précompaction. La sortie Bash dite streaming est désormais émise une fois terminée. |
 | `fe04829f` | Enregistrement des outils externes idempotent, fréquences/IDF recalculées et cache invalidé ; index BM25 réutilisé à corpus équivalent, signature JSON déterministe et termes obsolètes purgés. |
 
+Le sous-lot JIT context a ensuite été réécrit séparément sur
+`codex/portage-jit-tools-july-2026` :
+
+| Commit | Périmètre |
+|---|---|
+| `c40f9c84` | Contexte JIT conservé dans le transcript du round suivant, après tous les résultats d'outils frères. |
+| `a99e90a6` | Découverte JIT ignorée après un résultat d'outil en échec. |
+
 Preuves : **559/559** tests Tools/Bash élargis pour le premier sous-lot ;
 **136/136** tests Tools/RAG pour le second ; typecheck principal et Darkstar,
 lint ciblé sans erreur et `git diff --check` réussis. Deux contre-revues
@@ -83,8 +91,12 @@ indépendantes ont donné **GO**. Le vrai flux stdout/stderr Bash reste une dett
 fonctionnelle explicite : il ne devra être réintroduit qu'à travers la voie
 gardée, jamais par appel direct à `BashTool`.
 
-Restent à reprendre séparément : JIT context, feedback/options de sélection,
-réponse finale vide et deltas de coût. La compression adaptative et l'ancienne
+Preuves JIT : **188/188** tests ciblés sur l'exécuteur et le socle JIT ;
+typecheck principal et Darkstar réussis ; lint sans erreur. Détails et preuves
+rouge/vert : `docs/audits/PORTAGE-JIT-TOOLS-2026-08-03.md`.
+
+Restent à reprendre séparément : feedback/options de sélection, réponse finale
+vide et deltas de coût. La compression adaptative et l'ancienne
 implémentation d'annulation AsyncLocalStorage sont déjà remplacées dans la cible.
 
 ## Lot 4 — Fleet lifecycle, premier sous-lot
@@ -146,7 +158,7 @@ communautés et 75 processus. Cette reconstruction est locale et ignorée par Gi
 
 | Ordre | Lot source | Tip | Patchs absents | Chevauchements estimés | Règle de reprise |
 |---:|---|---|---:|---:|---|
-| 2 | Tools/RAG | `064cdca1` | 14 | 24 | **Deux sous-lots portés** (`02735e6d`, `fe04829f`). Poursuivre par JIT, feedback/options, réponse vide et coûts, chacun séparément. |
+| 2 | Tools/RAG | `064cdca1` | 14 | 24 | **Trois sous-lots portés** (`02735e6d`, `fe04829f`, puis JIT `c40f9c84` + `a99e90a6`). Poursuivre par feedback/options, réponse vide et coûts, chacun séparément. |
 | 3 | Providers/context | `36ee15bd` | 11 | 19 | **Premier sous-lot porté** (`029c53e1`) : systèmes, multimodal et résultats synthétiques. Poursuivre par les schémas `tools` et écarts provider réellement absents. |
 | 4 | Fleet | `efe36039` | 11 | 8 | **Lifecycle porté** (`5d0e1589`). Poursuivre par saturation/rétention, nettoyage Council, multiplexage et scopes loopback. |
 | 5 | Memory/self-improve | `d9b85fa0` | 10 | 10 | Porter les limites/gates et l'expurgation CKG ; ne pas intégrer la mémoire locale sale. |
