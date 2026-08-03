@@ -1899,7 +1899,11 @@ export class AgentExecutor {
             // --- JIT context discovery: load subdirectory context files ---
             // Décision #2 du plan task #5 — promu du sequential vers streaming
             // pour parité d'enrichissement après chaque tool qui touche un path.
-            jitContextMessages.push(...await runJitContextDiscovery(toolCall));
+            // A denied or failed path access must not become an indirect read
+            // through the context-discovery layer.
+            if (result.success) {
+              jitContextMessages.push(...await runJitContextDiscovery(toolCall));
+            }
 
             // Build three deliberately separate views of one observation:
             //   1. recovery: exact native output persisted before any hook/optimizer,
