@@ -239,6 +239,13 @@ export const TIMEOUT_CONFIG = {
    * is authenticated at accept time.
    */
   WS_UNAUTHENTICATED_TIMEOUT: 30000,
+  /**
+   * How long a connection may wait for an operator to approve its device
+   * pairing (ms). Longer than WS_UNAUTHENTICATED_TIMEOUT on purpose: a human
+   * has to walk over and run `buddy gateway devices`. Still bounded — a client
+   * cannot hold a slot forever by claiming to be pairing.
+   */
+  WS_PAIRING_PENDING_TIMEOUT: 600000,
   /** Default webhook request timeout (ms) */
   DEFAULT_WEBHOOK_TIMEOUT: 30000,
   /** Default rate limit window (ms) */

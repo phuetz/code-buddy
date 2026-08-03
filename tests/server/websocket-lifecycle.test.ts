@@ -115,6 +115,42 @@ describe('WebSocket fleet transport lifecycle', () => {
     expect(getConnectionCount()).toBe(0);
   });
 
+  it('keeps a device waiting for operator approval alive past the unauthenticated deadline', async () => {
+    // Trouvé par le contre-audit Agy sur mon propre correctif : un appareil qui
+    // reçoit PAIRING_PENDING reste `authenticated: false` en attendant qu'un
+    // humain lance `buddy gateway devices`. La seule échéance de 30 s coupait
+    // donc sa socket avant que l'opérateur ait eu le temps d'approuver, ce qui
+    // rendait l'appairage impossible en pratique.
+    process.env['CODEBUDDY_GATEWAY_REQUIRE_PAIRING'] = 'true';
+    try {
+      const socket = await startClient(true, true);
+      const reponse = once(socket, 'message');
+      socket.send(JSON.stringify({ type: 'authenticate', payload: { deviceId: 'appareil-en-attente' } }));
+      // Attend la réponse du serveur : c'est la preuve que l'état est posé.
+      const [brut] = await reponse;
+      expect(JSON.parse(String(brut)).error.code).toBe('PAIRING_PENDING');
+
+      // Trois balayages, soit bien au-delà des 30 s de l'échéance courte.
+      for (let sweep = 0; sweep < 3; sweep++) {
+        await vi.advanceTimersByTimeAsync(TIMEOUT_CONFIG.WS_HEARTBEAT_INTERVAL);
+        await new Promise<void>((resolve) => setImmediate(resolve));
+      }
+
+      expect(socket.readyState).toBe(WebSocket.OPEN);
+      expect(getConnectionCount()).toBe(1);
+
+      // L'attente reste bornée : au-delà du délai d'appairage, la socket tombe.
+      const closed = once(socket, 'close');
+      await vi.advanceTimersByTimeAsync(TIMEOUT_CONFIG.WS_PAIRING_PENDING_TIMEOUT);
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      await vi.advanceTimersByTimeAsync(TIMEOUT_CONFIG.WS_HEARTBEAT_INTERVAL);
+      await closed;
+      expect(getConnectionCount()).toBe(0);
+    } finally {
+      delete process.env['CODEBUDDY_GATEWAY_REQUIRE_PAIRING'];
+    }
+  });
+
   it('rejects a pending FleetListener request immediately when its socket drops', async () => {
     const created = createApiKey({
       name: 'websocket-lifecycle-test',

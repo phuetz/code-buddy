@@ -53,6 +53,12 @@ interface ConnectionState {
   lastActivity: number;
   /** Accept time, used to bound how long a connection may stay unauthenticated. */
   connectedAt: number;
+  /**
+   * When this connection last got PAIRING_PENDING. Such a client is a known
+   * device queued for operator approval, not an anonymous socket: it gets the
+   * longer pairing deadline instead of the unauthenticated one.
+   */
+  pairingPendingSince?: number;
   agent?: ServerAgent;
   agentInitializing?: Promise<void>;
   /** The in-flight chat turn, including non-streaming requests. */
@@ -485,6 +491,7 @@ messageHandlers.set('authenticate', async (ws, state, payload) => {
     state.keyId = undefined;
     state.scopes = deviceOutcome.scopes ?? [];
     state.anonymousRemote = false;
+    delete state.pairingPendingSince;
     send(ws, {
       type: 'authenticated',
       payload: { deviceId: deviceOutcome.deviceId, scopes: state.scopes, paired: true },
@@ -493,6 +500,10 @@ messageHandlers.set('authenticate', async (ws, state, payload) => {
     return;
   }
   if (deviceOutcome.outcome === 'pending') {
+    // Approving a device is a human gesture: someone has to run
+    // `buddy gateway devices`. Terminating this socket after the short
+    // unauthenticated deadline would make pairing impossible in practice.
+    state.pairingPendingSince = Date.now();
     sendError(ws, 'PAIRING_PENDING', deviceOutcome.message ?? 'Device pairing required');
     return;
   }
@@ -1147,8 +1158,10 @@ export async function setupWebSocket(
     // would let an anonymous client hold its slot forever without ever
     // sending a single frame of its own. Unauthenticated connections
     // therefore keep ageing towards the idle sweep and the auth deadline.
+    // A device queued for operator approval counts too: it is identified, and
+    // its own bounded pairing deadline is what limits it — not the idle sweep.
     ws.on('pong', () => {
-      if (!state.authenticated) return;
+      if (!state.authenticated && !state.pairingPendingSince) return;
       state.lastActivity = Date.now();
     });
 
@@ -1169,9 +1182,15 @@ export async function setupWebSocket(
       // A connection that never authenticates has no reason to stay open.
       // With auth disabled every connection is authenticated at accept time,
       // so this deadline only ever fires on a server that requires auth.
-      const unauthenticatedTooLong =
-        !state.authenticated &&
-        now - state.connectedAt > TIMEOUT_CONFIG.WS_UNAUTHENTICATED_TIMEOUT;
+      //
+      // Exception: a device waiting for operator approval. It IS identified,
+      // it just needs a human to approve it, so it gets the longer pairing
+      // deadline — still bounded, so claiming to pair buys time, not a slot.
+      const deadline = state.pairingPendingSince
+        ? TIMEOUT_CONFIG.WS_PAIRING_PENDING_TIMEOUT
+        : TIMEOUT_CONFIG.WS_UNAUTHENTICATED_TIMEOUT;
+      const since = state.pairingPendingSince ?? state.connectedAt;
+      const unauthenticatedTooLong = !state.authenticated && now - since > deadline;
 
       if (unauthenticatedTooLong || now - state.lastActivity > TIMEOUT_CONFIG.WS_IDLE_TIMEOUT) {
         abortActiveTurn(state);
