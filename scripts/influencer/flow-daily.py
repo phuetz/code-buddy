@@ -152,6 +152,46 @@ class QueueItem:
     line_index: int | None = None
 
 
+def strip_media_url_type(url: str) -> str:
+    """Ramène une URL média Flow à sa forme téléchargeable (sans `mediaUrlType`).
+
+    Les vignettes de la grille ajoutent `mediaUrlType=MEDIA_URL_TYPE_THUMBNAIL`,
+    qui renvoie une image : `download_sources` la rejetterait, ffprobe ne trouvant
+    aucune durée. Sans le paramètre, la même ressource sert la vidéo.
+    """
+    if 'getMediaUrlRedirect' not in url:
+        return url
+    base, sep, query = url.partition('?')
+    if not sep:
+        return url
+    kept = [p for p in query.split('&') if p and not p.startswith('mediaUrlType=')]
+    return f'{base}?{"&".join(kept)}' if kept else base
+
+
+def production_rules(ratio: str) -> str:
+    """Contraintes ajoutées à CHAQUE prompt, file comprise.
+
+    Un plan qui sort avec un défaut a coûté ses crédits pour rien : mieux vaut
+    les dépenser en interdisant d'avance ce qu'on sait que le modèle produit
+    spontanément. Les interdits ci-dessous visent des défauts constatés sur des
+    rushes réels, pas des précautions théoriques.
+
+    Le texte incrusté est le premier d'entre eux : le modèle ajoute volontiers
+    des sous-titres ou des légendes inventées, illisibles et impossibles à
+    retirer — et un rush qui en porte n'est réutilisable dans aucun montage.
+    """
+    return (
+        f'Contraintes de production, à respecter strictement : un seul plan continu de huit '
+        f'secondes au ratio {ratio}, sans aucune coupure ni changement de plan. '
+        'Aucun texte à l’image : ni sous-titre, ni légende, ni carton, ni titre, ni générique, '
+        'ni chiffre, ni écriture d’aucune sorte, y compris floue ou en arrière-plan. '
+        'Aucun logo, aucune marque, aucun filigrane, aucun élément d’interface. '
+        'Aucun visage humain reconnaissable ni main en gros plan si le sujet n’en demande pas. '
+        'Caméra stable et mouvement lent et régulier, exposition constante, '
+        'rendu photographique cohérent du début à la fin du plan.'
+    )
+
+
 def now() -> str:
     return datetime.now().astimezone().isoformat(timespec='seconds')
 
@@ -645,11 +685,31 @@ class FlowAgent:
         return True
 
     def videos(self) -> set[str]:
+        """Médias présents dans le projet, sous la forme d'URL téléchargeables.
+
+        Historiquement Flow montait un `<video>` par plan et il suffisait de lire
+        son `src`. Depuis la refonte de juillet 2026, la grille n'affiche plus que
+        des vignettes `<img>` : `document.querySelectorAll('video')` renvoie zéro,
+        le driver ne voyait donc JAMAIS arriver le plan qu'il venait de payer, et
+        concluait au timeout après l'avoir facturé.
+
+        Une vignette porte la même ressource que la vidéo, au paramètre près :
+            …getMediaUrlRedirect?name=<uuid>&mediaUrlType=MEDIA_URL_TYPE_THUMBNAIL  (image)
+            …getMediaUrlRedirect?name=<uuid>                                        (vidéo)
+        C'est exactement la forme des sources que le script téléchargeait déjà
+        avec succès. On retire donc le paramètre pour revenir à la vidéo, et on
+        garde le chemin `<video>` au cas où Flow le rétablirait.
+        """
         raw = self.js(
-            "JSON.stringify([...document.querySelectorAll('video')]."
-            "map(v=>v.currentSrc||v.src).filter(Boolean))"
+            "JSON.stringify([...document.querySelectorAll('video')]"
+            ".map(v=>v.currentSrc||v.src).filter(Boolean)"
+            ".concat([...document.querySelectorAll('img')].map(i=>i.src)"
+            ".filter(s=>s&&s.includes('getMediaUrlRedirect'))))"
         )
-        return set(json.loads(raw or '[]'))
+        found: set[str] = set()
+        for url in json.loads(raw or '[]'):
+            found.add(strip_media_url_type(url))
+        return found
 
     def failure_count(self) -> int:
         return int(
@@ -1009,6 +1069,30 @@ def run(args: argparse.Namespace) -> int:
         )
         atomic_json(args.state, state)
 
+        # RÉCOLTE — avant toute sortie anticipée, car c'est justement quand il n'y a
+        # rien à soumettre qu'il reste des plans à récupérer.
+        #
+        # Depuis juillet 2026, Flow met les demandes EN FILE D'ATTENTE (« la génération
+        # a été programmée… elle sera prête ») : le plan est facturé immédiatement mais
+        # n'apparaît qu'après la fin de la passe qui l'a demandé. L'ancien code fusionnait
+        # alors le média dans `projectSources` sans jamais le télécharger — la vidéo était
+        # payée, produite, puis abandonnée sur place. On rattrape donc, au début de chaque
+        # passe, tout ce qui est apparu depuis la précédente.
+        visible_sources = flow.ensure_video_view()
+        previously_known = set(state.get('projectSources', []))
+        harvested = sorted(visible_sources - previously_known)
+        if harvested:
+            try:
+                outputs = download_sources(flow, harvested, day_dir)
+                print(f'FLOW-DAILY récolte : {len(outputs)} plan(s) en attente récupéré(s)',
+                      flush=True)
+                journal(args.journal, 'harvest', date=date,
+                        recovered=len(outputs), sources=harvested)
+            except Exception as error:
+                # Ne jamais faire échouer la passe sur la récolte : le média reste dans
+                # Flow et sera retenté au prochain passage.
+                print(f'FLOW-DAILY récolte incomplète : {error}', flush=True)
+
         if needed == 0:
             ending = flow.credits()
             day['lastCredits'] = ending
@@ -1039,8 +1123,7 @@ def run(args: argparse.Namespace) -> int:
             )
             return 0
 
-        visible_sources = flow.ensure_video_view()
-        known_sources = set(state.get('projectSources', [])) | visible_sources
+        known_sources = previously_known | visible_sources
         state['projectSources'] = sorted(known_sources)
         atomic_json(args.state, state)
         stop_reason = 'candidats épuisés avant la cible'
@@ -1070,11 +1153,7 @@ def run(args: argparse.Namespace) -> int:
                 known_sources.update(visible_sources)
                 before_sources = set(known_sources)
                 before_failures = flow.failure_count()
-                prompt = (
-                    f'{item.prompt}\n\n'
-                    f'Contraintes de production : un seul plan, ratio {item.ratio}, '
-                    'aucun texte lisible, aucun logo, aucun filigrane.'
-                )
+                prompt = f'{item.prompt}\n\n{production_rules(item.ratio)}'
                 flow.fill_prompt(prompt)
                 record = {
                     'date': date,
