@@ -1544,14 +1544,66 @@ def write_test_queue(path: Path, state: dict[str, Any]) -> None:
     os.replace(temporary, path)
 
 
+# Outils DÉJÀ en production ici. Sans cette liste, le catalogue les reclasse
+# « à tester » à chaque passe et la file d'attente se remplit de choses qu'on
+# utilise tous les jours : au 2026-08-04, 49 des 207 entrées étaient dans ce cas,
+# dont Claude Code, Claude Fable 5, Gemma 4 et Kimi K3. Une file qui contient
+# 107 items dont la moitié est déjà adoptée n'est plus consultée — et c'est ainsi
+# qu'un outil réellement utile y dort sans être vu.
+#
+# Chaque entrée ci-dessous a été vérifiée le 2026-08-04 : modèles présents dans
+# `ollama list`, stratégies sous src/codebuddy/providers/, clés déclarées dans
+# ~/.codebuddy/media.env, ou binaires résolus dans le PATH. Ne PAS y ajouter un
+# outil simplement envisagé — le sens de ce statut est « en production chez nous ».
 KNOWN_USED = (
-    'longcat',
-    'wan 2.2',
-    'krea',
-    'comfyui',
-    'cerebras',
-    'groq',
+    # Modèles servis localement (ollama list)
+    'gemma 4', 'gemma4', 'qwen2.5', 'qwen 3', 'qwen3', 'devstral', 'llama 3',
+    'llama3', 'moondream', 'nomic embed',
+    # Agents et modèles employés au quotidien (abonnements, providers du dépôt)
+    'claude code', 'claude fable', 'claude opus', 'claude sonnet', 'chatgpt',
+    'gpt 5', 'gpt 5 6 luna', 'codex', 'gemini', 'grok', 'kimi', 'mistral',
+    # Fournisseurs branchés (clés présentes dans media.env)
+    'cerebras', 'groq', 'openrouter', 'deepl', 'ollama', 'lm studio',
+    # Voix et audio
+    'elevenlabs', 'eleven labs', 'piper', 'whisper', 'sherpa', 'parakeet',
+    'epidemic sound',
+    # Image, vidéo, avatar
+    'comfyui', 'wan 2.2', 'krea', 'longcat', 'heygen', 'google flow', 'veo',
+    'ditto', 'latentsync', 'stable diffusion',
+    # Outillage média résolu dans le PATH
+    'ffmpeg', 'yt dlp', 'tesseract', 'mermaid', 'imagemagick',
+    # Briques maison
+    'code explorer', 'gitnexus', 'code buddy',
 )
+
+
+KNOWN_USED_SET = frozenset(KNOWN_USED)
+
+
+def is_known_used(name: str) -> bool:
+    """Le nom désigne-t-il un outil DÉJÀ en production ici ?
+
+    La comparaison porte sur le nom complet, éventuellement privé de son suffixe
+    de version — jamais sur une sous-chaîne quelconque. Chercher « chatgpt »
+    n'importe où classerait « ChatGPT Health » comme adopté, « kimi » ferait de
+    même pour « Kimi Delta Attention », et l'outil disparaîtrait de la file sans
+    avoir été examiné. Un faux « à tester » coûte une relecture ; un faux
+    « déjà adopté » fait perdre la découverte.
+    """
+    base = re.sub(r'[^a-z0-9]+', ' ', unicodedata.normalize('NFKD', name).casefold()).strip()
+    if not base:
+        return False
+    mots = base.split()
+    candidats = {base}
+    # On ne retire QUE des marqueurs de version en fin de nom (« 4 », « 12b »,
+    # « v2 », « k3 »), jamais un mot ordinaire : « Gemma 4 12B » se ramène à
+    # « gemma 4 », mais « ChatGPT Health » et « Kimi Delta Attention » restent
+    # entiers — ce sont d'autres produits, pas des versions de ceux qu'on emploie.
+    version = re.compile(r'^(?:v?\d+(?:[.\-]\d+)*[a-z]?|\d+[a-z]+|[a-z]\d+)$')
+    while len(mots) > 1 and version.match(mots[-1]):
+        mots = mots[:-1]
+        candidats.add(' '.join(mots))
+    return any(c in KNOWN_USED_SET for c in candidats)
 
 
 def catalogue_status(item: dict[str, Any]) -> tuple[str, str]:
@@ -1567,7 +1619,7 @@ def catalogue_status(item: dict[str, Any]) -> tuple[str, str]:
             'écarté',
             'Test local : identité ArcFace 0,269, sous le seuil requis 0,55.',
         )
-    if any(name in haystack for name in KNOWN_USED):
+    if is_known_used(str(item.get('name', ''))):
         return ('déjà utilisé chez nous', 'Présent dans le pipeline actuel.')
     if any(
         item.get(axis_name, {}).get('a_tester')
