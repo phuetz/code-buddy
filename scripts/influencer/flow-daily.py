@@ -400,6 +400,26 @@ class FlowAgent:
             raise RuntimeError(f'Bouton Flow introuvable : {text}')
         self.click(button['x'], button['y'], wait)
 
+    def dismiss_announcement(self) -> bool:
+        """Ferme une annonce produit Flow (« Dernière mise à jour de Flow »).
+
+        Ces modales n'ont pas le bouton `aria-label="Fermer cette fenêtre modale"`
+        que cherche `close_profile` : elles ne se ferment que par leur bouton
+        d'action. Sans cela elles restent ouvertes indéfiniment, captent le focus
+        et font échouer `focus_editor()` — observé le 2026-08-04, où la passe
+        quotidienne mourait sur « L'éditeur Flow refuse le focus » après avoir
+        déjà payé la soumission.
+        """
+        return bool(
+            self.js(
+                "(()=>{for(const d of document.querySelectorAll('[role=dialog]')){"
+                "for(const b of d.querySelectorAll('button')){"
+                "const t=(b.innerText||'').trim().toLowerCase();"
+                "if(t==='commencer'||t==='get started'){b.click();return true}}}"
+                "return false})()"
+            )
+        )
+
     def close_profile(self) -> None:
         closed = self.js(
             "(()=>{let dialog=document.querySelector('[role=dialog][data-state=open]');"
@@ -407,6 +427,8 @@ class FlowAgent:
             "let button=dialog.querySelector('[aria-label=\"Fermer cette fenêtre modale\"]');"
             "if(!button)return false;button.click();return true})()"
         )
+        if not closed and self.dismiss_announcement():
+            closed = True
         if closed:
             for _ in range(20):
                 if not self.js(
