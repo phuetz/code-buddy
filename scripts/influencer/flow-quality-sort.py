@@ -111,7 +111,14 @@ def main() -> int:
             print(f'{binary} est requis et absent du PATH.', file=sys.stderr)
             return 1
 
-    videos = sorted(args.root.rglob('*.mp4'))
+    # Ignorer _tri : ce dossier ne contient que les liens symboliques posés par une
+    # passe --link précédente. Sans ce filtre, chaque rush est compté deux fois — la
+    # deuxième passe annonçait 148 vidéos là où il n'y en a que 74, ce qui fausse le
+    # total ET l'idée qu'on se fait de la récolte du jour.
+    videos = sorted(
+        v for v in args.root.rglob('*.mp4')
+        if '_tri' not in v.parts and not v.is_symlink()
+    )
     if not videos:
         print(f'Aucune vidéo sous {args.root}.')
         return 0
