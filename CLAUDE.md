@@ -2,6 +2,10 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Coordination Fable 5 / Codex
+
+Avant tout travail, lire [`docs/FABLE5-CODEX-COORDINATION.md`](docs/FABLE5-CODEX-COORDINATION.md), y réserver le chantier visé et respecter les zones gelées. Mettre à jour le tableau avec la branche, le commit et les vérifications avant de passer la main.
+
 > **Status: 1.1.0 GA** (tagged 2026-06-11). Multi-AI **fleet hub** (`peer.chat` + `peer.chat-session.*` + `peer.tool.invoke`) and the **Cowork** Electron GUI are the headline V1 features. ~27K Vitest tests. Read [`docs/getting-started.md`](docs/getting-started.md), [`docs/fleet-guide.md`](docs/fleet-guide.md), and [`CHANGELOG.md`](CHANGELOG.md). Keep this file short — it should capture what you *can't* derive by reading the source.
 
 ## Build, Test, Lint
@@ -275,7 +279,9 @@ The CKG is the **shared, cross-agent** memory (distinct from the per-session wri
 | `CODEBUDDY_REMINDER_RENAG_MS` / `CODEBUDDY_REMINDER_RENAG_MAX` | Gentle re-nag gap (default 60000) and max re-nags (default 2) before a missed dose escalates to Telegram + logs `missed` |
 | `CODEBUDDY_REMINDER_TICK_MS` | Reminder runner poll interval (default 60000) |
 | `CODEBUDDY_SENSORY_RULES_FILE` / `CODEBUDDY_RULE_RUNS_FILE` | Override the sensory-rules store / run-log paths. Administer with `buddy rules list\|enable\|disable\|rm\|runs\|validate\|add` or the Cowork **Automations** panel. Edits **hot-reload** on a running server (`wireSensoryRules` mtime-cache); `validateRule` runs `isDestructive` at write-time so a dangerous shell/agent rule is rejected on save. `src/sensory/sensory-rules-engine.ts` |
-| `CODEBUDDY_TTS_VOICE` / `CODEBUDDY_TTS_PIPER_MODEL` | Path to a Piper `.onnx` voice. Enables the `piper` TTS provider (`auto` picks it only when set) + the voice loop's synthesis |
+| `CODEBUDDY_TTS_VOICE` / `CODEBUDDY_TTS_PIPER_MODEL` | `elevenlabs:<voice_id>` selects ElevenLabs for Lisa; otherwise a Piper `.onnx` path keeps the local Piper route. Unset leaves the Pocket `estelle` default unchanged |
+| `CODEBUDDY_ELEVENLABS_MODEL` | Lisa's ElevenLabs model (default `eleven_flash_v2_5`; use `eleven_multilingual_v2` for maximum quality) |
+| `CODEBUDDY_ELEVENLABS_MONTHLY_CAP` | Robot-voice-only ElevenLabs character cap (default `200000`); persisted monthly in `~/.codebuddy/elevenlabs-voice-usage.json`, cache hits cost zero |
 | `OMNIPARSER_API_URL` / `OMNIPARSER_API_KEY` | Base URL (default `http://localhost:8000`) + optional Bearer for a self-hosted OmniParser v2 server, enabling `computer_control` `snapshot_with_screenshot` + `useOmniParser` (no-op if unreachable) |
 | `CODEBUDDY_DIFF_REVIEW` | Pre-application diff-review gate (`src/review/`, default `off`; `static` = deterministic checks only, `full` = + LLM lens reviewers). A producer proposes FULL before/after content (`reviewAndApply()`), the gate returns a structured accept/reject/annotate verdict (fail-closed: an unreviewable diff is rejected with `failClosed: true`, never silently applied), accepted diffs land transactionally (CheckpointManager snapshot, all-or-nothing, TOCTOU base re-check via sha256) with `rollbackAppliedDiff()`. Audit JSONL at `.codebuddy/diff-reviews.jsonl`. Aggregation is an AND, never a vote — that's why it's a gate DOWNSTREAM of the council, not a council member. WIRED into ALL five write surfaces — `apply_patch`, `create_file`/`write_file` (alias), `str_replace` and `multi_edit` — via the shared `reviewGatedWrite()` (`src/review/write-gate.ts`) + the per-tool plumbing helper `maybeReviewGatedWrite()` (`src/tools/review-gate-helper.ts`): apply_patch dry-runs the patch to full content (`computePatchedFiles`, STRICTER than the legacy applier — any failed hunk fails closed instead of partially applying); str_replace/multi_edit gate AFTER their matching cascade resolved the fragment(s) to full resulting content; all gates run after the user confirmation (the review complements the human gate) and fail closed on paths outside the base directory; a reject/annotate returns the annotations as the tool error so the agent revises; `full` mode resolves a default reviewer from the model pool (dead models skipped). The off paths load none of the review graph. `CODEBUDDY_DIFF_REVIEW_REVISE=true` adds the automatic revision loop (`src/review/revision-loop.ts`, rounds capped by `CODEBUDDY_DIFF_REVIEW_REVISE_ROUNDS`, default 2): a revisable verdict (annotate, or merit reject — never failClosed/conflicts) is handed to a reviser LLM with the annotations, the revised diff re-enters the SAME gate, every round journaled with lineage (`revision N of <diff-id>`); reviser output is constrained to the original paths (extra paths dropped), forgotten files carried over, oversized files fail closed |
 | `CODEBUDDY_COLLECTIVE_MEMORY` | Enable Collective Knowledge Graph injection into context (default off). `src/memory/collective-knowledge-graph.ts`. Same gate also activates Deep Research's Phase D CKG bridge (`buddy research --deep --ckg`, `src/agent/deep-research-ckg.ts`) — recalls prior collective knowledge into the report and ingests the run's deduped sources; `--ckg` opts in explicitly without setting the env var |
@@ -284,6 +290,16 @@ The CKG is the **shared, cross-agent** memory (distinct from the per-session wri
 | `BUDDY_MEMORY_EMBED_MODEL` / `BUDDY_MEMORY_EMBED_TOKEN_TYPE` | Multilingual MiniLM `.onnx` for hybrid recall (default `~/.codebuddy/models/buddy-memory/model.onnx`, `tokenizer.json` beside it; needs the `embeddings` cargo feature) + whether the graph expects `token_type_ids` (default true) |
 | `SENTRY_DSN`, `OTEL_EXPORTER_OTLP_ENDPOINT` | Observability |
 | `PERF_TIMING`, `CACHE_TRACE`, `VERBOSE` | Debug flags |
+
+### Exploitation de la voix ElevenLabs de Lisa
+
+Avec `ELEVENLABS_API_KEY` déjà chargé dans l'environnement, activer la voix vidéo de Lisa avec
+`export CODEBUDDY_TTS_VOICE=elevenlabs:3fxbs2pB9bs8S6Z1N38A`. Le modèle Flash 2.5 et le plafond
+mensuel de 200 000 caractères s'appliquent par défaut. Surveiller le compteur avec
+`cat ~/.codebuddy/elevenlabs-voice-usage.json` et le rendement du cache avec
+`buddy companion tts-cache stats`. Pour revenir immédiatement à Pocket `estelle`, exécuter
+`unset CODEBUDDY_TTS_VOICE`; les erreurs réseau, l'absence de clé et le plafond provoquent déjà ce
+repli automatiquement, sans interrompre la parole.
 
 ## Special Modes
 

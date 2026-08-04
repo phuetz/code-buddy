@@ -1,0 +1,30 @@
+{
+  "subject": "Un modèle IA local améliore la transcription",
+  "persona": "Lisa",
+  "structure": {
+    "0-3": "preuve visible et rupture",
+    "3-10": "contexte",
+    "10-45": "trois faits sourcés",
+    "45-60": "conséquence et question"
+  },
+  "script": "Texte du Short validé par le générateur amont.",
+  "audio_file": "/home/patrice/Videos/lisa/transcription-locale.mp3",
+  "presenter_video": "/home/patrice/Videos/lisa/heygen-transcription-locale.mp4",
+  "hook": "Cette IA transcrit sans envoyer votre voix dans le cloud",
+  "broll": [
+    {
+      "path": "/home/patrice/Documents/preuves-lisa/preuve-split-1080x960.png",
+      "trigger": "Cette",
+      "duration": 3
+    }
+  ],
+  "music": "mood:elegant",
+  "title": "Cette IA transcrit votre voix sans cloud",
+  "description": "Une démonstration sourcée, puis ce que cela change pour vos données.",
+  "keywords": ["IA locale", "transcription", "vie privée"],
+  "scheduled_for": "2026-08-04T12:30:00+02:00",
+  "platforms": ["youtube", "tiktok", "instagram"],
+  "evidence_manifests": [
+    "/home/patrice/Documents/preuves-lisa/exemple.meta.json"
+  ]
+}

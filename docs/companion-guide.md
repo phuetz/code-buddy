@@ -9,6 +9,41 @@ ce qui demande du matériel/du temps pour se vivre aussi.
 
 ---
 
+## Checklist modernisation Lisa (2026-07)
+
+Plan complet : [`docs/plans/2026-07-17-lisa-modernization.md`](plans/2026-07-17-lisa-modernization.md) · LoRA : [`krea-lora.md`](krea-lora.md).
+
+```bash
+# 1. Persona / voix character
+buddy persona set lisa
+buddy companion doctor          # exit 1 si ROBOT_NAME=Lisa sans spokenPrompt
+
+# 2. Config résidente recommandée (cerveau ancré)
+# CODEBUDDY_ROBOT_NAME=Lisa
+# CODEBUDDY_SENSORY_SPEAK=true
+# CODEBUDDY_SENSORY_SPEAK_ACT=true          # commandes vocales (opt-in)
+# CODEBUDDY_SENSORY_SPEAK_FACT_MODEL=…      # modèle capable pour faits (pas le tiny chat only)
+# CODEBUDDY_SENSORY_SPEAK_MODEL=auto        # latence pour small-talk
+# CODEBUDDY_VOICEBOX_INSTRUCT=…             # défaut Lisa expressif (delivery only)
+# CODEBUDDY_LISA_FEWSHOT_EVERY=4            # exemplars xAI anti-dilution
+
+# 3. Identité visuelle
+buddy lora status
+buddy lora validate lisa --quality
+# Dataset 40 déjà packé sous .codebuddy/lora/lisa/
+CODEBUDDY_LORA_TRAIN=true FAL_KEY=… buddy lora train cloud lisa --steps 1000
+buddy lora install .codebuddy/lora/lisa/output/*.safetensors --name lisa
+export CODEBUDDY_LORA_INFER_CHECKPOINT=…    # monostack = même base que le train
+buddy lora selfie --mood tender
+buddy lora selfie-cache --tier safe --per-style 5
+buddy lora selfie-cache --tier sensual --per-style 3
+
+# 4. Overnight
+bash scripts/overnight-lisa.sh              # écrit toujours MORNING-REPORT.md
+```
+
+---
+
 ## Ce que je sais faire
 
 ### 🗣️ T'entendre et répondre comme un humain
@@ -397,6 +432,48 @@ J'ai plusieurs personnalités (`/persona list|use <id>`) ; chacune a son **carac
 peut choisir une voix Pocket prédéfinie ou un court échantillon à cloner. Mon choix **tient entre les
 sessions**. Tu peux en créer (`~/.codebuddy/personas/*.json`).
 `personas/persona-manager.ts`.
+
+### 🖼️ Avatar visuel stable (LoRA Krea 2)
+La voix et le caractère Lisa sont dans le code (`/persona use lisa`) ; le **visage reproductible**
+passe par un **LoRA Krea 2** entraîné sur 40–50 images, puis installé dans ComfyUI — même idée que
+les tutoriels « Krea 2 LoRA Training » (train local ou cloud économique).
+
+```bash
+buddy lora lisa
+# → déposer les portraits dans .codebuddy/lora/lisa/images/
+buddy lora validate lisa --fill-captions
+CODEBUDDY_LORA_TRAIN=true FAL_KEY=… buddy lora train cloud lisa --steps 1000
+# ou plan local : buddy lora train local lisa
+buddy lora install .codebuddy/lora/lisa/output/<fichier>.safetensors --name lisa
+```
+
+Trigger par défaut : `ohwx lisa`. Ensuite : ComfyUI (base Krea 2 + LoRA `lisa`) et/ou
+`CODEBUDDY_IMAGE_PROVIDER=comfyui`. Doc complète : [`krea-lora.md`](krea-lora.md).
+`src/lora/` · `buddy lora`.
+
+Une fois le générateur d’images configuré, je peux **me photographier** et t’envoyer le cliché
+sur Telegram :
+
+```bash
+buddy lora selfie --mood tender
+# Voix : « Lisa, envoie-moi une photo de toi »
+```
+
+Prérequis : `CODEBUDDY_IMAGE_PROVIDER` (idéalement `comfyui` + LoRA) + Telegram
+(`CODEBUDDY_SENSORY_ALERT_TOKEN` / `_CHAT` pour l’alerte, ou le bot channel pour le chat).
+
+Surfaces : **voix**, **Telegram** (message entrant), **CLI** (`buddy lora selfie`), **outil agent**
+`lisa_selfie`. Comfy charge le LoRA via `CODEBUDDY_COMFYUI_LORA=lisa` (auto en selfie si projet hint).
+Cooldown : `CODEBUDDY_LISA_SELFIE_COOLDOWN_MS` (45 s). Désactiver : `CODEBUDDY_LISA_SELFIE=false`.
+`src/companion/lisa-selfie.ts` · `LoraLoader` dans `media-generation-tool.ts`.
+
+Les selfies pré-générés sont séparés sous
+`.codebuddy/lora/lisa/selfie-cache/{safe,sensual,explicit}/` et servis en rotation
+LRU pour rendre Telegram instantané. Le niveau `explicit` est fail-closed : il ne
+peut pas être généré tant que la route adulte vérifiée n'est pas activée.
+
+Catalogue de 24 moments originaux, inspiré des pratiques publiques des applications
+de compagnons : [`mysoulmate-image-prompt-catalog.md`](mysoulmate-image-prompt-catalog.md).
 
 ### 💊 Veiller sur tes rappels (médicaments…)
 Je te rappelle au bon moment (voix + Telegram), tu confirmes « c'est fait » (à la voix, en sécurité — ça ne

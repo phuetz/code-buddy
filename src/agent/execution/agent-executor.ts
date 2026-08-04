@@ -159,9 +159,11 @@ function configuredSensoryRuntime(
 ) {
   const voiceConfigured = surface === 'voice' || env.CODEBUDDY_SENSORY_SPEAK === 'true';
   const configuredTtsEngine = env.CODEBUDDY_TTS_ENGINE?.trim().toLowerCase();
-  const ttsProvider = configuredTtsEngine === 'piper' || configuredTtsEngine === 'voicebox'
-    ? configuredTtsEngine
-    : 'pocket';
+  const ttsProvider = env.CODEBUDDY_TTS_VOICE?.trim().toLowerCase().startsWith('elevenlabs:')
+    ? 'elevenlabs'
+    : configuredTtsEngine === 'piper' || configuredTtsEngine === 'voicebox'
+      ? configuredTtsEngine
+      : 'pocket';
   const ttsConfigured = voiceConfigured || Boolean(
     env.CODEBUDDY_TTS_ENGINE ||
     env.CODEBUDDY_TTS_VOICE ||

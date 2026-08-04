@@ -1,5 +1,5 @@
 import { Clock3, Download, Film, Plus, WandSparkles } from 'lucide-react';
-import type { FlowScene } from './flow-studio-model';
+import { sourceVideoClips, type FlowScene } from './flow-studio-model';
 
 export function FlowSceneTimeline({
   scenes,
@@ -19,12 +19,13 @@ export function FlowSceneTimeline({
   onAssemble: () => void;
 }) {
   const total = scenes.reduce((sum, scene) => sum + scene.durationSeconds, 0);
+  const sourceClipCount = sourceVideoClips(scenes).length;
   return (
     <section className="shrink-0 border-t border-border bg-surface" data-testid="flow-scene-timeline">
       <div className="flex items-center justify-between px-4 py-2">
         <div className="flex items-center gap-2"><h2 className="text-xs font-semibold">Scènes</h2><span className="text-[10px] text-muted-foreground">{scenes.length} plans · {total}s</span></div>
         <div className="flex gap-2">
-          <button type="button" onClick={onAssemble} disabled={scenes.filter((scene) => scene.mediaType === 'video' && scene.path).length < 2} className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-[10px] hover:bg-background disabled:opacity-40" data-testid="flow-assemble"><Film className="h-3 w-3" /> Monter</button>
+          <button type="button" onClick={onAssemble} disabled={sourceClipCount < 2} className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-[10px] hover:bg-background disabled:opacity-40" data-testid="flow-assemble"><Film className="h-3 w-3" /> Monter</button>
           <button type="button" onClick={onExportAll} disabled={!scenes.some((scene) => scene.path)} className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-[10px] hover:bg-background disabled:opacity-40" data-testid="flow-export-all"><Download className="h-3 w-3" /> Exporter</button>
           <button type="button" onClick={onAdd} className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-[10px] hover:bg-background"><Plus className="h-3 w-3" /> Ajouter un plan</button>
           <button type="button" onClick={onExtend} className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-[10px] hover:bg-background" data-testid="flow-extend-scene"><WandSparkles className="h-3 w-3" /> Étendre le plan</button>

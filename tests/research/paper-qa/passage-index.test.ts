@@ -12,8 +12,13 @@
  *                        be proven independently.
  */
 
-import { describe, it, expect } from 'vitest';
-import { PassageIndex } from '../../../src/research/paper-qa/passage-index.js';
+import { createHash } from 'node:crypto';
+import { describe, it, expect, vi } from 'vitest';
+import {
+  InMemoryEmbeddingCache,
+  PassageIndex,
+} from '../../../src/research/paper-qa/passage-index.js';
+import { logger } from '../../../src/utils/logger.js';
 import type { PassageEmbedder } from '../../../src/research/paper-qa/passage-index.js';
 import { parsePdfStructure } from '../../../src/research/paper-qa/pdf-structure.js';
 import type { ParsedPdf, StructuredDoc } from '../../../src/research/paper-qa/types.js';
@@ -205,6 +210,7 @@ describe('PassageIndex — index, search, provenance', () => {
 
 describe('PassageIndex — degradation and bounds', () => {
   it('degrades to keyword-only when the embedder throws (never crashes)', async () => {
+    const warning = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
     const doc = await docFromPages([
       'The heron stood motionless at the edge of the reed bed waiting patiently.',
       'Neural networks learn representations from data through gradient descent optimization.',
@@ -230,6 +236,11 @@ describe('PassageIndex — degradation and bounds', () => {
     // The degradation is now VISIBLE to callers (finding E): the last search
     // reports its semantic leg was unavailable.
     expect(index.lastSemanticAvailable).toBe(false);
+    expect(warning).toHaveBeenCalledWith(
+      expect.stringContaining('explicitly degraded to BM25-only'),
+      expect.objectContaining({ reason: expect.any(String) }),
+    );
+    warning.mockRestore();
   });
 
   it('returns [] for an empty index and an empty question', async () => {
@@ -300,5 +311,30 @@ describe('PassageIndex — degradation and bounds', () => {
     const docIds = new Set(results.map((r) => r.provenance.docId));
     expect(docIds.has('docA')).toBe(true);
     expect(docIds.has('docB')).toBe(true);
+  });
+
+  it('never reuses vectors from the pre-fix cache namespace that could contain mock data', async () => {
+    const model = 'Xenova/paraphrase-multilingual-MiniLM-L12-v2';
+    const text = 'A traceable passage about dopamine transport and neuronal signalling.';
+    const cache = new InMemoryEmbeddingCache(10);
+    const legacyFingerprint = createHash('sha1').update(`${model}\n${text}`).digest('hex');
+    cache.set(legacyFingerprint, new Float32Array([0.123, 0.456]));
+    let calls = 0;
+    const embedder: PassageEmbedder = {
+      embed: async (value) => {
+        calls += 1;
+        return bowEmbedder().embed(value);
+      },
+    };
+    const index = new PassageIndex({
+      embedder,
+      embeddingModel: model,
+      embeddingCache: cache,
+      chunkOptions: { targetChars: 5000, overlapChars: 0 },
+    });
+
+    await index.addDocument(await docFromPages([text], 'legacy-cache-proof'));
+
+    expect(calls).toBe(1);
   });
 });

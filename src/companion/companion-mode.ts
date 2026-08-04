@@ -24,6 +24,10 @@ import {
   engineUsesParakeetModel,
 } from '../sensory/speech-engine-config.js';
 import { getActivePersonaVoiceAsync } from '../personas/persona-manager.js';
+import {
+  doctorInputFromPersonaVoice,
+  runCompanionDoctor,
+} from './companion-doctor.js';
 import { DEFAULT_WAKE_WORD_CONFIG } from '../voice/types.js';
 import { hasCodexCredentials, getCodexAuthFilePath } from '../providers/codex-oauth.js';
 import { commandExists } from '../utils/command-exists.js';
@@ -602,12 +606,22 @@ function resolveDetectedPiperVoice(): string {
 }
 
 function resolveConfiguredPiperVoice(status: CompanionStatus): string {
-  const candidate = process.env.CODEBUDDY_TTS_VOICE
+  const selectedVoice = process.env.CODEBUDDY_TTS_VOICE?.trim();
+  const candidate = (selectedVoice?.toLowerCase().startsWith('elevenlabs:')
+    ? undefined
+    : selectedVoice)
     || process.env.CODEBUDDY_TTS_PIPER_MODEL
     || process.env.COWORK_PIPER_VOICE
     || process.env.CODEBUDDY_PIPER_VOICE
     || (status.tts.provider === 'piper' && status.tts.voice?.endsWith('.onnx') ? status.tts.voice : '');
   return candidate ? expandHome(candidate) : resolveDetectedPiperVoice();
+}
+
+function resolveConfiguredRobotVoice(status: CompanionStatus): string {
+  const selectedVoice = process.env.CODEBUDDY_TTS_VOICE?.trim();
+  return selectedVoice?.toLowerCase().startsWith('elevenlabs:')
+    ? selectedVoice
+    : resolveConfiguredPiperVoice(status);
 }
 
 function resolvePiperBin(): string {
@@ -742,7 +756,7 @@ async function buildVoiceAssistantBrief(
   const env = {
     ...process.env,
     CODEBUDDY_ROBOT_NAME: robotName,
-    CODEBUDDY_TTS_VOICE: piperVoice,
+    CODEBUDDY_TTS_VOICE: resolveConfiguredRobotVoice(status),
   };
   const readiness = describeVoiceReadiness(env);
   const permissionMode = readiness.permissionMode?.toLowerCase();
@@ -819,7 +833,7 @@ async function buildVoiceAssistantBrief(
     earDeviceAutoDetected: earDeviceSelection.autoDetected,
     ready,
     detail: ready
-      ? `Voice assistant loop ready: piper=${piperBin}, voice=${piperVoice}, ear=${earPython} (${earDevice}${earDeviceSelection.autoDetected ? ', webcam mic auto-selected' : ''}), STT=${speechPython}, player=${playerCommand}; responds as "${env.CODEBUDDY_ROBOT_NAME}" in ${responseMode} mode; model=${readiness.model}; ${actionDetail}.`
+      ? `Voice assistant loop ready: tts=${readiness.ttsEngine}, fallback=${piperVoice}, ear=${earPython} (${earDevice}${earDeviceSelection.autoDetected ? ', webcam mic auto-selected' : ''}), STT=${speechPython}, player=${playerCommand}; responds as "${env.CODEBUDDY_ROBOT_NAME}" in ${responseMode} mode; model=${readiness.model}; ${actionDetail}.`
       : missing.join('; '),
     next: ready
       ? undefined
@@ -1041,7 +1055,9 @@ function buildLiveCommands(
   bridge: CompanionSensoryBridgeBrief,
   assistant: CompanionVoiceAssistantBrief,
 ): CompanionLiveCommand[] {
-  const voice = assistant.piperVoice || resolvePiperVoicePath(status);
+  const voice = resolveConfiguredRobotVoice(status)
+    || assistant.piperVoice
+    || resolvePiperVoicePath(status);
   const tokenFallback = "${CODEBUDDY_SENSORY_TOKEN:-'<shared-sensory-token>'}";
   const sidecarTokenFallback = "${BUDDY_SENSE_TOKEN:-${CODEBUDDY_SENSORY_TOKEN:-'<shared-sensory-token>'}}";
   const voiceModel = process.env.CODEBUDDY_SENSORY_SPEAK_MODEL || assistant.readiness.model || 'auto';
@@ -1117,7 +1133,7 @@ export async function buildCompanionLiveBrief(
   const sensoryEnabled = isTruthyEnv('CODEBUDDY_SENSORY');
   const speechEnabled = isTruthyEnv('CODEBUDDY_SENSORY_SPEECH');
   const speakEnabled = isTruthyEnv('CODEBUDDY_SENSORY_SPEAK');
-  const resolvedTtsVoice = resolveConfiguredPiperVoice(status);
+  const resolvedTtsVoice = resolveConfiguredRobotVoice(status);
   const ttsVoicePresent = Boolean(resolvedTtsVoice);
   const voiceAssistant = await buildVoiceAssistantBrief(status, speechEnabled, speakEnabled, runtime);
   const telegramVoiceReady = isTruthyEnv('CODEBUDDY_VOICE_TO_TELEGRAM')
@@ -1259,6 +1275,36 @@ export async function buildCompanionLiveBrief(
       next: status.percepts.total > 0 ? undefined : 'Run `buddy companion self` or capture camera/voice percepts.',
     },
   ];
+
+  // Persona / spokenPrompt doctor (required when robot is Lisa)
+  try {
+    const voice = await getActivePersonaVoiceAsync();
+    const doctor = runCompanionDoctor(doctorInputFromPersonaVoice(voice));
+    const wantsLisa =
+      /^(lisa|companion-lisa)$/i.test((process.env.CODEBUDDY_ROBOT_NAME ?? '').trim()) ||
+      /^(lisa|companion-lisa)$/i.test((process.env.CODEBUDDY_COMPANION_VOICE_FALLBACK ?? '').trim()) ||
+      /^(lisa|companion-lisa)$/i.test((voice.robotName ?? '').trim());
+    capabilities.push({
+      id: 'persona_voice',
+      label: 'Persona / spoken character',
+      ready: doctor.ok,
+      required: wantsLisa,
+      detail: doctor.summary,
+      next: doctor.ok
+        ? undefined
+        : doctor.checks.find((c) => c.severity === 'error')?.next ||
+          'Run `buddy companion doctor` and pin persona lisa.',
+    });
+  } catch {
+    capabilities.push({
+      id: 'persona_voice',
+      label: 'Persona / spoken character',
+      ready: false,
+      required: false,
+      detail: 'Persona doctor could not run.',
+      next: 'Run `buddy companion doctor`.',
+    });
+  }
 
   const required = capabilities.filter(capability => capability.required);
   const requiredReady = required.filter(capability => capability.ready).length;

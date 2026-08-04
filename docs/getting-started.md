@@ -196,6 +196,10 @@ buddy companion missions run-next # Prepare the next mission brief
 buddy companion safety recent   # Inspect sensitive companion events
 buddy companion camera snapshot # Capture one webcam frame into .codebuddy/camera/
 buddy companion percepts recent # Read Buddy's local sensory journal
+buddy lora lisa                 # Init a Krea 2 character LoRA project for Lisa's visual identity
+# CODEBUDDY_LORA_TRAIN=true FAL_KEY=… buddy lora train cloud lisa --steps 1000
+# buddy lora install .codebuddy/lora/lisa/output/*.safetensors --name lisa
+# Full guide: docs/krea-lora.md
 buddy speak "Bonjour"           # Speak text aloud through the configured TTS provider
 buddy daemon start              # Run 24/7 in background
 buddy server --port 3000        # Expose REST/WebSocket API

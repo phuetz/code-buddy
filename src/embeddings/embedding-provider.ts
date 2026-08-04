@@ -89,6 +89,14 @@ export class EmbeddingProvider extends EventEmitter {
   }
 
   private async doInitialize(): Promise<void> {
+    if (this.config.provider === 'mock' && !isTestRuntime()) {
+      const error = new Error(
+        'Mock embeddings are test-only and cannot be initialized in normal execution',
+      );
+      this.emitProviderError(error);
+      throw error;
+    }
+
     try {
       if (this.config.provider === 'local') {
         await this.initializeLocalModel();
@@ -98,16 +106,24 @@ export class EmbeddingProvider extends EventEmitter {
       this.initialized = true;
       this.emit('initialized', { provider: this.config.provider });
     } catch (error) {
-      this.emit('error', error);
-      // Fall back to mock provider if local fails
+      this.emitProviderError(error);
       if (this.config.provider === 'local') {
-        logger.warn('Local embedding model failed to load, using mock embeddings');
-        this.config.provider = 'mock';
-        this.initialized = true;
-      } else {
-        throw error;
+        logger.warn(
+          'Local embedding model failed to load; semantic search must use its declared keyword-only fallback',
+          { error: error instanceof Error ? error.message : String(error) },
+        );
       }
+      // Never manufacture pseudo-random vectors after a production provider
+      // failure. Callers such as PaperQA and the CKG own an explicit BM25-only
+      // fallback and must be able to observe this rejection.
+      throw error;
     }
+  }
+
+  private emitProviderError(error: unknown): void {
+    // EventEmitter throws when an `error` event has no listener. Initialization
+    // must reject with the original provider failure instead.
+    if (this.listenerCount('error') > 0) this.emit('error', error);
   }
 
   private async initializeLocalModel(): Promise<void> {
@@ -395,7 +411,7 @@ export class EmbeddingProvider extends EventEmitter {
   }
 
   // ============================================================================
-  // Mock Methods (for testing and fallback)
+  // Mock Methods (tests only)
   // ============================================================================
 
   private embedMock(text: string): EmbeddingResult {
@@ -468,4 +484,8 @@ export async function initializeEmbeddingProvider(config?: Partial<EmbeddingConf
 
 export function resetEmbeddingProvider(): void {
   instance = null;
+}
+
+function isTestRuntime(): boolean {
+  return process.env.NODE_ENV === 'test';
 }

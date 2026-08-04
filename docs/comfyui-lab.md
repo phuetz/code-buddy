@@ -39,3 +39,16 @@ Les seules actions mutables sont :
 Il n’existe aucun canal pour télécharger, installer, importer, exécuter ou mettre en file un
 workflow. Le renderer ne choisit ni URL, ni commande, ni chemin racine. Aucune route distante et
 aucun secret ne sont exposés.
+
+## LoRA personnage (hors labo UI)
+
+L’entraînement et l’installation d’un LoRA **Krea 2** (avatar Lisa, style custom) passent par la
+CLI, pas par le panneau labo :
+
+- doc : [`krea-lora.md`](krea-lora.md)
+- `buddy lora init|validate|train cloud|train local|install|list|lisa`
+- install des poids dans `models/loras` via `buddy lora install` (racine ComfyUI détectée ou
+  `COMFYUI_ROOT`)
+
+Le labo continue d’**inventorier** les prérequis ; le train cloud reste opt-in
+(`CODEBUDDY_LORA_TRAIN=true` + `FAL_KEY`).

@@ -1,0 +1,75 @@
+{
+  "name": "lisa-portrait",
+  "version": 2,
+  "description": "Lisa portrait recipe inspired by Krea 2 character-LoRA demos (youtube GQusMZgc1RE). Checkpoint + optional LoraLoader; matches buildComfyWorkflow().",
+  "source": "https://www.youtube.com/watch?v=GQusMZgc1RE",
+  "trigger": "ohwx lisa",
+  "recommended": {
+    "checkpoint": "Krea 2 Turbo ideal after train-on-Raw; interim: sd_turbo.safetensors",
+    "lora": "lisa.safetensors (after buddy lora install)",
+    "lora_strength": 0.85,
+    "steps_turbo": 4,
+    "cfg_turbo": 1.0,
+    "steps_krea": 20,
+    "cfg_krea": 7.0,
+    "sampler": "euler",
+    "scheduler_turbo": "sgm_uniform",
+    "scheduler_default": "normal",
+    "width": 768,
+    "height": 1024,
+    "negative": "blurry, deformed, extra fingers, mutated hands, bad anatomy, plastic skin, oily skin, waxy face, duplicate face, watermark, text, logo, lowres, over-smoothed, cgi mannequin"
+  },
+  "prompt_template": "ohwx lisa, same woman every image, locked face identity, stunning young woman mid-20s, olive-golden warm skin, deep dark brown eyes, long dark brunette almost-black wavy hair with soft wet strands, high cheekbones, studio beauty portrait, soft glam key light, looking at camera, photoreal Krea-2 cinematic rendering, 85mm, shallow depth of field",
+  "workflow": {
+    "4": {
+      "class_type": "CheckpointLoaderSimple",
+      "inputs": { "ckpt_name": "{{CHECKPOINT}}" }
+    },
+    "10": {
+      "class_type": "LoraLoader",
+      "inputs": {
+        "lora_name": "{{LORA_NAME}}",
+        "strength_model": 0.85,
+        "strength_clip": 0.85,
+        "model": ["4", 0],
+        "clip": ["4", 1]
+      },
+      "_meta": { "optional": true, "note": "Omit node 10 and wire 4→3/6/7 when no LoRA" }
+    },
+    "5": {
+      "class_type": "EmptyLatentImage",
+      "inputs": { "width": 768, "height": 1024, "batch_size": 1 }
+    },
+    "6": {
+      "class_type": "CLIPTextEncode",
+      "inputs": { "text": "{{PROMPT}}", "clip": ["10", 1] }
+    },
+    "7": {
+      "class_type": "CLIPTextEncode",
+      "inputs": { "text": "{{NEGATIVE}}", "clip": ["10", 1] }
+    },
+    "3": {
+      "class_type": "KSampler",
+      "inputs": {
+        "seed": 42,
+        "steps": 20,
+        "cfg": 7.0,
+        "sampler_name": "euler",
+        "scheduler": "normal",
+        "denoise": 1.0,
+        "model": ["10", 0],
+        "positive": ["6", 0],
+        "negative": ["7", 0],
+        "latent_image": ["5", 0]
+      }
+    },
+    "8": {
+      "class_type": "VAEDecode",
+      "inputs": { "samples": ["3", 0], "vae": ["4", 2] }
+    },
+    "9": {
+      "class_type": "SaveImage",
+      "inputs": { "filename_prefix": "lisa-portrait", "images": ["8", 0] }
+    }
+  }
+}

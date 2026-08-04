@@ -23,14 +23,23 @@
  * (`getEmbeddingProvider`). Borrows Code Explorer's id convention `Type:scope:name` and edge
  * shape `(from, to, type, confidence, reason)`.
  *
- * Deferred (later phases): PageRank multi-hop (Phase 1 follow-up), SQLite backing +
- * cross-machine git sync (Phases 2-3), wake-sleep consolidation + gated promotion + a
- * production write tool (Phase 4). Never-throws on the write path.
+ * The in-process indexes below remove repeated ledger replay and accelerate common
+ * lexical recall, but dense retrieval is still an exact scan. `buddy-memory/` is
+ * the deliberate long-term scale path; do not duplicate its Rust storage/index
+ * engine in this TypeScript facade.
  *
  * @module memory/collective-knowledge-graph
  */
 
-import { appendFileSync, existsSync, mkdirSync, readFileSync } from 'fs';
+import { createHash } from 'node:crypto';
+import {
+  appendFileSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
 import { dirname, join } from 'path';
 import { logger } from '../utils/logger.js';
 import { contentHash, computeSalience, type EntityType, type RelationType } from './knowledge-graph.js';
@@ -39,6 +48,7 @@ import { getCodeBuddyHome } from '../utils/codebuddy-home.js';
 import { EmbeddingProvider } from '../embeddings/embedding-provider.js';
 import { BM25Index } from '../search/bm25.js';
 import { cosineSimilarityF32, hybridMmrRank, type HybridCandidate } from './hybrid-mmr.js';
+import { DiskEmbeddingCache } from '../research/paper-qa/disk-embedding-cache.js';
 import {
   canonicalObject,
   factMatchKey,
@@ -50,7 +60,6 @@ import {
   type FactVerdict,
   type StructuredFact,
 } from './ckg-fact-reconciliation.js';
-import { writeFileSync } from 'fs';
 import { redactRememberInput } from './ckg-redaction.js';
 
 /** Multilingual embeddings — all-MiniLM (the global default) is English-leaning and misses
@@ -208,6 +217,10 @@ export interface CollectiveKnowledgeGraphOptions {
   embeddingModel?: string;
   /** Inject an embedder (tests / alternative engines). Default: a dedicated EmbeddingProvider. */
   embedder?: CkgEmbedder;
+  /** Persist content-addressed vectors beside the ledger (default true). */
+  persistentEmbeddingCache?: boolean;
+  /** Override the persistent vector-cache directory. */
+  embeddingCacheDirectory?: string;
 }
 
 /** Minimal embedder surface hybrid recall needs — EmbeddingProvider satisfies it. */
@@ -227,8 +240,17 @@ export class CollectiveKnowledgeGraph {
   /** Invalidated (superseded) versions, keyed by `id@contentHash`. */
   private readonly superseded = new Map<string, CkgEntity>();
   private readonly relations = new Map<string, CkgRelation>();
-  /** contentHash → embedding vector. Content-addressed, so it survives ledger reloads. */
+  /** Model/name/content fingerprint → hot embedding vector. */
   private readonly embCache = new Map<string, Float32Array>();
+  private readonly diskEmbCache: DiskEmbeddingCache | null;
+  /** Common recall keys, maintained while ledger events are applied. */
+  private readonly recallTokenIndex = new Map<string, Set<string>>();
+  private readonly recallTypeIndex = new Map<EntityType, Set<string>>();
+  private readonly recallNameIndex = new Map<string, string>();
+  private readonly indexedEntityTokens = new Map<string, Set<string>>();
+  private recallBm25 = new BM25Index();
+  private ledgerStamp: string | null = null;
+  private ledgerLoaded = false;
   private readonly embeddingModel: string;
   private embedder: CkgEmbedder | null = null;
   /** Rust engine client (lazy) — used only when CODEBUDDY_CKG_ENGINE=rust and the binary exists.
@@ -241,6 +263,14 @@ export class CollectiveKnowledgeGraph {
     this.agentId = options.agentId ?? safeAgentId();
     this.embeddingModel = options.embeddingModel ?? CKG_EMBEDDING_MODEL;
     this.embedder = options.embedder ?? null;
+    this.diskEmbCache =
+      options.persistentEmbeddingCache === false
+        ? null
+        : new DiskEmbeddingCache({
+            directory:
+              options.embeddingCacheDirectory ?? join(dirname(this.ledgerPath), 'ckg-embeddings'),
+            maxEntries: 200_000,
+          });
   }
 
   /** The Rust engine client when opted-in (CODEBUDDY_CKG_ENGINE=rust) and available, else null.
@@ -280,6 +310,7 @@ export class CollectiveKnowledgeGraph {
    */
   remember(input: CkgRememberInput): CkgRecallResult | null {
     try {
+      this.load();
       const safeInput = redactRememberInput(input);
       const raw = (safeInput.text ?? '').trim();
       if (!raw) return null;
@@ -387,14 +418,14 @@ export class CollectiveKnowledgeGraph {
       if (!self) return stored;
       const provider = this.getEmbedder();
       const selfVec = (await provider.embed(`${self.name}. ${self.text}`)).embedding;
-      this.embCache.set(self.contentHash, selfVec);
+      this.setCachedEmbedding(self, selfVec);
       const sims: Array<{ e: CkgEntity; sim: number }> = [];
       for (const e of this.current.values()) {
         if (e.id === self.id) continue;
-        let v = this.embCache.get(e.contentHash);
+        let v = this.getCachedEmbedding(e);
         if (!v) {
           v = (await provider.embed(`${e.name}. ${e.text}`)).embedding;
-          this.embCache.set(e.contentHash, v);
+          this.setCachedEmbedding(e, v);
         }
         sims.push({ e, sim: cosineSimilarityF32(selfVec, v) });
       }
@@ -462,7 +493,9 @@ export class CollectiveKnowledgeGraph {
     const q = tokenize(query);
     const typeFilter = opts.types ? new Set(opts.types) : null;
     const scored: Array<{ e: CkgEntity; score: number }> = [];
-    for (const e of this.current.values()) {
+    for (const id of this.recallCandidateIds(q, typeFilter)) {
+      const e = this.current.get(id);
+      if (!e) continue;
       if (typeFilter && !typeFilter.has(e.type)) continue;
       const kw = keywordOverlap(q, `${e.name} ${e.text}`);
       if (q.size > 0 && kw === 0) continue;
@@ -507,29 +540,39 @@ export class CollectiveKnowledgeGraph {
     try {
       qVec = (await provider.embed(query)).embedding;
       for (const e of candidates) {
-        if (!this.embCache.has(e.contentHash)) {
-          this.embCache.set(e.contentHash, (await provider.embed(`${e.name}. ${e.text}`)).embedding);
+        if (!this.getCachedEmbedding(e)) {
+          this.setCachedEmbedding(
+            e,
+            (await provider.embed(`${e.name}. ${e.text}`)).embedding,
+          );
         }
       }
     } catch (err) {
       // Embeddings unavailable → degrade gracefully to keyword recall (still useful, $0, no crash).
-      logger.debug(`[ckg] semantic recall unavailable, keyword only: ${err instanceof Error ? err.message : String(err)}`);
+      logger.warn(
+        '[ckg] semantic recall unavailable; retrieval is explicitly degraded to keyword-only',
+        { error: err instanceof Error ? err.message : String(err) },
+      );
       return this.recall(query, { limit, ...(opts.types ? { types: opts.types } : {}) });
     }
 
-    // Lexical leg: transient BM25 over the live candidates (small corpus,
-    // O(N) per query — same cost class as the keyword pass it replaces, with
-    // idf + tf length-norm + stemming instead of raw overlap). The stemmer/
-    // stopwords are English-leaning; on French text BM25 still beats raw
-    // overlap, and the MULTILINGUAL semantic leg carries French synonymy.
-    const index = new BM25Index();
-    index.addDocuments(candidates.map((e) => ({ id: e.id, content: `${e.name} ${e.text}` })));
-    const lexScores = new Map(index.search(query, candidates.length).map((r) => [r.id, r.score]));
+    // The unfiltered hot path reuses the in-memory BM25 index built during
+    // ledger replay. A typed subset gets a small temporary index so its IDF
+    // remains identical to the previous behavior.
+    const lexicalIndex = typeFilter ? new BM25Index() : this.recallBm25;
+    if (typeFilter) {
+      lexicalIndex.addDocuments(
+        candidates.map((e) => ({ id: e.id, content: `${e.name} ${e.text}` })),
+      );
+    }
+    const lexScores = new Map(
+      lexicalIndex.search(query, this.current.size).map((r) => [r.id, r.score]),
+    );
 
     const byId = new Map(candidates.map((e) => [e.id, e]));
     const semById = new Map<string, number>();
     const hybridCandidates: HybridCandidate[] = candidates.map((e) => {
-      const vec = this.embCache.get(e.contentHash) ?? null;
+      const vec = this.getCachedEmbedding(e) ?? null;
       const sem = vec && qVec ? Math.max(0, cosineSimilarityF32(qVec, vec)) : null;
       if (sem !== null) semById.set(e.id, sem);
       const salience = computeSalience(e.mentions, new Date(e.updatedAt));
@@ -689,9 +732,10 @@ export class CollectiveKnowledgeGraph {
       this.current.has(id) || [...this.superseded.values()].some((e) => e.id === id);
     if (raw.includes(':') && known(raw)) return raw;
     const norm = normalizeName(raw);
-    for (const e of this.current.values()) {
-      if (e.name === raw || normalizeName(e.name) === norm) return e.id;
-    }
+    const indexed =
+      this.recallNameIndex.get(`exact:${raw}`) ??
+      this.recallNameIndex.get(`normalized:${norm}`);
+    if (indexed) return indexed;
     for (const e of this.superseded.values()) {
       if (e.name === raw || normalizeName(e.name) === norm) return e.id;
     }
@@ -868,11 +912,29 @@ export class CollectiveKnowledgeGraph {
     appendFileSync(this.ledgerPath, `${JSON.stringify(event)}\n`, 'utf8');
   }
 
-  /** Rebuild the in-memory view by replaying the whole ledger (Phase 0/1; SQLite index in Phase 2). */
+  /**
+   * Rebuild the in-memory view only when the ledger changed. The first load
+   * still replays JSONL (the append-only source of truth); subsequent recalls
+   * reuse the token/type/name/BM25 indexes until another process appends.
+   */
   private load(): void {
+    let stamp: string | null = null;
+    if (existsSync(this.ledgerPath)) {
+      try {
+        const stat = statSync(this.ledgerPath);
+        stamp = `${stat.size}:${stat.mtimeMs}`;
+      } catch {
+        stamp = null;
+      }
+    }
+    if (this.ledgerLoaded && stamp === this.ledgerStamp) return;
+
     this.current.clear();
     this.superseded.clear();
     this.relations.clear();
+    this.clearRecallIndexes();
+    this.ledgerLoaded = true;
+    this.ledgerStamp = stamp;
     if (!existsSync(this.ledgerPath)) return;
     let content: string;
     try {
@@ -906,6 +968,7 @@ export class CollectiveKnowledgeGraph {
     if (!e.id) return;
     const cur = this.current.get(e.id);
     if (!cur) return; // idempotent: nothing current to retract
+    this.unindexEntity(cur);
     cur.validTo = e.recordedAt;
     this.superseded.set(`${cur.id}@${cur.contentHash}`, cur);
     this.current.delete(e.id);
@@ -915,7 +978,9 @@ export class CollectiveKnowledgeGraph {
     if (!e.id || !e.type || e.name === undefined) return;
     const cur = this.current.get(e.id);
     if (!cur) {
-      this.current.set(e.id, this.makeEntity(e));
+      const fresh = this.makeEntity(e);
+      this.current.set(e.id, fresh);
+      this.indexEntity(fresh);
       return;
     }
     // Same id + same text → reinforce. Distinct agents corroborating lifts confidence
@@ -929,9 +994,11 @@ export class CollectiveKnowledgeGraph {
     }
     // Same id, DIFFERENT text → bi-temporal supersede: invalidate old, install new, link them.
     cur.validTo = e.recordedAt;
+    this.unindexEntity(cur);
     this.superseded.set(`${cur.id}@${cur.contentHash}`, cur);
     const fresh = this.makeEntity(e);
     this.current.set(e.id, fresh);
+    this.indexEntity(fresh);
     const relId = contentHash('relation', `${e.id}@${fresh.contentHash}|supersedes|${e.id}@${cur.contentHash}`);
     this.relations.set(relId, {
       id: relId,
@@ -988,6 +1055,98 @@ export class CollectiveKnowledgeGraph {
       ...(e.reason ? { reason: e.reason } : {}),
       mentions: 1,
     });
+  }
+
+  private recallCandidateIds(
+    queryTokens: Set<string>,
+    typeFilter: Set<EntityType> | null,
+  ): Set<string> {
+    if (queryTokens.size > 0) {
+      const ids = new Set<string>();
+      for (const token of queryTokens) {
+        for (const id of this.recallTokenIndex.get(token) ?? []) ids.add(id);
+      }
+      return ids;
+    }
+    if (typeFilter) {
+      const ids = new Set<string>();
+      for (const type of typeFilter) {
+        for (const id of this.recallTypeIndex.get(type) ?? []) ids.add(id);
+      }
+      return ids;
+    }
+    return new Set(this.current.keys());
+  }
+
+  private indexEntity(entity: CkgEntity): void {
+    this.unindexEntity(entity);
+    const tokens = tokenize(`${entity.name} ${entity.text}`);
+    this.indexedEntityTokens.set(entity.id, tokens);
+    for (const token of tokens) {
+      let ids = this.recallTokenIndex.get(token);
+      if (!ids) {
+        ids = new Set<string>();
+        this.recallTokenIndex.set(token, ids);
+      }
+      ids.add(entity.id);
+    }
+    let typed = this.recallTypeIndex.get(entity.type);
+    if (!typed) {
+      typed = new Set<string>();
+      this.recallTypeIndex.set(entity.type, typed);
+    }
+    typed.add(entity.id);
+    this.recallNameIndex.set(`exact:${entity.name}`, entity.id);
+    this.recallNameIndex.set(`normalized:${normalizeName(entity.name)}`, entity.id);
+    this.recallBm25.addDocument({ id: entity.id, content: `${entity.name} ${entity.text}` });
+  }
+
+  private unindexEntity(entity: CkgEntity): void {
+    const tokens = this.indexedEntityTokens.get(entity.id);
+    if (tokens) {
+      for (const token of tokens) {
+        const ids = this.recallTokenIndex.get(token);
+        ids?.delete(entity.id);
+        if (ids?.size === 0) this.recallTokenIndex.delete(token);
+      }
+      this.indexedEntityTokens.delete(entity.id);
+    }
+    const typed = this.recallTypeIndex.get(entity.type);
+    typed?.delete(entity.id);
+    if (typed?.size === 0) this.recallTypeIndex.delete(entity.type);
+    for (const key of [`exact:${entity.name}`, `normalized:${normalizeName(entity.name)}`]) {
+      if (this.recallNameIndex.get(key) === entity.id) this.recallNameIndex.delete(key);
+    }
+    this.recallBm25.removeDocument(entity.id);
+  }
+
+  private clearRecallIndexes(): void {
+    this.recallTokenIndex.clear();
+    this.recallTypeIndex.clear();
+    this.recallNameIndex.clear();
+    this.indexedEntityTokens.clear();
+    this.recallBm25 = new BM25Index();
+  }
+
+  private getCachedEmbedding(entity: CkgEntity): Float32Array | undefined {
+    const fingerprint = this.embeddingFingerprint(entity);
+    const memory = this.embCache.get(fingerprint);
+    if (memory) return memory;
+    const stored = this.diskEmbCache?.get(fingerprint);
+    if (stored) this.embCache.set(fingerprint, stored);
+    return stored;
+  }
+
+  private setCachedEmbedding(entity: CkgEntity, vector: Float32Array): void {
+    const fingerprint = this.embeddingFingerprint(entity);
+    this.embCache.set(fingerprint, vector);
+    this.diskEmbCache?.set(fingerprint, vector);
+  }
+
+  private embeddingFingerprint(entity: CkgEntity): string {
+    return createHash('sha1')
+      .update(`${this.embeddingModel}\n${entity.name}\n${entity.contentHash}`)
+      .digest('hex');
   }
 
   private toResult(e: CkgEntity, salience?: number): CkgRecallResult {

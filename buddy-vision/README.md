@@ -51,6 +51,7 @@ and loop latency from companion percepts.
 | `camera_alive` / `camera_unavailable` | Low-rate camera liveness refresh and explicit read/open failure. |
 | `motion` | Rate-limited keyframe for the brain's local VLM scene refresh. |
 | `drowsy` | `eyeBlink` blendshape closed ≥ `BUDDY_VISION_DROWSY_SECS` (Vigil) |
+| `person_identified` | Identité locale InsightFace, uniquement avec `BUDDY_VISION_IDENTIFY=true`; un résultat par présence continue. |
 
 A cheap motion gate (frame-diff) skips inference when nothing moves. On a
 transition: a JPEG keyframe is saved, the event is pushed to the bridge, and a
@@ -110,6 +111,7 @@ YOLO env knobs: `BUDDY_VISION_YOLO_MODEL`, `BUDDY_VISION_YOLO_CONF`,
 `BUDDY_VISION_OBSERVATION_SECS`, `BUDDY_VISION_MOTION_EVENT_SECS`,
 `BUDDY_VISION_MOTION_FRAME_SLOTS`, `BUDDY_VISION_SEMANTIC_FRAME_SLOTS`,
 `BUDDY_VISION_EVENTS_LOG_MAX_BYTES`, `BUDDY_EAR_DEVICE`,
+`BUDDY_VISION_IDENTIFY`, `BUDDY_VISION_IDENTIFY_THRESHOLD`,
 `BUDDY_EAR_RMS_ON`, `BUDDY_EAR_RMS_OFF`, `BUDDY_EAR_MIN_MS`,
 `BUDDY_EAR_MAX_MS`, `BUDDY_EAR_HANG_MS`, `BUDDY_EAR_WAV_DIR`.
 
@@ -141,3 +143,57 @@ workspace. Telegram receives text only unless the separate
 Raw VLM image inference is loopback-only by default; a non-loopback endpoint is
 accepted only over HTTPS with the separate `CODEBUDDY_VISION_REMOTE_IMAGE=true`
 consent.
+
+## Identité (opt-in)
+
+La reconnaissance d’identité est désactivée par défaut. Elle utilise localement
+InsightFace avec le pack `buffalo_l` (embeddings 512D) et ne s’active dans
+`watch.py` que si `BUDDY_VISION_IDENTIFY=true`. Installer d’abord les dépendances
+optionnelles dans le venv (la même commande est laissée commentée dans
+`setup.sh`) :
+
+```bash
+.venv/bin/pip install insightface onnxruntime
+```
+
+Enrôler une personne depuis un dossier contenant plusieurs vues nettes de son
+visage :
+
+```bash
+.venv/bin/python enroll.py --name Patrice --images ./photos-enrollement
+```
+
+Ou capturer localement 20 images depuis une caméra :
+
+```bash
+.venv/bin/python enroll.py --name Patrice --camera 0 --frames 20
+```
+
+Le CLI accepte uniquement les images où InsightFace trouve exactement un
+visage, affiche le nombre d’images acceptées/rejetées, puis fusionne les nouveaux
+vecteurs dans `~/.codebuddy/vision-identities/embeddings.json`, au format
+`{"Patrice": [[...512 valeurs...], [...]]}`. Plusieurs embeddings par personne
+sont conservés pour couvrir angles et éclairages différents.
+
+Pour lancer la reconnaissance :
+
+```bash
+BUDDY_VISION_IDENTIFY=true \
+BUDDY_SENSE_TOKEN=<token> \
+.venv/bin/python watch.py
+```
+
+Le score est une similarité cosinus et le seuil par défaut est `0.45`
+(`BUDDY_VISION_IDENTIFY_THRESHOLD`). Deux frames concordantes sont nécessaires
+avant d’émettre `person_identified`; les essais sans correspondance sont espacés
+d’environ 10 secondes et produisent `unknown` après trois essais. Un seul
+événement d’identité est émis par présence continue, puis l’état est remis à
+zéro sur `person_lost`. Si InsightFace ou `buffalo_l` est indisponible, la
+reconnaissance se désactive sans arrêter le sidecar et le pipeline anonyme
+continue normalement.
+
+Vie privée : les embeddings et leur nom restent dans le fichier local ci-dessus.
+Le CLI ne copie ni ne stocke jamais les images source ou les captures caméra.
+Seuls le nom reconnu et le score transitent sur le WebSocket loopback déjà
+protégé de la sensory bridge; aucun embedding et aucune image d’enrôlement ne
+quitte la machine.

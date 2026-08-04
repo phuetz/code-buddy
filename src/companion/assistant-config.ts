@@ -190,9 +190,14 @@ export const ASSISTANT_SETTINGS: AssistantSetting[] = [
     label: 'Voicebox delivery instruction',
     group: 'voice',
     type: 'text',
-    default: '',
+    // Acoustic only — never rewrite words. Lisa default: warm intimate FR companion.
+    default:
+      'Speak as Lisa: warm intimate French girlfriend energy, soft smile in the voice, ' +
+      'natural mid tempo, slight breathiness, never rewrite or invent words — delivery only.',
     envFile: 'both',
-    help: 'Optional acoustic delivery only (tone, pace, warmth), capped at 500 characters.',
+    help:
+      'Acoustic delivery only (tone, pace, warmth), capped at 500 characters. ' +
+      'Does not rewrite Lisa’s words (personality stays false on Voicebox).',
   },
   {
     key: 'CODEBUDDY_VOICEBOX_AUDIO_STREAM',
@@ -214,12 +219,12 @@ export const ASSISTANT_SETTINGS: AssistantSetting[] = [
   },
   {
     key: 'CODEBUDDY_TTS_VOICE',
-    label: 'Piper fallback voice',
+    label: 'Robot voice',
     group: 'voice',
     type: 'text',
     default: '',
     envFile: 'both',
-    help: 'Fallback Piper .onnx voice model path.',
+    help: 'Use elevenlabs:<voice_id> for ElevenLabs, or a Piper .onnx model path.',
   },
   {
     key: 'CODEBUDDY_SENSORY_SPEAK',
@@ -522,6 +527,24 @@ export const ASSISTANT_SETTINGS: AssistantSetting[] = [
     default: 'false',
     envFile: 'both',
     help: 'Injects relational context into companion replies.',
+  },
+  {
+    key: 'CODEBUDDY_COMPANION_INNER_LIFE',
+    label: 'Inner life',
+    group: 'companion',
+    type: 'toggle',
+    default: 'false',
+    envFile: 'vision',
+    help: 'Gives Lisa an interior: what she did while you were away (digital-authentic only) + a mood that drifts on its own. Surfaced via relational memory.',
+  },
+  {
+    key: 'CODEBUDDY_INNER_LIFE_EVERY',
+    label: 'Inner-life cadence (heartbeats)',
+    group: 'companion',
+    type: 'text',
+    default: '50',
+    envFile: 'vision',
+    help: 'How many heartbeats between inner-life ticks (a new "what I did" vignette + mood drift).',
   },
   {
     key: 'CODEBUDDY_CONVERSATION_BRIDGE',

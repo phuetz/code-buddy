@@ -108,6 +108,7 @@ lessons_propose
 lessons_search
 license_check
 lint_project
+lisa_selfie
 list_directory
 list_peers
 lsp_code_action

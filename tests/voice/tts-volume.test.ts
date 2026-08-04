@@ -8,6 +8,7 @@ import {
   normalizeWavFile,
   Pcm16WavStreamGain,
   resolveStreamGainDb,
+  resolveStreamHeadMs,
   resolveTargetRmsDbfs,
   resolveTtsVolumePercent,
 } from '../../src/voice/tts-volume.js';
@@ -55,6 +56,17 @@ function rms(samples: number[]): number {
   return Math.sqrt(samples.reduce((sum, sample) => sum + sample * sample, 0) / samples.length);
 }
 
+function gatedRms(samples: number[]): number {
+  const gate = 32_767 * 10 ** (__test.rmsGateDbfs / 20);
+  return rms(samples.filter((sample) => Math.abs(sample) >= gate));
+}
+
+function pcmPayload(samples: number[]): Buffer {
+  const payload = Buffer.alloc(samples.length * 2);
+  samples.forEach((sample, index) => payload.writeInt16LE(sample, index * 2));
+  return payload;
+}
+
 function levelDifferenceDb(left: number, right: number): number {
   return Math.abs(20 * Math.log10(left / right));
 }
@@ -82,6 +94,8 @@ describe('assistant TTS volume', () => {
     expect(resolveTtsVolumePercent({ CODEBUDDY_TTS_VOLUME: '140' })).toBe(100);
     expect(resolveTtsVolumePercent({ CODEBUDDY_TTS_VOLUME: 'invalid' })).toBe(100);
     expect(resolveStreamGainDb({})).toBe(0);
+    expect(resolveStreamHeadMs({})).toBe(400);
+    expect(resolveStreamHeadMs({ CODEBUDDY_TTS_STREAM_HEAD_MS: '650' })).toBe(650);
     expect(resolveTargetRmsDbfs({})).toBe(-18);
     expect(resolveTargetRmsDbfs({ CODEBUDDY_TTS_TARGET_RMS: '-20' })).toBe(-20);
     expect(resolveTargetRmsDbfs({ CODEBUDDY_TTS_TARGET_RMS: 'invalid' })).toBe(-18);
@@ -91,7 +105,7 @@ describe('assistant TTS volume', () => {
     const source = pcm16Wav([0, 4_000, -8_000, 12_000, -12_000], true);
     const once = normalizePcm16Wav(source, {});
     const twice = normalizePcm16Wav(once, {});
-    const outputRms = rms(samplesFrom(once));
+    const outputRms = gatedRms(samplesFrom(once));
 
     expect(levelDifferenceDb(outputRms, __test.targetRms)).toBeLessThan(0.1);
     expect(twice.equals(once)).toBe(true);
@@ -213,10 +227,10 @@ describe('assistant TTS volume', () => {
     const blockingSpeech = normalizePcm16Wav(weakSpeech);
     const streamingSpeech = streamWav(weakSpeech);
 
-    expect(levelDifferenceDb(rms(samplesFrom(blockingSpeech)), __test.targetRms))
-      .toBeLessThan(0.2);
-    expect(levelDifferenceDb(rms(samplesFrom(streamingSpeech)), __test.targetRms))
-      .toBeLessThan(0.2);
+    const blockingRms = rms(samplesFrom(blockingSpeech));
+    const streamingRms = rms(samplesFrom(streamingSpeech));
+    expect(20 * Math.log10(blockingRms / rms(weakSpeechSamples))).toBeGreaterThan(12);
+    expect(levelDifferenceDb(blockingRms, streamingRms)).toBeLessThan(0.2);
     expect(streamWav(noise).equals(noise)).toBe(true);
     expect(normalizePcm16Wav(noise).equals(noise)).toBe(true);
     expect(streamWav(silence).equals(silence)).toBe(true);
@@ -232,6 +246,48 @@ describe('assistant TTS volume', () => {
     expect(output.length).toBe(source.length);
     expect(processor.hasOutputAudio()).toBe(true);
     expect(levelDifferenceDb(rms(samplesFrom(output)), __test.targetRms)).toBeLessThan(0.1);
+  });
+
+  it('gates quasi-silence out of the normalization measurement', () => {
+    const speech = [2_000, -4_000, 6_000, -6_000];
+    const speechOnly = __test.planNormalization(pcmPayload(speech), {});
+    const padded = __test.planNormalization(
+      pcmPayload([...Array.from({ length: 2_000 }, () => 0), ...speech]),
+      {},
+    );
+
+    expect(padded.factor).toBeCloseTo(speechOnly.factor, 8);
+  });
+
+  it('waits for a 400 ms head by default before freezing the stream factor', () => {
+    const samples = Array.from({ length: 24_000 }, (_, index) => index % 2 ? 2_000 : -2_000);
+    const source = pcm16Wav(samples);
+    const processor = new Pcm16WavStreamGain({});
+    const headerLength = source.indexOf(Buffer.from('data')) + 8;
+
+    expect(processor.push(source.subarray(0, headerLength))).toHaveLength(1);
+    expect(processor.push(source.subarray(headerLength, headerLength + 19_152))).toEqual([]);
+    expect(processor.factor).toBeUndefined();
+    expect(processor.push(source.subarray(headerLength + 19_152, headerLength + 19_200)).length)
+      .toBeGreaterThan(0);
+    expect(processor.factor).toBeTypeOf('number');
+  });
+
+  it('applies an externally frozen factor immediately without measuring another head', () => {
+    const source = pcm16Wav(Array.from({ length: 500 }, (_, index) => index % 2 ? 4_000 : -4_000));
+    const processor = new Pcm16WavStreamGain({}, 0.5);
+    const output = Buffer.concat([...processor.push(source), ...processor.flush()]);
+
+    expect(processor.factor).toBe(0.5);
+    expect(Math.max(...samplesFrom(output).map(Math.abs))).toBeCloseTo(2_000, -1);
+  });
+
+  it('soft-limits residual peaks even when the factor does not amplify', () => {
+    const transformed = __test.transformPcm16(pcmPayload([32_767, -32_768]), 1);
+
+    expect(Math.abs(transformed.readInt16LE(0))).toBeLessThanOrEqual(__test.targetPeak);
+    expect(Math.abs(transformed.readInt16LE(0))).toBeLessThan(32_767);
+    expect(Math.abs(transformed.readInt16LE(2))).toBeLessThanOrEqual(__test.targetPeak);
   });
 
   it('streams unsupported input byte-for-byte', () => {

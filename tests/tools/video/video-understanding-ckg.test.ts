@@ -27,17 +27,30 @@ const fetchCaptions = async () => [
 
 describe('understandVideo — CKG ingestion gate', () => {
   let outDir: string;
+  let homeDir: string;
   const ORIGINAL_ENV = process.env.CODEBUDDY_COLLECTIVE_MEMORY;
+  const ORIGINAL_HOME = process.env.CODEBUDDY_HOME;
 
   beforeEach(async () => {
     outDir = await mkdtemp(join(tmpdir(), 'buddy-understand-ckg-'));
+    // Les cas « gate ON » appellent understandVideo SANS ckgBridge injecté pour obtenir
+    // la valeur de référence : la résolution `deps.ckgBridge ?? getDefaultVideoCkgBridge()`
+    // atteint alors le VRAI ledger et écrit la vidéo de test dans la mémoire collective de
+    // l'utilisateur (constaté : un nœud `discovery:collective:https-youtu-be-…` remontait
+    // en tête de rappels sérieux). Rediriger le home rend le fichier entier hermétique,
+    // y compris pour les chemins d'écriture qu'on n'aurait pas prévus.
+    homeDir = await mkdtemp(join(tmpdir(), 'buddy-ckg-home-'));
+    process.env.CODEBUDDY_HOME = homeDir;
     delete process.env.CODEBUDDY_COLLECTIVE_MEMORY;
   });
 
   afterEach(async () => {
     await rm(outDir, { recursive: true, force: true }).catch(() => {});
+    await rm(homeDir, { recursive: true, force: true }).catch(() => {});
     if (ORIGINAL_ENV === undefined) delete process.env.CODEBUDDY_COLLECTIVE_MEMORY;
     else process.env.CODEBUDDY_COLLECTIVE_MEMORY = ORIGINAL_ENV;
+    if (ORIGINAL_HOME === undefined) delete process.env.CODEBUDDY_HOME;
+    else process.env.CODEBUDDY_HOME = ORIGINAL_HOME;
   });
 
   it('gate OFF (default): the bridge is never called, and the result is byte-identical whether or not a bridge is injected', async () => {

@@ -262,8 +262,14 @@ function StudioView() {
   // (remembered stack/design preferences) — App Studio isn't a silo.
   const onGenerateWithAI = useCallback(
     async (request: StudioScaffoldRequest) => {
-      const prompt = buildAiGenerationPrompt(request);
       const cwd = request.targetDir?.trim() || workingDir || undefined;
+      const materialized = request.assetIds?.length && cwd
+        ? await window.electronAPI?.creativeAssets?.materialize({ ids: request.assetIds, targetRoot: cwd, stack: request.stack })
+        : undefined;
+      const enrichedRequest = materialized?.ok && materialized.assets
+        ? { ...request, materializedAssets: materialized.assets }
+        : request;
+      const prompt = buildAiGenerationPrompt(enrichedRequest);
       const session = await startSession(
         getInitialSessionTitle(request.prompt),
         prompt,

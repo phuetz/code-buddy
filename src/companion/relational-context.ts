@@ -22,6 +22,7 @@ import { getUserModel } from '../memory/user-model.js';
 import { injectPresenceBlock } from '../memory/presence-injector.js';
 import { loadRelationshipState, getPersonalitySummary } from './relationship-state.js';
 import { loadVoiceGuidance, formatVoiceGuidance } from './voice-guidance.js';
+import { readInnerLifeVignette, isInnerLifeEnabled } from './inner-life.js';
 
 export interface RelationalContextOptions {
   cwd?: string;
@@ -35,12 +36,15 @@ export interface RelationalContextOptions {
   includeEpisode?: boolean;
   /** Include the learned voice-guidance block ("how to reply better"). Default true. */
   includeGuidance?: boolean;
+  /** Include Lisa's own recent inner-life vignette ("what I did"). Default: `isInnerLifeEnabled()`. */
+  includeInnerLife?: boolean;
   /** Injectable seams (tests) — each defaults to the real source above. */
   factsBlock?: () => string | null;
   personalitySummary?: () => string;
   presenceBlock?: () => Promise<string>;
   episodeBlock?: () => Promise<string | null>;
   guidanceBlock?: () => string | null;
+  innerLifeBlock?: () => Promise<string | null>;
   /** Override the relationship-state file (tests). */
   relationshipStatePath?: string;
 }
@@ -216,6 +220,19 @@ export async function buildRelationalContext(
       return '';
     }
   });
+  const innerLife = Promise.resolve().then(async () => {
+    // Own opt-in (default off): only surfaced when inner-life is enabled, so a disabled companion
+    // never references a life it isn't living. Tests pass `includeInnerLife` + `innerLifeBlock`.
+    if ((options.includeInnerLife ?? isInnerLifeEnabled()) === false) return '';
+    try {
+      const value = options.innerLifeBlock
+        ? await options.innerLifeBlock()
+        : await readInnerLifeVignette();
+      return value?.trim() ? `<lisa_activite>\n${value.trim()}\n</lisa_activite>` : '';
+    } catch {
+      return '';
+    }
+  });
   const personality = Promise.resolve().then(() => {
     if (options.includePersonality === false) return '';
     try {
@@ -239,7 +256,7 @@ export async function buildRelationalContext(
     }
   });
 
-  return (await Promise.all([facts, guidance, episode, personality, presence]))
+  return (await Promise.all([facts, guidance, episode, innerLife, personality, presence]))
     .filter(Boolean)
     .join('\n\n');
 }

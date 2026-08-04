@@ -1,0 +1,55 @@
+job: extension
+config:
+  name: lisa-krea2
+  process:
+    - type: sd_trainer
+      training_folder: 'D:\DEV\Krea2TrainerRuntime\output'
+      device: cuda:0
+      trigger_word: ohwx lisa
+      network:
+        type: lora
+        linear: 32
+        linear_alpha: 32
+      save:
+        dtype: bf16
+        save_every: 250
+        max_step_saves_to_keep: 4
+        push_to_hub: false
+      datasets:
+        - folder_path: 'D:\DEV\Krea2TrainerRuntime\workspace\lisa-krea2'
+          caption_ext: txt
+          caption_dropout_rate: 0.05
+          shuffle_tokens: false
+          cache_latents_to_disk: true
+          resolution:
+            - 768
+      train:
+        batch_size: 1
+        steps: 1000
+        gradient_accumulation: 1
+        train_unet: true
+        train_text_encoder: false
+        gradient_checkpointing: true
+        noise_scheduler: flowmatch
+        optimizer: adamw8bit
+        lr: 0.0001
+        optimizer_params:
+          weight_decay: 0.0001
+        ema_config:
+          use_ema: false
+          ema_decay: 0.99
+        dtype: bf16
+        unload_text_encoder: true
+        disable_sampling: true
+      model:
+        name_or_path: 'D:\DEV\Krea2TrainerRuntime\models\Krea-2-Raw\raw.safetensors'
+        arch: krea2
+        quantize: true
+        quantize_te: true
+        low_vram: true
+        model_kwargs:
+          text_encoder_path: Qwen/Qwen3-VL-4B-Instruct
+          vae_path: Qwen/Qwen-Image
+meta:
+  name: Lisa Krea 2 identity LoRA
+  version: '1.0'

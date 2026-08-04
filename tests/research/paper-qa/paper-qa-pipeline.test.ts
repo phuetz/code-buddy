@@ -93,6 +93,7 @@ describe('runPaperQa (chained pipeline)', () => {
     expect(result.indexedPassages).toBeGreaterThanOrEqual(2);
     expect(result.pdfPathsConsidered).toBe(2);
     expect(result.retrievedPassages).toBeGreaterThan(0);
+    expect(result.indexedDocuments).toBe(2);
     expect(result.answer.sufficient).toBe(true);
     expect(result.answer.citations.length).toBeGreaterThan(0);
     // Semantic retrieval was available on this run (finding E).
@@ -153,8 +154,11 @@ describe('runPaperQa (chained pipeline)', () => {
     expect(result.retrievedPassages).toBeGreaterThan(0);
     // ...but the degradation is reported on the result and rendered in the header.
     expect(result.semanticAvailable).toBe(false);
+    expect(result.retrievalMode).toBe('bm25-only');
+    expect(result.degraded).toBe(true);
     const rendered = formatPaperQaOutput(result, deriveSourceLabels(Object.keys(CORPUS)));
     expect(rendered).toContain('recherche sémantique indisponible');
+    expect(rendered).toContain('BM25 seul (MODE DÉGRADÉ)');
   });
 
   it('refuses honestly when the evidence is irrelevant', async () => {

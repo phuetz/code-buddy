@@ -2421,6 +2421,16 @@ addLazyCommand(
 
 addLazyCommand(
   program,
+  'influencer',
+  'Influencer & book-trailer media pipeline (scripts/influencer)',
+  async () => {
+    const { createInfluencerCommand } = await import('./commands/influencer.js');
+    return createInfluencerCommand();
+  },
+);
+
+addLazyCommand(
+  program,
   'maison',
   'Household rhythm, holidays, quiet modes and private meal safety',
   async () => {
@@ -3441,6 +3451,17 @@ addLazyCommand(
   async () => {
     const { createVisionTrainCommand } = await import('./commands/vision-train.js');
     return createVisionTrainCommand();
+  },
+);
+
+// Krea 2 LoRA — character/style LoRA dataset + fal cloud train + local plan + ComfyUI install
+addLazyCommand(
+  program,
+  'lora',
+  'Krea 2 LoRA pipeline: init dataset, train cloud (fal, opt-in CODEBUDDY_LORA_TRAIN=true) or local plan, install into ComfyUI',
+  async () => {
+    const { createLoraCommand } = await import('./commands/lora.js');
+    return createLoraCommand();
   },
 );
 

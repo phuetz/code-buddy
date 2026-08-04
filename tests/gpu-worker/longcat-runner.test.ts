@@ -103,7 +103,7 @@ describe('LongCat GPU runner hardening', () => {
       'spec.loader.exec_module(module)',
       'child = "import os, pathlib, sys, time; pathlib.Path(sys.argv[1]).write_text(str(os.getpid())); print(\\"READY\\", flush=True); time.sleep(60)"',
       'try:',
-      '    module.stream_inference([sys.executable, "-c", child, sys.argv[2]])',
+      '    module.stream_inference([sys.executable, "-c", child, sys.argv[2]], temperature_reader=lambda: 70)',
       'except module.RunnerError as error:',
       '    print(error, flush=True)',
       '    raise SystemExit(23)',
@@ -136,5 +136,25 @@ describe('LongCat GPU runner hardening', () => {
     expect(stdout).toContain('LongCat inference was cancelled');
     const childPid = Number((await readFile(childPidPath, 'utf8')).trim());
     expect(() => globalThis.process.kill(childPid, 0)).toThrow();
+  });
+
+  it('fails closed and kills inference after two over-temperature samples', async () => {
+    const code = [
+      'import importlib.util, pathlib, sys, time',
+      'spec = importlib.util.spec_from_file_location("longcat_runner", pathlib.Path(sys.argv[1]))',
+      'module = importlib.util.module_from_spec(spec)',
+      'spec.loader.exec_module(module)',
+      'child = [sys.executable, "-c", "import time; time.sleep(60)"]',
+      'temperatures = iter([70, 89, 89])',
+      'try:',
+      '    module.stream_inference(child, temperature_reader=lambda: next(temperatures), thermal_limit_c=88, thermal_poll_seconds=0.02)',
+      'except module.RunnerError as error:',
+      '    print(error, flush=True)',
+      '    raise SystemExit(24)',
+    ].join('\n');
+    await expect(execFileAsync('python3', ['-c', code, RUNNER], { timeout: 3_000 })).rejects.toMatchObject({
+      code: 24,
+      stdout: expect.stringContaining('thermal guard stopped inference at 89 C'),
+    });
   });
 });

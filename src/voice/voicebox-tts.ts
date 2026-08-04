@@ -142,6 +142,8 @@ export interface VoiceboxRequestOptions {
   fetchImpl?: typeof fetch;
   /** Per-turn acoustic direction; merged with the configured base instruction. */
   instruct?: string;
+  /** Reuse the gain measured from the first segment of the current turn. */
+  frozenFactor?: number;
 }
 
 const DEFAULT_BASE_URL = 'http://127.0.0.1:17493';
@@ -786,7 +788,7 @@ export async function renderVoiceboxWavBytes(
     }
     if (total <= 44) return null;
     const audio = Buffer.concat(chunks.map((chunk) => Buffer.from(chunk)), total);
-    return normalizePcm16Wav(audio, env);
+    return normalizePcm16Wav(audio, env, options.frozenFactor);
   } catch (error) {
     if (!options.signal?.aborted) {
       logger.debug(

@@ -15,6 +15,7 @@ import { readFile, writeFile } from 'node:fs/promises';
 export const DEFAULT_TTS_VOLUME_PERCENT = 100;
 export const DEFAULT_STREAM_GAIN_DB = 0;
 export const DEFAULT_TARGET_RMS_DBFS = -18;
+export const DEFAULT_STREAM_HEAD_MS = 400;
 
 const TARGET_PEAK_DBFS = -1;
 const MAX_NORMALIZE_GAIN_DB = 12;
@@ -24,7 +25,9 @@ const MAX_STREAM_GAIN_DB = 18;
 const MIN_STREAM_GAIN_DB = 0;
 const MIN_TARGET_RMS_DBFS = -40;
 const MAX_TARGET_RMS_DBFS = -6;
-const STREAM_HEAD_MS = 100;
+const MIN_STREAM_HEAD_MS = 50;
+const MAX_STREAM_HEAD_MS = 2_000;
+const RMS_GATE_DBFS = -45;
 const MAX_STREAM_HEAD_BYTES = 256 * 1024;
 const PCM16_MAX = 32767;
 const TARGET_PEAK = Math.round(PCM16_MAX * 10 ** (TARGET_PEAK_DBFS / 20));
@@ -45,6 +48,15 @@ export function resolveStreamGainDb(env: NodeJS.ProcessEnv = process.env): numbe
   return Math.max(MIN_STREAM_GAIN_DB, Math.min(MAX_STREAM_GAIN_DB, parsed));
 }
 
+/** Look-ahead used to derive one stable streaming gain for a complete utterance. */
+export function resolveStreamHeadMs(env: NodeJS.ProcessEnv = process.env): number {
+  const raw = env.CODEBUDDY_TTS_STREAM_HEAD_MS?.trim();
+  if (!raw) return DEFAULT_STREAM_HEAD_MS;
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed)) return DEFAULT_STREAM_HEAD_MS;
+  return Math.max(MIN_STREAM_HEAD_MS, Math.min(MAX_STREAM_HEAD_MS, Math.round(parsed)));
+}
+
 /** Shared speech RMS target in dBFS. Invalid or unsafe values use -18 dBFS. */
 export function resolveTargetRmsDbfs(env: NodeJS.ProcessEnv = process.env): number {
   const raw = env.CODEBUDDY_TTS_TARGET_RMS?.trim();
@@ -54,19 +66,20 @@ export function resolveTargetRmsDbfs(env: NodeJS.ProcessEnv = process.env): numb
   return Math.max(MIN_TARGET_RMS_DBFS, Math.min(MAX_TARGET_RMS_DBFS, parsed));
 }
 
-interface Pcm16WavLayout {
+export interface Pcm16WavLayout {
   dataOffset: number;
   byteRate: number;
   blockAlign: number;
+  sampleRate: number;
 }
 
-type LayoutProbe =
+export type Pcm16WavLayoutProbe =
   | { status: 'ready'; layout: Pcm16WavLayout }
   | { status: 'incomplete' }
   | { status: 'unsupported' };
 
 /** Locate PCM16 data without trusting the often-placeholder streaming RIFF sizes. */
-function probePcm16Wav(buffer: Buffer): LayoutProbe {
+export function probePcm16Wav(buffer: Buffer): Pcm16WavLayoutProbe {
   if (buffer.length < 12) return { status: 'incomplete' };
   if (buffer.toString('ascii', 0, 4) !== 'RIFF' || buffer.toString('ascii', 8, 12) !== 'WAVE') {
     return { status: 'unsupported' };
@@ -76,6 +89,7 @@ function probePcm16Wav(buffer: Buffer): LayoutProbe {
   let pcm16 = false;
   let byteRate = 0;
   let blockAlign = 0;
+  let sampleRate = 0;
   while (offset <= 1024 * 1024) {
     if (buffer.length < offset + 8) return { status: 'incomplete' };
     const id = buffer.toString('ascii', offset, offset + 4);
@@ -87,7 +101,7 @@ function probePcm16Wav(buffer: Buffer): LayoutProbe {
       if (buffer.length < payloadOffset + 16) return { status: 'incomplete' };
       const format = buffer.readUInt16LE(payloadOffset);
       const channels = buffer.readUInt16LE(payloadOffset + 2);
-      const sampleRate = buffer.readUInt32LE(payloadOffset + 4);
+      sampleRate = buffer.readUInt32LE(payloadOffset + 4);
       byteRate = buffer.readUInt32LE(payloadOffset + 8);
       blockAlign = buffer.readUInt16LE(payloadOffset + 12);
       const bitsPerSample = buffer.readUInt16LE(payloadOffset + 14);
@@ -101,7 +115,10 @@ function probePcm16Wav(buffer: Buffer): LayoutProbe {
       if (!pcm16) return { status: 'unsupported' };
     } else if (id === 'data') {
       if (!pcm16) return { status: 'unsupported' };
-      return { status: 'ready', layout: { dataOffset: payloadOffset, byteRate, blockAlign } };
+      return {
+        status: 'ready',
+        layout: { dataOffset: payloadOffset, byteRate, blockAlign, sampleRate },
+      };
     }
 
     // Only the `data` chunk is allowed to advertise an unknown/placeholder
@@ -128,12 +145,7 @@ function transformPcm16(payload: Buffer, factor: number, limit = TARGET_PEAK): B
   for (let offset = 0; offset < pairedLength; offset += 2) {
     const sample = payload.readInt16LE(offset);
     const transformed = sample * factor;
-    output.writeInt16LE(
-      factor > 1
-        ? softLimit(transformed, limit)
-        : Math.max(-PCM16_MAX - 1, Math.min(PCM16_MAX, Math.round(transformed))),
-      offset
-    );
+    output.writeInt16LE(softLimit(transformed, limit), offset);
   }
   if (pairedLength < payload.length) output[pairedLength] = payload[pairedLength] ?? 0;
   return output;
@@ -145,8 +157,9 @@ interface Pcm16Level {
   zeroCrossingRate: number;
 }
 
-function measurePcm16(payload: Buffer): Pcm16Level {
+function measurePcm16(payload: Buffer, gateDbfs?: number): Pcm16Level {
   const pairedLength = payload.length - (payload.length & 1);
+  const gate = gateDbfs === undefined ? 0 : PCM16_MAX * 10 ** (gateDbfs / 20);
   let peak = 0;
   let sumSquares = 0;
   let samples = 0;
@@ -155,6 +168,7 @@ function measurePcm16(payload: Buffer): Pcm16Level {
   for (let offset = 0; offset < pairedLength; offset += 2) {
     const sample = payload.readInt16LE(offset);
     peak = Math.max(peak, Math.abs(sample));
+    if (Math.abs(sample) < gate) continue;
     sumSquares += sample * sample;
     samples += 1;
     const sign = Math.sign(sample);
@@ -194,14 +208,14 @@ function planNormalization(
   const peakLimit = Math.max(1, Math.min(PCM16_MAX, TARGET_PEAK * volumeFactor * targetBoost));
   if (volumeFactor === 0) return { factor: 0, peakLimit };
 
-  const level = measurePcm16(payload);
+  const level = measurePcm16(payload, RMS_GATE_DBFS);
   if (level.rms === 0) return { factor: 1, peakLimit };
   const targetRms = PCM16_MAX * 10 ** (resolveTargetRmsDbfs(env) / 20) * volumeFactor * targetBoost;
   const factor = targetRms / level.rms;
   const maxGain = 10 ** (MAX_NORMALIZE_GAIN_DB / 20);
   if (factor > maxGain) {
     const maxSpeechGain = 10 ** (MAX_SPEECH_NORMALIZE_GAIN_DB / 20);
-    if (factor > maxSpeechGain || !looksLikeWeakSpeech(level)) {
+    if (factor > maxSpeechGain || !looksLikeWeakSpeech(measurePcm16(payload))) {
       return { factor: 1, peakLimit };
     }
   }
@@ -216,7 +230,8 @@ function planNormalization(
  */
 export function normalizePcm16Wav(
   input: Uint8Array,
-  env: NodeJS.ProcessEnv = process.env
+  env: NodeJS.ProcessEnv = process.env,
+  frozenFactor?: number,
 ): Buffer {
   const source = Buffer.from(input);
   const probe = probePcm16Wav(source);
@@ -226,11 +241,14 @@ export function normalizePcm16Wav(
   const pairedEnd = source.length - ((source.length - dataOffset) & 1);
   if (pairedEnd <= dataOffset) return Buffer.from(source);
 
-  const { factor, peakLimit } = planNormalization(
+  const plan = planNormalization(
     source.subarray(dataOffset, pairedEnd),
-    env
+    env,
+    frozenFactor === undefined ? 0 : resolveStreamGainDb(env),
   );
-  if (factor === 1) return Buffer.from(source);
+  const factor = frozenFactor === undefined ? plan.factor : frozenFactor;
+  const { peakLimit } = plan;
+  if (frozenFactor === undefined && factor === 1) return Buffer.from(source);
   const output = Buffer.from(source);
   const transformed = transformPcm16(
     source.subarray(dataOffset, pairedEnd),
@@ -244,11 +262,12 @@ export function normalizePcm16Wav(
 /** Best-effort in-place normalization used for legacy cache entries and Piper. */
 export async function normalizeWavFile(
   filePath: string,
-  env: NodeJS.ProcessEnv = process.env
+  env: NodeJS.ProcessEnv = process.env,
+  frozenFactor?: number,
 ): Promise<boolean> {
   try {
     const source = await readFile(filePath);
-    const normalized = normalizePcm16Wav(source, env);
+    const normalized = normalizePcm16Wav(source, env, frozenFactor);
     if (!normalized.equals(source)) await writeFile(filePath, normalized, { mode: 0o600 });
     return true;
   } catch {
@@ -258,7 +277,7 @@ export async function normalizeWavFile(
 
 /**
  * Stateful gain processor for a chunked PCM16 WAV response. It buffers the RIFF
- * header plus roughly 100 ms of audio, derives the same RMS normalization used
+ * header plus roughly 400 ms of audio, derives the same RMS normalization used
  * for files, handles samples split across chunks, and fails open for other data.
  */
 export class Pcm16WavStreamGain {
@@ -267,13 +286,28 @@ export class Pcm16WavStreamGain {
   private headBytes = 0;
   private pendingByte: number | null = null;
   private mode: 'probing' | 'buffering' | 'gain' | 'passthrough' = 'probing';
-  private factor = 1;
+  private normalizationFactor: number | undefined;
   private peakLimit = TARGET_PEAK;
   private outputAudio = false;
   private readonly env: NodeJS.ProcessEnv;
+  private readonly frozenFactor: number | undefined;
 
-  constructor(env: NodeJS.ProcessEnv = process.env) {
+  constructor(env: NodeJS.ProcessEnv = process.env, frozenFactor?: number) {
     this.env = env;
+    this.frozenFactor = Number.isFinite(frozenFactor) ? frozenFactor : undefined;
+    this.normalizationFactor = this.frozenFactor;
+    if (this.frozenFactor !== undefined) {
+      this.peakLimit = planNormalization(
+        Buffer.alloc(0),
+        env,
+        resolveStreamGainDb(env),
+      ).peakLimit;
+    }
+  }
+
+  /** Gain derived from the first head, or the externally supplied turn gain. */
+  get factor(): number | undefined {
+    return this.normalizationFactor;
   }
 
   push(chunk: Uint8Array): Buffer[] {
@@ -294,21 +328,26 @@ export class Pcm16WavStreamGain {
       return [output];
     }
 
+    const header = this.prefix.subarray(0, probe.layout.dataOffset);
+    const payload = this.prefix.subarray(probe.layout.dataOffset);
+    this.prefix = Buffer.alloc(0);
+    if (this.frozenFactor !== undefined) {
+      this.mode = 'gain';
+      return [header, ...this.transformPayload(payload)].filter((part) => part.length > 0);
+    }
+
     this.mode = 'buffering';
     this.headBytes = Math.max(
       probe.layout.blockAlign,
       Math.min(
         MAX_STREAM_HEAD_BYTES,
         Math.round(
-          (probe.layout.byteRate * STREAM_HEAD_MS) /
+          (probe.layout.byteRate * resolveStreamHeadMs(this.env)) /
           1000 /
           probe.layout.blockAlign
         ) * probe.layout.blockAlign
       )
     );
-    const header = this.prefix.subarray(0, probe.layout.dataOffset);
-    const payload = this.prefix.subarray(probe.layout.dataOffset);
-    this.prefix = Buffer.alloc(0);
     return [header, ...this.bufferHead(payload)].filter((part) => part.length > 0);
   }
 
@@ -339,11 +378,11 @@ export class Pcm16WavStreamGain {
     }
     const paired = payload.subarray(0, pairedLength);
     const plan = planNormalization(paired, this.env, resolveStreamGainDb(this.env));
-    this.factor = plan.factor;
+    this.normalizationFactor = plan.factor;
     this.peakLimit = plan.peakLimit;
     if (paired.length === 0) return [];
     this.outputAudio = true;
-    return [transformPcm16(paired, this.factor, this.peakLimit)];
+    return [transformPcm16(paired, this.normalizationFactor ?? 1, this.peakLimit)];
   }
 
   hasOutputAudio(): boolean {
@@ -372,7 +411,7 @@ export class Pcm16WavStreamGain {
     }
     if (payload.length === 0) return [];
     this.outputAudio = true;
-    return [transformPcm16(payload, this.factor, this.peakLimit)];
+    return [transformPcm16(payload, this.normalizationFactor ?? 1, this.peakLimit)];
   }
 }
 
@@ -380,7 +419,10 @@ export const __test = {
   probePcm16Wav,
   measurePcm16,
   looksLikeWeakSpeech,
+  planNormalization,
   softLimit,
+  transformPcm16,
+  rmsGateDbfs: RMS_GATE_DBFS,
   targetPeak: TARGET_PEAK,
   targetRms: PCM16_MAX * 10 ** (DEFAULT_TARGET_RMS_DBFS / 20),
 };

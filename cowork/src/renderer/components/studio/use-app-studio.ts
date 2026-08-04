@@ -186,6 +186,14 @@ export function useAppStudio(options: UseAppStudioOptions = {}) {
     });
     if (result.ok) {
       const nextProjectRoot = result.data.projectDir;
+      if (request.assetIds?.length) {
+        const materialized = await window.electronAPI?.creativeAssets?.materialize({
+          ids: request.assetIds,
+          targetRoot: nextProjectRoot,
+          stack: request.stack,
+        });
+        if (!materialized?.ok) appendTerminal(`Assets créatifs: ${materialized?.error ?? 'matérialisation indisponible'}`);
+      }
       setProjectRoot(nextProjectRoot);
       setActiveFile(null);
       setFileContent('');

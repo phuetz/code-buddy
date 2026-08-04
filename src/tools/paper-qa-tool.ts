@@ -63,7 +63,7 @@ export interface PaperQaToolDeps {
   /** Injectable pdf-parse / file-read boundary forwarded to the corpus builder (tests). */
   pdfDeps?: PdfStructureDeps;
   /** Resolve input paths (files/dirs) to a concrete PDF list. Injectable for tests. */
-  resolvePdfPaths?: (paths: string[]) => Promise<string[]>;
+  resolvePdfPaths?: (paths: string[], cap?: number) => Promise<string[]>;
 }
 
 // ============================================================================
@@ -72,14 +72,14 @@ export interface PaperQaToolDeps {
 
 /** In-chat default cap on PDFs indexed per call (agent may raise via `max_pdfs`). */
 const DEFAULT_MAX_PDFS = 25;
-/** Hard ceiling on PDFs, even when the agent asks for more. */
-const MAX_PDFS_CAP = 200;
+/** Explicit large-corpus ceiling; the default remains deliberately small. */
+const MAX_PDFS_CAP = 100_000;
 /** Default passages retrieved before RCS filtering. */
 const DEFAULT_TOP_K = 8;
 /** Hard ceiling on retrieved passages. */
 const MAX_TOP_K = 50;
 /** Bound on directory entries visited while walking a directory input. */
-const MAX_WALK_ENTRIES = 5000;
+const MAX_WALK_ENTRIES = 100_000;
 
 /** Directory names skipped when walking a directory input (never scientific corpora). */
 const SKIP_DIRS = new Set([
@@ -229,7 +229,7 @@ export class PaperQaTool implements ITool {
       // Resolve the input paths (files/dirs) → concrete PDF list. Default: cwd.
       const requested = normalizePaths(input.paths ?? input.path);
       const searchRoots = requested.length > 0 ? requested : ['.'];
-      const pdfPaths = (await this.resolvePdfPaths(searchRoots)).slice(0, maxPdfs);
+      const pdfPaths = (await this.resolvePdfPaths(searchRoots, maxPdfs)).slice(0, maxPdfs);
       if (pdfPaths.length === 0) {
         return {
           success: false,
@@ -289,9 +289,9 @@ export class PaperQaTool implements ITool {
     return makeDefaultPaperQaLlm(provider);
   }
 
-  private async resolvePdfPaths(paths: string[]): Promise<string[]> {
-    if (this.deps.resolvePdfPaths) return this.deps.resolvePdfPaths(paths);
-    return resolvePdfPaths(paths);
+  private async resolvePdfPaths(paths: string[], cap: number): Promise<string[]> {
+    if (this.deps.resolvePdfPaths) return this.deps.resolvePdfPaths(paths, cap);
+    return resolvePdfPaths(paths, cap);
   }
 
   // --------------------------------------------------------------------------

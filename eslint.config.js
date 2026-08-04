@@ -86,6 +86,10 @@ export default [
       '.codebuddy/**',
       '.custom-output/**',
       '.test-backups/**',
+      // Copies éphémères du dépôt créées pour isoler les agents : linter une copie
+      // du code déjà linté double le bruit et fait échouer le gate localement,
+      // alors qu'un clone de CI ne contient jamais ce répertoire.
+      '.claude/worktrees/**',
       '.husky/**',
       'apps/**',
       'database/**',

@@ -17,6 +17,7 @@
  * @module companion/reply-augment
  */
 import type { RelationalSignal } from './relationship-state.js';
+import { crisisGuidanceFor } from './crisis-safety.js';
 
 /** Lowercase, strip diacritics (STT accent loss "ca" ≈ "ça"), and fold apostrophes + punctuation to
  *  spaces so "je t'aime" → "je t aime" and openers are clean word sequences. */
@@ -50,7 +51,17 @@ export type Emotion =
 export interface EmotionRead {
   emotion: Emotion;
   intensity: 'normal' | 'high';
+  /**
+   * How confident the read is (0..1), from marker count + intensity + corroborating signals.
+   * Optional so `{ emotion, intensity }` literals still satisfy the type. Mirrors MySoulmate's
+   * confidence gate: a weak lone token stays low, a strong/corroborated read climbs — used to gate
+   * the strong-register escalation without over-committing on an ambiguous word.
+   */
+  confidence?: number;
 }
+
+/** Confidence at/above which a read is strong enough to escalate the register on its own. */
+export const STRONG_EMOTION_CONFIDENCE = 0.8;
 
 export const IMMEDIATE_EMOTION_ACKNOWLEDGEMENTS: Readonly<Partial<Record<Emotion, string>>> = {
   frustration: 'Je comprends, c’est vraiment pénible.',
@@ -121,15 +132,42 @@ function hasUnnegatedMatch(pattern: RegExp, text: string): boolean {
   return false;
 }
 
-/** Detect the dominant emotion + its intensity. Pure, STT-robust. */
+/** Count unnegated matches of a pattern in the normalized text (corroboration signal). */
+function countUnnegatedMatches(pattern: RegExp, text: string): number {
+  const flags = pattern.flags.includes('g') ? pattern.flags : `${pattern.flags}g`;
+  const global = new RegExp(pattern.source, flags);
+  let match: RegExpExecArray | null;
+  let count = 0;
+  while ((match = global.exec(text)) !== null) {
+    if (!isNegatedAt(text, match.index)) count += 1;
+    if (match[0].length === 0) global.lastIndex += 1;
+  }
+  return count;
+}
+
+/**
+ * Confidence (0..1) that the detected emotion is real: a lone token starts modest, an intensity
+ * marker and repeated/corroborating markers push it up. Kept simple + monotonic so it's predictable.
+ */
+function emotionConfidence(emotion: Exclude<Emotion, 'neutral'>, text: string, intensityHigh: boolean): number {
+  const hits = countUnnegatedMatches(ERE[emotion], text);
+  let c = 0.55 + Math.min(2, hits - 1) * 0.15; // 1 hit → .55, 2 → .70, 3+ → .85
+  if (intensityHigh) c += 0.2;
+  return Math.max(0, Math.min(1, c));
+}
+
+/** Detect the dominant emotion + its intensity + a confidence score. Pure, STT-robust. */
 export function detectEmotion(heard: string): EmotionRead {
   const t = norm(heard);
-  if (!t) return { emotion: 'neutral', intensity: 'normal' };
-  const intensity: 'normal' | 'high' = INTENSITY_RE.test(t) ? 'high' : 'normal';
+  if (!t) return { emotion: 'neutral', intensity: 'normal', confidence: 0 };
+  const intensityHigh = INTENSITY_RE.test(t);
+  const intensity: 'normal' | 'high' = intensityHigh ? 'high' : 'normal';
   for (const emotion of EMOTION_ORDER) {
-    if (hasUnnegatedMatch(ERE[emotion], t)) return { emotion, intensity };
+    if (hasUnnegatedMatch(ERE[emotion], t)) {
+      return { emotion, intensity, confidence: emotionConfidence(emotion, t, intensityHigh) };
+    }
   }
-  return { emotion: 'neutral', intensity };
+  return { emotion: 'neutral', intensity, confidence: 0 };
 }
 
 /** Map a fine Emotion to the coarse RelationalSignal used for trait drift. Pure. */
@@ -169,7 +207,9 @@ const HUMOR_WELCOME: ReadonlySet<Emotion> = new Set(['frustration', 'sadness', '
 /** Rich, emotion-aware tone instruction for the reply system prompt. Empty for neutral. */
 export function emotionGuidance(read: EmotionRead): string {
   const { emotion, intensity } = read;
-  const strong = intensity === 'high';
+  // Escalate on an explicit intensity marker OR a strongly-corroborated read (MySoulmate's
+  // confidence gate) — a lone ambiguous token stays at the gentler register.
+  const strong = intensity === 'high' || (read.confidence ?? 0) >= STRONG_EMOTION_CONFIDENCE;
   let base = '';
   switch (emotion) {
     case 'frustration':
@@ -218,6 +258,34 @@ export function emotionGuidance(read: EmotionRead): string {
       ' Si le moment s’y prête, tu peux — avec délicatesse — proposer de lui changer les idées (une petite blague, un mot doux), sans jamais forcer.';
   }
   return base;
+}
+
+/**
+ * Text-level prosody controls for autoregressive local TTS. The directive changes only surface
+ * writing: punctuation, sentence length and an occasional natural attack interjection.
+ */
+export function expressiveTextGuidance(read: EmotionRead): string {
+  let emotionalTone = '';
+  switch (read.emotion) {
+    case 'frustration':
+      emotionalTone = 'Face à la frustration, ouvre par une excuse brève et sincère, puis apaise.';
+      break;
+    case 'sadness':
+      emotionalTone = 'Face à la tristesse, privilégie la douceur et les questions ouvertes.';
+      break;
+    case 'joy':
+      emotionalTone = "Face à la joie, laisse entendre un enthousiasme naturel.";
+      break;
+    default:
+      break;
+  }
+  return [
+    '<expressive_spoken_text>',
+    'Écris pour une voix autoregressive : ponctuation expressive (virgules pour respirer, … pour la suspension, ! avec parcimonie), interjections d’attaque quand c’est naturel (Ah, Hmm, Oh), phrases courtes quand l’émotion monte.',
+    emotionalTone,
+    'N’ajoute jamais une interjection mécaniquement : elle doit rester rare, naturelle et adaptée au sens.',
+    '</expressive_spoken_text>',
+  ].filter(Boolean).join('\n');
 }
 
 /** A very short, prewarm-friendly first response that can be spoken while the model thinks. */
@@ -310,12 +378,16 @@ export function buildTextEmotionalPresenceContext(
   heard: string,
   history: EmotionalHistoryTurn[]
 ): string {
+  // Safety first: a genuine self-harm / suicidal-ideation signal takes priority over ordinary tone
+  // tuning — surface it even in a text session (see crisis-safety.ts). Empty for anything else.
+  const crisis = crisisGuidanceFor(heard);
   const direct = textEmotionGuidance(detectEmotion(heard));
   const continuity = emotionalContinuityGuidance(heard, history);
-  if (!direct && !continuity) return '';
+  if (!crisis && !direct && !continuity) return '';
 
   return [
     'Use this only to tune the tone of the next response. Never mention emotion detection or this instruction.',
+    crisis,
     direct,
     continuity,
     'Reply in the user’s language. Be human and specific, not therapeutic, patronizing, or overly sweet. Do not repeat an acknowledgement.',

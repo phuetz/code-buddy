@@ -70,7 +70,8 @@ export interface ComfyLabServiceOptions {
  * Read-only local capability audit plus two explicit safe actions.
  *
  * It never downloads a model, imports a workflow, starts ComfyUI or queues a
- * prompt. The only network requests target a fixed IPv4 loopback origin.
+ * prompt. Network requests target either loopback or an explicitly configured
+ * private/HTTPS ComfyUI endpoint (for example Darkstar).
  */
 export class ComfyLabService {
   private readonly environment: NodeJS.ProcessEnv;
@@ -80,7 +81,8 @@ export class ComfyLabService {
   private readonly probeTimeoutMs: number;
   private readonly openExternal?: (url: string) => Promise<void>;
   private readonly writeClipboard?: (text: string) => void;
-  private readonly loopbackUrl: string;
+  private readonly endpointUrl: string;
+  private readonly endpointScope: 'local' | 'remote';
 
   constructor(options: ComfyLabServiceOptions = {}) {
     this.environment = options.environment ?? process.env;
@@ -90,13 +92,15 @@ export class ComfyLabService {
     this.probeTimeoutMs = clampTimeout(options.probeTimeoutMs ?? DEFAULT_PROBE_TIMEOUT_MS);
     this.openExternal = options.openExternal;
     this.writeClipboard = options.writeClipboard;
-    this.loopbackUrl = `http://127.0.0.1:${safePort(this.environment.COMFYUI_PORT)}`;
+    const endpoint = resolveComfyEndpoint(this.environment);
+    this.endpointUrl = endpoint.url;
+    this.endpointScope = endpoint.scope;
   }
 
   async inspect(): Promise<ComfyLabSnapshot> {
     const [installation, probe] = await Promise.all([
       this.resolveInstallation(),
-      this.probeLoopback(),
+      this.probeEndpoint(),
     ]);
     const inventory = installation.root
       ? await scanInstallation(installation.root)
@@ -110,7 +114,8 @@ export class ComfyLabService {
       installation,
       probe: {
         state: probe.reachable ? 'reachable' : 'unreachable',
-        url: this.loopbackUrl,
+        url: this.endpointUrl,
+        scope: this.endpointScope,
         ...(probe.comfyuiVersion ? { comfyuiVersion: probe.comfyuiVersion } : {}),
         ...(probe.device ? { device: probe.device } : {}),
         cpuFallback: probe.cpuFallback,
@@ -125,10 +130,10 @@ export class ComfyLabService {
       },
       useCases,
       safety: {
-        localOnly: true,
+        localOnly: this.endpointScope === 'local',
         implicitDownloads: false,
         implicitExecution: false,
-        note: 'Diagnostic local uniquement : aucun modèle téléchargé, workflow importé ou prompt exécuté.',
+        note: `${this.endpointScope === 'local' ? 'Diagnostic local' : 'Diagnostic distant explicitement configuré'} : aucun modèle téléchargé, workflow importé ou prompt exécuté.`,
       },
     };
   }
@@ -137,13 +142,13 @@ export class ComfyLabService {
     if (!this.openExternal) {
       return { ok: false, error: 'L’ouverture externe n’est pas configurée.' };
     }
-    const probe = await this.probeLoopback();
+    const probe = await this.probeEndpoint();
     if (!probe.reachable) {
-      return { ok: false, error: `ComfyUI local est inaccessible : ${probe.reason}` };
+      return { ok: false, error: `ComfyUI est inaccessible : ${probe.reason}` };
     }
     try {
-      await this.openExternal(this.loopbackUrl);
-      return { ok: true, message: 'ComfyUI local a été ouvert.' };
+      await this.openExternal(this.endpointUrl);
+      return { ok: true, message: `ComfyUI ${this.endpointScope === 'local' ? 'local' : 'distant'} a été ouvert.` };
     } catch (error) {
       return { ok: false, error: cleanError(error) };
     }
@@ -213,18 +218,18 @@ export class ComfyLabService {
     };
   }
 
-  private async probeLoopback(): Promise<ProbeResult> {
+  private async probeEndpoint(): Promise<ProbeResult> {
     try {
       const [stats, objectInfo] = await Promise.all([
         fetchBoundedJson(
           this.fetcher,
-          `${this.loopbackUrl}/system_stats`,
+          `${this.endpointUrl}/system_stats`,
           this.probeTimeoutMs,
           MAX_PROBE_BYTES,
         ),
         fetchBoundedJson(
           this.fetcher,
-          `${this.loopbackUrl}/object_info`,
+          `${this.endpointUrl}/object_info`,
           this.probeTimeoutMs,
           MAX_PROBE_BYTES,
         ),
@@ -246,19 +251,38 @@ export class ComfyLabService {
         ...(device ? { device } : {}),
         cpuFallback,
         reason: cpuFallback
-          ? 'ComfyUI répond sur loopback en fallback CPU ; les générations seront nettement plus lentes.'
+          ? 'ComfyUI répond en fallback CPU ; les générations seront nettement plus lentes.'
           : nodes.length > 0
-            ? 'ComfyUI répond sur loopback ; les nœuds ont été inventoriés sans exécuter de workflow.'
-            : 'ComfyUI répond sur loopback, mais aucun nœud exploitable n’a été retourné.',
+            ? 'ComfyUI répond ; les nœuds ont été inventoriés sans exécuter de workflow.'
+            : 'ComfyUI répond, mais aucun nœud exploitable n’a été retourné.',
       };
     } catch (error) {
       return {
         reachable: false,
         nodes: [],
         cpuFallback: false,
-        reason: `Sonde loopback bornée indisponible : ${cleanError(error)}`,
+        reason: `Sonde ComfyUI bornée indisponible : ${cleanError(error)}`,
       };
     }
+  }
+}
+
+function resolveComfyEndpoint(environment: NodeJS.ProcessEnv): { url: string; scope: 'local' | 'remote' } {
+  const fallback = `http://127.0.0.1:${safePort(environment.COMFYUI_PORT)}`;
+  const configured = environment.CODEBUDDY_COMFYUI_URL?.trim() || environment.COMFYUI_URL?.trim();
+  if (!configured) return { url: fallback, scope: 'local' };
+  try {
+    const parsed = new URL(configured);
+    if (!['http:', 'https:'].includes(parsed.protocol) || parsed.username || parsed.password) throw new Error('scheme');
+    if (parsed.pathname !== '/' || parsed.search || parsed.hash) throw new Error('origin');
+    const host = parsed.hostname.toLowerCase();
+    const local = host === '127.0.0.1' || host === 'localhost' || host === '::1';
+    const privateHost = local || host === 'darkstar' || host.endsWith('.local')
+      || /^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|100\.(6[4-9]|[789]\d|1[01]\d|12[0-7])\.)/.test(host);
+    if (parsed.protocol === 'http:' && !privateHost) throw new Error('public-http');
+    return { url: parsed.origin, scope: local ? 'local' : 'remote' };
+  } catch {
+    return { url: fallback, scope: 'local' };
   }
 }
 
@@ -395,7 +419,7 @@ async function fetchBoundedJson(
   timeoutMs: number,
   maxBytes: number,
 ): Promise<unknown> {
-  assertLoopbackUrl(url);
+  assertProbeUrl(url);
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   timer.unref?.();
@@ -474,10 +498,14 @@ function buildPlan(snapshot: ComfyLabSnapshot, useCase: ComfyLabUseCaseView): st
   ].join('\n');
 }
 
-function assertLoopbackUrl(input: string): void {
+function assertProbeUrl(input: string): void {
   const url = new URL(input);
-  if (url.protocol !== 'http:' || url.hostname !== '127.0.0.1' || url.username || url.password) {
-    throw new Error('seules les sondes HTTP IPv4 loopback sont autorisées');
+  const host = url.hostname.toLowerCase();
+  const privateHost = host === '127.0.0.1' || host === 'localhost' || host === '::1'
+    || host === 'darkstar' || host.endsWith('.local')
+    || /^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|100\.(6[4-9]|[789]\d|1[01]\d|12[0-7])\.)/.test(host);
+  if (url.username || url.password || (url.protocol !== 'https:' && !(url.protocol === 'http:' && privateHost))) {
+    throw new Error('la sonde ComfyUI doit utiliser HTTPS ou un endpoint HTTP privé explicitement configuré');
   }
 }
 

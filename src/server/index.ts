@@ -1862,6 +1862,30 @@ export async function startServer(userConfig: Partial<ServerConfig> = {}): Promi
             });
             logger.info(`Episodic journal: Enabled (CODEBUDDY_EPISODE_JOURNAL) — dialogue consolidation every ${episodeEvery} beats`);
           }
+          // Inner life (opt-in) — every N beats Lisa "spends a moment" (a digital-authentic vignette
+          // + her own small mood drift), surfaced via relational memory so a reply can reference what
+          // she did while he was away. Gives her an interior without ever claiming a human life.
+          if (process.env.CODEBUDDY_COMPANION_INNER_LIFE === 'true') {
+            const innerLifeEvery = Math.max(1, Number(process.env.CODEBUDDY_INNER_LIFE_EVERY ?? 50));
+            heart.register({
+              name: 'inner-life',
+              everyBeats: innerLifeEvery,
+              handler: async () => {
+                const { runInnerLifeTick } = await import('../companion/inner-life.js');
+                await runInnerLifeTick();
+                // A fresh vignette/mood should be visible to the next spoken turn.
+                try {
+                  const { invalidateVoiceRelationalContext } = await import(
+                    '../companion/relational-context.js'
+                  );
+                  invalidateVoiceRelationalContext();
+                } catch {
+                  /* best-effort refresh */
+                }
+              },
+            });
+            logger.info(`Inner life: Enabled (CODEBUDDY_COMPANION_INNER_LIFE) — a moment to herself every ${innerLifeEvery} beats`);
+          }
           // Voice-assistant improvement loop (opt-in, MySoulmate-inspired) — reflect on recent
           // dialogue and adapt over time: learned reply-guidance + bounded trait drift (behavioral
           // mode; never auto-accepts personal facts — those stay pending for `buddy assistant improve --apply`).

@@ -208,6 +208,33 @@ schedule config, counters, and recommendations in a Cowork-friendly shape.
 The REST endpoint mirrors that shape with
 `GET /api/heartbeat/status?format=report`.
 
+### Media — Krea 2 LoRA (character / style)
+
+```bash
+buddy lora lisa                              # init projet Lisa (trigger ohwx lisa)
+buddy lora init <name> [--trigger …] [--character …]
+buddy lora validate <name|path> [--fill-captions]
+buddy lora pack <name|path> [--out file.zip]
+buddy lora train cloud <name|path> [--steps 1000] [--resolution 768|1024]
+buddy lora train local <name|path>           # config AI-Toolkit + train-local.sh (pas de multi-Go auto)
+buddy lora install <file.safetensors> [--name id] [--comfy-root DIR]
+buddy lora list
+buddy lora status
+buddy lora selfie [--mood tender|playful|bold|…] [--tier safe|sensual|explicit] [--scene …] [--no-telegram]
+buddy lora selfie-cache --tier safe|sensual|explicit [--per-style 5] [--styles studio,tender]
+```
+
+Train **cloud** : opt-in `CODEBUDDY_LORA_TRAIN=true` + `FAL_KEY` (fal `krea-2-trainer`, ~$0.003/step).
+Install : copie vers ComfyUI `models/loras`.
+**Selfie** : génère un portrait Lisa (trigger LoRA) + `sendPhoto` Telegram. Doc : [krea-lora.md](./krea-lora.md).
+
+**Cache à trois niveaux** : stocke les variantes dans
+`.codebuddy/lora/lisa/selfie-cache/<niveau>/<style>/`. `safe` et `sensual`
+(non explicite, zones intimes couvertes) sont générables directement. `explicit`
+reste verrouillé sauf si une route commerciale vérifiée active explicitement
+`CODEBUDDY_ADULT_CONTENT_ENABLED=true` avec contrôle 18+, consentement, modération
+et journal d'audit.
+
 ### Research and Orchestration
 
 ```bash

@@ -1,0 +1,13 @@
+[Unit]
+Description=Lance Flow Agent chaque jour vers 20 h puis 22 h 30
+
+[Timer]
+OnCalendar=*-*-* 20:00:00
+OnCalendar=*-*-* 22:30:00
+RandomizedDelaySec=10min
+AccuracySec=1min
+Persistent=true
+Unit=codebuddy-flow-daily.service
+
+[Install]
+WantedBy=timers.target

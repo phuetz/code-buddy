@@ -2,12 +2,13 @@
  * Voice loop — closes the perception→cognition→action loop into speech. Given a
  * transcript of what the robot HEARD (the `onHeard` hook of `speech-reaction.ts`),
  * THINK a short reply with a LOCAL LLM ($0, Ollama) and SPEAK it with a real neural
- * voice (Pocket TTS, with Piper fallback). The result is a thing you can talk to:
+ * voice (Pocket by default, optional budget-guarded ElevenLabs, Piper fallback).
+ * The result is a thing you can talk to:
  * hear → think → speak.
  *
  * Everything is INJECTABLE (reply / synth / play) so the loop is deterministically
  * testable with no model, no audio device. Opt-in (`CODEBUDDY_SENSORY_SPEAK=true`,
- * gated by the caller), $0, loopback, NEVER-THROWS (a failure is silence, not a crash).
+ * gated by the caller), NEVER-THROWS (a failure is silence, not a crash).
  *
  * The default `replyFn` is a lightweight companion reply. To make the robot *act* on
  * spoken commands (run tools, code), inject a `replyFn` that drives a full agent turn —
@@ -19,6 +20,7 @@
 import { spawn } from 'child_process';
 import { createHash } from 'crypto';
 import { existsSync } from 'fs';
+import { readFile, writeFile } from 'fs/promises';
 import { homedir, tmpdir } from 'os';
 import { join } from 'path';
 import { logger } from '../utils/logger.js';
@@ -62,7 +64,13 @@ import {
 import type { TtsCache } from './tts-cache.js';
 import { resolveUserName } from '../companion/user-name.js';
 import { normalizeWavFile, Pcm16WavStreamGain } from '../voice/tts-volume.js';
-import { resolveTtsEngine, type LocalTtsEngine } from '../voice/local-tts.js';
+import { conditionPcm16Wav, Pcm16WavStreamEdges } from '../voice/pcm-edges.js';
+import {
+  resolveElevenLabsCacheVoice,
+  resolveElevenLabsFallbackEngine,
+  resolveTtsEngine,
+  type LocalTtsEngine,
+} from '../voice/local-tts.js';
 import { resolveVoiceboxConfig } from '../voice/voicebox-tts.js';
 import type { PermissionMode } from '../security/permission-modes.js';
 import {
@@ -70,11 +78,24 @@ import {
   detectEmotion,
   emotionalContinuityGuidance,
   emotionGuidance,
+  expressiveTextGuidance,
   immediateEmotionAcknowledgement,
   IMMEDIATE_EMOTION_ACKNOWLEDGEMENTS,
   openerKey,
   pushOpener,
 } from '../companion/reply-augment.js';
+import { crisisGuidanceFor } from '../companion/crisis-safety.js';
+import { evolveRelationshipFromUtterance } from '../companion/relationship-evolution.js';
+import {
+  buildMemoryCallback,
+  memoryCallbackHash,
+  shouldOfferCallback,
+} from '../companion/voice-callbacks.js';
+import {
+  loadRelationshipState,
+  moodBand,
+  personalityOf,
+} from '../companion/relationship-state.js';
 import {
   deriveVoiceDeliveryProfile,
   voiceDeliveryGuidance,
@@ -92,6 +113,32 @@ import { VisualConsentGate } from '../companion/visual-consent.js';
 import { getVoiceTurnCoordinator } from './voice-turn-coordinator.js';
 import { resolvePocketLanguage } from '../talk-mode/providers/pocket-tts.js';
 
+/** Derive relational prosody without changing the bare voice-loop default. */
+export function deriveSpokenDeliveryProfile(
+  heard: string,
+  context?: VoiceTurnContext,
+  env: NodeJS.ProcessEnv = process.env,
+): VoiceDeliveryProfile {
+  if (env.CODEBUDDY_COMPANION_RELATIONAL !== 'true') {
+    return deriveVoiceDeliveryProfile(heard, context);
+  }
+  const read = detectEmotion(heard);
+  let mood: string | undefined;
+  try {
+    mood = moodBand(personalityOf(loadRelationshipState()).mood);
+  } catch {
+    /* mood is best-effort; the local emotional read still tunes delivery */
+  }
+  return deriveVoiceDeliveryProfile(heard, {
+    ...context,
+    emotion: {
+      label: read.emotion,
+      intensity: read.intensity === 'high' ? 1 : 0.75,
+    },
+    ...(mood ? { mood } : {}),
+  });
+}
+
 /**
  * Cancellation handle threaded into the two interruptible steps of a spoken turn: the
  * LLM/agent "think" (`ReplyFn`) and the TTS "play" (`PlayFn`). When the signal aborts
@@ -102,12 +149,20 @@ import { resolvePocketLanguage } from '../talk-mode/providers/pocket-tts.js';
 export interface VoiceStepOptions {
   /** Abort the in-flight step (barge-in / cancellation). */
   signal?: AbortSignal;
+  /** Frozen gain measured from the first audio segment of this spoken turn. */
+  ttsNormalizationFactor?: number;
+  /** Insert the pipeline-owned fixed gap before a non-first sentence. */
+  prependInterSentenceSilence?: boolean;
+  /** The producer already applied the shared loudness law to this WAV. */
+  alreadyNormalized?: boolean;
   /** Exact current utterance when the grounded agent input also carries history. */
   introspectionText?: string;
   /** Internal routing receipt used to keep post-processing on the exact provider. */
   onProviderResolved?: (route: { model: string; apiKey: string; baseURL?: string }) => void;
   /** Raw-free cadence/length profile derived from the human's current spoken turn. */
   delivery?: VoiceDeliveryProfile;
+  /** Internal handoff: an outer reply router already applied relational drift for this turn. */
+  relationshipEvolutionHandled?: boolean;
   /**
    * Route-aware, transactional cognitive context. The caller is responsible
    * for enforcing the route's real egress clearance before returning a lease.
@@ -196,6 +251,8 @@ export interface StreamSpeakOptions extends VoiceStepOptions {
   onFirstAudio?: () => void;
   /** Optional live copy of normalized WAV bytes for a remote avatar renderer. */
   onAudioChunk?: (chunk: Uint8Array) => void;
+  /** Publishes the first measured gain so WAV fallback can preserve the turn level. */
+  onTtsNormalizationFactor?: (factor: number) => void;
 }
 /** Synthesize and play one text segment progressively; false requests the WAV fallback. */
 export type StreamSpeakFn = (text: string, opts?: StreamSpeakOptions) => Promise<boolean>;
@@ -260,7 +317,7 @@ export interface VoiceReplyOptions {
    * blocking contract is honored and no default stream is used).
    */
   streamFn?: StreamReplyFn;
-  /** Safety cap: force a sentence break after N chars with no punctuation (streaming). Default 200. */
+  /** Later-segment safety cap for punctuation-less text (streaming). Default 160. */
   sentenceCap?: number;
   /** Injectable "synthesize" step. Default: resident Pocket TTS, Piper fallback. */
   synth?: SynthFn;
@@ -430,9 +487,11 @@ export function describeVoiceReadiness(
 }
 
 export const SPEAK_SYSTEM_PROMPT =
-  `Tu es le compagnon robot de ${resolveUserName()}. On te parle à voix haute et tu réponds à voix haute. ` +
+  `Tu es le compagnon robot de ${resolveUserName()} — chaleureux, présent, un vrai personnage, ` +
+  "pas un helpdesk. On te parle à voix haute et tu réponds à voix haute. " +
   'Réponds en français avec des phrases complètes, naturelles et reliées par un raisonnement clair. ' +
-  'Adapte la longueur au tour : brève pour une salutation, développée et argumentée pour une question complexe. ' +
+  'Réagis d’abord, sois utile ensuite. Adapte la longueur au tour : brève pour une salutation, ' +
+  'développée et argumentée pour une question complexe. ' +
   "Pour une question factuelle, donne l'explication correcte la plus simple et n'invente rien. " +
   "Pas de markdown, pas de listes, pas de code, pas d'emoji.";
 
@@ -609,8 +668,9 @@ function normalizeFastReplyInput(text: string): string {
 }
 
 function resolveDefaultPiperVoiceModel(): string | undefined {
+  const ttsVoice = process.env.CODEBUDDY_TTS_VOICE?.trim();
   const configured =
-    process.env.CODEBUDDY_TTS_VOICE ||
+    (ttsVoice?.toLowerCase().startsWith('elevenlabs:') ? undefined : ttsVoice) ||
     process.env.CODEBUDDY_TTS_PIPER_MODEL ||
     process.env.COWORK_PIPER_VOICE ||
     process.env.CODEBUDDY_PIPER_VOICE;
@@ -1325,6 +1385,17 @@ export interface SpokenPromptAugmentationOptions {
    * Default false because voice already sends the bounded raw history.
    */
   includeRecentDialogue?: boolean;
+  /** Injectable environment for feature-gate tests. Defaults to `process.env`. */
+  env?: NodeJS.ProcessEnv;
+  /** Injectable latency-bounded relational snapshot. */
+  relationalContext?: () => Promise<string>;
+}
+
+/** Explicit override, otherwise expressive text follows the existing relational opt-in. */
+export function isExpressiveVoiceTextEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
+  const configured = env.CODEBUDDY_VOICE_EXPRESSIVE_TEXT;
+  if (configured !== undefined) return configured === 'true';
+  return env.CODEBUDDY_COMPANION_RELATIONAL === 'true';
 }
 
 /** Default think: a short companion reply from the fastest capable LLM ($0 when local).
@@ -1333,6 +1404,32 @@ export interface SpokenPromptAugmentationOptions {
  *  hybrid reply can reuse the exact same persona-voiced warm path for small talk. */
 /** Recent reply openings (first few words), so the companion doesn't reuse the same entry twice. */
 let recentReplyOpeners: string[] = [];
+let lastVoiceMemoryCallbackAt: number | undefined;
+let offeredVoiceMemoryCallbackHashes: string[] = [];
+
+function recentEpisodeFromRelationalContext(context: string): string | null {
+  return /<recent_episode>\s*([\s\S]*?)\s*<\/recent_episode>/u.exec(context)?.[1]?.trim() ?? null;
+}
+
+function memoryCallbackGuidance(relationalContext: string, env: NodeJS.ProcessEnv): string {
+  const now = Date.now();
+  if (!shouldOfferCallback(now, lastVoiceMemoryCallbackAt, env)) return '';
+  const callback = buildMemoryCallback(
+    recentEpisodeFromRelationalContext(relationalContext),
+    new Set(offeredVoiceMemoryCallbackHashes),
+  );
+  if (!callback) return '';
+
+  lastVoiceMemoryCallbackAt = now;
+  offeredVoiceMemoryCallbackHashes.push(memoryCallbackHash(callback));
+  offeredVoiceMemoryCallbackHashes = offeredVoiceMemoryCallbackHashes.slice(-64);
+  return [
+    '<spoken_memory_callback>',
+    `Ouvre naturellement la réponse par ce rappel issu du journal, sans le compléter ni inventer : « ${callback} »`,
+    'N’affirme aucun autre souvenir et poursuis seulement à partir de ce que l’utilisateur vient de dire.',
+    '</spoken_memory_callback>',
+  ].join('\n');
+}
 
 const REPEATED_OPENER_REWRITES: ReadonlyArray<{
   pattern: RegExp;
@@ -1452,13 +1549,19 @@ export async function buildSpokenPromptAugmentation(
   delivery?: VoiceDeliveryProfile,
   options: SpokenPromptAugmentationOptions = {},
 ): Promise<string> {
+  const env = options.env ?? process.env;
   const includeRecentDialogue =
     options.includeRecentDialogue ??
-    process.env.CODEBUDDY_VOICE_INCLUDE_RECENT_DIALOGUE === 'true';
+    env.CODEBUDDY_VOICE_INCLUDE_RECENT_DIALOGUE === 'true';
+  const emotion = detectEmotion(heard);
   const guidance = [
+    // Safety first: an acute-distress / self-harm signal in what he just said takes priority over
+    // every other tone/continuity instruction for this turn (see crisis-safety.ts). Empty otherwise.
+    crisisGuidanceFor(heard),
     prepareConversationTurn(heard, history, { includeRecentDialogue }).systemGuidance,
     delivery ? voiceDeliveryGuidance(delivery) : '',
-    emotionGuidance(detectEmotion(heard)),
+    emotionGuidance(emotion),
+    isExpressiveVoiceTextEnabled(env) ? expressiveTextGuidance(emotion) : '',
     emotionalContinuityGuidance(heard, history),
     spokenPrefix
       ? `Tu as déjà dit à voix haute : « ${spokenPrefix} » Enchaîne sans répéter cette idée ni cette formulation. Commence directement par la prochaine phrase utile du plan conversationnel.`
@@ -1469,10 +1572,19 @@ export async function buildSpokenPromptAugmentation(
     .join('\n');
 
   let relational = '';
-  if (process.env.CODEBUDDY_COMPANION_RELATIONAL === 'true') {
+  let memoryCallback = '';
+  if (env.CODEBUDDY_COMPANION_RELATIONAL === 'true') {
     try {
-      const { getVoiceRelationalContext } = await import('../companion/relational-context.js');
-      relational = await getVoiceRelationalContext();
+      const getRelationalContext = options.relationalContext ?? (async () => {
+        const { getVoiceRelationalContext } = await import('../companion/relational-context.js');
+        return getVoiceRelationalContext();
+      });
+      relational = await getRelationalContext();
+      // Reuse the already latency-bounded episode read embedded in relational context: no second
+      // storage access or model/audio round-trip is added to the first-sound path.
+      if (emotion.emotion === 'neutral') {
+        memoryCallback = memoryCallbackGuidance(relational, env);
+      }
     } catch {
       /* a missing relational source must never delay or break speech */
     }
@@ -1494,7 +1606,7 @@ export async function buildSpokenPromptAugmentation(
     /* continuity is best-effort and must never delay or break speech */
   }
 
-  return [relational, sharedRelationship, guidance].filter(Boolean).join('\n\n');
+  return [memoryCallback, relational, sharedRelationship, guidance].filter(Boolean).join('\n\n');
 }
 
 async function prepareSpokenTurn(
@@ -1519,6 +1631,20 @@ async function prepareSpokenTurn(
     buildSpokenPromptAugmentation(heard, history, spokenPrefix, delivery),
   ]);
   const basePrompt = personaVoice.spokenPrompt || SPEAK_SYSTEM_PROMPT;
+  // Re-anchor xAI/Lisa character + progressive intimacy on every spoken turn
+  // (spokenPrompt alone is short and dilutes under long history / cognitive context).
+  let characterBlock = '';
+  try {
+    const voiceChar = await import('../companion/companion-voice-character.js');
+    characterBlock = voiceChar.buildCompanionVoiceCharacterBlock({
+      personaId: personaVoice.personaId,
+      robotName: personaVoice.robotName,
+      spokenPrompt: personaVoice.spokenPrompt,
+      turnIndex: voiceChar.nextSpokenTurnIndex(),
+    });
+  } catch {
+    /* character injection is best-effort */
+  }
   let cognitiveLease: VoiceCognitiveContextLease | undefined;
   try {
     cognitiveLease = replyOpts?.acquireCognitiveContext?.(route, heard) ?? undefined;
@@ -1536,7 +1662,9 @@ async function prepareSpokenTurn(
   const cognitivePrompt = [cognitiveLease?.turnContext, cognitiveLease?.evidence]
     .filter(Boolean)
     .join('\n\n');
-  const systemPrompt = [basePrompt, augmentation, cognitivePrompt].filter(Boolean).join('\n\n');
+  const systemPrompt = [basePrompt, characterBlock, augmentation, cognitivePrompt]
+    .filter(Boolean)
+    .join('\n\n');
   return {
     CodeBuddyClient: clientModule.CodeBuddyClient,
     route,
@@ -1552,12 +1680,36 @@ export async function defaultReply(
 ): Promise<string> {
   const fast = fastCompanionReply(heard);
   if (fast) {
+    if (!replyOpts?.relationshipEvolutionHandled) void evolveRelationshipFromUtterance(heard);
     logger.info(`[voice] fast reply chars=${fast.length}`);
     return fast;
   }
+  // Lisa selfie when hybrid is not wrapping this path (CLI voice without hybrid, etc.)
+  if (process.env.CODEBUDDY_LISA_SELFIE !== 'false') {
+    try {
+      const { maybeHandleLisaSelfieRequest } = await import('../companion/lisa-selfie.js');
+      const selfie = await maybeHandleLisaSelfieRequest(heard, {
+        rootDir: process.cwd(),
+      });
+      if (selfie) {
+        if (!replyOpts?.relationshipEvolutionHandled) void evolveRelationshipFromUtterance(heard);
+        logger.info(
+          `[voice] lisa-selfie success=${selfie.success} telegram=${selfie.telegramSent}`,
+        );
+        return selfie.spokenReply;
+      }
+    } catch (err) {
+      logger.warn(
+        `[voice] lisa-selfie skipped: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+  }
   let cognitiveLease: VoiceCognitiveContextLease | undefined;
   try {
-    const delivery = replyOpts?.delivery ?? deriveVoiceDeliveryProfile(heard);
+    if (!replyOpts?.relationshipEvolutionHandled) {
+      await evolveRelationshipFromUtterance(heard);
+    }
+    const delivery = replyOpts?.delivery ?? deriveSpokenDeliveryProfile(heard);
     const prepared = await prepareSpokenTurn(
       heard,
       history,
@@ -1622,7 +1774,7 @@ export async function defaultSpokenPrefix(
 ): Promise<string> {
   try {
     if (replyOpts?.signal?.aborted) return '';
-    const delivery = replyOpts?.delivery ?? deriveVoiceDeliveryProfile(heard);
+    const delivery = replyOpts?.delivery ?? deriveSpokenDeliveryProfile(heard);
     // Prefix generation deliberately does not acquire/commit resident cognitive context: the
     // hybrid semantic gate has not accepted this private draft yet.
     const prepared = await prepareSpokenTurn(
@@ -1690,6 +1842,9 @@ export async function* streamCompanionReply(
   let cognitiveLease: VoiceCognitiveContextLease | undefined;
   let cognitiveLeaseSettled = false;
   try {
+    if (!replyOpts?.relationshipEvolutionHandled) {
+      await evolveRelationshipFromUtterance(heard);
+    }
     const resolvedRoute = await resolveVoiceModel(heard, { history });
     const acknowledgement = replyOpts?.spokenPrefix
       ? null
@@ -1700,7 +1855,7 @@ export async function* streamCompanionReply(
       full = `${acknowledgement} `;
       yield full;
     }
-    const delivery = replyOpts?.delivery ?? deriveVoiceDeliveryProfile(heard);
+    const delivery = replyOpts?.delivery ?? deriveSpokenDeliveryProfile(heard);
     const prepared = await prepareSpokenTurn(
       heard,
       history,
@@ -1826,6 +1981,9 @@ function resolveBaseCacheVoice(
       voicebox.instruct ?? '',
     ].join(':');
   }
+  if (engine === 'elevenlabs') {
+    return resolveElevenLabsCacheVoice(env);
+  }
   return voice || resolveDefaultPiperVoiceModel() || 'piper:default';
 }
 
@@ -1844,24 +2002,58 @@ function makeDefaultSynth(
     opts: VoiceStepOptions = {}
   ): Promise<{ wav: string; cacheable: boolean }> => {
     if (opts.signal?.aborted) throw new Error('TTS synthesis was interrupted');
+    const prepared = prepareSpeech(text);
+    if (!prepared) return { wav: '', cacheable: false };
+    text = prepared;
     const wavPath = join(tmpdir(), `cb-voice-${process.pid}-${Date.now()}.wav`);
-    if (engine === 'voicebox') {
+    let selectedEngine = engine;
+    if (selectedEngine === 'elevenlabs') {
+      const { synthesizeElevenLabsWav } = await import('../voice/local-tts.js');
+      if (await synthesizeElevenLabsWav(
+        text,
+        wavPath,
+        process.env,
+        6_000,
+        opts.signal,
+        opts.ttsNormalizationFactor,
+      )) {
+        return { wav: wavPath, cacheable: true };
+      }
+      if (opts.signal?.aborted) throw new Error('TTS synthesis was interrupted');
+      selectedEngine = resolveElevenLabsFallbackEngine(process.env);
+      if (selectedEngine === 'pocket') {
+        throw new Error('ElevenLabs and Pocket TTS synthesis failed');
+      }
+    }
+    if (selectedEngine === 'voicebox') {
       const { synthesizeVoiceboxWav } = await import('../voice/voicebox-tts.js');
       const deliveryInstruction = opts.delivery
         ? voiceRendererDeliveryInstruction(opts.delivery)
         : undefined;
       if (await synthesizeVoiceboxWav(text, wavPath, process.env, {
         signal: opts.signal,
+        ...(opts.ttsNormalizationFactor !== undefined
+          ? { frozenFactor: opts.ttsNormalizationFactor }
+          : {}),
         ...(deliveryInstruction ? { instruct: deliveryInstruction } : {}),
       })) {
         return { wav: wavPath, cacheable: true };
       }
       if (opts.signal?.aborted) throw new Error('TTS synthesis was interrupted');
       throw new Error('Voicebox TTS synthesis failed');
-    } else if (engine === 'pocket') {
+    } else if (selectedEngine === 'pocket') {
       const { synthesizePocketWav } = await import('../voice/local-tts.js');
-      if (await synthesizePocketWav(text, wavPath, process.env, 180_000, opts.signal)) {
-        return { wav: wavPath, cacheable: true };
+      if (await synthesizePocketWav(
+        text,
+        wavPath,
+        process.env,
+        180_000,
+        opts.signal,
+        opts.ttsNormalizationFactor,
+      )) {
+        // A transient cloud failure must not pin Pocket audio under the
+        // ElevenLabs cache identity after the network recovers.
+        return { wav: wavPath, cacheable: engine !== 'elevenlabs' };
       }
       if (opts.signal?.aborted) throw new Error('TTS synthesis was interrupted');
       throw new Error('Pocket TTS synthesis failed');
@@ -1877,7 +2069,7 @@ function makeDefaultSynth(
       },
       rootDir ? { rootDir } : {}
     );
-    await normalizeWavFile(res.outputPath, process.env);
+    await normalizeWavFile(res.outputPath, process.env, opts.ttsNormalizationFactor);
     return { wav: res.outputPath, cacheable: true };
   };
   // Reuse the synthesized WAV for repeated phrases (greeting, "oui je t'entends", …) so
@@ -1888,7 +2080,13 @@ function makeDefaultSynth(
   }
   return async (text: string, opts: VoiceStepOptions = {}): Promise<string> => {
     if (opts.signal?.aborted) throw new Error('TTS synthesis was interrupted');
-    if (text.trim().length > SHORT_SEGMENT_CACHE_MAX_CHARS) {
+    // A cache entry carries the gain of the turn that created it. Once the
+    // current turn has frozen its own factor, synthesize fresh so it is applied
+    // to raw engine output instead of compounding two independent gains.
+    if (opts.ttsNormalizationFactor !== undefined && engine !== 'elevenlabs') {
+      return (await synthFresh(text, opts)).wav;
+    }
+    if (text.trim().length > SHORT_SEGMENT_CACHE_MAX_CHARS && engine !== 'elevenlabs') {
       return (await synthFresh(text, opts)).wav;
     }
     const cacheVoice = opts.delivery && engine === 'voicebox'
@@ -1979,9 +2177,11 @@ function makeDefaultStreamSpeak(
   const streamEnabled = engine === 'voicebox'
     ? process.env.CODEBUDDY_VOICEBOX_AUDIO_STREAM !== 'false'
     : process.env.CODEBUDDY_POCKET_AUDIO_STREAM !== 'false';
-  if (engine === 'piper' || !streamEnabled) {
+  if ((engine !== 'pocket' && engine !== 'voicebox') || !streamEnabled) {
     return undefined;
   }
+
+  let turnFactor: number | undefined;
 
   return async (text, opts = {}): Promise<boolean> => {
     const signal = opts.signal;
@@ -2004,7 +2204,7 @@ function makeDefaultStreamSpeak(
         // The player starts reading a ready local WAV immediately: no HTTP,
         // model queue, or synthesis step remains on this acknowledgement.
         opts.onFirstAudio?.();
-        await defaultPlay(cachedBackchannel, { signal }, playerPromise);
+        await defaultPlay(cachedBackchannel, { signal, alreadyNormalized: true }, playerPromise);
         logger.info('[voice] instant backchannel cache hit');
         return !signal?.aborted;
       } finally {
@@ -2016,6 +2216,10 @@ function makeDefaultStreamSpeak(
         }
       }
     }
+
+    const prepared = prepareSpeech(text);
+    if (!prepared) return false;
+    text = prepared;
 
     const stream = engine === 'voicebox'
       ? await (async () => {
@@ -2044,7 +2248,13 @@ function makeDefaultStreamSpeak(
       return false;
     }
     const reader = stream.getReader();
-    const gain = new Pcm16WavStreamGain(process.env);
+    const gain = new Pcm16WavStreamGain(
+      process.env,
+      opts.ttsNormalizationFactor ?? turnFactor,
+    );
+    const edges = new Pcm16WavStreamEdges({
+      prependSilenceMs: opts.prependInterSentenceSilence ? 280 : 0,
+    });
     let firstAudio = false;
     let closedOk = false;
     let settled = false;
@@ -2053,15 +2263,24 @@ function makeDefaultStreamSpeak(
     const headTimeoutMs = Number.isFinite(configuredHeadTimeoutMs) && configuredHeadTimeoutMs > 0
       ? Math.max(50, Math.min(1_000, configuredHeadTimeoutMs))
       : 250;
-    const writeGainParts = (parts: Buffer[]): boolean => {
+    const writePlayerParts = (parts: Buffer[]): boolean => {
       let accepted = true;
       for (const part of parts) {
         opts.onAudioChunk?.(part);
         accepted = stdin.write(part) && accepted;
       }
-      if (!firstAudio && gain.hasOutputAudio()) {
+      if (!firstAudio && edges.hasOutputAudio()) {
         firstAudio = true;
         opts.onFirstAudio?.();
+      }
+      return accepted;
+    };
+    const writeGainParts = (parts: Buffer[]): boolean => {
+      let accepted = true;
+      for (const part of parts) accepted = writePlayerParts(edges.push(part)) && accepted;
+      if (turnFactor === undefined && gain.factor !== undefined) {
+        turnFactor = gain.factor;
+        opts.onTtsNormalizationFactor?.(turnFactor);
       }
       return accepted;
     };
@@ -2128,6 +2347,7 @@ function makeDefaultStreamSpeak(
       if (headReleaseTimer) clearTimeout(headReleaseTimer);
       headReleaseTimer = undefined;
       if (!writeGainParts(gain.flush())) await waitForPlayerDrain(child, stdin, signal);
+      if (!writePlayerParts(edges.flush())) await waitForPlayerDrain(child, stdin, signal);
       if (!stdin.destroyed) stdin.end();
       await closed;
       return firstAudio && closedOk && !signal?.aborted;
@@ -2167,9 +2387,16 @@ async function defaultPlay(
   const signal = opts.signal;
   // Already interrupted before we even start → don't spawn anything.
   if (signal?.aborted) return;
-  // This also migrates old, quiet cache entries on first playback. New Pocket
-  // and Piper files are already normalized, so the operation is idempotent.
-  await normalizeWavFile(wav, process.env);
+  if (!opts.alreadyNormalized) await normalizeWavFile(wav, process.env);
+  try {
+    const source = await readFile(wav);
+    const conditioned = conditionPcm16Wav(source, {
+      prependSilenceMs: opts.prependInterSentenceSilence ? 280 : 0,
+    });
+    if (!conditioned.equals(source)) await writeFile(wav, conditioned, { mode: 0o600 });
+  } catch {
+    // Edge conditioning is best-effort; playback must retain its fail-open contract.
+  }
   const player = await playerPromise;
   if (!player) {
     logger.warn('[voice] no audio player available (aplay/ffplay) — staying silent');
@@ -2273,7 +2500,10 @@ export async function sayNow(
       // Half-duplex: mute the ear while speaking. The signal lets barge-in kill this player too.
       await withSpeakingGuard(() => {
         noteSpokenText(t);
-        return play(wav, { signal: options.signal });
+        return play(wav, {
+          signal: options.signal,
+          alreadyNormalized: options.synth === undefined,
+        });
       });
       try {
         const { unlink } = await import('fs/promises');
@@ -2410,7 +2640,7 @@ export function makeVoiceReply(options: VoiceReplyOptions = {}): VoiceReplyHandl
         ? makeDefaultStreamSpeak(playerPromise, turnTtsEngine)
         : undefined
     );
-    const delivery = deriveVoiceDeliveryProfile(heard, context);
+    const delivery = deriveSpokenDeliveryProfile(heard, context, env);
     const startedAt = Date.now();
     let replyMs = 0;
     let synthMs = 0;
@@ -2657,7 +2887,11 @@ export function makeVoiceReply(options: VoiceReplyOptions = {}): VoiceReplyHandl
         firstContentAudioMs = Date.now() - startedAt;
       }
       try {
-        await play(wav, { ...(opts ?? {}), delivery });
+        await play(wav, {
+          ...(opts ?? {}),
+          delivery,
+          alreadyNormalized: options.synth === undefined,
+        });
       } finally {
         streamedWavMetadata.delete(wav);
       }

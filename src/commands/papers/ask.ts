@@ -34,14 +34,14 @@ import {
 
 /** In-chat/CLI default cap on PDFs indexed (agent may raise). */
 const DEFAULT_MAX_PDFS = 25;
-const MAX_PDFS_CAP = 200;
+const MAX_PDFS_CAP = 100_000;
 const DEFAULT_TOP_K = 8;
 const MAX_TOP_K = 50;
 
 export interface PapersAskOptions {
   /** Passages to retrieve before relevance filtering (1-50, default 8). */
   topK?: number;
-  /** Cap on PDFs indexed (1-200, default 25). */
+  /** Cap on PDFs indexed (1-100000, default 25). */
   maxPdfs?: number;
   /** Persist the rendered answer to this Markdown file instead of stdout. */
   report?: string;
@@ -99,7 +99,8 @@ export async function runPapersAskCli(
 
   try {
     // Resolve PDF paths (files/dirs) → concrete list.
-    const resolvePaths = io.resolvePdfPaths ?? ((p: string[]) => defaultResolvePdfPaths(p));
+    const resolvePaths =
+      io.resolvePdfPaths ?? ((p: string[]) => defaultResolvePdfPaths(p, maxPdfs));
     const searchRoots = paths.length > 0 ? paths : ['.'];
     const pdfPaths = (await resolvePaths(searchRoots)).slice(0, maxPdfs);
     if (pdfPaths.length === 0) {

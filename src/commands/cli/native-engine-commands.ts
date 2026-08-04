@@ -1461,6 +1461,22 @@ export function registerCompanionCommands(program: Command): void {
       console.log(formatCompanionStatus(await getCompanionStatus()));
     });
 
+  companion
+    .command('doctor')
+    .description(
+      'Diagnose Lisa persona / spokenPrompt / ROBOT_NAME alignment (exit 1 on errors)',
+    )
+    .option('--json', 'Print structured JSON')
+    .action(async (opts: { json?: boolean }) => {
+      const {
+        formatCompanionDoctorReport,
+        runLiveCompanionDoctor,
+      } = await import('../../companion/companion-doctor.js');
+      const report = await runLiveCompanionDoctor();
+      console.log(opts.json ? JSON.stringify(report, null, 2) : formatCompanionDoctorReport(report));
+      if (!report.ok) process.exitCode = 1;
+    });
+
   const continuity = companion
     .command('continuity')
     .description('Manage the integrity-protected companion lineage across models, machines, and future bodies');

@@ -27,7 +27,7 @@ import {
   desktopCapturer,
   nativeImage,
 } from 'electron';
-import { join, resolve, dirname, isAbsolute, basename } from 'path';
+import { join, resolve, dirname, isAbsolute, basename, relative } from 'path';
 import { fileURLToPath, pathToFileURL } from 'url';
 import * as fs from 'fs';
 import { execFileSync } from 'child_process';
@@ -62,6 +62,13 @@ import { CommandRunner } from './studio/command-runner';
 import { registerScaffoldIpc } from './studio/scaffold-ipc';
 import { registerMediaGenIpc } from './media/media-gen-ipc';
 import { MediaGenService } from './media/media-gen-service';
+import { synthesizeLocalizedNarration } from '../../../src/tools/video/narration.js';
+import {
+  loadVoiceRightsRegistry,
+  voiceProfileRevision,
+} from '../../../src/tools/video/voice-rights-registry.js';
+import { CreativeAssetRegistry } from './media/creative-asset-registry';
+import { registerCreativeAssetIpc } from './media/creative-asset-ipc';
 import { registerComfyLabIpc } from './comfy-lab/comfy-lab-ipc';
 import { ComfyLabService } from './comfy-lab/comfy-lab-service';
 import { registerAvatarBibleIpc } from './comfy-lab/avatar-bible-ipc';
@@ -82,6 +89,7 @@ import { registerSpecIpcHandlers } from './ipc/spec-ipc';
 import { registerSpecNextIpcHandlers } from './ipc/spec-next-ipc';
 import { registerLiveLauncherIpcHandlers } from './ipc/live-launcher-ipc';
 import { registerGpuMediaIpcHandlers } from './ipc/gpu-media-ipc';
+import { GpuMediaAdminBridge } from './gpu-media/gpu-media-admin-bridge';
 import { registerBrowserOperatorRuntimeIpcHandlers } from './ipc/browser-operator-runtime-ipc';
 import { registerMeetingLiveIpcHandlers } from './ipc/meeting-live-ipc';
 import { meetingDisplayAudioBroker } from './meeting/meeting-display-audio';
@@ -2663,7 +2671,6 @@ registerMissionIpcHandlers(() => missionBridge);
 registerSpecIpcHandlers(() => projectManager, configStore);
 registerSpecNextIpcHandlers(() => projectManager);
 liveLauncherBridge = registerLiveLauncherIpcHandlers();
-registerGpuMediaIpcHandlers();
 registerBrowserOperatorRuntimeIpcHandlers({ getProjectManager: () => projectManager });
 registerMeetingLiveIpcHandlers({ getMainWindow });
 registerProfilesIpcHandlers();
@@ -2694,20 +2701,74 @@ const avatarBibleService = new AvatarBibleService({
   },
 });
 registerAvatarBibleIpc(ipcMain, avatarBibleService);
+const creativeWorkspaceRoots = () => {
+  const roots = new Set<string>([join(app.getPath('userData'), 'default_working_dir')]);
+  if (currentWorkingDir) roots.add(currentWorkingDir);
+  const activeWorkspace = projectManager?.getActive()?.workspacePath;
+  if (activeWorkspace) roots.add(activeWorkspace);
+  for (const session of sessionManager?.listSessions() ?? []) {
+    if (session.cwd) roots.add(session.cwd);
+  }
+  return [...roots];
+};
+const activeCreativeWorkspace = () => projectManager?.getActive()?.workspacePath
+  ?? currentWorkingDir
+  ?? join(app.getPath('userData'), 'default_working_dir');
+const creativeAssetRegistry = new CreativeAssetRegistry({
+  roots: creativeWorkspaceRoots,
+  activeRoot: activeCreativeWorkspace,
+  mySoulmateRoot: join(app.getPath('home'), 'DEV', 'MySoulmate', 'companion-image-cache'),
+});
+registerCreativeAssetIpc(ipcMain, creativeAssetRegistry);
+registerGpuMediaIpcHandlers(new GpuMediaAdminBridge({
+  resolveAssetPath: (id) => creativeAssetRegistry.resolveAssetPath(id),
+  activeRoot: activeCreativeWorkspace,
+  synthesize: async (input) => {
+    const registryPath = process.env.CODEBUDDY_VOICE_RIGHTS_REGISTRY
+      ?? join(app.getPath('home'), '.codebuddy', 'voice-rights-registry.json');
+    const profiles = await loadVoiceRightsRegistry(registryPath);
+    const profile = profiles.get(input.voiceProfileId);
+    if (!profile || profile.locale !== input.locale) {
+      throw new Error('Le profil vocal commercial ne correspond pas à la locale LongCat.');
+    }
+    const os = await import('os');
+    const temporaryRoot = await fs.promises.mkdtemp(join(os.tmpdir(), 'cowork-commercial-voice-'));
+    const outputPath = join(temporaryRoot, 'voice.wav');
+    try {
+      const narration = await synthesizeLocalizedNarration({
+        text: input.narration,
+        outputPath,
+        locale: input.locale,
+        voiceProfileId: input.voiceProfileId,
+        fallbackPolicy: 'none',
+      }, { resolveVoiceProfile: async (id) => profiles.get(id) ?? null });
+      if (!narration) throw new Error('La synthèse vocale commerciale exacte a échoué sans fallback.');
+      const audio = await fs.promises.readFile(outputPath);
+      return {
+        audio: audio.buffer.slice(audio.byteOffset, audio.byteOffset + audio.byteLength) as ArrayBuffer,
+        rights: {
+          voiceProfileId: profile.id,
+          locale: profile.locale,
+          provider: profile.provider,
+          provenanceRef: profile.provenanceRef,
+          profileRevision: voiceProfileRevision(profile),
+          registryRevision: profile.registryRevision,
+          evidenceSha256: profile.evidenceSha256,
+          commercialUseApproved: true as const,
+        },
+      };
+    } finally {
+      await fs.promises.rm(temporaryRoot, { recursive: true, force: true });
+    }
+  },
+}));
 registerMediaGenIpc(ipcMain, new MediaGenService(
   undefined,
-  app.getPath('home'),
+  activeCreativeWorkspace,
   undefined,
-  () => {
-    const roots = new Set<string>([join(app.getPath('userData'), 'default_working_dir')]);
-    if (currentWorkingDir) roots.add(currentWorkingDir);
-    const activeWorkspace = projectManager?.getActive()?.workspacePath;
-    if (activeWorkspace) roots.add(activeWorkspace);
-    for (const session of sessionManager?.listSessions() ?? []) {
-      if (session.cwd) roots.add(session.cwd);
-    }
-    return roots;
-  },
+  creativeWorkspaceRoots,
+  (id) => creativeAssetRegistry.resolveAssetPath(id),
+  (id) => creativeAssetRegistry.resolveAsset(id),
 ));
 registerComfyLabIpc(ipcMain, new ComfyLabService({
   openExternal: async (url) => shell.openExternal(url),
@@ -2995,9 +3056,23 @@ function resolveLessonsWorkspace(projectId?: string): string {
 
 // ── Session export IPC handler ────────────────────────────────────────
 // bolt.new parity: export the generated project as a zip (Save-As dialog).
-ipcMain.handle('studio.exportZip', async (_event, { root }: { root: string }) => {
+ipcMain.handle('studio.exportZip', async (_event, input: unknown) => {
   try {
-    const st = await import('fs').then((f) => f.promises.stat(root));
+    if (!input || typeof input !== 'object' || Array.isArray(input)) return { ok: false, error: 'invalid export request' };
+    const requestedRoot = (input as { root?: unknown }).root;
+    if (typeof requestedRoot !== 'string' || !isAbsolute(requestedRoot) || requestedRoot.includes('\0')) {
+      return { ok: false, error: 'invalid project directory' };
+    }
+    const root = await fs.promises.realpath(requestedRoot);
+    const trustedRoots = (await Promise.all(creativeWorkspaceRoots().map(async (candidate) => {
+      try { return await fs.promises.realpath(candidate); } catch { return null; }
+    }))).filter((candidate): candidate is string => Boolean(candidate));
+    const trusted = trustedRoots.some((candidate) => {
+      const child = relative(candidate, root);
+      return child === '' || (!child.startsWith('..') && !isAbsolute(child));
+    });
+    if (!trusted) return { ok: false, error: 'project is outside trusted workspaces' };
+    const st = await fs.promises.stat(root);
     if (!st.isDirectory()) return { ok: false, error: 'not a directory' };
     const win = getMainWindow();
     const defaultName = `${basename(root) || 'projet'}.zip`;
@@ -3016,7 +3091,13 @@ ipcMain.handle('studio.exportZip', async (_event, { root }: { root: string }) =>
       archive.glob('**/*', {
         cwd: root,
         dot: true,
-        ignore: ['node_modules/**', '.git/**', '.codebuddy/checkpoints/**'],
+        follow: false,
+        ignore: ['node_modules/**', '.git/**', '.codebuddy/**'],
+      });
+      archive.glob('.codebuddy/media-generation/{images,videos,audio}/**/*.{png,jpg,jpeg,webp,gif,avif,mp4,webm,mov,wav,mp3,ogg,flac}', {
+        cwd: root,
+        dot: true,
+        follow: false,
       });
       void archive.finalize();
     });
@@ -3069,17 +3150,19 @@ ipcMain.handle('media.list', async () => {
 
 ipcMain.handle('media.copyToClipboard', async (_event, { sourcePath }: { sourcePath: string }) => {
   try {
-    const { kindOf } = await import('./media-library');
-    const kind = kindOf(sourcePath);
+    const { kindOf, resolveExportableMediaBundlePaths } = await import('./media-library');
+    const [approvedPath] = await resolveExportableMediaBundlePaths([sourcePath], creativeWorkspaceRoots());
+    if (!approvedPath) return { ok: false, error: 'not a media file' };
+    const kind = kindOf(approvedPath);
     if (kind === 'image') {
-      const img = nativeImage.createFromPath(sourcePath);
+      const img = nativeImage.createFromPath(approvedPath);
       if (img.isEmpty()) return { ok: false, error: 'image illisible' };
       clipboard.writeImage(img);
       return { ok: true, mode: 'image' as const };
     }
     // Non-image (video/audio): copy the absolute path (the clipboard has no
     // portable video type across apps).
-    clipboard.writeText(sourcePath);
+    clipboard.writeText(approvedPath);
     return { ok: true, mode: 'path' as const };
   } catch (err) {
     logWarn('[media.copyToClipboard] failed:', err);
@@ -3089,9 +3172,8 @@ ipcMain.handle('media.copyToClipboard', async (_event, { sourcePath }: { sourceP
 
 ipcMain.handle('media.exportMany', async (_event, { paths }: { paths: string[] }) => {
   try {
-    const { kindOf } = await import('./media-library');
-    const valid = (paths ?? []).filter((p) => kindOf(p));
-    if (valid.length === 0) return { ok: false, error: 'no media selected' };
+    const { resolveExportableMediaBundlePaths } = await import('./media-library');
+    const valid = await resolveExportableMediaBundlePaths(paths ?? [], creativeWorkspaceRoots());
     const win = getMainWindow();
     const picked = win
       ? await dialog.showOpenDialog(win, { title: 'Exporter la sélection vers…', properties: ['openDirectory', 'createDirectory'] })
@@ -3099,16 +3181,22 @@ ipcMain.handle('media.exportMany', async (_event, { paths }: { paths: string[] }
     if (picked.canceled || !picked.filePaths[0]) return { ok: false, canceled: true };
     const destDir = picked.filePaths[0];
     const fsp = await import('fs/promises');
+    const names = valid.map((source) => basename(source));
+    if (new Set(names).size !== names.length) {
+      return { ok: false, copied: 0, destDir, error: 'Two selected media files have the same export name' };
+    }
     let copied = 0;
     for (const src of valid) {
       try {
-        await fsp.copyFile(src, join(destDir, basename(src)));
+        await fsp.copyFile(src, join(destDir, basename(src)), fs.constants.COPYFILE_EXCL);
         copied += 1;
       } catch (err) {
         logWarn('[media.exportMany] copy failed:', src, err);
       }
     }
-    return { ok: true, copied, destDir };
+    return copied === valid.length
+      ? { ok: true, copied, destDir }
+      : { ok: false, copied, destDir, error: `${valid.length - copied} media file(s) could not be exported` };
   } catch (err) {
     logWarn('[media.exportMany] failed:', err);
     return { ok: false, error: String(err) };
@@ -3117,15 +3205,16 @@ ipcMain.handle('media.exportMany', async (_event, { paths }: { paths: string[] }
 
 ipcMain.handle('media.export', async (_event, { sourcePath }: { sourcePath: string }) => {
   try {
-    const { kindOf } = await import('./media-library');
-    if (!kindOf(sourcePath)) return { ok: false, error: 'not a media file' };
+    const { resolveExportableMediaBundlePaths } = await import('./media-library');
+    const [approvedPath] = await resolveExportableMediaBundlePaths([sourcePath], creativeWorkspaceRoots());
+    if (!approvedPath) return { ok: false, error: 'not a media file' };
     const fsp = await import('fs/promises');
     const win = getMainWindow();
     const result = win
-      ? await dialog.showSaveDialog(win, { defaultPath: basename(sourcePath), title: 'Exporter le média' })
-      : await dialog.showSaveDialog({ defaultPath: basename(sourcePath), title: 'Exporter le média' });
+      ? await dialog.showSaveDialog(win, { defaultPath: basename(approvedPath), title: 'Exporter le média' })
+      : await dialog.showSaveDialog({ defaultPath: basename(approvedPath), title: 'Exporter le média' });
     if (result.canceled || !result.filePath) return { ok: false, canceled: true };
-    await fsp.copyFile(sourcePath, result.filePath);
+    await fsp.copyFile(approvedPath, result.filePath, fs.constants.COPYFILE_EXCL);
     return { ok: true, savedTo: result.filePath };
   } catch (err) {
     logWarn('[media.export] failed:', err);
