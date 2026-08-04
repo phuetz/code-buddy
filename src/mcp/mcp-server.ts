@@ -38,6 +38,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 import type { ToolResult } from '../types/index.js';
 import { registerAgentTools } from './mcp-agent-tools.js';
+import { registerCkgTools } from './mcp-ckg-tools.js';
 import { registerMemoryTools } from './mcp-memory-tools.js';
 import { registerSessionTools } from './mcp-session-tools.js';
 import { registerDesktopTools } from './mcp-desktop-tools.js';
@@ -150,6 +151,7 @@ export class CodeBuddyMCPServer {
 
     registerAgentTools(this.mcpServer, getAgent);
     registerMemoryTools(this.mcpServer);
+    registerCkgTools(this.mcpServer);
     registerSessionTools(this.mcpServer, getAgent);
     registerDesktopTools(this.mcpServer);
     registerResources(this.mcpServer);
