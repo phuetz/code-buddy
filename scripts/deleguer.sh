@@ -54,6 +54,7 @@ GARDE
 
 echo "→ $MOTEUR sur $DEPOT — journal : $LOG"
 DEBUT=$(date +%s)
+AVANT=$(cd "$DEPOT" && git status --porcelain 2>/dev/null | sort)
 
 case "$MOTEUR" in
   luna|sol)
@@ -62,7 +63,11 @@ case "$MOTEUR" in
       - < "$CONSIGNE" 2>&1 | tee "$LOG"
     ;;
   agy)
-    (cd "$DEPOT" && agy --model gemini-3.6-flash-high -p "$(cat "$CONSIGNE")") 2>&1 | tee "$LOG"
+    # Sans cette option, agy en mode headless refuse TOUS les outils — il ne peut
+    # pas demander l'autorisation — et rend un bilan élogieux sans avoir rien fait.
+    # Constaté le 07/08/2026 : sortie 0, 12 s, aucun livrable.
+    (cd "$DEPOT" && agy --model gemini-3.6-flash-high \
+       --dangerously-skip-permissions -p "$(cat "$CONSIGNE")") 2>&1 | tee "$LOG"
     ;;
   local)
     MODELE=${OLLAMA_MODELE:-gemma4:31b-it-qat}
@@ -74,8 +79,9 @@ esac
 CODE=${PIPESTATUS[0]}
 DUREE=$(( $(date +%s) - DEBUT ))
 
-# La preuve qu'il a travaillé, pas qu'il l'a raconté. Zéro `exec` sur un moteur
-# agentique = aucune commande lancée, quoi qu'en dise le bilan.
+# La preuve qu'il a travaillé, pas qu'il l'a raconté. Un moteur qui échoue rend
+# souvent 0 avec un bilan élogieux : les deux moteurs l'ont fait le 07/08/2026,
+# codex sur bac à sable imbriqué, agy sur permissions headless refusées.
 echo "─────────────────────────────────────────────"
 printf 'moteur %s · %d s · sortie %d\n' "$MOTEUR" "$DUREE" "$CODE"
 if [ "$MOTEUR" = luna ] || [ "$MOTEUR" = sol ]; then
@@ -83,5 +89,22 @@ if [ "$MOTEUR" = luna ] || [ "$MOTEUR" = sol ]; then
   echo "commandes réellement exécutées : $EXECS"
   [ "$EXECS" -eq 0 ] && echo "⚠️  ZÉRO commande exécutée — bac à sable imbriqué ? relire l'en-tête de ce script."
 fi
-(cd "$DEPOT" && git status --short 2>/dev/null | head -20)
+
+# Deuxième preuve, valable pour TOUS les moteurs : le dépôt a-t-il bougé ?
+APRES=$(cd "$DEPOT" && git status --porcelain 2>/dev/null | sort)
+if [ "$AVANT" = "$APRES" ]; then
+  echo "⚠️  le dépôt est INCHANGÉ — si la mission demandait un livrable, il n'existe pas."
+else
+  echo "── ce qui a bougé ──"
+  diff <(printf '%s\n' "$AVANT") <(printf '%s\n' "$APRES") | grep '^>' | sed 's/^> /  /'
+fi
+
+# Troisième preuve, la seule qui vaille quand la mission nomme son livrable.
+grep -oE '`?~?/[A-Za-z0-9_./-]+\.(md|json|csv|txt)`?' "$MISSION" 2>/dev/null \
+  | tr -d '`' | sed "s|^~|$HOME|" | sort -u | while read -r attendu; do
+  case "$attendu" in
+    */tmp/*) continue ;;
+  esac
+  [ -e "$attendu" ] || echo "⚠️  livrable annoncé mais ABSENT : $attendu"
+done
 exit "$CODE"
