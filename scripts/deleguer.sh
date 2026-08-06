@@ -5,11 +5,16 @@
 #
 # Moteurs, du moins cher au plus cher en ressource RARE :
 #   local  ollama sur la machine        — aucun quota, aucun réseau
-#   agy    Gemini (Antigravity)         — gratuit, quota généreux
+#   agy    Gemini (Antigravity)         — abonnement AI Ultra, quota généreux
+#   grok   xAI Build (abonnement OAuth) — PAS la clé GROK_API_KEY, morte en 402
 #   luna   codex gpt-5.6-luna  (DÉFAUT) — quota ChatGPT, le moins lourd
 #   sol    codex gpt-5.6-sol            — quota ChatGPT, à réserver au dur
 #
 # Aucun de ces moteurs ne touche au forfait Claude : c'est tout l'objet.
+#
+# Pour un JUGEMENT sur des fichiers déjà écrits (pas une mission à exécuter),
+# c'est `juge-code.sh` qu'il faut : JUGE=free donne Nemotron 3 Ultra à 0 $, et
+# les DEUX clés OpenRouter tournent en alternance, soit 2 000 requêtes par jour.
 #
 # ⚠️ À lancer depuis un Bash de Claude Code avec `dangerouslyDisableSandbox: true`.
 #    Sinon codex tente de construire son bwrap dans celui de Claude, échoue sur
@@ -68,6 +73,12 @@ case "$MOTEUR" in
     # Constaté le 07/08/2026 : sortie 0, 12 s, aucun livrable.
     (cd "$DEPOT" && agy --model gemini-3.6-flash-high \
        --dangerously-skip-permissions -p "$(cat "$CONSIGNE")") 2>&1 | tee "$LOG"
+    ;;
+  grok)
+    # Abonnement xAI (OAuth, ~/.codebuddy/xai-auth.json) — À NE PAS CONFONDRE avec
+    # GROK_API_KEY, morte en 402 depuis juillet 2026. C'est l'abonnement qui paie.
+    (cd "$DEPOT" && grok --always-approve --cwd "$DEPOT" \
+       ${GROK_MODELE:+-m "$GROK_MODELE"} -p "$(cat "$CONSIGNE")") 2>&1 | tee "$LOG"
     ;;
   local)
     MODELE=${OLLAMA_MODELE:-gemma4:31b-it-qat}
