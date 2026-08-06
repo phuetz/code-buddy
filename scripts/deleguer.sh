@@ -111,11 +111,19 @@ else
 fi
 
 # Troisième preuve, la seule qui vaille quand la mission nomme son livrable.
-grep -oE '`?~?/[A-Za-z0-9_./-]+\.(md|json|csv|txt)`?' "$MISSION" 2>/dev/null \
-  | tr -d '`' | sed "s|^~|$HOME|" | sort -u | while read -r attendu; do
+#
+# Le motif exige un chemin ANCRÉ (`~/…`, `/…`) ou RELATIF AU DÉPÔT (`dossier/…`).
+# Première version le 07/08 : elle imposait un `/` initial, si bien qu'un chemin
+# relatif comme `Le_Livre/RAPPORT.md` était tronqué en `/RAPPORT.md` et signalé
+# absent alors qu'il venait d'être écrit. Une preuve qui crie au loup finit par
+# ne plus être lue — c'est le mode d'échec d'un contrôle, pas un détail.
+grep -oE '`?(~/|/)?[A-Za-zÀ-ÿ0-9_][A-Za-zÀ-ÿ0-9_.-]*(/[A-Za-zÀ-ÿ0-9_.-]+)+\.(md|json|csv|txt)`?' \
+  "$MISSION" 2>/dev/null | tr -d '`' | sort -u | while read -r attendu; do
   case "$attendu" in
-    */tmp/*) continue ;;
+    /tmp/*|*/tmp/*) continue ;;
+    /*|~/*) chemin="${attendu/#\~/$HOME}" ;;
+    *)      chemin="$DEPOT/$attendu" ;;
   esac
-  [ -e "$attendu" ] || echo "⚠️  livrable annoncé mais ABSENT : $attendu"
+  [ -e "$chemin" ] || echo "⚠️  livrable annoncé mais ABSENT : $chemin"
 done
 exit "$CODE"
