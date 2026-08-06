@@ -247,6 +247,16 @@ export const TOOL_METADATA: ToolMetadata[] = [
     fleetSafe: true,
   },
   {
+    name: 'community_search',
+    category: 'web',
+    keywords: ['reddit', 'hacker news', 'community', 'discussion', 'people', 'opinion',
+      'what do people think', 'sentiment', 'buzz', 'trending', 'stack overflow',
+      'github', 'arxiv', 'avis', 'retours', 'communauté'],
+    priority: 8,
+    description: 'Search what people actually say — discussions, votes and engagement — rather than what publishers write',
+    fleetSafe: true,
+  },
+  {
     name: 'weather',
     category: 'web',
     keywords: ['weather', 'météo', 'meteo', 'forecast', 'prévisions', 'previsions', 'température', 'temperature', 'pluie', 'neige', 'vent'],

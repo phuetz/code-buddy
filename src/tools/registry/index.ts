@@ -75,6 +75,7 @@ export {
 // Tool Adapters - Web
 export {
   WebSearchExecuteTool,
+  CommunitySearchExecuteTool,
   WebFetchTool,
   WebScrapeExecuteTool,
   createWebTools,
