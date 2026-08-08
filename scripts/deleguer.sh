@@ -5,7 +5,11 @@
 #
 # Moteurs, du moins cher au plus cher en ressource RARE :
 #   local  ollama sur la machine        — aucun quota, aucun réseau
-#   agy    Gemini (Antigravity)         — abonnement AI Ultra, quota généreux
+#   agy    Gemini (Antigravity)         — abonnement AI Ultra ; ⚠️ PLAFOND DUR
+#                                         de ~305 s : découper les missions
+#   oc     OpenCode Go (abonnement)     — 61 modèles, 5 lignées inédites
+#                                         (kimi, minimax, deepseek, glm, qwen) ;
+#                                         choisir avec OC_MODELE=<id>
 #   grok   xAI Build (abonnement OAuth) — PAS la clé GROK_API_KEY, morte en 402
 #   luna   codex gpt-5.6-luna  (DÉFAUT) — quota ChatGPT, le moins lourd
 #   sol    codex gpt-5.6-sol            — quota ChatGPT, à réserver au dur
@@ -79,6 +83,21 @@ case "$MOTEUR" in
     # GROK_API_KEY, morte en 402 depuis juillet 2026. C'est l'abonnement qui paie.
     (cd "$DEPOT" && grok --always-approve --cwd "$DEPOT" \
        ${GROK_MODELE:+-m "$GROK_MODELE"} -p "$(cat "$CONSIGNE")") 2>&1 | tee "$LOG"
+    ;;
+  oc)
+    # OpenCode — abonnement Go (`opencode auth login`, jeton dans
+    # ~/.local/share/opencode/auth.json). 61 modèles, dont cinq LIGNÉES que la
+    # flotte n'a pas par ailleurs : Moonshot (kimi), MiniMax, DeepSeek, Zhipu
+    # (glm), Alibaba (qwen). C'est ce qui sert le croisement d'audits — deux
+    # modèles de la même famille se trompent ensemble.
+    #
+    # ⚠️ Au 08/08/2026 les modèles PAYANTS renvoient « 401 Insufficient
+    # balance » malgré l'abonnement souscrit ; les `-free` fonctionnent. D'où le
+    # défaut ci-dessous. Quand la facturation sera réglée, passer
+    # OC_MODELE=kimi-k3 (juge de fouille profonde) ou deepseek-v4-pro (audit).
+    MODELE=${OC_MODELE:-deepseek-v4-flash-free}
+    (cd "$DEPOT" && opencode run --dir "$DEPOT" -m "opencode/$MODELE" \
+       "$(cat "$CONSIGNE")") 2>&1 | tee "$LOG"
     ;;
   local)
     MODELE=${OLLAMA_MODELE:-gemma4:31b-it-qat}
