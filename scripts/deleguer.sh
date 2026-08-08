@@ -85,6 +85,15 @@ case "$MOTEUR" in
        ${GROK_MODELE:+-m "$GROK_MODELE"} -p "$(cat "$CONSIGNE")") 2>&1 | tee "$LOG"
     ;;
   oc)
+    # ⛔ UN SEUL TRAVAIL OPENCODE À LA FOIS. Le quota d'une fenêtre de 5 h
+    # (12 $) est trop étroit pour le partage : deux missions concurrentes se
+    # font couper à mi-course toutes les deux — budget consommé, zéro livrable.
+    # En séquentiel, la première aboutit. Constaté le 08/08.
+    if pgrep -f 'opencode run' | grep -qv "^$$\$"; then
+      echo "⛔ REFUS — un travail OpenCode tourne déjà. Le quota de 5 h ne" >&2
+      echo "   supporte pas le parallélisme : attends son livrable." >&2
+      exit 3
+    fi
     # OpenCode — abonnement Go (`opencode auth login`, jeton dans
     # ~/.local/share/opencode/auth.json). 61 modèles, dont cinq LIGNÉES que la
     # flotte n'a pas par ailleurs : Moonshot (kimi), MiniMax, DeepSeek, Zhipu
