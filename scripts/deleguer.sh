@@ -91,12 +91,16 @@ case "$MOTEUR" in
     # (glm), Alibaba (qwen). C'est ce qui sert le croisement d'audits — deux
     # modèles de la même famille se trompent ensemble.
     #
-    # ⚠️ Au 08/08/2026 les modèles PAYANTS renvoient « 401 Insufficient
-    # balance » malgré l'abonnement souscrit ; les `-free` fonctionnent. D'où le
-    # défaut ci-dessous. Quand la facturation sera réglée, passer
-    # OC_MODELE=kimi-k3 (juge de fouille profonde) ou deepseek-v4-pro (audit).
-    MODELE=${OC_MODELE:-deepseek-v4-flash-free}
-    (cd "$DEPOT" && opencode run --dir "$DEPOT" -m "opencode/$MODELE" \
+    # ⚠️ DEUX FOURNISSEURS, ne pas les confondre — c'est ce qui m'a fait perdre
+    # une heure le 08/08 :
+    #   opencode/<m>      → Zen, payé au crédit ; seuls les `-free` répondent
+    #   opencode-go/<m>   → l'ABONNEMENT ; c'est celui-ci qu'on veut
+    # Un `opencode/kimi-k3` rend « 401 Insufficient balance » et donne
+    # l'illusion d'un problème de facturation. `opencode models` liste les
+    # identifiants réels avec leur préfixe : s'y fier plutôt qu'au catalogue
+    # HTTP, qui ne le montre pas.
+    MODELE=${OC_MODELE:-deepseek-v4-pro}
+    (cd "$DEPOT" && opencode run --dir "$DEPOT" -m "opencode-go/$MODELE" \
        "$(cat "$CONSIGNE")") 2>&1 | tee "$LOG"
     ;;
   local)
