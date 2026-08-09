@@ -189,13 +189,14 @@ interface EmbeddingCacheEvent {
 const SCOPE = 'collective';
 
 function normalizeName(s: string): string {
-  return s
+  const normalized = s
     .toLowerCase()
     .normalize('NFD')
     .replace(/\p{M}+/gu, '')
     .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 80);
+    .replace(/^-+|-+$/g, '');
+  if (normalized.length <= 80) return normalized;
+  return `${normalized.slice(0, 71)}-${contentHash('name', normalized).slice(0, 8)}`;
 }
 
 /** Code-Explorer id convention: `Type:scope:name`. */
