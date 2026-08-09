@@ -58,6 +58,7 @@ function buildState(opts: {
     peerRequestCount: 0,
     peerWindowStart: Date.now(),
     peerHandlersActive: 0,
+    peerHandlerSlots: new Set(),
     peerHandlerQueue: [],
     droppedBroadcasts: 0,
   };

@@ -67,6 +67,7 @@ interface ConnectionState {
   peerRequestCount: number;
   peerWindowStart: number;
   peerHandlersActive: number;
+  peerHandlerSlots: Set<number>;
   peerHandlerQueue: PeerHandlerTask[];
   // Phase (d).7 — count of broadcast() calls skipped for this client
   // because its ws.bufferedAmount exceeded SERVER_CONFIG.WS_BROADCAST_BUFFER_LIMIT.
@@ -81,7 +82,7 @@ interface ConnectionState {
 }
 
 interface PeerHandlerTask {
-  run: () => Promise<void>;
+  run: (slot: number) => Promise<void>;
   resolve: () => void;
   reject: (error: Error) => void;
 }
@@ -423,10 +424,18 @@ function sendError(ws: WebSocket, code: string, message: string, id?: string): v
 }
 
 function startPeerHandler(state: ConnectionState, task: PeerHandlerTask): void {
+  let slot = 0;
+  while (slot < MAX_PARALLEL_PEER_HANDLERS && state.peerHandlerSlots.has(slot)) slot++;
+  if (slot >= MAX_PARALLEL_PEER_HANDLERS) {
+    task.reject(new Error('No peer request execution slot available'));
+    return;
+  }
+  state.peerHandlerSlots.add(slot);
   state.peerHandlersActive += 1;
-  void task.run()
+  void task.run(slot)
     .then(task.resolve, task.reject)
     .finally(() => {
+      state.peerHandlerSlots.delete(slot);
       state.peerHandlersActive = Math.max(0, state.peerHandlersActive - 1);
       const next = state.peerHandlerQueue.shift();
       if (next) startPeerHandler(state, next);
@@ -440,7 +449,7 @@ function startPeerHandler(state: ConnectionState, task: PeerHandlerTask): void {
  */
 function enqueuePeerHandler(
   state: ConnectionState,
-  run: () => Promise<void>,
+  run: (slot: number) => Promise<void>,
 ): Promise<void> {
   return new Promise<void>((resolve, reject) => {
     const task: PeerHandlerTask = { run, resolve, reject };
@@ -1100,12 +1109,8 @@ async function processMessage(ws: WebSocket, state: ConnectionState, data: RawDa
   try {
     const enqueueMessage = await getEnqueueMessage();
     if (type === 'peer:request') {
-      const frame = payload && typeof payload === 'object'
-        ? payload as { id?: unknown }
-        : {};
-      const peerRequestId = typeof frame.id === 'string' ? frame.id : 'unknown';
-      await enqueuePeerHandler(state, () => enqueueMessage(
-        `${sessionKey}:peer:${peerRequestId}`,
+      await enqueuePeerHandler(state, (slot) => enqueueMessage(
+        `${sessionKey}:peer:${slot}`,
         () => handler(ws, state, payload ?? {}, envelope),
         { parallel: true },
       ));
@@ -1216,6 +1221,7 @@ export async function setupWebSocket(
       peerRequestCount: 0,
       peerWindowStart: now,
       peerHandlersActive: 0,
+      peerHandlerSlots: new Set(),
       peerHandlerQueue: [],
       droppedBroadcasts: 0,
     };
