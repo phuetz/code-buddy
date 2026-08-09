@@ -1109,6 +1109,17 @@ describe('Native Engine CLI Commands', () => {
       registerFleetAutonomyCommands(program);
     });
 
+    it('accepts colab as an alias for the autonomy command tree', async () => {
+      const autonomy = program.commands.find((command) => command.name() === 'autonomy');
+      expect(autonomy?.aliases()).toContain('colab');
+
+      await program.parseAsync(['node', 'test', 'colab', 'tasks', 'add', 'Alias task']);
+
+      expect(mockColabStore.addTask).toHaveBeenCalledWith(expect.objectContaining({
+        title: 'Alias task',
+      }));
+    });
+
     it('adds a task with dependencies', async () => {
       await program.parseAsync(['node', 'test', 'autonomy', 'tasks', 'add', 'My task', '--priority', 'high', '--depends-on', 'a,b']);
       expect(mockColabStore.addTask).toHaveBeenCalledWith(expect.objectContaining({ title: 'My task', priority: 'high', dependsOn: ['a', 'b'] }));
