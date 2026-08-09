@@ -24,6 +24,7 @@ import {
   _resetPeerRpcForTests,
   type PeerMethodContext,
 } from '../../src/server/websocket/peer-rpc.js';
+import { _resetFleetLoadForTests } from '../../src/fleet/fleet-load.js';
 
 // ---- helpers ---------------------------------------------------------
 
@@ -64,6 +65,7 @@ describe('peer-chat-bridge — Phase (d).15', () => {
   beforeEach(() => {
     _unwireForTests();
     _resetPeerRpcForTests();
+    _resetFleetLoadForTests();
   });
 
   describe('wire / unwire', () => {
@@ -90,6 +92,60 @@ describe('peer-chat-bridge — Phase (d).15', () => {
   });
 
   describe('peer.chat — error paths', () => {
+    it('rejects chat, stream, and dispatch with SATURATED while capacity is full', async () => {
+      const previousCapacity = process.env.CODEBUDDY_FLEET_MAX_CONCURRENCY;
+      process.env.CODEBUDDY_FLEET_MAX_CONCURRENCY = '1';
+      let release: (() => void) | undefined;
+      const chat = vi.fn(() => {
+        if (chat.mock.calls.length > 1) {
+          return Promise.resolve({
+            choices: [{ message: { role: 'assistant', content: 'unexpected' }, finish_reason: 'stop' }],
+          });
+        }
+        return new Promise((resolve) => {
+          release = () => resolve({
+            choices: [{ message: { role: 'assistant', content: 'done' }, finish_reason: 'stop' }],
+          });
+        });
+      });
+      wirePeerChatBridge(() => ({ chat } as never));
+
+      try {
+        const inFlight = dispatchPeerRequest(
+          { id: 'saturation-holder', method: 'peer.chat', params: { prompt: 'hold' } },
+          baseCtx,
+        );
+        await vi.waitFor(() => expect(chat).toHaveBeenCalledOnce());
+
+        for (const [method, params] of [
+          ['peer.dispatch', { id: 'saturated-dispatch', prompt: 'dispatch' }],
+          ['peer.chat', { prompt: 'second' }],
+          ['peer.chat-stream', { prompt: 'stream' }],
+        ] as const) {
+          const response = await dispatchPeerRequest(
+            { id: `blocked-${method}`, method, params },
+            baseCtx,
+          );
+          expect(response).toMatchObject({
+            ok: false,
+            error: { code: 'SATURATED' },
+          });
+        }
+
+        expect(getDispatchState('saturated-dispatch')).toBeNull();
+        release?.();
+        await expect(inFlight).resolves.toMatchObject({ ok: true });
+      } finally {
+        release?.();
+        if (previousCapacity === undefined) {
+          delete process.env.CODEBUDDY_FLEET_MAX_CONCURRENCY;
+        } else {
+          process.env.CODEBUDDY_FLEET_MAX_CONCURRENCY = previousCapacity;
+        }
+        _resetFleetLoadForTests();
+      }
+    });
+
     it('METHOD_ERROR when prompt is missing or empty', async () => {
       wirePeerChatBridge(() => null);
       const r1 = await dispatchPeerRequest(
@@ -200,9 +256,9 @@ describe('peer-chat-bridge — Phase (d).15', () => {
       expect(messages[0].content).toContain('briefly');
       expect(messages[1].role).toBe('user');
       expect(messages[1].content).toBe('What is CORS?');
-      // No tools (2nd arg is undefined), no chat options (3rd arg is undefined)
+      // No tools; the inbound Fleet cost gate supplies its max-token cap.
       expect(chat.mock.calls[0][1]).toBeUndefined();
-      expect(chat.mock.calls[0][2]).toBeUndefined();
+      expect(chat.mock.calls[0][2]).toEqual({ maxTokens: 4096 });
       // Response payload
       const payload = r.payload as {
         text: string;
@@ -315,7 +371,7 @@ describe('peer-chat-bridge — Phase (d).15', () => {
       );
 
       const chatOptions = chat.mock.calls[0][2] as { model: string } | undefined;
-      expect(chatOptions).toEqual({ model: 'grok-3-mini-fast' });
+      expect(chatOptions).toEqual({ model: 'grok-3-mini-fast', maxTokens: 4096 });
       const payload = r.payload as { modelRequested: string };
       expect(payload.modelRequested).toBe('grok-3-mini-fast');
     });
