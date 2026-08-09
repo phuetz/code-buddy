@@ -35,7 +35,7 @@ interface RetroFrictionPoint {
 
 export interface RunExperienceSourceDeps {
   /** Recent run ids, newest first. */
-  listRunIds: () => string[];
+  listRunIds: (limit: number) => string[];
   /** Build a retrospective for a run (null if not eligible). */
   buildRetrospective: (runId: string) => { frictionPoints: RetroFrictionPoint[] } | null;
 }
@@ -56,7 +56,7 @@ export class RunExperienceSource implements ExperienceSource {
 
   async collect(): Promise<Experience[]> {
     const limit = Math.max(1, this.options.limit ?? 10);
-    const runIds = this.deps.listRunIds().slice(0, limit);
+    const runIds = this.deps.listRunIds(limit).slice(0, limit);
     const experiences: Experience[] = [];
     for (const runId of runIds) {
       const retro = this.deps.buildRetrospective(runId);
@@ -94,7 +94,7 @@ export function createDefaultRunExperienceSource(
       const store = RunStore.getInstance();
       const source = new RunExperienceSource(
         {
-          listRunIds: () => store.listRuns().map((r: { runId: string }) => r.runId),
+          listRunIds: (limit: number) => store.listRuns(limit).map((r: { runId: string }) => r.runId),
           buildRetrospective: (runId: string) =>
             buildLearningRetrospective(runId, { workDir: options.workDir }) ?? null,
         },
