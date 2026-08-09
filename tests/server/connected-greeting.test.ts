@@ -32,6 +32,16 @@ describe('buildConnectedGreeting', () => {
     expect(payload.pairingRequired).toBe(true);
     expect(payload.capabilities.methods).toEqual(['authenticate', 'chat', 'ping']);
   });
+
+  it('documents scopes granted automatically when authentication is disabled', () => {
+    const greeting = buildConnectedGreeting({
+      ...base,
+      authRequired: false,
+      scopes: ['chat', 'fleet:listen', 'peer:invoke'],
+    });
+    const payload = greeting.payload as { scopes: string[] };
+    expect(payload.scopes).toEqual(['chat', 'fleet:listen', 'peer:invoke']);
+  });
 });
 
 describe('buildGatewayStatus', () => {

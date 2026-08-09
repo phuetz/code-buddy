@@ -305,6 +305,8 @@ export interface ConnectedGreetingOptions {
   protocolVersion: number;
   /** Supported message types, advertised for client capability discovery. */
   methods: string[];
+  /** Scopes granted immediately when authentication is disabled. */
+  scopes?: string[];
 }
 
 /**
@@ -323,6 +325,7 @@ export function buildConnectedGreeting(opts: ConnectedGreetingOptions): WebSocke
       protocolVersion: opts.protocolVersion,
       server: { version: opts.serverVersion },
       capabilities: { methods: [...new Set(opts.methods)].sort() },
+      ...(opts.scopes ? { scopes: [...opts.scopes] } : {}),
     },
     timestamp: new Date().toISOString(),
   };
@@ -1187,6 +1190,9 @@ export async function setupWebSocket(
           'avatar:write',
           ...(loopback
             ? [
+              'tools:execute',
+              'fleet:listen',
+              'peer:invoke',
               'cognition:write',
               'cognition:write-local',
               'cognition:sense',
@@ -1224,6 +1230,7 @@ export async function setupWebSocket(
       serverVersion: gatewayServerVersion(),
       protocolVersion: GATEWAY_PROTOCOL_VERSION,
       methods: Array.from(messageHandlers.keys()),
+      ...(!config.authEnabled ? { scopes: state.scopes } : {}),
     }));
 
     ws.on('message', async (data: RawData) => {
