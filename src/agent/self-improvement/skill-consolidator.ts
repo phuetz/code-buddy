@@ -13,6 +13,7 @@
  */
 
 import { EvolutionaryArchive } from './evolutionary-archive.js';
+import { createHash } from 'crypto';
 import { coversScenario } from './skill-gate.js';
 import { LiveSkillMutator, safetyGateSkill, toAuthoredSkillName } from './skill-mutator.js';
 import type { SkillBenchmarkScenario } from './skill-types.js';
@@ -113,7 +114,11 @@ export async function consolidateCluster(
     return { accepted: false, absorbed: [], skippedPinned, rejectionReason: 'coverage-loss', reasons: [`umbrella drops coverage for: ${lost.join(', ')}`] };
   }
 
-  const umbrellaName = toAuthoredSkillName(proposal.name);
+  const umbrellaName = availableUmbrellaName(
+    toAuthoredSkillName(proposal.name),
+    proposal.content,
+    mutator,
+  );
   if (!options.keepOnAccept) {
     return { accepted: true, umbrellaName, absorbed: [], skippedPinned, reasons: ['accepted (propose-only): umbrella safe + covers all merged scenarios, not installed'] };
   }
@@ -138,6 +143,21 @@ export async function consolidateCluster(
   }
 
   return { accepted: true, umbrellaName, absorbed, skippedPinned, reasons: [`consolidated ${absorbed.length} skill(s) into ${umbrellaName}`] };
+}
+
+/** Never overwrite a previous umbrella: it may be the sole remaining carrier of old guidance. */
+function availableUmbrellaName(
+  baseName: string,
+  content: string,
+  mutator: LiveSkillMutator,
+): string {
+  if (!mutator.has(baseName)) return baseName;
+  const digest = createHash('sha256').update(content).digest('hex').slice(0, 8);
+  const contentAddressed = toAuthoredSkillName(`${baseName}-${digest}`);
+  if (!mutator.has(contentAddressed)) return contentAddressed;
+  let suffix = 2;
+  while (mutator.has(`${contentAddressed}-${suffix}`)) suffix += 1;
+  return `${contentAddressed}-${suffix}`;
 }
 
 // ── proposers ────────────────────────────────────────────────────────────────
