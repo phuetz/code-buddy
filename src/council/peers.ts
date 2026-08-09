@@ -5,6 +5,7 @@
  */
 
 import type { CouncilPeer, GatherPeerAnswersOptions, PeerAnswer } from './types.js';
+import { sanitizeModelOutput } from '../utils/output-sanitizer.js';
 
 /**
  * Ask each connected fleet peer via `peer.chat` (parallel, per-peer timeout). The caller may
@@ -27,7 +28,9 @@ export async function gatherPeerAnswers(
         modelRequested?: string;
         usage?: { total_tokens?: number };
       };
-      const content = (resp?.text ?? '').trim();
+      // Remote answers bypass the agent executor just like local council
+      // answers, so sanitize before judge, consensus, synthesis, or display.
+      const content = sanitizeModelOutput(resp?.text ?? '').trim();
       if (!content) throw new Error('réponse vide');
       return {
         modelId: p.id,
