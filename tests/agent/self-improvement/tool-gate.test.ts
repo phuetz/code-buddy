@@ -27,12 +27,25 @@ const REVERSE: ToolBenchmarkScenario = {
   ],
 };
 
+const UPPERCASE: ToolBenchmarkScenario = {
+  id: 'uppercase-string',
+  capability: 'Uppercase the input string s',
+  description: 'authored tool should uppercase s',
+  visibleCases: [{ input: { s: 'hello' }, expectIncludes: ['HELLO'] }],
+  heldOutCases: [{ input: { s: 'world' }, expectIncludes: ['WORLD'] }],
+};
+
 const LEGIT: AuthoredToolSpec = {
   name: 'authored__reverse',
   description: 'reverse s',
   parameters: { type: 'object', properties: { s: { type: 'string' } } },
   language: 'javascript',
   code: "const i=JSON.parse(process.env.CODEBUDDY_TOOL_INPUT||'{}'); console.log((i.s||'').split('').reverse().join(''));",
+};
+
+const UPPERCASE_WITH_COLLIDING_NAME: AuthoredToolSpec = {
+  ...LEGIT,
+  code: "const i=JSON.parse(process.env.CODEBUDDY_TOOL_INPUT||'{}'); console.log((i.s||'').toUpperCase());",
 };
 
 // Gamed: hardcodes ONLY the visible outputs — passes visible, fails held-out.
@@ -53,6 +66,7 @@ function proposal(spec: AuthoredToolSpec): ToolProposal {
 beforeEach(() => {
   FormalToolRegistry.reset();
   getToolRegistry().removeTool('authored__reverse');
+  getToolRegistry().removeTool('authored__reverse_uppercase_string');
 });
 
 describe('tool-gate — behavioural held-out gate (anti reward-hacking)', () => {
@@ -167,5 +181,28 @@ describe('ToolImprovementEngine — cycle', () => {
     const r2 = await gamedEngine.runCycle();
     expect(r2.applied).toBe(false);
     expect(r2.gate?.rejectionReason).toBe('heldout-fail');
+  });
+
+  it('does not mark a homonymous proposal covered unless the existing tool passes its cases', async () => {
+    const mutator = new LiveToolMutator({ persist: false });
+    const engine = new ToolImprovementEngine({
+      scenarios: [REVERSE, UPPERCASE],
+      proposer: new StaticToolProposer(new Map([
+        [REVERSE.id, LEGIT],
+        [UPPERCASE.id, UPPERCASE_WITH_COLLIDING_NAME],
+      ])),
+      mutator,
+      archive: new EvolutionaryArchive({ workDir: path.join(os.tmpdir(), `cb-arch-${randomUUID()}`) }),
+      autonomy: 'auto-apply',
+    });
+
+    const results = await engine.runLoop();
+    expect(results.slice(0, 2).map((result) => result.applied)).toEqual([true, true]);
+    expect(results[1]!.gate?.appliedRef).toBe('authored__reverse_uppercase_string');
+    expect(mutator.has('authored__reverse')).toBe(true);
+    expect(mutator.has('authored__reverse_uppercase_string')).toBe(true);
+    const output = await FormalToolRegistry.getInstance()
+      .execute('authored__reverse_uppercase_string', { s: 'collision fixed' });
+    expect(output.output).toContain('COLLISION FIXED');
   });
 });
