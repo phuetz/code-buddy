@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { selectFastestModel, type LlmCandidate } from '../../src/fleet/model-selector.js';
@@ -123,6 +123,20 @@ describe('model-selector — latency-aware selection', () => {
     });
     expect(sel?.model).toBe('gemma4:31b'); // 800ms measured (cross-task) < qwen heuristic
     expect(sel?.measured).toBe(true);
+  });
+
+  it('builds scoped and global latency rankings only once per selection', async () => {
+    const sb = emptyScoreboard();
+    const rankingSpy = vi.spyOn(sb, 'ranking');
+
+    await selectFastestModel('Bonjour', {
+      taskType: 'french',
+      candidates: [GEMMA_31B, QWEN_7B, GROK_FAST],
+      scoreboard: sb,
+    });
+
+    expect(rankingSpy).toHaveBeenCalledTimes(2);
+    expect(rankingSpy.mock.calls).toEqual([['french'], []]);
   });
 
   it('capability floor: never picks a vision-only or embedding model for chat', async () => {

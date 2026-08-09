@@ -50,10 +50,14 @@ export function assignCouncilRolesToCandidates(
   const localRoles = roles.slice(0, picked.length);
   if (picked.length < 2 || localRoles.length < 2) return picked;
 
+  const candidateIndexes = new Map(picked.map((candidate, index) => [candidate, index]));
+  const scoreMatrix = localRoles.map((role) =>
+    picked.map((candidate) => scoreboard.roleScore(taskType, role.id, candidate.c.model)),
+  );
   const roleScore = (ordered: RankedCandidate[]): number =>
     ordered.reduce((sum, candidate, index) => {
-      const role = localRoles[index];
-      return sum + (role ? scoreboard.roleScore(taskType, role.id, candidate.c.model) : 0);
+      const candidateIndex = candidateIndexes.get(candidate);
+      return sum + (candidateIndex === undefined ? 0 : (scoreMatrix[index]?.[candidateIndex] ?? 0));
     }, 0);
 
   let best = picked;
@@ -82,11 +86,12 @@ export function assignCouncilRolesToCandidates(
   } else {
     const remaining = [...picked];
     const assigned: RankedCandidate[] = [];
-    for (const role of localRoles) {
+    for (let roleIndex = 0; roleIndex < localRoles.length; roleIndex++) {
       let bestIndex = 0;
       let bestCandidateScore = -1;
       for (let i = 0; i < remaining.length; i++) {
-        const score = scoreboard.roleScore(taskType, role.id, remaining[i]!.c.model);
+        const candidateIndex = candidateIndexes.get(remaining[i]!);
+        const score = candidateIndex === undefined ? 0 : (scoreMatrix[roleIndex]?.[candidateIndex] ?? 0);
         if (score > bestCandidateScore) {
           bestIndex = i;
           bestCandidateScore = score;
