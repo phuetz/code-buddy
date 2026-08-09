@@ -19,6 +19,7 @@ import { getSkillRegistry } from '../../skills/registry.js';
 import { scanSkillFirewall } from '../../security/skill-scanner.js';
 import { inspectAuthoredCode } from './authored-artifact-gate.js';
 import type { SkillSpec } from './skill-types.js';
+import { logger } from '../../utils/logger.js';
 
 export const AUTHORED_SKILL_PREFIX = 'authored-';
 const ARCHIVE_DIR = '.archive';
@@ -252,6 +253,22 @@ export class LiveSkillMutator implements SkillMutatorPort {
     if (!fs.existsSync(src)) return false;
     const dir = this.dirFor(name);
     if (fs.existsSync(dir)) return false; // don't clobber a live skill
+    let content: string;
+    try {
+      content = fs.readFileSync(path.join(src, 'SKILL.md'), 'utf-8');
+    } catch (err) {
+      logger.warn(
+        `[self-improve] refusing to restore skill "${name}": archived SKILL.md unreadable (${err instanceof Error ? err.message : String(err)})`,
+      );
+      return false;
+    }
+    const gate = safetyGateSkill(content);
+    if (!gate.ok) {
+      logger.warn(
+        `[self-improve] refusing to restore unsafe skill "${name}": ${gate.reasons.join('; ')}`,
+      );
+      return false;
+    }
     fs.renameSync(src, dir);
     this.reload(name);
     return true;
