@@ -7,7 +7,10 @@
   "is_private": true,
   "enable_gpu": true,
   "enable_internet": true,
-  "dataset_sources": ["KAGGLE_USERNAME/codebuddy-wheels"],
+  "dataset_sources": [
+    "KAGGLE_USERNAME/codebuddy-wheels"
+  ],
   "competition_sources": [],
-  "kernel_sources": []
+  "kernel_sources": [],
+  "machine_shape": "NvidiaTeslaT4"
 }

@@ -26,6 +26,15 @@ gratuit : ~30 h GPU + 20 h TPU par semaine. Boucle prouvée le jour même :
   matcher insensible à la casse (`${STATUS,,}`).
 - Lister `/kaggle/input` AVANT toute installation : le log d'erreur de pip ne
   dit pas si le dataset est monté.
+- **Choisir la carte via `machine_shape`** dans kernel-metadata.json :
+  `NvidiaTeslaT4` (sm_75, SUPPORTÉE par le torch 2.10 de l'image) — jamais la
+  P100 par défaut (sm_60, `no kernel image available` avec torch ≥ 2.10).
+- Après vérification téléphone, le réseau des kernels FONCTIONNE aussi — mais
+  garder le mode hermétique par défaut (reproductible, insensible aux pannes).
+
+## Preuve finale (10/08, kernel v8)
+`GPU disponible : True (Tesla T4)` — 3 époques YOLOv8 sur CUDA, `best.pt`
+rapatrié automatiquement. Boucle agent complète validée.
 
 ## Usage
 ```bash
