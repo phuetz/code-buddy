@@ -324,6 +324,7 @@ buddy doctor [--fix]        # Environment diagnostics + auto-migration
 buddy server [--port N]     # Start HTTP server (3000) + Gateway WS (3001) — required for fleet
 buddy dev plan|run|pr|fix-ci  # Golden-path workflows (forces WritePolicy.strict)
 buddy run list|show|tail|replay  # Observability
+buddy autonomy status|run|briefing|bench|tasks  # Autonomous fleet; `buddy colab …` is an alias
 buddy research "<topic>"    # Wide research (--deep: cited GPT-Researcher-style pipeline; --iterations N: gap-loop rounds; --perspectives N/--storm: STORM multi-perspective; --ckg: Collective Knowledge Graph bridge)
 buddy flow "<goal>"         # Planning flow (plan → execute → synthesize)
 buddy film generate|assemble|status <name>  # Long-form film producer: generate a clip per scene (video_generate) → montage with transitions + music → quality gate; resumable film.json manifest. `assemble` welds already-ready clips ($0, ffmpeg-only). See "Film production" below.

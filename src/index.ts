@@ -17,6 +17,11 @@ import type { SecurityMode } from "./security/security-modes.js";
 import type { CustomAgentConfig } from "./agent/custom/custom-agent-loader.js";
 
 import { fileURLToPath } from 'url';
+import {
+  addLazyCommandGroup,
+  getNonInteractiveUnknownCommand,
+  removeCommands,
+} from './cli/command-routing.js';
 import { resolveHeadlessOutputFormat, resolveHeadlessResultExitCode } from './cli/headless-options.js';
 import { resolveCliModelList } from './cli/model-listing.js';
 
@@ -1447,6 +1452,18 @@ program
     "TTS provider (edge-tts, espeak, say, piper, audioreader)"
   )
   .action(async (message, options) => {
+    const unknownCommand = getNonInteractiveUnknownCommand({
+      positionalArgs: Array.isArray(message) ? message : undefined,
+      hasExplicitPrompt: Boolean(options.prompt || options.print),
+      stdinIsTTY: process.stdin.isTTY,
+      stdoutIsTTY: process.stdout.isTTY,
+    });
+    if (unknownCommand) {
+      process.stderr.write(`Commande inconnue « ${unknownCommand} ». Voir buddy --help\n`);
+      process.exitCode = 1;
+      return;
+    }
+
     // Apply --quiet / --verbose flags
     if (options.quiet) {
       process.env.LOG_LEVEL = 'error';
@@ -2324,21 +2341,6 @@ gitCommand
 // This avoids loading MCP, provider, pipeline, etc. at startup.
 
 /**
- * Remove commands from a Commander program by name(s).
- * Uses splice to mutate the readonly commands array in-place.
- */
-function removeCommands(parent: typeof program, names: string | string[]): void {
-  const nameSet = new Set(Array.isArray(names) ? names : [names]);
-  const cmds = parent.commands as import('commander').Command[];
-  for (let i = cmds.length - 1; i >= 0; i--) {
-    const cmd = cmds[i];
-    if (cmd !== undefined && nameSet.has(cmd.name())) {
-      cmds.splice(i, 1);
-    }
-  }
-}
-
-/**
  * Register a lazy subcommand tree. When any subcommand action fires, the
  * real module is imported and re-parsed to handle the invocation.
  *
@@ -3142,32 +3144,6 @@ program
 // file itself pulls in transitive dependencies (logger, etc.) at startup.
 // By deferring the import until the command is matched, we avoid that cost.
 
-/**
- * Register a lazy command group. Creates a stub command whose action
- * loads the real registration module and re-parses argv.
- */
-function addLazyCommandGroup(
-  parent: typeof program,
-  name: string,
-  description: string,
-  loader: () => Promise<void>,
-): void {
-  const stub = parent
-    .command(name)
-    .description(description)
-    .allowUnknownOption(true)
-    .allowExcessArguments(true)
-    .helpOption(false);
-
-  stub.action(async () => {
-    // Remove stub and register the real commands
-    removeCommands(parent, name);
-    await loader();
-    // Re-parse so the real command tree handles the invocation
-    await parent.parseAsync(process.argv);
-  });
-}
-
 addLazyCommandGroup(program, 'daemon', 'Manage the Code Buddy daemon (background process)', async () => {
   const { registerDaemonCommands } = await import('./commands/cli/daemon-commands.js');
   registerDaemonCommands(program);
@@ -3250,10 +3226,16 @@ addLazyCommandGroup(program, 'screen', 'Capture, record, or watch the screen / a
   registerScreenCommands(program);
 });
 
-addLazyCommandGroup(program, 'autonomy', 'Autonomous fleet loop (claim + run colab tasks on local-first models)', async () => {
-  const { registerFleetAutonomyCommands } = await import('./commands/cli/native-engine-commands.js');
-  registerFleetAutonomyCommands(program);
-});
+addLazyCommandGroup(
+  program,
+  'autonomy',
+  'Autonomous fleet loop (claim + run colab tasks on local-first models)',
+  async () => {
+    const { registerFleetAutonomyCommands } = await import('./commands/cli/native-engine-commands.js');
+    registerFleetAutonomyCommands(program);
+  },
+  ['colab'],
+);
 
 addLazyCommandGroup(program, 'device', 'Manage paired device nodes (SSH, ADB, local)', async () => {
   const { registerDeviceCommands } = await import('./commands/cli/device-commands.js');
