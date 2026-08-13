@@ -45,6 +45,8 @@ export interface ChannelConfigPatch {
   allowedUsers?: string[];
   allowedChannels?: string[];
   options?: Record<string, ChannelConfigFieldValue>;
+  /** Declared non-secret options to remove from the persisted entry. */
+  unsetOptions?: string[];
 }
 
 export interface ChannelConfigLike {
@@ -521,13 +523,19 @@ export function validateChannelConfigPatch(
     }
     const rawOptions = raw.options as Record<string, unknown>;
     const options: Record<string, ChannelConfigFieldValue> = {};
+    const unsetOptions: string[] = [];
     for (const field of nonSecretFields.filter((candidate) => candidate.location === 'options')) {
       if (rawOptions[field.key] === undefined) continue;
+      if (rawOptions[field.key] === null) {
+        unsetOptions.push(field.key);
+        continue;
+      }
       const checked = validateFieldValue(field, rawOptions[field.key]);
       if (!checked.ok) return checked;
       options[field.key] = checked.value;
     }
-    patch.options = options;
+    if (Object.keys(options).length > 0) patch.options = options;
+    if (unsetOptions.length > 0) patch.unsetOptions = unsetOptions;
   }
 
   return { ok: true, patch };

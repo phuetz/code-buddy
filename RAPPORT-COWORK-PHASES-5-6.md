@@ -34,7 +34,7 @@ Base : `origin/main` (`f9a31a7e`)
 - Nouvelle section TOML `[task_models]` pour `architect`, `edit`, `review`, `research` et `chat`.
 - Compatibilité non intrusive : `[model_pairs]` reste lu et affiché sans être réécrit ni supprimé, mais demeure inactif dans le chat principal comme au merge-base. Seul l'opt-in programmatique historique `setModelPairs(...)` active ces paires.
 - Une entrée `[task_models]` absente retombe sur le modèle par défaut ; une carte entièrement absente est un no-op strict, y compris lorsqu'un ancien `[model_pairs]` existe.
-- La persistance remplace uniquement la section `[task_models]`, conserve les autres octets/sections TOML, écrit atomiquement en mode `0600` et refuse un modèle dont le provider n'est pas actif.
+- La persistance remplace uniquement la section `[task_models]`, conserve les autres sections, le style LF/CRLF et le mode d’un fichier existant. Une création neuve reste atomique en `0600`, et un modèle dont le provider n’est pas actif est refusé.
 - `ModelRoutingFacade` classe les cinq types, relit la configuration active à chaque tour et respecte la priorité `/switch` → carte explicite par tâche → paire explicitement activée par API → routage automatique/modèle par défaut.
 - Le vrai point d'entrée de tour de `CodeBuddyAgent` consomme cette décision, même quand le routage automatique par complexité est désactivé, puis restaure le modèle initial après le tour.
 

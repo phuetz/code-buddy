@@ -83,6 +83,18 @@ describe('channel config schema', () => {
     });
   });
 
+  it('turns explicit nulls into whitelisted option removals', () => {
+    expect(validateChannelConfigPatch('webchat', {
+      options: { port: null, title: 'Buddy' },
+    })).toEqual({
+      ok: true,
+      patch: {
+        options: { title: 'Buddy' },
+        unsetOptions: ['port'],
+      },
+    });
+  });
+
   it('requires channel-specific fields and encrypted secrets before enabling', () => {
     const entry = {
       type: 'matrix',

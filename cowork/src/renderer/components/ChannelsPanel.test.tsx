@@ -15,8 +15,9 @@ function makeApi() {
           type: 'matrix',
           enabled: false,
           configured: true,
-          hasSecret: false,
-          hasSecrets: { accessToken: false },
+          hasSecret: true,
+          hasSecrets: { accessToken: true },
+          legacyPlaintextSecrets: { accessToken: true },
           hasWebhookUrl: false,
           allowedUsers: ['alice'],
           allowedChannels: [],
@@ -25,6 +26,7 @@ function makeApi() {
             homeserverUrl: 'https://matrix.example',
             userId: '@buddy:matrix.example',
             autoJoin: true,
+            syncTimeout: 30,
           },
           connected: false,
           authenticated: false,
@@ -38,6 +40,7 @@ function makeApi() {
             { key: 'userId', label: 'User ID', kind: 'text', location: 'options', required: true },
             { key: 'accessToken', label: 'Access token', kind: 'secret', location: 'options', required: true, primarySecret: true },
             { key: 'autoJoin', label: 'Auto-join invitations', kind: 'boolean', location: 'options' },
+            { key: 'syncTimeout', label: 'Sync timeout', kind: 'number', location: 'options' },
           ],
         }],
       }),
@@ -94,6 +97,7 @@ describe('ChannelsPanel', () => {
     fireEvent.click(screen.getByTestId('channels-tab-configure'));
     expect(await screen.findByText('Matrix')).toBeTruthy();
     fireEvent.click(screen.getByTestId('channel-edit'));
+    expect(screen.getByText(/legacy plaintext/)).toBeTruthy();
 
     fireEvent.change(screen.getByLabelText('Homeserver URL *'), {
       target: { value: 'https://matrix.changed' },
@@ -106,12 +110,29 @@ describe('ChannelsPanel', () => {
         homeserverUrl: 'https://matrix.changed',
         userId: '@buddy:matrix.example',
         autoJoin: true,
+        syncTimeout: 30,
       },
     }));
+
+    fireEvent.change(screen.getByLabelText('Sync timeout'), { target: { value: '' } });
+    fireEvent.click(screen.getByTestId('channel-config-save'));
+    await waitFor(() => expect(api.channels.setConfig).toHaveBeenLastCalledWith('matrix', expect.objectContaining({
+      allowedUsers: ['alice'],
+      allowedChannels: [],
+      options: expect.objectContaining({
+        syncTimeout: null,
+      }),
+    })));
 
     const secretInput = screen.getByTestId('channel-secret-accessToken') as HTMLInputElement;
     expect(secretInput.type).toBe('password');
     fireEvent.change(secretInput, { target: { value: 'matrix-secret' } });
+    fireEvent.click(screen.getByTestId('channel-edit'));
+    fireEvent.click(screen.getByTestId('channel-edit'));
+    expect((screen.getByTestId('channel-secret-accessToken') as HTMLInputElement).value).toBe('');
+    fireEvent.change(screen.getByTestId('channel-secret-accessToken'), {
+      target: { value: 'matrix-secret' },
+    });
     fireEvent.click(screen.getByTestId('channel-secret-save-accessToken'));
     await waitFor(() => expect(api.channels.setSecret).toHaveBeenCalledWith(
       'matrix',

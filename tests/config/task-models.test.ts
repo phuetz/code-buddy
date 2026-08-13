@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs';
+import { chmodSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -50,6 +50,15 @@ describe('task model compatibility and persistence', () => {
       edit: 'legacy-editor',
       review: 'reviewer',
     });
+  });
+
+  it('accepts model revisions and quantization suffixes used by local registries', () => {
+    expect(getEffectiveTaskModels({
+      task_models: { edit: 'lmstudio-community/coder@q4_k_m+fast' },
+    })).toEqual({ edit: 'lmstudio-community/coder@q4_k_m+fast' });
+    expect(getEffectiveTaskModels({
+      task_models: { edit: 'unsafe model with spaces' },
+    })).toEqual({});
   });
 
   it('replaces only the task_models TOML section', () => {
@@ -144,5 +153,32 @@ describe('task model compatibility and persistence', () => {
     expect(() => saveTaskModelSettings({ review: 'offline/model' }, path)).toThrow(
       'model is not active: offline/model',
     );
+  });
+
+  it('preserves an existing config file line ending and permission mode', () => {
+    const path = temporaryConfig([
+      'active_model = "local-fast"',
+      '',
+      '[providers.local]',
+      'api_key_env = "LOCAL_KEY"',
+      'type = "custom"',
+      'enabled = true',
+      '',
+      '[models.local-fast]',
+      'provider = "local"',
+      'model_id = "local/fast-v2"',
+      'price_per_m_input = 0',
+      'price_per_m_output = 0',
+      'max_context_tokens = 100000',
+      '',
+    ].join('\r\n'));
+    chmodSync(path, 0o640);
+
+    saveTaskModelSettings({ review: 'local-fast' }, path);
+
+    const onDisk = readFileSync(path, 'utf8');
+    expect(onDisk).toContain('\r\n[task_models]\r\n');
+    expect(onDisk.replace(/\r\n/g, '')).not.toContain('\n');
+    expect(statSync(path).mode & 0o777).toBe(0o640);
   });
 });

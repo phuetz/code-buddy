@@ -79,6 +79,7 @@ interface ValidatedConfigPatch {
   allowedUsers?: string[];
   allowedChannels?: string[];
   options?: Record<string, ChannelFieldValue>;
+  unsetOptions?: string[];
 }
 interface ChannelSchemaModule {
   getChannelConfigDefinitions: () => ChannelCatalogEntry[];
@@ -188,6 +189,8 @@ export interface ChannelConfigView {
   hasSecret: boolean;
   /** Presence by form field; values never cross IPC. */
   hasSecrets: Record<string, boolean>;
+  /** Plaintext legacy presence by field; still booleans only. */
+  legacyPlaintextSecrets: Record<string, boolean>;
   hasWebhookUrl: boolean;
   webhookUrl?: string;
   allowedUsers: string[];
@@ -247,6 +250,7 @@ function toConfigView(
   entry: ChannelConfigEntry,
   definition: ChannelCatalogEntry | undefined,
   hasSecrets: Record<string, boolean>,
+  legacyPlaintextSecrets: Record<string, boolean>,
   runtime: Map<string, { connected: boolean; authenticated: boolean; lastActivity?: number; error?: string }>,
 ): ChannelConfigView {
   const rt = runtime.get(entry.type);
@@ -272,6 +276,7 @@ function toConfigView(
     // A legacy hand-written config may carry a plaintext token; report presence only.
     hasSecret: Object.values(hasSecrets).some(Boolean) || Boolean(entry.token),
     hasSecrets,
+    legacyPlaintextSecrets,
     hasWebhookUrl: Boolean(entry.webhookUrl),
     allowedUsers: Array.isArray(entry.allowedUsers) ? entry.allowedUsers.filter((u): u is string => typeof u === 'string') : [],
     allowedChannels: Array.isArray(entry.allowedChannels)
@@ -296,6 +301,7 @@ type ConfigPatch = {
   allowedUsers?: string[];
   allowedChannels?: string[];
   options?: Record<string, ChannelFieldValue>;
+  unsetOptions?: string[];
 };
 
 function applyPatch(entry: ChannelConfigEntry, patch: ConfigPatch): ChannelConfigEntry {
@@ -308,8 +314,11 @@ function applyPatch(entry: ChannelConfigEntry, patch: ConfigPatch): ChannelConfi
   if (Array.isArray(patch.allowedChannels)) {
     next.allowedChannels = patch.allowedChannels.filter((c): c is string => typeof c === 'string');
   }
-  if (patch.options) {
-    next.options = { ...(entry.options ?? {}), ...patch.options };
+  if (patch.options || patch.unsetOptions) {
+    const options = { ...(entry.options ?? {}), ...(patch.options ?? {}) };
+    for (const key of patch.unsetOptions ?? []) delete options[key];
+    if (Object.keys(options).length > 0) next.options = options;
+    else delete next.options;
   }
   return next;
 }
@@ -321,11 +330,9 @@ function secretPresenceFor(
   schema: ChannelSchemaModule,
   credentials: CredentialManagerLike | null,
 ): Record<string, boolean> {
+  const legacyPresence = legacySecretPresenceFor(entry, fields);
   const presence: Record<string, boolean> = {};
   for (const field of fields) {
-    const legacyValue = field.primarySecret
-      ? entry.token ?? entry.options?.[field.key]
-      : entry.options?.[field.key];
     let stored = false;
     try {
       stored = credentials?.hasCredential(
@@ -334,7 +341,23 @@ function secretPresenceFor(
     } catch (error) {
       logError('[channels] secret presence check failed:', error);
     }
-    presence[field.key] = stored || (typeof legacyValue === 'string' && legacyValue.length > 0);
+    presence[field.key] = stored || legacyPresence[field.key] === true;
+  }
+  return presence;
+}
+
+function legacySecretPresenceFor(
+  entry: ChannelConfigEntry,
+  fields: ChannelFieldDefinition[],
+): Record<string, boolean> {
+  const presence: Record<string, boolean> = {};
+  for (const field of fields) {
+    const candidates = field.primarySecret
+      ? [entry.token, entry.options?.[field.key]]
+      : [entry.options?.[field.key]];
+    presence[field.key] = candidates.some(
+      (value) => typeof value === 'string' && value.length > 0,
+    );
   }
   return presence;
 }
@@ -386,28 +409,37 @@ export function registerChannelsIpcHandlers(): void {
   ipcMain.handle(
     'channels.listConfig',
     async (_event, opts?: { configPath?: string }): Promise<ChannelsConfigResult> => {
-      const fallbackPath = channelsConfigCandidates(opts?.configPath).at(-1) ?? '';
+      let fallbackPath = '';
+      let catalog: ChannelCatalogEntry[] = [];
       try {
-        const { path, config } = readChannelsConfig(opts?.configPath);
         const schema = await loadChannelSchema();
         if (!schema) {
-          return { ok: false, error: 'channel config schema unavailable', path, channels: [], catalog: [] };
+          return { ok: false, error: 'channel config schema unavailable', path: fallbackPath, channels: [], catalog };
         }
-        const catalog = schema.getChannelConfigDefinitions();
+        catalog = schema.getChannelConfigDefinitions();
+        fallbackPath = channelsConfigCandidates(opts?.configPath).at(-1) ?? '';
+        const { path, config } = readChannelsConfig(opts?.configPath);
         const creds = await loadCredentialManager();
         const runtime = await runtimeStatusByType();
         const channels = config.channels
           .filter((e): e is ChannelConfigEntry => Boolean(e) && typeof e.type === 'string')
           .map((entry) => {
             const definition = schema.getChannelConfigDefinition(entry.type);
+            const secretFields = schema.getChannelSecretFields(entry.type);
             const hasSecrets = secretPresenceFor(
               entry.type,
               entry,
-              schema.getChannelSecretFields(entry.type),
+              secretFields,
               schema,
               creds,
             );
-            return toConfigView(entry, definition, hasSecrets, runtime);
+            return toConfigView(
+              entry,
+              definition,
+              hasSecrets,
+              legacySecretPresenceFor(entry, secretFields),
+              runtime,
+            );
           });
         return { ok: true, path, channels, catalog };
       } catch (error) {
@@ -417,7 +449,7 @@ export function registerChannelsIpcHandlers(): void {
           error: error instanceof Error ? error.message : String(error),
           path: fallbackPath,
           channels: [],
-          catalog: [],
+          catalog,
         };
       }
     },
@@ -441,6 +473,10 @@ export function registerChannelsIpcHandlers(): void {
         const validated = schema.validateChannelConfigPatch(type, patch);
         if (!validated.ok) return validated;
         const cleanPatch = validated.patch;
+        // Resolve every async dependency before the read-modify-write section.
+        // Once the file is read, the synchronous write completes in the same
+        // event-loop turn so concurrent IPC mutations cannot overwrite it.
+        const credentials = await loadCredentialManager();
         const { path, config } = readChannelsConfig(opts?.configPath);
         const idx = config.channels.findIndex((c) => c.type === type);
         let nextEntry: ChannelConfigEntry;
@@ -454,7 +490,6 @@ export function registerChannelsIpcHandlers(): void {
           config.channels.push(nextEntry);
         }
         if (nextEntry.enabled) {
-          const credentials = await loadCredentialManager();
           const presence = secretPresenceFor(
             type,
             nextEntry,
@@ -485,6 +520,8 @@ export function registerChannelsIpcHandlers(): void {
         if (!schema?.getChannelConfigDefinition(type)) {
           return { ok: false, error: `unsupported channel type: ${type}` };
         }
+        // Resolve before entering the synchronous read-modify-write section.
+        const credentials = await loadCredentialManager();
         const { path, config } = readChannelsConfig(opts?.configPath);
         const idx = config.channels.findIndex((c) => c.type === type);
         let nextEntry: ChannelConfigEntry;
@@ -498,7 +535,6 @@ export function registerChannelsIpcHandlers(): void {
           config.channels.push(nextEntry);
         }
         if (enabled) {
-          const credentials = await loadCredentialManager();
           const presence = secretPresenceFor(
             type,
             nextEntry,

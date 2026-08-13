@@ -54,12 +54,13 @@ interface ChannelConfigView {
   configured: boolean;
   hasSecret: boolean;
   hasSecrets: Record<string, boolean>;
+  legacyPlaintextSecrets: Record<string, boolean>;
   hasWebhookUrl: boolean;
   webhookUrl?: string;
   allowedUsers: string[];
   allowedChannels: string[];
   optionKeys: string[];
-  values: Record<string, string | number | boolean | string[]>;
+  values: Record<string, string | number | boolean | string[] | null>;
   connected: boolean;
   authenticated: boolean;
   lastActivity?: number;
@@ -413,7 +414,7 @@ function ChannelConfigRow({
     if (!catalog) return;
     setBusy(true);
     onError(null);
-    const options: Record<string, string | number | boolean | string[]> = {};
+    const options: Record<string, string | number | boolean | string[] | null> = {};
     let webhookUrl: string | undefined;
     for (const field of catalog.fields) {
       if (field.kind === 'secret') continue;
@@ -475,7 +476,10 @@ function ChannelConfigRow({
         </div>
         <div className="flex items-center gap-1">
           <button
-            onClick={() => setExpanded((value) => !value)}
+              onClick={() => setExpanded((value) => {
+                if (value) setSecrets({});
+                return !value;
+              })}
             data-testid="channel-edit"
             className="flex items-center gap-1 rounded px-2 py-1 text-[10px] text-text-muted hover:bg-surface"
           >
@@ -544,10 +548,13 @@ function ChannelConfigRow({
 
           {catalog.fields.filter((field) => field.kind === 'secret').map((field) => {
             const isSet = channel.hasSecrets[field.key] ?? false;
+            const isLegacyPlaintext = channel.legacyPlaintextSecrets?.[field.key] ?? false;
             return (
               <div key={field.key} className="space-y-1">
                 <label className="text-[10px] text-text-muted">
-                  {field.label}{field.required ? ' *' : ''} · {isSet ? 'stored' : 'not set'}
+                  {field.label}{field.required ? ' *' : ''} · {isLegacyPlaintext
+                    ? 'legacy plaintext — Save migrates it to the encrypted vault'
+                    : isSet ? 'stored in encrypted vault' : 'not set'}
                 </label>
                 <div className="flex items-center gap-2">
                   <input
@@ -626,8 +633,8 @@ function ChannelField({
   onChange,
 }: {
   field: ChannelFieldDefinition;
-  value: string | number | boolean | string[] | undefined;
-  onChange: (value: string | number | boolean | string[]) => void;
+  value: string | number | boolean | string[] | null | undefined;
+  onChange: (value: string | number | boolean | string[] | null) => void;
 }) {
   const label = `${field.label}${field.required ? ' *' : ''}`;
   if (field.kind === 'boolean') {
@@ -649,7 +656,7 @@ function ChannelField({
         <span>{label}</span>
         <select
           value={typeof value === 'string' ? value : ''}
-          onChange={(event) => onChange(event.target.value)}
+          onChange={(event) => onChange(event.target.value || null)}
           className="w-full rounded border border-border bg-surface px-2 py-1 text-xs text-text-primary"
         >
           <option value="">Default</option>
@@ -665,7 +672,10 @@ function ChannelField({
       <ChannelTextList
         label={label}
         value={Array.isArray(value) ? value.join('\n') : ''}
-        onChange={(raw) => onChange(raw.split(/[\n,]/).map((item) => item.trim()).filter(Boolean))}
+        onChange={(raw) => {
+          const items = raw.split(/[\n,]/).map((item) => item.trim()).filter(Boolean);
+          onChange(items.length > 0 ? items : null);
+        }}
         placeholder={field.placeholder ?? 'one value per line'}
       />
     );
@@ -678,8 +688,8 @@ function ChannelField({
         value={typeof value === 'string' || typeof value === 'number' ? value : ''}
         onChange={(event) => onChange(
           field.kind === 'number'
-            ? event.target.value === '' ? '' : Number(event.target.value)
-            : event.target.value,
+            ? event.target.value === '' ? null : Number(event.target.value)
+            : event.target.value || null,
         )}
         min={field.min}
         max={field.max}

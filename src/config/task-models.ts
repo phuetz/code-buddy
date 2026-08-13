@@ -15,6 +15,7 @@ import {
   readFileSync,
   renameSync,
   rmSync,
+  statSync,
   writeFileSync,
 } from 'fs';
 import { homedir } from 'os';
@@ -91,7 +92,9 @@ export interface TaskModelSettings {
 }
 
 const USER_CONFIG_FILE = join(homedir(), '.codebuddy', 'config.toml');
-const SAFE_MODEL_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,255}$/;
+// Model registries commonly use `@` for revisions/quantizations and `+` in
+// variants. Keep control characters/whitespace out without rejecting those IDs.
+const SAFE_MODEL_ID_RE = /^[A-Za-z0-9@][A-Za-z0-9._:/@+-]{0,255}$/;
 const TASK_TYPES = new Set<string>(TASK_MODEL_DEFINITIONS.map(({ type }) => type));
 
 export function isTaskType(value: unknown): value is TaskType {
@@ -152,6 +155,7 @@ function escapeTomlString(value: string): string {
  * serializer dropping profiles or advanced sections.
  */
 export function replaceTaskModelsSection(content: string, mappings: TaskModelsConfig): string {
+  const newline = content.includes('\r\n') ? '\r\n' : '\n';
   const hadTrailingNewline = content.endsWith('\n');
   const lines = content.split(/\r?\n/);
   if (hadTrailingNewline) lines.pop();
@@ -191,7 +195,9 @@ export function replaceTaskModelsSection(content: string, mappings: TaskModelsCo
     if (output.length > 0) output.push('');
     output.push(...after);
   }
-  return output.length > 0 ? `${output.join('\n')}\n` : '';
+  if (output.length === 0) return '';
+  const trailingNewline = hadTrailingNewline || content.length === 0 ? newline : '';
+  return `${output.join(newline)}${trailingNewline}`;
 }
 
 function mergeForSettings(raw: Partial<CodeBuddyConfig>): CodeBuddyConfig {
@@ -300,13 +306,14 @@ export function saveTaskModelSettings(value: unknown, configPath?: string): Task
   if (!validated.ok) throw new Error(validated.error);
 
   const existing = existsSync(path) ? readFileSync(path, 'utf8') : '';
+  const mode = existsSync(path) ? statSync(path).mode & 0o777 : 0o600;
   const updated = replaceTaskModelsSection(existing, validated.mappings);
   mkdirSync(dirname(path), { recursive: true });
   const temporaryPath = `${path}.tmp-${process.pid}-${Date.now()}`;
   try {
-    writeFileSync(temporaryPath, updated, { mode: 0o600 });
+    writeFileSync(temporaryPath, updated, { mode });
     renameSync(temporaryPath, path);
-    chmodSync(path, 0o600);
+    chmodSync(path, mode);
   } catch (error) {
     try {
       rmSync(temporaryPath, { force: true });

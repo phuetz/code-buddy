@@ -116,6 +116,23 @@ describe('channels config IPC', () => {
     expect(res.catalog.some((c) => c.type === 'feishu')).toBe(true);
   });
 
+  it('listConfig never throws on malformed options and retains the catalog on corrupt JSON', async () => {
+    const malformed = await call('channels.listConfig', {}, { configPath: 42 }) as {
+      ok: boolean;
+      catalog: Array<{ type: string }>;
+    };
+    expect(malformed.ok).toBe(false);
+    expect(malformed.catalog.some((entry) => entry.type === 'telegram')).toBe(true);
+
+    writeFileSync(configPath, '{ definitely-not-json');
+    const corrupt = await call('channels.listConfig', {}, opts()) as {
+      ok: boolean;
+      catalog: Array<{ type: string }>;
+    };
+    expect(corrupt.ok).toBe(false);
+    expect(corrupt.catalog.some((entry) => entry.type === 'telegram')).toBe(true);
+  });
+
   it('adds + enables a channel, persisting only non-secret fields to channels.json', async () => {
     expect(((await call('channels.setConfig', {}, 'telegram', { enabled: false }, opts())) as { ok: boolean }).ok).toBe(true);
     await call('channels.setSecret', {}, 'telegram', 'token', SECRET, opts());
@@ -170,6 +187,23 @@ describe('channels config IPC', () => {
     });
   });
 
+  it('removes an option when the renderer clears it', async () => {
+    await call('channels.setConfig', {}, 'webchat', {
+      enabled: false,
+      options: { port: 4567, title: 'Buddy' },
+    }, opts());
+
+    const result = await call('channels.setConfig', {}, 'webchat', {
+      options: { port: null },
+    }, opts()) as { ok: boolean };
+
+    expect(result.ok).toBe(true);
+    const entry = JSON.parse(readFileSync(configPath, 'utf8')).channels[0] as {
+      options: Record<string, unknown>;
+    };
+    expect(entry.options).toEqual({ title: 'Buddy' });
+  });
+
   it('refuses to enable an incomplete channel before writing it', async () => {
     await call('channels.setConfig', {}, 'matrix', {
       enabled: false,
@@ -220,6 +254,14 @@ describe('channels config IPC', () => {
       }],
     }));
 
+    const before = await call('channels.listConfig', {}, opts()) as {
+      channels: Array<{ legacyPlaintextSecrets: Record<string, boolean> }>;
+    };
+    expect(before.channels[0]?.legacyPlaintextSecrets).toMatchObject({
+      token: true,
+      appToken: true,
+    });
+
     const primary = await call(
       'channels.setSecret',
       {},
@@ -247,6 +289,13 @@ describe('channels config IPC', () => {
     expect(onDisk.channels[0]).not.toHaveProperty('token');
     expect(onDisk.channels[0]?.options).toEqual({ defaultChannel: 'general' });
     expect(readFileSync(configPath, 'utf8')).not.toContain(legacyToken);
+    const after = await call('channels.listConfig', {}, opts()) as {
+      channels: Array<{ legacyPlaintextSecrets: Record<string, boolean> }>;
+    };
+    expect(after.channels[0]?.legacyPlaintextSecrets).toMatchObject({
+      token: false,
+      appToken: false,
+    });
   });
 
   it('clears a legacy plaintext secret even when the vault is empty', async () => {
@@ -296,6 +345,28 @@ describe('channels config IPC', () => {
     expect(listed.channels[0]?.hasSecrets).toMatchObject({ token: true, appToken: true });
     expect(JSON.stringify(listed)).not.toContain('xoxb-secret');
     expect(JSON.stringify(listed)).not.toContain('xapp-secret');
+  });
+
+  it('serializes concurrent read-modify-write mutations without losing fields', async () => {
+    await call('channels.setConfig', {}, 'telegram', { enabled: false }, opts());
+    await call('channels.setSecret', {}, 'telegram', 'token', SECRET, opts());
+    await call('channels.setEnabled', {}, 'telegram', true, opts());
+
+    const [webhookResult, optionResult] = await Promise.all([
+      call('channels.setConfig', {}, 'telegram', {
+        webhookUrl: 'https://example.com/hook',
+      }, opts()),
+      call('channels.setConfig', {}, 'telegram', {
+        options: { botUsername: 'codebuddy' },
+      }, opts()),
+    ]) as Array<{ ok: boolean }>;
+
+    expect(webhookResult.ok).toBe(true);
+    expect(optionResult.ok).toBe(true);
+    expect(JSON.parse(readFileSync(configPath, 'utf8')).channels[0]).toMatchObject({
+      webhookUrl: 'https://example.com/hook',
+      options: { botUsername: 'codebuddy' },
+    });
   });
 
   it('never-throws on invalid input (bad type / empty secret / bad patch)', async () => {

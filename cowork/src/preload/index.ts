@@ -5250,19 +5250,17 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Generalized `[task_models]` settings. Validation and persistence stay in
   // the root core and are invoked in-process by the main IPC bridge.
   taskModels: {
-    get: (opts?: { configPath?: string }): Promise<TaskModelSettingsResult> =>
-      ipcRenderer.invoke('taskModels.get', opts),
+    get: (): Promise<TaskModelSettingsResult> => ipcRenderer.invoke('taskModels.get'),
     save: (
       mappings: TaskModelSaveMappings,
-      opts?: { configPath?: string },
-    ): Promise<TaskModelSettingsResult> => ipcRenderer.invoke('taskModels.save', mappings, opts),
+    ): Promise<TaskModelSettingsResult> => ipcRenderer.invoke('taskModels.save', mappings),
   },
 
   // Per-channel connection status + Phase-5 config surface. Secrets are
   // write-only: setters never echo values and listConfig reports presence only.
   channels: {
     status: () => ipcRenderer.invoke('channels.status'),
-    listConfig: (opts?: { configPath?: string }) => ipcRenderer.invoke('channels.listConfig', opts),
+    listConfig: () => ipcRenderer.invoke('channels.listConfig'),
     setConfig: (
       type: string,
       patch: {
@@ -5270,18 +5268,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
         webhookUrl?: string;
         allowedUsers?: string[];
         allowedChannels?: string[];
-        options?: Record<string, string | number | boolean | string[]>;
+        options?: Record<string, string | number | boolean | string[] | null>;
       },
-      opts?: { configPath?: string }
-    ) => ipcRenderer.invoke('channels.setConfig', type, patch, opts),
-    setEnabled: (type: string, enabled: boolean, opts?: { configPath?: string }) =>
-      ipcRenderer.invoke('channels.setEnabled', type, enabled, opts),
-    setSecret: (type: string, fieldKey: string, secret: string, opts?: { configPath?: string }) =>
-      ipcRenderer.invoke('channels.setSecret', type, fieldKey, secret, opts),
-    deleteSecret: (type: string, fieldKey: string, opts?: { configPath?: string }) =>
-      ipcRenderer.invoke('channels.deleteSecret', type, fieldKey, opts),
-    removeChannel: (type: string, opts?: { configPath?: string }) =>
-      ipcRenderer.invoke('channels.removeChannel', type, opts),
+    ) => ipcRenderer.invoke('channels.setConfig', type, patch),
+    setEnabled: (type: string, enabled: boolean) =>
+      ipcRenderer.invoke('channels.setEnabled', type, enabled),
+    setSecret: (type: string, fieldKey: string, secret: string) =>
+      ipcRenderer.invoke('channels.setSecret', type, fieldKey, secret),
+    deleteSecret: (type: string, fieldKey: string) =>
+      ipcRenderer.invoke('channels.deleteSecret', type, fieldKey),
+    removeChannel: (type: string) => ipcRenderer.invoke('channels.removeChannel', type),
   },
 
   // DM pairing / allowlist — "who is allowed to DM the agent" (core dm-pairing.ts).
@@ -9423,10 +9419,9 @@ declare global {
         }>;
       };
       taskModels: {
-        get: (opts?: { configPath?: string }) => Promise<TaskModelSettingsResult>;
+        get: () => Promise<TaskModelSettingsResult>;
         save: (
           mappings: TaskModelSaveMappings,
-          opts?: { configPath?: string }
         ) => Promise<TaskModelSettingsResult>;
       };
       channels: {
@@ -9474,7 +9469,7 @@ declare global {
             schemaVersion: 1;
           } | null;
         }>;
-        listConfig: (opts?: { configPath?: string }) => Promise<{
+        listConfig: () => Promise<{
           ok: boolean;
           error?: string;
           path: string;
@@ -9484,12 +9479,13 @@ declare global {
             configured: boolean;
             hasSecret: boolean;
             hasSecrets: Record<string, boolean>;
+            legacyPlaintextSecrets: Record<string, boolean>;
             hasWebhookUrl: boolean;
             webhookUrl?: string;
             allowedUsers: string[];
             allowedChannels: string[];
             optionKeys: string[];
-            values: Record<string, string | number | boolean | string[]>;
+            values: Record<string, string | number | boolean | string[] | null>;
             connected: boolean;
             authenticated: boolean;
             lastActivity?: number;
@@ -9520,29 +9516,24 @@ declare global {
             webhookUrl?: string;
             allowedUsers?: string[];
             allowedChannels?: string[];
-            options?: Record<string, string | number | boolean | string[]>;
+            options?: Record<string, string | number | boolean | string[] | null>;
           },
-          opts?: { configPath?: string }
         ) => Promise<{ ok: boolean; error?: string }>;
         setEnabled: (
           type: string,
-          enabled: boolean,
-          opts?: { configPath?: string }
+          enabled: boolean
         ) => Promise<{ ok: boolean; error?: string }>;
         setSecret: (
           type: string,
           fieldKey: string,
-          secret: string,
-          opts?: { configPath?: string }
+          secret: string
         ) => Promise<{ ok: boolean; error?: string }>;
         deleteSecret: (
           type: string,
-          fieldKey: string,
-          opts?: { configPath?: string }
+          fieldKey: string
         ) => Promise<{ ok: boolean; error?: string }>;
         removeChannel: (
-          type: string,
-          opts?: { configPath?: string }
+          type: string
         ) => Promise<{ ok: boolean; error?: string }>;
       };
       pairing: {
