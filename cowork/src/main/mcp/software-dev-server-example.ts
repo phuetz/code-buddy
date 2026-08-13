@@ -2221,40 +2221,6 @@ async function executeGUIInteraction(
 //   }
 // }
 
-// Helper: Execute Native Engine command
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-async function executeClaudeCode(
-  prompt: string,
-  workingDir: string = WORKSPACE_DIR
-): Promise<string> {
-  try {
-    // Check if claude-code is available
-    const claudeCodePath = process.env.CLAUDE_CODE_PATH || 'claude-code';
-
-    // Execute claude-code with the prompt
-    const { stdout, stderr } = await execFileAsync(
-      'bash',
-      ['-c', `${claudeCodePath} "${prompt.replace(/"/g, '\\"')}"`],
-      {
-        cwd: workingDir,
-        maxBuffer: 10 * 1024 * 1024, // 10MB buffer
-        timeout: 120000, // 2 minute timeout
-      }
-    );
-
-    if (stderr && !stderr.includes('Warning')) {
-      writeMCPLog('[ClaudeCode] stderr:', stderr);
-    }
-
-    return stdout || stderr || 'Command executed successfully';
-  } catch (error: unknown) {
-    writeMCPLog('[ClaudeCode] Error:', error instanceof Error ? error.message : String(error));
-    throw new Error(
-      `Native Engine execution failed: ${error instanceof Error ? error.message : String(error)}`
-    );
-  }
-}
-
 // Helper: Validate drag coordinates are finite integers
 function parseDragCoords(value: string): [number, number, number, number] {
   const parts = value.split(',').map(Number);
@@ -2283,21 +2249,6 @@ function parseDragCoords(value: string): [number, number, number, number] {
   return [x1, y1, x2, y2];
 }
 
-// Helper: Validate and resolve a file path within WORKSPACE_DIR (reject absolute + traversal)
-function resolveContainedPath(filePath: string): string {
-  if (path.isAbsolute(filePath)) {
-    throw new Error(`Absolute paths not allowed: ${filePath}`);
-  }
-  const fullPath = path.resolve(WORKSPACE_DIR, filePath);
-  if (
-    !fullPath.startsWith(path.resolve(WORKSPACE_DIR) + path.sep) &&
-    fullPath !== path.resolve(WORKSPACE_DIR)
-  ) {
-    throw new Error(`Path traversal detected: ${filePath}`);
-  }
-  return fullPath;
-}
-
 // Helper: Read file content
 async function readFile(filePath: string): Promise<string> {
   if (path.isAbsolute(filePath)) {
@@ -2312,34 +2263,6 @@ async function readFile(filePath: string): Promise<string> {
   } catch (error: unknown) {
     throw new Error(
       `Failed to read file ${filePath}: ${error instanceof Error ? error.message : String(error)}`
-    );
-  }
-}
-
-// Helper: Write file content
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-async function writeFile(filePath: string, content: string): Promise<void> {
-  const fullPath = resolveContainedPath(filePath);
-  try {
-    // Ensure directory exists
-    await fs.mkdir(path.dirname(fullPath), { recursive: true });
-    await fs.writeFile(fullPath, content, 'utf-8');
-  } catch (error: unknown) {
-    throw new Error(
-      `Failed to write file ${filePath}: ${error instanceof Error ? error.message : String(error)}`
-    );
-  }
-}
-
-// Helper: Delete file
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-async function deleteFile(filePath: string): Promise<void> {
-  const fullPath = resolveContainedPath(filePath);
-  try {
-    await fs.unlink(fullPath);
-  } catch (error: unknown) {
-    throw new Error(
-      `Failed to delete file ${filePath}: ${error instanceof Error ? error.message : String(error)}`
     );
   }
 }

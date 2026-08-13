@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AlertCircle, BrainCircuit, RefreshCw, Save, X } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import type {
   TaskModelSaveMappings,
   TaskModelSettingsView,
@@ -10,6 +11,7 @@ import type {
 import { useAppStore } from '../store';
 
 export function TaskModelsPanel() {
+  const { t } = useTranslation();
   const show = useAppStore((state) => state.showTaskModelsPanel);
   const setShow = useAppStore((state) => state.setShowTaskModelsPanel);
   const [settings, setSettings] = useState<TaskModelSettingsView | null>(null);
@@ -25,7 +27,7 @@ export function TaskModelsPanel() {
     try {
       const result = await window.electronAPI.taskModels.get();
       if (!result.ok || !result.settings) {
-        setError(result.error ?? 'Failed to load task model settings');
+        setError(result.error ?? t('taskModels.loadError'));
         return;
       }
       setSettings(result.settings);
@@ -35,7 +37,7 @@ export function TaskModelsPanel() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     if (show) void load();
@@ -63,7 +65,7 @@ export function TaskModelsPanel() {
     try {
       const result = await window.electronAPI.taskModels.save(payload);
       if (!result.ok || !result.settings) {
-        setError(result.error ?? 'Failed to save task model settings');
+        setError(result.error ?? t('taskModels.saveError'));
         return;
       }
       setSettings(result.settings);
@@ -88,8 +90,8 @@ export function TaskModelsPanel() {
           <div className="flex items-center gap-2">
             <BrainCircuit className="h-4 w-4 text-accent" />
             <div>
-              <h2 className="text-sm font-semibold text-text-primary">Models by task type</h2>
-              <p className="text-[10px] text-text-muted">Explicit routing with default-model fallback</p>
+              <h2 className="text-sm font-semibold text-text-primary">{t('taskModels.title')}</h2>
+              <p className="text-[10px] text-text-muted">{t('taskModels.subtitle')}</p>
             </div>
           </div>
           <div className="flex items-center gap-1">
@@ -98,7 +100,7 @@ export function TaskModelsPanel() {
               onClick={() => void load()}
               disabled={loading || saving}
               className="rounded p-1 hover:bg-surface disabled:opacity-40"
-              aria-label="Refresh task models"
+              aria-label={t('taskModels.refresh')}
             >
               <RefreshCw className={`h-4 w-4 text-text-muted ${loading ? 'animate-spin' : ''}`} />
             </button>
@@ -106,7 +108,7 @@ export function TaskModelsPanel() {
               type="button"
               onClick={() => setShow(false)}
               className="rounded p-1 hover:bg-surface"
-              aria-label="Close task models"
+              aria-label={t('taskModels.close')}
             >
               <X className="h-4 w-4 text-text-muted" />
             </button>
@@ -116,7 +118,7 @@ export function TaskModelsPanel() {
         {settings && (
           <div className="border-b border-border px-4 py-2 text-[10px] text-text-muted">
             <div className="truncate">{settings.configPath}</div>
-            <div>Default fallback: <span className="font-mono text-text-primary">{settings.defaultModel}</span></div>
+            <div>{t('taskModels.defaultFallback')}: <span className="font-mono text-text-primary">{settings.defaultModel}</span></div>
           </div>
         )}
 
@@ -129,7 +131,7 @@ export function TaskModelsPanel() {
 
         <div className="flex-1 space-y-3 overflow-y-auto px-4 py-4">
           {!settings && !loading && !error && (
-            <p className="text-xs text-text-muted">No model configuration is available.</p>
+            <p className="text-xs text-text-muted">{t('taskModels.noConfig')}</p>
           )}
 
           {settings?.taskTypes.map((task) => {
@@ -149,9 +151,11 @@ export function TaskModelsPanel() {
                       htmlFor={`task-model-${task.type}`}
                       className="text-xs font-medium text-text-primary"
                     >
-                      {task.label}
+                      {t(`taskModels.types.${task.type}.label`, task.label)}
                     </label>
-                    <p className="mt-0.5 text-[10px] text-text-muted">{task.description}</p>
+                    <p className="mt-0.5 text-[10px] text-text-muted">
+                      {t(`taskModels.types.${task.type}.description`, task.description)}
+                    </p>
                   </div>
                   <span className="rounded bg-background px-1.5 py-0.5 font-mono text-[9px] text-text-muted">
                     {task.type}
@@ -168,8 +172,10 @@ export function TaskModelsPanel() {
                   data-testid={`task-model-select-${task.type}`}
                   className="w-full rounded border border-border bg-surface px-2 py-1.5 text-xs text-text-primary"
                 >
-                  <option value="">Use fallback · {fallback}</option>
-                  {unavailable && <option value={unavailable}>Unavailable · {unavailable}</option>}
+                  <option value="">{t('taskModels.useFallback', { model: fallback })}</option>
+                  {unavailable && (
+                    <option value={unavailable}>{t('taskModels.unavailable', { model: unavailable })}</option>
+                  )}
                   {settings.models.map((model) => (
                     <option key={model.id} value={model.id}>
                       {model.label} · {model.provider}
@@ -179,10 +185,10 @@ export function TaskModelsPanel() {
 
                 <div className="mt-1 text-[9px] text-text-muted">
                   {explicit
-                    ? `Explicit [task_models]: ${explicit}`
+                    ? t('taskModels.explicit', { model: explicit })
                     : legacy
-                      ? `Legacy [model_pairs] (inactive for main chat): ${legacy}`
-                      : `Inherited default: ${settings.defaultModel}`}
+                      ? t('taskModels.legacyInactive', { model: legacy })
+                      : t('taskModels.inheritedDefault', { model: settings.defaultModel })}
                 </div>
               </section>
             );
@@ -190,19 +196,19 @@ export function TaskModelsPanel() {
 
           {settings && settings.models.length === 0 && (
             <div className="rounded border border-warning/30 bg-warning/10 p-2 text-xs text-warning">
-              No active models were found. Enable a provider and configure at least one model first.
+              {t('taskModels.noActiveModels')}
             </div>
           )}
           {invalidMappings.length > 0 && (
             <div className="rounded border border-warning/30 bg-warning/10 p-2 text-xs text-warning">
-              Replace or clear unavailable mappings before saving: {invalidMappings.join(', ')}.
+              {t('taskModels.invalidMappings', { models: invalidMappings.join(', ') })}
             </div>
           )}
         </div>
 
         <footer className="flex items-center justify-between border-t border-border px-4 py-3">
           <span className="text-[10px] text-text-muted">
-            {saved ? 'Saved. New turns use the updated map.' : 'Legacy model_pairs remains untouched and inactive.'}
+            {saved ? t('taskModels.saved') : t('taskModels.legacyUntouched')}
           </span>
           <button
             type="button"
@@ -211,7 +217,7 @@ export function TaskModelsPanel() {
             data-testid="task-models-save"
             className="flex items-center gap-1 rounded bg-accent px-3 py-1.5 text-xs text-white disabled:opacity-40"
           >
-            <Save className="h-3.5 w-3.5" /> {saving ? 'Saving…' : 'Save mappings'}
+            <Save className="h-3.5 w-3.5" /> {saving ? t('taskModels.saving') : t('taskModels.save')}
           </button>
         </footer>
       </div>

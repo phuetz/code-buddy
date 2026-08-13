@@ -378,28 +378,6 @@ export class SandboxAdapter implements SandboxExecutor {
     return result.response === 0;
   }
 
-  private async _showClaudeCodeInstallPrompt(
-    config: SandboxAdapterConfig,
-    distro: string
-  ): Promise<boolean> {
-    if (!config.mainWindow) {
-      return true; // Auto-install if no window
-    }
-
-    const result = await dialog.showMessageBox(config.mainWindow, {
-      type: 'question',
-      title: 'Install claude-code in WSL',
-      message: `Native Engine is not installed in ${distro}.`,
-      detail:
-        'Native Engine is required for AI agent functionality. ' +
-        'Would you like to install it automatically?',
-      buttons: ['Install', 'Skip (use native execution)'],
-      defaultId: 0,
-    });
-
-    return result.response === 0;
-  }
-
   private async showInstallFailedWarning(
     config: SandboxAdapterConfig,
     packageName: string

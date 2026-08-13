@@ -508,7 +508,6 @@ export class ClaudeAgentRunner {
   ) => Promise<string | null>;
   private pathResolver: PathResolver;
   private mcpManager?: MCPManager;
-  private _pluginRuntimeService?: PluginRuntimeService;
   private _skillsAdapter?: SkillsAdapter;
   private activeControllers: Map<string, AbortController> = new Map();
   private piSessions: Map<string, CachedPiSession> = new Map();
@@ -793,7 +792,7 @@ ${hints.join('\n')}
     this.requestSudoPassword = options.requestSudoPassword;
     this.pathResolver = pathResolver;
     this.mcpManager = mcpManager;
-    this._pluginRuntimeService = pluginRuntimeService;
+    void pluginRuntimeService;
     this._skillsAdapter = skillsAdapter;
 
     log('[ClaudeAgentRunner] Initialized with pi-coding-agent SDK');

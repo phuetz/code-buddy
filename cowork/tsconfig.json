@@ -13,8 +13,8 @@
     "jsx": "react-jsx",
     "strict": true,
     // Root modules are imported in-process and therefore join this program.
-    // Match the root tsconfig: ESLint owns unused-symbol checks across that
-    // shared source tree, while this gate remains focused on type safety.
+    // Match the root tsconfig: the Cowork ESLint gate enforces unused symbols
+    // as errors locally, while this shared-program gate stays focused on types.
     "noUnusedLocals": false,
     "noUnusedParameters": false,
     "noFallthroughCasesInSwitch": true,

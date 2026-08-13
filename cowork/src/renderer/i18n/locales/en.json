@@ -1,4 +1,32 @@
 {
+  "taskModels": {
+    "title": "Models by task type",
+    "subtitle": "Explicit routing with default-model fallback",
+    "loadError": "Failed to load task model settings",
+    "saveError": "Failed to save task model settings",
+    "refresh": "Refresh task models",
+    "close": "Close task models",
+    "defaultFallback": "Default fallback",
+    "noConfig": "No model configuration is available.",
+    "useFallback": "Use fallback · {{model}}",
+    "unavailable": "Unavailable · {{model}}",
+    "explicit": "Explicit [task_models]: {{model}}",
+    "legacyInactive": "Legacy [model_pairs] (inactive for main chat): {{model}}",
+    "inheritedDefault": "Inherited default: {{model}}",
+    "noActiveModels": "No active models were found. Enable a provider and configure at least one model first.",
+    "invalidMappings": "Replace or clear unavailable mappings before saving: {{models}}.",
+    "saved": "Saved. New turns use the updated map.",
+    "legacyUntouched": "Legacy model_pairs remains untouched and inactive.",
+    "saving": "Saving…",
+    "save": "Save mappings",
+    "types": {
+      "architect": { "label": "Architecture", "description": "Planning, design, trade-offs and deep reasoning." },
+      "edit": { "label": "Editing", "description": "Implementation, refactoring, fixes and code changes." },
+      "review": { "label": "Review", "description": "Code review, audits, critique and risk assessment." },
+      "research": { "label": "Research", "description": "Source discovery, comparison and evidence gathering." },
+      "chat": { "label": "Chat", "description": "General conversation and uncategorized requests." }
+    }
+  },
   "goal": {
     "label": "Goal",
     "pause": "Pause goal",

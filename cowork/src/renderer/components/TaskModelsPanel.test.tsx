@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { TaskModelSettingsView } from '../../shared/task-models-types';
 import { useAppStore } from '../store';
 import { TaskModelsPanel } from './TaskModelsPanel';
+import i18n from '../i18n/config';
 
 const settings: TaskModelSettingsView = {
   configPath: '/tmp/config.toml',
@@ -40,7 +41,8 @@ function makeApi() {
 }
 
 describe('TaskModelsPanel', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
+    await i18n.changeLanguage('en');
     useAppStore.setState({ showTaskModelsPanel: true });
   });
 

@@ -1,4 +1,32 @@
 {
+  "taskModels": {
+    "title": "按任务类型选择模型",
+    "subtitle": "显式路由，未配置时使用默认模型",
+    "loadError": "无法加载任务模型设置",
+    "saveError": "无法保存任务模型设置",
+    "refresh": "刷新任务模型",
+    "close": "关闭任务模型",
+    "defaultFallback": "默认回退",
+    "noConfig": "没有可用的模型配置。",
+    "useFallback": "使用回退 · {{model}}",
+    "unavailable": "不可用 · {{model}}",
+    "explicit": "显式 [task_models]：{{model}}",
+    "legacyInactive": "旧版 [model_pairs]（不用于主聊天）：{{model}}",
+    "inheritedDefault": "继承默认值：{{model}}",
+    "noActiveModels": "未找到活动模型。请先启用供应商并配置至少一个模型。",
+    "invalidMappings": "保存前请替换或清除不可用的映射：{{models}}。",
+    "saved": "已保存。新对话轮次将使用更新后的映射。",
+    "legacyUntouched": "旧版 model_pairs 保持不变且不启用。",
+    "saving": "保存中…",
+    "save": "保存映射",
+    "types": {
+      "architect": { "label": "架构", "description": "规划、设计、权衡和深度推理。" },
+      "edit": { "label": "编辑", "description": "实现、重构、修复和代码更改。" },
+      "review": { "label": "审查", "description": "代码审查、审计、批评和风险评估。" },
+      "research": { "label": "研究", "description": "发现来源、比较并收集证据。" },
+      "chat": { "label": "聊天", "description": "一般对话和未分类请求。" }
+    }
+  },
   "goal": {
     "label": "目标",
     "pause": "暂停目标",

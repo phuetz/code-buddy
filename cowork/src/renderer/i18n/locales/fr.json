@@ -1,4 +1,32 @@
 {
+  "taskModels": {
+    "title": "Modèles par type de tâche",
+    "subtitle": "Routage explicite avec repli sur le modèle par défaut",
+    "loadError": "Impossible de charger les réglages de modèles par tâche",
+    "saveError": "Impossible d’enregistrer les réglages de modèles par tâche",
+    "refresh": "Actualiser les modèles par tâche",
+    "close": "Fermer les modèles par tâche",
+    "defaultFallback": "Repli par défaut",
+    "noConfig": "Aucune configuration de modèle n’est disponible.",
+    "useFallback": "Utiliser le repli · {{model}}",
+    "unavailable": "Indisponible · {{model}}",
+    "explicit": "Explicite [task_models] : {{model}}",
+    "legacyInactive": "Legacy [model_pairs] (inactif pour le chat principal) : {{model}}",
+    "inheritedDefault": "Défaut hérité : {{model}}",
+    "noActiveModels": "Aucun modèle actif trouvé. Activez un fournisseur et configurez d’abord au moins un modèle.",
+    "invalidMappings": "Remplacez ou effacez les associations indisponibles avant l’enregistrement : {{models}}.",
+    "saved": "Enregistré. Les nouveaux tours utilisent la carte mise à jour.",
+    "legacyUntouched": "Le legacy model_pairs reste intact et inactif.",
+    "saving": "Enregistrement…",
+    "save": "Enregistrer les associations",
+    "types": {
+      "architect": { "label": "Architecture", "description": "Planification, conception, compromis et raisonnement approfondi." },
+      "edit": { "label": "Édition", "description": "Implémentation, refactorisation, corrections et changements de code." },
+      "review": { "label": "Revue", "description": "Revue de code, audits, critique et évaluation des risques." },
+      "research": { "label": "Recherche", "description": "Découverte de sources, comparaison et collecte de preuves." },
+      "chat": { "label": "Discussion", "description": "Conversation générale et demandes non catégorisées." }
+    }
+  },
   "goal": {
     "label": "Objectif",
     "pause": "Mettre l'objectif en pause",
