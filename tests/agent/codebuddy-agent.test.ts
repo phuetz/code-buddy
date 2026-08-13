@@ -1089,6 +1089,21 @@ describe('CodeBuddyAgent', () => {
       expect((agent as any).useModelRouting).toBe(false);
     });
 
+    it('should consume a configured task model at the real turn entry point', async () => {
+      agent = new CodeBuddyAgent('test-api-key');
+      await agent.systemPromptReady;
+      (agent as any).routingFacade.setTaskModels({ review: 'review-model' });
+      const route = jest.spyOn((agent as any).modelRouter, 'route');
+      mockGetCurrentModel.mockReset().mockReturnValue('default-model');
+      mockSetModel.mockReset();
+
+      for await (const _ of agent.processUserMessageStream('Review this pull request')) { /* consume */ }
+
+      expect(mockSetModel).toHaveBeenCalledWith('review-model');
+      expect(route).not.toHaveBeenCalled();
+      expect((agent as any).useModelRouting).toBe(false);
+    });
+
     it('should call modelRouter.route when routing is enabled', async () => {
       agent = new CodeBuddyAgent('test-api-key');
       await agent.systemPromptReady;

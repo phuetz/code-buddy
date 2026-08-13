@@ -9,6 +9,9 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
 import { homedir } from 'os';
 import { join, dirname } from 'path';
 import { logger } from '../utils/logger.js';
+import type { TaskModelsConfig } from './task-models.js';
+
+export type { TaskModelsConfig, TaskType } from './task-models.js';
 
 // ============================================================================
 // JSONC Utilities
@@ -585,6 +588,8 @@ export interface CodeBuddyConfig {
   integrations: IntegrationsConfig;
   /** Model pairs for architect/editor split */
   model_pairs?: ModelPairsConfig;
+  /** Per-task model overrides; explicit values supersede legacy model_pairs. */
+  task_models?: TaskModelsConfig;
   /** Active-LLM registry: auto-failover across live logins + "together" */
   llm?: LlmFailoverConfig;
   /** Agent defaults (model preferences) — Native Engine v2026.3.14 */
@@ -1011,6 +1016,24 @@ export function serializeTOML(config: CodeBuddyConfig): string {
     lines.push('');
   }
 
+  // Legacy architect/editor split (retained for full backwards compatibility).
+  if (config.model_pairs && (config.model_pairs.architect || config.model_pairs.editor)) {
+    lines.push('[model_pairs]');
+    if (config.model_pairs.architect) lines.push(`architect = "${config.model_pairs.architect}"`);
+    if (config.model_pairs.editor) lines.push(`editor = "${config.model_pairs.editor}"`);
+    lines.push('');
+  }
+
+  // Generalized model selection by task type.
+  if (config.task_models && Object.keys(config.task_models).length > 0) {
+    lines.push('[task_models]');
+    for (const taskType of ['architect', 'edit', 'review', 'research', 'chat'] as const) {
+      const model = config.task_models[taskType];
+      if (model) lines.push(`${taskType} = "${model}"`);
+    }
+    lines.push('');
+  }
+
   return lines.join('\n');
 }
 
@@ -1104,6 +1127,9 @@ class ConfigManager {
     }
     if (partial.model_pairs) {
       this.config.model_pairs = { ...this.config.model_pairs, ...partial.model_pairs };
+    }
+    if (partial.task_models) {
+      this.config.task_models = { ...this.config.task_models, ...partial.task_models };
     }
     if (partial.llm) {
       this.config.llm = { ...this.config.llm, ...partial.llm };

@@ -12,6 +12,13 @@ import type { ModelRouter, RoutingDecision } from '../../optimization/model-rout
 import { classifyTaskComplexity, selectModel, GROK_MODELS } from '../../optimization/model-routing.js';
 import type { CostTracker } from '../../utils/cost-tracker.js';
 import type { ModelPairsConfig } from '../../config/toml-config.js';
+import {
+  getEffectiveTaskModels as buildEffectiveTaskModels,
+  resolveConfiguredTaskModel,
+  type TaskModelRoutingConfig,
+  type TaskModelsConfig,
+  type TaskType,
+} from '../../config/task-models.js';
 import { getModelScoreboard, type ModelScoreboard } from '../../fleet/model-scoreboard.js';
 import { inferTaskType } from '../../fleet/model-capability-heuristics.js';
 import { logger } from '../../utils/logger.js';
@@ -41,6 +48,8 @@ export interface ModelRoutingStats {
 export interface ModelRoutingFacadeDeps {
   modelRouter: ModelRouter;
   costTracker: CostTracker;
+  /** Live config lookup; omitted in isolated tests and custom integrations. */
+  getTaskModelConfig?: () => TaskModelRoutingConfig | null | undefined;
 }
 
 /**
@@ -67,6 +76,7 @@ export interface AutoRouteOptions {
 export class ModelRoutingFacade {
   private readonly modelRouter: ModelRouter;
   private readonly costTracker: CostTracker;
+  private readonly getTaskModelConfig?: ModelRoutingFacadeDeps['getTaskModelConfig'];
 
   private useModelRouting: boolean = false;
   private autoRoutingEnabled: boolean = false;
@@ -74,8 +84,9 @@ export class ModelRoutingFacade {
   private sessionCostLimit: number = 10;
   private sessionCost: number = 0;
 
-  /** Architect/editor model pair config */
-  private modelPairs: ModelPairsConfig | null = null;
+  /** Explicit test/runtime overrides; undefined means "read the live config". */
+  private modelPairsOverride: ModelPairsConfig | null | undefined;
+  private taskModelsOverride: TaskModelsConfig | null | undefined;
 
   /** Mid-conversation model override (set by /switch) */
   private switchedModel: string | null = null;
@@ -83,6 +94,7 @@ export class ModelRoutingFacade {
   constructor(deps: ModelRoutingFacadeDeps) {
     this.modelRouter = deps.modelRouter;
     this.costTracker = deps.costTracker;
+    this.getTaskModelConfig = deps.getTaskModelConfig;
   }
 
   // ============================================================================
@@ -290,14 +302,68 @@ export class ModelRoutingFacade {
    * and editing/tool-execution tasks to the editor model.
    */
   setModelPairs(pairs: ModelPairsConfig | null): void {
-    this.modelPairs = pairs;
+    this.modelPairsOverride = pairs;
   }
 
   /**
    * Get the current model pairs config.
    */
   getModelPairs(): ModelPairsConfig | null {
-    return this.modelPairs;
+    if (this.modelPairsOverride !== undefined) return this.modelPairsOverride;
+    return this.readTaskModelConfig().model_pairs ?? null;
+  }
+
+  /** Configure explicit per-task mappings (null suppresses the live map). */
+  setTaskModels(mappings: TaskModelsConfig | null): void {
+    this.taskModelsOverride = mappings;
+  }
+
+  /** Return the explicit/live `[task_models]` map, before legacy fallback. */
+  getTaskModels(): TaskModelsConfig | null {
+    if (this.taskModelsOverride !== undefined) return this.taskModelsOverride;
+    return this.readTaskModelConfig().task_models ?? null;
+  }
+
+  /** Return the effective map after applying legacy model-pair compatibility. */
+  getEffectiveTaskModels(): TaskModelsConfig {
+    return buildEffectiveTaskModels(this.getConfiguredRoutingConfig());
+  }
+
+  private readTaskModelConfig(): TaskModelRoutingConfig {
+    try {
+      return this.getTaskModelConfig?.() ?? {};
+    } catch (error) {
+      logger.debug('Task-model config lookup failed; using default model', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return {};
+    }
+  }
+
+  private getConfiguredRoutingConfig(): TaskModelRoutingConfig {
+    const live = this.readTaskModelConfig();
+    return {
+      task_models: this.taskModelsOverride !== undefined
+        ? this.taskModelsOverride ?? undefined
+        : live.task_models,
+      model_pairs: this.modelPairsOverride !== undefined
+        ? this.modelPairsOverride ?? undefined
+        : live.model_pairs,
+    };
+  }
+
+  /** Resolve only explicit task config (plus `/switch`), never auto-routing. */
+  resolveConfiguredModelForTask(taskType: TaskType): string | null {
+    if (this.switchedModel) return this.switchedModel;
+    return resolveConfiguredTaskModel(this.getConfiguredRoutingConfig(), taskType);
+  }
+
+  /** Resolve task config first, then optional complexity-based auto-routing. */
+  resolveModelForTask(taskType: TaskType, userMessage?: string): string | null {
+    const configured = this.resolveConfiguredModelForTask(taskType);
+    if (configured) return configured;
+    if (userMessage && this.autoRoutingEnabled) return this.autoRouteIfEnabled(userMessage);
+    return null;
   }
 
   /**
@@ -305,34 +371,40 @@ export class ModelRoutingFacade {
    *
    * Priority:
    * 1. Mid-conversation /switch override (if set)
-   * 2. Architect/editor pair routing (if configured and intent is classifiable)
+   * 2. Explicit task map, then architect/editor compatibility routing
    * 3. Auto-routing by complexity (if enabled)
    * 4. Default model (null — caller uses their default)
    */
   resolveModelForIntent(intent: TaskIntent, userMessage?: string): string | null {
-    // Priority 1: explicit /switch override
-    if (this.switchedModel) {
-      return this.switchedModel;
-    }
+    const taskType: TaskType = intent === 'editing'
+      ? 'edit'
+      : intent === 'planning' || intent === 'reasoning'
+        ? 'architect'
+        : userMessage
+          ? this.classifyTaskType(userMessage)
+          : 'chat';
+    return this.resolveModelForTask(taskType, userMessage);
+  }
 
-    // Priority 2: architect/editor pair
-    if (this.modelPairs) {
-      if ((intent === 'planning' || intent === 'reasoning') && this.modelPairs.architect) {
-        return this.modelPairs.architect;
-      }
-      if (intent === 'editing' && this.modelPairs.editor) {
-        return this.modelPairs.editor;
-      }
-      // 'general' falls through to auto-routing or default
-    }
+  /** Classify the generalized task buckets used by `[task_models]`. */
+  classifyTaskType(userMessage: string): TaskType {
+    const lower = userMessage.toLowerCase();
+    const researchPatterns = [
+      'research', 'look up', 'find sources', 'browse', 'web search',
+      'literature', 'state of the art', 'latest information', 'investigate',
+    ];
+    const reviewPatterns = [
+      'review', 'code review', 'audit', 'critique', 'assess', 'security check',
+      'quality check', 'inspect this change', 'pull request', 'merge request',
+    ];
 
-    // Priority 3: auto-routing
-    if (userMessage && this.autoRoutingEnabled) {
-      return this.autoRouteIfEnabled(userMessage);
-    }
+    if (researchPatterns.some((pattern) => lower.includes(pattern))) return 'research';
+    if (reviewPatterns.some((pattern) => lower.includes(pattern))) return 'review';
 
-    // Priority 4: no override
-    return null;
+    const intent = this.classifyIntent(userMessage);
+    if (intent === 'editing') return 'edit';
+    if (intent === 'planning' || intent === 'reasoning') return 'architect';
+    return 'chat';
   }
 
   /**

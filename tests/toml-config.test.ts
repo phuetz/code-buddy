@@ -145,6 +145,36 @@ describe('TOML Serializer', () => {
     expect(toml).toContain('"git .*"');
     expect(toml).toContain('"rm -rf /"');
   });
+
+  it('round-trips legacy model_pairs and generalized task_models', () => {
+    const config = {
+      ...DEFAULT_CONFIG,
+      model_pairs: {
+        architect: 'legacy-thinker',
+        editor: 'legacy-editor',
+      },
+      task_models: {
+        architect: 'architect-v2',
+        review: 'review-v2',
+        research: 'research-v2',
+        chat: 'chat-v2',
+      },
+    };
+
+    const toml = serializeTOML(config);
+    const parsed = parseTOML(toml);
+
+    expect(parsed.model_pairs).toEqual({
+      architect: 'legacy-thinker',
+      editor: 'legacy-editor',
+    });
+    expect(parsed.task_models).toEqual({
+      architect: 'architect-v2',
+      review: 'review-v2',
+      research: 'research-v2',
+      chat: 'chat-v2',
+    });
+  });
 });
 
 // ============================================================================

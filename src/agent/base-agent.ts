@@ -19,6 +19,7 @@ import { getEnhancedMemory, EnhancedMemory, type MemoryEntry, type MemoryType } 
 import { getErrorMessage } from "../errors/index.js";
 import type { RepairCoordinator } from "./execution/repair-coordinator.js";
 import { logger } from "../utils/logger.js";
+import { getConfigManager } from "../config/toml-config.js";
 
 // Import facades
 import { AgentContextFacade, type ContextConfig } from "./facades/agent-context-facade.js";
@@ -229,6 +230,13 @@ export abstract class BaseAgent extends EventEmitter implements Agent {
     this.routingFacade = new ModelRoutingFacade({
       modelRouter: this.modelRouter,
       costTracker: this.costTracker,
+      getTaskModelConfig: () => {
+        const config = getConfigManager().getConfig();
+        return {
+          task_models: config.task_models,
+          model_pairs: config.model_pairs,
+        };
+      },
     });
 
     // Infrastructure facade
@@ -527,6 +535,7 @@ export abstract class BaseAgent extends EventEmitter implements Agent {
   // ============================================================================
 
   setModelRouting(enabled: boolean): void {
+    this.useModelRouting = enabled;
     this.routingFacade.setModelRouting(enabled);
   }
 

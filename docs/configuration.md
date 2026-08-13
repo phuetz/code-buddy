@@ -199,6 +199,15 @@ Main config file: `.codebuddy/config.toml`
 architect = "claude-sonnet-4"
 editor = "grok-code-fast-1"
 
+# Generalized per-task routing. These values take precedence over model_pairs;
+# omitted task types continue to inherit the legacy pair or the default model.
+[task_models]
+architect = "claude-sonnet-4"
+edit = "grok-code-fast-1"
+review = "gpt-5.6-sol"
+research = "gemini-2.5-flash"
+chat = "grok-code-fast-1"
+
 [agent_defaults]
 imageGenerationModel = "dall-e-3"
 
@@ -225,6 +234,7 @@ Set values at runtime:
 
 ```bash
 /config set model_pairs.architect "claude-sonnet-4"
+/config set task_models.review "gpt-5.6-sol"
 /config set agent_defaults.imageGenerationModel "dall-e-3"
 ```
 

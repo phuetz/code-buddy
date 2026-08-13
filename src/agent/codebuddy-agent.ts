@@ -1379,29 +1379,45 @@ Look at the screenshot and find the element matching the user's intent. Output o
       }
     }
 
-    // Model routing - select optimal model based on task complexity.
+    // Model routing: an explicit per-task mapping takes precedence, then the
+    // existing opt-in complexity router. With no task map and routing disabled,
+    // this remains a strict no-op.
     // Use local variables (not instance state) to avoid race conditions
     // if multiple streams run concurrently.
     let originalModel: string | null = null;
+    let routedModel: string | null = null;
     let routingDecision: typeof this.lastRoutingDecision = null;
-    if (!readOnlySelfInspection && this.useModelRouting) {
-      const conversationContext = this.chatHistory
-        .slice(-5)
-        .map(e => e.content)
-        .filter((c): c is string => typeof c === 'string');
+    if (!readOnlySelfInspection) {
+      const taskType = this.routingFacade.classifyTaskType(message);
+      routedModel = this.routingFacade.resolveConfiguredModelForTask(taskType);
 
-      routingDecision = this.modelRouter.route(
-        message,
-        conversationContext,
-        this.codebuddyClient.getCurrentModel()
-      );
-      this.lastRoutingDecision = routingDecision;
+      if (routedModel) {
+        if (routedModel !== this.codebuddyClient.getCurrentModel()) {
+          originalModel = this.codebuddyClient.getCurrentModel();
+          this.codebuddyClient.setModel(routedModel);
+          logger.debug(`Task model routing: ${taskType} · ${originalModel} → ${routedModel}`);
+        }
+      } else if (this.useModelRouting) {
+        const conversationContext = this.chatHistory
+          .slice(-5)
+          .map(e => e.content)
+          .filter((c): c is string => typeof c === 'string');
 
-      // Switch model if different from current
-      if (routingDecision.recommendedModel !== this.codebuddyClient.getCurrentModel()) {
-        originalModel = this.codebuddyClient.getCurrentModel();
-        this.codebuddyClient.setModel(routingDecision.recommendedModel);
-        logger.debug(`Model routing: ${originalModel} → ${routingDecision.recommendedModel} (${routingDecision.reason})`);
+        routingDecision = this.modelRouter.route(
+          message,
+          conversationContext,
+          this.codebuddyClient.getCurrentModel()
+        );
+        routedModel = routingDecision.recommendedModel;
+        this.lastRoutingDecision = routingDecision;
+        this.routingFacade.setLastRoutingDecision(routingDecision);
+
+        // Switch model if different from current
+        if (routedModel !== this.codebuddyClient.getCurrentModel()) {
+          originalModel = this.codebuddyClient.getCurrentModel();
+          this.codebuddyClient.setModel(routedModel);
+          logger.debug(`Model routing: ${originalModel} → ${routedModel} (${routingDecision.reason})`);
+        }
       }
     }
 
@@ -1420,8 +1436,8 @@ Look at the screenshot and find the element matching the user's intent. Output o
     } finally {
       // Restore original model if it was changed by routing.
       // Only restore if the model is still the one we set (another call may have changed it).
-      if (originalModel && routingDecision &&
-          this.codebuddyClient.getCurrentModel() === routingDecision.recommendedModel) {
+      if (originalModel && routedModel &&
+          this.codebuddyClient.getCurrentModel() === routedModel) {
         this.codebuddyClient.setModel(originalModel);
         logger.debug(`Model routing: restored to ${originalModel}`);
       }

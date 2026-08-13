@@ -210,6 +210,19 @@ editor = "grok-code-fast-1"
 
 Planning tasks route to `architect`, code editing routes to `editor`.
 
+For additional task categories, use the generalized map. Explicit entries take
+precedence over `[model_pairs]`; missing entries still fall back to the legacy
+pair and then to the default model.
+
+```toml
+[task_models]
+architect = "claude-sonnet-4"
+edit = "grok-code-fast-1"
+review = "gpt-5.6-sol"
+research = "gemini-2.5-flash"
+chat = "grok-code-fast-1"
+```
+
 ## Circuit Breaker and Failover
 
 Each provider has a 3-state circuit breaker (CLOSED/OPEN/HALF_OPEN):
