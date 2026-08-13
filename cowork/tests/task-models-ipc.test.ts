@@ -85,7 +85,7 @@ describe('task models IPC', () => {
     ]);
   });
 
-  it('loads active models and reports legacy compatibility mappings', async () => {
+  it('loads active models and reports dormant legacy mappings separately', async () => {
     const result = await call('taskModels.get', { configPath }) as {
       ok: boolean;
       settings: {

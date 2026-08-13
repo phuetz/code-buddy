@@ -27,7 +27,7 @@ afterEach(() => {
 });
 
 describe('task model compatibility and persistence', () => {
-  it('maps legacy architect/editor pairs and lets task_models override them', () => {
+  it('keeps legacy pairs dormant unless compatibility routing is explicitly enabled', () => {
     expect(legacyModelPairsToTaskModels({
       architect: 'legacy-thinker',
       editor: 'legacy-editor',
@@ -36,10 +36,16 @@ describe('task model compatibility and persistence', () => {
       edit: 'legacy-editor',
     });
 
-    expect(getEffectiveTaskModels({
+    const config = {
       model_pairs: { architect: 'legacy-thinker', editor: 'legacy-editor' },
       task_models: { architect: 'new-thinker', review: 'reviewer' },
-    })).toEqual({
+    };
+
+    expect(getEffectiveTaskModels(config)).toEqual({
+      architect: 'new-thinker',
+      review: 'reviewer',
+    });
+    expect(getEffectiveTaskModels(config, { includeLegacyModelPairs: true })).toEqual({
       architect: 'new-thinker',
       edit: 'legacy-editor',
       review: 'reviewer',
@@ -109,11 +115,7 @@ describe('task model compatibility and persistence', () => {
       architect: 'legacy-thinker',
       edit: 'legacy-editor',
     });
-    expect(saved.effectiveMappings).toEqual({
-      architect: 'legacy-thinker',
-      edit: 'legacy-editor',
-      review: 'local/fast-v2',
-    });
+    expect(saved.effectiveMappings).toEqual({ review: 'local/fast-v2' });
     const onDisk = readFileSync(path, 'utf8');
     expect(onDisk).toContain('review = "local/fast-v2"');
     expect(onDisk).toContain('[profiles.keep-me]');

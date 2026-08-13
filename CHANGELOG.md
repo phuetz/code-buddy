@@ -33,6 +33,7 @@ Index: [`docs/cb2/README.md`](docs/cb2/README.md).
 
 ### Bug Fixes
 
+* **routing:** keep legacy `[model_pairs]` dormant in the main chat unless an integration explicitly opts in; only `[task_models]` changes per-task routing by default.
 * **sensory:** sanitize text before TTS — mute leaked model tokens and foreign-script (CJK) garbage the voice can't pronounce; fix 5 real bugs in the voice/vision loop (respond-decider tier order, multi-word name matching, `resolveVoiceModel` fallback, permanent-deafness guard, prototype-chain guard).
 * **cowork:** unbreak `vite build` (load model-inventory via `loadCoreModule` instead of a static core import); revive `/export` and `/save`; delete dead `Sidebar.tsx`.
 

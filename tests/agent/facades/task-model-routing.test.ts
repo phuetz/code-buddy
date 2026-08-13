@@ -28,17 +28,28 @@ describe('ModelRoutingFacade task model map', () => {
     expect(facade.resolveConfiguredModelForTask('chat')).toBeNull();
   });
 
-  it('uses the new map first and fills missing values from legacy model_pairs', () => {
+  it('uses only the new map when legacy model_pairs merely comes from config', () => {
     const facade = createFacade(() => ({
       model_pairs: { architect: 'legacy-thinker', editor: 'legacy-editor' },
       task_models: { architect: 'new-thinker', review: 'review-model' },
     }));
 
     expect(facade.resolveConfiguredModelForTask('architect')).toBe('new-thinker');
-    expect(facade.resolveConfiguredModelForTask('edit')).toBe('legacy-editor');
+    expect(facade.resolveConfiguredModelForTask('edit')).toBeNull();
     expect(facade.resolveConfiguredModelForTask('review')).toBe('review-model');
     expect(facade.resolveModelForIntent('reasoning')).toBe('new-thinker');
-    expect(facade.resolveModelForIntent('editing')).toBe('legacy-editor');
+    expect(facade.resolveModelForIntent('editing')).toBeNull();
+  });
+
+  it('keeps setModelPairs as the explicit compatibility opt-in', () => {
+    const facade = createFacade(() => ({
+      model_pairs: { architect: 'dormant-architect', editor: 'dormant-editor' },
+    }));
+
+    facade.setModelPairs({ architect: 'opted-in-architect', editor: 'opted-in-editor' });
+
+    expect(facade.resolveConfiguredModelForTask('architect')).toBe('opted-in-architect');
+    expect(facade.resolveConfiguredModelForTask('edit')).toBe('opted-in-editor');
   });
 
   it('reads the live config for every turn so Cowork saves apply without reconstruction', () => {

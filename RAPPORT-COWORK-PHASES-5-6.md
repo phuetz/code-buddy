@@ -32,10 +32,10 @@ Base : `origin/main` (`f9a31a7e`)
 ### Livraison noyau
 
 - Nouvelle section TOML `[task_models]` pour `architect`, `edit`, `review`, `research` et `chat`.
-- Compatibilité ascendante complète : `[model_pairs].architect` alimente `architect`, `[model_pairs].editor` alimente `edit`, sans réécrire ni supprimer l'ancienne section. Une valeur explicite de `[task_models]` est prioritaire.
-- Une entrée absente retombe sur le modèle par défaut ; une carte entièrement absente est un no-op strict, ce qui conserve le comportement antérieur.
+- Compatibilité non intrusive : `[model_pairs]` reste lu et affiché sans être réécrit ni supprimé, mais demeure inactif dans le chat principal comme au merge-base. Seul l'opt-in programmatique historique `setModelPairs(...)` active ces paires.
+- Une entrée `[task_models]` absente retombe sur le modèle par défaut ; une carte entièrement absente est un no-op strict, y compris lorsqu'un ancien `[model_pairs]` existe.
 - La persistance remplace uniquement la section `[task_models]`, conserve les autres octets/sections TOML, écrit atomiquement en mode `0600` et refuse un modèle dont le provider n'est pas actif.
-- `ModelRoutingFacade` classe les cinq types, relit la configuration active à chaque tour et respecte la priorité `/switch` → carte par tâche → paire historique → routage automatique/modèle par défaut.
+- `ModelRoutingFacade` classe les cinq types, relit la configuration active à chaque tour et respecte la priorité `/switch` → carte explicite par tâche → paire explicitement activée par API → routage automatique/modèle par défaut.
 - Le vrai point d'entrée de tour de `CodeBuddyAgent` consomme cette décision, même quand le routage automatique par complexité est désactivé, puis restaure le modèle initial après le tour.
 
 ### Commit noyau
@@ -55,7 +55,7 @@ Base : `origin/main` (`f9a31a7e`)
 ### Couverture dédiée
 
 - TOML : round-trip simultané de `model_pairs` et `task_models`, remplacement ciblé de section et conservation des sections adjacentes.
-- Routage : no-op sans carte, priorité des nouvelles entrées, héritage historique, configuration relue à chaud, priorité de `/switch`, classification des cinq tâches et consommation au point d'entrée réel de l'agent.
+- Routage : no-op sans carte même en présence d'un `[model_pairs]` historique, priorité des nouvelles entrées, opt-in programmatique des paires, configuration relue à chaud, priorité de `/switch`, classification des cinq tâches et consommation au point d'entrée réel de l'agent.
 - Cowork : chargement/sauvegarde IPC, erreur propre sur provider inactif, affichage des replis, sélection d'un modèle actif, sauvegarde et fermeture par le flag de store.
 
 ## Blocs de fiabilisation
@@ -126,11 +126,11 @@ Adapter `DISPLAY` à la session (`:10.0` est courant sous xrdp). Vérifier au d�
 ### Scénario modèles par tâche
 
 1. Depuis Labs, ouvrir **Modèles par type de tâche**. Vérifier les cinq lignes et que chaque liste ne propose que les modèles de providers actifs.
-2. Avec un ancien `[model_pairs]`, vérifier les mentions héritées pour Architecture et Editing sans modifier le fichier.
+2. Avec un ancien `[model_pairs]`, vérifier les mentions legacy inactives pour Architecture et Editing sans modifier le fichier ni le routage du chat.
 3. Choisir des modèles explicites pour Review et Research, sauvegarder, fermer puis rouvrir le panneau.
 4. Vérifier dans `~/.codebuddy/config.toml` que `[task_models]` contient les choix et que `[model_pairs]` ainsi que les autres sections sont intactes.
 5. Lancer de nouveaux tours représentatifs (revue de code, recherche, édition) et contrôler dans les journaux/indicateurs de modèle que le modèle attendu est sélectionné, puis que le modèle de session est restauré après chaque tour.
-6. Effacer une association, sauvegarder et vérifier que cette tâche affiche et utilise de nouveau son repli historique ou le modèle par défaut.
+6. Effacer une association, sauvegarder et vérifier que cette tâche affiche et utilise de nouveau le modèle par défaut.
 7. Ouvrir DevTools avec `Ctrl+Shift+I` et confirmer l'absence d'erreur renderer ou IPC pendant tout le parcours.
 
 ## Inventaire des blocs

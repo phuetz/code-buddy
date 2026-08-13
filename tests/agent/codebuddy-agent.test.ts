@@ -1104,6 +1104,27 @@ describe('CodeBuddyAgent', () => {
       expect((agent as any).useModelRouting).toBe(false);
     });
 
+    it('keeps merge-base model_pairs config dormant in the main chat loop', async () => {
+      agent = new CodeBuddyAgent('test-api-key');
+      await agent.systemPromptReady;
+      (agent as any).routingFacade.getTaskModelConfig = () => ({
+        model_pairs: {
+          architect: 'legacy-architect',
+          editor: 'legacy-editor',
+        },
+      });
+      const route = jest.spyOn((agent as any).modelRouter, 'route');
+      mockGetCurrentModel.mockReset().mockReturnValue('merge-base-default');
+      mockSetModel.mockReset();
+
+      for await (const _ of agent.processUserMessageStream('Implement the cache adapter')) { /* consume */ }
+      for await (const _ of agent.processUserMessageStream('Design the cache architecture')) { /* consume */ }
+
+      expect(mockSetModel).not.toHaveBeenCalled();
+      expect(route).not.toHaveBeenCalled();
+      expect((agent as any).useModelRouting).toBe(false);
+    });
+
     it('should call modelRouter.route when routing is enabled', async () => {
       agent = new CodeBuddyAgent('test-api-key');
       await agent.systemPromptReady;

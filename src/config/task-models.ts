@@ -1,10 +1,11 @@
 /**
  * Per-task model configuration and persistence helpers.
  *
- * `[task_models]` is the generalized successor to `[model_pairs]`. The latter
- * remains a supported compatibility layer: `architect` maps to the
- * `architect` task and `editor` maps to `edit`. Explicit task mappings always
- * win, and an absent map is a strict no-op for the routing layer.
+ * `[task_models]` is the generalized successor to `[model_pairs]`. Legacy
+ * pairs can still be inspected and explicitly opted into by integrations, but
+ * merely having `[model_pairs]` in config must not change main-chat routing.
+ * This preserves the pre-`[task_models]` behaviour where that TOML section was
+ * parsed but never wired into production turns.
  */
 
 import {
@@ -62,6 +63,11 @@ export interface TaskModelRoutingConfig {
   model_pairs?: ModelPairsConfig;
 }
 
+export interface TaskModelResolutionOptions {
+  /** Explicit compatibility opt-in. Defaults to false for main-chat safety. */
+  includeLegacyModelPairs?: boolean;
+}
+
 export interface ActiveTaskModel {
   /** Model ID sent to the provider. */
   id: string;
@@ -77,9 +83,9 @@ export interface TaskModelSettings {
   taskTypes: Array<(typeof TASK_MODEL_DEFINITIONS)[number]>;
   /** Explicit values from the new `[task_models]` section. */
   mappings: TaskModelsConfig;
-  /** Compatibility values inherited from `[model_pairs]`. */
+  /** Legacy values retained for display or an explicit integration opt-in. */
   legacyMappings: TaskModelsConfig;
-  /** New values overlaid on the compatibility values. */
+  /** Values that affect main-chat turns by default. */
   effectiveMappings: TaskModelsConfig;
   models: ActiveTaskModel[];
 }
@@ -116,9 +122,14 @@ export function legacyModelPairsToTaskModels(pairs: ModelPairsConfig | null | un
   return mapped;
 }
 
-export function getEffectiveTaskModels(config: TaskModelRoutingConfig | null | undefined): TaskModelsConfig {
+export function getEffectiveTaskModels(
+  config: TaskModelRoutingConfig | null | undefined,
+  options: TaskModelResolutionOptions = {},
+): TaskModelsConfig {
   return {
-    ...legacyModelPairsToTaskModels(config?.model_pairs),
+    ...(options.includeLegacyModelPairs
+      ? legacyModelPairsToTaskModels(config?.model_pairs)
+      : {}),
     ...normalizeTaskModels(config?.task_models),
   };
 }
@@ -126,8 +137,9 @@ export function getEffectiveTaskModels(config: TaskModelRoutingConfig | null | u
 export function resolveConfiguredTaskModel(
   config: TaskModelRoutingConfig | null | undefined,
   taskType: TaskType,
+  options: TaskModelResolutionOptions = {},
 ): string | null {
-  return getEffectiveTaskModels(config)[taskType] ?? null;
+  return getEffectiveTaskModels(config, options)[taskType] ?? null;
 }
 
 function escapeTomlString(value: string): string {

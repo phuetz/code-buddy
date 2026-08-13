@@ -1,7 +1,7 @@
 /**
  * `taskModels.*` IPC — editable `[task_models]` settings backed directly by
  * the root core. No HTTP bridge is involved; the core module owns validation,
- * model discovery, compatibility with `[model_pairs]`, and atomic persistence.
+ * model discovery, visibility of dormant `[model_pairs]`, and atomic persistence.
  * Every handler is never-throw for Electron main-process safety.
  */
 

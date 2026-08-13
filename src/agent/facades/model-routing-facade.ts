@@ -324,9 +324,11 @@ export class ModelRoutingFacade {
     return this.readTaskModelConfig().task_models ?? null;
   }
 
-  /** Return the effective map after applying legacy model-pair compatibility. */
+  /** Return the map used by turns; legacy pairs require an explicit runtime opt-in. */
   getEffectiveTaskModels(): TaskModelsConfig {
-    return buildEffectiveTaskModels(this.getConfiguredRoutingConfig());
+    return buildEffectiveTaskModels(this.getConfiguredRoutingConfig(), {
+      includeLegacyModelPairs: this.modelPairsOverride !== undefined,
+    });
   }
 
   private readTaskModelConfig(): TaskModelRoutingConfig {
@@ -355,7 +357,11 @@ export class ModelRoutingFacade {
   /** Resolve only explicit task config (plus `/switch`), never auto-routing. */
   resolveConfiguredModelForTask(taskType: TaskType): string | null {
     if (this.switchedModel) return this.switchedModel;
-    return resolveConfiguredTaskModel(this.getConfiguredRoutingConfig(), taskType);
+    return resolveConfiguredTaskModel(this.getConfiguredRoutingConfig(), taskType, {
+      // `setModelPairs(...)` is the historical explicit opt-in. A pair merely
+      // loaded from TOML was dormant before task_models existed and stays so.
+      includeLegacyModelPairs: this.modelPairsOverride !== undefined,
+    });
   }
 
   /** Resolve task config first, then optional complexity-based auto-routing. */
@@ -371,7 +377,7 @@ export class ModelRoutingFacade {
    *
    * Priority:
    * 1. Mid-conversation /switch override (if set)
-   * 2. Explicit task map, then architect/editor compatibility routing
+   * 2. Explicit task map, then explicitly opted-in architect/editor routing
    * 3. Auto-routing by complexity (if enabled)
    * 4. Default model (null — caller uses their default)
    */

@@ -199,8 +199,8 @@ Main config file: `.codebuddy/config.toml`
 architect = "claude-sonnet-4"
 editor = "grok-code-fast-1"
 
-# Generalized per-task routing. These values take precedence over model_pairs;
-# omitted task types continue to inherit the legacy pair or the default model.
+# Generalized main-chat routing. model_pairs remains dormant unless an
+# integration explicitly opts into it; omitted task types use the default model.
 [task_models]
 architect = "claude-sonnet-4"
 edit = "grok-code-fast-1"

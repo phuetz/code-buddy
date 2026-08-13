@@ -135,7 +135,7 @@ export function TaskModelsPanel() {
           {settings?.taskTypes.map((task) => {
             const explicit = draft[task.type] ?? '';
             const legacy = settings.legacyMappings[task.type];
-            const fallback = legacy ?? settings.defaultModel;
+            const fallback = settings.defaultModel;
             const unavailable = explicit && !activeModelIds.has(explicit) ? explicit : null;
             return (
               <section
@@ -181,7 +181,7 @@ export function TaskModelsPanel() {
                   {explicit
                     ? `Explicit [task_models]: ${explicit}`
                     : legacy
-                      ? `Inherited [model_pairs]: ${legacy}`
+                      ? `Legacy [model_pairs] (inactive for main chat): ${legacy}`
                       : `Inherited default: ${settings.defaultModel}`}
                 </div>
               </section>
@@ -202,7 +202,7 @@ export function TaskModelsPanel() {
 
         <footer className="flex items-center justify-between border-t border-border px-4 py-3">
           <span className="text-[10px] text-text-muted">
-            {saved ? 'Saved. New turns use the updated map.' : 'Legacy model_pairs remains untouched.'}
+            {saved ? 'Saved. New turns use the updated map.' : 'Legacy model_pairs remains untouched and inactive.'}
           </span>
           <button
             type="button"

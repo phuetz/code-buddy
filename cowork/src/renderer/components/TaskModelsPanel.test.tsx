@@ -17,11 +17,7 @@ const settings: TaskModelSettingsView = {
   ],
   mappings: { review: 'review-v1' },
   legacyMappings: { architect: 'legacy-thinker', edit: 'legacy-editor' },
-  effectiveMappings: {
-    architect: 'legacy-thinker',
-    edit: 'legacy-editor',
-    review: 'review-v1',
-  },
+  effectiveMappings: { review: 'review-v1' },
   models: [
     { id: 'review-v1', key: 'review', provider: 'openai', label: 'Review model' },
     { id: 'research-v1', key: 'research', provider: 'google', label: 'Research model' },
@@ -55,7 +51,7 @@ describe('TaskModelsPanel', () => {
     vi.restoreAllMocks();
   });
 
-  it('shows legacy/default fallback and saves explicit active-model choices', async () => {
+  it('shows dormant legacy values and saves explicit active-model choices', async () => {
     const api = makeApi();
     (window as unknown as { electronAPI: { taskModels: typeof api } }).electronAPI = {
       taskModels: api,
@@ -63,7 +59,7 @@ describe('TaskModelsPanel', () => {
     render(<TaskModelsPanel />);
 
     expect(await screen.findByText('Models by task type')).toBeTruthy();
-    expect(screen.getByText('Inherited [model_pairs]: legacy-thinker')).toBeTruthy();
+    expect(screen.getByText('Legacy [model_pairs] (inactive for main chat): legacy-thinker')).toBeTruthy();
     fireEvent.change(screen.getByTestId('task-model-select-research'), {
       target: { value: 'research-v1' },
     });

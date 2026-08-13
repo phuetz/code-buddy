@@ -198,9 +198,9 @@ buddy --model grok-code-fast-1
 /switch auto                 # Revert to default
 ```
 
-## Model Pairs (Architect/Editor)
+## Model Pairs (Architect/Editor, legacy)
 
-Split planning and editing across models via TOML config:
+The legacy section is still parsed and shown for compatibility:
 
 ```toml
 [model_pairs]
@@ -208,11 +208,12 @@ architect = "claude-sonnet-4"
 editor = "grok-code-fast-1"
 ```
 
-Planning tasks route to `architect`, code editing routes to `editor`.
+It does not change main-chat routing by itself. This matches its historical
+behaviour before generalized task routing was connected. Integrations that call
+`setModelPairs(...)` explicitly still opt into architect/editor routing.
 
-For additional task categories, use the generalized map. Explicit entries take
-precedence over `[model_pairs]`; missing entries still fall back to the legacy
-pair and then to the default model.
+Use the generalized map for main-chat routing. Missing entries fall back to the
+default model.
 
 ```toml
 [task_models]
