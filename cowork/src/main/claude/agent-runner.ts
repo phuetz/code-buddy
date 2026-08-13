@@ -508,7 +508,6 @@ export class ClaudeAgentRunner {
   ) => Promise<string | null>;
   private pathResolver: PathResolver;
   private mcpManager?: MCPManager;
-  // @ts-expect-error stored for future plugin support
   private _pluginRuntimeService?: PluginRuntimeService;
   private _skillsAdapter?: SkillsAdapter;
   private activeControllers: Map<string, AbortController> = new Map();
