@@ -248,7 +248,7 @@ export function readTaskModelSettings(configPath?: string): TaskModelSettings {
   const raw = readRawConfig(path);
   const effective = configPath
     ? mergeForSettings(raw)
-    : getConfigManager().reload();
+    : getConfigManager().getConfig();
   const mappings = normalizeTaskModels(raw.task_models);
   const legacyMappings = legacyModelPairsToTaskModels(effective.model_pairs);
   const effectiveMappings = getEffectiveTaskModels(effective);

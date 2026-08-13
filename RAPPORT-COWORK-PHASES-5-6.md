@@ -44,7 +44,7 @@ Base : `origin/main` (`f9a31a7e`)
 
 ### Livraison Cowork
 
-- Nouveau namespace IPC `taskModels.get/save`, chargé en processus depuis le noyau et intégralement `never-throw`.
+- Nouveau namespace IPC `taskModels.get/save`, chargé en processus depuis le noyau et intégralement `never-throw`. Le GET lit l’état runtime courant sans recharger le singleton global ; seul le chemin post-sauvegarde recharge les fichiers.
 - Nouveau panneau « Modèles par type de tâche » : cinq sélecteurs limités aux modèles actifs, affichage du repli effectif (défaut ou `model_pairs`), signalement des modèles devenus indisponibles et sauvegarde à chaud.
 - Accès depuis Labs, le centre de commande avancé, la navigation classique et la palette de commandes.
 

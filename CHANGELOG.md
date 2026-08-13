@@ -33,6 +33,7 @@ Index: [`docs/cb2/README.md`](docs/cb2/README.md).
 
 ### Bug Fixes
 
+* **cowork:** make the task-model settings GET side-effect free so opening the panel cannot discard an applied profile or in-memory config mutation.
 * **cowork:** make the encrypted channel vault authoritative, migrate legacy plaintext credentials on save, and ensure rotations or clears cannot silently keep using an old token.
 * **routing:** keep legacy `[model_pairs]` dormant in the main chat unless an integration explicitly opts in; only `[task_models]` changes per-task routing by default.
 * **sensory:** sanitize text before TTS — mute leaked model tokens and foreign-script (CJK) garbage the voice can't pronounce; fix 5 real bugs in the voice/vision loop (respond-decider tier order, multi-word name matching, `resolveVoiceModel` fallback, permanent-deafness guard, prototype-chain guard).
