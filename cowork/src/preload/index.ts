@@ -90,6 +90,10 @@ import type {
 import type { VoiceBackgroundMissionInput } from '../shared/voice-background-mission';
 import type { LiveLauncherRunView, LiveLauncherStartInput } from '../shared/live-launcher-types';
 import type {
+  TaskModelSaveMappings,
+  TaskModelSettingsResult,
+} from '../shared/task-models-types';
+import type {
   GpuMediaAdminApi,
   GpuMediaAdminSubmitInput,
   GpuMediaDownloadResult,
@@ -5243,9 +5247,19 @@ contextBridge.exposeInMainWorld('electronAPI', {
     import: (profile: unknown) => ipcRenderer.invoke('profiles.import', profile),
   },
 
-  // Per-channel connection status (read-only) + Phase-5 config surface. Secrets
-  // are write-only: `setSecret` never echoes the token and `listConfig` reports
-  // `hasSecret` only — the value never crosses back to the renderer.
+  // Generalized `[task_models]` settings. Validation and persistence stay in
+  // the root core and are invoked in-process by the main IPC bridge.
+  taskModels: {
+    get: (opts?: { configPath?: string }): Promise<TaskModelSettingsResult> =>
+      ipcRenderer.invoke('taskModels.get', opts),
+    save: (
+      mappings: TaskModelSaveMappings,
+      opts?: { configPath?: string },
+    ): Promise<TaskModelSettingsResult> => ipcRenderer.invoke('taskModels.save', mappings, opts),
+  },
+
+  // Per-channel connection status + Phase-5 config surface. Secrets are
+  // write-only: setters never echo values and listConfig reports presence only.
   channels: {
     status: () => ipcRenderer.invoke('channels.status'),
     listConfig: (opts?: { configPath?: string }) => ipcRenderer.invoke('channels.listConfig', opts),
@@ -9407,6 +9421,13 @@ declare global {
           profiles?: Array<{ name: string; active: boolean }>;
           active?: string | null;
         }>;
+      };
+      taskModels: {
+        get: (opts?: { configPath?: string }) => Promise<TaskModelSettingsResult>;
+        save: (
+          mappings: TaskModelSaveMappings,
+          opts?: { configPath?: string }
+        ) => Promise<TaskModelSettingsResult>;
       };
       channels: {
         status: () => Promise<{

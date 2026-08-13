@@ -46,6 +46,7 @@ export const CAPABILITY_COMMANDS: CapabilityCommand[] = [
   { id: 'cap-tests', label: 'Test runner', description: 'Run the test suite', run: (s) => s.setShowTestRunner(true) },
   { id: 'cap-companion', label: 'Companion', description: 'Voice, presence, persona', run: (s) => s.setShowCompanionPanel(true) },
   { id: 'cap-channels', label: 'Delivery channels', description: 'Telegram, Discord, Slack…', run: (s) => s.setShowChannelsPanel(true) },
+  { id: 'cap-task-models', label: 'Models by task type', description: 'Architecture, edit, review, research and chat routing', run: (s) => s.setShowTaskModelsPanel(true) },
   { id: 'cap-mobile', label: 'Mobile supervision', description: 'Supervise from your phone', run: (s) => s.setShowMobileSupervisionPanel(true) },
   { id: 'cap-devices', label: 'Paired devices', description: 'Manage device nodes', run: (s) => s.setShowDevicePanel(true) },
   { id: 'cap-personas', label: 'Personas', description: 'Switch the active persona', run: (s) => s.setShowPersonaSwitcher(true) },

@@ -35,6 +35,7 @@ describe('CAPABILITY_COMMANDS', () => {
       'cap-research',
       'cap-companion',
       'cap-channels',
+      'cap-task-models',
       'cap-devices',
       'cap-global-search',
     ];

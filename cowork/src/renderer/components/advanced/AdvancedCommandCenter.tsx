@@ -53,6 +53,7 @@ type FeaturePanel =
   | 'skills'
   | 'companion'
   | 'channels'
+  | 'task-models'
   | 'autonomy'
   | 'tests'
   | 'insights'
@@ -153,6 +154,15 @@ const FEATURES: readonly FeatureDefinition[] = [
     group: 'Pilotage',
     icon: Network,
     panel: 'channels',
+  },
+  {
+    id: 'task-models',
+    label: 'Modèles par tâche',
+    description: 'Router architecture, édition, revue, recherche et chat vers un modèle actif.',
+    command: '[task_models]',
+    group: 'Pilotage',
+    icon: Brain,
+    panel: 'task-models',
   },
   {
     id: 'autonomy',
@@ -351,6 +361,9 @@ function openPanel(panel: FeaturePanel): void {
       return;
     case 'channels':
       store.setShowChannelsPanel(true);
+      return;
+    case 'task-models':
+      store.setShowTaskModelsPanel(true);
       return;
     case 'autonomy':
       store.setShowAutonomyPanel(true);

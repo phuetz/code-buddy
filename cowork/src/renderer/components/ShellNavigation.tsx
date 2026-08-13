@@ -119,6 +119,8 @@ export function ShellNavigation() {
   const setShowDevicePanel = useAppStore((s) => s.setShowDevicePanel);
   const showChannelsPanel = useAppStore((s) => s.showChannelsPanel);
   const setShowChannelsPanel = useAppStore((s) => s.setShowChannelsPanel);
+  const showTaskModelsPanel = useAppStore((s) => s.showTaskModelsPanel);
+  const setShowTaskModelsPanel = useAppStore((s) => s.setShowTaskModelsPanel);
   const setShowCompanionPanel = useAppStore((s) => s.setShowCompanionPanel);
   const setShowBookmarksPanel = useAppStore((s) => s.setShowBookmarksPanel);
   const setShowActivityFeed = useAppStore((s) => s.setShowActivityFeed);
@@ -311,6 +313,14 @@ export function ShellNavigation() {
           active: showChannelsPanel,
           onClick: () => setShowChannelsPanel(true),
           testId: 'channels-button',
+        },
+        {
+          id: 'task-models',
+          label: t('taskModels.title', 'Models by task type'),
+          icon: Cpu,
+          active: showTaskModelsPanel,
+          onClick: () => setShowTaskModelsPanel(true),
+          testId: 'task-models-button',
         },
         {
           id: 'mobile-supervision',

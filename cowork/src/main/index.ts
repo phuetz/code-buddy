@@ -53,6 +53,7 @@ import { registerMobileSupervisionIpcHandlers } from './ipc/mobile-supervision-i
 import { registerIdentityIpcHandlers } from './ipc/identity-ipc';
 import { registerDeviceIpcHandlers } from './ipc/device-ipc';
 import { registerChannelsIpcHandlers } from './ipc/channels-ipc';
+import { registerTaskModelsIpcHandlers } from './ipc/task-models-ipc';
 // App Studio (bolt.diy-style) main-process IPC + services.
 import { registerDevServerIpc } from './studio/dev-server-ipc';
 import { StudioDevServer } from './studio/dev-server-service';
@@ -2654,6 +2655,7 @@ registerIdentityIpcHandlers(() => projectManager);
 registerDeviceIpcHandlers();
 registerChannelsIpcHandlers();
 registerPairingIpcHandlers();
+registerTaskModelsIpcHandlers();
 registerMobileSupervisionIpcHandlers();
 registerCompanionIpcHandlers(() => projectManager);
 registerMaisonIpcHandlers();

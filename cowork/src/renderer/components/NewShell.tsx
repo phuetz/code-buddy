@@ -184,6 +184,50 @@ const THEME_OPTIONS = [
   { value: 'anthropic', label: 'Anthropic', glyph: '🟠' },
 ] as const;
 
+/** Labs launchers backed by live core bridges, above the component gallery. */
+function LabsView() {
+  const setShowChannelsPanel = useAppStore((state) => state.setShowChannelsPanel);
+  const setShowTaskModelsPanel = useAppStore((state) => state.setShowTaskModelsPanel);
+
+  return (
+    <div className="flex h-full min-h-0 flex-col" data-testid="labs-view">
+      <section className="shrink-0 border-b border-border bg-background px-6 py-4">
+        <h2 className="text-sm font-semibold">Labs configurables</h2>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Surfaces expérimentales reliées en direct au noyau Code Buddy.
+        </p>
+        <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
+          <button
+            type="button"
+            onClick={() => setShowTaskModelsPanel(true)}
+            data-testid="labs-open-task-models"
+            className="rounded-lg border border-border bg-background-secondary p-3 text-left transition-colors hover:bg-accent"
+          >
+            <div className="text-sm font-medium">🧠 Modèles par type de tâche</div>
+            <div className="mt-1 text-xs text-muted-foreground">
+              Choisir les modèles architecture, édition, revue, recherche et chat.
+            </div>
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowChannelsPanel(true)}
+            data-testid="labs-open-channels"
+            className="rounded-lg border border-border bg-background-secondary p-3 text-left transition-colors hover:bg-accent"
+          >
+            <div className="text-sm font-medium">📡 Canaux et appairage DM</div>
+            <div className="mt-1 text-xs text-muted-foreground">
+              Configurer les transports, secrets et autorisations de messages directs.
+            </div>
+          </button>
+        </div>
+      </section>
+      <div className="min-h-0 flex-1">
+        <LabsGallery />
+      </div>
+    </div>
+  );
+}
+
 function themeGlyph(theme: string): string {
   return THEME_OPTIONS.find((option) => option.value === theme)?.glyph ?? '🎨';
 }
@@ -557,7 +601,7 @@ export function NewShell() {
           {primaryView === 'library' && <MediaLibraryView />}
           {primaryView === 'capabilities' && <CapabilitiesView />}
           {primaryView === 'os' && <MissionControlView />}
-          {primaryView === 'labs' && <LabsGallery />}
+          {primaryView === 'labs' && <LabsView />}
           {primaryView === 'advanced' && <AdvancedCommandCenter />}
         </Suspense>
       </div>

@@ -69,6 +69,7 @@ import { MobileSupervisionPanel } from './components/MobileSupervisionPanel';
 import { IdentityPanel } from './components/IdentityPanel';
 import { DevicePanel } from './components/DevicePanel';
 import { ChannelsPanel } from './components/ChannelsPanel';
+import { TaskModelsPanel } from './components/TaskModelsPanel';
 // CompanionPanel is lazy loaded below
 import { MissionBoardPanel } from './components/MissionBoardPanel';
 import { DesktopSnapshotPanel } from './components/DesktopSnapshotPanel';
@@ -788,6 +789,7 @@ function App() {
       <IdentityPanel />
       <DevicePanel />
       <ChannelsPanel />
+      <TaskModelsPanel />
       <CompanionWrapper />
 
       {/* OpenClaw migration dialog — Hermes claw parity (dry-run by default) */}

@@ -544,6 +544,7 @@ export interface AppState {
   showIdentityPanel: boolean;
   showDevicePanel: boolean;
   showChannelsPanel: boolean;
+  showTaskModelsPanel: boolean;
   showLessonsGraph: boolean;
   showCompanionPanel: boolean;
 
@@ -856,6 +857,7 @@ export interface AppState {
   setShowIdentityPanel: (show: boolean) => void;
   setShowDevicePanel: (show: boolean) => void;
   setShowChannelsPanel: (show: boolean) => void;
+  setShowTaskModelsPanel: (show: boolean) => void;
   setShowLessonsGraph: (show: boolean) => void;
   setShowCompanionPanel: (show: boolean) => void;
   showHelpDocs: boolean;
@@ -1101,6 +1103,7 @@ export const useAppStore = create<AppState>((set) => ({
   showIdentityPanel: false,
   showDevicePanel: false,
   showChannelsPanel: false,
+  showTaskModelsPanel: false,
   showLessonsGraph: false,
   showCompanionPanel: false,
   showHelpDocs: false,
@@ -2297,6 +2300,7 @@ export const useAppStore = create<AppState>((set) => ({
   setShowIdentityPanel: (show) => set({ showIdentityPanel: show }),
   setShowDevicePanel: (show) => set({ showDevicePanel: show }),
   setShowChannelsPanel: (show) => set({ showChannelsPanel: show }),
+  setShowTaskModelsPanel: (show) => set({ showTaskModelsPanel: show }),
   setShowLessonsGraph: (show) => set({ showLessonsGraph: show }),
   setShowCompanionPanel: (show) => set({ showCompanionPanel: show }),
   setShowHelpDocs: (show) => set({ showHelpDocs: show }),
