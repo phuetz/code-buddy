@@ -31,8 +31,8 @@ import { getCredentialManager } from '../security/credential-manager.js';
  * token under (`cowork/src/main/ipc/channels-ipc.ts` → `channelSecretKey`).
  * Kept in one place so both sides can't drift.
  */
-export function channelSecretKey(type: string): string {
-  return `channel:${type}:token`;
+export function channelSecretKey(type: string, name = 'token'): string {
+  return `channel:${type}:${name}`;
 }
 
 /** The minimal shape `resolveChannelSecret` reads from a channel config. */
@@ -71,5 +71,38 @@ export function resolveChannelSecret(
   }
 
   // 3. No token — channel stays unauthenticated (unchanged legacy behavior).
+  return undefined;
+}
+
+/**
+ * Resolve a channel-specific secret stored in the encrypted credential vault.
+ *
+ * Primary credentials (for example `appPassword` on Teams) historically used
+ * the generic `channel:<type>:token` key, so callers can opt into that fallback
+ * while secondary credentials remain isolated under their own name. Literal
+ * values keep precedence for complete backwards compatibility with hand-written
+ * `channels.json` files.
+ */
+export function resolveChannelNamedSecret(
+  type: string,
+  name: string,
+  literal?: unknown,
+  fallbackToPrimary = false,
+): string | undefined {
+  if (typeof literal === 'string' && literal) return literal;
+
+  try {
+    const credentials = getCredentialManager();
+    const named = credentials.getCredential(channelSecretKey(type, name));
+    if (named) return named;
+    if (fallbackToPrimary && name !== 'token') {
+      const primary = credentials.getCredential(channelSecretKey(type));
+      if (primary) return primary;
+    }
+  } catch {
+    // Never throw or log a secret-resolution failure. The channel constructor
+    // will surface a missing required credential through its normal validation.
+  }
+
   return undefined;
 }

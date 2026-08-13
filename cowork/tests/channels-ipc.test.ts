@@ -44,6 +44,9 @@ const fakes = vi.hoisted(() => {
 
 vi.mock('../src/main/utils/core-loader', () => ({
   loadCoreModule: vi.fn(async (rel: string) => {
+    if (rel === 'channels/channel-config-schema.js') {
+      return vi.importActual('../../src/channels/channel-config-schema.js');
+    }
     if (rel === 'security/credential-manager.js') return { getCredentialManager: () => fakes.credMgr };
     if (rel === 'channels/dm-pairing.js') return { getDMPairing: () => fakes.pairingMgr };
     // channels/core.js + commands/handlers/channel-handlers.js (readiness bridge) → unavailable → empty runtime.
@@ -110,10 +113,12 @@ describe('channels config IPC', () => {
     expect(res.ok).toBe(true);
     expect(res.channels).toEqual([]);
     expect(res.catalog.some((c) => c.type === 'telegram')).toBe(true);
+    expect(res.catalog.some((c) => c.type === 'feishu')).toBe(true);
   });
 
   it('adds + enables a channel, persisting only non-secret fields to channels.json', async () => {
     expect(((await call('channels.setConfig', {}, 'telegram', { enabled: false }, opts())) as { ok: boolean }).ok).toBe(true);
+    await call('channels.setSecret', {}, 'telegram', 'token', SECRET);
     expect(((await call('channels.setEnabled', {}, 'telegram', true, opts())) as { ok: boolean }).ok).toBe(true);
 
     const onDisk = JSON.parse(readFileSync(configPath, 'utf8')) as { channels: Array<{ type: string; enabled: boolean }> };
@@ -121,20 +126,67 @@ describe('channels config IPC', () => {
     expect(onDisk.channels[0]).toMatchObject({ type: 'telegram', enabled: true });
 
     const res = (await call('channels.listConfig', {}, opts())) as { channels: Array<{ type: string; enabled: boolean; hasSecret: boolean }> };
-    expect(res.channels[0]).toMatchObject({ type: 'telegram', enabled: true, hasSecret: false });
+    expect(res.channels[0]).toMatchObject({
+      type: 'telegram',
+      enabled: true,
+      hasSecret: true,
+      hasSecrets: { token: true },
+    });
   });
 
   it('strips a token slipped into setConfig — a secret can never land in channels.json', async () => {
-    await call('channels.setConfig', {}, 'telegram', { enabled: true, token: SECRET, webhookUrl: 'https://example.com/hook' }, opts());
+    await call('channels.setConfig', {}, 'telegram', { enabled: false, token: SECRET, webhookUrl: 'https://example.com/hook' }, opts());
     const raw = readFileSync(configPath, 'utf8');
     expect(raw).not.toContain(SECRET);
     const onDisk = JSON.parse(raw) as { channels: Array<Record<string, unknown>> };
     expect(onDisk.channels[0]).not.toHaveProperty('token');
-    expect(onDisk.channels[0]).toMatchObject({ type: 'telegram', enabled: true, webhookUrl: 'https://example.com/hook' });
+    expect(onDisk.channels[0]).toMatchObject({ type: 'telegram', enabled: false, webhookUrl: 'https://example.com/hook' });
+  });
+
+  it('validates and persists channel-specific non-secret options', async () => {
+    const saved = (await call('channels.setConfig', {}, 'matrix', {
+      enabled: false,
+      allowedUsers: [' alice ', 'alice'],
+      options: {
+        homeserverUrl: 'https://matrix.example',
+        userId: '@buddy:matrix.example',
+        autoJoin: true,
+        accessToken: SECRET,
+      },
+    }, opts())) as { ok: boolean };
+    expect(saved.ok).toBe(true);
+
+    const raw = readFileSync(configPath, 'utf8');
+    expect(raw).not.toContain(SECRET);
+    expect(JSON.parse(raw).channels[0]).toMatchObject({
+      type: 'matrix',
+      enabled: false,
+      allowedUsers: ['alice'],
+      options: {
+        homeserverUrl: 'https://matrix.example',
+        userId: '@buddy:matrix.example',
+        autoJoin: true,
+      },
+    });
+  });
+
+  it('refuses to enable an incomplete channel before writing it', async () => {
+    await call('channels.setConfig', {}, 'matrix', {
+      enabled: false,
+      options: { homeserverUrl: 'https://matrix.example' },
+    }, opts());
+    const before = readFileSync(configPath, 'utf8');
+    const result = (await call('channels.setEnabled', {}, 'matrix', true, opts())) as {
+      ok: boolean;
+      error?: string;
+    };
+    expect(result.ok).toBe(false);
+    expect(result.error).toContain('User ID is required');
+    expect(readFileSync(configPath, 'utf8')).toBe(before);
   });
 
   it('SECURITY: setSecret stores the token in the encrypted store and it NEVER comes back via listConfig / disk / logs', async () => {
-    await call('channels.setConfig', {}, 'telegram', { enabled: true }, opts());
+    await call('channels.setConfig', {}, 'telegram', { enabled: false }, opts());
     const setRes = (await call('channels.setSecret', {}, 'telegram', SECRET)) as { ok: boolean; error?: string; [k: string]: unknown };
     expect(setRes.ok).toBe(true);
     // The return value carries NO secret.
@@ -155,7 +207,7 @@ describe('channels config IPC', () => {
   });
 
   it('deleteSecret / removeChannel clear the stored secret', async () => {
-    await call('channels.setConfig', {}, 'telegram', { enabled: true }, opts());
+    await call('channels.setConfig', {}, 'telegram', { enabled: false }, opts());
     await call('channels.setSecret', {}, 'telegram', SECRET);
     expect(fakes.store.has('channel:telegram:token')).toBe(true);
 
@@ -169,6 +221,21 @@ describe('channels config IPC', () => {
     expect(fakes.store.has('channel:telegram:token')).toBe(false);
     const onDisk = JSON.parse(readFileSync(configPath, 'utf8')) as { channels: unknown[] };
     expect(onDisk.channels).toEqual([]);
+  });
+
+  it('stores secondary secrets under distinct encrypted-vault keys', async () => {
+    await call('channels.setConfig', {}, 'slack', { enabled: false }, opts());
+    await call('channels.setSecret', {}, 'slack', 'token', 'xoxb-secret');
+    await call('channels.setSecret', {}, 'slack', 'appToken', 'xapp-secret');
+
+    expect(fakes.store.get('channel:slack:token')).toBe('xoxb-secret');
+    expect(fakes.store.get('channel:slack:appToken')).toBe('xapp-secret');
+    const listed = (await call('channels.listConfig', {}, opts())) as {
+      channels: Array<{ hasSecrets: Record<string, boolean> }>;
+    };
+    expect(listed.channels[0]?.hasSecrets).toMatchObject({ token: true, appToken: true });
+    expect(JSON.stringify(listed)).not.toContain('xoxb-secret');
+    expect(JSON.stringify(listed)).not.toContain('xapp-secret');
   });
 
   it('never-throws on invalid input (bad type / empty secret / bad patch)', async () => {

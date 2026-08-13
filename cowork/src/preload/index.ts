@@ -5256,14 +5256,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
         webhookUrl?: string;
         allowedUsers?: string[];
         allowedChannels?: string[];
+        options?: Record<string, string | number | boolean | string[]>;
       },
       opts?: { configPath?: string }
     ) => ipcRenderer.invoke('channels.setConfig', type, patch, opts),
     setEnabled: (type: string, enabled: boolean, opts?: { configPath?: string }) =>
       ipcRenderer.invoke('channels.setEnabled', type, enabled, opts),
-    setSecret: (type: string, token: string) =>
-      ipcRenderer.invoke('channels.setSecret', type, token),
-    deleteSecret: (type: string) => ipcRenderer.invoke('channels.deleteSecret', type),
+    setSecret: (type: string, fieldKey: string, secret: string) =>
+      ipcRenderer.invoke('channels.setSecret', type, fieldKey, secret),
+    deleteSecret: (type: string, fieldKey: string) =>
+      ipcRenderer.invoke('channels.deleteSecret', type, fieldKey),
     removeChannel: (type: string, opts?: { configPath?: string }) =>
       ipcRenderer.invoke('channels.removeChannel', type, opts),
   },
@@ -9460,11 +9462,13 @@ declare global {
             enabled: boolean;
             configured: boolean;
             hasSecret: boolean;
+            hasSecrets: Record<string, boolean>;
             hasWebhookUrl: boolean;
             webhookUrl?: string;
             allowedUsers: string[];
             allowedChannels: string[];
             optionKeys: string[];
+            values: Record<string, string | number | boolean | string[]>;
             connected: boolean;
             authenticated: boolean;
             lastActivity?: number;
@@ -9473,9 +9477,19 @@ declare global {
           catalog: Array<{
             type: string;
             label: string;
-            secretLabel: string;
-            needsSecret: boolean;
-            supportsWebhook: boolean;
+            description: string;
+            fields: Array<{
+              key: string;
+              label: string;
+              kind: 'text' | 'url' | 'number' | 'boolean' | 'string-list' | 'select' | 'secret';
+              location: 'root' | 'options';
+              required?: boolean;
+              primarySecret?: boolean;
+              placeholder?: string;
+              choices?: Array<{ value: string; label: string }>;
+              min?: number;
+              max?: number;
+            }>;
           }>;
         }>;
         setConfig: (
@@ -9485,6 +9499,7 @@ declare global {
             webhookUrl?: string;
             allowedUsers?: string[];
             allowedChannels?: string[];
+            options?: Record<string, string | number | boolean | string[]>;
           },
           opts?: { configPath?: string }
         ) => Promise<{ ok: boolean; error?: string }>;
@@ -9493,8 +9508,15 @@ declare global {
           enabled: boolean,
           opts?: { configPath?: string }
         ) => Promise<{ ok: boolean; error?: string }>;
-        setSecret: (type: string, token: string) => Promise<{ ok: boolean; error?: string }>;
-        deleteSecret: (type: string) => Promise<{ ok: boolean; error?: string }>;
+        setSecret: (
+          type: string,
+          fieldKey: string,
+          secret: string
+        ) => Promise<{ ok: boolean; error?: string }>;
+        deleteSecret: (
+          type: string,
+          fieldKey: string
+        ) => Promise<{ ok: boolean; error?: string }>;
         removeChannel: (
           type: string,
           opts?: { configPath?: string }

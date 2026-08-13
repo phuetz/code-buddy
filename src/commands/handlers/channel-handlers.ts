@@ -24,7 +24,10 @@ import {
   __resetSessionModelOverridesForTests,
 } from '../../channels/channel-model-override.js';
 import { logger } from '../../utils/logger.js';
-import { resolveChannelSecret } from '../../channels/resolve-channel-secret.js';
+import {
+  resolveChannelNamedSecret,
+  resolveChannelSecret,
+} from '../../channels/resolve-channel-secret.js';
 import type { ModelEgress } from '../../providers/model-egress.js';
 import {
   getChannelCognitivePort,
@@ -2028,7 +2031,11 @@ export async function instantiateChannel(configEntry: ChannelConfigEntry): Promi
       // TelegramChannel reads `config.token` (client.ts) — pass `token`, not
       // `botToken`, or it throws "Telegram bot token is required" and the
       // channel never starts from channels.json / server intake.
-      return new TelegramChannel({ token: config.token || '', ...opts } as unknown as import('../../channels/index.js').TelegramConfig);
+      return new TelegramChannel({
+        token: config.token || '',
+        ...opts,
+        webhookSecret: resolveChannelNamedSecret('telegram', 'webhookSecret', opts.webhookSecret),
+      } as unknown as import('../../channels/index.js').TelegramConfig);
     }
     case 'discord': {
       const { DiscordChannel } = await import('../../channels/discord/index.js');
@@ -2036,7 +2043,14 @@ export async function instantiateChannel(configEntry: ChannelConfigEntry): Promi
     }
     case 'slack': {
       const { SlackChannel } = await import('../../channels/slack/index.js');
-      return new SlackChannel({ botToken: config.token || '', ...opts } as unknown as import('../../channels/index.js').SlackConfig);
+      return new SlackChannel({
+        ...channelConfig,
+        ...opts,
+        type: 'slack',
+        token: config.token || '',
+        appToken: resolveChannelNamedSecret('slack', 'appToken', opts.appToken),
+        signingSecret: resolveChannelNamedSecret('slack', 'signingSecret', opts.signingSecret),
+      } as import('../../channels/index.js').SlackConfig);
     }
     case 'whatsapp': {
       const { WhatsAppChannel } = await import('../../channels/whatsapp/index.js');
@@ -2086,7 +2100,12 @@ export async function instantiateChannel(configEntry: ChannelConfigEntry): Promi
         type: 'google-chat',
         serviceAccountPath: String(opts.serviceAccountPath ?? ''),
         spaceId: typeof opts.spaceId === 'string' ? opts.spaceId : undefined,
-        verificationToken: typeof opts.verificationToken === 'string' ? opts.verificationToken : undefined,
+        verificationToken: resolveChannelNamedSecret(
+          'google-chat',
+          'verificationToken',
+          opts.verificationToken,
+          true,
+        ),
         projectNumber: typeof opts.projectNumber === 'string' ? opts.projectNumber : undefined,
       } as import('../../channels/index.js').GoogleChatConfig);
     }
@@ -2103,14 +2122,18 @@ export async function instantiateChannel(configEntry: ChannelConfigEntry): Promi
     }
     case 'webchat': {
       const { WebChatChannel } = await import('../../channels/webchat/index.js');
-      return new WebChatChannel({ ...opts } as unknown as import('../../channels/index.js').WebChatConfig);
+      return new WebChatChannel({
+        ...channelConfig,
+        ...opts,
+        authToken: resolveChannelNamedSecret('webchat', 'authToken', opts.authToken, true),
+      } as unknown as import('../../channels/index.js').WebChatConfig);
     }
     case 'dingtalk': {
       const { DingTalkChannel } = await import('../../channels/dingtalk/index.js');
       return new DingTalkChannel({
         ...channelConfig,
         accessToken: typeof opts.accessToken === 'string' ? opts.accessToken : config.token,
-        secret: typeof opts.secret === 'string' ? opts.secret : undefined,
+        secret: resolveChannelNamedSecret('dingtalk', 'secret', opts.secret),
         msgType: opts.msgType === 'markdown' ? 'markdown' : opts.msgType === 'text' ? 'text' : undefined,
         title: typeof opts.title === 'string' ? opts.title : undefined,
         atMobiles: Array.isArray(opts.atMobiles)
@@ -2160,7 +2183,7 @@ export async function instantiateChannel(configEntry: ChannelConfigEntry): Promi
       return new LINEChannel({
         ...channelConfig,
         channelAccessToken: String(opts.channelAccessToken ?? config.token ?? ''),
-        channelSecret: String(opts.channelSecret ?? ''),
+        channelSecret: String(resolveChannelNamedSecret('line', 'channelSecret', opts.channelSecret) ?? ''),
         port: typeof opts.port === 'number' ? opts.port : undefined,
       } as import('../../channels/index.js').LINEChannelConfig);
     }
@@ -2170,6 +2193,9 @@ export async function instantiateChannel(configEntry: ChannelConfigEntry): Promi
         ...channelConfig,
         privateKey: typeof opts.privateKey === 'string' ? opts.privateKey : config.token,
         relays: Array.isArray(opts.relays) ? opts.relays.filter((v): v is string => typeof v === 'string') : [],
+        maxRetries: typeof opts.maxRetries === 'number' ? opts.maxRetries : undefined,
+        reconnectDelayMs: typeof opts.reconnectDelayMs === 'number' ? opts.reconnectDelayMs : undefined,
+        publishTimeoutMs: typeof opts.publishTimeoutMs === 'number' ? opts.publishTimeoutMs : undefined,
       } as import('../../channels/index.js').NostrChannelConfig);
     }
     case 'zalo': {
@@ -2188,6 +2214,8 @@ export async function instantiateChannel(configEntry: ChannelConfigEntry): Promi
         url: String(opts.url ?? ''),
         token: String(config.token ?? opts.token ?? ''),
         teamId: typeof opts.teamId === 'string' ? opts.teamId : undefined,
+        maxRetries: typeof opts.maxRetries === 'number' ? opts.maxRetries : undefined,
+        retryDelay: typeof opts.retryDelay === 'number' ? opts.retryDelay : undefined,
       } as import('../../channels/index.js').MattermostChannelConfig);
     }
     case 'nextcloud-talk': {
@@ -2196,7 +2224,12 @@ export async function instantiateChannel(configEntry: ChannelConfigEntry): Promi
         ...channelConfig,
         url: String(opts.url ?? ''),
         username: String(opts.username ?? ''),
-        password: String(opts.password ?? ''),
+        password: String(resolveChannelNamedSecret('nextcloud-talk', 'password', opts.password, true) ?? ''),
+        bearer: resolveChannelNamedSecret('nextcloud-talk', 'bearer', opts.bearer),
+        roomToken: typeof opts.roomToken === 'string' ? opts.roomToken : undefined,
+        pollTimeoutSecs: typeof opts.pollTimeoutSecs === 'number' ? opts.pollTimeoutSecs : undefined,
+        maxRetries: typeof opts.maxRetries === 'number' ? opts.maxRetries : undefined,
+        retryDelayMs: typeof opts.retryDelayMs === 'number' ? opts.retryDelayMs : undefined,
       } as import('../../channels/index.js').NextcloudTalkChannelConfig);
     }
     case 'twilio-voice': {
@@ -2220,6 +2253,61 @@ export async function instantiateChannel(configEntry: ChannelConfigEntry): Promi
         maxRetries: typeof opts.maxRetries === 'number' ? opts.maxRetries : undefined,
         retryDelay: typeof opts.retryDelay === 'number' ? opts.retryDelay : undefined,
       } as import('../../channels/index.js').IMessageChannelConfig);
+    }
+    case 'irc': {
+      const { IRCChannel } = await import('../../channels/irc/index.js');
+      return new IRCChannel({
+        ...channelConfig,
+        type: 'irc',
+        server: String(opts.server ?? ''),
+        port: typeof opts.port === 'number' ? opts.port : undefined,
+        nick: String(opts.nick ?? ''),
+        username: typeof opts.username === 'string' ? opts.username : undefined,
+        realname: typeof opts.realname === 'string' ? opts.realname : undefined,
+        password: resolveChannelNamedSecret('irc', 'password', opts.password, true),
+        channels: Array.isArray(opts.channels)
+          ? opts.channels.filter((value): value is string => typeof value === 'string')
+          : [],
+        useTLS: typeof opts.useTLS === 'boolean' ? opts.useTLS : undefined,
+        sasl: typeof opts.sasl === 'boolean' ? opts.sasl : undefined,
+        connectTimeoutMs: typeof opts.connectTimeoutMs === 'number' ? opts.connectTimeoutMs : undefined,
+        maxRetries: typeof opts.maxRetries === 'number' ? opts.maxRetries : undefined,
+        retryDelayMs: typeof opts.retryDelayMs === 'number' ? opts.retryDelayMs : undefined,
+      } as import('../../channels/index.js').IRCChannelConfig);
+    }
+    case 'feishu': {
+      const { FeishuChannel } = await import('../../channels/feishu/index.js');
+      return new FeishuChannel({
+        ...channelConfig,
+        type: 'feishu',
+        appId: String(opts.appId ?? ''),
+        appSecret: String(resolveChannelNamedSecret('feishu', 'appSecret', opts.appSecret, true) ?? ''),
+        verificationToken: resolveChannelNamedSecret('feishu', 'verificationToken', opts.verificationToken),
+        encryptKey: resolveChannelNamedSecret('feishu', 'encryptKey', opts.encryptKey),
+        port: typeof opts.port === 'number' ? opts.port : undefined,
+      } as import('../../channels/index.js').FeishuChannelConfig);
+    }
+    case 'synology-chat': {
+      const { SynologyChatChannel } = await import('../../channels/synology-chat/index.js');
+      return new SynologyChatChannel({
+        ...channelConfig,
+        type: 'synology-chat',
+        incomingWebhookUrl: String(
+          resolveChannelNamedSecret(
+            'synology-chat',
+            'incomingWebhookUrl',
+            opts.incomingWebhookUrl,
+            true,
+          ) ?? '',
+        ),
+        outgoingWebhookToken: resolveChannelNamedSecret(
+          'synology-chat',
+          'outgoingWebhookToken',
+          opts.outgoingWebhookToken,
+        ),
+        botName: typeof opts.botName === 'string' ? opts.botName : undefined,
+        port: typeof opts.port === 'number' ? opts.port : undefined,
+      } as import('../../channels/index.js').SynologyChatChannelConfig);
     }
     case 'ntfy': {
       const { NtfyChannel } = await import('../../channels/ntfy/index.js');

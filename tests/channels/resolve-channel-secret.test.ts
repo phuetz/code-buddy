@@ -15,6 +15,7 @@ import * as os from 'os';
 import * as path from 'path';
 import {
   resolveChannelSecret,
+  resolveChannelNamedSecret,
   channelSecretKey,
 } from '../../src/channels/resolve-channel-secret.js';
 import { CredentialManager } from '../../src/security/credential-manager.js';
@@ -54,6 +55,7 @@ describe('resolveChannelSecret / channel token from the encrypted store', () => 
     // Must stay in lockstep with cowork/src/main/ipc/channels-ipc.ts.
     expect(channelSecretKey('telegram')).toBe('channel:telegram:token');
     expect(channelSecretKey('discord')).toBe('channel:discord:token');
+    expect(channelSecretKey('slack', 'appToken')).toBe('channel:slack:appToken');
   });
 
   it('resolves the encrypted token when the config has no literal token', () => {
@@ -81,6 +83,17 @@ describe('resolveChannelSecret / channel token from the encrypted store', () => 
 
   it('returns undefined when neither a literal nor a stored secret exists', () => {
     expect(resolveChannelSecret('telegram', {})).toBeUndefined();
+  });
+
+  it('resolves secondary secrets separately and supports the primary compatibility key', () => {
+    const credentials = CredentialManager.getInstance();
+    credentials.setCredential(channelSecretKey('slack'), STORED_TOKEN);
+    credentials.setCredential(channelSecretKey('slack', 'appToken'), 'xapp-encrypted');
+
+    expect(resolveChannelNamedSecret('slack', 'appToken')).toBe('xapp-encrypted');
+    expect(resolveChannelNamedSecret('slack', 'signingSecret')).toBeUndefined();
+    expect(resolveChannelNamedSecret('slack', 'botToken', undefined, true)).toBe(STORED_TOKEN);
+    expect(resolveChannelNamedSecret('slack', 'appToken', 'literal-xapp')).toBe('literal-xapp');
   });
 
   it('never throws when the CredentialManager blows up (falls back to no token)', () => {
@@ -164,5 +177,40 @@ describe('instantiateChannel wires the resolved token into the channel', () => {
     expect(channel).not.toBeNull();
     expect((channel as unknown as { botId: string }).botId).toBe('987654321');
     await channel?.disconnect();
+  });
+
+  it('passes the encrypted primary credential as SlackConfig.token', async () => {
+    const credentials = CredentialManager.getInstance();
+    credentials.setCredential(channelSecretKey('slack'), 'xoxb-encrypted-token');
+
+    const channel = await instantiateChannel({ type: 'slack', enabled: false });
+
+    expect(channel?.getStatus().type).toBe('slack');
+  });
+
+  it('instantiates the IRC, Feishu and Synology adapters exposed by the full channel catalog', async () => {
+    const credentials = CredentialManager.getInstance();
+    credentials.setCredential(channelSecretKey('feishu'), 'feishu-secret');
+    credentials.setCredential(channelSecretKey('synology-chat'), 'https://chat.example/incoming/token');
+
+    const irc = await instantiateChannel({
+      type: 'irc',
+      enabled: false,
+      options: { server: 'irc.example', nick: 'buddy', channels: ['#codebuddy'] },
+    });
+    const feishu = await instantiateChannel({
+      type: 'feishu',
+      enabled: false,
+      options: { appId: 'cli_demo' },
+    });
+    const synology = await instantiateChannel({
+      type: 'synology-chat',
+      enabled: false,
+      options: {},
+    });
+
+    expect(irc?.getStatus().type).toBe('irc');
+    expect(feishu?.getStatus().type).toBe('feishu');
+    expect(synology?.getStatus().type).toBe('synology-chat');
   });
 });

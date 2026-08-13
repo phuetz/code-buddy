@@ -1,4 +1,5 @@
 export * from './core.js';
+export * from './channel-config-schema.js';
 
 // Telegram
 export { TelegramChannel } from './telegram/index.js';

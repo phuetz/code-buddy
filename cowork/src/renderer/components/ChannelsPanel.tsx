@@ -3,11 +3,9 @@
  *
  *  - **Status** (read-only): the core ChannelManager's per-channel runtime
  *    connection status (`channels.status`). Unchanged from the original panel.
- *  - **Configure**: add / enable / disable a channel and set its secret. The
- *    non-secret config lands in `~/.codebuddy/channels.json`; the token is
- *    stored in the core's ENCRYPTED secret store via `channels.setSecret`. The
- *    secret field is MASKED and WRITE-ONLY — the value is never read back
- *    (`listConfig` reports only `hasSecret`).
+ *  - **Configure**: add / edit / enable / disable a channel. Non-secret fields
+ *    land in `~/.codebuddy/channels.json`; named credentials use the core's
+ *    ENCRYPTED secret store. Secret inputs are MASKED and WRITE-ONLY.
  *  - **Pairing**: the DM allowlist ("who is allowed to DM the agent") backed by
  *    the core `DMPairingManager` — list / approve / revoke approved senders.
  *
@@ -30,6 +28,8 @@ import {
   UserCheck,
   UserX,
   Power,
+  Save,
+  Settings2,
 } from 'lucide-react';
 import { useAppStore } from '../store';
 import { EmptyState } from './LessonCandidatePanel';
@@ -53,11 +53,13 @@ interface ChannelConfigView {
   enabled: boolean;
   configured: boolean;
   hasSecret: boolean;
+  hasSecrets: Record<string, boolean>;
   hasWebhookUrl: boolean;
   webhookUrl?: string;
   allowedUsers: string[];
   allowedChannels: string[];
   optionKeys: string[];
+  values: Record<string, string | number | boolean | string[]>;
   connected: boolean;
   authenticated: boolean;
   lastActivity?: number;
@@ -67,9 +69,21 @@ interface ChannelConfigView {
 interface ChannelCatalogEntry {
   type: string;
   label: string;
-  secretLabel: string;
-  needsSecret: boolean;
-  supportsWebhook: boolean;
+  description: string;
+  fields: ChannelFieldDefinition[];
+}
+
+interface ChannelFieldDefinition {
+  key: string;
+  label: string;
+  kind: 'text' | 'url' | 'number' | 'boolean' | 'string-list' | 'select' | 'secret';
+  location: 'root' | 'options';
+  required?: boolean;
+  primarySecret?: boolean;
+  placeholder?: string;
+  choices?: Array<{ value: string; label: string }>;
+  min?: number;
+  max?: number;
 }
 
 interface ApprovedSenderView {
@@ -370,10 +384,21 @@ function ChannelConfigRow({
   onChanged: () => Promise<void>;
   onError: (e: string | null) => void;
 }) {
-  const [secret, setSecret] = useState('');
+  const [expanded, setExpanded] = useState(false);
+  const [values, setValues] = useState(channel.values);
+  const [allowedUsers, setAllowedUsers] = useState(channel.allowedUsers.join('\n'));
+  const [allowedChannels, setAllowedChannels] = useState(channel.allowedChannels.join('\n'));
+  const [secrets, setSecrets] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
-  const needsSecret = catalog?.needsSecret ?? true;
-  const secretLabel = catalog?.secretLabel || 'Token';
+
+  useEffect(() => {
+    setValues(channel.values);
+    setAllowedUsers(channel.allowedUsers.join('\n'));
+    setAllowedChannels(channel.allowedChannels.join('\n'));
+  }, [channel]);
+
+  const listValue = (raw: string): string[] =>
+    [...new Set(raw.split(/[\n,]/).map((value) => value.trim()).filter(Boolean))];
 
   const toggle = async () => {
     setBusy(true);
@@ -384,27 +409,55 @@ function ChannelConfigRow({
     else await onChanged();
   };
 
-  const saveSecret = async () => {
-    if (!secret.trim()) return;
+  const saveConfig = async () => {
+    if (!catalog) return;
     setBusy(true);
     onError(null);
-    const res = await window.electronAPI.channels.setSecret(channel.type, secret);
+    const options: Record<string, string | number | boolean | string[]> = {};
+    let webhookUrl: string | undefined;
+    for (const field of catalog.fields) {
+      if (field.kind === 'secret') continue;
+      const value = values[field.key];
+      if (field.location === 'root' && field.key === 'webhookUrl') {
+        webhookUrl = typeof value === 'string' ? value : '';
+      } else if (field.location === 'options' && value !== undefined) {
+        options[field.key] = value;
+      }
+    }
+    const res = await window.electronAPI.channels.setConfig(channel.type, {
+      ...(webhookUrl !== undefined ? { webhookUrl } : {}),
+      allowedUsers: listValue(allowedUsers),
+      allowedChannels: listValue(allowedChannels),
+      options,
+    });
     setBusy(false);
-    setSecret(''); // never keep the plaintext secret in renderer state
-    if (!res.ok) onError(res.error ?? 'Failed to save secret');
+    if (!res.ok) onError(res.error ?? 'Failed to save channel configuration');
     else await onChanged();
   };
 
-  const clearSecret = async () => {
+  const saveSecret = async (field: ChannelFieldDefinition) => {
+    const value = secrets[field.key]?.trim();
+    if (!value) return;
     setBusy(true);
     onError(null);
-    const res = await window.electronAPI.channels.deleteSecret(channel.type);
+    const res = await window.electronAPI.channels.setSecret(channel.type, field.key, value);
     setBusy(false);
-    if (!res.ok) onError(res.error ?? 'Failed to clear secret');
+    setSecrets((current) => ({ ...current, [field.key]: '' }));
+    if (!res.ok) onError(res.error ?? `Failed to save ${field.label}`);
+    else await onChanged();
+  };
+
+  const clearSecret = async (field: ChannelFieldDefinition) => {
+    setBusy(true);
+    onError(null);
+    const res = await window.electronAPI.channels.deleteSecret(channel.type, field.key);
+    setBusy(false);
+    if (!res.ok) onError(res.error ?? `Failed to clear ${field.label}`);
     else await onChanged();
   };
 
   const remove = async () => {
+    if (!window.confirm(`Remove ${catalog?.label ?? channel.type} and all of its stored secrets?`)) return;
     setBusy(true);
     onError(null);
     const res = await window.electronAPI.channels.removeChannel(channel.type);
@@ -421,6 +474,13 @@ function ChannelConfigRow({
           {channel.connected && <span className="text-[9px] uppercase tracking-wide text-success">live</span>}
         </div>
         <div className="flex items-center gap-1">
+          <button
+            onClick={() => setExpanded((value) => !value)}
+            data-testid="channel-edit"
+            className="flex items-center gap-1 rounded px-2 py-1 text-[10px] text-text-muted hover:bg-surface"
+          >
+            <Settings2 className="w-3 h-3" /> {expanded ? 'Hide' : 'Edit'}
+          </button>
           <button
             onClick={() => void toggle()}
             disabled={busy}
@@ -447,33 +507,186 @@ function ChannelConfigRow({
         {channel.hasWebhookUrl && <span className="truncate">webhook: {channel.webhookUrl}</span>}
       </div>
 
-      {needsSecret && (
-        <div className="flex items-center gap-2">
-          <input
-            type="password"
-            value={secret}
-            onChange={(e) => setSecret(e.target.value)}
-            placeholder={channel.hasSecret ? `Replace ${secretLabel.toLowerCase()}…` : `${secretLabel}…`}
-            data-testid="channel-secret-input"
-            autoComplete="off"
-            className="flex-1 rounded border border-border bg-surface px-2 py-1 text-xs text-text-primary"
+      {expanded && catalog && (
+        <div className="space-y-3 border-t border-border pt-3" data-testid="channel-edit-form">
+          <p className="text-[10px] text-text-muted">{catalog.description}</p>
+
+          {catalog.fields.filter((field) => field.kind !== 'secret').map((field) => (
+            <ChannelField
+              key={field.key}
+              field={field}
+              value={values[field.key]}
+              onChange={(value) => setValues((current) => ({ ...current, [field.key]: value }))}
+            />
+          ))}
+
+          <ChannelTextList
+            label="Allowed users"
+            value={allowedUsers}
+            onChange={setAllowedUsers}
+            placeholder="one sender ID per line"
           />
+          <ChannelTextList
+            label="Allowed channels / rooms"
+            value={allowedChannels}
+            onChange={setAllowedChannels}
+            placeholder="one channel ID per line"
+          />
+
           <button
-            onClick={() => void saveSecret()}
-            disabled={!secret.trim() || busy}
-            data-testid="channel-secret-save"
-            className="rounded bg-accent/90 px-2 py-1 text-xs text-white disabled:opacity-40 hover:bg-accent"
+            onClick={() => void saveConfig()}
+            disabled={busy}
+            data-testid="channel-config-save"
+            className="flex items-center gap-1 rounded bg-accent/90 px-2 py-1 text-xs text-white disabled:opacity-40 hover:bg-accent"
           >
-            Save
+            <Save className="h-3 w-3" /> Save configuration
           </button>
-          {channel.hasSecret && (
-            <button onClick={() => void clearSecret()} disabled={busy} className="rounded border border-border px-2 py-1 text-xs text-text-muted hover:bg-surface">
-              Clear
-            </button>
-          )}
+
+          {catalog.fields.filter((field) => field.kind === 'secret').map((field) => {
+            const isSet = channel.hasSecrets[field.key] ?? false;
+            return (
+              <div key={field.key} className="space-y-1">
+                <label className="text-[10px] text-text-muted">
+                  {field.label}{field.required ? ' *' : ''} · {isSet ? 'stored' : 'not set'}
+                </label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="password"
+                    value={secrets[field.key] ?? ''}
+                    onChange={(event) => setSecrets((current) => ({
+                      ...current,
+                      [field.key]: event.target.value,
+                    }))}
+                    placeholder={isSet ? `Replace ${field.label.toLowerCase()}…` : `${field.label}…`}
+                    data-testid={`channel-secret-${field.key}`}
+                    autoComplete="new-password"
+                    className="flex-1 rounded border border-border bg-surface px-2 py-1 text-xs text-text-primary"
+                  />
+                  <button
+                    onClick={() => void saveSecret(field)}
+                    disabled={!secrets[field.key]?.trim() || busy}
+                    data-testid={`channel-secret-save-${field.key}`}
+                    className="rounded bg-accent/90 px-2 py-1 text-xs text-white disabled:opacity-40 hover:bg-accent"
+                  >
+                    Save
+                  </button>
+                  {isSet && (
+                    <button
+                      onClick={() => void clearSecret(field)}
+                      disabled={busy}
+                      className="rounded border border-border px-2 py-1 text-xs text-text-muted hover:bg-surface"
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {expanded && !catalog && (
+        <div className="rounded border border-warning/30 bg-warning/10 p-2 text-[10px] text-warning">
+          This legacy channel type has no editable schema. Its existing values were left untouched.
         </div>
       )}
     </div>
+  );
+}
+
+function ChannelTextList({
+  label,
+  value,
+  onChange,
+  placeholder,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  placeholder: string;
+}) {
+  return (
+    <label className="block space-y-1 text-[10px] text-text-muted">
+      <span>{label}</span>
+      <textarea
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder={placeholder}
+        rows={2}
+        className="w-full resize-y rounded border border-border bg-surface px-2 py-1 text-xs text-text-primary"
+      />
+    </label>
+  );
+}
+
+function ChannelField({
+  field,
+  value,
+  onChange,
+}: {
+  field: ChannelFieldDefinition;
+  value: string | number | boolean | string[] | undefined;
+  onChange: (value: string | number | boolean | string[]) => void;
+}) {
+  const label = `${field.label}${field.required ? ' *' : ''}`;
+  if (field.kind === 'boolean') {
+    return (
+      <label className="flex items-center justify-between gap-2 text-[10px] text-text-muted">
+        <span>{label}</span>
+        <input
+          type="checkbox"
+          checked={value === true}
+          onChange={(event) => onChange(event.target.checked)}
+          className="accent-accent"
+        />
+      </label>
+    );
+  }
+  if (field.kind === 'select') {
+    return (
+      <label className="block space-y-1 text-[10px] text-text-muted">
+        <span>{label}</span>
+        <select
+          value={typeof value === 'string' ? value : ''}
+          onChange={(event) => onChange(event.target.value)}
+          className="w-full rounded border border-border bg-surface px-2 py-1 text-xs text-text-primary"
+        >
+          <option value="">Default</option>
+          {field.choices?.map((choice) => (
+            <option key={choice.value} value={choice.value}>{choice.label}</option>
+          ))}
+        </select>
+      </label>
+    );
+  }
+  if (field.kind === 'string-list') {
+    return (
+      <ChannelTextList
+        label={label}
+        value={Array.isArray(value) ? value.join('\n') : ''}
+        onChange={(raw) => onChange(raw.split(/[\n,]/).map((item) => item.trim()).filter(Boolean))}
+        placeholder={field.placeholder ?? 'one value per line'}
+      />
+    );
+  }
+  return (
+    <label className="block space-y-1 text-[10px] text-text-muted">
+      <span>{label}</span>
+      <input
+        type={field.kind === 'number' ? 'number' : field.kind === 'url' ? 'url' : 'text'}
+        value={typeof value === 'string' || typeof value === 'number' ? value : ''}
+        onChange={(event) => onChange(
+          field.kind === 'number'
+            ? event.target.value === '' ? '' : Number(event.target.value)
+            : event.target.value,
+        )}
+        min={field.min}
+        max={field.max}
+        placeholder={field.placeholder}
+        className="w-full rounded border border-border bg-surface px-2 py-1 text-xs text-text-primary"
+      />
+    </label>
   );
 }
 
@@ -541,6 +754,7 @@ function PairingTab({ onLoading }: { onLoading: (b: boolean) => void }) {
   };
 
   const revoke = async (channelType: string, senderId: string) => {
+    if (!window.confirm(`Revoke DM access for ${senderId} on ${channelType}?`)) return;
     setBusy(true);
     setError(null);
     const res = await window.electronAPI.pairing.revoke(channelType, senderId);

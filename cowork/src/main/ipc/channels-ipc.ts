@@ -3,20 +3,22 @@
  *
  * `channels.status` stays READ-ONLY (per-channel runtime connection status, the
  * free-form `info` blob dropped server-side). Phase 5 adds a CONFIG surface on
- * top so the GUI can add / enable / disable a channel and set its secret —
+ * top so the GUI can add / edit / enable / disable a channel and set its secrets —
  * without ever moving the channel/secret logic out of the core:
  *
  *   - `channels.listConfig` — the configurable channels + their state, merged
  *     with runtime status. NEVER returns a secret value: each entry reports only
- *     `hasSecret: boolean`.
+ *     secret-presence booleans.
  *   - `channels.setConfig` / `channels.setEnabled` — write the NON-SECRET fields
- *     (`enabled`, `webhookUrl`, allow-lists) into `~/.codebuddy/channels.json`.
+ *     (channel-specific options, webhook URL, allow-lists) into
+ *     `~/.codebuddy/channels.json` (mode 0600).
  *     A `token`/secret key in the patch is stripped defensively so a secret can
- *     never leak into that world-readable JSON.
- *   - `channels.setSecret` / `channels.deleteSecret` — the token is stored via
+ *     never leak into that JSON.
+ *   - `channels.setSecret` / `channels.deleteSecret` — named credentials are stored via
  *     the core's ENCRYPTED secret store (`CredentialManager`, AES-256-GCM,
  *     `~/.codebuddy/credentials.enc`, mode 0600) under the key
- *     `channel:<type>:token`. The value is write-only: it is never echoed back
+ *     `channel:<type>:<name>` (the primary remains `token` for compatibility).
+ *     The value is write-only: it is never echoed back
  *     to the renderer and never logged (`CredentialManager` logs the key name
  *     only).
  *
@@ -27,7 +29,7 @@
  */
 
 import { ipcMain } from 'electron';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
+import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'fs';
 import { dirname, join } from 'path';
 import { loadCoreModule } from '../utils/core-loader';
 import { logError } from '../utils/logger';
@@ -52,9 +54,54 @@ interface CredentialModule {
   getCredentialManager: () => CredentialManagerLike;
 }
 
-/** The secret-store key that holds a channel's primary token. */
-function channelSecretKey(type: string): string {
-  return `channel:${type}:token`;
+type ChannelFieldValue = string | number | boolean | string[];
+interface ChannelFieldDefinition {
+  key: string;
+  label: string;
+  kind: 'text' | 'url' | 'number' | 'boolean' | 'string-list' | 'select' | 'secret';
+  location: 'root' | 'options';
+  required?: boolean;
+  primarySecret?: boolean;
+  placeholder?: string;
+  choices?: Array<{ value: string; label: string }>;
+  min?: number;
+  max?: number;
+}
+export interface ChannelCatalogEntry {
+  type: string;
+  label: string;
+  description: string;
+  fields: ChannelFieldDefinition[];
+}
+interface ValidatedConfigPatch {
+  enabled?: boolean;
+  webhookUrl?: string;
+  allowedUsers?: string[];
+  allowedChannels?: string[];
+  options?: Record<string, ChannelFieldValue>;
+}
+interface ChannelSchemaModule {
+  getChannelConfigDefinitions: () => ChannelCatalogEntry[];
+  getChannelConfigDefinition: (type: string) => ChannelCatalogEntry | undefined;
+  getChannelSecretFields: (type: string) => ChannelFieldDefinition[];
+  channelSecretStorageName: (field: ChannelFieldDefinition) => string;
+  validateChannelConfigPatch: (
+    type: string,
+    patch: unknown,
+  ) => { ok: true; patch: ValidatedConfigPatch } | { ok: false; error: string };
+  validateChannelForEnable: (
+    type: string,
+    entry: ChannelConfigEntry,
+    secretPresence: Record<string, boolean>,
+  ) => { ok: true } | { ok: false; error: string };
+}
+
+async function loadChannelSchema(): Promise<ChannelSchemaModule | null> {
+  return loadCoreModule<ChannelSchemaModule>('channels/channel-config-schema.js');
+}
+
+function channelSecretKey(type: string, storageName = 'token'): string {
+  return `channel:${type}:${storageName}`;
 }
 
 async function loadCredentialManager(): Promise<CredentialManagerLike | null> {
@@ -86,10 +133,13 @@ interface ChannelConfigEntry {
 }
 interface ChannelsConfigFile {
   channels: ChannelConfigEntry[];
+  [key: string]: unknown;
 }
 
 function channelsConfigCandidates(configPath?: string): string[] {
   if (configPath && configPath.trim()) return [configPath];
+  const envPath = process.env.CODEBUDDY_CHANNEL_CONFIG?.trim();
+  if (envPath) return [envPath];
   const home = process.env.HOME || process.env.USERPROFILE || '';
   return [join(process.cwd(), '.codebuddy', 'channels.json'), join(home, '.codebuddy', 'channels.json')];
 }
@@ -106,10 +156,11 @@ function readChannelsConfig(configPath?: string): { path: string; config: Channe
     try {
       const parsed = JSON.parse(readFileSync(p, 'utf8')) as Partial<ChannelsConfigFile>;
       const channels = Array.isArray(parsed.channels) ? parsed.channels : [];
-      return { path: p, config: { channels } };
+      return { path: p, config: { ...parsed, channels } };
     } catch (error) {
-      logError('[channels] channels.json unreadable, treating as empty:', error);
-      return { path: p, config: { channels: [] } };
+      throw new Error(
+        `Cannot read ${p}: ${error instanceof Error ? error.message : String(error)}`,
+      );
     }
   }
   // Nothing on disk yet — write target is the last candidate (home).
@@ -119,36 +170,11 @@ function readChannelsConfig(configPath?: string): { path: string; config: Channe
 
 function writeChannelsConfig(path: string, config: ChannelsConfigFile): void {
   mkdirSync(dirname(path), { recursive: true });
-  writeFileSync(path, JSON.stringify(config, null, 2) + '\n', { mode: 0o600 });
+  const temporaryPath = `${path}.tmp-${process.pid}`;
+  writeFileSync(temporaryPath, JSON.stringify(config, null, 2) + '\n', { mode: 0o600 });
+  renameSync(temporaryPath, path);
+  chmodSync(path, 0o600);
 }
-
-// ---------------------------------------------------------------------------
-// Catalog — the channels the GUI offers to add. Kept in sync (by hand) with the
-// token-bearing cases of `instantiateChannel`. `needsSecret:false` channels
-// (whatsapp QR, webchat) take no token.
-// ---------------------------------------------------------------------------
-export interface ChannelCatalogEntry {
-  type: string;
-  label: string;
-  /** Human label for the secret field (empty when the channel takes no token). */
-  secretLabel: string;
-  needsSecret: boolean;
-  supportsWebhook: boolean;
-}
-
-const CHANNEL_CATALOG: readonly ChannelCatalogEntry[] = [
-  { type: 'telegram', label: 'Telegram', secretLabel: 'Bot token', needsSecret: true, supportsWebhook: true },
-  { type: 'discord', label: 'Discord', secretLabel: 'Bot token', needsSecret: true, supportsWebhook: false },
-  { type: 'slack', label: 'Slack', secretLabel: 'Bot token', needsSecret: true, supportsWebhook: false },
-  { type: 'matrix', label: 'Matrix', secretLabel: 'Access token', needsSecret: true, supportsWebhook: false },
-  { type: 'teams', label: 'Microsoft Teams', secretLabel: 'App password', needsSecret: true, supportsWebhook: false },
-  { type: 'line', label: 'LINE', secretLabel: 'Channel access token', needsSecret: true, supportsWebhook: true },
-  { type: 'mattermost', label: 'Mattermost', secretLabel: 'Access token', needsSecret: true, supportsWebhook: false },
-  { type: 'ntfy', label: 'ntfy', secretLabel: 'Access token', needsSecret: true, supportsWebhook: false },
-  { type: 'google-chat', label: 'Google Chat', secretLabel: 'Verification token', needsSecret: true, supportsWebhook: true },
-  { type: 'whatsapp', label: 'WhatsApp', secretLabel: '', needsSecret: false, supportsWebhook: false },
-  { type: 'webchat', label: 'Web chat', secretLabel: '', needsSecret: false, supportsWebhook: false },
-];
 
 // ---------------------------------------------------------------------------
 // View types (renderer-facing). A secret VALUE never appears here.
@@ -160,11 +186,15 @@ export interface ChannelConfigView {
   configured: boolean;
   /** A token exists in the encrypted store OR a legacy plaintext token is present. */
   hasSecret: boolean;
+  /** Presence by form field; values never cross IPC. */
+  hasSecrets: Record<string, boolean>;
   hasWebhookUrl: boolean;
   webhookUrl?: string;
   allowedUsers: string[];
   allowedChannels: string[];
   optionKeys: string[];
+  /** Editable, non-secret values declared by the core schema. */
+  values: Record<string, ChannelFieldValue>;
   // Runtime (best-effort; false when the channel is not registered in this process).
   connected: boolean;
   authenticated: boolean;
@@ -215,22 +245,40 @@ async function runtimeStatusByType(): Promise<
 
 function toConfigView(
   entry: ChannelConfigEntry,
-  hasSecretInStore: boolean,
+  definition: ChannelCatalogEntry | undefined,
+  hasSecrets: Record<string, boolean>,
   runtime: Map<string, { connected: boolean; authenticated: boolean; lastActivity?: number; error?: string }>,
 ): ChannelConfigView {
   const rt = runtime.get(entry.type);
+  const values: Record<string, ChannelFieldValue> = {};
+  for (const field of definition?.fields ?? []) {
+    if (field.kind === 'secret') continue;
+    const value = field.location === 'root'
+      ? field.key === 'webhookUrl' ? entry.webhookUrl : undefined
+      : entry.options?.[field.key];
+    if (
+      typeof value === 'string'
+      || typeof value === 'number'
+      || typeof value === 'boolean'
+      || (Array.isArray(value) && value.every((item) => typeof item === 'string'))
+    ) {
+      values[field.key] = value as ChannelFieldValue;
+    }
+  }
   const view: ChannelConfigView = {
     type: entry.type,
     enabled: entry.enabled === true,
     configured: true,
     // A legacy hand-written config may carry a plaintext token; report presence only.
-    hasSecret: hasSecretInStore || Boolean(entry.token),
+    hasSecret: Object.values(hasSecrets).some(Boolean) || Boolean(entry.token),
+    hasSecrets,
     hasWebhookUrl: Boolean(entry.webhookUrl),
     allowedUsers: Array.isArray(entry.allowedUsers) ? entry.allowedUsers.filter((u): u is string => typeof u === 'string') : [],
     allowedChannels: Array.isArray(entry.allowedChannels)
       ? entry.allowedChannels.filter((c): c is string => typeof c === 'string')
       : [],
     optionKeys: entry.options && typeof entry.options === 'object' ? Object.keys(entry.options).sort() : [],
+    values,
     connected: rt?.connected ?? false,
     authenticated: rt?.authenticated ?? false,
   };
@@ -247,6 +295,7 @@ type ConfigPatch = {
   webhookUrl?: string;
   allowedUsers?: string[];
   allowedChannels?: string[];
+  options?: Record<string, ChannelFieldValue>;
 };
 
 function applyPatch(entry: ChannelConfigEntry, patch: ConfigPatch): ChannelConfigEntry {
@@ -259,7 +308,35 @@ function applyPatch(entry: ChannelConfigEntry, patch: ConfigPatch): ChannelConfi
   if (Array.isArray(patch.allowedChannels)) {
     next.allowedChannels = patch.allowedChannels.filter((c): c is string => typeof c === 'string');
   }
+  if (patch.options) {
+    next.options = { ...(entry.options ?? {}), ...patch.options };
+  }
   return next;
+}
+
+function secretPresenceFor(
+  type: string,
+  entry: ChannelConfigEntry,
+  fields: ChannelFieldDefinition[],
+  schema: ChannelSchemaModule,
+  credentials: CredentialManagerLike | null,
+): Record<string, boolean> {
+  const presence: Record<string, boolean> = {};
+  for (const field of fields) {
+    const legacyValue = field.primarySecret
+      ? entry.token ?? entry.options?.[field.key]
+      : entry.options?.[field.key];
+    let stored = false;
+    try {
+      stored = credentials?.hasCredential(
+        channelSecretKey(type, schema.channelSecretStorageName(field)),
+      ) ?? false;
+    } catch (error) {
+      logError('[channels] secret presence check failed:', error);
+    }
+    presence[field.key] = stored || (typeof legacyValue === 'string' && legacyValue.length > 0);
+  }
+  return presence;
 }
 
 export function registerChannelsIpcHandlers(): void {
@@ -283,36 +360,44 @@ export function registerChannelsIpcHandlers(): void {
   ipcMain.handle(
     'channels.listConfig',
     async (_event, opts?: { configPath?: string }): Promise<ChannelsConfigResult> => {
-      const { path, config } = readChannelsConfig(opts?.configPath);
+      const fallbackPath = channelsConfigCandidates(opts?.configPath).at(-1) ?? '';
       try {
+        const { path, config } = readChannelsConfig(opts?.configPath);
+        const schema = await loadChannelSchema();
+        if (!schema) {
+          return { ok: false, error: 'channel config schema unavailable', path, channels: [], catalog: [] };
+        }
+        const catalog = schema.getChannelConfigDefinitions();
         const creds = await loadCredentialManager();
         const runtime = await runtimeStatusByType();
         const channels = config.channels
           .filter((e): e is ChannelConfigEntry => Boolean(e) && typeof e.type === 'string')
           .map((entry) => {
-            let hasSecretInStore = false;
-            try {
-              hasSecretInStore = creds?.hasCredential(channelSecretKey(entry.type)) ?? false;
-            } catch (error) {
-              logError('[channels.listConfig] hasCredential failed:', error);
-            }
-            return toConfigView(entry, hasSecretInStore, runtime);
+            const definition = schema.getChannelConfigDefinition(entry.type);
+            const hasSecrets = secretPresenceFor(
+              entry.type,
+              entry,
+              schema.getChannelSecretFields(entry.type),
+              schema,
+              creds,
+            );
+            return toConfigView(entry, definition, hasSecrets, runtime);
           });
-        return { ok: true, path, channels, catalog: [...CHANNEL_CATALOG] };
+        return { ok: true, path, channels, catalog };
       } catch (error) {
         logError('[channels.listConfig] failed:', error);
         return {
           ok: false,
           error: error instanceof Error ? error.message : String(error),
-          path,
+          path: fallbackPath,
           channels: [],
-          catalog: [...CHANNEL_CATALOG],
+          catalog: [],
         };
       }
     },
   );
 
-  // Upsert a channel's NON-SECRET config (enabled / webhookUrl / allow-lists). A
+  // Upsert a channel's declared NON-SECRET config. A
   // `token` or other secret key in the patch is stripped so it can never land in
   // channels.json — secrets go through `channels.setSecret` only.
   ipcMain.handle(
@@ -324,21 +409,35 @@ export function registerChannelsIpcHandlers(): void {
       opts?: { configPath?: string },
     ): Promise<ChannelMutationResult> => {
       if (!isValidType(type)) return { ok: false, error: 'invalid channel type' };
-      if (!patch || typeof patch !== 'object') return { ok: false, error: 'invalid patch' };
-      const p = patch as Record<string, unknown>;
-      const cleanPatch: ConfigPatch = {};
-      if (typeof p.enabled === 'boolean') cleanPatch.enabled = p.enabled;
-      if (typeof p.webhookUrl === 'string') cleanPatch.webhookUrl = p.webhookUrl;
-      if (Array.isArray(p.allowedUsers)) cleanPatch.allowedUsers = p.allowedUsers as string[];
-      if (Array.isArray(p.allowedChannels)) cleanPatch.allowedChannels = p.allowedChannels as string[];
       try {
+        const schema = await loadChannelSchema();
+        if (!schema) return { ok: false, error: 'channel config schema unavailable' };
+        const validated = schema.validateChannelConfigPatch(type, patch);
+        if (!validated.ok) return validated;
+        const cleanPatch = validated.patch;
         const { path, config } = readChannelsConfig(opts?.configPath);
         const idx = config.channels.findIndex((c) => c.type === type);
+        let nextEntry: ChannelConfigEntry;
         if (idx >= 0) {
           const existing = config.channels[idx];
-          if (existing) config.channels[idx] = applyPatch(existing, cleanPatch);
+          if (!existing) return { ok: false, error: 'channel config entry unavailable' };
+          nextEntry = applyPatch(existing, cleanPatch);
+          config.channels[idx] = nextEntry;
         } else {
-          config.channels.push(applyPatch({ type, enabled: cleanPatch.enabled ?? false }, cleanPatch));
+          nextEntry = applyPatch({ type, enabled: cleanPatch.enabled ?? false }, cleanPatch);
+          config.channels.push(nextEntry);
+        }
+        if (nextEntry.enabled) {
+          const credentials = await loadCredentialManager();
+          const presence = secretPresenceFor(
+            type,
+            nextEntry,
+            schema.getChannelSecretFields(type),
+            schema,
+            credentials,
+          );
+          const enableValidation = schema.validateChannelForEnable(type, nextEntry, presence);
+          if (!enableValidation.ok) return enableValidation;
         }
         writeChannelsConfig(path, config);
         return { ok: true };
@@ -356,13 +455,33 @@ export function registerChannelsIpcHandlers(): void {
       if (!isValidType(type)) return { ok: false, error: 'invalid channel type' };
       if (typeof enabled !== 'boolean') return { ok: false, error: 'enabled must be a boolean' };
       try {
+        const schema = await loadChannelSchema();
+        if (!schema?.getChannelConfigDefinition(type)) {
+          return { ok: false, error: `unsupported channel type: ${type}` };
+        }
         const { path, config } = readChannelsConfig(opts?.configPath);
         const idx = config.channels.findIndex((c) => c.type === type);
+        let nextEntry: ChannelConfigEntry;
         if (idx >= 0) {
           const existing = config.channels[idx];
-          if (existing) existing.enabled = enabled;
+          if (!existing) return { ok: false, error: 'channel config entry unavailable' };
+          nextEntry = { ...existing, enabled };
+          config.channels[idx] = nextEntry;
         } else {
-          config.channels.push({ type, enabled });
+          nextEntry = { type, enabled };
+          config.channels.push(nextEntry);
+        }
+        if (enabled) {
+          const credentials = await loadCredentialManager();
+          const presence = secretPresenceFor(
+            type,
+            nextEntry,
+            schema.getChannelSecretFields(type),
+            schema,
+            credentials,
+          );
+          const validation = schema.validateChannelForEnable(type, nextEntry, presence);
+          if (!validation.ok) return validation;
         }
         writeChannelsConfig(path, config);
         return { ok: true };
@@ -373,33 +492,57 @@ export function registerChannelsIpcHandlers(): void {
     },
   );
 
-  // Store a channel's token in the ENCRYPTED secret store. Write-only: the value
+  // Store a channel credential in the ENCRYPTED secret store. Write-only: the value
   // is never returned and never logged (the store logs the key name only).
   ipcMain.handle(
     'channels.setSecret',
-    async (_event, type: unknown, token: unknown): Promise<ChannelMutationResult> => {
+    async (
+      _event,
+      type: unknown,
+      fieldKeyOrSecret: unknown,
+      maybeSecret?: unknown,
+    ): Promise<ChannelMutationResult> => {
       if (!isValidType(type)) return { ok: false, error: 'invalid channel type' };
-      if (typeof token !== 'string' || !token.trim()) return { ok: false, error: 'secret must be a non-empty string' };
+      const fieldKey = maybeSecret === undefined ? 'token' : fieldKeyOrSecret;
+      const secretValue = maybeSecret === undefined ? fieldKeyOrSecret : maybeSecret;
+      if (typeof fieldKey !== 'string') return { ok: false, error: 'invalid secret field' };
+      if (typeof secretValue !== 'string' || !secretValue.trim()) {
+        return { ok: false, error: 'secret must be a non-empty string' };
+      }
       try {
+        const schema = await loadChannelSchema();
+        const secretFields = schema?.getChannelSecretFields(type) ?? [];
+        const field = secretFields.find((candidate) => candidate.key === fieldKey)
+          ?? (fieldKey === 'token' ? secretFields.find((candidate) => candidate.primarySecret) : undefined);
+        if (!schema || !field) return { ok: false, error: 'invalid secret field' };
         const creds = await loadCredentialManager();
         if (!creds) return { ok: false, error: 'secret store unavailable' };
-        creds.setCredential(channelSecretKey(type), token);
+        creds.setCredential(
+          channelSecretKey(type, schema.channelSecretStorageName(field)),
+          secretValue,
+        );
         return { ok: true };
       } catch (error) {
-        // NB: never include `token` — only the (secret-free) error.
+        // NB: never include the secret value — only the (secret-free) error.
         logError('[channels.setSecret] failed for', typeof type === 'string' ? type : '?', error);
         return { ok: false, error: error instanceof Error ? error.message : String(error) };
       }
     },
   );
 
-  // Remove a channel's stored token.
-  ipcMain.handle('channels.deleteSecret', async (_event, type: unknown): Promise<ChannelMutationResult> => {
+  // Remove one stored channel credential.
+  ipcMain.handle('channels.deleteSecret', async (_event, type: unknown, fieldKey: unknown = 'token'): Promise<ChannelMutationResult> => {
     if (!isValidType(type)) return { ok: false, error: 'invalid channel type' };
+    if (typeof fieldKey !== 'string') return { ok: false, error: 'invalid secret field' };
     try {
+      const schema = await loadChannelSchema();
+      const secretFields = schema?.getChannelSecretFields(type) ?? [];
+      const field = secretFields.find((candidate) => candidate.key === fieldKey)
+        ?? (fieldKey === 'token' ? secretFields.find((candidate) => candidate.primarySecret) : undefined);
+      if (!schema || !field) return { ok: false, error: 'invalid secret field' };
       const creds = await loadCredentialManager();
       if (!creds) return { ok: false, error: 'secret store unavailable' };
-      creds.deleteCredential(channelSecretKey(type));
+      creds.deleteCredential(channelSecretKey(type, schema.channelSecretStorageName(field)));
       return { ok: true };
     } catch (error) {
       logError('[channels.deleteSecret] failed:', error);
@@ -407,7 +550,7 @@ export function registerChannelsIpcHandlers(): void {
     }
   });
 
-  // Remove a channel entry entirely (config + its stored secret).
+  // Remove a channel entry entirely (config + all of its stored secrets).
   ipcMain.handle(
     'channels.removeChannel',
     async (_event, type: unknown, opts?: { configPath?: string }): Promise<ChannelMutationResult> => {
@@ -418,7 +561,14 @@ export function registerChannelsIpcHandlers(): void {
         writeChannelsConfig(path, config);
         const creds = await loadCredentialManager();
         try {
-          creds?.deleteCredential(channelSecretKey(type));
+          const schema = await loadChannelSchema();
+          const storageNames = new Set<string>(['token']);
+          for (const field of schema?.getChannelSecretFields(type) ?? []) {
+            storageNames.add(schema?.channelSecretStorageName(field) ?? field.key);
+          }
+          for (const storageName of storageNames) {
+            creds?.deleteCredential(channelSecretKey(type, storageName));
+          }
         } catch (error) {
           logError('[channels.removeChannel] secret cleanup failed:', error);
         }
