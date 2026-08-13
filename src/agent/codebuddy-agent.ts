@@ -1392,6 +1392,8 @@ Look at the screenshot and find the element matching the user's intent. Output o
       routedModel = this.routingFacade.resolveConfiguredModelForTask(taskType);
 
       if (routedModel) {
+        const configuredDecision = this.routingFacade.recordConfiguredTaskModel(taskType, routedModel);
+        this.lastRoutingDecision = configuredDecision;
         if (routedModel !== this.codebuddyClient.getCurrentModel()) {
           originalModel = this.codebuddyClient.getCurrentModel();
           this.codebuddyClient.setModel(routedModel);

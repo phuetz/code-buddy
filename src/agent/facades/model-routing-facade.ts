@@ -364,6 +364,18 @@ export class ModelRoutingFacade {
     });
   }
 
+  /** Record an explicit task-map selection without charging auto-router stats. */
+  recordConfiguredTaskModel(taskType: TaskType, model: string): RoutingDecision {
+    const decision: RoutingDecision = {
+      recommendedModel: model,
+      tier: taskType === 'architect' ? 'reasoning' : 'standard',
+      reason: `Configured task model: ${taskType}`,
+      estimatedCost: 0,
+    };
+    this.lastRoutingDecision = decision;
+    return decision;
+  }
+
   /** Resolve task config first, then optional complexity-based auto-routing. */
   resolveModelForTask(taskType: TaskType, userMessage?: string): string | null {
     const configured = this.resolveConfiguredModelForTask(taskType);
@@ -398,10 +410,13 @@ export class ModelRoutingFacade {
     const researchPatterns = [
       'research', 'look up', 'find sources', 'browse', 'web search',
       'literature', 'state of the art', 'latest information', 'investigate',
+      'recherche', 'cherche des sources', 'trouve des sources', 'recherche web',
+      'littérature', 'état de l’art', "état de l'art", 'dernières informations',
     ];
     const reviewPatterns = [
       'review', 'code review', 'audit', 'critique', 'assess', 'security check',
       'quality check', 'inspect this change', 'pull request', 'merge request',
+      'revue', 'relis', 'relecture', 'évalue les risques', 'analyse cette pr',
     ];
 
     if (researchPatterns.some((pattern) => lower.includes(pattern))) return 'research';
@@ -425,17 +440,23 @@ export class ModelRoutingFacade {
       'plan', 'design', 'architect', 'how should', 'what approach',
       'strategy', 'outline', 'think about', 'consider', 'evaluate',
       'compare', 'pros and cons', 'trade-off', 'tradeoff',
+      'planifie', 'conçois', 'quelle approche', 'stratégie',
+      'avantages et inconvénients', 'compromis',
     ];
 
     const reasoningPatterns = [
       'why', 'explain', 'reason', 'analyze', 'debug',
       'understand', 'investigate', 'diagnose', 'figure out',
+      'pourquoi', 'explique', 'raisonne', 'analyse', 'débogue',
+      'comprendre', 'diagnostique',
     ];
 
     const editingPatterns = [
       'fix', 'edit', 'change', 'update', 'modify', 'refactor',
       'implement', 'create', 'add', 'remove', 'delete', 'rename',
       'write', 'build', 'code', 'make',
+      'corrige', 'modifie', 'mets à jour', 'refactorise', 'implémente',
+      'crée', 'ajoute', 'supprime', 'renomme', 'écris', 'construis',
     ];
 
     for (const p of planningPatterns) {

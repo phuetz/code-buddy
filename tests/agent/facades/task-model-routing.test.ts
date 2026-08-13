@@ -77,4 +77,27 @@ describe('ModelRoutingFacade task model map', () => {
     expect(facade.classifyTaskType('Research the latest primary sources')).toBe('research');
     expect(facade.classifyTaskType('Hello, how are you?')).toBe('chat');
   });
+
+  it('classifies French review, research, planning and editing requests', () => {
+    const facade = createFacade();
+
+    expect(facade.classifyTaskType('Relis cette PR et fais une revue complète')).toBe('review');
+    expect(facade.classifyTaskType('Cherche des sources récentes sur ce sujet')).toBe('research');
+    expect(facade.classifyTaskType('Conçois une stratégie de migration')).toBe('architect');
+    expect(facade.classifyTaskType('Corrige puis refactorise ce module')).toBe('edit');
+  });
+
+  it('records configured task-map decisions for routing diagnostics', () => {
+    const facade = createFacade();
+
+    const decision = facade.recordConfiguredTaskModel('review', 'review-model');
+
+    expect(decision).toMatchObject({
+      recommendedModel: 'review-model',
+      tier: 'standard',
+      reason: 'Configured task model: review',
+      estimatedCost: 0,
+    });
+    expect(facade.getLastRoutingDecision()).toBe(decision);
+  });
 });

@@ -1102,6 +1102,14 @@ describe('CodeBuddyAgent', () => {
       expect(mockSetModel).toHaveBeenCalledWith('review-model');
       expect(route).not.toHaveBeenCalled();
       expect((agent as any).useModelRouting).toBe(false);
+      expect((agent as any).lastRoutingDecision).toMatchObject({
+        recommendedModel: 'review-model',
+        reason: 'Configured task model: review',
+      });
+      expect((agent as any).routingFacade.getLastRoutingDecision()).toMatchObject({
+        recommendedModel: 'review-model',
+        reason: 'Configured task model: review',
+      });
     });
 
     it('keeps merge-base model_pairs config dormant in the main chat loop', async () => {
