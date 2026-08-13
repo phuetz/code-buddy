@@ -258,8 +258,10 @@ describe('TTSBridge — Pocket primary path', () => {
       expect.objectContaining({ CODEBUDDY_TTS_VOLUME: '50' }),
       30000
     );
-    expect(peak).toBeGreaterThan(13_500);
-    expect(peak).toBeLessThan(15_000);
+    // The shared normalizer targets -18 dBFS RMS, then applies the persisted
+    // assistant percentage. A 50% setting therefore lands around 2,063 PCM.
+    expect(peak).toBeGreaterThan(2_000);
+    expect(peak).toBeLessThan(2_100);
   });
 });
 

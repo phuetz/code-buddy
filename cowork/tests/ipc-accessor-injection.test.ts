@@ -93,7 +93,10 @@ describe('cost-ipc accessor injection', () => {
       modelBreakdown: {},
     });
     expect(handler('cost.history')(fakeEvent, 7)).toEqual([]); // sync handler
-    await expect(handler('cost.setBudget')(fakeEvent, 100)).resolves.toEqual({ success: false });
+    await expect(handler('cost.setBudget')(fakeEvent, 100)).resolves.toEqual({
+      success: false,
+      error: 'Cost service is not ready',
+    });
 
     // reassign the mutable AFTER register — handler must observe the new value
     bridge = makeCostBridge();
