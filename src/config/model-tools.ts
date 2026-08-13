@@ -461,6 +461,18 @@ const DEFAULT_MODEL_CONFIGS: ModelToolConfig[] = [
     patchFormat: 'search_replace',
     promptProfile: 'rich',
   },
+  // Grok 4.6 (500K context, agents longue durée — sorti 2026-08-12)
+  {
+    model: 'grok-4.6*',
+    strengths: ['thinking', 'code'],
+    supportsReasoning: true,
+    supportsToolCalls: true,
+    supportsVision: true,
+    contextWindow: 500000,
+    maxOutputTokens: 16384,
+    patchFormat: 'search_replace',
+    promptProfile: 'rich',
+  },
   // Grok 4 (256K context)
   {
     model: 'grok-4*',
