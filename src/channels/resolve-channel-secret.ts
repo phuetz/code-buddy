@@ -2,25 +2,24 @@
  * Channel secret resolution.
  *
  * A channel's auth token can come from two places:
- *   - an explicit literal token in `channels.json` (or an env-derived value),
  *   - the ENCRYPTED secret store the Cowork GUI writes to when you configure a
  *     channel in the Channels panel (`CredentialManager`, AES-256-GCM,
  *     `~/.codebuddy/credentials.enc`) under the key `channel:<type>:token`.
+ *   - an explicit legacy literal token in `channels.json` (or an env-derived value),
  *
  * The core channel loader historically read `config.token` literally, so a
  * channel configured purely through the GUI (encrypted token, no plaintext in
  * `channels.json`) started with NO token and never authenticated. This helper
- * closes that gap with a strict priority order (additive / backwards compatible):
+ * closes that gap with a strict priority order that makes rotations effective:
  *
- *   1. `config.token` literal — a hand-written `channels.json` or env-provided
- *      token stays authoritative; the encrypted store is never consulted.
- *   2. the encrypted `channel:<type>:token` secret from the CredentialManager.
+ *   1. the encrypted `channel:<type>:token` secret from the CredentialManager.
+ *   2. `config.token` literal as a migration fallback.
  *   3. `undefined` — no token (channel stays unauthenticated, unchanged legacy
  *      behavior).
  *
  * Contract:
  *   - never throws: an unavailable/uninitialised CredentialManager or a missing
- *     key falls back to the legacy "no token" behavior.
+ *     key falls back to the legacy literal, then to "no token".
  *   - never logs the resolved secret value.
  */
 
@@ -41,21 +40,16 @@ export interface ChannelSecretConfig {
 }
 
 /**
- * Resolve a channel's auth token, preferring an explicit literal over the
- * encrypted CredentialManager store. See the file header for the full contract.
+ * Resolve a channel's auth token, preferring the encrypted vault over a legacy
+ * literal. The Cowork writer purges that literal after the first successful
+ * save; vault-first resolution also keeps a rotation effective if cleanup fails.
+ * See the file header for the full contract.
  */
 export function resolveChannelSecret(
   type: string,
   config: ChannelSecretConfig,
 ): string | undefined {
-  // 1. A literal token always wins — full backwards compatibility. A
-  //    hand-written channels.json (or env-derived token) behaves exactly as
-  //    before and the encrypted store is never read.
-  if (config.token) {
-    return config.token;
-  }
-
-  // 2. Fall back to the encrypted secret the Cowork GUI stored for this channel.
+  // 1. Prefer the encrypted secret the Cowork GUI stored for this channel.
   try {
     const creds = getCredentialManager();
     const key = channelSecretKey(type);
@@ -66,12 +60,12 @@ export function resolveChannelSecret(
       }
     }
   } catch {
-    // never-throws: CredentialManager unavailable / uninitialised → behave as
-    // if no token was configured (legacy behavior). The secret is never logged.
+    // never-throws: CredentialManager unavailable / uninitialised → try the
+    // legacy literal below. The secret is never logged.
   }
 
-  // 3. No token — channel stays unauthenticated (unchanged legacy behavior).
-  return undefined;
+  // 2. Migration fallback for hand-written / historical channels.json files.
+  return config.token || undefined;
 }
 
 /**
@@ -79,9 +73,8 @@ export function resolveChannelSecret(
  *
  * Primary credentials (for example `appPassword` on Teams) historically used
  * the generic `channel:<type>:token` key, so callers can opt into that fallback
- * while secondary credentials remain isolated under their own name. Literal
- * values keep precedence for complete backwards compatibility with hand-written
- * `channels.json` files.
+ * while secondary credentials remain isolated under their own name. Vault
+ * values take precedence so replacing a historical literal is effective.
  */
 export function resolveChannelNamedSecret(
   type: string,
@@ -89,8 +82,6 @@ export function resolveChannelNamedSecret(
   literal?: unknown,
   fallbackToPrimary = false,
 ): string | undefined {
-  if (typeof literal === 'string' && literal) return literal;
-
   try {
     const credentials = getCredentialManager();
     const named = credentials.getCredential(channelSecretKey(type, name));
@@ -104,5 +95,5 @@ export function resolveChannelNamedSecret(
     // will surface a missing required credential through its normal validation.
   }
 
-  return undefined;
+  return typeof literal === 'string' && literal ? literal : undefined;
 }

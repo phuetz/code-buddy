@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import path from 'path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -118,7 +118,7 @@ describe('channels config IPC', () => {
 
   it('adds + enables a channel, persisting only non-secret fields to channels.json', async () => {
     expect(((await call('channels.setConfig', {}, 'telegram', { enabled: false }, opts())) as { ok: boolean }).ok).toBe(true);
-    await call('channels.setSecret', {}, 'telegram', 'token', SECRET);
+    await call('channels.setSecret', {}, 'telegram', 'token', SECRET, opts());
     expect(((await call('channels.setEnabled', {}, 'telegram', true, opts())) as { ok: boolean }).ok).toBe(true);
 
     const onDisk = JSON.parse(readFileSync(configPath, 'utf8')) as { channels: Array<{ type: string; enabled: boolean }> };
@@ -187,7 +187,7 @@ describe('channels config IPC', () => {
 
   it('SECURITY: setSecret stores the token in the encrypted store and it NEVER comes back via listConfig / disk / logs', async () => {
     await call('channels.setConfig', {}, 'telegram', { enabled: false }, opts());
-    const setRes = (await call('channels.setSecret', {}, 'telegram', SECRET)) as { ok: boolean; error?: string; [k: string]: unknown };
+    const setRes = (await call('channels.setSecret', {}, 'telegram', 'token', SECRET, opts())) as { ok: boolean; error?: string; [k: string]: unknown };
     expect(setRes.ok).toBe(true);
     // The return value carries NO secret.
     expect(JSON.stringify(setRes)).not.toContain(SECRET);
@@ -206,16 +206,76 @@ describe('channels config IPC', () => {
     expect(JSON.stringify(loggerMock.calls)).not.toContain(SECRET);
   });
 
+  it('migrates legacy plaintext and makes a vault rotation authoritative', async () => {
+    const legacyToken = 'legacy-token-that-must-disappear';
+    writeFileSync(configPath, JSON.stringify({
+      channels: [{
+        type: 'slack',
+        enabled: false,
+        token: legacyToken,
+        options: {
+          appToken: 'legacy-app-token',
+          defaultChannel: 'general',
+        },
+      }],
+    }));
+
+    const primary = await call(
+      'channels.setSecret',
+      {},
+      'slack',
+      'token',
+      'rotated-bot-token',
+      opts(),
+    ) as { ok: boolean };
+    const secondary = await call(
+      'channels.setSecret',
+      {},
+      'slack',
+      'appToken',
+      'rotated-app-token',
+      opts(),
+    ) as { ok: boolean };
+
+    expect(primary.ok).toBe(true);
+    expect(secondary.ok).toBe(true);
+    expect(fakes.store.get('channel:slack:token')).toBe('rotated-bot-token');
+    expect(fakes.store.get('channel:slack:appToken')).toBe('rotated-app-token');
+    const onDisk = JSON.parse(readFileSync(configPath, 'utf8')) as {
+      channels: Array<{ token?: string; options?: Record<string, unknown> }>;
+    };
+    expect(onDisk.channels[0]).not.toHaveProperty('token');
+    expect(onDisk.channels[0]?.options).toEqual({ defaultChannel: 'general' });
+    expect(readFileSync(configPath, 'utf8')).not.toContain(legacyToken);
+  });
+
+  it('clears a legacy plaintext secret even when the vault is empty', async () => {
+    writeFileSync(configPath, JSON.stringify({
+      channels: [{ type: 'telegram', enabled: false, token: 'legacy-only-token' }],
+    }));
+
+    const result = await call(
+      'channels.deleteSecret',
+      {},
+      'telegram',
+      'token',
+      opts(),
+    ) as { ok: boolean };
+
+    expect(result.ok).toBe(true);
+    expect(JSON.parse(readFileSync(configPath, 'utf8')).channels[0]).not.toHaveProperty('token');
+  });
+
   it('deleteSecret / removeChannel clear the stored secret', async () => {
     await call('channels.setConfig', {}, 'telegram', { enabled: false }, opts());
-    await call('channels.setSecret', {}, 'telegram', SECRET);
+    await call('channels.setSecret', {}, 'telegram', 'token', SECRET, opts());
     expect(fakes.store.has('channel:telegram:token')).toBe(true);
 
-    await call('channels.deleteSecret', {}, 'telegram');
+    await call('channels.deleteSecret', {}, 'telegram', 'token', opts());
     expect(fakes.store.has('channel:telegram:token')).toBe(false);
 
     // removeChannel drops the entry and any lingering secret.
-    await call('channels.setSecret', {}, 'telegram', SECRET);
+    await call('channels.setSecret', {}, 'telegram', 'token', SECRET, opts());
     const rm = (await call('channels.removeChannel', {}, 'telegram', opts())) as { ok: boolean };
     expect(rm.ok).toBe(true);
     expect(fakes.store.has('channel:telegram:token')).toBe(false);
@@ -225,8 +285,8 @@ describe('channels config IPC', () => {
 
   it('stores secondary secrets under distinct encrypted-vault keys', async () => {
     await call('channels.setConfig', {}, 'slack', { enabled: false }, opts());
-    await call('channels.setSecret', {}, 'slack', 'token', 'xoxb-secret');
-    await call('channels.setSecret', {}, 'slack', 'appToken', 'xapp-secret');
+    await call('channels.setSecret', {}, 'slack', 'token', 'xoxb-secret', opts());
+    await call('channels.setSecret', {}, 'slack', 'appToken', 'xapp-secret', opts());
 
     expect(fakes.store.get('channel:slack:token')).toBe('xoxb-secret');
     expect(fakes.store.get('channel:slack:appToken')).toBe('xapp-secret');
@@ -240,8 +300,9 @@ describe('channels config IPC', () => {
 
   it('never-throws on invalid input (bad type / empty secret / bad patch)', async () => {
     expect(((await call('channels.setConfig', {}, 'Bad Type!', { enabled: true }, opts())) as { ok: boolean }).ok).toBe(false);
-    expect(((await call('channels.setSecret', {}, 'telegram', '   ')) as { ok: boolean }).ok).toBe(false);
-    expect(((await call('channels.setSecret', {}, 'telegram', 42)) as { ok: boolean }).ok).toBe(false);
+    expect(((await call('channels.setSecret', {}, 'telegram', 'token', '   ', opts())) as { ok: boolean }).ok).toBe(false);
+    expect(((await call('channels.setSecret', {}, 'telegram', 'token', 42, opts())) as { ok: boolean }).ok).toBe(false);
+    expect(((await call('channels.setSecret', {}, 'telegram', SECRET)) as { ok: boolean }).ok).toBe(false);
     expect(((await call('channels.setConfig', {}, 'telegram', 'not-an-object', opts())) as { ok: boolean }).ok).toBe(false);
     expect(((await call('channels.setEnabled', {}, 'telegram', 'yes', opts())) as { ok: boolean }).ok).toBe(false);
     // No config file was created by the rejected calls.

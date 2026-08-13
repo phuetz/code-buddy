@@ -66,19 +66,14 @@ describe('resolveChannelSecret / channel token from the encrypted store', () => 
     expect(resolved).toBe(STORED_TOKEN);
   });
 
-  it('prefers a literal token and never reads the store (backwards compat)', () => {
+  it('serves a rotated vault token instead of a stale legacy literal', () => {
     const creds = CredentialManager.getInstance();
-    // A DIFFERENT token sits in the store; the literal must win regardless.
+    // A DIFFERENT token sits in the store; the rotation must win immediately.
     creds.setCredential(channelSecretKey('telegram'), STORED_TOKEN);
-    const hasSpy = vi.spyOn(creds, 'hasCredential');
-    const getSpy = vi.spyOn(creds, 'getCredential');
 
     const resolved = resolveChannelSecret('telegram', { token: LITERAL_TOKEN });
 
-    expect(resolved).toBe(LITERAL_TOKEN);
-    // The encrypted store is never even consulted when a literal is present.
-    expect(hasSpy).not.toHaveBeenCalled();
-    expect(getSpy).not.toHaveBeenCalled();
+    expect(resolved).toBe(STORED_TOKEN);
   });
 
   it('returns undefined when neither a literal nor a stored secret exists', () => {
@@ -93,6 +88,16 @@ describe('resolveChannelSecret / channel token from the encrypted store', () => 
     expect(resolveChannelNamedSecret('slack', 'appToken')).toBe('xapp-encrypted');
     expect(resolveChannelNamedSecret('slack', 'signingSecret')).toBeUndefined();
     expect(resolveChannelNamedSecret('slack', 'botToken', undefined, true)).toBe(STORED_TOKEN);
+    expect(resolveChannelNamedSecret('slack', 'appToken', 'literal-xapp')).toBe('xapp-encrypted');
+  });
+
+  it('falls back to legacy literals when the encrypted store is unavailable', () => {
+    const creds = CredentialManager.getInstance();
+    vi.spyOn(creds, 'getCredential').mockImplementation(() => {
+      throw new Error('credential store unavailable');
+    });
+
+    expect(resolveChannelSecret('telegram', { token: LITERAL_TOKEN })).toBe(LITERAL_TOKEN);
     expect(resolveChannelNamedSecret('slack', 'appToken', 'literal-xapp')).toBe('literal-xapp');
   });
 
@@ -165,7 +170,7 @@ describe('instantiateChannel wires the resolved token into the channel', () => {
     await channel?.disconnect();
   });
 
-  it('lets a literal token in channels.json win over the store', async () => {
+  it('uses the rotated vault token when channels.json still has a legacy literal', async () => {
     const creds = CredentialManager.getInstance();
     creds.setCredential(channelSecretKey('telegram'), STORED_TOKEN);
 
@@ -175,7 +180,7 @@ describe('instantiateChannel wires the resolved token into the channel', () => {
       token: LITERAL_TOKEN,
     });
     expect(channel).not.toBeNull();
-    expect((channel as unknown as { botId: string }).botId).toBe('987654321');
+    expect((channel as unknown as { botId: string }).botId).toBe(BOT_ID);
     await channel?.disconnect();
   });
 

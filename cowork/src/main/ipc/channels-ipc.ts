@@ -339,6 +339,32 @@ function secretPresenceFor(
   return presence;
 }
 
+/** Remove the plaintext equivalent after a vault mutation. */
+function purgeLegacySecret(
+  type: string,
+  field: ChannelFieldDefinition,
+  configPath?: string,
+): void {
+  const { path, config } = readChannelsConfig(configPath);
+  const index = config.channels.findIndex((entry) => entry.type === type);
+  const entry = config.channels[index];
+  if (index < 0 || !entry) return;
+
+  let changed = false;
+  if (field.primarySecret && Object.prototype.hasOwnProperty.call(entry, 'token')) {
+    delete entry.token;
+    changed = true;
+  }
+  if (entry.options && Object.prototype.hasOwnProperty.call(entry.options, field.key)) {
+    const options = { ...entry.options };
+    delete options[field.key];
+    if (Object.keys(options).length > 0) entry.options = options;
+    else delete entry.options;
+    changed = true;
+  }
+  if (changed) writeChannelsConfig(path, config);
+}
+
 export function registerChannelsIpcHandlers(): void {
   // Existing read-only runtime status (unchanged).
   ipcMain.handle('channels.status', async () => {
@@ -499,12 +525,11 @@ export function registerChannelsIpcHandlers(): void {
     async (
       _event,
       type: unknown,
-      fieldKeyOrSecret: unknown,
-      maybeSecret?: unknown,
+      fieldKey: unknown,
+      secretValue: unknown,
+      opts?: { configPath?: string },
     ): Promise<ChannelMutationResult> => {
       if (!isValidType(type)) return { ok: false, error: 'invalid channel type' };
-      const fieldKey = maybeSecret === undefined ? 'token' : fieldKeyOrSecret;
-      const secretValue = maybeSecret === undefined ? fieldKeyOrSecret : maybeSecret;
       if (typeof fieldKey !== 'string') return { ok: false, error: 'invalid secret field' };
       if (typeof secretValue !== 'string' || !secretValue.trim()) {
         return { ok: false, error: 'secret must be a non-empty string' };
@@ -521,6 +546,7 @@ export function registerChannelsIpcHandlers(): void {
           channelSecretKey(type, schema.channelSecretStorageName(field)),
           secretValue,
         );
+        purgeLegacySecret(type, field, opts?.configPath);
         return { ok: true };
       } catch (error) {
         // NB: never include the secret value — only the (secret-free) error.
@@ -531,7 +557,12 @@ export function registerChannelsIpcHandlers(): void {
   );
 
   // Remove one stored channel credential.
-  ipcMain.handle('channels.deleteSecret', async (_event, type: unknown, fieldKey: unknown = 'token'): Promise<ChannelMutationResult> => {
+  ipcMain.handle('channels.deleteSecret', async (
+    _event,
+    type: unknown,
+    fieldKey: unknown = 'token',
+    opts?: { configPath?: string },
+  ): Promise<ChannelMutationResult> => {
     if (!isValidType(type)) return { ok: false, error: 'invalid channel type' };
     if (typeof fieldKey !== 'string') return { ok: false, error: 'invalid secret field' };
     try {
@@ -543,6 +574,7 @@ export function registerChannelsIpcHandlers(): void {
       const creds = await loadCredentialManager();
       if (!creds) return { ok: false, error: 'secret store unavailable' };
       creds.deleteCredential(channelSecretKey(type, schema.channelSecretStorageName(field)));
+      purgeLegacySecret(type, field, opts?.configPath);
       return { ok: true };
     } catch (error) {
       logError('[channels.deleteSecret] failed:', error);

@@ -1994,9 +1994,8 @@ export async function registerAIMessageHandler(manager: import('../../channels/i
 
 export async function instantiateChannel(configEntry: ChannelConfigEntry): Promise<import('../../channels/index.js').BaseChannel | null> {
   // Resolve the auth token BEFORE building the channel config so every branch
-  // below sees the effective token. Priority: an explicit literal `token` wins
-  // (full backwards compat), otherwise fall back to the encrypted secret the
-  // Cowork GUI stores under `channel:<type>:token`, otherwise no token. Never
+  // below sees the effective token. Priority: the encrypted secret the Cowork
+  // GUI stores under `channel:<type>:token`, then a legacy literal `token`, then no token. Never
   // throws, never logs the secret. See src/channels/resolve-channel-secret.ts.
   const config: ChannelConfigEntry = {
     ...configEntry,

@@ -5276,10 +5276,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ) => ipcRenderer.invoke('channels.setConfig', type, patch, opts),
     setEnabled: (type: string, enabled: boolean, opts?: { configPath?: string }) =>
       ipcRenderer.invoke('channels.setEnabled', type, enabled, opts),
-    setSecret: (type: string, fieldKey: string, secret: string) =>
-      ipcRenderer.invoke('channels.setSecret', type, fieldKey, secret),
-    deleteSecret: (type: string, fieldKey: string) =>
-      ipcRenderer.invoke('channels.deleteSecret', type, fieldKey),
+    setSecret: (type: string, fieldKey: string, secret: string, opts?: { configPath?: string }) =>
+      ipcRenderer.invoke('channels.setSecret', type, fieldKey, secret, opts),
+    deleteSecret: (type: string, fieldKey: string, opts?: { configPath?: string }) =>
+      ipcRenderer.invoke('channels.deleteSecret', type, fieldKey, opts),
     removeChannel: (type: string, opts?: { configPath?: string }) =>
       ipcRenderer.invoke('channels.removeChannel', type, opts),
   },
@@ -9532,11 +9532,13 @@ declare global {
         setSecret: (
           type: string,
           fieldKey: string,
-          secret: string
+          secret: string,
+          opts?: { configPath?: string }
         ) => Promise<{ ok: boolean; error?: string }>;
         deleteSecret: (
           type: string,
-          fieldKey: string
+          fieldKey: string,
+          opts?: { configPath?: string }
         ) => Promise<{ ok: boolean; error?: string }>;
         removeChannel: (
           type: string,

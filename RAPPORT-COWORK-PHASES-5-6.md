@@ -14,7 +14,7 @@ Base : `origin/main` (`f9a31a7e`)
 - Le bridge Electron suit le patron vérifié `bridge + IPC + panneau` : chargement du noyau en processus avec `loadCoreModule`, handlers `never-throw`, namespace preload, flag Zustand, montage dans `App.tsx` et accès depuis Labs/navigation. Aucun appel HTTP n'a été ajouté.
 - Les champs non secrets sont validés puis écrits atomiquement en mode `0600` dans `channels.json`. Les clés inconnues du fichier restent préservées et un JSON invalide n'est jamais écrasé.
 - Les secrets sont en écriture seule dans le renderer. Seule leur présence traverse l'IPC ; les valeurs résident dans le coffre `CredentialManager` chiffré AES-256-GCM (`credentials.enc`, mode `0600`) sous des clés nommées par canal et champ.
-- Le chargement du noyau sait résoudre les secrets nommés, garde la priorité des anciens tokens littéraux pour la compatibilité, et complète l'instanciation des adaptateurs IRC, Feishu et Synology ainsi que les options Slack, Nostr, Mattermost, Nextcloud et IRC.
+- Le chargement du noyau sait résoudre les secrets nommés en donnant priorité au coffre ; le premier enregistrement ou effacement depuis Cowork purge le littéral legacy correspondant de `channels.json`, ce qui rend les rotations effectives. Les adaptateurs IRC, Feishu et Synology ainsi que les options Slack, Nostr, Mattermost, Nextcloud et IRC sont couverts.
 - L'onglet Appairage DM expose l'état, les demandes en attente, l'allowlist persistée, l'approbation par code, l'ajout direct et la révocation. La révocation exige une confirmation utilisateur.
 
 ### Commit
