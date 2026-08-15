@@ -597,6 +597,24 @@ const DEFAULT_MODEL_CONFIGS: ModelToolConfig[] = [
     patchFormat: 'full_file',
     promptProfile: 'lite',
   },
+  // Qwen3.8-27B — dense multimodal, 262k native context, Apache 2.0 (released
+  // 2026-08 ; Patrice rates it near Opus 5). Served LOCALLY (darkstar 2×RTX3090:
+  // FP8 ~28 GB tensor-parallel, or Q4 ~16 GB on a single 3090). Full-capability
+  // entry placed BEFORE the conservative `qwen3*` glob (first-match-wins, l.65) —
+  // unlike the small local qwen3 builds, the 27B drives the agent loop, does
+  // structured tool calls, vision, and search/replace patches. Cap the served KV
+  // cache below 262k on 48 GB VRAM.
+  {
+    model: 'qwen3.8*',
+    strengths: ['french', 'code', 'thinking'],
+    supportsReasoning: true,
+    supportsToolCalls: true,
+    supportsVision: true,
+    contextWindow: 262144,
+    maxOutputTokens: 16384,
+    patchFormat: 'search_replace',
+    promptProfile: 'rich',
+  },
   {
     model: 'qwen3*',
     strengths: ['french'],
