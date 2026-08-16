@@ -24,6 +24,8 @@ import {
 } from './cli/command-routing.js';
 import { resolveHeadlessOutputFormat, resolveHeadlessResultExitCode } from './cli/headless-options.js';
 import { resolveCliModelList } from './cli/model-listing.js';
+import { getConfigManager } from './config/toml-config.js';
+import { getHiddenCliCommands } from './config/feature-surface.js';
 
 // Read version from package.json
 const __filename = fileURLToPath(import.meta.url);
@@ -1425,7 +1427,7 @@ program
   )
   .option(
     "--profile <name>",
-    "apply a named configuration profile from .codebuddy/config.toml [profiles.<name>]"
+    "apply a built-in or configured profile (core, all, or [profiles.<name>])"
   )
   .option(
     "--from-pr <pr>",
@@ -1491,18 +1493,6 @@ program
         }
       }
     }
-    // Apply named configuration profile (--profile <name>) before anything else
-    if (options.profile) {
-      try {
-        const { getConfigManager } = await import('./config/toml-config.js');
-        getConfigManager().load();
-        getConfigManager().applyProfile(options.profile);
-      } catch (err) {
-        startupLogger.error(`Profile error: ${err instanceof Error ? err.message : err}`);
-        process.exit(1);
-      }
-    }
-
     // Handle --setup flag (interactive setup wizard)
     if (options.setup) {
       const { runSetup } = await import("./utils/interactive-setup.js");
@@ -3762,4 +3752,31 @@ addLazyCommand(
   },
 );
 
-program.parse();
+/** Read a root option before Commander dispatches a subcommand or help. */
+function getRequestedProfile(argv: readonly string[]): string | undefined {
+  for (let index = 2; index < argv.length; index++) {
+    const arg = argv[index];
+    if (arg === '--') break;
+    if (arg === '--profile') return argv[index + 1];
+    if (arg?.startsWith('--profile=')) return arg.slice('--profile='.length) || undefined;
+  }
+  return undefined;
+}
+
+// Apply the profile before parsing so it governs root chat, lazy subcommands,
+// slash-command menus, tool selection, and `buddy --help` consistently.
+const requestedProfile = getRequestedProfile(process.argv);
+if (requestedProfile) {
+  try {
+    getConfigManager().load();
+    getConfigManager().applyProfile(requestedProfile);
+  } catch (err) {
+    process.stderr.write(`Profile error: ${err instanceof Error ? err.message : String(err)}\n`);
+    process.exitCode = 1;
+  }
+}
+
+if (process.exitCode !== 1) {
+  removeCommands(program, getHiddenCliCommands());
+  program.parse();
+}

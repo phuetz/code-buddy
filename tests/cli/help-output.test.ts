@@ -49,4 +49,20 @@ describe('CLI help output', () => {
     expect(result.stdout).toContain('--output-format <format>');
     expect(result.stdout).not.toMatch(/^\s+--output <format>/m);
   }, 30_000);
+
+  it('hides advanced product areas only for the core profile', async () => {
+    const core = await runCli(['--profile', 'core', '--help']);
+    const all = await runCli(['--profile', 'all', '--help']);
+
+    expect(core.exitCode).toBe(0);
+    expect(core.stderr).toBe('');
+    expect(core.stdout).toMatch(/^\s+dev\s/m);
+    expect(core.stdout).toMatch(/^\s+research\s/m);
+    expect(core.stdout).not.toMatch(/^\s+(companion|film|vision-train|voice|nodes)\s/m);
+
+    expect(all.exitCode).toBe(0);
+    expect(all.stdout).toMatch(/^\s+companion\s/m);
+    expect(all.stdout).toMatch(/^\s+film\s/m);
+    expect(all.stdout).toMatch(/^\s+vision-train\s/m);
+  }, 30_000);
 });
