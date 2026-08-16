@@ -427,80 +427,12 @@ export function useInputHandler({
       if (userInput.startsWith("/")) {
         await handleDirectCommand(userInput);
       } else {
-        // Process @ file references before sending to AI
-        const processedInput = await processFileReferences(userInput);
-        await processUserMessage(processedInput);
+        await processUserMessage(userInput);
       }
     }
   };
 
   // Removed handleShellBypass as it's now in ClientCommandDispatcher
-
-  /**
-   * Process @ file references in input
-   * Replaces @path with file content or adds context about the file
-   */
-  const processFileReferences = async (input: string): Promise<string> => {
-    // Match @path patterns (not preceded by non-whitespace, not followed by space within the reference)
-    const fileRefPattern = /(?:^|(?<=\s))@([^\s@]+)/g;
-    const matches = [...input.matchAll(fileRefPattern)];
-
-    if (matches.length === 0) {
-      return input;
-    }
-
-    let processedInput = input;
-    const fileContents: string[] = [];
-
-    for (const match of matches) {
-      const filePath = match[1];
-      const fullMatch = match[0];
-      if (filePath === undefined) {
-        continue;
-      }
-
-      try {
-        const resolvedPath = path.isAbsolute(filePath)
-          ? filePath
-          : path.resolve(process.cwd(), filePath);
-
-        const exists = await fsPromises.access(resolvedPath).then(() => true).catch(() => false);
-        if (exists) {
-          const stats = await fsPromises.stat(resolvedPath);
-
-          if (stats.isDirectory()) {
-            // For directories, list contents
-            const entries = await fsPromises.readdir(resolvedPath);
-            const listing = entries.slice(0, 50).join('\n');
-            fileContents.push(`📁 Directory: ${filePath}\n${listing}${entries.length > 50 ? '\n... and more files' : ''}`);
-          } else if (stats.isFile()) {
-            // For files, read content (with size limit)
-            const maxSize = 100 * 1024; // 100KB limit
-            if (stats.size > maxSize) {
-              const content = (await fsPromises.readFile(resolvedPath, 'utf-8')).slice(0, maxSize);
-              fileContents.push(`📄 File: ${filePath} (truncated to 100KB)\n\`\`\`\n${content}\n\`\`\``);
-            } else {
-              const content = await fsPromises.readFile(resolvedPath, 'utf-8');
-              const ext = path.extname(filePath).slice(1) || 'txt';
-              fileContents.push(`📄 File: ${filePath}\n\`\`\`${ext}\n${content}\n\`\`\``);
-            }
-          }
-
-          // Remove the @reference from the input text
-          processedInput = processedInput.replace(fullMatch, `[${filePath}]`);
-        }
-      } catch {
-        // File doesn't exist or can't be read - leave the @reference as is
-      }
-    }
-
-    if (fileContents.length > 0) {
-      // Append file contents as context
-      processedInput = `${processedInput}\n\n---\nReferenced files:\n\n${fileContents.join('\n\n')}`;
-    }
-
-    return processedInput;
-  };
 
   const handleInputChange = (newInput: string) => {
     // Update command suggestions based on input
