@@ -62,3 +62,10 @@ export {
   createMetricsCollector,
   type PrometheusConfig,
 } from './prometheus-exporter.js';
+
+export {
+  explainRepository,
+  type RepoExplainDepth,
+  type RepoExplanation,
+  type RepoExplanationInput,
+} from './repo-explainer.js';

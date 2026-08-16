@@ -53,6 +53,15 @@ export interface SessionShareHtmlOptions {
   exportedAt?: Date;
 }
 
+/** Shared zero-CDN document shell used by standalone Code Buddy artifacts. */
+export interface StandaloneHtmlDocumentOptions {
+  lang?: string;
+  title: string;
+  styles: string;
+  /** Trusted HTML assembled from escaped fields by the calling renderer. */
+  bodyHtml: string;
+}
+
 export interface PersistedSessionShareDependencies {
   sessionFacade: Pick<SessionFacade, 'loadSession'>;
   timeline?: Pick<SessionTimeline, 'list'>;
@@ -427,6 +436,32 @@ function escapeHtml(text: string): string {
     .replace(/'/g, '&#039;');
 }
 
+/** Final secret-scrubbing pass shared by every autonomous HTML exporter. */
+export function finalizeStandaloneHtmlDocument(html: string): string {
+  return scrubSecrets(html);
+}
+
+/**
+ * Build a self-contained HTML document with the same fail-closed network CSP
+ * as the session replay exporter. Callers provide inline CSS and escaped body
+ * markup; scripts and remote resources remain forbidden.
+ */
+export function exportStandaloneHtmlDocument(options: StandaloneHtmlDocumentOptions): string {
+  const lang = (options.lang ?? 'fr').replace(/[^A-Za-z0-9-]/g, '') || 'fr';
+  return finalizeStandaloneHtmlDocument(`<!doctype html>
+<html lang="${lang}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark light">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data:; font-src data:; base-uri 'none'; form-action 'none'">
+  <title>${escapeHtml(options.title)}</title>
+  <style>${options.styles}</style>
+</head>
+<body>${options.bodyHtml}</body>
+</html>`);
+}
+
 function truncate(text: string, maxLength: number): string {
   const safe = redact(text);
   if (safe.length <= maxLength) return safe;
@@ -767,7 +802,7 @@ export function exportSessionShareHtml(
 
   // Final defence in depth: catch any future interpolated field that forgot to
   // pass through the local redaction helpers above.
-  return scrubSecrets(html);
+  return finalizeStandaloneHtmlDocument(html);
 }
 
 /** Load through SessionFacade and enrich from timeline regardless of the recording gate. */

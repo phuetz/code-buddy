@@ -245,6 +245,28 @@ describe('RepoProfiler', () => {
       expect(fs.existsSync(path.join(tmpDir, '.codebuddy', 'repoProfile.json'))).toBe(false);
       expect(fs.existsSync(path.join(tmpDir, '.codebuddy', 'code-graph.json'))).toBe(false);
     });
+
+    it('inspect computes a fresh profile without writing repository caches', async () => {
+      const pkg = {
+        name: 'read-only-inspection',
+        scripts: { test: 'vitest' },
+        dependencies: {},
+      };
+      fs.writeFileSync(path.join(tmpDir, 'package.json'), JSON.stringify(pkg));
+      fs.mkdirSync(path.join(tmpDir, 'src'));
+      fs.writeFileSync(
+        path.join(tmpDir, 'src', 'index.ts'),
+        "import { value } from './value.js';\nexport { value };\n"
+      );
+      fs.writeFileSync(path.join(tmpDir, 'src', 'value.ts'), 'export const value = 1;\n');
+
+      const profile = await new RepoProfiler(tmpDir).inspect();
+
+      expect(profile.name).toBe('read-only-inspection');
+      expect(profile.cartography).toBeDefined();
+      expect(profile.cartography?.importEdges?.length).toBeGreaterThan(0);
+      expect(fs.existsSync(path.join(tmpDir, '.codebuddy'))).toBe(false);
+    });
   });
 
   describe('Empty repo', () => {
