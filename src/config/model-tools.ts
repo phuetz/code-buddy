@@ -528,6 +528,19 @@ const DEFAULT_MODEL_CONFIGS: ModelToolConfig[] = [
     maxOutputTokens: 64000,
     patchFormat: 'unified',
   },
+  // Gemini 3.7 Flash (1M context, 64K output, multimodal ; gros bond coding/agent — sorti 2026-08-13,
+  // id API gemini-3.7-flash, ~$0.75/$3.75 par 1M). Entrée dédiée avant le glob gemini-3* pour marquer
+  // la force 'code'. Accès : clé API Gemini (AI Studio) — l'ancien Gemini CLI OAuth free-tier est coupé.
+  {
+    model: 'gemini-3.7-flash*',
+    strengths: ['thinking', 'code'],
+    supportsReasoning: true,
+    supportsToolCalls: true,
+    supportsVision: true,
+    contextWindow: 1000000,
+    maxOutputTokens: 64000,
+    patchFormat: 'unified',
+  },
   // Gemini 3.x (1M context, 64K output)
   {
     model: 'gemini-3*',
