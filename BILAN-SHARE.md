@@ -4,6 +4,8 @@ Date : 2026-08-16
 
 Branche : `feat/quick-wins-etoiles-2026-08-16`
 
+Commit de fonctionnalité : `865dfbfe` (`feat(share): buddy share — replay HTML autonome`)
+
 Publication distante : aucune (`git push` non exécuté)
 
 ## Livré
@@ -47,7 +49,7 @@ Résultat : exit 0.
 $ npm test -- tests/sessions/session-share.test.ts
 Test Files  1 passed (1)
 Tests       3 passed (3)
-Duration    389ms
+Duration    366ms
 ```
 
 Résultat : exit 0. Les tests couvrent les tours, l’absence d’URL réseau injectée, la rédaction OpenAI/Google/Bearer, le HTML échappé, les diffs, la fusion timeline/historique, `--last`, le chemin par défaut, `--open` et le repli sans gate timeline.
@@ -73,4 +75,4 @@ Browser plugin indisponible; repli Playwright local conformément à la skill fr
 
 ## Environnement de test
 
-Le worktree ne contenait pas `node_modules`. Un lien symbolique temporaire vers `/home/patrice/code-buddy/node_modules` a été utilisé pour les vérifications; il doit être retiré avant la passation et ne fait pas partie du commit.
+Le worktree ne contenait pas `node_modules`. Un lien symbolique temporaire vers `/home/patrice/code-buddy/node_modules` a été utilisé pour les vérifications, puis retiré avant la passation; il ne fait partie d'aucun commit.
