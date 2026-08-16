@@ -59,7 +59,7 @@ export const PROVIDER_DEFAULT_MODEL: Record<string, string> = {
   gemini: 'gemini-2.0-flash',
   openai: 'gpt-4o',
   openrouter: 'openai/gpt-4o',
-  ollama: 'llama3',
+  ollama: 'qwen2.5-coder:7b',
   lmstudio: 'default',
 };
 
@@ -77,13 +77,24 @@ export const PROVIDER_AUTH_MODE: Record<string, OnboardingAuthMode> = {
 export const PROVIDER_GUIDES: OnboardingProviderGuide[] = [
   {
     id: 'chatgpt',
-    label: 'ChatGPT subscription (OAuth)',
+    label: 'ChatGPT subscription — recommended (OAuth, no API key, $0 marginal cost)',
     authMode: 'oauth',
     envVar: '',
     defaultModel: 'gpt-5.6-sol',
     setupCommand: 'buddy login',
     verifyCommand: 'buddy whoami',
     help: 'One browser login unlocks the ChatGPT-backed Codex route; no OPENAI_API_KEY is required.',
+  },
+  {
+    id: 'ollama',
+    label: 'Ollama local model — free and private',
+    authMode: 'local',
+    envVar: '',
+    defaultModel: 'qwen2.5-coder:7b',
+    baseURL: 'http://localhost:11434/v1',
+    setupCommand: 'ollama serve',
+    verifyCommand: 'curl http://localhost:11434/api/tags',
+    help: 'Run Ollama locally and pull a coding model, for example: ollama pull qwen2.5-coder:7b',
   },
   {
     id: 'grok',
@@ -136,17 +147,6 @@ export const PROVIDER_GUIDES: OnboardingProviderGuide[] = [
     help: 'Set OPENROUTER_API_KEY (https://openrouter.ai/keys).',
   },
   {
-    id: 'ollama',
-    label: 'Ollama local model',
-    authMode: 'local',
-    envVar: '',
-    defaultModel: 'llama3',
-    baseURL: 'http://localhost:11434/v1',
-    setupCommand: 'ollama serve',
-    verifyCommand: 'curl http://localhost:11434/api/tags',
-    help: 'Run Ollama locally and pull the model you selected.',
-  },
-  {
     id: 'lmstudio',
     label: 'LM Studio local server',
     authMode: 'local',
@@ -177,8 +177,8 @@ export const ONBOARDING_PHASES: OnboardingPhase[] = [
     id: 'first-chat',
     title: 'Run a verifiable first chat',
     hermesPhase: 'Start the CLI/TUI and ask a specific prompt with observable success.',
-    codeBuddyAction: 'Run buddy with a repo summary prompt.',
-    successCheck: 'the answer names files or tools from the current workspace.',
+    codeBuddyAction: 'With ChatGPT or Ollama, run buddy try for the one-minute coding demo.',
+    successCheck: 'FizzBuzz and its test are created in isolation, then node --test passes.',
   },
   {
     id: 'session-resume',
@@ -334,7 +334,11 @@ export function buildRecommendedNextCommands(result: Pick<OnboardingResult, 'pro
     commands.push(guide.verifyCommand);
   }
 
-  commands.push(`buddy --model ${result.model} -p "Summarize this repo in 5 bullets and name the main entry point."`);
+  if (guide.id === 'chatgpt' || guide.id === 'ollama') {
+    commands.push('buddy try');
+  } else {
+    commands.push(`buddy --model ${result.model} -p "Summarize this repo in 5 bullets and name the main entry point."`);
+  }
   commands.push('buddy --continue');
   commands.push('buddy --init');
   return Array.from(new Set(commands));
