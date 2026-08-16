@@ -32,6 +32,20 @@ jest.mock('../../src/mcp/profiles.js', () => ({
   upsertMCPProfile: jest.fn(),
 }));
 
+jest.mock('../../src/mcp/mcp-server.js', () => ({
+  CodeBuddyMCPServer: jest.fn().mockImplementation(function() {
+    return {
+      getExposureSummary: jest.fn().mockReturnValue({
+        exposed: 2,
+        mode: 'read-write',
+        patterns: ['search*'],
+      }),
+      getExposedToolNames: jest.fn().mockReturnValue(['search', 'search_files']),
+      start: jest.fn().mockResolvedValue(undefined),
+    };
+  }),
+}));
+
 jest.mock('chalk', () => {
   const impl = {
   green: jest.fn((s: string) => s),
@@ -67,6 +81,7 @@ import { createMCPCommand } from '../../src/commands/mcp';
 import * as mcpConfig from '../../src/mcp/config';
 import * as tools from '../../src/codebuddy/tools';
 import * as mcpProfiles from '../../src/mcp/profiles';
+import { CodeBuddyMCPServer } from '../../src/mcp/mcp-server.js';
 import { logger } from '../../src/utils/logger.js';
 
 const mockAddMCPServer = mcpConfig.addMCPServer as jest.Mock;
@@ -79,6 +94,7 @@ const mockLoadMCPProfiles = mcpProfiles.loadMCPProfiles as jest.Mock;
 const mockRemoveMCPProfile = mcpProfiles.removeMCPProfile as jest.Mock;
 const mockSetActiveMCPProfile = mcpProfiles.setActiveMCPProfile as jest.Mock;
 const mockUpsertMCPProfile = mcpProfiles.upsertMCPProfile as jest.Mock;
+const mockCodeBuddyMCPServer = CodeBuddyMCPServer as jest.Mock;
 
 describe('MCP Command', () => {
   let command: Command;
@@ -151,6 +167,34 @@ describe('MCP Command', () => {
       expect(subcommands).toContain('enable');
       expect(subcommands).toContain('disable');
       expect(subcommands).toContain('profile');
+      expect(subcommands).toContain('serve');
+    });
+  });
+
+  describe('serve subcommand', () => {
+    test('starts the stdio server with explicit exposure options', async () => {
+      const serveCmd = command.commands.find(c => c.name() === 'serve');
+
+      await serveCmd?.parseAsync([
+        'node',
+        'test',
+        '--allow-write',
+        '--tools',
+        'search*',
+      ]);
+
+      expect(mockCodeBuddyMCPServer).toHaveBeenCalledWith({
+        allowWrite: true,
+        tools: 'search*',
+      });
+      const instance = mockCodeBuddyMCPServer.mock.results[0]?.value as {
+        start: jest.Mock;
+      };
+      expect(instance.start).toHaveBeenCalledOnce();
+      expect(logger.info).toHaveBeenCalledWith(
+        expect.stringContaining('2 tools (read-write)'),
+        expect.objectContaining({ tools: ['search', 'search_files'] }),
+      );
     });
   });
 

@@ -33,9 +33,12 @@ const ENTITY_TYPES = ['fact', 'lesson', 'decision', 'discovery'] as const;
 /**
  * Register Collective Knowledge Graph tools with the MCP server.
  */
-export function registerCkgTools(server: McpServer): void {
+export function registerCkgTools(
+  server: McpServer,
+  shouldRegister: (name: string) => boolean = () => true,
+): void {
   // ckg_recall - hybrid recall over the shared, cross-agent graph
-  server.tool(
+  if (shouldRegister('ckg_recall')) server.tool(
     'ckg_recall',
     "Recall from the Collective Knowledge Graph — the memory SHARED across every agent and tool, "
       + "as opposed to one session's private notes. Results carry how many DISTINCT agents "
@@ -92,7 +95,7 @@ export function registerCkgTools(server: McpServer): void {
   );
 
   // ckg_ingest - contribute to the shared graph
-  server.tool(
+  if (shouldRegister('ckg_ingest')) server.tool(
     'ckg_ingest',
     'Contribute a fact, lesson, decision or discovery to the Collective Knowledge Graph, so that '
       + 'every other agent and tool can recall it. Re-stating an existing fact under the same name '
