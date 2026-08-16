@@ -2373,6 +2373,16 @@ function addLazyCommand(
 
 addLazyCommand(
   program,
+  'try',
+  'Run an isolated 60-second coding-agent demo (ChatGPT OAuth or local Ollama)',
+  async () => {
+    const { createTryCommand } = await import('./commands/try.js');
+    return createTryCommand();
+  },
+);
+
+addLazyCommand(
+  program,
   'ws',
   'Manage and search the opt-in multi-repository workspace',
   async () => {
