@@ -2407,6 +2407,16 @@ addLazyCommand(
 
 addLazyCommand(
   program,
+  'changelog',
+  'Generate grouped release notes from Conventional Commits',
+  async () => {
+    const { createChangelogCommand } = await import('./commands/changelog.js');
+    return createChangelogCommand();
+  },
+);
+
+addLazyCommand(
+  program,
   'ws',
   'Manage and search the opt-in multi-repository workspace',
   async () => {
