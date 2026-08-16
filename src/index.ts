@@ -2387,6 +2387,16 @@ addLazyCommand(
 
 addLazyCommand(
   program,
+  'import',
+  'Import project rules and MCP servers from Cursor, Cline, Copilot, or Claude Code',
+  async () => {
+    const { createImportCommand } = await import('./commands/import.js');
+    return createImportCommand();
+  },
+);
+
+addLazyCommand(
+  program,
   'ws',
   'Manage and search the opt-in multi-repository workspace',
   async () => {
