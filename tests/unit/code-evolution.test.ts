@@ -18,17 +18,16 @@ const { mockExecSync } = vi.hoisted(() => ({
 }));
 jest.mock('child_process', () => ({
   execSync: mockExecSync,
+  execFileSync: (_file: string, args: string[], options: unknown) =>
+    mockExecSync(`git ${args.join(' ')}`, options),
 }));
 
-import { execSync } from 'child_process';
 import {
   generateEvolutionReport,
   formatEvolutionReport,
   exportEvolutionData,
   exportEvolutionCSV,
   EvolutionReport,
-  EvolutionDataPoint,
-  EvolutionOptions,
 } from '../../src/analytics/code-evolution';
 
 describe('CodeEvolutionTracker', () => {
@@ -38,7 +37,7 @@ describe('CodeEvolutionTracker', () => {
 
   describe('generateEvolutionReport', () => {
     it('should generate empty report when no git history', () => {
-      mockExecSync.mockImplementation(function() {
+      mockExecSync.mockImplementation(function () {
         throw new Error('Not a git repository');
       });
 
@@ -159,8 +158,9 @@ describe('CodeEvolutionTracker', () => {
     });
 
     it('should sample commits evenly when more commits than dataPoints', () => {
-      const commits = Array.from({ length: 100 }, (_, i) =>
-        `commit${i}|2024-01-${String(15 - Math.floor(i / 10)).padStart(2, '0')}T10:00:00Z`
+      const commits = Array.from(
+        { length: 100 },
+        (_, i) => `commit${i}|2024-01-${String(15 - Math.floor(i / 10)).padStart(2, '0')}T10:00:00Z`
       ).join('\n');
 
       mockExecSync.mockImplementation((cmd: string) => {
@@ -288,9 +288,7 @@ describe('CodeEvolutionTracker', () => {
       });
 
       if (report.dataPoints.length >= 2) {
-        expect(report.summary.fileChange).toBe(
-          report.summary.endFiles - report.summary.startFiles
-        );
+        expect(report.summary.fileChange).toBe(report.summary.endFiles - report.summary.startFiles);
       }
     });
 
@@ -423,8 +421,20 @@ describe('CodeEvolutionTracker', () => {
     it('should detect stable LOC trend', () => {
       const mockReport: EvolutionReport = {
         dataPoints: [
-          { date: new Date(), commit: 'a', linesOfCode: 1000, fileCount: 10, languageBreakdown: {} },
-          { date: new Date(), commit: 'b', linesOfCode: 1010, fileCount: 10, languageBreakdown: {} },
+          {
+            date: new Date(),
+            commit: 'a',
+            linesOfCode: 1000,
+            fileCount: 10,
+            languageBreakdown: {},
+          },
+          {
+            date: new Date(),
+            commit: 'b',
+            linesOfCode: 1010,
+            fileCount: 10,
+            languageBreakdown: {},
+          },
         ],
         summary: {
           startDate: new Date(),
@@ -452,8 +462,20 @@ describe('CodeEvolutionTracker', () => {
     it('should calculate velocity correctly', () => {
       const mockReport: EvolutionReport = {
         dataPoints: [
-          { date: new Date('2024-01-01'), commit: 'a', linesOfCode: 0, fileCount: 0, languageBreakdown: {} },
-          { date: new Date('2024-01-11'), commit: 'b', linesOfCode: 1000, fileCount: 10, languageBreakdown: {} },
+          {
+            date: new Date('2024-01-01'),
+            commit: 'a',
+            linesOfCode: 0,
+            fileCount: 0,
+            languageBreakdown: {},
+          },
+          {
+            date: new Date('2024-01-11'),
+            commit: 'b',
+            linesOfCode: 1000,
+            fileCount: 10,
+            languageBreakdown: {},
+          },
         ],
         summary: {
           startDate: new Date('2024-01-01'),
@@ -736,7 +758,7 @@ describe('CodeEvolutionTracker', () => {
 
     it('should limit displayed data points', () => {
       const manyDataPoints = Array.from({ length: 50 }, (_, i) => ({
-        date: new Date(`2024-01-${String(i % 28 + 1).padStart(2, '0')}`),
+        date: new Date(`2024-01-${String((i % 28) + 1).padStart(2, '0')}`),
         commit: `commit${i}`,
         linesOfCode: 1000 + i * 10,
         fileCount: 20,

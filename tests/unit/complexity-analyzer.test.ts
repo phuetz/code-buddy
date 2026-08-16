@@ -5,18 +5,22 @@
 // Create mock functions
 const { mockReadFile, mockGlob } = vi.hoisted(() => ({
   mockReadFile: vi.fn<Promise<string>, [string, string]>(),
-  mockGlob: vi.fn<Promise<string[]>, [string[], { cwd: string; ignore: string[]; absolute: boolean }]>(),
+  mockGlob: vi.fn<
+    Promise<string[]>,
+    [string[], { cwd: string; ignore: string[]; absolute: boolean }]
+  >(),
 }));
 
 // Mock dependencies before importing
 jest.mock('fs-extra', () => {
   const impl = {
-  readFile: mockReadFile,
-};
+    readFile: mockReadFile,
+  };
   return { ...impl, default: impl };
 });
 
 jest.mock('fast-glob', () => ({
+  default: mockGlob,
   glob: mockGlob,
 }));
 
@@ -26,8 +30,6 @@ import {
   exportComplexityJSON,
   exportComplexityCSV,
   ComplexityReport,
-  FunctionComplexity,
-  FileComplexity,
 } from '../../src/analytics/complexity-analyzer';
 
 describe('ComplexityAnalyzer', () => {
@@ -167,7 +169,7 @@ const simpleArrow = (x: number) => x * 2;
 
       expect(result.files.length).toBeGreaterThan(0);
       const functions = result.files[0]?.functions || [];
-      expect(functions.some(f => f.name === 'arrowFunc')).toBe(true);
+      expect(functions.some((f) => f.name === 'arrowFunc')).toBe(true);
     });
 
     it('should analyze class methods', async () => {
@@ -188,7 +190,7 @@ class Calculator {
 
       expect(result.files.length).toBeGreaterThan(0);
       const functions = result.files[0]?.functions || [];
-      expect(functions.some(f => f.name === 'add')).toBe(true);
+      expect(functions.some((f) => f.name === 'add')).toBe(true);
     });
 
     it('should skip files that cannot be analyzed', async () => {
@@ -381,8 +383,9 @@ function complex(x: number) {
       const result = await analyzeComplexity();
 
       if (result.hotspots.length >= 2) {
-        expect(result.hotspots[0].cyclomaticComplexity)
-          .toBeGreaterThanOrEqual(result.hotspots[1].cyclomaticComplexity);
+        expect(result.hotspots[0].cyclomaticComplexity).toBeGreaterThanOrEqual(
+          result.hotspots[1].cyclomaticComplexity
+        );
       }
     });
   });
@@ -402,7 +405,7 @@ function complex(x: number) {
       const result = await analyzeComplexity();
 
       expect(result.recommendations.length).toBeGreaterThan(0);
-      expect(result.recommendations.some(r => r.includes('cyclomatic complexity'))).toBe(true);
+      expect(result.recommendations.some((r) => r.includes('cyclomatic complexity'))).toBe(true);
     });
 
     it('should recommend for long functions', async () => {
@@ -418,7 +421,7 @@ function complex(x: number) {
 
       const result = await analyzeComplexity();
 
-      expect(result.recommendations.some(r => r.includes('longer than 50 lines'))).toBe(true);
+      expect(result.recommendations.some((r) => r.includes('longer than 50 lines'))).toBe(true);
     });
 
     it('should recommend for functions with many parameters', async () => {
@@ -431,7 +434,7 @@ function manyParams(a: number, b: number, c: number, d: number, e: number, f: nu
 
       const result = await analyzeComplexity();
 
-      expect(result.recommendations.some(r => r.includes('more than 5 parameters'))).toBe(true);
+      expect(result.recommendations.some((r) => r.includes('more than 5 parameters'))).toBe(true);
     });
 
     it('should give positive feedback when complexity is acceptable', async () => {
@@ -443,7 +446,9 @@ function simple() { return 1; }
       const result = await analyzeComplexity();
 
       // When all is good, should get positive message
-      expect(result.recommendations.some(r => r.includes('acceptable limits') || r.includes('good'))).toBe(true);
+      expect(
+        result.recommendations.some((r) => r.includes('acceptable limits') || r.includes('good'))
+      ).toBe(true);
     });
   });
 
@@ -694,7 +699,7 @@ async function fetchData() {
 
       expect(result.files.length).toBeGreaterThan(0);
       const functions = result.files[0]?.functions || [];
-      expect(functions.some(f => f.name === 'fetchData')).toBe(true);
+      expect(functions.some((f) => f.name === 'fetchData')).toBe(true);
     });
 
     it('should handle generator functions', async () => {

@@ -13,7 +13,7 @@
  *   await mgr.startMCPServer();
  */
 
-import { execSync, spawn, ChildProcess } from 'child_process';
+import { execFileSync, execSync, spawn, ChildProcess } from 'child_process';
 import * as path from 'path';
 import * as fs from 'fs';
 import { logger } from '../../utils/logger.js';
@@ -37,6 +37,11 @@ export interface CodeExplorerFreshness {
   commitsBehind?: number;
   /** The graph no longer matches HEAD (or the legacy `stale` flag was set). */
   stale: boolean;
+}
+
+export interface CodeExplorerFreshnessOptions {
+  /** Keep false for strictly read-only one-shot commands. Defaults to current opt-in behavior. */
+  autoIndex?: boolean;
 }
 
 const DEFAULT_STATS: CodeExplorerStats = {
@@ -231,6 +236,7 @@ export class CodeExplorerManager {
   getFreshness(
     runGit: (args: string, cwd: string) => string = (args, cwd) =>
       execSync(`git ${args}`, { cwd, stdio: 'pipe', timeout: 10_000 }).toString().trim(),
+    options: CodeExplorerFreshnessOptions = {},
   ): CodeExplorerFreshness {
     const meta = this.readMeta();
     if (!meta) return { indexed: false, stale: false };
@@ -245,7 +251,7 @@ export class CodeExplorerManager {
         stale: meta.stale === true,
         ...(indexedAt ? { indexedAt } : {}),
       };
-      this.maybeAutoIndex(freshness);
+      if (options.autoIndex !== false) this.maybeAutoIndex(freshness);
       return freshness;
     }
 
@@ -265,8 +271,44 @@ export class CodeExplorerManager {
       ...(commitsBehind !== undefined ? { commitsBehind } : {}),
       stale: (commitsBehind ?? 0) > 0,
     };
-    this.maybeAutoIndex(freshness);
+    if (options.autoIndex !== false) this.maybeAutoIndex(freshness);
     return freshness;
+  }
+
+  /**
+   * Ask the indexed engine for one Mermaid diagram without starting an MCP
+   * server or writing an output file. Returns an empty string on every failure.
+   */
+  generateDiagram(
+    target: string,
+    type: 'flowchart' | 'sequence' | 'class' = 'flowchart',
+  ): string {
+    if (!target.trim() || !this.isRepoIndexed()) return '';
+    const binary = this.resolveBinary();
+    if (!binary) return '';
+    try {
+      const output = execFileSync(
+        binary,
+        ['diagram', target, '--type', type, '--format', 'mermaid', '--path', this.repoPath],
+        {
+          cwd: this.repoPath,
+          encoding: 'utf-8',
+          stdio: ['ignore', 'pipe', 'pipe'],
+          timeout: 20_000,
+          maxBuffer: 4 * 1024 * 1024,
+        },
+      ).trim();
+      const diagramStart = output.search(
+        /^(?:flowchart|graph|sequenceDiagram|classDiagram|stateDiagram|erDiagram)\b/m,
+      );
+      return diagramStart >= 0 ? output.slice(diagramStart).trim() : '';
+    } catch (err) {
+      logger.debug('CodeExplorer: diagram unavailable', {
+        target,
+        error: err instanceof Error ? err.message : String(err),
+      });
+      return '';
+    }
   }
 
   /** Launch one detached incremental refresh per stale index revision when explicitly enabled. */

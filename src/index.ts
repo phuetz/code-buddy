@@ -2397,6 +2397,16 @@ addLazyCommand(
 
 addLazyCommand(
   program,
+  'explain',
+  'Explain an unfamiliar repository in one Markdown or self-contained HTML artifact',
+  async () => {
+    const { createExplainCommand } = await import('./commands/explain.js');
+    return createExplainCommand();
+  },
+);
+
+addLazyCommand(
+  program,
   'ws',
   'Manage and search the opt-in multi-repository workspace',
   async () => {

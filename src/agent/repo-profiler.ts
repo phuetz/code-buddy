@@ -76,6 +76,13 @@ export interface RepoProfile {
 
 const CACHE_FILENAME = '.codebuddy/repoProfile.json';
 
+interface ComputeProfileOptions {
+  /** Do not persist caches, start indexers, or mutate the shared code graph. */
+  readOnly?: boolean;
+  /** Keep raw import edges for one-shot consumers such as `buddy explain`. */
+  preserveImportEdges?: boolean;
+}
+
 /**
  * Profiles a repository to produce structured metadata.
  */
@@ -137,11 +144,20 @@ export class RepoProfiler {
     return profile;
   }
 
+  /**
+   * Compute a fresh profile without any project-local writes or background
+   * indexing. Unlike the persisted profile, raw import edges are retained so
+   * one-shot read-only commands can build architecture diagrams.
+   */
+  async inspect(): Promise<RepoProfile> {
+    return this.computeProfile({ readOnly: true, preserveImportEdges: true });
+  }
+
   // ──────────────────────────────────────────────────────────────
   // Private implementation
   // ──────────────────────────────────────────────────────────────
 
-  private async computeProfile(): Promise<RepoProfile> {
+  private async computeProfile(options: ComputeProfileOptions = {}): Promise<RepoProfile> {
     const languages: string[] = [];
     let framework: string | undefined;
     let packageManager: RepoProfile['packageManager'];
@@ -369,7 +385,7 @@ export class RepoProfiler {
     }
 
     // ── Populate code graph from cartography ───────────────────
-    if (cartography) {
+    if (cartography && !options.readOnly) {
       try {
         const graph = KnowledgeGraph.getInstance();
         graph.clear(); // Fresh rebuild
@@ -379,7 +395,7 @@ export class RepoProfiler {
         }
 
         // Strip importEdges from profile to keep repoProfile.json lean
-        delete cartography.importEdges;
+        if (!options.preserveImportEdges) delete cartography.importEdges;
 
         logger.debug(`RepoProfiler: code graph populated with ${tripleCount} triples`);
       } catch (err) {
@@ -417,7 +433,7 @@ export class RepoProfiler {
     profile.contextPack = this.buildContextPack(profile);
 
     // Trigger background semantic indexing of the workspace only for persistent runs.
-    if (this.shouldWriteRuntimeCaches()) {
+    if (!options.readOnly && this.shouldWriteRuntimeCaches()) {
       try {
         const { getWorkspaceIndexer } = await import('../knowledge/workspace-indexer.js');
         const indexer = getWorkspaceIndexer({

@@ -9,7 +9,7 @@
  */
 
 import fs from 'fs-extra';
-import { glob } from 'fast-glob';
+import fg from 'fast-glob';
 
 export interface FunctionComplexity {
   name: string;
@@ -109,7 +109,7 @@ const COGNITIVE_PATTERNS = [
 export async function analyzeComplexity(options: AnalyzerOptions = {}): Promise<ComplexityReport> {
   const opts = { ...DEFAULT_OPTIONS, ...options };
 
-  const files = await glob(opts.include, {
+  const files = await fg(opts.include, {
     cwd: opts.rootPath,
     ignore: opts.exclude,
     absolute: true,
