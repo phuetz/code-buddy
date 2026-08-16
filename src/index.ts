@@ -3533,6 +3533,16 @@ addLazyCommand(
 
 addLazyCommand(
   program,
+  'share',
+  'Export a saved session as a self-contained, shareable HTML replay',
+  async () => {
+    const { createShareCommand } = await import('./commands/share.js');
+    return createShareCommand();
+  },
+);
+
+addLazyCommand(
+  program,
   'forge',
   'Counterfactual Forge: compare competing strategies against one proof contract',
   async () => {
