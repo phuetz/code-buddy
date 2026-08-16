@@ -54,6 +54,7 @@ import {
 import { WritePolicy, WRITE_TOOL_NAMES } from "../security/write-policy.js";
 import { RunStore } from "../observability/run-store.js";
 import { isToolNameAllowed } from "../utils/tool-filter.js";
+import { isToolVisibleForSurface } from '../config/feature-surface.js';
 import { loadAuthoredTools } from "./self-improvement/tool-skill-mutator.js";
 import { ConfirmationService } from "../utils/confirmation-service.js";
 import {
@@ -878,7 +879,7 @@ export class ToolHandler {
     toolCallId?: string,
     startTime: number = Date.now(),
   ): ToolResult | null {
-    if (isToolNameAllowed(toolName)) {
+    if (isToolNameAllowed(toolName) && isToolVisibleForSurface(toolName)) {
       return null;
     }
 

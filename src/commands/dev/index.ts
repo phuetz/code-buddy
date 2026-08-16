@@ -10,27 +10,23 @@
  */
 
 import type { Command } from 'commander';
+import { logger } from '../../utils/logger.js';
 
-/** Helper: create agent from env */
+/** Create an agent through the shared OAuth/local/API provider resolver. */
 async function createAgent() {
   const dotenv = await import('dotenv');
   dotenv.config();
 
   const { CodeBuddyAgent } = await import('../../agent/codebuddy-agent.js');
+  const { resolveCommandProvider } = await import('../llm-provider-resolution.js');
+  const provider = resolveCommandProvider();
 
-  const apiKey = process.env.GROK_API_KEY || process.env.XAI_API_KEY
-    || process.env.OPENAI_API_KEY || process.env.ANTHROPIC_API_KEY
-    || process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY;
-
-  if (!apiKey) {
-    console.error('Error: no API key found. Set GROK_API_KEY (or equivalent) environment variable.');
+  if (!provider) {
+    logger.error('No provider found. Run `buddy login` (recommended) or start local Ollama.');
     process.exit(1);
   }
 
-  const baseURL = process.env.GROK_BASE_URL;
-  const model = process.env.GROK_MODEL;
-
-  return new CodeBuddyAgent(apiKey, baseURL, model);
+  return new CodeBuddyAgent(provider.apiKey, provider.baseURL, provider.model);
 }
 
 export function registerDevCommands(program: Command): void {
