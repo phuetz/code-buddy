@@ -1,23 +1,35 @@
 # Available Tools
 
 > Auto-generated tool reference for CodeBuddy. Do not edit manually.
-> Generated: 2026-06-26
+> Generated: 2026-08-09
 
 ## Table of Contents
 
-- [File Reading](#file-reading) (3)
-- [File Writing](#file-writing) (6)
-- [File Search](#file-search) (6)
-- [System Operations](#system-operations) (8)
-- [Git Operations](#git-operations) (1)
-- [Web Operations](#web-operations) (43)
+- [File Reading](#file-reading) (4)
+- [File Writing](#file-writing) (7)
+- [File Search](#file-search) (8)
+- [System Operations](#system-operations) (18)
+- [Git Operations](#git-operations) (3)
+- [Web Operations](#web-operations) (50)
 - [Planning & Tasks](#planning-tasks) (19)
-- [Codebase Analysis](#codebase-analysis) (7)
-- [Media](#media) (12)
-- [Documents](#documents) (3)
-- [Utility](#utility) (42)
+- [Codebase Analysis](#codebase-analysis) (15)
+- [Media](#media) (19)
+- [Documents](#documents) (5)
+- [Utility](#utility) (50)
 
 ## File Reading
+
+### self_describe
+
+Inspect the robot's attested core, bounded code structure, turn metadata, configured faculties, and epistemic limits without live probes
+
+**Parameters:**
+- `focus` (string) - The aspect of this agent to inspect, for example voice, memory, routing, architecture, or a current limitation.
+- `depth` (string) - summary returns a compact snapshot; deep inspects more curated source areas.   Values: `summary`, `deep`
+
+**Keywords:** self, describe, components, composants, briques, bricks, architecture, de quoi es-tu fait, de quoi es-tu compose, qui es-tu, capabilities, capacites, capteur, capteurs, sensors, modules, buddy-sense, buddy-vision, buddy-memory, introspection, auto inspection, etudie, examine, inspecte, propre code, ton code, fonctionne, fonctionnes, fonctionnement, limites, version, conscient, consciente, conscience, consciousness, modele de soi
+
+---
 
 ### read_file
 
@@ -61,6 +73,19 @@ List files and directories with type, size, and modification time
 ---
 
 ## File Writing
+
+### scaffold_app
+
+Scaffold a new project from a template (node-cli, react, express).
+
+**Parameters:**
+- `template` (string, required) - Built-in template to generate   Values: `react-ts`, `express-api`, `node-cli`
+- `targetDir` (string, required) - Absolute empty directory path to create or fill
+- `vars` (object) - Template variables such as binName, description, author, port
+
+**Keywords:** scaffold, template, app, project, generate, node-cli, react, express
+
+---
 
 ### str_replace_editor
 
@@ -168,6 +193,33 @@ Find and replace text across multiple files in the codebase
 
 ## File Search
 
+### diff_files
+
+Compute an LCS-based diff between two files.
+
+**Parameters:**
+- `root` (string, required)
+- `left` (string, required)
+- `right` (string, required)
+
+**Keywords:** diff, files, lcs
+
+---
+
+### file_search
+
+Regex search in text files under a bounded root (ignores node_modules/.git/binaries).
+
+**Parameters:**
+- `root` (string, required)
+- `pattern` (string, required)
+- `flags` (string)
+- `maxResults` (number)
+
+**Keywords:** search, regex, files
+
+---
+
 ### search
 
 Search for text content or files
@@ -258,6 +310,78 @@ Run multiple searches in one call
 
 ## System Operations
 
+### build_project
+
+Build/compile the project and report the outcome.
+
+**Parameters:**
+- `root` (string, required)
+- `timeoutMs` (number)
+
+**Keywords:** build, compile
+
+---
+
+### lint_project
+
+Run the project linter (eslint) and report issues.
+
+**Parameters:**
+- `root` (string, required) - Absolute project root to lint
+- `timeoutMs` (number) - Execution timeout in milliseconds, capped at 120000
+
+**Keywords:** lint, eslint, quality
+
+---
+
+### test_runner
+
+Run the project test suite (vitest/jest) and report results.
+
+**Parameters:**
+- `root` (string, required) - Absolute project root containing package.json
+- `timeoutMs` (number) - Execution timeout in milliseconds, capped at 300000
+
+**Keywords:** test, vitest, jest
+
+---
+
+### env_doctor
+
+Diagnose a project environment: node, node_modules, scripts, config, git, docker.
+
+**Parameters:**
+- `root` (string, required)
+
+**Keywords:** environment, doctor, node, node_modules, scripts, config, git, docker
+
+---
+
+### port_check
+
+Check whether a loopback port is available or already listening.
+
+**Parameters:**
+- `port` (number, required)
+- `host` (string)
+
+**Keywords:** port, check, loopback, available, listening, server
+
+---
+
+### format_project
+
+Run the project formatter (prettier).
+
+**Parameters:**
+- `root` (string, required)
+- `write` (boolean)
+- `timeoutMs` (number)
+
+**Keywords:** format, prettier
+
+---
+
 ### bash
 
 Execute bash commands
@@ -269,6 +393,27 @@ Execute bash commands
 
 ---
 
+### extension_forge
+
+Safely author and install a runtime widget, tool, or skill
+
+**Parameters:**
+- `kind` (string, required) - Extension type to create   Values: `widget`, `tool`, `skill`
+- `name` (string, required) - Short extension name; a safe authored namespace is added automatically
+- `description` (string, required) - Purpose and when this extension should be used
+- `template` (string) - Widget only: complete inert Mustache HTML and CSS template
+- `sample` (object) - Widget only: representative JSON payload used by the validation gate
+- `code` (string) - Tool only: complete source that reads CODEBUDDY_TOOL_INPUT and writes its result to stdout
+- `language` (string) - Tool only: source language   Values: `javascript`, `typescript`, `python`
+- `parameters` (object) - Tool only: JSON Schema describing the generated tool arguments
+- `validation_cases` (array) - Tool only: functional examples the implementation must pass
+- `robustness_cases` (array) - Tool only: distinct edge inputs that catch hardcoding and fragile behavior
+- `body` (string) - Skill only: complete reusable SKILL.md instructions
+
+**Keywords:** extension, forge, create, widget, tool, skill, self-extension, code
+
+---
+
 ### terminal
 
 Execute shell commands through the existing bash safety checks
@@ -277,6 +422,18 @@ Execute shell commands through the existing bash safety checks
 - `command` (string, required) - The bash command to execute
 
 **Keywords:** terminal, bash, shell, command, execute, run, hermes
+
+---
+
+### tool_search
+
+Search available tools by keyword (progressive disclosure)
+
+**Parameters:**
+- `query` (string, required) - Search query — keywords describing what you need to do.
+- `max_results` (number) - Maximum number of results (default: 10).
+
+**Keywords:** tool, search, discover, find, capability, mcp, schema
 
 ---
 
@@ -292,6 +449,25 @@ Execute a bounded code snippet as a real subprocess and persist run artifacts
 - `timeout_ms` (number) - Execution timeout in milliseconds (default: 30000, max: 120000)
 
 **Keywords:** execute_code, hermes, code, script, runtime, subprocess, artifact, run
+
+---
+
+### app_server
+
+Start/stop a managed local dev server and make its loopback URL browsable for testing the app
+
+**Parameters:**
+- `action` (string, required) - The app server action to perform   Values: `start`, `stop`, `status`, `logs`, `expose`, `unexpose`
+- `command` (string) - Shell command that starts the server, e.g. 'npm run dev' (start)
+- `url` (string) - Loopback readiness URL, e.g. http://127.0.0.1:5173/ — must be localhost/127.x/::1 and the port must be free (start)
+- `cwd` (string) - Working directory for the server command (start)
+- `timeoutMs` (number) - Readiness timeout in ms (start, default 45000)
+- `pid` (number) - Managed server pid (stop, logs, expose, unexpose)
+- `lines` (number) - Number of log lines (logs, default 100)
+- `stderr` (boolean) - Show stderr instead of stdout (logs)
+- `ttlMinutes` (number) - Public preview lifetime in minutes (expose, default 30, max 240)
+
+**Keywords:** dev server, app server, localhost, preview, test app, serve, npm run dev, vite, test ui
 
 ---
 
@@ -316,6 +492,18 @@ Kubernetes cluster management operations
 - `args` (object) - Operation-specific arguments
 
 **Keywords:** kubernetes, k8s, kubectl, pod, deployment, service, namespace, cluster, node, scale, rollout, configmap, secret, ingress, helm
+
+---
+
+### scan_vulnerabilities
+
+Scan project dependencies for known security vulnerabilities
+
+**Parameters:**
+- `path` (string) - Project root path to scan (default: current working directory)
+- `package_manager` (string) - Scan only a specific package manager (omit to scan all detected)   Values: `npm`, `pip`, `cargo`, `go`, `gem`, `composer`
+
+**Keywords:** vulnerability, security, audit, dependency, npm, pip, cargo, cve, scan, advisory
 
 ---
 
@@ -420,6 +608,17 @@ Execute JavaScript snippets in a controlled runtime
 
 ## Git Operations
 
+### git_summary
+
+Read-only git summary: branch, ahead/behind, staged/modified counts and last commit.
+
+**Parameters:**
+- `root` (string, required)
+
+**Keywords:** git, summary, status, branch, commit, ahead, behind
+
+---
+
 ### git
 
 Git version control operations
@@ -432,7 +631,32 @@ Git version control operations
 
 ---
 
+### resolve_conflicts
+
+Detect and resolve Git merge conflicts in files
+
+**Parameters:**
+- `file_path` (string) - Path to the file with merge conflicts (omit to scan all files)
+- `strategy` (string) - Resolution strategy: ours (current branch), theirs (incoming), both (keep both), ai (show for manual resolution). Default: ours   Values: `ours`, `theirs`, `both`, `ai`
+- `scan_only` (boolean) - Only scan and list conflicts without resolving
+
+**Keywords:** merge, conflict, resolve, git, ours, theirs, rebase, cherry-pick, markers
+
+---
+
 ## Web Operations
+
+### http_probe
+
+Probe a loopback HTTP endpoint for status and headers.
+
+**Parameters:**
+- `url` (string, required)
+- `timeoutMs` (number)
+
+**Keywords:** http, probe, loopback
+
+---
 
 ### internet_scout_run
 
@@ -847,15 +1071,56 @@ Search the Spotify catalog
 
 ---
 
+### stock_quote
+
+Real stock/index market quote via Yahoo Finance (free, no API key), Stooq fallback
+
+**Parameters:**
+- `symbol` (string, required) - Ticker symbol. US stocks plain (e.g. 'AAPL', 'TSLA', 'NVDA'); other exchanges suffixed (e.g. 'MC.PA' for LVMH, 'BMW.DE'); indices prefixed with ^ (e.g. '^FCHI' for CAC 40, '^GSPC' for S&P 500). Map the company/index name the user says to its ticker.
+
+**Keywords:** stock, bourse, cours, action, quote, ticker, market, index, indice, nasdaq, cac, cac 40, cotation, action en bourse, valeur boursière
+
+---
+
+### weather
+
+Current weather and forecast for a city via Open-Meteo (no API key)
+
+**Parameters:**
+- `location` (string, required) - City name as the user said it (e.g. 'Paris', 'La Roche-sur-Yon')
+- `days` (number) - Forecast days 1-7 (default 1 = today only)
+- `units` (string) - Units (default metric: °C, km/h)   Values: `metric`, `imperial`
+
+**Keywords:** weather, météo, meteo, forecast, prévisions, previsions, température, temperature, pluie, neige, vent
+
+---
+
+### web_scrape
+
+Scrape a public web page locally with Scrapling and graceful web_fetch fallback
+
+**Parameters:**
+- `url` (string, required) - Public HTTP or HTTPS URL to scrape
+- `mode` (string) - Scraping engine (default: http)   Values: `http`, `stealth`, `dynamic`
+- `format` (string) - Primary output format (default: markdown)   Values: `markdown`, `text`, `html`
+- `css` (object) - Named CSS selectors to extract, for example { title: 'h1', prices: '.price' }
+- `timeout` (number) - Timeout in milliseconds (default: CODEBUDDY_SCRAPLING_TIMEOUT_MS or 60000)
+- `impersonate` (string) - Optional browser identity for HTTP mode
+- `solveCloudflare` (boolean) - Attempt Cloudflare challenge handling in stealth mode
+
+**Keywords:** scrape, crawl, extract, cloudflare, anti-bot, stealth, html, markdown, adaptive, selector
+
+---
+
 ### web_search
 
-Search the web for information including weather, news, documentation, and general queries
+Search the web for information including news, documentation, and general queries
 
 **Parameters:**
 - `query` (string, required) - The search query to execute
 - `max_results` (number) - Maximum number of results to return (default: 5)
 
-**Keywords:** search, google, web, internet, online, latest, news, documentation, docs, how to, weather, météo, meteo, forecast, temperature, info, find, lookup
+**Keywords:** search, google, web, internet, online, latest, news, documentation, docs, how to, info, find, lookup
 
 ---
 
@@ -1014,6 +1279,36 @@ Scroll the active browser page or scroll to an element ref
 
 ---
 
+### deep_research
+
+Bounded multi-source cited research pipeline (deep/wide/STORM) returning a report with references
+
+**Parameters:**
+- `topic` (string, required) - The research question or topic to investigate.
+- `mode` (string) - 'deep' (default): deterministic cited pipeline (plan → search → scrape → dedup → synthesize). 'wide': parallel sub-agent research fan-out (broader, less citation-strict).   Values: `deep`, `wide`
+- `iterations` (number) - Deep only: number of gap-analysis rounds (1-3, default 1). >1 re-searches to fill gaps in the draft. Higher = slower/more thorough.
+- `perspectives` (number) - Deep only: research the topic from N diversified perspectives (2-6) and co-write an outline-first cited article (STORM). Activates the multi-perspective pipeline.
+- `ckg` (boolean) - Deep only: bridge the run to the Collective Knowledge Graph — recall prior collective knowledge and ingest the deduped sources for cross-run accumulation.
+- `max_sources` (number) - Deep only: global cap on scraped sources (1-20, default 6). Raise only when the topic explicitly needs broader coverage (slower).
+
+**Keywords:** research, deep research, investigate, investigation, sources, cite, citation, report, literature, state of the art, état de l'art, etat de l'art, recherche approfondie, recherche, enquête, due diligence, compare, comparison, storm, perspectives, multi-source, cited
+
+---
+
+### paper_qa
+
+Grounded, cited QA over a local corpus of scientific PDFs (page/section provenance, honest refusal)
+
+**Parameters:**
+- `question` (string, required) - The question to answer from the PDF corpus.
+- `paths` (array) - PDF file paths and/or directories of papers to search. A directory is walked for *.pdf (heavy build/vcs dirs skipped). Defaults to the current directory when omitted.
+- `top_k` (number) - Number of passages to retrieve before relevance filtering (1-50, default 8).
+- `max_pdfs` (number) - Cap on PDFs indexed for this call (1-200, default 25). Raise only when a broader corpus is truly needed (slower).
+
+**Keywords:** paper, papers, pdf, scientific, science, article, articles, corpus, cite, citation, cited, page, section, papier, papiers, scientifique, cite la source, preuves, grounded, publication, étude, research paper
+
+---
+
 ### web_extract
 
 Fetch and extract web page content
@@ -1036,12 +1331,28 @@ Fetch web page content
 
 ---
 
+### web_test
+
+One-call structured UI test with evidence: console + server logs + snapshot + screenshot + assertions
+
+**Parameters:**
+- `url` (string, required) - Page to test — a dev origin registered via app_server, or any safe public URL
+- `steps` (array) - Optional interactions played in order AFTER navigation and BEFORE the oracles/assertions (order: navigate → steps → console/network/server oracles → assertions). Test a FLOW, not just page load. Each step becomes a check with evidence; a failing step (e.g. missing selector) fails the run. Anything a step triggers (a fetch, a console error) is caught by the oracles that run afterward. Omit for the original load-and-assert behavior.
+- `assertions` (array) - Declarative checks: {type: 'text'|'selector'|'title', value: string}
+- `screenshot` (boolean) - Capture a screenshot as evidence (default true)
+- `allowConsoleErrors` (boolean) - Do not fail on console/page errors (default false)
+- `allowNetworkErrors` (boolean) - Do not fail on failed network requests / 4xx-5xx responses (default false)
+
+**Keywords:** web test, test ui, verify app, smoke test, e2e, console errors, check page, test app
+
+---
+
 ### browser
 
 Automate web browser for navigation, interaction, extraction, observation, and testing
 
 **Parameters:**
-- `action` (string, required) - The browser action to perform   Values: `launch`, `connect`, `close`, `tabs`, `new_tab`, `focus_tab`, `close_tab`, `snapshot`, `observe`, `get_element`, `find_elements`, `navigate`, `go_back`, `go_forward`, `reload`, `click`, `double_click`, `right_click`, `type`, `fill`, `select`, `press`, `hover`, `scroll`, `screenshot`, `pdf`, `get_cookies`, `set_cookie`, `clear_cookies`, `set_headers`, `set_offline`, `emulate_device`, `set_geolocation`, `evaluate`, `get_content`, `extract`, `assert_text`, `get_url`, `get_title`, `drag`, `upload_files`, `wait_for_navigation`, `get_local_storage`, `set_local_storage`, `get_session_storage`, `set_session_storage`, `add_route_rule`, `remove_route_rule`, `clear_route_rules`, `set_timezone`, `set_locale`, `download`
+- `action` (string, required) - The browser action to perform   Values: `launch`, `connect`, `close`, `tabs`, `new_tab`, `focus_tab`, `close_tab`, `snapshot`, `observe`, `get_element`, `find_elements`, `navigate`, `go_back`, `go_forward`, `reload`, `click`, `double_click`, `right_click`, `type`, `fill`, `select`, `press`, `hover`, `scroll`, `screenshot`, `pdf`, `get_cookies`, `set_cookie`, `clear_cookies`, `set_headers`, `set_offline`, `emulate_device`, `set_geolocation`, `evaluate`, `get_content`, `extract`, `assert_text`, `network`, `get_url`, `get_title`, `drag`, `upload_files`, `wait_for_navigation`, `get_local_storage`, `set_local_storage`, `get_session_storage`, `set_session_storage`, `add_route_rule`, `remove_route_rule`, `clear_route_rules`, `set_timezone`, `set_locale`, `download`
 - `cdpUrl` (string) - CDP WebSocket URL for connecting to existing browser
 - `headless` (boolean) - Run browser in headless mode (default: true)
 - `tabId` (string) - Tab ID for focus_tab/close_tab
@@ -1083,6 +1394,7 @@ Automate web browser for navigation, interaction, extraction, observation, and t
 - `latitude` (number) - Latitude for geolocation
 - `longitude` (number) - Longitude for geolocation
 - `expression` (string) - JavaScript code to evaluate in page
+- `networkAction` (string) - For action=network: list or clear captured network failures (failed requests + 4xx/5xx responses)   Values: `list`, `clear`
 - `timeout` (number) - Timeout in milliseconds
 - `sourceRef` (number) - Source element ref for drag operation
 - `targetRef` (number) - Target element ref for drag operation
@@ -1102,15 +1414,16 @@ Automate web browser for navigation, interaction, extraction, observation, and t
 
 ### browser_operator
 
-Propose a consent-gated Browser Operator session (action log, consent scopes, stop control, proof export) for live web goals beyond web_search/web_fetch — without launching a browser
+Propose a consent-gated Browser Operator session for a reviewed sourceUrl (action log, consent scopes, stop control, proof export) — without launching a browser
 
 **Parameters:**
 - `goal` (string, required) - What the browser session should accomplish, e.g. "log into the dashboard and export the monthly report".
 - `query` (string) - Optional search query seed. Defaults to the goal.
-- `sourceUrl` (string) - Optional known starting URL for the session.
+- `sourceUrl` (string) - Explicit credential-free HTTP(S) starting URL. Required by the executable runtime; resolve it with web_search first when unknown.
 - `intent` (string) - Plan intent. Defaults to research.   Values: `research`, `prospecting`, `profile_enrichment`, `page_verification`, `lead_discovery`
-- `mode` (string) - Browser surface. "isolated" (default) uses a fresh public surface; "local" reuses the operator's logged-in browser and therefore requires consent.   Values: `isolated`, `local`
+- `mode` (string) - Browser surface. "isolated" (default) is headless; "local" opens a fresh visible dedicated browser owned by Code Buddy. Attaching existing logged-in tabs is not yet supported.   Values: `isolated`, `local`
 - `requiresInteraction` (boolean) - Set true when the goal needs clicking/typing (mutating interaction). Adds an interact stage and consent scope.
+- `interactionInstruction` (string) - Exact single visible browser action to bind to the reviewed plan and confirm again immediately before execution. Defaults to goal.
 - `allowLoginPages` (boolean) - Set true when the session may pass authenticated/login pages. Requires consent.
 - `expectedText` (string) - Optional text whose presence proves the goal was reached (verification evidence).
 - `maxPages` (number) - Maximum pages the session may visit. Defaults to 5.
@@ -1415,6 +1728,88 @@ Update todo list progress
 
 ## Codebase Analysis
 
+### project_map
+
+Read-only map of a project: directory tree, entry points and languages.
+
+**Parameters:**
+- `root` (string, required) - Absolute project root to inspect
+- `maxDepth` (number) - Maximum tree depth, default 3, max 8
+
+**Keywords:** project, map, tree, structure, entrypoint, languages
+
+---
+
+### dep_inspect
+
+Inspect package.json dependencies, scripts, engines and lockfile.
+
+**Parameters:**
+- `root` (string, required) - Absolute project root
+
+**Keywords:** dependencies, package.json, scripts, engines, lockfile, npm
+
+---
+
+### code_stats
+
+Compute code statistics: line counts by language, comments and largest files.
+
+**Parameters:**
+- `root` (string, required)
+- `extensions` (array)
+
+**Keywords:** code, stats, lines, languages, comments, largest files
+
+---
+
+### license_check
+
+Check dependency licenses for compliance.
+
+**Parameters:**
+- `root` (string, required)
+
+**Keywords:** license, compliance, dependencies
+
+---
+
+### sbom_generate
+
+Generate a software bill of materials (SBOM) from the dependency tree.
+
+**Parameters:**
+- `root` (string, required)
+
+**Keywords:** sbom, dependencies, supply-chain
+
+---
+
+### todo_scan
+
+Scan a codebase for TODO/FIXME/HACK/XXX markers.
+
+**Parameters:**
+- `root` (string, required)
+- `markers` (array)
+
+**Keywords:** todo, fixme, hack, xxx, scan, markers
+
+---
+
+### bundle_analyze
+
+Analyze build output size (dist, gzip) for the project.
+
+**Parameters:**
+- `root` (string, required)
+- `distDir` (string)
+- `limit` (number)
+
+**Keywords:** bundle, dist, gzip
+
+---
+
 ### code_graph
 
 Query code dependency graph: callers, callees, impact analysis, Mermaid flowcharts, class hierarchies
@@ -1426,6 +1821,18 @@ Query code dependency graph: callers, callees, impact analysis, Mermaid flowchar
 - `depth` (number) - Depth for flowchart/impact/module_deps (default 2, max 6)
 
 **Keywords:** code graph, call graph, who calls, what calls, callers, callees, impact analysis, what breaks, affected, flowchart, mermaid, diagram, organigramme, class hierarchy, inheritance, extends, implements, file functions, methods, signatures, dependency path, module dependencies, communities, clusters, subsystems, semantic search, embedding, similarity, pagerank, dead code, unused, uncalled, orphan, coupling, heatmap, refactoring, god function, hub module, drift, snapshot, evolution, visualize, interactive, d3, impact preview, pr impact, diff impact
+
+---
+
+### find_bugs
+
+Scan source files for potential bugs using regex-based static analysis
+
+**Parameters:**
+- `path` (string, required) - File or directory path to scan for bugs
+- `severity` (string) - Filter by minimum severity level   Values: `all`, `critical`, `high`
+
+**Keywords:** bug, find, scan, analysis, static, security, lint, check, vulnerability, error, leak, dead code, race condition, null, injection
 
 ---
 
@@ -1515,6 +1922,69 @@ Spawn specialized subagent
 
 ## Media
 
+### comfy_recipe
+
+List, preflight, or run a registered local ComfyUI recipe with declared workspace-local image references and confined outputs
+
+**Parameters:**
+- `action` (string, required) - Operation to perform.   Values: `list`, `preflight`, `run`
+- `commercial_use` (boolean, required) - Explicitly declare commercial intent.
+- `recipe_id` (string) - Registered recipe id for preflight/run.
+- `version` (string) - Optional exact recipe version.
+- `prompt` (string) - Text prompt for run.
+- `negative_prompt` (string) - Optional negative prompt.
+- `seed` (number) - Optional non-negative integer seed.
+- `width` (number) - Optional width; supply height too.
+- `height` (number) - Optional height; supply width too.
+- `allow_fallback` (boolean) - Allow only registered recipe fallbacks.   Default: `true`
+- `reference_images` (array) - Run-only workspace-local images mapped to exact recipe image-binding ids.
+
+**Keywords:** comfyui, comfy, recipe, workflow, local generation, image, reference image, avatar, character consistency, cohérence personnage, video, audio, music, 3d, storyboard, book cover, trailer, animation, génération locale, couverture, bande annonce
+
+---
+
+### lisa_selfie
+
+Generate a portrait of Lisa (LoRA when installed) and optionally send it on Telegram
+
+**Parameters:**
+- `mood` (string) - Expressive register   Values: `tender`, `playful`, `bold`, `sparkly`, `calm`, `mika`, `portrait`
+- `scene` (string) - Optional short scene (no file paths)
+- `send_telegram` (boolean) - Send via Telegram after generation (default true when configured)
+- `aspect_ratio` (string) - Default portrait   Values: `landscape`, `square`, `portrait`
+
+**Keywords:** lisa, selfie, photo, portrait, telegram, companion, lora, photo de toi, envoie photo
+
+---
+
+### gpu_media_job
+
+Submit and monitor isolated PanoWorld or LongCat jobs on a configured GPU worker
+
+**Parameters:**
+- `operation` (string, required) - Worker operation.   Values: `capabilities`, `submit`, `status`, `cancel`
+- `job_kind` (string) - Required for submit.   Values: `panoworld_reconstruct`, `avatar_video_render`
+- `payload` (object) - Validated job payload. PanoWorld accepts single-2048 (1 view) or multi-1024 (max 5); avatar rendering is restricted to 480p.
+- `job_id` (string) - Required for status or cancel.
+
+**Keywords:** darkstar, gpu, panoworld, longcat, avatar, 3dgs, world model, reconstruction, render
+
+---
+
+### image_edit
+
+Create a new edited image from a confirmed workspace source and optional PNG alpha mask
+
+**Parameters:**
+- `prompt` (string, required) - Exact visual change to apply while preserving everything outside the requested regions
+- `image_path` (string, required) - Workspace-relative or absolute path to the source PNG, JPEG, or WebP
+- `mask_path` (string) - Optional workspace-confined PNG alpha mask
+- `selections` (array) - Optional edit rectangles using normalized 0..1 coordinates
+
+**Keywords:** image, edit, inpaint, mask, mark, design, retouch, modifier, zone
+
+---
+
 ### image_generate
 
 Generate an image through the configured image backend and cache returned media when possible
@@ -1523,7 +1993,44 @@ Generate an image through the configured image backend and cache returned media 
 - `prompt` (string, required) - Text prompt describing the desired image
 - `aspect_ratio` (string) - Output aspect ratio: landscape (wide), square (1:1), or portrait (tall). Defaults to landscape.   Values: `landscape`, `square`, `portrait`   Default: `landscape`
 
-**Keywords:** image, generate, picture, photo, openai, xai, hermes
+**Keywords:** image, generate, picture, photo, openai, xai, hermes, gener, cree, dessin, illustration
+
+---
+
+### object_detect
+
+Detect objects in a local image using local YOLOv8/Ultralytics inference
+
+**Parameters:**
+- `image_path` (string, required) - Absolute or workspace-relative path to the image file
+- `model_path` (string) - Optional YOLO model path. Defaults to CODEBUDDY_YOLO_MODEL, ~/vision_tests/yolov8n.onnx, ~/vision_tests/yolov8n.pt, or yolov8n.pt
+- `python_path` (string) - Optional Python executable with ultralytics installed. Defaults to CODEBUDDY_YOLO_PYTHON, ~/vision_tests/venv/bin/python, or python3
+- `min_confidence` (number) - Minimum detection confidence from 0 to 1. Default 0.25
+- `iou_threshold` (number) - YOLO IoU threshold from 0 to 1. Default 0.7
+- `classes` (array) - Optional class names or numeric class IDs to keep, e.g. ["person"] or ["0"]
+- `device` (string) - Optional Ultralytics device, e.g. cpu, cuda:0, mps, or a ROCm-supported device string
+- `max_detections` (number) - Maximum detections to return. Default 100
+- `save_annotated` (boolean) - Also save an annotated image with boxes. Default false
+- `annotated_output_path` (string) - Optional output path for the annotated image when save_annotated is true
+- `timeout_ms` (number) - YOLO runtime timeout in milliseconds. Default 120000
+
+**Keywords:** vision, image, object, detect, detection, yolo, yolov8, ultralytics, person, people, presence, camera
+
+---
+
+### understand_video
+
+Understand a video: transcript + research card + unverified experiment backlog + optional local visual or opt-in Gemini analysis
+
+**Parameters:**
+- `source` (string, required) - YouTube URL (youtube.com/watch?v=… or youtu.be/…), a direct media URL, or a local video/audio file path
+- `question` (string) - Optional question to answer about the video; recorded with the transcript so you can answer it from the transcript
+- `language` (string) - Optional preferred caption/transcription language code (e.g. 'en', 'fr'). Tried first, then en/fr.
+- `visual` (boolean) - Also analyze what is SHOWN on screen (frames → local vision model), fused per transcript segment. EXPENSIVE and SLOW: it downloads the picture track then describes each keyframe at a local VLM (~1–10 s/frame). Recommended mainly for SHORT videos, or when the on-screen VISUAL content matters (code screencasts, diagrams, slides). For LONG videos prefer the default transcript-only path. Safe either way — the visual leg is wall-clock-bounded (CODEBUDDY_VIDEO_VISUAL_BUDGET_MS, default ~120 s) and degrades gracefully: on a long video it renders the transcript plus a partial/ignored-visual note instead of timing out. Default false (transcript only).
+- `ocr` (boolean) - With visual:true, also OCR each keyframe (best for reading code/text on screen). Default false.
+- `cloud` (boolean) - OPT-IN cloud fallback: also send the video/URL to Gemini for a joint audio+visual, timestamped answer. Sends data to Google — public/non-sensitive videos only. Requires GEMINI_API_KEY; degrades to the local transcript on any failure. Default false.
+
+**Keywords:** video, youtube, transcribe, transcript, captions, subtitles, vidéo, résume vidéo, summarize, watch, movie, mp4, visual, screencast, frames, on-screen, shown, cloud, gemini, research, experiment, backlog, innovation
 
 ---
 
@@ -1555,7 +2062,31 @@ Generate a video through the configured video backend and cache returned media w
 - `seed` (number) - Optional seed for reproducible generations
 - `model` (string) - Optional configured model/family override for the active backend
 
-**Keywords:** video, generate, text-to-video, image-to-video, xai, fal, hermes
+**Keywords:** video, generate, text-to-video, image-to-video, xai, fal, hermes, gener, cree, clip, film, animation
+
+---
+
+### video_stitch
+
+Chain multiple local video clips into one longer film with transitions (xfade/gl), optional background music (ducked) and voiceover, via ffmpeg; saved under .codebuddy/media-generation/films/
+
+**Parameters:**
+- `clips` (array, required) - Ordered list of local video file paths to weld together, in play order. At least one; two or more to actually chain.
+- `transition` (string) - A single transition name applied at EVERY boundary (fade, fadeblack, dissolve, wipeleft/right/up/down, slideleft/right/up/down, circleopen/close, radial, pixelize, smoothleft…, or 'cut' for a hard cut). Default 'fade'.
+- `transitions` (array) - Optional per-boundary transitions (one object per gap between adjacent clips), overriding `transition`. Length should be clips.length − 1.
+- `transition_duration` (number) - Default transition duration in seconds applied to every boundary that does not specify its own. Default 1. Auto-clamped to fit inside the shortest adjacent clip.
+- `engine` (string) - Transition engine. 'xfade' (default) = native ffmpeg filters, zero dependency. 'gl' = GLSL gl-transition filter if this ffmpeg has it, else it falls back to xfade with a warning.   Values: `xfade`, `gl`
+- `resolution` (string) - Output resolution as a preset ('360p','480p','540p','720p','1080p','1440p','2160p','4k') or explicit 'WIDTHxHEIGHT'. Defaults to the first clip's dimensions.
+- `aspect_ratio` (string) - Aspect ratio used with a resolution preset to compute the target dimensions. Default 16:9.   Values: `16:9`, `9:16`, `1:1`, `4:3`, `3:4`, `3:2`, `2:3`
+- `fps` (number) - Output frame rate. Defaults to the first clip's fps, else 30.
+- `music` (string) - Optional background music file path. Looped and trimmed to the film length, and ducked under dialogue/voiceover unless ducking:false.
+- `music_volume` (number) - Background music volume 0..1. Default 0.25.
+- `ducking` (boolean) - Duck (lower) the music while dialogue/voiceover plays. Default true when music is present.
+- `voiceover` (string) - Optional full-length narration/voiceover audio file path, mixed at full volume over the film.
+- `name` (string) - Optional film name, used for the output filename and its sidecar metadata.
+- `output` (string) - Optional explicit output path. Defaults to .codebuddy/media-generation/films/<name>-<id>.mp4.
+
+**Keywords:** video, stitch, montage, film, concatenate, concat, chain, transition, xfade, crossfade, enchainer, assembler, monter, clip, produire, production, long, music, voiceover
 
 ---
 
@@ -1699,6 +2230,36 @@ Clipboard operations
 
 ## Documents
 
+### meeting_notes
+
+Create private, grounded meeting notes from a workspace-local transcript, audio, or video file
+
+**Parameters:**
+- `input_path` (string, required) - Workspace-local transcript (.txt/.md/.srt/.vtt/.json), audio, or video path. Relative paths resolve from active cwd; absolute paths must remain beneath it.
+- `language` (string) - Report language (default: fr).   Default: `fr`
+- `output_prefix` (string) - Optional workspace-local report prefix. Writes new <prefix>.md and <prefix>.json files; existing targets are never overwritten. An existing directory gets a safe title-derived filename.
+
+**Keywords:** meeting, notes, minutes, transcript, transcription, audio, video, summary, decisions, actions, speakers, evidence, timestamp, réunion, compte rendu, résumé, décisions, tâches, horodatage
+
+---
+
+### generate_document
+
+Generate professional documents (PowerPoint/Word/Excel/PDF) from markdown content
+
+**Parameters:**
+- `type` (string, required) - Document format to generate   Values: `pptx`, `docx`, `xlsx`, `pdf`
+- `title` (string, required) - Document title
+- `content` (string, required) - Document content in markdown format. Use # for title slide, ## for section headers, ### for sub-sections, - for bullet points, ``` for code blocks. For DOCX, local image references such as ![caption](screens/image1.png) are embedded, fitted without distortion, and captioned from the alt text. For XLSX, use CSV rows or JSON array of objects.
+- `outputPath` (string, required) - Output file path with matching extension, e.g. "./report.docx", "./deck.pptx", or "./output/analysis.pdf"
+- `theme` (string) - Visual theme for the document (default: professional)   Values: `professional`, `minimal`, `dark`
+- `pageSize` (string) - Page size for PDF/DOCX (default: A4)   Values: `A4`, `letter`
+- `orientation` (string) - Page orientation for PDF (default: portrait)   Values: `portrait`, `landscape`
+
+**Keywords:** generate, document, pptx, docx, xlsx, pdf, powerpoint, word, excel, slides, deck, report, create, export
+
+---
+
 ### archive
 
 Work with archives
@@ -1747,12 +2308,49 @@ Read PDF documents
 
 ## Utility
 
+### csv_preview
+
+Preview a CSV file: inferred columns, row counts and value types.
+
+**Parameters:**
+- `file` (string, required)
+- `previewRows` (number)
+
+**Keywords:** csv, preview, columns, rows, types, data
+
+---
+
+### json_query
+
+Query a JSON file by a dotted/bracket path.
+
+**Parameters:**
+- `file` (string, required)
+- `path` (string, required)
+
+**Keywords:** json, query, path, inspect, data
+
+---
+
+### code_exec
+
+Run bounded JavaScript orchestration whose nested effects retain Code Buddy policies and confirmations
+
+**Parameters:**
+- `code` (string, required) - JavaScript orchestration source. Top-level await is supported.
+- `timeout_ms` (number) - Bounded execution timeout in milliseconds (100..60000; default 30000).
+
+**Keywords:** code_exec, code mode, javascript, orchestration, tool bridge, responses lite, exec
+
+---
+
 ### mixture_of_agents
 
 Route a difficult problem through multiple frontier model references and an aggregator
 
 **Parameters:**
 - `user_prompt` (string, required) - The complex query or problem to solve using multiple model perspectives and a final aggregator.
+- `use_case` (string) - Selects complementary model roles and free OpenRouter models. balanced is the default.   Values: `balanced`, `fast`, `code`, `architecture`, `decision`, `research`, `security`
 
 **Keywords:** mixture of agents, moa, openrouter, frontier, aggregation, reasoning, hermes
 
@@ -1807,6 +2405,7 @@ Delegate a one-shot question to a connected fleet peer Code Buddy and get its an
 - `peer` (string, required) - The peer ID (from /fleet listen --name). Use list_peers to discover available peer IDs.
 - `prompt` (string, required) - The question or task to ask the peer. Be specific and self-contained — the peer has no shared context.
 - `systemPrompt` (string) - Optional system prompt override for the peer. Defaults to the peer's brief-answer mode.
+- `provider` (string) - Exact backend to use on the peer. When set, the peer fails closed instead of sending the model to another provider.   Values: `ollama`, `lmstudio`, `lemonade`, `chatgpt-oauth`, `agy-cli`, `gemini-cli`, `openrouter`, `grok`, `mistral`, `anthropic`, `gemini`, `openai`
 - `model` (string) - Optional model hint for the peer (e.g. "grok-3", "claude-opus-4-5"). Peer may ignore.
 - `dispatchProfile` (string) - Optional Fleet dispatch profile. When set, carries the operating posture through peer.chat and returns peer-side policy metadata when supported. Selection guide: balanced: general delegation, mixed tasks, or unclear posture; research: source-aware investigation, context gathering, and low-mutation analysis; code: implementation, refactoring, tests, and development edits; review: read-first code review, audit, regression, and missing-test analysis; safe: high-risk, secret-bearing, destructive, or read-only-by-default work.   Values: `balanced`, `research`, `code`, `review`, `safe`
 - `timeoutMs` (number) - Request timeout in milliseconds. Default 60000.
@@ -1817,12 +2416,12 @@ Delegate a one-shot question to a connected fleet peer Code Buddy and get its an
 
 ### restore_context
 
-Restore compressed context content by identifier
+Restore exact content previously captured in the active workspace and session by callId or scoped identifier
 
 **Parameters:**
-- `identifier` (string, required) - File path (e.g. "src/agent/types.ts") or URL to restore
+- `identifier` (string, required) - Exact tool call ID (preferred), or an identifier whose content was already captured in the active workspace and session
 
-**Keywords:** restore, context, memory, compressed, retrieve, earlier
+**Keywords:** restore, context, memory, compressed, retrieve, earlier, callId, raw, exact, workspace, session
 
 ---
 
@@ -1905,6 +2504,21 @@ Consult CodeExplorer for a query or code understanding request (read-only)
 - `query` (string, required) - The query or task description to ask CodeExplorer about.
 
 **Keywords:** code-explorer, ask, query, understand, explain, search, related files, dependents, tests
+
+---
+
+### delegate_agent
+
+Delegate a bounded multi-step task to a built-in specialized agent (pdf/excel/data_analysis/sql/archive/swe)
+
+**Parameters:**
+- `agent` (string, required) - Which specialized agent to delegate to.   Values: `pdf`, `excel`, `data_analysis`, `sql`, `archive`, `swe`
+- `action` (string) - The sub-action for the agent (e.g. pdf: extract|analyze|search|summarize; sql: query|tables|schema|import|export; data_analysis: analyze|transform|aggregate|pivot|correlate; archive: list|extract|create; swe: edit|debug|refactor|run). Omit for a sensible default.
+- `instruction` (string) - Free-form description of the task (used by swe; passed to other agents as context).
+- `filePath` (string) - Path to the input file the agent should operate on (PDF/XLSX/CSV/archive/db).
+- `params` (object) - Extra action-specific parameters (e.g. { pattern } for pdf search, { query } for sql, { sheetName } for excel).
+
+**Keywords:** delegate, agent, specialized, pdf, excel, xlsx, csv, data, analysis, sql, database, query, archive, zip, tar, swe, refactor, debug, pivot, correlate
 
 ---
 
@@ -2006,6 +2620,42 @@ Read one installed SKILL.md package and its integrity metadata from the local Sk
 - `include_content` (boolean) - Include SKILL.md file content. Default: true.
 
 **Keywords:** skill, skills, view, read, content, inspect, show, hub, hermes
+
+---
+
+### verify
+
+Delegate to an independent fresh-context Verifier that runs real oracles and returns a CONFIRMED / NEEDS REVIEW verdict with evidence (read-only)
+
+**Parameters:**
+- `instruction` (string, required) - What to verify — describe the change/flow and the claim to prove (e.g. "the login form submits and redirects to /dashboard", "the failing test tests/foo.test.ts now passes").
+- `url` (string) - Optional URL to drive when verifying a running web UI (passed through to the Verifier as a hint).
+
+**Keywords:** verify, verification, evidence, confirm, validate, oracle, independent, proof, check, works
+
+---
+
+### authored__greet
+
+Greet someone
+
+---
+
+### authored__reverse
+
+reverse s
+
+**Parameters:**
+- `s` (string)
+
+---
+
+### authored__slugify
+
+slugify text
+
+**Parameters:**
+- `text` (string)
 
 ---
 
@@ -2236,10 +2886,10 @@ Create and manipulate visual workspaces with positioned elements
 
 ### device_manage
 
-Manage paired devices (SSH/ADB/local)
+Manage paired devices (SSH/ADB/local), including read-only calendar events
 
 **Parameters:**
-- `action` (string, required) - Device action to perform   Values: `list`, `pair`, `remove`, `snap`, `screenshot`, `record`, `location`, `run`
+- `action` (string, required) - Device action to perform   Values: `list`, `pair`, `remove`, `snap`, `screenshot`, `record`, `location`, `calendar`, `run`
 - `deviceId` (string) - Device identifier
 - `name` (string) - Display name for pairing
 - `transport` (string) - Transport type   Values: `ssh`, `adb`, `local`
@@ -2249,8 +2899,9 @@ Manage paired devices (SSH/ADB/local)
 - `keyPath` (string) - Path to SSH key
 - `command` (string) - Command to run (for run action)
 - `duration` (number) - Recording duration in seconds (for record action)
+- `days` (number) - Calendar look-ahead in days, from 1 to 31 (for calendar action)
 
-**Keywords:** device, ssh, adb, android, remote, screenshot, camera, pair
+**Keywords:** device, ssh, adb, android, remote, screenshot, camera, pair, calendar, agenda
 
 ---
 
@@ -2401,5 +3052,5 @@ Scan source files for hardcoded secrets, credentials, and API keys
 
 ---
 
-_Total tools: 151_
-<!-- hash:5ed6cc115f65bdf8 -->
+_Total tools: 199_
+<!-- hash:89f1151c86b4bc77 -->

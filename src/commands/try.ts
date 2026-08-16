@@ -168,13 +168,21 @@ async function createDefaultAgent(
   provider: TryProvider,
   workspace: string,
 ): Promise<TryDemoAgent> {
-  const [{ CodeBuddyAgent }, { ConfirmationService }] = await Promise.all([
-    import('../agent/codebuddy-agent.js'),
-    import('../utils/confirmation-service.js'),
-  ]);
+  const [{ CodeBuddyAgent }, { ConfirmationService }, { getPermissionModeManager }] =
+    await Promise.all([
+      import('../agent/codebuddy-agent.js'),
+      import('../utils/confirmation-service.js'),
+      import('../security/permission-modes.js'),
+    ]);
   const confirmation = ConfirmationService.getInstance();
   const previousFlags = confirmation.getSessionFlags();
   confirmation.setSessionFlag('allOperations', true);
+  // Le permission mode est vérifié AVANT les session flags : en mode `default` et sans TTY,
+  // create_file est refusé (« User cancelled »). La démo tourne dans un bac à sable temporaire
+  // isolé (workspace), donc on auto-approuve tout le temps de la démo puis on restaure le mode.
+  const permMgr = getPermissionModeManager();
+  const previousMode = permMgr.getMode();
+  permMgr.setMode('bypassPermissions');
   try {
     const agent = new CodeBuddyAgent(
       provider.apiKey,
@@ -195,6 +203,7 @@ async function createDefaultAgent(
           confirmation.setSessionFlag('fileOperations', previousFlags.fileOperations);
           confirmation.setSessionFlag('bashCommands', previousFlags.bashCommands);
           confirmation.setSessionFlag('allOperations', previousFlags.allOperations);
+          permMgr.setMode(previousMode);
         }
       },
     };
@@ -202,6 +211,7 @@ async function createDefaultAgent(
     confirmation.setSessionFlag('fileOperations', previousFlags.fileOperations);
     confirmation.setSessionFlag('bashCommands', previousFlags.bashCommands);
     confirmation.setSessionFlag('allOperations', previousFlags.allOperations);
+    permMgr.setMode(previousMode);
     throw error;
   }
 }
