@@ -112,7 +112,12 @@ lisa_selfie
 list_directory
 list_peers
 lsp_code_action
+lsp_definition
+lsp_diagnostics
+lsp_hover
+lsp_references
 lsp_rename
+lsp_symbols
 meeting_notes
 mixture_of_agents
 multi_edit

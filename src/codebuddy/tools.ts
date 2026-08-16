@@ -171,7 +171,7 @@ export type { CodeBuddyTool, JsonSchemaProperty };
 // Explicit re-exports from tool-definitions (no blanket export *)
 export {
   CORE_TOOLS, SELF_DESCRIBE_TOOLS, MORPH_EDIT_TOOL, isMorphEnabled, CODE_EXEC_TOOLS,
-  SEARCH_TOOLS, TODO_TOOLS, KANBAN_TOOLS, MESSAGING_TOOLS, YUANBAO_TOOLS, HOMEASSISTANT_TOOLS, MOA_TOOLS, SPOTIFY_TOOLS, X_SEARCH_TOOLS, FEISHU_TOOLS, CRON_TOOLS, WEB_TOOLS, RESEARCH_TOOLS, ADVANCED_TOOLS, MULTIMODAL_TOOLS,
+  SEARCH_TOOLS, TODO_TOOLS, KANBAN_TOOLS, MESSAGING_TOOLS, YUANBAO_TOOLS, HOMEASSISTANT_TOOLS, MOA_TOOLS, SPOTIFY_TOOLS, X_SEARCH_TOOLS, FEISHU_TOOLS, CRON_TOOLS, WEB_TOOLS, RESEARCH_TOOLS, ADVANCED_TOOLS, MULTIMODAL_TOOLS, LSP_TOOLS,
   COMPUTER_CONTROL_TOOLS, BROWSER_TOOLS, CANVAS_TOOLS, REASON_TOOL, EXECUTE_CODE_TOOL,
   WINDOWS_TOOLS,
 } from "./tool-definitions/index.js";
@@ -318,7 +318,7 @@ export function initializeToolRegistry(): void {
   // Firecrawl tools — gated by API key (Native Engine v2026.3.14)
   registerGroup(FIRECRAWL_TOOLS, () => !!process.env.FIRECRAWL_API_KEY);
 
-  // LSP rename/refactor tools
+  // LSP navigation/diagnostics and rename/refactor tools
   registerGroup(LSP_TOOLS);
 
   // Secrets detector tools

@@ -1,9 +1,8 @@
 /**
  * LSP Tool Adapters
  *
- * ITool-compliant adapters for LSP rename and code action operations.
- * These adapters wrap the LSP client methods to conform to the formal
- * ITool interface for use with the FormalToolRegistry.
+ * ITool-compliant tools for LSP navigation, diagnostics, rename, and code
+ * action operations.
  */
 
 import type { ToolResult } from '../../types/index.js';
@@ -11,6 +10,21 @@ import type { ITool, ToolSchema, IToolMetadata, IValidationResult, ToolCategoryT
 import { executeLspRename } from '../lsp-rename-tool.js';
 import { getLSPClient } from '../../lsp/lsp-client.js';
 import type { LSPRange } from '../../lsp/lsp-client.js';
+import {
+  LspDefinitionTool,
+  LspDiagnosticsTool,
+  LspHoverTool,
+  LspReferencesTool,
+  LspSymbolsTool,
+} from '../lsp-navigation-tools.js';
+
+export {
+  LspDefinitionTool,
+  LspDiagnosticsTool,
+  LspHoverTool,
+  LspReferencesTool,
+  LspSymbolsTool,
+} from '../lsp-navigation-tools.js';
 
 // ============================================================================
 // LspRenameExecuteTool
@@ -220,6 +234,11 @@ export class LspCodeActionExecuteTool implements ITool {
  */
 export function createLspTools(): ITool[] {
   return [
+    new LspDefinitionTool(),
+    new LspReferencesTool(),
+    new LspHoverTool(),
+    new LspSymbolsTool(),
+    new LspDiagnosticsTool(),
     new LspRenameExecuteTool(),
     new LspCodeActionExecuteTool(),
   ];
