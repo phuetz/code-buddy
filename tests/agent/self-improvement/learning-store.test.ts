@@ -59,6 +59,17 @@ describe('LearningStore (git-backed reversibility)', () => {
     expect(versions).toHaveLength(2);
     expect(versions[0]!.score?.covered).toBe(1);
     expect(versions[0]!.message).toContain('improve(s-npm)');
+
+    const snapshots = await store.listVersionSnapshots();
+    expect(snapshots[0]).toEqual(
+      expect.objectContaining({
+        sha: v1.sha,
+        reason: 'v1',
+        scenarioId: 's-npm',
+        delta: 1,
+        lessons: [{ category: 'RULE', content: 'Use a path filter when running npm test.' }],
+      }),
+    );
   });
 
   it('restores to the best-scoring version after a regression', async () => {
