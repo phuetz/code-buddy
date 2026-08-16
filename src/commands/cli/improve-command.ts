@@ -13,6 +13,13 @@ import type { Command } from 'commander';
 import { logger } from '../../utils/logger.js';
 
 import {
+  buildImprovementDigest,
+  DEFAULT_IMPROVEMENT_DIGEST_SINCE,
+  parseDigestSince,
+  renderImprovementDigestHtml,
+  renderImprovementDigestMarkdown,
+} from '../../agent/self-improvement/digest.js';
+import {
   createWorkspaceEngine,
   createWorkspaceLearningStore,
   createWorkspaceRuleEngine,
@@ -74,6 +81,11 @@ interface ImproveBenchOptions extends ImproveOptions {
   scenarios?: string;
 }
 
+interface ImproveDigestOptions extends ImproveOptions {
+  since: string;
+  html?: string;
+}
+
 function print(payload: unknown, options: ImproveOptions, text: string): void {
   if (options.json) {
     console.log(JSON.stringify(payload, null, 2));
@@ -86,6 +98,69 @@ export function registerImproveCommands(program: Command): void {
   const improve = program
     .command('improve')
     .description('Recursive self-improvement: empirically validate and apply reversible learning improvements');
+
+  improve
+    .command('digest')
+    .description(
+      'Summarise recent self-improvement as readable Markdown, JSON, or a standalone HTML card'
+    )
+    .option(
+      '--since <duration-or-date>',
+      'inclusive period start (for example 7d, 24h, 2w, or an ISO date)',
+      DEFAULT_IMPROVEMENT_DIGEST_SINCE
+    )
+    .option('--html <file>', 'write a self-contained HTML card (no CDN or network resource)')
+    .option('--json', 'output JSON')
+    .action(async (options: ImproveDigestOptions) => {
+      const until = new Date();
+      let since: Date;
+      try {
+        since = parseDigestSince(options.since, until);
+      } catch (error) {
+        logger.error(error instanceof Error ? error.message : String(error));
+        process.exitCode = 1;
+        return;
+      }
+
+      try {
+        const { readImprovementDigestSources } =
+          await import('../../agent/self-improvement/digest-sources.js');
+        const sources = await readImprovementDigestSources({ workDir: process.cwd() });
+        const digest = buildImprovementDigest(sources, { since, until });
+        let htmlPath: string | undefined;
+        if (options.html) {
+          const [{ promises: fs }, path] = await Promise.all([
+            import('node:fs'),
+            import('node:path'),
+          ]);
+          htmlPath = path.resolve(options.html);
+          await fs.mkdir(path.dirname(htmlPath), { recursive: true });
+          await fs.writeFile(htmlPath, renderImprovementDigestHtml(digest), 'utf8');
+        }
+
+        if (options.json) {
+          console.log(
+            JSON.stringify(
+              {
+                ...digest,
+                ...(htmlPath ? { htmlPath } : {}),
+              },
+              null,
+              2
+            )
+          );
+          return;
+        }
+
+        const markdown = renderImprovementDigestMarkdown(digest);
+        console.log(htmlPath ? `${markdown}\n\n_Carte HTML écrite : ${htmlPath}_` : markdown);
+      } catch (error) {
+        logger.error(
+          `Impossible de générer le digest d’auto-amélioration : ${error instanceof Error ? error.message : String(error)}`
+        );
+        process.exitCode = 1;
+      }
+    });
 
   improve
     .command('bench')

@@ -67,6 +67,17 @@ export interface StoreVersion {
   score: BenchmarkScore | null;
 }
 
+/** Read-only materialisation used by reporting/audit consumers. */
+export interface LearningStoreSnapshotVersion {
+  sha: string;
+  createdAt: string;
+  reason: string;
+  score: BenchmarkScore | null;
+  lessons: LessonSnapshot[];
+  scenarioId?: string;
+  delta?: number;
+}
+
 export interface LearningStoreOptions {
   workDir?: string;
   port: LearnableStatePort;
@@ -199,6 +210,78 @@ export class LearningStore {
       });
     }
     return versions;
+  }
+
+  /**
+   * List versioned lesson snapshots without mutating the store. This is kept
+   * separate from `listVersions()` because normal status output should not pay
+   * the extra `git show` calls needed to reconstruct lesson history.
+   */
+  async listVersionSnapshots(): Promise<LearningStoreSnapshotVersion[]> {
+    const versions = await this.listVersions();
+    const snapshots: LearningStoreSnapshotVersion[] = [];
+    for (const version of versions) {
+      const [manifestShow, lessonsShow] = await Promise.all([
+        this.runGit(['show', `${version.sha}:manifest.json`]),
+        this.runGit(['show', `${version.sha}:lessons.json`]),
+      ]);
+
+      let manifest: Partial<VersionManifest> | null = null;
+      if (manifestShow.code === 0) {
+        try {
+          const parsed: unknown = JSON.parse(manifestShow.stdout);
+          if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+            manifest = parsed as Partial<VersionManifest>;
+          }
+        } catch {
+          manifest = null;
+        }
+      }
+
+      let lessons: LessonSnapshot[] = [];
+      if (lessonsShow.code === 0) {
+        try {
+          const parsed: unknown = JSON.parse(lessonsShow.stdout);
+          if (Array.isArray(parsed)) {
+            lessons = parsed.filter((lesson): lesson is LessonSnapshot => {
+              if (!lesson || typeof lesson !== 'object' || Array.isArray(lesson)) return false;
+              const record = lesson as Record<string, unknown>;
+              return (
+                (record.category === 'PATTERN' ||
+                  record.category === 'RULE' ||
+                  record.category === 'CONTEXT' ||
+                  record.category === 'INSIGHT') &&
+                typeof record.content === 'string' &&
+                (record.context === undefined || typeof record.context === 'string')
+              );
+            });
+          }
+        } catch {
+          lessons = [];
+        }
+      }
+
+      const generatedAt =
+        typeof manifest?.generatedAt === 'string' &&
+        Number.isFinite(Date.parse(manifest.generatedAt))
+          ? manifest.generatedAt
+          : version.createdAt;
+      snapshots.push({
+        sha: version.sha,
+        createdAt: generatedAt,
+        reason:
+          typeof manifest?.reason === 'string' && manifest.reason.trim()
+            ? manifest.reason
+            : version.message,
+        score: manifest?.score ?? version.score,
+        lessons,
+        ...(typeof manifest?.scenarioId === 'string' ? { scenarioId: manifest.scenarioId } : {}),
+        ...(typeof manifest?.delta === 'number' && Number.isFinite(manifest.delta)
+          ? { delta: manifest.delta }
+          : {}),
+      });
+    }
+    return snapshots;
   }
 
   /** The highest-scoring version (ties → most recent). The "version qui marche mieux". */
