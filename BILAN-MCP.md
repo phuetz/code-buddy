@@ -1,7 +1,8 @@
 # Bilan — `buddy mcp serve`
 
-Date : 2026-08-16  
+Date : 2026-08-16
 Branche : `feat/mcp-serve-2026-08-16`
+Commit fonctionnel : `23c5d3dc`
 
 ## Surface exposée
 
