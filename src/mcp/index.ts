@@ -42,7 +42,12 @@ export {
 
 // MCP Server (Code Buddy as a tool provider)
 export { CodeBuddyMCPServer } from "./mcp-server.js";
-export type { MCPToolDefinition } from "./mcp-server.js";
+export type {
+  CodeBuddyMCPServerOptions,
+  MCPExposureSummary,
+  MCPToolDefinition,
+  MCPToolExposureStats,
+} from "./mcp-server.js";
 
 // Configuration management
 export {

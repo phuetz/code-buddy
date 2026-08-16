@@ -12,9 +12,12 @@ import { z } from 'zod';
 /**
  * Register memory tools with the MCP server.
  */
-export function registerMemoryTools(server: McpServer): void {
+export function registerMemoryTools(
+  server: McpServer,
+  shouldRegister: (name: string) => boolean = () => true,
+): void {
   // memory_search - Search semantic memory
-  server.tool(
+  if (shouldRegister('memory_search')) server.tool(
     'memory_search',
     'Search Code Buddy\'s semantic memory for relevant stored knowledge, patterns, and context.',
     {
@@ -58,7 +61,7 @@ export function registerMemoryTools(server: McpServer): void {
   );
 
   // memory_save - Save a memory entry
-  server.tool(
+  if (shouldRegister('memory_save')) server.tool(
     'memory_save',
     'Save a piece of knowledge to Code Buddy\'s persistent memory for future reference.',
     {

@@ -57,9 +57,55 @@ export function confirmPrompt(prompt: string): Promise<boolean> {
   });
 }
 
+export interface MCPServeOptions {
+  allowWrite?: boolean;
+  tools?: string;
+}
+
+/** Start the distribution-facing stdio server. Logs stay on stderr via logger. */
+export async function serveMCP(options: MCPServeOptions = {}): Promise<void> {
+  const { CodeBuddyMCPServer } = await import('../mcp/mcp-server.js');
+  const server = new CodeBuddyMCPServer({
+    ...(options.allowWrite ? { allowWrite: true } : {}),
+    ...(options.tools ? { tools: options.tools } : {}),
+  });
+  const summary = server.getExposureSummary();
+  await server.start();
+  logger.info(
+    `MCP stdio server exposing ${summary.exposed} tools (${summary.mode})`,
+    {
+      tools: server.getExposedToolNames(),
+      ...(summary.patterns.length > 0 ? { filter: summary.patterns } : {}),
+    },
+  );
+}
+
 export function createMCPCommand(): Command {
   const mcpCommand = new Command('mcp');
-  mcpCommand.description('Manage MCP (Model Context Protocol) servers');
+  mcpCommand.description('Manage MCP servers or expose Code Buddy over MCP');
+
+  mcpCommand
+    .command('serve')
+    .description('Expose Code Buddy tools as an MCP server over stdio')
+    .option(
+      '--allow-write',
+      'Expose write, shell, execution, and other non-read-only tools (also CODEBUDDY_MCP_ALLOW_WRITE=1)',
+    )
+    .option(
+      '--tools <glob>',
+      'Restrict exposed tool names with a glob or comma-separated globs (also CODEBUDDY_MCP_TOOLS)',
+    )
+    .action(async (options: MCPServeOptions) => {
+      try {
+        await serveMCP(options);
+      } catch (error) {
+        logger.error(
+          'Failed to start MCP server',
+          error instanceof Error ? error : new Error(String(error)),
+        );
+        process.exit(1);
+      }
+    });
 
   for (const action of ['enable', 'disable'] as const) {
     mcpCommand

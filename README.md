@@ -323,6 +323,7 @@ Code Buddy is one engine — terminal, desktop, and HTTP — that an LLM drives 
 | [Providers & login](#providers--login) | 15 LLM providers + ChatGPT/xAI login at **$0** flat-fee, auto-failover, ensembles | [providers.md](docs/providers.md) |
 | [The agentic loop](#the-agentic-loop) | autonomous tool-calling with a middleware pipeline + confirm-before-execute | [CLAUDE.md](CLAUDE.md) |
 | [~110 tools](#110-tools) | edit/shell/web/browser/docs/media, RAG-selected, 5-strategy edit matching | [tools-reference.md](docs/tools-reference.md) |
+| [MCP server](#use-code-buddy-as-an-mcp-server) | expose the audited Code Buddy tool registry to Claude Desktop, Cursor, Cline, or Windsurf | [example config](examples/claude_desktop_config.json) |
 | [Reasoning](#reasoning) | extended thinking + Tree-of-Thought / MCTS, `/think` | [reasoning.md](docs/reasoning.md) |
 | [Goal loops & autonomy](#goal-loops--autonomy) | Ralph loop + LLM judge, YOLO, a 24/7 daemon | [fleet-guide.md](docs/fleet-guide.md) |
 | [Multi-AI Fleet](#multi-ai-fleet) | peers call each other's models + read-only tools over WebSocket | [fleet-guide.md](docs/fleet-guide.md) |
@@ -343,6 +344,23 @@ The core is a stateful multi-turn loop (`src/agent/execution/agent-executor.ts`,
 
 ### ~110 tools
 The agent has **~110 tools** — file edit, shell, web search (5-provider fallback), a real headless browser, PDF/Office, media/vision, code-exec, agent orchestration — and uses **RAG selection** to send only the relevant ones each turn (BM25 `tool_search` as fallback). Edits land even in refactored code via a **5-strategy cascade**: exact → flexible (trim/indent) → regex (tokenized) → fuzzy (Levenshtein 10%) → LCS (90%). It also speaks Codex-style **`apply_patch`**, and `code_exec` runs LLM-written JavaScript in a `vm` sandbox (no `process`/`require`, 30s). Extend it with MCP servers (auto-discovered from `.codebuddy/mcp.json`), plugins, or new tool classes.
+
+### Use Code Buddy as an MCP server
+
+Claude Desktop, Cursor, Cline, Windsurf, and other stdio MCP clients can consume Code Buddy's existing tools directly:
+
+```json
+{
+  "mcpServers": {
+    "code-buddy": {
+      "command": "buddy",
+      "args": ["mcp", "serve"]
+    }
+  }
+}
+```
+
+Save that object in `claude_desktop_config.json` or the client's `.mcp.json`; a copyable file lives at [`examples/claude_desktop_config.json`](examples/claude_desktop_config.json). Without a global install, use `"command": "npx"` and `"args": ["-y", "@phuetz/code-buddy", "mcp", "serve"]`. The default is deliberately **read-only** and exposes only registry tools audited with `fleetSafe: true` (file reading, search, and analysis). Narrow it with `--tools "search*"`. Write, shell, execution, agent, and desktop-control tools require the explicit `--allow-write` opt-in (or `CODEBUDDY_MCP_ALLOW_WRITE=1`), for example `buddy mcp serve --allow-write --tools "{view_file,write_file,bash}"`. This grants the MCP client materially broader access to the host, so enable it only for a client and workspace you trust.
 
 ### Reasoning
 Two systems: **Extended Thinking** (provider budget tokens — off/minimal/low/medium/high/xhigh) and Code Buddy's own **Tree-of-Thought + MCTS** with four depths (shallow CoT → beam search → MCTS → exhaustive). A reasoning middleware auto-detects complex queries and injects guidance; `/think`, `/megathink`, and `/ultrathink` set the depth, and the `reason` tool streams its search. (MCTSr Q-value `Q(a) = 0.5·(min(R) + mean(R))`.)
