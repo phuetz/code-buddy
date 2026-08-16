@@ -75,7 +75,10 @@ case "$MOTEUR" in
     # Sans cette option, agy en mode headless refuse TOUS les outils — il ne peut
     # pas demander l'autorisation — et rend un bilan élogieux sans avoir rien fait.
     # Constaté le 07/08/2026 : sortie 0, 12 s, aucun livrable.
-    (cd "$DEPOT" && agy --model gemini-3.6-flash-high \
+    # Gemini 3.7 Flash par défaut (sorti le 16/08/2026) ; surcharge via AGY_MODELE=…
+    # --print-timeout à 25m : lire un livre entier (150k+ tokens) dépasse le défaut 5m
+    (cd "$DEPOT" && agy --model "${AGY_MODELE:-gemini-3.7-flash-high}" \
+       --print-timeout "${AGY_TIMEOUT:-25m}" \
        --dangerously-skip-permissions -p "$(cat "$CONSIGNE")") 2>&1 | tee "$LOG"
     ;;
   grok)
