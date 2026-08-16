@@ -1512,9 +1512,12 @@ program
         ttsManager.setAutoSpeak(true);
       }
       if (options.ttsProvider) {
-        const validProviders = ['edge-tts', 'espeak', 'say', 'piper', 'audioreader'];
-        if (validProviders.includes(options.ttsProvider)) {
-          ttsManager.updateConfig({ provider: options.ttsProvider as any });
+        const validProviders = ['edge-tts', 'espeak', 'say', 'piper', 'audioreader'] as const;
+        const requestedProvider = String(options.ttsProvider);
+        if (validProviders.some((provider) => provider === requestedProvider)) {
+          ttsManager.updateConfig({
+            provider: requestedProvider as (typeof validProviders)[number],
+          });
         } else {
           startupLogger.warn(`⚠️ Invalid tts-provider: ${options.ttsProvider}. Valid: ${validProviders.join(', ')}`);
         }
@@ -3840,6 +3843,16 @@ if (requestedProfile) {
 }
 
 if (process.exitCode !== 1) {
+  program.addHelpText('before', `Pour commencer — 6 démos qui montrent le cœur agent de code :
+  1. buddy try
+     Crée FizzBuzz, écrit son test et l’exécute dans un bac à sable.
+  2. /loop "Corrige les tests en échec"              (dans une session buddy)
+  3. buddy research "Cartographie ce dépôt"
+  4. buddy dev pr "Ajoute une petite fonctionnalité"
+  5. /think deep "Propose le refactoring le plus sûr" (dans une session buddy)
+  6. /share create demo                              (dans une session buddy)
+
+`);
   removeCommands(program, getHiddenCliCommands());
   program.parse();
 }

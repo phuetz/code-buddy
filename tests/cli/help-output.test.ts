@@ -50,6 +50,21 @@ describe('CLI help output', () => {
     expect(result.stdout).not.toMatch(/^\s+--output <format>/m);
   }, 30_000);
 
+  it('starts with six focused demos before the exhaustive reference', async () => {
+    const result = await runCli(['--help']);
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stderr).toBe('');
+    expect(result.stdout.startsWith('Pour commencer — 6 démos')).toBe(true);
+    expect(result.stdout.indexOf('Pour commencer')).toBeLessThan(result.stdout.indexOf('Usage:'));
+    expect(result.stdout).toContain('1. buddy try');
+    expect(result.stdout).toContain('/loop "Corrige les tests en échec"');
+    expect(result.stdout).toContain('buddy research "Cartographie ce dépôt"');
+    expect(result.stdout).toContain('buddy dev pr "Ajoute une petite fonctionnalité"');
+    expect(result.stdout).toContain('/think deep "Propose le refactoring le plus sûr"');
+    expect(result.stdout).toContain('/share create demo');
+  }, 30_000);
+
   it('hides advanced product areas only for the core profile', async () => {
     const core = await runCli(['--profile', 'core', '--help']);
     const all = await runCli(['--profile', 'all', '--help']);
