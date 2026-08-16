@@ -180,6 +180,25 @@ export interface AgentBehaviorConfig {
   editor_model?: string;
 }
 
+/** Advanced product areas which can be hidden from the focused CLI surface. */
+export type AdvancedCapability =
+  | 'companion'
+  | 'film'
+  | 'sensory'
+  | 'robot'
+  | 'vision_train';
+
+/**
+ * Controls discoverability of optional product areas.
+ *
+ * This only narrows the surface when a profile explicitly asks for it. The
+ * default is an empty list so existing installations keep every command and
+ * tool they had before the focused onboarding profile was introduced.
+ */
+export interface FeatureSurfaceConfig {
+  hidden_capabilities?: AdvancedCapability[];
+}
+
 /**
  * Model pairs configuration for architect/editor split.
  * The architect model handles planning and reasoning while
@@ -583,6 +602,8 @@ export interface CodeBuddyConfig {
   agent: AgentBehaviorConfig;
   /** External integrations */
   integrations: IntegrationsConfig;
+  /** Optional feature discoverability / exposure controls */
+  surface: FeatureSurfaceConfig;
   /** Model pairs for architect/editor split */
   model_pairs?: ModelPairsConfig;
   /** Active-LLM registry: auto-failover across live logins + "together" */
@@ -835,6 +856,24 @@ export const DEFAULT_CONFIG: CodeBuddyConfig = {
     rtk_enabled: false,
     rtk_min_output_length: 500,
     icm_enabled: true,
+  },
+
+  // Additive profiles: no profile keeps the historical full surface. `core`
+  // is deliberately opt-in, while `all` is the explicit escape hatch.
+  surface: {
+    hidden_capabilities: [],
+  },
+  profiles: {
+    core: {
+      surface: {
+        hidden_capabilities: ['companion', 'film', 'sensory', 'robot', 'vision_train'],
+      },
+    },
+    all: {
+      surface: {
+        hidden_capabilities: [],
+      },
+    },
   },
 };
 
@@ -1102,11 +1141,17 @@ class ConfigManager {
     if (partial.integrations) {
       this.config.integrations = { ...this.config.integrations, ...partial.integrations };
     }
+    if (partial.surface) {
+      this.config.surface = { ...this.config.surface, ...partial.surface };
+    }
     if (partial.model_pairs) {
       this.config.model_pairs = { ...this.config.model_pairs, ...partial.model_pairs };
     }
     if (partial.llm) {
       this.config.llm = { ...this.config.llm, ...partial.llm };
+    }
+    if (partial.profiles) {
+      this.config.profiles = { ...this.config.profiles, ...partial.profiles };
     }
   }
 
@@ -1302,6 +1347,11 @@ export function getConfigManager(): ConfigManager {
     configManagerInstance = new ConfigManager();
   }
   return configManagerInstance;
+}
+
+/** Reset the singleton so profile-sensitive tests and embedded runtimes can reload cleanly. */
+export function resetConfigManager(): void {
+  configManagerInstance = null;
 }
 
 // Re-export types
