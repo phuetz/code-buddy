@@ -3574,6 +3574,16 @@ addLazyCommand(
 
 addLazyCommand(
   program,
+  'cost',
+  'Aggregate saved-session cost and token usage by model, provider, or day',
+  async () => {
+    const { createCostCommand } = await import('./commands/cost.js');
+    return createCostCommand();
+  },
+);
+
+addLazyCommand(
+  program,
   'forge',
   'Counterfactual Forge: compare competing strategies against one proof contract',
   async () => {
