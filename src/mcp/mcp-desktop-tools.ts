@@ -57,9 +57,12 @@ function fail(text: string) {
 /**
  * Register desktop-automation tools with the MCP server.
  */
-export function registerDesktopTools(server: McpServer): void {
+export function registerDesktopTools(
+  server: McpServer,
+  shouldRegister: (name: string) => boolean = () => true,
+): void {
   // ---- Read-only: screenshot ------------------------------------------------
-  server.tool(
+  if (shouldRegister('desktop_screenshot')) server.tool(
     'desktop_screenshot',
     'Capture a screenshot of the desktop (fullscreen by default, or a region). Returns the saved PNG path and dimensions. Read-only.',
     {
@@ -85,7 +88,7 @@ export function registerDesktopTools(server: McpServer): void {
   );
 
   // ---- Read-only: accessibility snapshot -----------------------------------
-  server.tool(
+  if (shouldRegister('desktop_snapshot')) server.tool(
     'desktop_snapshot',
     'Enumerate on-screen UI elements (accessibility tree) with numeric refs, roles, labels, and click coordinates. Read-only. Use the returned coordinates with desktop_click.',
     {
@@ -122,7 +125,7 @@ export function registerDesktopTools(server: McpServer): void {
     return;
   }
 
-  server.tool(
+  if (shouldRegister('desktop_click')) server.tool(
     'desktop_click',
     'Click the mouse at screen coordinates. Requires CODEBUDDY_MCP_DESKTOP_CONTROL=1. Actuates the real desktop.',
     {
@@ -145,7 +148,7 @@ export function registerDesktopTools(server: McpServer): void {
     },
   );
 
-  server.tool(
+  if (shouldRegister('desktop_move_mouse')) server.tool(
     'desktop_move_mouse',
     'Move the mouse cursor to screen coordinates. Requires CODEBUDDY_MCP_DESKTOP_CONTROL=1.',
     { x: z.number().describe('X coordinate'), y: z.number().describe('Y coordinate') },
@@ -160,7 +163,7 @@ export function registerDesktopTools(server: McpServer): void {
     },
   );
 
-  server.tool(
+  if (shouldRegister('desktop_type')) server.tool(
     'desktop_type',
     'Type text at the current focus. Requires CODEBUDDY_MCP_DESKTOP_CONTROL=1. Actuates the real keyboard.',
     { text: z.string().describe('Text to type') },
@@ -175,7 +178,7 @@ export function registerDesktopTools(server: McpServer): void {
     },
   );
 
-  server.tool(
+  if (shouldRegister('desktop_key')) server.tool(
     'desktop_key',
     'Press a key (optionally with modifiers), e.g. "enter", "escape", "tab", "f5". Requires CODEBUDDY_MCP_DESKTOP_CONTROL=1.',
     {
