@@ -47,6 +47,13 @@
       "reviewBy": "2026-11-19"
     },
     {
+      "package": "@react-native/virtualized-lists",
+      "severity": "high",
+      "advisories": ["https://github.com/advisories/GHSA-3wxx-5f3q-cvv7"],
+      "reason": "Same react-native cluster pulled only as an OPTIONAL peer of react-native-fs (itself an optional dep of alasql); a React Native UI component never loaded by a Node CLI. High is inherited from its react-native peer. Cleared when the RN cluster is pruned.",
+      "reviewBy": "2026-11-19"
+    },
+    {
       "package": "metro",
       "severity": "high",
       "advisories": ["https://github.com/advisories/GHSA-3wxx-5f3q-cvv7"],
