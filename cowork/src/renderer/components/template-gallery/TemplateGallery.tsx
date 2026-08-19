@@ -17,11 +17,11 @@ export function TemplateGallery({ items = DEFAULT_TEMPLATES, selectedId, onSelec
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Templates</p>
-          <h2 className="text-lg font-semibold">Choisir le résultat à créer</h2>
-          <p className="text-sm text-muted-foreground">Des vignettes schématiques pour prévisualiser la forme du livrable.</p>
+          <h2 className="text-lg font-semibold">Choose what to create</h2>
+          <p className="text-sm text-muted-foreground">Schematic thumbnails to preview the shape of the deliverable.</p>
         </div>
         <label className="text-sm text-muted-foreground">
-          Rechercher
+          Search
           <input
             type="search"
             value={query}
@@ -69,7 +69,7 @@ export function TemplateGallery({ items = DEFAULT_TEMPLATES, selectedId, onSelec
 
       {visibleItems.length === 0 && (
         <div className="mt-4 rounded-lg border border-dashed border-border bg-muted/30 p-6 text-center text-sm text-muted-foreground">
-          Aucun template ne correspond à cette recherche.
+          No template matches this search.
         </div>
       )}
     </section>

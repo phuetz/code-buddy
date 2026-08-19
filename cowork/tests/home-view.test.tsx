@@ -91,7 +91,7 @@ describe('HomeView', () => {
     const quick = container.querySelector('[data-testid="home-quick"]')!;
     const buttons = [...quick.querySelectorAll('button')];
 
-    const research = buttons.find((b) => b.textContent?.includes('Rechercher'))!;
+    const research = buttons.find((b) => b.textContent?.includes('Search'))!;
     act(() => research.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     expect(useAppStore.getState().showLiveLauncher).toBe(true);
 

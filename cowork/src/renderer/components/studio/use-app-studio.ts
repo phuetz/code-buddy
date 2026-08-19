@@ -45,9 +45,9 @@ export interface AppStudioState {
 }
 
 const DEFAULT_TEMPLATES: StudioTemplateCard[] = [
-  { id: 'react-ts', label: 'React + TypeScript', description: 'Application web Vite avec React et TypeScript.' },
-  { id: 'express-api', label: 'Express API', description: 'API Node/Express avec structure TypeScript.' },
-  { id: 'node-cli', label: 'Node CLI', description: 'CLI Node.js TypeScript prête à compiler.' },
+  { id: 'react-ts', label: 'React + TypeScript', description: 'Vite web app with React and TypeScript.' },
+  { id: 'express-api', label: 'Express API', description: 'Node/Express API with a TypeScript structure.' },
+  { id: 'node-cli', label: 'Node CLI', description: 'Node.js TypeScript CLI ready to compile.' },
 ];
 
 const noopResult = async (error = 'App Studio API not connected'): Promise<{ ok: false; error: string }> => ({ ok: false, error });

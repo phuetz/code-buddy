@@ -13,12 +13,12 @@ export interface BuildStatusStripProps {
 }
 
 const PHASE_LABELS: Record<BuildPhase, string> = {
-  idle: 'Prêt',
+  idle: 'Ready',
   scaffolding: 'Scaffold',
   installing: 'Install',
-  starting: 'Démarrage',
-  running: 'En ligne',
-  error: 'Erreur',
+  starting: 'Starting',
+  running: 'Online',
+  error: 'Error',
 };
 
 function toneForPhase(phase: BuildPhase): UiTone {
@@ -44,15 +44,15 @@ export function BuildStatusStrip({ phase, elapsedMs, error, onStop }: BuildStatu
     <section className="flex flex-wrap items-center gap-3 border-b border-border bg-background px-3 py-2">
       <Pill tone={toneForPhase(phase)}>{PHASE_LABELS[phase]}</Pill>
       <div className="w-28">
-        <StatTile label="Durée" value={formatElapsed(elapsedMs)} tone="default" />
+        <StatTile label="Duration" value={formatElapsed(elapsedMs)} tone="default" />
       </div>
       <div className="min-w-0 flex-1 text-xs text-muted-foreground">
-        {phase === 'idle' && 'Aucun build actif.'}
-        {phase === 'scaffolding' && 'Création des fichiers du projet.'}
-        {phase === 'installing' && 'Installation des dépendances.'}
-        {phase === 'starting' && 'Lancement du serveur local.'}
-        {phase === 'running' && 'Preview locale disponible.'}
-        {phase === 'error' && (error || 'Une erreur est survenue.')}
+        {phase === 'idle' && 'No active build.'}
+        {phase === 'scaffolding' && 'Creating the project files.'}
+        {phase === 'installing' && 'Installing dependencies.'}
+        {phase === 'starting' && 'Starting the local server.'}
+        {phase === 'running' && 'Local preview available.'}
+        {phase === 'error' && (error || 'An error occurred.')}
 
       </div>
       <button

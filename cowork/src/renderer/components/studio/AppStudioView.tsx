@@ -185,15 +185,15 @@ export function AppStudioView({
               type="button"
               onClick={() =>
                 setSeedPrompt(
-                  "Déploie cette app avec l'outil deploy (choisis l'hébergeur le plus simple, config générée, et donne-moi l'URL publique)."
+                  'Deploy this app with the deploy tool (pick the simplest host, generate the config, and give me the public URL).'
                 )
               }
-              title="Préparer une demande de déploiement (outil deploy)"
+              title="Prepare a deployment request (deploy tool)"
               className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border px-2.5 text-xs text-muted-foreground hover:text-foreground"
               data-testid="studio-deploy"
             >
               <Rocket className="h-4 w-4" aria-hidden="true" />
-              Déployer
+              Deploy
             </button>
           </div>
           <div className="min-h-0 flex-1">
@@ -212,7 +212,7 @@ export function AppStudioView({
                     <CodeEditorPane path={activeFile} value={fileContent} onChange={onChangeFileContent} onSave={onSaveFile} />
                   ) : (
                     <div className="flex h-full items-center justify-center p-6 text-center text-xs text-muted-foreground">
-                      Aucun fichier sélectionné.
+                      No file selected.
                     </div>
                   )}
                 </div>
@@ -254,10 +254,10 @@ export function AppStudioView({
               type="button"
               onClick={onNewApp}
               className="inline-flex h-7 items-center gap-1.5 rounded-md border border-border px-2.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
-              title="Démarrer une nouvelle app"
+              title="Start a new app"
             >
               <Plus className="h-3.5 w-3.5" aria-hidden="true" />
-              Nouvelle app
+              New app
             </button>
           </div>
         ) : null}
@@ -289,7 +289,7 @@ export function AppStudioView({
             workbench
           ) : (
             <div className="flex min-h-0 flex-1 items-center justify-center p-8 text-center text-xs text-muted-foreground">
-              Les fichiers, le code et la preview de ton app apparaîtront ici pendant la génération.
+              Your app's files, code, and preview will appear here during generation.
             </div>
           )}
         </div>
@@ -305,9 +305,9 @@ export function AppStudioView({
         <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-6">
           <div className="mx-auto max-w-3xl text-center">
             <PanelBottom className="mx-auto h-8 w-8 text-muted-foreground" aria-hidden="true" />
-            <h2 className="mt-3 text-sm font-medium text-foreground">Que veux-tu créer&nbsp;?</h2>
+            <h2 className="mt-3 text-sm font-medium text-foreground">What would you like to create?</h2>
             <p className="mt-1 text-xs text-muted-foreground">
-              Choisis un type ci-dessous (aperçu de ce qui sera créé) ou décris ton app en haut — les fichiers, le code et la preview apparaîtront ici.
+              Pick a type below (preview of what will be created) or describe your app above — the files, code, and preview will appear here.
             </p>
           </div>
           <div className="mx-auto mt-5 w-full max-w-4xl">
