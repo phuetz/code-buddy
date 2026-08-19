@@ -97,7 +97,7 @@ describe('buddy try', () => {
       },
       {
         type: 'assistant',
-        content: 'Deux fichiers créés, tests verts.',
+        content: 'Two files created, tests green.',
         timestamp: new Date(),
       },
     ];
@@ -121,8 +121,8 @@ describe('buddy try', () => {
     expect(createAgent).toHaveBeenCalledWith(chatGptProvider, '/tmp/code-buddy-try-test');
     expect(processUserMessage).toHaveBeenCalledWith(TRY_DEMO_PROMPT, { surface: 'cli' });
     expect(verify).toHaveBeenCalledWith('/tmp/code-buddy-try-test');
-    expect(stdout.join('\n')).toContain('Outils utilisés : write_file');
-    expect(stdout.join('\n')).toContain('✅ Démo réussie');
+    expect(stdout.join('\n')).toContain('Tools used: write_file');
+    expect(stdout.join('\n')).toContain('✅ Demo succeeded');
     expect(dispose).toHaveBeenCalledWith({ skipSessionLearning: true });
   });
 });

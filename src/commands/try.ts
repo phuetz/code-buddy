@@ -63,24 +63,24 @@ interface OllamaTagsResponse {
   models?: Array<{ name?: unknown; model?: unknown }>;
 }
 
-export const TRY_DEMO_PROMPT = `Tu pilotes une démo courte d'agent de code dans un dossier temporaire vide.
+export const TRY_DEMO_PROMPT = `You are driving a short coding-agent demo in an empty temporary folder.
 
-Objectif exact :
-1. Crée fizzbuzz.js en CommonJS. Exporte une fonction fizzBuzz(value) qui renvoie le nombre sous forme de chaîne, "Fizz" pour les multiples de 3, "Buzz" pour ceux de 5 et "FizzBuzz" pour ceux de 15.
-2. Crée fizzbuzz.test.js avec node:test et node:assert/strict. Teste au minimum 1, 3, 5 et 15.
-3. Exécute exactement : node --test fizzbuzz.test.js
-4. Si un test échoue, corrige le code et relance-le.
-5. Termine par un bilan très court indiquant les deux fichiers créés et le résultat des tests.
+Exact goal:
+1. Create fizzbuzz.js in CommonJS. Export a function fizzBuzz(value) that returns the number as a string, "Fizz" for multiples of 3, "Buzz" for multiples of 5, and "FizzBuzz" for multiples of 15.
+2. Create fizzbuzz.test.js using node:test and node:assert/strict. Test at least 1, 3, 5, and 15.
+3. Run exactly: node --test fizzbuzz.test.js
+4. If a test fails, fix the code and run it again.
+5. Finish with a very short summary naming the two files you created and the test result.
 
-Utilise directement les outils de fichier et de terminal. Ne demande aucune confirmation, n'installe aucune dépendance et ne modifie rien hors du dossier de travail.`;
+Write everything in English. Use the file and terminal tools directly. Do not ask for any confirmation, do not install any dependency, and do not change anything outside the working folder.`;
 
 export const NO_TRY_PROVIDER_MESSAGE = [
-  'Aucun provider gratuit prêt pour la démo.',
+  'No free provider is ready for the demo.',
   '',
-  '1. Recommandé — connecte ton compte ChatGPT (OAuth, sans clé API, coût marginal $0 avec ton plan) :',
+  '1. Recommended — sign in with your ChatGPT account (OAuth, no API key, $0 marginal cost with your plan):',
   '   buddy login',
   '',
-  '2. Ou utilise Ollama en local :',
+  '2. Or run a model locally with Ollama:',
   '   ollama pull qwen2.5-coder:7b',
   '   buddy try',
 ].join('\n');
@@ -177,9 +177,10 @@ async function createDefaultAgent(
   const confirmation = ConfirmationService.getInstance();
   const previousFlags = confirmation.getSessionFlags();
   confirmation.setSessionFlag('allOperations', true);
-  // Le permission mode est vérifié AVANT les session flags : en mode `default` et sans TTY,
-  // create_file est refusé (« User cancelled »). La démo tourne dans un bac à sable temporaire
-  // isolé (workspace), donc on auto-approuve tout le temps de la démo puis on restaure le mode.
+  // The permission mode is checked BEFORE session flags: in `default` mode with
+  // no TTY, create_file is refused ("User cancelled"). The demo runs in an
+  // isolated temporary sandbox (workspace), so we auto-approve for the duration
+  // of the demo and then restore the previous mode.
   const permMgr = getPermissionModeManager();
   const previousMode = permMgr.getMode();
   permMgr.setMode('bypassPermissions');
@@ -278,39 +279,39 @@ export async function runTryDemo(options: RunTryDemoOptions = {}): Promise<numbe
   ];
   let agent: TryDemoAgent | undefined;
 
-  write('Code Buddy — démo agent de code (~60 secondes)');
-  write(`[1/3] Provider : ${provider.label}`);
-  write(`[2/3] Bac à sable : ${workspace}`);
-  write('      L’agent crée FizzBuzz, écrit ses tests et les exécute…');
+  write('Code Buddy — coding-agent demo (~60 seconds)');
+  write(`[1/3] Provider: ${provider.label}`);
+  write(`[2/3] Sandbox: ${workspace}`);
+  write('      The agent is creating FizzBuzz, writing its tests, and running them…');
 
   try {
     agent = await createAgent(provider, workspace);
     await agent.systemPromptReady;
     const entries = await agent.processUserMessage(TRY_DEMO_PROMPT, { surface: 'cli' });
     const toolNames = invokedToolNames(entries);
-    if (toolNames.length > 0) write(`      Outils utilisés : ${toolNames.join(', ')}`);
+    if (toolNames.length > 0) write(`      Tools used: ${toolNames.join(', ')}`);
     const assistantMessage = latestAssistantMessage(entries);
-    if (assistantMessage) write(`      Agent : ${assistantMessage}`);
+    if (assistantMessage) write(`      Agent: ${assistantMessage}`);
 
-    write('[3/3] Vérification indépendante : node --test fizzbuzz.test.js');
+    write('[3/3] Independent verification: node --test fizzbuzz.test.js');
     const verification = await verify(workspace);
     if (!verification.success) {
-      writeError('❌ La démo n’a pas produit un test vert. Le bac à sable est conservé pour inspection.');
+      writeError('❌ The demo did not produce a green test. The sandbox is kept for inspection.');
       if (verification.output) writeError(verification.output);
       writeError(`   ${workspace}`);
       return 1;
     }
 
-    write('✅ Démo réussie : le code a été écrit et ses tests passent.');
+    write('✅ Demo succeeded: the code was written and its tests pass.');
     if (verification.output) {
       const passLine = verification.output.split('\n').find((line) => /pass/i.test(line));
       if (passLine) write(`   ${passLine.trim()}`);
     }
-    write(`   Fichiers à inspecter : ${workspace}`);
+    write(`   Files to inspect: ${workspace}`);
     return 0;
   } catch (error) {
-    writeError(`❌ Démo interrompue : ${error instanceof Error ? error.message : String(error)}`);
-    writeError(`   Le bac à sable est conservé : ${workspace}`);
+    writeError(`❌ Demo interrupted: ${error instanceof Error ? error.message : String(error)}`);
+    writeError(`   The sandbox is kept: ${workspace}`);
     return 1;
   } finally {
     agent?.dispose?.({ skipSessionLearning: true });
