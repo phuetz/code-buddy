@@ -50,6 +50,7 @@ const execFileAsync = promisify(execFile);
 
 let tempRoot: string;
 let oldRunsDir: string | undefined;
+let oldGrokKey: string | undefined;
 
 async function createTempGitRepo(): Promise<string> {
   const repo = await fs.mkdtemp(path.join(tempRoot, 'repo-'));
@@ -91,10 +92,22 @@ describe('runAgenticCodingCell', () => {
     tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'codebuddy-agentic-cell-'));
     oldRunsDir = process.env.CODEBUDDY_RUNS_DIR;
     process.env.CODEBUDDY_RUNS_DIR = path.join(tempRoot, 'runs');
+    // The verification/self-correction loop resolves an LLM client up front and
+    // throws "No LLM provider configuration found" when none is detected. CI
+    // runners have no API keys, so pin a dummy provider key to make detection
+    // deterministic. Verification here passes (or is safety-blocked) before any
+    // LLM call, so the client is constructed but never invoked — no network.
+    oldGrokKey = process.env.GROK_API_KEY;
+    process.env.GROK_API_KEY = 'test-dummy-key-not-used';
   });
 
   afterEach(async () => {
     process.env.CODEBUDDY_RUNS_DIR = oldRunsDir;
+    if (oldGrokKey === undefined) {
+      delete process.env.GROK_API_KEY;
+    } else {
+      process.env.GROK_API_KEY = oldGrokKey;
+    }
     await fs.rm(tempRoot, { force: true, recursive: true });
   });
 

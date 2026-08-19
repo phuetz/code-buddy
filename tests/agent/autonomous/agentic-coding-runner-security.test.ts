@@ -17,9 +17,17 @@ const execFileAsync = promisify(execFile);
 describe('AgenticCodingRunner - Security and Self-Improvement', () => {
   let tempRoot: string;
   let tempRepo: string;
+  let oldGrokKey: string | undefined;
 
   beforeEach(async () => {
     tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'codebuddy-security-test-'));
+    // The verification/self-correction loop resolves an LLM client up front and
+    // throws "No LLM provider configuration found" when none is detected. CI
+    // runners have no API keys, so pin a dummy provider key to make detection
+    // deterministic. CodeBuddyClient.prototype.chat is mocked below, so no real
+    // LLM call is ever made regardless.
+    oldGrokKey = process.env.GROK_API_KEY;
+    process.env.GROK_API_KEY = 'test-dummy-key-not-used';
     // Set up a dummy Git repository for tests
     tempRepo = path.join(tempRoot, 'test-git-repo');
     await fs.mkdir(tempRepo, { recursive: true });
@@ -39,6 +47,11 @@ describe('AgenticCodingRunner - Security and Self-Improvement', () => {
 
   afterEach(async () => {
     vi.restoreAllMocks();
+    if (oldGrokKey === undefined) {
+      delete process.env.GROK_API_KEY;
+    } else {
+      process.env.GROK_API_KEY = oldGrokKey;
+    }
     await fs.rm(tempRoot, { force: true, recursive: true });
   });
 
