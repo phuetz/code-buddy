@@ -1265,6 +1265,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
         designSystem?: string;
       }) => ipcRenderer.invoke('studio.scaffold.generate', request),
     },
+    github: {
+      push: (request: { root: string; name?: string; private?: boolean }) =>
+        ipcRenderer.invoke('studio.github.push', request),
+    },
   },
 
   // Checkpoint operations
@@ -5960,6 +5964,13 @@ declare global {
             template: string;
             targetDir: string;
             vars?: Record<string, string | boolean>;
+          }) => Promise<unknown>;
+        };
+        github: {
+          push: (request: {
+            root: string;
+            name?: string;
+            private?: boolean;
           }) => Promise<unknown>;
         };
       };

@@ -1,4 +1,4 @@
-import { Code2, Eye, PanelBottom, Play, Plus, Download, Rocket, History as HistoryIcon } from 'lucide-react';
+import { Code2, Eye, PanelBottom, Play, Plus, Download, Rocket, Github, X, History as HistoryIcon } from 'lucide-react';
 import { useState } from 'react';
 import { BuildStatusStrip, type BuildPhase } from './BuildStatusStrip.js';
 import { CodeEditorPane } from './CodeEditorPane.js';
@@ -81,6 +81,14 @@ export interface AppStudioViewProps {
 
 type MainTab = 'editor' | 'preview' | 'versions';
 
+/** Result surfaced by the "Push to GitHub" button (G3). */
+interface GithubPushOutcome {
+  mode: 'pushed' | 'manual';
+  url?: string;
+  log: string;
+  instructions?: string[];
+}
+
 export function AppStudioView({
   tree,
   activeFile,
@@ -118,7 +126,28 @@ export function AppStudioView({
 }: AppStudioViewProps) {
   const [tab, setTab] = useState<MainTab>('editor');
   const [seedPrompt, setSeedPrompt] = useState<string | undefined>(undefined);
+  const [ghBusy, setGhBusy] = useState(false);
+  const [ghResult, setGhResult] = useState<GithubPushOutcome | null>(null);
   const hasProject = tree.length > 0 || Boolean(activeFile) || Boolean(previewUrl);
+
+  // G3 — one-click push of the generated project to a new GitHub repo. Reuses
+  // the machine's `gh` CLI in the main process; falls back to printable
+  // instructions when gh is missing/unauthenticated (the escape-hatch).
+  const onPushGithub = async () => {
+    if (!workingDir || ghBusy) return;
+    setGhBusy(true);
+    setGhResult(null);
+    try {
+      const raw = await window.electronAPI?.studio?.github?.push?.({ root: workingDir });
+      const res = raw as { ok?: boolean; data?: GithubPushOutcome; error?: string } | undefined;
+      if (res?.ok && res.data) setGhResult(res.data);
+      else setGhResult({ mode: 'manual', log: res?.error ?? 'Push failed', instructions: [] });
+    } catch (error) {
+      setGhResult({ mode: 'manual', log: String(error), instructions: [] });
+    } finally {
+      setGhBusy(false);
+    }
+  };
 
   // The workbench (file tree + Code/Preview tabs + terminal) — shared by the
   // classic layout and the bolt.new split.
@@ -198,7 +227,66 @@ export function AppStudioView({
               <Rocket className="h-4 w-4" aria-hidden="true" />
               Deploy
             </button>
+            <button
+              type="button"
+              onClick={onPushGithub}
+              disabled={ghBusy || !workingDir}
+              title="Create a GitHub repository and push this project"
+              className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border px-2.5 text-xs text-muted-foreground hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+              data-testid="studio-github-push"
+            >
+              <Github className="h-4 w-4" aria-hidden="true" />
+              {ghBusy ? 'Pushing…' : 'GitHub'}
+            </button>
           </div>
+          {ghResult ? (
+            <div
+              className="flex items-start gap-2 border-b border-border bg-muted px-3 py-2 text-xs"
+              data-testid="studio-github-result"
+            >
+              <Github className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+              <div className="min-w-0 flex-1">
+                {ghResult.mode === 'pushed' ? (
+                  <div className="text-foreground">
+                    Pushed to GitHub.{' '}
+                    {ghResult.url ? (
+                      <a
+                        href={ghResult.url}
+                        onClick={(event) => {
+                          event.preventDefault();
+                          void window.electronAPI?.openExternal?.(ghResult.url ?? '');
+                        }}
+                        className="font-medium text-primary underline"
+                      >
+                        {ghResult.url}
+                      </a>
+                    ) : (
+                      'Repository created.'
+                    )}
+                  </div>
+                ) : (
+                  <div className="text-foreground">
+                    <div className="font-medium">Finish the push manually:</div>
+                    {ghResult.instructions && ghResult.instructions.length > 0 ? (
+                      <pre className="mt-1 overflow-x-auto whitespace-pre-wrap rounded bg-background p-2 font-mono text-[11px] text-muted-foreground">
+                        {ghResult.instructions.join('\n')}
+                      </pre>
+                    ) : (
+                      <div className="mt-0.5 text-muted-foreground">{ghResult.log}</div>
+                    )}
+                  </div>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={() => setGhResult(null)}
+                title="Dismiss"
+                className="shrink-0 rounded p-0.5 text-muted-foreground hover:text-foreground"
+              >
+                <X className="h-3.5 w-3.5" aria-hidden="true" />
+              </button>
+            </div>
+          ) : null}
           <div className="min-h-0 flex-1">
             {tab === 'editor' ? (
               <div className="flex h-full min-h-0 flex-col">

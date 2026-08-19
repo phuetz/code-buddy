@@ -60,6 +60,7 @@ import { registerStudioFilesIpc } from './studio/studio-files-ipc';
 import { registerCommandRunnerIpc } from './studio/command-runner-ipc';
 import { CommandRunner } from './studio/command-runner';
 import { registerScaffoldIpc } from './studio/scaffold-ipc';
+import { registerGithubIpc } from './studio/github-ipc';
 import { registerMediaGenIpc } from './media/media-gen-ipc';
 import { MediaGenService } from './media/media-gen-service';
 import { registerComfyLabIpc } from './comfy-lab/comfy-lab-ipc';
@@ -2677,6 +2678,7 @@ registerDevServerIpc(ipcMain, new StudioDevServer());
 registerStudioFilesIpc(ipcMain);
 registerCommandRunnerIpc(ipcMain, new CommandRunner(), () => getMainWindow()?.webContents ?? null);
 registerScaffoldIpc(ipcMain, new ScaffoldService());
+registerGithubIpc(ipcMain);
 
 // Media generation surface delegates to the core image_generate tool. Local
 // image egress (Design View edits) is confined in the main process to the
