@@ -127,14 +127,56 @@
       "package": "brace-expansion",
       "severity": "high",
       "advisories": ["https://github.com/advisories/GHSA-v6h2-p8h4-qcjw"],
-      "reason": "The only remaining high instance lives inside the vendored deps of the bundled `npm` CLI package (node_modules/npm/node_modules/brace-expansion); npm ships its dependencies bundled, so it cannot be bumped independently — only by upgrading `npm` itself, which is out of the declared range. All first-party brace-expansion instances were already patched by `npm audit fix`. Dev/tooling only.",
+      "reason": "Quadratic-complexity ReDoS in brace expansion. A non-breaking fix exists, but it is deferred: a broad `npm audit fix` sweep bumped ~56 packages and introduced an ESM module-format regression that broke dozens of test suites on a fresh `npm ci` (confirmed on CI). The lockfile is therefore pinned byte-for-byte to origin/main except the security-critical tar bump; brace-expansion is documented here until the ESM-incompatible package is isolated and this advisory can be cleared by a dedicated, test-gated bump. Reached only via glob/arg parsing in dev/build tooling, never attacker-controlled input.",
       "reviewBy": "2026-11-19"
     },
     {
       "package": "ip-address",
       "severity": "high",
       "advisories": ["https://github.com/advisories/GHSA-fmvm-x8mv-47mj"],
-      "reason": "The remaining high instance is bundled inside the `npm` CLI package (node_modules/npm/node_modules/ip-address) and cannot be bumped without upgrading `npm` itself (out of range). SSRF-classification advisory is not reached by Code Buddy's own SSRF guard, which does not use this copy. Dev/tooling only.",
+      "reason": "IPv4/CIDR misclassification advisory. Fix deferred with the rest of the audit-fix sweep that caused the ESM regression (see 'brace-expansion'); tree pinned to origin/main except the tar critical. Code Buddy's own SSRF guard does not use this copy; the flagged instances are transitive (npm CLI tooling + the `ip-address` dev dep). To be cleared by the dedicated ESM-safe bump.",
+      "reviewBy": "2026-11-19"
+    },
+    {
+      "package": "js-yaml",
+      "severity": "high",
+      "advisories": ["https://github.com/advisories/GHSA-h67p-54hq-rp68"],
+      "reason": "Quadratic-complexity DoS via YAML merge-key chains. A non-breaking fix exists but is deferred to avoid the ESM regression the broad audit-fix sweep caused (see 'brace-expansion'); tree pinned to origin/main except the tar critical. Only parses trusted local config/fixtures, not untrusted network input. Cleared by the dedicated ESM-safe bump.",
+      "reviewBy": "2026-11-19"
+    },
+    {
+      "package": "nanoid",
+      "severity": "high",
+      "advisories": ["https://github.com/advisories/GHSA-28wg-ghj8-5hjv"],
+      "reason": "Non-secure generator can loop on a negative/zero size. Fix deferred to avoid the ESM regression from the broad audit-fix sweep (see 'brace-expansion'); tree pinned to origin/main except the tar critical. IDs are generated from internal, non-attacker-controlled sizes. Cleared by the dedicated ESM-safe bump.",
+      "reviewBy": "2026-11-19"
+    },
+    {
+      "package": "postcss",
+      "severity": "high",
+      "advisories": ["https://github.com/advisories/GHSA-fxqj-rqcc-2cmp"],
+      "reason": "sourceMappingURL path-traversal / .map disclosure. Fix deferred to avoid the ESM regression from the broad audit-fix sweep (see 'brace-expansion'); tree pinned to origin/main except the tar critical. Reached only via build-time CSS processing of first-party stylesheets. Cleared by the dedicated ESM-safe bump.",
+      "reviewBy": "2026-11-19"
+    },
+    {
+      "package": "shell-quote",
+      "severity": "high",
+      "advisories": ["https://github.com/advisories/GHSA-395f-4hp3-45gv"],
+      "reason": "Quadratic-complexity DoS in parse(). Fix deferred to avoid the ESM regression from the broad audit-fix sweep (see 'brace-expansion'); tree pinned to origin/main except the tar critical. Transitive, dev/tooling parsing path, not untrusted network input. Cleared by the dedicated ESM-safe bump.",
+      "reviewBy": "2026-11-19"
+    },
+    {
+      "package": "fast-uri",
+      "severity": "high",
+      "advisories": ["https://github.com/advisories/GHSA-v2hh-gcrm-f6hx"],
+      "reason": "Host-confusion via malformed authority delimiter. Fix deferred to avoid the ESM regression from the broad audit-fix sweep (see 'brace-expansion'); tree pinned to origin/main except the tar critical. Transitive (fastify/ajv URI parsing). Cleared by the dedicated ESM-safe bump.",
+      "reviewBy": "2026-11-19"
+    },
+    {
+      "package": "linkify-it",
+      "severity": "high",
+      "advisories": ["https://github.com/advisories/GHSA-v245-v573-v5vm"],
+      "reason": "Quadratic-complexity DoS in the mailto: validator scan-loop. Fix deferred to avoid the ESM regression from the broad audit-fix sweep (see 'brace-expansion'); tree pinned to origin/main except the tar critical. Transitive (markdown-it link recognition) over local content. Cleared by the dedicated ESM-safe bump.",
       "reviewBy": "2026-11-19"
     }
   ]
