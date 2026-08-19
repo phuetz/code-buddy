@@ -29,32 +29,32 @@ interface FeatureRule {
 
 // Ordered so the plan reads naturally (structure → data → interactions).
 const FEATURE_RULES: FeatureRule[] = [
-  { keys: ['todo', 'tâche', 'tache', 'task'], title: 'Liste de tâches', detail: 'Ajout, complétion et suppression des items.' },
-  { keys: ['auth', 'login', 'connexion', 'sign in', 'signin'], title: 'Authentification', detail: 'Écran de connexion et état utilisateur.' },
-  { keys: ['dashboard', 'tableau de bord'], title: 'Tableau de bord', detail: 'Vue d’ensemble avec cartes de synthèse.' },
-  { keys: ['chart', 'graph', 'graphique', 'courbe'], title: 'Visualisations', detail: 'Graphiques des données clés.' },
-  { keys: ['table', 'tableau', 'grid', 'grille'], title: 'Tableau de données', detail: 'Colonnes triables et filtrables.' },
-  { keys: ['form', 'formulaire'], title: 'Formulaire', detail: 'Champs validés et soumission.' },
-  { keys: ['calendar', 'calendrier', 'agenda'], title: 'Calendrier', detail: 'Vue mensuelle et événements.' },
-  { keys: ['chat', 'messagerie', 'message'], title: 'Messagerie', detail: 'Fil de messages et saisie.' },
-  { keys: ['map', 'carte', 'géo', 'geo'], title: 'Carte', detail: 'Rendu cartographique et marqueurs.' },
-  { keys: ['cart', 'panier', 'shop', 'boutique', 'ecommerce', 'e-commerce'], title: 'Panier & produits', detail: 'Catalogue et panier.' },
-  { keys: ['gallery', 'galerie', 'photo', 'image'], title: 'Galerie', detail: 'Grille responsive de médias.' },
-  { keys: ['timer', 'minuteur', 'chrono', 'pomodoro'], title: 'Minuteur', detail: 'Décompte et contrôles.' },
-  { keys: ['blog', 'article', 'cms'], title: 'Articles', detail: 'Liste et page d’article.' },
-  { keys: ['landing', 'vitrine', 'portfolio'], title: 'Sections vitrine', detail: 'Hero, features et pied de page.' },
+  { keys: ['todo', 'tâche', 'tache', 'task'], title: 'Task list', detail: 'Add, complete and remove items.' },
+  { keys: ['auth', 'login', 'connexion', 'sign in', 'signin'], title: 'Authentication', detail: 'Sign-in screen and user state.' },
+  { keys: ['dashboard', 'tableau de bord'], title: 'Dashboard', detail: 'Overview with summary cards.' },
+  { keys: ['chart', 'graph', 'graphique', 'courbe'], title: 'Charts', detail: 'Charts for the key data.' },
+  { keys: ['table', 'tableau', 'grid', 'grille'], title: 'Data table', detail: 'Sortable, filterable columns.' },
+  { keys: ['form', 'formulaire'], title: 'Form', detail: 'Validated fields and submission.' },
+  { keys: ['calendar', 'calendrier', 'agenda'], title: 'Calendar', detail: 'Monthly view and events.' },
+  { keys: ['chat', 'messagerie', 'message'], title: 'Messaging', detail: 'Message thread and composer.' },
+  { keys: ['map', 'carte', 'géo', 'geo'], title: 'Map', detail: 'Map rendering and markers.' },
+  { keys: ['cart', 'panier', 'shop', 'boutique', 'ecommerce', 'e-commerce'], title: 'Cart & products', detail: 'Catalog and cart.' },
+  { keys: ['gallery', 'galerie', 'photo', 'image'], title: 'Gallery', detail: 'Responsive media grid.' },
+  { keys: ['timer', 'minuteur', 'chrono', 'pomodoro'], title: 'Timer', detail: 'Countdown and controls.' },
+  { keys: ['blog', 'article', 'cms'], title: 'Articles', detail: 'List and article page.' },
+  { keys: ['landing', 'vitrine', 'portfolio'], title: 'Landing sections', detail: 'Hero, features and footer.' },
 ];
 
 function detectStack(p: string): { stack: string; scaffold: string } {
-  if (/\bnext(\.js)?\b/.test(p)) return { stack: 'Next.js', scaffold: 'Initialiser le projet Next.js' };
-  if (/\bvue\b/.test(p)) return { stack: 'Vue + Vite', scaffold: 'Initialiser le projet Vue (Vite)' };
-  if (/\bsvelte\b/.test(p)) return { stack: 'SvelteKit', scaffold: 'Initialiser le projet Svelte' };
-  return { stack: 'React + Vite', scaffold: 'Initialiser le projet (Vite + React)' };
+  if (/\bnext(\.js)?\b/.test(p)) return { stack: 'Next.js', scaffold: 'Initialize the Next.js project' };
+  if (/\bvue\b/.test(p)) return { stack: 'Vue + Vite', scaffold: 'Initialize the Vue project (Vite)' };
+  if (/\bsvelte\b/.test(p)) return { stack: 'SvelteKit', scaffold: 'Initialize the Svelte project' };
+  return { stack: 'React + Vite', scaffold: 'Initialize the project (Vite + React)' };
 }
 
 function titleFrom(prompt: string): string {
   const trimmed = prompt.trim().replace(/\s+/g, ' ');
-  if (!trimmed) return 'Nouvelle application';
+  if (!trimmed) return 'New app';
   const firstClause = trimmed.split(/[.,\n]/)[0]!.slice(0, 60).trim();
   return firstClause.charAt(0).toUpperCase() + firstClause.slice(1);
 }
@@ -69,28 +69,28 @@ export function buildDevPlan(prompt: string): DevPlan {
     steps.push({ id, title, ...(detail ? { detail } : {}), status: 'pending', ...(match ? { match } : {}) });
   };
 
-  push('scaffold', scaffold, 'Structure, dépendances et point d’entrée.');
+  push('scaffold', scaffold, 'Structure, dependencies and entry point.');
 
   const seen = new Set<string>();
   for (const rule of FEATURE_RULES) {
     if (rule.keys.some((k) => p.includes(k)) && !seen.has(rule.title)) {
       seen.add(rule.title);
-      push(`feat-${slug(rule.title)}`, `Construire : ${rule.title}`, rule.detail, [slug(rule.title), ...rule.keys]);
+      push(`feat-${slug(rule.title)}`, `Build: ${rule.title}`, rule.detail, [slug(rule.title), ...rule.keys]);
     }
   }
   if (seen.size === 0) {
-    push('feat-core', 'Construire l’interface principale', 'Composants et mise en page depuis la description.');
+    push('feat-core', 'Build the main interface', 'Components and layout from the description.');
   }
 
   if (/\b(dark|sombre|night)\b/.test(p)) {
-    push('theme-dark', 'Ajouter le thème sombre', 'Palette et bascule clair/sombre.', ['theme', 'dark', 'sombre']);
+    push('theme-dark', 'Add the dark theme', 'Palette and light/dark toggle.', ['theme', 'dark', 'sombre']);
   } else if (/\b(couleur|color|brand|thème|theme|palette|design)\b/.test(p)) {
-    push('theme', 'Appliquer le thème & le branding', 'Couleurs, typographie et espacements.', ['theme', 'style', 'brand']);
+    push('theme', 'Apply the theme & branding', 'Colors, typography and spacing.', ['theme', 'style', 'brand']);
   }
 
-  push('wire', 'Câbler l’état & la navigation', 'Relier les composants et les données.');
-  push('run', 'Lancer la preview', 'Démarrer le serveur de dev et afficher le rendu.');
-  push('verify', 'Vérifier avec web_test', 'Vérification navigateur par Code Buddy : erreurs console/page + assertions.');
+  push('wire', 'Wire up state & navigation', 'Connect the components and the data.');
+  push('run', 'Launch the preview', 'Start the dev server and show the result.');
+  push('verify', 'Verify with web_test', 'Browser verification by Code Buddy: console/page errors + assertions.');
 
   return { title: titleFrom(prompt), stack, steps };
 }
@@ -210,13 +210,13 @@ export function parsePlanBlock(text: string): DevPlan | null {
 
   if (!steps.some((s) => s.id === 'scaffold')) steps[0]!.id = 'scaffold';
   if (!steps.some((s) => s.id === 'run')) {
-    steps.push({ id: 'run', title: 'Lancer la preview', detail: 'Démarrer le serveur de dev et afficher le rendu.', status: 'pending' });
+    steps.push({ id: 'run', title: 'Launch the preview', detail: 'Start the dev server and show the result.', status: 'pending' });
   }
   if (!steps.some((s) => s.id === 'verify')) {
-    steps.push({ id: 'verify', title: 'Vérifier avec web_test', detail: 'Vérification navigateur par Code Buddy : erreurs console/page + assertions.', status: 'pending' });
+    steps.push({ id: 'verify', title: 'Verify with web_test', detail: 'Browser verification by Code Buddy: console/page errors + assertions.', status: 'pending' });
   }
 
-  const stack = typeof obj.stack === 'string' && obj.stack.trim() ? obj.stack.trim() : 'App web';
+  const stack = typeof obj.stack === 'string' && obj.stack.trim() ? obj.stack.trim() : 'Web app';
   return { title: obj.title.trim().slice(0, 60), stack, steps };
 }
 

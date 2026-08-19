@@ -17,6 +17,14 @@ export function isStaticProject(tree: readonly TreeNode[]): boolean {
   return files.includes('index.html') && !files.includes('package.json');
 }
 
+/**
+ * An npm project has a root package.json — it needs `npm install` before its
+ * dev server can start (App Studio G1). Vite/Vue/Next/Expo scaffolds all match.
+ */
+export function isNpmProject(tree: readonly TreeNode[]): boolean {
+  return rootFiles(tree).includes('package.json');
+}
+
 /** Path to the static entry (root index.html), or null. */
 export function previewEntry(tree: readonly TreeNode[]): string | null {
   const entry = tree.find((n) => n.type === 'file' && n.name.toLowerCase() === 'index.html');

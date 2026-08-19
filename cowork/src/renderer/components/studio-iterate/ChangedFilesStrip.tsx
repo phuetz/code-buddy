@@ -9,9 +9,9 @@ export interface ChangedFilesStripProps {
 }
 
 const KIND_META = {
-  added: { label: 'Ajouté', icon: FilePlus2, className: 'border-green-500/30 bg-green-500/10 text-green-500' },
-  modified: { label: 'Modifié', icon: FilePenLine, className: 'border-amber-500/30 bg-amber-500/10 text-amber-500' },
-  deleted: { label: 'Supprimé', icon: FileX2, className: 'border-red-500/30 bg-red-500/10 text-red-500' },
+  added: { label: 'Added', icon: FilePlus2, className: 'border-green-500/30 bg-green-500/10 text-green-500' },
+  modified: { label: 'Modified', icon: FilePenLine, className: 'border-amber-500/30 bg-amber-500/10 text-amber-500' },
+  deleted: { label: 'Deleted', icon: FileX2, className: 'border-red-500/30 bg-red-500/10 text-red-500' },
 } as const;
 
 export function ChangedFilesStrip({ changes, onOpen }: ChangedFilesStripProps) {
@@ -21,17 +21,17 @@ export function ChangedFilesStrip({ changes, onOpen }: ChangedFilesStripProps) {
     return (
       <EmptyState
         icon={<FilePenLine className="h-5 w-5" aria-hidden="true" />}
-        title="Aucun fichier modifié"
-        hint="Le prochain tour d’itération affichera ici les fichiers ajoutés, modifiés ou supprimés."
+        title="No files changed"
+        hint="The next iteration turn will list the added, modified or deleted files here."
       />
     );
   }
 
   return (
-    <section className="rounded-lg border border-border bg-background p-3" aria-label="Fichiers changés au dernier tour">
+    <section className="rounded-lg border border-border bg-background p-3" aria-label="Files changed in the last turn">
       <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-        <h3 className="text-sm font-medium text-foreground">Derniers changements</h3>
-        <div className="flex gap-1 text-xs tabular-nums" aria-label={`${summary.added} ajouts, ${summary.modified} modifications, ${summary.deleted} suppressions`}>
+        <h3 className="text-sm font-medium text-foreground">Latest changes</h3>
+        <div className="flex gap-1 text-xs tabular-nums" aria-label={`${summary.added} added, ${summary.modified} modified, ${summary.deleted} deleted`}>
           <span className="rounded-full border border-green-500/30 bg-green-500/10 px-2 py-0.5 text-green-500">+{summary.added}</span>
           <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-amber-500">~{summary.modified}</span>
           <span className="rounded-full border border-red-500/30 bg-red-500/10 px-2 py-0.5 text-red-500">-{summary.deleted}</span>

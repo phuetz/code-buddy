@@ -19,7 +19,7 @@ export function EditorTabs({
 }) {
   if (tabs.length === 0) return null;
   return (
-    <div className="flex shrink-0 items-stretch gap-0.5 overflow-x-auto border-b border-border bg-muted px-1" role="tablist" aria-label="Fichiers ouverts">
+    <div className="flex shrink-0 items-stretch gap-0.5 overflow-x-auto border-b border-border bg-muted px-1" role="tablist" aria-label="Open files">
       {tabs.map((tab) => {
         const selected = tab.path === activePath;
         return (
@@ -34,14 +34,14 @@ export function EditorTabs({
             <button type="button" onClick={() => onSelect(tab.path)} className="inline-flex items-center gap-1.5" title={tab.path}>
               <FileCode className="h-3.5 w-3.5" aria-hidden="true" />
               {basename(tab.path)}
-              {tab.dirty ? <span className="h-1.5 w-1.5 rounded-full bg-primary" aria-label="Modifié" /> : null}
+              {tab.dirty ? <span className="h-1.5 w-1.5 rounded-full bg-primary" aria-label="Modified" /> : null}
             </button>
             <button
               type="button"
               onClick={() => onClose(tab.path)}
               className="rounded p-0.5 text-muted-foreground opacity-0 hover:bg-muted hover:text-foreground group-hover:opacity-100"
-              title="Fermer"
-              aria-label={`Fermer ${basename(tab.path)}`}
+              title="Close"
+              aria-label={`Close ${basename(tab.path)}`}
             >
               <X className="h-3 w-3" aria-hidden="true" />
             </button>

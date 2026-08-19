@@ -105,6 +105,74 @@ export class CommandRunner {
     }
   }
 
+  /**
+   * Run a command and resolve when it exits (App Studio's `npm install` /
+   * build step). Streams output line-by-line through `onOutput` exactly like
+   * {@link runCommand}, but returns a Promise that settles on process close
+   * with the exit code — so the caller can gate the next phase (start the dev
+   * server only after a successful install). A spawn failure resolves `ok:false`.
+   */
+  runToCompletion(
+    input: CommandRunInput,
+    onOutput?: OutputCallback,
+  ): Promise<CommandRunnerResult<{ id: string; code: number | null }>> {
+    return new Promise((resolve) => {
+      let settled = false;
+      const finish = (result: CommandRunnerResult<{ id: string; code: number | null }>) => {
+        if (settled) return;
+        settled = true;
+        resolve(result);
+      };
+      try {
+        const id = input.id.trim();
+        const cwd = input.cwd.trim();
+        const command = input.command.trim();
+        if (!id) return finish({ ok: false, error: 'id is required' });
+        if (!cwd) return finish({ ok: false, error: 'cwd is required' });
+        if (!command) return finish({ ok: false, error: 'command is required' });
+        if (this.commands.has(id)) return finish({ ok: false, error: `Command ${id} is already running` });
+
+        const child = this.spawnImpl(command, {
+          shell: true,
+          cwd,
+          detached: process.platform !== 'win32',
+          stdio: ['pipe', 'pipe', 'pipe'],
+        });
+        if (child.pid === undefined) return finish({ ok: false, error: `Failed to spawn command ${id}` });
+
+        const record: RunningCommand = {
+          id,
+          child,
+          output: [],
+          stdoutPartial: '',
+          stderrPartial: '',
+          onOutput: onOutput ?? this.defaultOutput,
+        };
+        this.commands.set(id, record);
+
+        child.stdout?.on('data', (chunk: Buffer) => this.consume(record, 'stdout', chunk));
+        child.stderr?.on('data', (chunk: Buffer) => this.consume(record, 'stderr', chunk));
+        child.once('error', (error) => {
+          this.emit(record, 'system', `Command error: ${errorMessage(error)}`);
+          this.commands.delete(id);
+          finish({ ok: false, error: errorMessage(error) });
+        });
+        child.once('close', (code, signal) => {
+          if (record.killTimer) clearTimeout(record.killTimer);
+          this.flush(record, 'stdout');
+          this.flush(record, 'stderr');
+          this.emit(record, 'system', `Command exited with code ${code ?? 'null'}${signal ? ` signal ${signal}` : ''}`);
+          this.commands.delete(id);
+          finish({ ok: true, data: { id, code: code ?? null } });
+        });
+
+        this.emit(record, 'system', `Command started: ${command}`);
+      } catch (error) {
+        finish({ ok: false, error: errorMessage(error) });
+      }
+    });
+  }
+
   kill(id: string): CommandRunnerResult<{ id: string; killed: boolean }> {
     try {
       const record = this.commands.get(id);
