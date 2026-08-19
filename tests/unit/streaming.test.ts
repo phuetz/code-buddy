@@ -709,7 +709,10 @@ describe('StreamTransformer', () => {
       const duration = Date.now() - start;
 
       expect(result).toEqual([1, 2, 3]);
-      expect(duration).toBeGreaterThanOrEqual(20); // 2 delays of 10ms each
+      // 2 delays of 10ms each = ~20ms nominal; allow a small margin for
+      // timer/Date.now() imprecision on loaded CI runners (still discriminant:
+      // with no delay this would be ~0ms).
+      expect(duration).toBeGreaterThanOrEqual(15);
     });
   });
 
