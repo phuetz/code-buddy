@@ -1,8 +1,49 @@
 // cowork/src/main/ipc-main-bridge.ts
+import { BrowserWindow } from 'electron';
 import type { ServerEvent } from '../renderer/types';
 import { getMainWindow } from './window-management';
 import { remoteManager as remoteManagerInstance } from './remote/remote-manager'; // Import the remoteManager instance
 import { log, logError } from './utils/logger'; // Import logger
+
+/**
+ * Tool-confirmation / credential events that MUST reach the renderer the user
+ * is actually looking at, on time — a dropped or mis-routed one silently
+ * expires (DesktopPermissionBridge times out at 90 s → "Demande expirée",
+ * and every gated `create_file` fails). The general event stream targets the
+ * single canonical `getMainWindow()`, which is correct while exactly one app
+ * window exists; but confirmations are load-bearing, so we deliver them to the
+ * ACTIVE (focused) app window in addition to the canonical main window —
+ * deduped, skipping destroyed windows. In the normal single-window case the
+ * focused window IS the main window, so this is byte-identical; it only adds a
+ * recipient when the active renderer ever diverges from `getMainWindow()`
+ * (a second window, a focus/window-recreation race), guaranteeing the modal is
+ * never delivered to a background renderer alone. It never DROPS the historical
+ * recipient. See `tests` regression: `e2e/appstudio-confirm-repro.spec.ts`.
+ */
+const CONFIRMATION_EVENT_TYPES = new Set<string>([
+  'permission.request',
+  'permission.dismiss',
+  'sudo.password.request',
+  'sudo.password.dismiss',
+]);
+
+/** Live app windows that should receive a confirmation event: the focused
+ *  window (the active renderer) plus the canonical main window, deduped and
+ *  excluding destroyed/offscreen (never-focusable) windows. */
+function confirmationTargets(): BrowserWindow[] {
+  const targets: BrowserWindow[] = [];
+  const seen = new Set<number>();
+  const push = (win: BrowserWindow | null | undefined) => {
+    if (!win || win.isDestroyed() || seen.has(win.id)) return;
+    seen.add(win.id);
+    targets.push(win);
+  };
+  // Focused first so the active renderer is always covered even if the
+  // canonical main-window ref is momentarily stale.
+  push(BrowserWindow.getFocusedWindow());
+  push(getMainWindow());
+  return targets;
+}
 
 /**
  * Sends an event to the renderer process of the main window.
@@ -87,7 +128,26 @@ export function sendToRenderer(event: ServerEvent) {
     }
   }
 
-  // Send to local UI
+  // Send to local UI.
+  //
+  // Confirmation-critical events go to the ACTIVE (focused) app window as well
+  // as the canonical main window, so a tool-approval modal can never land only
+  // on a background renderer and silently expire. Everything else keeps the
+  // historical single-target `getMainWindow()` path.
+  if (CONFIRMATION_EVENT_TYPES.has(event.type)) {
+    const targets = confirmationTargets();
+    if (targets.length > 0) {
+      for (const win of targets) {
+        win.webContents.send('server-event', event);
+      }
+      return;
+    }
+    logError(
+      `[ipc-main-bridge] dropped confirmation ${event.type} — no live window (focused/main both unavailable)`
+    );
+    return;
+  }
+
   const mainWindow = getMainWindow();
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.webContents.send('server-event', event);
