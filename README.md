@@ -335,6 +335,12 @@ The CLI guards this: on Node < 22, `buddy gui` prints a clear upgrade message in
 Describe an app in plain language and Code Buddy's **App Studio** scaffolds it, runs a **real `npm install` + dev server**, and shows a **live preview of the running app** — then you iterate in chat, it **auto-fixes build errors** (capped loop), and pushes to GitHub in one click. It's powered by the built-in **open-design** system (**150 brand styles**) and can generate its own images and video. Where hosted tools burn millions of tokens looping on errors, this is a **real local process** with a git-checkpointed editor — **`$0`, offline, no token-burn**.
 
 <p align="center">
+  <img src="docs/assets/showcase-appstudio-ui.jpg" alt="The App Studio workbench: dev plan, file tree, code editor, live preview of the running app, terminal, and Export/Deploy/GitHub actions" width="840"/>
+  <br/>
+  <sub>The <b>App Studio workbench</b> — dev plan, file tree, editor, <b>live preview of the running app</b>, terminal, and Export / Deploy / GitHub.</sub>
+</p>
+
+<p align="center">
   <a href="docs/assets/showcase-appstudio.mp4"><img src="docs/assets/showcase-appstudio.gif" alt="App Studio: describe a React app, it scaffolds, installs, builds, and the live preview renders the running app" width="820"/></a>
   <br/>
   <sub>Describe → scaffold (React + Vite) → real <code>npm install</code> + dev server → <b>live preview renders the running app</b> · <code>$0</code></sub>
