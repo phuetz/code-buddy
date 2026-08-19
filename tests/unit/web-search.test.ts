@@ -11,11 +11,27 @@
 
 import axios from 'axios';
 
-// Mock axios
+// Mock axios (used by the search() providers)
 jest.mock('axios');
 const mockedAxios = axios as jest.Mocked<typeof axios>;
 
+// fetchPage() migrated off axios to the SSRF-guarded fetch boundary; mock those so
+// the page-parsing tests stay hermetic (no real network) instead of hitting the
+// live web. search() still uses axios and is unaffected.
+jest.mock('../../src/security/safe-fetch.js', () => ({
+  safeFetchFollow: jest.fn(),
+}));
+jest.mock('../../src/security/ssrf-guard.js', () => ({
+  assertSafeUrl: jest.fn().mockResolvedValue({ safe: true }),
+}));
+
 import { WebSearchTool, WebSearchOptions, SearchResult } from '../../src/tools/web-search';
+import { safeFetchFollow } from '../../src/security/safe-fetch.js';
+const mockedSafeFetchFollow = safeFetchFollow as unknown as jest.Mock;
+
+// Build a minimal fetch Response stand-in for fetchPage tests.
+const htmlResponse = (html: string, ok = true, status = 200) =>
+  ({ ok, status, text: async () => html }) as unknown as Response;
 
 describe('WebSearchTool', () => {
   let webSearchTool: WebSearchTool;
@@ -232,7 +248,7 @@ describe('WebSearchTool', () => {
           </body>
         </html>
       `;
-      mockedAxios.get.mockResolvedValueOnce({ data: mockHtml });
+      mockedSafeFetchFollow.mockResolvedValueOnce(htmlResponse(mockHtml));
 
       const result = await webSearchTool.fetchPage('https://example.com/page');
 
@@ -261,7 +277,7 @@ describe('WebSearchTool', () => {
           </body>
         </html>
       `;
-      mockedAxios.get.mockResolvedValueOnce({ data: mockHtml });
+      mockedSafeFetchFollow.mockResolvedValueOnce(htmlResponse(mockHtml));
 
       const result = await webSearchTool.fetchPage('https://example.com');
 
@@ -283,7 +299,7 @@ describe('WebSearchTool', () => {
           </body>
         </html>
       `;
-      mockedAxios.get.mockResolvedValueOnce({ data: mockHtml });
+      mockedSafeFetchFollow.mockResolvedValueOnce(htmlResponse(mockHtml));
 
       const result = await webSearchTool.fetchPage('https://example.com');
 
@@ -302,7 +318,7 @@ describe('WebSearchTool', () => {
           <li>Item 3</li>
         </ul>
       `;
-      mockedAxios.get.mockResolvedValueOnce({ data: mockHtml });
+      mockedSafeFetchFollow.mockResolvedValueOnce(htmlResponse(mockHtml));
 
       const result = await webSearchTool.fetchPage('https://example.com');
 
@@ -313,7 +329,7 @@ describe('WebSearchTool', () => {
     it('should truncate content longer than 8000 characters', async () => {
       const longContent = 'x'.repeat(10000);
       const mockHtml = `<html><body><p>${longContent}</p></body></html>`;
-      mockedAxios.get.mockResolvedValueOnce({ data: mockHtml });
+      mockedSafeFetchFollow.mockResolvedValueOnce(htmlResponse(mockHtml));
 
       const result = await webSearchTool.fetchPage('https://example.com');
 
@@ -322,7 +338,7 @@ describe('WebSearchTool', () => {
     });
 
     it('should handle fetch errors gracefully', async () => {
-      mockedAxios.get.mockRejectedValueOnce(new Error('404 Not Found'));
+      mockedSafeFetchFollow.mockRejectedValueOnce(new Error('404 Not Found'));
 
       const result = await webSearchTool.fetchPage('https://example.com/nonexistent');
 
@@ -331,25 +347,26 @@ describe('WebSearchTool', () => {
       expect(result.error).toContain('404 Not Found');
     });
 
-    it('should follow redirects up to 5 times', async () => {
-      mockedAxios.get.mockResolvedValueOnce({ data: '<html>Redirected page</html>' });
+    it('should delegate redirect-following to the safe-fetch boundary', async () => {
+      // Redirect handling moved from axios (maxRedirects) into safeFetchFollow,
+      // which follows redirects internally; assert fetchPage delegates to it.
+      mockedSafeFetchFollow.mockResolvedValueOnce(htmlResponse('<html>Redirected page</html>'));
 
-      await webSearchTool.fetchPage('https://example.com');
+      const result = await webSearchTool.fetchPage('https://example.com');
 
-      expect(mockedAxios.get).toHaveBeenCalledWith(
+      expect(result.success).toBe(true);
+      expect(mockedSafeFetchFollow).toHaveBeenCalledWith(
         'https://example.com',
-        expect.objectContaining({
-          maxRedirects: 5,
-        })
+        expect.any(Object)
       );
     });
 
     it('should use appropriate headers', async () => {
-      mockedAxios.get.mockResolvedValueOnce({ data: '<html></html>' });
+      mockedSafeFetchFollow.mockResolvedValueOnce(htmlResponse('<html></html>'));
 
       await webSearchTool.fetchPage('https://example.com');
 
-      expect(mockedAxios.get).toHaveBeenCalledWith(
+      expect(mockedSafeFetchFollow).toHaveBeenCalledWith(
         'https://example.com',
         expect.objectContaining({
           headers: expect.objectContaining({
@@ -369,7 +386,7 @@ describe('WebSearchTool', () => {
           </body>
         </html>
       `;
-      mockedAxios.get.mockResolvedValueOnce({ data: mockHtml });
+      mockedSafeFetchFollow.mockResolvedValueOnce(htmlResponse(mockHtml));
 
       const result = await webSearchTool.fetchPage('https://example.com');
 
@@ -387,7 +404,7 @@ describe('WebSearchTool', () => {
           </body>
         </html>
       `;
-      mockedAxios.get.mockResolvedValueOnce({ data: mockHtml });
+      mockedSafeFetchFollow.mockResolvedValueOnce(htmlResponse(mockHtml));
 
       const result = await webSearchTool.fetchPage('https://example.com');
 
@@ -415,7 +432,7 @@ describe('WebSearchTool', () => {
           </body>
         </html>
       `;
-      mockedAxios.get.mockResolvedValueOnce({ data: mockHtml });
+      mockedSafeFetchFollow.mockResolvedValueOnce(htmlResponse(mockHtml));
 
       const result = await webSearchTool.fetchPage('https://example.com');
 
@@ -435,7 +452,7 @@ describe('WebSearchTool', () => {
           </body>
         </html>
       `;
-      mockedAxios.get.mockResolvedValueOnce({ data: mockHtml });
+      mockedSafeFetchFollow.mockResolvedValueOnce(htmlResponse(mockHtml));
 
       const result = await webSearchTool.fetchPage('https://example.com');
 
@@ -444,7 +461,7 @@ describe('WebSearchTool', () => {
     });
 
     it('should handle prompt parameter (even if unused)', async () => {
-      mockedAxios.get.mockResolvedValueOnce({ data: '<html><body>Content</body></html>' });
+      mockedSafeFetchFollow.mockResolvedValueOnce(htmlResponse('<html><body>Content</body></html>'));
 
       const result = await webSearchTool.fetchPage('https://example.com', 'Summarize this page');
 
