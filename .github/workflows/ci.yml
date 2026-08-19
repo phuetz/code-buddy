@@ -15,12 +15,12 @@ jobs:
     name: Test on Node.js ${{ matrix.node-version }} and ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
 
-    # Ubuntu is Code Buddy's primary, gating target: the ubuntu 18.x + 20.x legs
-    # are BLOCKING. macOS and Windows run best-effort (continue-on-error below) —
-    # a handful of fs/path-behaviour tests are macOS-specific and are being
-    # stabilised separately; we surface those results without letting them block a
-    # green CI. This is deliberately visible, not a silent removal of coverage:
-    # the non-Linux jobs still run the full suite and report pass/fail.
+    # Ubuntu is Code Buddy's primary, gating target: the ubuntu legs are BLOCKING.
+    # macOS and Windows run best-effort (continue-on-error below) — a handful of
+    # fs/path-behaviour tests are macOS-specific and are being stabilised
+    # separately; we surface those results without letting them block a green CI.
+    # This is deliberately visible, not a silent removal of coverage: the non-Linux
+    # jobs still run the full suite and report pass/fail.
     continue-on-error: ${{ matrix.os != 'ubuntu-latest' }}
 
     strategy:
@@ -29,7 +29,15 @@ jobs:
       # the blocking target actually passed.
       fail-fast: false
       matrix:
-        node-version: [18.x, 20.x]
+        # Node 20.x + 22.x (both current LTS). Node 18 was dropped: the test
+        # toolchain no longer runs on it — Vitest 4 requires Node "^20 || ^22 ||
+        # >=24" and Vite 7 requires "^20.19 || >=22.12", so the suite cannot pass on
+        # 18.x (it produced ~1.3k ESM/module-load failures there while 20.x was
+        # green apart from env-specific cases). Testing on unsupported-by-the-runner
+        # Node versions is not meaningful; the package still declares engines
+        # >=18 for the shipped CLI runtime, which is a separate concern from the
+        # dev/test toolchain. Revisit if the toolchain restores 18.x support.
+        node-version: [20.x, 22.x]
         os: [ubuntu-latest, windows-latest, macos-latest]
 
     steps:
