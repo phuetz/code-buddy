@@ -21,16 +21,16 @@ We take the security of Code Buddy seriously. If you believe you have found a se
 
 ### Please DO
 
-**Report security vulnerabilities privately** using one of these methods:
+**Report security vulnerabilities privately** using GitHub's built-in private reporting:
 
 1. **GitHub Security Advisories** (Preferred)
    - Go to the [Security tab](https://github.com/phuetz/code-buddy/security/advisories)
    - Click "Report a vulnerability"
    - Fill out the form with details
 
-2. **Email**
-   - Send an email to: security@example.com (replace with actual security contact)
-   - Use the subject line: `[SECURITY] Code Buddy Vulnerability Report`
+2. **Reach the maintainer**
+   - If you cannot use the form, contact the maintainer via their [GitHub profile](https://github.com/phuetz)
+   - Please do **not** open a public issue for security problems until they have been addressed
 
 ### What to Include
 
@@ -180,7 +180,7 @@ Security updates will be:
 
 For security-related questions or concerns:
 
-- **Security Email**: security@example.com (replace with actual)
+- **Report a vulnerability (private)**: https://github.com/phuetz/code-buddy/security/advisories/new
 - **General Issues**: https://github.com/phuetz/code-buddy/issues
 - **Discussions**: https://github.com/phuetz/code-buddy/discussions
 

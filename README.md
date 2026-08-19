@@ -16,8 +16,8 @@
 
 <p align="center">
   <a href="https://github.com/phuetz/code-buddy/stargazers"><img src="https://img.shields.io/github/stars/phuetz/code-buddy?style=flat-square&logo=github&color=feca57&label=Star" alt="GitHub stars"/></a>
-  <img src="https://img.shields.io/badge/Tests-27K%2B-00d26a?style=flat-square&logo=jest" alt="Tests"/>
-  <img src="https://img.shields.io/badge/v1.6.0-GA-blueviolet?style=flat-square" alt="Version 1.6.0 GA"/>
+  <a href="https://github.com/phuetz/code-buddy/tags"><img src="https://img.shields.io/github/v/tag/phuetz/code-buddy?sort=semver&style=flat-square&color=blueviolet&label=latest" alt="Latest tag"/></a>
+  <a href="https://github.com/phuetz/code-buddy/commits"><img src="https://img.shields.io/github/last-commit/phuetz/code-buddy?style=flat-square&color=00d26a" alt="Last commit"/></a>
 </p>
 
 <br/>
@@ -57,8 +57,6 @@ Watch a **local model reason on screen, then use real tools to do the work** —
 ## What is Code Buddy?
 
 An open-source, multi-provider AI coding agent with a terminal UI, an HTTP/WebSocket server, and the **Cowork** desktop app — all on one core engine. It reads files, writes code, runs commands, opens PRs, and plans complex tasks across **15 LLM providers** with automatic failover and per-provider circuit breakers. With `buddy login`, a ChatGPT Plus / Pro subscription becomes the flat-fee brain of the whole system — no API keys, no per-token metering. An optional companion layer adds voice, durable memory, opt-in camera perception, and 24/7 background operation.
-
-For that companion layer, `buddy companion live` now gives a MySoulmate-style integrated preflight: it checks whether the existing voice-assistant loop, Python vision sidecar, memory, sensory flags, Telegram, YOLO, and Fleet pieces are actually wired for a real live session, then records the result as a local self-percept.
 
 ---
 
@@ -130,7 +128,7 @@ More desktop demos (Fleet, Autonomy, Companion, …) and captures: [`cowork/read
 
 ## What's shipped
 
-**1.6.0 GA — these aren't roadmap items.** The captures above are unedited, and the core runs today:
+**Shipped and running today — not roadmap items.** The captures above are unedited, and the core runs today:
 
 - ✅ **`$0` local coding agent** — a local Ollama model reasons on screen, then calls tools to do real work. *(the demos above)*
 - ✅ **ChatGPT Plus/Pro → `gpt-5.6-sol` at `$0`** — `buddy login`, flat-fee, no API key, no per-token metering.
