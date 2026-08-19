@@ -120,8 +120,8 @@ export function TerminalPane({ output, onInput, onClear }: TerminalPaneProps) {
             type="button"
             onClick={onClear}
             className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border text-muted-foreground hover:bg-background hover:text-foreground"
-            title="Effacer"
-            aria-label="Effacer le terminal"
+            title="Clear"
+            aria-label="Clear the terminal"
           >
             <Trash2 className="h-4 w-4" aria-hidden="true" />
           </button>

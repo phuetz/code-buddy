@@ -172,7 +172,7 @@ export function useAppStudio(options: UseAppStudioOptions = {}) {
 
   const scaffold = useCallback(async (request: StudioScaffoldRequest) => {
     if (!request.targetDir) {
-      const error = 'Aucun répertoire cible pour le scaffold.';
+      const error = 'No target directory for the scaffold.';
       setBuildError(error);
       appendTerminal(error);
       return;
@@ -192,7 +192,7 @@ export function useAppStudio(options: UseAppStudioOptions = {}) {
       setFileContent('');
       setPreviewUrl(null);
       setPreviewStatus('idle');
-      appendTerminal(`Projet créé: ${nextProjectRoot}`);
+      appendTerminal(`Project created: ${nextProjectRoot}`);
       beginPhase('installing');
       await refreshTree(nextProjectRoot);
       setBuildPhase('idle');
@@ -235,7 +235,7 @@ export function useAppStudio(options: UseAppStudioOptions = {}) {
   const saveFile = useCallback(async () => {
     if (!projectRoot || !activeFile) return;
     const result = await apis.files.write(projectRoot, activeFile, fileContent);
-    appendTerminal(result.ok ? `Sauvegardé: ${activeFile}` : result.error);
+    appendTerminal(result.ok ? `Saved: ${activeFile}` : result.error);
   }, [activeFile, apis, appendTerminal, fileContent, projectRoot]);
 
   // bolt.new opens a file immediately — auto-select a sensible default once the
@@ -282,7 +282,7 @@ export function useAppStudio(options: UseAppStudioOptions = {}) {
   const startDev = useCallback(async (input?: { cwd?: string; command?: string; url?: string }): Promise<{ ok: boolean; error?: string }> => {
     const cwd = input?.cwd ?? projectRoot;
     if (!cwd) {
-      const error = 'Aucun répertoire projet pour lancer le serveur.';
+      const error = 'No project directory to start the server.';
       setBuildError(error);
       appendTerminal(error);
       return { ok: false, error };
@@ -348,7 +348,7 @@ export function useAppStudio(options: UseAppStudioOptions = {}) {
             .pop()
         : undefined;
       if (ours) {
-        appendTerminal(`Ancien serveur ${ours.pid} arrêté (reprise après rechargement).`);
+        appendTerminal(`Previous server ${ours.pid} stopped (resuming after reload).`);
         await apis.devServer.stop(ours.pid);
         // Le socket met un instant à se libérer après SIGTERM — retente avec
         // un court backoff plutôt qu'échouer sur le premier essai.
@@ -364,7 +364,7 @@ export function useAppStudio(options: UseAppStudioOptions = {}) {
       setPreviewUrl(result.data.url);
       setPreviewStatus('running');
       setBuildPhase('running');
-      appendTerminal(`Serveur prêt: ${result.data.url}`);
+      appendTerminal(`Server ready: ${result.data.url}`);
       return { ok: true };
     }
     setPreviewStatus('dead');
@@ -391,7 +391,7 @@ export function useAppStudio(options: UseAppStudioOptions = {}) {
   const stopDev = useCallback(async () => {
     if (devPid === null) return;
     const result = await apis.devServer.stop(devPid);
-    appendTerminal(result.ok ? `Serveur arrêté: ${devPid}` : result.error);
+    appendTerminal(result.ok ? `Server stopped: ${devPid}` : result.error);
     if (!result.ok) setBuildError(result.error);
     setPreviewStatus('dead');
     setBuildPhase('idle');

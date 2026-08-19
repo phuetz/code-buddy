@@ -422,7 +422,7 @@ function StudioView() {
         ...(st?.partialMessage ? { partial: st.partialMessage } : {}),
       }),
       busy,
-      suggestions: ['Change le thème', 'Ajoute un mode sombre', 'Rends-le responsive'],
+      suggestions: ['Change the theme', 'Add a dark mode', 'Make it responsive'],
       plan,
       changes,
       verifyReport,

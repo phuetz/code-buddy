@@ -170,7 +170,7 @@ export function AppStudioView({
               className={`inline-flex h-8 items-center gap-2 rounded-md px-3 text-xs ${tab === 'editor' ? 'bg-background text-foreground' : 'text-muted-foreground hover:bg-background hover:text-foreground'}`}
             >
               <Code2 className="h-4 w-4" aria-hidden="true" />
-              Éditeur
+              Editor
             </button>
             <button
               type="button"
@@ -199,19 +199,19 @@ export function AppStudioView({
               className="ml-auto inline-flex h-8 items-center gap-2 rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground disabled:cursor-not-allowed disabled:opacity-50"
             >
               <Play className="h-4 w-4" aria-hidden="true" />
-              Lancer
+              Run
             </button>
             <button
               type="button"
               onClick={() => {
                 if (workingDir) void window.electronAPI?.studio?.exportZip?.(workingDir);
               }}
-              title="Exporter le projet en zip"
+              title="Export the project as a zip"
               className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border px-2.5 text-xs text-muted-foreground hover:text-foreground"
               data-testid="studio-export-zip"
             >
               <Download className="h-4 w-4" aria-hidden="true" />
-              Exporter
+              Export
             </button>
             <button
               type="button"

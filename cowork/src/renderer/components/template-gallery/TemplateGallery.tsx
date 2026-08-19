@@ -40,7 +40,7 @@ export function TemplateGallery({ items = DEFAULT_TEMPLATES, selectedId, onSelec
             <button
               key={item.id}
               type="button"
-              aria-label={`Sélectionner ${item.name}`}
+              aria-label={`Select ${item.name}`}
               aria-pressed={selected}
               onClick={() => onSelect?.(item.id)}
               className={`group rounded-xl border bg-background p-3 text-left transition hover:-translate-y-0.5 hover:border-primary/70 hover:shadow-sm ${
