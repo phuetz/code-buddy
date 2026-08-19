@@ -1,4 +1,5 @@
 import * as readline from 'readline';
+import { spawn } from 'child_process';
 import { mkdirSync, writeFileSync } from 'fs';
 import { join } from 'path';
 import {
@@ -6,6 +7,11 @@ import {
   validateProviderKey,
   type ProviderOnboardingConfig,
 } from './provider-onboarding.js';
+import {
+  detectEnvironment,
+  renderDetectionSummary,
+  type EnvironmentSnapshot,
+} from './environment-detection.js';
 
 export interface OnboardingResult {
   provider: string;
@@ -451,7 +457,147 @@ function renderCapabilitiesFooter(): string {
   ].join('\n');
 }
 
+/** Reorder the provider menu so detected/available options come first, with the
+ *  recommended free path at index 0. Availability annotations are appended to
+ *  the label so the newcomer sees "(detected)" without extra prose. */
+export function orderGuidesByDetection(snapshot: EnvironmentSnapshot): OnboardingProviderGuide[] {
+  const availableIds = new Set(snapshot.capabilities.filter((c) => c.available).map((c) => c.id));
+  const recommendedId = snapshot.recommended?.id;
+  const annotate = (g: OnboardingProviderGuide): OnboardingProviderGuide =>
+    availableIds.has(g.id) ? { ...g, label: `${g.label} — detected ✓` } : g;
+  const scored = PROVIDER_GUIDES.map(annotate);
+  return scored.sort((a, b) => {
+    const rank = (g: OnboardingProviderGuide): number => {
+      if (g.id === recommendedId) return 0;
+      if (availableIds.has(g.id)) return 1;
+      return 2;
+    };
+    return rank(a) - rank(b);
+  });
+}
+
+/** Pull an Ollama model, streaming progress to the console. Resolves to the
+ *  model name on success, or null on failure (never throws). */
+async function pullOllamaModel(model: string): Promise<string | null> {
+  return new Promise((resolve) => {
+    try {
+      console.log(`\n  Pulling ${model} with Ollama (this can take a few minutes)…\n`);
+      const child = spawn('ollama', ['pull', model], { stdio: 'inherit' });
+      child.on('error', () => resolve(null));
+      child.on('close', (code) => resolve(code === 0 ? model : null));
+    } catch {
+      resolve(null);
+    }
+  });
+}
+
+/**
+ * Offer to start the newcomer on the best detected $0 path with a single "yes"
+ * — no provider menu, no key to paste. Returns a completed OnboardingResult when
+ * the fast path was taken, or null to fall through to the full manual wizard.
+ *
+ * Priority (mirrors detectEnvironment): a live local Ollama/LM Studio with a
+ * model → a signed-in ChatGPT/xAI subscription. When Ollama is running but has
+ * no model, we offer to pull a small coding model so the free path still works.
+ */
+async function runQuickStart(
+  rl: readline.Interface,
+  snapshot: EnvironmentSnapshot
+): Promise<OnboardingResult | null> {
+  const free = snapshot.recommendedFree;
+  const ollama = snapshot.capabilities.find((c) => c.id === 'ollama');
+
+  // Case A: a ready free path exists — offer it directly.
+  if (free) {
+    const answer = (
+      await ask(rl, `Start now on ${free.label} — free, no API key needed? (Y/n)`, 'y')
+    ).toLowerCase();
+    if (answer === 'y' || answer === 'yes' || answer === '') {
+      const guide = getProviderGuide(free.id);
+
+      if (free.id === 'ollama' || free.id === 'lmstudio') {
+        const model = await selectModel(rl, guide, free.models);
+        await persistProviderSelection({ ...guide, baseURL: free.baseURL ?? guide.baseURL }, model, '');
+        return finishQuickStart(free.id, model, free.baseURL);
+      }
+
+      // OAuth path (chatgpt / xai) — already signed in, just persist the choice.
+      const model = guide.defaultModel;
+      await persistProviderSelection(guide, model, '');
+      return finishQuickStart(free.id, model, guide.baseURL);
+    }
+    return null; // user declined the fast path → full menu
+  }
+
+  // Case B: Ollama is running but empty — offer to pull a model, then use it.
+  if (ollama?.available && !(ollama.models?.length)) {
+    const DEFAULT_PULL = 'qwen2.5-coder:7b';
+    const answer = (
+      await ask(
+        rl,
+        `Ollama is running but has no model. Pull ${DEFAULT_PULL} now (free, ~4.5 GB)? (Y/n)`,
+        'y'
+      )
+    ).toLowerCase();
+    if (answer === 'y' || answer === 'yes' || answer === '') {
+      const pulled = await pullOllamaModel(DEFAULT_PULL);
+      if (pulled) {
+        const guide = getProviderGuide('ollama');
+        await persistProviderSelection({ ...guide, baseURL: ollama.baseURL ?? guide.baseURL }, pulled, '');
+        return finishQuickStart('ollama', pulled, ollama.baseURL);
+      }
+      console.log('  ⚠️ Pull did not complete — falling back to the full setup menu.');
+    }
+  }
+
+  return null;
+}
+
+/** Persist config.json + build the OnboardingResult for a fast-path selection. */
+function finishQuickStart(provider: string, model: string, baseURL?: string): OnboardingResult {
+  const guide = getProviderGuide(provider);
+  const result: OnboardingResult = {
+    provider,
+    apiKey: '',
+    model,
+    ttsEnabled: false,
+    authMode: guide.authMode,
+    recommendedNextCommands: buildRecommendedNextCommands({ provider, apiKey: '', model }),
+  };
+  writeConfig(join(process.cwd(), '.codebuddy'), result);
+  console.log('');
+  console.log('  ✅ You\'re set — no environment variable needed.');
+  console.log('');
+  console.log(`  Provider:  ${provider}${baseURL ? ` (${baseURL})` : ''}`);
+  console.log(`  Model:     ${model}`);
+  console.log('');
+  return result;
+}
+
+/** Offer to run the isolated 60-second demo right after setup — ending the
+ *  wizard on proof (a green test), not prose. */
+async function offerTry(rl: readline.Interface): Promise<void> {
+  const answer = (await ask(rl, 'Run the 60-second demo now to confirm it works? (Y/n)', 'y')).toLowerCase();
+  if (answer === 'y' || answer === 'yes' || answer === '') {
+    try {
+      const { runTryDemo } = await import('../commands/try.js');
+      rl.pause();
+      await runTryDemo();
+      rl.resume();
+    } catch {
+      console.log('\n  Run it yourself anytime with:  buddy try\n');
+    }
+  } else {
+    console.log('\n  When you\'re ready:  buddy try\n');
+  }
+}
+
 export async function runOnboarding(): Promise<OnboardingResult> {
+  // 0. Detect what's already usable BEFORE opening readline — the probes are
+  //    async (~1.5s), and holding an open readline across them can race a
+  //    piped/non-interactive stdin to EOF. Detection needs no input anyway.
+  const snapshot = await detectEnvironment();
+
   const rl = readline.createInterface({
     input: process.stdin,
     output: process.stdout,
@@ -465,14 +611,27 @@ export async function runOnboarding(): Promise<OnboardingResult> {
     console.log('');
     console.log('  This wizard will help you configure Code Buddy.');
     console.log('');
+    console.log(renderDetectionSummary(snapshot));
+    console.log('');
+
+    const quick = await runQuickStart(rl, snapshot);
+    if (quick) {
+      console.log(renderCapabilitiesFooter());
+      console.log('');
+      await offerTry(rl);
+      return quick;
+    }
+
     console.log(renderOnboardingRoadmap());
     console.log('');
 
-    // 1. Provider selection
+    // 1. Provider selection — detected/free options float to the top, and the
+    //    default lands on the recommended free path when there is one.
+    const orderedGuides = orderGuidesByDetection(snapshot);
     const provider = await askChoice(
       rl,
       'Which AI provider do you want to use?',
-      PROVIDER_GUIDES.map((guide) => `${guide.id} — ${guide.label}`),
+      orderedGuides.map((guide) => `${guide.id} — ${guide.label}`),
       0
     ).then((choice) => choice.split(/\s+—\s+/)[0] ?? choice);
     const guide = getProviderGuide(provider);
@@ -586,6 +745,11 @@ export async function runOnboarding(): Promise<OnboardingResult> {
     console.log('');
     console.log(renderOnboardingRoadmap(result));
     console.log('');
+
+    // Close with a real, runnable test so the wizard ends on proof, not prose.
+    if (ready) {
+      await offerTry(rl);
+    }
 
     return result;
   } finally {

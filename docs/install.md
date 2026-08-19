@@ -148,18 +148,30 @@ npm link            # exposes `buddy` globally
 
 ---
 
-## First run
+## First run — free, no env var to edit
 
-Whichever path you took:
+Whichever path you took, the fastest way in is one command:
 
 ```sh
-buddy login          # ChatGPT Plus/Pro OAuth → $0 marginal cost, no API key
-# …or a free, fully local brain:
-export CODEBUDDY_PROVIDER=ollama
-buddy                # start chatting
-
-buddy --prompt "analyze the codebase structure"   # one-shot / headless
+buddy try            # 60-second zero-config demo — detects Ollama or a
+                     # signed-in ChatGPT and proves it works. Start here.
 ```
+
+To make it your default, either sign in with a subscription or let the wizard
+configure a local model — **no API key, no environment variable**:
+
+```sh
+buddy onboard        # guided: auto-detects your machine, defaults to the free
+                     # path, and writes the config for you
+buddy login          # ChatGPT Plus/Pro OAuth → $0 marginal cost, no API key
+buddy                # start chatting
+```
+
+Have [Ollama](https://ollama.ai) installed? `buddy onboard` detects the running
+server, offers to pull a small coding model if you have none, and saves the
+choice — you never touch `OLLAMA_HOST`. Not sure you're ready?
+**`buddy doctor`** answers in one line (and `buddy doctor --fix` configures a
+running Ollama automatically).
 
 See [Getting Started](getting-started.md) for headless mode, sessions, and
 typical workflows, and [Deployment](deployment.md) for running the server in
