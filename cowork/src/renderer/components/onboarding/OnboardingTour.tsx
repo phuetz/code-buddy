@@ -42,14 +42,14 @@ export function OnboardingTour({ open, onClose }: OnboardingTourProps) {
         <div className="border-b border-border-muted px-5 py-4">
           <div className="flex items-center justify-between gap-3">
             <p className="text-xs font-medium uppercase tracking-wide text-text-muted">
-              Première ouverture
+              First run
             </p>
             <button
               type="button"
               onClick={onClose}
               className="rounded-md px-2 py-1 text-xs font-medium text-text-muted transition-colors hover:bg-surface-hover hover:text-text"
             >
-              Passer
+              Skip
             </button>
           </div>
         </div>
@@ -69,7 +69,7 @@ export function OnboardingTour({ open, onClose }: OnboardingTourProps) {
             </div>
           </div>
 
-          <div className="flex items-center justify-center gap-2" aria-label="Progression du tour">
+          <div className="flex items-center justify-center gap-2" aria-label="Tour progress">
             {TOUR_STEPS.map((tourStep, index) => (
               <span
                 key={tourStep.id}
@@ -89,14 +89,14 @@ export function OnboardingTour({ open, onClose }: OnboardingTourProps) {
             disabled={isFirstStep}
             className="rounded-lg border border-border px-3 py-2 text-sm font-medium text-text transition-colors hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-40"
           >
-            Précédent
+            Previous
           </button>
           <button
             type="button"
             onClick={goToNextStep}
             className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-accent-foreground transition-colors hover:bg-accent/90"
           >
-            {isLastStep ? 'Terminer' : 'Suivant'}
+            {isLastStep ? 'Finish' : 'Next'}
           </button>
         </div>
       </div>

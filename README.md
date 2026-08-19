@@ -16,8 +16,8 @@
 
 <p align="center">
   <a href="https://github.com/phuetz/code-buddy/stargazers"><img src="https://img.shields.io/github/stars/phuetz/code-buddy?style=flat-square&logo=github&color=feca57&label=Star" alt="GitHub stars"/></a>
-  <img src="https://img.shields.io/badge/Tests-27K%2B-00d26a?style=flat-square&logo=jest" alt="Tests"/>
-  <img src="https://img.shields.io/badge/v1.6.0-GA-blueviolet?style=flat-square" alt="Version 1.6.0 GA"/>
+  <a href="https://github.com/phuetz/code-buddy/tags"><img src="https://img.shields.io/github/v/tag/phuetz/code-buddy?sort=semver&style=flat-square&color=blueviolet&label=latest" alt="Latest tag"/></a>
+  <a href="https://github.com/phuetz/code-buddy/commits"><img src="https://img.shields.io/github/last-commit/phuetz/code-buddy?style=flat-square&color=00d26a" alt="Last commit"/></a>
 </p>
 
 <br/>
@@ -57,8 +57,6 @@ Watch a **local model reason on screen, then use real tools to do the work** —
 ## What is Code Buddy?
 
 An open-source, multi-provider AI coding agent with a terminal UI, an HTTP/WebSocket server, and the **Cowork** desktop app — all on one core engine. It reads files, writes code, runs commands, opens PRs, and plans complex tasks across **15 LLM providers** with automatic failover and per-provider circuit breakers. With `buddy login`, a ChatGPT Plus / Pro subscription becomes the flat-fee brain of the whole system — no API keys, no per-token metering. An optional companion layer adds voice, durable memory, opt-in camera perception, and 24/7 background operation.
-
-For that companion layer, `buddy companion live` now gives a MySoulmate-style integrated preflight: it checks whether the existing voice-assistant loop, Python vision sidecar, memory, sensory flags, Telegram, YOLO, and Fleet pieces are actually wired for a real live session, then records the result as a local self-percept.
 
 ---
 
@@ -130,7 +128,7 @@ More desktop demos (Fleet, Autonomy, Companion, …) and captures: [`cowork/read
 
 ## What's shipped
 
-**1.6.0 GA — these aren't roadmap items.** The captures above are unedited, and the core runs today:
+**Shipped and running today — not roadmap items.** The captures above are unedited, and the core runs today:
 
 - ✅ **`$0` local coding agent** — a local Ollama model reasons on screen, then calls tools to do real work. *(the demos above)*
 - ✅ **ChatGPT Plus/Pro → `gpt-5.6-sol` at `$0`** — `buddy login`, flat-fee, no API key, no per-token metering.
@@ -140,25 +138,6 @@ More desktop demos (Fleet, Autonomy, Companion, …) and captures: [`cowork/read
 - ✅ **~27K Vitest tests** — run locally and on a real-environment runner (the suite is no-mocks / real-integration, so it needs live Ollama/Hermes/browser rather than a vanilla CI box).
 
 **Honest about scope:** [Hermes / OpenClaw parity](docs/hermes-openclaw-parity.md) lays out exactly what's shipped, what's externally-gated, and where the edges are — including which messaging channels are full integrations vs. in-process stubs.
-
----
-
-## Research — a sensory "nervous system" *(experimental)*
-
-Toward the long-term companion/robot vision, [`buddy-sense/`](buddy-sense/) is a **Rust, event-driven perception layer**. Parallel **sense modules** (audio VAD — energy or Silero neural; an autonomic **heartbeat**; screen via `xcap`; UI focus via AT-SPI) feed a **thalamus** that gates + coalesces the stream and broadcasts it over a loopback WebSocket into Code Buddy's event bus — where the heartbeat **paces background memory consolidation** ("dreaming", inspired by OpenClaw). Local, `$0`, permissive deps only (clean-room — no proprietary code copied).
-
-**The eyes are now live.** [`buddy-vision/`](buddy-vision/) (Python sidecar, sibling to `buddy-sense/`) watches a camera and emits **semantic** events — `camera_alive`, `person_entered` / `person_observed` / `person_lost` and `drowsy` (MediaPipe FaceLandmarker by default, optional YOLOv8 person-presence backend; transition events are state-machine deduplicated) — into the same bus. A local vision model (e.g. moondream) describes the scene on motion, and meaningful events push a Telegram alert. The world model keeps anonymous detector-episode continuity and normalized 2D image position; detection loss becomes `unknown`, not an invented physical departure. Raw images and paths never enter the cognitive workspace. Telegram photo upload is off by default and requires the separate `CODEBUDDY_VISION_TELEGRAM_PHOTO=true` consent; redacted VLM text can be explicitly enabled as short-lived cloud conversation context. Setup: `buddy-vision/setup.sh`.
-
-<p align="center"><img src="buddy-sense/docs/architecture.svg" alt="buddy-sense nervous-system architecture: senses → thalamus → bridge → Code Buddy event bus" width="840"/></p>
-
-**Honestly experimental** — distinct from the GA core above: the Rust daemon emits the heartbeat (+ audio from a WAV file), while live camera and live microphone run as Python sidecars (`buddy-vision/watch.py` and `buddy-vision/ear.py`) into the same bridge. The ear sidecar now defaults to `BUDDY_EAR_DEVICE=auto`, preferring webcam/USB microphones discovered through ALSA. `speech_end → STT → response gate → think/agent → speak` **is** wired with faster-whisper + Piper; resident voice actions use the async-scoped guarded posture `CODEBUDDY_SENSORY_SPEAK_PERMISSION_MODE=default` (an explicit `buddy voice --mode plan` session remains read-only). What's real today: the pure detector cores + thalamus + bridge are unit-tested (`cargo test`, 20 tests, no hardware), and the loopback bridge → event bus → reaction path (incl. speech transcription) is covered on the Code Buddy side.
-
-```bash
-cd buddy-sense && cargo test     # 20 tests, no hardware
-./buddy-sense/demo.sh            # headless end-to-end: heartbeat + audio VAD → Code Buddy
-```
-
-Design, the five sense modules, the opt-in features, and the diagrams: [`buddy-sense/README.md`](buddy-sense/README.md).
 
 ---
 
@@ -231,6 +210,31 @@ CODEBUDDY_LLM_FAILOVER=1 buddy -p "…"         # if the primary errors, auto-co
 </p>
 
 See [Getting Started](docs/getting-started.md) for install options, headless mode, sessions, and typical workflows.
+
+---
+
+## What Code Buddy does
+
+Code Buddy is one engine — terminal, desktop, and HTTP — that an LLM drives to read code, edit files, run commands, search the web, open PRs, and plan complex work. Below is the whole surface at a glance — click any area for the full write-up in **[docs/features.md](docs/features.md)**:
+
+| Area | In one line | Deep dive |
+|:-----|:------------|:----------|
+| [Providers & login](docs/features.md#providers--login) | 15 LLM providers + ChatGPT/xAI login at **$0** flat-fee, auto-failover, ensembles | [providers.md](docs/providers.md) |
+| [The agentic loop](docs/features.md#the-agentic-loop) | autonomous tool-calling with a middleware pipeline + confirm-before-execute | [CLAUDE.md](CLAUDE.md) |
+| [~110 tools](docs/features.md#110-tools) | edit/shell/web/browser/docs/media, RAG-selected, 5-strategy edit matching | [tools-reference.md](docs/tools-reference.md) |
+| [Reasoning](docs/features.md#reasoning) | extended thinking + Tree-of-Thought / MCTS, `/think` | [reasoning.md](docs/reasoning.md) |
+| [Goal loops & autonomy](docs/features.md#goal-loops--autonomy) | Ralph loop + LLM judge, YOLO, a 24/7 daemon | [fleet-guide.md](docs/fleet-guide.md) |
+| [Multi-AI Fleet](docs/features.md#multi-ai-fleet) | peers call each other's models + read-only tools over WebSocket | [fleet-guide.md](docs/fleet-guide.md) |
+| [Self-improvement](docs/features.md#self-improvement) | authors + empirically gates its own lessons/tools/skills, and evolves human-gated `src/` variants grounded in research (opt-in) | [CLAUDE.md](CLAUDE.md) |
+| [Skills](docs/features.md#skills) | 40 bundled (Office/research/automation) + authored + imported, firewalled | [commands.md](docs/commands.md) |
+| [Memory & context](docs/features.md#memory--context) | compression, importance-weighted window, JIT project context | [context-engine.md](docs/context-engine.md) |
+| [Security & sandboxing](docs/features.md#security--sandboxing) | Guardian risk-scorer, permission modes, sandbox tiers, SSRF guard, secrets | [security.md](docs/security.md) |
+| [Server & infrastructure](docs/features.md#server--infrastructure) | OpenAI-compatible HTTP, WS gateway, daemon, cron | [infrastructure.md](docs/infrastructure.md) |
+| [Channels](docs/features.md#channels) | 20+ messaging platforms with DM-pairing access control | [channels.md](docs/channels.md) |
+| [Git & code intelligence](docs/features.md#git--code-intelligence) | auto-commit, `/pr`, LSP rename, bug finder, the Code Explorer graph | [development.md](docs/development.md) |
+| [Config & modes](docs/features.md#config--modes) | TOML profiles, permission/agent/security modes, model-aware limits | [configuration.md](docs/configuration.md) |
+
+Every area above is written up in full — with the source files, the exact flags, and what's verified — in **[docs/features.md](docs/features.md)**.
 
 ---
 
@@ -314,74 +318,22 @@ The CLI guards this: on Node < 22, `buddy gui` prints a clear upgrade message in
 
 ---
 
-## What Code Buddy does
+## Research — a sensory "nervous system" *(experimental)*
 
-Code Buddy is one engine — terminal, desktop, and HTTP — that an LLM drives to read code, edit files, run commands, search the web, open PRs, and plan complex work. Below is the whole surface, explained. Jump to any area:
+Toward the long-term companion/robot vision, [`buddy-sense/`](buddy-sense/) is a **Rust, event-driven perception layer**. Parallel **sense modules** (audio VAD — energy or Silero neural; an autonomic **heartbeat**; screen via `xcap`; UI focus via AT-SPI) feed a **thalamus** that gates + coalesces the stream and broadcasts it over a loopback WebSocket into Code Buddy's event bus — where the heartbeat **paces background memory consolidation** ("dreaming", inspired by OpenClaw). Local, `$0`, permissive deps only (clean-room — no proprietary code copied).
 
-| Area | In one line | Deep dive |
-|:-----|:------------|:----------|
-| [Providers & login](#providers--login) | 15 LLM providers + ChatGPT/xAI login at **$0** flat-fee, auto-failover, ensembles | [providers.md](docs/providers.md) |
-| [The agentic loop](#the-agentic-loop) | autonomous tool-calling with a middleware pipeline + confirm-before-execute | [CLAUDE.md](CLAUDE.md) |
-| [~110 tools](#110-tools) | edit/shell/web/browser/docs/media, RAG-selected, 5-strategy edit matching | [tools-reference.md](docs/tools-reference.md) |
-| [Reasoning](#reasoning) | extended thinking + Tree-of-Thought / MCTS, `/think` | [reasoning.md](docs/reasoning.md) |
-| [Goal loops & autonomy](#goal-loops--autonomy) | Ralph loop + LLM judge, YOLO, a 24/7 daemon | [fleet-guide.md](docs/fleet-guide.md) |
-| [Multi-AI Fleet](#multi-ai-fleet) | peers call each other's models + read-only tools over WebSocket | [fleet-guide.md](docs/fleet-guide.md) |
-| [Self-improvement](#self-improvement) | authors + empirically gates its own lessons/tools/skills, and evolves human-gated `src/` variants grounded in research (opt-in) | [CLAUDE.md](CLAUDE.md) |
-| [Skills](#skills) | 40 bundled (Office/research/automation) + authored + imported, firewalled | [commands.md](docs/commands.md) |
-| [Memory & context](#memory--context) | compression, importance-weighted window, JIT project context | [context-engine.md](docs/context-engine.md) |
-| [Security & sandboxing](#security--sandboxing) | Guardian risk-scorer, permission modes, sandbox tiers, SSRF guard, secrets | [security.md](docs/security.md) |
-| [Server & infrastructure](#server--infrastructure) | OpenAI-compatible HTTP, WS gateway, daemon, cron | [infrastructure.md](docs/infrastructure.md) |
-| [Channels](#channels) | 20+ messaging platforms with DM-pairing access control | [channels.md](docs/channels.md) |
-| [Git & code intelligence](#git--code-intelligence) | auto-commit, `/pr`, LSP rename, bug finder, the Code Explorer graph | [development.md](docs/development.md) |
-| [Config & modes](#config--modes) | TOML profiles, permission/agent/security modes, model-aware limits | [configuration.md](docs/configuration.md) |
+**The eyes are now live.** [`buddy-vision/`](buddy-vision/) (Python sidecar, sibling to `buddy-sense/`) watches a camera and emits **semantic** events — `camera_alive`, `person_entered` / `person_observed` / `person_lost` and `drowsy` (MediaPipe FaceLandmarker by default, optional YOLOv8 person-presence backend; transition events are state-machine deduplicated) — into the same bus. A local vision model (e.g. moondream) describes the scene on motion, and meaningful events push a Telegram alert. The world model keeps anonymous detector-episode continuity and normalized 2D image position; detection loss becomes `unknown`, not an invented physical departure. Raw images and paths never enter the cognitive workspace. Telegram photo upload is off by default and requires the separate `CODEBUDDY_VISION_TELEGRAM_PHOTO=true` consent; redacted VLM text can be explicitly enabled as short-lived cloud conversation context. Setup: `buddy-vision/setup.sh`.
 
-### Providers & login
-Code Buddy talks to **15 LLM providers** through one OpenAI-compatible dispatcher (`src/codebuddy/client.ts`), picking exactly one strategy at startup: Grok, Claude, GPT, Gemini, Ollama, LM Studio, AWS Bedrock, Azure, Groq, Together, Fireworks, OpenRouter, vLLM, Copilot, Mistral. **`buddy login`** signs into a ChatGPT Plus/Pro subscription (routed via OpenAI's Codex Responses backend) and **`buddy login xai`** into SuperGrok — both **flat-fee, no API key, cost reported `$0.0000`** (no per-token metering). Multiple logins coexist: **`buddy llm`** lists them, **`buddy llm ensemble "<q>"`** asks them all and synthesizes one answer, and `CODEBUDDY_LLM_FAILOVER=1` auto-continues on the next active LLM when one errors (per-provider circuit breakers). `[model_pairs]` in TOML splits an *architect* and *editor* model. **Validated live (2026-06-23, real keys / local):** chat works on **Mistral, Ollama, Gemini, xAI/Grok, OpenRouter and DeepSeek**; agentic tool-use (real `create_file`/`bash` calls) is confirmed on **Mistral** and **Grok**. Ollama/Grok/ChatGPT are also reproduced in [`docs/proof.md`](docs/proof.md). Anthropic is wired but its key needs API credits to verify. Other listed providers share the same dispatcher but aren't individually load-tested here.
+<p align="center"><img src="buddy-sense/docs/architecture.svg" alt="buddy-sense nervous-system architecture: senses → thalamus → bridge → Code Buddy event bus" width="840"/></p>
 
-### The agentic loop
-The core is a stateful multi-turn loop (`src/agent/execution/agent-executor.ts`, `runTurnLoop`): the LLM proposes tool calls, the executor validates + confirms + runs them, feeds results back, and loops until done or you stop. A **middleware pipeline** (`src/agent/middleware/`) adds turn/cost limits, reasoning injection, workflow guards, auto-repair, and quality gates in priority order. Before any risky action the **ConfirmationService** checks permission mode → declarative rules → session flags → the Guardian Agent, and fail-closed guards block catastrophic commands (`rm -rf /`, fork bombs, `drop database`). Run it interactively (`buddy`), one-shot (`buddy -p "<task>"`), or fully autonomous (`buddy --yolo`).
+**Honestly experimental** — distinct from the GA core above: the Rust daemon emits the heartbeat (+ audio from a WAV file), while live camera and live microphone run as Python sidecars (`buddy-vision/watch.py` and `buddy-vision/ear.py`) into the same bridge. The ear sidecar now defaults to `BUDDY_EAR_DEVICE=auto`, preferring webcam/USB microphones discovered through ALSA. `speech_end → STT → response gate → think/agent → speak` **is** wired with faster-whisper + Piper; resident voice actions use the async-scoped guarded posture `CODEBUDDY_SENSORY_SPEAK_PERMISSION_MODE=default` (an explicit `buddy voice --mode plan` session remains read-only). What's real today: the pure detector cores + thalamus + bridge are unit-tested (`cargo test`, 20 tests, no hardware), and the loopback bridge → event bus → reaction path (incl. speech transcription) is covered on the Code Buddy side.
 
-### ~110 tools
-The agent has **~110 tools** — file edit, shell, web search (5-provider fallback), a real headless browser, PDF/Office, media/vision, code-exec, agent orchestration — and uses **RAG selection** to send only the relevant ones each turn (BM25 `tool_search` as fallback). Edits land even in refactored code via a **5-strategy cascade**: exact → flexible (trim/indent) → regex (tokenized) → fuzzy (Levenshtein 10%) → LCS (90%). It also speaks Codex-style **`apply_patch`**, and `code_exec` runs LLM-written JavaScript in a `vm` sandbox (no `process`/`require`, 30s). Extend it with MCP servers (auto-discovered from `.codebuddy/mcp.json`), plugins, or new tool classes.
+```bash
+cd buddy-sense && cargo test     # 20 tests, no hardware
+./buddy-sense/demo.sh            # headless end-to-end: heartbeat + audio VAD → Code Buddy
+```
 
-### Reasoning
-Two systems: **Extended Thinking** (provider budget tokens — off/minimal/low/medium/high/xhigh) and Code Buddy's own **Tree-of-Thought + MCTS** with four depths (shallow CoT → beam search → MCTS → exhaustive). A reasoning middleware auto-detects complex queries and injects guidance; `/think`, `/megathink`, and `/ultrathink` set the depth, and the `reason` tool streams its search. (MCTSr Q-value `Q(a) = 0.5·(min(R) + mean(R))`.)
-
-### Goal loops & autonomy
-A **goal loop** is autonomy with a referee: the agent acts, an LLM **judge** checks the goal after each turn, and it self-corrects until done or the turn budget runs out — no hand-written retry logic. Drive it with `/goal "<objective>"` + `/subgoal` (numbered criteria), or headless `buddy goal`. **`buddy --yolo`** grants 400 tool rounds under a `$100` cap with guardrails, and the **24/7 autonomous daemon** (`buddy autonomy install`) claims tasks from a shared queue and runs them free-first (local → Tailscale → paid). That queue is a **unified kanban board**: the agent's `kanban_*` tools and the daemon drive one shared board with a claim **lease + heartbeat**, **zombie reclaim** of a crashed peer's work, a **retry budget** that dead-letters a hopeless task to a review column, and a dependency DAG — view it as Hermes-style columns with `buddy autonomy tasks board`; `buddy colab …` is accepted as an alias for `buddy autonomy …`.
-
-### Multi-AI Fleet
-Run several Code Buddy instances as **peers on a WebSocket mesh** that observe each other's events live and call each other's models + read-only tools: `peer.chat` (one-shot), `peer.chat-session.*` (multi-turn, persisted), and `peer.tool.invoke` (remote read-only tools, behind three security gates that fail closed). **`/fleet route "<prompt>"`** classifies a task, gathers peer capabilities, runs a privacy lint (SSN/IBAN/card detection), and recommends a delegation; `/fleet listen|send|status|history` manage the mesh. It interops over A2A + ACP + MCP.
-
-### Self-improvement
-A confirmation-gated conversational forge plus two opt-in improvement loops. None auto-edit `main`.
-
-- **Conversational extension forge** (`extension_forge`): on request, authors a new inert **widget**, sandboxed executable **tool** (`authored__*`), or reusable **skill** (`authored-*`). It is confirmation-gated; tools must pass functional plus robustness cases, widgets pass an inert-markup and anti-hardcoding gate, and skills pass a prompt-injection/exfiltration firewall. Accepted tools are callable in the same conversation and persist across restarts. Never touches `src/`.
-- **Autonomous learned layer** (`CODEBUDDY_SELF_IMPROVE=true`, `buddy improve …`): runs the bounded background author-and-measure loop for lessons, tools, and skills. It remains opt-in even though user-requested `extension_forge` creation is available by default.
-- **Evolutionary self-improvement** (`CODEBUDDY_EVOLVE=true`, `buddy evolve run|list|tree|review|keep`): generates candidate **code variants of Code Buddy's own source** in throwaway git worktrees, scores each against an empirical **fitness** baseline (regressions + tests), keeps the best via **MAP-Elites** diversity — and it's **human-gated**: `keep --confirm` merges only into your current branch, **never automatically, never onto `main`**. Each generation records its **genealogy** (parent/generation) and the **plan** that produced it. Goals can be **grounded in ingested research** (`--source research`): it matches scientific articles in the collective knowledge graph to the concerned feature and synthesizes a targeted goal — so improvement draws on the literature, not just internal heuristics. Deliberately bounded, reversible, opt-in and off by default.
-
-### Skills
-Skills are procedural guidance (Markdown + frontmatter + triggers) the agent discovers and injects by topic. **40 are bundled**, including ones that build real Office docs and run analysis in *visible* Python steps (preflight libs → write script → run → verify): `xlsx`/`docx`/`pptx`, `doc-ingest` (PDF/Office → Markdown), `data-charts` (pandas/matplotlib), `web-automate` (Playwright), `web-research` (cited briefs). The agent can also **author** its own skills and **import** external ones from Hermes / OpenClaw — every imported skill is scanned by a **firewall** that quarantines prompt-injection/exfiltration payloads (`buddy skills import|imported|list`).
-
-### Memory & context
-For long sessions, `ContextManagerV2` compresses with a sliding window + **importance-weighted scoring** (errors 0.95, decisions 0.90, code 0.70, chat 0.25 — high-value messages survive truncation), masks old tool output, prunes stale images, and repairs the transcript after compaction. **JIT context** loads nearby `CODEBUDDY.md`/`CONTEXT.md`/`AGENTS.md` files when a tool touches a path, and each turn injects `<lessons_context>` and `<todo_context>`. Durable facts persist to bounded project/user memory (`/memory recent|remember|recall`), security-scanned against injection/secret-exfiltration.
-
-### Security & sandboxing
-Layered, fail-closed safety: the **Guardian Agent** scores each operation 0–100 (auto-approve <80, prompt 80–90, deny ≥90; read-only tools skip the LLM call), **permission modes** (`plan`/`acceptEdits`/`dontAsk`/`bypassPermissions`), **sandbox tiers** (read-only / workspace-write / full-access via bubblewrap·landlock·seatbelt, with `.git`/`.ssh`/`.aws` always read-only), an **SSRF guard** (blocks private ranges + IPv4/IPv6 bypass vectors with a DNS check before every fetch), an AES-256-GCM **secrets vault** (`buddy secrets`), a **write policy** (`strict` forces `apply_patch`), and an **output sanitizer** that strips model-leakage tokens.
-
-### Server & infrastructure
-**`buddy server`** exposes an HTTP API (port 3000) including an **OpenAI-compatible `/api/chat/completions`**, plus a **WebSocket gateway** (3001) for desktop/mobile clients (device pairing, presence, Origin-hardened, JWT in production). A **daemon** runs 24/7 with auto-restart, a heartbeat checklist, daily session reset, and a cross-platform service installer (systemd/launchd/Task Scheduler). **Cron** scheduling (`buddy cron add`) supports no-LLM `--watchdog` monitors and `--pre-check` gates so an expensive LLM run only fires when something actually changed.
-
-### Channels
-Code Buddy runs on **20+ messaging platforms** — Telegram, Discord, Slack, WhatsApp, Signal, Matrix, IRC, Nostr, Mattermost, Nextcloud Talk, iMessage (real persistent transports with auto-reconnect) plus REST/webhook adapters (Teams, Google Chat, Feishu, LINE, ntfy, DingTalk, WeCom, …). **DM pairing** prevents unauthorized credit burn: an unknown user gets a 6-char code (15-min TTL) you approve via `buddy pairing approve`. (A few niche adapters — Twitch/Tlon/Gmail — are in-process stubs, and Feishu real-time *inbound* needs the Lark SDK installed.)
-
-**Multiple bots, each with its own memory.** Run several bots from one instance (e.g. several Telegram tokens). Each gets its own **persona** — name, model, and system prompt via `channels.json` — and its own **isolated persistent memory** under `~/.codebuddy/bots/<id>/`, so two bots never see each other's remembered facts. Every conversation is **session-isolated** per `(channel, user)` (no cross-user context bleed) and **persists across daemon restarts** (history is replayed from disk onto a cold agent). Cross-channel **identity links** can still collapse the same person's Telegram + Discord into one canonical thread.
-
-### Git & code intelligence
-`buddy dev run` plans + implements + tests + **auto-commits** with a Conventional-Commit message; **`/pr`** opens a summarized PR; `lsp_rename`/`lsp_code_action` drive language servers for safe refactors; the **bug finder** flags 25+ patterns across 6 languages. For whole-repo understanding, the optional **[Code Explorer](https://github.com/phuetz/code-explorer)** (the `gitnexus` MCP server — a standalone Rust code-intelligence engine) pre-indexes the repo into a knowledge graph with 30 public tools (+ a private `business` tool) for impact/blast-radius, coupling, hotspots, and execution traces, answering structural questions with ~40× less context. Code Buddy also runs as an **ACP** agent (`buddy acp`) so editors like Zed can drive it natively.
-
-### Config & modes
-Configure via env vars, **TOML profiles** (`[profiles.<name>]`, `buddy --profile`), and per-project `.codebuddy/settings.json`. **Permission modes** gate approvals, **agent modes** (`plan`/`code`/`ask`/`architect`) restrict the tool surface, and **security modes** (`suggest`/`auto-edit`/`full-auto`) tune the approval flow. Per-model capabilities (context window, max output, patch format) live in `src/config/model-tools.ts`. The UI ships in **English and French (complete)**; `de`/`es`/`ja`/`zh` are registered locale scaffolds that currently fall back to English.
+Design, the five sense modules, the opt-in features, and the diagrams: [`buddy-sense/README.md`](buddy-sense/README.md).
 
 ---
 
@@ -391,6 +343,7 @@ Configure via env vars, **TOML profiles** (`[profiles.<name>]`, `buddy --profile
 |:---------|:------------|
 | [Install](docs/install.md) | The three install paths — one-command `curl \| sh`, Docker/VPS (24/7), npm |
 | [Getting Started](docs/getting-started.md) | Prerequisites, install, first run, headless mode, sessions |
+| [Features](docs/features.md) | The full feature surface — providers, agentic loop, tools, reasoning, autonomy, fleet, security, channels, and more |
 | [Providers](docs/providers.md) | All 15 providers, connection profiles, model pairs, circuit breaker |
 | [Tools Reference](docs/tools-reference.md) | Tool categories, RAG selection, edit matching, `apply_patch`, streaming |
 | [Commands](docs/commands.md) | All slash commands, CLI subcommands, companion commands, global flags |

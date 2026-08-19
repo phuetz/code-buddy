@@ -1,4 +1,4 @@
-import { Code2, Eye, PanelBottom, Play, Plus, Download, Rocket, History as HistoryIcon } from 'lucide-react';
+import { Code2, Eye, PanelBottom, Play, Plus, Download, Rocket, Github, X, History as HistoryIcon } from 'lucide-react';
 import { useState } from 'react';
 import { BuildStatusStrip, type BuildPhase } from './BuildStatusStrip.js';
 import { CodeEditorPane } from './CodeEditorPane.js';
@@ -51,6 +51,8 @@ export interface AppStudioViewProps {
   buildPhase: BuildPhase;
   buildElapsedMs: number;
   buildError?: string | null;
+  /** Extra build-strip status (auto-fix "Fixing… n/3"). */
+  buildNote?: string | null;
   templates: TemplateCard[];
   busy?: boolean;
   workingDir?: string;
@@ -79,6 +81,14 @@ export interface AppStudioViewProps {
 
 type MainTab = 'editor' | 'preview' | 'versions';
 
+/** Result surfaced by the "Push to GitHub" button (G3). */
+interface GithubPushOutcome {
+  mode: 'pushed' | 'manual';
+  url?: string;
+  log: string;
+  instructions?: string[];
+}
+
 export function AppStudioView({
   tree,
   activeFile,
@@ -91,6 +101,7 @@ export function AppStudioView({
   buildPhase,
   buildElapsedMs,
   buildError,
+  buildNote,
   templates,
   busy = false,
   workingDir,
@@ -115,7 +126,28 @@ export function AppStudioView({
 }: AppStudioViewProps) {
   const [tab, setTab] = useState<MainTab>('editor');
   const [seedPrompt, setSeedPrompt] = useState<string | undefined>(undefined);
+  const [ghBusy, setGhBusy] = useState(false);
+  const [ghResult, setGhResult] = useState<GithubPushOutcome | null>(null);
   const hasProject = tree.length > 0 || Boolean(activeFile) || Boolean(previewUrl);
+
+  // G3 — one-click push of the generated project to a new GitHub repo. Reuses
+  // the machine's `gh` CLI in the main process; falls back to printable
+  // instructions when gh is missing/unauthenticated (the escape-hatch).
+  const onPushGithub = async () => {
+    if (!workingDir || ghBusy) return;
+    setGhBusy(true);
+    setGhResult(null);
+    try {
+      const raw = await window.electronAPI?.studio?.github?.push?.({ root: workingDir });
+      const res = raw as { ok?: boolean; data?: GithubPushOutcome; error?: string } | undefined;
+      if (res?.ok && res.data) setGhResult(res.data);
+      else setGhResult({ mode: 'manual', log: res?.error ?? 'Push failed', instructions: [] });
+    } catch (error) {
+      setGhResult({ mode: 'manual', log: String(error), instructions: [] });
+    } finally {
+      setGhBusy(false);
+    }
+  };
 
   // The workbench (file tree + Code/Preview tabs + terminal) — shared by the
   // classic layout and the bolt.new split.
@@ -138,7 +170,7 @@ export function AppStudioView({
               className={`inline-flex h-8 items-center gap-2 rounded-md px-3 text-xs ${tab === 'editor' ? 'bg-background text-foreground' : 'text-muted-foreground hover:bg-background hover:text-foreground'}`}
             >
               <Code2 className="h-4 w-4" aria-hidden="true" />
-              Éditeur
+              Editor
             </button>
             <button
               type="button"
@@ -167,35 +199,94 @@ export function AppStudioView({
               className="ml-auto inline-flex h-8 items-center gap-2 rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground disabled:cursor-not-allowed disabled:opacity-50"
             >
               <Play className="h-4 w-4" aria-hidden="true" />
-              Lancer
+              Run
             </button>
             <button
               type="button"
               onClick={() => {
                 if (workingDir) void window.electronAPI?.studio?.exportZip?.(workingDir);
               }}
-              title="Exporter le projet en zip"
+              title="Export the project as a zip"
               className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border px-2.5 text-xs text-muted-foreground hover:text-foreground"
               data-testid="studio-export-zip"
             >
               <Download className="h-4 w-4" aria-hidden="true" />
-              Exporter
+              Export
             </button>
             <button
               type="button"
               onClick={() =>
                 setSeedPrompt(
-                  "Déploie cette app avec l'outil deploy (choisis l'hébergeur le plus simple, config générée, et donne-moi l'URL publique)."
+                  'Deploy this app with the deploy tool (pick the simplest host, generate the config, and give me the public URL).'
                 )
               }
-              title="Préparer une demande de déploiement (outil deploy)"
+              title="Prepare a deployment request (deploy tool)"
               className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border px-2.5 text-xs text-muted-foreground hover:text-foreground"
               data-testid="studio-deploy"
             >
               <Rocket className="h-4 w-4" aria-hidden="true" />
-              Déployer
+              Deploy
+            </button>
+            <button
+              type="button"
+              onClick={onPushGithub}
+              disabled={ghBusy || !workingDir}
+              title="Create a GitHub repository and push this project"
+              className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border px-2.5 text-xs text-muted-foreground hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+              data-testid="studio-github-push"
+            >
+              <Github className="h-4 w-4" aria-hidden="true" />
+              {ghBusy ? 'Pushing…' : 'GitHub'}
             </button>
           </div>
+          {ghResult ? (
+            <div
+              className="flex items-start gap-2 border-b border-border bg-muted px-3 py-2 text-xs"
+              data-testid="studio-github-result"
+            >
+              <Github className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+              <div className="min-w-0 flex-1">
+                {ghResult.mode === 'pushed' ? (
+                  <div className="text-foreground">
+                    Pushed to GitHub.{' '}
+                    {ghResult.url ? (
+                      <a
+                        href={ghResult.url}
+                        onClick={(event) => {
+                          event.preventDefault();
+                          void window.electronAPI?.openExternal?.(ghResult.url ?? '');
+                        }}
+                        className="font-medium text-primary underline"
+                      >
+                        {ghResult.url}
+                      </a>
+                    ) : (
+                      'Repository created.'
+                    )}
+                  </div>
+                ) : (
+                  <div className="text-foreground">
+                    <div className="font-medium">Finish the push manually:</div>
+                    {ghResult.instructions && ghResult.instructions.length > 0 ? (
+                      <pre className="mt-1 overflow-x-auto whitespace-pre-wrap rounded bg-background p-2 font-mono text-[11px] text-muted-foreground">
+                        {ghResult.instructions.join('\n')}
+                      </pre>
+                    ) : (
+                      <div className="mt-0.5 text-muted-foreground">{ghResult.log}</div>
+                    )}
+                  </div>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={() => setGhResult(null)}
+                title="Dismiss"
+                className="shrink-0 rounded p-0.5 text-muted-foreground hover:text-foreground"
+              >
+                <X className="h-3.5 w-3.5" aria-hidden="true" />
+              </button>
+            </div>
+          ) : null}
           <div className="min-h-0 flex-1">
             {tab === 'editor' ? (
               <div className="flex h-full min-h-0 flex-col">
@@ -212,7 +303,7 @@ export function AppStudioView({
                     <CodeEditorPane path={activeFile} value={fileContent} onChange={onChangeFileContent} onSave={onSaveFile} />
                   ) : (
                     <div className="flex h-full items-center justify-center p-6 text-center text-xs text-muted-foreground">
-                      Aucun fichier sélectionné.
+                      No file selected.
                     </div>
                   )}
                 </div>
@@ -254,14 +345,14 @@ export function AppStudioView({
               type="button"
               onClick={onNewApp}
               className="inline-flex h-7 items-center gap-1.5 rounded-md border border-border px-2.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
-              title="Démarrer une nouvelle app"
+              title="Start a new app"
             >
               <Plus className="h-3.5 w-3.5" aria-hidden="true" />
-              Nouvelle app
+              New app
             </button>
           </div>
         ) : null}
-        <BuildStatusStrip phase={buildPhase} elapsedMs={buildElapsedMs} error={buildError} onStop={onStopBuild} />
+        <BuildStatusStrip phase={buildPhase} elapsedMs={buildElapsedMs} error={buildError} note={buildNote} onStop={onStopBuild} />
         <div className="grid min-h-0 flex-1 grid-cols-[minmax(320px,380px)_minmax(0,1fr)]">
           <div className="flex min-h-0 flex-col border-r border-border bg-surface">
             {chat.plan ? <DevPlanCard plan={chat.plan} /> : null}
@@ -289,7 +380,7 @@ export function AppStudioView({
             workbench
           ) : (
             <div className="flex min-h-0 flex-1 items-center justify-center p-8 text-center text-xs text-muted-foreground">
-              Les fichiers, le code et la preview de ton app apparaîtront ici pendant la génération.
+              Your app's files, code, and preview will appear here during generation.
             </div>
           )}
         </div>
@@ -300,14 +391,14 @@ export function AppStudioView({
   return (
     <main className="flex h-full min-h-0 flex-col bg-background text-foreground">
       <StudioComposer templates={templates} onScaffold={onScaffold} onGenerateWithAI={onGenerateWithAI} onPrompt={onPrompt} busy={busy} workingDir={workingDir} seedPrompt={seedPrompt} />
-      <BuildStatusStrip phase={buildPhase} elapsedMs={buildElapsedMs} error={buildError} onStop={onStopBuild} />
+      <BuildStatusStrip phase={buildPhase} elapsedMs={buildElapsedMs} error={buildError} note={buildNote} onStop={onStopBuild} />
       {!hasProject ? (
         <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-6">
           <div className="mx-auto max-w-3xl text-center">
             <PanelBottom className="mx-auto h-8 w-8 text-muted-foreground" aria-hidden="true" />
-            <h2 className="mt-3 text-sm font-medium text-foreground">Que veux-tu créer&nbsp;?</h2>
+            <h2 className="mt-3 text-sm font-medium text-foreground">What would you like to create?</h2>
             <p className="mt-1 text-xs text-muted-foreground">
-              Choisis un type ci-dessous (aperçu de ce qui sera créé) ou décris ton app en haut — les fichiers, le code et la preview apparaîtront ici.
+              Pick a type below (preview of what will be created) or describe your app above — the files, code, and preview will appear here.
             </p>
           </div>
           <div className="mx-auto mt-5 w-full max-w-4xl">

@@ -101,8 +101,8 @@ function TreeRow({
                 onCreate(node.path);
               }}
               className="inline-flex h-6 w-6 items-center justify-center rounded text-muted-foreground hover:bg-background hover:text-foreground"
-              title="Créer"
-              aria-label={`Créer dans ${node.name}`}
+              title="Create"
+              aria-label={`Create in ${node.name}`}
             >
               <Plus className="h-3.5 w-3.5" aria-hidden="true" />
             </button>
@@ -115,8 +115,8 @@ function TreeRow({
                 onRename(node.path);
               }}
               className="inline-flex h-6 w-6 items-center justify-center rounded text-muted-foreground hover:bg-background hover:text-foreground"
-              title="Renommer"
-              aria-label={`Renommer ${node.name}`}
+              title="Rename"
+              aria-label={`Rename ${node.name}`}
             >
               <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
             </button>
@@ -129,8 +129,8 @@ function TreeRow({
                 onDelete(node.path);
               }}
               className="inline-flex h-6 w-6 items-center justify-center rounded text-muted-foreground hover:bg-background hover:text-foreground"
-              title="Supprimer"
-              aria-label={`Supprimer ${node.name}`}
+              title="Delete"
+              aria-label={`Delete ${node.name}`}
             >
               <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
             </button>
@@ -173,16 +173,16 @@ export function StudioFileTree({ tree, activePath, onOpen, onCreate, onRename, o
   }, []);
 
   return (
-    <nav className="flex h-full min-h-0 flex-col border border-border bg-surface" aria-label="Fichiers du projet">
+    <nav className="flex h-full min-h-0 flex-col border border-border bg-surface" aria-label="Project files">
       <header className="flex h-10 shrink-0 items-center justify-between border-b border-border bg-muted px-3">
-        <span className="text-xs font-medium text-muted-foreground">Fichiers</span>
+        <span className="text-xs font-medium text-muted-foreground">Files</span>
         {onCreate && (
           <button
             type="button"
             onClick={() => onCreate('')}
             className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border text-muted-foreground hover:bg-background hover:text-foreground"
-            title="Créer"
-            aria-label="Créer un fichier"
+            title="Create"
+            aria-label="Create a file"
           >
             <Plus className="h-4 w-4" aria-hidden="true" />
           </button>
@@ -207,7 +207,7 @@ export function StudioFileTree({ tree, activePath, onOpen, onCreate, onRename, o
             ))}
           </ul>
         ) : (
-          <div className="p-3 text-xs text-muted-foreground">Aucun fichier.</div>
+          <div className="p-3 text-xs text-muted-foreground">No files.</div>
         )}
       </div>
     </nav>

@@ -33,7 +33,7 @@ export interface StudioComposerProps {
   seedPrompt?: string;
 }
 
-const SUGGESTIONS = ['une todo app React', 'une API Express CRUD', 'une landing page'];
+const SUGGESTIONS = ['a React todo app', 'an Express CRUD API', 'a landing page'];
 
 const VARS_BY_TEMPLATE: Record<StudioTemplateId, string[]> = {
   'react-ts': ['projectName', 'description'],
@@ -190,7 +190,7 @@ export function StudioComposer({ templates, onScaffold, onGenerateWithAI, onProm
             }}
             disabled={busy}
             rows={4}
-            placeholder="Décris l'app à construire — ex. « une todo app React avec filtres, thème sombre et persistance locale ». Ctrl/⌘+Entrée pour générer."
+            placeholder="Describe the app to build — e.g. “a React todo app with filters, dark theme, and local persistence”. Ctrl/⌘+Enter to generate."
             className="min-h-[104px] min-w-0 flex-1 resize-y bg-transparent py-1 text-sm leading-relaxed text-foreground outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed"
           />
         </div>
@@ -220,16 +220,16 @@ export function StudioComposer({ templates, onScaffold, onGenerateWithAI, onProm
             value={targetDir}
             onChange={(event) => handleTargetChange(event.target.value)}
             disabled={busy}
-            placeholder="Dossier de destination"
+            placeholder="Destination folder"
             className="h-10 rounded-md border border-border bg-background px-3 text-sm text-foreground outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-50"
-            aria-label="Dossier de destination"
+            aria-label="Destination folder"
           />
           <div className="flex gap-2">
             <button
               type="button"
               onClick={handleGenerate}
               disabled={!canGenerate}
-              title="Générer depuis un template (rapide, sans IA)"
+              title="Generate from a template (fast, no AI)"
               className="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-border bg-surface px-4 text-sm font-medium text-foreground hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
             >
               <Send className="h-4 w-4" aria-hidden="true" />
@@ -240,11 +240,11 @@ export function StudioComposer({ templates, onScaffold, onGenerateWithAI, onProm
                 type="button"
                 onClick={handleGenerateWithAI}
                 disabled={!canGenerateAI}
-                title="L'agent génère une app custom brandée en lisant le système de design choisi"
+                title="The agent generates a custom, branded app by reading the chosen design system"
                 className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-primary px-5 text-sm font-medium text-primary-foreground disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <Sparkles className="h-4 w-4" aria-hidden="true" />
-                Générer avec IA
+                Generate with AI
               </button>
             ) : null}
           </div>
@@ -275,7 +275,7 @@ export function StudioComposer({ templates, onScaffold, onGenerateWithAI, onProm
               className="h-10 min-w-0 flex-1 bg-transparent text-sm text-foreground outline-none disabled:cursor-not-allowed disabled:opacity-50"
               aria-label="Style de design"
             >
-              <option value="">Style : aucun (neutre)</option>
+              <option value="">Style: none (neutral)</option>
               {designGroups.map((group) => (
                 <optgroup key={group.category} label={group.category}>
                   {group.systems.map((system) => (
@@ -290,9 +290,9 @@ export function StudioComposer({ templates, onScaffold, onGenerateWithAI, onProm
               type="button"
               onClick={() => setShowGallery(true)}
               disabled={busy}
-              title="Parcourir les 150 styles avec aperçu"
+              title="Browse the 150 styles with preview"
               className="shrink-0 rounded p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
-              aria-label="Parcourir les styles"
+              aria-label="Browse the styles"
             >
               <LayoutGrid className="h-4 w-4" aria-hidden="true" />
             </button>
@@ -316,7 +316,7 @@ export function StudioComposer({ templates, onScaffold, onGenerateWithAI, onProm
                 </span>
               </>
             ) : (
-              "Choisis un style de marque : l'app générée en reprend couleurs, typo et géométrie."
+              'Pick a brand style: the generated app inherits its colors, typography, and geometry.'
             )}
           </div>
         </div>
@@ -349,7 +349,7 @@ export function StudioComposer({ templates, onScaffold, onGenerateWithAI, onProm
           />
         </div>
         {missingVars.length > 0 ? (
-          <p className="text-xs text-destructive">Variables requises manquantes: {missingVars.join(', ')}</p>
+          <p className="text-xs text-destructive">Missing required variables: {missingVars.join(', ')}</p>
         ) : null}
         <div className="flex flex-wrap gap-2">
           {SUGGESTIONS.map((suggestion) => (
@@ -363,7 +363,7 @@ export function StudioComposer({ templates, onScaffold, onGenerateWithAI, onProm
               {suggestion}
             </button>
           ))}
-          {targetDir ? <span className="text-xs text-muted-foreground">Racine prévue: {dirname(targetDir)}</span> : null}
+          {targetDir ? <span className="text-xs text-muted-foreground">Planned root: {dirname(targetDir)}</span> : null}
         </div>
       </div>
       <DesignSystemGallery

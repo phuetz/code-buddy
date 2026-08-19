@@ -305,19 +305,22 @@ main() {
   fi
 
   info ""
-  printf '%s\n' "${C_BOLD}Get started${C_RESET}"
-  # Adapt the first step to what's actually on this machine — one obvious move.
+  printf '%s\n' "${C_BOLD}Get started — no API key, no env var to edit${C_RESET}"
+  # One obvious first move for everyone: the zero-config demo proves it works,
+  # then onboard/login make it your default.
   if detect_ollama; then
-    ok "Local Ollama detected — start chatting for \$0 right now:"
-    info "    ${C_BOLD}export CODEBUDDY_PROVIDER=ollama && buddy${C_RESET}"
+    ok "Local Ollama detected — prove it works for \$0 right now:"
+    info "    ${C_BOLD}buddy try${C_RESET}         — 60-second zero-config coding demo"
+    info "    ${C_BOLD}buddy onboard${C_RESET}     — save it as your default (detects Ollama, no env var)"
     info ""
     info "  ${C_DIM}Prefer a hosted brain? ${C_RESET}${C_BOLD}buddy login${C_RESET}${C_DIM} — ChatGPT Plus/Pro OAuth, \$0 marginal cost.${C_RESET}"
   else
-    info "  1. ${C_BOLD}buddy login${C_RESET}     — sign in with ChatGPT Plus/Pro (OAuth, \$0 marginal cost)"
-    info "     ${C_DIM}...or 'export CODEBUDDY_PROVIDER=ollama' if you run a local model.${C_RESET}"
-    info "  2. ${C_BOLD}buddy onboard${C_RESET}   — guided setup wizard (pick a model, keys optional)"
+    info "  1. ${C_BOLD}buddy try${C_RESET}       — 60-second zero-config demo (start here)"
+    info "  2. ${C_BOLD}buddy login${C_RESET}     — sign in with ChatGPT Plus/Pro (OAuth, \$0 marginal cost)"
+    info "     ${C_DIM}...or install Ollama (https://ollama.ai) and run 'buddy onboard' — it configures it for you.${C_RESET}"
     info "  3. ${C_BOLD}buddy${C_RESET}           — start chatting"
   fi
+  info "  ${C_DIM}Not sure you're ready? ${C_RESET}${C_BOLD}buddy doctor${C_RESET}${C_DIM} (add --fix to auto-configure a running Ollama).${C_RESET}"
   info ""
   info "${C_DIM}Full guide: https://github.com/phuetz/code-buddy/blob/main/docs/install.md${C_RESET}"
 }

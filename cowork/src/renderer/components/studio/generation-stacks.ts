@@ -11,54 +11,54 @@ export interface GenerationStack {
 export const GENERATION_STACKS: GenerationStack[] = [
   {
     id: 'static',
-    label: 'Web statique',
-    description: 'HTML/CSS/JS pur, avec un index.html ouvrable directement et aucun build requis.',
+    label: 'Static web',
+    description: 'Pure HTML/CSS/JS, with an index.html you can open directly and no build required.',
     planStack: 'HTML/CSS/JS',
     guidance:
       '- Stack : génère une application HTML/CSS/JS pur avec index.html, styles intégrés ou fichier CSS simple, script JS autonome, sans dépendance, sans package.json et ouvrable directement dans un navigateur.',
-    previewNote: 'Preview disponible via un serveur http.server local exposé en loopback.',
+    previewNote: 'Preview available via a local http.server exposed on loopback.',
     runnable: true,
   },
   {
     id: 'react-vite',
     label: 'React + Vite',
-    description: 'SPA React/TypeScript avec Vite, package.json et commande npm run dev.',
+    description: 'React/TypeScript SPA with Vite, package.json, and an npm run dev command.',
     planStack: 'React + Vite',
     guidance:
       '- Stack : génère une SPA React/TypeScript avec Vite, incluant package.json, index.html, src/main.tsx, src/App.tsx et les styles nécessaires, lançable avec npm run dev.',
-    previewNote: 'Preview disponible via le serveur de développement Vite.',
+    previewNote: 'Preview available via the Vite dev server.',
     runnable: true,
   },
   {
     id: 'vue-vite',
     label: 'Vue + Vite',
-    description: 'SPA Vue 3/TypeScript avec Vite, package.json et commande npm run dev.',
+    description: 'Vue 3/TypeScript SPA with Vite, package.json, and an npm run dev command.',
     planStack: 'Vue + Vite',
     guidance:
       '- Stack : génère une SPA Vue 3/TypeScript avec Vite, incluant package.json, index.html, src/main.ts, src/App.vue et les styles nécessaires, lançable avec npm run dev.',
-    previewNote: 'Preview disponible via le serveur de développement Vite.',
+    previewNote: 'Preview available via the Vite dev server.',
     runnable: true,
   },
   {
     id: 'pwa',
     label: 'PWA mobile',
     description:
-      'Web app installable sur mobile avec manifest, service worker, icônes et support hors-ligne.',
+      'Installable mobile web app with manifest, service worker, icons, and offline support.',
     planStack: 'PWA (HTML/CSS/JS)',
     guidance:
       '- Stack : génère une PWA mobile en HTML/CSS/JS avec index.html, manifest.webmanifest, service worker enregistré, icônes référencées, meta viewport et stratégie hors-ligne honnête pour les assets locaux.',
-    previewNote: "Preview web disponible ; l'application s'installe depuis le navigateur mobile.",
+    previewNote: 'Web preview available; the app installs from the mobile browser.',
     runnable: true,
   },
   {
     id: 'expo',
     label: 'Mobile (React Native / Expo)',
-    description: 'Application mobile native via Expo/React Native avec App.tsx et package.json Expo.',
+    description: 'Native mobile app via Expo/React Native with App.tsx and an Expo package.json.',
     planStack: 'React Native (Expo)',
     guidance:
       '- Stack : génère une application React Native/Expo avec App.tsx, package.json Expo, tsconfig si utile, composants compatibles mobile et sans supposer de preview navigateur Cowork.',
     previewNote:
-      'Pas de preview dans Cowork ; lance-la avec `npx expo start` sur un appareil ou un émulateur.',
+      'No preview in Cowork; run it with `npx expo start` on a device or emulator.',
     runnable: false,
   },
 ];

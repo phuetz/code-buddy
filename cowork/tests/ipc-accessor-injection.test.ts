@@ -93,7 +93,12 @@ describe('cost-ipc accessor injection', () => {
       modelBreakdown: {},
     });
     expect(handler('cost.history')(fakeEvent, 7)).toEqual([]); // sync handler
-    await expect(handler('cost.setBudget')(fakeEvent, 100)).resolves.toEqual({ success: false });
+    // Bridge null → { success: false } plus an informational `error` field
+    // (cost-ipc.ts returns 'Cost service is not ready'). Match the stable
+    // contract, not the exact shape, mirroring the co-located cost-ipc.test.ts.
+    await expect(handler('cost.setBudget')(fakeEvent, 100)).resolves.toMatchObject({
+      success: false,
+    });
 
     // reassign the mutable AFTER register — handler must observe the new value
     bridge = makeCostBridge();

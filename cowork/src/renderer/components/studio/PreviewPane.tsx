@@ -6,7 +6,7 @@ type PreviewDevice = 'desktop' | 'tablet' | 'mobile';
 
 const DEVICES: { id: PreviewDevice; label: string; icon: typeof Monitor; width: number }[] = [
   { id: 'desktop', label: 'Desktop', icon: Monitor, width: 0 },
-  { id: 'tablet', label: 'Tablette', icon: Tablet, width: 834 },
+  { id: 'tablet', label: 'Tablet', icon: Tablet, width: 834 },
   { id: 'mobile', label: 'Mobile', icon: Smartphone, width: 390 },
 ];
 
@@ -25,17 +25,17 @@ export interface PreviewPaneProps {
 function statusCopy(status: PreviewPaneProps['status'], unsafeUrl: boolean): { title: string; detail: string } {
   if (unsafeUrl) {
     return {
-      title: 'Preview refusée',
-      detail: 'Cowork affiche uniquement les previews locales fournies par le serveur de développement.',
+      title: 'Preview blocked',
+      detail: 'Cowork only displays local previews served by the development server.',
     };
   }
   if (status === 'starting') {
-    return { title: 'Serveur en démarrage', detail: 'La preview apparaîtra dès que le serveur répondra en local.' };
+    return { title: 'Server starting', detail: 'The preview will appear as soon as the server responds locally.' };
   }
   if (status === 'dead') {
-    return { title: 'Serveur arrêté', detail: 'Relance le serveur pour restaurer la preview.' };
+    return { title: 'Server stopped', detail: 'Restart the server to restore the preview.' };
   }
-  return { title: 'Aucune preview', detail: 'Génère ou démarre une app pour afficher le rendu.' };
+  return { title: 'No preview', detail: 'Generate or start an app to show the result.' };
 }
 
 export function PreviewPane({ url, status, onReload, onOpenExternal, onVerify, onStart }: PreviewPaneProps) {
@@ -58,11 +58,11 @@ export function PreviewPane({ url, status, onReload, onOpenExternal, onVerify, o
         <input
           readOnly
           value={safeUrl ?? ''}
-          placeholder="Preview locale"
+          placeholder="Local preview"
           className="min-w-0 flex-1 rounded-md border border-border bg-background px-2 py-1 font-mono text-xs text-muted-foreground outline-none"
-          aria-label="URL de preview"
+          aria-label="Preview URL"
         />
-        <div className="flex rounded-md border border-border bg-background p-0.5" role="group" aria-label="Taille de preview">
+        <div className="flex rounded-md border border-border bg-background p-0.5" role="group" aria-label="Preview size">
           {DEVICES.map((item) => {
             const Icon = item.icon;
             const selected = item.id === device;
@@ -86,8 +86,8 @@ export function PreviewPane({ url, status, onReload, onOpenExternal, onVerify, o
           onClick={handleReload}
           disabled={!canRender}
           className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border text-muted-foreground hover:bg-background hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
-          title="Recharger"
-          aria-label="Recharger la preview"
+          title="Reload"
+          aria-label="Reload preview"
         >
           <RefreshCw className="h-4 w-4" aria-hidden="true" />
         </button>
@@ -97,8 +97,8 @@ export function PreviewPane({ url, status, onReload, onOpenExternal, onVerify, o
             onClick={onOpenExternal}
             disabled={!canRender}
             className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border text-muted-foreground hover:bg-background hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
-            title="Ouvrir dans le navigateur"
-            aria-label="Ouvrir dans le navigateur"
+            title="Open in browser"
+            aria-label="Open in browser"
           >
             <ExternalLink className="h-4 w-4" aria-hidden="true" />
           </button>
@@ -109,11 +109,11 @@ export function PreviewPane({ url, status, onReload, onOpenExternal, onVerify, o
             onClick={onVerify}
             disabled={!canRender}
             className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border px-2.5 text-xs text-muted-foreground hover:bg-background hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
-            title="Vérifier l’app avec Code Buddy (web_test)"
-            aria-label="Vérifier l’app avec web_test"
+            title="Verify the app with Code Buddy (web_test)"
+            aria-label="Verify the app with web_test"
           >
             <ShieldCheck className="h-4 w-4" aria-hidden="true" />
-            Vérifier
+            Verify
           </button>
         )}
       </header>
@@ -142,7 +142,7 @@ export function PreviewPane({ url, status, onReload, onOpenExternal, onVerify, o
               className="inline-flex h-8 items-center rounded-md bg-accent px-3 text-xs font-medium text-background hover:bg-accent-hover"
               data-testid="preview-start"
             >
-              Démarrer la preview
+              Start preview
             </button>
           )}
           {status === 'dead' && (
@@ -151,7 +151,7 @@ export function PreviewPane({ url, status, onReload, onOpenExternal, onVerify, o
               onClick={onReload}
               className="inline-flex h-8 items-center rounded-md border border-border px-3 text-xs text-foreground hover:bg-muted"
             >
-              Relancer
+              Restart
             </button>
           )}
         </div>

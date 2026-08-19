@@ -23,9 +23,9 @@ export function CheckpointTimeline({ checkpoints, onRestore, onDiff }: Checkpoin
         className="rounded-xl border border-border bg-surface p-6 text-center"
         data-testid="checkpoint-timeline"
       >
-        <h3 className="text-sm font-semibold text-foreground">Aucun checkpoint</h3>
+        <h3 className="text-sm font-semibold text-foreground">No checkpoints</h3>
         <p className="mt-1 text-xs text-muted-foreground">
-          Les snapshots du projet apparaîtront ici dès leur création.
+          Project snapshots will appear here as soon as they are created.
         </p>
       </section>
     );
@@ -64,7 +64,7 @@ export function CheckpointTimeline({ checkpoints, onRestore, onDiff }: Checkpoin
                         onClick={() => onRestore(checkpoint.id)}
                         className="rounded-md bg-accent px-3 py-1.5 text-xs font-medium text-accent-foreground transition-colors hover:bg-accent/90"
                       >
-                        Restaurer
+                        Restore
                       </button>
                     </div>
                   </div>
