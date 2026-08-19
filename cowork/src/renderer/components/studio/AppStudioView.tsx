@@ -51,6 +51,8 @@ export interface AppStudioViewProps {
   buildPhase: BuildPhase;
   buildElapsedMs: number;
   buildError?: string | null;
+  /** Extra build-strip status (auto-fix "Fixing… n/3"). */
+  buildNote?: string | null;
   templates: TemplateCard[];
   busy?: boolean;
   workingDir?: string;
@@ -91,6 +93,7 @@ export function AppStudioView({
   buildPhase,
   buildElapsedMs,
   buildError,
+  buildNote,
   templates,
   busy = false,
   workingDir,
@@ -261,7 +264,7 @@ export function AppStudioView({
             </button>
           </div>
         ) : null}
-        <BuildStatusStrip phase={buildPhase} elapsedMs={buildElapsedMs} error={buildError} onStop={onStopBuild} />
+        <BuildStatusStrip phase={buildPhase} elapsedMs={buildElapsedMs} error={buildError} note={buildNote} onStop={onStopBuild} />
         <div className="grid min-h-0 flex-1 grid-cols-[minmax(320px,380px)_minmax(0,1fr)]">
           <div className="flex min-h-0 flex-col border-r border-border bg-surface">
             {chat.plan ? <DevPlanCard plan={chat.plan} /> : null}
@@ -300,7 +303,7 @@ export function AppStudioView({
   return (
     <main className="flex h-full min-h-0 flex-col bg-background text-foreground">
       <StudioComposer templates={templates} onScaffold={onScaffold} onGenerateWithAI={onGenerateWithAI} onPrompt={onPrompt} busy={busy} workingDir={workingDir} seedPrompt={seedPrompt} />
-      <BuildStatusStrip phase={buildPhase} elapsedMs={buildElapsedMs} error={buildError} onStop={onStopBuild} />
+      <BuildStatusStrip phase={buildPhase} elapsedMs={buildElapsedMs} error={buildError} note={buildNote} onStop={onStopBuild} />
       {!hasProject ? (
         <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-6">
           <div className="mx-auto max-w-3xl text-center">

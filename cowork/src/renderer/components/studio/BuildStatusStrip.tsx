@@ -9,6 +9,8 @@ export interface BuildStatusStripProps {
   phase: BuildPhase;
   elapsedMs: number;
   error?: string | null;
+  /** Extra status shown alongside the phase (e.g. auto-fix "Fixing… 2/3"). */
+  note?: string | null;
   onStop: () => void;
 }
 
@@ -37,12 +39,17 @@ function formatElapsed(ms: number): string {
   return `${minutes}m ${remaining}s`;
 }
 
-export function BuildStatusStrip({ phase, elapsedMs, error, onStop }: BuildStatusStripProps) {
+export function BuildStatusStrip({ phase, elapsedMs, error, note, onStop }: BuildStatusStripProps) {
   const canStop = phase === 'starting' || phase === 'running' || phase === 'installing';
 
   return (
     <section className="flex flex-wrap items-center gap-3 border-b border-border bg-background px-3 py-2">
       <Pill tone={toneForPhase(phase)}>{PHASE_LABELS[phase]}</Pill>
+      {note ? (
+        <span data-testid="build-note">
+          <Pill tone="info">{note}</Pill>
+        </span>
+      ) : null}
       <div className="w-28">
         <StatTile label="Duration" value={formatElapsed(elapsedMs)} tone="default" />
       </div>

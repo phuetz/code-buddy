@@ -17,8 +17,15 @@ import { ActivityPane } from './ActivityPane';
 import { PlanPanel } from './PlanPanel';
 import { FileActivityPanel } from './FileActivityPanel';
 import { HomeView } from './HomeView';
-import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAppStudio } from './studio/use-app-studio';
+import { isNpmProject } from './studio/static-project-model';
+import {
+  shouldAutoBuild,
+  canRetry,
+  buildFixPrompt,
+  autoFixNote,
+} from './studio/auto-build-model';
 import { sessionToStudioMessages } from './studio/studio-chat-adapter';
 import { buildDevPlan, advancePlan, latestLlmPlan } from './studio/dev-plan';
 import { changedFilesFromTrace } from './studio/trace-changes';
@@ -256,6 +263,102 @@ function StudioView() {
     void refreshTree(sessionCwd);
   }, [sessionCwd, traceCount, turnActive, refreshTree]);
 
+  // ── G1+G2: auto install/build → preview, with a capped auto-fix loop ───────
+  // When the agent finishes generating an npm app, App Studio installs it and
+  // starts the dev server (G1, via the install-aware startDev). If install/
+  // build/start fails, the error is fed back to the SAME session to fix (G2),
+  // capped at MAX_FIX_ATTEMPTS so the loop can't run away. Static sites keep
+  // auto-serving inside the hook — this only drives npm projects.
+  const startDev = actions.startDev;
+  const previewUrl = viewProps.previewUrl;
+  const previewStatus = viewProps.previewStatus;
+  const tree = viewProps.tree;
+  const terminalRef = useRef<string[]>([]);
+  terminalRef.current = viewProps.terminalOutput;
+  const prevTurnActiveRef = useRef(false);
+  const autoBuildRef = useRef({
+    root: sessionCwd,
+    attempts: 0,
+    awaitingFix: false,
+    everBuilt: false,
+    pendingFirstBuild: false,
+  });
+  const [autoFixAttempt, setAutoFixAttempt] = useState<number | null>(null);
+
+  // Fresh project → fresh auto-build state.
+  useEffect(() => {
+    autoBuildRef.current = {
+      root: sessionCwd,
+      attempts: 0,
+      awaitingFix: false,
+      everBuilt: false,
+      pendingFirstBuild: false,
+    };
+    setAutoFixAttempt(null);
+  }, [sessionCwd]);
+
+  const runBuild = useCallback(async () => {
+    if (!activeSessionId || !sessionCwd) return;
+    const st = autoBuildRef.current;
+    st.everBuilt = true;
+    const result = await startDev();
+    if (result.ok) {
+      st.awaitingFix = false;
+      setAutoFixAttempt(null);
+      return;
+    }
+    if (!canRetry(st.attempts)) {
+      // Budget spent — leave the error visible and hand back to the user.
+      st.awaitingFix = false;
+      setAutoFixAttempt(null);
+      return;
+    }
+    st.attempts += 1;
+    st.awaitingFix = true;
+    setAutoFixAttempt(st.attempts);
+    void continueSession(activeSessionId, buildFixPrompt(result.error ?? '', terminalRef.current));
+  }, [activeSessionId, sessionCwd, startDev, continueSession]);
+
+  // Falling edge of the agent turn = generation (or a fix) just finished.
+  useEffect(() => {
+    const wasActive = prevTurnActiveRef.current;
+    prevTurnActiveRef.current = turnActive;
+    if (!(wasActive && !turnActive)) return;
+    const st = autoBuildRef.current;
+    if (st.awaitingFix) {
+      st.awaitingFix = false;
+      void runBuild();
+      return;
+    }
+    if (!st.everBuilt) st.pendingFirstBuild = true;
+  }, [turnActive, runBuild]);
+
+  // First auto-build once the generated files are on disk (the tree refresh is
+  // async, so the falling edge only ARMS the build; this fires it when the
+  // package.json actually appears).
+  useEffect(() => {
+    const st = autoBuildRef.current;
+    if (!st.pendingFirstBuild || turnActive) return;
+    if (previewUrl) {
+      st.pendingFirstBuild = false;
+      return;
+    }
+    if (
+      shouldAutoBuild({
+        isNpm: isNpmProject(tree),
+        hasPreview: Boolean(previewUrl),
+        previewStatus,
+        turnActive: false,
+        alreadyBuilt: st.everBuilt,
+      })
+    ) {
+      st.pendingFirstBuild = false;
+      void runBuild();
+    }
+  }, [turnActive, tree, previewUrl, previewStatus, runBuild]);
+
+  const buildNote = autoFixNote(autoFixAttempt);
+
   // AI generation: start a project-scoped agent session and STAY in App Studio —
   // the bolt.new split shows the chat (left) driving the workbench (right) live.
   // memoryEnabled=true so the build taps Code Buddy's cross-session memory
@@ -340,6 +443,7 @@ function StudioView() {
   return (
     <AppStudioView
       {...viewProps}
+      buildNote={buildNote}
       onGenerateWithAI={onGenerateWithAI}
       onVerifyPreview={onVerifyPreview}
       onNewApp={() => setActiveSession(null)}
