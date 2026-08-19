@@ -31,6 +31,104 @@
       "advisories": ["https://github.com/advisories/GHSA-c76h-2ccp-4975"],
       "reason": "Dev-only: pulled transitively by semantic-release / @actions release tooling (node-gyp, @semantic-release/github). Not in the production runtime dependency tree; runs only in CI release jobs. Parent pins the version so a direct bump is not in range.",
       "reviewBy": "2026-09-21"
+    },
+    {
+      "package": "react-native",
+      "severity": "high",
+      "advisories": ["https://github.com/advisories/GHSA-3wxx-5f3q-cvv7"],
+      "reason": "Not used at runtime: dragged in only as an OPTIONAL peer of react-native-fs, itself an optional dep of alasql. Code Buddy is a Node CLI, never a React Native app, so none of the react-native / metro toolchain code executes. Advisories are build-time DoS. In-range fixes exist but require moving the whole RN/metro cluster; deferred as pure dead weight to be dropped when alasql's optional peer is pruned.",
+      "reviewBy": "2026-11-19"
+    },
+    {
+      "package": "@react-native/community-cli-plugin",
+      "severity": "high",
+      "advisories": ["https://github.com/advisories/GHSA-3wxx-5f3q-cvv7"],
+      "reason": "Same react-native/metro cluster pulled via alasql -> react-native-fs (optional peer). Metro dev-server DoS advisory; the Metro bundler never runs in a Node CLI. Cleared when the RN cluster is pruned.",
+      "reviewBy": "2026-11-19"
+    },
+    {
+      "package": "metro",
+      "severity": "high",
+      "advisories": ["https://github.com/advisories/GHSA-3wxx-5f3q-cvv7"],
+      "reason": "React Native bundler pulled transitively via alasql -> react-native-fs (optional peer); never invoked by the Node CLI. Dev-time DoS only. Cleared with the RN cluster prune.",
+      "reviewBy": "2026-11-19"
+    },
+    {
+      "package": "metro-config",
+      "severity": "high",
+      "advisories": ["https://github.com/advisories/GHSA-3wxx-5f3q-cvv7"],
+      "reason": "Part of the Metro bundler cluster (see 'metro'); transitive via alasql -> react-native-fs, never executed. Cleared with the RN cluster prune.",
+      "reviewBy": "2026-11-19"
+    },
+    {
+      "package": "metro-transform-worker",
+      "severity": "high",
+      "advisories": ["https://github.com/advisories/GHSA-3wxx-5f3q-cvv7"],
+      "reason": "Part of the Metro bundler cluster (see 'metro'); transitive via alasql -> react-native-fs, never executed. Cleared with the RN cluster prune.",
+      "reviewBy": "2026-11-19"
+    },
+    {
+      "package": "sharp",
+      "severity": "high",
+      "advisories": ["https://github.com/advisories/GHSA-54xq-cgqr-rpm3"],
+      "reason": "Inherited libvips CVEs (CVE-2026-33327/33328/35590/35591); no fixed sharp release on npm yet. sharp only decodes local/agent-generated image files, never attacker-controlled network streams. Bump as soon as a patched sharp ships.",
+      "reviewBy": "2026-11-19"
+    },
+    {
+      "package": "@huggingface/transformers",
+      "severity": "high",
+      "advisories": ["https://github.com/advisories/GHSA-54xq-cgqr-rpm3"],
+      "reason": "High severity is inherited from its own sharp / onnxruntime-node sub-deps (no independent fix available). Local embeddings/inference over trusted model files; not on an untrusted-network path. Cleared when sharp/onnxruntime ship patches.",
+      "reviewBy": "2026-11-19"
+    },
+    {
+      "package": "@xenova/transformers",
+      "severity": "high",
+      "advisories": ["https://github.com/advisories/GHSA-54xq-cgqr-rpm3"],
+      "reason": "High inherited from its bundled sharp; the only 'fix' npm offers is a downgrade to 1.4.2 (semver-major, would break the embeddings pipeline). Local-only inference over trusted models. Cleared when sharp patches upstream.",
+      "reviewBy": "2026-11-19"
+    },
+    {
+      "package": "onnxruntime-node",
+      "severity": "high",
+      "advisories": ["https://github.com/advisories/GHSA-mhpq-9hf6-jfp3"],
+      "reason": "High inherited from adm-zip (4GB-allocation DoS) used only to unpack the ONNX runtime's own trusted release archive at install; no fixed onnxruntime-node release available. Not reachable from untrusted input at runtime.",
+      "reviewBy": "2026-11-19"
+    },
+    {
+      "package": "adm-zip",
+      "severity": "high",
+      "advisories": ["https://github.com/advisories/GHSA-mhpq-9hf6-jfp3"],
+      "reason": "Crafted-ZIP memory-allocation DoS, no upstream fix. Reached only transitively (onnxruntime-node install unpacking its own release archive); Code Buddy never feeds untrusted ZIPs to it. Bump when adm-zip ships a fix.",
+      "reviewBy": "2026-11-19"
+    },
+    {
+      "package": "pptxgenjs",
+      "severity": "high",
+      "advisories": ["https://github.com/advisories/GHSA-wvhm-4hhf-97x9"],
+      "reason": "High inherited from its bundled image-size; the only npm 'fix' is a downgrade to pptxgenjs@1.1.5 (semver-major, a multi-year regression that drops core PPTX features). PPTX generation renders local/agent-supplied images only. Track pptxgenjs for a forward fix.",
+      "reviewBy": "2026-11-19"
+    },
+    {
+      "package": "image-size",
+      "severity": "high",
+      "advisories": ["https://github.com/advisories/GHSA-wvhm-4hhf-97x9"],
+      "reason": "ICNS/JXL/HEIF parser infinite-loop DoS, bundled by pptxgenjs (see 'pptxgenjs'); no in-range fix without the breaking pptxgenjs downgrade. Only parses local/generated image files. Cleared when pptxgenjs updates its image-size pin.",
+      "reviewBy": "2026-11-19"
+    },
+    {
+      "package": "brace-expansion",
+      "severity": "high",
+      "advisories": ["https://github.com/advisories/GHSA-v6h2-p8h4-qcjw"],
+      "reason": "The only remaining high instance lives inside the vendored deps of the bundled `npm` CLI package (node_modules/npm/node_modules/brace-expansion); npm ships its dependencies bundled, so it cannot be bumped independently — only by upgrading `npm` itself, which is out of the declared range. All first-party brace-expansion instances were already patched by `npm audit fix`. Dev/tooling only.",
+      "reviewBy": "2026-11-19"
+    },
+    {
+      "package": "ip-address",
+      "severity": "high",
+      "advisories": ["https://github.com/advisories/GHSA-fmvm-x8mv-47mj"],
+      "reason": "The remaining high instance is bundled inside the `npm` CLI package (node_modules/npm/node_modules/ip-address) and cannot be bumped without upgrading `npm` itself (out of range). SSRF-classification advisory is not reached by Code Buddy's own SSRF guard, which does not use this copy. Dev/tooling only.",
+      "reviewBy": "2026-11-19"
     }
   ]
 }
