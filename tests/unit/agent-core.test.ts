@@ -969,7 +969,10 @@ describe("Agent Core Module Tests", () => {
         expect(mockBashExecute).toHaveBeenCalledWith(
           expect.stringContaining("ls -la"),
           undefined,
-          expect.any(String)
+          expect.any(String),
+          // 4th arg is the AbortSignal (registry/bash-tools.ts passes it through);
+          // undefined when no cancellation signal is supplied.
+          undefined
         );
         expect(mockExecuteHooks).toHaveBeenCalledWith("pre-bash", expect.objectContaining({ command: expect.stringContaining("ls -la") }));
         expect(mockExecuteHooks).toHaveBeenCalledWith("post-bash", expect.objectContaining({
