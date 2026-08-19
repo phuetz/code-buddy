@@ -35,29 +35,71 @@ npm install -g @phuetz/code-buddy
 npx @phuetz/code-buddy@latest
 ```
 
-## First Run
+## First Run — free, in under 2 minutes
+
+You do **not** need an API key, and you do **not** need to edit any environment
+variable. Pick whichever line matches you:
 
 ```bash
-# Set your API key (Grok/xAI is the default provider)
-export GROK_API_KEY=your_api_key
+buddy try            # ← start here: a 60-second, zero-config coding demo.
+                     #    Detects a running Ollama or a signed-in ChatGPT and
+                     #    proves it works (writes FizzBuzz + tests, runs them).
 
-# Start interactive mode
-buddy
+buddy onboard        # Guided setup. Auto-detects what's on your machine and
+                     #    defaults to the FREE path — one "yes" and you're done.
+                     #    Writes the config for you (no env var to type).
 
-# Or with a specific task
-buddy --prompt "analyze the codebase structure"
+buddy login          # Sign in with a ChatGPT Plus/Pro subscription — $0 marginal
+                     #    cost, no API key. (Grok/xAI: `buddy login xai`.)
 
-# Use a local LLM (LM Studio)
-buddy --base-url http://localhost:1234/v1 --api-key lm-studio
-
-# Use Ollama
-buddy --base-url http://localhost:11434/v1 --model llama3
-
-# Full autonomy mode
-buddy --yolo
+buddy                # Start chatting once a provider is configured.
+buddy --prompt "analyze the codebase structure"   # one-shot / headless
 ```
 
-Code Buddy auto-detects your provider from the API key environment variables. Set any of `GROK_API_KEY`, `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GOOGLE_API_KEY`, `MISTRAL_API_KEY`, etc.
+### The two $0 paths in detail
+
+- **Local & private (Ollama).** Install [Ollama](https://ollama.ai), then run
+  `buddy onboard` — it detects the running server, offers to pull a small coding
+  model if you have none, and saves the choice. Nothing leaves your machine.
+- **ChatGPT subscription.** `buddy login` reuses your existing ChatGPT plan
+  through the Codex backend at **$0 marginal cost** — no key, no billing setup.
+
+> Stuck? `buddy doctor` tells you in one line whether you're ready to chat, and
+> **`buddy doctor --fix`** auto-configures a running Ollama for you.
+
+### Advanced: bring your own API key
+
+Code Buddy auto-detects a provider from API-key environment variables when one
+is set — any of `GROK_API_KEY`, `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`,
+`GOOGLE_API_KEY`, `MISTRAL_API_KEY`, etc. This is entirely optional; the free
+paths above need none of them.
+
+```bash
+export GROK_API_KEY=your_api_key   # optional — only if you prefer a paid API
+buddy
+buddy --yolo                       # full autonomy (see Special Modes)
+```
+
+## The 8 commands that matter (everything else is optional)
+
+`buddy --help` lists 60+ commands and the docs mention ~120 environment
+variables. **Ignore almost all of it to start.** These are the only ones a new
+user needs; the rest (companion/voice, film, robot, fleet, self-improvement, …)
+are opt-in and stay out of your way until you go looking for them.
+
+| Command | What it does |
+|---|---|
+| `buddy try` | Zero-config proof it works (60-second coding demo). |
+| `buddy onboard` | Guided setup; defaults to the free path, writes your config. |
+| `buddy login` | Sign in with a ChatGPT subscription ($0, no API key). |
+| `buddy` | Start an interactive session. |
+| `buddy -p "…"` | One-shot / headless (great for scripts and CI). |
+| `buddy doctor [--fix]` | Am I ready? Auto-fix the fixable. |
+| `buddy --continue` | Resume your last session. |
+| `buddy --init` | Drop a `.codebuddy/` + `AGENTS.md` into the current repo. |
+
+Nothing above needs an environment variable. Everything advanced is gated behind
+its own opt-in flag, so the defaults stay small and predictable.
 
 ## Onboarding the Cowork GUI (Ollama, $0)
 

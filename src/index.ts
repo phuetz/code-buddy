@@ -1731,12 +1731,13 @@ program
         if (!recovered) {
           logger.error(
             [
-              "❌ No AI provider configured. Pick one to get started:",
-              "   • Guided setup (recommended) — interactive wizard:     buddy onboard",
+              "❌ No AI provider configured yet. Fastest ways to start — no env var to edit:",
+              "   • 60-second demo, zero config — just run:               buddy try",
+              "   • Guided setup (recommended) — interactive wizard:      buddy onboard",
               "   • Free, no API key — sign in with your ChatGPT plan:    buddy login",
-              "   • Local & free — run a model with Ollama, then:         export OLLAMA_HOST=http://localhost:11434",
+              "   • Local & free — install Ollama, then let onboard use it: buddy onboard",
               "   • API key — set GROK_API_KEY / OPENAI_API_KEY / ANTHROPIC_API_KEY / GOOGLE_API_KEY (or pass --api-key)",
-              "   Run  buddy doctor  to check your setup.",
+              "   Check anytime:  buddy doctor   (add --fix to auto-configure a running Ollama).",
             ].join("\n")
           );
           process.exit(1);
@@ -2312,12 +2313,13 @@ gitCommand
       if (!apiKey) {
         logger.error(
           [
-            "❌ No AI provider configured. Pick one to get started:",
-            "   • Guided setup (recommended) — interactive wizard:     buddy onboard",
+            "❌ No AI provider configured yet. Fastest ways to start — no env var to edit:",
+            "   • 60-second demo, zero config — just run:               buddy try",
+            "   • Guided setup (recommended) — interactive wizard:      buddy onboard",
             "   • Free, no API key — sign in with your ChatGPT plan:    buddy login",
-            "   • Local & free — run a model with Ollama, then:         export OLLAMA_HOST=http://localhost:11434",
+            "   • Local & free — install Ollama, then let onboard use it: buddy onboard",
             "   • API key — set GROK_API_KEY / OPENAI_API_KEY / ANTHROPIC_API_KEY / GOOGLE_API_KEY (or pass --api-key)",
-            "   Run  buddy doctor  to check your setup.",
+            "   Check anytime:  buddy doctor   (add --fix to auto-configure a running Ollama).",
           ].join("\n")
         );
         process.exit(1);
@@ -3158,6 +3160,19 @@ addLazyCommandGroup(program, 'widgets', 'Inline conversation widgets: list, prev
   const { registerWidgetsCommand } = await import('./commands/widgets.js');
   registerWidgetsCommand(program);
 });
+
+// `buddy try` — an isolated 60-second coding-agent demo on a free path
+// (ChatGPT OAuth or a local Ollama). The fastest "does it work?" for a
+// newcomer; the onboarding wizard chains to it.
+addLazyCommand(
+  program,
+  'try',
+  'Run an isolated 60-second coding-agent demo (ChatGPT OAuth or local Ollama)',
+  async () => {
+    const { createTryCommand } = await import('./commands/try.js');
+    return createTryCommand();
+  },
+);
 
 // Utility commands (doctor, security-audit, onboard, webhook) are all registered
 // by a single registerUtilityCommands() call, so we must remove all stubs before

@@ -476,6 +476,111 @@ async function fixStaleLockFiles(lockFiles: string[]): Promise<FixResult> {
 }
 
 // ============================================================================
+// Provider readiness — the ONE thing a newcomer needs answered
+// ============================================================================
+
+/**
+ * Answer "can `buddy` actually talk to a model on the next run?" — the single
+ * most important diagnostic for someone who just installed. It distinguishes
+ * "a brain is reachable" (a live Ollama on localhost) from "buddy is pointed at
+ * it" (env var / onboarded settings / OAuth / API key), because a running
+ * Ollama that was never selected still dead-ends the first chat.
+ */
+async function checkProviderReadiness(): Promise<DoctorCheck> {
+  const { detectEnvironment } = await import('../wizard/environment-detection.js');
+  const snap = await detectEnvironment();
+
+  const oauthOrKey = snap.capabilities.some(
+    (c) => c.available && (c.kind === 'oauth' || c.kind === 'api-key'),
+  );
+  const ollama = snap.capabilities.find((c) => c.id === 'ollama');
+  const ollamaModels = ollama?.models?.length ?? 0;
+
+  let onboardedLocal = false;
+  try {
+    const { getSettingsManager } = await import('../utils/settings-manager.js');
+    const p = (getSettingsManager().loadUserSettings().provider || '').toLowerCase();
+    onboardedLocal = p === 'ollama' || p === 'lmstudio';
+  } catch {
+    /* settings unreadable — treat as not onboarded */
+  }
+  const envLocal = Boolean(process.env.OLLAMA_HOST || process.env.LMSTUDIO_HOST);
+  const configured = oauthOrKey || ((envLocal || onboardedLocal) && ollamaModels > 0);
+
+  if (configured) {
+    const rec = snap.recommended;
+    return {
+      name: 'AI provider ready',
+      status: 'ok',
+      message: rec ? `${rec.label} — ${rec.detail}` : 'a provider is configured',
+    };
+  }
+
+  if (ollama?.available && ollamaModels > 0 && ollama.baseURL) {
+    const model = ollama.models![0]!;
+    const baseURL = ollama.baseURL;
+    return {
+      name: 'AI provider ready',
+      status: 'warn',
+      message: `Ollama is running (${ollamaModels} model${ollamaModels === 1 ? '' : 's'}) but not selected — run \`buddy onboard\`, or --fix to select ${model} ($0)`,
+      fixable: true,
+      fix: async () => fixSelectRunningOllama(baseURL, model),
+    };
+  }
+
+  if (ollama?.available && ollama.baseURL) {
+    const baseURL = ollama.baseURL;
+    return {
+      name: 'AI provider ready',
+      status: 'warn',
+      message: 'Ollama is running but has no model — run `buddy onboard`, or --fix to pull qwen2.5-coder:7b ($0)',
+      fixable: true,
+      fix: async () => fixPullAndSelectOllama(baseURL),
+    };
+  }
+
+  return {
+    name: 'AI provider ready',
+    status: 'warn',
+    message: 'no provider configured — run `buddy onboard` (guided) or `buddy login` (ChatGPT subscription, $0)',
+  };
+}
+
+/** Point buddy at an already-running Ollama by writing user-settings (no download). */
+async function fixSelectRunningOllama(baseURL: string, model: string): Promise<FixResult> {
+  try {
+    const { getSettingsManager } = await import('../utils/settings-manager.js');
+    getSettingsManager().saveUserSettings({ provider: 'ollama', baseURL, model, defaultModel: model });
+    return {
+      success: true,
+      message: `Selected local Ollama model ${model} (written to user-settings.json) — try: buddy try`,
+      action: 'select-running-ollama',
+    };
+  } catch (err) {
+    return {
+      success: false,
+      message: `Failed to write provider selection: ${err instanceof Error ? err.message : String(err)}`,
+      action: 'select-running-ollama',
+    };
+  }
+}
+
+/** Pull a small coding model with Ollama, then select it. */
+async function fixPullAndSelectOllama(baseURL: string): Promise<FixResult> {
+  const model = 'qwen2.5-coder:7b';
+  try {
+    execSync(`ollama pull ${model}`, { stdio: 'inherit' });
+  } catch (err) {
+    return {
+      success: false,
+      message: `Failed to pull ${model}: ${err instanceof Error ? err.message : String(err)}. Install Ollama from https://ollama.ai`,
+      action: 'pull-ollama-model',
+    };
+  }
+  return fixSelectRunningOllama(baseURL, model);
+}
+
+// ============================================================================
 // Public API
 // ============================================================================
 
@@ -483,6 +588,7 @@ export async function runDoctorChecks(cwd?: string): Promise<DoctorCheck[]> {
   const dir = cwd ?? process.cwd();
   const { checkLlmKeysLive } = await import('./llm-key-check.js');
   return [
+    await checkProviderReadiness(),
     checkNodeVersion(),
     await checkNativeSqlite(),
     ...checkDependencies(),
