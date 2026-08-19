@@ -581,18 +581,30 @@ async function saveCommandLineSettings(
   }
 }
 
+/** Providers served by a local OpenAI-compatible runtime (no cloud model catalog). */
+const LOCAL_RUNTIME_PROVIDERS = new Set(['ollama', 'lmstudio', 'vllm']);
+
+/** A model id that only makes sense on a hosted cloud backend (never a local Ollama tag). */
+function looksLikeCloudModel(model: string): boolean {
+  return /grok|^gpt-|^o[1-9]|codex|claude|gemini/i.test(model);
+}
+
 /**
  * A saved/default model is only usable if it matches the detected provider's
  * backend: a `grok-*` slug 404s on the ChatGPT/Codex backend, and a `gpt-5.*`
- * slug 404s on xAI. We only enforce this for the two providers with a known
- * hard incompatibility (grok ↔ chatgpt); other providers are left untouched so
- * local/OpenAI/Anthropic model names pass through as before.
+ * slug 404s on xAI. We enforce this for the two cloud providers with a known
+ * hard incompatibility (grok ↔ chatgpt), AND for local runtimes (Ollama / LM
+ * Studio / vLLM) — a stale cloud slug like `grok-code-fast-1` left in
+ * settings.json must never be sent to a local server (it 404s with a cryptic
+ * "model not found"). Other providers are left untouched so OpenAI/Anthropic
+ * model names pass through as before.
  */
-function isModelCompatibleWithProvider(model: string, provider?: string): boolean {
+export function isModelCompatibleWithProvider(model: string, provider?: string): boolean {
   if (!provider) return true;
   const looksGrok = /grok/i.test(model);
   if (provider === 'grok') return looksGrok;
   if (provider === 'chatgpt') return /^(gpt-|o[1-9]|codex)/i.test(model) && !looksGrok;
+  if (LOCAL_RUNTIME_PROVIDERS.has(provider)) return !looksLikeCloudModel(model);
   return true;
 }
 
@@ -605,23 +617,57 @@ async function loadModel(): Promise<string | undefined> {
 
   const detected = await getDetectedProvider();
 
-  // 2. Project/user settings override auto-detection — UNLESS the saved model is
+  // Read the saved model once (reused by both the settings path and the
+  // local-runtime path below).
+  let settingsModel: string | undefined;
+  try {
+    const getSettingsManager = await lazyImport.settingsManager();
+    settingsModel = getSettingsManager().getCurrentModel() || undefined;
+  } catch (_err) {
+    logger.debug('Failed to load model from settings manager', { error: _err });
+  }
+
+  // 2. Local runtime (Ollama): resolve to a model that is ACTUALLY installed,
+  //    never a stale cloud slug. Detection sets `defaultModel` to the advertised
+  //    onboarding tag (e.g. `qwen2.5-coder:7b`), but a fresh box rarely has that
+  //    exact tag pulled — sending it (or a leftover `grok-code-fast-1` from
+  //    settings) yields a cryptic `404 model not found`. Probe the server's tags
+  //    and pick a real one; if none is installed / the server is down, fail with
+  //    a clear `ollama pull …` hint. This is the "$0 local" onboarding path, so
+  //    it must never dead-end on a Grok 404. Only triggers for local runtimes,
+  //    so cloud/no-provider behavior stays byte-identical.
+  if (detected && detected.provider === 'ollama') {
+    const { resolveInstalledOllamaModel, buildOllamaPullHint } = await import(
+      './providers/local-model-resolver.js'
+    );
+    const requested =
+      process.env.OLLAMA_MODEL ||
+      (settingsModel && isModelCompatibleWithProvider(settingsModel, 'ollama')
+        ? settingsModel
+        : undefined) ||
+      detected.defaultModel;
+    const resolution = await resolveInstalledOllamaModel({
+      baseURL: detected.baseURL,
+      requested,
+    });
+    if (resolution.model) return resolution.model;
+    cli.error(
+      buildOllamaPullHint({ baseURL: detected.baseURL, reachable: resolution.reachable, requested }),
+    );
+    process.exit(1);
+  }
+
+  // 3. Project/user settings override auto-detection — UNLESS the saved model is
   //    incompatible with the detected provider. A `gpt-5.5` left in settings.json
   //    would 404 against xAI after `buddy login xai`; symmetrically, a stale
   //    `grok-code-fast-1` default 404s against the ChatGPT/Codex backend (which
   //    then falls back to another unsupported slug and crashes). In either
   //    mismatch, prefer the detected provider's own default model.
-  try {
-    const getSettingsManager = await lazyImport.settingsManager();
-    const settingsModel = getSettingsManager().getCurrentModel();
-    if (settingsModel && isModelCompatibleWithProvider(settingsModel, detected?.provider)) {
-      return settingsModel;
-    }
-  } catch (_err) {
-    logger.debug('Failed to load model from settings manager', { error: _err });
+  if (settingsModel && isModelCompatibleWithProvider(settingsModel, detected?.provider)) {
+    return settingsModel;
   }
 
-  // 3. Fallback to auto-detected provider's default model
+  // 4. Fallback to auto-detected provider's default model
   if (detected) return detected.defaultModel;
 
   return undefined;
