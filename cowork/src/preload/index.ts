@@ -1235,6 +1235,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     commands: {
       run: (request: { cwd: string; command: string; id: string }) =>
         ipcRenderer.invoke('studio.cmd.run', request),
+      runToEnd: (request: { cwd: string; command: string; id: string }) =>
+        ipcRenderer.invoke('studio.cmd.runToEnd', request),
       kill: (id: string) => ipcRenderer.invoke('studio.cmd.kill', id),
       onOutput: (
         listener: (event: {
@@ -5941,6 +5943,7 @@ declare global {
         };
         commands: {
           run: (request: { cwd: string; command: string; id: string }) => Promise<unknown>;
+          runToEnd: (request: { cwd: string; command: string; id: string }) => Promise<unknown>;
           kill: (id: string) => Promise<unknown>;
           onOutput: (
             listener: (event: {
