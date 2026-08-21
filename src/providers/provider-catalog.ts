@@ -634,8 +634,16 @@ export const RUNTIME_PROVIDER_CATALOG: RuntimeProviderCatalogEntry[] = [
     baseUrlEnvKeys: ['NVIDIA_BASE_URL', 'NVIDIA_NIM_BASE_URL'],
     modelEnvKeys: ['NVIDIA_MODEL', 'NVIDIA_NIM_MODEL'],
     defaultBaseURL: 'https://integrate.api.nvidia.com/v1',
-    defaultModel: 'nvidia/llama-3.3-nemotron-super-49b-v1',
-    models: ['nvidia/llama-3.3-nemotron-super-49b-v1', 'nvidia/llama-3.1-nemotron-ultra-253b-v1'],
+    // Modèles VÉRIFIÉS fonctionnels le 22/08/2026 (le catalogue NVIDIA en liste 100+,
+    // mais beaucoup sont en fin de vie/410 ou introuvables/404). Kimi K3 = meilleur
+    // compromis qualité (FR excellent, ~6 s) ; mistral-nemotron = ultra rapide (~0,4 s).
+    defaultModel: 'moonshotai/kimi-k3',
+    models: [
+      'moonshotai/kimi-k3',
+      'mistralai/mistral-nemotron',
+      'nvidia/llama-3.3-nemotron-super-49b-v1',
+      'nvidia/llama-3.1-nemotron-ultra-253b-v1',
+    ],
   },
   {
     id: 'ollama-cloud',
