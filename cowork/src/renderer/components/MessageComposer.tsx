@@ -8,6 +8,7 @@ import { MemoryEditCard } from './MemoryEditCard';
 import { FileAttachmentChip } from './FileAttachmentChip';
 import type { AttachedFile } from '../utils/file-attachment-helpers';
 import { isVoiceCommandMode, setVoiceCommandMode } from '../utils/speech-text';
+import { useTextareaAutogrow } from '../hooks/use-textarea-autogrow';
 
 export interface MessageComposerProps {
   prompt: string;
@@ -70,6 +71,10 @@ export function MessageComposer(props: MessageComposerProps) {
       return next;
     });
   }, []);
+
+  // Auto-grow the textarea between 44 and 200 px as the user types or
+  // pastes multi-line content. Mirrors the chat-ui gitnexus-rs ChatInput pattern.
+  useTextareaAutogrow(props.textareaRef, props.prompt);
 
   return (
     <div
@@ -306,6 +311,7 @@ export function MessageComposer(props: MessageComposerProps) {
               }
               disabled={props.isSubmitting}
               rows={1}
+              style={{ minHeight: 44 }}
               className="flex-1 resize-none bg-transparent border-none outline-none text-text-primary placeholder:text-text-muted text-[15px] py-2"
             />
 
