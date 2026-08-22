@@ -24,6 +24,10 @@ import {
 } from './cli/command-routing.js';
 import { resolveHeadlessOutputFormat, resolveHeadlessResultExitCode } from './cli/headless-options.js';
 import { resolveCliModelList } from './cli/model-listing.js';
+import {
+  NO_PROVIDER_GUIDANCE,
+  recoverFirstRunWithChatGpt,
+} from './cli/first-run.js';
 
 // Read version from package.json
 const __filename = fileURLToPath(import.meta.url);
@@ -1718,51 +1722,59 @@ program
       const maxToolRounds = parseInt(options.maxToolRounds) || 400;
 
       if (!apiKey) {
-        // In an interactive terminal, offer the guided setup wizard right here
-        // (like Hermes) instead of dead-ending on an error — then continue the
-        // session with the credentials it captured.
+        // The shortest first-run path is a direct ChatGPT OAuth login. Keep the
+        // full wizard available, but do not make a new user navigate provider,
+        // model, and TTS choices before seeing the coding agent work.
         const interactive =
           Boolean(process.stdin.isTTY) && Boolean(process.stdout.isTTY) &&
           !options.prompt && !options.print &&
           process.env.CI !== 'true' && process.env.GITHUB_ACTIONS !== 'true';
 
-        let recovered = false;
-        if (interactive) {
-          const readline = await import('readline');
-          const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-          const answer: string = await new Promise((resolve) =>
-            rl.question('\n❔ No AI provider configured. Run guided setup now? [Y/n] ', resolve)
-          );
-          rl.close();
-          const yes = answer.trim() === '' || /^y(es)?$/i.test(answer.trim());
-          if (yes) {
+        const recoveredProvider = await recoverFirstRunWithChatGpt({
+          interactive,
+          ask: async (question) => {
+            const readline = await import('readline');
+            const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
             try {
-              const { runOnboarding } = await import('./wizard/onboarding.js');
-              const result = await runOnboarding();
-              // Bust the cached provider detection so the just-saved creds resolve.
-              cachedProvider = undefined;
-              apiKey = options.apiKey || await loadApiKey();
-              baseURL = options.baseUrl || await loadBaseURL();
-              model = options.model || result.model || await loadModel();
-              recovered = Boolean(apiKey);
-            } catch (err) {
-              logger.error('Guided setup did not complete', err instanceof Error ? err : { error: String(err) });
+              return await new Promise<string>((resolve) => rl.question(question, resolve));
+            } finally {
+              rl.close();
             }
-          }
+          },
+          login: async () => {
+            const { loginInteractive } = await import('./providers/codex-oauth.js');
+            cli.stdout('\n🔐 ChatGPT login — opening your browser…');
+            const auth = await loginInteractive();
+            cli.stdout(`✅ Authenticated${auth.email ? ` as ${auth.email}` : ''}. Starting Code Buddy…`);
+          },
+          reloadProvider: async () => {
+            // Bust provider detection so the OAuth file written moments ago is
+            // immediately visible to this same process.
+            cachedProvider = undefined;
+            const nextApiKey = options.apiKey || await loadApiKey();
+            if (!nextApiKey) return null;
+            return {
+              apiKey: nextApiKey,
+              baseURL: options.baseUrl || await loadBaseURL(),
+              model: options.model || await loadModel(),
+            };
+          },
+          onLoginError: (err) => {
+            logger.error(
+              'ChatGPT login did not complete',
+              err instanceof Error ? err : { error: String(err) },
+            );
+          },
+        });
+
+        if (recoveredProvider) {
+          apiKey = recoveredProvider.apiKey;
+          baseURL = recoveredProvider.baseURL;
+          model = recoveredProvider.model;
         }
 
-        if (!recovered) {
-          logger.error(
-            [
-              "❌ No AI provider configured yet. Fastest ways to start — no env var to edit:",
-              "   • 60-second demo, zero config — just run:               buddy try",
-              "   • Guided setup (recommended) — interactive wizard:      buddy onboard",
-              "   • Free, no API key — sign in with your ChatGPT plan:    buddy login",
-              "   • Local & free — install Ollama, then let onboard use it: buddy onboard",
-              "   • API key — set GROK_API_KEY / OPENAI_API_KEY / ANTHROPIC_API_KEY / GOOGLE_API_KEY (or pass --api-key)",
-              "   Check anytime:  buddy doctor   (add --fix to auto-configure a running Ollama).",
-            ].join("\n")
-          );
+        if (!recoveredProvider) {
+          logger.error(NO_PROVIDER_GUIDANCE);
           process.exit(1);
         }
       }
@@ -2334,17 +2346,7 @@ gitCommand
       const maxToolRounds = parseInt(options.maxToolRounds) || 400;
 
       if (!apiKey) {
-        logger.error(
-          [
-            "❌ No AI provider configured yet. Fastest ways to start — no env var to edit:",
-            "   • 60-second demo, zero config — just run:               buddy try",
-            "   • Guided setup (recommended) — interactive wizard:      buddy onboard",
-            "   • Free, no API key — sign in with your ChatGPT plan:    buddy login",
-            "   • Local & free — install Ollama, then let onboard use it: buddy onboard",
-            "   • API key — set GROK_API_KEY / OPENAI_API_KEY / ANTHROPIC_API_KEY / GOOGLE_API_KEY (or pass --api-key)",
-            "   Check anytime:  buddy doctor   (add --fix to auto-configure a running Ollama).",
-          ].join("\n")
-        );
+        logger.error(NO_PROVIDER_GUIDANCE);
         process.exit(1);
       }
 
