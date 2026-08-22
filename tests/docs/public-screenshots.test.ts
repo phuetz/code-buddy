@@ -215,7 +215,7 @@ describe('public README screenshots', () => {
       }
     }
 
-    expect(anchorCountsByFile.get(path.join(repoRoot, 'README.md'))).toBe(22);
+    expect(anchorCountsByFile.get(path.join(repoRoot, 'README.md'))).toBe(24);
     expect(anchorCountsByFile.get(path.join(repoRoot, 'cowork', 'readme.md'))).toBe(6);
   });
 
@@ -243,7 +243,7 @@ describe('public README screenshots', () => {
       }
     }
 
-    expect(targetsByFile.get(path.join(repoRoot, 'README.md'))).toHaveLength(23);
+    expect(targetsByFile.get(path.join(repoRoot, 'README.md'))).toHaveLength(28);
     expect(targetsByFile.get(screenshotGalleryReadme)).toHaveLength(18);
   });
 
