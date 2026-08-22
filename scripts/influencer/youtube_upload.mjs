@@ -7,10 +7,11 @@
  *
  * Usage :
  *   node youtube_upload.mjs --file SHORT-x.mp4 --title "…" --description-file desc.txt [--tags "a,b,c"]
- *        [--privacy private|unlisted|public] [--category 28] [--lang fr] [--dry-run]
- *   node youtube_upload.mjs --pack PACK-PUBLICATION-SHORTS.md [--only 01,02] [--dry-run]
+ *        [--privacy private|unlisted|public] [--category 28] [--lang fr] [--dry-run] [--tokens ~/DEV/youtube-mcp/tokens-ambre.json]
+ *   node youtube_upload.mjs --pack PACK-PUBLICATION-SHORTS.md [--only 01,02] [--dry-run] [--tokens …]
  *        → lit le pack (blocs "# Short NN — …", lignes "Fichier : `X.mp4`", sections "## Titre" / "## Description" / "## Tags"
- *          en blocs ``` ) et uploade chaque short en privé ; écrit un journal JSONL à côté du pack.
+ *          en blocs ``` ; lignes optionnelles "Catégorie : 19" et "Langue : fr" par bloc) et uploade chaque short en privé ;
+ *          écrit un journal JSONL à côté du pack.
  *
  * Prérequis : ~/DEV/youtube-mcp/.env (GOOGLE_CLIENT_ID/SECRET) + tokens.json (OAuth déjà validé le 01/08/2026).
  * Catégorie 28 = Science & Technology. Quota API YouTube : un upload = 1600 unités (10 000/jour) → ≤ 6 uploads/jour.
@@ -40,14 +41,15 @@ function loadEnv() {
   return env;
 }
 
-async function client() {
+async function client(tokensFile) {
   const env = loadEnv();
   const oauth = new google.auth.OAuth2(env.GOOGLE_CLIENT_ID, env.GOOGLE_CLIENT_SECRET, 'http://localhost:8723');
-  const tokens = JSON.parse(fs.readFileSync(path.join(MCP_DIR, 'tokens.json'), 'utf8'));
+  const tokensPath = tokensFile ? path.resolve(tokensFile) : path.join(MCP_DIR, 'tokens.json');
+  const tokens = JSON.parse(fs.readFileSync(tokensPath, 'utf8'));
   oauth.setCredentials(tokens);
   oauth.on('tokens', (t) => {
     const merged = { ...tokens, ...t };
-    fs.writeFileSync(path.join(MCP_DIR, 'tokens.json'), JSON.stringify(merged, null, 2));
+    fs.writeFileSync(tokensPath, JSON.stringify(merged, null, 2));
   });
   return google.youtube({ version: 'v3', auth: oauth });
 }
@@ -73,7 +75,7 @@ async function upload(yt, job, dry) {
       containsSyntheticMedia: true,
     },
   };
-  console.log(`→ ${path.basename(file)} (${sizeMB} Mo) · "${body.snippet.title}" · ${body.status.privacyStatus}${dry ? ' · DRY-RUN' : ''}`);
+  console.log(`→ ${path.basename(file)} (${sizeMB} Mo) · "${body.snippet.title}" · cat ${body.snippet.categoryId} · ${body.snippet.defaultLanguage} · ${body.status.privacyStatus}${dry ? ' · DRY-RUN' : ''}`);
   if (dry) return { dryRun: true, file, title: body.snippet.title };
   const res = await yt.videos.insert({
     part: ['snippet', 'status'],
@@ -101,7 +103,11 @@ function parsePack(packPath, only) {
     const tagsRaw = section('Tags');
     if (!file || !title) { console.warn(`⚠️ Short ${num} : fichier ou titre introuvable dans le pack — ignoré`); continue; }
     const tags = tagsRaw ? tagsRaw.split(/[,\n]/).map((t) => t.trim().replace(/^#/, '')).filter(Boolean).slice(0, 30) : [];
-    jobs.push({ num, file: path.isAbsolute(file) ? file : path.join(dir, file), title, description, tags });
+    // Lignes optionnelles par bloc : « Catégorie : 19 » (YouTube categoryId ; 19 = Voyages et événements, 28 = Science & Tech)
+    // et « Langue : fr ». Absentes → défauts historiques (28 / fr) : les packs Lisa restent byte-identiques.
+    const category = b.match(/^Cat[ée]gorie\s*:\s*`?(\d{1,2})`?/mi)?.[1];
+    const lang = b.match(/^Langue\s*:\s*`?([a-z]{2}(?:-[A-Z]{2})?)`?/m)?.[1];
+    jobs.push({ num, file: path.isAbsolute(file) ? file : path.join(dir, file), title, description, tags, ...(category ? { category } : {}), ...(lang ? { lang } : {}) });
   }
   return jobs;
 }
@@ -109,8 +115,9 @@ function parsePack(packPath, only) {
 async function main() {
   const dry = !!arg('dry-run', false);
   const privacy = arg('privacy', 'private');
+  const tokensFile = arg('tokens', null); // ex. tokens-ambre.json (chaîne Ambre) — défaut tokens.json (LISA IA)
   if (privacy === 'public') console.warn('⚠️ --privacy public : publication IMMÉDIATE — à n\'utiliser qu\'avec l\'accord explicite de Patrice.');
-  const yt = dry ? null : await client();
+  const yt = dry ? null : await client(tokensFile);
   const results = [];
   const pack = arg('pack', null);
   if (pack) {
