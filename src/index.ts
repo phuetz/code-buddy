@@ -3464,6 +3464,17 @@ addLazyCommand(
   },
 );
 
+// Repo explainer — one Markdown/HTML orientation artifact for an unfamiliar repository
+addLazyCommand(
+  program,
+  'explain',
+  'Explain an unfamiliar repository in one Markdown or self-contained HTML artifact',
+  async () => {
+    const { createExplainCommand } = await import('./commands/explain.js');
+    return createExplainCommand();
+  },
+);
+
 // AI-Scientist-lite (Phases 0-3) — human-gated, sandboxed experiment: single pass or bounded discovery loop (opt-in)
 addLazyCommand(
   program,
