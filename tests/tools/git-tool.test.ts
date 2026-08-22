@@ -418,8 +418,9 @@ describe('GitTool.bisect', () => {
 
       if (stepResult.data && (stepResult.data as { done: boolean }).done) {
         done = true;
-        // The output should mention the first bad commit
-        expect(stepResult.output).toContain('is the first bad commit');
+        // The output should mention the first bad commit (git >= 2.55 quotes the term:
+        // "is the first 'bad' commit")
+        expect(stepResult.output).toMatch(/is the first '?bad'? commit/);
       }
     }
 
