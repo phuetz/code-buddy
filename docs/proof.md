@@ -339,7 +339,7 @@ One local tick, one persisted artifact, **15.12 seconds**, no paid route. ✅
 
 ---
 
-## 5. 65 providers (25 with a free tier), **one routing path**
+## 5. 64 providers (25 with a free tier), **one routing path**
 
 ### Catalog-entry count — reproduced today
 

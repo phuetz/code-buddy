@@ -7,6 +7,7 @@ import {
   resolvePluginRuntimeProvider,
   resolveProviderFromCatalog,
 } from '../../src/providers/provider-catalog.js';
+import { AI_PROVIDERS } from '../../src/utils/config-validation/schema.js';
 
 const OMNIROUTE_IMPORTED_FREE_PROVIDER_IDS = [
   'ai21',
@@ -103,6 +104,16 @@ describe('runtime provider catalog', () => {
       'custom',
     ]));
     expect(ids).not.toEqual(expect.arrayContaining(['azure', 'bedrock', 'copilot']));
+  });
+
+  it('declares every runtime provider id in the AI_PROVIDERS settings enum (buddy provider use <id> must persist)', () => {
+    const missing = getRuntimeProviderCatalog().map((e) => e.id).filter((id) => !(AI_PROVIDERS as readonly string[]).includes(id));
+    expect(missing).toEqual([]);
+  });
+
+  it('never auto-detects an imported free-tier provider (priority >= 300) from a stray API key', () => {
+    const env = { CODEBUDDY_API_KEY: 'k', CODEBUDDY_BASE_URL: 'https://gw.example.test/v1', COHERE_API_KEY: 'stray', CEREBRAS_API_KEY: 'stray' } as NodeJS.ProcessEnv;
+    expect(resolveProviderFromCatalog({ env })?.provider).toBe('custom');
   });
 
   it('has unique ids across the whole catalog (no duplicated provider entries)', () => {

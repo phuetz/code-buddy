@@ -216,7 +216,11 @@ export function createProviderCommand(): Command {
         if (options.free) {
           console.log(`     Free tier: ${info.freeTier}`);
           console.log(`     Base URL: ${info.baseURL ?? 'none'}`);
-          console.log(`     API key env: ${info.apiKeyEnvVars.join(' | ') || 'none'}`);
+          if (info.authMode === 'local') {
+            console.log(`     Enable with: ${info.envVar} (local runtime / gateway — no API key by default)`);
+          } else {
+            console.log(`     API key env: ${info.apiKeyEnvVars.join(' | ') || 'none'}`);
+          }
         }
         console.log(`     Models: ${info.models.slice(0, 3).join(', ')}${info.models.length > 3 ? '...' : ''}`);
         console.log('');
