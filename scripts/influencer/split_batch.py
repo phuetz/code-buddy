@@ -10,7 +10,9 @@ Usage : split_batch.py jobs.json [--only L5,L6] [--dry-run]
 jobs.json = {"music": "…mp3", "broll_root": "~/.codebuddy/media-video/flow-crame", "out_dir": "…", "cadence": 3,
              "jobs": [{"id": "L5", "src": "…/L5-kimi-k3.mp4", "hook": "Kimi K3 : …",
                        "fix": ["Kimi 4.3=Kimi K3"], "broll": ["lisa-neuralnet.mp4", "lisa-code.mp4", …],
-                       "cadence": 3, "out": "SHORT-SPLIT-L5-kimi-k3.mp4"}]}
+                       "cadence": 3, "face_crop": "top:0.15,bottom:0.65", "out": "SHORT-SPLIT-L5-kimi-k3.mp4"}]}
+`face_crop` (par job ou global) est passé tel quel à wrap-short `--face-crop` (défaut wrap-short : top:0.15,bottom:0.65 ;
+un clip déjà zoomé comme veille-2026-08/v*.mp4 veut top:0.0,bottom:0.5).
 Un B-roll peut être un chemin absolu ou relatif à broll_root ; une image (png/jpg) est acceptée par wrap-short.
 Écrit un journal `<out_dir>/_split-batch.log` + `_split-batch-results.json`.
 """
@@ -63,6 +65,9 @@ def main():
         cmd = [sys.executable, WRAP, src, out, '--hook', job.get('hook', ''), '--layout', 'split']
         for f in job.get('fix', []):
             cmd += ['--fix', f]
+        face_crop = job.get('face_crop', cfg.get('face_crop'))
+        if face_crop:  # ex. "top:0.0,bottom:0.5" pour un clip déjà zoomé (visage plus haut)
+            cmd += ['--face-crop', face_crop]
         for c in cuts:
             cmd += ['--cut', c]
         if music and os.path.exists(music):
