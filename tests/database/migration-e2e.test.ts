@@ -21,6 +21,24 @@ import { tmpdir } from 'os';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
+// Real SQLite I/O (one fsync per commit, rollback journal, no WAL): an upgrade
+// takes ~3 s on Windows CI runners with ~5× jitter (0.8–4.4 s across runs) and
+// occasional I/O stall bursts — run 32590054137 (Node 22 job) spent 22 s in
+// each of two adjacent upgrades that the three previous runs finished in <5 s.
+// Give the e2e file the same 60 s budget as the other real-I/O suites and log
+// slow phases so a stall is attributable.
+vi.setConfig({ testTimeout: 60_000 });
+
+const SLOW_PHASE_MS = 5_000;
+async function initializeTimed(manager: { initialize(): Promise<void> }, label: string): Promise<void> {
+  const started = Date.now();
+  await manager.initialize();
+  const elapsed = Date.now() - started;
+  if (elapsed > SLOW_PHASE_MS) {
+    console.error(`[migration-e2e] slow ${label}.initialize(): ${elapsed}ms on ${process.platform}/node ${process.version}`);
+  }
+}
+
 // Probe the native module the same way tests/database.test.ts does:
 // skip the whole suite when better-sqlite3 isn't loadable at this Node ABI.
 let hasBetterSqlite3 = false;
@@ -176,7 +194,7 @@ describe.skipIf(!hasBetterSqlite3)('Database migration E2E (old install → curr
       const applied: number[] = [];
       manager.on('db:migration', (e: { version: number }) => applied.push(e.version));
 
-      await manager.initialize();
+      await initializeTimed(manager, 'manager');
 
       // Every migration after v1 was applied, in order
       const expected = [];
@@ -217,7 +235,7 @@ describe.skipIf(!hasBetterSqlite3)('Database migration E2E (old install → curr
       createOldInstallDb(dbPath, 1);
 
       const manager = new DatabaseManager({ dbPath, walMode: false });
-      await manager.initialize();
+      await initializeTimed(manager, 'manager');
       const db = manager.getDatabase();
 
       db.prepare(
@@ -240,7 +258,7 @@ describe.skipIf(!hasBetterSqlite3)('Database migration E2E (old install → curr
       const applied: number[] = [];
       manager.on('db:migration', (e: { version: number }) => applied.push(e.version));
 
-      await manager.initialize();
+      await initializeTimed(manager, 'manager');
 
       const expected = [];
       for (let v = 3; v <= SCHEMA_VERSION; v++) expected.push(v);
@@ -256,7 +274,7 @@ describe.skipIf(!hasBetterSqlite3)('Database migration E2E (old install → curr
       const applied: number[] = [];
       manager.on('db:migration', (e: { version: number }) => applied.push(e.version));
 
-      await manager.initialize();
+      await initializeTimed(manager, 'manager');
 
       expect(applied).toEqual([...Array(SCHEMA_VERSION).keys()].map(i => i + 1));
       expect(manager.getDatabaseStats().version).toBe(SCHEMA_VERSION);
@@ -268,13 +286,13 @@ describe.skipIf(!hasBetterSqlite3)('Database migration E2E (old install → curr
       createOldInstallDb(dbPath, 1);
 
       const first = new DatabaseManager({ dbPath, walMode: false });
-      await first.initialize();
+      await initializeTimed(first, 'first');
       first.close();
 
       const second = new DatabaseManager({ dbPath, walMode: false });
       const applied: number[] = [];
       second.on('db:migration', (e: { version: number }) => applied.push(e.version));
-      await second.initialize();
+      await initializeTimed(second, 'second');
 
       expect(applied).toEqual([]);
       expect(second.getDatabaseStats().version).toBe(SCHEMA_VERSION);
