@@ -32,7 +32,7 @@ describe('long-form production', () => {
   });
 
   it('assembles only the exact regular scene files into a private immutable master', async () => {
-    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'long-form-'));
+    const root = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'long-form-')));
     roots.push(root);
     const clips = path.join(root, 'clips'); await fs.mkdir(clips);
     for (const scene of compileLongFormRenderPacket(plan()).scenes) await fs.writeFile(path.join(clips, scene.expectedFilename), Buffer.alloc(2048, 1));

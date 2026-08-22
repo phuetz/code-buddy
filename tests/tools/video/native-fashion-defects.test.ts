@@ -54,7 +54,7 @@ describe('native fashion defects and retry receipts', () => {
   });
 
   it('appends valid receipts as JSONL without replacing earlier entries', async () => {
-    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'native-fashion-retries-'));
+    const root = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'native-fashion-retries-')));
     roots.push(root);
     const journalPath = path.join(root, 'retry.jsonl');
     await appendRetryReceipt(journalPath, receipt());
@@ -70,14 +70,14 @@ describe('native fashion defects and retry receipts', () => {
   });
 
   it('refuses an identical retry after the first attempt', async () => {
-    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'native-fashion-retries-'));
+    const root = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'native-fashion-retries-')));
     roots.push(root);
     await expect(appendRetryReceipt(path.join(root, 'retry.jsonl'), receipt({ attempt: 2 })))
       .rejects.toThrow('identical retry');
   });
 
   it('refuses promotion while any blocking gate has failed', async () => {
-    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'native-fashion-retries-'));
+    const root = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'native-fashion-retries-')));
     roots.push(root);
     await expect(appendRetryReceipt(path.join(root, 'retry.jsonl'), receipt({
       failedGates: ['outfit'],

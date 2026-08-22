@@ -14,7 +14,7 @@ afterEach(async () => {
 });
 
 async function fixture() {
-  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'flow-plan-'));
+  const root = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'flow-plan-')));
   temporaryDirectories.push(root);
   const filename = path.join(root, 'lisa.png');
   const bytes = Buffer.concat([
