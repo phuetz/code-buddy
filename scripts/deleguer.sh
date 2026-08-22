@@ -129,7 +129,7 @@ case "$MOTEUR" in
     # l'illusion d'un problème de facturation. `opencode models` liste les
     # identifiants réels avec leur préfixe : s'y fier plutôt qu'au catalogue
     # HTTP, qui ne le montre pas.
-    MODELE=${OC_MODELE:-deepseek-v4-pro}
+    MODELE=${OC_MODELE:-kimi-k3}  # deepseek-v4-pro exige un opt-in « hébergé en Chine » depuis le 22/08 → Kimi K3 par défaut
     (cd "$DEPOT" && opencode run --dir "$DEPOT" -m "opencode-go/$MODELE" \
        "$(cat "$CONSIGNE")") 2>&1 | tee "$LOG"
     ;;
