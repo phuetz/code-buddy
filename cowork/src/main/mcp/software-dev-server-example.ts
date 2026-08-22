@@ -2222,7 +2222,6 @@ async function executeGUIInteraction(
 // }
 
 // Helper: Execute Native Engine command
-// @ts-expect-error - Reserved for future use
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 async function executeClaudeCode(
   prompt: string,
@@ -2318,7 +2317,6 @@ async function readFile(filePath: string): Promise<string> {
 }
 
 // Helper: Write file content
-// @ts-expect-error - Reserved for future use
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 async function writeFile(filePath: string, content: string): Promise<void> {
   const fullPath = resolveContainedPath(filePath);
@@ -2334,7 +2332,6 @@ async function writeFile(filePath: string, content: string): Promise<void> {
 }
 
 // Helper: Delete file
-// @ts-expect-error - Reserved for future use
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 async function deleteFile(filePath: string): Promise<void> {
   const fullPath = resolveContainedPath(filePath);
