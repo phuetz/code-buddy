@@ -17,6 +17,26 @@ export interface AcpSessionStoreConfig {
   storeDir?: string;
 }
 
+/**
+ * Atomic replace with a short retry: on Windows a rename onto a file that
+ * another handle still has open (a concurrent `load`, an indexer) fails with
+ * EPERM/EBUSY for a few milliseconds instead of succeeding as on POSIX.
+ */
+async function renameWithRetry(from: string, to: string): Promise<void> {
+  const delaysMs = [10, 25, 50, 100, 200];
+  for (let attempt = 0; ; attempt++) {
+    try {
+      await fs.promises.rename(from, to);
+      return;
+    } catch (err) {
+      const code = (err as NodeJS.ErrnoException).code;
+      const delay = delaysMs[attempt];
+      if ((code !== 'EPERM' && code !== 'EBUSY') || delay === undefined) throw err;
+      await new Promise((resolve) => setTimeout(resolve, delay));
+    }
+  }
+}
+
 export class AcpSessionStore {
   private readonly dir: string;
 
@@ -73,7 +93,12 @@ export class AcpSessionStore {
     const file = this.fileFor(session.sessionId);
     const temp = `${file}.tmp.${Date.now()}-${Math.random().toString(36).slice(2)}`;
     await fs.promises.writeFile(temp, JSON.stringify(session, null, 2), 'utf-8');
-    await fs.promises.rename(temp, file);
+    try {
+      await renameWithRetry(temp, file);
+    } catch (err) {
+      await fs.promises.rm(temp, { force: true }).catch(() => {});
+      throw err;
+    }
   }
 
   private fileFor(sessionId: string): string {

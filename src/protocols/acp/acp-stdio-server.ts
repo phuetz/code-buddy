@@ -33,6 +33,7 @@
 import { randomUUID } from 'crypto';
 import type { Readable, Writable } from 'node:stream';
 import { AcpSessionStore } from './acp-session-store.js';
+import { logger } from '../../utils/logger.js';
 
 export const ACP_PROTOCOL_VERSION = 1;
 
@@ -225,17 +226,28 @@ export class AcpStdioServer {
     });
   }
 
+  /**
+   * Fire-and-forget persistence (`void this.persistSession(...)`): a failed
+   * write must be logged, never surface as an unhandled rejection.
+   */
   private async persistSession(sessionId: string): Promise<void> {
     const s = this.sessions.get(sessionId);
     if (!s) return;
-    await this.store.save({
-      sessionId,
-      cwd: s.cwd,
-      history: s.history,
-      mcpServers: s.mcpServers,
-      title: s.title,
-      updatedAt: s.updatedAt,
-    });
+    try {
+      await this.store.save({
+        sessionId,
+        cwd: s.cwd,
+        history: s.history,
+        mcpServers: s.mcpServers,
+        title: s.title,
+        updatedAt: s.updatedAt,
+      });
+    } catch (err) {
+      logger.warn?.('[acp] failed to persist session', {
+        sessionId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
   }
 
   private requestClient(
