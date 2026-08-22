@@ -13,6 +13,25 @@ describe('PolicyEngine', () => {
     policyEngine.releaseKillSwitch();
   });
 
+  it('does not mistake the macOS /private system prefix for a secret path', () => {
+    // /private/var/folders/… is the realpath of $TMPDIR on macOS
+    expect(
+      policyEngine.evaluate({
+        capability: 'shell:safe',
+        risk: 'low',
+        detail: { command: 'pwd', path: '/private/var/folders/df/x/T/work' },
+      }).decision,
+    ).toBe('allow');
+    // a genuinely secret-looking path still needs approval
+    expect(
+      policyEngine.evaluate({
+        capability: 'shell:safe',
+        risk: 'low',
+        detail: { command: 'pwd', path: '/home/u/private-keys' },
+      }).decision,
+    ).toBe('needs_approval');
+  });
+
   it('should default to singleton instance', () => {
     const instance1 = PolicyEngine.getInstance();
     const instance2 = PolicyEngine.getInstance();

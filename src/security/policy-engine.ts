@@ -139,7 +139,10 @@ export class PolicyEngine {
 
   private isSecretsOrDeployment(detail?: Record<string, unknown>): boolean {
     if (!detail) return false;
-    const pathStr = String(detail.path || '').toLowerCase();
+    // macOS canonicalizes /var, /tmp and /etc under `/private/…` — that system
+    // prefix is not a "private key" path. Without this, every command whose cwd
+    // is the realpath of $TMPDIR (/private/var/folders/…) needed approval.
+    const pathStr = String(detail.path || '').toLowerCase().replace(/^\/private(?=\/|$)/, '');
     const cmdStr = String(detail.command || '').toLowerCase();
     const peerIdStr = String(detail.peerId || '').toLowerCase();
 
