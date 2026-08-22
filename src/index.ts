@@ -582,31 +582,8 @@ async function saveCommandLineSettings(
 }
 
 /** Providers served by a local OpenAI-compatible runtime (no cloud model catalog). */
-const LOCAL_RUNTIME_PROVIDERS = new Set(['ollama', 'lmstudio', 'vllm']);
-
-/** A model id that only makes sense on a hosted cloud backend (never a local Ollama tag). */
-function looksLikeCloudModel(model: string): boolean {
-  return /grok|^gpt-|^o[1-9]|codex|claude|gemini/i.test(model);
-}
-
-/**
- * A saved/default model is only usable if it matches the detected provider's
- * backend: a `grok-*` slug 404s on the ChatGPT/Codex backend, and a `gpt-5.*`
- * slug 404s on xAI. We enforce this for the two cloud providers with a known
- * hard incompatibility (grok ↔ chatgpt), AND for local runtimes (Ollama / LM
- * Studio / vLLM) — a stale cloud slug like `grok-code-fast-1` left in
- * settings.json must never be sent to a local server (it 404s with a cryptic
- * "model not found"). Other providers are left untouched so OpenAI/Anthropic
- * model names pass through as before.
- */
-export function isModelCompatibleWithProvider(model: string, provider?: string): boolean {
-  if (!provider) return true;
-  const looksGrok = /grok/i.test(model);
-  if (provider === 'grok') return looksGrok;
-  if (provider === 'chatgpt') return /^(gpt-|o[1-9]|codex)/i.test(model) && !looksGrok;
-  if (LOCAL_RUNTIME_PROVIDERS.has(provider)) return !looksLikeCloudModel(model);
-  return true;
-}
+import { isModelCompatibleWithProvider } from './providers/model-provider-compat.js';
+export { isModelCompatibleWithProvider };
 
 // Load model from detected provider or user settings
 async function loadModel(): Promise<string | undefined> {
