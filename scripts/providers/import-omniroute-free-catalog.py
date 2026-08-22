@@ -172,10 +172,12 @@ def main() -> None:
         env = lambda s: re.sub(r"[^A-Z0-9]+", "_", s.upper()).strip("_")  # noqa: E731
         for x in keep:
             models = x["models"] or DEFAULT_MODELS.get(x["id"]) or ["default"]
+            free_note = x["freeNote"].replace("'", "’") or "declared free tier (hasFree)"
             print(f"""  {{
     id: '{x['id']}',
     label: '{x['name'].replace("'", "’")}',
-    // Import catalogue OmniRoute (22/08/2026) — palier gratuit : {x['freeNote'].replace("'", "’") or 'déclaré (hasFree)'}.
+    // Import catalogue OmniRoute (22/08/2026) — palier gratuit : {free_note}.
+    freeTier: '{free_note}',
     // Clé : {x['apiKeyUrl'] or x['website'] or 'voir site'}. À vérifier live avant usage.
     authMode: 'api-key',
     apiMode: 'openai-compatible',
