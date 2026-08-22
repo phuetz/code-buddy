@@ -147,8 +147,10 @@ describe('ToolHandler code_exec logical-session isolation', () => {
     const pwdB = await handler.executeTool(bashCall('pwd-b', 'pwd'));
     if (!pwdB.success) console.error('[macos-diag] pwd in restored cwd', realSessionB, ':', pwdB.error);
     expect(pwdB.success).toBe(true);
-    expect(pwdB.output).toContain(realSessionB);
-    expect(pwdB.output).not.toContain(realSessionA);
+    // Match on the unique mkdtemp leaf: `pwd` prints the shell's spelling of the
+    // directory (MSYS `/c/Users/...` on Windows), not the Node one.
+    expect(pwdB.output).toContain(path.basename(realSessionB));
+    expect(pwdB.output).not.toContain(path.basename(realSessionA));
     expect(handler.getRecoverySessionId()).toBe('logical-session-b');
 
     handler.restoreWorkingDirectory(realSessionA);

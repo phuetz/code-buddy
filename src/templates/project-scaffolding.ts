@@ -805,7 +805,9 @@ export class TemplateEngine extends EventEmitter {
         await fs.chmod(filePath, 0o755);
       }
 
-      filesCreated.push(path.relative(projectPath, filePath));
+      // Template file keys are POSIX-style; report created files the same way
+      // on every platform so callers/tests can match them verbatim.
+      filesCreated.push(path.relative(projectPath, filePath).split(path.sep).join('/'));
     }
 
     this.emit('progress', { phase: 'files-created', count: filesCreated.length });

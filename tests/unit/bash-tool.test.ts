@@ -540,11 +540,12 @@ describe('BashTool', () => {
     it('should handle cd command separately', async () => {
       const processDirectory = process.cwd();
 
-      const result = await bashTool.execute('cd /tmp');
+      // A real temp dir rather than `/tmp` (absent on Windows).
+      const result = await bashTool.execute(`cd ${cwdRoot}`);
 
       expect(result.success).toBe(true);
-      expect(result.output).toContain(realpathSync('/tmp'));
-      expect(bashTool.getCurrentDirectory()).toBe(realpathSync('/tmp'));
+      expect(result.output).toContain(realpathSync(cwdRoot));
+      expect(bashTool.getCurrentDirectory()).toBe(realpathSync(cwdRoot));
       expect(process.cwd()).toBe(processDirectory);
     });
 

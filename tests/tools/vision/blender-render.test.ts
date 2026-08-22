@@ -4,6 +4,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { EventEmitter } from 'events';
+import { join } from 'path';
 import {
   buildBlenderProcArgs,
   renderScenes,
@@ -71,8 +72,9 @@ describe('renderScenes (fail-open)', () => {
       mkdir: async () => {},
     });
     expect(res.ok).toBe(true);
-    expect(res.cocoPath).toBe('/x/out/coco_annotations.json');
-    expect(res.imagesDir).toBe('/x/out/images');
+    // path.join spelling: native separators on Windows.
+    expect(res.cocoPath).toBe(join('/x/out', 'coco_annotations.json'));
+    expect(res.imagesDir).toBe(join('/x/out', 'images'));
   });
 
   it('fails (never throws) when blenderproc exits non-zero', async () => {

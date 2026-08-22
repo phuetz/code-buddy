@@ -87,7 +87,10 @@ describe('Wide Research checkpoint schema and atomic store', () => {
     expect(raw).not.toContain('secret-provider.invalid');
     expect(raw).not.toContain('abcdefghijklmnop');
     expect(await readdir(directory)).toEqual(['run.json']);
-    expect((await lstat(file)).mode & 0o777).toBe(0o600);
+    // POSIX mode bits only: Windows reports 0o666 whatever the chmod.
+    if (process.platform !== 'win32') {
+      expect((await lstat(file)).mode & 0o777).toBe(0o600);
+    }
   });
 
   it('refuses to overwrite an unrelated existing file', async () => {

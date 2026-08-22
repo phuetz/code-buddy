@@ -21,6 +21,9 @@ describe('self-improvement rollback preserves pre-existing WIP', () => {
     await execFileAsync('git', ['init'], { cwd: repo });
     await execFileAsync('git', ['config', 'user.name', 'Test User'], { cwd: repo });
     await execFileAsync('git', ['config', 'user.email', 'test@example.com'], { cwd: repo });
+    // Windows git defaults to core.autocrlf=true, which would rewrite the
+    // restored files with CRLF and break the byte-exact assertions below.
+    await execFileAsync('git', ['config', 'core.autocrlf', 'false'], { cwd: repo });
     await writeFile(path.join(repo, 'README.md'), 'initial readme\n', 'utf8');
     await writeFile(path.join(repo, 'notes.txt'), 'committed notes\n', 'utf8');
     await execFileAsync('git', ['add', 'README.md', 'notes.txt'], { cwd: repo });

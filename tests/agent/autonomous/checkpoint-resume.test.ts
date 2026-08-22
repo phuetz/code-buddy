@@ -35,7 +35,8 @@ describe('runner checkpoint resume', () => {
     } else {
       process.env.GROK_API_KEY = oldGrokKey;
     }
-    await fs.rm(tempRoot, { force: true, recursive: true });
+    // Retry: Windows may still hold a handle on just-closed files (AV/indexer).
+    await fs.rm(tempRoot, { force: true, recursive: true, maxRetries: 5, retryDelay: 100 });
   });
 
   async function createTempGitRepo(): Promise<string> {

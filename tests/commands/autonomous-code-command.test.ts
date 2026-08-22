@@ -116,7 +116,8 @@ describe('autonomous-code CLI command', () => {
     }
     consoleLogSpy.mockRestore();
     consoleErrorSpy.mockRestore();
-    await fs.rm(tempRoot, { force: true, recursive: true });
+    // Retry: Windows may still hold a handle on just-closed files (AV/indexer).
+    await fs.rm(tempRoot, { force: true, recursive: true, maxRetries: 5, retryDelay: 100 });
   });
 
   it('prints JSON report for a valid task contract', async () => {

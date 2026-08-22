@@ -9,7 +9,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { spawnSync } from 'child_process';
 import { mkdtemp, rm } from 'fs/promises';
 import { tmpdir } from 'os';
-import { join } from 'path';
+import { join, sep } from 'path';
 
 import {
   filmSlug,
@@ -123,7 +123,8 @@ describe('film project persistence', () => {
   it('round-trips through save/load under the films dir', async () => {
     const p = project();
     await saveFilmProject(root, p, fixedNow);
-    expect(filmProjectPath(root, 'My Film!')).toMatch(/films\/My-Film\/film\.json$/);
+    // Compare the POSIX spelling: the project path uses native separators.
+    expect(filmProjectPath(root, 'My Film!').split(sep).join('/')).toMatch(/films\/My-Film\/film\.json$/);
 
     const loaded = await loadFilmProject(root, 'My Film!');
     expect(loaded).not.toBeNull();

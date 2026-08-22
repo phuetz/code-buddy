@@ -166,10 +166,18 @@ export async function detectCapabilities(): Promise<SandboxCapabilities> {
     capabilities.seatbelt = await probeSeatbelt();
   }
 
-  // Check for Docker
+  // Check for Docker. The sandbox runs Linux images with Linux-only flags, so a
+  // daemon in Windows-containers mode (Windows CI runners) does not count.
+  // Only an explicit Windows daemon degrades; if the format probe itself is
+  // unsupported (docker→podman shims), fall back to the historical probe.
   try {
-    const result = await execSimple('docker', ['version', '--format', '{{.Server.Version}}']);
-    capabilities.docker = result.exitCode === 0;
+    const result = await execSimple('docker', ['version', '--format', '{{.Server.Os}}']);
+    if (result.exitCode === 0) {
+      capabilities.docker = result.stdout.trim().toLowerCase() !== 'windows';
+    } else {
+      const fallback = await execSimple('docker', ['version', '--format', '{{.Server.Version}}']);
+      capabilities.docker = fallback.exitCode === 0;
+    }
   } catch {
     capabilities.docker = false;
   }

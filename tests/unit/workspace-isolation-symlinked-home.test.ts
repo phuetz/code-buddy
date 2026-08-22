@@ -14,6 +14,8 @@ type IsolationModule = typeof import('../../src/workspace/workspace-isolation.js
 
 describe('WorkspaceIsolation with a symlinked HOME', () => {
   const previousHome = process.env.HOME;
+  // os.homedir() reads USERPROFILE on Windows, HOME elsewhere — redirect both.
+  const previousUserProfile = process.env.USERPROFILE;
   let realHome: string;
   let linkHome: string;
   let mod: IsolationModule;
@@ -26,6 +28,7 @@ describe('WorkspaceIsolation with a symlinked HOME', () => {
     fs.mkdirSync(path.join(realHome, '.ssh'));
     // BLOCKED_PATHS / SYSTEM_WHITELIST are computed from os.homedir() at import time.
     process.env.HOME = linkHome;
+    process.env.USERPROFILE = linkHome;
     vi.resetModules();
     mod = await import('../../src/workspace/workspace-isolation.js');
   });
@@ -33,6 +36,8 @@ describe('WorkspaceIsolation with a symlinked HOME', () => {
   afterAll(() => {
     if (previousHome === undefined) delete process.env.HOME;
     else process.env.HOME = previousHome;
+    if (previousUserProfile === undefined) delete process.env.USERPROFILE;
+    else process.env.USERPROFILE = previousUserProfile;
     vi.resetModules();
     fs.rmSync(linkHome, { force: true });
     fs.rmSync(realHome, { recursive: true, force: true });

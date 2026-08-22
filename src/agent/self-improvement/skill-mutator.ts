@@ -126,6 +126,26 @@ export interface MutationResult {
   reasons: string[];
 }
 
+/**
+ * Rename a skill directory, tolerating the transient EPERM/EBUSY Windows
+ * returns while a handle is still open inside it (the registry's
+ * fire-and-forget `registerSkillFile` read, an indexer, an AV scan).
+ */
+function renameDirWithRetry(from: string, to: string): void {
+  const delaysMs = [10, 25, 50, 100, 200];
+  for (let attempt = 0; ; attempt++) {
+    try {
+      fs.renameSync(from, to);
+      return;
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      const delay = delaysMs[attempt];
+      if ((code !== 'EPERM' && code !== 'EBUSY') || delay === undefined) throw error;
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, delay);
+    }
+  }
+}
+
 /** Dual-purpose mutator: the engine's port + the curation operations. */
 export class LiveSkillMutator implements SkillMutatorPort {
   private readonly skillsRoot: string;
@@ -240,7 +260,7 @@ export class LiveSkillMutator implements SkillMutatorPort {
     fs.mkdirSync(archiveRoot, { recursive: true });
     let dest = path.join(archiveRoot, name);
     if (fs.existsSync(dest)) dest = `${dest}-${randomUUID().slice(0, 8)}`;
-    fs.renameSync(dir, dest);
+    renameDirWithRetry(dir, dest);
     this.reload(name);
     return true;
   }
@@ -251,7 +271,7 @@ export class LiveSkillMutator implements SkillMutatorPort {
     if (!fs.existsSync(src)) return false;
     const dir = this.dirFor(name);
     if (fs.existsSync(dir)) return false; // don't clobber a live skill
-    fs.renameSync(src, dir);
+    renameDirWithRetry(src, dir);
     this.reload(name);
     return true;
   }

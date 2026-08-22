@@ -1,4 +1,5 @@
 import { execFileSync } from 'child_process';
+import * as path from 'path';
 
 jest.mock('child_process', () => ({
   execFileSync: jest.fn((command: string, args: string[]) => {
@@ -24,9 +25,10 @@ describe('Worktree shell safety', () => {
     const result = handleWorktree(['add', '/tmp/worktree-safe', 'feature; rm -rf /']);
 
     expect(result.handled).toBe(true);
+    // The handler resolves the path (drive letter + backslashes on Windows).
     expect(execFileSync).toHaveBeenCalledWith(
       'git',
-      ['worktree', 'add', '-b', 'feature; rm -rf /', '/tmp/worktree-safe'],
+      ['worktree', 'add', '-b', 'feature; rm -rf /', path.resolve('/tmp/worktree-safe')],
       expect.objectContaining({ stdio: 'pipe' })
     );
   });

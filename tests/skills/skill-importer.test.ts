@@ -50,7 +50,8 @@ describe('skill-importer — discovery', () => {
     writeSkill(path.join(src, 'mlops', 'inference', 'vllm'), 'name: vllm\ndescription: "vllm."\nversion: 1.0.0', '# vLLM'); // depth 3
     writeSkill(path.join(src, '.git', 'sneaky'), 'name: x\ndescription: "x"', '# x'); // operational → skip
     writeSkill(path.join(src, 'index-cache', 'cached'), 'name: y\ndescription: "y"', '# y'); // operational → skip
-    const dirs = findSkillDirs(src).map((d) => path.relative(src, d)).sort();
+    // Compare the POSIX spelling: path.relative uses native separators.
+    const dirs = findSkillDirs(src).map((d) => path.relative(src, d).split(path.sep).join('/')).sort();
     expect(dirs).toEqual(['dev/git-helper', 'mlops/inference/vllm']);
   });
 });

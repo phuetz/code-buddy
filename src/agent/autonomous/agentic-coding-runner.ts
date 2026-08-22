@@ -2020,6 +2020,10 @@ function startAgenticCodingObservability(
           || reportWithRecursiveImprovement.status === 'ready'
           ? 'completed'
           : 'failed');
+        // The cell owns this store: release its SQLite artifact index and event
+        // streams now. A leaked handle keeps `runs/artifact-index.sqlite` locked
+        // on Windows (EBUSY on cleanup) and leaks a descriptor everywhere else.
+        store.dispose();
       }
 
       return {
@@ -2042,6 +2046,7 @@ function startAgenticCodingObservability(
       });
       if (ownsRun) {
         store.endRun(runId, 'failed');
+        store.dispose();
       }
     },
     runId,

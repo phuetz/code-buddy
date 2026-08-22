@@ -92,8 +92,11 @@ describe('FoodProfileStore encryption', () => {
     expect(saved.keySource).toBe('local-key-file');
     expect(LOCAL_KEY_FALLBACK_POLICY.plaintextFallback).toBe(false);
     expect(LOCAL_KEY_FALLBACK_POLICY.machineDerivedFallback).toBe(false);
-    expect(fs.statSync(localKeyPath).mode & 0o777).toBe(0o600);
-    expect(fs.statSync(storePath).mode & 0o777).toBe(0o600);
+    // POSIX mode bits only: Windows reports 0o666 whatever the chmod.
+    if (process.platform !== 'win32') {
+      expect(fs.statSync(localKeyPath).mode & 0o777).toBe(0o600);
+      expect(fs.statSync(storePath).mode & 0o777).toBe(0o600);
+    }
     await expect(new FoodProfileStore({
       storePath,
       localKeyPath,

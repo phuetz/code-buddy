@@ -180,7 +180,8 @@ describe('media-fetch', () => {
     expect(args).toContain('https://youtu.be/x');
     expect(isDownloadOk(result)).toBe(true);
     if (isDownloadOk(result)) {
-      expect(result.wavPath.startsWith('/out/')).toBe(true);
+      // path.join spelling: native separators on Windows.
+      expect(result.wavPath.startsWith(join('/out', 'ytdl-audio-'))).toBe(true);
       expect(result.wavPath.endsWith('.wav')).toBe(true);
     }
   });

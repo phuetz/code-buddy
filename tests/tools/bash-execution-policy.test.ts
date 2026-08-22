@@ -86,7 +86,9 @@ describe('Bash runtime execution policy', () => {
     })).toBe(true);
   });
 
-  it('binds exact approvals to the resolved executable and detects replacement before spawn', async () => {
+  // The probe executable is a POSIX shell script resolved through PATH without an
+  // extension — not how Windows resolves executables (PATHEXT).
+  it.skipIf(process.platform === 'win32')('binds exact approvals to the resolved executable and detects replacement before spawn', async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'codebuddy-executable-id-'));
     const executable = path.join(dir, 'policy-probe');
     const previousPath = process.env.PATH;
