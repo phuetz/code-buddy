@@ -6,7 +6,6 @@ import {
   SessionLanesManager,
   getSessionLanesManager,
   resetSessionLanesManager,
-  DEFAULT_SESSION_LANES_CONFIG,
 } from '../../../src/tools/hooks/index.js';
 
 describe('SessionLanesManager', () => {
@@ -42,7 +41,9 @@ describe('SessionLanesManager', () => {
 
       expect(result.success).toBe(true);
       expect(result.result).toBe(42);
-      expect(result.executionTimeMs).toBeGreaterThanOrEqual(50);
+      // Date.now() is millisecond-quantized; a 50 ms timer may legitimately
+      // span 49 observed milliseconds when it straddles a clock tick.
+      expect(result.executionTimeMs).toBeGreaterThanOrEqual(45);
     });
 
     it('should handle task errors', async () => {

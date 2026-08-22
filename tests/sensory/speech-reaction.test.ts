@@ -55,7 +55,23 @@ function speechStart(payload: Record<string, unknown> = {}): void {
   });
 }
 
-const tick = (): Promise<void> => new Promise((r) => setTimeout(r, 30));
+const SPEECH_WAIT_TIMEOUT_MS = 5_000;
+
+async function waitFor(assertion: () => void | Promise<void>): Promise<void> {
+  await vi.waitFor(assertion, {
+    timeout: SPEECH_WAIT_TIMEOUT_MS,
+    interval: 5,
+  });
+}
+
+async function waitForPercept(file: string, expected: string): Promise<string> {
+  let content = '';
+  await waitFor(async () => {
+    content = await readFile(file, 'utf8');
+    expect(content).toContain(expected);
+  });
+  return content;
+}
 
 async function fileExists(file: string): Promise<boolean> {
   try {
@@ -93,17 +109,15 @@ describe('speech reaction — speech_end → STT → percept', () => {
     try {
       speechStart({ rms: 0.08 });
       transcriptPartial('cherche les actualités', { audioMs: 1200, decodeMs: 95 });
-      await tick();
-      expect(partials).toEqual([{
+      await waitFor(() => expect(partials).toEqual([{
         text: 'cherche les actualités',
         audioMs: 1200,
         decodeMs: 95,
-      }]);
+      }]));
       expect(heard).toEqual([]);
 
       transcriptFinal('cherche les actualités françaises');
-      await tick();
-      expect(heard).toEqual(['cherche les actualités françaises']);
+      await waitFor(() => expect(heard).toEqual(['cherche les actualités françaises']));
     } finally {
       unwire();
     }
@@ -123,8 +137,7 @@ describe('speech reaction — speech_end → STT → percept', () => {
     });
     try {
       speechStart({ rms: 0.08, rmsOn: 0.04, adaptiveVad: true });
-      await tick();
-      expect(starts).toEqual([{ rms: 0.08, rmsOn: 0.04, adaptiveVad: true }]);
+      await waitFor(() => expect(starts).toEqual([{ rms: 0.08, rmsOn: 0.04, adaptiveVad: true }]));
       expect(heard).toEqual([]);
     } finally {
       unwire();
@@ -140,6 +153,7 @@ describe('speech reaction — speech_end → STT → percept', () => {
       | { turnId: string; text: string; context: { turnId?: string } }
       | undefined;
     let heardTurnId: string | undefined;
+    let mouthCompleted = false;
     const unwire = wireSpeechReaction({
       debounceMs: 0,
       cwd: tmp,
@@ -154,22 +168,27 @@ describe('speech reaction — speech_end → STT → percept', () => {
       onHeard: async (_text, context) => {
         phases.push('heard');
         heardTurnId = context?.turnId;
-        await mouthGate;
+        try {
+          await mouthGate;
+        } finally {
+          mouthCompleted = true;
+        }
       },
     });
     try {
       transcriptFinal('Lisa, réfléchissons en parallèle');
-      await tick();
-      expect(recognized).toMatchObject({ text: 'Lisa, réfléchissons en parallèle' });
-      expect(recognized?.turnId).toMatch(/^voice_/);
-      expect(recognized?.context.turnId).toBe(recognized?.turnId);
-      expect(heardTurnId).toBe(recognized?.turnId);
-      expect(phases).toEqual(['gate', 'recognized', 'heard']);
+      await waitFor(() => {
+        expect(recognized).toMatchObject({ text: 'Lisa, réfléchissons en parallèle' });
+        expect(recognized?.turnId).toMatch(/^voice_/);
+        expect(recognized?.context.turnId).toBe(recognized?.turnId);
+        expect(heardTurnId).toBe(recognized?.turnId);
+        expect(phases).toEqual(['gate', 'recognized', 'heard']);
+      });
       // onHeard is still deliberately blocked, representing generation/TTS.
       // The semantic background ingress has nevertheless already completed.
     } finally {
       releaseMouth();
-      await tick();
+      await waitFor(() => expect(mouthCompleted).toBe(true));
       unwire();
     }
   });
@@ -193,13 +212,12 @@ describe('speech reaction — speech_end → STT → percept', () => {
       });
       try {
         transcriptFinal(`bruit ambiant ${reason}`);
-        await tick();
+        const journal = await waitForPercept(
+          path.join(tmp, '.codebuddy', 'companion', 'percepts.jsonl'),
+          `bruit ambiant ${reason}`,
+        );
         expect(recognized).toEqual([]);
         expect(heard).toEqual([]);
-        const journal = await readFile(
-          path.join(tmp, '.codebuddy', 'companion', 'percepts.jsonl'),
-          'utf8',
-        );
         const percept = JSON.parse(journal.trim()) as {
           payload: { text: string; responded: boolean; decisionReason: string };
         };
@@ -229,8 +247,7 @@ describe('speech reaction — speech_end → STT → percept', () => {
     });
     try {
       transcriptFinal('Lisa, continue malgré la panne');
-      await tick();
-      expect(heard).toEqual(['Lisa, continue malgré la panne']);
+      await waitFor(() => expect(heard).toEqual(['Lisa, continue malgré la panne']));
     } finally {
       unwire();
     }
@@ -284,17 +301,17 @@ describe('speech reaction — speech_end → STT → percept', () => {
     });
     try {
       transcriptFinal('Lisa, raconte-moi quelque chose');
-      await tick();
+      await waitFor(() => expect(heard).toHaveLength(1));
       transcriptFinal('je voudrais ajouter un détail', { aecActive: true, audioMs: 700 });
-      await tick();
-      await tick();
-      expect(interruptions).toHaveLength(1);
-      expect(interruptions[0]).toMatchObject({ text: 'je voudrais ajouter un détail' });
-      expect(interruptions[0]?.turnId).toMatch(/^voice_/);
-      expect(heard).toEqual([
-        'Lisa, raconte-moi quelque chose',
-        'je voudrais ajouter un détail',
-      ]);
+      await waitFor(() => {
+        expect(interruptions).toHaveLength(1);
+        expect(interruptions[0]).toMatchObject({ text: 'je voudrais ajouter un détail' });
+        expect(interruptions[0]?.turnId).toMatch(/^voice_/);
+        expect(heard).toEqual([
+          'Lisa, raconte-moi quelque chose',
+          'je voudrais ajouter un détail',
+        ]);
+      });
     } finally {
       releaseFirst();
       unwire();
@@ -321,15 +338,15 @@ describe('speech reaction — speech_end → STT → percept', () => {
     });
     try {
       transcriptFinal('Lisa, raconte-moi quelque chose');
-      await tick();
+      await waitFor(() => expect(heard).toHaveLength(1));
       transcriptFinal('Lisa, attends, nouvelle question');
-      await tick();
-      await tick();
-      expect(barged).toEqual(['Lisa, attends, nouvelle question']);
-      expect(heard).toEqual([
-        'Lisa, raconte-moi quelque chose',
-        'Lisa, attends, nouvelle question',
-      ]);
+      await waitFor(() => {
+        expect(barged).toEqual(['Lisa, attends, nouvelle question']);
+        expect(heard).toEqual([
+          'Lisa, raconte-moi quelque chose',
+          'Lisa, attends, nouvelle question',
+        ]);
+      });
     } finally {
       releaseFirst();
       unwire();
@@ -349,11 +366,9 @@ describe('speech reaction — speech_end → STT → percept', () => {
     });
     try {
       transcriptFinal('Lisa, je voulais te dire que');
-      await tick();
       expect(heard).toEqual([]);
       transcriptFinal('le test est terminé.');
-      await tick();
-      expect(heard).toEqual(['Lisa, je voulais te dire que le test est terminé.']);
+      await waitFor(() => expect(heard).toEqual(['Lisa, je voulais te dire que le test est terminé.']));
     } finally {
       unwire();
     }
@@ -376,8 +391,7 @@ describe('speech reaction — speech_end → STT → percept', () => {
         turnProbability: 0.82,
         turnDetectionMs: 60,
       });
-      await tick();
-      expect(heard).toEqual(['Lisa, vérifie ce que']);
+      await waitFor(() => expect(heard).toEqual(['Lisa, vérifie ce que']));
     } finally {
       unwire();
     }
@@ -521,15 +535,18 @@ describe('speech reaction — speech_end → STT → percept', () => {
     });
     try {
       speechEnd('/tmp/x.wav');
-      await tick();
-      expect(calls).toBe(1);
-      expect(heard).toBe('Bonjour Patrice');
+      await waitFor(() => {
+        expect(calls).toBe(1);
+        expect(heard).toBe('Bonjour Patrice');
+      });
 
       speechEnd('/tmp/x.wav');
-      await tick();
       expect(calls).toBe(1); // within debounce → one transcription per utterance
 
-      const percepts = await readFile(path.join(tmp, '.codebuddy', 'companion', 'percepts.jsonl'), 'utf8');
+      const percepts = await waitForPercept(
+        path.join(tmp, '.codebuddy', 'companion', 'percepts.jsonl'),
+        'Bonjour Patrice',
+      );
       expect(percepts).toContain('Bonjour Patrice');
       expect(percepts).toContain('sensory_speech_reaction');
     } finally {
@@ -571,18 +588,16 @@ describe('speech reaction — speech_end → STT → percept', () => {
         startedAtMs: 10_000,
         endedAtMs: 14_200,
       });
-      await tick();
-
-      expect(context).toMatchObject({
+      await waitFor(() => expect(context).toMatchObject({
         audioMs: 4_000,
         captureMs: 4_200,
         speechStartedAtMs: 10_000,
         speechEndedAtMs: 14_200,
-      });
+      }));
       expect(context?.turnId).toMatch(/^voice_/);
-      const percepts = await readFile(
+      const percepts = await waitForPercept(
         path.join(tmp, '.codebuddy', 'companion', 'percepts.jsonl'),
-        'utf8',
+        'Lisa prends le temps',
       );
       const recorded = JSON.parse(percepts.trim().split('\n').at(-1)!) as {
         payload: { delivery: Record<string, unknown> };
@@ -610,10 +625,12 @@ describe('speech reaction — speech_end → STT → percept', () => {
     });
     try {
       speechEnd('/tmp/x.wav');
-      await tick();
       expect(heard).toBe(0); // vetoed → did not speak
       // …but it still observed + remembered.
-      const percepts = await readFile(path.join(tmp, '.codebuddy', 'companion', 'percepts.jsonl'), 'utf8');
+      const percepts = await waitForPercept(
+        path.join(tmp, '.codebuddy', 'companion', 'percepts.jsonl'),
+        'il fait beau',
+      );
       expect(percepts).toContain('il fait beau');
     } finally {
       unwire();
@@ -647,13 +664,15 @@ describe('speech reaction — speech_end → STT → percept', () => {
     });
     try {
       speechEnd('/tmp/silent.wav'); // turn 1: vetoed, STT advances clock 1000 → 3000
-      await tick();
+      await waitForPercept(
+        path.join(tmp, '.codebuddy', 'companion', 'percepts.jsonl'),
+        'il fait beau aujourd’hui',
+      );
       expect(heard).toEqual([]); // stayed silent
 
       clock = 4500; // a real address arrives 3500ms after turn 1 began (past the 3000ms debounce)
       speechEnd('/tmp/real.wav'); // turn 2: addressed
-      await tick();
-      expect(heard).toEqual(['Buddy, quelle heure ?']); // NOT swallowed by a stale echo re-stamp
+      await waitFor(() => expect(heard).toEqual(['Buddy, quelle heure ?'])); // NOT swallowed by a stale echo re-stamp
     } finally {
       unwire();
     }
@@ -675,8 +694,7 @@ describe('speech reaction — speech_end → STT → percept', () => {
     });
     try {
       speechEnd('/tmp/x.wav');
-      await tick();
-      expect(heard).toBe('Buddy, quelle heure ?');
+      await waitFor(() => expect(heard).toBe('Buddy, quelle heure ?'));
     } finally {
       unwire();
     }
@@ -708,17 +726,12 @@ describe('speech reaction — speech_end → STT → percept', () => {
     });
     try {
       speechEnd('/tmp/first.wav');
-      await tick();
+      await waitFor(() => expect(calls).toEqual(['/tmp/first.wav']));
       speechEnd('/tmp/second.wav');
-      await tick();
-
       expect(calls).toEqual(['/tmp/first.wav']);
       releaseFirst?.();
-      await tick();
-      await tick();
-
-      expect(calls).toEqual(['/tmp/first.wav', '/tmp/second.wav']);
-      expect(heard).toEqual(['premiere phrase', 'deuxieme phrase']);
+      await waitFor(() => expect(calls).toEqual(['/tmp/first.wav', '/tmp/second.wav']));
+      await waitFor(() => expect(heard).toEqual(['premiere phrase', 'deuxieme phrase']));
     } finally {
       unwire();
     }
@@ -788,9 +801,10 @@ describe('speech reaction — speech_end → STT → percept', () => {
         decodeMs: 75,
         sampleRate: 16000,
       });
-      await tick();
-
-      const raw = await readFile(path.join(tmp, '.codebuddy', 'companion', 'percepts.jsonl'), 'utf8');
+      const raw = await waitForPercept(
+        path.join(tmp, '.codebuddy', 'companion', 'percepts.jsonl'),
+        'Buddy, lance un diagnostic',
+      );
       const percept = JSON.parse(raw.trim()) as { payload: { responded: boolean; latency: Record<string, unknown>; capture: Record<string, unknown> } };
       expect(percept.payload.responded).toBe(true);
       expect(percept.payload.latency.sttMs).toBe(120);
@@ -861,12 +875,10 @@ describe('speech reaction — speech_end → STT → percept', () => {
     });
     try {
       transcriptFinal('Et la réciprocité alors ?', { startedAtMs: 2_400 });
-      await tick();
-
-      expect(heard).toEqual(['Et la réciprocité alors ?']);
-      const raw = await readFile(
+      await waitFor(() => expect(heard).toEqual(['Et la réciprocité alors ?']));
+      const raw = await waitForPercept(
         path.join(tmp, '.codebuddy', 'companion', 'percepts.jsonl'),
-        'utf8',
+        'Et la réciprocité alors ?',
       );
       const percept = JSON.parse(raw.trim()) as {
         payload: { playbackEcho?: boolean; turnTaking?: Record<string, unknown> };
@@ -900,13 +912,11 @@ describe('speech reaction — speech_end → STT → percept', () => {
     });
     try {
       transcriptFinal('Voici la réponse que Lisa vient de prononcer.', { startedAtMs: 4_250 });
-      await tick();
-
-      expect(heard).toEqual([]);
-      const raw = await readFile(
+      const raw = await waitForPercept(
         path.join(tmp, '.codebuddy', 'companion', 'percepts.jsonl'),
-        'utf8',
+        'Likely loudspeaker echo suppressed',
       );
+      expect(heard).toEqual([]);
       expect(raw).not.toContain('Voici la réponse que Lisa vient de prononcer.');
       const percept = JSON.parse(raw.trim()) as {
         summary: string;
@@ -961,7 +971,7 @@ describe('speech reaction — speech_end → STT → percept', () => {
       beginSpeaking(clock);
       noteSpokenText('La réponse prononcée par le haut-parleur.', 1_150);
       transcriptFinal('La réponse prononcée par le haut-parleur.', { startedAtMs: 1_250 });
-      await tick();
+      expect(heard).toEqual(['Lisa, explique le filtre anti-écho.']);
 
       clock = 2_000;
       endSpeaking(clock);
@@ -1058,18 +1068,24 @@ describe('speech reaction — speech_end → STT → percept', () => {
     });
     try {
       // 1) Addressed by name → speaks.
-      speechEnd('/tmp/x.wav');
-      await tick();
+      speechEnd('/tmp/decider-addressed.wav');
+      await waitFor(() => expect(spoken).toEqual(['Buddy, quelle heure est-il ?']));
       // 2) In-window follow-up without the name → speaks (continuity).
       clock += 5000;
       transcript = 'et demain ?';
-      speechEnd('/tmp/x.wav');
-      await tick();
+      speechEnd('/tmp/decider-follow-up.wav');
+      await waitFor(() => expect(spoken).toEqual([
+        'Buddy, quelle heure est-il ?',
+        'et demain ?',
+      ]));
       // 3) Much later, ambient human-human chatter → silent.
       clock += 60_000;
       transcript = 'il fait beau aujourd’hui';
-      speechEnd('/tmp/x.wav');
-      await tick();
+      speechEnd('/tmp/decider-ambient.wav');
+      await waitForPercept(
+        path.join(tmp, '.codebuddy', 'companion', 'percepts.jsonl'),
+        'il fait beau aujourd’hui',
+      );
 
       expect(spoken).toEqual(['Buddy, quelle heure est-il ?', 'et demain ?']);
     } finally {
@@ -1088,7 +1104,6 @@ describe('speech reaction — speech_end → STT → percept', () => {
       speechEnd(); // no wav → can't transcribe
       getGlobalEventBus().emit('sensory:perception', { source: 'test', metadata: { modality: 'audio', kind: 'speech_start', payload: { wav: '/tmp/x.wav' } } });
       getGlobalEventBus().emit('sensory:perception', { source: 'test', metadata: { modality: 'vital', kind: 'heartbeat', payload: { beat: 1 } } });
-      await tick();
       expect(calls).toBe(0);
     } finally {
       unwire();
@@ -1112,8 +1127,7 @@ describe('speech reaction — speech_end → STT → percept', () => {
     const unwire = wireSpeechReaction({ transcriber, debounceMs: 0, cwd: tmp });
     try {
       speechEnd(wav);
-      await tick();
-      expect(await fileExists(wav)).toBe(false);
+      await waitFor(async () => expect(await fileExists(wav)).toBe(false));
     } finally {
       unwire();
       if (previousDir === undefined) delete process.env.BUDDY_EAR_WAV_DIR;
@@ -1130,6 +1144,7 @@ describe('speech reaction — speech_end → STT → percept', () => {
     await mkdir(companionDir, { recursive: true });
     await writeFile(wav, 'temporary audio');
     let release!: () => void;
+    let started = false;
     const blocked = new Promise<void>((resolve) => { release = resolve; });
     const previousDir = process.env.BUDDY_EAR_WAV_DIR;
     const previousKeep = process.env[SPEECH_KEEP_WAV_ENV];
@@ -1139,17 +1154,17 @@ describe('speech reaction — speech_end → STT → percept', () => {
       debounceMs: 0,
       cwd: tmp,
       transcriber: async () => {
+        started = true;
         await blocked;
         throw new Error('aborted');
       },
     });
     try {
       speechEnd(wav);
-      await tick();
+      await waitFor(() => expect(started).toBe(true));
       unwire();
       release();
-      await tick();
-      expect(await fileExists(wav)).toBe(false);
+      await waitFor(async () => expect(await fileExists(wav)).toBe(false));
     } finally {
       release();
       unwire();
@@ -1184,18 +1199,19 @@ describe('speech reaction — speech_end → STT → percept', () => {
     });
     try {
       speechEnd(wavs[0]);
-      await tick();
+      await waitFor(() => expect(calls).toEqual([wavs[0]]));
       speechEnd(wavs[1]);
       speechEnd(wavs[2]);
-      await tick();
-      expect(await fileExists(wavs[1]!)).toBe(false);
-      expect(await fileExists(wavs[2]!)).toBe(true);
+      await waitFor(async () => {
+        expect(await fileExists(wavs[1]!)).toBe(false);
+        expect(await fileExists(wavs[2]!)).toBe(true);
+      });
       release();
-      await tick();
-      await tick();
-      expect(calls).toEqual([wavs[0], wavs[2]]);
-      expect(await fileExists(wavs[0]!)).toBe(false);
-      expect(await fileExists(wavs[2]!)).toBe(false);
+      await waitFor(() => expect(calls).toEqual([wavs[0], wavs[2]]));
+      await waitFor(async () => {
+        expect(await fileExists(wavs[0]!)).toBe(false);
+        expect(await fileExists(wavs[2]!)).toBe(false);
+      });
     } finally {
       release();
       unwire();
@@ -1224,15 +1240,21 @@ describe('speech reaction — speech_end → STT → percept', () => {
     const previousKeep = process.env[SPEECH_KEEP_WAV_ENV];
     process.env.BUDDY_EAR_WAV_DIR = companionDir;
     delete process.env[SPEECH_KEEP_WAV_ENV];
-    const unwire = wireSpeechReaction({ transcriber: async () => 'texte', debounceMs: 0, cwd: tmp });
+    const calls: string[] = [];
+    const unwire = wireSpeechReaction({
+      transcriber: async (wav) => {
+        calls.push(wav);
+        return 'texte';
+      },
+      debounceMs: 0,
+      cwd: tmp,
+    });
     try {
       speechEnd(wrongName);
-      await tick();
       speechEnd(outside);
-      await tick();
       process.env[SPEECH_KEEP_WAV_ENV] = 'true';
       speechEnd(retained);
-      await tick();
+      await waitFor(() => expect(calls).toContain(retained));
       expect(await fileExists(wrongName)).toBe(true);
       expect(await fileExists(outside)).toBe(true);
       expect(await fileExists(retained)).toBe(true);
@@ -1266,11 +1288,14 @@ describe('speech reaction — live transcript_final (buddy-sense live-audio)', (
     });
     try {
       transcriptFinal('Bonjour Lisa', { ms: 1200 });
-      await tick();
-      expect(sttCalls).toBe(0); // text already decoded in buddy-sense → no STT here
-      expect(heard).toBe('Bonjour Lisa');
-
-      const percepts = await readFile(path.join(tmp, '.codebuddy', 'companion', 'percepts.jsonl'), 'utf8');
+      await waitFor(() => {
+        expect(sttCalls).toBe(0); // text already decoded in buddy-sense → no STT here
+        expect(heard).toBe('Bonjour Lisa');
+      });
+      const percepts = await waitForPercept(
+        path.join(tmp, '.codebuddy', 'companion', 'percepts.jsonl'),
+        'Bonjour Lisa',
+      );
       expect(percepts).toContain('Bonjour Lisa');
       expect(percepts).toContain('"live":true'); // recorded as the live-mic path, no fake wav
     } finally {
@@ -1293,9 +1318,11 @@ describe('speech reaction — live transcript_final (buddy-sense live-audio)', (
     });
     try {
       transcriptFinal('il fait beau');
-      await tick();
+      const percepts = await waitForPercept(
+        path.join(tmp, '.codebuddy', 'companion', 'percepts.jsonl'),
+        'il fait beau',
+      );
       expect(heard).toBe(0); // vetoed → silent, but still observed
-      const percepts = await readFile(path.join(tmp, '.codebuddy', 'companion', 'percepts.jsonl'), 'utf8');
       expect(percepts).toContain('il fait beau');
     } finally {
       unwire();
@@ -1316,7 +1343,6 @@ describe('speech reaction — live transcript_final (buddy-sense live-audio)', (
     });
     try {
       transcriptFinal('   '); // whitespace only → dropped before any job
-      await tick();
       expect(heard).toBe(0);
     } finally {
       unwire();
