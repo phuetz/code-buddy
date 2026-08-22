@@ -118,6 +118,39 @@ describe('CodeBuddyClient provider fallback', () => {
     expect(mockCreate).toHaveBeenCalledTimes(1);
   });
 
+  it('does not start a chat fallback after caller cancellation', async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const error = new Error('aborted');
+    error.name = 'AbortError';
+    mockCreate.mockRejectedValueOnce(error);
+
+    const client = new CodeBuddyClient('primary-key', 'grok-code-fast-1', 'https://api.x.ai/v1', {
+      fallbackProviders: [
+        {
+          provider: 'openai',
+          label: 'OpenAI',
+          apiMode: 'openai-compatible',
+          authMode: 'api-key',
+          apiKey: 'fallback-openai-key',
+          baseURL: 'https://api.openai.com/v1',
+          defaultModel: 'gpt-4o',
+          source: 'override',
+          model: 'gpt-4o',
+          rawSpec: 'openai:gpt-4o',
+          fallbackSource: 'environment',
+        },
+      ],
+    });
+
+    await expect(client.chat(
+      [{ role: 'user', content: 'hello' }],
+      [],
+      { signal: controller.signal },
+    )).rejects.toMatchObject({ name: 'AbortError' });
+    expect(mockCreate).toHaveBeenCalledOnce();
+  });
+
   it('tries same-provider credential pools before cross-provider fallbacks', async () => {
     const markFailed = vi.fn();
     const markSuccess = vi.fn();
@@ -264,5 +297,40 @@ describe('CodeBuddyClient provider fallback', () => {
 
     expect(chunks).toHaveLength(1);
     expect(mockCreate).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not start a stream fallback after caller cancellation', async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const error = new Error('aborted');
+    error.name = 'AbortError';
+    mockCreate.mockRejectedValueOnce(error);
+
+    const client = new CodeBuddyClient('primary-key', 'grok-code-fast-1', 'https://api.x.ai/v1', {
+      fallbackProviders: [
+        {
+          provider: 'openai',
+          label: 'OpenAI',
+          apiMode: 'openai-compatible',
+          authMode: 'api-key',
+          apiKey: 'fallback-openai-key',
+          baseURL: 'https://api.openai.com/v1',
+          defaultModel: 'gpt-4o',
+          source: 'override',
+          model: 'gpt-4o',
+          rawSpec: 'openai:gpt-4o',
+          fallbackSource: 'environment',
+        },
+      ],
+    });
+
+    await expect(async () => {
+      for await (const _chunk of client.chatStream(
+        [{ role: 'user', content: 'hello' }],
+        [],
+        { signal: controller.signal },
+      )) { /* drain */ }
+    }).rejects.toMatchObject({ name: 'AbortError' });
+    expect(mockCreate).toHaveBeenCalledOnce();
   });
 });
