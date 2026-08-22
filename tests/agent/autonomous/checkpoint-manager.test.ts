@@ -17,7 +17,7 @@ describe('checkpoint-manager', () => {
 
   afterEach(async () => {
     process.env.CODEBUDDY_HOME = oldHome;
-    await fs.rm(tempHome, { force: true, recursive: true });
+    await fs.rm(tempHome, { force: true, recursive: true, maxRetries: 10, retryDelay: 100 });
   });
 
   it('saves and loads a checkpoint correctly', async () => {

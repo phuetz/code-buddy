@@ -16,7 +16,7 @@ export function DevPlanCard({ plan }: { plan: DevPlan }) {
   return (
     <section
       className="shrink-0 border-b border-border bg-background/60 p-3"
-      aria-label="Plan de développement"
+      aria-label="Development plan"
       data-testid="dev-plan-card"
     >
       <header className="mb-2 flex items-center gap-2">

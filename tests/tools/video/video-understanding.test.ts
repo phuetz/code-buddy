@@ -180,7 +180,8 @@ describe('media-fetch', () => {
     expect(args).toContain('https://youtu.be/x');
     expect(isDownloadOk(result)).toBe(true);
     if (isDownloadOk(result)) {
-      expect(result.wavPath.startsWith('/out/')).toBe(true);
+      // path.join spelling: native separators on Windows.
+      expect(result.wavPath.startsWith(join('/out', 'ytdl-audio-'))).toBe(true);
       expect(result.wavPath.endsWith('.wav')).toBe(true);
     }
   });
@@ -218,7 +219,7 @@ describe('long-transcribe (real ffmpeg, injected STT)', () => {
   });
 
   afterAll(async () => {
-    if (dir) await rm(dir, { recursive: true, force: true }).catch(() => {});
+    if (dir) await rm(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }).catch(() => {});
   });
 
   it.skipIf(!FFMPEG)('splits into chunks and reassembles with cumulative offsets', async () => {
@@ -335,7 +336,7 @@ describe('long-transcribe — timeout-safe default chunk (#1)', () => {
       expect(segs).toHaveLength(2);
       expect(transcriber).toHaveBeenCalledTimes(2);
     } finally {
-      await rm(workDir, { recursive: true, force: true }).catch(() => {});
+      await rm(workDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }).catch(() => {});
     }
   });
 
@@ -368,7 +369,7 @@ describe('long-transcribe — timeout-safe default chunk (#1)', () => {
       await transcribeLong('/audio.wav', { spawn: fakeSpawn, workDir, transcriber: async () => 'x', chunkSec: 45 });
       expect(segmentArgs[segmentArgs.indexOf('-segment_time') + 1]).toBe('45');
     } finally {
-      await rm(workDir, { recursive: true, force: true }).catch(() => {});
+      await rm(workDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }).catch(() => {});
     }
   });
 });
@@ -385,7 +386,7 @@ describe('understandVideo source resolution', () => {
   });
 
   afterAll(async () => {
-    if (outDir) await rm(outDir, { recursive: true, force: true }).catch(() => {});
+    if (outDir) await rm(outDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }).catch(() => {});
   });
 
   it('YouTube URL tries captions first and does NOT download when captions exist', async () => {

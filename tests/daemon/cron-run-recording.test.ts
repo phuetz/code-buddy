@@ -37,7 +37,7 @@ describe('CronAgentBridge run recording', () => {
     store.dispose();
     await new Promise((r) => setTimeout(r, 60));
     try {
-      fs.rmSync(tmpDir, { recursive: true, force: true });
+      fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     } catch {
       // ignore
     }

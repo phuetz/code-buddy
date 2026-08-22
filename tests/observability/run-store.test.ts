@@ -13,7 +13,7 @@ function makeTmpDir(): string {
 
 function cleanDir(dir: string): void {
   try {
-    fs.rmSync(dir, { recursive: true, force: true });
+    fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   } catch {
     // Ignore
   }
@@ -166,6 +166,23 @@ describe('RunStore', () => {
       const record = store.getRun(runId);
       expect(record?.artifacts).toContain('plan.md');
       expect(record?.artifacts).toContain('summary.md');
+    });
+
+    it('does not reopen the SQLite artifact index after dispose()', () => {
+      const runId = startRun('artifact after dispose');
+      store.saveArtifact(runId, 'plan.md', 'plan content');
+      const internals = store as unknown as { artifactIndexDb: unknown };
+      expect(internals.artifactIndexDb).not.toBeNull();
+
+      store.dispose();
+      expect(internals.artifactIndexDb).toBeNull();
+
+      // A post-run hook (learning retrospective) may still save artifacts: the
+      // file lands, but the index handle stays released (no EBUSY on cleanup).
+      const late = store.saveArtifact(runId, 'late.md', 'late content');
+      expect(fs.existsSync(late)).toBe(true);
+      expect(internals.artifactIndexDb).toBeNull();
+      expect(() => fs.rmSync(path.join(tmpDir, 'artifact-index.sqlite'), { force: true })).not.toThrow();
     });
   });
 
@@ -456,7 +473,7 @@ describe('RunStore', () => {
       expect(before.staleRows).toBe(0);
 
       // Simulate a pruned/moved run folder while the index keeps the row.
-      fs.rmSync(path.join(tmpDir, runId), { recursive: true, force: true });
+      fs.rmSync(path.join(tmpDir, runId), { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
 
       const after = store.checkArtifactIndexHealth();
       expect(after.staleRows).toBe(1);
@@ -500,7 +517,7 @@ describe('RunStore', () => {
       const baseline = store.checkArtifactIndexHealth();
       if (baseline.unavailable) return;
 
-      fs.rmSync(path.join(tmpDir, staleRunId), { recursive: true, force: true });
+      fs.rmSync(path.join(tmpDir, staleRunId), { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
       fs.rmSync(path.join(tmpDir, orphanRunId, 'artifacts', 'orphan.md'), { force: true });
 
       // Default repair removes only the stale (missing-run) row.

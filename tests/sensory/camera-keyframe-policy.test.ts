@@ -1,4 +1,4 @@
-import { mkdtemp, symlink, writeFile } from 'node:fs/promises';
+import { mkdtemp, realpath, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -30,7 +30,8 @@ describe('camera keyframe policy', () => {
     await writeFile(secret, Buffer.from([0xff, 0xd8, 0xff]));
     await symlink(secret, escape);
 
-    expect(await safeCameraKeyframePath(safe, { root })).toBe(safe);
+    // The policy returns the REAL path (symlink defence); os.tmpdir() is itself a symlink on macOS.
+    expect(await safeCameraKeyframePath(safe, { root })).toBe(await realpath(safe));
     expect(await safeCameraKeyframePath(text, { root })).toBeUndefined();
     expect(await safeCameraKeyframePath(secret, { root })).toBeUndefined();
     expect(await safeCameraKeyframePath(escape, { root })).toBeUndefined();

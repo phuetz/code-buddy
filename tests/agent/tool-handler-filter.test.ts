@@ -56,7 +56,7 @@ describe('ToolHandler active tool filter enforcement', () => {
       }
       item.store.dispose();
       await new Promise((resolve) => setTimeout(resolve, 60));
-      fs.rmSync(item.dir, { recursive: true, force: true });
+      fs.rmSync(item.dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     }
     (RunStore as unknown as { _instance: RunStore | null })._instance = null;
   });

@@ -19,8 +19,8 @@ describe('buildDevPlan', () => {
     const plan = buildDevPlan('Un dashboard Next.js avec des graphiques et un thème sombre');
     expect(plan.stack).toBe('Next.js');
     const titles = plan.steps.map((s) => s.title);
-    expect(titles.some((t) => /Tableau de bord/.test(t))).toBe(true);
-    expect(titles.some((t) => /Visualisations/.test(t))).toBe(true);
+    expect(titles.some((t) => /Dashboard/.test(t))).toBe(true);
+    expect(titles.some((t) => /Charts/.test(t))).toBe(true);
     expect(plan.steps.some((s) => s.id === 'theme-dark')).toBe(true);
   });
 
@@ -30,13 +30,13 @@ describe('buildDevPlan', () => {
   });
 
   it('derives a readable title and never returns empty for a blank prompt', () => {
-    expect(buildDevPlan('').title).toBe('Nouvelle application');
+    expect(buildDevPlan('').title).toBe('New app');
     expect(buildDevPlan('Todo app pro. Avec du style').title).toBe('Todo app pro');
   });
 
   it('does not duplicate a feature mentioned twice', () => {
     const plan = buildDevPlan('un formulaire et encore un formulaire');
-    const formSteps = plan.steps.filter((s) => /Formulaire/.test(s.title));
+    const formSteps = plan.steps.filter((s) => /Form/.test(s.title));
     expect(formSteps).toHaveLength(1);
   });
 });
@@ -70,7 +70,7 @@ describe('advancePlan', () => {
       changedPaths: ['src/components/ThemeToggle.tsx', 'src/TodoList.tsx'],
     });
     expect(p.steps.find((s) => s.id === 'theme-dark')!.status).toBe('done');
-    const todo = p.steps.find((s) => /tâches/i.test(s.title));
+    const todo = p.steps.find((s) => /Task list/i.test(s.title));
     expect(todo?.status).toBe('done');
   });
 

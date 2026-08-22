@@ -25,7 +25,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  try { fs.rmSync(tmpHome, { recursive: true, force: true }); } catch { /* ignore */ }
+  try { fs.rmSync(tmpHome, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }); } catch { /* ignore */ }
   vi.restoreAllMocks();
 });
 
@@ -46,7 +46,10 @@ function makeJwt(claims: Record<string, unknown>): string {
 }
 
 function mockModelDiscovery(): void {
-  vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+  // Return a FRESH Response per call: a Response body can only be read once, and
+  // runDoctorChecks() now issues other fetches (provider detection) before the
+  // ChatGPT-OAuth check — a single reused Response would arrive already-consumed.
+  vi.spyOn(globalThis, 'fetch').mockImplementation(async () =>
     new Response(JSON.stringify({
       models: [{
         slug: 'gpt-5.6-sol',

@@ -28,7 +28,7 @@ describe('pickModelUCB — cost-aware UCB model bandit', () => {
     sb = new ModelScoreboard(join(dir, 'ledger.jsonl'));
   });
   afterEach(() => {
-    rmSync(dir, { recursive: true, force: true });
+    rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   it('(a) explores a never-tried candidate first (runCount 0 = infinite UCB priority)', () => {

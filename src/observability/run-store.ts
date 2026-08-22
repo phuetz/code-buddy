@@ -237,6 +237,8 @@ export class RunStore {
   private artifactIndexDb: Database.Database | null = null;
   /** If SQLite/FTS is unavailable, keep run search on the file-scan fallback. */
   private artifactIndexUnavailable = false;
+  /** Set by dispose(): the artifact index must never be lazily reopened afterwards. */
+  private disposed = false;
 
    constructor(runsDir?: string) {
     this.runsDir =
@@ -272,6 +274,7 @@ export class RunStore {
   }
 
   dispose(): void {
+    this.disposed = true;
     for (const ws of this.handles.values()) {
       try {
         ws.destroy();
@@ -1030,7 +1033,10 @@ export class RunStore {
   }
 
   private getArtifactIndexDb(): Database.Database | null {
-    if (this.artifactIndexUnavailable) {
+    // Post-run hooks (learning retrospective, lifecycle hooks) may still call
+    // saveArtifact() after the owner disposed the store; reopening the SQLite
+    // index here would leak the handle the dispose just released.
+    if (this.artifactIndexUnavailable || this.disposed) {
       return null;
     }
     if (this.artifactIndexDb) {

@@ -10,14 +10,14 @@ export function StaticPreviewNotice({ mode, entry }: { mode: PreviewMode; entry:
     return (
       <div className="flex items-center gap-2 rounded-md border border-border bg-muted px-2.5 py-1.5 text-[11px] text-muted-foreground" data-testid="static-notice">
         <FileCode2 className="h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" />
-        Site statique — la preview sert {entry ?? 'index.html'} directement (aucun build).
+        Static site — the preview serves {entry ?? 'index.html'} directly (no build).
       </div>
     );
   }
   return (
     <div className="flex items-center gap-2 rounded-md border border-border bg-muted px-2.5 py-1.5 text-[11px] text-muted-foreground" data-testid="static-notice">
       <Terminal className="h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" />
-      Projet avec build — la preview démarre le serveur de dev (npm run dev).
+      Build project — the preview starts the dev server (npm run dev).
     </div>
   );
 }

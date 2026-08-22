@@ -52,7 +52,7 @@ describe('Learning Agent on real RunStore trajectories', () => {
     } else {
       process.env.CODEBUDDY_LEARNING_AGENT = oldLearningEnv;
     }
-    fs.rmSync(tempDir, { recursive: true, force: true });
+    fs.rmSync(tempDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   function startLearningRun(): string {

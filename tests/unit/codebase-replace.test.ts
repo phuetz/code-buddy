@@ -39,7 +39,7 @@ describe('Codebase Replace Tool', () => {
 
   afterEach(() => {
     // Clean up temp directory
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   it('should find and replace literal text when rg is available', async () => {

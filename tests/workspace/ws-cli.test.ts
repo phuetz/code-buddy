@@ -2,12 +2,12 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { createWsCommand } from '../../src/commands/ws.js';
-import { makeGitRepo, makeTempRoot } from './helpers.js';
+import { canonical, makeGitRepo, makeTempRoot } from './helpers.js';
 
 const roots: string[] = [];
 
 afterEach(() => {
-  for (const root of roots.splice(0)) fs.rmSync(root, { recursive: true, force: true });
+  for (const root of roots.splice(0)) fs.rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
 });
 
 describe('buddy ws CLI', () => {
@@ -27,12 +27,12 @@ describe('buddy ws CLI', () => {
     await makeCommand().parseAsync(['node', 'ws', 'add', 'external', external]);
     const configPath = path.join(project, '.codebuddy', 'workspace.json');
     expect(JSON.parse(fs.readFileSync(configPath, 'utf8'))).toEqual({
-      repos: [{ name: 'external', path: fs.realpathSync(external) }],
+      repos: [{ name: 'external', path: canonical(external) }],
     });
 
     output.length = 0;
     await makeCommand().parseAsync(['node', 'ws', 'list']);
-    expect(output.join('\n')).toContain(`valid\texternal\t${fs.realpathSync(external)}`);
+    expect(output.join('\n')).toContain(`valid\texternal\t${canonical(external)}`);
 
     await makeCommand().parseAsync(['node', 'ws', 'rm', 'external']);
     expect(JSON.parse(fs.readFileSync(configPath, 'utf8'))).toEqual({ repos: [] });

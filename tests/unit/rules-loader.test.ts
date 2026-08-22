@@ -24,7 +24,7 @@ async function makeTempDir(): Promise<string> {
 
 async function cleanup(dir: string): Promise<void> {
   try {
-    await fs.rm(dir, { recursive: true, force: true });
+    await fs.rm(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   } catch {
     // ignore
   }

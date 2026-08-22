@@ -142,7 +142,7 @@ describe('assistant TTS volume', () => {
       const twice = readFileSync(file);
       expect(twice.equals(once)).toBe(true);
     } finally {
-      rmSync(dir, { recursive: true, force: true });
+      rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     }
   });
 
@@ -180,7 +180,7 @@ describe('assistant TTS volume', () => {
     writeFileSync(blockingPath, source);
     expect(await normalizeWavFile(blockingPath, {})).toBe(true);
     const blocking = readFileSync(blockingPath);
-    rmSync(dir, { recursive: true, force: true });
+    rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
 
     const levels = [cache, streaming, blocking].map((wav) => {
       const samples = samplesFrom(wav);

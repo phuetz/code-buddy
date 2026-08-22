@@ -27,7 +27,7 @@ beforeEach(() => {
 
 afterEach(() => {
   delete process.env.CODEBUDDY_HOME;
-  fs.rmSync(home, { recursive: true, force: true });
+  fs.rmSync(home, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   resetDenyGuardCache();
 });
 

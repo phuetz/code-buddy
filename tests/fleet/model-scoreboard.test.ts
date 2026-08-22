@@ -36,7 +36,7 @@ beforeEach(() => {
 
 afterEach(() => {
   try {
-    fs.rmSync(path.dirname(tmpFile), { recursive: true, force: true });
+    fs.rmSync(path.dirname(tmpFile), { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   } catch {
     /* ignore */
   }

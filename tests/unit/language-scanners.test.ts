@@ -96,7 +96,7 @@ describe('Python Scanner', () => {
   });
 
   afterEach(() => {
-    try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch { /* best-effort cleanup */ }
+    try { fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }); } catch { /* best-effort cleanup */ }
   });
 
   it('populates class definitions', () => {
@@ -247,7 +247,7 @@ describe('Go Scanner', () => {
   });
 
   afterEach(() => {
-    try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch { /* best-effort cleanup */ }
+    try { fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }); } catch { /* best-effort cleanup */ }
   });
 
   it('populates struct definitions', () => {

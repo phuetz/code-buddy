@@ -31,7 +31,20 @@ export function registerUtilityCommands(program: Command): void {
 
       const icons = { ok: '✅', warn: '⚠️', error: '❌' };
 
+      // Headline verdict: the first question a newcomer has is "can I chat yet?"
+      const readiness = checks.find((c) => c.name === 'AI provider ready');
+      if (readiness) {
+        if (readiness.status === 'ok') {
+          console.log(`  ✅ Ready to chat — a provider is configured (${readiness.message})`);
+          console.log('     Start now:  buddy         (or try the demo:  buddy try)');
+        } else {
+          console.log(`  ⚠️  Not ready to chat yet — ${readiness.message}`);
+        }
+        console.log('');
+      }
+
       for (const check of checks) {
+        if (check.name === 'AI provider ready') continue; // already shown as the headline
         if (options.verbose || check.status !== 'ok') {
           const fixTag = check.fixable ? ' [fixable]' : '';
           console.log(`  ${icons[check.status]} ${check.name}: ${check.message}${fixTag}`);

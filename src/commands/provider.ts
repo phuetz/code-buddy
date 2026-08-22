@@ -24,9 +24,11 @@ interface ProviderInfo {
   name: string;
   envVar: string;
   envVars: string[];
+  apiKeyEnvVars: string[];
   models: string[];
   defaultModel: string;
   baseURL?: string;
+  freeTier?: string;
   providerId: RuntimeProviderId;
   authMode: RuntimeProviderCatalogEntry['authMode'];
 }
@@ -66,6 +68,31 @@ const PROVIDER_COMMAND_KEYS: Record<RuntimeProviderId, string> = {
   huggingface: 'huggingface',
   nvidia: 'nvidia',
   stepfun: 'stepfun',
+  omniroute: 'omniroute',
+  ai21: 'ai21',
+  'ant-ling': 'ant-ling',
+  cerebras: 'cerebras',
+  cohere: 'cohere',
+  deepinfra: 'deepinfra',
+  'featherless-ai': 'featherless-ai',
+  friendliai: 'friendliai',
+  hyperbolic: 'hyperbolic',
+  inception: 'inception',
+  'inference-net': 'inference-net',
+  internlm: 'internlm',
+  liquid: 'liquid',
+  longcat: 'longcat',
+  modelscope: 'modelscope',
+  nscale: 'nscale',
+  openadapter: 'openadapter',
+  pioneer: 'pioneer',
+  reka: 'reka',
+  sambanova: 'sambanova',
+  sarvam: 'sarvam',
+  scaleway: 'scaleway',
+  tokenrouter: 'tokenrouter',
+  typhoon: 'typhoon',
+  zenmux: 'zenmux',
   vllm: 'vllm',
   custom: 'custom',
   azure: 'azure',
@@ -86,9 +113,11 @@ export const PROVIDERS: Record<string, ProviderInfo> = Object.fromEntries(
           envVars: entry.id === 'chatgpt'
             ? ['CODEBUDDY_CHATGPT_OAUTH']
             : [...entry.apiKeyEnvKeys, ...entry.baseUrlEnvKeys],
+          apiKeyEnvVars: entry.apiKeyEnvKeys,
           models: entry.models,
           defaultModel: entry.defaultModel,
           baseURL: entry.defaultBaseURL,
+          ...(entry.freeTier ? { freeTier: entry.freeTier } : {}),
           providerId: entry.id,
           authMode: entry.authMode,
         } satisfies ProviderInfo,
@@ -164,28 +193,41 @@ export function createProviderCommand(): Command {
     .command('list')
     .alias('ls')
     .description('List available AI providers')
-    .action(() => {
+    .option('--free', 'List only providers with a free tier')
+    .action((options: { free?: boolean }) => {
       const configured = getConfiguredProviders();
       const configuredPluginProviders = getConfiguredPluginNativeProviders();
       const current = resolveProviderCommandKey(getCurrentProvider()) || getCurrentProvider();
 
-      console.log('\nAvailable AI Providers:\n');
+      console.log(options.free ? '\nFree-tier AI Providers:\n' : '\nAvailable AI Providers:\n');
 
       for (const [key, info] of Object.entries(PROVIDERS)) {
+        if (options.free && !info.freeTier) continue;
+
         const isConfigured = configured.includes(key);
         const isCurrent = key === current;
         const status = isConfigured ? '✅' : '❌';
         const marker = isCurrent ? ' (active)' : '';
+        const freeMarker = info.freeTier ? '🆓 ' : '';
 
-        console.log(`  ${status} ${info.name}${marker}`);
+        console.log(`  ${status} ${freeMarker}${info.name}${marker}`);
         console.log(`     Key: ${key}`);
         console.log(`     Env: ${info.envVar}`);
+        if (options.free) {
+          console.log(`     Free tier: ${info.freeTier}`);
+          console.log(`     Base URL: ${info.baseURL ?? 'none'}`);
+          if (info.authMode === 'local') {
+            console.log(`     Enable with: ${info.envVar} (local runtime / gateway — no API key by default)`);
+          } else {
+            console.log(`     API key env: ${info.apiKeyEnvVars.join(' | ') || 'none'}`);
+          }
+        }
         console.log(`     Models: ${info.models.slice(0, 3).join(', ')}${info.models.length > 3 ? '...' : ''}`);
         console.log('');
       }
 
       const pluginProviders = getPluginNativeRuntimeProviderCatalog();
-      if (pluginProviders.length > 0) {
+      if (!options.free && pluginProviders.length > 0) {
         console.log('Plugin-native providers (available through bundled transports):\n');
         for (const entry of pluginProviders) {
           const status = configuredPluginProviders.includes(entry.id) ? '✅' : '❌';

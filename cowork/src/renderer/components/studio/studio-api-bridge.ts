@@ -61,6 +61,8 @@ export function createStudioApis(): AppStudioApis | undefined {
     },
     commands: {
       run: async (request) => asResult<{ id: string; pid: number }>(await studio.commands.run(request)),
+      runToEnd: async (request) =>
+        asResult<{ id: string; code: number | null }>(await studio.commands.runToEnd(request)),
       kill: async (id) => asResult<{ id: string; killed: boolean }>(await studio.commands.kill(id)),
       onOutput: (listener) => studio.commands.onOutput(listener),
     },

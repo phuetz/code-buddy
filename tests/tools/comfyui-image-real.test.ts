@@ -29,7 +29,7 @@ describe('ComfyUI local image provider (real HTTP)', () => {
 
   afterEach(async () => {
     process.env = originalEnv;
-    await fs.rm(tempWorkspace, { recursive: true, force: true });
+    await fs.rm(tempWorkspace, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   it('submits a workflow, polls history, downloads the PNG and saves it', async () => {

@@ -21,6 +21,11 @@
 
 import { BashTool } from '../../src/tools/bash';
 import { ConfirmationService } from '../../src/utils/confirmation-service';
+import {
+  approveSandboxUnavailableEscalations,
+  clearSandboxEscalationBridge,
+} from '../helpers/sandbox-escalation-bridge.js';
+import { canonical, canonicalShellPath } from '../helpers/shell-path.js';
 import path from 'path';
 import os from 'os';
 import fs from 'fs';
@@ -86,6 +91,9 @@ describe('BashTool', () => {
     confirmationService = ConfirmationService.getInstance();
     // Auto-approve bash commands for testing
     confirmationService.setSessionFlag('bashCommands', true);
+    // Hosts without a sandbox backend (Windows CI) escalate every allowed
+    // command to an exact grant: stand in for the approving human.
+    approveSandboxUnavailableEscalations(confirmationService);
 
     bashTool = new BashTool();
     jest.clearAllMocks();
@@ -94,6 +102,7 @@ describe('BashTool', () => {
   afterEach(() => {
     bashTool.dispose();
     if (confirmationService) {
+      clearSandboxEscalationBridge(confirmationService);
       confirmationService.dispose();
     }
     (ConfirmationService as unknown as { instance: ConfirmationService | undefined }).instance = undefined;
@@ -122,7 +131,7 @@ describe('BashTool', () => {
 
     it('streams in the cwd override too (the path Cowork actually uses)', async () => {
       const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'bash-stream-cwd-'));
-      const real = fs.realpathSync(dir);
+      const real = canonical(dir);
       const gen = bashTool.executeStreaming('pwd', 30000, dir);
       let out = '';
       let r = await gen.next();
@@ -132,20 +141,22 @@ describe('BashTool', () => {
       }
       const final = r.value;
       expect(final.success).toBe(true);
-      expect(fs.realpathSync((out || final.output || '').trim())).toBe(real);
-      fs.rmSync(dir, { recursive: true, force: true });
+      // `pwd` prints the shell's spelling (MSYS `/tmp/...` under Git Bash).
+      expect(canonicalShellPath(out || final.output || '')).toBe(real);
+      fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     });
 
     it('runs in the cwd override when provided (embedded session workingDirectory)', async () => {
       const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'bash-cwd-'));
-      const real = fs.realpathSync(dir);
+      const real = canonical(dir);
       const result = await bashTool.execute('pwd', 30000, dir);
       expect(result.success).toBe(true);
-      expect(fs.realpathSync(result.output!.trim())).toBe(real);
+      // `pwd` prints the shell's spelling (MSYS `/tmp/...` under Git Bash).
+      expect(canonicalShellPath(result.output!)).toBe(real);
       // Sans override : comportement historique (process cwd), pas le tmpdir.
       const legacy = await bashTool.execute('pwd');
-      expect(fs.realpathSync(legacy.output!.trim())).not.toBe(real);
-      fs.rmSync(dir, { recursive: true, force: true });
+      expect(canonicalShellPath(legacy.output!)).not.toBe(real);
+      fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     });
 
     // cat is not available on Windows
@@ -160,7 +171,7 @@ describe('BashTool', () => {
         expect(result.success).toBe(true);
         expect(result.output).toContain('test content');
       } finally {
-        fs.rmSync(tmpDir, { recursive: true, force: true });
+        fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
       }
     });
 
@@ -343,12 +354,14 @@ describe('BashTool', () => {
 
     it('should set NO_COLOR=1 in child process', async () => {
       const result = await bashTool.execute('printenv NO_COLOR');
+      if (!result.success) console.error('[macos-diag] printenv NO_COLOR:', result.error);
       expect(result.success).toBe(true);
       expect(result.output).toContain('1');
     });
 
     it('should set GIT_TERMINAL_PROMPT=0 in child process', async () => {
       const result = await bashTool.execute('printenv GIT_TERMINAL_PROMPT');
+      if (!result.success) console.error('[macos-diag] printenv GIT_TERMINAL_PROMPT:', result.error);
       expect(result.success).toBe(true);
       expect(result.output).toContain('0');
     });
@@ -495,6 +508,7 @@ describe('BashTool', () => {
     it('should execute commands in current working directory', async () => {
       await bashTool.execute(`cd ${tmpDir}`);
       const result = await bashTool.execute('pwd');
+      if (!result.success) console.error('[macos-diag] pwd after cd', tmpDir, '->', bashTool.getCurrentDirectory(), ':', result.error);
       expect(result.success).toBe(true);
       expect(result.output).toBeDefined();
     });

@@ -101,7 +101,7 @@ describe('CloudAgentRunner', () => {
   afterEach(() => {
     resetCloudAgentRunner();
     try {
-      fs.rmSync(testDir, { recursive: true, force: true });
+      fs.rmSync(testDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     } catch {
       // Ignore cleanup errors
     }

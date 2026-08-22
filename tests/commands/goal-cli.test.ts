@@ -68,7 +68,7 @@ describe('runGoalLoop (buddy goal headless)', () => {
 
   afterEach(() => {
     resetGoalManagers();
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   it('loops with continuation prompts until the judge says done', async () => {
@@ -507,7 +507,7 @@ describe('goal CLI working directory handling', () => {
   afterEach(() => {
     process.chdir(originalCwd);
     for (const dir of tmpDirs) {
-      fs.rmSync(dir, { recursive: true, force: true });
+      fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     }
   });
 
@@ -523,7 +523,9 @@ describe('goal CLI working directory handling', () => {
     fs.mkdirSync(target);
     process.chdir(parent);
 
-    expect(resolveGoalCliWorkingDirectory(fakeDirectoryCommand('target'))).toBe(target);
+    // Resolved against process.cwd(), which is canonical after chdir through a
+    // symlinked tmpdir (macOS /var → /private/var).
+    expect(resolveGoalCliWorkingDirectory(fakeDirectoryCommand('target'))).toBe(fs.realpathSync(target));
   });
 
   it('applies the global --directory option before the headless goal run starts', () => {
@@ -531,8 +533,9 @@ describe('goal CLI working directory handling', () => {
 
     const cwd = applyGoalCliWorkingDirectory(fakeDirectoryCommand(target));
 
-    expect(cwd).toBe(target);
-    expect(process.cwd()).toBe(target);
+    // process.cwd() reports the canonical path after chdir (symlinked tmpdir on macOS).
+    expect(cwd).toBe(fs.realpathSync(target));
+    expect(process.cwd()).toBe(fs.realpathSync(target));
   });
 
   it('leaves cwd unchanged when no directory option is available', () => {

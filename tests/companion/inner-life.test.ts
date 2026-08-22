@@ -73,7 +73,7 @@ describe('runInnerLifeTick', () => {
       expect(after).toBeGreaterThan(40);
       expect(after).toBeLessThanOrEqual(MOOD_BASELINE);
     } finally {
-      rmSync(dir, { recursive: true, force: true });
+      rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     }
   });
 

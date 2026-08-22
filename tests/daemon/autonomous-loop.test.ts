@@ -26,7 +26,7 @@ describe('FleetAutonomousLoop', () => {
   });
 
   afterEach(() => {
-    rmSync(dir, { recursive: true, force: true });
+    rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   function makeLoop(executor: TaskExecutor, enabled = true): FleetAutonomousLoop {
@@ -133,7 +133,7 @@ describe('FleetAutonomousLoop — fleet load + saturation backpressure', () => {
   });
 
   afterEach(async () => {
-    rmSync(dir, { recursive: true, force: true });
+    rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     const { _resetFleetLoadForTests } = await import('../../src/fleet/fleet-load.js');
     _resetFleetLoadForTests();
     if (originalCap === undefined) delete process.env.CODEBUDDY_FLEET_MAX_CONCURRENCY;

@@ -36,13 +36,13 @@ interface StudioTile {
 const STUDIO_TILES: StudioTile[] = [
   { label: 'App', icon: Hammer, run: (s) => s.setPrimaryView('studio') },
   { label: 'Deck', icon: Presentation, run: (s, seed) => { s.setCreationsSeed(seed); s.setCreationsTab('deck'); s.setPrimaryView('creations'); } },
-  { label: 'Feuille', icon: Table2, run: (s, seed) => { s.setCreationsSeed(seed); s.setCreationsTab('sheet'); s.setPrimaryView('creations'); } },
+  { label: 'Sheet', icon: Table2, run: (s, seed) => { s.setCreationsSeed(seed); s.setCreationsTab('sheet'); s.setPrimaryView('creations'); } },
   { label: 'Document', icon: FileText, run: (s, seed) => { s.setCreationsSeed(seed); s.setCreationsTab('doc'); s.setPrimaryView('creations'); } },
   { label: 'Pod', icon: Radio, run: (s, seed) => { s.setCreationsSeed(seed); s.setCreationsTab('pod'); s.setPrimaryView('creations'); } },
   { label: 'Image', icon: ImageIcon, run: (s, seed) => { s.setCreationsSeed(seed); s.setCreationsTab('image'); s.setPrimaryView('creations'); } },
-  { label: 'Vidéo', icon: Clapperboard, run: (s, seed) => { s.setCreationsSeed(seed); s.setCreationsTab('video'); s.setPrimaryView('creations'); } },
+  { label: 'Video', icon: Clapperboard, run: (s, seed) => { s.setCreationsSeed(seed); s.setCreationsTab('video'); s.setPrimaryView('creations'); } },
   { label: 'Drive', icon: FolderOpen, run: (s) => { s.setCreationsTab('drive'); s.setPrimaryView('creations'); } },
-  { label: 'Recherche', icon: Search, run: (s) => s.setShowLiveLauncher(true) },
+  { label: 'Search', icon: Search, run: (s) => s.setShowLiveLauncher(true) },
 ];
 
 function RecentSessions({
@@ -147,9 +147,9 @@ export function HomeView() {
     .slice(0, 5);
 
   const quick: QuickAction[] = [
-    { label: 'Coder / corriger', hint: 'Décris le bug ou la fonctionnalité', run: () => prefill('') },
-    { label: 'Rechercher', hint: 'Recherche large + flow de planification', run: () => setShowLiveLauncher(true) },
-    { label: 'Créer un document', hint: 'Excel, Word, PDF, charts', run: () => setShowSkillsManager(true) },
+    { label: 'Code / fix', hint: 'Describe the bug or the feature', run: () => prefill('') },
+    { label: 'Search', hint: 'Wide research + planning flow', run: () => setShowLiveLauncher(true) },
+    { label: 'Create a document', hint: 'Excel, Word, PDF, charts', run: () => setShowSkillsManager(true) },
   ];
 
   // A rotating handful of ready-to-run missions (Genspark recipes) — clicking
@@ -164,9 +164,9 @@ export function HomeView() {
       <LivingBriefing sessions={sessions} onOpenMissionControl={() => setPrimaryView('os')} />
 
       <div className="text-center">
-        <h1 className="text-2xl font-semibold">Que veux-tu faire ?</h1>
+        <h1 className="text-2xl font-semibold">What would you like to do?</h1>
         <p className="text-sm text-muted-foreground mt-1">
-          Dis-le à Code Buddy — il code, cherche et crée sur ton dossier.
+          Tell Code Buddy — it codes, searches, and creates in your folder.
         </p>
       </div>
 
@@ -186,7 +186,7 @@ export function HomeView() {
             onChange={(e) => setPrompt(e.target.value)}
             onKeyDown={onKeyDown}
             rows={2}
-            placeholder="Ex : corrige le bug de connexion, ou crée un tableau de bord…"
+            placeholder="e.g. fix the login bug, or create a dashboard…"
             className="flex-1 resize-none bg-transparent px-2 py-1.5 text-sm focus:outline-none"
             data-testid="home-input"
           />
@@ -196,7 +196,7 @@ export function HomeView() {
             className="shrink-0 rounded-xl bg-accent px-4 py-2 text-sm font-medium text-background hover:bg-accent-hover disabled:opacity-40"
             data-testid="home-send"
           >
-            {submitting ? '…' : 'Envoyer'}
+            {submitting ? '…' : 'Send'}
           </button>
         </div>
       </form>
@@ -219,7 +219,7 @@ export function HomeView() {
         ))}
         {prompt.trim() ? (
           <div className="w-full text-center text-xs text-muted-foreground">
-            Ton sujet accompagnera le studio choisi.
+            Your topic will travel with the studio you pick.
           </div>
         ) : null}
       </div>

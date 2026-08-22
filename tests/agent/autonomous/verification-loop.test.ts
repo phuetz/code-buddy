@@ -45,7 +45,7 @@ describe('runVerificationAndSelfCorrectionLoop', () => {
 
   afterEach(async () => {
     process.env.CODEBUDDY_HOME = oldCodeBuddyHome;
-    await fs.rm(tempRoot, { force: true, recursive: true });
+    await fs.rm(tempRoot, { force: true, recursive: true, maxRetries: 10, retryDelay: 100 });
   });
 
   function getContract(repo: string): AgenticCodingTaskContract {
@@ -126,13 +126,26 @@ describe('runVerificationAndSelfCorrectionLoop', () => {
     const contract = getContract(repoPath);
     const dispatch = getDispatch(repoPath, taskFile);
 
+    // Inject a client so the loop does not call detectProviderFromEnv(), which
+    // throws "No LLM provider configuration found" on CI runners that have no
+    // API keys. Verification passes on the first try, so the client is never
+    // actually used (chat would fail the test loudly if it were).
+    const chat = vi.fn(() => {
+      throw new Error('chat must not be called when verification passes on first try');
+    });
+    const mockClient = {
+      chat,
+      getCurrentModel: () => 'gpt-4o',
+    } as unknown as CodeBuddyClient;
+
     const result = await runVerificationAndSelfCorrectionLoop(
       {
         ...contract,
         edits: [], // No edits needed, already correct
       },
       { taskFile },
-      dispatch
+      dispatch,
+      mockClient
     );
 
     expect(result.status).toBe('verified');

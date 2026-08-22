@@ -122,6 +122,31 @@ describe('Provider Command', () => {
       expect(output).toContain('Hugging Face');
     });
 
+    it('should mark providers with a free tier in the full list', async () => {
+      await run(['list']);
+
+      const output = consoleLogSpy.mock.calls.map((c) => c.join(' ')).join('\n');
+
+      expect(output).toContain('🆓 Ollama');
+      expect(output).toContain('🆓 NVIDIA NIM');
+      expect(output).not.toContain('🆓 Grok (xAI)');
+    });
+
+    it('should filter and detail providers with --free', async () => {
+      await run(['list', '--free']);
+
+      const output = consoleLogSpy.mock.calls.map((c) => c.join(' ')).join('\n');
+
+      expect(output).toContain('Free-tier AI Providers');
+      expect(output).toContain('🆓 OmniRoute (local AI gateway)');
+      expect(output).toContain('Free tier: local gateway to 90+ free tiers');
+      expect(output).toContain('Base URL: http://localhost:20128/v1');
+      expect(output).toContain('Enable with: OMNIROUTE_BASE_URL');
+      expect(output).toContain('API key env: NVIDIA_API_KEY');
+      expect(output).not.toContain('Key: grok');
+      expect(output).not.toContain('Plugin-native providers');
+    });
+
     it('should show environment variable names', async () => {
       await run(['list']);
 

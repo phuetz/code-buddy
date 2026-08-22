@@ -47,7 +47,7 @@ describe('Insights CLI commands', () => {
     store.dispose();
     (RunStore as unknown as { _instance: RunStore | null })._instance = null;
     resetToolAnalytics();
-    fs.rmSync(tempDir, { recursive: true, force: true });
+    fs.rmSync(tempDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   it('registers the insights command and its subcommands', () => {

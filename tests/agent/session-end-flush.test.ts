@@ -78,7 +78,7 @@ describe('session-end-flush (WS3-T1)', () => {
   });
 
   afterEach(() => {
-    rmSync(workDir, { recursive: true, force: true });
+    rmSync(workDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   describe('extractOpenRisks', () => {

@@ -139,7 +139,7 @@ describe('WorkspaceIsolation', () => {
         });
         expect(isolation.validatePath(target).valid).toBe(false);
       } finally {
-        rmSync(parent, { recursive: true, force: true });
+        rmSync(parent, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
       }
     });
 
@@ -155,7 +155,7 @@ describe('WorkspaceIsolation', () => {
           expect(isolation.validatePath(path.join(realRoot, 'inside.ts')).valid).toBe(true);
         });
       } finally {
-        rmSync(parent, { recursive: true, force: true });
+        rmSync(parent, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
       }
     });
 
@@ -174,7 +174,7 @@ describe('WorkspaceIsolation', () => {
           expect(result.reason).toBe('symlink_escape');
         });
       } finally {
-        rmSync(parent, { recursive: true, force: true });
+        rmSync(parent, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
       }
     });
 
@@ -193,7 +193,7 @@ describe('WorkspaceIsolation', () => {
         expect(result.valid).toBe(false);
         expect(result.reason).toBe('symlink_escape');
       } finally {
-        rmSync(parent, { recursive: true, force: true });
+        rmSync(parent, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
       }
     });
 
@@ -218,7 +218,7 @@ describe('WorkspaceIsolation', () => {
         await voice;
       } finally {
         releaseVoice?.();
-        rmSync(parent, { recursive: true, force: true });
+        rmSync(parent, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
       }
     });
 

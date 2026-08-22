@@ -23,7 +23,7 @@ describe('CKG retraction', () => {
   });
 
   afterEach(() => {
-    rmSync(dir, { recursive: true, force: true });
+    rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   const ledgerLines = (): number => readFileSync(ledgerPath, 'utf8').split('\n').filter((l) => l.trim()).length;

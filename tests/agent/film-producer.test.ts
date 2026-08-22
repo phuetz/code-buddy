@@ -9,7 +9,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { mkdtemp, rm } from 'fs/promises';
 import { tmpdir } from 'os';
-import { join } from 'path';
+import { join, sep } from 'path';
 
 import { produceFilm, type ProduceFilmDeps } from '../../src/agent/film/film-producer.js';
 import { loadFilmProject } from '../../src/tools/video/film-project.js';
@@ -80,7 +80,7 @@ describe('produceFilm', () => {
     root = await mkdtemp(join(tmpdir(), 'buddy-producer-'));
   });
   afterEach(async () => {
-    await rm(root, { recursive: true, force: true });
+    await rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   it('generates every scene, assembles, runs the quality gate, and persists the manifest', async () => {
@@ -261,7 +261,8 @@ describe('produceFilm', () => {
     expect(mux).toHaveBeenCalledTimes(1);
     // the ready clip is the muxed (narrated) one under film-work/.
     const saved = await loadFilmProject(root, 'narr');
-    expect(saved!.scenes[0]!.clipPath).toMatch(/film-work\/.*\/clip-scene-1\.mp4$/);
+    // Compare the POSIX spelling: the producer returns native separators.
+    expect(saved!.scenes[0]!.clipPath.split(sep).join('/')).toMatch(/film-work\/.*\/clip-scene-1\.mp4$/);
   });
 
   it('proceeds without narration when Piper is unavailable (fail-open)', async () => {

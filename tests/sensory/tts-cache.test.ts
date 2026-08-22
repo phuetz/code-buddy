@@ -18,8 +18,8 @@ beforeEach(async () => {
   clock = 1_000_000;
 });
 afterEach(async () => {
-  await rm(dir, { recursive: true, force: true });
-  await rm(tmp, { recursive: true, force: true });
+  await rm(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+  await rm(tmp, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
 });
 
 const cache = () => new TtsCache({ dir, tmpDir: tmp, now: () => clock });

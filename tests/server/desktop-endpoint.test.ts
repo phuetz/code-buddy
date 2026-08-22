@@ -103,7 +103,7 @@ describe('desktop WebSocket endpoint (/desktop)', () => {
     else process.env.CODEBUDDY_HOME = previousHome;
     if (previousSecret === undefined) delete process.env.JWT_SECRET;
     else process.env.JWT_SECRET = previousSecret;
-    fs.rmSync(tmpHome, { recursive: true, force: true });
+    fs.rmSync(tmpHome, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   async function start(): Promise<string> {

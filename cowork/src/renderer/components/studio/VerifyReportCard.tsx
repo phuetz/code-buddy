@@ -9,7 +9,7 @@ import { summarizeReport } from './web-test-report-model.js';
 export function VerifyReportCard({ report, onRerun }: { report: WebTestReport; onRerun?: () => void }) {
   const summary = summarizeReport(report);
   return (
-    <section className="rounded-lg border border-border bg-surface p-3" aria-label="Rapport de vérification" data-testid="verify-report">
+    <section className="rounded-lg border border-border bg-surface p-3" aria-label="Verification report" data-testid="verify-report">
       <header className="mb-2 flex items-center gap-2">
         {report.passed ? (
           <CheckCircle2 className="h-4 w-4 text-green-500" aria-hidden="true" />
@@ -24,20 +24,20 @@ export function VerifyReportCard({ report, onRerun }: { report: WebTestReport; o
             type="button"
             onClick={onRerun}
             className="inline-flex h-7 items-center gap-1.5 rounded-md border border-border px-2 text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
-            title="Relancer la vérification"
+            title="Re-run verification"
           >
             <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
-            Relancer
+            Re-run
           </button>
         ) : null}
       </header>
 
       <div className="mb-2 flex gap-3 text-[11px] tabular-nums text-muted-foreground">
         <span className={report.consoleErrorCount > 0 ? 'text-red-500' : undefined}>
-          {report.consoleErrorCount} erreur(s) console
+          {report.consoleErrorCount} console error(s)
         </span>
         <span className={report.networkFailureCount > 0 ? 'text-red-500' : undefined}>
-          {report.networkFailureCount} échec(s) réseau
+          {report.networkFailureCount} network failure(s)
         </span>
       </div>
 
@@ -60,7 +60,7 @@ export function VerifyReportCard({ report, onRerun }: { report: WebTestReport; o
       {report.screenshotPath ? (
         <img
           src={`file://${report.screenshotPath}`}
-          alt="Capture de la vérification"
+          alt="Verification screenshot"
           className="mt-2 max-h-48 w-full rounded-md border border-border object-contain"
         />
       ) : null}

@@ -50,7 +50,7 @@ beforeEach(async () => {
   tmp = await mkdtemp(path.join(os.tmpdir(), 'greet-'));
 });
 afterEach(async () => {
-  await rm(tmp, { recursive: true, force: true });
+  await rm(tmp, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   delete process.env.CODEBUDDY_SENSORY_GREET;
   delete process.env.CODEBUDDY_SENSORY_GREET_LLM;
   delete process.env.CODEBUDDY_USER_NAME;

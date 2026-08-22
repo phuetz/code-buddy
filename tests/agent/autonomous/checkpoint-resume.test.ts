@@ -13,16 +13,30 @@ const execFileAsync = promisify(execFile);
 describe('runner checkpoint resume', () => {
   let tempRoot: string;
   let oldHome: string | undefined;
+  let oldGrokKey: string | undefined;
 
   beforeEach(async () => {
     tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'codebuddy-checkpoint-resume-'));
     oldHome = process.env.CODEBUDDY_HOME;
     process.env.CODEBUDDY_HOME = tempRoot;
+    // The verification/self-correction loop resolves an LLM client up front and
+    // throws "No LLM provider configuration found" when none is detected. CI
+    // runners have no API keys, so pin a dummy provider key to make detection
+    // deterministic. Verification here passes before any LLM call, so the client
+    // is constructed but never invoked — no network.
+    oldGrokKey = process.env.GROK_API_KEY;
+    process.env.GROK_API_KEY = 'test-dummy-key-not-used';
   });
 
   afterEach(async () => {
     process.env.CODEBUDDY_HOME = oldHome;
-    await fs.rm(tempRoot, { force: true, recursive: true });
+    if (oldGrokKey === undefined) {
+      delete process.env.GROK_API_KEY;
+    } else {
+      process.env.GROK_API_KEY = oldGrokKey;
+    }
+    // Retry: Windows may still hold a handle on just-closed files (AV/indexer).
+    await fs.rm(tempRoot, { force: true, recursive: true, maxRetries: 5, retryDelay: 100 });
   });
 
   async function createTempGitRepo(): Promise<string> {

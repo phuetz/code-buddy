@@ -32,7 +32,7 @@ describe('HeartbeatEngine', () => {
 
   afterEach(async () => {
     engine.stop();
-    await fs.rm(tmpDir, { recursive: true, force: true });
+    await fs.rm(tmpDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   // ==========================================================================

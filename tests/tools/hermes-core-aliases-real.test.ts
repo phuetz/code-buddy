@@ -38,7 +38,7 @@ describe('Hermes core aliases use real tool implementations', () => {
     resetBashInstance();
     resetWebSearchInstance();
     resetSSRFGuard();
-    await fs.rm(tempDir, { recursive: true, force: true });
+    await fs.rm(tempDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   it('routes read/write/patch/search/terminal/web_extract through live filesystem, shell, ripgrep and HTTP paths', async () => {

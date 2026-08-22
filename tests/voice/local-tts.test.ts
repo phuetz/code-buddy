@@ -65,7 +65,7 @@ describe('Pocket resident server client', () => {
       await new Promise<void>((resolve) => server?.close(() => resolve()));
       server = null;
     }
-    if (dir) rmSync(dir, { recursive: true, force: true });
+    if (dir) rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   it('uses an already-running Pocket server instead of spawning the one-shot CLI', async () => {

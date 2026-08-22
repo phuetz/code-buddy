@@ -19,7 +19,7 @@ describe('CollectiveKnowledgeGraph (Phase 0)', () => {
   });
   afterEach(() => {
     try {
-      rmSync(dir, { recursive: true, force: true });
+      rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     } catch {
       /* best effort */
     }
@@ -158,7 +158,7 @@ describe('CollectiveKnowledgeGraph — hybrid recall (semantic, $0)', () => {
     ledgerPath = join(dir, 'ckg-ledger.jsonl');
   });
   afterEach(() => {
-    try { rmSync(dir, { recursive: true, force: true }); } catch { /* best effort */ }
+    try { rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }); } catch { /* best effort */ }
   });
 
   it('paraphrase with no shared keywords still finds the right knowledge', async () => {
@@ -320,7 +320,7 @@ describe('CollectiveKnowledgeGraph — cross-agent corroboration', () => {
     ledgerPath = join(dir, 'ckg-ledger.jsonl');
   });
   afterEach(() => {
-    try { rmSync(dir, { recursive: true, force: true }); } catch { /* best effort */ }
+    try { rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }); } catch { /* best effort */ }
   });
 
   it('two DISTINCT agents agreeing raises corroboration + confidence', () => {
@@ -366,7 +366,7 @@ describe('CollectiveKnowledgeGraph — scientific discovery ingestion + auto-lin
     ledgerPath = join(dir, 'ckg-ledger.jsonl');
   });
   afterEach(() => {
-    try { rmSync(dir, { recursive: true, force: true }); } catch { /* best effort */ }
+    try { rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }); } catch { /* best effort */ }
   });
 
   it('auto-links a new discovery to its nearest neighbour, NOT to unrelated ones', async () => {

@@ -93,7 +93,7 @@ describe('video_stitch — input parsing (injected)', () => {
     root = await mkdtemp(join(tmpdir(), 'buddy-stitch-'));
   });
   afterAll(async () => {
-    await rm(root, { recursive: true, force: true });
+    await rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   it('forwards per-boundary transitions to ffmpeg', async () => {
@@ -158,7 +158,7 @@ describe.runIf(hasFfmpeg)('video_stitch — real ffmpeg through the adapter', ()
     }
   }, 60_000);
   afterAll(async () => {
-    await rm(root, { recursive: true, force: true });
+    await rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   it('welds two clips into a film via the tool', async () => {

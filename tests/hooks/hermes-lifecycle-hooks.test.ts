@@ -36,7 +36,7 @@ describe('Hermes lifecycle hook contract', () => {
   afterEach(() => {
     resetUserHooksManager();
     resetToolHooksManager();
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   it('maps Hermes stages to user hook events and tool hook stages', () => {

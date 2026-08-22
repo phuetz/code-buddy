@@ -72,7 +72,7 @@ describe('app_server expose (stub tunnel binary, real lifecycle)', () => {
     await tool?.stopAll();
     resetDevOrigins();
     resetProcessTool();
-    fs.rmSync(stubDir, { recursive: true, force: true });
+    fs.rmSync(stubDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   async function startServer(): Promise<{ pid: number; port: number }> {

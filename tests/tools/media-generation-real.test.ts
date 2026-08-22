@@ -30,7 +30,7 @@ describe('Hermes media generation real integrations', () => {
 
   afterEach(async () => {
     process.env = originalEnv;
-    await fs.rm(tempWorkspace, { recursive: true, force: true });
+    await fs.rm(tempWorkspace, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   it('generates and caches an image through a real HTTP image endpoint', async () => {

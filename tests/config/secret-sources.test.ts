@@ -33,7 +33,7 @@ beforeAll(() => {
 
 afterAll(() => {
   process.env.PATH = originalPath;
-  fs.rmSync(binDir, { recursive: true, force: true });
+  fs.rmSync(binDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
 });
 
 describe('built-in sources', () => {
@@ -52,7 +52,10 @@ describe('built-in sources', () => {
   });
 });
 
-describe('1Password op:// notation', () => {
+// The fake `op` binary is a POSIX shell script (shebang + chmod) — not runnable on Windows.
+const opSkipped = process.platform === 'win32';
+
+describe.skipIf(opSkipped)('1Password op:// notation', () => {
   it('resolves a whole-value op:// ref through the op CLI', async () => {
     expect(await resolveSecretRef('op://vault/item/field')).toBe('secret-for:op://vault/item/field');
   });
@@ -71,7 +74,7 @@ describe('pluggable sources', () => {
     expect(await resolveSecretRef('pwd=${vault-test:db/main}')).toBe('pwd=from-vault:db/main');
   });
 
-  it('deep object resolution walks nested values', async () => {
+  it.skipIf(opSkipped)('deep object resolution walks nested values', async () => {
     const resolved = await resolveSecretRefs({
       plain: 42,
       nested: { secret: 'op://v/i/f', list: ['${vault-test:x}'] },

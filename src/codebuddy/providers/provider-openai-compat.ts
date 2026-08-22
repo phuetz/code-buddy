@@ -123,6 +123,65 @@ export function resolveLlmExtraHeaders(
   return Object.keys(out).length > 0 ? out : undefined;
 }
 
+/** Flatten a chat message's `content` to plain text (string, or joined text parts). */
+function messageContentToText(content: CodeBuddyMessage['content']): string {
+  if (typeof content === 'string') return content;
+  if (Array.isArray(content)) {
+    return content
+      .map((part) =>
+        part && typeof part === 'object' && 'text' in part && typeof (part as { text?: unknown }).text === 'string'
+          ? (part as { text: string }).text
+          : '',
+      )
+      .filter(Boolean)
+      .join('\n');
+  }
+  return '';
+}
+
+/**
+ * Normalize a message list so it carries **exactly one `system` message, in
+ * position 0** — required by strict chat templates (e.g. Qwen3's Jinja template
+ * raises `System message must be at the beginning` on any later/second system
+ * message; Ollama then returns HTTP 400 "Unable to generate parser").
+ *
+ * Code Buddy legitimately emits several `system` messages per turn: the base
+ * system prompt (front) plus per-turn context injections appended AFTER the
+ * conversation (`<lessons_context>`, `<todo_context>`, mention/middleware/
+ * companion context blocks — see agent-executor). Public cloud providers accept
+ * that ordering; strict local templates do not.
+ *
+ * The transform merges every `system` content, in original order, into a single
+ * leading system message and keeps all non-system messages in their original
+ * relative order. It is a no-op (returns the same array reference) when the list
+ * already has at most one system message and it is already at index 0, so
+ * runtimes that tolerate the current ordering are byte-identical.
+ *
+ * Exported for unit testing.
+ */
+export function mergeSystemMessagesToFront(messages: CodeBuddyMessage[]): CodeBuddyMessage[] {
+  const systemIndexes: number[] = [];
+  for (let i = 0; i < messages.length; i++) {
+    if (messages[i]?.role === 'system') systemIndexes.push(i);
+  }
+  // Already compliant: 0 or 1 system message, and if present it leads the list.
+  if (systemIndexes.length === 0) return messages;
+  if (systemIndexes.length === 1 && systemIndexes[0] === 0) return messages;
+
+  const systemTexts: string[] = [];
+  const rest: CodeBuddyMessage[] = [];
+  for (const msg of messages) {
+    if (msg.role === 'system') {
+      const text = messageContentToText(msg.content);
+      if (text) systemTexts.push(text);
+    } else {
+      rest.push(msg);
+    }
+  }
+  const merged: CodeBuddyMessage = { role: 'system', content: systemTexts.join('\n\n') };
+  return [merged, ...rest];
+}
+
 export class OpenAICompatProvider implements Provider {
   private client: OpenAI;
   private apiKey: string;
@@ -453,6 +512,43 @@ export class OpenAICompatProvider implements Provider {
     return this.baseURL.includes('api.x.ai');
   }
 
+  /**
+   * Whether the target is a **local inference runtime** whose chat template may
+   * be strict about system-message placement (Ollama, LM Studio, vLLM). These
+   * embed the model's own Jinja template, so a second/late `system` message
+   * hard-fails (Qwen3: "System message must be at the beginning" → HTTP 400).
+   *
+   * Detection is by endpoint: loopback / private-LAN hosts and the well-known
+   * local ports, plus the `ollama`/`lmstudio`/`vllm` model providers. Public
+   * cloud hosts (api.x.ai, api.openai.com, api.anthropic.com, openrouter.ai, …)
+   * never match, so Grok/GPT/Claude payloads are left untouched.
+   */
+  private isStrictTemplateLocalRuntime(): boolean {
+    const url = this.baseURL.toLowerCase();
+    const provider = getModelInfo(this.currentModel).provider;
+    if (provider === 'ollama' || provider === 'lmstudio') return true;
+    // vLLM is served over an OpenAI-compat endpoint but is not a distinct
+    // ModelProvider value — detect it (and any self-hosted runtime) by env/URL.
+    if (process.env.VLLM_BASE_URL && url === process.env.VLLM_BASE_URL.toLowerCase()) return true;
+    if (url.includes('localhost') || url.includes('127.0.0.1') || url.includes('0.0.0.0')) return true;
+    if (url.includes('lmstudio') || url.includes('ollama') || url.includes('vllm')) return true;
+    // Private-LAN address ranges (self-hosted runtimes on the local network).
+    if (/(?:^|\/\/)(?:10\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+|172\.(?:1[6-9]|2\d|3[01])\.\d+\.\d+)/.test(url)) {
+      return true;
+    }
+    return false;
+  }
+
+  /**
+   * Apply `mergeSystemMessagesToFront` when talking to a strict-template local
+   * runtime. No-op for cloud providers (preserves the exact current ordering,
+   * so Grok/GPT/Claude are byte-identical).
+   */
+  private normalizeMessagesForRuntime(messages: CodeBuddyMessage[]): CodeBuddyMessage[] {
+    if (!this.isStrictTemplateLocalRuntime()) return messages;
+    return mergeSystemMessagesToFront(messages);
+  }
+
   /** Gate legacy search_parameters by provider compatibility. */
   private shouldIncludeSearchParameters(searchParams?: SearchParameters): boolean {
     if (!searchParams) {
@@ -640,11 +736,13 @@ export class OpenAICompatProvider implements Provider {
     try {
       const useTools = !this.isLocalInference() && tools && tools.length > 0;
 
+      // Strict-template local runtimes (Ollama/LM Studio/vLLM) require a single
+      // leading system message — merge any late/duplicate system injections.
+      let finalMessages: CodeBuddyMessage[] = this.normalizeMessagesForRuntime(messages);
       // Inject Anthropic prompt-cache breakpoints (Manus AI #20).
-      let finalMessages: CodeBuddyMessage[] = messages;
       const modelInfo = getModelInfo(this.currentModel);
       if (modelInfo.provider === 'anthropic') {
-        finalMessages = injectAnthropicCacheBreakpoints(messages) as CodeBuddyMessage[];
+        finalMessages = injectAnthropicCacheBreakpoints(finalMessages) as CodeBuddyMessage[];
       }
 
       const requestPayload: ChatRequestPayload = {
@@ -803,8 +901,12 @@ export class OpenAICompatProvider implements Provider {
     try {
       const useTools = !this.isLocalInference() && tools && tools.length > 0;
 
-      // Convert tool messages for local models that don't support tool role.
-      let finalMessages = this.convertToolMessagesForLocalModels(messages);
+      // Strict-template local runtimes (Ollama/LM Studio/vLLM) require a single
+      // leading system message — merge any late/duplicate system injections
+      // before the tool-role conversion below.
+      let finalMessages = this.convertToolMessagesForLocalModels(
+        this.normalizeMessagesForRuntime(messages),
+      );
 
       // Anthropic message hooks — symmetry with chat() (Phase C4).
       // The pre-C4 chatStream() never called these, so Claude streams missed

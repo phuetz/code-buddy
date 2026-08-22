@@ -546,13 +546,16 @@ describe('ROITracker', () => {
   });
 
   describe('getROITracker singleton', () => {
-    it('should return same instance', () => {
+    it('should return same instance', async () => {
       // Reset module state by clearing the mock
       jest.resetModules();
 
-      // Re-import to get fresh singleton
-      const { getROITracker: getTracker1 } = require('../../src/analytics/roi-tracker');
-      const { getROITracker: getTracker2 } = require('../../src/analytics/roi-tracker');
+      // Re-import to get fresh singleton. Use await import() (with .js) rather than
+      // require(): require() of this ESM module fails on Node 18/20 ("require() of
+      // ES Module not supported" / "Unknown file extension .ts"); the dynamic import
+      // is transformed by vitest and returns a fresh module after resetModules().
+      const { getROITracker: getTracker1 } = await import('../../src/analytics/roi-tracker.js');
+      const { getROITracker: getTracker2 } = await import('../../src/analytics/roi-tracker.js');
 
       // Note: Due to module caching, these should be the same
       const instance1 = getTracker1();
@@ -561,11 +564,11 @@ describe('ROITracker', () => {
       expect(instance1).toBe(instance2);
     });
 
-    it('should accept config on first call', () => {
+    it('should accept config on first call', async () => {
       jest.resetModules();
       mockFs.existsSync.mockReturnValue(false);
 
-      const { getROITracker } = require('../../src/analytics/roi-tracker');
+      const { getROITracker } = await import('../../src/analytics/roi-tracker.js');
       const instance = getROITracker({ hourlyRate: 75 });
 
       expect(instance).toBeDefined();

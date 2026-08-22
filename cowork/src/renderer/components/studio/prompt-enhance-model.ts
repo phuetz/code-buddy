@@ -28,28 +28,28 @@ export function enhancePrompt(prompt: string): PromptEnhancement {
   if (!base) {
     return {
       suggestions: [
-        'Décris une app concrète (ex. « une todo app »)',
-        'Précise le style (ex. thème sombre, responsive)',
-        'Nomme les fonctionnalités clés',
+        'Describe a concrete app (e.g. "a todo app")',
+        'Specify the style (e.g. dark theme, responsive)',
+        'Name the key features',
       ],
       enriched: '',
     };
   }
 
   if (!STACK_RE.test(base)) {
-    suggestions.push('Préciser la stack (React + Vite)');
-    additions.push('en React + Vite');
+    suggestions.push('Specify the stack (React + Vite)');
+    additions.push('in React + Vite');
   }
   if (!STYLE_RE.test(base)) {
-    suggestions.push('Ajouter un style (thème sombre soigné, responsive)');
-    additions.push('avec un thème sombre soigné et une mise en page responsive');
+    suggestions.push('Add a style (polished dark theme, responsive)');
+    additions.push('with a polished dark theme and a responsive layout');
   }
   if (!FEATURE_RE.test(base)) {
-    suggestions.push('Détailler les fonctionnalités principales');
-    additions.push('avec les fonctionnalités principales clairement séparées en composants');
+    suggestions.push('Detail the main features');
+    additions.push('with the main features clearly separated into components');
   }
   if (suggestions.length === 0) {
-    suggestions.push('Le prompt est déjà précis — tu peux générer.');
+    suggestions.push('The prompt is already precise — you can generate.');
   }
 
   const enriched = additions.length > 0 ? `${base}, ${additions.join(', ')}.` : base;

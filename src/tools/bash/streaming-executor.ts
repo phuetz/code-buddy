@@ -89,8 +89,15 @@ export async function* executeStreaming(
 
   if (policy.action === 'sandbox') {
     const sandboxed = await executeInWorkspaceSandbox(executionCommand, cwd, timeout, signal);
+    if (signal?.aborted) {
+      return { success: false, error: 'Command aborted by user' };
+    }
     if (sandboxed.available && sandboxed.result) {
-      const { stdout, stderr, exitCode, backend } = sandboxed.result;
+      const { stdout, stderr, exitCode, backend, timedOut } = sandboxed.result;
+      if (timedOut) {
+        if (stdout) yield stdout;
+        return { success: false, error: `Command timed out after ${timeout}ms\n[sandbox:${backend}]` };
+      }
       if (exitCode === 0 || !isSandboxBoundaryFailure(sandboxed.result)) {
         if (stdout) yield stdout;
         if (stderr) yield stderr;

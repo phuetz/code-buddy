@@ -245,7 +245,7 @@ describe('buildRelationalContext — real user-model (accepted-only + privacy, n
   });
   afterEach(() => {
     resetUserModels();
-    rmSync(tmp, { recursive: true, force: true });
+    rmSync(tmp, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   it('surfaces only ACCEPTED facts, and a sensitive fact is refused at write so it can never leak', async () => {

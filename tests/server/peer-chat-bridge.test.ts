@@ -200,9 +200,10 @@ describe('peer-chat-bridge — Phase (d).15', () => {
       expect(messages[0].content).toContain('briefly');
       expect(messages[1].role).toBe('user');
       expect(messages[1].content).toBe('What is CORS?');
-      // No tools (2nd arg is undefined), no chat options (3rd arg is undefined)
+      // No tools (2nd arg is undefined). The 3rd arg now carries the sane-default
+      // output bound applied by the cost-capped fleet call (maxTokens: 4096).
       expect(chat.mock.calls[0][1]).toBeUndefined();
-      expect(chat.mock.calls[0][2]).toBeUndefined();
+      expect(chat.mock.calls[0][2]).toEqual({ maxTokens: 4096 });
       // Response payload
       const payload = r.payload as {
         text: string;
@@ -314,8 +315,9 @@ describe('peer-chat-bridge — Phase (d).15', () => {
         baseCtx,
       );
 
-      const chatOptions = chat.mock.calls[0][2] as { model: string } | undefined;
-      expect(chatOptions).toEqual({ model: 'grok-3-mini-fast' });
+      const chatOptions = chat.mock.calls[0][2] as { model: string; maxTokens?: number } | undefined;
+      // model propagates alongside the sane-default output bound (maxTokens: 4096).
+      expect(chatOptions).toEqual({ model: 'grok-3-mini-fast', maxTokens: 4096 });
       const payload = r.payload as { modelRequested: string };
       expect(payload.modelRequested).toBe('grok-3-mini-fast');
     });

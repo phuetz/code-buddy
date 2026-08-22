@@ -267,7 +267,7 @@ describe('SWEAgent', () => {
         .toBe('beta-private-output');
     } finally {
       resetRestorableCompressor();
-      fs.rmSync(workspace, { recursive: true, force: true });
+      fs.rmSync(workspace, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     }
   });
 

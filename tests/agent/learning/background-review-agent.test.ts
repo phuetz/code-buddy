@@ -422,7 +422,7 @@ describe('reversible-net guard on the live review loop (option A)', () => {
         reviewer: 'auto:gate-passed',
       });
     } finally {
-      await fs.rm(workDir, { recursive: true, force: true });
+      await fs.rm(workDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     }
   });
 
@@ -458,7 +458,7 @@ describe('reversible-net guard on the live review loop (option A)', () => {
       expect(result.screenedWrites).toEqual([]);
       expect(listSkillWriteAudit(workDir)).toHaveLength(1);
     } finally {
-      await fs.rm(workDir, { recursive: true, force: true });
+      await fs.rm(workDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     }
   });
 });

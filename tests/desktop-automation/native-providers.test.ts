@@ -561,8 +561,11 @@ describe('Auto-detection', () => {
   });
 
   describe('fallback chain', () => {
-    it('should have correct default config with native as primary', () => {
-      const { DEFAULT_AUTOMATION_CONFIG } = require('../../src/desktop-automation/types.js');
+    it('should have correct default config with native as primary', async () => {
+      // await import() instead of require(): require() of this ES module throws
+      // "Unexpected token 'export'" on Node 18/20; the dynamic import is
+      // vitest-transformed and works on every Node version.
+      const { DEFAULT_AUTOMATION_CONFIG } = await import('../../src/desktop-automation/types.js');
       expect(DEFAULT_AUTOMATION_CONFIG.provider).toBe('native');
       expect(DEFAULT_AUTOMATION_CONFIG.fallbackProviders).toEqual(['nutjs', 'mock']);
     });

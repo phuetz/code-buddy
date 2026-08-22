@@ -4,6 +4,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   isStaticProject,
+  isNpmProject,
   previewEntry,
   describePreviewMode,
   staticServePlan,
@@ -36,6 +37,12 @@ describe('static-project-model', () => {
   it('finds the static entry path', () => {
     expect(previewEntry(staticTree)).toBe('index.html');
     expect(previewEntry([{ name: 'src', path: 'src', type: 'directory' }])).toBeNull();
+  });
+
+  it('flags an npm project (needs install) by its root package.json', () => {
+    expect(isNpmProject(viteTree)).toBe(true);
+    expect(isNpmProject(staticTree)).toBe(false);
+    expect(isNpmProject([])).toBe(false);
   });
 });
 

@@ -325,7 +325,7 @@ describe('Tools CLI commands', () => {
       );
     } finally {
       process.chdir(previousCwd);
-      await fs.rm(rootDir, { recursive: true, force: true });
+      await fs.rm(rootDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     }
   });
 
@@ -387,7 +387,7 @@ describe('Tools CLI commands', () => {
       ]);
     } finally {
       process.chdir(previousCwd);
-      await fs.rm(rootDir, { recursive: true, force: true });
+      await fs.rm(rootDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     }
   });
 
@@ -430,7 +430,7 @@ describe('Tools CLI commands', () => {
       ).resolves.toContain('- Approved by: Patrice');
     } finally {
       process.chdir(previousCwd);
-      await fs.rm(rootDir, { recursive: true, force: true });
+      await fs.rm(rootDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     }
   });
 
@@ -547,7 +547,7 @@ describe('Tools CLI commands', () => {
       ).resolves.toContain('- Approved by: Patrice');
     } finally {
       process.chdir(previousCwd);
-      await fs.rm(rootDir, { recursive: true, force: true });
+      await fs.rm(rootDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     }
   });
 
@@ -603,7 +603,7 @@ describe('Tools CLI commands', () => {
       );
     } finally {
       process.chdir(previousCwd);
-      await fs.rm(rootDir, { recursive: true, force: true });
+      await fs.rm(rootDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     }
   });
 });

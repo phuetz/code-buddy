@@ -84,6 +84,9 @@ export interface CherryPickOptions {
   noCommit?: boolean;
 }
 
+/** Final bisect summary line, git-version agnostic (unquoted term < 2.55, quoted term >= 2.55 / custom terms). */
+const BISECT_DONE_PATTERN = /\bis the first '?[\w-]+'? commit\b/;
+
 export class GitTool {
   private confirmationService = ConfirmationService.getInstance();
   private attributionManager: AttributionManager;
@@ -707,11 +710,21 @@ export class GitTool {
    */
   async bisectStep(result: 'good' | 'bad' | 'skip'): Promise<ToolResult> {
     try {
-      const { stdout } = await this.execGit(['bisect', result]);
-      const output = stdout.trim();
+      const { stdout, stderr } = await this.execGit(['bisect', result]);
+      // git routes bisect messages inconsistently across versions (the shell-script
+      // bisect wrote the summary to stdout; the newer builtin can emit the
+      // "<commit> is the first bad commit" summary and progress on stderr). Inspect
+      // both streams so completion detection is git-version agnostic.
+      const combined = `${stdout}\n${stderr}`.trim();
 
-      // Check if bisect is done (found the first bad commit)
-      const isDone = output.includes('is the first bad commit');
+      // Check if bisect is done (found the first bad commit). git < 2.55 prints
+      // "<sha> is the first bad commit"; git >= 2.55 quotes the term
+      // ("is the first 'bad' commit", or the custom --term-bad name), so match
+      // the phrase shape rather than one literal.
+      const isDone = BISECT_DONE_PATTERN.test(combined);
+      // Surface both streams so callers (and tests) see the summary wherever git
+      // put it; when only stdout is present this is identical to the old behavior.
+      const output = combined;
 
       return {
         success: true,

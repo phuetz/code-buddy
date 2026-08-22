@@ -25,7 +25,7 @@ beforeAll(() => {
 });
 
 afterAll(() => {
-  rmSync(sessionCwd, { recursive: true, force: true });
+  rmSync(sessionCwd, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   resetTextEditorInstance();
 });
 

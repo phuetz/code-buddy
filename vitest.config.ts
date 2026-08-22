@@ -84,7 +84,19 @@ export default defineConfig({
     globals: true,
     environment: 'node',
     setupFiles: ['./vitest.setup.ts'],
-    testTimeout: 20000,
+    // windows-latest runners show I/O stall bursts: on 2026-08-22 three
+    // different real-I/O suites (migration-e2e, execute-code RPC, ocr-tool)
+    // each crossed 20 s once on a Windows job while finishing in < 5 s on
+    // every other run. Give Windows hosts a 60 s budget; Linux/macOS keep the
+    // historical 20 s / 30 s (a real hang still fails, just later).
+    testTimeout: process.platform === 'win32' ? 60000 : 20000,
+    // Match the generous test timeout for setup/teardown hooks. Several suites do
+    // heavy dynamic `import()` inside `beforeEach`; under the CPU/RAM pressure of a
+    // full parallel run on constrained CI runners those imports occasionally cross
+    // the Vitest default 10s hook timeout and fail spuriously (the same test passes
+    // in ~3s in isolation). 30s removes the false timeout without masking a real
+    // hang. See CI flakiness on macos-latest (3 vCPU / 7 GB).
+    hookTimeout: process.platform === 'win32' ? 60000 : 30000,
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'html', 'lcov'],
@@ -116,6 +128,16 @@ export default defineConfig({
     ],
     pool: 'forks',
     execArgv: ['--max-old-space-size=8192'],
+    // Bound worker concurrency on CI only. The default is one worker per CPU, and
+    // each fork carries an 8 GB heap ceiling — on GitHub's constrained runners
+    // (esp. macos-latest: 3 vCPU / 7 GB) that over-subscribes RAM, causing swap
+    // thrash that slows module imports enough to trip hook timeouts. This is the
+    // honest root-cause fix for the historically-red macOS "Run tests" job: no
+    // test is skipped and no coverage is dropped — the full suite still runs, just
+    // with a steadier scheduler on CI. Local/dev runs keep full parallelism.
+    // (Vitest 4 moved the old `poolOptions.forks` knobs to top-level maxWorkers/
+    // minWorkers.)
+    ...(process.env.CI ? { maxWorkers: 2, minWorkers: 1 } : {}),
   },
   resolve: {
     alias: {

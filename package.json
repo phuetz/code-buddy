@@ -214,7 +214,7 @@
     "playwright": "^1.58.2",
     "sharp": "^0.33.5",
     "string-width": "^7.2.0",
-    "tar": "^7.5.15",
+    "tar": "^7.5.22",
     "tree-sitter": "^0.21.1",
     "tree-sitter-bash": "^0.23.3",
     "tree-sitter-typescript": "^0.23.2",
@@ -267,6 +267,7 @@
     },
     "simple-git": "^3.36.0",
     "vite": "^7.3.3",
-    "ws": "^8.20.1"
+    "ws": "^8.20.1",
+    "npm": "^11.19.0"
   }
 }

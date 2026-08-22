@@ -9,7 +9,7 @@ describe('memory knowledge graph loading', () => {
 
   afterEach(async () => {
     await Promise.all(temporaryDirectories.splice(0).map((dir) =>
-      rm(dir, { recursive: true, force: true })
+      rm(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 })
     ));
   });
 

@@ -30,7 +30,7 @@ describe('diff-review gate covers insert/replace_lines (L4)', () => {
     delete process.env.CODEBUDDY_DIFF_REVIEW;
     editor.dispose();
     (ConfirmationService as unknown as { instance?: ConfirmationService }).instance = undefined;
-    fs.rmSync(dir, { recursive: true, force: true });
+    fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   function seed(name = 'f.ts'): string {

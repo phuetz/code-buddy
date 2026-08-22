@@ -9,7 +9,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { spawnSync } from 'child_process';
 import { mkdtemp, rm } from 'fs/promises';
 import { tmpdir } from 'os';
-import { join } from 'path';
+import { join, sep } from 'path';
 
 import {
   filmSlug,
@@ -117,13 +117,14 @@ describe('film project persistence', () => {
     root = await mkdtemp(join(tmpdir(), 'buddy-filmproj-'));
   });
   afterAll(async () => {
-    await rm(root, { recursive: true, force: true });
+    await rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   it('round-trips through save/load under the films dir', async () => {
     const p = project();
     await saveFilmProject(root, p, fixedNow);
-    expect(filmProjectPath(root, 'My Film!')).toMatch(/films\/My-Film\/film\.json$/);
+    // Compare the POSIX spelling: the project path uses native separators.
+    expect(filmProjectPath(root, 'My Film!').split(sep).join('/')).toMatch(/films\/My-Film\/film\.json$/);
 
     const loaded = await loadFilmProject(root, 'My Film!');
     expect(loaded).not.toBeNull();
@@ -268,7 +269,7 @@ describe.runIf(hasFfmpeg)('assessFilmQuality — real', () => {
     root = await mkdtemp(join(tmpdir(), 'buddy-quality-real-'));
   });
   afterAll(async () => {
-    await rm(root, { recursive: true, force: true });
+    await rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   it('passes a healthy color+tone clip', async () => {

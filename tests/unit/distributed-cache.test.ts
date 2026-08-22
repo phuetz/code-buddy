@@ -443,10 +443,13 @@ describe('getDistributedCache singleton', () => {
     expect(cache1).toBe(cache2);
   });
 
-  it('should accept config on first call', () => {
-    // Reset module to test fresh singleton
+  it('should accept config on first call', async () => {
     jest.resetModules();
-    const { getDistributedCache: getFresh, default: DCClass } = require('../../src/advanced/distributed-cache');
+    // Reset module to test fresh singleton. await import() (with .js) instead of
+    // require(): require() of this ES module fails on Node 18/20 ("require() of ES
+    // Module not supported" / "Unknown file extension .ts"); the dynamic import is
+    // vitest-transformed and returns a fresh module after resetModules().
+    const { getDistributedCache: getFresh, default: DCClass } = await import('../../src/advanced/distributed-cache.js');
 
     const cache = getFresh({ maxSize: 50 * 1024 * 1024 });
     // Check that it's a DistributedCache by duck-typing

@@ -44,6 +44,17 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+/**
+ * Canonical spelling of a path, shared by every comparison in this module and
+ * by the workspace tools (`fs.promises.realpath`). The native realpath also
+ * expands Windows 8.3 short names (`RUNNER~1` → `runneradmin`), which the pure
+ * JS `fs.realpathSync` keeps — mixing the two made a project root never match
+ * git's `--show-toplevel` and every repo look like a symlink escape.
+ */
+function canonicalPath(target: string): string {
+  return fs.realpathSync.native(target);
+}
+
 function isGitRepositoryRoot(candidate: string): boolean {
   try {
     const topLevel = execFileSync(
@@ -51,7 +62,7 @@ function isGitRepositoryRoot(candidate: string): boolean {
       ['-C', candidate, 'rev-parse', '--show-toplevel'],
       { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] },
     ).trim();
-    return fs.realpathSync(topLevel) === candidate;
+    return canonicalPath(topLevel) === candidate;
   } catch {
     return false;
   }
@@ -62,7 +73,7 @@ function findGitRoot(startDir: string): string | null {
   while (true) {
     if (fs.existsSync(path.join(current, '.git'))) {
       try {
-        const canonical = fs.realpathSync(current);
+        const canonical = canonicalPath(current);
         if (isGitRepositoryRoot(canonical)) return canonical;
       } catch {
         // Ignore an unreadable marker and continue looking at parent directories.
@@ -126,7 +137,7 @@ function inspectEntry(rawValue: unknown, index: number, configPath: string): Wor
 
   let normalizedPath: string;
   try {
-    normalizedPath = fs.realpathSync(requestedPath);
+    normalizedPath = canonicalPath(requestedPath);
     if (!fs.statSync(normalizedPath).isDirectory()) {
       return { name: raw.name.trim(), path: raw.path, valid: false, reason: 'path is not a directory' };
     }

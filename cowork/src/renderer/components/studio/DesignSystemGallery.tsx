@@ -53,9 +53,9 @@ export function DesignSystemGallery({ open, selectedId, onSelect, onClose }: Des
             autoFocus
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="Rechercher un style — Spotify, brutalist, minimal, fintech…"
+            placeholder="Search a style — Spotify, brutalist, minimal, fintech…"
             className="min-w-0 flex-1 bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground"
-            aria-label="Rechercher un style"
+            aria-label="Search a style"
           />
           <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
             {filtered.length}/{DESIGN_SYSTEMS.length}
@@ -78,8 +78,8 @@ export function DesignSystemGallery({ open, selectedId, onSelect, onClose }: Des
               !selectedId ? 'border-accent bg-accent/10' : 'border-border bg-background'
             }`}
           >
-            <span className="text-sm font-medium text-foreground">Aucun (neutre)</span>
-            <span className="text-[11px] text-muted-foreground">Génération sans branding imposé.</span>
+            <span className="text-sm font-medium text-foreground">None (neutral)</span>
+            <span className="text-[11px] text-muted-foreground">Generation with no imposed branding.</span>
           </button>
 
           {filtered.map((system) => {

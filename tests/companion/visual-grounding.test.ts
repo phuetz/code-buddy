@@ -21,7 +21,7 @@ afterEach(async () => {
   const { rm } = await import('node:fs/promises');
   await Promise.all(
     temporaryDirectories.splice(0).map((directory) =>
-      rm(directory, { recursive: true, force: true }),
+      rm(directory, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }),
     ),
   );
 });
@@ -181,7 +181,10 @@ describe('one-shot visual grounding lifecycle', () => {
       skipAvailabilityCheck: true,
     }));
     expect(analyze).toHaveBeenCalledOnce();
-    expect(analysisMode).toBe(0o600);
+    // POSIX mode bits only: Windows reports 0o666 whatever the chmod.
+    if (process.platform !== 'win32') {
+      expect(analysisMode).toBe(0o600);
+    }
     expect(result?.status).toBe('analyzed');
     expect(result?.response).toContain('image ponctuelle');
     expect(result?.response).toContain('hamburger maison');

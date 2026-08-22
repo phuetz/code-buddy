@@ -2,6 +2,7 @@ import { execFile } from 'child_process';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import type { ToolResult } from '../types/index.js';
+import { resolveLocalBinaryLaunch } from './local-binary-launch.js';
 
 export interface LintProjectInput {
   root: string;
@@ -52,9 +53,15 @@ async function exists(filePath: string): Promise<boolean> {
   }
 }
 
-function runLocalBinary(file: string, args: string[], cwd: string, timeoutMs: number): Promise<{ stdout: string; stderr: string; timedOut: boolean }> {
+// On win32 the `.bin/eslint.cmd` shim is not spawnable without a shell: run
+// eslint's JS entry through process.execPath (cmd.exe verbatim fallback) —
+// see local-binary-launch.ts.
+const ESLINT_JS_ENTRIES = ['node_modules/eslint/bin/eslint.js'];
+
+function runLocalBinary(root: string, file: string, args: string[], cwd: string, timeoutMs: number): Promise<{ stdout: string; stderr: string; timedOut: boolean }> {
+  const launch = resolveLocalBinaryLaunch(root, file, ESLINT_JS_ENTRIES, args);
   return new Promise((resolve) => {
-    execFile(file, args, { cwd, timeout: timeoutMs, maxBuffer: 10 * 1024 * 1024 }, (error, stdout, stderr) => {
+    execFile(launch.file, launch.args, { cwd, timeout: timeoutMs, maxBuffer: 10 * 1024 * 1024, windowsVerbatimArguments: launch.windowsVerbatimArguments }, (error, stdout, stderr) => {
       const timedOut = Boolean(error && 'killed' in error && error.killed);
       resolve({ stdout: String(stdout ?? ''), stderr: String(stderr ?? ''), timedOut });
     });
@@ -98,7 +105,20 @@ export class LintProjectTool {
       }
 
       const timeoutMs = Math.min(Math.max(Number(input.timeoutMs) || DEFAULT_TIMEOUT_MS, 1_000), MAX_TIMEOUT_MS);
-      const { stdout, stderr, timedOut } = await runLocalBinary(eslintPath, ['.', '--format', 'json'], root, timeoutMs);
+      const { stdout, stderr, timedOut } = await runLocalBinary(root, eslintPath, ['.', '--format', 'json'], root, timeoutMs);
+      // ESLint reports absolute paths derived from its (canonical) cwd; when the
+      // root was given lexically through a symlink (macOS /var → /private/var),
+      // relativize against the canonical root too so summaries stay project-relative.
+      const rootReal = await fs.realpath(root).catch(() => root);
+      const relativize = (filePath: string): string => {
+        const rel = path.relative(root, filePath);
+        if (!rel) return filePath;
+        if (rel.startsWith('..') || path.isAbsolute(rel)) {
+          const relReal = path.relative(rootReal, filePath);
+          if (relReal && !relReal.startsWith('..') && !path.isAbsolute(relReal)) return relReal;
+        }
+        return rel;
+      };
       const reports = parseJsonOutput(stdout);
       const files: LintProjectFileSummary[] = reports.filter(isRecord).map((report) => {
         const messages = Array.isArray(report.messages) ? report.messages.filter(isRecord).map((message) => ({
@@ -109,7 +129,7 @@ export class LintProjectTool {
           message: typeof message.message === 'string' ? message.message : '',
         })) : [];
         return {
-          filePath: typeof report.filePath === 'string' ? path.relative(root, report.filePath) || report.filePath : 'unknown',
+          filePath: typeof report.filePath === 'string' ? relativize(report.filePath) : 'unknown',
           errors: typeof report.errorCount === 'number' ? report.errorCount : messages.filter((m) => m.severity === 2).length,
           warnings: typeof report.warningCount === 'number' ? report.warningCount : messages.filter((m) => m.severity === 1).length,
           messages,
