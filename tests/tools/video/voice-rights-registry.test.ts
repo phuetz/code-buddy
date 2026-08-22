@@ -1,5 +1,5 @@
 import { createHash } from 'crypto';
-import { chmod, mkdtemp, readFile, rm, symlink, writeFile } from 'fs/promises';
+import { chmod, mkdtemp, readFile, realpath, rm, symlink, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
 import path from 'path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -13,7 +13,7 @@ afterEach(async () => {
 });
 
 async function fixture(overrides: Record<string, unknown> = {}) {
-  const root = await mkdtemp(path.join(tmpdir(), 'voice-rights-'));
+  const root = await realpath(await mkdtemp(path.join(tmpdir(), 'voice-rights-')));
   roots.push(root);
   const evidencePath = path.join(root, 'license.txt');
   await writeFile(evidencePath, 'reviewed license evidence', { mode: 0o600 });

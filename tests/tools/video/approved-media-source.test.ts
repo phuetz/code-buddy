@@ -17,7 +17,7 @@ afterEach(async () => {
 });
 
 async function fixture(): Promise<{ root: string; file: string; sha256: string }> {
-  const root = await fs.mkdtemp(path.join(tmpdir(), 'approved-media-'));
+  const root = await fs.realpath(await fs.mkdtemp(path.join(tmpdir(), 'approved-media-')));
   roots.push(root);
   const file = path.join(root, 'portrait.png');
   await fs.writeFile(file, png);
@@ -45,7 +45,7 @@ describe('loadApprovedImageSource', () => {
 
   it('rejects symlinks and files outside the approved root', async () => {
     const value = await fixture();
-    const outsideRoot = await fs.mkdtemp(path.join(tmpdir(), 'outside-media-'));
+    const outsideRoot = await fs.realpath(await fs.mkdtemp(path.join(tmpdir(), 'outside-media-')));
     roots.push(outsideRoot);
     const outside = path.join(outsideRoot, 'outside.png');
     await fs.writeFile(outside, png);
