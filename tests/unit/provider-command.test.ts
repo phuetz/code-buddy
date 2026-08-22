@@ -141,7 +141,7 @@ describe('Provider Command', () => {
       expect(output).toContain('🆓 OmniRoute (local AI gateway)');
       expect(output).toContain('Free tier: local gateway to 90+ free tiers');
       expect(output).toContain('Base URL: http://localhost:20128/v1');
-      expect(output).toContain('API key env: OMNIROUTE_API_KEY');
+      expect(output).toContain('Enable with: OMNIROUTE_BASE_URL');
       expect(output).toContain('API key env: NVIDIA_API_KEY');
       expect(output).not.toContain('Key: grok');
       expect(output).not.toContain('Plugin-native providers');

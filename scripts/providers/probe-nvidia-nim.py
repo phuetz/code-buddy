@@ -10,7 +10,10 @@ BASE = os.environ.get("NVIDIA_BASE_URL", "https://integrate.api.nvidia.com/v1")
 def load_key():
     k = os.environ.get("NVIDIA_API_KEY")
     if k: return k
-    for line in open(os.path.expanduser("~/.codebuddy/lisa.env"), encoding="utf-8"):
+    envf = os.path.expanduser("~/.codebuddy/lisa.env")
+    if not os.path.isfile(envf):
+        sys.exit("NVIDIA_API_KEY introuvable (ni dans l'environnement, ni dans ~/.codebuddy/lisa.env) — clé gratuite sur build.nvidia.com")
+    for line in open(envf, encoding="utf-8"):
         m = re.match(r'^(?:export\s+)?NVIDIA_API_KEY=(.*)$', line.strip())
         if m: return m.group(1).strip().strip('"').strip("'")
     sys.exit("NVIDIA_API_KEY introuvable")
@@ -51,7 +54,10 @@ def main():
     args = [a for a in sys.argv[1:] if not a.startswith("--")]
     out_json = None
     if "--json" in sys.argv:
-        out_json = sys.argv[sys.argv.index("--json") + 1]; args = [a for a in args if a != out_json]
+        i = sys.argv.index("--json")
+        if i + 1 >= len(sys.argv) or sys.argv[i + 1].startswith("--"):
+            sys.exit("--json attend un chemin de sortie (ex. --json probe.json)")
+        out_json = sys.argv[i + 1]; args = [a for a in args if a != out_json]
     try:
         live = [m["id"] for m in get("/models").get("data", [])]
     except Exception as e:
