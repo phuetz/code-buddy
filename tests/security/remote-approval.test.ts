@@ -26,7 +26,7 @@ describe('RemoteApprovalService', () => {
     const second = await requestAndApprove(service);
 
     expect(first.id).toMatch(
-      /^approval-[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+      /^approval-[0-9a-f]{10}$/i
     );
     expect(second.id).not.toBe(first.id);
   });

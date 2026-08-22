@@ -7,7 +7,7 @@
  */
 
 import { EventEmitter } from 'events';
-import { randomUUID } from 'crypto';
+import { randomBytes } from 'crypto';
 import { logger } from '../utils/logger.js';
 
 // ============================================================================
@@ -72,7 +72,8 @@ export class RemoteApprovalService extends EventEmitter {
     summary: string;
     timeoutMs?: number;
   }): Promise<boolean> {
-    const id = `approval-${randomUUID()}`;
+    // 10 hex = 40 bits d'entropie : imprévisible pour un ID à TTL court, et tapable sur Telegram (« /approve approval-9f3c1a2b7e »)
+    const id = `approval-${randomBytes(5).toString('hex')}`;
     const timeoutMs = req.timeoutMs ?? this.defaultTimeoutMs;
 
     const request: ApprovalRequest = {
