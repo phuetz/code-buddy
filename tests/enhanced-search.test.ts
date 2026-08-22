@@ -10,6 +10,7 @@
  */
 
 import { EventEmitter } from 'events';
+import * as nodePath from 'path';
 
 // Mock @vscode/ripgrep
 jest.mock('@vscode/ripgrep', () => ({
@@ -131,7 +132,8 @@ describe('EnhancedSearch', () => {
           'test query',
         ]),
         expect.objectContaining({
-          cwd: '/test/workdir',
+          // The workdir is path.resolve()d (drive letter + backslashes on Windows).
+          cwd: nodePath.resolve('/test/workdir'),
         })
       );
     });

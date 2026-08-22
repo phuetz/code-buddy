@@ -42,6 +42,8 @@ try {
 
 describe.skipIf(!hasBetterSqlite3)('Database migration E2E (old install → current)', () => {
   const ORIGINAL_HOME = process.env.HOME;
+  // os.homedir() reads USERPROFILE on Windows, HOME elsewhere — redirect both.
+  const ORIGINAL_USERPROFILE = process.env.USERPROFILE;
   let fakeHome: string;
   let workDir: string;
 
@@ -67,6 +69,7 @@ describe.skipIf(!hasBetterSqlite3)('Database migration E2E (old install → curr
     fakeHome = mkdtempSync(join(tmpdir(), 'codebuddy-mig-home-'));
     workDir = mkdtempSync(join(tmpdir(), 'codebuddy-mig-work-'));
     process.env.HOME = fakeHome;
+    process.env.USERPROFILE = fakeHome;
 
     const schema = await import('../../src/database/schema.js');
     SCHEMA_VERSION = schema.SCHEMA_VERSION;
@@ -100,6 +103,8 @@ describe.skipIf(!hasBetterSqlite3)('Database migration E2E (old install → curr
 
   afterAll(() => {
     process.env.HOME = ORIGINAL_HOME;
+    if (ORIGINAL_USERPROFILE === undefined) delete process.env.USERPROFILE;
+    else process.env.USERPROFILE = ORIGINAL_USERPROFILE;
     for (const dir of [fakeHome, workDir]) {
       try {
         rmSync(dir, { recursive: true, force: true });

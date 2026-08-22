@@ -5,7 +5,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mkdtempSync, rmSync, readFileSync } from 'fs';
 import { tmpdir } from 'os';
-import { join } from 'path';
+import { basename, join } from 'path';
 import {
   canonicalObject,
   decayPolicyFor,
@@ -148,7 +148,7 @@ describe('CKG.exportFactMirror + listFacts (read-only Markdown mirror)', () => {
     const out = join(dir2, 'mirror');
     const { files, factCount } = ckg.exportFactMirror(out);
     expect(factCount).toBe(2);
-    expect(files.map((f) => f.split('/').pop()).sort()).toEqual(['identity.md', 'tool.md']);
+    expect(files.map((f) => basename(f)).sort()).toEqual(['identity.md', 'tool.md']);
 
     const identity = readFileSync(join(out, 'identity.md'), 'utf8');
     expect(identity).toContain('NE PAS ÉDITER');
