@@ -36,11 +36,26 @@ export interface OCROptions {
  * Uses Tesseract OCR as the backend (must be installed on system)
  * Falls back to basic image analysis if Tesseract is not available
  */
+export interface OCRToolOptions {
+  /**
+   * Host platform driving the engine cascade (default `process.platform`).
+   * Injected so tests of the Tesseract CLI path can skip engine 1 — the
+   * Windows-native PowerShell OCR shells out for real (dynamic
+   * `import('child_process')` escapes the static mock) and would race them.
+   */
+  platform?: NodeJS.Platform;
+}
+
 export class OCRTool {
   private readonly supportedFormats = ['.png', '.jpg', '.jpeg', '.gif', '.bmp', '.tiff', '.tif', '.webp'];
   private readonly maxFileSizeMB = 50;
   private tesseractAvailable: boolean | null = null;
   private vfs = UnifiedVfsRouter.Instance;
+  private readonly platform: NodeJS.Platform;
+
+  constructor(options: OCRToolOptions = {}) {
+    this.platform = options.platform ?? process.platform;
+  }
 
   /**
    * Perform OCR on an image file
@@ -75,7 +90,7 @@ export class OCRTool {
 
       // Cascade order:
       // 1. Try Windows Runtime OCR if on Windows
-      if (process.platform === 'win32') {
+      if (this.platform === 'win32') {
         const winResult = await this.runWindowsNativeOCR(resolvedPath);
         if (winResult.success) {
           return winResult;
