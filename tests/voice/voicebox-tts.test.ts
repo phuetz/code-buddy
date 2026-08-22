@@ -128,7 +128,10 @@ describe('Voicebox synthesis', () => {
       expect(await synthesizeVoiceboxWav('Première phrase.', first, env, { fetchImpl })).toBe(true);
       expect(await synthesizeVoiceboxWav('Deuxième phrase.', second, env, { fetchImpl })).toBe(true);
       expect(readFileSync(first).subarray(0, 4).toString('ascii')).toBe('RIFF');
-      expect(statSync(first).mode & 0o077).toBe(0);
+      // POSIX mode bits only: Windows reports 0o666 whatever the chmod.
+      if (process.platform !== 'win32') {
+        expect(statSync(first).mode & 0o077).toBe(0);
+      }
       expect(fetchImpl).toHaveBeenCalledTimes(3);
     } finally {
       rmSync(dir, { recursive: true, force: true });

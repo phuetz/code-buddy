@@ -42,8 +42,11 @@ describe('MealPlanStore CRUD and privacy', () => {
 
     expect((await store.get(created.id))?.status).toBe('suggested');
     expect(await store.list({ slot: 'lunch' })).toHaveLength(1);
-    expect(fs.statSync(path.dirname(filePath)).mode & 0o777).toBe(0o700);
-    expect(fs.statSync(filePath).mode & 0o777).toBe(0o600);
+    // POSIX mode bits only: Windows reports 0o666 whatever the chmod.
+    if (process.platform !== 'win32') {
+      expect(fs.statSync(path.dirname(filePath)).mode & 0o777).toBe(0o700);
+      expect(fs.statSync(filePath).mode & 0o777).toBe(0o600);
+    }
 
     now = new Date('2026-07-12T09:00:00.000Z');
     const updated = await store.update(created.id, {

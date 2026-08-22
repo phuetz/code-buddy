@@ -147,7 +147,9 @@ describe('applyReviewedDiff', () => {
     expect(read('b.ts')).toBe('raced\n');
   });
 
-  it('rolls back EVERYTHING when a write fails mid-apply', () => {
+  // Relies on chmod 0o555 making a directory unwritable — POSIX mode bits have no
+  // effect on Windows, so the mid-apply failure cannot be provoked there.
+  it.skipIf(process.platform === 'win32')('rolls back EVERYTHING when a write fails mid-apply', () => {
     write('a.ts', 'v1\n');
     // A read-only directory: creating sub/blocked.ts will fail with EACCES —
     // and it is NOT detectable as a conflict beforehand (the file is absent).

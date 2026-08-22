@@ -43,8 +43,11 @@ describe('FoodInventoryStore', () => {
     expect(created).not.toHaveProperty('allergens');
     expect(created).not.toHaveProperty('allergenDisclosure');
     expect(await store.list({ status: 'unknown' })).toHaveLength(1);
-    expect(fs.statSync(path.dirname(filePath)).mode & 0o777).toBe(0o700);
-    expect(fs.statSync(filePath).mode & 0o777).toBe(0o600);
+    // POSIX mode bits only: Windows reports 0o666 whatever the chmod.
+    if (process.platform !== 'win32') {
+      expect(fs.statSync(path.dirname(filePath)).mode & 0o777).toBe(0o700);
+      expect(fs.statSync(filePath).mode & 0o777).toBe(0o600);
+    }
 
     now = new Date('2026-07-12T09:00:00.000Z');
     const updated = await store.update(created.id, {

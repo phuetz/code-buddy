@@ -44,7 +44,8 @@ describe('skill-signing', () => {
     expect(verifyManifest({ ...manifest, version: '1.0.1' }, signature, getPublicKey())).toBe(false);
   });
 
-  it('creates the private key with mode 0600', () => {
+  // POSIX mode bits only: Windows reports 0o666 whatever the chmod.
+  it.skipIf(process.platform === 'win32')('creates the private key with mode 0600', () => {
     getPublicKey();
     const mode = fs.statSync(path.join(tempHome, '.codebuddy', 'skill-signing', 'key.pem')).mode & 0o777;
 

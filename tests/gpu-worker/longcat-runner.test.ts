@@ -92,7 +92,8 @@ describe('LongCat GPU runner hardening', () => {
     });
   });
 
-  it('forwards SIGTERM to the complete inference process group', async () => {
+  // POSIX process groups + SIGTERM forwarding; Windows has neither.
+  it.skipIf(process.platform === 'win32')('forwards SIGTERM to the complete inference process group', async () => {
     const root = await mkdtemp(join(tmpdir(), 'codebuddy-longcat-signal-'));
     created.push(root);
     const childPidPath = join(root, 'child.pid');
