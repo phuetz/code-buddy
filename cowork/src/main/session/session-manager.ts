@@ -2879,6 +2879,10 @@ export class SessionManager {
     }
   }
 
+  dispose(): void {
+    this.turnJournal.close();
+  }
+
   // Request permission for a tool
   async requestPermission(
     sessionId: string,

@@ -2470,6 +2470,7 @@ async function cleanupSandboxResources(): Promise<void> {
     logError('[App] Error stopping clipboard watcher:', error);
   }
 
+  sessionManager?.dispose();
   try {
     closeDatabase();
   } catch (error) {
@@ -2540,6 +2541,7 @@ app.on('before-quit', async (event) => {
     if (process.env.VITE_DEV_SERVER_URL) {
       stopNavServer();
       liveLauncherBridge?.shutdown();
+      sessionManager?.dispose();
       try {
         closeDatabase();
       } catch {

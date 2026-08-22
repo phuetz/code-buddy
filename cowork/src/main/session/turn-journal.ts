@@ -88,6 +88,19 @@ export interface TurnJournalReadResult {
   replay: TurnJournalReplayResult;
 }
 
+interface OpenJournalHandle {
+  fd: number;
+  dirty: boolean;
+  flushTimer: ReturnType<typeof setTimeout> | null;
+}
+
+const FSYNC_INTERVAL_MS = 100;
+const DURABLE_BOUNDARIES = new Set<TurnJournalEventType>([
+  'turn_completed',
+  'turn_failed',
+  'cancel_requested',
+]);
+
 /**
  * Identifies the exact byte prefix that belonged to the history active before
  * a branch mutation. The fence itself is committed in SQLite with the branch
@@ -103,6 +116,7 @@ export interface TurnJournalFence {
 export class TurnJournal {
   private readonly dir: string;
   private readonly runSequences: Map<string, number> = new Map();
+  private readonly openHandles: Map<string, OpenJournalHandle> = new Map();
 
   constructor(dir?: string) {
     this.dir = dir ?? path.join(app.getPath('userData'), 'turn-journals');
@@ -132,7 +146,19 @@ export class TurnJournal {
         ...(turnId ? { turnId } : {}),
         ...(Object.keys(data).length > 0 ? { data } : {}),
       };
-      appendLineDurably(this.pathFor(sessionId), `${JSON.stringify(event)}\n`);
+      const handle = this.getOrOpenHandle(sessionId);
+      try {
+        fs.writeSync(handle.fd, `${JSON.stringify(event)}\n`, undefined, 'utf8');
+        handle.dirty = true;
+      } catch (error) {
+        this.closeHandle(sessionId, false);
+        throw error;
+      }
+      if (DURABLE_BOUNDARIES.has(type)) {
+        this.closeHandle(sessionId, true);
+      } else {
+        this.scheduleFlush(sessionId, handle);
+      }
     } catch (error) {
       logWarn('[TurnJournal] append failed:', error);
     }
@@ -228,12 +254,60 @@ export class TurnJournal {
 
   delete(sessionId: string): void {
     try {
+      this.closeHandle(sessionId, false);
       const file = this.pathFor(sessionId);
       if (fs.existsSync(file)) {
         fs.unlinkSync(file);
       }
     } catch (error) {
       logWarn('[TurnJournal] delete failed:', error);
+    }
+  }
+
+  close(): void {
+    for (const sessionId of [...this.openHandles.keys()]) {
+      this.closeHandle(sessionId, true);
+    }
+  }
+
+  private getOrOpenHandle(sessionId: string): OpenJournalHandle {
+    const existing = this.openHandles.get(sessionId);
+    if (existing) return existing;
+    const handle: OpenJournalHandle = {
+      fd: fs.openSync(this.pathFor(sessionId), 'a'),
+      dirty: false,
+      flushTimer: null,
+    };
+    this.openHandles.set(sessionId, handle);
+    return handle;
+  }
+
+  private scheduleFlush(sessionId: string, handle: OpenJournalHandle): void {
+    if (handle.flushTimer) return;
+    handle.flushTimer = setTimeout(() => this.closeHandle(sessionId, true), FSYNC_INTERVAL_MS);
+    handle.flushTimer.unref?.();
+  }
+
+  private closeHandle(sessionId: string, durable: boolean): void {
+    const handle = this.openHandles.get(sessionId);
+    if (!handle) return;
+    this.openHandles.delete(sessionId);
+    if (handle.flushTimer) {
+      clearTimeout(handle.flushTimer);
+      handle.flushTimer = null;
+    }
+    try {
+      if (durable && handle.dirty) {
+        fs.fsyncSync(handle.fd);
+      }
+    } catch (error) {
+      logWarn('[TurnJournal] fsync failed:', error);
+    } finally {
+      try {
+        fs.closeSync(handle.fd);
+      } catch (error) {
+        logWarn('[TurnJournal] close failed:', error);
+      }
     }
   }
 
@@ -253,6 +327,9 @@ export class TurnJournal {
     const replay = this.read(sessionId).replay;
     const safeReason = safeJournalName(reason) || 'history-change';
     const archivedPath = `${file}.${safeReason}.${Date.now()}.${randomUUID()}.archived`;
+    // Flush + close the append handle first so later appends reopen the fresh
+    // active file instead of writing into the archived inode.
+    this.closeHandle(sessionId, true);
     fs.renameSync(file, archivedPath);
     for (const run of replay.runs) {
       this.runSequences.delete(run.runId);
@@ -505,14 +582,4 @@ function statusForEventType(type: TurnJournalEventType): TurnJournalTurnStatus {
   if (type === 'turn_failed') return 'failed';
   if (type === 'cancel_requested') return 'cancelled';
   return 'running';
-}
-
-function appendLineDurably(file: string, line: string): void {
-  const fd = fs.openSync(file, 'a');
-  try {
-    fs.writeSync(fd, line, undefined, 'utf8');
-    fs.fsyncSync(fd);
-  } finally {
-    fs.closeSync(fd);
-  }
 }
