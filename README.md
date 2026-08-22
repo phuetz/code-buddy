@@ -22,7 +22,7 @@
 
 <br/>
 
-Watch a **local model reason on screen, then use real tools to do the work** — no cloud, no API bill, `~$0`. Or bring any of **65 providers** (Claude, GPT, Grok, Gemini, Mistral, DeepSeek, NVIDIA NIM, Cerebras, … — **25 with a free tier**) with automatic failover. From your terminal, a desktop app, your phone, or a 24/7 service. No lock-in.
+Watch a **local model reason on screen, then use real tools to do the work** — no cloud, no API bill, `~$0`. Or bring any of **64 providers** (Claude, GPT, Grok, Gemini, Mistral, DeepSeek, NVIDIA NIM, Cerebras, … — **25 with a free tier**) with automatic failover. From your terminal, a desktop app, your phone, or a 24/7 service. No lock-in.
 
 <p align="center">
   <a href="docs/qa/code-buddy-studio/cowork-demo-moneyshot.mp4"><img src="docs/qa/code-buddy-studio/cowork-demo-moneyshot.gif" alt="A local model reasons, then creates a file — for ~$0.0001" width="760"/></a>
@@ -30,7 +30,7 @@ Watch a **local model reason on screen, then use real tools to do the work** —
   <sub>A <b>local</b> model reasons, then uses a tool to create a real file — <code>~$0.0001</code>, no cloud. <a href="cowork/readme.md#demo">More demos →</a></sub>
 </p>
 
-- 🆓 **Free & local-first** — runs entirely on local **Ollama (`$0`)**, any of **65 providers** (25 free-tier) with auto-failover, or a flat-fee **ChatGPT Plus/Pro** / **SuperGrok** login (no API metering). Two minutes to start: `buddy onboard` → `buddy try`.
+- 🆓 **Free & local-first** — runs entirely on local **Ollama (`$0`)**, any of **64 providers** (25 free-tier) with auto-failover, or a flat-fee **ChatGPT Plus/Pro** / **SuperGrok** login (no API metering). Two minutes to start: `buddy onboard` → `buddy try`.
 - 🧠 **Reasoning you can watch** — local models think step-by-step on screen, then call tools to act. See the [live captures](cowork/readme.md#demo).
 - 🛠️ **200+ tools** (RAG-selected per query) — edit, shell, web search, browser, PDFs/Office, image/video generation, 150 design systems, a skills hub, and MCP in both directions (`buddy mcp-server`, `buddy mcp add`).
 - 🖥️ **Runs everywhere** — terminal TUI, the **Cowork** desktop app, an HTTP/WebSocket server, your phone, or a 24/7 background service — one core engine.
@@ -59,7 +59,7 @@ Watch a **local model reason on screen, then use real tools to do the work** —
 
 ## What is Code Buddy?
 
-An open-source, multi-provider AI coding agent with a terminal UI, an HTTP/WebSocket server, and the **Cowork** desktop app — all on one core engine. It reads files, writes code, runs commands, opens PRs, and plans complex tasks across **65 LLM providers** (one OpenAI-compatible dispatcher; 25 with a free tier, 6 validated live for chat and 2 for agentic tool-use — see [features.md](docs/features.md#providers--login)) with automatic failover and per-provider circuit breakers. With `buddy login`, a ChatGPT Plus / Pro subscription becomes the flat-fee brain of the whole system — no API keys, no per-token metering. An optional companion layer adds voice, durable memory, opt-in camera perception, and 24/7 background operation.
+An open-source, multi-provider AI coding agent with a terminal UI, an HTTP/WebSocket server, and the **Cowork** desktop app — all on one core engine. It reads files, writes code, runs commands, opens PRs, and plans complex tasks across **64 LLM providers** (one OpenAI-compatible dispatcher; 25 with a free tier, 6 validated live for chat and 2 for agentic tool-use — see [features.md](docs/features.md#providers--login)) with automatic failover and per-provider circuit breakers. With `buddy login`, a ChatGPT Plus / Pro subscription becomes the flat-fee brain of the whole system — no API keys, no per-token metering. An optional companion layer adds voice, durable memory, opt-in camera perception, and 24/7 background operation.
 
 ---
 
@@ -149,7 +149,7 @@ More desktop demos (Fleet, Autonomy, Companion, …) and captures: [`cowork/read
 - ✅ **ChatGPT Plus/Pro → `gpt-5.6-sol` at `$0`** — `buddy login`, flat-fee, no API key, no per-token metering.
 - ✅ **Goal loops (Ralph loop)** — a judge model re-checks completion every turn and auto-continues until done; proven multi-turn on a free local model, with a real in-loop length-truncation recovery ([test](tests/agent/in-loop-recovery.real.test.ts), no mocks).
 - ✅ **Multi-AI Fleet** — peers observe each other live and call each other's models & read-only tools (`peer.chat` / `peer.tool.invoke`).
-- ✅ **65 providers** wired through one dispatcher (**25 with a free tier** — `docs/providers/omniroute-free-catalog.md`), automatic failover and per-provider circuit breakers; **200+ tools** declared (RAG-selected), MCP server + connectors, a skills hub with a firewall.
+- ✅ **64 providers** wired through one dispatcher (**25 with a free tier** — `docs/providers/omniroute-free-catalog.md`), automatic failover and per-provider circuit breakers; **200+ tools** declared (RAG-selected), MCP server + connectors, a skills hub with a firewall.
 - ✅ **App Studio** in the desktop app — real install/dev-server/live preview/auto-fix/GitHub push ([section below](#build--run-apps--app-studio-a-0-offline-boltnew)); **150 design systems** shipped as assets.
 - ✅ **Self-improvement with empirical gates** — `buddy improve tools` authors tools that must pass held-out tests; `buddy evolve` (opt-in) scores source variants in throwaway worktrees and merges nothing without `keep --confirm`.
 - ✅ **Video Studio** — `buddy film from-prompt` / `buddy film generate|assemble|status` and the Cowork Video Studio panel.
@@ -166,7 +166,7 @@ More desktop demos (Fleet, Autonomy, Companion, …) and captures: [`cowork/read
 | `$0` local agent | A local Ollama/LM Studio model reasons on screen, then calls tools (files, shell, web) — no key, no cloud | `buddy` · `buddy -p "<task>"` | shipped |
 | Flat-fee logins | ChatGPT Plus/Pro (`gpt-5.6-sol`) and SuperGrok over OAuth — cost reported `$0.0000`, no API key | `buddy login` · `buddy login xai` | shipped |
 | Onboarding in 2 min | Wizard detects what you have, prefers the free path, ends on a green demo; repair tool | `buddy onboard` · `buddy try` · `buddy doctor --fix` | shipped |
-| 65 providers, 25 free tiers | One OpenAI-compatible dispatcher; failover order, ensembles, council | `buddy llm` · `buddy llm ensemble "<q>"` · `buddy council` | shipped (free tiers: verify live) |
+| 64 providers, 25 free tiers | One OpenAI-compatible dispatcher; failover order, ensembles, council | `buddy llm` · `buddy llm ensemble "<q>"` · `buddy council` | shipped (free tiers: verify live) |
 | App Studio (bolt.new, `$0`) | Describe → scaffold → real `npm install` + dev server → live preview → auto-fix (≤3) → GitHub push | Cowork → **App Studio** | shipped (desktop only) |
 | 150 design systems | Brand tokens + `DESIGN.md` applied to generated apps; agent tool `design_system` | Cowork gallery · tool `design_system` | shipped |
 | Self-improvement (Darwin-Gödel style) | Authors lessons/tools/skills, keeps only what passes empirical + held-out gates; never touches `src/` | `buddy improve tools [--apply]` · `buddy improve status` | shipped, propose-only by default |
@@ -261,7 +261,7 @@ Code Buddy is one engine — terminal, desktop, and HTTP — that an LLM drives 
 
 | Area | In one line | Deep dive |
 |:-----|:------------|:----------|
-| [Providers & login](docs/features.md#providers--login) | 65 LLM providers (25 free-tier) + ChatGPT/xAI login at **$0** flat-fee, auto-failover, ensembles, council | [providers.md](docs/providers.md) |
+| [Providers & login](docs/features.md#providers--login) | 64 LLM providers (25 free-tier) + ChatGPT/xAI login at **$0** flat-fee, auto-failover, ensembles, council | [providers.md](docs/providers.md) |
 | [The agentic loop](docs/features.md#the-agentic-loop) | autonomous tool-calling with a middleware pipeline + confirm-before-execute | [CLAUDE.md](CLAUDE.md) |
 | [200+ tools](docs/features.md#110-tools) | edit/shell/web/browser/docs/media/design, RAG-selected per query, 5-strategy edit matching | [tools-reference.md](docs/tools-reference.md) |
 | [Reasoning](docs/features.md#reasoning) | extended thinking + Tree-of-Thought / MCTS, `/think` | [reasoning.md](docs/reasoning.md) |
@@ -410,7 +410,7 @@ Design, the five sense modules, the opt-in features, and the diagrams: [`buddy-s
 | [Install](docs/install.md) | The three install paths — one-command `curl \| sh`, Docker/VPS (24/7), npm |
 | [Getting Started](docs/getting-started.md) | Prerequisites, install, first run, headless mode, sessions |
 | [Features](docs/features.md) | The full feature surface — providers, agentic loop, tools, reasoning, autonomy, fleet, security, channels, and more |
-| [Providers](docs/providers.md) | All 65 providers (25 free-tier), connection profiles, model pairs, circuit breaker |
+| [Providers](docs/providers.md) | All 64 providers (25 free-tier), connection profiles, model pairs, circuit breaker |
 | [Tools Reference](docs/tools-reference.md) | Tool categories, RAG selection, edit matching, `apply_patch`, streaming |
 | [Commands](docs/commands.md) | All slash commands, CLI subcommands, companion commands, global flags |
 | [Cowork Desktop](docs/cowork.md) · [Architecture](cowork/ARCHITECTURE.md) · [README](cowork/readme.md) | Desktop overview, install, source build, sandbox modes, internals |
