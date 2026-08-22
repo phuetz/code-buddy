@@ -478,13 +478,13 @@ describe('EnhancedMemory', () => {
     it('should sort by importance and recency', async () => {
       const results = await memory.recall();
 
-      // Results should be sorted (higher score first)
+      // Results should be sorted (higher score first). `recall()` bumps
+      // `lastAccessedAt` on every returned entry, so recomputing the recency
+      // term afterwards with a fresh `Date.now()` is clock-granularity noise
+      // (flaky on Windows): all recency terms are ≈ 1 and the order is
+      // decided by importance — assert that, with a tolerance for ties.
       for (let i = 1; i < results.length; i++) {
-        const prevScore = results[i - 1].importance * 0.6 +
-          (new Date(results[i - 1].lastAccessedAt).getTime() / Date.now()) * 0.4;
-        const currScore = results[i].importance * 0.6 +
-          (new Date(results[i].lastAccessedAt).getTime() / Date.now()) * 0.4;
-        expect(prevScore).toBeGreaterThanOrEqual(currScore);
+        expect(results[i - 1].importance + 1e-6).toBeGreaterThanOrEqual(results[i].importance);
       }
     });
 
