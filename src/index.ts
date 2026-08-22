@@ -3431,6 +3431,39 @@ addLazyCommand(
   },
 );
 
+// Cost dashboard — read-only aggregation of persisted session JSON
+addLazyCommand(
+  program,
+  'cost',
+  'Aggregate saved-session cost and token usage by model, provider, or day',
+  async () => {
+    const { createCostCommand } = await import('./commands/cost.js');
+    return createCostCommand();
+  },
+);
+
+// Changelog — grouped release notes from Conventional Commits
+addLazyCommand(
+  program,
+  'changelog',
+  'Generate grouped release notes from Conventional Commits',
+  async () => {
+    const { createChangelogCommand } = await import('./commands/changelog.js');
+    return createChangelogCommand();
+  },
+);
+
+// Import — project rules + MCP servers from Cursor / Cline / Copilot / Claude Code
+addLazyCommand(
+  program,
+  'import',
+  'Import project rules and MCP servers from Cursor, Cline, Copilot, or Claude Code',
+  async () => {
+    const { createImportCommand } = await import('./commands/import.js');
+    return createImportCommand();
+  },
+);
+
 // AI-Scientist-lite (Phases 0-3) — human-gated, sandboxed experiment: single pass or bounded discovery loop (opt-in)
 addLazyCommand(
   program,
