@@ -97,8 +97,12 @@ case "$MOTEUR" in
     NKEY=$(grep -E "^(export )?NVIDIA_API_KEY=" "$HOME/.codebuddy/lisa.env" 2>/dev/null | head -1 | sed 's/^export //' | cut -d= -f2- | tr -d "'\"")
     [ -n "$NKEY" ] || { echo "NVIDIA_API_KEY introuvable dans ~/.codebuddy/lisa.env" >&2; exit 2; }
     CB_SRC=${CB_SRC:-$HOME/code-buddy-vitrine}; [ -f "$CB_SRC/src/index.ts" ] || CB_SRC=$HOME/code-buddy
-    (cd "$DEPOT" && NVIDIA_API_KEY="$NKEY" "$CB_SRC/node_modules/.bin/tsx" "$CB_SRC/src/index.ts" \
-       -u https://integrate.api.nvidia.com/v1 -m "${NVIDIA_MODELE:-moonshotai/kimi-k3}" \
+    # ⚠️ PAS de -u/-m : ces flags PERSISTENT baseURL/modèle dans ~/.codebuddy/user-settings.json (effet de
+    # bord vu le 22/08). On sélectionne le provider par l'environnement, sans rien écrire.
+    # -m ne persiste rien (seul -u écrit user-settings) mais il est NÉCESSAIRE : sans lui, le
+    # defaultModel périmé de ~/.codebuddy/user-settings.json (grok-code-fast-1) part vers NVIDIA → 404.
+    (cd "$DEPOT" && CODEBUDDY_PROVIDER=nvidia NVIDIA_API_KEY="$NKEY" \
+       "$CB_SRC/node_modules/.bin/tsx" "$CB_SRC/src/index.ts" -m "${NVIDIA_MODELE:-moonshotai/kimi-k3}" \
        --permission-mode acceptEdits -p "$(cat "$CONSIGNE")") 2>&1 | tee "$LOG"
     ;;
   oc)
