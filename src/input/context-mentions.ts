@@ -4,6 +4,10 @@ import axios from "axios";
 import { exec } from "child_process";
 import { promisify } from "util";
 import { getErrorMessage } from "../types/index.js";
+import {
+  DEFAULT_FILE_MENTION_MAX_BYTES,
+  resolveProjectFileMention,
+} from '../context/file-mentions.js';
 
 const execAsync = promisify(exec);
 
@@ -29,6 +33,11 @@ export interface ExpandedInput {
   contexts: MentionContext[];
 }
 
+export interface ContextMentionParserOptions {
+  projectRoot?: string;
+  maxFileBytes?: number;
+}
+
 export class ContextMentionParser {
   private patterns = {
     file: /@file:([^\s]+)/g,
@@ -43,8 +52,14 @@ export class ContextMentionParser {
     terminal: /@terminal\b/g,
   };
 
-  private maxFileSize = 100 * 1024;  // 100KB max for included files
+  private projectRoot: string;
+  private maxFileSize: number;
   private maxUrlSize = 50 * 1024;    // 50KB max for URL content
+
+  constructor(options: ContextMentionParserOptions = {}) {
+    this.projectRoot = options.projectRoot ?? process.cwd();
+    this.maxFileSize = options.maxFileBytes ?? DEFAULT_FILE_MENTION_MAX_BYTES;
+  }
 
   async expandMentions(input: string): Promise<ExpandedInput> {
     const contexts: MentionContext[] = [];
@@ -188,34 +203,24 @@ export class ContextMentionParser {
   }
 
   private async resolveFile(filePath: string, original: string): Promise<MentionContext> {
-    const resolvedPath = path.resolve(filePath);
+    const result = await resolveProjectFileMention(filePath, {
+      projectRoot: this.projectRoot,
+      maxFileBytes: this.maxFileSize,
+    });
 
-    if (!(await fs.pathExists(resolvedPath))) {
+    if (result === null) {
       throw new Error(`File not found: ${filePath}`);
     }
 
-    const stats = await fs.stat(resolvedPath);
-
-    if (stats.isDirectory()) {
-      const files = await fs.readdir(resolvedPath);
-      return {
-        type: "file",
-        original,
-        resolved: resolvedPath,
-        content: `Directory ${filePath}:\n${files.join("\n")}`,
-      };
+    if (result.status === 'ignored') {
+      throw new Error(`File mention refused (${result.reason}): ${result.message}`);
     }
 
-    if (stats.size > this.maxFileSize) {
-      throw new Error(`File too large: ${filePath} (${Math.round(stats.size / 1024)}KB > ${Math.round(this.maxFileSize / 1024)}KB)`);
-    }
-
-    const content = await fs.readFile(resolvedPath, "utf-8");
     return {
       type: "file",
       original,
-      resolved: resolvedPath,
-      content: `File ${filePath}:\n\`\`\`\n${content}\n\`\`\``,
+      resolved: result.path,
+      content: `File ${result.path}:\n\`\`\`\n${result.content}\n\`\`\``,
     };
   }
 
@@ -632,8 +637,11 @@ export function getContextMentionParser(): ContextMentionParser {
  * - The cleaned message (without the @mentions)
  * - Structured context blocks to inject into the system prompt or user message
  */
-export async function processMentions(message: string): Promise<MentionResult> {
-  const parser = getContextMentionParser();
+export async function processMentions(
+  message: string,
+  options?: ContextMentionParserOptions,
+): Promise<MentionResult> {
+  const parser = options ? new ContextMentionParser(options) : getContextMentionParser();
   const expanded = await parser.expandMentions(message);
 
   const contextBlocks = expanded.contexts

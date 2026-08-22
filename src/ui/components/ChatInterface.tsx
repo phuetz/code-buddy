@@ -4,6 +4,7 @@ import type { CodeBuddyAgent, ChatEntry } from "../../agent/codebuddy-agent.js";
 import { useInputHandler } from "../../hooks/use-input-handler.js";
 import { StatusBlock } from "./StatusBlock.js";
 import { CommandSuggestions } from "./CommandSuggestions.js";
+import { FileAutocomplete } from "./FileAutocomplete.js";
 import { ModelSelection } from "./ModelSelection.js";
 import { ChatHistory } from "./ChatHistory.js";
 import { TabbedQuestion } from "./TabbedQuestion.js";
@@ -138,6 +139,9 @@ function ChatInterfaceWithAgent({
     selectedCommandIndex,
     showModelSelection,
     selectedModelIndex,
+    showFileAutocomplete,
+    selectedFileIndex,
+    fileSuggestions,
     commandSuggestions,
     availableModels,
     autoEditEnabled,
@@ -617,6 +621,13 @@ function ChatInterfaceWithAgent({
             input={input}
             selectedIndex={selectedCommandIndex}
             isVisible={showCommandSuggestions}
+          />
+
+          <FileAutocomplete
+            input={input}
+            visible={showFileAutocomplete}
+            selectedIndex={selectedFileIndex}
+            suggestions={fileSuggestions}
           />
 
           <ModelSelection

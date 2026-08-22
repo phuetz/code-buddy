@@ -18,6 +18,7 @@ import { spawn, ChildProcess } from 'child_process';
 import { logger } from '../utils/logger.js';
 import * as path from 'path';
 import * as fs from 'fs';
+import { fileURLToPath, pathToFileURL } from 'url';
 
 // ============================================================================
 // Types
@@ -208,7 +209,7 @@ export class LSPClient {
     this.servers = new Map();
     this.connections = new Map();
     this.configPath = configPath || '.codebuddy/lsp-config.json';
-    this.rootUri = `file:///${process.cwd().replace(/\\/g, '/')}`;
+    this.rootUri = pathToFileURL(process.cwd()).href;
     this.stats = { queriesExecuted: 0, totalResponseMs: 0, cacheHits: 0 };
     logger.debug('LSPClient initialized', { configPath: this.configPath });
   }
@@ -229,9 +230,27 @@ export class LSPClient {
     return this.servers.has(lang) || DEFAULT_CONFIGS[lang] !== undefined;
   }
 
+  /**
+   * Return the effective server configuration for a language.
+   * Explicit registrations take precedence over the built-in defaults.
+   */
+  getServerConfig(language: LSPLanguage): LSPServerConfig | null {
+    const config = this.servers.get(language) ?? DEFAULT_CONFIGS[language];
+    if (!config) return null;
+    return {
+      ...config,
+      args: [...config.args],
+      initOptions: config.initOptions ? { ...config.initOptions } : undefined,
+    };
+  }
+
   static getDefaultConfig(language: LSPLanguage): LSPServerConfig | null {
     const config = DEFAULT_CONFIGS[language];
-    return config ? { ...config } : null;
+    return config ? {
+      ...config,
+      args: [...config.args],
+      initOptions: config.initOptions ? { ...config.initOptions } : undefined,
+    } : null;
   }
 
   static getSupportedLanguages(): LSPLanguage[] {
@@ -265,6 +284,17 @@ export class LSPClient {
 
     const started = await this.startServer(language);
     return started ? (this.connections.get(language) ?? null) : null;
+  }
+
+  /**
+   * Ensure that the server required by a file is running and initialized.
+   * This exposes the existing lifecycle without exposing the connection itself,
+   * allowing callers to distinguish an unavailable server from an empty result.
+   */
+  async ensureServerForFile(filePath: string): Promise<boolean> {
+    const language = this.detectLanguage(filePath);
+    if (!language) return false;
+    return (await this.ensureServer(language)) !== null;
   }
 
   async startServer(language: LSPLanguage): Promise<boolean> {
@@ -478,7 +508,7 @@ export class LSPClient {
     // Server notification
     if (msg.method === 'textDocument/publishDiagnostics') {
       const params = msg.params as { uri: string; diagnostics: Array<{ range: { start: { line: number; character: number }; end: { line: number; character: number } }; severity?: number; message: string; source?: string }> };
-      const filePath = params.uri.replace('file:///', '').replace('file://', '');
+      const filePath = this.uriToPath(params.uri);
       conn.diagnostics.set(filePath, params.diagnostics.map(d => ({
         file: filePath,
         line: d.range.start.line + 1,
@@ -510,8 +540,15 @@ export class LSPClient {
   }
 
   private pathToUri(filePath: string): string {
-    const abs = path.resolve(filePath).replace(/\\/g, '/');
-    return `file:///${abs.replace(/^\//, '')}`;
+    return pathToFileURL(path.resolve(filePath)).href;
+  }
+
+  private uriToPath(uri: string): string {
+    try {
+      return fileURLToPath(uri);
+    } catch {
+      return decodeURIComponent(uri.replace(/^file:\/\/\//, '/').replace(/^file:\/\//, ''));
+    }
   }
 
   // ==========================================================================
@@ -540,7 +577,7 @@ export class LSPClient {
       if (!result) return [];
       const locations = Array.isArray(result) ? result : [result];
       return locations.map(loc => ({
-        file: loc.uri.replace('file:///', '').replace('file://', ''),
+        file: this.uriToPath(loc.uri),
         line: loc.range.start.line + 1,
         column: loc.range.start.character + 1,
         endLine: loc.range.end.line + 1,
@@ -574,7 +611,7 @@ export class LSPClient {
 
       if (!result) return [];
       return result.map(loc => ({
-        file: loc.uri.replace('file:///', '').replace('file://', ''),
+        file: this.uriToPath(loc.uri),
         line: loc.range.start.line + 1,
         column: loc.range.start.character + 1,
         endLine: loc.range.end.line + 1,
@@ -683,8 +720,7 @@ export class LSPClient {
     this.stats.totalResponseMs += Date.now() - start;
 
     // Check cached diagnostics from publishDiagnostics notification
-    const uri = this.pathToUri(file);
-    const normalized = uri.replace('file:///', '').replace('file://', '');
+    const normalized = path.resolve(file);
     return conn.diagnostics.get(normalized) || [];
   }
 
