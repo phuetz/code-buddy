@@ -554,7 +554,7 @@ describe('AcpStdioServer (real ndjson transport)', () => {
       expect(seenMcpServers[0]).toEqual(mcpServers);
       expect(harness.notifications('session/update').at(-1)?.params.update.content.text).toBe(JSON.stringify(mcpServers));
     } finally {
-      fs.rmSync(storeDir, { recursive: true, force: true });
+      fs.rmSync(storeDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     }
   });
 

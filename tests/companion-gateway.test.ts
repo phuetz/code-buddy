@@ -32,7 +32,7 @@ describe('companion gateway', () => {
   });
 
   afterEach(async () => {
-    await rm(tempDir, { recursive: true, force: true });
+    await rm(tempDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   it('loads a disabled default profile for common channels', async () => {

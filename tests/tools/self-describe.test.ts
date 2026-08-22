@@ -67,7 +67,7 @@ function makeFakeRepo(opts: {
 
 describe('buildSelfDescription', () => {
   let root: string;
-  afterEach(() => { if (root) fs.rmSync(root, { recursive: true, force: true }); });
+  afterEach(() => { if (root) fs.rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }); });
 
   it('lists the three bricks with verified source/build status only', () => {
     root = makeFakeRepo({ senseBuilt: true, memoryStub: true });
@@ -125,7 +125,7 @@ describe('buildSelfDescription', () => {
       expect(sense).toMatchObject({ present: false, status: 'non présent' });
       expect(description.text).not.toContain('PRIVATE_OUTSIDE_DESCRIPTION');
     } finally {
-      fs.rmSync(outside, { recursive: true, force: true });
+      fs.rmSync(outside, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     }
   });
 
@@ -427,7 +427,7 @@ describe('SelfDescribeTool', () => {
       expect(result.output).not.toContain('Caméra disponible');
       expect(result.output).not.toMatch(/je suis (?:littéralement )?consciente/i);
     } finally {
-      fs.rmSync(runtimeRoot, { recursive: true, force: true });
+      fs.rmSync(runtimeRoot, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     }
   });
 

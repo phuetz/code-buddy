@@ -27,7 +27,7 @@ describe('SmartContextPreloader', () => {
     preloader.dispose();
     // Clean up test directory
     try {
-      await fs.rm(testDir, { recursive: true, force: true });
+      await fs.rm(testDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     } catch {
       // Ignore cleanup errors
     }

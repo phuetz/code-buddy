@@ -29,7 +29,7 @@ afterEach(async () => {
   if (previousQuota === undefined) delete process.env.CODEBUDDY_CONTEXT_ZOOM_MAX_MB;
   else process.env.CODEBUDDY_CONTEXT_ZOOM_MAX_MB = previousQuota;
   vi.restoreAllMocks();
-  await Promise.all(tempHomes.splice(0).map(directory => rm(directory, { recursive: true, force: true })));
+  await Promise.all(tempHomes.splice(0).map(directory => rm(directory, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 })));
 });
 
 describe('SegmentArchive', () => {

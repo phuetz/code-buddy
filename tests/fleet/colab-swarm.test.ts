@@ -16,7 +16,7 @@ describe('createSwarm', () => {
     store = new FleetColabStore({ dir, agentId: 'me/cb', now: () => 1000, generateId: (p) => `${p}-${++seq}` });
   });
 
-  afterEach(() => rmSync(dir, { recursive: true, force: true }));
+  afterEach(() => rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }));
 
   it('builds a workers → verifier → synthesizer DAG', () => {
     const graph = createSwarm(store, {

@@ -36,7 +36,7 @@ describe('background review live headless tool probe', () => {
     else process.env.CODEBUDDY_HEADLESS = previousHeadless;
     if (previousSentinel === undefined) delete process.env[BACKGROUND_REVIEW_SENTINEL_ENV];
     else process.env[BACKGROUND_REVIEW_SENTINEL_ENV] = previousSentinel;
-    await fs.rm(tempDir, { recursive: true, force: true });
+    await fs.rm(tempDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   it('writes project memory through the real headless registry in a virgin workspace', async () => {

@@ -145,8 +145,8 @@ describe('buddy skills command with real SkillsHub state', () => {
     } else {
       process.env.USERPROFILE = originalUserProfile;
     }
-    await Promise.all(repoTempDirs.map((dir) => fs.rm(dir, { recursive: true, force: true })));
-    await fs.rm(tempHome, { recursive: true, force: true });
+    await Promise.all(repoTempDirs.map((dir) => fs.rm(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 })));
+    await fs.rm(tempHome, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   it('doctor reports missing and tampered SKILL.md packages without mutating the lockfile', async () => {

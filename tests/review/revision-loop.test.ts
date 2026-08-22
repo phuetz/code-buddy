@@ -29,7 +29,7 @@ beforeEach(() => {
 
 afterEach(() => {
   resetCheckpointManager();
-  fs.rmSync(workDir, { recursive: true, force: true });
+  fs.rmSync(workDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
 });
 
 const ORIGIN = { kind: 'agent' as const, label: 't' };

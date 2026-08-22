@@ -534,7 +534,7 @@ describe('BashTool', () => {
     });
 
     afterEach(() => {
-      rmSync(cwdRoot, { recursive: true, force: true });
+      rmSync(cwdRoot, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     });
 
     it('should handle cd command separately', async () => {

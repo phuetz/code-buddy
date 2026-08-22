@@ -42,7 +42,7 @@ async function verifySource(root: string, head: string): Promise<void> {
 }
 
 afterEach(async () => {
-  await Promise.all(created.splice(0).map((path) => rm(path, { recursive: true, force: true })));
+  await Promise.all(created.splice(0).map((path) => rm(path, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 })));
 });
 
 describe('LongCat GPU runner hardening', () => {

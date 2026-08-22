@@ -116,7 +116,7 @@ afterEach(() => {
   process.chdir(previousCwd);
   resetLessonCandidateQueues();
   try {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   } catch {
     /* ignore */
   }

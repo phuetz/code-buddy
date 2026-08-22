@@ -12,7 +12,7 @@ import { recipeFixture } from './comfyui-recipe-fixture.js';
 const temporaryRoots: string[] = [];
 
 afterEach(async () => {
-  await Promise.all(temporaryRoots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
+  await Promise.all(temporaryRoots.splice(0).map((root) => rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 })));
 });
 
 describe('ComfyUI recipe loader and registry', () => {

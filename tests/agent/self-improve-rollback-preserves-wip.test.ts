@@ -32,7 +32,7 @@ describe('self-improvement rollback preserves pre-existing WIP', () => {
 
   afterEach(async () => {
     vi.restoreAllMocks();
-    await rm(tempRoot, { recursive: true, force: true });
+    await rm(tempRoot, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   it('restores tracked modifications and untracked files after a failed sandbox run', async () => {

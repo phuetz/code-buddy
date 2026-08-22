@@ -290,7 +290,7 @@ describe("ExecPolicy", () => {
         await reloaded.initialize();
         expect(reloaded.evaluateShellCommand("git status --short").action).toBe("allow");
       } finally {
-        fs.rmSync(dir, { recursive: true, force: true });
+        fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
       }
     });
   });

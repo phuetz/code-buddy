@@ -76,7 +76,7 @@ describe('useInputHandler', () => {
 
   afterEach(() => {
     try {
-      fs.rmSync(tempDir, { recursive: true, force: true });
+      fs.rmSync(tempDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     } catch {
       // Ignore cleanup errors
     }

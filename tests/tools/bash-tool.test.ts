@@ -143,7 +143,7 @@ describe('BashTool', () => {
       expect(final.success).toBe(true);
       // `pwd` prints the shell's spelling (MSYS `/tmp/...` under Git Bash).
       expect(canonicalShellPath(out || final.output || '')).toBe(real);
-      fs.rmSync(dir, { recursive: true, force: true });
+      fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     });
 
     it('runs in the cwd override when provided (embedded session workingDirectory)', async () => {
@@ -156,7 +156,7 @@ describe('BashTool', () => {
       // Sans override : comportement historique (process cwd), pas le tmpdir.
       const legacy = await bashTool.execute('pwd');
       expect(canonicalShellPath(legacy.output!)).not.toBe(real);
-      fs.rmSync(dir, { recursive: true, force: true });
+      fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     });
 
     // cat is not available on Windows
@@ -171,7 +171,7 @@ describe('BashTool', () => {
         expect(result.success).toBe(true);
         expect(result.output).toContain('test content');
       } finally {
-        fs.rmSync(tmpDir, { recursive: true, force: true });
+        fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
       }
     });
 

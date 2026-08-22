@@ -17,7 +17,7 @@ describe('Output Schema Validator', () => {
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   function writeSchema(schema: object): string {
@@ -241,7 +241,7 @@ describe('Ephemeral session behavior', () => {
     const dir = process.env.CODEBUDDY_SESSIONS_DIR;
     delete process.env.CODEBUDDY_SESSIONS_DIR;
     if (dir) {
-      fs.rmSync(dir, { recursive: true, force: true });
+      fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     }
   });
 

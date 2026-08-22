@@ -49,7 +49,7 @@ describe('ContextManagerV2 extractive summary — failed tool preservation', () 
 
   afterEach(() => {
     manager.stopPeriodicSnapshot();
-    rmSync(workDir, { recursive: true, force: true });
+    rmSync(workDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   function summaryOf(messages: CodeBuddyMessage[]): string {

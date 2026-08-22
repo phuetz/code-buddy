@@ -52,7 +52,7 @@ describe('AgenticCodingRunner - Security and Self-Improvement', () => {
     } else {
       process.env.GROK_API_KEY = oldGrokKey;
     }
-    await fs.rm(tempRoot, { force: true, recursive: true });
+    await fs.rm(tempRoot, { force: true, recursive: true, maxRetries: 10, retryDelay: 100 });
   });
 
   describe('persistRunArtifact', () => {

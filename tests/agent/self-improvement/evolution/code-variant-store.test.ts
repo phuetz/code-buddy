@@ -28,7 +28,7 @@ describe('CodeVariantStore', () => {
     store = new CodeVariantStore(join(dir, 'variants.json'));
   });
   afterEach(() => {
-    try { rmSync(dir, { recursive: true, force: true }); } catch { /* best effort */ }
+    try { rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }); } catch { /* best effort */ }
   });
 
   it('records and lists round-trip', () => {
@@ -146,7 +146,7 @@ describe('genealogy (recursive self-improvement lineage)', () => {
       expect(child?.generation).toBe(1);
       expect(child?.plan).toContain('speed up recall'); // the plan that produced the version is stored
     } finally {
-      rmSync(d, { recursive: true, force: true });
+      rmSync(d, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     }
   });
 });

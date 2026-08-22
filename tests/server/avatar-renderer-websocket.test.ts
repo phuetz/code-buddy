@@ -42,7 +42,7 @@ describe('avatar renderer Gateway feedback', () => {
     else process.env.CODEBUDDY_HOME = previousHome;
     if (previousSecret === undefined) delete process.env.JWT_SECRET;
     else process.env.JWT_SECRET = previousSecret;
-    rmSync(home, { recursive: true, force: true });
+    rmSync(home, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   async function start(): Promise<string> {

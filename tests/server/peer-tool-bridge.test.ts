@@ -98,7 +98,7 @@ afterEach(async () => {
   delete process.env.CODEBUDDY_PEER_TOOL_WORKSPACE_ROOT;
   delete process.env.CODEBUDDY_PEER_TOOL_ALLOWLIST;
   if (tmpRoot) {
-    await fs.rm(tmpRoot, { recursive: true, force: true });
+    await fs.rm(tmpRoot, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   }
 });
 

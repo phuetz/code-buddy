@@ -71,7 +71,7 @@ describe('buddy replay', () => {
     exitSpy.mockRestore();
     if (previousSessionsDir === undefined) delete process.env.CODEBUDDY_SESSIONS_DIR;
     else process.env.CODEBUDDY_SESSIONS_DIR = previousSessionsDir;
-    await fs.rm(tempDir, { recursive: true, force: true });
+    await fs.rm(tempDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   function output(): string {

@@ -80,8 +80,8 @@ describe('skill background writes (S1 — sentinel auto-install gated by flag)',
       if (savedEnv[key] === undefined) delete process.env[key];
       else process.env[key] = savedEnv[key];
     }
-    await fs.rm(tempHubDir, { recursive: true, force: true });
-    await fs.rm(rootDir, { recursive: true, force: true });
+    await fs.rm(tempHubDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+    await fs.rm(rootDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   it('is a no-op when the opt-in flag is OFF', async () => {

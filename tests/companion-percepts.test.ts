@@ -34,7 +34,7 @@ describe('companion percept store', () => {
     } else {
       delete process.env.CODEBUDDY_COMPANION_MEMORY_KEY;
     }
-    await rm(tempDir, { recursive: true, force: true });
+    await rm(tempDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   it('records percepts as local workspace jsonl and returns newest first', async () => {

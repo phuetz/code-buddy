@@ -61,7 +61,7 @@ describe('buddy cron add — CLI persistence', () => {
       process.env.CODEBUDDY_CRON_HOME = previousCronHome;
     }
     vi.resetModules();
-    await fs.rm(tempCronHome, { recursive: true, force: true });
+    await fs.rm(tempCronHome, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   it('persists a script job created via `cron add --script`', async () => {

@@ -15,7 +15,7 @@ afterEach(() => {
   vi.restoreAllMocks();
   if (originalWorkspaceEnv === undefined) delete process.env.CODEBUDDY_WORKSPACE;
   else process.env.CODEBUDDY_WORKSPACE = originalWorkspaceEnv;
-  for (const root of roots.splice(0)) fs.rmSync(root, { recursive: true, force: true });
+  for (const root of roots.splice(0)) fs.rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
 });
 
 describe('workspace configuration', () => {

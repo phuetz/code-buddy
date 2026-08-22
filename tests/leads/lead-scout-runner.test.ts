@@ -14,7 +14,7 @@ describe('runLeadScout', () => {
   });
 
   afterEach(async () => {
-    await rm(tempDir, { recursive: true, force: true });
+    await rm(tempDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   it('loads local JSON data, normalizes, deduplicates, scores, and drafts a review queue', async () => {

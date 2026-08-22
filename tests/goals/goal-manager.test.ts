@@ -61,7 +61,7 @@ describe('GoalManager', () => {
       process.env.CODEBUDDY_GOAL_PLANNER_MODEL = originalGoalPlannerModelEnv;
     }
     resetGoalManagers();
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   it('set() activates a goal with the default budget and persists it', () => {
@@ -390,7 +390,7 @@ describe('GoalManager', () => {
     } finally {
       process.chdir(originalCwd);
       settingsHierarchy.resetSettingsHierarchy();
-      fs.rmSync(projectDir, { recursive: true, force: true });
+      fs.rmSync(projectDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     }
   });
 

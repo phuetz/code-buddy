@@ -80,7 +80,7 @@ function runnerEnv(
 
 afterEach(async () => {
   const { rm } = await import('fs/promises');
-  await Promise.all(created.splice(0).map((path) => rm(path, { recursive: true, force: true })));
+  await Promise.all(created.splice(0).map((path) => rm(path, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 })));
 });
 
 // This suite spawns the real Python GPU runner (scripts/gpu-runners/codebuddy_runner.py),

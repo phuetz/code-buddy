@@ -192,7 +192,7 @@ describe('Hermes runtime backend live smoke runner', () => {
       expect(rendered).toContain('Gated auto-route backends:');
       expect(rendered).toContain('- docker: Docker is runnable but excluded from auto routing');
     } finally {
-      fs.rmSync(tempDir, { recursive: true, force: true });
+      fs.rmSync(tempDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     }
   });
 
@@ -300,7 +300,7 @@ describe('Hermes runtime backend live smoke runner', () => {
       expect(result.output).toContain('--allow-remote');
       expect(result.args).toEqual([]);
     } finally {
-      fs.rmSync(tempDir, { recursive: true, force: true });
+      fs.rmSync(tempDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     }
   });
 
@@ -334,7 +334,7 @@ describe('Hermes runtime backend live smoke runner', () => {
       expect(result.output).toContain('smoke-user');
       expect(result.output).not.toContain('redacted-token');
     } finally {
-      fs.rmSync(tempDir, { recursive: true, force: true });
+      fs.rmSync(tempDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     }
   });
 

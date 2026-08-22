@@ -16,7 +16,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-  await fs.rm(temporaryDirectory, { recursive: true, force: true });
+  await fs.rm(temporaryDirectory, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
 });
 
 describe('EtalabHolidayProvider', () => {

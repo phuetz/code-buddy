@@ -68,7 +68,7 @@ describe('runGoalLoop (buddy goal headless)', () => {
 
   afterEach(() => {
     resetGoalManagers();
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   it('loops with continuation prompts until the judge says done', async () => {
@@ -507,7 +507,7 @@ describe('goal CLI working directory handling', () => {
   afterEach(() => {
     process.chdir(originalCwd);
     for (const dir of tmpDirs) {
-      fs.rmSync(dir, { recursive: true, force: true });
+      fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     }
   });
 

@@ -45,7 +45,7 @@ describe('Hermes vision tools real integrations', () => {
     await pages?.close();
     pages = undefined;
     process.chdir(originalCwd);
-    await fs.rm(tempWorkspace, { recursive: true, force: true });
+    await fs.rm(tempWorkspace, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   it('analyzes a real image file and writes a durable vision report', async () => {

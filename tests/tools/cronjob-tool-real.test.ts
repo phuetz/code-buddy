@@ -29,7 +29,7 @@ describe('cronjob tool real scheduler integration', () => {
       process.env.CODEBUDDY_CRON_HOME = previousCronHome;
     }
     vi.resetModules();
-    await fs.rm(tempCronHome, { recursive: true, force: true });
+    await fs.rm(tempCronHome, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   it('creates, lists, pauses, resumes, runs, and removes a persisted cron job', async () => {

@@ -19,7 +19,7 @@ describe('Log Rotation', () => {
     resetLogger();
     try {
       if (fs.existsSync(TEST_LOG_DIR)) {
-        fs.rmSync(TEST_LOG_DIR, { recursive: true, force: true });
+        fs.rmSync(TEST_LOG_DIR, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
       }
     } catch { /* ignore */ }
     fs.mkdirSync(TEST_LOG_DIR, { recursive: true });
@@ -31,7 +31,7 @@ describe('Log Rotation', () => {
     delete process.env.LOG_MAX_FILES;
     try {
       if (fs.existsSync(TEST_LOG_DIR)) {
-        fs.rmSync(TEST_LOG_DIR, { recursive: true, force: true });
+        fs.rmSync(TEST_LOG_DIR, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
       }
     } catch { /* ignore */ }
   });

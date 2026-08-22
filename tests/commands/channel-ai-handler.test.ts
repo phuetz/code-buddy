@@ -1166,7 +1166,7 @@ describe('registerAIMessageHandler inbound roundtrip (GAP-7)', () => {
       expect(transientContext).toContain('décisions sanitaires locales');
       expect(transientContext).not.toContain("Message de l'utilisateur :");
     } finally {
-      rmSync(directory, { recursive: true, force: true });
+      rmSync(directory, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
       delete process.env.CODEBUDDY_PREFETCH_CACHE_FILE;
       delete process.env.CODEBUDDY_PREFETCH_ITEMS_FILE;
       delete process.env.CODEBUDDY_PREFETCH;
@@ -1230,7 +1230,7 @@ describe('registerAIMessageHandler inbound roundtrip (GAP-7)', () => {
         expect.stringContaining('https://example.test/lyon-air'),
       );
     } finally {
-      rmSync(directory, { recursive: true, force: true });
+      rmSync(directory, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
       delete process.env.CODEBUDDY_PREFETCH_CACHE_FILE;
       delete process.env.CODEBUDDY_PREFETCH_ITEMS_FILE;
       delete process.env.CODEBUDDY_PREFETCH;
@@ -1320,7 +1320,7 @@ describe('registerAIMessageHandler inbound roundtrip (GAP-7)', () => {
         expect.stringContaining('Lyon publie des mesures horaires'),
       );
     } finally {
-      rmSync(directory, { recursive: true, force: true });
+      rmSync(directory, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
       delete process.env.CODEBUDDY_PREFETCH_CACHE_FILE;
       delete process.env.CODEBUDDY_PREFETCH_ITEMS_FILE;
       delete process.env.CODEBUDDY_PREFETCH;

@@ -1901,7 +1901,7 @@ describe('Hermes CLI commands', () => {
       store.dispose();
       (RunStore as unknown as { _instance: RunStore | null })._instance = previousInstance;
       resetDataRedactionEngine();
-      fs.rmSync(tempDir, { recursive: true, force: true });
+      fs.rmSync(tempDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     }
   });
 

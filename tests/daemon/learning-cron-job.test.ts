@@ -28,7 +28,7 @@ describe('learning daemon cron job (S6)', () => {
       if (savedEnv[key] === undefined) delete process.env[key];
       else process.env[key] = savedEnv[key];
     }
-    await fs.rm(dir, { recursive: true, force: true });
+    await fs.rm(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   it('registers a bounded script job that runs `improve cycle --apply`, silently', async () => {

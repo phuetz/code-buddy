@@ -226,7 +226,7 @@ describe('shared prefetched turn context', () => {
       expect(groundedPrompt).toContain('Demande actuelle : Pourquoi celle sur Lyon compte-t-elle ?');
     } finally {
       reply.dispose();
-      rmSync(directory, { recursive: true, force: true });
+      rmSync(directory, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     }
   });
 });

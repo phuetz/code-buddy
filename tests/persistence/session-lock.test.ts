@@ -127,7 +127,7 @@ describe('SessionLock', () => {
       lock.release();
       // Cleanup
       try { fs.unlinkSync(lockPath); } catch { /* ignore */ }
-      try { fs.rmSync(path.join(tmpDir, 'deep'), { recursive: true }); } catch { /* ignore */ }
+      try { fs.rmSync(path.join(tmpDir, 'deep'), { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }); } catch { /* ignore */ }
     });
 
     it('should acquire lock when lock file owned by current process', () => {

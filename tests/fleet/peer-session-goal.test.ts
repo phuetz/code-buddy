@@ -60,7 +60,7 @@ beforeEach(() => {
 afterEach(() => {
   _unwireForTests();
   resetPeerSessionStore();
-  fs.rmSync(storeTmpDir, { recursive: true, force: true });
+  fs.rmSync(storeTmpDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
 });
 
 const baseCtx = (overrides: Partial<PeerMethodContext> = {}): PeerMethodContext => ({

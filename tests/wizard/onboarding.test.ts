@@ -104,7 +104,7 @@ describe('onboarding', () => {
 
     afterEach(() => {
       try {
-        rmSync(tmpDir, { recursive: true });
+        rmSync(tmpDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
       } catch {
         // ignore
       }

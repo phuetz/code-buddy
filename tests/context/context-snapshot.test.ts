@@ -37,7 +37,7 @@ describe('ContextManagerV2 periodic snapshot (WS3-T2)', () => {
 
   afterEach(() => {
     manager.stopPeriodicSnapshot();
-    rmSync(workDir, { recursive: true, force: true });
+    rmSync(workDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     vi.useRealTimers();
   });
 

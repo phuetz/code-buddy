@@ -35,7 +35,7 @@ describe('execute_code real subprocess integration', () => {
 
   afterEach(async () => {
     process.chdir(originalCwd);
-    await fs.rm(tempWorkspace, { recursive: true, force: true });
+    await fs.rm(tempWorkspace, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   it('runs JavaScript through a real Node subprocess and persists artifacts', async () => {

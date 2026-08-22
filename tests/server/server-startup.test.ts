@@ -51,7 +51,7 @@ describe('server startup', () => {
     } else {
       process.env.JWT_SECRET = previousJwtSecret;
     }
-    fs.rmSync(tmpHome, { recursive: true, force: true });
+    fs.rmSync(tmpHome, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   it('initializes SQLite before health checks run', async () => {

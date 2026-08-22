@@ -98,7 +98,7 @@ describe('ToolHandler code_exec logical-session isolation', () => {
     getFormalToolRegistry().unregister(PROBE_TOOL);
     clearAllCodeExecSessions();
     clearSandboxEscalationBridge(ConfirmationService.getInstance());
-    fs.rmSync(workDir, { recursive: true, force: true });
+    fs.rmSync(workDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   it('propagates executionExtra to tools called from code_exec', async () => {
