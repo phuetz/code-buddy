@@ -14,7 +14,8 @@ Entrée : un JSON d'ordre (voir `ordre.json` du pilote longform-actu-2026-08-22)
 
 {
   "slug": "…", "titre": "…", "description": "…", "tags": [...],
-  "music": "…mp3", "music_db": -32,
+  "music": "…mp3", "music_db": -32,          // niveau LUFS du lit musical seul dans le master (verrouillé)
+  "avatar_punch_in": 1.15,                   // 1 ou 0 = cadrage unique
   "broll_roots": ["~/.codebuddy/media-video/flow-crame", "~/.codebuddy/media-video/broll"],
   "cutaway": {"first_at": 3.0, "every": 3.5, "duration": 2.5},
   "subtitles": "karaoke" | "none",
@@ -37,6 +38,15 @@ SANS visage (voix de l'extrait + carte + B-roll) avant le 1er insert Lisa ; "cta
 le CTA unique avant 12 % ; "carton" par segment = phrase-pont sobre ; "recap" = carte 3 lignes avant la
 fin ; "fin.formule" + écran de fin 20 s ; cartes "source" (capture stylisée surlignée) ;
 "broll_specific_dir" = B-roll Grok Imagine nommés <id>-*.mp4 prioritaires.
+
+Retouches v2b (juge Gemini 15,5/20 + retours Patrice « musique trop forte » ×2, 22/08) : la carte-thèse du
+hook est SUPERPOSÉE à la voix de la première section parlée (plus de carte muette au démarrage ;
+"hook.sur_voix": false rétablit la carte devant, "hook.duree_sur_voix" = 3.0 s) ; aucune carte ne reste
+vide > 0,3 s (liste : 1re puce immédiate) ; chaîne audio SANS traitement dynamique : voix normalisée
+linéairement à −14 LUFS (+ limiteur crête −1,5 dBTP), lit musical VERROUILLÉ à "music_db" LUFS intégrés
+(défaut −32, mesuré sur le morceau : même niveau sous les cartes muettes et l'écran de fin, jamais de
+remontée), ducking doux en plus sous la voix ; QC final = mesure seule si conforme (re-master dynamique
+seulement en repli) ; "avatar_punch_in" = 1.15 alterne plan moyen / punch-in recadré sur les plans avatar.
 
 Sorties (dans --out-dir) : <slug>.mp4 (1920×1080 30 fps, −14 LUFS), <slug>-preview.mp4
 (960×540), <slug>-planche-12.jpg, PACK-<slug>.md, chapters.txt, MESURES-<slug>.json,
@@ -70,11 +80,15 @@ HERE = Path(__file__).resolve().parent
 INFLUENCER = HERE.parent
 sys.path.insert(0, str(INFLUENCER))
 from video_delivery_qc import (  # noqa: E402
+    LUFS_TOLERANCE,
+    MAX_TRUE_PEAK_DBTP,
     DeliveryQCError,
     assert_no_production_markers,
     master_video_audio,
+    measure_loudness,
     write_qc_sidecar,
 )
+from video_delivery_qc import TARGET_LUFS as QC_TARGET_LUFS  # noqa: E402
 
 
 def _load_module(name: str, path: Path):
@@ -314,7 +328,9 @@ def render_card_frames(spec: dict[str, Any], dur: float) -> list[tuple[Image.Ima
         titre = str(spec.get('titre', ''))
         lignes = [str(x) for x in spec.get('lignes', [])]
         n = len(lignes)
-        step = max(0.35, (dur - 0.6) / max(1, n))
+        # le titre seul ne reste jamais plus de 0,3 s (juge : « carte vide 2,1 s ») ; puis une puce par pas
+        first = min(0.3, dur / 4)
+        step = max(0.35, (dur - 0.6 - first) / max(1, n))
         shown_total = 0.0
         for k in range(n + 1):
             img, d = card_base(kicker)
@@ -332,7 +348,7 @@ def render_card_frames(spec: dict[str, Any], dur: float) -> list[tuple[Image.Ima
                 lf2, ll, lh2 = fit_text(l, box_w - 60, row - 12, size_max, 26, 'Condensed SemiBold', max_lines=2, name='ligne liste')
                 d.rectangle([margin, cy + lh2 * 0.22, margin + 14, cy + lh2 * 0.78], fill=RED)
                 draw_block(d, ll, lf2, lh2, margin + 40, cy, WHITE)
-            d_k = step if k < n else max(0.2, dur - shown_total)
+            d_k = first if k == 0 else (step if k < n else max(0.2, dur - shown_total))
             shown_total += d_k
             frames.append((img, d_k))
         return frames
@@ -734,21 +750,35 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
     return head + '\n'.join(lines) + '\n'
 
 
+def punch_in_filter(zoom: float) -> str:
+    """Recadrage « punch-in » ×zoom du composite (centré, ancré vers le haut = visage), remis à W×H."""
+    cw = int(W / zoom) // 2 * 2
+    ch = int(H / zoom) // 2 * 2
+    cx = (W - cw) // 2
+    cy = int((H - ch) * 0.30) // 2 * 2
+    return f'crop={cw}:{ch}:{cx}:{cy},scale={W}:{H}:flags=lanczos,setsar=1'
+
+
 def assemble_segment(seg_id: str, src: Path, clip_range: tuple[float, float] | None, dur: float,
                      composite: Path, shots: list[dict[str, Any]], cut_sources: list[Path],
                      card_videos: dict[int, Path], ass_path: Path, dest_v: Path, dest_a: Path,
-                     cut_offsets: list[float]) -> None:
-    """Monte les plans (trim du composite / cut-aways / cartes) + sous-titres, et extrait l'audio."""
+                     cut_offsets: list[float], punch_in: float = 1.0) -> None:
+    """Monte les plans (trim du composite / cut-aways / cartes) + sous-titres, et extrait l'audio.
+    `punch_in` > 1 : un plan avatar sur deux est recadré ×punch_in (deux valeurs de plan)."""
     if not dest_v.exists():
         cmd = ['ffmpeg', '-y', '-hide_banner', '-v', 'error', '-i', str(composite)]
         inputs = 1
         fc: list[str] = []
         labels: list[str] = []
         cut_i = 0
+        avatar_i = 0
         for k, s in enumerate(shots):
             d = q(s['t1'] - s['t0'])
             if s['type'] == 'avatar':
-                fc.append(f"[0:v]trim=start={s['t0']:.6f}:end={s['t1']:.6f},setpts=PTS-STARTPTS[v{k}]")
+                zoom = punch_in_filter(punch_in) + ',' if punch_in > 1.0 and avatar_i % 2 == 1 else ''
+                avatar_i += 1
+                fc.append(f"[0:v]trim=start={s['t0']:.6f}:end={s['t1']:.6f},setpts=PTS-STARTPTS,{zoom}"
+                          f"null[v{k}]")
             elif s['type'] == 'cut':
                 srcp = cut_sources[cut_i % len(cut_sources)]
                 off = cut_offsets[cut_i % len(cut_offsets)]
@@ -919,7 +949,7 @@ def render_avatar_section(seg: dict[str, Any], cfg: dict[str, Any], workdir: Pat
                         encoding='utf-8')
     dest_v, dest_a = sdir / 'video.mp4', sdir / 'audio.wav'
     assemble_segment(sid, src, clip_range, dur, composite, shots, cut_sources, card_videos, ass_path,
-                     dest_v, dest_a, offsets)
+                     dest_v, dest_a, offsets, punch_in=float(cfg.get('avatar_punch_in', 1.15) or 1.0))
     (sdir / 'shots.json').write_text(json.dumps(
         [{k: (v if k != 'card' else (v or {}).get('type')) for k, v in s.items()} for s in shots],
         ensure_ascii=False, indent=1), encoding='utf-8')
@@ -939,56 +969,117 @@ def render_card_section(sid: str, spec: dict[str, Any], dur: float, workdir: Pat
 
 # --------------------------------------------------------------------------- final
 def concat_sections(sections: list[Section], workdir: Path, dest_v: Path, dest_a: Path) -> None:
-    if not dest_v.exists():
+    if stale(dest_v, *(s.video for s in sections)):
         lst = workdir / 'concat-video.txt'
         lst.write_text('\n'.join(f"file '{s.video}'" for s in sections) + '\n', encoding='utf-8')
         atomic(['ffmpeg', '-y', '-hide_banner', '-v', 'error', '-f', 'concat', '-safe', '0', '-i', str(lst),
                 '-c', 'copy'], dest_v)
-    if not dest_a.exists():
+    if stale(dest_a, *(s.audio for s in sections)):
         lst = workdir / 'concat-audio.txt'
         lst.write_text('\n'.join(f"file '{s.audio}'" for s in sections) + '\n', encoding='utf-8')
         atomic(['ffmpeg', '-y', '-hide_banner', '-v', 'error', '-f', 'concat', '-safe', '0', '-i', str(lst),
                 '-c:a', 'pcm_s16le'], dest_a)
 
 
-def mix_music(voice: Path, music: Path, music_db: float, dur: float, dest: Path) -> None:
-    if dest.exists():
+TARGET_LUFS = -14.0
+LIMIT_DBTP = -1.5
+# limiteur crête VRAIE : alimiter ne voit que les échantillons → suréchantillonnage ×4 et marge de 0,5 dB
+# (sans cela une voix limitée à −1,5 dBFS ressortait à −0,5 dBTP et le QC basculait en re-master dynamique)
+LIMITER = (f'aresample=192000,alimiter=limit={10 ** ((LIMIT_DBTP - 0.5) / 20):.4f}:attack=5:release=100:level=false,'
+           f'aresample=48000')
+
+
+def stale(dest: Path, *sources: Path) -> bool:
+    """Vrai si `dest` manque ou est plus ancien qu'une de ses sources — le rendu régénère ce qui est
+    périmé (un master existant n'était jamais ré-muxé après un re-rendu des sections)."""
+    if not dest.exists():
+        return True
+    m = dest.stat().st_mtime
+    return any(src.exists() and src.stat().st_mtime > m for src in sources)
+
+
+def ebur128(path: Path, start: float | None = None, length: float | None = None) -> dict[str, float]:
+    """Mesure I (LUFS), LRA et crête (dBFS, true-peak) d'un fichier ou d'un extrait."""
+    cmd = ['ffmpeg', '-hide_banner', '-nostats']
+    if start is not None:
+        cmd += ['-ss', f'{start:.3f}']
+    if length is not None:
+        cmd += ['-t', f'{length:.3f}']
+    res = run([*cmd, '-i', str(path), '-af', 'ebur128=peak=true', '-f', 'null', '-'], capture=True)
+    out: dict[str, float] = {}
+    for key, pat in (('I', r'^\s+I:\s+(-?[0-9.]+) LUFS'), ('LRA', r'^\s+LRA:\s+(-?[0-9.]+) LU'),
+                     ('TP', r'^\s+Peak:\s+(-?[0-9.]+) dBFS')):
+        m = re.findall(pat, res.stderr, flags=re.M)
+        if m:
+            out[key] = float(m[-1])
+    if 'I' not in out:
+        raise NewsLongError(f'ebur128 : mesure introuvable pour {path}')
+    return out
+
+
+def premaster_voice(voice: Path, dest: Path) -> float:
+    """Voix → −14 LUFS par GAIN LINÉAIRE (+ limiteur crête −1,5 dBTP, qui ne touche que les rares crêtes
+    au-dessus) : aucun traitement dynamique, donc le rapport voix/musique décidé au mix est celui du master.
+    (L'ancien loudnorm deux passes sur le mix basculait en mode dynamique — +13 dB dépassait TP −1,5 — et
+    remontait la musique seule sous les cartes de +15 à +21 dB : le « pompage » relevé par le juge.)"""
+    meas = ebur128(voice)
+    gain = TARGET_LUFS - meas['I']
+    if stale(dest, voice):
+        atomic(['ffmpeg', '-y', '-hide_banner', '-v', 'error', '-i', str(voice), '-af',
+                f'volume={gain:.2f}dB,{LIMITER}', '-c:a', 'pcm_s24le', '-ar', '48000'], dest)
+    return gain
+
+
+def music_gain(music: Path, music_lufs: float, cache: Path) -> float:
+    """Gain (dB) qui amène le morceau à `music_lufs` LUFS intégrés (mesure mise en cache)."""
+    key = f'{music.resolve()}|{music.stat().st_mtime_ns}'
+    data = json.loads(cache.read_text(encoding='utf-8')) if cache.exists() else {}
+    if data.get('key') != key:
+        data = {'key': key, **ebur128(music)}
+        cache.write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding='utf-8')
+    return music_lufs - float(data['I'])
+
+
+def mix_music(voice: Path, music: Path, music_gain_db: float, dur: float, dest: Path) -> None:
+    """Voix (déjà à −14 LUFS) + lit musical VERROUILLÉ à son niveau (gain fixe, identique sous les cartes
+    muettes et l'écran de fin) ; ducking doux en plus sous la voix (ratio 3, relâchement 1 s — moins de
+    pompage), jamais de remontée au-dessus du niveau verrouillé ; limiteur crête de sécurité. Résultat =
+    master audio, sans loudnorm."""
+    if not stale(dest, voice, music):
         return
     fade_out = max(0.0, dur - 2.0)
     fc = (f'[0:a]asplit=2[sc][dry];'
           f'[1:a]atrim=0:{dur:.6f},asetpts=PTS-STARTPTS,aresample=48000,'
           f'aformat=sample_fmts=fltp:sample_rates=48000:channel_layouts=stereo,'
-          f'volume={music_db:.1f}dB,afade=t=in:st=0:d=1.0,afade=t=out:st={fade_out:.6f}:d=2.0[m];'
-          f'[m][sc]sidechaincompress=threshold=0.02:ratio=10:attack=8:release=400:makeup=1[duck];'
-          f'[dry][duck]amix=inputs=2:normalize=0:dropout_transition=0,atrim=0:{dur:.6f}[mix]')
+          f'volume={music_gain_db:.2f}dB,afade=t=in:st=0:d=1.0,afade=t=out:st={fade_out:.6f}:d=2.0[m];'
+          f'[m][sc]sidechaincompress=threshold=0.125:ratio=3:attack=20:release=1000:makeup=1[duck];'
+          f'[dry][duck]amix=inputs=2:normalize=0:dropout_transition=0,atrim=0:{dur:.6f},{LIMITER}[mix]')
     atomic(['ffmpeg', '-y', '-hide_banner', '-v', 'error', '-i', str(voice), '-stream_loop', '-1', '-i', str(music),
-            '-filter_complex', fc, '-map', '[mix]', '-t', f'{dur:.6f}', '-c:a', 'pcm_s24le'], dest)
+            '-filter_complex', fc, '-map', '[mix]', '-t', f'{dur:.6f}', '-c:a', 'pcm_s24le', '-ar', '48000'], dest)
 
 
 def premaster_audio(source: Path, dest: Path) -> None:
-    """Loudnorm EBU R128 deux passes (linéaire) vers −14 LUFS sur le mix AVANT le mux : un programme
-    avec de longues cartes silencieuses peut sortir 12 dB sous la cible, au-delà de la correction bornée
-    que video_delivery_qc.master_video_audio accepte."""
-    if dest.exists():
+    """Contrôle du mix : s'il est déjà à −14 ±0,5 LUFS et sous −1,5 dBTP, copie telle quelle ; sinon
+    ajustement LINÉAIRE (gain + limiteur) — jamais de loudnorm dynamique."""
+    if not stale(dest, source):
         return
-    target = 'I=-14:TP=-1.5:LRA=11'
-    res = run(['ffmpeg', '-hide_banner', '-v', 'info', '-i', str(source), '-af', f'loudnorm={target}:print_format=json',
-               '-f', 'null', '-'], capture=True)
-    m = re.findall(r'\{\s*"input_i".*?\}', res.stderr, flags=re.DOTALL)
-    if not m:
-        raise NewsLongError('loudnorm passe 1 : mesures introuvables')
-    meas = json.loads(m[-1])
-    second = (f'loudnorm={target}:measured_I={meas["input_i"]}:measured_TP={meas["input_tp"]}:'
-              f'measured_LRA={meas["input_lra"]}:measured_thresh={meas["input_thresh"]}:'
-              f'offset={meas["target_offset"]}:linear=true:print_format=summary')
-    atomic(['ffmpeg', '-y', '-hide_banner', '-v', 'error', '-i', str(source), '-af', second,
+    meas = ebur128(source)
+    delta = TARGET_LUFS - meas['I']
+    if abs(delta) <= 0.5 and meas.get('TP', -99) <= LIMIT_DBTP + 0.01:
+        tmp = dest.with_name(f'.{dest.stem}.{os.getpid()}.part{dest.suffix}')
+        shutil.copyfile(source, tmp)
+        os.replace(tmp, dest)
+        return
+    print(f'  pré-master : ajustement linéaire {delta:+.2f} dB (mix {meas["I"]:.1f} LUFS, TP {meas.get("TP", 0):.1f})',
+          flush=True)
+    atomic(['ffmpeg', '-y', '-hide_banner', '-v', 'error', '-i', str(source), '-af', f'volume={delta:.2f}dB,{LIMITER}',
             '-c:a', 'pcm_s24le', '-ar', '48000'], dest)
 
 
 def mux(video: Path, audio: Path, dur: float, dest: Path, force: bool = False) -> None:
     """Le master final est écrit dans un .part puis renommé (atomic) : l'ancien reste en place jusqu'au
     dernier instant, même avec --force."""
-    if dest.exists() and not force:
+    if not force and not stale(dest, video, audio):
         return
     atomic(['ffmpeg', '-y', '-hide_banner', '-v', 'error', '-i', str(video), '-i', str(audio),
             '-map', '0:v:0', '-map', '1:a:0', '-c:v', 'copy', '-c:a', 'aac', '-b:a', '256k', '-ar', '48000',
@@ -996,7 +1087,7 @@ def mux(video: Path, audio: Path, dur: float, dest: Path, force: bool = False) -
 
 
 def render_preview(src: Path, dest: Path, force: bool = False) -> None:
-    if dest.exists() and not force:
+    if not force and not stale(dest, src):
         return
     atomic(['ffmpeg', '-y', '-hide_banner', '-v', 'error', '-i', str(src), '-vf', 'scale=960:540',
             '-c:v', 'libx264', '-preset', 'fast', '-crf', '27', '-c:a', 'aac', '-b:a', '128k',
@@ -1004,7 +1095,7 @@ def render_preview(src: Path, dest: Path, force: bool = False) -> None:
 
 
 def render_planche(src: Path, dur: float, dest: Path, n: int = 12, cols: int = 4, force: bool = False) -> None:
-    if dest.exists() and not force:
+    if not force and not stale(dest, src):
         return
     tw, th = 480, 270
     rows = math.ceil(n / cols)
@@ -1217,7 +1308,8 @@ def main() -> None:
                 for p in (workdir / 'segments' / s['id']).glob('card-*.mp4'):
                     p.unlink()
             if not only:
-                for p in [workdir / 'video.mp4', workdir / 'voice.wav', workdir / 'mix.wav', workdir / 'mastered.wav',
+                for p in [workdir / 'video.mp4', workdir / 'voice.wav', workdir / 'voice-norm.wav', workdir / 'mix.wav',
+                          workdir / 'mastered.wav',
                           workdir / 'concat-video.txt', workdir / 'concat-audio.txt']:
                     p.unlink(missing_ok=True)
                 shutil.rmtree(workdir / 'cards', ignore_errors=True)
@@ -1234,6 +1326,23 @@ def main() -> None:
 
         segs = {s['id']: s for s in cfg['segments']}
         shadow_cache: dict[int, Path] = {}
+
+        # Hook : la carte-thèse est superposée à la 1re section PARLÉE (fait 1, sinon citation, sinon 1er
+        # segment) — la voix démarre à 0:00. `hook.sur_voix: false` rétablit la carte muette devant.
+        hook = cfg.get('hook', {})
+        these_card: dict[str, Any] | None = None
+        these_host = None
+        if hook and hook.get('sur_voix', True):
+            these_card = {'type': 'these', 'titre': hook.get('these', ''), 'accent': hook.get('accent', ''),
+                          'ligne': hook.get('ligne', ''), 't': '@0.0',
+                          'duree': float(hook.get('duree_sur_voix', min(3.0, float(hook.get('duree', 4.0)))))}
+            if hook.get('faits'):
+                these_host = 'fait'
+            elif hook.get('citation'):
+                these_host = 'citation'
+            else:
+                these_host = 'segment'
+                cfg['segments'][0]['cartes'] = [these_card, *cfg['segments'][0].get('cartes', [])]
 
         # 1) segments avatar en parallèle
         def job(seg):
@@ -1259,11 +1368,13 @@ def main() -> None:
             sections.append(sec)
             t += sec.dur
 
-        hook = cfg.get('hook', {})
         if hook:
-            add(render_card_section('hook-these', {'type': 'these', 'titre': hook.get('these', ''),
-                                                   'accent': hook.get('accent', ''), 'ligne': hook.get('ligne', '')},
-                                    float(hook.get('duree', 4.0)), workdir), 'hook')
+            if these_card is None:
+                add(render_card_section('hook-these', {'type': 'these', 'titre': hook.get('these', ''),
+                                                       'accent': hook.get('accent', ''), 'ligne': hook.get('ligne', '')},
+                                        float(hook.get('duree', 4.0)), workdir), 'hook')
+            else:
+                chapter_marks.setdefault('hook', 0.0)
             for i, fait in enumerate(hook.get('faits', [])):
                 seg = segs[fait['segment']]
                 src = expand(seg['src'])
@@ -1274,9 +1385,12 @@ def main() -> None:
                     raise NewsLongError(f"fait {i}: mot de fin « {fait['a']} » introuvable")
                 w_end = next(w for w in words if w['t0'] == t_end)
                 t1 = w_end['t1'] + float(fait.get('apres', 0.3))
+                cartes_f = [dict(fait['carte'], t=fait['carte'].get('t', '@0.0'))] if fait.get('carte') else []
+                if i == 0 and these_host == 'fait':
+                    cartes_f = [these_card, *cartes_f]
                 pseudo = {'id': f'hook-fait-{i + 1}', 'src': seg['src'], 'fix': seg.get('fix', []),
                           'broll': fait.get('broll') or seg.get('broll', []),
-                          'cartes': [dict(fait['carte'], t=fait['carte'].get('t', '@0.0'))] if fait.get('carte') else [],
+                          'cartes': cartes_f,
                           'cutaway': fait.get('cutaway', {'first_at': 0.0, 'duration': 2.2, 'every': 2.2, 'tail_avatar': 0.0})}
                 add(render_avatar_section(pseudo, cfg, workdir, roots, shadow_cache, clip_range=(max(0.0, t0), t1),
                                           kind='fait', faceless=True, cache_dir=cache_dir),
@@ -1294,6 +1408,7 @@ def main() -> None:
                 t1 = w_end['t1'] + float(cit.get('apres', 0.35))
                 pseudo = {'id': 'hook-citation', 'src': seg['src'], 'fix': seg.get('fix', []),
                           'broll': cit.get('broll') or seg.get('broll', []),
+                          'cartes': [these_card] if these_host == 'citation' else [],
                           'face_crop': seg.get('face_crop'),
                           'cutaway': cit.get('cutaway', {'first_at': 1.8, 'duration': 1.5, 'every': 99, 'tail_avatar': 1.2})}
                 add(render_avatar_section(pseudo, cfg, workdir, roots, shadow_cache,
@@ -1350,6 +1465,9 @@ def main() -> None:
             if at not in chapter_marks:
                 print(f"AVERTISSEMENT chapitre « {ch['titre']} » : repère {at} inconnu", file=sys.stderr)
                 continue
+            if chapters and chapter_marks[at] <= chapters[-1][0]:
+                print(f"  chapitre « {ch['titre']} » fusionné avec le précédent (même instant)", file=sys.stderr)
+                continue
             chapters.append((chapter_marks[at], ch['titre']))
         if not chapters or chapters[0][0] > 0:
             chapters.insert(0, (0.0, cfg.get('hook', {}).get('chapitre', 'Intro')))
@@ -1362,13 +1480,24 @@ def main() -> None:
         music = expand(cfg['music'])
         if not music.exists():
             raise NewsLongError(f'musique introuvable: {music}')
+        voice_norm = workdir / 'voice-norm.wav'
+        v_gain = premaster_voice(voice, voice_norm)
+        music_lufs = float(cfg.get('music_lufs', cfg.get('music_db', -32)))
+        m_gain = music_gain(music, music_lufs, workdir / 'music-loudness.json')
+        print(f'  audio : voix {v_gain:+.1f} dB → −14 LUFS ; musique {m_gain:+.1f} dB → {music_lufs:.0f} LUFS verrouillés',
+              flush=True)
         mix = workdir / 'mix.wav'
-        mix_music(voice, music, float(cfg.get('music_db', -32)), total, mix)
+        mix_music(voice_norm, music, m_gain, total, mix)
         mastered = workdir / 'mastered.wav'
         premaster_audio(mix, mastered)
-        if args.force or not final.exists():
+        if args.force or stale(final, video, mastered):
             mux(video, mastered, total, final, force=args.force)
-            measurement = master_video_audio(final)
+            measurement = measure_loudness(final)
+            if (abs(measurement.integrated_lufs - QC_TARGET_LUFS) > LUFS_TOLERANCE
+                    or measurement.true_peak_dbtp > MAX_TRUE_PEAK_DBTP):
+                print(f'  QC : {measurement.integrated_lufs:.2f} LUFS / TP {measurement.true_peak_dbtp:.2f} hors '
+                      f'tolérance → re-master dynamique (repli)', file=sys.stderr)
+                measurement = master_video_audio(final)
             write_qc_sidecar(final, measurement)
         render_preview(final, out_dir / f'{slug}-preview.mp4', force=args.force)
         render_planche(final, total, out_dir / f'{slug}-planche-12.jpg', force=args.force)
