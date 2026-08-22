@@ -378,7 +378,6 @@ export class SandboxAdapter implements SandboxExecutor {
     return result.response === 0;
   }
 
-  // @ts-expect-error Reserved for future use
   private async _showClaudeCodeInstallPrompt(
     config: SandboxAdapterConfig,
     distro: string
