@@ -1,5 +1,5 @@
 import { EventEmitter } from 'node:events';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, realpath, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import type { spawn } from 'node:child_process';
@@ -88,8 +88,9 @@ describe('film output confinement', () => {
     );
 
     expect(result.success).toBe(true);
+    // The confined output dir is canonical (realpath); os.tmpdir() is a symlink on macOS.
     expect(result.outputPath).toBe(
-      path.join(rootDir, '.codebuddy', 'media-generation', 'films', 'finished.mp4'),
+      path.join(await realpath(rootDir), '.codebuddy', 'media-generation', 'films', 'finished.mp4'),
     );
     expect(seen.some((call) => call.includes(result.outputPath!))).toBe(true);
   });

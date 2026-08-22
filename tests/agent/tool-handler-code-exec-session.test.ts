@@ -131,25 +131,29 @@ describe('ToolHandler code_exec logical-session isolation', () => {
     const sessionA = fs.mkdtempSync(path.join(workDir, 'session-a-'));
     const sessionB = fs.mkdtempSync(path.join(workDir, 'session-b-'));
     const hostCwd = process.cwd();
+    // `cd` stores the canonical (realpath) cwd; a restored value comes from that
+    // same store, so restore canonical paths too (os.tmpdir() is a symlink on macOS).
+    const realSessionA = fs.realpathSync(sessionA);
+    const realSessionB = fs.realpathSync(sessionB);
 
     handler.setRecoverySessionId('logical-session-a');
     const changed = await handler.executeTool(bashCall('cd-a', `cd ${sessionA}`));
     expect(changed.success).toBe(true);
-    expect(handler.getWorkingDirectory()).toBe(fs.realpathSync(sessionA));
+    expect(handler.getWorkingDirectory()).toBe(realSessionA);
     expect(process.cwd()).toBe(hostCwd);
 
-    handler.restoreWorkingDirectory(sessionB);
+    handler.restoreWorkingDirectory(realSessionB);
     handler.setRecoverySessionId('logical-session-b');
     const pwdB = await handler.executeTool(bashCall('pwd-b', 'pwd'));
     expect(pwdB.success).toBe(true);
-    expect(pwdB.output).toContain(fs.realpathSync(sessionB));
-    expect(pwdB.output).not.toContain(fs.realpathSync(sessionA));
+    expect(pwdB.output).toContain(realSessionB);
+    expect(pwdB.output).not.toContain(realSessionA);
     expect(handler.getRecoverySessionId()).toBe('logical-session-b');
 
-    handler.restoreWorkingDirectory(sessionA);
+    handler.restoreWorkingDirectory(realSessionA);
     handler.setRecoverySessionId('logical-session-a');
     const pwdA = await handler.executeTool(bashCall('pwd-a', 'pwd'));
-    expect(pwdA.output).toContain(fs.realpathSync(sessionA));
+    expect(pwdA.output).toContain(realSessionA);
     expect(handler.getRecoverySessionId()).toBe('logical-session-a');
     expect(process.cwd()).toBe(hostCwd);
   });

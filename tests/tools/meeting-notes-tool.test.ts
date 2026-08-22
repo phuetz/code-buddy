@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, readFile, rm, symlink, writeFile } from 'fs/promises';
+import { mkdtemp, mkdir, readFile, realpath, rm, symlink, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -102,8 +102,10 @@ describe('meeting_notes execution and workspace confinement', () => {
 
     expect(response.success).toBe(true);
     expect(response.output).toContain('# Sync équipe');
+    // The tool hands the REAL input path to the generator (symlink defence);
+    // os.tmpdir() is itself a symlink on macOS.
     expect(generate).toHaveBeenCalledWith(
-      { kind: 'file', path: input },
+      { kind: 'file', path: await realpath(input) },
       { language: 'fr', useAI: false },
     );
     expect((response.data as { paths: unknown }).paths).toBeNull();

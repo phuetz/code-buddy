@@ -2880,7 +2880,8 @@ describe('Hermes CLI commands', () => {
         priority: 'high',
         tags: ['hermes', 'parity'],
       });
-      expect(output.boardPath).toBe(path.join(tmpDir, '.codebuddy', 'kanban-board.json'));
+      // The registry roots on process.cwd(), canonical after chdir (symlinked tmpdir on macOS).
+      expect(output.boardPath).toBe(path.join(fs.realpathSync(tmpDir), '.codebuddy', 'kanban-board.json'));
 
       consoleLogSpy.mockClear();
       program = createProgram();

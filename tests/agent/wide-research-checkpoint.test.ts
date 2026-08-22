@@ -1,7 +1,7 @@
 import { chmod, lstat, mkdir, readFile, readdir, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, realpath, rm } from 'node:fs/promises';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   assertWideResearchCheckpointCompatible,
@@ -19,7 +19,8 @@ import {
 const tempDirs: string[] = [];
 
 async function tempDirectory(): Promise<string> {
-  const directory = await mkdtemp(join(tmpdir(), 'wide-research-checkpoint-'));
+  // Canonical base: macOS tmpdir lives behind a symlink, which the safety policy rejects.
+  const directory = await realpath(await mkdtemp(join(tmpdir(), 'wide-research-checkpoint-')));
   tempDirs.push(directory);
   return directory;
 }

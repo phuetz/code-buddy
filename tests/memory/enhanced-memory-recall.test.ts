@@ -39,7 +39,9 @@ afterEach(() => {
     /* ignore */
   }
   memory = null;
-  fs.rmSync(tmpHome, { recursive: true, force: true });
+  // dispose() kicks off a fire-and-forget saveAll(); retry so a write landing
+  // mid-removal can't leave the cleanup with ENOTEMPTY (seen on macOS CI).
+  fs.rmSync(tmpHome, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
 });
 
 /**
