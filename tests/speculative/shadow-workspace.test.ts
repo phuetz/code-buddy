@@ -34,7 +34,8 @@ describe('ShadowWorkspace', () => {
     testRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'codebuddy-shadow-'));
     repo = createRepo(testRoot);
     shadowBase = path.join(testRoot, 'shadow-store');
-    process.env.CODEBUDDY_SHADOW_CMD = 'sh -c "exit 0"';
+    // node-based validators: identical on sh (POSIX) and cmd.exe (Windows).
+    process.env.CODEBUDDY_SHADOW_CMD = 'node -e "process.exit(0)"';
     delete process.env.CODEBUDDY_SHADOW_TIMEOUT_MS;
     delete process.env.CODEBUDDY_SHADOW_WORKSPACE;
   });
@@ -87,13 +88,13 @@ describe('ShadowWorkspace', () => {
 
   it('reports success and failure from the configured command with its output tail', async () => {
     const workspace = new ShadowWorkspace(repo, undefined, shadowBase);
-    process.env.CODEBUDDY_SHADOW_CMD = 'sh -c "printf success-marker; exit 0"';
+    process.env.CODEBUDDY_SHADOW_CMD = 'node -e "process.stdout.write(\'success-marker\'); process.exit(0)"';
     const passed = await workspace.runSpeculative([{ path: 'tracked.txt', content: 'passing\n' }]);
 
     expect(passed).toMatchObject({ ok: true, exitCode: 0, unavailable: false });
     expect(passed.stdoutTail).toContain('success-marker');
 
-    process.env.CODEBUDDY_SHADOW_CMD = 'sh -c "printf failure-marker; exit 1"';
+    process.env.CODEBUDDY_SHADOW_CMD = 'node -e "process.stdout.write(\'failure-marker\'); process.exit(1)"';
     const failed = await workspace.runSpeculative([{ path: 'tracked.txt', content: 'failing\n' }]);
 
     expect(failed).toMatchObject({ ok: false, exitCode: 1, unavailable: false });
@@ -122,7 +123,8 @@ describe('ShadowWorkspace', () => {
     fs.rmSync(path.join(repo, 'tracked.txt'));
     git(repo, 'add', 'tracked.txt');
     fs.writeFileSync(path.join(repo, 'untracked.txt'), 'diagnostic-untracked\n');
-    process.env.CODEBUDDY_SHADOW_CMD = 'sh -c "test ! -e tracked.txt && grep diagnostic-untracked untracked.txt"';
+    process.env.CODEBUDDY_SHADOW_CMD =
+      'node -e "const fs = require(\'fs\'); const untracked = fs.readFileSync(\'untracked.txt\', \'utf8\'); process.stdout.write(untracked); process.exit(!fs.existsSync(\'tracked.txt\') && untracked.includes(\'diagnostic-untracked\') ? 0 : 1)"';
     const workspace = new ShadowWorkspace(repo, undefined, shadowBase);
 
     const result = await workspace.runWorkingTree();
@@ -133,7 +135,7 @@ describe('ShadowWorkspace', () => {
   });
 
   it('fails validation with a timeout annotation when the command runs too long', async () => {
-    process.env.CODEBUDDY_SHADOW_CMD = 'sh -c "printf before-sleep; sleep 2"';
+    process.env.CODEBUDDY_SHADOW_CMD = 'node -e "process.stdout.write(\'before-sleep\'); setTimeout(() => {}, 2000)"';
     process.env.CODEBUDDY_SHADOW_TIMEOUT_MS = '200';
     const workspace = new ShadowWorkspace(repo, undefined, shadowBase);
 

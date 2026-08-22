@@ -36,10 +36,15 @@ function tail(text: string, max = 4000): string {
   return text.length <= max ? text : text.slice(-max);
 }
 
+// npm is a `.cmd` shim on Windows: it only resolves/runs through cmd.exe (Node
+// refuses to spawn .cmd files directly). The argv is fixed, so `shell: true`
+// adds no injection surface.
+const NPM_SHELL = process.platform === 'win32';
+
 function runNpmTest(cwd: string, timeoutMs: number): Promise<{ stdout: string; stderr: string; exitCode: number | null; timedOut: boolean; durationMs: number }> {
   const started = Date.now();
   return new Promise((resolve) => {
-    execFile('npm', ['run', 'test'], { cwd, timeout: timeoutMs, maxBuffer: 20 * 1024 * 1024 }, (error, stdout, stderr) => {
+    execFile('npm', ['run', 'test'], { cwd, timeout: timeoutMs, maxBuffer: 20 * 1024 * 1024, shell: NPM_SHELL }, (error, stdout, stderr) => {
       const code = error && 'code' in error && typeof error.code === 'number' ? error.code : error ? 1 : 0;
       const timedOut = Boolean(error && 'killed' in error && error.killed);
       resolve({ stdout: String(stdout ?? ''), stderr: String(stderr ?? ''), exitCode: code, timedOut, durationMs: Date.now() - started });

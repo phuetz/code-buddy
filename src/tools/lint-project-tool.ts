@@ -52,9 +52,18 @@ async function exists(filePath: string): Promise<boolean> {
   }
 }
 
+// npm's Windows shims under node_modules/.bin are `.cmd` batch files: they only
+// run through cmd.exe (Node refuses to spawn them directly), and the path must
+// be quoted so a workspace under "Program Files" still resolves. The args are
+// fixed flags, so `shell: true` adds no injection surface.
+function localBinary(file: string): { file: string; shell: boolean } {
+  return process.platform === 'win32' ? { file: `"${file}"`, shell: true } : { file, shell: false };
+}
+
 function runLocalBinary(file: string, args: string[], cwd: string, timeoutMs: number): Promise<{ stdout: string; stderr: string; timedOut: boolean }> {
+  const bin = localBinary(file);
   return new Promise((resolve) => {
-    execFile(file, args, { cwd, timeout: timeoutMs, maxBuffer: 10 * 1024 * 1024 }, (error, stdout, stderr) => {
+    execFile(bin.file, args, { cwd, timeout: timeoutMs, maxBuffer: 10 * 1024 * 1024, shell: bin.shell }, (error, stdout, stderr) => {
       const timedOut = Boolean(error && 'killed' in error && error.killed);
       resolve({ stdout: String(stdout ?? ''), stderr: String(stderr ?? ''), timedOut });
     });

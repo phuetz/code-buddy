@@ -8,11 +8,20 @@ export function makeTempRoot(prefix = 'codebuddy-workspace-'): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
 }
 
+/**
+ * Canonical path spelling used by the workspace layer (`fs.realpathSync.native`
+ * / `fs.promises.realpath`). On Windows it also expands 8.3 short names
+ * (`RUNNER~1` → `runneradmin`), which the JS `fs.realpathSync` does not.
+ */
+export function canonical(target: string): string {
+  return fs.realpathSync.native(target);
+}
+
 export function makeGitRepo(parent: string, name: string): string {
   const repo = path.join(parent, name);
   fs.mkdirSync(repo, { recursive: true });
   execFileSync('git', ['init', '-q', repo]);
-  return fs.realpathSync(repo);
+  return canonical(repo);
 }
 
 export function writeWorkspaceConfig(

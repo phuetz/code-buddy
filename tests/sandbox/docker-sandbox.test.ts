@@ -5,6 +5,7 @@
  */
 
 import { EventEmitter } from 'events';
+import * as path from 'path';
 
 // Hoist mock variables so they're available inside vi.mock factories
 const { mockExecSync, mockSpawn, mockSpawnSync } = vi.hoisted(() => ({
@@ -61,9 +62,14 @@ describe('DockerSandbox', () => {
 
   describe('isAvailable', () => {
     it('should return true when docker is available', () => {
-      mockExecSync.mockReturnValue(Buffer.from(''));
+      mockExecSync.mockReturnValue(Buffer.from('linux\n'));
       expect(DockerSandbox.isAvailable()).toBe(true);
-      expect(mockExecSync).toHaveBeenCalledWith('docker info', expect.objectContaining({ stdio: 'pipe' }));
+      expect(mockExecSync).toHaveBeenCalledWith('docker info --format {{.OSType}}', expect.objectContaining({ stdio: 'pipe' }));
+    });
+
+    it('should return false when the daemon runs Windows containers (Linux-only sandbox flags)', () => {
+      mockExecSync.mockReturnValue(Buffer.from('windows\r\n'));
+      expect(DockerSandbox.isAvailable()).toBe(false);
     });
 
     it('should return false when docker is not found', () => {
@@ -173,7 +179,8 @@ describe('DockerSandbox', () => {
 
       const args = mockSpawn.mock.calls[0][1] as string[];
       expect(args).toContain('-v');
-      expect(args).toContain('/home/user/project:/workspace');
+      // The host side is path.resolve()d (drive letter + backslashes on Windows).
+      expect(args).toContain(`${path.resolve('/home/user/project')}:/workspace`);
       expect(args).toContain('-w');
       expect(args).toContain('/workspace');
     });
@@ -193,7 +200,7 @@ describe('DockerSandbox', () => {
 
       const args = mockSpawn.mock.calls[0][1] as string[];
       if (process.platform === 'win32') {
-        expect(args).toContain('/home/user/project:/workspace');
+        expect(args).toContain(`${path.resolve('/home/user/project')}:/workspace`);
       } else {
         expect(args).toContain('/home/user/project:/home/user/project');
         expect(args).toContain('/home/user/project');

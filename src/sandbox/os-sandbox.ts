@@ -170,10 +170,12 @@ export async function detectCapabilities(): Promise<SandboxCapabilities> {
     }
   }
 
-  // Check for Docker
+  // Check for Docker. The sandbox runs Linux images with Linux-only flags, so a
+  // daemon in Windows-containers mode (Windows CI runners) does not count.
   try {
-    const result = await execSimple('docker', ['version', '--format', '{{.Server.Version}}']);
-    capabilities.docker = result.exitCode === 0;
+    const result = await execSimple('docker', ['version', '--format', '{{.Server.Os}}']);
+    const serverOs = result.stdout.trim().toLowerCase();
+    capabilities.docker = result.exitCode === 0 && (serverOs === '' || serverOs === 'linux');
   } catch {
     capabilities.docker = false;
   }

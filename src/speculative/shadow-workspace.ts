@@ -247,12 +247,22 @@ export class ShadowWorkspace {
       );
     }
 
-    const shell = process.platform === 'win32' ? (process.env.ComSpec ?? 'cmd.exe') : 'sh';
-    const shellArgs = process.platform === 'win32' ? ['/d', '/s', '/c', command] : ['-c', command];
+    const isWindows = process.platform === 'win32';
+    const shell = isWindows ? (process.env.ComSpec ?? 'cmd.exe') : 'sh';
+    // On Windows the command line must reach cmd.exe verbatim: with the default
+    // argument quoting Node wraps `command` in quotes and backslash-escapes the
+    // quotes inside it, which `cmd /s /c` then hands to the program mangled
+    // (`sh -c \"exit 0\"` ⇒ syntax error, exit 2). This mirrors what Node does
+    // for `shell: true`.
+    const shellArgs = isWindows ? ['/d', '/s', '/c', `"${command}"`] : ['-c', command];
     const validation = await this.runProcess(
       shell,
       shellArgs,
-      { cwd: shadowPath, detached: process.platform !== 'win32' },
+      {
+        cwd: shadowPath,
+        detached: !isWindows,
+        ...(isWindows ? { windowsVerbatimArguments: true } : {}),
+      },
       timeoutMs,
     );
     if (validation.error) {

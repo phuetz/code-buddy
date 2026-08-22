@@ -177,11 +177,20 @@ export class DockerSandbox extends EventEmitter implements SandboxBackendInterfa
 
   /**
    * Check if Docker is available on the system.
+   *
+   * The sandbox only ever runs Linux images with Linux-only flags
+   * (`--read-only`, `--tmpfs`, `--cap-drop`, `--pids-limit`), so a daemon in
+   * Windows-containers mode (the default on Windows CI runners) is reported as
+   * unavailable instead of failing every command with
+   * "read-only mode is not supported for Windows containers".
    */
   static isAvailable(): boolean {
     try {
-      execSync('docker info', { stdio: 'pipe', timeout: 10000 });
-      return true;
+      const output = execSync('docker info --format {{.OSType}}', { stdio: 'pipe', timeout: 10000 });
+      const osType = String(output ?? '').trim().toLowerCase();
+      // An empty answer (older daemons, partial output) keeps the historical
+      // "daemon answered ⇒ available" behaviour.
+      return osType === '' || osType === 'linux';
     } catch {
       return false;
     }
