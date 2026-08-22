@@ -46,6 +46,31 @@ describe('runtime provider catalog', () => {
       'nvidia',
       'ollama-cloud',
       'stepfun',
+      'omniroute',
+      'ai21',
+      'ant-ling',
+      'cerebras',
+      'cohere',
+      'deepinfra',
+      'featherless-ai',
+      'friendliai',
+      'hyperbolic',
+      'inception',
+      'inference-net',
+      'internlm',
+      'liquid',
+      'longcat',
+      'modelscope',
+      'nscale',
+      'openadapter',
+      'pioneer',
+      'reka',
+      'sambanova',
+      'sarvam',
+      'scaleway',
+      'tokenrouter',
+      'typhoon',
+      'zenmux',
       'vllm',
       'custom',
     ]));
@@ -68,6 +93,7 @@ describe('runtime provider catalog', () => {
     expect(findRuntimeProvider('glm')?.id).toBe('zai');
     expect(findRuntimeProvider('kimi')?.id).toBe('kimi-coding');
     expect(findRuntimeProvider('dashscope')?.id).toBe('alibaba');
+    expect(findRuntimeProvider('omni')?.id).toBe('omniroute');
     expect(findRuntimeProvider('hf')?.id).toBe('huggingface');
     expect(findRuntimeProvider('azure-openai')?.id).toBe('azure');
     expect(findRuntimeProvider('aws-bedrock')?.id).toBe('bedrock');
