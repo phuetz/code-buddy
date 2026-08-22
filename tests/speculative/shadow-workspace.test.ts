@@ -19,6 +19,9 @@ function createRepo(testRoot: string): string {
   git(repo, 'init', '-q');
   git(repo, 'config', 'user.email', 'shadow@example.test');
   git(repo, 'config', 'user.name', 'Shadow Test');
+  // Windows git defaults to core.autocrlf=true, which would check the shadow
+  // worktree out with CRLF and break the byte-exact content assertions.
+  git(repo, 'config', 'core.autocrlf', 'false');
   fs.writeFileSync(path.join(repo, 'tracked.txt'), 'committed-v1\n');
   git(repo, 'add', 'tracked.txt');
   git(repo, 'commit', '-m', 'initial');
@@ -46,7 +49,8 @@ describe('ShadowWorkspace', () => {
     delete process.env.CODEBUDDY_SHADOW_WORKSPACE;
     vi.restoreAllMocks();
     vi.doUnmock('../../src/speculative/shadow-workspace.js');
-    fs.rmSync(testRoot, { recursive: true, force: true });
+    // Retry: Windows may still hold a handle on a just-killed validator's cwd.
+    fs.rmSync(testRoot, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   });
 
   it('creates lazily, writes proposals, and resyncs to the repository HEAD before each run', async () => {

@@ -4,6 +4,11 @@ import path from 'path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ToolHandler } from '../../src/agent/tool-handler.js';
+import { ConfirmationService } from '../../src/utils/confirmation-service.js';
+import {
+  approveSandboxUnavailableEscalations,
+  clearSandboxEscalationBridge,
+} from '../helpers/sandbox-escalation-bridge.js';
 import { clearAllCodeExecSessions } from '../../src/tools/code-exec-tool.js';
 import { getFormalToolRegistry } from '../../src/tools/registry/index.js';
 import type { ITool, IToolExecutionContext } from '../../src/tools/registry/types.js';
@@ -40,6 +45,9 @@ describe('ToolHandler code_exec logical-session isolation', () => {
   beforeEach(() => {
     clearAllCodeExecSessions();
     observedScopes.splice(0);
+    // The bash `pwd` below runs through the real ConfirmationService; hosts
+    // without a sandbox backend (Windows CI) escalate it to an exact grant.
+    approveSandboxUnavailableEscalations(ConfirmationService.getInstance());
     workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'code-exec-session-'));
     handler = new ToolHandler({
       checkpointManager: {
@@ -88,6 +96,7 @@ describe('ToolHandler code_exec logical-session isolation', () => {
   afterEach(() => {
     getFormalToolRegistry().unregister(PROBE_TOOL);
     clearAllCodeExecSessions();
+    clearSandboxEscalationBridge(ConfirmationService.getInstance());
     fs.rmSync(workDir, { recursive: true, force: true });
   });
 

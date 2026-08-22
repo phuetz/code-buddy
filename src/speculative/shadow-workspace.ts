@@ -5,7 +5,7 @@
  * @module speculative/shadow-workspace
  */
 
-import { spawn, type ChildProcess, type SpawnOptions } from 'node:child_process';
+import { spawn, spawnSync, type ChildProcess, type SpawnOptions } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import * as fs from 'node:fs/promises';
 import { homedir } from 'node:os';
@@ -481,6 +481,15 @@ export class ShadowWorkspace {
           } catch {
             child.kill('SIGKILL');
           }
+        } else if (child.pid && process.platform === 'win32') {
+          // Kill the whole tree: `child.kill` only ends cmd.exe and leaves the
+          // validator running (holding the shadow directory open).
+          try {
+            spawnSync('taskkill', ['/pid', String(child.pid), '/t', '/f'], { stdio: 'ignore', timeout: 5000 });
+          } catch {
+            // Fall through to the plain kill below.
+          }
+          child.kill('SIGKILL');
         } else {
           child.kill('SIGKILL');
         }

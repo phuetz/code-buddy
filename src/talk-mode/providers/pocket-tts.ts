@@ -45,7 +45,8 @@ const SAMPLE_RATE = 24000; // Pocket TTS emits 24 kHz mono WAV.
 
 /** A launcher from a command/path: a `…/uvx` needs the `pocket-tts` subcommand prefix. */
 function launcherFor(cmd: string): PocketLauncher {
-  return { command: cmd, argsPrefix: /(^|\/)uvx$/.test(cmd) ? ['pocket-tts'] : [] };
+  // `uvx`, `/abs/uvx`, `C:\…\uvx` or `uvx.exe` all launch Pocket through uvx.
+  return { command: cmd, argsPrefix: /(^|[\\/])uvx(\.exe)?$/i.test(cmd) ? ['pocket-tts'] : [] };
 }
 
 /**
