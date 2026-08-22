@@ -29,11 +29,14 @@ vi.mock('../../../src/agent/extended-thinking.js', () => ({
 
 import { OpenAICompatProvider } from '../../../src/codebuddy/providers/provider-openai-compat.js';
 
-function createProvider(): OpenAICompatProvider {
+function createProvider(
+  baseURL = 'https://api.x.ai/v1',
+  model = 'grok-code-fast-1',
+): OpenAICompatProvider {
   return new OpenAICompatProvider({
     apiKey: 'test-key',
-    baseURL: 'https://api.x.ai/v1',
-    model: 'grok-code-fast-1',
+    baseURL,
+    model,
     defaultMaxTokens: 8192,
     getCircuitBreakerConfig: () => undefined,
   });
