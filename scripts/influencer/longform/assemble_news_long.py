@@ -14,7 +14,7 @@ Entrée : un JSON d'ordre (voir `ordre.json` du pilote longform-actu-2026-08-22)
 
 {
   "slug": "…", "titre": "…", "description": "…", "tags": [...],
-  "music": "…mp3", "music_db": -26,
+  "music": "…mp3", "music_db": -32,
   "broll_roots": ["~/.codebuddy/media-video/flow-crame", "~/.codebuddy/media-video/broll"],
   "cutaway": {"first_at": 3.0, "every": 3.5, "duration": 2.5},
   "subtitles": "karaoke" | "none",
@@ -1363,7 +1363,7 @@ def main() -> None:
         if not music.exists():
             raise NewsLongError(f'musique introuvable: {music}')
         mix = workdir / 'mix.wav'
-        mix_music(voice, music, float(cfg.get('music_db', -26)), total, mix)
+        mix_music(voice, music, float(cfg.get('music_db', -32)), total, mix)
         mastered = workdir / 'mastered.wav'
         premaster_audio(mix, mastered)
         if args.force or not final.exists():
