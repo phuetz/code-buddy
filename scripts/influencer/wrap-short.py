@@ -149,6 +149,21 @@ def karaoke_events(card):
         events.append({'t0': start, 't1': end, 'text': ' '.join(parts)})
     return events
 
+def concat_with_outro(src, outro):
+    """Soude `outro` à la fin de `src` (même W×H/fps/SAR que src, audio 48 kHz stéréo) et renvoie le mp4 temporaire."""
+    probe = subprocess.run(['ffprobe', '-v', 'error', '-select_streams', 'v:0', '-show_entries',
+                            'stream=width,height,r_frame_rate', '-of', 'csv=p=0', src],
+                           capture_output=True, text=True).stdout.strip().split(',')
+    w, h, fr = int(probe[0]), int(probe[1]), probe[2]
+    out = tempfile.NamedTemporaryFile(suffix='.mp4', delete=False).name
+    vf = f"scale={w}:{h}:force_original_aspect_ratio=decrease,pad={w}:{h}:(ow-iw)/2:(oh-ih)/2,setsar=1,fps={fr},format=yuv420p"
+    fc = (f"[0:v]{vf}[v0];[1:v]{vf}[v1];"
+          "[0:a]aresample=48000,aformat=channel_layouts=stereo[a0];[1:a]aresample=48000,aformat=channel_layouts=stereo[a1];"
+          "[v0][a0][v1][a1]concat=n=2:v=1:a=1[v][a]")
+    subprocess.run(['ffmpeg', '-v', 'error', '-i', src, '-i', outro, '-filter_complex', fc, '-map', '[v]', '-map', '[a]',
+                    '-c:v', 'libx264', '-crf', '16', '-preset', 'fast', '-c:a', 'aac', '-b:a', '192k', out, '-y'], check=True)
+    return out
+
 def build_ass(cards_list, hook, hook_end, w=1080, h=1920, layout='standard',
               subs='karaoke', attributions=None):
     # split : sous-titres juste sous la couture B-roll / au-dessus de la tête (judge 22/08 : 88 px posés sur le buste)
@@ -327,6 +342,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('src'); ap.add_argument('out')
     ap.add_argument('--hook', default='')
+    ap.add_argument('--outro', default='', help='clip (mp4) soudé à la fin du clip source avant habillage : CTA/signature HeyGen')
     ap.add_argument('--hook-end', type=float, default=4.5)
     ap.add_argument('--cut', action='append', default=[],
                     help='chemin.mp4@declencheur:durée (ex: b48.mp4@Un:3.5)')
@@ -347,6 +363,11 @@ def main():
         help='karaoke = mot actif agrandi et coloré (défaut, standard Ninon) ; '
              'cards = cartes statiques historiques')
     a = ap.parse_args()
+    if a.outro:
+        # Outro CTA/signature (ex. clip HeyGen générique « Moi c'est Lisa, abonne-toi ») soudé APRÈS le
+        # clip source, avant transcription (le karaoké couvre donc aussi l'outro). Ré-encodage au format
+        # du clip source pour que le concat soit fiable quel que soit l'encodage de l'outro.
+        a.src = concat_with_outro(a.src, a.outro)
 
     words = transcribe(a.src)
     if not words:

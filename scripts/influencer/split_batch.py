@@ -7,7 +7,7 @@ Ninon mesurée 2,2 s ; défaut 2,5 s) en tournant sur la liste de B-roll du job 
 planche contact 6 vignettes pour relecture.
 
 Usage : split_batch.py jobs.json [--only L5,L6] [--dry-run]
-jobs.json = {"music": "…mp3", "broll_root": "~/.codebuddy/media-video/flow-crame", "out_dir": "…", "cadence": 3,
+jobs.json = {"music": "…mp3", "broll_root": "~/.codebuddy/media-video/flow-crame", "out_dir": "…", "cadence": 2.5, "outro": "…/OUTRO-LISA-CTA.mp4",
              "jobs": [{"id": "L5", "src": "…/L5-kimi-k3.mp4", "hook": "Kimi K3 : …",
                        "fix": ["Kimi 4.3=Kimi K3"], "broll": ["lisa-neuralnet.mp4", "lisa-code.mp4", …],
                        "cadence": 3, "face_crop": "top:0.15,bottom:0.65", "out": "SHORT-SPLIT-L5-kimi-k3.mp4"}]}
@@ -66,6 +66,9 @@ def main():
             cuts.append(f"{brolls[i % len(brolls)]}@{t:.1f}:{cadence}")
             t += cadence; i += 1
         cmd = [sys.executable, WRAP, src, out, '--hook', job.get('hook', ''), '--layout', 'split']
+        outro = os.path.expanduser(job.get('outro', cfg.get('outro', '')) or '')
+        if outro and os.path.exists(outro):  # CTA/signature HeyGen soudé à la fin (clé globale ou par job)
+            cmd += ['--outro', outro]
         for f in job.get('fix', []):
             cmd += ['--fix', f]
         face_crop = job.get('face_crop', cfg.get('face_crop'))
