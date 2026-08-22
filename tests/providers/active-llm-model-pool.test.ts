@@ -131,6 +131,87 @@ describe('listActiveLlmModelPool — cloud expansion', () => {
   });
 });
 
+describe('listActiveLlmModelPool — OmniRoute gateway expansion', () => {
+  function omniroute(over: Record<string, unknown> = {}): Record<string, unknown> {
+    return active({
+      provider: 'omniroute',
+      model: 'auto/best-free',
+      apiKey: 'omniroute',
+      baseURL: 'http://localhost:20128/v1',
+      costInputUsdPerMtok: 0,
+      isLocal: false, // loopback gateway, cloud inference
+      ...over,
+    });
+  }
+
+  it('seats the resolved default, then the curated auto/* combos, then the ids the gateway serves — all $0, cloud egress', async () => {
+    buildActiveLlmRegistry.mockResolvedValue({ all: [omniroute()] });
+    findRuntimeProvider.mockImplementation((id: string) =>
+      id === 'omniroute' ? { models: ['auto/best-free', 'auto/best-coding'] } : undefined,
+    );
+    getLocalCapabilities.mockResolvedValue({
+      models: [
+        { id: 'auto/best-free', provider: 'omniroute' }, // dup of the default → dropped
+        { id: 'nvidia/nemotron-3-nano', provider: 'omniroute' },
+        { id: 'qwen3:8b', provider: 'ollama' }, // not enrolled: ollama isn't active here
+      ],
+    });
+
+    const pool = await listActiveLlmModelPool({ env: {} });
+
+    expect(pool.map((p) => p.model)).toEqual([
+      'auto/best-free',
+      'auto/best-coding',
+      'nvidia/nemotron-3-nano',
+    ]);
+    for (const entry of pool) {
+      expect(entry.provider).toBe('omniroute');
+      expect(entry.apiKey).toBe('omniroute');
+      expect(entry.baseURL).toBe('http://localhost:20128/v1');
+      expect(entry.costInputUsdPerMtok).toBe(0);
+      expect(entry.egress).toBe('cloud');
+    }
+  });
+
+  it('caps the ids discovered from the gateway (it can list 100+), keeping the curated combos', async () => {
+    buildActiveLlmRegistry.mockResolvedValue({ all: [omniroute()] });
+    findRuntimeProvider.mockImplementation((id: string) =>
+      id === 'omniroute' ? { models: ['auto/best-free'] } : undefined,
+    );
+    getLocalCapabilities.mockResolvedValue({
+      models: Array.from({ length: 40 }, (_, i) => ({ id: `vendor/model-${i}`, provider: 'omniroute' })),
+    });
+
+    const pool = await listActiveLlmModelPool({ env: {}, maxLocalPerProvider: 3 });
+    expect(pool.map((p) => p.model)).toEqual([
+      'auto/best-free',
+      'vendor/model-0',
+      'vendor/model-1',
+      'vendor/model-2',
+    ]);
+  });
+
+  it('survives a failing gateway probe (default combo still seated)', async () => {
+    buildActiveLlmRegistry.mockResolvedValue({ all: [omniroute()] });
+    findRuntimeProvider.mockReturnValue(undefined);
+    getLocalCapabilities.mockRejectedValue(new Error('ECONNREFUSED'));
+
+    const pool = await listActiveLlmModelPool({ env: {} });
+    expect(pool).toEqual([
+      expect.objectContaining({ provider: 'omniroute', model: 'auto/best-free', costInputUsdPerMtok: 0 }),
+    ]);
+  });
+
+  it('legacy registry pool mode keeps one omniroute entry (no expansion, no probe)', async () => {
+    buildActiveLlmRegistry.mockResolvedValue({ all: [omniroute()] });
+    findRuntimeProvider.mockReturnValue({ models: ['auto/best-free', 'auto/best-coding'] });
+
+    const pool = await listActiveLlmModelPool({ env: { CODEBUDDY_COUNCIL_POOL: 'registry' } });
+    expect(pool.map((p) => p.model)).toEqual(['auto/best-free']);
+    expect(getLocalCapabilities).not.toHaveBeenCalled();
+  });
+});
+
 describe('listActiveLlmModelPool — local expansion', () => {
   it('expands installed Lemonade models as local zero-cost candidates', async () => {
     buildActiveLlmRegistry.mockResolvedValue({

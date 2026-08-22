@@ -67,6 +67,7 @@ const APPROX_COST_USD_PER_MTOK: Record<string, number> = {
   ollama: 0,
   lemonade: 0,
   lmstudio: 0,
+  omniroute: 0,
   'gemini-cli': 0,
   grok: 0.5,
   gemini: 0.3,
@@ -81,6 +82,22 @@ function canonicalProviderId(provider: string | undefined | null): string | unde
   return findRuntimeProvider(provider)?.id ?? provider.trim().toLowerCase();
 }
 
+/**
+ * Catalog providers that are only ACTIVE when their endpoint/CLI actually
+ * answered the capability probe (a stale env var or default port must never
+ * occupy a failover slot or a council seat): the on-box runtimes, the
+ * Antigravity CLI and the OmniRoute gateway.
+ */
+const PROBED_RUNTIME_PROVIDERS = new Set(['ollama', 'lmstudio', 'lemonade', 'agy-cli', 'omniroute']);
+
+/**
+ * Local gateways: `authMode: 'local'` in the catalog (loopback endpoint, no
+ * key) but the inference leaves the machine — OmniRoute proxies to cloud free
+ * tiers. They are probed like runtimes yet reported as NOT local so the
+ * privacy escape hatches (`localOnly`) never route through them.
+ */
+const LOCAL_GATEWAY_PROVIDERS = new Set(['omniroute']);
+
 /** Local runtimes that actually responded to a probe → their first real
  * installed model (reuses the fleet capability registry's Ollama/LM Studio
  * HTTP probes; `probeOllama` sets `id` to the actual model name). */
@@ -91,10 +108,7 @@ async function getReachableRuntimeModels(force?: boolean): Promise<Map<string, s
     const caps = await getLocalCapabilities({ force });
     for (const m of caps.models) {
       const id = canonicalProviderId(m.provider);
-      if (
-        (id === 'ollama' || id === 'lmstudio' || id === 'lemonade' || id === 'agy-cli') &&
-        !map.has(id)
-      ) {
+      if (id && PROBED_RUNTIME_PROVIDERS.has(id) && !map.has(id)) {
         map.set(id, m.id);
       }
     }
@@ -137,7 +151,9 @@ function toActiveLlm(
   resolved: ResolvedRuntimeProvider,
   entry: RuntimeProviderCatalogEntry | undefined,
 ): ActiveLlm {
-  const isLocal = (entry?.authMode ?? resolved.authMode) === 'local';
+  const isLocal =
+    (entry?.authMode ?? resolved.authMode) === 'local' &&
+    !LOCAL_GATEWAY_PROVIDERS.has(resolved.provider);
   const resolvedModel = resolved.defaultModel;
   const isFreeOpenRouterModel =
     resolved.provider === 'openrouter' &&
@@ -220,7 +236,8 @@ export async function buildActiveLlmRegistry(
       resolved = { ...resolved, defaultModel: realModel };
     }
 
-    const isLocal = (entry.authMode ?? resolved.authMode) === 'local';
+    const isGateway = LOCAL_GATEWAY_PROVIDERS.has(entry.id);
+    const isLocal = (entry.authMode ?? resolved.authMode) === 'local' && !isGateway;
     if (opts.localOnly && !isLocal) continue;
     // The catalog reports a local provider as "configured" even when it isn't
     // running — only keep locals we actually probed as reachable, and use their
@@ -230,6 +247,11 @@ export async function buildActiveLlmRegistry(
       if (!realModel) continue;
       resolved = { ...resolved, defaultModel: realModel };
     }
+    // A local gateway (OmniRoute) is active only when its `/v1/models` answered;
+    // its resolved model (env override or the catalog's `auto/best-free` combo)
+    // is kept — the gateway routes any of its ids, unlike a runtime whose
+    // catalog default may not be installed.
+    if (isGateway && !reachableRuntimeModels.has(entry.id)) continue;
 
     const key = `${canonicalProviderId(resolved.provider)}:${resolved.baseURL.replace(/\/+$/, '')}`;
     if (seen.has(key)) continue;

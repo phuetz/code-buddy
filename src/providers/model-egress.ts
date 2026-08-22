@@ -1,11 +1,17 @@
 export type ModelEgress = 'local' | 'lan' | 'cloud';
 
+/**
+ * Providers whose PROCESS/endpoint is local but whose inference is not: the
+ * subscription CLIs (child process on the box, model in the cloud) and the
+ * OmniRoute gateway (loopback proxy that fans out to cloud free tiers).
+ */
 const CLOUD_SUBPROCESS_PROVIDERS = new Set([
   'agy-cli',
   'gemini-cli',
   'chatgpt',
   'chatgpt-oauth',
   'grok-oauth',
+  'omniroute',
 ]);
 
 function isPrivateIpv4(hostname: string): boolean {

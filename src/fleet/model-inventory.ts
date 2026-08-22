@@ -240,6 +240,8 @@ function providerExecutionLocation(provider: FleetProvider): ModelExecutionLocat
   if (provider === 'chatgpt-oauth' || provider === 'anthropic' || provider === 'openai' || provider === 'gemini' || provider === 'grok' || provider === 'mistral') {
     return 'cloud';
   }
+  // OmniRoute listens on loopback but routes inference to cloud free tiers.
+  if (provider === 'omniroute') return 'cloud';
   return 'local';
 }
 
