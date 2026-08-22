@@ -299,6 +299,18 @@ export async function resolveFileMentions(
   return { files, issues };
 }
 
+/**
+ * Wrapper tags that delimit injected file content. A file that contains one of
+ * them verbatim could otherwise close the wrapper early and masquerade as
+ * trusted context, so the literal sequences are neutralized before injection.
+ */
+const WRAPPER_TAG_PATTERN = /<(\/?)(context|file_contents)(?=[\s/>])/gi;
+
+/** Escape wrapper-like tags so untrusted content cannot close or forge a block. */
+export function neutralizeWrapperTags(content: string): string {
+  return content.replace(WRAPPER_TAG_PATTERN, '&lt;$1$2');
+}
+
 /** Format a resolved file as untrusted, explicitly requested turn context. */
 export function formatFileMentionContext(file: ResolvedFileMention): string {
   return [
@@ -307,7 +319,7 @@ export function formatFileMentionContext(file: ResolvedFileMention): string {
     `Path: ${JSON.stringify(file.path)}`,
     `Size: ${file.size} bytes`,
     '<file_contents>',
-    file.content,
+    neutralizeWrapperTags(file.content),
     '</file_contents>',
   ].join('\n');
 }
