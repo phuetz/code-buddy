@@ -360,6 +360,7 @@ export class ChatGptResponsesProvider implements Provider {
     let content = '';
     const toolCalls: CodeBuddyToolCall[] = [];
     let finishReason = 'stop';
+    let usage: CodeBuddyResponse['usage'];
 
     for await (const chunk of this.chatStream(messages, tools, opts)) {
       const delta = chunk.choices[0]?.delta;
@@ -383,6 +384,17 @@ export class ChatGptResponsesProvider implements Provider {
       if (chunk.choices[0]?.finish_reason) {
         finishReason = chunk.choices[0].finish_reason;
       }
+      if (chunk.usage) {
+        const chunkUsage = chunk.usage as typeof chunk.usage & { cached_tokens?: number };
+        usage = {
+          prompt_tokens: chunkUsage.prompt_tokens,
+          completion_tokens: chunkUsage.completion_tokens,
+          total_tokens: chunkUsage.total_tokens,
+          ...(chunkUsage.cached_tokens !== undefined
+            ? { cached_tokens: chunkUsage.cached_tokens }
+            : {}),
+        };
+      }
     }
 
     return {
@@ -394,6 +406,7 @@ export class ChatGptResponsesProvider implements Provider {
         },
         finish_reason: finishReason,
       }],
+      ...(usage ? { usage } : {}),
     };
   }
 
@@ -953,6 +966,10 @@ type DeltaWithReasoning = ChatCompletionChunk['choices'][0]['delta'] & {
   reasoning_content?: string;
 };
 
+type ChunkUsage = NonNullable<ChatCompletionChunk['usage']> & {
+  cached_tokens?: number;
+};
+
 /** Async-generates OpenAI-shaped chunks from a Codex SSE stream.
  *
  *  `onReasoningItem` (optional) is invoked for each `output_item.done`
@@ -977,7 +994,11 @@ export async function* parseSseStream(
   let functionCallIndex = 0;
   const customCalls = new Map<string, { callId?: string; name?: string; input: string }>();
 
-  const makeChunk = (delta: DeltaWithReasoning, finishReason?: string): ChatCompletionChunk => ({
+  const makeChunk = (
+    delta: DeltaWithReasoning,
+    finishReason?: string,
+    usage?: ChunkUsage,
+  ): ChatCompletionChunk => ({
     id: `chatcmpl-codex-${chunkIndex++}`,
     object: 'chat.completion.chunk',
     created: Math.floor(Date.now() / 1000),
@@ -987,6 +1008,7 @@ export async function* parseSseStream(
       delta: delta as ChatCompletionChunk['choices'][0]['delta'],
       finish_reason: (finishReason as ChatCompletionChunk['choices'][0]['finish_reason']) ?? null,
     }],
+    ...(usage ? { usage } : {}),
   });
 
   try {
@@ -1051,7 +1073,15 @@ export async function* parseSseStream(
             encrypted_content?: string;
             summary?: unknown;
           };
-          response?: { error?: { code?: string; message?: string } };
+          response?: {
+            error?: { code?: string; message?: string };
+            usage?: {
+              input_tokens?: number;
+              output_tokens?: number;
+              total_tokens?: number;
+              input_tokens_details?: { cached_tokens?: number };
+            };
+          };
         };
         try {
           parsed = JSON.parse(dataStr);
@@ -1184,7 +1214,20 @@ export async function* parseSseStream(
         }
 
         if (type === 'response.completed') {
-          yield makeChunk({}, 'stop');
+          const responseUsage = parsed.response?.usage;
+          let chunkUsage: ChunkUsage | undefined;
+          if (responseUsage) {
+            const promptTokens = responseUsage.input_tokens ?? 0;
+            const completionTokens = responseUsage.output_tokens ?? 0;
+            const cachedTokens = responseUsage.input_tokens_details?.cached_tokens;
+            chunkUsage = {
+              prompt_tokens: promptTokens,
+              completion_tokens: completionTokens,
+              total_tokens: responseUsage.total_tokens ?? promptTokens + completionTokens,
+              ...(cachedTokens !== undefined ? { cached_tokens: cachedTokens } : {}),
+            };
+          }
+          yield makeChunk({}, 'stop', chunkUsage);
           return;
         }
 

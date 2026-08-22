@@ -15,6 +15,24 @@ describe('Audit Logger', () => {
     expect(auditLogger.getEntries().length).toBe(1);
   });
 
+  it('scrubs secrets before buffering audit entries', () => {
+    const apiKey = `sk-${'a'.repeat(32)}`;
+    const bearer = 'b'.repeat(32);
+
+    auditLogger.log({
+      action: 'bash_execute',
+      decision: 'allow',
+      source: `provider:${apiKey}`,
+      target: `curl -H "Authorization: Bearer ${bearer}" https://example.test`,
+      details: `token=${apiKey}`,
+    });
+
+    const serialized = JSON.stringify(auditLogger.getEntries()[0]);
+    expect(serialized).not.toContain(apiKey);
+    expect(serialized).not.toContain(bearer);
+    expect(serialized).toContain('[REDACTED:');
+  });
+
   it('should log code validation', () => {
     auditLogger.logCodeValidation({
       target: 'test.ts',

@@ -70,6 +70,36 @@ interface ChatRequestPayloadStreaming extends Omit<ChatCompletionCreateParamsStr
   chat_template_kwargs?: { enable_thinking: boolean };
 }
 
+type ReasoningCompatiblePayload = {
+  model: string;
+  temperature?: number | null;
+  max_tokens?: number | null;
+  max_completion_tokens?: number | null;
+};
+
+function adaptPayloadForOpenAIReasoningModel<T extends ReasoningCompatiblePayload>(
+  payload: T,
+  baseURL: string,
+): T {
+  let hostname: string;
+  try {
+    hostname = new URL(baseURL).hostname.toLowerCase();
+  } catch {
+    return payload;
+  }
+  const officialOpenAI = hostname === 'openai.com' || hostname.endsWith('.openai.com');
+  if (!officialOpenAI || !/^(?:o\d|gpt-5)/i.test(payload.model)) {
+    return payload;
+  }
+
+  if (payload.max_tokens !== undefined) {
+    payload.max_completion_tokens = payload.max_tokens;
+    delete payload.max_tokens;
+  }
+  delete payload.temperature;
+  return payload;
+}
+
 export interface OpenAICompatProviderOptions {
   apiKey: string;
   baseURL: string;
@@ -432,13 +462,15 @@ export class OpenAICompatProvider implements Provider {
         },
       };
 
-      const response = await this.client.chat.completions.create({
+      const probePayload: ChatCompletionCreateParamsNonStreaming = {
         model: this.currentModel,
         messages: [{ role: 'user', content: 'What time is it? Use the get_current_time tool.' }],
         tools: [testTool as unknown as OpenAI.ChatCompletionTool],
         tool_choice: 'auto',
         max_tokens: 50,
-      });
+      };
+      adaptPayloadForOpenAIReasoningModel(probePayload, this.baseURL);
+      const response = await this.client.chat.completions.create(probePayload);
 
       if (!response.choices || response.choices.length === 0) {
         logger.warn('Tool support probe returned empty choices array');
@@ -753,6 +785,7 @@ export class OpenAICompatProvider implements Provider {
         temperature: opts.temperature ?? 0.7,
         max_tokens: opts.maxTokens ?? this.defaultMaxTokens,
       };
+      adaptPayloadForOpenAIReasoningModel(requestPayload, this.baseURL);
       requestPayload.chat_template_kwargs = this.getLemonadeChatTemplateKwargs();
       const openRouterProviderRouting = this.getOpenRouterProviderRouting();
       if (openRouterProviderRouting) {
@@ -927,6 +960,7 @@ export class OpenAICompatProvider implements Provider {
         temperature: opts.temperature ?? 0.7,
         max_tokens: opts.maxTokens ?? this.defaultMaxTokens,
       };
+      adaptPayloadForOpenAIReasoningModel(requestPayload, this.baseURL);
       const lemonadeChatTemplateKwargs = this.getLemonadeChatTemplateKwargs();
       if (lemonadeChatTemplateKwargs) {
         (requestPayload as unknown as Record<string, unknown>).chat_template_kwargs =
