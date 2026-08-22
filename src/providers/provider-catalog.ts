@@ -659,8 +659,23 @@ export const RUNTIME_PROVIDER_CATALOG: RuntimeProviderCatalogEntry[] = [
     baseUrlEnvKeys: ['NVIDIA_BASE_URL', 'NVIDIA_NIM_BASE_URL'],
     modelEnvKeys: ['NVIDIA_MODEL', 'NVIDIA_NIM_MODEL'],
     defaultBaseURL: 'https://integrate.api.nvidia.com/v1',
-    defaultModel: 'nvidia/llama-3.3-nemotron-super-49b-v1',
-    models: ['nvidia/llama-3.3-nemotron-super-49b-v1', 'nvidia/llama-3.1-nemotron-ultra-253b-v1'],
+    // Modèles VÉRIFIÉS par sonde live le 22/08/2026 (scripts/providers/probe-nvidia-nim.py, rapport
+    // docs/providers/nvidia-nim-probe-2026-08-22.md) : 8/28 candidats répondent. Le catalogue NVIDIA en
+    // liste ~100 mais beaucoup sont en fin de vie (410 Gone : GLM 5.2, MiniMax M2.7, DeepSeek V4, Qwen 3.5,
+    // Mistral Small 4/Large 3…) ou introuvables (404 : Kimi K2.6, Nemotron Ultra 253B). Kimi K3 = meilleur
+    // compromis qualité (FR excellent, ~4 s) ; Nemotron 3 Nano/Super/Ultra = la famille récente (0,5-1,3 s).
+    defaultModel: 'moonshotai/kimi-k3',
+    models: [
+      'moonshotai/kimi-k3',
+      'nvidia/nemotron-3-ultra-550b-a55b',
+      'nvidia/nemotron-3-super-120b-a12b',
+      'nvidia/nemotron-3-nano-30b-a3b',
+      'nvidia/llama-3.3-nemotron-super-49b-v1',
+      'stepfun-ai/step-3.7-flash',
+      'openai/gpt-oss-20b',
+      'meta/llama-3.3-70b-instruct',
+      'mistralai/mistral-nemotron',
+    ],
   },
   {
     id: 'ollama-cloud',
