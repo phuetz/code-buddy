@@ -2,6 +2,7 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { removeTmpDir } from '../helpers/tmp.js';
 
 import {
   buildPolicyEvalManifest,
@@ -33,7 +34,7 @@ describe('policy evals', () => {
     }
     store.dispose();
     await new Promise((resolve) => setTimeout(resolve, 60));
-    fs.rmSync(tempDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+    removeTmpDir(tempDir);
   });
 
   function startRun(objective: string, metadata?: Parameters<RunStore['startRun']>[1]): string {
