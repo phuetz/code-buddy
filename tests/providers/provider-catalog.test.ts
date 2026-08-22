@@ -7,6 +7,33 @@ import {
   resolveProviderFromCatalog,
 } from '../../src/providers/provider-catalog.js';
 
+const OMNIROUTE_IMPORTED_FREE_PROVIDER_IDS = [
+  'ai21',
+  'ant-ling',
+  'cerebras',
+  'cohere',
+  'deepinfra',
+  'featherless-ai',
+  'friendliai',
+  'hyperbolic',
+  'inception',
+  'inference-net',
+  'internlm',
+  'liquid',
+  'longcat',
+  'modelscope',
+  'nscale',
+  'openadapter',
+  'pioneer',
+  'reka',
+  'sambanova',
+  'sarvam',
+  'scaleway',
+  'tokenrouter',
+  'typhoon',
+  'zenmux',
+] as const;
+
 describe('runtime provider catalog', () => {
   it('exposes the direct runtime providers used by the main CodeBuddyClient path', () => {
     const ids = getDirectRuntimeProviderCatalog().map((entry) => entry.id);
@@ -83,6 +110,16 @@ describe('runtime provider catalog', () => {
 
     expect(ids).toEqual(['azure', 'bedrock', 'copilot']);
     expect(pluginProviders.every((entry) => entry.runtimeSupport === 'plugin-native')).toBe(true);
+  });
+
+  it('exposes non-empty free-tier metadata for OmniRoute and every imported provider', () => {
+    for (const id of [...OMNIROUTE_IMPORTED_FREE_PROVIDER_IDS, 'omniroute'] as const) {
+      const freeTier = findRuntimeProvider(id)?.freeTier;
+      expect(freeTier).toEqual(expect.any(String));
+      expect(freeTier?.trim().length).toBeGreaterThan(0);
+    }
+
+    expect(findRuntimeProvider('omniroute')?.freeTier).toBe('local gateway to 90+ free tiers');
   });
 
   it('resolves aliases to their canonical runtime provider', () => {
