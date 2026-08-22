@@ -133,6 +133,59 @@ export class WebSearchExecuteTool implements ITool {
 /**
  * WebFetchTool - ITool adapter for fetching web pages
  */
+export class CommunitySearchExecuteTool implements ITool {
+  readonly name = 'community_search';
+  readonly description =
+    'Search what PEOPLE say — Hacker News, Stack Overflow, GitHub, arXiv and Reddit — '
+    + 'ranked by real engagement (votes, points, stars) over a recent window. '
+    + 'Complements web_search, which indexes what publishers write. '
+    + 'Free, no API key required.';
+
+  async execute(input: Record<string, unknown>): Promise<ToolResult> {
+    const { communitySearchTool } = await import('../community-search.js');
+    return communitySearchTool.search(input.query as string, {
+      days: input.days as number | undefined,
+      limit: input.limit as number | undefined,
+      sources: input.sources as import('../community-search.js').CommunitySource[] | undefined,
+    });
+  }
+
+  getSchema(): ToolSchema {
+    return {
+      name: this.name,
+      description: this.description,
+      parameters: {
+        type: 'object',
+        properties: {
+          query: {
+            type: 'string',
+            description: 'What to look for. Plain words work best — this searches discussions, not pages.',
+          },
+          days: {
+            type: 'number',
+            description: 'How far back to look, in days (1-365, default 30). Beyond ~30 it stops being current.',
+            default: 30,
+          },
+          limit: {
+            type: 'number',
+            description: 'How many results to return (1-60, default 25)',
+            default: 25,
+          },
+          sources: {
+            type: 'array',
+            items: {
+              type: 'string',
+              enum: ['hackernews', 'stackexchange', 'github', 'arxiv', 'reddit'],
+            },
+            description: 'Restrict to specific sources. All by default.',
+          },
+        },
+        required: ['query'],
+      },
+    };
+  }
+}
+
 export class WebFetchTool implements ITool {
   readonly name = 'web_fetch';
   readonly description = 'Fetch and extract text content from a web page';
@@ -472,6 +525,7 @@ export class StockQuoteExecuteTool implements ITool {
 export function createWebTools(): ITool[] {
   return [
     new WebSearchExecuteTool(),
+    new CommunitySearchExecuteTool(),
     new WebFetchTool(),
     new WebScrapeExecuteTool(),
     new WeatherExecuteTool(),

@@ -418,6 +418,7 @@ Design, the five sense modules, the opt-in features, and the diagrams: [`buddy-s
 | [Fleet Guide](docs/fleet-guide.md) | Multi-AI hub, peer-rpc methods, env-driven auto-detect, Tailscale labs |
 | [Security](docs/security.md) · [Context Engine](docs/context-engine.md) | Permission modes, Guardian, sandboxing, secrets; compression, JIT context |
 | [Channels](docs/channels.md) · [Configuration](docs/configuration.md) | 20+ channels, DM pairing; env vars, TOML, model limits |
+| [Companion Guide](docs/companion-guide.md) · [Krea 2 LoRA](docs/krea-lora.md) | Voice companion (Lisa) · character LoRA train/install for ComfyUI |
 | [Infrastructure](docs/infrastructure.md) · [Deployment](docs/deployment.md) | Server, gateway, daemon, cron; systemd, Docker, Kubernetes, upgrades |
 | [Development](docs/development.md) | Build, test, architecture, conventions, adding tools |
 | [Hermes / OpenClaw Parity](docs/hermes-openclaw-parity.md) | Where Code Buddy stands vs Hermes Agent & OpenClaw |

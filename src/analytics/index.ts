@@ -51,6 +51,21 @@ export {
 } from './cost-predictor.js';
 
 export {
+  aggregateCostReport,
+  buildCostReport,
+  inferCostProvider,
+  parseCostSince,
+  type CostBreakdown,
+  type CostGroupBy,
+  type CostPricing,
+  type CostPricingResolver,
+  type CostReport,
+  type CostReportOptions,
+  type CostSessionEntry,
+  type CostTokenTotals,
+} from './cost-report.js';
+
+export {
   BudgetAlertManager,
   type BudgetAlert,
   type BudgetAlertConfig,
@@ -62,3 +77,10 @@ export {
   createMetricsCollector,
   type PrometheusConfig,
 } from './prometheus-exporter.js';
+
+export {
+  explainRepository,
+  type RepoExplainDepth,
+  type RepoExplanation,
+  type RepoExplanationInput,
+} from './repo-explainer.js';

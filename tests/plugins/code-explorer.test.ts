@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import * as path from 'path';
 import * as fs from 'fs';
-import { execSync, spawn } from 'child_process';
+import { execFileSync, execSync, spawn } from 'child_process';
 
 // Mock logger
 vi.mock('../../src/utils/logger.js', () => ({
@@ -21,6 +21,7 @@ vi.mock('../../src/utils/logger.js', () => ({
 
 // Mock child_process
 vi.mock('child_process', () => ({
+  execFileSync: vi.fn(),
   execSync: vi.fn(),
   spawn: vi.fn(),
 }));
@@ -299,6 +300,16 @@ describe('CodeExplorerManager', () => {
       expect(spawn).not.toHaveBeenCalled();
     });
 
+    it('never refreshes when a read-only caller disables auto-index', () => {
+      vi.stubEnv('CODEBUDDY_CODE_EXPLORER_AUTOINDEX', 'true');
+
+      expect(manager.getFreshness(() => '3', { autoIndex: false })).toMatchObject({
+        stale: true,
+        commitsBehind: 3,
+      });
+      expect(spawn).not.toHaveBeenCalled();
+    });
+
     it('keeps freshness fail-open when the background launch fails', () => {
       vi.stubEnv('CODEBUDDY_CODE_EXPLORER_AUTOINDEX', 'true');
       (spawn as unknown as ReturnType<typeof vi.fn>).mockImplementation(() => {
@@ -307,6 +318,41 @@ describe('CodeExplorerManager', () => {
 
       expect(() => manager.getFreshness(() => '1')).not.toThrow();
       expect(manager.getFreshness(() => '1')).toMatchObject({ stale: true, commitsBehind: 1 });
+    });
+  });
+
+  describe('generateDiagram', () => {
+    it('returns Mermaid emitted by the indexed CLI without writing a file', () => {
+      (fs.existsSync as unknown as ReturnType<typeof vi.fn>).mockReturnValue(true);
+      (execSync as unknown as ReturnType<typeof vi.fn>).mockReturnValue(Buffer.from('1.0.0'));
+      (execFileSync as unknown as ReturnType<typeof vi.fn>).mockReturnValue(
+        'Diagram generated\nflowchart LR\n  Entry --> Service\n',
+      );
+
+      expect(manager.generateDiagram('createService')).toBe(
+        'flowchart LR\n  Entry --> Service',
+      );
+      expect(execFileSync).toHaveBeenCalledWith(
+        'code-explorer',
+        [
+          'diagram',
+          'createService',
+          '--type',
+          'flowchart',
+          '--format',
+          'mermaid',
+          '--path',
+          path.resolve(testRepoPath),
+        ],
+        expect.objectContaining({ cwd: path.resolve(testRepoPath), encoding: 'utf-8' }),
+      );
+    });
+
+    it('fails open when no index exists', () => {
+      (fs.existsSync as unknown as ReturnType<typeof vi.fn>).mockReturnValue(false);
+
+      expect(manager.generateDiagram('createService')).toBe('');
+      expect(execFileSync).not.toHaveBeenCalled();
     });
   });
 

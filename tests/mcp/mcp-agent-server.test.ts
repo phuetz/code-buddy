@@ -9,9 +9,33 @@
 // Mocks
 // =========================================================================
 
-import { CodeBuddyAgent } from '../../src/agent/codebuddy-agent';
-import { CodeBuddyMCPServer } from '../../src/mcp/mcp-server';
-import { formatAgentResponse } from '../../src/mcp/mcp-agent-tools';
+import { CodeBuddyAgent } from '../../src/agent/codebuddy-agent.js';
+import { CodeBuddyMCPServer } from '../../src/mcp/mcp-server.js';
+import { formatAgentResponse } from '../../src/mcp/mcp-agent-tools.js';
+
+// Keep this suite focused on the MCP-only agent/resource layer. Registry
+// discovery and execution are covered by mcp-server.test.ts and the SDK
+// roundtrip test.
+jest.mock('../../src/codebuddy/tools.js', () => ({
+  initializeToolRegistry: jest.fn(),
+}));
+
+jest.mock('../../src/tools/registry.js', () => ({
+  getToolRegistry: jest.fn().mockReturnValue({
+    getAllTools: jest.fn().mockReturnValue([]),
+    getTool: jest.fn(),
+  }),
+}));
+
+jest.mock('../../src/tools/registry/interactive-adapters.js', () => ({
+  createInteractiveToolAdapters: jest.fn().mockReturnValue([]),
+}));
+
+jest.mock('../../src/tools/registry/tool-registry.js', () => ({
+  getFormalToolRegistry: jest.fn().mockReturnValue({
+    getAll: jest.fn().mockReturnValue([]),
+  }),
+}));
 
 const mockProcessUserMessage = jest.fn().mockResolvedValue([
   { type: 'assistant', content: 'Hello from agent', timestamp: new Date() },
@@ -26,7 +50,7 @@ const mockExecutePlan = jest.fn().mockResolvedValue([
 const mockNeedsOrchestration = jest.fn().mockReturnValue(false);
 const mockDispose = jest.fn();
 
-jest.mock('../../src/agent/codebuddy-agent', () => ({
+jest.mock('../../src/agent/codebuddy-agent.js', () => ({
   CodeBuddyAgent: jest.fn().mockImplementation(function() { return {
     processUserMessage: mockProcessUserMessage,
     executePlan: mockExecutePlan,
@@ -161,6 +185,13 @@ const registeredPrompts = new Map<string, { description: string; schema: unknown
 
 jest.mock('@modelcontextprotocol/sdk/server/mcp.js', () => ({
   McpServer: jest.fn().mockImplementation(function() { return {
+    registerTool: jest.fn((name: string, config: { description?: string; inputSchema?: unknown }, handler: Function) => {
+      registeredTools.set(name, {
+        description: config.description ?? '',
+        schema: config.inputSchema,
+        handler,
+      });
+    }),
     tool: jest.fn((name: string, description: string, schema: unknown, handler: Function) => {
       registeredTools.set(name, { description, schema, handler });
     }),
@@ -196,7 +227,7 @@ describe('MCP Agent Intelligence Layer', () => {
     // Set env for agent init
     process.env.GROK_API_KEY = 'test-key-123';
 
-    server = new CodeBuddyMCPServer();
+    server = new CodeBuddyMCPServer({ allowWrite: true });
   });
 
   afterEach(async () => {
@@ -211,10 +242,8 @@ describe('MCP Agent Intelligence Layer', () => {
   // =========================================================================
 
   describe('tool registration', () => {
-    it('should register all 17 tools', () => {
-      // 15 core/agent/memory/session + 2 read-only desktop tools (the 4 desktop
-      // control tools are gated behind CODEBUDDY_MCP_DESKTOP_CONTROL=1).
-      expect(registeredTools.size).toBe(17);
+    it('should register the registry and supplemental agent tools', () => {
+      expect(registeredTools.size).toBeGreaterThan(10);
     });
 
     it('should register agent_chat tool', () => {
@@ -632,7 +661,7 @@ describe('MCP Agent Intelligence Layer', () => {
 
       // Create new server without API key
       registeredTools.clear();
-      const noKeyServer = new CodeBuddyMCPServer();
+      const _noKeyServer = new CodeBuddyMCPServer({ allowWrite: true });
 
       const handler = registeredTools.get('agent_chat')!.handler;
       const result = await handler({ message: 'test' });
@@ -748,15 +777,14 @@ describe('MCP Agent Intelligence Layer', () => {
   // Static Tool Definitions
   // =========================================================================
 
-  describe('getToolDefinitions includes new tools', () => {
-    it('should list all 15 tools', () => {
-      const defs = CodeBuddyMCPServer.getToolDefinitions();
-      expect(defs).toHaveLength(15);
+  describe('write-enabled exposure includes the MCP-only agent layer', () => {
+    it('should keep registry definitions isolated from this supplemental-layer suite', () => {
+      const defs = CodeBuddyMCPServer.getToolDefinitions({ allowWrite: true });
+      expect(defs).toEqual([]);
     });
 
-    it('should include agent tools in definitions', () => {
-      const defs = CodeBuddyMCPServer.getToolDefinitions();
-      const names = defs.map(d => d.name);
+    it('should include supplemental agent tools in the running server', () => {
+      const names = server.getExposedToolNames();
       expect(names).toContain('agent_chat');
       expect(names).toContain('agent_task');
       expect(names).toContain('agent_plan');
@@ -767,17 +795,10 @@ describe('MCP Agent Intelligence Layer', () => {
       expect(names).toContain('web_search');
     });
 
-    it('agent_chat should require message parameter', () => {
-      const defs = CodeBuddyMCPServer.getToolDefinitions();
-      const agentChat = defs.find(d => d.name === 'agent_chat')!;
-      expect(agentChat.inputSchema.required).toContain('message');
-    });
-
-    it('memory_save should require key and value', () => {
-      const defs = CodeBuddyMCPServer.getToolDefinitions();
-      const memorySave = defs.find(d => d.name === 'memory_save')!;
-      expect(memorySave.inputSchema.required).toContain('key');
-      expect(memorySave.inputSchema.required).toContain('value');
+    it('should omit supplemental agent tools in default read-only mode', () => {
+      const names = new CodeBuddyMCPServer().getExposedToolNames();
+      expect(names).not.toContain('agent_chat');
+      expect(names).not.toContain('memory_save');
     });
   });
 });

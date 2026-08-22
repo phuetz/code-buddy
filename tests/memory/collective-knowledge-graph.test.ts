@@ -221,6 +221,96 @@ describe('CollectiveKnowledgeGraph — hybrid recall (semantic, $0)', () => {
   }, 60000);
 });
 
+describe('CollectiveKnowledgeGraph — persistent recall indexes', () => {
+  let dir: string;
+  let ledgerPath: string;
+
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), 'ckg-index-'));
+    ledgerPath = join(dir, 'ckg-ledger.jsonl');
+  });
+
+  afterEach(() => {
+    try {
+      rmSync(dir, { recursive: true, force: true });
+    } catch {
+      /* best effort */
+    }
+  });
+
+  it('builds token/type/name indexes used by common recall keys', () => {
+    const ckg = new CollectiveKnowledgeGraph({
+      ledgerPath,
+      agentId: 'host/repo',
+      persistentEmbeddingCache: false,
+    });
+    ckg.remember({
+      type: 'discovery',
+      name: 'dopamine-neurons',
+      text: 'Dopamine neurons are measured in the substantia nigra cohort.',
+    });
+    ckg.remember({
+      type: 'lesson',
+      name: 'citation-policy',
+      text: 'Every biomedical claim must retain an exact citation.',
+    });
+
+    expect(ckg.recall('substantia dopamine', { types: ['discovery'] })[0]?.name).toBe(
+      'dopamine-neurons',
+    );
+    expect(ckg.getEntity('citation-policy').status).toBe('current');
+
+    const indexes = ckg as unknown as {
+      recallTokenIndex: Map<string, Set<string>>;
+      recallTypeIndex: Map<string, Set<string>>;
+      recallNameIndex: Map<string, string>;
+    };
+    expect(indexes.recallTokenIndex.get('dopamine')?.size).toBe(1);
+    expect(indexes.recallTypeIndex.get('discovery')?.size).toBe(1);
+    expect(indexes.recallNameIndex.get('exact:citation-policy')).toContain('lesson:collective:');
+  });
+
+  it('reuses persisted entity embeddings in a new process-like instance', async () => {
+    const vectorFor = (text: string): Float32Array =>
+      text.includes('dopamine') ? new Float32Array([1, 0]) : new Float32Array([0, 1]);
+    let firstCalls = 0;
+    const first = new CollectiveKnowledgeGraph({
+      ledgerPath,
+      agentId: 'first/repo',
+      embedder: {
+        embed: async (text) => {
+          firstCalls += 1;
+          return { embedding: vectorFor(text) };
+        },
+      },
+    });
+    first.remember({
+      type: 'discovery',
+      name: 'parkinson-dopamine',
+      text: 'Parkinson research examines dopamine neuron degeneration.',
+    });
+    await first.recallHybrid('dopamine degeneration', { limit: 1 });
+    expect(firstCalls).toBe(2); // query + entity
+
+    let secondCalls = 0;
+    const second = new CollectiveKnowledgeGraph({
+      ledgerPath,
+      agentId: 'second/repo',
+      embedder: {
+        embed: async (text) => {
+          secondCalls += 1;
+          return { embedding: vectorFor(text) };
+        },
+      },
+    });
+    const hits = await second.recallHybrid('dopamine degeneration', { limit: 1 });
+
+    expect(hits[0]?.name).toBe('parkinson-dopamine');
+    expect(secondCalls).toBe(1); // query only; entity vector came from disk
+    expect(existsSync(join(dir, 'ckg-embeddings'))).toBe(true);
+  });
+});
+
 // --- Improvement: cross-agent corroboration (collective trust) ---
 describe('CollectiveKnowledgeGraph — cross-agent corroboration', () => {
   let dir: string;

@@ -679,6 +679,38 @@ def main() -> None:
     )
     last_observation_at = float("-inf")
     backend, person_detector, face_detector = create_detectors(enabled)
+    identity_recognizer = None
+    stable_identity_match = None
+    identity_recheck_secs = 10.0
+    identity_attempts = []
+    identity_next_attempt_at = float("inf")
+    identity_emitted = False
+    identify_requested = os.environ.get(
+        "BUDDY_VISION_IDENTIFY", ""
+    ).strip().lower() == "true"
+    if identify_requested and person is not None:
+        # identity.py has no eager model dependency. InsightFace itself is
+        # imported only on this explicit opt-in path, and failure leaves the
+        # existing anonymous presence behavior untouched.
+        from identity import InsightFaceIdentityRecognizer
+        from identity import stable_identity_match as stable_match
+
+        candidate = InsightFaceIdentityRecognizer()
+        if not candidate.enrolled:
+            print(
+                "[vision] identity disabled: no enrolled identities in "
+                "~/.codebuddy/vision-identities/embeddings.json",
+                file=sys.stderr,
+                flush=True,
+            )
+        elif candidate.prepare():
+            identity_recognizer = candidate
+            stable_identity_match = stable_match
+            print(
+                f"[vision] identity enabled (buffalo_l, "
+                f"threshold={candidate.threshold:.2f})",
+                flush=True,
+            )
 
     cap = cv2.VideoCapture(CAMERA_INDEX)
     if not cap.isOpened():
@@ -761,6 +793,15 @@ def main() -> None:
                 had_presence,
                 person.present if person else False,
             )
+            if identity_recognizer is not None:
+                if not had_presence and person.present:
+                    identity_attempts = []
+                    identity_next_attempt_at = t0
+                    identity_emitted = False
+                elif had_presence and not person.present:
+                    identity_attempts = []
+                    identity_next_attempt_at = float("inf")
+                    identity_emitted = False
             if drowsy:
                 # With multiple faces, attributing a blink to one anonymous
                 # episode is ambiguous. Reset instead of guessing.
@@ -795,6 +836,11 @@ def main() -> None:
                     payload["presenceEpisodeId"] = track["episodeId"]
                 if person is not None:
                     payload["occupancyCount"] = visible_count
+                if kind == "person_entered" and identity_recognizer is not None:
+                    # Lets the brain wait for the local identity result before
+                    # selecting a named arrival opener. Absent when identity is
+                    # disabled, preserving the anonymous path byte-for-byte.
+                    payload["identityPending"] = True
                 if keyframe:
                     payload["imagePath"] = keyframe
                 if kind not in ("person_lost", "person_track_lost") and track.get("box2d"):
@@ -804,6 +850,62 @@ def main() -> None:
                 bridge.emit(kind, salience, payload)
                 log_event({"ts_ms": now_ms(), "kind": kind, **payload})
                 print(f"[vision] event {kind} → bridge", flush=True)
+
+            if (
+                identity_recognizer is not None
+                and not identity_emitted
+                and visible_count > 0
+                and t0 >= identity_next_attempt_at
+            ):
+                boxes = [
+                    track["box2d"]
+                    for track in visible_tracks
+                    if track.get("box2d")
+                ]
+                identity_match = identity_recognizer.identify(frame, boxes)
+                if identity_recognizer.embedder.disabled:
+                    # Fail open: resume the anonymous pipeline without emitting
+                    # a misleading "unknown" identity.
+                    identity_recognizer = None
+                    identity_attempts = []
+                    identity_next_attempt_at = float("inf")
+                else:
+                    identity_attempts.append(identity_match)
+                    stable = stable_identity_match(identity_attempts, 2)
+                    identity_payload = None
+                    if stable is not None:
+                        identity_payload = {
+                            "name": stable.name,
+                            "similarity": round(stable.similarity, 4),
+                        }
+                    elif len(identity_attempts) >= 3:
+                        identity_payload = {"name": "unknown"}
+                    if identity_payload is not None:
+                        identity_payload.update({
+                            "camera": CAMERA_NAME,
+                            "occupancyCount": visible_count,
+                        })
+                        bridge.emit("person_identified", 180, identity_payload)
+                        log_event({
+                            "ts_ms": now_ms(),
+                            "kind": "person_identified",
+                            **identity_payload,
+                        })
+                        print(
+                            f"[vision] event person_identified "
+                            f"({identity_payload['name']}) → bridge",
+                            flush=True,
+                        )
+                        identity_emitted = True
+                        identity_next_attempt_at = float("inf")
+                    else:
+                        # A threshold match gets one immediate confirmation
+                        # frame. Under-threshold/no-face attempts are retried at
+                        # the low-rate interval while presence continues.
+                        identity_next_attempt_at = (
+                            t0 if identity_match is not None
+                            else t0 + identity_recheck_secs
+                        )
 
             if presence_batch["entered"] and visible_count > 0:
                 last_observation_at = t0

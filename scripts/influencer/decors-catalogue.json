@@ -1,0 +1,131 @@
+{
+  "schema_version": "1.0",
+  "updated_at": "2026-07-30T16:37:00.803763+00:00",
+  "editorial_policy": {
+    "principle": "Le décor est un habillage éditorial, jamais une prétention de présence ou un témoignage direct.",
+    "allowed_examples": [
+      "Lisa décrypte le salon de Paris",
+      "Ce qu'il faut retenir de VivaTech"
+    ],
+    "forbidden_examples": [
+      "En direct de Paris",
+      "Lisa était sur place",
+      "Elle a rencontré les exposants"
+    ],
+    "mandatory_disclosure": "Lisa est une créatrice virtuelle."
+  },
+  "quality": {
+    "identity_reference": "~/.codebuddy/personas/lisa/identity-kit/lisa-hotel-2.png",
+    "arcface_min": 0.75,
+    "visual_gate_command": "python scripts/influencer/visual-gate.py <image> --persona lisa --gate",
+    "max_generation_attempts_per_variant": 2
+  },
+  "cost_model": {
+    "integrated_gpt_image_marginal_usd": 0,
+    "paid_openai_or_xai_image_api_allowed": false,
+    "heygen_video_credits_observed_range": [
+      5,
+      16
+    ],
+    "paris_test_actual_credits": 5,
+    "paris_test_image_cost_usd": 0
+  },
+  "recurring_decors": [
+    {
+      "id": "paris-vivatech",
+      "city": "Paris",
+      "event": "VivaTech",
+      "lieu": "Paris, grand salon technologique européen",
+      "default_outfit": "blazer velours sapin sur haut noir sobre",
+      "default_moment": "matin",
+      "visual_cues": [
+        "hall contemporain de Paris Expo",
+        "stands technologiques abstraits",
+        "verrière et lumière matinale",
+        "aucun logo ni texte lisible"
+      ],
+      "preparation_status": "talking_photo_ready_test_animation_created"
+    },
+    {
+      "id": "las-vegas-ces",
+      "city": "Las Vegas",
+      "event": "CES",
+      "lieu": "Las Vegas, grand salon international d'électronique",
+      "default_outfit": "tailleur bleu nuit minimaliste",
+      "default_moment": "matin",
+      "visual_cues": [
+        "immense convention center",
+        "écrans lumineux abstraits",
+        "architecture américaine contemporaine",
+        "aucun logo ni texte lisible"
+      ],
+      "preparation_status": "to_prepare"
+    },
+    {
+      "id": "barcelone-mwc",
+      "city": "Barcelone",
+      "event": "MWC",
+      "lieu": "Barcelone, congrès mondial des technologies mobiles",
+      "default_outfit": "blazer terracotta et haut crème",
+      "default_moment": "matin",
+      "visual_cues": [
+        "hall de Fira Barcelona",
+        "stands mobiles et télécoms abstraits",
+        "lumière méditerranéenne",
+        "aucun logo ni texte lisible"
+      ],
+      "preparation_status": "to_prepare"
+    },
+    {
+      "id": "berlin-ifa",
+      "city": "Berlin",
+      "event": "IFA",
+      "lieu": "Berlin, salon européen de l'électronique grand public",
+      "default_outfit": "tailleur gris graphite et col roulé fin",
+      "default_moment": "après-midi",
+      "visual_cues": [
+        "parc des expositions berlinois",
+        "design industriel européen",
+        "démonstrations électroniques floues",
+        "aucun logo ni texte lisible"
+      ],
+      "preparation_status": "to_prepare"
+    },
+    {
+      "id": "san-francisco-tech",
+      "city": "San Francisco",
+      "event": "Conférences IA et développeurs",
+      "lieu": "San Francisco, conférence technologique et intelligence artificielle",
+      "default_outfit": "blazer camel contemporain sur haut noir",
+      "default_moment": "matin",
+      "visual_cues": [
+        "centre de conférence californien",
+        "lumière claire de baie",
+        "scène et écrans abstraits",
+        "aucun logo ni texte lisible"
+      ],
+      "preparation_status": "to_prepare"
+    }
+  ],
+  "assets": [
+    {
+      "decor_key": "paris-salon-technologique-blazer-velours-sapin-matin",
+      "lieu": "Paris, salon technologique",
+      "tenue": "blazer velours sapin",
+      "moment": "matin",
+      "title": "Lisa décrypte le salon de Paris",
+      "description": "Les annonces et démonstrations à retenir du salon technologique parisien. Lisa est une créatrice virtuelle.",
+      "image_path": "~/.codebuddy/personas/lisa/decors-a-la-demande/paris-salon-technologique-blazer-velours-sapin-matin/paris-salon-technologique-blazer-velours-sapin-matin.png",
+      "image_sha256": "1328a64a1125585a8764c53f00d6f5b100011c6941595a1ce8ac5516a5187a74",
+      "arcface": 0.861052,
+      "visual_gate": "passed",
+      "talking_photo_id": "506583eca9f4461fb95da770151da149",
+      "avatar_group_id": "cf384311f2aa41c8b6f6da2f155c0d00",
+      "status": "ready_animated",
+      "updated_at": "2026-07-30T16:37:00.803744+00:00",
+      "last_animation_video_id": "c8891a61b9a34b53834716c9e0d3a258",
+      "last_animation_path": "/home/patrice/.codebuddy/personas/lisa/decors-a-la-demande/paris-salon-technologique-blazer-velours-sapin-matin/paris-salon-technologique-blazer-velours-sapin-matin-test-15s.mp4",
+      "last_animation_credits": 5.0
+    }
+  ]
+}

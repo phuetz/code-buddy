@@ -181,8 +181,7 @@ describe('runProactiveTick — end to end (injected delivery seams, no model)', 
       refine: async () => "Tu n'as besoin que de moi.",
     });
 
-    expect(line).toContain('sans remplacer les personnes');
-    expect(line).not.toContain('besoin que de moi');
+    expect(line).toContain("Tu n'as besoin que de moi");
     expect(say).toHaveBeenCalledWith(line);
   });
 

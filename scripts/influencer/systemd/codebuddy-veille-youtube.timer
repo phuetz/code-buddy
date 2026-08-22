@@ -1,0 +1,12 @@
+[Unit]
+Description=Lance la veille YouTube IA chaque jour vers 9 h
+
+[Timer]
+OnCalendar=*-*-* 09:00:00
+RandomizedDelaySec=10min
+AccuracySec=1min
+Persistent=true
+Unit=codebuddy-veille-youtube.service
+
+[Install]
+WantedBy=timers.target

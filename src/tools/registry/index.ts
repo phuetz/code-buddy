@@ -75,6 +75,7 @@ export {
 // Tool Adapters - Web
 export {
   WebSearchExecuteTool,
+  CommunitySearchExecuteTool,
   WebFetchTool,
   WebScrapeExecuteTool,
   createWebTools,
@@ -381,8 +382,13 @@ export {
   resetFirecrawlInstances,
 } from './firecrawl-tools.js';
 
-// Tool Adapters - LSP (lsp_rename, lsp_code_action)
+// Tool Adapters - LSP navigation, diagnostics, rename, and code actions
 export {
+  LspDefinitionTool,
+  LspReferencesTool,
+  LspHoverTool,
+  LspSymbolsTool,
+  LspDiagnosticsTool,
   LspRenameExecuteTool,
   LspCodeActionExecuteTool,
   createLspTools,

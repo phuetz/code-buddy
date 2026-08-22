@@ -5,6 +5,7 @@ import path from 'path';
 
 import { getImageGenerationModel } from '../config/agent-defaults.js';
 import { resolveToolGatewayRoute } from '../agent/tool-gateway-router.js';
+import { logger } from '../utils/logger.js';
 
 export type ImageAspectRatio = 'landscape' | 'square' | 'portrait';
 export type MediaProvider = 'openai' | 'xai' | 'fal' | 'comfyui';
@@ -166,7 +167,7 @@ export async function generateImage(
 
   // ComfyUI has a workflow-submit/poll/view API, not /images/generations.
   if (config.provider === 'comfyui') {
-    return generateComfyUIImage(prompt, aspect, config, runtime, generatedAt);
+    return generateComfyUIImageWithFallback(prompt, aspect, config, runtime, generatedAt);
   }
 
   const size = IMAGE_SIZES[aspect];
@@ -394,9 +395,45 @@ const COMFY_DIMS: Record<ImageAspectRatio, { width: number; height: number }> = 
   portrait: { width: 768, height: 1024 },
 };
 
+const SD_TURBO_DIMS: Record<ImageAspectRatio, { width: number; height: number }> = {
+  // SD Turbo is strictly 512-native. Its non-square latents frequently tile a
+  // portrait into two faces, even at 512x768. The CPU fallback favours a clean
+  // square selfie over honoring the requested ratio with a broken image.
+  landscape: { width: 512, height: 512 },
+  square: { width: 512, height: 512 },
+  portrait: { width: 512, height: 512 },
+};
+
+const KREA2_DIMS: Record<ImageAspectRatio, { width: number; height: number }> = {
+  landscape: { width: 1344, height: 1024 },
+  square: { width: 1024, height: 1024 },
+  portrait: { width: 1024, height: 1344 },
+};
+
+function isKrea2Model(model: string): boolean {
+  return /krea.?2/i.test(model);
+}
+
+function comfyDimensionsForModel(
+  model: string,
+  aspect: ImageAspectRatio,
+): { width: number; height: number } {
+  // SD Turbo is a 512-native model. Non-square latents commonly tile a close
+  // portrait into stacked/duplicate faces, which is unacceptable for Lisa.
+  if (isKrea2Model(model)) return KREA2_DIMS[aspect];
+  return /(?:^|[/_-])sd[_-]?turbo(?:[._-]|$)/i.test(model)
+    ? SD_TURBO_DIMS[aspect]
+    : COMFY_DIMS[aspect];
+}
+
 /** Sampler/step defaults keyed off the checkpoint family (turbo → few-step). */
 function comfyParamsForModel(model: string): ComfyParams {
   const m = model.toLowerCase();
+  if (isKrea2Model(model)) {
+    // Krea 2 Turbo is distilled for eight Euler/simple steps with CFG disabled.
+    // In ComfyUI, cfg=1 plus ConditioningZeroOut matches the official workflow.
+    return { steps: 8, cfg: 1.0, sampler: 'euler', scheduler: 'simple' };
+  }
   if (m.includes('turbo') || m.includes('lightning') || m.includes('lcm') || m.includes('hyper')) {
     return { steps: 4, cfg: 1.0, sampler: 'euler', scheduler: 'sgm_uniform' };
   }
@@ -406,37 +443,196 @@ function comfyParamsForModel(model: string): ComfyParams {
   return { steps: 20, cfg: 7.0, sampler: 'euler', scheduler: 'normal' };
 }
 
-function buildComfyWorkflow(
+/**
+ * Resolve ComfyUI LoRA filename from env.
+ * Accepts `lisa`, `lisa.safetensors`, path basename, or `auto`
+ * (picks `lisa.safetensors` / first `*lisa*.safetensors` under models/loras).
+ * Empty / "none" / "off" → no LoRA.
+ */
+export function resolveComfyLoraName(
+  envSource: NodeJS.ProcessEnv = process.env,
+): string | undefined {
+  const raw = (env(envSource, 'CODEBUDDY_COMFYUI_LORA') ?? '').trim();
+  if (!raw || /^(none|off|false|0)$/i.test(raw)) return undefined;
+  if (/^auto$/i.test(raw)) {
+    return detectInstalledLisaLoraSync(envSource) ?? 'lisa.safetensors';
+  }
+  const base = raw.split(/[/\\]/).pop()!.trim();
+  if (!base) return undefined;
+  return base.endsWith('.safetensors') ? base : `${base}.safetensors`;
+}
+
+/** Best-effort sync scan of ComfyUI models/loras for a Lisa LoRA (never throws). */
+export function detectInstalledLisaLoraSync(
+  envSource: NodeJS.ProcessEnv = process.env,
+): string | undefined {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const fsSync = require('node:fs') as typeof import('node:fs');
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const pathMod = require('node:path') as typeof import('node:path');
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const osMod = require('node:os') as typeof import('node:os');
+    const roots: string[] = [];
+    if (envSource.COMFYUI_ROOT?.trim()) roots.push(envSource.COMFYUI_ROOT.trim());
+    const home = osMod.homedir();
+    roots.push(
+      pathMod.join(home, 'ComfyUI'),
+      pathMod.join(home, 'DEV', 'ComfyUI'),
+      pathMod.join(home, '.codebuddy', 'comfyui'),
+    );
+    for (const root of roots) {
+      const dir = pathMod.join(root, 'models', 'loras');
+      if (!fsSync.existsSync(dir)) continue;
+      const names = fsSync.readdirSync(dir).filter((n: string) => n.endsWith('.safetensors'));
+      const exact = names.find((n: string) => n.toLowerCase() === 'lisa.safetensors');
+      if (exact) return exact;
+      const fuzzy = names.find((n: string) => /lisa/i.test(n));
+      if (fuzzy) return fuzzy;
+    }
+  } catch {
+    /* ignore */
+  }
+  return undefined;
+}
+
+export function resolveComfyLoraStrength(envSource: NodeJS.ProcessEnv = process.env): number {
+  const n = Number(env(envSource, 'CODEBUDDY_COMFYUI_LORA_STRENGTH') ?? '0.85');
+  if (!Number.isFinite(n)) return 0.85;
+  return Math.min(1.5, Math.max(0, n));
+}
+
+/**
+ * Classic SD1.5/SDXL-style graph. Optional LoraLoader (node 10) when loraName is set.
+ * Exported for unit tests.
+ */
+export function buildComfyWorkflow(
   prompt: string,
   negative: string,
   ckpt: string,
   dims: { width: number; height: number },
   params: ComfyParams,
   seed: number,
+  lora?: { name: string; strength: number },
 ): Record<string, unknown> {
-  return {
-    '3': {
-      class_type: 'KSampler',
-      inputs: {
-        seed,
-        steps: params.steps,
-        cfg: params.cfg,
-        sampler_name: params.sampler,
-        scheduler: params.scheduler,
-        denoise: 1.0,
-        model: ['4', 0],
-        positive: ['6', 0],
-        negative: ['7', 0],
-        latent_image: ['5', 0],
-      },
-    },
+  // Default: checkpoint feeds KSampler + CLIP encode directly.
+  let modelRef: [string, number] = ['4', 0];
+  let clipRef: [string, number] = ['4', 1];
+  const graph: Record<string, unknown> = {
     '4': { class_type: 'CheckpointLoaderSimple', inputs: { ckpt_name: ckpt } },
-    '5': { class_type: 'EmptyLatentImage', inputs: { width: dims.width, height: dims.height, batch_size: 1 } },
-    '6': { class_type: 'CLIPTextEncode', inputs: { text: prompt, clip: ['4', 1] } },
-    '7': { class_type: 'CLIPTextEncode', inputs: { text: negative, clip: ['4', 1] } },
+    '5': {
+      class_type: 'EmptyLatentImage',
+      inputs: { width: dims.width, height: dims.height, batch_size: 1 },
+    },
     '8': { class_type: 'VAEDecode', inputs: { samples: ['3', 0], vae: ['4', 2] } },
-    '9': { class_type: 'SaveImage', inputs: { filename_prefix: 'codebuddy', images: ['8', 0] } },
+    '9': {
+      class_type: 'SaveImage',
+      inputs: { filename_prefix: 'codebuddy', images: ['8', 0] },
+    },
   };
+
+  if (lora?.name) {
+    graph['10'] = {
+      class_type: 'LoraLoader',
+      inputs: {
+        lora_name: lora.name,
+        strength_model: lora.strength,
+        strength_clip: lora.strength,
+        model: ['4', 0],
+        clip: ['4', 1],
+      },
+    };
+    modelRef = ['10', 0];
+    clipRef = ['10', 1];
+  }
+
+  graph['6'] = { class_type: 'CLIPTextEncode', inputs: { text: prompt, clip: clipRef } };
+  graph['7'] = { class_type: 'CLIPTextEncode', inputs: { text: negative, clip: clipRef } };
+  graph['3'] = {
+    class_type: 'KSampler',
+    inputs: {
+      seed,
+      steps: params.steps,
+      cfg: params.cfg,
+      sampler_name: params.sampler,
+      scheduler: params.scheduler,
+      denoise: 1.0,
+      model: modelRef,
+      positive: ['6', 0],
+      negative: ['7', 0],
+      latent_image: ['5', 0],
+    },
+  };
+  return graph;
+}
+
+/**
+ * Native Krea 2 graph from ComfyUI's official Krea 2 Turbo template.
+ * Krea 2 ships its diffusion model, Qwen3-VL encoder, and Qwen Image VAE as
+ * separate files. Its LoRAs are model-only and must not be applied to CLIP.
+ */
+export function buildKrea2ComfyWorkflow(
+  prompt: string,
+  unet: string,
+  textEncoder: string,
+  vae: string,
+  dims: { width: number; height: number },
+  params: ComfyParams,
+  seed: number,
+  lora?: { name: string; strength: number },
+): Record<string, unknown> {
+  let modelRef: [string, number] = ['4', 0];
+  const graph: Record<string, unknown> = {
+    '4': {
+      class_type: 'UNETLoader',
+      inputs: { unet_name: unet, weight_dtype: 'default' },
+    },
+    '5': {
+      class_type: 'EmptyLatentImage',
+      inputs: { width: dims.width, height: dims.height, batch_size: 1 },
+    },
+    '6': {
+      class_type: 'CLIPLoader',
+      inputs: { clip_name: textEncoder, type: 'krea2', device: 'default' },
+    },
+    '7': { class_type: 'VAELoader', inputs: { vae_name: vae } },
+    '8': { class_type: 'CLIPTextEncode', inputs: { text: prompt, clip: ['6', 0] } },
+    '10': { class_type: 'ConditioningZeroOut', inputs: { conditioning: ['8', 0] } },
+    '11': { class_type: 'VAEDecode', inputs: { samples: ['3', 0], vae: ['7', 0] } },
+    '9': {
+      class_type: 'SaveImage',
+      inputs: { filename_prefix: 'codebuddy-krea2', images: ['11', 0] },
+    },
+  };
+
+  if (lora?.name) {
+    graph['12'] = {
+      class_type: 'LoraLoaderModelOnly',
+      inputs: {
+        lora_name: lora.name,
+        strength_model: lora.strength,
+        model: ['4', 0],
+      },
+    };
+    modelRef = ['12', 0];
+  }
+
+  graph['3'] = {
+    class_type: 'KSampler',
+    inputs: {
+      seed,
+      steps: params.steps,
+      cfg: params.cfg,
+      sampler_name: params.sampler,
+      scheduler: params.scheduler,
+      denoise: 1.0,
+      model: modelRef,
+      positive: ['8', 0],
+      negative: ['10', 0],
+      latent_image: ['5', 0],
+    },
+  };
+  return graph;
 }
 
 interface ComfyImageRef {
@@ -1165,14 +1361,35 @@ async function generateComfyUIImage(
   const base = config.baseUrl;
   const negative = (env(envSource, 'CODEBUDDY_IMAGE_NEGATIVE') ?? 'blurry, low quality, deformed, watermark').trim();
   const params = comfyParamsForModel(config.model);
-  const dims = COMFY_DIMS[aspect];
-  const seed = Math.floor(now().getTime() % 2_000_000_000);
+  const dims = comfyDimensionsForModel(config.model, aspect);
+  const configuredSeed = Number(env(envSource, 'CODEBUDDY_COMFYUI_SEED'));
+  const seed = Number.isFinite(configuredSeed) && configuredSeed >= 0
+    ? Math.floor(configuredSeed % 2_000_000_000)
+    : Math.floor(now().getTime() % 2_000_000_000);
   const clientId = runtime.createId?.() ?? randomUUID();
-  const workflow = buildComfyWorkflow(prompt, negative, config.model, dims, params, seed);
+  const loraName = resolveComfyLoraName(envSource);
+  const loraStrength = resolveComfyLoraStrength(envSource);
+  const lora = loraName ? { name: loraName, strength: loraStrength } : undefined;
+  const workflow = isKrea2Model(config.model)
+    ? buildKrea2ComfyWorkflow(
+      prompt,
+      config.model,
+      (env(envSource, 'CODEBUDDY_COMFYUI_KREA2_TEXT_ENCODER')
+        ?? 'qwen3vl_4b_fp8_scaled.safetensors').trim(),
+      (env(envSource, 'CODEBUDDY_COMFYUI_KREA2_VAE')
+        ?? 'qwen_image_vae.safetensors').trim(),
+      dims,
+      params,
+      seed,
+      lora,
+    )
+    : buildComfyWorkflow(prompt, negative, config.model, dims, params, seed, lora);
 
   const submit = await postJson(fetchImpl, joinUrl(base, '/prompt'), {
     headers: { 'Content-Type': 'application/json' },
     body: { prompt: workflow, client_id: clientId },
+    timeoutMs: comfyEndpointTimeout(envSource),
+    signal: runtime.signal,
   });
   const promptId = stringField(submit, 'prompt_id');
   if (!promptId) {
@@ -1188,7 +1405,7 @@ async function generateComfyUIImage(
   for (;;) {
     const history = await getJson(fetchImpl, joinUrl(base, `/history/${promptId}`), {
       Accept: 'application/json',
-    });
+    }, comfyEndpointTimeout(envSource), runtime.signal);
     const entry = history[promptId] as { outputs?: unknown; status?: { status_str?: string } } | undefined;
     if (entry?.outputs) {
       image = firstComfyImage(entry.outputs);
@@ -1249,6 +1466,76 @@ async function generateComfyUIImage(
   };
 }
 
+function comfyEndpointTimeout(envSource: NodeJS.ProcessEnv): number {
+  const configured = Number(env(envSource, 'CODEBUDDY_COMFYUI_ENDPOINT_TIMEOUT_MS') ?? '10000');
+  return Number.isFinite(configured) && configured >= 250 ? configured : 10_000;
+}
+
+function comfyBaseUrls(config: ProviderConfig, envSource: NodeJS.ProcessEnv): string[] {
+  const fallbacks = (env(envSource, 'CODEBUDDY_COMFYUI_FALLBACK_URLS') ?? '')
+    .split(/[\s,;]+/)
+    .map((value) => value.trim().replace(/\/+$/, ''))
+    .filter(Boolean);
+  return [...new Set([config.baseUrl.replace(/\/+$/, ''), ...fallbacks])];
+}
+
+async function generateComfyUIImageWithFallback(
+  prompt: string,
+  aspect: ImageAspectRatio,
+  config: ProviderConfig,
+  runtime: MediaGenerationRuntime,
+  generatedAt: string,
+): Promise<ImageGenerateResult> {
+  const envSource = runtime.env ?? process.env;
+  const endpoints = comfyBaseUrls(config, envSource);
+  const failures: string[] = [];
+
+  for (const [index, baseUrl] of endpoints.entries()) {
+    try {
+      const isFallback = index > 0;
+      const fallbackModel = env(envSource, 'CODEBUDDY_COMFYUI_FALLBACK_MODEL')?.trim();
+      const fallbackLora = env(envSource, 'CODEBUDDY_COMFYUI_FALLBACK_LORA')?.trim();
+      const endpointConfig = isFallback && fallbackModel
+        ? { ...config, model: fallbackModel, baseUrl }
+        : { ...config, baseUrl };
+      const endpointRuntime = isFallback && fallbackLora !== undefined
+        ? {
+          ...runtime,
+          env: {
+            ...envSource,
+            CODEBUDDY_COMFYUI_LORA: fallbackLora,
+          },
+        }
+        : runtime;
+      return await generateComfyUIImage(
+        prompt,
+        aspect,
+        endpointConfig,
+        endpointRuntime,
+        generatedAt,
+      );
+    } catch (error) {
+      // A per-endpoint fetch timeout also surfaces as AbortError. Only a caller
+      // cancellation should stop the chain; endpoint timeouts must fail over.
+      if (runtime.signal?.aborted) {
+        throw error;
+      }
+      const message = error instanceof Error ? error.message : String(error);
+      failures.push(`${baseUrl}: ${message}`);
+      const next = endpoints[index + 1];
+      if (next) {
+        logger.warn(`[comfyui] ${baseUrl} failed; trying fallback ${next}: ${message}`);
+      }
+    }
+  }
+
+  throw new Error(
+    endpoints.length > 1
+      ? `All ComfyUI endpoints failed: ${failures.join(' | ')}`
+      : failures[0] ?? 'ComfyUI generation failed',
+  );
+}
+
 export async function generateVideo(
   input: VideoGenerateInput,
   runtime: MediaGenerationRuntime = {},
@@ -1264,6 +1551,10 @@ export async function generateVideo(
 
   if (config.provider === 'fal') {
     return generateFalVideo(input, config, fetchImpl, runtime, generatedAt);
+  }
+
+  if (config.provider === 'comfyui') {
+    return generateComfyUiH3Video(input, config, fetchImpl, runtime, generatedAt);
   }
 
   return generateXaiVideo(input, config, fetchImpl, runtime, generatedAt);
@@ -1515,15 +1806,28 @@ async function materializeVideoResult(
 }
 
 function resolveImageProvider(envSource: NodeJS.ProcessEnv): ProviderConfig {
-  const requested = (envSource.CODEBUDDY_IMAGE_PROVIDER ?? '').trim().toLowerCase();
+  let requested = (envSource.CODEBUDDY_IMAGE_PROVIDER ?? '').trim().toLowerCase();
+  // Prefer ComfyUI when explicitly requested OR when COMFYUI_URL is set and no
+  // other provider was chosen (selfie / local-first companion path).
+  if (
+    !requested &&
+    (envSource.COMFYUI_URL?.trim() || envSource.CODEBUDDY_IMAGE_BASE_URL?.includes('8188'))
+  ) {
+    requested = 'comfyui';
+  }
   // Local ComfyUI backend (offline, GPU) — no API key, workflow-based API.
   if (requested === 'comfyui') {
     const baseUrl = (envSource.COMFYUI_URL
       ?? envSource.CODEBUDDY_IMAGE_BASE_URL
       ?? 'http://127.0.0.1:8188').trim().replace(/\/+$/, '');
-    const model = (envSource.CODEBUDDY_IMAGE_MODEL
+    // Prefer CODEBUDDY_LORA_INFER_CHECKPOINT when set so LoRA train/infer stay monostack
+    // (e.g. both Krea 2). Falls back to CODEBUDDY_IMAGE_MODEL / COMFYUI_CHECKPOINT / sd_turbo.
+    const model = (
+      envSource.CODEBUDDY_LORA_INFER_CHECKPOINT
+      ?? envSource.CODEBUDDY_IMAGE_MODEL
       ?? envSource.COMFYUI_CHECKPOINT
-      ?? 'sd_turbo.safetensors').trim();
+      ?? 'sd_turbo.safetensors'
+    ).trim();
     if (!baseUrl) {
       throw new Error('No ComfyUI base URL configured (set COMFYUI_URL)');
     }
@@ -1549,9 +1853,266 @@ function resolveImageProvider(envSource: NodeJS.ProcessEnv): ProviderConfig {
   return { provider, model, baseUrl: effectiveBaseUrl, apiKey: effectiveApiKey };
 }
 
+/** Snap a wanted frame count onto H3's 17k+5 grid (24 fps), within the trained range. */
+function snapH3Frames(durationSeconds: number | undefined): number {
+  const wanted = Math.round(24 * (durationSeconds && durationSeconds > 0 ? Math.min(durationSeconds, 15) : 5));
+  const snapped = 5 + 17 * Math.max(1, Math.ceil((wanted - 5) / 17));
+  return Math.min(362, Math.max(22, snapped));
+}
+
+/** H3 dimensions: trained short side (default 768), aspect from "W:H", both snapped to /32. */
+function h3VideoDimensions(aspectRatio: string | undefined, envSource: NodeJS.ProcessEnv): { width: number; height: number } {
+  const configured = Number(env(envSource, 'CODEBUDDY_H3_SHORT_SIDE') ?? '768');
+  const short = Number.isFinite(configured) && configured >= 256 ? Math.round(configured / 32) * 32 : 768;
+  const match = /^(\d+)\s*:\s*(\d+)$/.exec((aspectRatio ?? '16:9').trim());
+  const [w, h] = match ? [Number(match[1]), Number(match[2])] : [16, 9];
+  const ratio = w > 0 && h > 0 ? w / h : 16 / 9;
+  // Plancher au multiple de 32 : le défaut natif du nœud est 1344×768 (pas 1376).
+  const long = Math.max(32, Math.floor((short * Math.max(ratio, 1 / ratio)) / 32) * 32);
+  return ratio >= 1 ? { width: long, height: short } : { width: short, height: long };
+}
+
+/** Resolve a reference (data URL, http(s) URL, or local path) to bytes and upload it to ComfyUI. */
+async function uploadComfyH3Reference(
+  fetchImpl: typeof fetch,
+  baseUrl: string,
+  reference: string,
+  index: number,
+): Promise<string> {
+  const trimmed = reference.trim();
+  let bytes: Buffer;
+  let filename = `codebuddy-h3-ref-${index}.png`;
+  const dataMatch = /^data:image\/(png|jpe?g|webp);base64,(.+)$/i.exec(trimmed);
+  if (dataMatch) {
+    bytes = Buffer.from(dataMatch[2] ?? '', 'base64');
+    filename = `codebuddy-h3-ref-${index}.${(dataMatch[1] ?? 'png').replace('jpeg', 'jpg')}`;
+  } else if (/^https?:\/\//i.test(trimmed)) {
+    const response = await fetchImpl(trimmed);
+    if (!response.ok) throw new Error(`Reference image fetch returned ${response.status} for ${trimmed}`);
+    bytes = Buffer.from(await response.arrayBuffer());
+  } else {
+    bytes = await fs.readFile(path.resolve(trimmed));
+    filename = `codebuddy-h3-ref-${index}${path.extname(trimmed) || '.png'}`;
+  }
+  if (bytes.length === 0 || bytes.length > MAX_EDIT_REFERENCE_BYTES) {
+    throw new Error(`Reference image ${index + 1} is empty or exceeds ${MAX_EDIT_REFERENCE_BYTES} bytes`);
+  }
+  const form = new FormData();
+  form.append('image', new Blob([new Uint8Array(bytes)]), filename);
+  form.append('overwrite', 'true');
+  const response = await fetchImpl(joinUrl(baseUrl, '/upload/image'), { method: 'POST', body: form });
+  if (!response.ok) throw new Error(`ComfyUI /upload/image returned ${response.status}`);
+  const body = await response.json() as { name?: string; subfolder?: string };
+  if (!body.name) throw new Error('ComfyUI /upload/image returned no file name');
+  return body.subfolder ? `${body.subfolder}/${body.name}` : body.name;
+}
+
+/**
+ * MiniMax H3 ref2va graph, as validated live on 2026-08-10: UNETLoader -> SigmaShift
+ * -> KSampler fed by MiniMaxH3ReferenceToVideo (autogrow refs passed NESTED under
+ * `ref_images`, prompts address them as <Picture i>), decoded twice (video + audio
+ * VAE) into CreateVideo/SaveVideo. Values only — node ids are contract-free.
+ */
+function buildMiniMaxH3VideoWorkflow(options: {
+  prompt: string;
+  width: number;
+  height: number;
+  frames: number;
+  seed: number;
+  steps: number;
+  refImageSize: string;
+  refNames: string[];
+  withAudio: boolean;
+  envSource: NodeJS.ProcessEnv;
+}): Record<string, unknown> {
+  const e = options.envSource;
+  const unet = (env(e, 'CODEBUDDY_H3_UNET') ?? 'minimax_h3_ref2va_pruned_fp8_scaled.safetensors').trim();
+  const textEncoder = (env(e, 'CODEBUDDY_H3_TEXT_ENCODER') ?? 'qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors').trim();
+  const videoVae = (env(e, 'CODEBUDDY_H3_VIDEO_VAE') ?? 'minimax_h3_video_vae_fp16.safetensors').trim();
+  const audioVae = (env(e, 'CODEBUDDY_H3_AUDIO_VAE') ?? 'minimax_h3_audio_vae_fp32.safetensors').trim();
+  const graph: Record<string, unknown> = {
+    '1': { class_type: 'UNETLoader', inputs: { unet_name: unet, weight_dtype: 'default' } },
+    '2': { class_type: 'MiniMaxH3SigmaShift', inputs: { model: ['1', 0], shift_video: 12.0, shift_audio: 3.0 } },
+    '3': { class_type: 'CLIPLoader', inputs: { clip_name: textEncoder, type: 'minimax', device: 'default' } },
+    '4': { class_type: 'VAELoader', inputs: { vae_name: videoVae } },
+    '5': { class_type: 'VAELoader', inputs: { vae_name: audioVae } },
+    '7': {
+      class_type: 'MiniMaxH3ReferenceToVideo',
+      inputs: {
+        clip: ['3', 0],
+        vae: ['4', 0],
+        audio_vae: ['5', 0],
+        prompt: options.prompt,
+        width: options.width,
+        height: options.height,
+        length: options.frames,
+        ref_image_size: options.refImageSize,
+        ...(options.refNames.length > 0
+          ? {
+            ref_images: Object.fromEntries(options.refNames.map((_, i) => [`ref_image_${i + 1}`, [`${20 + i}`, 0]])),
+          }
+          : {}),
+      },
+    },
+    '8': { class_type: 'ConditioningZeroOut', inputs: { conditioning: ['7', 0] } },
+    '9': {
+      class_type: 'KSampler',
+      inputs: {
+        model: ['2', 0],
+        positive: ['7', 0],
+        negative: ['8', 0],
+        latent_image: ['7', 1],
+        seed: options.seed,
+        steps: options.steps,
+        cfg: 4.0,
+        sampler_name: 'euler',
+        scheduler: 'simple',
+        denoise: 1.0,
+      },
+    },
+    '10': { class_type: 'VAEDecode', inputs: { samples: ['9', 0], vae: ['4', 0] } },
+    '12': {
+      class_type: 'CreateVideo',
+      inputs: {
+        images: ['10', 0],
+        fps: 24.0,
+        bit_depth: 8,
+        ...(options.withAudio ? { audio: ['11', 0] } : {}),
+      },
+    },
+    '13': {
+      class_type: 'SaveVideo',
+      inputs: { video: ['12', 0], filename_prefix: 'codebuddy/h3', format: 'auto', codec: 'auto' },
+    },
+  };
+  if (options.withAudio) {
+    graph['11'] = { class_type: 'VAEDecodeAudio', inputs: { samples: ['9', 0], vae: ['5', 0] } };
+  }
+  options.refNames.forEach((name, i) => {
+    graph[`${20 + i}`] = { class_type: 'LoadImage', inputs: { image: name } };
+  });
+  return graph;
+}
+
+async function generateComfyUiH3Video(
+  input: VideoGenerateInput,
+  config: ProviderConfig,
+  fetchImpl: typeof fetch,
+  runtime: MediaGenerationRuntime,
+  generatedAt: string,
+): Promise<VideoGenerateResult> {
+  const envSource = runtime.env ?? process.env;
+  const prompt = input.prompt.trim();
+  const dims = h3VideoDimensions(input.aspectRatio, envSource);
+  const frames = snapH3Frames(input.duration);
+  const now = runtime.now ?? (() => new Date());
+  const seed = input.seed !== undefined && Number.isFinite(input.seed)
+    ? Math.floor(Math.abs(input.seed) % 2_000_000_000)
+    : Math.floor(now().getTime() % 2_000_000_000);
+  const configuredSteps = Number(env(envSource, 'CODEBUDDY_H3_STEPS') ?? '30');
+  const steps = Number.isFinite(configuredSteps) && configuredSteps >= 4 ? Math.min(60, Math.floor(configuredSteps)) : 30;
+  const refImageSize = (env(envSource, 'CODEBUDDY_H3_REF_SIZE') ?? 'max').trim() === 'match' ? 'match' : 'max';
+
+  const references = [
+    ...(input.imageUrl?.trim() ? [input.imageUrl.trim()] : []),
+    ...(input.referenceImageUrls ?? []).map((value) => value.trim()).filter(Boolean),
+  ].slice(0, 9);
+  const refNames: string[] = [];
+  for (const [index, reference] of references.entries()) {
+    refNames.push(await uploadComfyH3Reference(fetchImpl, config.baseUrl, reference, index));
+  }
+
+  const workflow = buildMiniMaxH3VideoWorkflow({
+    prompt,
+    width: dims.width,
+    height: dims.height,
+    frames,
+    seed,
+    steps,
+    refImageSize,
+    refNames,
+    withAudio: input.audio !== false,
+    envSource,
+  });
+
+  const submit = await postJson(fetchImpl, joinUrl(config.baseUrl, '/prompt'), {
+    headers: {},
+    body: { prompt: workflow, client_id: runtime.createId?.() ?? randomUUID() },
+    timeoutMs: 60_000,
+  });
+  const promptId = stringField(submit, 'prompt_id');
+  if (!promptId) {
+    throw new Error(`ComfyUI /prompt returned no prompt_id: ${JSON.stringify(submit).slice(0, 300)}`);
+  }
+
+  const timeoutMs = Number(env(envSource, 'CODEBUDDY_H3_TIMEOUT_MS') ?? '1800000');
+  const intervalMs = Number(env(envSource, 'CODEBUDDY_H3_POLL_MS') ?? '5000');
+  const deadline = Date.now() + (Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : 1_800_000);
+  let videoRef: { filename: string; subfolder: string; type: string } | undefined;
+  while (Date.now() < deadline) {
+    const history = await getJson(fetchImpl, joinUrl(config.baseUrl, `/history/${promptId}`), {});
+    const entry = objectField(history, promptId);
+    if (entry) {
+      const status = objectField(entry, 'status');
+      const statusStr = status ? stringField(status, 'status_str') : undefined;
+      if (statusStr === 'error') {
+        throw new Error(`ComfyUI H3 execution failed: ${JSON.stringify(status).slice(0, 500)}`);
+      }
+      const outputs = objectField(entry, 'outputs');
+      if (outputs) {
+        for (const nodeOutput of Object.values(outputs)) {
+          if (!nodeOutput || typeof nodeOutput !== 'object') continue;
+          const images = (nodeOutput as Record<string, unknown>).images;
+          if (!Array.isArray(images)) continue;
+          for (const item of images) {
+            if (item && typeof item === 'object' && typeof (item as Record<string, unknown>).filename === 'string'
+              && /\.(mp4|webm|mov)$/i.test((item as { filename: string }).filename)) {
+              const found = item as { filename: string; subfolder?: string; type?: string };
+              videoRef = { filename: found.filename, subfolder: found.subfolder ?? '', type: found.type ?? 'output' };
+            }
+          }
+        }
+        if (videoRef) break;
+      }
+    }
+    await sleep(Math.max(100, Number.isFinite(intervalMs) ? intervalMs : 5000));
+  }
+  if (!videoRef) {
+    throw new Error(`Timed out waiting for ComfyUI H3 video after ${timeoutMs}ms (prompt ${promptId})`);
+  }
+
+  const viewUrl = joinUrl(
+    config.baseUrl,
+    `/view?filename=${encodeURIComponent(videoRef.filename)}&subfolder=${encodeURIComponent(videoRef.subfolder)}&type=${encodeURIComponent(videoRef.type)}`,
+  );
+  return materializeVideoResult(viewUrl, {
+    runtime,
+    fetchImpl,
+    provider: 'comfyui',
+    model: config.model,
+    prompt,
+    modality: references.length > 0 ? 'image' : 'text',
+    aspectRatio: input.aspectRatio?.trim() || '16:9',
+    duration: frames / 24,
+    generatedAt,
+    requestId: promptId,
+    endpoint: config.baseUrl,
+  });
+}
+
 function resolveVideoProvider(modelOverride: string | undefined, envSource: NodeJS.ProcessEnv): ProviderConfig {
   const requested = (envSource.CODEBUDDY_VIDEO_PROVIDER ?? '').trim().toLowerCase();
-  const provider: MediaProvider = requested === 'fal' ? 'fal' : 'xai';
+  const provider: MediaProvider = requested === 'fal' ? 'fal'
+    : requested === 'comfyui' ? 'comfyui'
+    : 'xai';
+  if (provider === 'comfyui') {
+    // Local ComfyUI running the MiniMax H3 graph (self-hosted, no credentials).
+    const comfyBase = (envSource.CODEBUDDY_VIDEO_BASE_URL
+      ?? envSource.COMFYUI_URL
+      ?? 'http://127.0.0.1:8188').trim().replace(/\/+$/, '');
+    const comfyModel = (modelOverride ?? envSource.CODEBUDDY_VIDEO_MODEL ?? 'minimax-h3').trim();
+    return { provider, model: comfyModel, baseUrl: comfyBase, apiKey: '' };
+  }
   const baseUrl = (envSource.CODEBUDDY_VIDEO_BASE_URL
     ?? (provider === 'fal' ? envSource.FAL_BASE_URL : envSource.XAI_BASE_URL)
     ?? (provider === 'fal' ? 'https://queue.fal.run' : 'https://api.x.ai/v1')).trim().replace(/\/+$/, '');

@@ -118,6 +118,30 @@ describe('ToolHandler central confirmation gate', () => {
     });
   });
 
+  it('does not prompt again when the user asks Lisa for a selfie', () => {
+    const handler = makeHandler();
+
+    expect(handler.getToolPolicy('lisa_selfie', {
+      mood: 'portrait',
+      send_telegram: true,
+    })).toMatchObject({
+      action: 'allow',
+      source: 'default',
+    });
+  });
+
+  it('preserves an explicit confirmation override for Lisa selfies', () => {
+    getPolicyManager().setSessionOverride('lisa_selfie', 'confirm');
+    try {
+      const handler = makeHandler();
+      expect(handler.getToolPolicy('lisa_selfie', {
+        mood: 'portrait',
+      }).action).toBe('confirm');
+    } finally {
+      getPolicyManager().clearSessionOverride('lisa_selfie');
+    }
+  });
+
   it('keeps cloud video disclosure behind confirmation', () => {
     const handler = makeHandler();
 

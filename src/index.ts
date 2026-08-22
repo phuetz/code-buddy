@@ -24,6 +24,12 @@ import {
 } from './cli/command-routing.js';
 import { resolveHeadlessOutputFormat, resolveHeadlessResultExitCode } from './cli/headless-options.js';
 import { resolveCliModelList } from './cli/model-listing.js';
+import {
+  NO_PROVIDER_GUIDANCE,
+  recoverFirstRunWithChatGpt,
+} from './cli/first-run.js';
+import { getConfigManager } from './config/toml-config.js';
+import { getHiddenCliCommands } from './config/feature-surface.js';
 
 // Read version from package.json
 const __filename = fileURLToPath(import.meta.url);
@@ -1448,7 +1454,7 @@ program
   )
   .option(
     "--profile <name>",
-    "apply a named configuration profile from .codebuddy/config.toml [profiles.<name>]"
+    "apply a built-in or configured profile (core, all, or [profiles.<name>])"
   )
   .option(
     "--from-pr <pr>",
@@ -1514,18 +1520,6 @@ program
         }
       }
     }
-    // Apply named configuration profile (--profile <name>) before anything else
-    if (options.profile) {
-      try {
-        const { getConfigManager } = await import('./config/toml-config.js');
-        getConfigManager().load();
-        getConfigManager().applyProfile(options.profile);
-      } catch (err) {
-        startupLogger.error(`Profile error: ${err instanceof Error ? err.message : err}`);
-        process.exit(1);
-      }
-    }
-
     // Handle --setup flag (interactive setup wizard)
     if (options.setup) {
       const { runSetup } = await import("./utils/interactive-setup.js");
@@ -1718,51 +1712,59 @@ program
       const maxToolRounds = parseInt(options.maxToolRounds) || 400;
 
       if (!apiKey) {
-        // In an interactive terminal, offer the guided setup wizard right here
-        // (like Hermes) instead of dead-ending on an error — then continue the
-        // session with the credentials it captured.
+        // The shortest first-run path is a direct ChatGPT OAuth login. Keep the
+        // full wizard available, but do not make a new user navigate provider,
+        // model, and TTS choices before seeing the coding agent work.
         const interactive =
           Boolean(process.stdin.isTTY) && Boolean(process.stdout.isTTY) &&
           !options.prompt && !options.print &&
           process.env.CI !== 'true' && process.env.GITHUB_ACTIONS !== 'true';
 
-        let recovered = false;
-        if (interactive) {
-          const readline = await import('readline');
-          const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-          const answer: string = await new Promise((resolve) =>
-            rl.question('\n❔ No AI provider configured. Run guided setup now? [Y/n] ', resolve)
-          );
-          rl.close();
-          const yes = answer.trim() === '' || /^y(es)?$/i.test(answer.trim());
-          if (yes) {
+        const recoveredProvider = await recoverFirstRunWithChatGpt({
+          interactive,
+          ask: async (question) => {
+            const readline = await import('readline');
+            const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
             try {
-              const { runOnboarding } = await import('./wizard/onboarding.js');
-              const result = await runOnboarding();
-              // Bust the cached provider detection so the just-saved creds resolve.
-              cachedProvider = undefined;
-              apiKey = options.apiKey || await loadApiKey();
-              baseURL = options.baseUrl || await loadBaseURL();
-              model = options.model || result.model || await loadModel();
-              recovered = Boolean(apiKey);
-            } catch (err) {
-              logger.error('Guided setup did not complete', err instanceof Error ? err : { error: String(err) });
+              return await new Promise<string>((resolve) => rl.question(question, resolve));
+            } finally {
+              rl.close();
             }
-          }
+          },
+          login: async () => {
+            const { loginInteractive } = await import('./providers/codex-oauth.js');
+            cli.stdout('\n🔐 ChatGPT login — opening your browser…');
+            const auth = await loginInteractive();
+            cli.stdout(`✅ Authenticated${auth.email ? ` as ${auth.email}` : ''}. Starting Code Buddy…`);
+          },
+          reloadProvider: async () => {
+            // Bust provider detection so the OAuth file written moments ago is
+            // immediately visible to this same process.
+            cachedProvider = undefined;
+            const nextApiKey = options.apiKey || await loadApiKey();
+            if (!nextApiKey) return null;
+            return {
+              apiKey: nextApiKey,
+              baseURL: options.baseUrl || await loadBaseURL(),
+              model: options.model || await loadModel(),
+            };
+          },
+          onLoginError: (err) => {
+            logger.error(
+              'ChatGPT login did not complete',
+              err instanceof Error ? err : { error: String(err) },
+            );
+          },
+        });
+
+        if (recoveredProvider) {
+          apiKey = recoveredProvider.apiKey;
+          baseURL = recoveredProvider.baseURL;
+          model = recoveredProvider.model;
         }
 
-        if (!recovered) {
-          logger.error(
-            [
-              "❌ No AI provider configured yet. Fastest ways to start — no env var to edit:",
-              "   • 60-second demo, zero config — just run:               buddy try",
-              "   • Guided setup (recommended) — interactive wizard:      buddy onboard",
-              "   • Free, no API key — sign in with your ChatGPT plan:    buddy login",
-              "   • Local & free — install Ollama, then let onboard use it: buddy onboard",
-              "   • API key — set GROK_API_KEY / OPENAI_API_KEY / ANTHROPIC_API_KEY / GOOGLE_API_KEY (or pass --api-key)",
-              "   Check anytime:  buddy doctor   (add --fix to auto-configure a running Ollama).",
-            ].join("\n")
-          );
+        if (!recoveredProvider) {
+          logger.error(NO_PROVIDER_GUIDANCE);
           process.exit(1);
         }
       }
@@ -2334,17 +2336,7 @@ gitCommand
       const maxToolRounds = parseInt(options.maxToolRounds) || 400;
 
       if (!apiKey) {
-        logger.error(
-          [
-            "❌ No AI provider configured yet. Fastest ways to start — no env var to edit:",
-            "   • 60-second demo, zero config — just run:               buddy try",
-            "   • Guided setup (recommended) — interactive wizard:      buddy onboard",
-            "   • Free, no API key — sign in with your ChatGPT plan:    buddy login",
-            "   • Local & free — install Ollama, then let onboard use it: buddy onboard",
-            "   • API key — set GROK_API_KEY / OPENAI_API_KEY / ANTHROPIC_API_KEY / GOOGLE_API_KEY (or pass --api-key)",
-            "   Check anytime:  buddy doctor   (add --fix to auto-configure a running Ollama).",
-          ].join("\n")
-        );
+        logger.error(NO_PROVIDER_GUIDANCE);
         process.exit(1);
       }
 
@@ -2408,6 +2400,46 @@ function addLazyCommand(
 
 addLazyCommand(
   program,
+  'try',
+  'Run an isolated 60-second coding-agent demo (ChatGPT OAuth or local Ollama)',
+  async () => {
+    const { createTryCommand } = await import('./commands/try.js');
+    return createTryCommand();
+  },
+);
+
+addLazyCommand(
+  program,
+  'import',
+  'Import project rules and MCP servers from Cursor, Cline, Copilot, or Claude Code',
+  async () => {
+    const { createImportCommand } = await import('./commands/import.js');
+    return createImportCommand();
+  },
+);
+
+addLazyCommand(
+  program,
+  'explain',
+  'Explain an unfamiliar repository in one Markdown or self-contained HTML artifact',
+  async () => {
+    const { createExplainCommand } = await import('./commands/explain.js');
+    return createExplainCommand();
+  },
+);
+
+addLazyCommand(
+  program,
+  'changelog',
+  'Generate grouped release notes from Conventional Commits',
+  async () => {
+    const { createChangelogCommand } = await import('./commands/changelog.js');
+    return createChangelogCommand();
+  },
+);
+
+addLazyCommand(
+  program,
   'ws',
   'Manage and search the opt-in multi-repository workspace',
   async () => {
@@ -2429,7 +2461,7 @@ addLazyCommand(
 addLazyCommand(
   program,
   'mcp',
-  'Manage MCP (Model Context Protocol) servers',
+  'Manage MCP servers or expose Code Buddy with `buddy mcp serve`',
   async () => {
     const { createMCPCommand } = await import('./commands/mcp.js');
     return createMCPCommand();
@@ -2443,6 +2475,16 @@ addLazyCommand(
   async () => {
     const { createCampaignCommand } = await import('./commands/campaign.js');
     return createCampaignCommand();
+  },
+);
+
+addLazyCommand(
+  program,
+  'influencer',
+  'Influencer & book-trailer media pipeline (scripts/influencer)',
+  async () => {
+    const { createInfluencerCommand } = await import('./commands/influencer.js');
+    return createInfluencerCommand();
   },
 );
 
@@ -3130,12 +3172,17 @@ program
 // MCP Server command - run Code Buddy as an MCP tool provider over stdio
 program
   .command("mcp-server")
-  .description("Start Code Buddy as an MCP server over stdio (for VS Code, Cursor, etc.)")
+  .description("Legacy alias for `buddy mcp serve`")
   .option("--list", "List available MCP tools and exit")
+  .option("--allow-write", "Expose write, shell, and execution tools")
+  .option("--tools <glob>", "Restrict exposed tool names with glob patterns")
   .action(async (options) => {
     if (options.list) {
       const { CodeBuddyMCPServer } = await import("./mcp/mcp-server.js");
-      const tools = CodeBuddyMCPServer.getToolDefinitions();
+      const tools = CodeBuddyMCPServer.getToolDefinitions({
+        ...(options.allowWrite ? { allowWrite: true } : {}),
+        ...(options.tools ? { tools: options.tools } : {}),
+      });
       // Pipeable listing.
       for (const tool of tools) {
         cli.stdout(`${tool.name}: ${tool.description}`);
@@ -3144,9 +3191,11 @@ program
     }
 
     try {
-      const { CodeBuddyMCPServer } = await import("./mcp/mcp-server.js");
-      const server = new CodeBuddyMCPServer();
-      await server.start();
+      const { serveMCP } = await import("./commands/mcp.js");
+      await serveMCP({
+        ...(options.allowWrite ? { allowWrite: true } : {}),
+        ...(options.tools ? { tools: options.tools } : {}),
+      });
     } catch (error) {
       logger.error("Failed to start MCP server", error instanceof Error ? error : new Error(String(error)));
       process.exit(1);
@@ -3464,6 +3513,17 @@ addLazyCommand(
   },
 );
 
+// Krea 2 LoRA — character/style LoRA dataset + fal cloud train + local plan + ComfyUI install
+addLazyCommand(
+  program,
+  'lora',
+  'Krea 2 LoRA pipeline: init dataset, train cloud (fal, opt-in CODEBUDDY_LORA_TRAIN=true) or local plan, install into ComfyUI',
+  async () => {
+    const { createLoraCommand } = await import('./commands/lora.js');
+    return createLoraCommand();
+  },
+);
+
 // Planning Flow — OpenManus-compatible multi-agent orchestration
 addLazyCommand(
   program,
@@ -3545,6 +3605,26 @@ addLazyCommand(
   async () => {
     const { createReplayCommand } = await import('./commands/replay.js');
     return createReplayCommand();
+  },
+);
+
+addLazyCommand(
+  program,
+  'share',
+  'Export a saved session as a self-contained, shareable HTML replay',
+  async () => {
+    const { createShareCommand } = await import('./commands/share.js');
+    return createShareCommand();
+  },
+);
+
+addLazyCommand(
+  program,
+  'cost',
+  'Aggregate saved-session cost and token usage by model, provider, or day',
+  async () => {
+    const { createCostCommand } = await import('./commands/cost.js');
+    return createCostCommand();
   },
 );
 
@@ -3779,4 +3859,41 @@ addLazyCommand(
   },
 );
 
-program.parse();
+/** Read a root option before Commander dispatches a subcommand or help. */
+function getRequestedProfile(argv: readonly string[]): string | undefined {
+  for (let index = 2; index < argv.length; index++) {
+    const arg = argv[index];
+    if (arg === '--') break;
+    if (arg === '--profile') return argv[index + 1];
+    if (arg?.startsWith('--profile=')) return arg.slice('--profile='.length) || undefined;
+  }
+  return undefined;
+}
+
+// Apply the profile before parsing so it governs root chat, lazy subcommands,
+// slash-command menus, tool selection, and `buddy --help` consistently.
+const requestedProfile = getRequestedProfile(process.argv);
+if (requestedProfile) {
+  try {
+    getConfigManager().load();
+    getConfigManager().applyProfile(requestedProfile);
+  } catch (err) {
+    process.stderr.write(`Profile error: ${err instanceof Error ? err.message : String(err)}\n`);
+    process.exitCode = 1;
+  }
+}
+
+if (process.exitCode !== 1) {
+  program.addHelpText('before', `Pour commencer — 6 démos qui montrent le cœur agent de code :
+  1. buddy try
+     Crée FizzBuzz, écrit son test et l’exécute dans un bac à sable.
+  2. /loop "Corrige les tests en échec"              (dans une session buddy)
+  3. buddy research "Cartographie ce dépôt"
+  4. buddy dev pr "Ajoute une petite fonctionnalité"
+  5. /think deep "Propose le refactoring le plus sûr" (dans une session buddy)
+  6. /share create demo                              (dans une session buddy)
+
+`);
+  removeCommands(program, getHiddenCliCommands());
+  program.parse();
+}

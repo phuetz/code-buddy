@@ -247,6 +247,16 @@ export const TOOL_METADATA: ToolMetadata[] = [
     fleetSafe: true,
   },
   {
+    name: 'community_search',
+    category: 'web',
+    keywords: ['reddit', 'hacker news', 'community', 'discussion', 'people', 'opinion',
+      'what do people think', 'sentiment', 'buzz', 'trending', 'stack overflow',
+      'github', 'arxiv', 'avis', 'retours', 'communauté'],
+    priority: 8,
+    description: 'Search what people actually say — discussions, votes and engagement — rather than what publishers write',
+    fleetSafe: true,
+  },
+  {
     name: 'weather',
     category: 'web',
     keywords: ['weather', 'météo', 'meteo', 'forecast', 'prévisions', 'previsions', 'température', 'temperature', 'pluie', 'neige', 'vent'],
@@ -883,6 +893,24 @@ export const TOOL_METADATA: ToolMetadata[] = [
     description: 'Generate an image through the configured image backend and cache returned media when possible'
   },
   {
+    name: 'lisa_selfie',
+    category: 'media',
+    keywords: [
+      'lisa',
+      'selfie',
+      'photo',
+      'portrait',
+      'telegram',
+      'companion',
+      'lora',
+      'photo de toi',
+      'envoie photo',
+    ],
+    priority: 9,
+    description:
+      'Generate a portrait of Lisa (LoRA when installed) and optionally send it on Telegram',
+  },
+  {
     name: 'image_edit',
     category: 'media',
     keywords: ['image', 'edit', 'inpaint', 'mask', 'mark', 'design', 'retouch', 'modifier', 'zone'],
@@ -1290,6 +1318,48 @@ export const TOOL_METADATA: ToolMetadata[] = [
     keywords: ['knowledge', 'graph', 'relationships', 'imports', 'calls', 'extends', 'dependencies', 'code', 'architecture'],
     priority: 6,
     description: 'Query code entity relationships and dependencies',
+    fleetSafe: true,
+  },
+
+  // LSP semantic navigation and diagnostics (read-only)
+  {
+    name: 'lsp_definition',
+    category: 'codebase',
+    keywords: ['lsp', 'definition', 'declaration', 'go to definition', 'semantic navigation', 'symbol', 'type'],
+    priority: 9,
+    description: 'Resolve a semantic symbol definition through the configured language server',
+    fleetSafe: true,
+  },
+  {
+    name: 'lsp_references',
+    category: 'codebase',
+    keywords: ['lsp', 'references', 'usages', 'callers', 'where used', 'semantic navigation', 'symbol'],
+    priority: 9,
+    description: 'Find semantic symbol references through the configured language server',
+    fleetSafe: true,
+  },
+  {
+    name: 'lsp_hover',
+    category: 'codebase',
+    keywords: ['lsp', 'hover', 'type', 'signature', 'documentation', 'semantic information', 'symbol'],
+    priority: 9,
+    description: 'Get semantic hover and type information from the configured language server',
+    fleetSafe: true,
+  },
+  {
+    name: 'lsp_symbols',
+    category: 'codebase',
+    keywords: ['lsp', 'symbols', 'outline', 'classes', 'functions', 'methods', 'document structure', 'semantic navigation'],
+    priority: 9,
+    description: 'Get a semantic document outline from the configured language server',
+    fleetSafe: true,
+  },
+  {
+    name: 'lsp_diagnostics',
+    category: 'codebase',
+    keywords: ['lsp', 'diagnostics', 'errors', 'warnings', 'typecheck', 'lint', 'semantic analysis'],
+    priority: 9,
+    description: 'Get diagnostics published by the configured language server',
     fleetSafe: true,
   },
 

@@ -4,6 +4,7 @@ import { tmpdir } from 'os';
 import {
   PROVIDER_ENV_MAP,
   PROVIDER_DEFAULT_MODEL,
+  PROVIDER_GUIDES,
   buildRecommendedNextCommands,
   getProviderGuide,
   ONBOARDING_PHASES,
@@ -45,7 +46,7 @@ describe('onboarding', () => {
       expect(PROVIDER_DEFAULT_MODEL['claude']).toBe('claude-sonnet-4-20250514');
       expect(PROVIDER_DEFAULT_MODEL['chatgpt']).toBe('gpt-5.6-sol');
       expect(PROVIDER_DEFAULT_MODEL['gemini']).toBe('gemini-2.0-flash');
-      expect(PROVIDER_DEFAULT_MODEL['ollama']).toBe('llama3');
+      expect(PROVIDER_DEFAULT_MODEL['ollama']).toBe('qwen2.5-coder:7b');
     });
   });
 
@@ -74,10 +75,12 @@ describe('onboarding', () => {
         setupCommand: 'buddy login',
         verifyCommand: 'buddy whoami',
       });
+      expect(PROVIDER_GUIDES.slice(0, 2).map((guide) => guide.id)).toEqual([
+        'chatgpt',
+        'ollama',
+      ]);
       expect(commands.slice(0, 2)).toEqual(['buddy login', 'buddy whoami']);
-      expect(commands).toContain(
-        'buddy --model gpt-5.5 -p "Summarize this repo in 5 bullets and name the main entry point."'
-      );
+      expect(commands).toContain('buddy try');
       expect(commands).toContain('buddy --continue');
     });
 

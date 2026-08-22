@@ -1,0 +1,21 @@
+[Unit]
+Description=Consommation quotidienne des crédits Google Flow via Agent
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/code-buddy
+ExecStart=/usr/bin/python3 %h/code-buddy/scripts/influencer/flow-daily.py --resume --project-url https://labs.google/fx/fr/tools/flow/project/0c269221-2769-4cc1-a2e9-0bde17d11e3f
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONDONTWRITEBYTECODE=1
+Restart=on-failure
+RestartSec=10min
+TimeoutStartSec=1h
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=default.target

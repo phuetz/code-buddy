@@ -54,8 +54,9 @@ describe('persona voice layer + persistence', () => {
     const v = getActivePersonaVoice();
     expect(v.robotName).toBe('Lisa');
     expect(v.spokenPrompt).toContain('Lisa');
+    expect(v.spokenPrompt).toContain('petite amie numérique');
     expect(v.spokenPrompt).toContain('petite copine vocale virtuelle');
-    expect(v.greeting).toContain('Coucou Patrice');
+    expect(v.greeting).toContain('Te revoilà Patrice');
   });
 
   it('a custom persona supplies its own voice .onnx + name (the per-personality voice)', async () => {

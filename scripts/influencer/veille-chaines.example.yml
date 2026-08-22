@@ -1,0 +1,56 @@
+# Copier vers ~/.codebuddy/veille-chaines.yml pour remplacer la liste intégrée.
+# Vision IA reste volontairement en tête.
+channels:
+  - name: Vision IA
+    channel_id: UCyc03X3uRuxM9n7fyRH_gIw
+    language: fr
+    focus: actualité IA, outils, science et biomédical
+    enabled: true
+
+  - name: Ludo Salenne
+    channel_id: UCnnYqSNKKygemgmxC9PyLTw
+    language: fr
+    focus: outils IA concrets, automatisation et actualité
+    enabled: true
+
+  - name: Defend Intelligence
+    channel_id: UCnEHCrot2HkySxMTmDPhZyg
+    language: fr
+    focus: vulgarisation technique IA et machine learning
+    enabled: true
+
+  - name: Matt Wolfe
+    channel_id: UChpleBmo18P08aKCIgti38g
+    language: en
+    focus: revue hebdomadaire des outils et actualités IA
+    enabled: true
+
+  - name: Matthew Berman
+    channel_id: UCawZsQWqfGSbCI5yjkdVkTA
+    language: en
+    focus: LLM ouverts, agents, code et benchmarks
+    enabled: true
+
+  - name: AI Explained
+    channel_id: UCNJ1Ymd5yFuUPtn21xtRbbw
+    language: en
+    focus: modèles, articles et analyse des annonces IA
+    enabled: true
+
+  - name: MattVidPro
+    channel_id: UC5Wz4fFacYuON6IKbhSa7Zw
+    language: en
+    focus: génération vidéo et image, modèles créatifs
+    enabled: true
+
+  - name: Theoretically Media
+    channel_id: UC9Ryt3XOGYBoAJVsBHNGDzA
+    language: en
+    focus: outils vidéo, image, voix et production média
+    enabled: true
+
+  - name: Two Minute Papers
+    channel_id: UCbfYPyITQ-7l4upoX8nvctg
+    language: en
+    focus: articles de recherche IA, vision et sciences
+    enabled: true

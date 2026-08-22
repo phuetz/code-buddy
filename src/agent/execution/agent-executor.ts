@@ -114,6 +114,12 @@ export interface TimelineTurnData {
 const JUICE_WEB_TOOLS = new Set(['web_fetch', 'web_search', 'fetch', 'browser_fetch']);
 
 const CONTEXT_MENTION_PATTERN = /@(?:file:|url:|image:|git(?::|\s)|symbol:|search:|web\s|terminal\b)/i;
+const FILE_MENTION_CANDIDATE_PATTERN = /(?:^|\s)@[^\s@]+/;
+
+interface PreprocessedUserMessage {
+  message: string;
+  fileMentionContextBlocks: CodeBuddyMessage[];
+}
 
 const RELATIONSHIP_OUTBOUND_TOOLS = new Set([
   'send_message',
@@ -159,9 +165,11 @@ function configuredSensoryRuntime(
 ) {
   const voiceConfigured = surface === 'voice' || env.CODEBUDDY_SENSORY_SPEAK === 'true';
   const configuredTtsEngine = env.CODEBUDDY_TTS_ENGINE?.trim().toLowerCase();
-  const ttsProvider = configuredTtsEngine === 'piper' || configuredTtsEngine === 'voicebox'
-    ? configuredTtsEngine
-    : 'pocket';
+  const ttsProvider = env.CODEBUDDY_TTS_VOICE?.trim().toLowerCase().startsWith('elevenlabs:')
+    ? 'elevenlabs'
+    : configuredTtsEngine === 'piper' || configuredTtsEngine === 'voicebox'
+      ? configuredTtsEngine
+      : 'pocket';
   const ttsConfigured = voiceConfigured || Boolean(
     env.CODEBUDDY_TTS_ENGINE ||
     env.CODEBUDDY_TTS_VOICE ||
@@ -792,8 +800,9 @@ export class AgentExecutor {
    * processUserMessageStream (F10): handles @mention expansion, fires
    * persona auto-selection, and feeds the knowledge graph in the
    * background. Returns the cleaned message (with `@web` / `@git` /
-   * `@terminal` markers removed). Both paths must call this before
-   * entering their respective main loops so the loops stay parity.
+   * `@terminal` markers removed) and ephemeral context for bare `@path`
+   * mentions. Both paths must call this before entering their respective
+   * main loops so the loops stay parity.
    *
    * All sub-steps are best-effort: any individual failure is swallowed at
    * debug level so a broken plugin cannot break the main loop.
@@ -801,21 +810,61 @@ export class AgentExecutor {
   private async preprocessUserMessage(
     message: string,
     messages: CodeBuddyMessage[],
+    projectRoot: string,
     readOnlySelfInspection = false,
     isolatedSharedHost = false,
-  ): Promise<string> {
-    // Mentions can read arbitrary workspace files, persona selection can alter
+  ): Promise<PreprocessedUserMessage> {
+    // Mentions can read explicit workspace files, persona selection can alter
     // identity, and KG extraction persists project entities. None belongs in a
     // core-only technical self-inspection turn.
-    if (readOnlySelfInspection) return message;
+    if (readOnlySelfInspection) {
+      return { message, fileMentionContextBlocks: [] };
+    }
 
     // Avoid loading the sizeable mention parser (fs-extra, axios, child_process)
     // for the overwhelmingly common case where the message contains no mention.
     const mentionPromise = CONTEXT_MENTION_PATTERN.test(message)
       ? import('../../input/context-mentions.js')
-          .then(({ processMentions }) => processMentions(message))
+          .then(({ processMentions }) => processMentions(message, { projectRoot }))
           .catch(() => null)
       : Promise.resolve(null);
+
+    // Bare @path mentions are resolved independently from the heavier legacy
+    // mention parser. They are turn-scoped context: the user's message remains
+    // readable in history, while file contents do not persist into later turns.
+    const fileMentionPromise: Promise<CodeBuddyMessage[]> = FILE_MENTION_CANDIDATE_PATTERN.test(message)
+      ? import('../../context/file-mentions.js')
+          .then(async ({ formatFileMentionContext, resolveFileMentions }) => {
+            const resolution = await resolveFileMentions(message, { projectRoot });
+            const blocks: CodeBuddyMessage[] = resolution.files.map((file) => ({
+              role: 'system' as const,
+              content: `<context type="file_mention" ephemeral="true">\n${formatFileMentionContext(file)}\n</context>`,
+            }));
+
+            for (const ignored of resolution.issues) {
+              logger.debug('File mention content was not injected', {
+                path: ignored.path,
+                reason: ignored.reason,
+              });
+              blocks.push({
+                role: 'system' as const,
+                content: [
+                  '<context type="file_mention_notice" ephemeral="true">',
+                  `Mention ${JSON.stringify(ignored.mention)} was not included: ${ignored.message}`,
+                  '</context>',
+                ].join('\n'),
+              });
+            }
+
+            return blocks;
+          })
+          .catch((error: unknown) => {
+            logger.debug('File mention resolution failed closed', {
+              error: getErrorMessage(error),
+            });
+            return [];
+          })
+      : Promise.resolve([]);
 
     // Persona selection affects this turn's system prompt, so keep it on the
     // critical path, but load it concurrently with explicit mention expansion.
@@ -825,7 +874,11 @@ export class AgentExecutor {
           .then(({ getPersonaManager }) => getPersonaManager().autoSelectPersona({ message }))
           .catch(() => null);
 
-    const [mentionResult] = await Promise.all([mentionPromise, personaPromise]);
+    const [mentionResult, , fileMentionContextBlocks] = await Promise.all([
+      mentionPromise,
+      personaPromise,
+      fileMentionPromise,
+    ]);
 
     if (mentionResult && mentionResult.contextBlocks.length > 0) {
       message = mentionResult.cleanedMessage;
@@ -853,7 +906,7 @@ export class AgentExecutor {
       });
     }
 
-    return message;
+    return { message, fileMentionContextBlocks };
   }
 
   /**
@@ -1062,19 +1115,26 @@ export class AgentExecutor {
       introspectionIntent === 'describe' || introspectionIntent === 'inspect';
     const guardGenerativeSelfInspection = introspectionIntent === 'improve';
     const isolatedSharedHost = surface === 'http';
-    message = await this.preprocessUserMessage(
+    const turnCwd = typeof this.deps.toolHandler.getWorkingDirectory === 'function'
+      ? this.deps.toolHandler.getWorkingDirectory()
+      : process.cwd();
+    // A stateful `cd` changes the tool cwd, not the TUI project boundary.
+    // Keep @file confinement anchored to the process launch directory there;
+    // embedded hosts continue to provide their explicit workspace directory.
+    const fileMentionProjectRoot = surface === 'cli' ? process.cwd() : turnCwd;
+    const preprocessed = await this.preprocessUserMessage(
       message,
       messages,
+      fileMentionProjectRoot,
       readOnlySelfInspection,
       isolatedSharedHost,
     );
+    message = preprocessed.message;
+    const fileMentionContextBlocks = preprocessed.fileMentionContextBlocks;
     // Query ranking should also follow the current utterance on transports that
     // embed history in `message`; keep the full composite only as user context
     // for the provider. Normal CLI turns retain the preprocessed query.
     const turnQueryText = introspectionText ?? message;
-    const turnCwd = typeof this.deps.toolHandler.getWorkingDirectory === 'function'
-      ? this.deps.toolHandler.getWorkingDirectory()
-      : process.cwd();
     let permissionMode: string | undefined;
     let providerName: string | undefined;
     let operationalRobotName: string | undefined;
@@ -1307,7 +1367,7 @@ export class AgentExecutor {
         // Build context in a scratch array while the prompt and tools are being
         // prepared. It is appended only after transcript preparation so the
         // existing compaction and repair ordering remains unchanged.
-        const contextBlocks: CodeBuddyMessage[] = [];
+        const contextBlocks: CodeBuddyMessage[] = [...fileMentionContextBlocks];
         const contextPromise = toolRounds === 0
           ? injectInitialContext(contextBlocks, {
               message: turnQueryText,

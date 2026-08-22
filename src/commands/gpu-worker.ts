@@ -39,12 +39,18 @@ export function parseGpuRunnerArgs(value: string | undefined, name: string): str
 function optionalRunner(
   command: string | undefined,
   rawArgs: string | undefined,
-  name: string
+  name: string,
+  revision: string | undefined,
 ): GpuMediaRunnerConfig | undefined {
   if (!command?.trim()) return undefined;
+  const normalizedRevision = revision?.trim();
+  if (normalizedRevision && !/^[a-f0-9]{64}$/u.test(normalizedRevision)) {
+    throw new Error(`${name}_REVISION must be a lowercase SHA-256 digest`);
+  }
   return {
     command: command.trim(),
     args: parseGpuRunnerArgs(rawArgs, `${name}_ARGS`),
+    ...(normalizedRevision ? { revision: normalizedRevision } : {}),
   };
 }
 
@@ -75,16 +81,20 @@ export function buildGpuWorkerConfig(
   const panoworld = optionalRunner(
     env.CODEBUDDY_PANOWORLD_RUNNER,
     env.CODEBUDDY_PANOWORLD_RUNNER_ARGS,
-    'CODEBUDDY_PANOWORLD_RUNNER'
+    'CODEBUDDY_PANOWORLD_RUNNER',
+    env.CODEBUDDY_PANOWORLD_RUNNER_REVISION,
   );
   const longcat = optionalRunner(
     env.CODEBUDDY_LONGCAT_RUNNER,
     env.CODEBUDDY_LONGCAT_RUNNER_ARGS,
-    'CODEBUDDY_LONGCAT_RUNNER'
+    'CODEBUDDY_LONGCAT_RUNNER',
+    env.CODEBUDDY_LONGCAT_RUNNER_REVISION,
   );
   if (!panoworld && !longcat) {
     throw new Error('Configure CODEBUDDY_PANOWORLD_RUNNER or CODEBUDDY_LONGCAT_RUNNER');
   }
+  const retentionDays = env.CODEBUDDY_GPU_WORKER_RETENTION_DAYS?.trim();
+  const maxStoredJobs = env.CODEBUDDY_GPU_WORKER_MAX_TERMINAL_JOBS?.trim();
   return {
     host: options.host,
     port: integer(options.port, '--port', 0, 65_535),
@@ -97,6 +107,12 @@ export function buildGpuWorkerConfig(
     },
     workerId: options.workerId,
     maxConcurrency: integer(options.maxConcurrency, '--max-concurrency', 1, 2),
+    ...(retentionDays ? {
+      terminalJobRetentionMs: integer(retentionDays, 'CODEBUDDY_GPU_WORKER_RETENTION_DAYS', 1, 3650) * 24 * 60 * 60 * 1000,
+    } : {}),
+    ...(maxStoredJobs ? {
+      maxStoredTerminalJobs: integer(maxStoredJobs, 'CODEBUDDY_GPU_WORKER_MAX_TERMINAL_JOBS', 1, 100_000),
+    } : {}),
   };
 }
 

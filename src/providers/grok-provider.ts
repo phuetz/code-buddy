@@ -157,7 +157,7 @@ export class GrokProvider extends BaseProvider {
   }
 
   async getModels(): Promise<string[]> {
-    return ['grok-4-1-fast', 'grok-4-latest', 'grok-4-fast', 'grok-code-fast-1', 'grok-3-latest', 'grok-3-fast', 'grok-3-mini'];
+    return ['grok-4.6', 'grok-4-1-fast', 'grok-4-latest', 'grok-4-fast', 'grok-code-fast-1', 'grok-3-latest', 'grok-3-fast', 'grok-3-mini'];
   }
 
   getPricing(): { input: number; output: number } {

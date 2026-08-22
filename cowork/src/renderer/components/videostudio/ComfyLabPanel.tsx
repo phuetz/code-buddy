@@ -104,12 +104,12 @@ export function ComfyLabPanel({ onClose, onUseAvatar }: ComfyLabPanelProps) {
           <div className="flex flex-wrap items-start gap-4">
             <div className="min-w-0 flex-1">
               <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-violet-600 dark:text-violet-300">
-                Cartographie locale · aucun lancement automatique
+                Cartographie {snapshot?.probe.scope === 'remote' ? 'Darkstar / distante' : 'locale'} · aucun lancement automatique
               </p>
               <h2 className="mt-1 text-xl font-semibold">Laboratoire ComfyUI</h2>
               <p className="mt-1 max-w-3xl text-xs leading-relaxed text-muted-foreground">
                 Six parcours créatifs classés par priorité, évalués depuis les modèles non vides,
-                workflows locaux et nœuds exposés sur loopback. Ici, Code Buddy observe et prépare :
+                workflows disponibles et nœuds exposés par l’endpoint configuré. Ici, Code Buddy observe et prépare :
                 il ne télécharge, n’installe et n’exécute rien.
               </p>
             </div>
@@ -162,7 +162,7 @@ export function ComfyLabPanel({ onClose, onUseAvatar }: ComfyLabPanelProps) {
               />
               <InventoryTile
                 icon={<Server className="h-4 w-4" />}
-                label="Loopback"
+                label={snapshot.probe.scope === 'remote' ? 'Endpoint distant' : 'Loopback'}
                 value={snapshot.probe.state === 'reachable' ? 'En ligne' : 'Hors ligne'}
                 detail={snapshot.probe.device
                   ? `${snapshot.probe.device.name} · ${snapshot.probe.device.type}`

@@ -1,5 +1,12 @@
 # Lisa — architecture produit et boucle de développement
 
+## Plan de modernisation opérationnel (2026-07-17)
+
+Vagues **A–E** (ops persona/doctor, cerveau ancré, LoRA E2E, mémoire typée, voix/MetaHuman) :
+[`docs/plans/2026-07-17-lisa-modernization.md`](plans/2026-07-17-lisa-modernization.md).
+
+Alignement : Vague A–B ≈ P0/P1 ci-dessous · D ≈ P2 · E ≈ P3/P4 · C = identité visuelle transverse.
+
 ## Vision
 
 Lisa n'est pas un chatbot dont l'unique avantage serait l'apparence. Le produit vise une présence

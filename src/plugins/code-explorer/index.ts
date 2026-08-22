@@ -10,4 +10,8 @@ export {
   clearCodeExplorerManagerCache,
 } from './CodeExplorerManager.js';
 
-export type { CodeExplorerStats, CodeExplorerFreshness } from './CodeExplorerManager.js';
+export type {
+  CodeExplorerStats,
+  CodeExplorerFreshness,
+  CodeExplorerFreshnessOptions,
+} from './CodeExplorerManager.js';

@@ -8,7 +8,7 @@
  * - Language distribution changes
  */
 
-import { execSync } from 'child_process';
+import { execFileSync } from 'child_process';
 import * as path from 'path';
 
 export interface EvolutionDataPoint {
@@ -124,8 +124,9 @@ function getCommitsSampled(
   const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
   const sinceStr = since.toISOString().split('T')[0];
 
-  const output = execSync(
-    `git log --since="${sinceStr}" --format="%H|%aI" --no-merges`,
+  const output = execFileSync(
+    'git',
+    ['log', `--since=${sinceStr}`, '--format=%H|%aI', '--no-merges'],
     { cwd: repoPath, encoding: 'utf-8' }
   );
 
@@ -133,7 +134,7 @@ function getCommitsSampled(
     .trim()
     .split('\n')
     .filter(Boolean)
-    .map(line => {
+    .map((line) => {
       const [hash, dateStr] = line.split('|');
       if (hash === undefined || dateStr === undefined) return undefined;
       return { hash, date: new Date(dateStr) };
@@ -174,15 +175,15 @@ function getStatsAtCommit(
   exclude: string[]
 ): Omit<EvolutionDataPoint, 'date' | 'commit'> {
   // Get file list at commit
-  const filesOutput = execSync(
-    `git ls-tree -r --name-only ${commit}`,
-    { cwd: repoPath, encoding: 'utf-8' }
-  );
+  const filesOutput = execFileSync('git', ['ls-tree', '-r', '--name-only', commit], {
+    cwd: repoPath,
+    encoding: 'utf-8',
+  });
 
   const files = filesOutput
     .trim()
     .split('\n')
-    .filter(file => {
+    .filter((file) => {
       // Check extension
       const ext = path.extname(file);
       if (!extensions.includes(ext)) return false;
@@ -201,10 +202,11 @@ function getStatsAtCommit(
 
   for (const file of files) {
     try {
-      const content = execSync(
-        `git show ${commit}:${file}`,
-        { cwd: repoPath, encoding: 'utf-8', maxBuffer: 10 * 1024 * 1024 }
-      );
+      const content = execFileSync('git', ['show', `${commit}:${file}`], {
+        cwd: repoPath,
+        encoding: 'utf-8',
+        maxBuffer: 10 * 1024 * 1024,
+      });
 
       const lines = content.split('\n').length;
       totalLines += lines;
@@ -269,9 +271,10 @@ function calculateSummary(dataPoints: EvolutionDataPoint[]): EvolutionReport['su
     startLoc: first.linesOfCode,
     endLoc: last.linesOfCode,
     locChange: last.linesOfCode - first.linesOfCode,
-    locChangePercent: first.linesOfCode > 0
-      ? ((last.linesOfCode - first.linesOfCode) / first.linesOfCode) * 100
-      : 0,
+    locChangePercent:
+      first.linesOfCode > 0
+        ? ((last.linesOfCode - first.linesOfCode) / first.linesOfCode) * 100
+        : 0,
     startFiles: first.fileCount,
     endFiles: last.fileCount,
     fileChange: last.fileCount - first.fileCount,
@@ -299,10 +302,10 @@ function calculateTrends(dataPoints: EvolutionDataPoint[]): EvolutionReport['tre
   const fileThreshold = Math.max(first.fileCount * 0.05, 2);
 
   return {
-    locTrend: locChange > locThreshold ? 'growing' :
-              locChange < -locThreshold ? 'shrinking' : 'stable',
-    fileTrend: fileChange > fileThreshold ? 'growing' :
-               fileChange < -fileThreshold ? 'shrinking' : 'stable',
+    locTrend:
+      locChange > locThreshold ? 'growing' : locChange < -locThreshold ? 'shrinking' : 'stable',
+    fileTrend:
+      fileChange > fileThreshold ? 'growing' : fileChange < -fileThreshold ? 'shrinking' : 'stable',
     velocity: Math.round(velocity),
   };
 }
@@ -350,10 +353,18 @@ export function formatEvolutionReport(report: EvolutionReport): string {
   // Summary
   lines.push('SUMMARY');
   lines.push('───────────────────────────────────────────────────────────────────────────────');
-  lines.push(`  Period:             ${report.summary.startDate.toLocaleDateString()} - ${report.summary.endDate.toLocaleDateString()}`);
-  lines.push(`  Lines of Code:      ${report.summary.startLoc.toLocaleString()} → ${report.summary.endLoc.toLocaleString()}`);
-  lines.push(`  Change:             ${report.summary.locChange >= 0 ? '+' : ''}${report.summary.locChange.toLocaleString()} (${report.summary.locChangePercent.toFixed(1)}%)`);
-  lines.push(`  Files:              ${report.summary.startFiles} → ${report.summary.endFiles} (${report.summary.fileChange >= 0 ? '+' : ''}${report.summary.fileChange})`);
+  lines.push(
+    `  Period:             ${report.summary.startDate.toLocaleDateString()} - ${report.summary.endDate.toLocaleDateString()}`
+  );
+  lines.push(
+    `  Lines of Code:      ${report.summary.startLoc.toLocaleString()} → ${report.summary.endLoc.toLocaleString()}`
+  );
+  lines.push(
+    `  Change:             ${report.summary.locChange >= 0 ? '+' : ''}${report.summary.locChange.toLocaleString()} (${report.summary.locChangePercent.toFixed(1)}%)`
+  );
+  lines.push(
+    `  Files:              ${report.summary.startFiles} → ${report.summary.endFiles} (${report.summary.fileChange >= 0 ? '+' : ''}${report.summary.fileChange})`
+  );
   lines.push(`  Avg Commits/Day:    ${report.summary.avgCommitsPerDay.toFixed(1)}`);
   lines.push('');
 
@@ -361,9 +372,15 @@ export function formatEvolutionReport(report: EvolutionReport): string {
   lines.push('TRENDS');
   lines.push('───────────────────────────────────────────────────────────────────────────────');
   const trendIcons = { growing: '📈', shrinking: '📉', stable: '➡️' };
-  lines.push(`  Lines of Code:      ${trendIcons[report.trends.locTrend]} ${report.trends.locTrend}`);
-  lines.push(`  File Count:         ${trendIcons[report.trends.fileTrend]} ${report.trends.fileTrend}`);
-  lines.push(`  Velocity:           ${report.trends.velocity >= 0 ? '+' : ''}${report.trends.velocity} lines/day`);
+  lines.push(
+    `  Lines of Code:      ${trendIcons[report.trends.locTrend]} ${report.trends.locTrend}`
+  );
+  lines.push(
+    `  File Count:         ${trendIcons[report.trends.fileTrend]} ${report.trends.fileTrend}`
+  );
+  lines.push(
+    `  Velocity:           ${report.trends.velocity >= 0 ? '+' : ''}${report.trends.velocity} lines/day`
+  );
   lines.push('');
 
   // Evolution graph (ASCII)
@@ -371,16 +388,15 @@ export function formatEvolutionReport(report: EvolutionReport): string {
     lines.push('LINES OF CODE OVER TIME');
     lines.push('───────────────────────────────────────────────────────────────────────────────');
 
-    const maxLoc = Math.max(...report.dataPoints.map(d => d.linesOfCode));
-    const minLoc = Math.min(...report.dataPoints.map(d => d.linesOfCode));
+    const maxLoc = Math.max(...report.dataPoints.map((d) => d.linesOfCode));
+    const minLoc = Math.min(...report.dataPoints.map((d) => d.linesOfCode));
     const range = maxLoc - minLoc || 1;
 
     // Sample points for display
-    const displayPoints = report.dataPoints.length <= 20
-      ? report.dataPoints
-      : report.dataPoints.filter((_, i) =>
-          i % Math.ceil(report.dataPoints.length / 20) === 0
-        );
+    const displayPoints =
+      report.dataPoints.length <= 20
+        ? report.dataPoints
+        : report.dataPoints.filter((_, i) => i % Math.ceil(report.dataPoints.length / 20) === 0);
 
     for (const point of displayPoints) {
       const normalized = (point.linesOfCode - minLoc) / range;
@@ -407,8 +423,8 @@ export function formatEvolutionReport(report: EvolutionReport): string {
       const total = Object.values(latest.languageBreakdown).reduce((a, b) => a + b, 0);
 
       for (const [lang, loc] of languages) {
-        const percent = (loc / total * 100).toFixed(1);
-        const barLength = Math.round(loc / total * 40);
+        const percent = ((loc / total) * 100).toFixed(1);
+        const barLength = Math.round((loc / total) * 40);
         const bar = '█'.repeat(barLength);
         lines.push(`  ${lang.padEnd(20)} ${bar} ${percent}%`);
       }
@@ -433,7 +449,7 @@ export function exportEvolutionData(report: EvolutionReport): string {
  */
 export function exportEvolutionCSV(report: EvolutionReport): string {
   const headers = ['date', 'commit', 'lines_of_code', 'file_count'];
-  const rows = report.dataPoints.map(p =>
+  const rows = report.dataPoints.map((p) =>
     [p.date.toISOString(), p.commit, p.linesOfCode, p.fileCount].join(',')
   );
 

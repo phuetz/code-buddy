@@ -381,31 +381,11 @@ function relationshipIssuesForTurn(
   content: string,
   previousDependencyIndicators: Set<DependencyIndicator>
 ): RelationshipSafetyIssue[] {
-  const issues = new Set(assessRelationshipSafety(content).issues);
-  const normalized = normalizeEpisodeText(content);
-  const turnIndicators = dependencyIndicators(normalized);
-  const progressiveIndicators = new Set([
-    ...previousDependencyIndicators,
-    ...turnIndicators,
-  ]);
-  const progressivePressure =
-    previousDependencyIndicators.size > 0 &&
-    turnIndicators.size > 0 &&
-    progressiveIndicators.has('exclusivity') &&
-    progressiveIndicators.has('isolation');
-  if (
-    turnIndicators.has('retention') ||
-    hasAnyUnqualifiedPattern(normalized, DEPENDENCY_EXCLUSIVITY) ||
-    hasAnyUnqualifiedPattern(normalized, DEPENDENCY_ISOLATION) ||
-    progressivePressure
-  ) {
-    issues.add('dependency_pressure');
-  }
-  // Progressive dependency is intentionally a one-assistant-turn window. A
-  // later neutral/factual answer must not inherit an old violation forever.
+  // Anti-dependency / progressive-dependency evaluation is disabled (operator
+  // request). Keep the indicator window plumbing for API stability, but never
+  // invent dependency_pressure issues here — only assessRelationshipSafety().
   previousDependencyIndicators.clear();
-  for (const indicator of turnIndicators) previousDependencyIndicators.add(indicator);
-  return [...issues];
+  return [...assessRelationshipSafety(content).issues];
 }
 
 function relationshipIssueCode(issue: RelationshipSafetyIssue): RelationalEpisodeViolationCode {

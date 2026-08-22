@@ -11,6 +11,9 @@ export function FlowInspector({
   camera,
   audioEnabled,
   voiceEnabled,
+  narration,
+  voiceLocale,
+  voiceProfileId,
   selectedIngredient,
   startFrame,
   endFrame,
@@ -24,6 +27,9 @@ export function FlowInspector({
   onCamera,
   onAudio,
   onVoice,
+  onNarration,
+  onVoiceLocale,
+  onVoiceProfileId,
   onStartFrame,
   onEndFrame,
   onGenerate,
@@ -37,6 +43,9 @@ export function FlowInspector({
   camera: FlowCameraMove;
   audioEnabled: boolean;
   voiceEnabled: boolean;
+  narration: string;
+  voiceLocale: string;
+  voiceProfileId: string;
   selectedIngredient?: FlowIngredient;
   startFrame?: FlowIngredient;
   endFrame?: FlowIngredient;
@@ -50,12 +59,15 @@ export function FlowInspector({
   onCamera: (camera: FlowCameraMove) => void;
   onAudio: (enabled: boolean) => void;
   onVoice: (enabled: boolean) => void;
+  onNarration: (value: string) => void;
+  onVoiceLocale: (value: string) => void;
+  onVoiceProfileId: (value: string) => void;
   onStartFrame: () => void;
   onEndFrame: () => void;
   onGenerate: () => void;
 }) {
   return (
-    <aside className="flex min-h-0 w-72 shrink-0 flex-col border-l border-border bg-surface" data-testid="flow-inspector">
+    <aside className="flex min-h-0 w-full shrink-0 flex-col border-t border-border bg-surface lg:w-72 lg:border-l lg:border-t-0" data-testid="flow-inspector">
       <div className="border-b border-border px-4 py-3"><h2 className="text-xs font-semibold">Réglages du plan</h2></div>
       <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4 text-xs">
         <label className="block"><span className="mb-1.5 block font-medium">Prompt</span><textarea value={prompt} onChange={(event) => onPrompt(event.target.value)} rows={5} className="w-full resize-none rounded-lg border border-border bg-background p-2.5 leading-relaxed outline-none focus:border-orange-500" placeholder="Décris le sujet, l’action, la lumière et le style…" data-testid="flow-prompt" /></label>
@@ -67,7 +79,7 @@ export function FlowInspector({
         <div className="grid grid-cols-2 gap-2"><SelectField label="Ratio" value={aspect} onChange={(value) => onAspect(value as '1:1' | '16:9' | '9:16')} options={['1:1', '16:9', '9:16']} /><SelectField label="Sorties" value={String(outputs)} onChange={(value) => onOutputs(Number(value))} options={mode === 'image' ? ['1', '2', '4'] : ['1', '2']} /></div>
         {mode === 'video' ? <SelectField label="Durée" value={String(duration)} onChange={(value) => onDuration(Number(value))} options={['4', '6', '8', '10']} suffix="s" /> : null}
         <SelectField label="Mouvement caméra" value={camera} onChange={(value) => onCamera(value as FlowCameraMove)} options={['static', 'pan-left', 'dolly-back', 'orbit']} labels={{ static: 'Caméra fixe', 'pan-left': 'Panoramique gauche', 'dolly-back': 'Travelling arrière', orbit: 'Orbite cinématique' }} />
-        {mode === 'video' ? <div className="space-y-2 rounded-lg border border-border p-3"><Toggle label="Audio d’ambiance" checked={audioEnabled} onChange={onAudio} /><Toggle label="Voix cohérente" checked={voiceEnabled} disabled={!audioEnabled} onChange={onVoice} /></div> : null}
+        {mode === 'video' ? <div className="space-y-2 rounded-lg border border-border p-3"><Toggle label="Audio d’ambiance" checked={audioEnabled} onChange={onAudio} /><Toggle label="Voix cohérente (LongCat)" checked={voiceEnabled} disabled={!audioEnabled} onChange={onVoice} />{voiceEnabled ? <><div className="grid grid-cols-2 gap-2"><label className="block"><span className="mb-1 block text-[10px] text-muted-foreground">Locale</span><input value={voiceLocale} onChange={(event) => onVoiceLocale(event.target.value)} maxLength={40} className="w-full rounded-md border border-border bg-background p-2 text-[10px] outline-none" placeholder="fr-FR" data-testid="flow-voice-locale" /></label><label className="block"><span className="mb-1 block text-[10px] text-muted-foreground">Profil vocal</span><input value={voiceProfileId} onChange={(event) => onVoiceProfileId(event.target.value)} maxLength={120} className="w-full rounded-md border border-border bg-background p-2 text-[10px] outline-none" placeholder="lisa-fr-pocket-v1" data-testid="flow-voice-profile" /></label></div><p className="text-[10px] leading-relaxed text-muted-foreground">Le processus principal vérifie ce profil dans le registre commercial local. Aucun fallback de voix n’est autorisé.</p><label className="block"><span className="mb-1 block text-[10px] text-muted-foreground">Texte prononcé</span><textarea value={narration} onChange={(event) => onNarration(event.target.value)} rows={3} maxLength={4000} className="w-full resize-none rounded-md border border-border bg-background p-2 text-[10px] outline-none" placeholder="La phrase prononcée par la compagne…" data-testid="flow-narration" /></label></> : null}</div> : null}
       </div>
       <div className="border-t border-border p-4"><button type="button" onClick={onGenerate} disabled={busy || !prompt.trim()} className="flex w-full items-center justify-center gap-2 rounded-lg bg-orange-500 px-4 py-2.5 text-xs font-semibold text-white hover:bg-orange-600 disabled:opacity-45" data-testid="flow-generate">{busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />} {busy ? 'Génération…' : `Générer ${outputs} variante${outputs > 1 ? 's' : ''}`}</button></div>
     </aside>

@@ -4,6 +4,10 @@ This directory contains example configuration files and usage examples for Code 
 
 ## Configuration Examples
 
+### MCP server for Claude Desktop, Cursor, Cline, or Windsurf
+
+Copy [`claude_desktop_config.json`](claude_desktop_config.json) into the MCP configuration used by your client. It starts `buddy mcp serve` in read-only mode; add `--allow-write` to its `args` only when the client should be allowed to modify files or run commands.
+
 ### User Settings
 
 Copy `user-settings.json` to `~/.grok/user-settings.json`:

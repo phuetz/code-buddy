@@ -23,12 +23,17 @@ describe('gpu-worker command', () => {
       CODEBUDDY_PANOWORLD_RUNNER_ARGS: '["D:/DEV/PanoWorld/codebuddy_runner.py"]',
       CODEBUDDY_LONGCAT_RUNNER: 'python',
       CODEBUDDY_LONGCAT_RUNNER_ARGS: '["D:/DEV/LongCat/codebuddy_runner.py"]',
+      CODEBUDDY_LONGCAT_RUNNER_REVISION: 'd'.repeat(64),
+      CODEBUDDY_GPU_WORKER_RETENTION_DAYS: '30',
+      CODEBUDDY_GPU_WORKER_MAX_TERMINAL_JOBS: '500',
     });
     expect(config).toMatchObject({
       host: '100.73.222.64',
       port: 4310,
       workerId: 'darkstar',
       maxConcurrency: 1,
+      terminalJobRetentionMs: 30 * 24 * 60 * 60 * 1000,
+      maxStoredTerminalJobs: 500,
       runners: {
         panoworld_reconstruct: {
           command: 'python',
@@ -37,6 +42,7 @@ describe('gpu-worker command', () => {
         avatar_video_render: {
           command: 'python',
           args: ['D:/DEV/LongCat/codebuddy_runner.py'],
+          revision: 'd'.repeat(64),
         },
       },
     });
@@ -58,6 +64,16 @@ describe('gpu-worker command', () => {
         CODEBUDDY_GPU_WORKER_TOKEN: 'a-secret-token-longer-than-24-bytes',
       })
     ).toThrow(/RUNNER/);
+    expect(() => buildGpuWorkerConfig(options, {
+      CODEBUDDY_GPU_WORKER_TOKEN: 'a-secret-token-longer-than-24-bytes',
+      CODEBUDDY_PANOWORLD_RUNNER: 'python',
+      CODEBUDDY_GPU_WORKER_RETENTION_DAYS: '0',
+    })).toThrow(/RETENTION_DAYS/);
+    expect(() => buildGpuWorkerConfig(options, {
+      CODEBUDDY_GPU_WORKER_TOKEN: 'a-secret-token-longer-than-24-bytes',
+      CODEBUDDY_PANOWORLD_RUNNER: 'python',
+      CODEBUDDY_PANOWORLD_RUNNER_REVISION: 'not-a-digest',
+    })).toThrow(/REVISION/);
   });
 
   it('validates runner argument JSON and exposes the CLI command', () => {

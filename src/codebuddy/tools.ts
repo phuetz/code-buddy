@@ -25,6 +25,10 @@ import { applyToolFilter } from "../utils/tool-filter.js";
 import { TOOL_METADATA } from "../tools/metadata.js";
 import { getPluginMarketplace } from "../plugins/marketplace.js";
 import { getWorkspace } from '../workspace/workspace-config.js';
+import {
+  filterToolNamesForSurface,
+  filterToolsForSurface,
+} from '../config/feature-surface.js';
 
 // Import modular tool definitions
 import {
@@ -167,7 +171,7 @@ export type { CodeBuddyTool, JsonSchemaProperty };
 // Explicit re-exports from tool-definitions (no blanket export *)
 export {
   CORE_TOOLS, SELF_DESCRIBE_TOOLS, MORPH_EDIT_TOOL, isMorphEnabled, CODE_EXEC_TOOLS,
-  SEARCH_TOOLS, TODO_TOOLS, KANBAN_TOOLS, MESSAGING_TOOLS, YUANBAO_TOOLS, HOMEASSISTANT_TOOLS, MOA_TOOLS, SPOTIFY_TOOLS, X_SEARCH_TOOLS, FEISHU_TOOLS, CRON_TOOLS, WEB_TOOLS, RESEARCH_TOOLS, ADVANCED_TOOLS, MULTIMODAL_TOOLS,
+  SEARCH_TOOLS, TODO_TOOLS, KANBAN_TOOLS, MESSAGING_TOOLS, YUANBAO_TOOLS, HOMEASSISTANT_TOOLS, MOA_TOOLS, SPOTIFY_TOOLS, X_SEARCH_TOOLS, FEISHU_TOOLS, CRON_TOOLS, WEB_TOOLS, RESEARCH_TOOLS, ADVANCED_TOOLS, MULTIMODAL_TOOLS, LSP_TOOLS,
   COMPUTER_CONTROL_TOOLS, BROWSER_TOOLS, CANVAS_TOOLS, REASON_TOOL, EXECUTE_CODE_TOOL,
   WINDOWS_TOOLS,
 } from "./tool-definitions/index.js";
@@ -221,9 +225,9 @@ export function getBuiltinToolNames(): string[] {
     [CONTEXT_EXPAND_TOOL],
   ];
 
-  return Array.from(new Set(
+  return filterToolNamesForSurface(Array.from(new Set(
     groups.flatMap((tools) => tools.map((tool) => tool.function.name)),
-  ));
+  )));
 }
 
 // ============================================================================
@@ -314,7 +318,7 @@ export function initializeToolRegistry(): void {
   // Firecrawl tools — gated by API key (Native Engine v2026.3.14)
   registerGroup(FIRECRAWL_TOOLS, () => !!process.env.FIRECRAWL_API_KEY);
 
-  // LSP rename/refactor tools
+  // LSP navigation/diagnostics and rename/refactor tools
   registerGroup(LSP_TOOLS);
 
   // Secrets detector tools
@@ -704,6 +708,11 @@ export async function getAllCodeBuddyTools(): Promise<CodeBuddyTool[]> {
   // Apply CLI tool filter (--enabled-tools, --disabled-tools, --allowed-tools)
   allTools = applyToolFilter(allTools);
 
+  // An explicitly focused profile removes optional product faculties before
+  // both RAG selection and the tool_search index are built. With no profile,
+  // this returns the original array unchanged.
+  allTools = filterToolsForSurface(allTools);
+
   // When Code Explorer (code-explorer) is connected, make the built-in graph tools
   // defer to it at the decision point — its graph is broader / more complete.
   // Conditional & non-mutating: returns fresh objects only for code_graph /
@@ -888,7 +897,7 @@ export function getSkillAugmentedTools(
   // Skill requirements must not bypass CLI/custom-agent/Fleet profile
   // filters. Re-apply the active schema filter after augmentation so a
   // disabled tool cannot reappear in the model-facing tool schema.
-  return applyToolFilter([...currentTools, ...missingTools]);
+  return applyToolFilter(filterToolsForSurface([...currentTools, ...missingTools]));
 }
 
 // Initialize registry on module load

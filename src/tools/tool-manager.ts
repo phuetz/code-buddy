@@ -8,6 +8,7 @@
  */
 
 import { getConfigManager, ToolConfig, ToolPermission } from '../config/toml-config.js';
+import { isToolVisibleForSurface } from '../config/feature-surface.js';
 import {
   TypedEventEmitterAdapter,
   ToolEvents,
@@ -238,6 +239,14 @@ export class ToolManager extends TypedEventEmitterAdapter<ToolManagerEvents> {
    * Check if a tool call is allowed
    */
   checkPermission(toolName: string, args: Record<string, unknown>): PermissionCheckResult {
+    if (!isToolVisibleForSurface(toolName)) {
+      return {
+        allowed: false,
+        reason: `Tool "${toolName}" is hidden by the active feature profile`,
+        requiresConfirmation: false,
+      };
+    }
+
     const permission = this.getPermission(toolName);
 
     // Never allowed

@@ -221,6 +221,52 @@ const DEFAULT_MODEL_CONFIGS: ModelToolConfig[] = [
     maxOutputTokens: 16384,
     patchFormat: 'unified',
   },
+  // Claude 5 family (Fable/Mythos tier + Opus 5 + Sonnet 5). Specs conservatrices
+  // alignées sur Opus 4.6 en attendant les fiches officielles — à ajuster si besoin.
+  {
+    model: 'claude-fable-5*',
+    strengths: ['code', 'thinking'],
+    supportsReasoning: true,
+    supportsToolCalls: true,
+    supportsVision: true,
+    contextWindow: 200000,
+    maxOutputTokens: 128000,
+    patchFormat: 'search_replace',
+    promptProfile: 'rich',
+  },
+  {
+    model: 'claude-mythos-5*',
+    strengths: ['code', 'thinking'],
+    supportsReasoning: true,
+    supportsToolCalls: true,
+    supportsVision: true,
+    contextWindow: 200000,
+    maxOutputTokens: 128000,
+    patchFormat: 'search_replace',
+    promptProfile: 'rich',
+  },
+  {
+    model: 'claude-opus-5*',
+    strengths: ['code', 'thinking'],
+    supportsReasoning: true,
+    supportsToolCalls: true,
+    supportsVision: true,
+    contextWindow: 200000,
+    maxOutputTokens: 128000,
+    patchFormat: 'search_replace',
+    promptProfile: 'rich',
+  },
+  {
+    model: 'claude-sonnet-5*',
+    strengths: ['code', 'thinking'],
+    supportsReasoning: true,
+    supportsToolCalls: true,
+    supportsVision: true,
+    contextWindow: 200000,
+    maxOutputTokens: 64000,
+    patchFormat: 'search_replace',
+    promptProfile: 'rich',
+  },
   // Claude Opus 4.6 (200K context, 128K output)
   {
     model: 'claude-opus-4-6*',
@@ -415,6 +461,18 @@ const DEFAULT_MODEL_CONFIGS: ModelToolConfig[] = [
     patchFormat: 'search_replace',
     promptProfile: 'rich',
   },
+  // Grok 4.6 (500K context, agents longue durée — sorti 2026-08-12)
+  {
+    model: 'grok-4.6*',
+    strengths: ['thinking', 'code'],
+    supportsReasoning: true,
+    supportsToolCalls: true,
+    supportsVision: true,
+    contextWindow: 500000,
+    maxOutputTokens: 16384,
+    patchFormat: 'search_replace',
+    promptProfile: 'rich',
+  },
   // Grok 4 (256K context)
   {
     model: 'grok-4*',
@@ -463,6 +521,19 @@ const DEFAULT_MODEL_CONFIGS: ModelToolConfig[] = [
   {
     model: 'gemini-3.1-flash-lite*',
     strengths: ['thinking'],
+    supportsReasoning: true,
+    supportsToolCalls: true,
+    supportsVision: true,
+    contextWindow: 1000000,
+    maxOutputTokens: 64000,
+    patchFormat: 'unified',
+  },
+  // Gemini 3.7 Flash (1M context, 64K output, multimodal ; gros bond coding/agent — sorti 2026-08-13,
+  // id API gemini-3.7-flash, ~$0.75/$3.75 par 1M). Entrée dédiée avant le glob gemini-3* pour marquer
+  // la force 'code'. Accès : clé API Gemini (AI Studio) — l'ancien Gemini CLI OAuth free-tier est coupé.
+  {
+    model: 'gemini-3.7-flash*',
+    strengths: ['thinking', 'code'],
     supportsReasoning: true,
     supportsToolCalls: true,
     supportsVision: true,
@@ -596,6 +667,24 @@ const DEFAULT_MODEL_CONFIGS: ModelToolConfig[] = [
     disabledTools: ['apply_patch', 'browser', 'computer_control'],
     patchFormat: 'full_file',
     promptProfile: 'lite',
+  },
+  // Qwen3.8-27B — dense multimodal, 262k native context, Apache 2.0 (released
+  // 2026-08 ; Patrice rates it near Opus 5). Served LOCALLY (darkstar 2×RTX3090:
+  // FP8 ~28 GB tensor-parallel, or Q4 ~16 GB on a single 3090). Full-capability
+  // entry placed BEFORE the conservative `qwen3*` glob (first-match-wins, l.65) —
+  // unlike the small local qwen3 builds, the 27B drives the agent loop, does
+  // structured tool calls, vision, and search/replace patches. Cap the served KV
+  // cache below 262k on 48 GB VRAM.
+  {
+    model: 'qwen3.8*',
+    strengths: ['french', 'code', 'thinking'],
+    supportsReasoning: true,
+    supportsToolCalls: true,
+    supportsVision: true,
+    contextWindow: 262144,
+    maxOutputTokens: 16384,
+    patchFormat: 'search_replace',
+    promptProfile: 'rich',
   },
   {
     model: 'qwen3*',

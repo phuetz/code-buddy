@@ -259,9 +259,9 @@ export function registerAssistantCommand(program: Command): void {
         engines = [requested];
       } else if (requested === 'active') {
         const active = resolveTtsEngine(env);
-        if (active === 'piper') {
+        if (active === 'piper' || active === 'elevenlabs') {
           console.error(
-            'Le moteur actif Piper ne fournit pas de flux PCM progressif. ' +
+            `Le moteur actif ${active} ne fournit pas de flux PCM progressif. ` +
               'Utilise --engine pocket, --engine voicebox ou --engine both.'
           );
           process.exitCode = 1;

@@ -68,6 +68,7 @@ export interface ComfyLabSnapshot {
     };
     cpuFallback: boolean;
     reason: string;
+    scope: 'local' | 'remote';
   };
   inventory: {
     modelFiles: number;
@@ -78,7 +79,7 @@ export interface ComfyLabSnapshot {
   };
   useCases: ComfyLabUseCaseView[];
   safety: {
-    localOnly: true;
+    localOnly: boolean;
     implicitDownloads: false;
     implicitExecution: false;
     note: string;

@@ -196,6 +196,7 @@ export {
   AUDIO_TOOL,
   TEXT_TO_SPEECH_TOOL,
   IMAGE_GENERATE_TOOL,
+  LISA_SELFIE_TOOL,
   IMAGE_EDIT_TOOL,
   VIDEO_TOOL,
   VIDEO_ANALYZE_TOOL,
@@ -288,8 +289,13 @@ export {
   LSP_FIND_REFS_TOOL,
 } from '../../lsp/lsp-client.js';
 
-// LSP rename/refactor tools
+// LSP navigation/diagnostics and rename/refactor tools
 export {
+  LSP_DEFINITION_TOOL,
+  LSP_REFERENCES_TOOL,
+  LSP_HOVER_TOOL,
+  LSP_SYMBOLS_TOOL,
+  LSP_DIAGNOSTICS_TOOL,
   LSP_RENAME_TOOL,
   LSP_CODE_ACTION_TOOL,
   LSP_TOOLS,

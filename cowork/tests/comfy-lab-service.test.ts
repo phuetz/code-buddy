@@ -51,6 +51,23 @@ afterEach(async () => {
 });
 
 describe('ComfyLabService', () => {
+  it('uses an explicitly configured private Darkstar endpoint', async () => {
+    const fetcher = localFetcher(['CheckpointLoaderSimple']);
+    const opened = vi.fn(async () => undefined);
+    const service = new ComfyLabService({
+      environment: { COMFYUI_URL: 'http://darkstar:8188/' },
+      homeDirectory: '/definitely-missing',
+      fetcher,
+      openExternal: opened,
+    });
+    const snapshot = await service.inspect();
+    expect(snapshot.probe).toMatchObject({ state: 'reachable', url: 'http://darkstar:8188', scope: 'remote' });
+    expect(snapshot.safety.localOnly).toBe(false);
+    expect(fetcher).toHaveBeenCalledWith('http://darkstar:8188/system_stats', expect.any(Object));
+    await expect(service.openComfyUi()).resolves.toMatchObject({ ok: true });
+    expect(opened).toHaveBeenCalledWith('http://darkstar:8188');
+  });
+
   it('derives prioritized readiness from non-empty models, templates, and loopback nodes', async () => {
     const root = await makeComfyRoot();
     const fetcher = localFetcher([

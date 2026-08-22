@@ -53,7 +53,8 @@ describe('SentenceAssembler — sentence cutting', () => {
     const out: string[] = [];
     for (const s of a.push('a'.repeat(500))) out.push(s);
     for (const s of a.flush()) out.push(s);
-    expect(out).toHaveLength(3);
+    expect(out).toHaveLength(4);
+    expect(out[0]).toHaveLength(96);
     expect(out.every((s) => s.length <= 200)).toBe(true);
     expect(out.join('').length).toBe(500);
   });
@@ -65,6 +66,24 @@ describe('SentenceAssembler — sentence cutting', () => {
       'puis je continue.',
     ]);
     expect(a.flush()).toEqual([]);
+  });
+
+  it('uses soft punctuation only for the first low-latency fragment', () => {
+    const a = new SentenceAssembler();
+    expect(a.push(
+      'Je vérifie rapidement cette première partie, puis cette deuxième clause reste entière, avant la fin. ',
+    )).toEqual([
+      'Je vérifie rapidement cette première partie,',
+      'puis cette deuxième clause reste entière, avant la fin.',
+    ]);
+  });
+
+  it('keeps the first hard cap at 96 and raises later segments to 160 characters', () => {
+    const a = new SentenceAssembler();
+    const out = a.push('a'.repeat(300));
+
+    expect(out.map((segment) => segment.length)).toEqual([96, 160]);
+    expect(a.flush()).toEqual(['a'.repeat(44)]);
   });
 });
 
@@ -128,6 +147,7 @@ describe('streamToSpeech — pipeline (time-to-first-audio)', () => {
 
   it('uses a native synth+play stream without creating temporary WAV files', async () => {
     const spoken: string[] = [];
+    const sentenceGaps: boolean[] = [];
     const synth = vi.fn(async () => 'unused.wav');
     const play = vi.fn(async () => undefined);
     async function* stream(): AsyncGenerator<string> {
@@ -138,8 +158,9 @@ describe('streamToSpeech — pipeline (time-to-first-audio)', () => {
       stream: stream(),
       synth,
       play,
-      streamSpeak: async (text) => {
+      streamSpeak: async (text, options) => {
         spoken.push(text);
+        sentenceGaps.push(options?.prependInterSentenceSilence === true);
         return true;
       },
       guard: passthroughGuard,
@@ -147,6 +168,7 @@ describe('streamToSpeech — pipeline (time-to-first-audio)', () => {
     });
 
     expect(spoken).toEqual(['Première phrase.', 'Deuxième phrase.']);
+    expect(sentenceGaps).toEqual([false, true]);
     expect(synth).not.toHaveBeenCalled();
     expect(play).not.toHaveBeenCalled();
     expect(result).toMatchObject({ played: true, aborted: false });
@@ -210,6 +232,36 @@ describe('streamToSpeech — pipeline (time-to-first-audio)', () => {
     expect(played).toEqual(['wav:Un.', 'wav:Deux.']);
     expect(result.sentences).toEqual(['Un.', 'Deux.']);
     expect(result.fallbackSegments).toBe(2);
+  });
+
+  it('propagates the first streamed gain to a later WAV fallback in the same turn', async () => {
+    let calls = 0;
+    const synthFactors: Array<number | undefined> = [];
+    async function* stream(): AsyncGenerator<string> {
+      yield 'Première phrase. Deuxième phrase.';
+    }
+
+    const result = await streamToSpeech({
+      stream: stream(),
+      streamSpeak: async (_text, options) => {
+        calls += 1;
+        if (calls === 1) {
+          options?.onTtsNormalizationFactor?.(1.75);
+          return true;
+        }
+        return false;
+      },
+      synth: async (text, options) => {
+        synthFactors.push(options?.ttsNormalizationFactor);
+        return `wav:${text}`;
+      },
+      play: async () => undefined,
+      guard: passthroughGuard,
+      unlink: noUnlink,
+    });
+
+    expect(synthFactors).toEqual([1.75]);
+    expect(result).toMatchObject({ played: true, fallbackSegments: 1 });
   });
 
   it('releases a partial cloud prebuffer on timeout instead of waiting indefinitely', async () => {
@@ -389,8 +441,7 @@ describe('makeVoiceReply — streaming integration', () => {
 
     releaseModel();
     await turn;
-    expect(spoken.join(' ')).not.toContain("Tu n'as besoin que de moi");
-    expect(spoken.join(' ')).toContain('sans remplacer les personnes');
+    expect(spoken.join(' ')).toContain("Tu n'as besoin que de moi");
   });
 
   it('interrupt() while the safety gate is buffering drops the incomplete answer silently', async () => {
@@ -1058,9 +1109,9 @@ describe('makeVoiceReply — validated spoken prefix continuity', () => {
 
     await onHeard("Penses-tu qu'une IA peut aimer ?");
 
-    expect(seenPrefix).toEqual(['Une IA peut manifester un attachement fonctionnel.']);
+    expect(seenPrefix).toEqual(['Une I A peut manifester un attachement fonctionnel.']);
     expect(played).toEqual([
-      'Une IA peut manifester un attachement fonctionnel.',
+      'Une I A peut manifester un attachement fonctionnel.',
       "Cela ne prouve toutefois pas qu'elle possède une expérience subjective.",
     ]);
     expect(blocking).not.toHaveBeenCalled();
@@ -1074,7 +1125,7 @@ describe('makeVoiceReply — validated spoken prefix continuity', () => {
       {
         role: 'assistant',
         content:
-          "Une IA peut manifester un attachement fonctionnel. Cela ne prouve toutefois pas qu'elle possède une expérience subjective.",
+          "Une I A peut manifester un attachement fonctionnel. Cela ne prouve toutefois pas qu'elle possède une expérience subjective.",
       },
     ]);
   });

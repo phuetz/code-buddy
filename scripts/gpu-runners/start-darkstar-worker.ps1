@@ -19,6 +19,8 @@ if ([Text.Encoding]::UTF8.GetByteCount($token) -lt 24) {
 
 $runner = Join-Path $Repo 'scripts\gpu-runners\panoworld-wsl.sh'
 $longcatRunner = Join-Path $Repo 'scripts\gpu-runners\longcat-wsl.sh'
+$longcatAdapter = Join-Path $Repo 'scripts\gpu-runners\longcat-runner.py'
+$longcatInference = Join-Path $Repo 'scripts\gpu-runners\longcat-lowmem-inference.py'
 $node = Join-Path $NodeDir 'node.exe'
 $entrypoint = Join-Path $Repo 'dist\index.js'
 foreach ($path in @($runner, $node, $entrypoint)) {
@@ -47,6 +49,7 @@ if ($BindHost -notin @('0.0.0.0', '127.0.0.1', '::', '::1') -and $BindWaitSecond
 }
 
 $env:CODEBUDDY_GPU_WORKER_TOKEN = $token
+$env:CODEBUDDY_GPU_MAX_TEMP_C = '88'
 $env:CODEBUDDY_PANOWORLD_RUNNER = 'C:\Windows\System32\wsl.exe'
 $env:CODEBUDDY_PANOWORLD_RUNNER_ARGS = @(
   '-d',
@@ -57,6 +60,7 @@ $env:CODEBUDDY_PANOWORLD_RUNNER_ARGS = @(
 ) | ConvertTo-Json -Compress
 Remove-Item Env:CODEBUDDY_LONGCAT_RUNNER -ErrorAction SilentlyContinue
 Remove-Item Env:CODEBUDDY_LONGCAT_RUNNER_ARGS -ErrorAction SilentlyContinue
+Remove-Item Env:CODEBUDDY_LONGCAT_RUNNER_REVISION -ErrorAction SilentlyContinue
 if (Test-Path -LiteralPath $LongCatReadyFile -PathType Leaf) {
   $longcatReady = Get-Content -LiteralPath $LongCatReadyFile -Raw | ConvertFrom-Json
   if (
@@ -67,8 +71,10 @@ if (Test-Path -LiteralPath $LongCatReadyFile -PathType Leaf) {
   ) {
     throw 'LongCat readiness marker does not match the deployed runner and checkpoints.'
   }
-  if (-not (Test-Path -LiteralPath $longcatRunner -PathType Leaf)) {
-    throw "LongCat readiness marker exists but the runner is missing: $longcatRunner"
+  foreach ($longcatFile in @($longcatRunner, $longcatAdapter, $longcatInference)) {
+    if (-not (Test-Path -LiteralPath $longcatFile -PathType Leaf)) {
+      throw "LongCat readiness marker exists but a runner component is missing: $longcatFile"
+    }
   }
   $env:CODEBUDDY_LONGCAT_RUNNER = 'C:\Windows\System32\wsl.exe'
   $env:CODEBUDDY_LONGCAT_RUNNER_ARGS = @(
@@ -78,8 +84,26 @@ if (Test-Path -LiteralPath $LongCatReadyFile -PathType Leaf) {
     'bash',
     '/mnt/d/DEV/code-buddy-gpu-worker/scripts/gpu-runners/longcat-wsl.sh'
   ) | ConvertTo-Json -Compress
+  $revisionMaterial = @(
+    $longcatReady.runnerVersion,
+    $longcatReady.upstreamCommit,
+    $longcatReady.avatarRevision,
+    $longcatReady.baseRevision,
+    (Get-FileHash -LiteralPath $longcatRunner -Algorithm SHA256).Hash.ToLowerInvariant(),
+    (Get-FileHash -LiteralPath $longcatAdapter -Algorithm SHA256).Hash.ToLowerInvariant(),
+    (Get-FileHash -LiteralPath $longcatInference -Algorithm SHA256).Hash.ToLowerInvariant()
+  ) -join ':'
+  $revisionSha = [Security.Cryptography.SHA256]::Create()
+  try {
+    $revisionBytes = [Text.Encoding]::UTF8.GetBytes($revisionMaterial)
+    $env:CODEBUDDY_LONGCAT_RUNNER_REVISION = (
+      [BitConverter]::ToString($revisionSha.ComputeHash($revisionBytes))
+    ).Replace('-', '').ToLowerInvariant()
+  } finally {
+    $revisionSha.Dispose()
+  }
 }
-$forwarded = 'CODEBUDDY_GPU_JOB_REQUEST/p:CODEBUDDY_GPU_JOB_RESULT/p:CODEBUDDY_GPU_JOB_ID:CODEBUDDY_GPU_ALLOWED_ROOTS_JSON'
+$forwarded = 'CODEBUDDY_GPU_JOB_REQUEST/p:CODEBUDDY_GPU_JOB_RESULT/p:CODEBUDDY_GPU_JOB_ID:CODEBUDDY_GPU_ALLOWED_ROOTS_JSON:CODEBUDDY_GPU_MAX_TEMP_C'
 $env:WSLENV = if ($env:WSLENV) { "${env:WSLENV}:$forwarded" } else { $forwarded }
 
 New-Item -ItemType Directory -Path $StateDir -Force | Out-Null

@@ -38,7 +38,7 @@ interface FuzzyPickerProps {
  * Simple fuzzy matching score
  * Returns -1 if no match, otherwise a score (higher is better)
  */
-function fuzzyMatch(query: string, text: string): number {
+export function fuzzyMatch(query: string, text: string): number {
   if (!query) return 1; // Empty query matches everything
 
   const lowerQuery = query.toLowerCase();

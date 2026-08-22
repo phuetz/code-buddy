@@ -19,9 +19,10 @@ export function FlowIngredientRail({
     const normalized = query.trim().toLowerCase();
     return ingredients.filter((item) => (kind === 'all' || item.kind === kind) && (!normalized || item.name.toLowerCase().includes(normalized)));
   }, [ingredients, kind, query]);
+  const selectedIdSet = useMemo(() => new Set(selectedIds), [selectedIds]);
 
   return (
-    <aside className="flex min-h-0 w-56 shrink-0 flex-col border-r border-border bg-surface" data-testid="flow-ingredient-rail">
+    <aside className="flex h-52 min-h-0 w-full shrink-0 flex-col border-b border-border bg-surface lg:h-auto lg:w-56 lg:border-b-0 lg:border-r" data-testid="flow-ingredient-rail">
       <div className="flex items-center justify-between border-b border-border px-3 py-2.5">
         <h2 className="text-xs font-semibold text-foreground">Ingrédients</h2>
         <button type="button" onClick={onAdd} className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-[11px] text-foreground hover:bg-background" data-testid="flow-add-ingredient">
@@ -45,11 +46,12 @@ export function FlowIngredientRail({
       </div>
       <div className="grid min-h-0 flex-1 auto-rows-max grid-cols-2 gap-2 overflow-y-auto p-3">
         {visible.map((ingredient) => {
-          const selected = selectedIds.includes(ingredient.id);
+          const selected = selectedIdSet.has(ingredient.id);
           return (
             <button key={ingredient.id} type="button" onClick={() => onToggle(ingredient)} className={`overflow-hidden rounded-lg border text-left transition ${selected ? 'border-orange-500 ring-2 ring-orange-500/15' : 'border-border hover:border-muted-foreground/40'}`} aria-pressed={selected} data-testid={`flow-ingredient-${ingredient.id}`}>
               <img src={ingredient.url} alt="" className="aspect-[4/3] w-full bg-muted object-cover" />
-              <span className="block truncate px-2 py-1.5 text-[10px] font-medium text-foreground">{ingredient.name}</span>
+              <span className="block truncate px-2 pt-1.5 text-[10px] font-medium text-foreground">{ingredient.name}</span>
+              <span className="block truncate px-2 pb-1.5 text-[8px] text-muted-foreground">{ingredient.source === 'mysoulmate' ? 'MySoulmate · validé' : ingredient.source === 'avatar-bible' ? 'Bible avatar' : 'Workspace'}</span>
             </button>
           );
         })}

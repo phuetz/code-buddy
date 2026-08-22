@@ -54,6 +54,7 @@ import {
 import { WritePolicy, WRITE_TOOL_NAMES } from "../security/write-policy.js";
 import { RunStore } from "../observability/run-store.js";
 import { isToolNameAllowed } from "../utils/tool-filter.js";
+import { isToolVisibleForSurface } from '../config/feature-surface.js';
 import { loadAuthoredTools } from "./self-improvement/tool-skill-mutator.js";
 import { ConfirmationService } from "../utils/confirmation-service.js";
 import {
@@ -878,7 +879,7 @@ export class ToolHandler {
     toolCallId?: string,
     startTime: number = Date.now(),
   ): ToolResult | null {
-    if (isToolNameAllowed(toolName)) {
+    if (isToolNameAllowed(toolName) && isToolVisibleForSurface(toolName)) {
       return null;
     }
 
@@ -1104,6 +1105,22 @@ export class ToolHandler {
     }
 
     if (decision.source !== 'default') return decision;
+
+    // Asking Lisa for a photo is already the user's authorization for this
+    // bounded companion action. The tool rotates an existing local cache when
+    // possible (or uses the configured image backend), archives a copy, and
+    // returns/sends the requested media. A second generic tool confirmation
+    // adds no meaningful safety boundary. Explicit policy overrides still win
+    // because they are returned above, and adult content remains guarded in
+    // companion/lisa-selfie.ts.
+    if (toolName === 'lisa_selfie') {
+      return {
+        action: 'allow',
+        reason: 'The Lisa photo request itself authorizes bounded selfie delivery',
+        source: 'default',
+        timestamp: new Date(),
+      };
+    }
 
     // Sharing a video is already an explicit request to inspect that media.
     // The default path only reads captions/media and writes disposable local

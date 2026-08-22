@@ -1,0 +1,241 @@
+#!/usr/bin/env python3
+"""Génère les 8 VO anglaises (voix natives ElevenLabs) — mêmes IDs de lignes que le FR."""
+import os as _os
+WORKDIR = _os.environ.get('INFLUENCER_WORKDIR', _os.path.expanduser('~/.codebuddy/influencer-work'))
+_os.makedirs(WORKDIR, exist_ok=True)
+
+import os, json, urllib.request
+KEY = next(l.split('=',1)[1].strip() for l in open(os.path.expanduser('~/.codebuddy/media.env')) if l.startswith('ELEVENLABS_API_KEY='))
+BASE=WORKDIR
+
+# voix natives EN
+GEORGE='JBFqnCBsd6RMkjVDRZzb'  # narrateur UK
+ROGER ='CwhRBWXzGAHq8TQ4Fs17'
+BRIAN ='nPczCjzI2devNBz1zQrb'  # deep
+BILL  ='pqHfZKP75CvOlQylNhV4'  # old wise
+SARAH ='EXAVITQu4vr4xnSDxMaL'
+ALICE ='Xb7hH8MSUJpSbSDYk0k2'  # british, cold (IA/malédiction)
+MATILDA='XrExE9yKIg1WjnnlVkGX'
+LILY  ='pFZP5JQG7iQjIQuC4Bku'  # british actress
+BELLA ='hpp4J3VqNfWAUOO0d1Us'
+CALLUM='N2lVS1w4EtoT3dr4eOWO'  # husky (jeune homme)
+CHARLIE='IKne3meq5aSn9XLyUdCD'
+DANIEL='onwK4e9ZLuTAKqWW03F9'
+
+BOOKS = {
+ 'cain':[
+  ('01-narr',GEORGE,"What if the first murder in history left a trace? In our DNA."),
+  ('02-narr',GEORGE,"2026. A biotech startup makes an impossible discovery."),
+  ('03-narr',GEORGE,"Twelve million people carry a marker on chromosome seven."),
+  ('04-narr',GEORGE,"They call it the gene of Cain."),
+  ('05-fana',ROGER,"It is not a discovery. It is a warning."),
+  ('06-narr',GEORGE,"Nathan Valdes is an emergency doctor. A man who saves lives."),
+  ('07-narr',GEORGE,"Until he learns that he is one of them."),
+  ('08-nathan',CALLUM,"In a single day, I went from healer to monster."),
+  ('09-narr',GEORGE,"Overnight, he becomes an outcast."),
+  ('10-narr',GEORGE,"Hunted by fanatics who believe the mark is a curse."),
+  ('11-fana',ROGER,"The blood must be purified."),
+  ('12-narr',GEORGE,"Coveted by a consortium that sees only profit."),
+  ('13-cons',BRIAN,"This gene is worth more than every vaccine on Earth."),
+  ('14-narr',GEORGE,"But an ancient order has been waiting six thousand years."),
+  ('15-ally',DANIEL,"We have been expecting you."),
+  ('16-narr',GEORGE,"They tell him it is not a curse."),
+  ('17-narr',GEORGE,"It is an inheritance."),
+  ('18-nathan',CALLUM,"I will not run anymore."),
+  ('19-narr',GEORGE,"Six thousand years. One question."),
+  ('20-narr',GEORGE,"Are we our genes…"),
+  ('21-narr',GEORGE,"…or what we choose to do with them?"),
+  ('22-title',GEORGE,"The Sons of Cain."),
+  ('23-tagline',GEORGE,"The mark was never a legend."),
+  ('24-cta',GEORGE,"A novel by Patrice Huetz. Available now."),
+ ],
+ 'architectes':[
+  ('01-narr',GEORGE,"Evry. An invisible kid, in a system that never gave him anything."),
+  ('02-karim',CHARLIE,"If they can't see me, I'll teach them to fear me."),
+  ('03-narr',GEORGE,"Karim Said. Code as his only weapon."),
+  ('04-narr',GEORGE,"Self-taught. A genius. A ghost in the machine."),
+  ('05-narr',GEORGE,"Under the alias Kr4m, he becomes a legend."),
+  ('06-karim',CHARLIE,"One bug, and it's over. So I never make mistakes."),
+  ('07-narr',GEORGE,"From banks to governments, no system can resist him."),
+  ('08-narr',GEORGE,"But in the shadows, someone is watching."),
+  ('09-etat',BRIAN,"We know who you are, Architect."),
+  ('10-narr',GEORGE,"Hunted by nations. Coveted by the powerful."),
+  ('11-narr',GEORGE,"He could bring it all down with a single line of code."),
+  ('12-karim',CHARLIE,"Power isn't in money anymore. It's in information."),
+  ('13-narr',GEORGE,"But a new threat is rising."),
+  ('14-ia',ALICE,"Artificial intelligence hacks better than you now."),
+  ('15-narr',GEORGE,"His greatest fear: to be made obsolete. Unplugged."),
+  ('16-karim',CHARLIE,"What's left of a man when you erase everything?"),
+  ('17-narr',GEORGE,"From legendary hacker to architect of global chaos."),
+  ('18-narr',GEORGE,"How far will he go to avoid disappearing?"),
+  ('19-narr',GEORGE,"In a world of code, power belongs to the one who writes the rules."),
+  ('20-karim',CHARLIE,"I don't hack the system. I rewrite it."),
+  ('21-narr',GEORGE,"One man against the digital world."),
+  ('22-title',GEORGE,"The Architects of Chaos."),
+  ('23-tagline',GEORGE,"In a world of code, he writes the rules."),
+  ('24-cta',GEORGE,"A saga by Patrice Huetz. Available now."),
+ ],
+ 'soeurs':[
+  ('01-narr',LILY,"The criminal underworld has one unwritten rule: women do not inherit."),
+  ('02-narr',LILY,"They weep. They remarry. They vanish."),
+  ('03-narr',LILY,"In 2020, three criminal empires are about to change hands."),
+  ('04-narr',LILY,"In Naples, Vittoria Ferrante buries her husband with one hand, and signs the books of the Camorra with the other."),
+  ('05-vitt',SARAH,"I kept his accounts for twelve years. He never knew."),
+  ('06-narr',LILY,"In Moscow, Katarina Volkov lays her hand on her father's coffin, head of the Bratva."),
+  ('07-kata',ALICE,"They're all waiting for me to cry. They'll be waiting a long time."),
+  ('08-narr',LILY,"In Guadalajara, Isabella Reyes learns of her brother's death from a bullet to the neck."),
+  ('09-isa',BELLA,"Within an hour, the culprit was gone. Within a month, I ran the cartel."),
+  ('10-narr',LILY,"Three women. Three empires. Three continents."),
+  ('11-narr',LILY,"They were underestimated. Once."),
+  ('12-narr',LILY,"Monaco. One July night. A single table brings them together."),
+  ('13-vitt',SARAH,"Apart, they wage war on us. Together, we make the law."),
+  ('14-narr',LILY,"An unlikely alliance to rule the criminal world."),
+  ('15-narr',LILY,"But each has her own agenda. Each hides a wound no one knows."),
+  ('16-kata',ALICE,"Emotion is a flaw. And every flaw is eventually exploited."),
+  ('17-narr',LILY,"And among them… a mole."),
+  ('18-isa',BELLA,"One of us three is a traitor. The only question is which."),
+  ('19-maya',MATILDA,"Agent Maya Chen, F.B.I. I've hunted them for five years."),
+  ('20-maya',MATILDA,"The problem is… I'm starting to admire them."),
+  ('21-narr',LILY,"The blood of men built the empires."),
+  ('22-narr',LILY,"The blood of women will make them reign."),
+  ('23-title',LILY,"Sisters in Blood."),
+  ('24-cta',LILY,"A saga by Patrice Huetz. Available now."),
+ ],
+ 'juges':[
+  ('01-narr',GEORGE,"In France, justice has a face you never see: the investigating judge."),
+  ('02-narr',GEORGE,"Mathilde Vernet. Daughter of a judge. Justice in her blood."),
+  ('03-math',SARAH,"Presumed innocent. Proven guilty. The line between them is a knife's edge."),
+  ('04-narr',GEORGE,"Idealistic, uncompromising, she hunts the powerful no one dares to charge."),
+  ('05-narr',GEORGE,"Corrupt officials. Untouchable tycoons. Bought magistrates."),
+  ('06-math',SARAH,"A judge answers only to the law. In theory."),
+  ('07-narr',GEORGE,"Every order she signs makes her one more enemy."),
+  ('08-narr',GEORGE,"But the closer she gets to the truth, the tighter the system closes around her."),
+  ('09-pouv',BRIAN,"You think you judge the powerful, Your Honor. You are only a tool."),
+  ('10-narr',GEORGE,"Files that vanish. Witnesses who fall silent."),
+  ('11-narr',GEORGE,"From hunter, she becomes the prey."),
+  ('12-math',SARAH,"What is my price? Everyone has a price. That is what terrifies me."),
+  ('13-narr',GEORGE,"And one question haunts her, the one she has fled her whole life."),
+  ('14-narr',GEORGE,"Her father, a judge too, ended up corrupt."),
+  ('15-pere',BILL,"One day, you'll understand why a righteous man finally breaks."),
+  ('16-math',SARAH,"I refuse to understand. I refuse to become him."),
+  ('17-narr',GEORGE,"How far will she go so that the law is not a lie?"),
+  ('18-math',SARAH,"The law decides. Conscience judges. They don't always agree."),
+  ('19-narr',GEORGE,"Justice… or vengeance?"),
+  ('20-title',GEORGE,"The Judges of the Shadows."),
+  ('21-tagline',GEORGE,"The law decides. Conscience judges."),
+  ('22-cta',GEORGE,"A saga by Patrice Huetz. Available now."),
+ ],
+ 'pionniers':[
+  ('01-narr',GEORGE,"2078. Earth is dying. Humanity makes its final gamble."),
+  ('02-narr',GEORGE,"One ark. Two thousand pioneers. A planet forty light-years away: Eden."),
+  ('03-narr',GEORGE,"At their head, one woman: Doctor Amara Diallo."),
+  ('04-amara',MATILDA,"If I get a single number wrong, they all die."),
+  ('05-narr',GEORGE,"The first woman to lead an interstellar colonization mission."),
+  ('06-narr',GEORGE,"She sacrificed everything for science. Even her son, left behind on Earth."),
+  ('07-amara',MATILDA,"Earth watched us leave. It will not call us back."),
+  ('08-narr',GEORGE,"After a century of sleep, they wake before an unknown world."),
+  ('09-narr',GEORGE,"Eden is magnificent. Eden is deadly."),
+  ('10-amara',MATILDA,"Eden does not adapt to us. We must adapt to Eden."),
+  ('11-narr',GEORGE,"Water, more precious than gold. Oxygen, more than water."),
+  ('12-narr',GEORGE,"Build a civilization… or vanish into the void."),
+  ('13-narr',GEORGE,"Across four generations, their children will inherit a world, and its secrets."),
+  ('14-amara',MATILDA,"Forget Earth, and you lose who you are."),
+  ('15-narr',GEORGE,"For Eden is not empty. And Eden has chosen them."),
+  ('16-narr',GEORGE,"One question will echo across the centuries."),
+  ('17-amara',MATILDA,"Do we truly deserve this paradise?"),
+  ('18-narr',GEORGE,"Does humanity have the right to begin again?"),
+  ('19-title',GEORGE,"The Pioneers of Eden."),
+  ('20-tagline',GEORGE,"Earth watched us leave."),
+  ('21-cta',GEORGE,"A saga by Patrice Huetz. Available now."),
+ ],
+ 'heritiers':[
+  ('01-narr',BRIAN,"In 1890, in a manor deep in the Perigord, a man signed a pact."),
+  ('02-aug',DANIEL,"All I ask is that my bloodline never dies out."),
+  ('03-narr',BRIAN,"Augustin Moreau got what he wanted. His family never disappeared."),
+  ('04-narr',BRIAN,"But in every generation, one of them is cursed."),
+  ('05-mal',ALICE,"You inherit what you cannot see. Especially evil."),
+  ('06-narr',BRIAN,"The Voice. The Mirror. The Shadow."),
+  ('07-narr',BRIAN,"Six generations. Six shapes of the same evil."),
+  ('08-narr',BRIAN,"And a house that never dies."),
+  ('09-mal',ALICE,"This house cannot be sold. It always comes back."),
+  ('10-narr',BRIAN,"The manor ages with the family. It adapts. It waits."),
+  ('11-narr',BRIAN,"At the heart of the garden, a well. In the cellar, a room sealed since 1890."),
+  ('12-narr',BRIAN,"In 2025, Lucie Moreau, the last heir, returns."),
+  ('13-mal',ALICE,"You've come to finish what Augustin began."),
+  ('14-narr',BRIAN,"She believes she can break the curse."),
+  ('15-narr',BRIAN,"But can you betray a pact you never signed?"),
+  ('16-mal',ALICE,"Fear does not protect you. It opens doors."),
+  ('17-narr',BRIAN,"A bargain signed with the shadow does not fade with time."),
+  ('18-narr',BRIAN,"Evil, for its part, is patient."),
+  ('19-title',BRIAN,"The Heirs of Evil."),
+  ('20-tagline',BRIAN,"You inherit what you cannot see."),
+  ('21-cta',BRIAN,"A saga by Patrice Huetz. Available now."),
+  ('e1-narr',BRIAN,"Every Moreau child is born with a debt they never owed."),
+  ('e2-mal',ALICE,"The house remembers everything. It forgets no face."),
+  ('e3-narr',BRIAN,"Generations have tried to flee. None ever succeeded."),
+  ('e4-narr',BRIAN,"In the attic, a trunk. In the trunk, the truth they tried to bury."),
+  ('e5-mal',ALICE,"You can burn the house. The pact does not burn."),
+ ],
+ 'rois':[
+  ('01-narr',GEORGE,"Saint-Denis. The Levant Tower. One estate, three families, one kingdom: the night."),
+  ('02-narr',GEORGE,"1995. Ibrahima Konate is eighteen. Son of an imam. He dreams of everything, except staying poor."),
+  ('03-ibra',CALLUM,"My father came here with dreams. I watched them die. Me? Never."),
+  ('04-narr',GEORGE,"A small-time dealer, he climbs the ladder of crime, floor by floor."),
+  ('05-ibra',CALLUM,"You've got to look like somebody. Otherwise you're nobody."),
+  ('06-narr',GEORGE,"Three families. Drugs, weapons, real estate."),
+  ('07-rach',ROGER,"In this estate, you make alliances, or you get buried."),
+  ('08-narr',GEORGE,"In thirty years, Ibra becomes the king of the night."),
+  ('09-narr',GEORGE,"But a throne built in the shadows always collapses in the end."),
+  ('10-narr',GEORGE,"The police. His rivals. His own sister, now a lawyer, now his enemy."),
+  ('11-narr',GEORGE,"And a fear that never leaves him."),
+  ('12-ibra',CALLUM,"The day my daughter sees who I really am…"),
+  ('13-narr',GEORGE,"From local baron to outcast. From king to prisoner."),
+  ('14-narr',GEORGE,"He won it all. He will lose it all."),
+  ('15-ibra',CALLUM,"I spent my whole life running from my father. I was turning into him."),
+  ('16-narr',GEORGE,"More social than gangster. More tragic than triumphant."),
+  ('17-narr',GEORGE,"Thirty years of a war no one wins."),
+  ('18-title',GEORGE,"The Kings of the Night."),
+  ('19-tagline',GEORGE,"In the night, everyone wants to be king."),
+  ('20-cta',GEORGE,"A saga by Patrice Huetz. Available now."),
+ ],
+ 'seigneurs':[
+  ('01-narr',BRIAN,"He was born in a barracks. He grew up in the Foreign Legion."),
+  ('02-narr',BRIAN,"Victor Marchand. Son of a legionnaire killed in the former Yugoslavia."),
+  ('03-narr',BRIAN,"Bosnia. Kosovo. Ivory Coast. Iraq. Ten years of wars that were not his own."),
+  ('04-vict',ROGER,"I understood one thing: war is not an anomaly. It is the natural state."),
+  ('05-narr',BRIAN,"In 2005, he founds ARES."),
+  ('06-narr',BRIAN,"A private army. Soldiers for hire. A war to sell."),
+  ('07-vict',ROGER,"States wage war. I make it profitable."),
+  ('08-narr',BRIAN,"From the sands of the Sahel to the mountains of Afghanistan."),
+  ('09-narr',BRIAN,"From Libya to Ukraine, no conflict happens without him."),
+  ('10-narr',BRIAN,"Soldier, then mercenary, then merchant of death."),
+  ('11-vict',ROGER,"Loyalty? It lasts until the first late paycheck."),
+  ('12-narr',BRIAN,"Twenty years building an empire on the blood of others."),
+  ('13-narr',BRIAN,"But a warlord has many enemies."),
+  ('14-narr',BRIAN,"And one day, The Hague comes calling."),
+  ('15-vict',ROGER,"They taught me never to die for nothing. The question is what I lived for."),
+  ('16-narr',BRIAN,"From the first bullet to the international court."),
+  ('17-narr',BRIAN,"Does redemption even exist for a man like him?"),
+  ('18-title',BRIAN,"The Warlords."),
+  ('19-tagline',BRIAN,"War is the natural state."),
+  ('20-cta',BRIAN,"A saga by Patrice Huetz. Available now."),
+  ('e1-narr',BRIAN,"He never lost a war. He sold every one of them."),
+  ('e2-vict',ROGER,"You don't choose sides. You choose contracts."),
+  ('e3-narr',BRIAN,"His men follow him everywhere. Out of loyalty, or out of fear."),
+  ('e4-narr',BRIAN,"Every conflict of the century bears his signature, somewhere."),
+  ('e5-vict',ROGER,"Peace? Peace is just the time it takes to reload."),
+ ],
+}
+
+def tts(v,t,o):
+    b=json.dumps({'text':t,'model_id':'eleven_multilingual_v2','voice_settings':{'stability':0.5,'similarity_boost':0.85,'style':0.3,'use_speaker_boost':True}}).encode()
+    r=urllib.request.Request(f'https://api.elevenlabs.io/v1/text-to-speech/{v}',data=b,headers={'xi-api-key':KEY,'Content-Type':'application/json'})
+    open(o,'wb').write(urllib.request.urlopen(r,timeout=45).read())
+
+import sys
+only=sys.argv[1:] if len(sys.argv)>1 else list(BOOKS)
+for book in only:
+    out=f'{BASE}/{book}-vo-en'; os.makedirs(out,exist_ok=True)
+    for n,v,t in BOOKS[book]: tts(v,t,f'{out}/{n}.mp3')
+    print(f'{book}-EN OK {len(BOOKS[book])}', flush=True)
+print('ALL-EN-DONE', flush=True)

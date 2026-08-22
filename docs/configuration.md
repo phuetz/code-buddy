@@ -48,6 +48,27 @@
 | `FIRECRAWL_API_KEY` | Firecrawl search/scrape tools |
 | `MORPH_API_KEY` | Fast file editing |
 | `PICOVOICE_ACCESS_KEY` | Porcupine wake word detection |
+| `FAL_KEY` / `FAL_API_KEY` | fal.ai — vidéo/image FAL + train LoRA Krea 2 (`buddy lora train cloud`) |
+
+### Media / ComfyUI / LoRA
+
+| Variable | Description | Default |
+|:---------|:------------|:--------|
+| `CODEBUDDY_IMAGE_PROVIDER` | Backend `image_generate` (`comfyui`, `openai`, `xai`, `fal`, …) | provider-dependent |
+| `COMFYUI_URL` | Endpoint ComfyUI pour génération | `http://127.0.0.1:8188` |
+| `COMFYUI_ROOT` | Racine ComfyUI (install LoRA `models/loras`) | auto-detect |
+| `CODEBUDDY_LORA_TRAIN` | Opt-in train cloud LoRA Krea 2 (upload + coût fal) | unset (off) |
+| `CODEBUDDY_LORA_INFER_CHECKPOINT` | Checkpoint Comfy prioritaire pour selfies/image (monostack vs train) | unset → `CODEBUDDY_IMAGE_MODEL` / `sd_turbo` |
+| `CODEBUDDY_LISA_FEWSHOT_EVERY` | Injecter les exemplars xAI anti-dilution tous les N tours voix (0=off) | `4` |
+| `AI_TOOLKIT_DIR` | Chemin AI-Toolkit pour `buddy lora train local` / `train-local.sh` | unset |
+| `CODEBUDDY_LISA_SELFIE` | Interception vocale + Telegram inbound « photo de toi » (`false` pour off) | on |
+| `CODEBUDDY_LISA_LORA_TRIGGER` | Trigger LoRA Lisa si pas de `.codebuddy/lora/lisa/project.json` | `ohwx lisa` |
+| `CODEBUDDY_COMFYUI_LORA` | LoRA Comfy : `lisa`, `lisa.safetensors`, `auto` (scan models/loras), `none` | unset ; selfie → `auto` |
+| `CODEBUDDY_COMFYUI_LORA_STRENGTH` | Intensité LoRA modèle+CLIP | `0.85` |
+| `CODEBUDDY_LISA_SELFIE_COOLDOWN_MS` | Cooldown entre selfies (ms) | `45000` |
+| `CODEBUDDY_SENSORY_ALERT_TOKEN` / `_CHAT` | Bot Telegram pour alertes, notes vocales **et selfies** Lisa | unset |
+
+Doc LoRA : [krea-lora.md](./krea-lora.md).
 
 ### Channels
 
@@ -86,7 +107,7 @@
 | `CODEBUDDY_VOICEBOX_PROFILE` | Required Voicebox profile name or id | unset |
 | `CODEBUDDY_VOICEBOX_ENGINE` | Voicebox backend (`qwen`, `qwen_custom_voice`, `luxtts`, `chatterbox`, `chatterbox_turbo`, `tada`, `kokoro`) | `qwen` |
 | `CODEBUDDY_VOICEBOX_LANGUAGE` / `_MODEL_SIZE` | Voicebox language and model size | `fr` / `1.7B` |
-| `CODEBUDDY_VOICEBOX_INSTRUCT` | Acoustic delivery instruction only, maximum 500 characters | unset |
+| `CODEBUDDY_VOICEBOX_INSTRUCT` | Acoustic delivery only (tone/pace; never rewrites words). Default Lisa warmth FR | Lisa preset in `assistant-config` |
 | `CODEBUDDY_VOICEBOX_AUDIO_STREAM` | Pipe returned WAV directly to speakers/avatar | `true` |
 | `CODEBUDDY_TTS_VOLUME` | Assistant-only normalized output volume (0–100) | `100` |
 | `COWORK_DICTATION_SHORTCUT` | Cowork global dictation accelerator; press once to record and again to transcribe/paste | `CommandOrControl+Shift+Space` |

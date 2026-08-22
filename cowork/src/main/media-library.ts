@@ -63,6 +63,108 @@ export function kindOf(filePath: string): MediaKind | null {
   return EXT_TO_KIND[path.extname(filePath).toLowerCase()] ?? null;
 }
 
+/** Allow a YouTube sidecar only when its exact source video is exported with it. */
+export function isExportableMediaBundlePath(filePath: string, selectedPaths: readonly string[]): boolean {
+  if (kindOf(filePath)) return true;
+  const suffix = '.youtube.json';
+  if (!filePath.toLowerCase().endsWith(suffix)) return false;
+  const sourceVideo = filePath.slice(0, -suffix.length);
+  return kindOf(sourceVideo) === 'video' && selectedPaths.includes(sourceVideo);
+}
+
+/** Resolve a renderer selection to regular files confined to known media workspaces. */
+export async function resolveExportableMediaBundlePaths(
+  selectedPaths: readonly string[],
+  roots: readonly string[],
+): Promise<string[]> {
+  if (!Array.isArray(selectedPaths) || selectedPaths.length === 0 || selectedPaths.length > 100) {
+    throw new Error('invalid media export selection');
+  }
+  const trustedRoots = (await Promise.all([...new Set(roots)].map(async (root) => {
+    try {
+      const canonical = await fs.promises.realpath(root);
+      return (await fs.promises.stat(canonical)).isDirectory()
+        ? { lexical: path.resolve(root), canonical }
+        : null;
+    } catch {
+      return null;
+    }
+  }))).filter((root): root is { lexical: string; canonical: string } => Boolean(root));
+  const canonicalRoots = [...new Set(trustedRoots.map((root) => root.canonical))];
+  if (!canonicalRoots.length) throw new Error('no trusted media workspace is available');
+
+  const indexedMedia = new Set<string>();
+  for (const root of canonicalRoots) {
+    for (const item of scanRoot(root)) {
+      try {
+        const canonical = await fs.promises.realpath(item.path);
+        await requireNoSymlinkDescendants(root, canonical);
+        indexedMedia.add(canonical);
+      } catch {
+        // The media library is a discovery surface, not an authority. Entries
+        // that changed or crossed a symlink since discovery are not exportable.
+      }
+    }
+  }
+
+  const canonicalPaths: string[] = [];
+  for (const selected of [...new Set(selectedPaths)]) {
+    if (typeof selected !== 'string' || !path.isAbsolute(selected) || selected.includes('\0')) {
+      throw new Error('media export path is invalid');
+    }
+    const lexical = await fs.promises.lstat(selected);
+    if (lexical.isSymbolicLink() || !lexical.isFile()) {
+      throw new Error('media export accepts regular non-symlink files only');
+    }
+    const lexicalRoot = trustedRoots.find((root) => isWithin(path.resolve(selected), root.lexical));
+    if (lexicalRoot) await requireNoSymlinkDescendants(lexicalRoot.lexical, path.resolve(selected));
+    const canonical = await fs.promises.realpath(selected);
+    const trustedRoot = canonicalRoots.find((root) => isWithin(canonical, root));
+    if (!trustedRoot) {
+      throw new Error('media export path is outside trusted workspaces');
+    }
+    await requireNoSymlinkDescendants(trustedRoot, canonical);
+    canonicalPaths.push(canonical);
+  }
+  for (const candidate of canonicalPaths) {
+    if (kindOf(candidate)) {
+      if (!indexedMedia.has(candidate)) throw new Error('media export path is not indexed by the media library');
+      continue;
+    }
+    const suffix = '.youtube.json';
+    if (!candidate.toLowerCase().endsWith(suffix)) throw new Error('unsupported media bundle file');
+    const video = candidate.slice(0, -suffix.length);
+    if (kindOf(video) !== 'video' || !indexedMedia.has(video) || !canonicalPaths.includes(video)) {
+      throw new Error('YouTube metadata must be exported with its exact source video');
+    }
+  }
+  const exportNames = new Set<string>();
+  for (const candidate of canonicalPaths) {
+    const name = path.basename(candidate).toLocaleLowerCase('en');
+    if (exportNames.has(name)) throw new Error(`media export contains a duplicate filename: ${path.basename(candidate)}`);
+    exportNames.add(name);
+  }
+  return canonicalPaths;
+}
+
+function isWithin(candidate: string, root: string): boolean {
+  const relative = path.relative(path.resolve(root), path.resolve(candidate));
+  return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));
+}
+
+async function requireNoSymlinkDescendants(root: string, target: string): Promise<void> {
+  const child = path.relative(root, target);
+  if (!child || child === '..' || child.startsWith(`..${path.sep}`) || path.isAbsolute(child)) {
+    throw new Error('media export path escapes its trusted workspace');
+  }
+  let cursor = root;
+  for (const segment of child.split(path.sep)) {
+    cursor = path.join(cursor, segment);
+    const info = await fs.promises.lstat(cursor);
+    if (info.isSymbolicLink()) throw new Error('media export path contains a symbolic link');
+  }
+}
+
 function scanDirRecursive(dir: string, root: string, out: MediaItem[], depth = 0): void {
   if (depth > 4) return;
   let entries: fs.Dirent[];
@@ -100,7 +202,7 @@ export function scanRoot(root: string): MediaItem[] {
     for (const entry of fs.readdirSync(root, { withFileTypes: true })) {
       if (!entry.isFile()) continue;
       const kind = kindOf(entry.name);
-      if (!kind) continue;
+      if (kind !== 'audio') continue;
       const full = path.join(root, entry.name);
       try {
         const stat = fs.statSync(full);
