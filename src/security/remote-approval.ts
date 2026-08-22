@@ -7,6 +7,7 @@
  */
 
 import { EventEmitter } from 'events';
+import { randomUUID } from 'crypto';
 import { logger } from '../utils/logger.js';
 
 // ============================================================================
@@ -38,7 +39,6 @@ export class RemoteApprovalService extends EventEmitter {
   private pending = new Map<string, ApprovalRequest>();
   private resolvers = new Map<string, (approved: boolean) => void>();
   private channels = new Map<string, ChannelSendFn>();
-  private nextId = 1;
   private defaultTimeoutMs = 120_000; // 2 minutes
 
   /**
@@ -72,7 +72,7 @@ export class RemoteApprovalService extends EventEmitter {
     summary: string;
     timeoutMs?: number;
   }): Promise<boolean> {
-    const id = `approval-${this.nextId++}`;
+    const id = `approval-${randomUUID()}`;
     const timeoutMs = req.timeoutMs ?? this.defaultTimeoutMs;
 
     const request: ApprovalRequest = {
