@@ -57,6 +57,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -483,25 +484,30 @@ def render_card_frames(spec: dict[str, Any], dur: float) -> list[tuple[Image.Ima
 
 
 def render_card_video(spec: dict[str, Any], dur: float, dest: Path, workdir: Path) -> None:
-    if dest.exists():
-        return
-    dur = q(dur)
-    frames = render_card_frames(spec, dur)
-    tmpdir = workdir / 'frames' / dest.stem
-    tmpdir.mkdir(parents=True, exist_ok=True)
-    lst = []
-    total = 0.0
-    for i, (img, d) in enumerate(frames):
-        p = tmpdir / f'{i:03d}.png'
-        img.save(p)
-        lst.append(f"file '{p}'\nduration {max(FRAME, d):.4f}")
-        total += d
-    lst.append(f"file '{tmpdir / f'{len(frames) - 1:03d}.png'}'")
-    concat = tmpdir / 'list.txt'
-    concat.write_text('\n'.join(lst) + '\n', encoding='utf-8')
-    atomic(['ffmpeg', '-y', '-hide_banner', '-v', 'error', '-f', 'concat', '-safe', '0', '-i', str(concat),
-            '-vf', f'fps={FPS},format=yuv420p', '-t', f'{dur:.6f}', '-an', *X264], dest)
-    shutil.rmtree(tmpdir, ignore_errors=True)
+    """Rend une carte en MP4 depuis ses frames PIL. Les frames + la liste concat vivent dans un dossier
+    temporaire UNIQUE par appel (mkdtemp) : `dest.stem` (ex. card-03) est le même dans chaque segment,
+    et quatre segments rendus en parallèle se volaient/supprimaient `frames/card-03/` (incident du 22/08,
+    ffmpeg 254 « list.txt introuvable »). Le verrou par destination évite en plus deux rendus identiques."""
+    with path_lock(dest):
+        if dest.exists():
+            return
+        dur = q(dur)
+        frames = render_card_frames(spec, dur)
+        (workdir / 'frames').mkdir(parents=True, exist_ok=True)
+        tmpdir = Path(tempfile.mkdtemp(prefix=f'{dest.parent.name}-{dest.stem}-', dir=workdir / 'frames'))
+        try:
+            lst = []
+            for i, (img, d) in enumerate(frames):
+                p = tmpdir / f'{i:03d}.png'
+                img.save(p)
+                lst.append(f"file '{p}'\nduration {max(FRAME, d):.4f}")
+            lst.append(f"file '{tmpdir / f'{len(frames) - 1:03d}.png'}'")
+            concat = tmpdir / 'list.txt'
+            concat.write_text('\n'.join(lst) + '\n', encoding='utf-8')
+            atomic(['ffmpeg', '-y', '-hide_banner', '-v', 'error', '-f', 'concat', '-safe', '0', '-i', str(concat),
+                    '-vf', f'fps={FPS},format=yuv420p', '-t', f'{dur:.6f}', '-an', *X264], dest)
+        finally:
+            shutil.rmtree(tmpdir, ignore_errors=True)
 
 
 def shadow_overlay(path: Path, fg_w: int) -> Path:
@@ -979,24 +985,26 @@ def premaster_audio(source: Path, dest: Path) -> None:
             '-c:a', 'pcm_s24le', '-ar', '48000'], dest)
 
 
-def mux(video: Path, audio: Path, dur: float, dest: Path) -> None:
-    if dest.exists():
+def mux(video: Path, audio: Path, dur: float, dest: Path, force: bool = False) -> None:
+    """Le master final est écrit dans un .part puis renommé (atomic) : l'ancien reste en place jusqu'au
+    dernier instant, même avec --force."""
+    if dest.exists() and not force:
         return
     atomic(['ffmpeg', '-y', '-hide_banner', '-v', 'error', '-i', str(video), '-i', str(audio),
             '-map', '0:v:0', '-map', '1:a:0', '-c:v', 'copy', '-c:a', 'aac', '-b:a', '256k', '-ar', '48000',
             '-t', f'{dur:.6f}', '-movflags', '+faststart'], dest)
 
 
-def render_preview(src: Path, dest: Path) -> None:
-    if dest.exists():
+def render_preview(src: Path, dest: Path, force: bool = False) -> None:
+    if dest.exists() and not force:
         return
     atomic(['ffmpeg', '-y', '-hide_banner', '-v', 'error', '-i', str(src), '-vf', 'scale=960:540',
             '-c:v', 'libx264', '-preset', 'fast', '-crf', '27', '-c:a', 'aac', '-b:a', '128k',
             '-movflags', '+faststart'], dest)
 
 
-def render_planche(src: Path, dur: float, dest: Path, n: int = 12, cols: int = 4) -> None:
-    if dest.exists():
+def render_planche(src: Path, dur: float, dest: Path, n: int = 12, cols: int = 4, force: bool = False) -> None:
+    if dest.exists() and not force:
         return
     tw, th = 480, 270
     rows = math.ceil(n / cols)
@@ -1158,7 +1166,10 @@ def main() -> None:
     ap.add_argument('--cache-dir', type=Path, default=None,
                     help='cache partagé B-roll normalisés + transcripts (défaut: <out-dir>/work)')
     ap.add_argument('--only', default='', help='ids de segments à (re)rendre seuls, ex. L1,L2 (debug)')
-    ap.add_argument('--force', action='store_true', help='supprime les intermédiaires finaux (pas les B-roll normalisés)')
+    ap.add_argument('--force', action='store_true',
+                    help='re-rend les intermédiaires de la passe (segments visés, cartes, concat, mix, master) — '
+                         'jamais les B-roll normalisés/transcripts ; le master final est remplacé atomiquement, '
+                         'jamais supprimé avant que le nouveau soit écrit')
     ap.add_argument('--jobs', type=int, default=4)
     ap.add_argument('--mesure', action='store_true', help='ne fait que re-mesurer le MP4 final')
     ap.add_argument('--scene', type=float, default=0.3)
@@ -1192,17 +1203,27 @@ def main() -> None:
         }
         assert_no_production_markers(visible, 'contenu visible (long actu)')
 
-        if args.force:
-            for p in [final, out_dir / f'{slug}-preview.mp4', workdir / 'video.mp4', workdir / 'voice.wav',
-                      workdir / 'mix.wav', workdir / 'concat-video.txt', workdir / 'concat-audio.txt']:
-                p.unlink(missing_ok=True)
+        only = {x for x in args.only.split(',') if x}
+        if args.force and not args.mesure:
+            # Ne supprimer QUE ce que cette passe régénère : les segments visés (tous, ou --only), et — hors
+            # --only — les sections dérivées (hook-fait-*, hook-citation, cartes) + concat/mix/master
+            # intermédiaires. Les sorties finales (master, preview, planche) ne sont PAS supprimées :
+            # elles sont réécrites atomiquement (tmp + rename) en fin de passe.
             for s in cfg['segments']:
+                if only and s['id'] not in only:
+                    continue
                 for name in ('video.mp4', 'audio.wav', 'subs.ass', 'composite.mp4', 'bg.mp4', 'bg.txt'):
                     (workdir / 'segments' / s['id'] / name).unlink(missing_ok=True)
                 for p in (workdir / 'segments' / s['id']).glob('card-*.mp4'):
                     p.unlink()
-            shutil.rmtree(workdir / 'cards', ignore_errors=True)
-            shutil.rmtree(workdir / 'segments' / 'hook-citation', ignore_errors=True)
+            if not only:
+                for p in [workdir / 'video.mp4', workdir / 'voice.wav', workdir / 'mix.wav', workdir / 'mastered.wav',
+                          workdir / 'concat-video.txt', workdir / 'concat-audio.txt']:
+                    p.unlink(missing_ok=True)
+                shutil.rmtree(workdir / 'cards', ignore_errors=True)
+                for d in (workdir / 'segments').glob('hook-*'):
+                    shutil.rmtree(d, ignore_errors=True)
+            shutil.rmtree(workdir / 'frames', ignore_errors=True)
 
         if args.mesure:
             secs = [Section(s['id'], 'segment', workdir / 'segments' / s['id'] / 'video.mp4',
@@ -1212,7 +1233,6 @@ def main() -> None:
             return
 
         segs = {s['id']: s for s in cfg['segments']}
-        only = {x for x in args.only.split(',') if x}
         shadow_cache: dict[int, Path] = {}
 
         # 1) segments avatar en parallèle
@@ -1346,12 +1366,12 @@ def main() -> None:
         mix_music(voice, music, float(cfg.get('music_db', -26)), total, mix)
         mastered = workdir / 'mastered.wav'
         premaster_audio(mix, mastered)
-        if not final.exists():
-            mux(video, mastered, total, final)
+        if args.force or not final.exists():
+            mux(video, mastered, total, final, force=args.force)
             measurement = master_video_audio(final)
             write_qc_sidecar(final, measurement)
-        render_preview(final, out_dir / f'{slug}-preview.mp4')
-        render_planche(final, total, out_dir / f'{slug}-planche-12.jpg')
+        render_preview(final, out_dir / f'{slug}-preview.mp4', force=args.force)
+        render_planche(final, total, out_dir / f'{slug}-planche-12.jpg', force=args.force)
         mes = measure(final, sections, out_dir / f'MESURES-{slug}.json', args.scene)
         mes['temps_rendu_s'] = round(time.time() - t_start, 1)
         (out_dir / f'MESURES-{slug}.json').write_text(json.dumps(mes, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
