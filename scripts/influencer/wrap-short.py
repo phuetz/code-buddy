@@ -438,7 +438,7 @@ def main():
         fc.extend([
             f'[{music_index}:a]atrim=0:{total:.3f},asetpts=PTS-STARTPTS,'
             f'afade=t=in:st=0:d=0.5,afade=t=out:st={fade_out:.3f}:d=1,'
-            'volume=0.06[music]',
+            'volume=0.045[music]',
             '[music][0:a]sidechaincompress=threshold=0.006:ratio=8:'
             'attack=5:release=250[ducked]',
             f'[0:a][ducked]amix=inputs=2:normalize=0,atrim=0:{total:.3f},'
