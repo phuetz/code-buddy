@@ -21,6 +21,10 @@
 
 import { BashTool } from '../../src/tools/bash';
 import { ConfirmationService } from '../../src/utils/confirmation-service';
+import {
+  approveSandboxUnavailableEscalations,
+  clearSandboxEscalationBridge,
+} from '../helpers/sandbox-escalation-bridge.js';
 import path from 'path';
 import os from 'os';
 import fs from 'fs';
@@ -86,6 +90,9 @@ describe('BashTool', () => {
     confirmationService = ConfirmationService.getInstance();
     // Auto-approve bash commands for testing
     confirmationService.setSessionFlag('bashCommands', true);
+    // Hosts without a sandbox backend (Windows CI) escalate every allowed
+    // command to an exact grant: stand in for the approving human.
+    approveSandboxUnavailableEscalations(confirmationService);
 
     bashTool = new BashTool();
     jest.clearAllMocks();
@@ -94,6 +101,7 @@ describe('BashTool', () => {
   afterEach(() => {
     bashTool.dispose();
     if (confirmationService) {
+      clearSandboxEscalationBridge(confirmationService);
       confirmationService.dispose();
     }
     (ConfirmationService as unknown as { instance: ConfirmationService | undefined }).instance = undefined;

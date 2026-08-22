@@ -128,8 +128,7 @@ export interface MutationResult {
 
 /**
  * Rename a skill directory, tolerating the transient EPERM/EBUSY Windows
- * returns while a handle is still open inside it (the registry's
- * fire-and-forget `registerSkillFile` read, an indexer, an AV scan).
+ * returns while a handle is still open inside it (an indexer, an AV scan).
  */
 function renameDirWithRetry(from: string, to: string): void {
   const delaysMs = [10, 25, 50, 100, 200];
@@ -169,7 +168,13 @@ export class LiveSkillMutator implements SkillMutatorPort {
       getSkillRegistry().unload(name);
       return;
     }
-    void getSkillRegistry().registerSkillFile(file, 'workspace').catch(() => {});
+    // Synchronous: an async read still pending when archive()/restore() renames
+    // the directory right after makes that rename EPERM on Windows.
+    try {
+      getSkillRegistry().registerSkillFileSync(file, 'workspace');
+    } catch {
+      // A skill the registry refuses (scanner/validation) stays on disk, unloaded.
+    }
   }
 
   private readContent(name: string): string | null {

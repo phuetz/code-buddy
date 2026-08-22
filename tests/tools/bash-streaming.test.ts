@@ -1,5 +1,9 @@
 import { BashTool } from '../../src/tools/bash';
 import { ConfirmationService } from '../../src/utils/confirmation-service.js';
+import {
+  approveSandboxUnavailableEscalations,
+  clearSandboxEscalationBridge,
+} from '../helpers/sandbox-escalation-bridge.js';
 
 describe('BashTool - Streaming Execution', () => {
   let bash: BashTool;
@@ -9,11 +13,15 @@ describe('BashTool - Streaming Execution', () => {
     // Auto-approve bash commands for tests
     const service = ConfirmationService.getInstance();
     service.setSessionFlag('bashCommands', true);
+    // Hosts without a sandbox backend (Windows CI) escalate every allowed
+    // command to an exact grant: stand in for the approving human.
+    approveSandboxUnavailableEscalations(service);
   });
 
   afterEach(() => {
     bash.dispose();
     const service = ConfirmationService.getInstance();
+    clearSandboxEscalationBridge(service);
     service.setSessionFlag('bashCommands', false);
   });
 

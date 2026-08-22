@@ -31,8 +31,10 @@ describe('Browser Operator persistent profile', () => {
     const resolved = resolvePersistentBrowserOperatorProfile(profile);
     expect(resolved).toBe(realpathSync(profile));
     expect(resolvePersistentBrowserOperatorProfile(profile)).toBe(resolved);
-    const mode = (await lstat(profile)).mode & 0o777;
-    expect(mode).toBe(0o700);
+    // POSIX mode bits only: Windows reports 0o666 whatever the chmod.
+    if (process.platform !== 'win32') {
+      expect((await lstat(profile)).mode & 0o777).toBe(0o700);
+    }
     const markerPath = join(profile, BROWSER_OPERATOR_PROFILE_MARKER);
     expect(JSON.parse(await readFile(markerPath, 'utf8'))).toMatchObject({
       schemaVersion: 1,

@@ -34,7 +34,10 @@ function config(overrides: Partial<OSSandboxConfig>): OSSandboxConfig {
   };
 }
 
-describe('generateSeatbeltProfile', () => {
+// SBPL profiles are consumed by macOS sandbox-exec and embed POSIX paths
+// (`/tmp`, `<root>/.git`); the generator is never used on Windows, where the
+// `C:\…` forms would be meaningless. Pure-function coverage runs on POSIX hosts.
+describe.skipIf(process.platform === 'win32')('generateSeatbeltProfile', () => {
   let realRoot: string;
   let linkRoot: string;
 
