@@ -3,6 +3,7 @@ import {
   findRuntimeProvider,
   getDirectRuntimeProviderCatalog,
   getPluginNativeRuntimeProviderCatalog,
+  getRuntimeProviderCatalog,
   resolvePluginRuntimeProvider,
   resolveProviderFromCatalog,
 } from '../../src/providers/provider-catalog.js';
