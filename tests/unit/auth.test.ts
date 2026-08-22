@@ -933,7 +933,7 @@ describe('Token Management - SessionEncryption', () => {
       expect(encrypted.ciphertext).toBeDefined();
       expect(encrypted.iv).toBeDefined();
       expect(encrypted.authTag).toBeDefined();
-      expect(encrypted.version).toBe(1);
+      expect(encrypted.version).toBe(2);
       expect(encrypted.ciphertext).not.toBe(plaintext);
     });
 
