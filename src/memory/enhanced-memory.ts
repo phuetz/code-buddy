@@ -1122,7 +1122,15 @@ export class EnhancedMemory extends EventEmitter {
       clearInterval(this.decayIntervalId);
       this.decayIntervalId = null;
     }
-    this.saveAll();
+    // Fire-and-forget by contract (dispose() is sync), but never let a late write
+    // surface as an unhandled rejection — e.g. a test that removes the data dir
+    // right after dispose() (ENOENT on bayesian-state.json) turned the whole
+    // vitest run red on CI.
+    void this.saveAll().catch((err) => {
+      logger.debug('enhanced-memory: saveAll on dispose failed', {
+        error: err instanceof Error ? err.message : String(err),
+      });
+    });
     this.memories.clear();
     this.projects.clear();
     this.summaries = [];

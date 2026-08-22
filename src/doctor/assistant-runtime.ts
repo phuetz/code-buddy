@@ -327,8 +327,12 @@ function systemctlEnvironment(): NodeJS.ProcessEnv {
   return result;
 }
 
-async function execSystemctlUser(args: string[], timeoutMs: number): Promise<SystemctlResult> {
-  if (process.platform !== 'linux') return { ok: false, stdout: '' };
+async function execSystemctlUser(
+  args: string[],
+  timeoutMs: number,
+  platform: NodeJS.Platform = process.platform,
+): Promise<SystemctlResult> {
+  if (platform !== 'linux') return { ok: false, stdout: '' };
   return await new Promise<SystemctlResult>((resolve) => {
     execFile(
       'systemctl',
@@ -347,12 +351,15 @@ async function execSystemctlUser(args: string[], timeoutMs: number): Promise<Sys
 }
 
 class SystemdUserServiceController implements UserServiceController {
+  /** The platform is injected (not read from `process`) so the doctor's systemctl boundary is deterministic under test. */
+  constructor(private readonly platform: NodeJS.Platform = process.platform) {}
+
   async getActiveState(
     service: AssistantRepairService,
     timeoutMs: number,
   ): Promise<'active' | 'inactive' | 'failed' | 'unknown'> {
     if (!isAssistantRepairService(service)) return 'unknown';
-    const result = await execSystemctlUser(['is-active', `${service}.service`], timeoutMs);
+    const result = await execSystemctlUser(['is-active', `${service}.service`], timeoutMs, this.platform);
     if (result.stdout === 'active') return 'active';
     if (result.stdout === 'inactive') return 'inactive';
     if (result.stdout === 'failed') return 'failed';
@@ -364,6 +371,7 @@ class SystemdUserServiceController implements UserServiceController {
     const result = await execSystemctlUser(
       ['show', '--property=LoadState', '--value', `${service}.service`],
       timeoutMs,
+      this.platform,
     );
     if (result.stdout === 'loaded') return true;
     if (result.stdout === 'not-found' || result.stdout === 'masked') return false;
@@ -372,7 +380,7 @@ class SystemdUserServiceController implements UserServiceController {
 
   async restart(service: AssistantRepairService, timeoutMs: number): Promise<boolean> {
     if (!isAssistantRepairService(service)) return false;
-    const result = await execSystemctlUser(['restart', `${service}.service`], timeoutMs);
+    const result = await execSystemctlUser(['restart', `${service}.service`], timeoutMs, this.platform);
     return result.ok;
   }
 }
@@ -578,9 +586,9 @@ export async function runAssistantRuntimeDoctor(
   const now = dependencies.now ?? Date.now;
   const fetchImpl = dependencies.fetchImpl ?? ((url, init) => fetch(url, init));
   const tcpProbe = dependencies.tcpProbe ?? defaultTcpProbe;
-  const services = dependencies.services ?? new SystemdUserServiceController();
-  const stateStore = dependencies.repairStateStore ?? new FileAssistantRepairStateStore();
   const platform = dependencies.platform ?? process.platform;
+  const services = dependencies.services ?? new SystemdUserServiceController(platform);
+  const stateStore = dependencies.repairStateStore ?? new FileAssistantRepairStateStore();
   const probeTimeoutMs = boundedNumber(
     options.probeTimeoutMs,
     DEFAULT_PROBE_TIMEOUT_MS,

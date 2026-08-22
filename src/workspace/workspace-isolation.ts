@@ -116,12 +116,47 @@ const BLOCKED_PATHS: readonly string[] = [
   '/etc/security',
 ];
 
+/**
+ * Canonical (symlink-resolved) form of a path, resolving through the nearest
+ * existing ancestor when the leaf does not exist yet. Returns `null` when no
+ * ancestor can be resolved. Needed because workspace roots and whitelist
+ * entries are often reached through benign system symlinks — on macOS
+ * `os.tmpdir()` is `/var/folders/…` → `/private/var/folders/…`, `/tmp` →
+ * `/private/tmp`, `/home` → `/System/Volumes/Data/home` — and `realpath` of a
+ * file below them would otherwise never match the lexical root.
+ */
+function canonicalizeViaExistingAncestor(resolvedPath: string): string | null {
+  let ancestor = resolvedPath;
+  while (!fs.existsSync(ancestor)) {
+    const parent = path.dirname(ancestor);
+    if (parent === ancestor) return null;
+    ancestor = parent;
+  }
+
+  try {
+    const canonicalAncestor = fs.realpathSync(ancestor);
+    const missingSuffix = path.relative(ancestor, resolvedPath);
+    return missingSuffix ? path.resolve(canonicalAncestor, missingSuffix) : canonicalAncestor;
+  } catch {
+    return null;
+  }
+}
+
+/** Lexical + canonical forms of a root (deduplicated). */
+function rootForms(root: string): string[] {
+  const lexical = path.resolve(root);
+  const canonical = canonicalizeViaExistingAncestor(lexical);
+  return canonical && canonical !== lexical ? [lexical, canonical] : [lexical];
+}
+
 // ============================================================================
 // Workspace Isolation Class
 // ============================================================================
 
 export class WorkspaceIsolation extends EventEmitter {
   private config: WorkspaceIsolationConfig;
+  /** Canonical (realpath) form of the workspace root, when it differs from the lexical one. */
+  private canonicalWorkspaceRoot: string | null = null;
   private blockedAccessLog: BlockedAccessLog[] = [];
   private systemWhitelist: Set<string>;
   private blockedPaths: Set<string>;
@@ -139,19 +174,20 @@ export class WorkspaceIsolation extends EventEmitter {
       ...config,
     };
 
-    // Normalize workspace root
+    // Normalize workspace root (lexical + canonical so a root reached through a
+    // benign symlink, e.g. macOS /var → /private/var, still contains its realpaths)
     this.config.workspaceRoot = path.resolve(this.config.workspaceRoot);
+    this.canonicalWorkspaceRoot = this.computeCanonicalRoot(this.config.workspaceRoot);
 
-    // Build whitelist set for fast lookup
+    // Build whitelist set for fast lookup (both forms of every entry)
     this.systemWhitelist = new Set(
-      [...SYSTEM_WHITELIST, ...this.config.additionalAllowedPaths]
-        .map(p => path.resolve(p))
+      [...SYSTEM_WHITELIST, ...this.config.additionalAllowedPaths].flatMap(rootForms)
     );
 
-    // Build blocked paths set
-    this.blockedPaths = new Set(
-      BLOCKED_PATHS.map(p => path.resolve(p))
-    );
+    // Build blocked paths set — both forms too, otherwise a secret reached
+    // through a symlinked $HOME would be whitelisted canonically (e.g.
+    // ~/.codebuddy) while only its lexical path is blocked.
+    this.blockedPaths = new Set(BLOCKED_PATHS.flatMap(rootForms));
   }
 
   /**
@@ -166,7 +202,13 @@ export class WorkspaceIsolation extends EventEmitter {
    */
   setWorkspaceRoot(root: string): void {
     this.config.workspaceRoot = path.resolve(root);
+    this.canonicalWorkspaceRoot = this.computeCanonicalRoot(this.config.workspaceRoot);
     this.emit('workspace:root-changed', this.config.workspaceRoot);
+  }
+
+  private computeCanonicalRoot(lexicalRoot: string): string | null {
+    const canonical = canonicalizeViaExistingAncestor(lexicalRoot);
+    return canonical && canonical !== lexicalRoot ? canonical : null;
   }
 
   /**
@@ -187,7 +229,9 @@ export class WorkspaceIsolation extends EventEmitter {
   addAllowedPath(allowedPath: string): void {
     const resolved = path.resolve(allowedPath);
     this.config.additionalAllowedPaths.push(resolved);
-    this.systemWhitelist.add(resolved);
+    for (const form of rootForms(resolved)) {
+      this.systemWhitelist.add(form);
+    }
   }
 
   /**
@@ -273,7 +317,11 @@ export class WorkspaceIsolation extends EventEmitter {
    */
   private isWithinWorkspace(resolvedPath: string): boolean {
     const normalizedPath = path.normalize(resolvedPath);
-    const roots = [this.config.workspaceRoot, ...(this.workspaceContext.getStore() ?? [])];
+    const roots = [
+      this.config.workspaceRoot,
+      ...(this.canonicalWorkspaceRoot ? [this.canonicalWorkspaceRoot] : []),
+      ...(this.workspaceContext.getStore() ?? []),
+    ];
     return roots.some((root) => {
       const normalizedWorkspace = path.normalize(root);
       return (
@@ -290,20 +338,7 @@ export class WorkspaceIsolation extends EventEmitter {
    * where `link` already points outside the workspace.
    */
   private resolveViaExistingAncestor(resolvedPath: string): string | null {
-    let ancestor = resolvedPath;
-    while (!fs.existsSync(ancestor)) {
-      const parent = path.dirname(ancestor);
-      if (parent === ancestor) return null;
-      ancestor = parent;
-    }
-
-    try {
-      const canonicalAncestor = fs.realpathSync(ancestor);
-      const missingSuffix = path.relative(ancestor, resolvedPath);
-      return path.resolve(canonicalAncestor, missingSuffix);
-    } catch {
-      return null;
-    }
+    return canonicalizeViaExistingAncestor(resolvedPath);
   }
 
   /**

@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, realpath, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -284,7 +284,8 @@ describe('buddy research checkpoint/resume flags', () => {
   });
 
   it('creates nested durable report directories and writes only scrubbed content', async () => {
-    const directory = await mkdtemp(join(tmpdir(), 'wide-research-cli-'));
+    // Canonical base: macOS tmpdir lives behind a symlink, which the durable-write policy rejects.
+    const directory = await realpath(await mkdtemp(join(tmpdir(), 'wide-research-cli-')));
     tempDirs.push(directory);
     const checkpointPath = join(directory, 'state', 'run.json');
     const reportPath = join(directory, 'reports', 'nested', 'report.md');

@@ -253,7 +253,8 @@ function comfyEnv(bundle: ReturnType<typeof inpaintBundle>): NodeJS.ProcessEnv {
 }
 
 async function temporaryWorkspace(): Promise<string> {
-  const workspace = await fs.mkdtemp(path.join(os.tmpdir(), 'codebuddy-comfy-inpaint-'));
+  // Canonical base: outputPath is returned as a realpath, and macOS tmpdir lives behind a symlink.
+  const workspace = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'codebuddy-comfy-inpaint-')));
   workspaces.push(workspace);
   return workspace;
 }

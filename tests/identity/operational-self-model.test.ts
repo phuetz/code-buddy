@@ -21,7 +21,8 @@ const { computeDistDigest } = require('../../scripts/runtime-manifest-utils.cjs'
 };
 
 function tempRoot(prefix = 'code-buddy-self-model-'): string {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
+  // The resolver canonicalizes roots (realpath); os.tmpdir() is a symlink on macOS.
+  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), prefix)));
   roots.push(root);
   return root;
 }

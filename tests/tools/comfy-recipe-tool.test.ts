@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { access, mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
+import { access, mkdir, mkdtemp, realpath, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -378,7 +378,8 @@ async function setupFixture() {
 }
 
 async function temporaryDirectory(prefix: string): Promise<string> {
-  const root = await mkdtemp(path.join(tmpdir(), prefix));
+  // Canonical base: macOS tmpdir lives behind a symlink, which the root realpath policy rejects.
+  const root = await realpath(await mkdtemp(path.join(tmpdir(), prefix)));
   temporaryRoots.push(root);
   return root;
 }

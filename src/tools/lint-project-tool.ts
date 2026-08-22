@@ -99,6 +99,19 @@ export class LintProjectTool {
 
       const timeoutMs = Math.min(Math.max(Number(input.timeoutMs) || DEFAULT_TIMEOUT_MS, 1_000), MAX_TIMEOUT_MS);
       const { stdout, stderr, timedOut } = await runLocalBinary(eslintPath, ['.', '--format', 'json'], root, timeoutMs);
+      // ESLint reports absolute paths derived from its (canonical) cwd; when the
+      // root was given lexically through a symlink (macOS /var → /private/var),
+      // relativize against the canonical root too so summaries stay project-relative.
+      const rootReal = await fs.realpath(root).catch(() => root);
+      const relativize = (filePath: string): string => {
+        const rel = path.relative(root, filePath);
+        if (!rel) return filePath;
+        if (rel.startsWith('..') || path.isAbsolute(rel)) {
+          const relReal = path.relative(rootReal, filePath);
+          if (relReal && !relReal.startsWith('..') && !path.isAbsolute(relReal)) return relReal;
+        }
+        return rel;
+      };
       const reports = parseJsonOutput(stdout);
       const files: LintProjectFileSummary[] = reports.filter(isRecord).map((report) => {
         const messages = Array.isArray(report.messages) ? report.messages.filter(isRecord).map((message) => ({
@@ -109,7 +122,7 @@ export class LintProjectTool {
           message: typeof message.message === 'string' ? message.message : '',
         })) : [];
         return {
-          filePath: typeof report.filePath === 'string' ? path.relative(root, report.filePath) || report.filePath : 'unknown',
+          filePath: typeof report.filePath === 'string' ? relativize(report.filePath) : 'unknown',
           errors: typeof report.errorCount === 'number' ? report.errorCount : messages.filter((m) => m.severity === 2).length,
           warnings: typeof report.warningCount === 'number' ? report.warningCount : messages.filter((m) => m.severity === 1).length,
           messages,

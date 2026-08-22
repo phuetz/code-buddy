@@ -1,4 +1,4 @@
-import { lstat, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
+import { lstat, mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -22,8 +22,11 @@ describe('Browser Operator persistent profile', () => {
     directories.push(root);
     const profile = join(root, 'profile');
 
-    expect(resolvePersistentBrowserOperatorProfile(profile)).toBe(profile);
-    expect(resolvePersistentBrowserOperatorProfile(profile)).toBe(profile);
+    // The resolver returns the canonical profile path (symlink defence) —
+    // compare against realpath since os.tmpdir() itself is a symlink on macOS.
+    const resolved = resolvePersistentBrowserOperatorProfile(profile);
+    expect(resolved).toBe(await realpath(profile));
+    expect(resolvePersistentBrowserOperatorProfile(profile)).toBe(resolved);
     const mode = (await lstat(profile)).mode & 0o777;
     expect(mode).toBe(0o700);
     const markerPath = join(profile, BROWSER_OPERATOR_PROFILE_MARKER);
@@ -54,7 +57,7 @@ describe('Browser Operator persistent profile', () => {
     await mkdir(join(profile, 'Default'));
     await writeFile(join(profile, 'Default', 'Cookies'), 'persisted sign-in');
 
-    expect(resolvePersistentBrowserOperatorProfile(profile)).toBe(profile);
+    expect(resolvePersistentBrowserOperatorProfile(profile)).toBe(await realpath(profile));
   });
 
   it('refuses a symlink profile instead of exposing another browser profile', async () => {
