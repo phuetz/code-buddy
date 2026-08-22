@@ -151,6 +151,8 @@ export class AcpStdioServer {
   private readonly pendingClientRequests = new Map<string, PendingClientRequest>();
   private readonly store: AcpSessionStore;
   private storeLoaded = false;
+  /** In-flight fire-and-forget persistSession() writes (see whenIdle()). */
+  private readonly pendingPersists = new Set<Promise<void>>();
   private clientCapabilities: AcpClientCapabilities = {};
   private nextClientRequestId = 0;
   private buffer = '';
@@ -230,23 +232,37 @@ export class AcpStdioServer {
    * Fire-and-forget persistence (`void this.persistSession(...)`): a failed
    * write must be logged, never surface as an unhandled rejection.
    */
-  private async persistSession(sessionId: string): Promise<void> {
+  private persistSession(sessionId: string): Promise<void> {
     const s = this.sessions.get(sessionId);
-    if (!s) return;
-    try {
-      await this.store.save({
-        sessionId,
-        cwd: s.cwd,
-        history: s.history,
-        mcpServers: s.mcpServers,
-        title: s.title,
-        updatedAt: s.updatedAt,
-      });
-    } catch (err) {
+    if (!s) return Promise.resolve();
+    const snapshot = {
+      sessionId,
+      cwd: s.cwd,
+      history: s.history,
+      mcpServers: s.mcpServers,
+      title: s.title,
+      updatedAt: s.updatedAt,
+    };
+    const write = this.store.save(snapshot).catch((err: unknown) => {
       logger.warn?.('[acp] failed to persist session', {
         sessionId,
         error: err instanceof Error ? err.message : String(err),
       });
+    });
+    this.pendingPersists.add(write);
+    void write.finally(() => this.pendingPersists.delete(write));
+    return write;
+  }
+
+  /**
+   * Resolves once every in-flight session write has settled (successfully or
+   * not). Callers that stop the server and then remove its store directory
+   * (tests, a tear-down) await this first: on Windows a write still holding
+   * `<id>.json.tmp` open makes the directory removal fail with ENOTEMPTY.
+   */
+  async whenIdle(): Promise<void> {
+    while (this.pendingPersists.size > 0) {
+      await Promise.allSettled([...this.pendingPersists]);
     }
   }
 
