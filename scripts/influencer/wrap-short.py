@@ -51,24 +51,42 @@ FIXES_DEFAULT = {
 }
 
 def apply_fixes(words, extra):
-    fixes = dict(FIXES_DEFAULT)
+    """Corrige les noms propres sur des n-grammes de 1 à 4 mots whisper.
+
+    Whisper éclate « Kimi K3 » en « Kimi », « 4 », « .3, » : on compare donc la
+    clé normalisée AVEC et SANS espaces (« kimi 4.3 » == « kimi 4 .3 »), et on
+    recolle la ponctuation finale du dernier mot remplacé.
+    """
+    fixes = {}
+    for k, v in FIXES_DEFAULT.items():
+        fixes[k] = v
     for f in extra or []:
         a, b = f.split('=', 1)
         fixes[a.lower()] = b
-    # bigrammes d'abord, puis unigrammes
+    # variantes « alphanumérique pur » pour toutes les clés : « kimi 4.3 » == « kimi 4 .3, » == « kimi43 »
+    alnum = lambda t: re.sub(r'[^a-z0-9]', '', norm(t))
+    nospace = {alnum(k): v for k, v in fixes.items()}
     i = 0
     while i < len(words):
-        if i + 1 < len(words):
-            big = norm(words[i]['w']) + ' ' + norm(words[i+1]['w'])
-            if big in fixes:
-                words[i]['w'] = fixes[big]
-                words[i+1]['w'] = ''
-                i += 2
+        hit = False
+        for n in (4, 3, 2, 1):
+            if i + n > len(words):
                 continue
-        uni = norm(words[i]['w'])
-        if uni in fixes:
-            words[i]['w'] = fixes[uni]
-        i += 1
+            toks = [norm(words[j]['w']) for j in range(i, i + n)]
+            key = ' '.join(toks)
+            rep = fixes.get(key)
+            if rep is None:
+                rep = nospace.get(alnum(key))
+            if rep is not None:
+                tail = re.search(r'[,.!?;:]+$', words[i + n - 1]['w'] or '')
+                words[i]['w'] = rep + (tail.group(0) if tail and not rep.endswith(tail.group(0)) else '')
+                for j in range(i + 1, i + n):
+                    words[j]['w'] = ''
+                i += n
+                hit = True
+                break
+        if not hit:
+            i += 1
     return [w for w in words if w['w']]
 
 def merge_apostrophes(words):
