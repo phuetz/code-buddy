@@ -343,12 +343,14 @@ describe('BashTool', () => {
 
     it('should set NO_COLOR=1 in child process', async () => {
       const result = await bashTool.execute('printenv NO_COLOR');
+      if (!result.success) console.error('[macos-diag] printenv NO_COLOR:', result.error);
       expect(result.success).toBe(true);
       expect(result.output).toContain('1');
     });
 
     it('should set GIT_TERMINAL_PROMPT=0 in child process', async () => {
       const result = await bashTool.execute('printenv GIT_TERMINAL_PROMPT');
+      if (!result.success) console.error('[macos-diag] printenv GIT_TERMINAL_PROMPT:', result.error);
       expect(result.success).toBe(true);
       expect(result.output).toContain('0');
     });
@@ -495,6 +497,7 @@ describe('BashTool', () => {
     it('should execute commands in current working directory', async () => {
       await bashTool.execute(`cd ${tmpDir}`);
       const result = await bashTool.execute('pwd');
+      if (!result.success) console.error('[macos-diag] pwd after cd', tmpDir, '->', bashTool.getCurrentDirectory(), ':', result.error);
       expect(result.success).toBe(true);
       expect(result.output).toBeDefined();
     });

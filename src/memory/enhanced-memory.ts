@@ -175,6 +175,7 @@ export class EnhancedMemory extends EventEmitter {
   private embeddingProvider: MemoryEmbedder | null = null;
   private bayesianQualifier = new BayesianQualifier();
   private disposed = false;
+  private pendingDisposeSave: Promise<void> | null = null;
   /** Resolves when initialize() finished (dirs ensured, stores loaded). */
   private readonly ready: Promise<void>;
 
@@ -1115,6 +1116,19 @@ export class EnhancedMemory extends EventEmitter {
   /**
    * Dispose
    */
+  /**
+   * Resolve once every pending write (including the fire-and-forget save
+   * started by `dispose()`) has settled — lets a caller remove the data
+   * directory deterministically instead of racing the last write.
+   */
+  async flush(): Promise<void> {
+    if (this.pendingDisposeSave) {
+      await this.pendingDisposeSave;
+      return;
+    }
+    await this.saveAll();
+  }
+
   dispose(): void {
     this.disposed = true;
     // Clear decay interval timer
@@ -1126,7 +1140,7 @@ export class EnhancedMemory extends EventEmitter {
     // surface as an unhandled rejection — e.g. a test that removes the data dir
     // right after dispose() (ENOENT on bayesian-state.json) turned the whole
     // vitest run red on CI.
-    void this.saveAll().catch((err) => {
+    this.pendingDisposeSave = this.saveAll().catch((err) => {
       logger.debug('enhanced-memory: saveAll on dispose failed', {
         error: err instanceof Error ? err.message : String(err),
       });

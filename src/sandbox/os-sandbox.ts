@@ -16,6 +16,7 @@ import * as os from 'os';
 import * as path from 'path';
 import * as fs from 'fs';
 import { sanitizeEnvVars } from '../security/env-blocklist.js';
+import { logger } from '../utils/logger.js';
 import type { SandboxBackendInterface, SandboxExecOptions, SandboxExecResult } from './sandbox-backend.js';
 
 // ============================================================================
@@ -550,6 +551,7 @@ async function execSeatbelt(
       ...args,
     ];
 
+    const cwd = fs.existsSync(config.workDir) ? config.workDir : undefined;
     const result = await execWithTimeout(
       'sandbox-exec',
       sandboxArgs,
@@ -557,10 +559,30 @@ async function execSeatbelt(
       'seatbelt',
       config.abortSignal,
       {
-        ...(fs.existsSync(config.workDir) ? { cwd: config.workDir } : {}),
+        ...(cwd ? { cwd } : {}),
         env: seatbeltEnvironment(config),
       },
     );
+    if (result.exitCode !== 0 && !result.timedOut && !config.abortSignal?.aborted) {
+      // Surface WHY: sandbox-exec's own stderr (profile compile errors) or the
+      // child's, plus the execution context. Without this a denied/crashed
+      // child looked like a bare "exit 1" and was undiagnosable from CI logs.
+      const roots = profile
+        .split('\n')
+        .filter((line) => line.startsWith('(allow file-write*'))
+        .map((line) => line.match(/\(subpath "([^"]+)"\)/)?.[1] ?? line)
+        .slice(0, 6);
+      const diag = `[seatbelt diag] exit=${result.exitCode} cwd=${cwd ?? '(unset)'} cmd=${[command, ...args].join(' ').slice(0, 200)} profile=${profile.split('\n').length} lines, writable roots: ${roots.join(' | ')}`;
+      result.stderr = result.stderr.trim() ? `${result.stderr.trimEnd()}\n${diag}` : diag;
+      logger.warn('Seatbelt sandbox command failed', {
+        exitCode: result.exitCode,
+        cwd,
+        command,
+        args,
+        stderr: result.stderr.slice(0, 2000),
+        profileHead: profile.split('\n').slice(0, 40).join('\n'),
+      });
+    }
     return result;
   } finally {
     // Clean up profile file
@@ -1243,12 +1265,18 @@ function execWithTimeout(
       proc.kill('SIGKILL');
     }, timeout);
 
-    proc.on('close', (code) => {
+    proc.on('close', (code, terminationSignal) => {
       clearTimeout(timer);
+      // A signal death (dyld abort, SIGKILL from the sandbox, …) has no exit
+      // code; say so instead of reporting a silent "exit 1".
+      const diagnostic =
+        code === null && terminationSignal && !timedOut
+          ? `${stderr}${stderr && !stderr.endsWith('\n') ? '\n' : ''}[sandbox:${backend}] child terminated by ${terminationSignal}`
+          : stderr;
       resolve({
         exitCode: code ?? 1,
         stdout,
-        stderr,
+        stderr: diagnostic,
         duration: Date.now() - startTime,
         timedOut,
         backend,
