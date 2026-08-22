@@ -14,7 +14,10 @@ Entrée : un JSON d'ordre (voir `ordre.json` du pilote longform-actu-2026-08-22)
 
 {
   "slug": "…", "titre": "…", "description": "…", "tags": [...],
-  "music": "…mp3", "music_db": -32,          // niveau LUFS du lit musical seul dans le master (verrouillé)
+  "music": null,                             // DÉFAUT : SANS musique (Vision IA n'en met pas) ; "…mp3" pour un lit
+  "music_db": -38,                           // (si music) niveau LUFS du lit musical seul dans le master (verrouillé)
+  "room_tone_lufs": -55,                     // sans musique : ambiance de salle constante très discrète (null = silence pur)
+  "music_card_db": -4, "music_card_max_s": 3.0,   // atténuation fixe sous les cartes muettes courtes
   "avatar_punch_in": 1.15,                   // 1 ou 0 = cadrage unique
   "broll_roots": ["~/.codebuddy/media-video/flow-crame", "~/.codebuddy/media-video/broll"],
   "cutaway": {"first_at": 3.0, "every": 3.5, "duration": 2.5},
@@ -47,6 +50,28 @@ linéairement à −14 LUFS (+ limiteur crête −1,5 dBTP), lit musical VERROUI
 (défaut −32, mesuré sur le morceau : même niveau sous les cartes muettes et l'écran de fin, jamais de
 remontée), ducking doux en plus sous la voix ; QC final = mesure seule si conforme (re-master dynamique
 seulement en repli) ; "avatar_punch_in" = 1.15 alterne plan moyen / punch-in recadré sur les plans avatar.
+Audit audio agy (22/08, « la musique sursaute ») : CHAQUE section parlée est normalisée à −14 LUFS avant la
+concaténation (gain par clip HeyGen, ±0,5 LU) ; "music_db" −38 par défaut ; sidechain doux (seuil 0,08,
+ratio 2, 30/400 ms) ; sous les cartes/cartons muets < "music_card_max_s" (3 s) atténuation fixe
+"music_card_db" (−4 dB) avec fondus de 1,5 s ; "denoise": true sur un segment/la citation = highpass 80 Hz
++ afftdn avant normalisation.
+Décision Patrice 22/08 (« Vision IA ne met pas de musique de fond ») : le défaut est SANS musique — "music": null
+(ou absent) ⇒ voix normalisée par section + une ambiance de salle constante (bruit rose à "room_tone_lufs",
+défaut −55 LUFS, sous le plancher des clips HeyGen ≈ −44) pour que les cartes muettes ne « claquent » pas
+en silence numérique ; "room_tone_lufs": null ⇒ silence pur. "music_db"/"music_card_db" ne servent que si
+"music" est fourni.
+
+Sections VOIX OFF (v3, 23/08 — format long « L'IA vient de… » 18 min = 5 sujets en voix off + 4 inserts
+avatar) : un segment `"type": "voiceover"` a pour `src` un MP3/WAV (voix ElevenLabs `longform-voice.py`) au lieu
+d'un clip avatar ; il est rendu SANS visage — B-roll plein cadre enchaînés au rythme de `cutaway` (mettre
+`every == duration`, ex. 2.2 s cold open / 3.5 s sujet / 6 s zoom-out → c'est ce qui donne les pics de rythme),
+cartes déclenchées sur un mot du transcript whisper du MP3, badge de chapitre sur les plans B-roll, sous-titres
+idem. Les segments avatar (HeyGen) et voix off se mélangent librement dans `segments`. Un B-roll trop court
+pour un plan est prolongé sur sa dernière image (jamais de section vidéo plus courte que sa voix).
+Nouvelles cartes : `capture` (VRAIE capture d'écran PNG/JPG d'une page source, recadrée `box` [x0,y0,x1,y1]
+en px source, annotée `annot` [{"forme": "rect"|"ellipse", "box": [...]}] en rouge, lent push-in, pied
+« Source : … » + date) ; `timeline` (étapes datées révélées une à une : `etapes` [{"date", "texte", "accent"}]) ;
+`courbe` (courbe en S tracée progressivement, `etapes` = 3 libellés de bas en haut).
 
 Sorties (dans --out-dir) : <slug>.mp4 (1920×1080 30 fps, −14 LUFS), <slug>-preview.mp4
 (960×540), <slug>-planche-12.jpg, PACK-<slug>.md, chapters.txt, MESURES-<slug>.json,
@@ -496,7 +521,173 @@ def render_card_frames(spec: dict[str, Any], dur: float) -> list[tuple[Image.Ima
         frames.append((img, dur))
         return frames
 
+    if kind == 'capture':
+        return render_capture_frames(spec, dur)
+
+    if kind == 'timeline':
+        titre = str(spec.get('titre', ''))
+        etapes = list(spec.get('etapes', []))
+        n = len(etapes)
+        if n == 0:
+            raise NewsLongError('timeline: aucune étape')
+        first = min(0.3, dur / 4)
+        step = max(0.4, (dur - 0.6 - first) / n)
+        shown = 0.0
+        for k in range(n + 1):
+            img, d = card_base(kicker)
+            y = 150
+            if titre:
+                tf, tlines, tlh = fit_text(titre, box_w, 200, 96, 40, max_lines=2, name='titre timeline')
+                y = draw_block(d, tlines, tf, tlh, margin, y, WHITE) + 30
+                d.rectangle([margin, y, margin + 140, y + 8], fill=RED)
+            ly = max(y + 200, 560)
+            d.line([(margin, ly), (W - margin, ly)], fill=(70, 90, 140), width=6)
+            gap = (W - 2 * margin) / max(1, n - 1) if n > 1 else 0
+            df = font(54, 'Condensed ExtraBold')
+            ef = font(38, 'Condensed SemiBold')
+            for j, e in enumerate(etapes[:k]):
+                cx = int(margin + (j * gap if n > 1 else (W - 2 * margin) / 2))
+                col = RED if e.get('accent') else WHITE
+                d.ellipse([cx - 22, ly - 22, cx + 22, ly + 22], fill=col)
+                date = str(e.get('date', ''))
+                texte = str(e.get('texte', ''))
+                dw = df.getlength(date)
+                dx = min(max(margin, cx - dw / 2), W - margin - dw)
+                d.text((dx, ly - 110), date, font=df, fill=col)
+                if texte:
+                    tl = wrap_lines(texte, ef, 420)
+                    tw = max(ef.getlength(l) for l in tl)
+                    tx = min(max(margin, cx - tw / 2), W - margin - tw)
+                    for i2, l in enumerate(tl[:3]):
+                        d.text((tx, ly + 50 + i2 * 46), l, font=ef, fill=GREY)
+            if k == n and spec.get('ligne'):
+                lf, llines, llh = fit_text(str(spec['ligne']), box_w, 120, 44, 26, 'Condensed SemiBold', max_lines=2, name='ligne timeline')
+                draw_block(d, llines, lf, llh, margin, H - 200, GREY, 'center', box_w)
+            d_k = first if k == 0 else (step if k < n else max(0.2, dur - shown))
+            shown += d_k
+            frames.append((img, d_k))
+        return frames
+
+    if kind == 'courbe':
+        titre = str(spec.get('titre', ''))
+        etapes = [str(x) for x in spec.get('etapes', [])]
+        steps = 18
+        x0, x1 = margin + 40, W - margin - 40
+        y_top, y_bot = 330, H - 200
+        pts_all = []
+        for i in range(101):
+            u = i / 100
+            # sigmoïde : lente, puis raide, puis plateau
+            v = 1 / (1 + math.exp(-10 * (u - 0.5)))
+            pts_all.append((x0 + (x1 - x0) * u, y_bot - (y_bot - y_top) * v))
+        for i in range(steps + 1):
+            k = i / steps
+            img, d = card_base(kicker)
+            y = 150
+            if titre:
+                tf, tlines, tlh = fit_text(titre, box_w, 160, 88, 40, max_lines=2, name='titre courbe')
+                y = draw_block(d, tlines, tf, tlh, margin, y, WHITE) + 24
+                d.rectangle([margin, y, margin + 140, y + 8], fill=RED)
+            d.line([(x0, y_bot), (x1, y_bot)], fill=(70, 90, 140), width=4)
+            d.line([(x0, y_bot), (x0, y_top - 20)], fill=(70, 90, 140), width=4)
+            n_pts = max(2, int(len(pts_all) * k))
+            d.line(pts_all[:n_pts], fill=RED, width=10, joint='curve')
+            lf = font(46, 'Condensed ExtraBold')
+            for j, lab in enumerate(etapes):
+                u = (j + 0.5) / max(1, len(etapes))
+                if u <= k + 0.02:
+                    px, py = pts_all[min(100, int(u * 100))]
+                    d.ellipse([px - 16, py - 16, px + 16, py + 16], fill=WHITE)
+                    lw = lf.getlength(lab)
+                    lx = min(max(x0, px - lw / 2), x1 - lw)
+                    ly = py - 70 if j < len(etapes) - 1 else py + 30
+                    d.text((lx, ly), lab, font=lf, fill=WHITE)
+            if i == steps and spec.get('ligne'):
+                lf2, llines, llh = fit_text(str(spec['ligne']), box_w, 100, 44, 26, 'Condensed SemiBold', max_lines=2, name='ligne courbe')
+                draw_block(d, llines, lf2, llh, margin, H - 150, GREY, 'center', box_w)
+            frames.append((img, 0.07 if i < steps else max(0.1, dur - 0.07 * steps)))
+        return frames
+
     raise NewsLongError(f'type de carte inconnu: {kind}')
+
+
+def render_capture_frames(spec: dict[str, Any], dur: float) -> list[tuple[Image.Image, float]]:
+    """Carte « capture réelle » : l'image source (capture d'écran d'une page citée) recadrée, posée sur un
+    écran arrondi ombré, annotée en rouge (cadre / cercle), lent push-in, en-tête source + date, pied
+    « Source : … ». C'est la preuve journalistique demandée par le juge (cartes 100 % typographiques → réel)."""
+    img_path = expand(str(spec.get('image', '')))
+    if not img_path.exists():
+        raise NewsLongError(f'capture introuvable: {img_path}')
+    src = Image.open(img_path).convert('RGB')
+    box = spec.get('box')
+    if box:
+        x0, y0, x1, y1 = [int(v) for v in box]
+        src = src.crop((max(0, x0), max(0, y0), min(src.width, x1), min(src.height, y1)))
+        ox, oy = max(0, x0), max(0, y0)
+    else:
+        ox = oy = 0
+    src_name = str(spec.get('source', ''))
+    date = str(spec.get('date', ''))
+    foot = str(spec.get('ligne', f'Source : {src_name}' if src_name else ''))
+    kicker = spec.get('kicker', 'CAPTURE · SOURCE')
+    px, py, pw, ph = 150, 130, W - 300, H - 260
+    top_h = 60 if (src_name or date) else 0
+    foot_h = 70 if foot else 0
+    area = (px + 14, py + top_h + 14, pw - 28, ph - top_h - foot_h - 28)
+    # échelle « contain »
+    scale0 = min(area[2] / src.width, area[3] / src.height)
+    frames: list[tuple[Image.Image, float]] = []
+    steps = 10 if dur >= 2.0 else 1
+    zoom_max = float(spec.get('zoom', 1.05))
+    for i in range(steps):
+        k = i / max(1, steps - 1)
+        z = 1.0 + (zoom_max - 1.0) * k
+        img, d = card_base(kicker)
+        d.rounded_rectangle([px + 12, py + 16, px + pw + 12, py + ph + 16], radius=18, fill=(0, 0, 0))
+        d.rounded_rectangle([px, py, px + pw, py + ph], radius=18, fill=(246, 246, 242))
+        if top_h:
+            mf = font(30, 'Condensed Bold')
+            d.text((px + 40, py + 16), src_name.upper(), font=mf, fill=RED)
+            if date:
+                d.text((px + pw - 40 - mf.getlength(date), py + 16), date, font=mf, fill=(110, 110, 110))
+            d.line([(px + 40, py + top_h - 2), (px + pw - 40, py + top_h - 2)], fill=(200, 200, 195), width=2)
+        sc = scale0 * z
+        sw, sh = int(src.width * sc), int(src.height * sc)
+        shot = src.resize((sw, sh), Image.LANCZOS)
+        # recadrage centré si le zoom dépasse la zone
+        cw, ch = min(sw, area[2]), min(sh, area[3])
+        cx0, cy0 = (sw - cw) // 2, (sh - ch) // 2
+        shot = shot.crop((cx0, cy0, cx0 + cw, cy0 + ch))
+        dx = area[0] + (area[2] - cw) // 2
+        dy = area[1] + (area[3] - ch) // 2
+        img.paste(shot, (dx, dy))
+        d = ImageDraw.Draw(img)
+        d.rectangle([dx, dy, dx + cw, dy + ch], outline=(180, 180, 175), width=2)
+        for a in spec.get('annot', []) or []:
+            ax0, ay0, ax1, ay1 = [float(v) for v in a.get('box', [0, 0, 0, 0])]
+            # px source (avant recadrage) → px écran
+            X0 = dx + (ax0 - ox) * sc - cx0
+            Y0 = dy + (ay0 - oy) * sc - cy0
+            X1 = dx + (ax1 - ox) * sc - cx0
+            Y1 = dy + (ay1 - oy) * sc - cy0
+            if a.get('forme', 'rect') == 'ellipse':
+                d.ellipse([X0, Y0, X1, Y1], outline=RED, width=7)
+            else:
+                d.rectangle([X0, Y0, X1, Y1], outline=RED, width=7)
+            label = a.get('label')
+            if label:
+                lf = font(34, 'Condensed ExtraBold')
+                lw = lf.getlength(label) + 28
+                ly = Y0 - 50 if Y0 - 50 > dy else Y1 + 8
+                d.rectangle([X0, ly, X0 + lw, ly + 44], fill=RED)
+                d.text((X0 + 14, ly + 4), label, font=lf, fill=WHITE)
+        if foot_h:
+            ff = font(34, 'Condensed Bold')
+            d.rectangle([px, py + ph - foot_h, px + pw, py + ph], fill=RED)
+            fl = wrap_lines(foot, ff, pw - 80)[0]
+            d.text((px + 40, py + ph - foot_h + 16), fl, font=ff, fill=WHITE)
+        frames.append((img, dur / steps))
+    return frames
 
 
 def render_card_video(spec: dict[str, Any], dur: float, dest: Path, workdir: Path) -> None:
@@ -709,7 +900,8 @@ def ass_time(t: float) -> str:
     return wrap_short.ass_time(max(0.0, t))
 
 
-def build_segment_ass(cards_list, shots, badge: str, citation: str | None, subtitles: str) -> str:
+def build_segment_ass(cards_list, shots, badge: str, citation: str | None, subtitles: str,
+                      badge_on_cuts: bool = False) -> str:
     head = f"""[Script Info]
 ScriptType: v4.00+
 PlayResX: {W}
@@ -728,7 +920,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
     lines = []
     if badge:
         for s in shots:
-            if s['type'] == 'avatar' and s['t1'] - s['t0'] > 0.6:
+            if (s['type'] == 'avatar' or (badge_on_cuts and s['type'] == 'cut')) and s['t1'] - s['t0'] > 0.6:
                 lines.append(f"Dialogue: 2,{ass_time(s['t0'])},{ass_time(s['t1'])},Badge,,0,0,0,,{wrap_short.ass_escape(badge)}")
     if citation:
         end = shots[-1]['t1'] if shots else 5
@@ -762,16 +954,17 @@ def punch_in_filter(zoom: float) -> str:
 def assemble_segment(seg_id: str, src: Path, clip_range: tuple[float, float] | None, dur: float,
                      composite: Path, shots: list[dict[str, Any]], cut_sources: list[Path],
                      card_videos: dict[int, Path], ass_path: Path, dest_v: Path, dest_a: Path,
-                     cut_offsets: list[float], punch_in: float = 1.0) -> None:
+                     cut_offsets: list[float], punch_in: float = 1.0, punch_first: bool = False) -> None:
     """Monte les plans (trim du composite / cut-aways / cartes) + sous-titres, et extrait l'audio.
-    `punch_in` > 1 : un plan avatar sur deux est recadré ×punch_in (deux valeurs de plan)."""
+    `punch_in` > 1 : un plan avatar sur deux est recadré ×punch_in (deux valeurs de plan) ; `punch_first`
+    commence par le plan serré (un insert court d'un seul plan peut ainsi varier d'un insert à l'autre)."""
     if not dest_v.exists():
         cmd = ['ffmpeg', '-y', '-hide_banner', '-v', 'error', '-i', str(composite)]
         inputs = 1
         fc: list[str] = []
         labels: list[str] = []
         cut_i = 0
-        avatar_i = 0
+        avatar_i = 1 if punch_first else 0
         for k, s in enumerate(shots):
             d = q(s['t1'] - s['t0'])
             if s['type'] == 'avatar':
@@ -784,7 +977,8 @@ def assemble_segment(seg_id: str, src: Path, clip_range: tuple[float, float] | N
                 off = cut_offsets[cut_i % len(cut_offsets)]
                 cut_i += 1
                 cmd += ['-i', str(srcp)]
-                fc.append(f"[{inputs}:v]trim=start={off:.6f}:end={off + d:.6f},setpts=PTS-STARTPTS[v{k}]")
+                fc.append(f"[{inputs}:v]trim=start={off:.6f}:end={off + d:.6f},setpts=PTS-STARTPTS,"
+                          f"tpad=stop_mode=clone:stop_duration={d:.6f},trim=duration={d:.6f},setpts=PTS-STARTPTS[v{k}]")
                 inputs += 1
             else:
                 cmd += ['-i', str(card_videos[k])]
@@ -813,9 +1007,46 @@ def silent_audio(dur: float, dest: Path) -> None:
 
 
 # --------------------------------------------------------------------------- sections
+VOICED_KINDS = {'segment', 'fait', 'citation'}
+DENOISE = 'highpass=f=80,afftdn=nf=-50:nr=6'  # doux : le gros du « souffle » de la citation est < 80 Hz (hp seul : −1,1 LU), afftdn nf=-30 rognait la voix (−2,1 LU)
+
+
 class Section:
-    def __init__(self, sid: str, kind: str, video: Path, audio: Path, dur: float, titre: str = ''):
+    def __init__(self, sid: str, kind: str, video: Path, audio: Path, dur: float, titre: str = '',
+                 denoise: bool = False):
         self.id, self.kind, self.video, self.audio, self.dur, self.titre = sid, kind, video, audio, dur, titre
+        self.denoise = denoise
+        self.gain_db = 0.0
+        self.lufs = None
+
+
+def normalize_section_audio(sec: Section) -> Section:
+    """Section PARLÉE → audio-norm.wav à −14 LUFS (gain linéaire par clip + limiteur crête vraie ; débruitage
+    optionnel avant). Un seul gain global laissait ±3 LU entre clips HeyGen (audit : L6 −2,8 LU)."""
+    if sec.kind not in VOICED_KINDS:
+        return sec
+    dest = sec.audio.with_name('audio-norm.wav')
+    meta = sec.audio.with_name('audio-norm.json')
+    if stale(dest, sec.audio) or not meta.exists() or json.loads(meta.read_text()).get('denoise') != sec.denoise:
+        pre = f'{DENOISE},' if sec.denoise else ''
+        if sec.denoise:
+            tmp = sec.audio.with_name(f'.{sec.id}.denoised.wav')
+            atomic(['ffmpeg', '-y', '-hide_banner', '-v', 'error', '-i', str(sec.audio), '-af', DENOISE,
+                    '-c:a', 'pcm_s16le'], tmp)
+            meas = ebur128(tmp)
+            tmp.unlink(missing_ok=True)
+        else:
+            meas = ebur128(sec.audio)
+        gain = TARGET_LUFS - meas['I']
+        atomic(['ffmpeg', '-y', '-hide_banner', '-v', 'error', '-i', str(sec.audio), '-af',
+                f'{pre}volume={gain:.2f}dB,{LIMITER}', '-c:a', 'pcm_s16le', '-ar', '48000'], dest)  # même format que
+        after = ebur128(dest)  # les wav de cartes (concat demuxer : formats mélangés = paquets PCM invalides)
+        meta.write_text(json.dumps({'denoise': sec.denoise, 'gain_db': round(gain, 2), 'in_lufs': meas['I'],
+                                    'out_lufs': after['I']}), encoding='utf-8')
+    data = json.loads(meta.read_text())
+    sec.gain_db, sec.lufs = data['gain_db'], data['out_lufs']
+    sec.audio = dest
+    return sec
 
 
 def words_for(seg: dict[str, Any], src: Path, workdir: Path) -> list[dict[str, Any]]:
@@ -912,10 +1143,17 @@ def render_avatar_section(seg: dict[str, Any], cfg: dict[str, Any], workdir: Pat
     n_cut = sum(1 for s in shots if s['type'] == 'cut')
     cut_d = float(cut_cfg.get('duration', 2.5))
     offsets = []
+    cut_durs = [probe_duration(c) for c in cuts]
     for i in range(max(1, n_cut)):
-        src_d = probe_duration(cuts[i % len(cuts)])
-        slot = (i // len(cuts)) % max(1, int((src_d - cut_d) // cut_d) or 1)
-        offsets.append(q(min(max(0.0, src_d - cut_d - FRAME), slot * cut_d)))
+        src_d = cut_durs[i % len(cuts)]
+        if faceless:
+            # voix off : pas de `every` distinct, les plans font `duration` ; décalage par pas de 1,5 s
+            n_slots = max(1, int((src_d - cut_d) / 1.5) + 1)
+            slot = (i // len(cuts)) % n_slots
+            offsets.append(q(min(max(0.0, src_d - cut_d - FRAME), slot * 1.5)))
+        else:
+            slot = (i // len(cuts)) % max(1, int((src_d - cut_d) // cut_d) or 1)
+            offsets.append(q(min(max(0.0, src_d - cut_d - FRAME), slot * cut_d)))
     # ordre des cut-aways : on commence au 2e B-roll (le 1er est déjà le fond au début)
     cut_sources = (cuts[1:] + cuts[:1] if len(cuts) > 1 else cuts) if not faceless else cuts
 
@@ -945,15 +1183,18 @@ def render_avatar_section(seg: dict[str, Any], cfg: dict[str, Any], workdir: Pat
         acte = seg.get('acte', '')
         badge = f"{acte}  —  {seg.get('titre', '')}" if acte else seg.get('titre', '')
     ass_path = sdir / 'subs.ass'
-    ass_path.write_text(build_segment_ass(subs_cards, shots, badge, citation, cfg.get('subtitles', 'karaoke')),
+    ass_path.write_text(build_segment_ass(subs_cards, shots, badge, citation, cfg.get('subtitles', 'karaoke'),
+                                          badge_on_cuts=faceless and kind == 'segment'),
                         encoding='utf-8')
     dest_v, dest_a = sdir / 'video.mp4', sdir / 'audio.wav'
     assemble_segment(sid, src, clip_range, dur, composite, shots, cut_sources, card_videos, ass_path,
-                     dest_v, dest_a, offsets, punch_in=float(cfg.get('avatar_punch_in', 1.15) or 1.0))
+                     dest_v, dest_a, offsets,
+                     punch_in=float(seg.get('avatar_punch_in', cfg.get('avatar_punch_in', 1.15)) or 1.0),
+                     punch_first=bool(seg.get('punch_in_first')))
     (sdir / 'shots.json').write_text(json.dumps(
         [{k: (v if k != 'card' else (v or {}).get('type')) for k, v in s.items()} for s in shots],
         ensure_ascii=False, indent=1), encoding='utf-8')
-    return Section(sid, kind, dest_v, dest_a, dur, seg.get('titre', ''))
+    return Section(sid, kind, dest_v, dest_a, dur, seg.get('titre', ''), denoise=bool(seg.get('denoise')))
 
 
 def render_card_section(sid: str, spec: dict[str, Any], dur: float, workdir: Path) -> Section:
@@ -1040,22 +1281,74 @@ def music_gain(music: Path, music_lufs: float, cache: Path) -> float:
     return music_lufs - float(data['I'])
 
 
-def mix_music(voice: Path, music: Path, music_gain_db: float, dur: float, dest: Path) -> None:
-    """Voix (déjà à −14 LUFS) + lit musical VERROUILLÉ à son niveau (gain fixe, identique sous les cartes
-    muettes et l'écran de fin) ; ducking doux en plus sous la voix (ratio 3, relâchement 1 s — moins de
-    pompage), jamais de remontée au-dessus du niveau verrouillé ; limiteur crête de sécurité. Résultat =
-    master audio, sans loudnorm."""
-    if not stale(dest, voice, music):
+def card_envelope(quiet: list[tuple[float, float]], att_db: float, fade: float = 1.5) -> str:
+    """Expression `volume` (eval=frame) : atténuation fixe `att_db` sous chaque fenêtre muette, avec des
+    rampes linéaires de `fade` s centrées sur les bords (pas de sursaut entre deux phrases)."""
+    if not quiet or att_db >= 0:
+        return ''
+    half = fade / 2
+    terms = [f'max(0,min(1,min((t-{a - half:.3f})/{fade:.3f},({b + half:.3f}-t)/{fade:.3f})))' for a, b in quiet]
+    env = '+'.join(terms) if len(terms) > 1 else terms[0]
+    return f"volume=volume='pow(10,({att_db:.2f}*min(1,{env}))/20)':eval=frame,"
+
+
+def mix_music(voice: Path, music: Path, music_gain_db: float, dur: float, dest: Path,
+              quiet: list[tuple[float, float]] | None = None, card_db: float = -4.0, stamp: Path | None = None) -> None:
+    """Voix (déjà à −14 LUFS par section) + lit musical VERROUILLÉ à son niveau (gain fixe) ; sidechain doux
+    sous la voix (seuil 0,08 ≈ −22 dBFS, ratio 2, 30/400 ms : −2 à −3 dB, pas de pompage) ; sous les cartes
+    muettes courtes, atténuation fixe `card_db` avec fondus de 1,5 s ; limiteur crête. Résultat = master
+    audio, sans loudnorm."""
+    quiet = quiet or []
+    sig = json.dumps({'gain': round(music_gain_db, 2), 'quiet': quiet, 'card_db': card_db, 'v': 3})
+    if stamp and stamp.exists() and stamp.read_text() == sig and not stale(dest, voice, music):
         return
     fade_out = max(0.0, dur - 2.0)
     fc = (f'[0:a]asplit=2[sc][dry];'
           f'[1:a]atrim=0:{dur:.6f},asetpts=PTS-STARTPTS,aresample=48000,'
           f'aformat=sample_fmts=fltp:sample_rates=48000:channel_layouts=stereo,'
-          f'volume={music_gain_db:.2f}dB,afade=t=in:st=0:d=1.0,afade=t=out:st={fade_out:.6f}:d=2.0[m];'
-          f'[m][sc]sidechaincompress=threshold=0.125:ratio=3:attack=20:release=1000:makeup=1[duck];'
+          f'volume={music_gain_db:.2f}dB,{card_envelope(quiet, card_db)}'
+          f'afade=t=in:st=0:d=1.0,afade=t=out:st={fade_out:.6f}:d=2.0[m];'
+          f'[m][sc]sidechaincompress=threshold=0.08:ratio=2:attack=30:release=400:makeup=1[duck];'
           f'[dry][duck]amix=inputs=2:normalize=0:dropout_transition=0,atrim=0:{dur:.6f},{LIMITER}[mix]')
     atomic(['ffmpeg', '-y', '-hide_banner', '-v', 'error', '-i', str(voice), '-stream_loop', '-1', '-i', str(music),
             '-filter_complex', fc, '-map', '[mix]', '-t', f'{dur:.6f}', '-c:a', 'pcm_s24le', '-ar', '48000'], dest)
+    if stamp:
+        stamp.write_text(sig, encoding='utf-8')
+
+
+def room_tone_gain(lufs: float, workdir: Path) -> float:
+    """Gain (dB) qui amène `anoisesrc=pink` (amplitude 0.05) à `lufs` LUFS — mesuré une fois, mis en cache."""
+    cache = workdir / 'room-tone.json'
+    data = json.loads(cache.read_text()) if cache.exists() else {}
+    if 'I' not in data:
+        res = run(['ffmpeg', '-hide_banner', '-nostats', '-f', 'lavfi', '-i',
+                   'anoisesrc=colour=pink:amplitude=0.05:sample_rate=48000:seed=7', '-t', '10', '-af', 'ebur128',
+                   '-f', 'null', '-'], capture=True)
+        m = re.findall(r'^\s+I:\s+(-?[0-9.]+) LUFS', res.stderr, flags=re.M)
+        if not m:
+            raise NewsLongError('ambiance de salle : mesure introuvable')
+        data = {'I': float(m[-1])}
+        cache.write_text(json.dumps(data), encoding='utf-8')
+    return lufs - data['I']
+
+
+def mix_room_tone(voice: Path, dur: float, dest: Path, tone_gain_db: float | None, stamp: Path) -> None:
+    """Sans musique : voix + ambiance de salle CONSTANTE (bruit rose très discret, même niveau sous la parole
+    et sous les cartes → zéro contraste), limiteur crête. `tone_gain_db` None ⇒ copie de la voix (silence pur)."""
+    sig = json.dumps({'tone': None if tone_gain_db is None else round(tone_gain_db, 2), 'v': 1})
+    if stamp.exists() and stamp.read_text() == sig and not stale(dest, voice):
+        return
+    if tone_gain_db is None:
+        tmp = dest.with_name(f'.{dest.stem}.{os.getpid()}.part{dest.suffix}')
+        shutil.copyfile(voice, tmp)
+        os.replace(tmp, dest)
+    else:
+        fc = (f'[1:a]volume={tone_gain_db:.2f}dB,afade=t=in:st=0:d=0.5,afade=t=out:st={max(0.0, dur - 1.0):.3f}:d=1.0[tone];'
+              f'[0:a][tone]amix=inputs=2:normalize=0:dropout_transition=0,atrim=0:{dur:.6f},{LIMITER}[mix]')
+        atomic(['ffmpeg', '-y', '-hide_banner', '-v', 'error', '-i', str(voice), '-f', 'lavfi', '-t', f'{dur:.3f}', '-i',
+                'anoisesrc=colour=pink:amplitude=0.05:sample_rate=48000:seed=7', '-filter_complex', fc, '-map', '[mix]',
+                '-t', f'{dur:.6f}', '-c:a', 'pcm_s24le', '-ar', '48000'], dest)
+    stamp.write_text(sig, encoding='utf-8')
 
 
 def premaster_audio(source: Path, dest: Path) -> None:
@@ -1083,6 +1376,9 @@ def mux(video: Path, audio: Path, dur: float, dest: Path, force: bool = False) -
         return
     atomic(['ffmpeg', '-y', '-hide_banner', '-v', 'error', '-i', str(video), '-i', str(audio),
             '-map', '0:v:0', '-map', '1:a:0', '-c:v', 'copy', '-c:a', 'aac', '-b:a', '256k', '-ar', '48000',
+            # PNS/TNS de l'encodeur AAC natif : sur une ambiance de salle (bruit rose) très basse, la substitution
+            # de bruit produisait UN échantillon à +4,7 dBTP (74,99 s) → QC en repli dynamique ; sans PNS/TNS : −1,8
+            '-aac_pns', '0', '-aac_tns', '0',
             '-t', f'{dur:.6f}', '-movflags', '+faststart'], dest)
 
 
@@ -1178,6 +1474,7 @@ def measure(final: Path, sections: list[Section], out: Path, scene_thr: float = 
                             'ecart_median_s': round(sorted(g25)[len(g25) // 2], 2) if g25 else None},
         'plan_avatar_max_s': round(longest_avatar, 2), 'avatar_total_s': round(avatar_total, 1),
         'part_avatar_pct': round(avatar_total / dur * 100, 1),
+        'sections_voix_off': sum(1 for s in sections if s.kind == 'segment' and not (s.video.parent / 'composite.mp4').exists()),
         'loudness': lufs,
     }
     out.write_text(json.dumps(data, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
@@ -1195,7 +1492,9 @@ def write_pack(cfg: dict[str, Any], chapters: list[tuple[float, str]], out: Path
              '## Titre', '', cfg['titre'], '']
     if alts:
         lines += ['Alternatives :', *(f'- {a}' for a in alts), '']
-    lines += ['## Description (coller telle quelle)', '', '```', desc, '', 'CHAPITRES', chap_txt, '', '```', '',
+    sources = cfg.get('sources', [])
+    src_txt = ('\n\nSOURCES\n' + '\n'.join(f'• {x}' for x in sources)) if sources else ''
+    lines += ['## Description (coller telle quelle)', '', '```', desc, '', 'CHAPITRES', chap_txt + src_txt, '', '```', '',
               '## Tags', '', ', '.join(tags), '', '## Chapitres (chapters.txt)', '', '```', chap_txt, '```', '']
     if mesures:
         lines += ['## Mesures', '', '```', json.dumps(mesures, ensure_ascii=False, indent=2), '```', '']
@@ -1288,7 +1587,8 @@ def main() -> None:
             'faits': [f.get('carte') for f in cfg.get('hook', {}).get('faits', [])],
             'cartons': [s.get('carton') for s in cfg['segments'] if isinstance(s.get('carton'), dict)],
             'segments': [{'titre': s.get('titre'), 'acte': s.get('acte'),
-                          'cartes': [{f: c.get(f) for f in ('chiffre', 'ligne', 'titre', 'lignes', 'source', 'surligne')
+                          'cartes': [{f: c.get(f) for f in ('chiffre', 'ligne', 'titre', 'lignes', 'source', 'surligne',
+                                                            'etapes', 'accent')
                                       if c.get(f) is not None} for c in s.get('cartes', [])]}
                          for s in cfg['segments']],
         }
@@ -1303,7 +1603,8 @@ def main() -> None:
             for s in cfg['segments']:
                 if only and s['id'] not in only:
                     continue
-                for name in ('video.mp4', 'audio.wav', 'subs.ass', 'composite.mp4', 'bg.mp4', 'bg.txt'):
+                for name in ('video.mp4', 'audio.wav', 'audio-norm.wav', 'audio-norm.json', 'subs.ass',
+                             'composite.mp4', 'bg.mp4', 'bg.txt'):
                     (workdir / 'segments' / s['id'] / name).unlink(missing_ok=True)
                 for p in (workdir / 'segments' / s['id']).glob('card-*.mp4'):
                     p.unlink()
@@ -1346,8 +1647,10 @@ def main() -> None:
 
         # 1) segments avatar en parallèle
         def job(seg):
-            print(f"→ segment {seg['id']} ({seg.get('titre', '')})", flush=True)
-            return render_avatar_section(seg, cfg, workdir, roots, shadow_cache, cache_dir=cache_dir)
+            vo = seg.get('type') == 'voiceover'
+            print(f"→ segment {seg['id']} ({seg.get('titre', '')}){' [voix off]' if vo else ''}", flush=True)
+            return render_avatar_section(seg, cfg, workdir, roots, shadow_cache, cache_dir=cache_dir,
+                                         faceless=vo)
 
         todo = [s for s in cfg['segments'] if not only or s['id'] in only]
         with ThreadPoolExecutor(max_workers=max(1, args.jobs)) as ex:
@@ -1409,6 +1712,7 @@ def main() -> None:
                 pseudo = {'id': 'hook-citation', 'src': seg['src'], 'fix': seg.get('fix', []),
                           'broll': cit.get('broll') or seg.get('broll', []),
                           'cartes': [these_card] if these_host == 'citation' else [],
+                          'denoise': bool(cit.get('denoise', seg.get('denoise'))),
                           'face_crop': seg.get('face_crop'),
                           'cutaway': cit.get('cutaway', {'first_at': 1.8, 'duration': 1.5, 'every': 99, 'tail_avatar': 1.2})}
                 add(render_avatar_section(pseudo, cfg, workdir, roots, shadow_cache,
@@ -1476,18 +1780,40 @@ def main() -> None:
         # 4) montage final
         video = workdir / 'video.mp4'
         voice = workdir / 'voice.wav'
+        for sec in sections:
+            normalize_section_audio(sec)
+        voiced = [s for s in sections if s.kind in VOICED_KINDS]
+        print('  voix par section : ' + ', '.join(f'{s.id} {s.gain_db:+.1f} dB→{s.lufs:.1f}' for s in voiced), flush=True)
         concat_sections(sections, workdir, video, voice)
-        music = expand(cfg['music'])
-        if not music.exists():
-            raise NewsLongError(f'musique introuvable: {music}')
+        quiet: list[tuple[float, float]] = []
+        t_acc = 0.0
+        for sec in sections:
+            if sec.kind not in VOICED_KINDS and sec.dur < float(cfg.get('music_card_max_s', 3.0)):
+                quiet.append((round(t_acc, 3), round(t_acc + sec.dur, 3)))
+            t_acc += sec.dur
         voice_norm = workdir / 'voice-norm.wav'
         v_gain = premaster_voice(voice, voice_norm)
-        music_lufs = float(cfg.get('music_lufs', cfg.get('music_db', -32)))
-        m_gain = music_gain(music, music_lufs, workdir / 'music-loudness.json')
-        print(f'  audio : voix {v_gain:+.1f} dB → −14 LUFS ; musique {m_gain:+.1f} dB → {music_lufs:.0f} LUFS verrouillés',
-              flush=True)
         mix = workdir / 'mix.wav'
-        mix_music(voice_norm, music, m_gain, total, mix)
+        music_info: dict[str, Any]
+        if cfg.get('music'):
+            music = expand(cfg['music'])
+            if not music.exists():
+                raise NewsLongError(f'musique introuvable: {music}')
+            music_lufs = float(cfg.get('music_lufs', cfg.get('music_db', -38)))
+            m_gain = music_gain(music, music_lufs, workdir / 'music-loudness.json')
+            print(f'  audio : voix {v_gain:+.1f} dB → −14 LUFS ; musique {m_gain:+.1f} dB → {music_lufs:.0f} LUFS verrouillés',
+                  flush=True)
+            mix_music(voice_norm, music, m_gain, total, mix, quiet=quiet, card_db=float(cfg.get('music_card_db', -4.0)),
+                      stamp=workdir / 'mix.sig')
+            music_info = {'lufs_verrouille': music_lufs, 'gain_db': round(m_gain, 2),
+                          'cartes_muettes_db': float(cfg.get('music_card_db', -4.0)), 'fenetres_muettes': quiet}
+        else:
+            tone = cfg.get('room_tone_lufs', -55)
+            tone_gain = room_tone_gain(float(tone), workdir) if tone is not None else None
+            print(f'  audio : voix {v_gain:+.1f} dB → −14 LUFS ; SANS musique ; ambiance de salle '
+                  f'{"aucune (silence pur)" if tone is None else f"{float(tone):.0f} LUFS constante"}', flush=True)
+            mix_room_tone(voice_norm, total, mix, tone_gain, workdir / 'mix.sig')
+            music_info = {'sans_musique': True, 'ambiance_lufs': tone}
         mastered = workdir / 'mastered.wav'
         premaster_audio(mix, mastered)
         if args.force or stale(final, video, mastered):
@@ -1503,6 +1829,8 @@ def main() -> None:
         render_planche(final, total, out_dir / f'{slug}-planche-12.jpg', force=args.force)
         mes = measure(final, sections, out_dir / f'MESURES-{slug}.json', args.scene)
         mes['temps_rendu_s'] = round(time.time() - t_start, 1)
+        mes['voix_par_section_lufs'] = {s.id: s.lufs for s in voiced}
+        mes['musique'] = music_info
         (out_dir / f'MESURES-{slug}.json').write_text(json.dumps(mes, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
         write_pack(cfg, chapters, out_dir / f'PACK-{slug}.md', final, total, mes)
         thumb = build_thumbnail(cfg, out_dir, workdir, slug)
