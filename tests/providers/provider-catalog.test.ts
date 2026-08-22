@@ -104,6 +104,11 @@ describe('runtime provider catalog', () => {
     expect(ids).not.toEqual(expect.arrayContaining(['azure', 'bedrock', 'copilot']));
   });
 
+  it('has unique ids across the whole catalog (no duplicated provider entries)', () => {
+    const ids = getRuntimeProviderCatalog().map((entry) => entry.id);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
   it('tracks plugin-native transports outside the direct CodeBuddyClient path', () => {
     const pluginProviders = getPluginNativeRuntimeProviderCatalog();
     const ids = pluginProviders.map((entry) => entry.id);
