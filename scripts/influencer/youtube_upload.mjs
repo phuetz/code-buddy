@@ -95,7 +95,7 @@ function parsePack(packPath, only) {
     const num = b.match(/^(\d+)/)?.[1];
     if (only && !only.includes(num)) continue;
     const file = b.match(/Fichier\s*:\s*`([^`]+\.mp4)`/)?.[1];
-    const section = (name) => b.match(new RegExp(`## ${name}[^\\n]*\\n+\`\`\`[^\\n]*\\n([\\s\\S]*?)\`\`\``))?.[1]?.trim();
+    const section = (name) => b.match(new RegExp(`## (?:\\d+ )?${name}[^\\n]*\\n+\`\`\`[^\\n]*\\n([\\s\\S]*?)\`\`\``, 'i'))?.[1]?.trim();
     const title = section('Titre');
     const description = section('Description');
     const tagsRaw = section('Tags');
