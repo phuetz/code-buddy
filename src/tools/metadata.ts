@@ -1293,6 +1293,48 @@ export const TOOL_METADATA: ToolMetadata[] = [
     fleetSafe: true,
   },
 
+  // LSP semantic navigation and diagnostics (read-only)
+  {
+    name: 'lsp_definition',
+    category: 'codebase',
+    keywords: ['lsp', 'definition', 'declaration', 'go to definition', 'semantic navigation', 'symbol', 'type'],
+    priority: 9,
+    description: 'Resolve a semantic symbol definition through the configured language server',
+    fleetSafe: true,
+  },
+  {
+    name: 'lsp_references',
+    category: 'codebase',
+    keywords: ['lsp', 'references', 'usages', 'callers', 'where used', 'semantic navigation', 'symbol'],
+    priority: 9,
+    description: 'Find semantic symbol references through the configured language server',
+    fleetSafe: true,
+  },
+  {
+    name: 'lsp_hover',
+    category: 'codebase',
+    keywords: ['lsp', 'hover', 'type', 'signature', 'documentation', 'semantic information', 'symbol'],
+    priority: 9,
+    description: 'Get semantic hover and type information from the configured language server',
+    fleetSafe: true,
+  },
+  {
+    name: 'lsp_symbols',
+    category: 'codebase',
+    keywords: ['lsp', 'symbols', 'outline', 'classes', 'functions', 'methods', 'document structure', 'semantic navigation'],
+    priority: 9,
+    description: 'Get a semantic document outline from the configured language server',
+    fleetSafe: true,
+  },
+  {
+    name: 'lsp_diagnostics',
+    category: 'codebase',
+    keywords: ['lsp', 'diagnostics', 'errors', 'warnings', 'typecheck', 'lint', 'semantic analysis'],
+    priority: 9,
+    description: 'Get diagnostics published by the configured language server',
+    fleetSafe: true,
+  },
+
   // LSP rename/refactor
   {
     name: 'lsp_rename',
