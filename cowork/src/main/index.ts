@@ -403,6 +403,10 @@ app.disableHardwareAcceleration();
 let mainWindow: BrowserWindow | null = null;
 let engineAdapter: EngineAdapterLike | undefined;
 let sessionManager: SessionManager | null = null;
+const REMOTE_PERMISSION_TIMEOUT_MS = 5 * 60_000 + 30_000;
+let respondToEnginePermission:
+  | ((id: string, response: 'allow' | 'allow_always' | 'deny') => void)
+  | null = null;
 let skillsManager: SkillsManager | null = null;
 let pluginRuntimeService: PluginRuntimeService | null = null;
 let scheduledTaskManager: ScheduledTaskManager | null = null;
@@ -1331,7 +1335,7 @@ async function startSandboxBootstrap(): Promise<void> {
   }
 }
 
-import { sendToRenderer } from './ipc-main-bridge';
+import { sendToRenderer, setPermissionResponder } from './ipc-main-bridge';
 import { remoteBackendManager } from './remote-backend/remote-backend-manager';
 import { remoteBackendConfigStore } from './remote-backend/remote-backend-config-store';
 
@@ -1514,7 +1518,12 @@ app
           const { DesktopPermissionBridge } = await import(
             /* webpackIgnore: true */ /* @vite-ignore */ permBridgeUrl
           );
-          const permissionBridge = new DesktopPermissionBridge(sendToRenderer);
+          const permissionBridge = new DesktopPermissionBridge(
+            sendToRenderer,
+            REMOTE_PERMISSION_TIMEOUT_MS
+          );
+          respondToEnginePermission = (id, response) =>
+            permissionBridge.handleResponse(id, response);
           const adapterWithPerm = engineAdapter as unknown as {
             setPermissionCallback?: (cb: unknown) => void;
           };
@@ -1658,7 +1667,15 @@ app
       pluginRuntimeService,
       engineAdapter,
       new InProcessCoworkCognition(() => getServerBridge().getCognitionPort()),
+      (sessionId) => remoteManager.isRemoteSession(sessionId),
     );
+    setPermissionResponder((toolUseId, response, bridgeId) => {
+      if (bridgeId && respondToEnginePermission) {
+        respondToEnginePermission(bridgeId, response);
+        return;
+      }
+      sessionManager?.handlePermissionResponse(toolUseId, response);
+    });
 
     // Do not grant `allOperations` process-wide. The engine adapter wires
     // ConfirmationService to Cowork's real permission dialog, while routine

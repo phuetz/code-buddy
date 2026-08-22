@@ -477,6 +477,8 @@ export type BackgroundSessionLifecycleListener = (
 ) => void;
 
 export class SessionManager {
+  private static readonly LOCAL_PERMISSION_TIMEOUT_MS = 60_000;
+  private static readonly REMOTE_PERMISSION_TIMEOUT_MS = 5 * 60_000 + 30_000;
   private db: DatabaseInstance;
   private sendToRenderer: (event: ServerEvent) => void;
   private pathResolver: PathResolver;
@@ -524,6 +526,7 @@ export class SessionManager {
     pluginRuntimeService?: PluginRuntimeService,
     engineAdapter?: EngineAdapterLike,
     private readonly cognition?: CoworkCognitionPort,
+    private readonly isRemoteSession: (sessionId: string) => boolean = () => false,
   ) {
     this.db = db;
     this.engineAdapter = engineAdapter;
@@ -2884,11 +2887,14 @@ export class SessionManager {
     input: Record<string, unknown>
   ): Promise<PermissionResult> {
     return new Promise((resolve) => {
+      const timeoutMs = this.isRemoteSession(sessionId)
+        ? SessionManager.REMOTE_PERMISSION_TIMEOUT_MS
+        : SessionManager.LOCAL_PERMISSION_TIMEOUT_MS;
       const timeoutId = setTimeout(() => {
         this.pendingPermissions.delete(toolUseId);
         resolve('deny');
         this.sendToRenderer({ type: 'permission.dismiss', payload: { toolUseId } });
-      }, 60_000);
+      }, timeoutMs);
       this.pendingPermissions.set(toolUseId, (result: PermissionResult) => {
         clearTimeout(timeoutId);
         resolve(result);
