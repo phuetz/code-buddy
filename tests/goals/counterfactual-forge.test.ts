@@ -14,7 +14,7 @@ describe('Counterfactual Forge', () => {
     dir = fs.mkdtempSync(path.join(os.tmpdir(), 'counterfactual-forge-'));
   });
 
-  afterEach(() => fs.rmSync(dir, { recursive: true, force: true }));
+  afterEach(() => fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }));
 
   it('compares proof-backed strategies and selects only an eligible winner', () => {
     const state = createGoalState('Minimize voice latency with no quality regression');

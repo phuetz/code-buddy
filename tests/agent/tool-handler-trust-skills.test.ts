@@ -68,7 +68,7 @@ describe('ToolHandler trust gate — read-only skills exception', () => {
 
   afterEach(() => {
     if (createdRoot) {
-      fs.rmSync(createdRoot, { recursive: true, force: true });
+      fs.rmSync(createdRoot, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
       createdRoot = null;
     }
     resetTrustFolderManager();

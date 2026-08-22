@@ -33,7 +33,7 @@ beforeAll(() => {
 
 afterAll(() => {
   process.env.PATH = originalPath;
-  fs.rmSync(binDir, { recursive: true, force: true });
+  fs.rmSync(binDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
 });
 
 describe('built-in sources', () => {

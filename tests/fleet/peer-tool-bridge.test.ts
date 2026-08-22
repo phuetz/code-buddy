@@ -58,7 +58,7 @@ describe('PeerToolBridge', () => {
     delete process.env.CODEBUDDY_PEER_TOOL_ALLOWLIST;
     
     // Clean up temp directory
-    await fs.rm(tempWorkspace, { recursive: true, force: true });
+    await fs.rm(tempWorkspace, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   it('fails closed when workspace root is not configured', async () => {

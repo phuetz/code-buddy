@@ -35,7 +35,7 @@ describe('understandVideo — CKG ingestion gate', () => {
   });
 
   afterEach(async () => {
-    await rm(outDir, { recursive: true, force: true }).catch(() => {});
+    await rm(outDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }).catch(() => {});
     if (ORIGINAL_ENV === undefined) delete process.env.CODEBUDDY_COLLECTIVE_MEMORY;
     else process.env.CODEBUDDY_COLLECTIVE_MEMORY = ORIGINAL_ENV;
   });

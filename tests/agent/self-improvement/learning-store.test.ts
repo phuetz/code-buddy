@@ -40,7 +40,7 @@ beforeEach(() => {
   dir = fs.mkdtempSync(path.join(os.tmpdir(), 'learning-store-'));
   stamp = 0;
 });
-afterEach(() => fs.rmSync(dir, { recursive: true, force: true }));
+afterEach(() => fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }));
 
 describe('LearningStore (git-backed reversibility)', () => {
   it('initialises an isolated git repo and commits scored versions', async () => {

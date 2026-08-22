@@ -221,7 +221,7 @@ describe('OpenClaw gateway bridge compatibility', () => {
   });
 
   afterEach(async () => {
-    await rm(tempDir, { recursive: true, force: true });
+    await rm(tempDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   it('discovers an OpenClaw gateway lockfile without exposing secrets', async () => {

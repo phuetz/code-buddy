@@ -37,7 +37,7 @@ describe('lm-resizer compressor', () => {
       if (!hasBin) return;
       if (prevStore === undefined) delete process.env.CODEBUDDY_LM_RESIZER_STORE;
       else process.env.CODEBUDDY_LM_RESIZER_STORE = prevStore;
-      try { rmSync(dir, { recursive: true, force: true }); } catch { /* best effort */ }
+      try { rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }); } catch { /* best effort */ }
     });
 
     it.skipIf(!hasBin)('compresses noisy output, preserves the real error, exposes a recovery hash', async () => {

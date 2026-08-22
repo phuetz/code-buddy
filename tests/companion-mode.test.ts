@@ -159,7 +159,7 @@ describe('companion-mode', () => {
   });
 
   afterEach(async () => {
-    await rm(tempDir, { recursive: true, force: true });
+    await rm(tempDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     for (const key of envKeys) {
       const value = originalEnv[key];
       if (value === undefined) {

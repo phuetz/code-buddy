@@ -33,7 +33,7 @@ describe('peer Mission Exchange bridge', () => {
     else process.env.CODEBUDDY_HOME = previousHome;
     if (previousAllow === undefined) delete process.env.CODEBUDDY_PEER_EXCHANGE_ALLOW_BIDS;
     else process.env.CODEBUDDY_PEER_EXCHANGE_ALLOW_BIDS = previousAllow;
-    fs.rmSync(dir, { recursive: true, force: true });
+    fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   const context = {

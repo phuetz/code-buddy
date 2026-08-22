@@ -117,7 +117,7 @@ describe('assistant permission posture migration', () => {
       expect(readAssistantConfig(paths).CODEBUDDY_SENSORY_SPEAK_PERMISSION_MODE).toBe('default');
       expect(readFileSync(paths.vision, 'utf8')).toBe(original);
     } finally {
-      rmSync(dir, { recursive: true, force: true });
+      rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     }
   });
 });
@@ -135,7 +135,7 @@ describe('assistant response policy migration', () => {
       expect(readAssistantConfig(paths).CODEBUDDY_SENSORY_RESPONSE_POLICY).toBe('always');
       expect(readFileSync(paths.vision, 'utf8')).toBe(original);
     } finally {
-      rmSync(dir, { recursive: true, force: true });
+      rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     }
   });
 
@@ -157,7 +157,7 @@ describe('assistant response policy migration', () => {
       );
       expect(readAssistantConfig(paths).CODEBUDDY_SENSORY_RESPONSE_POLICY).toBe('addressed');
     } finally {
-      rmSync(dir, { recursive: true, force: true });
+      rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     }
   });
 });
@@ -183,7 +183,7 @@ describe('assistant privileged runtime env', () => {
       });
       expect(readAssistantConfig(paths)).not.toHaveProperty('CODEBUDDY_SENSORY_ALERT_TOKEN');
     } finally {
-      rmSync(dir, { recursive: true, force: true });
+      rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     }
   });
 });
@@ -307,7 +307,7 @@ describe('writeAssistantConfig', () => {
         'CODEBUDDY_SENSORY_RESPONSE_POLICY=addressed'
       );
     } finally {
-      rmSync(dir, { recursive: true, force: true });
+      rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     }
   });
 
@@ -330,7 +330,7 @@ describe('writeAssistantConfig', () => {
       expect(readFileSync(paths.vision, 'utf8')).toContain('CODEBUDDY_TTS_VOLUME=35');
       expect(readFileSync(paths.lisa, 'utf8')).toContain('CODEBUDDY_TTS_VOLUME=35');
     } finally {
-      rmSync(dir, { recursive: true, force: true });
+      rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     }
   });
 });

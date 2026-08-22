@@ -41,7 +41,7 @@ describe('Hermes Kanban real workspace integration', () => {
 
   afterEach(async () => {
     process.chdir(originalCwd);
-    await fs.rm(tempWorkspace, { recursive: true, force: true });
+    await fs.rm(tempWorkspace, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   it('persists the Hermes kanban lifecycle on disk', async () => {

@@ -421,7 +421,7 @@ describe('assembleFilm — orchestration (injected)', () => {
     root = await mkdtemp(join(tmpdir(), 'buddy-film-'));
   });
   afterAll(async () => {
-    await rm(root, { recursive: true, force: true });
+    await rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   it('assembles a 3-clip film and reports the estimated duration Σd − ΣT', async () => {
@@ -553,7 +553,7 @@ describe.runIf(hasFfmpeg)('assembleFilm — real ffmpeg render', () => {
   }, 60_000);
 
   afterAll(async () => {
-    await rm(root, { recursive: true, force: true });
+    await rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   it('welds 3 clips with a 0.5s xfade into one film of ≈ 5s', async () => {

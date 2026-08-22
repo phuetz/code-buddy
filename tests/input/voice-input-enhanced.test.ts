@@ -96,7 +96,7 @@ describe('VoiceInputManager availability and errors', () => {
       expect(fs.readFileSync(configPath, 'utf8')).toContain('sk-test-secret');
     } finally {
       manager.dispose();
-      await rm(tempHome, { recursive: true, force: true });
+      await rm(tempHome, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     }
   });
 });

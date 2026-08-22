@@ -177,7 +177,7 @@ describe('robust lm-resizer client', () => {
       expect(result?.transport).toBe('http');
       expect(fetchImpl).toHaveBeenCalledTimes(2);
     } finally {
-      rmSync(dir, { recursive: true, force: true });
+      rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     }
   });
 

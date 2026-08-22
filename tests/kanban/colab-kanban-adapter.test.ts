@@ -25,7 +25,7 @@ describe('ColabKanbanAdapter (unified kanban board)', () => {
   });
 
   afterEach(() => {
-    rmSync(dir, { recursive: true, force: true });
+    rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   it('writes to the shared fleet board so the daemon can claim what a tool created', async () => {

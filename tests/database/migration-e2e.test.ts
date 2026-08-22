@@ -125,7 +125,7 @@ describe.skipIf(!hasBetterSqlite3)('Database migration E2E (old install → curr
     else process.env.USERPROFILE = ORIGINAL_USERPROFILE;
     for (const dir of [fakeHome, workDir]) {
       try {
-        rmSync(dir, { recursive: true, force: true });
+        rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
       } catch {
         // best-effort cleanup
       }
@@ -321,7 +321,7 @@ describe.skipIf(!hasBetterSqlite3)('Database migration E2E (old install → curr
     }
 
     beforeEach(async () => {
-      rmSync(codebuddyDir(), { recursive: true, force: true });
+      rmSync(codebuddyDir(), { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
       resetSingletons();
       // migration.ts drives the singleton manager — point it at a fresh file
       await initializeDatabase({ dbPath: freshDbPath(), walMode: false });

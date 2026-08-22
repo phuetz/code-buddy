@@ -13,7 +13,7 @@ function makeTmpDir(): string {
 
 function cleanDir(dir: string): void {
   try {
-    fs.rmSync(dir, { recursive: true, force: true });
+    fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   } catch {
     // Ignore
   }
@@ -473,7 +473,7 @@ describe('RunStore', () => {
       expect(before.staleRows).toBe(0);
 
       // Simulate a pruned/moved run folder while the index keeps the row.
-      fs.rmSync(path.join(tmpDir, runId), { recursive: true, force: true });
+      fs.rmSync(path.join(tmpDir, runId), { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
 
       const after = store.checkArtifactIndexHealth();
       expect(after.staleRows).toBe(1);
@@ -517,7 +517,7 @@ describe('RunStore', () => {
       const baseline = store.checkArtifactIndexHealth();
       if (baseline.unavailable) return;
 
-      fs.rmSync(path.join(tmpDir, staleRunId), { recursive: true, force: true });
+      fs.rmSync(path.join(tmpDir, staleRunId), { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
       fs.rmSync(path.join(tmpDir, orphanRunId, 'artifacts', 'orphan.md'), { force: true });
 
       // Default repair removes only the stale (missing-run) row.

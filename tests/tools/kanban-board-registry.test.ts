@@ -20,7 +20,7 @@ describe('KanbanBoardRegistry (multi-board)', () => {
   });
 
   afterEach(() => {
-    fs.rmSync(dir, { recursive: true, force: true });
+    fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   it('always exposes a default board and resolves to it initially', () => {

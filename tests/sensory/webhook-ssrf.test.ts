@@ -37,7 +37,7 @@ describe('sensory webhook SSRF protection', () => {
     resetSSRFGuard();
     delete process.env.CODEBUDDY_SENSORY_RULES_FILE;
     delete process.env.CODEBUDDY_RULE_RUNS_FILE;
-    await rm(tempDir, { recursive: true, force: true });
+    await rm(tempDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   it('rejects a private webhook during validation and persistence', async () => {

@@ -98,7 +98,7 @@ afterEach(() => {
   unwireSessionForTests();
   resetPeerSessionStore();
   for (const key of ENV_KEYS) delete process.env[key];
-  fs.rmSync(storeDir, { recursive: true, force: true });
+  fs.rmSync(storeDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
 });
 
 describe('peer.chat inbound cost cap', () => {

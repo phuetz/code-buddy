@@ -21,7 +21,7 @@ beforeEach(() => {
   dir = mkdtempSync(path.join(tmpdir(), 'ce-freshness-'));
 });
 afterEach(() => {
-  rmSync(dir, { recursive: true, force: true });
+  rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
 });
 
 describe('getStats — real .gitnexus nested schema', () => {

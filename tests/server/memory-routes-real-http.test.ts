@@ -51,7 +51,7 @@ describe('memory HTTP routes (real persistent store)', () => {
     const { stopServer } = await import('../../src/server/index.js');
     await stopServer(server);
     resetMemoryManagerForTests();
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   it('POST → GET /:id round-trips through the REAL memory file', async () => {

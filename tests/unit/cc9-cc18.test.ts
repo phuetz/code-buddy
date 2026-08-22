@@ -69,7 +69,7 @@ describe('CC10: Instruction Excludes', () => {
   afterEach(async () => {
     const { clearExcludesCache } = await import('../../src/context/instruction-excludes.js');
     clearExcludesCache();
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   it('shouldExcludeInstructionFile returns false when no excludes configured', async () => {
@@ -110,7 +110,7 @@ describe('CC9: Import Directive Parser', () => {
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   it('resolves relative @import directives', async () => {
@@ -456,7 +456,7 @@ describe('CC14: Agent Memory Integration', () => {
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   it('readAgentMemory returns empty for nonexistent', async () => {

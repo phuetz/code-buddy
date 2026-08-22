@@ -120,7 +120,7 @@ export const run = async () => {
 
 function cleanupTestProject(dir: string): void {
   try {
-    fs.rmSync(dir, { recursive: true, force: true });
+    fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   } catch { /* ignore cleanup errors */ }
 }
 

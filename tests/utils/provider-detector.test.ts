@@ -54,7 +54,7 @@ afterEach(() => {
       delete process.env[k];
     }
   }
-  try { fs.rmSync(tmpHome, { recursive: true, force: true }); } catch { /* ignore */ }
+  try { fs.rmSync(tmpHome, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }); } catch { /* ignore */ }
 });
 
 function writeAuth(content: unknown = { tokens: { access_token: 'tok' } }): void {

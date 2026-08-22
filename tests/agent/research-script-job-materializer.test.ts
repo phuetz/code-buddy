@@ -13,7 +13,7 @@ describe('research script job materializer', () => {
   });
 
   afterEach(() => {
-    fs.rmSync(tempDir, { recursive: true, force: true });
+    fs.rmSync(tempDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   it('writes a reviewable, not-run artifact folder without executing the script', async () => {

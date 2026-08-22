@@ -129,7 +129,7 @@ describe('buildChannelStatusReport', () => {
       ]));
       expect(report.recommendations).toEqual([]);
     } finally {
-      fs.rmSync(tempDir, { recursive: true, force: true });
+      fs.rmSync(tempDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     }
   });
 
@@ -192,7 +192,7 @@ describe('buildChannelStatusReport', () => {
       }));
       expect(JSON.stringify(report)).not.toContain('ntfy-secret-token');
     } finally {
-      fs.rmSync(tempDir, { recursive: true, force: true });
+      fs.rmSync(tempDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     }
   });
 
@@ -230,7 +230,7 @@ describe('buildChannelStatusReport', () => {
       expect(JSON.stringify(report)).not.toContain('dingtalk-token');
       expect(JSON.stringify(report)).not.toContain('SEC-test');
     } finally {
-      fs.rmSync(tempDir, { recursive: true, force: true });
+      fs.rmSync(tempDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     }
   });
 
@@ -267,7 +267,7 @@ describe('buildChannelStatusReport', () => {
       }));
       expect(JSON.stringify(report)).not.toContain('wecom-key');
     } finally {
-      fs.rmSync(tempDir, { recursive: true, force: true });
+      fs.rmSync(tempDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     }
   });
 
@@ -304,7 +304,7 @@ describe('buildChannelStatusReport', () => {
       expect(JSON.stringify(report)).not.toContain('weixin-access-token');
       expect(JSON.stringify(report)).not.toContain('agent@example');
     } finally {
-      fs.rmSync(tempDir, { recursive: true, force: true });
+      fs.rmSync(tempDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     }
   });
 
@@ -341,7 +341,7 @@ describe('buildChannelStatusReport', () => {
       }));
       expect(JSON.stringify(report)).not.toContain('onebot-secret-token');
     } finally {
-      fs.rmSync(tempDir, { recursive: true, force: true });
+      fs.rmSync(tempDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     }
   });
 });

@@ -26,7 +26,7 @@ beforeEach(async () => {
 });
 
 afterEach(() => {
-  try { fs.rmSync(tmpHome, { recursive: true, force: true }); } catch { /* ignore */ }
+  try { fs.rmSync(tmpHome, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }); } catch { /* ignore */ }
 });
 
 describe('installation-id', () => {

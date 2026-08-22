@@ -80,7 +80,7 @@ describe('produceFilm', () => {
     root = await mkdtemp(join(tmpdir(), 'buddy-producer-'));
   });
   afterEach(async () => {
-    await rm(root, { recursive: true, force: true });
+    await rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   it('generates every scene, assembles, runs the quality gate, and persists the manifest', async () => {

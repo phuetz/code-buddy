@@ -506,7 +506,7 @@ describe('ConfigBackupManager', () => {
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   it('should create a backup file', () => {
@@ -681,7 +681,7 @@ describe('WorktreeSessionManager', () => {
       expect(session.worktreePath).toContain('.worktrees');
       expect(mockExecSync).toHaveBeenCalled();
     } finally {
-      fs.rmSync(tmpDir, { recursive: true, force: true });
+      fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     }
   });
 
@@ -693,7 +693,7 @@ describe('WorktreeSessionManager', () => {
       mgr.createWorktreeSession('branch-b', tmpDir);
       expect(mgr.listWorktreeSessions()).toHaveLength(2);
     } finally {
-      fs.rmSync(tmpDir, { recursive: true, force: true });
+      fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     }
   });
 
@@ -706,7 +706,7 @@ describe('WorktreeSessionManager', () => {
       expect(found).toBeDefined();
       expect(found!.branch).toBe('branch-c');
     } finally {
-      fs.rmSync(tmpDir, { recursive: true, force: true });
+      fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     }
   });
 
@@ -725,7 +725,7 @@ describe('WorktreeSessionManager', () => {
       expect(result).toBe(true);
       expect(mgr.isWorktreeActive('branch-d')).toBe(false);
     } finally {
-      fs.rmSync(tmpDir, { recursive: true, force: true });
+      fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     }
   });
 

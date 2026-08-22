@@ -40,7 +40,7 @@ describe('WorkspaceIsolation with a symlinked HOME', () => {
     else process.env.USERPROFILE = previousUserProfile;
     vi.resetModules();
     fs.rmSync(linkHome, { force: true });
-    fs.rmSync(realHome, { recursive: true, force: true });
+    fs.rmSync(realHome, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   it('still blocks protected secrets in both their lexical and canonical spelling', () => {

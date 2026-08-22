@@ -117,7 +117,7 @@ describe('film project persistence', () => {
     root = await mkdtemp(join(tmpdir(), 'buddy-filmproj-'));
   });
   afterAll(async () => {
-    await rm(root, { recursive: true, force: true });
+    await rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   it('round-trips through save/load under the films dir', async () => {
@@ -269,7 +269,7 @@ describe.runIf(hasFfmpeg)('assessFilmQuality — real', () => {
     root = await mkdtemp(join(tmpdir(), 'buddy-quality-real-'));
   });
   afterAll(async () => {
-    await rm(root, { recursive: true, force: true });
+    await rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   it('passes a healthy color+tone clip', async () => {

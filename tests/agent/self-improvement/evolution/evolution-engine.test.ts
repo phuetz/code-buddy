@@ -64,7 +64,7 @@ describe('gatherInspirations (AlphaEvolve-style elites)', () => {
       expect(insp.map((i) => i.id)).toEqual(['e2', 'e1']);
       expect(insp.every((i) => typeof i.diff === 'string')).toBe(true);
     } finally {
-      rmSync(dir, { recursive: true, force: true });
+      rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     }
   });
 
@@ -75,7 +75,7 @@ describe('gatherInspirations (AlphaEvolve-style elites)', () => {
       store.record(vr({ id: 'e1', score: 0.9 }));
       expect(gatherInspirations(store, 'HEAD', process.cwd(), 0, 0)).toEqual([]);
     } finally {
-      rmSync(dir, { recursive: true, force: true });
+      rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     }
   });
 });

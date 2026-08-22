@@ -10,7 +10,7 @@ const originalTimeout = process.env.CODEBUDDY_WORKSPACE_TIMEOUT_MS;
 afterEach(() => {
   if (originalTimeout === undefined) delete process.env.CODEBUDDY_WORKSPACE_TIMEOUT_MS;
   else process.env.CODEBUDDY_WORKSPACE_TIMEOUT_MS = originalTimeout;
-  for (const root of roots.splice(0)) fs.rmSync(root, { recursive: true, force: true });
+  for (const root of roots.splice(0)) fs.rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
 });
 
 function fixture(): { tool: WorkspaceSearchTool; first: string; second: string } {

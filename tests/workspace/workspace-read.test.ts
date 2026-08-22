@@ -10,7 +10,7 @@ const originalMaxFile = process.env.CODEBUDDY_WORKSPACE_MAX_FILE_KB;
 afterEach(() => {
   if (originalMaxFile === undefined) delete process.env.CODEBUDDY_WORKSPACE_MAX_FILE_KB;
   else process.env.CODEBUDDY_WORKSPACE_MAX_FILE_KB = originalMaxFile;
-  for (const root of roots.splice(0)) fs.rmSync(root, { recursive: true, force: true });
+  for (const root of roots.splice(0)) fs.rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
 });
 
 function fixture(): { root: string; repo: string; tool: WorkspaceReadTool } {

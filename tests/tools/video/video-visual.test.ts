@@ -135,7 +135,7 @@ describe('sampleFrames — scene/interval pass isolation (#11)', () => {
       expect(frames.length).toBe(2);
       expect(frames.every((f) => posix(f.path).includes('/interval/'))).toBe(true);
     } finally {
-      await rm(outDir, { recursive: true, force: true }).catch(() => {});
+      await rm(outDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }).catch(() => {});
     }
   });
 });
@@ -334,7 +334,7 @@ describe('understandVideo — visual path (injected pipeline)', () => {
     await mkdir(outDir, { recursive: true });
   });
   afterAll(async () => {
-    if (outDir) await rm(outDir, { recursive: true, force: true }).catch(() => {});
+    if (outDir) await rm(outDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }).catch(() => {});
   });
 
   it('visual:true fuses {said, shown} per segment with one keyframe each', async () => {
@@ -540,7 +540,7 @@ describe('sampleFrames (real ffmpeg smoke)', () => {
         expect(f.path.endsWith('.jpg')).toBe(true);
       }
     } finally {
-      await rm(dir, { recursive: true, force: true }).catch(() => {});
+      await rm(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }).catch(() => {});
     }
   }, 60_000);
 });

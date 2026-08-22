@@ -28,7 +28,7 @@ describe('resolveBanditModel — opt-in decision', () => {
     dir = mkdtempSync(join(tmpdir(), 'bandit-wire-'));
     sb = new ModelScoreboard(join(dir, 'ledger.jsonl'));
   });
-  afterEach(() => rmSync(dir, { recursive: true, force: true }));
+  afterEach(() => rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }));
 
   it('OFF → null and never consults the selector (the byte-identical static path)', async () => {
     let selectorCalls = 0;
@@ -76,7 +76,7 @@ describe('recordBanditOutcome — closing the bandit loop', () => {
     dir = mkdtempSync(join(tmpdir(), 'bandit-rec-'));
     sb = new ModelScoreboard(join(dir, 'ledger.jsonl'));
   });
-  afterEach(() => rmSync(dir, { recursive: true, force: true }));
+  afterEach(() => rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }));
 
   it("records under taskType 'evolve' so the next selection learns from it", () => {
     const choice: BanditChoice = { model: 'm-rich', provider: 'testprov', scoreboard: sb };
@@ -117,7 +117,7 @@ describe('runEvolutionCycle — bandit wiring (real git repo)', () => {
   });
   afterEach(() => {
     process.chdir(originalCwd);
-    rmSync(dir, { recursive: true, force: true });
+    rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   it('WITH the bandit → the mutator receives the chosen model and the outcome is recorded (evolve)', async () => {

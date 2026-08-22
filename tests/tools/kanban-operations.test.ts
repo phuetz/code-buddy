@@ -15,7 +15,7 @@ describe('KanbanStore — assign / unlink / archive / stats (Hermes parity)', ()
   });
 
   afterEach(async () => {
-    await fs.rm(dir, { recursive: true, force: true });
+    await fs.rm(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   it('assigns and clears a card assignee', async () => {

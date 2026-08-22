@@ -77,7 +77,7 @@ describe('companion mission board', () => {
   });
 
   afterEach(async () => {
-    await rm(tempDir, { recursive: true, force: true });
+    await rm(tempDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   it('syncs gap missions from the competitive radar', async () => {

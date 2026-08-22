@@ -29,7 +29,7 @@ describe('FleetColabStore', () => {
   });
 
   afterEach(() => {
-    rmSync(dir, { recursive: true, force: true });
+    rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   describe('isAutoClaimable (safety guardrail)', () => {

@@ -53,7 +53,7 @@ beforeEach(() => {
 afterEach(() => {
   // Clean up temp directory
   try {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   } catch {
     // Ignore cleanup errors on Windows
   }
@@ -74,7 +74,7 @@ describe('GitTool - Existing Operations', () => {
     const nonGitTool = new GitTool(nonGitDir);
     const isRepo = await nonGitTool.isGitRepo();
     expect(isRepo).toBe(false);
-    fs.rmSync(nonGitDir, { recursive: true, force: true });
+    fs.rmSync(nonGitDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   it('should get status of clean repo after initial commit', async () => {

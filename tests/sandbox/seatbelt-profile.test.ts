@@ -50,7 +50,7 @@ describe.skipIf(process.platform === 'win32')('generateSeatbeltProfile', () => {
 
   afterAll(() => {
     fs.rmSync(linkRoot, { force: true });
-    fs.rmSync(realRoot, { recursive: true, force: true });
+    fs.rmSync(realRoot, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   it('is closed by default but lets a Darwin process start (reads + exec + fork)', () => {

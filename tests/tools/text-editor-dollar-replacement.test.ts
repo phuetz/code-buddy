@@ -27,7 +27,7 @@ describe('str_replace inserts $-patterns literally (no String.replace expansion)
   afterEach(() => {
     editor.dispose();
     (ConfirmationService as unknown as { instance?: ConfirmationService }).instance = undefined;
-    fs.rmSync(dir, { recursive: true, force: true });
+    fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   function seed(content: string, name = 'f.ts'): string {

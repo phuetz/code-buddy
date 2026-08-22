@@ -39,7 +39,7 @@ describe('self-improvement gate against the real LessonsTracker', () => {
   });
 
   afterEach(() => {
-    fs.rmSync(dir, { recursive: true, force: true });
+    fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   it('moves the real benchmark number and persists under auto-apply', () => {

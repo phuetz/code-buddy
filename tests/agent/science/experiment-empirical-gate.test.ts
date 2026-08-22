@@ -84,7 +84,7 @@ describe('applyEmpiricalScoring — keep path', () => {
     dir = mkdtempSync(join(tmpdir(), 'exp-gate-'));
     store = new ExperimentVariantStore(join(dir, 'variants.json'));
   });
-  afterEach(() => rmSync(dir, { recursive: true, force: true }));
+  afterEach(() => rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }));
 
   it('KEEPS a beating variant when the keep-gate approves + archives it kept', async () => {
     const config = makeConfig({ baseline: baselineReport(0.5), confirmKeep: vi.fn(approve) });
@@ -108,7 +108,7 @@ describe('applyEmpiricalScoring — KEEP-GATE FAIL CLOSED', () => {
     dir = mkdtempSync(join(tmpdir(), 'exp-gate-'));
     store = new ExperimentVariantStore(join(dir, 'variants.json'));
   });
-  afterEach(() => rmSync(dir, { recursive: true, force: true }));
+  afterEach(() => rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }));
 
   it('a declined keep-gate leaves the variant ARCHIVED but NOT kept', async () => {
     const config = makeConfig({ baseline: baselineReport(0.5), confirmKeep: vi.fn(decline) });
@@ -139,7 +139,7 @@ describe('applyEmpiricalScoring — reject path', () => {
     dir = mkdtempSync(join(tmpdir(), 'exp-gate-'));
     store = new ExperimentVariantStore(join(dir, 'variants.json'));
   });
-  afterEach(() => rmSync(dir, { recursive: true, force: true }));
+  afterEach(() => rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }));
 
   it('a worse variant is rejected — keep-gate NEVER asked, archived not kept', async () => {
     const confirmKeep = vi.fn(approve);
@@ -162,7 +162,7 @@ describe('applyEmpiricalScoring — never-throws', () => {
     dir = mkdtempSync(join(tmpdir(), 'exp-gate-'));
     store = new ExperimentVariantStore(join(dir, 'variants.json'));
   });
-  afterEach(() => rmSync(dir, { recursive: true, force: true }));
+  afterEach(() => rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }));
 
   it('degrades to a floor outcome when the metric parser throws', async () => {
     const config = makeConfig({

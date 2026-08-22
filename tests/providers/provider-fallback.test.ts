@@ -140,7 +140,7 @@ describe('runtime provider fallback resolution', () => {
       });
     } finally {
       manager.shutdown();
-      fs.rmSync(persistDir, { recursive: true, force: true });
+      fs.rmSync(persistDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     }
   });
 });

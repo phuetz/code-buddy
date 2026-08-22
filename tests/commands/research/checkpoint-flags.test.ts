@@ -102,7 +102,7 @@ describe('buddy research checkpoint/resume flags', () => {
 
   afterEach(async () => {
     await Promise.all(
-      tempDirs.splice(0).map((directory) => rm(directory, { recursive: true, force: true })),
+      tempDirs.splice(0).map((directory) => rm(directory, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 })),
     );
     process.exitCode = undefined;
   });

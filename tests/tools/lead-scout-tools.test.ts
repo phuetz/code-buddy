@@ -204,7 +204,7 @@ describe('LeadScoutRunTool', () => {
   });
 
   afterEach(async () => {
-    await rm(tempDir, { recursive: true, force: true });
+    await rm(tempDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   it('exposes a lead_scout_run schema and LLM-facing definition', () => {
