@@ -247,7 +247,11 @@ export async function executeInWorkspaceSandbox(
   timeout: number,
   signal?: AbortSignal,
 ): Promise<SandboxedExecution> {
-  const shellEnv = getShellEnvPolicy().buildEnv(getFilteredEnv());
+  // Same controlled overrides as the direct spawn path and the Docker path
+  // (CI=true, NO_COLOR=1, GIT_TERMINAL_PROMPT=0, …): the native sandbox used
+  // to receive only the policy-filtered env, so a sandboxed `printenv NO_COLOR`
+  // differed from a direct one.
+  const shellEnv = { ...getShellEnvPolicy().buildEnv(getFilteredEnv()), ...CONTROLLED_SUBPROCESS_ENV };
   const env = Object.fromEntries(
     Object.entries(shellEnv).filter(
       (entry): entry is [string, string] => typeof entry[1] === 'string'

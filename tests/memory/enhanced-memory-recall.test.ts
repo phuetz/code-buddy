@@ -32,15 +32,16 @@ beforeEach(() => {
   // store() on a fresh HOME must no longer race ensureDir/loadMemories.
 });
 
-afterEach(() => {
+afterEach(async () => {
   try {
-    (memory as unknown as { dispose?: () => void })?.dispose?.();
+    memory?.dispose();
+    // dispose() kicks off a fire-and-forget saveAll(); wait for it to settle so
+    // the cleanup below never races the last write (ENOTEMPTY seen on macOS CI).
+    await memory?.flush();
   } catch {
     /* ignore */
   }
   memory = null;
-  // dispose() kicks off a fire-and-forget saveAll(); retry so a write landing
-  // mid-removal can't leave the cleanup with ENOTEMPTY (seen on macOS CI).
   fs.rmSync(tmpHome, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
 });
 

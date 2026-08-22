@@ -145,6 +145,7 @@ describe('ToolHandler code_exec logical-session isolation', () => {
     handler.restoreWorkingDirectory(realSessionB);
     handler.setRecoverySessionId('logical-session-b');
     const pwdB = await handler.executeTool(bashCall('pwd-b', 'pwd'));
+    if (!pwdB.success) console.error('[macos-diag] pwd in restored cwd', realSessionB, ':', pwdB.error);
     expect(pwdB.success).toBe(true);
     expect(pwdB.output).toContain(realSessionB);
     expect(pwdB.output).not.toContain(realSessionA);

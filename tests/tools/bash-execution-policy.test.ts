@@ -31,6 +31,14 @@ describe('Bash runtime execution policy', () => {
     clearPermissionsCache();
   });
 
+  it('does not demand approval for a cwd under the macOS canonical /private prefix', async () => {
+    // After `cd $TMPDIR` the bash tool stores the realpath (/private/var/folders/…);
+    // that prefix must not turn a sandboxed `pwd` into an approval prompt.
+    await expect(
+      evaluateShellExecution('pwd', '/private/var/folders/df/x/T/code-buddy-work')
+    ).resolves.toMatchObject({ action: 'sandbox' });
+  });
+
   it('keeps read-only commands inside the workspace sandbox', async () => {
     await expect(evaluateShellExecution('cat README.md', process.cwd())).resolves.toMatchObject({
       action: 'sandbox',
