@@ -1535,9 +1535,8 @@ describe('CodeBuddyClient', () => {
 
       await client.chat([{ role: 'user', content: 'Hi' }], tools);
 
-      expect(mockCreate).toHaveBeenCalledWith(
-        expect.objectContaining({ tools: [] })
-      );
+      const payload = mockCreate.mock.calls[0]?.[0] as Record<string, unknown>;
+      expect(payload).not.toHaveProperty('tools');
     });
 
     it('should enable tools when GROK_FORCE_TOOLS is set for LM Studio', async () => {
