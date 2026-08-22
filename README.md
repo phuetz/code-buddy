@@ -234,6 +234,10 @@ buddy llm                                    # list the LLMs you're logged into 
 buddy llm ensemble "is this approach sound?" # ask ChatGPT + Grok + Ollama together, then synthesize
 buddy council "compare REST vs GraphQL"      # conductor roles + synthesis + judge + learned ranking
 buddy council --scoreboard                   # the learned ranking (which model is best for code / reasoning / …)
+buddy cost                                   # read-only dashboard of token and cost usage (--by model|provider|day)
+buddy changelog                              # grouped release notes from Conventional Commits
+buddy import                                 # import Cursor/Cline/Copilot/Claude Code rules & MCP servers
+buddy explain [path] [--depth deep] [--html] # one-shot repo explanation report (conventions, hotspots, risks)
 CODEBUDDY_LLM_FAILOVER=1 buddy -p "…"         # if the primary errors, auto-continue on the next active LLM
 ```
 
@@ -263,7 +267,7 @@ Code Buddy is one engine — terminal, desktop, and HTTP — that an LLM drives 
 |:-----|:------------|:----------|
 | [Providers & login](docs/features.md#providers--login) | 64 LLM providers (30 free-tier or local `$0`) + ChatGPT/xAI login at **$0** flat-fee, auto-failover, ensembles, council | [providers.md](docs/providers.md) |
 | [The agentic loop](docs/features.md#the-agentic-loop) | autonomous tool-calling with a middleware pipeline + confirm-before-execute | [CLAUDE.md](CLAUDE.md) |
-| [200+ tools](docs/features.md#110-tools) | edit/shell/web/browser/docs/media/design, RAG-selected per query, 5-strategy edit matching | [tools-reference.md](docs/tools-reference.md) |
+| [200+ tools](docs/features.md#110-tools) | edit/shell/web/browser/docs/media/design, 5 LSP navigation tools, `@file` mentions, RAG-selected per query, 5-strategy edit matching | [tools-reference.md](docs/tools-reference.md) |
 | [Reasoning](docs/features.md#reasoning) | extended thinking + Tree-of-Thought / MCTS, `/think` | [reasoning.md](docs/reasoning.md) |
 | [Goal loops & autonomy](docs/features.md#goal-loops--autonomy) | Ralph loop + LLM judge, YOLO, a 24/7 daemon | [fleet-guide.md](docs/fleet-guide.md) |
 | [Multi-AI Fleet](docs/features.md#multi-ai-fleet) | peers call each other's models + read-only tools over WebSocket | [fleet-guide.md](docs/fleet-guide.md) |
@@ -273,7 +277,7 @@ Code Buddy is one engine — terminal, desktop, and HTTP — that an LLM drives 
 | [Security & sandboxing](docs/features.md#security--sandboxing) | Guardian risk-scorer, permission modes, sandbox tiers, SSRF guard, secrets | [security.md](docs/security.md) |
 | [Server & infrastructure](docs/features.md#server--infrastructure) | OpenAI-compatible HTTP, WS gateway, daemon, cron | [infrastructure.md](docs/infrastructure.md) |
 | [Channels](docs/features.md#channels) | 20+ messaging platforms with DM-pairing access control | [channels.md](docs/channels.md) |
-| [Git & code intelligence](docs/features.md#git--code-intelligence) | auto-commit, `/pr`, LSP rename, bug finder, the Code Explorer graph | [development.md](docs/development.md) |
+| [Git & code intelligence](docs/features.md#git--code-intelligence) | auto-commit, `/pr`, `buddy changelog`, LSP rename + 5 LSP navigation tools, bug finder, the Code Explorer graph | [development.md](docs/development.md) |
 | [Config & modes](docs/features.md#config--modes) | TOML profiles, permission/agent/security modes, model-aware limits | [configuration.md](docs/configuration.md) |
 
 Every area above is written up in full — with the source files, the exact flags, and what's verified — in **[docs/features.md](docs/features.md)**.
