@@ -3,7 +3,7 @@
 
 Pour chaque job : wrap-short.py --layout split (B-roll en haut, Lisa en bas, karaoké mot-à-mot, hook,
 musique duckée, master -14 LUFS) avec une cadence de B-roll automatique (≈ toutes les `cadence` s,
-Ninon mesurée 2,2 s ; défaut 3 s) en tournant sur la liste de B-roll du job — puis aperçu 540×960 et
+Ninon mesurée 2,2 s ; défaut 2,5 s) en tournant sur la liste de B-roll du job — puis aperçu 540×960 et
 planche contact 6 vignettes pour relecture.
 
 Usage : split_batch.py jobs.json [--only L5,L6] [--dry-run]
@@ -52,14 +52,17 @@ def main():
         src = os.path.expanduser(job['src'])
         out = os.path.join(out_dir, job.get('out', f"SHORT-SPLIT-{jid}.mp4"))
         dur = duration(src)
-        cadence = float(job.get('cadence', cfg.get('cadence', 3)))
+        cadence = float(job.get('cadence', cfg.get('cadence', 2.5)))  # Ninon mesurée 2,2 s ; judge 22/08 : 3,0 s insuffisant
         brolls = [b if os.path.isabs(os.path.expanduser(b)) else os.path.join(root, b) for b in job['broll']]
         brolls = [os.path.expanduser(b) for b in brolls]
         missing = [b for b in brolls if not os.path.exists(b)]
         if missing:
             print(f"⚠️ {jid}: B-roll introuvable {missing}"); results.append({'id': jid, 'error': f'broll manquant {missing}'}); continue
         cuts, t, i = [], 0.0, 0
-        while t < dur - 1.0:
+        need = int(dur / cadence) + 1
+        if len(brolls) * 2 < need:
+            print(f"   ⚠️ {jid}: {len(brolls)} B-roll pour {need} plans (chaque clip repasse > 2×) — ajouter des clips au job")
+        while t < dur - 0.5:
             cuts.append(f"{brolls[i % len(brolls)]}@{t:.1f}:{cadence}")
             t += cadence; i += 1
         cmd = [sys.executable, WRAP, src, out, '--hook', job.get('hook', ''), '--layout', 'split']

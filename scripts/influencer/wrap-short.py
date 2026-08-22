@@ -151,7 +151,9 @@ def karaoke_events(card):
 
 def build_ass(cards_list, hook, hook_end, w=1080, h=1920, layout='standard',
               subs='karaoke', attributions=None):
-    sub_margin_v = 430 if layout == 'standard' else 180
+    # split : sous-titres juste sous la couture B-roll / au-dessus de la tête (judge 22/08 : 88 px posés sur le buste)
+    sub_margin_v = 430 if layout == 'standard' else 930
+    sub_font = 88 if layout == 'standard' else 100
     hook_margin_v = 150 if layout == 'standard' else 90
     attr_margin_v = 24 if layout == 'split' else 240
     head = f"""[Script Info]
@@ -162,7 +164,7 @@ WrapStyle: 0
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Sub,DejaVu Sans,88,&H00FFFFFF,&H00FFFFFF,&H00101010,&H96000000,-1,0,0,0,100,100,0,0,1,7,0,2,60,60,{sub_margin_v},1
+Style: Sub,DejaVu Sans,{sub_font},&H00FFFFFF,&H00FFFFFF,&H00101010,&H96000000,-1,0,0,0,100,100,0,0,1,7,0,2,60,60,{sub_margin_v},1
 Style: Hook,DejaVu Sans,72,&H00FFFFFF,&H00FFFFFF,&H00101010,&H78000000,-1,0,0,0,100,100,0,0,3,10,0,8,40,40,{hook_margin_v},1
 Style: Attr,DejaVu Sans,30,&H00E8E8E8,&H00E8E8E8,&H00101010,&H50000000,0,0,0,0,100,100,0,0,3,8,0,7,24,24,{attr_margin_v},1
 
@@ -350,7 +352,7 @@ def main():
     if not words:
         sys.exit('transcription vide')
     words = apply_fixes(words, a.fix)
-    sub_cards = cards(words)
+    sub_cards = cards(words, max_words=3 if a.layout == 'split' else 4)
 
     cuts = []
     for spec in a.cut:
@@ -415,8 +417,8 @@ def main():
         fc.extend([
             f'[{music_index}:a]atrim=0:{total:.3f},asetpts=PTS-STARTPTS,'
             f'afade=t=in:st=0:d=0.5,afade=t=out:st={fade_out:.3f}:d=1,'
-            'volume=0.22[music]',
-            '[music][0:a]sidechaincompress=threshold=0.03:ratio=8:'
+            'volume=0.06[music]',
+            '[music][0:a]sidechaincompress=threshold=0.006:ratio=8:'
             'attack=5:release=250[ducked]',
             f'[0:a][ducked]amix=inputs=2:normalize=0,atrim=0:{total:.3f},'
             'loudnorm=I=-14:TP=-1.5:LRA=11,aresample=48000[aout]',
