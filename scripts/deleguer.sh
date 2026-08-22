@@ -10,6 +10,8 @@
 #   oc     OpenCode Go (abonnement)     — 61 modèles, 5 lignées inédites
 #                                         (kimi, minimax, deepseek, glm, qwen) ;
 #                                         choisir avec OC_MODELE=<id>
+#   nvidia NVIDIA Build (clé GRATUITE ~40 RPM) — Code Buddy headless sur Kimi K3 /
+#                                         Nemotron 3 ; 0 quota perso ; prompts → NVIDIA (pas de confidentiel)
 #   grok   xAI Build (abonnement OAuth) — PAS la clé GROK_API_KEY, morte en 402
 #   luna   codex gpt-5.6-luna  (DÉFAUT) — quota ChatGPT, le moins lourd
 #   sol    codex gpt-5.6-sol            — quota ChatGPT, à réserver au dur
@@ -86,6 +88,18 @@ case "$MOTEUR" in
     # GROK_API_KEY, morte en 402 depuis juillet 2026. C'est l'abonnement qui paie.
     (cd "$DEPOT" && grok --always-approve --cwd "$DEPOT" \
        ${GROK_MODELE:+-m "$GROK_MODELE"} -p "$(cat "$CONSIGNE")") 2>&1 | tee "$LOG"
+    ;;
+  nvidia)
+    # NVIDIA Build (build.nvidia.com) = palier GRATUIT (~40 RPM), clé NVIDIA_API_KEY dans
+    # ~/.codebuddy/lisa.env. Exécutant = Code Buddy lui-même en headless (agentique : lit, édite,
+    # lance les commandes) sur Kimi K3 par défaut (FR excellent) — ou NVIDIA_MODELE=nvidia/nemotron-3-ultra-550b-a55b.
+    # Modèles vivants vérifiés le 22/08/2026 : docs/providers/nvidia-nim-probe-2026-08-22.md (worktree vitrine).
+    NKEY=$(grep -E "^(export )?NVIDIA_API_KEY=" "$HOME/.codebuddy/lisa.env" 2>/dev/null | head -1 | sed 's/^export //' | cut -d= -f2- | tr -d "'\"")
+    [ -n "$NKEY" ] || { echo "NVIDIA_API_KEY introuvable dans ~/.codebuddy/lisa.env" >&2; exit 2; }
+    CB_SRC=${CB_SRC:-$HOME/code-buddy-vitrine}; [ -f "$CB_SRC/src/index.ts" ] || CB_SRC=$HOME/code-buddy
+    (cd "$DEPOT" && NVIDIA_API_KEY="$NKEY" "$CB_SRC/node_modules/.bin/tsx" "$CB_SRC/src/index.ts" \
+       -u https://integrate.api.nvidia.com/v1 -m "${NVIDIA_MODELE:-moonshotai/kimi-k3}" \
+       --permission-mode acceptEdits -p "$(cat "$CONSIGNE")") 2>&1 | tee "$LOG"
     ;;
   oc)
     # ⛔ UN SEUL TRAVAIL OPENCODE À LA FOIS. Le quota d'une fenêtre de 5 h

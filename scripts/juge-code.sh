@@ -24,6 +24,7 @@
 #   JUGE=free  → NVIDIA Nemotron 3 Ultra 550B via OpenRouter (2 × 1000 req/jour)
 #   JUGE=agy   → Google Gemini 3.6 Flash High via le CLI Antigravity (abo AI Ultra)
 #   JUGE=cere  → OpenAI gpt-oss-120b via Cerebras (2400 req/jour, ~1580 tok/s)
+#   JUGE=nvidia → NVIDIA Nemotron 3 Ultra 550B via NVIDIA Build DIRECT (clé gratuite, ~40 RPM) ; JUGE=nvkimi → Kimi K3 (même voie)
 # `grok` est mort côté crédits (402 depuis 07/2026) et l'API Mistral est PAYANTE
 # à l'usage : ni l'un ni l'autre n'est une voie de volume.
 set -euo pipefail
@@ -32,6 +33,8 @@ case "${JUGE:-qwen}" in
   free)  MODEL="nvidia/nemotron-3-ultra-550b-a55b:free"; MAXTOK=20000 ;;
   agy)   MODEL="agy:gemini-3.6-flash-high";              MAXTOK=20000 ;;
   cere)  MODEL="cerebras:gpt-oss-120b";                  MAXTOK=20000 ;;
+  nvidia) MODEL="nvidia:nvidia/nemotron-3-ultra-550b-a55b"; MAXTOK=20000 ;;   # NVIDIA Build DIRECT ($0, ~40 RPM) — lignée NVIDIA sans OpenRouter
+  nvkimi) MODEL="nvidia:moonshotai/kimi-k3";             MAXTOK=20000 ;;   # Kimi K3 via NVIDIA Build (FR excellent)
   kimi)  MODEL="moonshotai/kimi-k3";    MAXTOK=30000 ;;
   qwen)  MODEL="qwen/qwen3.7-flash";    MAXTOK=20000 ;;
   *)     MODEL="${JUGE}";               MAXTOK=20000 ;;
@@ -74,6 +77,37 @@ case "$MODEL" in
     # `agy -p` veut le prompt en ARGUMENT, pas sur stdin : piper ne fait qu'afficher l'aide.
     agy --model "${MODEL#agy:}" -p "$(printf '%s\n\n%s\n%s' "$SYSTEME" "$PROMPT" "$(cat "$CTXFILE")")" 2>&1
     echo; echo "--- $MODEL : \$0.0000 (abonnement Google AI Ultra)"
+    rm -f "$CTXFILE"; exit 0 ;;
+  nvidia:*)
+    # NVIDIA Build (build.nvidia.com) en DIRECT — clé NVIDIA_API_KEY dans ~/.codebuddy/lisa.env.
+    # Modèles vérifiés le 22/08/2026 (sonde) : kimi-k3, nemotron-3-ultra/super/nano, step-3.7-flash,
+    # gpt-oss-20b, llama-3.3-70b. Évite le 502 « Upstream error from Nvidia » vu via OpenRouter.
+    NKEY=$(grep -E "^(export )?NVIDIA_API_KEY=" "$HOME/.codebuddy/lisa.env" 2>/dev/null | head -1 | sed 's/^export //' | cut -d= -f2- | tr -d "'\"")
+    [ -n "$NKEY" ] || NKEY=$(grep "^NVIDIA_API_KEY=" "$KEYS_FILE" 2>/dev/null | cut -d= -f2)
+    python3 - "$PROMPT" "$CTXFILE" "$NKEY" "${MODEL#nvidia:}" "$MAXTOK" "$SYSTEME" <<'PYNV'
+import json, sys, urllib.request, urllib.error, time
+prompt, key, model, maxtok, systeme = sys.argv[1], sys.argv[3], sys.argv[4], int(sys.argv[5]), sys.argv[6]
+body = json.dumps({"model": model, "max_tokens": maxtok, "temperature": 0.2, "messages": [
+    {"role": "system", "content": systeme},
+    {"role": "user", "content": prompt + open(sys.argv[2]).read()}]}).encode()
+d = None
+for attempt in range(3):
+    try:
+        req = urllib.request.Request("https://integrate.api.nvidia.com/v1/chat/completions", data=body,
+          headers={"Authorization": "Bearer " + key, "Content-Type": "application/json", "Accept": "application/json"})
+        with urllib.request.urlopen(req, timeout=900) as r:
+            d = json.load(r)
+        break
+    except urllib.error.HTTPError as e:
+        if e.code in (429, 502, 503) and attempt < 2:
+            time.sleep(20 * (attempt + 1)); continue
+        print("ERREUR NVIDIA Build — aucun verdict rendu :", e.code, e.read().decode(errors="replace")[:600]); sys.exit(2)
+if not d or "choices" not in d:
+    print("ERREUR NVIDIA Build — aucun verdict rendu :", json.dumps(d, ensure_ascii=False)[:800]); sys.exit(2)
+m = d["choices"][0]["message"]
+print(m.get("content") or m.get("reasoning_content") or m.get("reasoning") or "(réponse vide — augmenter max_tokens)")
+print("\n--- " + model + " via NVIDIA Build : $0.0000 (palier gratuit, ~40 RPM) | " + str(d.get('usage', {}).get('completion_tokens', 0)) + " tokens")
+PYNV
     rm -f "$CTXFILE"; exit 0 ;;
   cerebras:*)
     CKEY=$(grep "^CEREBRAS_API_KEY=" "$KEYS_FILE" 2>/dev/null | cut -d= -f2)
