@@ -2,6 +2,7 @@ import { execFile } from 'child_process';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import type { ToolResult } from '../types/index.js';
+import { resolveLocalBinaryLaunch } from './local-binary-launch.js';
 
 export interface LintProjectInput {
   root: string;
@@ -52,18 +53,15 @@ async function exists(filePath: string): Promise<boolean> {
   }
 }
 
-// npm's Windows shims under node_modules/.bin are `.cmd` batch files: they only
-// run through cmd.exe (Node refuses to spawn them directly), and the path must
-// be quoted so a workspace under "Program Files" still resolves. The args are
-// fixed flags, so `shell: true` adds no injection surface.
-function localBinary(file: string): { file: string; shell: boolean } {
-  return process.platform === 'win32' ? { file: `"${file}"`, shell: true } : { file, shell: false };
-}
+// On win32 the `.bin/eslint.cmd` shim is not spawnable without a shell: run
+// eslint's JS entry through process.execPath (cmd.exe verbatim fallback) —
+// see local-binary-launch.ts.
+const ESLINT_JS_ENTRIES = ['node_modules/eslint/bin/eslint.js'];
 
-function runLocalBinary(file: string, args: string[], cwd: string, timeoutMs: number): Promise<{ stdout: string; stderr: string; timedOut: boolean }> {
-  const bin = localBinary(file);
+function runLocalBinary(root: string, file: string, args: string[], cwd: string, timeoutMs: number): Promise<{ stdout: string; stderr: string; timedOut: boolean }> {
+  const launch = resolveLocalBinaryLaunch(root, file, ESLINT_JS_ENTRIES, args);
   return new Promise((resolve) => {
-    execFile(bin.file, args, { cwd, timeout: timeoutMs, maxBuffer: 10 * 1024 * 1024, shell: bin.shell }, (error, stdout, stderr) => {
+    execFile(launch.file, launch.args, { cwd, timeout: timeoutMs, maxBuffer: 10 * 1024 * 1024, windowsVerbatimArguments: launch.windowsVerbatimArguments }, (error, stdout, stderr) => {
       const timedOut = Boolean(error && 'killed' in error && error.killed);
       resolve({ stdout: String(stdout ?? ''), stderr: String(stderr ?? ''), timedOut });
     });
@@ -107,7 +105,7 @@ export class LintProjectTool {
       }
 
       const timeoutMs = Math.min(Math.max(Number(input.timeoutMs) || DEFAULT_TIMEOUT_MS, 1_000), MAX_TIMEOUT_MS);
-      const { stdout, stderr, timedOut } = await runLocalBinary(eslintPath, ['.', '--format', 'json'], root, timeoutMs);
+      const { stdout, stderr, timedOut } = await runLocalBinary(root, eslintPath, ['.', '--format', 'json'], root, timeoutMs);
       // ESLint reports absolute paths derived from its (canonical) cwd; when the
       // root was given lexically through a symlink (macOS /var → /private/var),
       // relativize against the canonical root too so summaries stay project-relative.

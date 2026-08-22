@@ -18,9 +18,10 @@ describe('LintProjectTool', () => {
 process.exit(1);
 `;
     await writeExecutable(path.join(binDir, 'eslint'), `#!/usr/bin/env node\n${fakeEslint}`);
-    // Windows picks the npm-style `.cmd` shim (which runs the same script through node).
-    await fs.writeFile(path.join(binDir, 'eslint.js'), fakeEslint);
-    await fs.writeFile(path.join(binDir, 'eslint.cmd'), '@node "%~dp0eslint.js" %*\r\n');
+    // Windows: the tool looks for the npm-style `.cmd` shim, then runs eslint's JS entry through node.
+    await fs.writeFile(path.join(binDir, 'eslint.cmd'), '@node "%~dp0..\\eslint\\bin\\eslint.js" %*\r\n');
+    await fs.mkdir(path.join(root, 'node_modules', 'eslint', 'bin'), { recursive: true });
+    await fs.writeFile(path.join(root, 'node_modules', 'eslint', 'bin', 'eslint.js'), fakeEslint);
 
     const result = await new LintProjectTool().execute({ root, timeoutMs: 5000 });
 

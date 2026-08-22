@@ -187,12 +187,19 @@ export class DockerSandbox extends EventEmitter implements SandboxBackendInterfa
   static isAvailable(): boolean {
     try {
       const output = execSync('docker info --format {{.OSType}}', { stdio: 'pipe', timeout: 10000 });
-      const osType = String(output ?? '').trim().toLowerCase();
-      // An empty answer (older daemons, partial output) keeps the historical
-      // "daemon answered ⇒ available" behaviour.
-      return osType === '' || osType === 'linux';
+      // Only an explicit Windows daemon degrades; an empty answer (older
+      // daemons, partial output) keeps "daemon answered ⇒ available".
+      return String(output ?? '').trim().toLowerCase() !== 'windows';
     } catch {
-      return false;
+      // The format probe itself may be unsupported (a docker→podman shim
+      // answers "can't evaluate field OSType", exit 125): fall back to the
+      // historical liveness probe so such daemons stay available.
+      try {
+        execSync('docker info', { stdio: 'pipe', timeout: 10000 });
+        return true;
+      } catch {
+        return false;
+      }
     }
   }
 

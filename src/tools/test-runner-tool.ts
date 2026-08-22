@@ -2,6 +2,7 @@ import { execFile } from 'child_process';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import type { ToolResult } from '../types/index.js';
+import { resolveNpmLaunch } from './local-binary-launch.js';
 
 export interface TestRunnerData {
   root: string;
@@ -36,15 +37,11 @@ function tail(text: string, max = 4000): string {
   return text.length <= max ? text : text.slice(-max);
 }
 
-// npm is a `.cmd` shim on Windows: it only resolves/runs through cmd.exe (Node
-// refuses to spawn .cmd files directly). The argv is fixed, so `shell: true`
-// adds no injection surface.
-const NPM_SHELL = process.platform === 'win32';
-
 function runNpmTest(cwd: string, timeoutMs: number): Promise<{ stdout: string; stderr: string; exitCode: number | null; timedOut: boolean; durationMs: number }> {
   const started = Date.now();
+  const npm = resolveNpmLaunch(['run', 'test']);
   return new Promise((resolve) => {
-    execFile('npm', ['run', 'test'], { cwd, timeout: timeoutMs, maxBuffer: 20 * 1024 * 1024, shell: NPM_SHELL }, (error, stdout, stderr) => {
+    execFile(npm.file, npm.args, { cwd, timeout: timeoutMs, maxBuffer: 20 * 1024 * 1024, windowsVerbatimArguments: npm.windowsVerbatimArguments }, (error, stdout, stderr) => {
       const code = error && 'code' in error && typeof error.code === 'number' ? error.code : error ? 1 : 0;
       const timedOut = Boolean(error && 'killed' in error && error.killed);
       resolve({ stdout: String(stdout ?? ''), stderr: String(stderr ?? ''), exitCode: code, timedOut, durationMs: Date.now() - started });

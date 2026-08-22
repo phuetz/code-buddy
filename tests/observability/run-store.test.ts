@@ -167,6 +167,23 @@ describe('RunStore', () => {
       expect(record?.artifacts).toContain('plan.md');
       expect(record?.artifacts).toContain('summary.md');
     });
+
+    it('does not reopen the SQLite artifact index after dispose()', () => {
+      const runId = startRun('artifact after dispose');
+      store.saveArtifact(runId, 'plan.md', 'plan content');
+      const internals = store as unknown as { artifactIndexDb: unknown };
+      expect(internals.artifactIndexDb).not.toBeNull();
+
+      store.dispose();
+      expect(internals.artifactIndexDb).toBeNull();
+
+      // A post-run hook (learning retrospective) may still save artifacts: the
+      // file lands, but the index handle stays released (no EBUSY on cleanup).
+      const late = store.saveArtifact(runId, 'late.md', 'late content');
+      expect(fs.existsSync(late)).toBe(true);
+      expect(internals.artifactIndexDb).toBeNull();
+      expect(() => fs.rmSync(path.join(tmpDir, 'artifact-index.sqlite'), { force: true })).not.toThrow();
+    });
   });
 
   describe('listRuns', () => {

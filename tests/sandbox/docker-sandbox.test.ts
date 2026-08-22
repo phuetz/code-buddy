@@ -72,6 +72,20 @@ describe('DockerSandbox', () => {
       expect(DockerSandbox.isAvailable()).toBe(false);
     });
 
+    it('should keep an empty format answer as available (historical behaviour)', () => {
+      mockExecSync.mockReturnValue(Buffer.from(''));
+      expect(DockerSandbox.isAvailable()).toBe(true);
+    });
+
+    it('should fall back to `docker info` when the format probe is unsupported (podman shim)', () => {
+      mockExecSync.mockImplementation(function(command: string) {
+        if (command.includes('--format')) throw new Error("can't evaluate field OSType");
+        return Buffer.from('');
+      });
+      expect(DockerSandbox.isAvailable()).toBe(true);
+      expect(mockExecSync).toHaveBeenCalledWith('docker info', expect.objectContaining({ stdio: 'pipe' }));
+    });
+
     it('should return false when docker is not found', () => {
       mockExecSync.mockImplementation(function() { throw new Error('command not found'); });
       expect(DockerSandbox.isAvailable()).toBe(false);
