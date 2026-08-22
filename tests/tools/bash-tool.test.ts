@@ -25,6 +25,7 @@ import {
   approveSandboxUnavailableEscalations,
   clearSandboxEscalationBridge,
 } from '../helpers/sandbox-escalation-bridge.js';
+import { canonical, canonicalShellPath } from '../helpers/shell-path.js';
 import path from 'path';
 import os from 'os';
 import fs from 'fs';
@@ -130,7 +131,7 @@ describe('BashTool', () => {
 
     it('streams in the cwd override too (the path Cowork actually uses)', async () => {
       const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'bash-stream-cwd-'));
-      const real = fs.realpathSync(dir);
+      const real = canonical(dir);
       const gen = bashTool.executeStreaming('pwd', 30000, dir);
       let out = '';
       let r = await gen.next();
@@ -140,19 +141,21 @@ describe('BashTool', () => {
       }
       const final = r.value;
       expect(final.success).toBe(true);
-      expect(fs.realpathSync((out || final.output || '').trim())).toBe(real);
+      // `pwd` prints the shell's spelling (MSYS `/tmp/...` under Git Bash).
+      expect(canonicalShellPath(out || final.output || '')).toBe(real);
       fs.rmSync(dir, { recursive: true, force: true });
     });
 
     it('runs in the cwd override when provided (embedded session workingDirectory)', async () => {
       const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'bash-cwd-'));
-      const real = fs.realpathSync(dir);
+      const real = canonical(dir);
       const result = await bashTool.execute('pwd', 30000, dir);
       expect(result.success).toBe(true);
-      expect(fs.realpathSync(result.output!.trim())).toBe(real);
+      // `pwd` prints the shell's spelling (MSYS `/tmp/...` under Git Bash).
+      expect(canonicalShellPath(result.output!)).toBe(real);
       // Sans override : comportement historique (process cwd), pas le tmpdir.
       const legacy = await bashTool.execute('pwd');
-      expect(fs.realpathSync(legacy.output!.trim())).not.toBe(real);
+      expect(canonicalShellPath(legacy.output!)).not.toBe(real);
       fs.rmSync(dir, { recursive: true, force: true });
     });
 

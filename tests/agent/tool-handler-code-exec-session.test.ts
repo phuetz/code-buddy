@@ -9,6 +9,7 @@ import {
   approveSandboxUnavailableEscalations,
   clearSandboxEscalationBridge,
 } from '../helpers/sandbox-escalation-bridge.js';
+import { canonical, canonicalShellPath } from '../helpers/shell-path.js';
 import { clearAllCodeExecSessions } from '../../src/tools/code-exec-tool.js';
 import { getFormalToolRegistry } from '../../src/tools/registry/index.js';
 import type { ITool, IToolExecutionContext } from '../../src/tools/registry/types.js';
@@ -165,7 +166,8 @@ describe('ToolHandler code_exec logical-session isolation', () => {
     handler.restoreWorkingDirectory(realSessionA);
     handler.setRecoverySessionId('logical-session-a');
     const pwdA = await handler.executeTool(bashCall('pwd-a', 'pwd'));
-    expect(pwdA.output).toContain(realSessionA);
+    // `pwd` prints the shell's spelling (MSYS `/tmp/...` under Git Bash).
+    expect(canonicalShellPath(pwdA.output ?? '')).toBe(canonical(realSessionA));
     expect(handler.getRecoverySessionId()).toBe('logical-session-a');
     expect(process.cwd()).toBe(hostCwd);
   });

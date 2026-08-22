@@ -21,8 +21,12 @@
  * its second call. That's a true round-trip, not a shape check.
  */
 
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { PassThrough } from 'stream';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { AcpSessionStore } from '../../../src/protocols/acp/acp-session-store.js';
 
 import {
   AcpStdioServer,
@@ -51,6 +55,7 @@ class SimulatedEditor {
   readonly messages: Array<Record<string, any>> = [];
   readonly clientRequests: Array<Record<string, any>> = [];
   readonly server: AcpStdioServer;
+  readonly storeDir: string;
   /** Records of fs/read_text_file requests the agent made. */
   readonly reads: Array<Record<string, any>> = [];
   /** Records of fs/write_text_file requests the agent made. */
@@ -75,10 +80,13 @@ class SimulatedEditor {
         }
       }
     });
+    // Persist into a private temp store, not the runner's real ~/.codebuddy.
+    this.storeDir = mkdtempSync(join(tmpdir(), 'acp-agentic-turn-'));
     this.server = new AcpStdioServer({
       input: this.input,
       output: this.output,
       promptRunner: runner,
+      store: new AcpSessionStore({ storeDir: this.storeDir }),
       // Keep the pending-request timer short so nothing lingers.
       clientRequestTimeoutMs: 2_000,
     });
@@ -160,6 +168,7 @@ describe('ACP agentic tool-using turn (real server + simulated editor)', () => {
 
   afterEach(() => {
     editor?.server.stop();
+    if (editor) rmSync(editor.storeDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   });
 
   it('runs a real tool round-trip: tool_call → permission → fs/read → tool_call_update → end_turn', async () => {
