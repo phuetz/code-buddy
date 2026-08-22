@@ -179,7 +179,7 @@ describe.skipIf(!hasBetterSqlite3)('Database System', () => {
         expect(manager.formatStats()).toContain(join(homeDir, 'codebuddy.db'));
       } finally {
         manager.close();
-        rmSync(homeDir, { recursive: true, force: true });
+        rmSync(homeDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
 
         if (previousCodeBuddyHome === undefined) {
           delete process.env.CODEBUDDY_HOME;

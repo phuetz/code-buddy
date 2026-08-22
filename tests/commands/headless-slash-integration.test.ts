@@ -24,7 +24,7 @@ describe('headless slash — real engine chain (no mocks)', () => {
 
   afterEach(() => {
     resetGoalManagers();
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   it('runs __HELP__ end-to-end and returns real, non-empty help output', async () => {

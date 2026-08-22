@@ -170,9 +170,13 @@ describe('PrecompactionFlusher', () => {
     });
 
     it('should return null when both local and global writes fail', async () => {
-      // Point HOME to a read-only location
-      process.env.HOME = '/dev/null/impossible';
-      process.env.USERPROFILE = '/dev/null/impossible';
+      // Point HOME underneath a regular FILE: no mkdir can succeed below it on
+      // any OS (`/dev/null/impossible` is a perfectly creatable `C:\dev\null\…`
+      // on Windows).
+      const blocker = path.join(tmpDir, 'blocker-file');
+      fs.writeFileSync(blocker, 'not a directory');
+      process.env.HOME = path.join(blocker, 'impossible');
+      process.env.USERPROFILE = path.join(blocker, 'impossible');
       const nonexistent = path.join(tmpDir, 'no', 'such', 'dir');
       const result = await callSaveFacts(flusher, '- Lost fact', nonexistent);
       expect(result).toBeNull();

@@ -46,7 +46,7 @@ describe('GitPinnedMarketplace', () => {
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   it('should install a plugin from org/repo spec', () => {
@@ -191,7 +191,7 @@ describe('KeybindingsManager', () => {
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   it('should load defaults when no config file exists', () => {
@@ -528,7 +528,7 @@ describe('AuthHandler', () => {
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     // Restore env vars
     for (const [key, val] of Object.entries(savedEnv)) {
       if (val !== undefined) {

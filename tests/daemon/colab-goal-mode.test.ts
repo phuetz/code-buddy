@@ -31,7 +31,7 @@ describe('colab goal-mode (Hermes kanban goal-mode parity)', () => {
   });
 
   afterEach(() => {
-    rmSync(dir, { recursive: true, force: true });
+    rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   function makeLoop(executor: TaskExecutor, goalJudge?: ColabGoalJudge): FleetAutonomousLoop {

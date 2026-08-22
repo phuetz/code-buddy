@@ -350,7 +350,28 @@ function pendingAcksFile(): string {
   );
 }
 
-async function savePendingAcks(): Promise<void> {
+/**
+ * Fire-and-forget disk mirrors (`void savePendingAcks()` / `void saveSnoozes()`)
+ * still in flight. `whenRemindersPersisted()` lets a caller that is about to
+ * remove the store directory (tests, a tear-down) wait for them first — on
+ * Windows an unfinished write leaves the directory ENOTEMPTY.
+ */
+const pendingWrites = new Set<Promise<void>>();
+function trackWrite(write: Promise<void>): Promise<void> {
+  pendingWrites.add(write);
+  void write.finally(() => pendingWrites.delete(write));
+  return write;
+}
+export async function whenRemindersPersisted(): Promise<void> {
+  while (pendingWrites.size > 0) {
+    await Promise.allSettled([...pendingWrites]);
+  }
+}
+
+function savePendingAcks(): Promise<void> {
+  return trackWrite(savePendingAcksNow());
+}
+async function savePendingAcksNow(): Promise<void> {
   try {
     const file = pendingAcksFile();
     await mkdir(join(file, '..'), { recursive: true });
@@ -877,7 +898,10 @@ function snoozesFile(): string {
     join(homedir(), '.codebuddy', 'companion', 'snoozes.json')
   );
 }
-async function saveSnoozes(): Promise<void> {
+function saveSnoozes(): Promise<void> {
+  return trackWrite(saveSnoozesNow());
+}
+async function saveSnoozesNow(): Promise<void> {
   try {
     const file = snoozesFile();
     await mkdir(join(file, '..'), { recursive: true });

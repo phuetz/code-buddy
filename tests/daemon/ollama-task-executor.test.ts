@@ -36,7 +36,7 @@ describe('createLocalModelTaskExecutor', () => {
   let dir: string;
 
   beforeEach(() => { dir = mkdtempSync(join(tmpdir(), 'executor-')); });
-  afterEach(() => { rmSync(dir, { recursive: true, force: true }); });
+  afterEach(() => { rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }); });
 
   it('calls the tier endpoint, writes the artifact, and reports success', async () => {
     const fetchImpl = vi.fn(async () => okResponse('robot dreams in code'));

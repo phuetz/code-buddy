@@ -72,7 +72,7 @@ beforeEach(() => {
 
 afterEach(() => {
   if (tempAuthDir) {
-    fs.rmSync(tempAuthDir, { recursive: true, force: true });
+    fs.rmSync(tempAuthDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     tempAuthDir = null;
   }
   for (const key of ENV_KEYS_TO_PRESERVE) {

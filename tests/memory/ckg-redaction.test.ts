@@ -14,7 +14,7 @@ describe('CKG remember input redaction', () => {
   });
 
   afterEach(async () => {
-    await rm(tempDir, { recursive: true, force: true });
+    await rm(tempDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   it('redacts secrets in entity names and relation fields before persistence', async () => {

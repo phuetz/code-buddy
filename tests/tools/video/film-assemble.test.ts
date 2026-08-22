@@ -17,7 +17,7 @@ import { EventEmitter } from 'events';
 import { spawn, spawnSync } from 'child_process';
 import { mkdtemp, rm, stat, readFile } from 'fs/promises';
 import { tmpdir } from 'os';
-import { join } from 'path';
+import { join, sep } from 'path';
 
 import {
   computeXfadeOffsets,
@@ -421,7 +421,7 @@ describe('assembleFilm — orchestration (injected)', () => {
     root = await mkdtemp(join(tmpdir(), 'buddy-film-'));
   });
   afterAll(async () => {
-    await rm(root, { recursive: true, force: true });
+    await rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   it('assembles a 3-clip film and reports the estimated duration Σd − ΣT', async () => {
@@ -445,7 +445,8 @@ describe('assembleFilm — orchestration (injected)', () => {
     expect(res.probedDuration).toBe(14); // from the fake output ffprobe
     expect(res.targetWidth).toBe(1920);
     expect(res.hasAudio).toBe(true);
-    expect(res.outputPath).toMatch(/\.codebuddy\/media-generation\/films\/.*\.mp4$/);
+    // Compare the POSIX spelling: the output path uses native separators.
+    expect(res.outputPath.split(sep).join('/')).toMatch(/\.codebuddy\/media-generation\/films\/.*\.mp4$/);
     expect(res.mediaPath).toBe(`MEDIA:${res.outputPath}`);
 
     // Media-library sidecar: prompt/provider/model so the film shows a real card.
@@ -552,7 +553,7 @@ describe.runIf(hasFfmpeg)('assembleFilm — real ffmpeg render', () => {
   }, 60_000);
 
   afterAll(async () => {
-    await rm(root, { recursive: true, force: true });
+    await rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   it('welds 3 clips with a 0.5s xfade into one film of ≈ 5s', async () => {

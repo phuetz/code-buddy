@@ -332,7 +332,7 @@ describe('SecurityAuditor - authorization', () => {
   });
 
   afterEach(async () => {
-    await fs.rm(tmpCredDir, { recursive: true, force: true });
+    await fs.rm(tmpCredDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   it('should flag insecure credentials directory permissions', async () => {
@@ -386,9 +386,9 @@ describe('SecurityAuditor - authorization', () => {
   });
 
   afterEach(async () => {
-    await fs.rm(tmpConfigDir, { recursive: true, force: true });
-    await fs.rm(tmpSessionsDir, { recursive: true, force: true });
-    await fs.rm(tmpPluginsDir, { recursive: true, force: true });
+    await fs.rm(tmpConfigDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+    await fs.rm(tmpSessionsDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+    await fs.rm(tmpPluginsDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   it('should flag world-readable config directory', async () => {
@@ -507,7 +507,7 @@ describe('SecurityAuditor - plugins', () => {
   });
 
   afterEach(async () => {
-    await fs.rm(tmpPluginsDir, { recursive: true, force: true });
+    await fs.rm(tmpPluginsDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   it('should report installed plugins as info', async () => {
@@ -695,7 +695,7 @@ describe('SecurityAuditor - tools', () => {
   });
 
   afterEach(async () => {
-    await fs.rm(tmpDir, { recursive: true, force: true });
+    await fs.rm(tmpDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   it('should fix file permission findings', async () => {

@@ -82,7 +82,7 @@ describe('ScreenRecorder', () => {
       captured = { cmd, args };
       return proc as never;
     };
-    const rec = new ScreenRecorder({ spawnImpl });
+    const rec = new ScreenRecorder({ spawnImpl, platform: 'linux' });
     expect(rec.isRecording()).toBe(false);
     rec.start('/tmp/x/out.mp4', { display: ':5', fps: 20, screenSize: { width: 640, height: 480 } });
     expect(rec.isRecording()).toBe(true);

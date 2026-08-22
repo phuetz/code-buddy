@@ -109,7 +109,7 @@ describe('SessionTimeline', () => {
   afterEach(async () => {
     if (previousTimelineEnv === undefined) delete process.env.CODEBUDDY_TIMELINE;
     else process.env.CODEBUDDY_TIMELINE = previousTimelineEnv;
-    await fs.rm(tempDir, { recursive: true, force: true });
+    await fs.rm(tempDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   it('records, lists, and gets turns in turn order', async () => {

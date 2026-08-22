@@ -47,7 +47,7 @@ describe('session_search real saved-session integration', () => {
     } else {
       process.env.CODEBUDDY_SESSIONS_DIR = previousSessionsDir;
     }
-    await fs.rm(tempHome, { recursive: true, force: true });
+    await fs.rm(tempHome, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   it('finds a real persisted session through the agent tool', async () => {

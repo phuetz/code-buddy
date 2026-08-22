@@ -16,7 +16,7 @@ describe('TrackManager', () => {
 
   afterEach(() => {
     // Clean up temporary directory
-    fs.rmSync(tempDir, { recursive: true, force: true });
+    fs.rmSync(tempDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   describe('initialize', () => {
@@ -157,7 +157,7 @@ describe('TrackCommands', () => {
   });
 
   afterEach(() => {
-    fs.rmSync(tempDir, { recursive: true, force: true });
+    fs.rmSync(tempDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   describe('execute', () => {

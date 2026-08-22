@@ -48,8 +48,8 @@ describe('skills_list and skill_view real SkillsHub integration', () => {
     const { resetSkillsHub } = await import('../../src/skills/hub.js');
     process.chdir(originalCwd);
     resetSkillsHub();
-    await fs.rm(tempHome, { recursive: true, force: true });
-    await fs.rm(tempWorkspace, { recursive: true, force: true });
+    await fs.rm(tempHome, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+    await fs.rm(tempWorkspace, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   it('lists and reads installed SKILL.md packages from the real lockfile', async () => {

@@ -26,7 +26,7 @@ describe('Maison voice actions', () => {
     speak = vi.fn(async () => undefined);
   });
 
-  afterEach(() => rmSync(dir, { recursive: true, force: true }));
+  afterEach(() => rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }));
 
   it('parses and starts a named cooking timer without an LLM', async () => {
     expect(parseMaisonVoiceCommand('Lisa, mets un minuteur de 10 minutes pour les pâtes'))

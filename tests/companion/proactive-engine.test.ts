@@ -115,7 +115,7 @@ describe('runProactiveTick — end to end (injected delivery seams, no model)', 
     delete process.env.CODEBUDDY_COMPANION_PROACTIVE;
     if (ORIGINAL_TIMEZONE === undefined) delete process.env.CODEBUDDY_TIMEZONE;
     else process.env.CODEBUDDY_TIMEZONE = ORIGINAL_TIMEZONE;
-    rmSync(tmp, { recursive: true, force: true });
+    rmSync(tmp, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   it('does nothing when the feature is off', async () => {
@@ -308,7 +308,7 @@ describe('proactive-state persistence', () => {
       expect(loaded.recentLines.length).toBe(8); // capped
       expect(loaded.recentLines[loaded.recentLines.length - 1]).toBe('l19');
     } finally {
-      rmSync(tmp, { recursive: true, force: true });
+      rmSync(tmp, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     }
   });
 });

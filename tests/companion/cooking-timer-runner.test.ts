@@ -23,7 +23,7 @@ describe('cooking timer runner', () => {
     resetCookingTimerRunnerState();
   });
 
-  afterEach(() => rmSync(dir, { recursive: true, force: true }));
+  afterEach(() => rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }));
 
   it('announces a named due timer and keeps it pending for acknowledgement', async () => {
     const started = await store.start(1_000, 'pâtes');

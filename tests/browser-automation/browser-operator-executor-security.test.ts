@@ -107,7 +107,7 @@ async function workspace(): Promise<string> {
 
 afterEach(async () => {
   vi.restoreAllMocks();
-  await Promise.all(tempDirectories.splice(0).map((directory) => rm(directory, { recursive: true, force: true })));
+  await Promise.all(tempDirectories.splice(0).map((directory) => rm(directory, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 })));
 });
 
 beforeEach(() => {

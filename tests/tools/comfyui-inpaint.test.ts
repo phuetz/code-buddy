@@ -13,7 +13,7 @@ const SOURCE = `data:image/png;base64,${PIXEL}`;
 const workspaces: string[] = [];
 
 afterEach(async () => {
-  await Promise.all(workspaces.splice(0).map((workspace) => fs.rm(workspace, { recursive: true, force: true })));
+  await Promise.all(workspaces.splice(0).map((workspace) => fs.rm(workspace, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 })));
 });
 
 describe('ComfyUI inpaint workflow', () => {
@@ -253,7 +253,8 @@ function comfyEnv(bundle: ReturnType<typeof inpaintBundle>): NodeJS.ProcessEnv {
 }
 
 async function temporaryWorkspace(): Promise<string> {
-  const workspace = await fs.mkdtemp(path.join(os.tmpdir(), 'codebuddy-comfy-inpaint-'));
+  // Canonical base: outputPath is returned as a realpath, and macOS tmpdir lives behind a symlink.
+  const workspace = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'codebuddy-comfy-inpaint-')));
   workspaces.push(workspace);
   return workspace;
 }

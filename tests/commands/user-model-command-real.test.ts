@@ -83,7 +83,7 @@ describe('buddy user-model analyze real CLI path', () => {
   });
 
   afterEach(async () => {
-    await fs.rm(tempWorkDir, { recursive: true, force: true });
+    await fs.rm(tempWorkDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   it('proposes local observations from a real session JSON without accepting them', async () => {

@@ -25,7 +25,7 @@ describe('buddy exchange', () => {
     resetGoalManagers();
     if (previousHome === undefined) delete process.env.CODEBUDDY_HOME;
     else process.env.CODEBUDDY_HOME = previousHome;
-    fs.rmSync(dir, { recursive: true, force: true });
+    fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   it('runs constitution → bid → rehearsal → award and creates a Forge branch', async () => {

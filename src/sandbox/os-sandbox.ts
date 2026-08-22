@@ -16,6 +16,7 @@ import * as os from 'os';
 import * as path from 'path';
 import * as fs from 'fs';
 import { sanitizeEnvVars } from '../security/env-blocklist.js';
+import { logger } from '../utils/logger.js';
 import type { SandboxBackendInterface, SandboxExecOptions, SandboxExecResult } from './sandbox-backend.js';
 
 // ============================================================================
@@ -159,21 +160,24 @@ export async function detectCapabilities(): Promise<SandboxCapabilities> {
     }
   }
 
-  // Check for seatbelt (macOS)
+  // Check for seatbelt (macOS): sandbox-exec is built into every macOS, so
+  // presence proves nothing — run a trivial command under the real profile.
   if (platform === 'darwin') {
-    try {
-      // sandbox-exec is built into macOS
-      const result = await execSimple('which', ['sandbox-exec']);
-      capabilities.seatbelt = result.exitCode === 0;
-    } catch {
-      capabilities.seatbelt = false;
-    }
+    capabilities.seatbelt = await probeSeatbelt();
   }
 
-  // Check for Docker
+  // Check for Docker. The sandbox runs Linux images with Linux-only flags, so a
+  // daemon in Windows-containers mode (Windows CI runners) does not count.
+  // Only an explicit Windows daemon degrades; if the format probe itself is
+  // unsupported (docker→podman shims), fall back to the historical probe.
   try {
-    const result = await execSimple('docker', ['version', '--format', '{{.Server.Version}}']);
-    capabilities.docker = result.exitCode === 0;
+    const result = await execSimple('docker', ['version', '--format', '{{.Server.Os}}']);
+    if (result.exitCode === 0) {
+      capabilities.docker = result.stdout.trim().toLowerCase() !== 'windows';
+    } else {
+      const fallback = await execSimple('docker', ['version', '--format', '{{.Server.Version}}']);
+      capabilities.docker = fallback.exitCode === 0;
+    }
   } catch {
     capabilities.docker = false;
   }
@@ -294,52 +298,187 @@ async function execBubblewrap(
 // ============================================================================
 
 /**
- * Generate seatbelt profile for sandbox-exec
+ * Canonical form of a path for seatbelt rules. The kernel matches `subpath`
+ * against the resolved vnode path, so a rule written for `/var/folders/…` or
+ * `/tmp` never matches on macOS where those are symlinks to `/private/…`.
+ * Returns the lexical path and (when different) its realpath.
  */
-function generateSeatbeltProfile(config: OSSandboxConfig): string {
+function seatbeltPathForms(p: string): string[] {
+  const lexical = path.resolve(p);
+  const canonical = canonicalizeViaExistingAncestor(lexical);
+  return canonical === lexical ? [lexical] : [lexical, canonical];
+}
+
+/**
+ * Canonical form of a path whose leaf may not exist yet: realpath the nearest
+ * existing ancestor and re-append the rest (same helper shape as
+ * review-gate-helper.ts), so a not-yet-created `<workspace>/.git` or
+ * `.codebuddy` is still protected under the CANONICAL workspace root.
+ */
+function canonicalizeViaExistingAncestor(resolved: string): string {
+  const pending: string[] = [];
+  let cursor = resolved;
+  for (;;) {
+    try {
+      const real = fs.realpathSync(cursor);
+      return pending.length ? path.join(real, ...pending.reverse()) : real;
+    } catch {
+      const parent = path.dirname(cursor);
+      if (parent === cursor) return resolved;
+      pending.push(path.basename(cursor));
+      cursor = parent;
+    }
+  }
+}
+
+/**
+ * Secrets that stay unreadable inside the seatbelt sandbox even though reads
+ * are otherwise open. Aligned with `BLOCKED_PATHS` in
+ * src/workspace/workspace-isolation.ts and the `workspaceReadOnly` list of the
+ * Docker path (src/tools/bash/execution-policy.ts). Exported for tests.
+ */
+export function seatbeltUnreadablePaths(homeDir: string = os.homedir()): string[] {
+  return [
+    path.join(homeDir, '.ssh'),
+    path.join(homeDir, '.gnupg'),
+    path.join(homeDir, '.aws'),
+    path.join(homeDir, '.kube'),
+    path.join(homeDir, '.docker', 'config.json'),
+    path.join(homeDir, '.npmrc'),
+    path.join(homeDir, '.netrc'),
+    path.join(homeDir, '.config', 'gh', 'hosts.yml'),
+    path.join(homeDir, '.config', 'gcloud', 'credentials.db'),
+    path.join(homeDir, '.codebuddy', 'credentials.enc'),
+    '/etc/sudoers',
+    '/etc/security',
+  ];
+}
+
+function seatbeltQuote(p: string): string {
+  return `"${p.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
+}
+
+/**
+ * Generate the seatbelt (sandbox-exec) profile.
+ *
+ * Shape follows the Codex CLI / Chromium profiles that are known to run on
+ * macOS 12–15: closed by default, reads allowed everywhere, writes limited to
+ * the canonicalized writable roots, network closed unless enabled.
+ *
+ * Why reads are not limited to `readOnlyPaths`: a macOS process cannot even
+ * `exec` without reading the dyld shared cache (`/System/…`,
+ * `/System/Volumes/Preboot/Cryptexes/…`), `/Library`, `/private/var/db`, and
+ * developer toolchains live under `/Users/*`, `/opt/homebrew`,
+ * `/Applications/Xcode.app`. There is no closed, portable "minimal system
+ * read set" on Darwin, so a deny-default read policy makes every command exit
+ * before it starts. Write confinement + no network is the property the
+ * workspace sandbox actually provides (same as Codex's `workspace-write`).
+ *
+ * `readOnlyPaths` that sit under a writable root (e.g. `<workspace>/.git`,
+ * `.codebuddy`) are carved out of the write grant with `require-not`, and
+ * re-denied explicitly so the protection does not depend on rule ordering.
+ *
+ * Asymmetry vs the Linux bubblewrap path, on purpose: bwrap runs on a tmpfs
+ * root with `HOME=/tmp`, so the child never sees the real home or the host
+ * temp dir. Seatbelt has no mount namespace — the child shares the host's
+ * real `/tmp`/`$TMPDIR` (writable scratch) and the real `$HOME` (readable).
+ * The credential files and directories in `seatbeltUnreadablePaths()` are
+ * therefore explicitly denied (read AND write) after the broad read allow;
+ * SBPL gives later rules precedence, and the deny is written for both the
+ * lexical and canonical spelling of each path.
+ */
+export function generateSeatbeltProfile(config: OSSandboxConfig): string {
   const rules: string[] = [
     '(version 1)',
+    '',
+    '; Code Buddy workspace sandbox. Inspired by the Codex CLI and Chromium',
+    '; seatbelt policies: closed by default, read-everywhere, write-confined.',
     '(deny default)',
     '',
-    '; Allow basic operations',
-    '(allow process-fork)',
-    '(allow process-exec)',
-    '(allow signal (target self))',
+    '; Reads: see generateSeatbeltProfile() — Darwin has no minimal read set',
+    '(allow file-read*)',
     '',
-    '; Allow sysctl reads',
+    '; …except credentials (shared real $HOME — see the asymmetry note above)',
+    ...seatbeltUnreadablePaths()
+      .flatMap(seatbeltPathForms)
+      .flatMap((secret) => [
+        `(deny file-read* file-write* (subpath ${seatbeltQuote(secret)}))`,
+        `(deny file-read* file-write* (literal ${seatbeltQuote(secret)}))`,
+      ]),
+    '',
+    '; Child processes inherit the policy of their parent',
+    '(allow process-exec)',
+    '(allow process-fork)',
+    '(allow signal (target same-sandbox))',
+    '(allow process-info* (target same-sandbox))',
+    '',
+    '; sysctls (hw.*, kern.osversion, … — used by every runtime at startup)',
     '(allow sysctl-read)',
     '',
-    '; Allow reading system files',
+    '; user/group lookups (getpwuid, ~ expansion, whoami)',
+    '(allow mach-lookup (global-name "com.apple.system.opendirectoryd.libinfo"))',
+    '',
+    '; devices',
+    '(allow file-write* (literal "/dev/null"))',
+    '(allow file-ioctl (literal "/dev/null"))',
+    '(allow pseudo-tty)',
+    '(allow file-read* file-write* file-ioctl (literal "/dev/ptmx"))',
+    '(allow file-ioctl (regex #"^/dev/ttys[0-9]+"))',
+    '',
+    '; Writable roots (lexical + canonical forms)',
   ];
 
-  // Read-only paths
-  for (const p of config.readOnlyPaths) {
-    rules.push(`(allow file-read* (subpath "${p}"))`);
+  const readOnly = config.readOnlyPaths.flatMap(seatbeltPathForms);
+  const writable = new Set<string>();
+  for (const p of [...config.readWritePaths, config.workDir]) {
+    for (const form of seatbeltPathForms(p)) writable.add(form);
+  }
+  // Scratch space is always writable (the Codex workspace-write default).
+  for (const p of ['/tmp', os.tmpdir()]) {
+    for (const form of seatbeltPathForms(p)) writable.add(form);
   }
 
-  // Read-write paths
-  for (const p of config.readWritePaths) {
-    rules.push(`(allow file-read* file-write* (subpath "${p}"))`);
+  for (const root of writable) {
+    const protectedBelow = readOnly.filter(
+      (ro) => ro === root || ro.startsWith(root.endsWith('/') ? root : `${root}/`)
+    );
+    if (protectedBelow.length === 0) {
+      rules.push(`(allow file-write* (subpath ${seatbeltQuote(root)}))`);
+      continue;
+    }
+    const exclusions = protectedBelow
+      .filter((ro) => ro !== root)
+      .flatMap((ro) => [
+        `(require-not (subpath ${seatbeltQuote(ro)}))`,
+        `(require-not (literal ${seatbeltQuote(ro)}))`,
+      ]);
+    if (protectedBelow.includes(root)) continue; // whole root is read-only
+    rules.push(
+      `(allow file-write* (require-all (subpath ${seatbeltQuote(root)}) ${exclusions.join(' ')}))`
+    );
   }
 
-  // Working directory
-  rules.push(`(allow file-read* file-write* (subpath "${config.workDir}"))`);
-
-  // Temp directory
-  rules.push('(allow file-read* file-write* (subpath "/tmp"))');
-  rules.push('(allow file-read* file-write* (subpath "/private/tmp"))');
-
-  // Allow reading /dev/null, /dev/random, etc.
-  rules.push('(allow file-read* (literal "/dev/null"))');
-  rules.push('(allow file-read* (literal "/dev/random"))');
-  rules.push('(allow file-read* (literal "/dev/urandom"))');
-  rules.push('(allow file-write* (literal "/dev/null"))');
+  const protectedSubpaths = readOnly.filter((ro) =>
+    [...writable].some((root) => ro !== root && ro.startsWith(root.endsWith('/') ? root : `${root}/`))
+  );
+  if (protectedSubpaths.length > 0) {
+    rules.push('');
+    rules.push('; Protected metadata stays read-only even inside writable roots');
+    for (const ro of protectedSubpaths) {
+      rules.push(`(deny file-write* (subpath ${seatbeltQuote(ro)}))`);
+      rules.push(`(deny file-write* (literal ${seatbeltQuote(ro)}))`);
+    }
+  }
 
   // Network
   if (config.allowNetwork) {
     rules.push('');
     rules.push('; Allow network access');
     rules.push('(allow network*)');
+    rules.push('(allow system-socket)');
+    rules.push(
+      '(allow mach-lookup (global-name "com.apple.SecurityServer") (global-name "com.apple.networkd") (global-name "com.apple.trustd.agent") (global-name "com.apple.SystemConfiguration.DNSConfiguration") (global-name "com.apple.SystemConfiguration.configd"))'
+    );
   }
 
   // Subprocess
@@ -350,6 +489,52 @@ function generateSeatbeltProfile(config: OSSandboxConfig): string {
   }
 
   return rules.join('\n');
+}
+
+/** Environment handed to the seatbelt child (mirrors the bubblewrap path). */
+function seatbeltEnvironment(config: OSSandboxConfig): Record<string, string> {
+  return {
+    HOME: process.env.HOME || os.homedir(),
+    PATH: process.env.PATH || '/usr/local/bin:/usr/bin:/bin',
+    TMPDIR: os.tmpdir(),
+    TERM: process.env.TERM || 'xterm',
+    CODEBUDDY_CLI: process.env.CODEBUDDY_CLI || '1',
+    CODEBUDDY_CLI_VERSION: process.env.CODEBUDDY_CLI_VERSION || '',
+    ...sanitizeEnvVars(config.env),
+  };
+}
+
+/**
+ * Probe that `sandbox-exec` can actually run a trivial command under a
+ * REPRESENTATIVE profile. `which sandbox-exec` alone produced false
+ * positives: the binary exists on every macOS, so a profile that cannot exec
+ * (or a host that forbids sandbox-exec) turned every otherwise-valid command
+ * into an exit-1 failure — the same trap the bubblewrap probe guards against.
+ *
+ * The probe config mirrors what `createSandboxConfigForMode('workspace-write')`
+ * emits (a writable root with a protected `.git` below it), so every rule
+ * shape of the real profile — `require-all`/`require-not`, the explicit
+ * denies, the secret read denies — must compile and run. Any failure ⇒ the
+ * backend is reported unavailable (fail-closed, callers escalate explicitly).
+ */
+export function seatbeltProbeConfig(): OSSandboxConfig {
+  const scratch = os.tmpdir();
+  return {
+    ...DEFAULT_CONFIG,
+    workDir: scratch,
+    readWritePaths: [scratch],
+    readOnlyPaths: ['/usr', '/bin', path.join(scratch, '.git'), path.join(scratch, '.codebuddy')],
+  };
+}
+
+async function probeSeatbelt(): Promise<boolean> {
+  const profile = generateSeatbeltProfile(seatbeltProbeConfig());
+  try {
+    const result = await execSimple('sandbox-exec', ['-p', profile, '/usr/bin/true']);
+    return result.exitCode === 0;
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -364,8 +549,8 @@ async function execSeatbelt(
   const profile = generateSeatbeltProfile(config);
 
   // Write profile to temp file
-  const profilePath = path.join(os.tmpdir(), `grok-sandbox-${Date.now()}.sb`);
-  fs.writeFileSync(profilePath, profile);
+  const profilePath = path.join(os.tmpdir(), `grok-sandbox-${Date.now()}-${process.pid}.sb`);
+  fs.writeFileSync(profilePath, profile, { mode: 0o600 });
 
   try {
     const sandboxArgs = [
@@ -374,13 +559,38 @@ async function execSeatbelt(
       ...args,
     ];
 
+    const cwd = fs.existsSync(config.workDir) ? config.workDir : undefined;
     const result = await execWithTimeout(
       'sandbox-exec',
       sandboxArgs,
       config.timeout,
       'seatbelt',
       config.abortSignal,
+      {
+        ...(cwd ? { cwd } : {}),
+        env: seatbeltEnvironment(config),
+      },
     );
+    if (result.exitCode !== 0 && !result.timedOut && !config.abortSignal?.aborted) {
+      // Surface WHY: sandbox-exec's own stderr (profile compile errors) or the
+      // child's, plus the execution context. Without this a denied/crashed
+      // child looked like a bare "exit 1" and was undiagnosable from CI logs.
+      const roots = profile
+        .split('\n')
+        .filter((line) => line.startsWith('(allow file-write*'))
+        .map((line) => line.match(/\(subpath "([^"]+)"\)/)?.[1] ?? line)
+        .slice(0, 6);
+      const diag = `[seatbelt diag] exit=${result.exitCode} cwd=${cwd ?? '(unset)'} cmd=${[command, ...args].join(' ').slice(0, 200)} profile=${profile.split('\n').length} lines, writable roots: ${roots.join(' | ')}`;
+      result.stderr = result.stderr.trim() ? `${result.stderr.trimEnd()}\n${diag}` : diag;
+      logger.warn('Seatbelt sandbox command failed', {
+        exitCode: result.exitCode,
+        cwd,
+        command,
+        args,
+        stderr: result.stderr.slice(0, 2000),
+        profileHead: profile.split('\n').slice(0, 40).join('\n'),
+      });
+    }
     return result;
   } finally {
     // Clean up profile file
@@ -1032,6 +1242,7 @@ function execWithTimeout(
   timeout: number,
   backend: SandboxBackend,
   signal?: AbortSignal,
+  spawnOptions: { cwd?: string; env?: Record<string, string> } = {},
 ): Promise<OSSandboxResult> {
   return new Promise((resolve) => {
     const startTime = Date.now();
@@ -1039,6 +1250,8 @@ function execWithTimeout(
     const options: SpawnOptions = {
       stdio: ['ignore', 'pipe', 'pipe'],
       ...(signal ? { signal } : {}),
+      ...(spawnOptions.cwd ? { cwd: spawnOptions.cwd } : {}),
+      ...(spawnOptions.env ? { env: spawnOptions.env } : {}),
     };
 
     const proc = spawn(command, args, options);
@@ -1060,12 +1273,18 @@ function execWithTimeout(
       proc.kill('SIGKILL');
     }, timeout);
 
-    proc.on('close', (code) => {
+    proc.on('close', (code, terminationSignal) => {
       clearTimeout(timer);
+      // A signal death (dyld abort, SIGKILL from the sandbox, …) has no exit
+      // code; say so instead of reporting a silent "exit 1".
+      const diagnostic =
+        code === null && terminationSignal && !timedOut
+          ? `${stderr}${stderr && !stderr.endsWith('\n') ? '\n' : ''}[sandbox:${backend}] child terminated by ${terminationSignal}`
+          : stderr;
       resolve({
         exitCode: code ?? 1,
         stdout,
-        stderr,
+        stderr: diagnostic,
         duration: Date.now() - startTime,
         timedOut,
         backend,
@@ -1075,14 +1294,19 @@ function execWithTimeout(
 
     proc.on('error', (err) => {
       clearTimeout(timer);
+      // An AbortSignal cancellation surfaces as an 'error' (AbortError) on the
+      // child: the sandbox did isolate the command, the caller cancelled it.
+      // Reporting `sandboxed: false` here made every abort look like a backend
+      // refusal and escalated it to an approval prompt.
+      const aborted = Boolean(signal?.aborted);
       resolve({
         exitCode: 1,
-        stdout: '',
-        stderr: err.message,
+        stdout: aborted ? stdout : '',
+        stderr: aborted ? 'Command aborted by user' : err.message,
         duration: Date.now() - startTime,
         timedOut: false,
         backend,
-        sandboxed: false,
+        sandboxed: aborted,
       });
     });
   });

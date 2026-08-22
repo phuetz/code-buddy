@@ -21,7 +21,7 @@ describe('handleChannels additional channel activation', () => {
     await manager.shutdown();
     resetChannelManager();
     vi.restoreAllMocks();
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   const mockedConnectChannels = new Set<ChannelType>([

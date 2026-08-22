@@ -15,12 +15,12 @@ jest.mock('../../src/services/vfs/unified-vfs-router.js', () => ({
   }
 }));
 
-// Mock child_process. We intentionally do NOT provide `exec`: the Windows-native
-// OCR engine (engine 1 of the cascade) does `const { exec } = await
-// import('child_process')` then `promisify(exec)`. Leaving `exec` undefined makes
-// `promisify(undefined)` throw synchronously, so engine 1 fails fast and the
-// cascade falls through. (Providing a no-op `exec` mock would instead create a
-// promisified function that never resolves and hangs the test.)
+// Mock child_process (static `spawn`/`execSync` imports). The Windows-native
+// OCR engine (engine 1 of the cascade) does a DYNAMIC `await import('child_process')`
+// that this mock does not reliably intercept — on a Windows host it shelled out
+// to a real PowerShell OCR (up to 15 s) and raced the `setImmediate`-timed
+// emissions below. The tool is therefore constructed with an explicit
+// non-Windows platform so the cascade starts at engine 2 on every host.
 const mockSpawn = jest.fn();
 const mockExecSync = jest.fn();
 jest.mock('child_process', () => ({
@@ -52,7 +52,7 @@ describe('OCRTool', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    tool = new OCRTool();
+    tool = new OCRTool({ platform: 'linux' });
     (tool as any).tesseractAvailable = null;
     
     // Default execSync to return empty string instead of buffer to avoid split errors

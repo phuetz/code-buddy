@@ -23,7 +23,7 @@ describe('CameraAnalyzeTool', () => {
   });
 
   afterEach(async () => {
-    await fs.rm(path.dirname(tmpImage), { recursive: true, force: true });
+    await fs.rm(path.dirname(tmpImage), { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   it('captures a frame, composes a data-URL image_url message, and returns the model description', async () => {

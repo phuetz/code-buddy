@@ -158,6 +158,29 @@ const CASES: Record<LisaIntrospectionIntent, readonly string[]> = {
 };
 
 describe('Lisa introspection intent classifier', () => {
+  it('does not treat a long task that merely mentions Lisa as a self-inspection turn (regression 2026-08-22)', () => {
+    // A headless mission: the persona is the SUBJECT of the task, not the agent,
+    // and the only no-mutation clause is a guard-rail twenty lines away.
+    const mission = [
+      '# MISSION (mécanique, 5 min)',
+      'Dépôt : ~/.codebuddy/personas/lisa. Pour chaque short, écris le bloc titre/description.',
+      'Description : commencer par « Lisa est une présentatrice virtuelle. Les faits sont sourcés. », 2-4 phrases factuelles.',
+      'Lis les fiches SHORT-LISA-*.md et les narrations dans narrations-shorts/.',
+      '',
+      '## Garde-fous — non négociables',
+      '- Rester dans le dépôt indiqué. Ne jamais écrire ailleurs.',
+      '- Ne pas toucher aux services qui tournent (ComfyUI sur 8188/8189 notamment).',
+      '- Terminer par un bilan de dix lignes maximum.',
+    ].join('\n');
+    expect(classifyLisaIntrospection(mission)).toBeNull();
+    expect(classifyLisaIntrospection('Lisa est une présentatrice virtuelle. Les faits sont sourcés.')).toBeNull();
+  });
+
+  it('still reads a nearby no-mutation clause as an inspection boundary', () => {
+    expect(classifyLisaIntrospection('Analyse ton propre code sans le modifier.')).toBe('inspect');
+    expect(classifyLisaIntrospection('Lisa, examine son propre fonctionnement mais ne touche jamais aux fichiers.')).toBe('inspect');
+  });
+
   for (const [intent, requests] of Object.entries(CASES) as Array<
     [LisaIntrospectionIntent, readonly string[]]
   >) {

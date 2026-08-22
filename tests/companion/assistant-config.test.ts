@@ -1,6 +1,6 @@
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, sep } from 'node:path';
 import {
   ASSISTANT_SETTINGS,
   mergeEnv,
@@ -117,7 +117,7 @@ describe('assistant permission posture migration', () => {
       expect(readAssistantConfig(paths).CODEBUDDY_SENSORY_SPEAK_PERMISSION_MODE).toBe('default');
       expect(readFileSync(paths.vision, 'utf8')).toBe(original);
     } finally {
-      rmSync(dir, { recursive: true, force: true });
+      rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     }
   });
 });
@@ -135,7 +135,7 @@ describe('assistant response policy migration', () => {
       expect(readAssistantConfig(paths).CODEBUDDY_SENSORY_RESPONSE_POLICY).toBe('always');
       expect(readFileSync(paths.vision, 'utf8')).toBe(original);
     } finally {
-      rmSync(dir, { recursive: true, force: true });
+      rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     }
   });
 
@@ -157,7 +157,7 @@ describe('assistant response policy migration', () => {
       );
       expect(readAssistantConfig(paths).CODEBUDDY_SENSORY_RESPONSE_POLICY).toBe('addressed');
     } finally {
-      rmSync(dir, { recursive: true, force: true });
+      rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     }
   });
 });
@@ -183,7 +183,7 @@ describe('assistant privileged runtime env', () => {
       });
       expect(readAssistantConfig(paths)).not.toHaveProperty('CODEBUDDY_SENSORY_ALERT_TOKEN');
     } finally {
-      rmSync(dir, { recursive: true, force: true });
+      rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     }
   });
 });
@@ -191,7 +191,8 @@ describe('assistant privileged runtime env', () => {
 describe('voicePreviewCachePath', () => {
   it('builds a sanitized path under ~/.codebuddy/companion/voice-previews, keyed on voice+text', () => {
     const p = voicePreviewCachePath('estelle');
-    expect(p).toMatch(/\.codebuddy\/companion\/voice-previews\/estelle-[a-z0-9]+\.wav$/);
+    // Compare the POSIX spelling: the cache path uses native separators.
+    expect(p.split(sep).join('/')).toMatch(/\.codebuddy\/companion\/voice-previews\/estelle-[a-z0-9]+\.wav$/);
     // default text → stable path (prewarm-friendly), unsafe chars sanitized
     expect(voicePreviewCachePath('estelle')).toBe(p);
     expect(voicePreviewCachePath('a b/../c')).toMatch(/a-b-\.\.-c-[a-z0-9]+\.wav$/);
@@ -306,7 +307,7 @@ describe('writeAssistantConfig', () => {
         'CODEBUDDY_SENSORY_RESPONSE_POLICY=addressed'
       );
     } finally {
-      rmSync(dir, { recursive: true, force: true });
+      rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     }
   });
 
@@ -329,7 +330,7 @@ describe('writeAssistantConfig', () => {
       expect(readFileSync(paths.vision, 'utf8')).toContain('CODEBUDDY_TTS_VOLUME=35');
       expect(readFileSync(paths.lisa, 'utf8')).toContain('CODEBUDDY_TTS_VOLUME=35');
     } finally {
-      rmSync(dir, { recursive: true, force: true });
+      rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     }
   });
 });

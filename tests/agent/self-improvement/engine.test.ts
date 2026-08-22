@@ -41,7 +41,7 @@ beforeEach(() => {
   dir = fs.mkdtempSync(path.join(os.tmpdir(), 'self-improve-engine-'));
   stamp = 0;
 });
-afterEach(() => fs.rmSync(dir, { recursive: true, force: true }));
+afterEach(() => fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }));
 
 describe('resolveAutonomy', () => {
   it('is propose-only unless CODEBUDDY_SELF_IMPROVE=true', () => {

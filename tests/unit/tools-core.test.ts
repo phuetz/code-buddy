@@ -284,12 +284,13 @@ describe('BashTool', () => {
       process.chdir(originalCwd);
     });
 
-    // /tmp is a Unix-only path
+    // /tmp is a Unix-only path; on macOS it is a symlink to /private/tmp and
+    // `cd` tracks the canonical (realpath) directory.
     (isWindows ? test.skip : test)('should change to valid directory', async () => {
       const result = await bashTool.execute('cd /tmp');
       expect(result.success).toBe(true);
       expect(result.output).toContain('/tmp');
-      expect(bashTool.getCurrentDirectory()).toBe('/tmp');
+      expect(bashTool.getCurrentDirectory()).toBe(fs.realpathSync('/tmp'));
     });
 
     test('should fail for non-existent directory', async () => {

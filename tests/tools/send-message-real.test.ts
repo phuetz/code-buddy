@@ -35,7 +35,7 @@ describe('send_message real outbox integration', () => {
 
   afterEach(async () => {
     process.chdir(originalCwd);
-    await fs.rm(tempWorkspace, { recursive: true, force: true });
+    await fs.rm(tempWorkspace, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   it('previews outbound messages by default and writes a real outbox record', async () => {

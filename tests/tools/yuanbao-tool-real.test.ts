@@ -36,7 +36,7 @@ describe('Hermes Yuanbao real HTTP integration', () => {
     await new Promise<void>((resolve, reject) => {
       server.close((error) => (error ? reject(error) : resolve()));
     });
-    await fs.rm(tempDir, { recursive: true, force: true });
+    await fs.rm(tempDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   it('queries group info and members through a real Yuanbao gateway HTTP path', async () => {

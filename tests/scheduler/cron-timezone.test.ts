@@ -13,7 +13,7 @@ describe('CronScheduler IANA timezone scheduling', () => {
 
   afterEach(() => {
     vi.useRealTimers();
-    rmSync(dir, { recursive: true, force: true });
+    rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   function scheduler(): CronScheduler {

@@ -221,7 +221,7 @@ describe('OpenClaw gateway bridge compatibility', () => {
   });
 
   afterEach(async () => {
-    await rm(tempDir, { recursive: true, force: true });
+    await rm(tempDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   it('discovers an OpenClaw gateway lockfile without exposing secrets', async () => {
@@ -977,7 +977,8 @@ describe('OpenClaw gateway bridge compatibility', () => {
     }
   });
 
-  it('runs a read-only upstream OpenClaw validation checklist against a local gateway fixture', async () => {
+  // The fake `openclaw` binary is a POSIX shell script (shebang + chmod) — not runnable on Windows.
+  it.skipIf(process.platform === 'win32')('runs a read-only upstream OpenClaw validation checklist against a local gateway fixture', async () => {
     const server = await startOpenClawWebSocketContractServer();
     try {
       await mkdir(openclawHome, { recursive: true });

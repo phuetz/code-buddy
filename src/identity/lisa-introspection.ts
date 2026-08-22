@@ -150,7 +150,7 @@ const NON_ACTIONABLE_SELF_IMPROVEMENT = [
 ] as const;
 
 const SELF_IMPLEMENTATION_TARGET =
-  /\b(?:ton|ta|tes|votre|vos) (?:propre?s? )?(?:code(?: source)?|fonctionnement|architecture|implementation|systeme|memoire|outils?|sources?|composants?|internes?)\b|\b(?:lisa|l assistant|l assistante|l agent)\b.{0,96}\b(?:son |sa |ses )?(?:propre?s? )?(?:code|fonctionnement|architecture|implementation|systeme|memoire|outils?|sources?|composants?|internes?)\b|\byour (?:own )?(?:code|implementation|architecture|system|memory|tools?|sources?|components?|internals)\b/;
+  /\b(?:ton|ta|tes|votre|vos) (?:propre?s? )?(?:code(?: source)?|fonctionnement|architecture|implementation|systeme|memoire|outils?|sources?|composants?|internes?)\b|\b(?:lisa|l assistant|l assistante|l agent)\b.{0,96}\b(?:(?:son|sa|ses) (?:propre?s? )?|propre?s? )(?:code|fonctionnement|architecture|implementation|systeme|memoire|outils?|sources?|composants?|internes?)\b|\byour (?:own )?(?:code|implementation|architecture|system|memory|tools?|sources?|components?|internals)\b/;
 
 const INSPECT_PATTERNS = [
   /\b(?:introspection technique|auto inspection)\b/,
@@ -236,6 +236,25 @@ const EXPLICIT_PERSONAL_INTROSPECTION_SCOPE =
 
 function matchesAny(text: string, patterns: readonly RegExp[]): boolean {
   return patterns.some((pattern) => pattern.test(text));
+}
+
+/**
+ * Characters of context (each side) around a self-implementation target in
+ * which a no-mutation clause is read as binding on that target. A long,
+ * multi-section task (e.g. a headless mission whose guard-rails say "ne pas
+ * toucher aux services" twenty lines after an unrelated mention of Lisa) must
+ * not be downgraded to a local, provider-less inspection turn.
+ */
+const NO_MUTATION_PROXIMITY_CHARS = 160;
+
+function hasNoMutationNearSelfTarget(text: string): boolean {
+  const target = new RegExp(SELF_IMPLEMENTATION_TARGET.source, 'g');
+  for (const match of text.matchAll(target)) {
+    const start = Math.max(0, match.index - NO_MUTATION_PROXIMITY_CHARS);
+    const end = Math.min(text.length, match.index + match[0].length + NO_MUTATION_PROXIMITY_CHARS);
+    if (matchesAny(text.slice(start, end), NO_MUTATION_PATTERNS)) return true;
+  }
+  return false;
 }
 
 export type LisaOperationalResponseMode =
@@ -421,10 +440,7 @@ export function classifyLisaIntrospection(raw: string): LisaIntrospectionIntent 
 
   // An explicit no-mutation clause is authority, not just prose. It must win
   // over nearby verbs such as “corrige/répare” that appear under negation.
-  if (
-    SELF_IMPLEMENTATION_TARGET.test(text) &&
-    matchesAny(text, NO_MUTATION_PATTERNS)
-  ) {
+  if (hasNoMutationNearSelfTarget(text)) {
     return 'inspect';
   }
 

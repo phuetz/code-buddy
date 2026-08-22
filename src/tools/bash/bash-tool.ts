@@ -401,6 +401,13 @@ export class BashTool implements Disposable {
           return { success: false, error: 'Command aborted by user' };
         }
         if (sandboxed.available && sandboxed.result) {
+          if (sandboxed.result.timedOut) {
+            return {
+              success: false,
+              error: `Command timed out after ${timeout}ms\n[sandbox:${sandboxed.result.backend}]`,
+              ...(sandboxed.result.stdout ? { output: sandboxed.result.stdout } : {}),
+            };
+          }
           if (sandboxed.result.exitCode === 0) {
             return this.formatProcessResult(
               sandboxed.result.stdout,

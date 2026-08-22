@@ -25,7 +25,7 @@ beforeEach(() => {
 
 afterEach(() => {
   resetCheckpointManager();
-  fs.rmSync(workDir, { recursive: true, force: true });
+  fs.rmSync(workDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
 });
 
 const ORIGIN = { kind: 'agent' as const, label: 't' };
@@ -149,12 +149,11 @@ describe('applyReviewedDiff', () => {
 
   it('rolls back EVERYTHING when a write fails mid-apply', () => {
     write('a.ts', 'v1\n');
-    // A read-only directory: creating sub/blocked.ts will fail with EACCES —
-    // and it is NOT detectable as a conflict beforehand (the file is absent).
-    const readOnlyDir = path.join(workDir, 'sub');
-    fs.mkdirSync(readOnlyDir);
-    fs.chmodSync(readOnlyDir, 0o555);
-    try {
+    // `sub` is a regular FILE: creating sub/blocked.ts fails (ENOTDIR/ENOENT) on
+    // every OS — unlike a chmod 0o555 directory, inert on Windows — and it is
+    // NOT detectable as a conflict beforehand (the file is absent).
+    write('sub', 'not a directory\n');
+    {
       const diff = buildProposedDiff({
         workDir,
         intent: 'x',
@@ -171,8 +170,6 @@ describe('applyReviewedDiff', () => {
       expect(report.rolledBack).toBe(true);
       expect(report.errors[0]).toMatch(/rolled back cleanly/);
       expect(read('a.ts')).toBe('v1\n'); // the first write was undone
-    } finally {
-      fs.chmodSync(readOnlyDir, 0o755);
     }
   });
 

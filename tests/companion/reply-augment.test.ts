@@ -219,7 +219,7 @@ describe('hybrid reply evolves Lisa’s traits per utterance (real state file, o
   afterEach(() => {
     delete process.env.CODEBUDDY_RELATIONSHIP_STATE_FILE;
     delete process.env.CODEBUDDY_COMPANION_RELATIONAL;
-    rmSync(tmp, { recursive: true, force: true });
+    rmSync(tmp, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   it('an affectionate utterance nudges warmth up; feature-off leaves it untouched', async () => {
@@ -254,7 +254,7 @@ describe('hybrid reply evolves Lisa’s traits per utterance (real state file, o
         DEFAULT_TRAITS.warmth
       );
     } finally {
-      rmSync(tmp2, { recursive: true, force: true });
+      rmSync(tmp2, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     }
   });
 });

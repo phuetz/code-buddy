@@ -39,7 +39,7 @@ describe('SessionStore', () => {
       process.env.CODEBUDDY_SESSIONS_DIR = previousDir;
     }
 
-    await fs.rm(testDir, { recursive: true, force: true });
+    await fs.rm(testDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   describe('createSession', () => {

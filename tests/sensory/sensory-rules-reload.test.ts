@@ -19,7 +19,7 @@ beforeEach(() => {
   process.env.CODEBUDDY_RULE_RUNS_FILE = path.join(dir, 'rule-runs.jsonl');
 });
 afterEach(async () => {
-  await rm(dir, { recursive: true, force: true });
+  await rm(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   delete process.env.CODEBUDDY_SENSORY_RULES_FILE;
   delete process.env.CODEBUDDY_RULE_RUNS_FILE;
 });

@@ -52,7 +52,7 @@ beforeAll(() => {
 afterAll(() => {
   // Clean up test directory
   if (existsSync(TEST_LOG_DIR)) {
-    rmSync(TEST_LOG_DIR, { recursive: true, force: true });
+    rmSync(TEST_LOG_DIR, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   }
 });
 
@@ -759,7 +759,7 @@ describe('Interaction Logger', () => {
 
   afterEach(() => {
     if (existsSync(MOCK_HOME)) {
-      rmSync(MOCK_HOME, { recursive: true, force: true });
+      rmSync(MOCK_HOME, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     }
   });
 

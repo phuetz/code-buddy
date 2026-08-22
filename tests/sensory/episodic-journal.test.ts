@@ -70,7 +70,7 @@ describe('runEpisodeConsolidation', () => {
     tmp = mkdtempSync(join(tmpdir(), 'episode-'));
   });
   afterEach(() => {
-    rmSync(tmp, { recursive: true, force: true });
+    rmSync(tmp, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   it('consolidates heard dialogue and promotes the episode', async () => {

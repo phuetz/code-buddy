@@ -4,6 +4,12 @@ import path from 'path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ToolHandler } from '../../src/agent/tool-handler.js';
+import { ConfirmationService } from '../../src/utils/confirmation-service.js';
+import {
+  approveSandboxUnavailableEscalations,
+  clearSandboxEscalationBridge,
+} from '../helpers/sandbox-escalation-bridge.js';
+import { canonical, canonicalShellPath } from '../helpers/shell-path.js';
 import { clearAllCodeExecSessions } from '../../src/tools/code-exec-tool.js';
 import { getFormalToolRegistry } from '../../src/tools/registry/index.js';
 import type { ITool, IToolExecutionContext } from '../../src/tools/registry/types.js';
@@ -40,6 +46,9 @@ describe('ToolHandler code_exec logical-session isolation', () => {
   beforeEach(() => {
     clearAllCodeExecSessions();
     observedScopes.splice(0);
+    // The bash `pwd` below runs through the real ConfirmationService; hosts
+    // without a sandbox backend (Windows CI) escalate it to an exact grant.
+    approveSandboxUnavailableEscalations(ConfirmationService.getInstance());
     workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'code-exec-session-'));
     handler = new ToolHandler({
       checkpointManager: {
@@ -88,7 +97,8 @@ describe('ToolHandler code_exec logical-session isolation', () => {
   afterEach(() => {
     getFormalToolRegistry().unregister(PROBE_TOOL);
     clearAllCodeExecSessions();
-    fs.rmSync(workDir, { recursive: true, force: true });
+    clearSandboxEscalationBridge(ConfirmationService.getInstance());
+    fs.rmSync(workDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   it('propagates executionExtra to tools called from code_exec', async () => {
@@ -131,25 +141,33 @@ describe('ToolHandler code_exec logical-session isolation', () => {
     const sessionA = fs.mkdtempSync(path.join(workDir, 'session-a-'));
     const sessionB = fs.mkdtempSync(path.join(workDir, 'session-b-'));
     const hostCwd = process.cwd();
+    // `cd` stores the canonical (realpath) cwd; a restored value comes from that
+    // same store, so restore canonical paths too (os.tmpdir() is a symlink on macOS).
+    const realSessionA = fs.realpathSync(sessionA);
+    const realSessionB = fs.realpathSync(sessionB);
 
     handler.setRecoverySessionId('logical-session-a');
     const changed = await handler.executeTool(bashCall('cd-a', `cd ${sessionA}`));
     expect(changed.success).toBe(true);
-    expect(handler.getWorkingDirectory()).toBe(fs.realpathSync(sessionA));
+    expect(handler.getWorkingDirectory()).toBe(realSessionA);
     expect(process.cwd()).toBe(hostCwd);
 
-    handler.restoreWorkingDirectory(sessionB);
+    handler.restoreWorkingDirectory(realSessionB);
     handler.setRecoverySessionId('logical-session-b');
     const pwdB = await handler.executeTool(bashCall('pwd-b', 'pwd'));
+    if (!pwdB.success) console.error('[macos-diag] pwd in restored cwd', realSessionB, ':', pwdB.error);
     expect(pwdB.success).toBe(true);
-    expect(pwdB.output).toContain(fs.realpathSync(sessionB));
-    expect(pwdB.output).not.toContain(fs.realpathSync(sessionA));
+    // Match on the unique mkdtemp leaf: `pwd` prints the shell's spelling of the
+    // directory (MSYS `/c/Users/...` on Windows), not the Node one.
+    expect(pwdB.output).toContain(path.basename(realSessionB));
+    expect(pwdB.output).not.toContain(path.basename(realSessionA));
     expect(handler.getRecoverySessionId()).toBe('logical-session-b');
 
-    handler.restoreWorkingDirectory(sessionA);
+    handler.restoreWorkingDirectory(realSessionA);
     handler.setRecoverySessionId('logical-session-a');
     const pwdA = await handler.executeTool(bashCall('pwd-a', 'pwd'));
-    expect(pwdA.output).toContain(fs.realpathSync(sessionA));
+    // `pwd` prints the shell's spelling (MSYS `/tmp/...` under Git Bash).
+    expect(canonicalShellPath(pwdA.output ?? '')).toBe(canonical(realSessionA));
     expect(handler.getRecoverySessionId()).toBe('logical-session-a');
     expect(process.cwd()).toBe(hostCwd);
   });

@@ -26,7 +26,7 @@ describe('object_detect YOLOv8 tool', () => {
   });
 
   afterEach(async () => {
-    await fs.rm(tempWorkspace, { recursive: true, force: true });
+    await fs.rm(tempWorkspace, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   it('runs the injected YOLO runtime and writes a durable report', async () => {

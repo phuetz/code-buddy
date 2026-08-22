@@ -47,7 +47,7 @@ afterEach(async () => {
   else process.env.CODEBUDDY_DISABLE_MCP = previousMcpDisabled;
   if (previousAuthoredTools === undefined) delete process.env.CODEBUDDY_LOAD_AUTHORED_TOOLS;
   else process.env.CODEBUDDY_LOAD_AUTHORED_TOOLS = previousAuthoredTools;
-  await Promise.all(tempHomes.splice(0).map(directory => rm(directory, { recursive: true, force: true })));
+  await Promise.all(tempHomes.splice(0).map(directory => rm(directory, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 })));
 });
 
 describe('context_expand', () => {

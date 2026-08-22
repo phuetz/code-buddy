@@ -45,7 +45,7 @@ describe('runVerificationAndSelfCorrectionLoop', () => {
 
   afterEach(async () => {
     process.env.CODEBUDDY_HOME = oldCodeBuddyHome;
-    await fs.rm(tempRoot, { force: true, recursive: true });
+    await fs.rm(tempRoot, { force: true, recursive: true, maxRetries: 10, retryDelay: 100 });
   });
 
   function getContract(repo: string): AgenticCodingTaskContract {

@@ -93,7 +93,7 @@ describe.runIf(hasFfmpeg)('renderScene — real', () => {
     dir = await mkdtemp(join(tmpdir(), 'buddy-scene-'));
   });
   afterAll(async () => {
-    await rm(dir, { recursive: true, force: true });
+    await rm(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   it('renders an animated text card (no narration) at 1080p', async () => {

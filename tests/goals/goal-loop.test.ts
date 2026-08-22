@@ -34,7 +34,7 @@ describe('maybeContinueGoalAfterTurn', () => {
 
   afterEach(() => {
     resetGoalManagers();
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   it('continues a realistic fix-and-test goal and strips the usage footer before judging', async () => {

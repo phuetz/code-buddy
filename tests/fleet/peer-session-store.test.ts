@@ -53,7 +53,7 @@ afterEach(() => {
   resetPeerSessionStore();
   // Cleanup tmpdir best-effort.
   try {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   } catch {
     /* ignore */
   }
@@ -122,7 +122,7 @@ describe('PeerSessionStore — loadAll', () => {
       storeDir: path.join(tmpDir, 'subdir-that-existed-but-then-vanished'),
     });
     // Force the dir to be removed AFTER ensureDir created it.
-    fs.rmSync(path.join(tmpDir, 'subdir-that-existed-but-then-vanished'), { recursive: true, force: true });
+    fs.rmSync(path.join(tmpDir, 'subdir-that-existed-but-then-vanished'), { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     const all = await ghost.loadAll();
     expect(all).toEqual([]);
   });

@@ -41,7 +41,7 @@ describe('disk-guard', () => {
     delete process.env.CODEBUDDY_LOG_MAX_FILES;
     Object.assign(process.env, savedEnv);
     try {
-      rmSync(sandbox, { recursive: true, force: true });
+      rmSync(sandbox, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     } catch {
       /* best effort */
     }

@@ -115,7 +115,7 @@ afterEach(() => {
   delete process.env.CODEBUDDY_SKILL_EXCHANGE;
   firewallMock.mockReset();
   vi.restoreAllMocks();
-  fs.rmSync(tempRoot, { recursive: true, force: true });
+  fs.rmSync(tempRoot, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
 });
 
 describe('skill exchange export', () => {

@@ -44,7 +44,7 @@ describe('CKG Rust engine (CODEBUDDY_CKG_ENGINE=rust)', () => {
     if (prevEngine === undefined) delete process.env.CODEBUDDY_CKG_ENGINE;
     else process.env.CODEBUDDY_CKG_ENGINE = prevEngine;
     resetCollectiveKnowledgeGraph();
-    try { rmSync(dir, { recursive: true, force: true }); } catch { /* best effort */ }
+    try { rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }); } catch { /* best effort */ }
   });
 
   it.skipIf(!hasBin)('ingest via the engine → recall finds it (TS↔Rust round-trip)', async () => {

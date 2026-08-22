@@ -236,7 +236,8 @@ describe('BrowserOperatorExecutor', () => {
       expect(mockStagehandOptions?.env).toBe('LOCAL');
       expect(mockStagehandOptions?.localBrowserLaunchOptions).toMatchObject({
         headless: false,
-        userDataDir: path.join(tempDir, 'persistent-profile'),
+        // The profile resolver canonicalizes (realpath) the directory it created.
+        userDataDir: await fs.realpath(path.join(tempDir, 'persistent-profile')),
         preserveUserDataDir: true,
       });
       expect(lockHeldDuringInit).toBe(true);

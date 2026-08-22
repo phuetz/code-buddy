@@ -36,7 +36,7 @@ describe('Hermes skill package summary on real SkillsHub lockfiles', () => {
   });
 
   afterEach(async () => {
-    await fs.rm(tempDir, { recursive: true, force: true });
+    await fs.rm(tempDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   it('summarizes installed skills, lifecycle state, usage and rollback snapshots', async () => {

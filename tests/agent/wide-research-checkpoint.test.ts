@@ -1,7 +1,7 @@
 import { chmod, lstat, mkdir, readFile, readdir, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, realpath, rm } from 'node:fs/promises';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   assertWideResearchCheckpointCompatible,
@@ -19,13 +19,14 @@ import {
 const tempDirs: string[] = [];
 
 async function tempDirectory(): Promise<string> {
-  const directory = await mkdtemp(join(tmpdir(), 'wide-research-checkpoint-'));
+  // Canonical base: macOS tmpdir lives behind a symlink, which the safety policy rejects.
+  const directory = await realpath(await mkdtemp(join(tmpdir(), 'wide-research-checkpoint-')));
   tempDirs.push(directory);
   return directory;
 }
 
 afterEach(async () => {
-  await Promise.all(tempDirs.splice(0).map((directory) => rm(directory, { recursive: true, force: true })));
+  await Promise.all(tempDirs.splice(0).map((directory) => rm(directory, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 })));
 });
 
 function checkpoint(overrides: Partial<WideResearchCheckpoint> = {}): WideResearchCheckpoint {
@@ -86,7 +87,10 @@ describe('Wide Research checkpoint schema and atomic store', () => {
     expect(raw).not.toContain('secret-provider.invalid');
     expect(raw).not.toContain('abcdefghijklmnop');
     expect(await readdir(directory)).toEqual(['run.json']);
-    expect((await lstat(file)).mode & 0o777).toBe(0o600);
+    // POSIX mode bits only: Windows reports 0o666 whatever the chmod.
+    if (process.platform !== 'win32') {
+      expect((await lstat(file)).mode & 0o777).toBe(0o600);
+    }
   });
 
   it('refuses to overwrite an unrelated existing file', async () => {

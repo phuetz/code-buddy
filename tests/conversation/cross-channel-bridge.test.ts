@@ -261,7 +261,7 @@ describe('cross-channel companion conversation', () => {
       expect(JSON.stringify(bridge.snapshot())).not.toContain('PRIVATE_LEGACY_SENTINEL');
       expect(JSON.stringify(bridge.snapshot())).not.toContain('PRIVATE_MENTION_SENTINEL');
     } finally {
-      await rm(directory, { recursive: true, force: true });
+      await rm(directory, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     }
   });
 
@@ -379,7 +379,7 @@ describe('cross-channel companion conversation', () => {
         content: 'Tour écrit par le service vocal.',
       });
     } finally {
-      await rm(directory, { recursive: true, force: true });
+      await rm(directory, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     }
   });
 
@@ -408,7 +408,7 @@ describe('cross-channel companion conversation', () => {
         content: 'Le canal est maintenant configuré.',
       });
     } finally {
-      await rm(directory, { recursive: true, force: true });
+      await rm(directory, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     }
   });
 
@@ -462,7 +462,7 @@ describe('cross-channel companion conversation', () => {
       expect(resumedCowork.isActive()).toBe(true);
       expect(deliver).toHaveBeenCalledTimes(2);
     } finally {
-      await rm(directory, { recursive: true, force: true });
+      await rm(directory, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     }
   });
 
@@ -495,7 +495,7 @@ describe('cross-channel companion conversation', () => {
         new Set(['concurrent-voice', 'concurrent-cowork']),
       );
     } finally {
-      await rm(directory, { recursive: true, force: true });
+      await rm(directory, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     }
   });
 
@@ -534,7 +534,7 @@ describe('cross-channel companion conversation', () => {
       expect(first.relationshipSnapshot().counters.total).toBe(1);
       expect(second.relationshipSnapshot().counters.total).toBe(1);
     } finally {
-      await rm(directory, { recursive: true, force: true });
+      await rm(directory, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     }
   });
 
@@ -566,7 +566,7 @@ describe('cross-channel companion conversation', () => {
       expect(results.sort()).toEqual([false, true]);
       expect((await readFile(historyPath, 'utf8')).trim().split('\n')).toHaveLength(1);
     } finally {
-      await rm(directory, { recursive: true, force: true });
+      await rm(directory, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     }
   });
 
@@ -618,7 +618,7 @@ describe('cross-channel companion conversation', () => {
         { role: 'user', content: 'Réessaie ce tour.' },
       ]);
     } finally {
-      await rm(directory, { recursive: true, force: true });
+      await rm(directory, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     }
   });
 
@@ -651,7 +651,7 @@ describe('cross-channel companion conversation', () => {
       expect(deliver).toHaveBeenCalledTimes(1);
       expect((await readFile(historyPath, 'utf8')).trim().split('\n')).toHaveLength(1);
     } finally {
-      await rm(directory, { recursive: true, force: true });
+      await rm(directory, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     }
   });
 
@@ -725,7 +725,7 @@ describe('cross-channel companion conversation', () => {
         lastRole: 'assistant',
       });
     } finally {
-      await rm(directory, { recursive: true, force: true });
+      await rm(directory, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     }
   });
 
@@ -766,7 +766,7 @@ describe('cross-channel companion conversation', () => {
       expect(bridge.history().at(-1)?.content.length).toBeGreaterThan(7_000);
       expect((await readdir(directory)).some((entry) => entry.endsWith('.lock'))).toBe(false);
     } finally {
-      await rm(directory, { recursive: true, force: true });
+      await rm(directory, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     }
   });
 
@@ -786,7 +786,7 @@ describe('cross-channel companion conversation', () => {
       }
       expect((await stat(historyPath)).isFile()).toBe(true);
     } finally {
-      await rm(directory, { recursive: true, force: true });
+      await rm(directory, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     }
   });
 
@@ -833,7 +833,7 @@ describe('cross-channel companion conversation', () => {
       const reader = new CrossChannelConversationBridge(hugeConfig);
       expect(reader.history()).toHaveLength(1);
     } finally {
-      await rm(directory, { recursive: true, force: true });
+      await rm(directory, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     }
   });
 });

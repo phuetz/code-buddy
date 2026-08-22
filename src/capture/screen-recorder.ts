@@ -142,17 +142,19 @@ export function buildRecordArgs(
 export class ScreenRecorder {
   private proc: ChildProcess | null = null;
   private readonly doSpawn: SpawnLike;
+  private readonly platform: NodeJS.Platform;
 
-  constructor(opts: { spawnImpl?: SpawnLike } = {}) {
+  constructor(opts: { spawnImpl?: SpawnLike; platform?: NodeJS.Platform } = {}) {
     this.doSpawn = opts.spawnImpl ?? (spawn as unknown as SpawnLike);
+    this.platform = opts.platform ?? process.platform;
   }
 
   /** Capture one frame; resolves to the output path. */
   captureFrame(output: string, target: CaptureTarget = {}): Promise<string> {
-    if (process.platform === 'linux' && isWaylandSession()) {
+    if (this.platform === 'linux' && isWaylandSession()) {
       return Promise.reject(new Error('Wayland session: x11grab cannot capture. Use a portal/wf-recorder backend.'));
     }
-    const { cmd, args } = buildFrameArgs(output, target);
+    const { cmd, args } = buildFrameArgs(output, target, this.platform);
     return new Promise((resolve, reject) => {
       const p = this.doSpawn(cmd, args, { stdio: 'ignore' });
       p.on('error', reject);
@@ -163,11 +165,11 @@ export class ScreenRecorder {
   /** Start a video recording. Returns the output path; call stop() to finish. */
   start(output: string, opts: RecordOptions = {}): string {
     if (this.proc) throw new Error('already recording');
-    if (process.platform === 'linux' && isWaylandSession()) {
+    if (this.platform === 'linux' && isWaylandSession()) {
       throw new Error('Wayland session: x11grab cannot record. Use a portal/wf-recorder backend.');
     }
     fs.mkdirSync(path.dirname(path.resolve(output)), { recursive: true });
-    const { cmd, args } = buildRecordArgs(output, opts);
+    const { cmd, args } = buildRecordArgs(output, opts, this.platform);
     this.proc = this.doSpawn(cmd, args, { stdio: 'ignore' });
     return output;
   }
