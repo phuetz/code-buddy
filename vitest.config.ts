@@ -135,7 +135,9 @@ export default defineConfig({
     // never reported: its fork died mid-run, outside any test. 4 GB per fork
     // keeps two forks inside the runner's RAM and turns a runaway heap into a
     // visible V8 "heap out of memory" instead of a silent OS kill.
-    // Linux/macOS keep 8 GB.
+    // Linux/macOS keep 8 GB. (The 4 GB cap alone was not enough — the fork still
+    // died with no V8 FATAL, i.e. off-heap growth; see the sharded Windows test
+    // steps in .github/workflows/ci.yml.)
     execArgv: [`--max-old-space-size=${process.platform === 'win32' ? 4096 : 8192}`],
     // Bound worker concurrency on CI only. The default is one worker per CPU, and
     // each fork carries an 8 GB heap ceiling — on GitHub's constrained runners
