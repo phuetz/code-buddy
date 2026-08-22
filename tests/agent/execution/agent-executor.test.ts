@@ -6,6 +6,9 @@
  * middleware pipeline integration, and message queue steering.
  */
 
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
 import { AgentExecutor, ExecutorDependencies, ExecutorConfig } from '../../../src/agent/execution/agent-executor';
 import type { ChatEntry, StreamingChunk } from '../../../src/agent/types';
 import type { CodeBuddyMessage } from '../../../src/codebuddy/client';
@@ -275,6 +278,41 @@ describe('AgentExecutor', () => {
       expect(prepared.some((turn) =>
         typeof turn.content === 'string' && turn.content.includes('<interaction_context')
       )).toBe(false);
+    });
+  });
+
+  describe('ephemeral file mentions', () => {
+    it('injects an existing @path into the provider turn without persisting its content', async () => {
+      const projectRoot = await mkdtemp(path.join(os.tmpdir(), 'agent-file-mention-'));
+      try {
+        await writeFile(path.join(projectRoot, 'note.txt'), 'FILE_MENTION_SENTINEL\n');
+        (deps.toolHandler.getWorkingDirectory as jest.Mock).mockReturnValue(projectRoot);
+        setupLLMFlow(deps, [{ content: 'I read it.' }]);
+        const messages: CodeBuddyMessage[] = [
+          { role: 'system', content: 'Base system prompt' },
+          { role: 'user', content: 'Review @note.txt' },
+        ];
+
+        await collectChunks(
+          executor.processUserMessageStream('Review @note.txt', [], messages, null),
+        );
+
+        const providerMessages = (
+          (deps.client.chatStream as jest.Mock).mock.calls[0][0]
+        ) as CodeBuddyMessage[];
+        const fileContext = providerMessages.find((turn) =>
+          typeof turn.content === 'string' && turn.content.includes('<context type="file_mention"'),
+        );
+
+        expect(fileContext?.content).toContain('FILE_MENTION_SENTINEL');
+        expect(fileContext?.content).toContain('"note.txt"');
+        expect(messages.some((turn) =>
+          typeof turn.content === 'string' && turn.content.includes('FILE_MENTION_SENTINEL'),
+        )).toBe(false);
+        expect(messages.find((turn) => turn.role === 'user')?.content).toBe('Review @note.txt');
+      } finally {
+        await rm(projectRoot, { recursive: true, force: true });
+      }
     });
   });
 
