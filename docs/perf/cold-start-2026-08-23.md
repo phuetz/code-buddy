@@ -125,6 +125,28 @@ Cible first-paint < 1 200 ms : OK (528 ms).
    dans `script -qec` (PTY pour `isTTY`). `--ephemeral` évite la
    persistance de session. Arrêt à la bannière.
 
+## Écran « Starting Code Buddy… »
+
+Sur HEAD, le premier cadre TUI est un splash cyan :
+
+```
+Starting Code Buddy...
+Loading the coding assistant.
+```
+
+Il s’affiche **avant** que `CodeBuddyAgent` (registre d’outils, providers)
+soit importé. L’UI complète (bannière ASCII, prompt) arrive au
+`rerender` *time-to-agent-ready*.
+
+Pour l’automatisation (CI, scripts qui scrapent le PTY et ne doivent pas
+voir un écran transitoire) :
+
+- variable : `CODEBUDDY_NO_LOADING_SCREEN=1` (aliases : `true` / `yes` / `on`)
+- option : `buddy --no-loading-screen`
+
+Dans ce mode le splash n’est pas peint : le premier cadre est l’UI
+agent, comme sur `origin/main`.
+
 ## Profil et changement
 
 Le profil `PERF_TIMING=true` sur `origin/main` montre encore le graphe

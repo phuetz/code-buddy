@@ -29,6 +29,7 @@ import {
   useAccessibilitySettings,
   useKeyboardShortcuts,
 } from "../utils/accessibility.js";
+import { StartupScreen } from "./StartupScreen.js";
 
 interface ChatInterfaceProps {
   agent?: CodeBuddyAgent;
@@ -37,15 +38,6 @@ interface ChatInterfaceProps {
   loading?: boolean;
   /** Specialized renderers failed to register; structured output is generic. */
   renderersDegraded?: boolean;
-}
-
-function StartupScreen() {
-  return (
-    <Box flexDirection="column" paddingX={2} paddingY={1}>
-      <Text color="cyan">Starting Code Buddy...</Text>
-      <Text color="gray" dimColor>Loading the coding assistant.</Text>
-    </Box>
-  );
 }
 
 // Main chat component that handles input when agent is available

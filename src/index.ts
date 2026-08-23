@@ -28,6 +28,7 @@ import {
   NO_PROVIDER_GUIDANCE,
   recoverFirstRunWithChatGpt,
 } from './cli/first-run.js';
+import { isLoadingScreenDisabled } from './ui/loading-screen.js';
 
 // Read version from package.json
 const __filename = fileURLToPath(import.meta.url);
@@ -1431,6 +1432,10 @@ program
     "skip session persistence (do not save session to disk)"
   )
   .option(
+    "--no-loading-screen",
+    "skip the Starting Code Buddy… splash (also CODEBUDDY_NO_LOADING_SCREEN=1)"
+  )
+  .option(
     "--system-prompt-override <text>",
     "replace the entire system prompt with this text"
   )
@@ -1966,6 +1971,12 @@ program
       // Paint a lightweight shell before importing the agent graph. The agent
       // imports the complete tool dispatch surface and provider runtime; none
       // of that is needed to show the first useful frame of the TUI.
+      // Automation can skip the splash: CODEBUDDY_NO_LOADING_SCREEN=1 or
+      // --no-loading-screen (Commander stores that as loadingScreen === false).
+      const skipLoadingScreen = isLoadingScreenDisabled(
+        process.env,
+        options.loadingScreen === false,
+      );
       recordStartupPhase('ui-load-start');
       const React = await lazyImport.React();
       const { render } = await lazyImport.ink();
@@ -1976,13 +1987,17 @@ program
         inkOptions.patchConsole = false;
       }
 
-      recordStartupPhase('ui-first-render');
-      const firstPaintAt = Date.now();
-      const startupRender = render(
-        React.createElement(ChatInterface, { loading: true }),
-        inkOptions,
-      );
-      logStartupMetrics();
+      let firstPaintAt = STARTUP_TIME;
+      let startupRender: ReturnType<typeof render> | undefined;
+      if (!skipLoadingScreen) {
+        recordStartupPhase('ui-first-render');
+        firstPaintAt = Date.now();
+        startupRender = render(
+          React.createElement(ChatInterface, { loading: true }),
+          inkOptions,
+        );
+        logStartupMetrics();
+      }
 
       // Interactive mode: load the full agent graph after the first frame.
       const CodeBuddyAgent = await lazyImport.CodeBuddyAgent();
@@ -2184,6 +2199,10 @@ program
         : message;
 
       const totalStartupMs = Date.now() - STARTUP_TIME;
+      if (!startupRender) {
+        recordStartupPhase('ui-first-render');
+        firstPaintAt = Date.now();
+      }
       const sinceFirstPaintMs = Date.now() - firstPaintAt;
       if (totalStartupMs > 5000) {
         logger.warn(`Slow startup detected: ${totalStartupMs}ms. Run with PERF_TIMING=true for phase breakdown.`);
@@ -2201,13 +2220,19 @@ program
       // Historical alias: longitudinal PERF_TIMING series used `ui-render`
       // for time-to-agent-ready (the full ChatInterface, not the loading shell).
       recordStartupPhase('ui-render');
+      logStartupMetrics();
       try {
         await renderersReady;
       } catch {
         cli.warn('Specialized renderers failed to load; structured output (tests, weather, diffs, tables) will use generic text.');
       }
       const renderersDegraded = areSpecializedRenderersDegraded();
-      startupRender.rerender(React.createElement(ChatInterface, { agent, initialMessage, renderersDegraded }));
+      const readyUi = React.createElement(ChatInterface, { agent, initialMessage, renderersDegraded });
+      if (startupRender) {
+        startupRender.rerender(readyUi);
+      } else {
+        render(readyUi, inkOptions);
+      }
 
       // Initialize plugin system in background (non-blocking)
       setImmediate(async () => {
