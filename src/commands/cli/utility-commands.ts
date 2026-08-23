@@ -55,6 +55,7 @@ export function registerUtilityCommands(program: Command): void {
       const warns = checks.filter(c => c.status === 'warn').length;
       const oks = checks.filter(c => c.status === 'ok').length;
       const fixable = checks.filter(c => c.fixable).length;
+      const readinessNeedsAttention = readiness !== undefined && readiness.status !== 'ok';
 
       console.log(`\n  Summary: ${oks} passed, ${warns} warnings, ${errors} errors`);
       if (fixable > 0 && !options.fix) {
@@ -75,9 +76,16 @@ export function registerUtilityCommands(program: Command): void {
         const failed = fixResults.filter(r => !r.success).length;
         console.log(`\n  Fix summary: ${fixed} fixed, ${failed} failed\n`);
 
-        if (failed > 0) process.exit(1);
-      } else if (errors > 0) {
-        process.exit(1);
+        // A successful fix can resolve a fixable readiness warning (for
+        // example, selecting an already-running Ollama). A missing provider
+        // remains a real failure even if unrelated housekeeping was fixed.
+        const unresolvedReadiness = readinessNeedsAttention && !readiness?.fixable;
+        if (failed > 0 || errors > 0 || unresolvedReadiness) process.exitCode = 1;
+      } else if (errors > 0 || readinessNeedsAttention) {
+        // `doctor` is also useful in CI and scripts: a clear "not ready"
+        // verdict must not look successful merely because the warnings are
+        // non-fatal for an already-configured user.
+        process.exitCode = 1;
       }
     });
 

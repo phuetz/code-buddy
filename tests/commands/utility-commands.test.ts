@@ -56,6 +56,29 @@ describe('utility CLI commands', () => {
     expect(doctorMocks.runDoctorChecks).toHaveBeenCalledWith(targetDir);
   });
 
+  it('returns a failing status when doctor finds no ready provider', async () => {
+    doctorMocks.runDoctorChecks.mockResolvedValueOnce([
+      {
+        name: 'AI provider ready',
+        status: 'warn',
+        message: 'no provider configured — run `buddy login`',
+      },
+    ]);
+    const program = new Command();
+    program.exitOverride();
+    registerUtilityCommands(program);
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+    try {
+      process.exitCode = 0;
+      await program.parseAsync(['node', 'test', 'doctor']);
+      expect(process.exitCode).toBe(1);
+    } finally {
+      process.exitCode = 0;
+      logSpy.mockRestore();
+    }
+  });
+
   it('registers the ollama status command', async () => {
     const program = new Command();
     const logs: unknown[][] = [];
