@@ -28,6 +28,8 @@ import {
   NO_PROVIDER_GUIDANCE,
   recoverFirstRunWithChatGpt,
 } from './cli/first-run.js';
+import { getConfigManager } from './config/toml-config.js';
+import { getHiddenCliCommands } from './config/feature-surface.js';
 
 // Read version from package.json
 const __filename = fileURLToPath(import.meta.url);
@@ -1452,7 +1454,7 @@ program
   )
   .option(
     "--profile <name>",
-    "apply a named configuration profile from .codebuddy/config.toml [profiles.<name>]"
+    "apply a built-in or configured profile (core, all, or [profiles.<name>])"
   )
   .option(
     "--from-pr <pr>",
@@ -1518,18 +1520,6 @@ program
         }
       }
     }
-    // Apply named configuration profile (--profile <name>) before anything else
-    if (options.profile) {
-      try {
-        const { getConfigManager } = await import('./config/toml-config.js');
-        getConfigManager().load();
-        getConfigManager().applyProfile(options.profile);
-      } catch (err) {
-        startupLogger.error(`Profile error: ${err instanceof Error ? err.message : err}`);
-        process.exit(1);
-      }
-    }
-
     // Handle --setup flag (interactive setup wizard)
     if (options.setup) {
       const { runSetup } = await import("./utils/interactive-setup.js");
@@ -3832,6 +3822,30 @@ addLazyCommand(
   },
 );
 
+/** Read a root option before Commander dispatches a subcommand or help. */
+function getRequestedProfile(argv: readonly string[]): string | undefined {
+  for (let index = 2; index < argv.length; index++) {
+    const arg = argv[index];
+    if (arg === '--') break;
+    if (arg === '--profile') return argv[index + 1];
+    if (arg?.startsWith('--profile=')) return arg.slice('--profile='.length) || undefined;
+  }
+  return undefined;
+}
+
+// Apply the profile before parsing so it governs root chat, lazy subcommands,
+// slash-command menus, tool selection, and `buddy --help` consistently.
+const requestedProfile = getRequestedProfile(process.argv);
+if (requestedProfile) {
+  try {
+    getConfigManager().load();
+    getConfigManager().applyProfile(requestedProfile);
+  } catch (err) {
+    process.stderr.write(`Profile error: ${err instanceof Error ? err.message : String(err)}\n`);
+    process.exitCode = 1;
+  }
+}
+
 function isRootHelpRequest(argv: readonly string[]): boolean {
   const args = argv.slice(2);
   if (!args.some((arg) => arg === '--help' || arg === '-h')) {
@@ -3846,8 +3860,21 @@ function isRootHelpRequest(argv: readonly string[]): boolean {
 // Commander writes help and immediately calls process.exit(). The root help is
 // larger than a macOS pipe buffer, so a slow reader can lose the queued suffix.
 // It is fully registered here: write it once and let Node drain stdout naturally.
-if (isRootHelpRequest(process.argv)) {
-  program.outputHelp();
-} else {
-  program.parse();
+if (process.exitCode !== 1) {
+  program.addHelpText('before', `Pour commencer — 6 démos qui montrent le cœur agent de code :
+  1. buddy try
+     Crée FizzBuzz, écrit son test et l’exécute dans un bac à sable.
+  2. /loop "Corrige les tests en échec"              (dans une session buddy)
+  3. buddy research "Cartographie ce dépôt"
+  4. buddy dev pr "Ajoute une petite fonctionnalité"
+  5. /think deep "Propose le refactoring le plus sûr" (dans une session buddy)
+  6. /share create demo                              (dans une session buddy)
+
+`);
+  removeCommands(program, getHiddenCliCommands());
+  if (isRootHelpRequest(process.argv)) {
+    program.outputHelp();
+  } else {
+    program.parse();
+  }
 }

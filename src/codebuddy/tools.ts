@@ -25,6 +25,10 @@ import { applyToolFilter } from "../utils/tool-filter.js";
 import { TOOL_METADATA } from "../tools/metadata.js";
 import { getPluginMarketplace } from "../plugins/marketplace.js";
 import { getWorkspace } from '../workspace/workspace-config.js';
+import {
+  filterToolNamesForSurface,
+  filterToolsForSurface,
+} from '../config/feature-surface.js';
 
 // Import modular tool definitions
 import {
@@ -221,9 +225,9 @@ export function getBuiltinToolNames(): string[] {
     [CONTEXT_EXPAND_TOOL],
   ];
 
-  return Array.from(new Set(
+  return filterToolNamesForSurface(Array.from(new Set(
     groups.flatMap((tools) => tools.map((tool) => tool.function.name)),
-  ));
+  )));
 }
 
 // ============================================================================
@@ -704,6 +708,11 @@ export async function getAllCodeBuddyTools(): Promise<CodeBuddyTool[]> {
   // Apply CLI tool filter (--enabled-tools, --disabled-tools, --allowed-tools)
   allTools = applyToolFilter(allTools);
 
+  // An explicitly focused profile removes optional product faculties before
+  // both RAG selection and the tool_search index are built. With no profile,
+  // this returns the original array unchanged.
+  allTools = filterToolsForSurface(allTools);
+
   // When Code Explorer (code-explorer) is connected, make the built-in graph tools
   // defer to it at the decision point — its graph is broader / more complete.
   // Conditional & non-mutating: returns fresh objects only for code_graph /
@@ -888,7 +897,7 @@ export function getSkillAugmentedTools(
   // Skill requirements must not bypass CLI/custom-agent/Fleet profile
   // filters. Re-apply the active schema filter after augmentation so a
   // disabled tool cannot reappear in the model-facing tool schema.
-  return applyToolFilter([...currentTools, ...missingTools]);
+  return applyToolFilter(filterToolsForSurface([...currentTools, ...missingTools]));
 }
 
 // Initialize registry on module load
