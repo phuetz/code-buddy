@@ -1510,9 +1510,9 @@ program
         ttsManager.setAutoSpeak(true);
       }
       if (options.ttsProvider) {
-        const validProviders = ['edge-tts', 'espeak', 'say', 'piper', 'audioreader'];
-        if (validProviders.includes(options.ttsProvider)) {
-          ttsManager.updateConfig({ provider: options.ttsProvider as any });
+        const validProviders = ['edge-tts', 'espeak', 'say', 'piper', 'audioreader'] as const;
+        if (validProviders.includes(options.ttsProvider as (typeof validProviders)[number])) {
+          ttsManager.updateConfig({ provider: options.ttsProvider as (typeof validProviders)[number] });
         } else {
           startupLogger.warn(`⚠️ Invalid tts-provider: ${options.ttsProvider}. Valid: ${validProviders.join(', ')}`);
         }
