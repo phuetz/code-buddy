@@ -2192,6 +2192,9 @@ program
       agent.enableBackgroundReview();
 
       recordStartupPhase('agent-ready-render');
+      // Historical alias: longitudinal PERF_TIMING series used `ui-render`
+      // for time-to-agent-ready (the full ChatInterface, not the loading shell).
+      recordStartupPhase('ui-render');
       await renderersReady;
       startupRender.rerender(React.createElement(ChatInterface, { agent, initialMessage }));
 
