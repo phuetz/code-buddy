@@ -372,12 +372,27 @@ describe('StepManager', () => {
         action: 'delay',
       };
 
-      const startTime = Date.now();
-      const result = await stepManager.executeStep(step, context);
-      const elapsed = Date.now() - startTime;
+      // Fake timers: a wall-clock measure (`Date.now()` deltas around a 10 ms
+      // setTimeout) read 9 ms on CI (timer fires on the monotonic clock, Date.now
+      // is rounded) — flaky. Assert the behaviour instead: the step does not
+      // resolve before the delay elapses, and resolves once it has.
+      vi.useFakeTimers();
+      try {
+        let settled = false;
+        const pending = stepManager.executeStep(step, context).then(r => {
+          settled = true;
+          return r;
+        });
+        await vi.advanceTimersByTimeAsync(9);
+        expect(settled).toBe(false);
+        await vi.advanceTimersByTimeAsync(1);
+        const result = await pending;
 
-      expect(result.success).toBe(true);
-      expect(elapsed).toBeGreaterThanOrEqual(10);
+        expect(settled).toBe(true);
+        expect(result.success).toBe(true);
+      } finally {
+        vi.useRealTimers();
+      }
     });
 
     it('should execute setVariable action', async () => {
