@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import * as path from 'node:path';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
@@ -249,10 +249,18 @@ describe('runner checkpoint resume', () => {
       runsDir: path.join(tempRoot, 'runs'),
     }));
 
-    const events = (await fs.readFile(report.observability!.eventsPath, 'utf8'))
-      .trim()
-      .split('\n')
-      .map((line) => JSON.parse(line) as { data: { stepId?: string }; type: string });
+    let events: Array<{ data: { stepId?: string }; type: string }> = [];
+    await vi.waitFor(async () => {
+      events = (await fs.readFile(report.observability!.eventsPath, 'utf8'))
+        .trim()
+        .split('\n')
+        .map((line) => JSON.parse(line) as { data: { stepId?: string }; type: string });
+      expect(events.some((event) => event.type === 'run_end')).toBe(true);
+    }, {
+      timeout: 5_000,
+      interval: 5,
+    });
+
     expect(events).toEqual(expect.arrayContaining([
       expect.objectContaining({
         data: expect.objectContaining({ stepId: 'resume-decomposed-checkpoint' }),

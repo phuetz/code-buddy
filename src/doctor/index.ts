@@ -128,7 +128,7 @@ async function checkChatGptOAuth(): Promise<DoctorCheck> {
       return {
         name: 'ChatGPT OAuth',
         status: 'warn',
-        message: `not signed in (run \`/login chatgpt\` to use your ChatGPT subscription) — file: ${getCodexAuthFilePath()}`,
+        message: `not signed in (run \`buddy login\` to use your ChatGPT subscription) — file: ${getCodexAuthFilePath()}`,
       };
     }
     const auth = await getChatGptAuth();
@@ -136,7 +136,7 @@ async function checkChatGptOAuth(): Promise<DoctorCheck> {
       return {
         name: 'ChatGPT OAuth',
         status: 'error',
-        message: `credential file present but unreadable — try \`/logout chatgpt\` then \`/login chatgpt\``,
+        message: 'credential file present but unreadable — try `buddy logout chatgpt` then `buddy login`',
       };
     }
     const {

@@ -28,8 +28,9 @@ npm run build
 npm link            # exposes `buddy` globally (or use: npm start / node dist/index.js)
 
 # npm — published stable release
-# NOTE: during the rc phase the npm release can lag the source; prefer from-source for newest features
-npm install -g @phuetz/code-buddy
+# The package name is scoped; `code-buddy` (without @phuetz/) is not published.
+# The npm release can lag the source; use @latest and check `buddy --version`.
+npm install -g @phuetz/code-buddy@latest
 
 # Or try without installing (also subject to the lag note above)
 npx @phuetz/code-buddy@latest
@@ -38,23 +39,28 @@ npx @phuetz/code-buddy@latest
 ## First Run — free, in under 2 minutes
 
 You do **not** need an API key, and you do **not** need to edit any environment
-variable. Pick whichever line matches you:
+variable. `buddy try` is a real coding-agent smoke test: before running it, you
+need either a ChatGPT OAuth login or a reachable Ollama model. If neither is
+available, it exits quickly with the setup commands instead of pretending to
+run an offline AI demo.
 
 ```bash
-buddy try            # ← start here: a 60-second, zero-config coding demo.
-                     #    Detects a running Ollama or a signed-in ChatGPT and
-                     #    proves it works (writes FizzBuzz + tests, runs them).
+buddy login          # ChatGPT subscription, no API key (opens a browser)
+buddy try            # ← after login: a 60-second coding demo.
+                     #    Writes FizzBuzz + tests, runs them, and independently verifies them.
 
-buddy onboard        # Guided setup. Auto-detects what's on your machine and
-                     #    defaults to the FREE path — one "yes" and you're done.
+buddy onboard        # Interactive guided setup. If a free provider is detected,
+                     #    it offers the quick path; on a blank machine, choose a provider.
                      #    Writes the config for you (no env var to type).
-
-buddy login          # Sign in with a ChatGPT Plus/Pro subscription — $0 marginal
-                     #    cost, no API key. (Grok/xAI: `buddy login xai`.)
+buddy try            # prove the configured provider works
 
 buddy                # Start chatting once a provider is configured.
 buddy --prompt "analyze the codebase structure"   # one-shot / headless
 ```
+
+`buddy onboard` needs a terminal because it asks questions. In a pipe or CI
+job it exits with an explanation; use `buddy login`, environment variables, or
+`buddy doctor` for a non-interactive check.
 
 ### The two $0 paths in detail
 
@@ -89,8 +95,8 @@ are opt-in and stay out of your way until you go looking for them.
 
 | Command | What it does |
 | ---------------------- | ------------------------------------------------------------ |
-| `buddy try` | Zero-config proof it works (60-second coding demo). |
-| `buddy onboard` | Guided setup; defaults to the free path, writes your config. |
+| `buddy try` | Proof the configured free provider works (60-second coding demo). |
+| `buddy onboard` | Interactive setup; uses a detected free path or asks you to choose one. |
 | `buddy login` | Sign in with a ChatGPT subscription ($0, no API key). |
 | `buddy` | Start an interactive session. |
 | `buddy -p "…"` | One-shot / headless (great for scripts and CI). |
@@ -98,7 +104,8 @@ are opt-in and stay out of your way until you go looking for them.
 | `buddy --continue` | Resume your last session. |
 | `buddy --init` | Drop a `.codebuddy/` + `AGENTS.md` into the current repo. |
 
-Nothing above needs an environment variable. Everything advanced is gated behind
+Nothing above needs an environment variable. `buddy try` still needs a ChatGPT
+login or a reachable local model; everything advanced is gated behind
 its own opt-in flag, so the defaults stay small and predictable.
 
 ## Built-in Utilities & Migration

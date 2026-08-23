@@ -78,6 +78,7 @@ describe('buddy try', () => {
     expect(stdout).toEqual([]);
     expect(stderr).toEqual([NO_TRY_PROVIDER_MESSAGE]);
     expect(stderr[0]!.indexOf('buddy login')).toBeLessThan(stderr[0]!.indexOf('Ollama'));
+    expect(NO_TRY_PROVIDER_MESSAGE).toContain('ollama serve');
     expect(createAgent).not.toHaveBeenCalled();
   });
 

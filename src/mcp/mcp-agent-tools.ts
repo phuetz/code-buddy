@@ -64,9 +64,13 @@ export function formatAgentResponse(entries: ChatEntry[]): string {
 /**
  * Register agent intelligence tools with the MCP server.
  */
-export function registerAgentTools(server: McpServer, getAgent: AgentGetter): void {
+export function registerAgentTools(
+  server: McpServer,
+  getAgent: AgentGetter,
+  shouldRegister: (name: string) => boolean = () => true,
+): void {
   // agent_chat - Send message to agent, get response
-  server.tool(
+  if (shouldRegister('agent_chat')) server.tool(
     'agent_chat',
     'Send a message to the Code Buddy AI agent and get a response with tool call results. Use for conversational interactions.',
     {
@@ -97,7 +101,7 @@ export function registerAgentTools(server: McpServer, getAgent: AgentGetter): vo
   );
 
   // agent_task - Autonomous task execution
-  server.tool(
+  if (shouldRegister('agent_task')) server.tool(
     'agent_task',
     'Execute an autonomous task using Code Buddy agent. For complex tasks, uses DAG-based planning; for simple tasks, processes directly. Returns all tool calls and results.',
     {
@@ -135,7 +139,7 @@ export function registerAgentTools(server: McpServer, getAgent: AgentGetter): vo
   );
 
   // agent_plan - Create plan without executing
-  server.tool(
+  if (shouldRegister('agent_plan')) server.tool(
     'agent_plan',
     'Create an execution plan for a task without executing it. Returns the DAG-based task plan with dependencies.',
     {

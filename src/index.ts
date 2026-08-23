@@ -1513,11 +1513,8 @@ program
       }
       if (options.ttsProvider) {
         const validProviders = ['edge-tts', 'espeak', 'say', 'piper', 'audioreader'] as const;
-        const requestedProvider = String(options.ttsProvider);
-        if (validProviders.some((provider) => provider === requestedProvider)) {
-          ttsManager.updateConfig({
-            provider: requestedProvider as (typeof validProviders)[number],
-          });
+        if (validProviders.includes(options.ttsProvider as (typeof validProviders)[number])) {
+          ttsManager.updateConfig({ provider: options.ttsProvider as (typeof validProviders)[number] });
         } else {
           startupLogger.warn(`⚠️ Invalid tts-provider: ${options.ttsProvider}. Valid: ${validProviders.join(', ')}`);
         }
@@ -2424,7 +2421,7 @@ addLazyCommand(
 addLazyCommand(
   program,
   'mcp',
-  'Manage MCP (Model Context Protocol) servers',
+  'Manage MCP servers or expose Code Buddy with `buddy mcp serve`',
   async () => {
     const { createMCPCommand } = await import('./commands/mcp.js');
     return createMCPCommand();
@@ -3125,12 +3122,17 @@ program
 // MCP Server command - run Code Buddy as an MCP tool provider over stdio
 program
   .command("mcp-server")
-  .description("Start Code Buddy as an MCP server over stdio (for VS Code, Cursor, etc.)")
+  .description("Legacy alias for `buddy mcp serve`")
   .option("--list", "List available MCP tools and exit")
+  .option("--allow-write", "Expose write, shell, and execution tools")
+  .option("--tools <glob>", "Restrict exposed tool names with glob patterns")
   .action(async (options) => {
     if (options.list) {
       const { CodeBuddyMCPServer } = await import("./mcp/mcp-server.js");
-      const tools = CodeBuddyMCPServer.getToolDefinitions();
+      const tools = CodeBuddyMCPServer.getToolDefinitions({
+        ...(options.allowWrite ? { allowWrite: true } : {}),
+        ...(options.tools ? { tools: options.tools } : {}),
+      });
       // Pipeable listing.
       for (const tool of tools) {
         cli.stdout(`${tool.name}: ${tool.description}`);
@@ -3139,9 +3141,11 @@ program
     }
 
     try {
-      const { CodeBuddyMCPServer } = await import("./mcp/mcp-server.js");
-      const server = new CodeBuddyMCPServer();
-      await server.start();
+      const { serveMCP } = await import("./commands/mcp.js");
+      await serveMCP({
+        ...(options.allowWrite ? { allowWrite: true } : {}),
+        ...(options.tools ? { tools: options.tools } : {}),
+      });
     } catch (error) {
       logger.error("Failed to start MCP server", error instanceof Error ? error : new Error(String(error)));
       process.exit(1);
@@ -3544,7 +3548,7 @@ addLazyCommand(
 addLazyCommand(
   program,
   'loop',
-  'Boucle de dev autonome (plan→exécute→vérifie→juge→décide) jusqu\'à fait prouvé ou budget',
+  'Autonomous development loop (plan → execute → verify → judge → decide) until proven done or budget exhausted',
   async () => {
     const { createLoopCommand } = await import('./commands/loop-cli.js');
     return createLoopCommand();
@@ -3842,6 +3846,20 @@ if (requestedProfile) {
   }
 }
 
+function isRootHelpRequest(argv: readonly string[]): boolean {
+  const args = argv.slice(2);
+  if (!args.some((arg) => arg === '--help' || arg === '-h')) {
+    return false;
+  }
+
+  const commandNames = new Set(program.commands.map((command) => command.name()));
+  const { operands } = program.parseOptions(args);
+  return !operands.some((operand) => commandNames.has(operand));
+}
+
+// Commander writes help and immediately calls process.exit(). The root help is
+// larger than a macOS pipe buffer, so a slow reader can lose the queued suffix.
+// It is fully registered here: write it once and let Node drain stdout naturally.
 if (process.exitCode !== 1) {
   program.addHelpText('before', `Pour commencer — 6 démos qui montrent le cœur agent de code :
   1. buddy try
@@ -3854,5 +3872,9 @@ if (process.exitCode !== 1) {
 
 `);
   removeCommands(program, getHiddenCliCommands());
-  program.parse();
+  if (isRootHelpRequest(process.argv)) {
+    program.outputHelp();
+  } else {
+    program.parse();
+  }
 }
