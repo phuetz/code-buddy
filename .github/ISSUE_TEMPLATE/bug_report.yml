@@ -1,24 +1,94 @@
-name: Bug Report
-description: File a bug report
-title: "[Bug]: "
-labels: ["bug"]
+name: Bug report
+description: Report a reproducible problem in Code Buddy
+title: "bug: "
+labels:
+  - bug
 body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping improve Code Buddy. Remove API keys, tokens, private prompts, and repository secrets from everything you share.
+
+  - type: input
+    id: version
+    attributes:
+      label: Code Buddy version
+      description: Run `buddy --version` or provide the commit SHA.
+      placeholder: "1.8.0"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: install-method
+    attributes:
+      label: Installation method
+      options:
+        - npm
+        - npx / buddy try
+        - Source checkout
+        - Docker
+        - Cowork desktop app
+        - Other
+    validations:
+      required: true
+
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: Include operating system, Node.js version, and shell.
+      placeholder: "Ubuntu 24.04, Node 22.14.0, bash"
+    validations:
+      required: true
+
+  - type: input
+    id: provider
+    attributes:
+      label: Provider and model
+      description: If relevant; never include credentials.
+      placeholder: "Ollama / qwen3-coder"
+
   - type: textarea
     id: description
     attributes:
-      label: Bug Description
-      description: Describe what happened and what you expected
-      placeholder: What went wrong?
+      label: What happened?
+      description: Describe the observed behavior and its impact.
     validations:
       required: true
 
   - type: textarea
-    id: steps
+    id: reproduction
     attributes:
       label: Steps to reproduce
       placeholder: |
-        1. 
-        2. 
-        3. 
+        1. Run `...`
+        2. Enter `...`
+        3. Observe `...`
     validations:
-      required: false
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Sanitized logs or screenshots
+      description: Paste only what is needed and redact all sensitive data.
+      render: shell
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checklist
+      options:
+        - label: I searched open and closed issues for duplicates.
+          required: true
+        - label: I removed secrets and private data from this report.
+          required: true
+        - label: This is not a security vulnerability; those are reported privately through SECURITY.md.
+          required: true
