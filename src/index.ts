@@ -1510,9 +1510,9 @@ program
         ttsManager.setAutoSpeak(true);
       }
       if (options.ttsProvider) {
-        const validProviders = ['edge-tts', 'espeak', 'say', 'piper', 'audioreader'];
-        if (validProviders.includes(options.ttsProvider)) {
-          ttsManager.updateConfig({ provider: options.ttsProvider as any });
+        const validProviders = ['edge-tts', 'espeak', 'say', 'piper', 'audioreader'] as const;
+        if (validProviders.includes(options.ttsProvider as (typeof validProviders)[number])) {
+          ttsManager.updateConfig({ provider: options.ttsProvider as (typeof validProviders)[number] });
         } else {
           startupLogger.warn(`⚠️ Invalid tts-provider: ${options.ttsProvider}. Valid: ${validProviders.join(', ')}`);
         }
@@ -2431,7 +2431,7 @@ addLazyCommand(
 addLazyCommand(
   program,
   'mcp',
-  'Manage MCP (Model Context Protocol) servers',
+  'Manage MCP servers or expose Code Buddy with `buddy mcp serve`',
   async () => {
     const { createMCPCommand } = await import('./commands/mcp.js');
     return createMCPCommand();
@@ -3132,12 +3132,17 @@ program
 // MCP Server command - run Code Buddy as an MCP tool provider over stdio
 program
   .command("mcp-server")
-  .description("Start Code Buddy as an MCP server over stdio (for VS Code, Cursor, etc.)")
+  .description("Legacy alias for `buddy mcp serve`")
   .option("--list", "List available MCP tools and exit")
+  .option("--allow-write", "Expose write, shell, and execution tools")
+  .option("--tools <glob>", "Restrict exposed tool names with glob patterns")
   .action(async (options) => {
     if (options.list) {
       const { CodeBuddyMCPServer } = await import("./mcp/mcp-server.js");
-      const tools = CodeBuddyMCPServer.getToolDefinitions();
+      const tools = CodeBuddyMCPServer.getToolDefinitions({
+        ...(options.allowWrite ? { allowWrite: true } : {}),
+        ...(options.tools ? { tools: options.tools } : {}),
+      });
       // Pipeable listing.
       for (const tool of tools) {
         cli.stdout(`${tool.name}: ${tool.description}`);
@@ -3146,9 +3151,11 @@ program
     }
 
     try {
-      const { CodeBuddyMCPServer } = await import("./mcp/mcp-server.js");
-      const server = new CodeBuddyMCPServer();
-      await server.start();
+      const { serveMCP } = await import("./commands/mcp.js");
+      await serveMCP({
+        ...(options.allowWrite ? { allowWrite: true } : {}),
+        ...(options.tools ? { tools: options.tools } : {}),
+      });
     } catch (error) {
       logger.error("Failed to start MCP server", error instanceof Error ? error : new Error(String(error)));
       process.exit(1);
@@ -3551,7 +3558,7 @@ addLazyCommand(
 addLazyCommand(
   program,
   'loop',
-  'Boucle de dev autonome (plan→exécute→vérifie→juge→décide) jusqu\'à fait prouvé ou budget',
+  'Autonomous development loop (plan → execute → verify → judge → decide) until proven done or budget exhausted',
   async () => {
     const { createLoopCommand } = await import('./commands/loop-cli.js');
     return createLoopCommand();

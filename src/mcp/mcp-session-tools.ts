@@ -15,9 +15,13 @@ type AgentGetter = () => Promise<import('../agent/codebuddy-agent.js').CodeBuddy
 /**
  * Register session and web search tools with the MCP server.
  */
-export function registerSessionTools(server: McpServer, getAgent: AgentGetter): void {
+export function registerSessionTools(
+  server: McpServer,
+  getAgent: AgentGetter,
+  shouldRegister: (name: string) => boolean = () => true,
+): void {
   // session_list - List recent sessions
-  server.tool(
+  if (shouldRegister('session_list')) server.tool(
     'session_list',
     'List recent Code Buddy chat sessions with their IDs, names, and timestamps.',
     {
@@ -55,7 +59,7 @@ export function registerSessionTools(server: McpServer, getAgent: AgentGetter): 
   );
 
   // session_resume - Resume a previous session
-  server.tool(
+  if (shouldRegister('session_resume')) server.tool(
     'session_resume',
     'Resume a previous Code Buddy session by ID, restoring its chat history and context.',
     {
@@ -108,7 +112,7 @@ export function registerSessionTools(server: McpServer, getAgent: AgentGetter): 
   );
 
   // web_search - Search the web
-  server.tool(
+  if (shouldRegister('web_search')) server.tool(
     'web_search',
     'Search the web using Code Buddy\'s configured search providers (Brave, Perplexity, DuckDuckGo, etc.).',
     {

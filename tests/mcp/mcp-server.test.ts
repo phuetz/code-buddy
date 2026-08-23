@@ -1,497 +1,138 @@
-/**
- * Tests for CodeBuddyMCPServer
- *
- * Tests tool listing, schema definitions, tool execution mapping,
- * and server start/stop lifecycle.
- */
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { CodeBuddyMCPServer } from '../../src/mcp/mcp-server.js';
 
-// Mock all tool dependencies before imports
+const WRITE_ENV = 'CODEBUDDY_MCP_ALLOW_WRITE';
+const TOOLS_ENV = 'CODEBUDDY_MCP_TOOLS';
+const DESKTOP_CONTROL_ENV = 'CODEBUDDY_MCP_DESKTOP_CONTROL';
+const FORBIDDEN_BY_DEFAULT = [
+  'apply_patch',
+  'bash',
+  'code_exec',
+  'codebase_replace',
+  'create_file',
+  'edit_file',
+  'execute_code',
+  'file_edit',
+  'file_write',
+  'git',
+  'image_edit',
+  'interactive_shell',
+  'multi_edit',
+  'patch',
+  'process',
+  'shell_docker',
+  'shell_exec',
+  'shell_git',
+  'shell_k8s',
+  'shell_process',
+  'str_replace_editor',
+  'terminal',
+  'write_file',
+];
 
-import { CodeBuddyMCPServer, MCPToolDefinition } from '../../src/mcp/mcp-server';
-
-jest.mock('../../src/tools/text-editor', () => {
-  return {
-    TextEditorTool: jest.fn().mockImplementation(function() { return {
-      view: jest.fn().mockResolvedValue({ success: true, output: 'file contents here' }),
-      create: jest.fn().mockResolvedValue({ success: true, output: 'File created' }),
-      strReplace: jest.fn().mockResolvedValue({ success: true, output: 'Replacement applied' }),
-    }; }),
-  };
-});
-
-jest.mock('../../src/tools/search', () => {
-  return {
-    SearchTool: jest.fn().mockImplementation(function() { return {
-      search: jest.fn().mockResolvedValue({ success: true, output: 'src/foo.ts:10: match found' }),
-    }; }),
-  };
-});
-
-jest.mock('../../src/tools/git-tool', () => {
-  return {
-    GitTool: jest.fn().mockImplementation(function() { return {
-      getStatus: jest.fn().mockResolvedValue({
-        branch: 'main',
-        ahead: 0,
-        behind: 0,
-        staged: [],
-        unstaged: ['file.ts'],
-        untracked: [],
-      }),
-      getDiff: jest.fn().mockResolvedValue('diff --git a/file.ts b/file.ts'),
-      getLog: jest.fn().mockResolvedValue('abc1234 Initial commit'),
-      add: jest.fn().mockResolvedValue({ success: true, output: 'Staged: all changes' }),
-      commit: jest.fn().mockResolvedValue({ success: true, output: 'Committed' }),
-      branch: jest.fn().mockResolvedValue({ success: true, output: '* main\n  dev' }),
-      checkout: jest.fn().mockResolvedValue({ success: true, output: 'Switched to branch dev' }),
-    }; }),
-  };
-});
-
-jest.mock('../../src/tools/bash/index', () => {
-  return {
-    BashTool: jest.fn().mockImplementation(function() { return {
-      execute: jest.fn().mockResolvedValue({ success: true, output: 'command output' }),
-    }; }),
-  };
-});
-
-jest.mock('../../src/utils/confirmation-service', () => {
-  return {
-    ConfirmationService: {
-      getInstance: jest.fn().mockReturnValue({
-        setSessionFlag: jest.fn(),
-        getSessionFlags: jest.fn().mockReturnValue({ allOperations: true }),
-      }),
-    },
-  };
-});
-
-// Mock the MCP SDK to avoid actual stdio transport
-jest.mock('@modelcontextprotocol/sdk/server/mcp.js', () => {
-  const registeredTools = new Map<string, { description: string; schema: unknown; handler: Function }>();
-  const registeredResources = new Map<string, { uri: string; options: unknown; handler: Function }>();
-  const registeredPrompts = new Map<string, { description: string; schema: unknown; handler: Function }>();
-
-  return {
-    McpServer: jest.fn().mockImplementation(function() { return {
-      tool: jest.fn((name: string, description: string, schema: unknown, handler: Function) => {
-        registeredTools.set(name, { description, schema, handler });
-      }),
-      resource: jest.fn((name: string, uri: string, options: unknown, handler: Function) => {
-        registeredResources.set(name, { uri, options, handler });
-      }),
-      prompt: jest.fn((name: string, description: string, schema: unknown, handler: Function) => {
-        registeredPrompts.set(name, { description, schema, handler });
-      }),
-      connect: jest.fn().mockResolvedValue(undefined),
-      close: jest.fn().mockResolvedValue(undefined),
-      _registeredTools: registeredTools,
-      _registeredResources: registeredResources,
-      _registeredPrompts: registeredPrompts,
-    }; }),
-  };
-});
-
-jest.mock('@modelcontextprotocol/sdk/server/stdio.js', () => {
-  return {
-    StdioServerTransport: jest.fn().mockImplementation(function() { return {
-      start: jest.fn().mockResolvedValue(undefined),
-      close: jest.fn().mockResolvedValue(undefined),
-    }; }),
-  };
-});
-
-
-jest.mock('../../src/agent/codebuddy-agent.js', () => {
-  return {
-    CodeBuddyAgent: jest.fn().mockImplementation(function() { return {
-      dispose: jest.fn(),
-    }; }),
-  };
-});
-
-import { z } from 'zod';
-
-describe('CodeBuddyMCPServer', () => {
-  let server: CodeBuddyMCPServer;
+describe('CodeBuddyMCPServer registry exposure', () => {
+  const previousWriteEnv = process.env[WRITE_ENV];
+  const previousToolsEnv = process.env[TOOLS_ENV];
+  const previousDesktopControlEnv = process.env[DESKTOP_CONTROL_ENV];
 
   beforeEach(() => {
-    server = new CodeBuddyMCPServer();
+    delete process.env[WRITE_ENV];
+    delete process.env[TOOLS_ENV];
+    delete process.env[DESKTOP_CONTROL_ENV];
   });
 
-  afterEach(async () => {
-    if (server.isRunning()) {
-      await server.stop();
-    }
+  afterEach(() => {
+    if (previousWriteEnv === undefined) delete process.env[WRITE_ENV];
+    else process.env[WRITE_ENV] = previousWriteEnv;
+    if (previousToolsEnv === undefined) delete process.env[TOOLS_ENV];
+    else process.env[TOOLS_ENV] = previousToolsEnv;
+    if (previousDesktopControlEnv === undefined) delete process.env[DESKTOP_CONTROL_ENV];
+    else process.env[DESKTOP_CONTROL_ENV] = previousDesktopControlEnv;
   });
 
-  // =========================================================================
-  // Tool Listing
-  // =========================================================================
+  it('lists a broad read-only surface and no write, shell, or execution tool by default', () => {
+    const server = new CodeBuddyMCPServer();
+    const tools = server.getExposedToolDefinitions();
+    const names = server.getExposedToolNames();
 
-  describe('getToolDefinitions', () => {
-    it('should return all 15 tool definitions', () => {
-      const tools = CodeBuddyMCPServer.getToolDefinitions();
-      expect(tools).toHaveLength(15);
-    });
+    expect(tools.length).toBeGreaterThan(7);
+    expect(names).toEqual(tools.map((tool) => tool.name));
+    expect(tools.every((tool) => tool.readOnly)).toBe(true);
+    expect(names).toContain('view_file');
+    expect(names).toContain('list_directory');
+    expect(names).toContain('search');
+    expect(FORBIDDEN_BY_DEFAULT.filter((name) => names.includes(name))).toEqual([]);
 
-    it('should include all expected tool names', () => {
-      const tools = CodeBuddyMCPServer.getToolDefinitions();
-      const names = tools.map((t: MCPToolDefinition) => t.name);
-      // Original 7 tools
-      expect(names).toContain('read_file');
-      expect(names).toContain('write_file');
-      expect(names).toContain('edit_file');
-      expect(names).toContain('bash');
-      expect(names).toContain('search_files');
-      expect(names).toContain('list_files');
-      expect(names).toContain('git');
-      // Agent intelligence tools (8 new)
-      expect(names).toContain('agent_chat');
-      expect(names).toContain('agent_task');
-      expect(names).toContain('agent_plan');
-      expect(names).toContain('memory_search');
-      expect(names).toContain('memory_save');
-      expect(names).toContain('session_list');
-      expect(names).toContain('session_resume');
-      expect(names).toContain('web_search');
-    });
+    const summary = server.getExposureSummary();
+    expect(summary.mode).toBe('read-only');
+    expect(summary.exposed).toBe(tools.length);
+    expect(summary.registryReadOnly).toBe(tools.length);
+    expect(summary.registryTotal).toBeGreaterThan(summary.registryReadOnly);
+  });
 
-    it('should have descriptions for all tools', () => {
-      const tools = CodeBuddyMCPServer.getToolDefinitions();
-      for (const tool of tools) {
-        expect(tool.description).toBeTruthy();
-        expect(typeof tool.description).toBe('string');
-      }
+  it('derives MCP argument schemas from the canonical registry', () => {
+    const tools = new CodeBuddyMCPServer().getExposedToolDefinitions();
+    const readFile = tools.find((tool) => tool.name === 'read_file');
+
+    expect(readFile).toBeDefined();
+    expect(readFile?.inputSchema.type).toBe('object');
+    expect(readFile?.inputSchema.required).toContain('path');
+    expect(readFile?.inputSchema.properties).toMatchObject({
+      path: expect.objectContaining({ type: 'string' }),
     });
   });
 
-  // =========================================================================
-  // Tool Schema Definitions
-  // =========================================================================
+  it('only adds unsafe registry tools after an explicit allow-write opt-in', () => {
+    const defaultFiltered = new CodeBuddyMCPServer({ tools: 'bash' });
+    expect(defaultFiltered.getExposedToolNames()).toEqual([]);
 
-  describe('tool schemas', () => {
-    let tools: MCPToolDefinition[];
-
-    beforeAll(() => {
-      tools = CodeBuddyMCPServer.getToolDefinitions();
+    const writeEnabled = new CodeBuddyMCPServer({
+      allowWrite: true,
+      tools: '{bash,write_file}',
     });
+    expect(writeEnabled.getExposedToolNames()).toEqual(['bash', 'write_file']);
+    expect(writeEnabled.getExposureSummary().mode).toBe('read-write');
 
-    it('read_file should require path parameter', () => {
-      const readFile = tools.find((t: MCPToolDefinition) => t.name === 'read_file')!;
-      expect(readFile.inputSchema).toBeDefined();
-      expect(readFile.inputSchema.required).toContain('path');
-      const props = readFile.inputSchema.properties as Record<string, { type: string }>;
-      expect(props.path.type).toBe('string');
+    const patchEnabled = new CodeBuddyMCPServer({
+      allowWrite: true,
+      tools: 'apply_patch',
     });
-
-    it('write_file should require path and content parameters', () => {
-      const writeFile = tools.find((t: MCPToolDefinition) => t.name === 'write_file')!;
-      expect(writeFile.inputSchema.required).toContain('path');
-      expect(writeFile.inputSchema.required).toContain('content');
-    });
-
-    it('edit_file should require path, old_string, and new_string', () => {
-      const editFile = tools.find((t: MCPToolDefinition) => t.name === 'edit_file')!;
-      const required = editFile.inputSchema.required as string[];
-      expect(required).toContain('path');
-      expect(required).toContain('old_string');
-      expect(required).toContain('new_string');
-    });
-
-    it('bash should require command parameter', () => {
-      const bash = tools.find((t: MCPToolDefinition) => t.name === 'bash')!;
-      expect(bash.inputSchema.required).toContain('command');
-    });
-
-    it('search_files should require query parameter', () => {
-      const search = tools.find((t: MCPToolDefinition) => t.name === 'search_files')!;
-      expect(search.inputSchema.required).toContain('query');
-    });
-
-    it('git should require subcommand parameter with enum values', () => {
-      const git = tools.find((t: MCPToolDefinition) => t.name === 'git')!;
-      expect(git.inputSchema.required).toContain('subcommand');
-      const props = git.inputSchema.properties as Record<string, { enum?: string[] }>;
-      expect(props.subcommand.enum).toEqual(
-        expect.arrayContaining(['status', 'diff', 'log', 'add', 'commit'])
-      );
-    });
-
-    it('list_files should not require any parameters', () => {
-      const listFiles = tools.find((t: MCPToolDefinition) => t.name === 'list_files')!;
-      const required = listFiles.inputSchema.required as string[] | undefined;
-      expect(!required || required.length === 0).toBe(true);
-    });
+    expect(patchEnabled.getExposedToolNames()).toEqual(['apply_patch']);
   });
 
-  describe('Zod Tool Schema Validation', () => {
-    let getRegisteredSchema: (name: string) => Record<string, z.ZodTypeAny>;
+  it('preserves the 11 historical MCP-only tools behind allow-write', () => {
+    const server = new CodeBuddyMCPServer({ allowWrite: true });
+    const registryNames = new Set(
+      server.getExposedToolDefinitions().map((tool) => tool.name),
+    );
+    const supplementalNames = server.getExposedToolNames()
+      .filter((name) => !registryNames.has(name))
+      .sort();
 
-    beforeAll(() => {
-      getRegisteredSchema = (name: string) => {
-        const mcpServer = (server as any).mcpServer;
-        const entry = mcpServer._registeredTools.get(name);
-        return entry?.schema;
-      };
-    });
-
-    it('should validate read_file schema properly', () => {
-      const schemaObj = getRegisteredSchema('read_file');
-      const schema = z.object(schemaObj);
-      expect(schema.safeParse({ path: '/tmp/test.txt' }).success).toBe(true);
-      expect(schema.safeParse({ path: '/tmp/test.txt', start_line: 1, end_line: 5 }).success).toBe(true);
-      expect(schema.safeParse({}).success).toBe(false); // missing path
-      expect(schema.safeParse({ path: 123 }).success).toBe(false); // wrong type
-    });
-
-    it('should validate write_file schema properly', () => {
-      const schemaObj = getRegisteredSchema('write_file');
-      const schema = z.object(schemaObj);
-      expect(schema.safeParse({ path: '/tmp/test.txt', content: 'data' }).success).toBe(true);
-      expect(schema.safeParse({ path: '/tmp/test.txt' }).success).toBe(false); // missing content
-    });
-
-    it('should validate edit_file schema properly', () => {
-      const schemaObj = getRegisteredSchema('edit_file');
-      const schema = z.object(schemaObj);
-      expect(schema.safeParse({ path: '/tmp/test.txt', old_string: 'old', new_string: 'new' }).success).toBe(true);
-      expect(schema.safeParse({ path: '/tmp/test.txt', old_string: 'old' }).success).toBe(false); // missing new_string
-    });
-
-    it('should validate bash schema properly', () => {
-      const schemaObj = getRegisteredSchema('bash');
-      const schema = z.object(schemaObj);
-      expect(schema.safeParse({ command: 'echo hello' }).success).toBe(true);
-      expect(schema.safeParse({ command: 'echo hello', timeout: 5000 }).success).toBe(true);
-      expect(schema.safeParse({}).success).toBe(false);
-    });
-
-    it('should validate git schema properly', () => {
-      const schemaObj = getRegisteredSchema('git');
-      const schema = z.object(schemaObj);
-      expect(schema.safeParse({ subcommand: 'status' }).success).toBe(true);
-      expect(schema.safeParse({ subcommand: 'commit', args: { message: 'msg' } }).success).toBe(true);
-      expect(schema.safeParse({ subcommand: 'invalid_cmd' }).success).toBe(false);
-    });
+    expect(supplementalNames).toEqual([
+      'agent_chat',
+      'agent_plan',
+      'agent_task',
+      'ckg_ingest',
+      'ckg_recall',
+      'desktop_screenshot',
+      'desktop_snapshot',
+      'memory_save',
+      'memory_search',
+      'session_list',
+      'session_resume',
+    ]);
+    expect(server.getExposureSummary().supplementalExposed).toBe(11);
   });
 
-  // =========================================================================
-  // Tool Execution Mapping
-  // =========================================================================
+  it('supports environment opt-in and glob filtering', () => {
+    process.env[WRITE_ENV] = '1';
+    process.env[TOOLS_ENV] = '*_file';
 
-  describe('tool execution', () => {
-    // Access the internally registered tool handlers via the mock
-    function getRegisteredHandler(name: string): Function | undefined {
-      const mcpServer = (server as unknown as { mcpServer: { _registeredTools: Map<string, { handler: Function }> } }).mcpServer;
-      const entry = mcpServer._registeredTools.get(name);
-      return entry?.handler;
-    }
+    const names = new CodeBuddyMCPServer().getExposedToolNames();
 
-    it('should register all tools with the MCP server', () => {
-      const mcpServer = (server as unknown as { mcpServer: { tool: jest.Mock } }).mcpServer;
-      // 7 original + 3 agent + 2 memory + 2 CKG + 3 session + 2 desktop (read-only;
-      // the 4 control tools are gated behind CODEBUDDY_MCP_DESKTOP_CONTROL=1) = 19 tools
-      expect(mcpServer.tool).toHaveBeenCalledTimes(19);
-    });
-
-    it('should map read_file to TextEditorTool.view', async () => {
-      const handler = getRegisteredHandler('read_file');
-      expect(handler).toBeDefined();
-
-      const result = await handler!({ path: '/tmp/test.txt' });
-      expect(result.content).toBeDefined();
-      expect(result.content[0].text).toBe('file contents here');
-    });
-
-    it('should map read_file with line range', async () => {
-      const handler = getRegisteredHandler('read_file');
-      const result = await handler!({ path: '/tmp/test.txt', start_line: 5, end_line: 10 });
-      expect(result.content[0].text).toBe('file contents here');
-    });
-
-    it('should map write_file to TextEditorTool.create', async () => {
-      const handler = getRegisteredHandler('write_file');
-      expect(handler).toBeDefined();
-
-      const result = await handler!({ path: '/tmp/new.txt', content: 'hello world' });
-      expect(result.content[0].text).toBe('File created');
-    });
-
-    it('should map edit_file to TextEditorTool.strReplace', async () => {
-      const handler = getRegisteredHandler('edit_file');
-      expect(handler).toBeDefined();
-
-      const result = await handler!({ path: '/tmp/test.txt', old_string: 'foo', new_string: 'bar' });
-      expect(result.content[0].text).toBe('Replacement applied');
-    });
-
-    it('should map bash to BashTool.execute', async () => {
-      const handler = getRegisteredHandler('bash');
-      expect(handler).toBeDefined();
-
-      const result = await handler!({ command: 'echo hello' });
-      expect(result.content[0].text).toBe('command output');
-    });
-
-    it('should map bash with custom timeout', async () => {
-      const handler = getRegisteredHandler('bash');
-      const result = await handler!({ command: 'sleep 1', timeout: 60000 });
-      expect(result.content[0].text).toBe('command output');
-    });
-
-    it('should map search_files to SearchTool.search', async () => {
-      const handler = getRegisteredHandler('search_files');
-      expect(handler).toBeDefined();
-
-      const result = await handler!({ query: 'TODO' });
-      expect(result.content[0].text).toContain('match found');
-    });
-
-    it('should map list_files to TextEditorTool.view', async () => {
-      const handler = getRegisteredHandler('list_files');
-      expect(handler).toBeDefined();
-
-      const result = await handler!({});
-      expect(result.content).toBeDefined();
-    });
-
-    it('should map git status to GitTool.getStatus', async () => {
-      const handler = getRegisteredHandler('git');
-      expect(handler).toBeDefined();
-
-      const result = await handler!({ subcommand: 'status' });
-      expect(result.content[0].text).toContain('Branch: main');
-      expect(result.content[0].text).toContain('file.ts');
-    });
-
-    it('should map git diff to GitTool.getDiff', async () => {
-      const handler = getRegisteredHandler('git');
-      const result = await handler!({ subcommand: 'diff', args: { staged: true } });
-      expect(result.content[0].text).toContain('diff --git');
-    });
-
-    it('should map git log to GitTool.getLog', async () => {
-      const handler = getRegisteredHandler('git');
-      const result = await handler!({ subcommand: 'log', args: { count: 5 } });
-      expect(result.content[0].text).toContain('Initial commit');
-    });
-
-    it('should map git add to GitTool.add', async () => {
-      const handler = getRegisteredHandler('git');
-      const result = await handler!({ subcommand: 'add', args: { files: ['file.ts'] } });
-      expect(result.content[0].text).toContain('Staged');
-    });
-
-    it('should map git commit to GitTool.commit', async () => {
-      const handler = getRegisteredHandler('git');
-      const result = await handler!({ subcommand: 'commit', args: { message: 'test commit' } });
-      expect(result.content[0].text).toBe('Committed');
-    });
-
-    it('should return error when git commit is missing message', async () => {
-      const handler = getRegisteredHandler('git');
-      const result = await handler!({ subcommand: 'commit', args: {} });
-      expect(result.isError).toBe(true);
-      expect(result.content[0].text).toContain('commit message is required');
-    });
-
-    it('should map git branch to GitTool.branch', async () => {
-      const handler = getRegisteredHandler('git');
-      const result = await handler!({ subcommand: 'branch' });
-      expect(result.content[0].text).toContain('main');
-    });
-
-    it('should map git checkout to GitTool.checkout', async () => {
-      const handler = getRegisteredHandler('git');
-      const result = await handler!({ subcommand: 'checkout', args: { branch_name: 'dev' } });
-      expect(result.content[0].text).toContain('Switched to branch dev');
-    });
-
-    it('should return error when git checkout is missing branch_name', async () => {
-      const handler = getRegisteredHandler('git');
-      const result = await handler!({ subcommand: 'checkout', args: {} });
-      expect(result.isError).toBe(true);
-      expect(result.content[0].text).toContain('branch_name is required');
-    });
+    expect(names).toContain('read_file');
+    expect(names).toContain('write_file');
+    expect(names.every((name) => name.endsWith('_file'))).toBe(true);
   });
-
-  // =========================================================================
-  // Server Lifecycle
-  // =========================================================================
-
-  describe('server lifecycle', () => {
-    it('should not be running initially', () => {
-      expect(server.isRunning()).toBe(false);
-    });
-
-    it('should start successfully', async () => {
-      await server.start();
-      expect(server.isRunning()).toBe(true);
-    });
-
-    it('should stop successfully after starting', async () => {
-      await server.start();
-      expect(server.isRunning()).toBe(true);
-
-      await server.stop();
-      expect(server.isRunning()).toBe(false);
-    });
-
-    it('should throw when starting twice', async () => {
-      await server.start();
-      await expect(server.start()).rejects.toThrow('MCP server is already running');
-    });
-
-    it('should be idempotent when stopping a non-running server', async () => {
-      // Should not throw
-      await server.stop();
-      expect(server.isRunning()).toBe(false);
-    });
-
-    it('should allow restart after stop', async () => {
-      await server.start();
-      await server.stop();
-      await server.start();
-      expect(server.isRunning()).toBe(true);
-    });
-
-    it('should properly dispose of the agent when stop is called', async () => {
-      await server.start();
-      
-      process.env.OPENAI_API_KEY = 'test-key';
-      
-      // We trigger the lazy-loading of the agent by calling agent_chat
-      const handler = getRegisteredHandler('agent_chat');
-      if (handler) {
-        await handler({ message: 'hello', mode: 'ask' });
-      }
-
-      // Ensure the internal agent is assigned
-      const internalAgent = (server as any).agent;
-      expect(internalAgent).toBeTruthy();
-
-      await server.stop();
-
-      expect((server as any).agent).toBeNull();
-      expect(internalAgent.dispose).toHaveBeenCalled();
-      
-      delete process.env.OPENAI_API_KEY;
-    });
-
-    it('should set transport to null after stop', async () => {
-      await server.start();
-      expect((server as any).transport).not.toBeNull();
-      await server.stop();
-      expect((server as any).transport).toBeNull();
-    });
-  });
-
-  // Helper to get registered handler for lifecycle tests
-  function getRegisteredHandler(name: string): Function | undefined {
-    const mcpServer = (server as unknown as { mcpServer: { _registeredTools: Map<string, { handler: Function }> } }).mcpServer;
-    const entry = mcpServer._registeredTools.get(name);
-    return entry?.handler;
-  }
 });

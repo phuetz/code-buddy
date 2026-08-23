@@ -34,9 +34,9 @@ Watch a **local model reason on screen, then use real tools to do the work** —
   <sub>A <b>local</b> model reasons, then uses a tool to create a real file — <code>~$0.0001</code>, no cloud. <a href="cowork/readme.md#demo">More demos →</a></sub>
 </p>
 
-- 🆓 **Free & local-first** — runs entirely on local **Ollama (`$0`)**, any of **64 providers** (30 free-tier or local `$0`) with auto-failover, or a flat-fee **ChatGPT Plus/Pro** / **SuperGrok** login (no API metering). Two minutes to start: `buddy onboard` → `buddy try`.
+- 🆓 **Free & local-first** — runs entirely on local **Ollama (`$0`)**, any of **64 providers** (30 free-tier or local `$0`) with auto-failover, or a flat-fee **ChatGPT Plus/Pro** / **SuperGrok** login (no API metering). Two minutes to start: `buddy login` (or `buddy onboard`) → `buddy try`.
 - 🧠 **Reasoning you can watch** — local models think step-by-step on screen, then call tools to act. See the [live captures](cowork/readme.md#demo).
-- 🛠️ **200+ tools** (RAG-selected per query) — edit, shell, web search, browser, PDFs/Office, image/video generation, 150 design systems, a skills hub, and MCP in both directions (`buddy mcp-server`, `buddy mcp add`).
+- 🛠️ **200+ tools** (RAG-selected per query) — edit, shell, web search, browser, PDFs/Office, image/video generation, 150 design systems, a skills hub, and MCP in both directions (`buddy mcp serve`, `buddy mcp add`).
 - 🖥️ **Runs everywhere** — terminal TUI, the **Cowork** desktop app, an HTTP/WebSocket server, your phone, or a 24/7 background service — one core engine.
 - 🏗️ **App Studio** (Cowork) — describe an app → scaffold, **live preview**, capped auto-fix (3 tries), one-click GitHub push. Static apps use the managed preview server; npm stacks run a real install + dev server.
 - 🧬 **Self-improving, human-gated** — the agent authors its own tools/skills behind empirical gates (`buddy improve …`), and can evolve its own source in throwaway worktrees (`buddy evolve`, opt-in, `keep --confirm` only).
@@ -72,7 +72,10 @@ This README reflects source version **1.8.0 plus `Unreleased` changes through 23
 
 ## In action
 
-**Reproduce it in 60 seconds — `buddy try`.** One command: the agent writes FizzBuzz + a test, runs it, then an **independent** check re-verifies. Real run on a free provider (ChatGPT OAuth here), cost `$0.0000`, English by default.
+**Reproduce it in 60 seconds — `buddy try`.** Once ChatGPT OAuth or a local
+Ollama model is ready, the agent writes FizzBuzz + a test, runs it, then an
+**independent** check re-verifies. Real run on a free provider (ChatGPT OAuth
+here), cost `$0.0000`, English by default.
 
 <p align="center">
   <img src="docs/assets/showcase-try.gif" alt="buddy try — the agent writes FizzBuzz and a test, runs it, independently verifies, $0" width="760"/>
@@ -181,8 +184,8 @@ More desktop demos (Fleet, Autonomy, Companion, …) and captures: [`cowork/read
 | Video Studio                          | Pitch → scene plan → clips → Piper narration → captions → montage; five tools gate quality, plan, hand off and route                             | `buddy film from-prompt "<pitch>" [--short]` · tool: `video_route` | shipped (fail-open on missing binaries)                          |
 | Voice                                 | Push-to-talk → STT (faster-whisper) → a real agent turn under a permission posture → Piper reply                                                 | `buddy voice --mode plan/default/…`                                | shipped (needs mic; wake word = Porcupine only with a key)       |
 | Multi-AI Fleet                        | Peers stream events and call each other's models / read-only tools; router + privacy lint                                                        | `buddy server` · `/fleet listen`, `chat`, `route`                  | shipped (auth token required for `peer:invoke`)                  |
-| MCP, both ways                        | Expose tools, resources and prompts over stdio — including CKG recall/ingest — and add servers, profiles and audit                               | `buddy mcp-server` · `buddy mcp add`, `audit`, `profile`           | shipped (**not** read-only — it exposes `bash`, `write_file`)    |
-| Code Explorer + collective memory     | Read-only code-graph questions; research pipeline with a cross-agent knowledge graph                                                             | `code_explorer_ask` · `ckg_recall` / `ckg_ingest`                  | shipped / CKG opt-in                                             |
+| MCP, both ways                        | Expose the audited tool registry + resources + prompts over stdio — including CKG recall/ingest; add external servers, profiles, audit                                         | `buddy mcp serve` · `buddy mcp add`, `audit`, `profile`           | shipped (read-only by default; writes require `--allow-write`)    |
+| Code Explorer + collective memory     | Read-only code-graph questions; research pipeline with a cross-agent knowledge graph                                                             | tool `code_explorer_ask` · `buddy research "<topic>" --deep --ckg` | shipped / CKG opt-in                                             |
 | Code Buddy 2 (10 opt-ins)             | Shadow Workspace, Time-Travel, Intent Ledger, CKG sync, Self-Benchmark, Context zoom, Generative UI, Perceptive pair, Skill Exchange, Multi-repo | `buddy shadow`, `replay`, `intents`, `widgets`, `ws…`              | opt-in, byte-identical when off — [docs/cb2](docs/cb2/README.md) |
 | Desktop app                           | Electron **Cowork**: chat, plan, files, App Studio, Video Studio, assistant, fleet, Mission Control — 7 themes                                   | `buddy gui` (Node ≥ 22)                                            | shipped                                                          |
 
@@ -193,7 +196,16 @@ Everything above is written up with source files, flags and what's verified in *
 ## Quick Start
 
 ```bash
-# From source — current main
+# One command — installs Node if needed (no sudo), then Code Buddy
+curl -fsSL https://raw.githubusercontent.com/phuetz/code-buddy/main/install.sh | sh
+
+# …or, if you already have Node ≥ 18:
+npm install -g @phuetz/code-buddy@latest
+
+# …or run it 24/7 in Docker (the VPS path):
+docker compose up -d          # after: cp .env.example .env && set JWT_SECRET
+
+# …or from source (newest features)
 git clone https://github.com/phuetz/code-buddy.git
 cd code-buddy
 npm install
@@ -204,7 +216,16 @@ buddy doctor                # checks Node, providers and optional runtimes
 
 > **Requirements:** Node.js **≥ 18** for the CLI (the one-command installer provisions **≥ 20**). The **Cowork desktop app needs Node ≥ 22** plus a C++ build toolchain for native modules (`better-sqlite3`). Run **`buddy doctor`** anytime to check your environment (`--fix` to auto-remediate). Full install guide (one-command, Docker/VPS, npm): **[docs/install.md](docs/install.md)**.
 
-Then choose one `$0` path and run the built-in proof:
+> The npm package name is **`@phuetz/code-buddy`**; the unscoped
+> `code-buddy` package is not published. The npm channel can lag the source
+> branch, so use `@latest` and confirm with `buddy --version`.
+
+`buddy try` is a real provider smoke test, not an offline mock. It needs either
+`buddy login` (ChatGPT OAuth) or a reachable Ollama model. With neither
+available, it exits quickly and prints the exact setup commands; it does not
+silently fall back to a paid API.
+
+Then pick a brain:
 
 ```bash
 # ChatGPT Plus / Pro — flat-fee OAuth, no API key
@@ -419,6 +440,27 @@ Alongside `buddy film`, five agent tools now separate policy and planning from g
   <br/>
   <sub><code>video_route</code> réel · capture du 23/08/2026 · capacités déclarées synthétiques · routage pur, aucun média généré, crédit dépensé ou modèle appelé</sub>
 </p>
+
+---
+
+## Use Code Buddy as an MCP server
+
+Claude Desktop, Cursor, Cline, Windsurf, and other stdio MCP clients can consume Code Buddy's existing tools directly:
+
+```json
+{
+  "mcpServers": {
+    "code-buddy": {
+      "command": "buddy",
+      "args": ["mcp", "serve"]
+    }
+  }
+}
+```
+
+Save that object in `claude_desktop_config.json` or the client's `.mcp.json`; a copyable file lives at [`examples/claude_desktop_config.json`](examples/claude_desktop_config.json). Without a global install, use `"command": "npx"` and `"args": ["-y", "@phuetz/code-buddy", "mcp", "serve"]`.
+
+The default is deliberately **read-only** and exposes only registry tools audited with `fleetSafe: true` (file reading, search, and analysis). Narrow it with `--tools "search*"`. Write, shell, execution, agent, and desktop-control tools require the explicit `--allow-write` opt-in (or `CODEBUDDY_MCP_ALLOW_WRITE=1`), for example `buddy mcp serve --allow-write --tools "{view_file,write_file,bash}"`. This grants the MCP client materially broader access to the host, so enable it only for a client and workspace you trust.
 
 ---
 

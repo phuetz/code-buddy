@@ -23,6 +23,22 @@ export interface OnboardingResult {
   recommendedNextCommands?: string[];
 }
 
+export const NON_INTERACTIVE_ONBOARDING_MESSAGE = [
+  'Code Buddy onboarding needs an interactive terminal.',
+  '',
+  'Run `buddy onboard` from a terminal (not a pipe or CI job), or configure a provider non-interactively:',
+  '  buddy login',
+  '  buddy doctor',
+  '  buddy try',
+].join('\n');
+
+export function isInteractiveTerminal(
+  input: { isTTY?: boolean },
+  output: { isTTY?: boolean },
+): boolean {
+  return input.isTTY === true && output.isTTY === true;
+}
+
 export type OnboardingAuthMode = 'oauth' | 'api-key' | 'local';
 
 export interface OnboardingProviderGuide {
@@ -592,7 +608,12 @@ async function offerTry(rl: readline.Interface): Promise<void> {
   }
 }
 
-export async function runOnboarding(): Promise<OnboardingResult> {
+export async function runOnboarding(): Promise<OnboardingResult | null> {
+  if (!isInteractiveTerminal(process.stdin, process.stdout)) {
+    console.error(NON_INTERACTIVE_ONBOARDING_MESSAGE);
+    return null;
+  }
+
   // 0. Detect what's already usable BEFORE opening readline — the probes are
   //    async (~1.5s), and holding an open readline across them can race a
   //    piped/non-interactive stdin to EOF. Detection needs no input anyway.
