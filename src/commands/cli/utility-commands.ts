@@ -119,7 +119,8 @@ export function registerUtilityCommands(program: Command): void {
     .description('Interactive setup wizard for Code Buddy')
     .action(async () => {
       const { runOnboarding } = await import('../../wizard/onboarding.js');
-      await runOnboarding();
+      const result = await runOnboarding();
+      if (!result) process.exitCode = 2;
     });
 
   const ollamaCommand = program
