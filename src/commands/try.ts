@@ -80,7 +80,8 @@ export const NO_TRY_PROVIDER_MESSAGE = [
   '1. Recommended — sign in with your ChatGPT account (OAuth, no API key, $0 marginal cost with your plan):',
   '   buddy login',
   '',
-  '2. Or run a model locally with Ollama:',
+  '2. Or run a model locally with Ollama (install it from https://ollama.com first):',
+  '   ollama serve',
   '   ollama pull qwen2.5-coder:7b',
   '   buddy try',
 ].join('\n');

@@ -8,7 +8,7 @@ Plus/Pro subscription — OAuth, `$0` marginal cost, no API key).
 |:-----|:---------|:---------|
 | [1. One command](#1-one-command-curl--sh) | A laptop / workstation | `curl -fsSL https://raw.githubusercontent.com/phuetz/code-buddy/main/install.sh \| sh` |
 | [2. Docker / VPS](#2-docker--vps-247) | A server that runs 24/7 | `docker compose up -d` |
-| [3. npm](#3-npm) | You already have Node ≥ 20 | `npm install -g @phuetz/code-buddy` |
+| [3. npm](#3-npm) | You already have Node ≥ 18 | `npm install -g @phuetz/code-buddy@latest` |
 
 ---
 
@@ -125,12 +125,16 @@ tokens persist in the mounted volume.
 
 ## 3. npm
 
-If you already have **Node.js ≥ 20** (`node --version`):
+If you already have **Node.js ≥ 18** (`node --version`):
 
 ```sh
-npm install -g @phuetz/code-buddy
+npm install -g @phuetz/code-buddy@latest
 buddy onboard
 ```
+
+The package name is scoped: install `@phuetz/code-buddy`, not the unscoped
+`code-buddy` name. The npm release may lag the source checkout; confirm the
+installed version with `buddy --version`.
 
 From source (newest features):
 
@@ -142,7 +146,7 @@ npm run build
 npm link            # exposes `buddy` globally
 ```
 
-> **Requirements:** Node.js **≥ 20** for the CLI. The **Cowork desktop app needs
+> **Requirements:** Node.js **≥ 18** for the CLI. The **Cowork desktop app needs
 > Node ≥ 22** plus a C++ toolchain for native modules (`better-sqlite3`).
 > Run **`buddy doctor`** anytime to check your environment (`--fix` to remediate).
 
@@ -150,19 +154,24 @@ npm link            # exposes `buddy` globally
 
 ## First run — free, no env var to edit
 
-Whichever path you took, the fastest way in is one command:
+Whichever path you took, the fastest way in is one command after a free
+provider is available:
 
 ```sh
-buddy try            # 60-second zero-config demo — detects Ollama or a
-                     # signed-in ChatGPT and proves it works. Start here.
+buddy try            # 60-second demo — uses Ollama or signed-in ChatGPT and
+                     # proves the configured provider works.
 ```
+
+Without a ChatGPT login or reachable Ollama, `buddy try` exits quickly with
+the exact setup commands; it does not require an API key or make up an offline
+model response.
 
 To make it your default, either sign in with a subscription or let the wizard
 configure a local model — **no API key, no environment variable**:
 
 ```sh
-buddy onboard        # guided: auto-detects your machine, defaults to the free
-                     # path, and writes the config for you
+buddy onboard        # guided: auto-detects your machine, offers the free path
+                     # when available, and writes the config for you
 buddy login          # ChatGPT Plus/Pro OAuth → $0 marginal cost, no API key
 buddy                # start chatting
 ```

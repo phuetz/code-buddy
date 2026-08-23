@@ -1510,9 +1510,9 @@ program
         ttsManager.setAutoSpeak(true);
       }
       if (options.ttsProvider) {
-        const validProviders = ['edge-tts', 'espeak', 'say', 'piper', 'audioreader'];
-        if (validProviders.includes(options.ttsProvider)) {
-          ttsManager.updateConfig({ provider: options.ttsProvider as any });
+        const validProviders = ['edge-tts', 'espeak', 'say', 'piper', 'audioreader'] as const;
+        if (validProviders.includes(options.ttsProvider as (typeof validProviders)[number])) {
+          ttsManager.updateConfig({ provider: options.ttsProvider as (typeof validProviders)[number] });
         } else {
           startupLogger.warn(`⚠️ Invalid tts-provider: ${options.ttsProvider}. Valid: ${validProviders.join(', ')}`);
         }
@@ -3551,7 +3551,7 @@ addLazyCommand(
 addLazyCommand(
   program,
   'loop',
-  'Boucle de dev autonome (plan→exécute→vérifie→juge→décide) jusqu\'à fait prouvé ou budget',
+  'Autonomous development loop (plan → execute → verify → judge → decide) until proven done or budget exhausted',
   async () => {
     const { createLoopCommand } = await import('./commands/loop-cli.js');
     return createLoopCommand();
