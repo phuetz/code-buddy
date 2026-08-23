@@ -1,54 +1,22 @@
-/**
- * Stable JSON Serialization — Manus AI / Native Engine KV-cache preservation
- *
- * A single-token difference anywhere in the prompt prefix invalidates the
- * KV-cache from that point forward (autoregressive transformer property).
- * Many JSON serializers produce non-deterministic key ordering, causing
- * spurious cache misses.
- *
- * `stableStringify()` sorts keys recursively so the same object always
- * produces the same byte sequence regardless of insertion order.
- *
- * Apply to all tool result metadata, structured objects in system prompts,
- * and any JSON embedded in message content.
- */
+import { describe, expect, it } from 'vitest';
+import { normalizeJson, stableStringify } from '../../src/utils/stable-json';
 
-/**
- * Serialize an object to JSON with recursively sorted keys.
- * Arrays preserve their original element order.
- *
- * @param value  - Value to serialize
- * @param space  - Optional indentation (same as JSON.stringify)
- */
-export function stableStringify(value: unknown, space?: number | string): string {
-  return JSON.stringify(sortKeys(value), null, space);
-}
+describe('stable JSON serialization', () => {
+  it('preserves Date serialization', () => {
+    const date = new Date('2026-01-02T03:04:05.000Z');
+    expect(stableStringify({ when: date })).toBe('{"when":"2026-01-02T03:04:05.000Z"}');
+  });
 
-function sortKeys(value: unknown): unknown {
-  if (value === null || typeof value !== 'object') return value;
+  it('sorts nested object keys while preserving array order', () => {
+    expect(stableStringify({ z: [{ b: 2, a: 1 }], a: 0 })).toBe('{"a":0,"z":[{"a":1,"b":2}]}');
+  });
 
-  if (Array.isArray(value)) {
-    return value.map(sortKeys);
-  }
+  it('supports indentation', () => {
+    expect(stableStringify({ b: 2, a: 1 }, 2)).toBe('{\n  "a": 1,\n  "b": 2\n}');
+  });
 
-  if (value instanceof Date) return value;
-
-  const obj = value as Record<string, unknown>;
-  const sorted: Record<string, unknown> = {};
-  for (const key of Object.keys(obj).sort()) {
-    sorted[key] = sortKeys(obj[key]);
-  }
-  return sorted;
-}
-
-/**
- * Parse JSON and re-serialize with stable key order.
- * Useful for normalizing JSON strings that may come from external sources.
- */
-export function normalizeJson(jsonString: string, space?: number | string): string {
-  try {
-    return stableStringify(JSON.parse(jsonString), space);
-  } catch {
-    return jsonString; // Not valid JSON, return as-is
-  }
-}
+  it('returns invalid JSON unchanged', () => {
+    const invalid = '{not-json';
+    expect(normalizeJson(invalid)).toBe(invalid);
+  });
+});
