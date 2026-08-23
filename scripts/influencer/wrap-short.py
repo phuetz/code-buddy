@@ -103,21 +103,198 @@ def merge_apostrophes(words):
             out.append(dict(w))
     return out
 
+
+# Whisper éclate « 4.5 » en « 4. »+« 5 », « 4 »+« . »+« 5 » ou « 4 »+« 5 ».
+# Un jeton « 4. » matchait aussi la fin de phrase de cards() → deux cartons.
+_MAX_FUSE_GAP = 0.40
+_CORE_PUNCT = '.,!?;:«»"\' '
+_VERSION_LEAD = re.compile(
+    r'^(?:v|gpt|claude|grok|qwen|quen|glm|gemini|gémini|seedance|'
+    r'kimi|opus|fable|deepseek|llama|mistral|nemotron|chatgpt)$',
+    re.I)
+_PERCENT = re.compile(r'^(?:%|％|pour-?cents?)$', re.I)
+_MAGNITUDE = re.compile(
+    r'^(?:milliards?|millions?|mille|millièmes?|%|％|pour-?cents?)$', re.I)
+_BARE_SEP = re.compile(r'^[.,]$')
+_FRAC = re.compile(r'^(\d{1,3})([.,!?;:]*)?$')
+_LEAD_FRAC = re.compile(r'^([.,])(\d{1,3})([.,!?;:]*)?$')
+_INT_HEAD = re.compile(r'^(?:[A-Za-z][A-Za-z0-9+-]*?)?\d{1,3}$')
+_DEC_HEAD = re.compile(r'^(.*?)(\d+)([.,])$')
+_THOUSANDS_GRP = re.compile(r'^\d{3}$')
+_PURE_INT = re.compile(r'^\d{1,3}$')
+_NUMISH = re.compile(
+    r'^(?:[vV]?\d+(?:[.,]\d+)?%?|[A-Za-z]+-?\d+(?:[.,]\d+)?)$')
+
+
+def _core(tok):
+    return (tok or '').strip(_CORE_PUNCT)
+
+
+def _close(a, b):
+    return (b['t0'] - a['t1']) < _MAX_FUSE_GAP
+
+
+def _fuse(parts, text):
+    return {'t0': parts[0]['t0'], 't1': parts[-1]['t1'], 'w': text}
+
+
+def _is_dec_head(text):
+    """« 4. », « 3, », « v2. », « GPT-4. » — pas une année ni un nombre déjà entier.
+
+    « 4.6, » / « Grok 4.6, » ont déjà leur partie fractionnaire : le [.,] final
+    n'est que de la ponctuation, pas un séparateur décimal ouvert.
+    """
+    m = _DEC_HEAD.match(text or '')
+    if not m or not (1 <= len(m.group(2)) <= 3):
+        return False
+    if re.search(r'\d[.,]\d*$', m.group(1) or ''):
+        return False
+    return True
+
+
+def _is_numish_token(text):
+    c = _core(text)
+    if not c:
+        return False
+    if c in '%％' or _PERCENT.match(c) or _THOUSANDS_GRP.match(c):
+        return True
+    if _NUMISH.match(c) or _is_dec_head(text or ''):
+        return True
+    return bool(re.match(r'^[.,]\d', text or ''))
+
+
+def _missing_sep(prev, nxt_after):
+    """Point pour une version (Claude 4.5), virgule pour un nombre FR (3,7 milliards)."""
+    if nxt_after and _MAGNITUDE.match(_core(nxt_after['w'])):
+        return ','
+    if prev and _VERSION_LEAD.match(_core(prev['w'])):
+        return '.'
+    return '.'
+
+
+def sticky_with_next(a, b):
+    """Vrai si a et b doivent rester sur le même carton (version, milliers, %)."""
+    ca, cb = _core(a['w']), _core(b['w'])
+    if _VERSION_LEAD.match(ca) and _is_numish_token(b['w']):
+        return True
+    if _is_numish_token(a['w']) and _PERCENT.match(cb):
+        return True
+    if _PURE_INT.match(ca) and _THOUSANDS_GRP.match(cb):
+        return True
+    if _is_dec_head(a['w']) and re.match(r'^\d', (b['w'] or '').lstrip()):
+        return True
+    if _INT_HEAD.match(ca) and _LEAD_FRAC.match((b['w'] or '').strip()):
+        return True
+    return False
+
+
+def _is_sentence_end(text, nxt):
+    if re.search(r'[!?…]$', text or ''):
+        return True
+    if not (text or '').endswith('.'):
+        return False
+    if nxt and _is_dec_head(text) and re.match(r'^\d', (nxt['w'] or '').lstrip()):
+        return False
+    return True
+
+
+def merge_numeric_fragments(words):
+    """Recolle décimaux, versions, milliers et pourcentages éclatés par whisper.
+
+    Timing du jeton fusionné = début du premier, fin du dernier. Idempotent
+    sur un nombre déjà entier (« 4.5 », « v2.5 »).
+    """
+    out = []
+    i = 0
+    n = len(words)
+    while i < n:
+        w = words[i]
+        nxt = words[i + 1] if i + 1 < n else None
+        nxt2 = words[i + 2] if i + 2 < n else None
+        prev = out[-1] if out else None
+
+        # « 4 » + « . » + « 5 »
+        if (nxt and nxt2 and _close(w, nxt) and _close(nxt, nxt2)
+                and _INT_HEAD.match(_core(w['w']))
+                and _BARE_SEP.match((nxt['w'] or '').strip())
+                and _FRAC.match((nxt2['w'] or '').strip())):
+            out.append(_fuse([w, nxt, nxt2], w['w'] + nxt['w'] + nxt2['w']))
+            i += 3
+            continue
+
+        if nxt and _close(w, nxt):
+            # « 4. » + « 5 »  /  « v2. » + « 5 »  /  « GPT-4. » + « 5 »
+            if _is_dec_head(w['w']) and _FRAC.match((nxt['w'] or '').strip()):
+                out.append(_fuse([w, nxt], w['w'] + nxt['w']))
+                i += 2
+                continue
+            # « 4 » + « .5 »
+            if (_INT_HEAD.match(_core(w['w']))
+                    and _LEAD_FRAC.match((nxt['w'] or '').strip())):
+                out.append(_fuse([w, nxt], w['w'] + nxt['w']))
+                i += 2
+                continue
+            # « 1 » + « 000 » (+ groupes de 3)
+            if _PURE_INT.match(_core(w['w'])) and _THOUSANDS_GRP.match(_core(nxt['w'])):
+                parts = [w, nxt]
+                j = i + 2
+                while (j < n and _close(parts[-1], words[j])
+                       and _THOUSANDS_GRP.match(_core(words[j]['w']))):
+                    parts.append(words[j])
+                    j += 1
+                out.append(_fuse(parts, ' '.join(p['w'] for p in parts)))
+                i = j
+                continue
+            # « 12 » + « % »
+            if (_is_numish_token(w['w']) and not (w['w'] or '').endswith('%')
+                    and _PERCENT.match(_core(nxt['w']) or nxt['w'])):
+                out.append(_fuse([w, nxt], w['w'] + ' ' + nxt['w']))
+                i += 2
+                continue
+            # « 4 » + « 5 » (séparateur tombé) — 1+1, ou version, ou 1+N devant une magnitude
+            ca, cb = _core(w['w']), _core(nxt['w'])
+            if re.fullmatch(r'\d{1,2}', ca or '') and re.fullmatch(r'\d{1,2}', cb or ''):
+                nxt_after = nxt2
+                one_plus_one = len(ca) == 1 and len(cb) == 1
+                versionish = prev and _VERSION_LEAD.match(_core(prev['w']))
+                magnitude = nxt_after and _MAGNITUDE.match(_core(nxt_after['w']))
+                if one_plus_one or versionish or (len(ca) == 1 and magnitude):
+                    trail = re.search(r'[,.!?;:]+$', nxt['w'] or '')
+                    text = ca + _missing_sep(prev, nxt_after) + cb
+                    if trail:
+                        text += trail.group(0)
+                    out.append(_fuse([w, nxt], text))
+                    i += 2
+                    continue
+
+        out.append(dict(w))
+        i += 1
+    return out
+
+
 def cards(words, max_words=4, max_dur=2.6):
     """Groupe les mots en cartes de sous-titres courtes."""
-    words = merge_apostrophes(words)
+    words = merge_numeric_fragments(merge_apostrophes(words))
     out, cur = [], []
-    for w in words:
+    i = 0
+    while i < len(words):
+        w = words[i]
+        nxt = words[i + 1] if i + 1 < len(words) else None
         cur.append(w)
         dur = cur[-1]['t1'] - cur[0]['t0']
-        if (len(cur) >= max_words or dur >= max_dur
-                or re.search(r'[.!?…]$', w['w'])):
+        sentence_end = _is_sentence_end(w['w'], nxt)
+        over = len(cur) >= max_words or dur >= max_dur or sentence_end
+        if over:
+            if nxt and sticky_with_next(w, nxt) and len(cur) < max_words + 3:
+                i += 1
+                continue
             out.append({'t0': cur[0]['t0'], 't1': cur[-1]['t1'],
-                        'text': ' '.join(x['w'] for x in cur), 'words': cur})
+                        'text': ' '.join(x['w'] for x in cur), 'words': list(cur)})
             cur = []
+        i += 1
     if cur:
         out.append({'t0': cur[0]['t0'], 't1': cur[-1]['t1'],
-                    'text': ' '.join(x['w'] for x in cur), 'words': cur})
+                    'text': ' '.join(x['w'] for x in cur), 'words': list(cur)})
     # jointures : pas de trous < 0.3s
     for a, b in zip(out, out[1:]):
         if 0 < b['t0'] - a['t1'] < 0.3:

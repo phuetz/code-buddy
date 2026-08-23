@@ -3,6 +3,7 @@
 import importlib.util
 import json
 from pathlib import Path
+import re
 import sys
 import tempfile
 import unittest
@@ -48,6 +49,192 @@ class CardsTest(unittest.TestCase):
         self.assertEqual(len(cards), 1)
         self.assertEqual([w['w'] for w in cards[0]['words']], ['Un', 'agent', 'IA.'])
         self.assertEqual(cards[0]['text'], 'Un agent IA.')
+
+
+def _texts(cards):
+    return [c['text'] for c in cards]
+
+
+def _joined(words):
+    return [w['w'] for w in wrap_short.merge_numeric_fragments(words)]
+
+
+class MergeNumericFragmentsTest(unittest.TestCase):
+    """Karaoké : un décimal/version/%/milliers reste UN jeton, jamais coupé."""
+
+    def test_claude_4_point_5_eclate_en_4_dot_puis_5(self):
+        words = [
+            word(0.00, 0.35, 'Claude'),
+            word(0.35, 0.55, '4.'),
+            word(0.55, 0.80, '5'),
+            word(0.90, 1.20, 'sort'),
+        ]
+        self.assertEqual(_joined(words), ['Claude', '4.5', 'sort'])
+        fused = wrap_short.merge_numeric_fragments(words)
+        self.assertEqual(fused[1]['t0'], 0.35)
+        self.assertEqual(fused[1]['t1'], 0.80)
+
+    def test_triple_4_point_5(self):
+        words = [
+            word(0.0, 0.2, '4'),
+            word(0.2, 0.25, '.'),
+            word(0.25, 0.4, '5'),
+        ]
+        self.assertEqual(_joined(words), ['4.5'])
+
+    def test_4_et_5_sans_separateur_quand_le_transcript_dit_4_5(self):
+        words = [
+            word(0.0, 0.3, 'Claude'),
+            word(0.3, 0.45, '4'),
+            word(0.45, 0.60, '5'),
+        ]
+        self.assertEqual(_joined(words), ['Claude', '4.5'])
+
+    def test_3_virgule_7_milliards(self):
+        words = [
+            word(0.0, 0.2, 'coûte'),
+            word(0.2, 0.4, '3,'),
+            word(0.4, 0.55, '7'),
+            word(0.55, 1.0, 'milliards'),
+        ]
+        self.assertEqual(_joined(words), ['coûte', '3,7', 'milliards'])
+
+    def test_3_7_milliards_separateur_tombe(self):
+        words = [
+            word(0.0, 0.2, '3'),
+            word(0.2, 0.35, '7'),
+            word(0.35, 0.8, 'milliards'),
+        ]
+        self.assertEqual(_joined(words), ['3,7', 'milliards'])
+
+    def test_v2_5(self):
+        self.assertEqual(
+            _joined([word(0.0, 0.2, 'v2.'), word(0.2, 0.4, '5')]),
+            ['v2.5'],
+        )
+
+    def test_gpt_4_5(self):
+        self.assertEqual(
+            _joined([word(0.0, 0.3, 'GPT-4.'), word(0.3, 0.5, '5')]),
+            ['GPT-4.5'],
+        )
+
+    def test_1_000_et_500_000(self):
+        self.assertEqual(
+            _joined([word(0.0, 0.2, '1'), word(0.2, 0.5, '000')]),
+            ['1 000'],
+        )
+        self.assertEqual(
+            _joined([
+                word(0.0, 0.2, '500'),
+                word(0.2, 0.4, '000'),
+            ]),
+            ['500 000'],
+        )
+
+    def test_12_pourcent(self):
+        self.assertEqual(
+            _joined([word(0.0, 0.2, '12'), word(0.2, 0.4, '%')]),
+            ['12 %'],
+        )
+
+    def test_deja_entier_idempotent(self):
+        words = [
+            word(0.0, 0.3, 'Claude'),
+            word(0.3, 0.6, '4.5'),
+            word(0.7, 1.0, 'v2.5'),
+            word(1.0, 1.3, '1 000'),
+        ]
+        self.assertEqual(_joined(words), ['Claude', '4.5', 'v2.5', '1 000'])
+
+    def test_ne_colle_pas_une_annee_et_un_chiffre_suivant(self):
+        words = [
+            word(0.0, 0.4, '2024.'),
+            word(1.0, 1.2, '5'),
+            word(1.2, 1.6, 'personnes'),
+        ]
+        self.assertEqual(_joined(words), ['2024.', '5', 'personnes'])
+
+    def test_nombre_deja_entier_avec_virgule_finale(self):
+        words = [
+            word(0.0, 0.4, 'Grok'),
+            word(0.4, 0.8, '4.6,'),
+            word(0.9, 1.1, '13'),
+            word(1.1, 1.4, 'août'),
+        ]
+        self.assertEqual(_joined(words), ['Grok', '4.6,', '13', 'août'])
+
+
+class CardsKeepDecimalsTest(unittest.TestCase):
+    def test_transcription_type_whisper_un_carton_par_nombre(self):
+        # Simulation d'une passe whisper small : décimaux éclatés + versions + milliers.
+        words = [
+            word(0.00, 0.30, 'le'),
+            word(0.30, 0.50, 'même'),
+            word(0.50, 0.80, 'socle'),
+            word(0.80, 1.00, 'que'),
+            word(1.00, 1.20, '4.'),
+            word(1.20, 1.40, '5'),
+            word(1.50, 1.80, 'Claude'),
+            word(1.80, 2.00, '4.'),
+            word(2.00, 2.20, '5'),
+            word(2.30, 2.50, 'soit'),
+            word(2.50, 2.70, '3,'),
+            word(2.70, 2.90, '7'),
+            word(2.90, 3.40, 'milliards'),
+            word(3.50, 3.70, 'v2.'),
+            word(3.70, 3.90, '5'),
+            word(4.00, 4.20, 'et'),
+            word(4.20, 4.40, '1'),
+            word(4.40, 4.70, '000'),
+            word(4.80, 5.10, 'Qwen'),
+            word(5.10, 5.40, '3.8'),
+            word(5.50, 5.80, 'plus'),
+            word(5.80, 6.00, '12'),
+            word(6.00, 6.20, '%'),
+        ]
+        cards = wrap_short.cards(words, max_words=3)
+        blob = ' | '.join(_texts(cards))
+        self.assertIn('4.5', blob)
+        self.assertIn('3,7', blob)
+        self.assertIn('v2.5', blob)
+        self.assertIn('1 000', blob)
+        self.assertIn('Qwen 3.8', blob)
+        self.assertIn('12 %', blob)
+        for c in cards:
+            self.assertNotRegex(c['text'], r'\d[.,]\s*$')
+            self.assertFalse(
+                re.fullmatch(r'\d+[.,]?', c['text'].strip()),
+                f'carton orphelin {c["text"]!r}',
+            )
+
+    def test_qwen_et_pourcent_pas_coupes_par_max_words(self):
+        words = [
+            word(0.0, 0.2, 'sur'),
+            word(0.2, 0.4, 'le'),
+            word(0.4, 0.7, 'Qwen'),
+            word(0.7, 1.0, '3.8'),
+            word(1.1, 1.3, 'gagne'),
+            word(1.3, 1.5, '12'),
+            word(1.5, 1.7, '%'),
+        ]
+        cards = wrap_short.cards(words, max_words=3)
+        blob = ' | '.join(_texts(cards))
+        self.assertIn('Qwen 3.8', blob)
+        self.assertIn('12 %', blob)
+
+    def test_vraie_fin_de_phrase_reste_coupee(self):
+        cards = wrap_short.cards(
+            [
+                word(0.0, 0.3, 'C\'est'),
+                word(0.3, 0.8, 'fini.'),
+                word(1.2, 1.5, 'Les'),
+                word(1.5, 1.9, 'autres'),
+            ],
+            max_words=3,
+        )
+        self.assertEqual(_texts(cards)[0], "C'est fini.")
+        self.assertTrue(any(t.startswith('Les') for t in _texts(cards)))
 
 
 class KaraokeEventsTest(unittest.TestCase):
