@@ -918,6 +918,17 @@ export const TOOL_METADATA: ToolMetadata[] = [
     description: 'Chain multiple local video clips into one longer film with transitions (xfade/gl), optional background music (ducked) and voiceover, via ffmpeg; saved under .codebuddy/media-generation/films/'
   },
   {
+    name: 'video_quality_gate',
+    category: 'media',
+    keywords: [
+      'video', 'quality', 'gate', 'youtube', 'master', 'visual', 'identity', 'anatomy',
+      'fashion', 'review', 'qa', 'qualité', 'contrôle', 'gate visuel', 'flicker',
+    ],
+    priority: 8,
+    description:
+      'Fail-closed visual quality gate plus digest-bound YouTube master human review; never publishes',
+  },
+  {
     name: 'video_route',
     category: 'media',
     keywords: [

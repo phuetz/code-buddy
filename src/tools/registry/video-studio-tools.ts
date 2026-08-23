@@ -5,12 +5,14 @@
  */
 
 import type { ITool } from './types.js';
+import { VideoQualityGateTool } from '../video-quality-gate-tool.js';
 import { VideoRouteTool } from '../video-route-tool.js';
 
-export { VideoRouteTool };
+export { VideoQualityGateTool, VideoRouteTool };
 
 export function createVideoStudioTools(): ITool[] {
   return [
+    new VideoQualityGateTool(),
     new VideoRouteTool(),
   ];
 }

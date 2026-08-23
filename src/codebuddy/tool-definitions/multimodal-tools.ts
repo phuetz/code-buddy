@@ -503,6 +503,71 @@ const HYBRID_REQUEST_PROPERTIES = {
   upscale_4k: { type: "boolean", description: "Optional 4K upscale surcharge on Flow engines." },
 };
 
+export const VIDEO_QUALITY_GATE_TOOL: CodeBuddyTool = {
+  type: "function",
+  function: {
+    name: "video_quality_gate",
+    description:
+      "Fail-closed visual quality gate (identity, anatomy, flicker, sharpness, master properties) plus digest-bound YouTube master human review. Never writes files, never publishes, never calls YouTube.",
+    parameters: {
+      type: "object",
+      properties: {
+        operation: {
+          type: "string",
+          enum: ["evaluate_visual", "review_youtube", "request_youtube_changes"],
+          description:
+            "evaluate_visual: score a schema-V1 visual gate report. review_youtube / request_youtube_changes: digest-bound human review of a technical YouTube master report.",
+        },
+        report: {
+          type: "object",
+          description:
+            "VisualGateReport (evaluate_visual) or YouTubeTechnicalReport (review_youtube / request_youtube_changes).",
+        },
+        profile: {
+          type: "string",
+          enum: ["native-fashion-v1", "legacy-localized-v1"],
+          description: "Threshold profile. Defaults to report.profile for evaluate_visual.",
+        },
+        clip_sha256: {
+          type: "string",
+          description: "Optional lowercase SHA-256; when set, the visual report must match this clip digest.",
+        },
+        confirm_outfit: {
+          type: "boolean",
+          description: "Human confirmation that outfit matches the approved look (evaluate_visual).",
+        },
+        confirm_decor_framing: {
+          type: "boolean",
+          description: "Human confirmation that decor/framing is approved (evaluate_visual).",
+        },
+        expected_video_sha256: {
+          type: "string",
+          description: "Expected master digest for YouTube review operations.",
+        },
+        reviewer: { type: "string", description: "Reviewer name (YouTube review operations)." },
+        reason: { type: "string", description: "Review reason (YouTube review operations)." },
+        checks: {
+          type: "object",
+          description: "YouTube human-review checks (all booleans).",
+          properties: {
+            voice: { type: "boolean", description: "Voice rights and performance approved." },
+            lip_sync: { type: "boolean", description: "Lip sync approved." },
+            identity: { type: "boolean", description: "Identity/face approved." },
+            anatomy: { type: "boolean", description: "Anatomy approved." },
+            captions: { type: "boolean", description: "Captions approved." },
+            disclosure: { type: "boolean", description: "Synthetic-media disclosure approved." },
+            editorial: { type: "boolean", description: "Editorial approved." },
+          },
+          required: ["voice", "lip_sync", "identity", "anatomy", "captions", "disclosure", "editorial"],
+          additionalProperties: false,
+        },
+      },
+      required: ["operation", "report"],
+      additionalProperties: false,
+    },
+  },
+};
+
 export const VIDEO_ROUTE_TOOL: CodeBuddyTool = {
   type: "function",
   function: {
@@ -1185,6 +1250,7 @@ export const MULTIMODAL_TOOLS: CodeBuddyTool[] = [
   GPU_MEDIA_JOB_TOOL,
   VIDEO_GENERATE_TOOL,
   VIDEO_STITCH_TOOL,
+  VIDEO_QUALITY_GATE_TOOL,
   VIDEO_ROUTE_TOOL,
   SCREENSHOT_TOOL,
   CAMERA_SNAPSHOT_TOOL,
