@@ -67,13 +67,12 @@ describe('withRetry', () => {
 
   it('applies exponential backoff', async () => {
     const delays: number[] = [];
-    const originalSetTimeout = globalThis.setTimeout;
-    vi.spyOn(globalThis, 'setTimeout').mockImplementation((fn: Function, delay?: number) => {
+    vi.spyOn(globalThis, 'setTimeout').mockImplementation(((fn: () => void, delay?: number) => {
       if (delay && delay > 0) delays.push(delay);
       // Execute immediately for test speed
       fn();
       return 0 as unknown as ReturnType<typeof setTimeout>;
-    });
+    }) as unknown as typeof setTimeout);
 
     const op = vi
       .fn()

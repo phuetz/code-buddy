@@ -10,14 +10,20 @@ vi.mock('electron', () => ({
 
 import { MCPManager } from '../src/main/mcp/mcp-manager';
 
+type PrivateMCPManager = MCPManager & {
+  clients: Map<string, unknown>;
+  tools: Map<string, unknown>;
+  reconnectServer: ReturnType<typeof vi.fn>;
+};
+
 function createManagerWithTool(toolName: string) {
   const manager = new MCPManager();
   const mockClient = {
     callTool: vi.fn().mockResolvedValue({ ok: true }),
-  } as any;
+  };
 
-  (manager as any).clients = new Map([['server-1', mockClient]]);
-  (manager as any).tools = new Map([
+  (manager as unknown as PrivateMCPManager).clients = new Map([['server-1', mockClient]]);
+  (manager as unknown as PrivateMCPManager).tools = new Map([
     [
       toolName,
       {
@@ -73,10 +79,10 @@ describe('MCP tool name parsing', () => {
           ],
         })
         .mockResolvedValueOnce({ ok: true }),
-    } as any;
+    };
 
-    (manager as any).clients = new Map([['server-1', mockClient]]);
-    (manager as any).tools = new Map([
+    (manager as unknown as PrivateMCPManager).clients = new Map([['server-1', mockClient]]);
+    (manager as unknown as PrivateMCPManager).tools = new Map([
       [
         toolName,
         {
@@ -88,11 +94,11 @@ describe('MCP tool name parsing', () => {
         },
       ],
     ]);
-    (manager as any).reconnectServer = vi.fn().mockResolvedValue(true);
+    (manager as unknown as PrivateMCPManager).reconnectServer = vi.fn().mockResolvedValue(true);
 
     const result = await manager.callTool(toolName, { display_index: 0 });
 
-    expect((manager as any).reconnectServer).toHaveBeenCalledWith('server-1');
+    expect((manager as unknown as PrivateMCPManager).reconnectServer).toHaveBeenCalledWith('server-1');
     expect(mockClient.callTool).toHaveBeenCalledTimes(2);
     expect(result).toEqual({ ok: true });
   });
@@ -109,10 +115,10 @@ describe('MCP tool name parsing', () => {
           },
         ],
       }),
-    } as any;
+    };
 
-    (manager as any).clients = new Map([['server-1', mockClient]]);
-    (manager as any).tools = new Map([
+    (manager as unknown as PrivateMCPManager).clients = new Map([['server-1', mockClient]]);
+    (manager as unknown as PrivateMCPManager).tools = new Map([
       [
         toolName,
         {
@@ -124,11 +130,11 @@ describe('MCP tool name parsing', () => {
         },
       ],
     ]);
-    (manager as any).reconnectServer = vi.fn().mockResolvedValue(true);
+    (manager as unknown as PrivateMCPManager).reconnectServer = vi.fn().mockResolvedValue(true);
 
     const result = await manager.callTool(toolName, { display_index: 0 });
 
-    expect((manager as any).reconnectServer).not.toHaveBeenCalled();
+    expect((manager as unknown as PrivateMCPManager).reconnectServer).not.toHaveBeenCalled();
     expect(mockClient.callTool).toHaveBeenCalledTimes(1);
     expect(result).toEqual({
       content: [

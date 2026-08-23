@@ -59,13 +59,13 @@ async function configure(page: Page): Promise<void> {
       localStorage.setItem('COWORK_NEW_SHELL', 'true');
       localStorage.setItem('cowork.tourSeen', '1');
     } catch { /* ignore */ }
-    const api = (window as unknown as { electronAPI: any }).electronAPI;
+    const api = (window as unknown as { electronAPI: { config: { get: () => Promise<Record<string, unknown>>; save: (cfg: unknown) => Promise<void> } } }).electronAPI;
     const cfg = await api.config.get();
     const patch = provider === 'chatgpt'
       ? { provider: 'openai', baseUrl: 'https://chatgpt.com/backend-api/codex', model, apiKey: 'oauth-chatgpt' }
       : { provider: 'ollama', baseUrl: 'http://localhost:11434', model, apiKey: 'ollama' };
     const configSets = Array.isArray(cfg.configSets) && cfg.configSets.length
-      ? cfg.configSets.map((c: any, i: number) => (i === 0 ? { ...c, ...patch } : c))
+      ? (cfg.configSets as Array<Record<string, unknown>>).map((c, i) => (i === 0 ? { ...c, ...patch } : c))
       : [{ name: 'Default', ...patch }];
     await api.config.save({ ...cfg, ...patch, configSets });
   }, { model: MODEL, provider: PROVIDER });
@@ -121,7 +121,7 @@ test('App Studio confirmation modal is delivered to the active renderer', async 
     await page.screenshot({ path: path.join(SHOT_DIR, '02-composer-filled.png') });
     // Trigger the SAME generation path programmatically (identical delivery path).
     await page.evaluate(async (cwd) => {
-      const api = (window as unknown as { electronAPI: any }).electronAPI;
+      const api = (window as unknown as { electronAPI: { invoke: (args: unknown) => Promise<unknown> } }).electronAPI;
       const prompt =
         'Crée une application web minimale. Utilise IMPÉRATIVEMENT l\'outil `create_file` pour ' +
         'créer un fichier `index.html` contenant une page "Hello World" avec un titre centré. ' +

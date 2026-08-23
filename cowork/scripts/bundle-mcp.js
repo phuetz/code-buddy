@@ -230,55 +230,6 @@ async function bundleWithEsbuild() {
   }
 }
 
-function transpileFallback() {
-  const ts = require('typescript');
-
-  console.log('esbuild unavailable, falling back to TypeScript transpile-only');
-  console.log('Dependencies will NOT be bundled. MCP servers may fail in packaged builds.\n');
-
-  const sourceFiles = fs.readdirSync(SRC_MCP_DIR).filter((file) => file.endsWith('.ts'));
-
-  for (const file of sourceFiles) {
-    const inputPath = path.join(SRC_MCP_DIR, file);
-    const outputPath = path.join(DIST_MCP_DIR, file.replace(/\.ts$/, '.js'));
-    const sourceText = fs.readFileSync(inputPath, 'utf8');
-    const result = ts.transpileModule(sourceText, {
-      compilerOptions: {
-        module: ts.ModuleKind.CommonJS,
-        target: ts.ScriptTarget.ES2022,
-        moduleResolution: ts.ModuleResolutionKind.NodeJs,
-        esModuleInterop: true,
-        resolveJsonModule: true,
-        allowSyntheticDefaultImports: true,
-      },
-      fileName: inputPath,
-      reportDiagnostics: true,
-    });
-
-    if (result.diagnostics?.length) {
-      const errors = result.diagnostics.filter(
-        (d) => d.category === ts.DiagnosticCategory.Error
-      );
-      if (errors.length > 0) {
-        throw new Error(
-          `${file}\n${errors.map((d) => ts.flattenDiagnosticMessageText(d.messageText, '\n')).join('\n')}`
-        );
-      }
-    }
-
-    fs.writeFileSync(outputPath, result.outputText);
-  }
-
-  for (const server of servers) {
-    const outfile = path.join(DIST_MCP_DIR, `${server.name}.js`);
-    const stats = fs.statSync(outfile);
-    const sizeKB = (stats.size / 1024).toFixed(2);
-    console.log(`Built ${server.description}`);
-    console.log(`   Entry: ${server.entry}`);
-    console.log(`   Output: dist-mcp/${server.name}.js (${sizeKB} KB, transpile-only)`);
-  }
-}
-
 async function stageBundledServers(
   sourceDir = DIST_MCP_DIR,
   stagedDir = STAGED_MCP_DIR,

@@ -36,7 +36,7 @@ describe('remote default working dir', () => {
     manager.setAgentExecutor({
       startSession: async (title, prompt, cwd) => {
         calls.push({ title, prompt, cwd });
-        return { id: 'session-1' } as any;
+        return { id: 'session-1' } as unknown as import('../src/main/session/types').Session;
       },
       continueSession: async () => {},
       stopSession: async () => {},
@@ -44,7 +44,7 @@ describe('remote default working dir', () => {
 
     manager.setDefaultWorkingDirectory('/tmp/default_workdir');
 
-    const router = (manager as any).messageRouter;
+    const router = (manager as unknown as { messageRouter: { routeMessage: (msg: unknown) => Promise<unknown> } }).messageRouter;
     await router.routeMessage(buildMessage());
 
     expect(calls).toHaveLength(1);
