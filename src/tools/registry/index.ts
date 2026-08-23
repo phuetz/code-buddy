@@ -346,6 +346,7 @@ export {
   VideoLongFormPlanTool,
   VideoQualityGateTool,
   VideoRouteTool,
+  VideoTrailerPlanTool,
   createVideoStudioTools,
 } from './video-studio-tools.js';
 

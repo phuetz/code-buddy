@@ -595,6 +595,40 @@ export const VIDEO_LONG_FORM_PLAN_TOOL: CodeBuddyTool = {
   },
 };
 
+export const VIDEO_TRAILER_PLAN_TOOL: CodeBuddyTool = {
+  type: "function",
+  function: {
+    name: "video_trailer_plan",
+    description:
+      "Validate a cinematic book-trailer plan or compile a PREVIEW routing estimate. Never generates media, never spends Flow credits, never authorizes publication (executionAuthorized is always false).",
+    parameters: {
+      type: "object",
+      properties: {
+        operation: {
+          type: "string",
+          enum: ["validate", "preview"],
+          description:
+            "validate: fail-closed editorial/status validation. preview: map shots to hybrid-video requests and estimate routing.",
+        },
+        plan: {
+          type: "object",
+          description:
+            "CinematicTrailerPlan (schemaVersion 1). Accepts unknown/partial values; malformed plans collapse to INCOMPLETE with blockers.",
+        },
+        capacity: {
+          type: "object",
+          description: "Required for preview: available engines and Flow credit budget.",
+          properties: HYBRID_CAPACITY_PROPERTIES,
+          required: ["darkstar", "ministar", "google_flow", "remaining_flow_credits", "max_flow_credits_per_batch"],
+          additionalProperties: false,
+        },
+      },
+      required: ["operation", "plan"],
+      additionalProperties: false,
+    },
+  },
+};
+
 export const VIDEO_ROUTE_TOOL: CodeBuddyTool = {
   type: "function",
   function: {
@@ -1279,6 +1313,7 @@ export const MULTIMODAL_TOOLS: CodeBuddyTool[] = [
   VIDEO_STITCH_TOOL,
   VIDEO_QUALITY_GATE_TOOL,
   VIDEO_LONG_FORM_PLAN_TOOL,
+  VIDEO_TRAILER_PLAN_TOOL,
   VIDEO_ROUTE_TOOL,
   SCREENSHOT_TOOL,
   CAMERA_SNAPSHOT_TOOL,

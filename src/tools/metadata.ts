@@ -940,6 +940,17 @@ export const TOOL_METADATA: ToolMetadata[] = [
       'Assess or compile an original long-form episode plan; never writes files or auto-publishes',
   },
   {
+    name: 'video_trailer_plan',
+    category: 'media',
+    keywords: [
+      'video', 'trailer', 'bande-annonce', 'cinematic', 'storyboard', 'book',
+      'preview', 'plan', 'narrative', 'hook', 'cta',
+    ],
+    priority: 8,
+    description:
+      'Validate a cinematic book-trailer plan or compile a preview routing estimate; never generates media',
+  },
+  {
     name: 'video_route',
     category: 'media',
     keywords: [
