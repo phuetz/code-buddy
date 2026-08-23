@@ -291,9 +291,9 @@ describe('CodeBuddyMCPServer', () => {
 
     it('should register all tools with the MCP server', () => {
       const mcpServer = (server as unknown as { mcpServer: { tool: jest.Mock } }).mcpServer;
-      // 7 original + 3 agent + 2 memory + 3 session + 2 desktop (read-only;
-      // the 4 control tools are gated behind CODEBUDDY_MCP_DESKTOP_CONTROL=1) = 17 tools
-      expect(mcpServer.tool).toHaveBeenCalledTimes(17);
+      // 7 original + 3 agent + 2 memory + 2 CKG + 3 session + 2 desktop (read-only;
+      // the 4 control tools are gated behind CODEBUDDY_MCP_DESKTOP_CONTROL=1) = 19 tools
+      expect(mcpServer.tool).toHaveBeenCalledTimes(19);
     });
 
     it('should map read_file to TextEditorTool.view', async () => {

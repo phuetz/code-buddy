@@ -211,10 +211,10 @@ describe('MCP Agent Intelligence Layer', () => {
   // =========================================================================
 
   describe('tool registration', () => {
-    it('should register all 17 tools', () => {
-      // 15 core/agent/memory/session + 2 read-only desktop tools (the 4 desktop
-      // control tools are gated behind CODEBUDDY_MCP_DESKTOP_CONTROL=1).
-      expect(registeredTools.size).toBe(17);
+    it('should register all 19 tools', () => {
+      // 15 core/agent/memory/session + 2 CKG + 2 read-only desktop tools (the 4
+      // desktop control tools are gated behind CODEBUDDY_MCP_DESKTOP_CONTROL=1).
+      expect(registeredTools.size).toBe(19);
     });
 
     it('should register agent_chat tool', () => {
