@@ -1,11 +1,49 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { mkdtempSync, rmSync, existsSync, readFileSync } from 'fs';
+import { mkdtempSync, existsSync, readFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
+import { removeTmpDir } from '../helpers/tmp.js';
 import {
   CollectiveKnowledgeGraph,
+  type CkgEmbedder,
   type CkgRememberInput,
 } from '../../src/memory/collective-knowledge-graph.js';
+
+// Hybrid ranking and auto-linking are deterministic CKG behaviours. Keep their
+// tests independent from a downloaded local model, CPU scheduling, and small
+// platform-specific cosine differences by supplying clearly separated vectors.
+function fixtureEmbedding(text: string): Float32Array {
+  const normalized = text.toLowerCase();
+  if (/(immunoth[eé]rapie|anticorps|pd-1|tumeur|cancer)/u.test(normalized)) {
+    return Float32Array.from([0, 0, 0, 0, 1, 0, 0, 0]);
+  }
+  if (/(voix|vocal|robot|assistant|lent|retard|devstral)/u.test(normalized)) {
+    return Float32Array.from([1, 0, 0, 0, 0, 0, 0, 0]);
+  }
+  if (/(budget|argent|projet|travail)/u.test(normalized)) {
+    return Float32Array.from([0, 1, 0, 0, 0, 0, 0, 0]);
+  }
+  if (/(recette|g[aâ]teau|[œo]ufs|farine|beurre|ingr[eé]dient|p[aâ]tisserie)/u.test(normalized)) {
+    return Float32Array.from([0, 0, 1, 0, 0, 0, 0, 0]);
+  }
+  if (/(partage|machine|push git|sync)/u.test(normalized)) {
+    return Float32Array.from([0, 0, 0, 1, 0, 0, 0, 0]);
+  }
+  if (/(galax|d[eé]calage|astronom|distance)/u.test(normalized)) {
+    return Float32Array.from([0, 0, 0, 0, 0, 1, 0, 0]);
+  }
+  if (/(traitement x|maladie y|ne marche pas|r[eé]duit fortement)/u.test(normalized)) {
+    return Float32Array.from([0, 0, 0, 0, 0, 0, 1, 0]);
+  }
+  if (/(metformine|diab[eè]te|glyc[eé]mie|h[eé]moglobine|m[eé]dicament)/u.test(normalized)) {
+    return Float32Array.from([0, 0, 0, 0, 0, 0, 0, 1]);
+  }
+  return Float32Array.from([0, 0, 0, 0, 0, 0, 0, 0]);
+}
+
+const deterministicEmbedder: CkgEmbedder = {
+  embed: async (text) => ({ embedding: fixtureEmbedding(text) }),
+};
 
 // Real ledger on a tmp dir — no mocks. Two instances on the SAME ledger model two agents
 // sharing one collective store.
@@ -18,11 +56,7 @@ describe('CollectiveKnowledgeGraph (Phase 0)', () => {
     ledgerPath = join(dir, 'ckg-ledger.jsonl');
   });
   afterEach(() => {
-    try {
-      rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
-    } catch {
-      /* best effort */
-    }
+    removeTmpDir(dir);
   });
 
   const lesson: CkgRememberInput = {
@@ -144,7 +178,7 @@ describe('CollectiveKnowledgeGraph (Phase 0)', () => {
   });
 
   it('formats a <collective_knowledge> prompt block', async () => {
-    const ckg = new CollectiveKnowledgeGraph({ ledgerPath, agentId: 'host/repo' });
+    const ckg = new CollectiveKnowledgeGraph({ ledgerPath, agentId: 'host/repo', embedder: deterministicEmbedder });
     ckg.remember(lesson);
     const block = await ckg.formatCollectiveContext('mode vocal devstral');
     expect(block).toContain('<collective_knowledge>');
@@ -186,7 +220,8 @@ describe('CollectiveKnowledgeGraph (Phase 0)', () => {
 });
 
 // --- Phase 1: hybrid (semantic) retrieval + the measurable "B benefits from A" metric ---
-// Uses REAL local embeddings ($0, Xenova) — first run loads the model, hence the timeout.
+// Uses deterministic semantic fixture vectors; the production default remains
+// the local multilingual model, but ranking tests must not download or execute it.
 describe('CollectiveKnowledgeGraph — hybrid recall (semantic, $0)', () => {
   let dir: string;
   let ledgerPath: string;
@@ -195,11 +230,11 @@ describe('CollectiveKnowledgeGraph — hybrid recall (semantic, $0)', () => {
     ledgerPath = join(dir, 'ckg-ledger.jsonl');
   });
   afterEach(() => {
-    try { rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }); } catch { /* best effort */ }
+    removeTmpDir(dir);
   });
 
   it('paraphrase with no shared keywords still finds the right knowledge', async () => {
-    const ckg = new CollectiveKnowledgeGraph({ ledgerPath, agentId: 'host/repo' });
+    const ckg = new CollectiveKnowledgeGraph({ ledgerPath, agentId: 'host/repo', embedder: deterministicEmbedder });
     ckg.remember({ type: 'lesson', text: 'La voix du robot répond avec beaucoup de retard.' });
     ckg.remember({ type: 'lesson', text: 'La recette de gâteau demande trois œufs et du beurre.' });
     const hits = await ckg.recallHybrid('mon assistant parle trop lentement', { limit: 1 });
@@ -208,8 +243,8 @@ describe('CollectiveKnowledgeGraph — hybrid recall (semantic, $0)', () => {
   }, 60000);
 
   it('METRIC — agent B answers paraphrased queries correctly thanks to A (≥2/3 vs 0/3 baseline)', async () => {
-    const agentA = new CollectiveKnowledgeGraph({ ledgerPath, agentId: 'ministar/code-buddy' });
-    const agentB = new CollectiveKnowledgeGraph({ ledgerPath, agentId: 'laptop/code-buddy' });
+    const agentA = new CollectiveKnowledgeGraph({ ledgerPath, agentId: 'ministar/code-buddy', embedder: deterministicEmbedder });
+    const agentB = new CollectiveKnowledgeGraph({ ledgerPath, agentId: 'laptop/code-buddy', embedder: deterministicEmbedder });
 
     // Three semantically well-separated lessons (no shared keywords with the probes).
     const lessons = [
@@ -231,10 +266,9 @@ describe('CollectiveKnowledgeGraph — hybrid recall (semantic, $0)', () => {
     // A capitalizes the lessons into the collective.
     for (const l of lessons) agentA.remember({ type: 'lesson', name: l.key, text: l.text });
 
-    // B now recalls the RIGHT lesson for the paraphrased probes. Bar = ≥2/3: an honest,
-    // falsifiable capitalization proof that is robust to the default embedding model's known
-    // weakness on French (all-MiniLM is English-leaning — multilingual upgrade is a tracked
-    // improvement). The point is measurable: B went from 0 to ≥2 of 3 thanks to A.
+    // B now recalls the RIGHT lesson for the paraphrased probes. The orthogonal
+    // fixture vectors make the capitalization proof falsifiable without a model
+    // download or a platform-dependent similarity margin.
     let score = 0;
     for (const p of probes) {
       const top = await agentB.recallHybrid(p.q, { limit: 1 });
@@ -244,7 +278,7 @@ describe('CollectiveKnowledgeGraph — hybrid recall (semantic, $0)', () => {
   }, 90000);
 
   it('IMPROVEMENT — MMR returns DIVERSE results, not near-duplicates', async () => {
-    const ckg = new CollectiveKnowledgeGraph({ ledgerPath, agentId: 'host/repo' });
+    const ckg = new CollectiveKnowledgeGraph({ ledgerPath, agentId: 'host/repo', embedder: deterministicEmbedder });
     ckg.remember({ type: 'lesson', name: 'v1', text: 'La voix du robot répond trop lentement.' });
     ckg.remember({ type: 'lesson', name: 'v2', text: 'Le robot met trop de temps à répondre vocalement.' });
     ckg.remember({ type: 'lesson', name: 'sync', text: 'Le partage entre machines se fait par un push git.' });
@@ -267,7 +301,7 @@ describe('CollectiveKnowledgeGraph — cross-agent corroboration', () => {
     ledgerPath = join(dir, 'ckg-ledger.jsonl');
   });
   afterEach(() => {
-    try { rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }); } catch { /* best effort */ }
+    removeTmpDir(dir);
   });
 
   it('two DISTINCT agents agreeing raises corroboration + confidence', () => {
@@ -313,11 +347,11 @@ describe('CollectiveKnowledgeGraph — scientific discovery ingestion + auto-lin
     ledgerPath = join(dir, 'ckg-ledger.jsonl');
   });
   afterEach(() => {
-    try { rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }); } catch { /* best effort */ }
+    removeTmpDir(dir);
   });
 
   it('auto-links a new discovery to its nearest neighbour, NOT to unrelated ones', async () => {
-    const ckg = new CollectiveKnowledgeGraph({ ledgerPath, agentId: 'host/repo' });
+    const ckg = new CollectiveKnowledgeGraph({ ledgerPath, agentId: 'host/repo', embedder: deterministicEmbedder });
     // Two oncology/immunology findings (neighbours) + one astronomy finding (unrelated).
     await ckg.ingest({ name: 'd1', text: "L'immunothérapie par inhibiteurs de points de contrôle traite certains cancers.", autoLinkThreshold: 0.4 });
     const d2 = await ckg.ingest({ name: 'd2', text: 'Les anticorps anti-PD-1 stimulent le système immunitaire contre les tumeurs.', autoLinkThreshold: 0.4 });
@@ -333,7 +367,7 @@ describe('CollectiveKnowledgeGraph — scientific discovery ingestion + auto-lin
   }, 90000);
 
   it('tags neighbour links as supports/contradicts via a classifier (the "what works/doesn\'t" signal)', async () => {
-    const ckg = new CollectiveKnowledgeGraph({ ledgerPath, agentId: 'host/repo' });
+    const ckg = new CollectiveKnowledgeGraph({ ledgerPath, agentId: 'host/repo', embedder: deterministicEmbedder });
     // Stub NLI classifier: a finding that says "ne marche pas" contradicts its neighbour.
     const classifier = async (subject: string): Promise<'supports' | 'contradicts' | 'related_to'> =>
       subject.includes('ne marche pas') ? 'contradicts' : 'supports';
@@ -350,7 +384,7 @@ describe('CollectiveKnowledgeGraph — scientific discovery ingestion + auto-lin
   }, 90000);
 
   it('ingestPublication stores a discovery recallable by paraphrase', async () => {
-    const ckg = new CollectiveKnowledgeGraph({ ledgerPath, agentId: 'host/repo' });
+    const ckg = new CollectiveKnowledgeGraph({ ledgerPath, agentId: 'host/repo', embedder: deterministicEmbedder });
     await ckg.ingestPublication({
       id: 'PMID:1',
       title: 'La metformine réduit la glycémie chez les patients diabétiques de type 2',
