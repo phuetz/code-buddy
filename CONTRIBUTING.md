@@ -1,403 +1,135 @@
 # Contributing to Code Buddy
 
-First off, thank you for considering contributing to Code Buddy! It's people like you that make Code Buddy such a great tool.
+Thank you for helping make Code Buddy better. Small, focused pull requests are
+welcome, including documentation and test improvements.
 
-## Table of Contents
+By participating, you agree to follow our [Code of Conduct](CODE_OF_CONDUCT.md).
+Please report vulnerabilities privately as described in
+[SECURITY.md](SECURITY.md).
 
-- [Code of Conduct](#code-of-conduct)
-- [Getting Started](#getting-started)
-- [Development Process](#development-process)
-- [Pull Request Process](#pull-request-process)
-- [Coding Standards](#coding-standards)
-- [Testing Guidelines](#testing-guidelines)
-- [Commit Message Guidelines](#commit-message-guidelines)
-- [Project Structure](#project-structure)
+## Five-minute setup
 
-## Code of Conduct
-
-This project and everyone participating in it is governed by the [Contributor Covenant Code of Conduct](https://www.contributor-covenant.org/version/2/0/code_of_conduct/). By participating, you are expected to uphold this code.
-
-## Getting Started
-
-### Prerequisites
-
-- Node.js 16.0.0 or higher
-- npm or yarn
-- Git
-- ripgrep (optional, for better search performance)
-
-### Setting Up Your Development Environment
-
-1. **Fork the repository** on GitHub
-
-2. **Clone your fork** locally:
-   ```bash
-   git clone https://github.com/YOUR_USERNAME/code-buddy.git
-   cd code-buddy
-   ```
-
-3. **Install dependencies**:
-   ```bash
-   npm install
-   ```
-
-4. **Set up environment variables**:
-   ```bash
-   cp .env.example .env
-   # Add your GROK_API_KEY to .env
-   ```
-
-5. **Run the development build**:
-   ```bash
-   npm run dev
-   ```
-
-6. **Run tests**:
-   ```bash
-   npm test
-   ```
-
-## Development Process
-
-### Creating a Branch
-
-Always create a new branch for your work:
+Development and tests require Node.js 20 or newer, npm, Git, and a recent
+version of ripgrep (`rg`). Bun is optional.
 
 ```bash
-git checkout -b feature/your-feature-name
-# or
-git checkout -b fix/bug-description
+git clone https://github.com/YOUR_USERNAME/code-buddy.git
+cd code-buddy
+npm install
+npm run dev:node -- --help
 ```
 
-Branch naming convention:
-- `feature/` - New features
-- `fix/` - Bug fixes
-- `docs/` - Documentation changes
-- `refactor/` - Code refactoring
-- `test/` - Adding or updating tests
-- `chore/` - Maintenance tasks
+No API key is needed to run the test suite. To try a provider, copy
+`.env.example` to `.env` and add only the credentials needed for that provider.
+Never commit `.env` or credentials.
 
-### Making Changes
+## Pick an issue and create a branch
 
-1. Make your changes in your feature branch
-2. Add tests for any new functionality
-3. Ensure all tests pass: `npm test`
-4. Ensure type checking passes: `npm run typecheck`
-5. Ensure linting passes: `npm run lint`
-6. Format your code: `npm run format`
-
-### Running the Application Locally
+New contributors can start with a
+[`good first issue`](https://github.com/phuetz/code-buddy/issues?q=is%3Aissue%20is%3Aopen%20label%3A%22good%20first%20issue%22).
+Before doing substantial work, comment on the issue so contributors do not
+duplicate effort.
 
 ```bash
-# Development mode with hot reload
-npm run dev
-
-# Build and run
-npm run build
-npm start
-
-# Run with specific directory
-npm run dev -- -d /path/to/project
+git fetch origin
+git switch -c fix/short-description origin/main
 ```
 
-## Pull Request Process
+Keep a pull request focused on one change. Branch names such as
+`fix/short-description`, `feat/short-description`, `docs/short-description`, and
+`test/short-description` are easy to scan.
 
-1. **Update documentation** if you're adding or changing features
+### Using Git worktrees
 
-2. **Add tests** for new functionality:
-   - Unit tests in `__tests__` directories
-   - Aim for 80%+ code coverage
-   - Test edge cases and error conditions
-
-3. **Ensure all checks pass**:
-   ```bash
-   npm run typecheck  # TypeScript checks
-   npm run lint       # Linting
-   npm test           # Tests
-   npm run format:check # Code formatting
-   ```
-
-4. **Update the README.md** with details of changes if applicable
-
-5. **Commit your changes** following our [commit message guidelines](#commit-message-guidelines)
-
-6. **Push to your fork**:
-   ```bash
-   git push origin feature/your-feature-name
-   ```
-
-7. **Create a Pull Request** from your fork to our `main` branch
-
-8. **Address review feedback** - a maintainer will review your PR and may request changes
-
-### Pull Request Guidelines
-
-- Keep PRs focused on a single feature or fix
-- Write clear PR descriptions explaining what and why
-- Link related issues in the PR description
-- Ensure CI/CD checks pass
-- Be responsive to feedback
-- Keep your PR up to date with the main branch
-
-## Coding Standards
-
-### TypeScript
-
-- Use TypeScript for all new code
-- Enable strict type checking (we're working towards full strict mode)
-- Avoid `any` types - use `unknown` if type is truly unknown
-- Prefer interfaces over types for object shapes
-- Use const assertions where appropriate
-
-### Code Style
-
-We use Prettier and ESLint to maintain consistent code style:
+Worktrees are useful when you have several contributions in flight:
 
 ```bash
-# Auto-format code
-npm run format
-
-# Check formatting
-npm run format:check
-
-# Lint code
-npm run lint
-
-# Auto-fix linting issues
-npm run lint:fix
+git fetch origin
+git worktree add ../code-buddy-my-change -b fix/my-change origin/main
+cd ../code-buddy-my-change
+npm install
 ```
 
-**Key style points:**
-- Use single quotes for strings
-- Use semicolons
-- 2 spaces for indentation
-- Max line length: 100 characters
-- Use arrow functions for callbacks
-- Use async/await over promises
+Use one branch per worktree. Do not check out the same branch in two worktrees,
+and run commands from the worktree you intend to change. Remove a worktree only
+after its changes are committed or otherwise backed up.
 
-### File Organization
+## Develop and test
 
-```
-src/
-├── agent/        # Core agent logic
-├── codebuddy/    # Grok API client and tools
-├── tools/        # Tool implementations
-├── ui/           # UI components
-├── utils/        # Utility functions
-├── types/        # TypeScript type definitions
-└── hooks/        # React hooks
-```
-
-### Naming Conventions
-
-- **Files**: kebab-case (e.g., `text-editor.ts`)
-- **Components**: PascalCase (e.g., `ChatInterface.tsx`)
-- **Functions**: camelCase (e.g., `processMessage`)
-- **Constants**: UPPER_SNAKE_CASE (e.g., `MAX_RETRIES`)
-- **Interfaces/Types**: PascalCase (e.g., `ToolDefinition`)
-
-### Documentation
-
-- Add JSDoc comments for all public functions and classes
-- Include parameter descriptions and return types
-- Add usage examples where helpful
-- Document edge cases and assumptions
-
-Example:
-```typescript
-/**
- * Validates a file path to prevent path traversal attacks
- *
- * @param inputPath - The path to validate (can be relative or absolute)
- * @param workingDir - The base working directory
- * @returns The resolved absolute path if valid
- * @throws {Error} If path traversal is detected
- *
- * @example
- * ```typescript
- * const safePath = validatePath('../config.json', '/home/user/project');
- * ```
- */
-export function validatePath(inputPath: string, workingDir: string): string {
-  // Implementation
-}
-```
-
-## Testing Guidelines
-
-### Test Structure
-
-- Unit tests go in `__tests__` directories next to the code they test
-- Name test files with `.test.ts` or `.spec.ts` extension
-- Use descriptive test names that explain what is being tested
-
-### Writing Tests
-
-```typescript
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-
-describe('MyModule', () => {
-  describe('myFunction', () => {
-    it('should handle normal case', () => {
-      const result = myFunction('input');
-      expect(result).toBe('expected');
-    });
-
-    it('should handle edge case', () => {
-      const result = myFunction('');
-      expect(result).toBe('');
-    });
-
-    it('should throw on invalid input', () => {
-      expect(() => myFunction(null)).toThrow('Invalid input');
-    });
-  });
-});
-```
-
-### Test Coverage
-
-- Aim for 80%+ code coverage
-- Test happy paths and edge cases
-- Test error conditions
-- Mock external dependencies (API calls, file system, etc.)
-
-### Running Tests
+Run the narrowest relevant test while iterating:
 
 ```bash
-# Run tests in watch mode
+npm test -- tests/path/to/file.test.ts
+```
+
+Tests live in `tests/`; do not add in-source `src/**/*.test.ts` files. Add or
+update tests for observable behavior, including failure and boundary cases.
+Before requesting review, run the complete validation gate:
+
+```bash
+npm run validate
+```
+
+That command runs lint, TypeScript checks, and the full Vitest suite. The suite
+is large, so a path-filtered test is preferred during development. If an
+environment-specific check cannot run locally, state exactly what you did run
+in the pull request.
+
+For the Electron app, install its dependencies separately and use its own
+commands:
+
+```bash
+cd cowork
+npm install
 npm test
-
-# Run tests once
-npm run test:run
-
-# Run with coverage
-npm run test:coverage
-
-# Run with UI
-npm run test:ui
 ```
 
-## Commit Message Guidelines
+See [the getting-started guide](docs/getting-started.md),
+[the fleet guide](docs/fleet-guide.md), and
+[`cowork/ARCHITECTURE.md`](cowork/ARCHITECTURE.md) for subsystem details.
 
-We follow the [Conventional Commits](https://www.conventionalcommits.org/) specification.
+## Code conventions
 
-### Format
+- TypeScript is strict. Avoid `any`; prefer a precise type or `unknown` plus
+  validation.
+- This is an ESM project. Source imports use `.js` extensions even when the
+  source file is `.ts`.
+- Use single quotes, semicolons, two-space indentation, and kebab-case file
+  names. React components use PascalCase.
+- Use `logger` from `src/utils/logger.ts` rather than `console.*` in production
+  code.
+- Keep tests in `tests/` and mirror the source area in the test path when
+  practical.
+- Preserve lazy loading at CLI and agent entry points; avoid pulling heavy
+  modules into startup paths.
 
-```
-<type>(<scope>): <subject>
+Repository-specific testing traps and architecture notes are documented in
+[`AGENTS.md`](AGENTS.md). Read the relevant source and nearby tests before
+changing a subsystem.
 
-<body>
+## Commits and pull requests
 
-<footer>
-```
+Commit messages follow
+[Conventional Commits](https://www.conventionalcommits.org/):
 
-### Type
-
-Must be one of:
-- **feat**: New feature
-- **fix**: Bug fix
-- **docs**: Documentation only changes
-- **style**: Code style changes (formatting, etc.)
-- **refactor**: Code refactoring
-- **perf**: Performance improvements
-- **test**: Adding or updating tests
-- **chore**: Maintenance tasks
-- **ci**: CI/CD changes
-- **build**: Build system changes
-
-### Scope (optional)
-
-The scope should be the name of the affected module:
-- `agent`
-- `tools`
-- `ui`
-- `api`
-- `security`
-
-### Examples
-
-```
-feat(tools): add new search tool with fuzzy matching
-
-This adds a new search tool that uses ripgrep for fast searching
-and includes fuzzy matching for file names.
-
-Closes #123
+```text
+feat(fleet): add peer latency filter
+fix(cli): preserve profile during restart
+test(memory): cover empty fact updates
+docs: clarify local Ollama setup
 ```
 
-```
-fix(security): prevent path traversal attacks
+Use an imperative, lower-case summary and add a scope when it helps. Breaking
+changes require a `!` or a `BREAKING CHANGE:` footer.
 
-Implement path validation to ensure all file operations stay
-within the working directory.
+A pull request should explain the problem and solution, link the issue when one
+exists, list the checks run, and update user-facing documentation when behavior
+changes. Please keep generated files and unrelated formatting out of the diff.
 
-BREAKING CHANGE: File paths outside working directory now throw errors
-```
+## Getting help
 
-```
-docs: update installation instructions
-
-Add macOS-specific instructions and troubleshooting section.
-```
-
-### Commit Message Rules
-
-- Use the imperative mood ("add feature" not "added feature")
-- Don't capitalize the first letter of the subject
-- No period at the end of the subject
-- Limit subject line to 100 characters
-- Separate subject from body with a blank line
-- Wrap body at 72 characters
-- Use body to explain what and why, not how
-
-## Project Structure
-
-```
-code-buddy/
-├── .github/              # GitHub workflows and templates
-│   └── workflows/        # CI/CD workflows
-├── .husky/               # Git hooks
-├── src/
-│   ├── agent/            # Core agent logic (CodeBuddyAgent)
-│   ├── codebuddy/        # Grok API client and tool definitions
-│   ├── tools/            # Tool implementations
-│   │   ├── bash-tool.ts
-│   │   ├── file-tool.ts
-│   │   ├── search-tool.ts
-│   │   └── text-editor.ts
-│   ├── ui/               # Ink/React UI components
-│   │   ├── components/   # React components
-│   │   └── utils/        # UI utilities
-│   ├── utils/            # Utility functions
-│   │   ├── path-validator.ts
-│   │   ├── command-validator.ts
-│   │   ├── confirmation-service.ts
-│   │   ├── settings.ts
-│   │   └── token-counter.ts
-│   ├── types/            # TypeScript type definitions
-│   ├── hooks/            # React hooks
-│   └── index.ts          # CLI entry point
-├── dist/                 # Compiled output
-├── tests/                # Integration and E2E tests
-├── AUDIT.md              # Technical audit report
-├── CONTRIBUTING.md       # This file
-├── ARCHITECTURE.md       # Architecture documentation
-└── README.md             # User documentation
-```
-
-## Getting Help
-
-- **Documentation**: Check the [README.md](README.md) and [ARCHITECTURE.md](ARCHITECTURE.md)
-- **Issues**: Browse [existing issues](https://github.com/your-org/code-buddy/issues)
-- **Discussions**: Join [GitHub Discussions](https://github.com/your-org/code-buddy/discussions)
-- **Discord**: Join our [Discord community](#)
-
-## Recognition
-
-Contributors will be recognized in:
-- The project README
-- Release notes
-- Our contributors page
-
-Thank you for your contributions! 🎉
+Use a
+[question issue](https://github.com/phuetz/code-buddy/issues/new/choose) for
+reproducible project questions. Include your Code Buddy version, Node version,
+operating system, install method, provider/model when relevant, and sanitized
+logs. Never post API keys, tokens, private prompts, or repository secrets.
