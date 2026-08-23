@@ -120,7 +120,10 @@ class ScenarioTimeoutError extends Error {
   }
 }
 
-function historyPath(env: Record<string, string | undefined>): string {
+/** Resolve the append-only history path without reading or creating it. */
+export function resolveBenchmarkHistoryPath(
+  env: Record<string, string | undefined> = process.env
+): string {
   return env.CODEBUDDY_SELF_BENCH_HISTORY
     ? path.resolve(env.CODEBUDDY_SELF_BENCH_HISTORY)
     : path.join(os.homedir(), '.codebuddy', 'capability-history.jsonl');
@@ -245,7 +248,7 @@ function isHistoryEntry(value: unknown): value is BenchmarkHistoryEntry {
 export async function readBenchmarkHistory(
   env: Record<string, string | undefined> = process.env
 ): Promise<BenchmarkHistoryEntry[]> {
-  const file = historyPath(env);
+  const file = resolveBenchmarkHistoryPath(env);
   try {
     const raw = await fs.readFile(file, 'utf8');
     return raw
@@ -408,7 +411,7 @@ export async function runBenchmark(
       (!names || names.has(candidate.model.toLowerCase())) &&
       (!provider || candidate.provider.toLowerCase() === provider)
   );
-  const file = historyPath(env);
+  const file = resolveBenchmarkHistoryPath(env);
   const runId = options.runId ?? randomUUID();
   const now = options.now ?? (() => new Date());
   const monotonicNow = options.monotonicNow ?? (() => performance.now());
