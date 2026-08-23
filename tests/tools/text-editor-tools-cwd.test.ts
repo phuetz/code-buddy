@@ -29,31 +29,35 @@ afterAll(() => {
   resetTextEditorInstance();
 });
 
+// Nom témoin unique : le dépôt a désormais un index.html à sa racine (GitHub Pages),
+// un nom générique ferait échouer l'assertion « pas créé dans process.cwd() » à tort.
+const PROBE = `meteo-cristal-${process.pid}.html`;
+
 describe('registry file tools honor context.cwd for relative paths', () => {
   it('create_file writes a relative path into the session cwd, not process.cwd()', async () => {
     const tool = new CreateFileTool();
     const result = await tool.execute(
-      { path: 'index.html', content: '<h1>Météo Cristal</h1>' },
+      { path: PROBE, content: '<h1>Météo Cristal</h1>' },
       { cwd: sessionCwd }
     );
     expect(result.success).toBe(true);
-    expect(existsSync(join(sessionCwd, 'index.html'))).toBe(true);
-    expect(existsSync(join(process.cwd(), 'index.html'))).toBe(false);
+    expect(existsSync(join(sessionCwd, PROBE))).toBe(true);
+    expect(existsSync(join(process.cwd(), PROBE))).toBe(false);
   });
 
   it('str_replace_editor edits the file in the session cwd', async () => {
     const tool = new StrReplaceEditorTool();
     const result = await tool.execute(
-      { path: 'index.html', old_str: 'Météo Cristal', new_str: 'Météo Cristal v2' },
+      { path: PROBE, old_str: 'Météo Cristal', new_str: 'Météo Cristal v2' },
       { cwd: sessionCwd }
     );
     expect(result.success).toBe(true);
-    expect(readFileSync(join(sessionCwd, 'index.html'), 'utf8')).toContain('Météo Cristal v2');
+    expect(readFileSync(join(sessionCwd, PROBE), 'utf8')).toContain('Météo Cristal v2');
   });
 
   it('view_file reads through the session cwd', async () => {
     const tool = new ViewFileTool();
-    const result = await tool.execute({ path: 'index.html' }, { cwd: sessionCwd });
+    const result = await tool.execute({ path: PROBE }, { cwd: sessionCwd });
     expect(result.success).toBe(true);
     expect(result.output).toContain('Météo Cristal v2');
   });
