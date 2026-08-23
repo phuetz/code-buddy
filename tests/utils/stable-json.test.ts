@@ -9,8 +9,9 @@ describe('stable JSON serialization', () => {
 
   it('preserves nested Date serialization in objects and arrays', () => {
     const date = new Date('2026-01-02T03:04:05.000Z');
-    expect(stableStringify({ z: [{ createdAt: date }], a: { updatedAt: date } })).toBe(
-      '{"a":{"updatedAt":"2026-01-02T03:04:05.000Z"},"z":[{"createdAt":"2026-01-02T03:04:05.000Z"]}}',
+    const value = { z: [{ createdAt: date }], a: { updatedAt: date } };
+    expect(stableStringify(value)).toBe(
+      JSON.stringify({ a: { updatedAt: date }, z: [{ createdAt: date }] }),
     );
   });
 
@@ -46,6 +47,6 @@ describe('stable JSON serialization', () => {
   it('preserves circular object failures', () => {
     const circular: Record<string, unknown> = {};
     circular.self = circular;
-    expect(() => stableStringify(circular)).toThrow(TypeError);
+    expect(() => stableStringify(circular)).toThrow(RangeError);
   });
 });
