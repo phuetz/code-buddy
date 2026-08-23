@@ -53,6 +53,10 @@ describe('Code Buddy core runtime packaging', () => {
     expect(packageJson.scripts?.['prepare:core-runtime']).toBe(
       'node scripts/prepare-core-runtime.js',
     );
+    expect(build.indexOf('npm run rebuild')).toBeGreaterThan(-1);
+    expect(build.indexOf('npm run rebuild')).toBeLessThan(
+      build.indexOf('npm run prepare:core-runtime'),
+    );
     expect(build.indexOf('npm run prepare:core-runtime')).toBeGreaterThan(-1);
     expect(build.indexOf('npm run prepare:core-runtime')).toBeLessThan(
       build.indexOf('node scripts/pre-build-check.js'),
@@ -64,9 +68,12 @@ describe('Code Buddy core runtime packaging', () => {
       path.join(coworkRoot, '..', 'scripts', 'build-all.js'),
       'utf8',
     );
+    const rebuild = buildAll.indexOf("['run', 'rebuild']");
     const prepare = buildAll.indexOf("['scripts/prepare-core-runtime.js']");
     const precheck = buildAll.indexOf("['scripts/pre-build-check.js']");
     const builder = buildAll.indexOf("['electron-builder', '--config'");
+    expect(rebuild).toBeGreaterThan(-1);
+    expect(rebuild).toBeLessThan(prepare);
     expect(prepare).toBeGreaterThan(-1);
     expect(precheck).toBeGreaterThan(prepare);
     expect(builder).toBeGreaterThan(precheck);

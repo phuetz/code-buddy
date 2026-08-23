@@ -453,4 +453,70 @@ describe('prepareCoreRuntime', () => {
       ),
     ).toBe('electron-abi');
   });
+
+  it('stages Cowork SQLite when the core declares it as optional', () => {
+    const root = temporaryRoot();
+    const coreRoot = path.join(root, 'core');
+    const coworkRoot = path.join(root, 'cowork');
+    const runtimeRoot = path.join(coworkRoot, '.bundle-resources', 'core-runtime');
+    writeFile(
+      path.join(coreRoot, 'package.json'),
+      JSON.stringify({
+        name: '@phuetz/code-buddy',
+        version: '1.0.0',
+        description: 'Optional SQLite runtime fixture',
+        optionalDependencies: { 'better-sqlite3': '1.0.0' },
+      }),
+    );
+    writeFile(
+      path.join(coreRoot, 'dist', 'desktop', 'codebuddy-engine-adapter.js'),
+      'export class CodeBuddyEngineAdapter {}',
+    );
+    writePackage(coreRoot, 'node_modules/better-sqlite3', { version: 'node-build' });
+    writeFile(
+      path.join(
+        coreRoot,
+        'node_modules',
+        'better-sqlite3',
+        'build',
+        'Release',
+        'better_sqlite3.node',
+      ),
+      'node-abi',
+    );
+    writePackage(coworkRoot, 'node_modules/better-sqlite3', { version: 'electron-build' });
+    writeFile(
+      path.join(
+        coworkRoot,
+        'node_modules',
+        'better-sqlite3',
+        'build',
+        'Release',
+        'better_sqlite3.node',
+      ),
+      'electron-abi',
+    );
+    writeCoreRuntimeManifest(coreRoot, {
+      name: '@phuetz/code-buddy',
+      version: '1.0.0',
+      description: 'Optional SQLite runtime fixture',
+    });
+
+    const result = prepareCoreRuntime({ coreRoot, coworkRoot, runtimeRoot });
+
+    expect(result.manifest.nativeOverrides).toEqual(['better-sqlite3']);
+    expect(
+      fs.readFileSync(
+        path.join(
+          runtimeRoot,
+          'node_modules',
+          'better-sqlite3',
+          'build',
+          'Release',
+          'better_sqlite3.node',
+        ),
+        'utf8',
+      ),
+    ).toBe('electron-abi');
+  });
 });

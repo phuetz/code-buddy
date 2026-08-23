@@ -49,6 +49,10 @@ if (existsSync(coworkDir)) {
   // ─── Step 3: Package installer (optional) ────────────────────────────────
   if (pack) {
     console.log('\n═══ Step 3/3: Packaging installer ═══');
+    // The embedded runtime and the Cowork main process both load
+    // better-sqlite3 from Electron. Rebuild it before staging the runtime so
+    // the packaging path has the same ABI guarantee as `cowork npm run build`.
+    run(npm, ['run', 'rebuild'], coworkDir);
     // The embedded core lives outside app.asar at resources/dist. Stage its
     // production dependency closure beside it before electron-builder runs;
     // otherwise bare imports such as `chalk` cannot resolve in production.
