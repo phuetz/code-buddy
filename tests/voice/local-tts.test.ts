@@ -111,6 +111,13 @@ describe('Pocket resident server client', () => {
   });
 
   it('exposes Pocket WAV chunks without waiting for the complete response', async () => {
+    const firstChunk = Buffer.alloc(44, 1);
+    const secondChunk = Buffer.alloc(20, 2);
+    let releaseSecondChunk: (() => void) | undefined;
+    const secondChunkReleased = new Promise<void>((resolve) => {
+      releaseSecondChunk = resolve;
+    });
+    let responseEnded = false;
     server = createServer((req, res) => {
       if (req.url === '/health') {
         res.setHeader('content-type', 'application/json');
@@ -121,8 +128,12 @@ describe('Pocket resident server client', () => {
         req.resume();
         req.on('end', () => {
           res.setHeader('content-type', 'audio/wav');
-          res.write(Buffer.alloc(44, 1));
-          setTimeout(() => res.end(Buffer.alloc(20, 2)), 10);
+          res.once('finish', () => {
+            responseEnded = true;
+          });
+          res.flushHeaders();
+          res.write(firstChunk);
+          void secondChunkReleased.then(() => res.end(secondChunk));
         });
         return;
       }
@@ -144,11 +155,25 @@ describe('Pocket resident server client', () => {
     );
     expect(stream).not.toBeNull();
     const reader = stream!.getReader();
-    const first = await reader.read();
-    expect(first.done).toBe(false);
-    expect(first.value?.byteLength).toBe(44);
-    const second = await reader.read();
-    expect(second.done).toBe(false);
-    expect(second.value?.byteLength).toBe(20);
+    try {
+      const first = await reader.read();
+      expect(first.done).toBe(false);
+      expect(first.value).toBeDefined();
+      if (!first.value) throw new Error('Pocket stream yielded no first chunk');
+      expect(first.value.byteLength).toBeGreaterThan(0);
+      expect(first.value.byteLength).toBeLessThan(firstChunk.length + secondChunk.length);
+      expect(responseEnded).toBe(false);
+
+      const chunks = [Buffer.from(first.value)];
+      releaseSecondChunk?.();
+      while (true) {
+        const next = await reader.read();
+        if (next.done) break;
+        if (next.value) chunks.push(Buffer.from(next.value));
+      }
+      expect(Buffer.concat(chunks)).toEqual(Buffer.concat([firstChunk, secondChunk]));
+    } finally {
+      releaseSecondChunk?.();
+    }
   });
 });
