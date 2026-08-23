@@ -26,7 +26,7 @@
   "scripts": {
     "dev": "npm run download:node && npm run build:wsl-agent && npm run build:lima-agent && npm run build:mcp && vite",
     "dev:with-python": "npm run download:node && npm run prepare:python && npm run prepare:python:skills && npm run build:wsl-agent && npm run build:lima-agent && npm run build:mcp && vite",
-    "build": "npm run download:node && npm run prepare:gui-tools && npm run prepare:python:all && npm run prepare:python:skills && npm run build:wsl-agent && npm run build:lima-agent && npm run build:mcp && npm run build:tray-icon && tsc && vite build && npm run prepare:core-runtime && node scripts/pre-build-check.js && electron-builder",
+    "build": "npm run download:node && npm run prepare:gui-tools && npm run prepare:python:all && npm run prepare:python:skills && npm run build:wsl-agent && npm run build:lima-agent && npm run build:mcp && npm run build:tray-icon && tsc && vite build && npm run rebuild && npm run prepare:core-runtime && node scripts/pre-build-check.js && electron-builder",
     "build:e2e": "vite build",
     "build:win": "node scripts/build-windows.js",
     "build:tray-icon": "node scripts/build-tray-icon.js",
