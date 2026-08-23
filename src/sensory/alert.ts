@@ -6,6 +6,7 @@
  * @module sensory/alert
  */
 import { logger } from '../utils/logger.js';
+import { prepareSpeech } from './speech-sanitizer.js';
 
 /**
  * Send `text` as a Telegram VOICE NOTE (so the robot's voice reaches Patrice's phone when he's
@@ -24,26 +25,27 @@ export async function sendTelegramVoice(
 ): Promise<boolean> {
   const token = process.env.CODEBUDDY_SENSORY_ALERT_TOKEN;
   const chat = process.env.CODEBUDDY_SENSORY_ALERT_CHAT;
-  if (!token || !chat || !text.trim()) return false;
+  const clean = prepareSpeech(text);
+  if (!token || !chat || !clean) return false;
   const post = deps.post ?? ((url, form) => fetch(url, { method: 'POST', body: form }));
   let ogg: string | undefined;
   try {
     const synthesize =
       deps.synthesize ?? (async (t: string) => (await import('../voice/local-tts.js')).synthesizeToOgg(t));
-    ogg = await synthesize(text);
+    ogg = await synthesize(clean);
     const fs = await import('node:fs/promises');
     const path = await import('node:path');
     const bytes = await fs.readFile(ogg);
     const form = new FormData();
     form.append('chat_id', chat);
     form.append('voice', new Blob([bytes], { type: 'audio/ogg' }), path.basename(ogg));
-    form.append('caption', text.slice(0, 1024)); // text too, for skim + fallback context
+    form.append('caption', clean.slice(0, 1024)); // text too, for skim + fallback context
     const res = await post(`https://api.telegram.org/bot${token}/sendVoice`, form);
     if (res?.ok) return true;
-    return await (deps.fallback ?? sendTelegramAlert)(text);
+    return await (deps.fallback ?? sendTelegramAlert)(clean);
   } catch (err) {
     logger.warn(`[sensory] voice note failed, sending text instead: ${err instanceof Error ? err.message : String(err)}`);
-    return await (deps.fallback ?? sendTelegramAlert)(text).catch(() => false);
+    return await (deps.fallback ?? sendTelegramAlert)(clean).catch(() => false);
   } finally {
     if (ogg) {
       try {

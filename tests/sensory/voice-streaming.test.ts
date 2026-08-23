@@ -53,18 +53,29 @@ describe('SentenceAssembler — sentence cutting', () => {
     const out: string[] = [];
     for (const s of a.push('a'.repeat(500))) out.push(s);
     for (const s of a.flush()) out.push(s);
-    expect(out).toHaveLength(3);
+    expect(out).toHaveLength(4);
+    expect(out[0]).toHaveLength(96);
     expect(out.every((s) => s.length <= 200)).toBe(true);
     expect(out.join('').length).toBe(500);
   });
 
-  it('cuts a sufficiently long clause at a comma for lower TTS latency', () => {
+  it('uses soft punctuation only for the first low-latency fragment', () => {
     const a = new SentenceAssembler();
-    expect(a.push('Je vérifie maintenant cette première partie, puis je continue. ')).toEqual([
-      'Je vérifie maintenant cette première partie,',
-      'puis je continue.',
+    expect(a.push(
+      'Je vérifie rapidement cette première partie, puis cette deuxième clause reste entière, avant la fin. ',
+    )).toEqual([
+      'Je vérifie rapidement cette première partie,',
+      'puis cette deuxième clause reste entière, avant la fin.',
     ]);
     expect(a.flush()).toEqual([]);
+  });
+
+  it('keeps the first hard cap at 96 and raises later segments to 160 characters', () => {
+    const a = new SentenceAssembler();
+    const out = a.push('a'.repeat(300));
+
+    expect(out.map((segment) => segment.length)).toEqual([96, 160]);
+    expect(a.flush()).toEqual(['a'.repeat(44)]);
   });
 });
 
@@ -1058,9 +1069,9 @@ describe('makeVoiceReply — validated spoken prefix continuity', () => {
 
     await onHeard("Penses-tu qu'une IA peut aimer ?");
 
-    expect(seenPrefix).toEqual(['Une IA peut manifester un attachement fonctionnel.']);
+    expect(seenPrefix).toEqual(['Une I A peut manifester un attachement fonctionnel.']);
     expect(played).toEqual([
-      'Une IA peut manifester un attachement fonctionnel.',
+      'Une I A peut manifester un attachement fonctionnel.',
       "Cela ne prouve toutefois pas qu'elle possède une expérience subjective.",
     ]);
     expect(blocking).not.toHaveBeenCalled();
@@ -1074,7 +1085,7 @@ describe('makeVoiceReply — validated spoken prefix continuity', () => {
       {
         role: 'assistant',
         content:
-          "Une IA peut manifester un attachement fonctionnel. Cela ne prouve toutefois pas qu'elle possède une expérience subjective.",
+          "Une I A peut manifester un attachement fonctionnel. Cela ne prouve toutefois pas qu'elle possède une expérience subjective.",
       },
     ]);
   });
