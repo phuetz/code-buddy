@@ -1,18 +1,46 @@
 import fs from 'fs';
-import os from 'os';
 import path from 'path';
+import { fileURLToPath } from 'url';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ToolHandler } from '../../src/agent/tool-handler.js';
+import { resetPermissionModeManager } from '../../src/security/permission-modes.js';
+import { resetTrustFolderManager } from '../../src/security/trust-folders.js';
 import { ConfirmationService } from '../../src/utils/confirmation-service.js';
 import {
   approveSandboxUnavailableEscalations,
   clearSandboxEscalationBridge,
 } from '../helpers/sandbox-escalation-bridge.js';
 import { canonical, canonicalShellPath } from '../helpers/shell-path.js';
+import { makeTmpDir, removeTmpDir } from '../helpers/tmp.js';
 import { clearAllCodeExecSessions } from '../../src/tools/code-exec-tool.js';
-import { getFormalToolRegistry } from '../../src/tools/registry/index.js';
+import { getFormalToolRegistry, resetBashInstance } from '../../src/tools/registry/index.js';
 import type { ITool, IToolExecutionContext } from '../../src/tools/registry/types.js';
+
+const REPO_ROOT = fs.realpathSync(
+  path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..'),
+);
+
+const HOST_ENV_KEYS = ['HOME', 'USERPROFILE', 'TMPDIR', 'TEMP', 'TMP'] as const;
+
+const hostEnvSnapshot: Record<(typeof HOST_ENV_KEYS)[number], string | undefined> = {
+  HOME: process.env.HOME,
+  USERPROFILE: process.env.USERPROFILE,
+  TMPDIR: process.env.TMPDIR,
+  TEMP: process.env.TEMP,
+  TMP: process.env.TMP,
+};
+
+function restoreHostProcess(): void {
+  if (process.cwd() !== REPO_ROOT) {
+    process.chdir(REPO_ROOT);
+  }
+  for (const key of HOST_ENV_KEYS) {
+    const previous = hostEnvSnapshot[key];
+    if (previous === undefined) delete process.env[key];
+    else process.env[key] = previous;
+  }
+}
 
 const PROBE_TOOL = 'code_exec_recovery_scope_probe';
 
@@ -44,12 +72,29 @@ describe('ToolHandler code_exec logical-session isolation', () => {
   const observedScopes: string[] = [];
 
   beforeEach(() => {
+    // Previous files in the same vitest fork can leave process.cwd(), HOME,
+    // the bash singleton cwd, or trust enforcement behind. Restore first so
+    // this file's session dirs are not created under a mutated host state.
+    restoreHostProcess();
+    resetBashInstance();
+    resetTrustFolderManager();
+    resetPermissionModeManager();
     clearAllCodeExecSessions();
     observedScopes.splice(0);
     // The bash `pwd` below runs through the real ConfirmationService; hosts
     // without a sandbox backend (Windows CI) escalate it to an exact grant.
     approveSandboxUnavailableEscalations(ConfirmationService.getInstance());
-    workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'code-exec-session-'));
+    // Repo-local tmp (gitignored): Linux bubblewrap mounts a tmpfs over `/tmp`,
+    // so a cwd under os.tmpdir() disappears inside the sandbox. git rev-parse
+    // from this path still finds the workspace, so the bind stays visible.
+    workDir = makeTmpDir('code-exec-session-', path.join(REPO_ROOT, 'tmp'));
+    const isolatedHome = path.join(workDir, 'home');
+    fs.mkdirSync(isolatedHome, { recursive: true });
+    process.env.HOME = isolatedHome;
+    process.env.USERPROFILE = isolatedHome;
+    process.env.TMPDIR = workDir;
+    process.env.TEMP = workDir;
+    process.env.TMP = workDir;
     handler = new ToolHandler({
       checkpointManager: {
         checkpointBeforeCreate: vi.fn(),
@@ -97,8 +142,12 @@ describe('ToolHandler code_exec logical-session isolation', () => {
   afterEach(() => {
     getFormalToolRegistry().unregister(PROBE_TOOL);
     clearAllCodeExecSessions();
+    resetBashInstance();
+    resetTrustFolderManager();
+    resetPermissionModeManager();
     clearSandboxEscalationBridge(ConfirmationService.getInstance());
-    fs.rmSync(workDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+    restoreHostProcess();
+    removeTmpDir(workDir);
   });
 
   it('propagates executionExtra to tools called from code_exec', async () => {
@@ -138,16 +187,14 @@ describe('ToolHandler code_exec logical-session isolation', () => {
   });
 
   it('owns cd state locally and restores it without changing the host process cwd', async () => {
-    const sessionA = fs.mkdtempSync(path.join(workDir, 'session-a-'));
-    const sessionB = fs.mkdtempSync(path.join(workDir, 'session-b-'));
     const hostCwd = process.cwd();
-    // `cd` stores the canonical (realpath) cwd; a restored value comes from that
-    // same store, so restore canonical paths too (os.tmpdir() is a symlink on macOS).
-    const realSessionA = fs.realpathSync(sessionA);
-    const realSessionB = fs.realpathSync(sessionB);
+    // `cd` stores the canonical (realpath) cwd; makeTmpDir already realpaths so
+    // restore/compare use the same spelling (os.tmpdir() is a symlink on macOS).
+    const realSessionA = makeTmpDir('session-a-', workDir);
+    const realSessionB = makeTmpDir('session-b-', workDir);
 
     handler.setRecoverySessionId('logical-session-a');
-    const changed = await handler.executeTool(bashCall('cd-a', `cd ${sessionA}`));
+    const changed = await handler.executeTool(bashCall('cd-a', `cd ${realSessionA}`));
     expect(changed.success).toBe(true);
     expect(handler.getWorkingDirectory()).toBe(realSessionA);
     expect(process.cwd()).toBe(hostCwd);
