@@ -70,13 +70,16 @@ describe('Cowork private turn cross-channel boundary', () => {
     vi.stubEnv('CODEBUDDY_PREFETCH', 'false');
 
     let bridge: CrossChannelConversationBridge | undefined;
+    const captureBridge = (instance: CrossChannelConversationBridge) => {
+      bridge = instance;
+    };
     class CapturingBridge extends CrossChannelConversationBridge {
       constructor(
         config: CrossChannelBridgeConfig,
         dependencies?: CrossChannelBridgeDependencies,
       ) {
         super(config, dependencies);
-        bridge = this;
+        captureBridge(this);
       }
     }
     const config: CrossChannelBridgeConfig = {
