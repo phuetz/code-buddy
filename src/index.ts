@@ -2299,8 +2299,9 @@ program
       recordStartupPhase('renderers-await-start');
       try {
         await renderersReady;
-      } catch {
-        cli.warn('Specialized renderers failed to load; structured output (tests, weather, diffs, tables) will use generic text.');
+      } catch (renderersError) {
+        const detail = renderersError instanceof Error ? renderersError.message : String(renderersError);
+        cli.warn(`Specialized renderers failed to load (${detail}); structured output (tests, weather, diffs, tables) will use generic text.`);
       }
       const renderersAwaitMs = PERF_TIMING ? Date.now() - renderersAwaitStart : 0;
       if (PERF_TIMING) {
