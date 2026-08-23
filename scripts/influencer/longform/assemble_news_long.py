@@ -1738,6 +1738,7 @@ def main() -> None:
             if carton is not False and c_dur > 0 and (carton or carton_d > 0):
                 add(render_card_section(f'carton-{sid}', {
                     'type': 'chapitre', 'titre': (carton or {}).get('titre') or seg.get('titre', sid),
+                    'kicker': (carton or {}).get('kicker', 'LISA IA · ACTU'),
                     'acte': seg.get('acte', ''), 'ligne': (carton or {}).get('pont', '')}, c_dur, workdir), sid)
             add(rendered[sid], sid)
             if cta and cta.get('apres') == sid:
