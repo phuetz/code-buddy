@@ -1973,6 +1973,7 @@ program
       }
 
       recordStartupPhase('ui-first-render');
+      const firstPaintAt = Date.now();
       const startupRender = render(
         React.createElement(ChatInterface, { loading: true }),
         inkOptions,
@@ -2179,10 +2180,11 @@ program
         : message;
 
       const totalStartupMs = Date.now() - STARTUP_TIME;
+      const sinceFirstPaintMs = Date.now() - firstPaintAt;
       if (totalStartupMs > 5000) {
         logger.warn(`Slow startup detected: ${totalStartupMs}ms. Run with PERF_TIMING=true for phase breakdown.`);
       } else {
-        logger.debug(`Agent ready in ${totalStartupMs}ms after the first TUI frame`);
+        logger.debug(`Agent ready in ${sinceFirstPaintMs}ms after the first TUI frame`);
       }
 
       // Opt the interactive session into the Hermes-style post-session background
