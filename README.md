@@ -30,7 +30,7 @@ Watch a **local model reason on screen, then use real tools to do the work** —
   <sub>A <b>local</b> model reasons, then uses a tool to create a real file — <code>~$0.0001</code>, no cloud. <a href="cowork/readme.md#demo">More demos →</a></sub>
 </p>
 
-- 🆓 **Free & local-first** — runs entirely on local **Ollama (`$0`)**, any of **64 providers** (30 free-tier or local `$0`) with auto-failover, or a flat-fee **ChatGPT Plus/Pro** / **SuperGrok** login (no API metering). Two minutes to start: `buddy onboard` → `buddy try`.
+- 🆓 **Free & local-first** — runs entirely on local **Ollama (`$0`)**, any of **64 providers** (30 free-tier or local `$0`) with auto-failover, or a flat-fee **ChatGPT Plus/Pro** / **SuperGrok** login (no API metering). Two minutes to start: `buddy login` (or `buddy onboard`) → `buddy try`.
 - 🧠 **Reasoning you can watch** — local models think step-by-step on screen, then call tools to act. See the [live captures](cowork/readme.md#demo).
 - 🛠️ **200+ tools** (RAG-selected per query) — edit, shell, web search, browser, PDFs/Office, image/video generation, 150 design systems, a skills hub, and MCP in both directions (`buddy mcp-server`, `buddy mcp add`).
 - 🖥️ **Runs everywhere** — terminal TUI, the **Cowork** desktop app, an HTTP/WebSocket server, your phone, or a 24/7 background service — one core engine.
@@ -65,7 +65,10 @@ An open-source, multi-provider AI coding agent with a terminal UI, an HTTP/WebSo
 
 ## In action
 
-**Reproduce it in 60 seconds — `buddy try`.** One command: the agent writes FizzBuzz + a test, runs it, then an **independent** check re-verifies. Real run on a free provider (ChatGPT OAuth here), cost `$0.0000`, English by default.
+**Reproduce it in 60 seconds — `buddy try`.** Once ChatGPT OAuth or a local
+Ollama model is ready, the agent writes FizzBuzz + a test, runs it, then an
+**independent** check re-verifies. Real run on a free provider (ChatGPT OAuth
+here), cost `$0.0000`, English by default.
 
 <p align="center">
   <img src="docs/assets/showcase-try.gif" alt="buddy try — the agent writes FizzBuzz and a test, runs it, independently verifies, $0" width="760"/>
@@ -189,8 +192,8 @@ Everything above is written up with source files, flags and what's verified in *
 # One command — installs Node if needed (no sudo), then Code Buddy
 curl -fsSL https://raw.githubusercontent.com/phuetz/code-buddy/main/install.sh | sh
 
-# …or, if you already have Node ≥ 20:
-npm install -g @phuetz/code-buddy
+# …or, if you already have Node ≥ 18:
+npm install -g @phuetz/code-buddy@latest
 
 # …or run it 24/7 in Docker (the VPS path):
 docker compose up -d          # after: cp .env.example .env && set JWT_SECRET
@@ -201,6 +204,15 @@ cd code-buddy && npm install && npm run build && npm link   # exposes `buddy` gl
 ```
 
 > **Requirements:** Node.js **≥ 18** for the CLI (the one-command installer provisions **≥ 20**). The **Cowork desktop app needs Node ≥ 22** plus a C++ build toolchain for native modules (`better-sqlite3`). Run **`buddy doctor`** anytime to check your environment (`--fix` to auto-remediate). Full install guide (one-command, Docker/VPS, npm): **[docs/install.md](docs/install.md)**.
+
+> The npm package name is **`@phuetz/code-buddy`**; the unscoped
+> `code-buddy` package is not published. The npm channel can lag the source
+> branch, so use `@latest` and confirm with `buddy --version`.
+
+`buddy try` is a real provider smoke test, not an offline mock. It needs either
+`buddy login` (ChatGPT OAuth) or a reachable Ollama model. With neither
+available, it exits quickly and prints the exact setup commands; it does not
+silently fall back to a paid API.
 
 Then pick a brain:
 
