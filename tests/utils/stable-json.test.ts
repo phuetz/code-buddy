@@ -31,7 +31,9 @@ function sortKeys(value: unknown): unknown {
     return value.map(sortKeys);
   }
 
-  if (value instanceof Date) return value;`n`n  const obj = value as Record<string, unknown>;
+  if (value instanceof Date) return value;
+
+  const obj = value as Record<string, unknown>;
   const sorted: Record<string, unknown> = {};
   for (const key of Object.keys(obj).sort()) {
     sorted[key] = sortKeys(obj[key]);
