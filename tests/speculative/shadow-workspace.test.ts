@@ -1,8 +1,9 @@
-import { spawn } from 'node:child_process';
-import { execFileSync } from 'node:child_process';
+import { EventEmitter } from 'node:events';
+import { spawn, execFileSync, type ChildProcess } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import { PassThrough } from 'node:stream';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   ShadowWorkspace,
@@ -26,6 +27,20 @@ function createRepo(testRoot: string): string {
   git(repo, 'add', 'tracked.txt');
   git(repo, 'commit', '-m', 'initial');
   return repo;
+}
+
+function hangingValidator(): ChildProcess {
+  const stdout = new PassThrough();
+  const stderr = new PassThrough();
+  const child = new EventEmitter() as ChildProcess;
+  const kill = vi.fn(() => {
+    stdout.end();
+    stderr.end();
+    return true;
+  });
+  Object.assign(child, { stdout, stderr, pid: 42, kill });
+  process.nextTick(() => stdout.write('before-sleep'));
+  return child;
 }
 
 describe('ShadowWorkspace', () => {
@@ -139,15 +154,38 @@ describe('ShadowWorkspace', () => {
   });
 
   it('fails validation with a timeout annotation when the command runs too long', async () => {
-    process.env.CODEBUDDY_SHADOW_CMD = 'node -e "process.stdout.write(\'before-sleep\'); setTimeout(() => {}, 2000)"';
-    process.env.CODEBUDDY_SHADOW_TIMEOUT_MS = '200';
-    const workspace = new ShadowWorkspace(repo, undefined, shadowBase);
+    // The validator is deliberately fake and never closes. Advancing the timeout
+    // clock proves the annotation without measuring process startup or wall time.
+    process.env.CODEBUDDY_SHADOW_CMD = 'node -e "process.stdout.write(\'before-sleep\')"';
+    const timeoutMs = 200;
+    process.env.CODEBUDDY_SHADOW_TIMEOUT_MS = String(timeoutMs);
+    const validationShell = process.platform === 'win32' ? (process.env.ComSpec ?? 'cmd.exe') : 'sh';
+    let markValidatorStarted: () => void = () => undefined;
+    const validatorStarted = new Promise<void>((resolve) => {
+      markValidatorStarted = resolve;
+    });
+    const spawnSpy = vi.fn<SpawnFn>((command, args, options) =>
+      command === validationShell
+        ? (markValidatorStarted(), hangingValidator())
+        : spawn(command, args, options));
+    const workspace = new ShadowWorkspace(repo, spawnSpy, shadowBase);
+    const nativeSetImmediate = setImmediate;
 
-    const result = await workspace.runSpeculative([{ path: 'tracked.txt', content: 'timeout\n' }]);
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      const resultPromise = workspace.runSpeculative([{ path: 'tracked.txt', content: 'timeout\n' }]);
+      await validatorStarted;
+      await new Promise<void>((resolve) => nativeSetImmediate(resolve));
 
-    expect(result).toMatchObject({ ok: false, unavailable: false, timedOut: true });
-    expect(result.stdoutTail).toContain('before-sleep');
-    expect(result.stdoutTail).toMatch(/timed out after 200ms/);
+      await vi.advanceTimersByTimeAsync(timeoutMs);
+      const result = await resultPromise;
+
+      expect(result).toMatchObject({ ok: false, unavailable: false, timedOut: true });
+      expect(result.stdoutTail).toContain('before-sleep');
+      expect(result.stdoutTail).toMatch(new RegExp(`timed out after ${timeoutMs}ms`));
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('fails open without throwing when the requested directory is not a git repository', async () => {
