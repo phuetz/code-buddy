@@ -1286,6 +1286,8 @@ export async function startServer(userConfig: Partial<ServerConfig> = {}): Promi
           const { shouldWireSpeechReaction, wireSensoryReactions } = await import('../sensory/reactions.js');
           const { getHeartbeatScheduler } = await import('../sensory/heartbeat-scheduler.js');
           const sensoryBridgeHandle = startSensoryBridge();
+          sensoryTeardown.push(() => sensoryBridgeHandle.close());
+          await sensoryBridgeHandle.ready;
           const unwireReactions = wireSensoryReactions();
           const { wireSensoryWorkspace } = await import('../cognition/sensory-workspace.js');
           const embodiedCognition = wireSensoryWorkspace({
@@ -1297,7 +1299,6 @@ export async function startServer(userConfig: Partial<ServerConfig> = {}): Promi
             embodiedCognition.workspace,
           );
           sensoryTeardown.push(
-            () => sensoryBridgeHandle.close(),
             unwireReactions,
             () => embodiedCognition.close(),
           );
