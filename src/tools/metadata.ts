@@ -918,6 +918,61 @@ export const TOOL_METADATA: ToolMetadata[] = [
     description: 'Chain multiple local video clips into one longer film with transitions (xfade/gl), optional background music (ducked) and voiceover, via ffmpeg; saved under .codebuddy/media-generation/films/'
   },
   {
+    name: 'video_quality_gate',
+    category: 'media',
+    keywords: [
+      'video', 'quality', 'gate', 'youtube', 'master', 'visual', 'identity', 'anatomy',
+      'fashion', 'review', 'qa', 'qualité', 'contrôle', 'gate visuel', 'flicker',
+    ],
+    priority: 8,
+    description:
+      'Fail-closed visual quality gate plus digest-bound YouTube master human review; never publishes',
+  },
+  {
+    name: 'video_long_form_plan',
+    category: 'media',
+    keywords: [
+      'video', 'long-form', 'long form', 'episode', 'plan', 'youtube', 'chapters',
+      'narration', 'ad break', 'mid-roll', 'épisode', 'plan long', 'compile',
+    ],
+    priority: 8,
+    description:
+      'Assess or compile an original long-form episode plan; never writes files or auto-publishes',
+  },
+  {
+    name: 'video_trailer_plan',
+    category: 'media',
+    keywords: [
+      'video', 'trailer', 'bande-annonce', 'cinematic', 'storyboard', 'book',
+      'preview', 'plan', 'narrative', 'hook', 'cta',
+    ],
+    priority: 8,
+    description:
+      'Validate a cinematic book-trailer plan or compile a preview routing estimate; never generates media',
+  },
+  {
+    name: 'video_flow_handoff',
+    category: 'media',
+    keywords: [
+      'video', 'flow', 'google flow', 'veo', 'handoff', 'export', 'import',
+      'credits', 'browser', 'packet', 'transfert', 'veo3',
+    ],
+    priority: 8,
+    description:
+      'Build, verify, export or human-review Google Flow work packets; never bills via API, never publishes',
+  },
+  {
+    name: 'video_route',
+    category: 'media',
+    keywords: [
+      'video', 'route', 'router', 'hybrid', 'flow', 'veo', 'comfyui', 'longcat',
+      'darkstar', 'ministar', 'credits', 'engine', 'routage', 'moteur',
+    ],
+    priority: 8,
+    description:
+      'Route hybrid video requests to local engines or browser-assisted Google Flow; estimates credits, never spends',
+  },
+  {
     name: 'understand_video',
     category: 'media',
     keywords: ['video', 'youtube', 'transcribe', 'transcript', 'captions', 'subtitles', 'vidéo', 'résume vidéo', 'summarize', 'watch', 'movie', 'mp4', 'visual', 'screencast', 'frames', 'on-screen', 'shown', 'cloud', 'gemini', 'research', 'experiment', 'backlog', 'innovation'],
