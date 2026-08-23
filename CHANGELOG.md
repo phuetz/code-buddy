@@ -79,6 +79,7 @@ once it reaches `1.0.0`.
 
 ### Added
 
+- **cli:** splash « Starting Code Buddy… » pendant le chargement du graphe agent (premier cadre TUI plus tôt). Désactivable pour l'automatisation : `CODEBUDDY_NO_LOADING_SCREEN=1` ou `--no-loading-screen`.
 - **cli:** add `buddy cost` (aggregated token & cost dashboard), `buddy changelog` (release notes from Conventional Commits), and `buddy import` (rules & MCP server migration from Cursor/Cline/Copilot/Claude Code) (#104).
 - **cli:** add `buddy explain [path]` — one-shot repository explanation report (Markdown or self-contained HTML, `--depth quick|deep`), extracted from PR #70 (#107)
 - **ui:** read-only LSP navigation tools (`lsp_definition`, `lsp_references`, `lsp_hover`, `lsp_symbols`, `lsp_diagnostics`) and ephemeral `@file` mentions with bounded project-root resolution (#103).

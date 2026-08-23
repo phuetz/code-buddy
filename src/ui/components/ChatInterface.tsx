@@ -29,10 +29,15 @@ import {
   useAccessibilitySettings,
   useKeyboardShortcuts,
 } from "../utils/accessibility.js";
+import { StartupScreen } from "./StartupScreen.js";
 
 interface ChatInterfaceProps {
   agent?: CodeBuddyAgent;
   initialMessage?: string;
+  /** Render the lightweight shell while the agent graph is loading. */
+  loading?: boolean;
+  /** Specialized renderers failed to register; structured output is generic. */
+  renderersDegraded?: boolean;
 }
 
 // Main chat component that handles input when agent is available
@@ -652,24 +657,41 @@ function ChatInterfaceWithAgent({
 function ChatInterfaceInner({
   agent,
   initialMessage,
+  loading,
+  renderersDegraded,
 }: ChatInterfaceProps) {
   const [currentAgent, setCurrentAgent] = useState<CodeBuddyAgent | null>(
     agent || null
   );
 
+  const activeAgent = agent || currentAgent;
+
   const handleApiKeySet = (newAgent: CodeBuddyAgent) => {
     setCurrentAgent(newAgent);
   };
 
-  if (!currentAgent) {
+  if (loading && !activeAgent) {
+    return <StartupScreen />;
+  }
+
+  if (!activeAgent) {
     return <ApiKeyInput onApiKeySet={handleApiKeySet} />;
   }
 
   return (
-    <ChatInterfaceWithAgent
-      agent={currentAgent}
-      initialMessage={initialMessage}
-    />
+    <Box flexDirection="column">
+      {renderersDegraded && (
+        <Box paddingX={2} paddingTop={1}>
+          <Text color="yellow">
+            Specialized renderers failed to load; structured output falls back to generic text.
+          </Text>
+        </Box>
+      )}
+      <ChatInterfaceWithAgent
+        agent={activeAgent}
+        initialMessage={initialMessage}
+      />
+    </Box>
   );
 }
 
@@ -677,11 +699,18 @@ function ChatInterfaceInner({
 export default function ChatInterface({
   agent,
   initialMessage,
+  loading,
+  renderersDegraded,
 }: ChatInterfaceProps) {
   return (
     <ThemeProvider>
       <ToastProvider>
-        <ChatInterfaceInner agent={agent} initialMessage={initialMessage} />
+        <ChatInterfaceInner
+          agent={agent}
+          initialMessage={initialMessage}
+          loading={loading}
+          renderersDegraded={renderersDegraded}
+        />
       </ToastProvider>
     </ThemeProvider>
   );

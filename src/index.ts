@@ -28,6 +28,7 @@ import {
   NO_PROVIDER_GUIDANCE,
   recoverFirstRunWithChatGpt,
 } from './cli/first-run.js';
+import { isLoadingScreenDisabled } from './ui/loading-screen.js';
 
 // Read version from package.json
 const __filename = fileURLToPath(import.meta.url);
@@ -98,6 +99,33 @@ function logStartupMetrics(): void {
   cli.info('===========================\n');
 }
 
+type ColdStartVariant = 'serial' | 'prefetch' | 'light';
+
+/**
+ * ST3c cold-start experiment (perf/cold-start-st3c).
+ *
+ * - `serial`: PR #142 HEAD — await ChatInterface, paint splash, THEN
+ *   import CodeBuddyAgent. First paint is early; agent-ready is serialized.
+ * - `prefetch`: start CodeBuddyAgent + ChatInterface imports before the splash
+ *   without awaiting the agent; splash is still ChatInterface `{ loading: true }`.
+ * - `light`: first Ink tree is the tiny StartupScreen (React+Ink only). No
+ *   agent/ChatInterface prefetch before that frame — kicking those imports
+ *   off early starves Ink on the main thread (probe: first-paint 850 ms).
+ *   After the splash, the agent import starts and ChatInterface joins
+ *   once construction is done (warm graph).
+ *
+ * Override with CODEBUDDY_COLD_START_VARIANT. Unset is `light` (ST3c winner:
+ * early StartupScreen, heavy imports after first paint). `serial` reproduces
+ * PR #142 HEAD; `prefetch` is the rejected overlap-before-paint attempt.
+ */
+function resolveColdStartVariant(
+  env: NodeJS.ProcessEnv = process.env,
+): ColdStartVariant {
+  const raw = env.CODEBUDDY_COLD_START_VARIANT?.trim().toLowerCase();
+  if (raw === 'prefetch' || raw === 'light' || raw === 'serial') return raw;
+  return 'light';
+}
+
 recordStartupPhase('imports-start');
 
 recordStartupPhase('imports-done');
@@ -144,7 +172,7 @@ const lazyImport = {
   initProject: () => lazyLoad('initProject', () => import("./utils/init-project.js")),
   securityModes: () => lazyLoad('securityModes', () => import("./security/security-modes.js")),
   contextLoader: () => lazyLoad('contextLoader', () => import("./context/context-loader.js")),
-  renderers: () => lazyLoad('renderers', () => import("./renderers/index.js")),
+  renderers: () => lazyLoad('renderers', () => import("./renderers/startup.js")),
   performance: () => lazyLoad('performance', () => import("./performance/index.js")),
   pluginManager: () => lazyLoad('pluginManager', () => import("./plugins/plugin-manager.js")),
   lazyLoader: () => lazyLoad('lazyLoader', () => import("./performance/lazy-loader.js")),
@@ -1431,6 +1459,10 @@ program
     "skip session persistence (do not save session to disk)"
   )
   .option(
+    "--no-loading-screen",
+    "skip the Starting Code Buddy… splash (also CODEBUDDY_NO_LOADING_SCREEN=1)"
+  )
+  .option(
     "--system-prompt-override <text>",
     "replace the entire system prompt with this text"
   )
@@ -1950,17 +1982,97 @@ program
         return;
       }
 
-      // Initialize rendering system (lazy load)
-      const { initializeRenderers, configureRenderContext } = await lazyImport.renderers();
-      initializeRenderers();
+      // Initialize rendering system (lazy load). Prefetch variants kick off the
+      // heavy agent / ChatInterface graphs BEFORE this await so they overlap
+      // the renderer module + first Ink frame instead of starting after it.
+      const coldStartVariant = resolveColdStartVariant();
+      recordStartupPhase(`variant:${coldStartVariant}`);
+      // `prefetch` starts both heavy graphs immediately (rejected: starves
+      // React/Ink, first-paint ~725 ms). `light` does not prefetch here.
+      let agentImportP: ReturnType<typeof lazyImport.CodeBuddyAgent> | undefined;
+      let chatImportP: ReturnType<typeof lazyImport.ChatInterface> | undefined;
+      if (coldStartVariant === 'prefetch') {
+        recordStartupPhase('prefetch-start');
+        agentImportP = lazyImport.CodeBuddyAgent();
+        chatImportP = lazyImport.ChatInterface();
+      }
+
+      const {
+        initializeRenderers,
+        configureRenderContext,
+        areSpecializedRenderersDegraded,
+      } = await lazyImport.renderers();
+      recordStartupPhase('renderers-mod-done');
+      const renderersReady = initializeRenderers();
       configureRenderContext({
         plain: options.plain,
         noColor: options.color === false,
         noEmoji: options.emoji === false,
       });
+      // `light` deliberately does not prefetch the agent here: CodeBuddyAgent's
+      // module evaluation is main-thread work and delays `await ink()`.
 
-      // Interactive mode: launch UI (lazy load heavy modules)
-      const CodeBuddyAgent = await lazyImport.CodeBuddyAgent();
+      // Paint a lightweight shell before importing the agent graph. The agent
+      // imports the complete tool dispatch surface and provider runtime; none
+      // of that is needed to show the first useful frame of the TUI.
+      // Automation can skip the splash: CODEBUDDY_NO_LOADING_SCREEN=1 or
+      // --no-loading-screen (Commander stores that as loadingScreen === false).
+      const skipLoadingScreen = isLoadingScreenDisabled(
+        process.env,
+        options.loadingScreen === false,
+      );
+      recordStartupPhase('ui-load-start');
+      const React = await lazyImport.React();
+      const { render } = await lazyImport.ink();
+      type ChatInterfaceComponent = Awaited<
+        ReturnType<typeof lazyImport.ChatInterface>
+      >;
+      let ChatInterface: ChatInterfaceComponent | undefined;
+      // `light` must not wait for ChatInterface before the first frame —
+      // that module is the 200–340 ms tax ST3b paid for a 2-line splash.
+      if (coldStartVariant !== 'light') {
+        ChatInterface = await (chatImportP ?? lazyImport.ChatInterface());
+      }
+      const inkOptions: Record<string, unknown> = { exitOnCtrlC: true };
+      if (options.altScreen === false) {
+        // --no-alt-screen disables Ink's alternate screen buffer
+        inkOptions.patchConsole = false;
+      }
+
+      let firstPaintAt = STARTUP_TIME;
+      let startupRender: ReturnType<typeof render> | undefined;
+      if (!skipLoadingScreen) {
+        recordStartupPhase('ui-first-render');
+        firstPaintAt = Date.now();
+        if (coldStartVariant === 'light') {
+          const { StartupScreen } = await import(
+            './ui/components/StartupScreen.js'
+          );
+          startupRender = render(
+            React.createElement(StartupScreen),
+            inkOptions,
+          );
+        } else if (ChatInterface) {
+          startupRender = render(
+            React.createElement(ChatInterface, { loading: true }),
+            inkOptions,
+          );
+        }
+        recordStartupPhase('splash-render-done');
+        logStartupMetrics();
+      }
+
+      // Light: heavy graphs are safe to start now — the splash is already
+      // painted. Agent + ChatInterface overlap each other, not the first frame.
+      if (coldStartVariant === 'light') {
+        recordStartupPhase('prefetch-after-splash');
+        agentImportP = agentImportP ?? lazyImport.CodeBuddyAgent();
+        chatImportP = chatImportP ?? lazyImport.ChatInterface();
+      }
+
+      // Interactive mode: load the full agent graph. Prefetch variants have
+      // already started this import; serial starts it only now (HEAD).
+      const CodeBuddyAgent = await (agentImportP ?? lazyImport.CodeBuddyAgent());
       let systemPromptId = options.systemPrompt;  // New: external prompt support
       let customAgentConfig = null;
 
@@ -2158,28 +2270,16 @@ program
         ? message.join(" ")
         : message;
 
-      // Lazy load React and Ink for UI
-      recordStartupPhase('ui-load-start');
-      const React = await lazyImport.React();
-      const { render } = await lazyImport.ink();
-      const ChatInterface = await lazyImport.ChatInterface();
-
-      // Log startup metrics before UI render
-      recordStartupPhase('ui-render');
-      logStartupMetrics();
-
       const totalStartupMs = Date.now() - STARTUP_TIME;
+      if (!startupRender) {
+        recordStartupPhase('ui-first-render');
+        firstPaintAt = Date.now();
+      }
+      const sinceFirstPaintMs = Date.now() - firstPaintAt;
       if (totalStartupMs > 5000) {
         logger.warn(`Slow startup detected: ${totalStartupMs}ms. Run with PERF_TIMING=true for phase breakdown.`);
       } else {
-        logger.debug(`Startup completed in ${totalStartupMs}ms`);
-      }
-
-      // Configure Ink render options
-      const inkOptions: Record<string, unknown> = { exitOnCtrlC: true };
-      if (options.altScreen === false) {
-        // --no-alt-screen disables Ink's alternate screen buffer
-        inkOptions.patchConsole = false;
+        logger.debug(`Agent ready in ${sinceFirstPaintMs}ms after the first TUI frame`);
       }
 
       // Opt the interactive session into the Hermes-style post-session background
@@ -2188,7 +2288,39 @@ program
       // trigger a review (recursion + cost safety).
       agent.enableBackgroundReview();
 
-      render(React.createElement(ChatInterface, { agent, initialMessage }), inkOptions);
+      // Light variant: ChatInterface was loading during agent construction.
+      if (!ChatInterface) {
+        recordStartupPhase('chat-import-join-start');
+        ChatInterface = await (chatImportP ?? lazyImport.ChatInterface());
+        recordStartupPhase('chat-import-join-done');
+      }
+
+      const renderersAwaitStart = PERF_TIMING ? Date.now() : 0;
+      recordStartupPhase('renderers-await-start');
+      try {
+        await renderersReady;
+      } catch (renderersError) {
+        const detail = renderersError instanceof Error ? renderersError.message : String(renderersError);
+        cli.warn(`Specialized renderers failed to load (${detail}); structured output (tests, weather, diffs, tables) will use generic text.`);
+      }
+      const renderersAwaitMs = PERF_TIMING ? Date.now() - renderersAwaitStart : 0;
+      if (PERF_TIMING) {
+        recordStartupPhase(`renderers-await (${renderersAwaitMs}ms)`);
+        cli.info(`  renderers-await: ${renderersAwaitMs}ms`);
+      }
+
+      recordStartupPhase('agent-ready-render');
+      // Historical alias: longitudinal PERF_TIMING series used `ui-render`
+      // for time-to-agent-ready (the full ChatInterface, not the loading shell).
+      recordStartupPhase('ui-render');
+      logStartupMetrics();
+      const renderersDegraded = areSpecializedRenderersDegraded();
+      const readyUi = React.createElement(ChatInterface, { agent, initialMessage, renderersDegraded });
+      if (startupRender) {
+        startupRender.rerender(readyUi);
+      } else {
+        render(readyUi, inkOptions);
+      }
 
       // Initialize plugin system in background (non-blocking)
       setImmediate(async () => {
