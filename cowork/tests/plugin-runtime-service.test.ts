@@ -72,12 +72,12 @@ function createPluginFixture(root: string, pluginName: string): string {
   return pluginRoot;
 }
 
-async function createRuntimeService(options?: { catalogService?: any; commandRunner?: any }) {
+async function createRuntimeService(options?: { catalogService?: never; commandRunner?: never }) {
   const { PluginRuntimeService } = await import('../src/main/skills/plugin-runtime-service');
   const fakeCatalogService = options?.catalogService ?? ({
     listAnthropicPlugins: vi.fn(),
     downloadPlugin: vi.fn(),
-  } as any);
+  } as never);
   return new PluginRuntimeService(fakeCatalogService, options?.commandRunner);
 }
 
@@ -116,7 +116,7 @@ describe('PluginRuntimeService', () => {
         catalogSource: 'claude-marketplace',
       },
     ]);
-    const catalogService = { listAnthropicPlugins } as any;
+    const catalogService = { listAnthropicPlugins } as never;
     const commandRunner = vi
       .fn()
       .mockResolvedValueOnce({ stdout: '', stderr: '' })
@@ -161,7 +161,7 @@ describe('PluginRuntimeService', () => {
         catalogSource: 'claude-marketplace',
       },
     ]);
-    const catalogService = { listAnthropicPlugins } as any;
+    const catalogService = { listAnthropicPlugins } as never;
     const commandRunner = vi
       .fn()
       .mockResolvedValueOnce({ stdout: '', stderr: '' })
@@ -217,7 +217,7 @@ describe('PluginRuntimeService', () => {
         catalogSource: 'claude-marketplace',
       },
     ]);
-    const catalogService = { listAnthropicPlugins } as any;
+    const catalogService = { listAnthropicPlugins } as never;
     const commandRunner = vi
       .fn()
       .mockResolvedValueOnce({ stdout: '', stderr: '' })
@@ -277,7 +277,7 @@ describe('PluginRuntimeService', () => {
         catalogSource: 'claude-marketplace',
       },
     ]);
-    const catalogService = { listAnthropicPlugins } as any;
+    const catalogService = { listAnthropicPlugins } as never;
     const commandRunner = vi.fn();
 
     const service = await createRuntimeService({ catalogService, commandRunner });
@@ -303,7 +303,7 @@ describe('PluginRuntimeService', () => {
         catalogSource: 'claude-marketplace',
       },
     ]);
-    const catalogService = { listAnthropicPlugins } as any;
+    const catalogService = { listAnthropicPlugins } as never;
     const commandRunner = vi
       .fn()
       .mockResolvedValueOnce({ stdout: '', stderr: '' })
@@ -332,7 +332,7 @@ describe('PluginRuntimeService', () => {
         catalogSource: 'claude-marketplace',
       },
     ]);
-    const catalogService = { listAnthropicPlugins } as any;
+    const catalogService = { listAnthropicPlugins } as never;
     const commandRunner = vi.fn(async () => {
       const error = new Error('spawn claude ENOENT') as Error & { code?: string };
       error.code = 'ENOENT';
