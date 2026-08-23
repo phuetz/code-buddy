@@ -461,6 +461,27 @@ describe('capability-registry — Hermes role tags', () => {
 });
 
 describe('capability-registry — caching', () => {
+  it('deduplicates concurrent snapshot builds', async () => {
+    const fetchSpy = vi.fn(async () => {
+      throw new Error('econn');
+    });
+    global.fetch = fetchSpy as unknown as typeof fetch;
+
+    const snapshots = await Promise.all(
+      Array.from({ length: 5 }, () => getLocalCapabilities()),
+    );
+
+    const probedUrls = fetchSpy.mock.calls.map(([url]) => String(url));
+    expect(probedUrls.length).toBeGreaterThan(0);
+    expect(new Set(probedUrls).size).toBe(probedUrls.length);
+    expect(snapshots).toHaveLength(5);
+    expect(
+      snapshots.every(
+        (snapshot) => snapshot.machineLabel === snapshots[0]!.machineLabel,
+      ),
+    ).toBe(true);
+  });
+
   it('caches the snapshot — second call does not re-probe', async () => {
     process.env.ANTHROPIC_API_KEY = 'k';
     const fetchSpy = vi.fn(async () => {

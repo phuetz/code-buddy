@@ -847,7 +847,7 @@ export class PersistentMemoryManager extends EventEmitter {
       const tags = memory.tags?.length ? ` [${memory.tags.join(", ")}]` : "";
       return (
         `- **${memory.key}** (${memory.category}${tags}, accessed ${memory.accessCount}×, ` +
-        `age ${Math.round(candidate.ageDays)}d, retention ${candidate.retention.toFixed(3)}): ${memory.value}`
+        `age ${Math.round(candidate.ageDays)}d, retention ${candidate.retention.toFixed(3)}): ${escapeArchiveValue(memory.value)}`
       );
     });
 
@@ -968,7 +968,7 @@ export class PersistentMemoryManager extends EventEmitter {
         .filter(Boolean);
       entries.push({
         key: entryKey,
-        value,
+        value: unescapeArchiveValue(value),
         category,
         ...(tags?.length ? { tags } : {}),
         forgottenAt,
@@ -1372,6 +1372,20 @@ export class PersistentMemoryManager extends EventEmitter {
       total: this.projectMemories.size + this.userMemories.size,
     };
   }
+}
+
+const ARCHIVE_ESCAPED_VALUE_PREFIX = "@codebuddy-escaped-v1:";
+
+function escapeArchiveValue(value: string): string {
+  return ARCHIVE_ESCAPED_VALUE_PREFIX + value.replace(/\\/g, "\\\\").replace(/\r?\n/g, "\\n");
+}
+
+/** Decode backslash/newline escapes in one pass so a literal `\\n` stays literal. */
+function unescapeArchiveValue(value: string): string {
+  if (!value.startsWith(ARCHIVE_ESCAPED_VALUE_PREFIX)) return value;
+  return value
+    .slice(ARCHIVE_ESCAPED_VALUE_PREFIX.length)
+    .replace(/\\(\\|n)/g, (_match, escaped: string) => escaped === "n" ? "\n" : "\\");
 }
 
 // Default singleton instance (no bot scope) + per-bot instances.
