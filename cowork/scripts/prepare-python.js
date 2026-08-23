@@ -133,7 +133,9 @@ function download(url, dest) {
       try {
         file.close();
         fs.unlinkSync(dest);
-      } catch {}
+      } catch {
+        // ignore cleanup error
+      }
       reject(err);
     });
   });
