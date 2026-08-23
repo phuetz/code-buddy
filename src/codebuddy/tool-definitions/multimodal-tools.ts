@@ -568,6 +568,33 @@ export const VIDEO_QUALITY_GATE_TOOL: CodeBuddyTool = {
   },
 };
 
+export const VIDEO_LONG_FORM_PLAN_TOOL: CodeBuddyTool = {
+  type: "function",
+  function: {
+    name: "video_long_form_plan",
+    description:
+      "Assess or compile an original long-form episode plan (8–20 min, chaptered, private, human-review required). Never generates media, never writes files, never auto-publishes.",
+    parameters: {
+      type: "object",
+      properties: {
+        operation: {
+          type: "string",
+          enum: ["assess", "compile"],
+          description:
+            "assess: readiness report. compile: render packet if production-ready. Neither writes files nor publishes.",
+        },
+        plan: {
+          type: "object",
+          description:
+            "LongFormEpisodePlan (schemaVersion 1): episodeId, locale, title, description, chapters[], publication gate (private, autoPublish false, humanReviewRequired).",
+        },
+      },
+      required: ["operation", "plan"],
+      additionalProperties: false,
+    },
+  },
+};
+
 export const VIDEO_ROUTE_TOOL: CodeBuddyTool = {
   type: "function",
   function: {
@@ -1251,6 +1278,7 @@ export const MULTIMODAL_TOOLS: CodeBuddyTool[] = [
   VIDEO_GENERATE_TOOL,
   VIDEO_STITCH_TOOL,
   VIDEO_QUALITY_GATE_TOOL,
+  VIDEO_LONG_FORM_PLAN_TOOL,
   VIDEO_ROUTE_TOOL,
   SCREENSHOT_TOOL,
   CAMERA_SNAPSHOT_TOOL,

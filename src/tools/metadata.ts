@@ -929,6 +929,17 @@ export const TOOL_METADATA: ToolMetadata[] = [
       'Fail-closed visual quality gate plus digest-bound YouTube master human review; never publishes',
   },
   {
+    name: 'video_long_form_plan',
+    category: 'media',
+    keywords: [
+      'video', 'long-form', 'long form', 'episode', 'plan', 'youtube', 'chapters',
+      'narration', 'ad break', 'mid-roll', 'épisode', 'plan long', 'compile',
+    ],
+    priority: 8,
+    description:
+      'Assess or compile an original long-form episode plan; never writes files or auto-publishes',
+  },
+  {
     name: 'video_route',
     category: 'media',
     keywords: [
