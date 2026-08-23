@@ -10,7 +10,23 @@ describe('stable JSON serialization', () => {
   it('preserves nested Date serialization in objects and arrays', () => {
     const date = new Date('2026-01-02T03:04:05.000Z');
     expect(stableStringify({ z: [{ createdAt: date }], a: { updatedAt: date } })).toBe(
-      '{"a":{"updatedAt":"2026-01-02T03:04:05.000Z"},"z":[{"createdAt":"2026-01-02T03:04:05.000Z"}]}',
+      '{"a":{"updatedAt":"2026-01-02T03:04:05.000Z"},"z":[{"createdAt":"2026-01-02T03:04:05.000Z"]}}',
+    );
+  });
+
+  it('serializes Dates directly in arrays', () => {
+    expect(stableStringify([new Date('2026-01-02T03:04:05.000Z')])).toBe(
+      '["2026-01-02T03:04:05.000Z"]',
+    );
+  });
+
+  it('serializes invalid Dates as null like JSON.stringify', () => {
+    expect(stableStringify({ when: new Date('invalid') })).toBe('{"when":null}');
+  });
+
+  it('sorts valid JSON recursively in normalizeJson', () => {
+    expect(normalizeJson('{"z":{"b":2,"a":1},"a":[3,2,1]}')).toBe(
+      '{"a":[3,2,1],"z":{"a":1,"b":2}}',
     );
   });
 
@@ -25,5 +41,11 @@ describe('stable JSON serialization', () => {
   it('returns invalid JSON unchanged', () => {
     const invalid = '{not-json';
     expect(normalizeJson(invalid)).toBe(invalid);
+  });
+
+  it('preserves circular object failures', () => {
+    const circular: Record<string, unknown> = {};
+    circular.self = circular;
+    expect(() => stableStringify(circular)).toThrow(TypeError);
   });
 });
