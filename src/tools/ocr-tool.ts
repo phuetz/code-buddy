@@ -1,9 +1,18 @@
 import { UnifiedVfsRouter } from '../services/vfs/unified-vfs-router.js';
 import path from 'path';
-import { spawn, execSync } from 'child_process';
+import { spawn as defaultSpawn, execSync as defaultExecSync } from 'child_process';
 import { ToolResult, getErrorMessage } from '../types/index.js';
 import { fileURLToPath } from 'url';
 import { logger } from '../utils/logger.js';
+
+type TesseractJsLoader = () => Promise<{
+  createWorker: (language?: string) => Promise<{
+    recognize: (imagePath: string) => Promise<{
+      data: { text?: string; confidence?: number; words?: unknown[] };
+    }>;
+    terminate: () => Promise<void>;
+  }>;
+}>;
 
 export interface OCRResult {
   text: string;
@@ -44,6 +53,21 @@ export interface OCRToolOptions {
    * `import('child_process')` escapes the static mock) and would race them.
    */
   platform?: NodeJS.Platform;
+  /**
+   * Injected `spawn`. Tests pass a fake so the Tesseract CLI path never
+   * depends on a host `tesseract` binary being present or absent.
+   */
+  spawn?: typeof defaultSpawn;
+  /**
+   * Injected `execSync`. Same reason: `tesseract --version` / `which convert`
+   * must not silently consult PATH.
+   */
+  execSync?: typeof defaultExecSync;
+  /**
+   * Override the dynamic `import('tesseract.js')`. Tests supply a rejecting
+   * stub so engine 2 fails on a microtask instead of loading WASM.
+   */
+  loadTesseractJs?: TesseractJsLoader;
 }
 
 export class OCRTool {
@@ -52,9 +76,16 @@ export class OCRTool {
   private tesseractAvailable: boolean | null = null;
   private vfs = UnifiedVfsRouter.Instance;
   private readonly platform: NodeJS.Platform;
+  private readonly spawnImpl: typeof defaultSpawn;
+  private readonly execSyncImpl: typeof defaultExecSync;
+  private readonly loadTesseractJs: TesseractJsLoader;
 
   constructor(options: OCRToolOptions = {}) {
     this.platform = options.platform ?? process.platform;
+    this.spawnImpl = options.spawn ?? defaultSpawn;
+    this.execSyncImpl = options.execSync ?? defaultExecSync;
+    this.loadTesseractJs = options.loadTesseractJs
+      ?? (async () => import('tesseract.js') as unknown as Awaited<ReturnType<TesseractJsLoader>>);
   }
 
   /**
@@ -139,7 +170,7 @@ export class OCRTool {
     }
 
     try {
-      execSync('tesseract --version', { stdio: 'ignore' });
+      this.execSyncImpl('tesseract --version', { stdio: 'ignore' });
       this.tesseractAvailable = true;
     } catch {
       this.tesseractAvailable = false;
@@ -179,7 +210,7 @@ export class OCRTool {
       // Request TSV output for confidence scores
       args.push('-c', 'tessedit_create_tsv=1');
 
-      const tesseract = spawn('tesseract', args);
+      const tesseract = this.spawnImpl('tesseract', args);
 
       let stdout = '';
       let stderr = '';
@@ -362,7 +393,7 @@ export class OCRTool {
         };
       }
 
-      const output = execSync('tesseract --list-langs', { encoding: 'utf8' });
+      const output = this.execSyncImpl('tesseract --list-langs', { encoding: 'utf8' });
       const lines = output.split('\n').slice(1).filter(l => l.trim());
 
       return {
@@ -424,7 +455,7 @@ export class OCRTool {
   ): Promise<ToolResult> {
     // For region extraction, we need ImageMagick to crop first
     try {
-      execSync('which convert', { stdio: 'ignore' });
+      this.execSyncImpl('which convert', { stdio: 'ignore' });
     } catch {
       return {
         success: false,
@@ -445,7 +476,7 @@ export class OCRTool {
 
     try {
       // Crop the region using ImageMagick
-      execSync(
+      this.execSyncImpl(
         `convert "${resolvedPath}" -crop ${region.width}x${region.height}+${region.x}+${region.y} "${tempPath}"`
       );
 
@@ -536,7 +567,7 @@ export class OCRTool {
   private async runTesseractJS(imagePath: string, options: OCROptions): Promise<ToolResult> {
     const startTime = Date.now();
     try {
-      const { createWorker } = await import('tesseract.js');
+      const { createWorker } = await this.loadTesseractJs();
       const worker = await createWorker(options.language || 'eng');
       
       const { data } = await worker.recognize(imagePath);
@@ -554,7 +585,7 @@ export class OCRTool {
       }));
 
       const result: OCRResult = {
-        text: data.text,
+        text: data.text ?? '',
         confidence: data.confidence,
         language: options.language || 'eng',
         blocks,

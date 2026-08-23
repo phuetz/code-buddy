@@ -1,6 +1,7 @@
+import { spawn as defaultSpawn, execSync as defaultExecSync } from 'child_process';
+import { EventEmitter } from 'events';
 import { OCRTool } from '../../src/tools/ocr-tool.js';
 import { UnifiedVfsRouter } from '../../src/services/vfs/unified-vfs-router.js';
-import { EventEmitter } from 'events';
 
 // Define mocks inside the factory
 jest.mock('../../src/services/vfs/unified-vfs-router.js', () => ({
@@ -15,30 +16,38 @@ jest.mock('../../src/services/vfs/unified-vfs-router.js', () => ({
   }
 }));
 
-// Mock child_process (static `spawn`/`execSync` imports). The Windows-native
-// OCR engine (engine 1 of the cascade) does a DYNAMIC `await import('child_process')`
-// that this mock does not reliably intercept — on a Windows host it shelled out
-// to a real PowerShell OCR (up to 15 s) and raced the `setImmediate`-timed
-// emissions below. The tool is therefore constructed with an explicit
-// non-Windows platform so the cascade starts at engine 2 on every host.
+// Hermetic CLI/WASM stubs injected via OCRToolOptions. A module-level
+// `jest.mock('child_process')` is incomplete (no `exec`/`execFile`, and the
+// Jest-compat transform rewrites the factory to `async () =>`) so macOS CI
+// could still shell out to a real `tesseract` / `/usr/bin/convert` (CUPS, not
+// ImageMagick) and race the cascade. Injected fakes do not consult PATH.
 const mockSpawn = jest.fn();
 const mockExecSync = jest.fn();
-jest.mock('child_process', () => ({
-  spawn: (...args: any[]) => mockSpawn(...args),
-  execSync: (...args: any[]) => mockExecSync(...args)
-}));
+const rejectTesseractJs = async () => {
+  throw new Error('tesseract.js disabled in test');
+};
 
-// The OCR cascade tries Windows-native OCR (engine 1) and Tesseract.js WASM
-// (engine 2) BEFORE the Tesseract CLI path these tests exercise. Stub
-// tesseract.js so engine 2 fails on a microtask (rather than doing real WASM
-// macrotask IO, which would both download models and race the test's
-// `setImmediate`-timed event emissions). With this in place the cascade falls
-// through deterministically to the mocked Tesseract CLI path.
-jest.mock('tesseract.js', () => ({
-  createWorker: jest.fn(async () => {
-    throw new Error('tesseract.js disabled in test');
-  })
-}));
+const HOST_OCR_ENV = {
+  GROK_API_KEY: process.env.GROK_API_KEY,
+  OPENAI_API_KEY: process.env.OPENAI_API_KEY,
+};
+
+function restoreOcrEnv(): void {
+  for (const key of Object.keys(HOST_OCR_ENV) as Array<keyof typeof HOST_OCR_ENV>) {
+    const previous = HOST_OCR_ENV[key];
+    if (previous === undefined) delete process.env[key];
+    else process.env[key] = previous;
+  }
+}
+
+function createTool(): OCRTool {
+  return new OCRTool({
+    platform: 'linux',
+    spawn: mockSpawn as unknown as typeof defaultSpawn,
+    execSync: mockExecSync as unknown as typeof defaultExecSync,
+    loadTesseractJs: rejectTesseractJs,
+  });
+}
 
 describe('OCRTool', () => {
   let tool: OCRTool;
@@ -52,11 +61,16 @@ describe('OCRTool', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    tool = new OCRTool({ platform: 'linux' });
-    (tool as any).tesseractAvailable = null;
-    
+    restoreOcrEnv();
+    tool = createTool();
+    (tool as { tesseractAvailable: boolean | null }).tesseractAvailable = null;
+
     // Default execSync to return empty string instead of buffer to avoid split errors
     mockExecSync.mockReturnValue('');
+  });
+
+  afterEach(() => {
+    restoreOcrEnv();
   });
 
   const mockProcess = () => {
@@ -129,7 +143,7 @@ describe('OCRTool', () => {
 
       const promise = tool.extractText('test.png');
 
-      await new Promise(resolve => setImmediate(resolve));
+      await vi.waitFor(() => expect(mockSpawn).toHaveBeenCalled());
 
       proc.stderr.emit('data', Buffer.from('Error'));
       proc.emit('close', 1);
@@ -255,7 +269,7 @@ describe('OCRTool', () => {
 
       const promise = tool.extractRegion('test.png', { x: 0, y: 0, width: 100, height: 100 });
 
-      await new Promise(resolve => setImmediate(resolve));
+      await vi.waitFor(() => expect(mockSpawn).toHaveBeenCalled());
 
       const tsv = `level\tpage_num\tblock_num\tpar_num\tline_num\tword_num\tleft\ttop\twidth\theight\tconf\ttext
 5\t1\t1\t1\t1\t1\t10\t10\t50\t20\t95\tRegionText`;
