@@ -164,7 +164,7 @@ function summarize(name, s) {
     : `${name}: (no samples)`;
 }
 
-function collect(label) {
+function collect() {
   return {
     firstPaintApp: [],
     uiRenderApp: [],
@@ -233,7 +233,7 @@ async function main() {
       console.error(`  phases=${JSON.stringify(sample.phases)}`);
     }
   } else {
-    const buckets = Object.fromEntries(TARGETS.map((t) => [t.label, collect(t.label)]));
+    const buckets = Object.fromEntries(TARGETS.map((t) => [t.label, collect()]));
     console.error(`[tui] interleaved n=${TUI_RUNS} targets=${TARGETS.map((t) => t.label).join(',')}`);
     for (let i = 0; i < TUI_RUNS; i++) {
       for (const t of TARGETS) {
