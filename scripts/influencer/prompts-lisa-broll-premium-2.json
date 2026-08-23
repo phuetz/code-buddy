@@ -1,0 +1,67 @@
+[
+ {
+  "id": "lisa-price-chart-up",
+  "ratio": "16:9",
+  "prompt": "Cinematic close-up of a dark financial dashboard, a glowing orange price line chart shooting sharply upward, bar charts pulsing in the background, shallow depth of field, moody, no face, no person."
+ },
+ {
+  "id": "lisa-open-weights",
+  "ratio": "16:9",
+  "prompt": "Cinematic shot of a glowing open padlock made of light dissolving into streams of data that flow from a tall server toward dozens of small glowing terminals, dark void, cyan light, volumetric fog, no face, no person."
+ },
+ {
+  "id": "lisa-audio-waveform",
+  "ratio": "16:9",
+  "prompt": "Cinematic macro of a glowing audio waveform and spectrum bars pulsing to a beat in a dark music studio, violet and teal light, shallow depth of field, no face, no person."
+ },
+ {
+  "id": "lisa-gateway-closing",
+  "ratio": "16:9",
+  "prompt": "Cinematic wide shot of a massive glowing digital gateway slowly closing in a dark futuristic hall, beams of light being cut off one by one, blue and red glow, volumetric fog, no face, no person."
+ },
+ {
+  "id": "lisa-contract-seal",
+  "ratio": "16:9",
+  "prompt": "Cinematic close-up of a holographic legal contract floating above a dark desk, a glowing seal stamping onto it, amber light, shallow depth of field, no face, no person."
+ },
+ {
+  "id": "lisa-curves-converge",
+  "ratio": "16:9",
+  "prompt": "Cinematic slow push-in on a dark chart where two glowing line curves, one blue and one orange, converge toward each other, particles drifting, depth of field, no face, no person."
+ },
+ {
+  "id": "lisa-data-vault",
+  "ratio": "16:9",
+  "prompt": "Cinematic slow push-in toward a massive glowing circular data vault door in a dark server hall, volumetric light, photorealistic, no face, no person."
+ },
+ {
+  "id": "lisa-quantum-chip",
+  "ratio": "16:9",
+  "prompt": "Cinematic macro of a golden quantum computer chandelier in a dark cryogenic lab, frost and faint blue glow, slow tilt down, photorealistic, shallow depth of field, no face, no person."
+ },
+ {
+  "id": "lisa-server-cables",
+  "ratio": "16:9",
+  "prompt": "Cinematic macro of glowing fiber-optic cables and blinking network ports in a dark server rack, light pulses traveling along the fibers, cyan glow, shallow depth of field, no face, no person."
+ },
+ {
+  "id": "lisa-keyboard-code",
+  "ratio": "16:9",
+  "prompt": "Cinematic macro of hands typing on a backlit mechanical keyboard in a dark room, lines of code reflected on a monitor, blue light, shallow depth of field, no face."
+ },
+ {
+  "id": "lisa-phone-chat",
+  "ratio": "16:9",
+  "prompt": "Cinematic close-up of a smartphone on a dark desk, an AI chat interface typing out glowing text bubbles, soft blue screen light, shallow depth of field, no face, no person."
+ },
+ {
+  "id": "lisa-satellite-earth",
+  "ratio": "16:9",
+  "prompt": "Cinematic view of a satellite drifting above Earth at night, city lights below, data beams linking ground stations, slow drift, photorealistic, no face, no person."
+ },
+ {
+  "id": "lisa-lab-robot-arm",
+  "ratio": "16:9",
+  "prompt": "Cinematic shot of a sleek robotic arm moving precisely in a dark high-tech lab, blue status lights, volumetric light, shallow depth of field, no face, no person."
+ }
+]

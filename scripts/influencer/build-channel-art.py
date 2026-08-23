@@ -53,8 +53,8 @@ class Chaine:
 CHAINES = (
     Chaine(
         cle="ambre",
-        nom="AMBRE",
-        signature="Les destinations, habillées par Ambre.",
+        nom="Ambre",
+        signature="Des destinations chics et de charme.",
         portrait=Path(
             "/home/patrice/Videos/personas/garde-robe-reparee/ambre-trench-camel.png"
         ),
@@ -67,8 +67,8 @@ CHAINES = (
     ),
     Chaine(
         cle="lisa",
-        nom="LISA IA",
-        signature="Comprendre ce que l'IA change, sans le vendre.",
+        nom="Lisa IA",
+        signature="Comprendre ce que l'IA change.",
         portrait=Path(
             "/home/patrice/.codebuddy/personas/lisa/wardrobe/lisa-blazer.png"
         ),
@@ -127,23 +127,36 @@ def fabriquer_banniere(chaine: Chaine, sortie: Path) -> Path:
 
     toile = Image.new("RGB", (largeur, hauteur), chaine.fond)
 
-    # Le portrait occupe la moitié droite, cadré sur le buste.
+    # Le portrait occupe la moitié droite. On l'AGRANDIT (1,3x la hauteur de la
+    # bannière) : le visage, cadré dans le tiers supérieur du portrait, descend
+    # ainsi au centre de la bande visible YouTube — sans laisser de vide en haut
+    # (le portrait couvre toute la hauteur et déborde en bas, où il est coupé).
     portrait = Image.open(chaine.portrait).convert("RGB")
-    facteur = hauteur / portrait.height
-    portrait = portrait.resize(
-        (round(portrait.width * facteur), hauteur), Image.LANCZOS
-    )
+    facteur = (hauteur * 1.3) / portrait.height
+    new_w = round(portrait.width * facteur)
+    new_h = round(portrait.height * facteur)
+    portrait = portrait.resize((new_w, new_h), Image.LANCZOS)
     portrait_l = portrait.width
 
     # Dégradé d'opacité : invisible à gauche, plein à droite. Sans lui, le
     # portrait se découpe en rectangle et la bannière fait montage amateur.
-    masque = Image.new("L", (portrait_l, hauteur))
+    masque = Image.new("L", (portrait_l, new_h))
     dessin_masque = ImageDraw.Draw(masque)
     for x in range(portrait_l):
         t = x / max(1, portrait_l - 1)
-        dessin_masque.line([(x, 0), (x, hauteur)], fill=int(255 * min(1.0, t * 1.9)))
+        dessin_masque.line([(x, 0), (x, new_h)], fill=int(255 * min(1.0, t * 1.9)))
 
-    toile.paste(portrait, (largeur - portrait_l, 0), masque)
+    # Sur mobile, YouTube n'affiche qu'une bande CENTRALE étroite (zone sûre
+    # 1546 px). Collé tout à droite, le côté du visage sort de cette bande et est
+    # coupé. On décale le portrait vers la gauche (visage plus central) tout en le
+    # laissant toucher le bord droit (facteur d'agrandissement déjà large).
+    offset_x = round(largeur * 0.10)
+    toile.paste(portrait, (largeur - portrait_l - offset_x, 0), masque)
+    # Prolonge le bord droit du portrait pour combler le vide créé par le décalage
+    # (évite un liseré net + fond vide à droite).
+    bord = portrait.crop((portrait_l - 4, 0, portrait_l, new_h))
+    bord = bord.resize((offset_x + 8, new_h))
+    toile.paste(bord, (largeur - offset_x - 8, 0))
 
     dessin = ImageDraw.Draw(toile)
     police_nom = ImageFont.truetype(GRAS, 150)

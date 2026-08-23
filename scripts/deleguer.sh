@@ -89,6 +89,14 @@ case "$MOTEUR" in
     (cd "$DEPOT" && grok --always-approve --cwd "$DEPOT" \
        ${GROK_MODELE:+-m "$GROK_MODELE"} -p "$(cat "$CONSIGNE")") 2>&1 | tee "$LOG"
     ;;
+  qwen)
+    # Qwen 3.8 27B LOCAL (Ollama, 0 €, aucun quota) — exécutant = Code Buddy headless (agentique : lit,
+    # édite, lance). OLLAMA_MODELE pour changer (gemma4:31b-it-qat, …). Un seul job à la fois (GPU).
+    CB_SRC=${CB_SRC:-$HOME/code-buddy-vitrine}; [ -f "$CB_SRC/src/index.ts" ] || CB_SRC=$HOME/code-buddy
+    (cd "$DEPOT" && CODEBUDDY_PROVIDER=ollama OLLAMA_HOST="${OLLAMA_HOST:-http://127.0.0.1:11434}" \
+       "$CB_SRC/node_modules/.bin/tsx" "$CB_SRC/src/index.ts" -m "${OLLAMA_MODELE:-qwen3.8:27b}" \
+       --permission-mode acceptEdits -p "$(cat "$CONSIGNE")") 2>&1 | tee "$LOG"
+    ;;
   nvidia)
     # NVIDIA Build (build.nvidia.com) = palier GRATUIT (~40 RPM), clé NVIDIA_API_KEY dans
     # ~/.codebuddy/lisa.env. Exécutant = Code Buddy lui-même en headless (agentique : lit, édite,

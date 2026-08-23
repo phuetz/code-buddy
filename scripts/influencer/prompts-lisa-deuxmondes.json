@@ -1,0 +1,8 @@
+[
+  {"id":"tw-01-datacenter","ratio":"16:9","prompt":"Cinematic shot gliding through a vast dark data center, endless server racks pulsing with cyan and violet light, floating streams of glowing data particles, volumetric fog, slow forward dolly, shallow depth of field, hyper-detailed, moody electronic atmosphere, no face, no person."},
+  {"id":"tw-02-neonflux","ratio":"16:9","prompt":"Abstract flight through a neon wireframe cityscape made of light, glowing grid lines and holographic shapes rushing past, cyan and magenta, fast forward motion, particles, cinematic sci-fi, high energy, no face, no person."},
+  {"id":"tw-03-threshold","ratio":"16:9","prompt":"A luminous doorway of light splitting a cold blue digital world from a warm golden human world, slow push through the threshold, dust motes in warm sunlight on the other side, cinematic, symbolic, seamless transition, no face, no person."},
+  {"id":"tw-04-sunrise","ratio":"16:9","prompt":"Warm golden-hour sunrise over a quiet European city rooftop, soft haze, birds, gentle breeze moving curtains, slow rising crane shot, film grain, intimate and hopeful mood, no face, no person."},
+  {"id":"tw-05-coffee","ratio":"16:9","prompt":"Close-up of warm morning light falling on a wooden table, a cup of coffee steaming, soft bokeh, cozy, cinematic, shallow depth of field, no face, no person."},
+  {"id":"tw-06-finale","ratio":"16:9","prompt":"Wide cinematic shot where a glowing digital nebula slowly dissolves into a real starry night sky over mountains, particles becoming stars, epic and emotional, slow pull back, no face, no person."}
+]

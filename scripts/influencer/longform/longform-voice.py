@@ -209,7 +209,12 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description='Synthétise les MP3 Lisa et mesure leur durée réelle.')
     parser.add_argument('--workdir', required=True, help='workdir avec plan.json')
+    parser.add_argument('--speed', type=float, default=None,
+                        help='vitesse ElevenLabs par défaut (0.7–1.2) ; sinon 0.93 avatar / 0.85 voix off ; '
+                             'une section peut porter sa propre clé "speed"')
+    parser.add_argument('--only', default='', help='ids de sections à synthétiser seuls (csv)')
     args = parser.parse_args()
+    only = {x for x in args.only.split(',') if x}
 
     workdir = Path(args.workdir).expanduser().resolve()
     plan_path = workdir / 'plan.json'
@@ -227,6 +232,8 @@ def main() -> None:
         usage = load_usage()
         network_characters = 0
         for section in sections:
+            if only and section['id'] not in only:
+                continue
             audio_path = voice_dir / f'{section["id"]}.mp3'
             if audio_path.exists():
                 print(f'SKIP audio existant: {audio_path}')
@@ -237,7 +244,9 @@ def main() -> None:
                     api_key = load_env_value(
                         MEDIA_ENV, 'ELEVENLABS_API_KEY')
                 print(f'ElevenLabs: {section["id"]}…')
-                speed = 0.93 if section.get('mode') == 'avatar' else 0.85
+                default_speed = args.speed if args.speed is not None else (
+                    0.93 if section.get('mode') == 'avatar' else 0.85)
+                speed = float(section.get('speed', default_speed))
                 synthesize(
                     text,
                     audio_path,

@@ -1,0 +1,10 @@
+[
+  {"id":"lisa-datacenter","ratio":"16:9","prompt":"Cinematic slow forward dolly through a vast futuristic AI data center, endless server racks pulsing with blue light, floating streams of glowing data, volumetric fog, hyper-detailed, moody, no face, no person."},
+  {"id":"lisa-brain","ratio":"16:9","prompt":"A translucent digital human brain made of flowing light particles slowly rotating in a dark studio, glowing neural connections firing, cinematic macro, teal and orange, no face, no person."},
+  {"id":"lisa-gpu","ratio":"16:9","prompt":"Extreme macro cinematic shot of a glowing AI GPU chip, circuits lighting up in sequence, electric blue traces, dark background, shallow depth of field, no face, no person."},
+  {"id":"lisa-code","ratio":"16:9","prompt":"Cascading streams of glowing code and data flowing through a dark cyberspace, fast forward camera move, blue and green light trails, cinematic sci-fi, no face, no person."},
+  {"id":"lisa-neuralnet","ratio":"16:9","prompt":"Abstract neural network of glowing nodes firing in sequence across a dark void, connections lighting up, cinematic macro, teal and amber volumetric light, slow drift, no face, no person."},
+  {"id":"lisa-hologramui","ratio":"16:9","prompt":"Floating holographic user interface panels and charts materializing in dark space, glowing cyan data visualizations, cinematic depth of field, slow parallax, no face, no person."},
+  {"id":"lisa-smartcity","ratio":"16:9","prompt":"Aerial night view of a futuristic smart city, glowing data connections arcing between skyscrapers, cinematic slow drift, blue tech glow, volumetric haze, no face, no person."},
+  {"id":"lisa-globe","ratio":"16:9","prompt":"Cinematic slow push-in on a glowing 3D globe covered in millions of tiny luminous data points connected by neural threads, dark space, volumetric light, hyper-detailed, no face, no person."}
+]
