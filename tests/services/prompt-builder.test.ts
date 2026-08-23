@@ -70,6 +70,18 @@ vi.mock('../../src/identity/identity-manager.js', () => ({
   }),
 }));
 
+const codingStyleMocks = vi.hoisted(() => ({
+  analyzeDirectoryMock: vi.fn(async () => ({ language: 'typescript' })),
+  buildPromptSnippetMock: vi.fn(() => '<coding_style>use single quotes</coding_style>'),
+}));
+
+vi.mock('../../src/memory/coding-style-analyzer.js', () => ({
+  getCodingStyleAnalyzer: () => ({
+    analyzeDirectory: codingStyleMocks.analyzeDirectoryMock,
+    buildPromptSnippet: codingStyleMocks.buildPromptSnippetMock,
+  }),
+}));
+
 // ---- imports under test (after mocks) --------------------------------
 
 import {
@@ -188,6 +200,12 @@ describe('PromptBuilder — Phase T4', () => {
       .mockReturnValue({ contextWindow: 128_000, maxOutputTokens: 8_000 });
     identityMock.loadMock.mockReset().mockResolvedValue([]);
     identityMock.getPromptInjectionMock.mockReset().mockReturnValue('');
+    codingStyleMocks.analyzeDirectoryMock
+      .mockReset()
+      .mockResolvedValue({ language: 'typescript' });
+    codingStyleMocks.buildPromptSnippetMock
+      .mockReset()
+      .mockReturnValue('<coding_style>use single quotes</coding_style>');
   });
 
   afterEach(() => {
@@ -775,6 +793,21 @@ describe('PromptBuilder — Phase T4', () => {
       const lastCall = promptMocks.getSystemPromptForModeMock.mock.calls.at(-1)!;
       expect(lastCall[0]).toBe('yolo');
       expect(lastCall[3]).toBe('extra');
+    });
+  });
+
+  describe('coding style cache', () => {
+    it('scans a cwd only once across successive prompt builds', async () => {
+      const { builder } = buildBuilder({ config: { cwd: '/tmp/project-a' } });
+
+      const first = await builder.buildSystemPrompt(undefined, 'grok-3', null);
+      const second = await builder.buildSystemPrompt(undefined, 'grok-3', null);
+
+      expect(first).toContain('<coding_style>use single quotes</coding_style>');
+      expect(second).toContain('<coding_style>use single quotes</coding_style>');
+      expect(codingStyleMocks.analyzeDirectoryMock).toHaveBeenCalledOnce();
+      expect(codingStyleMocks.analyzeDirectoryMock).toHaveBeenCalledWith('/tmp/project-a');
+      expect(codingStyleMocks.buildPromptSnippetMock).toHaveBeenCalledOnce();
     });
   });
 
