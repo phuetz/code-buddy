@@ -38,7 +38,7 @@ Watch a **local model reason on screen, then use real tools to do the work** —
 - 🧠 **Reasoning you can watch** — local models think step-by-step on screen, then call tools to act. See the [live captures](cowork/readme.md#demo).
 - 🛠️ **200+ tools** (RAG-selected per query) — edit, shell, web search, browser, PDFs/Office, image/video generation, 150 design systems, a skills hub, and MCP in both directions (`buddy mcp serve`, `buddy mcp add`).
 - 🖥️ **Runs everywhere** — terminal TUI, the **Cowork** desktop app, an HTTP/WebSocket server, your phone, or a 24/7 background service — one core engine.
-- 🏗️ **App Studio** (Cowork) — describe an app → scaffold, real `npm install` + dev server, **live preview**, capped auto-fix (3 tries), one-click GitHub push. A `$0`, offline bolt.new.
+- 🏗️ **App Studio** (Cowork) — describe an app → scaffold, **live preview**, capped auto-fix (3 tries), one-click GitHub push. Static apps use the managed preview server; npm stacks run a real install + dev server.
 - 🧬 **Self-improving, human-gated** — the agent authors its own tools/skills behind empirical gates (`buddy improve …`), and can evolve its own source in throwaway worktrees (`buddy evolve`, opt-in, `keep --confirm` only).
 - 🎬 **Video Studio** — `buddy film from-prompt "<pitch>"`: scene plan → clips → Piper narration → karaoke captions → ffmpeg montage (fail-open: no voice binary ⇒ silent scenes).
 - 🤝 **Multi-AI Fleet** — peers observe each other live and call each other's models & read-only tools (`peer.chat` / `peer.tool.invoke`) across your network.
@@ -65,6 +65,8 @@ Watch a **local model reason on screen, then use real tools to do the work** —
 ## What is Code Buddy?
 
 An open-source, multi-provider AI coding agent with a terminal UI, an HTTP/WebSocket server, and the **Cowork** desktop app — all on one core engine. It reads files, writes code, runs commands, opens PRs, and plans complex tasks across **64 LLM providers** (one OpenAI-compatible dispatcher; 30 with a free tier or a local `$0` runtime (24 imported from OmniRoute's registry + the OmniRoute gateway), 6 validated live for chat and 2 for agentic tool-use — see [features.md](docs/features.md#providers--login)) with automatic failover and per-provider circuit breakers. With `buddy login`, a ChatGPT Plus / Pro subscription becomes the flat-fee brain of the whole system — no API keys, no per-token metering. An optional companion layer adds voice, durable memory, opt-in camera perception, and 24/7 background operation.
+
+This README reflects source version **1.8.0 plus `Unreleased` changes through 23 August 2026**; see the [changelog](CHANGELOG.md).
 
 ---
 
@@ -158,10 +160,10 @@ More desktop demos (Fleet, Autonomy, Companion, …) and captures: [`cowork/read
 - ✅ **Goal loops (Ralph loop)** — a judge model re-checks completion every turn and auto-continues until done; proven multi-turn on a free local model, with a real in-loop length-truncation recovery ([test](tests/agent/in-loop-recovery.real.test.ts), no mocks).
 - ✅ **Multi-AI Fleet** — peers observe each other live and call each other's models & read-only tools (`peer.chat` / `peer.tool.invoke`).
 - ✅ **64 providers** wired through one dispatcher (**30 with a free tier or a local `$0` runtime (24 imported from OmniRoute's registry + the OmniRoute gateway)** — `docs/providers/omniroute-free-catalog.md`), automatic failover and per-provider circuit breakers; **200+ tools** declared (RAG-selected), MCP server + connectors, a skills hub with a firewall.
-- ✅ **App Studio** in the desktop app — real install/dev-server/live preview/auto-fix/GitHub push ([section below](#build--run-apps--app-studio-a-0-offline-boltnew)); **150 design systems** shipped as assets.
+- ✅ **App Studio** in the desktop app — managed static preview or real npm install/dev server, live preview, auto-fix and GitHub push ([section below](#build--run-apps--app-studio)); **150 design systems** shipped as assets.
 - ✅ **Self-improvement with empirical gates** — `buddy improve tools` authors tools that must pass held-out tests; `buddy evolve` (opt-in) scores source variants in throwaway worktrees and merges nothing without `keep --confirm`.
-- ✅ **Video Studio** — `buddy film from-prompt` / `buddy film generate|assemble|status` and the Cowork Video Studio panel.
-- ✅ **2,165 Vitest test files (~34K cases)** — run locally and on a real-environment runner (the suite is no-mocks / real-integration, so it needs live Ollama/Hermes/browser rather than a vanilla CI box).
+- ✅ **Video Studio** — `buddy film from-prompt` / `buddy film generate|assemble|status`, five policy/planning tools, and the Cowork Video Studio panel.
+- ✅ **2,300+ test/spec files across core + Cowork** — unit and integration coverage, plus targeted real-environment lanes for Ollama, browsers, Hermes and native modules; Windows CI is split into bounded Vitest shards.
 
 **Honest about scope:** [Hermes / OpenClaw parity](docs/hermes-openclaw-parity.md) lays out exactly what's shipped, what's externally-gated, and where the edges are — including which messaging channels are full integrations vs. in-process stubs.
 
@@ -174,15 +176,15 @@ More desktop demos (Fleet, Autonomy, Companion, …) and captures: [`cowork/read
 | `$0` local agent                      | A local Ollama/LM Studio model reasons on screen, then calls tools (files, shell, web) — no key, no cloud                                        | `buddy` · `buddy -p "<task>"`                                      | shipped                                                          |
 | Flat-fee logins                       | ChatGPT Plus/Pro (`gpt-5.6-sol`) and SuperGrok over OAuth — cost reported `$0.0000`, no API key                                                  | `buddy login` · `buddy login xai`                                  | shipped                                                          |
 | Onboarding in 2 min                   | Wizard detects what you have, prefers the free path, ends on a green demo; repair tool                                                           | `buddy onboard` · `buddy try` · `buddy doctor --fix`               | shipped                                                          |
-| 64 providers, 25 free tiers           | One OpenAI-compatible dispatcher; failover order, ensembles, council                                                                             | `buddy llm` · `buddy llm ensemble "<q>"` · `buddy council`         | shipped (free tiers: verify live)                                |
-| App Studio (bolt.new, `$0`)           | Describe → scaffold → real `npm install` + dev server → live preview → auto-fix (≤3) → GitHub push                                               | Cowork → **App Studio**                                            | shipped (desktop only)                                           |
+| 64 providers, 30 free/local tiers     | One OpenAI-compatible dispatcher; failover order, ensembles, council                                                                             | `buddy llm` · `buddy llm ensemble "<q>"` · `buddy council`         | shipped (imported free tiers: verify live)                       |
+| App Studio (local-first)              | Describe → scaffold → managed static preview or real npm install + dev server → auto-fix (≤3) → GitHub push                                      | Cowork → **App Studio**                                            | shipped (desktop only)                                           |
 | 150 design systems                    | Brand tokens + `DESIGN.md` applied to generated apps; agent tool `design_system`                                                                 | Cowork gallery · tool `design_system`                              | shipped                                                          |
 | Self-improvement (Darwin-Gödel style) | Authors lessons/tools/skills, keeps only what passes empirical + held-out gates; never touches `src/`                                            | `buddy improve tools [--apply]` · `buddy improve status`           | shipped, propose-only by default                                 |
 | Evolution of its own source           | Variants of Code Buddy's code in throwaway worktrees, scored vs baseline, MAP-Elites diversity, genealogy                                        | `buddy evolve run`, `list`, `tree`, `review`, `keep --confirm`     | opt-in `CODEBUDDY_EVOLVE=true`                                   |
-| Video Studio                          | Pitch → scene plan → clips → Piper narration → karaoke captions → montage + quality gate                                                         | `buddy film from-prompt "<pitch>" [--short]`                       | shipped (fail-open on missing binaries)                          |
+| Video Studio                          | Pitch → scene plan → clips → Piper narration → captions → montage; five tools gate quality, plan, hand off and route                             | `buddy film from-prompt "<pitch>" [--short]` · tool: `video_route` | shipped (fail-open on missing binaries)                          |
 | Voice                                 | Push-to-talk → STT (faster-whisper) → a real agent turn under a permission posture → Piper reply                                                 | `buddy voice --mode plan/default/…`                                | shipped (needs mic; wake word = Porcupine only with a key)       |
 | Multi-AI Fleet                        | Peers stream events and call each other's models / read-only tools; router + privacy lint                                                        | `buddy server` · `/fleet listen`, `chat`, `route`                  | shipped (auth token required for `peer:invoke`)                  |
-| MCP, both ways                        | Expose the audited tool registry + resources + prompts over stdio; add external servers, profiles, audit                                         | `buddy mcp serve` · `buddy mcp add`, `audit`, `profile`           | shipped (read-only by default; writes require `--allow-write`)    |
+| MCP, both ways                        | Expose the audited tool registry + resources + prompts over stdio — including CKG recall/ingest; add external servers, profiles, audit                                         | `buddy mcp serve` · `buddy mcp add`, `audit`, `profile`           | shipped (read-only by default; writes require `--allow-write`)    |
 | Code Explorer + collective memory     | Read-only code-graph questions; research pipeline with a cross-agent knowledge graph                                                             | tool `code_explorer_ask` · `buddy research "<topic>" --deep --ckg` | shipped / CKG opt-in                                             |
 | Code Buddy 2 (10 opt-ins)             | Shadow Workspace, Time-Travel, Intent Ledger, CKG sync, Self-Benchmark, Context zoom, Generative UI, Perceptive pair, Skill Exchange, Multi-repo | `buddy shadow`, `replay`, `intents`, `widgets`, `ws…`              | opt-in, byte-identical when off — [docs/cb2](docs/cb2/README.md) |
 | Desktop app                           | Electron **Cowork**: chat, plan, files, App Studio, Video Studio, assistant, fleet, Mission Control — 7 themes                                   | `buddy gui` (Node ≥ 22)                                            | shipped                                                          |
@@ -205,7 +207,11 @@ docker compose up -d          # after: cp .env.example .env && set JWT_SECRET
 
 # …or from source (newest features)
 git clone https://github.com/phuetz/code-buddy.git
-cd code-buddy && npm install && npm run build && npm link   # exposes `buddy` globally
+cd code-buddy
+npm install
+npm run build
+npm link                    # exposes `buddy` globally
+buddy doctor                # checks Node, providers and optional runtimes
 ```
 
 > **Requirements:** Node.js **≥ 18** for the CLI (the one-command installer provisions **≥ 20**). The **Cowork desktop app needs Node ≥ 22** plus a C++ build toolchain for native modules (`better-sqlite3`). Run **`buddy doctor`** anytime to check your environment (`--fix` to auto-remediate). Full install guide (one-command, Docker/VPS, npm): **[docs/install.md](docs/install.md)**.
@@ -222,22 +228,16 @@ silently fall back to a paid API.
 Then pick a brain:
 
 ```bash
-# Option A — free & local: point at a local Ollama, $0
-export CODEBUDDY_PROVIDER=ollama
-buddy
-
-# Option B — log in with your ChatGPT Plus / Pro subscription (no API key)
+# ChatGPT Plus / Pro — flat-fee OAuth, no API key
 buddy login        # opens browser for OAuth → tokens persisted
 buddy whoami       # ✅ connected · you@example.com · Plan: pro
-buddy              # auto-routes to gpt-5.6-sol via the Codex backend, cost $0.0000
+buddy try          # writes + tests FizzBuzz, then independently verifies it
 
-# Option C — bring your own API key
-export GROK_API_KEY=...   # or GEMINI_API_KEY / OPENAI_API_KEY / ANTHROPIC_API_KEY
-buddy
-
-# Option D — log in with your xAI / SuperGrok subscription (no API key)
-buddy login xai    # browser OAuth → routes to Grok (grok-4-latest), cost $0
+# Or fully local with Ollama — no login, no cloud
+CODEBUDDY_PROVIDER=ollama OLLAMA_HOST=http://127.0.0.1:11434 buddy try
 ```
+
+Other supported install paths: the [one-command installer](docs/install.md), `npm install -g @phuetz/code-buddy`, and Docker/VPS. API keys and `buddy login xai` remain available when you want another provider.
 
 ```bash
 buddy --prompt "analyze the codebase structure"   # one-shot task
@@ -252,11 +252,33 @@ buddy llm ensemble "is this approach sound?" # ask ChatGPT + Grok + Ollama toget
 buddy council "compare REST vs GraphQL"      # conductor roles + synthesis + judge + learned ranking
 buddy council --scoreboard                   # the learned ranking (which model is best for code / reasoning / …)
 buddy cost                                   # read-only dashboard of token and cost usage (--by model|provider|day)
-buddy changelog                              # grouped release notes from Conventional Commits
+buddy changelog --since v1.7.0               # grouped release notes from Conventional Commits
 buddy import                                 # import Cursor/Cline/Copilot/Claude Code rules & MCP servers
-buddy explain [path] [--depth deep] [--html] # one-shot repo explanation report (conventions, hotspots, risks)
+buddy explain . [--depth deep] [--html]       # one-shot repo explanation report (conventions, hotspots, risks)
+buddy security-audit                         # local configuration and secret-exposure audit
 CODEBUDDY_LLM_FAILOVER=1 buddy -p "…"         # if the primary errors, auto-continue on the next active LLM
 ```
+
+The repository-inspection commands are read-only and work without an LLM call:
+
+<table>
+  <tr>
+    <td width="50%" align="center">
+      <a href="docs/assets/readme/cli-explain-repository.png"><img src="docs/assets/readme/cli-explain-repository.png" alt="Rendered HTML report produced by buddy explain for the Code Buddy repository" width="430"/></a><br/>
+      <sub><code>buddy explain . --html</code> · capture réelle du 23/08/2026 · analyse locale, aucun modèle</sub>
+    </td>
+    <td width="50%" align="center">
+      <a href="docs/assets/readme/cli-cost-dashboard.png"><img src="docs/assets/readme/cli-cost-dashboard.png" alt="Terminal cost dashboard grouped by model" width="430"/></a><br/>
+      <sub><code>buddy cost</code> · capture réelle du 23/08/2026 · sessions locales, aucun modèle</sub>
+    </td>
+  </tr>
+  <tr>
+    <td colspan="2" align="center">
+      <a href="docs/assets/readme/cli-changelog-since-v1.7.0.png"><img src="docs/assets/readme/cli-changelog-since-v1.7.0.png" alt="Release notes generated from Conventional Commits since v1.7.0" width="820"/></a><br/>
+      <sub><code>buddy changelog --since v1.7.0</code> · capture réelle du 23/08/2026 · historique Git local, aucun modèle</sub>
+    </td>
+  </tr>
+</table>
 
 **`buddy council`** takes the ensemble further: for complex tasks, a lightweight conductor assigns complementary roles (architect, implementer, reviewer, verifier, skeptic, etc.) instead of asking every model the exact same prompt. It still routes by capability and past win rate, an impartial judge scores the candidates, a synthesis pass merges the best role-specialized contributions, and a scoreboard **learns which AI is best for which kind of task and role** over time — so future runs can put stronger models on reviewer/verifier/architect jobs. Use `--no-conductor` to force the old direct fan-out, or `--no-synthesis` to keep only the judge-selected answer. Works in Telegram too (`council <task>`).
 
@@ -280,21 +302,36 @@ See [Getting Started](docs/getting-started.md) for install options, headless mod
 
 Code Buddy is one engine — terminal, desktop, and HTTP — that an LLM drives to read code, edit files, run commands, search the web, open PRs, and plan complex work. Below is the whole surface at a glance — click any area for the full write-up in **[docs/features.md](docs/features.md)**:
 
+Type `@path/to/file` in the TUI to attach bounded, ephemeral project context, with fuzzy Tab completion. Five read-only LSP tools add semantic definitions, references, hover, symbols and diagnostics when the matching language-server binary is installed.
+
+<table>
+  <tr>
+    <td width="50%" align="center">
+      <a href="docs/assets/readme/tui-file-mention-autocomplete.png"><img src="docs/assets/readme/tui-file-mention-autocomplete.png" alt="Code Buddy TUI showing project file autocomplete after an at-file mention" width="430"/></a><br/>
+      <sub><code>@src/agent/codebuddy-agent.ts</code> · capture réelle du 23/08/2026 · modèle affiché <code>qwen2.5:3b-instruct</code>, aucun appel envoyé</sub>
+    </td>
+    <td width="50%" align="center">
+      <a href="docs/assets/readme/lsp-server-status.png"><img src="docs/assets/readme/lsp-server-status.png" alt="Local buddy lsp status probe showing installed and missing language servers" width="430"/></a><br/>
+      <sub><code>buddy lsp status</code> · capture réelle du 23/08/2026 · sonde locale, aucun modèle · seul <code>rust-analyzer</code> est installé ici</sub>
+    </td>
+  </tr>
+</table>
+
 | Area                                                               | In one line                                                                                                                          | Deep dive                                     |
 | :----------------------------------------------------------------- | :----------------------------------------------------------------------------------------------------------------------------------- | :-------------------------------------------- |
 | [Providers & login](docs/features.md#providers--login)             | 64 LLM providers (30 free-tier or local `$0`) + ChatGPT/xAI login at **$0** flat-fee, auto-failover, ensembles, council              | [providers.md](docs/providers.md)             |
 | [The agentic loop](docs/features.md#the-agentic-loop)              | autonomous tool-calling with a middleware pipeline + confirm-before-execute                                                          | [CLAUDE.md](CLAUDE.md)                        |
-| [200+ tools](docs/features.md#110-tools)                           | edit/shell/web/browser/docs/media/design, 5 LSP navigation tools, `@file` mentions, RAG-selected per query, 5-strategy edit matching | [tools-reference.md](docs/tools-reference.md) |
+| [200+ tools](docs/features.md#200-tools)                           | edit/shell/web/browser/docs/media/design, 5 LSP navigation tools, `@file` mentions plus 5 Video Studio tools, RAG-selected per query | [tools-reference.md](docs/tools-reference.md) |
 | [Reasoning](docs/features.md#reasoning)                            | extended thinking + Tree-of-Thought / MCTS, `/think`                                                                                 | [reasoning.md](docs/reasoning.md)             |
 | [Goal loops & autonomy](docs/features.md#goal-loops--autonomy)     | Ralph loop + LLM judge, YOLO, a 24/7 daemon                                                                                          | [fleet-guide.md](docs/fleet-guide.md)         |
 | [Multi-AI Fleet](docs/features.md#multi-ai-fleet)                  | peers call each other's models + read-only tools over WebSocket                                                                      | [fleet-guide.md](docs/fleet-guide.md)         |
 | [Self-improvement](docs/features.md#self-improvement)              | authors + empirically gates its own lessons/tools/skills, and evolves human-gated `src/` variants grounded in research (opt-in)      | [CLAUDE.md](CLAUDE.md)                        |
-| [Skills](docs/features.md#skills)                                  | 8 bundled + a hub (`buddy hub`) + authored + imported (Hermes/OpenClaw), firewalled                                                  | [commands.md](docs/commands.md)               |
+| [Skills](docs/features.md#skills)                                  | bundled + a hub (`buddy hub`) + authored + imported (Hermes/OpenClaw), firewalled                                                    | [commands.md](docs/commands.md)               |
 | [Memory & context](docs/features.md#memory--context)               | compression, importance-weighted window, JIT project context                                                                         | [context-engine.md](docs/context-engine.md)   |
 | [Security & sandboxing](docs/features.md#security--sandboxing)     | Guardian risk-scorer, permission modes, sandbox tiers, SSRF guard, secrets                                                           | [security.md](docs/security.md)               |
 | [Server & infrastructure](docs/features.md#server--infrastructure) | OpenAI-compatible HTTP, WS gateway, daemon, cron                                                                                     | [infrastructure.md](docs/infrastructure.md)   |
 | [Channels](docs/features.md#channels)                              | 20+ messaging platforms with DM-pairing access control                                                                               | [channels.md](docs/channels.md)               |
-| [Git & code intelligence](docs/features.md#git--code-intelligence) | auto-commit, `/pr`, `buddy changelog`, LSP rename + 5 LSP navigation tools, bug finder, the Code Explorer graph                      | [development.md](docs/development.md)         |
+| [Git & code intelligence](docs/features.md#git--code-intelligence) | commits, `/pr`, `buddy changelog`, `@file` context, LSP navigation/refactors, bug finder, Code Explorer                              | [development.md](docs/development.md)         |
 | [Config & modes](docs/features.md#config--modes)                   | TOML profiles, permission/agent/security modes, model-aware limits                                                                   | [configuration.md](docs/configuration.md)     |
 
 Every area above is written up in full — with the source files, the exact flags, and what's verified — in **[docs/features.md](docs/features.md)**.
@@ -304,6 +341,12 @@ Every area above is written up in full — with the source files, the exact flag
 ## Cowork Desktop
 
 Cowork is the desktop cockpit for Code Buddy: chat, tools, traces, workflows, settings, permissions, models, MCP connectors, skills, artifacts, and companion controls — all against the same core agent as the CLI. The Code Buddy settings panel can probe the local backend, start it, discover models, and route turns through the embedded engine or a configured server.
+
+<p align="center">
+  <a href="docs/assets/readme/cowork-app-studio.png"><img src="docs/assets/readme/cowork-app-studio.png" alt="Native Cowork desktop application open on its App Studio panel" width="820"/></a>
+  <br/>
+  <sub>Cowork natif · App Studio · capture réelle du 23/08/2026 · build Vite de production + Electron sous Linux · aucun appel modèle</sub>
+</p>
 
 <p align="center">
   <a href="docs/qa/code-buddy-studio/showcase-2026-06-16/cowork-chat-stream.mp4"><img src="docs/qa/code-buddy-studio/showcase-2026-06-16/cowork-chat-stream.gif" alt="Real gpt-5.5 chat streaming in the Cowork desktop app for $0" width="760"/></a>
@@ -322,17 +365,6 @@ Cowork is the desktop cockpit for Code Buddy: chat, tools, traces, workflows, se
   <br/>
   <sub>The left rail opens every panel as a dock tab — here the <b>Autonomy dashboard</b> (24/7 daemon, free-first model ladder, live subagents) and <b>Project Memory</b>. <a href="docs/assets/cowork-panels-demo.mp4">MP4 →</a></sub>
 </p>
-
-<table>
-  <tr>
-    <td width="50%" align="center"><img src="docs/assets/cowork-welcome.png" alt="Cowork desktop home with the expanded left menu and quick-action cards" width="430"/><br/><sub>Home — expanded menu, quick-action cards, gradient hero</sub></td>
-    <td width="50%" align="center"><img src="docs/assets/cowork-panel.png" alt="A launcher opens its panel as a tab — here the Autonomy dashboard" width="430"/><br/><sub>A launcher opens its panel as a tab — here the Autonomy dashboard (daemon, model ladder, subagents)</sub></td>
-  </tr>
-  <tr>
-    <td width="50%" align="center"><img src="docs/qa/code-buddy-studio/showcase-2026-06-16/03-fleet-autonomy.png" alt="Fleet and autonomy dashboard" width="430"/><br/><sub>Fleet dispatch · tool-permission posture · Hermes toolsets</sub></td>
-    <td width="50%" align="center"><img src="docs/qa/code-buddy-studio/showcase-2026-06-16/02-chat-dark-theme.png" alt="Cowork dark theme" width="430"/><br/><sub>Light &amp; dark themes</sub></td>
-  </tr>
-</table>
 
 **📄 It also builds real Office documents — via multi-step skills.** Ask in plain language → the agent triggers an open-source document **skill** that drives `openpyxl` / `python-pptx` / `python-docx` in **visible steps** (check the lib → write the script → run it → verify) → a real, professionally-styled **Excel, PowerPoint, Word, or PDF**. Below, `gpt-5.5` builds an Excel budget in the desktop app — the activity shows each step, cost `$0.0000`:
 
@@ -381,26 +413,32 @@ The CLI guards this: on Node < 22, `buddy gui` prints a clear upgrade message in
 
 ---
 
-## Build & run apps — App Studio (a `$0`, offline bolt.new)
+## Build & run apps — App Studio
 
-Describe an app in plain language and Code Buddy's **App Studio** scaffolds it, runs a **real `npm install` + dev server**, and shows a **live preview of the running app** — then you iterate in chat, it **auto-fixes build errors** (capped loop), and pushes to GitHub in one click. It's powered by the built-in **open-design** system (**150 brand styles**) and can generate its own images and video. Where hosted tools burn millions of tokens looping on errors, this is a **real local process** with a git-checkpointed editor — **`$0`, offline, no token-burn**.
+Describe an app in plain language and **App Studio** scaffolds it, serves a live preview, lets you iterate in chat, auto-fixes build errors (three attempts), checkpoints edits in Git, and can push to GitHub. Static HTML/CSS/JS uses the managed HTTP preview; npm projects run a real `npm install` and configured dev server. The built-in **open-design** system supplies 150 brand styles.
+
+For the brief _« page d'accueil d'un refuge pour chiots »_, the real generation path produced this responsive static site, then `app_server` served it and `web_test` checked navigation, content, form markup, console and network errors:
 
 <p align="center">
-  <img src="docs/assets/showcase-appstudio-ui.jpg" alt="The App Studio workbench: dev plan, file tree, code editor, live preview of the running app, terminal, and Export/Deploy/GitHub actions" width="840"/>
+  <a href="docs/assets/readme/app-studio-puppy-shelter.png"><img src="docs/assets/readme/app-studio-puppy-shelter.png" alt="Puppy shelter landing page generated through the real App Studio prompt path" width="840"/></a>
   <br/>
-  <sub>The <b>App Studio workbench</b> — dev plan, file tree, editor, <b>live preview of the running app</b>, terminal, and Export / Deploy / GitHub.</sub>
+  <sub>Site réellement généré le 23/08/2026 · <code>gpt-5.6-sol</code> via ChatGPT Pro · coût marginal affiché <code>$0.0000</code></sub>
 </p>
 
 <p align="center">
-  <a href="docs/assets/showcase-appstudio.mp4"><img src="docs/assets/showcase-appstudio.gif" alt="App Studio: describe a React app, it scaffolds, installs, builds, and the live preview renders the running app" width="820"/></a>
+  <a href="docs/assets/readme/app-studio-terminal-verification.png"><img src="docs/assets/readme/app-studio-terminal-verification.png" alt="Terminal showing real App Studio generation followed by app_server and passing web_test checks" width="820"/></a>
   <br/>
-  <sub>Describe → scaffold (React + Vite) → real <code>npm install</code> + dev server → <b>live preview renders the running app</b> · <code>$0</code></sub>
+  <sub>Capture réelle du 23/08/2026 · génération, serveur <code>app_server</code>, puis contrôles <code>web_test</code> réussis · modèle <code>gpt-5.6-sol</code></sub>
 </p>
 
-**A real site, not a to-do app.** Asked for _"a warm landing page for a Shar-Pei puppy adoption shelter"_, App Studio generated a full editorial site — hero, adoptable puppies, values, contact — copy and design by the LLM (`Generate with AI`, `$0`), and the **Shar-Pei photos generated on a local GPU** (`$0`, no quota). Nothing hand-coded:
+### Video Studio tools
+
+Alongside `buddy film`, five agent tools now separate policy and planning from generation: `video_quality_gate`, `video_long_form_plan`, `video_trailer_plan`, `video_flow_handoff`, and `video_route`. They validate requests, plan shots, prepare browser-assisted handoffs, and choose a backend without silently publishing or spending credits.
 
 <p align="center">
-  <img src="docs/assets/showcase-appstudio-sharpei.jpg" alt="A Shar-Pei puppy adoption shelter landing page generated by App Studio — elegant editorial design with AI-generated puppy photos, $0" width="820"/>
+  <a href="docs/assets/readme/video-studio-route-tool.png"><img src="docs/assets/readme/video-studio-route-tool.png" alt="Real terminal invocation of the video_route policy tool selecting a video backend and fallbacks" width="820"/></a>
+  <br/>
+  <sub><code>video_route</code> réel · capture du 23/08/2026 · capacités déclarées synthétiques · routage pur, aucun média généré, crédit dépensé ou modèle appelé</sub>
 </p>
 
 ---
@@ -473,7 +511,7 @@ Design, the five sense modules, the opt-in features, and the diagrams: [`buddy-s
 git clone https://github.com/phuetz/code-buddy.git
 cd code-buddy && npm install
 npm run dev          # development mode
-npm run validate     # lint + typecheck + test (run before committing) — 2,100+ Vitest test files
+npm run validate     # lint + typecheck + test (run before committing) — 2,300+ test/spec files
 ```
 
 See [Development](docs/development.md) for architecture and coding conventions, and [CONTRIBUTING.md](CONTRIBUTING.md) for the workflow.
