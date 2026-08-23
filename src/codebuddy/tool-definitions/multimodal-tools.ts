@@ -629,6 +629,75 @@ export const VIDEO_TRAILER_PLAN_TOOL: CodeBuddyTool = {
   },
 };
 
+export const VIDEO_FLOW_HANDOFF_TOOL: CodeBuddyTool = {
+  type: "function",
+  function: {
+    name: "video_flow_handoff",
+    description:
+      "Build, verify, export or human-review Google Flow (Veo) browser-assisted work packets. Billing stays on Ultra Flow credits; apiBillingAllowed is always false; never publishes.",
+    parameters: {
+      type: "object",
+      properties: {
+        operation: {
+          type: "string",
+          enum: ["create", "verify", "export", "review_import"],
+          description:
+            "create: signed Flow handoff from shots. verify: check handoffSha256. export: QA-approved Short plan (reads approved assets, writes nothing). review_import: digest-bound human review of an import receipt.",
+        },
+        shots: {
+          type: "array",
+          items: { type: "object" },
+          description: "Source shots for create (absolute source_path, SHA-256, adult identity, consumers).",
+        },
+        handoff: { type: "object", description: "GoogleFlowHandoff document for verify." },
+        plan: { type: "object", description: "QA-approved Short plan (schemaVersion 3) for export." },
+        receipt: { type: "object", description: "GoogleFlowImportReceipt for review_import." },
+        capacity: {
+          type: "object",
+          description: "Engine availability and Flow credits (create).",
+          properties: HYBRID_CAPACITY_PROPERTIES,
+          required: ["darkstar", "ministar", "google_flow", "remaining_flow_credits", "max_flow_credits_per_batch"],
+          additionalProperties: false,
+        },
+        source_plan_sha256: { type: "string", description: "Canonical SHA-256 of the V3 source plan (create)." },
+        batch_id: { type: "string", description: "Safe batch id (lowercase kebab)." },
+        model: { type: "string", enum: ["lite", "fast", "quality"], description: "Flow model family." },
+        locale: { type: "string", description: "BCP 47 locale (create)." },
+        duration_seconds: { type: "number", description: "Clip duration in seconds: 4, 6 or 8. Quality requires 8." },
+        aspect_ratio: { type: "string", enum: ["9:16", "16:9"], description: "Output aspect ratio." },
+        upscale_4k: { type: "boolean", description: "4K upscale surcharge." },
+        approved_asset_root: { type: "string", description: "Absolute approved-asset root (export)." },
+        short_id: { type: "string", description: "Export a single Short id (mutually exclusive with include_all_shorts)." },
+        include_all_shorts: { type: "boolean", description: "Export every Short in the plan." },
+        remaining_flow_credits: { type: "number", description: "Remaining Flow credits (export)." },
+        max_flow_credits_per_batch: { type: "number", description: "Batch credit ceiling (export)." },
+        darkstar_available: { type: "boolean", description: "Darkstar available (export)." },
+        ministar_available: { type: "boolean", description: "Ministar available (export)." },
+        expected_receipt_sha256: { type: "string", description: "Expected import receipt digest (review_import)." },
+        reviewer: { type: "string", description: "Reviewer name (review_import)." },
+        reason: { type: "string", description: "Review reason (review_import)." },
+        checks: {
+          type: "object",
+          description: "Flow human-review checks (review_import).",
+          properties: {
+            identity: { type: "boolean", description: "Identity preserved." },
+            anatomy: { type: "boolean", description: "Anatomy plausible." },
+            motion: { type: "boolean", description: "Motion approved." },
+            clean_end: { type: "boolean", description: "Clean end frame." },
+            no_speech: { type: "boolean", description: "No speech in the clip." },
+            no_text_or_logo: { type: "boolean", description: "No burned-in text or logo." },
+            safe_content: { type: "boolean", description: "Advertiser-safe content." },
+          },
+          required: ["identity", "anatomy", "motion", "clean_end", "no_speech", "no_text_or_logo", "safe_content"],
+          additionalProperties: false,
+        },
+      },
+      required: ["operation"],
+      additionalProperties: false,
+    },
+  },
+};
+
 export const VIDEO_ROUTE_TOOL: CodeBuddyTool = {
   type: "function",
   function: {
@@ -1314,6 +1383,7 @@ export const MULTIMODAL_TOOLS: CodeBuddyTool[] = [
   VIDEO_QUALITY_GATE_TOOL,
   VIDEO_LONG_FORM_PLAN_TOOL,
   VIDEO_TRAILER_PLAN_TOOL,
+  VIDEO_FLOW_HANDOFF_TOOL,
   VIDEO_ROUTE_TOOL,
   SCREENSHOT_TOOL,
   CAMERA_SNAPSHOT_TOOL,

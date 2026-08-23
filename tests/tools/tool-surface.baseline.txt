@@ -186,6 +186,7 @@ user_model_recall
 verify
 video
 video_analyze
+video_flow_handoff
 video_generate
 video_long_form_plan
 video_quality_gate

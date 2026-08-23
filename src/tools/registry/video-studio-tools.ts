@@ -5,18 +5,26 @@
  */
 
 import type { ITool } from './types.js';
+import { VideoFlowHandoffTool } from '../video-flow-handoff-tool.js';
 import { VideoLongFormPlanTool } from '../video-long-form-plan-tool.js';
 import { VideoQualityGateTool } from '../video-quality-gate-tool.js';
 import { VideoRouteTool } from '../video-route-tool.js';
 import { VideoTrailerPlanTool } from '../video-trailer-plan-tool.js';
 
-export { VideoLongFormPlanTool, VideoQualityGateTool, VideoRouteTool, VideoTrailerPlanTool };
+export {
+  VideoFlowHandoffTool,
+  VideoLongFormPlanTool,
+  VideoQualityGateTool,
+  VideoRouteTool,
+  VideoTrailerPlanTool,
+};
 
 export function createVideoStudioTools(): ITool[] {
   return [
     new VideoQualityGateTool(),
     new VideoLongFormPlanTool(),
     new VideoTrailerPlanTool(),
+    new VideoFlowHandoffTool(),
     new VideoRouteTool(),
   ];
 }

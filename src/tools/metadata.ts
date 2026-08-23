@@ -951,6 +951,17 @@ export const TOOL_METADATA: ToolMetadata[] = [
       'Validate a cinematic book-trailer plan or compile a preview routing estimate; never generates media',
   },
   {
+    name: 'video_flow_handoff',
+    category: 'media',
+    keywords: [
+      'video', 'flow', 'google flow', 'veo', 'handoff', 'export', 'import',
+      'credits', 'browser', 'packet', 'transfert', 'veo3',
+    ],
+    priority: 8,
+    description:
+      'Build, verify, export or human-review Google Flow work packets; never bills via API, never publishes',
+  },
+  {
     name: 'video_route',
     category: 'media',
     keywords: [

@@ -343,6 +343,7 @@ export {
 } from './multimodal-tools.js';
 
 export {
+  VideoFlowHandoffTool,
   VideoLongFormPlanTool,
   VideoQualityGateTool,
   VideoRouteTool,
