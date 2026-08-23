@@ -477,6 +477,72 @@ export const VIDEO_STITCH_TOOL: CodeBuddyTool = {
   }
 };
 
+const HYBRID_CAPACITY_PROPERTIES = {
+  darkstar: { type: "boolean", description: "Darkstar local GPU worker is available." },
+  ministar: { type: "boolean", description: "Ministar local GPU worker is available." },
+  google_flow: { type: "boolean", description: "Google Flow (browser-assisted) is available." },
+  remaining_flow_credits: { type: "number", description: "Remaining Google Flow credits." },
+  max_flow_credits_per_batch: { type: "number", description: "Credit ceiling for this batch." },
+};
+
+const HYBRID_REQUEST_PROPERTIES = {
+  id: { type: "string", description: "Request id (non-empty)." },
+  use_case: {
+    type: "string",
+    enum: ["avatar-lipsync", "bulk-variation", "hero-shot", "long-form-b-roll", "transition"],
+    description: "Production use case.",
+  },
+  content_tier: {
+    type: "string",
+    enum: ["safe", "sensual", "explicit"],
+    description: "Content tier. Non-safe stays on local engines.",
+  },
+  quantity: { type: "number", description: "Positive integer quantity." },
+  requires_lip_sync: { type: "boolean", description: "Whether lip synchronization is required." },
+  premium: { type: "boolean", description: "Premium/hero quality (Veo Quality when Flow can spend)." },
+  upscale_4k: { type: "boolean", description: "Optional 4K upscale surcharge on Flow engines." },
+};
+
+export const VIDEO_ROUTE_TOOL: CodeBuddyTool = {
+  type: "function",
+  function: {
+    name: "video_route",
+    description:
+      "Route hybrid image/video production requests to a local engine (Darkstar/Ministar/LongCat) or browser-assisted Google Flow. Pure policy: estimates credits, never spends, never generates media, never publishes.",
+    parameters: {
+      type: "object",
+      properties: {
+        request: {
+          type: "object",
+          description: "Single hybrid video request to route.",
+          properties: HYBRID_REQUEST_PROPERTIES,
+          required: ["id", "use_case", "content_tier", "quantity", "requires_lip_sync", "premium"],
+          additionalProperties: false,
+        },
+        requests: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: HYBRID_REQUEST_PROPERTIES,
+            required: ["id", "use_case", "content_tier", "quantity", "requires_lip_sync", "premium"],
+            additionalProperties: false,
+          },
+          description: "Batch of requests (credit ceiling decrements between items).",
+        },
+        capacity: {
+          type: "object",
+          description: "Available engines and Flow credit budget.",
+          properties: HYBRID_CAPACITY_PROPERTIES,
+          required: ["darkstar", "ministar", "google_flow", "remaining_flow_credits", "max_flow_credits_per_batch"],
+          additionalProperties: false,
+        },
+      },
+      required: ["capacity"],
+      additionalProperties: false,
+    },
+  },
+};
+
 // Screenshot Tool - Capture screenshots
 export const SCREENSHOT_TOOL: CodeBuddyTool = {
   type: "function",
@@ -1119,6 +1185,7 @@ export const MULTIMODAL_TOOLS: CodeBuddyTool[] = [
   GPU_MEDIA_JOB_TOOL,
   VIDEO_GENERATE_TOOL,
   VIDEO_STITCH_TOOL,
+  VIDEO_ROUTE_TOOL,
   SCREENSHOT_TOOL,
   CAMERA_SNAPSHOT_TOOL,
   CAMERA_ANALYZE_TOOL,

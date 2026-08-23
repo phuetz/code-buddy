@@ -42,6 +42,7 @@ import {
   type GpuMediaJobKind,
 } from '../gpu-media-worker.js';
 import { scheduleAvatarDelivery } from '../gpu-avatar-delivery.js';
+import { createVideoStudioTools } from './video-studio-tools.js';
 
 // ============================================================================
 // Lazy-loaded tool instances
@@ -1666,6 +1667,7 @@ export function createMultimodalTools(): ITool[] {
     new GpuMediaJobTool(),
     new VideoGenerateTool(),
     new VideoStitchTool(),
+    ...createVideoStudioTools(),
     new VideoExecuteTool(),
     new PDFExecuteTool(),
     new OCRExecuteTool(),

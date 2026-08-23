@@ -187,6 +187,7 @@ verify
 video
 video_analyze
 video_generate
+video_route
 video_stitch
 view_file
 vision_analyze

@@ -918,6 +918,17 @@ export const TOOL_METADATA: ToolMetadata[] = [
     description: 'Chain multiple local video clips into one longer film with transitions (xfade/gl), optional background music (ducked) and voiceover, via ffmpeg; saved under .codebuddy/media-generation/films/'
   },
   {
+    name: 'video_route',
+    category: 'media',
+    keywords: [
+      'video', 'route', 'router', 'hybrid', 'flow', 'veo', 'comfyui', 'longcat',
+      'darkstar', 'ministar', 'credits', 'engine', 'routage', 'moteur',
+    ],
+    priority: 8,
+    description:
+      'Route hybrid video requests to local engines or browser-assisted Google Flow; estimates credits, never spends',
+  },
+  {
     name: 'understand_video',
     category: 'media',
     keywords: ['video', 'youtube', 'transcribe', 'transcript', 'captions', 'subtitles', 'vidéo', 'résume vidéo', 'summarize', 'watch', 'movie', 'mp4', 'visual', 'screencast', 'frames', 'on-screen', 'shown', 'cloud', 'gemini', 'research', 'experiment', 'backlog', 'innovation'],
