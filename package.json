@@ -135,6 +135,7 @@
   "files": [
     "dist",
     "codebuddy-runtime.json",
+    "examples/claude_desktop_config.json",
     "README.md",
     "LICENSE"
   ],
