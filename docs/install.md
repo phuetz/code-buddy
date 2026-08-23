@@ -4,11 +4,12 @@ Three ways in, fastest first. All of them land you at the same next step:
 **`buddy onboard`** (guided setup) and **`buddy login`** (sign in with a ChatGPT
 Plus/Pro subscription — OAuth, `$0` marginal cost, no API key).
 
-| Path | Best for | One line |
-|:-----|:---------|:---------|
-| [1. One command](#1-one-command-curl--sh) | A laptop / workstation | `curl -fsSL https://raw.githubusercontent.com/phuetz/code-buddy/main/install.sh \| sh` |
-| [2. Docker / VPS](#2-docker--vps-247) | A server that runs 24/7 | `docker compose up -d` |
-| [3. npm](#3-npm) | You already have Node ≥ 18 | `npm install -g @phuetz/code-buddy@latest` |
+| Path                                                                     | Best for                                | One line                                                                               |
+| :----------------------------------------------------------------------- | :-------------------------------------- | :------------------------------------------------------------------------------------- |
+| [1. One command](#1-one-command-curl--sh)                                | A laptop / workstation                  | `curl -fsSL https://raw.githubusercontent.com/phuetz/code-buddy/main/install.sh \| sh` |
+| [2. Docker / VPS](#2-docker--vps-247)                                    | A server that runs 24/7                 | `docker compose up -d`                                                                 |
+| [3. npm](#3-npm)                                                         | You already have Node ≥ 18              | `npm install -g @phuetz/code-buddy@latest`                                             |
+| [4. From source](#4-from-source-linux-including-remote-desktop-sessions) | Newest features, Linux / remote desktop | `git clone … && npm install && npm run build && npm link`                              |
 
 ---
 
@@ -39,11 +40,11 @@ sh install.sh            # run
 
 Useful overrides (all optional):
 
-| Variable | Default | Purpose |
-|:---------|:--------|:--------|
-| `CODEBUDDY_NODE_VERSION` | `20.18.1` | Node version fetched when a private copy is needed |
-| `CODEBUDDY_HOME` | `~/.codebuddy` | Where a private Node / npm prefix is placed |
-| `CODEBUDDY_MIN_NODE_MAJOR` | `20` | Minimum acceptable system Node major |
+| Variable                   | Default        | Purpose                                            |
+| :------------------------- | :------------- | :------------------------------------------------- |
+| `CODEBUDDY_NODE_VERSION`   | `20.18.1`      | Node version fetched when a private copy is needed |
+| `CODEBUDDY_HOME`           | `~/.codebuddy` | Where a private Node / npm prefix is placed        |
+| `CODEBUDDY_MIN_NODE_MAJOR` | `20`           | Minimum acceptable system Node major               |
 
 > **Windows:** use **WSL2** (then follow the Linux path above), or the [npm path](#3-npm).
 
@@ -109,7 +110,7 @@ One-off CLI in a container (no server):
 ```sh
 docker run --rm -it \
   -v codebuddy-data:/home/codebuddy/.codebuddy \
-  codebuddy:latest --prompt "explain this repo" 
+  codebuddy:latest --prompt "explain this repo"
 ```
 
 > **Security note.** Expose the server behind a reverse proxy with TLS; keep
@@ -151,6 +152,34 @@ npm link            # exposes `buddy` globally
 > Run **`buddy doctor`** anytime to check your environment (`--fix` to remediate).
 
 ---
+
+## 4. From source (Linux, including remote-desktop sessions)
+
+Verified 2026-08-23 on Ubuntu under an xrdp/MATE session. Everything lives in your own account, no sudo.
+
+```bash
+# Node 24 via nvm (don't rely on the distro Node)
+curl -fsSL https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash && exec bash -l
+nvm install 24 && nvm alias default 24
+
+git clone --depth 1 https://github.com/phuetz/code-buddy.git ~/code-buddy && cd ~/code-buddy
+npm install --no-audit --no-fund     # `npm ci` also works once the lockfile fix (#144) is in
+npm run build && npm link            # exposes the `buddy` command
+buddy --version && buddy doctor      # expect 0 errors (warnings without a provider are normal)
+buddy login                          # or: export NVIDIA_API_KEY=… + a [profiles.nvidia] entry, or a local Ollama
+buddy try                            # the 60-second proof
+```
+
+Desktop GUI (Cowork) in the dev flavour — the one that works over xrdp/VNC:
+
+```bash
+buddy install-gui                    # Electron + compile; ignore "Build aborted … electron-builder" (that's only the installer packaging)
+cd cowork && npx vite build && npm run rebuild
+NODE_ENV=production ./node_modules/electron/dist/electron --no-sandbox --disable-gpu ./dist-electron/main/index.js
+```
+
+`--no-sandbox --disable-gpu` are required in remote-desktop sessions (see `cowork/DEV-LINUX.md`). Update later with
+`git pull --ff-only && npm install && npm run build` (+ `cd cowork && npx vite build`).
 
 ## First run — free, no env var to edit
 
