@@ -53,6 +53,7 @@ Watch a **local model reason on screen, then use real tools to do the work** —
 [Quick Start](#quick-start) ·
 [In action](#in-action) ·
 [What it does](#what-code-buddy-does) ·
+[Honest comparison](docs/honest-comparison.md) ·
 [FAQ](docs/faq.md) ·
 [Docs](#documentation) ·
 [Contributing](#contributing)
@@ -428,6 +429,7 @@ Design, the five sense modules, the opt-in features, and the diagrams: [`buddy-s
 | [Channels](docs/channels.md) · [Configuration](docs/configuration.md)                                  | 20+ channels, DM pairing; env vars, TOML, model limits                                                              |
 | [Infrastructure](docs/infrastructure.md) · [Deployment](docs/deployment.md)                            | Server, gateway, daemon, cron; systemd, Docker, Kubernetes, upgrades                                                |
 | [Development](docs/development.md)                                                                     | Build, test, architecture, conventions, adding tools                                                                |
+| [Honest comparison](docs/honest-comparison.md)                                                         | Code Buddy vs Claude Code, Codex CLI, Aider, and Gemini CLI — including the honest “no” columns                     |
 | [Hermes / OpenClaw Parity](docs/hermes-openclaw-parity.md)                                             | Where Code Buddy stands vs Hermes Agent & OpenClaw                                                                  |
 
 ---
