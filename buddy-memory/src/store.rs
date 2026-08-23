@@ -221,7 +221,11 @@ impl Store {
         if let Some(dir) = self.ledger_path.parent() {
             let _ = fs::create_dir_all(dir);
         }
-        if let Ok(mut f) = OpenOptions::new().create(true).append(true).open(&self.ledger_path) {
+        if let Ok(mut f) = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&self.ledger_path)
+        {
             let line = serde_json::to_string(ev).unwrap_or_default();
             let _ = writeln!(f, "{}", line);
         }
@@ -270,7 +274,9 @@ impl Store {
             Ok(s) if s.version == 1 => s,
             _ => return,
         };
-        let ledger_len = fs::metadata(&self.ledger_path).map(|m| m.len()).unwrap_or(0);
+        let ledger_len = fs::metadata(&self.ledger_path)
+            .map(|m| m.len())
+            .unwrap_or(0);
         if snap.offset > ledger_len {
             return; // snapshot ahead of the ledger (truncated/rebuilt) → ignore, replay fully
         }
@@ -300,7 +306,8 @@ impl Store {
                 if !ev.agent_id.is_empty() {
                     cur.contributors.insert(ev.agent_id.clone());
                 }
-                cur.confidence = corroborated_confidence(cur.base_confidence, cur.contributors.len());
+                cur.confidence =
+                    corroborated_confidence(cur.base_confidence, cur.contributors.len());
                 cur.updated_at = ev.recorded_at.clone();
                 return;
             }
@@ -323,7 +330,10 @@ impl Store {
                 source_id: id,
                 target_id: target,
                 rel_type: "supersedes".to_string(),
-                reason: Some(format!("fact changed (was {})", &old_hash[..old_hash.len().min(8)])),
+                reason: Some(format!(
+                    "fact changed (was {})",
+                    &old_hash[..old_hash.len().min(8)]
+                )),
                 mentions: 1,
             });
             return;
@@ -351,8 +361,11 @@ impl Store {
     }
     fn rebuild_index(&mut self) {
         self.index.clear();
-        let entries: Vec<(String, String, String)> =
-            self.current.values().map(|e| (e.id.clone(), e.name.clone(), e.text.clone())).collect();
+        let entries: Vec<(String, String, String)> = self
+            .current
+            .values()
+            .map(|e| (e.id.clone(), e.name.clone(), e.text.clone()))
+            .collect();
         for (id, name, text) in entries {
             self.index_add(&id, &name, &text);
         }
@@ -374,7 +387,11 @@ impl Store {
             confidence: base,
             mentions: 1,
             contributors,
-            agent_id: if ev.agent_id.is_empty() { None } else { Some(ev.agent_id.clone()) },
+            agent_id: if ev.agent_id.is_empty() {
+                None
+            } else {
+                Some(ev.agent_id.clone())
+            },
             source: ev.source.clone(),
             valid_to: None,
             created_at: ev.recorded_at.clone(),
@@ -394,11 +411,24 @@ impl Store {
         }
         self.relations.insert(
             rel_id.clone(),
-            MemRelation { id: rel_id, source_id, target_id, rel_type, reason: ev.reason.clone(), mentions: 1 },
+            MemRelation {
+                id: rel_id,
+                source_id,
+                target_id,
+                rel_type,
+                reason: ev.reason.clone(),
+                mentions: 1,
+            },
         );
     }
 
-    fn make_event(&self, kind: &str, content_hash: String, agent_id: String, source: Option<String>) -> LedgerEvent {
+    fn make_event(
+        &self,
+        kind: &str,
+        content_hash: String,
+        agent_id: String,
+        source: Option<String>,
+    ) -> LedgerEvent {
         LedgerEvent {
             v: 1,
             kind: kind.to_string(),
@@ -424,13 +454,19 @@ impl Store {
         if text.is_empty() {
             return None;
         }
-        let node_type = input.node_type.clone().unwrap_or_else(|| "fact".to_string());
+        let node_type = input
+            .node_type
+            .clone()
+            .unwrap_or_else(|| "fact".to_string());
         let name = match &input.name {
             Some(n) if !n.trim().is_empty() => n.trim().to_string(),
             _ => normalize_name(text),
         };
         let id = entity_id(&node_type, &name);
-        let agent = input.agent_id.clone().unwrap_or_else(|| self.default_agent.clone());
+        let agent = input
+            .agent_id
+            .clone()
+            .unwrap_or_else(|| self.default_agent.clone());
         let ch = content_hash(&node_type, text);
         let conf = clamp01(input.confidence.unwrap_or(0.8));
 
@@ -444,10 +480,17 @@ impl Store {
 
         if let Some(rels) = &input.relations {
             for rel in rels {
-                let target_type = rel.target_type.clone().unwrap_or_else(|| "concept".to_string());
+                let target_type = rel
+                    .target_type
+                    .clone()
+                    .unwrap_or_else(|| "concept".to_string());
                 let target_id = entity_id(&target_type, &rel.target_name);
-                let rel_ch = content_hash("relation", &format!("{}|{}|{}", id, rel.predicate, target_id));
-                let mut rev = self.make_event("relation", rel_ch, agent.clone(), input.source.clone());
+                let rel_ch = content_hash(
+                    "relation",
+                    &format!("{}|{}|{}", id, rel.predicate, target_id),
+                );
+                let mut rev =
+                    self.make_event("relation", rel_ch, agent.clone(), input.source.clone());
                 rev.source_id = Some(id.clone());
                 rev.target_id = Some(target_id.clone());
                 rev.rel_type = Some(rel.predicate.clone());
@@ -468,15 +511,26 @@ impl Store {
         self.current.get(&id).map(|e| self.to_result(e, None, None))
     }
 
-    pub fn recall(&mut self, query: &str, limit: usize, types: Option<&[String]>) -> Vec<RecallResult> {
+    pub fn recall(
+        &mut self,
+        query: &str,
+        limit: usize,
+        types: Option<&[String]>,
+    ) -> Vec<RecallResult> {
         self.load_incremental();
         let q = tokenize(query);
         let mut scored: Vec<(f64, &MemEntity)> = Vec::new();
         let score_entity = |e: &MemEntity, kw: f64| -> f64 {
             let salience = compute_salience(e.mentions, days_since(&e.updated_at), 60.0, 1.0);
-            (if kw == 0.0 { 1.0 } else { kw }) * salience * corroboration_boost(e.contributors.len())
+            (if kw == 0.0 { 1.0 } else { kw })
+                * salience
+                * corroboration_boost(e.contributors.len())
         };
-        let passes_type = |e: &MemEntity| types.map(|ts| ts.iter().any(|t| t == &e.node_type)).unwrap_or(true);
+        let passes_type = |e: &MemEntity| {
+            types
+                .map(|ts| ts.iter().any(|t| t == &e.node_type))
+                .unwrap_or(true)
+        };
 
         if q.is_empty() {
             // No query terms → rank everything by salience (rare; e.g. "what's salient lately").
@@ -508,12 +562,19 @@ impl Store {
             }
         }
         scored.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
-        scored.into_iter().take(limit).map(|(s, e)| self.to_result(e, Some(s), None)).collect()
+        scored
+            .into_iter()
+            .take(limit)
+            .map(|(s, e)| self.to_result(e, Some(s), None))
+            .collect()
     }
 
     pub fn get_superseded(&mut self) -> Vec<RecallResult> {
         self.load_incremental();
-        self.superseded.values().map(|e| self.to_result(e, None, None)).collect()
+        self.superseded
+            .values()
+            .map(|e| self.to_result(e, None, None))
+            .collect()
     }
 
     pub fn stats(&mut self) -> Stats {
@@ -526,19 +587,30 @@ impl Store {
         }
     }
 
-    fn to_result(&self, e: &MemEntity, salience: Option<f64>, similarity: Option<f64>) -> RecallResult {
+    fn to_result(
+        &self,
+        e: &MemEntity,
+        salience: Option<f64>,
+        similarity: Option<f64>,
+    ) -> RecallResult {
         let relations: Vec<RelOut> = self
             .relations
             .values()
             .filter(|r| r.source_id == e.id)
-            .map(|r| RelOut { predicate: r.rel_type.clone(), target: r.target_id.clone(), reason: r.reason.clone() })
+            .map(|r| RelOut {
+                predicate: r.rel_type.clone(),
+                target: r.target_id.clone(),
+                reason: r.reason.clone(),
+            })
             .collect();
         RecallResult {
             id: e.id.clone(),
             node_type: e.node_type.clone(),
             name: e.name.clone(),
             text: e.text.clone(),
-            salience: salience.unwrap_or_else(|| compute_salience(e.mentions, days_since(&e.updated_at), 60.0, 1.0)),
+            salience: salience.unwrap_or_else(|| {
+                compute_salience(e.mentions, days_since(&e.updated_at), 60.0, 1.0)
+            }),
             mentions: e.mentions,
             confidence: e.confidence,
             corroborations: e.contributors.len(),
@@ -568,7 +640,9 @@ impl Store {
         if !path.exists() {
             return;
         }
-        let needs_tt = std::env::var("BUDDY_MEMORY_EMBED_TOKEN_TYPE").map(|v| v != "false").unwrap_or(true);
+        let needs_tt = std::env::var("BUDDY_MEMORY_EMBED_TOKEN_TYPE")
+            .map(|v| v != "false")
+            .unwrap_or(true);
         if let Ok(e) = crate::embed::Embedder::load(path, 384, 256, needs_tt) {
             self.embedder = Some(e);
         }
@@ -667,9 +741,10 @@ impl Store {
             for (j, cand) in items.iter().enumerate() {
                 let mut max_sim = 0f32;
                 for p in &picked {
-                    if let (Some(a), Some(b)) =
-                        (self.emb_cache.get(&cands[cand.0].ch), self.emb_cache.get(&cands[p.0].ch))
-                    {
+                    if let (Some(a), Some(b)) = (
+                        self.emb_cache.get(&cands[cand.0].ch),
+                        self.emb_cache.get(&cands[p.0].ch),
+                    ) {
                         max_sim = max_sim.max(crate::embed::cosine(a, b));
                     }
                 }
@@ -685,7 +760,9 @@ impl Store {
         picked
             .into_iter()
             .filter_map(|(idx, rel, sem)| {
-                self.current.get(&cands[idx].id).map(|e| self.to_result(e, Some(rel), Some(sem as f64)))
+                self.current
+                    .get(&cands[idx].id)
+                    .map(|e| self.to_result(e, Some(rel), Some(sem as f64)))
             })
             .collect()
     }
@@ -701,7 +778,13 @@ mod hybrid_tests {
             .map(|p| std::path::Path::new(&p).exists())
             .unwrap_or_else(|| {
                 std::env::var("HOME")
-                    .map(|h| std::path::Path::new(&format!("{}/.codebuddy/models/buddy-memory/model.onnx", h)).exists())
+                    .map(|h| {
+                        std::path::Path::new(&format!(
+                            "{}/.codebuddy/models/buddy-memory/model.onnx",
+                            h
+                        ))
+                        .exists()
+                    })
                     .unwrap_or(false)
             })
     }
@@ -716,12 +799,30 @@ mod hybrid_tests {
         std::fs::create_dir_all(&dir).unwrap();
         let ledger = dir.join("ledger.jsonl");
         let mut s = Store::new(ledger, "test/repo".to_string());
-        s.remember(&RememberInput { text: "La réponse vocale du robot est beaucoup trop lente.".into(), node_type: Some("discovery".into()), ..Default::default() });
-        s.remember(&RememberInput { text: "La recette de gâteau demande trois œufs et du beurre.".into(), node_type: Some("discovery".into()), ..Default::default() });
+        s.remember(&RememberInput {
+            text: "La réponse vocale du robot est beaucoup trop lente.".into(),
+            node_type: Some("discovery".into()),
+            ..Default::default()
+        });
+        s.remember(&RememberInput {
+            text: "La recette de gâteau demande trois œufs et du beurre.".into(),
+            node_type: Some("discovery".into()),
+            ..Default::default()
+        });
         // Paraphrase with no shared keywords → semantic must surface the voice discovery.
-        let hits = s.recall_hybrid("mon assistant parle avec beaucoup de retard", 2, None, 0.7, 0.7);
+        let hits = s.recall_hybrid(
+            "mon assistant parle avec beaucoup de retard",
+            2,
+            None,
+            0.7,
+            0.7,
+        );
         assert!(!hits.is_empty());
-        assert!(hits[0].text.contains("vocale"), "top hit should be the voice discovery, got {:?}", hits[0].text);
+        assert!(
+            hits[0].text.contains("vocale"),
+            "top hit should be the voice discovery, got {:?}",
+            hits[0].text
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 }
@@ -740,7 +841,13 @@ mod store_tests {
         dir.join("ledger.jsonl")
     }
     fn input(name: &str, text: &str, agent: &str) -> RememberInput {
-        RememberInput { text: text.into(), node_type: Some("fact".into()), name: Some(name.into()), agent_id: Some(agent.into()), ..Default::default() }
+        RememberInput {
+            text: text.into(),
+            node_type: Some("fact".into()),
+            name: Some(name.into()),
+            agent_id: Some(agent.into()),
+            ..Default::default()
+        }
     }
 
     #[test]
@@ -757,7 +864,10 @@ mod store_tests {
         let mut s2 = Store::new(led.clone(), "a/r".into());
         assert_eq!(s2.stats().entities, 3);
         assert!(s2.snapshot_path.exists());
-        assert!(s2.recall("zeta eta", 5, None).iter().any(|r| r.name == "k3"));
+        assert!(s2
+            .recall("zeta eta", 5, None)
+            .iter()
+            .any(|r| r.name == "k3"));
         let _ = std::fs::remove_dir_all(led.parent().unwrap());
     }
 
@@ -765,12 +875,26 @@ mod store_tests {
     fn supersede_invalidates_old_and_links() {
         let led = tmp_ledger();
         let mut s = Store::new(led.clone(), "a/r".into());
-        s.remember(&input("decision", "on route la voix vers devstral local", "a/r"));
-        s.remember(&input("decision", "on route la voix vers gpt-5.5 cloud", "a/r"));
+        s.remember(&input(
+            "decision",
+            "on route la voix vers devstral local",
+            "a/r",
+        ));
+        s.remember(&input(
+            "decision",
+            "on route la voix vers gpt-5.5 cloud",
+            "a/r",
+        ));
         let cur = s.recall("route voix", 5, None);
-        let top = cur.iter().find(|r| r.name == "decision").expect("current decision");
+        let top = cur
+            .iter()
+            .find(|r| r.name == "decision")
+            .expect("current decision");
         assert!(top.text.contains("gpt-5.5"));
-        assert!(top.relations.iter().any(|rel| rel.predicate == "supersedes"));
+        assert!(top
+            .relations
+            .iter()
+            .any(|rel| rel.predicate == "supersedes"));
         let old = s.get_superseded();
         assert_eq!(old.len(), 1);
         assert!(old[0].text.contains("devstral"));
@@ -783,8 +907,22 @@ mod store_tests {
         let led = tmp_ledger();
         let mut a = Store::new(led.clone(), "ministar/cb".into());
         let mut b = Store::new(led.clone(), "laptop/cb".into());
-        a.remember(&RememberInput { text: "le ledger append-only evite les pertes".into(), node_type: Some("fact".into()), name: Some("k".into()), agent_id: Some("ministar/cb".into()), confidence: Some(0.6), ..Default::default() });
-        b.remember(&RememberInput { text: "le ledger append-only evite les pertes".into(), node_type: Some("fact".into()), name: Some("k".into()), agent_id: Some("laptop/cb".into()), confidence: Some(0.6), ..Default::default() });
+        a.remember(&RememberInput {
+            text: "le ledger append-only evite les pertes".into(),
+            node_type: Some("fact".into()),
+            name: Some("k".into()),
+            agent_id: Some("ministar/cb".into()),
+            confidence: Some(0.6),
+            ..Default::default()
+        });
+        b.remember(&RememberInput {
+            text: "le ledger append-only evite les pertes".into(),
+            node_type: Some("fact".into()),
+            name: Some("k".into()),
+            agent_id: Some("laptop/cb".into()),
+            confidence: Some(0.6),
+            ..Default::default()
+        });
         let hits = b.recall("ledger pertes", 1, None);
         assert_eq!(hits[0].corroborations, 2);
         assert!(hits[0].confidence > 0.6);
@@ -793,7 +931,10 @@ mod store_tests {
 }
 
 fn snapshot_path_for(ledger: &Path) -> PathBuf {
-    let name = ledger.file_name().and_then(|n| n.to_str()).unwrap_or("ckg-ledger.jsonl");
+    let name = ledger
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("ckg-ledger.jsonl");
     ledger.with_file_name(format!("{}.snap", name))
 }
 

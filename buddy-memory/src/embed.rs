@@ -23,7 +23,12 @@ pub struct Embedder {
 impl Embedder {
     /// Load from a model path; tokenizer.json is resolved next to it unless given. `_dims` is the
     /// expected output dim (informational; pooling adapts to the actual model output rank).
-    pub fn load(model_path: &Path, _dims: usize, max_len: usize, needs_token_type_ids: bool) -> Result<Self, String> {
+    pub fn load(
+        model_path: &Path,
+        _dims: usize,
+        max_len: usize,
+        needs_token_type_ids: bool,
+    ) -> Result<Self, String> {
         let tok_path = resolve_tokenizer_path(model_path);
         let session = Session::builder()
             .map_err(|e| e.to_string())?
@@ -31,8 +36,14 @@ impl Embedder {
             .map_err(|e| e.to_string())?
             .commit_from_file(model_path)
             .map_err(|e| e.to_string())?;
-        let tokenizer = Tokenizer::from_file(&tok_path).map_err(|e| format!("tokenizer load failed: {e}"))?;
-        Ok(Self { session, tokenizer, max_len, needs_token_type_ids })
+        let tokenizer =
+            Tokenizer::from_file(&tok_path).map_err(|e| format!("tokenizer load failed: {e}"))?;
+        Ok(Self {
+            session,
+            tokenizer,
+            max_len,
+            needs_token_type_ids,
+        })
     }
 
     pub fn embed(&mut self, texts: &[&str]) -> Result<Vec<Vec<f32>>, String> {
@@ -41,7 +52,10 @@ impl Embedder {
         }
         let encodings = self
             .tokenizer
-            .encode_batch(texts.iter().map(|s| (*s).to_string()).collect::<Vec<_>>(), true)
+            .encode_batch(
+                texts.iter().map(|s| (*s).to_string()).collect::<Vec<_>>(),
+                true,
+            )
             .map_err(|e| format!("tokenize failed: {e}"))?;
         let batch_size = encodings.len();
         let batch_max_len = encodings
@@ -75,12 +89,19 @@ impl Embedder {
                 .map_err(|e| e.to_string())?
         } else {
             self.session
-                .run(ort::inputs![INPUT_IDS => input_ids_tensor, ATTENTION_MASK => attention_tensor])
+                .run(
+                    ort::inputs![INPUT_IDS => input_ids_tensor, ATTENTION_MASK => attention_tensor],
+                )
                 .map_err(|e| e.to_string())?
         };
 
-        let (_, first) = outputs.iter().next().ok_or("ONNX session returned no outputs")?;
-        let tensor = first.try_extract_tensor::<f32>().map_err(|e| e.to_string())?;
+        let (_, first) = outputs
+            .iter()
+            .next()
+            .ok_or("ONNX session returned no outputs")?;
+        let tensor = first
+            .try_extract_tensor::<f32>()
+            .map_err(|e| e.to_string())?;
         let out_shape: Vec<usize> = tensor.0.iter().map(|&d| d as usize).collect();
         let data: &[f32] = tensor.1;
 
@@ -104,7 +125,8 @@ impl Embedder {
                     let mut denom = 0.0f32;
                     for t in 0..seq {
                         let m = if t < batch_max_len {
-                            attention_for_pooling[b * batch_max_len + t.min(batch_max_len - 1)] as f32
+                            attention_for_pooling[b * batch_max_len + t.min(batch_max_len - 1)]
+                                as f32
                         } else {
                             0.0
                         };
@@ -126,13 +148,19 @@ impl Embedder {
                 }
                 Ok(result)
             }
-            other => Err(format!("unexpected ONNX output rank {} (shape {:?})", other, out_shape)),
+            other => Err(format!(
+                "unexpected ONNX output rank {} (shape {:?})",
+                other, out_shape
+            )),
         }
     }
 }
 
 fn resolve_tokenizer_path(model_path: &Path) -> PathBuf {
-    model_path.parent().map(|p| p.join("tokenizer.json")).unwrap_or_else(|| PathBuf::from("tokenizer.json"))
+    model_path
+        .parent()
+        .map(|p| p.join("tokenizer.json"))
+        .unwrap_or_else(|| PathBuf::from("tokenizer.json"))
 }
 
 fn normalize_in_place(v: &mut [f32]) {
