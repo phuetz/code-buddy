@@ -84,22 +84,23 @@ jobs:
     # what runs; Linux/macOS keep the single invocation.
     - name: Run tests (shard 1/6)
       if: runner.os == 'Windows'
-      run: npm test -- --shard=1/6
+      # One retry: a fork can still be killed off-heap on windows-latest (0 red tests).
+      run: npm test -- --shard=1/6 || npm test -- --shard=1/6
     - name: Run tests (shard 2/6)
       if: runner.os == 'Windows'
-      run: npm test -- --shard=2/6
+      run: npm test -- --shard=2/6 || npm test -- --shard=2/6
     - name: Run tests (shard 3/6)
       if: runner.os == 'Windows'
-      run: npm test -- --shard=3/6
+      run: npm test -- --shard=3/6 || npm test -- --shard=3/6
     - name: Run tests (shard 4/6)
       if: runner.os == 'Windows'
-      run: npm test -- --shard=4/6
+      run: npm test -- --shard=4/6 || npm test -- --shard=4/6
     - name: Run tests (shard 5/6)
       if: runner.os == 'Windows'
-      run: npm test -- --shard=5/6
+      run: npm test -- --shard=5/6 || npm test -- --shard=5/6
     - name: Run tests (shard 6/6)
       if: runner.os == 'Windows'
-      run: npm test -- --shard=6/6
+      run: npm test -- --shard=6/6 || npm test -- --shard=6/6
 
     - name: Build project
       run: npm run build
