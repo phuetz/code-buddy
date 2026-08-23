@@ -7,7 +7,8 @@
 
 import React, { useMemo } from 'react';
 import { Box, Text } from 'ink';
-import { getRenderManager, RenderContext } from '../../renderers/index.js';
+import { getRenderManager } from '../../renderers/render-manager.js';
+import type { RenderContext } from '../../renderers/types.js';
 import { useTheme } from '../context/theme-context.js';
 import type { WeatherCondition } from '../../renderers/types.js';
 

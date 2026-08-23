@@ -1,11 +1,12 @@
 import React, { useMemo, useState, useEffect } from "react";
 import { Box, Text, Static } from "ink";
-import { ChatEntry } from "../../agent/codebuddy-agent.js";
+import type { ChatEntry } from "../../agent/codebuddy-agent.js";
 import { DiffRenderer } from "./DiffRenderer.js";
 import { MarkdownRenderer } from "../utils/markdown-renderer.js";
 import { useTheme } from "../context/theme-context.js";
 import { ThemeColors, AvatarConfig } from "../../themes/theme.js";
-import { getRenderManager, isTestResultsData, isWeatherData, isCodeStructureData } from "../../renderers/index.js";
+import { getRenderManager } from "../../renderers/render-manager.js";
+import { isTestResultsData, isWeatherData, isCodeStructureData } from "../../renderers/types.js";
 import { ErrorBoundary } from "./ErrorBoundary.js";
 import { Divider } from "./EnhancedSpinners.js";
 import { ReasoningBlock } from "./ReasoningBlock.js";

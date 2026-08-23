@@ -144,7 +144,7 @@ const lazyImport = {
   initProject: () => lazyLoad('initProject', () => import("./utils/init-project.js")),
   securityModes: () => lazyLoad('securityModes', () => import("./security/security-modes.js")),
   contextLoader: () => lazyLoad('contextLoader', () => import("./context/context-loader.js")),
-  renderers: () => lazyLoad('renderers', () => import("./renderers/index.js")),
+  renderers: () => lazyLoad('renderers', () => import("./renderers/startup.js")),
   performance: () => lazyLoad('performance', () => import("./performance/index.js")),
   pluginManager: () => lazyLoad('pluginManager', () => import("./plugins/plugin-manager.js")),
   lazyLoader: () => lazyLoad('lazyLoader', () => import("./performance/lazy-loader.js")),
@@ -1952,14 +1952,34 @@ program
 
       // Initialize rendering system (lazy load)
       const { initializeRenderers, configureRenderContext } = await lazyImport.renderers();
-      initializeRenderers();
+      const renderersReady = initializeRenderers();
       configureRenderContext({
         plain: options.plain,
         noColor: options.color === false,
         noEmoji: options.emoji === false,
       });
 
-      // Interactive mode: launch UI (lazy load heavy modules)
+      // Paint a lightweight shell before importing the agent graph. The agent
+      // imports the complete tool dispatch surface and provider runtime; none
+      // of that is needed to show the first useful frame of the TUI.
+      recordStartupPhase('ui-load-start');
+      const React = await lazyImport.React();
+      const { render } = await lazyImport.ink();
+      const ChatInterface = await lazyImport.ChatInterface();
+      const inkOptions: Record<string, unknown> = { exitOnCtrlC: true };
+      if (options.altScreen === false) {
+        // --no-alt-screen disables Ink's alternate screen buffer
+        inkOptions.patchConsole = false;
+      }
+
+      recordStartupPhase('ui-first-render');
+      const startupRender = render(
+        React.createElement(ChatInterface, { loading: true }),
+        inkOptions,
+      );
+      logStartupMetrics();
+
+      // Interactive mode: load the full agent graph after the first frame.
       const CodeBuddyAgent = await lazyImport.CodeBuddyAgent();
       let systemPromptId = options.systemPrompt;  // New: external prompt support
       let customAgentConfig = null;
@@ -2158,28 +2178,11 @@ program
         ? message.join(" ")
         : message;
 
-      // Lazy load React and Ink for UI
-      recordStartupPhase('ui-load-start');
-      const React = await lazyImport.React();
-      const { render } = await lazyImport.ink();
-      const ChatInterface = await lazyImport.ChatInterface();
-
-      // Log startup metrics before UI render
-      recordStartupPhase('ui-render');
-      logStartupMetrics();
-
       const totalStartupMs = Date.now() - STARTUP_TIME;
       if (totalStartupMs > 5000) {
         logger.warn(`Slow startup detected: ${totalStartupMs}ms. Run with PERF_TIMING=true for phase breakdown.`);
       } else {
-        logger.debug(`Startup completed in ${totalStartupMs}ms`);
-      }
-
-      // Configure Ink render options
-      const inkOptions: Record<string, unknown> = { exitOnCtrlC: true };
-      if (options.altScreen === false) {
-        // --no-alt-screen disables Ink's alternate screen buffer
-        inkOptions.patchConsole = false;
+        logger.debug(`Agent ready in ${totalStartupMs}ms after the first TUI frame`);
       }
 
       // Opt the interactive session into the Hermes-style post-session background
@@ -2188,7 +2191,9 @@ program
       // trigger a review (recursion + cost safety).
       agent.enableBackgroundReview();
 
-      render(React.createElement(ChatInterface, { agent, initialMessage }), inkOptions);
+      recordStartupPhase('agent-ready-render');
+      await renderersReady;
+      startupRender.rerender(React.createElement(ChatInterface, { agent, initialMessage }));
 
       // Initialize plugin system in background (non-blocking)
       setImmediate(async () => {

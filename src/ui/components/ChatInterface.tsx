@@ -33,6 +33,17 @@ import {
 interface ChatInterfaceProps {
   agent?: CodeBuddyAgent;
   initialMessage?: string;
+  /** Render the lightweight shell while the agent graph is loading. */
+  loading?: boolean;
+}
+
+function StartupScreen() {
+  return (
+    <Box flexDirection="column" paddingX={2} paddingY={1}>
+      <Text color="cyan">Starting Code Buddy...</Text>
+      <Text color="gray" dimColor>Loading the coding assistant.</Text>
+    </Box>
+  );
 }
 
 // Main chat component that handles input when agent is available
@@ -652,22 +663,29 @@ function ChatInterfaceWithAgent({
 function ChatInterfaceInner({
   agent,
   initialMessage,
+  loading,
 }: ChatInterfaceProps) {
   const [currentAgent, setCurrentAgent] = useState<CodeBuddyAgent | null>(
     agent || null
   );
 
+  const activeAgent = agent || currentAgent;
+
   const handleApiKeySet = (newAgent: CodeBuddyAgent) => {
     setCurrentAgent(newAgent);
   };
 
-  if (!currentAgent) {
+  if (loading && !activeAgent) {
+    return <StartupScreen />;
+  }
+
+  if (!activeAgent) {
     return <ApiKeyInput onApiKeySet={handleApiKeySet} />;
   }
 
   return (
     <ChatInterfaceWithAgent
-      agent={currentAgent}
+      agent={activeAgent}
       initialMessage={initialMessage}
     />
   );
@@ -677,11 +695,12 @@ function ChatInterfaceInner({
 export default function ChatInterface({
   agent,
   initialMessage,
+  loading,
 }: ChatInterfaceProps) {
   return (
     <ThemeProvider>
       <ToastProvider>
-        <ChatInterfaceInner agent={agent} initialMessage={initialMessage} />
+        <ChatInterfaceInner agent={agent} initialMessage={initialMessage} loading={loading} />
       </ToastProvider>
     </ThemeProvider>
   );
