@@ -26,9 +26,24 @@ import {
   clearSandboxEscalationBridge,
 } from '../helpers/sandbox-escalation-bridge.js';
 import { canonical, canonicalShellPath } from '../helpers/shell-path.js';
+import { EventEmitter } from 'node:events';
+import type { ChildProcess } from 'child_process';
 import path from 'path';
 import os from 'os';
 import fs from 'fs';
+import { vi } from 'vitest';
+
+const processMocks = vi.hoisted(() => ({
+  spawn: vi.fn(),
+  realSpawn: undefined as typeof import('child_process').spawn | undefined,
+}));
+
+vi.mock('child_process', async () => {
+  const actual = await vi.importActual<typeof import('child_process')>('child_process');
+  processMocks.realSpawn = actual.spawn;
+  processMocks.spawn.mockImplementation(actual.spawn);
+  return { ...actual, spawn: processMocks.spawn };
+});
 
 jest.mock('../../src/utils/logger.js', () => ({
   logger: {
@@ -80,6 +95,15 @@ jest.mock('../../src/utils/disposable', () => ({
 }));
 
 const isWindows = process.platform === 'win32';
+
+function createMockChildProcess(): ChildProcess & EventEmitter {
+  const child = new EventEmitter() as ChildProcess & EventEmitter;
+  Object.defineProperty(child, 'pid', { value: 12345, writable: true });
+  Object.defineProperty(child, 'stdout', { value: new EventEmitter(), writable: true });
+  Object.defineProperty(child, 'stderr', { value: new EventEmitter(), writable: true });
+  child.kill = jest.fn().mockReturnValue(true);
+  return child;
+}
 
 describe('BashTool', () => {
   let bashTool: BashTool;
@@ -530,10 +554,39 @@ describe('BashTool', () => {
     });
 
     it('should include stderr in output when command succeeds', async () => {
-      // Use a command that writes to both stdout and stderr
-      const result = await bashTool.execute('echo "stdout output"');
-      expect(result.success).toBe(true);
-      expect(result.output).toContain('stdout output');
+      const child = createMockChildProcess();
+      processMocks.spawn.mockImplementationOnce(() => child);
+      confirmationService.setInteractiveBridge(async () => ({ confirmed: true }));
+
+      try {
+        // A package-manager probe takes the direct-approval path without
+        // touching the real filesystem or network in this output-unit test.
+        const execution = bashTool.execute('npm --version');
+
+        // execute() performs async policy work before installing its listeners.
+        // Wait for spawn, then emit stdout/stderr/close on a later turn so no
+        // event can be lost by a synchronous fake-process emission.
+        await vi.waitFor(() => expect(processMocks.spawn).toHaveBeenCalled(), {
+          timeout: 5000,
+          interval: 1,
+        });
+        await new Promise<void>((resolve) => {
+          setImmediate(() => {
+            (child.stdout as EventEmitter).emit('data', Buffer.from('stdout output'));
+            (child.stderr as EventEmitter).emit('data', Buffer.from('stderr output'));
+            child.emit('close', 0);
+            resolve();
+          });
+        });
+
+        const result = await execution;
+        expect(result.success).toBe(true);
+        expect(result.output).toContain('stdout output');
+        expect(result.output).toContain('STDERR: stderr output');
+      } finally {
+        processMocks.spawn.mockReset();
+        processMocks.spawn.mockImplementation(processMocks.realSpawn);
+      }
     });
 
     it('should handle binary-like output gracefully', async () => {
