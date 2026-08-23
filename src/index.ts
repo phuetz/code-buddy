@@ -3832,4 +3832,22 @@ addLazyCommand(
   },
 );
 
-program.parse();
+function isRootHelpRequest(argv: readonly string[]): boolean {
+  const args = argv.slice(2);
+  if (!args.some((arg) => arg === '--help' || arg === '-h')) {
+    return false;
+  }
+
+  const commandNames = new Set(program.commands.map((command) => command.name()));
+  const { operands } = program.parseOptions(args);
+  return !operands.some((operand) => commandNames.has(operand));
+}
+
+// Commander writes help and immediately calls process.exit(). The root help is
+// larger than a macOS pipe buffer, so a slow reader can lose the queued suffix.
+// It is fully registered here: write it once and let Node drain stdout naturally.
+if (isRootHelpRequest(process.argv)) {
+  program.outputHelp();
+} else {
+  program.parse();
+}
