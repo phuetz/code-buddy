@@ -7,7 +7,8 @@
 
 Usage: python3 wrap-short.py <brut.mp4> <out.mp4> --hook "TITRE" \
          [--cut broll.mp4@mot:durée ...] [--fix "avant=après" ...] \
-         [--layout standard|split] [--music musique.mp3]
+         [--layout standard|split] [--music musique.mp3] \
+         [--music-volume 0.01]
 
 Le déclencheur `mot` est cherché dans les word-timestamps whisper (1er match,
 insensible casse/accents simples) ; `@12.5:3` = temps absolu accepté aussi.
@@ -26,6 +27,32 @@ from pathlib import Path
 from video_delivery_qc import master_video_audio, write_qc_sidecar
 
 IMAGE_EXTENSIONS = {'.png', '.jpg', '.jpeg', '.webp'}
+
+# Tapis musical : 0.01 ≈ −40 dB (÷3 vs 0.03 ≈ −30,5 dB). Cible : mix voix −14 LUFS,
+# musique ≈ −38 à −40 LUFS dans le master (jamais en concurrence). Le seuil de
+# ducking est sur la SIDECHAIN voix, pas sur la musique : il ne se divise pas
+# avec le volume. `--music-volume 0.007` si le tapis reste encore trop présent.
+DEFAULT_MUSIC_VOLUME = 0.01
+DEFAULT_MUSIC_DUCK_THRESHOLD = 0.006
+
+
+def music_audio_filters(
+    music_index,
+    total,
+    volume=DEFAULT_MUSIC_VOLUME,
+    duck_threshold=DEFAULT_MUSIC_DUCK_THRESHOLD,
+):
+    """Filtre audio : musique bouclée, duckée sous la voix, mix masterisé −14 LUFS."""
+    fade_out = max(0.0, total - 1.0)
+    return [
+        f'[{music_index}:a]atrim=0:{total:.3f},asetpts=PTS-STARTPTS,'
+        f'afade=t=in:st=0:d=0.5,afade=t=out:st={fade_out:.3f}:d=1,'
+        f'volume={volume:g}[music]',
+        f'[music][0:a]sidechaincompress=threshold={duck_threshold:g}:ratio=8:'
+        'attack=5:release=250[ducked]',
+        f'[0:a][ducked]amix=inputs=2:normalize=0,atrim=0:{total:.3f},'
+        'loudnorm=I=-14:TP=-1.5:LRA=11,aresample=48000[aout]',
+    ]
 
 def is_image(path):
     return os.path.splitext(path)[1].lower() in IMAGE_EXTENSIONS
@@ -536,6 +563,13 @@ def main():
         '--music',
         help='musique optionnelle, bouclée et duckée sous la voix puis masterisée à -14 LUFS')
     ap.add_argument(
+        '--music-volume',
+        type=float,
+        default=DEFAULT_MUSIC_VOLUME,
+        metavar='GAIN',
+        help='gain linéaire de la musique de fond (défaut 0.01 ≈ −40 dB ; '
+             '0.03 = ancien niveau trop présent ; 0.007 si le tapis gêne encore)')
+    ap.add_argument(
         '--subs', choices=('karaoke', 'cards'), default='karaoke',
         help='karaoke = mot actif agrandi et coloré (défaut, standard Ninon) ; '
              'cards = cartes statiques historiques')
@@ -609,18 +643,11 @@ def main():
 
     audio_args = ['-map', '0:a', '-c:a', 'aac', '-b:a', '192k']
     if a.music:
+        if a.music_volume <= 0:
+            sys.exit('--music-volume doit être > 0')
         music_index = len(cuts) + 1
         inputs += ['-stream_loop', '-1', '-i', a.music]
-        fade_out = max(0.0, total - 1.0)
-        fc.extend([
-            f'[{music_index}:a]atrim=0:{total:.3f},asetpts=PTS-STARTPTS,'
-            f'afade=t=in:st=0:d=0.5,afade=t=out:st={fade_out:.3f}:d=1,'
-            'volume=0.03[music]',
-            '[music][0:a]sidechaincompress=threshold=0.006:ratio=8:'
-            'attack=5:release=250[ducked]',
-            f'[0:a][ducked]amix=inputs=2:normalize=0,atrim=0:{total:.3f},'
-            'loudnorm=I=-14:TP=-1.5:LRA=11,aresample=48000[aout]',
-        ])
+        fc.extend(music_audio_filters(music_index, total, volume=a.music_volume))
         audio_args = ['-map', '[aout]', '-c:a', 'aac', '-b:a', '192k']
 
     if a.layout == 'standard' and not a.music:

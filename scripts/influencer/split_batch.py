@@ -6,7 +6,7 @@ musique duckée, master -14 LUFS) avec une cadence de B-roll automatique (≈ to
 Ninon mesurée 2,2 s ; défaut 2,5 s) en tournant sur la liste de B-roll du job — puis aperçu 540×960 et
 planche contact 6 vignettes pour relecture.
 
-Usage : split_batch.py jobs.json [--only L5,L6] [--dry-run]
+Usage : split_batch.py jobs.json [--only L5,L6] [--dry-run] [--music-volume 0.01]
 jobs.json = {"music": "…mp3", "broll_root": "~/.codebuddy/media-video/flow-crame", "out_dir": "…", "cadence": 2.5, "outro": "…/OUTRO-LISA-CTA.mp4",
              "jobs": [{"id": "L5", "src": "…/L5-kimi-k3.mp4", "hook": "Kimi K3 : …",
                        "fix": ["Kimi 4.3=Kimi K3"], "broll": ["lisa-neuralnet.mp4", "lisa-code.mp4", …],
@@ -39,6 +39,9 @@ def main():
     if '--only' in sys.argv:
         only = set(sys.argv[sys.argv.index('--only') + 1].split(','))
     dry = '--dry-run' in sys.argv
+    music_volume = cfg.get('music_volume')
+    if '--music-volume' in sys.argv:
+        music_volume = float(sys.argv[sys.argv.index('--music-volume') + 1])
     root = os.path.expanduser(cfg.get('broll_root', '~/.codebuddy/media-video/flow-crame'))
     out_dir = os.path.expanduser(cfg.get('out_dir', os.path.dirname(os.path.abspath(sys.argv[1]))))
     os.makedirs(out_dir, exist_ok=True)
@@ -51,6 +54,10 @@ def main():
             continue
         src = os.path.expanduser(job['src'])
         out = os.path.join(out_dir, job.get('out', f"SHORT-SPLIT-{jid}.mp4"))
+        if not os.path.exists(src):
+            print(f"⚠️ {jid}: src introuvable {src}")
+            results.append({'id': jid, 'error': f'src manquant {src}'})
+            continue
         dur = duration(src)
         cadence = float(job.get('cadence', cfg.get('cadence', 2.5)))  # Ninon mesurée 2,2 s ; judge 22/08 : 3,0 s insuffisant
         brolls = [b if os.path.isabs(os.path.expanduser(b)) else os.path.join(root, b) for b in job['broll']]
@@ -78,6 +85,8 @@ def main():
             cmd += ['--cut', c]
         if music and os.path.exists(music):
             cmd += ['--music', music]
+            if music_volume is not None:
+                cmd += ['--music-volume', f'{music_volume:g}']
         print(f"→ {jid} ({dur:.0f} s, {len(cuts)} plans B-roll, cadence {cadence}s){' · DRY-RUN' if dry else ''}")
         if dry:
             results.append({'id': jid, 'dryRun': True, 'cuts': len(cuts)}); continue

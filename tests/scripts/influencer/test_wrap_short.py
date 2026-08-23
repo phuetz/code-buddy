@@ -324,5 +324,24 @@ class IsImageTest(unittest.TestCase):
         self.assertFalse(wrap_short.is_image('b042.mp4'))
 
 
+class MusicAudioFiltersTest(unittest.TestCase):
+    def test_defaut_volume_0_01_et_ducking_voix(self):
+        joined = ';'.join(wrap_short.music_audio_filters(2, 10.0))
+        self.assertIn('volume=0.01[music]', joined)
+        self.assertIn('threshold=0.006', joined)
+        self.assertIn('loudnorm=I=-14', joined)
+        self.assertEqual(wrap_short.DEFAULT_MUSIC_VOLUME, 0.01)
+
+    def test_music_volume_override(self):
+        joined = ';'.join(wrap_short.music_audio_filters(3, 8.5, volume=0.007))
+        self.assertIn('volume=0.007[music]', joined)
+        self.assertIn('[3:a]atrim=0:8.500', joined)
+        self.assertNotIn('volume=0.01[music]', joined)
+
+    def test_cli_option_presente(self):
+        src = SCRIPT.read_text(encoding='utf-8')
+        self.assertIn("'--music-volume'", src)
+
+
 if __name__ == '__main__':
     unittest.main()
