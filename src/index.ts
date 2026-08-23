@@ -1951,7 +1951,11 @@ program
       }
 
       // Initialize rendering system (lazy load)
-      const { initializeRenderers, configureRenderContext } = await lazyImport.renderers();
+      const {
+        initializeRenderers,
+        configureRenderContext,
+        areSpecializedRenderersDegraded,
+      } = await lazyImport.renderers();
       const renderersReady = initializeRenderers();
       configureRenderContext({
         plain: options.plain,
@@ -2197,8 +2201,13 @@ program
       // Historical alias: longitudinal PERF_TIMING series used `ui-render`
       // for time-to-agent-ready (the full ChatInterface, not the loading shell).
       recordStartupPhase('ui-render');
-      await renderersReady;
-      startupRender.rerender(React.createElement(ChatInterface, { agent, initialMessage }));
+      try {
+        await renderersReady;
+      } catch {
+        cli.warn('Specialized renderers failed to load; structured output (tests, weather, diffs, tables) will use generic text.');
+      }
+      const renderersDegraded = areSpecializedRenderersDegraded();
+      startupRender.rerender(React.createElement(ChatInterface, { agent, initialMessage, renderersDegraded }));
 
       // Initialize plugin system in background (non-blocking)
       setImmediate(async () => {

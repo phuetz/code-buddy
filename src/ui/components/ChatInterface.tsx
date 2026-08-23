@@ -35,6 +35,8 @@ interface ChatInterfaceProps {
   initialMessage?: string;
   /** Render the lightweight shell while the agent graph is loading. */
   loading?: boolean;
+  /** Specialized renderers failed to register; structured output is generic. */
+  renderersDegraded?: boolean;
 }
 
 function StartupScreen() {
@@ -664,6 +666,7 @@ function ChatInterfaceInner({
   agent,
   initialMessage,
   loading,
+  renderersDegraded,
 }: ChatInterfaceProps) {
   const [currentAgent, setCurrentAgent] = useState<CodeBuddyAgent | null>(
     agent || null
@@ -684,10 +687,19 @@ function ChatInterfaceInner({
   }
 
   return (
-    <ChatInterfaceWithAgent
-      agent={activeAgent}
-      initialMessage={initialMessage}
-    />
+    <Box flexDirection="column">
+      {renderersDegraded && (
+        <Box paddingX={2} paddingTop={1}>
+          <Text color="yellow">
+            Specialized renderers failed to load; structured output falls back to generic text.
+          </Text>
+        </Box>
+      )}
+      <ChatInterfaceWithAgent
+        agent={activeAgent}
+        initialMessage={initialMessage}
+      />
+    </Box>
   );
 }
 
@@ -696,11 +708,17 @@ export default function ChatInterface({
   agent,
   initialMessage,
   loading,
+  renderersDegraded,
 }: ChatInterfaceProps) {
   return (
     <ThemeProvider>
       <ToastProvider>
-        <ChatInterfaceInner agent={agent} initialMessage={initialMessage} loading={loading} />
+        <ChatInterfaceInner
+          agent={agent}
+          initialMessage={initialMessage}
+          loading={loading}
+          renderersDegraded={renderersDegraded}
+        />
       </ToastProvider>
     </ThemeProvider>
   );
