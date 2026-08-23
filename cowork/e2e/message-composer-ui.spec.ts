@@ -57,8 +57,7 @@ test.describe('MessageComposer E2E', () => {
     fs.writeFileSync(imagePath, Buffer.from(b64, 'base64'));
 
     await electronApp.evaluate(({ dialog }, selectedPath) => {
-      const originalShowOpenDialog = dialog.showOpenDialog.bind(dialog);
-      dialog.showOpenDialog = async (...args) => {
+      dialog.showOpenDialog = async () => {
         return {
           canceled: false,
           filePaths: [selectedPath],

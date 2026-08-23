@@ -33,7 +33,6 @@ const {
   validateRuntimeManifest,
 } = require('../../scripts/runtime-manifest-utils.cjs');
 
-const RUNTIME_SCHEMA_VERSION = 2;
 const CORE_RUNTIME_RELATIVE_PATH = path.join('.bundle-resources', 'core-runtime');
 const CORE_RUNTIME_ENTRYPOINT = 'dist/desktop/codebuddy-engine-adapter.js';
 const CODE_BUDDY_PACKAGE_NAME = /^@phuetz\/code-buddy$/;
