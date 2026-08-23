@@ -70,12 +70,24 @@ import {
   detectEmotion,
   emotionalContinuityGuidance,
   emotionGuidance,
+  expressiveTextGuidance,
   immediateEmotionAcknowledgement,
   IMMEDIATE_EMOTION_ACKNOWLEDGEMENTS,
   openerKey,
   pushOpener,
 } from '../companion/reply-augment.js';
 import { crisisGuidanceFor } from '../companion/crisis-safety.js';
+import { evolveRelationshipFromUtterance } from '../companion/relationship-evolution.js';
+import {
+  loadRelationshipState,
+  moodBand,
+  personalityOf,
+} from '../companion/relationship-state.js';
+import {
+  buildMemoryCallback,
+  memoryCallbackHash,
+  shouldOfferCallback,
+} from '../companion/voice-callbacks.js';
 import {
   deriveVoiceDeliveryProfile,
   voiceDeliveryGuidance,
@@ -93,6 +105,32 @@ import { VisualConsentGate } from '../companion/visual-consent.js';
 import { getVoiceTurnCoordinator } from './voice-turn-coordinator.js';
 import { resolvePocketLanguage } from '../talk-mode/providers/pocket-tts.js';
 
+/** Derive relational prosody without changing the bare voice-loop default. */
+export function deriveSpokenDeliveryProfile(
+  heard: string,
+  context?: VoiceTurnContext,
+  env: NodeJS.ProcessEnv = process.env,
+): VoiceDeliveryProfile {
+  if (env.CODEBUDDY_COMPANION_RELATIONAL !== 'true') {
+    return deriveVoiceDeliveryProfile(heard, context);
+  }
+  const read = detectEmotion(heard);
+  let mood: string | undefined;
+  try {
+    mood = moodBand(personalityOf(loadRelationshipState()).mood);
+  } catch {
+    /* mood is best-effort; the local emotional read still tunes delivery */
+  }
+  return deriveVoiceDeliveryProfile(heard, {
+    ...context,
+    emotion: {
+      label: read.emotion,
+      intensity: read.intensity === 'high' ? 1 : 0.75,
+    },
+    ...(mood ? { mood } : {}),
+  });
+}
+
 /**
  * Cancellation handle threaded into the two interruptible steps of a spoken turn: the
  * LLM/agent "think" (`ReplyFn`) and the TTS "play" (`PlayFn`). When the signal aborts
@@ -109,6 +147,8 @@ export interface VoiceStepOptions {
   onProviderResolved?: (route: { model: string; apiKey: string; baseURL?: string }) => void;
   /** Raw-free cadence/length profile derived from the human's current spoken turn. */
   delivery?: VoiceDeliveryProfile;
+  /** Internal handoff: an outer reply router already applied relational drift for this turn. */
+  relationshipEvolutionHandled?: boolean;
   /**
    * Route-aware, transactional cognitive context. The caller is responsible
    * for enforcing the route's real egress clearance before returning a lease.
@@ -1326,6 +1366,17 @@ export interface SpokenPromptAugmentationOptions {
    * Default false because voice already sends the bounded raw history.
    */
   includeRecentDialogue?: boolean;
+  /** Injectable environment for feature-gate tests. Defaults to `process.env`. */
+  env?: NodeJS.ProcessEnv;
+  /** Injectable latency-bounded relational snapshot. */
+  relationalContext?: () => Promise<string>;
+}
+
+/** Explicit override, otherwise expressive text follows the existing relational opt-in. */
+export function isExpressiveVoiceTextEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
+  const configured = env.CODEBUDDY_VOICE_EXPRESSIVE_TEXT;
+  if (configured !== undefined) return configured === 'true';
+  return env.CODEBUDDY_COMPANION_RELATIONAL === 'true';
 }
 
 /** Default think: a short companion reply from the fastest capable LLM ($0 when local).
@@ -1334,6 +1385,32 @@ export interface SpokenPromptAugmentationOptions {
  *  hybrid reply can reuse the exact same persona-voiced warm path for small talk. */
 /** Recent reply openings (first few words), so the companion doesn't reuse the same entry twice. */
 let recentReplyOpeners: string[] = [];
+let lastVoiceMemoryCallbackAt: number | undefined;
+let offeredVoiceMemoryCallbackHashes: string[] = [];
+
+function recentEpisodeFromRelationalContext(context: string): string | null {
+  return /<recent_episode>\s*([\s\S]*?)\s*<\/recent_episode>/u.exec(context)?.[1]?.trim() ?? null;
+}
+
+function memoryCallbackGuidance(relationalContext: string, env: NodeJS.ProcessEnv): string {
+  const now = Date.now();
+  if (!shouldOfferCallback(now, lastVoiceMemoryCallbackAt, env)) return '';
+  const callback = buildMemoryCallback(
+    recentEpisodeFromRelationalContext(relationalContext),
+    new Set(offeredVoiceMemoryCallbackHashes),
+  );
+  if (!callback) return '';
+
+  lastVoiceMemoryCallbackAt = now;
+  offeredVoiceMemoryCallbackHashes.push(memoryCallbackHash(callback));
+  offeredVoiceMemoryCallbackHashes = offeredVoiceMemoryCallbackHashes.slice(-64);
+  return [
+    '<spoken_memory_callback>',
+    `Ouvre naturellement la réponse par ce rappel issu du journal, sans le compléter ni inventer : « ${callback} »`,
+    'N’affirme aucun autre souvenir et poursuis seulement à partir de ce que l’utilisateur vient de dire.',
+    '</spoken_memory_callback>',
+  ].join('\n');
+}
 
 const REPEATED_OPENER_REWRITES: ReadonlyArray<{
   pattern: RegExp;
@@ -1453,16 +1530,19 @@ export async function buildSpokenPromptAugmentation(
   delivery?: VoiceDeliveryProfile,
   options: SpokenPromptAugmentationOptions = {},
 ): Promise<string> {
+  const env = options.env ?? process.env;
   const includeRecentDialogue =
     options.includeRecentDialogue ??
-    process.env.CODEBUDDY_VOICE_INCLUDE_RECENT_DIALOGUE === 'true';
+    env.CODEBUDDY_VOICE_INCLUDE_RECENT_DIALOGUE === 'true';
+  const emotion = detectEmotion(heard);
   const guidance = [
     // Safety first: an acute-distress / self-harm signal in what he just said takes priority over
     // every other tone/continuity instruction for this turn (see crisis-safety.ts). Empty otherwise.
     crisisGuidanceFor(heard),
     prepareConversationTurn(heard, history, { includeRecentDialogue }).systemGuidance,
     delivery ? voiceDeliveryGuidance(delivery) : '',
-    emotionGuidance(detectEmotion(heard)),
+    emotionGuidance(emotion),
+    isExpressiveVoiceTextEnabled(env) ? expressiveTextGuidance(emotion) : '',
     emotionalContinuityGuidance(heard, history),
     spokenPrefix
       ? `Tu as déjà dit à voix haute : « ${spokenPrefix} » Enchaîne sans répéter cette idée ni cette formulation. Commence directement par la prochaine phrase utile du plan conversationnel.`
@@ -1473,10 +1553,19 @@ export async function buildSpokenPromptAugmentation(
     .join('\n');
 
   let relational = '';
-  if (process.env.CODEBUDDY_COMPANION_RELATIONAL === 'true') {
+  let memoryCallback = '';
+  if (env.CODEBUDDY_COMPANION_RELATIONAL === 'true') {
     try {
-      const { getVoiceRelationalContext } = await import('../companion/relational-context.js');
-      relational = await getVoiceRelationalContext();
+      const getRelationalContext = options.relationalContext ?? (async () => {
+        const { getVoiceRelationalContext } = await import('../companion/relational-context.js');
+        return getVoiceRelationalContext();
+      });
+      relational = await getRelationalContext();
+      // Reuse the already latency-bounded episode read embedded in relational context: no second
+      // storage access or model/audio round-trip is added to the first-sound path.
+      if (emotion.emotion === 'neutral') {
+        memoryCallback = memoryCallbackGuidance(relational, env);
+      }
     } catch {
       /* a missing relational source must never delay or break speech */
     }
@@ -1498,7 +1587,7 @@ export async function buildSpokenPromptAugmentation(
     /* continuity is best-effort and must never delay or break speech */
   }
 
-  return [relational, sharedRelationship, guidance].filter(Boolean).join('\n\n');
+  return [memoryCallback, relational, sharedRelationship, guidance].filter(Boolean).join('\n\n');
 }
 
 async function prepareSpokenTurn(
@@ -1556,12 +1645,16 @@ export async function defaultReply(
 ): Promise<string> {
   const fast = fastCompanionReply(heard);
   if (fast) {
+    if (!replyOpts?.relationshipEvolutionHandled) void evolveRelationshipFromUtterance(heard);
     logger.info(`[voice] fast reply chars=${fast.length}`);
     return fast;
   }
   let cognitiveLease: VoiceCognitiveContextLease | undefined;
   try {
-    const delivery = replyOpts?.delivery ?? deriveVoiceDeliveryProfile(heard);
+    if (!replyOpts?.relationshipEvolutionHandled) {
+      await evolveRelationshipFromUtterance(heard);
+    }
+    const delivery = replyOpts?.delivery ?? deriveSpokenDeliveryProfile(heard);
     const prepared = await prepareSpokenTurn(
       heard,
       history,
@@ -1626,7 +1719,7 @@ export async function defaultSpokenPrefix(
 ): Promise<string> {
   try {
     if (replyOpts?.signal?.aborted) return '';
-    const delivery = replyOpts?.delivery ?? deriveVoiceDeliveryProfile(heard);
+    const delivery = replyOpts?.delivery ?? deriveSpokenDeliveryProfile(heard);
     // Prefix generation deliberately does not acquire/commit resident cognitive context: the
     // hybrid semantic gate has not accepted this private draft yet.
     const prepared = await prepareSpokenTurn(
@@ -1694,6 +1787,9 @@ export async function* streamCompanionReply(
   let cognitiveLease: VoiceCognitiveContextLease | undefined;
   let cognitiveLeaseSettled = false;
   try {
+    if (!replyOpts?.relationshipEvolutionHandled) {
+      await evolveRelationshipFromUtterance(heard);
+    }
     const resolvedRoute = await resolveVoiceModel(heard, { history });
     const acknowledgement = replyOpts?.spokenPrefix
       ? null
@@ -1704,7 +1800,7 @@ export async function* streamCompanionReply(
       full = `${acknowledgement} `;
       yield full;
     }
-    const delivery = replyOpts?.delivery ?? deriveVoiceDeliveryProfile(heard);
+    const delivery = replyOpts?.delivery ?? deriveSpokenDeliveryProfile(heard);
     const prepared = await prepareSpokenTurn(
       heard,
       history,
@@ -1848,6 +1944,9 @@ function makeDefaultSynth(
     opts: VoiceStepOptions = {}
   ): Promise<{ wav: string; cacheable: boolean }> => {
     if (opts.signal?.aborted) throw new Error('TTS synthesis was interrupted');
+    const prepared = prepareSpeech(text);
+    if (!prepared) return { wav: '', cacheable: false };
+    text = prepared;
     const wavPath = join(tmpdir(), `cb-voice-${process.pid}-${Date.now()}.wav`);
     if (engine === 'voicebox') {
       const { synthesizeVoiceboxWav } = await import('../voice/voicebox-tts.js');
@@ -1992,6 +2091,10 @@ function makeDefaultStreamSpeak(
     if (signal?.aborted) return false;
     const player = await playerPromise;
     if (!player) return false;
+
+    const prepared = prepareSpeech(text);
+    if (!prepared) return false;
+    text = prepared;
 
     const baseCacheVoice = resolveBaseCacheVoice(engine);
     const cacheVoice = opts.delivery && engine === 'voicebox'
@@ -2414,7 +2517,7 @@ export function makeVoiceReply(options: VoiceReplyOptions = {}): VoiceReplyHandl
         ? makeDefaultStreamSpeak(playerPromise, turnTtsEngine)
         : undefined
     );
-    const delivery = deriveVoiceDeliveryProfile(heard, context);
+    const delivery = deriveSpokenDeliveryProfile(heard, context, env);
     const startedAt = Date.now();
     let replyMs = 0;
     let synthMs = 0;

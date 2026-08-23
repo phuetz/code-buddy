@@ -678,6 +678,7 @@ describe('voice loop — emotional prompt defaults', () => {
   const savedChannelId = process.env.CODEBUDDY_CONVERSATION_CHANNEL_ID;
   const savedPersist = process.env.CODEBUDDY_CONVERSATION_PERSIST;
   const savedIncludeRecentDialogue = process.env.CODEBUDDY_VOICE_INCLUDE_RECENT_DIALOGUE;
+  const savedExpressiveText = process.env.CODEBUDDY_VOICE_EXPRESSIVE_TEXT;
 
   afterEach(() => {
     if (savedRelational === undefined) delete process.env.CODEBUDDY_COMPANION_RELATIONAL;
@@ -693,6 +694,8 @@ describe('voice loop — emotional prompt defaults', () => {
     } else {
       process.env.CODEBUDDY_VOICE_INCLUDE_RECENT_DIALOGUE = savedIncludeRecentDialogue;
     }
+    if (savedExpressiveText === undefined) delete process.env.CODEBUDDY_VOICE_EXPRESSIVE_TEXT;
+    else process.env.CODEBUDDY_VOICE_EXPRESSIVE_TEXT = savedExpressiveText;
     resetCrossChannelConversationBridge();
   });
 
@@ -702,6 +705,50 @@ describe('voice loop — emotional prompt defaults', () => {
     expect(prompt).toMatch(/triste|accueille|douce/i);
     expect(prompt).not.toContain('<recent_episode>');
     expect(prompt).not.toContain('<lisa_state>');
+    expect(prompt).not.toContain('<expressive_spoken_text>');
+  });
+
+  it('enables expressive text by default only with relational context, with an explicit override', async () => {
+    delete process.env.CODEBUDDY_VOICE_EXPRESSIVE_TEXT;
+    process.env.CODEBUDDY_COMPANION_RELATIONAL = 'true';
+    const relational = await buildSpokenPromptAugmentation('je suis triste ce soir');
+    expect(relational).toContain('<expressive_spoken_text>');
+    expect(relational).toMatch(/douceur|questions ouvertes/i);
+
+    process.env.CODEBUDDY_COMPANION_RELATIONAL = 'false';
+    process.env.CODEBUDDY_VOICE_EXPRESSIVE_TEXT = 'true';
+    const explicit = await buildSpokenPromptAugmentation('je galère avec ça');
+    expect(explicit).toContain('<expressive_spoken_text>');
+    expect(explicit).toMatch(/excuse br[eè]ve|apaise/i);
+
+    process.env.CODEBUDDY_COMPANION_RELATIONAL = 'true';
+    process.env.CODEBUDDY_VOICE_EXPRESSIVE_TEXT = 'false';
+    const disabled = await buildSpokenPromptAugmentation("c'est génial");
+    expect(disabled).not.toContain('<expressive_spoken_text>');
+  });
+
+  it('offers a journal-backed callback through the relational voice gate without another read', async () => {
+    const prompt = await buildSpokenPromptAugmentation(
+      'on continue ici',
+      [],
+      undefined,
+      undefined,
+      {
+        env: {
+          CODEBUDDY_COMPANION_RELATIONAL: 'true',
+          CODEBUDDY_VOICE_CALLBACK_GAP_MS: '0',
+        },
+        relationalContext: async () => [
+          '<recent_episode>',
+          "Dernier point de l'utilisateur : Le point courant. Point encore ouvert : Reprendre le test vocal demain.",
+          '</recent_episode>',
+        ].join('\n'),
+      },
+    );
+
+    expect(prompt).toContain('<spoken_memory_callback>');
+    expect(prompt).toContain('Reprendre le test vocal demain');
+    expect(prompt).toMatch(/sans le compl[ée]ter ni inventer/i);
   });
 
   it('carries recent emotional context into a neutral follow-up without forcing it', async () => {
