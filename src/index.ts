@@ -3551,7 +3551,7 @@ addLazyCommand(
 addLazyCommand(
   program,
   'loop',
-  'Boucle de dev autonome (plan→exécute→vérifie→juge→décide) jusqu\'à fait prouvé ou budget',
+  'Autonomous development loop (plan → execute → verify → judge → decide) until proven done or budget exhausted',
   async () => {
     const { createLoopCommand } = await import('./commands/loop-cli.js');
     return createLoopCommand();
