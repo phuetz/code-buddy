@@ -25,7 +25,13 @@ import {
   buildYtdlpArgs,
   buildVideoYtdlpArgs,
   downloadAudioWav,
+  downloadVideoFile,
   isDownloadOk,
+  isVideoDownloadOk,
+  isYoutubeSource,
+  isRetryableYoutubeFailure,
+  resolvePlayerClientChain,
+  YOUTUBE_CLIENT_FALLBACKS,
 } from '../../../src/tools/video/media-fetch.js';
 import {
   buildStoryboardYtdlpArgs,
@@ -213,6 +219,88 @@ describe('media-fetch', () => {
     });
     expect(isDownloadOk(result)).toBe(false);
     if (!isDownloadOk(result)) expect(result.error).toMatch(/code 1/);
+  });
+});
+
+/**
+ * YouTube serves the default `android_vr` formats behind URLs that answer HTTP 403
+ * (measured 2026-08-24 on `4HTpSc7vB6U`): extraction succeeds, the download dies. The
+ * fix is a player-client fallback chain, so these tests pin BOTH the chain itself and
+ * the retry decision — a non-YouTube source, or a genuine error, must not be retried.
+ */
+describe('media-fetch YouTube player-client fallbacks', () => {
+  it('only offers fallbacks for YouTube sources', () => {
+    expect(isYoutubeSource('https://youtu.be/x')).toBe(true);
+    expect(isYoutubeSource('https://www.youtube.com/watch?v=x')).toBe(true);
+    expect(isYoutubeSource('https://vimeo.com/123')).toBe(false);
+    expect(resolvePlayerClientChain('https://vimeo.com/123', {})).toEqual([undefined]);
+    expect(resolvePlayerClientChain('https://youtu.be/x', {})).toEqual([
+      undefined,
+      ...YOUTUBE_CLIENT_FALLBACKS,
+    ]);
+  });
+
+  it('lets CODEBUDDY_YTDLP_PLAYER_CLIENTS override or disable the chain', () => {
+    expect(
+      resolvePlayerClientChain('https://youtu.be/x', { CODEBUDDY_YTDLP_PLAYER_CLIENTS: 'ios, web' }),
+    ).toEqual([undefined, 'ios', 'web']);
+    expect(
+      resolvePlayerClientChain('https://youtu.be/x', { CODEBUDDY_YTDLP_PLAYER_CLIENTS: '' }),
+    ).toEqual([undefined]);
+  });
+
+  it('recognises the "extraction ok, media refused" signatures', () => {
+    expect(isRetryableYoutubeFailure('ERROR: unable to download video data: HTTP Error 403: Forbidden')).toBe(true);
+    expect(isRetryableYoutubeFailure('WARNING: Only images are available for download')).toBe(true);
+    expect(isRetryableYoutubeFailure('ERROR: Requested format is not available')).toBe(true);
+    expect(isRetryableYoutubeFailure('ERROR: Video unavailable')).toBe(false);
+  });
+
+  it('retries the video download with player_client=android after a 403', async () => {
+    const spawnSpy = vi.fn(() =>
+      spawnSpy.mock.calls.length === 1
+        ? makeFakeChild({ code: 1, stderr: 'ERROR: unable to download video data: HTTP Error 403: Forbidden' })
+        : makeFakeChild({ code: 0 }),
+    );
+    const result = await downloadVideoFile('https://youtu.be/x', '/out', {
+      env: { CODEBUDDY_YTDLP_BIN: '/opt/yt-dlp' },
+      existsSync: (p) => p === '/opt/yt-dlp',
+      which: () => null,
+      spawn: spawnSpy as never,
+    });
+    expect(spawnSpy).toHaveBeenCalledTimes(2);
+    const firstArgs = spawnSpy.mock.calls[0]?.[1] as unknown as string[];
+    const secondArgs = spawnSpy.mock.calls[1]?.[1] as unknown as string[];
+    expect(firstArgs).not.toContain('--extractor-args');
+    expect(secondArgs[secondArgs.indexOf('--extractor-args') + 1]).toBe('youtube:player_client=android');
+    expect(isVideoDownloadOk(result)).toBe(true);
+  });
+
+  it('does not retry a genuine failure', async () => {
+    const spawnSpy = vi.fn(() => makeFakeChild({ code: 1, stderr: 'ERROR: Video unavailable' }));
+    const result = await downloadVideoFile('https://youtu.be/x', '/out', {
+      env: { CODEBUDDY_YTDLP_BIN: '/opt/yt-dlp' },
+      existsSync: (p) => p === '/opt/yt-dlp',
+      which: () => null,
+      spawn: spawnSpy as never,
+    });
+    expect(spawnSpy).toHaveBeenCalledTimes(1);
+    expect(isVideoDownloadOk(result)).toBe(false);
+  });
+
+  it('surfaces the last error once every client is exhausted', async () => {
+    const spawnSpy = vi.fn(() =>
+      makeFakeChild({ code: 1, stderr: 'ERROR: unable to download video data: HTTP Error 403: Forbidden' }),
+    );
+    const result = await downloadAudioWav('https://youtu.be/x', '/out', {
+      env: { CODEBUDDY_YTDLP_BIN: '/opt/yt-dlp' },
+      existsSync: (p) => p === '/opt/yt-dlp',
+      which: () => null,
+      spawn: spawnSpy as never,
+    });
+    expect(spawnSpy).toHaveBeenCalledTimes(1 + YOUTUBE_CLIENT_FALLBACKS.length);
+    expect(isDownloadOk(result)).toBe(false);
+    if (!isDownloadOk(result)) expect(result.error).toMatch(/403/);
   });
 });
 

@@ -51,6 +51,61 @@ export interface MediaFetchDeps {
 
 const YTDLP_HINT = 'yt-dlp introuvable — installe-le (pip install -U yt-dlp) puis réessaie.';
 
+/**
+ * YouTube player clients tried, in order, when the default extraction yields media
+ * URLs the server refuses (HTTP 403) or no downloadable format at all. Measured on
+ * 2026-08-24: the default `android_vr` formats 403 while `android` serves the
+ * progressive format 18 — which is all the visual pass needs (≤480p keyframes).
+ * `tv_simply` is kept as a second net; it needs the EJS challenge solver but also
+ * lands on format 18 when it works.
+ */
+export const YOUTUBE_CLIENT_FALLBACKS = ['android', 'tv_simply'] as const;
+
+/** Signatures of a "the extraction worked but the media is unreachable" failure. */
+const RETRYABLE_PATTERNS = [
+  /HTTP Error 403/i,
+  /403 Forbidden/i,
+  /Requested format is not available/i,
+  /Only images are available/i,
+  /unable to download video data/i,
+];
+
+/** Is `source` a YouTube URL? Client fallbacks only mean something there. */
+export function isYoutubeSource(source: string): boolean {
+  return /(?:^|\/\/|\.)(?:youtube\.com|youtu\.be|youtube-nocookie\.com)(?:\/|$)/i.test(source);
+}
+
+/** Should we retry `stderr` with another player client? */
+export function isRetryableYoutubeFailure(stderr: string): boolean {
+  return RETRYABLE_PATTERNS.some((re) => re.test(stderr));
+}
+
+/**
+ * The ordered list of player clients to try for `source`: `undefined` first (yt-dlp's
+ * own default), then the fallbacks. `CODEBUDDY_YTDLP_PLAYER_CLIENTS` (csv) overrides
+ * the fallback list; an empty value disables retries entirely.
+ */
+export function resolvePlayerClientChain(
+  source: string,
+  env: NodeJS.ProcessEnv = process.env,
+): Array<string | undefined> {
+  if (!isYoutubeSource(source)) return [undefined];
+  const raw = env.CODEBUDDY_YTDLP_PLAYER_CLIENTS;
+  if (raw !== undefined) {
+    const custom = raw
+      .split(',')
+      .map((entry) => entry.trim())
+      .filter(Boolean);
+    return [undefined, ...custom];
+  }
+  return [undefined, ...YOUTUBE_CLIENT_FALLBACKS];
+}
+
+/** `--extractor-args youtube:player_client=<client>`, or nothing when unset. */
+function playerClientArgs(playerClient?: string): string[] {
+  return playerClient ? ['--extractor-args', `youtube:player_client=${playerClient}`] : [];
+}
+
 function expandHome(value: string): string {
   if (value === '~') return homedir();
   if (value.startsWith('~/')) return join(homedir(), value.slice(2));
@@ -104,15 +159,21 @@ export function resolveYtdlp(deps: MediaFetchDeps = {}): YtdlpInvocation | null 
 
 /**
  * Build the argv (excluding the base command) for a 16 kHz mono WAV extraction.
- * `outputTemplate` is a yt-dlp `-o` template ending in `.%(ext)s`.
+ * `outputTemplate` is a yt-dlp `-o` template ending in `.%(ext)s`. `playerClient`
+ * pins the YouTube player client for a retry attempt (see `resolvePlayerClientChain`).
  */
-export function buildYtdlpArgs(source: string, outputTemplate: string): string[] {
+export function buildYtdlpArgs(
+  source: string,
+  outputTemplate: string,
+  playerClient?: string,
+): string[] {
   return [
     // Recent YouTube extraction requires an explicit JavaScript runtime. Code Buddy
     // already runs on Node, so reuse the exact executable instead of depending on a
     // separately installed Deno runtime or on the caller's PATH.
     '--js-runtimes',
     `node:${process.execPath}`,
+    ...playerClientArgs(playerClient),
     '-x',
     '--audio-format',
     'wav',
@@ -123,6 +184,112 @@ export function buildYtdlpArgs(source: string, outputTemplate: string): string[]
     outputTemplate,
     source,
   ];
+}
+
+/** Outcome of one yt-dlp spawn: success, or a message plus the raw stderr for triage. */
+interface AttemptOutcome {
+  ok: boolean;
+  error?: string;
+  stderr: string;
+}
+
+/**
+ * Run yt-dlp once. Never throws, never rejects: spawn failures, non-zero exits and
+ * timeouts all come back as `{ ok: false }`.
+ */
+function runYtdlpOnce(
+  invocation: YtdlpInvocation,
+  args: string[],
+  spawn: typeof realSpawn,
+  timeoutMs: number,
+): Promise<AttemptOutcome> {
+  return new Promise<AttemptOutcome>((resolve) => {
+    let settled = false;
+    const finish = (result: AttemptOutcome): void => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve(result);
+    };
+
+    let stderr = '';
+    let child: ReturnType<typeof realSpawn>;
+    try {
+      child = spawn(invocation.cmd, args, { stdio: ['ignore', 'pipe', 'pipe'] });
+    } catch (err) {
+      resolve({
+        ok: false,
+        error: `yt-dlp spawn failed: ${err instanceof Error ? err.message : String(err)}`,
+        stderr: '',
+      });
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      try {
+        child.kill('SIGKILL');
+      } catch {
+        /* already gone */
+      }
+      finish({ ok: false, error: `yt-dlp timed out after ${timeoutMs}ms`, stderr });
+    }, timeoutMs);
+
+    child.stderr?.on('data', (d) => {
+      stderr = `${stderr}${String(d)}`.slice(-4000);
+    });
+
+    child.on('error', (err) => {
+      finish({
+        ok: false,
+        error: `yt-dlp failed to run (${invocation.label}): ${err instanceof Error ? err.message : String(err)}. ${YTDLP_HINT}`,
+        stderr,
+      });
+    });
+
+    child.on('close', (code) => {
+      if (code === 0) {
+        finish({ ok: true, stderr });
+      } else {
+        finish({
+          ok: false,
+          error: `yt-dlp exited with code ${code}${stderr.trim() ? `: ${stderr.trim().slice(-500)}` : ''}`,
+          stderr,
+        });
+      }
+    });
+  });
+}
+
+/**
+ * Walk the player-client chain until one attempt succeeds. Only retries when the
+ * failure looks like YouTube refusing the media (403 / no usable format) — a genuine
+ * error (bad URL, missing ffmpeg) fails on the first attempt as before.
+ */
+async function runWithClientFallbacks(
+  source: string,
+  invocation: YtdlpInvocation,
+  buildArgs: (playerClient?: string) => string[],
+  deps: MediaFetchDeps,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const spawn = deps.spawn ?? realSpawn;
+  const timeoutMs = deps.timeoutMs ?? 10 * 60 * 1000;
+  const chain = resolvePlayerClientChain(source, deps.env ?? process.env);
+
+  let lastError = 'yt-dlp failed';
+  for (const [index, playerClient] of chain.entries()) {
+    const args = [...invocation.baseArgs, ...buildArgs(playerClient)];
+    if (playerClient) {
+      logger.info(`[video] yt-dlp retry with player_client=${playerClient}: ${source}`);
+    }
+    const outcome = await runYtdlpOnce(invocation, args, spawn, timeoutMs);
+    if (outcome.ok) return { ok: true };
+    lastError = outcome.error ?? 'yt-dlp failed';
+    const isLast = index === chain.length - 1;
+    if (isLast || !isRetryableYoutubeFailure(`${lastError}\n${outcome.stderr}`)) {
+      return { ok: false, error: lastError };
+    }
+  }
+  return { ok: false, error: lastError };
 }
 
 /**
@@ -140,61 +307,21 @@ export async function downloadAudioWav(
     return { error: YTDLP_HINT };
   }
 
-  const spawn = deps.spawn ?? realSpawn;
-  const timeoutMs = deps.timeoutMs ?? 10 * 60 * 1000;
-
   // Deterministic base name so the resulting WAV path is known up front (yt-dlp
   // replaces %(ext)s with `wav` under `--audio-format wav`).
   const base = `ytdl-audio-${Date.now()}`;
   const outputTemplate = join(outDir, `${base}.%(ext)s`);
   const wavPath = join(outDir, `${base}.wav`);
-  const args = [...invocation.baseArgs, ...buildYtdlpArgs(source, outputTemplate)];
 
   logger.info(`[video] downloading audio via ${invocation.label}: ${source}`);
 
-  return new Promise<DownloadResult>((resolve) => {
-    let settled = false;
-    const finish = (result: DownloadResult): void => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      resolve(result);
-    };
-
-    let stderr = '';
-    let child: ReturnType<typeof realSpawn>;
-    try {
-      child = spawn(invocation.cmd, args, { stdio: ['ignore', 'pipe', 'pipe'] });
-    } catch (err) {
-      finish({ error: `yt-dlp spawn failed: ${err instanceof Error ? err.message : String(err)}` });
-      return;
-    }
-
-    const timer = setTimeout(() => {
-      try {
-        child.kill('SIGKILL');
-      } catch {
-        /* already gone */
-      }
-      finish({ error: `yt-dlp timed out after ${timeoutMs}ms` });
-    }, timeoutMs);
-
-    child.stderr?.on('data', (d) => {
-      stderr = `${stderr}${String(d)}`.slice(-4000);
-    });
-
-    child.on('error', (err) => {
-      finish({ error: `yt-dlp failed to run (${invocation.label}): ${err instanceof Error ? err.message : String(err)}. ${YTDLP_HINT}` });
-    });
-
-    child.on('close', (code) => {
-      if (code === 0) {
-        finish({ wavPath });
-      } else {
-        finish({ error: `yt-dlp exited with code ${code}${stderr.trim() ? `: ${stderr.trim().slice(-500)}` : ''}` });
-      }
-    });
-  });
+  const result = await runWithClientFallbacks(
+    source,
+    invocation,
+    (playerClient) => buildYtdlpArgs(source, outputTemplate, playerClient),
+    deps,
+  );
+  return result.ok ? { wavPath } : { error: result.error };
 }
 
 /** Type guard: did the download succeed? */
@@ -221,10 +348,15 @@ export function isVideoDownloadOk(result: VideoDownloadResult): result is VideoD
  * download. Capped at 480p and recoded to mp4 so the output extension is known up
  * front and the file stays small — we only need it for grayscale keyframe hashing.
  */
-export function buildVideoYtdlpArgs(source: string, outputTemplate: string): string[] {
+export function buildVideoYtdlpArgs(
+  source: string,
+  outputTemplate: string,
+  playerClient?: string,
+): string[] {
   return [
     '--js-runtimes',
     `node:${process.execPath}`,
+    ...playerClientArgs(playerClient),
     '-f',
     'bv*[height<=480]+ba/b[height<=480]/b',
     '--recode-video',
@@ -251,57 +383,17 @@ export async function downloadVideoFile(
     return { error: YTDLP_HINT };
   }
 
-  const spawn = deps.spawn ?? realSpawn;
-  const timeoutMs = deps.timeoutMs ?? 10 * 60 * 1000;
-
   const base = `ytdl-video-${Date.now()}`;
   const outputTemplate = join(outDir, `${base}.%(ext)s`);
   const videoPath = join(outDir, `${base}.mp4`);
-  const args = [...invocation.baseArgs, ...buildVideoYtdlpArgs(source, outputTemplate)];
 
   logger.info(`[video] downloading video via ${invocation.label}: ${source}`);
 
-  return new Promise<VideoDownloadResult>((resolve) => {
-    let settled = false;
-    const finish = (result: VideoDownloadResult): void => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      resolve(result);
-    };
-
-    let stderr = '';
-    let child: ReturnType<typeof realSpawn>;
-    try {
-      child = spawn(invocation.cmd, args, { stdio: ['ignore', 'pipe', 'pipe'] });
-    } catch (err) {
-      finish({ error: `yt-dlp spawn failed: ${err instanceof Error ? err.message : String(err)}` });
-      return;
-    }
-
-    const timer = setTimeout(() => {
-      try {
-        child.kill('SIGKILL');
-      } catch {
-        /* already gone */
-      }
-      finish({ error: `yt-dlp timed out after ${timeoutMs}ms` });
-    }, timeoutMs);
-
-    child.stderr?.on('data', (d) => {
-      stderr = `${stderr}${String(d)}`.slice(-4000);
-    });
-
-    child.on('error', (err) => {
-      finish({ error: `yt-dlp failed to run (${invocation.label}): ${err instanceof Error ? err.message : String(err)}. ${YTDLP_HINT}` });
-    });
-
-    child.on('close', (code) => {
-      if (code === 0) {
-        finish({ videoPath });
-      } else {
-        finish({ error: `yt-dlp exited with code ${code}${stderr.trim() ? `: ${stderr.trim().slice(-500)}` : ''}` });
-      }
-    });
-  });
+  const result = await runWithClientFallbacks(
+    source,
+    invocation,
+    (playerClient) => buildVideoYtdlpArgs(source, outputTemplate, playerClient),
+    deps,
+  );
+  return result.ok ? { videoPath } : { error: result.error };
 }
