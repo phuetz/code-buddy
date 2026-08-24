@@ -238,23 +238,49 @@ if ! grep -q 'youtube.force-ssl' "$MCP/tokens.json"; then
   souci "l'autorisation manque toujours (étape 1) — rien à rattraper pour l'instant."
 else
   rattrapes=0
+  FAITS="$LISA/.pistes-deposees.txt"
+  touch "$FAITS"
   for journal in "$SHORTS/PACK-PUBLICATION-SPLIT-21.uploads.jsonl" "$ACTU/uploads.jsonl"; do
     [ -f "$journal" ] || continue
+    # Un même fichier a pu être téléversé plusieurs fois (reprises, doublons). Seule la
+    # DERNIÈRE mise en ligne compte : les précédentes sont soit supprimées, soit des
+    # doublons à retirer — y déposer une piste gaspille 450 unités de quota pour rien.
     while IFS= read -r ligne; do
       [ -z "$ligne" ] && continue
-      id=$(printf '%s' "$ligne" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("id",""))' 2>/dev/null)
-      fichier=$(printf '%s' "$ligne" | python3 -c 'import json,os,sys; print(os.path.basename(json.load(sys.stdin).get("file","")))' 2>/dev/null)
+      id=$(printf '%s' "$ligne" | cut -d'|' -f1)
+      fichier=$(printf '%s' "$ligne" | cut -d'|' -f2)
       [ -z "$id" ] && continue
+      # Déjà déposée lors d'un passage précédent : on ne repaie pas le quota.
+      if grep -qx "$id" "$FAITS"; then
+        info "· $fichier déjà fait"
+        continue
+      fi
       case "$fichier" in
         SHORT-SPLIT-*) piste="$SHORTS/sous-titres/${fichier%.mp4}.fr.srt" ;;
         *)             piste="$ACTU/${fichier%.mp4}.fr.srt" ;;
       esac
       [ -f "$piste" ] || continue
       info "→ $fichier ($id)"
-      node "$OUTILS/youtube_captions.mjs" --video "$id" --file "$piste" --lang fr --replace \
-        && rattrapes=$((rattrapes + 1)) \
-        || souci "dépôt échoué pour $id (vidéo supprimée, ou traitement inachevé)."
-    done < "$journal"
+      if node "$OUTILS/youtube_captions.mjs" --video "$id" --file "$piste" --lang fr --replace; then
+        rattrapes=$((rattrapes + 1))
+        printf '%s\n' "$id" >> "$FAITS"
+      else
+        souci "dépôt échoué pour $id — vidéo supprimée, traitement inachevé, ou quota épuisé."
+      fi
+    done < <(python3 - "$journal" <<'DEDOUBLONNE'
+import json, os, sys
+derniere = {}
+for ligne in open(sys.argv[1], encoding='utf-8'):
+    ligne = ligne.strip()
+    if not ligne:
+        continue
+    d = json.loads(ligne)
+    if d.get('id'):
+        derniere[os.path.basename(d.get('file', ''))] = d['id']   # la dernière écrase
+for fichier, ident in derniere.items():
+    print(f'{ident}|{fichier}')
+DEDOUBLONNE
+)
   done
   info "$rattrapes piste(s) déposée(s)."
 fi

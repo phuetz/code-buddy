@@ -100,9 +100,10 @@ async function main() {
   console.log(`À déposer : ${path.basename(file)} — ${cues} sous-titres, ${ko} Ko, langue ${lang}`);
 
   // captions.insert refuse un doublon (langue + nom) avec une 409 captionExists.
+  // La piste auto-générée (ASR) porte le même couple langue+nom : c'est elle qu'on
+  // remplace, et c'est bien le but — elle est ce qui indexe « Deeppsych » pour DeepSeek.
   const doublon = pistes.find((p) => p.snippet.language === lang &&
-                                     (p.snippet.name ?? '') === nom &&
-                                     p.snippet.trackKind !== 'ASR');
+                                     (p.snippet.name ?? '') === nom);
   if (doublon && !arg('replace')) {
     throw new Error(`une piste ${lang} nommée "${nom}" existe déjà (${doublon.id}). ` +
                     'Relance avec --replace pour la remplacer.');
@@ -113,15 +114,23 @@ async function main() {
     return;
   }
 
-  if (doublon) {
-    await yt.captions.delete({ id: doublon.id });
-    console.log(`ancienne piste supprimée : ${doublon.id}`);
-  }
+  // On dépose AVANT de supprimer l'ancienne : si l'insert échoue (quota épuisé, réseau),
+  // la vidéo garde au moins sa piste précédente. L'inverse laissait des vidéos sans aucun
+  // sous-titre — mesuré le 24/08 sur un short dont l'ASR avait été supprimée juste avant
+  // que le quota ne tombe.
   const res = await yt.captions.insert({
     part: ['snippet'],
     requestBody: { snippet: { videoId, language: lang, name: nom, isDraft: false } },
     media: { body: fs.createReadStream(file) },
   });
+  if (doublon) {
+    try {
+      await yt.captions.delete({ id: doublon.id });
+      console.log(`ancienne piste retirée : ${doublon.id}`);
+    } catch (e) {
+      console.log(`⚠ ancienne piste conservée (${doublon.id}) : ${e.message.split('\n')[0]}`);
+    }
+  }
   console.log(`✅ piste déposée : ${res.data.id} (${res.data.snippet.language}, ` +
               `brouillon=${res.data.snippet.isDraft})`);
 }
