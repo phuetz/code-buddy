@@ -327,6 +327,42 @@ class TraitsUnion(unittest.TestCase):
         self.assertAlmostEqual(sortie[0]['t1'], 0.58)  # fin du second jeton
 
 
+class JetonsEclates(unittest.TestCase):
+    """Ce que whisper et la table `fix` cassent doit être recollé AVANT d'apparier.
+
+    Deux causes mesurées le 24/08 sur le pilote longue : whisper éclate les apostrophes
+    (« c 'est »), et une correction de la table `fix` peut fusionner plusieurs mots en un
+    seul jeton (« trie ce dossier »). Dans les deux cas le jeton ne ressemble à aucun mot
+    du script : l'ancrage du segment L8 tombait à 0,69 pour cette seule raison.
+    """
+
+    @staticmethod
+    def _mots(paires, pas=0.4):
+        return [{'w': w, 't0': i * pas, 't1': (i + 1) * pas} for i, w in enumerate(paires)]
+
+    def test_apostrophe_eclatee_s_apparie_quand_meme(self):
+        mots = self._mots(['Et', 'si', 'c', "'est", 'fait'])
+        alignes, rapport = ws.align_to_script(mots, "Et si c'est fait")
+        self.assertEqual([m['w'] for m in alignes], ['Et', 'si', "c'est", 'fait'])
+        self.assertEqual(rapport['taux_ancrage'], 1.0)
+
+    def test_jeton_fusionne_par_fix_s_apparie_mot_a_mot(self):
+        # apply_fixes remplace « tris ce dossier » par le jeton unique « trie ce dossier »
+        mots = self._mots(['Tu', 'lances', 'trie ce dossier', 'demain'])
+        alignes, rapport = ws.align_to_script(mots, 'Tu lances trie ce dossier demain')
+        self.assertEqual([m['w'] for m in alignes],
+                         ['Tu', 'lances', 'trie', 'ce', 'dossier', 'demain'])
+        self.assertEqual(rapport['taux_ancrage'], 1.0)
+
+    def test_l_eclatement_repartit_les_instants_sans_deborder(self):
+        mots = [{'w': 'trie ce dossier', 't0': 2.0, 't1': 3.5}]
+        alignes, _ = ws.align_to_script(mots, 'trie ce dossier')
+        self.assertAlmostEqual(alignes[0]['t0'], 2.0, places=3)
+        self.assertAlmostEqual(alignes[-1]['t1'], 3.5, places=3)
+        for a, b in zip(alignes, alignes[1:]):
+            self.assertLessEqual(a['t1'], b['t0'] + 1e-9)
+
+
 _SPEC_SRT = importlib.util.spec_from_file_location(
     'srt_from_script', Path(__file__).resolve().parent / 'srt_from_script.py')
 srt = importlib.util.module_from_spec(_SPEC_SRT)

@@ -169,6 +169,31 @@ def _align_key(word):
     return re.sub(r'[^a-z0-9]', '', norm(word))
 
 
+def _eclater_groupes(words):
+    """Re-découpe les jetons que `apply_fixes` a fusionnés (« trie ce dossier »).
+
+    Une correction de la table `fix` peut remplacer plusieurs mots par un seul jeton
+    porteur d'espaces. Ce jeton ne peut alors s'apparier avec aucun mot isolé du script :
+    mesuré sur le segment L8, dix corrections de ce type faisaient chuter l'ancrage à 0,74.
+    On rend à chaque mot son instant, réparti au prorata de sa longueur.
+    """
+    sortie = []
+    for w in words:
+        parties = w['w'].split()
+        if len(parties) <= 1:
+            sortie.append(w)
+            continue
+        poids = [max(1, len(p)) for p in parties]
+        total = sum(poids)
+        span = max(0.0, w['t1'] - w['t0'])
+        curseur = w['t0']
+        for part, poid in zip(parties, poids):
+            part_dur = span * poid / total
+            sortie.append({'w': part, 't0': curseur, 't1': curseur + part_dur})
+            curseur += part_dur
+    return sortie
+
+
 def align_to_script(words, script_text, min_anchor_ratio=0.35):
     """Reporte les instants de `words` (STT) sur les mots de `script_text`.
 
@@ -188,6 +213,12 @@ def align_to_script(words, script_text, min_anchor_ratio=0.35):
         raise ValueError('script vide : aucun mot à afficher')
     if not words:
         raise ValueError('transcription vide : aucun instant à reporter')
+
+    # Whisper éclate les apostrophes (« c 'est ») et les mots composés (« au », « -delà »).
+    # Sans les recoller AVANT d'apparier, chaque fragment tombe à côté du mot entier du
+    # script : mesuré sur le segment L8, l'ancrage passait de 0,94 à 0,69 pour cette seule
+    # raison. Le recollage ne change pas les instants — seulement le découpage en jetons.
+    words = _eclater_groupes(merge_apostrophes(words))
 
     src_keys = [_align_key(w['w']) for w in words]
     tgt_keys = [_align_key(w) for w in target]

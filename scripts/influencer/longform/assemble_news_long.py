@@ -128,6 +128,10 @@ def _load_module(name: str, path: Path):
 # wrap-short.py (tiret dans le nom) : whisper, corrections de noms, cartes karaoké.
 wrap_short = _load_module('wrap_short', INFLUENCER / 'wrap-short.py')
 
+# Dossier des scripts narrés (`script_dir` du JSON d'ordre) : un `<id-de-segment>.txt` par
+# segment. Posé une fois au démarrage plutôt que passé à travers toute la chaîne d'appels.
+SCRIPT_DIR: Path | None = None
+
 W, H, FPS = 1920, 1080, 30
 FRAME = 1.0 / FPS
 FONT_VAR = '/usr/share/fonts/truetype/ubuntu/UbuntuSans[wdth,wght].ttf'
@@ -1049,7 +1053,15 @@ def normalize_section_audio(sec: Section) -> Section:
     return sec
 
 
-def words_for(seg: dict[str, Any], src: Path, workdir: Path) -> list[dict[str, Any]]:
+def words_for(seg: dict[str, Any], src: Path, workdir: Path,
+              script_dir: Path | None = None) -> list[dict[str, Any]]:
+    """Mots datés du segment. Avec un script, le TEXTE en vient et whisper ne donne que le tempo.
+
+    Sans script, on retombe sur le comportement historique : les mots devinés par whisper,
+    rustinés par la table `fix` du segment. C'est ce qui a gravé « tout chinois »,
+    « la question n'est plus qu'à l'abonnement » et une punchline coupée en deux dans le
+    pilote du 22/08 — la table ne répare que ce qu'on a déjà vu passer.
+    """
     cache = workdir / 'words' / f"{seg['id']}.json"
     if cache.exists():
         words = json.loads(cache.read_text(encoding='utf-8'))
@@ -1057,7 +1069,26 @@ def words_for(seg: dict[str, Any], src: Path, workdir: Path) -> list[dict[str, A
         cache.parent.mkdir(parents=True, exist_ok=True)
         words = wrap_short.transcribe(str(src))
         cache.write_text(json.dumps(words, ensure_ascii=False), encoding='utf-8')
-    return wrap_short.apply_fixes(words, seg.get('fix', []))
+    words = wrap_short.apply_fixes(words, seg.get('fix', []))
+
+    script = seg.get('script')
+    dossier = script_dir or SCRIPT_DIR
+    if not script and dossier:
+        candidat = Path(dossier) / f"{seg['id']}.txt"
+        script = str(candidat) if candidat.exists() else None
+    if not script:
+        return words
+    chemin = Path(os.path.expanduser(str(script)))
+    if not chemin.exists():
+        print(f"⚠️ {seg['id']}: script déclaré mais introuvable ({chemin})", file=sys.stderr)
+        return words
+    alignes, rapport = wrap_short.align_to_script(words, chemin.read_text(encoding='utf-8'))
+    print(f"[script] {seg['id']}: {rapport['mots_script']} mots affichés depuis le script, "
+          f"{rapport['taux_ancrage'] * 100:.0f}% d'ancrage", file=sys.stderr)
+    if not rapport['suffisant']:
+        raise SystemExit(f"{seg['id']}: ancrage trop faible "
+                         f"({rapport['taux_ancrage'] * 100:.0f}%) — le script ne correspond pas à ce clip.")
+    return alignes
 
 
 def find_word(words: list[dict[str, Any]], spec: str) -> float | None:
@@ -1068,9 +1099,19 @@ def find_word(words: list[dict[str, Any]], spec: str) -> float | None:
         return float(spec[1:])
     m = re.match(r'^(.*?)(?:\+(\d+))?$', spec)
     target, occ = wrap_short.norm(m.group(1)), int(m.group(2) or 1)
+    # Un déclencheur peut porter sur PLUSIEURS mots (« trie ce dossier »). Historiquement
+    # cela marchait par accident : la table `fix` fusionnait ces mots en un seul jeton. Dès
+    # que les jetons sont rendus mot à mot — ce que fait l'alignement sur script —, il faut
+    # chercher la SUITE de mots, sinon la carte retombe sur son instant de repli.
+    cibles = target.split()
     n = 0
-    for w in words:
-        if wrap_short.norm(w['w']) == target:
+    for i, w in enumerate(words):
+        if len(cibles) > 1:
+            suite = [wrap_short.norm(x['w']) for x in words[i:i + len(cibles)]]
+            trouve = suite == cibles
+        else:
+            trouve = wrap_short.norm(w['w']) == target
+        if trouve:
             n += 1
             if n == occ:
                 return float(w['t0'])
@@ -1567,6 +1608,10 @@ def main() -> None:
 
     t_start = time.time()
     cfg = json.loads(args.ordre.read_text(encoding='utf-8'))
+    global SCRIPT_DIR
+    if cfg.get('script_dir'):
+        SCRIPT_DIR = Path(os.path.expanduser(cfg['script_dir'])).resolve()
+        print(f'[script] textes narrés lus dans {SCRIPT_DIR}', file=sys.stderr)
     out_dir = args.out_dir.expanduser().resolve()
     workdir = (args.work_dir or (out_dir / 'work')).expanduser().resolve()
     workdir.mkdir(parents=True, exist_ok=True)
