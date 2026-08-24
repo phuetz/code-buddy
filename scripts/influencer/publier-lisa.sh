@@ -5,7 +5,8 @@
 # Ce que ce script fait, dans cet ordre :
 #   1. autorise l'accès aux sous-titres (une seule fois, interactif) ;
 #   2. dépose la piste de sous-titres exacte sur la longue GLM déjà en ligne ;
-#   3. téléverse les 21 Shorts EN PRIVÉ et dépose la piste de chacun.
+#   3. téléverse les 21 Shorts EN PRIVÉ et dépose la piste de chacun ;
+#   4. téléverse la longue « L'IA vient de changer de prix » EN PRIVÉ, avec sa piste.
 #
 # Ce qu'il ne fait JAMAIS : passer une vidéo en public, supprimer une vidéo, modifier
 # un titre ou une description. Tout sort en « private » — c'est toi qui publies, depuis
@@ -19,7 +20,7 @@
 # Usage :
 #   bash ~/publier-lisa.sh              # déroule les étapes, en demandant confirmation
 #   bash ~/publier-lisa.sh --essai      # montre tout ce qui serait fait, sans rien envoyer
-#   bash ~/publier-lisa.sh --etape 2    # ne joue qu'une étape (1, 2 ou 3)
+#   bash ~/publier-lisa.sh --etape 2    # ne joue qu'une étape (1 à 4)
 #
 set -uo pipefail
 
@@ -29,6 +30,9 @@ LONGUE="$LISA/longform-02-glm-2026-08-23"
 OUTILS="$HOME/code-buddy/scripts/influencer"
 MCP="$HOME/DEV/youtube-mcp"
 VIDEO_LONGUE="EWvyPEbY19U"
+ACTU="$LISA/longform-actu-2026-08-22"
+ACTU_FICHIER="$ACTU/ia-change-de-prix-taille-maitre-v2.mp4"
+ACTU_PISTE="$ACTU/ia-change-de-prix-taille-maitre-v2.fr.srt"
 
 # Les 21 Shorts. Les 7 qui portaient des phrases cassées à l'écran (01 L1, 03 L3, 04 L4,
 # 06 L6, 09 L9, 16 N5, 17 V1) ont été re-rendus le 24/08 depuis un script corrigé : le
@@ -69,7 +73,8 @@ done
 [ -f "$MCP/.env" ] || stop "$MCP/.env est absent (identifiants Google)."
 [ -f "$MCP/tokens.json" ] || stop "$MCP/tokens.json est absent (jeton OAuth)."
 [ -f "$OUTILS/youtube_captions.mjs" ] || stop "outil de sous-titres introuvable."
-[ -f "$LONGUE/LONG02-glm-talonne-claude-v2.fr.srt" ] || stop "la piste de la longue est absente."
+[ -f "$LONGUE/LONG02-glm-talonne-claude-v2.fr.srt" ] || stop "la piste de la longue GLM est absente."
+[ -f "$ACTU_PISTE" ] || souci "la piste de la longue « actu » est absente — l'étape 4 la sautera."
 
 pistes=$(ls "$SHORTS/sous-titres/"*.srt 2>/dev/null | wc -l)
 [ "$pistes" -ge 21 ] || souci "seulement $pistes pistes de Shorts trouvées (21 attendues)."
@@ -167,6 +172,61 @@ fi
 fi
 
 # ---------------------------------------------------------------------------
+if joue_etape 4; then
+gras "Étape 4 — la longue « L'IA vient de changer de prix et de maître » (8 min 45)"
+
+if [ ! -f "$ACTU_FICHIER" ]; then
+  souci "fichier introuvable — étape sautée."
+elif demander "Téléverser cette longue en privé, avec ses sous-titres ?"; then
+  # Le pack de la longue n'a pas le format « # Short NN » du lot vertical : on en extrait
+  # titre, description et tags pour un téléversement direct.
+  META=$(mktemp -d)
+  python3 - "$ACTU/PACK-ia-change-de-prix-taille-maitre-v2.md" "$META" <<'EXTRAIT'
+import pathlib, re, sys
+pack = pathlib.Path(sys.argv[1]).read_text(encoding='utf-8')
+dest = pathlib.Path(sys.argv[2])
+def section(nom):
+    m = re.search(rf'^## {nom}[^\n]*\n(.*?)(?=^## |\Z)', pack, re.S | re.M)
+    return m.group(1).strip() if m else ''
+titre = section('Titre').splitlines()[0].strip()
+bloc = re.search(r'```\n(.*?)```', section('Description'), re.S)
+description = bloc.group(1).strip() if bloc else section('Description')
+tags = ' '.join(section('Tags').split('\n')).strip()
+(dest / 'titre.txt').write_text(titre, encoding='utf-8')
+(dest / 'description.txt').write_text(description, encoding='utf-8')
+(dest / 'tags.txt').write_text(tags, encoding='utf-8')
+print(f'titre : {titre}')
+EXTRAIT
+
+  JOURNAL_ACTU="$ACTU/uploads.jsonl"
+  AVANT_ACTU=$( [ -f "$JOURNAL_ACTU" ] && wc -l < "$JOURNAL_ACTU" || echo 0 )
+  node "$OUTILS/youtube_upload.mjs" \
+    --file "$ACTU_FICHIER" \
+    --title "$(cat "$META/titre.txt")" \
+    --description-file "$META/description.txt" \
+    --tags "$(cat "$META/tags.txt")" \
+    --category 28 --lang fr --privacy private $ESSAI \
+    | tee -a "$JOURNAL_ACTU.tmp" \
+    || souci "le téléversement a échoué — voir le détail ci-dessus."
+  grep -h '"id"' "$JOURNAL_ACTU.tmp" >> "$JOURNAL_ACTU" 2>/dev/null || true
+  rm -f "$JOURNAL_ACTU.tmp"; rm -rf "$META"
+
+  if [ -z "$ESSAI" ] && [ -f "$ACTU_PISTE" ]; then
+    id=$(tail -1 "$JOURNAL_ACTU" 2>/dev/null | grep -o '"id": *"[^"]*"' | head -1 | cut -d'"' -f4)
+    if [ -n "$id" ]; then
+      info "→ dépôt de la piste sur $id"
+      node "$OUTILS/youtube_captions.mjs" --video "$id" --file "$ACTU_PISTE" --lang fr \
+        || souci "dépôt échoué pour $id — réessaie quand YouTube aura fini de traiter la vidéo."
+    else
+      souci "identifiant de la vidéo introuvable dans le journal — piste non déposée."
+    fi
+  fi
+else
+  info "étape sautée."
+fi
+fi
+
+# ---------------------------------------------------------------------------
 gras "Terminé — ce qu'il te reste à faire"
 cat <<'FIN'
    1. Ouvre YouTube Studio et relis les vidéos privées.
@@ -180,10 +240,6 @@ cat <<'FIN'
      ne coûte qu'une unité dans un compteur séparé (100 par jour). Aucun risque ici.
 
    Restent en attente, et ce sont tes décisions :
-   - la longue de 8 min 45 (« L'IA vient de changer de prix et de maître ») : elle est
-     prête à publier, mais son script narré n'a pas été conservé, donc je ne peux pas
-     lui fabriquer de piste exacte sans la deviner. Dis-moi si on la publie sans piste,
-     ou si on reconstitue son texte d'abord.
    - deux défauts dans la VOIX de la longue GLM, que ni le sous-titrage ni un re-rendu
      ne corrigent : « deux mille sept cents » au lieu de 2 800 (une fois sur six), et
      une phrase répétée à 03:50 puis 04:01.
