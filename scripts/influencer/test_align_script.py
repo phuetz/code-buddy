@@ -197,15 +197,45 @@ class ScriptWords(unittest.TestCase):
         # La ponctuation porte la respiration : c'est elle qui découpe les cartes.
         self.assertEqual(
             ws.script_words("Ouvert. Pas dans votre salon, non ?"),
-            ['Ouvert.', 'Pas', 'dans', 'votre', 'salon,', 'non'],
+            ['Ouvert.', 'Pas', 'dans', 'votre', 'salon,', 'non\u00a0?'],
         )
 
-    def test_ignore_la_ponctuation_isolee(self):
-        # « — » n'est pas un mot : affiché seul, il occupe une case de karaoké vide.
+    def test_la_ponctuation_isolee_rejoint_son_mot(self):
+        """Aucun signe ne doit disparaître, aucun ne doit occuper une case à lui seul.
+
+        La typographie française met une espace avant « : ; ? ! » » : ces signes arrivent
+        donc isolés. Les jeter coûtait 140 signes sur la longue GLM — dont les guillemets
+        des citations que la vidéo réfute, qui devenaient des affirmations de Lisa.
+        """
         self.assertEqual(
             ws.script_words("Merci d'avoir regardé — à très vite."),
-            ['Merci', "d'avoir", 'regardé', 'à', 'très', 'vite.'],
+            ['Merci', "d'avoir", 'regardé —', 'à', 'très', 'vite.'],
         )
+
+    def test_les_guillemets_encadrent_bien_la_citation(self):
+        sortie = ws.script_words("Il a dit : « ouvert ne veut pas dire local ». Faux.")
+        self.assertEqual(
+            sortie,
+            ['Il', 'a', 'dit\u00a0:', '«\u00a0ouvert', 'ne', 'veut', 'pas', 'dire',
+             'local\u00a0».', 'Faux.'],
+        )
+
+    def test_aucun_signe_de_ponctuation_ne_se_perd(self):
+        # Contrôle de conservation : ce qui entre en ponctuation doit ressortir.
+        script = ("Deux fronts : « le salon » et « l'affiche ». Lequel gagne ? "
+                  "Aucun — les deux avancent.")
+        sortie = ' '.join(ws.script_words(script))
+        for signe in '«»:?—.':
+            self.assertEqual(
+                sortie.count(signe), script.count(signe),
+                f'{signe!r} perdu : {script.count(signe)} dans le script, '
+                f'{sortie.count(signe)} en sortie',
+            )
+
+    def test_aucun_jeton_vide_ni_purement_ponctuation(self):
+        script = "Il a dit : « ouvert ». Puis — silence. Vraiment ?"
+        for mot in ws.script_words(script):
+            self.assertTrue(mot.strip(ws._PONCTUATION_SEULE + '\u00a0'), repr(mot))
 
 
 BASE_REELLE = Path(os.path.expanduser(

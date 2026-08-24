@@ -108,6 +108,45 @@ _SCRIPT_MARKUP = re.compile(r'[*_`>]|~~')
 # occuperait une case de karaoké vide et volerait du temps au mot suivant.
 _PONCTUATION_SEULE = '.,!?;:«»\'"“”‘’…—–-'
 
+# La typographie française met une espace AVANT « : ; ? ! » » : ces signes arrivent donc
+# comme des jetons isolés. Les jeter — ce que faisait la première version — coûtait 140
+# signes sur la longue GLM, dont 47 guillemets ouvrants et 26 « ». » : les citations que la
+# vidéo passe dix-huit minutes à réfuter s'affichaient alors comme des affirmations de Lisa.
+# On les recolle donc au mot voisin plutôt que de les perdre : le texte reste celui du
+# script, ponctuation comprise, sans qu'un jeton vide occupe une case de karaoké.
+_OUVRANTS = '«"“‘¿¡('
+# Signes doubles : la typographie française exige une espace avant. On la met INSÉCABLE
+# (U+00A0) pour qu'aucun lecteur de sous-titres ne renvoie « » » ou « : » seul à la ligne.
+_SIGNES_DOUBLES = '»:;?!'
+_INSECABLE = '\u00a0'
+
+
+def _recoller_ponctuation(jetons):
+    """Fusionne la ponctuation isolée avec son mot : ouvrants à droite, le reste à gauche."""
+    sortie = []
+    en_attente = ''  # ponctuation ouvrante qui attend le mot qu'elle introduit
+    for jeton in jetons:
+        if not jeton.strip(_PONCTUATION_SEULE):
+            # Jeton purement ponctuation : il appartient à un mot, pas à lui-même.
+            if jeton[0] in _OUVRANTS:
+                en_attente += jeton + _INSECABLE
+            elif sortie:
+                if jeton[0] in '—–':
+                    separateur = ' '        # un tiret de respiration garde son air
+                elif jeton[0] in _SIGNES_DOUBLES:
+                    separateur = _INSECABLE  # « mot : », « mot ? », « mot » »
+                else:
+                    separateur = ''          # le point et la virgule se collent
+                sortie[-1] = sortie[-1] + separateur + jeton
+            else:
+                en_attente += jeton + _INSECABLE
+            continue
+        sortie.append(en_attente + jeton)
+        en_attente = ''
+    if en_attente and sortie:
+        sortie[-1] = sortie[-1] + _INSECABLE + en_attente.strip()
+    return sortie
+
 
 def script_words(text):
     """Le script → la liste de mots à AFFICHER, markdown et didascalies retirés.
@@ -122,7 +161,7 @@ def script_words(text):
         line = _SCRIPT_BRACKETS.sub(' ', line)
         line = _SCRIPT_MARKUP.sub('', line)
         kept.append(line)
-    return [w for w in ' '.join(kept).split() if w.strip(_PONCTUATION_SEULE)]
+    return _recoller_ponctuation(' '.join(kept).split())
 
 
 def _align_key(word):
