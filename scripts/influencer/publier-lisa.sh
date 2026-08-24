@@ -5,7 +5,7 @@
 # Ce que ce script fait, dans cet ordre :
 #   1. autorise l'accès aux sous-titres (une seule fois, interactif) ;
 #   2. dépose la piste de sous-titres exacte sur la longue GLM déjà en ligne ;
-#   3. téléverse 14 Shorts EN PRIVÉ et dépose la piste de chacun.
+#   3. téléverse les 21 Shorts EN PRIVÉ et dépose la piste de chacun.
 #
 # Ce qu'il ne fait JAMAIS : passer une vidéo en public, supprimer une vidéo, modifier
 # un titre ou une description. Tout sort en « private » — c'est toi qui publies, depuis
@@ -30,10 +30,11 @@ OUTILS="$HOME/code-buddy/scripts/influencer"
 MCP="$HOME/DEV/youtube-mcp"
 VIDEO_LONGUE="EWvyPEbY19U"
 
-# Les 14 Shorts jugés publiables tels quels. Les 7 écartés (01 L1, 03 L3, 04 L4, 06 L6,
-# 09 L9, 16 N5, 17 V1) ont des phrases cassées à l'écran — aucun nom propre faux, mais un
-# re-rendu s'impose avant de les montrer. Détail : AUDIT-TEXTE-ECRAN-2026-08-24.md
-SHORTS_OK="02,05,07,08,10,11,12,13,14,15,18,19,20,21"
+# Les 21 Shorts. Les 7 qui portaient des phrases cassées à l'écran (01 L1, 03 L3, 04 L4,
+# 06 L6, 09 L9, 16 N5, 17 V1) ont été re-rendus le 24/08 depuis un script corrigé : le
+# texte affiché vient désormais du fichier, plus d'une ré-écoute. Les originaux sont
+# conservés dans shorts-split-2026-08-22/v2-avant-script/.
+SHORTS_OK="01,02,03,04,05,06,07,08,09,10,11,12,13,14,15,16,17,18,19,20,21"
 
 ESSAI=""
 ETAPE=""
@@ -127,16 +128,15 @@ fi
 
 # ---------------------------------------------------------------------------
 if joue_etape 3; then
-gras "Étape 3 — 14 Shorts en privé, chacun avec sa piste"
+gras "Étape 3 — 21 Shorts en privé, chacun avec sa piste"
 
-info "blocs publiés : $SHORTS_OK"
-info "écartés (re-rendu nécessaire) : 01, 03, 04, 06, 09, 16, 17"
+info "les 21 blocs, dont les 7 re-rendus le 24/08 (01, 03, 04, 06, 09, 16, 17)"
 info "chaque Short part en PRIVÉ : rien n'est visible tant que tu ne l'as pas décidé"
 
 JOURNAL="$SHORTS/PACK-PUBLICATION-SPLIT-21.uploads.jsonl"
 AVANT=$(wc -l < "$JOURNAL" 2>/dev/null || echo 0)
 
-if demander "Téléverser les 14 Shorts en privé ?"; then
+if demander "Téléverser les 21 Shorts en privé ?"; then
   node "$OUTILS/youtube_upload.mjs" \
     --pack "$SHORTS/PACK-PUBLICATION-SPLIT-21.md" \
     --only "$SHORTS_OK" $ESSAI \
@@ -180,8 +180,6 @@ cat <<'FIN'
      ne coûte qu'une unité dans un compteur séparé (100 par jour). Aucun risque ici.
 
    Restent en attente, et ce sont tes décisions :
-   - 7 Shorts à re-rendre (01, 03, 04, 06, 09, 16, 17) : phrases cassées à l'écran,
-     aucun nom propre faux — détail dans AUDIT-TEXTE-ECRAN-2026-08-24.md
    - la longue de 8 min 45 (« L'IA vient de changer de prix et de maître ») : elle est
      prête à publier, mais son script narré n'a pas été conservé, donc je ne peux pas
      lui fabriquer de piste exacte sans la deviner. Dis-moi si on la publie sans piste,
