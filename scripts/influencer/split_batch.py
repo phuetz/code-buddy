@@ -80,6 +80,19 @@ def main():
             cmd += ['--outro', outro]
         for f in job.get('fix', []):
             cmd += ['--fix', f]
+        # `script` (par job) ou `script_dir` (global, un <ID>.txt par job) : le texte AFFICHÉ
+        # vient de ce fichier et non de la transcription. Whisper ne sert plus qu'à dater les
+        # mots — aucun nom propre ne peut donc être inventé à l'écran.
+        script = job.get('script')
+        if not script and cfg.get('script_dir'):
+            candidat = os.path.join(os.path.expanduser(cfg['script_dir']), f'{jid}.txt')
+            script = candidat if os.path.exists(candidat) else None
+        if script:
+            script = os.path.expanduser(script)
+            if os.path.exists(script):
+                cmd += ['--script', script]
+            else:
+                print(f"⚠️ {jid}: script déclaré mais introuvable ({script})")
         face_crop = job.get('face_crop', cfg.get('face_crop'))
         if face_crop:  # ex. "top:0.0,bottom:0.5" pour un clip déjà zoomé (visage plus haut)
             cmd += ['--face-crop', face_crop]
