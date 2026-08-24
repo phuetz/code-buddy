@@ -1,14 +1,20 @@
 name: Deploy product site (GitHub Pages)
 
-# Publishes the static landing page in site/ to GitHub Pages.
+# Publishes the minimal root landing page and only the assets it references.
 # One-time setup by the repo owner: Settings → Pages → Source: "GitHub Actions".
-# After that, every push to main that touches site/ redeploys automatically.
+# After that, every push to main that touches the landing page or its referenced assets redeploys automatically.
 
 on:
   push:
     branches: [main]
     paths:
-      - 'site/**'
+      - 'index.html'
+      - '.nojekyll'
+      - 'assets/site/**'
+      - 'cowork/public/favicon.png'
+      - 'docs/assets/showcase-appstudio*'
+      - 'docs/assets/showcase-try.gif'
+      - 'docs/assets/cowork-chat-demo.*'
       - '.github/workflows/pages.yml'
   workflow_dispatch:
 
@@ -30,8 +36,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/configure-pages@v5
+      - name: Prepare the root landing page artifact
+        run: |
+          mkdir -p .pages-artifact/assets/site .pages-artifact/cowork/public .pages-artifact/docs/assets
+          cp index.html .nojekyll .pages-artifact/
+          cp assets/site/site.css assets/site/site.js .pages-artifact/assets/site/
+          cp cowork/public/favicon.png .pages-artifact/cowork/public/
+          cp docs/assets/showcase-appstudio.gif docs/assets/showcase-appstudio.mp4 docs/assets/showcase-appstudio-sharpei.jpg .pages-artifact/docs/assets/
+          cp docs/assets/showcase-try.gif docs/assets/cowork-chat-demo.gif docs/assets/cowork-chat-demo.mp4 .pages-artifact/docs/assets/
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: site
+          path: .pages-artifact
       - id: deployment
         uses: actions/deploy-pages@v4

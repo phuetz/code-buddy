@@ -243,7 +243,7 @@ describe('public README screenshots', () => {
       }
     }
 
-    expect(targetsByFile.get(path.join(repoRoot, 'README.md'))).toHaveLength(28);
+    expect(targetsByFile.get(path.join(repoRoot, 'README.md'))).toHaveLength(30);
     expect(targetsByFile.get(screenshotGalleryReadme)).toHaveLength(18);
   });
 

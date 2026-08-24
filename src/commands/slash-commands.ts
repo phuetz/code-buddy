@@ -19,6 +19,7 @@ export type {
 
 import type { SlashCommand, SlashCommandArgument, SlashCommandResult } from './slash/types.js';
 import { builtinCommands } from './slash/builtin-commands.js';
+import { isCommandVisibleForSurface } from '../config/feature-surface.js';
 
 /**
  * Slash Commands Manager - Advanced enterprise architecture for.
@@ -54,7 +55,9 @@ export class SlashCommandManager {
    */
   private loadBuiltinCommands(): void {
     for (const cmd of builtinCommands) {
-      this.commands.set(cmd.name, cmd);
+      if (isCommandVisibleForSurface(cmd.name)) {
+        this.commands.set(cmd.name, cmd);
+      }
     }
   }
 

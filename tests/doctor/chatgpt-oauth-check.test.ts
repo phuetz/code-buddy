@@ -72,7 +72,7 @@ describe('doctor — ChatGPT OAuth check', () => {
     expect(chatgpt).toBeDefined();
     expect(chatgpt?.status).toBe('warn');
     expect(chatgpt?.message).toMatch(/not signed in/i);
-    expect(chatgpt?.message).toMatch(/login chatgpt/i);
+    expect(chatgpt?.message).toMatch(/buddy login/i);
   }, 15_000);
 
   it('returns ok with email + plan when credentials are valid and recent', async () => {

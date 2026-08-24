@@ -37,7 +37,7 @@ describe('perceived voice latency benchmark', () => {
     expect(report).toMatchObject({
       cacheHit: true,
       answerChars: 57,
-      sentenceCap: 96,
+      sentenceCap: 160,
       runs: 1,
     });
     expect(report.results).toHaveLength(2);
