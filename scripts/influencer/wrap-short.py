@@ -21,7 +21,7 @@ Un `--cut` peut être une image (png/jpg/webp), notamment une capture de
 collect-evidence.py : son `.meta.json` voisin est détecté et l'attribution
 est incrustée automatiquement pendant la fenêtre d'affichage.
 """
-import argparse, json, math, os, re, subprocess, sys, tempfile, unicodedata
+import argparse, difflib, json, math, os, re, subprocess, sys, tempfile, unicodedata
 from pathlib import Path
 
 from video_delivery_qc import master_video_audio, write_qc_sidecar
@@ -84,6 +84,170 @@ def transcribe(path):
             words.append({'t0': w.start, 't1': w.end, 'w': w.word.strip()})
     return words
 
+# ---------------------------------------------------------------------------
+# Texte à l'écran SANS erreur : le script fait foi, le STT ne donne que le tempo.
+#
+# Whisper « small » francise mal les noms propres du domaine (DeepSeek → « Deeppsych »,
+# Grok → « GROC », Qwen → « Quen », Kimi K3 → « Kimi 4.3 », Fable 5 → « s'effable 5 »,
+# Opus 5 → « Au plus 5 », et jusqu'à Lisa → « Liya »). Rustiner ces mots un par un avec
+# --fix ne passe pas à l'échelle : chaque nouveau clip apporte ses propres inventions,
+# et une erreur oubliée part gravée dans l'image.
+#
+# La narration est SYNTHÉTISÉE À PARTIR D'UN SCRIPT : le texte exact est donc connu
+# avant l'enregistrement. `align_to_script` s'en sert comme unique source du texte
+# affiché et ne garde de la transcription que les instants. Le mot montré à l'écran ne
+# peut alors plus être un mot inventé : il sort du script, par construction.
+# ---------------------------------------------------------------------------
+
+# Coupé du script : titres markdown, séparateurs, didascalies et emphases.
+_SCRIPT_DROP_LINE = re.compile(r'^\s*(#{1,6}\s|-{3,}\s*$|\*\*(?:Décor|Decor|Ton|Voix|Format|Durée|Source)s?\b)')
+_SCRIPT_BRACKETS = re.compile(r'\[[^\]]*\]|\([A-ZÀ-Ý][^)]{0,40}\)\s*:')
+_SCRIPT_MARKUP = re.compile(r'[*_`>]|~~')
+# Ponctuation qui, isolée, ne fait pas un mot. Les scripts narrés emploient le tiret
+# cadratin comme marque de respiration (« regardé — à très vite ») : affiché seul il
+# occuperait une case de karaoké vide et volerait du temps au mot suivant.
+_PONCTUATION_SEULE = '.,!?;:«»\'"“”‘’…—–-'
+
+
+def script_words(text):
+    """Le script → la liste de mots à AFFICHER, markdown et didascalies retirés.
+
+    On conserve la ponctuation collée au mot (comme whisper) : elle porte la
+    respiration du karaoké et les fins de phrase qui découpent les cartes.
+    """
+    kept = []
+    for line in (text or '').splitlines():
+        if _SCRIPT_DROP_LINE.match(line):
+            continue
+        line = _SCRIPT_BRACKETS.sub(' ', line)
+        line = _SCRIPT_MARKUP.sub('', line)
+        kept.append(line)
+    return [w for w in ' '.join(kept).split() if w.strip(_PONCTUATION_SEULE)]
+
+
+def _align_key(word):
+    """Clé de comparaison : sans accent, sans ponctuation, sans casse."""
+    return re.sub(r'[^a-z0-9]', '', norm(word))
+
+
+def align_to_script(words, script_text, min_anchor_ratio=0.35):
+    """Reporte les instants de `words` (STT) sur les mots de `script_text`.
+
+    Renvoie `(mots_alignés, rapport)`. Chaque élément garde la forme
+    `{'t0','t1','w'}` du reste du pipeline, mais `w` vient TOUJOURS du script.
+
+    Les mots que le STT a reconnus servent d'ancres ; ceux qu'il a manqués ou
+    inventés laissent un trou, comblé en répartissant le temps disponible au
+    prorata de la longueur des mots — un mot long dure plus qu'un mot court.
+
+    `min_anchor_ratio` est un garde-fou : sous ce taux d'ancrage, le script et
+    l'audio ne parlent visiblement pas de la même chose (mauvais fichier, mauvaise
+    prise). On le signale au lieu de produire un karaoké faux en silence.
+    """
+    target = script_words(script_text)
+    if not target:
+        raise ValueError('script vide : aucun mot à afficher')
+    if not words:
+        raise ValueError('transcription vide : aucun instant à reporter')
+
+    src_keys = [_align_key(w['w']) for w in words]
+    tgt_keys = [_align_key(w) for w in target]
+
+    matcher = difflib.SequenceMatcher(None, src_keys, tgt_keys, autojunk=False)
+    anchored = {}
+    for block in matcher.get_matching_blocks():
+        for k in range(block.size):
+            anchored[block.b + k] = words[block.a + k]
+
+    start = words[0]['t0']
+    end = max(w['t1'] for w in words)
+    out = [{'w': w, 't0': None, 't1': None} for w in target]
+    for i, anchor in anchored.items():
+        out[i]['t0'] = anchor['t0']
+        out[i]['t1'] = anchor['t1']
+
+    _fill_gaps(out, start, end)
+
+    ratio = len(anchored) / len(target)
+    report = {
+        'mots_script': len(target),
+        'mots_stt': len(words),
+        'ancres': len(anchored),
+        'taux_ancrage': round(ratio, 3),
+        'suffisant': ratio >= min_anchor_ratio,
+    }
+    return out, report
+
+
+# Durée plancher d'un mot comblé : sous ~3 images (25 fps) il passe inaperçu.
+MIN_WORD_DURATION = 0.12
+
+
+def _widen_gap(out, i, j, t_start, t_end, missing):
+    """Reprend du temps aux ancres voisines quand le trou est trop étroit.
+
+    Whisper ne laisse aucun silence entre deux mots qu'il a reconnus : un mot qu'il a
+    manqué en plein débit tomberait donc dans un trou de durée nulle et ne s'afficherait
+    jamais — précisément le mot que le script devait rétablir. Ses syllabes ont été
+    absorbées par les mots voisins, on leur en reprend une part, sans jamais prendre plus
+    de la moitié de leur durée pour que l'ancre reste lisible et l'ordre préservé.
+    En bord de segment il n'y a qu'un voisin : la plage globale du STT n'est pas débordée.
+    """
+    lenders = []
+    if i > 0:
+        lenders.append([out[i - 1], -1, max(0.0, (out[i - 1]['t1'] - out[i - 1]['t0']) / 2)])
+    if j < len(out):
+        lenders.append([out[j], 1, max(0.0, (out[j]['t1'] - out[j]['t0']) / 2)])
+    # Deux passes : la moitié demandée à chaque voisin, puis le reste à celui qui peut encore.
+    for share in (0.5, 1.0):
+        for lender in lenders:
+            if missing <= 1e-9:
+                break
+            taken = min(lender[2], missing * share)
+            if taken <= 1e-9:
+                continue
+            lender[2] -= taken
+            missing -= taken
+            if lender[1] < 0:
+                lender[0]['t1'] -= taken
+                t_start -= taken
+            else:
+                lender[0]['t0'] += taken
+                t_end += taken
+    return t_start, t_end
+
+
+def _fill_gaps(out, start, end):
+    """Interpole les mots sans ancre, au prorata de leur longueur."""
+    n = len(out)
+    i = 0
+    while i < n:
+        if out[i]['t0'] is not None:
+            i += 1
+            continue
+        j = i
+        while j < n and out[j]['t0'] is None:
+            j += 1
+        # Bornes du trou : fin de l'ancre précédente → début de la suivante.
+        t_start = out[i - 1]['t1'] if i > 0 else start
+        t_end = out[j]['t0'] if j < n else end
+        if t_end is None or t_end < t_start:
+            t_end = t_start
+        needed = MIN_WORD_DURATION * (j - i)
+        if t_end - t_start < needed:
+            t_start, t_end = _widen_gap(out, i, j, t_start, t_end, needed - (t_end - t_start))
+        weights = [max(1, len(_align_key(out[k]['w']))) for k in range(i, j)]
+        total = sum(weights) or 1
+        span = max(0.0, t_end - t_start)
+        cursor = t_start
+        for k, weight in zip(range(i, j), weights):
+            share = span * weight / total
+            out[k]['t0'] = cursor
+            cursor += share
+            out[k]['t1'] = cursor
+        i = j
+
+
 FIXES_DEFAULT = {
     'chat gpt': 'ChatGPT', 'chat gp': 'ChatGPT', 'chatgpt': 'ChatGPT',
     'open ai': 'OpenAI', 'openai': 'OpenAI', 'hugging face': 'Hugging Face',
@@ -129,11 +293,27 @@ def apply_fixes(words, extra):
             i += 1
     return [w for w in words if w['w']]
 
+# Un trait d'union qui OUVRE un jeton est toujours une coupure de whisper (« au »+« -delà »,
+# « qu'est »+« -ce », « travail »+« -là ») : le mot composé s'écrit d'un seul tenant. Un jeton
+# réduit AU seul tiret, lui, est une respiration de la narration et doit rester tel quel — d'où
+# l'exigence d'un caractère supplémentaire.
+_TRAIT_UNION_SUITE = re.compile(r'^[-‑–—]\S')
+
+
 def merge_apostrophes(words):
-    """Recolle les apostrophes éclatées par whisper (« qu 'elle » → « qu'elle »)."""
+    """Recolle ce que whisper a éclaté : apostrophes (« qu 'elle ») et traits d'union.
+
+    Sans cela, « au-delà » finit en deux jetons et le découpage en cartons peut isoler
+    « -delà » tout seul à l'écran — mesuré sur L3, L4 et V1 le 24/08.
+    """
     out = []
     for w in words:
-        if out and (w['w'].startswith("'") or out[-1]['w'].endswith("'")):
+        recolle = out and (
+            w['w'].startswith("'")
+            or out[-1]['w'].endswith("'")
+            or _TRAIT_UNION_SUITE.match(w['w'])
+        )
+        if recolle:
             out[-1] = {
                 't0': out[-1]['t0'],
                 't1': w['t1'],
@@ -564,6 +744,17 @@ def main():
     ap.add_argument('--cut', action='append', default=[],
                     help='chemin.mp4@declencheur:durée (ex: b48.mp4@Un:3.5)')
     ap.add_argument('--fix', action='append', default=[])
+    ap.add_argument(
+        '--script', default='',
+        help='fichier texte du script narré : le texte AFFICHÉ en vient mot pour mot, '
+             'la transcription ne sert plus qu\'à dater les mots. Supprime par construction '
+             'les inventions de whisper sur les noms propres (DeepSeek, Grok, Qwen, Kimi K3…). '
+             'Écris le script tel que tu veux le LIRE à l\'écran (« 27 » plutôt que « vingt-sept »).')
+    ap.add_argument(
+        '--script-min-ancrage', type=float, default=0.35,
+        help='taux minimal de mots du script retrouvés dans la transcription (défaut 0.35). '
+             'En dessous, le script ne correspond pas à la prise : on s\'arrête au lieu de '
+             'graver un karaoké décalé.')
     ap.add_argument('--broll-dir', default=os.path.expanduser('~/.codebuddy/media-video/broll'))
     ap.add_argument(
         '--layout', choices=('standard', 'split'), default='standard',
@@ -597,6 +788,17 @@ def main():
     if not words:
         sys.exit('transcription vide')
     words = apply_fixes(words, a.fix)
+    if a.script:
+        script_text = Path(os.path.expanduser(a.script)).read_text(encoding='utf-8')
+        words, rapport = align_to_script(words, script_text, a.script_min_ancrage)
+        print(f"[script] {rapport['mots_script']} mots affichés depuis le script, "
+              f"{rapport['ancres']} datés directement par la transcription "
+              f"({rapport['taux_ancrage'] * 100:.0f}% d'ancrage)", file=sys.stderr)
+        if not rapport['suffisant']:
+            sys.exit(
+                f"ancrage trop faible ({rapport['taux_ancrage'] * 100:.0f}% < "
+                f"{a.script_min_ancrage * 100:.0f}%) : le script ne correspond pas à cette prise. "
+                'Vérifie le couple script/clip avant de rendre.')
     sub_cards = cards(words, max_words=3 if a.layout == 'split' else 4)
 
     cuts = []
