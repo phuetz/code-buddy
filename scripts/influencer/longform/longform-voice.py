@@ -19,7 +19,19 @@ MODEL_ID = 'eleven_multilingual_v2'
 OUTPUT_FORMAT = 'mp3_44100_192'
 MEDIA_ENV = Path('~/.codebuddy/media.env').expanduser()
 USAGE_PATH = Path('~/.codebuddy/elevenlabs-voice-usage.json').expanduser()
-MONTHLY_CAP = 200_000
+# Garde-fou de dépense, pas une limite du fournisseur : il évite de brûler un quota
+# ElevenLabs par une boucle de rendu. `CODEBUDDY_ELEVENLABS_MONTHLY_CAP` le relève quand
+# une régénération le justifie — même variable que la voix du robot.
+MONTHLY_CAP = int(os.environ.get('CODEBUDDY_ELEVENLABS_MONTHLY_CAP', 200_000))
+
+# Débit de parole visé, en mots par minute. Repères en français : 140-160 pour une
+# narration posée, 165-180 pour une présentatrice dynamique, essoufflant au-delà de 190.
+# Les Shorts de Lisa sont à 174 : c'est la voix que Patrice a validée, et la référence.
+#
+# Une longue avait été générée à `speed: 1.2` pour tenir une durée cible : 204 mots/min
+# à l'oreille, « elle parle beaucoup plus vite, du coup c'est moins bien ». Personne ne
+# l'a vu avant l'écoute, parce que rien ne mesurait le débit. Maintenant si.
+DEBIT_MIN, DEBIT_MAX = 160, 185
 
 
 def load_env_value(path: Path, key: str) -> str:
@@ -258,6 +270,14 @@ def main() -> None:
                 print(f'OK {audio_path}')
             duration = media_duration(audio_path)
             section['duree_reelle_s'] = round(duration, 3)
+            mots = len(str(text).split())
+            if duration > 0 and mots >= 20:
+                debit = mots / duration * 60
+                section['debit_mots_min'] = round(debit)
+                if not DEBIT_MIN <= debit <= DEBIT_MAX:
+                    sens = 'trop vite' if debit > DEBIT_MAX else 'trop lentement'
+                    print(f'  ⚠ {debit:.0f} mots/min — {sens} (viser {DEBIT_MIN}-{DEBIT_MAX}, '
+                          f'les Shorts sont à 174). Vitesse demandée : {speed}.', file=sys.stderr)
             total += duration
             print(f'  durée réelle: {duration:.3f}s')
     except RuntimeError as exc:
