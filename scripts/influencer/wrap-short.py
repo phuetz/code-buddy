@@ -21,19 +21,27 @@ Un `--cut` peut être une image (png/jpg/webp), notamment une capture de
 collect-evidence.py : son `.meta.json` voisin est détecté et l'attribution
 est incrustée automatiquement pendant la fenêtre d'affichage.
 """
-import argparse, json, os, re, subprocess, sys, tempfile, unicodedata
+import argparse, json, math, os, re, subprocess, sys, tempfile, unicodedata
 from pathlib import Path
 
 from video_delivery_qc import master_video_audio, write_qc_sidecar
 
 IMAGE_EXTENSIONS = {'.png', '.jpg', '.jpeg', '.webp'}
 
-# Tapis musical : 0.01 ≈ −40 dB (÷3 vs 0.03 ≈ −30,5 dB). Cible : mix voix −14 LUFS,
-# musique ≈ −38 à −40 LUFS dans le master (jamais en concurrence). Le seuil de
-# ducking est sur la SIDECHAIN voix, pas sur la musique : il ne se divise pas
-# avec le volume. `--music-volume 0.007` si le tapis reste encore trop présent.
+# Tapis musical : la voix est normalisée AVANT le mix pour qu'une source faible
+# ne fasse plus remonter la musique avec elle. À 0.01 (≈ −40 dB), le tapis reste
+# ainsi à peine perceptible et stable entre les clips. Le seuil de ducking est
+# sur la SIDECHAIN voix, pas sur la musique.
 DEFAULT_MUSIC_VOLUME = 0.01
 DEFAULT_MUSIC_DUCK_THRESHOLD = 0.006
+DEFAULT_VOICE_TARGET_LUFS = -14.5
+DEFAULT_VOICE_TRUE_PEAK_DBTP = -2.0
+MASTER_LIMIT_LINEAR = 0.841395  # −1,5 dBFS, sans gain automatique du limiteur
+
+
+def valid_music_volume(value):
+    """Refuse les gains non positifs et les valeurs NaN/inf acceptées par float()."""
+    return math.isfinite(value) and value > 0
 
 
 def music_audio_filters(
@@ -42,16 +50,21 @@ def music_audio_filters(
     volume=DEFAULT_MUSIC_VOLUME,
     duck_threshold=DEFAULT_MUSIC_DUCK_THRESHOLD,
 ):
-    """Filtre audio : musique bouclée, duckée sous la voix, mix masterisé −14 LUFS."""
+    """Filtre voix prioritaire : normalise la voix, puis ajoute et limite le tapis."""
     fade_out = max(0.0, total - 1.0)
     return [
+        f'[0:a]loudnorm=I={DEFAULT_VOICE_TARGET_LUFS:g}:'
+        f'TP={DEFAULT_VOICE_TRUE_PEAK_DBTP:g}:LRA=7,aresample=48000,'
+        'asplit=2[voice_main][voice_sc]',
         f'[{music_index}:a]atrim=0:{total:.3f},asetpts=PTS-STARTPTS,'
-        f'afade=t=in:st=0:d=0.5,afade=t=out:st={fade_out:.3f}:d=1,'
+        f'aresample=48000,afade=t=in:st=0:d=0.5,'
+        f'afade=t=out:st={fade_out:.3f}:d=1,'
         f'volume={volume:g}[music]',
-        f'[music][0:a]sidechaincompress=threshold={duck_threshold:g}:ratio=8:'
+        f'[music][voice_sc]sidechaincompress=threshold={duck_threshold:g}:ratio=8:'
         'attack=5:release=250[ducked]',
-        f'[0:a][ducked]amix=inputs=2:normalize=0,atrim=0:{total:.3f},'
-        'loudnorm=I=-14:TP=-1.5:LRA=11,aresample=48000[aout]',
+        f'[voice_main][ducked]amix=inputs=2:normalize=0,atrim=0:{total:.3f},'
+        f'alimiter=limit={MASTER_LIMIT_LINEAR:g}:level=false:'
+        'attack=5:release=50[aout]',
     ]
 
 def is_image(path):
@@ -567,8 +580,8 @@ def main():
         type=float,
         default=DEFAULT_MUSIC_VOLUME,
         metavar='GAIN',
-        help='gain linéaire de la musique de fond (défaut 0.01 ≈ −40 dB ; '
-             '0.03 = ancien niveau trop présent ; 0.007 si le tapis gêne encore)')
+        help='gain linéaire de la musique de fond après normalisation de la voix '
+             '(défaut 0.01 ≈ −40 dB ; 0.03 = ancien niveau trop présent)')
     ap.add_argument(
         '--subs', choices=('karaoke', 'cards'), default='karaoke',
         help='karaoke = mot actif agrandi et coloré (défaut, standard Ninon) ; '
@@ -643,8 +656,8 @@ def main():
 
     audio_args = ['-map', '0:a', '-c:a', 'aac', '-b:a', '192k']
     if a.music:
-        if a.music_volume <= 0:
-            sys.exit('--music-volume doit être > 0')
+        if not valid_music_volume(a.music_volume):
+            sys.exit('--music-volume doit être un nombre fini > 0')
         music_index = len(cuts) + 1
         inputs += ['-stream_loop', '-1', '-i', a.music]
         fc.extend(music_audio_filters(music_index, total, volume=a.music_volume))

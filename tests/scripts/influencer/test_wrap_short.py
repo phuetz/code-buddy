@@ -4,6 +4,8 @@ import importlib.util
 import json
 from pathlib import Path
 import re
+import shutil
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -325,12 +327,18 @@ class IsImageTest(unittest.TestCase):
 
 
 class MusicAudioFiltersTest(unittest.TestCase):
-    def test_defaut_volume_0_01_et_ducking_voix(self):
+    def test_normalise_la_voix_avant_le_tapis_et_conserve_le_ducking(self):
         joined = ';'.join(wrap_short.music_audio_filters(2, 10.0))
+        self.assertTrue(joined.startswith('[0:a]loudnorm=I=-14.5:TP=-2:LRA=7'))
+        self.assertIn('asplit=2[voice_main][voice_sc]', joined)
         self.assertIn('volume=0.01[music]', joined)
+        self.assertIn('[music][voice_sc]sidechaincompress', joined)
         self.assertIn('threshold=0.006', joined)
-        self.assertIn('loudnorm=I=-14', joined)
+        self.assertIn('[voice_main][ducked]amix', joined)
+        self.assertIn('alimiter=limit=0.841395:level=false', joined)
+        self.assertNotIn('loudnorm=I=-14:TP=-1.5', joined)
         self.assertEqual(wrap_short.DEFAULT_MUSIC_VOLUME, 0.01)
+        self.assertEqual(wrap_short.DEFAULT_VOICE_TARGET_LUFS, -14.5)
 
     def test_music_volume_override(self):
         joined = ';'.join(wrap_short.music_audio_filters(3, 8.5, volume=0.007))
@@ -338,9 +346,69 @@ class MusicAudioFiltersTest(unittest.TestCase):
         self.assertIn('[3:a]atrim=0:8.500', joined)
         self.assertNotIn('volume=0.01[music]', joined)
 
+    def test_music_volume_refuse_zero_nan_et_inf(self):
+        self.assertTrue(wrap_short.valid_music_volume(0.01))
+        for value in (0.0, -0.01, float('nan'), float('inf'), -float('inf')):
+            with self.subTest(value=value):
+                self.assertFalse(wrap_short.valid_music_volume(value))
+
     def test_cli_option_presente(self):
         src = SCRIPT.read_text(encoding='utf-8')
         self.assertIn("'--music-volume'", src)
+
+    def test_batch_permet_un_dossier_de_sortie_separe(self):
+        split_batch = SCRIPT.with_name('split_batch.py').read_text(encoding='utf-8')
+        self.assertIn("'--out-dir'", split_batch)
+
+    def test_ffmpeg_garde_le_meme_ecart_sur_une_voix_faible_ou_forte(self):
+        ffmpeg = shutil.which('ffmpeg')
+        if not ffmpeg:
+            self.skipTest('ffmpeg absent')
+
+        def render(root, name, voice_volume):
+            out = root / f'{name}.wav'
+            filters = ';'.join(wrap_short.music_audio_filters(1, 4.0))
+            subprocess.run(
+                [
+                    ffmpeg, '-nostdin', '-y', '-v', 'error',
+                    '-f', 'lavfi', '-i',
+                    f'sine=frequency=1000:sample_rate=48000:duration=4,volume={voice_volume}',
+                    '-f', 'lavfi', '-i',
+                    'sine=frequency=220:sample_rate=48000:duration=4,volume=0.5',
+                    '-filter_complex', filters, '-map', '[aout]',
+                    '-c:a', 'pcm_s24le', str(out),
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            return out
+
+        def mean_volume(path, frequency_filter):
+            result = subprocess.run(
+                [
+                    ffmpeg, '-nostdin', '-hide_banner', '-nostats', '-i', str(path),
+                    '-af', f'{frequency_filter},volumedetect', '-f', 'null', '-',
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            match = re.search(r'mean_volume: (-?[0-9.]+) dB', result.stderr)
+            self.assertIsNotNone(match)
+            return float(match.group(1))
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            weak = render(root, 'weak', 0.03)
+            strong = render(root, 'strong', 0.3)
+            gaps = []
+            for output in (weak, strong):
+                voice_db = mean_volume(output, 'bandpass=f=1000:width_type=h:w=100')
+                music_db = mean_volume(output, 'bandpass=f=220:width_type=h:w=50')
+                gaps.append(voice_db - music_db)
+                self.assertGreater(voice_db - music_db, 25.0)
+            self.assertAlmostEqual(gaps[0], gaps[1], delta=0.6)
 
 
 if __name__ == '__main__':

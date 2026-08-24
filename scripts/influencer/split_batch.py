@@ -6,7 +6,7 @@ musique duckée, master -14 LUFS) avec une cadence de B-roll automatique (≈ to
 Ninon mesurée 2,2 s ; défaut 2,5 s) en tournant sur la liste de B-roll du job — puis aperçu 540×960 et
 planche contact 6 vignettes pour relecture.
 
-Usage : split_batch.py jobs.json [--only L5,L6] [--dry-run] [--music-volume 0.01]
+Usage : split_batch.py jobs.json [--only L5,L6] [--dry-run] [--music-volume 0.01] [--out-dir DOSSIER]
 jobs.json = {"music": "…mp3", "broll_root": "~/.codebuddy/media-video/flow-crame", "out_dir": "…", "cadence": 2.5, "outro": "…/OUTRO-LISA-CTA.mp4",
              "jobs": [{"id": "L5", "src": "…/L5-kimi-k3.mp4", "hook": "Kimi K3 : …",
                        "fix": ["Kimi 4.3=Kimi K3"], "broll": ["lisa-neuralnet.mp4", "lisa-code.mp4", …],
@@ -44,6 +44,8 @@ def main():
         music_volume = float(sys.argv[sys.argv.index('--music-volume') + 1])
     root = os.path.expanduser(cfg.get('broll_root', '~/.codebuddy/media-video/flow-crame'))
     out_dir = os.path.expanduser(cfg.get('out_dir', os.path.dirname(os.path.abspath(sys.argv[1]))))
+    if '--out-dir' in sys.argv:
+        out_dir = os.path.expanduser(sys.argv[sys.argv.index('--out-dir') + 1])
     os.makedirs(out_dir, exist_ok=True)
     music = os.path.expanduser(cfg.get('music', '')) if cfg.get('music') else ''
     log = open(os.path.join(out_dir, '_split-batch.log'), 'a')
