@@ -501,6 +501,42 @@ describe('understandVideo — visual path (injected pipeline)', () => {
     expect(downloadVideo).toHaveBeenCalledWith('https://youtu.be/dQw4w9WgXcQ', outDir);
     expect(sampleFramesFn).toHaveBeenCalledWith('/dl/video.mp4', undefined);
   });
+
+  it('falls back to YouTube storyboard frames when the media stream is refused', async () => {
+    const sampleFramesFn = vi.fn(async () => [] as SampledFrame[]);
+    const sampleYoutubeStoryboard = vi.fn(async () => ({
+      frames: [
+        { path: '/story-0.jpg', t: 0 },
+        { path: '/story-1.jpg', t: 9.84 },
+      ],
+      storyboardPath: '/story.mhtml',
+    }));
+    const result = await understandVideo(
+      { source: 'https://youtu.be/dQw4w9WgXcQ', visual: true },
+      {
+        outDir,
+        fetchCaptions: async () => [{ text: 'hello', start: 0, duration: 12 }],
+        downloadVideo: async () => ({ error: 'HTTP Error 403' }),
+        sampleYoutubeStoryboard,
+        sampleFrames: sampleFramesFn,
+        dedupFrames: async (frames) => frames,
+        describeFrame: async (path) => `storyboard ${path}`,
+      },
+    );
+
+    expect(isUnderstandOk(result)).toBe(true);
+    if (!isUnderstandOk(result)) return;
+    expect(result.visual!.framesSampled).toBe(2);
+    expect(result.visual!.framesDistinct).toBe(2);
+    expect(result.visual!.note).toContain('repli storyboard YouTube');
+    expect(result.output).toContain('storyboard /story-1.jpg');
+    expect(sampleYoutubeStoryboard).toHaveBeenCalledWith(
+      'https://youtu.be/dQw4w9WgXcQ',
+      outDir,
+      expect.any(Number),
+    );
+    expect(sampleFramesFn).not.toHaveBeenCalled();
+  });
 });
 
 // ---------------------------------------------------------------------------

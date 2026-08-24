@@ -23,9 +23,15 @@ import {
 import {
   resolveYtdlp,
   buildYtdlpArgs,
+  buildVideoYtdlpArgs,
   downloadAudioWav,
   isDownloadOk,
 } from '../../../src/tools/video/media-fetch.js';
+import {
+  buildStoryboardYtdlpArgs,
+  extractStoryboardJpegs,
+  storyboardFrameIndices,
+} from '../../../src/tools/video/youtube-storyboard.js';
 import { transcribeLong, defaultChunkSec } from '../../../src/tools/video/long-transcribe.js';
 import {
   understandVideo,
@@ -140,12 +146,24 @@ describe('media-fetch', () => {
 
   it('buildYtdlpArgs produces a 16kHz mono WAV extraction command', () => {
     const args = buildYtdlpArgs('https://youtu.be/x', '/out/a.%(ext)s');
+    const jsIdx = args.indexOf('--js-runtimes');
+    expect(jsIdx).toBeGreaterThanOrEqual(0);
+    expect(args[jsIdx + 1]).toBe(`node:${process.execPath}`);
     expect(args).toContain('-x');
     expect(args).toContain('--audio-format');
     expect(args).toContain('wav');
     const ppIdx = args.indexOf('--postprocessor-args');
     expect(ppIdx).toBeGreaterThanOrEqual(0);
     expect(args[ppIdx + 1]).toBe('-ar 16000 -ac 1');
+    expect(args).toContain('https://youtu.be/x');
+  });
+
+  it('buildVideoYtdlpArgs enables the running Node executable for YouTube extraction', () => {
+    const args = buildVideoYtdlpArgs('https://youtu.be/x', '/out/v.%(ext)s');
+    const jsIdx = args.indexOf('--js-runtimes');
+    expect(jsIdx).toBeGreaterThanOrEqual(0);
+    expect(args[jsIdx + 1]).toBe(`node:${process.execPath}`);
+    expect(args).toContain('bv*[height<=480]+ba/b[height<=480]/b');
     expect(args).toContain('https://youtu.be/x');
   });
 
@@ -195,6 +213,37 @@ describe('media-fetch', () => {
     });
     expect(isDownloadOk(result)).toBe(false);
     if (!isDownloadOk(result)) expect(result.error).toMatch(/code 1/);
+  });
+});
+
+describe('youtube-storyboard fallback', () => {
+  it('builds a local sb0 download with metadata and the running Node runtime', () => {
+    const args = buildStoryboardYtdlpArgs('https://youtu.be/x', '/out/s.%(ext)s');
+    expect(args[args.indexOf('--js-runtimes') + 1]).toBe(`node:${process.execPath}`);
+    expect(args[args.indexOf('-f') + 1]).toBe('sb0');
+    expect(args).toContain('--write-info-json');
+    expect(args).toContain('https://youtu.be/x');
+  });
+
+  it('extracts binary JPEG MIME bodies without corrupting their bytes', () => {
+    const first = Buffer.from([0xff, 0xd8, 0x00, 0x80, 0xfe, 0xff, 0xd9]);
+    const second = Buffer.from([0xff, 0xd8, 0x0d, 0x0a, 0x41, 0xff, 0xd9]);
+    const part = (body: Buffer): Buffer =>
+      Buffer.concat([
+        Buffer.from(`Content-ID: <x>\r\nContent-Type: image/jpeg\r\nContent-Length: ${body.length}\r\n\r\n`, 'ascii'),
+        body,
+        Buffer.from('\r\n--boundary\r\n', 'ascii'),
+      ]);
+    const parsed = extractStoryboardJpegs(Buffer.concat([Buffer.from('--boundary\r\n'), part(first), part(second)]));
+    expect(parsed).toHaveLength(2);
+    expect(parsed[0]).toEqual(first);
+    expect(parsed[1]).toEqual(second);
+  });
+
+  it('caps storyboard frames evenly while keeping both ends', () => {
+    expect(storyboardFrameIndices(92, 5)).toEqual([0, 23, 46, 68, 91]);
+    expect(storyboardFrameIndices(3, 10)).toEqual([0, 1, 2]);
+    expect(storyboardFrameIndices(0, 10)).toEqual([]);
   });
 });
 

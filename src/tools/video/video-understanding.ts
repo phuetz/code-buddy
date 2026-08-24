@@ -35,10 +35,15 @@ import {
   type VideoDownloadResult,
 } from './media-fetch.js';
 import { transcribeLong, describeVideoSttEngine, type TimedSegment, type LongTranscribeOptions } from './long-transcribe.js';
-import type { SampledFrame, FrameSampleDeps } from './frame-sample.js';
+import { capEvenly, type SampledFrame, type FrameSampleDeps } from './frame-sample.js';
 import type { FrameDedupDeps } from './frame-dedup.js';
 import type { DescribeFrameDeps } from './describe-frame.js';
 import type { CloudUnderstandDeps, CloudUnderstandOutcome, CloudSourceKind } from './cloud-understand.js';
+import {
+  isStoryboardSampleOk,
+  sampleYoutubeStoryboardFrames,
+  type StoryboardSampleResult,
+} from './youtube-storyboard.js';
 import { ingestVideoUnderstanding, getDefaultVideoCkgBridge, type VideoCkgBridge } from './video-ckg.js';
 import {
   buildVideoExperimentBacklog,
@@ -146,6 +151,11 @@ export interface UnderstandVideoDeps {
   describeOptions?: DescribeFrameDeps;
   /** Download the picture track for a remote source (default: `downloadVideoFile`). */
   downloadVideo?: (source: string, outDir: string) => Promise<VideoDownloadResult>;
+  /**
+   * YouTube-only fallback when the full media stream is refused (for example a
+   * PO-token HTTP 403). Downloads public storyboard sheets and crops local frames.
+   */
+  sampleYoutubeStoryboard?: (source: string, outDir: string, timeoutMs: number) => Promise<StoryboardSampleResult>;
   /**
    * Wall-clock budget (ms) for the WHOLE visual leg — download + sample + describe + ocr.
    * When it runs out the pipeline stops describing further frames and returns what it has
@@ -396,13 +406,13 @@ export async function fuseTranscriptWithFrames(
 /** Resolve a local video path for Phase 2: the local source file if available, else
  *  download the picture track for a remote source. Returns `null` (with a note) when
  *  the visual analysis can't run — the caller degrades to transcript-only. */
-async function resolveVideoPath(
+async function resolveVisualSource(
   input: UnderstandVideoInput,
   deps: UnderstandVideoDeps,
   outDir: string,
   localVideoPath: string | undefined,
   downloadTimeoutMs?: number,
-): Promise<{ videoPath: string } | { note: string }> {
+): Promise<{ videoPath: string } | { frames: SampledFrame[]; note: string } | { note: string }> {
   if (localVideoPath) return { videoPath: localVideoPath };
 
   // Remote source (YouTube / direct URL): download the picture track, BOUNDED by the
@@ -415,6 +425,30 @@ async function resolveVideoPath(
         downloadVideoFile(s, d, downloadTimeoutMs !== undefined ? { timeoutMs: downloadTimeoutMs } : {}));
     const dl = await download(input.source, outDir);
     if (isVideoDownloadOk(dl)) return { videoPath: dl.videoPath };
+
+    // YouTube can expose captions + public storyboard sheets while refusing the
+    // actual media stream without a PO token. Keep visual understanding useful by
+    // sampling those low-bandwidth sheets locally; direct URLs still degrade as before.
+    if (isYoutubeUrl(input.source)) {
+      const sampleStoryboard =
+        deps.sampleYoutubeStoryboard ??
+        ((source: string, dir: string, timeoutMs: number) =>
+          sampleYoutubeStoryboardFrames(source, dir, { timeoutMs }));
+      const storyboard = await sampleStoryboard(
+        input.source,
+        outDir,
+        Math.max(1000, downloadTimeoutMs ?? DEFAULT_VISUAL_BUDGET_MS),
+      );
+      if (isStoryboardSampleOk(storyboard)) {
+        return {
+          frames: storyboard.frames,
+          note: `repli storyboard YouTube : ${storyboard.frames.length} aperçus locaux (flux vidéo refusé)`,
+        };
+      }
+      return {
+        note: `visuel ignoré : flux vidéo échoué (${dl.error}) et storyboard indisponible (${storyboard.error}) — transcript rendu`,
+      };
+    }
     return { note: `visuel ignoré : téléchargement vidéo trop long ou échoué (${dl.error}) — transcript rendu` };
   }
 
@@ -446,8 +480,8 @@ async function runVisualPipeline(
 
   // Bound the download by the time left in the budget (long videos otherwise dominate).
   const downloadTimeoutMs = Math.max(1000, deadline - now());
-  const resolved = await resolveVideoPath(input, deps, outDir, localVideoPath, downloadTimeoutMs);
-  if ('note' in resolved) {
+  const resolved = await resolveVisualSource(input, deps, outDir, localVideoPath, downloadTimeoutMs);
+  if ('note' in resolved && !('frames' in resolved)) {
     logger.warn(`[video] ${resolved.note}`);
     return transcriptOnly(resolved.note);
   }
@@ -474,16 +508,25 @@ async function runVisualPipeline(
     ...(input.ocr ? { withOcr: true } : {}),
   };
 
-  const frames = await sampleFramesFn(resolved.videoPath, deps.frameSampleOptions);
+  const frames = 'frames' in resolved
+    ? resolved.frames
+    : await sampleFramesFn(resolved.videoPath, deps.frameSampleOptions);
   if (frames.length === 0) {
     return { fused: segments.map((s) => ({ ...s })), framesSampled: 0, framesDistinct: 0, note: 'aucune frame échantillonnée' };
   }
   const distinct = await dedupFramesFn(frames);
 
   // Budgeted describe: the costly per-frame VLM calls (~1–10 s each) are bounded by the
-  // wall-clock budget. We STOP calling the VLM once the remaining time can't cover another
-  // describe, and count N described / M attempted so the output carries a truncation note.
+  // wall-clock budget. When not all distinct frames plausibly fit, spread the candidates
+  // EVENLY across the complete timeline. Otherwise a partial run describes only the opening
+  // minutes and misses later demonstrations — exactly the wrong behavior for tutorials.
   const perFrameEstimateMs = deps.visualPerFrameEstimateMs ?? DEFAULT_VLM_FRAME_ESTIMATE_MS;
+  const remainingBeforeDescribe = Math.max(0, deadline - now());
+  const descriptionCapacity = Math.max(0, Math.floor(remainingBeforeDescribe / perFrameEstimateMs));
+  const framesForFusion = capEvenly(distinct, descriptionCapacity);
+  const selectionNote = framesForFusion.length < distinct.length
+    ? `visuel partiel : ${framesForFusion.length}/${distinct.length} frames sélectionnées uniformément — budget de ${budgetSec} s`
+    : undefined;
   let attempted = 0;
   let described = 0;
   let budgetHit = false;
@@ -499,11 +542,14 @@ async function runVisualPipeline(
     return text;
   };
 
-  const fused = await fuseTranscriptWithFrames(segments, distinct, budgetedDescribe);
+  const fused = await fuseTranscriptWithFrames(segments, framesForFusion, budgetedDescribe);
 
   const result: VisualResult = { fused, framesSampled: frames.length, framesDistinct: distinct.length };
+  if ('note' in resolved) result.note = resolved.note;
+  if (selectionNote) result.note = result.note ? `${result.note}; ${selectionNote}` : selectionNote;
   if (budgetHit && described < attempted) {
-    result.note = `visuel partiel : ${described}/${attempted} frames décrites — budget de ${budgetSec} s atteint (transcript complet rendu)`;
+    const budgetNote = `visuel partiel : ${described}/${attempted} frames décrites — budget de ${budgetSec} s atteint (transcript complet rendu)`;
+    result.note = result.note ? `${result.note}; ${budgetNote}` : budgetNote;
   }
   return result;
 }

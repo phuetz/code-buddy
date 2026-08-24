@@ -108,6 +108,11 @@ export function resolveYtdlp(deps: MediaFetchDeps = {}): YtdlpInvocation | null 
  */
 export function buildYtdlpArgs(source: string, outputTemplate: string): string[] {
   return [
+    // Recent YouTube extraction requires an explicit JavaScript runtime. Code Buddy
+    // already runs on Node, so reuse the exact executable instead of depending on a
+    // separately installed Deno runtime or on the caller's PATH.
+    '--js-runtimes',
+    `node:${process.execPath}`,
     '-x',
     '--audio-format',
     'wav',
@@ -218,6 +223,8 @@ export function isVideoDownloadOk(result: VideoDownloadResult): result is VideoD
  */
 export function buildVideoYtdlpArgs(source: string, outputTemplate: string): string[] {
   return [
+    '--js-runtimes',
+    `node:${process.execPath}`,
     '-f',
     'bv*[height<=480]+ba/b[height<=480]/b',
     '--recode-video',

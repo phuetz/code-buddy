@@ -152,6 +152,7 @@ describe('understandVideo — visual wall-clock budget', () => {
           { text: 'la suite', start: 3, duration: 3 },
         ],
         downloadVideo,
+        sampleYoutubeStoryboard: async () => ({ error: 'storyboard timed out' }),
         sampleFrames,
         dedupFrames: async (f) => f,
         describeFrame,
