@@ -20,7 +20,8 @@
 # Usage :
 #   bash ~/publier-lisa.sh              # déroule les étapes, en demandant confirmation
 #   bash ~/publier-lisa.sh --essai      # montre tout ce qui serait fait, sans rien envoyer
-#   bash ~/publier-lisa.sh --etape 2    # ne joue qu'une étape (1 à 4)
+#   bash ~/publier-lisa.sh --etape 2    # ne joue qu'une étape (1 à 5)
+#   bash ~/publier-lisa.sh --etape 5    # dépose les pistes sur ce qui est déjà en ligne
 #
 set -uo pipefail
 
@@ -227,11 +228,49 @@ fi
 fi
 
 # ---------------------------------------------------------------------------
+if joue_etape 5; then
+gras "Étape 5 — rattrapage : déposer les pistes sur ce qui est DÉJÀ en ligne"
+
+# À utiliser quand des vidéos sont parties sans sous-titres — typiquement parce que
+# l'autorisation de l'étape 1 n'était pas encore faite. On relit le journal des
+# téléversements et on dépose la piste de chaque vidéo qui en a une. Aucun re-téléversement.
+if ! grep -q 'youtube.force-ssl' "$MCP/tokens.json"; then
+  souci "l'autorisation manque toujours (étape 1) — rien à rattraper pour l'instant."
+else
+  rattrapes=0
+  for journal in "$SHORTS/PACK-PUBLICATION-SPLIT-21.uploads.jsonl" "$ACTU/uploads.jsonl"; do
+    [ -f "$journal" ] || continue
+    while IFS= read -r ligne; do
+      [ -z "$ligne" ] && continue
+      id=$(printf '%s' "$ligne" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("id",""))' 2>/dev/null)
+      fichier=$(printf '%s' "$ligne" | python3 -c 'import json,os,sys; print(os.path.basename(json.load(sys.stdin).get("file","")))' 2>/dev/null)
+      [ -z "$id" ] && continue
+      case "$fichier" in
+        SHORT-SPLIT-*) piste="$SHORTS/sous-titres/${fichier%.mp4}.fr.srt" ;;
+        *)             piste="$ACTU/${fichier%.mp4}.fr.srt" ;;
+      esac
+      [ -f "$piste" ] || continue
+      info "→ $fichier ($id)"
+      node "$OUTILS/youtube_captions.mjs" --video "$id" --file "$piste" --lang fr --replace \
+        && rattrapes=$((rattrapes + 1)) \
+        || souci "dépôt échoué pour $id (vidéo supprimée, ou traitement inachevé)."
+    done < "$journal"
+  done
+  info "$rattrapes piste(s) déposée(s)."
+fi
+fi
+
+# ---------------------------------------------------------------------------
 gras "Terminé — ce qu'il te reste à faire"
 cat <<'FIN'
    1. Ouvre YouTube Studio et relis les vidéos privées.
    2. Passe en public celles que tu valides. C'est le seul geste qui les rend visibles ;
       ce script ne l'a pas fait et ne le fera jamais tout seul.
+
+   Si des vidéos sont parties SANS sous-titres (autorisation pas encore faite), le
+   rattrapage les couvre sans rien re-téléverser :
+       cd ~/DEV/youtube-mcp && npm run auth
+       bash ~/publier-lisa.sh --etape 5
 
    Bon à savoir :
    - Si une vidéo était encore « en cours de traitement » chez YouTube, son dépôt de
