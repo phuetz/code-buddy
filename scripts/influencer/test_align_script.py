@@ -327,5 +327,61 @@ class TraitsUnion(unittest.TestCase):
         self.assertAlmostEqual(sortie[0]['t1'], 0.58)  # fin du second jeton
 
 
+_SPEC_SRT = importlib.util.spec_from_file_location(
+    'srt_from_script', Path(__file__).resolve().parent / 'srt_from_script.py')
+srt = importlib.util.module_from_spec(_SPEC_SRT)
+_SPEC_SRT.loader.exec_module(srt)
+
+
+class DecoupageSousTitres(unittest.TestCase):
+    """Ce que le spectateur lit : deux lignes, 42 caractères, et un chiffre entier."""
+
+    @staticmethod
+    def _mots(texte, pas=0.4):
+        return [{'w': w, 't0': i * pas, 't1': (i + 1) * pas}
+                for i, w in enumerate(texte.split())]
+
+    def test_le_nombre_ne_se_separe_jamais_de_son_unite(self):
+        # Mesuré sur le Short L5 : « Kimi K3, 2700 » finissait un carton et « milliards »
+        # ouvrait le suivant — le chiffre est pourtant l'argument de la vidéo.
+        cartons = srt.decouper(self._mots(
+            'Nouveau monstre Open Source, Kimi K3, 2700 milliards de paramètres mais surtout'))
+        for carton in cartons:
+            self.assertNotEqual(carton[-1]['w'].rstrip('.,'), '2700',
+                                'le nombre a été coupé de son unité')
+
+    def test_aucune_ligne_ne_depasse_deux_fois_la_largeur(self):
+        texte = ('Un carton doit toujours tenir sur deux lignes de quarante-deux signes '
+                 'sans quoi le lecteur de YouTube replie le texte où il veut')
+        for carton in srt.decouper(self._mots(texte)):
+            rendu = srt.plier(' '.join(m['w'] for m in carton))
+            self.assertLessEqual(len(rendu.split('\n')), srt.MAX_LIGNES, rendu)
+
+    def test_le_pliage_ne_coupe_pas_dans_un_mot(self):
+        rendu = srt.plier('Claude Opus 4.6 tourne en local sur une machine normale aujourd hui')
+        self.assertEqual(rendu.replace('\n', ' '),
+                         'Claude Opus 4.6 tourne en local sur une machine normale aujourd hui')
+
+    def test_les_instants_ne_se_chevauchent_pas(self):
+        cartons = srt.decouper(self._mots('un deux trois quatre cinq six sept huit neuf dix'))
+        bornes = srt.bornes(cartons, fin_totale=99.0)
+        for (a0, a1), (b0, _) in zip(bornes, bornes[1:]):
+            self.assertLessEqual(a1, b0 + 1e-9, f'{a1} déborde sur {b0}')
+            self.assertLess(a0, a1)
+
+    def test_un_carton_bref_est_etire_jusqu_au_seuil_de_lecture(self):
+        cartons = [[{'w': 'Ouvert.', 't0': 1.0, 't1': 1.05}],
+                   [{'w': 'Ensuite.', 't0': 9.0, 't1': 9.4}]]
+        bornes = srt.bornes(cartons, fin_totale=20.0)
+        self.assertAlmostEqual(bornes[0][1] - bornes[0][0], srt.MIN_DUREE, places=3)
+
+    def test_le_srt_rendu_est_bien_forme(self):
+        alignes = self._mots('Qwen 3.8 tourne en local. Gratuit. Hors ligne.')
+        rendu = srt.rendre_srt(alignes, fin_totale=10.0)
+        self.assertTrue(rendu.startswith('1\n'))
+        self.assertIn(' --> ', rendu)
+        self.assertNotIn('\n\n\n', rendu)
+
+
 if __name__ == '__main__':
     unittest.main(verbosity=2)

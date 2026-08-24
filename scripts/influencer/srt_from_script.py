@@ -14,7 +14,7 @@ Usage :
     srt_from_script.py --audio CLIP.mp4 --script texte.txt --out CLIP.fr.srt
     srt_from_script.py --words mots.json --script texte.txt --out sortie.srt --duree 1088
 """
-import argparse, importlib.util, json, os, sys
+import argparse, importlib.util, json, os, re, sys
 from pathlib import Path
 
 _ICI = Path(__file__).resolve().parent
@@ -72,24 +72,62 @@ def plier(texte, largeur=LARGEUR_LIGNE):
 MAX_CARACTERES = LARGEUR_LIGNE * MAX_LIGNES - 4
 
 
+# Unités qui ne se séparent jamais du nombre qui les précède : « 2 700 » seul en fin de
+# carton, puis « milliards » au carton suivant, casse la lecture d'un chiffre — et le chiffre
+# est souvent l'argument de la vidéo.
+_MAGNITUDES = re.compile(
+    r'^(?:milliards?|millions?|milliers?|mille|cents?|centimes?|dollars?|euros?|%|'
+    r'[kKMGTP]?[oO]|[kKMGT]?octets?|tokens?|secondes?|minutes?|heures?|jours?|semaines?|mois|ans?)\b',
+    re.I)
+
+
+def _coupure_interdite(precedent, suivant):
+    """La frontière entre ces deux mots casserait-elle une unité de sens ?"""
+    if ws.sticky_with_next(precedent, suivant):
+        return True
+    fin_chiffre = re.search(r'\d[\s\u00a0]*$', precedent['w'].rstrip('.,;:'))
+    return bool(fin_chiffre and _MAGNITUDES.match(suivant['w']))
+
+
 def decouper(mots, max_car=MAX_CARACTERES, max_dur=3.5):
     """Groupe les mots en cartons : bornés en caractères ET en durée.
 
     On ne coupe sur un point que si le carton en cours est déjà lisible : la narration de
     Lisa enchaîne des phrases très courtes (« Ouvert. », « Pas dans votre salon. ») qui
     durent parfois 50 ms, et couper sur chacune produirait des cartons illisibles.
+
+    Quand la longueur force une coupure, on recule d'un mot plutôt que de séparer un nombre
+    de son unité.
     """
     groupes, courant = [], []
-    for mot in mots:
+
+    def fermer(suivant):
+        """Clôt le carton courant, en reculant si la coupure casserait une unité de sens.
+
+        `suivant` est le mot qui commencera le carton d'après : c'est lui qui dit si la
+        frontière est acceptable (« 2 700 » ne doit pas rester seul avant « milliards »).
+        """
+        nonlocal courant
+        report = []
+        while len(courant) >= 2:
+            apres = report[0] if report else suivant
+            if apres is None or not _coupure_interdite(courant[-1], apres):
+                break
+            report.insert(0, courant.pop())
+        groupes.append(courant)
+        courant = report
+
+    for i, mot in enumerate(mots):
+        suivant = mots[i + 1] if i + 1 < len(mots) else None
         projete = len(' '.join(m['w'] for m in courant + [mot]))
         if courant and projete > max_car:
-            groupes.append(courant); courant = []
+            fermer(mot)
         courant.append(mot)
         duree = courant[-1]['t1'] - courant[0]['t0']
         lisible = duree >= MIN_DUREE and len(courant) >= MIN_MOTS
         fin_phrase = mot['w'].rstrip().endswith(('.', '!', '?', '…', ':'))
         if duree >= max_dur or (fin_phrase and lisible):
-            groupes.append(courant); courant = []
+            fermer(suivant)
     if courant:
         groupes.append(courant)
     return groupes
