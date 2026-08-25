@@ -3303,16 +3303,15 @@ describe('AgentExecutor', () => {
       ).resolves.toBeDefined();
     });
 
-    it('ask_user streaming-only (décision #3 lock-in): __INTERACTIVE_SHELL_REQUEST__ in tool result yields ask_user only in streaming', async () => {
-      // Le sequential path retourne ChatEntry[] synchrone — il ne peut pas
-      // suspendre pour demander à l'utilisateur. Cette asymétrie est par design
-      // (décision #3). La fusion doit conserver : streaming yield ask_user,
-      // sequential drop silencieusement.
+    it('preserves an interactive-shell question for sequential callers and yields ask_user while streaming', async () => {
+      // The sequential path cannot suspend for an answer, but it must still
+      // return the question so headless, HTTP, MCP, cron, and channel callers
+      // can surface it and submit the answer as a later turn.
       const toolCall = makeToolCall('shell', { command: 'sudo rm -rf /' }, 'shell_1');
       const interactivePayload = `${INTERACTIVE_SHELL_SIGNAL}:Confirm dangerous command?`;
 
-      // Sequential — Phase D: consumes runTurnLoop. Even with the signal in
-      // tool output, no ask_user entry should be returned (events dropped).
+      // Sequential — Phase D consumes runTurnLoop and materializes the
+      // otherwise streaming-only question as an assistant entry.
       const depsSeq = createMockDeps();
       setupLLMFlow(depsSeq, [
         { content: 'r0', tool_calls: [toolCall] },
@@ -3323,8 +3322,10 @@ describe('AgentExecutor', () => {
         output: interactivePayload,
       });
       const seqEntries = await new AgentExecutor(depsSeq, createMockConfig()).processUserMessage('go', [], []);
-      const seqAskUser = seqEntries.find(e => (e as { type: string }).type === 'ask_user' as never);
-      expect(seqAskUser).toBeUndefined();
+      expect(seqEntries.at(-1)).toMatchObject({
+        type: 'assistant',
+        content: expect.stringContaining('Do you want to open an interactive terminal'),
+      });
 
       // Streaming — même setup, doit yield un chunk ask_user.
       const depsStream = createMockDeps();

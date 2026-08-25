@@ -537,8 +537,9 @@ export interface ExecutorConfig {
  * of the task #5 fusion (~/.claude/plans/vague1-task5-design-decisions.md).
  * Once the dual paths collapse to a single source of truth, the streaming
  * adapter forwards events directly and the sequential adapter maps them
- * to ChatEntry[] (dropping streaming-only types like ask_user, tool_stream,
- * token_count — décision #3).
+ * to ChatEntry[]. Progress-only events such as tool_stream and token_count
+ * are dropped; ask_user is materialized as assistant text so non-streaming
+ * callers do not lose a question that requires a later user turn.
  *
  * Future raffinement: replace alias with a proper discriminated union once
  * we have full visibility on the streaming yield surface.
@@ -917,10 +918,11 @@ export class AgentExecutor {
    * into `history` and the right messages into `messages` — we just slice
    * the new entries out of `history`.
    *
-   * Streaming-only events (`ask_user`, `tool_stream`, `token_count`,
-   * `reasoning`, `steer`) are silently dropped per décision #3 of the plan
-   * `~/.claude/plans/vague1-task5-design-decisions.md` — the sequential
-   * caller cannot suspend, so these have no meaningful sync representation.
+   * Progress-only events (`tool_stream`, `token_count`, `reasoning`, `steer`)
+   * are dropped per décision #3 of the fusion plan. `ask_user` is different:
+   * the sequential caller cannot suspend, but it can surface the question and
+   * accept the answer as a later turn, so the collector persists it as an
+   * assistant entry in both history projections.
    *
    * The sequential path has no abortController support (signature-bound) —
    * we pass null to runTurnLoop and rely on its internal handling.
@@ -936,7 +938,7 @@ export class AgentExecutor {
     introspectionText?: string,
   ): Promise<ChatEntry[]> {
     const initialHistoryLength = history.length;
-    for await (const _event of this.runMeasuredTurn(
+    for await (const event of this.runMeasuredTurn(
       message,
       history,
       messages,
@@ -947,7 +949,13 @@ export class AgentExecutor {
       surface,
       introspectionText,
     )) {
-      // Events dropped. runTurnLoop pushes ChatEntries to history directly.
+      if (event.type === 'ask_user' && event.askUser?.question.trim()) {
+        const content = sanitizeAssistantOutput(event.askUser.question.trim());
+        history.push({ type: 'assistant', content, timestamp: new Date() });
+        messages.push({ role: 'assistant', content });
+      }
+      // Other entries are pushed by runTurnLoop itself. Progress-only events
+      // have no durable sequential representation and are intentionally dropped.
     }
     return history.slice(initialHistoryLength);
   }
