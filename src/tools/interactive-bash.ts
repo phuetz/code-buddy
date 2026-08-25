@@ -1,6 +1,9 @@
 import { EventEmitter } from "events";
 import { exec } from "child_process";
 import { ToolResult, getErrorMessage } from "../types/index.js";
+import { getFilteredEnv } from "./bash/command-validator.js";
+import { SAFE_ENV_VARS } from "./bash/security-patterns.js";
+import { getShellEnvPolicy } from "../security/shell-env-policy.js";
 
 // Note: node-pty is an optional dependency for PTY support
 // If not available, falls back to regular child_process
@@ -56,6 +59,34 @@ function validateCommand(command: string): string | null {
     }
   }
   return null;
+}
+
+/**
+ * Build the environment for both interactive execution paths.
+ *
+ * A PTY needs the same terminal variables as a normal shell (PATH, HOME,
+ * SHELL, locale, etc.), but inheriting all of process.env would also carry
+ * interpreter injection variables such as NODE_OPTIONS, NODE_PATH, or
+ * PYTHONPATH. Explicit overrides use the same allowlist so they cannot reopen
+ * that gap after the inherited environment has been filtered.
+ */
+function buildInteractiveEnv(overrides: Record<string, string> = {}): NodeJS.ProcessEnv {
+  const safeOverrides: Record<string, string> = {};
+
+  for (const [key, value] of Object.entries(overrides)) {
+    if (!SAFE_ENV_VARS.has(key)) continue;
+    // eslint-disable-next-line no-control-regex
+    safeOverrides[key] = value.replace(/[\x00-\x1f\x7f]/g, '');
+  }
+
+  const env = getShellEnvPolicy().buildEnv({
+    ...getFilteredEnv(),
+    ...safeOverrides,
+  });
+
+  // node-pty needs a terminal type even when the parent process has none.
+  env.TERM = 'xterm-256color';
+  return env;
 }
 
 export interface InteractiveSession {
@@ -122,11 +153,7 @@ export class InteractiveBashTool extends EventEmitter {
           cols,
           rows,
           cwd: options.cwd || process.cwd(),
-          env: {
-            ...process.env,
-            ...options.env,
-            TERM: "xterm-256color",
-          },
+          env: buildInteractiveEnv(options.env),
         });
 
         let output = "";
@@ -212,7 +239,7 @@ export class InteractiveBashTool extends EventEmitter {
         cwd: process.cwd(),
         shell: '/bin/bash',
         env: {
-          ...process.env,
+          ...buildInteractiveEnv(),
           // Disable shell history for security
           HISTFILE: "/dev/null",
           HISTSIZE: "0",
