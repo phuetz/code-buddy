@@ -214,4 +214,33 @@ describe('Model Utilities', () => {
       expect(formatted).toContain('Supported: No');
     });
   });
+
+  describe('modèles servis par une passerelle', () => {
+    // SUPPORTED_MODELS ne liste que les fournisseurs directs ; les modèles OpenRouter et
+    // NVIDIA sont décrits dans model-tools.ts. Sans le recours à cette source, ils étaient
+    // tous annoncés « non supportés » et plafonnés à 8 192 tokens — le million de contexte
+    // de minimax/minimax-m3 restait inutilisé et son prompt système tronqué à 14 336.
+    it('reconnaît un modèle décrit dans model-tools et rend son vrai contexte', () => {
+      const info = getModelInfo('minimax/minimax-m3:free');
+      expect(info.isSupported).toBe(true);
+      expect(info.maxTokens).toBe(1048576);
+    });
+
+    it('distingue les paliers d\'un même modèle', () => {
+      expect(getModelInfo('minimax/minimax-m2.7:free').maxTokens).toBe(196608);
+      expect(getModelInfo('minimax/minimax-m3:batch').maxTokens).toBe(524288);
+    });
+
+    it('laisse un modèle vraiment inconnu au repli prudent', () => {
+      const info = getModelInfo('fournisseur-imaginaire/modele-inexistant');
+      expect(info.isSupported).toBe(false);
+      expect(info.maxTokens).toBe(8192);
+    });
+
+    it('ne détourne pas un modèle listé dans SUPPORTED_MODELS', () => {
+      const info = getModelInfo('grok-4-latest');
+      expect(info.isSupported).toBe(true);
+      expect(info.provider).toBe('xai');
+    });
+  });
 });

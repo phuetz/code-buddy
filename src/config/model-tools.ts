@@ -98,6 +98,75 @@ const DEFAULT_MODEL_CONFIGS: ModelToolConfig[] = [
     maxOutputTokens: 8192,
     patchFormat: 'search_replace',
   },
+  // MiniMax (OpenRouter). Relevé le 25/08/2026 sur /api/v1/models : m3 accepte
+  // 1 048 576 tokens de contexte — texte, image ET vidéo — pour 0 $ au palier `:free`.
+  // Sans ces entrées, un modèle inconnu retombe sur 32 768 de contexte et son prompt
+  // système est tronqué à 14 336 tokens : le million annoncé reste inutilisé.
+  // Le palier gratuit borne les requêtes par jour, pas la taille du contexte.
+  {
+    model: 'minimax/minimax-m3:batch',
+    strengths: ['reasoning', 'code', 'long-context', 'cheap', 'vision'],
+    supportsReasoning: true,
+    supportsToolCalls: true,
+    supportsVision: true,
+    contextWindow: 524288,
+    maxOutputTokens: 32768,
+    patchFormat: 'search_replace',
+  },
+  {
+    // maxOutputTokens volontairement bas : OpenRouter n'en déclare aucun pour le palier
+    // gratuit, et c'est ce qui réserve la place au prompt — ici ~491 K tokens.
+    model: 'minimax/minimax-m3*',
+    strengths: ['reasoning', 'code', 'long-context', 'cheap', 'vision'],
+    supportsReasoning: true,
+    supportsToolCalls: true,
+    supportsVision: true,
+    contextWindow: 1048576,
+    maxOutputTokens: 65536,
+    patchFormat: 'search_replace',
+  },
+  {
+    model: 'minimax/minimax-m2.7:free',
+    strengths: ['reasoning', 'code', 'long-context', 'cheap'],
+    supportsReasoning: true,
+    supportsToolCalls: true,
+    supportsVision: false,
+    contextWindow: 196608,
+    maxOutputTokens: 32768,
+    patchFormat: 'search_replace',
+  },
+  {
+    model: 'minimax/minimax-m1',
+    strengths: ['reasoning', 'long-context', 'cheap'],
+    supportsReasoning: true,
+    supportsToolCalls: true,
+    supportsVision: false,
+    contextWindow: 1000000,
+    maxOutputTokens: 40000,
+    patchFormat: 'search_replace',
+  },
+  {
+    // minimax-01 n'expose PAS d'appel d'outils : à réserver à la lecture, pas à l'agent.
+    model: 'minimax/minimax-01',
+    strengths: ['long-context', 'cheap', 'vision'],
+    supportsReasoning: false,
+    supportsToolCalls: false,
+    supportsVision: true,
+    contextWindow: 1000192,
+    maxOutputTokens: 65536,
+    patchFormat: 'search_replace',
+  },
+  {
+    // m2, m2.1, m2.5, m2.7 et m2-her : tous à 204 800 de contexte.
+    model: 'minimax/minimax-m2*',
+    strengths: ['reasoning', 'code', 'cheap'],
+    supportsReasoning: true,
+    supportsToolCalls: true,
+    supportsVision: false,
+    contextWindow: 204800,
+    maxOutputTokens: 32768,
+    patchFormat: 'search_replace',
+  },
   {
     model: 'qwen/qwen3-coder:free',
     strengths: ['code', 'french', 'cheap'],
@@ -807,6 +876,24 @@ function matchModel(modelName: string, pattern: string): boolean {
  * Results are cached per model name (when no custom configs are provided).
  */
 const _configCache = new Map<string, ModelToolConfig>();
+
+/**
+ * Le motif qui couvre ce modèle, ou `null` s'il n'en existe aucun.
+ *
+ * `getModelToolConfig` renvoie toujours quelque chose : un repli prudent quand le modèle
+ * est inconnu. Impossible, dès lors, de distinguer « déclaré » de « deviné ». Cette
+ * fonction le dit — c'est ce qui permet à `getModelInfo` de reconnaître les modèles
+ * décrits ici sans les dupliquer dans `SUPPORTED_MODELS`.
+ */
+export function findModelToolConfig(
+  modelName: string,
+  customConfigs?: ModelToolConfig[],
+): ModelToolConfig | null {
+  for (const config of [...(customConfigs || []), ...DEFAULT_MODEL_CONFIGS]) {
+    if (matchModel(modelName, config.model)) return config;
+  }
+  return null;
+}
 
 export function getModelToolConfig(
   modelName: string,

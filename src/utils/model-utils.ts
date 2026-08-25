@@ -3,6 +3,7 @@
  */
 
 import { SUPPORTED_MODELS } from '../config/constants.js';
+import { findModelToolConfig } from '../config/model-tools.js';
 import { ValidationError } from './errors.js';
 
 export type ModelName = keyof typeof SUPPORTED_MODELS;
@@ -38,6 +39,20 @@ export function getModelInfo(model: string): ModelInfo {
   if (supportedModel) {
     return {
       ...SUPPORTED_MODELS[supportedModel],
+      isSupported: true,
+    };
+  }
+
+  // `SUPPORTED_MODELS` ne liste que les modèles des fournisseurs directs. Les modèles
+  // servis par une passerelle (OpenRouter, NVIDIA…) sont décrits dans `model-tools.ts`,
+  // qui est la source de vérité des capacités par modèle. Sans ce recours, tous étaient
+  // annoncés « non supportés » et retombaient sur 8 192 tokens : le million de contexte
+  // de minimax/minimax-m3 restait inutilisé, et son prompt système tronqué à 14 336.
+  const parCapacites = findModelToolConfig(model);
+  if (parCapacites?.contextWindow) {
+    return {
+      maxTokens: parCapacites.contextWindow,
+      provider: 'unknown',
       isSupported: true,
     };
   }
