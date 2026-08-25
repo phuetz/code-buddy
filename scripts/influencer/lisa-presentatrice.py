@@ -59,9 +59,26 @@ ROOT = Path(__file__).resolve().parents[2]
 MEDIA_ENV = Path('~/.codebuddy/media.env').expanduser()
 ELEVEN_USAGE = Path('~/.codebuddy/elevenlabs-voice-usage.json').expanduser()
 ELEVEN_MONTHLY_CAP = 200_000
-LISA_VOICE_ID = '3fxbs2pB9bs8S6Z1N38A'
-DEFAULT_AVATAR_ID = '4507aec10b6f4cdbab4262180308bb69'
-DEFAULT_AVATAR_PREVIEW_TOKEN = 'ca66500fbb7f4abf8a43e5d413753cc5'
+# Identifiants de comptes : ils vivent dans ~/.codebuddy/media.env, pas dans le dépôt.
+# Ce dépôt est PUBLIC ; un jeton de prévisualisation HeyGen écrit en dur ici serait
+# lisible de tous au premier push. Les variables d'environnement priment, puis media.env.
+def _identifiant(cle: str, defaut: str = '') -> str:
+    valeur = os.environ.get(cle)
+    if valeur:
+        return valeur.strip()
+    try:
+        for ligne in Path('~/.codebuddy/media.env').expanduser().read_text(encoding='utf-8').splitlines():
+            ligne = ligne.strip()
+            if ligne.startswith(f'{cle}=') and not ligne.startswith('#'):
+                return ligne.split('=', 1)[1].strip().strip('\'"')
+    except OSError:
+        pass
+    return defaut
+
+
+LISA_VOICE_ID = _identifiant('LISA_VOICE_ID', '3fxbs2pB9bs8S6Z1N38A')
+DEFAULT_AVATAR_ID = _identifiant('LISA_AVATAR_ID')
+DEFAULT_AVATAR_PREVIEW_TOKEN = _identifiant('LISA_AVATAR_PREVIEW_TOKEN')
 DEFAULT_MUSIC = (
     Path('~/.codebuddy/media-audio/music/elegant').expanduser()
     / 'ES_Somewhat Elegant - Dye O.mp3'
