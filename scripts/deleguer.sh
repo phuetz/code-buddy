@@ -120,8 +120,12 @@ case "$MOTEUR" in
     GKEY=$(grep -E "^(export )?GMI_API_KEY=" "$HOME/.codebuddy/media.env" 2>/dev/null | head -1 | sed 's/^export //' | cut -d= -f2- | tr -d "'\"")
     [ -n "$GKEY" ] || { echo "GMI_API_KEY introuvable dans ~/.codebuddy/media.env" >&2; exit 2; }
     CB_SRC=${CB_SRC:-$HOME/code-buddy-vitrine}; [ -f "$CB_SRC/src/index.ts" ] || CB_SRC=$HOME/code-buddy
-    (cd "$DEPOT" && CODEBUDDY_PROVIDER=openai-compatible \
-       OPENAI_API_KEY="$GKEY" OPENAI_BASE_URL="https://api.gmi-serving.com/v1" \
+    # `CODEBUDDY_PROVIDER=openai-compatible` + `OPENAI_*` n'est PAS reconnu par le dispatcher
+    # (mesuré le 25/08 : « Auto-detected provider: custom » puis « No AI provider configured »,
+    # échec en 1 s). La voie qui marche est le couple GROK_API_KEY/GROK_BASE_URL, que
+    # `src/codebuddy/client.ts` route vers OpenAICompatProvider — le nom de la variable est
+    # historique, il ne désigne pas xAI.
+    (cd "$DEPOT" && GROK_API_KEY="$GKEY" GROK_BASE_URL="https://api.gmi-serving.com/v1" \
        "$CB_SRC/node_modules/.bin/tsx" "$CB_SRC/src/index.ts" -m "${GMI_MODELE:-MiniMaxAI/MiniMax-M3}" \
        --permission-mode acceptEdits -p "$(cat "$CONSIGNE")") 2>&1 | tee "$LOG"
     ;;
