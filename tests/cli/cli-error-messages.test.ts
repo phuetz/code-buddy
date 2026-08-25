@@ -56,6 +56,22 @@ describe('CLI error messages', () => {
     expect(text).toContain('acceptEdits');
   }, 30_000);
 
+  it('keeps the full nested command path in the global-option example', async () => {
+    const result = await runCli(['skills', 'list', '--permission-mode', 'acceptEdits']);
+    const text = `${result.stdout}\n${result.stderr}`;
+    expect(result.exitCode).toBe(1);
+    expect(text).toContain('buddy --permission-mode <value> skills list');
+  }, 20_000);
+
+  it('adds the global-option hint to utility commands loaded as a group', async () => {
+    const result = await runCli(['doctor', '--permission-mode', 'acceptEdits']);
+    const text = `${result.stdout}\n${result.stderr}`;
+    expect(result.exitCode).toBe(1);
+    expect(text).toContain("unknown option '--permission-mode'");
+    expect(text).toContain('buddy --permission-mode <value> doctor');
+    expect(text).toContain('acceptEdits');
+  }, 20_000);
+
   it('names the received --max-turns value', async () => {
     const result = await runCli(['loop', 'x', '--max-turns', 'abc']);
     const text = `${result.stdout}\n${result.stderr}`;

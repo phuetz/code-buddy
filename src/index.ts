@@ -3248,6 +3248,10 @@ const loadUtilityCommands = async () => {
   removeCommands(program, utilityCommandNames);
   const { registerUtilityCommands } = await import('./commands/cli/utility-commands.js');
   registerUtilityCommands(program);
+  for (const name of utilityCommandNames) {
+    const command = program.commands.find((candidate) => candidate.name() === name);
+    if (command) attachUnknownOptionHint(command, program);
+  }
   await program.parseAsync(process.argv);
 };
 

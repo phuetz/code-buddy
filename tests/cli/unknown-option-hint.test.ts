@@ -59,4 +59,20 @@ describe('attachUnknownOptionHint', () => {
     expect(err.text).toContain("unknown option '--not-a-real-flag'");
     expect(err.text).not.toContain('BEFORE the subcommand');
   });
+
+  it('keeps the complete nested command path in the example', () => {
+    const err = { text: '' };
+    const program = new Command().name('buddy').enablePositionalOptions().exitOverride();
+    program.configureOutput({ writeErr: (s) => { err.text += s; } });
+    program.option('--permission-mode <mode>', 'permission mode');
+    const skills = program.command('skills');
+    const list = skills.command('list').exitOverride();
+    list.configureOutput({ writeErr: (s) => { err.text += s; } });
+    attachUnknownOptionHint(skills, program);
+
+    expect(() =>
+      program.parse(['skills', 'list', '--permission-mode', 'acceptEdits'], { from: 'user' }),
+    ).toThrow();
+    expect(err.text).toContain('buddy --permission-mode <value> skills list');
+  });
 });

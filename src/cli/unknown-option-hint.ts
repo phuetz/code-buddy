@@ -66,9 +66,9 @@ function takesValue(longFlag: string): boolean {
 }
 
 /** Build the user-facing error for a root option used after a subcommand. */
-export function formatGlobalOptionMisplaced(flag: string, commandName: string, longFlag: string = flag): string {
+export function formatGlobalOptionMisplaced(flag: string, commandPath: string, longFlag: string = flag): string {
   const valueSlot = takesValue(longFlag) ? ' <value>' : '';
-  const exampleCommand = commandName && commandName !== 'buddy' ? commandName : '<command>';
+  const exampleCommand = commandPath && commandPath !== 'buddy' ? commandPath : '<command>';
   const lines = [
     `error: unknown option '${flagName(flag)}'`,
     '',
@@ -93,6 +93,16 @@ function isAllowingUnknown(command: Command): boolean {
   return Boolean((command as unknown as { _allowUnknownOption?: boolean })._allowUnknownOption);
 }
 
+function relativeCommandPath(command: Command, root: Command): string {
+  const names: string[] = [];
+  let current: Command | null = command;
+  while (current && current !== root) {
+    names.unshift(current.name());
+    current = current.parent;
+  }
+  return names.join(' ');
+}
+
 /**
  * When a subcommand sees a flag that actually belongs on the root program,
  * replace Commander's bare « unknown option » with where to put it.
@@ -106,7 +116,9 @@ export function attachUnknownOptionHint(command: Command, root: Command): void {
     if (isAllowingUnknown(this)) return;
     const name = flagName(flag);
     if (flags.has(name)) {
-      this.error(formatGlobalOptionMisplaced(flag, this.name(), longFlagOf(root, name)));
+      this.error(
+        formatGlobalOptionMisplaced(flag, relativeCommandPath(this, root), longFlagOf(root, name)),
+      );
       return;
     }
     proto.unknownOption.call(this, flag);
