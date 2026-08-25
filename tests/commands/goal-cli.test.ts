@@ -435,7 +435,7 @@ describe('goal CLI numeric option parsing', () => {
       '--max-turns must be a positive integer'
     );
     expect(() => parsePositiveIntegerOption('abc', '--max-tool-rounds')).toThrow(
-      '--max-tool-rounds must be a positive integer'
+      '--max-tool-rounds must be a positive integer ≥ 1 (received "abc")'
     );
     expect(() => parsePositiveIntegerOption('1e3', '--max-turns')).toThrow(
       '--max-turns must be a positive integer'

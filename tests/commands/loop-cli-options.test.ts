@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createLoopCommand } from '../../src/commands/loop-cli.js';
+import { createLoopCommand, validateLoopCommandNumericOptions } from '../../src/commands/loop-cli.js';
 
 describe('buddy loop — options de ligne de commande', () => {
   it('accepte --permission-mode APRÈS la sous-commande', () => {
@@ -17,5 +17,14 @@ describe('buddy loop — options de ligne de commande', () => {
     const option = createLoopCommand().options.find((o) => o.long === '--permission-mode');
     expect(option?.description).toContain('acceptEdits');
     expect(option?.description).toContain('bypassPermissions');
+  });
+
+  it('nomme la valeur reçue pour --max-turns et --budget', () => {
+    expect(() =>
+      validateLoopCommandNumericOptions(['node', 'buddy', 'loop', 'x', '--max-turns', 'abc']),
+    ).toThrow(/received "abc"/);
+    expect(() =>
+      validateLoopCommandNumericOptions(['node', 'buddy', 'loop', 'x', '--budget', '-5']),
+    ).toThrow(/received "-5"/);
   });
 });

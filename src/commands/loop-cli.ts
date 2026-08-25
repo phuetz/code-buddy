@@ -29,9 +29,12 @@ import { InvalidArgumentError } from 'commander';
 import * as path from 'path';
 
 function parsePositiveFloatOption(value: string, optionName: string): number {
-  const n = Number(value.trim());
+  const trimmed = value.trim();
+  const n = Number(trimmed);
   if (!Number.isFinite(n) || n <= 0) {
-    throw new InvalidArgumentError(`${optionName} must be a positive number`);
+    throw new InvalidArgumentError(
+      `${optionName} must be a positive number (received ${JSON.stringify(trimmed)})`,
+    );
   }
   return n;
 }

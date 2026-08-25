@@ -293,7 +293,9 @@ export function parsePositiveIntegerOption(value: string, optionName: string): n
   const trimmed = value.trim();
   const n = Number(trimmed);
   if (!/^[1-9]\d*$/.test(trimmed) || !Number.isSafeInteger(n)) {
-    throw new InvalidArgumentError(`${optionName} must be a positive integer`);
+    throw new InvalidArgumentError(
+      `${optionName} must be a positive integer ≥ 1 (received ${JSON.stringify(trimmed)})`,
+    );
   }
   return n;
 }
@@ -336,9 +338,28 @@ export function createGoalCommand(): Command {
       value => parsePositiveIntegerOption(value, '--max-tool-rounds'),
       50
     )
+    // Same placement trap as `buddy loop`: a root `--permission-mode` is refused
+    // after the subcommand. Goal is the other unattended loop, so accept it here too.
+    .option(
+      '--permission-mode <mode>',
+      'Permission posture: default, plan, acceptEdits, dontAsk, bypassPermissions',
+    )
     .action(async (goal: string, options, command) => {
       try {
         const cwd = await prepareGoalCliWorkspace(command);
+
+        const permissionMode: string | undefined =
+          options.permissionMode ?? command?.optsWithGlobals?.()?.permissionMode;
+        if (permissionMode) {
+          const { getPermissionModeManager } = await import('../security/permission-modes.js');
+          const modes = ['default', 'plan', 'acceptEdits', 'dontAsk', 'bypassPermissions'] as const;
+          if (!modes.includes(permissionMode as (typeof modes)[number])) {
+            throw new Error(
+              `Unknown permission mode: ${permissionMode}. Values: ${modes.join(', ')}`,
+            );
+          }
+          getPermissionModeManager().setMode(permissionMode as (typeof modes)[number]);
+        }
 
         const modelOverride: string | undefined = options.model ?? command?.optsWithGlobals?.()?.model;
         const resolved = resolveCommandProvider({ explicitModel: modelOverride });
