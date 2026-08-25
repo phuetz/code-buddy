@@ -10,6 +10,9 @@
 #   oc     OpenCode Go (abonnement)     — 61 modèles, 5 lignées inédites
 #                                         (kimi, minimax, deepseek, glm, qwen) ;
 #                                         choisir avec OC_MODELE=<id>
+#   gmi    GMI Cloud — MiniMax M3 ILLIMITÉ jusqu'au 6/09/2026 (1 M de contexte,
+#                                         texte+image+vidéo). La seule voie vers M3 à 0 $
+#                                         depuis le retrait du `:free` d'OpenRouter.
 #   minimax OpenRouter — m2.7:free (196 K de contexte, 0 $) par défaut ;
 #                                         MINIMAX_MODELE=minimax/minimax-m3 pour 1 M de
 #                                         contexte + vision, mais PAYANT (~0,30 $/M).
@@ -101,6 +104,28 @@ case "$MOTEUR" in
        "$CB_SRC/node_modules/.bin/tsx" "$CB_SRC/src/index.ts" -m "${OLLAMA_MODELE:-qwen3.8:27b}" \
        --permission-mode acceptEdits -p "$(cat "$CONSIGNE")") 2>&1 | tee "$LOG"
     ;;
+  gmi)
+    # GMI Cloud (api.gmi-serving.com), compatible OpenAI. Offre MiniMax : M3, M2.7, Speech 2.8
+    # et Music 3.0 ILLIMITÉS du 24/08 au 6/09/2026 — https://www.gmicloud.ai/minimax-week
+    #
+    # M3 = 1 048 576 tokens de contexte, texte + image + vidéo. C'est la seule voie vers M3 à
+    # coût nul depuis que le palier `:free` d'OpenRouter a été retiré (mesuré le 25/08 : vivant
+    # à 05h, mort à 07h). Après le 6/09, vérifier avant de s'en servir.
+    #
+    # ⚠️ Cloudflare renvoie « error code: 1010 » sur l'agent utilisateur par défaut de Python
+    # et de certains clients : il faut un User-Agent de navigateur. curl et Node passent.
+    #
+    # Identifiants exacts : MiniMaxAI/MiniMax-M3, MiniMaxAI/MiniMax-M2.7, MiniMaxAI/MiniMax-M2.5.
+    # Prompts → GMI Cloud : rien de confidentiel.
+    GKEY=$(grep -E "^(export )?GMI_API_KEY=" "$HOME/.codebuddy/media.env" 2>/dev/null | head -1 | sed 's/^export //' | cut -d= -f2- | tr -d "'\"")
+    [ -n "$GKEY" ] || { echo "GMI_API_KEY introuvable dans ~/.codebuddy/media.env" >&2; exit 2; }
+    CB_SRC=${CB_SRC:-$HOME/code-buddy-vitrine}; [ -f "$CB_SRC/src/index.ts" ] || CB_SRC=$HOME/code-buddy
+    (cd "$DEPOT" && CODEBUDDY_PROVIDER=openai-compatible \
+       OPENAI_API_KEY="$GKEY" OPENAI_BASE_URL="https://api.gmi-serving.com/v1" \
+       "$CB_SRC/node_modules/.bin/tsx" "$CB_SRC/src/index.ts" -m "${GMI_MODELE:-MiniMaxAI/MiniMax-M3}" \
+       --permission-mode acceptEdits -p "$(cat "$CONSIGNE")") 2>&1 | tee "$LOG"
+    ;;
+
   minimax)
     # OpenRouter, MiniMax. Défaut : m2.7:free (196 608 de contexte, 0 $).
     #

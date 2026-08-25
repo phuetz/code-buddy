@@ -107,6 +107,28 @@ const DEFAULT_MODEL_CONFIGS: ModelToolConfig[] = [
   // Sans ces entrées, un modèle inconnu retombe sur 32 768 de contexte et son prompt
   // système est tronqué à 14 336 tokens : le million annoncé reste inutilisé.
   // Le palier gratuit borne les requêtes par jour, pas la taille du contexte.
+  // GMI Cloud sert MiniMax sous d'autres identifiants (MiniMaxAI/MiniMax-M3, insensible
+  // à la casse ici). Mêmes capacités que chez OpenRouter — c'est le même modèle.
+  {
+    model: 'MiniMaxAI/MiniMax-M3',
+    strengths: ['reasoning', 'code', 'long-context', 'cheap', 'vision'],
+    supportsReasoning: true,
+    supportsToolCalls: true,
+    supportsVision: true,
+    contextWindow: 1048576,
+    maxOutputTokens: 65536,
+    patchFormat: 'search_replace',
+  },
+  {
+    model: 'MiniMaxAI/MiniMax-M2*',
+    strengths: ['reasoning', 'code', 'cheap'],
+    supportsReasoning: true,
+    supportsToolCalls: true,
+    supportsVision: false,
+    contextWindow: 204800,
+    maxOutputTokens: 32768,
+    patchFormat: 'search_replace',
+  },
   {
     model: 'minimax/minimax-m3:batch',
     strengths: ['reasoning', 'code', 'long-context', 'cheap', 'vision'],
