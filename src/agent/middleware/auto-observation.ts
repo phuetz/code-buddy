@@ -74,8 +74,6 @@ export class AutoObservationMiddleware implements ConversationMiddleware {
   }
 
   beforeTurn(_context: MiddlewareContext): MiddlewareResult {
-    // Reset per-turn observation counter
-    this.observationsThisTurn = 0;
     return { action: 'continue' };
   }
 
@@ -285,5 +283,10 @@ export class AutoObservationMiddleware implements ConversationMiddleware {
 
   private sleep(ms: number): Promise<void> {
     return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  /** Reset the per-user-task cap; beforeTurn runs once per LLM/tool round. */
+  reset(): void {
+    this.observationsThisTurn = 0;
   }
 }

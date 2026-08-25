@@ -75,7 +75,7 @@ describe('AutoObservationMiddleware', () => {
   });
 
   describe('beforeTurn', () => {
-    it('should reset observation counter and return continue', () => {
+    it('should return continue', () => {
       const ctx = makeContext();
       const result = middleware.beforeTurn(ctx);
       expect(result.action).toBe('continue');
@@ -209,7 +209,41 @@ describe('AutoObservationMiddleware', () => {
       expect(snapshotCallCount).toBe(2);
     });
 
-    it('should reset observation counter on beforeTurn', async () => {
+    it('keeps the observation cap across agent-loop rounds until the next task reset', async () => {
+      const mw = new AutoObservationMiddleware({
+        stabilizationMs: 0,
+        maxObservationsPerTurn: 1,
+      });
+      const pipeline = new MiddlewarePipeline();
+      pipeline.use(mw);
+      mockTakeSnapshot.mockResolvedValue({
+        id: 'snap-loop',
+        elements: [],
+        elementMap: new Map(),
+        valid: true,
+      });
+      mockToTextRepresentation.mockReturnValue('# UI Snapshot');
+      mockCompareTo.mockReturnValue({
+        hasChanges: false,
+        changedRegions: [],
+        newElements: [],
+        removedElements: [],
+        similarity: 1,
+      });
+
+      for (let toolRound = 0; toolRound < 2; toolRound++) {
+        const ctx = makeContext({
+          toolRound,
+          messages: [makeToolCallMessage('computer_control', 'click')],
+        });
+        await pipeline.runBeforeTurn(ctx);
+        await pipeline.runAfterTurn(ctx);
+      }
+
+      expect(mockTakeSnapshot).toHaveBeenCalledTimes(1);
+    });
+
+    it('should reset observation counter on the pipeline new-task hook', async () => {
       mockTakeSnapshot.mockResolvedValue({
         id: 'snap-1',
         elements: [],
@@ -237,8 +271,10 @@ describe('AutoObservationMiddleware', () => {
       await mw.afterTurn(ctx2);
       expect(mockTakeSnapshot).toHaveBeenCalledTimes(1); // Still 1
 
-      // Reset via beforeTurn
-      mw.beforeTurn(makeContext());
+      // Reset only at the next user task, not at every loop round.
+      const pipeline = new MiddlewarePipeline();
+      pipeline.use(mw);
+      pipeline.resetForNewTask();
 
       // Now should work again
       const ctx3 = makeContext({
