@@ -215,7 +215,14 @@ export const SAFE_ENV_VARS: Set<string> = new Set([
   'DISPLAY',
   'COLORTERM',
   // Python
-  'PYTHONPATH',
+  // NOTE sécurité : PYTHONPATH est VOLONTAIREMENT absent — même classe
+  // d'attaque que NODE_PATH. L'interpréteur place ses entrées AVANT la
+  // bibliothèque standard dans `sys.path` : un répertoire contrôlé posant un
+  // faux `json.py` (ou tout module importé) exécute du code arbitraire dans
+  // chaque `python3` lancé par l'agent (web_scrape/Scrapling, object_detect/YOLO,
+  // browser-use, camofox, yt-dlp, run_script, toute commande `python3 …`).
+  // Il est dans BLOCKED_ENV_VARS (src/security/env-blocklist.ts).
+  // Voir tests/security/pythonpath-injection.test.ts.
   'PYTHONIOENCODING',
   'VIRTUAL_ENV',
   // Package managers (non-sensitive config)

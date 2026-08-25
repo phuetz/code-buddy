@@ -65,6 +65,10 @@ const DEFAULT_EXCLUDE_PATTERNS = [
   '*_CERT', '*_CERTIFICATE',
   // Injection de code dans les sous-processus (voir env-blocklist.ts)
   'NODE_OPTIONS', 'NODE_PATH',
+  // Substitution de module / de bibliothèque à l'interpréteur ou au chargeur
+  'PYTHONPATH', 'PYTHONHOME', 'PYTHONSTARTUP',
+  'LD_PRELOAD', 'LD_LIBRARY_PATH', 'DYLD_INSERT_LIBRARIES', 'DYLD_LIBRARY_PATH',
+  'PERL5LIB', 'PERL5OPT', 'RUBYLIB', 'RUBYOPT', 'GEM_PATH', 'GEM_HOME',
   // Cloud providers
   'AWS_*', 'OPENAI_*', 'ANTHROPIC_*', 'GOOGLE_*API*',
   'AZURE_*', 'DIGITALOCEAN_*', 'HETZNER_*',

@@ -49,11 +49,14 @@ const SAFE_ENV_KEYS = new Set([
   'VISUAL',
   'PAGER',
   'LESS',
-  'PYTHONPATH',
+  // NOTE sécurité : PYTHONPATH / LD_LIBRARY_PATH / DYLD_LIBRARY_PATH sont
+  // VOLONTAIREMENT absents — substitution de module Python ou de bibliothèque
+  // partagée dans les sous-processus (mêmes vecteurs que NODE_PATH). Ils sont
+  // dans BLOCKED_ENV_VARS (src/security/env-blocklist.ts). Un appelant qui en a
+  // réellement besoin le passe explicitement via `allowEnv`/`extraEnv`.
+  // Voir tests/security/pythonpath-injection.test.ts.
   'PYTHONIOENCODING',
   'VIRTUAL_ENV',
-  'LD_LIBRARY_PATH',
-  'DYLD_LIBRARY_PATH',
   'CUDA_VISIBLE_DEVICES',
   'OMP_NUM_THREADS',
   'MKL_NUM_THREADS',

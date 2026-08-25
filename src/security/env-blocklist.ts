@@ -27,8 +27,14 @@ export const BLOCKED_ENV_VARS: Set<string> = new Set([
   'DOTNET_STARTUP_HOOKS',
   'DOTNET_SHARED_STORE',
 
-  // Python
+  // Python — `PYTHONPATH` détourne la résolution de modules (un faux `json.py`
+  // placé dans un répertoire contrôlé est chargé AVANT la stdlib) ; `PYTHONHOME`
+  // repointe la stdlib entière ; `PYTHONSTARTUP` exécute un fichier au démarrage
+  // d'un interpréteur interactif.
   'PYTHONBREAKPOINT',
+  'PYTHONPATH',
+  'PYTHONHOME',
+  'PYTHONSTARTUP',
 
   // Node.js — `NODE_OPTIONS=--require evil.js` exécute du JS arbitraire dans
   // tout process node/npm ; `NODE_PATH` détourne la résolution de modules.
