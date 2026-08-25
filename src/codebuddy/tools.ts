@@ -287,7 +287,7 @@ export function initializeToolRegistry(): void {
   if (process.env.CODEBUDDY_LOAD_AUTHORED_TOOLS !== 'false') {
     try {
       const loaded = loadAuthoredTools();
-      if (loaded.length > 0) logger.info(`[self-improve] reloaded ${loaded.length} authored tool(s): ${loaded.join(', ')}`);
+      if (loaded.length > 0) logger.debug(`[self-improve] reloaded ${loaded.length} authored tool(s): ${loaded.join(', ')}`);
     } catch { /* persisted store optional */ }
   }
 

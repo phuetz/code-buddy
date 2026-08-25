@@ -1,7 +1,13 @@
 import path from 'node:path';
 import { spawn } from 'node:child_process';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 
-function runCli(args: string[]): Promise<{
+interface RunCliOptions {
+  cwd?: string;
+  env?: NodeJS.ProcessEnv;
+}
+
+function runCli(args: string[], options: RunCliOptions = {}): Promise<{
   exitCode: number | null;
   stdout: string;
   stderr: string;
@@ -13,14 +19,15 @@ function runCli(args: string[]): Promise<{
   return new Promise((resolve, reject) => {
     const child = spawn(process.execPath, [
       path.resolve('node_modules/tsx/dist/cli.mjs'),
-      'src/index.ts',
+      path.resolve('src/index.ts'),
       ...args,
     ], {
-      cwd: process.cwd(),
+      cwd: options.cwd ?? process.cwd(),
       env: {
         ...cleanEnv,
         CODEBUDDY_DISABLE_MCP: 'true',
         NO_COLOR: '1',
+        ...options.env,
       },
       stdio: ['ignore', 'pipe', 'pipe'],
     });
@@ -63,6 +70,52 @@ describe('CLI help output', () => {
     expect(result.stdout).toContain('buddy dev pr "Ajoute une petite fonctionnalité"');
     expect(result.stdout).toContain('/think deep "Propose le refactoring le plus sûr"');
     expect(result.stdout).toContain('/share create demo');
+  }, 30_000);
+
+  it('keeps help free of startup telemetry when persisted authored tools are reloaded', async () => {
+    const workDir = await mkdtemp(path.join(process.cwd(), '.tmp-help-output-'));
+    const storeDir = path.join(workDir, '.codebuddy', 'self-improvement');
+    await mkdir(storeDir, { recursive: true });
+    await writeFile(path.join(storeDir, 'authored-tools.json'), JSON.stringify({
+      schemaVersion: 1,
+      tools: [
+        {
+          name: 'authored__help_probe',
+          description: 'Return a fixed value for the CLI help telemetry test.',
+          parameters: { type: 'object', properties: {}, additionalProperties: false },
+          language: 'javascript',
+          code: "process.stdout.write('ok');",
+        },
+      ],
+    }));
+
+    try {
+      const result = await runCli(['mcp', '--help'], {
+        cwd: workDir,
+        env: {
+          CODEBUDDY_LOAD_AUTHORED_TOOLS: 'true',
+          NODE_ENV: 'development',
+        },
+      });
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stderr).toBe('');
+      expect(result.stdout).toContain('Usage: buddy mcp');
+      expect(result.stdout).not.toContain('[self-improve]');
+    } finally {
+      await rm(workDir, { recursive: true, force: true });
+    }
+  }, 30_000);
+
+  it('keeps profile application telemetry out of help output', async () => {
+    const result = await runCli(['--profile', 'core', '--help'], {
+      env: { NODE_ENV: 'development' },
+    });
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stderr).toBe('');
+    expect(result.stdout.startsWith('Pour commencer — 6 démos')).toBe(true);
+    expect(result.stdout).not.toContain('Applied config profile');
   }, 30_000);
 
   it('hides advanced product areas only for the core profile', async () => {

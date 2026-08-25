@@ -1273,7 +1273,7 @@ class ConfigManager {
       );
     }
     this.mergeConfig(profile);
-    logger.info(`Applied config profile: ${profileName}`, { source: 'ConfigManager' });
+    logger.debug(`Applied config profile: ${profileName}`, { source: 'ConfigManager' });
   }
 
   /**
