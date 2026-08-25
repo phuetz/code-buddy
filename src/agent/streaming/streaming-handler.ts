@@ -166,6 +166,47 @@ export interface AccumulatedMessage {
   [key: string]: unknown;
 }
 
+interface StreamingSuppressionMarker {
+  start: string;
+  ends: readonly string[];
+}
+
+// Block/control markers already removed by sanitizeLLMOutput. Streaming must
+// recognize them incrementally because providers may split any marker across
+// deltas; sanitizing each delta independently leaks both the marker and the
+// hidden block before the complete response can be cleaned.
+const STREAMING_SUPPRESSION_MARKERS: readonly StreamingSuppressionMarker[] = [
+  { start: '<think>', ends: ['</think>'] },
+  { start: '<reasoning>', ends: ['</reasoning>'] },
+  { start: '[INST]', ends: ['[/INST]'] },
+  { start: '<<SYS>>', ends: ['<</SYS>>'] },
+  { start: '<|channel', ends: ['>'] },
+  { start: '<|message', ends: ['>'] },
+  { start: '<|tool_call', ends: ['>'] },
+  { start: '<|constrain', ends: ['>'] },
+  { start: '<channel|', ends: ['>'] },
+  { start: '<message|', ends: ['>'] },
+  { start: '<tool_call|', ends: ['>'] },
+  { start: '<constrain|', ends: ['>'] },
+  { start: '<|', ends: ['|>'] },
+  { start: '＜｜', ends: ['｜＞'] },
+  { start: '\\u003c|', ends: ['|\\u003e'] },
+];
+
+function longestTrailingMarkerPrefix(text: string, markers: readonly string[]): string {
+  let longest = '';
+  for (const marker of markers) {
+    const maxLength = Math.min(text.length, marker.length - 1);
+    for (let length = maxLength; length > longest.length; length--) {
+      if (text.endsWith(marker.slice(0, length))) {
+        longest = text.slice(-length);
+        break;
+      }
+    }
+  }
+  return longest;
+}
+
 /**
  * StreamingHandler manages the accumulation and processing of streaming
  * responses from LLM APIs. It handles:
@@ -202,6 +243,8 @@ export class StreamingHandler {
   private tokenCounter: TokenCounter | null = null;
   private lastTokenUpdate: number = 0;
   private toolCallsYielded: boolean = false;
+  private pendingDisplayContent: string = '';
+  private displaySuppressionEnds: readonly string[] | null = null;
 
   /**
    * Creates a new StreamingHandler instance.
@@ -264,7 +307,7 @@ export class StreamingHandler {
 
     // Sanitize content for display
     const displayContent = this.config.sanitizeOutput
-      ? sanitizeLLMOutput(rawContentDelta)
+      ? this.sanitizeStreamingDelta(rawContentDelta)
       : rawContentDelta;
 
     // Check for tool calls
@@ -435,6 +478,22 @@ export class StreamingHandler {
   }
 
   /**
+   * Flush a benign marker prefix held at the end of a completed stream.
+   * Unterminated hidden/control blocks stay suppressed.
+   */
+  flushDisplayContent(): string {
+    if (!this.config.sanitizeOutput) return '';
+    if (this.displaySuppressionEnds) {
+      this.pendingDisplayContent = '';
+      this.displaySuppressionEnds = null;
+      return '';
+    }
+    const content = sanitizeLLMOutput(this.pendingDisplayContent);
+    this.pendingDisplayContent = '';
+    return content;
+  }
+
+  /**
    * Gets the current token count estimate.
    *
    * @returns Token count or undefined if tracking is disabled
@@ -476,6 +535,76 @@ export class StreamingHandler {
     this.accumulatedFinishReason = null;
     this.lastTokenUpdate = 0;
     this.toolCallsYielded = false;
+    this.pendingDisplayContent = '';
+    this.displaySuppressionEnds = null;
+  }
+
+  private sanitizeStreamingDelta(rawContentDelta: string): string {
+    this.pendingDisplayContent += rawContentDelta;
+    let visible = '';
+
+    while (this.pendingDisplayContent) {
+      if (this.displaySuppressionEnds) {
+        let closingIndex = -1;
+        let closingMarker = '';
+        for (const end of this.displaySuppressionEnds) {
+          const index = this.pendingDisplayContent.indexOf(end);
+          if (index >= 0 && (closingIndex < 0 || index < closingIndex)) {
+            closingIndex = index;
+            closingMarker = end;
+          }
+        }
+        if (closingIndex < 0) {
+          this.pendingDisplayContent = longestTrailingMarkerPrefix(
+            this.pendingDisplayContent,
+            this.displaySuppressionEnds,
+          );
+          break;
+        }
+        this.pendingDisplayContent = this.pendingDisplayContent.slice(
+          closingIndex + closingMarker.length,
+        );
+        this.displaySuppressionEnds = null;
+        continue;
+      }
+
+      let openingIndex = -1;
+      let openingMarker: StreamingSuppressionMarker | null = null;
+      for (const marker of STREAMING_SUPPRESSION_MARKERS) {
+        const index = this.pendingDisplayContent.indexOf(marker.start);
+        if (
+          index >= 0 &&
+          (
+            openingIndex < 0 ||
+            index < openingIndex ||
+            (index === openingIndex && marker.start.length > (openingMarker?.start.length ?? 0))
+          )
+        ) {
+          openingIndex = index;
+          openingMarker = marker;
+        }
+      }
+
+      if (openingMarker) {
+        visible += sanitizeLLMOutput(this.pendingDisplayContent.slice(0, openingIndex));
+        this.pendingDisplayContent = this.pendingDisplayContent.slice(
+          openingIndex + openingMarker.start.length,
+        );
+        this.displaySuppressionEnds = openingMarker.ends;
+        continue;
+      }
+
+      const heldPrefix = longestTrailingMarkerPrefix(
+        this.pendingDisplayContent,
+        STREAMING_SUPPRESSION_MARKERS.map((marker) => marker.start),
+      );
+      const safeLength = this.pendingDisplayContent.length - heldPrefix.length;
+      visible += sanitizeLLMOutput(this.pendingDisplayContent.slice(0, safeLength));
+      this.pendingDisplayContent = heldPrefix;
+      break;
+    }
+
+    return visible;
   }
 
   /**

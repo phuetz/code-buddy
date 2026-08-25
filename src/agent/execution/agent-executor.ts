@@ -1589,6 +1589,15 @@ export class AgentExecutor {
           }
         }
 
+        const trailingDisplayContent = this.deps.streamingHandler.flushDisplayContent?.() ?? '';
+        if (
+          trailingDisplayContent &&
+          !relationshipSafety &&
+          !guardGenerativeSelfInspection
+        ) {
+          yield { type: 'content', content: trailingDisplayContent };
+        }
+
         if (tools.length > 0 && !this.deps.streamingHandler.hasYieldedToolCalls()) {
           const extracted = this.deps.streamingHandler.extractToolCalls();
           if (extracted.toolCalls.length > 0) {
