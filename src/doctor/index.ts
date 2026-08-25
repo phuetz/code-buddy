@@ -78,11 +78,36 @@ async function checkNativeSqlite(): Promise<DoctorCheck> {
 function checkDependencies(): DoctorCheck[] {
   const checks: DoctorCheck[] = [];
 
-  const required: Array<{ cmd: string; label: string; level: 'error' | 'warn' }> = [
-    { cmd: 'rg', label: 'ripgrep (rg)', level: 'warn' },
-    { cmd: 'sox', label: 'sox (voice input)', level: 'warn' },
-    { cmd: 'rtk', label: 'RTK (token compressor)', level: 'warn' },
-    { cmd: 'icm', label: 'ICM (infinite context memory)', level: 'warn' },
+  const required: Array<{
+    cmd: string;
+    label: string;
+    level: 'error' | 'warn';
+    missingMessage: string;
+  }> = [
+    {
+      cmd: 'rg',
+      label: 'ripgrep (rg)',
+      level: 'warn',
+      missingMessage: 'not found — optional; install ripgrep for faster file search',
+    },
+    {
+      cmd: 'sox',
+      label: 'sox (voice input)',
+      level: 'warn',
+      missingMessage: 'not found — optional; install SoX only to use voice input',
+    },
+    {
+      cmd: 'rtk',
+      label: 'RTK (token compressor)',
+      level: 'warn',
+      missingMessage: 'not found — optional; install RTK only to use token compression',
+    },
+    {
+      cmd: 'icm',
+      label: 'ICM (infinite context memory)',
+      level: 'warn',
+      missingMessage: 'not found — optional; install ICM only to use infinite-context memory',
+    },
   ];
 
   for (const dep of required) {
@@ -90,7 +115,7 @@ function checkDependencies(): DoctorCheck[] {
     checks.push({
       name: dep.label,
       status: availability === 'installed' ? 'ok' : dep.level,
-      message: availability,
+      message: availability === 'installed' ? availability : dep.missingMessage,
     });
   }
 
@@ -106,12 +131,22 @@ function checkDependencies(): DoctorCheck[] {
 }
 
 function checkApiKeys(): DoctorCheck[] {
-  const keys = ['GROK_API_KEY', 'OPENAI_API_KEY', 'ANTHROPIC_API_KEY', 'GOOGLE_API_KEY'];
-  return keys.map(key => ({
-    name: `API key: ${key}`,
-    status: process.env[key] ? 'ok' as const : 'warn' as const,
-    message: process.env[key] ? 'set' : 'not set',
-  }));
+  const providers = [
+    { label: 'GROK_API_KEY / XAI_API_KEY', variables: ['GROK_API_KEY', 'XAI_API_KEY'] },
+    { label: 'OPENAI_API_KEY', variables: ['OPENAI_API_KEY'] },
+    { label: 'ANTHROPIC_API_KEY', variables: ['ANTHROPIC_API_KEY'] },
+    { label: 'GEMINI_API_KEY / GOOGLE_API_KEY', variables: ['GEMINI_API_KEY', 'GOOGLE_API_KEY'] },
+  ];
+  return providers.map(provider => {
+    const configuredVariable = provider.variables.find(variable => process.env[variable]);
+    return {
+      name: `API key: ${provider.label}`,
+      status: 'ok' as const,
+      message: configuredVariable
+        ? `set (${configuredVariable})`
+        : 'not set (optional; use provider login, a local model, or set this provider key)',
+    };
+  });
 }
 
 /**
@@ -182,9 +217,11 @@ function checkConfigFiles(cwd: string): DoctorCheck[] {
 
   const configFile = join(cwd, '.codebuddy', 'config.json');
   checks.push({
-    name: 'config.json',
-    status: existsSync(configFile) ? 'ok' : 'warn',
-    message: existsSync(configFile) ? 'exists' : 'not found',
+    name: '.codebuddy/config.json (legacy)',
+    status: 'ok',
+    message: existsSync(configFile)
+      ? 'exists'
+      : 'not present (optional; current configuration uses settings.json or config.toml profiles)',
   });
 
   // Check settings.json for corruption
