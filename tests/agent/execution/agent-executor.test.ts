@@ -1242,13 +1242,15 @@ describe('AgentExecutor', () => {
       const history: ChatEntry[] = [];
       const messages: CodeBuddyMessage[] = [];
 
-      await executor.processUserMessage('Loop forever', history, messages);
+      const entries = await executor.processUserMessage('Loop forever', history, messages);
 
-      // Phase D: max-rounds warning is yielded as a `content` event by runTurnLoop
-      // but not pushed as a ChatEntry in history (per décision #3 — streaming-only
-      // events are dropped by the sequential collector). The invariant we still
-      // assert is that the loop stops after maxToolRounds.
+      // The unified loop stops at the configured boundary and makes the reason
+      // durable for both streaming and sequential callers.
       expect(deps.toolHandler.executeTool).toHaveBeenCalledTimes(2);
+      expect(entries.at(-1)).toMatchObject({
+        type: 'assistant',
+        content: expect.stringContaining('Maximum tool execution rounds reached'),
+      });
     });
 
     it('should stop when cost limit is reached during tool execution', async () => {

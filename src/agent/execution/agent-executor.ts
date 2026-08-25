@@ -2333,8 +2333,11 @@ export class AgentExecutor {
         }
       }
 
-      if (toolRounds >= maxToolRounds) {
-        yield { type: "content", content: "\n\nMaximum tool execution rounds reached." };
+      if (toolRounds >= maxToolRounds && !terminateDetectedStreaming) {
+        const limitMessage = 'Maximum tool execution rounds reached.';
+        history.push({ type: 'assistant', content: limitMessage, timestamp: new Date() });
+        messages.push({ role: 'assistant', content: limitMessage });
+        yield { type: 'content', content: `\n\n${limitMessage}` };
       }
 
       recordTurnCost();
