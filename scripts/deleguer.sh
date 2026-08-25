@@ -10,6 +10,9 @@
 #   oc     OpenCode Go (abonnement)     — 61 modèles, 5 lignées inédites
 #                                         (kimi, minimax, deepseek, glm, qwen) ;
 #                                         choisir avec OC_MODELE=<id>
+#   minimax OpenRouter palier gratuit — minimax-m3:free, 1 M de contexte, 0 $ ;
+#                                         pour ce qui ne tient pas ailleurs (livre entier,
+#                                         corpus, gros diff). Prompts → OpenRouter.
 #   nvidia NVIDIA Build (clé GRATUITE ~40 RPM) — Code Buddy headless sur Kimi K3 /
 #                                         Nemotron 3 ; 0 quota perso ; prompts → NVIDIA (pas de confidentiel)
 #   grok   xAI Build (abonnement OAuth) — PAS la clé GROK_API_KEY, morte en 402
@@ -97,6 +100,23 @@ case "$MOTEUR" in
        "$CB_SRC/node_modules/.bin/tsx" "$CB_SRC/src/index.ts" -m "${OLLAMA_MODELE:-qwen3.8:27b}" \
        --permission-mode acceptEdits -p "$(cat "$CONSIGNE")") 2>&1 | tee "$LOG"
     ;;
+  minimax)
+    # OpenRouter, palier GRATUIT : minimax/minimax-m3:free — 1 048 576 tokens de contexte,
+    # 0 $, sur les clés OpenRouter déjà en place (~/.codebuddy/media.env). Mesuré le 25/08 :
+    # 3 s pour une relecture de script, 5 s pour lire 21 scripts d'un coup, français correct.
+    #
+    # C'est LE moteur pour ce qui ne tient pas dans une fenêtre ordinaire : un livre entier,
+    # un corpus de scripts, un gros diff. En volume, préférer NVIDIA ou le local — le palier
+    # gratuit d'OpenRouter est limité en requêtes par jour, pas en taille de contexte.
+    # OpenRouter voit les prompts : rien de confidentiel.
+    OKEY=$(grep -E "^(export )?OPENROUTER_API_KEY=" "$HOME/.codebuddy/media.env" 2>/dev/null | head -1 | sed 's/^export //' | cut -d= -f2- | tr -d "'\"")
+    [ -n "$OKEY" ] || { echo "OPENROUTER_API_KEY introuvable dans ~/.codebuddy/media.env" >&2; exit 2; }
+    CB_SRC=${CB_SRC:-$HOME/code-buddy-vitrine}; [ -f "$CB_SRC/src/index.ts" ] || CB_SRC=$HOME/code-buddy
+    (cd "$DEPOT" && CODEBUDDY_PROVIDER=openrouter OPENROUTER_API_KEY="$OKEY" \
+       "$CB_SRC/node_modules/.bin/tsx" "$CB_SRC/src/index.ts" -m "${MINIMAX_MODELE:-minimax/minimax-m3:free}" \
+       --permission-mode acceptEdits -p "$(cat "$CONSIGNE")") 2>&1 | tee "$LOG"
+    ;;
+
   nvidia)
     # NVIDIA Build (build.nvidia.com) = palier GRATUIT (~40 RPM), clé NVIDIA_API_KEY dans
     # ~/.codebuddy/lisa.env. Exécutant = Code Buddy lui-même en headless (agentique : lit, édite,
