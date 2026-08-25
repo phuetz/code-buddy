@@ -176,7 +176,7 @@ describe('buddy skills command with real SkillsHub state', () => {
     const result = JSON.parse(getLogOutput()) as {
       healthyCount: number;
       issueCount: number;
-      issues: Array<{ commands: string[]; issue: string; name: string }>;
+      issues: Array<{ commands: string[]; issue: string; name: string; preferredCommand?: string }>;
       ok: boolean;
       total: number;
     };
@@ -195,6 +195,7 @@ describe('buddy skills command with real SkillsHub state', () => {
         ],
         issue: 'missing-file',
         name: 'missing-helper',
+        preferredCommand: 'buddy skills doctor --repair-stale-temp --approved-by <reviewer>',
         staleTempPath: true,
       }),
       expect.objectContaining({
@@ -205,9 +206,21 @@ describe('buddy skills command with real SkillsHub state', () => {
         ],
         issue: 'integrity-mismatch',
         name: 'tampered-helper',
+        preferredCommand: 'buddy skills rollback tampered-helper --approved-by <reviewer>',
       }),
     ]));
     expect(getSkillsHub().list()).toHaveLength(3);
+
+    consoleLogSpy.mockClear();
+    await createProgram().parseAsync(['node', 'buddy', 'skills', 'doctor']);
+    const humanOutput = getLogOutput();
+    expect(humanOutput).toContain(
+      'command: buddy skills doctor --repair-stale-temp --approved-by <reviewer>',
+    );
+    expect(humanOutput).toContain(
+      'command: buddy skills rollback tampered-helper --approved-by <reviewer>',
+    );
+    expect(humanOutput).not.toContain('command: skill_manage');
   });
 
   it('records reviewer approval when enabling, disabling, and deprecating installed skills', async () => {
@@ -528,6 +541,13 @@ describe('buddy skills command with real SkillsHub state', () => {
       expect.objectContaining({ integrityOk: false, name: 'missing-helper' }),
       expect.objectContaining({ integrityOk: false, name: 'tampered-helper' }),
     ]));
+
+    consoleLogSpy.mockClear();
+    await createProgram().parseAsync(['node', 'buddy', 'skills', 'list']);
+    const humanOutput = getLogOutput();
+    expect(humanOutput).toContain('Installed skills (1 usable / 2 enabled / 3 total):');
+    expect(humanOutput).toContain('Run buddy skills doctor.');
+    expect(humanOutput).not.toContain('Run buddy skills doctor --json.');
   });
 
   it('repairs missing skill lockfile entries through the real CLI with reviewer approval', async () => {

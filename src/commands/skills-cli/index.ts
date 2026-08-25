@@ -79,9 +79,11 @@ function buildSkillDoctorIssue(skill: InstalledSkillStatus): SkillDoctorIssue {
     issue,
     name: skill.name,
     path: skill.path,
-    ...(staleTempPath ? {
-      preferredCommand: `buddy skills doctor --repair-stale-temp --approved-by <reviewer> --json`,
-    } : {}),
+    preferredCommand: staleTempPath
+      ? 'buddy skills doctor --repair-stale-temp --approved-by <reviewer>'
+      : issue === 'missing-file'
+        ? `buddy skills reset ${skill.name} --approved-by <reviewer>`
+        : `buddy skills rollback ${skill.name} --approved-by <reviewer>`,
     recommendation: issue === 'missing-file'
       ? staleTempPath
         ? 'This lockfile entry points inside the OS temp directory and SKILL.md is gone; delete the stale entry after reviewer approval unless you intentionally want to reconstruct it.'
@@ -143,6 +145,7 @@ export function registerSkillsCommands(program: Command): void {
       const all = hub.listWithIntegrity();
       const shown = opts.all ? all : all.filter((s) => s.enabled !== false);
       const health = buildSkillListHealth(all, shown);
+      const usableCount = all.filter((skill) => skill.enabled !== false && skill.integrityOk).length;
 
       if (opts.json) {
         console.log(JSON.stringify({ count: shown.length, health, total: all.length, skills: shown }, null, 2));
@@ -152,7 +155,10 @@ export function registerSkillsCommands(program: Command): void {
         console.log(all.length === 0 ? 'No skills installed.' : 'No enabled skills (use --all to see disabled).');
         return;
       }
-      console.log(`\nInstalled skills (${shown.length}${opts.all ? '' : ` enabled / ${all.length} total`}):`);
+      const counts = opts.all
+        ? `${usableCount} usable / ${all.length} total`
+        : `${usableCount} usable / ${health.enabledCount} enabled / ${all.length} total`;
+      console.log(`\nInstalled skills (${counts}):`);
       for (const skill of shown) {
         const status = skill.enabled === false ? '-' : skill.integrityOk ? '+' : '!';
         const inv = skill.usage ? `  used ${skill.usage.invocationCount}×` : '';
@@ -160,7 +166,7 @@ export function registerSkillsCommands(program: Command): void {
         console.log(`  ${status} ${skill.name} v${skill.version} (${skill.source})${inv}${health}`);
       }
       if (!health.ok) {
-        console.log(`\nHealth: ${health.healthyCount} ok / ${health.issueCount} issue(s). Run ${health.nextCommand}.`);
+        console.log(`\nHealth: ${health.healthyCount} ok / ${health.issueCount} issue(s). Run buddy skills doctor.`);
       }
       console.log('');
     });
@@ -268,7 +274,7 @@ export function registerSkillsCommands(program: Command): void {
         console.log(`  ! ${issue.name} v${issue.version}: ${issue.issue}`);
         console.log(`      path: ${issue.path}`);
         console.log(`      next: ${issue.recommendation}`);
-        console.log(`      command: ${issue.commands[0]}`);
+        console.log(`      command: ${issue.preferredCommand}`);
       }
       if (repairRequested) {
         console.log(`\nRepaired missing lockfile entries: ${repairedMissing.filter((item) => item.removed).length}`);
