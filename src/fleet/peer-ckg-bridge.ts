@@ -26,6 +26,7 @@ import {
 import { getCodeBuddyHome } from '../utils/codebuddy-home.js';
 import { logger } from '../utils/logger.js';
 import { getFleetRegistry } from './fleet-registry.js';
+import { defangPeerKnowledgeText } from './peer-text-sanitizer.js';
 import {
   registerPeerMethod,
   unregisterPeerMethod,
@@ -436,7 +437,7 @@ function parseSyncResponse(
     if (!entry || !localAllowed.has(entry.type) || isRemoteProvenance(entry)) {
       throw new Error('CKG_SYNC_RESPONSE_INVALID: peer returned a disallowed or malformed entry');
     }
-    entries.push(entry);
+    entries.push(defangEntry(entry));
   }
   if (entries.length > 0) {
     const newest = Math.max(...entries.map((entry) => Date.parse(entry.recordedAt)));
@@ -445,6 +446,36 @@ function parseSyncResponse(
     }
   }
   return { entries, maxTs: value.maxTs };
+}
+
+/**
+ * Neutralize control tokens in the free-form fields of an entry received from a
+ * peer, at the door — before it reaches `ckg.remember()`.
+ *
+ * A synced entry is not read once and discarded: it is appended to the local
+ * collective ledger and injected into later prompts when
+ * `CODEBUDDY_COLLECTIVE_MEMORY` is on. Left as-is, `<|im_start|>system …` sent
+ * by another machine becomes a persistent, cross-machine role-injection channel
+ * — the same vector closed on the council path, but this one survives restarts.
+ *
+ * The size caps in `parseEntry` run BEFORE this: defanging only inserts spaces,
+ * so it can grow a field by a few percent at most. That is deliberate — the caps
+ * exist to stop ledger bloat, and refusing an entry for one inserted space would
+ * turn a hardening pass into a sync failure.
+ */
+function defangEntry(entry: CkgSyncEntry): CkgSyncEntry {
+  const name = defangPeerKnowledgeText(entry.name);
+  const text = entry.text === undefined ? undefined : defangPeerKnowledgeText(entry.text);
+  if (name === entry.name && text === entry.text) return entry;
+  logger.warn('[peer-ckg-bridge] neutralised control tokens in a synced entry', {
+    id: entry.id,
+    type: entry.type,
+  });
+  return {
+    ...entry,
+    name,
+    ...(text !== undefined ? { text } : {}),
+  };
 }
 
 function toPeerRememberInput(

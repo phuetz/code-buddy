@@ -17,6 +17,11 @@
  * session ids — nor to `peer.tool.invoke` output, which is verbatim file/
  * directory content where `<think>` or `[INST]` may legitimately appear.
  *
+ * `defangPeerKnowledgeText` is the second, deliberately weaker rule, for peer
+ * text that is PERSISTED and re-injected later (`peer.ckg.sync`). It neutralizes
+ * the same markers without deleting anything — see its own doc for why deletion
+ * is the wrong trade there.
+ *
  * @module fleet/peer-text-sanitizer
  */
 
@@ -36,4 +41,60 @@ import { sanitizeModelOutput, stripInvisibleChars } from '../utils/output-saniti
 export function sanitizePeerText(text: unknown): string {
   if (typeof text !== 'string' || text.length === 0) return '';
   return stripInvisibleChars(sanitizeModelOutput(text));
+}
+
+/**
+ * Control-token shapes, and where to break them.
+ *
+ * Each rule inserts ONE ASCII space just after the opening delimiter. Every
+ * character of the payload survives and stays readable to a human; the marker
+ * simply stops being an exact match for any tokenizer special token or prompt
+ * parser. Order matters only in that invisible characters must already be gone
+ * (see `defangPeerKnowledgeText`): a zero-width space wedged between the `<`
+ * and the `|` would slip past these rules, then re-form into a live token the
+ * moment something else strips it.
+ */
+const KNOWLEDGE_DEFANG_RULES: ReadonlyArray<{ pattern: RegExp; replacement: string }> = [
+  // ChatML and every other `<|…|>` control token.
+  { pattern: /<\|/g, replacement: '< |' },
+  // Its JSON-escaped form, which survives a round-trip through a JSON payload.
+  { pattern: /\\u003c\|/gi, replacement: '\\u003c |' },
+  // GLM-5 full-width variant ＜｜…｜＞.
+  { pattern: /＜｜/g, replacement: '＜ ｜' },
+  // Half-formed pipe markers leaked by local runtimes: `<channel|>`, `<message|>`, …
+  { pattern: /<(channel|message|tool_call|constrain)\|>/gi, replacement: '< $1|>' },
+  // DeepSeek / Qwen reasoning fences.
+  { pattern: /<(\/?)(think|reasoning)>/gi, replacement: '< $1$2>' },
+  // LLaMA instruction and system markers.
+  { pattern: /\[(\/?)INST\]/gi, replacement: '[ $1INST]' },
+  { pattern: /<<(\/?)SYS>>/gi, replacement: '< <$1SYS>>' },
+];
+
+/**
+ * Neutralize control tokens in peer text that will be PERSISTED rather than read once.
+ *
+ * `sanitizePeerText` is right for a one-shot answer: it DELETES the offending
+ * spans, and a `<think>…</think>` block a peer's model leaked is worth nothing.
+ * That rule cannot be reused for `peer.ckg.sync`, whose entries land in the
+ * append-only collective ledger and are injected into later prompts: an entry
+ * can be derived from indexed code (`buddy research ingest-code`), where
+ * `[INST]…[/INST]` or `<|im_start|>` are the very subject of the knowledge.
+ * Deleting the span would silently destroy the payload of a legitimate entry,
+ * permanently, and the loss would only surface much later.
+ *
+ * So this variant defangs instead of deleting: invisible characters go (they
+ * have no use in a knowledge entry, and they can hide a token from the rules
+ * below), then one space is inserted inside each control-token delimiter. The
+ * text stays complete and readable; the marker stops parsing as a role switch.
+ *
+ * @param text - Raw `name` / `text` field of an entry received from a peer.
+ * @returns The defanged text (empty string for a non-string / empty input).
+ */
+export function defangPeerKnowledgeText(text: unknown): string {
+  if (typeof text !== 'string' || text.length === 0) return '';
+  let defanged = stripInvisibleChars(text);
+  for (const rule of KNOWLEDGE_DEFANG_RULES) {
+    defanged = defanged.replace(rule.pattern, rule.replacement);
+  }
+  return defanged;
 }
