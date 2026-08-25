@@ -125,4 +125,67 @@ describe('buddy try', () => {
     expect(stdout.join('\n')).toContain('✅ Démo réussie');
     expect(dispose).toHaveBeenCalledWith({ skipSessionLearning: true });
   });
+
+  it('fait taire la télémétrie pendant la démo, et restaure le niveau ensuite', async () => {
+    // `try` est la première commande qu'un nouvel utilisateur lance : la télémétrie de l'agent
+    // noyait les huit lignes qui racontent la démo. Le silence est donc le défaut, pas une option.
+    const precedent = process.env.LOG_LEVEL;
+    process.env.LOG_LEVEL = 'info';
+    const { logger } = await import('../../src/utils/logger.js');
+    logger.setLevel('info');
+    const niveauPendantLaDemo: Array<string | undefined> = [];
+
+    await runTryDemo({
+      resolveProvider: async () => chatGptProvider,
+      createWorkspace: async () => '/tmp/code-buddy-try-test',
+      createAgent: async () => ({
+        systemPromptReady: Promise.resolve(),
+        processUserMessage: async () => {
+          niveauPendantLaDemo.push(logger.getLevel());
+          return [];
+        },
+        dispose: vi.fn(),
+      }),
+      verify: async () => ({ success: true, output: '# pass 1' }),
+      stdout: () => {},
+    });
+
+    // On vérifie le NIVEAU EFFECTIF du logger, pas la variable d'environnement : le logger
+    // est un singleton qui lit `LOG_LEVEL` à l'import, donc poser la variable ne l'affecte
+    // pas. Un test qui regardait la variable passait au vert pendant que la démo restait
+    // bavarde — mesuré : 15 lignes de télémétrie survivaient.
+    expect(niveauPendantLaDemo).toEqual(['error']);
+    expect(process.env.LOG_LEVEL).toBe('info');
+    expect(logger.getLevel()).toBe('info');
+    if (precedent === undefined) delete process.env.LOG_LEVEL;
+    else process.env.LOG_LEVEL = precedent;
+  });
+
+  it('laisse passer la télémétrie quand on la demande explicitement', async () => {
+    const precedent = process.env.LOG_LEVEL;
+    process.env.LOG_LEVEL = 'info';
+    const { logger } = await import('../../src/utils/logger.js');
+    logger.setLevel('info');
+    const niveauPendantLaDemo: Array<string | undefined> = [];
+
+    await runTryDemo({
+      verbose: true,
+      resolveProvider: async () => chatGptProvider,
+      createWorkspace: async () => '/tmp/code-buddy-try-test',
+      createAgent: async () => ({
+        systemPromptReady: Promise.resolve(),
+        processUserMessage: async () => {
+          niveauPendantLaDemo.push(logger.getLevel());
+          return [];
+        },
+        dispose: vi.fn(),
+      }),
+      verify: async () => ({ success: true, output: '# pass 1' }),
+      stdout: () => {},
+    });
+
+    expect(niveauPendantLaDemo).toEqual(['info']);
+    if (precedent === undefined) delete process.env.LOG_LEVEL;
+    else process.env.LOG_LEVEL = precedent;
+  });
 });

@@ -57,6 +57,8 @@ export interface RunTryDemoOptions extends ResolveTryProviderOptions {
   verify?: (workspace: string) => Promise<TryVerification>;
   stdout?: (message: string) => void;
   stderr?: (message: string) => void;
+  /** Montrer la télémétrie de l'agent. Défaut: false — `try` est une vitrine, pas un débogage. */
+  verbose?: boolean;
 }
 
 interface OllamaTagsResponse {
@@ -258,6 +260,35 @@ function setTemporaryEnv(key: string, value: string): () => void {
 
 /** Execute the scripted demo. Returns a process-style exit code. */
 export async function runTryDemo(options: RunTryDemoOptions = {}): Promise<number> {
+  // `try` est la toute première chose qu'un nouvel utilisateur exécute. Par défaut, la
+  // télémétrie de l'agent (`INFO [notification] view_file completed in 26ms`, l'avertissement
+  // `bypassPermissions` du bac à sable) noyait les huit lignes qui racontent la démo — au point
+  // que la première capture vidéo en était illisible. On abaisse donc le niveau de journal pour
+  // la durée de la démo, sauf si l'utilisateur demande explicitement le détail. Le niveau est
+  // restauré à la fin, y compris en cas d'erreur.
+  // Poser `LOG_LEVEL` ne suffit PAS : le logger est un singleton qui lit la variable à
+  // l'import du module, donc bien avant cette ligne. Mesuré : 15 lignes de télémétrie
+  // survivaient au correctif « par l'environnement », alors que le test unitaire, lui,
+  // passait — il vérifiait la variable, pas le résultat. C'est `setLevel()` qui agit.
+  let restoreLogLevel = () => {};
+  if (!options.verbose) {
+    const restoreEnv = setTemporaryEnv('LOG_LEVEL', 'error');
+    const { logger } = await import('../utils/logger.js');
+    const previousLevel = logger.getLevel();
+    logger.setLevel('error');
+    restoreLogLevel = () => {
+      logger.setLevel(previousLevel);
+      restoreEnv();
+    };
+  }
+  try {
+    return await runTryDemoInner(options);
+  } finally {
+    restoreLogLevel();
+  }
+}
+
+async function runTryDemoInner(options: RunTryDemoOptions): Promise<number> {
   const write = options.stdout ?? ((message: string) => process.stdout.write(`${message}\n`));
   const writeError = options.stderr ?? ((message: string) => process.stderr.write(`${message}\n`));
   const resolveProvider = options.resolveProvider ?? (() => resolveTryProvider(options));
@@ -321,7 +352,8 @@ export async function runTryDemo(options: RunTryDemoOptions = {}): Promise<numbe
 export function createTryCommand(): Command {
   return new Command('try')
     .description('Run an isolated 60-second coding-agent demo (ChatGPT OAuth or local Ollama)')
-    .action(async () => {
-      process.exitCode = await runTryDemo();
+    .option('--verbose', "Afficher la télémétrie de l'agent pendant la démo")
+    .action(async (options: { verbose?: boolean }) => {
+      process.exitCode = await runTryDemo({ verbose: options.verbose === true });
     });
 }

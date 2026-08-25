@@ -548,6 +548,10 @@ export const logger = {
   },
   isDebugEnabled: () => getLogger().isDebugEnabled(),
   setLevel: (level: LogLevel) => getLogger().setLevel(level),
+  // Exposé pour que l'appelant qui abaisse le niveau puisse RESTAURER le précédent.
+  // `setLevel` seul invitait à supposer « c'était info » — ce qui est faux dès que
+  // l'utilisateur a posé LOG_LEVEL ou DEBUG.
+  getLevel: () => getLogger().getLevel(),
   time: (label: string) => getLogger().time(label),
   child: (source: string) => getLogger().child(source),
 };
