@@ -253,8 +253,14 @@ class CollectEvidenceTest(unittest.TestCase):
         self.assertEqual(candidates[0].category, 'official')
 
     def test_editorial_exclusions_apply_to_subject_mode(self) -> None:
+        # La liste des sujets écartés est PRIVÉE : elle vit dans l'environnement, jamais
+        # dans ce dépôt public. Le test pose donc la sienne — sans quoi il passerait
+        # sur la machine de Patrice et échouerait partout ailleurs.
+        patch = mock.patch.dict(os.environ, {'INFLUENCER_EXCLUDED_TOPICS': 'organisme temoin'})
+        patch.start()
+        self.addCleanup(patch.stop)
         excluded = collect_evidence.find_excluded_topic(
-            'France Travail lance une nouvelle IA'
+            'Organisme témoin lance une nouvelle IA'
         )
 
         self.assertIsNotNone(excluded)

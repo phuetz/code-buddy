@@ -9,8 +9,8 @@ provisoire :
 
 1. une cadence automatisée sur trois plateformes ressemble au profil d'un
    compte spam et peut entraîner une révocation sans recours ;
-2. Patrice ne doit jamais publier sur France Travail, le chômage, l'ARE, la
-   CCAS, l'action sociale ou un client configuré localement ;
+2. ne jamais publier sur un sujet déclaré dans `INFLUENCER_EXCLUDED_TOPICS` —
+   employeur, clients, situation administrative ; la liste reste privée ;
 3. l'API YouTube et les autres plateformes imposent des quotas et des audits.
 
 Cette justification est aussi placée dans le module

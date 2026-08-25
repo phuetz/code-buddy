@@ -8,6 +8,7 @@ import os
 from pathlib import Path
 import sys
 import unittest
+from unittest import mock
 
 
 SCRIPT = (
@@ -34,10 +35,16 @@ class FindSubjectsTest(unittest.TestCase):
         )
 
     def test_french_feed_is_dated_and_filtered_before_ranking(self) -> None:
+        # La liste des sujets écartés est PRIVÉE : elle vit dans l'environnement, jamais
+        # dans ce dépôt public. Le test pose donc la sienne — sans quoi il passerait
+        # sur la machine de Patrice et échouerait partout ailleurs.
+        patch = mock.patch.dict(os.environ, {'INFLUENCER_EXCLUDED_TOPICS': 'organisme temoin'})
+        patch.start()
+        self.addCleanup(patch.stop)
         xml = b"""<?xml version="1.0"?>
         <rss><channel>
           <item>
-            <title>France Travail teste un nouvel algorithme</title>
+            <title>Organisme temoin teste un nouvel algorithme</title>
             <link>https://korben.info/france-travail-algorithme.html</link>
             <pubDate>Sun, 26 Jul 2026 18:00:00 +0000</pubDate>
           </item>
@@ -68,7 +75,7 @@ class FindSubjectsTest(unittest.TestCase):
         )
         self.assertEqual(eligible[0]['source_label'], 'Korben')
         self.assertIn('source=Korben', stderr.getvalue())
-        self.assertIn('France Travail', stderr.getvalue())
+        self.assertIn('Organisme temoin', stderr.getvalue())
 
     def test_similar_title_and_tracking_url_merge_origins(self) -> None:
         first = {

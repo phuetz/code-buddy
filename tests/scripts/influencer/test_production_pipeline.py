@@ -2,6 +2,8 @@
 
 from pathlib import Path
 import sys
+import os
+from unittest import mock
 import unittest
 
 
@@ -53,13 +55,22 @@ class ProductionPipelineTest(unittest.TestCase):
         )
 
     def test_editorial_policy_runs_before_production(self) -> None:
-        with self.assertRaisesRegex(PipelineError, 'sujet interdit'):
-            validate_editorial(
-                {
-                    'subject': 'France Travail et les nouveaux contrôles',
-                    'persona': 'Lisa',
-                }
-            )
+        # La liste des sujets écartés est PRIVÉE : elle vit dans l'environnement, pas dans
+        # le dépôt (celui-ci est public, et publier la liste dirait ce qu'on cherche à
+        # taire). Le test pose donc la sienne, au lieu de dépendre de la machine — sans
+        # quoi il passerait chez Patrice et échouerait en intégration continue.
+        with mock.patch.dict(os.environ, {'INFLUENCER_EXCLUDED_TOPICS': 'organisme témoin'}):
+            with self.assertRaisesRegex(PipelineError, 'sujet interdit'):
+                validate_editorial(
+                    {
+                        'subject': 'Organisme témoin : de nouveaux contrôles',
+                        'persona': 'Lisa',
+                    }
+                )
+
+    def test_editorial_policy_lets_a_neutral_subject_through(self) -> None:
+        with mock.patch.dict(os.environ, {'INFLUENCER_EXCLUDED_TOPICS': 'organisme témoin'}):
+            validate_editorial({'subject': 'DeepSeek sort V4 Flash', 'persona': 'Lisa'})
 
 
 if __name__ == '__main__':

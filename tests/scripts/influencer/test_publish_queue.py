@@ -4,7 +4,9 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 import sys
 import tempfile
+import os
 import unittest
+from unittest import mock
 
 
 SCRIPT_DIR = (
@@ -100,16 +102,22 @@ class PublicationQueueTest(QueueFixture):
         )
 
     def test_excluded_subject_is_refused_and_logged_before_queue(self) -> None:
+        # La liste des sujets écartés est PRIVÉE : elle vit dans l'environnement, jamais
+        # dans ce dépôt public. Le test pose donc la sienne — sans quoi il passerait
+        # sur la machine de Patrice et échouerait partout ailleurs.
+        patch = mock.patch.dict(os.environ, {'INFLUENCER_EXCLUDED_TOPICS': 'organisme temoin'})
+        patch.start()
+        self.addCleanup(patch.stop)
         with self.assertRaises(EditorialPolicyError):
             self.add(
-                subject='France Travail teste un algorithme',
-                title='France Travail automatise un contrôle',
+                subject='Organisme témoin teste un algorithme',
+                title='Organisme témoin automatise un contrôle',
             )
 
         self.assertEqual(self.queue.list(), [])
         events = self.queue.audit_events()
         self.assertEqual(events[-1]['event'], 'sujet_refusé')
-        self.assertIn('France Travail', events[-1]['details']['subject'])
+        self.assertIn('Organisme témoin', events[-1]['details']['subject'])
         self.assertTrue((self.root / 'journal.jsonl').read_text())
 
     def test_same_video_is_unique_per_platform(self) -> None:

@@ -2,8 +2,9 @@
 """Moisson quotidienne de sujets pour Lisa (influenceuse décryptage IA).
 
 RÈGLE ÉDITORIALE — les chaînes Lisa/Ambre ne traitent jamais un sujet où
-Patrice est personnellement partie prenante : France Travail / assurance
-chômage, CCAS, clients et partenaires commerciaux. Les titres concernés sont
+le créateur est personnellement partie prenante — employeur, clients, situation
+administrative. La liste vit dans l'environnement (INFLUENCER_EXCLUDED_TOPICS),
+jamais dans ce dépôt public. Les titres concernés sont
 écartés et journalisés AVANT le classement. Les exclusions par défaut viennent
 de ``EXCLUDED_TOPICS`` et peuvent être complétées avec la variable
 ``INFLUENCER_EXCLUDED_TOPICS``.

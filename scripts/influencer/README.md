@@ -6,9 +6,8 @@ tech, 2 compilations YouTube, 49 plans B-roll Veo Quality, 12 Shorts influenceus
 ## Règle éditoriale Lisa/Ambre
 
 Les chaînes Lisa et Ambre ne doivent **jamais** traiter un sujet où Patrice est
-personnellement partie prenante. Sont notamment exclus France Travail, Pôle
-emploi, l'assurance chômage, le contrôle ou la radiation des demandeurs
-d'emploi, l'ARE, la CCAS et l'action sociale, ainsi que les clients et
+personnellement partie prenante. La liste des sujets écartés est PRIVÉE : elle se
+déclare dans `INFLUENCER_EXCLUDED_TOPICS`, jamais dans ce dépôt public. Les clients et
 partenaires commerciaux de Patrice.
 
 `find-subjects.py` applique ce filtre à **tous** les titres collectés (Google

@@ -337,7 +337,14 @@ def test_entity_scan_ignores_transcript_only_promotional_outro(
     assert stats['boundary_transcript_mentions_ignored'] == 1
 
 
-def test_editorial_policy_is_applied_before_queue_ranking(tmp_path: Path) -> None:
+def test_editorial_policy_is_applied_before_queue_ranking(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # La liste des sujets écartés vit dans l'environnement, pas dans le dépôt : celui-ci
+    # est public, et y publier la liste dirait exactement ce qu'on cherche à taire. Le
+    # test pose la sienne, sinon il passerait sur la machine de Patrice et échouerait
+    # partout ailleurs.
+    monkeypatch.setenv('INFLUENCER_EXCLUDED_TOPICS', 'organisme témoin')
     observed = datetime(2026, 7, 28, tzinfo=UTC)
     inventory = {
         'updated_at': observed.isoformat(),
@@ -346,7 +353,7 @@ def test_editorial_policy_is_applied_before_queue_ranking(tmp_path: Path) -> Non
             video(
                 'excluded',
                 observed - timedelta(days=2),
-                title='France Travail automatise un nouveau contrôle',
+                title='Organisme témoin automatise un nouveau contrôle',
             ),
             video(
                 'eligible',
@@ -370,7 +377,7 @@ def test_editorial_policy_is_applied_before_queue_ranking(tmp_path: Path) -> Non
     encoded = json.dumps(queue, ensure_ascii=False)
     assert '"approved"' not in encoded
     assert all(
-        'France Travail automatise'
+        'Organisme témoin automatise'
         not in json.dumps(candidate, ensure_ascii=False)
         for candidate in queue['candidates']
     )

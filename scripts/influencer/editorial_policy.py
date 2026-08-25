@@ -1,52 +1,68 @@
 #!/usr/bin/env python3
-"""Politique éditoriale partagée par les chaînes Lisa et Ambre.
+"""Politique éditoriale partagée par les chaînes de la maison.
 
-Les sujets où Patrice est personnellement partie prenante sont exclus avant
-toute sélection, tout classement ou génération. La liste par défaut couvre
-notamment France Travail / l'assurance chômage et la CCAS / l'action sociale.
-Les clients et partenaires commerciaux supplémentaires doivent être ajoutés
-avec ``INFLUENCER_EXCLUDED_TOPICS`` (valeurs séparées par virgules, points-
-virgules ou retours à la ligne).
+Un créateur ne traite pas les sujets où il est lui-même partie prenante :
+son employeur, ses clients, sa situation administrative. Ce module écarte ces
+sujets AVANT toute sélection, tout classement et toute génération — plutôt que
+de compter sur une relecture qui, un jour, laissera passer.
+
+**La liste est privée par construction.** Elle n'a pas sa place dans un dépôt
+public : la publier reviendrait à documenter ce qu'on cherche justement à ne
+pas exposer. Elle se déclare dans l'environnement, via
+``INFLUENCER_EXCLUDED_TOPICS`` — un terme par ligne, ou séparés par des
+virgules ou des points-virgules. Un thème peut porter un libellé avec
+``libellé: terme1, terme2``.
+
+Exemple, dans ~/.codebuddy/media.env ou l'environnement du shell :
+
+    INFLUENCER_EXCLUDED_TOPICS="mon employeur: acme, acme corp; mon client: beta sa"
+
+Sans cette variable, aucun sujet n'est exclu et un avertissement le dit : mieux
+vaut une politique visiblement vide qu'une politique silencieusement inopérante.
 """
 
 import os
+import sys
+from pathlib import Path
 import re
 import unicodedata
 
 
-EXCLUDED_TOPICS: dict[str, tuple[str, ...]] = {
-    'France Travail / assurance chômage (situation personnelle de Patrice)': (
-        'france travail',
-        'pôle emploi',
-        'pole emploi',
-        'assurance chômage',
-        'assurance chomage',
-        'chômage',
-        'chomage',
-        "demandeur d'emploi",
-        "demandeurs d'emploi",
-        'allocation chômage',
-        'allocations chômage',
-        'allocation chomage',
-        'allocations chomage',
-        'indemnisation chômage',
-        'indemnisation chomage',
-        'cumul ARE',
-        'ARE',
-        'radiation',
-    ),
-    'CCAS / action sociale (client de Patrice)': (
-        'CCAS',
-        "centre communal d'action sociale",
-        "centres communaux d'action sociale",
-        "caisse d'allocations",
-        "caisses d'allocations",
-        'action sociale',
-        'aide sociale',
-    ),
-}
+# Aucun sujet exclu par défaut : la liste réelle vit dans l'environnement (voir le
+# docstring). Un dépôt public ne doit pas porter la liste des sujets qu'on évite —
+# elle dirait exactement ce qu'on cherche à taire.
+EXCLUDED_TOPICS: dict[str, tuple[str, ...]] = {}
 
 EXCLUDED_TOPICS_ENV = 'INFLUENCER_EXCLUDED_TOPICS'
+
+_MEDIA_ENV = Path('~/.codebuddy/media.env').expanduser()
+_AVERTI = False
+
+
+def _depuis_media_env() -> str:
+    """Replie sur ~/.codebuddy/media.env quand la variable n'est pas exportée.
+
+    Les scripts du pipeline sont lancés de contextes très différents — shell, cron,
+    sous-processus d'un agent. Dépendre d'un `export` préalable, c'est accepter qu'un
+    jour la politique soit silencieusement vide.
+    """
+    try:
+        for ligne in _MEDIA_ENV.read_text(encoding='utf-8').splitlines():
+            if ligne.startswith(f'{EXCLUDED_TOPICS_ENV}='):
+                return ligne.split('=', 1)[1].strip().strip('\'"')
+    except OSError:
+        pass
+    return ''
+
+
+def _prevenir_politique_vide() -> None:
+    global _AVERTI
+    _AVERTI = True
+    print(
+        f'AVERTISSEMENT : {EXCLUDED_TOPICS_ENV} n\'est pas définie — aucun sujet n\'est '
+        'écarté. Déclare-la dans ~/.codebuddy/media.env ou dans ton shell.',
+        file=sys.stderr,
+    )
 
 
 def _normalise(value: str) -> str:
@@ -59,7 +75,7 @@ def _normalise(value: str) -> str:
 
 
 def _configured_topics() -> tuple[str, ...]:
-    raw = os.environ.get(EXCLUDED_TOPICS_ENV, '')
+    raw = os.environ.get(EXCLUDED_TOPICS_ENV) or _depuis_media_env()
     return tuple(
         topic.strip()
         for topic in re.split(r'[,;\n]+', raw)
@@ -68,13 +84,18 @@ def _configured_topics() -> tuple[str, ...]:
 
 
 def get_excluded_topics() -> dict[str, tuple[str, ...]]:
-    """Retourne les exclusions par défaut enrichies par la configuration."""
+    """Les sujets à écarter, lus dans l'environnement.
+
+    Prévient une seule fois quand la politique est vide : sans avertissement, une
+    variable oubliée donnerait un filtre qui laisse tout passer en paraissant
+    fonctionner — le pire des deux mondes.
+    """
     topics = dict(EXCLUDED_TOPICS)
     configured = _configured_topics()
     if configured:
-        topics[
-            'client ou partenaire commercial configuré localement'
-        ] = configured
+        topics['sujet exclu (configuration locale)'] = configured
+    elif not _AVERTI:
+        _prevenir_politique_vide()
     return topics
 
 

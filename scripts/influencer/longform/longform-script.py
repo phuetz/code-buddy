@@ -2,7 +2,8 @@
 """Génère et valide le plan éditorial d'une vidéo longue Lisa.
 
 RÈGLE ÉDITORIALE — aucun sujet où Patrice est personnellement partie prenante :
-France Travail / assurance chômage, CCAS, clients ou partenaires commerciaux.
+déclarés dans INFLUENCER_EXCLUDED_TOPICS (employeur, clients, situation
+administrative). La liste reste privée : ce dépôt est public.
 Le sujet est contrôlé avant l'appel LLM et la règle est répétée dans le prompt.
 """
 

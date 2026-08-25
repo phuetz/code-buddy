@@ -7,7 +7,7 @@ humaine nominative. Ce point de contrôle protège simultanément :
 
 1. les comptes contre un profil d'automatisation assimilable à du spam ;
 2. Patrice contre la publication d'un sujet où il est personnellement exposé
-   (France Travail, chômage, ARE, CCAS et exclusions locales) ;
+   (sujets déclarés dans INFLUENCER_EXCLUDED_TOPICS, liste privée) ;
 3. les quotas d'envoi des plateformes.
 
 L'automatisation commence avant ce verrou et reprend immédiatement après lui.

@@ -8,8 +8,8 @@ les 8 à 10 secondes.
 ## Filtre éditorial obligatoire
 
 Une vidéo Lisa/Ambre ne traite jamais un sujet où Patrice est personnellement
-partie prenante : France Travail / Pôle emploi, assurance ou allocation chômage,
-contrôle des demandeurs d'emploi, ARE, radiation, CCAS / action sociale, clients
+partie prenante. La liste est privée et se déclare dans
+`INFLUENCER_EXCLUDED_TOPICS` ; elle n'a pas sa place dans un dépôt public. Clients
 et partenaires commerciaux. `longform-script.py` refuse un `--sujet` concerné
 avant l'appel au LLM et rappelle la règle dans le prompt pour empêcher sa
 réintroduction dans un exemple ou une démo.

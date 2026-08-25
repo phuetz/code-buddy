@@ -52,8 +52,8 @@ python3 scripts/influencer/collect-evidence.py \
 Le mode lot croise `sources.json`, le catalogue produit par
 `veille-youtube.py`, la sortie de `find-subjects.py` et son collecteur Google
 News RSS. Il classe les sources sans LLM payant, tente les preuves dans l'ordre
-et continue lorsqu'une page est inaccessible. France Travail, l'assurance
-chômage, la CCAS et les exclusions configurées dans `editorial_policy.py` sont
+et continue lorsqu'une page est inaccessible. Les sujets déclarés dans
+`INFLUENCER_EXCLUDED_TOPICS` (voir `editorial_policy.py`) sont
 refusés avant toute requête.
 
 Le dossier par défaut est visible par le Chromium snap :
