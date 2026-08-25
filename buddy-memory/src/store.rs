@@ -222,8 +222,13 @@ impl Store {
             let _ = fs::create_dir_all(dir);
         }
         if let Ok(mut f) = OpenOptions::new().create(true).append(true).open(&self.ledger_path) {
-            let line = serde_json::to_string(ev).unwrap_or_default();
-            let _ = writeln!(f, "{}", line);
+            // One write of the full JSON line + newline. writeln! emits the
+            // payload and the '\n' as two O_APPEND write() syscalls, so a
+            // concurrent TS or Rust writer can splice another record between
+            // them and tear both lines. POSIX/Linux atomicity is per write().
+            let mut buf = serde_json::to_vec(ev).unwrap_or_default();
+            buf.push(b'\n');
+            let _ = f.write_all(&buf);
         }
         // Apply via the ledger tail (NOT apply_event directly): load_incremental reads everything
         // from `offset` — our just-written line PLUS any events other processes appended since our
@@ -788,6 +793,49 @@ mod store_tests {
         let hits = b.recall("ledger pertes", 1, None);
         assert_eq!(hits[0].corroborations, 2);
         assert!(hits[0].confidence > 0.6);
+        let _ = std::fs::remove_dir_all(led.parent().unwrap());
+    }
+
+    #[test]
+    fn concurrent_appends_keep_whole_json_lines() {
+        // Four stores, one shared ledger — the TS/Rust mixed-engine shape.
+        // writeln! used to emit JSON and '\n' as two O_APPEND write()s, so a
+        // sibling writer could splice a record between them and tear both lines.
+        let led = tmp_ledger();
+        let n = 250usize;
+        std::thread::scope(|scope| {
+            for tag in ["a", "b", "c", "d"] {
+                let led = led.clone();
+                scope.spawn(move || {
+                    let mut store = Store::new(led, format!("{tag}/cb"));
+                    for i in 0..n {
+                        store.remember(&RememberInput {
+                            text: format!("concurrent {tag} fact {i} for jsonl integrity"),
+                            node_type: Some("fact".into()),
+                            name: Some(format!("{tag}-{i}")),
+                            agent_id: Some(format!("{tag}/cb")),
+                            ..Default::default()
+                        });
+                    }
+                });
+            }
+        });
+        let raw = fs::read_to_string(&led).expect("ledger readable");
+        let mut ok = 0usize;
+        for (i, line) in raw.lines().enumerate() {
+            if line.is_empty() {
+                continue;
+            }
+            serde_json::from_str::<serde_json::Value>(line).unwrap_or_else(|err| {
+                panic!("torn JSONL line {i}: {err}: {line}");
+            });
+            ok += 1;
+        }
+        assert!(
+            ok >= n * 4,
+            "expected at least {} entity lines, got {ok}",
+            n * 4
+        );
         let _ = std::fs::remove_dir_all(led.parent().unwrap());
     }
 }

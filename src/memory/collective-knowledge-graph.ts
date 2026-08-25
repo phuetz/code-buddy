@@ -908,7 +908,8 @@ export class CollectiveKnowledgeGraph {
   private append(event: LedgerEvent): void {
     const dir = dirname(this.ledgerPath);
     if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-    // O_APPEND keeps concurrent small-line writes from interleaving (POSIX atomic append).
+    // One write() of the full JSON line + newline. O_APPEND is atomic per
+    // syscall (the companion Rust engine must not split payload and '\n').
     appendFileSync(this.ledgerPath, `${JSON.stringify(event)}\n`, 'utf8');
   }
 
