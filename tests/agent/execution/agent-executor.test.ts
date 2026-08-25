@@ -20,6 +20,8 @@ import {
   getStreamingOptimizer,
   resetOptimizers,
 } from '../../../src/optimization/latency-optimizer.js';
+import { MiddlewarePipeline } from '../../../src/agent/middleware/pipeline.js';
+import { CostLimitMiddleware } from '../../../src/agent/middleware/cost-limit.js';
 
 // ---------------------------------------------------------------------------
 // Mock modules
@@ -2728,6 +2730,23 @@ describe('AgentExecutor', () => {
   // =========================================================================
 
   describe('Cost Tracking', () => {
+    it('records a tool-using turn exactly once with the default cost middleware', async () => {
+      const toolCall = makeToolCall('read_file', { path: '/x' }, 'cost_once');
+      setupLLMFlow(deps, [
+        { content: '', tool_calls: [toolCall] },
+        { content: 'Done.' },
+      ]);
+      const pipeline = new MiddlewarePipeline();
+      pipeline.use(new CostLimitMiddleware({
+        isSessionCostLimitReached: config.isSessionCostLimitReached,
+      }));
+      deps.middlewarePipeline = pipeline;
+
+      await new AgentExecutor(deps, config).processUserMessage('Read it', [], []);
+
+      expect(config.recordSessionCost).toHaveBeenCalledTimes(1);
+    });
+
     it('records cumulative input cost across provider rounds', async () => {
       const toolCall = makeToolCall('read_file', { path: '/x' }, 'cost_round_1');
       setupLLMFlow(deps, [

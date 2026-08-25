@@ -386,7 +386,6 @@ export class CodeBuddyAgent extends BaseAgent {
         try {
           const { CostLimitMiddleware } = await import('./middleware/cost-limit.js');
           pipeline.use(new CostLimitMiddleware({
-            recordSessionCost: this.recordSessionCost.bind(this),
             isSessionCostLimitReached: this.isSessionCostLimitReached.bind(this),
           }));
           logger.debug('CostLimitMiddleware registered in pipeline (priority 20)');

@@ -12,20 +12,15 @@ export class CostLimitMiddleware implements ConversationMiddleware {
   readonly name = 'cost-limit';
   readonly priority = 20;
 
-  private recordSessionCost: (input: number, output: number) => void;
   private isSessionCostLimitReached: () => boolean;
 
   constructor(deps: {
-    recordSessionCost: (input: number, output: number) => void;
     isSessionCostLimitReached: () => boolean;
   }) {
-    this.recordSessionCost = deps.recordSessionCost;
     this.isSessionCostLimitReached = deps.isSessionCostLimitReached;
   }
 
   afterTurn(context: MiddlewareContext): MiddlewareResult {
-    this.recordSessionCost(context.inputTokens, context.outputTokens);
-
     if (this.isSessionCostLimitReached()) {
       return {
         action: 'stop',
