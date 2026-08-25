@@ -32,10 +32,14 @@ export function createIntentCommand(): Command {
     .argument('[view]', 'graph|proofs|progress|integrity|outcomes|constitution|exchange|shadows', 'graph')
     .option('--json', 'Print structured JSON')
     .option('--limit <n>', 'Maximum proof records to show', parseLimit, 100)
-    .action((rawView: string, options: { json?: boolean; limit: number }) => {
+    .action((rawView: string, options: { json?: boolean; limit: number }, command) => {
       const view = rawView.toLowerCase() as IntentView;
-      if (!['graph', 'proofs', 'progress', 'integrity', 'outcomes', 'constitution', 'exchange', 'shadows'].includes(view)) {
-        throw new InvalidArgumentError('view must be graph, proofs, progress, integrity, outcomes, constitution, exchange or shadows');
+      const views = ['graph', 'proofs', 'progress', 'integrity', 'outcomes', 'constitution', 'exchange', 'shadows'];
+      if (!views.includes(view)) {
+        command.error(
+          `unknown view '${rawView}'. Expected: ${views.join(', ')}`,
+        );
+        return;
       }
 
       const state = getGoalManager().state;

@@ -49,6 +49,16 @@ describe('buddy intent', () => {
     expect(log).toHaveBeenCalledWith(expect.stringContaining('Start one with buddy loop'));
   });
 
+  it('rejects an unknown view with the received value and the accepted list', async () => {
+    const cmd = createIntentCommand().exitOverride();
+    let err = '';
+    cmd.configureOutput({ writeErr: (s) => { err += s; } });
+    await expect(cmd.parseAsync(['node', 'intent', 'nimportequoi'])).rejects.toThrow();
+    expect(err).toContain("unknown view 'nimportequoi'");
+    expect(err).toContain('graph');
+    expect(err).toContain('proofs');
+  });
+
   it('renders criterion progress and proof-chain integrity', async () => {
     const manager = getGoalManager();
     const state = manager.set('Prove criterion progress');
