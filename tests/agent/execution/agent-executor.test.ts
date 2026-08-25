@@ -66,6 +66,7 @@ jest.mock('../../../src/agent/execution/context-pipeline.js', async () => {
     ...actual,
     injectInitialContext: jest.fn(actual.injectInitialContext),
     injectNextRoundContext: jest.fn(actual.injectNextRoundContext),
+    runJitContextDiscovery: jest.fn(actual.runJitContextDiscovery),
   };
 });
 
@@ -73,6 +74,7 @@ jest.mock('../../../src/agent/execution/context-pipeline.js', async () => {
 import {
   injectInitialContext as injectInitialContextMock,
   injectNextRoundContext as injectNextRoundContextMock,
+  runJitContextDiscovery as runJitContextDiscoveryMock,
 } from '../../../src/agent/execution/context-pipeline.js';
 
 // ---------------------------------------------------------------------------
@@ -3255,6 +3257,27 @@ describe('AgentExecutor', () => {
       );
       expect(initialMock.mock.calls.length).toBe(1);
       expect(nextRoundMock.mock.calls.length).toBeGreaterThanOrEqual(1);
+    });
+
+    it('passes JIT context discovered after a tool to the next provider round', async () => {
+      const toolCall = makeToolCall('view_file', { path: 'src/example.ts' }, 'jit_context');
+      setupLLMFlow(deps, [
+        { content: '', tool_calls: [toolCall] },
+        { content: 'Done.' },
+      ]);
+      const jitMock = runJitContextDiscoveryMock as unknown as jest.Mock;
+      jitMock.mockResolvedValueOnce([
+        { role: 'system', content: 'JIT_CONTEXT_SENTINEL' },
+      ]);
+
+      await executor.processUserMessage('Inspect the file', [], []);
+
+      const secondRoundMessages = (deps.client.chatStream as jest.Mock).mock.calls[1][0] as
+        CodeBuddyMessage[];
+      expect(secondRoundMessages).toContainEqual({
+        role: 'system',
+        content: 'JIT_CONTEXT_SENTINEL',
+      });
     });
 
     // -------------------------------------------------------------------------

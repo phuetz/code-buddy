@@ -1139,6 +1139,7 @@ export class AgentExecutor {
     );
     message = preprocessed.message;
     const fileMentionContextBlocks = preprocessed.fileMentionContextBlocks;
+    const jitContextBlocks: CodeBuddyMessage[] = [];
     // Query ranking should also follow the current utterance on transports that
     // embed history in `message`; keep the full composite only as user context
     // for the provider. Normal CLI turns retain the preprocessed query.
@@ -1375,7 +1376,10 @@ export class AgentExecutor {
         // Build context in a scratch array while the prompt and tools are being
         // prepared. It is appended only after transcript preparation so the
         // existing compaction and repair ordering remains unchanged.
-        const contextBlocks: CodeBuddyMessage[] = [...fileMentionContextBlocks];
+        const contextBlocks: CodeBuddyMessage[] = [
+          ...fileMentionContextBlocks,
+          ...jitContextBlocks,
+        ];
         const contextPromise = toolRounds === 0
           ? injectInitialContext(contextBlocks, {
               message: turnQueryText,
@@ -1960,9 +1964,11 @@ export class AgentExecutor {
             // --- JIT context discovery: load subdirectory context files ---
             // Décision #2 du plan task #5 — promu du sequential vers streaming
             // pour parité d'enrichissement après chaque tool qui touche un path.
-            for (const msg of await runJitContextDiscovery(toolCall)) {
-              preparedMessages.push(msg);
-            }
+            // The current provider request already consumed preparedMessages.
+            // Keep newly discovered instructions in turn-local state so the
+            // next provider round actually receives them without persisting
+            // them into later user turns.
+            jitContextBlocks.push(...await runJitContextDiscovery(toolCall));
 
             // Build three deliberately separate views of one observation:
             //   1. recovery: exact native output persisted before any hook/optimizer,
