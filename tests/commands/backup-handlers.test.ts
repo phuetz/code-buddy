@@ -41,6 +41,7 @@ describe('Backup Handlers', () => {
   it('should handle unknown subcommand', async () => {
     const result = await handleBackup('unknown');
     expect(result.handled).toBe(true);
+    expect(result.exitCode).toBe(1);
     expect(result.response).toContain('Unknown backup subcommand');
   });
 
@@ -70,7 +71,10 @@ describe('Backup Handlers', () => {
 
       const result = await handleBackup('create');
       expect(result.handled).toBe(true);
+      expect(result.exitCode).toBe(1);
       expect(result.response).toContain('No .codebuddy/ directory');
+      expect(result.response).toContain('.codebuddy');
+      expect(result.response).toContain('buddy --init');
     });
 
     it('should support --only-config flag', async () => {
@@ -108,12 +112,14 @@ describe('Backup Handlers', () => {
 
       const result = await handleBackup('verify nonexistent.json');
       expect(result.handled).toBe(true);
+      expect(result.exitCode).toBe(1);
       expect(result.response).toContain('not found');
     });
 
     it('should require file argument', async () => {
       const result = await handleBackup('verify');
       expect(result.handled).toBe(true);
+      expect(result.exitCode).toBe(1);
       expect(result.response).toContain('Usage');
     });
   });
@@ -147,6 +153,7 @@ describe('Backup Handlers', () => {
     it('should require file argument', async () => {
       const result = await handleBackup('restore');
       expect(result.handled).toBe(true);
+      expect(result.exitCode).toBe(1);
       expect(result.response).toContain('Usage');
     });
 

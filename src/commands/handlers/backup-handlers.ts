@@ -14,6 +14,8 @@ import { logger } from '../../utils/logger.js';
 export interface CommandHandlerResult {
   handled: boolean;
   response?: string;
+  /** Non-zero when the CLI should fail (usage, missing file, unknown subcommand). */
+  exitCode?: number;
 }
 
 /** Default backup directory */
@@ -52,6 +54,7 @@ export async function handleBackup(
     default:
       return {
         handled: true,
+        exitCode: 1,
         response: `Unknown backup subcommand: ${subcommand}\nUsage: backup create|verify|list|restore`,
       };
   }
@@ -72,7 +75,9 @@ async function handleBackupCreate(flags: string[]): Promise<CommandHandlerResult
   if (!existsSync(sourcePath)) {
     return {
       handled: true,
-      response: 'No .codebuddy/ directory found in current project.',
+      exitCode: 1,
+      response:
+        `No .codebuddy/ directory found at ${sourcePath}. Create one with \`buddy --init\` first.`,
     };
   }
 
@@ -137,6 +142,7 @@ async function handleBackupVerify(args: string[]): Promise<CommandHandlerResult>
   if (!filePath) {
     return {
       handled: true,
+      exitCode: 1,
       response: 'Usage: backup verify <file>',
     };
   }
@@ -145,6 +151,7 @@ async function handleBackupVerify(args: string[]): Promise<CommandHandlerResult>
   if (!existsSync(fullPath)) {
     return {
       handled: true,
+      exitCode: 1,
       response: `Backup file not found: ${fullPath}`,
     };
   }
@@ -156,6 +163,7 @@ async function handleBackupVerify(args: string[]): Promise<CommandHandlerResult>
     if (!manifest || !manifest.version || !Array.isArray(manifest.files)) {
       return {
         handled: true,
+        exitCode: 1,
         response: `Invalid backup: missing or corrupt manifest`,
       };
     }
@@ -174,6 +182,7 @@ async function handleBackupVerify(args: string[]): Promise<CommandHandlerResult>
   } catch (err) {
     return {
       handled: true,
+      exitCode: 1,
       response: `Backup corrupt or unreadable: ${(err as Error).message}`,
     };
   }
@@ -223,6 +232,7 @@ async function handleBackupRestore(args: string[]): Promise<CommandHandlerResult
   if (!filePath) {
     return {
       handled: true,
+      exitCode: 1,
       response: 'Usage: backup restore <file>',
     };
   }
@@ -231,6 +241,7 @@ async function handleBackupRestore(args: string[]): Promise<CommandHandlerResult
   if (!existsSync(fullPath)) {
     return {
       handled: true,
+      exitCode: 1,
       response: `Backup file not found: ${fullPath}`,
     };
   }
@@ -242,6 +253,7 @@ async function handleBackupRestore(args: string[]): Promise<CommandHandlerResult
     if (!manifest || !Array.isArray(manifest.files)) {
       return {
         handled: true,
+        exitCode: 1,
         response: 'Invalid backup file.',
       };
     }
@@ -260,6 +272,7 @@ async function handleBackupRestore(args: string[]): Promise<CommandHandlerResult
   } catch (err) {
     return {
       handled: true,
+      exitCode: 1,
       response: `Failed to read backup: ${(err as Error).message}`,
     };
   }
