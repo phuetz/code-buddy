@@ -99,7 +99,11 @@ const DEFAULT_MODEL_CONFIGS: ModelToolConfig[] = [
     patchFormat: 'search_replace',
   },
   // MiniMax (OpenRouter). Relevé le 25/08/2026 sur /api/v1/models : m3 accepte
-  // 1 048 576 tokens de contexte — texte, image ET vidéo — pour 0 $ au palier `:free`.
+  // 1 048 576 tokens de contexte — texte, image ET vidéo.
+  //
+  // Le palier `m3:free` a vécu deux heures ce jour-là : disponible à 05h, retiré à 07h
+  // (« This model is unavailable for free »). Les entrées `:free` restent utiles quand
+  // le palier revient, mais rien ne doit en dépendre. `m2.7:free` tenait encore.
   // Sans ces entrées, un modèle inconnu retombe sur 32 768 de contexte et son prompt
   // système est tronqué à 14 336 tokens : le million annoncé reste inutilisé.
   // Le palier gratuit borne les requêtes par jour, pas la taille du contexte.
