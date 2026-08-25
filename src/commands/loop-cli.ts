@@ -94,6 +94,15 @@ export function createLoopCommand(): Command {
     )
     .option('--no-plan', 'Désactiver la décomposition en plan')
     .option('-m, --model <model>', 'Override du modèle agent pour ce run')
+    // `--permission-mode` existe sur le programme principal, mais Commander n'accepte une
+    // option globale qu'AVANT la sous-commande : `buddy loop … --permission-mode acceptEdits`
+    // échouait sur « unknown option », sans dire où la placer. Or c'est précisément sur une
+    // boucle autonome qu'on veut préciser la posture, et la forme naturelle est de la mettre
+    // après l'objectif. On l'accepte donc ici aussi ; la forme globale continue de marcher.
+    .option(
+      '--permission-mode <mode>',
+      'Posture de permission : default, plan, acceptEdits, dontAsk, bypassPermissions',
+    )
     .option(
       '--max-tool-rounds <n>',
       'Max tool rounds par tour',
@@ -106,6 +115,19 @@ export function createLoopCommand(): Command {
         await loadLoopEnv(launchDir);
         const cwd = applyGoalCliWorkingDirectory(command);
         if (cwd !== launchDir) await loadLoopEnv(cwd);
+
+        const permissionMode: string | undefined =
+          options.permissionMode ?? command?.optsWithGlobals?.()?.permissionMode;
+        if (permissionMode) {
+          const { getPermissionModeManager } = await import('../security/permission-modes.js');
+          const modes = ['default', 'plan', 'acceptEdits', 'dontAsk', 'bypassPermissions'] as const;
+          if (!modes.includes(permissionMode as (typeof modes)[number])) {
+            throw new Error(
+              `Posture de permission inconnue : ${permissionMode}. Valeurs : ${modes.join(', ')}`,
+            );
+          }
+          getPermissionModeManager().setMode(permissionMode as (typeof modes)[number]);
+        }
 
         const modelOverride: string | undefined = options.model ?? command?.optsWithGlobals?.()?.model;
         const resolved = resolveCommandProvider({ explicitModel: modelOverride });
