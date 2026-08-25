@@ -694,11 +694,115 @@ def render_capture_frames(spec: dict[str, Any], dur: float) -> list[tuple[Image.
     return frames
 
 
+def render_demo_chassis(spec: dict[str, Any], zone: tuple[int, int, int, int]) -> Path:
+    """Le châssis d'une carte « démo » : même écran arrondi que `capture`, mais évidé.
+
+    On dessine tout SAUF l'intérieur de l'écran, qu'on laisse transparent : la vidéo
+    de l'outil viendra se poser dessous par un overlay ffmpeg. Une carte `capture`
+    fabrique une image par pas de zoom ; ici l'action est DANS la vidéo, donc un seul
+    châssis suffit et il ne bouge pas."""
+    src_name = str(spec.get('source', ''))
+    date = str(spec.get('date', ''))
+    foot = str(spec.get('ligne', f'Source : {src_name}' if src_name else ''))
+    kicker = spec.get('kicker', 'DÉMO · EN DIRECT')
+    px, py, pw, ph = 150, 130, W - 300, H - 260
+    top_h = 60 if (src_name or date) else 0
+    foot_h = 70 if foot else 0
+    dx, dy, cw, ch = zone
+
+    img, d = card_base(kicker)
+    img = img.convert('RGBA')
+    d = ImageDraw.Draw(img)
+    d.rounded_rectangle([px + 12, py + 16, px + pw + 12, py + ph + 16], radius=18, fill=(0, 0, 0, 255))
+    d.rounded_rectangle([px, py, px + pw, py + ph], radius=18, fill=(246, 246, 242, 255))
+    if top_h:
+        mf = font(30, 'Condensed Bold')
+        d.text((px + 40, py + 16), src_name.upper(), font=mf, fill=RED)
+        if date:
+            d.text((px + pw - 40 - mf.getlength(date), py + 16), date, font=mf, fill=(110, 110, 110))
+        d.line([(px + 40, py + top_h - 2), (px + pw - 40, py + top_h - 2)], fill=(200, 200, 195), width=2)
+    if foot_h:
+        ff = font(34, 'Condensed Bold')
+        d.rectangle([px, py + ph - foot_h, px + pw, py + ph], fill=RED)
+        fl = wrap_lines(foot, ff, pw - 80)[0]
+        d.text((px + 40, py + ph - foot_h + 16), fl, font=ff, fill=WHITE)
+    # Le cadre de l'écran est dessiné, puis son intérieur est évidé.
+    d.rectangle([dx - 2, dy - 2, dx + cw + 2, dy + ch + 2], outline=(180, 180, 175), width=2)
+    for a in spec.get('annot', []) or []:
+        ax0, ay0, ax1, ay1 = [float(v) for v in a.get('box', [0, 0, 0, 0])]
+        if a.get('forme', 'rect') == 'ellipse':
+            d.ellipse([dx + ax0, dy + ay0, dx + ax1, dy + ay1], outline=RED, width=7)
+        else:
+            d.rectangle([dx + ax0, dy + ay0, dx + ax1, dy + ay1], outline=RED, width=7)
+        label = a.get('label')
+        if label:
+            lf = font(34, 'Condensed ExtraBold')
+            lw = lf.getlength(label) + 28
+            ly = dy + ay0 - 50 if dy + ay0 - 50 > dy else dy + ay1 + 8
+            d.rectangle([dx + ax0, ly, dx + ax0 + lw, ly + 44], fill=RED)
+            d.text((dx + ax0 + 14, ly + 4), label, font=lf, fill=WHITE)
+    ax, ay, aw, ah = spec['_area']
+    trou = Image.new('RGBA', (aw, ah), (0, 0, 0, 0))
+    img.paste(trou, (ax, ay))
+    dest = Path(tempfile.mkdtemp(prefix='demo-chassis-')) / 'chassis.png'
+    img.save(dest)
+    return dest
+
+
+def render_demo_card(spec: dict[str, Any], dur: float, dest: Path, workdir: Path) -> None:
+    """Carte « démo » : une VRAIE capture vidéo d'un outil en marche, dans le châssis de `capture`.
+
+    Une carte `capture` prouve qu'une source existe ; une carte `demo` prouve qu'un outil
+    FONCTIONNE — le terminal qui répond, la commande qui tourne, le résultat qui s'affiche.
+    C'est la différence entre citer un benchmark et le montrer.
+
+    La vidéo est mise à l'échelle « contain » dans l'écran (jamais déformée, jamais rognée),
+    posée sur un fond sombre, et le châssis évidé vient par-dessus. Si la démo est plus courte
+    que la carte, sa dernière image est tenue ; plus longue, elle est coupée — la durée de la
+    carte reste celle que le plan a prévue, sinon la voix se décale."""
+    video = expand(str(spec.get('video', '')))
+    if not video.exists():
+        raise NewsLongError(f'démo introuvable: {video}')
+    with path_lock(dest):
+        if dest.exists():
+            return
+        dur = q(dur)
+        px, py, pw, ph = 150, 130, W - 300, H - 260
+        top_h = 60 if (spec.get('source') or spec.get('date')) else 0
+        foot_h = 70 if spec.get('ligne', spec.get('source')) else 0
+        aw, ah = pw - 28, ph - top_h - foot_h - 28
+        vw, vh = [int(v) for v in run(['ffprobe', '-v', 'error', '-select_streams', 'v:0',
+                                       '-show_entries', 'stream=width,height', '-of', 'csv=p=0',
+                                       str(video)], capture=True).stdout.strip().split(',')[:2]]
+        sc = min(aw / vw, ah / vh)
+        cw, ch = int(vw * sc) // 2 * 2, int(vh * sc) // 2 * 2
+        dx = px + 14 + (aw - cw) // 2
+        dy = py + top_h + 14 + (ah - ch) // 2
+        spec = {**spec, '_area': (px + 14, py + top_h + 14, aw, ah)}
+        chassis = render_demo_chassis(spec, (dx, dy, cw, ch))
+        try:
+            # `tpad` tient la dernière image si la démo est plus courte que la carte.
+            filtre = (f'[1:v]scale={cw}:{ch},fps={FPS},tpad=stop_mode=clone:stop_duration={dur:.3f}[v];'
+                      f'[0:v][v]overlay={dx}:{dy}:shortest=0[b];'
+                      f'[b][2:v]overlay=0:0:format=auto,format=yuv420p[o]')
+            atomic(['ffmpeg', '-y', '-hide_banner', '-v', 'error',
+                    '-f', 'lavfi', '-i', f'color=c=0x141414:s={W}x{H}:r={FPS}',
+                    '-i', str(video), '-i', str(chassis),
+                    '-filter_complex', filtre, '-map', '[o]',
+                    '-t', f'{dur:.6f}', '-an', *X264], dest)
+        finally:
+            shutil.rmtree(chassis.parent, ignore_errors=True)
+
+
 def render_card_video(spec: dict[str, Any], dur: float, dest: Path, workdir: Path) -> None:
     """Rend une carte en MP4 depuis ses frames PIL. Les frames + la liste concat vivent dans un dossier
     temporaire UNIQUE par appel (mkdtemp) : `dest.stem` (ex. card-03) est le même dans chaque segment,
     et quatre segments rendus en parallèle se volaient/supprimaient `frames/card-03/` (incident du 22/08,
     ffmpeg 254 « list.txt introuvable »). Le verrou par destination évite en plus deux rendus identiques."""
+    if spec.get('type') == 'demo':
+        # L'action est dans la vidéo : ce chemin ne passe pas par des frames PIL.
+        render_demo_card(spec, dur, dest, workdir)
+        return
     with path_lock(dest):
         if dest.exists():
             return
