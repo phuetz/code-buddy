@@ -1425,6 +1425,214 @@ export class ToolHandler {
   }
 
   /**
+   * Streaming bash dispatch. Mirrors executeTool's authorization, lifecycle
+   * hooks and RunStore events, then yields from BashTool.executeStreaming.
+   *
+   * Confirmation is not asked here: authorizeToolAction skips the generic
+   * confirm prompt for PRECISE_RUNTIME_APPROVAL_TOOLS, and the shell adapter
+   * still calls evaluateShellExecution (deny/ask/sandbox) before spawn.
+   */
+  private async *executeStreamingBash(
+    toolCall: CodeBuddyToolCall,
+    executionExtra: Record<string, unknown> | undefined,
+    startTime: number,
+  ): AsyncGenerator<string, ToolResult, undefined> {
+    const toolName = 'bash';
+    const hooksManager = getToolHooksManager();
+    let args: Record<string, unknown>;
+    try {
+      args = JSON.parse(toolCall.function.arguments) as Record<string, unknown>;
+    } catch (error) {
+      return { success: false, error: `Streaming execution error: ${getErrorMessage(error)}` };
+    }
+
+    let hookContext: ToolHookContext = {
+      toolName,
+      originalArgs: { ...args },
+      args,
+      toolCallId: toolCall.id,
+      timestamp: startTime,
+    };
+
+    const authorizationCwd = this.currentWorkingDirectory ?? process.cwd();
+    const authorizedScope = buildToolApprovalKey(toolName, args, authorizationCwd);
+    const authorizationError = await this.authorizeToolAction(
+      toolName,
+      args,
+      hookContext,
+      hooksManager,
+    );
+    if (authorizationError) return authorizationError;
+
+    if (this.currentRunId) {
+      RunStore.getInstance().emit(this.currentRunId, {
+        type: 'tool_call',
+        data: {
+          toolName,
+          toolCallId: toolCall.id,
+          args: this.sanitizeArgsForLog(args),
+        },
+      });
+    }
+
+    hookContext = await hooksManager.executeBeforeHooks(hookContext);
+    const modifiedArgs = hookContext.args;
+
+    let abortExecution = false;
+    let lifecycleModifiedArgs = { ...modifiedArgs };
+    try {
+      const lifecycleBeforeResult = await this.deps.hooksManager.executeHooks('before-tool-call', {
+        toolName,
+        toolArgs: modifiedArgs,
+        sessionId: this.currentRunId,
+      });
+      for (const res of lifecycleBeforeResult) {
+        if (res.abort) {
+          abortExecution = true;
+        }
+        if (res.modified?.toolArgs) {
+          lifecycleModifiedArgs = { ...lifecycleModifiedArgs, ...res.modified.toolArgs };
+        }
+      }
+    } catch (hookError) {
+      logger.warn('before-tool-call hook failed, continuing with execution', {
+        error: getErrorMessage(hookError),
+      });
+    }
+
+    if (abortExecution) {
+      return {
+        success: false,
+        error: `Execution of tool "${toolName}" was aborted by a before-tool-call hook.`,
+      };
+    }
+
+    hookContext.args = lifecycleModifiedArgs;
+    const finalArgs = hookContext.args;
+    const finalScope = buildToolApprovalKey(toolName, finalArgs, authorizationCwd);
+    if (finalScope !== authorizedScope) {
+      const modifiedAuthorizationError = await this.authorizeToolAction(
+        toolName,
+        finalArgs,
+        hookContext,
+        hooksManager,
+      );
+      if (modifiedAuthorizationError) return modifiedAuthorizationError;
+    }
+
+    try {
+      const command = finalArgs.command as string;
+      const timeout = (finalArgs.timeout as number) || 30000;
+
+      // A weaker model can emit a `bash` call without a `command` (or a
+      // non-string one). Fail with a clear, recoverable message instead of
+      // crashing downstream on `command.trim()` (auto-repair can then re-prompt).
+      let bashResult: ToolResult;
+      if (typeof command !== 'string' || command.trim() === '') {
+        bashResult = {
+          success: false,
+          error:
+            'bash: missing a non-empty "command" string argument. Put the shell command to run in the "command" field.',
+        };
+      } else {
+        try {
+          await this.deps.hooksManager.executeHooks('pre-bash', { command });
+        } catch (hookError) {
+          logger.warn('Pre-bash hook failed, continuing with execution', {
+            error: getErrorMessage(hookError),
+          });
+        }
+
+        const directoryChange = this.changeSessionDirectory(
+          command,
+          this.currentWorkingDirectory ?? process.cwd(),
+        );
+        if (directoryChange) {
+          bashResult = directoryChange;
+        } else {
+          // Session cwd override — the streaming path is what embedded hosts
+          // (Cowork) actually exercise; without it, streamed bash ran in the
+          // Electron process cwd regardless of the session workingDirectory.
+          const gen = this.bash.executeStreaming(
+            command,
+            timeout,
+            this.currentWorkingDirectory,
+            abortSignalFromExecutionExtra(executionExtra),
+          );
+          let streamed = await gen.next();
+          while (!streamed.done) {
+            yield streamed.value;
+            streamed = await gen.next();
+          }
+          bashResult = streamed.value ?? { success: false, error: 'Tool returned no result' };
+        }
+
+        try {
+          await this.deps.hooksManager.executeHooks('post-bash', {
+            command,
+            output: bashResult.output,
+            error: bashResult.error,
+          });
+        } catch (hookError) {
+          logger.warn('Post-bash hook failed', { error: getErrorMessage(hookError) });
+        }
+      }
+
+      const hookResult: ToolHookResult = {
+        success: bashResult.success,
+        output: bashResult.output,
+        error: bashResult.error,
+        executionTimeMs: Date.now() - startTime,
+      };
+      const finalHookResult = await hooksManager.executeAfterHooks(hookContext, hookResult);
+
+      await this.deps.hooksManager.executeHooks('after-tool-call', {
+        toolName,
+        toolArgs: finalArgs,
+        output: finalHookResult.output,
+        error: finalHookResult.error,
+        sessionId: this.currentRunId,
+      });
+
+      if (!finalHookResult.success && finalHookResult.error) {
+        await hooksManager.executeErrorHooks(
+          hookContext,
+          new Error(finalHookResult.error),
+        );
+        try {
+          await this.deps.hooksManager.executeHooks('on-tool-failure', {
+            toolName,
+            error: finalHookResult.error,
+          });
+        } catch { /* hook failure non-fatal */ }
+      }
+
+      if (this.currentRunId) {
+        RunStore.getInstance().emit(this.currentRunId, {
+          type: 'tool_result',
+          data: {
+            toolName,
+            toolCallId: toolCall.id,
+            success: finalHookResult.success,
+            outputLength: finalHookResult.output?.length || 0,
+            error: finalHookResult.error,
+            durationMs: Date.now() - startTime,
+          },
+        });
+      }
+
+      return {
+        success: finalHookResult.success,
+        output: finalHookResult.output,
+        error: finalHookResult.error,
+        ...(bashResult.data !== undefined ? { data: bashResult.data } : {}),
+      };
+    } catch (error) {
+      return { success: false, error: `Streaming execution error: ${getErrorMessage(error)}` };
+    }
+  }
+
+  /**
    * Execute a tool with streaming output.
    * Currently only supports bash. Falls back to executeTool for other tools.
    * Yields string deltas for real-time output.
@@ -1440,48 +1648,11 @@ export class ToolHandler {
       return filterBlock;
     }
 
-    // Bash: stream stdout/stderr in real-time
+    // Bash: stream stdout/stderr in real-time. Authorization, lifecycle
+    // hooks and RunStore tracing must still match executeTool — this path
+    // exists only to yield chunks, not to skip the guarded dispatch.
     if (toolName === 'bash') {
-      try {
-        const args = JSON.parse(toolCall.function.arguments);
-        const command = args.command as string;
-        const timeout = (args.timeout as number) || 30000;
-
-        // A weaker model can emit a `bash` call without a `command` (or a
-        // non-string one). Fail with a clear, recoverable message instead of
-        // crashing downstream on `command.trim()` (auto-repair can then re-prompt).
-        if (typeof command !== 'string' || command.trim() === '') {
-          return {
-            success: false,
-            error:
-              'bash: missing a non-empty "command" string argument. Put the shell command to run in the "command" field.',
-          };
-        }
-
-        const directoryChange = this.changeSessionDirectory(
-          command,
-          this.currentWorkingDirectory ?? process.cwd(),
-        );
-        if (directoryChange) return directoryChange;
-
-        // Session cwd override — the streaming path is what embedded hosts
-        // (Cowork) actually exercise; without it, streamed bash ran in the
-        // Electron process cwd regardless of the session workingDirectory.
-        const gen = this.bash.executeStreaming(
-          command,
-          timeout,
-          this.currentWorkingDirectory,
-          abortSignalFromExecutionExtra(executionExtra),
-        );
-        let result = await gen.next();
-        while (!result.done) {
-          yield result.value;
-          result = await gen.next();
-        }
-        return result.value;
-      } catch (error) {
-        return { success: false, error: `Streaming execution error: ${getErrorMessage(error)}` };
-      }
+      return yield* this.executeStreamingBash(toolCall, executionExtra, startTime);
     }
 
     // Reason: stream MCTS progress events in real-time
