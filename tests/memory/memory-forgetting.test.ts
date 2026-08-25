@@ -5,7 +5,7 @@
  * cadence gate. Real fs (temp dirs), no mocks.
  */
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { mkdtemp, mkdir, readFile, writeFile } from 'fs/promises';
+import { chmod, mkdtemp, mkdir, readFile, writeFile } from 'fs/promises';
 import os from 'os';
 import path from 'path';
 
@@ -184,6 +184,30 @@ describe('persistent memory — applyForgetting (recoverable)', () => {
     expect(result.forgotten).toEqual([]);
     expect(manager.recall('precious')).toBe('ne jamais perdre');
   });
+
+  it.skipIf(process.platform === 'win32')(
+    'fail-closed: chmod 0444 on the archive file deletes nothing',
+    async () => {
+      const dir = await mkdtemp(path.join(os.tmpdir(), 'forget-chmod-'));
+      const manager = await makeManager(dir);
+      await manager.remember('precious', 'ne jamais perdre', { category: 'context' });
+      const archive = path.join(dir, 'CODEBUDDY_MEMORY.archive.md');
+      const livePath = path.join(dir, 'CODEBUDDY_MEMORY.md');
+      await writeFile(archive, '# existing archive\n');
+      await chmod(archive, 0o444);
+      try {
+        const liveBefore = await readFile(livePath, 'utf8');
+        const result = await manager.applyForgetting('project', { now: new Date(Date.now() + 365 * DAY) });
+        expect(result.forgotten).toEqual([]);
+        expect(manager.get('precious')?.value).toBe('ne jamais perdre');
+        const liveAfter = await readFile(livePath, 'utf8');
+        expect(liveAfter).toBe(liveBefore);
+        expect(liveAfter).toContain('precious');
+      } finally {
+        await chmod(archive, 0o644);
+      }
+    },
+  );
 });
 
 describe('dreaming — forgetting pass wiring', () => {

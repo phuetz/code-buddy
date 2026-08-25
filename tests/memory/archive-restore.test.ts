@@ -90,6 +90,16 @@ describe('archive restore (recoverable forgetting)', () => {
     expect(await manager.restoreFromArchive('never-forgotten')).toBeNull();
   });
 
+  it('a second restore after a successful restore returns null and keeps the live entry', async () => {
+    await forget('once', 'only once');
+    const first = await manager.restoreFromArchive('once');
+    expect(first?.result.status).toBe('stored');
+    expect(manager.get('once')?.value).toBe('only once');
+    expect(await manager.restoreFromArchive('once')).toBeNull();
+    expect(manager.get('once')?.value).toBe('only once');
+    expect(await manager.listArchived()).toHaveLength(0);
+  });
+
   it('restores the LATEST archived version when a key was forgotten twice', async () => {
     await forget('versioned', 'v1 of the fact');
     await forget('versioned', 'v2 of the fact');
