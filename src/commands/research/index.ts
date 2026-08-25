@@ -10,7 +10,7 @@
  *   buddy research "competitor analysis for Manus AI" --items 25 --report report.md
  */
 
-import { Command } from 'commander';
+import { Command, InvalidArgumentError } from 'commander';
 import {
   computeWideResearchDefaultOverallTimeoutMs,
   WideResearchOrchestrator,
@@ -84,14 +84,25 @@ function detectReportPathFromArgv(argv: string[]): string | undefined {
   return undefined;
 }
 
-function parseClampedInteger(
+export function parseClampedInteger(
   value: unknown,
   fallback: number,
   minimum: number,
-  maximum?: number,
+  maximum: number | undefined,
+  optionName: string,
 ): number {
-  const parsed = typeof value === 'string' ? Number.parseInt(value, 10) : Number.NaN;
-  const normalized = Number.isFinite(parsed) ? Math.floor(parsed) : fallback;
+  if (value === undefined) {
+    return Math.max(minimum, maximum === undefined ? fallback : Math.min(maximum, fallback));
+  }
+  const raw = String(value).trim();
+  if (!/^-?\d+$/.test(raw)) {
+    const range = maximum === undefined ? `${minimum}+` : `${minimum}–${maximum}`;
+    throw new InvalidArgumentError(
+      `${optionName} must be an integer in ${range} (received ${JSON.stringify(value)})`,
+    );
+  }
+  const parsed = Number.parseInt(raw, 10);
+  const normalized = Number.isFinite(parsed) ? parsed : fallback;
   return Math.max(minimum, maximum === undefined ? normalized : Math.min(maximum, normalized));
 }
 
@@ -164,15 +175,30 @@ export function createResearchCommand(): Command {
         baseURL: resolved.baseURL,
       };
 
-      const legacyWorkers = opts.workers === undefined
-        ? undefined
-        : parseClampedInteger(opts.workers, 5, 1, 20);
-      const items = parseClampedInteger(opts.items, legacyWorkers ?? 5, 1, 250);
-      const concurrency = Math.min(
-        items,
-        parseClampedInteger(opts.concurrency, legacyWorkers ?? 5, 1, 20),
-      );
-      const maxRoundsPerWorker = parseClampedInteger(opts.rounds, 15, 1);
+      let legacyWorkers: number | undefined;
+      let items: number;
+      let concurrency: number;
+      let maxRoundsPerWorker: number;
+      try {
+        legacyWorkers = opts.workers === undefined
+          ? undefined
+          : parseClampedInteger(opts.workers, 5, 1, 20, '--workers');
+        items = parseClampedInteger(opts.items, legacyWorkers ?? 5, 1, 250, '--items');
+        concurrency = Math.min(
+          items,
+          parseClampedInteger(opts.concurrency, legacyWorkers ?? 5, 1, 20, '--concurrency'),
+        );
+        maxRoundsPerWorker = parseClampedInteger(opts.rounds, 15, 1, undefined, '--rounds');
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        if (jsonOutput) {
+          console.log(JSON.stringify({ kind: 'wide_research_run', status: 'failed', error: message }));
+        } else {
+          console.error(`❌ ${message}`);
+        }
+        process.exitCode = 1;
+        return;
+      }
       const workerTimeoutMs = Math.max(5_000, parseInt(opts.workerTimeoutMs, 10) || 90_000);
       const explicitOverallTimeout = typeof opts.timeoutMs === 'string';
       const overallTimeoutMs = explicitOverallTimeout
