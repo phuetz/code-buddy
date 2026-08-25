@@ -40,6 +40,7 @@ import {
 import type { ToolResult } from '../types/index.js';
 import { logger } from '../utils/logger.js';
 import type { PeerChatProviderId } from '../fleet/peer-chat-client-factory.js';
+import { sanitizePeerText } from '../fleet/peer-text-sanitizer.js';
 
 const DEFAULT_TIMEOUT_MS = 60_000;
 const IDLE_RESET_MS = 120_000;
@@ -184,7 +185,11 @@ export async function executePeerDelegate(params: PeerDelegateParams): Promise<T
     )) as PeerChatRpcResult;
 
     const elapsedMs = Date.now() - t0;
-    const text = raw?.text ?? '';
+    // The peer is another machine: its answer is model prose that lands in the
+    // agent's context as a tool result. Strip leakage/control tokens at the door
+    // (local model output already is, in agent-executor) so a peer cannot inject
+    // <think>/<|im_start|>/[INST]/<<SYS>> or invisible characters into our prompt.
+    const text = sanitizePeerText(raw?.text);
     const lines: string[] = [`[peer: ${params.peer}] [${elapsedMs}ms]`, text];
     if (raw?.usage?.total_tokens != null) {
       const inT = raw.usage.prompt_tokens ?? '?';

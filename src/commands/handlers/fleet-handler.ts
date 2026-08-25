@@ -59,6 +59,7 @@ import {
   normalizePeerChatProviderId,
   type PeerChatProviderId,
 } from '../../fleet/peer-chat-client-factory.js';
+import { sanitizePeerText } from '../../fleet/peer-text-sanitizer.js';
 
 // eslint-disable-next-line no-control-regex -- Fleet stream chunks may contain terminal control bytes from remote peers.
 const ANSI_ESCAPE_PATTERN = /\x1B\[[0-?]*[ -/]*[@-~]/g;
@@ -984,7 +985,9 @@ async function handleChat(rest: string[]): Promise<CommandHandlerResult> {
       ref.dispatchProfile = result.dispatchProfile ?? ref.dispatchProfile;
       ref.provider = result.providerResolved ?? ref.provider;
       activeAlias = alias;
-      const text = result?.text ?? '';
+      // Peer prose from another machine — sanitized at the door like every
+      // other model output surface (see fleet/peer-text-sanitizer.ts).
+      const text = sanitizePeerText(result?.text);
       const providerTxt = ref.provider ? `, provider ${ref.provider}` : '';
       const profileTxt = ref.dispatchProfile ? `, profile ${ref.dispatchProfile}` : '';
       return textResult(

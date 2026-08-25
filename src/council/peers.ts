@@ -4,6 +4,7 @@
  * @module council/peers
  */
 
+import { sanitizePeerText } from '../fleet/peer-text-sanitizer.js';
 import type { CouncilPeer, GatherPeerAnswersOptions, PeerAnswer } from './types.js';
 
 /**
@@ -27,7 +28,11 @@ export async function gatherPeerAnswers(
         modelRequested?: string;
         usage?: { total_tokens?: number };
       };
-      const content = (resp?.text ?? '').trim();
+      // A peer is another machine we do not control: its prose is sanitized at
+      // the door, exactly like local model answers (council-engine.ts). Without
+      // this, a peer could smuggle <think>/<|im_start|>/[INST]/<<SYS>> or
+      // zero-width characters into the judge prompt built below.
+      const content = sanitizePeerText(resp?.text).trim();
       if (!content) throw new Error('réponse vide');
       return {
         modelId: p.id,
