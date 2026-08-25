@@ -27,8 +27,11 @@ souci() { printf '\033[33m   ⚠ %s\033[0m\n' "$*"; }
 # ---------------------------------------------------------------------------
 gras "Quota disponible ?"
 
-# Un appel à 1 unité suffit à savoir si le compteur est reparti : inutile d'entamer le
-# travail pour le voir mourir au milieu.
+# Le sondage doit coûter AUTANT que l'opération visée. Un appel à 1 unité (channels.list)
+# passe encore quand il ne reste que des miettes, et laisse croire que le quota est reparti :
+# mesuré le 25/08 à 3h47, il annonçait « disponible » alors que les neuf dépôts ont tous
+# échoué. On sonde donc avec captions.list, qui coûte 50 unités comme celui qui précède
+# chaque dépôt.
 if node -e "
 const fs=require('fs'),path=require('path'),os=require('os');
 const {createRequire}=require('module');
@@ -41,7 +44,7 @@ for(const l of fs.readFileSync(path.join(MCP,'.env'),'utf8').split('\n')){
 }
 const o=new google.auth.OAuth2(env.GOOGLE_CLIENT_ID,env.GOOGLE_CLIENT_SECRET,'http://localhost:8723');
 o.setCredentials(JSON.parse(fs.readFileSync(path.join(MCP,'tokens.json'),'utf8')));
-google.youtube({version:'v3',auth:o}).channels.list({part:['id'],mine:true})
+google.youtube({version:'v3',auth:o}).captions.list({part:['snippet'],videoId:'ARYfmvZ4H5E'})
   .then(()=>process.exit(0)).catch(e=>{console.error(e.message.split('\n')[0].slice(0,70));process.exit(1);});
 " 2>&1 | sed 's/^/   /'; then
   info "✅ le quota est reparti."

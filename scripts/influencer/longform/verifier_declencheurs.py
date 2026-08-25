@@ -73,8 +73,16 @@ def declencheurs(ordre, segs):
                     (citation['segment'], citation['a'], 'hook/citation/fin')]
     for sid, seg in segs.items():
         for carte in seg.get('cartes', []) or []:
-            if isinstance(carte, dict) and carte.get('at') is not None:
-                trouves.append((sid, carte['at'], f"carte « {str(carte.get('valeur', ''))[:24]} »"))
+            if not isinstance(carte, dict):
+                continue
+            # Selon les projets la clé porte le nom `t` ou `at` : chercher les deux, sinon
+            # le contrôle passe à côté de la moitié des cartes sans rien dire — c'est ce
+            # qui est arrivé le 25/08, deux cartes tombées sur leur repli en silence.
+            spec = carte.get('t', carte.get('at'))
+            if spec is None:
+                continue
+            etiquette = str(carte.get('valeur') or carte.get('chiffre') or carte.get('titre') or '')
+            trouves.append((sid, spec, f"carte « {etiquette[:24]} »"))
         for cut in seg.get('cut', []) or []:
             if isinstance(cut, str) and '@' in cut:
                 trouves.append((sid, cut.split('@', 1)[1].rsplit(':', 1)[0], 'cut-away'))
