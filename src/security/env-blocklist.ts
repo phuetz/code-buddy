@@ -30,6 +30,11 @@ export const BLOCKED_ENV_VARS: Set<string> = new Set([
   // Python
   'PYTHONBREAKPOINT',
 
+  // Node.js — `NODE_OPTIONS=--require evil.js` exécute du JS arbitraire dans
+  // tout process node/npm ; `NODE_PATH` détourne la résolution de modules.
+  'NODE_OPTIONS',
+  'NODE_PATH',
+
   // Shared library injection
   'LD_PRELOAD',
   'LD_LIBRARY_PATH',

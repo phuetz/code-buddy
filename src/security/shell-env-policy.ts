@@ -46,8 +46,9 @@ const CORE_VARS = new Set([
   'PATH', 'HOME', 'USER', 'LOGNAME', 'SHELL', 'TERM', 'TERM_PROGRAM',
   'LANG', 'LC_ALL', 'LC_CTYPE', 'TZ', 'TMPDIR', 'TEMP', 'TMP',
   'PWD', 'OLDPWD', 'SHLVL', 'COLORTERM', 'CLICOLOR',
-  // Node.js / npm
-  'NODE_ENV', 'NODE_PATH', 'NPM_CONFIG_PREFIX',
+  // Node.js / npm — NODE_PATH exclu volontairement (détournement de résolution
+  // de modules) ; NODE_OPTIONS ne l'a jamais été et ne doit pas l'être.
+  'NODE_ENV', 'NPM_CONFIG_PREFIX',
   // Common CI vars (non-sensitive)
   'CI', 'GITHUB_ACTIONS', 'GITLAB_CI',
 ]);
@@ -62,6 +63,8 @@ const DEFAULT_EXCLUDE_PATTERNS = [
   '*CREDENTIAL*', '*PRIVATE*', '*AUTH*',
   // Specific suffix patterns
   '*_CERT', '*_CERTIFICATE',
+  // Injection de code dans les sous-processus (voir env-blocklist.ts)
+  'NODE_OPTIONS', 'NODE_PATH',
   // Cloud providers
   'AWS_*', 'OPENAI_*', 'ANTHROPIC_*', 'GOOGLE_*API*',
   'AZURE_*', 'DIGITALOCEAN_*', 'HETZNER_*',

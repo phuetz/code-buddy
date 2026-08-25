@@ -190,9 +190,13 @@ export const SAFE_ENV_VARS: Set<string> = new Set([
   'TEMP',
   'TMP',
   // Node.js
+  // NOTE sécurité : NODE_OPTIONS et NODE_PATH sont VOLONTAIREMENT absents.
+  // NODE_OPTIONS accepte `--require /chemin/script.js` : hérité par un
+  // sous-processus `node`/`npm`, il exécute du JavaScript arbitraire avant le
+  // code visé. NODE_PATH permet le même détournement par substitution de module.
+  // Les deux sont dans BLOCKED_ENV_VARS (src/security/env-blocklist.ts).
+  // Voir tests/security/node-options-injection.test.ts.
   'NODE_ENV',
-  'NODE_PATH',
-  'NODE_OPTIONS',
   // Development tools
   'EDITOR',
   'VISUAL',
