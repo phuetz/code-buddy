@@ -22,6 +22,9 @@ import {
   getNonInteractiveUnknownCommand,
   removeCommands,
 } from './cli/command-routing.js';
+import { attachUnknownOptionHint } from './cli/unknown-option-hint.js';
+import { parseListenPort } from './cli/listen-port.js';
+import { getRequestedProfile } from './cli/requested-profile.js';
 import { resolveHeadlessOutputFormat, resolveHeadlessResultExitCode } from './cli/headless-options.js';
 import { resolveCliModelList } from './cli/model-listing.js';
 import {
@@ -1648,10 +1651,8 @@ program
       try {
         process.chdir(options.directory);
       } catch (error: unknown) {
-        logger.error(
-          `Error changing directory to ${options.directory}:`,
-          error as Error
-        );
+        const detail = error instanceof Error ? error.message : String(error);
+        process.stderr.write(`error: cannot change directory to ${options.directory}: ${detail}\n`);
         process.exit(1);
       }
     }
@@ -2297,10 +2298,8 @@ gitCommand
       try {
         process.chdir(options.directory);
       } catch (error: unknown) {
-        logger.error(
-          `Error changing directory to ${options.directory}:`,
-          error as Error
-        );
+        const detail = error instanceof Error ? error.message : String(error);
+        process.stderr.write(`error: cannot change directory to ${options.directory}: ${detail}\n`);
         process.exit(1);
       }
     }
@@ -2369,6 +2368,7 @@ function addLazyCommand(
     const realCommand = await loader();
     // Replace the stub with the real command and re-parse
     removeCommands(parent, name);
+    attachUnknownOptionHint(realCommand, parent);
     parent.addCommand(realCommand);
     // Re-parse argv so the real command handles subcommands & options
     await parent.parseAsync(process.argv);
@@ -2507,10 +2507,18 @@ program
   .option("--host <host>", "server host", "0.0.0.0")
   .option("--no-auth", "disable JWT authentication (loopback development only)")
   .action(async (options) => {
+    let port: number;
+    try {
+      port = parseListenPort(String(options.port));
+    } catch (error) {
+      process.stderr.write(`error: ${error instanceof Error ? error.message : String(error)}\n`);
+      process.exit(1);
+      return;
+    }
     const { startServer } = await import("./server/index.js");
     try {
       await startServer({
-        port: parseInt(options.port),
+        port,
         host: options.host,
         authEnabled: options.auth !== false,
       });
@@ -2530,10 +2538,13 @@ program
   )
   .action(async (options) => {
     const allowed = ["default", "plan", "acceptEdits", "dontAsk", "bypassPermissions"] as const;
-    const mode = (allowed as readonly string[]).includes(options.mode) ? options.mode : "default";
-    if (mode !== options.mode) {
-      cli.stdout(`⚠️  Unknown --mode '${options.mode}', falling back to 'default' (guarded workspace).`);
+    if (!(allowed as readonly string[]).includes(options.mode)) {
+      cli.stdout(
+        `error: unknown --mode '${options.mode}'. Values: ${allowed.join(", ")}`,
+      );
+      process.exit(1);
     }
+    const mode = options.mode as (typeof allowed)[number];
     if (mode === "dontAsk" || mode === "bypassPermissions") {
       cli.stdout(
         `⚠️  Posture '${mode}': voice can EDIT FILES / RUN COMMANDS from a possibly-misheard transcript. Ctrl-C to abort.`,
@@ -2567,6 +2578,7 @@ program
         const label = args.join(" ").trim();
         if (!label || !options.at) {
           cli.stdout('Usage: buddy remind add "<label>" --at HH:MM [--days 1,3,5]');
+          process.exitCode = 1;
           return;
         }
         const days = options.days
@@ -2612,22 +2624,29 @@ program
         const id = args[0];
         if (!id) {
           cli.stdout("Usage: buddy remind done <id>");
+          process.exitCode = 1;
           return;
         }
         const done = await r.markDone(id, "cli");
         cli.stdout(done ? `✅ Marked done: ${done.label}` : `Reminder not found: ${id}`);
+        if (!done) process.exitCode = 1;
       } else if (act === "rm" || act === "remove") {
         const id = args[0];
         if (!id) {
           cli.stdout("Usage: buddy remind rm <id>");
+          process.exitCode = 1;
           return;
         }
-        cli.stdout((await r.removeReminder(id)) ? `🗑️  Removed ${id}` : `Reminder not found: ${id}`);
+        const removed = await r.removeReminder(id);
+        cli.stdout(removed ? `🗑️  Removed ${id}` : `Reminder not found: ${id}`);
+        if (!removed) process.exitCode = 1;
       } else {
         cli.stdout("Usage: buddy remind add|list|done|rm");
+        process.exitCode = 1;
       }
     } catch (e) {
       cli.stdout(`❌ ${e instanceof Error ? e.message : String(e)}`);
+      process.exitCode = 1;
     }
   });
 
@@ -2657,6 +2676,7 @@ program
         const id = args[0];
         if (!id) {
           cli.stdout(`Usage: buddy rules ${act} <id>`);
+          process.exitCode = 1;
           return;
         }
         const ok = await r.toggleSensoryRule(id, act === "enable");
@@ -2665,13 +2685,17 @@ program
             ? `${act === "enable" ? "✅ enabled" : "⏸️  disabled"} ${id} (live within ~2s on a running server — no restart)`
             : `Rule not found: ${id}`,
         );
+        if (!ok) process.exitCode = 1;
       } else if (act === "rm" || act === "remove") {
         const id = args[0];
         if (!id) {
           cli.stdout("Usage: buddy rules rm <id>");
+          process.exitCode = 1;
           return;
         }
-        cli.stdout((await r.removeSensoryRule(id)) ? `🗑️  Removed ${id}` : `Rule not found: ${id}`);
+        const removed = await r.removeSensoryRule(id);
+        cli.stdout(removed ? `🗑️  Removed ${id}` : `Rule not found: ${id}`);
+        if (!removed) process.exitCode = 1;
       } else if (act === "runs") {
         const runs = await r.readRuleRuns(parseInt(options.limit, 10) || 20);
         if (!runs.length) {
@@ -2704,6 +2728,7 @@ program
           cli.stdout(
             'Usage: buddy rules add --json \'{"id":"x","match":{"kind":"person_entered"},"action":{"type":"alert","message":"hi"}}\'',
           );
+          process.exitCode = 1;
           return;
         }
         let rule;
@@ -2711,15 +2736,19 @@ program
           rule = JSON.parse(raw);
         } catch (e) {
           cli.stdout(`❌ invalid JSON: ${e instanceof Error ? e.message : String(e)}`);
+          process.exitCode = 1;
           return;
         }
         const res = await r.upsertSensoryRule(rule);
         cli.stdout(res.ok ? `✅ Saved rule ${rule.id}` : `❌ rejected:\n  - ${res.errors.join("\n  - ")}`);
+        if (!res.ok) process.exitCode = 1;
       } else {
         cli.stdout("Usage: buddy rules list|enable|disable|rm|runs|validate|add");
+        process.exitCode = 1;
       }
     } catch (e) {
       cli.stdout(`❌ ${e instanceof Error ? e.message : String(e)}`);
+      process.exitCode = 1;
     }
   });
 
@@ -3776,6 +3805,7 @@ program
     const result = await handleBackup(fullArgs);
     // Backup command output is pipeable (scripts often capture it).
     if (result.response) cli.stdout(result.response);
+    if (result.exitCode) process.exitCode = result.exitCode;
   });
 
 // Cloud — background agent tasks (Cursor/Codex parity)
@@ -3823,24 +3853,30 @@ addLazyCommand(
   },
 );
 
-/** Read a root option before Commander dispatches a subcommand or help. */
-function getRequestedProfile(argv: readonly string[]): string | undefined {
-  for (let index = 2; index < argv.length; index++) {
-    const arg = argv[index];
-    if (arg === '--') break;
-    if (arg === '--profile') return argv[index + 1];
-    if (arg?.startsWith('--profile=')) return arg.slice('--profile='.length) || undefined;
-  }
-  return undefined;
-}
-
 // Apply the profile before parsing so it governs root chat, lazy subcommands,
 // slash-command menus, tool selection, and `buddy --help` consistently.
 const requestedProfile = getRequestedProfile(process.argv);
-if (requestedProfile) {
+if (requestedProfile.kind === 'missing') {
   try {
     getConfigManager().load();
-    getConfigManager().applyProfile(requestedProfile);
+  } catch {
+    // Listing available names is best-effort; the missing-value error still stands.
+  }
+  let available = '(none defined)';
+  try {
+    const names = Object.keys(getConfigManager().getConfig().profiles ?? {});
+    if (names.length) available = names.join(', ');
+  } catch {
+    available = 'core, all';
+  }
+  process.stderr.write(
+    `error: option '--profile <name>' argument missing. Available profiles: ${available}\n`,
+  );
+  process.exitCode = 1;
+} else if (requestedProfile.kind === 'value') {
+  try {
+    getConfigManager().load();
+    getConfigManager().applyProfile(requestedProfile.name);
   } catch (err) {
     process.stderr.write(`Profile error: ${err instanceof Error ? err.message : String(err)}\n`);
     process.exitCode = 1;
@@ -3848,6 +3884,7 @@ if (requestedProfile) {
 }
 
 if (process.exitCode !== 1) {
+  attachUnknownOptionHint(program, program);
   program.addHelpText('before', `Pour commencer — 6 démos qui montrent le cœur agent de code :
   1. buddy try
      Crée FizzBuzz, écrit son test et l’exécute dans un bac à sable.

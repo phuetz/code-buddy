@@ -1,4 +1,5 @@
 import type { Command } from 'commander';
+import { attachUnknownOptionHint } from './unknown-option-hint.js';
 
 export interface NonInteractiveCommandContext {
   positionalArgs: readonly string[] | undefined;
@@ -66,6 +67,8 @@ export function addLazyCommandGroup(
   stub.action(async () => {
     removeCommands(parent, [name, ...(aliases ?? [])]);
     await loader();
+    const real = parent.commands.find((command) => command.name() === name);
+    if (real) attachUnknownOptionHint(real, parent);
     await parent.parseAsync(process.argv);
   });
 }
