@@ -128,64 +128,135 @@ describe('buddy try', () => {
 
   it('fait taire la télémétrie pendant la démo, et restaure le niveau ensuite', async () => {
     // `try` est la première commande qu'un nouvel utilisateur lance : la télémétrie de l'agent
-    // noyait les huit lignes qui racontent la démo. Le silence est donc le défaut, pas une option.
-    const precedent = process.env.LOG_LEVEL;
-    process.env.LOG_LEVEL = 'info';
+    // noyait les huit lignes qui racontent la démo. Le silence est donc le défaut de la CLI.
+    const precedentEnv = process.env.LOG_LEVEL;
     const { logger } = await import('../../src/utils/logger.js');
-    logger.setLevel('info');
+    const precedentLogger = logger.getLevel();
+    process.env.LOG_LEVEL = 'warn';
+    logger.setLevel('warn');
     const niveauPendantLaDemo: Array<string | undefined> = [];
 
-    await runTryDemo({
-      resolveProvider: async () => chatGptProvider,
-      createWorkspace: async () => '/tmp/code-buddy-try-test',
-      createAgent: async () => ({
-        systemPromptReady: Promise.resolve(),
-        processUserMessage: async () => {
-          niveauPendantLaDemo.push(logger.getLevel());
-          return [];
-        },
-        dispose: vi.fn(),
-      }),
-      verify: async () => ({ success: true, output: '# pass 1' }),
-      stdout: () => {},
+    try {
+      await runTryDemo({
+        verbose: false,
+        resolveProvider: async () => chatGptProvider,
+        createWorkspace: async () => '/tmp/code-buddy-try-test',
+        createAgent: async () => ({
+          systemPromptReady: Promise.resolve(),
+          processUserMessage: async () => {
+            niveauPendantLaDemo.push(logger.getLevel());
+            return [];
+          },
+          dispose: vi.fn(),
+        }),
+        verify: async () => ({ success: true, output: '# pass 1' }),
+        stdout: () => {},
+      });
+
+      // On vérifie le NIVEAU EFFECTIF du logger, pas la variable d'environnement : le logger
+      // est un singleton qui lit `LOG_LEVEL` à l'import, donc poser la variable ne l'affecte
+      // pas. Un test qui regardait la variable passait au vert pendant que la démo restait
+      // bavarde — mesuré : 15 lignes de télémétrie survivaient.
+      expect(niveauPendantLaDemo).toEqual(['error']);
+      expect(process.env.LOG_LEVEL).toBe('warn');
+      expect(logger.getLevel()).toBe('warn');
+    } finally {
+      logger.setLevel(precedentLogger);
+      if (precedentEnv === undefined) delete process.env.LOG_LEVEL;
+      else process.env.LOG_LEVEL = precedentEnv;
+    }
+  });
+
+  it("restaure l'environnement si l'installation du silence échoue", async () => {
+    const precedentEnv = process.env.LOG_LEVEL;
+    const { logger } = await import('../../src/utils/logger.js');
+    const precedentLogger = logger.getLevel();
+    process.env.LOG_LEVEL = 'debug';
+    logger.setLevel('debug');
+    const getLevel = vi.spyOn(logger, 'getLevel').mockImplementationOnce(() => {
+      throw new Error('échec installation logger');
     });
 
-    // On vérifie le NIVEAU EFFECTIF du logger, pas la variable d'environnement : le logger
-    // est un singleton qui lit `LOG_LEVEL` à l'import, donc poser la variable ne l'affecte
-    // pas. Un test qui regardait la variable passait au vert pendant que la démo restait
-    // bavarde — mesuré : 15 lignes de télémétrie survivaient.
-    expect(niveauPendantLaDemo).toEqual(['error']);
-    expect(process.env.LOG_LEVEL).toBe('info');
-    expect(logger.getLevel()).toBe('info');
-    if (precedent === undefined) delete process.env.LOG_LEVEL;
-    else process.env.LOG_LEVEL = precedent;
+    try {
+      await expect(runTryDemo({ verbose: false })).rejects.toThrow('échec installation logger');
+      expect(process.env.LOG_LEVEL).toBe('debug');
+      expect(logger.getLevel()).toBe('debug');
+    } finally {
+      getLevel.mockRestore();
+      logger.setLevel(precedentLogger);
+      if (precedentEnv === undefined) delete process.env.LOG_LEVEL;
+      else process.env.LOG_LEVEL = precedentEnv;
+    }
+  });
+
+  it("préserve le niveau d'un appelant programmatique qui omet verbose", async () => {
+    const precedentEnv = process.env.LOG_LEVEL;
+    const { logger } = await import('../../src/utils/logger.js');
+    const precedentLogger = logger.getLevel();
+    const niveauAppelant = 'warn';
+    process.env.LOG_LEVEL = niveauAppelant;
+    logger.setLevel(niveauAppelant);
+    const niveauxPendantLaDemo: string[] = [];
+
+    try {
+      await runTryDemo({
+        resolveProvider: async () => chatGptProvider,
+        createWorkspace: async () => '/tmp/code-buddy-try-test',
+        createAgent: async () => ({
+          systemPromptReady: Promise.resolve(),
+          processUserMessage: async () => {
+            niveauxPendantLaDemo.push(logger.getLevel());
+            return [];
+          },
+          dispose: vi.fn(),
+        }),
+        verify: async () => ({ success: true, output: '# pass 1' }),
+        stdout: () => {},
+      });
+
+      expect(niveauxPendantLaDemo).toEqual([niveauAppelant]);
+      expect(process.env.LOG_LEVEL).toBe(niveauAppelant);
+      expect(logger.getLevel()).toBe(niveauAppelant);
+    } finally {
+      logger.setLevel(precedentLogger);
+      if (precedentEnv === undefined) delete process.env.LOG_LEVEL;
+      else process.env.LOG_LEVEL = precedentEnv;
+    }
   });
 
   it('laisse passer la télémétrie quand on la demande explicitement', async () => {
-    const precedent = process.env.LOG_LEVEL;
-    process.env.LOG_LEVEL = 'info';
+    const precedentEnv = process.env.LOG_LEVEL;
     const { logger } = await import('../../src/utils/logger.js');
-    logger.setLevel('info');
+    const precedentLogger = logger.getLevel();
+    const niveauAppelant = 'debug';
+    process.env.LOG_LEVEL = niveauAppelant;
+    logger.setLevel(niveauAppelant);
     const niveauPendantLaDemo: Array<string | undefined> = [];
 
-    await runTryDemo({
-      verbose: true,
-      resolveProvider: async () => chatGptProvider,
-      createWorkspace: async () => '/tmp/code-buddy-try-test',
-      createAgent: async () => ({
-        systemPromptReady: Promise.resolve(),
-        processUserMessage: async () => {
-          niveauPendantLaDemo.push(logger.getLevel());
-          return [];
-        },
-        dispose: vi.fn(),
-      }),
-      verify: async () => ({ success: true, output: '# pass 1' }),
-      stdout: () => {},
-    });
+    try {
+      await runTryDemo({
+        verbose: true,
+        resolveProvider: async () => chatGptProvider,
+        createWorkspace: async () => '/tmp/code-buddy-try-test',
+        createAgent: async () => ({
+          systemPromptReady: Promise.resolve(),
+          processUserMessage: async () => {
+            niveauPendantLaDemo.push(logger.getLevel());
+            return [];
+          },
+          dispose: vi.fn(),
+        }),
+        verify: async () => ({ success: true, output: '# pass 1' }),
+        stdout: () => {},
+      });
 
-    expect(niveauPendantLaDemo).toEqual(['info']);
-    if (precedent === undefined) delete process.env.LOG_LEVEL;
-    else process.env.LOG_LEVEL = precedent;
+      expect(niveauPendantLaDemo).toEqual([niveauAppelant]);
+      expect(process.env.LOG_LEVEL).toBe(niveauAppelant);
+      expect(logger.getLevel()).toBe(niveauAppelant);
+    } finally {
+      logger.setLevel(precedentLogger);
+      if (precedentEnv === undefined) delete process.env.LOG_LEVEL;
+      else process.env.LOG_LEVEL = precedentEnv;
+    }
   });
 });

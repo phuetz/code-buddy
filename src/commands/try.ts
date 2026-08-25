@@ -57,7 +57,10 @@ export interface RunTryDemoOptions extends ResolveTryProviderOptions {
   verify?: (workspace: string) => Promise<TryVerification>;
   stdout?: (message: string) => void;
   stderr?: (message: string) => void;
-  /** Montrer la télémétrie de l'agent. Défaut: false — `try` est une vitrine, pas un débogage. */
+  /**
+   * `false` masque la télémétrie, `true` la laisse passer. Une valeur omise préserve le niveau
+   * de l'appelant pour la compatibilité de l'API ; la commande CLI passe toujours un booléen.
+   */
   verbose?: boolean;
 }
 
@@ -258,9 +261,17 @@ function setTemporaryEnv(key: string, value: string): () => void {
   };
 }
 
-/** Execute the scripted demo. Returns a process-style exit code. */
+/**
+ * Execute the scripted demo. Returns a process-style exit code.
+ *
+ * Programmatic callers that omit `verbose` keep their logger state unchanged. The CLI passes
+ * `false` by default because `buddy try` is a human-facing showcase whose short narrative must
+ * not be drowned out by agent telemetry.
+ */
 export async function runTryDemo(options: RunTryDemoOptions = {}): Promise<number> {
-  // `try` est la toute première chose qu'un nouvel utilisateur exécute. Par défaut, la
+  if (options.verbose !== false) return runTryDemoInner(options);
+
+  // `try` est la toute première chose qu'un nouvel utilisateur exécute. Dans la CLI, la
   // télémétrie de l'agent (`INFO [notification] view_file completed in 26ms`, l'avertissement
   // `bypassPermissions` du bac à sable) noyait les huit lignes qui racontent la démo — au point
   // que la première capture vidéo en était illisible. On abaisse donc le niveau de journal pour
@@ -270,21 +281,22 @@ export async function runTryDemo(options: RunTryDemoOptions = {}): Promise<numbe
   // l'import du module, donc bien avant cette ligne. Mesuré : 15 lignes de télémétrie
   // survivaient au correctif « par l'environnement », alors que le test unitaire, lui,
   // passait — il vérifiait la variable, pas le résultat. C'est `setLevel()` qui agit.
-  let restoreLogLevel = () => {};
-  if (!options.verbose) {
-    const restoreEnv = setTemporaryEnv('LOG_LEVEL', 'error');
+  const restoreEnv = setTemporaryEnv('LOG_LEVEL', 'error');
+  let restoreLogger = () => {};
+  try {
     const { logger } = await import('../utils/logger.js');
     const previousLevel = logger.getLevel();
+    // Enregistrer la restauration AVANT la mutation : même un `setLevel` qui muterait puis
+    // lancerait ne pourrait pas laisser le singleton au niveau `error`.
+    restoreLogger = () => logger.setLevel(previousLevel);
     logger.setLevel('error');
-    restoreLogLevel = () => {
-      logger.setLevel(previousLevel);
-      restoreEnv();
-    };
-  }
-  try {
     return await runTryDemoInner(options);
   } finally {
-    restoreLogLevel();
+    try {
+      restoreLogger();
+    } finally {
+      restoreEnv();
+    }
   }
 }
 
