@@ -16,6 +16,7 @@ import path from 'path';
 import os from 'os';
 import { randomUUID } from 'crypto';
 import { getSkillRegistry } from '../../skills/registry.js';
+import { logger } from '../../utils/logger.js';
 import { scanSkillFirewall } from '../../security/skill-scanner.js';
 import { inspectAuthoredCode } from './authored-artifact-gate.js';
 import type { SkillSpec } from './skill-types.js';
@@ -32,8 +33,27 @@ export function toAuthoredSkillName(raw: string): string {
   return base.startsWith(AUTHORED_SKILL_PREFIX) ? base : `${AUTHORED_SKILL_PREFIX}${base || 'skill'}`;
 }
 
+/**
+ * Le nom d'une skill devient un SEGMENT DE CHEMIN (`dirFor`), et il arrive brut
+ * depuis le CLI (`improve skills-restore|skills-pin|…`). Le préfixe seul ne
+ * suffit donc pas : `authored-/../../x` le passe, puis `path.join` le normalise
+ * HORS du dossier des skills — assez pour lire, écrire ou supprimer ailleurs.
+ * On exige ici un simple segment : pas de séparateur, pas de `..`, pas de NUL,
+ * un suffixe non vide. `toAuthoredSkillName` ne produit que `[a-z0-9-]`, donc
+ * aucun nom légitime n'est perdu.
+ */
+export function isSafeSkillSegment(name: string): boolean {
+  if (typeof name !== 'string' || name.length === 0) return false;
+  if (name.includes('/') || name.includes('\\') || name.includes('\0')) return false;
+  if (name.includes('..')) return false;
+  return name === path.basename(name);
+}
+
 export function isAuthoredSkillName(name: string): boolean {
-  return name.startsWith(AUTHORED_SKILL_PREFIX);
+  if (typeof name !== 'string') return false;
+  if (!name.startsWith(AUTHORED_SKILL_PREFIX)) return false;
+  if (name.length <= AUTHORED_SKILL_PREFIX.length) return false;
+  return isSafeSkillSegment(name);
 }
 
 // ── frontmatter helpers (our controlled format; avoids the registry parser's
@@ -158,10 +178,12 @@ export class LiveSkillMutator implements SkillMutatorPort {
   }
 
   has(name: string): boolean {
+    if (!isSafeSkillSegment(name)) return false;
     return fs.existsSync(this.skillFile(name));
   }
 
   isPinned(name: string): boolean {
+    if (!isSafeSkillSegment(name)) return false;
     const c = this.readContent(name);
     return c ? readPinned(c) : false;
   }
@@ -245,12 +267,30 @@ export class LiveSkillMutator implements SkillMutatorPort {
     return true;
   }
 
+  /**
+   * Réinstallation depuis .archive/, RE-GATÉE. Une skill est injectée dans le
+   * contexte de l'agent, et une skill archivée l'a souvent été parce qu'elle
+   * avait été jugée dangereuse : la rendre active sans repasser le pare-feu
+   * (anti-injection de prompt / anti-exfiltration) rouvrirait exactement la
+   * porte que create()/update() ferment. Aucun chemin d'activation sans scan.
+   */
   restore(name: string): boolean {
     if (!isAuthoredSkillName(name)) return false;
     const src = path.join(this.skillsRoot, ARCHIVE_DIR, name);
     if (!fs.existsSync(src)) return false;
     const dir = this.dirFor(name);
     if (fs.existsSync(dir)) return false; // don't clobber a live skill
+    const archivedFile = path.join(src, 'SKILL.md');
+    if (!fs.existsSync(archivedFile)) {
+      logger.warn(`refusing to restore skill "${name}": archived entry has no SKILL.md to gate`);
+      return false;
+    }
+    const gate = safetyGateSkill(fs.readFileSync(archivedFile, 'utf-8'));
+    if (!gate.ok) {
+      // On laisse l'archive intacte : refus non destructif, ré-inspectable.
+      logger.warn(`refusing to restore skill "${name}": ${gate.reasons.join('; ')}`);
+      return false;
+    }
     fs.renameSync(src, dir);
     this.reload(name);
     return true;
