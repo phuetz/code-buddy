@@ -101,6 +101,8 @@ interface BaileysSocket {
   user?: { id?: string; name?: string };
 }
 
+const BAILEYS_SPECIFIER = '@whiskeysockets/baileys';
+
 // ============================================================================
 // Channel Implementation
 // ============================================================================
@@ -156,7 +158,7 @@ export class WhatsAppChannel extends BaseChannel {
     let baileys: BaileysModule;
     try {
       const loader = (this.constructor as typeof WhatsAppChannel).baileysLoader
-        ?? (async () => await import('@whiskeysockets/baileys') as unknown as BaileysModule);
+        ?? (async () => await import(BAILEYS_SPECIFIER) as unknown as BaileysModule);
       baileys = await loader();
     } catch {
       throw new Error(

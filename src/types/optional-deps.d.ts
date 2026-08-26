@@ -79,12 +79,11 @@ declare module 'xlsx' {
   function writeFile(workbook: WorkBook, filename: string, options?: unknown): void;
 }
 
-// tar / sharp / @whiskeysockets/baileys (optional) — typed-`any` fallback so
+// tar / sharp (optional) — typed-`any` fallback so
 // `tsc --noEmit` passes when CI's `npm ci` omits optional deps. When the real
 // package is installed its own types take precedence (verified both ways).
 declare module 'tar';
 declare module 'sharp';
-declare module '@whiskeysockets/baileys';
 
 // @mlc-ai/web-llm (optional)
 declare module '@mlc-ai/web-llm' {
