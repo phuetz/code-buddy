@@ -378,13 +378,15 @@ export function resetLazyLoader(): void {
 // Pre-configured Module Loaders
 // ============================================================================
 
+const PDF_PARSE_SPECIFIER = 'pdf-parse';
+
 /**
  * Register common heavy modules for lazy loading
  */
 export function registerCommonModules(loader: LazyLoader): void {
   // PDF processing - low priority, only needed when user processes PDFs
   loader.register('pdf-parse', async () => {
-    const module = await import('pdf-parse');
+    const module = await import(PDF_PARSE_SPECIFIER);
     return module.default || module;
   }, { priority: LoadPriority.DEFERRED });
 

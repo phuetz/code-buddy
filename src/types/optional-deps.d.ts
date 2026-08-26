@@ -59,19 +59,6 @@ declare module 'adm-zip' {
   export default AdmZip;
 }
 
-// pdf-parse (optional)
-declare module 'pdf-parse' {
-  interface PdfData {
-    numpages: number;
-    numrender: number;
-    info: Record<string, unknown>;
-    metadata: unknown;
-    text: string;
-  }
-  function pdfParse(dataBuffer: Buffer): Promise<PdfData>;
-  export default pdfParse;
-}
-
 // xlsx (optional)
 declare module 'xlsx' {
   interface Sheet {

@@ -44,6 +44,14 @@ interface PdfParseResult {
   text: string;
 }
 
+type PdfParseLegacyFn = (buffer: Buffer) => Promise<PdfParseResult>;
+
+interface PdfParseLegacyModule {
+  default?: PdfParseLegacyFn;
+}
+
+const PDF_PARSE_SPECIFIER = 'pdf-parse';
+
 // ============================================================================
 // Configuration
 // ============================================================================
@@ -63,7 +71,7 @@ const PDF_AGENT_CONFIG: SpecializedAgentConfig = {
 // ============================================================================
 
 export class PDFAgent extends SpecializedAgent {
-  private pdfParse: ((buffer: Buffer) => Promise<PdfParseResult>) | null = null;
+  private pdfParse: PdfParseLegacyFn | null = null;
 
   constructor() {
     super(PDF_AGENT_CONFIG);
@@ -72,8 +80,9 @@ export class PDFAgent extends SpecializedAgent {
   async initialize(): Promise<void> {
     try {
       // Dynamic import of pdf-parse
-      const pdfParseModule = await import('pdf-parse');
-      this.pdfParse = pdfParseModule.default || pdfParseModule;
+      const pdfParseModule = await import(PDF_PARSE_SPECIFIER) as unknown as PdfParseLegacyModule;
+      this.pdfParse = pdfParseModule.default
+        ?? (pdfParseModule as unknown as PdfParseLegacyFn);
       this.isInitialized = true;
       this.emit('initialized');
     } catch (_error) {

@@ -38,6 +38,7 @@ const DEFAULT_MAX_SECTIONS = 1000;
 
 /** Upper bound on heading-line length; longer lines are prose, not headings. */
 const MAX_HEADING_LEN = 120;
+const PDF_PARSE_SPECIFIER = 'pdf-parse';
 
 /**
  * Minimal structural view of the pdf-parse v2 module, typed locally so the
@@ -70,7 +71,7 @@ interface PdfParseModuleV2 {
 const defaultParsePdf: PdfParseFn = async (data) => {
   let mod: PdfParseModuleV2;
   try {
-    mod = (await import('pdf-parse')) as unknown as PdfParseModuleV2;
+    mod = (await import(PDF_PARSE_SPECIFIER)) as unknown as PdfParseModuleV2;
   } catch {
     logger.warn('paper-qa: pdf-parse not installed — cannot parse PDF structure');
     return null;
@@ -125,7 +126,7 @@ const MIN_USEFUL_PAGE_TEXT = 20;
 const defaultOcrPdf: PdfOcrFn = async (data, pageNumbers, language) => {
   if (pageNumbers.length === 0) return [];
   const [pdfModule, tesseractModule] = await Promise.all([
-    import('pdf-parse') as unknown as Promise<PdfParseModuleV2>,
+    import(PDF_PARSE_SPECIFIER) as unknown as Promise<PdfParseModuleV2>,
     import('tesseract.js'),
   ]);
   const worker = await tesseractModule.createWorker(language);
