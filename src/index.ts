@@ -3253,19 +3253,6 @@ addLazyCommandGroup(program, 'widgets', 'Inline conversation widgets: list, prev
   registerWidgetsCommand(program);
 });
 
-// `buddy try` — an isolated 60-second coding-agent demo on a free path
-// (ChatGPT OAuth or a local Ollama). The fastest "does it work?" for a
-// newcomer; the onboarding wizard chains to it.
-addLazyCommand(
-  program,
-  'try',
-  'Run an isolated 60-second coding-agent demo (ChatGPT OAuth or local Ollama)',
-  async () => {
-    const { createTryCommand } = await import('./commands/try.js');
-    return createTryCommand();
-  },
-);
-
 // Utility commands (doctor, security-audit, onboard, webhook) are all registered
 // by a single registerUtilityCommands() call, so we must remove all stubs before
 // re-registering to avoid Commander duplicate command errors.
@@ -3501,50 +3488,6 @@ addLazyCommand(
   async () => {
     const { createPapersCommand } = await import('./commands/papers/index.js');
     return createPapersCommand();
-  },
-);
-
-// Cost dashboard — read-only aggregation of persisted session JSON
-addLazyCommand(
-  program,
-  'cost',
-  'Aggregate saved-session cost and token usage by model, provider, or day',
-  async () => {
-    const { createCostCommand } = await import('./commands/cost.js');
-    return createCostCommand();
-  },
-);
-
-// Changelog — grouped release notes from Conventional Commits
-addLazyCommand(
-  program,
-  'changelog',
-  'Generate grouped release notes from Conventional Commits',
-  async () => {
-    const { createChangelogCommand } = await import('./commands/changelog.js');
-    return createChangelogCommand();
-  },
-);
-
-// Import — project rules + MCP servers from Cursor / Cline / Copilot / Claude Code
-addLazyCommand(
-  program,
-  'import',
-  'Import project rules and MCP servers from Cursor, Cline, Copilot, or Claude Code',
-  async () => {
-    const { createImportCommand } = await import('./commands/import.js');
-    return createImportCommand();
-  },
-);
-
-// Repo explainer — one Markdown/HTML orientation artifact for an unfamiliar repository
-addLazyCommand(
-  program,
-  'explain',
-  'Explain an unfamiliar repository in one Markdown or self-contained HTML artifact',
-  async () => {
-    const { createExplainCommand } = await import('./commands/explain.js');
-    return createExplainCommand();
   },
 );
 
