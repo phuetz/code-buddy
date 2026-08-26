@@ -8,6 +8,11 @@
 # Sortie 0 : aucune commande ne plante. Sortie 1 : la liste des fautives.
 #
 #   scripts/balayage-installation.sh [--avec-optionnelles]
+#
+# Pour placer BALAYAGE_DIR sous le dépôt sans laisser la résolution Node
+# remonter vers son node_modules, les tests peuvent fournir :
+#   BALAYAGE_NODE_OPTIONS="--experimental-loader=... --require=..."
+#   BALAYAGE_BLOCKED_MODULES="pkg-a,pkg-b"
 set -uo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -33,19 +38,34 @@ ENTREE="$BASE/install/node_modules/@phuetz/code-buddy/dist/index.js"
 mkdir -p "$BASE/home"
 
 # Environnement vide : ni clé d'API, ni configuration héritée.
-appel() { env -i HOME="$BASE/home" PATH=/usr/bin:/bin TERM=dumb timeout 45 node "$ENTREE" "$@" 2>&1; }
+appel() {
+  local -a environnement=(
+    "HOME=$BASE/home"
+    "PATH=/usr/bin:/bin"
+    "TERM=dumb"
+  )
+  [ -n "${BALAYAGE_NODE_OPTIONS:-}" ] && environnement+=("NODE_OPTIONS=$BALAYAGE_NODE_OPTIONS")
+  [ -n "${BALAYAGE_BLOCKED_MODULES:-}" ] && environnement+=("CODEBUDDY_TEST_BLOCKED_MODULES=$BALAYAGE_BLOCKED_MODULES")
+  env -i "${environnement[@]}" timeout 45 node "$ENTREE" "$@" 2>&1
+}
 
 appel --help | grep -oE '^  [a-z][a-z0-9-]+' | tr -d ' ' | sort -u > "$BASE/commandes.txt"
 total=$(wc -l < "$BASE/commandes.txt")
 echo "== balayage de $total commandes"
 
 : > "$BASE/fautives.txt"
+: > "$BASE/resultats.txt"
 while read -r c; do
   sortie="$(appel "$c" --help)"
-  if grep -qE "Cannot find package|ERR_MODULE_NOT_FOUND|Unhandled promise|Crash context saved" <<<"$sortie"; then
+  statut=$?
+  if [ "$statut" -ne 0 ] || grep -qE "Cannot find package|ERR_MODULE_NOT_FOUND|Unhandled promise|Crash context saved" <<<"$sortie"; then
     paquet="$(grep -oE "Cannot find package '[^']+'" <<<"$sortie" | head -1 | cut -d"'" -f2)"
-    echo "$c|${paquet:-inconnu}" >> "$BASE/fautives.txt"
-    printf '  ✗ %-18s %s\n' "$c" "${paquet:-plantage}"
+    raison="${paquet:-exit-$statut}"
+    echo "$c|$raison" >> "$BASE/fautives.txt"
+    echo "$c|$statut|FAIL|$raison" >> "$BASE/resultats.txt"
+    printf '  ✗ %-18s %s\n' "$c" "$raison"
+  else
+    echo "$c|$statut|PASS" >> "$BASE/resultats.txt"
   fi
 done < "$BASE/commandes.txt"
 
