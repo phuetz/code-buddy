@@ -543,9 +543,6 @@ def write_chapters(
     sections: list[dict[str, Any]],
     starts: list[float],
 ) -> None:
-    if path.exists():
-        print(f'SKIP chapitres existants: {path}')
-        return
     lines: list[str] = []
     previous_phase: str | None = None
     for section, start in zip(sections, starts):
