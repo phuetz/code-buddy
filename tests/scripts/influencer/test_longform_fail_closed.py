@@ -3,6 +3,7 @@ import importlib.util
 import os
 import subprocess
 import sys
+import tempfile
 import types
 import unittest
 from pathlib import Path
@@ -133,6 +134,38 @@ class TimelineSafetyTests(unittest.TestCase):
 
         with self.assertRaisesRegex(news.NewsLongError, 'carte.*ne peut pas être affichée'):
             news.build_shots(10.0, {'tail_avatar': 0.0}, cards)
+
+    def test_demo_cache_is_invalidated_when_source_content_changes(self) -> None:
+        with tempfile.TemporaryDirectory(prefix='.x1-demo-cache-', dir=LONGFORM) as directory:
+            root = Path(directory)
+            source = root / 'demo.mp4'
+            destination = root / 'card.mp4'
+            chassis = root / 'chassis' / 'chassis.png'
+            source.write_bytes(b'old take')
+
+            def render_from_current_source(_command, dest):
+                dest.write_bytes(source.read_bytes())
+
+            probe = subprocess.CompletedProcess(
+                args=['ffprobe'], returncode=0, stdout='640,480\n', stderr=''
+            )
+            with patch.object(news, 'run', return_value=probe), \
+                 patch.object(news, 'render_demo_chassis', return_value=chassis), \
+                 patch.object(news, 'atomic', side_effect=render_from_current_source) as atomic:
+                news.render_demo_card({'video': str(source)}, 1.0, destination, root)
+                original_stat = source.stat()
+                source.write_bytes(b'new take')
+                os.utime(
+                    source,
+                    ns=(original_stat.st_atime_ns, original_stat.st_mtime_ns),
+                )
+
+                news.render_demo_card({'video': str(source)}, 1.0, destination, root)
+                self.assertEqual(destination.read_bytes(), b'new take')
+                self.assertEqual(atomic.call_count, 2)
+
+                news.render_demo_card({'video': str(source)}, 1.0, destination, root)
+                self.assertEqual(atomic.call_count, 2)
 
 
 class SubtitleSafetyTests(unittest.TestCase):

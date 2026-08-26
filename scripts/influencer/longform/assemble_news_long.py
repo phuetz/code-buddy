@@ -84,6 +84,7 @@ Usage :
 from __future__ import annotations
 
 import argparse
+import hashlib
 import importlib.util
 import json
 import math
@@ -749,6 +750,66 @@ def render_demo_chassis(spec: dict[str, Any], zone: tuple[int, int, int, int]) -
     return dest
 
 
+DEMO_CACHE_VERSION = 1
+
+
+def demo_cache_path(dest: Path) -> Path:
+    return dest.with_name(f'{dest.name}.demo-source.json')
+
+
+def sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    try:
+        with path.open('rb') as source:
+            for chunk in iter(lambda: source.read(1024 * 1024), b''):
+                digest.update(chunk)
+    except OSError as exc:
+        raise NewsLongError(f'démo illisible: {path}: {exc}') from exc
+    return digest.hexdigest()
+
+
+def demo_cache_signature(video: Path, spec: dict[str, Any], dur: float) -> dict[str, Any]:
+    try:
+        resolved_video = video.resolve()
+        video_size = video.stat().st_size
+    except OSError as exc:
+        raise NewsLongError(f'démo illisible: {video}: {exc}') from exc
+    return {
+        'version': DEMO_CACHE_VERSION,
+        'video': {
+            'path': str(resolved_video),
+            'size': video_size,
+            'sha256': sha256_file(video),
+        },
+        'duration': q(dur),
+        'card': {
+            key: spec.get(key)
+            for key in ('source', 'date', 'ligne', 'kicker', 'annot')
+        },
+    }
+
+
+def read_demo_cache(path: Path) -> dict[str, Any] | None:
+    try:
+        data = json.loads(path.read_text(encoding='utf-8'))
+    except (OSError, json.JSONDecodeError):
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def write_demo_cache(path: Path, signature: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(f'.{path.name}.{os.getpid()}-{threading.get_ident()}.part')
+    try:
+        tmp.write_text(
+            json.dumps(signature, ensure_ascii=False, indent=2) + '\n',
+            encoding='utf-8',
+        )
+        os.replace(tmp, path)
+    finally:
+        tmp.unlink(missing_ok=True)
+
+
 def render_demo_card(spec: dict[str, Any], dur: float, dest: Path, workdir: Path) -> None:
     """Carte « démo » : une VRAIE capture vidéo d'un outil en marche, dans le châssis de `capture`.
 
@@ -761,12 +822,14 @@ def render_demo_card(spec: dict[str, Any], dur: float, dest: Path, workdir: Path
     que la carte, sa dernière image est tenue ; plus longue, elle est coupée — la durée de la
     carte reste celle que le plan a prévue, sinon la voix se décale."""
     video = expand(str(spec.get('video', '')))
-    if not video.exists():
+    if not video.is_file():
         raise NewsLongError(f'démo introuvable: {video}')
     with path_lock(dest):
-        if dest.exists():
-            return
         dur = q(dur)
+        signature = demo_cache_signature(video, spec, dur)
+        cache_path = demo_cache_path(dest)
+        if dest.exists() and read_demo_cache(cache_path) == signature:
+            return
         px, py, pw, ph = 150, 130, W - 300, H - 260
         top_h = 60 if (spec.get('source') or spec.get('date')) else 0
         foot_h = 70 if spec.get('ligne', spec.get('source')) else 0
@@ -792,6 +855,9 @@ def render_demo_card(spec: dict[str, Any], dur: float, dest: Path, workdir: Path
                     '-t', f'{dur:.6f}', '-an', *X264], dest)
         finally:
             shutil.rmtree(chassis.parent, ignore_errors=True)
+        if demo_cache_signature(video, spec, dur) != signature:
+            raise NewsLongError(f'démo modifiée pendant le rendu: {video}')
+        write_demo_cache(cache_path, signature)
 
 
 def render_card_video(spec: dict[str, Any], dur: float, dest: Path, workdir: Path) -> None:
