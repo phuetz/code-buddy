@@ -28,7 +28,7 @@ import {
   validateCommand as validateCommandSafety,
   sanitizeForShell
 } from '../../utils/input-validator.js';
-import { rgPath } from '@vscode/ripgrep';
+import { getRipgrepPath } from '../../utils/ripgrep-path.js';
 import { validateCommand, getFilteredEnv } from './command-validator.js';
 import { getShellEnvPolicy } from '../../security/shell-env-policy.js';
 import { executeStreaming as executeStreamingImpl } from './streaming-executor.js';
@@ -828,7 +828,7 @@ export class BashTool implements Disposable {
         files
       ];
 
-      const rg = spawn(rgPath, args, {
+      const rg = spawn(getRipgrepPath(), args, {
         cwd: this.currentDirectory,
         env: getShellEnvPolicy().buildEnv(getFilteredEnv()),
       });

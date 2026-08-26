@@ -24,7 +24,7 @@
  */
 
 import { spawn } from 'child_process';
-import { rgPath } from '@vscode/ripgrep';
+import { getRipgrepPath } from '../utils/ripgrep-path.js';
 import * as fs from 'fs/promises';
 import { createReadStream } from 'fs';
 import * as path from 'path';
@@ -266,7 +266,7 @@ async function execSearch({ args, emitChunk }: ExecArgs): Promise<{ output: stri
       '--max-count', '50',
       '--', query, resolved,
     ];
-    const proc = spawn(rgPath, rgArgs, { stdio: ['ignore', 'pipe', 'pipe'] });
+    const proc = spawn(getRipgrepPath(), rgArgs, { stdio: ['ignore', 'pipe', 'pipe'] });
     let stdout = '';
     let stderr = '';
     let truncated = false;

@@ -10,7 +10,7 @@ import { promisify } from 'util';
 import * as fs from 'fs';
 import * as path from 'path';
 import { logger } from '../utils/logger.js';
-import { rgPath } from '@vscode/ripgrep';
+import { getRipgrepPath } from '../utils/ripgrep-path.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -93,7 +93,7 @@ export async function codebaseReplace(
 
   let matchingFiles: string[];
   try {
-    const { stdout } = await execFileAsync(rgPath, rgFlags, {
+    const { stdout } = await execFileAsync(getRipgrepPath(), rgFlags, {
       cwd: process.cwd(),
       maxBuffer: 1024 * 1024,
     });

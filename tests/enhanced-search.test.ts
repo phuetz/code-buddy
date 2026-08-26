@@ -12,9 +12,9 @@
 import { EventEmitter } from 'events';
 import * as nodePath from 'path';
 
-// Mock @vscode/ripgrep
-jest.mock('@vscode/ripgrep', () => ({
-  rgPath: '/mock/path/to/rg',
+// Mock the optional bundled/system ripgrep resolver
+jest.mock('../src/utils/ripgrep-path.js', () => ({
+  getRipgrepPath: () => '/mock/path/to/rg',
 }));
 
 // Mock child_process
@@ -102,10 +102,10 @@ describe('EnhancedSearch', () => {
     });
 
     it('should handle asar paths', async () => {
-      // Mock rgPath with asar
+      // Mock the resolved path with an asar location
       jest.resetModules();
-      jest.doMock('@vscode/ripgrep', () => ({
-        rgPath: '/app.asar/node_modules/rg',
+      jest.doMock('../src/utils/ripgrep-path.js', () => ({
+        getRipgrepPath: () => '/app.asar/node_modules/rg',
       }));
 
       // Re-import to get new mock

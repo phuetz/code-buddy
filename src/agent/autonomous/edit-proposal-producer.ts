@@ -1,6 +1,6 @@
 import * as fs from 'node:fs/promises';
 import { spawn } from 'node:child_process';
-import { rgPath } from '@vscode/ripgrep';
+import { getRipgrepPath } from '../../utils/ripgrep-path.js';
 
 import { CodeBuddyClient, CodeBuddyMessage, CodeBuddyTool } from '../../codebuddy/client.js';
 import { detectProviderFromEnv } from '../../utils/provider-detector.js';
@@ -378,7 +378,7 @@ export async function generateEditProposalWithTrace(
                 query,
                 '.'
               ];
-              const rgBinary = rgPath.replace(/\.asar([\\/])/, '.asar.unpacked$1');
+              const rgBinary = getRipgrepPath().replace(/\.asar([\\/])/, '.asar.unpacked$1');
               const rgProcResult = await new Promise<{ stdout: string; stderr: string; code: number | null }>((resolve) => {
                 const proc = spawn(rgBinary, rgArgs, { cwd: repo });
                 let stdout = '';

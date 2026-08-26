@@ -12,14 +12,14 @@
  */
 
 
-// Mock @vscode/ripgrep
+// Mock ripgrep path resolution
 
 import { EventEmitter } from 'events';
 import { vi } from 'vitest';
 import { SearchTool } from '../../src/tools/search.js';
 
-jest.mock('@vscode/ripgrep', () => ({
-  rgPath: '/mock/path/to/rg',
+jest.mock('../../src/utils/ripgrep-path.js', () => ({
+  getRipgrepPath: () => '/mock/path/to/rg',
 }));
 
 // Mock child_process

@@ -12,9 +12,9 @@ jest.mock('child_process', () => ({
   spawn: jest.fn(),
 }));
 
-// Mock @vscode/ripgrep
-jest.mock('@vscode/ripgrep', () => ({
-  rgPath: '/path/to/rg',
+// Mock ripgrep path resolution
+jest.mock('../../src/utils/ripgrep-path.js', () => ({
+  getRipgrepPath: () => '/path/to/rg',
 }));
 
 describe('EnhancedSearch', () => {

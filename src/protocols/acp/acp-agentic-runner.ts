@@ -34,7 +34,7 @@
  */
 
 import { spawn } from 'child_process';
-import { rgPath } from '@vscode/ripgrep';
+import { getRipgrepPath } from '../../utils/ripgrep-path.js';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { logger } from '../../utils/logger.js';
@@ -580,7 +580,7 @@ function searchWorkspace(
 
   return new Promise<BoundedToolText>((resolve, reject) => {
     const rgArgs = ['--no-heading', '--line-number', '--color', 'never', '--max-count', '50', '--', query, resolved];
-    const proc = spawn(rgPath, rgArgs, { stdio: ['ignore', 'pipe', 'pipe'] });
+    const proc = spawn(getRipgrepPath(), rgArgs, { stdio: ['ignore', 'pipe', 'pipe'] });
     let stdout = '';
     let stderr = '';
     let lineCount = 0;

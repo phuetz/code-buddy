@@ -2,7 +2,7 @@ import fs from "fs-extra";
 import * as path from "path";
 import { execFile } from "child_process";
 import { promisify } from "util";
-import { rgPath } from "@vscode/ripgrep";
+import { getRipgrepPath } from '../utils/ripgrep-path.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -164,7 +164,7 @@ export class CodebaseMapper {
         "--glob",
         `!**/${directory}/**`,
       ]);
-      const rgBinary = rgPath.replace(/\.asar([\\/])/, ".asar.unpacked$1");
+      const rgBinary = getRipgrepPath().replace(/\.asar([\\/])/, ".asar.unpacked$1");
       const { stdout } = await execFileAsync(
         rgBinary,
         ["--files", ...ignoreArgs, "--", this.rootDir],

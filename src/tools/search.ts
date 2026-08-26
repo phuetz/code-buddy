@@ -1,5 +1,5 @@
 import { spawn } from "child_process";
-import { rgPath } from "@vscode/ripgrep";
+import { getRipgrepPath } from '../utils/ripgrep-path.js';
 import { ToolResult } from "../types/index.js";
 import { ConfirmationService } from "../utils/confirmation-service.js";
 import * as path from "path";
@@ -249,7 +249,7 @@ export class SearchTool {
       args.push(query, this.currentDirectory);
 
       // Use bundled ripgrep binary from @vscode/ripgrep
-      const rgBinary = rgPath.replace(/\.asar([\\/])/, '.asar.unpacked$1');
+      const rgBinary = getRipgrepPath().replace(/\.asar([\\/])/, '.asar.unpacked$1');
       const rg = spawn(rgBinary, args);
       let output = "";
       let errorOutput = "";

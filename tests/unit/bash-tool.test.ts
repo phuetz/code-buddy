@@ -126,9 +126,9 @@ jest.mock('../../src/utils/input-validator', () => ({
   sanitizeForShell: jest.fn((input: string) => `'${input.replace(/'/g, "'\\''")}'`),
 }));
 
-// Mock ripgrep path
-jest.mock('@vscode/ripgrep', () => ({
-  rgPath: '/usr/bin/rg',
+// Mock ripgrep path resolution
+jest.mock('../../src/utils/ripgrep-path.js', () => ({
+  getRipgrepPath: () => '/usr/bin/rg',
 }));
 
 // Mock safe-binaries checker

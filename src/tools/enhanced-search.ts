@@ -14,7 +14,7 @@
 
 import { spawn, ChildProcess } from 'child_process';
 import { EventEmitter } from 'events';
-import { rgPath } from '@vscode/ripgrep';
+import { getRipgrepPath } from '../utils/ripgrep-path.js';
 import { logger } from '../utils/logger.js';
 import * as path from 'node:path';
 
@@ -231,7 +231,7 @@ export class EnhancedSearch extends EventEmitter {
    */
   getRipgrepPath(): string {
     // Handle Electron asar packaging
-    return rgPath.replace(/\.asar([\\/])/, '.asar.unpacked$1');
+    return getRipgrepPath().replace(/\.asar([\\/])/, '.asar.unpacked$1');
   }
 
   // ==========================================================================

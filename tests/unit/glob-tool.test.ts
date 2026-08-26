@@ -6,7 +6,7 @@
  */
 
 
-// Mock @vscode/ripgrep
+// Mock ripgrep path resolution
 
 import { EventEmitter } from 'events';
 import { SearchTool } from '../../src/tools/search.js';
@@ -31,8 +31,8 @@ const { mockSpawn, mockReaddir, mockFsExtra, mockEnhancedSearch } = vi.hoisted((
 // Fix mockFsExtra.readdir to point to mockReaddir
 mockFsExtra.readdir = mockReaddir;
 
-vi.mock('@vscode/ripgrep', () => ({
-  rgPath: '/mock/path/to/rg',
+vi.mock('../../src/utils/ripgrep-path.js', () => ({
+  getRipgrepPath: () => '/mock/path/to/rg',
 }));
 
 // Mock child_process
