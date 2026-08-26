@@ -1206,32 +1206,193 @@ def words_for(seg: dict[str, Any], src: Path, workdir: Path,
     return alignes
 
 
+_FRENCH_SMALL_NUMBERS = {
+    'zero': 0, 'un': 1, 'une': 1, 'deux': 2, 'trois': 3, 'quatre': 4,
+    'cinq': 5, 'six': 6, 'sept': 7, 'huit': 8, 'neuf': 9, 'dix': 10,
+    'onze': 11, 'douze': 12, 'treize': 13, 'quatorze': 14, 'quinze': 15,
+    'seize': 16, 'dix-sept': 17, 'dix-huit': 18, 'dix-neuf': 19,
+}
+_FRENCH_TENS = {
+    'vingt': 20, 'trente': 30, 'quarante': 40, 'cinquante': 50,
+    'soixante': 60,
+}
+_FRENCH_NUMBER_WORDS = {
+    *_FRENCH_SMALL_NUMBERS,
+    *_FRENCH_TENS,
+    'et', 'cent', 'cents', 'mille', 'million', 'millions',
+    'milliard', 'milliards', 'vingts',
+}
+
+
+def _under_hundred(tokens: list[str]) -> int | None:
+    if not tokens:
+        return 0
+    if tokens[0] == 'et' or tokens[-1] == 'et' or tokens.count('et') > 1:
+        return None
+    tokens = [token for token in tokens if token != 'et']
+    if not tokens:
+        return None
+    joined = '-'.join(tokens)
+    if joined in _FRENCH_SMALL_NUMBERS:
+        return _FRENCH_SMALL_NUMBERS[joined]
+    if tokens[0] in _FRENCH_TENS:
+        base = _FRENCH_TENS[tokens[0]]
+        rest = _under_hundred(tokens[1:])
+        limit = 19 if base == 60 else 9
+        return base + rest if rest is not None and 0 <= rest <= limit else None
+    if len(tokens) >= 2 and tokens[:2] == ['quatre', 'vingt']:
+        rest = _under_hundred(tokens[2:])
+        return 80 + rest if rest is not None and 0 <= rest <= 19 else None
+    return None
+
+
+def _under_thousand(tokens: list[str]) -> int | None:
+    if not tokens:
+        return 0
+    if 'cent' not in tokens:
+        return _under_hundred(tokens)
+    if tokens.count('cent') != 1:
+        return None
+    index = tokens.index('cent')
+    multiplier = _under_hundred(tokens[:index]) if index else 1
+    rest = _under_hundred(tokens[index + 1:])
+    if multiplier is None or not 1 <= multiplier <= 9 or rest is None:
+        return None
+    return multiplier * 100 + rest
+
+
+def french_number_value(text: str) -> int | None:
+    """Normalise un entier français écrit en lettres ou en chiffres.
+
+    Le montage n'a pas besoin d'un moteur linguistique général : il doit seulement
+    reconnaître de façon déterministe les nombres susceptibles de servir de repères.
+    Les formes françaises usuelles sont couvertes jusqu'aux milliards.
+    """
+    normalised = wrap_short.norm(str(text)).replace('‑', '-').replace('–', '-')
+    if re.fullmatch(r'\d+', normalised):
+        return int(normalised)
+    if re.fullmatch(r'\d{1,3}(?:[\s_.]\d{3})+', normalised):
+        return int(re.sub(r'[\s_.]', '', normalised))
+    tokens = normalised.replace('-', ' ').split()
+    tokens = [
+        {'cents': 'cent', 'vingts': 'vingt', 'millions': 'million',
+         'milliards': 'milliard'}.get(token, token)
+        for token in tokens
+    ]
+    if not tokens or any(token not in _FRENCH_NUMBER_WORDS for token in tokens):
+        return None
+
+    total = 0
+    remaining = tokens
+    for marker, factor in (('milliard', 1_000_000_000), ('million', 1_000_000), ('mille', 1_000)):
+        if marker not in remaining:
+            continue
+        if remaining.count(marker) != 1:
+            return None
+        index = remaining.index(marker)
+        left = _under_thousand(remaining[:index]) if index else 1
+        if left is None or left <= 0:
+            return None
+        total += left * factor
+        remaining = remaining[index + 1:]
+    rest = _under_thousand(remaining)
+    return total + rest if rest is not None else None
+
+
+def _canonical_parts(parts: list[str]) -> list[str]:
+    """Réduit les suites numériques en chiffres des deux côtés de la comparaison."""
+    output: list[str] = []
+    index = 0
+    while index < len(parts):
+        found: tuple[int, int] | None = None
+        for end in range(min(len(parts), index + 12), index, -1):
+            value = french_number_value(' '.join(parts[index:end]))
+            if value is not None:
+                found = end, value
+                break
+        if found:
+            end, value = found
+            output.append(str(value))
+            index = end
+        else:
+            output.append(wrap_short.norm(parts[index]))
+            index += 1
+    return output
+
+
+def _canonical_target(spec: str) -> list[str]:
+    return _canonical_parts(wrap_short.norm(spec).split())
+
+
+def _canonical_timed_words(words: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    flattened: list[dict[str, Any]] = []
+    for word in words:
+        normalised = wrap_short.norm(str(word['w']))
+        # Un seul jeton « 7 940 » est un nombre groupé. Deux jetons successifs
+        # « 7 » puis « 948 » gardent en revanche deux points d'ancrage : dans le
+        # rendu vécu, la carte « sept » doit partir au début du nombre prononcé.
+        parts = [normalised] if any(char.isdigit() for char in normalised) else normalised.split()
+        flattened.extend({'w': part, 't0': word['t0'], 't1': word['t1']} for part in parts)
+
+    output: list[dict[str, Any]] = []
+    index = 0
+    while index < len(flattened):
+        found: tuple[int, int] | None = None
+        for end in range(min(len(flattened), index + 12), index, -1):
+            if end - index > 1 and any(
+                any(char.isdigit() for char in item['w']) for item in flattened[index:end]
+            ):
+                continue
+            value = french_number_value(' '.join(item['w'] for item in flattened[index:end]))
+            if value is not None:
+                found = end, value
+                break
+        if found:
+            end, value = found
+            output.append({
+                'w': str(value),
+                't0': flattened[index]['t0'],
+                't1': flattened[end - 1]['t1'],
+            })
+            index = end
+        else:
+            output.append(flattened[index])
+            index += 1
+    return output
+
+
 def find_word(words: list[dict[str, Any]], spec: str) -> float | None:
     """`mot` ou `mot+N` (N-ième occurrence) → t0 du mot (comparaison normalisée, « 2700 » est un MOT,
     pas un temps) ; sinon `@12.5` ou un nombre décimal avec point = temps absolu."""
     spec = str(spec).strip()
     if spec.startswith('@'):
-        return float(spec[1:])
-    m = re.match(r'^(.*?)(?:\+(\d+))?$', spec)
-    target, occ = wrap_short.norm(m.group(1)), int(m.group(2) or 1)
+        try:
+            absolute = float(spec[1:])
+        except ValueError as exc:
+            raise NewsLongError(f'instant absolu invalide: {spec!r}') from exc
+        if not math.isfinite(absolute) or absolute < 0:
+            raise NewsLongError(f'instant absolu invalide: {spec!r}')
+        return absolute
+    if re.fullmatch(r'\d+\.\d+', spec):
+        return float(spec)
+    m = re.fullmatch(r'(.*?)(?:\+(\d+))?', spec)
+    if not m or not m.group(1):
+        raise NewsLongError(f'déclencheur invalide: {spec!r}')
+    target, occ = _canonical_target(m.group(1)), int(m.group(2) or 1)
     # Un déclencheur peut porter sur PLUSIEURS mots (« trie ce dossier »). Historiquement
     # cela marchait par accident : la table `fix` fusionnait ces mots en un seul jeton. Dès
     # que les jetons sont rendus mot à mot — ce que fait l'alignement sur script —, il faut
     # chercher la SUITE de mots, sinon la carte retombe sur son instant de repli.
-    cibles = target.split()
+    timed_words = _canonical_timed_words(words)
+    cibles = target
     n = 0
-    for i, w in enumerate(words):
-        if len(cibles) > 1:
-            suite = [wrap_short.norm(x['w']) for x in words[i:i + len(cibles)]]
-            trouve = suite == cibles
-        else:
-            trouve = wrap_short.norm(w['w']) == target
+    for i, word in enumerate(timed_words):
+        suite = [item['w'] for item in timed_words[i:i + len(cibles)]]
+        trouve = suite == cibles
         if trouve:
             n += 1
             if n == occ:
-                return float(w['t0'])
-    if re.fullmatch(r'\d+\.\d+', spec):
-        return float(spec)
+                return float(word['t0'])
     return None
 
 
