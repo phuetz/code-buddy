@@ -1,4 +1,17 @@
 #!/usr/bin/env bash
+# NOTE (26/08/2026) — deux reglages valent pour TOUS les moteurs qui lancent Code Buddy
+# en headless (qwen, gmi, minimax, nvidia, darkstar) :
+#
+#   CB_SRC pointe sur le depot COURANT, pas sur ~/code-buddy-vitrine. Le worktree vitrine
+#   etait reste a un vieux commit et rejouait des defauts deja corriges : `cd X && Y` refuse
+#   comme nom de repertoire (7ae2d4cb) et contexte bride a 14336 jetons pour un modele qui en
+#   tient 262144 (384934e0). Un moteur qui execute du code perime mesure le passe.
+#
+#   La posture est `dontAsk`, pas `acceptEdits` : ce dernier autorise les ecritures mais PAS
+#   les commandes, et en headless la demande d'approbation ne peut aboutir (« Approval requires
+#   an interactive terminal ») — l'agent n'executait alors plus rien, echec impute a tort aux
+#   modeles. `dontAsk` leve la question sans lever les garde-fous : validateur statique de
+#   commandes et filtre de secrets restent actifs. CB_POSTURE permet de durcir au cas par cas.
 # Déléguer une mission à un moteur à $0, sans repayer les pièges déjà payés.
 #
 #   deleguer.sh <dépôt> <mission.md> [moteur]
@@ -72,7 +85,24 @@ GARDE
 
 echo "→ $MOTEUR sur $DEPOT — journal : $LOG"
 DEBUT=$(date +%s)
-AVANT=$(cd "$DEPOT" && git status --porcelain 2>/dev/null | sort)
+# Empreinte de l'etat du depot : les NOMS des fichiers touches, plus leur taille et leur
+# date. `git status --porcelain` seul ne suffit pas — un fichier reecrit garde le meme nom
+# et la meme ligne de statut, si bien qu'une mission qui refait un rapport deja present etait
+# annoncee « depot INCHANGE » alors que le livrable venait d'etre produit (vu le 26/08/2026).
+# Un controle qui crie au loup finit par ne plus etre lu.
+empreinte_depot() {
+  (cd "$1" && git status --porcelain 2>/dev/null | sort | while read -r ligne; do
+    fichier=${ligne:3}
+    fichier=${fichier%\"}; fichier=${fichier#\"}
+    if [ -f "$fichier" ]; then
+      printf '%s %s\n' "$ligne" "$(stat -c '%s:%Y' "$fichier" 2>/dev/null || echo '?')"
+    else
+      printf '%s\n' "$ligne"
+    fi
+  done)
+}
+
+AVANT=$(empreinte_depot "$DEPOT")
 
 case "$MOTEUR" in
   luna|sol)
@@ -99,10 +129,10 @@ case "$MOTEUR" in
   qwen)
     # Qwen 3.8 27B LOCAL (Ollama, 0 €, aucun quota) — exécutant = Code Buddy headless (agentique : lit,
     # édite, lance). OLLAMA_MODELE pour changer (gemma4:31b-it-qat, …). Un seul job à la fois (GPU).
-    CB_SRC=${CB_SRC:-$HOME/code-buddy-vitrine}; [ -f "$CB_SRC/src/index.ts" ] || CB_SRC=$HOME/code-buddy
+    CB_SRC=${CB_SRC:-$HOME/code-buddy}; [ -f "$CB_SRC/src/index.ts" ] || CB_SRC=$HOME/code-buddy-vitrine
     (cd "$DEPOT" && CODEBUDDY_PROVIDER=ollama OLLAMA_HOST="${OLLAMA_HOST:-http://127.0.0.1:11434}" \
        "$CB_SRC/node_modules/.bin/tsx" "$CB_SRC/src/index.ts" -m "${OLLAMA_MODELE:-qwen3.8:27b}" \
-       --permission-mode acceptEdits -p "$(cat "$CONSIGNE")") 2>&1 | tee "$LOG"
+       --permission-mode "${CB_POSTURE:-dontAsk}" -p "$(cat "$CONSIGNE")") 2>&1 | tee "$LOG"
     ;;
   gmi)
     # GMI Cloud (api.gmi-serving.com), compatible OpenAI. Offre MiniMax : M3, M2.7, Speech 2.8
@@ -119,7 +149,7 @@ case "$MOTEUR" in
     # Prompts → GMI Cloud : rien de confidentiel.
     GKEY=$(grep -E "^(export )?GMI_API_KEY=" "$HOME/.codebuddy/media.env" 2>/dev/null | head -1 | sed 's/^export //' | cut -d= -f2- | tr -d "'\"")
     [ -n "$GKEY" ] || { echo "GMI_API_KEY introuvable dans ~/.codebuddy/media.env" >&2; exit 2; }
-    CB_SRC=${CB_SRC:-$HOME/code-buddy-vitrine}; [ -f "$CB_SRC/src/index.ts" ] || CB_SRC=$HOME/code-buddy
+    CB_SRC=${CB_SRC:-$HOME/code-buddy}; [ -f "$CB_SRC/src/index.ts" ] || CB_SRC=$HOME/code-buddy-vitrine
     # `CODEBUDDY_PROVIDER=openai-compatible` + `OPENAI_*` n'est PAS reconnu par le dispatcher
     # (mesuré le 25/08 : « Auto-detected provider: custom » puis « No AI provider configured »,
     # échec en 1 s). La voie qui marche est le couple GROK_API_KEY/GROK_BASE_URL, que
@@ -127,7 +157,7 @@ case "$MOTEUR" in
     # historique, il ne désigne pas xAI.
     (cd "$DEPOT" && GROK_API_KEY="$GKEY" GROK_BASE_URL="https://api.gmi-serving.com/v1" \
        "$CB_SRC/node_modules/.bin/tsx" "$CB_SRC/src/index.ts" -m "${GMI_MODELE:-MiniMaxAI/MiniMax-M3}" \
-       --permission-mode acceptEdits -p "$(cat "$CONSIGNE")") 2>&1 | tee "$LOG"
+       --permission-mode "${CB_POSTURE:-dontAsk}" -p "$(cat "$CONSIGNE")") 2>&1 | tee "$LOG"
     ;;
 
   minimax)
@@ -145,10 +175,10 @@ case "$MOTEUR" in
     # En volume, préférer NVIDIA ou le local. OpenRouter voit les prompts : rien de confidentiel.
     OKEY=$(grep -E "^(export )?OPENROUTER_API_KEY=" "$HOME/.codebuddy/media.env" 2>/dev/null | head -1 | sed 's/^export //' | cut -d= -f2- | tr -d "'\"")
     [ -n "$OKEY" ] || { echo "OPENROUTER_API_KEY introuvable dans ~/.codebuddy/media.env" >&2; exit 2; }
-    CB_SRC=${CB_SRC:-$HOME/code-buddy-vitrine}; [ -f "$CB_SRC/src/index.ts" ] || CB_SRC=$HOME/code-buddy
+    CB_SRC=${CB_SRC:-$HOME/code-buddy}; [ -f "$CB_SRC/src/index.ts" ] || CB_SRC=$HOME/code-buddy-vitrine
     (cd "$DEPOT" && CODEBUDDY_PROVIDER=openrouter OPENROUTER_API_KEY="$OKEY" \
        "$CB_SRC/node_modules/.bin/tsx" "$CB_SRC/src/index.ts" -m "${MINIMAX_MODELE:-minimax/minimax-m2.7:free}" \
-       --permission-mode acceptEdits -p "$(cat "$CONSIGNE")") 2>&1 | tee "$LOG"
+       --permission-mode "${CB_POSTURE:-dontAsk}" -p "$(cat "$CONSIGNE")") 2>&1 | tee "$LOG"
     ;;
 
   nvidia)
@@ -158,14 +188,14 @@ case "$MOTEUR" in
     # Modèles vivants vérifiés le 22/08/2026 : docs/providers/nvidia-nim-probe-2026-08-22.md (worktree vitrine).
     NKEY=$(grep -E "^(export )?NVIDIA_API_KEY=" "$HOME/.codebuddy/lisa.env" 2>/dev/null | head -1 | sed 's/^export //' | cut -d= -f2- | tr -d "'\"")
     [ -n "$NKEY" ] || { echo "NVIDIA_API_KEY introuvable dans ~/.codebuddy/lisa.env" >&2; exit 2; }
-    CB_SRC=${CB_SRC:-$HOME/code-buddy-vitrine}; [ -f "$CB_SRC/src/index.ts" ] || CB_SRC=$HOME/code-buddy
+    CB_SRC=${CB_SRC:-$HOME/code-buddy}; [ -f "$CB_SRC/src/index.ts" ] || CB_SRC=$HOME/code-buddy-vitrine
     # ⚠️ PAS de -u/-m : ces flags PERSISTENT baseURL/modèle dans ~/.codebuddy/user-settings.json (effet de
     # bord vu le 22/08). On sélectionne le provider par l'environnement, sans rien écrire.
     # -m ne persiste rien (seul -u écrit user-settings) mais il est NÉCESSAIRE : sans lui, le
     # defaultModel périmé de ~/.codebuddy/user-settings.json (grok-code-fast-1) part vers NVIDIA → 404.
     (cd "$DEPOT" && CODEBUDDY_PROVIDER=nvidia NVIDIA_API_KEY="$NKEY" \
        "$CB_SRC/node_modules/.bin/tsx" "$CB_SRC/src/index.ts" -m "${NVIDIA_MODELE:-moonshotai/kimi-k3}" \
-       --permission-mode acceptEdits -p "$(cat "$CONSIGNE")") 2>&1 | tee "$LOG"
+       --permission-mode "${CB_POSTURE:-dontAsk}" -p "$(cat "$CONSIGNE")") 2>&1 | tee "$LOG"
     ;;
   oc)
     # ⛔ UN SEUL TRAVAIL OPENCODE À LA FOIS. Le quota d'une fenêtre de 5 h
@@ -208,12 +238,12 @@ case "$MOTEUR" in
     DS_HOTE=${DARKSTAR_HOTE:-http://darkstar:11434}
     curl -sf --max-time 8 "$DS_HOTE/api/tags" >/dev/null || {
       echo "darkstar injoignable sur $DS_HOTE — machine eteinte ou ollama arrete" >&2; exit 2; }
-    CB_SRC=${CB_SRC:-$HOME/code-buddy-vitrine}; [ -f "$CB_SRC/src/index.ts" ] || CB_SRC=$HOME/code-buddy
+    CB_SRC=${CB_SRC:-$HOME/code-buddy}; [ -f "$CB_SRC/src/index.ts" ] || CB_SRC=$HOME/code-buddy-vitrine
     # Comme pour nvidia : pas de -u (il PERSISTE baseURL dans user-settings.json), mais -m est
     # necessaire sinon le defaultModel perime part vers darkstar et rend 404.
     (cd "$DEPOT" && GROK_BASE_URL="$DS_HOTE/v1" GROK_API_KEY=ollama \
        "$CB_SRC/node_modules/.bin/tsx" "$CB_SRC/src/index.ts" -m "${DARKSTAR_MODELE:-qwen3.8:27b}" \
-       --permission-mode acceptEdits -p "$(cat "$CONSIGNE")") 2>&1 | tee "$LOG"
+       --permission-mode "${CB_POSTURE:-dontAsk}" -p "$(cat "$CONSIGNE")") 2>&1 | tee "$LOG"
     ;;
   local)
     MODELE=${OLLAMA_MODELE:-gemma4:31b-it-qat}
@@ -237,12 +267,13 @@ if [ "$MOTEUR" = luna ] || [ "$MOTEUR" = sol ]; then
 fi
 
 # Deuxième preuve, valable pour TOUS les moteurs : le dépôt a-t-il bougé ?
-APRES=$(cd "$DEPOT" && git status --porcelain 2>/dev/null | sort)
+APRES=$(empreinte_depot "$DEPOT")
 if [ "$AVANT" = "$APRES" ]; then
-  echo "⚠️  le dépôt est INCHANGÉ — si la mission demandait un livrable, il n'existe pas."
+  echo "⚠️  aucun fichier créé NI modifié dans le dépôt (contenu comparé, pas seulement les noms)."
 else
   echo "── ce qui a bougé ──"
-  diff <(printf '%s\n' "$AVANT") <(printf '%s\n' "$APRES") | grep '^>' | sed 's/^> /  /'
+  diff <(printf '%s\n' "$AVANT") <(printf '%s\n' "$APRES") | grep '^>' \
+    | sed -E 's/^> /  /; s/ [0-9]+:[0-9]+$//'
 fi
 
 # Troisième preuve, la seule qui vaille quand la mission nomme son livrable.
