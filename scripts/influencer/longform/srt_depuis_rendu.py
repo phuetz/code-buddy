@@ -11,7 +11,7 @@ Le karaoké écrit un événement PAR MOT, tous porteurs de la même carte : on 
 premier et de la fin du dernier.
 
 Usage :
-    srt_depuis_rendu.py <dossier-work-du-rendu> --out piste.fr.srt
+    srt_depuis_rendu.py <dossier-work-du-rendu> --media master.mp4 --out piste.fr.srt
 """
 import argparse
 import importlib.util
@@ -103,7 +103,11 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('work', type=Path, help='dossier work/ du rendu (contient concat-audio.txt)')
+    ap.add_argument('--media', type=Path, required=True,
+                    help='master exact auquel la piste sera attachée')
     ap.add_argument('--out', required=True)
+    ap.add_argument('--tolerance', type=float, default=0.5,
+                    help='écart maximal timeline/média en secondes (défaut: 0,5)')
     a = ap.parse_args()
 
     work = a.work.expanduser().resolve()
@@ -112,15 +116,20 @@ def main():
         sys.exit(f'{concat} introuvable — est-ce bien le dossier work/ d’un rendu ?')
 
     cartons, offset = [], 0.0
-    for ligne in concat.read_text(encoding='utf-8').splitlines():
-        if "'" not in ligne:
-            continue
-        audio = Path(ligne.split("'")[1])
-        ass = audio.parent / 'subs.ass'
-        if ass.exists():
-            for t0, t1, texte in cartons_du_segment(ass):
-                cartons.append((t0 + offset, t1 + offset, texte))
-        offset += duree(audio)
+    try:
+        for ligne in concat.read_text(encoding='utf-8').splitlines():
+            if "'" not in ligne:
+                continue
+            audio = Path(ligne.split("'")[1])
+            ass = audio.parent / 'subs.ass'
+            if ass.exists():
+                for t0, t1, texte in cartons_du_segment(ass):
+                    cartons.append((t0 + offset, t1 + offset, texte))
+            offset += duree(audio)
+        media = a.media.expanduser().resolve()
+        assert_duration_match(offset, duree(media), tolerance=a.tolerance)
+    except (OSError, SubtitleSyncError) as exc:
+        sys.exit(f'ERREUR: {exc}')
 
     if not cartons:
         sys.exit('aucun carton trouvé : ce montage a-t-il bien des sous-titres ?')
@@ -134,7 +143,7 @@ def main():
                      f'{srt.plier(texte)}\n')
 
     Path(a.out).expanduser().write_text('\n'.join(blocs), encoding='utf-8')
-    print(f'{a.out} — {len(blocs)} sous-titres, montage de {offset:.2f} s')
+    print(f'{a.out} — {len(blocs)} sous-titres, montage de {offset:.2f} s, média vérifié')
 
 
 if __name__ == '__main__':
