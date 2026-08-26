@@ -1,5 +1,7 @@
 import { EventEmitter } from "events";
 import { exec } from "child_process";
+import { existsSync } from "fs";
+import { basename, delimiter, isAbsolute, join } from "path";
 import { ToolResult, getErrorMessage } from "../types/index.js";
 import { getFilteredEnv } from "./bash/command-validator.js";
 import { SAFE_ENV_VARS } from "./bash/security-patterns.js";
@@ -59,6 +61,67 @@ function validateCommand(command: string): string | null {
     }
   }
   return null;
+}
+
+function getProcessEnvValue(name: string): string | undefined {
+  const key = Object.keys(process.env).find(
+    (candidate) => candidate.toUpperCase() === name.toUpperCase()
+  );
+  return key ? process.env[key] : undefined;
+}
+
+/**
+ * Resolve Bash to an absolute path before passing it to node-pty.
+ *
+ * node-pty 1.1 uses posix_spawn (not posix_spawnp) on macOS, so a bare
+ * executable name is not searched in PATH there. Its Windows backend also
+ * reports "File not found" when Bash is not directly resolvable from the
+ * parent Path. Git for Windows ships Bash in the standard locations below.
+ */
+function resolveBashExecutable(): string {
+  const candidates: string[] = [];
+
+  if (process.platform === "win32") {
+    for (const envName of ["PROGRAMFILES", "PROGRAMW6432", "PROGRAMFILES(X86)"]) {
+      const root = getProcessEnvValue(envName);
+      if (!root) continue;
+      candidates.push(join(root, "Git", "bin", "bash.exe"));
+      candidates.push(join(root, "Git", "usr", "bin", "bash.exe"));
+    }
+
+    const localAppData = getProcessEnvValue("LOCALAPPDATA");
+    if (localAppData) {
+      candidates.push(join(localAppData, "Programs", "Git", "bin", "bash.exe"));
+      candidates.push(join(localAppData, "Programs", "Git", "usr", "bin", "bash.exe"));
+    }
+  } else {
+    const configuredShell = getProcessEnvValue("SHELL");
+    if (
+      configuredShell &&
+      isAbsolute(configuredShell) &&
+      basename(configuredShell) === "bash"
+    ) {
+      candidates.push(configuredShell);
+    }
+    candidates.push("/bin/bash", "/usr/bin/bash", "/usr/local/bin/bash");
+  }
+
+  const pathValue = getProcessEnvValue("PATH");
+  if (pathValue) {
+    const executableName = process.platform === "win32" ? "bash.exe" : "bash";
+    for (const pathEntry of pathValue.split(delimiter)) {
+      const directory = pathEntry.trim().replace(/^["']|["']$/g, "");
+      if (directory) candidates.push(join(directory, executableName));
+    }
+  }
+
+  const shell = candidates.find((candidate) => existsSync(candidate));
+  if (!shell) {
+    throw new Error(
+      "Bash executable not found. Install Bash or add it to PATH (Git for Windows includes bash.exe)."
+    );
+  }
+  return shell;
 }
 
 /**
@@ -133,8 +196,10 @@ export class InteractiveBashTool extends EventEmitter {
       return { sessionId: '', output: `Error: ${validationError}` };
     }
 
+    const shellExecutable = resolveBashExecutable();
+
     if (!this.isPTYAvailable) {
-      return this.fallbackExecute(command);
+      return this.fallbackExecute(command, shellExecutable);
     }
 
     const sessionId = `pty-${++this.sessionCounter}`;
@@ -148,7 +213,7 @@ export class InteractiveBashTool extends EventEmitter {
           return;
         }
 
-        const shell = pty.spawn("bash", ["-c", command], {
+        const shell = pty.spawn(shellExecutable, ["-c", command], {
           name: "xterm-256color",
           cols,
           rows,
@@ -227,7 +292,8 @@ export class InteractiveBashTool extends EventEmitter {
   }
 
   private async fallbackExecute(
-    command: string
+    command: string,
+    shellExecutable: string
   ): Promise<{ sessionId: string; output: string }> {
     const sessionId = `exec-${++this.sessionCounter}`;
 
@@ -237,7 +303,7 @@ export class InteractiveBashTool extends EventEmitter {
         timeout: 60000,
         maxBuffer: 10 * 1024 * 1024,
         cwd: process.cwd(),
-        shell: '/bin/bash',
+        shell: shellExecutable,
         env: {
           ...buildInteractiveEnv(),
           // Disable shell history for security

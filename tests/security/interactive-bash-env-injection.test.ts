@@ -11,7 +11,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { spawnSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { delimiter, join } from 'node:path';
 
 import { InteractiveBashTool } from '../../src/tools/interactive-bash.js';
 
@@ -34,6 +34,23 @@ function shellQuote(value: string): string {
 
 function combinedOutput(result: { stdout?: string | null; stderr?: string | null }): string {
   return `${result.stdout ?? ''}${result.stderr ?? ''}`;
+}
+
+function parseJsonOutput(output: string): Record<string, string> {
+  const start = output.indexOf('{');
+  const end = output.lastIndexOf('}');
+  if (start === -1 || end < start) {
+    throw new Error(`Sortie JSON enfant introuvable dans : ${output}`);
+  }
+  return JSON.parse(output.slice(start, end + 1)) as Record<string, string>;
+}
+
+function normalizePortablePath(value: string): string {
+  const withSlashes = value.replaceAll('\\', '/');
+  return (process.platform === 'win32'
+    ? withSlashes.replace(/(^|;)([A-Za-z]):\//g, '$1/$2/')
+    : withSlashes
+  ).toLowerCase();
 }
 
 async function runInteractive(command: string, forceFallback = false): Promise<string> {
@@ -67,24 +84,40 @@ afterEach(() => {
 
 describe('InteractiveBashTool — environnement des sous-processus', () => {
   it('conserve les variables nécessaires au terminal interactif', async () => {
-    process.env.PATH = '/usr/bin:/bin';
+    const pathMarker = join(workDir, 'path-marker');
+    const envProbe = join(workDir, 'env-probe.cjs');
+    process.env.PATH = [pathMarker, process.env.PATH].filter(Boolean).join(delimiter);
     process.env.HOME = workDir;
-    process.env.SHELL = '/bin/bash';
+    process.env.SHELL = 'codebuddy-test-shell';
     process.env.LANG = 'C.UTF-8';
-
-    const output = await runInteractive(
-      'printf "%s\\n" "$PATH" "$HOME" "$SHELL" "$LANG" "$TERM"',
+    writeFileSync(
+      envProbe,
+      `process.stdout.write(JSON.stringify({\n` +
+        `  PATH: process.env.PATH,\n` +
+        `  HOME: process.env.HOME,\n` +
+        `  SHELL: process.env.SHELL,\n` +
+        `  LANG: process.env.LANG,\n` +
+        `  TERM: process.env.TERM,\n` +
+        `}) + '\\n');\n`,
     );
-    expect(output).toContain('/usr/bin:/bin');
-    expect(output).toContain(workDir);
-    expect(output).toContain('/bin/bash');
-    expect(output).toContain('C.UTF-8');
-    expect(output).toContain('xterm-256color');
+
+    const environment = parseJsonOutput(
+      await runInteractive(`${shellQuote(process.execPath)} ${shellQuote(envProbe)}`),
+    );
+    expect(normalizePortablePath(environment.PATH)).toContain(
+      normalizePortablePath(pathMarker),
+    );
+    expect(environment.HOME).toBe(workDir);
+    expect(environment.SHELL).toBe('codebuddy-test-shell');
+    expect(environment.LANG).toBe('C.UTF-8');
+    expect(environment.TERM).toBe('xterm-256color');
   });
 
   it.each([false, true])('ne transmet pas NODE_OPTIONS à un vrai node enfant (%s)', async (forceFallback) => {
     const evilScript = join(workDir, 'evil.cjs');
+    const victimScript = join(workDir, 'node-options-victim.cjs');
     writeFileSync(evilScript, `process.stdout.write('${MARKER}\\n');\n`);
+    writeFileSync(victimScript, `process.stdout.write('child ok\\n');\n`);
     process.env.NODE_OPTIONS = `--require ${evilScript}`;
 
     const control = spawnSync(process.execPath, ['-e', 'void 0'], {
@@ -95,7 +128,7 @@ describe('InteractiveBashTool — environnement des sous-processus', () => {
     expect(combinedOutput(control)).toContain(MARKER);
 
     const output = await runInteractive(
-      `${shellQuote(process.execPath)} -e "process.stdout.write('child ok\\n')"`,
+      `${shellQuote(process.execPath)} ${shellQuote(victimScript)}`,
       forceFallback,
     );
     expect(output).not.toContain(MARKER);
@@ -104,8 +137,10 @@ describe('InteractiveBashTool — environnement des sous-processus', () => {
 
   it.each([false, true])('ne transmet pas NODE_PATH à un vrai node enfant (%s)', async (forceFallback) => {
     const evilModules = join(workDir, 'evil-modules');
+    const victimScript = join(workDir, 'node-path-victim.cjs');
     mkdirSync(evilModules);
     writeFileSync(join(evilModules, 'interactive-evil.cjs'), `process.stdout.write('${MARKER}\\n');\n`);
+    writeFileSync(victimScript, "try { require('interactive-evil.cjs'); } catch {}\n");
     process.env.NODE_PATH = evilModules;
 
     const control = spawnSync(
@@ -116,7 +151,7 @@ describe('InteractiveBashTool — environnement des sous-processus', () => {
     expect(combinedOutput(control)).toContain(MARKER);
 
     const output = await runInteractive(
-      `${shellQuote(process.execPath)} -e "try { require('interactive-evil.cjs') } catch {}"`,
+      `${shellQuote(process.execPath)} ${shellQuote(victimScript)}`,
       forceFallback,
     );
     expect(output).not.toContain(MARKER);

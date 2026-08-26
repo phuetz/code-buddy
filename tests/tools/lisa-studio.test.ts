@@ -65,7 +65,9 @@ describe('Lisa Studio', () => {
     expect(report.seeds).toEqual({ keyframes: [100, 101, 102], animation: 103 });
     expect(report.gate).toMatchObject({ accepted: true, bestScore: 0.66, selectedIndex: 1 });
     expect(report.paths.selectedKeyframe).toContain('-02-seed-101.png');
-    expect(report.paths.video).toContain('.codebuddy/media-generation/videos/lisa-clip-');
+    expect(report.paths.video).toContain(
+      path.join('.codebuddy', 'media-generation', 'videos', 'lisa-clip-')
+    );
     expect(report.prompts.animation).toBe(
       'Lisa sourit doucement, plan fixe verrouillé, visage net et centré'
     );
