@@ -155,7 +155,11 @@ class LegacyAssemblySafetyTests(unittest.TestCase):
         with patch.object(legacy, 'render_card') as render_card:
             with self.assertRaisesRegex(legacy.AssemblyError, 'aucun visuel'):
                 legacy.render_voiceover_section(
-                    {'id': 'S1'}, 10.0, [], Path('render'), LONGFORM / 'README.md'
+                    {'id': 'S1'},
+                    10.0,
+                    [],
+                    Path('render'),
+                    LONGFORM / '.v9-no-visual-output.mp4',
                 )
         render_card.assert_not_called()
 
