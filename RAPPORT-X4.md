@@ -1,7 +1,7 @@
 # MISSION X4 — Code Buddy fonctionne sans `better-sqlite3`
 
-Date : 2026-08-26  
-Branche : `fix/w2-cli-families-2026-08-26`  
+Date : 2026-08-26
+Branche : `fix/w2-cli-families-2026-08-26`
 Commits fonctionnels : `65cf2bf1`, `077249eb`, `2049fb4f`
 
 ## Résultat
