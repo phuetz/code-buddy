@@ -99,15 +99,20 @@ class TriggerSafetyTests(unittest.TestCase):
 
         for segment, script_dir, message in cases:
             with self.subTest(segment=segment, script_dir=script_dir):
-                with patch.object(news.Path, 'exists', side_effect=[True, False]):
-                    with patch.object(news.Path, 'read_text', return_value=cached):
-                        with self.assertRaisesRegex(news.NewsLongError, message):
-                            news.words_for(
-                                segment,
-                                Path('voice.mp3'),
-                                Path('work'),
-                                script_dir=script_dir,
-                            )
+                # Le cache de mots est declare a jour : ce test porte sur le script
+                # manquant, pas sur la fraicheur du cache. Compter les appels a
+                # Path.exists rendait le test dependant de l'ordre interne de
+                # words_for — il cassait des qu'une verification s'y ajoutait.
+                with patch.object(news, 'stale', return_value=False):
+                    with patch.object(news.Path, 'exists', return_value=False):
+                        with patch.object(news.Path, 'read_text', return_value=cached):
+                            with self.assertRaisesRegex(news.NewsLongError, message):
+                                news.words_for(
+                                    segment,
+                                    Path('voice.mp3'),
+                                    Path('work'),
+                                    script_dir=script_dir,
+                                )
 
     def test_verifier_cannot_pass_without_cached_transcription(self) -> None:
         with self.assertRaisesRegex(RuntimeError, 'déclencheurs non vérifiés'):

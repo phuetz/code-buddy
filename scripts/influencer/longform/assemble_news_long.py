@@ -1309,7 +1309,10 @@ def words_for(seg: dict[str, Any], src: Path, workdir: Path,
     pilote du 22/08 — la table ne répare que ce qu'on a déjà vu passer.
     """
     cache = workdir / 'words' / f"{seg['id']}.json"
-    if cache.exists():
+    # La transcription ne vaut que pour l'audio qui l'a produite. Une voix
+    # resynthetisee laissait le cache d'hier faire foi : le sommaire disait
+    # encore « huit choses » et les cartes s'ancraient sur un audio disparu.
+    if not stale(cache, src):
         words = json.loads(cache.read_text(encoding='utf-8'))
     else:
         cache.parent.mkdir(parents=True, exist_ok=True)
