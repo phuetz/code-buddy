@@ -84,18 +84,26 @@ workdir/
 - `<id>` doit correspondre exactement à `sections[].id` dans `plan.json`.
 - `voice/<id>.mp3` est créé par `longform-voice.py`.
 - `avatar/<id>.mp4` contient un rendu HeyGen déjà contrôlé. S'il manque,
-  l'assembleur produit une carte « AVATAR À FOURNIR » nette et conserve la voix
-  de la section ; un montage complet reste donc testable sans HeyGen.
+  l'assembleur s'arrête : un placeholder ne peut pas être livré comme un vrai plan.
 - `visuals/<id>/` accepte JPG, PNG, WebP et formats courants d'image/vidéo.
   Les noms sont triés : les préfixes `01-`, `02-`, etc. fixent l'ordre.
 - Les images reçoivent un Ken Burns lent. Les vidéos sont bouclées si nécessaire,
   recadrées en cover 16:9 et rendues muettes.
-- Sans visuel, une carte de chapitre élégante est utilisée.
+- Sans visuel, l'assemblage échoue au lieu de fabriquer une carte de repli.
 
-Tous les scripts sautent les assets déjà présents. Les intermédiaires dans
+Les intermédiaires déjà présents permettent une reprise, mais une sortie finale
+existante n'est jamais annoncée comme un nouveau succès. Les intermédiaires dans
 `render/` permettent de reprendre après une interruption sans nouvelle synthèse
 ni nouveau rendu. Pour forcer une reconstruction après une modification
 validée, supprimer seulement l'asset ou l'intermédiaire explicitement concerné.
+
+Pour le pipeline `assemble_news_long.py`, les déclencheurs des cartes et les
+repères de chapitres sont validés avant le premier encodage. Le contrôle autonome
+emploie exactement la même normalisation, nombres lettres/chiffres compris :
+
+```bash
+python3 scripts/influencer/longform/verifier_declencheurs.py "$WORK" ordre.json
+```
 
 ## Audio et sortie
 
@@ -107,3 +115,11 @@ un loudnorm EBU R128 en deux passes vers −14 LUFS.
 
 La sortie est un MP4 H.264 + AAC, 1920×1080, 30 fps, avec `faststart`.
 `chapters.txt` contient les chapitres YouTube au format `00:00 Titre`.
+
+Une piste SRT doit nommer le master exact auquel elle sera attachée. La commande
+refuse avant écriture un écart de timeline supérieur à 0,5 seconde :
+
+```bash
+python3 scripts/influencer/longform/srt_depuis_rendu.py "$WORK/work" \
+  --media "$WORK/final.mp4" --out "$WORK/final.fr.srt"
+```
