@@ -1179,13 +1179,20 @@ def words_for(seg: dict[str, Any], src: Path, workdir: Path,
     dossier = script_dir or SCRIPT_DIR
     if not script and dossier:
         candidat = Path(dossier) / f"{seg['id']}.txt"
-        script = str(candidat) if candidat.exists() else None
+        if not candidat.exists():
+            raise NewsLongError(
+                f"{seg['id']}: script attendu mais introuvable ({candidat}) — "
+                'repli sur la transcription refusé'
+            )
+        script = str(candidat)
     if not script:
         return words
     chemin = Path(os.path.expanduser(str(script)))
     if not chemin.exists():
-        print(f"⚠️ {seg['id']}: script déclaré mais introuvable ({chemin})", file=sys.stderr)
-        return words
+        raise NewsLongError(
+            f"{seg['id']}: script déclaré mais introuvable ({chemin}) — "
+            'repli sur la transcription refusé'
+        )
     alignes, rapport = wrap_short.align_to_script(words, chemin.read_text(encoding='utf-8'))
     print(f"[script] {seg['id']}: {rapport['mots_script']} mots affichés depuis le script, "
           f"{rapport['taux_ancrage'] * 100:.0f}% d'ancrage", file=sys.stderr)
