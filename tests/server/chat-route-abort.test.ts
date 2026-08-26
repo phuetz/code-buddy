@@ -116,7 +116,7 @@ describe('HTTP SSE disconnect cancellation', () => {
     resetDatabaseManager();
     if (previousHome === undefined) delete process.env.CODEBUDDY_HOME;
     else process.env.CODEBUDDY_HOME = previousHome;
-    fs.rmSync(tmpHome, { recursive: true, force: true });
+    fs.rmSync(tmpHome, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   async function start(): Promise<string> {

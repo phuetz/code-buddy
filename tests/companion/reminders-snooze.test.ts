@@ -5,7 +5,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { rm } from 'node:fs/promises';
+import { removeTmpDirAsync } from '../helpers/tmp.js';
 import {
   parseSnooze,
   snoozePending,
@@ -18,6 +18,7 @@ import {
   openAck,
   pendingAcks,
   addReminder,
+  whenRemindersPersisted,
 } from '../../src/companion/reminders.js';
 import { runReminderTick } from '../../src/companion/reminder-runner.js';
 
@@ -34,7 +35,10 @@ beforeEach(() => {
   resetSnoozes();
 });
 afterEach(async () => {
-  await rm(dir, { recursive: true, force: true });
+  // Let the fire-and-forget mirrors (acks/snoozes) land before removing their
+  // directory — an in-flight write makes the rm ENOTEMPTY on Windows.
+  await whenRemindersPersisted();
+  await removeTmpDirAsync(dir);
   delete process.env.CODEBUDDY_REMINDERS_FILE;
   delete process.env.CODEBUDDY_REMINDER_LOG_FILE;
   delete process.env.CODEBUDDY_REMINDER_SNOOZE_FILE;

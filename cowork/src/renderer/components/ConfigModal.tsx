@@ -11,7 +11,7 @@ import { LLMConfigPanel } from './LLMConfigPanel';
 interface ConfigModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSave: (config: Partial<AppConfig>) => Promise<void>;
+  onSave: (config: Partial<AppConfig>) => Promise<AppConfig | void>;
   initialConfig?: AppConfig | null;
   isFirstRun?: boolean;
 }
@@ -221,7 +221,7 @@ export function ConfigModal({
               <div className="grid grid-cols-2 gap-2">
                 <button
                   onClick={apiConfig.handleTest}
-                  disabled={apiConfig.isTesting || (apiConfig.requiresApiKey && !apiConfig.apiKey.trim())}
+                  disabled={apiConfig.isTesting || (apiConfig.requiresApiKey && !apiConfig.hasUsableApiKey)}
                   className="flex w-full items-center justify-center gap-2 rounded-xl border border-border bg-surface px-4 py-3 font-medium text-text-primary transition-all hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {apiConfig.isTesting ? (
@@ -240,7 +240,7 @@ export function ConfigModal({
                   onClick={() => {
                     void apiConfig.handleSave();
                   }}
-                  disabled={apiConfig.isSaving || (apiConfig.requiresApiKey && !apiConfig.apiKey.trim())}
+                  disabled={apiConfig.isSaving || (apiConfig.requiresApiKey && !apiConfig.hasUsableApiKey)}
                   className="flex w-full items-center justify-center gap-2 rounded-xl bg-accent px-4 py-3 font-medium text-white transition-all hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {apiConfig.isSaving ? (

@@ -2189,6 +2189,10 @@ function makeDefaultStreamSpeak(
     const player = await playerPromise;
     if (!player) return false;
 
+    const prepared = prepareSpeech(text);
+    if (!prepared) return false;
+    text = prepared;
+
     const baseCacheVoice = resolveBaseCacheVoice(engine);
     const cacheVoice = opts.delivery && engine === 'voicebox'
       ? `${baseCacheVoice}:${voiceRendererDeliveryInstruction(opts.delivery)}`
@@ -2216,10 +2220,6 @@ function makeDefaultStreamSpeak(
         }
       }
     }
-
-    const prepared = prepareSpeech(text);
-    if (!prepared) return false;
-    text = prepared;
 
     const stream = engine === 'voicebox'
       ? await (async () => {

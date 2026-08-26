@@ -14,7 +14,7 @@ import type { BuildPhase } from './BuildStatusStrip.js';
 import type { StudioScaffoldRequest } from './StudioComposer.js';
 import { filterStudioTree, pickDefaultFile, type TreeNode } from './utils/file-tree-model.js';
 import { detectDevCommand } from '../studio-iterate/studio-preview-model.js';
-import { isStaticProject, staticServePlan } from './static-project-model.js';
+import { isStaticProject, isNpmProject, staticServePlan } from './static-project-model.js';
 import { openTab, closeTab as closeTabModel, nextActiveAfterClose, type EditorTab } from './editor-tabs-model.js';
 import type { AppStudioApis, CommandOutputEvent, StudioTemplateCard } from './studio-api.js';
 
@@ -45,9 +45,9 @@ export interface AppStudioState {
 }
 
 const DEFAULT_TEMPLATES: StudioTemplateCard[] = [
-  { id: 'react-ts', label: 'React + TypeScript', description: 'Application web Vite avec React et TypeScript.' },
-  { id: 'express-api', label: 'Express API', description: 'API Node/Express avec structure TypeScript.' },
-  { id: 'node-cli', label: 'Node CLI', description: 'CLI Node.js TypeScript prête à compiler.' },
+  { id: 'react-ts', label: 'React + TypeScript', description: 'Vite web app with React and TypeScript.' },
+  { id: 'express-api', label: 'Express API', description: 'Node/Express API with a TypeScript structure.' },
+  { id: 'node-cli', label: 'Node CLI', description: 'Node.js TypeScript CLI ready to compile.' },
 ];
 
 const noopResult = async (error = 'App Studio API not connected'): Promise<{ ok: false; error: string }> => ({ ok: false, error });
@@ -69,6 +69,7 @@ const NOOP_APIS: AppStudioApis = {
   },
   commands: {
     run: () => noopResult(),
+    runToEnd: () => noopResult(),
     kill: () => noopResult(),
   },
   scaffold: {
@@ -171,7 +172,7 @@ export function useAppStudio(options: UseAppStudioOptions = {}) {
 
   const scaffold = useCallback(async (request: StudioScaffoldRequest) => {
     if (!request.targetDir) {
-      const error = 'Aucun répertoire cible pour le scaffold.';
+      const error = 'No target directory for the scaffold.';
       setBuildError(error);
       appendTerminal(error);
       return;
@@ -199,7 +200,7 @@ export function useAppStudio(options: UseAppStudioOptions = {}) {
       setFileContent('');
       setPreviewUrl(null);
       setPreviewStatus('idle');
-      appendTerminal(`Projet créé: ${nextProjectRoot}`);
+      appendTerminal(`Project created: ${nextProjectRoot}`);
       beginPhase('installing');
       await refreshTree(nextProjectRoot);
       setBuildPhase('idle');
@@ -242,7 +243,7 @@ export function useAppStudio(options: UseAppStudioOptions = {}) {
   const saveFile = useCallback(async () => {
     if (!projectRoot || !activeFile) return;
     const result = await apis.files.write(projectRoot, activeFile, fileContent);
-    appendTerminal(result.ok ? `Sauvegardé: ${activeFile}` : result.error);
+    appendTerminal(result.ok ? `Saved: ${activeFile}` : result.error);
   }, [activeFile, apis, appendTerminal, fileContent, projectRoot]);
 
   // bolt.new opens a file immediately — auto-select a sensible default once the
@@ -254,13 +255,60 @@ export function useAppStudio(options: UseAppStudioOptions = {}) {
     }
   }, [tree, activeFile, openFile]);
 
-  const startDev = useCallback(async (input?: { cwd?: string; command?: string; url?: string }) => {
+  // Track projects whose `npm install` already succeeded this session so
+  // "Lancer" / preview reload doesn't reinstall on every click (G1).
+  const installedRootsRef = useRef<Set<string>>(new Set());
+
+  // Real `npm install` for npm projects before the dev server starts (App
+  // Studio G1). Streams output to the terminal, drives the "installing" build
+  // phase, and resolves once the install exits — so a React/Vue app that the
+  // agent wrote file-by-file actually gets its node_modules before preview.
+  const ensureInstalled = useCallback(
+    async (cwd: string): Promise<{ ok: boolean; error?: string }> => {
+      if (installedRootsRef.current.has(cwd)) return { ok: true };
+      // Fast path across reloads: npm writes this marker after a successful
+      // install, so an already-installed project skips the reinstall.
+      const marker = await apis.files.read(cwd, 'node_modules/.package-lock.json');
+      if (marker.ok) {
+        installedRootsRef.current.add(cwd);
+        return { ok: true };
+      }
+      beginPhase('installing');
+      appendTerminal('$ npm install');
+      const id = (options.commandIdFactory ?? defaultCommandId)();
+      const result = await apis.commands.runToEnd({ cwd, command: 'npm install', id });
+      if (!result.ok) return { ok: false, error: result.error };
+      if (result.data.code !== 0) {
+        return { ok: false, error: `npm install exited with code ${result.data.code ?? 'null'}` };
+      }
+      installedRootsRef.current.add(cwd);
+      return { ok: true };
+    },
+    [apis, appendTerminal, beginPhase, options.commandIdFactory]
+  );
+
+  const startDev = useCallback(async (input?: { cwd?: string; command?: string; url?: string }): Promise<{ ok: boolean; error?: string }> => {
     const cwd = input?.cwd ?? projectRoot;
     if (!cwd) {
-      const error = 'Aucun répertoire projet pour lancer le serveur.';
+      const error = 'No project directory to start the server.';
       setBuildError(error);
       appendTerminal(error);
-      return;
+      return { ok: false, error };
+    }
+    // G1: an npm project (root package.json) needs its dependencies installed
+    // before the dev server can boot. Install first (idempotent, cached per
+    // session); a failed install surfaces as a build error the auto-fix loop
+    // can pick up, without ever spawning a doomed dev server.
+    if (!input?.command && isNpmProject(tree)) {
+      const installed = await ensureInstalled(cwd);
+      if (!installed.ok) {
+        const error = installed.error ?? 'npm install failed';
+        setPreviewStatus('dead');
+        setBuildError(error);
+        setBuildPhase('error');
+        appendTerminal(error);
+        return { ok: false, error };
+      }
     }
     beginPhase('starting');
     setPreviewStatus('starting');
@@ -308,7 +356,7 @@ export function useAppStudio(options: UseAppStudioOptions = {}) {
             .pop()
         : undefined;
       if (ours) {
-        appendTerminal(`Ancien serveur ${ours.pid} arrêté (reprise après rechargement).`);
+        appendTerminal(`Previous server ${ours.pid} stopped (resuming after reload).`);
         await apis.devServer.stop(ours.pid);
         // Le socket met un instant à se libérer après SIGTERM — retente avec
         // un court backoff plutôt qu'échouer sur le premier essai.
@@ -324,14 +372,15 @@ export function useAppStudio(options: UseAppStudioOptions = {}) {
       setPreviewUrl(result.data.url);
       setPreviewStatus('running');
       setBuildPhase('running');
-      appendTerminal(`Serveur prêt: ${result.data.url}`);
-    } else {
-      setPreviewStatus('dead');
-      setBuildError(result.error);
-      setBuildPhase('error');
-      appendTerminal(result.error);
+      appendTerminal(`Server ready: ${result.data.url}`);
+      return { ok: true };
     }
-  }, [apis, appendTerminal, beginPhase, options.devCommand, options.devUrl, options.platform, projectRoot, tree]);
+    setPreviewStatus('dead');
+    setBuildError(result.error);
+    setBuildPhase('error');
+    appendTerminal(result.error);
+    return { ok: false, error: result.error };
+  }, [apis, appendTerminal, beginPhase, ensureInstalled, options.devCommand, options.devUrl, options.platform, projectRoot, tree]);
 
   // bolt.new restores the preview when you reopen a project. For STATIC
   // projects the serve is a loopback python http.server — cheap and safe to
@@ -350,7 +399,7 @@ export function useAppStudio(options: UseAppStudioOptions = {}) {
   const stopDev = useCallback(async () => {
     if (devPid === null) return;
     const result = await apis.devServer.stop(devPid);
-    appendTerminal(result.ok ? `Serveur arrêté: ${devPid}` : result.error);
+    appendTerminal(result.ok ? `Server stopped: ${devPid}` : result.error);
     if (!result.ok) setBuildError(result.error);
     setPreviewStatus('dead');
     setBuildPhase('idle');

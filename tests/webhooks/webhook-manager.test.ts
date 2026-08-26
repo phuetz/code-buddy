@@ -14,7 +14,7 @@ describe('WebhookManager', () => {
   });
 
   afterEach(() => {
-    rmSync(tempDir, { recursive: true, force: true });
+    rmSync(tempDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   it('should register a webhook with an ID', () => {

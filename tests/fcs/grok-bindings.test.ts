@@ -19,7 +19,7 @@ describe('Grok-CLI Bindings', () => {
 
   afterAll(() => {
     if (fs.existsSync(testDir)) {
-      fs.rmSync(testDir, { recursive: true });
+      fs.rmSync(testDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     }
   });
 

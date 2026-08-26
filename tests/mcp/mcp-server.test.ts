@@ -3,6 +3,7 @@ import { CodeBuddyMCPServer } from '../../src/mcp/mcp-server.js';
 
 const WRITE_ENV = 'CODEBUDDY_MCP_ALLOW_WRITE';
 const TOOLS_ENV = 'CODEBUDDY_MCP_TOOLS';
+const DESKTOP_CONTROL_ENV = 'CODEBUDDY_MCP_DESKTOP_CONTROL';
 const FORBIDDEN_BY_DEFAULT = [
   'apply_patch',
   'bash',
@@ -32,10 +33,12 @@ const FORBIDDEN_BY_DEFAULT = [
 describe('CodeBuddyMCPServer registry exposure', () => {
   const previousWriteEnv = process.env[WRITE_ENV];
   const previousToolsEnv = process.env[TOOLS_ENV];
+  const previousDesktopControlEnv = process.env[DESKTOP_CONTROL_ENV];
 
   beforeEach(() => {
     delete process.env[WRITE_ENV];
     delete process.env[TOOLS_ENV];
+    delete process.env[DESKTOP_CONTROL_ENV];
   });
 
   afterEach(() => {
@@ -43,6 +46,8 @@ describe('CodeBuddyMCPServer registry exposure', () => {
     else process.env[WRITE_ENV] = previousWriteEnv;
     if (previousToolsEnv === undefined) delete process.env[TOOLS_ENV];
     else process.env[TOOLS_ENV] = previousToolsEnv;
+    if (previousDesktopControlEnv === undefined) delete process.env[DESKTOP_CONTROL_ENV];
+    else process.env[DESKTOP_CONTROL_ENV] = previousDesktopControlEnv;
   });
 
   it('lists a broad read-only surface and no write, shell, or execution tool by default', () => {
@@ -93,6 +98,31 @@ describe('CodeBuddyMCPServer registry exposure', () => {
       tools: 'apply_patch',
     });
     expect(patchEnabled.getExposedToolNames()).toEqual(['apply_patch']);
+  });
+
+  it('preserves the 11 historical MCP-only tools behind allow-write', () => {
+    const server = new CodeBuddyMCPServer({ allowWrite: true });
+    const registryNames = new Set(
+      server.getExposedToolDefinitions().map((tool) => tool.name),
+    );
+    const supplementalNames = server.getExposedToolNames()
+      .filter((name) => !registryNames.has(name))
+      .sort();
+
+    expect(supplementalNames).toEqual([
+      'agent_chat',
+      'agent_plan',
+      'agent_task',
+      'ckg_ingest',
+      'ckg_recall',
+      'desktop_screenshot',
+      'desktop_snapshot',
+      'memory_save',
+      'memory_search',
+      'session_list',
+      'session_resume',
+    ]);
+    expect(server.getExposureSummary().supplementalExposed).toBe(11);
   });
 
   it('supports environment opt-in and glob filtering', () => {

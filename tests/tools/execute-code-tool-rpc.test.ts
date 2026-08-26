@@ -48,7 +48,8 @@ describe('execute_code → tool RPC (opt-in, OFF by default)', () => {
   afterEach(async () => {
     delete process.env.CODEBUDDY_EXECUTE_CODE_TOOL_RPC;
     delete process.env.CODEBUDDY_EXECUTE_CODE_RPC_TOOLS;
-    await fs.rm(tempWorkspace, { recursive: true, force: true });
+    // Retry: a script killed on timeout may still hold its run dir on Windows.
+    await fs.rm(tempWorkspace, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   });
 
   it('OFF by default: script RPC attempt is refused and no tool runs', async () => {
@@ -233,16 +234,27 @@ describe('execute_code → tool RPC (opt-in, OFF by default)', () => {
       "print('__RPC__:' + json.dumps(r))",
     ].join('\n');
 
+    const started = Date.now();
     const result: ExecuteCodeResult = await executeCode(
-      { language: 'python', code },
+      // 30 s own timeout (< the 60 s test budget): on a stall the interpreter
+      // is killed and the failure carries `execute_code timed out`, instead of
+      // a vitest timeout that leaves python polling and its run dir locked.
+      { language: 'python', code, timeoutMs: 30_000 },
       { rootDir: tempWorkspace, createId: nextId, rpcInvoke: invoke },
     );
+    const elapsed = Date.now() - started;
+    if (elapsed > 5_000) {
+      console.error(`[execute-code-rpc] slow python round-trip: ${elapsed}ms on ${process.platform}/node ${process.version}; stderr: ${result.stderr.slice(-500)}`);
+    }
 
-    expect(result.ok, result.error).toBe(true);
+    expect(result.ok, `${result.error}\n${result.stderr}`).toBe(true);
     const rpc = parseRpcLine(result.stdout);
     expect(rpc.ok).toBe(true);
     expect(rpc.output).toContain(secret);
-  });
+    // Real interpreter spawn + file-polling RPC: Windows CI runners jitter
+    // 1.2–3.5 s with occasional I/O stalls (20 s+ on run 32590054137 after
+    // three green runs) — same 60 s budget as the other real-I/O suites.
+  }, 60_000);
 });
 
 // ──────────────────────────────────────────────────────────────────
@@ -313,7 +325,8 @@ describe('CODEBUDDY_EXECUTE_CODE_RPC_TOOLS integration', () => {
   afterEach(async () => {
     delete process.env.CODEBUDDY_EXECUTE_CODE_TOOL_RPC;
     delete process.env.CODEBUDDY_EXECUTE_CODE_RPC_TOOLS;
-    await fs.rm(tempWorkspace, { recursive: true, force: true });
+    // Retry: a script killed on timeout may still hold its run dir on Windows.
+    await fs.rm(tempWorkspace, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   });
 
   it('extraTools are unioned with the base allowlist', () => {

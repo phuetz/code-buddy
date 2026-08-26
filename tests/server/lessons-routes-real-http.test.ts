@@ -42,7 +42,7 @@ describe('lessons HTTP routes (real tracker)', () => {
     const { stopServer } = await import('../../src/server/index.js');
     await stopServer(server);
     process.chdir(cwdBefore);
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   const projectFile = (): string => path.join(tmpDir, '.codebuddy', 'lessons.md');

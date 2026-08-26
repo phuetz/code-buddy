@@ -31,7 +31,20 @@ export function registerUtilityCommands(program: Command): void {
 
       const icons = { ok: '✅', warn: '⚠️', error: '❌' };
 
+      // Headline verdict: the first question a newcomer has is "can I chat yet?"
+      const readiness = checks.find((c) => c.name === 'AI provider ready');
+      if (readiness) {
+        if (readiness.status === 'ok') {
+          console.log(`  ✅ Ready to chat — a provider is configured (${readiness.message})`);
+          console.log('     Start now:  buddy         (or try the demo:  buddy try)');
+        } else {
+          console.log(`  ⚠️  Not ready to chat yet — ${readiness.message}`);
+        }
+        console.log('');
+      }
+
       for (const check of checks) {
+        if (check.name === 'AI provider ready') continue; // already shown as the headline
         if (options.verbose || check.status !== 'ok') {
           const fixTag = check.fixable ? ' [fixable]' : '';
           console.log(`  ${icons[check.status]} ${check.name}: ${check.message}${fixTag}`);
@@ -42,6 +55,7 @@ export function registerUtilityCommands(program: Command): void {
       const warns = checks.filter(c => c.status === 'warn').length;
       const oks = checks.filter(c => c.status === 'ok').length;
       const fixable = checks.filter(c => c.fixable).length;
+      const readinessNeedsAttention = readiness !== undefined && readiness.status !== 'ok';
 
       console.log(`\n  Summary: ${oks} passed, ${warns} warnings, ${errors} errors`);
       if (fixable > 0 && !options.fix) {
@@ -62,9 +76,16 @@ export function registerUtilityCommands(program: Command): void {
         const failed = fixResults.filter(r => !r.success).length;
         console.log(`\n  Fix summary: ${fixed} fixed, ${failed} failed\n`);
 
-        if (failed > 0) process.exit(1);
-      } else if (errors > 0) {
-        process.exit(1);
+        // A successful fix can resolve a fixable readiness warning (for
+        // example, selecting an already-running Ollama). A missing provider
+        // remains a real failure even if unrelated housekeeping was fixed.
+        const unresolvedReadiness = readinessNeedsAttention && !readiness?.fixable;
+        if (failed > 0 || errors > 0 || unresolvedReadiness) process.exitCode = 1;
+      } else if (errors > 0 || readinessNeedsAttention) {
+        // `doctor` is also useful in CI and scripts: a clear "not ready"
+        // verdict must not look successful merely because the warnings are
+        // non-fatal for an already-configured user.
+        process.exitCode = 1;
       }
     });
 
@@ -106,7 +127,8 @@ export function registerUtilityCommands(program: Command): void {
     .description('Interactive setup wizard for Code Buddy')
     .action(async () => {
       const { runOnboarding } = await import('../../wizard/onboarding.js');
-      await runOnboarding();
+      const result = await runOnboarding();
+      if (!result) process.exitCode = 2;
     });
 
   const ollamaCommand = program

@@ -242,7 +242,7 @@ export class PluginSandbox {
     // Handle worker errors
     this.worker.on('error', (error) => {
       for (const pending of this.pendingCalls.values()) {
-        pending.reject(error);
+        pending.reject(error instanceof Error ? error : new Error(String(error)));
       }
       this.pendingCalls.clear();
     });

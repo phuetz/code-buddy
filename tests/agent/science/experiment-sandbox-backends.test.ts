@@ -34,7 +34,7 @@ async function scratchRoot(): Promise<string> {
 afterEach(async () => {
   while (tmpDirs.length) {
     const dir = tmpDirs.pop();
-    if (dir) await fs.rm(dir, { recursive: true, force: true }).catch(() => undefined);
+    if (dir) await fs.rm(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }).catch(() => undefined);
   }
 });
 

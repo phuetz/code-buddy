@@ -43,7 +43,7 @@ export function applyDesignSystem(projectDir: string, designSystemId: string): A
     if (tokens) {
       const cssPath = path.join(cssDir, 'design-system.css');
       fs.writeFileSync(cssPath, `/* Design system: ${system.name} (${system.category}) — via Code Buddy App Studio */\n${tokens}\n`, 'utf8');
-      files.push(path.relative(projectDir, cssPath));
+      files.push(path.relative(projectDir, cssPath).split(path.sep).join('/'));
       ensureCssImport(cssDir);
     }
 

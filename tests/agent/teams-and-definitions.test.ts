@@ -49,7 +49,7 @@ describe('AgentDefinitionLoader', () => {
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   function writeAgentFile(dir: string, filename: string, content: string): string {

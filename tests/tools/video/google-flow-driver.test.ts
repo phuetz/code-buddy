@@ -1,21 +1,19 @@
 import path from 'path';
 
 import { describe, expect, it, vi } from 'vitest';
-import type { Download } from 'playwright';
 
 import {
   attachToBrowser,
+  assertCreditBudget,
   assertLoopbackCdpUrl,
+  assertSufficientCreditBalance,
+  estimateCreditCost,
   FLOW_SELECTORS,
   FlowDriver,
   GOOGLE_FLOW_URL,
+  type FlowDownload,
   type FlowPage,
 } from '../../../src/tools/video/google-flow-driver.js';
-import {
-  assertCreditBudget,
-  assertSufficientCreditBalance,
-  estimateCreditCost,
-} from '../../../scripts/trailers/run-flow-generation.js';
 
 interface FakeElement {
   visible?: boolean;
@@ -92,7 +90,7 @@ class FakeFlowPage implements FlowPage {
 
   async waitForTimeout(): Promise<void> {}
 
-  async waitForEvent(): Promise<Download> {
+  async waitForEvent(): Promise<FlowDownload> {
     throw new Error('download not configured');
   }
 }

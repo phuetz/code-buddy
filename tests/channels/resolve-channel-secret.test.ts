@@ -43,7 +43,7 @@ describe('resolveChannelSecret / channel token from the encrypted store', () => 
   afterEach(() => {
     CredentialManager.resetInstance();
     try {
-      fs.rmSync(tmpDir, { recursive: true, force: true });
+      fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     } catch {
       /* best-effort temp cleanup */
     }
@@ -131,7 +131,7 @@ describe('instantiateChannel wires the resolved token into the channel', () => {
   afterEach(() => {
     CredentialManager.resetInstance();
     try {
-      fs.rmSync(tmpDir, { recursive: true, force: true });
+      fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     } catch {
       /* best-effort temp cleanup */
     }

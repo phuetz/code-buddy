@@ -89,7 +89,7 @@ describe('Browser Operator Consent Gate', () => {
   });
 
   afterEach(async () => {
-    await rm(workspaceRoot, { recursive: true, force: true });
+    await rm(workspaceRoot, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   it('navigates without prompting, but click prompts for confirmation', async () => {

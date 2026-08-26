@@ -60,6 +60,7 @@ import { registerStudioFilesIpc } from './studio/studio-files-ipc';
 import { registerCommandRunnerIpc } from './studio/command-runner-ipc';
 import { CommandRunner } from './studio/command-runner';
 import { registerScaffoldIpc } from './studio/scaffold-ipc';
+import { registerGithubIpc } from './studio/github-ipc';
 import { registerMediaGenIpc } from './media/media-gen-ipc';
 import { MediaGenService } from './media/media-gen-service';
 import { synthesizeLocalizedNarration } from '../../../src/tools/video/narration.js';
@@ -410,6 +411,10 @@ app.disableHardwareAcceleration();
 let mainWindow: BrowserWindow | null = null;
 let engineAdapter: EngineAdapterLike | undefined;
 let sessionManager: SessionManager | null = null;
+const REMOTE_PERMISSION_TIMEOUT_MS = 5 * 60_000 + 30_000;
+let respondToEnginePermission:
+  | ((id: string, response: 'allow' | 'allow_always' | 'deny') => void)
+  | null = null;
 let skillsManager: SkillsManager | null = null;
 let pluginRuntimeService: PluginRuntimeService | null = null;
 let scheduledTaskManager: ScheduledTaskManager | null = null;
@@ -1158,7 +1163,7 @@ function createWindow() {
       type: 'config.status',
       payload: {
         isConfigured,
-        config: configStore.getAll(),
+        config: configStore.getAllRedacted(),
       },
     });
 
@@ -1338,7 +1343,7 @@ async function startSandboxBootstrap(): Promise<void> {
   }
 }
 
-import { sendToRenderer } from './ipc-main-bridge';
+import { sendToRenderer, setPermissionResponder } from './ipc-main-bridge';
 import { remoteBackendManager } from './remote-backend/remote-backend-manager';
 import { remoteBackendConfigStore } from './remote-backend/remote-backend-config-store';
 
@@ -1521,7 +1526,12 @@ app
           const { DesktopPermissionBridge } = await import(
             /* webpackIgnore: true */ /* @vite-ignore */ permBridgeUrl
           );
-          const permissionBridge = new DesktopPermissionBridge(sendToRenderer);
+          const permissionBridge = new DesktopPermissionBridge(
+            sendToRenderer,
+            REMOTE_PERMISSION_TIMEOUT_MS
+          );
+          respondToEnginePermission = (id, response) =>
+            permissionBridge.handleResponse(id, response);
           const adapterWithPerm = engineAdapter as unknown as {
             setPermissionCallback?: (cb: unknown) => void;
           };
@@ -1665,7 +1675,15 @@ app
       pluginRuntimeService,
       engineAdapter,
       new InProcessCoworkCognition(() => getServerBridge().getCognitionPort()),
+      (sessionId) => remoteManager.isRemoteSession(sessionId),
     );
+    setPermissionResponder((toolUseId, response, bridgeId) => {
+      if (bridgeId && respondToEnginePermission) {
+        respondToEnginePermission(bridgeId, response);
+        return;
+      }
+      sessionManager?.handlePermissionResponse(toolUseId, response);
+    });
 
     // Do not grant `allOperations` process-wide. The engine adapter wires
     // ConfirmationService to Cowork's real permission dialog, while routine
@@ -2460,6 +2478,7 @@ async function cleanupSandboxResources(): Promise<void> {
     logError('[App] Error stopping clipboard watcher:', error);
   }
 
+  sessionManager?.dispose();
   try {
     closeDatabase();
   } catch (error) {
@@ -2530,6 +2549,7 @@ app.on('before-quit', async (event) => {
     if (process.env.VITE_DEV_SERVER_URL) {
       stopNavServer();
       liveLauncherBridge?.shutdown();
+      sessionManager?.dispose();
       try {
         closeDatabase();
       } catch {
@@ -2684,6 +2704,7 @@ registerDevServerIpc(ipcMain, new StudioDevServer());
 registerStudioFilesIpc(ipcMain);
 registerCommandRunnerIpc(ipcMain, new CommandRunner(), () => getMainWindow()?.webContents ?? null);
 registerScaffoldIpc(ipcMain, new ScaffoldService());
+registerGithubIpc(ipcMain);
 
 // Media generation surface delegates to the core image_generate tool. Local
 // image egress (Design View edits) is confined in the main process to the
@@ -3587,7 +3608,7 @@ ipcMain.handle('dialog.selectFiles', async () => {
 // Config IPC handlers
 ipcMain.handle('config.get', () => {
   try {
-    return configStore.getAll();
+    return configStore.getAllRedacted();
   } catch (error) {
     logError('[Config] Error getting config:', error);
     return {};
@@ -3670,15 +3691,15 @@ const syncConfigAfterMutation = async (previousConfig: AppConfig) => {
     type: 'config.status',
     payload: {
       isConfigured,
-      config: updatedConfig,
+      config: configStore.getAllRedacted(),
     },
   });
   log('[Config] Notified renderer of config update, isConfigured:', isConfigured);
-  return updatedConfig;
+  return configStore.getAllRedacted();
 };
 
 ipcMain.handle('config.save', async (_event, newConfig: Partial<AppConfig>) => {
-  log('[Config] Saving config:', { ...newConfig, apiKey: newConfig.apiKey ? '***' : '' });
+  log('[Config] Saving config fields:', Object.keys(newConfig));
 
   const previousConfig = configStore.getAll();
   // Update config
@@ -3746,7 +3767,7 @@ ipcMain.handle(
   'config.listModels',
   async (
     _event,
-    payload: { provider: AppConfig['provider']; apiKey: string; baseUrl?: string }
+    payload: { provider: AppConfig['provider']; apiKey?: string; baseUrl?: string }
   ): Promise<ProviderModelInfo[]> => {
     if (payload.provider === 'ollama') {
       return listOllamaModels(payload);
@@ -3761,7 +3782,11 @@ ipcMain.handle(
 ipcMain.handle('config.diagnose', async (_event, payload: DiagnosticInput) => {
   try {
     const { runDiagnostics } = await import('./config/api-diagnostics');
-    return await runDiagnostics(payload);
+    const storedConfig = configStore.getAll();
+    return await runDiagnostics({
+      ...payload,
+      apiKey: payload.apiKey?.trim() || storedConfig.apiKey,
+    });
   } catch (error) {
     logError('[Config] Error running diagnostics:', error);
     throw error;
@@ -5828,7 +5853,7 @@ ipcMain.handle('skills.setStoragePath', async (_event, targetPath: string, migra
     type: 'config.status',
     payload: {
       isConfigured: configStore.isConfigured(),
-      config: configStore.getAll(),
+      config: configStore.getAllRedacted(),
     },
   });
   return { success: true, ...result };
@@ -6530,7 +6555,7 @@ async function handleClientEvent(event: ClientEvent): Promise<unknown> {
           type: 'config.status',
           payload: {
             isConfigured: configStore.isConfigured(),
-            config: configStore.getAll(),
+            config: configStore.getAllRedacted(),
           },
         });
         }
@@ -6546,7 +6571,7 @@ async function handleClientEvent(event: ClientEvent): Promise<unknown> {
         type: 'config.status',
         payload: {
           isConfigured: configStore.isConfigured(),
-          config: configStore.getAll(),
+          config: configStore.getAllRedacted(),
         },
       });
       return null;

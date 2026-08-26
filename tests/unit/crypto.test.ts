@@ -142,7 +142,7 @@ describe('SessionEncryption', () => {
       expect(encrypted).toHaveProperty('authTag');
       expect(encrypted).toHaveProperty('salt');
       expect(encrypted).toHaveProperty('version');
-      expect(encrypted.version).toBe(1);
+      expect(encrypted.version).toBe(2);
     });
 
     it('should encode data as base64', () => {
@@ -223,6 +223,41 @@ describe('SessionEncryption', () => {
       };
 
       expect(() => encryption.decrypt(tampered)).toThrow();
+    });
+
+    it('should fail decryption when the per-record salt is tampered with', () => {
+      const encrypted = encryption.encrypt('secret data');
+      const tampered: EncryptedData = {
+        ...encrypted,
+        salt: crypto.randomBytes(32).toString('base64'),
+      };
+
+      expect(() => encryption.decrypt(tampered)).toThrow();
+    });
+
+    it('should decrypt legacy version 1 records with the master key', async () => {
+      const masterKey = crypto.randomBytes(32);
+      mockFsExtra.pathExists.mockResolvedValue(true);
+      mockFsExtra.readFile.mockResolvedValue(Buffer.from(masterKey));
+      const legacyEncryption = new SessionEncryption({ keyPath: tempKeyPath });
+      await legacyEncryption.initialize();
+
+      const iv = crypto.randomBytes(16);
+      const cipher = crypto.createCipheriv('aes-256-gcm', masterKey, iv);
+      const ciphertext = Buffer.concat([
+        cipher.update('legacy session', 'utf8'),
+        cipher.final(),
+      ]);
+      const legacyRecord: EncryptedData = {
+        ciphertext: ciphertext.toString('base64'),
+        iv: iv.toString('base64'),
+        authTag: cipher.getAuthTag().toString('base64'),
+        salt: crypto.randomBytes(32).toString('base64'),
+        version: 1,
+      };
+
+      expect(legacyEncryption.decrypt(legacyRecord)).toBe('legacy session');
+      legacyEncryption.dispose();
     });
   });
 

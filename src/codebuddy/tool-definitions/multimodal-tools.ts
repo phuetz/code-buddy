@@ -511,6 +511,267 @@ export const VIDEO_STITCH_TOOL: CodeBuddyTool = {
   }
 };
 
+const HYBRID_CAPACITY_PROPERTIES = {
+  darkstar: { type: "boolean", description: "Darkstar local GPU worker is available." },
+  ministar: { type: "boolean", description: "Ministar local GPU worker is available." },
+  google_flow: { type: "boolean", description: "Google Flow (browser-assisted) is available." },
+  remaining_flow_credits: { type: "number", description: "Remaining Google Flow credits." },
+  max_flow_credits_per_batch: { type: "number", description: "Credit ceiling for this batch." },
+};
+
+const HYBRID_REQUEST_PROPERTIES = {
+  id: { type: "string", description: "Request id (non-empty)." },
+  use_case: {
+    type: "string",
+    enum: ["avatar-lipsync", "bulk-variation", "hero-shot", "long-form-b-roll", "transition"],
+    description: "Production use case.",
+  },
+  content_tier: {
+    type: "string",
+    enum: ["safe", "sensual", "explicit"],
+    description: "Content tier. Non-safe stays on local engines.",
+  },
+  quantity: { type: "number", description: "Positive integer quantity." },
+  requires_lip_sync: { type: "boolean", description: "Whether lip synchronization is required." },
+  premium: { type: "boolean", description: "Premium/hero quality (Veo Quality when Flow can spend)." },
+  upscale_4k: { type: "boolean", description: "Optional 4K upscale surcharge on Flow engines." },
+};
+
+export const VIDEO_QUALITY_GATE_TOOL: CodeBuddyTool = {
+  type: "function",
+  function: {
+    name: "video_quality_gate",
+    description:
+      "Fail-closed visual quality gate (identity, anatomy, flicker, sharpness, master properties) plus digest-bound YouTube master human review. Never writes files, never publishes, never calls YouTube.",
+    parameters: {
+      type: "object",
+      properties: {
+        operation: {
+          type: "string",
+          enum: ["evaluate_visual", "review_youtube", "request_youtube_changes"],
+          description:
+            "evaluate_visual: score a schema-V1 visual gate report. review_youtube / request_youtube_changes: digest-bound human review of a technical YouTube master report.",
+        },
+        report: {
+          type: "object",
+          description:
+            "VisualGateReport (evaluate_visual) or YouTubeTechnicalReport (review_youtube / request_youtube_changes).",
+        },
+        profile: {
+          type: "string",
+          enum: ["native-fashion-v1", "legacy-localized-v1"],
+          description: "Threshold profile. Defaults to report.profile for evaluate_visual.",
+        },
+        clip_sha256: {
+          type: "string",
+          description: "Optional lowercase SHA-256; when set, the visual report must match this clip digest.",
+        },
+        confirm_outfit: {
+          type: "boolean",
+          description: "Human confirmation that outfit matches the approved look (evaluate_visual).",
+        },
+        confirm_decor_framing: {
+          type: "boolean",
+          description: "Human confirmation that decor/framing is approved (evaluate_visual).",
+        },
+        expected_video_sha256: {
+          type: "string",
+          description: "Expected master digest for YouTube review operations.",
+        },
+        reviewer: { type: "string", description: "Reviewer name (YouTube review operations)." },
+        reason: { type: "string", description: "Review reason (YouTube review operations)." },
+        checks: {
+          type: "object",
+          description: "YouTube human-review checks (all booleans).",
+          properties: {
+            voice: { type: "boolean", description: "Voice rights and performance approved." },
+            lip_sync: { type: "boolean", description: "Lip sync approved." },
+            identity: { type: "boolean", description: "Identity/face approved." },
+            anatomy: { type: "boolean", description: "Anatomy approved." },
+            captions: { type: "boolean", description: "Captions approved." },
+            disclosure: { type: "boolean", description: "Synthetic-media disclosure approved." },
+            editorial: { type: "boolean", description: "Editorial approved." },
+          },
+          required: ["voice", "lip_sync", "identity", "anatomy", "captions", "disclosure", "editorial"],
+          additionalProperties: false,
+        },
+      },
+      required: ["operation", "report"],
+      additionalProperties: false,
+    },
+  },
+};
+
+export const VIDEO_LONG_FORM_PLAN_TOOL: CodeBuddyTool = {
+  type: "function",
+  function: {
+    name: "video_long_form_plan",
+    description:
+      "Assess or compile an original long-form episode plan (8–20 min, chaptered, private, human-review required). Never generates media, never writes files, never auto-publishes.",
+    parameters: {
+      type: "object",
+      properties: {
+        operation: {
+          type: "string",
+          enum: ["assess", "compile"],
+          description:
+            "assess: readiness report. compile: render packet if production-ready. Neither writes files nor publishes.",
+        },
+        plan: {
+          type: "object",
+          description:
+            "LongFormEpisodePlan (schemaVersion 1): episodeId, locale, title, description, chapters[], publication gate (private, autoPublish false, humanReviewRequired).",
+        },
+      },
+      required: ["operation", "plan"],
+      additionalProperties: false,
+    },
+  },
+};
+
+export const VIDEO_TRAILER_PLAN_TOOL: CodeBuddyTool = {
+  type: "function",
+  function: {
+    name: "video_trailer_plan",
+    description:
+      "Validate a cinematic book-trailer plan or compile a PREVIEW routing estimate. Never generates media, never spends Flow credits, never authorizes publication (executionAuthorized is always false).",
+    parameters: {
+      type: "object",
+      properties: {
+        operation: {
+          type: "string",
+          enum: ["validate", "preview"],
+          description:
+            "validate: fail-closed editorial/status validation. preview: map shots to hybrid-video requests and estimate routing.",
+        },
+        plan: {
+          type: "object",
+          description:
+            "CinematicTrailerPlan (schemaVersion 1). Accepts unknown/partial values; malformed plans collapse to INCOMPLETE with blockers.",
+        },
+        capacity: {
+          type: "object",
+          description: "Required for preview: available engines and Flow credit budget.",
+          properties: HYBRID_CAPACITY_PROPERTIES,
+          required: ["darkstar", "ministar", "google_flow", "remaining_flow_credits", "max_flow_credits_per_batch"],
+          additionalProperties: false,
+        },
+      },
+      required: ["operation", "plan"],
+      additionalProperties: false,
+    },
+  },
+};
+
+export const VIDEO_FLOW_HANDOFF_TOOL: CodeBuddyTool = {
+  type: "function",
+  function: {
+    name: "video_flow_handoff",
+    description:
+      "Build, verify, export or human-review Google Flow (Veo) browser-assisted work packets. Billing stays on Ultra Flow credits; apiBillingAllowed is always false; never publishes.",
+    parameters: {
+      type: "object",
+      properties: {
+        operation: {
+          type: "string",
+          enum: ["create", "verify", "export", "review_import"],
+          description:
+            "create: signed Flow handoff from shots. verify: check handoffSha256. export: QA-approved Short plan (reads approved assets, writes nothing). review_import: digest-bound human review of an import receipt.",
+        },
+        shots: {
+          type: "array",
+          items: { type: "object" },
+          description: "Source shots for create (absolute source_path, SHA-256, adult identity, consumers).",
+        },
+        handoff: { type: "object", description: "GoogleFlowHandoff document for verify." },
+        plan: { type: "object", description: "QA-approved Short plan (schemaVersion 3) for export." },
+        receipt: { type: "object", description: "GoogleFlowImportReceipt for review_import." },
+        capacity: {
+          type: "object",
+          description: "Engine availability and Flow credits (create).",
+          properties: HYBRID_CAPACITY_PROPERTIES,
+          required: ["darkstar", "ministar", "google_flow", "remaining_flow_credits", "max_flow_credits_per_batch"],
+          additionalProperties: false,
+        },
+        source_plan_sha256: { type: "string", description: "Canonical SHA-256 of the V3 source plan (create)." },
+        batch_id: { type: "string", description: "Safe batch id (lowercase kebab)." },
+        model: { type: "string", enum: ["lite", "fast", "quality"], description: "Flow model family." },
+        locale: { type: "string", description: "BCP 47 locale (create)." },
+        duration_seconds: { type: "number", description: "Clip duration in seconds: 4, 6 or 8. Quality requires 8." },
+        aspect_ratio: { type: "string", enum: ["9:16", "16:9"], description: "Output aspect ratio." },
+        upscale_4k: { type: "boolean", description: "4K upscale surcharge." },
+        approved_asset_root: { type: "string", description: "Absolute approved-asset root (export)." },
+        short_id: { type: "string", description: "Export a single Short id (mutually exclusive with include_all_shorts)." },
+        include_all_shorts: { type: "boolean", description: "Export every Short in the plan." },
+        remaining_flow_credits: { type: "number", description: "Remaining Flow credits (export)." },
+        max_flow_credits_per_batch: { type: "number", description: "Batch credit ceiling (export)." },
+        darkstar_available: { type: "boolean", description: "Darkstar available (export)." },
+        ministar_available: { type: "boolean", description: "Ministar available (export)." },
+        expected_receipt_sha256: { type: "string", description: "Expected import receipt digest (review_import)." },
+        reviewer: { type: "string", description: "Reviewer name (review_import)." },
+        reason: { type: "string", description: "Review reason (review_import)." },
+        checks: {
+          type: "object",
+          description: "Flow human-review checks (review_import).",
+          properties: {
+            identity: { type: "boolean", description: "Identity preserved." },
+            anatomy: { type: "boolean", description: "Anatomy plausible." },
+            motion: { type: "boolean", description: "Motion approved." },
+            clean_end: { type: "boolean", description: "Clean end frame." },
+            no_speech: { type: "boolean", description: "No speech in the clip." },
+            no_text_or_logo: { type: "boolean", description: "No burned-in text or logo." },
+            safe_content: { type: "boolean", description: "Advertiser-safe content." },
+          },
+          required: ["identity", "anatomy", "motion", "clean_end", "no_speech", "no_text_or_logo", "safe_content"],
+          additionalProperties: false,
+        },
+      },
+      required: ["operation"],
+      additionalProperties: false,
+    },
+  },
+};
+
+export const VIDEO_ROUTE_TOOL: CodeBuddyTool = {
+  type: "function",
+  function: {
+    name: "video_route",
+    description:
+      "Route hybrid image/video production requests to a local engine (Darkstar/Ministar/LongCat) or browser-assisted Google Flow. Pure policy: estimates credits, never spends, never generates media, never publishes.",
+    parameters: {
+      type: "object",
+      properties: {
+        request: {
+          type: "object",
+          description: "Single hybrid video request to route.",
+          properties: HYBRID_REQUEST_PROPERTIES,
+          required: ["id", "use_case", "content_tier", "quantity", "requires_lip_sync", "premium"],
+          additionalProperties: false,
+        },
+        requests: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: HYBRID_REQUEST_PROPERTIES,
+            required: ["id", "use_case", "content_tier", "quantity", "requires_lip_sync", "premium"],
+            additionalProperties: false,
+          },
+          description: "Batch of requests (credit ceiling decrements between items).",
+        },
+        capacity: {
+          type: "object",
+          description: "Available engines and Flow credit budget.",
+          properties: HYBRID_CAPACITY_PROPERTIES,
+          required: ["darkstar", "ministar", "google_flow", "remaining_flow_credits", "max_flow_credits_per_batch"],
+          additionalProperties: false,
+        },
+      },
+      required: ["capacity"],
+      additionalProperties: false,
+    },
+  },
+};
+
 // Screenshot Tool - Capture screenshots
 export const SCREENSHOT_TOOL: CodeBuddyTool = {
   type: "function",
@@ -1154,6 +1415,11 @@ export const MULTIMODAL_TOOLS: CodeBuddyTool[] = [
   GPU_MEDIA_JOB_TOOL,
   VIDEO_GENERATE_TOOL,
   VIDEO_STITCH_TOOL,
+  VIDEO_QUALITY_GATE_TOOL,
+  VIDEO_LONG_FORM_PLAN_TOOL,
+  VIDEO_TRAILER_PLAN_TOOL,
+  VIDEO_FLOW_HANDOFF_TOOL,
+  VIDEO_ROUTE_TOOL,
   SCREENSHOT_TOOL,
   CAMERA_SNAPSHOT_TOOL,
   CAMERA_ANALYZE_TOOL,

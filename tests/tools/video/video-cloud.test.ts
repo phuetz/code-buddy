@@ -45,7 +45,7 @@ describe('understandVideo — cloud is strictly opt-in', () => {
     await mkdir(outDir, { recursive: true });
   });
   afterAll(async () => {
-    if (outDir) await rm(outDir, { recursive: true, force: true }).catch(() => {});
+    if (outDir) await rm(outDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }).catch(() => {});
   });
 
   it('cloud absent: understandCloud is NEVER called and result.cloud is undefined', async () => {
@@ -103,7 +103,7 @@ describe('understandVideo — cloud path (never-throws)', () => {
     await mkdir(outDir, { recursive: true });
   });
   afterAll(async () => {
-    if (outDir) await rm(outDir, { recursive: true, force: true }).catch(() => {});
+    if (outDir) await rm(outDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }).catch(() => {});
   });
 
   it('cloud:true with NO API key degrades cleanly to the local transcript', async () => {

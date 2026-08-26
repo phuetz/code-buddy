@@ -143,6 +143,7 @@ interface HealthCheckResponse {
     database: 'ok' | 'error';
     api: 'ok' | 'error';
     memory: 'ok' | 'error';
+    sensoryBridge?: 'ok' | 'error';
   };
   memory: {
     heapUsedMB: number;
@@ -203,11 +204,15 @@ function getApiHeartbeatStatus(): 'ok' | 'stale' | 'unknown' {
 router.get(
   '/',
   asyncHandler(async (_req: Request, res: Response) => {
-    const checks = {
+    const checks: HealthCheckResponse['checks'] = {
       database: checkDatabase(),
       api: checkApi(),
       memory: checkMemory(),
     };
+    if (process.env.CODEBUDDY_SENSORY === 'true') {
+      const { getSensoryBridgeHealth } = await import('../../sensory/sensory-bridge.js');
+      checks.sensoryBridge = getSensoryBridgeHealth().ready ? 'ok' : 'error';
+    }
 
     const checksOk = Object.values(checks).filter((c) => c === 'ok').length;
     const totalChecks = Object.values(checks).length;
@@ -289,6 +294,18 @@ router.get(
         : `Memory pressure (${Math.round(memUsage.heapUsed / 1024 / 1024)}MB exceeds threshold)`,
     };
 
+    if (process.env.CODEBUDDY_SENSORY === 'true') {
+      const { getSensoryBridgeHealth } = await import('../../sensory/sensory-bridge.js');
+      const health = getSensoryBridgeHealth();
+      checks.sensoryBridge = {
+        ready: health.ready,
+        message:
+          health.status === 'error'
+            ? `Sensory bridge failed: ${health.error ?? 'unknown error'}`
+            : `Sensory bridge ${health.status}`,
+      };
+    }
+
     if (provider?.provider === 'grok') {
       const apiStart = Date.now();
       try {
@@ -320,7 +337,11 @@ router.get(
     }
 
     const allPassing = Object.values(checks).every((c) => c.ready);
-    const criticalPassing = checks.provider.ready && checks.database.ready && checks.memory.ready;
+    const criticalPassing =
+      checks.provider.ready &&
+      checks.database.ready &&
+      checks.memory.ready &&
+      (checks.sensoryBridge?.ready ?? true);
 
     const response = {
       ready: criticalPassing,

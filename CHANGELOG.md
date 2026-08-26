@@ -7,63 +7,63 @@ Index: [`docs/cb2/README.md`](docs/cb2/README.md).
 
 ### Features
 
-* **speculative:** Shadow Workspace — proposed writes are validated (typecheck/tests) in a ghost git worktree BEFORE touching the working tree; failures come back as structured tool errors (`CODEBUDDY_SHADOW_WORKSPACE`, `buddy shadow status|run`).
-* **sessions:** Time-Travel — per-turn timeline (JSONL), `buddy replay <session> [--at N] [--fork id]`: inspect, restore checkpointed file state (confirmed), fork a session at any turn (`CODEBUDDY_TIMELINE`).
-* **intents:** Intent Ledger — tasks captured as falsifiable versioned specs with shell-verifiable criteria; `buddy intents new|list|show|check|drift|done|archive` re-proves "done" months later (`CODEBUDDY_INTENTS`).
-* **fleet:** CKG federation — `peer.ckg.sync`: pull-only, delta-based sync of the collective knowledge graph between fleet peers (type allowlist, first-hand-only anti-gossip, fail-closed both sides, `buddy research sync <peer>`; `CODEBUDDY_CKG_SYNC`).
-* **self-improvement:** continuous Self-Benchmark — capability scores per active model over time (JSONL history), moving-average regression detection, feeds the council ModelScoreboard (`buddy improve bench --run|--history|--report`; `CODEBUDDY_SELF_BENCH`).
-* **context:** zoom-in — compaction becomes lossless-recoverable: originals archived per segment, summaries tagged `[segment:<id>]`, new `context_expand` tool lets the LLM recover exact content on demand (`CODEBUDDY_CONTEXT_ZOOM`).
-* **widgets:** generative UI by default — structured answers (data payloads, markdown tables) auto-propose a server-rendered widget, reusing authored templates by declared `dataTypes` before generating (generation stays separately gated; `CODEBUDDY_WIDGETS_AUTO`).
-* **sensory:** perceptive pair-programming — the screen sense recognizes on-screen errors (fast text heuristics + optional local-vision stage) and offers help by voice through the companion conductor — debounced, hourly-capped, never acts on its own (`CODEBUDDY_SENSORY_ERRORWATCH`).
-* **skills:** Skill Exchange — export/install skills as ed25519-signed packages (per-file sha256, TOFU trust store, firewall re-scan at install, fail-closed on any mismatch; `buddy skills exchange export|verify|install|keys`; `CODEBUDDY_SKILL_EXCHANGE`).
-* **workspace:** multi-repo — `workspace.json` federates N repos; read-only `workspace_search`/`workspace_read` tools with realpath containment, size caps and timeouts; `buddy ws list|add|rm|search` (`CODEBUDDY_WORKSPACE`).
+- **speculative:** Shadow Workspace — proposed writes are validated (typecheck/tests) in a ghost git worktree BEFORE touching the working tree; failures come back as structured tool errors (`CODEBUDDY_SHADOW_WORKSPACE`, `buddy shadow status|run`).
+- **sessions:** Time-Travel — per-turn timeline (JSONL), `buddy replay <session> [--at N] [--fork id]`: inspect, restore checkpointed file state (confirmed), fork a session at any turn (`CODEBUDDY_TIMELINE`).
+- **intents:** Intent Ledger — tasks captured as falsifiable versioned specs with shell-verifiable criteria; `buddy intents new|list|show|check|drift|done|archive` re-proves "done" months later (`CODEBUDDY_INTENTS`).
+- **fleet:** CKG federation — `peer.ckg.sync`: pull-only, delta-based sync of the collective knowledge graph between fleet peers (type allowlist, first-hand-only anti-gossip, fail-closed both sides, `buddy research sync <peer>`; `CODEBUDDY_CKG_SYNC`).
+- **self-improvement:** continuous Self-Benchmark — capability scores per active model over time (JSONL history), moving-average regression detection, feeds the council ModelScoreboard (`buddy improve bench --run|--history|--report`; `CODEBUDDY_SELF_BENCH`).
+- **context:** zoom-in — compaction becomes lossless-recoverable: originals archived per segment, summaries tagged `[segment:<id>]`, new `context_expand` tool lets the LLM recover exact content on demand (`CODEBUDDY_CONTEXT_ZOOM`).
+- **widgets:** generative UI by default — structured answers (data payloads, markdown tables) auto-propose a server-rendered widget, reusing authored templates by declared `dataTypes` before generating (generation stays separately gated; `CODEBUDDY_WIDGETS_AUTO`).
+- **sensory:** perceptive pair-programming — the screen sense recognizes on-screen errors (fast text heuristics + optional local-vision stage) and offers help by voice through the companion conductor — debounced, hourly-capped, never acts on its own (`CODEBUDDY_SENSORY_ERRORWATCH`).
+- **skills:** Skill Exchange — export/install skills as ed25519-signed packages (per-file sha256, TOFU trust store, firewall re-scan at install, fail-closed on any mismatch; `buddy skills exchange export|verify|install|keys`; `CODEBUDDY_SKILL_EXCHANGE`).
+- **workspace:** multi-repo — `workspace.json` federates N repos; read-only `workspace_search`/`workspace_read` tools with realpath containment, size caps and timeouts; `buddy ws list|add|rm|search` (`CODEBUDDY_WORKSPACE`).
 
 ## [1.8.0](https://github.com/phuetz/code-buddy/compare/v1.7.0...v1.8.0) (2026-07-01)
 
 ### Features
 
-* **evolve:** evolutionary self-improvement lands on `main` — `buddy evolve run|list|review|keep`: generate code variants in throwaway git worktrees, score them against an empirical fitness baseline, keep the best (human-gated `keep --confirm`, opt-in `CODEBUDDY_EVOLVE`, never auto-merges).
-* **evolve:** research-grounded goals — `evolve run --source research` matches ingested scientific articles (from the collective knowledge graph) to the concerned Code Buddy feature and synthesizes ambitious, targeted improvement goals. Closes the loop: article → CKG → goal → variant.
-* **evolve:** deliberate planning step — a real structured plan (approach + titled steps + rationale) drives each generation and is stored for audit; the planner is grounded in the CKG (`recallHybrid`).
-* **evolve:** genealogy — parent/generation lineage on each variant, `evolve tree` + `evolve list --json`; the plan that produced a version is stored and shown.
-* **evolve:** compounding (`--compound`, guarded) + fresh self-model (`--refresh-model`).
-* **research:** administer the collective knowledge graph — `buddy research list` (indexed documents) and `buddy research topics list|add|remove|clear` (persistent auto-ingest subjects, unioned with the env).
-* **cowork:** opt-in redesigned shell (`COWORK_NEW_SHELL`) — one calm nav (Chat · Plan · Activity · Files · Advanced/Labs), plan-then-act, embedded activity log with one-click undo + reviewable inline diffs, and an Evolution panel listing the generated versions.
-* **companion:** relationship-aware presence (reunion after an absence + tenure milestones) and event follow-ups (mention a dated event → Lisa asks how it went), captured only on addressed turns.
+- **evolve:** evolutionary self-improvement lands on `main` — `buddy evolve run|list|review|keep`: generate code variants in throwaway git worktrees, score them against an empirical fitness baseline, keep the best (human-gated `keep --confirm`, opt-in `CODEBUDDY_EVOLVE`, never auto-merges).
+- **evolve:** research-grounded goals — `evolve run --source research` matches ingested scientific articles (from the collective knowledge graph) to the concerned Code Buddy feature and synthesizes ambitious, targeted improvement goals. Closes the loop: article → CKG → goal → variant.
+- **evolve:** deliberate planning step — a real structured plan (approach + titled steps + rationale) drives each generation and is stored for audit; the planner is grounded in the CKG (`recallHybrid`).
+- **evolve:** genealogy — parent/generation lineage on each variant, `evolve tree` + `evolve list --json`; the plan that produced a version is stored and shown.
+- **evolve:** compounding (`--compound`, guarded) + fresh self-model (`--refresh-model`).
+- **research:** administer the collective knowledge graph — `buddy research list` (indexed documents) and `buddy research topics list|add|remove|clear` (persistent auto-ingest subjects, unioned with the env).
+- **cowork:** opt-in redesigned shell (`COWORK_NEW_SHELL`) — one calm nav (Chat · Plan · Activity · Files · Advanced/Labs), plan-then-act, embedded activity log with one-click undo + reviewable inline diffs, and an Evolution panel listing the generated versions.
+- **companion:** relationship-aware presence (reunion after an absence + tenure milestones) and event follow-ups (mention a dated event → Lisa asks how it went), captured only on addressed turns.
 
 ### Bug Fixes
 
-* **sensory:** sanitize text before TTS — mute leaked model tokens and foreign-script (CJK) garbage the voice can't pronounce; fix 5 real bugs in the voice/vision loop (respond-decider tier order, multi-word name matching, `resolveVoiceModel` fallback, permanent-deafness guard, prototype-chain guard).
-* **cowork:** unbreak `vite build` (load model-inventory via `loadCoreModule` instead of a static core import); revive `/export` and `/save`; delete dead `Sidebar.tsx`.
+- **sensory:** sanitize text before TTS — mute leaked model tokens and foreign-script (CJK) garbage the voice can't pronounce; fix 5 real bugs in the voice/vision loop (respond-decider tier order, multi-word name matching, `resolveVoiceModel` fallback, permanent-deafness guard, prototype-chain guard).
+- **cowork:** unbreak `vite build` (load model-inventory via `loadCoreModule` instead of a static core import); revive `/export` and `/save`; delete dead `Sidebar.tsx`.
 
 ## [1.7.0](https://github.com/phuetz/code-buddy/compare/v1.6.1...v1.7.0) (2026-06-26)
 
 ### Features
 
-* **companion:** reminders — the robot reminds you (meds…) and you flag them done ([f239327](https://github.com/phuetz/code-buddy/commit/f2393275ff91f0b47f17c1832dd0565bafe2ad41))
-* **cowork:** Automations panel — administer reminders + rules from the GUI (thin client) ([fe99899](https://github.com/phuetz/code-buddy/commit/fe99899c2677cf17659ef4f8e1f09f2529fce5ba))
-* **cowork:** code blocks -> live Artifact preview + copy buttons everywhere (Lisa-inspired) ([8d8aa68](https://github.com/phuetz/code-buddy/commit/8d8aa68260d16b5910c2a31b31561feaeea7aa7d))
-* **cowork:** React live preview in the Artifact panel (Phase 2) ([5a12973](https://github.com/phuetz/code-buddy/commit/5a1297332b75331d2dd01be89778fbf8cabda02b))
-* **fleet:** council --fleet — several machines collaborate on one question (token recipe) ([3f9b6da](https://github.com/phuetz/code-buddy/commit/3f9b6daf0e9a4a97e9c0d271bca4c8c2fc83ad5b))
-* **rendering:** complete the unified layer — ansi + plain renderers + façade ([a28d03d](https://github.com/phuetz/code-buddy/commit/a28d03d339ae9b5cf8d652f438eb1821c3d7bac8))
-* **sensory:** administer triggerable actions — rules CRUD + write-validate + HOT-RELOAD ([68f0e3e](https://github.com/phuetz/code-buddy/commit/68f0e3e30691fb166bb202ea4bd2c6b70ee3a650))
-* **sensory:** close the voice loop — hear → think → speak (Piper TTS + local LLM) ([0de62df](https://github.com/phuetz/code-buddy/commit/0de62df59f049a1f388db7b0558224465c4d36c6))
-* **sensory:** robot listens like a human — reply only when addressed or warranted ([b866649](https://github.com/phuetz/code-buddy/commit/b866649f9423ab1b808d6ede5552329dd77c4ea9))
-* **sensory:** the robot's voice follows you — Telegram voice notes when away ([2084dfb](https://github.com/phuetz/code-buddy/commit/2084dfbf3003370220c09a0394f88ec4f3b08495))
-* **vision:** anti-spam dedup — alert only on a meaningfully changed scene (Phase 2a) ([ce0d125](https://github.com/phuetz/code-buddy/commit/ce0d12590573aaa0ce33afc61b5766421fcd0424))
-* **vision:** event->action rules engine (Phase 2c) — a camera event triggers code, safely ([a48e11a](https://github.com/phuetz/code-buddy/commit/a48e11a96fc06f58a7f0845a807f3adfe4832e12))
-* **vision:** robot eyes — live camera motion sense + local-VLM understanding + Telegram alert ([07e61a5](https://github.com/phuetz/code-buddy/commit/07e61a531e2085db60d7c1e189599807610567a8))
-* **vision:** semantic event detection — person/drowsy reactions + shared alert (Phase 2b) ([9be3e99](https://github.com/phuetz/code-buddy/commit/9be3e99b17d7f6cdfd007b052720dbd7af895678))
-* **voice:** Cowork defaults to voice piloting; spoken return stays switch-gated ([90787b5](https://github.com/phuetz/code-buddy/commit/90787b503ec3cd5c4ff4bc468d38fded28e2a691))
-* **voice:** harden voice ACT — capable agent-turn model knob + process-global posture warning ([5689539](https://github.com/phuetz/code-buddy/commit/56895398167aef4c99d3d6b019a4be73ba046aa2))
-* **voice:** latency-route the spoken reply to the fastest capable LLM ([144be78](https://github.com/phuetz/code-buddy/commit/144be78d04c0345fc1e736247ad7524520135c4b))
-* **voice:** voice commands — speak an instruction, the agent acts, the result is spoken ([ed5ab72](https://github.com/phuetz/code-buddy/commit/ed5ab727b4a5d2275b3b44ee422befdaf8d0c47c))
+- **companion:** reminders — the robot reminds you (meds…) and you flag them done ([f239327](https://github.com/phuetz/code-buddy/commit/f2393275ff91f0b47f17c1832dd0565bafe2ad41))
+- **cowork:** Automations panel — administer reminders + rules from the GUI (thin client) ([fe99899](https://github.com/phuetz/code-buddy/commit/fe99899c2677cf17659ef4f8e1f09f2529fce5ba))
+- **cowork:** code blocks -> live Artifact preview + copy buttons everywhere (Lisa-inspired) ([8d8aa68](https://github.com/phuetz/code-buddy/commit/8d8aa68260d16b5910c2a31b31561feaeea7aa7d))
+- **cowork:** React live preview in the Artifact panel (Phase 2) ([5a12973](https://github.com/phuetz/code-buddy/commit/5a1297332b75331d2dd01be89778fbf8cabda02b))
+- **fleet:** council --fleet — several machines collaborate on one question (token recipe) ([3f9b6da](https://github.com/phuetz/code-buddy/commit/3f9b6daf0e9a4a97e9c0d271bca4c8c2fc83ad5b))
+- **rendering:** complete the unified layer — ansi + plain renderers + façade ([a28d03d](https://github.com/phuetz/code-buddy/commit/a28d03d339ae9b5cf8d652f438eb1821c3d7bac8))
+- **sensory:** administer triggerable actions — rules CRUD + write-validate + HOT-RELOAD ([68f0e3e](https://github.com/phuetz/code-buddy/commit/68f0e3e30691fb166bb202ea4bd2c6b70ee3a650))
+- **sensory:** close the voice loop — hear → think → speak (Piper TTS + local LLM) ([0de62df](https://github.com/phuetz/code-buddy/commit/0de62df59f049a1f388db7b0558224465c4d36c6))
+- **sensory:** robot listens like a human — reply only when addressed or warranted ([b866649](https://github.com/phuetz/code-buddy/commit/b866649f9423ab1b808d6ede5552329dd77c4ea9))
+- **sensory:** the robot's voice follows you — Telegram voice notes when away ([2084dfb](https://github.com/phuetz/code-buddy/commit/2084dfbf3003370220c09a0394f88ec4f3b08495))
+- **vision:** anti-spam dedup — alert only on a meaningfully changed scene (Phase 2a) ([ce0d125](https://github.com/phuetz/code-buddy/commit/ce0d12590573aaa0ce33afc61b5766421fcd0424))
+- **vision:** event->action rules engine (Phase 2c) — a camera event triggers code, safely ([a48e11a](https://github.com/phuetz/code-buddy/commit/a48e11a96fc06f58a7f0845a807f3adfe4832e12))
+- **vision:** robot eyes — live camera motion sense + local-VLM understanding + Telegram alert ([07e61a5](https://github.com/phuetz/code-buddy/commit/07e61a531e2085db60d7c1e189599807610567a8))
+- **vision:** semantic event detection — person/drowsy reactions + shared alert (Phase 2b) ([9be3e99](https://github.com/phuetz/code-buddy/commit/9be3e99b17d7f6cdfd007b052720dbd7af895678))
+- **voice:** Cowork defaults to voice piloting; spoken return stays switch-gated ([90787b5](https://github.com/phuetz/code-buddy/commit/90787b503ec3cd5c4ff4bc468d38fded28e2a691))
+- **voice:** harden voice ACT — capable agent-turn model knob + process-global posture warning ([5689539](https://github.com/phuetz/code-buddy/commit/56895398167aef4c99d3d6b019a4be73ba046aa2))
+- **voice:** latency-route the spoken reply to the fastest capable LLM ([144be78](https://github.com/phuetz/code-buddy/commit/144be78d04c0345fc1e736247ad7524520135c4b))
+- **voice:** voice commands — speak an instruction, the agent acts, the result is spoken ([ed5ab72](https://github.com/phuetz/code-buddy/commit/ed5ab727b4a5d2275b3b44ee422befdaf8d0c47c))
 
 ### Bug Fixes
 
-* **companion:** harden the reminder ack — reject lookalike affirmations (health safety) ([2abc19d](https://github.com/phuetz/code-buddy/commit/2abc19d72e0a896f827e08b1fc291abfbb8979f5))
-* **sensory:** engagement window is bounded per-address, not sticky ([150a9e7](https://github.com/phuetz/code-buddy/commit/150a9e75f32481a112900773b973946be042b984))
-* **vision:** swallow EPIPE on a shell action's stdin (a command that ignores stdin would crash the host) ([b6fe1a4](https://github.com/phuetz/code-buddy/commit/b6fe1a4ac896a72c899d3611745db3b06f5b5fb6))
+- **companion:** harden the reminder ack — reject lookalike affirmations (health safety) ([2abc19d](https://github.com/phuetz/code-buddy/commit/2abc19d72e0a896f827e08b1fc291abfbb8979f5))
+- **sensory:** engagement window is bounded per-address, not sticky ([150a9e7](https://github.com/phuetz/code-buddy/commit/150a9e75f32481a112900773b973946be042b984))
+- **vision:** swallow EPIPE on a shell action's stdin (a command that ignores stdin would crash the host) ([b6fe1a4](https://github.com/phuetz/code-buddy/commit/b6fe1a4ac896a72c899d3611745db3b06f5b5fb6))
 
 # Changelog
 
@@ -78,6 +78,40 @@ once it reaches `1.0.0`.
 ## [Unreleased]
 
 ### Added
+
+- **cli:** add `buddy cost` (aggregated token & cost dashboard), `buddy changelog` (release notes from Conventional Commits), and `buddy import` (rules & MCP server migration from Cursor/Cline/Copilot/Claude Code) (#104).
+- **cli:** add `buddy explain [path]` — one-shot repository explanation report (Markdown or self-contained HTML, `--depth quick|deep`), extracted from PR #70 (#107)
+- **ui:** read-only LSP navigation tools (`lsp_definition`, `lsp_references`, `lsp_hover`, `lsp_symbols`, `lsp_diagnostics`) and ephemeral `@file` mentions with bounded project-root resolution (#103).
+- **cowork-chat:** chat-ui parity with gitnexus-rs (`HealthBadge`, backend status probe, `useTextareaAutogrow`) rebased from PR #40 (#105).
+- **providers:** OmniRoute gateway, 24 free-tier providers catalog, live probes, and real numbers (#82).
+
+### Fixed
+
+- **cowork:** deliver tool-confirmation modals to the active window too as defense-in-depth (#81).
+- **providers:** follow-up to PR #82 review — settings enum, auto-detect guard, gateway URL, docs counts (#83).
+- **identity:** long tasks mentioning Lisa no longer hijacked by local self-inspection (#84).
+- **cli:** stale first-party model slug no longer sent to another first-party backend (404) (#85).
+- **git-tool:** bisect completion detection on git >= 2.55 (#86).
+- **sandbox:** seatbelt profile macOS — runnable deny-default policy, functional probe, controlled cwd/env (#88).
+- **win32:** dispose owned RunStore, Linux-only Docker probe, cmd.exe quoting, .cmd shims, realpath 8.3, and POSIX test guards (#89).
+- **ci:** Windows suite — sandbox-unavailable escalation bridge in tests, sync skill reload, taskkill tree, uvx launcher (#90).
+- **ci:** Windows cwd override via native paths and EPERM-safe ACP session persistence (#91).
+- **ci:** Windows ACP agentic-turn teardown drains in-flight session writes before rm (#93).
+- **ci:** Windows 60 s test budget on win32 hosts and OCR tool platform injection (#94).
+- **ci:** Windows robust tmp teardowns via rmSync retry options across tests and reminders persistence flush (#95).
+- **ci:** Windows 4 GB V8 heap per vitest fork on win32 hosts (#96).
+- **cowork:** restore green Vitest suite (DOCX timeout, TTS volume RMS assertion) (#98).
+- **security:** audit batch 1 mergeable part — audit-log secret scrubbing, guardian fail-closed, HKDF v2 sessions, short approval IDs, OpenAI reasoning params, ChatGPT usage, bounded TTS cache (#99).
+- **cowork:** typecheck green with tsconfig `../src` imports (#100).
+- **test:** harden 5 flaky tests (timers, teardown, races) in sensory, evolution, and session lanes (#101).
+
+### CI
+
+- **ci:** macOS tmp realpath (`/private/var`), platform injection, and sandbox timeout/abort (#87).
+- **ci:** Windows Node 22 real-I/O test budgets and execute_code RPC timeout (#92).
+- **ci:** Windows test suite run as three consecutive vitest shards to bound off-heap worker memory on Node 20 (#102).
+
+### Added (Previous)
 
 - **Voicebox Studio et dictée globale locale.** Cowork et la CLI inventorient le serveur Voicebox,
   ses profils, son backend GPU, ses modèles et ses 23 langues ; ils peuvent créer et sélectionner
@@ -199,9 +233,9 @@ once it reaches `1.0.0`.
   `~/.codebuddy/reminders.json`, or by voice ("rappelle-moi … à 9h"). Stored as JSON
   (`src/companion/reminders.ts` + `reminder-runner.ts`); runner is independent of the sensory
   daemon. (Live-proven: robot speaks a reminder via Piper in ~3s; CLI mutates the JSON + log.
-  Telegram *delivery* is live; an interactive Telegram *button-ack* is the next step; voice
+  Telegram _delivery_ is live; an interactive Telegram _button-ack_ is the next step; voice
   create/ack are synthetic-tested — no live mic yet.)
-- **Robot mode listens like a human — replies only when addressed or warranted.** In daemon mode the robot used to answer *every* utterance it heard. New `respond-decider.ts` adds a tiered, cheap-first gate between hearing and speaking (the percept is still recorded on every utterance — observation/memory stay continuous): **addressed** (robot name, fuzzy-matched for STT mangling → always replies) → **engagement window** (follow-ups within `CODEBUDDY_SENSORY_ENGAGE_WINDOW_MS` reply without re-addressing — bounded *per address*, the window does NOT slide on cross-talk, so one address can't make it answer the room forever) → **silent** unless `CODEBUDDY_SENSORY_CHIME_IN=true`, which adds a cheap cue check then a rare high-bar LLM judge (error→silent, so it never butts into a human-human conversation). `CODEBUDDY_ROBOT_NAME` (default `Buddy`), `CODEBUDDY_SENSORY_ALWAYS_RESPOND=true` reverts to the old reply-to-everything behavior. NO LLM call on ambient speech. (Note: buddy-sense audio is still WAV-fed — there is no live-mic capture yet, so this is unit- + synthetic-event-tested, not demonstrable as a live always-listening robot.)
+- **Robot mode listens like a human — replies only when addressed or warranted.** In daemon mode the robot used to answer _every_ utterance it heard. New `respond-decider.ts` adds a tiered, cheap-first gate between hearing and speaking (the percept is still recorded on every utterance — observation/memory stay continuous): **addressed** (robot name, fuzzy-matched for STT mangling → always replies) → **engagement window** (follow-ups within `CODEBUDDY_SENSORY_ENGAGE_WINDOW_MS` reply without re-addressing — bounded _per address_, the window does NOT slide on cross-talk, so one address can't make it answer the room forever) → **silent** unless `CODEBUDDY_SENSORY_CHIME_IN=true`, which adds a cheap cue check then a rare high-bar LLM judge (error→silent, so it never butts into a human-human conversation). `CODEBUDDY_ROBOT_NAME` (default `Buddy`), `CODEBUDDY_SENSORY_ALWAYS_RESPOND=true` reverts to the old reply-to-everything behavior. NO LLM call on ambient speech. (Note: buddy-sense audio is still WAV-fed — there is no live-mic capture yet, so this is unit- + synthetic-event-tested, not demonstrable as a live always-listening robot.)
 - **Voice COMMANDS — speak an instruction, the agent acts, the result is spoken (CLI + Cowork).**
   Opt-in (`CODEBUDDY_SENSORY_SPEAK_ACT=true`). A spoken utterance now drives a REAL agent turn via
   `makeAgentReply` (`src/sensory/agent-reply.ts`) instead of a chatty reply, then a condensed 1–2
@@ -214,7 +248,7 @@ once it reaches `1.0.0`.
   **condensed** (`condenseForSpeech`) instead of reading a whole markdown answer aloud. Never-throws,
   `$0` on local models. (Deferred: the `/listen` TUI slash — stdin conflicts with Ink; the Cowork
   "voice can act" autonomy toggle — pending a permission-mode realm check.)
-- **Voice loop is latency-routed for fluidity.** A spoken reply now goes to the **lowest-latency capable LLM** instead of a hardcoded model — a companion that takes 16s to answer breaks the spell. New `selectFastestModel` (`src/fleet/model-selector.ts`) **reuses the council's "which LLM is best" system** (active-LLM registry + `ModelScoreboard` *measured* latency + `inferStrengths`/`inferTaskType`, now shared via `fleet/model-capability-heuristics.ts`) but with a **latency objective gated by a capability floor** (never a vision-only or embedding model for chat). It enumerates **every** probed local model (the registry collapses each local provider to one), prefers measured latency over a size heuristic, and treats cost as a tie-break (a flat-fee subscription model like `grok-3-fast` can be both fastest and `$0`-marginal). `CODEBUDDY_SENSORY_SPEAK_MODEL` stays authoritative (pin a model); `=auto`/unset routes; `CODEBUDDY_SENSORY_SPEAK_LOCAL_ONLY=true` keeps it on-box. Proven live: router picked a model replying in **1.1s** vs **23.2s** for a proven-slow big model it avoided. Never-throws.
+- **Voice loop is latency-routed for fluidity.** A spoken reply now goes to the **lowest-latency capable LLM** instead of a hardcoded model — a companion that takes 16s to answer breaks the spell. New `selectFastestModel` (`src/fleet/model-selector.ts`) **reuses the council's "which LLM is best" system** (active-LLM registry + `ModelScoreboard` _measured_ latency + `inferStrengths`/`inferTaskType`, now shared via `fleet/model-capability-heuristics.ts`) but with a **latency objective gated by a capability floor** (never a vision-only or embedding model for chat). It enumerates **every** probed local model (the registry collapses each local provider to one), prefers measured latency over a size heuristic, and treats cost as a tie-break (a flat-fee subscription model like `grok-3-fast` can be both fastest and `$0`-marginal). `CODEBUDDY_SENSORY_SPEAK_MODEL` stays authoritative (pin a model); `=auto`/unset routes; `CODEBUDDY_SENSORY_SPEAK_LOCAL_ONLY=true` keeps it on-box. Proven live: router picked a model replying in **1.1s** vs **23.2s** for a proven-slow big model it avoided. Never-throws.
 - **Robot vision — "the eyes" (experimental, operational).** `buddy-vision/` (Python sidecar, sibling to `buddy-sense/`) watches a camera and emits **semantic** events into the sensory bus — `person_entered` / `person_left` and `drowsy` (MediaPipe FaceLandmarker; each detector a **state machine → one event per transition**, no spam). On the Code Buddy side, `semantic-vision-reaction.ts` turns these into a Telegram alert (photo + caption); `vision-reaction.ts` now describes the keyframe with a **real local vision model** (`CODEBUDDY_VISION_MODEL`, e.g. moondream — gemma is text-only) and **dedups** repeat scenes. `buddy-sense`'s vision sense gained live camera capture (`live-vision`). Built for remote watch; all local, `$0`. Setup: `buddy-vision/setup.sh`.
 - **Event→action rules engine.** A camera (or any sensory) event can now **trigger code**: a declarative `~/.codebuddy/sensory-rules.json` maps events to actions — **shell / webhook / Telegram alert / agent** — with a per-rule cooldown + time-of-day window and an audit log (`companion/rule-runs.jsonl`). Security: the camera sees the world (adversarial input), so event data reaches shell/agent actions **only via env (`VISION_*`) + stdin, never interpolated** into the command, and destructive commands (rm -rf / dd / sudo / fork-bomb) are hard-blocked. Opt-in: `CODEBUDDY_SENSORY_RULES=true` + token. `src/sensory/sensory-rules-engine.ts` + `sensory-action-executor.ts`; example in `buddy-vision/sensory-rules.example.json`.
 - **Unified rendering core finished.** `src/rendering/ansi.ts` (markdown→ANSI terminal) + `plain.ts` (markdown→clean plain text) complete the `render(md, 'telegram'|'ansi'|'plain')` façade started in 1.6.1.
@@ -259,7 +293,7 @@ once it reaches `1.0.0`.
   pollute the session LRU or disk recovery, failed turns roll back and invalidate the shared agent,
   cwd and mutable context are session-confined, and HTTP/desktop WebSocket stop/close/error events
   abort the active provider iterator without emitting a late partial answer.
-- **MCP init no longer hangs on one unresponsive server** — `ensureServersInitialized` wraps each server in a per-server timeout (`CODEBUDDY_MCP_INIT_TIMEOUT_MS`, default 15s); previously a single hung server blocked *all* MCP tools from loading.
+- **MCP init no longer hangs on one unresponsive server** — `ensureServersInitialized` wraps each server in a per-server timeout (`CODEBUDDY_MCP_INIT_TIMEOUT_MS`, default 15s); previously a single hung server blocked _all_ MCP tools from loading.
 - Telegram channel starts from `channels.json` / server intake (correct `token` field); the channel agent is provider-agnostic + context-adaptive (minimal prompt + RAG tools) instead of the legacy ~73KB prompt.
 
 ---
@@ -373,14 +407,14 @@ GitNexus integration (WS2), central Policy Engine + PII lint (WS5). See
   now signs and publishes a real kind-1 event and awaits the relay `OK` ack
   (sign→verify round-trip tested). nsec/hex secret keys supported.
 - **Browser Use — local execution** — when no managed key/gateway is set, the
-  runner now drives a *local* `browser-use` (pip) + local Ollama + Chromium
+  runner now drives a _local_ `browser-use` (pip) + local Ollama + Chromium
   (installed and validated end-to-end here). The managed gateway stays optional.
 - **Mobile-supervision HTTPS** — optional TLS for the server that hosts
   `/api/mobile` (`CODEBUDDY_HTTPS=1` + `CODEBUDDY_TLS_CERT`/`CODEBUDDY_TLS_KEY`,
   or an `openssl` dev self-signed cert) via Node built-ins; HTTP default and the
   dispatch product-gate unchanged.
 - **Feishu/Lark real-time inbound** — wired to the official
-  `@larksuiteoapi/node-sdk` WSClient via an *optional* runtime import (not a core
+  `@larksuiteoapi/node-sdk` WSClient via an _optional_ runtime import (not a core
   dependency); degrades to the honest send-only state when the SDK is absent.
 
 > Parity vs Hermes Agent / OpenClaw: **15 covered / 4 covered-partial / 1 partial
@@ -455,7 +489,7 @@ The continuity workstream from the modernization plan, V1.1's first lot:
   fresh snapshot and suggests a clean pause + `buddy --continue`
   (warn-only, hourly cadence, `pause_suggested` run event).
 - **Shared guard-rail** — new `redactSecrets()` in `fleet/privacy-lint`:
-  every WS3 memory write is privacy-linted on full text *before*
+  every WS3 memory write is privacy-linted on full text _before_
   truncation; the lesson auto-proposer now drops candidates containing
   secret/PII material.
 
@@ -898,7 +932,7 @@ end-to-end experience trustworthy after the rc.7 ship. Highlights:
 - **Cold-start indicator + elapsed counter** (commit `0765e3e9`).
   The "processing" spinner now shows live elapsed seconds and an
   italic sub-line at 5 s+ ("Loading model or generating thinking")
-  + a warning at 30 s+ ("Cold start in progress"). Particularly
+  - a warning at 30 s+ ("Cold start in progress"). Particularly
   useful with Ollama qwen3.6:35b which routinely takes 60–120 s on
   first run.
 - **Help icon (?) in titlebar** + keyboard shortcuts dialog rewrite
@@ -1035,7 +1069,7 @@ through Electron on Linux + DISPLAY=:10.0 + CDP-driven test injection.
 ### Notes
 
 - `rc.7` is **not tagged in this commit** — `release.yml` triggers on
-  `v*` and would publish the *root* package (`@phuetz/code-buddy`),
+  `v*` and would publish the _root_ package (`@phuetz/code-buddy`),
   not Cowork. To release Cowork separately, either narrow the trigger
   in `release.yml` to `v*-cowork` or publish manually from the cowork
   workspace.
@@ -1490,7 +1524,7 @@ stable major release. The core feature set is now complete:
   covering 0.4.x → 0.5.0 → 0.5.0-fleet-infrastructure → 0.5.1-fleet
 - **V1.2** (`a968695`): `docs/fleet-guide.md` — comprehensive guide for
   the multi-AI hub: 2 stated objectives (real-time inter-AI collaboration
-  + pilot local LLMs), all slash commands, all peer-rpc methods, env
+  - pilot local LLMs), all slash commands, all peer-rpc methods, env
   config, lab examples, smoke test recipe, security model, V1.x roadmap
 - **V1.3** (`b3fc4e8`): Wire adaptive auto-compact helper as opt-in
   config flag `useAdaptiveBuffer`. Default false (backward compat).
@@ -1714,7 +1748,7 @@ followed.
 ### Added — A2A protocol POC (Niveau 1 → 3)
 
 - POC Niveau 1: Spoke registration via `POST /api/a2a/agents/register`
-  + heartbeat. Hub at Ministar Linux `100.98.18.76:3000`.
+  - heartbeat. Hub at Ministar Linux `100.98.18.76:3000`.
 - POC Niveau 2 (`6bf7349`): Cross-host task router forwarding to remote
   spokes via HTTP.
 - POC Niveau 3 (`677a146`): Skill-based routing dispatch on

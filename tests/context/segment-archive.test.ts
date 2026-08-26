@@ -1,4 +1,4 @@
-import { mkdtemp, readdir, rm, utimes } from 'node:fs/promises';
+import { mkdtemp, readdir, rm, utimes, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -29,7 +29,7 @@ afterEach(async () => {
   if (previousQuota === undefined) delete process.env.CODEBUDDY_CONTEXT_ZOOM_MAX_MB;
   else process.env.CODEBUDDY_CONTEXT_ZOOM_MAX_MB = previousQuota;
   vi.restoreAllMocks();
-  await Promise.all(tempHomes.splice(0).map(directory => rm(directory, { recursive: true, force: true })));
+  await Promise.all(tempHomes.splice(0).map(directory => rm(directory, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 })));
 });
 
 describe('SegmentArchive', () => {
@@ -96,8 +96,12 @@ describe('SegmentArchive', () => {
     expect(archive.get('session-lru', second!)).not.toBeNull();
   });
 
-  it('never throws when its archive directory cannot be written', () => {
-    const archive = new SegmentArchive('/sys');
+  it('never throws when its archive directory cannot be written', async () => {
+    // A home underneath a regular FILE: no mkdir can succeed below it on any OS
+    // (`/sys` is read-only on Linux only; `C:\sys` is creatable on Windows).
+    const blocker = join(await tempHome(), 'blocker-file');
+    await writeFile(blocker, 'not a directory');
+    const archive = new SegmentArchive(join(blocker, 'home'));
     let result: string | null = 'not-called';
 
     expect(() => {

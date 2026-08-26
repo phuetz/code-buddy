@@ -4,6 +4,7 @@
  * wraps addReminder, so a one-time event is a DATED one-shot and duplicates are de-duplicated.
  */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { whenRemindersPersisted } from '../../src/companion/reminders.js';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { rm } from 'node:fs/promises';
@@ -18,7 +19,9 @@ beforeEach(() => {
   process.env.CODEBUDDY_REMINDER_LOG_FILE = path.join(dir, 'log.jsonl');
 });
 afterEach(async () => {
-  await rm(dir, { recursive: true, force: true });
+  // Let the fire-and-forget reminder mirrors land before removing their dir (ENOTEMPTY on Windows).
+  await whenRemindersPersisted();
+  await rm(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   delete process.env.CODEBUDDY_REMINDERS_FILE;
   delete process.env.CODEBUDDY_REMINDER_LOG_FILE;
 });

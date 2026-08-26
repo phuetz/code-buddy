@@ -197,6 +197,23 @@ export class SkillRegistry extends EventEmitter {
     return skill;
   }
 
+  /**
+   * Synchronous twin of registerSkillFile for callers that immediately go on
+   * to move/remove the skill directory (the self-improvement mutator): no
+   * read handle is left pending on the event loop, which on Windows would make
+   * the subsequent directory rename fail with EPERM.
+   */
+  registerSkillFileSync(filePath: string, tier: SkillTier = 'workspace'): Skill {
+    const content = fs.readFileSync(filePath, 'utf-8');
+    const skill = parseSkillFile(content, filePath, tier);
+    const validation = validateSkill(skill);
+    if (!validation.valid) {
+      throw new Error(`Invalid skill: ${validation.errors.join(', ')}`);
+    }
+    this.registerSkill(skill);
+    return skill;
+  }
+
   // ==========================================================================
   // Retrieval
   // ==========================================================================

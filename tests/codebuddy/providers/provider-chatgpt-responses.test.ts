@@ -385,6 +385,24 @@ describe('parseSseStream — Codex SSE → OpenAI ChatCompletionChunk', () => {
     expect(finished).toBe(true);
   });
 
+  it('maps Responses usage onto the final completion chunk', async () => {
+    const stream = makeSseStream([
+      'data: {"type":"response.completed","response":{"usage":{"input_tokens":120,"output_tokens":30,"total_tokens":150,"input_tokens_details":{"cached_tokens":80}}}}\n\n',
+    ]);
+
+    const chunks = [];
+    for await (const chunk of parseSseStream(stream, 'gpt-5.5')) {
+      chunks.push(chunk);
+    }
+
+    expect(chunks.at(-1)?.usage).toEqual({
+      prompt_tokens: 120,
+      completion_tokens: 30,
+      total_tokens: 150,
+      cached_tokens: 80,
+    });
+  });
+
   it('emits tool_calls on output_item.done with type=function_call', async () => {
     const stream = makeSseStream([
       'data: {"type":"response.output_item.done","item":{"type":"function_call","name":"search","arguments":"{\\"q\\":\\"X\\"}","call_id":"c1"}}\n\n',
@@ -643,6 +661,30 @@ function discoveredCatalog(): ChatGptCodexModelCatalog {
 }
 
 describe('ChatGptResponsesProvider — chatStream wiring', () => {
+  it('surfaces Responses usage through non-streaming chat', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(streamingResponse([
+      'data: {"type":"response.output_text.delta","delta":"done"}\n\n',
+      'data: {"type":"response.completed","response":{"usage":{"input_tokens":90,"output_tokens":10,"total_tokens":100,"input_tokens_details":{"cached_tokens":64}}}}\n\n',
+    ]));
+    const provider = new ChatGptResponsesProvider({
+      authProvider: async () => authBundle(),
+      model: 'gpt-5.5',
+      defaultMaxTokens: 1_000,
+    });
+
+    const response = await provider.chat([
+      { role: 'user', content: 'Work' } as CodeBuddyMessage,
+    ]);
+
+    expect(response.choices[0]?.message.content).toBe('done');
+    expect(response.usage).toEqual({
+      prompt_tokens: 90,
+      completion_tokens: 10,
+      total_tokens: 100,
+      cached_tokens: 64,
+    });
+  });
+
   it('sends Authorization, ChatGPT-Account-ID, and originator headers', async () => {
     const fetchMock = vi
       .spyOn(globalThis, 'fetch')

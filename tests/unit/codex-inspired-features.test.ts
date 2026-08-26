@@ -18,6 +18,19 @@ import { describe, it, expect, beforeEach } from 'vitest';
 describe('Guardian Sub-Agent', () => {
   let mod: typeof import('@/security/guardian-agent.js');
 
+  function withTTY(value: boolean, run: () => Promise<void>): Promise<void> {
+    const stdinDescriptor = Object.getOwnPropertyDescriptor(process.stdin, 'isTTY');
+    const stdoutDescriptor = Object.getOwnPropertyDescriptor(process.stdout, 'isTTY');
+    Object.defineProperty(process.stdin, 'isTTY', { configurable: true, value });
+    Object.defineProperty(process.stdout, 'isTTY', { configurable: true, value });
+    return run().finally(() => {
+      if (stdinDescriptor) Object.defineProperty(process.stdin, 'isTTY', stdinDescriptor);
+      else Reflect.deleteProperty(process.stdin, 'isTTY');
+      if (stdoutDescriptor) Object.defineProperty(process.stdout, 'isTTY', stdoutDescriptor);
+      else Reflect.deleteProperty(process.stdout, 'isTTY');
+    });
+  }
+
   beforeEach(async () => {
     mod = await import('@/security/guardian-agent.js');
   });
@@ -42,14 +55,38 @@ describe('Guardian Sub-Agent', () => {
     expect(result.riskScore).toBeGreaterThan(80);
   });
 
-  it('should prompt user when no LLM configured', async () => {
-    const result = await mod.evaluateToolCall({
-      toolName: 'str_replace_editor',
-      content: 'edit src/main.ts',
-      cwd: '/project',
+  it('denies when no LLM is configured and no interactive terminal exists', async () => {
+    await withTTY(false, async () => {
+      const result = await mod.evaluateToolCall({
+        toolName: 'str_replace_editor',
+        content: 'edit src/main.ts',
+        cwd: '/project',
+      });
+      expect(result.decision).toBe('deny');
     });
-    // No LLM = fail to prompt_user
-    expect(result.decision).toBe('prompt_user');
+  });
+
+  it('prompts when no LLM is configured but a human is interactive', async () => {
+    await withTTY(true, async () => {
+      const result = await mod.evaluateToolCall({
+        toolName: 'str_replace_editor',
+        content: 'edit src/main.ts',
+        cwd: '/project',
+      });
+      expect(result.decision).toBe('prompt_user');
+    });
+  });
+
+  it('denies in YOLO mode even when a terminal is interactive', async () => {
+    await withTTY(true, async () => {
+      const result = await mod.evaluateToolCall({
+        toolName: 'str_replace_editor',
+        content: 'edit src/main.ts',
+        cwd: '/project',
+        yoloMode: true,
+      });
+      expect(result.decision).toBe('deny');
+    });
   });
 
   it('shouldUseGuardian returns false for safe tools', () => {

@@ -17,7 +17,7 @@ export function PromptEnhancer({
 }) {
   if (suggestions.length === 0) return null;
   return (
-    <section className="rounded-lg border border-border bg-surface p-2.5" aria-label="Améliorer le prompt" data-testid="prompt-enhancer">
+    <section className="rounded-lg border border-border bg-surface p-2.5" aria-label="Enhance the prompt" data-testid="prompt-enhancer">
       <header className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-foreground">
         <Sparkles className="h-3.5 w-3.5 text-primary" aria-hidden="true" />
         Suggestions
@@ -37,7 +37,7 @@ export function PromptEnhancer({
         className="inline-flex h-8 items-center gap-1.5 rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
       >
         <Wand2 className="h-3.5 w-3.5" aria-hidden="true" />
-        Améliorer le prompt
+        Enhance the prompt
       </button>
     </section>
   );

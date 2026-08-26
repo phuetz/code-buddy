@@ -173,7 +173,7 @@ describe('gateway routing integration (real http server)', () => {
       expect(requests[0]?.authorization).toBe('Bearer gw-token');
       expect(result.image).toBeTruthy();
     } finally {
-      fs.rmSync(rootDir, { recursive: true, force: true });
+      fs.rmSync(rootDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     }
   });
 });

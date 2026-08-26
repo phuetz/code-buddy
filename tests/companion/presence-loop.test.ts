@@ -46,7 +46,7 @@ afterEach(() => {
   delete process.env.CODEBUDDY_COMPANION_QUIET;
   if (ORIGINAL_TIMEZONE === undefined) delete process.env.CODEBUDDY_TIMEZONE;
   else process.env.CODEBUDDY_TIMEZONE = ORIGINAL_TIMEZONE;
-  rmSync(stateDir, { recursive: true, force: true });
+  rmSync(stateDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
 });
 
 describe('presence loop — the conductor speaks only when it warms (rails)', () => {

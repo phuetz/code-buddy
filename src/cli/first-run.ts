@@ -14,6 +14,7 @@ export const NO_PROVIDER_GUIDANCE = [
   '      buddy onboard',
   '      GROK_API_KEY / OPENAI_API_KEY / ANTHROPIC_API_KEY / GOOGLE_API_KEY',
   '   After option 1 or 2, run  buddy try  for the one-minute coding demo.',
+  '   Check anytime:  buddy doctor   (add --fix to auto-configure a running Ollama).',
 ].join('\n');
 
 export function acceptsRecommendedLogin(answer: string): boolean {

@@ -34,7 +34,7 @@ describe('ServiceInstaller.control (linux/systemd)', () => {
   });
 
   afterAll(async () => {
-    await fs.rm(tmpHome, { recursive: true, force: true });
+    await fs.rm(tmpHome, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   it('fails closed when the service is not installed', async () => {

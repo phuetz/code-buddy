@@ -116,8 +116,8 @@ describe('optional HTTPS transport (off-device TLS packaging)', () => {
       else process.env[k] = savedEnv[k]!;
     }
     resetDatabaseManager();
-    fs.rmSync(tmpDir, { recursive: true, force: true });
-    fs.rmSync(tmpHome, { recursive: true, force: true });
+    fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+    fs.rmSync(tmpHome, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   it.skipIf(!hasOpenssl)(
@@ -223,7 +223,7 @@ describe('optional HTTPS transport (off-device TLS packaging)', () => {
         const opts2 = resolveServerTlsOptions();
         expect(opts2!.cert.equals(certBefore)).toBe(true);
       } finally {
-        fs.rmSync(genHome, { recursive: true, force: true });
+        fs.rmSync(genHome, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
       }
     },
     30_000

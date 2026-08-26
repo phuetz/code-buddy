@@ -71,7 +71,7 @@ describe('applyDesignSystem', () => {
   let dir: string;
 
   afterEach(() => {
-    if (dir) fs.rmSync(dir, { recursive: true, force: true });
+    if (dir) fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   it('brands a react-ts-like project: writes design-system.css + DESIGN.md and wires the import after index.css', () => {

@@ -14,7 +14,7 @@ describe('companion privacy controls', () => {
   });
 
   afterEach(async () => {
-    await rm(tempDir, { recursive: true, force: true });
+    await rm(tempDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   it('summarizes workspace companion memory stores', async () => {

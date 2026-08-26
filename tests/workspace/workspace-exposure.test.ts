@@ -11,7 +11,7 @@ afterAll(() => {
   process.chdir(originalCwd);
   if (originalWorkspaceEnv === undefined) delete process.env.CODEBUDDY_WORKSPACE;
   else process.env.CODEBUDDY_WORKSPACE = originalWorkspaceEnv;
-  fs.rmSync(root, { recursive: true, force: true });
+  fs.rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
 });
 
 describe('conditional workspace tool exposure', () => {

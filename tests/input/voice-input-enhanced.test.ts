@@ -88,12 +88,15 @@ describe('VoiceInputManager availability and errors', () => {
       const configPath = path.join(configDir, 'voice-config.json');
 
       expect(fs.existsSync(configPath)).toBe(true);
-      expect(fs.statSync(configDir).mode & 0o777).toBe(0o700);
-      expect(fs.statSync(configPath).mode & 0o777).toBe(0o600);
+      // POSIX mode bits only: Windows reports 0o666 whatever the chmod.
+      if (process.platform !== 'win32') {
+        expect(fs.statSync(configDir).mode & 0o777).toBe(0o700);
+        expect(fs.statSync(configPath).mode & 0o777).toBe(0o600);
+      }
       expect(fs.readFileSync(configPath, 'utf8')).toContain('sk-test-secret');
     } finally {
       manager.dispose();
-      await rm(tempHome, { recursive: true, force: true });
+      await rm(tempHome, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     }
   });
 });

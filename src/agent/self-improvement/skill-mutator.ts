@@ -146,6 +146,25 @@ export interface MutationResult {
   reasons: string[];
 }
 
+/**
+ * Rename a skill directory, tolerating the transient EPERM/EBUSY Windows
+ * returns while a handle is still open inside it (an indexer, an AV scan).
+ */
+function renameDirWithRetry(from: string, to: string): void {
+  const delaysMs = [10, 25, 50, 100, 200];
+  for (let attempt = 0; ; attempt++) {
+    try {
+      fs.renameSync(from, to);
+      return;
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      const delay = delaysMs[attempt];
+      if ((code !== 'EPERM' && code !== 'EBUSY') || delay === undefined) throw error;
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, delay);
+    }
+  }
+}
+
 /** Dual-purpose mutator: the engine's port + the curation operations. */
 export class LiveSkillMutator implements SkillMutatorPort {
   private readonly skillsRoot: string;
@@ -169,7 +188,13 @@ export class LiveSkillMutator implements SkillMutatorPort {
       getSkillRegistry().unload(name);
       return;
     }
-    void getSkillRegistry().registerSkillFile(file, 'workspace').catch(() => {});
+    // Synchronous: an async read still pending when archive()/restore() renames
+    // the directory right after makes that rename EPERM on Windows.
+    try {
+      getSkillRegistry().registerSkillFileSync(file, 'workspace');
+    } catch {
+      // A skill the registry refuses (scanner/validation) stays on disk, unloaded.
+    }
   }
 
   private readContent(name: string): string | null {
@@ -262,7 +287,7 @@ export class LiveSkillMutator implements SkillMutatorPort {
     fs.mkdirSync(archiveRoot, { recursive: true });
     let dest = path.join(archiveRoot, name);
     if (fs.existsSync(dest)) dest = `${dest}-${randomUUID().slice(0, 8)}`;
-    fs.renameSync(dir, dest);
+    renameDirWithRetry(dir, dest);
     this.reload(name);
     return true;
   }
@@ -291,7 +316,7 @@ export class LiveSkillMutator implements SkillMutatorPort {
       logger.warn(`refusing to restore skill "${name}": ${gate.reasons.join('; ')}`);
       return false;
     }
-    fs.renameSync(src, dir);
+    renameDirWithRetry(src, dir);
     this.reload(name);
     return true;
   }

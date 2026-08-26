@@ -39,7 +39,7 @@ afterEach(() => {
   // Clean up test directories
   const mockHome = join(tmpdir(), 'grok-test-home');
   if (existsSync(mockHome)) {
-    rmSync(mockHome, { recursive: true, force: true });
+    rmSync(mockHome, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   }
 });
 

@@ -136,6 +136,15 @@ buddy dev issue <url-or-number>    # GitHub issue -> branch -> code -> tests -> 
 buddy dev explain                  # Summarize repo conventions
 ```
 
+### Utilities and Migration
+
+```bash
+buddy cost [--last] [--session <id>] [--since <7d|YYYY-MM-DD>] [--by <model|provider|day>] [--json] # Read-only cost & token dashboard
+buddy changelog [--since <tag|YYYY-MM-DD|ref>] [--to <ref>] [--out <CHANGELOG.md>] [--json]         # Grouped release notes from Conventional Commits
+buddy import [--from <path>] [--dry-run]                                                             # Import Cursor/Cline/Copilot/Claude Code rules & MCP servers
+buddy explain [path] [--out <f.md|.html>] [--depth <quick|deep>] [--html]                          # One-shot repository explanation report
+```
+
 ### Daemon and Background
 
 ```bash

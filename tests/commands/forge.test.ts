@@ -27,7 +27,7 @@ describe('buddy forge', () => {
     resetGoalManagers();
     if (previousHome === undefined) delete process.env.CODEBUDDY_HOME;
     else process.env.CODEBUDDY_HOME = previousHome;
-    fs.rmSync(dir, { recursive: true, force: true });
+    fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   it('creates, evaluates, compares and selects a proof-backed branch', async () => {

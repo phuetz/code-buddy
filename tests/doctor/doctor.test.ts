@@ -23,7 +23,11 @@ describe('Doctor', () => {
   it('should pass Node.js version check', () => {
     const nodeCheck = checks.find(c => c.name === 'Node.js version');
     expect(nodeCheck).toBeDefined();
-    expect(nodeCheck!.status).toBe('ok');
+    // checkNodeVersion() legitimately returns 'warn' on Node 18/20/21 (Cowork needs
+    // >= 22) and 'ok' on >= 22 — both are a passing outcome for the CLI (>= 18). The
+    // CI matrix runs 18.x/20.x, so accept ok OR warn like the sibling checks; only a
+    // hard 'error' (Node < 18) should fail this.
+    expect(['ok', 'warn']).toContain(nodeCheck!.status);
   });
 
   it('should detect git in a git repo', () => {

@@ -21,13 +21,17 @@ i18n
         translation: zhTranslations,
       },
     },
-    // Default language — French. Phase d.21 V1.0 ship: this Cowork
-    // build targets Patrice (FR-FR) primarily; English + Chinese remain
-    // available via the language switcher. Users on en/zh navigators
-    // still get their language because LanguageDetector runs first
-    // (localStorage → navigator); fallbackLng only kicks in when
-    // detection fails or returns an unsupported locale.
-    fallbackLng: 'fr',
+    // Default language — English. Worldwide-showcase default: a fresh
+    // install presents English so screenshots/demos are globally legible
+    // regardless of the host OS locale. French and Chinese remain fully
+    // available via the language switcher (Settings › General and the
+    // onboarding wizard), and a user's explicit choice is persisted in
+    // localStorage and always wins on the next launch. Navigator
+    // auto-detection is intentionally NOT in the order: it made the UI
+    // follow the host OS locale (French on FR-FR machines), which defeats
+    // the English-first showcase default. en.json and fr.json have full
+    // parity (2809 keys each) so nothing is untranslated in either.
+    fallbackLng: 'en',
     supportedLngs: ['en', 'fr', 'zh'],
     nonExplicitSupportedLngs: true,
     load: 'languageOnly',
@@ -37,7 +41,7 @@ i18n
     pluralSeparator: '_',
     contextSeparator: '_',
     detection: {
-      order: ['localStorage', 'navigator'],
+      order: ['localStorage'],
       caches: ['localStorage'],
       lookupLocalStorage: 'i18nextLng',
     },

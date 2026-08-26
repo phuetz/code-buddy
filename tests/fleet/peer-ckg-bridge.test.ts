@@ -67,7 +67,7 @@ describe('peer.ckg.sync', () => {
     delete process.env.CODEBUDDY_CKG_SYNC;
     delete process.env.CODEBUDDY_CKG_SYNC_TYPES;
     delete process.env.CODEBUDDY_CKG_SYNC_MAX;
-    await rm(directory, { recursive: true, force: true });
+    await rm(directory, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   function remember(

@@ -29,7 +29,7 @@ describe('USearch Vector Index', () => {
 
     // Cleanup test directory
     if (existsSync(testDir)) {
-      rmSync(testDir, { recursive: true, force: true });
+      rmSync(testDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     }
   });
 

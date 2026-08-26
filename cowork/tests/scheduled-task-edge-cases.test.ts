@@ -175,7 +175,7 @@ describe('ScheduledTaskManager – edge cases', () => {
     expect(final?.nextRunAt).toBeGreaterThan(now);
 
     // Access internal timers map to verify exactly one timer exists
-    const timers = (manager as any).timers as Map<string, NodeJS.Timeout>;
+    const timers = (manager as unknown as { timers: Map<string, NodeJS.Timeout> }).timers;
     expect(timers.size).toBe(1);
     expect(timers.has('rapid-toggle')).toBe(true);
   });

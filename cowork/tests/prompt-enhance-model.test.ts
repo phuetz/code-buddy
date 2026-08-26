@@ -34,6 +34,6 @@ describe('enhancePrompt', () => {
 
   it('acknowledges an already-precise prompt', () => {
     const { suggestions } = enhancePrompt('un dashboard React avec des graphiques et un thème sombre');
-    expect(suggestions.some((s) => /déjà précis/.test(s))).toBe(true);
+    expect(suggestions.some((s) => /already precise/.test(s))).toBe(true);
   });
 });

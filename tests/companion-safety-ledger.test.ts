@@ -18,7 +18,7 @@ describe('companion safety ledger', () => {
   });
 
   afterEach(async () => {
-    await rm(tempDir, { recursive: true, force: true });
+    await rm(tempDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   it('records append-only safety events in the workspace', async () => {

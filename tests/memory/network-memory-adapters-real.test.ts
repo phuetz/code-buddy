@@ -258,7 +258,7 @@ describe('ByteRoverMemoryProvider (brv CLI subprocess)', () => {
   });
 
   afterEach(() => {
-    fs.rmSync(dir, { recursive: true, force: true });
+    fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   it('resolves brv, queries on recall, and curates on remember', async () => {

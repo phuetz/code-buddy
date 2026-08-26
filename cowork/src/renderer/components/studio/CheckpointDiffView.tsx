@@ -10,9 +10,9 @@ export interface CheckpointDiffViewProps {
 }
 
 const STATUS_META: Record<DiffFileEntry['status'], { icon: string; label: string; className: string }> = {
-  added: { icon: '+', label: 'Ajouté', className: 'text-success' },
-  modified: { icon: '~', label: 'Modifié', className: 'text-warning' },
-  deleted: { icon: '−', label: 'Supprimé', className: 'text-destructive' },
+  added: { icon: '+', label: 'Added', className: 'text-success' },
+  modified: { icon: '~', label: 'Modified', className: 'text-warning' },
+  deleted: { icon: '−', label: 'Deleted', className: 'text-destructive' },
 };
 
 function formatCount(value: number | undefined, sign: '+' | '-'): string | null {
@@ -28,7 +28,7 @@ export function CheckpointDiffView({ entries, onClose }: CheckpointDiffViewProps
     <section className="rounded-xl border border-border bg-surface p-4" data-testid="checkpoint-diff">
       <header className="flex flex-wrap items-start justify-between gap-3 border-b border-border pb-3">
         <div>
-          <h3 className="text-sm font-semibold text-foreground">Diff du checkpoint</h3>
+          <h3 className="text-sm font-semibold text-foreground">Checkpoint diff</h3>
           <p className="mt-1 text-xs text-muted-foreground">
             <span className="text-success">+{summary.added}</span>{' '}
             <span className="text-warning">~{summary.modified}</span>{' '}
@@ -46,14 +46,14 @@ export function CheckpointDiffView({ entries, onClose }: CheckpointDiffViewProps
           onClick={onClose}
           className="rounded-md border border-border px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-muted"
         >
-          Fermer
+          Close
         </button>
       </header>
 
       {sortedEntries.length === 0 ? (
         <div className="py-8 text-center">
-          <p className="text-sm font-medium text-foreground">Aucun changement</p>
-          <p className="mt-1 text-xs text-muted-foreground">Ce checkpoint ne contient aucun fichier à comparer.</p>
+          <p className="text-sm font-medium text-foreground">No changes</p>
+          <p className="mt-1 text-xs text-muted-foreground">This checkpoint contains no files to compare.</p>
         </div>
       ) : (
         <ul className="mt-3 divide-y divide-border">

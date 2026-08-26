@@ -15,6 +15,7 @@ import {
   pocketLauncherCandidates,
 } from '../../../src/talk-mode/providers/pocket-tts.js';
 import { spawn } from 'child_process';
+import { join } from 'path';
 
 jest.mock('child_process', () => ({
   spawn: jest.fn(),
@@ -141,9 +142,11 @@ describe('pocketLauncherCandidates', () => {
   });
 
   it('adds absolute ~/.local/bin/uvx fallback when PATH is minimal (the daemon case)', () => {
-    const exists = (p: string) => p === '/home/u/.local/bin/uvx';
+    // path.join spelling: native separators on Windows.
+    const uvxPath = join(home, '.local/bin/uvx');
+    const exists = (p: string) => p === uvxPath;
     const cs = pocketLauncherCandidates(undefined, {}, home, exists);
-    const uvxAbs = cs.find((c) => c.command === '/home/u/.local/bin/uvx');
+    const uvxAbs = cs.find((c) => c.command === uvxPath);
     expect(uvxAbs).toBeDefined();
     expect(uvxAbs?.argsPrefix).toEqual(['pocket-tts']);
   });

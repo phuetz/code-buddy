@@ -25,7 +25,7 @@ beforeEach(() => {
   dir = mkdtempSync(path.join(os.tmpdir(), 'ef-'));
   p = path.join(dir, 'event-followups.json');
 });
-afterEach(() => rmSync(dir, { recursive: true, force: true }));
+afterEach(() => rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }));
 
 describe('hasFutureCue', () => {
   it('fires on future-time words, not on plain statements', () => {

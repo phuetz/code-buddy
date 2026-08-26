@@ -6,7 +6,7 @@ import {
   getWorkspace,
   resolveWorkspaceConfigPath,
 } from '../../src/workspace/workspace-config.js';
-import { makeGitRepo, makeTempRoot, writeWorkspaceConfig } from './helpers.js';
+import { canonical, makeGitRepo, makeTempRoot, writeWorkspaceConfig } from './helpers.js';
 
 const roots: string[] = [];
 const originalWorkspaceEnv = process.env.CODEBUDDY_WORKSPACE;
@@ -15,7 +15,7 @@ afterEach(() => {
   vi.restoreAllMocks();
   if (originalWorkspaceEnv === undefined) delete process.env.CODEBUDDY_WORKSPACE;
   else process.env.CODEBUDDY_WORKSPACE = originalWorkspaceEnv;
-  for (const root of roots.splice(0)) fs.rmSync(root, { recursive: true, force: true });
+  for (const root of roots.splice(0)) fs.rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
 });
 
 describe('workspace configuration', () => {
@@ -54,7 +54,7 @@ describe('workspace configuration', () => {
 
     const workspace = getWorkspace({ cwd: project, homeDir: path.join(root, 'home') });
 
-    expect(workspace?.repos).toEqual([{ name: 'valid', path: fs.realpathSync(validRepo) }]);
+    expect(workspace?.repos).toEqual([{ name: 'valid', path: canonical(validRepo) }]);
     expect(warn).toHaveBeenCalledTimes(2);
   });
 

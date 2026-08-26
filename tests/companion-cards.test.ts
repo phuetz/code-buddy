@@ -19,7 +19,7 @@ describe('companion cards', () => {
   });
 
   afterEach(async () => {
-    await rm(tempDir, { recursive: true, force: true });
+    await rm(tempDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   it('creates typed cards and records them as companion percepts', async () => {

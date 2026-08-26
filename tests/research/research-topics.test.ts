@@ -16,7 +16,7 @@ beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), 'rtopics-'));
   store = join(dir, 'research-topics.json');
 });
-afterEach(() => rmSync(dir, { recursive: true, force: true }));
+afterEach(() => rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }));
 
 describe('research topics store', () => {
   it('adds, dedups case-insensitively, and persists (keeping first spelling)', () => {

@@ -53,7 +53,7 @@ beforeEach(() => {
 afterEach(() => {
   // Clean up temp directory
   try {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   } catch {
     // Ignore cleanup errors on Windows
   }
@@ -74,7 +74,7 @@ describe('GitTool - Existing Operations', () => {
     const nonGitTool = new GitTool(nonGitDir);
     const isRepo = await nonGitTool.isGitRepo();
     expect(isRepo).toBe(false);
-    fs.rmSync(nonGitDir, { recursive: true, force: true });
+    fs.rmSync(nonGitDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   it('should get status of clean repo after initial commit', async () => {
@@ -418,8 +418,9 @@ describe('GitTool.bisect', () => {
 
       if (stepResult.data && (stepResult.data as { done: boolean }).done) {
         done = true;
-        // The output should mention the first bad commit
-        expect(stepResult.output).toContain('is the first bad commit');
+        // The output should mention the first bad commit (git >= 2.55 quotes the term:
+        // "is the first 'bad' commit")
+        expect(stepResult.output).toMatch(/is the first '?bad'? commit/);
       }
     }
 

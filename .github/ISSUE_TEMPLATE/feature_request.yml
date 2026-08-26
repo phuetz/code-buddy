@@ -1,13 +1,66 @@
-name: Feature Request
-description: Suggest an idea for this project
-title: "[Feature]: "
-labels: ["enhancement"]
+name: Feature request
+description: Suggest a focused improvement to Code Buddy
+title: "feat: "
+labels:
+  - enhancement
 body:
   - type: textarea
-    id: description
+    id: problem
     attributes:
-      label: Feature Description
-      description: What feature would you like to see?
-      placeholder: Describe the feature you'd like
+      label: Problem or use case
+      description: What are you trying to accomplish, and what blocks you today?
     validations:
       required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: Describe the smallest useful behavior and an example of how it would work.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - CLI / terminal UI
+        - Providers and model routing
+        - Tools and MCP
+        - Fleet and multi-agent
+        - Cowork desktop app
+        - Server and API
+        - Documentation
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: How do you solve this today, if at all?
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Add mockups, examples, or links if they make the request clearer.
+
+  - type: checkboxes
+    id: contribution
+    attributes:
+      label: Contribution
+      options:
+        - label: I would be willing to submit a focused pull request for this feature.
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checklist
+      options:
+        - label: I searched open and closed issues for similar requests.
+          required: true
+        - label: I described the problem separately from my preferred solution.
+          required: true

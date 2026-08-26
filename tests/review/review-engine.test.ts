@@ -30,7 +30,7 @@ beforeEach(() => {
 
 afterEach(() => {
   resetCheckpointManager();
-  fs.rmSync(workDir, { recursive: true, force: true });
+  fs.rmSync(workDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
 });
 
 const ORIGIN = { kind: 'council' as const, label: 'council-synthesis' };

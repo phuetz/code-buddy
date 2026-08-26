@@ -31,7 +31,7 @@ describe('agentic-coding fs.writeFile secret-redaction patch (cycle-3 extraction
   });
 
   afterEach(async () => {
-    await fs.rm(tmp, { recursive: true, force: true });
+    await fs.rm(tmp, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   it('auto-redacts secrets on a normal fs.writeFile (outside declared edits)', async () => {

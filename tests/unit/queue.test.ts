@@ -785,7 +785,7 @@ describe('Queue Module', () => {
       persistentQueue.dispose();
       // Clean up temp directory
       try {
-        fs.rmSync(tempDir, { recursive: true, force: true });
+        fs.rmSync(tempDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
       } catch {
         // Ignore cleanup errors
       }
@@ -1120,7 +1120,7 @@ describe('Queue Module', () => {
 
       afterEach(() => {
         try {
-          fs.rmSync(tempDir, { recursive: true, force: true });
+          fs.rmSync(tempDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
         } catch {
           // Ignore
         }
@@ -1236,7 +1236,7 @@ describe('Queue Module', () => {
         expect(pq.size()).toBe(0);
 
         pq.dispose();
-        fs.rmSync(tempDir, { recursive: true, force: true });
+        fs.rmSync(tempDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
       });
 
       it('should handle read-only storage', () => {
@@ -1254,7 +1254,7 @@ describe('Queue Module', () => {
         expect(() => pq.save()).not.toThrow();
 
         pq.dispose();
-        fs.rmSync(tempDir, { recursive: true, force: true });
+        fs.rmSync(tempDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
       });
     });
   });

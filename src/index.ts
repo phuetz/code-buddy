@@ -595,20 +595,9 @@ async function saveCommandLineSettings(
   }
 }
 
-/**
- * A saved/default model is only usable if it matches the detected provider's
- * backend: a `grok-*` slug 404s on the ChatGPT/Codex backend, and a `gpt-5.*`
- * slug 404s on xAI. We only enforce this for the two providers with a known
- * hard incompatibility (grok ↔ chatgpt); other providers are left untouched so
- * local/OpenAI/Anthropic model names pass through as before.
- */
-function isModelCompatibleWithProvider(model: string, provider?: string): boolean {
-  if (!provider) return true;
-  const looksGrok = /grok/i.test(model);
-  if (provider === 'grok') return looksGrok;
-  if (provider === 'chatgpt') return /^(gpt-|o[1-9]|codex)/i.test(model) && !looksGrok;
-  return true;
-}
+/** Providers served by a local OpenAI-compatible runtime (no cloud model catalog). */
+import { isModelCompatibleWithProvider } from './providers/model-provider-compat.js';
+export { isModelCompatibleWithProvider };
 
 // Load model from detected provider or user settings
 async function loadModel(): Promise<string | undefined> {
@@ -619,23 +608,57 @@ async function loadModel(): Promise<string | undefined> {
 
   const detected = await getDetectedProvider();
 
-  // 2. Project/user settings override auto-detection — UNLESS the saved model is
+  // Read the saved model once (reused by both the settings path and the
+  // local-runtime path below).
+  let settingsModel: string | undefined;
+  try {
+    const getSettingsManager = await lazyImport.settingsManager();
+    settingsModel = getSettingsManager().getCurrentModel() || undefined;
+  } catch (_err) {
+    logger.debug('Failed to load model from settings manager', { error: _err });
+  }
+
+  // 2. Local runtime (Ollama): resolve to a model that is ACTUALLY installed,
+  //    never a stale cloud slug. Detection sets `defaultModel` to the advertised
+  //    onboarding tag (e.g. `qwen2.5-coder:7b`), but a fresh box rarely has that
+  //    exact tag pulled — sending it (or a leftover `grok-code-fast-1` from
+  //    settings) yields a cryptic `404 model not found`. Probe the server's tags
+  //    and pick a real one; if none is installed / the server is down, fail with
+  //    a clear `ollama pull …` hint. This is the "$0 local" onboarding path, so
+  //    it must never dead-end on a Grok 404. Only triggers for local runtimes,
+  //    so cloud/no-provider behavior stays byte-identical.
+  if (detected && detected.provider === 'ollama') {
+    const { resolveInstalledOllamaModel, buildOllamaPullHint } = await import(
+      './providers/local-model-resolver.js'
+    );
+    const requested =
+      process.env.OLLAMA_MODEL ||
+      (settingsModel && isModelCompatibleWithProvider(settingsModel, 'ollama')
+        ? settingsModel
+        : undefined) ||
+      detected.defaultModel;
+    const resolution = await resolveInstalledOllamaModel({
+      baseURL: detected.baseURL,
+      requested,
+    });
+    if (resolution.model) return resolution.model;
+    cli.error(
+      buildOllamaPullHint({ baseURL: detected.baseURL, reachable: resolution.reachable, requested }),
+    );
+    process.exit(1);
+  }
+
+  // 3. Project/user settings override auto-detection — UNLESS the saved model is
   //    incompatible with the detected provider. A `gpt-5.5` left in settings.json
   //    would 404 against xAI after `buddy login xai`; symmetrically, a stale
   //    `grok-code-fast-1` default 404s against the ChatGPT/Codex backend (which
   //    then falls back to another unsupported slug and crashes). In either
   //    mismatch, prefer the detected provider's own default model.
-  try {
-    const getSettingsManager = await lazyImport.settingsManager();
-    const settingsModel = getSettingsManager().getCurrentModel();
-    if (settingsModel && isModelCompatibleWithProvider(settingsModel, detected?.provider)) {
-      return settingsModel;
-    }
-  } catch (_err) {
-    logger.debug('Failed to load model from settings manager', { error: _err });
+  if (settingsModel && isModelCompatibleWithProvider(settingsModel, detected?.provider)) {
+    return settingsModel;
   }
 
-  // 3. Fallback to auto-detected provider's default model
+  // 4. Fallback to auto-detected provider's default model
   if (detected) return detected.defaultModel;
 
   return undefined;
@@ -1498,9 +1521,9 @@ program
         ttsManager.setAutoSpeak(true);
       }
       if (options.ttsProvider) {
-        const validProviders = ['edge-tts', 'espeak', 'say', 'piper', 'audioreader'];
-        if (validProviders.includes(options.ttsProvider)) {
-          ttsManager.updateConfig({ provider: options.ttsProvider as any });
+        const validProviders = ['edge-tts', 'espeak', 'say', 'piper', 'audioreader'] as const;
+        if (validProviders.includes(options.ttsProvider as (typeof validProviders)[number])) {
+          ttsManager.updateConfig({ provider: options.ttsProvider as (typeof validProviders)[number] });
         } else {
           startupLogger.warn(`⚠️ Invalid tts-provider: ${options.ttsProvider}. Valid: ${validProviders.join(', ')}`);
         }
@@ -3230,6 +3253,19 @@ addLazyCommandGroup(program, 'widgets', 'Inline conversation widgets: list, prev
   registerWidgetsCommand(program);
 });
 
+// `buddy try` — an isolated 60-second coding-agent demo on a free path
+// (ChatGPT OAuth or a local Ollama). The fastest "does it work?" for a
+// newcomer; the onboarding wizard chains to it.
+addLazyCommand(
+  program,
+  'try',
+  'Run an isolated 60-second coding-agent demo (ChatGPT OAuth or local Ollama)',
+  async () => {
+    const { createTryCommand } = await import('./commands/try.js');
+    return createTryCommand();
+  },
+);
+
 // Utility commands (doctor, security-audit, onboard, webhook) are all registered
 // by a single registerUtilityCommands() call, so we must remove all stubs before
 // re-registering to avoid Commander duplicate command errors.
@@ -3468,6 +3504,50 @@ addLazyCommand(
   },
 );
 
+// Cost dashboard — read-only aggregation of persisted session JSON
+addLazyCommand(
+  program,
+  'cost',
+  'Aggregate saved-session cost and token usage by model, provider, or day',
+  async () => {
+    const { createCostCommand } = await import('./commands/cost.js');
+    return createCostCommand();
+  },
+);
+
+// Changelog — grouped release notes from Conventional Commits
+addLazyCommand(
+  program,
+  'changelog',
+  'Generate grouped release notes from Conventional Commits',
+  async () => {
+    const { createChangelogCommand } = await import('./commands/changelog.js');
+    return createChangelogCommand();
+  },
+);
+
+// Import — project rules + MCP servers from Cursor / Cline / Copilot / Claude Code
+addLazyCommand(
+  program,
+  'import',
+  'Import project rules and MCP servers from Cursor, Cline, Copilot, or Claude Code',
+  async () => {
+    const { createImportCommand } = await import('./commands/import.js');
+    return createImportCommand();
+  },
+);
+
+// Repo explainer — one Markdown/HTML orientation artifact for an unfamiliar repository
+addLazyCommand(
+  program,
+  'explain',
+  'Explain an unfamiliar repository in one Markdown or self-contained HTML artifact',
+  async () => {
+    const { createExplainCommand } = await import('./commands/explain.js');
+    return createExplainCommand();
+  },
+);
+
 // AI-Scientist-lite (Phases 0-3) — human-gated, sandboxed experiment: single pass or bounded discovery loop (opt-in)
 addLazyCommand(
   program,
@@ -3553,7 +3633,7 @@ addLazyCommand(
 addLazyCommand(
   program,
   'loop',
-  'Boucle de dev autonome (plan→exécute→vérifie→juge→décide) jusqu\'à fait prouvé ou budget',
+  'Autonomous development loop (plan → execute → verify → judge → decide) until proven done or budget exhausted',
   async () => {
     const { createLoopCommand } = await import('./commands/loop-cli.js');
     return createLoopCommand();
@@ -3862,14 +3942,14 @@ const requestedProfile = getRequestedProfile(process.argv);
 if (requestedProfile.kind === 'missing') {
   try {
     getConfigManager().load();
-  } catch {
+  } catch (_error) {
     // Listing available names is best-effort; the missing-value error still stands.
   }
   let available = '(none defined)';
   try {
     const names = Object.keys(getConfigManager().getConfig().profiles ?? {});
     if (names.length) available = names.join(', ');
-  } catch {
+  } catch (_error) {
     available = 'core, all';
   }
   process.stderr.write(
@@ -3886,6 +3966,20 @@ if (requestedProfile.kind === 'missing') {
   }
 }
 
+function isRootHelpRequest(argv: readonly string[]): boolean {
+  const args = argv.slice(2);
+  if (!args.some((arg) => arg === '--help' || arg === '-h')) {
+    return false;
+  }
+
+  const commandNames = new Set(program.commands.map((command) => command.name()));
+  const { operands } = program.parseOptions(args);
+  return !operands.some((operand) => commandNames.has(operand));
+}
+
+// Commander writes help and immediately calls process.exit(). The root help is
+// larger than a macOS pipe buffer, so a slow reader can lose the queued suffix.
+// It is fully registered here: write it once and let Node drain stdout naturally.
 if (process.exitCode !== 1) {
   attachUnknownOptionHint(program, program);
   program.addHelpText('before', `Pour commencer — 6 démos qui montrent le cœur agent de code :
@@ -3899,5 +3993,9 @@ if (process.exitCode !== 1) {
 
 `);
   removeCommands(program, getHiddenCliCommands());
-  program.parse();
+  if (isRootHelpRequest(process.argv)) {
+    program.outputHelp();
+  } else {
+    program.parse();
+  }
 }

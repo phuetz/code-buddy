@@ -35,7 +35,7 @@ describe('Bug Finder - scanFile', () => {
 
   afterEach(() => {
     if (fs.existsSync(TEST_DIR)) {
-      fs.rmSync(TEST_DIR, { recursive: true, force: true });
+      fs.rmSync(TEST_DIR, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     }
   });
 
@@ -240,7 +240,7 @@ describe('Bug Finder - scanDirectory', () => {
 
   afterEach(() => {
     if (fs.existsSync(TEST_DIR)) {
-      fs.rmSync(TEST_DIR, { recursive: true, force: true });
+      fs.rmSync(TEST_DIR, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     }
   });
 
@@ -297,7 +297,7 @@ describe('Bug Finder - executeFindBugs', () => {
 
   afterEach(() => {
     if (fs.existsSync(TEST_DIR)) {
-      fs.rmSync(TEST_DIR, { recursive: true, force: true });
+      fs.rmSync(TEST_DIR, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     }
   });
 

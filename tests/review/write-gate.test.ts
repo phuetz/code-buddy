@@ -37,7 +37,7 @@ afterEach(() => {
   if (previousEnv === undefined) delete process.env.CODEBUDDY_DIFF_REVIEW;
   else process.env.CODEBUDDY_DIFF_REVIEW = previousEnv;
   resetCheckpointManager();
-  fs.rmSync(workDir, { recursive: true, force: true });
+  fs.rmSync(workDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
 });
 
 function write(rel: string, content: string): void {

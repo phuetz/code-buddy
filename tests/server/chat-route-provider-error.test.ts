@@ -144,7 +144,7 @@ describe('chat routes provider error statuses', () => {
     } else {
       process.env.CODEBUDDY_HOME = previousHome;
     }
-    fs.rmSync(tmpHome, { recursive: true, force: true });
+    fs.rmSync(tmpHome, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   async function start(options: { rateLimit?: boolean } = {}): Promise<string> {

@@ -50,8 +50,8 @@ export function TerminalInput({ onRun, busy = false, history }: TerminalInputPro
         }}
         onKeyDown={handleKeyDown}
         className="min-w-0 flex-1 border-0 bg-surface font-mono text-foreground outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-60"
-        placeholder={busy ? 'Commande en cours…' : 'Tape une commande'}
-        aria-label="Commande terminal"
+        placeholder={busy ? 'Command running…' : 'Type a command'}
+        aria-label="Terminal command"
       />
     </label>
   );

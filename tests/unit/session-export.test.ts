@@ -394,8 +394,12 @@ describe('SessionRecorder', () => {
       const session1 = recorder.getSession();
       const session2 = recorder.getSession();
 
-      // Should be equal but not same reference
-      expect(session1).toEqual(session2);
+      // `exportedAt` records when each snapshot was taken and can legitimately
+      // differ by one millisecond. Compare the session payload itself instead.
+      const { exportedAt: _exportedAt1, ...sessionPayload1 } = session1;
+      const { exportedAt: _exportedAt2, ...sessionPayload2 } = session2;
+
+      expect(sessionPayload1).toEqual(sessionPayload2);
       expect(session1.messages).not.toBe(session2.messages);
     });
   });

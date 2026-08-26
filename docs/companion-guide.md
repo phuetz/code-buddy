@@ -721,14 +721,21 @@ plus provoquer une dérive émotionnelle ni un appel LLM répété à chaque bat
 La température 0,2 et le budget de base de 48 tokens stabilisent les réponses brèves ; le style
 `natural` augmente automatiquement ce budget pour les questions développées ou philosophiques
 (`CODEBUDDY_VOICE_TEMPERATURE`, `CODEBUDDY_VOICE_MAX_TOKENS`,
-`CODEBUDDY_VOICE_RESPONSE_STYLE`). Une virgule longue ou 96 caractères
-peut déclencher un segment TTS anticipé (`CODEBUDDY_VOICE_SENTENCE_CAP`). Pendant une réponse,
+`CODEBUDDY_VOICE_RESPONSE_STYLE`). Le premier fragment peut partir sur une virgule longue ou à
+96 caractères pour préserver la latence ; les suivants attendent une fin de phrase ou 160 caractères
+afin de conserver une prosodie plus naturelle. `CODEBUDDY_VOICE_SENTENCE_CAP` remplace le plafond
+des segments suivants. Pendant une réponse,
 « Lisa… », « stop », « arrête », « attends » ou « une seconde » annule le modèle et le son en cours,
 puis traite la nouvelle phrase.
 Quand la mémoire relationnelle est active, ses sources sont lues en parallèle et
 pré-chauffées au démarrage. Une réponse à froid ne l'attend que 75 ms au maximum
 (`CODEBUDDY_COMPANION_RELATIONAL_BUDGET_MS`) ; ensuite la dernière version connue est
 servie immédiatement pendant son actualisation (`CODEBUDDY_COMPANION_RELATIONAL_TTL_MS=5000`).
+Le même opt-in module le débit et les pauses à partir de l'émotion du tour et de la bande d'humeur,
+active par défaut la consigne de ponctuation expressive et autorise un rappel occasionnel issu
+uniquement du dernier épisode consolidé. `CODEBUDDY_VOICE_EXPRESSIVE_TEXT=true|false` surcharge la
+consigne expressive ; `CODEBUDDY_VOICE_CALLBACK_GAP_MS` règle la fenêtre de rappel (deux heures par
+défaut). Les rappels sont bornés, dédupliqués par empreinte et ne complètent jamais un souvenir.
 Dans le chat texte (CLI et Cowork), les signaux émotionnels explicites ajoutent seulement
 un petit contexte de ton **éphémère** à la requête courante : aucune consultation de modèle,
 aucune écriture de profil, et aucune pollution de l'historique. L'assistant accueille brièvement

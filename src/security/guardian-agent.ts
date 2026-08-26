@@ -289,17 +289,24 @@ function quickEval(ctx: GuardianContext): GuardianEvaluation | null {
  *
  * @returns GuardianEvaluation with risk score and decision
  */
+function failClosedDecision(ctx: GuardianContext): GuardianEvaluation['decision'] {
+  const nonInteractive = !process.stdout.isTTY || !process.stdin.isTTY;
+  return ctx.yoloMode || nonInteractive ? 'deny' : 'prompt_user';
+}
+
 export async function evaluateToolCall(ctx: GuardianContext): Promise<GuardianEvaluation> {
   // Quick heuristic check first
   const quick = quickEval(ctx);
   if (quick) return quick;
 
-  // If no LLM call configured, fail-open for non-dangerous operations
+  // A prompt is only safe when a human can actually answer it. Autonomous and
+  // non-interactive callers would otherwise turn this fallback into a proceed.
   if (!_llmCall) {
+    const decision = failClosedDecision(ctx);
     return {
       riskScore: 50,
-      reasoning: 'Guardian LLM not configured — defaulting to prompt user',
-      decision: 'prompt_user',
+      reasoning: `Guardian LLM not configured — failing ${decision === 'deny' ? 'closed (deny)' : 'to prompt user'}`,
+      decision,
       risks: ['No guardian LLM available'],
     };
   }
@@ -325,7 +332,12 @@ export async function evaluateToolCall(ctx: GuardianContext): Promise<GuardianEv
     const jsonMatch = response.match(/\{[\s\S]*?\}/);
     if (!jsonMatch) {
       logger.debug('Guardian: failed to parse LLM response');
-      return { riskScore: 50, reasoning: 'Failed to parse guardian response', decision: 'prompt_user', risks: [] };
+      return {
+        riskScore: 50,
+        reasoning: 'Failed to parse guardian response',
+        decision: failClosedDecision(ctx),
+        risks: [],
+      };
     }
 
     const parsed = JSON.parse(jsonMatch[0]);
@@ -344,12 +356,12 @@ export async function evaluateToolCall(ctx: GuardianContext): Promise<GuardianEv
 
     return { riskScore, reasoning, decision, risks };
   } catch (err) {
-    // Fail-closed: on any error, prompt the user
+    // Prompt only when a human can answer; otherwise deny.
     logger.debug(`Guardian evaluation failed: ${err instanceof Error ? err.message : String(err)}`);
     return {
       riskScore: 50,
       reasoning: `Guardian evaluation failed: ${err instanceof Error ? err.message : 'unknown error'}`,
-      decision: 'prompt_user',
+      decision: failClosedDecision(ctx),
       risks: ['Guardian evaluation failed'],
     };
   }

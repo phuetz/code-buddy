@@ -33,7 +33,6 @@ const {
   validateRuntimeManifest,
 } = require('../../scripts/runtime-manifest-utils.cjs');
 
-const RUNTIME_SCHEMA_VERSION = 2;
 const CORE_RUNTIME_RELATIVE_PATH = path.join('.bundle-resources', 'core-runtime');
 const CORE_RUNTIME_ENTRYPOINT = 'dist/desktop/codebuddy-engine-adapter.js';
 const CODE_BUDDY_PACKAGE_NAME = /^@phuetz\/code-buddy$/;
@@ -413,9 +412,11 @@ function prepareCoreRuntime(options = {}) {
   }
 
   // The root install is compiled for the host Node ABI. Embedded mode runs in
-  // Electron, so use Cowork's postinstall-rebuilt package for this ABI-sensitive
-  // native dependency. Its JS API is backward-compatible with core usage.
-  if (options.useCoworkNativeOverrides !== false && packagePaths.includes('node_modules/better-sqlite3')) {
+  // Electron, so always stage Cowork's postinstall-rebuilt package for this
+  // ABI-sensitive dependency. better-sqlite3 is optional in the core manifest,
+  // but mandatory for Cowork, so it may not be present in packagePaths.
+  const nativeOverrides = [];
+  if (options.useCoworkNativeOverrides !== false) {
     const sqliteSource = path.join(coworkRoot, 'node_modules', 'better-sqlite3');
     const sqliteBinding = path.join(sqliteSource, 'build', 'Release', 'better_sqlite3.node');
     if (!fs.existsSync(sqliteBinding)) {
@@ -424,6 +425,7 @@ function prepareCoreRuntime(options = {}) {
       );
     }
     replacePackage(runtimeRoot, 'better-sqlite3', sqliteSource);
+    nativeOverrides.push('better-sqlite3');
   }
 
   const manifest = {
@@ -432,10 +434,7 @@ function prepareCoreRuntime(options = {}) {
     arch,
     includeRootOptional,
     packageCount: packagePaths.length,
-    nativeOverrides:
-      options.useCoworkNativeOverrides === false || !packagePaths.includes('node_modules/better-sqlite3')
-        ? []
-        : ['better-sqlite3'],
+    nativeOverrides,
   };
   fs.writeFileSync(
     path.join(runtimeRoot, 'codebuddy-runtime.json'),

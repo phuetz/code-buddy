@@ -39,7 +39,7 @@ describe('research script job runner', () => {
   });
 
   afterEach(() => {
-    fs.rmSync(tempDir, { recursive: true, force: true });
+    fs.rmSync(tempDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   it('runs a materialized local script with disabled network and captures artifacts', async () => {

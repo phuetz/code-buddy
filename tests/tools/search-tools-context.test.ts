@@ -16,7 +16,7 @@ const roots: string[] = [];
 afterEach(async () => {
   resetSearchInstance();
   resetEnhancedSearch();
-  await Promise.all(roots.splice(0).map((root) => fs.rm(root, { recursive: true, force: true })));
+  await Promise.all(roots.splice(0).map((root) => fs.rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 })));
 });
 
 describe('registry search workspace confinement', () => {

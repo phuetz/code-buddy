@@ -20,6 +20,7 @@ export type FleetProvider =
   | 'agy-cli'      // wraps Google Antigravity (cloud subscription)
   | 'ollama'
   | 'lemonade'     // local Ryzen NPU/GPU/CPU OpenAI-compatible server
+  | 'omniroute'    // local OpenAI-compatible gateway to 90+ free tiers (inference egress = cloud)
   | 'openrouter'
   | 'lm-studio'
   | 'chatgpt-oauth'

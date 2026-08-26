@@ -70,7 +70,7 @@ export function StudioPreviewPane({ apis, cwd, className }: StudioPreviewPanePro
       const res = await apis.devServer.start({ cwd, command: cmd.command, url: cmd.url });
       if (!res.ok) {
         setStatus('dead');
-        setError(res.error || 'Le serveur de dev n’a pas démarré.');
+        setError(res.error || 'The dev server did not start.');
         return;
       }
       setUrl(res.data.url);
@@ -140,10 +140,10 @@ export function StudioPreviewPane({ apis, cwd, className }: StudioPreviewPanePro
         ) : (
           <div className="m-auto max-w-sm p-6 text-center">
             {status === 'starting' ? (
-              <p className="text-sm text-muted-foreground">Démarrage du serveur de dev…</p>
+              <p className="text-sm text-muted-foreground">Starting the dev server…</p>
             ) : status === 'dead' ? (
               <div className="space-y-2">
-                <p className="text-sm font-medium text-red-500">Le serveur de dev a échoué.</p>
+                <p className="text-sm font-medium text-red-500">The dev server failed.</p>
                 {error ? (
                   <pre className="max-h-40 overflow-auto whitespace-pre-wrap rounded-md border border-border bg-background p-2 text-left text-xs text-muted-foreground">
                     {error}
@@ -152,9 +152,9 @@ export function StudioPreviewPane({ apis, cwd, className }: StudioPreviewPanePro
               </div>
             ) : (
               <div className="space-y-1">
-                <p className="text-sm font-medium text-foreground">Aperçu en direct</p>
+                <p className="text-sm font-medium text-foreground">Live preview</p>
                 <p className="text-xs text-muted-foreground">
-                  Lance la preview pour tester l’app générée et voir tes modifications en direct.
+                  Start the preview to test the generated app and see your changes live.
                 </p>
               </div>
             )}

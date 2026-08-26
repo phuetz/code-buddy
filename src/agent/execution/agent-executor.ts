@@ -115,7 +115,6 @@ const JUICE_WEB_TOOLS = new Set(['web_fetch', 'web_search', 'fetch', 'browser_fe
 
 const CONTEXT_MENTION_PATTERN = /@(?:file:|url:|image:|git(?::|\s)|symbol:|search:|web\s|terminal\b)/i;
 const FILE_MENTION_CANDIDATE_PATTERN = /(?:^|\s)@[^\s@]+/;
-
 interface PreprocessedUserMessage {
   message: string;
   fileMentionContextBlocks: CodeBuddyMessage[];

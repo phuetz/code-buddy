@@ -153,7 +153,7 @@ describe('Fleet loopback smoke', () => {
     }
     vi.restoreAllMocks();
     resetCapabilityCache();
-    await fs.rm(tmpRoot, { recursive: true, force: true });
+    await fs.rm(tmpRoot, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   async function connectLoopbackPeer(peerChatClient?: { chat: ReturnType<typeof vi.fn> }): Promise<void> {

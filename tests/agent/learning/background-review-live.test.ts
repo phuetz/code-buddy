@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import fs from 'fs/promises';
 import os from 'os';
 import path from 'path';
@@ -11,6 +11,10 @@ import {
   type BackgroundReviewClient,
   type ReviewChatResponse,
 } from '../../../src/agent/learning/background-review-agent.js';
+
+// This is an intentional real-registry/headless/filesystem probe, not a unit
+// test: keep its legitimate cold-import and persistence budget local to it.
+vi.setConfig({ testTimeout: 60_000 });
 
 describe('background review live headless tool probe', () => {
   let previousCwd: string;
@@ -36,7 +40,7 @@ describe('background review live headless tool probe', () => {
     else process.env.CODEBUDDY_HEADLESS = previousHeadless;
     if (previousSentinel === undefined) delete process.env[BACKGROUND_REVIEW_SENTINEL_ENV];
     else process.env[BACKGROUND_REVIEW_SENTINEL_ENV] = previousSentinel;
-    await fs.rm(tempDir, { recursive: true, force: true });
+    await fs.rm(tempDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   it('writes project memory through the real headless registry in a virgin workspace', async () => {

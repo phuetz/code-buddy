@@ -77,7 +77,7 @@ afterEach(async () => {
   if (previousOptIn === undefined) delete process.env.CODEBUDDY_SELF_BENCH;
   else process.env.CODEBUDDY_SELF_BENCH = previousOptIn;
   process.exitCode = previousExitCode;
-  await Promise.all(tempDirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
+  await Promise.all(tempDirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 })));
 });
 
 describe('detectRegressions', () => {

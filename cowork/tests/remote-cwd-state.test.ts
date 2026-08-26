@@ -24,6 +24,11 @@ function buildMessage(text: string): RemoteMessage {
   };
 }
 
+type MockSession = import('../src/main/session/types').Session;
+function getMessageRouter(manager: RemoteManager) {
+  return (manager as unknown as { messageRouter: { routeMessage: (msg: RemoteMessage) => Promise<unknown> } }).messageRouter;
+}
+
 describe('remote cwd state', () => {
   it('uses !cd as the next-session working directory before a real prompt starts the session', async () => {
     const manager = new RemoteManager();
@@ -32,14 +37,14 @@ describe('remote cwd state', () => {
     manager.setAgentExecutor({
       startSession: async (_title, _prompt, cwd) => {
         startCalls.push({ cwd });
-        return { id: 'session-1' } as any;
+        return { id: 'session-1' } as unknown as MockSession;
       },
       continueSession: async () => {},
       stopSession: async () => {},
       validateWorkingDirectory: async () => null,
     });
 
-    const router = (manager as any).messageRouter;
+    const router = getMessageRouter(manager);
     await router.routeMessage(buildMessage('!cd C:\\\\workspace'));
     await router.routeMessage(buildMessage('run tests'));
 
@@ -60,14 +65,14 @@ describe('remote cwd state', () => {
         if (callCount === 1) {
           throw new Error('bad cwd');
         }
-        return { id: 'session-1' } as any;
+        return { id: 'session-1' } as unknown as MockSession;
       },
       continueSession: async () => {},
       stopSession: async () => {},
       validateWorkingDirectory: async () => null,
     });
 
-    const router = (manager as any).messageRouter;
+    const router = getMessageRouter(manager);
     await router.routeMessage(buildMessage('[cwd: C:\\\\bad] first try'));
     await router.routeMessage(buildMessage('second try'));
 
@@ -85,7 +90,7 @@ describe('remote cwd state', () => {
     manager.setAgentExecutor({
       startSession: async (_title, _prompt, cwd) => {
         startCalls.push({ cwd });
-        return { id: 'session-1' } as any;
+        return { id: 'session-1' } as unknown as MockSession;
       },
       continueSession: async () => {},
       stopSession: async () => {},
@@ -93,7 +98,7 @@ describe('remote cwd state', () => {
         cwd === 'C:\\\\bad' ? 'Directory does not exist' : null,
     });
 
-    const router = (manager as any).messageRouter;
+    const router = getMessageRouter(manager);
     await router.routeMessage(buildMessage('!cd C:\\\\bad'));
     await router.routeMessage(buildMessage('run tests'));
 
@@ -109,7 +114,7 @@ describe('remote cwd state', () => {
     manager.setAgentExecutor({
       startSession: async (_title, _prompt, cwd) => {
         startCalls.push({ cwd });
-        return { id: 'session-1' } as any;
+        return { id: 'session-1' } as unknown as MockSession;
       },
       continueSession: async (_sessionId, _prompt, _content, cwd) => {
         continueCalls.push({ cwd });
@@ -118,7 +123,7 @@ describe('remote cwd state', () => {
       validateWorkingDirectory: async () => null,
     });
 
-    const router = (manager as any).messageRouter;
+    const router = getMessageRouter(manager);
     await router.routeMessage(buildMessage('!cd project'));
     await router.routeMessage(buildMessage('[cwd: reports] summarize'));
     await router.routeMessage(buildMessage('continue'));
@@ -135,14 +140,14 @@ describe('remote cwd state', () => {
     manager.setAgentExecutor({
       startSession: async (_title, _prompt, cwd) => {
         startCalls.push({ cwd });
-        return { id: 'session-1' } as any;
+        return { id: 'session-1' } as unknown as MockSession;
       },
       continueSession: async () => {},
       stopSession: async () => {},
       validateWorkingDirectory: async () => null,
     });
 
-    const router = (manager as any).messageRouter;
+    const router = getMessageRouter(manager);
     await router.routeMessage(buildMessage('[cwd: reports] run tests'));
 
     expect(startCalls).toEqual([{ cwd: 'C:\\workspace\\reports' }]);
@@ -155,14 +160,14 @@ describe('remote cwd state', () => {
     manager.setAgentExecutor({
       startSession: async (_title, _prompt, cwd) => {
         startCalls.push({ cwd });
-        return { id: 'session-1' } as any;
+        return { id: 'session-1' } as unknown as MockSession;
       },
       continueSession: async () => {},
       stopSession: async () => {},
       validateWorkingDirectory: async () => null,
     });
 
-    const router = (manager as any).messageRouter;
+    const router = getMessageRouter(manager);
     await router.routeMessage(buildMessage('!cd reports'));
     await router.routeMessage(buildMessage('run tests'));
 

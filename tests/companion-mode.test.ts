@@ -16,6 +16,12 @@ import * as os from 'os';
 import * as path from 'path';
 import { vi } from 'vitest';
 
+/** `KEY=value` or `KEY='value'` (the brief single-quotes values with shell-special characters). */
+function envAssignment(key: string, value: string): RegExp {
+  const escaped = value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`${key}='?${escaped}'?`);
+}
+
 const mocks = vi.hoisted(() => {
   const identity = {
     load: vi.fn(),
@@ -153,7 +159,7 @@ describe('companion-mode', () => {
   });
 
   afterEach(async () => {
-    await rm(tempDir, { recursive: true, force: true });
+    await rm(tempDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     for (const key of envKeys) {
       const value = originalEnv[key];
       if (value === undefined) {
@@ -336,10 +342,12 @@ describe('companion-mode', () => {
     expect(output).toContain('CODEBUDDY_SENSORY_SPEAK_PERMISSION_MODE=default');
     expect(output).toContain('CODEBUDDY_SPEECH_PYTHON=/tmp/voice/bin/python');
     expect(output).toContain('CODEBUDDY_SPEECH_ENGINE=parakeet');
-    expect(output).toContain(`CODEBUDDY_PARAKEET_MODEL_DIR=${path.join(tempDir, 'parakeet')}`);
+    // Paths are shell-quoted when they carry characters outside the safe set
+    // (Windows backslashes), so accept an optional single-quoted spelling.
+    expect(output).toMatch(envAssignment('CODEBUDDY_PARAKEET_MODEL_DIR', path.join(tempDir, 'parakeet')));
     expect(output).toContain('CODEBUDDY_SPEECH_MODEL=base');
     expect(output).toContain('CODEBUDDY_SPEECH_LANG=fr');
-    expect(output).toContain(`CODEBUDDY_SPEECH_HOTWORDS_FILE=${path.join(tempDir, 'speech-hotwords.txt')}`);
+    expect(output).toMatch(envAssignment('CODEBUDDY_SPEECH_HOTWORDS_FILE', path.join(tempDir, 'speech-hotwords.txt')));
     expect(output).toContain('CODEBUDDY_PIPER_BIN=piper');
     expect(output).toContain('Voice assistant behavior');
     expect(output).toContain('/tmp/ear/bin/python buddy-vision/ear.py');

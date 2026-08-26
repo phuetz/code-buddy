@@ -11,6 +11,7 @@ import * as crypto from 'crypto';
 import fs from 'fs-extra';
 import * as path from 'path';
 import * as os from 'os';
+import { logger } from '../utils/logger.js';
 
 // AES-256-GCM parameters
 const ALGORITHM = 'aes-256-gcm';
@@ -19,6 +20,9 @@ const IV_LENGTH = 16; // 128 bits
 const AUTH_TAG_LENGTH = 16; // 128 bits
 const SALT_LENGTH = 32;
 const PBKDF2_ITERATIONS = 100000;
+const HKDF_DIGEST = 'sha256';
+const HKDF_INFO = 'codebuddy-session-encryption/v2';
+const ENCRYPTION_VERSION = 2;
 
 export interface EncryptedData {
   /** Encrypted ciphertext (base64) */
@@ -128,8 +132,9 @@ export class SessionEncryption {
 
     const iv = crypto.randomBytes(IV_LENGTH);
     const salt = crypto.randomBytes(SALT_LENGTH);
+    const subkey = this.deriveSubkey(salt);
 
-    const cipher = crypto.createCipheriv(ALGORITHM, this.key, iv, {
+    const cipher = crypto.createCipheriv(ALGORITHM, subkey, iv, {
       authTagLength: AUTH_TAG_LENGTH,
     });
 
@@ -143,8 +148,15 @@ export class SessionEncryption {
       iv: iv.toString('base64'),
       authTag: cipher.getAuthTag().toString('base64'),
       salt: salt.toString('base64'),
-      version: 1,
+      version: ENCRYPTION_VERSION,
     };
+  }
+
+  /** Derive a domain-separated AES key for one encrypted record. */
+  private deriveSubkey(salt: Buffer): Buffer {
+    return Buffer.from(
+      crypto.hkdfSync(HKDF_DIGEST, this.key as Buffer, salt, HKDF_INFO, KEY_LENGTH)
+    );
   }
 
   /**
@@ -159,8 +171,15 @@ export class SessionEncryption {
     const iv = Buffer.from(encrypted.iv, 'base64');
     const authTag = Buffer.from(encrypted.authTag, 'base64');
     const ciphertext = Buffer.from(encrypted.ciphertext, 'base64');
+    if (encrypted.version >= ENCRYPTION_VERSION && !encrypted.salt) {
+      throw new Error('Encrypted session is missing its per-record salt');
+    }
+    const key =
+      encrypted.version >= ENCRYPTION_VERSION
+        ? this.deriveSubkey(Buffer.from(encrypted.salt, 'base64'))
+        : this.key;
 
-    const decipher = crypto.createDecipheriv(ALGORITHM, this.key, iv, {
+    const decipher = crypto.createDecipheriv(ALGORITHM, key, iv, {
       authTagLength: AUTH_TAG_LENGTH,
     });
 
@@ -231,8 +250,11 @@ export class SessionEncryption {
   }
 
   /**
-   * Rotate encryption key
-   * Re-encrypts all data with a new key
+   * Rotate the master encryption key.
+   *
+   * This method cannot re-encrypt stored sessions because it does not own the
+   * session store. Callers must retain the returned old key until every stored
+   * blob has been decrypted and re-encrypted with the new key.
    */
   async rotateKey(): Promise<{ oldKey: string; newKey: string }> {
     if (!this.key) {
@@ -248,6 +270,11 @@ export class SessionEncryption {
     await fs.writeFile(this.config.keyPath, newKey, { mode: 0o600 });
 
     this.key = newKey;
+
+    logger.warn(
+      'Session encryption key rotated without re-encrypting stored sessions; ' +
+        'retain oldKey until migration completes.'
+    );
 
     return {
       oldKey,

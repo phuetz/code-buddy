@@ -1,8 +1,9 @@
-import { spawn } from 'node:child_process';
-import { execFileSync } from 'node:child_process';
+import { EventEmitter } from 'node:events';
+import { spawn, execFileSync, type ChildProcess } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import { PassThrough } from 'node:stream';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   ShadowWorkspace,
@@ -19,10 +20,27 @@ function createRepo(testRoot: string): string {
   git(repo, 'init', '-q');
   git(repo, 'config', 'user.email', 'shadow@example.test');
   git(repo, 'config', 'user.name', 'Shadow Test');
+  // Windows git defaults to core.autocrlf=true, which would check the shadow
+  // worktree out with CRLF and break the byte-exact content assertions.
+  git(repo, 'config', 'core.autocrlf', 'false');
   fs.writeFileSync(path.join(repo, 'tracked.txt'), 'committed-v1\n');
   git(repo, 'add', 'tracked.txt');
   git(repo, 'commit', '-m', 'initial');
   return repo;
+}
+
+function hangingValidator(): ChildProcess {
+  const stdout = new PassThrough();
+  const stderr = new PassThrough();
+  const child = new EventEmitter() as ChildProcess;
+  const kill = vi.fn(() => {
+    stdout.end();
+    stderr.end();
+    return true;
+  });
+  Object.assign(child, { stdout, stderr, pid: 42, kill });
+  process.nextTick(() => stdout.write('before-sleep'));
+  return child;
 }
 
 describe('ShadowWorkspace', () => {
@@ -34,7 +52,8 @@ describe('ShadowWorkspace', () => {
     testRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'codebuddy-shadow-'));
     repo = createRepo(testRoot);
     shadowBase = path.join(testRoot, 'shadow-store');
-    process.env.CODEBUDDY_SHADOW_CMD = 'sh -c "exit 0"';
+    // node-based validators: identical on sh (POSIX) and cmd.exe (Windows).
+    process.env.CODEBUDDY_SHADOW_CMD = 'node -e "process.exit(0)"';
     delete process.env.CODEBUDDY_SHADOW_TIMEOUT_MS;
     delete process.env.CODEBUDDY_SHADOW_WORKSPACE;
   });
@@ -45,7 +64,8 @@ describe('ShadowWorkspace', () => {
     delete process.env.CODEBUDDY_SHADOW_WORKSPACE;
     vi.restoreAllMocks();
     vi.doUnmock('../../src/speculative/shadow-workspace.js');
-    fs.rmSync(testRoot, { recursive: true, force: true });
+    // Retry: Windows may still hold a handle on a just-killed validator's cwd.
+    fs.rmSync(testRoot, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   });
 
   it('creates lazily, writes proposals, and resyncs to the repository HEAD before each run', async () => {
@@ -87,13 +107,13 @@ describe('ShadowWorkspace', () => {
 
   it('reports success and failure from the configured command with its output tail', async () => {
     const workspace = new ShadowWorkspace(repo, undefined, shadowBase);
-    process.env.CODEBUDDY_SHADOW_CMD = 'sh -c "printf success-marker; exit 0"';
+    process.env.CODEBUDDY_SHADOW_CMD = 'node -e "process.stdout.write(\'success-marker\'); process.exit(0)"';
     const passed = await workspace.runSpeculative([{ path: 'tracked.txt', content: 'passing\n' }]);
 
     expect(passed).toMatchObject({ ok: true, exitCode: 0, unavailable: false });
     expect(passed.stdoutTail).toContain('success-marker');
 
-    process.env.CODEBUDDY_SHADOW_CMD = 'sh -c "printf failure-marker; exit 1"';
+    process.env.CODEBUDDY_SHADOW_CMD = 'node -e "process.stdout.write(\'failure-marker\'); process.exit(1)"';
     const failed = await workspace.runSpeculative([{ path: 'tracked.txt', content: 'failing\n' }]);
 
     expect(failed).toMatchObject({ ok: false, exitCode: 1, unavailable: false });
@@ -122,7 +142,8 @@ describe('ShadowWorkspace', () => {
     fs.rmSync(path.join(repo, 'tracked.txt'));
     git(repo, 'add', 'tracked.txt');
     fs.writeFileSync(path.join(repo, 'untracked.txt'), 'diagnostic-untracked\n');
-    process.env.CODEBUDDY_SHADOW_CMD = 'sh -c "test ! -e tracked.txt && grep diagnostic-untracked untracked.txt"';
+    process.env.CODEBUDDY_SHADOW_CMD =
+      'node -e "const fs = require(\'fs\'); const untracked = fs.readFileSync(\'untracked.txt\', \'utf8\'); process.stdout.write(untracked); process.exit(!fs.existsSync(\'tracked.txt\') && untracked.includes(\'diagnostic-untracked\') ? 0 : 1)"';
     const workspace = new ShadowWorkspace(repo, undefined, shadowBase);
 
     const result = await workspace.runWorkingTree();
@@ -133,15 +154,38 @@ describe('ShadowWorkspace', () => {
   });
 
   it('fails validation with a timeout annotation when the command runs too long', async () => {
-    process.env.CODEBUDDY_SHADOW_CMD = 'sh -c "printf before-sleep; sleep 2"';
-    process.env.CODEBUDDY_SHADOW_TIMEOUT_MS = '200';
-    const workspace = new ShadowWorkspace(repo, undefined, shadowBase);
+    // The validator is deliberately fake and never closes. Advancing the timeout
+    // clock proves the annotation without measuring process startup or wall time.
+    process.env.CODEBUDDY_SHADOW_CMD = 'node -e "process.stdout.write(\'before-sleep\')"';
+    const timeoutMs = 200;
+    process.env.CODEBUDDY_SHADOW_TIMEOUT_MS = String(timeoutMs);
+    const validationShell = process.platform === 'win32' ? (process.env.ComSpec ?? 'cmd.exe') : 'sh';
+    let markValidatorStarted: () => void = () => undefined;
+    const validatorStarted = new Promise<void>((resolve) => {
+      markValidatorStarted = resolve;
+    });
+    const spawnSpy = vi.fn<SpawnFn>((command, args, options) =>
+      command === validationShell
+        ? (markValidatorStarted(), hangingValidator())
+        : spawn(command, args, options));
+    const workspace = new ShadowWorkspace(repo, spawnSpy, shadowBase);
+    const nativeSetImmediate = setImmediate;
 
-    const result = await workspace.runSpeculative([{ path: 'tracked.txt', content: 'timeout\n' }]);
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      const resultPromise = workspace.runSpeculative([{ path: 'tracked.txt', content: 'timeout\n' }]);
+      await validatorStarted;
+      await new Promise<void>((resolve) => nativeSetImmediate(resolve));
 
-    expect(result).toMatchObject({ ok: false, unavailable: false, timedOut: true });
-    expect(result.stdoutTail).toContain('before-sleep');
-    expect(result.stdoutTail).toMatch(/timed out after 200ms/);
+      await vi.advanceTimersByTimeAsync(timeoutMs);
+      const result = await resultPromise;
+
+      expect(result).toMatchObject({ ok: false, unavailable: false, timedOut: true });
+      expect(result.stdoutTail).toContain('before-sleep');
+      expect(result.stdoutTail).toMatch(new RegExp(`timed out after ${timeoutMs}ms`));
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('fails open without throwing when the requested directory is not a git repository', async () => {

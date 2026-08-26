@@ -268,7 +268,7 @@ describe('generateMeetingNotes', () => {
       expect(result.json).not.toContain(directory);
       expect(result.notes.transcript[1]).toMatchObject({ startSeconds: 4.5, endSeconds: 9 });
     } finally {
-      await rm(directory, { recursive: true, force: true });
+      await rm(directory, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     }
   });
 });

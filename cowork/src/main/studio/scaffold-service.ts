@@ -65,19 +65,19 @@ export const STUDIO_TEMPLATES: TemplateCard[] = [
   {
     id: 'react-ts',
     label: 'React + TypeScript',
-    description: 'Application web Vite avec React et TypeScript.',
+    description: 'Vite web app with React and TypeScript.',
     category: 'web',
   },
   {
     id: 'express-api',
     label: 'Express API',
-    description: 'API Node/Express avec structure TypeScript.',
+    description: 'Node/Express API with a TypeScript structure.',
     category: 'api',
   },
   {
     id: 'node-cli',
     label: 'Node CLI',
-    description: 'CLI Node.js TypeScript prête à compiler.',
+    description: 'Node.js TypeScript CLI ready to compile.',
     category: 'cli',
   },
 ];

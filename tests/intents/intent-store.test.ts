@@ -23,7 +23,7 @@ describe('IntentStore', () => {
   });
 
   afterEach(async () => {
-    await rm(rootDir, { recursive: true, force: true });
+    await rm(rootDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   it('creates, gets, lists, and updates an intent status', async () => {

@@ -19,8 +19,8 @@ const FFMPEG = spawnSync('ffmpeg', ['-version'], { stdio: 'ignore' }).status ===
 afterEach(async () => Promise.all(roots.splice(0).map((root) => fs.rm(root, { recursive: true, force: true }))));
 
 async function fixture() {
-  const resultsRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'flow-results-'));
-  const outputRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'flow-import-'));
+  const resultsRoot = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'flow-results-')));
+  const outputRoot = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'flow-import-')));
   roots.push(resultsRoot, outputRoot);
   const handoff = createGoogleFlowHandoff([{
     id: 'pilot-flow-01', characterName: 'Lisa', declaredAdultAge: 28,

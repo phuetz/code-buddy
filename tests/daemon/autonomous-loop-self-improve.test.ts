@@ -27,7 +27,7 @@ describe('FleetAutonomousLoop — idle self-improvement trigger', () => {
   });
 
   afterEach(() => {
-    rmSync(dir, { recursive: true, force: true });
+    rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     if (prevFlag === undefined) delete process.env.CODEBUDDY_SELF_IMPROVE;
     else process.env.CODEBUDDY_SELF_IMPROVE = prevFlag;
   });

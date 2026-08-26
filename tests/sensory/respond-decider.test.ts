@@ -469,7 +469,7 @@ describe('respond-decider — addressed + engagement window (no LLM)', () => {
       expect(await d.decide('Lisa tu es là ?')).toEqual({ respond: true, reason: 'addressed' });
     } finally {
       resetPersonaManager();
-      await rm(path.dirname(dir), { recursive: true, force: true });
+      await rm(path.dirname(dir), { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     }
   });
 
@@ -501,7 +501,7 @@ describe('respond-decider — addressed + engagement window (no LLM)', () => {
       if (previousRobotName === undefined) delete process.env.CODEBUDDY_ROBOT_NAME;
       else process.env.CODEBUDDY_ROBOT_NAME = previousRobotName;
       resetPersonaManager();
-      await rm(path.dirname(dir), { recursive: true, force: true });
+      await rm(path.dirname(dir), { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     }
   });
 

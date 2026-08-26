@@ -259,7 +259,7 @@ export function createWindow() {
       type: 'config.status',
       payload: {
         isConfigured,
-        config: configStore.getAll(),
+        config: configStore.getAllRedacted(),
       },
     });
 

@@ -4,7 +4,7 @@ import type { CodeBuddyAgent, ChatEntry } from "../../agent/codebuddy-agent.js";
 import { useInputHandler } from "../../hooks/use-input-handler.js";
 import { StatusBlock } from "./StatusBlock.js";
 import { CommandSuggestions } from "./CommandSuggestions.js";
-import { FileAutocomplete } from './FileAutocomplete.js';
+import { FileAutocomplete } from "./FileAutocomplete.js";
 import { ModelSelection } from "./ModelSelection.js";
 import { ChatHistory } from "./ChatHistory.js";
 import { TabbedQuestion } from "./TabbedQuestion.js";

@@ -109,7 +109,12 @@ describe('planVariant / makeLlmVariantPlanner (injected chat)', () => {
   });
 
   it('never throws — a chat that throws → null', async () => {
-    const planner = makeLlmVariantPlanner({ chat: async () => { throw new Error('provider down'); } });
+    // The chat is mocked here; disable the default CKG recall as well so this
+    // unit test does not open the real knowledge graph on every invocation.
+    const planner = makeLlmVariantPlanner({
+      chat: async () => { throw new Error('provider down'); },
+      recall: null,
+    });
     await expect(planner({ weakness, inspirations })).resolves.toBeNull();
   });
 });

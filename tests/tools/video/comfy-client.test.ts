@@ -28,7 +28,7 @@ describe('headless ComfyUI client', () => {
   });
 
   it('submits, polls until done, and downloads image/video/gif outputs', async () => {
-    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'comfy-client-test-'));
+    const root = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'comfy-client-test-')));
     roots.push(root);
     let historyCalls = 0;
     const paths: string[] = [];

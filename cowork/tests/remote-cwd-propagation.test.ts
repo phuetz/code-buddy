@@ -30,14 +30,14 @@ describe('remote cwd propagation', () => {
     const continueCalls: Array<{ sessionId: string; prompt: string; cwd?: string }> = [];
 
     manager.setAgentExecutor({
-      startSession: async () => ({ id: 'session-1' } as any),
+      startSession: async () => ({ id: 'session-1' } as unknown as import('../src/main/session/types').Session),
       continueSession: async (sessionId, prompt, _content, cwd) => {
         continueCalls.push({ sessionId, prompt, cwd });
       },
       stopSession: async () => {},
     });
 
-    const router = (manager as any).messageRouter;
+    const router = (manager as unknown as { messageRouter: { routeMessage: (msg: unknown) => Promise<unknown> } }).messageRouter;
     await router.routeMessage(buildMessage('hello'));
     await router.routeMessage(buildMessage('[cwd: C:\\\\workspace] run tests'));
 

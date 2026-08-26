@@ -31,7 +31,7 @@ export function recentProjects(sessions: ReadonlyArray<Session>, cap = 8): Proje
         sessionId: session.id,
         cwd,
         name: cwd.split('/').filter(Boolean).pop() ?? cwd,
-        title: session.title || 'Sans titre',
+        title: session.title || 'Untitled',
         updatedAt: session.updatedAt,
       });
     }
@@ -49,7 +49,7 @@ export function StudioProjectHistory() {
   return (
     <div className="mx-auto mt-6 w-full max-w-4xl" data-testid="studio-project-history">
       <h3 className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-        Projets récents
+        Recent projects
       </h3>
       <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
         {projects.map((project) => (
@@ -66,7 +66,7 @@ export function StudioProjectHistory() {
             </div>
             <p className="mt-1 line-clamp-1 text-[11px] text-muted-foreground">{project.title}</p>
             <p className="mt-0.5 text-[11px] text-muted-foreground">
-              {new Date(project.updatedAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}
+              {new Date(project.updatedAt).toLocaleDateString('en-US', { day: 'numeric', month: 'short' })}
             </p>
           </button>
         ))}

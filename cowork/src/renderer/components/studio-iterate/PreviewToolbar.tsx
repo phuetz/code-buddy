@@ -15,46 +15,46 @@ export interface PreviewToolbarProps {
 }
 
 const STATUS_META: Record<PreviewStatus, { label: string; className: string }> = {
-  idle: { label: 'Arrêtée', className: 'border-border bg-muted text-muted-foreground' },
-  starting: { label: 'Démarrage', className: 'border-amber-500/30 bg-amber-500/10 text-amber-500' },
+  idle: { label: 'Stopped', className: 'border-border bg-muted text-muted-foreground' },
+  starting: { label: 'Starting', className: 'border-amber-500/30 bg-amber-500/10 text-amber-500' },
   running: { label: 'Active', className: 'border-green-500/30 bg-green-500/10 text-green-500' },
-  dead: { label: 'Erreur', className: 'border-red-500/30 bg-red-500/10 text-red-500' },
+  dead: { label: 'Error', className: 'border-red-500/30 bg-red-500/10 text-red-500' },
 };
 
 const DEVICES: { id: PreviewDevice; label: string; icon: typeof Monitor }[] = [
   { id: 'desktop', label: 'Desktop', icon: Monitor },
-  { id: 'tablet', label: 'Tablette', icon: Tablet },
+  { id: 'tablet', label: 'Tablet', icon: Tablet },
   { id: 'mobile', label: 'Mobile', icon: Smartphone },
 ];
 
 function displayUrl(url?: string): string {
   if (!url) {
-    return 'Aucune preview';
+    return 'No preview';
   }
 
   try {
     const parsed = new URL(url);
     const isLoopback = ['localhost', '127.0.0.1', '::1'].includes(parsed.hostname);
-    return isLoopback ? parsed.toString() : 'URL non locale masquée';
+    return isLoopback ? parsed.toString() : 'Non-local URL hidden';
   } catch {
-    return 'URL invalide';
+    return 'Invalid URL';
   }
 }
 
 export function PreviewToolbar({ url, status, device, onReload, onDevice, onOpenExternal, onToggle }: PreviewToolbarProps) {
   const statusMeta = STATUS_META[status];
   const canUsePreview = status === 'running' && !!url;
-  const toggleLabel = status === 'running' || status === 'starting' ? 'Arrêter la preview' : 'Lancer la preview';
+  const toggleLabel = status === 'running' || status === 'starting' ? 'Stop the preview' : 'Start the preview';
   const ToggleIcon = status === 'running' || status === 'starting' ? Square : Play;
 
   return (
-    <section className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-background p-2" aria-label="Barre de test de la preview">
+    <section className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-background p-2" aria-label="Preview test bar">
       <button type="button" className="inline-flex items-center gap-2 rounded-md bg-primary px-3 py-1.5 text-sm text-primary-foreground hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50" onClick={onToggle} disabled={!onToggle} aria-label={toggleLabel}>
         <ToggleIcon className="h-3.5 w-3.5" aria-hidden="true" />
-        {status === 'running' || status === 'starting' ? 'Arrêter' : 'Lancer'}
+        {status === 'running' || status === 'starting' ? 'Stop' : 'Start'}
       </button>
 
-      <div className="flex rounded-md border border-border bg-surface p-0.5" role="group" aria-label="Taille de preview">
+      <div className="flex rounded-md border border-border bg-surface p-0.5" role="group" aria-label="Preview size">
         {DEVICES.map((item) => {
           const Icon = item.icon;
           const selected = item.id === device;
@@ -68,14 +68,14 @@ export function PreviewToolbar({ url, status, device, onReload, onDevice, onOpen
         })}
       </div>
 
-      <button type="button" className="inline-flex items-center gap-2 rounded-md border border-border bg-surface px-2.5 py-1.5 text-sm text-foreground hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50" onClick={onReload} disabled={!canUsePreview || !onReload} aria-label="Recharger la preview">
+      <button type="button" className="inline-flex items-center gap-2 rounded-md border border-border bg-surface px-2.5 py-1.5 text-sm text-foreground hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50" onClick={onReload} disabled={!canUsePreview || !onReload} aria-label="Reload preview">
         <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
-        Recharger
+        Reload
       </button>
 
-      <button type="button" className="inline-flex items-center gap-2 rounded-md border border-border bg-surface px-2.5 py-1.5 text-sm text-foreground hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50" onClick={onOpenExternal} disabled={!canUsePreview || !onOpenExternal} aria-label="Ouvrir la preview dans le navigateur">
+      <button type="button" className="inline-flex items-center gap-2 rounded-md border border-border bg-surface px-2.5 py-1.5 text-sm text-foreground hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50" onClick={onOpenExternal} disabled={!canUsePreview || !onOpenExternal} aria-label="Open the preview in the browser">
         <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
-        Ouvrir
+        Open
       </button>
 
       <div className="ml-auto flex min-w-0 items-center gap-2 text-xs">

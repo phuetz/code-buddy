@@ -302,7 +302,7 @@ describe('CodeBuddyEngineRunner companion continuity', () => {
       runSession: vi.fn(async (
         _sessionId: string,
         _messages: Array<{ role: string; content: string }>,
-        onEvent: (event: any) => void,
+        onEvent: (event: { type: string; thinking?: string; tool?: { id: string; name: string; input: string } }) => void,
       ) => {
         onEvent({ type: 'thinking', thinking: "Tu n'as besoin que de moi." });
         onEvent({

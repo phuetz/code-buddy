@@ -118,7 +118,7 @@ describe('hermes claw migrate (real)', () => {
   });
 
   afterEach(() => {
-    fs.rmSync(tmp, { recursive: true, force: true });
+    fs.rmSync(tmp, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   it('detects the OpenClaw home from an explicit source', () => {

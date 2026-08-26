@@ -50,7 +50,7 @@ function makeState(goal = 'test', overrides: Partial<PersistedWorkflow> = {}): P
 
 async function rmRecursive(p: string): Promise<void> {
   try {
-    await fs.rm(p, { recursive: true, force: true });
+    await fs.rm(p, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   } catch {
     /* ignore */
   }

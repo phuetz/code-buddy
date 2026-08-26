@@ -9,16 +9,16 @@ const mockPathResolver = {
 
 describe('tool executors treat UNC paths as absolute', () => {
   it('does not resolve UNC paths relative to the mounted workspace in ToolExecutor', () => {
-    const executor = new ToolExecutor(mockPathResolver as any);
+    const executor = new ToolExecutor(mockPathResolver as never);
     expect(() =>
-      (executor as any).resolveWorkspacePath('session-1', '\\\\server\\share\\report.txt')
+      (executor as unknown as { resolveWorkspacePath: (sessionId: string, path: string) => string }).resolveWorkspacePath('session-1', '\\\\server\\share\\report.txt')
     ).toThrow('Path is outside the mounted workspace');
   });
 
   it('does not resolve UNC paths relative to the mounted workspace in SandboxToolExecutor', () => {
-    const executor = new SandboxToolExecutor(mockPathResolver as any, {} as any);
+    const executor = new SandboxToolExecutor(mockPathResolver as never, {} as never);
     expect(() =>
-      (executor as any).resolveWorkspacePath('session-1', '\\\\server\\share\\report.txt')
+      (executor as unknown as { resolveWorkspacePath: (sessionId: string, path: string) => string }).resolveWorkspacePath('session-1', '\\\\server\\share\\report.txt')
     ).toThrow('Path is outside the mounted workspace');
   });
 });

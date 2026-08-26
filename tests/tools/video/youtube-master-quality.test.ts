@@ -21,7 +21,7 @@ const REAL_MEDIA = ffmpegEncoders.status === 0 && /\blibx264\b/u.test(ffmpegEnco
 afterEach(async () => Promise.all(roots.splice(0).map((root) => fs.rm(root, { recursive: true, force: true }))));
 
 async function fixture() {
-  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'youtube-master-'));
+  const root = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'youtube-master-')));
   roots.push(root);
   const videoPath = path.join(root, 'pilot.mp4');
   const captionPath = `${videoPath}.fr-FR.vtt`;
@@ -306,7 +306,7 @@ describe('YouTube master quality gate', () => {
       checks,
       now: () => new Date('2026-07-18T12:05:00Z'),
     });
-    const outputRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'youtube-private-bundle-'));
+    const outputRoot = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'youtube-private-bundle-')));
     roots.push(outputRoot);
     const bundle = await createPrivateYouTubeBundle({
       videoPath,
@@ -328,7 +328,7 @@ describe('YouTube master quality gate', () => {
     await expect(fs.readFile(path.join(bundle.directory, 'bundle.json'), 'utf8')).resolves.toContain('ready-for-private-upload');
 
     await fs.appendFile(videoPath, 'changed');
-    const secondRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'youtube-private-bundle-tampered-'));
+    const secondRoot = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'youtube-private-bundle-tampered-')));
     roots.push(secondRoot);
     await expect(createPrivateYouTubeBundle({
       videoPath,

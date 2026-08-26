@@ -14,10 +14,14 @@ describe('LintProjectTool', () => {
     const binDir = path.join(root, 'node_modules', '.bin');
     await fs.mkdir(binDir, { recursive: true });
     await fs.writeFile(path.join(root, 'bad.ts'), 'const x = 1\n');
-    await writeExecutable(path.join(binDir, 'eslint'), `#!/usr/bin/env node
-console.log(JSON.stringify([{filePath: process.cwd() + '/bad.ts', errorCount: 1, warningCount: 1, messages: [{ruleId: 'semi', severity: 2, line: 1, column: 12, message: 'Missing semicolon.'}, {ruleId: 'no-unused-vars', severity: 1, line: 1, column: 7, message: 'x unused'}]}]));
+    const fakeEslint = `console.log(JSON.stringify([{filePath: process.cwd() + '/bad.ts', errorCount: 1, warningCount: 1, messages: [{ruleId: 'semi', severity: 2, line: 1, column: 12, message: 'Missing semicolon.'}, {ruleId: 'no-unused-vars', severity: 1, line: 1, column: 7, message: 'x unused'}]}]));
 process.exit(1);
-`);
+`;
+    await writeExecutable(path.join(binDir, 'eslint'), `#!/usr/bin/env node\n${fakeEslint}`);
+    // Windows: the tool looks for the npm-style `.cmd` shim, then runs eslint's JS entry through node.
+    await fs.writeFile(path.join(binDir, 'eslint.cmd'), '@node "%~dp0..\\eslint\\bin\\eslint.js" %*\r\n');
+    await fs.mkdir(path.join(root, 'node_modules', 'eslint', 'bin'), { recursive: true });
+    await fs.writeFile(path.join(root, 'node_modules', 'eslint', 'bin', 'eslint.js'), fakeEslint);
 
     const result = await new LintProjectTool().execute({ root, timeoutMs: 5000 });
 

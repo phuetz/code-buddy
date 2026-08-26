@@ -31,6 +31,14 @@ describe('Bash runtime execution policy', () => {
     clearPermissionsCache();
   });
 
+  it('does not demand approval for a cwd under the macOS canonical /private prefix', async () => {
+    // After `cd $TMPDIR` the bash tool stores the realpath (/private/var/folders/…);
+    // that prefix must not turn a sandboxed `pwd` into an approval prompt.
+    await expect(
+      evaluateShellExecution('pwd', '/private/var/folders/df/x/T/code-buddy-work')
+    ).resolves.toMatchObject({ action: 'sandbox' });
+  });
+
   it('keeps read-only commands inside the workspace sandbox', async () => {
     await expect(evaluateShellExecution('cat README.md', process.cwd())).resolves.toMatchObject({
       action: 'sandbox',
@@ -78,7 +86,9 @@ describe('Bash runtime execution policy', () => {
     })).toBe(true);
   });
 
-  it('binds exact approvals to the resolved executable and detects replacement before spawn', async () => {
+  // The probe executable is a POSIX shell script resolved through PATH without an
+  // extension — not how Windows resolves executables (PATHEXT).
+  it.skipIf(process.platform === 'win32')('binds exact approvals to the resolved executable and detects replacement before spawn', async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'codebuddy-executable-id-'));
     const executable = path.join(dir, 'policy-probe');
     const previousPath = process.env.PATH;
@@ -106,7 +116,7 @@ describe('Bash runtime execution policy', () => {
     } finally {
       if (previousPath === undefined) delete process.env.PATH;
       else process.env.PATH = previousPath;
-      fs.rmSync(dir, { recursive: true, force: true });
+      fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     }
   });
 });

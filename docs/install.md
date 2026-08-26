@@ -4,11 +4,12 @@ Three ways in, fastest first. All of them land you at the same next step:
 **`buddy onboard`** (guided setup) and **`buddy login`** (sign in with a ChatGPT
 Plus/Pro subscription — OAuth, `$0` marginal cost, no API key).
 
-| Path | Best for | One line |
-|:-----|:---------|:---------|
-| [1. One command](#1-one-command-curl--sh) | A laptop / workstation | `curl -fsSL https://raw.githubusercontent.com/phuetz/code-buddy/main/install.sh \| sh` |
-| [2. Docker / VPS](#2-docker--vps-247) | A server that runs 24/7 | `docker compose up -d` |
-| [3. npm](#3-npm) | You already have Node ≥ 20 | `npm install -g @phuetz/code-buddy` |
+| Path                                                                     | Best for                                | One line                                                                               |
+| :----------------------------------------------------------------------- | :-------------------------------------- | :------------------------------------------------------------------------------------- |
+| [1. One command](#1-one-command-curl--sh)                                | A laptop / workstation                  | `curl -fsSL https://raw.githubusercontent.com/phuetz/code-buddy/main/install.sh \| sh` |
+| [2. Docker / VPS](#2-docker--vps-247)                                    | A server that runs 24/7                 | `docker compose up -d`                                                                 |
+| [3. npm](#3-npm)                                                         | You already have Node ≥ 18              | `npm install -g @phuetz/code-buddy@latest`                                             |
+| [4. From source](#4-from-source-linux-including-remote-desktop-sessions) | Newest features, Linux / remote desktop | `git clone … && npm install && npm run build && npm link`                              |
 
 ---
 
@@ -39,11 +40,11 @@ sh install.sh            # run
 
 Useful overrides (all optional):
 
-| Variable | Default | Purpose |
-|:---------|:--------|:--------|
-| `CODEBUDDY_NODE_VERSION` | `20.18.1` | Node version fetched when a private copy is needed |
-| `CODEBUDDY_HOME` | `~/.codebuddy` | Where a private Node / npm prefix is placed |
-| `CODEBUDDY_MIN_NODE_MAJOR` | `20` | Minimum acceptable system Node major |
+| Variable                   | Default        | Purpose                                            |
+| :------------------------- | :------------- | :------------------------------------------------- |
+| `CODEBUDDY_NODE_VERSION`   | `20.18.1`      | Node version fetched when a private copy is needed |
+| `CODEBUDDY_HOME`           | `~/.codebuddy` | Where a private Node / npm prefix is placed        |
+| `CODEBUDDY_MIN_NODE_MAJOR` | `20`           | Minimum acceptable system Node major               |
 
 > **Windows:** use **WSL2** (then follow the Linux path above), or the [npm path](#3-npm).
 
@@ -109,7 +110,7 @@ One-off CLI in a container (no server):
 ```sh
 docker run --rm -it \
   -v codebuddy-data:/home/codebuddy/.codebuddy \
-  codebuddy:latest --prompt "explain this repo" 
+  codebuddy:latest --prompt "explain this repo"
 ```
 
 > **Security note.** Expose the server behind a reverse proxy with TLS; keep
@@ -125,12 +126,16 @@ tokens persist in the mounted volume.
 
 ## 3. npm
 
-If you already have **Node.js ≥ 20** (`node --version`):
+If you already have **Node.js ≥ 18** (`node --version`):
 
 ```sh
-npm install -g @phuetz/code-buddy
+npm install -g @phuetz/code-buddy@latest
 buddy onboard
 ```
+
+The package name is scoped: install `@phuetz/code-buddy`, not the unscoped
+`code-buddy` name. The npm release may lag the source checkout; confirm the
+installed version with `buddy --version`.
 
 From source (newest features):
 
@@ -142,24 +147,69 @@ npm run build
 npm link            # exposes `buddy` globally
 ```
 
-> **Requirements:** Node.js **≥ 20** for the CLI. The **Cowork desktop app needs
+> **Requirements:** Node.js **≥ 18** for the CLI. The **Cowork desktop app needs
 > Node ≥ 22** plus a C++ toolchain for native modules (`better-sqlite3`).
 > Run **`buddy doctor`** anytime to check your environment (`--fix` to remediate).
 
 ---
 
-## First run
+## 4. From source (Linux, including remote-desktop sessions)
 
-Whichever path you took:
+Verified 2026-08-23 on Ubuntu under an xrdp/MATE session. Everything lives in your own account, no sudo.
+
+```bash
+# Node 24 via nvm (don't rely on the distro Node)
+curl -fsSL https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash && exec bash -l
+nvm install 24 && nvm alias default 24
+
+git clone --depth 1 https://github.com/phuetz/code-buddy.git ~/code-buddy && cd ~/code-buddy
+npm install --no-audit --no-fund     # `npm ci` also works once the lockfile fix (#144) is in
+npm run build && npm link            # exposes the `buddy` command
+buddy --version && buddy doctor      # expect 0 errors (warnings without a provider are normal)
+buddy login                          # or: export NVIDIA_API_KEY=… + a [profiles.nvidia] entry, or a local Ollama
+buddy try                            # the 60-second proof
+```
+
+Desktop GUI (Cowork) in the dev flavour — the one that works over xrdp/VNC:
+
+```bash
+buddy install-gui                    # Electron + compile; ignore "Build aborted … electron-builder" (that's only the installer packaging)
+cd cowork && npx vite build && npm run rebuild
+NODE_ENV=production ./node_modules/electron/dist/electron --no-sandbox --disable-gpu ./dist-electron/main/index.js
+```
+
+`--no-sandbox --disable-gpu` are required in remote-desktop sessions (see `cowork/DEV-LINUX.md`). Update later with
+`git pull --ff-only && npm install && npm run build` (+ `cd cowork && npx vite build`).
+
+## First run — free, no env var to edit
+
+Whichever path you took, the fastest way in is one command after a free
+provider is available:
 
 ```sh
-buddy login          # ChatGPT Plus/Pro OAuth → $0 marginal cost, no API key
-# …or a free, fully local brain:
-export CODEBUDDY_PROVIDER=ollama
-buddy                # start chatting
-
-buddy --prompt "analyze the codebase structure"   # one-shot / headless
+buddy try            # 60-second demo — uses Ollama or signed-in ChatGPT and
+                     # proves the configured provider works.
 ```
+
+Without a ChatGPT login or reachable Ollama, `buddy try` exits quickly with
+the exact setup commands; it does not require an API key or make up an offline
+model response.
+
+To make it your default, either sign in with a subscription or let the wizard
+configure a local model — **no API key, no environment variable**:
+
+```sh
+buddy onboard        # guided: auto-detects your machine, offers the free path
+                     # when available, and writes the config for you
+buddy login          # ChatGPT Plus/Pro OAuth → $0 marginal cost, no API key
+buddy                # start chatting
+```
+
+Have [Ollama](https://ollama.ai) installed? `buddy onboard` detects the running
+server, offers to pull a small coding model if you have none, and saves the
+choice — you never touch `OLLAMA_HOST`. Not sure you're ready?
+**`buddy doctor`** answers in one line (and `buddy doctor --fix` configures a
+running Ollama automatically).
 
 See [Getting Started](getting-started.md) for headless mode, sessions, and
 typical workflows, and [Deployment](deployment.md) for running the server in

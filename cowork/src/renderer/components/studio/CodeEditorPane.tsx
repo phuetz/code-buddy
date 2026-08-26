@@ -61,17 +61,17 @@ export function CodeEditorPane({ path, value, onChange, onSave, readOnly = false
     <section className="flex h-full min-h-0 flex-col overflow-hidden border border-border bg-surface">
       <header className="flex h-10 shrink-0 items-center justify-between border-b border-border bg-muted px-3">
         <div className="flex min-w-0 items-center gap-2">
-          <span className="truncate font-mono text-xs text-foreground">{path || 'Sans fichier'}</span>
-          {dirty && <span className="h-2 w-2 shrink-0 rounded-full bg-primary" aria-label="Modifié" />}
-          {saved && <span className="text-xs text-muted-foreground">enregistré</span>}
+          <span className="truncate font-mono text-xs text-foreground">{path || 'No file'}</span>
+          {dirty && <span className="h-2 w-2 shrink-0 rounded-full bg-primary" aria-label="Modified" />}
+          {saved && <span className="text-xs text-muted-foreground">saved</span>}
         </div>
         <button
           type="button"
           onClick={handleSave}
           disabled={readOnly}
           className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border text-muted-foreground hover:bg-background hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
-          title="Enregistrer"
-          aria-label="Enregistrer"
+          title="Save"
+          aria-label="Save"
         >
           <Save className="h-4 w-4" aria-hidden="true" />
         </button>

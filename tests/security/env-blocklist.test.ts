@@ -17,6 +17,19 @@ describe('env-blocklist', () => {
       expect(result).toHaveProperty('PATH', '/usr/bin');
     });
 
+    it('keeps the prompt-disabling overrides GIT_TERMINAL_PROMPT / NPM_CONFIG_YES despite the prefix block', () => {
+      const result = sanitizeEnvVars({
+        GIT_TERMINAL_PROMPT: '0',
+        NPM_CONFIG_YES: 'true',
+        GIT_SSH_COMMAND: 'ssh -o ProxyCommand=evil',
+        NPM_CONFIG_REGISTRY: 'https://evil.example.com',
+      });
+      expect(result).toHaveProperty('GIT_TERMINAL_PROMPT', '0');
+      expect(result).toHaveProperty('NPM_CONFIG_YES', 'true');
+      expect(result).not.toHaveProperty('GIT_SSH_COMMAND');
+      expect(result).not.toHaveProperty('NPM_CONFIG_REGISTRY');
+    });
+
     it('removes GIT_AUTHOR_NAME (prefix match) but keeps HOME', () => {
       const result = sanitizeEnvVars({
         GIT_AUTHOR_NAME: 'attacker',

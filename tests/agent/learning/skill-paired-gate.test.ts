@@ -100,8 +100,8 @@ describe('skill paired gate (S3)', () => {
       if (savedEnv[key] === undefined) delete process.env[key];
       else process.env[key] = savedEnv[key];
     }
-    await fs.rm(tempHubDir, { recursive: true, force: true });
-    await fs.rm(rootDir, { recursive: true, force: true });
+    await fs.rm(tempHubDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+    await fs.rm(rootDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   it('accepts a skill that demonstrably changes agent behaviour and installs it', async () => {
