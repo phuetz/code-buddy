@@ -61,12 +61,14 @@ describe('gatherPeerAnswers — assainissement du texte reçu d\'une autre machi
     expect(content).not.toContain('<|im_end|>');
     expect(content).not.toContain('[INST]');
     expect(content).not.toContain('<<SYS>>');
-    expect(content).not.toMatch(/[​‌‍⁠﻿]/);
+    // Ecrits en echappements : un caractere invisible litteral dans une source
+    // est indechiffrable a la relecture, et eslint le refuse a juste titre.
+    expect(content).not.toMatch(/\u200B|\u200C|\u200D|\u2060|\uFEFF/u);
     expect(content).toContain('La vraie réponse.');
   });
 
   it('traite comme vide un pair qui ne renvoie QUE des jetons de fuite', async () => {
-    const peers = [peer('leaky', async () => ({ text: '<think>rien</think>​', modelRequested: 'm' }))];
+    const peers = [peer('leaky', async () => ({ text: '<think>rien</think>\u200B', modelRequested: 'm' }))];
     const { answers, errors } = await gatherPeerAnswers('q', peers, 1000);
     expect(answers).toHaveLength(0);
     expect(errors.map((e) => e.id)).toEqual(['leaky']);
