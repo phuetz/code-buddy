@@ -1,4 +1,4 @@
-import type { Command } from 'commander';
+import { InvalidArgumentError, type Command } from 'commander';
 
 export const CLI_PERMISSION_MODES = [
   'default',
@@ -13,6 +13,13 @@ export type CliPermissionMode = (typeof CLI_PERMISSION_MODES)[number];
 export function isCliPermissionMode(value: unknown): value is CliPermissionMode {
   return typeof value === 'string'
     && (CLI_PERMISSION_MODES as readonly string[]).includes(value);
+}
+
+export function parseCliPermissionMode(value: string): CliPermissionMode {
+  if (isCliPermissionMode(value)) return value;
+  throw new InvalidArgumentError(
+    `expected one of ${CLI_PERMISSION_MODES.join(', ')} (received ${JSON.stringify(value)})`,
+  );
 }
 
 /**

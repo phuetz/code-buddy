@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   hoistPermissionModeOption,
   installPermissionModeActionHook,
+  parseCliPermissionMode,
 } from '../../src/cli/permission-mode-option.js';
 
 describe('global --permission-mode routing', () => {
@@ -71,5 +72,11 @@ describe('global --permission-mode routing', () => {
       'acceptEdits',
     ];
     expect(hoistPermissionModeOption(argv)).toEqual(argv);
+  });
+
+  it('rejects an invalid mode during option parsing', () => {
+    expect(() => parseCliPermissionMode('nimportequoi')).toThrow(
+      'expected one of default, plan, acceptEdits, dontAsk, bypassPermissions (received "nimportequoi")',
+    );
   });
 });

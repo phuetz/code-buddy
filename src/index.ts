@@ -27,6 +27,7 @@ import { parseListenPort } from './cli/listen-port.js';
 import {
   hoistPermissionModeOption,
   installPermissionModeActionHook,
+  parseCliPermissionMode,
 } from './cli/permission-mode-option.js';
 import { getRequestedProfile } from './cli/requested-profile.js';
 import { resolveHeadlessOutputFormat, resolveHeadlessResultExitCode } from './cli/headless-options.js';
@@ -1378,7 +1379,8 @@ program
   )
   .option(
     "--permission-mode <mode>",
-    "permission mode: default, plan, acceptEdits, dontAsk, bypassPermissions"
+    "permission mode: default, plan, acceptEdits, dontAsk, bypassPermissions",
+    parseCliPermissionMode,
   )
   .option(
     "--dangerously-skip-permissions",

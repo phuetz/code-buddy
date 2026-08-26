@@ -45,6 +45,15 @@ function runCli(args: string[], timeoutMs = 15_000): Promise<{
 }
 
 describe('CLI error messages', () => {
+  it('rejects an invalid permission mode before showing root help', async () => {
+    const result = await runCli(['--permission-mode', 'nimportequoi', '--help']);
+    const text = `${result.stdout}\n${result.stderr}`;
+    expect(result.exitCode).toBe(1);
+    expect(text).toContain("option '--permission-mode <mode>' argument 'nimportequoi' is invalid");
+    expect(text).toContain('default, plan, acceptEdits, dontAsk, bypassPermissions');
+    expect(text).not.toContain('Usage: buddy [options]');
+  }, 20_000);
+
   it('accepts --permission-mode after a nested lazy command', async () => {
     const result = await runCli(['run', 'list', '--limit', '0', '--permission-mode', 'acceptEdits']);
     const text = `${result.stdout}\n${result.stderr}`;
