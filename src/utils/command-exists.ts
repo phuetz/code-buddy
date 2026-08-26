@@ -1,4 +1,6 @@
 import { spawn, type ChildProcess, type SpawnOptions } from 'child_process';
+import fs from 'node:fs';
+import path from 'node:path';
 
 export interface CommandExistsRuntime {
   spawn: (command: string, args: string[], options: SpawnOptions) => ChildProcess;
@@ -15,11 +17,74 @@ export interface CommandLookup {
   args: string[];
 }
 
+export interface ExecutableResolutionOptions {
+  cwd?: string;
+  env?: NodeJS.ProcessEnv;
+  platform?: NodeJS.Platform;
+  isExecutable?: (candidate: string) => boolean;
+}
+
 const DEFAULT_TIMEOUT_MS = 5000;
 
 const defaultRuntime: CommandExistsRuntime = {
   spawn,
 };
+
+function isExecutableFile(candidate: string): boolean {
+  try {
+    fs.accessSync(candidate, fs.constants.X_OK);
+    return fs.statSync(candidate).isFile();
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Enumerate the paths the host would consider for an executable token.
+ * Keeping this shared avoids subtly different PATH/PATHEXT handling between
+ * shell selection and executable identity checks.
+ */
+export function executableCandidates(
+  token: string,
+  cwd: string,
+  env: NodeJS.ProcessEnv,
+  platform: NodeJS.Platform = process.platform,
+): string[] {
+  if (token.includes('/') || (platform === 'win32' && token.includes('\\'))) {
+    return [path.resolve(cwd, token)];
+  }
+
+  const searchPath = env.PATH ?? process.env.PATH ?? '';
+  const configuredExtensions = platform === 'win32'
+    ? (env.PATHEXT ?? process.env.PATHEXT ?? '.EXE;.CMD;.BAT;.COM').split(';').filter(Boolean)
+    : [''];
+  const tokenAlreadyHasExtension = platform === 'win32' && configuredExtensions.some(
+    (extension) => token.toLowerCase().endsWith(extension.toLowerCase()),
+  );
+  const extensions = tokenAlreadyHasExtension ? [''] : configuredExtensions;
+
+  return searchPath
+    .split(path.delimiter)
+    .filter(Boolean)
+    .flatMap((directory) => extensions.map((extension) => path.join(directory, `${token}${extension}`)));
+}
+
+/** Resolve an executable synchronously for call sites whose public API is synchronous. */
+export function resolveExecutable(
+  executable: string,
+  options: ExecutableResolutionOptions = {},
+): string | undefined {
+  const normalizedExecutable = executable.trim();
+  if (!normalizedExecutable) return undefined;
+
+  const cwd = options.cwd ?? process.cwd();
+  const env = options.env ?? process.env;
+  const platform = options.platform ?? process.platform;
+  const isExecutable = options.isExecutable ?? isExecutableFile;
+
+  return executableCandidates(normalizedExecutable, cwd, env, platform)
+    .find((candidate) => isExecutable(candidate));
+}
 
 export function resolveCommandLookup(command: string, platform: NodeJS.Platform = process.platform): CommandLookup {
   if (platform === 'win32') {

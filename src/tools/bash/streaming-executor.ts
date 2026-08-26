@@ -13,6 +13,7 @@ import { validateCommand } from './command-validator.js';
 import { getFilteredEnv } from './command-validator.js';
 import { getShellEnvPolicy } from '../../security/shell-env-policy.js';
 import { buildBashEnvPrelude, CONTROLLED_SUBPROCESS_ENV } from './env-overrides.js';
+import { getShellConfiguration } from '../../utils/shell-configuration.js';
 import { rewriteCommandWithRtk } from './rtk-rewrite.js';
 import {
   evaluateShellExecution,
@@ -156,7 +157,11 @@ export async function* executeStreaming(
     ...CONTROLLED_SUBPROCESS_ENV,
   };
 
-  const proc = spawn('bash', ['-c', `${buildBashEnvPrelude()}\n${executionCommand}`], {
+  const shellConfiguration = getShellConfiguration();
+  const shellCommand = shellConfiguration.shell === 'bash'
+    ? `${buildBashEnvPrelude()}\n${executionCommand}`
+    : executionCommand;
+  const proc = spawn(shellConfiguration.executable, [...shellConfiguration.argsPrefix, shellCommand], {
     shell: false,
     cwd,
     env: controlledEnv,

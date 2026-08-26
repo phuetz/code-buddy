@@ -15,9 +15,9 @@ import { getPermissionModeManager } from '../../security/permission-modes.js';
 import { PolicyEngine } from '../../security/policy-engine.js';
 import { getFilteredEnv } from './command-validator.js';
 import { CONTROLLED_SUBPROCESS_ENV } from './env-overrides.js';
+import { executableCandidates } from '../../utils/command-exists.js';
 import { createHash } from 'node:crypto';
 import * as fs from 'node:fs';
-import * as path from 'node:path';
 
 const LOCAL_WORKSPACE_SANDBOX_IMAGE = 'codebuddy-workspace-sandbox:1';
 
@@ -53,20 +53,6 @@ function runtimeEnvironment(): Record<string, string> {
       ...CONTROLLED_SUBPROCESS_ENV,
     }).filter((entry): entry is [string, string] => typeof entry[1] === 'string'),
   );
-}
-
-function executableCandidates(token: string, cwd: string, env: Record<string, string>): string[] {
-  if (token.includes('/') || (process.platform === 'win32' && token.includes('\\'))) {
-    return [path.resolve(cwd, token)];
-  }
-  const searchPath = env.PATH ?? process.env.PATH ?? '';
-  const extensions = process.platform === 'win32'
-    ? (env.PATHEXT ?? '.EXE;.CMD;.BAT;.COM').split(';')
-    : [''];
-  return searchPath
-    .split(path.delimiter)
-    .filter(Boolean)
-    .flatMap((directory) => extensions.map((extension) => path.join(directory, `${token}${extension}`)));
 }
 
 function resolveExecutableIdentity(

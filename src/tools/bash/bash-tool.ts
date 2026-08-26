@@ -29,6 +29,7 @@ import {
   sanitizeForShell
 } from '../../utils/input-validator.js';
 import { getRipgrepPath } from '../../utils/ripgrep-path.js';
+import { getShellConfiguration } from '../../utils/shell-configuration.js';
 import { validateCommand, getFilteredEnv } from './command-validator.js';
 import { getShellEnvPolicy } from '../../security/shell-env-policy.js';
 import { executeStreaming as executeStreamingImpl } from './streaming-executor.js';
@@ -183,8 +184,7 @@ export class BashTool implements Disposable {
       };
 
       const spawnOptions: SpawnOptions = {
-        // IMPORTANT: shell must be false when using bash -c
-        // Using shell: true with bash -c creates double-shell that breaks commands
+        // An explicit executable + prefix avoids a second shell interpretation.
         shell: false,
         cwd: options.cwd,
         env: controlledEnv,
@@ -194,7 +194,15 @@ export class BashTool implements Disposable {
         stdio: ['ignore', 'pipe', 'pipe'],
       };
 
-      const proc = spawn('bash', ['-c', `${buildBashEnvPrelude()}\n${command}`], spawnOptions);
+      const shellConfiguration = getShellConfiguration();
+      const shellCommand = shellConfiguration.shell === 'bash'
+        ? `${buildBashEnvPrelude()}\n${command}`
+        : command;
+      const proc = spawn(
+        shellConfiguration.executable,
+        [...shellConfiguration.argsPrefix, shellCommand],
+        spawnOptions,
+      );
       this.runningProcesses.add(proc);
 
       // Store process group ID for cleanup

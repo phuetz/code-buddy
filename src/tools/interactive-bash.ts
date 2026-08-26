@@ -1,16 +1,20 @@
 import { EventEmitter } from "events";
-import { exec } from "child_process";
+import { spawn } from "child_process";
 import { existsSync } from "fs";
 import { basename, delimiter, isAbsolute, join } from "path";
 import { ToolResult, getErrorMessage } from "../types/index.js";
 import { getFilteredEnv } from "./bash/command-validator.js";
 import { SAFE_ENV_VARS } from "./bash/security-patterns.js";
 import { getShellEnvPolicy } from "../security/shell-env-policy.js";
+import {
+  getShellConfiguration,
+  type ShellConfiguration,
+} from "../utils/shell-configuration.js";
 
 // Note: node-pty is an optional dependency for PTY support
 // If not available, falls back to regular child_process
 
-interface PTYShell {
+export interface PTYShell {
   onData: (callback: (data: string) => void) => void;
   onExit: (callback: (event: { exitCode: number }) => void) => void;
   write: (data: string) => void;
@@ -18,7 +22,7 @@ interface PTYShell {
   kill: () => void;
 }
 
-interface PTYModule {
+export interface PTYModule {
   spawn: (shell: string, args: string[], options: {
     name: string;
     cols: number;
@@ -78,7 +82,7 @@ function getProcessEnvValue(name: string): string | undefined {
  * reports "File not found" when Bash is not directly resolvable from the
  * parent Path. Git for Windows ships Bash in the standard locations below.
  */
-function resolveBashExecutable(): string {
+export function resolveBashExecutable(): string {
   const candidates: string[] = [];
 
   if (process.platform === "win32") {
@@ -176,10 +180,12 @@ export class InteractiveBashTool extends EventEmitter {
   private sessions: Map<string, SessionEntry> = new Map();
   private sessionCounter: number = 0;
   private isPTYAvailable: boolean;
+  private readonly ptyModule: PTYModule | null;
 
-  constructor() {
+  constructor(ptyModule: PTYModule | null = pty) {
     super();
-    this.isPTYAvailable = pty !== null;
+    this.ptyModule = ptyModule;
+    this.isPTYAvailable = ptyModule !== null;
   }
 
   isPTYSupported(): boolean {
@@ -196,10 +202,13 @@ export class InteractiveBashTool extends EventEmitter {
       return { sessionId: '', output: `Error: ${validationError}` };
     }
 
-    const shellExecutable = resolveBashExecutable();
+    const selectedConfiguration = getShellConfiguration();
+    const shellConfiguration = selectedConfiguration.shell === 'bash'
+      ? { ...selectedConfiguration, executable: resolveBashExecutable() }
+      : selectedConfiguration;
 
     if (!this.isPTYAvailable) {
-      return this.fallbackExecute(command, shellExecutable);
+      return this.fallbackExecute(command, shellConfiguration);
     }
 
     const sessionId = `pty-${++this.sessionCounter}`;
@@ -208,18 +217,22 @@ export class InteractiveBashTool extends EventEmitter {
 
     return new Promise((resolve, reject) => {
       try {
-        if (!pty) {
+        if (!this.ptyModule) {
           reject(new Error("PTY module not available"));
           return;
         }
 
-        const shell = pty.spawn(shellExecutable, ["-c", command], {
-          name: "xterm-256color",
-          cols,
-          rows,
-          cwd: options.cwd || process.cwd(),
-          env: buildInteractiveEnv(options.env),
-        });
+        const shell = this.ptyModule.spawn(
+          shellConfiguration.executable,
+          [...shellConfiguration.argsPrefix, command],
+          {
+            name: "xterm-256color",
+            cols,
+            rows,
+            cwd: options.cwd || process.cwd(),
+            env: buildInteractiveEnv(options.env),
+          },
+        );
 
         let output = "";
         let resolved = false;
@@ -293,28 +306,57 @@ export class InteractiveBashTool extends EventEmitter {
 
   private async fallbackExecute(
     command: string,
-    shellExecutable: string
+    shellConfiguration: ShellConfiguration,
   ): Promise<{ sessionId: string; output: string }> {
     const sessionId = `exec-${++this.sessionCounter}`;
 
     return new Promise((resolve) => {
-      // Use exec for simpler command execution with maxBuffer support
-      exec(command, {
-        timeout: 60000,
-        maxBuffer: 10 * 1024 * 1024,
-        cwd: process.cwd(),
-        shell: shellExecutable,
-        env: {
-          ...buildInteractiveEnv(),
-          // Disable shell history for security
-          HISTFILE: "/dev/null",
-          HISTSIZE: "0",
+      const child = spawn(
+        shellConfiguration.executable,
+        [...shellConfiguration.argsPrefix, command],
+        {
+          shell: false,
+          timeout: 60000,
+          cwd: process.cwd(),
+          env: {
+            ...buildInteractiveEnv(),
+            // Disable shell history for security
+            HISTFILE: "/dev/null",
+            HISTSIZE: "0",
+          },
+          stdio: ['ignore', 'pipe', 'pipe'],
         },
-      }, (error, stdout, stderr) => {
-        if (error) {
+      );
+      const maxBuffer = 10 * 1024 * 1024;
+      let stdout = '';
+      let stderr = '';
+      let settled = false;
+
+      child.stdout?.on('data', (data: Buffer) => {
+        if (stdout.length < maxBuffer) {
+          stdout += data.toString().slice(0, maxBuffer - stdout.length);
+        }
+      });
+      child.stderr?.on('data', (data: Buffer) => {
+        if (stderr.length < maxBuffer) {
+          stderr += data.toString().slice(0, maxBuffer - stderr.length);
+        }
+      });
+      child.on('error', (error: Error) => {
+        if (settled) return;
+        settled = true;
+        resolve({
+          sessionId,
+          output: `Error: ${getErrorMessage(error)}\n${stderr}`,
+        });
+      });
+      child.on('close', (exitCode: number | null) => {
+        if (settled) return;
+        settled = true;
+        if (exitCode !== 0) {
           resolve({
             sessionId,
-            output: `Error: ${getErrorMessage(error)}\n${stderr || ''}`,
+            output: `Error: Shell exited with code ${exitCode ?? 1}\n${stderr}`,
           });
         } else {
           resolve({
