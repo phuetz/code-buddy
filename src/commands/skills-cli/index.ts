@@ -255,6 +255,8 @@ export function registerSkillsCommands(program: Command): void {
         total: inspectedAfterRepair.length,
       };
 
+      if (finalIssues.length > 0) process.exitCode = 1;
+
       if (opts.json) {
         console.log(JSON.stringify(result, null, 2));
         return;
