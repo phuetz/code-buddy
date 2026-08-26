@@ -2,6 +2,7 @@
 """Synthétise la voix Lisa section par section avec ElevenLabs."""
 
 import argparse
+import hashlib
 import json
 import os
 import subprocess
@@ -247,18 +248,35 @@ def main() -> None:
             if only and section['id'] not in only:
                 continue
             audio_path = voice_dir / f'{section["id"]}.mp3'
-            if audio_path.exists():
-                print(f'SKIP audio existant: {audio_path}')
-            else:
-                text = section['texte'].strip()
+            text = section['texte'].strip()
+            # Le MP3 ne vaut que pour le texte qui l'a produit : une empreinte est
+            # ecrite a cote, et un texte modifie force la resynthese. Sans elle, un
+            # sommaire reecrit gardait l'ancienne voix, et le rendu l'annoncait OK.
+            stamp_path = audio_path.with_suffix('.txt.sha256')
+            stamp = hashlib.sha256(text.encode('utf-8')).hexdigest()
+            a_jour = (
+                audio_path.exists()
+                and stamp_path.exists()
+                and stamp_path.read_text(encoding='utf-8').strip() == stamp
+            )
+            # Un audio sans empreinte ne prouve rien : on ignore quel texte l'a
+            # produit. L'adopter en le datant du texte COURANT effacerait justement
+            # la modification qu'on cherche a voir. On resynthetise.
+            if audio_path.exists() and not stamp_path.exists():
+                print(f'audio sans empreinte -> resynthese: {audio_path}')
+            if a_jour:
+                print(f'SKIP audio a jour: {audio_path}')
+            default_speed = args.speed if args.speed is not None else (
+                0.93 if section.get('mode') == 'avatar' else 0.85)
+            speed = float(section.get('speed', default_speed))
+            if not a_jour:
+                if audio_path.exists() and stamp_path.exists():
+                    print(f'texte modifie -> resynthese: {audio_path}')
                 reserve_usage(usage, text)
                 if api_key is None:
                     api_key = load_env_value(
                         MEDIA_ENV, 'ELEVENLABS_API_KEY')
                 print(f'ElevenLabs: {section["id"]}…')
-                default_speed = args.speed if args.speed is not None else (
-                    0.93 if section.get('mode') == 'avatar' else 0.85)
-                speed = float(section.get('speed', default_speed))
                 synthesize(
                     text,
                     audio_path,
@@ -267,10 +285,11 @@ def main() -> None:
                 )
                 settle_usage(usage, text)
                 network_characters += len(text)
+                stamp_path.write_text(stamp + '\n', encoding='utf-8')
                 print(f'OK {audio_path}')
             duration = media_duration(audio_path)
             section['duree_reelle_s'] = round(duration, 3)
-            mots = len(str(text).split())
+            mots = len(text.split())
             if duration > 0 and mots >= 20:
                 debit = mots / duration * 60
                 section['debit_mots_min'] = round(debit)
