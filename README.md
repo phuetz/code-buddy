@@ -66,7 +66,7 @@ Watch a **local model reason on screen, then use real tools to do the work** —
 
 An open-source, multi-provider AI coding agent with a terminal UI, an HTTP/WebSocket server, and the **Cowork** desktop app — all on one core engine. It reads files, writes code, runs commands, opens PRs, and plans complex tasks across **64 LLM providers** (one OpenAI-compatible dispatcher; 30 with a free tier or a local `$0` runtime (24 imported from OmniRoute's registry + the OmniRoute gateway), 6 validated live for chat and 2 for agentic tool-use — see [features.md](docs/features.md#providers--login)) with automatic failover and per-provider circuit breakers. With `buddy login`, a ChatGPT Plus / Pro subscription becomes the flat-fee brain of the whole system — no API keys, no per-token metering. An optional companion layer adds voice, durable memory, opt-in camera perception, and 24/7 background operation.
 
-This README reflects source version **1.8.0 plus `Unreleased` changes through 23 August 2026**; see the [changelog](CHANGELOG.md).
+This README reflects source version **2.0.0**; see the [changelog](CHANGELOG.md).
 
 ---
 

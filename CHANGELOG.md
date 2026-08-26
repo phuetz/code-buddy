@@ -1,3 +1,42 @@
+## [2.0.0](https://github.com/phuetz/code-buddy/compare/v1.8.0...v2.0.0) (2026-08-26)
+
+**« Code Buddy 2 ».** 575 commits depuis la 1.8.0 : 151 fonctionnalités, 158 correctifs,
+219 commits de tests et de documentation. **Aucune rupture de compatibilité** — pas un seul
+`BREAKING CHANGE`, et les dix innovations de la campagne CB2 restent opt-in : sans leur variable
+d'environnement, le comportement est identique à celui de la 1.8.0. Le passage à 2.0.0 marque
+un changement de nature, pas d'interface.
+
+### Ce qui change pour qui installe
+
+Le produit a été mesuré comme un inconnu l'installe : paquet construit, installé dans un dossier
+vide **sans les dépendances optionnelles et sans configuration**, puis les 103 commandes appelées
+une par une.
+
+- **22 commandes sur 103 plantaient au démarrage. Il n'en reste aucune.** Parmi elles `loop`,
+  `goal`, `research`, `flow` et `tools` — le cœur du produit.
+- `js-yaml` était classé optionnel alors qu'il est importé au chargement de la configuration :
+  repassé en dépendance réelle.
+- `better-sqlite3` reste optionnel — il compile du natif, l'exiger déplacerait la panne vers
+  l'installation — mais son absence dégrade désormais proprement au lieu de planter.
+- Le binaire ripgrep embarqué et le binaire natif de `@ngrok/ngrok` sont chargés à la demande.
+- Une dépendance optionnelle absente ne casse plus `npm run typecheck`.
+- `scripts/balayage-installation.sh` rejoue cette vérification à chaque version, dans les deux
+  sens (`--avec-optionnelles`).
+
+### Correctifs notables
+
+- **cli:** `--permission-mode` accepté après n'importe quelle sous-commande ; options numériques
+  invalides refusées au lieu d'être ignorées ; `skills doctor` sort non-zéro quand il signale un
+  problème ; cinq commandes enregistrées deux fois après fusion, dédupliquées.
+- **try:** la démo respecte l'endpoint et le modèle demandés. Elle partait dans le cloud en
+  annonçant un succès, même quand un GPU local était explicitement visé.
+- **video:** cinq caches qui ignoraient un changement de leur propre source — carte démo, master
+  déjà présent, segments face au script narré, voix de synthèse face à son texte, transcription
+  face à sa voix. Tous invalidés par une empreinte.
+- **video:** treize replis silencieux fermés dans le pipeline longform. Le plus grave remplaçait
+  un script narré manquant par une transcription automatique — celle qui écrit « Deeppsych » pour
+  DeepSeek. Un pipeline média échoue bruyamment ou produit juste, jamais faux en silence.
+
 ## Unreleased — « Code Buddy 2 » campaign (2026-07-16)
 
 Ten opt-in innovations landed as one campaign — each spec'd (`docs/specs/cb2/`), developed by an
