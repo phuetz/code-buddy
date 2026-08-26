@@ -1375,7 +1375,7 @@ def find_word(words: list[dict[str, Any]], spec: str) -> float | None:
         return absolute
     if re.fullmatch(r'\d+\.\d+', spec):
         return float(spec)
-    m = re.fullmatch(r'(.*?)(?:\+(\d+))?', spec)
+    m = re.fullmatch(r'(.*?)(?:[+#](\d+))?', spec)
     if not m or not m.group(1):
         raise NewsLongError(f'déclencheur invalide: {spec!r}')
     target, occ = _canonical_target(m.group(1)), int(m.group(2) or 1)
