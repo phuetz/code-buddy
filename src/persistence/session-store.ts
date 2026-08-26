@@ -5,6 +5,10 @@ import os from 'os';
 import type { ChatEntry } from '../agent/types.js';
 import { getSessionRepository, SessionRepository } from '../database/repositories/session-repository.js';
 import type { Message as DBMessage, Session as DBSession } from '../database/schema.js';
+import {
+  isOptionalSqliteUnavailableError,
+  SQLITE_INSTALL_GUIDANCE,
+} from '../database/optional-sqlite.js';
 import { withSessionLock } from './session-lock.js';
 import { logger } from '../utils/logger.js';
 
@@ -151,7 +155,8 @@ export class SessionStore {
       this.dbRepository = getSessionRepository();
       return this.dbRepository;
     } catch (error) {
-      logger.debug('[session-store] SQLite unavailable; using JSON session persistence only', {
+      const guidance = isOptionalSqliteUnavailableError(error) ? ` ${SQLITE_INSTALL_GUIDANCE}` : '';
+      logger.warn(`[session-store] SQLite unavailable; using JSON session persistence.${guidance}`, {
         error: error instanceof Error ? error.message : String(error),
       });
       this.config.useSQLite = false;

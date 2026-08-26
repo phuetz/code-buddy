@@ -13,6 +13,7 @@ import { logger } from '../utils/logger.js';
 import { getFreeSpaceInfo } from '../utils/disk-guard.js';
 import { SERVER_CONFIG } from '../config/constants.js';
 import { diagnoseServerExposure } from '../server/exposure-diagnostic.js';
+import { loadBetterSqlite3, SQLITE_INSTALL_GUIDANCE } from '../database/optional-sqlite.js';
 
 export interface FixResult {
   success: boolean;
@@ -62,15 +63,17 @@ function checkNodeVersion(): DoctorCheck {
 // build it — surface that here clearly instead of crashing a DB feature later.
 async function checkNativeSqlite(): Promise<DoctorCheck> {
   try {
-    await import('better-sqlite3');
+    const DatabaseConstructor = await loadBetterSqlite3();
+    const probe = new DatabaseConstructor(':memory:');
+    probe.close();
     return { name: 'SQLite (better-sqlite3)', status: 'ok', message: 'native module available' };
   } catch {
     return {
       name: 'SQLite (better-sqlite3)',
       status: 'warn',
       message:
-        'native module not built — DB-backed features (memory/sessions/cache) are unavailable. ' +
-        'Install build tools and reinstall (Linux: `build-essential python3`; macOS: `xcode-select --install`).',
+        'native module unavailable — sessions remain persisted as JSON files, but DB-backed memory, cache, and indexed search are disabled. ' +
+        SQLITE_INSTALL_GUIDANCE,
     };
   }
 }

@@ -5,10 +5,11 @@
  * Handles connection, migrations, and provides access to repositories.
  */
 
-import Database from 'better-sqlite3';
+import type Database from 'better-sqlite3';
 import * as fs from 'fs';
 import * as path from 'path';
 import { SCHEMA_VERSION, MIGRATIONS } from './schema.js';
+import { loadBetterSqlite3, normalizeOptionalSqliteError } from './optional-sqlite.js';
 import { logger } from '../utils/logger.js';
 import { TypedEventEmitter, DatabaseEvents } from '../events/index.js';
 import { getDatabasePath } from '../utils/codebuddy-home.js';
@@ -94,7 +95,8 @@ export class DatabaseManager extends TypedEventEmitter<DatabaseEvents> {
 
       // Open database
       const dbPath = this.config.inMemory ? ':memory:' : this.config.dbPath!;
-      this.db = new Database(dbPath, {
+      const DatabaseConstructor = await loadBetterSqlite3();
+      this.db = new DatabaseConstructor(dbPath, {
         verbose: this.config.verbose ? (msg: unknown) => logger.debug(String(msg)) : undefined,
       });
 
@@ -128,10 +130,11 @@ export class DatabaseManager extends TypedEventEmitter<DatabaseEvents> {
       this.emitWithLegacy('db:initialized', 'initialized', {});
 
     } catch (error) {
+      const normalizedError = normalizeOptionalSqliteError(error);
       this.emitWithLegacy('db:error', 'error', {
-        error: error instanceof Error ? error : new Error(String(error)),
+        error: normalizedError,
       });
-      throw error;
+      throw normalizedError;
     }
   }
 

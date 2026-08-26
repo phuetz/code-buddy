@@ -14,7 +14,13 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import { randomBytes } from 'crypto';
-import Database from 'better-sqlite3';
+import type Database from 'better-sqlite3';
+import {
+  isOptionalSqliteUnavailableError,
+  loadBetterSqlite3Sync,
+  SQLITE_INSTALL_GUIDANCE,
+  type BetterSqlite3Constructor,
+} from '../database/optional-sqlite.js';
 import { logger } from '../utils/logger.js';
 import { executeHermesLifecycleHook } from '../hooks/hermes-lifecycle-hooks.js';
 
@@ -1032,6 +1038,10 @@ export class RunStore {
     return path.join(this.runsDir, runId);
   }
 
+  private loadDatabaseConstructor(): BetterSqlite3Constructor {
+    return loadBetterSqlite3Sync();
+  }
+
   private getArtifactIndexDb(): Database.Database | null {
     // Post-run hooks (learning retrospective, lifecycle hooks) may still call
     // saveArtifact() after the owner disposed the store; reopening the SQLite
@@ -1043,7 +1053,8 @@ export class RunStore {
       return this.artifactIndexDb;
     }
     try {
-      const db = new Database(path.join(this.runsDir, ARTIFACT_INDEX_DB));
+      const DatabaseConstructor = this.loadDatabaseConstructor();
+      const db = new DatabaseConstructor(path.join(this.runsDir, ARTIFACT_INDEX_DB));
       db.pragma('journal_mode = WAL');
 
       // Check if table exists and does NOT have tokenize='trigram'
@@ -1106,8 +1117,9 @@ export class RunStore {
       return db;
     } catch (err) {
       this.artifactIndexUnavailable = true;
-      logger.debug('RunStore: artifact FTS index unavailable, falling back to file scan', {
-        err: err instanceof Error ? err.message : String(err),
+      const guidance = isOptionalSqliteUnavailableError(err) ? ` ${SQLITE_INSTALL_GUIDANCE}` : '';
+      logger.warn(`RunStore: artifact FTS index unavailable, falling back to file scan.${guidance}`, {
+        error: err instanceof Error ? err.message : String(err),
       });
       return null;
     }

@@ -8,11 +8,13 @@
  * - Rollback support
  */
 
-import Database from 'better-sqlite3';
+import type Database from 'better-sqlite3';
 import { createHash } from 'crypto';
 import { UnifiedVfsRouter } from '../services/vfs/unified-vfs-router.js';
+import { loadBetterSqlite3, normalizeOptionalSqliteError } from '../database/optional-sqlite.js';
 import * as path from 'path';
 import * as os from 'os';
+import { fileURLToPath } from 'node:url';
 
 export interface Migration {
   version: number;
@@ -45,9 +47,11 @@ export interface MigrationConfig {
   tableName?: string;
 }
 
+const moduleDirectory = path.dirname(fileURLToPath(import.meta.url));
+
 const DEFAULT_CONFIG: Required<MigrationConfig> = {
   dbPath: path.join(os.homedir(), '.codebuddy', 'codebuddy.db'),
-  migrationsDir: path.join(__dirname, '../../database/migrations'),
+  migrationsDir: path.join(moduleDirectory, '../../database/migrations'),
   tableName: '_migrations',
 };
 
@@ -201,7 +205,12 @@ export class MigrationManager {
     await this.vfs.ensureDir(path.dirname(this.config.dbPath));
 
     // Open database
-    this.db = new Database(this.config.dbPath);
+    try {
+      const DatabaseConstructor = await loadBetterSqlite3();
+      this.db = new DatabaseConstructor(this.config.dbPath);
+    } catch (error) {
+      throw normalizeOptionalSqliteError(error);
+    }
 
     // Create migrations table
     this.db.exec(`
