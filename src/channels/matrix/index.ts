@@ -189,7 +189,12 @@ export class MatrixChannel extends BaseChannel {
   async connect(): Promise<void> {
     let sdk: MatrixSdkModule;
     try {
-      sdk = await import('matrix-js-sdk') as unknown as MatrixSdkModule;
+      // Indirect specifier on purpose: matrix-js-sdk is an optional dependency, and a
+      // literal import makes `tsc` fail with TS2307 wherever it is not installed — which
+      // would break the typecheck of the whole project over a channel nobody enabled.
+      // MatrixSdkModule below is the full local contract, so nothing is lost here.
+      const optionalSpecifier = 'matrix-js-sdk';
+      sdk = await import(optionalSpecifier) as unknown as MatrixSdkModule;
     } catch {
       throw new Error(
         'Matrix channel requires matrix-js-sdk. Install it with: npm install matrix-js-sdk'
