@@ -1396,11 +1396,11 @@ def find_word(words: list[dict[str, Any]], spec: str) -> float | None:
     return None
 
 
-def resolve_trigger(words: list[dict[str, Any]], spec: str, fallback: float) -> float:
+def resolve_trigger(words: list[dict[str, Any]], spec: str, fallback: float | None = None) -> float:
     t = find_word(words, spec)
     if t is None:
-        print(f"  AVERTISSEMENT déclencheur « {spec} » introuvable → {fallback:.1f}s", file=sys.stderr)
-        return fallback
+        suffix = f' (ancien repli arbitraire: {fallback:.1f}s)' if fallback is not None else ''
+        raise NewsLongError(f'déclencheur « {spec} » introuvable{suffix}')
     return float(t)
 
 
@@ -1432,7 +1432,7 @@ def render_avatar_section(seg: dict[str, Any], cfg: dict[str, Any], workdir: Pat
     cards = []
     for c in seg.get('cartes', []):
         c2 = dict(c)
-        c2['_t'] = resolve_trigger(words, c['t'], fallback=dur / 2)
+        c2['_t'] = resolve_trigger(words, c.get('t', c.get('at')))
         cards.append(c2)
 
     cut_cfg = dict(cfg.get('cutaway', {}))
@@ -2003,7 +2003,7 @@ def main() -> None:
                 seg = segs[fait['segment']]
                 src = expand(seg['src'])
                 words = words_for(seg, src, cache_dir)
-                t0 = resolve_trigger(words, fait['de'], 0.0) - float(fait.get('avant', 0.15))
+                t0 = resolve_trigger(words, fait['de']) - float(fait.get('avant', 0.15))
                 t_end = find_word(words, str(fait['a']))
                 if t_end is None:
                     raise NewsLongError(f"fait {i}: mot de fin « {fait['a']} » introuvable")
@@ -2024,7 +2024,7 @@ def main() -> None:
                 seg = segs[cit['segment']]
                 src = expand(seg['src'])
                 words = words_for(seg, src, cache_dir)
-                t0 = resolve_trigger(words, cit['de'], 0.0) - float(cit.get('avant', 0.15))
+                t0 = resolve_trigger(words, cit['de']) - float(cit.get('avant', 0.15))
                 t_end = find_word(words, str(cit['a']))
                 if t_end is None:
                     raise NewsLongError(f"citation: mot de fin « {cit['a']} » introuvable")
