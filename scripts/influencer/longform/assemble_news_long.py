@@ -955,7 +955,11 @@ def build_shots(dur: float, cut_cfg: dict[str, Any], cards: list[dict[str, Any]]
         t0 = max(c['_t'], last_end + min_shot) if windows else max(c['_t'], 0.0)
         t1 = min(t0 + float(c.get('duree', 3.0)), dur - tail)
         if t1 - t0 < 1.0:
-            continue
+            label = c.get('chiffre') or c.get('titre') or c.get('type', 'sans titre')
+            raise NewsLongError(
+                f'carte « {label} » ne peut pas être affichée: déclencheur {c["_t"]:.3f}s, '
+                f'segment {dur:.3f}s, fenêtre utile {max(0.0, t1 - t0):.3f}s'
+            )
         windows.append((q(t0), q(t1), c))
         last_end = t1
     shots: list[dict[str, Any]] = []
