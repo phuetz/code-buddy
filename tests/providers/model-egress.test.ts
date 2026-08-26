@@ -11,6 +11,11 @@ describe('model egress classification', () => {
     expect(classifyProviderModelEgress('agy-cli', 'local://agy-cli', true)).toBe('cloud');
   });
 
+  it('treats the OmniRoute gateway as cloud egress even on loopback (it proxies to cloud free tiers)', () => {
+    expect(classifyModelEgress('http://localhost:20128/v1', true)).toBe('local');
+    expect(classifyProviderModelEgress('omniroute', 'http://localhost:20128/v1', true)).toBe('cloud');
+  });
+
   it('keeps actual loopback inference local and remote APIs cloud', () => {
     expect(classifyProviderModelEgress('ollama', 'http://127.0.0.1:11434', true)).toBe('local');
     expect(classifyProviderModelEgress('grok', 'https://api.x.ai/v1', false)).toBe('cloud');

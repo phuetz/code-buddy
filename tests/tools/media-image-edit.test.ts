@@ -11,7 +11,7 @@ const SOURCE = `data:image/png;base64,${PIXEL}`;
 const workspaces: string[] = [];
 
 afterEach(async () => {
-  await Promise.all(workspaces.splice(0).map((workspace) => fs.rm(workspace, { recursive: true, force: true })));
+  await Promise.all(workspaces.splice(0).map((workspace) => fs.rm(workspace, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 })));
 });
 
 describe('editImage', () => {

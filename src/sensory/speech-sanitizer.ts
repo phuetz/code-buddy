@@ -66,7 +66,9 @@ export function frenchIntegerToWords(value: number): string {
   if (value < 1_000) {
     const hundreds = Math.floor(value / 100);
     const remainder = value % 100;
-    const head = hundreds === 1 ? 'cent' : `${SMALL_NUMBERS[hundreds]} cent${remainder === 0 ? 's' : ''}`;
+    const head = hundreds === 1
+      ? 'cent'
+      : `${SMALL_NUMBERS[hundreds]} cent${remainder === 0 ? 's' : ''}`;
     return remainder === 0 ? head : `${head} ${underHundred(remainder)}`;
   }
   const thousands = Math.floor(value / 1_000);
@@ -78,12 +80,15 @@ export function frenchIntegerToWords(value: number): string {
 /** Normalize the bounded numeric forms that French local voices pronounce inconsistently. */
 export function normalizeFrenchNumbers(text: string): string {
   let output = text;
-  output = output.replace(/\b(\d{1,2})\s*h\s*(\d{1,2})\b/giu, (_match, hour: string, minute: string) => {
-    const hourValue = Number(hour);
-    const minuteValue = Number(minute);
-    if (hourValue > 23 || minuteValue > 59) return _match;
-    return `${frenchIntegerToWords(hourValue)} heure${hourValue === 1 ? '' : 's'} ${frenchIntegerToWords(minuteValue)}`;
-  });
+  output = output.replace(
+    /\b(\d{1,2})\s*h\s*(\d{1,2})\b/giu,
+    (match, hour: string, minute: string) => {
+      const hourValue = Number(hour);
+      const minuteValue = Number(minute);
+      if (hourValue > 23 || minuteValue > 59) return match;
+      return `${frenchIntegerToWords(hourValue)} heure${hourValue === 1 ? '' : 's'} ${frenchIntegerToWords(minuteValue)}`;
+    },
+  );
   output = output.replace(/\b1(?:er|re)\b/giu, (match) =>
     match.toLocaleLowerCase('fr-FR').endsWith('re') ? 'première' : 'premier');
   output = output.replace(/\b2(?:e|ème)\b/giu, 'deuxième');
@@ -124,8 +129,7 @@ export function prepareSpeech(raw: string): string | null {
   t = t.replace(/^\s*(?:[-*+•▪◦‣]|\d+[.)])\s+/gmu, ', ');
   t = stripSpeechMarkdown(t);
   t = t.replace(EMOJI_RUN, ' ');
-  // Keep the ellipsis and attack interjections generated as text-level prosody controls. Pocket
-  // TTS uses this punctuation to produce a real suspension rather than a plain sentence stop.
+  // Keep ellipses and attack interjections: expressive renderers use them as prosody controls.
   t = t.replace(/!+/gu, '!').replace(/\?+/gu, '?');
   // Lists and standalone dashes become pauses, without breaking compounds such
   // as "peut-être" or the hyphens produced by French number words.
@@ -133,8 +137,7 @@ export function prepareSpeech(raw: string): string | null {
   t = t.replace(/\s*\n\s*,\s*/gu, ', ');
   t = t.replace(/\n+/gu, '. ');
   // Replace foreign runs with a space (never ''), so Latin words on either side don't get glued
-  // ("bonjour，patrice"), then collapse the doubles. We deliberately do NOT rewrite spacing around
-  // punctuation: French keeps a space before ! ? : ; and touching it would mutate every clean reply.
+  // ("bonjour，patrice"), then apply the bounded French pronunciation rules shared by every path.
   t = stripForeignScript(t);
   t = normalizeFrenchNumbers(t);
   t = t.replace(/\b([A-ZÀ-ÖØ-Þ]{2,4})\b/gu, (sigle) => [...sigle].join(' '));

@@ -157,7 +157,7 @@ describe('SkillsHub', () => {
 
   afterEach(() => {
     hub.shutdown();
-    rmSync(tempDir, { recursive: true, force: true });
+    rmSync(tempDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     resetSkillsHub();
   });
 
@@ -633,7 +633,7 @@ describe('SkillsHub', () => {
 
       // Manually remove the directory
       const skillDir = join(config.skillsDir!, 'test-skill');
-      rmSync(skillDir, { recursive: true, force: true });
+      rmSync(skillDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
 
       // Should still succeed (removes from lockfile)
       const result = await hub.uninstall('test-skill');
@@ -710,7 +710,7 @@ describe('SkillsHub', () => {
 
       // Manually delete the skill file
       const skillDir = join(config.skillsDir!, 'test-skill');
-      rmSync(skillDir, { recursive: true, force: true });
+      rmSync(skillDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
 
       const result = await hub.sync();
       expect(result.removed).toContain('test-skill');
@@ -1069,7 +1069,7 @@ describe('SkillsHub signing & trusted keys', () => {
 
   afterEach(() => {
     hub.shutdown();
-    rmSync(tempDir, { recursive: true, force: true });
+    rmSync(tempDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     resetSkillsHub();
   });
 

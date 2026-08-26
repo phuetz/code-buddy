@@ -56,7 +56,7 @@ async function writeTempFile(content: string): Promise<string> {
 
 async function removeTempFile(filePath: string): Promise<void> {
   try {
-    await fs.rm(path.dirname(filePath), { recursive: true, force: true });
+    await fs.rm(path.dirname(filePath), { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   } catch {
     // ignore
   }

@@ -21,7 +21,7 @@ describe('mobile supervision gateway contract', () => {
   afterEach(async () => {
     await new Promise((resolve) => setTimeout(resolve, 60));
     store.dispose();
-    fs.rmSync(tempDir, { recursive: true, force: true });
+    fs.rmSync(tempDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   it('describes a local-first review-only gateway without remote execution', async () => {

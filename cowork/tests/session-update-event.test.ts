@@ -1,15 +1,16 @@
 import { describe, it, expect } from 'vitest';
 import { applySessionUpdate } from '../src/renderer/utils/session-update';
+import type { Session } from '../src/renderer/types';
 
 describe('applySessionUpdate', () => {
   it('updates title in session list', () => {
-    const sessions = [{ id: 's1', title: 'Old', status: 'idle' } as any];
+    const sessions = [{ id: 's1', title: 'Old', status: 'idle' } as unknown as Session];
     const updated = applySessionUpdate(sessions, 's1', { title: 'New' });
     expect(updated[0].title).toBe('New');
   });
 
   it('inserts session when missing and updates include full session fields', () => {
-    const sessions: any[] = [];
+    const sessions: Session[] = [];
     const updates = {
       title: 'Remote Session',
       status: 'idle',

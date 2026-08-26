@@ -310,7 +310,7 @@ describe('headless CLI exit codes', () => {
       expect(status.trim()).toBe('');
     } finally {
       await new Promise<void>(resolve => server.close(() => resolve()));
-      fs.rmSync(tmpDir, { recursive: true, force: true });
+      fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     }
   }, 90_000);
 

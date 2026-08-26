@@ -23,7 +23,7 @@ beforeEach(() => {
   dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rule-engine-'));
   stamp = 0;
 });
-afterEach(() => fs.rmSync(dir, { recursive: true, force: true }));
+afterEach(() => fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }));
 
 describe('RuleLearningEngine (execution-grounded loop)', () => {
   it('auto-apply learns correct forbid rules from the corpus until fully classified', () => {

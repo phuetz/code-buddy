@@ -22,7 +22,7 @@ beforeEach(async () => {
 });
 afterEach(async () => {
   resetPersonaManager();
-  await rm(path.dirname(dir), { recursive: true, force: true });
+  await rm(path.dirname(dir), { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
 });
 
 describe('persona voice layer + persistence', () => {

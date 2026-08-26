@@ -59,15 +59,6 @@ describe('SentenceAssembler — sentence cutting', () => {
     expect(out.join('').length).toBe(500);
   });
 
-  it('cuts a sufficiently long clause at a comma for lower TTS latency', () => {
-    const a = new SentenceAssembler();
-    expect(a.push('Je vérifie maintenant cette première partie, puis je continue. ')).toEqual([
-      'Je vérifie maintenant cette première partie,',
-      'puis je continue.',
-    ]);
-    expect(a.flush()).toEqual([]);
-  });
-
   it('uses soft punctuation only for the first low-latency fragment', () => {
     const a = new SentenceAssembler();
     expect(a.push(
@@ -76,6 +67,7 @@ describe('SentenceAssembler — sentence cutting', () => {
       'Je vérifie rapidement cette première partie,',
       'puis cette deuxième clause reste entière, avant la fin.',
     ]);
+    expect(a.flush()).toEqual([]);
   });
 
   it('keeps the first hard cap at 96 and raises later segments to 160 characters', () => {

@@ -1,3 +1,4 @@
+import { realpathSync } from 'node:fs';
 import { lstat, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -13,7 +14,7 @@ import {
 const directories: string[] = [];
 
 afterEach(async () => {
-  await Promise.all(directories.splice(0).map((directory) => rm(directory, { recursive: true, force: true })));
+  await Promise.all(directories.splice(0).map((directory) => rm(directory, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 })));
 });
 
 describe('Browser Operator persistent profile', () => {
@@ -22,10 +23,18 @@ describe('Browser Operator persistent profile', () => {
     directories.push(root);
     const profile = join(root, 'profile');
 
-    expect(resolvePersistentBrowserOperatorProfile(profile)).toBe(profile);
-    expect(resolvePersistentBrowserOperatorProfile(profile)).toBe(profile);
-    const mode = (await lstat(profile)).mode & 0o777;
-    expect(mode).toBe(0o700);
+    // The resolver returns the canonical profile path (symlink defence) —
+    // compare against realpath since os.tmpdir() itself is a symlink on macOS.
+    // Use the same realpath flavour as the resolver (`fs.realpathSync`): on
+    // Windows the libuv realpath behind fs/promises also expands 8.3 short
+    // names (RUNNER~1 → runneradmin) while the JS one does not.
+    const resolved = resolvePersistentBrowserOperatorProfile(profile);
+    expect(resolved).toBe(realpathSync(profile));
+    expect(resolvePersistentBrowserOperatorProfile(profile)).toBe(resolved);
+    // POSIX mode bits only: Windows reports 0o666 whatever the chmod.
+    if (process.platform !== 'win32') {
+      expect((await lstat(profile)).mode & 0o777).toBe(0o700);
+    }
     const markerPath = join(profile, BROWSER_OPERATOR_PROFILE_MARKER);
     expect(JSON.parse(await readFile(markerPath, 'utf8'))).toMatchObject({
       schemaVersion: 1,
@@ -54,7 +63,7 @@ describe('Browser Operator persistent profile', () => {
     await mkdir(join(profile, 'Default'));
     await writeFile(join(profile, 'Default', 'Cookies'), 'persisted sign-in');
 
-    expect(resolvePersistentBrowserOperatorProfile(profile)).toBe(profile);
+    expect(resolvePersistentBrowserOperatorProfile(profile)).toBe(realpathSync(profile));
   });
 
   it('refuses a symlink profile instead of exposing another browser profile', async () => {

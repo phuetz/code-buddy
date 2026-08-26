@@ -70,7 +70,7 @@ import {
 import { TurnJournal } from '../src/main/session/turn-journal';
 
 // Shared minimal DB factory used across tests
-function makeDb(overrides: Partial<DatabaseInstance> = {}): DatabaseInstance {
+function makeDb(overrides: Record<string, unknown> = {}): DatabaseInstance {
   return {
     sessions: {
       create: vi.fn(),
@@ -84,6 +84,7 @@ function makeDb(overrides: Partial<DatabaseInstance> = {}): DatabaseInstance {
       getBySessionId: vi.fn(() => []),
       delete: vi.fn(),
       deleteBySessionId: vi.fn(),
+      update: vi.fn(),
     },
     traceSteps: {
       create: vi.fn(),
@@ -91,9 +92,20 @@ function makeDb(overrides: Partial<DatabaseInstance> = {}): DatabaseInstance {
       getBySessionId: vi.fn(() => []),
       deleteBySessionId: vi.fn(),
     },
+    raw: {
+      transaction: (fn: (...args: unknown[]) => unknown) => (...args: unknown[]) => fn(...args),
+    },
     ...overrides,
   } as unknown as DatabaseInstance;
 }
+
+type PrivateSessionManager = SessionManager & {
+  agentRunner: { run: ReturnType<typeof vi.fn>; cancel: ReturnType<typeof vi.fn> };
+  ensureSandboxInitialized: ReturnType<typeof vi.fn>;
+  processFileAttachments: (session: unknown, content: unknown) => Promise<Array<{ relativePath: string; [key: string]: unknown }>>;
+  runSessionTitleGeneration: ReturnType<typeof vi.fn>;
+  processPrompt: (session: unknown, prompt: string, options?: unknown) => Promise<unknown>;
+};
 
 // ------------------------------------------------------------------
 // listSessions
@@ -132,7 +144,7 @@ describe('SessionManager.listSessions', () => {
         getAll: vi.fn(() => [row]),
         update: vi.fn(),
         delete: vi.fn(),
-      } as any,
+      },
     });
 
     const manager = new SessionManager(db, vi.fn());
@@ -188,7 +200,7 @@ describe('SessionManager.listSessions', () => {
         getAll: vi.fn(() => [row]),
         update: vi.fn(),
         delete: vi.fn(),
-      } as any,
+      },
     });
 
     const manager = new SessionManager(db, vi.fn());
@@ -222,7 +234,7 @@ describe('SessionManager.listSessions', () => {
         getAll: vi.fn(() => [row]),
         update: vi.fn(),
         delete: vi.fn(),
-      } as any,
+      },
     });
 
     const manager = new SessionManager(db, vi.fn());
@@ -236,7 +248,7 @@ describe('SessionManager.listSessions', () => {
 describe('SessionManager session recall prefill', () => {
   it('only builds recall context for memory-enabled sessions', () => {
     const now = Date.now();
-    const createdTraceSteps: any[] = [];
+    const createdTraceSteps: unknown[] = [];
     const sessions = [
       {
         id: 'current',
@@ -288,7 +300,7 @@ describe('SessionManager session recall prefill', () => {
         getAll: vi.fn(() => sessions),
         update: vi.fn(),
         delete: vi.fn(),
-      } as any,
+      },
       messages: {
         create: vi.fn(),
         getBySessionId: vi.fn((sessionId: string) =>
@@ -314,13 +326,13 @@ describe('SessionManager session recall prefill', () => {
         ),
         delete: vi.fn(),
         deleteBySessionId: vi.fn(),
-      } as any,
+      },
       traceSteps: {
         create: vi.fn((step) => createdTraceSteps.push(step)),
         update: vi.fn(),
         getBySessionId: vi.fn(() => []),
         deleteBySessionId: vi.fn(),
-      } as any,
+      },
     });
     const manager = new SessionManager(db, vi.fn());
     const memoryEnabledSession: Session = {
@@ -363,7 +375,7 @@ describe('SessionManager Hermes-style session actions', () => {
   it('recovers missing user turns and interruption markers from turn journals on startup', () => {
     const journalDir = mkdtempSync(join(tmpdir(), 'cowork-startup-journal-'));
     try {
-      const createdMessages: any[] = [];
+      const createdMessages: Array<{ role: string; metadata: string }> = [];
       const sessionRow = {
         id: 's-recover',
         title: 'Recover me',
@@ -387,22 +399,22 @@ describe('SessionManager Hermes-style session actions', () => {
       };
       const db = makeDb({
         raw: {
-          transaction: (fn: (messages: any[]) => void) => (messages: any[]) => fn(messages),
-        } as any,
+          transaction: (fn: (messages: unknown[]) => void) => (messages: unknown[]) => fn(messages),
+        },
         sessions: {
           create: vi.fn(),
           get: vi.fn(() => sessionRow),
           getAll: vi.fn(() => [sessionRow]),
           update: vi.fn(),
           delete: vi.fn(),
-        } as any,
+        },
         messages: {
           create: vi.fn((message) => createdMessages.push(message)),
           update: vi.fn(),
           delete: vi.fn(),
           deleteBySessionId: vi.fn(),
           getBySessionId: vi.fn(() => []),
-        } as any,
+        },
       });
       const manager = new SessionManager(db, vi.fn());
       const journal = new TurnJournal(journalDir);
@@ -470,7 +482,7 @@ describe('SessionManager Hermes-style session actions', () => {
         deleteBySessionId: vi.fn(),
         getBySessionId: vi.fn(() => []),
         searchContent: vi.fn(() => []),
-      } as any,
+      },
     });
     const manager = new SessionManager(db, vi.fn());
     (manager as unknown as { activeTurnJournalIds: Map<string, string> }).activeTurnJournalIds.set(
@@ -522,7 +534,7 @@ describe('SessionManager Hermes-style session actions', () => {
         getAll: vi.fn(() => []),
         update,
         delete: vi.fn(),
-      } as any,
+      },
     });
     const manager = new SessionManager(db, sendToRenderer);
 
@@ -564,7 +576,7 @@ describe('SessionManager Hermes-style session actions', () => {
         getAll: vi.fn(() => []),
         update,
         delete: vi.fn(),
-      } as any,
+      },
     });
     const manager = new SessionManager(db, sendToRenderer);
 
@@ -580,13 +592,13 @@ describe('SessionManager Hermes-style session actions', () => {
   });
 
   it('duplicates messages while remapping tool ids inside the copied session', () => {
-    const createdSessions: any[] = [];
-    const createdMessages: any[] = [];
-    const createdTraceSteps: any[] = [];
+    const createdSessions: unknown[] = [];
+    const createdMessages: unknown[] = [];
+    const createdTraceSteps: unknown[] = [];
     const db = makeDb({
       raw: {
         transaction: (fn: () => void) => () => fn(),
-      } as any,
+      },
       sessions: {
         create: vi.fn((session) => createdSessions.push(session)),
         get: vi.fn(() => ({
@@ -613,7 +625,7 @@ describe('SessionManager Hermes-style session actions', () => {
         getAll: vi.fn(() => []),
         update: vi.fn(),
         delete: vi.fn(),
-      } as any,
+      },
       messages: {
         create: vi.fn((message) => createdMessages.push(message)),
         update: vi.fn(),
@@ -634,7 +646,7 @@ describe('SessionManager Hermes-style session actions', () => {
             execution_time_ms: null,
           },
         ]),
-      } as any,
+      },
       traceSteps: {
         create: vi.fn((step) => createdTraceSteps.push(step)),
         update: vi.fn(),
@@ -655,7 +667,7 @@ describe('SessionManager Hermes-style session actions', () => {
           },
         ]),
         deleteBySessionId: vi.fn(),
-      } as any,
+      },
     });
     const manager = new SessionManager(db, vi.fn());
 
@@ -668,13 +680,13 @@ describe('SessionManager Hermes-style session actions', () => {
     expect(duplicate?.archived).toBe(false);
     expect(createdSessions).toHaveLength(1);
     expect(createdMessages).toHaveLength(1);
-    const copiedContent = JSON.parse(createdMessages[0].content);
+    const copiedContent = JSON.parse((createdMessages[0] as { content: string }).content);
     expect(copiedContent[0].id).not.toBe('tool-1');
     expect(copiedContent[1].toolUseId).toBe(copiedContent[0].id);
-    const copiedMetadata = JSON.parse(createdMessages[0].metadata);
+    const copiedMetadata = JSON.parse((createdMessages[0] as { metadata: string }).metadata);
     expect(copiedMetadata.turn.id).not.toBe('turn-original');
     expect(copiedMetadata.turn.role).toBe('assistant');
-    expect(createdTraceSteps[0].id).toBe(copiedContent[0].id);
+    expect((createdTraceSteps[0] as { id: string }).id).toBe(copiedContent[0].id);
   });
 });
 
@@ -699,7 +711,7 @@ describe('SessionManager.getMessages content normalization', () => {
             execution_time_ms: null,
           },
         ]),
-      } as any,
+      },
     });
 
     const manager = new SessionManager(db, vi.fn());
@@ -726,7 +738,7 @@ describe('SessionManager.getMessages content normalization', () => {
             execution_time_ms: null,
           },
         ]),
-      } as any,
+      },
     });
 
     const manager = new SessionManager(db, vi.fn());
@@ -751,7 +763,7 @@ describe('SessionManager.getMessages content normalization', () => {
             execution_time_ms: null,
           },
         ]),
-      } as any,
+      },
     });
 
     const manager = new SessionManager(db, vi.fn());
@@ -776,7 +788,7 @@ describe('SessionManager.getMessages content normalization', () => {
             execution_time_ms: null,
           },
         ]),
-      } as any,
+      },
     });
 
     const manager = new SessionManager(db, vi.fn());
@@ -809,6 +821,35 @@ describe('SessionManager.handlePermissionResponse', () => {
     const manager = new SessionManager(db, vi.fn());
     // Should not throw
     expect(() => manager.handlePermissionResponse('nonexistent', 'deny')).not.toThrow();
+  });
+
+  it('keeps remote permission requests pending beyond the channel timeout', async () => {
+    vi.useFakeTimers();
+    try {
+      const db = makeDb();
+      const sendToRenderer = vi.fn();
+      const manager = new SessionManager(
+        db,
+        sendToRenderer,
+        undefined,
+        undefined,
+        undefined,
+        () => true
+      );
+      const permissionPromise = manager.requestPermission('remote-s1', 'tool-remote', 'bash', {
+        command: 'pwd',
+      });
+      const resolved = vi.fn();
+      void permissionPromise.then(resolved);
+
+      await vi.advanceTimersByTimeAsync(5 * 60_000);
+      expect(resolved).not.toHaveBeenCalled();
+
+      manager.handlePermissionResponse('tool-remote', 'allow');
+      await expect(permissionPromise).resolves.toBe('allow');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 
@@ -848,7 +889,7 @@ describe('SessionManager.deleteSession cache eviction', () => {
         getAll: vi.fn(() => []),
         update: vi.fn(),
         delete: vi.fn(),
-      } as any,
+      },
       messages: {
         create: vi.fn(),
         delete: vi.fn(),
@@ -864,7 +905,7 @@ describe('SessionManager.deleteSession cache eviction', () => {
             execution_time_ms: null,
           },
         ]),
-      } as any,
+      },
     });
 
     const manager = new SessionManager(db, vi.fn());
@@ -896,7 +937,7 @@ describe('SessionManager.searchMessageContent', () => {
         deleteBySessionId: vi.fn(),
         getBySessionId: vi.fn(() => []),
         searchContent,
-      } as any,
+      },
     });
     const manager = new SessionManager(db, vi.fn());
     expect(manager.searchMessageContent('')).toEqual([]);
@@ -926,7 +967,7 @@ describe('SessionManager.searchMessageContent', () => {
         deleteBySessionId: vi.fn(),
         getBySessionId: vi.fn(() => []),
         searchContent,
-      } as any,
+      },
     });
     const manager = new SessionManager(db, vi.fn());
 
@@ -961,7 +1002,7 @@ describe('SessionManager.searchMessageContent', () => {
         deleteBySessionId: vi.fn(),
         getBySessionId: vi.fn(() => []),
         searchContent,
-      } as any,
+      },
     });
     const manager = new SessionManager(db, vi.fn());
 
@@ -1022,7 +1063,7 @@ describe('SessionManager file attachment processing', () => {
 
     try {
       const manager = new SessionManager(makeDb(), vi.fn());
-      const processed = await (manager as any).processFileAttachments(
+      const processed = await (manager as unknown as PrivateSessionManager).processFileAttachments(
         { id: 'session-attachments', cwd: root },
         [
           {
@@ -1042,7 +1083,7 @@ describe('SessionManager file attachment processing', () => {
         ]
       );
 
-      expect(processed.map((block: any) => block.relativePath)).toEqual([
+      expect(processed.map((block) => block.relativePath)).toEqual([
         join('.tmp', 'questions.docx'),
         join('.tmp', 'questions-2.docx'),
       ]);
@@ -1058,12 +1099,12 @@ describe('SessionManager file attachment processing', () => {
     const db = makeDb();
     const manager = new SessionManager(db, vi.fn());
     const run = vi.fn(async () => undefined);
-    (manager as any).agentRunner = { run, cancel: vi.fn() };
-    (manager as any).ensureSandboxInitialized = vi.fn(async () => undefined);
-    (manager as any).processFileAttachments = vi.fn(async (_session: unknown, content: unknown) => content);
-    (manager as any).runSessionTitleGeneration = vi.fn(async () => undefined);
+    (manager as unknown as PrivateSessionManager).agentRunner = { run, cancel: vi.fn() };
+    (manager as unknown as PrivateSessionManager).ensureSandboxInitialized = vi.fn(async () => undefined);
+    (manager as unknown as PrivateSessionManager).processFileAttachments = vi.fn(async (_session: unknown, content: unknown) => content as Array<{ relativePath: string }>);
+    (manager as unknown as PrivateSessionManager).runSessionTitleGeneration = vi.fn(async () => undefined);
 
-    await (manager as any).processPrompt(
+    await (manager as unknown as PrivateSessionManager).processPrompt(
       {
         id: 'session-word-workshop',
         title: 'Word workshop',
@@ -1140,30 +1181,30 @@ describe('SessionManager file attachment processing', () => {
       };
       const db = makeDb({
         raw: {
-          transaction: (fn: (messages: any[]) => void) => (messages: any[]) => fn(messages),
-        } as any,
+          transaction: (fn: (messages: unknown[]) => void) => (messages: unknown[]) => fn(messages),
+        },
         sessions: {
           create: vi.fn(),
           get: vi.fn(() => sessionRow),
           getAll: vi.fn(() => [sessionRow]),
           update: vi.fn(),
           delete: vi.fn(),
-        } as any,
+        },
         messages: {
           create: vi.fn(),
           update: vi.fn(),
           delete: vi.fn(),
           deleteBySessionId: vi.fn(),
           getBySessionId: vi.fn(() => []),
-        } as any,
+        },
       });
       const manager = new SessionManager(db, vi.fn());
       const journal = new TurnJournal(journalDir);
       (manager as unknown as { turnJournal: TurnJournal }).turnJournal = journal;
       (manager as unknown as { loadSession: (id: string) => unknown }).loadSession = () => session;
-      (manager as any).agentRunner = { run: vi.fn(async () => undefined), cancel: vi.fn() };
-      (manager as any).ensureSandboxInitialized = vi.fn(async () => undefined);
-      (manager as any).runSessionTitleGeneration = vi.fn(async () => undefined);
+      (manager as unknown as PrivateSessionManager).agentRunner = { run: vi.fn(async () => undefined), cancel: vi.fn() };
+      (manager as unknown as PrivateSessionManager).ensureSandboxInitialized = vi.fn(async () => undefined);
+      (manager as unknown as PrivateSessionManager).runSessionTitleGeneration = vi.fn(async () => undefined);
 
       journal.append(
         's-queue-recover',
@@ -1206,8 +1247,8 @@ describe('SessionManager file attachment processing', () => {
 
       await new Promise((resolve) => setTimeout(resolve, 10));
 
-      expect((manager as any).agentRunner.run).toHaveBeenCalledTimes(1);
-      const runArgs = (manager as any).agentRunner.run.mock.calls[0];
+      expect((manager as unknown as PrivateSessionManager).agentRunner.run).toHaveBeenCalledTimes(1);
+      const runArgs = (manager as unknown as PrivateSessionManager).agentRunner.run.mock.calls[0];
       expect(runArgs[0]).toBe(session);
       expect(runArgs[1]).toBe('Resume the queued prompt');
       expect(runArgs[2]).toHaveLength(1);

@@ -111,7 +111,7 @@ export function SettingsAPI() {
           isRunning={apiConfig.isDiagnosing}
           onRunDiagnostics={apiConfig.handleDiagnose}
           onRunDeepDiagnostics={apiConfig.isOllamaMode ? apiConfig.handleDeepDiagnose : undefined}
-          disabled={apiConfig.requiresApiKey && !apiConfig.apiKey.trim()}
+          disabled={apiConfig.requiresApiKey && !apiConfig.hasUsableApiKey}
         />
       </section>
     </div>

@@ -38,7 +38,7 @@ describe('bandit concurrency — distinct models per concurrent round', () => {
     dir = mkdtempSync(join(tmpdir(), 'bandit-conc-'));
     sb = new ModelScoreboard(join(dir, 'ledger.jsonl')); // EMPTY: every arm n===0
   });
-  afterEach(() => rmSync(dir, { recursive: true, force: true }));
+  afterEach(() => rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }));
 
   it('THE BUG: the raw UCB selector hands the SAME model to every concurrent cycle (empty scoreboard)', () => {
     const picks = Array.from({ length: 3 }, () => defaultEvolveSelector(CANDS, sb));

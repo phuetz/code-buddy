@@ -274,7 +274,7 @@ export function expressiveTextGuidance(read: EmotionRead): string {
       emotionalTone = 'Face à la tristesse, privilégie la douceur et les questions ouvertes.';
       break;
     case 'joy':
-      emotionalTone = "Face à la joie, laisse entendre un enthousiasme naturel.";
+      emotionalTone = 'Face à la joie, laisse entendre un enthousiasme naturel.';
       break;
     default:
       break;

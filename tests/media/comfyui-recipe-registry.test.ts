@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, rm, symlink, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, realpath, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -12,7 +12,7 @@ import { recipeFixture } from './comfyui-recipe-fixture.js';
 const temporaryRoots: string[] = [];
 
 afterEach(async () => {
-  await Promise.all(temporaryRoots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
+  await Promise.all(temporaryRoots.splice(0).map((root) => rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 })));
 });
 
 describe('ComfyUI recipe loader and registry', () => {
@@ -83,7 +83,8 @@ describe('ComfyUI recipe loader and registry', () => {
 });
 
 async function temporaryDirectory(): Promise<string> {
-  const root = await mkdtemp(path.join(tmpdir(), 'codebuddy-comfy-recipe-'));
+  // Canonical base: macOS tmpdir lives behind a symlink, which the recipe-root policy rejects.
+  const root = await realpath(await mkdtemp(path.join(tmpdir(), 'codebuddy-comfy-recipe-')));
   temporaryRoots.push(root);
   return root;
 }

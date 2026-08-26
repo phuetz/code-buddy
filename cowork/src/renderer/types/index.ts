@@ -2123,6 +2123,8 @@ export type ConfigSetId = string;
 
 export interface ProviderProfile {
   apiKey: string;
+  hasKey?: boolean;
+  keyTail?: string;
   baseUrl?: string;
   model: string;
   contextWindow?: number;
@@ -2150,6 +2152,8 @@ export interface CreateSetPayload {
 export interface AppConfig {
   provider: ProviderType;
   apiKey: string;
+  hasKey?: boolean;
+  keyTail?: string;
   baseUrl?: string;
   customProtocol?: CustomProtocolType;
   model: string;
@@ -2249,7 +2253,7 @@ export interface ModelInventorySnapshot {
 
 export interface ApiTestInput {
   provider: AppConfig['provider'];
-  apiKey: string;
+  apiKey?: string;
   baseUrl?: string;
   customProtocol?: AppConfig['customProtocol'];
   model?: string;
@@ -2305,7 +2309,7 @@ export interface DiagnosticResult {
 
 export interface DiagnosticInput {
   provider: AppConfig['provider'];
-  apiKey: string;
+  apiKey?: string;
   baseUrl?: string;
   customProtocol?: AppConfig['customProtocol'];
   model?: string;

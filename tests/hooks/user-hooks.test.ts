@@ -42,7 +42,7 @@ describe('UserHooksManager', () => {
 
   afterEach(() => {
     resetUserHooksManager();
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   // ── loadConfig ──────────────────────────────────────────────────────────────
@@ -426,7 +426,7 @@ describe('UserHooksManager', () => {
         const b = getUserHooksManager(tmpDir2);
         expect(a).not.toBe(b);
       } finally {
-        fs.rmSync(tmpDir2, { recursive: true, force: true });
+        fs.rmSync(tmpDir2, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
       }
     });
 

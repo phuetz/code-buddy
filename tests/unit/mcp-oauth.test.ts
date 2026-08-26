@@ -39,7 +39,7 @@ afterEach(() => {
   process.cwd = originalCwd;
   delete process.env.CODEBUDDY_VAULT_KEY;
   try {
-    fs.rmSync(tempDir, { recursive: true, force: true });
+    fs.rmSync(tempDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   } catch { /* ignore */ }
 });
 

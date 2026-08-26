@@ -47,7 +47,7 @@ describe('Run CLI commands', () => {
     consoleLogSpy.mockRestore();
     store.dispose();
     (RunStore as unknown as { _instance: RunStore | null })._instance = null;
-    fs.rmSync(tempDir, { recursive: true, force: true });
+    fs.rmSync(tempDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   function startRun(objective: string, metadata?: Parameters<RunStore['startRun']>[1]): string {
@@ -338,7 +338,7 @@ describe('Run CLI commands', () => {
       return;
     }
 
-    fs.rmSync(path.join(tempDir, staleRunId), { recursive: true, force: true });
+    fs.rmSync(path.join(tempDir, staleRunId), { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     fs.rmSync(path.join(tempDir, orphanRunId, 'artifacts', 'orphan.md'), { force: true });
 
     const checkProgram = createProgram();

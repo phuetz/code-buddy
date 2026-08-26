@@ -97,12 +97,14 @@ describe('DockerSandbox probe cache', () => {
     expect(mockExecSync).toHaveBeenCalledTimes(2);
 
     DockerSandbox.invalidateProbeCache();
-    mockExecSync.mockImplementationOnce(() => {
+    // A stopped daemon fails both the OSType probe and the `docker info` fallback.
+    const daemonStopped = () => {
       throw new Error('daemon stopped');
-    });
+    };
+    mockExecSync.mockImplementationOnce(daemonStopped).mockImplementationOnce(daemonStopped);
     await expect(DockerSandbox.isAvailableCached()).resolves.toBe(false);
     await expect(DockerSandbox.isAvailableCached()).resolves.toBe(true);
-    expect(mockExecSync).toHaveBeenCalledTimes(4);
+    expect(mockExecSync).toHaveBeenCalledTimes(5);
   });
 
   it('invalidates daemon and image assumptions after Docker run exit 125', async () => {

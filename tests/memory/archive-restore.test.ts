@@ -86,6 +86,21 @@ describe('archive restore (recoverable forgetting)', () => {
     expect(fresh.get('revive-me')?.value).toBe('value worth keeping');
   });
 
+  it('round-trips a multiline value through forget, archive listing, and restore', async () => {
+    const value = 'first line\nsecond line with literal \\n marker\nthird line';
+    await forget('multiline', value);
+
+    const archived = await manager.listArchived('project');
+    expect(archived).toHaveLength(1);
+    expect(archived[0]!.value).toBe(value);
+
+    const restored = await manager.restoreFromArchive('multiline', 'project');
+    expect(restored?.result.status).toBe('stored');
+    expect(restored?.restored.value).toBe(value);
+    expect(manager.get('multiline')?.value).toBe(value);
+    expect(await manager.listArchived('project')).toHaveLength(0);
+  });
+
   it('returns null for a key that was never archived', async () => {
     expect(await manager.restoreFromArchive('never-forgotten')).toBeNull();
   });

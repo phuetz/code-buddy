@@ -82,7 +82,7 @@ afterEach(async () => {
   else process.env.HOME = originalHome;
   if (originalUserProfile === undefined) delete process.env.USERPROFILE;
   else process.env.USERPROFILE = originalUserProfile;
-  await fs.rm(tempHome, { recursive: true, force: true });
+  await fs.rm(tempHome, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
 });
 
 describe('buddy bundles', () => {

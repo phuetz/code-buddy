@@ -56,7 +56,7 @@ describe('companion mission runner', () => {
   });
 
   afterEach(async () => {
-    await rm(tempDir, { recursive: true, force: true });
+    await rm(tempDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   it('selects the highest-priority mission, starts it, and writes an executable brief', async () => {

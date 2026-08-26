@@ -16,7 +16,7 @@ describe('MediaPipeline', () => {
 
   beforeEach(() => {
     if (existsSync(TEST_DIR)) {
-      rmSync(TEST_DIR, { recursive: true });
+      rmSync(TEST_DIR, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     }
     mkdirSync(TEST_DIR, { recursive: true });
     pipeline = new MediaPipeline({
@@ -30,7 +30,7 @@ describe('MediaPipeline', () => {
   afterEach(() => {
     pipeline.dispose();
     if (existsSync(TEST_DIR)) {
-      rmSync(TEST_DIR, { recursive: true });
+      rmSync(TEST_DIR, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     }
   });
 

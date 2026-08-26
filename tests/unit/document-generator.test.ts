@@ -57,7 +57,7 @@ describe('document generator DOCX output', () => {
       expect(documentXml).toContain('Embedded image: media/screen-impact.png');
       expect(documentXml).not.toContain('[Table]');
     } finally {
-      rmSync(tempDir, { recursive: true, force: true });
+      rmSync(tempDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     }
   });
 
@@ -94,7 +94,7 @@ describe('document generator DOCX output', () => {
       expect(documentXml).toContain('&lt;xml&gt;');
       expect(documentXml).toContain('&amp;');
     } finally {
-      rmSync(tempDir, { recursive: true, force: true });
+      rmSync(tempDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     }
   });
 
@@ -124,7 +124,7 @@ describe('document generator DOCX output', () => {
       expect(documentXml).toContain('<w:tbl>');
       expect(documentXml).toContain('Detailed answer');
     } finally {
-      rmSync(tempDir, { recursive: true, force: true });
+      rmSync(tempDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     }
   });
 
@@ -173,7 +173,7 @@ describe('document generator DOCX output', () => {
       expect(imageExtent?.[1]).toBe(imageExtent?.[2]);
       expect(documentXml).toContain('The OCR confirms the impact context.');
     } finally {
-      rmSync(tempDir, { recursive: true, force: true });
+      rmSync(tempDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     }
   });
 
@@ -226,7 +226,7 @@ describe('document generator DOCX output', () => {
       expect(documentXml).toContain('Figure - Extracted source screenshot');
       expect(documentXml).toContain('OCR summary: source screen validates the impact context.');
     } finally {
-      rmSync(tempDir, { recursive: true, force: true });
+      rmSync(tempDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     }
   });
 
@@ -334,7 +334,7 @@ describe('document generator DOCX output', () => {
       expect(documentXml).toContain('Réponse: le traitement doit préserver le contexte');
       expect(documentXml).toContain('Figure - Source screenshot - screen-impact.png');
     } finally {
-      rmSync(tempDir, { recursive: true, force: true });
+      rmSync(tempDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     }
   });
 
@@ -355,7 +355,7 @@ describe('document generator DOCX output', () => {
         error: 'outputPath must end with .docx for DOCX documents',
       });
     } finally {
-      rmSync(tempDir, { recursive: true, force: true });
+      rmSync(tempDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     }
   });
 
@@ -404,7 +404,7 @@ describe('document generator DOCX output', () => {
       };
       expect(resultData.docxValidation?.mediaFileCount).toBeGreaterThanOrEqual(1);
     } finally {
-      rmSync(tempDir, { recursive: true, force: true });
+      rmSync(tempDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     }
   });
 });

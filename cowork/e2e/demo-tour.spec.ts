@@ -52,12 +52,12 @@ async function launchCowork(videoDir: string): Promise<{ app: ElectronApplicatio
 // encrypted, so we can't pre-seed a file) and reload so isConfigured flips.
 async function configureOllama(page: Page, model: string): Promise<Page> {
   await page.evaluate(async (m) => {
-    const api = (window as unknown as { electronAPI: any }).electronAPI;
+    const api = (window as unknown as { electronAPI: { config: { get: () => Promise<Record<string, unknown>>; save: (cfg: unknown) => Promise<void> } } }).electronAPI;
     const cfg = await api.config.get();
     // enableThinking + thinkingLevel so the reasoning zone is shown during the turn.
     const patch = { provider: 'ollama', baseUrl: 'http://localhost:11434', model: m, apiKey: 'ollama', enableThinking: true, thinkingLevel: 'high' };
     const configSets = Array.isArray(cfg.configSets) && cfg.configSets.length
-      ? cfg.configSets.map((c: any, i: number) => (i === 0 ? { ...c, ...patch } : c))
+      ? (cfg.configSets as Array<Record<string, unknown>>).map((c, i) => (i === 0 ? { ...c, ...patch } : c))
       : [{ name: 'Default', ...patch }];
     await api.config.save({ ...cfg, ...patch, configSets });
   }, model);

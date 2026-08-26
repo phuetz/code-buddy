@@ -139,7 +139,11 @@ pub fn entity_id(node_type: &str, name: &str) -> String {
 
 /// sha256(`type:normalized-text`) first 16 hex chars. Mirrors TS `contentHash`.
 pub fn content_hash(node_type: &str, text: &str) -> String {
-    let normalized = text.split_whitespace().collect::<Vec<_>>().join(" ").to_lowercase();
+    let normalized = text
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .to_lowercase();
     let mut hasher = Sha256::new();
     hasher.update(format!("{}:{}", node_type, normalized).as_bytes());
     let digest = hasher.finalize();
@@ -159,7 +163,12 @@ pub fn corroboration_boost(distinct_agents: usize) -> f64 {
 }
 
 /// salience = ln(mentions+1) * exp(-0.693 * days_since_update / half_life). Mirrors TS `computeSalience`.
-pub fn compute_salience(mentions: u64, days_since_update: f64, half_life_days: f64, base_sim: f64) -> f64 {
+pub fn compute_salience(
+    mentions: u64,
+    days_since_update: f64,
+    half_life_days: f64,
+    base_sim: f64,
+) -> f64 {
     let reinforcement = ((mentions as f64) + 1.0).ln();
     let recency = (-0.693 * days_since_update / half_life_days).exp();
     base_sim * reinforcement * recency
@@ -181,9 +190,15 @@ mod tests {
 
     #[test]
     fn entity_id_and_hash_stable() {
-        assert_eq!(entity_id("lesson", "Voice Agent Model"), "lesson:collective:voice-agent-model");
+        assert_eq!(
+            entity_id("lesson", "Voice Agent Model"),
+            "lesson:collective:voice-agent-model"
+        );
         // accented fold
-        assert_eq!(entity_id("fact", "Métformine à 9h"), "fact:collective:metformine-a-9h");
+        assert_eq!(
+            entity_id("fact", "Métformine à 9h"),
+            "fact:collective:metformine-a-9h"
+        );
         let h1 = content_hash("fact", "Hello   world");
         let h2 = content_hash("fact", "hello world");
         assert_eq!(h1, h2); // whitespace-collapsed + lowercased

@@ -343,6 +343,15 @@ export {
   resetMultimodalInstances,
 } from './multimodal-tools.js';
 
+export {
+  VideoFlowHandoffTool,
+  VideoLongFormPlanTool,
+  VideoQualityGateTool,
+  VideoRouteTool,
+  VideoTrailerPlanTool,
+  createVideoStudioTools,
+} from './video-studio-tools.js';
+
 // Tool Adapters - Advanced (JS REPL, Multi-Edit, CodebaseMap, SpawnSubagent)
 export {
   JSReplExecuteTool,

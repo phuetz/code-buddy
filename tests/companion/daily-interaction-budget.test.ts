@@ -16,7 +16,7 @@ describe('daily spontaneous interaction budget', () => {
     statePath = join(dir, 'budget.json');
   });
 
-  afterEach(() => rmSync(dir, { recursive: true, force: true }));
+  afterEach(() => rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }));
 
   it('shares one persisted cap across presence and proactive surfaces', async () => {
     const base = {

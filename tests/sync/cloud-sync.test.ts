@@ -46,7 +46,7 @@ describe('Cloud Storage', () => {
   });
 
   afterEach(async () => {
-    await rm(testDir, { recursive: true, force: true });
+    await rm(testDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   describe('LocalStorage', () => {
@@ -223,7 +223,7 @@ describe('CloudSyncManager', () => {
 
   afterEach(async () => {
     syncManager.dispose();
-    await rm(testDir, { recursive: true, force: true });
+    await rm(testDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   describe('Initialization', () => {
@@ -467,7 +467,7 @@ describe('BackupManager', () => {
 
   afterEach(async () => {
     backupManager.dispose();
-    await rm(testDir, { recursive: true, force: true });
+    await rm(testDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   describe('Initialization', () => {
@@ -828,7 +828,7 @@ describe('Cloud Sync System', () => {
   });
 
   afterEach(async () => {
-    await rm(testDir, { recursive: true, force: true });
+    await rm(testDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   it('should create integrated sync system', () => {

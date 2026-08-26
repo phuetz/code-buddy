@@ -17,7 +17,7 @@ function makeTempDir(): string {
 describe('Hermes Agent diagnostics', () => {
   afterEach(() => {
     if (tempDir) {
-      fs.rmSync(tempDir, { recursive: true, force: true });
+      fs.rmSync(tempDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
       tempDir = null;
     }
   });

@@ -87,7 +87,8 @@ async function probeSelectableModels(): Promise<Array<{ id: string; provider: st
         m.provider === 'ollama' ||
         m.provider === 'lm-studio' ||
         m.provider === 'lemonade' ||
-        m.provider === 'agy-cli',
+        m.provider === 'agy-cli' ||
+        m.provider === 'omniroute',
       )
       .map((m) => ({ id: m.id, provider: normalizeLocalProvider(m.provider) }));
   } catch {
@@ -117,7 +118,9 @@ export async function listActiveLlmModelPool(
   const seenCloud = new Set<string>();
   const seenLocalNames = new Set<string>();
   const maxLocal = Math.max(1, opts.maxLocalPerProvider ?? DEFAULT_MAX_LOCAL_PER_PROVIDER);
-  const discoveredModels = base.some((c) => c.isLocal || c.provider === 'agy-cli')
+  const discoveredModels = base.some(
+    (c) => c.isLocal || c.provider === 'agy-cli' || c.provider === 'omniroute',
+  )
     ? await probeSelectableModels()
     : [];
 
@@ -126,7 +129,17 @@ export async function listActiveLlmModelPool(
     // The registry's resolved default (env override included) always seats first.
     const catalogModels = active.provider === 'agy-cli'
       ? discoveredModels.filter((m) => m.provider === 'agy-cli').map((m) => m.id)
-      : (findRuntimeProvider(active.provider)?.models ?? []);
+      : active.provider === 'omniroute'
+        // OmniRoute: the curated `auto/*` routing combos first, then the ids the
+        // gateway actually serves (capped like a probed runtime — it can list 100+).
+        ? [
+          ...(findRuntimeProvider('omniroute')?.models ?? []),
+          ...discoveredModels
+            .filter((m) => m.provider === 'omniroute')
+            .map((m) => m.id)
+            .slice(0, maxLocal),
+        ]
+        : (findRuntimeProvider(active.provider)?.models ?? []);
     for (const model of [defaultEntry.model, ...catalogModels]) {
       const key = `${active.provider}:${model}`.toLowerCase();
       if (seenCloud.has(key)) continue;

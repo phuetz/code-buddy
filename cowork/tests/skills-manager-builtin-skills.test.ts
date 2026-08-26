@@ -49,12 +49,12 @@ const EXPECTED_BUILTIN_SKILLS = [
 function createDbMock(): DatabaseInstance {
   const statement = { run: vi.fn() };
   return {
-    raw: {} as any,
-    sessions: {} as any,
-    messages: {} as any,
-    traceSteps: {} as any,
-    scheduledTasks: {} as any,
-    prepare: vi.fn(() => statement as any),
+    raw: {} as never,
+    sessions: {} as never,
+    messages: {} as never,
+    traceSteps: {} as never,
+    scheduledTasks: {} as never,
+    prepare: vi.fn(() => statement as never),
     exec: vi.fn(),
     pragma: vi.fn(),
     close: vi.fn(),

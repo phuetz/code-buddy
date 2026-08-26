@@ -15,7 +15,7 @@ describe('buildAiGenerationPrompt — stacks', () => {
   it('defaults to the static stack when none is chosen', () => {
     const out = buildAiGenerationPrompt(req());
     expect(out).toContain('"stack":"HTML/CSS/JS"');
-    expect(out).toContain('(Web statique)');
+    expect(out).toContain('(Static web)');
   });
 
   it('injects the Expo stack (mobile) plan tag, label and guidance', () => {

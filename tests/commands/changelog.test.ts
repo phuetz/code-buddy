@@ -188,6 +188,6 @@ describe('buddy changelog command', () => {
       code: 'buddy.changelog',
       exitCode: 1,
     });
-    expect(stderr.join('')).toContain('Ce dossier n’est pas un dépôt Git : /pas-un-repo');
+    expect(stderr.join('')).toContain(`Ce dossier n’est pas un dépôt Git : ${path.resolve('/pas-un-repo')}`);
   });
 });

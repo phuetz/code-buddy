@@ -93,6 +93,7 @@ export interface RuntimeProviderCatalogEntry {
   id: RuntimeProviderId;
   aliases?: string[];
   label: string;
+  freeTier?: string;
   authMode: ProviderAuthMode;
   apiMode: ProviderApiMode;
   runtimeSupport: ProviderRuntimeSupport;
@@ -185,6 +186,7 @@ export const RUNTIME_PROVIDER_CATALOG: RuntimeProviderCatalogEntry[] = [
   {
     id: 'ollama',
     label: 'Ollama',
+    freeTier: 'local, $0',
     authMode: 'local',
     apiMode: 'openai-compatible',
     runtimeSupport: 'direct',
@@ -201,6 +203,7 @@ export const RUNTIME_PROVIDER_CATALOG: RuntimeProviderCatalogEntry[] = [
     id: 'lemonade',
     aliases: ['lemond'],
     label: 'Lemonade Server',
+    freeTier: 'local, $0',
     authMode: 'local',
     apiMode: 'openai-compatible',
     runtimeSupport: 'direct',
@@ -218,6 +221,7 @@ export const RUNTIME_PROVIDER_CATALOG: RuntimeProviderCatalogEntry[] = [
     id: 'lmstudio',
     aliases: ['lm-studio', 'lm_studio'],
     label: 'LM Studio',
+    freeTier: 'local, $0',
     authMode: 'local',
     apiMode: 'openai-compatible',
     runtimeSupport: 'direct',
@@ -324,7 +328,7 @@ export const RUNTIME_PROVIDER_CATALOG: RuntimeProviderCatalogEntry[] = [
     modelEnvKeys: ['DEEPSEEK_MODEL'],
     defaultBaseURL: 'https://api.deepseek.com/v1',
     defaultModel: 'deepseek-chat',
-    models: ['deepseek-chat', 'deepseek-reasoner'],
+    models: ['deepseek-chat', 'deepseek-reasoner', 'deepseek-v3.2'],
   },
   {
     id: 'groq',
@@ -619,20 +623,6 @@ export const RUNTIME_PROVIDER_CATALOG: RuntimeProviderCatalogEntry[] = [
     models: ['deepseek-v4-flash', 'glm-5.1'],
   },
   {
-    id: 'deepseek',
-    label: 'DeepSeek',
-    authMode: 'api-key',
-    apiMode: 'openai-compatible',
-    runtimeSupport: 'direct',
-    priority: 126,
-    apiKeyEnvKeys: ['DEEPSEEK_API_KEY'],
-    baseUrlEnvKeys: ['DEEPSEEK_BASE_URL'],
-    modelEnvKeys: ['DEEPSEEK_MODEL'],
-    defaultBaseURL: 'https://api.deepseek.com/v1',
-    defaultModel: 'deepseek-chat',
-    models: ['deepseek-chat', 'deepseek-reasoner', 'deepseek-v3.2'],
-  },
-  {
     id: 'huggingface',
     aliases: ['hf'],
     label: 'Hugging Face',
@@ -651,6 +641,7 @@ export const RUNTIME_PROVIDER_CATALOG: RuntimeProviderCatalogEntry[] = [
     id: 'nvidia',
     aliases: ['nvidia-nim', 'nim'],
     label: 'NVIDIA NIM',
+    freeTier: 'free API key, ~40 RPM',
     authMode: 'api-key',
     apiMode: 'openai-compatible',
     runtimeSupport: 'direct',
@@ -659,15 +650,22 @@ export const RUNTIME_PROVIDER_CATALOG: RuntimeProviderCatalogEntry[] = [
     baseUrlEnvKeys: ['NVIDIA_BASE_URL', 'NVIDIA_NIM_BASE_URL'],
     modelEnvKeys: ['NVIDIA_MODEL', 'NVIDIA_NIM_MODEL'],
     defaultBaseURL: 'https://integrate.api.nvidia.com/v1',
-    // Modèles VÉRIFIÉS fonctionnels le 22/08/2026 (le catalogue NVIDIA en liste 100+,
-    // mais beaucoup sont en fin de vie/410 ou introuvables/404). Kimi K3 = meilleur
-    // compromis qualité (FR excellent, ~6 s) ; mistral-nemotron = ultra rapide (~0,4 s).
+    // Modèles VÉRIFIÉS par sonde live le 22/08/2026 (scripts/providers/probe-nvidia-nim.py, rapport
+    // docs/providers/nvidia-nim-probe-2026-08-22.md) : 8/28 candidats répondent. Le catalogue NVIDIA en
+    // liste ~100 mais beaucoup sont en fin de vie (410 Gone : GLM 5.2, MiniMax M2.7, DeepSeek V4, Qwen 3.5,
+    // Mistral Small 4/Large 3…) ou introuvables (404 : Kimi K2.6, Nemotron Ultra 253B). Kimi K3 = meilleur
+    // compromis qualité (FR excellent, ~4 s) ; Nemotron 3 Nano/Super/Ultra = la famille récente (0,5-1,3 s).
     defaultModel: 'moonshotai/kimi-k3',
     models: [
       'moonshotai/kimi-k3',
-      'mistralai/mistral-nemotron',
+      'nvidia/nemotron-3-ultra-550b-a55b',
+      'nvidia/nemotron-3-super-120b-a12b',
+      'nvidia/nemotron-3-nano-30b-a3b',
       'nvidia/llama-3.3-nemotron-super-49b-v1',
-      'nvidia/llama-3.1-nemotron-ultra-253b-v1',
+      'stepfun-ai/step-3.7-flash',
+      'openai/gpt-oss-20b',
+      'meta/llama-3.3-70b-instruct',
+      'mistralai/mistral-nemotron',
     ],
   },
   {
@@ -704,6 +702,7 @@ export const RUNTIME_PROVIDER_CATALOG: RuntimeProviderCatalogEntry[] = [
     id: 'omniroute',
     aliases: ['omni-route', 'omni'],
     label: 'OmniRoute (local AI gateway)',
+    freeTier: 'local gateway to 90+ free tiers',
     // OmniRoute (github.com/diegosouzapw/OmniRoute, MIT) = proxy LOCAL OpenAI-compatible qui
     // agrège 90+ fournisseurs à palier gratuit (NVIDIA NIM, Cerebras, GLM, DeepSeek, Pollinations…)
     // avec bascule automatique sur quota/erreur et compression de prompts (RTK+Caveman).
@@ -732,8 +731,7 @@ export const RUNTIME_PROVIDER_CATALOG: RuntimeProviderCatalogEntry[] = [
   {
     id: 'ai21',
     label: 'AI21 Labs',
-    // Import catalogue OmniRoute (22/08/2026) — palier gratuit : $10 trial credits on signup (valid 3 months), no credit card required.
-    // Clé : https://www.ai21.com. À vérifier live avant usage.
+    freeTier: '$10 trial credits on signup (valid 3 months), no credit card required',
     authMode: 'api-key',
     apiMode: 'openai-compatible',
     runtimeSupport: 'direct',
@@ -748,8 +746,7 @@ export const RUNTIME_PROVIDER_CATALOG: RuntimeProviderCatalogEntry[] = [
   {
     id: 'ant-ling',
     label: 'Ant Ling / Ring (inclusionAI)',
-    // Import catalogue OmniRoute (22/08/2026) — palier gratuit : 500,000 free tokens per day per account (resets 02:00 UTC+8, no rollover).
-    // Clé : https://developer.ant-ling.com/en/docs/. À vérifier live avant usage.
+    freeTier: '500,000 free tokens/day (resets 02:00 UTC+8, no rollover)',
     authMode: 'api-key',
     apiMode: 'openai-compatible',
     runtimeSupport: 'direct',
@@ -764,8 +761,7 @@ export const RUNTIME_PROVIDER_CATALOG: RuntimeProviderCatalogEntry[] = [
   {
     id: 'cerebras',
     label: 'Cerebras',
-    // Import catalogue OmniRoute (22/08/2026) — palier gratuit : Free Trial: 1M tokens/day, 30K TPM, 5 RPM — no credit card..
-    // Clé : https://inference.cerebras.ai. À vérifier live avant usage.
+    freeTier: '1M tokens/day, 30K TPM, 5 RPM; no credit card',
     authMode: 'api-key',
     apiMode: 'openai-compatible',
     runtimeSupport: 'direct',
@@ -780,8 +776,7 @@ export const RUNTIME_PROVIDER_CATALOG: RuntimeProviderCatalogEntry[] = [
   {
     id: 'cohere',
     label: 'Cohere',
-    // Import catalogue OmniRoute (22/08/2026) — palier gratuit : Free Trial: 1,000 API calls/month for testing, no credit card required.
-    // Clé : https://cohere.com. À vérifier live avant usage.
+    freeTier: '1,000 API calls/month; no credit card',
     authMode: 'api-key',
     apiMode: 'openai-compatible',
     runtimeSupport: 'direct',
@@ -796,8 +791,7 @@ export const RUNTIME_PROVIDER_CATALOG: RuntimeProviderCatalogEntry[] = [
   {
     id: 'deepinfra',
     label: 'DeepInfra',
-    // Import catalogue OmniRoute (22/08/2026) — palier gratuit : Free signup credits for API testing and model exploration.
-    // Clé : https://deepinfra.com. À vérifier live avant usage.
+    freeTier: 'free signup credits for API testing and model exploration',
     authMode: 'api-key',
     apiMode: 'openai-compatible',
     runtimeSupport: 'direct',
@@ -812,8 +806,7 @@ export const RUNTIME_PROVIDER_CATALOG: RuntimeProviderCatalogEntry[] = [
   {
     id: 'featherless-ai',
     label: 'Featherless AI',
-    // Import catalogue OmniRoute (22/08/2026) — palier gratuit : Free tier available — no credit card required.
-    // Clé : https://featherless.ai. À vérifier live avant usage.
+    freeTier: 'free tier, no credit card required',
     authMode: 'api-key',
     apiMode: 'openai-compatible',
     runtimeSupport: 'direct',
@@ -828,8 +821,7 @@ export const RUNTIME_PROVIDER_CATALOG: RuntimeProviderCatalogEntry[] = [
   {
     id: 'friendliai',
     label: 'FriendliAI',
-    // Import catalogue OmniRoute (22/08/2026) — palier gratuit : Free tier for serverless inference — no credit card required.
-    // Clé : https://friendli.ai. À vérifier live avant usage.
+    freeTier: 'free serverless inference tier, no credit card required',
     authMode: 'api-key',
     apiMode: 'openai-compatible',
     runtimeSupport: 'direct',
@@ -844,8 +836,7 @@ export const RUNTIME_PROVIDER_CATALOG: RuntimeProviderCatalogEntry[] = [
   {
     id: 'hyperbolic',
     label: 'Hyperbolic',
-    // Import catalogue OmniRoute (22/08/2026) — palier gratuit : $1-5 trial credits on signup for serverless inference.
-    // Clé : https://hyperbolic.xyz. À vérifier live avant usage.
+    freeTier: '$1-5 trial credits on signup for serverless inference',
     authMode: 'api-key',
     apiMode: 'openai-compatible',
     runtimeSupport: 'direct',
@@ -860,8 +851,7 @@ export const RUNTIME_PROVIDER_CATALOG: RuntimeProviderCatalogEntry[] = [
   {
     id: 'inception',
     label: 'Inception',
-    // Import catalogue OmniRoute (22/08/2026) — palier gratuit : 10M free tokens on signup, no credit card required..
-    // Clé : https://docs.inceptionlabs.ai. À vérifier live avant usage.
+    freeTier: '10M free tokens on signup, no credit card required',
     authMode: 'api-key',
     apiMode: 'openai-compatible',
     runtimeSupport: 'direct',
@@ -876,8 +866,7 @@ export const RUNTIME_PROVIDER_CATALOG: RuntimeProviderCatalogEntry[] = [
   {
     id: 'inference-net',
     label: 'Inference.net',
-    // Import catalogue OmniRoute (22/08/2026) — palier gratuit : $25 free credits on signup plus research grants available.
-    // Clé : https://inference.net. À vérifier live avant usage.
+    freeTier: '$25 signup credits plus research grants',
     authMode: 'api-key',
     apiMode: 'openai-compatible',
     runtimeSupport: 'direct',
@@ -892,8 +881,7 @@ export const RUNTIME_PROVIDER_CATALOG: RuntimeProviderCatalogEntry[] = [
   {
     id: 'internlm',
     label: 'InternLM (Intern-S1)',
-    // Import catalogue OmniRoute (22/08/2026) — palier gratuit : Free monthly quota ~1M input / 3M output tokens (~10 RPM).
-    // Clé : https://internlm.intern-ai.org.cn/. À vérifier live avant usage.
+    freeTier: '~1M input / 3M output tokens monthly (~10 RPM)',
     authMode: 'api-key',
     apiMode: 'openai-compatible',
     runtimeSupport: 'direct',
@@ -908,8 +896,7 @@ export const RUNTIME_PROVIDER_CATALOG: RuntimeProviderCatalogEntry[] = [
   {
     id: 'liquid',
     label: 'Liquid AI',
-    // Import catalogue OmniRoute (22/08/2026) — palier gratuit : Free LFM2.5-1.2B-Thinking and LFM2.5-1.2B-Instruct models. MIT spinoff, hybrid architecture..
-    // Clé : https://liquid.ai. À vérifier live avant usage.
+    freeTier: 'free LFM2.5-1.2B Thinking and Instruct models',
     authMode: 'api-key',
     apiMode: 'openai-compatible',
     runtimeSupport: 'direct',
@@ -924,8 +911,7 @@ export const RUNTIME_PROVIDER_CATALOG: RuntimeProviderCatalogEntry[] = [
   {
     id: 'longcat',
     label: 'LongCat AI',
-    // Import catalogue OmniRoute (22/08/2026) — palier gratuit : Free: one-time 10M-token grant after account signup + KYC verification (LongCat-2.0). One-time only — not a recurring daily/monthly allowance..
-    // Clé : https://longcat.chat/platform/docs. À vérifier live avant usage.
+    freeTier: 'one-time 10M-token grant after signup and KYC verification',
     authMode: 'api-key',
     apiMode: 'openai-compatible',
     runtimeSupport: 'direct',
@@ -940,8 +926,7 @@ export const RUNTIME_PROVIDER_CATALOG: RuntimeProviderCatalogEntry[] = [
   {
     id: 'modelscope',
     label: 'ModelScope',
-    // Import catalogue OmniRoute (22/08/2026) — palier gratuit : Free tier via ModelScope API-Inference — Alibaba account required..
-    // Clé : https://modelscope.cn. À vérifier live avant usage.
+    freeTier: 'free API-Inference tier, Alibaba account required',
     authMode: 'api-key',
     apiMode: 'openai-compatible',
     runtimeSupport: 'direct',
@@ -956,8 +941,7 @@ export const RUNTIME_PROVIDER_CATALOG: RuntimeProviderCatalogEntry[] = [
   {
     id: 'nscale',
     label: 'nScale',
-    // Import catalogue OmniRoute (22/08/2026) — palier gratuit : $5 free credits on signup for inference testing.
-    // Clé : https://nscale.com. À vérifier live avant usage.
+    freeTier: '$5 signup credits for inference testing',
     authMode: 'api-key',
     apiMode: 'openai-compatible',
     runtimeSupport: 'direct',
@@ -972,8 +956,7 @@ export const RUNTIME_PROVIDER_CATALOG: RuntimeProviderCatalogEntry[] = [
   {
     id: 'openadapter',
     label: 'OpenAdapter',
-    // Import catalogue OmniRoute (22/08/2026) — palier gratuit : Free tier with a generous quota and no credit card — 15+ open-source models with daily quota. Get your API key at https://dashboard.openadapter.in..
-    // Clé : https://openadapter.dev. À vérifier live avant usage.
+    freeTier: '15+ open-source models with daily quota, no credit card',
     authMode: 'api-key',
     apiMode: 'openai-compatible',
     runtimeSupport: 'direct',
@@ -988,8 +971,7 @@ export const RUNTIME_PROVIDER_CATALOG: RuntimeProviderCatalogEntry[] = [
   {
     id: 'pioneer',
     label: 'Pioneer AI',
-    // Import catalogue OmniRoute (22/08/2026) — palier gratuit : $75 free usage credits — no credit card required.
-    // Clé : https://agent.pioneer.ai/settings/api-keys. À vérifier live avant usage.
+    freeTier: '$75 usage credits, no credit card required',
     authMode: 'api-key',
     apiMode: 'openai-compatible',
     runtimeSupport: 'direct',
@@ -1004,8 +986,7 @@ export const RUNTIME_PROVIDER_CATALOG: RuntimeProviderCatalogEntry[] = [
   {
     id: 'reka',
     label: 'Reka',
-    // Import catalogue OmniRoute (22/08/2026) — palier gratuit : $10/month recurring free API credits.
-    // Clé : https://docs.reka.ai/chat/overview. À vérifier live avant usage.
+    freeTier: '$10/month recurring API credits',
     authMode: 'api-key',
     apiMode: 'openai-compatible',
     runtimeSupport: 'direct',
@@ -1020,8 +1001,7 @@ export const RUNTIME_PROVIDER_CATALOG: RuntimeProviderCatalogEntry[] = [
   {
     id: 'sambanova',
     label: 'SambaNova',
-    // Import catalogue OmniRoute (22/08/2026) — palier gratuit : $5 free credits on signup (30-day validity), no credit card required.
-    // Clé : https://sambanova.ai. À vérifier live avant usage.
+    freeTier: '$5 signup credits (valid 30 days), no credit card required',
     authMode: 'api-key',
     apiMode: 'openai-compatible',
     runtimeSupport: 'direct',
@@ -1036,8 +1016,7 @@ export const RUNTIME_PROVIDER_CATALOG: RuntimeProviderCatalogEntry[] = [
   {
     id: 'sarvam',
     label: 'Sarvam AI',
-    // Import catalogue OmniRoute (22/08/2026) — palier gratuit : ₹1,000 in free signup credits — never expire.
-    // Clé : https://docs.sarvam.ai. À vérifier live avant usage.
+    freeTier: '₹1,000 signup credits, never expire',
     authMode: 'api-key',
     apiMode: 'openai-compatible',
     runtimeSupport: 'direct',
@@ -1052,8 +1031,7 @@ export const RUNTIME_PROVIDER_CATALOG: RuntimeProviderCatalogEntry[] = [
   {
     id: 'scaleway',
     label: 'Scaleway AI',
-    // Import catalogue OmniRoute (22/08/2026) — palier gratuit : 1M free tokens for new accounts — EU/GDPR compliant (Paris), Qwen3 235B & Llama 70B.
-    // Clé : https://www.scaleway.com/en/docs/ai-data/generative-apis/. À vérifier live avant usage.
+    freeTier: '1M free tokens for new accounts',
     authMode: 'api-key',
     apiMode: 'openai-compatible',
     runtimeSupport: 'direct',
@@ -1068,8 +1046,7 @@ export const RUNTIME_PROVIDER_CATALOG: RuntimeProviderCatalogEntry[] = [
   {
     id: 'tokenrouter',
     label: 'TokenRouter',
-    // Import catalogue OmniRoute (22/08/2026) — palier gratuit : Free tier includes the MiniMax 3 model. Get your API key at https://tokenrouter.com..
-    // Clé : https://tokenrouter.com. À vérifier live avant usage.
+    freeTier: 'free tier includes MiniMax 3',
     authMode: 'api-key',
     apiMode: 'openai-compatible',
     runtimeSupport: 'direct',
@@ -1084,8 +1061,7 @@ export const RUNTIME_PROVIDER_CATALOG: RuntimeProviderCatalogEntry[] = [
   {
     id: 'typhoon',
     label: 'Typhoon',
-    // Import catalogue OmniRoute (22/08/2026) — palier gratuit : Free API key with a 5 req/s and 200 req/m rate limit..
-    // Clé : https://docs.opentyphoon.ai. À vérifier live avant usage.
+    freeTier: 'free API key, 5 req/s and 200 req/m',
     authMode: 'api-key',
     apiMode: 'openai-compatible',
     runtimeSupport: 'direct',
@@ -1100,8 +1076,7 @@ export const RUNTIME_PROVIDER_CATALOG: RuntimeProviderCatalogEntry[] = [
   {
     id: 'zenmux',
     label: 'ZenMux',
-    // Import catalogue OmniRoute (22/08/2026) — palier gratuit : Free tier includes access to Gemini 3 Flash, DeepSeek V3.2, Grok 4.1 Fast, Mistral Large, and more. Get your API key at https://zenmux.ai..
-    // Clé : https://zenmux.ai. À vérifier live avant usage.
+    freeTier: 'free Gemini 3 Flash, DeepSeek V3.2, Grok 4.1 Fast, Mistral Large, and more',
     authMode: 'api-key',
     apiMode: 'openai-compatible',
     runtimeSupport: 'direct',
@@ -1116,6 +1091,7 @@ export const RUNTIME_PROVIDER_CATALOG: RuntimeProviderCatalogEntry[] = [
   {
     id: 'vllm',
     label: 'vLLM',
+    freeTier: 'local, $0',
     authMode: 'local',
     apiMode: 'openai-compatible',
     runtimeSupport: 'direct',
@@ -1238,8 +1214,12 @@ export function resolveProviderFromCatalog(
     if (chatgpt) return resolveEntry(chatgpt, env, 'oauth', options);
   }
 
+  // Imported free-tier providers (priority >= 300) are NEVER auto-selected: a stray COHERE_/CEREBRAS_/…
+  // _API_KEY exported for another tool must not hijack detection away from a configured custom endpoint
+  // or a historical provider. They stay fully usable when chosen explicitly (CODEBUDDY_PROVIDER, --profile,
+  // `buddy provider use <id>`).
   const ordered = getDirectRuntimeProviderCatalog()
-    .filter((entry) => entry.id !== 'chatgpt' && entry.id !== 'custom')
+    .filter((entry) => entry.id !== 'chatgpt' && entry.id !== 'custom' && entry.priority < AUTO_DETECT_PRIORITY_CEILING)
     .sort((a, b) => a.priority - b.priority);
 
   for (const entry of ordered) {
@@ -1379,14 +1359,19 @@ function normalizeProviderId(value: string | undefined | null): string {
   return (value ?? '').trim().toLowerCase().replace(/^bundled-/, '');
 }
 
+/** Entries at or above this priority (imported free tiers) are opt-in only: excluded from env auto-detection. */
+export const AUTO_DETECT_PRIORITY_CEILING = 300;
+
 function normalizeProviderBaseURL(value: string, entry: RuntimeProviderCatalogEntry): string {
   let baseURL = value.trim();
 
-  if ((entry.id === 'ollama' || entry.id === 'lmstudio' || entry.id === 'vllm') && !/^https?:\/\//i.test(baseURL)) {
+  // Local runtimes whose endpoint ends in /v1: accept HOST:PORT, add scheme + /v1 (lemonade keeps its /api/v1).
+  const v1Local = entry.id === 'ollama' || entry.id === 'lmstudio' || entry.id === 'vllm' || entry.id === 'omniroute';
+  if (v1Local && !/^https?:\/\//i.test(baseURL)) {
     baseURL = `http://${baseURL}`;
   }
 
-  if (entry.id === 'ollama' || entry.id === 'lmstudio' || entry.id === 'vllm') {
+  if (v1Local) {
     const withoutSlash = baseURL.replace(/\/+$/, '');
     if (/\/v1$/i.test(withoutSlash)) return withoutSlash;
     return `${withoutSlash}/v1`;

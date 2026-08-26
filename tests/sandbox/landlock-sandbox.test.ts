@@ -226,14 +226,16 @@ describe('Landlock + Seccomp Sandbox', () => {
       mockPlatform.mockReturnValue('darwin');
 
       mockSpawn.mockImplementation((cmd: string, args: string[]) => {
-        if (cmd === 'which' && args[0] === 'sandbox-exec') {
-          return createMockProcess(0, '/usr/bin/sandbox-exec\n');
+        // Seatbelt is detected by a functional probe: `sandbox-exec -p <profile> /usr/bin/true`.
+        if (cmd === 'sandbox-exec' && args[0] === '-p') {
+          return createMockProcess(0);
         }
         return createMockProcess(1);
       });
 
       const caps = await detectCapabilities();
       expect(caps.landlock).toBe(false);
+      expect(caps.seatbelt).toBe(true);
       expect(caps.recommended).toBe('seatbelt');
     });
   });

@@ -382,8 +382,8 @@ describe('pi model resolution helpers', () => {
         cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
         contextWindow: 128000,
         maxTokens: 16384,
-        compat: { supportsStreaming: true } as any,
-      } as any,
+        compat: { supportsStreaming: true } as unknown as import('../src/renderer/types').ModelDefinition['compat'],
+      } as unknown as import('../src/renderer/types').ModelDefinition,
       {
         configProvider: 'custom',
         rawProvider: 'custom',
@@ -393,6 +393,6 @@ describe('pi model resolution helpers', () => {
 
     expect(model.compat?.supportsDeveloperRole).toBe(false);
     expect(model.compat?.supportsStore).toBe(false);
-    expect((model.compat as any)?.supportsStreaming).toBe(true);
+    expect(model.compat?.supportsStreaming).toBe(true);
   });
 });

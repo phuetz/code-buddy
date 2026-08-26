@@ -21,7 +21,8 @@ const { computeDistDigest } = require('../../scripts/runtime-manifest-utils.cjs'
 };
 
 function tempRoot(prefix = 'code-buddy-self-model-'): string {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
+  // The resolver canonicalizes roots (realpath); os.tmpdir() is a symlink on macOS.
+  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), prefix)));
   roots.push(root);
   return root;
 }
@@ -79,7 +80,7 @@ function sourceFixture(): string {
 }
 
 afterEach(() => {
-  for (const root of roots.splice(0)) fs.rmSync(root, { recursive: true, force: true });
+  for (const root of roots.splice(0)) fs.rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
 });
 
 describe('operational self-model', () => {

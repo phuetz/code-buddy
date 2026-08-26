@@ -58,7 +58,11 @@ fn main() {
         let req: Value = match serde_json::from_str(trimmed) {
             Ok(v) => v,
             Err(e) => {
-                let _ = writeln!(out, "{}", json!({"id": Value::Null, "error": format!("bad json: {}", e)}));
+                let _ = writeln!(
+                    out,
+                    "{}",
+                    json!({"id": Value::Null, "error": format!("bad json: {}", e)})
+                );
                 let _ = out.flush();
                 continue;
             }
@@ -96,7 +100,10 @@ fn dispatch(store: &mut Store, method: &str, params: &Value) -> Result<Value, St
             let query = params.get("query").and_then(|v| v.as_str()).unwrap_or("");
             let limit = params.get("limit").and_then(|v| v.as_u64()).unwrap_or(5) as usize;
             let types = parse_str_array(params.get("types"));
-            Ok(serde_json::to_value(store.recall(query, limit, types.as_deref())).unwrap_or(Value::Null))
+            Ok(
+                serde_json::to_value(store.recall(query, limit, types.as_deref()))
+                    .unwrap_or(Value::Null),
+            )
         }
         "recallHybrid" => {
             let query = params.get("query").and_then(|v| v.as_str()).unwrap_or("");
@@ -104,8 +111,14 @@ fn dispatch(store: &mut Store, method: &str, params: &Value) -> Result<Value, St
             let types = parse_str_array(params.get("types"));
             #[cfg(feature = "embeddings")]
             let res = {
-                let w_sem = params.get("semanticWeight").and_then(|v| v.as_f64()).unwrap_or(0.7);
-                let mmr = params.get("mmrLambda").and_then(|v| v.as_f64()).unwrap_or(0.7);
+                let w_sem = params
+                    .get("semanticWeight")
+                    .and_then(|v| v.as_f64())
+                    .unwrap_or(0.7);
+                let mmr = params
+                    .get("mmrLambda")
+                    .and_then(|v| v.as_f64())
+                    .unwrap_or(0.7);
                 store.recall_hybrid(query, limit, types.as_deref(), w_sem, mmr)
             };
             // Built without embeddings → keyword recall (degrades like the TS path).
@@ -127,11 +140,18 @@ fn opt_result(r: Option<store::RecallResult>) -> Value {
 }
 
 fn s(params: &Value, key: &str) -> Option<String> {
-    params.get(key).and_then(|v| v.as_str()).map(|x| x.to_string())
+    params
+        .get(key)
+        .and_then(|v| v.as_str())
+        .map(|x| x.to_string())
 }
 
 fn parse_str_array(v: Option<&Value>) -> Option<Vec<String>> {
-    v.and_then(|x| x.as_array()).map(|a| a.iter().filter_map(|i| i.as_str().map(|s| s.to_string())).collect())
+    v.and_then(|x| x.as_array()).map(|a| {
+        a.iter()
+            .filter_map(|i| i.as_str().map(|s| s.to_string()))
+            .collect()
+    })
 }
 
 fn parse_relations(params: &Value) -> Option<Vec<RememberRel>> {
@@ -144,8 +164,14 @@ fn parse_relations(params: &Value) -> Option<Vec<RememberRel>> {
                 Some(RememberRel {
                     predicate,
                     target_name,
-                    target_type: r.get("targetType").and_then(|v| v.as_str()).map(|x| x.to_string()),
-                    reason: r.get("reason").and_then(|v| v.as_str()).map(|x| x.to_string()),
+                    target_type: r
+                        .get("targetType")
+                        .and_then(|v| v.as_str())
+                        .map(|x| x.to_string()),
+                    reason: r
+                        .get("reason")
+                        .and_then(|v| v.as_str())
+                        .map(|x| x.to_string()),
                 })
             })
             .collect(),

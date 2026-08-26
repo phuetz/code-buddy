@@ -41,7 +41,7 @@ describe('understandVideo — visual wall-clock budget', () => {
     await mkdir(outDir, { recursive: true });
   });
   afterAll(async () => {
-    if (outDir) await rm(outDir, { recursive: true, force: true }).catch(() => {});
+    if (outDir) await rm(outDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }).catch(() => {});
   });
 
   it('describes K frames then STOPS at the budget, with a truncation note (K < total)', async () => {

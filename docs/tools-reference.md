@@ -5,12 +5,12 @@ Code Buddy includes ~110 tools organized into categories. Tools are selected per
 ## Tool Categories
 
 | Category | Tools | Description |
-|:---------|:------|:------------|
+| :------------------ | :----------------------------------------------------------------------------------------------------------------------------------------------------------- | :----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **File Operations** | `view_file`, `create_file`, `str_replace_editor`, `edit_file`, `multi_edit`, `codebase_replace` | Read, write, and edit files with multi-strategy matching |
 | **Search** | `search`, `codebase_map`, `tool_search` (BM25), `grep`, `glob`, `list_files`, `tree` | Find code, patterns, and files |
 | **System** | `bash`, `docker`, `kubernetes`, `run_script` | Execute commands and scripts (Python/JS/TS in Docker) |
 | **Web** | `web_search`, `web_fetch`, `browser`, `firecrawl_search`, `firecrawl_scrape` | Search the web, fetch pages, automate browsers |
-| **Patching** | `apply_patch` (Codex-style, 4-pass seek), `lsp_rename`, `lsp_code_action` | Apply diffs, LSP-powered refactoring |
+| **Patching & LSP**  | `apply_patch` (Codex-style, 4-pass seek), `lsp_definition`, `lsp_references`, `lsp_hover`, `lsp_symbols`, `lsp_diagnostics`, `lsp_rename`, `lsp_code_action` | Apply diffs, read-only semantic navigation, and LSP refactoring                                                                                                                                                          |
 | **Planning** | `plan`, `create_todo_list`, `get_todo_list`, `update_todo_list`, `reason` (ToT/MCTS) | Task planning and structured reasoning |
 | **Media / Vision** | `screenshot`, `camera_snapshot`, `camera_analyze`, `vision_analyze`, `screen_memory`, `audio`, `video`, `ocr_extract`, `image_process`, `clipboard` | Screen + **webcam** capture, vision-model description via a local VLM (`camera_analyze` → ffmpeg snapshot → e.g. `ollama/gemma4:12b`), Screenpipe recall (`screen_memory`), OCR (Tesseract.js), image processing (Sharp) |
 | **Documents** | `pdf`, `document`, `archive`, `execute_cell`, `execute_all` | PDF/Excel processing, Jupyter notebook execution |
@@ -52,6 +52,24 @@ The `str_replace` operation tries 4+ matching strategies in cascade:
 3. **Regex** -- splits on delimiters, joins with `\s*` pattern (confidence 0.85)
 4. **Fuzzy** -- Levenshtein distance with whitespace penalty factor 0.1, threshold 10% (confidence 0.9+)
 5. **LCS fallback** -- original `findBestFuzzyMatch()` at 90% similarity threshold
+
+## LSP Navigation Tools
+
+Five read-only semantic navigation tools connect directly to the configured language server:
+
+- `lsp_definition` — Resolve semantic definitions for a symbol or 1-based line:column.
+- `lsp_references` — Find all semantic usages and callers of a symbol across the project.
+- `lsp_hover` — Return type information, signatures, and documentation.
+- `lsp_symbols` — Return the document outline (classes, functions, methods, variables).
+- `lsp_diagnostics` — Return compiler/typechecker diagnostics, errors, and warnings for a file.
+
+## Explicit @file Mentions
+
+In chat prompts, `@path/to/file` mentions resolve files with bounded project-root containment:
+
+- **Project containment:** Absolute paths, symlinks escaping the project, and path traversal fail closed and never reach the model.
+- **Safety caps:** Binary files and files >100 KB are rejected.
+- **Ephemeral context:** File content is injected ephemerally for the turn prompt and does not persist in permanent session history.
 
 ## apply_patch Format (Codex-style)
 
@@ -120,7 +138,7 @@ Add tools via three mechanisms:
 ## Web Search (5-Provider Fallback)
 
 | Priority | Provider | Key Required | Notes |
-|:---------|:---------|:-------------|:------|
+| :------- | :--------- | :------------------------------------------- | :----------------------------------- |
 | 1 | Brave MCP | `BRAVE_API_KEY` + MCP | Richest results |
 | 2 | Brave API | `BRAVE_API_KEY` | Country, language, freshness filters |
 | 3 | Perplexity | `PERPLEXITY_API_KEY` or `OPENROUTER_API_KEY` | AI-synthesized answers |

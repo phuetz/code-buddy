@@ -12,7 +12,7 @@ import { EventEmitter } from 'events';
 import { execFileSync } from 'child_process';
 import { mkdtemp, rm, mkdir } from 'fs/promises';
 import { tmpdir } from 'os';
-import { join } from 'path';
+import { join, sep } from 'path';
 
 import {
   frameBudgetForDuration,
@@ -114,9 +114,11 @@ describe('sampleFrames — scene/interval pass isolation (#11)', () => {
     }) as never;
     // Scene subdir → 1 file (< minSceneFrames=3 → triggers interval fallback);
     // interval subdir → 2 files → interval wins.
+    // Compare POSIX spellings: the sampler builds native paths (backslashes on Windows).
+    const posix = (p: string): string => p.split(sep).join('/');
     const readdirFn = async (dir: string): Promise<string[]> => {
-      if (dir.endsWith('/scene')) return ['frame_0001.jpg'];
-      if (dir.endsWith('/interval')) return ['frame_0001.jpg', 'frame_0002.jpg'];
+      if (posix(dir).endsWith('/scene')) return ['frame_0001.jpg'];
+      if (posix(dir).endsWith('/interval')) return ['frame_0001.jpg', 'frame_0002.jpg'];
       return [];
     };
     try {
@@ -127,13 +129,13 @@ describe('sampleFrames — scene/interval pass isolation (#11)', () => {
         budget: 10,
         readdir: readdirFn,
       });
-      expect(outTemplates.some((t) => t.includes('/scene/'))).toBe(true);
-      expect(outTemplates.some((t) => t.includes('/interval/'))).toBe(true);
+      expect(outTemplates.some((t) => posix(t).includes('/scene/'))).toBe(true);
+      expect(outTemplates.some((t) => posix(t).includes('/interval/'))).toBe(true);
       // Interval (2 frames) beat scene (1) → returned frames all come from the interval dir.
       expect(frames.length).toBe(2);
-      expect(frames.every((f) => f.path.includes('/interval/'))).toBe(true);
+      expect(frames.every((f) => posix(f.path).includes('/interval/'))).toBe(true);
     } finally {
-      await rm(outDir, { recursive: true, force: true }).catch(() => {});
+      await rm(outDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }).catch(() => {});
     }
   });
 });
@@ -332,7 +334,7 @@ describe('understandVideo — visual path (injected pipeline)', () => {
     await mkdir(outDir, { recursive: true });
   });
   afterAll(async () => {
-    if (outDir) await rm(outDir, { recursive: true, force: true }).catch(() => {});
+    if (outDir) await rm(outDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }).catch(() => {});
   });
 
   it('visual:true fuses {said, shown} per segment with one keyframe each', async () => {
@@ -574,7 +576,7 @@ describe('sampleFrames (real ffmpeg smoke)', () => {
         expect(f.path.endsWith('.jpg')).toBe(true);
       }
     } finally {
-      await rm(dir, { recursive: true, force: true }).catch(() => {});
+      await rm(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }).catch(() => {});
     }
   }, 60_000);
 });

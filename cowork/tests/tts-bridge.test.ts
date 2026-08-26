@@ -250,7 +250,9 @@ describe('TTSBridge — Pocket primary path', () => {
 
     const result = await bridge.synthesize('Volume explicite');
     const output = Buffer.from(result.audio);
-    const peak = Math.max(Math.abs(output.readInt16LE(44)), Math.abs(output.readInt16LE(46)));
+    const samples = [output.readInt16LE(44), output.readInt16LE(46)];
+    const rms = Math.sqrt(samples.reduce((sum, sample) => sum + sample ** 2, 0) / samples.length);
+    const expectedRms = 32_767 * 10 ** (-18 / 20) * 0.5;
 
     expect(pocketSynthesizer).toHaveBeenCalledWith(
       'Volume explicite',
@@ -258,8 +260,7 @@ describe('TTSBridge — Pocket primary path', () => {
       expect.objectContaining({ CODEBUDDY_TTS_VOLUME: '50' }),
       30000
     );
-    expect(peak).toBeGreaterThan(13_500);
-    expect(peak).toBeLessThan(15_000);
+    expect(Math.abs(20 * Math.log10(rms / expectedRms))).toBeLessThan(0.1);
   });
 });
 

@@ -1,20 +1,3 @@
-# Funding options for Grok CLI
 # These are supported funding model platforms
-
-# GitHub Sponsors
-# github: [username]
-
-# Open Collective
-# open_collective: code-buddy
-
-# Ko-fi
-# ko_fi: username
-
-# Patreon
-# patreon: username
-
-# Buy Me a Coffee
-# custom: ['https://www.buymeacoffee.com/username']
-
-# Uncomment and add your funding platforms above
-# Remove this file if you don't want to accept sponsorships
+# https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/displaying-a-sponsor-button-in-your-repository
+github: phuetz

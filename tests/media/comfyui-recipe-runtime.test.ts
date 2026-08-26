@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { mkdtemp, mkdir, readFile, rm, symlink, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, realpath, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -17,7 +17,7 @@ const temporaryRoots: string[] = [];
 
 afterEach(async () => {
   vi.restoreAllMocks();
-  await Promise.all(temporaryRoots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
+  await Promise.all(temporaryRoots.splice(0).map((root) => rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 })));
 });
 
 describe('ComfyUI recipe runtime', () => {
@@ -309,7 +309,8 @@ interface RuntimePaths {
 }
 
 async function runtimePaths(modelContents: string | undefined): Promise<RuntimePaths> {
-  const base = await mkdtemp(path.join(tmpdir(), 'codebuddy-comfy-runtime-'));
+  // Canonical base: macOS tmpdir lives behind a symlink, which the models/output root policy rejects.
+  const base = await realpath(await mkdtemp(path.join(tmpdir(), 'codebuddy-comfy-runtime-')));
   temporaryRoots.push(base);
   const modelsRoot = path.join(base, 'models');
   const outputRoot = path.join(base, 'outputs');

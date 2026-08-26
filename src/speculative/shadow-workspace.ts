@@ -5,7 +5,7 @@
  * @module speculative/shadow-workspace
  */
 
-import { spawn, type ChildProcess, type SpawnOptions } from 'node:child_process';
+import { spawn, spawnSync, type ChildProcess, type SpawnOptions } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import * as fs from 'node:fs/promises';
 import { homedir } from 'node:os';
@@ -247,12 +247,22 @@ export class ShadowWorkspace {
       );
     }
 
-    const shell = process.platform === 'win32' ? (process.env.ComSpec ?? 'cmd.exe') : 'sh';
-    const shellArgs = process.platform === 'win32' ? ['/d', '/s', '/c', command] : ['-c', command];
+    const isWindows = process.platform === 'win32';
+    const shell = isWindows ? (process.env.ComSpec ?? 'cmd.exe') : 'sh';
+    // On Windows the command line must reach cmd.exe verbatim: with the default
+    // argument quoting Node wraps `command` in quotes and backslash-escapes the
+    // quotes inside it, which `cmd /s /c` then hands to the program mangled
+    // (`sh -c \"exit 0\"` ⇒ syntax error, exit 2). This mirrors what Node does
+    // for `shell: true`.
+    const shellArgs = isWindows ? ['/d', '/s', '/c', `"${command}"`] : ['-c', command];
     const validation = await this.runProcess(
       shell,
       shellArgs,
-      { cwd: shadowPath, detached: process.platform !== 'win32' },
+      {
+        cwd: shadowPath,
+        detached: !isWindows,
+        ...(isWindows ? { windowsVerbatimArguments: true } : {}),
+      },
       timeoutMs,
     );
     if (validation.error) {
@@ -471,6 +481,15 @@ export class ShadowWorkspace {
           } catch {
             child.kill('SIGKILL');
           }
+        } else if (child.pid && process.platform === 'win32') {
+          // Kill the whole tree: `child.kill` only ends cmd.exe and leaves the
+          // validator running (holding the shadow directory open).
+          try {
+            spawnSync('taskkill', ['/pid', String(child.pid), '/t', '/f'], { stdio: 'ignore', timeout: 5000 });
+          } catch {
+            // Fall through to the plain kill below.
+          }
+          child.kill('SIGKILL');
         } else {
           child.kill('SIGKILL');
         }

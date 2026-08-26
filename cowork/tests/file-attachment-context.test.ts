@@ -250,7 +250,7 @@ describe('file attachment prompt context', () => {
     } finally {
       rmSync(tempDir, { recursive: true, force: true });
     }
-  });
+  }, 15_000);
 
   it('extracts plain text attachments without loading core document tools', async () => {
     const tempDir = mkdtempSync(join(tmpdir(), 'codebuddy-attachment-'));

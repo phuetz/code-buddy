@@ -109,18 +109,38 @@ async function dismissOnboardingIfPresent(appPage: Page) {
           getState: () => {
             appConfig?: Record<string, unknown> | null;
             setAppConfig?: (config: Record<string, unknown>) => void;
+            setShowOnboardingTour?: (show: boolean) => void;
           };
         };
       }
     ).useAppStore?.getState();
 
     store?.setAppConfig?.({ ...(store.appConfig ?? {}), onboardingCompleted: true });
+
+    // The first-run guided TOUR is a SEPARATE overlay from the setup wizard
+    // (OnboardingTourHost, latched on localStorage 'cowork.tourSeen'). Its
+    // full-screen backdrop intercepts pointer events, so a click-driven test
+    // times out unless the tour is closed too. Set the latch and clear the
+    // store flag so it neither shows now nor re-opens on the next mount.
+    try {
+      window.localStorage.setItem('cowork.tourSeen', '1');
+    } catch {
+      /* localStorage may be unavailable in some harness contexts */
+    }
+    store?.setShowOnboardingTour?.(false);
   });
 
   const onboarding = appPage.getByTestId('onboarding-wizard');
   if (await onboarding.isVisible({ timeout: 3000 }).catch(() => false)) {
     await appPage.getByTestId('onboarding-skip').click();
     await expect(onboarding).toBeHidden();
+  }
+
+  // Belt-and-suspenders: if the tour overlay is still mounted, wait for the
+  // store-flag flip above to unmount it before proceeding.
+  const tour = appPage.getByTestId('onboarding-tour');
+  if (await tour.isVisible({ timeout: 500 }).catch(() => false)) {
+    await expect(tour).toBeHidden({ timeout: 3000 }).catch(() => undefined);
   }
 }
 

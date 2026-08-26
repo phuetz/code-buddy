@@ -5,7 +5,7 @@ const REAL_GPT55_ENABLED = process.env.COWORK_REAL_GPT55 === '1';
 
 async function completeOnboardingForTest(appPage: import('@playwright/test').Page) {
   await appPage.evaluate(async () => {
-    // @ts-ignore
+    // @ts-expect-error window.electronAPI is not typed in page evaluate
     await window.electronAPI?.config?.save?.({
       onboardingCompleted: true,
       provider: 'chatgpt',

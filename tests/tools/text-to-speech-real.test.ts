@@ -16,7 +16,7 @@ describe('Hermes text_to_speech real integration', () => {
   });
 
   afterEach(async () => {
-    await fs.rm(tempWorkspace, { recursive: true, force: true });
+    await fs.rm(tempWorkspace, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   it('synthesizes a real local speech audio file when a provider is available', async () => {

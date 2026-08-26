@@ -14,6 +14,12 @@ import { existsSync, mkdirSync, rmSync, readFileSync, writeFileSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
 import { Logger, debug, getLogger, logger, resetLogger } from '../../src/utils/logger.js';
+// Loaded as a namespace via a static ESM import (with .js) instead of a bare
+// require(). require() of this ESM module throws "Unexpected token 'export'" on
+// Node 18/20 (which do not allow require() of an ES module); the static import is
+// transformed by vitest and works on every Node version. The hoisted os mock below
+// still applies.
+import * as interactionLoggerModule from '../../src/logging/interaction-logger.js';
 
 // ============================================================================
 // Logger (src/utils/logger.ts) Tests
@@ -46,7 +52,7 @@ beforeAll(() => {
 afterAll(() => {
   // Clean up test directory
   if (existsSync(TEST_LOG_DIR)) {
-    rmSync(TEST_LOG_DIR, { recursive: true, force: true });
+    rmSync(TEST_LOG_DIR, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   }
 });
 
@@ -753,13 +759,13 @@ describe('Interaction Logger', () => {
 
   afterEach(() => {
     if (existsSync(MOCK_HOME)) {
-      rmSync(MOCK_HOME, { recursive: true, force: true });
+      rmSync(MOCK_HOME, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     }
   });
 
   describe('Session Management', () => {
     it('should start a new session with UUID', () => {
-      const { createInteractionLogger } = require('../../src/logging/interaction-logger');
+      const { createInteractionLogger } = interactionLoggerModule;
       const logger = createInteractionLogger({ autoSave: false });
 
       const sessionId = logger.startSession({
@@ -775,7 +781,7 @@ describe('Interaction Logger', () => {
     });
 
     it('should generate short ID from full ID', () => {
-      const { createInteractionLogger } = require('../../src/logging/interaction-logger');
+      const { createInteractionLogger } = interactionLoggerModule;
       const logger = createInteractionLogger({ autoSave: false });
 
       logger.startSession({ model: 'grok-3', provider: 'xai' });
@@ -786,7 +792,7 @@ describe('Interaction Logger', () => {
     });
 
     it('should include all metadata in session', () => {
-      const { createInteractionLogger } = require('../../src/logging/interaction-logger');
+      const { createInteractionLogger } = interactionLoggerModule;
       const logger = createInteractionLogger({ autoSave: false });
 
       logger.startSession({
@@ -809,7 +815,7 @@ describe('Interaction Logger', () => {
     });
 
     it('should set ended_at and duration on endSession', () => {
-      const { createInteractionLogger } = require('../../src/logging/interaction-logger');
+      const { createInteractionLogger } = interactionLoggerModule;
       const logger = createInteractionLogger({ autoSave: false });
 
       logger.startSession({ model: 'grok-3', provider: 'xai' });
@@ -827,7 +833,7 @@ describe('Interaction Logger', () => {
 
   describe('Message Logging', () => {
     it('should log messages with timestamps', () => {
-      const { createInteractionLogger } = require('../../src/logging/interaction-logger');
+      const { createInteractionLogger } = interactionLoggerModule;
       const logger = createInteractionLogger({ autoSave: false });
 
       logger.startSession({ model: 'grok-3', provider: 'xai' });
@@ -841,7 +847,7 @@ describe('Interaction Logger', () => {
     });
 
     it('should increment turns for user messages', () => {
-      const { createInteractionLogger } = require('../../src/logging/interaction-logger');
+      const { createInteractionLogger } = interactionLoggerModule;
       const logger = createInteractionLogger({ autoSave: false });
 
       logger.startSession({ model: 'grok-3', provider: 'xai' });
@@ -854,7 +860,7 @@ describe('Interaction Logger', () => {
     });
 
     it('should track input tokens for user and system messages', () => {
-      const { createInteractionLogger } = require('../../src/logging/interaction-logger');
+      const { createInteractionLogger } = interactionLoggerModule;
       const logger = createInteractionLogger({ autoSave: false });
 
       logger.startSession({ model: 'grok-3', provider: 'xai' });
@@ -866,7 +872,7 @@ describe('Interaction Logger', () => {
     });
 
     it('should track output tokens for assistant messages', () => {
-      const { createInteractionLogger } = require('../../src/logging/interaction-logger');
+      const { createInteractionLogger } = interactionLoggerModule;
       const logger = createInteractionLogger({ autoSave: false });
 
       logger.startSession({ model: 'grok-3', provider: 'xai' });
@@ -878,7 +884,7 @@ describe('Interaction Logger', () => {
     });
 
     it('should not log when no session is active', () => {
-      const { createInteractionLogger } = require('../../src/logging/interaction-logger');
+      const { createInteractionLogger } = interactionLoggerModule;
       const logger = createInteractionLogger({ autoSave: false });
 
       // Should not throw
@@ -890,7 +896,7 @@ describe('Interaction Logger', () => {
 
   describe('Tool Call Logging', () => {
     it('should attach tool calls to last assistant message', () => {
-      const { createInteractionLogger } = require('../../src/logging/interaction-logger');
+      const { createInteractionLogger } = interactionLoggerModule;
       const logger = createInteractionLogger({ autoSave: false });
 
       logger.startSession({ model: 'grok-3', provider: 'xai' });
@@ -908,7 +914,7 @@ describe('Interaction Logger', () => {
     });
 
     it('should update tool call with result', () => {
-      const { createInteractionLogger } = require('../../src/logging/interaction-logger');
+      const { createInteractionLogger } = interactionLoggerModule;
       const logger = createInteractionLogger({ autoSave: false });
 
       logger.startSession({ model: 'grok-3', provider: 'xai' });
@@ -928,7 +934,7 @@ describe('Interaction Logger', () => {
     });
 
     it('should log failed tool results', () => {
-      const { createInteractionLogger } = require('../../src/logging/interaction-logger');
+      const { createInteractionLogger } = interactionLoggerModule;
       const logger = createInteractionLogger({ autoSave: false });
 
       logger.startSession({ model: 'grok-3', provider: 'xai' });
@@ -948,7 +954,7 @@ describe('Interaction Logger', () => {
 
   describe('Cost Tracking', () => {
     it('should update estimated cost', () => {
-      const { createInteractionLogger } = require('../../src/logging/interaction-logger');
+      const { createInteractionLogger } = interactionLoggerModule;
       const logger = createInteractionLogger({ autoSave: false });
 
       logger.startSession({ model: 'grok-3', provider: 'xai' });
@@ -959,7 +965,7 @@ describe('Interaction Logger', () => {
     });
 
     it('should not update cost when no session', () => {
-      const { createInteractionLogger } = require('../../src/logging/interaction-logger');
+      const { createInteractionLogger } = interactionLoggerModule;
       const logger = createInteractionLogger({ autoSave: false });
 
       // Should not throw
@@ -970,7 +976,7 @@ describe('Interaction Logger', () => {
 
   describe('Session Formatting', () => {
     it('should format session for display', () => {
-      const { InteractionLogger, SessionData } = require('../../src/logging/interaction-logger');
+      const { InteractionLogger, SessionData } = interactionLoggerModule;
 
       const session = {
         version: '1.0.0',
@@ -1028,7 +1034,7 @@ describe('Interaction Logger', () => {
 
   describe('Logger Cleanup', () => {
     it('should dispose resources and end session', () => {
-      const { createInteractionLogger } = require('../../src/logging/interaction-logger');
+      const { createInteractionLogger } = interactionLoggerModule;
       const logger = createInteractionLogger({ autoSave: false });
 
       logger.startSession({ model: 'grok-3', provider: 'xai' });
@@ -1038,7 +1044,7 @@ describe('Interaction Logger', () => {
     });
 
     it('should handle dispose when no session', () => {
-      const { createInteractionLogger } = require('../../src/logging/interaction-logger');
+      const { createInteractionLogger } = interactionLoggerModule;
       const logger = createInteractionLogger({ autoSave: false });
 
       // Should not throw
@@ -1049,7 +1055,7 @@ describe('Interaction Logger', () => {
     it('should clear save interval on dispose', () => {
       jest.useFakeTimers();
 
-      const { createInteractionLogger } = require('../../src/logging/interaction-logger');
+      const { createInteractionLogger } = interactionLoggerModule;
       const logger = createInteractionLogger({
         autoSave: true,
         saveIntervalMs: 1000,
@@ -1131,7 +1137,7 @@ describe('Edge Cases and Error Handling', () => {
 
   describe('Interaction Logger edge cases', () => {
     it('should handle null content in messages', () => {
-      const { createInteractionLogger } = require('../../src/logging/interaction-logger');
+      const { createInteractionLogger } = interactionLoggerModule;
       const logger = createInteractionLogger({ autoSave: false });
 
       logger.startSession({ model: 'grok-3', provider: 'xai' });
@@ -1142,7 +1148,7 @@ describe('Edge Cases and Error Handling', () => {
     });
 
     it('should handle tool result for non-existent tool call', () => {
-      const { createInteractionLogger } = require('../../src/logging/interaction-logger');
+      const { createInteractionLogger } = interactionLoggerModule;
       const logger = createInteractionLogger({ autoSave: false });
 
       logger.startSession({ model: 'grok-3', provider: 'xai' });
@@ -1154,7 +1160,7 @@ describe('Edge Cases and Error Handling', () => {
     });
 
     it('should handle empty tool calls array', () => {
-      const { createInteractionLogger } = require('../../src/logging/interaction-logger');
+      const { createInteractionLogger } = interactionLoggerModule;
       const logger = createInteractionLogger({ autoSave: false });
 
       logger.startSession({ model: 'grok-3', provider: 'xai' });

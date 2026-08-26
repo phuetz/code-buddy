@@ -19,6 +19,7 @@ import { useUnreadNotificationCount } from '../store/selectors';
 import { TabBar } from './TabBar';
 import { Tooltip } from './Tooltip';
 import { PresenceIndicator } from './PresenceIndicator';
+import { HealthBadge } from './HealthBadge';
 import { ServerDashboard } from './ServerDashboard';
 import { RunnerBadge } from './RunnerBadge';
 import { ClipboardSummaryPanel } from './ClipboardSummaryPanel';
@@ -65,8 +66,13 @@ export function Titlebar() {
           old shell → the new-shell home had no model picker / spend). Gated on newShellEnabled. */}
       <TitlebarModelCost />
 
+      {/* Backend health badge (auto-polls /api/health with backoff; hidden when disabled). */}
+      <div className="titlebar-no-drag px-2 flex items-center ml-auto">
+        <HealthBadge />
+      </div>
+
       {/* Presence indicator (face memory) — opens EnrollmentDialog on click. */}
-      <div className="titlebar-no-drag ml-auto hidden items-center px-2 lg:flex">
+      <div className="titlebar-no-drag hidden items-center px-2 lg:flex">
         <PresenceIndicator
           onEnrollClicked={() => useAppStore.getState().setShowEnrollmentDialog(true)}
         />

@@ -356,7 +356,7 @@ describe('HTTP agent session isolation', () => {
       }
       expect(fs.existsSync(path.join(workspace, '.codebuddy', 'tool-results'))).toBe(false);
     } finally {
-      fs.rmSync(workspace, { recursive: true, force: true });
+      fs.rmSync(workspace, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     }
   });
 

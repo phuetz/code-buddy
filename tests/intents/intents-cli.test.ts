@@ -23,7 +23,7 @@ describe('buddy intents', () => {
     if (previousFlag === undefined) delete process.env.CODEBUDDY_INTENTS;
     else process.env.CODEBUDDY_INTENTS = previousFlag;
     process.exitCode = 0;
-    await rm(rootDir, { recursive: true, force: true });
+    await rm(rootDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   it('fails closed with exit 1 and performs no generation without the env flag', async () => {

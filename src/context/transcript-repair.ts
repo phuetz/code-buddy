@@ -96,6 +96,7 @@ export function repairToolCallPairs(messages: CodeBuddyMessage[]): CodeBuddyMess
           result.push({
             role: 'tool',
             tool_call_id: tc.id,
+            name: tc.function.name,
             content: '[result lost during compaction]',
           } as CodeBuddyMessage);
           injectedSynthetics++;

@@ -309,7 +309,7 @@ describe('voice loop — short segment TTS cache', () => {
         'Seconde réponse distincte.',
       ]);
     } finally {
-      await rm(dir, { recursive: true, force: true });
+      await rm(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     }
   });
 
@@ -344,7 +344,7 @@ describe('voice loop — short segment TTS cache', () => {
       expect(longSyntheses).toHaveLength(2);
       expect(longSyntheses.every((text) => text.length > 60)).toBe(true);
     } finally {
-      await rm(dir, { recursive: true, force: true });
+      await rm(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     }
   });
 });

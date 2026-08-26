@@ -40,7 +40,7 @@ describe('buddy run retrospective', () => {
     (RunStore as unknown as { _instance: RunStore | null })._instance = null;
     resetLessonCandidateQueues();
     process.chdir(oldCwd);
-    fs.rmSync(tempDir, { recursive: true, force: true });
+    fs.rmSync(tempDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   it('runs the Learning Agent from the CLI against a real persisted run', async () => {

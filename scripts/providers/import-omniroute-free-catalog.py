@@ -76,13 +76,16 @@ def omniroute_root() -> Path:
 
 def parse_registry(reg_dir: Path) -> dict[str, dict]:
     out: dict[str, dict] = {}
+    if not reg_dir.is_dir():
+        sys.exit(f"registry OmniRoute introuvable : {reg_dir} (installer : npm install -g omniroute, ou OMNIROUTE_ROOT=<dossier du paquet>)")
     for d in sorted(reg_dir.iterdir()):
         f = d / "index.ts"
         if not f.is_file():
             continue
         src = f.read_text(encoding="utf-8", errors="replace")
         # retirer les commentaires // (pas le // de https://) pour ne pas attraper des modèles commentés
-        code = "\n".join(re.sub(r'(?<![:/])//(?!/).*$', "", l) for l in src.splitlines())
+        # retire les commentaires de fin de ligne hors chaînes (un `//` précédé d'un guillemet ouvert est gardé)
+        code = "\n".join(re.sub(r'^((?:[^"\'/]|"[^"]*"|\'[^\']*\'|/(?!/))*)//.*$', r"\1", l) for l in src.splitlines())
         g = lambda k: (re.search(rf'\b{k}:\s*"([^"]*)"', code) or [None, ""])[1]  # noqa: E731
         # modèles = les `{ id: "…" }` À L'INTÉRIEUR du tableau `models: [ … ]` (crochets équilibrés)
         models: list[str] = []
@@ -136,6 +139,7 @@ def main() -> None:
     ap.add_argument("--ts", action="store_true")
     ap.add_argument("--all", action="store_true", help="ne pas filtrer sur hasFree")
     ap.add_argument("--curated", action="store_true", help="ne garder que la liste CURATED")
+    ap.add_argument("--refresh", action="store_true", help="régénérer même les ids déjà présents dans Code Buddy (pour rafraîchir baseURL/modèles/notes)")
     args = ap.parse_args()
     root = omniroute_root()
     reg = parse_registry(root / "open-sse" / "config" / "providers" / "registry")
@@ -151,7 +155,7 @@ def main() -> None:
         elif not r["baseUrl"]: reason = "baseUrl vide"
         elif not free and not args.all: reason = "pas de palier gratuit déclaré"
         elif EXCLUDE_PATTERNS.search(pid): reason = "exclu (web/g4f/non-LLM/ToS)"
-        elif pid in ALREADY or ALREADY.get(pid) in cb or pid in cb: reason = f"déjà dans Code Buddy ({ALREADY.get(pid, pid)})"
+        elif (pid in ALREADY or ALREADY.get(pid) in cb or pid in cb) and not (args.refresh and pid in CURATED): reason = f"déjà dans Code Buddy ({ALREADY.get(pid, pid)})"
         base = re.sub(r"/chat/completions/?$", "", r["baseUrl"])
         rows.append({
             "id": pid, "name": c.get("name") or pid, "baseURL": base, "models": r["models"][:8],
@@ -172,10 +176,12 @@ def main() -> None:
         env = lambda s: re.sub(r"[^A-Z0-9]+", "_", s.upper()).strip("_")  # noqa: E731
         for x in keep:
             models = x["models"] or DEFAULT_MODELS.get(x["id"]) or ["default"]
+            free_note = x["freeNote"].replace("'", "’") or "declared free tier (hasFree)"
             print(f"""  {{
     id: '{x['id']}',
     label: '{x['name'].replace("'", "’")}',
-    // Import catalogue OmniRoute (22/08/2026) — palier gratuit : {x['freeNote'].replace("'", "’") or 'déclaré (hasFree)'}.
+    // Import catalogue OmniRoute (22/08/2026) — palier gratuit : {free_note}.
+    freeTier: '{free_note}',
     // Clé : {x['apiKeyUrl'] or x['website'] or 'voir site'}. À vérifier live avant usage.
     authMode: 'api-key',
     apiMode: 'openai-compatible',
@@ -187,6 +193,7 @@ def main() -> None:
     defaultBaseURL: '{x['baseURL']}',
     defaultModel: '{models[0]}',
     models: [{', '.join("'" + m + "'" for m in models[:6])}],
+    freeTier: '{(x['freeNote'] or 'free tier (see OmniRoute registry)').replace("'", "’")[:140]}',
   }},""")
         return
     print(f"# Catalogue OmniRoute → candidats Code Buddy ({len(keep)} retenus / {len(rows)} entrées, source {root})\n")

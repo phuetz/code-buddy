@@ -33,7 +33,7 @@ describe('buildHermesTrajectoryCompatibilityReport', () => {
     store.dispose();
     resetDataRedactionEngine();
     await new Promise((resolve) => setTimeout(resolve, 60));
-    fs.rmSync(tempDir, { recursive: true, force: true });
+    fs.rmSync(tempDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   function startRun(objective: string, metadata?: Parameters<RunStore['startRun']>[1]): string {

@@ -1,0 +1,54 @@
+name: Question
+description: Ask a reproducible usage or configuration question
+title: "question: "
+labels:
+  - question
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please do not share API keys, tokens, private prompts, or repository secrets. Security vulnerabilities must be reported privately through SECURITY.md.
+
+  - type: textarea
+    id: question
+    attributes:
+      label: Question
+      description: What are you trying to do, and where are you stuck?
+    validations:
+      required: true
+
+  - type: textarea
+    id: tried
+    attributes:
+      label: What have you tried?
+      description: Include commands, relevant configuration, and sanitized output.
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Code Buddy version
+      description: Run `buddy --version` or provide the commit SHA.
+      placeholder: "1.8.0"
+    validations:
+      required: true
+
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: Include operating system, Node.js version, install method, and provider/model if relevant.
+      placeholder: "macOS 15, Node 22.14.0, npm, ChatGPT / Codex"
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checklist
+      options:
+        - label: I searched the documentation and existing issues first.
+          required: true
+        - label: I removed secrets and private data from this question.
+          required: true

@@ -62,6 +62,8 @@ export interface CommandOutputEvent {
 
 export interface CommandsApi {
   run(request: { cwd: string; command: string; id: string }): Promise<StudioResult<{ id: string; pid: number }>>;
+  /** Run to completion (streams output, resolves on exit) — used by the auto-install/build step. */
+  runToEnd(request: { cwd: string; command: string; id: string }): Promise<StudioResult<{ id: string; code: number | null }>>;
   kill(id: string): Promise<StudioResult<{ id: string; killed: boolean }>>;
   onOutput?: (listener: (event: CommandOutputEvent) => void) => () => void;
 }

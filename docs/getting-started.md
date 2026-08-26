@@ -28,51 +28,132 @@ npm run build
 npm link            # exposes `buddy` globally (or use: npm start / node dist/index.js)
 
 # npm — published stable release
-# NOTE: during the rc phase the npm release can lag the source; prefer from-source for newest features
-npm install -g @phuetz/code-buddy
+# The package name is scoped; `code-buddy` (without @phuetz/) is not published.
+# The npm release can lag the source; use @latest and check `buddy --version`.
+npm install -g @phuetz/code-buddy@latest
 
 # Or try without installing (also subject to the lag note above)
 npx @phuetz/code-buddy@latest
 ```
 
-## First Run
+## First Run — free, in under 2 minutes
+
+You do **not** need an API key, and you do **not** need to edit any environment
+variable. `buddy try` is a real coding-agent smoke test: before running it, you
+need either a ChatGPT OAuth login or a reachable Ollama model. If neither is
+available, it exits quickly with the setup commands instead of pretending to
+run an offline AI demo.
 
 ```bash
-# Set your API key (Grok/xAI is the default provider)
-export GROK_API_KEY=your_api_key
+buddy login          # ChatGPT subscription, no API key (opens a browser)
+buddy try            # ← after login: a 60-second coding demo.
+                     #    Writes FizzBuzz + tests, runs them, and independently verifies them.
 
-# Start interactive mode
-buddy
+buddy onboard        # Interactive guided setup. If a free provider is detected,
+                     #    it offers the quick path; on a blank machine, choose a provider.
+                     #    Writes the config for you (no env var to type).
+buddy try            # prove the configured provider works
 
-# Or with a specific task
-buddy --prompt "analyze the codebase structure"
-
-# Use a local LLM (LM Studio)
-buddy --base-url http://localhost:1234/v1 --api-key lm-studio
-
-# Use Ollama
-buddy --base-url http://localhost:11434/v1 --model llama3
-
-# Full autonomy mode
-buddy --yolo
+buddy                # Start chatting once a provider is configured.
+buddy --prompt "analyze the codebase structure"   # one-shot / headless
 ```
 
-Code Buddy auto-detects your provider from the API key environment variables. Set any of `GROK_API_KEY`, `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GOOGLE_API_KEY`, `MISTRAL_API_KEY`, etc.
+`buddy onboard` needs a terminal because it asks questions. In a pipe or CI
+job it exits with an explanation; use `buddy login`, environment variables, or
+`buddy doctor` for a non-interactive check.
+
+### The two $0 paths in detail
+
+- **Local & private (Ollama).** Install [Ollama](https://ollama.ai), then run
+  `buddy onboard` — it detects the running server, offers to pull a small coding
+  model if you have none, and saves the choice. Nothing leaves your machine.
+- **ChatGPT subscription.** `buddy login` reuses your existing ChatGPT plan
+  through the Codex backend at **$0 marginal cost** — no key, no billing setup.
+
+> Stuck? `buddy doctor` tells you in one line whether you're ready to chat, and
+> **`buddy doctor --fix`** auto-configures a running Ollama for you.
+
+### Advanced: bring your own API key
+
+Code Buddy auto-detects a provider from API-key environment variables when one
+is set — any of `GROK_API_KEY`, `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`,
+`GOOGLE_API_KEY`, `MISTRAL_API_KEY`, etc. This is entirely optional; the free
+paths above need none of them.
+
+```bash
+export GROK_API_KEY=your_api_key   # optional — only if you prefer a paid API
+buddy
+buddy --yolo                       # full autonomy (see Special Modes)
+```
+
+## The 8 commands that matter (everything else is optional)
+
+`buddy --help` lists 60+ commands and the docs mention ~120 environment
+variables. **Ignore almost all of it to start.** These are the only ones a new
+user needs; the rest (companion/voice, film, robot, fleet, self-improvement, …)
+are opt-in and stay out of your way until you go looking for them.
+
+| Command | What it does |
+| ---------------------- | ------------------------------------------------------------ |
+| `buddy try` | Proof the configured free provider works (60-second coding demo). |
+| `buddy onboard` | Interactive setup; uses a detected free path or asks you to choose one. |
+| `buddy login` | Sign in with a ChatGPT subscription ($0, no API key). |
+| `buddy` | Start an interactive session. |
+| `buddy -p "…"` | One-shot / headless (great for scripts and CI). |
+| `buddy doctor [--fix]` | Am I ready? Auto-fix the fixable. |
+| `buddy --continue` | Resume your last session. |
+| `buddy --init` | Drop a `.codebuddy/` + `AGENTS.md` into the current repo. |
+
+Nothing above needs an environment variable. `buddy try` still needs a ChatGPT
+login or a reachable local model; everything advanced is gated behind
+its own opt-in flag, so the defaults stay small and predictable.
+
+## Built-in Utilities & Migration
+
+Code Buddy includes standalone CLI utilities for cost tracking, changelog generation, project onboarding, and configuration migration:
+
+| Command             | Description                                                                                                                    | Main Options                                                                                    |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------- |
+| `buddy cost`        | Read-only cost and token usage dashboard aggregated from saved session JSONs                                                   | `--by <model\|provider\|day>`, `--since <7d\|YYYY-MM-DD>`, `--last`, `--session <id>`, `--json` |
+| `buddy changelog`   | Generate structured release notes from Conventional Commits in Git history                                                     | `--since <tag\|YYYY-MM-DD\|ref>`, `--to <ref>`, `--out <file.md>`, `--json`                     |
+| `buddy import`      | Import project rules and MCP servers from Cursor, Cline, Copilot, or Claude Code into `CODEBUDDY.md` and `.codebuddy/mcp.json` | `--from <path>`, `--dry-run`                                                                    |
+| `buddy explain`     | One-shot repository explanation report (conventions, hotspots, risks) as Markdown or self-contained HTML | `--out <f.md\|.html>`, `--depth <quick\|deep>`, `--html` |
+| `buddy dev explain` | Summarise repository conventions, architecture, critical paths, and workflows from a fresh repo profile                        | `buddy dev explain`                                                                             |
+
+## In-Chat Context & Code Intelligence: @file Mentions and LSP Tools
+
+### Explicit `@file` Mentions
+
+In interactive chat, mention files using `@path/to/file` (with fuzzy autocomplete and keyboard navigation):
+
+- **Project containment:** Absolute paths, symlinks escaping the project root, and path traversals (`..`) fail closed and are never sent to the model.
+- **Safety caps:** Binary files and files exceeding 100 KB are rejected.
+- **Ephemeral context:** Resolved file content is injected ephemerally into the turn prompt and does not permanently inflate conversation history.
+
+### Read-Only LSP Navigation Tools
+
+Code Buddy connects to configured language servers to expose 5 read-only semantic navigation tools:
+
+- `lsp_definition` — Resolve semantic definitions for a symbol or 1-based line:column.
+- `lsp_references` — Find usages and callers across the codebase.
+- `lsp_hover` — Return type signatures and documentation for a symbol or position.
+- `lsp_symbols` — Return document outline (classes, functions, methods, variables).
+- `lsp_diagnostics` — Return compiler/typechecker diagnostics, errors, and warnings for a file.
 
 ## Onboarding the Cowork GUI (Ollama, $0)
 
 Code Buddy also ships a desktop GUI — **Cowork** (`npm run build:gui`). On first launch a guided
 wizard takes you from zero to your first chat. Here is the full journey against a **local Ollama**
-model (`qwen2.5:7b-instruct`) — no API key, $0. *(Screenshots are real captures from the
-Electron app, generated by `cowork/e2e/onboarding-ollama-screens.spec.ts`.)*
+model (`qwen2.5:7b-instruct`) — no API key, $0. _(Screenshots are real captures from the
+Electron app, generated by `cowork/e2e/onboarding-ollama-screens.spec.ts`.)_
 
 1. **Welcome.** Pick your language and a setup path.
 
    ![Onboarding — welcome](assets/onboarding/01-welcome.png)
 
-2. **Connect an AI provider.** Choose a brain — *Code Buddy brain* (your signed-in ChatGPT/Codex
-   backend), *Local runtimes* (Ollama / LM Studio, discovered on this machine), or a *Custom
-   endpoint*. The connection panel verifies reachability with **Test connection** — the same live
+2. **Connect an AI provider.** Choose a brain — _Code Buddy brain_ (your signed-in ChatGPT/Codex
+   backend), _Local runtimes_ (Ollama / LM Studio, discovered on this machine), or a _Custom
+   endpoint_. The connection panel verifies reachability with **Test connection** — the same live
    probe as Settings → API.
 
    ![Onboarding — connect a provider](assets/onboarding/02-provider.png)

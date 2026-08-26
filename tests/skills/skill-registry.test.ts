@@ -56,7 +56,7 @@ describe('SkillRegistry', () => {
   });
 
   afterEach(() => {
-    rmSync(tempDir, { recursive: true, force: true });
+    rmSync(tempDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   // ---- parseFrontmatter ----

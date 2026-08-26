@@ -26,7 +26,7 @@ describe('native status report HTTP routes', () => {
     } else {
       process.env.CODEBUDDY_HOME = previousHome;
     }
-    fs.rmSync(tmpHome, { recursive: true, force: true });
+    fs.rmSync(tmpHome, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   it('serves raw and report-shaped daemon and heartbeat status over real HTTP', async () => {

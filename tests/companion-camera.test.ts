@@ -68,7 +68,7 @@ describe('companion camera bridge', () => {
   });
 
   afterEach(async () => {
-    await rm(tempDir, { recursive: true, force: true });
+    await rm(tempDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   it('builds platform-specific ffmpeg camera arguments', () => {

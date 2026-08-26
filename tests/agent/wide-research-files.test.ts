@@ -1,4 +1,4 @@
-import { link, lstat, mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises';
+import { link, lstat, mkdir, mkdtemp, readFile, readdir, realpath, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -12,14 +12,15 @@ import {
 const tempDirs: string[] = [];
 
 async function tempDirectory(): Promise<string> {
-  const directory = await mkdtemp(join(tmpdir(), 'wide-research-files-'));
+  // Canonical base: macOS tmpdir lives behind a symlink, which the safety policy rejects.
+  const directory = await realpath(await mkdtemp(join(tmpdir(), 'wide-research-files-')));
   tempDirs.push(directory);
   return directory;
 }
 
 afterEach(async () => {
   await Promise.all(
-    tempDirs.splice(0).map((directory) => rm(directory, { recursive: true, force: true })),
+    tempDirs.splice(0).map((directory) => rm(directory, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 })),
   );
 });
 

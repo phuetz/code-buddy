@@ -14,6 +14,11 @@ const mockPathResolver = {
   },
 };
 
+type PrivateToolExecutor = ToolExecutor & {
+  validateCommandSandbox: (sessionId: string, cmd: string, cwd: string) => void;
+  formatSize: (bytes: number) => string;
+};
+
 // ------------------------------------------------------------------
 // validateCommandSandbox — dangerous pattern detection
 // (accessed via the public `execute` / `bash` path for simplicity,
@@ -22,9 +27,9 @@ const mockPathResolver = {
 //  Instead, we expose the private method through casting.)
 // ------------------------------------------------------------------
 describe('ToolExecutor validateCommandSandbox — dangerous patterns', () => {
-  const executor = new ToolExecutor(mockPathResolver as any);
+  const executor = new ToolExecutor(mockPathResolver as never);
   const validateCmd = (cmd: string) =>
-    (executor as any).validateCommandSandbox('s1', cmd, '/tmp/workspace');
+    (executor as unknown as PrivateToolExecutor).validateCommandSandbox('s1', cmd, '/tmp/workspace');
 
   it('blocks rm -rf / commands', () => {
     // Use a relative path so path-containment check does not fire first
@@ -62,9 +67,9 @@ describe('ToolExecutor validateCommandSandbox — dangerous patterns', () => {
 // validateCommandSandbox — path traversal detection
 // ------------------------------------------------------------------
 describe('ToolExecutor validateCommandSandbox — path traversal', () => {
-  const executor = new ToolExecutor(mockPathResolver as any);
+  const executor = new ToolExecutor(mockPathResolver as never);
   const validateCmd = (cmd: string) =>
-    (executor as any).validateCommandSandbox('s1', cmd, '/tmp/workspace');
+    (executor as unknown as PrivateToolExecutor).validateCommandSandbox('s1', cmd, '/tmp/workspace');
 
   it('blocks commands using ../ traversal', () => {
     expect(() => validateCmd('cat ../secret.txt')).toThrow('path traversal');
@@ -83,9 +88,9 @@ describe('ToolExecutor validateCommandSandbox — path traversal', () => {
 // validateCommandSandbox — absolute path outside mount
 // ------------------------------------------------------------------
 describe('ToolExecutor validateCommandSandbox — absolute path containment', () => {
-  const executor = new ToolExecutor(mockPathResolver as any);
+  const executor = new ToolExecutor(mockPathResolver as never);
   const validateCmd = (cmd: string) =>
-    (executor as any).validateCommandSandbox('s1', cmd, '/tmp/workspace');
+    (executor as unknown as PrivateToolExecutor).validateCommandSandbox('s1', cmd, '/tmp/workspace');
 
   it('blocks absolute paths outside mounted workspace', () => {
     expect(() => validateCmd('cat /etc/passwd')).toThrow('outside the mounted workspace');
@@ -100,11 +105,11 @@ describe('ToolExecutor validateCommandSandbox — absolute path containment', ()
 // validateCommandSandbox — cwd outside mount
 // ------------------------------------------------------------------
 describe('ToolExecutor validateCommandSandbox — cwd validation', () => {
-  const executor = new ToolExecutor(mockPathResolver as any);
+  const executor = new ToolExecutor(mockPathResolver as never);
 
   it('throws when cwd is outside the mounted workspace', () => {
     expect(() =>
-      (executor as any).validateCommandSandbox('s1', 'ls', '/outside/dir')
+      (executor as unknown as PrivateToolExecutor).validateCommandSandbox('s1', 'ls', '/outside/dir')
     ).toThrow('Working directory is outside the mounted workspace');
   });
 });
@@ -113,8 +118,8 @@ describe('ToolExecutor validateCommandSandbox — cwd validation', () => {
 // formatSize — private utility
 // ------------------------------------------------------------------
 describe('ToolExecutor.formatSize', () => {
-  const executor = new ToolExecutor(mockPathResolver as any);
-  const fmt = (bytes: number) => (executor as any).formatSize(bytes);
+  const executor = new ToolExecutor(mockPathResolver as never);
+  const fmt = (bytes: number) => (executor as unknown as PrivateToolExecutor).formatSize(bytes);
 
   it('formats bytes below 1 KB', () => {
     expect(fmt(512)).toBe('512 B');
@@ -137,7 +142,7 @@ describe('ToolExecutor.formatSize', () => {
 // webFetch — URL validation (does not make real network calls)
 // ------------------------------------------------------------------
 describe('ToolExecutor.webFetch URL validation', () => {
-  const executor = new ToolExecutor(mockPathResolver as any);
+  const executor = new ToolExecutor(mockPathResolver as never);
 
   it('rejects empty URL', async () => {
     await expect(executor.webFetch('')).rejects.toThrow('URL is required');
@@ -162,7 +167,7 @@ describe('ToolExecutor.webFetch URL validation', () => {
 // execute — unknown tool dispatch
 // ------------------------------------------------------------------
 describe('ToolExecutor.execute — unknown tool', () => {
-  const executor = new ToolExecutor(mockPathResolver as any);
+  const executor = new ToolExecutor(mockPathResolver as never);
 
   it('returns an error result for unrecognised tool names', async () => {
     const result = await executor.execute(

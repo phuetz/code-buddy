@@ -659,12 +659,11 @@ describe('CodeBuddyClient', () => {
 
       await client.chat(messages, tools);
 
-      // Tools should be empty for local inference
-      expect(mockCreate).toHaveBeenCalledWith(
-        expect.objectContaining({
-          tools: [],
-        })
-      );
+      // Tools are disabled for local inference: the payload omits `tools`
+      // entirely (an empty array would still be rejected by some runtimes).
+      const localPayload = mockCreate.mock.calls.at(-1)?.[0];
+      expect(localPayload).toBeDefined();
+      expect(localPayload).not.toHaveProperty('tools');
     });
 
     it('should enable tools when GROK_FORCE_TOOLS is set', async () => {
@@ -1032,11 +1031,10 @@ describe('CodeBuddyClient', () => {
 
       await client.chat([{ role: 'user', content: 'Hi' }], []);
 
-      expect(mockCreate).toHaveBeenCalledWith(
-        expect.objectContaining({
-          tools: [],
-        })
-      );
+      // An empty tools array is omitted from the payload.
+      const emptyToolsPayload = mockCreate.mock.calls.at(-1)?.[0];
+      expect(emptyToolsPayload).toBeDefined();
+      expect(emptyToolsPayload).not.toHaveProperty('tools');
     });
 
     it('should handle null content in assistant message', async () => {

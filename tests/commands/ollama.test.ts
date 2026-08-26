@@ -1,3 +1,4 @@
+import * as path from 'path';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import {
   buildOllamaUpdatePlan,
@@ -22,18 +23,22 @@ describe('ollama command helpers', () => {
       scriptUrl: 'https://ollama.com/install.ps1',
     });
 
+    // The plan resolves paths on the HOST (drive letter + backslashes when the
+    // test itself runs on Windows), whatever the requested target platform.
+    const repoRoot = path.resolve('/repo');
+    const scriptPath = path.join(repoRoot, 'scripts', 'update-ollama-windows.ps1');
     expect(plan).toMatchObject({
       supported: true,
       platform: 'win32',
-      repoRoot: '/repo',
-      scriptPath: '/repo/scripts/update-ollama-windows.ps1',
+      repoRoot,
+      scriptPath,
       command: 'powershell',
     });
     expect(plan.args).toEqual([
       '-ExecutionPolicy',
       'Bypass',
       '-File',
-      '/repo/scripts/update-ollama-windows.ps1',
+      scriptPath,
       '-InstallerScriptUrl',
       'https://ollama.com/install.ps1',
     ]);

@@ -7,7 +7,7 @@ import { CronScheduler } from '../../src/scheduler/cron-scheduler.js';
 describe('CronScheduler tick serialization', () => {
   const dirs: string[] = [];
   afterEach(() => {
-    dirs.splice(0).forEach((dir) => rmSync(dir, { recursive: true, force: true }));
+    dirs.splice(0).forEach((dir) => rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }));
   });
 
   it('does not execute one long due job from two overlapping ticks', async () => {

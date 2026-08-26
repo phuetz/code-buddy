@@ -3,9 +3,38 @@ import {
   findRuntimeProvider,
   getDirectRuntimeProviderCatalog,
   getPluginNativeRuntimeProviderCatalog,
+  getRuntimeProviderCatalog,
   resolvePluginRuntimeProvider,
   resolveProviderFromCatalog,
 } from '../../src/providers/provider-catalog.js';
+import { AI_PROVIDERS } from '../../src/utils/config-validation/schema.js';
+
+const OMNIROUTE_IMPORTED_FREE_PROVIDER_IDS = [
+  'ai21',
+  'ant-ling',
+  'cerebras',
+  'cohere',
+  'deepinfra',
+  'featherless-ai',
+  'friendliai',
+  'hyperbolic',
+  'inception',
+  'inference-net',
+  'internlm',
+  'liquid',
+  'longcat',
+  'modelscope',
+  'nscale',
+  'openadapter',
+  'pioneer',
+  'reka',
+  'sambanova',
+  'sarvam',
+  'scaleway',
+  'tokenrouter',
+  'typhoon',
+  'zenmux',
+] as const;
 
 describe('runtime provider catalog', () => {
   it('exposes the direct runtime providers used by the main CodeBuddyClient path', () => {
@@ -77,12 +106,37 @@ describe('runtime provider catalog', () => {
     expect(ids).not.toEqual(expect.arrayContaining(['azure', 'bedrock', 'copilot']));
   });
 
+  it('declares every runtime provider id in the AI_PROVIDERS settings enum (buddy provider use <id> must persist)', () => {
+    const missing = getRuntimeProviderCatalog().map((e) => e.id).filter((id) => !(AI_PROVIDERS as readonly string[]).includes(id));
+    expect(missing).toEqual([]);
+  });
+
+  it('never auto-detects an imported free-tier provider (priority >= 300) from a stray API key', () => {
+    const env = { CODEBUDDY_API_KEY: 'k', CODEBUDDY_BASE_URL: 'https://gw.example.test/v1', COHERE_API_KEY: 'stray', CEREBRAS_API_KEY: 'stray' } as NodeJS.ProcessEnv;
+    expect(resolveProviderFromCatalog({ env })?.provider).toBe('custom');
+  });
+
+  it('has unique ids across the whole catalog (no duplicated provider entries)', () => {
+    const ids = getRuntimeProviderCatalog().map((entry) => entry.id);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
   it('tracks plugin-native transports outside the direct CodeBuddyClient path', () => {
     const pluginProviders = getPluginNativeRuntimeProviderCatalog();
     const ids = pluginProviders.map((entry) => entry.id);
 
     expect(ids).toEqual(['azure', 'bedrock', 'copilot']);
     expect(pluginProviders.every((entry) => entry.runtimeSupport === 'plugin-native')).toBe(true);
+  });
+
+  it('exposes non-empty free-tier metadata for OmniRoute and every imported provider', () => {
+    for (const id of [...OMNIROUTE_IMPORTED_FREE_PROVIDER_IDS, 'omniroute'] as const) {
+      const freeTier = findRuntimeProvider(id)?.freeTier;
+      expect(freeTier).toEqual(expect.any(String));
+      expect(freeTier?.trim().length).toBeGreaterThan(0);
+    }
+
+    expect(findRuntimeProvider('omniroute')?.freeTier).toBe('local gateway to 90+ free tiers');
   });
 
   it('resolves aliases to their canonical runtime provider', () => {

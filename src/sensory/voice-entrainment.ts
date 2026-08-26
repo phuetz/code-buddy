@@ -87,7 +87,7 @@ export function applyEmotionalModulation(
 
   // A direct emotional read is more specific than the companion's ambient mood. Mood fills the
   // register only when the utterance itself is neutral or unrecognized.
-  if (isSadOrTired || (!emotion || emotion === 'neutral') && moodIsLow) {
+  if (isSadOrTired || ((!emotion || emotion === 'neutral') && moodIsLow)) {
     const reduction = isSadOrTired ? 0.15 * intensity : 0.15;
     return {
       ...profile,
@@ -96,7 +96,7 @@ export function applyEmotionalModulation(
       targetWpm: boundedTargetWpm(profile.targetWpm * (1 - reduction)),
     };
   }
-  if (isJoyful || (!emotion || emotion === 'neutral') && moodIsJoyful) {
+  if (isJoyful || ((!emotion || emotion === 'neutral') && moodIsJoyful)) {
     const increase = isJoyful ? 0.1 * intensity : 0.1;
     return {
       ...profile,

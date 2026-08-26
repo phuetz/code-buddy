@@ -84,7 +84,19 @@ export default defineConfig({
     globals: true,
     environment: 'node',
     setupFiles: ['./vitest.setup.ts'],
-    testTimeout: 20000,
+    // windows-latest runners show I/O stall bursts: on 2026-08-22 three
+    // different real-I/O suites (migration-e2e, execute-code RPC, ocr-tool)
+    // each crossed 20 s once on a Windows job while finishing in < 5 s on
+    // every other run. Give Windows hosts a 60 s budget; Linux/macOS keep the
+    // historical 20 s / 30 s (a real hang still fails, just later).
+    testTimeout: process.platform === 'win32' ? 60000 : 20000,
+    // Match the generous test timeout for setup/teardown hooks. Several suites do
+    // heavy dynamic `import()` inside `beforeEach`; under the CPU/RAM pressure of a
+    // full parallel run on constrained CI runners those imports occasionally cross
+    // the Vitest default 10s hook timeout and fail spuriously (the same test passes
+    // in ~3s in isolation). 30s removes the false timeout without masking a real
+    // hang. See CI flakiness on macos-latest (3 vCPU / 7 GB).
+    hookTimeout: process.platform === 'win32' ? 60000 : 30000,
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'html', 'lcov'],
@@ -115,7 +127,28 @@ export default defineConfig({
       ...(RUN_REAL_TESTS ? [] : ['**/*real*.test.ts']),
     ],
     pool: 'forks',
-    execArgv: ['--max-old-space-size=8192'],
+    // Per-fork V8 heap ceiling. On windows-latest (7 GB RAM, 2 CI forks) the
+    // 8 GB ceiling over-subscribes physical memory: the Node 20 Windows job of
+    // the PR #95 run ended with "[vitest-pool]: Worker forks emitted error /
+    // Worker exited unexpectedly" — 1596 files passed, 0 failed, one file
+    // (tests/unit/hybrid-search-semantic, pure, 2.2 s in the 8 earlier runs)
+    // never reported: its fork died mid-run, outside any test. 4 GB per fork
+    // keeps two forks inside the runner's RAM and turns a runaway heap into a
+    // visible V8 "heap out of memory" instead of a silent OS kill.
+    // Linux/macOS keep 8 GB. (The 4 GB cap alone was not enough — the fork still
+    // died with no V8 FATAL, i.e. off-heap growth; see the sharded Windows test
+    // steps in .github/workflows/ci.yml.)
+    execArgv: [`--max-old-space-size=${process.platform === 'win32' ? 4096 : 8192}`],
+    // Bound worker concurrency on CI only. The default is one worker per CPU, and
+    // each fork carries an 8 GB heap ceiling — on GitHub's constrained runners
+    // (esp. macos-latest: 3 vCPU / 7 GB) that over-subscribes RAM, causing swap
+    // thrash that slows module imports enough to trip hook timeouts. This is the
+    // honest root-cause fix for the historically-red macOS "Run tests" job: no
+    // test is skipped and no coverage is dropped — the full suite still runs, just
+    // with a steadier scheduler on CI. Local/dev runs keep full parallelism.
+    // (Vitest 4 moved the old `poolOptions.forks` knobs to top-level maxWorkers/
+    // minWorkers.)
+    ...(process.env.CI ? { maxWorkers: 2, minWorkers: 1 } : {}),
   },
   resolve: {
     alias: {

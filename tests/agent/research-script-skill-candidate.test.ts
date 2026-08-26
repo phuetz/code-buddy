@@ -46,7 +46,7 @@ describe('research script skill candidate', () => {
 
   afterEach(async () => {
     resetSkillsHub();
-    await fs.rm(tempHubDir, { recursive: true, force: true });
+    await fs.rm(tempHubDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   it('builds an eligible SKILL.md candidate after repeated successful runs', () => {
@@ -149,7 +149,7 @@ describe('research script skill candidate', () => {
         status: 'awaiting_human_approval',
       });
     } finally {
-      await fs.rm(rootDir, { recursive: true, force: true });
+      await fs.rm(rootDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     }
   });
 
@@ -217,7 +217,7 @@ describe('research script skill candidate', () => {
       await registry.load();
       expect(registry.get(candidate.skillName)?.sourcePath).toBe(installed.absoluteInstalledPath);
     } finally {
-      await fs.rm(rootDir, { recursive: true, force: true });
+      await fs.rm(rootDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     }
   });
 
@@ -269,7 +269,7 @@ describe('research script skill candidate', () => {
       ]);
       expect(candidates.map((candidate) => candidate.eligible)).toEqual([false, true]);
     } finally {
-      await fs.rm(rootDir, { recursive: true, force: true });
+      await fs.rm(rootDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     }
   });
 
@@ -372,7 +372,7 @@ describe('research script skill candidate', () => {
         `skill_manage action=candidate_install candidate_path=${newCandidate.skillPath} approved_by=<reviewer>`,
       );
     } finally {
-      await fs.rm(rootDir, { recursive: true, force: true });
+      await fs.rm(rootDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     }
   });
 
@@ -402,7 +402,7 @@ describe('research script skill candidate', () => {
         }),
       ).rejects.toThrow('not eligible for install');
     } finally {
-      await fs.rm(rootDir, { recursive: true, force: true });
+      await fs.rm(rootDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     }
   });
 });

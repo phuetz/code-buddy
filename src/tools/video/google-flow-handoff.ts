@@ -1,5 +1,6 @@
 /** Browser-assisted Google Flow work packets. No unofficial API or hidden billing. */
 
+import { isAbsolute } from 'node:path';
 import { createHash } from 'crypto';
 
 import {
@@ -132,7 +133,7 @@ export function createGoogleFlowHandoff(
   for (const shot of shots) {
     if (
       !/^[a-z0-9](?:[a-z0-9-]{0,125}[a-z0-9])?$/u.test(shot.id) ||
-      !/^[a-f0-9]{64}$/u.test(shot.sourceSha256) || !shot.sourcePath.startsWith('/') ||
+      !/^[a-f0-9]{64}$/u.test(shot.sourceSha256) || !isAbsolute(shot.sourcePath) ||
       !['hero', 'b-roll', 'transition'].includes(shot.role) ||
       !(shot.consumers?.length || shot.consumerShortIds?.length) ||
       (shot.consumerShortIds ?? []).some((shortId) =>

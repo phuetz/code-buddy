@@ -43,7 +43,7 @@ describe('AutonomyBriefingJournal — evidence-first night watch', () => {
   });
 
   afterEach(() => {
-    rmSync(dir, { recursive: true, force: true });
+    rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   it('groups evening and pre-dawn activity into the same morning handover', () => {

@@ -22,6 +22,7 @@ let fixtureDirectory: string;
 let sourceFile: string;
 let client: LSPClient;
 let dependencies: LspToolDependencies;
+let workspace: { cwd: string };
 
 beforeAll(async () => {
   fixtureDirectory = await fs.mkdtemp(path.join(os.tmpdir(), 'codebuddy-lsp-tools-'));
@@ -48,6 +49,8 @@ beforeAll(async () => {
     client,
     commandExists: async () => true,
   };
+  // Tools are confined to the active workspace; anchor it on the fixture.
+  workspace = { cwd: fixtureDirectory };
 });
 
 afterAll(async () => {
@@ -60,7 +63,7 @@ describe('read-only LSP navigation tools with a mocked stdio server', () => {
     const result = await new LspDefinitionTool(dependencies).execute({
       file: sourceFile,
       symbol: 'answer',
-    });
+    }, workspace);
 
     expect(result.success).toBe(true);
     expect(result.output).toContain(`${sourceFile}:1:14`);
@@ -75,7 +78,7 @@ describe('read-only LSP navigation tools with a mocked stdio server', () => {
       file: sourceFile,
       line: 3,
       column: 10,
-    });
+    }, workspace);
 
     expect(result.success).toBe(true);
     expect(result.output).toContain('References');
@@ -94,7 +97,7 @@ describe('read-only LSP navigation tools with a mocked stdio server', () => {
     const result = await new LspHoverTool(dependencies).execute({
       file: sourceFile,
       symbol: 'answer',
-    });
+    }, workspace);
 
     expect(result.success).toBe(true);
     expect(result.output).toContain('const answer: 42');
@@ -104,7 +107,7 @@ describe('read-only LSP navigation tools with a mocked stdio server', () => {
   });
 
   it('lsp_symbols returns the semantic document outline', async () => {
-    const result = await new LspSymbolsTool(dependencies).execute({ file: sourceFile });
+    const result = await new LspSymbolsTool(dependencies).execute({ file: sourceFile }, workspace);
 
     expect(result.success).toBe(true);
     expect(result.output).toContain('[Constant] answer');
@@ -117,7 +120,7 @@ describe('read-only LSP navigation tools with a mocked stdio server', () => {
   });
 
   it('lsp_diagnostics returns diagnostics published by the server', async () => {
-    const result = await new LspDiagnosticsTool(dependencies).execute({ file: sourceFile });
+    const result = await new LspDiagnosticsTool(dependencies).execute({ file: sourceFile }, workspace);
 
     expect(result.success).toBe(true);
     expect(result.output).toContain('WARNING');
@@ -156,7 +159,7 @@ describe('read-only LSP navigation tools with a mocked stdio server', () => {
     const result = await createTool({
       client: missingClient,
       commandExists: async () => false,
-    }).execute({ ...args, file: sourceFile });
+    }).execute({ ...args, file: sourceFile }, workspace);
 
     expect(result.success).toBe(false);
     expect(result.error).toContain('No LSP server is available for typescript');

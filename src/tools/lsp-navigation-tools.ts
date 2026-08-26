@@ -4,7 +4,8 @@
  * These tools expose the existing outbound LSP client to the agent. They do
  * not implement language intelligence themselves: symbol, definition,
  * reference, hover, outline, and diagnostic data all come from the configured
- * language server.
+ * language server. Target files are confined to the active workspace
+ * (`context.cwd`, symlinks resolved), mirroring `view_file`.
  */
 
 import * as fs from 'fs/promises';
@@ -58,6 +59,14 @@ interface LspExecutionContext {
   language: LSPLanguage;
   symbol?: string;
   position?: LspPosition;
+}
+
+function isPathInside(root: string, candidate: string): boolean {
+  const relative = path.relative(root, candidate);
+  return (
+    relative === '' ||
+    (relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative))
+  );
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -157,12 +166,27 @@ abstract class LspReadOnlyTool implements ITool {
     }
 
     const requestedFile = input.file as string;
-    const resolvedFile = path.resolve(context?.cwd ?? process.cwd(), requestedFile);
+    const workspaceRoot = path.resolve(context?.cwd ?? process.cwd());
+    const resolvedFile = path.resolve(workspaceRoot, requestedFile);
+    if (!isPathInside(workspaceRoot, resolvedFile)) {
+      return { success: false, error: `LSP target is outside the active workspace: ${requestedFile}` };
+    }
 
     try {
       const stat = await fs.stat(resolvedFile);
       if (!stat.isFile()) {
         return { success: false, error: `LSP target is not a regular file: ${resolvedFile}` };
+      }
+      // Symlinks inside the workspace must not point at files outside it.
+      const [realFile, realRoot] = await Promise.all([
+        fs.realpath(resolvedFile),
+        fs.realpath(workspaceRoot),
+      ]);
+      if (!isPathInside(realRoot, realFile)) {
+        return {
+          success: false,
+          error: `LSP target resolves outside the active workspace: ${requestedFile}`,
+        };
       }
     } catch {
       return {
@@ -271,7 +295,8 @@ abstract class LspReadOnlyTool implements ITool {
     const properties: Record<string, JsonSchemaProperty> = {
       file: {
         type: 'string',
-        description: 'Path to the source file, relative to the active workspace or absolute',
+        description:
+          'Path to the source file, relative to the active workspace (or absolute, inside it)',
       },
     };
 

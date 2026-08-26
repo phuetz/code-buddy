@@ -12,7 +12,7 @@ import {
 const temporaryDirectories: string[] = [];
 
 async function temporaryBook(): Promise<string> {
-  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'book-manuscript-'));
+  const directory = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'book-manuscript-')));
   temporaryDirectories.push(directory);
   return directory;
 }

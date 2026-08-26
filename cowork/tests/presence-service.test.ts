@@ -72,7 +72,7 @@ function installWindowMocks(): void {
   });
   Object.defineProperty(HTMLMediaElement.prototype, 'srcObject', {
     configurable: true,
-    set: () => undefined,
+    set() {},
     get: () => null,
   });
 }

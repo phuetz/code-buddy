@@ -12,8 +12,33 @@
  * @module tools/review-gate-helper
  */
 
+import * as fs from 'fs';
 import * as path from 'path';
 import { logger } from '../utils/logger.js';
+
+/**
+ * Canonical form of a path whose leaf may not exist yet: realpath the nearest
+ * existing ancestor and re-append the rest. Needed so the containment check
+ * compares like with like — on macOS `os.tmpdir()`/`process.cwd()` yield the
+ * canonical `/private/var/...` while a configured base directory may still be
+ * the lexical `/var/...` symlink (same on any symlinked workspace).
+ */
+function canonicalize(target: string): string {
+  const resolved = path.resolve(target);
+  const pending: string[] = [];
+  let cursor = resolved;
+  for (;;) {
+    try {
+      const real = fs.realpathSync(cursor);
+      return pending.length ? path.join(real, ...pending.reverse()) : real;
+    } catch {
+      const parent = path.dirname(cursor);
+      if (parent === cursor) return resolved;
+      pending.push(path.basename(cursor));
+      cursor = parent;
+    }
+  }
+}
 
 interface GatedWriteRequestBase {
   baseDirectory: string;
@@ -49,9 +74,13 @@ export async function maybeReviewGatedWrite(req: GatedWriteRequest): Promise<Gat
     ? req.changes
     : [{ path: path.relative(req.baseDirectory, req.resolvedPath), newContent: req.newContent }];
   const normalizedChanges: Array<{ path: string; newContent: string | null }> = [];
+  // Compare canonical forms on BOTH sides: a lexical base directory vs a
+  // canonical resolved path (symlinked tmp/workspace) must not be mistaken
+  // for an escape; a genuinely-outside path still fails closed below.
+  const canonicalBase = canonicalize(req.baseDirectory);
   for (const change of changes) {
-    const resolved = path.resolve(req.baseDirectory, change.path);
-    const rel = path.relative(path.resolve(req.baseDirectory), resolved);
+    const resolved = canonicalize(path.resolve(req.baseDirectory, change.path));
+    const rel = path.relative(canonicalBase, resolved);
     if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) {
       const displayPath = 'displayPath' in req ? req.displayPath : change.path;
       return {

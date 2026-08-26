@@ -1,8 +1,8 @@
 /** Routing policy for the MySoulmate hybrid image/video production fleet. */
 
-// ContentTier now lives in the shared media module; re-exported here to keep
+// ContentTier and its runtime values live in the shared media module; re-exported here to keep
 // this router's public API stable for existing importers.
-export type { ContentTier } from '../../media/content-tier.js';
+export { CONTENT_TIERS, type ContentTier } from '../../media/content-tier.js';
 import type { ContentTier } from '../../media/content-tier.js';
 export type HybridVideoUseCase =
   | 'avatar-lipsync'

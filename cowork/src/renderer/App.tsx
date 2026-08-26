@@ -311,6 +311,7 @@ function App() {
       if (result.success) {
         setIsConfigured(Boolean(result.config?.isConfigured));
         setAppConfig(result.config);
+        return result.config;
       }
     },
     [isElectron, setIsConfigured, setAppConfig]

@@ -37,7 +37,7 @@ async function readPackageJson(projectPath: string): Promise<Record<string, unkn
 afterEach(async () => {
   resetTemplateEngine();
   if (tmpDir) {
-    await fs.rm(tmpDir, { recursive: true, force: true });
+    await fs.rm(tmpDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     tmpDir = undefined;
   }
 });

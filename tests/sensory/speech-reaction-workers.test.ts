@@ -158,7 +158,7 @@ describe('speech reaction — persistent STT workers', () => {
       expect(workerHarness.spawn).toHaveBeenCalledOnce();
       expect(workerHarness.processes[0]?.command).toBe('/tmp/fake-buddy-sense');
     } finally {
-      await rm(modelDir, { recursive: true, force: true });
+      await rm(modelDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     }
   });
 });

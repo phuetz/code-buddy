@@ -7,6 +7,8 @@ import {
   PROVIDER_GUIDES,
   buildRecommendedNextCommands,
   getProviderGuide,
+  isInteractiveTerminal,
+  NON_INTERACTIVE_ONBOARDING_MESSAGE,
   ONBOARDING_PHASES,
   renderOnboardingRoadmap,
   writeConfig,
@@ -14,6 +16,13 @@ import {
 } from '../../src/wizard/onboarding.js';
 
 describe('onboarding', () => {
+  it('explains how to proceed when no interactive terminal is available', () => {
+    expect(isInteractiveTerminal({ isTTY: false }, { isTTY: true })).toBe(false);
+    expect(isInteractiveTerminal({ isTTY: true }, { isTTY: true })).toBe(true);
+    expect(NON_INTERACTIVE_ONBOARDING_MESSAGE).toContain('buddy login');
+    expect(NON_INTERACTIVE_ONBOARDING_MESSAGE).toContain('buddy doctor');
+  });
+
   describe('PROVIDER_ENV_MAP', () => {
     it('should map grok to GROK_API_KEY', () => {
       expect(PROVIDER_ENV_MAP['grok']).toBe('GROK_API_KEY');
@@ -107,7 +116,7 @@ describe('onboarding', () => {
 
     afterEach(() => {
       try {
-        rmSync(tmpDir, { recursive: true });
+        rmSync(tmpDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
       } catch {
         // ignore
       }

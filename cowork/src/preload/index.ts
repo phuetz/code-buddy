@@ -645,7 +645,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.invoke('config.test', config),
     listModels: (payload: {
       provider: AppConfig['provider'];
-      apiKey: string;
+      apiKey?: string;
       baseUrl?: string;
     }): Promise<ProviderModelInfo[]> => ipcRenderer.invoke('config.listModels', payload),
     diagnose: (input: DiagnosticInput): Promise<DiagnosticResult> =>
@@ -1263,6 +1263,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     commands: {
       run: (request: { cwd: string; command: string; id: string }) =>
         ipcRenderer.invoke('studio.cmd.run', request),
+      runToEnd: (request: { cwd: string; command: string; id: string }) =>
+        ipcRenderer.invoke('studio.cmd.runToEnd', request),
       kill: (id: string) => ipcRenderer.invoke('studio.cmd.kill', id),
       onOutput: (
         listener: (event: {
@@ -1290,6 +1292,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
         vars?: Record<string, string | boolean>;
         designSystem?: string;
       }) => ipcRenderer.invoke('studio.scaffold.generate', request),
+    },
+    github: {
+      push: (request: { root: string; name?: string; private?: boolean }) =>
+        ipcRenderer.invoke('studio.github.push', request),
     },
   },
 
@@ -5673,7 +5679,7 @@ declare global {
         test: (config: ApiTestInput) => Promise<ApiTestResult>;
         listModels: (payload: {
           provider: AppConfig['provider'];
-          apiKey: string;
+          apiKey?: string;
           baseUrl?: string;
         }) => Promise<ProviderModelInfo[]>;
         diagnose: (input: DiagnosticInput) => Promise<DiagnosticResult>;
@@ -5990,6 +5996,7 @@ declare global {
         };
         commands: {
           run: (request: { cwd: string; command: string; id: string }) => Promise<unknown>;
+          runToEnd: (request: { cwd: string; command: string; id: string }) => Promise<unknown>;
           kill: (id: string) => Promise<unknown>;
           onOutput: (
             listener: (event: {
@@ -6006,6 +6013,13 @@ declare global {
             template: string;
             targetDir: string;
             vars?: Record<string, string | boolean>;
+          }) => Promise<unknown>;
+        };
+        github: {
+          push: (request: {
+            root: string;
+            name?: string;
+            private?: boolean;
           }) => Promise<unknown>;
         };
       };

@@ -65,6 +65,17 @@ export const BLOCKED_ENV_PREFIXES: string[] = [
 ];
 
 /**
+ * Exact names that are exempt from the prefix block. They only DISABLE
+ * interactive prompts (Code Buddy sets them itself in
+ * CONTROLLED_SUBPROCESS_ENV) and carry no injection surface, unlike
+ * GIT_DIR / GIT_SSH_COMMAND / NPM_CONFIG_REGISTRY which stay blocked.
+ */
+export const ALLOWED_ENV_OVERRIDES: Set<string> = new Set([
+  'GIT_TERMINAL_PROMPT',
+  'NPM_CONFIG_YES',
+]);
+
+/**
  * Returns a new env object with all blocked variables removed.
  * Logs a debug message for each variable that is stripped.
  */
@@ -77,7 +88,8 @@ export function sanitizeEnvVars(env: Record<string, string>): Record<string, str
       continue;
     }
 
-    const prefixBlocked = BLOCKED_ENV_PREFIXES.some((prefix) => key.startsWith(prefix));
+    const prefixBlocked =
+      !ALLOWED_ENV_OVERRIDES.has(key) && BLOCKED_ENV_PREFIXES.some((prefix) => key.startsWith(prefix));
     if (prefixBlocked) {
       logger.debug(`Blocked env var (prefix match): ${key}`);
       continue;

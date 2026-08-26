@@ -31,7 +31,7 @@ describe('desktop electron path resolution', () => {
       expect(rootElectron).not.toBe(coworkElectron);
       expect(resolveElectronBinaryPath(projectRoot)).toBe(coworkElectron);
     } finally {
-      rmSync(projectRoot, { recursive: true, force: true });
+      rmSync(projectRoot, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     }
   });
 
@@ -42,7 +42,7 @@ describe('desktop electron path resolution', () => {
 
       expect(resolveElectronBinaryPath(projectRoot)).toBe(rootElectron);
     } finally {
-      rmSync(projectRoot, { recursive: true, force: true });
+      rmSync(projectRoot, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     }
   });
 
@@ -56,7 +56,7 @@ describe('desktop electron path resolution', () => {
       expect(hasElectronBinary(join(projectRoot, 'cowork'))).toBe(false);
       expect(() => resolveElectronBinaryPath(projectRoot)).toThrow('Electron binary not found');
     } finally {
-      rmSync(projectRoot, { recursive: true, force: true });
+      rmSync(projectRoot, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     }
   });
 
@@ -72,7 +72,7 @@ describe('desktop electron path resolution', () => {
       expect(hasElectronBinary(baseDir)).toBe(true);
       expect(resolveElectronBinaryPath(projectRoot)).toBe(distCandidate);
     } finally {
-      rmSync(projectRoot, { recursive: true, force: true });
+      rmSync(projectRoot, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     }
   });
 });

@@ -3,6 +3,7 @@ import path from 'node:path';
 import fs from 'node:fs';
 
 const indexPath = path.resolve(process.cwd(), 'src/main/index.ts');
+const windowManagementPath = path.resolve(process.cwd(), 'src/main/window-management.ts');
 
 describe('Main process window/config behavior', () => {
   it('second-instance path focuses existing window and only recreates when none found', () => {
@@ -35,5 +36,16 @@ describe('Main process window/config behavior', () => {
 
     expect(continueGuard).toContain('hasUsableCredentialsForActiveSet');
     expect(continueGuard).toContain('sendActiveSetConfigRequiredError(event.payload.sessionId)');
+  });
+
+  it('only exposes redacted provider config to the renderer', () => {
+    const indexSource = fs.readFileSync(indexPath, 'utf8');
+    const windowSource = fs.readFileSync(windowManagementPath, 'utf8');
+
+    expect(indexSource).toContain("ipcMain.handle('config.get'");
+    expect(indexSource).toContain('return configStore.getAllRedacted();');
+    expect(indexSource).not.toContain('config: configStore.getAll(),');
+    expect(windowSource).not.toContain('config: configStore.getAll(),');
+    expect(windowSource).toContain('config: configStore.getAllRedacted(),');
   });
 });

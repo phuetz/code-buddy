@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import * as path from 'node:path';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
@@ -13,16 +13,30 @@ const execFileAsync = promisify(execFile);
 describe('runner checkpoint resume', () => {
   let tempRoot: string;
   let oldHome: string | undefined;
+  let oldGrokKey: string | undefined;
 
   beforeEach(async () => {
     tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'codebuddy-checkpoint-resume-'));
     oldHome = process.env.CODEBUDDY_HOME;
     process.env.CODEBUDDY_HOME = tempRoot;
+    // The verification/self-correction loop resolves an LLM client up front and
+    // throws "No LLM provider configuration found" when none is detected. CI
+    // runners have no API keys, so pin a dummy provider key to make detection
+    // deterministic. Verification here passes before any LLM call, so the client
+    // is constructed but never invoked — no network.
+    oldGrokKey = process.env.GROK_API_KEY;
+    process.env.GROK_API_KEY = 'test-dummy-key-not-used';
   });
 
   afterEach(async () => {
     process.env.CODEBUDDY_HOME = oldHome;
-    await fs.rm(tempRoot, { force: true, recursive: true });
+    if (oldGrokKey === undefined) {
+      delete process.env.GROK_API_KEY;
+    } else {
+      process.env.GROK_API_KEY = oldGrokKey;
+    }
+    // Retry: Windows may still hold a handle on just-closed files (AV/indexer).
+    await fs.rm(tempRoot, { force: true, recursive: true, maxRetries: 5, retryDelay: 100 });
   });
 
   async function createTempGitRepo(): Promise<string> {
@@ -235,10 +249,18 @@ describe('runner checkpoint resume', () => {
       runsDir: path.join(tempRoot, 'runs'),
     }));
 
-    const events = (await fs.readFile(report.observability!.eventsPath, 'utf8'))
-      .trim()
-      .split('\n')
-      .map((line) => JSON.parse(line) as { data: { stepId?: string }; type: string });
+    let events: Array<{ data: { stepId?: string }; type: string }> = [];
+    await vi.waitFor(async () => {
+      events = (await fs.readFile(report.observability!.eventsPath, 'utf8'))
+        .trim()
+        .split('\n')
+        .map((line) => JSON.parse(line) as { data: { stepId?: string }; type: string });
+      expect(events.some((event) => event.type === 'run_end')).toBe(true);
+    }, {
+      timeout: 5_000,
+      interval: 5,
+    });
+
     expect(events).toEqual(expect.arrayContaining([
       expect.objectContaining({
         data: expect.objectContaining({ stepId: 'resume-decomposed-checkpoint' }),

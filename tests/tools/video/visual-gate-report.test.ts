@@ -188,7 +188,7 @@ describe('visual gate evaluation', () => {
 
 describe('visual gate report loader', () => {
   it('loads, binds, evaluates and hashes the exact report bytes', async () => {
-    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'visual-gate-report-'));
+    const root = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'visual-gate-report-')));
     roots.push(root);
     const reportPath = path.join(root, 'report.json');
     const bytes = Buffer.from(`${JSON.stringify(validReport(), null, 2)}\n`);

@@ -24,7 +24,7 @@ describe('buddy intent', () => {
   afterEach(() => {
     log.mockRestore();
     resetGoalManagers();
-    fs.rmSync(dir, { recursive: true, force: true });
+    fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   it('renders the current intent as structured JSON', async () => {

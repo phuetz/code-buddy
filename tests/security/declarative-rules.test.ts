@@ -137,7 +137,7 @@ describe('declarative permission rules', () => {
       ).toBe('ask');
     } finally {
       clearPermissionsCache();
-      rmSync(projectRoot, { recursive: true, force: true });
+      rmSync(projectRoot, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     }
   });
 });

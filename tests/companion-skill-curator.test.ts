@@ -61,7 +61,7 @@ describe('companion skill curator', () => {
   });
 
   afterEach(async () => {
-    await rm(tempDir, { recursive: true, force: true });
+    await rm(tempDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   it('curates reusable skills from completed missions and repeated percept tags', async () => {

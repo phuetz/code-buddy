@@ -29,12 +29,11 @@ class FakeChildProcess extends EventEmitter {
 
   constructor() {
     super();
-    const self = this;
     this.stdin = new Writable({
-      write(chunk, _enc, cb) {
+      write: (chunk, _enc, cb) => {
         const text = chunk.toString();
         for (const line of text.split('\n').filter(Boolean)) {
-          self._stdinHandler(line);
+          this._stdinHandler(line);
         }
         cb();
       },

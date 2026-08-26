@@ -19,7 +19,7 @@ function fingerprint(char: string): string {
 
 afterEach(() => {
   for (const directory of directories.splice(0)) {
-    rmSync(directory, { recursive: true, force: true });
+    rmSync(directory, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   }
 });
 

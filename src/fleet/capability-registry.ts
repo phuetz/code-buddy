@@ -15,6 +15,8 @@
  *   4. Local Ollama daemon — best-effort `GET http://127.0.0.1:11434/api/tags`
  *      (fails silently when Ollama isn't running)
  *   5. Local LM Studio — best-effort `GET http://127.0.0.1:1234/v1/models`
+ *   6. Local OmniRoute gateway — best-effort `GET {OMNIROUTE_BASE_URL}/v1/models`
+ *      (loopback proxy to 90+ cloud free tiers → advertised with `cloud` egress)
  *
  * The registry is **opportunistic** — it only advertises providers
  * that are actually reachable at boot time. A 5-min refresh keeps
@@ -41,6 +43,8 @@ import type {
 /** Cached snapshot — rebuilt every refresh interval. */
 let cached: PeerCapability | null = null;
 let lastRefreshAt = 0;
+/** In-flight rebuild shared by concurrent callers after cache expiry. */
+let building: Promise<PeerCapability> | null = null;
 /** Refresh window: 5 minutes — enough to catch a manual Ollama restart. */
 const REFRESH_INTERVAL_MS = 5 * 60 * 1000;
 const ANSI_ESCAPE_PATTERN = new RegExp(
@@ -66,9 +70,20 @@ export async function getLocalCapabilities(
     // would make the router's load term worse than useless.
     return { ...cached, activeRequests: getFleetLoad().activeRequests };
   }
-  cached = await buildCapabilitySnapshot();
-  lastRefreshAt = now;
-  return { ...cached, activeRequests: getFleetLoad().activeRequests };
+  if (!building) {
+    building = buildCapabilitySnapshot()
+      .then((snapshot) => {
+        cached = snapshot;
+        lastRefreshAt = Date.now();
+        return snapshot;
+      })
+      .finally(() => {
+        building = null;
+      });
+  }
+
+  const snapshot = await building;
+  return { ...snapshot, activeRequests: getFleetLoad().activeRequests };
 }
 
 /** Sync getter — returns last cached snapshot or empty stub. */
@@ -136,6 +151,10 @@ async function buildCapabilitySnapshot(): Promise<PeerCapability> {
   // Layer 5 — local Lemonade Server (OpenAI-compatible, Ryzen NPU/GPU/CPU).
   const lemonadeModels = await probeLemonade();
   models.push(...lemonadeModels);
+
+  // Layer 6 — local OmniRoute gateway (OpenAI-compatible, $0, cloud egress).
+  const omnirouteModels = await probeOmniRoute();
+  models.push(...omnirouteModels);
 
   const egress: PeerCapability['egress'] = models.some((model) => model.egress === 'cloud')
     ? 'cloud' // any cloud key present → peer is a cloud-egress peer
@@ -593,6 +612,58 @@ async function probeLemonade(): Promise<FleetModelDescriptor[]> {
       }));
   } catch (error) {
     logger.debug?.('[capability-registry] Lemonade probe skipped', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return [];
+  }
+}
+
+/** Default OmniRoute endpoint (`omniroute serve`), mirrors the provider catalog. */
+const DEFAULT_OMNIROUTE_BASE_URL = 'http://127.0.0.1:20128';
+const OMNIROUTE_PROBE_TIMEOUT_MS = 800;
+
+/**
+ * Turn an OmniRoute base URL (HOST:PORT, with or without `/v1`) into its
+ * `/v1/models` endpoint. Exported for the unit tests.
+ */
+export function omnirouteModelsUrl(baseURL: string | undefined): string {
+  let host = (baseURL ?? '').trim() || DEFAULT_OMNIROUTE_BASE_URL;
+  if (!/^https?:\/\//i.test(host)) host = `http://${host}`;
+  host = host.replace(/\/+$/, '').replace(/\/v1$/i, '');
+  return `${host}/v1/models`;
+}
+
+/**
+ * Probe a local OmniRoute gateway. OmniRoute is a loopback OpenAI-compatible
+ * proxy that fans out to 90+ cloud free tiers, so its models are advertised
+ * with `cloud` egress (the process is local, the inference is not) at $0.
+ * Best-effort: short timeout, never throws — an absent gateway costs nothing.
+ */
+async function probeOmniRoute(): Promise<FleetModelDescriptor[]> {
+  const url = omnirouteModelsUrl(process.env.OMNIROUTE_BASE_URL);
+  try {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), OMNIROUTE_PROBE_TIMEOUT_MS);
+    const apiKey = process.env.OMNIROUTE_API_KEY?.trim();
+    const res = await fetch(url, {
+      signal: ctrl.signal,
+      headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : undefined,
+    });
+    clearTimeout(timer);
+    if (!res.ok) return [];
+    const data = (await res.json()) as { data?: Array<{ id?: unknown }> };
+    if (!Array.isArray(data.data)) return [];
+    return data.data
+      .filter((model): model is { id: string } => typeof model.id === 'string' && model.id.length > 0)
+      .map((model): FleetModelDescriptor => ({
+        id: model.id,
+        contextWindow: 32_768,
+        strengths: deriveStrengths(model.id, 'omniroute'),
+        provider: 'omniroute',
+        egress: 'cloud',
+      }));
+  } catch (error) {
+    logger.debug?.('[capability-registry] OmniRoute probe skipped', {
       error: error instanceof Error ? error.message : String(error),
     });
     return [];

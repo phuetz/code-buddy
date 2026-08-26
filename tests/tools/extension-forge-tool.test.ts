@@ -33,7 +33,7 @@ afterEach(() => {
   getToolRegistry().removeTool('authored__uppercase');
   getToolRegistry().removeTool('authored__hardcoded');
   for (const dir of createdDirs.splice(0)) {
-    fs.rmSync(dir, { recursive: true, force: true });
+    fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   }
 });
 

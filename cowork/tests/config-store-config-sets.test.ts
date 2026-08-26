@@ -102,6 +102,57 @@ describe('ConfigStore config sets', () => {
     expect(defaultSetView.apiKey).toBe('sk-openrouter-origin');
   });
 
+  it('redacts every profile key and preserves secrets on renderer round-trip', () => {
+    mocks.seed = {
+      provider: 'openrouter',
+      customProtocol: 'anthropic',
+      apiKey: 'sk-openrouter-origin',
+      baseUrl: 'https://openrouter.ai/api/v1',
+      model: 'anthropic/claude-sonnet-4-6',
+      enableThinking: false,
+      isConfigured: true,
+    };
+    const store = new ConfigStore();
+    store.createSet({ name: 'Work', mode: 'clone' });
+    store.update({ provider: 'openai', apiKey: 'sk-openai-work', model: 'gpt-5-mini' });
+    const before = store.getAll();
+
+    const redacted = store.getAllRedacted();
+    const serialized = JSON.stringify(redacted);
+    expect(serialized).not.toContain('sk-openrouter-origin');
+    expect(serialized).not.toContain('sk-openai-work');
+    expect(redacted.apiKey).toBe('');
+    expect(redacted.hasKey).toBe(true);
+    expect(redacted.keyTail).toBe('work');
+    expect(redacted.profiles.openai).toMatchObject({
+      apiKey: '',
+      hasKey: true,
+      keyTail: 'work',
+    });
+    expect(
+      redacted.configSets.every((set) =>
+        Object.values(set.profiles).every((profile) => profile?.apiKey === '')
+      )
+    ).toBe(true);
+
+    store.update(redacted);
+    const after = store.getAll();
+    expect(after.apiKey).toBe(before.apiKey);
+    expect(
+      after.configSets.map((set) =>
+        Object.fromEntries(
+          Object.entries(set.profiles).map(([key, profile]) => [key, profile?.apiKey])
+        )
+      )
+    ).toEqual(
+      before.configSets.map((set) =>
+        Object.fromEntries(
+          Object.entries(set.profiles).map(([key, profile]) => [key, profile?.apiKey])
+        )
+      )
+    );
+  });
+
   it('guards default set deletion and falls back to default after delete', () => {
     const store = new ConfigStore();
     const created = store.createSet({ name: 'My Set', mode: 'clone' });

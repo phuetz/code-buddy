@@ -126,7 +126,7 @@ describe('voice to avatar lifecycle', () => {
     } finally {
       if (previous === undefined) delete process.env.CODEBUDDY_AVATAR_STREAM_AUDIO;
       else process.env.CODEBUDDY_AVATAR_STREAM_AUDIO = previous;
-      rmSync(dir, { recursive: true, force: true });
+      rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     }
   });
 

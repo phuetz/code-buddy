@@ -81,7 +81,7 @@ beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), 'exp-orch-'));
   store = new ExperimentVariantStore(join(dir, 'variants.json'));
 });
-afterEach(() => rmSync(dir, { recursive: true, force: true }));
+afterEach(() => rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }));
 
 describe('runExperiment — byte-identical without the empirical option', () => {
   it('does NOT score/record and run.empirical is undefined; Phase 0 stage order preserved', async () => {

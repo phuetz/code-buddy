@@ -26,8 +26,8 @@ describe('cron jobs HTTP routes', () => {
     } else {
       process.env.CODEBUDDY_HOME = previousHome;
     }
-    fs.rmSync(tmpHome, { recursive: true, force: true });
-    fs.rmSync(tmpCron, { recursive: true, force: true });
+    fs.rmSync(tmpHome, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+    fs.rmSync(tmpCron, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   it('loads persisted cron jobs before listing or triggering them over real HTTP', async () => {

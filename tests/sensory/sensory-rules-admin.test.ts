@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { rm, appendFile, mkdir } from 'node:fs/promises';
+import { rm, appendFile, mkdir, readFile, stat } from 'node:fs/promises';
 import {
   validateRule,
   upsertSensoryRule,
@@ -9,6 +9,7 @@ import {
   toggleSensoryRule,
   removeSensoryRule,
   readRuleRuns,
+  appendRuleRun,
   type SensoryRule,
 } from '../../src/sensory/sensory-rules-engine.js';
 
@@ -21,7 +22,7 @@ beforeEach(() => {
   process.env.CODEBUDDY_RULE_RUNS_FILE = path.join(dir, 'rule-runs.jsonl');
 });
 afterEach(async () => {
-  await rm(dir, { recursive: true, force: true });
+  await rm(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   delete process.env.CODEBUDDY_SENSORY_RULES_FILE;
   delete process.env.CODEBUDDY_RULE_RUNS_FILE;
 });
@@ -87,5 +88,16 @@ describe('sensory-rules admin — readRuleRuns (observe)', () => {
     // tolerate junk lines
     await appendFile(f, 'not json\n');
     expect((await readRuleRuns(10)).length).toBe(2);
+  });
+
+  it('rotates a large rule-runs sidecar before appending', async () => {
+    await mkdir(dir, { recursive: true });
+    const file = process.env.CODEBUDDY_RULE_RUNS_FILE!;
+    await appendFile(file, 'x'.repeat(512 * 1024 + 1));
+
+    await appendRuleRun({ ts: 3, rule: 'rotated', action: 'alert', ok: true });
+
+    expect((await stat(`${file}.1`)).size).toBeGreaterThan(512 * 1024);
+    expect(JSON.parse((await readFile(file, 'utf8')).trim())).toMatchObject({ rule: 'rotated', ok: true });
   });
 });

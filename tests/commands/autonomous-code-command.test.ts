@@ -17,6 +17,7 @@ const execFileAsync = promisify(execFile);
 let consoleLogSpy: ReturnType<typeof vi.spyOn>;
 let consoleErrorSpy: ReturnType<typeof vi.spyOn>;
 let tempRoot: string;
+let oldGrokKey: string | undefined;
 
 function createProgram(): Command {
   const program = new Command();
@@ -95,15 +96,28 @@ describe('autonomous-code CLI command', () => {
     process.env.CODEBUDDY_HOME = tempRoot;
     consoleLogSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
     consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    // The verification/self-correction loop resolves an LLM client up front and
+    // throws "No LLM provider configuration found" when none is detected. CI
+    // runners have no API keys, so pin a dummy provider key to make detection
+    // deterministic. Verification here passes before any LLM call, so the client
+    // is constructed but never invoked — no network.
+    oldGrokKey = process.env.GROK_API_KEY;
+    process.env.GROK_API_KEY = 'test-dummy-key-not-used';
   });
 
   afterEach(async () => {
     vi.doUnmock('../../src/agent/autonomous/edit-proposal-producer.js');
     vi.doUnmock('../../src/agent/autonomous/agentic-coding-runner.js');
     process.env.CODEBUDDY_HOME = oldHome;
+    if (oldGrokKey === undefined) {
+      delete process.env.GROK_API_KEY;
+    } else {
+      process.env.GROK_API_KEY = oldGrokKey;
+    }
     consoleLogSpy.mockRestore();
     consoleErrorSpy.mockRestore();
-    await fs.rm(tempRoot, { force: true, recursive: true });
+    // Retry: Windows may still hold a handle on just-closed files (AV/indexer).
+    await fs.rm(tempRoot, { force: true, recursive: true, maxRetries: 5, retryDelay: 100 });
   });
 
   it('prints JSON report for a valid task contract', async () => {

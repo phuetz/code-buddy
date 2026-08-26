@@ -3,11 +3,6 @@
 import { mkdir } from 'fs/promises';
 import path from 'path';
 
-import {
-  chromium,
-  type Download,
-} from 'playwright';
-
 import { isLoopbackHost } from '../../security/dev-origins.js';
 
 export const DEFAULT_FLOW_CDP_URL = 'http://127.0.0.1:9222';
@@ -58,12 +53,18 @@ interface FlowLocator {
   first(): FlowLocator;
 }
 
+/** Playwright Download subset — kept local so the driver stays injectable. */
+export interface FlowDownload {
+  failure(): Promise<string | null>;
+  saveAs(destPath: string): Promise<void>;
+}
+
 export interface FlowPage {
   url(): string;
   locator(selector: string): FlowLocator;
   goto(url: string, options: { waitUntil: 'domcontentloaded'; timeout: number }): Promise<unknown>;
   waitForTimeout(milliseconds: number): Promise<void>;
-  waitForEvent(event: 'download', options?: { timeout?: number }): Promise<Download>;
+  waitForEvent(event: 'download', options?: { timeout?: number }): Promise<FlowDownload>;
 }
 
 export interface FlowBrowserContext {
@@ -265,12 +266,17 @@ export class FlowDriver {
   }
 }
 
+async function defaultConnectOverCdp(cdpUrl: string): Promise<FlowBrowser> {
+  const { chromium } = await import('playwright');
+  return chromium.connectOverCDP(cdpUrl) as unknown as FlowBrowser;
+}
+
 export async function attachToBrowser(options: AttachToBrowserOptions = {}): Promise<AttachToBrowserResult> {
   const cdpUrl = assertLoopbackCdpUrl(options.cdpUrl ?? DEFAULT_FLOW_CDP_URL);
   const timeoutMs = positiveTimeout(options.timeoutMs, 30_000, 'CDP timeout');
   let attached: FlowBrowser;
   try {
-    attached = await (options.connector ?? ((url) => chromium.connectOverCDP(url)))(cdpUrl);
+    attached = await (options.connector ?? defaultConnectOverCdp)(cdpUrl);
   } catch (error) {
     throw new Error(`Could not attach to operator Chrome at ${cdpUrl}: ${errorMessage(error)}`);
   }
@@ -335,4 +341,48 @@ function positiveTimeout(value: number | undefined, fallback: number, label: str
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+export type FlowRunModel = 'fast' | 'quality';
+
+export class FlowCreditBudgetError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'FlowCreditBudgetError';
+  }
+}
+
+function creditCostPerClip(model: FlowRunModel): 10 | 100 {
+  if (model === 'fast') return 10;
+  if (model === 'quality') return 100;
+  throw new Error('Flow model must be fast or quality');
+}
+
+function assertNonNegativeInteger(value: number, label: string): void {
+  if (!Number.isSafeInteger(value) || value < 0) throw new Error(`${label} must be a non-negative integer`);
+}
+
+export function estimateCreditCost(jobs: readonly unknown[], model: FlowRunModel): number {
+  return jobs.length * creditCostPerClip(model);
+}
+
+export function assertSufficientCreditBalance(balance: number, estimatedCost: number): void {
+  assertNonNegativeInteger(balance, 'Flow credit balance');
+  assertNonNegativeInteger(estimatedCost, 'estimated Flow credit cost');
+  if (balance < estimatedCost) {
+    throw new FlowCreditBudgetError(
+      `Insufficient Google Flow credits: balance ${balance}, full-run estimate ${estimatedCost}; no generation submitted`,
+    );
+  }
+}
+
+export function assertCreditBudget(spent: number, nextCost: number, maxCredits: number): void {
+  assertNonNegativeInteger(spent, 'spent Flow credits');
+  if (!Number.isSafeInteger(nextCost) || nextCost <= 0) throw new Error('next Flow credit cost must be positive');
+  if (!Number.isSafeInteger(maxCredits) || maxCredits <= 0) throw new Error('--max-credits must be a positive integer');
+  if (spent + nextCost > maxCredits) {
+    throw new FlowCreditBudgetError(
+      `Flow max-credit guard stopped the run at ${spent}/${maxCredits}; next clip costs ${nextCost}`,
+    );
+  }
 }

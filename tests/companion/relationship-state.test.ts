@@ -47,7 +47,7 @@ describe('relationship-state pure helpers', () => {
         expect(statSync(dir).mode & 0o077).toBe(0);
       }
     } finally {
-      rmSync(dir, { recursive: true, force: true });
+      rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     }
   });
 });
@@ -66,7 +66,7 @@ describe('relationship presence moments (via the tick)', () => {
   });
   afterEach(() => {
     delete process.env.CODEBUDDY_COMPANION_PRESENCE;
-    rmSync(dir, { recursive: true, force: true });
+    rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   it('greets a return after a real absence (reunion), opening the window', async () => {

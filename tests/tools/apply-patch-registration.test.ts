@@ -50,9 +50,9 @@ describe('apply_patch registration (V2)', () => {
     });
     afterEach(() => {
       process.chdir(prevCwd);
-      fs.rmSync(dir, { recursive: true, force: true });
+      fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
       for (const outsidePath of outsidePaths.splice(0)) {
-        fs.rmSync(outsidePath, { recursive: true, force: true });
+        fs.rmSync(outsidePath, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
       }
     });
 

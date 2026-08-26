@@ -189,7 +189,6 @@ export class MatrixChannel extends BaseChannel {
   async connect(): Promise<void> {
     let sdk: MatrixSdkModule;
     try {
-      // @ts-expect-error -- optional dependency, loaded dynamically
       sdk = await import('matrix-js-sdk') as unknown as MatrixSdkModule;
     } catch {
       throw new Error(

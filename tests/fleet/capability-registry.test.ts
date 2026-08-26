@@ -24,6 +24,7 @@ vi.mock('../../src/utils/logger.js', () => ({
 
 import {
   getLocalCapabilities,
+  omnirouteModelsUrl,
   parseAgyModelsOutput,
   resetCapabilityCache,
 } from '../../src/fleet/capability-registry';
@@ -53,6 +54,8 @@ function clearProviderEnv() {
     'AGY_CLI_PATH',
     'LEMONADE_HOST',
     'LEMONADE_API_KEY',
+    'OMNIROUTE_BASE_URL',
+    'OMNIROUTE_API_KEY',
     'OPENROUTER_API_KEY',
   ]) {
     delete process.env[k];
@@ -78,7 +81,7 @@ beforeEach(() => {
 
 afterEach(() => {
   if (tempAuthDir) {
-    fs.rmSync(tempAuthDir, { recursive: true, force: true });
+    fs.rmSync(tempAuthDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     tempAuthDir = null;
   }
   process.env = { ...originalEnv };
@@ -314,6 +317,90 @@ describe('capability-registry — Lemonade probe', () => {
   });
 });
 
+describe('capability-registry — OmniRoute gateway probe', () => {
+  it('enrols the gateway models when /v1/models answers, with cloud egress (inference leaves the box)', async () => {
+    global.fetch = vi.fn(async (url: RequestInfo | URL) => {
+      if (String(url) === 'http://127.0.0.1:20128/v1/models') {
+        return new Response(JSON.stringify({
+          data: [
+            { id: 'auto/best-free' },
+            { id: 'nvidia/nemotron-3-nano' },
+            { id: 42 }, // junk id → dropped
+          ],
+        }), { status: 200 });
+      }
+      throw new Error('econn');
+    }) as unknown as typeof fetch;
+
+    const cap = await getLocalCapabilities();
+    const omni = cap.models.filter((model) => model.provider === 'omniroute');
+    expect(omni.map((model) => model.id)).toEqual(['auto/best-free', 'nvidia/nemotron-3-nano']);
+    expect(omni.every((model) => model.egress === 'cloud')).toBe(true);
+    expect(cap.egress).toBe('cloud');
+  });
+
+  it('stays silent when the gateway is absent (connection refused)', async () => {
+    global.fetch = vi.fn(async () => {
+      throw new Error('ECONNREFUSED 127.0.0.1:20128');
+    }) as unknown as typeof fetch;
+
+    const cap = await getLocalCapabilities();
+    expect(cap.models.filter((model) => model.provider === 'omniroute')).toEqual([]);
+    expect(cap.egress).toBe('local');
+  });
+
+  it('stays silent on an HTTP error or a malformed body', async () => {
+    global.fetch = vi.fn(async (url: RequestInfo | URL) => {
+      if (String(url).includes(':20128/v1/models')) {
+        return new Response('upstream exploded', { status: 502 });
+      }
+      throw new Error('econn');
+    }) as unknown as typeof fetch;
+    expect((await getLocalCapabilities({ force: true })).models.filter((m) => m.provider === 'omniroute')).toEqual([]);
+
+    global.fetch = vi.fn(async (url: RequestInfo | URL) => {
+      if (String(url).includes(':20128/v1/models')) {
+        return new Response('not json', { status: 200 });
+      }
+      throw new Error('econn');
+    }) as unknown as typeof fetch;
+    expect((await getLocalCapabilities({ force: true })).models.filter((m) => m.provider === 'omniroute')).toEqual([]);
+
+    global.fetch = vi.fn(async (url: RequestInfo | URL) => {
+      if (String(url).includes(':20128/v1/models')) {
+        return new Response(JSON.stringify({ models: ['wrong-shape'] }), { status: 200 });
+      }
+      throw new Error('econn');
+    }) as unknown as typeof fetch;
+    expect((await getLocalCapabilities({ force: true })).models.filter((m) => m.provider === 'omniroute')).toEqual([]);
+  });
+
+  it('honours OMNIROUTE_BASE_URL (HOST:PORT or /v1 form) and sends the bearer when OMNIROUTE_API_KEY is set', async () => {
+    process.env.OMNIROUTE_BASE_URL = 'omni.lan:20128/v1/';
+    process.env.OMNIROUTE_API_KEY = 'sk-omni';
+    const fetchSpy = vi.fn(async (url: RequestInfo | URL) => {
+      if (String(url) === 'http://omni.lan:20128/v1/models') {
+        return new Response(JSON.stringify({ data: [{ id: 'auto/best-free' }] }), { status: 200 });
+      }
+      throw new Error('econn');
+    });
+    global.fetch = fetchSpy as unknown as typeof fetch;
+
+    const cap = await getLocalCapabilities();
+    expect(cap.models.filter((model) => model.provider === 'omniroute').map((m) => m.id)).toEqual(['auto/best-free']);
+    const call = fetchSpy.mock.calls.find((c) => String(c[0]).includes('omni.lan'));
+    expect(call).toBeDefined();
+    expect((call![1] as RequestInit | undefined)?.headers).toEqual({ Authorization: 'Bearer sk-omni' });
+  });
+
+  it('omnirouteModelsUrl normalises scheme, trailing slash and /v1', () => {
+    expect(omnirouteModelsUrl(undefined)).toBe('http://127.0.0.1:20128/v1/models');
+    expect(omnirouteModelsUrl('localhost:20128')).toBe('http://localhost:20128/v1/models');
+    expect(omnirouteModelsUrl('http://localhost:20128/v1')).toBe('http://localhost:20128/v1/models');
+    expect(omnirouteModelsUrl('https://gw.example/v1/')).toBe('https://gw.example/v1/models');
+  });
+});
+
 describe('capability-registry — strength derivation', () => {
   it('marks Codex / coder models with the "code" strength', async () => {
     process.env.OPENAI_API_KEY = 'k';
@@ -374,6 +461,27 @@ describe('capability-registry — Hermes role tags', () => {
 });
 
 describe('capability-registry — caching', () => {
+  it('deduplicates concurrent snapshot builds', async () => {
+    const fetchSpy = vi.fn(async () => {
+      throw new Error('econn');
+    });
+    global.fetch = fetchSpy as unknown as typeof fetch;
+
+    const snapshots = await Promise.all(
+      Array.from({ length: 5 }, () => getLocalCapabilities()),
+    );
+
+    const probedUrls = fetchSpy.mock.calls.map(([url]) => String(url));
+    expect(probedUrls.length).toBeGreaterThan(0);
+    expect(new Set(probedUrls).size).toBe(probedUrls.length);
+    expect(snapshots).toHaveLength(5);
+    expect(
+      snapshots.every(
+        (snapshot) => snapshot.machineLabel === snapshots[0]!.machineLabel,
+      ),
+    ).toBe(true);
+  });
+
   it('caches the snapshot — second call does not re-probe', async () => {
     process.env.ANTHROPIC_API_KEY = 'k';
     const fetchSpy = vi.fn(async () => {

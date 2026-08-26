@@ -20,7 +20,7 @@ describe('DevicePairingStore', () => {
   });
 
   afterEach(() => {
-    rmSync(dir, { recursive: true, force: true });
+    rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   describe('requestPairing', () => {
@@ -137,7 +137,10 @@ describe('DevicePairingStore', () => {
       store.requestPairing({ deviceId: 'dev-1' });
       store.approve('dev-1');
       const mode = require('fs').statSync(join(dir, 'paired.json')).mode & 0o777;
-      expect(mode).toBe(0o600);
+      // POSIX mode bits only: Windows reports 0o666 whatever the chmod.
+      if (process.platform !== 'win32') {
+        expect(mode).toBe(0o600);
+      }
       expect(existsSync(join(dir, 'pending.json'))).toBe(true);
     });
   });
