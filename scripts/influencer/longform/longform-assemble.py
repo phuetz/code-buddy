@@ -641,13 +641,9 @@ def main() -> None:
                     render_avatar(
                         section, avatar_path, duration, destination)
                 else:
-                    print(
-                        f'AVERTISSEMENT {section_id}: avatar absent, '
-                        'placeholder utilisé',
-                        file=sys.stderr,
+                    raise AssemblyError(
+                        f'{section_id}: avatar absent ({avatar_path}) — placeholder refusé'
                     )
-                    render_card(
-                        section, duration, destination, avatar_missing=True)
             else:
                 visuals = list_visuals(workdir / 'visuals' / section_id)
                 render_voiceover_section(
