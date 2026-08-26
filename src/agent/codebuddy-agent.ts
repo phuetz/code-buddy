@@ -38,6 +38,8 @@ import { resetPersonaManager } from "../personas/persona-manager.js";
 import { resetEnhancedMemory } from "../memory/enhanced-memory.js";
 import { resetPluginMarketplace } from "../plugins/marketplace.js";
 import { classifyLisaIntrospection } from '../identity/lisa-introspection.js';
+import { primeLocalRuntimeModelConfig } from '../config/local-runtime-context.js';
+import { getModelToolConfig } from '../config/model-tools.js';
 
 // Re-export types for backwards compatibility
 export type { ChatEntry, StreamingChunk } from "./types.js";
@@ -529,7 +531,13 @@ export class CodeBuddyAgent extends BaseAgent {
     const customInstructions = loadCustomInstructions();
 
     // Initialize system prompt (async operation) — track readiness
-    this.systemPromptReady = this.initializeAgentSystemPrompt(systemPromptId, modelToUse, customInstructions);
+    this.systemPromptReady = this.initializeAgentSystemPrompt(
+      systemPromptId,
+      modelToUse,
+      customInstructions,
+      baseURL,
+      apiKey,
+    );
 
     // Fire SessionStart user hook (non-blocking)
     getUserHooksManager(initialWorkingDirectory).executeHooks('SessionStart', {}).catch(
@@ -658,9 +666,12 @@ Look at the screenshot and find the element matching the user's intent. Output o
   private async initializeAgentSystemPrompt(
     systemPromptId: string | undefined,
     modelName: string,
-    customInstructions: string | null
+    customInstructions: string | null,
+    baseURL?: string,
+    apiKey?: string,
   ): Promise<void> {
     try {
+      await this.primeLocalRuntimeContext(modelName, baseURL, apiKey);
       const hasInitialOverride = !!this.customSystemPromptOverride;
       let systemPrompt = this.customSystemPromptOverride
         ?? await this.promptBuilder.buildSystemPrompt(systemPromptId, modelName, customInstructions);
@@ -693,6 +704,41 @@ Look at the screenshot and find the element matching the user's intent. Output o
       this.messages.push({
         role: "system",
         content: "You are a helpful AI coding assistant.",
+      });
+    }
+  }
+
+  private async primeLocalRuntimeContext(
+    modelName: string,
+    baseURL: string | undefined,
+    apiKey: string | undefined,
+  ): Promise<void> {
+    try {
+      const runtime = await primeLocalRuntimeModelConfig({
+        model: modelName,
+        baseURL,
+        apiKey,
+      });
+      if (!runtime) return;
+
+      // CODEBUDDY_MAX_CONTEXT is an explicit user override and therefore wins
+      // over discovery. Otherwise, refresh the manager built synchronously in
+      // the constructor before the first prompt/turn consumes its limits.
+      const envMaxContext = Number(process.env.CODEBUDDY_MAX_CONTEXT);
+      if (Number.isFinite(envMaxContext) && envMaxContext > 0) return;
+      const contextWindow = getModelToolConfig(modelName).contextWindow;
+      if (!contextWindow) return;
+      this.contextManager.updateConfig({
+        maxContextTokens: contextWindow,
+        responseReserveTokens: Math.floor(contextWindow * 0.125),
+        autoCompactThreshold: Math.min(200_000, contextWindow),
+      });
+    } catch (error) {
+      // Discovery must never turn an offline local workstation into a startup
+      // failure. Keep the context manager and config cache exactly as built.
+      logger.debug('Local runtime context probe skipped', {
+        model: modelName,
+        error: error instanceof Error ? error.message : String(error),
       });
     }
   }

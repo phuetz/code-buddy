@@ -16,6 +16,9 @@ import { CodeBuddyAgent } from '../../src/agent/codebuddy-agent';
 import type { ChatEntry, StreamingChunk } from '../../src/agent/types';
 import { findSkill } from '../../src/skills/index.js';
 import { PromptBuilder } from '../../src/services/prompt-builder.js';
+import { createContextManager } from '../../src/context/context-manager-v2.js';
+import { resetLocalRuntimeContextProbeCache } from '../../src/config/local-runtime-context.js';
+import { resetRuntimeModelContextCache } from '../../src/config/model-tools.js';
 
 const mockChat = jest.fn();
 const mockChatStream = jest.fn();
@@ -417,6 +420,7 @@ jest.mock('../../src/tools/hooks/index.js', () => ({
 describe('CodeBuddyAgent', () => {
   let agent: CodeBuddyAgent;
   const originalEnv = { ...process.env };
+  const originalFetch = globalThis.fetch;
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -440,6 +444,9 @@ describe('CodeBuddyAgent', () => {
 
   afterEach(() => {
     process.env = originalEnv;
+    globalThis.fetch = originalFetch;
+    resetLocalRuntimeContextProbeCache();
+    resetRuntimeModelContextCache();
     if (agent) {
       try { agent.dispose(); } catch { /* ignore */ }
     }
@@ -507,6 +514,51 @@ describe('CodeBuddyAgent', () => {
       const messages = (agent as any).messages;
       expect(messages.length).toBeGreaterThanOrEqual(1);
       expect(messages[0].role).toBe('system');
+    });
+
+    it('primes local runtime context before the first prompt is ready', async () => {
+      globalThis.fetch = jest.fn().mockImplementation(async (input: string | URL | Request) => {
+        const url = String(input);
+        if (url.endsWith('/api/show')) {
+          return {
+            ok: true,
+            json: async () => ({ model_info: { 'x7.context_length': 131072 } }),
+          } as Response;
+        }
+        return { ok: true, json: async () => ({ models: [] }) } as Response;
+      }) as unknown as typeof fetch;
+
+      agent = new CodeBuddyAgent(
+        'ollama',
+        'http://localhost:11434/v1',
+        'x7-agent-local:latest',
+      );
+      await agent.systemPromptReady;
+
+      const manager = (createContextManager as jest.Mock).mock.results.at(-1)?.value;
+      expect(manager.updateConfig).toHaveBeenCalledWith({
+        maxContextTokens: 131072,
+        responseReserveTokens: 16384,
+        autoCompactThreshold: 131072,
+      });
+      const buildSystemPrompt = (PromptBuilder as jest.Mock).mock.results.at(-1)?.value.buildSystemPrompt;
+      expect(buildSystemPrompt.mock.invocationCallOrder[0])
+        .toBeGreaterThan(manager.updateConfig.mock.invocationCallOrder[0]);
+    });
+
+    it('keeps agent startup fail-open when a local runtime is unreachable', async () => {
+      globalThis.fetch = jest.fn().mockRejectedValue(new Error('ECONNREFUSED')) as typeof fetch;
+      agent = new CodeBuddyAgent(
+        'ollama',
+        'http://127.0.0.1:11434/v1',
+        'x7-agent-offline:latest',
+      );
+
+      await expect(agent.systemPromptReady).resolves.toBeUndefined();
+      const manager = (createContextManager as jest.Mock).mock.results.at(-1)?.value;
+      expect(manager.updateConfig).not.toHaveBeenCalled();
+      expect((agent as unknown as { messages: Array<{ role: string }> }).messages[0]?.role)
+        .toBe('system');
     });
 
     it('should use an initial system prompt override without building the default prompt', async () => {

@@ -781,6 +781,20 @@ const DEFAULT_MODEL_CONFIGS: ModelToolConfig[] = [
     patchFormat: 'search_replace',
     promptProfile: 'rich',
   },
+  // Ornith 1.5 35B — Qwen3.5 MoE lineage served on Darkstar. Ollama
+  // `/api/show` reports `qwen35moe.context_length: 262144` and the runtime
+  // advertises completion, vision, tools and thinking (measured 2026-08-26).
+  {
+    model: 'ornith-1.5*',
+    strengths: ['french', 'code', 'thinking'],
+    supportsReasoning: true,
+    supportsToolCalls: true,
+    supportsVision: true,
+    contextWindow: 262144,
+    maxOutputTokens: 16384,
+    patchFormat: 'search_replace',
+    promptProfile: 'rich',
+  },
   {
     model: 'qwen3*',
     strengths: ['french'],
@@ -902,6 +916,51 @@ function matchModel(modelName: string, pattern: string): boolean {
  * Results are cached per model name (when no custom configs are provided).
  */
 const _configCache = new Map<string, ModelToolConfig>();
+const _runtimeContextWindows = new Map<string, number>();
+
+function modelCacheKey(modelName: string): string {
+  return modelName.trim().toLowerCase();
+}
+
+function applyRuntimeContextWindow(
+  modelName: string,
+  config: ModelToolConfig,
+): ModelToolConfig {
+  const runtimeContextWindow = _runtimeContextWindows.get(modelCacheKey(modelName));
+  if (runtimeContextWindow === undefined) return config;
+
+  // A declaration is an intentional ceiling, not merely documentation. The
+  // runtime can reveal that less context is actually served, but can never
+  // enlarge a configured cap (for example the deliberately conservative
+  // Gemma profiles above).
+  const contextWindow = config.contextWindow === undefined
+    ? runtimeContextWindow
+    : Math.min(config.contextWindow, runtimeContextWindow);
+  return contextWindow === config.contextWindow ? config : { ...config, contextWindow };
+}
+
+/**
+ * Prime the synchronous hot-path cache with a limit measured asynchronously
+ * from a local runtime. Invalid values are ignored so discovery stays
+ * fail-open.
+ */
+export function cacheRuntimeModelContextWindow(modelName: string, contextWindow: number): void {
+  if (!modelName.trim() || !Number.isSafeInteger(contextWindow) || contextWindow <= 0) return;
+
+  const normalizedModel = modelCacheKey(modelName);
+  _runtimeContextWindows.set(normalizedModel, contextWindow);
+  for (const cachedModel of _configCache.keys()) {
+    if (modelCacheKey(cachedModel) === normalizedModel) _configCache.delete(cachedModel);
+  }
+  resetModelStrengthsCache();
+}
+
+/** Test seam: restore the pre-probe behaviour and clear derived memos. */
+export function resetRuntimeModelContextCache(): void {
+  _runtimeContextWindows.clear();
+  _configCache.clear();
+  resetModelStrengthsCache();
+}
 
 /**
  * Le motif qui couvre ce modèle, ou `null` s'il n'en existe aucun.
@@ -935,8 +994,9 @@ export function getModelToolConfig(
   for (const config of configs) {
     if (matchModel(modelName, config.model)) {
       logger.debug('Model tool config matched', { model: modelName, pattern: config.model });
-      if (!customConfigs) _configCache.set(modelName, config);
-      return config;
+      const resolved = applyRuntimeContextWindow(modelName, config);
+      if (!customConfigs) _configCache.set(modelName, resolved);
+      return resolved;
     }
   }
 
@@ -947,7 +1007,7 @@ export function getModelToolConfig(
     supportsReasoning: false,
     supportsToolCalls: true,
     supportsVision: false,
-    contextWindow: 32768,
+    contextWindow: _runtimeContextWindows.get(modelCacheKey(modelName)) ?? 32768,
     maxOutputTokens: 4096,
     patchFormat: 'search_replace',
   };
