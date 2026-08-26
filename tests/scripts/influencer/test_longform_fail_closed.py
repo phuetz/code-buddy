@@ -167,6 +167,97 @@ class TimelineSafetyTests(unittest.TestCase):
                 news.render_demo_card({'video': str(source)}, 1.0, destination, root)
                 self.assertEqual(atomic.call_count, 2)
 
+    def test_segment_cache_is_invalidated_when_narrated_script_changes(self) -> None:
+        with tempfile.TemporaryDirectory(prefix='.x5-script-cache-', dir=LONGFORM) as directory:
+            root = Path(directory)
+            source = root / 'voice.mp4'
+            composite = root / 'composite.mp4'
+            ass = root / 'subs.ass'
+            destination = root / 'segment.mp4'
+            audio = root / 'segment.wav'
+            mastered = root / 'mastered.wav'
+            master = root / 'master.mp4'
+            for item in (source, composite, ass, mastered):
+                item.write_bytes(item.name.encode())
+
+            base_ns = 1_700_000_000_000_000_000
+            os.utime(mastered, ns=(base_ns, base_ns))
+            render_count = 0
+
+            def fake_atomic(_command, dest):
+                nonlocal render_count
+                if dest == destination:
+                    render_count += 1
+                    dest.write_bytes(f'render-{render_count}'.encode())
+                    tick = base_ns + render_count * 1_000_000_000
+                    os.utime(dest, ns=(tick, tick))
+                else:
+                    dest.write_bytes(b'audio')
+
+            def render(script_dir):
+                signature = news.segment_script_cache_signature({'id': 'S1'}, script_dir)
+                news.assemble_segment(
+                    'S1', source, None, 1.0, composite,
+                    [{'type': 'avatar', 't0': 0.0, 't1': 1.0, 'card': None}],
+                    [], {}, ass, destination, audio, [],
+                    script_signature=signature,
+                )
+                if news.stale(master, destination, mastered):
+                    master.write_bytes(destination.read_bytes())
+                    tick = destination.stat().st_mtime_ns + 100_000_000
+                    os.utime(master, ns=(tick, tick))
+
+            with patch.object(news, 'atomic', side_effect=fake_atomic):
+                render(None)
+                self.assertEqual(master.read_bytes(), b'render-1')
+
+                script_dir = root / 'scripts'
+                script_dir.mkdir()
+                script = script_dir / 'S1.txt'
+                script.write_text('ses lecons', encoding='utf-8')
+                render(script_dir)
+                self.assertEqual(master.read_bytes(), b'render-2')
+
+                render(script_dir)
+                self.assertEqual(render_count, 2)
+
+                original_stat = script.stat()
+                script.write_text('CodeBuddy!', encoding='utf-8')
+                os.utime(
+                    script,
+                    ns=(original_stat.st_atime_ns, original_stat.st_mtime_ns),
+                )
+                render(script_dir)
+                self.assertEqual(master.read_bytes(), b'render-3')
+
+                render(None)
+                self.assertEqual(master.read_bytes(), b'render-4')
+
+    def test_cache_root_already_named_words_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory(prefix='.x5-words-cache-', dir=LONGFORM) as directory:
+            root = Path(directory)
+            order = root / 'order.json'
+            order.write_text('{"titre":"cache root test","segments":[]}', encoding='utf-8')
+            cache_root = root / 'shared' / 'words'
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(LONGFORM / 'assemble_news_long.py'),
+                    str(order),
+                    '--out-dir',
+                    str(root / 'out'),
+                    '--cache-dir',
+                    str(cache_root),
+                ],
+                capture_output=True,
+                text=True,
+            )
+
+            self.assertEqual(result.returncode, 2)
+            self.assertRegex(result.stderr, '--cache-dir.*racine')
+            self.assertFalse(cache_root.exists())
+
 
 class SubtitleSafetyTests(unittest.TestCase):
     def test_two_minute_timeline_media_gap_is_fatal(self) -> None:

@@ -98,7 +98,7 @@ import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
@@ -751,20 +751,21 @@ def render_demo_chassis(spec: dict[str, Any], zone: tuple[int, int, int, int]) -
 
 
 DEMO_CACHE_VERSION = 1
+SEGMENT_SCRIPT_CACHE_VERSION = 1
 
 
 def demo_cache_path(dest: Path) -> Path:
     return dest.with_name(f'{dest.name}.demo-source.json')
 
 
-def sha256_file(path: Path) -> str:
+def sha256_file(path: Path, label: str = 'fichier') -> str:
     digest = hashlib.sha256()
     try:
         with path.open('rb') as source:
             for chunk in iter(lambda: source.read(1024 * 1024), b''):
                 digest.update(chunk)
     except OSError as exc:
-        raise NewsLongError(f'démo illisible: {path}: {exc}') from exc
+        raise NewsLongError(f'{label} illisible: {path}: {exc}') from exc
     return digest.hexdigest()
 
 
@@ -779,7 +780,7 @@ def demo_cache_signature(video: Path, spec: dict[str, Any], dur: float) -> dict[
         'video': {
             'path': str(resolved_video),
             'size': video_size,
-            'sha256': sha256_file(video),
+            'sha256': sha256_file(video, 'démo'),
         },
         'duration': q(dur),
         'card': {
@@ -789,7 +790,7 @@ def demo_cache_signature(video: Path, spec: dict[str, Any], dur: float) -> dict[
     }
 
 
-def read_demo_cache(path: Path) -> dict[str, Any] | None:
+def read_cache_signature(path: Path) -> dict[str, Any] | None:
     try:
         data = json.loads(path.read_text(encoding='utf-8'))
     except (OSError, json.JSONDecodeError):
@@ -797,7 +798,7 @@ def read_demo_cache(path: Path) -> dict[str, Any] | None:
     return data if isinstance(data, dict) else None
 
 
-def write_demo_cache(path: Path, signature: dict[str, Any]) -> None:
+def write_cache_signature(path: Path, signature: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_name(f'.{path.name}.{os.getpid()}-{threading.get_ident()}.part')
     try:
@@ -808,6 +809,58 @@ def write_demo_cache(path: Path, signature: dict[str, Any]) -> None:
         os.replace(tmp, path)
     finally:
         tmp.unlink(missing_ok=True)
+
+
+def script_path_for(seg: dict[str, Any], script_dir: Path | None) -> Path | None:
+    declared = seg.get('script')
+    if not declared and script_dir is not None:
+        candidate = script_dir / f"{seg['id']}.txt"
+        if not candidate.exists():
+            raise NewsLongError(
+                f"{seg['id']}: script attendu mais introuvable ({candidate}) — "
+                'repli sur la transcription refusé'
+            )
+        return candidate
+    if not declared:
+        return None
+    path = Path(os.path.expanduser(str(declared)))
+    if not path.exists():
+        raise NewsLongError(
+            f"{seg['id']}: script déclaré mais introuvable ({path}) — "
+            'repli sur la transcription refusé'
+        )
+    return path
+
+
+def segment_script_cache_path(dest: Path) -> Path:
+    return dest.with_name(f'{dest.name}.script-source.json')
+
+
+def segment_script_cache_signature(
+    seg: dict[str, Any],
+    script_dir: Path | None,
+) -> dict[str, Any]:
+    resolved_dir = script_dir.expanduser().resolve() if script_dir is not None else None
+    script = script_path_for(seg, resolved_dir)
+    script_data = None
+    if script is not None:
+        try:
+            resolved_script = script.resolve()
+            script_size = script.stat().st_size
+        except OSError as exc:
+            raise NewsLongError(f'script narré illisible: {script}: {exc}') from exc
+        script_data = {
+            'path': str(resolved_script),
+            'size': script_size,
+            'sha256': sha256_file(script, 'script narré'),
+        }
+    return {
+        'version': SEGMENT_SCRIPT_CACHE_VERSION,
+        'segment': seg['id'],
+        'script_dir': str(resolved_dir) if resolved_dir is not None else None,
+        'source': 'segment' if seg.get('script') else ('script_dir' if resolved_dir is not None else 'transcription'),
+        'script': script_data,
+    }
 
 
 def render_demo_card(spec: dict[str, Any], dur: float, dest: Path, workdir: Path) -> None:
@@ -828,7 +881,7 @@ def render_demo_card(spec: dict[str, Any], dur: float, dest: Path, workdir: Path
         dur = q(dur)
         signature = demo_cache_signature(video, spec, dur)
         cache_path = demo_cache_path(dest)
-        if dest.exists() and read_demo_cache(cache_path) == signature:
+        if dest.exists() and read_cache_signature(cache_path) == signature:
             return
         px, py, pw, ph = 150, 130, W - 300, H - 260
         top_h = 60 if (spec.get('source') or spec.get('date')) else 0
@@ -857,7 +910,7 @@ def render_demo_card(spec: dict[str, Any], dur: float, dest: Path, workdir: Path
             shutil.rmtree(chassis.parent, ignore_errors=True)
         if demo_cache_signature(video, spec, dur) != signature:
             raise NewsLongError(f'démo modifiée pendant le rendu: {video}')
-        write_demo_cache(cache_path, signature)
+        write_cache_signature(cache_path, signature)
 
 
 def render_card_video(spec: dict[str, Any], dur: float, dest: Path, workdir: Path) -> None:
@@ -1132,40 +1185,59 @@ def punch_in_filter(zoom: float) -> str:
 def assemble_segment(seg_id: str, src: Path, clip_range: tuple[float, float] | None, dur: float,
                      composite: Path, shots: list[dict[str, Any]], cut_sources: list[Path],
                      card_videos: dict[int, Path], ass_path: Path, dest_v: Path, dest_a: Path,
-                     cut_offsets: list[float], punch_in: float = 1.0, punch_first: bool = False) -> None:
+                     cut_offsets: list[float], punch_in: float = 1.0, punch_first: bool = False,
+                     script_signature: dict[str, Any] | None = None,
+                     script_signature_provider: Callable[[], dict[str, Any]] | None = None) -> None:
     """Monte les plans (trim du composite / cut-aways / cartes) + sous-titres, et extrait l'audio.
     `punch_in` > 1 : un plan avatar sur deux est recadré ×punch_in (deux valeurs de plan) ; `punch_first`
     commence par le plan serré (un insert court d'un seul plan peut ainsi varier d'un insert à l'autre)."""
-    if not dest_v.exists():
-        cmd = ['ffmpeg', '-y', '-hide_banner', '-v', 'error', '-i', str(composite)]
-        inputs = 1
-        fc: list[str] = []
-        labels: list[str] = []
-        cut_i = 0
-        avatar_i = 1 if punch_first else 0
-        for k, s in enumerate(shots):
-            d = q(s['t1'] - s['t0'])
-            if s['type'] == 'avatar':
-                zoom = punch_in_filter(punch_in) + ',' if punch_in > 1.0 and avatar_i % 2 == 1 else ''
-                avatar_i += 1
-                fc.append(f"[0:v]trim=start={s['t0']:.6f}:end={s['t1']:.6f},setpts=PTS-STARTPTS,{zoom}"
-                          f"null[v{k}]")
-            elif s['type'] == 'cut':
-                srcp = cut_sources[cut_i % len(cut_sources)]
-                off = cut_offsets[cut_i % len(cut_offsets)]
-                cut_i += 1
-                cmd += ['-i', str(srcp)]
-                fc.append(f"[{inputs}:v]trim=start={off:.6f}:end={off + d:.6f},setpts=PTS-STARTPTS,"
-                          f"tpad=stop_mode=clone:stop_duration={d:.6f},trim=duration={d:.6f},setpts=PTS-STARTPTS[v{k}]")
-                inputs += 1
-            else:
-                cmd += ['-i', str(card_videos[k])]
-                fc.append(f"[{inputs}:v]trim=0:{d:.6f},setpts=PTS-STARTPTS[v{k}]")
-                inputs += 1
-            labels.append(f'[v{k}]')
-        fc.append(f"{''.join(labels)}concat=n={len(labels)}:v=1:a=0[vc]")
-        fc.append(f"[vc]ass={ass_path}:fontsdir=/usr/share/fonts/truetype/dejavu,fps={FPS},format=yuv420p[v]")
-        atomic([*cmd, '-filter_complex', ';'.join(fc), '-map', '[v]', '-t', f'{dur:.6f}', '-an', *X264], dest_v)
+    cache_path = segment_script_cache_path(dest_v)
+    with path_lock(dest_v):
+        if (script_signature is not None and dest_v.exists()
+                and read_cache_signature(cache_path) != script_signature):
+            dest_v.unlink()
+        rendered_video = not dest_v.exists()
+        if rendered_video:
+            cmd = ['ffmpeg', '-y', '-hide_banner', '-v', 'error', '-i', str(composite)]
+            inputs = 1
+            fc: list[str] = []
+            labels: list[str] = []
+            cut_i = 0
+            avatar_i = 1 if punch_first else 0
+            for k, s in enumerate(shots):
+                d = q(s['t1'] - s['t0'])
+                if s['type'] == 'avatar':
+                    zoom = punch_in_filter(punch_in) + ',' if punch_in > 1.0 and avatar_i % 2 == 1 else ''
+                    avatar_i += 1
+                    fc.append(f"[0:v]trim=start={s['t0']:.6f}:end={s['t1']:.6f},setpts=PTS-STARTPTS,{zoom}"
+                              f"null[v{k}]")
+                elif s['type'] == 'cut':
+                    srcp = cut_sources[cut_i % len(cut_sources)]
+                    off = cut_offsets[cut_i % len(cut_offsets)]
+                    cut_i += 1
+                    cmd += ['-i', str(srcp)]
+                    fc.append(f"[{inputs}:v]trim=start={off:.6f}:end={off + d:.6f},setpts=PTS-STARTPTS,"
+                              f"tpad=stop_mode=clone:stop_duration={d:.6f},trim=duration={d:.6f},"
+                              f"setpts=PTS-STARTPTS[v{k}]")
+                    inputs += 1
+                else:
+                    cmd += ['-i', str(card_videos[k])]
+                    fc.append(f"[{inputs}:v]trim=0:{d:.6f},setpts=PTS-STARTPTS[v{k}]")
+                    inputs += 1
+                labels.append(f'[v{k}]')
+            fc.append(f"{''.join(labels)}concat=n={len(labels)}:v=1:a=0[vc]")
+            fc.append(f"[vc]ass={ass_path}:fontsdir=/usr/share/fonts/truetype/dejavu,fps={FPS},format=yuv420p[v]")
+            atomic([*cmd, '-filter_complex', ';'.join(fc), '-map', '[v]', '-t', f'{dur:.6f}', '-an', *X264],
+                   dest_v)
+        if script_signature is not None:
+            current_signature = script_signature_provider() if script_signature_provider else script_signature
+            if current_signature != script_signature:
+                if rendered_video:
+                    dest_v.unlink(missing_ok=True)
+                cache_path.unlink(missing_ok=True)
+                raise NewsLongError(f'{seg_id}: script narré modifié pendant le rendu')
+            if rendered_video:
+                write_cache_signature(cache_path, script_signature)
     if not dest_a.exists():
         cmd = ['ffmpeg', '-y', '-hide_banner', '-v', 'error']
         if clip_range:
@@ -1245,24 +1317,9 @@ def words_for(seg: dict[str, Any], src: Path, workdir: Path,
         cache.write_text(json.dumps(words, ensure_ascii=False), encoding='utf-8')
     words = wrap_short.apply_fixes(words, seg.get('fix', []))
 
-    script = seg.get('script')
-    dossier = script_dir or SCRIPT_DIR
-    if not script and dossier:
-        candidat = Path(dossier) / f"{seg['id']}.txt"
-        if not candidat.exists():
-            raise NewsLongError(
-                f"{seg['id']}: script attendu mais introuvable ({candidat}) — "
-                'repli sur la transcription refusé'
-            )
-        script = str(candidat)
-    if not script:
+    chemin = script_path_for(seg, script_dir or SCRIPT_DIR)
+    if chemin is None:
         return words
-    chemin = Path(os.path.expanduser(str(script)))
-    if not chemin.exists():
-        raise NewsLongError(
-            f"{seg['id']}: script déclaré mais introuvable ({chemin}) — "
-            'repli sur la transcription refusé'
-        )
     alignes, rapport = wrap_short.align_to_script(words, chemin.read_text(encoding='utf-8'))
     print(f"[script] {seg['id']}: {rapport['mots_script']} mots affichés depuis le script, "
           f"{rapport['taux_ancrage'] * 100:.0f}% d'ancrage", file=sys.stderr)
@@ -1607,6 +1664,7 @@ def render_avatar_section(seg: dict[str, Any], cfg: dict[str, Any], workdir: Pat
     src = expand(seg['src'])
     if not src.exists():
         raise NewsLongError(f'{sid}: clip introuvable {src}')
+    script_signature = segment_script_cache_signature(seg, SCRIPT_DIR)
     sdir = workdir / 'segments' / sid
     sdir.mkdir(parents=True, exist_ok=True)
     if clip_range:
@@ -1700,7 +1758,9 @@ def render_avatar_section(seg: dict[str, Any], cfg: dict[str, Any], workdir: Pat
     assemble_segment(sid, src, clip_range, dur, composite, shots, cut_sources, card_videos, ass_path,
                      dest_v, dest_a, offsets,
                      punch_in=float(seg.get('avatar_punch_in', cfg.get('avatar_punch_in', 1.15)) or 1.0),
-                     punch_first=bool(seg.get('punch_in_first')))
+                     punch_first=bool(seg.get('punch_in_first')),
+                     script_signature=script_signature,
+                     script_signature_provider=lambda: segment_script_cache_signature(seg, SCRIPT_DIR))
     (sdir / 'shots.json').write_text(json.dumps(
         [{k: (v if k != 'card' else (v or {}).get('type')) for k, v in s.items()} for s in shots],
         ensure_ascii=False, indent=1), encoding='utf-8')
@@ -1747,6 +1807,15 @@ def stale(dest: Path, *sources: Path) -> bool:
         return True
     m = dest.stat().st_mtime
     return any(src.exists() and src.stat().st_mtime > m for src in sources)
+
+
+def validate_cache_root(cache_dir: Path) -> None:
+    """Refuse le sous-dossier `words` comme racine, sinon `words_for` créerait `words/words`."""
+    if cache_dir.name.casefold() == 'words':
+        raise NewsLongError(
+            f'--cache-dir doit désigner la racine du cache, pas son sous-répertoire words: {cache_dir}; '
+            f'utilisez plutôt {cache_dir.parent}'
+        )
 
 
 def ebur128(path: Path, start: float | None = None, length: float | None = None) -> dict[str, float]:
@@ -2064,7 +2133,7 @@ def main() -> None:
     ap.add_argument('--out-dir', type=Path, required=True)
     ap.add_argument('--work-dir', type=Path, default=None, help='intermédiaires (défaut: <out-dir>/work)')
     ap.add_argument('--cache-dir', type=Path, default=None,
-                    help='cache partagé B-roll normalisés + transcripts (défaut: <out-dir>/work)')
+                    help='racine du cache partagé B-roll + transcripts, jamais .../words (défaut: <out-dir>/work)')
     ap.add_argument('--only', default='', help='ids de segments à (re)rendre seuls, ex. L1,L2 (debug)')
     ap.add_argument('--force', action='store_true',
                     help='re-rend les intermédiaires de la passe (segments visés, cartes, concat, mix, master) — '
@@ -2085,6 +2154,10 @@ def main() -> None:
     workdir = (args.work_dir or (out_dir / 'work')).expanduser().resolve()
     workdir.mkdir(parents=True, exist_ok=True)
     cache_dir = (args.cache_dir or (out_dir / 'work')).expanduser().resolve()
+    try:
+        validate_cache_root(cache_dir)
+    except NewsLongError as exc:
+        ap.error(str(exc))
     cache_dir.mkdir(parents=True, exist_ok=True)
     slug = cfg.get('slug') or slugify(cfg['titre'])
     final = out_dir / f'{slug}.mp4'
