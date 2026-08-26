@@ -12,6 +12,10 @@
  */
 
 import { logger } from '../utils/logger.js';
+import {
+  parsePowerShellCommand,
+  type PowerShellParserOptions,
+} from './powershell-parser.js';
 
 // Cache tree-sitter modules loaded via async import at module init time.
 // parseBashCommand is sync, so we pre-load and cache these optional deps.
@@ -52,6 +56,103 @@ export interface ParseResult {
   usedTreeSitter: boolean;
   /** Any parsing warnings */
   warnings: string[];
+  /** Whether the selected shell parser found output/input redirection. */
+  hasRedirection?: boolean;
+}
+
+export type ShellKind = 'posix' | 'powershell' | 'cmd' | 'unknown';
+
+export interface ShellParseOptions {
+  /** Resolved shell executable/name when the command itself is not wrapped. */
+  shell?: string;
+  powershell?: PowerShellParserOptions;
+}
+
+interface ShellWrapper {
+  command: string;
+  executable: string;
+  shell: ShellKind;
+}
+
+function stripMatchingOuterQuotes(value: string): string {
+  const trimmed = value.trim();
+  if (trimmed.length < 2) return trimmed;
+  const first = trimmed[0];
+  const last = trimmed.at(-1);
+  if ((first === '"' && last === '"') || (first === "'" && last === "'")) {
+    return trimmed.slice(1, -1);
+  }
+  return trimmed;
+}
+
+function shellKind(executable: string | undefined): ShellKind {
+  if (!executable) return 'unknown';
+  const unquoted = executable.trim().replace(/^(['"])(.*)\1$/, '$2');
+  const parts = unquoted.split(/[\\/]/).filter(Boolean);
+  const base = (parts.at(-1) ?? unquoted).replace(/\.exe$/i, '').toLowerCase();
+
+  if (base === 'powershell' || base === 'pwsh') return 'powershell';
+  if (base === 'cmd') return 'cmd';
+  if (base === 'bash' || base === 'sh' || base === 'zsh') return 'posix';
+  return 'unknown';
+}
+
+function unwrapShellOnce(input: string): ShellWrapper | null {
+  const match = input.trim().match(/^(?:"([^"]+)"|'([^']+)'|(\S+))(?:\s+([\s\S]+))$/);
+  if (!match) return null;
+
+  const executable = match[1] ?? match[2] ?? match[3];
+  const rest = match[4];
+  if (executable === undefined || rest === undefined) return null;
+
+  const kind = shellKind(executable);
+  let payload: string | undefined;
+
+  if (kind === 'posix') {
+    payload = rest.match(/^-[a-z]*c\s+([\s\S]+)$/i)?.[1];
+  } else if (kind === 'cmd') {
+    payload = rest.match(/^(?:(?:\/[dqs])\s+)*\/c\s+([\s\S]+)$/i)?.[1];
+  } else if (kind === 'powershell') {
+    const commandFlag = /(?:^|\s)-(?:command|c)(?=\s|$)\s*/i.exec(rest);
+    if (commandFlag) {
+      payload = rest.slice(commandFlag.index + commandFlag[0].length);
+    }
+  }
+
+  if (payload === undefined || !payload.trim()) return null;
+  return {
+    command: stripMatchingOuterQuotes(payload),
+    executable: executable.replace(/^(['"])(.*)\1$/, '$2'),
+    shell: kind,
+  };
+}
+
+function unwrapShellCommand(
+  input: string,
+  explicitShell?: string,
+): { command: string; executable?: string; shell: ShellKind } {
+  let command = input.trim();
+  let executable = explicitShell;
+  let selectedShell = shellKind(explicitShell);
+
+  for (let depth = 0; depth < 10; depth++) {
+    const wrapper = unwrapShellOnce(command);
+    if (!wrapper) break;
+    command = wrapper.command;
+    executable = wrapper.executable;
+    selectedShell = wrapper.shell;
+  }
+
+  return { command, executable, shell: selectedShell };
+}
+
+/**
+ * Remove recognized shell wrappers recursively so an inner command cannot hide
+ * behind bash/sh/zsh -c, cmd /c, powershell -Command or pwsh -Command.
+ */
+export function stripShellWrapper(input: string): string {
+  if (typeof input !== 'string') return '';
+  return unwrapShellCommand(input).command;
 }
 
 // ============================================================================
@@ -301,6 +402,26 @@ export function parseBashCommand(input: string): ParseResult {
   }
 
   return fallbackParse(input);
+}
+
+/**
+ * Parse with the grammar of the resolved or wrapped shell. PowerShell never
+ * falls back to the POSIX parser: if its native parser is unavailable or
+ * uncertain, the returned warnings require the caller to refuse execution.
+ */
+export function parseShellCommand(
+  input: string,
+  options: ShellParseOptions = {},
+): ParseResult {
+  const resolved = unwrapShellCommand(input, options.shell);
+  if (resolved.shell === 'powershell') {
+    return parsePowerShellCommand(resolved.command, {
+      ...options.powershell,
+      executable: options.powershell?.executable ?? resolved.executable,
+    });
+  }
+
+  return parseBashCommand(resolved.command);
 }
 
 /**

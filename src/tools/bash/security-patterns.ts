@@ -31,6 +31,20 @@ export const BLOCKED_PATTERNS: RegExp[] = [
   /curl.*\|\s*(ba)?sh/i,                // curl | sh
   /sudo\s+(rm|dd|mkfs)/i,               // sudo dangerous commands
 
+  // PowerShell / Windows execution and host destruction
+  /\b(?:invoke-expression|iex)(?=\s|$)/i, // Invoke arbitrary PowerShell text
+  /\|\s*(?:invoke-expression|iex)(?=\s|$)/i, // Download/decode pipe to iex
+  /\bremove-item\b(?=[^|;&\r\n]*\s-(?:recurse|r)\b)(?=[^|;&\r\n]*\s-(?:force|fo)\b)/i,
+  /\bformat-volume\b/i,                 // Format a Windows volume
+  /\bset-executionpolicy\b/i,           // Weaken PowerShell script policy
+  /\breg(?:\.exe)?\s+delete\b/i,        // Delete registry data
+  /\bvssadmin(?:\.exe)?\s+delete\s+shadows\b/i, // Delete recovery snapshots
+  /\bbcdedit(?:\.exe)?\b/i,             // Modify boot configuration
+  /\bdiskpart(?:\.exe)?\b/i,            // Partition/format disks
+  /\bnet(?:\.exe)?\s+user\b/i,          // Create/change/delete local users
+  /\bstart-process\b/i,                 // Spawn outside the inspected expression
+  /(?:^|[|;&]\s*)\.\\[^\s"'|;&]+\.ps1(?=\s|$)/i, // Direct script launch
+
   // Command injection via command substitution
   /\$\([^)]*(?:rm|dd|mkfs|chmod|chown|curl|wget|nc|netcat|bash|sh|eval|exec)/i,  // $(dangerous_cmd)
   /`[^`]*(?:rm|dd|mkfs|chmod|chown|curl|wget|nc|netcat|bash|sh|eval|exec)/i,     // `dangerous_cmd`
@@ -169,6 +183,8 @@ export const BLOCKED_COMMANDS: Set<string> = new Set([
   'ssh-keygen', 'ssh-add',          // SSH key operations
   'gpg',                             // GPG operations
   'openssl',                         // Certificate operations (can leak keys)
+  // Windows host administration
+  'format', 'format-volume', 'diskpart', 'reg', 'bcdedit', 'vssadmin',
 ]);
 
 /**
@@ -189,6 +205,13 @@ export const SAFE_ENV_VARS: Set<string> = new Set([
   'TMPDIR',
   'TEMP',
   'TMP',
+  // Windows process/session essentials
+  'USERPROFILE',
+  'APPDATA',
+  'LOCALAPPDATA',
+  'COMSPEC',
+  'PATHEXT',
+  'SYSTEMROOT',
   // Node.js
   // NOTE sécurité : NODE_OPTIONS et NODE_PATH sont VOLONTAIREMENT absents.
   // NODE_OPTIONS accepte `--require /chemin/script.js` : hérité par un
@@ -262,4 +285,7 @@ export const BLOCKED_PATHS: string[] = [
   '/etc/passwd',
   '/etc/shadow',
   '/etc/sudoers',
+  'System32\\config\\SAM',
+  'System32\\config\\SYSTEM',
+  'System32\\config\\SECURITY',
 ];

@@ -22,7 +22,16 @@ export const SAFE_BINARIES: readonly string[] = [
   'tr', 'cut', 'paste', 'diff', 'comm', 'seq', 'true', 'false',
   'test', 'expr',
   'git',
+  // PowerShell read-only cmdlets
+  'Get-ChildItem', 'Get-Content', 'Select-String', 'Measure-Object',
+  'Get-Location', 'Get-Item', 'Test-Path', 'Resolve-Path', 'Get-FileHash',
 ] as const;
+
+const SAFE_POWERSHELL_BINARIES = new Map(
+  SAFE_BINARIES
+    .filter(binary => binary.includes('-'))
+    .map(binary => [binary.toLowerCase(), binary]),
+);
 
 /**
  * Options that turn an otherwise read-only command into a mutating command or
@@ -127,11 +136,17 @@ export class SafeBinariesChecker {
     if (parsedCommand.isSubshell) return false;
 
     const binary = this.basename(parsedCommand.command);
-    if (!this.safeBinaries.has(binary)) return false;
+    const canonicalPowerShellBinary = SAFE_POWERSHELL_BINARIES.get(binary.toLowerCase());
+    const safeBinary = this.safeBinaries.has(binary)
+      ? binary
+      : canonicalPowerShellBinary && this.safeBinaries.has(canonicalPowerShellBinary)
+        ? canonicalPowerShellBinary
+        : null;
+    if (!safeBinary) return false;
 
     const args = parsedCommand.args.map(arg => this.stripOuterQuotes(arg));
 
-    switch (binary) {
+    switch (safeBinary) {
       case 'find':
         return !args.some(arg => UNSAFE_FIND_ACTIONS.has(arg.toLowerCase()));
       case 'rg':

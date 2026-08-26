@@ -46,6 +46,8 @@ const CORE_VARS = new Set([
   'PATH', 'HOME', 'USER', 'LOGNAME', 'SHELL', 'TERM', 'TERM_PROGRAM',
   'LANG', 'LC_ALL', 'LC_CTYPE', 'TZ', 'TMPDIR', 'TEMP', 'TMP',
   'PWD', 'OLDPWD', 'SHLVL', 'COLORTERM', 'CLICOLOR',
+  // Windows process/session essentials
+  'USERPROFILE', 'APPDATA', 'LOCALAPPDATA', 'COMSPEC', 'PATHEXT', 'SYSTEMROOT',
   // Node.js / npm — NODE_PATH exclu volontairement (détournement de résolution
   // de modules) ; NODE_OPTIONS ne l'a jamais été et ne doit pas l'être.
   'NODE_ENV', 'NPM_CONFIG_PREFIX',

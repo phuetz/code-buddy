@@ -16,7 +16,7 @@ import {
   SAFE_ENV_VARS,
   BLOCKED_PATHS,
 } from './security-patterns.js';
-import { parseBashCommand } from '../../security/bash-parser.js';
+import { parseShellCommand } from '../../security/bash-parser.js';
 import { auditLogger } from '../../security/audit-logger.js';
 import { checkUserDenyRules } from '../../security/bash-allowlist/deny-guard.js';
 
@@ -33,6 +33,8 @@ const HARD_BLOCKED_COMMANDS = new Set([
   'insmod', 'rmmod', 'modprobe', 'sysctl',
   'useradd', 'userdel', 'usermod', 'groupadd',
   'passwd', 'chpasswd', 'visudo',
+  // Windows host-wide disk, registry, boot and shadow-copy administration.
+  'format', 'format-volume', 'diskpart', 'reg', 'bcdedit', 'vssadmin',
 ]);
 
 /**
@@ -52,30 +54,53 @@ export function extractBaseCommand(command: string): string | null {
     remaining = remaining.replace(/^[A-Za-z_][A-Za-z0-9_]*=\S*\s+/, '');
   }
 
-  // Get the first token
-  const match = remaining.match(/^(\S+)/);
-  if (!match) return null;
-
-  let cmd = match[1];
+  // Resolve a quoted executable first. For an unquoted absolute Windows path,
+  // consume through `.exe` so `C:\Program Files\...\pwsh.exe` cannot be
+  // misclassified as the binary `C:\Program`.
+  const quotedMatch = remaining.match(/^(?:"([^"]+)"|'([^']+)')(?:\s|$)/);
+  const windowsExecutableMatch = remaining.match(
+    /^((?:[A-Za-z]:|\.{1,2})\\[\s\S]*?\.exe)(?=\s|$)/i,
+  );
+  const tokenMatch = remaining.match(/^(\S+)/);
+  let cmd = quotedMatch?.[1]
+    ?? quotedMatch?.[2]
+    ?? windowsExecutableMatch?.[1]
+    ?? tokenMatch?.[1];
   if (cmd === undefined) return null;
 
-  // Remove path prefix (e.g., /usr/bin/ls -> ls)
-  if (cmd.includes('/')) {
-    cmd = cmd.split('/').pop() || cmd;
-  }
+  const pathParts = cmd.split(/[\\/]/).filter(Boolean);
+  cmd = pathParts.at(-1) ?? cmd;
 
-  // Handle ./ prefix
-  if (cmd.startsWith('./')) {
-    cmd = cmd.slice(2);
-  }
-
-  return cmd.toLowerCase();
+  return cmd.replace(/\.exe$/i, '').toLowerCase();
 }
 
 /**
  * Check if command uses shell features that could bypass validation
  */
 export function hasShellBypassFeatures(command: string): { bypass: boolean; reason?: string } {
+  const powerShellBypassPatterns = [
+    {
+      pattern: /(?:^|[|;&]\s*|\s)(?:invoke-expression|iex)(?=\s|$)/i,
+      reason: 'PowerShell Invoke-Expression execution detected',
+    },
+    {
+      pattern: /(?:^|[|;&]\s*)start-process(?=\s|$)/i,
+      reason: 'PowerShell Start-Process execution detected',
+    },
+    {
+      pattern: /(?:^|[|;&]\s*)\.\\[^\s"'|;&]+\.ps1(?=\s|$)/i,
+      reason: 'Direct PowerShell script execution detected',
+    },
+    {
+      pattern: /\b(?:powershell|pwsh)(?:\.exe)?\b[\s\S]*-(?:encodedcommand|enc)(?=\s|$)/i,
+      reason: 'PowerShell encoded command detected',
+    },
+  ];
+
+  for (const { pattern, reason } of powerShellBypassPatterns) {
+    if (pattern.test(command)) return { bypass: true, reason };
+  }
+
   // Check for multiple commands via && || ; |
   // But allow single pipes for grep, etc.
   const multiCommandPatterns = [
@@ -123,7 +148,7 @@ export function hasShellBypassFeatures(command: string): { bypass: boolean; reas
  * Note: Sandbox manager validation is performed separately by the caller
  * since it requires instance state.
  */
-export function validateCommand(command: string): { valid: boolean; reason?: string } {
+export function validateCommand(command: string, shell?: string): { valid: boolean; reason?: string } {
   // User-defined deny rules (/allowlist deny <pattern>) are a HARD stop in
   // every mode — YOLO skips confirmations, never validation. Checked first so
   // a user rule wins even over commands the static checks would tolerate.
@@ -185,7 +210,11 @@ export function validateCommand(command: string): { valid: boolean; reason?: str
 
   // Check for access to blocked paths
   for (const blockedPath of BLOCKED_PATHS) {
-    if (command.includes(blockedPath)) {
+    const isWindowsPath = blockedPath.includes('\\');
+    const containsBlockedPath = isWindowsPath
+      ? command.replace(/\//g, '\\').toLowerCase().includes(blockedPath.toLowerCase())
+      : command.includes(blockedPath);
+    if (containsBlockedPath) {
       auditLogger.logCommandValidation({ command, valid: false, reason: `Protected path: ${blockedPath}`, source: 'command-validator' });
       return {
         valid: false,
@@ -197,9 +226,23 @@ export function validateCommand(command: string): { valid: boolean; reason?: str
   // Phase 2: AST-based validation via bash-parser
   // Parse the command into individual commands and validate each
   try {
-    const parsed = parseBashCommand(command);
+    const parsed = parseShellCommand(command, { shell });
+    const powerShellWarning = parsed.warnings.find(warning => warning.startsWith('PowerShell parser'));
+    if (powerShellWarning) {
+      auditLogger.logCommandValidation({
+        command,
+        valid: false,
+        reason: powerShellWarning,
+        source: 'powershell-parser',
+      });
+      return {
+        valid: false,
+        reason: `PowerShell parser refused command: ${powerShellWarning}`,
+      };
+    }
     for (const cmd of parsed.commands) {
-      if (HARD_BLOCKED_COMMANDS.has(cmd.command.toLowerCase())) {
+      const parsedBaseCommand = extractBaseCommand(cmd.command);
+      if (parsedBaseCommand && HARD_BLOCKED_COMMANDS.has(parsedBaseCommand)) {
         auditLogger.logCommandValidation({
           command,
           valid: false,
@@ -213,7 +256,7 @@ export function validateCommand(command: string): { valid: boolean; reason?: str
       }
 
       // Check subshell commands too
-      if (cmd.isSubshell && HARD_BLOCKED_COMMANDS.has(cmd.command.toLowerCase())) {
+      if (cmd.isSubshell && parsedBaseCommand && HARD_BLOCKED_COMMANDS.has(parsedBaseCommand)) {
         auditLogger.logCommandValidation({
           command,
           valid: false,
@@ -227,7 +270,16 @@ export function validateCommand(command: string): { valid: boolean; reason?: str
       }
     }
   } catch {
-    // If parsing fails, fall through to allow (already validated by regex above)
+    auditLogger.logCommandValidation({
+      command,
+      valid: false,
+      reason: 'Shell parser failed unexpectedly',
+      source: 'command-validator',
+    });
+    return {
+      valid: false,
+      reason: 'Shell parser failed unexpectedly; command refused',
+    };
   }
 
   auditLogger.logCommandValidation({ command, valid: true, source: 'command-validator' });
