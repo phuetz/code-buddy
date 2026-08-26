@@ -180,6 +180,24 @@ describe('buddy research checkpoint/resume flags', () => {
     });
   });
 
+  it.each([
+    ['--worker-timeout-ms', '5000+'],
+    ['--timeout-ms', '30000+'],
+    ['--iterations', '1–5'],
+    ['--perspectives', '0–6'],
+  ])('rejects a non-integer %s value before research starts', async (option, range) => {
+    const { logs } = await run(`${option}=abc`, '--json');
+
+    expect(process.exitCode).toBe(1);
+    expect(mocks.orchestratorOptions).toEqual([]);
+    expect(mocks.research).not.toHaveBeenCalled();
+    expect(JSON.parse(logs[0]!)).toMatchObject({
+      kind: 'wide_research_run',
+      status: 'failed',
+      error: `${option} must be an integer in ${range} (received "abc")`,
+    });
+  });
+
   it('accepts 250 total items while capping each parallel wave at 20', async () => {
     await run('--items=999', '--concurrency=99', '--json');
     expect(mocks.orchestratorOptions.at(-1)).toMatchObject({

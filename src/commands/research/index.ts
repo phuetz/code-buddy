@@ -150,6 +150,52 @@ export function createResearchCommand(): Command {
         return;
       }
 
+      let legacyWorkers: number | undefined;
+      let items: number;
+      let concurrency: number;
+      let maxRoundsPerWorker: number;
+      let workerTimeoutMs: number;
+      let overallTimeoutMs: number;
+      let deepRounds: number;
+      let perspectivesN: number;
+      const explicitOverallTimeout = typeof opts.timeoutMs === 'string';
+      try {
+        legacyWorkers = opts.workers === undefined
+          ? undefined
+          : parseClampedInteger(opts.workers, 5, 1, 20, '--workers');
+        items = parseClampedInteger(opts.items, legacyWorkers ?? 5, 1, 250, '--items');
+        concurrency = Math.min(
+          items,
+          parseClampedInteger(opts.concurrency, legacyWorkers ?? 5, 1, 20, '--concurrency'),
+        );
+        maxRoundsPerWorker = parseClampedInteger(opts.rounds, 15, 1, undefined, '--rounds');
+        workerTimeoutMs = parseClampedInteger(
+          opts.workerTimeoutMs,
+          90_000,
+          5_000,
+          undefined,
+          '--worker-timeout-ms',
+        );
+        overallTimeoutMs = explicitOverallTimeout
+          ? parseClampedInteger(opts.timeoutMs, 30_000, 30_000, undefined, '--timeout-ms')
+          : computeWideResearchDefaultOverallTimeoutMs({
+              items,
+              concurrency,
+              workerTimeoutMs,
+            });
+        deepRounds = parseClampedInteger(opts.iterations, 1, 1, 5, '--iterations');
+        perspectivesN = parseClampedInteger(opts.perspectives, 0, 0, 6, '--perspectives');
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        if (jsonOutput) {
+          console.log(JSON.stringify({ kind: 'wide_research_run', status: 'failed', error: message }));
+        } else {
+          console.error(`❌ ${message}`);
+        }
+        process.exitCode = 1;
+        return;
+      }
+
       // The root program also declares a global `-m, --model`; depending on
       // argv order Commander can bind it there — merge so either wins.
       const modelOverride: string | undefined = opts.model ?? command?.optsWithGlobals?.()?.model;
@@ -175,39 +221,6 @@ export function createResearchCommand(): Command {
         baseURL: resolved.baseURL,
       };
 
-      let legacyWorkers: number | undefined;
-      let items: number;
-      let concurrency: number;
-      let maxRoundsPerWorker: number;
-      try {
-        legacyWorkers = opts.workers === undefined
-          ? undefined
-          : parseClampedInteger(opts.workers, 5, 1, 20, '--workers');
-        items = parseClampedInteger(opts.items, legacyWorkers ?? 5, 1, 250, '--items');
-        concurrency = Math.min(
-          items,
-          parseClampedInteger(opts.concurrency, legacyWorkers ?? 5, 1, 20, '--concurrency'),
-        );
-        maxRoundsPerWorker = parseClampedInteger(opts.rounds, 15, 1, undefined, '--rounds');
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        if (jsonOutput) {
-          console.log(JSON.stringify({ kind: 'wide_research_run', status: 'failed', error: message }));
-        } else {
-          console.error(`❌ ${message}`);
-        }
-        process.exitCode = 1;
-        return;
-      }
-      const workerTimeoutMs = Math.max(5_000, parseInt(opts.workerTimeoutMs, 10) || 90_000);
-      const explicitOverallTimeout = typeof opts.timeoutMs === 'string';
-      const overallTimeoutMs = explicitOverallTimeout
-        ? Math.max(30_000, parseInt(opts.timeoutMs, 10) || 30_000)
-        : computeWideResearchDefaultOverallTimeoutMs({
-            items,
-            concurrency,
-            workerTimeoutMs,
-          });
       const hardStopTimeoutMs = overallTimeoutMs + 2_000;
       const argvReportPath = detectReportPathFromArgv(process.argv.slice(2));
       const reportPath: string | undefined = opts.report || argvReportPath;
@@ -264,11 +277,9 @@ export function createResearchCommand(): Command {
       const { maybeRunDeepResearch, runDeepResearchCli } = await import('./deep.js');
       // Phase B: --iterations > 1 turns the single Phase-A round into the bounded
       // gap loop. Default '1' ⇒ Phase A byte-identical (the loop delegates).
-      const deepRounds = Math.max(1, Math.min(5, parseInt(opts.iterations, 10) || 1));
       // Phase C (STORM): --perspectives N (or --storm ⇒ 4) turns Deep Research
       // into the multi-perspective outline-first pipeline. STORM implies --deep
       // and TAKES PRECEDENCE over --iterations (per-perspective single round).
-      const perspectivesN = Math.max(0, Math.min(6, parseInt(opts.perspectives, 10) || 0));
       const stormRequested = Boolean(opts.storm) || perspectivesN > 0;
       const stormPerspectives = stormRequested ? perspectivesN || 4 : undefined;
       const deepEnabled = Boolean(opts.deep) || stormRequested; // STORM implies --deep
