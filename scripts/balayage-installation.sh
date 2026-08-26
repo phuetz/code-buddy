@@ -12,6 +12,7 @@ set -uo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BASE="${BALAYAGE_DIR:-$(mktemp -d)}"
+mkdir -p "$BASE"   # BALAYAGE_DIR peut nommer un répertoire encore inexistant
 OMIT="--omit=optional"
 [ "${1:-}" = "--avec-optionnelles" ] && OMIT=""
 
