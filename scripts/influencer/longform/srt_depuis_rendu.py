@@ -15,6 +15,7 @@ Usage :
 """
 import argparse
 import importlib.util
+import math
 import re
 import subprocess
 import sys
@@ -28,6 +29,10 @@ _spec.loader.exec_module(srt)
 
 _TAGS = re.compile(r'\{[^}]*\}')
 _TEMPS = re.compile(r'^(\d+):(\d\d):(\d\d)\.(\d\d)$')
+
+
+class SubtitleSyncError(RuntimeError):
+    """La piste ne peut pas être prouvée synchrone avec le média cible."""
 
 
 def _secondes(t):
@@ -59,12 +64,39 @@ def cartons_du_segment(ass):
 
 
 def duree(chemin):
-    r = subprocess.run(['ffprobe', '-v', 'error', '-show_entries', 'format=duration',
-                        '-of', 'csv=p=0', str(chemin)], capture_output=True, text=True)
     try:
-        return float(r.stdout.strip())
-    except ValueError:
-        return 0.0
+        result = subprocess.run(
+            ['ffprobe', '-v', 'error', '-show_entries', 'format=duration',
+             '-of', 'csv=p=0', str(chemin)],
+            capture_output=True,
+            text=True,
+        )
+    except FileNotFoundError as exc:
+        raise SubtitleSyncError('ffprobe introuvable') from exc
+    if result.returncode != 0:
+        details = (result.stderr or result.stdout or '').strip()
+        raise SubtitleSyncError(
+            f'ffprobe a échoué pour {chemin} (code {result.returncode})'
+            + (f': {details[-500:]}' if details else '')
+        )
+    try:
+        duration = float(result.stdout.strip())
+    except ValueError as exc:
+        raise SubtitleSyncError(f'durée illisible pour {chemin}') from exc
+    if not math.isfinite(duration) or duration <= 0:
+        raise SubtitleSyncError(f'durée invalide pour {chemin}: {duration!r}')
+    return duration
+
+
+def assert_duration_match(timeline_duration, media_duration, tolerance=0.5):
+    if not math.isfinite(tolerance) or tolerance < 0:
+        raise SubtitleSyncError(f'tolérance invalide: {tolerance!r}')
+    gap = abs(float(timeline_duration) - float(media_duration))
+    if gap > tolerance:
+        raise SubtitleSyncError(
+            f'piste refusée: timeline {timeline_duration:.3f} s, média {media_duration:.3f} s, '
+            f'écart {gap:.3f} s > tolérance {tolerance:.3f} s'
+        )
 
 
 def main():
