@@ -195,6 +195,26 @@ case "$MOTEUR" in
     (cd "$DEPOT" && opencode run --dir "$DEPOT" -m "opencode-go/$MODELE" \
        "$(cat "$CONSIGNE")") 2>&1 | tee "$LOG"
     ;;
+  darkstar)
+    # Les DEUX RTX 3090 de darkstar (48 Go), en agentique. Le moteur `local` ci-dessous ne fait
+    # qu'un `ollama run` : il genere du texte mais n'a AUCUN outil, donc il ne peut ni lire ni
+    # ecrire un fichier — c'est pourquoi les 3090 restaient a 0 % pendant que tout partait dans
+    # le cloud. Ici l'executant est Code Buddy lui-meme, qui lit, edite et lance les commandes,
+    # sur un modele servi a la maison : $0, sans quota, et le code ne sort pas de la piece.
+    #
+    # Modele par defaut : qwen3.8:27b (tient sur une carte, sait appeler des outils). Pour un
+    # modele qui ne tient pas sur 24 Go, ollama repartit sur les deux cartes automatiquement.
+    # DARKSTAR_MODELE=ornith-1.5:35b|deepseek-r1:32b|qwen3.6:35b-a3b-q4_K_M
+    DS_HOTE=${DARKSTAR_HOTE:-http://darkstar:11434}
+    curl -sf --max-time 8 "$DS_HOTE/api/tags" >/dev/null || {
+      echo "darkstar injoignable sur $DS_HOTE — machine eteinte ou ollama arrete" >&2; exit 2; }
+    CB_SRC=${CB_SRC:-$HOME/code-buddy-vitrine}; [ -f "$CB_SRC/src/index.ts" ] || CB_SRC=$HOME/code-buddy
+    # Comme pour nvidia : pas de -u (il PERSISTE baseURL dans user-settings.json), mais -m est
+    # necessaire sinon le defaultModel perime part vers darkstar et rend 404.
+    (cd "$DEPOT" && GROK_BASE_URL="$DS_HOTE/v1" GROK_API_KEY=ollama \
+       "$CB_SRC/node_modules/.bin/tsx" "$CB_SRC/src/index.ts" -m "${DARKSTAR_MODELE:-qwen3.8:27b}" \
+       --permission-mode acceptEdits -p "$(cat "$CONSIGNE")") 2>&1 | tee "$LOG"
+    ;;
   local)
     MODELE=${OLLAMA_MODELE:-gemma4:31b-it-qat}
     (cd "$DEPOT" && ollama run "$MODELE" "$(cat "$CONSIGNE")") 2>&1 | tee "$LOG"
