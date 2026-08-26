@@ -562,8 +562,9 @@ def write_chapters(
 
 def final_mux(video: Path, audio: Path, duration: float, destination: Path) -> None:
     if destination.exists():
-        print(f'SKIP sortie existante: {destination}')
-        return
+        raise AssemblyError(
+            f'sortie existante: {destination} — faux succès refusé'
+        )
     atomic_ffmpeg([
         'ffmpeg', '-y', '-hide_banner', '-v', 'error',
         '-i', str(video), '-i', str(audio),
@@ -622,11 +623,12 @@ def main() -> None:
 
         starts, total_duration = timeline(durations)
         chapters_path = workdir / 'chapters.txt'
-        write_chapters(chapters_path, sections, starts)
         if output.exists():
-            print(f'SKIP sortie existante: {output}')
-            print(f'OK {chapters_path}')
-            return
+            raise AssemblyError(
+                f'sortie existante: {output} — faux succès refusé; '
+                'utilisez un nouveau --out ou archivez explicitement le master précédent'
+            )
+        write_chapters(chapters_path, sections, starts)
 
         section_videos: list[Path] = []
         for section, duration in zip(sections, durations):
