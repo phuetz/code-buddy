@@ -1404,6 +1404,133 @@ def resolve_trigger(words: list[dict[str, Any]], spec: str, fallback: float | No
     return float(t)
 
 
+def trigger_references(cfg: dict[str, Any]) -> list[tuple[str, str, str]]:
+    """Inventorie tous les repères verbaux du plan, sans en oublier une famille."""
+    segments = cfg.get('segments')
+    if not isinstance(segments, list) or not segments:
+        raise NewsLongError('segments doit être une liste non vide')
+    segment_ids = {
+        segment.get('id') for segment in segments if isinstance(segment, dict)
+    }
+    references: list[tuple[str, str, str]] = []
+
+    def add(segment_id: Any, spec: Any, label: str) -> None:
+        if not isinstance(segment_id, str) or segment_id not in segment_ids:
+            raise NewsLongError(f'{label}: segment inconnu {segment_id!r}')
+        if spec is None or not str(spec).strip():
+            raise NewsLongError(f'{label}: déclencheur absent')
+        references.append((segment_id, str(spec), label))
+
+    hook = cfg.get('hook') or {}
+    for index, fact in enumerate(hook.get('faits', []) or [], 1):
+        add(fact.get('segment'), fact.get('de'), f'hook/fait {index}/début')
+        add(fact.get('segment'), fact.get('a'), f'hook/fait {index}/fin')
+    citation = hook.get('citation')
+    if citation:
+        add(citation.get('segment'), citation.get('de'), 'hook/citation/début')
+        add(citation.get('segment'), citation.get('a'), 'hook/citation/fin')
+    for segment in segments:
+        if not isinstance(segment, dict):
+            continue
+        sid = segment.get('id')
+        for index, card in enumerate(segment.get('cartes', []) or [], 1):
+            if not isinstance(card, dict):
+                raise NewsLongError(f'{sid}: carte {index} invalide')
+            spec = card.get('t', card.get('at'))
+            label = str(card.get('valeur') or card.get('chiffre') or card.get('titre') or f'carte {index}')
+            add(sid, spec, f'{sid}/carte « {label[:32]} »')
+    return references
+
+
+def validate_trigger_references(
+    cfg: dict[str, Any],
+    cache_dir: Path,
+    only: set[str] | None = None,
+) -> list[tuple[str, str, float]]:
+    """Résout tous les déclencheurs avant le premier encodage vidéo."""
+    segments = {segment['id']: segment for segment in cfg['segments']}
+    words_by_segment: dict[str, list[dict[str, Any]]] = {}
+    resolved: list[tuple[str, str, float]] = []
+    missing: list[str] = []
+    for sid, spec, label in trigger_references(cfg):
+        if only and sid not in only:
+            continue
+        if sid not in words_by_segment:
+            segment = segments[sid]
+            src = expand(segment['src'])
+            if not src.exists():
+                raise NewsLongError(f'{sid}: source introuvable avant validation des déclencheurs: {src}')
+            words_by_segment[sid] = words_for(segment, src, cache_dir)
+        instant = find_word(words_by_segment[sid], spec)
+        if instant is None:
+            missing.append(f'{label}: « {spec} » introuvable dans {sid}')
+        else:
+            resolved.append((sid, spec, instant))
+    if missing:
+        raise NewsLongError(
+            'validation des déclencheurs refusée avant rendu:\n- ' + '\n- '.join(missing)
+        )
+    print(f'[préflight] {len(resolved)} déclencheur(s) validé(s) avant rendu', file=sys.stderr)
+    return resolved
+
+
+def available_chapter_marks(cfg: dict[str, Any]) -> set[str]:
+    marks = {
+        segment['id'] for segment in cfg.get('segments', [])
+        if isinstance(segment, dict) and isinstance(segment.get('id'), str)
+    }
+    hook = cfg.get('hook') or {}
+    if hook:
+        marks.add('hook')
+        if hook.get('faits'):
+            marks.add('faits')
+        if hook.get('citation'):
+            marks.add('citation')
+    cta = cfg.get('cta') or {}
+    if cta:
+        after = cta.get('apres')
+        valid_after = {'hook', *marks}
+        if after not in valid_after:
+            raise NewsLongError(
+                f'CTA: repère apres={after!r} inconnu; disponibles: '
+                + ', '.join(sorted(valid_after))
+            )
+        marks.add('cta')
+    for key in ('recap', 'punchline'):
+        if cfg.get(key):
+            marks.add(key)
+    fin = cfg.get('fin') or {}
+    if fin:
+        marks.add('fin')
+        if fin.get('formule'):
+            marks.add('formule')
+    return marks
+
+
+def validate_chapter_references(cfg: dict[str, Any]) -> None:
+    """Refuse avant rendu tout chapitre qui serait omis de la sortie."""
+    available = available_chapter_marks(cfg)
+    seen: set[str] = set()
+    errors: list[str] = []
+    for index, chapter in enumerate(cfg.get('chapitres', []) or [], 1):
+        if not isinstance(chapter, dict):
+            errors.append(f'chapitre {index}: objet attendu')
+            continue
+        mark = chapter.get('at')
+        title = chapter.get('titre', f'#{index}')
+        if mark not in available:
+            errors.append(f'chapitre « {title} »: repère {mark} inconnu')
+        elif mark in seen:
+            errors.append(f'chapitre « {title} »: repère {mark} déclaré plusieurs fois')
+        else:
+            seen.add(mark)
+    if errors:
+        raise NewsLongError(
+            'validation des chapitres refusée avant rendu:\n- ' + '\n- '.join(errors)
+            + '\nRepères disponibles: ' + ', '.join(sorted(available))
+        )
+
+
 def render_avatar_section(seg: dict[str, Any], cfg: dict[str, Any], workdir: Path, roots: list[Path],
                           shadow_cache: dict[int, Path], citation: str | None = None,
                           clip_range: tuple[float, float] | None = None, kind: str = 'segment',
@@ -1916,6 +2043,10 @@ def main() -> None:
         assert_no_production_markers(visible, 'contenu visible (long actu)')
 
         only = {x for x in args.only.split(',') if x}
+        if not args.mesure:
+            validate_trigger_references(cfg, cache_dir, only=only or None)
+            if not only:
+                validate_chapter_references(cfg)
         if args.force and not args.mesure:
             # Ne supprimer QUE ce que cette passe régénère : les segments visés (tous, ou --only), et — hors
             # --only — les sections dérivées (hook-fait-*, hook-citation, cartes) + concat/mix/master
@@ -2089,11 +2220,12 @@ def main() -> None:
         for ch in cfg.get('chapitres', []):
             at = ch['at']
             if at not in chapter_marks:
-                print(f"AVERTISSEMENT chapitre « {ch['titre']} » : repère {at} inconnu", file=sys.stderr)
-                continue
+                raise NewsLongError(f"chapitre « {ch['titre']} »: repère {at} inconnu")
             if chapters and chapter_marks[at] <= chapters[-1][0]:
-                print(f"  chapitre « {ch['titre']} » fusionné avec le précédent (même instant)", file=sys.stderr)
-                continue
+                raise NewsLongError(
+                    f"chapitre « {ch['titre']} » à {chapter_marks[at]:.3f}s non strictement après "
+                    f'le précédent à {chapters[-1][0]:.3f}s — fusion silencieuse refusée'
+                )
             chapters.append((chapter_marks[at], ch['titre']))
         if not chapters or chapters[0][0] > 0:
             chapters.insert(0, (0.0, cfg.get('hook', {}).get('chapitre', 'Intro')))
