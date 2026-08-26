@@ -112,9 +112,11 @@ string-width
 
 Cette recommandation documente l'état actuel. Si le choix produit est de garder `sharp` ou le SDK Google optionnels, il faut d'abord supprimer leur remontée statique dans les chemins centraux; les laisser tels quels dans `optionalDependencies` ne correspond pas au comportement du produit.
 
+Pendant X3, un chantier concurrent a créé `d5835293` et a déjà reclassé `js-yaml`. Cette décision n'appartient à aucun des commits X3; elle n'a été ni indexée, ni modifiée, ni annulée ici. Le tableau conserve `js-yaml` parmi les 25 paquets du périmètre initial et constate que l'analyse indépendante arrive au même verdict C.
+
 ## Intégrité du chantier
 
-- `package.json` et `package-lock.json` : non modifiés.
+- `package.json` et `package-lock.json` : non modifiés par X3. Le commit concurrent `d5835293`, hors des trois commits X3, touche `package.json` pour `js-yaml`.
 - `scripts/influencer/` : non touché; son changement préexistant est resté hors index.
 - Aucun `git add -A`, `git commit -a`, push, API payante ou service lancé.
 - Les artefacts non suivis `.x4-repro-current` et `.x4-repro.JCoQDQ/`, apparus pendant la mission et étrangers à X3, ont été laissés intacts.
