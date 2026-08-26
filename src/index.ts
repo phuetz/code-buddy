@@ -24,6 +24,10 @@ import {
 } from './cli/command-routing.js';
 import { attachUnknownOptionHint } from './cli/unknown-option-hint.js';
 import { parseListenPort } from './cli/listen-port.js';
+import {
+  hoistPermissionModeOption,
+  installPermissionModeActionHook,
+} from './cli/permission-mode-option.js';
 import { getRequestedProfile } from './cli/requested-profile.js';
 import { resolveHeadlessOutputFormat, resolveHeadlessResultExitCode } from './cli/headless-options.js';
 import { resolveCliModelList } from './cli/model-listing.js';
@@ -1764,21 +1768,6 @@ program
         const confirmationService = ConfirmationService.getInstance();
         confirmationService.setSessionFlag("allOperations", true);
         cli.error("✅ Auto-approve: ENABLED (all tool executions will be approved)");
-      }
-
-      // CC18: Handle --permission-mode
-      if (options.permissionMode) {
-        const { getPermissionModeManager } = await import("./security/permission-modes.js");
-        const mgr = getPermissionModeManager();
-        const validModes = ['default', 'plan', 'acceptEdits', 'dontAsk', 'bypassPermissions'] as const;
-        if (validModes.includes(options.permissionMode as typeof validModes[number])) {
-          const success = mgr.setMode(options.permissionMode as typeof validModes[number]);
-          if (success) {
-            cli.error(`Permission mode: ${options.permissionMode}`);
-          }
-        } else {
-          cli.error(`Invalid permission mode: ${options.permissionMode}. Valid: ${validModes.join(', ')}`);
-        }
       }
 
       // Handle --dangerously-skip-permissions (natively)
@@ -3857,8 +3846,16 @@ addLazyCommand(
   },
 );
 
+installPermissionModeActionHook(program, async (mode) => {
+  const { getPermissionModeManager } = await import('./security/permission-modes.js');
+  if (getPermissionModeManager().setMode(mode)) {
+    cli.error(`Permission mode: ${mode}`);
+  }
+});
+
 // Apply the profile before parsing so it governs root chat, lazy subcommands,
 // slash-command menus, tool selection, and `buddy --help` consistently.
+process.argv = hoistPermissionModeOption(process.argv);
 const requestedProfile = getRequestedProfile(process.argv);
 if (requestedProfile.kind === 'missing') {
   try {

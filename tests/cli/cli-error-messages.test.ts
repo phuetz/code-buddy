@@ -45,31 +45,28 @@ function runCli(args: string[], timeoutMs = 15_000): Promise<{
 }
 
 describe('CLI error messages', () => {
-  it('tells where to put a global option used after the subcommand', async () => {
-    const result = await runCli(['research', 'x', '--permission-mode', 'acceptEdits']);
+  it('accepts --permission-mode after a nested lazy command', async () => {
+    const result = await runCli(['run', 'list', '--limit', '0', '--permission-mode', 'acceptEdits']);
     const text = `${result.stdout}\n${result.stderr}`;
     expect(result.timedOut).toBe(false);
-    expect(result.exitCode).toBe(1);
-    expect(text).toContain("unknown option '--permission-mode'");
-    expect(text).toContain('BEFORE the subcommand');
-    expect(text).toContain('buddy --permission-mode');
-    expect(text).toContain('acceptEdits');
+    expect(result.exitCode).toBe(0);
+    expect(text).not.toContain("unknown option '--permission-mode'");
+    expect(text).toContain('No runs found.');
   }, 30_000);
 
-  it('keeps the full nested command path in the global-option example', async () => {
-    const result = await runCli(['skills', 'list', '--permission-mode', 'acceptEdits']);
+  it('accepts --permission-mode after a guarded long-running command', async () => {
+    const result = await runCli(['science', 'probe', '--permission-mode', 'plan']);
     const text = `${result.stdout}\n${result.stderr}`;
     expect(result.exitCode).toBe(1);
-    expect(text).toContain('buddy --permission-mode <value> skills list');
+    expect(text).not.toContain("unknown option '--permission-mode'");
   }, 20_000);
 
-  it('adds the global-option hint to utility commands loaded as a group', async () => {
+  it('also accepts the trailing global option on utility command help', async () => {
     const result = await runCli(['doctor', '--permission-mode', 'acceptEdits']);
     const text = `${result.stdout}\n${result.stderr}`;
-    expect(result.exitCode).toBe(1);
-    expect(text).toContain("unknown option '--permission-mode'");
-    expect(text).toContain('buddy --permission-mode <value> doctor');
-    expect(text).toContain('acceptEdits');
+    expect(result.timedOut).toBe(false);
+    expect(text).not.toContain("unknown option '--permission-mode'");
+    expect(text).toContain('Code Buddy Doctor');
   }, 20_000);
 
   it('names the received --max-turns value', async () => {
