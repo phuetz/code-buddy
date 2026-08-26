@@ -359,15 +359,12 @@ def render_voiceover_section(
     render_root: Path,
     destination: Path,
 ) -> None:
+    if not visuals:
+        raise AssemblyError(
+            f'{section["id"]}: aucun visuel — carte de repli refusée'
+        )
     if destination.exists():
         print(f'SKIP section existante: {destination}')
-        return
-    if not visuals:
-        print(
-            f'AVERTISSEMENT {section["id"]}: aucun visuel, carte de repli',
-            file=sys.stderr,
-        )
-        render_card(section, duration, destination, avatar_missing=False)
         return
 
     count = visual_slot_count(duration)
