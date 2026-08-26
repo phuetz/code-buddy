@@ -48,6 +48,10 @@ interface ResolveTryProviderOptions {
   hasChatGptCredentials?: () => boolean;
   fetchImpl?: typeof fetch;
   ollamaProbeTimeoutMs?: number;
+  /** Endpoint imposé par l'utilisateur (`--base-url`) : prime sur toute auto-détection. */
+  baseUrlOverride?: string;
+  /** Modèle imposé par l'utilisateur (`--model`). */
+  modelOverride?: string;
 }
 
 export interface RunTryDemoOptions extends ResolveTryProviderOptions {
@@ -125,11 +129,49 @@ function parseOllamaModels(value: unknown): string[] {
     .filter((model): model is string => Boolean(model));
 }
 
+/** Demande à un endpoint OpenAI-compatible le premier modèle qu'il expose. */
+async function probeFirstModel(
+  baseURL: string,
+  options: ResolveTryProviderOptions,
+): Promise<string | undefined> {
+  const fetchImpl = options.fetchImpl ?? fetch;
+  try {
+    const response = await fetchImpl(`${baseURL}/models`, {
+      signal: AbortSignal.timeout(options.ollamaProbeTimeoutMs ?? OLLAMA_PROBE_TIMEOUT_MS),
+    });
+    if (!response.ok) return undefined;
+    const payload = (await response.json()) as { data?: Array<{ id?: string }> };
+    return payload.data?.find((entry) => typeof entry.id === 'string')?.id;
+  } catch {
+    return undefined;
+  }
+}
+
 /** Resolve only the free demo routes: ChatGPT OAuth first, local Ollama second. */
 export async function resolveTryProvider(
   options: ResolveTryProviderOptions = {},
 ): Promise<TryProvider | null> {
   const env = options.env ?? process.env;
+
+  // Un endpoint demandé explicitement gagne toujours : l'auto-détection sert à
+  // deviner quand l'utilisateur n'a rien dit, pas à contredire ce qu'il a dit.
+  const baseUrlOverride = options.baseUrlOverride?.trim();
+  if (baseUrlOverride) {
+    const baseURL = baseUrlOverride.replace(/\/+$/, '');
+    const model =
+      options.modelOverride?.trim() ||
+      (await probeFirstModel(baseURL, options)) ||
+      env.OLLAMA_MODEL;
+    if (!model) return null;
+    return {
+      kind: 'ollama',
+      label: `endpoint imposé (${baseURL} · ${model})`,
+      apiKey: env.OPENAI_API_KEY ?? env.GROK_API_KEY ?? 'local',
+      baseURL,
+      model,
+    };
+  }
+
   const hasChatGpt = (options.hasChatGptCredentials ?? hasCodexCredentials)();
   if (hasChatGpt) {
     const provider = resolveProviderFromCatalog({
@@ -367,7 +409,14 @@ export function createTryCommand(): Command {
   return new Command('try')
     .description('Run an isolated 60-second coding-agent demo (ChatGPT OAuth or local Ollama)')
     .option('--verbose', 'Show agent telemetry during the demo')
-    .action(async (options: { verbose?: boolean }) => {
-      process.exitCode = await runTryDemo({ verbose: options.verbose === true });
+    .action(async (options: { verbose?: boolean }, command: Command) => {
+      // `--base-url` et `--model` sont des options GLOBALES : sans cette reprise,
+      // la démo les ignorait en silence et annonçait un succès obtenu ailleurs.
+      const globals = command.parent?.opts<{ baseUrl?: string; model?: string }>() ?? {};
+      process.exitCode = await runTryDemo({
+        verbose: options.verbose === true,
+        ...(globals.baseUrl ? { baseUrlOverride: globals.baseUrl } : {}),
+        ...(globals.model ? { modelOverride: globals.model } : {}),
+      });
     });
 }

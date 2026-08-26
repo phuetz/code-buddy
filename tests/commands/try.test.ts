@@ -260,4 +260,39 @@ describe('buddy try', () => {
       else process.env.LOG_LEVEL = precedentEnv;
     }
   });
+
+  it('honore un endpoint impose plutot que le fournisseur auto-detecte', async () => {
+    const provider = await resolveTryProvider({
+      env: {} as NodeJS.ProcessEnv,
+      // Des identifiants ChatGPT sont presents : sans respect de l'override,
+      // la demo partait dans le cloud en annoncant un succes.
+      hasChatGptCredentials: () => true,
+      baseUrlOverride: 'http://darkstar:11434/v1',
+      modelOverride: 'qwen3.8:27b',
+    });
+
+    expect(provider?.baseURL).toBe('http://darkstar:11434/v1');
+    expect(provider?.model).toBe('qwen3.8:27b');
+    expect(provider?.kind).not.toBe('chatgpt');
+  });
+
+  it('interroge l endpoint impose quand aucun modele n est precise', async () => {
+    const fetchImpl = (async () =>
+      new Response(JSON.stringify({ data: [{ id: 'ornith-1.5:35b' }] }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })) as unknown as typeof fetch;
+
+    const provider = await resolveTryProvider({
+      env: {} as NodeJS.ProcessEnv,
+      hasChatGptCredentials: () => true,
+      baseUrlOverride: 'http://darkstar:11434/v1/',
+      fetchImpl,
+    });
+
+    expect(provider?.model).toBe('ornith-1.5:35b');
+    // la barre oblique finale ne doit pas se retrouver dans l'URL construite
+    expect(provider?.baseURL).toBe('http://darkstar:11434/v1');
+  });
+
 });
