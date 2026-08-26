@@ -29,10 +29,57 @@
 
 import type { Command } from 'commander';
 
+interface RunNumericOptionRule {
+  maximum?: number;
+  minimum: number;
+  option: string;
+}
+
+const RUN_NUMERIC_OPTION_RULES: Record<string, RunNumericOptionRule> = {
+  limit: { minimum: 0, option: '--limit' },
+  maxArtifactBytes: { minimum: 0, option: '--max-artifact-bytes' },
+  maxCompressedBytes: { minimum: 0, option: '--max-compressed-bytes' },
+  maxEventValueBytes: { minimum: 0, option: '--max-event-value-bytes' },
+  maxLessons: { minimum: 0, option: '--max-lessons' },
+  maxMemories: { minimum: 0, option: '--max-memories' },
+  maxSessions: { minimum: 0, option: '--max-sessions' },
+  staleAfterMinutes: { minimum: 0, option: '--stale-after-minutes' },
+  ttl: { minimum: 60, maximum: 900, option: '--ttl' },
+};
+
+export function validateRunNumericOptions(options: Record<string, unknown>): void {
+  for (const [key, rule] of Object.entries(RUN_NUMERIC_OPTION_RULES)) {
+    const value = options[key];
+    if (value === undefined) continue;
+    const raw = String(value).trim();
+    const parsed = Number(raw);
+    const inRange = Number.isSafeInteger(parsed)
+      && parsed >= rule.minimum
+      && (rule.maximum === undefined || parsed <= rule.maximum);
+    if (!/^\d+$/.test(raw) || !inRange) {
+      const range = rule.maximum === undefined
+        ? rule.minimum === 0 ? 'a non-negative integer' : `an integer >= ${rule.minimum}`
+        : `an integer in ${rule.minimum}–${rule.maximum}`;
+      throw new Error(`${rule.option} must be ${range} (received ${JSON.stringify(value)})`);
+    }
+  }
+}
+
 export function registerRunCommands(program: Command): void {
   const run = program
     .command('run')
     .description('Inspect and replay agent runs (observability)');
+
+  run.hook('preAction', (_thisCommand, actionCommand) => {
+    try {
+      validateRunNumericOptions(actionCommand.opts());
+    } catch (error) {
+      actionCommand.error(`error: ${error instanceof Error ? error.message : String(error)}`, {
+        code: 'commander.invalidArgument',
+        exitCode: 1,
+      });
+    }
+  });
 
   // ── buddy run list ─────────────────────────────────────────────
   run

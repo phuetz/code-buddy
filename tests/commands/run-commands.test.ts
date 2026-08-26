@@ -56,6 +56,22 @@ describe('Run CLI commands', () => {
     return runId;
   }
 
+  it.each([
+    [['run', 'list', '--limit', 'not-a-number'], '--limit'],
+    [['run', 'doctor', '--stale-after-minutes', '1.5'], '--stale-after-minutes'],
+    [['run', 'recall-pack', 'query', '--max-lessons', '-1'], '--max-lessons'],
+    [['run', 'trajectory-export', 'run-id', '--max-artifact-bytes', '4KB'], '--max-artifact-bytes'],
+    [['run', 'trajectory-batch', '--max-compressed-bytes', 'Infinity'], '--max-compressed-bytes'],
+    [['run', 'mobile-pairing-state', 'query', '--ttl', '59'], '--ttl'],
+  ])('rejects invalid numeric options before the run action: %s', async (args, option) => {
+    const program = createProgram();
+    registerRunCommands(program);
+
+    await expect(program.parseAsync(['node', 'test', ...args])).rejects.toThrow(
+      new RegExp(`${option} must be`),
+    );
+  });
+
   it('reports stale running runs without mutating the run ledger', async () => {
     const completedRunId = startRun('Completed run doctor proof', {
       channel: 'cli',
