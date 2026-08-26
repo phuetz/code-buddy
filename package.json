@@ -1,7 +1,7 @@
 {
   "name": "@phuetz/code-buddy",
   "version": "2.0.0",
-  "description": "Open-source multi-provider AI coding agent for the terminal, desktop, and HTTP. 15 LLM providers (Grok, Claude, ChatGPT, Gemini, Ollama, LM Studio, …) with ~110 tools, a peer-to-peer fleet, opt-in self-improvement, multi-channel messaging, and a skills system.",
+  "description": "Open-source AI coding agent for the terminal, desktop, and HTTP. 64 LLM providers (Claude, GPT, Grok, Gemini, Ollama, LM Studio, NVIDIA NIM, …), 30 of them free-tier or local $0, with automatic failover. 220+ tools selected per query, a peer-to-peer fleet, opt-in self-improvement, multi-channel messaging, and a skills system.",
   "author": "Patrice Huetz <patrice.huetz@gmail.com>",
   "repository": {
     "type": "git",
