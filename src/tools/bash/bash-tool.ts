@@ -44,6 +44,41 @@ import {
   isSandboxBoundaryFailure,
 } from './execution-policy.js';
 
+/**
+ * Vrai seulement pour un `cd` SEUL, qui doit changer le répertoire de la session.
+ *
+ * `command.startsWith('cd ')` était vrai aussi pour `cd /depot && grep -n x fichier`,
+ * et tout ce qui suivait le `cd` était alors traité comme un nom de répertoire :
+ * « Cannot change directory: ENOENT … stat '/depot && grep -n x fichier' ». Le motif
+ * étant celui que produit spontanément un modèle pour travailler dans un dépôt, l'agent
+ * en headless n'exécutait plus rien — mesuré le 26/08/2026 sur deux moteurs distincts,
+ * dont l'échec avait d'abord été imputé au modèle plutôt qu'à cet outil.
+ *
+ * Une commande composée repart vers le shell, où `cd X && Y` a son sens habituel :
+ * Y s'exécute dans X, sans que le répertoire de session change — c'est le comportement
+ * attendu, et il ne peut de toute façon pas remonter depuis un processus fils.
+ */
+export function isBareChangeDirectory(command: string): boolean {
+  const trimmed = command.trim();
+  if (!/^cd(\s|$)/.test(trimmed)) return false;
+  // Le parseur voit les opérateurs (&&, ||, ;, |, &) sans se laisser abuser par
+  // ceux qui vivent dans des guillemets — un répertoire peut légitimement s'appeler
+  // « rapports && archives ».
+  // Hors guillemets, une esperluette finale lance en arriere-plan : le parseur n'y voit
+  // qu'une commande, mais un `cd` dans un sous-shell ne changerait rien a la session.
+  const sansChaines = trimmed.replace(/(["']).*?\1/g, '');
+  if (/&\s*$/.test(sansChaines)) return false;
+  try {
+    const { commands } = parseBashCommand(trimmed);
+    if (commands.length > 1) return false;
+  } catch {
+    // Parseur indisponible : on retombe sur une détection prudente plutôt que
+    // de traiter une commande composée comme un simple changement de répertoire.
+    if (/(\|\||&&|[;|&])/.test(trimmed.replace(/(["']).*?\1/g, ''))) return false;
+  }
+  return true;
+}
+
 export class BashTool implements Disposable {
   private currentDirectory: string = process.cwd();
   private confirmationService = ConfirmationService.getInstance();
@@ -347,8 +382,8 @@ export class BashTool implements Disposable {
       // `cd` changes the tool/session working directory rather than executing
       // a child process. Keep it out of the shell sandbox, which cannot persist
       // a directory change back to the parent process.
-      if (command.startsWith('cd ')) {
-        const newDir = command.substring(3).trim();
+      if (isBareChangeDirectory(command)) {
+        const newDir = command.trim().substring(3).trim();
         const cleanDir = newDir.replace(/^["']|["']$/g, '');
         try {
           const candidate = resolve(effectiveCwd, cleanDir);
