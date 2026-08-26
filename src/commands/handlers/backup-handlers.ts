@@ -164,7 +164,7 @@ async function handleBackupVerify(args: string[]): Promise<CommandHandlerResult>
       return {
         handled: true,
         exitCode: 1,
-        response: `Invalid backup: missing or corrupt manifest`,
+        response: `Invalid backup ${fullPath}: missing or corrupt manifest`,
       };
     }
 
@@ -183,7 +183,7 @@ async function handleBackupVerify(args: string[]): Promise<CommandHandlerResult>
     return {
       handled: true,
       exitCode: 1,
-      response: `Backup corrupt or unreadable: ${(err as Error).message}`,
+      response: `Backup corrupt or unreadable: ${fullPath}: ${(err as Error).message}`,
     };
   }
 }
@@ -254,7 +254,7 @@ async function handleBackupRestore(args: string[]): Promise<CommandHandlerResult
       return {
         handled: true,
         exitCode: 1,
-        response: 'Invalid backup file.',
+        response: `Invalid backup ${fullPath}: missing or corrupt manifest`,
       };
     }
 
@@ -273,7 +273,7 @@ async function handleBackupRestore(args: string[]): Promise<CommandHandlerResult
     return {
       handled: true,
       exitCode: 1,
-      response: `Failed to read backup: ${(err as Error).message}`,
+      response: `Failed to read backup ${fullPath}: ${(err as Error).message}`,
     };
   }
 }

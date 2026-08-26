@@ -122,6 +122,22 @@ describe('Backup Handlers', () => {
       expect(result.exitCode).toBe(1);
       expect(result.response).toContain('Usage');
     });
+
+    it.each(['verify', 'restore'])('should name a directory that cannot be read by backup %s', async (action) => {
+      const { existsSync, readFileSync } = await import('fs');
+      const directoryPath = process.cwd();
+      vi.mocked(existsSync).mockReturnValue(true);
+      vi.mocked(readFileSync).mockImplementationOnce(() => {
+        throw new Error('EISDIR: illegal operation on a directory, read');
+      });
+
+      const result = await handleBackup(`${action} ${directoryPath}`);
+
+      expect(result.handled).toBe(true);
+      expect(result.exitCode).toBe(1);
+      expect(result.response).toContain('EISDIR');
+      expect(result.response).toContain(directoryPath);
+    });
   });
 
   describe('backup list', () => {
