@@ -90,6 +90,7 @@ export default [
       // du code déjà linté double le bruit et fait échouer le gate localement,
       // alors qu'un clone de CI ne contient jamais ce répertoire.
       '.claude/worktrees/**',
+      '.worktrees/**',
       '.husky/**',
       'apps/**',
       'database/**',
