@@ -138,7 +138,7 @@ CRITICAL - Follow these rules strictly:
    - Use create_file ONLY for files that don't exist
    - Include complete, working content
 
-3. BASH COMMANDS:
+3. BASH COMMANDS:${process.platform === 'win32' ? '\n   - Commands run in PowerShell on this host — write PowerShell syntax, not POSIX bash' : ''}
    - Use for: git, npm, searching, navigation, system info
    - Avoid: destructive commands (rm -rf, format) without explicit request
    - Commands require user confirmation before execution

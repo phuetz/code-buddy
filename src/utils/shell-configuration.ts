@@ -54,3 +54,40 @@ export function getShellConfiguration(
   shellConfigurationCache.set(platform, configuration);
   return configuration;
 }
+
+const SHELL_DISPLAY_NAMES: Record<ShellType, string> = {
+  bash: 'bash',
+  powershell: 'PowerShell',
+  cmd: 'cmd.exe',
+};
+
+/**
+ * Model-facing description for the `bash` tool, derived from the shell that
+ * actually executes commands. The model picks its command syntax from this
+ * text, so a PowerShell host must not advertise bash (gemini-cli pattern).
+ * The bash wording is the historical text, kept byte-identical on POSIX.
+ */
+export function getShellToolDescription(
+  configuration: ShellConfiguration = getShellConfiguration(),
+): string {
+  const factsSentence =
+    'Prefer it to check facts and state you can verify (git status, test output, file existence, exit codes) rather than assuming.';
+  if (configuration.shell === 'bash') {
+    return `Execute a bash command. ${factsSentence}`;
+  }
+  const executableName =
+    configuration.executable.split(/[\\/]/).pop() || configuration.executable;
+  const invocation = [executableName, ...configuration.argsPrefix, '<command>'].join(' ');
+  const shellName = SHELL_DISPLAY_NAMES[configuration.shell];
+  return `Execute a ${shellName} command (runs as \`${invocation}\`). Write ${shellName} syntax, not POSIX bash. ${factsSentence}`;
+}
+
+/** Model-facing description of the `command` parameter, same derivation. */
+export function getShellCommandParamDescription(
+  configuration: ShellConfiguration = getShellConfiguration(),
+): string {
+  if (configuration.shell === 'bash') {
+    return 'The bash command to execute';
+  }
+  return `The ${SHELL_DISPLAY_NAMES[configuration.shell]} command to execute`;
+}

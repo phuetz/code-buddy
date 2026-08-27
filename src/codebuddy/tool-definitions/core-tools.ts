@@ -9,6 +9,10 @@
  */
 
 import type { CodeBuddyTool } from './types.js';
+import {
+  getShellCommandParamDescription,
+  getShellToolDescription,
+} from '../../utils/shell-configuration.js';
 
 // View file or directory contents
 export const VIEW_FILE_TOOL: CodeBuddyTool = {
@@ -202,13 +206,15 @@ export const BASH_TOOL: CodeBuddyTool = {
   type: "function",
   function: {
     name: "bash",
-    description: "Execute a bash command. Prefer it to check facts and state you can verify (git status, test output, file existence, exit codes) rather than assuming.",
+    // Derived from the shell that actually executes (PowerShell on Windows):
+    // the model picks its command syntax from this text.
+    description: getShellToolDescription(),
     parameters: {
       type: "object",
       properties: {
         command: {
           type: "string",
-          description: "The bash command to execute",
+          description: getShellCommandParamDescription(),
         },
       },
       required: ["command"],
