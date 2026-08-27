@@ -59,8 +59,27 @@ appel() {
   env -i "${environnement[@]}" timeout --kill-after=5 "$TIMEOUT" node "$ENTREE" "$@" 2>&1
 }
 
-appel --help | grep -oE '^  [a-z][a-z0-9-]+' | tr -d ' ' | sort -u > "$BASE/commandes.txt"
+# Extrait la liste des sous-commandes d'un point d'entrée node depuis son --help.
+extraire_commandes() {
+  env -i "HOME=$BASE/home" "PATH=/usr/bin:/bin" "TERM=dumb" \
+    timeout --kill-after=5 "$TIMEOUT" node "$1" --help 2>&1 \
+    | grep -oE '^  [a-z][a-z0-9-]+' | tr -d ' ' | sort -u
+}
+
+extraire_commandes "$ENTREE" > "$BASE/commandes.txt"
 total=$(wc -l < "$BASE/commandes.txt")
+
+# L'ATTENDU : les commandes que le paquet DEVRAIT exposer. Fourni par un test
+# (BALAYAGE_ATTENDU), sinon dérivé de la SOURCE (dist du dépôt) en mode réel — le
+# balayage vérifie justement que l'INSTALLÉ se comporte comme la source.
+: > "$BASE/attendues.txt"
+if [ -n "${BALAYAGE_ATTENDU:-}" ] && [ -f "$BALAYAGE_ATTENDU" ]; then
+  sort -u "$BALAYAGE_ATTENDU" > "$BASE/attendues.txt"
+elif [ -z "${BALAYAGE_ENTREE:-}" ] && [ -f "$REPO/dist/index.js" ]; then
+  extraire_commandes "$REPO/dist/index.js" > "$BASE/attendues.txt"
+fi
+attendu=$(wc -l < "$BASE/attendues.txt")
+
 # Une extraction vide n'est PAS un succès : le balayage n'a rien pu tester (aide
 # restructurée, sortie sur stderr, env -i cassé…). Sans cette garde, la boucle ne
 # tourne pas, n=0, et le script annonce « ✓ 0/0 » — aveugle à sa propre panne.
@@ -68,6 +87,21 @@ if [ "$total" -eq 0 ]; then
   echo "✗ aucune commande extraite de --help : le balayage n'a rien pu tester" >&2
   echo "  (aide restructurée, sortie sur stderr, ou point d'entrée muet ?) — traces : $BASE" >&2
   exit 2
+fi
+
+# total>0 ne suffit pas : une restructuration PARTIELLE du --help donnerait un
+# sous-ensemble (3/30) qui passe la garde et imprime « ✓ 3/3 » — un faux succès avec
+# l'apparence d'un vrai balayage. Comparer à l'attendu ferme la famille : toute
+# commande attendue absente de l'extraction fait échouer, nommément.
+if [ "$attendu" -gt 0 ]; then
+  manquantes=$(comm -23 "$BASE/attendues.txt" "$BASE/commandes.txt")
+  if [ -n "$manquantes" ]; then
+    echo "✗ extraction incomplète : $total/$attendu commandes attendues seulement." >&2
+    echo "  Manquantes (aide restructurée ou installation partielle ?) :" >&2
+    echo "$manquantes" | sed 's/^/    - /' >&2
+    echo "  traces : $BASE" >&2
+    exit 2
+  fi
 fi
 echo "== balayage de $total commandes"
 

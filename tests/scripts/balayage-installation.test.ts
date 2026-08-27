@@ -105,6 +105,40 @@ describe('balayage-installation.sh — gardes', () => {
     expect(stdout).toMatch(/beta/);
   });
 
+  it('une extraction PARTIELLE (moins de commandes qu’attendu) n’est pas un succès', () => {
+    // Le --help ne liste que 2 commandes alors que 4 sont attendues (restructuration
+    // partielle) : total>0 passe, mais la comparaison à l'attendu doit échouer.
+    const attendu = join(dir, 'attendues.txt');
+    writeFileSync(attendu, 'alpha\nbeta\ngamma\ndelta\n');
+    const cli = fakeCli(`
+      const arg = process.argv[2];
+      if (arg === '--help' || arg === undefined) {
+        console.log('  alpha   ok');
+        console.log('  beta    ok');
+      } else { process.exit(0); }
+    `);
+    const { status, stdout } = runBalayage(cli, { BALAYAGE_ATTENDU: attendu });
+    expect(status).not.toBe(0);
+    expect(stdout).toMatch(/gamma/);
+    expect(stdout).toMatch(/delta/);
+    expect(stdout).not.toMatch(/2\/2 commandes répondent/);
+  });
+
+  it('accepte quand toutes les commandes attendues sont présentes', () => {
+    const attendu = join(dir, 'attendues.txt');
+    writeFileSync(attendu, 'alpha\nbeta\n');
+    const cli = fakeCli(`
+      const arg = process.argv[2];
+      if (arg === '--help' || arg === undefined) {
+        console.log('  alpha   ok');
+        console.log('  beta    ok');
+      } else { process.exit(0); }
+    `);
+    const { status, stdout } = runBalayage(cli, { BALAYAGE_ATTENDU: attendu });
+    expect(status).toBe(0);
+    expect(stdout).toMatch(/2\/2 commandes répondent/);
+  });
+
   it('ne hangne PAS sur une commande qui ignore SIGTERM (--kill-after)', () => {
     // 'beta' ignore SIGTERM et boucle : sans --kill-after, timeout attend à l'infini.
     const cli = fakeCli(`
