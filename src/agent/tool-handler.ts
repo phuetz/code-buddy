@@ -22,6 +22,7 @@ import {
   ImageTool,
   BashTool,
 } from "../tools/index.js";
+import { isBareChangeDirectory } from "../tools/bash/bash-tool.js";
 import { getFormalToolRegistry } from "../tools/registry/index.js";
 import type { FormalToolRegistry, IToolExecutionContext } from "../tools/registry/index.js";
 // The adapter list (base tools + aliases, with the audit-history rationale for
@@ -342,7 +343,12 @@ export class ToolHandler {
 
   /** Handle the stateful `cd` builtin without ever mutating process.cwd(). */
   private changeSessionDirectory(command: string, baseCwd: string): ToolResult | null {
-    if (!command.startsWith('cd ')) return null;
+    // Second chemin de la « famille cwd embarqué » : ne traiter comme changement de
+    // répertoire de session qu'un `cd` SEUL. `command.startsWith('cd ')` interceptait
+    // aussi `cd /repo && node --test`, dont tout ce qui suit était stat comme un
+    // répertoire — l'agent headless n'exécutait plus rien. Une commande composée
+    // repart au shell, où `cd X && Y` a son sens.
+    if (!isBareChangeDirectory(command)) return null;
     const requested = command.substring(3).trim().replace(/^["']|["']$/g, '');
     try {
       const candidate = resolve(baseCwd, requested);
