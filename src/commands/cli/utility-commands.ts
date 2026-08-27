@@ -24,7 +24,7 @@ export function registerUtilityCommands(program: Command): void {
     .option('-v, --verbose', 'Show all checks including passing ones')
     .option('--fix', 'Auto-fix issues that can be resolved automatically')
     .action(async (options: { verbose?: boolean; fix?: boolean }) => {
-      const { runDoctorChecks, runFixes } = await import('../../doctor/index.js');
+      const { runDoctorChecks, runFixes, summarizeDoctorChecks } = await import('../../doctor/index.js');
       const checks = await runDoctorChecks(resolveCommandDirectory(program));
 
       console.log('\n🔍 Code Buddy Doctor\n');
@@ -51,13 +51,15 @@ export function registerUtilityCommands(program: Command): void {
         }
       }
 
-      const errors = checks.filter(c => c.status === 'error').length;
-      const warns = checks.filter(c => c.status === 'warn').length;
-      const oks = checks.filter(c => c.status === 'ok').length;
+      const { passed: oks, warnings: warns, errors, optionalNotInstalled } =
+        summarizeDoctorChecks(checks);
       const fixable = checks.filter(c => c.fixable).length;
       const readinessNeedsAttention = readiness !== undefined && readiness.status !== 'ok';
 
       console.log(`\n  Summary: ${oks} passed, ${warns} warnings, ${errors} errors`);
+      if (optionalNotInstalled > 0) {
+        console.log(`  ${optionalNotInstalled} optional tool(s) not installed (not a problem)`);
+      }
       if (fixable > 0 && !options.fix) {
         console.log(`  ${fixable} issue(s) can be auto-fixed with --fix`);
       }

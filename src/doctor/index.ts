@@ -27,6 +27,41 @@ export interface DoctorCheck {
   message: string;
   fixable?: boolean;
   fix?: () => Promise<FixResult>;
+  /**
+   * A genuinely optional capability (a tool you install only to use one
+   * feature). When absent it must NOT inflate the warning count — a fresh
+   * machine with only optional tools missing is healthy, and a health-check
+   * that keys on the warning total should read it as such.
+   */
+  optional?: boolean;
+}
+
+export interface DoctorSummary {
+  passed: number;
+  /** Warnings that need attention — excludes absent optional capabilities. */
+  warnings: number;
+  errors: number;
+  /** Optional capabilities not installed — informational, not a warning. */
+  optionalNotInstalled: number;
+}
+
+/**
+ * Aggregate checks into the summary. An optional capability that is absent
+ * (status 'warn' + optional) is counted as informational, never as a warning,
+ * so `doctor` on a fresh machine reports 0 warnings for missing optional tools.
+ */
+export function summarizeDoctorChecks(checks: DoctorCheck[]): DoctorSummary {
+  let passed = 0;
+  let warnings = 0;
+  let errors = 0;
+  let optionalNotInstalled = 0;
+  for (const check of checks) {
+    if (check.status === 'error') errors += 1;
+    else if (check.status === 'ok') passed += 1;
+    else if (check.optional) optionalNotInstalled += 1;
+    else warnings += 1;
+  }
+  return { passed, warnings, errors, optionalNotInstalled };
 }
 
 function commandExists(cmd: string): boolean {
@@ -115,10 +150,14 @@ function checkDependencies(): DoctorCheck[] {
 
   for (const dep of required) {
     const availability = getCommandAvailability(dep.cmd);
+    const installed = availability === 'installed';
+    // These are install-only-for-one-feature tools: absent, they are
+    // informational, not a warning that should count against machine health.
     checks.push({
       name: dep.label,
-      status: availability === 'installed' ? 'ok' : dep.level,
-      message: availability === 'installed' ? availability : dep.missingMessage,
+      status: installed ? 'ok' : dep.level,
+      message: installed ? availability : dep.missingMessage,
+      optional: !installed,
     });
   }
 
