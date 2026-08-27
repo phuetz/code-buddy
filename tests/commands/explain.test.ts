@@ -100,4 +100,25 @@ describe('buddy explain command', () => {
     expect(markdown).toContain('Collecte globale incomplète');
     expect(markdown).toContain('## 4. Par où commencer');
   });
+
+  it('rejette un chemin inexistant en erreur CLI propre, pas en exception non gérée', async () => {
+    // Avant : `ensureDirectory` levait un Error nu qui s'échappait de l'action →
+    // « Unhandled promise rejection » + crash recovery. Doit être une erreur CLI
+    // contrôlée (exit 1), pas une exception qui remonte jusqu'au handler global.
+    const command = createExplainCommand({ cwd: tempDirectory });
+    command.exitOverride();
+    await expect(
+      command.parseAsync(['node', 'explain', 'nexistepas-xyz-999']),
+    ).rejects.toMatchObject({ exitCode: 1 });
+  });
+
+  it('rejette un chemin qui n’est pas un dossier en erreur CLI propre', async () => {
+    const filePath = path.join(tempDirectory, 'un-fichier.txt');
+    await fs.writeFile(filePath, 'x');
+    const command = createExplainCommand({ cwd: tempDirectory });
+    command.exitOverride();
+    await expect(
+      command.parseAsync(['node', 'explain', 'un-fichier.txt']),
+    ).rejects.toMatchObject({ exitCode: 1 });
+  });
 });

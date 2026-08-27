@@ -125,10 +125,18 @@ export function createExplainCommand(dependencies: ExplainCommandDependencies = 
     .option('--out <fichier.md|.html>', 'Fichier de sortie (Markdown par défaut)')
     .option('--depth <quick|deep>', 'Profondeur de collecte', parseDepth, 'quick')
     .option('--html', 'Produire un HTML autonome zéro CDN', false)
-    .action(async (requestedPath: string, options: ExplainOptions) => {
+    .action(async (requestedPath: string, options: ExplainOptions, command: Command) => {
       const cwd = path.resolve(dependencies.cwd ?? process.cwd());
       const rootPath = path.resolve(cwd, requestedPath || '.');
-      await ensureDirectory(rootPath);
+      // Un chemin absent/non-dossier est une erreur d'usage : la rendre en erreur
+      // CLI propre (exit 1), jamais laisser l'Error s'échapper de l'action async —
+      // il deviendrait une « Unhandled promise rejection » + un crash recovery.
+      try {
+        await ensureDirectory(rootPath);
+      } catch (error) {
+        command.error(error instanceof Error ? error.message : String(error));
+        return;
+      }
       const { outputPath, format } = resolveOutput(cwd, rootPath, options);
       const generatedAt = dependencies.now?.() ?? new Date();
 
