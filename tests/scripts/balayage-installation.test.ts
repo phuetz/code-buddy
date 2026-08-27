@@ -9,7 +9,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, rmSync, writeFileSync, chmodSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync, chmodSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -61,6 +61,76 @@ function runBalayage(entree: string, extra: Record<string, string> = {}): {
     };
   }
 }
+
+function runRegenerer(
+  sourceEntree: string,
+  referencePath: string,
+  extra: Record<string, string> = {},
+  force = false,
+): { status: number; stdout: string } {
+  const env = {
+    ...process.env,
+    BALAYAGE_SOURCE_ENTREE: sourceEntree,
+    BALAYAGE_REFERENCE: referencePath,
+    BALAYAGE_TIMEOUT: '5',
+    ...extra,
+  };
+  const args = force ? [SCRIPT, '--regenerer', '--force'] : [SCRIPT, '--regenerer'];
+  try {
+    const stdout = execFileSync('bash', args, {
+      env,
+      encoding: 'utf8',
+      timeout: 30_000,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    return { status: 0, stdout };
+  } catch (e) {
+    const err = e as { status?: number; stdout?: Buffer | string; stderr?: Buffer | string };
+    return { status: err.status ?? -1, stdout: String(err.stdout ?? '') + String(err.stderr ?? '') };
+  }
+}
+
+describe('balayage-installation.sh — --regenerer (le chemin qui PRODUIT la référence)', () => {
+  it('refuse d’écrire une référence vide depuis une source cassée (référence intacte)', () => {
+    const source = fakeCli(`if (process.argv[2] === '--help') console.log('plus aucune commande');`);
+    const ref = join(dir, 'ref.txt');
+    writeFileSync(ref, 'alpha\nbeta\ngamma\n');
+    const { status, stdout } = runRegenerer(source, ref);
+    expect(status).not.toBe(0);
+    expect(stdout).toMatch(/aucune commande|INCHANGÉE/i);
+    // La référence existante n'a PAS été tronquée.
+    expect(readFileSync(ref, 'utf8').trim().split('\n').filter(Boolean)).toHaveLength(3);
+  });
+
+  it('refuse une chute brutale sans --force, en nommant les pertes (référence intacte)', () => {
+    const source = fakeCli(`if (process.argv[2] === '--help') { console.log('  alpha  x'); }`);
+    const ref = join(dir, 'ref.txt');
+    writeFileSync(ref, 'alpha\nbeta\ngamma\n');
+    const { status, stdout } = runRegenerer(source, ref);
+    expect(status).not.toBe(0);
+    expect(stdout).toMatch(/beta/);
+    expect(stdout).toMatch(/gamma/);
+    expect(readFileSync(ref, 'utf8').trim().split('\n').filter(Boolean)).toHaveLength(3);
+  });
+
+  it('accepte une chute assumée avec --force', () => {
+    const source = fakeCli(`if (process.argv[2] === '--help') { console.log('  alpha  x'); }`);
+    const ref = join(dir, 'ref.txt');
+    writeFileSync(ref, 'alpha\nbeta\ngamma\n');
+    const { status } = runRegenerer(source, ref, {}, true);
+    expect(status).toBe(0);
+    expect(readFileSync(ref, 'utf8').trim().split('\n').filter(Boolean)).toEqual(['alpha']);
+  });
+
+  it('accepte une croissance (ajouts) sans --force', () => {
+    const source = fakeCli(`if (process.argv[2] === '--help') { console.log('  alpha x'); console.log('  beta y'); console.log('  gamma z'); }`);
+    const ref = join(dir, 'ref.txt');
+    writeFileSync(ref, 'alpha\nbeta\n');
+    const { status } = runRegenerer(source, ref);
+    expect(status).toBe(0);
+    expect(readFileSync(ref, 'utf8').trim().split('\n').filter(Boolean)).toHaveLength(3);
+  });
+});
 
 describe('balayage-installation.sh — gardes', () => {
   it('une extraction vide N’EST PAS un succès (garde total>0)', () => {

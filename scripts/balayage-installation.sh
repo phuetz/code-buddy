@@ -29,14 +29,50 @@ TIMEOUT="${BALAYAGE_TIMEOUT:-45}"
 # installation qui perd des commandes rend l'extraction plus courte que la
 # référence → détectée. Dériver l'attendu par le MÊME extracteur ne verrait
 # jamais une cécité commune aux deux côtés (c'est le défaut d'origine du balayage).
-REFERENCE="$REPO/scripts/balayage-commandes-attendues.txt"
+REFERENCE="${BALAYAGE_REFERENCE:-$REPO/scripts/balayage-commandes-attendues.txt}"
 
-# --regenerer : met à jour la référence depuis la source (acte DÉLIBÉRÉ, relu en diff).
+# --regenerer : met à jour la référence depuis la source (acte DÉLIBÉRÉ). C'est le chemin
+# qui PRODUIT l'ancre : s'il est aveugle, toute la protection s'effondre en silence — une
+# source cassée régénérerait la référence à 0 ou 3 commandes, et le balayage retomberait à
+# « ✓ 3/3 ». Donc : jamais de troncature préventive (on écrit un temp, on remplace après
+# validation), refus d'une référence vide, refus d'une chute brutale sans --force, et stderr
+# VISIBLE (quand la régénération échoue, c'est le moment de voir pourquoi).
 if [ "${1:-}" = "--regenerer" ]; then
-  env -i "HOME=${HOME:-/tmp}" "PATH=$PATH" "TERM=dumb" NO_COLOR=1 \
-    timeout --kill-after=5 "$TIMEOUT" "$REPO/node_modules/.bin/tsx" "$REPO/src/index.ts" --help 2>/dev/null \
-    | grep -oE '^  [a-z][a-z0-9-]+' | tr -d ' ' | sort -u > "$REFERENCE"
-  echo "référence régénérée : $(wc -l < "$REFERENCE") commandes → $REFERENCE"
+  force=false
+  [ "${2:-}" = "--force" ] && force=true
+  tmp_ref="$(mktemp)"
+  {
+    if [ -n "${BALAYAGE_SOURCE_ENTREE:-}" ]; then
+      env -i "HOME=${HOME:-/tmp}" "PATH=$PATH" "TERM=dumb" NO_COLOR=1 \
+        timeout --kill-after=5 "$TIMEOUT" node "$BALAYAGE_SOURCE_ENTREE" --help
+    else
+      env -i "HOME=${HOME:-/tmp}" "PATH=$PATH" "TERM=dumb" NO_COLOR=1 \
+        timeout --kill-after=5 "$TIMEOUT" "$REPO/node_modules/.bin/tsx" "$REPO/src/index.ts" --help
+    fi
+  } | grep -oE '^  [a-z][a-z0-9-]+' | tr -d ' ' | sort -u > "$tmp_ref"
+  nouveau=$(wc -l < "$tmp_ref")
+
+  # Ne JAMAIS écrire une référence vide : c'est exactement la panne que le balayage existe
+  # pour attraper. La référence existante reste intacte.
+  if [ "$nouveau" -eq 0 ]; then
+    echo "✗ régénération abandonnée : la source n'expose aucune commande — référence INCHANGÉE." >&2
+    echo "  (source cassée, --help restructuré, ou point d'entrée muet ?) : $REFERENCE" >&2
+    rm -f "$tmp_ref"; exit 2
+  fi
+  # Une chute brutale (103 → 3) est le cas PARTIEL, suspect : refuser sans --force, en nommant
+  # ce qui serait perdu. La revue de diff ne peut pas être la seule barrière.
+  if [ -f "$REFERENCE" ]; then
+    ancien=$(wc -l < "$REFERENCE")
+    if [ "$nouveau" -lt "$ancien" ] && ! $force; then
+      echo "✗ régénération abandonnée : $nouveau commandes contre $ancien dans la référence." >&2
+      echo "  Commandes qui SERAIENT perdues (source cassée ?) :" >&2
+      comm -23 <(sort -u "$REFERENCE") "$tmp_ref" | sed 's/^/    - /' >&2
+      echo "  Si la suppression est VOULUE : scripts/balayage-installation.sh --regenerer --force" >&2
+      rm -f "$tmp_ref"; exit 2
+    fi
+  fi
+  mv "$tmp_ref" "$REFERENCE"
+  echo "référence régénérée : $nouveau commandes → $REFERENCE"
   exit 0
 fi
 
