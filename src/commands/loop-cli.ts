@@ -18,6 +18,7 @@
 
 import { Command } from 'commander';
 import { resolveCommandProvider } from './llm-provider-resolution.js';
+import { applyRequestedPermissionMode } from './apply-permission-mode.js';
 import {
   applyGoalCliWorkingDirectory,
   parsePositiveIntegerOption,
@@ -119,18 +120,11 @@ export function createLoopCommand(): Command {
         const cwd = applyGoalCliWorkingDirectory(command);
         if (cwd !== launchDir) await loadLoopEnv(cwd);
 
-        const permissionMode: string | undefined =
-          options.permissionMode ?? command?.optsWithGlobals?.()?.permissionMode;
-        if (permissionMode) {
-          const { getPermissionModeManager } = await import('../security/permission-modes.js');
-          const modes = ['default', 'plan', 'acceptEdits', 'dontAsk', 'bypassPermissions'] as const;
-          if (!modes.includes(permissionMode as (typeof modes)[number])) {
-            throw new Error(
-              `Posture de permission inconnue : ${permissionMode}. Valeurs : ${modes.join(', ')}`,
-            );
-          }
-          getPermissionModeManager().setMode(permissionMode as (typeof modes)[number]);
-        }
+        await applyRequestedPermissionMode(
+          options,
+          command,
+          (mode, values) => `Posture de permission inconnue : ${mode}. Valeurs : ${values}`,
+        );
 
         const modelOverride: string | undefined = options.model ?? command?.optsWithGlobals?.()?.model;
         const resolved = resolveCommandProvider({ explicitModel: modelOverride });

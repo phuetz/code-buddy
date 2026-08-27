@@ -15,6 +15,7 @@
 
 import { Command, InvalidArgumentError } from 'commander';
 import path from 'path';
+import { applyRequestedPermissionMode } from './apply-permission-mode.js';
 import type { ChatEntry } from '../agent/codebuddy-agent.js';
 import type { CodeBuddyClient } from '../codebuddy/client.js';
 import { resolveGoalJudgeClient, type GoalJudgeProviderInfo } from '../goals/goal-judge-client.js';
@@ -348,18 +349,11 @@ export function createGoalCommand(): Command {
       try {
         const cwd = await prepareGoalCliWorkspace(command);
 
-        const permissionMode: string | undefined =
-          options.permissionMode ?? command?.optsWithGlobals?.()?.permissionMode;
-        if (permissionMode) {
-          const { getPermissionModeManager } = await import('../security/permission-modes.js');
-          const modes = ['default', 'plan', 'acceptEdits', 'dontAsk', 'bypassPermissions'] as const;
-          if (!modes.includes(permissionMode as (typeof modes)[number])) {
-            throw new Error(
-              `Unknown permission mode: ${permissionMode}. Values: ${modes.join(', ')}`,
-            );
-          }
-          getPermissionModeManager().setMode(permissionMode as (typeof modes)[number]);
-        }
+        await applyRequestedPermissionMode(
+          options,
+          command,
+          (mode, values) => `Unknown permission mode: ${mode}. Values: ${values}`,
+        );
 
         const modelOverride: string | undefined = options.model ?? command?.optsWithGlobals?.()?.model;
         const resolved = resolveCommandProvider({ explicitModel: modelOverride });
