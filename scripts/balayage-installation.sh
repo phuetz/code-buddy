@@ -20,21 +20,31 @@ BASE="${BALAYAGE_DIR:-$(mktemp -d)}"
 mkdir -p "$BASE"   # BALAYAGE_DIR peut nommer un répertoire encore inexistant
 OMIT="--omit=optional"
 [ "${1:-}" = "--avec-optionnelles" ] && OMIT=""
+# Un process qui ignore SIGTERM ferait hangner tout le balayage sans --kill-after ;
+# les tests raccourcissent le délai via BALAYAGE_TIMEOUT.
+TIMEOUT="${BALAYAGE_TIMEOUT:-45}"
 
-echo "== construction"
-( cd "$REPO" && npm run build ) > "$BASE/build.log" 2>&1 || { echo "build en échec, voir $BASE/build.log"; exit 2; }
+if [ -n "${BALAYAGE_ENTREE:-}" ]; then
+  # Point d'entrée injecté (tests) : on exerce l'extraction et les gardes sans
+  # build/pack/install réels.
+  ENTREE="$BALAYAGE_ENTREE"
+  [ -f "$ENTREE" ] || { echo "point d'entrée injecté introuvable : $ENTREE"; exit 2; }
+else
+  echo "== construction"
+  ( cd "$REPO" && npm run build ) > "$BASE/build.log" 2>&1 || { echo "build en échec, voir $BASE/build.log"; exit 2; }
 
-echo "== empaquetage"
-TGZ="$(cd "$REPO" && npm pack --silent 2>/dev/null | tail -1)"
-[ -n "$TGZ" ] || { echo "npm pack n'a rien produit"; exit 2; }
-mkdir -p "$BASE/install" && mv "$REPO/$TGZ" "$BASE/install/"
+  echo "== empaquetage"
+  TGZ="$(cd "$REPO" && npm pack --silent 2>/dev/null | tail -1)"
+  [ -n "$TGZ" ] || { echo "npm pack n'a rien produit"; exit 2; }
+  mkdir -p "$BASE/install" && mv "$REPO/$TGZ" "$BASE/install/"
 
-echo "== installation propre ${OMIT:-(avec les optionnelles)}"
-( cd "$BASE/install" && npm init -y >/dev/null 2>&1 && npm install "./$TGZ" $OMIT --no-audit --no-fund ) \
-  > "$BASE/install.log" 2>&1 || { echo "installation en échec, voir $BASE/install.log"; exit 2; }
+  echo "== installation propre ${OMIT:-(avec les optionnelles)}"
+  ( cd "$BASE/install" && npm init -y >/dev/null 2>&1 && npm install "./$TGZ" $OMIT --no-audit --no-fund ) \
+    > "$BASE/install.log" 2>&1 || { echo "installation en échec, voir $BASE/install.log"; exit 2; }
 
-ENTREE="$BASE/install/node_modules/@phuetz/code-buddy/dist/index.js"
-[ -f "$ENTREE" ] || { echo "point d'entrée introuvable : $ENTREE"; exit 2; }
+  ENTREE="$BASE/install/node_modules/@phuetz/code-buddy/dist/index.js"
+  [ -f "$ENTREE" ] || { echo "point d'entrée introuvable : $ENTREE"; exit 2; }
+fi
 mkdir -p "$BASE/home"
 
 # Environnement vide : ni clé d'API, ni configuration héritée.
@@ -46,11 +56,19 @@ appel() {
   )
   [ -n "${BALAYAGE_NODE_OPTIONS:-}" ] && environnement+=("NODE_OPTIONS=$BALAYAGE_NODE_OPTIONS")
   [ -n "${BALAYAGE_BLOCKED_MODULES:-}" ] && environnement+=("CODEBUDDY_TEST_BLOCKED_MODULES=$BALAYAGE_BLOCKED_MODULES")
-  env -i "${environnement[@]}" timeout 45 node "$ENTREE" "$@" 2>&1
+  env -i "${environnement[@]}" timeout --kill-after=5 "$TIMEOUT" node "$ENTREE" "$@" 2>&1
 }
 
 appel --help | grep -oE '^  [a-z][a-z0-9-]+' | tr -d ' ' | sort -u > "$BASE/commandes.txt"
 total=$(wc -l < "$BASE/commandes.txt")
+# Une extraction vide n'est PAS un succès : le balayage n'a rien pu tester (aide
+# restructurée, sortie sur stderr, env -i cassé…). Sans cette garde, la boucle ne
+# tourne pas, n=0, et le script annonce « ✓ 0/0 » — aveugle à sa propre panne.
+if [ "$total" -eq 0 ]; then
+  echo "✗ aucune commande extraite de --help : le balayage n'a rien pu tester" >&2
+  echo "  (aide restructurée, sortie sur stderr, ou point d'entrée muet ?) — traces : $BASE" >&2
+  exit 2
+fi
 echo "== balayage de $total commandes"
 
 : > "$BASE/fautives.txt"
