@@ -3873,9 +3873,9 @@ addLazyCommand(
 
 installPermissionModeActionHook(program, async (mode) => {
   const { getPermissionModeManager } = await import('./security/permission-modes.js');
-  if (getPermissionModeManager().setMode(mode)) {
-    cli.error(`Permission mode: ${mode}`);
-  }
+  // setMode announces the posture itself (INFO, escalated WARN for bypass);
+  // a second line here rendered as a false "ERROR Permission mode: <mode>".
+  getPermissionModeManager().setMode(mode);
 });
 
 // Apply the profile before parsing so it governs root chat, lazy subcommands,
