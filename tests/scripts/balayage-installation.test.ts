@@ -113,6 +113,24 @@ describe('balayage-installation.sh — --regenerer (le chemin qui PRODUIT la ré
     expect(readFileSync(ref, 'utf8').trim().split('\n').filter(Boolean)).toHaveLength(3);
   });
 
+  it('refuse une PERTE à compte constant (échange), pas seulement une chute d’amplitude', () => {
+    // 5 → 5 mais delta/epsilon remplacés par zeta/eta : le décompte ne bouge pas,
+    // pourtant deux commandes sortent de l'ancre. Une garde qui compte les rate.
+    const source = fakeCli(
+      `if (process.argv[2] === '--help') ['alpha','beta','gamma','zeta','eta'].forEach(c => console.log('  '+c+'  d'));`,
+    );
+    const ref = join(dir, 'ref.txt');
+    writeFileSync(ref, 'alpha\nbeta\ngamma\ndelta\nepsilon\n');
+    const { status, stdout } = runRegenerer(source, ref);
+    expect(status).not.toBe(0);
+    expect(stdout).toMatch(/delta/);
+    expect(stdout).toMatch(/epsilon/);
+    // La référence n'a pas été écrasée : delta/epsilon toujours là.
+    const apres = readFileSync(ref, 'utf8');
+    expect(apres).toMatch(/delta/);
+    expect(apres).toMatch(/epsilon/);
+  });
+
   it('accepte une chute assumée avec --force', () => {
     const source = fakeCli(`if (process.argv[2] === '--help') { console.log('  alpha  x'); }`);
     const ref = join(dir, 'ref.txt');

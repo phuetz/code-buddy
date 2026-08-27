@@ -59,14 +59,18 @@ if [ "${1:-}" = "--regenerer" ]; then
     echo "  (source cassée, --help restructuré, ou point d'entrée muet ?) : $REFERENCE" >&2
     rm -f "$tmp_ref"; exit 2
   fi
-  # Une chute brutale (103 → 3) est le cas PARTIEL, suspect : refuser sans --force, en nommant
-  # ce qui serait perdu. La revue de diff ne peut pas être la seule barrière.
+  # Refuser toute PERTE d'IDENTITÉ, pas seulement une chute d'AMPLITUDE. Comparer les
+  # nombres ratait l'échange à compte constant (5→5, deux commandes remplacées) : delta
+  # sortait de l'ancre sans un mot. Le déclencheur est donc l'ensemble des commandes qui
+  # DISPARAISSENT (`comm -23`), pas le décompte — la chute brutale n'est qu'un cas
+  # particulier de la perte. La revue de diff ne peut pas être la seule barrière.
   if [ -f "$REFERENCE" ]; then
-    ancien=$(wc -l < "$REFERENCE")
-    if [ "$nouveau" -lt "$ancien" ] && ! $force; then
-      echo "✗ régénération abandonnée : $nouveau commandes contre $ancien dans la référence." >&2
-      echo "  Commandes qui SERAIENT perdues (source cassée ?) :" >&2
-      comm -23 <(sort -u "$REFERENCE") "$tmp_ref" | sed 's/^/    - /' >&2
+    perdues=$(comm -23 <(sort -u "$REFERENCE") "$tmp_ref")
+    if [ -n "$perdues" ] && ! $force; then
+      ancien=$(wc -l < "$REFERENCE")
+      echo "✗ régénération abandonnée : des commandes de la référence disparaîtraient ($nouveau vs $ancien)." >&2
+      echo "  Commandes qui SERAIENT perdues (source cassée ou --help restructuré ?) :" >&2
+      echo "$perdues" | sed 's/^/    - /' >&2
       echo "  Si la suppression est VOULUE : scripts/balayage-installation.sh --regenerer --force" >&2
       rm -f "$tmp_ref"; exit 2
     fi
