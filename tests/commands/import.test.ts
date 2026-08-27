@@ -187,6 +187,17 @@ describe('buddy import', () => {
     await expect(fs.stat(path.join(root, '.codebuddy'))).rejects.toMatchObject({ code: 'ENOENT' });
   });
 
+  it('rejette un chemin positionnel au lieu de l’ignorer en silence (il faut --from)', async () => {
+    // `buddy import /un/chemin` ignorait le chemin, importait du cwd et annonçait
+    // un succès (exit 0) : l'utilisateur croit avoir importé depuis son chemin.
+    const root = await temporaryProject('codebuddy-import-excess-');
+    const command = createImportCommand({ cwd: root, stdout: () => {} });
+    command.exitOverride();
+    await expect(
+      command.parseAsync(['node', 'import', '/un/chemin/quelconque']),
+    ).rejects.toMatchObject({ exitCode: 1 });
+  });
+
   it('rejects --from paths outside the current project', async () => {
     const root = await temporaryProject('codebuddy-import-project-');
     const outside = await temporaryProject('codebuddy-import-outside-');

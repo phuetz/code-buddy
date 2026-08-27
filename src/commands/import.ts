@@ -663,7 +663,17 @@ export function createImportCommand(dependencies: ImportConfigDependencies = {})
     .description('Importer les règles et serveurs MCP d’agents concurrents sans écraser l’existant')
     .option('--dry-run', 'Lister les imports sans écrire de fichier', false)
     .option('--from <chemin>', 'Dossier source situé dans le projet courant', '.')
-    .action(async (options: ImportConfigOptions) => {
+    .action(async (options: ImportConfigOptions, command: Command) => {
+      // La source est --from, pas un argument positionnel : un chemin donné en
+      // position était silencieusement ignoré et l'import se faisait depuis le cwd
+      // en annonçant un succès. Le refuser, en indiquant --from.
+      if (command.args.length > 0) {
+        command.error(
+          `import ne prend pas de chemin en argument (reçu « ${command.args[0]} ») ; ` +
+            'indique le dossier source avec --from <chemin>.',
+        );
+        return;
+      }
       const result = await importProjectConfiguration(options, dependencies);
       const write =
         dependencies.stdout ?? ((message: string) => process.stdout.write(`${message}\n`));
