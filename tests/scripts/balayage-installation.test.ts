@@ -139,6 +139,45 @@ describe('balayage-installation.sh — gardes', () => {
     expect(stdout).toMatch(/2\/2 commandes répondent/);
   });
 
+  it('une référence ATTENDUE mais vide n’est pas sautée en silence (exploit du binôme)', () => {
+    // Reproduction de la réfutation d'Opus : un attendu vide faisait sauter la
+    // comparaison sans rien dire → « ✓ 3/3 » exit 0. La référence attendue mais
+    // vide doit désormais échouer bruyamment.
+    const vide = join(dir, 'attendu-vide.txt');
+    writeFileSync(vide, '');
+    const cli = fakeCli(`
+      const arg = process.argv[2];
+      if (arg === '--help' || arg === undefined) {
+        console.log('  alpha   ok'); console.log('  beta    ok'); console.log('  gamma   ok');
+      } else { process.exit(0); }
+    `);
+    const { status, stdout } = runBalayage(cli, { BALAYAGE_ATTENDU: vide });
+    expect(status).not.toBe(0);
+    expect(stdout).not.toMatch(/3\/3 commandes répondent/);
+    expect(stdout).toMatch(/référence.*(absente|vide)/i);
+  });
+
+  it('une référence figée plus longue que l’extraction est détectée (cécité de l’extracteur)', () => {
+    // La référence connaît 5 commandes ; l'extracteur n'en lit plus que 2 (format
+    // --help cassé). Une dérivation par le MÊME extracteur ne verrait rien ; la
+    // référence figée, elle, expose le trou.
+    const attendu = join(dir, 'reference-figee.txt');
+    writeFileSync(attendu, 'alpha\nbeta\ngamma\ndelta\nepsilon\n');
+    const cli = fakeCli(`
+      const arg = process.argv[2];
+      if (arg === '--help' || arg === undefined) {
+        // Format cassé : seules 2 lignes matchent encore le motif d'extraction.
+        console.log('  alpha   ok');
+        console.log('  beta    ok');
+        console.log('COMMANDS: gamma, delta, epsilon (nouveau format non lu)');
+      } else { process.exit(0); }
+    `);
+    const { status, stdout } = runBalayage(cli, { BALAYAGE_ATTENDU: attendu });
+    expect(status).not.toBe(0);
+    expect(stdout).toMatch(/gamma/);
+    expect(stdout).toMatch(/epsilon/);
+  });
+
   it('ne hangne PAS sur une commande qui ignore SIGTERM (--kill-after)', () => {
     // 'beta' ignore SIGTERM et boucle : sans --kill-after, timeout attend à l'infini.
     const cli = fakeCli(`

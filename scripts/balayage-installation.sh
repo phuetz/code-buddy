@@ -24,6 +24,22 @@ OMIT="--omit=optional"
 # les tests raccourcissent le délai via BALAYAGE_TIMEOUT.
 TIMEOUT="${BALAYAGE_TIMEOUT:-45}"
 
+# Référence VERSIONNÉE des commandes attendues. Frozen snapshot indépendant de
+# l'extracteur au moment du balayage : une régression de l'extracteur ou une
+# installation qui perd des commandes rend l'extraction plus courte que la
+# référence → détectée. Dériver l'attendu par le MÊME extracteur ne verrait
+# jamais une cécité commune aux deux côtés (c'est le défaut d'origine du balayage).
+REFERENCE="$REPO/scripts/balayage-commandes-attendues.txt"
+
+# --regenerer : met à jour la référence depuis la source (acte DÉLIBÉRÉ, relu en diff).
+if [ "${1:-}" = "--regenerer" ]; then
+  env -i "HOME=${HOME:-/tmp}" "PATH=$PATH" "TERM=dumb" NO_COLOR=1 \
+    timeout --kill-after=5 "$TIMEOUT" "$REPO/node_modules/.bin/tsx" "$REPO/src/index.ts" --help 2>/dev/null \
+    | grep -oE '^  [a-z][a-z0-9-]+' | tr -d ' ' | sort -u > "$REFERENCE"
+  echo "référence régénérée : $(wc -l < "$REFERENCE") commandes → $REFERENCE"
+  exit 0
+fi
+
 if [ -n "${BALAYAGE_ENTREE:-}" ]; then
   # Point d'entrée injecté (tests) : on exerce l'extraction et les gardes sans
   # build/pack/install réels.
@@ -69,14 +85,15 @@ extraire_commandes() {
 extraire_commandes "$ENTREE" > "$BASE/commandes.txt"
 total=$(wc -l < "$BASE/commandes.txt")
 
-# L'ATTENDU : les commandes que le paquet DEVRAIT exposer. Fourni par un test
-# (BALAYAGE_ATTENDU), sinon dérivé de la SOURCE (dist du dépôt) en mode réel — le
-# balayage vérifie justement que l'INSTALLÉ se comporte comme la source.
+# L'ATTENDU : les commandes que le paquet DEVRAIT exposer. Un test l'injecte
+# (BALAYAGE_ATTENDU) ; en mode réel c'est la référence VERSIONNÉE — jamais
+# re-dérivée par le même extracteur, sans quoi une cécité commune aux deux côtés
+# passerait inaperçue.
 : > "$BASE/attendues.txt"
 if [ -n "${BALAYAGE_ATTENDU:-}" ] && [ -f "$BALAYAGE_ATTENDU" ]; then
   sort -u "$BALAYAGE_ATTENDU" > "$BASE/attendues.txt"
-elif [ -z "${BALAYAGE_ENTREE:-}" ] && [ -f "$REPO/dist/index.js" ]; then
-  extraire_commandes "$REPO/dist/index.js" > "$BASE/attendues.txt"
+elif [ -z "${BALAYAGE_ENTREE:-}" ] && [ -f "$REFERENCE" ]; then
+  sort -u "$REFERENCE" > "$BASE/attendues.txt"
 fi
 attendu=$(wc -l < "$BASE/attendues.txt")
 
@@ -89,15 +106,31 @@ if [ "$total" -eq 0 ]; then
   exit 2
 fi
 
+# La donnée de RÉFÉRENCE doit être gardée comme la donnée d'entrée. Dès qu'une
+# référence est ATTENDUE — mode réel (fichier versionné), ou un test qui fournit
+# BALAYAGE_ATTENDU — mais qu'elle ressort vide, la comparaison ci-dessous serait
+# sautée EN SILENCE et le balayage retomberait au niveau « total>0 » sans le
+# signaler : le faux succès sur extraction PARTIELLE reviendrait par cette porte.
+reference_attendue=false
+[ -n "${BALAYAGE_ATTENDU:-}" ] && reference_attendue=true
+[ -z "${BALAYAGE_ENTREE:-}" ] && reference_attendue=true   # mode réel : la référence versionnée
+if $reference_attendue && [ "$attendu" -eq 0 ]; then
+  echo "✗ référence des commandes attendues absente ou vide : ${BALAYAGE_ATTENDU:-$REFERENCE}" >&2
+  echo "  Régénère-la depuis la source : scripts/balayage-installation.sh --regenerer" >&2
+  exit 2
+fi
+
 # total>0 ne suffit pas : une restructuration PARTIELLE du --help donnerait un
 # sous-ensemble (3/30) qui passe la garde et imprime « ✓ 3/3 » — un faux succès avec
-# l'apparence d'un vrai balayage. Comparer à l'attendu ferme la famille : toute
-# commande attendue absente de l'extraction fait échouer, nommément.
+# l'apparence d'un vrai balayage. Comparer à l'attendu (référence figée) ferme la
+# famille : toute commande attendue absente de l'extraction fait échouer, nommément —
+# que la cause soit une installation qui perd la commande OU un extracteur qui a
+# cessé de savoir la lire.
 if [ "$attendu" -gt 0 ]; then
   manquantes=$(comm -23 "$BASE/attendues.txt" "$BASE/commandes.txt")
   if [ -n "$manquantes" ]; then
     echo "✗ extraction incomplète : $total/$attendu commandes attendues seulement." >&2
-    echo "  Manquantes (aide restructurée ou installation partielle ?) :" >&2
+    echo "  Manquantes (installation partielle ou extracteur qui ne lit plus ?) :" >&2
     echo "$manquantes" | sed 's/^/    - /' >&2
     echo "  traces : $BASE" >&2
     exit 2
