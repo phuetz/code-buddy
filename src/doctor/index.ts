@@ -116,48 +116,55 @@ async function checkNativeSqlite(): Promise<DoctorCheck> {
 function checkDependencies(): DoctorCheck[] {
   const checks: DoctorCheck[] = [];
 
-  const required: Array<{
+  // Optionality is INTRINSIC to the tool, never derived from whether it is
+  // installed: deriving `optional: !installed` would silently reclassify ANY
+  // absent tool added here as informational — reintroducing, through the side
+  // door, the exact defect this flag fixes. A genuinely required tool added to
+  // this list must carry `optional: false` so its absence still counts.
+  const externalTools: Array<{
     cmd: string;
     label: string;
     level: 'error' | 'warn';
+    optional: boolean;
     missingMessage: string;
   }> = [
     {
       cmd: 'rg',
       label: 'ripgrep (rg)',
       level: 'warn',
+      optional: true,
       missingMessage: 'not found — optional; install ripgrep for faster file search',
     },
     {
       cmd: 'sox',
       label: 'sox (voice input)',
       level: 'warn',
+      optional: true,
       missingMessage: 'not found — optional; install SoX only to use voice input',
     },
     {
       cmd: 'rtk',
       label: 'RTK (token compressor)',
       level: 'warn',
+      optional: true,
       missingMessage: 'not found — optional; install RTK only to use token compression',
     },
     {
       cmd: 'icm',
       label: 'ICM (infinite context memory)',
       level: 'warn',
+      optional: true,
       missingMessage: 'not found — optional; install ICM only to use infinite-context memory',
     },
   ];
 
-  for (const dep of required) {
-    const availability = getCommandAvailability(dep.cmd);
-    const installed = availability === 'installed';
-    // These are install-only-for-one-feature tools: absent, they are
-    // informational, not a warning that should count against machine health.
+  for (const dep of externalTools) {
+    const installed = getCommandAvailability(dep.cmd) === 'installed';
     checks.push({
       name: dep.label,
       status: installed ? 'ok' : dep.level,
-      message: installed ? availability : dep.missingMessage,
-      optional: !installed,
+      message: installed ? 'installed' : dep.missingMessage,
+      optional: dep.optional,
     });
   }
 
