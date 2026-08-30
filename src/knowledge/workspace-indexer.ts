@@ -80,7 +80,7 @@ const DEFAULT_CONFIG: WorkspaceIndexerConfig = {
   chunkSize: 1000,
   chunkOverlap: 200,
   filePatterns: ['**/*.ts', '**/*.js', '**/*.tsx', '**/*.jsx', '**/*.py', '**/*.go', '**/*.rs', '**/*.md', '**/*.json'],
-  ignorePatterns: ['node_modules/**', 'dist/**', '.git/**', 'build/**', '.codebuddy/**'],
+  ignorePatterns: ['**/node_modules/**', '**/dist/**', '**/.git/**', '**/build/**', '**/.codebuddy/**'],
 };
 
 export interface IndexEntry {
@@ -167,6 +167,11 @@ export class WorkspaceIndexer extends EventEmitter {
         cwd: this.config.workspaceRoot,
         ignore: this.config.ignorePatterns,
         absolute: false,
+        // Ne pas suivre les symlinks : une boucle de liens (ex. node_modules
+        // imbriqués) provoquait `ELOOP: too many symbolic links` et tuait l'index.
+        followSymbolicLinks: false,
+        // Un lien cassé / une permission refusée ne doit pas faire échouer tout l'index.
+        suppressErrors: true,
       });
 
       const mtimeCachePath = path.join(path.dirname(this.config.indexPath), 'mtimes.json');

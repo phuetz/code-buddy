@@ -104,6 +104,9 @@ export function DeliverableStudioPanel<T>({ config }: { config: DeliverableStudi
       workingDir || undefined,
       null,
       true,
+      // Flux de génération (comme App Studio) : auto-approbation pour ne pas
+      // interrompre la production du livrable avec des dialogues de permission.
+      { permissionMode: 'acceptEdits' },
     );
     if (session?.id) setSessionId(session.id);
   };

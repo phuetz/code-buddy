@@ -715,7 +715,7 @@ export function useIPC() {
       cwd?: string,
       projectId?: string | null,
       memoryEnabled?: boolean,
-      options?: { conversationMode?: 'default' | 'companion' },
+      options?: { conversationMode?: 'default' | 'companion'; permissionMode?: import('../types').PermissionMode },
     ) => {
       setLoading(true);
       console.log('[useIPC] Starting session:', title);
@@ -803,6 +803,7 @@ export function useIPC() {
             projectId,
             memoryEnabled,
             content, // Send full content blocks including images
+            permissionMode: options?.permissionMode,
           },
         });
         if (session) {

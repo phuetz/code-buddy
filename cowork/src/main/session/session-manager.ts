@@ -806,7 +806,8 @@ export class SessionManager {
     projectId?: string | null,
     allowedTools?: string[],
     content?: ContentBlock[],
-    memoryEnabled: boolean = false
+    memoryEnabled: boolean = false,
+    permissionMode?: PermissionMode
   ): Promise<Session> {
     log('[SessionManager] Starting new session:', title);
 
@@ -838,6 +839,10 @@ export class SessionManager {
     if (effectiveCwd) await this.trustSessionCwd(effectiveCwd);
 
     const session = this.createSession(title, effectiveCwd, allowedTools, memoryEnabled);
+    // App Studio (and any caller that opts in) runs in auto-approve so building a
+    // website never interrupts with per-write tool-confirmation dialogs (bolt.new UX).
+    // Scoped to this session's sandboxed cwd; shell stays gated by the static validator.
+    if (permissionMode) session.permissionMode = permissionMode;
 
     // Attach active project if any (Claude Cowork parity)
     if (resolvedProjectId) {

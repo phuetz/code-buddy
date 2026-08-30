@@ -1684,6 +1684,7 @@ export type ClientEvent =
         allowedTools?: string[];
         content?: ContentBlock[];
         memoryEnabled?: boolean;
+        permissionMode?: PermissionMode;
       };
     }
   | { type: 'session.continue'; payload: { sessionId: string; prompt: string; content?: ContentBlock[]; permissionModeOverride?: PermissionMode } }

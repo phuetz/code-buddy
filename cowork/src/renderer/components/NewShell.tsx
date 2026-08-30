@@ -378,7 +378,10 @@ function StudioView() {
         prompt,
         cwd,
         null,
-        true
+        true,
+        // App Studio = build-an-app flow: auto-approve file writes so it runs
+        // end-to-end without tool-confirmation dialogs, like bolt.new.
+        { permissionMode: 'acceptEdits' }
       );
       if (session?.id) setActiveSession(session.id);
     },
