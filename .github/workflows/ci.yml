@@ -140,6 +140,9 @@ jobs:
       run: node scripts/ci-audit-gate.mjs
 
     - name: Run dependency check
+      # Advisory only: depcheck has many false positives here (dynamic imports,
+      # CI/test-only deps) and must not block a release — like the audit gate above.
+      continue-on-error: true
       run: npx depcheck
 
   build-matrix:
