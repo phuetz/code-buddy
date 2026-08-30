@@ -230,6 +230,58 @@ export interface PlanSourceMessage {
   content: ReadonlyArray<{ type: string; text?: string }>;
 }
 
+export const APP_STUDIO_PLAN_PROMPT_MARKER =
+  'COMMENCE ta réponse par un plan de développement dans un bloc ```plan';
+export const APP_STUDIO_AUTO_CONTINUE_PROMPT =
+  "Continue la construction : enchaine l'etape suivante du plan et ne t'arrete pas tant que toutes les etapes ne sont pas faites. Ne demande pas de confirmation.";
+export const MAX_APP_STUDIO_AUTO_CONTINUATIONS = 10;
+
+export interface DevPlanProgressSnapshot {
+  doneStepIds: string[];
+  filePaths: string[];
+}
+
+/** Reconnaît le prompt réservé à la génération App Studio, y compris après rechargement. */
+export function isAppStudioPlanSession(messages: ReadonlyArray<PlanSourceMessage>): boolean {
+  return messages.some(
+    (message) =>
+      message.role === 'user' &&
+      message.content.some(
+        (block) => block.type === 'text' && block.text?.includes(APP_STUDIO_PLAN_PROMPT_MARKER)
+      )
+  );
+}
+
+/** Les étapes de lancement et de vérification ne doivent jamais relancer la construction. */
+export function hasPendingBuildStep(plan: DevPlan): boolean {
+  return plan.steps.some(
+    (step) => step.status === 'pending' && step.id !== 'run' && step.id !== 'verify'
+  );
+}
+
+export function devPlanProgressSnapshot(
+  plan: DevPlan,
+  filePaths: ReadonlyArray<string>
+): DevPlanProgressSnapshot {
+  return {
+    doneStepIds: plan.steps.filter((step) => step.status === 'done').map((step) => step.id),
+    filePaths: [...new Set(filePaths)],
+  };
+}
+
+/** Un tour progresse seulement s'il termine une nouvelle étape ou produit un nouveau fichier. */
+export function hasDevPlanProgress(
+  previous: DevPlanProgressSnapshot,
+  current: DevPlanProgressSnapshot
+): boolean {
+  const previousDone = new Set(previous.doneStepIds);
+  const previousFiles = new Set(previous.filePaths);
+  return (
+    current.doneStepIds.some((id) => !previousDone.has(id)) ||
+    current.filePaths.some((path) => !previousFiles.has(path))
+  );
+}
+
 /**
  * The most recent LLM-emitted plan in a session: the streaming partial reply
  * wins (live plan as it lands), else assistant messages scanned newest-first.

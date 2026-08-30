@@ -27,8 +27,20 @@ import {
   autoFixNote,
 } from './studio/auto-build-model';
 import { sessionToStudioMessages } from './studio/studio-chat-adapter';
-import { buildDevPlan, advancePlan, latestLlmPlan } from './studio/dev-plan';
+import {
+  APP_STUDIO_AUTO_CONTINUE_PROMPT,
+  MAX_APP_STUDIO_AUTO_CONTINUATIONS,
+  advancePlan,
+  buildDevPlan,
+  devPlanProgressSnapshot,
+  hasDevPlanProgress,
+  hasPendingBuildStep,
+  isAppStudioPlanSession,
+  latestLlmPlan,
+  type DevPlanProgressSnapshot,
+} from './studio/dev-plan';
 import { changedFilesFromTrace } from './studio/trace-changes';
+import { flattenFiles } from './studio/utils/file-tree-model';
 import { latestWebTestReport } from './studio/web-test-report-model';
 import { createStudioApis } from './studio/studio-api-bridge';
 import type { StudioScaffoldRequest } from './studio/StudioComposer';
@@ -263,6 +275,106 @@ function StudioView() {
     void refreshTree(sessionCwd);
   }, [sessionCwd, traceCount, turnActive, refreshTree]);
 
+  const changes = changedFilesFromTrace(st?.traceSteps ?? []);
+  const llmPlan = latestLlmPlan(st?.messages ?? [], st?.partialMessage);
+  const plan = advancePlan(llmPlan ?? buildDevPlan(activeSession?.title ?? ''), {
+    hasFiles: viewProps.tree.length > 0,
+    previewRunning: viewProps.previewStatus === 'running',
+    busy: turnActive,
+    changedPaths: changes.map((change) => change.path),
+  });
+
+  interface AutoContinuationState {
+    sessionId: string | null;
+    count: number;
+    stagnantCount: number;
+    inFlight: boolean;
+    sawRunning: boolean;
+    stopped: boolean;
+    baseline: DevPlanProgressSnapshot | null;
+  }
+
+  const autoContinuationRef = useRef<AutoContinuationState>({
+    sessionId: null,
+    count: 0,
+    stagnantCount: 0,
+    inFlight: false,
+    sawRunning: false,
+    stopped: false,
+    baseline: null,
+  });
+
+  // Boucle App Studio uniquement : un vrai plan LLM et le marqueur du prompt sont obligatoires.
+  useEffect(() => {
+    const state = autoContinuationRef.current;
+    if (state.sessionId !== activeSessionId) {
+      autoContinuationRef.current = {
+        sessionId: activeSessionId,
+        count: 0,
+        stagnantCount: 0,
+        inFlight: false,
+        sawRunning: false,
+        stopped: false,
+        baseline: null,
+      };
+    }
+
+    const current = autoContinuationRef.current;
+    const running = activeSession?.status === 'running' || turnActive;
+    if (running) {
+      if (current.inFlight) current.sawRunning = true;
+      return;
+    }
+    if (
+      current.stopped ||
+      !activeSessionId ||
+      !llmPlan ||
+      !isAppStudioPlanSession(st?.messages ?? [])
+    ) {
+      return;
+    }
+
+    const snapshot = devPlanProgressSnapshot(plan, [
+      ...flattenFiles(viewProps.tree),
+      ...changes.map((change) => change.path),
+    ]);
+
+    if (current.inFlight) {
+      // Attend d'avoir réellement observé le tour actif pour résister au double effet de React StrictMode.
+      if (!current.sawRunning || !current.baseline) return;
+      current.stagnantCount = hasDevPlanProgress(current.baseline, snapshot)
+        ? 0
+        : current.stagnantCount + 1;
+      current.inFlight = false;
+      current.sawRunning = false;
+      current.baseline = null;
+      if (current.stagnantCount >= 2) {
+        current.stopped = true;
+        return;
+      }
+    }
+
+    if (!hasPendingBuildStep(plan) || current.count >= MAX_APP_STUDIO_AUTO_CONTINUATIONS) {
+      current.stopped = true;
+      return;
+    }
+
+    current.count += 1;
+    current.inFlight = true;
+    current.baseline = snapshot;
+    void continueSession(activeSessionId, APP_STUDIO_AUTO_CONTINUE_PROMPT);
+  }, [
+    activeSession?.status,
+    activeSessionId,
+    changes,
+    continueSession,
+    llmPlan,
+    plan,
+    st?.messages,
+    turnActive,
+    viewProps.tree,
+  ]);
+
   // ── G1+G2: auto install/build → preview, with a capped auto-fix loop ───────
   // When the agent finishes generating an npm app, App Studio installs it and
   // starts the dev server (G1, via the install-aware startDev). If install/
@@ -417,17 +529,9 @@ function StudioView() {
     // to the deterministic plan derived from the prompt; then advance its steps
     // from the real project state (files present, preview running, building).
     const busy = Boolean(st?.activeTurn);
-    const changes = changedFilesFromTrace(st?.traceSteps ?? []);
     // Latest web_test verification (the "Vérifier" button / the agent's own
     // check) rendered as a PASSED/FAILED card under the chat.
     const verifyReport = latestWebTestReport(st?.traceSteps ?? []);
-    const llmPlan = latestLlmPlan(st?.messages ?? [], st?.partialMessage);
-    const plan = advancePlan(llmPlan ?? buildDevPlan(activeSession?.title ?? ''), {
-      hasFiles: viewProps.tree.length > 0,
-      previewRunning: viewProps.previewStatus === 'running',
-      busy,
-      changedPaths: changes.map((c) => c.path),
-    });
     return {
       messages: sessionToStudioMessages(st?.messages ?? [], {
         running: busy,
@@ -444,12 +548,11 @@ function StudioView() {
     };
   }, [
     activeSessionId,
+    changes,
     sessionCwd,
     sessionStates,
     continueSession,
-    activeSession?.title,
-    viewProps.tree.length,
-    viewProps.previewStatus,
+    plan,
   ]);
 
   return (

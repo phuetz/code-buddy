@@ -3,7 +3,18 @@
  * (stack detection, feature steps, theme, always-present scaffold/run bookends).
  */
 import { describe, expect, it } from 'vitest';
-import { buildDevPlan, advancePlan, parsePlanBlock, stripPlanBlocks, latestLlmPlan } from '../src/renderer/components/studio/dev-plan';
+import {
+  APP_STUDIO_PLAN_PROMPT_MARKER,
+  advancePlan,
+  buildDevPlan,
+  devPlanProgressSnapshot,
+  hasDevPlanProgress,
+  hasPendingBuildStep,
+  isAppStudioPlanSession,
+  latestLlmPlan,
+  parsePlanBlock,
+  stripPlanBlocks,
+} from '../src/renderer/components/studio/dev-plan';
 
 describe('buildDevPlan', () => {
   it('detects React by default and brackets the plan with scaffold + verify', () => {
@@ -77,6 +88,50 @@ describe('advancePlan', () => {
   it('is pure — does not mutate the input plan', () => {
     advancePlan(base, { hasFiles: true, previewRunning: true, busy: false });
     expect(base.steps.every((s) => s.status === 'pending')).toBe(true);
+  });
+});
+
+describe('App Studio auto-continuation guards', () => {
+  const appStudioMessages = [
+    {
+      role: 'user',
+      content: [{ type: 'text', text: `${APP_STUDIO_PLAN_PROMPT_MARKER} (JSON strict) :` }],
+    },
+  ];
+
+  it('recognizes only a session seeded by the App Studio generation prompt', () => {
+    expect(isAppStudioPlanSession(appStudioMessages)).toBe(true);
+    expect(
+      isAppStudioPlanSession([{ role: 'user', content: [{ type: 'text', text: 'Continue le plan.' }] }])
+    ).toBe(false);
+  });
+
+  it('ignores pending run/verify steps and stops when build steps are done', () => {
+    const plan = buildDevPlan('todo');
+    plan.steps.forEach((step) => {
+      step.status = step.id === 'run' || step.id === 'verify' ? 'pending' : 'done';
+    });
+    expect(hasPendingBuildStep(plan)).toBe(false);
+  });
+
+  it('detects a newly completed step or a new file, but not an unchanged turn', () => {
+    const before = { doneStepIds: ['scaffold'], filePaths: ['index.html'] };
+    expect(hasDevPlanProgress(before, before)).toBe(false);
+    expect(
+      hasDevPlanProgress(before, { doneStepIds: ['scaffold', 'theme'], filePaths: ['index.html'] })
+    ).toBe(true);
+    expect(
+      hasDevPlanProgress(before, { doneStepIds: ['scaffold'], filePaths: ['index.html', 'app.js'] })
+    ).toBe(true);
+  });
+
+  it('builds a deduplicated progress snapshot from done steps and file paths', () => {
+    const plan = advancePlan(buildDevPlan('todo'), {
+      hasFiles: true,
+      previewRunning: false,
+      busy: false,
+    });
+    expect(devPlanProgressSnapshot(plan, ['index.html', 'index.html']).filePaths).toEqual(['index.html']);
   });
 });
 

@@ -12,6 +12,7 @@
 import type { StudioScaffoldRequest } from './StudioComposer.js';
 import { findDesignSystem } from './design-systems-catalog.js';
 import { findStack } from './generation-stacks.js';
+import { APP_STUDIO_PLAN_PROMPT_MARKER } from './dev-plan.js';
 
 export function buildAiGenerationPrompt(req: StudioScaffoldRequest): string {
   const stack = findStack(req.stack)!;
@@ -22,7 +23,7 @@ export function buildAiGenerationPrompt(req: StudioScaffoldRequest): string {
   // bolt.new's plan step, LLM edition: the agent opens with a machine-readable
   // plan block that App Studio renders as the "Plan de vol" card (parsed by
   // dev-plan.ts parsePlanBlock; hidden from the chat bubble).
-  lines.push('COMMENCE ta réponse par un plan de développement dans un bloc ```plan (JSON strict) :');
+  lines.push(`${APP_STUDIO_PLAN_PROMPT_MARKER} (JSON strict) :`);
   lines.push('```plan');
   lines.push(
     '{"title":"<nom court de l\'app>","stack":"' + stack.planStack + '","steps":[' +
