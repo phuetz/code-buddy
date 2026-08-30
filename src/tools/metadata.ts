@@ -883,7 +883,10 @@ export const TOOL_METADATA: ToolMetadata[] = [
     category: 'system',
     keywords: ['tool', 'search', 'discover', 'find', 'capability', 'mcp', 'schema'],
     priority: 9,
-    description: 'Search available tools by keyword (progressive disclosure)'
+    description: 'Search available tools by keyword (progressive disclosure)',
+    // Index BM25 local, sans écriture ni réseau : une confirmation bloquante
+    // n'ajoute aucune frontière de sécurité et cassait le premier tour Studio.
+    fleetSafe: true,
   },
   {
     name: 'image_generate',

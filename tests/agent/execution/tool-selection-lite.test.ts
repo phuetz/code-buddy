@@ -75,6 +75,8 @@ describe('ToolSelectionStrategy lite-profile overrides', () => {
   beforeEach(() => {
     ragMock.getRelevantToolsMock.mockReset();
     ragMock.getRelevantToolsMock.mockImplementation(async () => makeSelection([]));
+    ragMock.getAllCodeBuddyToolsMock.mockReset();
+    ragMock.getAllCodeBuddyToolsMock.mockResolvedValue([]);
   });
 
   it('passes the caller-supplied maxTools=5 to RAG when promptProfile=lite', async () => {
@@ -116,6 +118,29 @@ describe('ToolSelectionStrategy lite-profile overrides', () => {
       'restore_context',
       'understand_video',
     ]);
+  });
+
+  it('force-includes design_system only for the marked App Studio build prompt', async () => {
+    const strategy = new ToolSelectionStrategy({ enableCaching: false });
+    const result = await strategy.selectToolsForQuery(
+      'COMMENCE ta réponse par un plan de développement dans un bloc ```plan\n' +
+        'Applique le style avec l’outil `design_system`.',
+      { alwaysInclude: ['view_file'] },
+    );
+
+    const alwaysInclude = ragMock.getRelevantToolsMock.mock.calls[0]![1]?.alwaysInclude;
+    expect(alwaysInclude).toEqual(['view_file', 'restore_context', 'design_system']);
+    expect(result.tools.map(tool => tool.function.name)).toContain('design_system');
+  });
+
+  it('keeps the non-Studio selection requirements unchanged when design_system is mentioned', async () => {
+    const strategy = new ToolSelectionStrategy({ enableCaching: false });
+    await strategy.selectToolsForQuery('Explique le tool `design_system`.', {
+      alwaysInclude: ['view_file'],
+    });
+
+    const alwaysInclude = ragMock.getRelevantToolsMock.mock.calls[0]![1]?.alwaysInclude;
+    expect(alwaysInclude).toEqual(['view_file', 'restore_context']);
   });
 
   it('keeps web verification available for YouTube links on lite overrides', async () => {
@@ -167,6 +192,32 @@ describe('ToolSelectionStrategy lite-profile overrides', () => {
 
     const callArgs = ragMock.getRelevantToolsMock.mock.calls[0]!;
     expect(callArgs[1]?.maxTools).toBe(15);
+  });
+
+  it('fails open with the complete tool set when RAG selection throws', async () => {
+    ragMock.getRelevantToolsMock.mockRejectedValueOnce(new Error('selector unavailable'));
+    ragMock.getAllCodeBuddyToolsMock.mockResolvedValueOnce([
+      makeTool('view_file'),
+      makeTool('design_system'),
+    ]);
+
+    const strategy = new ToolSelectionStrategy({ enableCaching: false });
+    const result = await strategy.selectToolsForQuery('build an app');
+
+    expect(result.selection).toBeNull();
+    expect(result.tools.map(tool => tool.function.name)).toEqual(['view_file', 'design_system']);
+  });
+
+  it('continues without tools when RAG and its complete fallback both throw', async () => {
+    ragMock.getRelevantToolsMock.mockRejectedValueOnce(new Error('selector unavailable'));
+    ragMock.getAllCodeBuddyToolsMock.mockRejectedValueOnce(new Error('registry unavailable'));
+
+    const strategy = new ToolSelectionStrategy({ enableCaching: false });
+
+    await expect(strategy.selectToolsForQuery('build an app')).resolves.toMatchObject({
+      tools: [],
+      selection: null,
+    });
   });
 
   it('drops memory-tool inclusions from alwaysInclude on lite override', async () => {

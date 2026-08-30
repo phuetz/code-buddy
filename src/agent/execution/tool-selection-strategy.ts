@@ -42,6 +42,7 @@ import { getPromptCacheManager } from '../../optimization/prompt-cache.js';
 import { logger } from '../../utils/logger.js';
 import type { UnifiedSkill } from '../../skills/types.js';
 import { getSkillsHub } from '../../skills/hub.js';
+import { DESIGN_SYSTEM_TOOL } from '../../codebuddy/tool-definitions/design-tools.js';
 
 // Re-export types for convenience
 export type {
@@ -159,6 +160,16 @@ function requiredToolsForQuery(query: string): string[] {
   if (/\b(?:actualit[eé]s?|gros\s+titres|derni[eè]res?\s+infos?|news)\b/i.test(query)) {
     required.add('web_search');
   }
+
+  // Le prompt App Studio est le seul à porter ce marqueur. Son système de
+  // design est une dépendance explicite de génération, pas un simple indice
+  // de pertinence : l'inclure évite un aller-retour tool_search au premier tour.
+  if (
+    query.includes('COMMENCE ta réponse par un plan de développement dans un bloc ```plan') &&
+    query.includes('`design_system`')
+  ) {
+    required.add('design_system');
+  }
   return [...required];
 }
 
@@ -219,6 +230,7 @@ export class ToolSelectionStrategy {
     options: Partial<ToolSelectionConfig> = {}
   ): Promise<SelectionResult> {
     const mergedConfig = { ...this.config, ...options };
+    const requiredTools = requiredToolsForQuery(query);
     // Recovery is part of the observation contract, not a relevance hint.
     // Keep it available even when a lite profile supplies a smaller
     // `alwaysInclude` override: once an earlier result was compacted, the
@@ -228,7 +240,7 @@ export class ToolSelectionStrategy {
       alwaysInclude: Array.from(new Set([
         ...mergedConfig.alwaysInclude,
         'restore_context',
-        ...requiredToolsForQuery(query),
+        ...requiredTools,
       ])),
     };
     const modelName = ToolSelectionStrategy.normalizeModelName(effectiveConfig.modelName);
@@ -255,24 +267,45 @@ export class ToolSelectionStrategy {
     let selection: ToolSelectionResult | null = null;
 
     if (effectiveConfig.useRAG) {
-      // Use RAG-based selection
-      const result = await getRelevantTools(query, {
-        maxTools: effectiveConfig.maxTools,
-        useRAG: true,
-        alwaysInclude: effectiveConfig.alwaysInclude,
-      });
+      try {
+        // Use RAG-based selection
+        const result = await getRelevantTools(query, {
+          maxTools: effectiveConfig.maxTools,
+          useRAG: true,
+          alwaysInclude: effectiveConfig.alwaysInclude,
+        });
 
-      tools = result.selectedTools;
-      selection = result;
-      this.lastSelection = result;
-      this.cachedToolNames = result.selectedTools.map(t => t.function.name);
+        tools = result.selectedTools;
+        selection = result;
+        this.lastSelection = result;
+        this.cachedToolNames = result.selectedTools.map(t => t.function.name);
 
-      logger.debug('RAG tool selection completed', {
-        query: query.slice(0, 50),
-        selectedCount: tools.length,
-        categories: result.classification.categories,
-        tokenSavings: result.originalTokens - result.reducedTokens,
-      });
+        logger.debug('RAG tool selection completed', {
+          query: query.slice(0, 50),
+          selectedCount: tools.length,
+          categories: result.classification.categories,
+          tokenSavings: result.originalTokens - result.reducedTokens,
+        });
+      } catch (error) {
+        // La sélection réduit le prompt mais ne doit jamais empêcher le tour.
+        // En cas d'échec, on garde la génération avec tous les tools disponibles.
+        logger.warn('RAG tool selection failed; using fail-open fallback', {
+          error: error instanceof Error ? error.message : String(error),
+        });
+        selection = null;
+        this.lastSelection = null;
+        try {
+          tools = await getAllCodeBuddyTools();
+        } catch (fallbackError) {
+          // Même l'assemblage complet est optionnel : un tour sans tool reste
+          // préférable à une génération bloquée ou rejetée avant le premier token.
+          logger.warn('Full tool fallback failed; continuing without tools', {
+            error: fallbackError instanceof Error ? fallbackError.message : String(fallbackError),
+          });
+          tools = [];
+        }
+        this.cachedToolNames = tools.map(t => t.function.name);
+      }
     } else {
       // Fallback: return all tools
       tools = await getAllCodeBuddyTools();
@@ -282,6 +315,15 @@ export class ToolSelectionStrategy {
         query: query.slice(0, 50),
         toolCount: tools.length,
       });
+    }
+
+    // `design_system` n'appartient pas à la surface générale : App Studio
+    // reçoit ce schéma fixe uniquement lorsque son marqueur est présent.
+    if (
+      requiredTools.includes('design_system') &&
+      !tools.some((tool) => tool.function.name === 'design_system')
+    ) {
+      tools = [...tools, DESIGN_SYSTEM_TOOL];
     }
 
     // Augment with skill-required tools if a skill is active

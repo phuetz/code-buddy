@@ -130,6 +130,14 @@ describe('ToolHandler central confirmation gate', () => {
     });
   });
 
+  it('treats local tool_search as read-only instead of opening a confirmation gate', () => {
+    const handler = makeHandler();
+
+    expect(handler.getToolPolicy('tool_search', { query: 'design_system' })).toMatchObject({
+      action: 'allow',
+    });
+  });
+
   it('preserves an explicit confirmation override for Lisa selfies', () => {
     getPolicyManager().setSessionOverride('lisa_selfie', 'confirm');
     try {

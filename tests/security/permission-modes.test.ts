@@ -438,9 +438,9 @@ describe('PermissionModeManager — Phase T1', () => {
     // answering "je ne peux pas faire de recherche en plan mode". Plan mode
     // now unions the registry's fleetSafe flag (the maintained read-only
     // source of truth, ~41 tools).
-    it('allows registry read-only tools (web_search/web_fetch/list_directory) in plan mode', () => {
+    it('allows registry read-only tools (including local tool_search) in plan mode', () => {
       const m = new PermissionModeManager({ mode: 'plan' });
-      for (const tool of ['web_search', 'web_fetch', 'list_directory', 'weather']) {
+      for (const tool of ['web_search', 'web_fetch', 'list_directory', 'weather', 'tool_search']) {
         expect(m.checkPermission(tool, tool).allowed, tool).toBe(true);
       }
     });

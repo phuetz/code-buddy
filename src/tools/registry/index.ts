@@ -85,6 +85,9 @@ export {
 // Tool Adapters - Research (Deep/Wide/STORM)
 export { createResearchTools } from './research-tools.js';
 
+// Catalogue de design local (App Studio et génération d'interfaces)
+export { DesignSystemExecuteTool, createDesignTools } from './design-tools.js';
+
 // Tool Adapters - Todo
 export {
   CreateTodoListTool,
