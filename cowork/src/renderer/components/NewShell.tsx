@@ -379,9 +379,12 @@ function StudioView() {
         cwd,
         null,
         true,
-        // App Studio = build-an-app flow: auto-approve file writes so it runs
-        // end-to-end without tool-confirmation dialogs, like bolt.new.
-        { permissionMode: 'acceptEdits' }
+        // App Studio = build-an-app flow: bypass confirmations entirely so it runs
+        // end-to-end without dialogs, like bolt.new. acceptEdits was not enough —
+        // it auto-approves the write but the downstream safety gates still prompt;
+        // bypassPermissions short-circuits the whole chain. The session is sandboxed
+        // to its own cwd and the generation prompt forbids shell.
+        { permissionMode: 'bypassPermissions' }
       );
       if (session?.id) setActiveSession(session.id);
     },

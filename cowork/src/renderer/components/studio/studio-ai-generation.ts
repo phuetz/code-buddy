@@ -86,7 +86,14 @@ export function buildAiGenerationPrompt(req: StudioScaffoldRequest): string {
   );
   lines.push(`- ${stack.guidance}`);
   lines.push(`- Preview : ${stack.previewNote}`);
-  lines.push("- L'application doit être fonctionnelle ET soignée visuellement selon la guidance de design.");
+  lines.push(
+    "- DESIGN OBLIGATOIRE : l'app doit être VISUELLEMENT SOIGNÉE et MODERNE, jamais du HTML brut sans style. " +
+      'Écris un CSS conséquent : palette de couleurs cohérente (pas les blancs/noirs par défaut du navigateur), ' +
+      'typographie hiérarchisée (titres et corps, tailles et interlignage lisibles), mise en page RESPONSIVE ' +
+      '(flexbox/grid, mobile-first), espacements généreux, boutons et cartes stylés, états `:hover` et transitions ' +
+      "douces. Vise la qualité d'une landing page professionnelle. Si un système de design est fourni ci-dessus, " +
+      'respecte-le fidèlement ; sinon choisis une direction élégante et applique-la partout dans l\'interface.',
+  );
   lines.push("- Termine par un court résumé de ce que tu as créé et comment ouvrir l'app (ouvrir index.html).");
 
   return lines.join('\n');

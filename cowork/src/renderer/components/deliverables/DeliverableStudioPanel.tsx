@@ -104,9 +104,10 @@ export function DeliverableStudioPanel<T>({ config }: { config: DeliverableStudi
       workingDir || undefined,
       null,
       true,
-      // Flux de génération (comme App Studio) : auto-approbation pour ne pas
-      // interrompre la production du livrable avec des dialogues de permission.
-      { permissionMode: 'acceptEdits' },
+      // Flux de génération (comme App Studio) : bypass complet des confirmations
+      // pour ne jamais interrompre la production. acceptEdits ne suffisait pas
+      // (les gardes en aval prompte­nt malgré l'auto-approbation de l'écriture).
+      { permissionMode: 'bypassPermissions' },
     );
     if (session?.id) setSessionId(session.id);
   };
