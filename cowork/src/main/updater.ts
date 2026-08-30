@@ -6,6 +6,7 @@
  */
 import { ipcMain, type BrowserWindow } from 'electron';
 import { log, logError } from './utils/logger';
+import { getMainWindow } from './window-management';
 
 let autoUpdater: {
   checkForUpdates: () => Promise<unknown>;
@@ -18,6 +19,14 @@ let autoUpdater: {
  * Initialize the auto-updater. Call once after app.whenReady().
  */
 export function initUpdater(mainWindow: BrowserWindow): void {
+  const currentWindow = (): BrowserWindow | null => {
+    const activeWindow = getMainWindow();
+    if (activeWindow && !activeWindow.isDestroyed()) return activeWindow;
+    return mainWindow.isDestroyed() ? null : mainWindow;
+  };
+  const sendToCurrentWindow = (event: unknown): void => {
+    currentWindow()?.webContents.send('server-event', event);
+  };
   try {
      
     const { autoUpdater: updater } = require('electron-updater');
@@ -28,7 +37,7 @@ export function initUpdater(mainWindow: BrowserWindow): void {
 
     updater.on('update-available', (info: { version?: string; releaseNotes?: string }) => {
       log('[Updater] Update available:', info.version);
-      mainWindow.webContents.send('server-event', {
+      sendToCurrentWindow({
         type: 'update.available',
         payload: {
           available: true,
@@ -40,7 +49,7 @@ export function initUpdater(mainWindow: BrowserWindow): void {
     });
 
     updater.on('download-progress', (progress: { percent?: number }) => {
-      mainWindow.webContents.send('server-event', {
+      sendToCurrentWindow({
         type: 'update.progress',
         payload: { percent: progress.percent || 0 },
       });
@@ -48,7 +57,7 @@ export function initUpdater(mainWindow: BrowserWindow): void {
 
     updater.on('update-downloaded', (info: { version?: string }) => {
       log('[Updater] Update downloaded:', info.version);
-      mainWindow.webContents.send('server-event', {
+      sendToCurrentWindow({
         type: 'update.downloaded',
         payload: {
           available: true,

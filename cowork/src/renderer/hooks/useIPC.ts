@@ -186,8 +186,6 @@ export function useIPC() {
 
     const cleanup = window.electronAPI.on((event: ServerEvent) => {
       const store = useAppStore.getState();
-      console.log('[useIPC] Received event:', event.type);
-
       try {
         switch (event.type) {
           case 'session.list':
@@ -241,12 +239,6 @@ export function useIPC() {
             break;
 
           case 'stream.message':
-            console.log(
-              '[useIPC] stream.message received:',
-              event.payload.message.role,
-              'content:',
-              JSON.stringify(event.payload.message.content)
-            );
             // Clear pending partial buffer to prevent RAF from appending stale chunks
             delete pendingPartials[event.payload.sessionId];
             // Clear thinking buffer too — final thinking is in the message content blocks
@@ -988,7 +980,8 @@ export function useIPC() {
     async (
       sessionId: string,
       promptOrContent: string | ContentBlock[],
-      intentId?: string
+      intentId?: string,
+      options?: { permissionModeOverride?: import('../types').PermissionMode },
     ): Promise<{ delivered: boolean; fallbackQueued: boolean }> => {
       const content: ContentBlock[] =
         typeof promptOrContent === 'string'
@@ -1018,7 +1011,13 @@ export function useIPC() {
 
       const result = await invoke<{ delivered: boolean; fallbackQueued: boolean }>({
         type: 'session.steer',
-        payload: { sessionId, prompt, content, intentId },
+        payload: {
+          sessionId,
+          prompt,
+          content,
+          intentId,
+          permissionModeOverride: options?.permissionModeOverride,
+        },
       });
       return result ?? { delivered: false, fallbackQueued: true };
     },

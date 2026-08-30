@@ -67,10 +67,13 @@ export function PersonaSwitcherDialog({ isOpen, onClose }: PersonaSwitcherDialog
   // Subscribe to identity.updated events from main so hot-reload works
   useEffect(() => {
     const api = window.electronAPI as unknown as {
-      onEvent?: (cb: (event: { type: string; payload?: unknown }) => void) => () => void;
+      onEvent?: (
+        types: string | string[],
+        cb: (event: { type: string; payload?: unknown }) => void,
+      ) => () => void;
     };
     if (!api?.onEvent) return;
-    const unsubscribe = api.onEvent((event) => {
+    const unsubscribe = api.onEvent(['identity.updated', 'identity.activated'], (event) => {
       if (event.type === 'identity.updated' && Array.isArray(event.payload)) {
         setEntries(event.payload as PersonaEntry[]);
       } else if (event.type === 'identity.activated') {

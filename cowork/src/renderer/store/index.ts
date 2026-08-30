@@ -126,6 +126,7 @@ const MISSION_RUNTIME_EVENT_LIMIT = 200;
 
 // Tail cap for live tool output accumulated from tool_stream deltas.
 const STREAMED_TOOL_OUTPUT_CAP = 100_000;
+const TRACE_STEP_CAP = 2_000;
 
 function isSameMissionRuntimeEvent(a: MissionRuntimeEvent, b: MissionRuntimeEvent): boolean {
   return a.ts === b.ts && a.type === b.type && a.message === b.message;
@@ -1502,7 +1503,7 @@ export const useAppStore = create<AppState>((set) => ({
       const ss = getSession(state.sessionStates, sessionId);
       return {
         sessionStates: patchSession(state.sessionStates, sessionId, {
-          traceSteps: [...ss.traceSteps, step],
+          traceSteps: [...ss.traceSteps, step].slice(-TRACE_STEP_CAP),
         }),
       };
     }),

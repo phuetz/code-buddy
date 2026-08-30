@@ -81,6 +81,7 @@ import {
 import { readConversationBranchJournalFence } from './sqlite-session-branches';
 import { buildSessionRecallPrefill, repairSessionTranscript } from './session-insights-bridge';
 import { appendLatencyMeasurement } from '../../shared/session-latency';
+import { getMainWindow } from '../window-management';
 
 export { formatFileAttachmentPromptLine } from './file-attachment-context';
 
@@ -126,6 +127,15 @@ function parseSessionIntelligence(raw: string | null | undefined): SessionIntell
     return { ...defaultSessionIntelligence(), ...parsed };
   } catch {
     return defaultSessionIntelligence();
+  }
+}
+
+function parseOptionalJson<T>(raw: string | null | undefined): T | undefined {
+  if (!raw) return undefined;
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    return undefined;
   }
 }
 
@@ -488,7 +498,12 @@ export class SessionManager {
   private pluginRuntimeService?: PluginRuntimeService;
   private activeSessions: Map<string, AbortController> = new Map();
   private promptQueues: Map<string, QueuedPromptItem[]> = new Map();
-  private pendingPermissions: Map<string, (result: PermissionResult) => void> = new Map();
+  private pendingEnginePermissionIds = new Set<string>();
+  private pendingPermissions = new Map<
+    string,
+    { sessionId: string; timer: ReturnType<typeof setTimeout>; resolve: (result: PermissionResult) => void }
+  >();
+  private cancelPendingToolPermissions: (() => void) | null = null;
   private pendingSudoPasswords: Map<
     string,
     { sessionId: string; resolve: (password: string | null) => void }
@@ -581,6 +596,11 @@ export class SessionManager {
   /** Inject notification bridge (wired from main/index.ts) */
   setNotificationBridge(bridge: NotificationBridgeLike): void {
     this.notificationBridge = bridge;
+  }
+
+  /** Injecte l'annulation du pont moteur sans coupler ce gestionnaire au core. */
+  setPermissionCanceller(cancel: (() => void) | null): void {
+    this.cancelPendingToolPermissions = cancel;
   }
 
   /** Observe durable background-session outcomes without creating another task engine. */
@@ -867,7 +887,8 @@ export class SessionManager {
     prompt: string,
     cwd?: string,
     projectId?: string,
-    content?: ContentBlock[]
+    content?: ContentBlock[],
+    permissionMode?: PermissionMode,
   ): Promise<Session> {
     log('[SessionManager] Starting background session:', title);
 
@@ -890,6 +911,7 @@ export class SessionManager {
 
     const session = this.createSession(title, effectiveCwd);
     session.isBackground = true;
+    if (permissionMode) session.permissionMode = permissionMode;
     if (resolvedProjectId) {
       session.projectId = resolvedProjectId;
     }
@@ -1167,18 +1189,20 @@ export class SessionManager {
         executionLocation: 'local',
       },
     };
-    this.saveSession(session);
-    for (const item of input.messages) {
-      if (!item || typeof item.content !== 'string') continue;
-      const role: Message['role'] = item.type === 'user' ? 'user' : item.type === 'assistant' ? 'assistant' : 'system';
-      this.saveMessage({
-        id: uuidv4(),
-        sessionId: session.id,
-        role,
-        content: [{ type: 'text', text: item.content }],
-        timestamp: Date.parse(item.timestamp ?? '') || createdAt,
-      });
-    }
+    this.db.raw.transaction(() => {
+      this.saveSession(session);
+      for (const item of input.messages) {
+        if (!item || typeof item.content !== 'string') continue;
+        const role: Message['role'] = item.type === 'user' ? 'user' : item.type === 'assistant' ? 'assistant' : 'system';
+        this.saveMessage({
+          id: uuidv4(),
+          sessionId: session.id,
+          role,
+          content: [{ type: 'text', text: item.content }],
+          timestamp: Date.parse(item.timestamp ?? '') || createdAt,
+        });
+      }
+    })();
     return session;
   }
 
@@ -1346,7 +1370,8 @@ export class SessionManager {
     sessionId: string,
     prompt: string,
     content?: ContentBlock[],
-    intentId?: string
+    intentId?: string,
+    permissionModeOverride?: PermissionMode,
   ): Promise<{ delivered: boolean; fallbackQueued: boolean }> {
     const session = this.loadSession(sessionId);
     if (!session) {
@@ -1360,7 +1385,7 @@ export class SessionManager {
     );
 
     if (!delivered) {
-      this.enqueuePrompt(session, prompt, content);
+      this.enqueuePrompt(session, prompt, content, { permissionModeOverride });
       this.turnJournal.append(session.id, 'steer_fallback_queued', {
         intentId,
         promptPreview: prompt.slice(0, 240),
@@ -1439,7 +1464,7 @@ export class SessionManager {
     // Initialize sandbox with workspace
     const initPromise = initializeSandbox({
       workspacePath: session.cwd,
-      mainWindow: null, // Will show dialogs globally
+      mainWindow: getMainWindow(),
     }).then(() => {
       /* void */
     });
@@ -2172,6 +2197,21 @@ export class SessionManager {
     );
     this.titleGenerationTokens.delete(sessionId);
     this.agentRunner.cancel(sessionId);
+    this.cancelPendingToolPermissions?.();
+    // Une annulation doit aussi retirer toute confirmation encore affichée.
+    // Les permissions moteur ne portent pas toujours l'id de session : la
+    // modale est globale et il vaut mieux la congédier que la laisser fantôme.
+    for (const toolUseId of this.pendingEnginePermissionIds) {
+      this.sendToRenderer({ type: 'permission.dismiss', payload: { toolUseId } });
+    }
+    this.pendingEnginePermissionIds.clear();
+    for (const [toolUseId, pending] of this.pendingPermissions) {
+      if (pending.sessionId !== sessionId) continue;
+      clearTimeout(pending.timer);
+      pending.resolve('deny');
+      this.pendingPermissions.delete(toolUseId);
+      this.sendToRenderer({ type: 'permission.dismiss', payload: { toolUseId } });
+    }
     // Cancel any pending sudo password requests for this session
     for (const [toolUseId, entry] of this.pendingSudoPasswords) {
       if (entry.sessionId === sessionId) {
@@ -2528,8 +2568,8 @@ export class SessionManager {
       role: row.role as Message['role'],
       content: this.normalizeContent(row.content),
       timestamp: row.timestamp,
-      tokenUsage: row.token_usage ? JSON.parse(row.token_usage) : undefined,
-      metadata: row.metadata ? JSON.parse(row.metadata) : undefined,
+      tokenUsage: parseOptionalJson<Message['tokenUsage']>(row.token_usage),
+      metadata: parseOptionalJson<MessageMetadata>(row.metadata),
       executionTimeMs: row.execution_time_ms ?? undefined,
     }));
     this.messageCache.set(sessionId, messages);
@@ -2875,20 +2915,29 @@ export class SessionManager {
     }));
   }
 
+  /** Suit les permissions moteur afin que stopSession retire les modales obsolètes. */
+  trackPermissionRequest(toolUseId: string): void {
+    this.pendingEnginePermissionIds.add(toolUseId);
+  }
+
   // Handle permission response
   handlePermissionResponse(toolUseId: string, result: PermissionResult): void {
-    const resolver = this.pendingPermissions.get(toolUseId);
-    if (resolver) {
-      resolver(result);
-      this.pendingPermissions.delete(toolUseId);
-    }
+    this.pendingEnginePermissionIds.delete(toolUseId);
+    const pending = this.pendingPermissions.get(toolUseId);
+    if (!pending) return;
+    clearTimeout(pending.timer);
+    this.pendingPermissions.delete(toolUseId);
+    pending.resolve(result);
   }
 
   dispose(): void {
     this.turnJournal.close();
   }
 
-  // Request permission for a tool
+  /**
+   * Point de compatibilité du runner historique. Il partage désormais le
+   * suivi d'annulation des modales au lieu de maintenir un chemin divergent.
+   */
   async requestPermission(
     sessionId: string,
     toolUseId: string,
@@ -2899,15 +2948,12 @@ export class SessionManager {
       const timeoutMs = this.isRemoteSession(sessionId)
         ? SessionManager.REMOTE_PERMISSION_TIMEOUT_MS
         : SessionManager.LOCAL_PERMISSION_TIMEOUT_MS;
-      const timeoutId = setTimeout(() => {
+      const timer = setTimeout(() => {
         this.pendingPermissions.delete(toolUseId);
         resolve('deny');
         this.sendToRenderer({ type: 'permission.dismiss', payload: { toolUseId } });
       }, timeoutMs);
-      this.pendingPermissions.set(toolUseId, (result: PermissionResult) => {
-        clearTimeout(timeoutId);
-        resolve(result);
-      });
+      this.pendingPermissions.set(toolUseId, { sessionId, timer, resolve });
       this.sendToRenderer({
         type: 'permission.request',
         payload: { toolUseId, toolName, input, sessionId },

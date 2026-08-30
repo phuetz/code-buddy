@@ -12,6 +12,7 @@ export interface VoiceBackgroundMissionInput {
   title?: string;
   cwd?: string;
   projectId?: string;
+  permissionMode?: 'default' | 'plan' | 'acceptEdits' | 'dontAsk' | 'bypassPermissions';
 }
 
 export interface VoiceMissionAssessment {

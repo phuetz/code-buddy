@@ -31,6 +31,37 @@ const VALID_TABS = new Set([
 
 let server: http.Server | null = null;
 
+function isTrustedBrowserRequest(req: http.IncomingMessage): boolean {
+  const host = req.headers.host;
+  if (host) {
+    try {
+      const hostname = new URL(`http://${host}`).hostname.replace(/^\[|\]$/g, '').toLowerCase();
+      if (hostname !== 'localhost' && hostname !== '::1' && !hostname.startsWith('127.')) {
+        return false;
+      }
+    } catch {
+      return false;
+    }
+  }
+
+  const origin = req.headers.origin;
+  if (origin) {
+    try {
+      const hostname = new URL(origin).hostname.replace(/^\[|\]$/g, '').toLowerCase();
+      if (hostname !== 'localhost' && hostname !== '::1' && !hostname.startsWith('127.')) {
+        return false;
+      }
+    } catch {
+      return false;
+    }
+  }
+
+  // Les clients natifs (curl, moteur local) n'envoient pas ces en-têtes.
+  // Un navigateur cross-site sans Origin reste refusé via Sec-Fetch-Site.
+  const fetchSite = req.headers['sec-fetch-site'];
+  return fetchSite !== 'cross-site';
+}
+
 function json(res: http.ServerResponse, status: number, body: Record<string, unknown>): void {
   const payload = JSON.stringify(body);
   res.writeHead(status, {
@@ -68,6 +99,10 @@ export function startNavServer(getMainWindow: () => BrowserWindow | null): void 
     try {
       const url = new URL(req.url || '/', `http://${HOST}:${PORT}`);
       const pathname = url.pathname;
+
+      if (!isTrustedBrowserRequest(req)) {
+        return json(res, 403, { ok: false, error: 'Untrusted browser origin' });
+      }
 
       // Only GET is supported
       if (req.method !== 'GET') {

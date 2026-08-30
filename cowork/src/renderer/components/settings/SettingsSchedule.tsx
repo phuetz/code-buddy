@@ -49,6 +49,7 @@ const SCHEDULE_TIME_SUGGESTIONS = [
 export function SettingsSchedule({ isActive }: { isActive: boolean }) {
   const { t } = useTranslation();
   const workingDir = useAppStore((state) => state.workingDir);
+  const permissionMode = useAppStore((state) => state.permissionMode);
   const sessions = useAppStore((state) => state.sessions);
   const scheduleDraft = useAppStore((state) => state.scheduleDraft);
   const clearScheduleDraft = useAppStore((state) => state.clearScheduleDraft);
@@ -266,7 +267,7 @@ export function SettingsSchedule({ isActive }: { isActive: boolean }) {
           enabled,
           repeatEvery: scheduleMode === 'legacy-interval' ? repeatEvery : null,
           repeatUnit: scheduleMode === 'legacy-interval' ? repeatUnit : null,
-          metadata,
+          metadata: { ...(metadata ?? {}), permissionMode },
         };
         await window.electronAPI.schedule.create(payload);
         setSuccess({ key: 'schedule.created' });

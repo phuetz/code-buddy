@@ -62,6 +62,10 @@ export class MemoryManager {
     const stmt = this.db.prepare(query);
     const rows = stmt.all(...params) as Record<string, unknown>[];
 
+    return this.rowsToMessages(rows);
+  }
+
+  private rowsToMessages(rows: Record<string, unknown>[]): Message[] {
     return rows.map((row) => {
       let content: ContentBlock[];
       try {
@@ -91,21 +95,34 @@ export class MemoryManager {
   /**
    * Search messages using full-text search
    */
-  searchMessages(sessionId: string, query: string): Message[] {
-    // First get all messages for the session
-    const messages = this.getMessageHistory(sessionId);
+  searchMessages(sessionId: string, query: string, limit = 100): Message[] {
+    const normalized = query.trim();
+    if (!normalized) return [];
+    const boundedLimit = Math.max(1, Math.min(500, Math.floor(limit)));
 
-    // Simple text search (FTS5 would be more efficient for large datasets)
-    const queryLower = query.toLowerCase();
+    try {
+      const ftsQuery = `"${normalized.replace(/"/g, '""')}"`;
+      const rows = this.db.prepare(
+        `SELECT m.*
+           FROM messages_fts f
+           JOIN messages m ON m.id = f.message_id
+          WHERE f.session_id = ? AND messages_fts MATCH ?
+          ORDER BY bm25(messages_fts), m.timestamp DESC
+          LIMIT ?`
+      ).all(sessionId, ftsQuery, boundedLimit) as Record<string, unknown>[];
+      if (rows.length > 0) return this.rowsToMessages(rows);
+    } catch {
+      // Les anciennes bases sans FTS utilisent le repli borné ci-dessous.
+    }
 
-    return messages.filter((message) => {
-      return message.content.some((block) => {
-        if (block.type === 'text') {
-          return block.text.toLowerCase().includes(queryLower);
-        }
-        return false;
-      });
-    });
+    const escaped = normalized.toLowerCase().replace(/[\\%_]/g, (char) => `\\${char}`);
+    const rows = this.db.prepare(
+      `SELECT * FROM messages
+        WHERE session_id = ? AND LOWER(content) LIKE ? ESCAPE '\\'
+        ORDER BY timestamp DESC
+        LIMIT ?`
+    ).all(sessionId, `%${escaped}%`, boundedLimit) as Record<string, unknown>[];
+    return this.rowsToMessages(rows);
   }
 
   /**

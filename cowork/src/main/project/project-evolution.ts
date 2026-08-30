@@ -526,7 +526,15 @@ export class ProjectEvolutionService {
     if (!session || session.project_id !== project.id) {
       throw new Error('The selected session does not belong to this Project');
     }
-    const rows = this.database.messages.getBySessionId(sessionId).slice(-100);
+    const rows = typeof this.database.raw.prepare === 'function'
+      ? (this.database.raw.prepare(
+          `SELECT * FROM messages
+            WHERE session_id = ?
+            ORDER BY timestamp DESC
+            LIMIT 100`
+        ).all(sessionId) as MessageRow[]).reverse()
+      // Compatibilité avec les adaptateurs historiques sans accès SQL brut.
+      : this.database.messages.getBySessionId(sessionId).slice(-100);
     const lines: SourceLine[] = [];
     let used = 0;
     for (const row of rows) {

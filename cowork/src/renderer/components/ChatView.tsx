@@ -67,7 +67,8 @@ function toScheduleCreateInput(
       | null;
     enabled: boolean;
   },
-  fallbackCwd: string
+  fallbackCwd: string,
+  permissionMode: import('../types').PermissionMode,
 ): ScheduleCreateInput {
   return {
     prompt: input.prompt,
@@ -83,6 +84,7 @@ function toScheduleCreateInput(
           }
         : input.scheduleConfig,
     enabled: input.enabled,
+    metadata: { permissionMode },
   };
 }
 
@@ -691,7 +693,9 @@ export function ChatView() {
       const intent = queuedIntents.find((item) => item.id === intentId);
       if (!intent) return;
       removeQueuedIntent(activeSessionId, intentId);
-      const result = await steerSession(activeSessionId, intent.content, intent.id);
+      const result = await steerSession(activeSessionId, intent.content, intent.id, {
+        permissionModeOverride: permissionMode,
+      });
       if (!result.delivered && !result.fallbackQueued) {
         useAppStore.getState().enqueueQueuedIntent({
           ...intent,
@@ -700,7 +704,7 @@ export function ChatView() {
         });
       }
     },
-    [activeSessionId, queuedIntents, removeQueuedIntent, steerSession]
+    [activeSessionId, permissionMode, queuedIntents, removeQueuedIntent, steerSession]
   );
 
   const handleFileSelect = async () => {
@@ -827,7 +831,11 @@ export function ChatView() {
 
         if (result.action?.type === 'create_schedule' && result.action.createInput) {
           await window.electronAPI.schedule.create(
-            toScheduleCreateInput(result.action.createInput, activeSession?.cwd || '')
+            toScheduleCreateInput(
+              result.action.createInput,
+              activeSession?.cwd || '',
+              permissionMode,
+            )
           );
           setGlobalNotice({
             id: `schedule-created-${Date.now()}`,
@@ -1115,7 +1123,11 @@ export function ChatView() {
 
             if (result.action?.type === 'create_schedule' && result.action.createInput) {
               await window.electronAPI.schedule.create(
-                toScheduleCreateInput(result.action.createInput, activeSession?.cwd || '')
+                toScheduleCreateInput(
+                  result.action.createInput,
+                  activeSession?.cwd || '',
+                  permissionMode,
+                )
               );
               useAppStore.getState().setGlobalNotice?.({
                 id: `schedule-created-${Date.now()}`,

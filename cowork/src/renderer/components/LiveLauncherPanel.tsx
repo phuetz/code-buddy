@@ -85,7 +85,7 @@ export function LiveLauncherPanel({ isOpen, onClose }: LiveLauncherPanelProps) {
     if (!isOpen) return undefined;
     const api = window.electronAPI;
     if (!api?.onEvent) return undefined;
-    const unsubscribe = api.onEvent((event) => {
+    const unsubscribe = api.onEvent('liveLauncher.event', (event) => {
       if (event.type !== 'liveLauncher.event') return;
       const payload = event.payload as LiveLauncherEventPayload;
       if (!runIdRef.current || payload.runId !== runIdRef.current) return;

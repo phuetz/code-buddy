@@ -566,35 +566,41 @@ export function TestRunnerPanel({ isOpen, onClose }: TestRunnerPanelProps) {
 
   useEffect(() => {
     const api = window.electronAPI as unknown as {
-      onEvent?: (cb: (event: { type: string; payload?: unknown }) => void) => () => void;
+      onEvent?: (
+        types: string | string[],
+        cb: (event: { type: string; payload?: unknown }) => void,
+      ) => () => void;
     };
     if (!api?.onEvent) return undefined;
-    const unsubscribe = api.onEvent((event) => {
-      switch (event.type) {
-        case 'test.framework':
-          setFramework((event.payload as { framework: string }).framework);
-          break;
-        case 'test.start':
-          setIsRunning(true);
-          setOutput('');
-          setResult(null);
-          setError(null);
-          break;
-        case 'test.output': {
-          const payload = event.payload as { stream: string; text: string };
-          setOutput((prev) => prev + payload.text);
-          break;
+    const unsubscribe = api.onEvent(
+      ['test.framework', 'test.start', 'test.output', 'test.complete', 'test.cancelled'],
+      (event) => {
+        switch (event.type) {
+          case 'test.framework':
+            setFramework((event.payload as { framework: string }).framework);
+            break;
+          case 'test.start':
+            setIsRunning(true);
+            setOutput('');
+            setResult(null);
+            setError(null);
+            break;
+          case 'test.output': {
+            const payload = event.payload as { stream: string; text: string };
+            setOutput((prev) => prev + payload.text);
+            break;
+          }
+          case 'test.complete':
+            setIsRunning(false);
+            setResult(event.payload as TestResult);
+            break;
+          case 'test.cancelled':
+            setIsRunning(false);
+            setError(t('testRunner.cancelled', 'Test run cancelled'));
+            break;
         }
-        case 'test.complete':
-          setIsRunning(false);
-          setResult(event.payload as TestResult);
-          break;
-        case 'test.cancelled':
-          setIsRunning(false);
-          setError(t('testRunner.cancelled', 'Test run cancelled'));
-          break;
-      }
-    });
+      },
+    );
     return unsubscribe;
   }, [t]);
 

@@ -59,6 +59,25 @@ function readSidecar(filePath: string): { prompt?: string; model?: string; provi
   }
 }
 
+async function readSidecarAsync(filePath: string): Promise<{
+  prompt?: string;
+  model?: string;
+  provider?: string;
+}> {
+  try {
+    const raw = JSON.parse(
+      await fs.promises.readFile(`${filePath}.meta.json`, 'utf-8'),
+    ) as Record<string, unknown>;
+    return {
+      ...(typeof raw.prompt === 'string' ? { prompt: raw.prompt } : {}),
+      ...(typeof raw.model === 'string' ? { model: raw.model } : {}),
+      ...(typeof raw.provider === 'string' ? { provider: raw.provider } : {}),
+    };
+  } catch {
+    return {};
+  }
+}
+
 export function kindOf(filePath: string): MediaKind | null {
   return EXT_TO_KIND[path.extname(filePath).toLowerCase()] ?? null;
 }
@@ -95,7 +114,7 @@ export async function resolveExportableMediaBundlePaths(
 
   const indexedMedia = new Set<string>();
   for (const root of canonicalRoots) {
-    for (const item of scanRoot(root)) {
+    for (const item of await scanRootAsync(root)) {
       try {
         const canonical = await fs.promises.realpath(item.path);
         await requireNoSymlinkDescendants(root, canonical);
@@ -190,6 +209,40 @@ function scanDirRecursive(dir: string, root: string, out: MediaItem[], depth = 0
   }
 }
 
+async function scanDirRecursiveAsync(
+  dir: string,
+  root: string,
+  out: MediaItem[],
+  depth = 0,
+): Promise<void> {
+  if (depth > 4) return;
+  let entries: fs.Dirent[];
+  try {
+    entries = await fs.promises.readdir(dir, { withFileTypes: true });
+  } catch {
+    return;
+  }
+  for (const entry of entries) {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      await scanDirRecursiveAsync(full, root, out, depth + 1);
+      continue;
+    }
+    if (!entry.isFile()) continue;
+    const kind = kindOf(entry.name);
+    if (!kind) continue;
+    try {
+      const [info, sidecar] = await Promise.all([
+        fs.promises.stat(full),
+        readSidecarAsync(full),
+      ]);
+      out.push({ path: full, kind, size: info.size, mtimeMs: info.mtimeMs, root, ...sidecar });
+    } catch {
+      /* suppression concurrente : ignorer */
+    }
+  }
+}
+
 /**
  * Scan one session root: `.codebuddy/media-generation/**` (recursive) plus
  * loose media files at the root itself (TTS wav outputs — non-recursive so a
@@ -217,12 +270,49 @@ export function scanRoot(root: string): MediaItem[] {
   return out;
 }
 
+export async function scanRootAsync(root: string): Promise<MediaItem[]> {
+  const out: MediaItem[] = [];
+  await scanDirRecursiveAsync(path.join(root, '.codebuddy', 'media-generation'), root, out);
+  try {
+    const entries = await fs.promises.readdir(root, { withFileTypes: true });
+    for (const entry of entries) {
+      if (!entry.isFile() || kindOf(entry.name) !== 'audio') continue;
+      const full = path.join(root, entry.name);
+      try {
+        const [info, sidecar] = await Promise.all([
+          fs.promises.stat(full),
+          readSidecarAsync(full),
+        ]);
+        out.push({ path: full, kind: 'audio', size: info.size, mtimeMs: info.mtimeMs, root, ...sidecar });
+      } catch {
+        /* suppression concurrente : ignorer */
+      }
+    }
+  } catch {
+    /* racine absente */
+  }
+  return out;
+}
+
 /** Scan distinct roots, newest first, deduplicated by path, capped. */
 export function scanMediaLibrary(roots: string[], cap = 500): MediaItem[] {
   const seen = new Set<string>();
   const all: MediaItem[] = [];
   for (const root of [...new Set(roots)].filter(Boolean)) {
     for (const item of scanRoot(root)) {
+      if (seen.has(item.path)) continue;
+      seen.add(item.path);
+      all.push(item);
+    }
+  }
+  return all.sort((a, b) => b.mtimeMs - a.mtimeMs).slice(0, cap);
+}
+
+export async function scanMediaLibraryAsync(roots: string[], cap = 500): Promise<MediaItem[]> {
+  const seen = new Set<string>();
+  const all: MediaItem[] = [];
+  for (const root of [...new Set(roots)].filter(Boolean)) {
+    for (const item of await scanRootAsync(root)) {
       if (seen.has(item.path)) continue;
       seen.add(item.path);
       all.push(item);

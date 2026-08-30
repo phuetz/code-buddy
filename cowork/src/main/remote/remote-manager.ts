@@ -76,6 +76,7 @@ export class RemoteManager extends EventEmitter {
 
   // Session state tracking
   private remoteSessionIds: Set<string> = new Set();
+  private remoteSessionInitPromises: Map<string, Promise<Session>> = new Map();
 
   // Mapping: actual session ID -> remote session ID
   private sessionIdMapping: Map<string, string> = new Map();
@@ -1046,6 +1047,7 @@ export class RemoteManager extends EventEmitter {
     const sessionId = this.sessionIdMapping.get(actualSessionId);
     this.sessionIdMapping.delete(actualSessionId);
     if (sessionId) {
+      this.remoteSessionIds.delete(sessionId);
       for (const [key, value] of this.reverseSessionIdMapping) {
         if (value === actualSessionId) {
           this.reverseSessionIdMapping.delete(key);
@@ -1215,16 +1217,27 @@ export class RemoteManager extends EventEmitter {
     const finalPrompt = processedPrompt.prompt ?? prompt;
 
     if (isNewSession) {
+      // Réserver avant l'await pour empêcher deux messages concurrents de
+      // créer deux sessions réelles pour le même identifiant distant.
+      this.remoteSessionIds.add(sessionId);
       // Create new session with working directory
-      const newSession = await this.agentExecutor.startSession(
+      let newSession: Session;
+      const initialization = this.agentExecutor.startSession(
         buildRemoteSessionTitle(finalPrompt),
         finalPrompt,
         workingDirectory
       );
+      this.remoteSessionInitPromises.set(sessionId, initialization);
+      try {
+        newSession = await initialization;
+      } catch (error) {
+        this.remoteSessionIds.delete(sessionId);
+        throw error;
+      } finally {
+        this.remoteSessionInitPromises.delete(sessionId);
+      }
 
       // Map remote session ID to actual session ID
-      this.remoteSessionIds.add(sessionId);
-
       // Store bidirectional mapping
       this.sessionIdMapping.set(newSession.id, sessionId);
       this.reverseSessionIdMapping.set(sessionId, newSession.id);
@@ -1254,7 +1267,12 @@ export class RemoteManager extends EventEmitter {
       this.emitRemoteUserMessage(newSession.id, content, finalPrompt);
     } else {
       // Continue existing session - use actual session ID
-      const actualSessionId = existingActualSessionId;
+      let actualSessionId = existingActualSessionId;
+      if (!actualSessionId) {
+        // Une seconde requête peut arriver pendant le startSession initial.
+        // Attendre cette réservation évite création double comme faux échec.
+        actualSessionId = (await this.remoteSessionInitPromises.get(sessionId))?.id;
+      }
       if (!actualSessionId) {
         throw new Error(`No actual session ID found for remote session: ${sessionId}`);
       }

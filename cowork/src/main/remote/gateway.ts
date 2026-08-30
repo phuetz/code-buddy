@@ -39,6 +39,46 @@ interface WSMessage {
   requestId?: string;
 }
 
+function isLoopbackHostname(hostname: string): boolean {
+  const normalized = hostname.replace(/^\[|\]$/g, '').toLowerCase();
+  return normalized === 'localhost'
+    || normalized === '::1'
+    || normalized.startsWith('127.');
+}
+
+function isTrustedWebSocketOrigin(origin: string): boolean {
+  try {
+    const parsed = new URL(origin);
+    if (!['http:', 'https:'].includes(parsed.protocol)) return false;
+    if (isLoopbackHostname(parsed.hostname)) return true;
+
+    // Les frontends distants doivent être déclarés explicitement. Un client
+    // natif n'envoie pas d'Origin et reste donc compatible avec le mode no-auth.
+    const configuredOrigins = [
+      process.env.VITE_DEV_SERVER_URL,
+      ...(process.env.CODEBUDDY_GATEWAY_TRUSTED_ORIGINS?.split(',') ?? []),
+    ];
+    return configuredOrigins.some((candidate) => {
+      if (!candidate?.trim()) return false;
+      try {
+        return new URL(candidate.trim()).origin === parsed.origin;
+      } catch {
+        return false;
+      }
+    });
+  } catch {
+    return false;
+  }
+}
+
+function tokensMatch(provided: string | undefined, expected: string | undefined): boolean {
+  if (typeof provided !== 'string' || typeof expected !== 'string') return false;
+  const providedBuffer = Buffer.from(provided, 'utf8');
+  const expectedBuffer = Buffer.from(expected, 'utf8');
+  return providedBuffer.length === expectedBuffer.length
+    && crypto.timingSafeEqual(providedBuffer, expectedBuffer);
+}
+
 export class RemoteGateway extends EventEmitter {
   private config: GatewayConfig;
   private httpServer?: HttpServer;
@@ -663,6 +703,13 @@ export class RemoteGateway extends EventEmitter {
   // ============================================================================
 
   private handleWSConnection(ws: WebSocket, _req: IncomingMessage): void {
+    const origin = _req.headers.origin;
+    if (origin && !isTrustedWebSocketOrigin(origin)) {
+      logWarn('[Gateway] Rejected WebSocket origin:', origin);
+      ws.close(1008, 'Untrusted origin');
+      return;
+    }
+
     const clientId = this.generateClientId();
     const ip = _req.socket.remoteAddress || 'unknown';
 
@@ -750,10 +797,14 @@ export class RemoteGateway extends EventEmitter {
       return;
     }
 
-    const { token } = message.payload as { token?: string };
+    const { token, userId } = message.payload as { token?: string; userId?: string };
+
+    if (typeof userId === 'string' && /^[\w:@.-]{1,200}$/u.test(userId)) {
+      client.userId = userId;
+    }
 
     if (this.config.auth.mode === 'token') {
-      if (token === this.config.auth.token) {
+      if (tokensMatch(token, this.config.auth.token)) {
         client.authenticated = true;
         this.sendWSMessage(client.ws, {
           type: 'auth_result',
@@ -809,6 +860,17 @@ export class RemoteGateway extends EventEmitter {
         isGroup: false,
         isMentioned: true,
       };
+
+      // Les modes sans jeton restent utilisables par les clients natifs, mais
+      // l'identité annoncée doit tout de même passer l'allowlist ou le pairing.
+      if (this.config.auth.mode !== 'token' && !(await this.checkAuthorization(remoteMessage))) {
+        this.sendWSMessage(client.ws, {
+          type: 'error',
+          payload: { error: 'Not authorized' },
+          requestId: message.requestId,
+        });
+        return;
+      }
 
       // Route to agent
       await this.messageRouter.routeMessage(remoteMessage);

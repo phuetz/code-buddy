@@ -37,6 +37,8 @@ export interface SandboxAdapterConfig extends SandboxConfig {
   skipInstallPrompts?: boolean;
   /** Main window for dialogs */
   mainWindow?: BrowserWindow | null;
+  /** Autorise explicitement le repli natif sans interface de confirmation. */
+  allowNativeFallback?: boolean;
 }
 
 interface SandboxState {
@@ -311,6 +313,19 @@ export class SandboxAdapter implements SandboxExecutor {
   private async initializeNative(config: SandboxAdapterConfig): Promise<void> {
     const isWindows = process.platform === 'win32';
     const isMac = process.platform === 'darwin';
+
+    const sandboxEnabled = configStore.get('sandboxEnabled') !== false;
+    if (
+      sandboxEnabled
+      && (isWindows || isMac)
+      && !config.forceNative
+      && !config.allowNativeFallback
+      && (!config.mainWindow || config.mainWindow.isDestroyed())
+    ) {
+      throw new Error(
+        'Sandbox isolation is unavailable and native fallback was not explicitly approved'
+      );
+    }
 
     if (isWindows) {
       // On Windows without WSL, show security warning

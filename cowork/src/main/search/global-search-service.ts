@@ -225,7 +225,7 @@ export class GlobalSearchService {
 
     // Files (limited to active project workspace)
     try {
-      const fileHits = this.searchFiles(trimmed, perCategory);
+      const fileHits = await this.searchFiles(trimmed, perCategory);
       counts.file = fileHits.length;
       hits.push(...fileHits);
     } catch (err) {
@@ -402,13 +402,17 @@ export class GlobalSearchService {
     }
   }
 
-  private searchFiles(query: string, limit: number): GlobalSearchHit[] {
+  private async searchFiles(query: string, limit: number): Promise<GlobalSearchHit[]> {
     if (!this.deps.projectManager) return [];
     const active = this.deps.projectManager.getActive();
     if (!active?.workspacePath) return [];
 
     const workspace = active.workspacePath;
-    if (!fs.existsSync(workspace)) return [];
+    try {
+      await fs.promises.access(workspace);
+    } catch {
+      return [];
+    }
 
     const results: GlobalSearchHit[] = [];
     const ignoreDirs = new Set([
@@ -424,12 +428,12 @@ export class GlobalSearchService {
       '.idea',
     ]);
 
-    const visit = (dir: string, depth: number): void => {
+    const visit = async (dir: string, depth: number): Promise<void> => {
       if (results.length >= limit) return;
       if (depth > 6) return;
       let entries: fs.Dirent[];
       try {
-        entries = fs.readdirSync(dir, { withFileTypes: true });
+        entries = await fs.promises.readdir(dir, { withFileTypes: true });
       } catch {
         return;
       }
@@ -439,7 +443,7 @@ export class GlobalSearchService {
         const full = path.join(dir, entry.name);
         if (entry.isDirectory()) {
           if (ignoreDirs.has(entry.name)) continue;
-          visit(full, depth + 1);
+          await visit(full, depth + 1);
           continue;
         }
         if (entry.isFile()) {
@@ -463,7 +467,7 @@ export class GlobalSearchService {
     };
 
     try {
-      visit(workspace, 0);
+      await visit(workspace, 0);
     } catch (err) {
       logWarn('[GlobalSearchService] file walk failed:', err);
     }

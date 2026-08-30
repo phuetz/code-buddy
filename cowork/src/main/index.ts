@@ -415,6 +415,7 @@ const REMOTE_PERMISSION_TIMEOUT_MS = 5 * 60_000 + 30_000;
 let respondToEnginePermission:
   | ((id: string, response: 'allow' | 'allow_always' | 'deny') => void)
   | null = null;
+let cancelEnginePermissions: (() => void) | null = null;
 let skillsManager: SkillsManager | null = null;
 let pluginRuntimeService: PluginRuntimeService | null = null;
 let scheduledTaskManager: ScheduledTaskManager | null = null;
@@ -782,6 +783,7 @@ if (!hasSingleInstanceLock) {
 
     if (!mainWindow || mainWindow.isDestroyed()) {
       mainWindow = existingWindow;
+      setMainWindow(existingWindow);
     }
     if (existingWindow.isMinimized()) {
       existingWindow.restore();
@@ -1123,22 +1125,21 @@ function createWindow() {
 
   mainWindow.on('closed', () => {
     meetingDisplayAudioBroker.dispose();
+    globalShortcut.unregister('CommandOrControl+Alt+S');
     mainWindow = null;
     setMainWindow(null);
   });
 
-  // Register Panic Stop Shortcut
-  mainWindow.on('focus', () => {
-    globalShortcut.register('CommandOrControl+Alt+S', () => {
-      logWarn('[App] Panic Stop shortcut triggered!');
-      if (mainWindow) {
-        sendToRenderer({ type: 'panic-stop', payload: {} });
-      }
-    });
+  // Un seul enregistrement par fenêtre, libéré avec son cycle de vie.
+  const panicShortcutRegistered = globalShortcut.register('CommandOrControl+Alt+S', () => {
+    logWarn('[App] Panic Stop shortcut triggered!');
+    if (mainWindow) {
+      sendToRenderer({ type: 'panic-stop', payload: {} });
+    }
   });
-  mainWindow.on('blur', () => {
-    globalShortcut.unregister('CommandOrControl+Alt+S');
-  });
+  if (!panicShortcutRegistered) {
+    logWarn('[App] Panic Stop shortcut unavailable: CommandOrControl+Alt+S');
+  }
 
   // Voicebox-inspired system dictation. A toggle chord works reliably through
   // Electron's cross-platform globalShortcut API; capture remains in the
@@ -1157,6 +1158,7 @@ function createWindow() {
 
   // Notify renderer about config status after window is ready
   mainWindow.webContents.on('did-finish-load', () => {
+    flushPendingConfirmations();
     const isConfigured = configStore.isConfigured();
     log('[Config] Notifying renderer, isConfigured:', isConfigured);
     sendToRenderer({
@@ -1343,7 +1345,11 @@ async function startSandboxBootstrap(): Promise<void> {
   }
 }
 
-import { sendToRenderer, setPermissionResponder } from './ipc-main-bridge';
+import {
+  flushPendingConfirmations,
+  sendToRenderer,
+  setPermissionResponder,
+} from './ipc-main-bridge';
 import { remoteBackendManager } from './remote-backend/remote-backend-manager';
 import { remoteBackendConfigStore } from './remote-backend/remote-backend-config-store';
 
@@ -1527,11 +1533,19 @@ app
             /* webpackIgnore: true */ /* @vite-ignore */ permBridgeUrl
           );
           const permissionBridge = new DesktopPermissionBridge(
-            sendToRenderer,
+            (event: Parameters<typeof sendToRenderer>[0]) => {
+              if (event.type === 'permission.request') {
+                sessionManager?.trackPermissionRequest(event.payload.toolUseId);
+              } else if (event.type === 'permission.dismiss') {
+                sessionManager?.handlePermissionResponse(event.payload.toolUseId, 'deny');
+              }
+              sendToRenderer(event);
+            },
             REMOTE_PERMISSION_TIMEOUT_MS
           );
           respondToEnginePermission = (id, response) =>
             permissionBridge.handleResponse(id, response);
+          cancelEnginePermissions = () => permissionBridge.cancelAll();
           const adapterWithPerm = engineAdapter as unknown as {
             setPermissionCallback?: (cb: unknown) => void;
           };
@@ -1548,6 +1562,7 @@ app
             'permission.bridge.response',
             (_event, { id, response, reason }: { id: string; response: string; reason?: string }) => {
               permissionBridge.handleResponse(id, response as 'allow' | 'deny' | 'allow_always', reason);
+              sessionManager?.handlePermissionResponse(id, response as 'allow' | 'deny' | 'allow_always');
             }
           );
 
@@ -1677,12 +1692,13 @@ app
       new InProcessCoworkCognition(() => getServerBridge().getCognitionPort()),
       (sessionId) => remoteManager.isRemoteSession(sessionId),
     );
+    sessionManager.setPermissionCanceller(cancelEnginePermissions);
     setPermissionResponder((toolUseId, response, bridgeId) => {
+      sessionManager?.handlePermissionResponse(toolUseId, response);
       if (bridgeId && respondToEnginePermission) {
         respondToEnginePermission(bridgeId, response);
         return;
       }
-      sessionManager?.handlePermissionResponse(toolUseId, response);
     });
 
     // Do not grant `allOperations` process-wide. The engine adapter wires
@@ -1894,7 +1910,7 @@ app
     // no second scheduler or execution loop is introduced here.
     missionBridge = new MissionBridge({
       sendToRenderer,
-      executeVoiceMission: async ({ title, prompt, cwd, projectId }) => {
+      executeVoiceMission: async ({ title, prompt, cwd, projectId, permissionMode }) => {
         if (!sessionManager) throw new Error('Session manager not initialized');
         if (cwd) {
           const unsupportedReason = getWorkspacePathUnsupportedReason(cwd);
@@ -1905,6 +1921,8 @@ app
           prompt,
           cwd,
           projectId,
+          undefined,
+          permissionMode,
         );
         // A complete snapshot lets the renderer open the result immediately,
         // even when this is the first time it has seen the background session.
@@ -2227,7 +2245,28 @@ app
         if (title !== task.title) {
           scheduledTaskStore.update(task.id, { title });
         }
-        const started = await sessionManager.startSession(title, task.prompt, task.cwd);
+        const scheduledPermissionMode = scheduledMetadataString(
+          task.metadata ?? {},
+          'permissionMode',
+        );
+        const permissionMode =
+          scheduledPermissionMode === 'default' ||
+          scheduledPermissionMode === 'plan' ||
+          scheduledPermissionMode === 'acceptEdits' ||
+          scheduledPermissionMode === 'dontAsk' ||
+          scheduledPermissionMode === 'bypassPermissions'
+            ? scheduledPermissionMode
+            : undefined;
+        const started = await sessionManager.startSession(
+          title,
+          task.prompt,
+          task.cwd,
+          undefined,
+          undefined,
+          undefined,
+          false,
+          permissionMode,
+        );
         // 定时任务创建的新会话需要主动同步到前端会话列表
         sendToRenderer({
           type: 'session.update',
@@ -2861,6 +2900,7 @@ ipcMain.handle(
       prompt: string;
       cwd?: string;
       projectId?: string;
+      permissionMode?: import('../renderer/types').PermissionMode;
     }
   ) => {
     if (!sessionManager) throw new Error('SessionManager not initialized');
@@ -2872,7 +2912,9 @@ ipcMain.handle(
       payload.title,
       payload.prompt,
       payload.cwd,
-      payload.projectId
+      payload.projectId,
+      undefined,
+      payload.permissionMode,
     );
     return session;
   }
@@ -3017,11 +3059,15 @@ ipcMain.handle('memoryProvider.setActive', async (_event, providerId: string) =>
       const mod = await loadCoreModule<{ getMemoryProviderRegistry: () => { setActive: (providerId: string) => void } }>(
         'memory/memory-provider.js'
       );
-      if (mod) {
-        mod.getMemoryProviderRegistry().setActive(providerId);
-      }
-    } catch {
-      // Ignored
+      if (!mod) throw new Error('Memory provider registry unavailable');
+      mod.getMemoryProviderRegistry().setActive(providerId);
+    } catch (err) {
+      // La préférence reste persistée, mais le runtime courant n'a pas basculé.
+      logWarn('[memoryProvider.setActive] live update failed:', err);
+      return {
+        success: false,
+        error: `Provider saved but not activated in the current process: ${String(err)}`,
+      };
     }
     return { success: true };
   } catch (err) {
@@ -3133,7 +3179,7 @@ ipcMain.handle('studio.exportZip', async (_event, input: unknown) => {
 // session roots; export = native Save-As dialog + copy.
 ipcMain.handle('media.list', async () => {
   try {
-    const { scanMediaLibrary } = await import('./media-library');
+    const { scanMediaLibraryAsync } = await import('./media-library');
     const roots = new Set<string>();
     roots.add(join(app.getPath('userData'), 'default_working_dir'));
     if (sessionManager) {
@@ -3141,7 +3187,7 @@ ipcMain.handle('media.list', async () => {
         if (s.cwd) roots.add(s.cwd);
       }
     }
-    const items = scanMediaLibrary([...roots]);
+    const items = await scanMediaLibraryAsync([...roots]);
     // Link each media to the conversation that generated it: its basename is
     // echoed in that session's assistant message (the MEDIA: marker).
     if (sessionManager) {
@@ -5713,7 +5759,9 @@ ipcMain.handle('model.capabilities', async (_event, model: string) => {
 registerGitIpcHandlers();
 
 // Hunk diff accept/reject — Claude Cowork parity Phase 3 step 1
-registerDiffIpcHandlers();
+registerDiffIpcHandlers(
+  () => projectManager?.getActive()?.workspacePath ?? currentWorkingDir,
+);
 
 // Global search (Cmd+K palette) — Claude Cowork parity Phase 2 step 8
 ipcMain.handle('search.global', async (_event, query: string, limit?: number) => {
@@ -6436,7 +6484,8 @@ async function handleClientEvent(event: ClientEvent): Promise<unknown> {
         event.payload.sessionId,
         event.payload.prompt,
         event.payload.content,
-        event.payload.intentId
+        event.payload.intentId,
+        event.payload.permissionModeOverride,
       );
 
     case 'session.stop':

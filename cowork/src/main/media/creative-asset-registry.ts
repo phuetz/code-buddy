@@ -12,7 +12,7 @@ import type {
   CreativeAssetMaterializeResult,
   CreativeContentTier,
 } from '../../shared/creative-assets';
-import { kindOf, scanMediaLibrary } from '../media-library';
+import { kindOf, scanMediaLibraryAsync } from '../media-library';
 
 const MAX_LIST_LIMIT = 500;
 const MAX_IMPORT_BYTES = 50 * 1024 * 1024;
@@ -196,7 +196,7 @@ export class CreativeAssetRegistry {
 
   private async workspaceAssets(): Promise<CreativeAsset[]> {
     const roots = await this.canonicalRoots();
-    return scanMediaLibrary(roots, MAX_LIST_LIMIT).map((item) => {
+    return (await scanMediaLibraryAsync(roots, MAX_LIST_LIMIT)).map((item) => {
       const id = mediaAssetId(item.path);
       this.knownPaths.set(id, item.path);
       const asset = {

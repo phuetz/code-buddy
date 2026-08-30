@@ -9,6 +9,7 @@
  */
 
 import { logWarn } from '../utils/logger';
+import type Database from 'better-sqlite3';
 import type { DatabaseInstance } from '../db/database';
 
 export type ActivityType =
@@ -46,11 +47,35 @@ export interface ActivityEntry {
 }
 
 const MAX_ENTRIES = 200;
+const TRIM_EVERY_RECORDS = 20;
 
 export class ActivityFeed {
+  private insertStatement: Database.Statement | null = null;
+  private trimStatement: Database.Statement | null = null;
+  private recordsSinceTrim = 0;
+
   constructor(private db: DatabaseInstance) {
     this.ensureSchema();
+    this.prepareStatements();
     this.compactAsync();
+  }
+
+  private prepareStatements(): void {
+    try {
+      this.insertStatement = this.db.raw.prepare(
+        `INSERT INTO activity_log (type, title, description, session_id, project_id, metadata, timestamp)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`
+      );
+      this.trimStatement = this.db.raw.prepare(
+        `DELETE FROM activity_log
+         WHERE id NOT IN (
+           SELECT id FROM activity_log ORDER BY timestamp DESC LIMIT ?
+         )`
+      );
+      this.trimStatement.run(MAX_ENTRIES);
+    } catch (err) {
+      logWarn('[ActivityFeed] statement preparation failed:', err);
+    }
   }
 
   private ensureSchema(): void {
@@ -92,13 +117,10 @@ export class ActivityFeed {
 
   record(entry: Omit<ActivityEntry, 'id' | 'timestamp'>): void {
     try {
-      const database = this.db.raw;
-      database
-        .prepare(
-          `INSERT INTO activity_log (type, title, description, session_id, project_id, metadata, timestamp)
-           VALUES (?, ?, ?, ?, ?, ?, ?)`
-        )
-        .run(
+      if (!this.insertStatement || !this.trimStatement) {
+        throw new Error('activity statements unavailable');
+      }
+      this.insertStatement.run(
           entry.type,
           entry.title,
           entry.description ?? null,
@@ -106,17 +128,13 @@ export class ActivityFeed {
           entry.projectId ?? null,
           entry.metadata ? JSON.stringify(entry.metadata) : null,
           Date.now()
-        );
+      );
 
-      // Trim to MAX_ENTRIES
-      database
-        .prepare(
-          `DELETE FROM activity_log
-           WHERE id NOT IN (
-             SELECT id FROM activity_log ORDER BY timestamp DESC LIMIT ?
-           )`
-        )
-        .run(MAX_ENTRIES);
+      this.recordsSinceTrim += 1;
+      if (this.recordsSinceTrim >= TRIM_EVERY_RECORDS) {
+        this.trimStatement.run(MAX_ENTRIES);
+        this.recordsSinceTrim = 0;
+      }
     } catch (err) {
       logWarn('[ActivityFeed] record failed:', err);
     }

@@ -87,6 +87,7 @@ export const VoiceChatOverlay: React.FC<Props> = ({ isOpen, onClose }) => {
   );
   const workingDir = useAppStore((s) => s.workingDir);
   const activeProjectId = useAppStore((s) => s.activeProjectId);
+  const permissionMode = useAppStore((s) => s.permissionMode);
   const missionRuntime = useAppStore((s) => s.missionRuntime);
   const upsertMissionRuntime = useAppStore((s) => s.upsertMissionRuntime);
   const setActiveSession = useAppStore((s) => s.setActiveSession);
@@ -354,6 +355,7 @@ export const VoiceChatOverlay: React.FC<Props> = ({ isOpen, onClose }) => {
           prompt: message,
           ...(missionCwd ? { cwd: missionCwd } : {}),
           ...(missionProjectId ? { projectId: missionProjectId } : {}),
+          permissionMode,
         });
         if (!result.ok || !result.mission) {
           throw new Error(result.error ?? 'Mission creation failed');

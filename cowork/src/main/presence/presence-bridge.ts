@@ -135,6 +135,7 @@ const PRESENCE_TIMEOUT_MS = 15_000;
 
 export class PresenceBridge extends EventEmitter {
   private lastEmittedDetection: Map<string, number> = new Map();
+  private lastUnknownEmittedAt = 0;
   private lastSeenMatch: PresenceMatch | null = null;
   private lastSeenAt = 0;
   private timeoutTimer: NodeJS.Timeout | null = null;
@@ -180,12 +181,14 @@ export class PresenceBridge extends EventEmitter {
       const embedding = Float32Array.from(payload.embedding);
       const match = await store.match(embedding, payload.threshold);
       if (match) {
+        this.lastUnknownEmittedAt = 0;
         this.recordDetection(match);
       } else {
-        // Detection happened but no match — forward as "unknown" so the UI
-        // can decide to suggest enrollment. We don't dedup unknowns because
-        // each one might be a different stranger.
-        this.emitEvent({ type: 'unknown', timestamp: Date.now() });
+        const now = Date.now();
+        if (now - this.lastUnknownEmittedAt >= PRESENCE_DEDUP_WINDOW_MS) {
+          this.lastUnknownEmittedAt = now;
+          this.emitEvent({ type: 'unknown', timestamp: now });
+        }
       }
       return match;
     });

@@ -1688,7 +1688,7 @@ export type ClientEvent =
       };
     }
   | { type: 'session.continue'; payload: { sessionId: string; prompt: string; content?: ContentBlock[]; permissionModeOverride?: PermissionMode } }
-  | { type: 'session.steer'; payload: { sessionId: string; prompt: string; content?: ContentBlock[]; intentId?: string } }
+  | { type: 'session.steer'; payload: { sessionId: string; prompt: string; content?: ContentBlock[]; intentId?: string; permissionModeOverride?: PermissionMode } }
   | { type: 'session.stop'; payload: { sessionId: string } }
   | { type: 'session.delete'; payload: { sessionId: string } }
   | { type: 'session.batchDelete'; payload: { sessionIds: string[] } }

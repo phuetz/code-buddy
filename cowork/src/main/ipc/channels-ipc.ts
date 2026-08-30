@@ -414,14 +414,13 @@ export function registerChannelsIpcHandlers(): void {
       if (!isValidType(type)) return { ok: false, error: 'invalid channel type' };
       try {
         const { path, config } = readChannelsConfig(opts?.configPath);
+        const creds = await loadCredentialManager();
+        if (!creds) return { ok: false, error: 'secret store unavailable' };
+        // Supprimer le secret avant la configuration évite de signaler un
+        // succès alors qu'un jeton orphelin reste dans le trousseau.
+        creds.deleteCredential(channelSecretKey(type));
         config.channels = config.channels.filter((c) => c.type !== type);
         writeChannelsConfig(path, config);
-        const creds = await loadCredentialManager();
-        try {
-          creds?.deleteCredential(channelSecretKey(type));
-        } catch (error) {
-          logError('[channels.removeChannel] secret cleanup failed:', error);
-        }
         return { ok: true };
       } catch (error) {
         logError('[channels.removeChannel] failed:', error);

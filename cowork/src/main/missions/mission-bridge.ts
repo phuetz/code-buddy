@@ -62,6 +62,7 @@ export type VoiceMissionExecutor = (input: {
   prompt: string;
   cwd?: string;
   projectId?: string;
+  permissionMode?: VoiceBackgroundMissionInput['permissionMode'];
 }) => Promise<{ sessionId: string }>;
 
 export interface VoiceSessionOutcome {
@@ -182,6 +183,8 @@ export class MissionBridge {
         externalActionsRequireConfirmation: true,
         ...(input.cwd ? { cwd: input.cwd } : {}),
         ...(input.projectId ? { projectId: input.projectId } : {}),
+        ...(input.permissionMode ? { permissionMode: input.permissionMode } : {}),
+        ...(input.permissionMode ? { permissionMode: input.permissionMode } : {}),
       },
     });
 
@@ -430,7 +433,9 @@ export class MissionBridge {
   }
 }
 
-function voiceMissionLaunchContext(mission: Mission): Pick<VoiceBackgroundMissionInput, 'cwd' | 'projectId'> {
+function voiceMissionLaunchContext(
+  mission: Mission,
+): Pick<VoiceBackgroundMissionInput, 'cwd' | 'projectId' | 'permissionMode'> {
   const queued = [...mission.events]
     .reverse()
     .find((event) => event.type === VOICE_MISSION_EVENT.queued);
@@ -441,6 +446,13 @@ function voiceMissionLaunchContext(mission: Mission): Pick<VoiceBackgroundMissio
     ...(typeof data.cwd === 'string' && data.cwd.trim() ? { cwd: data.cwd } : {}),
     ...(typeof data.projectId === 'string' && data.projectId.trim()
       ? { projectId: data.projectId }
+      : {}),
+    ...(data.permissionMode === 'default' ||
+    data.permissionMode === 'plan' ||
+    data.permissionMode === 'acceptEdits' ||
+    data.permissionMode === 'dontAsk' ||
+    data.permissionMode === 'bypassPermissions'
+      ? { permissionMode: data.permissionMode }
       : {}),
   };
 }

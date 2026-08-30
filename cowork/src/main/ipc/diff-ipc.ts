@@ -12,10 +12,14 @@
  */
 
 import { ipcMain } from 'electron';
+import { promises as fs } from 'node:fs';
+import { isAbsolute, relative, sep } from 'node:path';
 import { parseUnifiedDiff, revertHunks, type ParsedHunk } from '../diff/hunk-diff-service';
 import { logError } from '../utils/logger';
 
-export function registerDiffIpcHandlers(): void {
+export function registerDiffIpcHandlers(
+  getWorkspaceRoot: () => string | null | undefined,
+): void {
   // Hunk diff accept/reject — Claude Cowork parity Phase 3 step 1
   ipcMain.handle('diff.parseHunks', async (_event, excerpt: string) => {
     try {
@@ -31,7 +35,21 @@ export function registerDiffIpcHandlers(): void {
       if (!filePath || !Array.isArray(hunks)) {
         return { success: false, method: 'none', error: 'Invalid arguments' };
       }
-      return revertHunks(filePath, hunks);
+      const workspaceRoot = getWorkspaceRoot();
+      if (!workspaceRoot) {
+        return { success: false, method: 'none', error: 'No active workspace' };
+      }
+
+      // Canonicaliser les deux côtés ferme aussi les évasions par lien symbolique.
+      const [canonicalRoot, canonicalFile] = await Promise.all([
+        fs.realpath(workspaceRoot),
+        fs.realpath(filePath),
+      ]);
+      const child = relative(canonicalRoot, canonicalFile);
+      if (child === '..' || child.startsWith(`..${sep}`) || isAbsolute(child)) {
+        return { success: false, method: 'none', error: 'File is outside the active workspace' };
+      }
+      return revertHunks(canonicalFile, hunks);
     } catch (err) {
       logError('[diff.revertHunks] failed:', err);
       return {

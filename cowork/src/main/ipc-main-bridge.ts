@@ -21,7 +21,7 @@ export function setPermissionResponder(responder: PermissionResponder | null): v
 /**
  * Tool-confirmation / credential events that MUST reach the renderer the user
  * is actually looking at, on time — a dropped or mis-routed one silently
- * expires (DesktopPermissionBridge times out at 90 s → "Demande expirée",
+ * expires (DesktopPermissionBridge attend jusqu'à 5 min 30 s côté distant,
  * and every gated `create_file` fails). The general event stream targets the
  * single canonical `getMainWindow()`, which is correct while exactly one app
  * window exists; but confirmations are load-bearing, so we deliver them to the
@@ -39,6 +39,42 @@ const CONFIRMATION_EVENT_TYPES = new Set<string>([
   'sudo.password.request',
   'sudo.password.dismiss',
 ]);
+const pendingConfirmationEvents = new Map<string, ServerEvent>();
+const MAX_PENDING_CONFIRMATIONS = 50;
+
+function confirmationEventKey(event: ServerEvent): string {
+  const payload = 'payload' in event
+    ? event.payload as { toolUseId?: string }
+    : undefined;
+  const family = event.type.startsWith('sudo.') ? 'sudo' : 'permission';
+  return `${family}:${payload?.toolUseId ?? event.type}`;
+}
+
+function queueConfirmationEvent(event: ServerEvent): void {
+  const key = confirmationEventKey(event);
+  if (event.type.endsWith('.dismiss')) {
+    pendingConfirmationEvents.delete(key);
+    return;
+  }
+  pendingConfirmationEvents.set(key, event);
+  while (pendingConfirmationEvents.size > MAX_PENDING_CONFIRMATIONS) {
+    const oldest = pendingConfirmationEvents.keys().next().value;
+    if (!oldest) break;
+    pendingConfirmationEvents.delete(oldest);
+  }
+}
+
+export function flushPendingConfirmations(): void {
+  const targets = confirmationTargets();
+  if (targets.length === 0 || pendingConfirmationEvents.size === 0) return;
+  const pending = [...pendingConfirmationEvents.values()];
+  pendingConfirmationEvents.clear();
+  for (const event of pending) {
+    for (const win of targets) {
+      win.webContents.send('server-event', event);
+    }
+  }
+}
 
 /** Live app windows that should receive a confirmation event: the focused
  *  window (the active renderer) plus the canonical main window, deduped and
@@ -66,14 +102,14 @@ function sendToLocalRenderer(event: ServerEvent): void {
   if (CONFIRMATION_EVENT_TYPES.has(event.type)) {
     const targets = confirmationTargets();
     if (targets.length > 0) {
+      flushPendingConfirmations();
       for (const win of targets) {
         win.webContents.send('server-event', event);
       }
       return;
     }
-    logError(
-      `[ipc-main-bridge] dropped confirmation ${event.type} — no live window (focused/main both unavailable)`
-    );
+    queueConfirmationEvent(event);
+    log(`[ipc-main-bridge] queued confirmation ${event.type} — no live window`);
     return;
   }
 

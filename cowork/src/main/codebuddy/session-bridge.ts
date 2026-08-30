@@ -25,6 +25,7 @@ import {
   CodeBuddyAdapter,
   type CodeBuddyMessage,
 } from './codebuddy-adapter';
+import { getMainWindow } from '../window-management';
 
 // ---------------------------------------------------------------------------
 // Payload shapes — mirror what the renderer already expects from agent-runner
@@ -72,11 +73,11 @@ interface ErrorPayload {
 
 export class SessionBridge {
   private adapter: CodeBuddyAdapter;
-  private mainWindow: BrowserWindow;
+  private initialWindow: BrowserWindow;
 
   constructor(adapter: CodeBuddyAdapter, mainWindow: BrowserWindow) {
     this.adapter = adapter;
-    this.mainWindow = mainWindow;
+    this.initialWindow = mainWindow;
   }
 
   /**
@@ -190,9 +191,15 @@ export class SessionBridge {
   // ---- IPC helpers -----------------------------------------------------------
 
   private send(channel: string, data: unknown): void {
-    if (!this.mainWindow.isDestroyed()) {
-      this.mainWindow.webContents.send(channel, data);
-    }
+    // Résoudre la fenêtre à chaque événement : elle peut être recréée pendant
+    // une session longue. Le paramètre historique reste un repli compatible.
+    const mainWindow = getMainWindow();
+    const target = mainWindow && !mainWindow.isDestroyed()
+      ? mainWindow
+      : this.initialWindow.isDestroyed()
+        ? null
+        : this.initialWindow;
+    target?.webContents.send(channel, data);
   }
 
   private sendSessionStatus(payload: SessionStatusPayload): void {

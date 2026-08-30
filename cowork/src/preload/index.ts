@@ -387,6 +387,27 @@ type VoiceboxPreviewResult =
 // Track registered callbacks to prevent duplicate listeners
 let registeredCallback: ((event: ServerEvent) => void) | null = null;
 let ipcListener: ((event: Electron.IpcRendererEvent, data: ServerEvent) => void) | null = null;
+const eventSubscribers = new Map<string, Set<(event: ServerEvent) => void>>();
+
+function ensureServerEventListener(): void {
+  if (ipcListener) return;
+  ipcListener = (_event: Electron.IpcRendererEvent, data: ServerEvent) => {
+    registeredCallback?.(data);
+    for (const callback of eventSubscribers.get(data.type) ?? []) {
+      callback(data);
+    }
+    for (const callback of eventSubscribers.get('*') ?? []) {
+      callback(data);
+    }
+  };
+  ipcRenderer.on('server-event', ipcListener);
+}
+
+function removeServerEventListenerIfUnused(): void {
+  if (registeredCallback || eventSubscribers.size > 0 || !ipcListener) return;
+  ipcRenderer.removeListener('server-event', ipcListener);
+  ipcListener = null;
+}
 
 // Allowlist of valid ClientEvent types to prevent spoofing arbitrary IPC channels
 const ALLOWED_CLIENT_EVENTS: ReadonlySet<string> = new Set<ClientEvent['type']>([
@@ -432,43 +453,41 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Receive events from main process - ensures only ONE listener
   on: (callback: (event: ServerEvent) => void) => {
-    // Remove previous listener if exists
-    if (ipcListener) {
-      console.log('[Preload] Removing previous listener');
-      ipcRenderer.removeListener('server-event', ipcListener);
-    }
-
     registeredCallback = callback;
-    ipcListener = (_: Electron.IpcRendererEvent, data: ServerEvent) => {
-      console.log('[Preload] Received event:', data.type);
-      if (registeredCallback) {
-        registeredCallback(data);
-      }
-    };
-
-    console.log('[Preload] Registering new listener');
-    ipcRenderer.on('server-event', ipcListener);
+    ensureServerEventListener();
 
     // Return cleanup function
     return () => {
-      console.log('[Preload] Cleanup called');
-      if (ipcListener) {
-        ipcRenderer.removeListener('server-event', ipcListener);
-        ipcListener = null;
+      if (registeredCallback === callback) {
         registeredCallback = null;
       }
+      removeServerEventListenerIfUnused();
     };
   },
 
-  // Additional event subscription for panels that need their own live feed
-  // without replacing the app-wide store listener registered through `on`.
-  onEvent: (callback: (event: ServerEvent) => void) => {
-    const listener = (_: Electron.IpcRendererEvent, data: ServerEvent) => {
-      callback(data);
-    };
-    ipcRenderer.on('server-event', listener);
+  // Un seul listener natif, puis distribution par type aux panneaux abonnés.
+  onEvent: (
+    typesOrCallback: string | string[] | ((event: ServerEvent) => void),
+    typedCallback?: (event: ServerEvent) => void,
+  ) => {
+    const callback = typeof typesOrCallback === 'function' ? typesOrCallback : typedCallback;
+    if (!callback) return () => undefined;
+    const types = typeof typesOrCallback === 'function'
+      ? ['*']
+      : Array.isArray(typesOrCallback) ? typesOrCallback : [typesOrCallback];
+    for (const type of types) {
+      const subscribers = eventSubscribers.get(type) ?? new Set();
+      subscribers.add(callback);
+      eventSubscribers.set(type, subscribers);
+    }
+    ensureServerEventListener();
     return () => {
-      ipcRenderer.removeListener('server-event', listener);
+      for (const type of types) {
+        const subscribers = eventSubscribers.get(type);
+        subscribers?.delete(callback);
+        if (subscribers?.size === 0) eventSubscribers.delete(type);
+      }
+      removeServerEventListenerIfUnused();
     };
   },
 
@@ -1381,6 +1400,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       prompt: string;
       cwd?: string;
       projectId?: string;
+      permissionMode?: Session['permissionMode'];
     }) => ipcRenderer.invoke('session.startBackground', payload),
     updateSettings: (
       sessionId: string,
@@ -5420,7 +5440,10 @@ declare global {
     electronAPI: {
       send: (event: ClientEvent) => void;
       on: (callback: (event: ServerEvent) => void) => () => void;
-      onEvent: (callback: (event: ServerEvent) => void) => () => void;
+      onEvent: (
+        typesOrCallback: string | string[] | ((event: ServerEvent) => void),
+        callback?: (event: ServerEvent) => void,
+      ) => () => void;
       invoke: <T>(event: ClientEvent) => Promise<T>;
       platform: NodeJS.Platform;
       getSystemTheme: () => Promise<{ shouldUseDarkColors: boolean }>;
@@ -6089,6 +6112,7 @@ declare global {
           prompt: string;
           cwd?: string;
           projectId?: string;
+          permissionMode?: Session['permissionMode'];
         }) => Promise<unknown>;
         updateSettings: (
           sessionId: string,
