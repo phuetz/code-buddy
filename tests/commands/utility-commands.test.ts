@@ -6,6 +6,14 @@ import { registerUtilityCommands } from '../../src/commands/cli/utility-commands
 const doctorMocks = vi.hoisted(() => ({
   runDoctorChecks: vi.fn(async () => []),
   runFixes: vi.fn(async () => []),
+  summarizeDoctorChecks: vi.fn(
+    (checks: Array<{ status: 'ok' | 'warn' | 'error'; optional?: boolean }>) => ({
+      passed: checks.filter(check => check.status === 'ok').length,
+      warnings: checks.filter(check => check.status === 'warn' && !check.optional).length,
+      errors: checks.filter(check => check.status === 'error').length,
+      optionalNotInstalled: checks.filter(check => check.status === 'warn' && check.optional).length,
+    })
+  ),
 }));
 
 vi.mock('../../src/doctor/index.js', () => doctorMocks);
