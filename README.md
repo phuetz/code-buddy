@@ -12,7 +12,7 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-BSL_1.1-feca57.svg?style=flat-square" alt="License: Business Source License 1.1"/></a>
   <a href="https://nodejs.org"><img src="https://img.shields.io/badge/dev_node-%3E%3D20-54a0ff?style=flat-square&logo=node.js" alt="Development: Node.js 20 or newer"/></a>
   <a href="docs/providers.md"><img src="https://img.shields.io/badge/cost-%240_with_your_subscriptions-00a67e?style=flat-square" alt="$0 with your subscriptions"/></a>
-  <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-5.3-5f27cd?style=flat-square&logo=typescript" alt="TypeScript"/></a>
+  <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-5.9-5f27cd?style=flat-square&logo=typescript" alt="TypeScript"/></a>
   <a href="https://deepwiki.com/phuetz/code-buddy/"><img src="https://deepwiki.com/badge.svg" alt="Ask DeepWiki"/></a>
 </p>
 
@@ -520,7 +520,9 @@ See [Development](docs/development.md) for architecture and coding conventions, 
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+Business Source License 1.1 (BUSL-1.1) — see [LICENSE](LICENSE). Self-host and personal/
+non-commercial use are free; providing Code Buddy as a commercial service to third parties is not
+permitted. Converts to Apache 2.0 on 2030-08-31. The bundled Python skills stay MIT (see their SKILL.md).
 
 ---
 
