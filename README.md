@@ -9,7 +9,7 @@
 <p align="center">
   <a href="https://www.npmjs.com/package/@phuetz/code-buddy"><img src="https://img.shields.io/npm/v/@phuetz/code-buddy.svg?style=flat-square&color=ff6b6b&label=version" alt="npm version"/></a>
   <a href="https://github.com/phuetz/code-buddy/actions/workflows/ci.yml?query=branch%3Amain"><img src="https://github.com/phuetz/code-buddy/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI on main"/></a>
-  <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-feca57.svg?style=flat-square" alt="License: MIT"/></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-BSL_1.1-feca57.svg?style=flat-square" alt="License: Business Source License 1.1"/></a>
   <a href="https://nodejs.org"><img src="https://img.shields.io/badge/dev_node-%3E%3D20-54a0ff?style=flat-square&logo=node.js" alt="Development: Node.js 20 or newer"/></a>
   <a href="docs/providers.md"><img src="https://img.shields.io/badge/cost-%240_with_your_subscriptions-00a67e?style=flat-square" alt="$0 with your subscriptions"/></a>
   <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-5.3-5f27cd?style=flat-square&logo=typescript" alt="TypeScript"/></a>
