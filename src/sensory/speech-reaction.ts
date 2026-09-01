@@ -30,6 +30,8 @@ import type { BaseEvent } from '../events/types.js';
 import { perceptionOf } from './reactions.js';
 import {
   resolveSpeechRecognitionEngine,
+  resolveSpeechLanguage,
+  resolveSpeechTranscriptionPlan,
   resolveParakeetModelDir,
   expandSpeechPath,
   type SpeechRecognitionEngine,
@@ -434,10 +436,7 @@ function defaultSpeechHotwords(): string {
 }
 
 export function resolveFasterWhisperOptions(): FasterWhisperTranscribeOptions {
-  const language =
-    process.env.CODEBUDDY_SPEECH_LANG?.trim() ||
-    process.env.CODEBUDDY_COMPANION_LANGUAGE?.trim() ||
-    'fr';
+  const language = resolveSpeechLanguage();
   const initialPrompt =
     process.env.CODEBUDDY_SPEECH_INITIAL_PROMPT?.trim() || defaultSpeechInitialPrompt();
   const hotwords = defaultSpeechHotwords();
@@ -1183,7 +1182,22 @@ async function transcribeWavRaw(
   // `engineOverride` lets ONE call path (e.g. long/video transcription) prefer a faster
   // engine WITHOUT touching the global `CODEBUDDY_SPEECH_ENGINE` default that the
   // companion/sensory hot paths read. Unset → the env-driven resolution (unchanged).
-  const engine = engineOverride ?? resolveSpeechRecognitionEngine();
+  const requestedEngine = engineOverride ?? resolveSpeechRecognitionEngine();
+  const plan = resolveSpeechTranscriptionPlan(requestedEngine);
+  const engine = plan.effectiveEngine;
+  if (plan.blockingReason) {
+    const message =
+      `requested=${plan.requestedEngine} language=${plan.language} reason=${plan.blockingReason}`;
+    logger.error(`[speech] STT unavailable: ${message}`);
+    throw new Error(`STT unavailable: ${message}`);
+  }
+  if (plan.fallbackReason) {
+    const hotwordCount = splitSpeechPhrases(defaultSpeechHotwords()).length;
+    logger.warn(
+      `[speech] STT fallback activated: requested=${plan.requestedEngine} effective=${engine} `
+      + `language=${plan.language} reason=${plan.fallbackReason} hotwords=${hotwordCount}`
+    );
+  }
   if (engine === 'faster-whisper') {
     return transcribeWavWithFasterWhisperRaw(wav);
   }
@@ -1355,7 +1369,11 @@ export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => v
         const rawText = job.presetText !== undefined ? job.presetText : await transcribe(job.wav);
         const normalizedText = normalizeSpeechTranscript(rawText);
         const text = normalizedText.text;
-        sttMs = elapsedSince(transcribeStartMs, now);
+        const ingestMs = elapsedSince(transcribeStartMs, now);
+        // On live `transcript_final`, the real decode happened upstream in
+        // buddy-sense. Report its payload timing instead of the near-zero cost of
+        // copying preset text into the brain.
+        sttMs = job.presetText !== undefined && decodeMs !== undefined ? decodeMs : ingestMs;
         const { recordCompanionPercept } = await import('../companion/percepts.js');
         const latencyPayload = {
           ...(captureStartedAtMs !== undefined ? { captureStartedAtMs } : {}),
@@ -1363,11 +1381,17 @@ export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => v
           ...(eventTimestamp !== undefined ? { eventReceivedAtMs: eventTimestamp } : {}),
           transcribeStartMs,
           sttMs,
+          ...(job.presetText !== undefined ? { ingestMs } : {}),
           ...(endpointMs !== undefined ? { endpointMs } : {}),
           ...(decodeMs !== undefined ? { decodeMs } : {}),
           ...(turnDetectionMs !== undefined ? { turnDetectionMs } : {}),
           ...(endpointMs !== undefined || decodeMs !== undefined || turnDetectionMs !== undefined
-            ? { inputReadyMs: (endpointMs ?? 0) + (turnDetectionMs ?? 0) + (decodeMs ?? 0) + sttMs }
+            ? {
+                inputReadyMs:
+                  (endpointMs ?? 0)
+                  + (turnDetectionMs ?? 0)
+                  + (job.presetText !== undefined ? sttMs : (decodeMs ?? 0) + sttMs),
+              }
             : {}),
           decisionMs,
           actionMs,
@@ -1484,7 +1508,28 @@ export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => v
           );
           return;
         }
-        logger.info(`[speech] heard (${sttMs}ms STT) → ${text}`);
+        const configuredPlan = resolveSpeechTranscriptionPlan();
+        const sttEngine = typeof payload.sttEngine === 'string'
+          ? payload.sttEngine
+          : job.presetText !== undefined
+            ? 'sherpa-rs'
+            : configuredPlan.effectiveEngine;
+        const sttLanguage = typeof payload.sttLanguage === 'string'
+          ? payload.sttLanguage
+          : configuredPlan.language;
+        const sttModel = typeof payload.sttModel === 'string'
+          ? payload.sttModel
+          : sttEngine === 'faster-whisper'
+            ? process.env.CODEBUDDY_SPEECH_MODEL?.trim() || 'base'
+            : resolveParakeetModelDir();
+        const hotwordsState = payload.hotwordsApplied === false
+          ? 'ignored'
+          : sttEngine === 'faster-whisper' && defaultSpeechHotwords()
+            ? 'applied'
+            : 'none';
+        logger.info(
+          `[speech] heard (${sttMs}ms STT, engine=${sttEngine}, model=${sttModel}, language=${sttLanguage}, hotwords=${hotwordsState}) → ${text}`
+        );
 
         const turnContext: VoiceTurnContext = {
           turnId,
@@ -1594,7 +1639,9 @@ export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => v
         }
         const totalMs = elapsedSince(transcribeStartMs, now);
         const inputReadyMs =
-          (endpointMs ?? 0) + (turnDetectionMs ?? 0) + (decodeMs ?? 0) + sttMs;
+          (endpointMs ?? 0)
+          + (turnDetectionMs ?? 0)
+          + (job.presetText !== undefined ? sttMs : (decodeMs ?? 0) + sttMs);
         const perceivedResponseMs =
           responseTiming?.firstAudioMs !== undefined
             ? inputReadyMs + decisionMs + responseTiming.firstAudioMs
@@ -1613,6 +1660,19 @@ export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => v
               text,
               ...(job.presetText !== undefined ? { live: true } : { wav: job.wav }),
               responded,
+              stt: {
+                requestedEngine:
+                  typeof payload.sttRequestedEngine === 'string'
+                    ? payload.sttRequestedEngine
+                    : configuredPlan.requestedEngine,
+                engine: sttEngine,
+                model: sttModel,
+                language: sttLanguage,
+                hotwords: hotwordsState,
+                ...(typeof payload.sttFallbackReason === 'string'
+                  ? { fallbackReason: payload.sttFallbackReason }
+                  : {}),
+              },
               ...(decisionReason ? { decisionReason } : {}),
               latency: {
                 ...latencyPayload,

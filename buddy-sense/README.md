@@ -99,13 +99,16 @@ binary built without `stt` ignores the `stt` arg and runs the daemon instead.
 
 The daemon's real-time ears. Instead of the batch `ear.py → WAV → worker` chain,
 `live-audio` keeps **one** ffmpeg reading the mic continuously (`-f pulse`, the same
-ffmpeg the camera sense uses — so no `cpal`, no `libasound2-dev`, no sudo), runs a
-streaming energy-VAD endpointer to carve the stream into utterances, decodes each
-one in-process (`stt`, ~120 ms) and broadcasts an `audio/transcript_final` event
-whose payload already carries the text — the Code Buddy side consumes it directly,
-no WAV round-trip. For utterances longer than 1200 ms, one bounded offline
-snapshot may also emit `transcript_partial`. It is explicitly unstable and used
-only to retarget model/tool prewarming; it never triggers a reply or action.
+ffmpeg the camera sense uses — so no `cpal`, no `libasound2-dev`, no sudo) and runs a
+streaming energy-VAD endpointer to carve the stream into utterances. With no explicit
+language pin, it decodes in-process with Parakeet/sherpa-rs and broadcasts an
+`audio/transcript_final`. When `CODEBUDDY_SPEECH_LANG` is pinned, the sherpa-rs API
+cannot enforce it, so `CODEBUDDY_SPEECH_FALLBACK=true` delegates a transient WAV in
+an `audio/speech_end` event to the brain's faster-whisper path. That path applies the
+language and configured hotwords, and both services log the fallback explicitly.
+For utterances longer than 1200 ms, the in-process path may also emit one bounded
+offline `transcript_partial`; it is used only to retarget model/tool prewarming and
+never triggers a reply or action.
 
 ```bash
 cargo build --release --features live-audio   # implies stt

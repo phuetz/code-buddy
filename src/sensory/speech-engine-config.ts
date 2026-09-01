@@ -17,6 +17,16 @@ import { join } from 'path';
 
 export type SpeechRecognitionEngine = 'faster-whisper' | 'parakeet' | 'sherpa-rs' | 'auto';
 
+export interface SpeechTranscriptionPlan {
+  requestedEngine: SpeechRecognitionEngine;
+  effectiveEngine: SpeechRecognitionEngine;
+  language: string;
+  languagePinned: boolean;
+  fallbackEnabled: boolean;
+  fallbackReason?: 'parakeet-language-pin-unsupported';
+  blockingReason?: 'parakeet-language-pin-unsupported-and-fallback-disabled';
+}
+
 /** Expand a leading `~` / `~/` to the home directory (leaves other paths as-is). */
 export function expandSpeechPath(value: string): string {
   if (value === '~') return homedir();
@@ -36,6 +46,58 @@ export function resolveSpeechRecognitionEngine(): SpeechRecognitionEngine {
   if (configured === 'faster-whisper' || configured === 'whisper') return 'faster-whisper';
   if (configured === 'auto') return 'auto';
   return 'faster-whisper';
+}
+
+export function resolveSpeechLanguage(env: NodeJS.ProcessEnv = process.env): string {
+  return (
+    env.CODEBUDDY_SPEECH_LANG?.trim()
+    || env.CODEBUDDY_COMPANION_LANGUAGE?.trim()
+    || 'fr'
+  );
+}
+
+/**
+ * Resolve the decoder that can actually honour an explicit language pin.
+ * Parakeet-TDT v3 is multilingual and auto-detects language, but the sherpa-rs
+ * transducer API has no per-request language field. When the operator explicitly
+ * pins a language and fallback is allowed, faster-whisper owns that turn.
+ */
+export function resolveSpeechTranscriptionPlan(
+  requestedEngine = resolveSpeechRecognitionEngine(),
+  env: NodeJS.ProcessEnv = process.env,
+): SpeechTranscriptionPlan {
+  const language = resolveSpeechLanguage(env);
+  const languagePinned = Boolean(
+    env.CODEBUDDY_SPEECH_LANG?.trim() || env.CODEBUDDY_COMPANION_LANGUAGE?.trim()
+  );
+  const fallbackEnabled = env.CODEBUDDY_SPEECH_FALLBACK?.trim().toLowerCase() !== 'false';
+  if (engineUsesParakeetModel(requestedEngine) && languagePinned) {
+    if (fallbackEnabled) {
+      return {
+        requestedEngine,
+        effectiveEngine: 'faster-whisper',
+        language,
+        languagePinned,
+        fallbackEnabled,
+        fallbackReason: 'parakeet-language-pin-unsupported',
+      };
+    }
+    return {
+      requestedEngine,
+      effectiveEngine: requestedEngine,
+      language,
+      languagePinned,
+      fallbackEnabled,
+      blockingReason: 'parakeet-language-pin-unsupported-and-fallback-disabled',
+    };
+  }
+  return {
+    requestedEngine,
+    effectiveEngine: requestedEngine,
+    language,
+    languagePinned,
+    fallbackEnabled,
+  };
 }
 
 /**

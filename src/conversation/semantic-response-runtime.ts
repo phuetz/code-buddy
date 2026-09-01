@@ -14,7 +14,10 @@ import type {
 } from '../providers/provider-catalog.js';
 import { logger } from '../utils/logger.js';
 import { sanitizeModelOutput, stripInvisibleChars } from '../utils/output-sanitizer.js';
-import { deriveArgumentObligations } from './argument-obligations.js';
+import {
+  deriveArgumentObligations,
+  isRuntimeEvidenceVerificationRequest,
+} from './argument-obligations.js';
 import { prepareConversationTurn } from './conversation-orchestrator.js';
 import {
   runSemanticResponseGate,
@@ -159,7 +162,7 @@ export function shouldReviewSemanticResponse(
 ): boolean {
   if (!isSemanticReviewEnabled(options)) return false;
   const plan = resolvePlan(input);
-  const profile = input.profile ?? inferProfile(plan);
+  const profile = input.profile ?? inferProfile(plan, input.request);
   return (
     shouldRunSemanticResponseGate({ plan, profile }) &&
     deriveArgumentObligations(plan, input.request).length > 0
@@ -179,7 +182,7 @@ export async function reviewSemanticResponse(
   const now = dependencies.now ?? Date.now;
   const startedAt = now();
   const plan = resolvePlan(input);
-  const profile = input.profile ?? inferProfile(plan);
+  const profile = input.profile ?? inferProfile(plan, input.request);
 
   if (!shouldReviewSemanticResponse({ ...input, plan, profile }, options)) {
     const result = runtimeResult(input.draft, 'skipped', 'ineligible');
@@ -364,8 +367,10 @@ function resolvePlan(input: SemanticResponseReviewCandidate): ConversationPlan {
   ).plan;
 }
 
-function inferProfile(plan: ConversationPlan): SemanticResponseProfile {
-  return plan.act === 'fresh_information' || plan.analysis.needsFreshContext
+function inferProfile(plan: ConversationPlan, request: string): SemanticResponseProfile {
+  return plan.act === 'fresh_information' ||
+    plan.analysis.needsFreshContext ||
+    isRuntimeEvidenceVerificationRequest(request)
     ? 'factual_analytical'
     : 'conversation';
 }

@@ -1303,6 +1303,39 @@ describe('speech reaction — live transcript_final (buddy-sense live-audio)', (
     }
   });
 
+  it('reports the upstream decode time instead of a misleading zero-millisecond STT', async () => {
+    const tmp = await mkdtemp(path.join(os.tmpdir(), 'speech-live-timing-'));
+    const unwire = wireSpeechReaction({
+      transcriber: async () => 'unused',
+      debounceMs: 0,
+      cwd: tmp,
+      now: () => 1000,
+    });
+    try {
+      transcriptFinal('Lisa, tu m’entends ?', {
+        decodeMs: 87,
+        endpointMs: 420,
+        sttEngine: 'sherpa-rs',
+        sttLanguage: 'auto',
+        hotwordsApplied: false,
+      });
+      const raw = await waitForPercept(
+        path.join(tmp, '.codebuddy', 'companion', 'percepts.jsonl'),
+        'Lisa, tu m’entends ?',
+      );
+      const percept = JSON.parse(raw.trim()) as {
+        payload: { latency: { sttMs: number; ingestMs: number; decodeMs: number } };
+      };
+      expect(percept.payload.latency).toMatchObject({
+        sttMs: 87,
+        ingestMs: 0,
+        decodeMs: 87,
+      });
+    } finally {
+      unwire();
+    }
+  });
+
   it('honours the shouldRespond gate on the live path too', async () => {
     const tmp = await mkdtemp(path.join(os.tmpdir(), 'speech-live-'));
     let heard = 0;

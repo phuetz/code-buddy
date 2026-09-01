@@ -146,6 +146,23 @@ describe('speech reaction — persistent STT workers', () => {
     expect(workerHarness.processes[1]?.command).toBe(command);
   });
 
+  it('routes an explicit French pin away from auto-detect-only Parakeet and propagates hotwords', async () => {
+    vi.stubEnv('CODEBUDDY_SPEECH_ENGINE', 'parakeet');
+    vi.stubEnv('CODEBUDDY_SPEECH_LANG', 'fr');
+    vi.stubEnv('CODEBUDDY_SPEECH_FALLBACK', 'true');
+    vi.stubEnv('CODEBUDDY_SPEECH_HOTWORDS', 'Lisa');
+    workerHarness.queueResponses('text');
+    const { transcribeWav } = await loadSpeechReaction();
+
+    await expect(transcribeWav('/tmp/lisa-fr.wav')).resolves.toBe('bonjour');
+
+    const workerScript = workerHarness.processes[0]?.args.join('\n') ?? '';
+    expect(workerScript).toContain('from faster_whisper import WhisperModel');
+    expect(workerScript).toContain('"language": "fr"');
+    expect(workerScript).toContain('"hotwords": "Lisa');
+    expect(workerScript).not.toContain('import sherpa_onnx');
+  });
+
   it('does not cascade auto STT when sherpa-rs returns an empty transcript', async () => {
     const modelDir = await mkdtemp(path.join(os.tmpdir(), 'speech-auto-model-'));
     vi.stubEnv('CODEBUDDY_PARAKEET_MODEL_DIR', modelDir);

@@ -1,6 +1,7 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import {
   resolveSpeechRecognitionEngine,
+  resolveSpeechTranscriptionPlan,
   resolveParakeetModelDir,
   engineUsesParakeetModel,
   expandSpeechPath,
@@ -43,6 +44,31 @@ describe('speech-engine-config — single source of truth (no more companion/spe
     expect(engineUsesParakeetModel('sherpa-rs')).toBe(true);
     expect(engineUsesParakeetModel('auto')).toBe(true);
     expect(engineUsesParakeetModel('faster-whisper')).toBe(false);
+  });
+
+  it('selects faster-whisper when Parakeet cannot honour the requested language', () => {
+    expect(resolveSpeechTranscriptionPlan('parakeet', {
+      CODEBUDDY_SPEECH_LANG: 'fr',
+      CODEBUDDY_SPEECH_FALLBACK: 'true',
+    })).toEqual({
+      requestedEngine: 'parakeet',
+      effectiveEngine: 'faster-whisper',
+      language: 'fr',
+      languagePinned: true,
+      fallbackEnabled: true,
+      fallbackReason: 'parakeet-language-pin-unsupported',
+    });
+    expect(resolveSpeechTranscriptionPlan('parakeet', {
+      CODEBUDDY_SPEECH_FALLBACK: 'true',
+    }).effectiveEngine).toBe('parakeet');
+    expect(resolveSpeechTranscriptionPlan('parakeet', {
+      CODEBUDDY_SPEECH_LANG: 'fr',
+      CODEBUDDY_SPEECH_FALLBACK: 'false',
+    })).toMatchObject({
+      effectiveEngine: 'parakeet',
+      fallbackEnabled: false,
+      blockingReason: 'parakeet-language-pin-unsupported-and-fallback-disabled',
+    });
   });
 
   it('resolves + expands the parakeet model dir', () => {

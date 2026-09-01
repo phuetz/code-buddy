@@ -1100,6 +1100,49 @@ describe('registerAIMessageHandler inbound roundtrip (GAP-7)', () => {
     );
   });
 
+  it('reviews a short Telegram claim about what the sensory system received', async () => {
+    process.env.CODEBUDDY_CONVERSATION_CHANNEL = 'telegram';
+    process.env.CODEBUDDY_CONVERSATION_CHANNEL_ID = 'chan-42';
+    resetCrossChannelConversationBridge();
+    const bridge = getCrossChannelConversationBridge();
+    await bridge.recordVoiceTurn({
+      role: 'assistant',
+      content: 'Je ne peux confirmer que ce que les traces me donnent.',
+    });
+    const request = "Il t'as transmis Lisa tu m'entends ?";
+    const unsupported = 'Oui, il me l’a transmis exactement.';
+    const honest = 'Je ne peux pas le confirmer sans une trace sensorielle correspondante.';
+    hoisted.processUserMessage.mockResolvedValue([{ role: 'assistant', content: unsupported }]);
+    hoisted.getChatHistory.mockReturnValue([
+      { type: 'user', content: request, timestamp: new Date() },
+      { type: 'assistant', content: unsupported, timestamp: new Date() },
+    ]);
+    hoisted.reviewSemanticResponse.mockResolvedValue({
+      response: honest,
+      outcome: 'revised',
+      reason: 'revision_completed',
+      revisionAttempts: 1,
+    });
+
+    const manager = makeManager();
+    await registerAIMessageHandler(manager as any);
+    const send = makeSuccessfulSend();
+    await manager.emit(makeMessage(request, 'sess-runtime-evidence'), {
+      type: 'telegram',
+      send,
+    });
+
+    expect(hoisted.reviewSemanticResponse).toHaveBeenCalledWith(
+      expect.objectContaining({
+        request,
+        draft: unsupported,
+        profile: 'factual_analytical',
+      }),
+    );
+    expect(send.mock.calls.map((call) => String(call[0]?.content ?? '')).join('\n'))
+      .toContain('sans une trace sensorielle');
+  });
+
   it('runs relationship safety after semantic revision before any Telegram persistence', async () => {
     process.env.CODEBUDDY_CONVERSATION_CHANNEL = 'telegram';
     process.env.CODEBUDDY_CONVERSATION_CHANNEL_ID = 'chan-42';

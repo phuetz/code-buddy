@@ -25,8 +25,9 @@ use std::io::{BufRead, BufReader, Read, Write};
 use std::os::unix::fs::OpenOptionsExt;
 use std::path::PathBuf;
 use std::process::{Child, ChildStdin, Command, Stdio};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc as std_mpsc;
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tokio::sync::mpsc;
 
 const SPEECH_SALIENCE: u8 = 200; // a final transcript is salient → never coalesced
@@ -71,6 +72,181 @@ const ADAPTIVE_NOISE_PERCENTILE: f64 = 0.10;
 const ADAPTIVE_OPEN_MULTIPLIER: f64 = 2.0;
 const ADAPTIVE_CLOSE_MULTIPLIER: f64 = 1.2;
 const MAX_EFFECTIVE_THRESHOLD: f64 = 0.95;
+static DELEGATED_WAV_SEQ: AtomicU64 = AtomicU64::new(0);
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum LiveSttDecision {
+    InProcessParakeet {
+        requested_engine: String,
+        language: String,
+    },
+    DelegateToBrain {
+        requested_engine: String,
+        language: String,
+        reason: &'static str,
+    },
+    Disabled {
+        requested_engine: String,
+        language: String,
+        reason: &'static str,
+    },
+}
+
+struct DelegatedStt {
+    requested_engine: String,
+    language: String,
+    reason: &'static str,
+    hotwords_configured: bool,
+}
+
+enum LiveTranscriber {
+    InProcessParakeet {
+        stt: crate::senses::stt::Stt,
+        model_dir: String,
+        requested_engine: String,
+        language: String,
+    },
+    DelegateToBrain(DelegatedStt),
+}
+
+fn env_enabled(value: Option<&str>, default_value: bool) -> bool {
+    let Some(value) = value.map(str::trim).filter(|value| !value.is_empty()) else {
+        return default_value;
+    };
+    matches!(
+        value.to_ascii_lowercase().as_str(),
+        "1" | "true" | "yes" | "on"
+    )
+}
+
+fn normalized_engine(value: Option<&str>) -> String {
+    match value
+        .map(str::trim)
+        .unwrap_or_default()
+        .to_ascii_lowercase()
+        .as_str()
+    {
+        "parakeet" | "sherpa-onnx" => "parakeet".to_string(),
+        "sherpa-rs" | "sherpa-rust" | "rust" => "sherpa-rs".to_string(),
+        "auto" => "auto".to_string(),
+        "faster-whisper" | "whisper" => "faster-whisper".to_string(),
+        _ => "faster-whisper".to_string(),
+    }
+}
+
+fn resolve_live_stt_decision_from(
+    engine: Option<&str>,
+    language: Option<&str>,
+    fallback: Option<&str>,
+) -> LiveSttDecision {
+    let requested_engine = normalized_engine(engine);
+    let pinned_language = language
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string);
+    let language = pinned_language
+        .clone()
+        .unwrap_or_else(|| "auto".to_string());
+    let fallback_enabled = env_enabled(fallback, true);
+    if requested_engine == "faster-whisper" {
+        return LiveSttDecision::DelegateToBrain {
+            requested_engine,
+            language,
+            reason: "configured-faster-whisper",
+        };
+    }
+    if pinned_language.is_some() {
+        return if fallback_enabled {
+            LiveSttDecision::DelegateToBrain {
+                requested_engine,
+                language,
+                reason: "parakeet-language-pin-unsupported",
+            }
+        } else {
+            LiveSttDecision::Disabled {
+                requested_engine,
+                language,
+                reason: "parakeet-language-pin-unsupported-and-fallback-disabled",
+            }
+        };
+    }
+    LiveSttDecision::InProcessParakeet {
+        requested_engine,
+        language,
+    }
+}
+
+fn resolve_live_stt_decision() -> LiveSttDecision {
+    resolve_live_stt_decision_from(
+        std::env::var("CODEBUDDY_SPEECH_ENGINE").ok().as_deref(),
+        std::env::var("CODEBUDDY_SPEECH_LANG")
+            .ok()
+            .or_else(|| std::env::var("CODEBUDDY_COMPANION_LANGUAGE").ok())
+            .as_deref(),
+        std::env::var("CODEBUDDY_SPEECH_FALLBACK").ok().as_deref(),
+    )
+}
+
+fn speech_hotwords_configured() -> bool {
+    [
+        "CODEBUDDY_ROBOT_NAME",
+        "CODEBUDDY_SPEECH_HOTWORDS",
+        "CODEBUDDY_SPEECH_HOTWORDS_FILE",
+    ]
+    .iter()
+    .any(|name| std::env::var(name).is_ok_and(|value| !value.trim().is_empty()))
+}
+
+fn expand_home_path(value: &str) -> PathBuf {
+    let trimmed = value.trim();
+    if trimmed == "~" {
+        return PathBuf::from(std::env::var("HOME").unwrap_or_else(|_| ".".to_string()));
+    }
+    if let Some(rest) = trimmed.strip_prefix("~/") {
+        return PathBuf::from(std::env::var("HOME").unwrap_or_else(|_| ".".to_string())).join(rest);
+    }
+    PathBuf::from(trimmed)
+}
+
+fn companion_audio_dir() -> PathBuf {
+    for name in ["BUDDY_EAR_WAV_DIR", "CODEBUDDY_COMPANION_AUDIO_DIR"] {
+        if let Ok(value) = std::env::var(name) {
+            if !value.trim().is_empty() {
+                return expand_home_path(&value);
+            }
+        }
+    }
+    expand_home_path("~/.codebuddy/companion")
+}
+
+fn write_delegated_wav(samples: &[i16]) -> Result<PathBuf, String> {
+    let directory = companion_audio_dir();
+    std::fs::create_dir_all(&directory)
+        .map_err(|error| format!("create {}: {error}", directory.display()))?;
+    let stamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis();
+    let sequence = DELEGATED_WAV_SEQ.fetch_add(1, Ordering::Relaxed) % 1_000_000;
+    let path = directory.join(format!("utt-{stamp}{sequence:06}.wav"));
+    let spec = hound::WavSpec {
+        channels: 1,
+        sample_rate: SAMPLE_RATE,
+        bits_per_sample: 16,
+        sample_format: hound::SampleFormat::Int,
+    };
+    let mut writer = hound::WavWriter::create(&path, spec)
+        .map_err(|error| format!("create {}: {error}", path.display()))?;
+    for sample in samples {
+        writer
+            .write_sample(*sample)
+            .map_err(|error| format!("write {}: {error}", path.display()))?;
+    }
+    writer
+        .finalize()
+        .map_err(|error| format!("finalize {}: {error}", path.display()))?;
+    Ok(path)
+}
 
 fn frame_samples() -> usize {
     ((SAMPLE_RATE as u64 * FRAME_MS) / 1000) as usize
@@ -691,17 +867,67 @@ fn capture_loop(
     // microphone: the semantic playback guard remains active and hearing never dies.
     let capture = resolve_capture_profile(&source);
     let source = capture.source.clone();
-    // Load the recognizer ONCE (≈1–2 s). On failure, log loudly and bow out so
-    // the daemon keeps beating instead of going deaf with a panic.
-    let model_dir = crate::senses::stt::resolve_model_dir();
-    let mut stt = match crate::senses::stt::Stt::load(&model_dir) {
-        Ok(s) => s,
-        Err(e) => {
-            eprintln!("[buddy-sense] live-audio: recognizer load failed ({e}); sense disabled");
+    // Parakeet-TDT v3 is multilingual and auto-detects language, but this
+    // sherpa-rs transducer API has no per-request language field. An explicit
+    // language pin is delegated as a WAV to the brain, whose faster-whisper
+    // path owns both language and hotword options.
+    let mut transcriber = match resolve_live_stt_decision() {
+        LiveSttDecision::InProcessParakeet {
+            requested_engine,
+            language,
+        } => {
+            let model_dir = crate::senses::stt::resolve_model_dir();
+            let stt = match crate::senses::stt::Stt::load(&model_dir) {
+                Ok(stt) => stt,
+                Err(error) => {
+                    eprintln!(
+                        "[buddy-sense] live-audio: recognizer load failed ({error}); sense disabled"
+                    );
+                    return;
+                }
+            };
+            eprintln!(
+                "[buddy-sense] live-audio: STT ready requested={requested_engine} effective=sherpa-rs language={language} model={model_dir}"
+            );
+            if speech_hotwords_configured() {
+                eprintln!(
+                    "[buddy-sense] live-audio: WARNING hotwords configured but not supported by the in-process Parakeet decoder"
+                );
+            }
+            LiveTranscriber::InProcessParakeet {
+                stt,
+                model_dir,
+                requested_engine,
+                language,
+            }
+        }
+        LiveSttDecision::DelegateToBrain {
+            requested_engine,
+            language,
+            reason,
+        } => {
+            eprintln!(
+                "[buddy-sense] live-audio: STT fallback activated requested={requested_engine} effective=faster-whisper language={language} reason={reason} hotwords={} transport=speech_end-wav",
+                speech_hotwords_configured(),
+            );
+            LiveTranscriber::DelegateToBrain(DelegatedStt {
+                requested_engine,
+                language,
+                reason,
+                hotwords_configured: speech_hotwords_configured(),
+            })
+        }
+        LiveSttDecision::Disabled {
+            requested_engine,
+            language,
+            reason,
+        } => {
+            eprintln!(
+                "[buddy-sense] live-audio: STT DISABLED requested={requested_engine} language={language} reason={reason}"
+            );
             return;
         }
     };
-    eprintln!("[buddy-sense] live-audio: recognizer ready ({model_dir})");
     let mut smart_turn = SmartTurnWorker::start().ok();
     if smart_turn.is_some() {
         eprintln!("[buddy-sense] live-audio: Smart Turn v3.2 ready");
@@ -791,15 +1017,17 @@ fn capture_loop(
                     // Exactly one speculative decode per utterance. Blocking for
                     // ~120 ms is bounded and ffmpeg's pipe buffers the live PCM.
                     partial_emitted = true;
-                    let decode_started = Instant::now();
-                    let text = stt.transcribe_pcm(SAMPLE_RATE, samples);
-                    let decode_ms = decode_started.elapsed().as_millis() as u64;
-                    if !text.is_empty()
-                        && tx
-                            .blocking_send(partial_transcript_event(&text, audio_ms, decode_ms))
-                            .is_err()
-                    {
-                        break;
+                    if let LiveTranscriber::InProcessParakeet { stt, .. } = &mut transcriber {
+                        let decode_started = Instant::now();
+                        let text = stt.transcribe_pcm(SAMPLE_RATE, samples);
+                        let decode_ms = decode_started.elapsed().as_millis() as u64;
+                        if !text.is_empty()
+                            && tx
+                                .blocking_send(partial_transcript_event(&text, audio_ms, decode_ms))
+                                .is_err()
+                        {
+                            break;
+                        }
                     }
                 }
             }
@@ -842,7 +1070,7 @@ fn capture_loop(
                     eprintln!("[buddy-sense] Smart Turn failed ({error}); falling back to VAD");
                     smart_turn = None;
                     if !emit_utterance(
-                        &mut stt,
+                        &mut transcriber,
                         &tx,
                         segment.samples,
                         endpoint_ms,
@@ -855,7 +1083,7 @@ fn capture_loop(
                 }
                 Some(Ok(value)) => {
                     if !emit_utterance(
-                        &mut stt,
+                        &mut transcriber,
                         &tx,
                         segment.samples,
                         endpoint_ms,
@@ -868,7 +1096,7 @@ fn capture_loop(
                 }
                 None => {
                     if !emit_utterance(
-                        &mut stt,
+                        &mut transcriber,
                         &tx,
                         segment.samples,
                         endpoint_ms,
@@ -889,7 +1117,7 @@ fn capture_loop(
                 let mut held = held_turn.take().expect("held turn exists");
                 held.decision.forced_after_hold = true;
                 if !emit_utterance(
-                    &mut stt,
+                    &mut transcriber,
                     &tx,
                     held.samples,
                     endpoint_ms,
@@ -910,7 +1138,7 @@ fn capture_loop(
     }
     if !final_utt.is_empty() {
         let _ = emit_utterance(
-            &mut stt,
+            &mut transcriber,
             &tx,
             final_utt,
             endpoint_ms,
@@ -985,8 +1213,33 @@ fn partial_transcript_event(text: &str, audio_ms: u64, decode_ms: u64) -> Sensor
     )
 }
 
+fn add_turn_decision_payload(
+    payload: &mut serde_json::Value,
+    turn_decision: Option<SmartTurnDecision>,
+) {
+    let (Some(decision), Some(object)) = (turn_decision, payload.as_object_mut()) else {
+        return;
+    };
+    object.insert(
+        "turnDetector".to_string(),
+        serde_json::json!("smart-turn-v3.2"),
+    );
+    object.insert(
+        "turnProbability".to_string(),
+        serde_json::json!(decision.probability),
+    );
+    object.insert(
+        "turnDetectionMs".to_string(),
+        serde_json::json!(decision.duration_ms),
+    );
+    object.insert(
+        "turnForcedAfterHold".to_string(),
+        serde_json::json!(decision.forced_after_hold),
+    );
+}
+
 fn emit_utterance(
-    stt: &mut crate::senses::stt::Stt,
+    transcriber: &mut LiveTranscriber,
     tx: &mpsc::Sender<SensoryEvent>,
     utt: Vec<i16>,
     endpoint_ms: u64,
@@ -995,54 +1248,90 @@ fn emit_utterance(
     capture: &CaptureProfile,
 ) -> bool {
     let audio_ms = (utt.len() as u64 * 1000) / SAMPLE_RATE as u64;
-    let decode_started = std::time::Instant::now();
-    let text = stt.transcribe_pcm(SAMPLE_RATE, &utt);
-    let decode_ms = decode_started.elapsed().as_millis() as u64;
-    if text.is_empty() {
-        return true; // silence / non-speech that slipped the gate — skip quietly
+    match transcriber {
+        LiveTranscriber::InProcessParakeet {
+            stt,
+            model_dir,
+            requested_engine,
+            language,
+        } => {
+            let decode_started = Instant::now();
+            let text = stt.transcribe_pcm(SAMPLE_RATE, &utt);
+            let decode_ms = decode_started.elapsed().as_millis() as u64;
+            if text.is_empty() {
+                return true; // silence / non-speech that slipped the gate
+            }
+            if std::env::var("BUDDY_SENSE_MIC_DEBUG").is_ok() {
+                eprintln!(
+                    "[buddy-sense] live-audio transcript engine=sherpa-rs language={language} audio={audio_ms}ms decode={decode_ms}ms: {text}"
+                );
+            }
+            let mut payload = serde_json::json!({
+                "text": text,
+                "ms": audio_ms,
+                "audioMs": audio_ms,
+                "decodeMs": decode_ms,
+                "endpointMs": endpoint_ms,
+                "aecActive": capture.aec_active,
+                "captureSourceClass": capture.source_class,
+                "sttRequestedEngine": requested_engine,
+                "sttEngine": "sherpa-rs",
+                "sttModel": model_dir,
+                "sttLanguage": language,
+                "hotwordsApplied": false,
+            });
+            if let Some(metadata) = endpoint {
+                add_endpoint_payload(&mut payload, metadata, endpoint_ms);
+            }
+            add_turn_decision_payload(&mut payload, turn_decision);
+            tx.blocking_send(SensoryEvent::new(
+                Modality::Audio,
+                "transcript_final",
+                SPEECH_SALIENCE,
+                payload,
+            ))
+            .is_ok()
+        }
+        LiveTranscriber::DelegateToBrain(route) => {
+            let write_started = Instant::now();
+            let wav = match write_delegated_wav(&utt) {
+                Ok(path) => path,
+                Err(error) => {
+                    eprintln!(
+                        "[buddy-sense] live-audio: delegated STT WAV write failed; utterance dropped: {error}"
+                    );
+                    return true;
+                }
+            };
+            let write_ms = write_started.elapsed().as_millis() as u64;
+            let mut payload = serde_json::json!({
+                "wav": wav,
+                "ms": audio_ms,
+                "audioMs": audio_ms,
+                "writeMs": write_ms,
+                "endpointMs": endpoint_ms,
+                "aecActive": capture.aec_active,
+                "captureSourceClass": capture.source_class,
+                "sttDelegated": true,
+                "sttRequestedEngine": route.requested_engine,
+                "sttEngine": "faster-whisper",
+                "sttLanguage": route.language,
+                "sttFallbackReason": route.reason,
+                "hotwordsConfigured": route.hotwords_configured,
+            });
+            if let Some(metadata) = endpoint {
+                add_endpoint_payload(&mut payload, metadata, endpoint_ms);
+            }
+            add_turn_decision_payload(&mut payload, turn_decision);
+            tx.blocking_send(SensoryEvent::new(
+                Modality::Audio,
+                "speech_end",
+                SPEECH_SALIENCE,
+                payload,
+            ))
+            .is_ok()
+        }
     }
-    // Validation aid: `BUDDY_SENSE_MIC_DEBUG=1` echoes each final to stderr so you
-    // can speak and see the transcript at the terminal, without a bus consumer.
-    if std::env::var("BUDDY_SENSE_MIC_DEBUG").is_ok() {
-        eprintln!("[buddy-sense] live-audio transcript ({audio_ms}ms audio, {decode_ms}ms decode): {text}");
-    }
-    let mut payload = serde_json::json!({
-        "text": text,
-        "ms": audio_ms,
-        "audioMs": audio_ms,
-        "decodeMs": decode_ms,
-        "endpointMs": endpoint_ms,
-        "aecActive": capture.aec_active,
-        "captureSourceClass": capture.source_class,
-    });
-    if let Some(metadata) = endpoint {
-        add_endpoint_payload(&mut payload, metadata, endpoint_ms);
-    }
-    if let (Some(decision), Some(object)) = (turn_decision, payload.as_object_mut()) {
-        object.insert(
-            "turnDetector".to_string(),
-            serde_json::json!("smart-turn-v3.2"),
-        );
-        object.insert(
-            "turnProbability".to_string(),
-            serde_json::json!(decision.probability),
-        );
-        object.insert(
-            "turnDetectionMs".to_string(),
-            serde_json::json!(decision.duration_ms),
-        );
-        object.insert(
-            "turnForcedAfterHold".to_string(),
-            serde_json::json!(decision.forced_after_hold),
-        );
-    }
-    let ev = SensoryEvent::new(
-        Modality::Audio,
-        "transcript_final",
-        SPEECH_SALIENCE,
-        payload,
-    );
-    tx.blocking_send(ev).is_ok()
 }
 
 #[cfg(test)]
@@ -1052,6 +1341,49 @@ mod tests {
     fn frames_of(level: i16, count: usize) -> Vec<Vec<i16>> {
         let n = frame_samples();
         (0..count).map(|_| vec![level; n]).collect()
+    }
+
+    #[test]
+    fn an_explicit_french_pin_is_delegated_to_the_language_aware_brain_stt() {
+        assert_eq!(
+            resolve_live_stt_decision_from(Some("parakeet"), Some("fr"), Some("true")),
+            LiveSttDecision::DelegateToBrain {
+                requested_engine: "parakeet".to_string(),
+                language: "fr".to_string(),
+                reason: "parakeet-language-pin-unsupported",
+            }
+        );
+        assert_eq!(
+            resolve_live_stt_decision_from(Some("parakeet"), None, Some("true")),
+            LiveSttDecision::InProcessParakeet {
+                requested_engine: "parakeet".to_string(),
+                language: "auto".to_string(),
+            }
+        );
+    }
+
+    #[test]
+    fn a_language_pin_fails_closed_when_fallback_is_disabled() {
+        assert_eq!(
+            resolve_live_stt_decision_from(Some("sherpa-rs"), Some("fr"), Some("false")),
+            LiveSttDecision::Disabled {
+                requested_engine: "sherpa-rs".to_string(),
+                language: "fr".to_string(),
+                reason: "parakeet-language-pin-unsupported-and-fallback-disabled",
+            }
+        );
+    }
+
+    #[test]
+    fn explicitly_configured_faster_whisper_is_delegated_without_a_fake_decode() {
+        assert_eq!(
+            resolve_live_stt_decision_from(Some("faster-whisper"), Some("fr"), Some("true")),
+            LiveSttDecision::DelegateToBrain {
+                requested_engine: "faster-whisper".to_string(),
+                language: "fr".to_string(),
+                reason: "configured-faster-whisper",
+            }
+        );
     }
 
     #[test]

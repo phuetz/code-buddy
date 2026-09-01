@@ -22,9 +22,15 @@ const DEFAULT_MODEL_SUBDIR: &str = ".codebuddy/asr/sherpa-onnx-nemo-parakeet-tdt
 const FEATURE_DIM: i32 = 128;
 
 pub fn resolve_model_dir() -> String {
-    if let Ok(dir) = std::env::var("BUDDY_SENSE_STT_MODEL_DIR") {
-        if !dir.trim().is_empty() {
-            return dir;
+    for name in [
+        "BUDDY_SENSE_STT_MODEL_DIR",
+        "CODEBUDDY_PARAKEET_MODEL_DIR",
+        "CODEBUDDY_SHERPA_ONNX_MODEL_DIR",
+    ] {
+        if let Ok(dir) = std::env::var(name) {
+            if !dir.trim().is_empty() {
+                return dir;
+            }
         }
     }
     let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());

@@ -12,7 +12,10 @@ import type { ChatEntry } from '../../agent/types.js';
 import type { CodeBuddyMessage } from '../../codebuddy/client.js';
 import type { CompanionRuntimeRoute } from '../../conversation/companion-model-routing.js';
 import type { PreparedConversationTurn } from '../../conversation/conversation-orchestrator.js';
-import { deriveArgumentObligations } from '../../conversation/argument-obligations.js';
+import {
+  deriveArgumentObligations,
+  isRuntimeEvidenceVerificationRequest,
+} from '../../conversation/argument-obligations.js';
 import { shouldRunSemanticResponseGate } from '../../conversation/semantic-response-gate.js';
 import type { ConversationTurn } from '../../conversation/types.js';
 import {
@@ -1632,11 +1635,17 @@ export async function registerAIMessageHandler(manager: import('../../channels/i
         ].filter((part): part is string => Boolean(part?.trim())).join('\n\n') || undefined;
       }
 
+      const semanticReviewProfile = isRuntimeEvidenceVerificationRequest(message.content)
+        ? ('factual_analytical' as const)
+        : undefined;
       const semanticReviewPlanned =
         companionConversation &&
         !prefetchedDirectResponse &&
         preparedConversation !== undefined &&
-        shouldRunSemanticResponseGate({ plan: preparedConversation.plan }) &&
+        shouldRunSemanticResponseGate({
+          plan: preparedConversation.plan,
+          ...(semanticReviewProfile ? { profile: semanticReviewProfile } : {}),
+        }) &&
         deriveArgumentObligations(preparedConversation.plan, message.content).length > 0;
       if (semanticReviewPlanned) {
         agent.suspendTranscriptSnapshots();
@@ -1749,6 +1758,7 @@ export async function registerAIMessageHandler(manager: import('../../channels/i
             request: message.content,
             draft: unreviewedResponse,
             plan: preparedConversation.plan,
+            ...(semanticReviewProfile ? { profile: semanticReviewProfile } : {}),
             history: companionConversationHistory,
             ...(semanticEvidence ? { evidence: semanticEvidence } : {}),
             mainProvider: {
