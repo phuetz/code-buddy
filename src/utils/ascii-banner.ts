@@ -1,6 +1,6 @@
 /**
  * Simple ASCII Banner Generator
- * MIT Licensed alternative to cfonts (GPL-3.0)
+ * In-house alternative to cfonts (GPL-3.0) — avoids any GPL dependency.
  *
  * Provides basic ASCII art text rendering without GPL license concerns.
  */

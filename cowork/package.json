@@ -165,7 +165,7 @@
     "yaml": "^2.9.0"
   },
   "author": "Code Buddy Cowork Team",
-  "license": "MIT",
+  "license": "BUSL-1.1",
   "optionalDependencies": {
     "bufferutil": "^4.1.0",
     "utf-8-validate": "^6.0.6"
