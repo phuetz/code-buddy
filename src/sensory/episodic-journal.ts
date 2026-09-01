@@ -186,11 +186,20 @@ async function defaultReadHeard(limit: number, cwd?: string): Promise<string[]> 
 export async function runEpisodeConsolidation(deps: EpisodeDeps = {}): Promise<EpisodeSummary | null> {
   const limit = deps.limit ?? 20;
   const now = deps.now ?? Date.now();
-  const conversation = deps.readConversation ? await deps.readConversation(limit) : [];
-  const heard =
-    conversation.length > 0
-      ? conversation.filter((turn) => turn.role === 'user').map((turn) => turn.content)
-      : await (deps.readHeard ?? defaultReadHeard)(limit, deps.cwd);
+  let conversation: ConversationTurn[];
+  let heard: string[];
+  try {
+    conversation = deps.readConversation ? await deps.readConversation(limit) : [];
+    heard =
+      conversation.length > 0
+        ? conversation.filter((turn) => turn.role === 'user').map((turn) => turn.content)
+        : await (deps.readHeard ?? defaultReadHeard)(limit, deps.cwd);
+  } catch (err) {
+    logger.warn(
+      `[episode] could not read recent dialogue: ${err instanceof Error ? err.message : String(err)}`,
+    );
+    return null;
+  }
   if (conversation.length === 0 && heard.length === 0) return null;
 
   const ep = conversation.length > 0
@@ -202,8 +211,10 @@ export async function runEpisodeConsolidation(deps: EpisodeDeps = {}): Promise<E
     try {
       const refined = await deps.refine(heard);
       if (refined && refined.trim()) ep.line = refined.trim();
-    } catch {
-      /* keep the template line */
+    } catch (err) {
+      logger.warn(
+        `[episode] refinement failed; keeping template: ${err instanceof Error ? err.message : String(err)}`,
+      );
     }
   }
 
@@ -236,7 +247,13 @@ export async function runEpisodeConsolidation(deps: EpisodeDeps = {}): Promise<E
     logger.warn(`[episode] could not persist episode: ${err instanceof Error ? err.message : String(err)}`);
   }
 
-  await (deps.promote ?? promoteEpisode)(ep);
+  try {
+    await (deps.promote ?? promoteEpisode)(ep);
+  } catch (err) {
+    logger.warn(
+      `[episode] could not promote episode: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
   logger.info(`[episode] consolidated ${ep.count} utterance(s) → ${ep.topics.length} topic(s)`);
   return ep;
 }

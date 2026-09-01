@@ -109,6 +109,67 @@ describe('runEpisodeConsolidation', () => {
     expect(ep!.line).toBe('On a surtout parlé du déploiement et des tests.');
   });
 
+  it('reports the template fallback when LLM refinement fails', async () => {
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+    try {
+      const ep = await runEpisodeConsolidation({
+        cwd: tmp,
+        readHeard: async () => ['du déploiement'],
+        refine: async () => {
+          throw new Error('refiner offline');
+        },
+        promote: async () => {},
+      });
+
+      expect(ep?.line).toContain('du déploiement');
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining('[episode] refinement failed; keeping template: refiner offline'),
+      );
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it('keeps the never-throws contract when the dialogue reader fails', async () => {
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+    try {
+      await expect(
+        runEpisodeConsolidation({
+          cwd: tmp,
+          readHeard: async () => {
+            throw new Error('percept store unavailable');
+          },
+          promote: async () => {},
+        }),
+      ).resolves.toBeNull();
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining('[episode] could not read recent dialogue: percept store unavailable'),
+      );
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it('keeps the never-throws contract when an injected promotion fails', async () => {
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+    try {
+      await expect(
+        runEpisodeConsolidation({
+          cwd: tmp,
+          readHeard: async () => ['un épisode à garder'],
+          promote: async () => {
+            throw new Error('memory offline');
+          },
+        }),
+      ).resolves.toMatchObject({ topics: ['un épisode à garder'] });
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining('[episode] could not promote episode: memory offline'),
+      );
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
   it('consolidates a complete cross-channel exchange and deduplicates an unchanged episode', async () => {
     const promoted: EpisodeSummary[] = [];
     const readConversation = async () => [
