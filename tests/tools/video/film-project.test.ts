@@ -191,6 +191,34 @@ describe('reduceQuality', () => {
     expect(r.durationOk).toBe(false);
   });
 
+  // Régression mesurée le 2026-09-01 : une vidéo de présentation dont la narration
+  // avait été sautée (Piper absent) est sortie à -54,7 dB et le gate a rendu PASS.
+  // -54,7 dB est inaudible en pratique — l'ancien seuil de -60 dB ne l'attrapait pas.
+  it('fails a film that is inaudible in practice, not just digitally silent', () => {
+    const r = reduceQuality({
+      probedDuration: 27.6,
+      hasAudio: true,
+      meanDb: -54.7,
+      maxDb: -40,
+      blackIntervals: [],
+    });
+    expect(r.silent).toBe(true);
+    expect(r.pass).toBe(false);
+  });
+
+  it('warns on an abnormally quiet mix without failing it', () => {
+    const r = reduceQuality({
+      probedDuration: 30,
+      hasAudio: true,
+      meanDb: -38,
+      maxDb: -12,
+      blackIntervals: [],
+    });
+    expect(r.silent).toBe(false);
+    expect(r.pass).toBe(true);
+    expect(r.warnings.some((w) => /quiet/i.test(w))).toBe(true);
+  });
+
   it('fails a silent film with an audio track', () => {
     const r = reduceQuality({
       probedDuration: 10,

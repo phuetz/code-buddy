@@ -321,10 +321,15 @@ function run(
   });
 }
 
+/** Mean level at or below which an audio track is inaudible in practice — the gate fails. */
+const SILENT_MEAN_DB = -50;
+/** Mean level at or below which a mix is suspiciously quiet — warned about, but still passes. */
+const QUIET_MEAN_DB = -35;
+
 /**
  * Reduce raw probe values into a pass/fail report (pure — the testable core of
  * the gate). `pass` requires: duration within 12%/±0.6s of expected (when
- * given), not silent when there is an audio track, and < 15% black frames.
+ * given), audible when there is an audio track (mean > -50 dB), and < 15% black frames.
  */
 export function reduceQuality(params: {
   probedDuration: number | null;
@@ -351,9 +356,15 @@ export function reduceQuality(params: {
     warnings.push('Could not probe the rendered film duration.');
   }
 
-  // "silent" = has an audio track but the mean level is essentially inaudible.
-  const silent = hasAudio && meanDb != null && meanDb <= -60;
+  // "silent" = has an audio track but nobody could hear it. The threshold is set by
+  // audibility, not by digital silence: a presentation film whose narration was skipped
+  // came out at -54.7 dB and passed the old -60 dB gate while being inaudible.
+  const silent = hasAudio && meanDb != null && meanDb <= SILENT_MEAN_DB;
   if (silent) warnings.push(`Audio track present but effectively silent (mean ${meanDb} dB).`);
+  else if (hasAudio && meanDb != null && meanDb <= QUIET_MEAN_DB) {
+    // Audible, but far below anything a viewer expects — worth surfacing, not worth failing.
+    warnings.push(`Audio is unusually quiet (mean ${meanDb} dB); check the voice track.`);
+  }
   if (hasAudio && maxDb != null && maxDb >= -0.1) {
     warnings.push(`Audio may be clipping (max ${maxDb} dB).`);
   }
