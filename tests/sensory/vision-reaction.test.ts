@@ -222,6 +222,37 @@ describe('vision reaction — motion → camera_analyze (debounced)', () => {
     }
   });
 
+  it('does not publish an in-flight analysis after teardown', async () => {
+    const tmp = await mkdtemp(path.join(os.tmpdir(), 'vision-teardown-'));
+    let release!: (analysis: { success: boolean; description?: string }) => void;
+    const analysis = new Promise<{ success: boolean; description?: string }>((resolve) => {
+      release = resolve;
+    });
+    const described: Array<Record<string, unknown>> = [];
+    const listenerId = getGlobalEventBus().on('sensory:perception', (event) => {
+      const metadata = event.metadata as Record<string, unknown> | undefined;
+      if (metadata?.kind === 'scene_described') described.push(metadata);
+    });
+    const unwire = wireVisionReaction({
+      analyzer: { analyze: async () => analysis },
+      debounceMs: 0,
+      cwd: tmp,
+    });
+
+    try {
+      motion();
+      await tick();
+      unwire();
+      release({ success: true, description: 'stale camera frame' });
+      await tick();
+
+      expect(described).toHaveLength(0);
+    } finally {
+      unwire();
+      getGlobalEventBus().off(listenerId);
+    }
+  });
+
   it('rejects a false analyzer success that contains no description', async () => {
     const tmp = await mkdtemp(path.join(os.tmpdir(), 'vision-empty-success-'));
     const described: Array<Record<string, unknown>> = [];

@@ -51,6 +51,7 @@ export function wireScreenReaction(options: ScreenReactionOptions = {}): () => v
   const now = options.now ?? (() => Date.now());
   let lastAt = Number.NEGATIVE_INFINITY;
   let inFlight = false;
+  let disposed = false;
 
   const id = bus.on('sensory:perception', (evt: BaseEvent) => {
     const p = perceptionOf(evt);
@@ -68,6 +69,7 @@ export function wireScreenReaction(options: ScreenReactionOptions = {}): () => v
     void (async () => {
       try {
         const analysis = options.analyzer ? await options.analyzer.analyze() : {};
+        if (disposed) return;
         const { recordCompanionPercept } = await import('../companion/percepts.js');
         const score = (p.payload as { score?: number } | undefined)?.score;
         await recordCompanionPercept(
@@ -91,6 +93,7 @@ export function wireScreenReaction(options: ScreenReactionOptions = {}): () => v
   });
 
   return () => {
+    disposed = true;
     bus.off(id);
   };
 }

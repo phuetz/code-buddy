@@ -96,4 +96,27 @@ describe('screen reaction — screen/change → percept (debounced)', () => {
       else process.env.CODEBUDDY_SCREEN_DEBOUNCE_MS = previous;
     }
   });
+
+  it('does not publish an in-flight analysis after teardown', async () => {
+    const tmp = await mkdtemp(path.join(os.tmpdir(), 'screen-teardown-'));
+    let release!: (analysis: { description?: string }) => void;
+    const analysis = new Promise<{ description?: string }>((resolve) => {
+      release = resolve;
+    });
+    const unwire = wireScreenReaction({
+      analyzer: { analyze: async () => analysis },
+      debounceMs: 0,
+      cwd: tmp,
+    });
+
+    change();
+    await tick();
+    unwire();
+    release({ description: 'stale desktop' });
+    await tick();
+
+    await expect(
+      readFile(path.join(tmp, '.codebuddy', 'companion', 'percepts.jsonl'), 'utf8'),
+    ).rejects.toMatchObject({ code: 'ENOENT' });
+  });
 });

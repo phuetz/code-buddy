@@ -169,6 +169,7 @@ export function wireVisionReaction(options: VisionReactionOptions = {}): () => v
   let lastAlertedDesc = '';
   let lastAt = Number.NEGATIVE_INFINITY;
   let inFlight = false;
+  let disposed = false;
 
   const id = bus.on('sensory:perception', (evt: BaseEvent) => {
     const p = perceptionOf(evt);
@@ -195,6 +196,7 @@ export function wireVisionReaction(options: VisionReactionOptions = {}): () => v
           'Décris la scène en une phrase courte : objets génériques et situation notable. Ne transcris aucun texte/OCR, nom, adresse, téléphone, identifiant, secret ou visage reconnu.',
           suppliedFrame,
         );
+        if (disposed) return;
         if (!res.success) return;
         const desc = res.description?.trim();
         if (!desc) {
@@ -260,6 +262,7 @@ export function wireVisionReaction(options: VisionReactionOptions = {}): () => v
   });
 
   return () => {
+    disposed = true;
     bus.off(id);
   };
 }
