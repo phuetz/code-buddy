@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { mkdtemp, readFile } from 'fs/promises';
 import os from 'os';
 import path from 'path';
@@ -9,6 +9,7 @@ import {
   type VisionAnalyzer,
 } from '../../src/sensory/vision-reaction.js';
 import { getGlobalEventBus } from '../../src/events/event-bus.js';
+import { logger } from '../../src/utils/logger.js';
 
 describe('shouldWireVisionReaction — the camera security invariant', () => {
   it('only enables the camera when explicitly on AND a token is set', () => {
@@ -102,6 +103,79 @@ describe('vision reaction — motion → camera_analyze (debounced)', () => {
       expect(calls).toBe(0);
     } finally {
       unwire();
+    }
+  });
+
+  it('rejects a false analyzer success that contains no description', async () => {
+    const tmp = await mkdtemp(path.join(os.tmpdir(), 'vision-empty-success-'));
+    const described: Array<Record<string, unknown>> = [];
+    const listenerId = getGlobalEventBus().on('sensory:perception', (event) => {
+      const metadata = event.metadata as Record<string, unknown> | undefined;
+      if (metadata?.kind === 'scene_described') described.push(metadata);
+    });
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+    const unwire = wireVisionReaction({
+      analyzer: { analyze: async () => ({ success: true }) },
+      debounceMs: 0,
+      cwd: tmp,
+    });
+    try {
+      motion();
+      await tick();
+
+      expect(described).toHaveLength(0);
+      expect(warn).toHaveBeenCalledWith(
+        '[vision] analyzer reported success without a description; ignoring result',
+      );
+    } finally {
+      unwire();
+      getGlobalEventBus().off(listenerId);
+      warn.mockRestore();
+    }
+  });
+
+  it('retries a similar Telegram alert when the previous delivery was rejected', async () => {
+    const tmp = await mkdtemp(path.join(os.tmpdir(), 'vision-alert-retry-'));
+    const previousToken = process.env.CODEBUDDY_SENSORY_ALERT_TOKEN;
+    const previousChat = process.env.CODEBUDDY_SENSORY_ALERT_CHAT;
+    const previousCooldown = process.env.CODEBUDDY_VISION_ALERT_COOLDOWN_MS;
+    const previousSimilarity = process.env.CODEBUDDY_VISION_ALERT_SIM;
+    const originalFetch = globalThis.fetch;
+    let fetchCalls = 0;
+    process.env.CODEBUDDY_SENSORY_ALERT_TOKEN = 'test-token';
+    process.env.CODEBUDDY_SENSORY_ALERT_CHAT = 'test-chat';
+    process.env.CODEBUDDY_VISION_ALERT_COOLDOWN_MS = '300000';
+    process.env.CODEBUDDY_VISION_ALERT_SIM = '0.6';
+    globalThis.fetch = (async () => {
+      fetchCalls += 1;
+      return { ok: false } as Response;
+    }) as typeof fetch;
+    let clock = 1000;
+    const unwire = wireVisionReaction({
+      analyzer: { analyze: async () => ({ success: true, description: 'la même scène calme' }) },
+      debounceMs: 0,
+      cwd: tmp,
+      now: () => clock,
+    });
+    try {
+      motion();
+      await tick();
+      clock += 1000;
+      motion();
+      await tick();
+
+      expect(fetchCalls).toBe(2);
+    } finally {
+      unwire();
+      globalThis.fetch = originalFetch;
+      if (previousToken === undefined) delete process.env.CODEBUDDY_SENSORY_ALERT_TOKEN;
+      else process.env.CODEBUDDY_SENSORY_ALERT_TOKEN = previousToken;
+      if (previousChat === undefined) delete process.env.CODEBUDDY_SENSORY_ALERT_CHAT;
+      else process.env.CODEBUDDY_SENSORY_ALERT_CHAT = previousChat;
+      if (previousCooldown === undefined) delete process.env.CODEBUDDY_VISION_ALERT_COOLDOWN_MS;
+      else process.env.CODEBUDDY_VISION_ALERT_COOLDOWN_MS = previousCooldown;
+      if (previousSimilarity === undefined) delete process.env.CODEBUDDY_VISION_ALERT_SIM;
+      else process.env.CODEBUDDY_VISION_ALERT_SIM = previousSimilarity;
     }
   });
 

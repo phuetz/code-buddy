@@ -156,7 +156,11 @@ export function wireVisionReaction(options: VisionReactionOptions = {}): () => v
           suppliedFrame,
         );
         if (!res.success) return;
-        const desc = res.description ?? '(no description)';
+        const desc = res.description?.trim();
+        if (!desc) {
+          logger.warn('[vision] analyzer reported success without a description; ignoring result');
+          return;
+        }
         const alertDescription = redactVisionDescriptionForEgress(desc, 900) ?? '(description indisponible)';
         const frame = await safeCameraKeyframePath(res.imagePath ?? suppliedFrame);
         // Publish perception before optional journaling/notification work. A
@@ -191,12 +195,19 @@ export function wireVisionReaction(options: VisionReactionOptions = {}): () => v
         logger.info(`[vision] motion analyzed → ${desc}`);
         // Alert only on a meaningfully different scene OR after the cooldown.
         if (sceneSimilarity(desc, lastAlertedDesc) < alertSimThreshold || now() - lastAlertAt >= alertCooldownMs) {
-          lastAlertAt = now();
-          lastAlertedDesc = desc;
-          await sendTelegramAlert(
+          const delivered = await sendTelegramAlert(
             `${pickMotionPrefix()}${payload.camera ? ' (caméra locale)' : ''} : ${alertDescription}`,
             telegramVisionPhotoPath(frame),
           );
+          if (delivered) {
+            lastAlertAt = now();
+            lastAlertedDesc = desc;
+          } else if (
+            process.env.CODEBUDDY_SENSORY_ALERT_TOKEN &&
+            process.env.CODEBUDDY_SENSORY_ALERT_CHAT
+          ) {
+            logger.warn('[vision] Telegram alert was not delivered; cooldown not armed');
+          }
         } else {
           logger.info('[vision] alert suppressed (scène similaire dans le cooldown)');
         }
