@@ -3,8 +3,8 @@
  * short "what we talked about" line (distinct from dreaming's sensor stats) and promote it to memory.
  * Pure core + a best-effort pass, all seams injected (no real percept store / memory / home dir).
  */
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { mkdirSync, mkdtempSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
@@ -14,6 +14,7 @@ import {
   type EpisodeSummary,
 } from '../../src/sensory/episodic-journal.js';
 import { recordCompanionPercept } from '../../src/companion/percepts.js';
+import { logger } from '../../src/utils/logger.js';
 
 describe('summarizeEpisode', () => {
   it('keeps the last few distinct utterances and drops consecutive duplicates', () => {
@@ -167,5 +168,28 @@ describe('runEpisodeConsolidation', () => {
     expect(episode?.topics).toEqual(['Buddy, résume mon travail', 'Oui, continue']);
     expect(episode?.line).not.toContain('émission');
     expect(promoted).toHaveLength(1);
+  });
+
+  it('fails closed instead of growing the journal when rotation cannot complete', async () => {
+    const dir = join(tmp, '.codebuddy', 'companion');
+    const journal = join(dir, 'episodes.jsonl');
+    const oversized = 'x'.repeat(512 * 1024 + 1);
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(journal, oversized, 'utf8');
+    mkdirSync(`${journal}.1`); // rename(file, directory) fails deterministically
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+
+    try {
+      await runEpisodeConsolidation({
+        cwd: tmp,
+        readHeard: async () => ['un nouvel épisode'],
+        promote: async () => {},
+      });
+
+      expect(statSync(journal).size).toBe(Buffer.byteLength(oversized));
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('[episode] could not persist episode:'));
+    } finally {
+      warn.mockRestore();
+    }
   });
 });

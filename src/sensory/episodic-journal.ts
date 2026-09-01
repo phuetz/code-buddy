@@ -223,7 +223,8 @@ export async function runEpisodeConsolidation(deps: EpisodeDeps = {}): Promise<E
     try {
       const info = await stat(file);
       if (info.size > 512 * 1024) await rename(file, `${file}.1`); // rotate, one backup (disk-guard lesson)
-    } catch {
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
       /* no file yet */
     }
     await appendFile(file, `${JSON.stringify(ep)}\n`, { encoding: 'utf8', mode: 0o600 });

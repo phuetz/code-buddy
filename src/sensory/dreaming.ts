@@ -96,7 +96,8 @@ export async function runDreamingPass(options: DreamingOptions = {}): Promise<Dr
     try {
       const info = await stat(file);
       if (info.size > 512 * 1024) await rename(file, `${file}.1`);
-    } catch {
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
       /* no file yet */
     }
     await appendFile(file, `${JSON.stringify(summary)}\n`, 'utf8');

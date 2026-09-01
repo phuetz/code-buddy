@@ -1,11 +1,12 @@
-import { describe, it, expect, afterEach } from 'vitest';
-import { mkdtemp, readFile } from 'fs/promises';
+import { describe, it, expect, afterEach, vi } from 'vitest';
+import { mkdir, mkdtemp, readFile, stat, writeFile } from 'fs/promises';
 import os from 'os';
 import path from 'path';
 import { consolidate, runDreamingPass, promoteSalientDream } from '../../src/sensory/dreaming.js';
 import { getSensoryMemory } from '../../src/sensory/sensory-memory.js';
 import { getMemoryManager, resetMemoryManagerForTests } from '../../src/memory/persistent-memory.js';
 import type { Perception } from '../../src/sensory/reactions.js';
+import { logger } from '../../src/utils/logger.js';
 
 describe('dreaming — consolidation', () => {
   it('consolidates a window (counts, salient, avg load, span on receivedAt)', () => {
@@ -61,6 +62,28 @@ describe('dreaming — consolidation', () => {
       },
     });
     expect(promoted).toBe(false); // no salient events → no promotion
+  });
+
+  it('fails closed instead of growing the journal when rotation cannot complete', async () => {
+    const tmp = await mkdtemp(path.join(os.tmpdir(), 'dream-rotation-'));
+    const dir = path.join(tmp, '.codebuddy', 'companion');
+    const journal = path.join(dir, 'dreams.jsonl');
+    const oversized = 'x'.repeat(512 * 1024 + 1);
+    await mkdir(dir, { recursive: true });
+    await writeFile(journal, oversized, 'utf8');
+    await mkdir(`${journal}.1`); // rename(file, directory) fails deterministically
+    getSensoryMemory().drain();
+    getSensoryMemory().push({ modality: 'vital', kind: 'heartbeat', receivedAt: 1 });
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+
+    try {
+      await runDreamingPass({ cwd: tmp, promote: async () => {} });
+
+      expect((await stat(journal)).size).toBe(Buffer.byteLength(oversized));
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('[dreaming] could not persist dream:'));
+    } finally {
+      warn.mockRestore();
+    }
   });
 });
 
