@@ -6,6 +6,8 @@ export interface VoiceInteraction {
   examples: string[];
   reply: string;
   patterns: RegExp[];
+  /** This phrase needs the history-aware agent path; a canned reply would only promise an action. */
+  requiresAgent?: boolean;
 }
 
 export function normalizeVoiceInteractionText(text: string): string {
@@ -218,6 +220,7 @@ export const VOICE_INTERACTIONS: VoiceInteraction[] = [
   {
     id: 'autonomy',
     category: 'work',
+    requiresAgent: true,
     examples: ['Continue en autonomie', 'Travaille pendant mon absence'],
     reply: 'Je continue en autonomie et je garde les preuves pour ton retour.',
     patterns: [
@@ -229,6 +232,7 @@ export const VOICE_INTERACTIONS: VoiceInteraction[] = [
   {
     id: 'real-tests',
     category: 'work',
+    requiresAgent: true,
     examples: ['Teste en vrai', 'Pas de mock'],
     reply: 'Tu as raison. Je vais tester en vrai et garder une preuve.',
     patterns: [
@@ -240,6 +244,7 @@ export const VOICE_INTERACTIONS: VoiceInteraction[] = [
   {
     id: 'shorter',
     category: 'voice-control',
+    requiresAgent: true,
     examples: ['Réponds plus court', 'Fais plus court'],
     reply: 'D’accord, je vais faire plus court.',
     patterns: [
@@ -258,6 +263,7 @@ export const VOICE_INTERACTIONS: VoiceInteraction[] = [
   {
     id: 'repeat',
     category: 'voice-control',
+    requiresAgent: true,
     examples: ['Répète', 'Je n’ai pas compris'],
     reply: 'D’accord. Je peux répéter plus lentement.',
     patterns: [
@@ -274,6 +280,12 @@ export function matchVoiceInteraction(heard: string): string | null {
   if (!text) return null;
   for (const interaction of VOICE_INTERACTIONS) {
     if (interaction.patterns.some((pattern) => pattern.test(text))) {
+      if (
+        interaction.requiresAgent ||
+        (interaction.id !== 'stop-speaking' && REAL_WORK_REQUEST.test(text))
+      ) {
+        return null;
+      }
       return interaction.reply;
     }
   }
@@ -282,5 +294,9 @@ export function matchVoiceInteraction(heard: string): string | null {
 }
 
 export const VOICE_INTERACTION_PREWARM_PHRASES = [
-  ...new Set(VOICE_INTERACTIONS.map((interaction) => interaction.reply)),
+  ...new Set(
+    VOICE_INTERACTIONS
+      .filter((interaction) => !interaction.requiresAgent)
+      .map((interaction) => interaction.reply),
+  ),
 ];
