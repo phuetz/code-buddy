@@ -496,7 +496,8 @@ export async function recordCompanionPercept<TPayload extends Record<string, unk
   try {
     const info = await stat(storePath);
     if (info.size > 1024 * 1024) await rename(storePath, `${storePath}.1`);
-  } catch {
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
     /* no file yet */
   }
   await appendFile(storePath, `${JSON.stringify(storedPercept)}\n`, 'utf8');
