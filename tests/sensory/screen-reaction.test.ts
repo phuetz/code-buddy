@@ -68,4 +68,32 @@ describe('screen reaction — screen/change → percept (debounced)', () => {
       unwire();
     }
   });
+
+  it('falls back to the safe debounce when the environment value is invalid', async () => {
+    const tmp = await mkdtemp(path.join(os.tmpdir(), 'screen-invalid-debounce-'));
+    const previous = process.env.CODEBUDDY_SCREEN_DEBOUNCE_MS;
+    process.env.CODEBUDDY_SCREEN_DEBOUNCE_MS = 'not-a-number';
+    let calls = 0;
+    const unwire = wireScreenReaction({
+      analyzer: {
+        analyze: async () => {
+          calls += 1;
+          return {};
+        },
+      },
+      cwd: tmp,
+      now: () => 1000,
+    });
+    try {
+      change();
+      await tick();
+      change();
+      await tick();
+      expect(calls).toBe(1);
+    } finally {
+      unwire();
+      if (previous === undefined) delete process.env.CODEBUDDY_SCREEN_DEBOUNCE_MS;
+      else process.env.CODEBUDDY_SCREEN_DEBOUNCE_MS = previous;
+    }
+  });
 });

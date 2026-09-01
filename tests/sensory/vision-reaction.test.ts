@@ -106,6 +106,122 @@ describe('vision reaction — motion → camera_analyze (debounced)', () => {
     }
   });
 
+  it('falls back to the safe debounce when the environment value is invalid', async () => {
+    const tmp = await mkdtemp(path.join(os.tmpdir(), 'vision-invalid-debounce-'));
+    const previousDebounce = process.env.CODEBUDDY_VISION_DEBOUNCE_MS;
+    const previousToken = process.env.CODEBUDDY_SENSORY_ALERT_TOKEN;
+    const previousChat = process.env.CODEBUDDY_SENSORY_ALERT_CHAT;
+    process.env.CODEBUDDY_VISION_DEBOUNCE_MS = 'not-a-number';
+    delete process.env.CODEBUDDY_SENSORY_ALERT_TOKEN;
+    delete process.env.CODEBUDDY_SENSORY_ALERT_CHAT;
+    let calls = 0;
+    const unwire = wireVisionReaction({
+      analyzer: {
+        analyze: async () => {
+          calls += 1;
+          return { success: true, description: 'une scène' };
+        },
+      },
+      cwd: tmp,
+      now: () => 1000,
+    });
+    try {
+      motion();
+      await tick();
+      motion();
+      await tick();
+      expect(calls).toBe(1);
+    } finally {
+      unwire();
+      if (previousDebounce === undefined) delete process.env.CODEBUDDY_VISION_DEBOUNCE_MS;
+      else process.env.CODEBUDDY_VISION_DEBOUNCE_MS = previousDebounce;
+      if (previousToken === undefined) delete process.env.CODEBUDDY_SENSORY_ALERT_TOKEN;
+      else process.env.CODEBUDDY_SENSORY_ALERT_TOKEN = previousToken;
+      if (previousChat === undefined) delete process.env.CODEBUDDY_SENSORY_ALERT_CHAT;
+      else process.env.CODEBUDDY_SENSORY_ALERT_CHAT = previousChat;
+    }
+  });
+
+  it('falls back to the safe alert cooldown when the environment value is invalid', async () => {
+    const tmp = await mkdtemp(path.join(os.tmpdir(), 'vision-invalid-cooldown-'));
+    const previousToken = process.env.CODEBUDDY_SENSORY_ALERT_TOKEN;
+    const previousChat = process.env.CODEBUDDY_SENSORY_ALERT_CHAT;
+    const previousCooldown = process.env.CODEBUDDY_VISION_ALERT_COOLDOWN_MS;
+    const originalFetch = globalThis.fetch;
+    process.env.CODEBUDDY_SENSORY_ALERT_TOKEN = 'test-token';
+    process.env.CODEBUDDY_SENSORY_ALERT_CHAT = 'test-chat';
+    process.env.CODEBUDDY_VISION_ALERT_COOLDOWN_MS = 'invalid';
+    let fetchCalls = 0;
+    globalThis.fetch = (async () => {
+      fetchCalls += 1;
+      return { ok: true } as Response;
+    }) as typeof fetch;
+    let clock = 1000;
+    const unwire = wireVisionReaction({
+      analyzer: { analyze: async () => ({ success: true, description: 'la même scène' }) },
+      debounceMs: 0,
+      cwd: tmp,
+      now: () => clock,
+    });
+    try {
+      motion();
+      await tick();
+      clock += 300_001;
+      motion();
+      await tick();
+      expect(fetchCalls).toBe(2);
+    } finally {
+      unwire();
+      globalThis.fetch = originalFetch;
+      if (previousToken === undefined) delete process.env.CODEBUDDY_SENSORY_ALERT_TOKEN;
+      else process.env.CODEBUDDY_SENSORY_ALERT_TOKEN = previousToken;
+      if (previousChat === undefined) delete process.env.CODEBUDDY_SENSORY_ALERT_CHAT;
+      else process.env.CODEBUDDY_SENSORY_ALERT_CHAT = previousChat;
+      if (previousCooldown === undefined) delete process.env.CODEBUDDY_VISION_ALERT_COOLDOWN_MS;
+      else process.env.CODEBUDDY_VISION_ALERT_COOLDOWN_MS = previousCooldown;
+    }
+  });
+
+  it('falls back to the safe similarity threshold when the environment value is out of range', async () => {
+    const tmp = await mkdtemp(path.join(os.tmpdir(), 'vision-invalid-similarity-'));
+    const previousToken = process.env.CODEBUDDY_SENSORY_ALERT_TOKEN;
+    const previousChat = process.env.CODEBUDDY_SENSORY_ALERT_CHAT;
+    const previousSimilarity = process.env.CODEBUDDY_VISION_ALERT_SIM;
+    const originalFetch = globalThis.fetch;
+    process.env.CODEBUDDY_SENSORY_ALERT_TOKEN = 'test-token';
+    process.env.CODEBUDDY_SENSORY_ALERT_CHAT = 'test-chat';
+    process.env.CODEBUDDY_VISION_ALERT_SIM = '-1';
+    let fetchCalls = 0;
+    globalThis.fetch = (async () => {
+      fetchCalls += 1;
+      return { ok: true } as Response;
+    }) as typeof fetch;
+    let description = 'un bureau calme';
+    const unwire = wireVisionReaction({
+      analyzer: { analyze: async () => ({ success: true, description }) },
+      debounceMs: 0,
+      cwd: tmp,
+      now: () => 1000,
+    });
+    try {
+      motion();
+      await tick();
+      description = 'un jardin éclairé';
+      motion();
+      await tick();
+      expect(fetchCalls).toBe(2);
+    } finally {
+      unwire();
+      globalThis.fetch = originalFetch;
+      if (previousToken === undefined) delete process.env.CODEBUDDY_SENSORY_ALERT_TOKEN;
+      else process.env.CODEBUDDY_SENSORY_ALERT_TOKEN = previousToken;
+      if (previousChat === undefined) delete process.env.CODEBUDDY_SENSORY_ALERT_CHAT;
+      else process.env.CODEBUDDY_SENSORY_ALERT_CHAT = previousChat;
+      if (previousSimilarity === undefined) delete process.env.CODEBUDDY_VISION_ALERT_SIM;
+      else process.env.CODEBUDDY_VISION_ALERT_SIM = previousSimilarity;
+    }
+  });
+
   it('rejects a false analyzer success that contains no description', async () => {
     const tmp = await mkdtemp(path.join(os.tmpdir(), 'vision-empty-success-'));
     const described: Array<Record<string, unknown>> = [];

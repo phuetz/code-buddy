@@ -54,6 +54,38 @@ export interface VisionReactionOptions {
   now?: () => number;
 }
 
+const DEFAULT_VISION_DEBOUNCE_MS = 8000;
+const DEFAULT_VISION_ALERT_COOLDOWN_MS = 300_000;
+const DEFAULT_VISION_ALERT_SIMILARITY = 0.6;
+
+function configuredNumber(value: number | string | undefined): number {
+  return typeof value === 'string' && !value.trim() ? Number.NaN : Number(value);
+}
+
+function resolveNonNegativeMs(
+  value: number | string | undefined,
+  fallback: number,
+  label: string,
+): number {
+  const parsed = configuredNumber(value);
+  if (Number.isFinite(parsed) && parsed >= 0) return parsed;
+  if (value !== undefined) {
+    logger.warn(`[vision] invalid ${label} ${JSON.stringify(value)}; using ${fallback}`);
+  }
+  return fallback;
+}
+
+function resolveSimilarityThreshold(value: string | undefined): number {
+  const parsed = configuredNumber(value);
+  if (Number.isFinite(parsed) && parsed >= 0 && parsed <= 1) return parsed;
+  if (value !== undefined) {
+    logger.warn(
+      `[vision] invalid alert similarity ${JSON.stringify(value)}; using ${DEFAULT_VISION_ALERT_SIMILARITY}`,
+    );
+  }
+  return DEFAULT_VISION_ALERT_SIMILARITY;
+}
+
 export function shouldAllowVisionImageEndpoint(
   baseURL: string,
   remoteConsent = process.env.CODEBUDDY_VISION_REMOTE_IMAGE === 'true',
@@ -118,13 +150,21 @@ function sceneSimilarity(a: string, b: string): number {
 
 export function wireVisionReaction(options: VisionReactionOptions = {}): () => void {
   const bus = getGlobalEventBus();
-  const debounceMs = options.debounceMs ?? Number(process.env.CODEBUDDY_VISION_DEBOUNCE_MS ?? 8000);
+  const debounceMs = resolveNonNegativeMs(
+    options.debounceMs ?? process.env.CODEBUDDY_VISION_DEBOUNCE_MS,
+    DEFAULT_VISION_DEBOUNCE_MS,
+    'debounce',
+  );
   const now = options.now ?? (() => Date.now());
   const analyzer: VisionAnalyzer = options.analyzer ?? { analyze: defaultAnalyze };
   // Anti-spam: for a remote watch, only alert when the scene meaningfully CHANGES
   // vs the last alerted scene, or after a long cooldown (periodic refresh).
-  const alertCooldownMs = Number(process.env.CODEBUDDY_VISION_ALERT_COOLDOWN_MS ?? 300_000);
-  const alertSimThreshold = Number(process.env.CODEBUDDY_VISION_ALERT_SIM ?? 0.6);
+  const alertCooldownMs = resolveNonNegativeMs(
+    process.env.CODEBUDDY_VISION_ALERT_COOLDOWN_MS,
+    DEFAULT_VISION_ALERT_COOLDOWN_MS,
+    'alert cooldown',
+  );
+  const alertSimThreshold = resolveSimilarityThreshold(process.env.CODEBUDDY_VISION_ALERT_SIM);
   let lastAlertAt = Number.NEGATIVE_INFINITY;
   let lastAlertedDesc = '';
   let lastAt = Number.NEGATIVE_INFINITY;
