@@ -227,3 +227,6 @@ __pycache__/
 # Preuves d’audit : captures de tableaux de bord privés (HeyGen, blogs).
 # Le dépôt est public — elles sont sauvegardées hors dépôt dans ~/Sauvegardes-git/.
 docs/audits/**/evidence/
+
+# Artefact généré par `buddy --init` (importe CLAUDE.md) — ne pas versionner
+/CODEBUDDY.md
