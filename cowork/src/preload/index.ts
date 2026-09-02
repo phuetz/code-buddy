@@ -678,6 +678,29 @@ contextBridge.exposeInMainWorld('electronAPI', {
     modelInventory: (payload?: {
       includeTailnetPeers?: boolean;
     }): Promise<ModelInventorySnapshot> => ipcRenderer.invoke('config.model-inventory', payload),
+    geminiOauthLogin: (): Promise<{ success: boolean; tokens?: unknown; error?: string }> =>
+      ipcRenderer.invoke('config.geminiOauthLogin'),
+    geminiOauthClear: (): Promise<{ success: boolean; error?: string }> =>
+      ipcRenderer.invoke('config.geminiOauthClear'),
+    codexOauthLogin: (): Promise<{
+      success: boolean;
+      email?: string | null;
+      plan_type?: string | null;
+      account_id?: string | null;
+      is_fedramp?: boolean;
+      error?: string;
+    }> => ipcRenderer.invoke('config.codexOauthLogin'),
+    codexOauthClear: (): Promise<{ success: boolean; error?: string }> =>
+      ipcRenderer.invoke('config.codexOauthClear'),
+    codexOauthStatus: (): Promise<{
+      success: boolean;
+      signedIn: boolean;
+      email?: string | null;
+      plan_type?: string | null;
+      account_id?: string | null;
+      is_fedramp?: boolean;
+      error?: string;
+    }> => ipcRenderer.invoke('config.codexOauthStatus'),
   },
 
   // Workflow Builder Pro API
@@ -5713,6 +5736,30 @@ declare global {
         modelInventory: (payload?: {
           includeTailnetPeers?: boolean;
         }) => Promise<ModelInventorySnapshot>;
+        geminiOauthLogin: () => Promise<{
+          success: boolean;
+          tokens?: unknown;
+          error?: string;
+        }>;
+        geminiOauthClear: () => Promise<{ success: boolean; error?: string }>;
+        codexOauthLogin: () => Promise<{
+          success: boolean;
+          email?: string | null;
+          plan_type?: string | null;
+          account_id?: string | null;
+          is_fedramp?: boolean;
+          error?: string;
+        }>;
+        codexOauthClear: () => Promise<{ success: boolean; error?: string }>;
+        codexOauthStatus: () => Promise<{
+          success: boolean;
+          signedIn: boolean;
+          email?: string | null;
+          plan_type?: string | null;
+          account_id?: string | null;
+          is_fedramp?: boolean;
+          error?: string;
+        }>;
       };
       workflowBuilder: {
         start: () => Promise<{ success: boolean; error?: string }>;

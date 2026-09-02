@@ -1213,58 +1213,28 @@ export function useIPC() {
 
   const geminiOauthLogin = useCallback(async () => {
     if (!isElectron) return { success: false, error: 'Not running in Electron' };
-    return invoke<{ success: boolean; tokens?: unknown; error?: string }>({
-      type: 'config.geminiOauthLogin',
-      payload: {},
-    });
-  }, [invoke]);
+    return window.electronAPI.config.geminiOauthLogin();
+  }, []);
 
   const geminiOauthClear = useCallback(async () => {
     if (!isElectron) return { success: false, error: 'Not running in Electron' };
-    return invoke<{ success: boolean; error?: string }>({
-      type: 'config.geminiOauthClear',
-      payload: {},
-    });
-  }, [invoke]);
+    return window.electronAPI.config.geminiOauthClear();
+  }, []);
 
   const codexOauthLogin = useCallback(async () => {
     if (!isElectron) return { success: false, error: 'Not running in Electron' };
-    return invoke<{
-      success: boolean;
-      email?: string | null;
-      plan_type?: string | null;
-      account_id?: string | null;
-      is_fedramp?: boolean;
-      error?: string;
-    }>({
-      type: 'config.codexOauthLogin',
-      payload: {},
-    });
-  }, [invoke]);
+    return window.electronAPI.config.codexOauthLogin();
+  }, []);
 
   const codexOauthClear = useCallback(async () => {
     if (!isElectron) return { success: false, error: 'Not running in Electron' };
-    return invoke<{ success: boolean; error?: string }>({
-      type: 'config.codexOauthClear',
-      payload: {},
-    });
-  }, [invoke]);
+    return window.electronAPI.config.codexOauthClear();
+  }, []);
 
   const codexOauthStatus = useCallback(async () => {
     if (!isElectron) return { success: false, signedIn: false, error: 'Not running in Electron' };
-    return invoke<{
-      success: boolean;
-      signedIn: boolean;
-      email?: string | null;
-      plan_type?: string | null;
-      account_id?: string | null;
-      is_fedramp?: boolean;
-      error?: string;
-    }>({
-      type: 'config.codexOauthStatus',
-      payload: {},
-    });
-  }, [invoke]);
+    return window.electronAPI.config.codexOauthStatus();
+  }, []);
 
   const getMCPServers = useCallback(async () => {
     if (!isElectron) {
