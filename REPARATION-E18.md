@@ -7,9 +7,9 @@ Rapport initialisé avant toute inspection du dépôt, conformément à la missi
 | Point | Rouge | Correctif | Vert | Commit |
 |---|---|---|---|---|
 | D5 | `npx vitest run tests/scripts/package-lifecycle.test.ts` : 1 échec ; clone frais : `ENOENT ... codebuddy-runtime.json`, exit 1 | `package.json` : `prepack` exécute `npm run build`, retire les sourcemaps puis génère le manifeste | Test ciblé PASS ; clone neuf issu de `726d29587` : `npm pack` exit 0, manifeste et tarball produits | `726d29587` |
-| D6 | Test Commander rouge et route réelle initialement ChatGPT OAuth malgré `CODEBUDDY_PROVIDER=ollama`; démos locales 1.5B/4B non vertes | `try` accepte `--model`/`--base-url` après le sous-commande, transmet les options injectables et respecte `CODEBUDDY_PROVIDER=ollama` ; sélection exacte du tag Ollama | Tests ciblés 14/14 PASS ; headless affiche `Ollama local (qwen2.5:1.5b-instruct)` puis échoue honnêtement sur la qualité du petit modèle ; qwen3.8:27b atteint timeout 180 s | À faire |
-| D7 | Test initial : `checkTtsProviders` n’était pas exposé ; diagnostic historique conseillait `edge-tts/espeak` | `doctor` sonde le lanceur Pocket (`pocket-tts`/`uvx`) et la présence de `ELEVENLABS_API_KEY`, avec conseil explicite | `npx vitest run tests/doctor/tts-guidance.test.ts` : 1/1 PASS ; `buddy speak --out` sans AudioReader : exit 1 + message clair, aucun WAV | À faire |
-| D8 | À établir | À faire | À faire | À faire |
+| D6 | Test Commander rouge et route réelle initialement ChatGPT OAuth malgré `CODEBUDDY_PROVIDER=ollama`; démos locales 1.5B/4B non vertes | `try` accepte `--model`/`--base-url` après le sous-commande, transmet les options injectables et respecte `CODEBUDDY_PROVIDER=ollama` ; sélection exacte du tag Ollama | Tests ciblés 14/14 PASS ; headless affiche `Ollama local (qwen2.5:1.5b-instruct)` puis échoue honnêtement sur la qualité du petit modèle ; qwen3.8:27b atteint timeout 180 s | `050626bd4` |
+| D7 | Test initial : `checkTtsProviders` n’était pas exposé ; diagnostic historique conseillait `edge-tts/espeak` | `doctor` sonde le lanceur Pocket (`pocket-tts`/`uvx`) et la présence de `ELEVENLABS_API_KEY`, avec conseil explicite | `npx vitest run tests/doctor/tts-guidance.test.ts` : 1/1 PASS ; `buddy speak --out` sans AudioReader : exit 1 + message clair, aucun WAV | `10ae7977f` |
+| D8 | Test documentaire rouge : la doc ne signalait pas la limite `.git` des installations npm pack | Message d’erreur explicite et documentation de la nécessité d’un checkout Git | Test ciblé 6/6 PASS ; commande avec `GIT_DIR=/dev/null` : message explicite, exit Commander 1 | `0130f30f5` |
 | D9 | À établir | À faire | À faire | À faire |
 | D10 | À établir | À faire | À faire | À faire |
 | D11 | À établir | À faire | À faire | À faire |
@@ -19,6 +19,7 @@ Rapport initialisé avant toute inspection du dépôt, conformément à la missi
 - D5 réglé et prouvé sur clone neuf issu de `726d29587`.
 - D6 réglé côté routage/options ; la démo locale complète reste limitée par les modèles Ollama testés, détail ci-dessous.
 - D7 réglé : diagnostic TTS aligné sur Pocket/ElevenLabs ; absence de moteur = message clair et exit 1.
+- D8 réglé côté commande et documentation ; commit dédié `0130f30f5`.
 
 ## Commandes, sorties et commits
 
@@ -122,3 +123,28 @@ exit 1
 ```
 
 Le code conseille désormais Pocket TTS ou ElevenLabs ; `espeak` et `edge-tts` ne sont plus proposés par `doctor` pour cette surface.
+
+### D8 — changelog hors checkout Git
+
+Rouge :
+
+```text
+$ npx vitest run tests/commands/changelog.test.ts
+FAIL — la documentation ne contenait pas `installation npm pack`
+```
+
+Vert :
+
+```text
+$ npx vitest run tests/commands/changelog.test.ts
+Test Files  1 passed (1)
+Tests       6 passed (6)
+
+$ GIT_DIR=/dev/null node --import "$PWD/node_modules/tsx/dist/loader.mjs" --input-type=module -e '... createChangelogCommand({ cwd: "./_e18/no-git-d8" }) ...'
+Ce dossier n’est pas un dépôt Git : .../_e18/no-git-d8. La commande `buddy changelog` nécessite un checkout Git ; une installation npm pack n’inclut pas `.git`.
+caught: buddy.changelog
+```
+
+Le second contrôle force Git à ne pas utiliser le dépôt parent ; l’action Commander reçoit bien `exitCode: 1`. Le message et la documentation ne promettent donc pas un changelog depuis un paquet npm sans historique Git.
+
+Commit D8 : `0130f30f5` (`fix(changelog): explain Git requirement outside a checkout`).
