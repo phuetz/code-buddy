@@ -44,8 +44,13 @@ const hoisted = vi.hoisted(() => {
     cognitiveComplete: vi.fn(),
     cognitiveFail: vi.fn(),
     cognitiveCancel: vi.fn(),
+    maybeHandleCameraShareRequest: vi.fn(),
   };
 });
+
+vi.mock('../../src/companion/camera-share.js', () => ({
+  maybeHandleCameraShareRequest: hoisted.maybeHandleCameraShareRequest,
+}));
 
 vi.mock('../../src/channels/core.js', () => ({
   checkDMPairing: hoisted.checkDMPairing,
@@ -219,6 +224,7 @@ describe('registerAIMessageHandler inbound roundtrip (GAP-7)', () => {
     hoisted.cognitiveComplete.mockResolvedValue(undefined);
     hoisted.cognitiveFail.mockResolvedValue(undefined);
     hoisted.cognitiveCancel.mockResolvedValue(undefined);
+    hoisted.maybeHandleCameraShareRequest.mockResolvedValue(null);
   });
 
   it('keeps the real Lisa selfie follow-up sequence on the bounded media path', async () => {
@@ -264,6 +270,31 @@ describe('registerAIMessageHandler inbound roundtrip (GAP-7)', () => {
     } finally {
       selfie.mockRestore();
     }
+  });
+
+  it('handles an inbound Telegram camera-share request before the agent turn', async () => {
+    hoisted.maybeHandleCameraShareRequest.mockResolvedValue({
+      success: true,
+      telegramSent: false,
+      spokenReply: 'Un bureau avec un écran allumé.',
+      description: 'Un bureau avec un écran allumé.',
+    });
+    const manager = makeManager();
+    await registerAIMessageHandler(manager as any);
+    const send = makeSuccessfulSend();
+    await manager.emit(makeMessage("qu'est-ce que tu vois ?"), { type: 'telegram', send });
+
+    expect(hoisted.maybeHandleCameraShareRequest).toHaveBeenCalledOnce();
+    expect(hoisted.maybeHandleCameraShareRequest.mock.calls[0]?.[1]).toMatchObject({
+      surface: 'telegram',
+      inboundChatId: 'chan-42',
+    });
+    expect(send).toHaveBeenCalledWith({
+      channelId: 'chan-42',
+      content: 'Un bureau avec un écran allumé.',
+      replyTo: expect.any(String),
+    });
+    expect(hoisted.processUserMessage).not.toHaveBeenCalled();
   });
 
   it('runs message → pairing → route → agent → reply and delivers the response', async () => {
