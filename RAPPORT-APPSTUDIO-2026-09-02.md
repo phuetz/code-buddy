@@ -206,5 +206,4 @@ Aucun de ces quatre fichiers de test ni leurs modules de production n'est modifi
 - `3e7f53ab5` — `feat(app-studio): enforce design direction in generation`
 - `5d317423e` — `test(app-studio): cover styled agent scaffolding`
 - `415b6c478` — `fix(app-studio): use a clean template dependency floor`
-
-Le commit du présent rapport et des captures est ajouté après cette liste et consigné dans le tableau de coordination.
+- `6df11b338` — `docs(app-studio): record build and visual proof`
