@@ -6,7 +6,7 @@
  */
 
 import { CodeBuddyMessage } from '../codebuddy/client.js';
-import { TokenCounter } from './token-counter.js';
+import { estimateImageUrlTokens, TokenCounter } from './token-counter.js';
 import { CompressionResult } from './types.js';
 import { repairToolCallPairs } from './transcript-repair.js';
 
@@ -145,21 +145,21 @@ export class ContextCompressor {
   private countTotalTokens(messages: CodeBuddyMessage[]): number {
     const tokenMessages = messages.map(msg => ({
       role: msg.role,
-      content: typeof msg.content === 'string' ? msg.content : null,
+      content: typeof msg.content === 'string' || Array.isArray(msg.content) ? msg.content : null,
       tool_calls: 'tool_calls' in msg ? msg.tool_calls : undefined,
     }));
-    return this.tokenCounter.countMessageTokens(tokenMessages);
+    const imageTokens = messages.reduce(
+      (total, message) => total + estimateImageUrlTokens(message.content),
+      0,
+    );
+    return this.tokenCounter.countMessageTokens(tokenMessages) + imageTokens;
   }
 
   /**
    * Helper to count tokens for a single message (for incremental calculations).
    */
   private countSingleMessageTokens(msg: CodeBuddyMessage): number {
-    return this.tokenCounter.countMessageTokens([{
-      role: msg.role,
-      content: typeof msg.content === 'string' ? msg.content : null,
-      tool_calls: 'tool_calls' in msg ? msg.tool_calls : undefined,
-    }]);
+    return this.countTotalTokens([msg]);
   }
 
   /**

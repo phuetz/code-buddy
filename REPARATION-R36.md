@@ -253,15 +253,56 @@ AssertionError: expected function to throw an error, but it didn't
   - `tests/unit/context-manager-v2.test.ts tests/unit/context-manager-v3.test.ts tests/context-manager-v2.test.ts` : 95 passed (3 files)
   - `tests/context` : 53 passed, 3 failed (restants : trous 6 à 8)
   - `npx tsc --noEmit -p .` : exit code 0
-- **Commit** : [COMMIT_HASH_TROU_5]
+- **Commit** : `9df7093ba`
 
 ### Trou 6
-- **Fichier de test** : 
+- **Fichier de test** : `tests/context/revue-gemini-multimodal.test.ts`
 - **Sortie ROUGE initiale** :
+```text
+ FAIL  tests/context/revue-gemini-multimodal.test.ts > Mission G1 — Trou 6 : cas multimodal ignoré lors du comptage et de la compaction > ContextManagerV3 doit compter les tokens du texte contenu dans un message multimodal
+AssertionError: ContextManagerV3 ignored multimodal text content and counted only 7 tokens: expected 7 to be greater than 500
+ ❯ tests/context/revue-gemini-multimodal.test.ts:32:7
+     30|       stats.totalTokens,
+     31|       `ContextManagerV3 ignored multimodal text content and counted on…
+     32|     ).toBeGreaterThan(500);
+       |       ^
+     33|
+     34|     manager.dispose();
+
+ FAIL  tests/context/revue-gemini-multimodal.test.ts > Mission G1 — Trou 6 : cas multimodal ignoré lors du comptage et de la compaction > ContextManagerV3.prepareMessages ne doit pas laisser passer une requête multimodale qui dépasse le budget réel
+AssertionError: expected [Function] to throw an error
+
+- Expected:
+null
+
++ Received:
+undefined
+
+ ❯ tests/context/revue-gemini-multimodal.test.ts:56:68
+     54|     // ACTUELLEMENT : comme le comptage renvoie ~3 tokens, rejectIfCur…
+     55|     // et la requête géante passe sans erreur !
+     56|     expect(() => manager.prepareMessages([hugeMultimodalMessage])).toT…
+       |                                                                    ^
+     57|
+     58|     manager.dispose();
+```
 - **Analyse et correction** (`fichier:ligne`) :
+  - `src/context/context-manager-v3.ts:17,101,186` : import de `estimateImageUrlTokens`, prise en charge de `Array.isArray(msg.content)` dans le mappage vers `TokenCounter` et ajout des tokens d'images estimés (`estimateImageUrlTokens`) dans `countMessageTokens` et `getStats`.
+  - `src/context/compression.ts:9,147` : import de `estimateImageUrlTokens` et prise en charge des contenus multimodaux et images dans `countTotalTokens` et `countSingleMessageTokens`.
 - **Sortie VERT** :
+```text
+ RUN  v4.1.9 /home/patrice/DEV/cb-verif-d-2026-09-02
+
+ Test Files  1 passed (1)
+      Tests  2 passed (2)
+   Start at  20:47:24
+   Duration  843ms (transform 448ms, setup 25ms, import 585ms, tests 115ms, environment 0ms)
+```
 - **Vérification suite & tsc** :
-- **Commit** :
+  - `tests/unit/context-manager-v2.test.ts tests/unit/context-manager-v3.test.ts tests/context-manager-v2.test.ts` : 95 passed (3 files)
+  - `tests/context` : 54 passed, 2 failed (restants : trous 7 et 8)
+  - `npx tsc --noEmit -p .` : exit code 0
+- **Commit** : [COMMIT_HASH_TROU_6]
 
 ### Trou 7
 - **Fichier de test** : 

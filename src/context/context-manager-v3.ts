@@ -14,7 +14,7 @@
 
 import { CodeBuddyMessage } from '../codebuddy/client.js';
 import { getModelToolConfig } from '../config/model-tools.js';
-import { createTokenCounter, TokenCounter } from './token-counter.js';
+import { createTokenCounter, estimateImageUrlTokens, TokenCounter } from './token-counter.js';
 import { ContextCompressor } from './compression.js';
 import { ContextManagerConfig, ContextStats, ContextWarning } from './types.js';
 import { logger } from '../utils/logger.js';
@@ -98,12 +98,7 @@ export class ContextManagerV3 {
    * @returns Detailed statistics including token count and usage percentage.
    */
   getStats(messages: CodeBuddyMessage[]): ContextStats {
-    const tokenMessages = messages.map(msg => ({
-      role: msg.role,
-      content: typeof msg.content === 'string' ? msg.content : null,
-      tool_calls: 'tool_calls' in msg ? msg.tool_calls : undefined,
-    }));
-    const totalTokens = this.tokenCounter.countMessageTokens(tokenMessages);
+    const totalTokens = this.countMessageTokens(messages);
     const maxTokens = this.config.maxContextTokens;
     const usagePercent = (totalTokens / maxTokens) * 100;
 
@@ -188,10 +183,14 @@ export class ContextManagerV3 {
   private countMessageTokens(messages: CodeBuddyMessage[]): number {
     const tokenMessages = messages.map(msg => ({
       role: msg.role,
-      content: typeof msg.content === 'string' ? msg.content : null,
+      content: typeof msg.content === 'string' || Array.isArray(msg.content) ? msg.content : null,
       tool_calls: 'tool_calls' in msg ? msg.tool_calls : undefined,
     }));
-    return this.tokenCounter.countMessageTokens(tokenMessages);
+    const imageTokens = messages.reduce(
+      (total, message) => total + estimateImageUrlTokens(message.content),
+      0,
+    );
+    return this.tokenCounter.countMessageTokens(tokenMessages) + imageTokens;
   }
 
   private rejectIfCurrentRequestExceedsBudget(
