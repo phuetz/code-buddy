@@ -27,16 +27,18 @@ export class ContextExpandTool implements ITool {
     'Expand an exact archived conversation segment from the current session. Use this whenever a [segment:…] summary does not contain enough detail to answer precisely.';
 
   private readonly archive: SegmentArchive;
+  private readonly explicitArchive: boolean;
 
   constructor(options: ContextExpandToolOptions = {}) {
     this.archive = options.archive ?? new SegmentArchive();
+    this.explicitArchive = options.archive !== undefined;
   }
 
   async execute(
     input: Record<string, unknown>,
     context?: IToolExecutionContext,
   ): Promise<ToolResult> {
-    if (!isContextZoomEnabled()) {
+    if (!this.explicitArchive && !isContextZoomEnabled()) {
       return { success: false, error: 'context_expand is disabled; set CODEBUDDY_CONTEXT_ZOOM=true to enable it.' };
     }
 

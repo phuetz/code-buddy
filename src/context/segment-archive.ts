@@ -131,7 +131,7 @@ export class SegmentArchive {
       }
       const filePath = path.join(this.sessionDirectory(sessionId), `${segmentId}.json`);
       const record = this.readRecord(filePath);
-      if (!record || record.sessionId !== sessionId || record.segmentId !== segmentId) {
+      if (!record || record.sessionId !== sessionId) {
         return null;
       }
       this.assertRecordIntegrity(record, segmentId);

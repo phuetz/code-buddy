@@ -172,15 +172,40 @@ AssertionError: ContextManagerV3.getStats maxTokens remains stuck at 8192 instea
   - `tests/unit/context-manager-v2.test.ts tests/unit/context-manager-v3.test.ts tests/context-manager-v2.test.ts` : 95 passed (3 files)
   - `tests/context` : 51 passed, 5 failed (restants : trous 4 à 8)
   - `npx tsc --noEmit -p .` : exit code 0
-- **Commit** : [COMMIT_HASH_TROU_3]
+- **Commit** : `22812aa6f`
 
 ### Trou 4
-- **Fichier de test** : 
+- **Fichier de test** : `tests/context/revue-gemini-segment-archive-hash.test.ts`
 - **Sortie ROUGE initiale** :
+```text
+ FAIL  tests/context/revue-gemini-segment-archive-hash.test.ts > Mission G1 — Trou 4 : segment archivé puis restauré avec un hachage différent > SegmentArchive.get doit lever SegmentIntegrityError si le segment sur disque a un segmentId différent du hash demandé
+AssertionError: expected function to throw an error, but it didn't
+ ❯ tests/context/revue-gemini-segment-archive-hash.test.ts:58:52
+     56|     // doit impérativement lever SegmentIntegrityError, et NON renvoye…
+     57|     // ACTUELLEMENT : get() fait `if (record.segmentId !== segmentId) …
+     58|     expect(() => archive.get(sessionId, targetId)).toThrow(SegmentInte…
+       |                                                    ^
+     59|
+     60|     // ContextExpandTool doit également signaler une erreur d'intégrité
+```
 - **Analyse et correction** (`fichier:ligne`) :
+  - `src/context/segment-archive.ts:134` : dans `SegmentArchive.get`, suppression du court-circuit `record.segmentId !== segmentId` renvoyant `null` afin de laisser `assertRecordIntegrity(record, segmentId)` lever `SegmentIntegrityError`.
+  - `src/tools/context-expand-tool.ts:30,39` : dans `ContextExpandTool`, autoriser l'exécution sans condition sur `CODEBUDDY_CONTEXT_ZOOM` lorsqu'une instance d'archive est injectée explicitement dans le constructeur (`explicitArchive`).
 - **Sortie VERT** :
+```text
+ RUN  v4.1.9 /home/patrice/DEV/cb-verif-d-2026-09-02
+
+ Test Files  1 passed (1)
+      Tests  2 passed (2)
+   Start at  20:43:55
+   Duration  315ms (transform 139ms, setup 32ms, import 104ms, tests 69ms, environment 0ms)
+```
 - **Vérification suite & tsc** :
-- **Commit** :
+  - `tests/tools/context-expand.test.ts tests/context/segment-integrity.test.ts` : 7 passed (2 files)
+  - `tests/unit/context-manager-v2.test.ts tests/unit/context-manager-v3.test.ts tests/context-manager-v2.test.ts` : 95 passed (3 files)
+  - `tests/context` : 52 passed, 4 failed (restants : trous 5 à 8)
+  - `npx tsc --noEmit -p .` : exit code 0
+- **Commit** : [COMMIT_HASH_TROU_4]
 
 ### Trou 5
 - **Fichier de test** : 
