@@ -113,7 +113,7 @@ export function registerSpeakCommand(program: Command): void {
       const result = await provider.synthesize(text, {
         voice: opts.voice,
         rate: parseFloat(opts.speed),
-        format: requestedFormat === 'ogg' ? 'wav' : requestedFormat as 'wav' | 'mp3',
+        format: requestedFormat as 'wav' | 'ogg' | 'mp3',
       });
 
       const { execSync } = await import("child_process");

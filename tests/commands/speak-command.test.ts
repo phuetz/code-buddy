@@ -16,7 +16,9 @@ vi.mock('../../src/talk-mode/providers/audioreader-tts.js', () => ({
       _text: string,
       options?: { format?: string },
     ): Promise<{ audio: Buffer; format: string }> {
-      const format = options?.format === 'mp3' ? 'mp3' : 'wav';
+      const format = options?.format === 'mp3' || options?.format === 'ogg'
+        ? options.format
+        : 'wav';
       return { audio: Buffer.from(`fake-${format}-data`), format };
     }
     async shutdown(): Promise<void> {}
@@ -81,7 +83,7 @@ describe('speak CLI command', () => {
     ]);
 
     expect(fs.existsSync(outputPath)).toBe(true);
-    expect(fs.readFileSync(outputPath).length).toBeGreaterThan(0);
+    expect(fs.readFileSync(outputPath, 'utf8')).toBe('fake-ogg-data');
   });
 
   it('refuses an unsupported --format', async () => {
