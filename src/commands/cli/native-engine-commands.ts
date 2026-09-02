@@ -216,6 +216,17 @@ export function registerHubCommands(program: Command): void {
         return;
       }
       if (installed.length === 0) {
+        const { getBundledSkillsPath } = await import('../../skills/index.js');
+        const { countBundledSkillEntries } = await import('../skills-cli/index.js');
+        const bundledCount = countBundledSkillEntries(getBundledSkillsPath());
+        if (bundledCount > 0) {
+          console.log('No hub-installed skills.');
+          console.log(
+            `${bundledCount} bundled skill(s) shipped with the package are still available to the agent.`,
+          );
+          console.log('Install more with: buddy hub search');
+          return;
+        }
         console.log('No skills installed from the hub.');
         return;
       }

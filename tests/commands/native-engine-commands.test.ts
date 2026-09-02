@@ -694,7 +694,8 @@ describe('Native Engine CLI Commands', () => {
 
         await program.parseAsync(['node', 'test', 'hub', 'list']);
 
-        expect(getLogOutput()).toContain('No skills installed from the hub.');
+        const output = getLogOutput();
+        expect(output).toMatch(/No hub-installed skills|No skills installed from the hub/);
       });
 
       it('should output installed skills JSON', async () => {
