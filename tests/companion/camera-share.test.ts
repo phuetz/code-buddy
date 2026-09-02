@@ -5,6 +5,7 @@ import path from 'path';
 
 import {
   cameraShareCooldownRemainingMs,
+  findRecentEyeKeyframe,
   isCameraShareRequest,
   isCameraShareTelegramSendRequest,
   maybeHandleCameraShareRequest,
@@ -267,6 +268,56 @@ describe('camera-share — capture factice + faux Telegram', () => {
     expect(third!.telegramSent).toBe(true);
     expect(sendPhoto).toHaveBeenCalledTimes(2);
     await fs.rm(path.dirname(frame), { recursive: true, force: true });
+  });
+
+  it('relit l’image-clé récente de l’œil et n’ouvre pas la webcam', async () => {
+    const spool = await fs.mkdtemp(path.join(os.tmpdir(), 'cb-eye-spool-'));
+    const frame = path.join(spool, 'motion-03.jpg');
+    await fs.writeFile(frame, Buffer.from([0xff, 0xd8, 0xff, 0xd9]));
+    const capture = vi.fn();
+    const sendPhoto = vi.fn(async () => true);
+    const result = await maybeHandleCameraShareRequest("qu'est-ce que tu vois ?", {
+      surface: 'telegram',
+      inboundChatId: ALERT_CHAT,
+      env: env({ BUDDY_SENSE_FRAME_DIR: spool }),
+      analyze: async (imagePath) => {
+        expect(imagePath).toContain('motion-03.jpg');
+        return 'Le salon vu par l’œil.';
+      },
+      sendPhoto,
+    });
+    expect(capture).not.toHaveBeenCalled();
+    expect(result!.success).toBe(true);
+    expect(result!.telegramSent).toBe(true);
+    expect(result!.spokenReply).toContain('salon');
+    expect(sendPhoto.mock.calls[0]?.[1]).toContain('motion-03.jpg');
+    await fs.rm(spool, { recursive: true, force: true });
+  });
+
+  it('ignore une image-clé trop vieille et dit qu’il n’y a pas d’image', async () => {
+    const spool = await fs.mkdtemp(path.join(os.tmpdir(), 'cb-eye-stale-'));
+    const frame = path.join(spool, 'semantic-001.jpg');
+    await fs.writeFile(frame, Buffer.from([0xff, 0xd8, 0xff, 0xd9]));
+    const stale = Date.now() - 120_000;
+    await fs.utimes(frame, new Date(stale), new Date(stale));
+    const found = await findRecentEyeKeyframe({
+      env: { BUDDY_SENSE_FRAME_DIR: spool } as NodeJS.ProcessEnv,
+      maxAgeMs: 30_000,
+    });
+    expect(found).toBeUndefined();
+    const result = await maybeHandleCameraShareRequest('regarde', {
+      surface: 'telegram',
+      inboundChatId: ALERT_CHAT,
+      env: env({
+        BUDDY_SENSE_FRAME_DIR: spool,
+        CODEBUDDY_CAMERA_SHARE_MAX_AGE_MS: '30000',
+      }),
+      analyze: vi.fn(),
+      sendPhoto: vi.fn(async () => true),
+    });
+    expect(result!.success).toBe(false);
+    expect(result!.spokenReply.toLowerCase()).toContain("je n'ai pas d'image en ce moment");
+    await fs.rm(spool, { recursive: true, force: true });
   });
 
   it('l’envoi par défaut passe par sendTelegramAlert (chat d’alerte), jamais un autre destinataire', async () => {

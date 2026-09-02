@@ -122,3 +122,21 @@ exit 0
 $ npx eslint src/sensory/voice-loop.ts src/sensory/hybrid-reply.ts src/companion/camera-share.ts tests/sensory/camera-share-voice.test.ts
 exit 0
 ```
+
+Commit voix : `3c9f2f639` `feat(companion): décrire à la voix ce que voit la caméra`
+
+### Image-clé de l'œil
+
+Le cerveau ne doit pas ouvrir `/dev/video0` (tenu par `buddy-vision-eye`). La capture par défaut relit `motion-*.jpg` / `semantic-*.jpg` du spool (`BUDDY_SENSE_FRAME_DIR`, âge ≤ 30 s). Pas d'image récente → « je n'ai pas d'image en ce moment ». Les tests injectent toujours une capture factice.
+
+```text
+$ npx vitest run tests/companion/camera-share.test.ts tests/sensory/camera-share-voice.test.ts
+Test Files  2 passed (2)
+Tests  20 passed (20)
+
+$ npx eslint src/companion/camera-share.ts tests/companion/camera-share.test.ts
+exit 0
+
+$ npm run typecheck
+exit 0
+```

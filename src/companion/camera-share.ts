@@ -1,9 +1,11 @@
 /**
  * On-demand camera share — « qu'est-ce que tu vois ? »
  *
- * Captures one local webcam frame, describes it with CODEBUDDY_VISION_MODEL
- * (loopback only; CODEBUDDY_VISION_REMOTE_IMAGE stays false), and optionally
- * sends the photo to CODEBUDDY_SENSORY_ALERT_CHAT via sendTelegramAlert.
+ * Reads one frame from the eye sidecar's keyframe ring (the brain must not
+ * open /dev/video0 — buddy-vision-eye already owns the camera), describes it
+ * with CODEBUDDY_VISION_MODEL (loopback only; CODEBUDDY_VISION_REMOTE_IMAGE
+ * stays false), and optionally sends the photo to CODEBUDDY_SENSORY_ALERT_CHAT
+ * via sendTelegramAlert.
  *
  * Telegram never uses an inbound chat id other than the configured alert chat.
  * Voice does not send a photo unless the utterance explicitly asks to send it.
@@ -11,19 +13,26 @@
  * @module companion/camera-share
  */
 
+import { readdir, stat } from 'node:fs/promises';
+import { homedir } from 'node:os';
+import path from 'node:path';
 import { logger } from '../utils/logger.js';
 import { normalizeVoiceInteractionText } from '../sensory/voice-interactions.js';
 import { shouldAllowVisionImageEndpoint } from '../sensory/vision-reaction.js';
 import { redactVisionDescriptionForEgress } from '../sensory/vision-description-safety.js';
+import { safeCameraKeyframePath } from '../sensory/camera-keyframe-policy.js';
 import { isLisaSelfieRequest } from './lisa-selfie.js';
-import {
-  captureCameraSnapshot,
-  type CameraSnapshotOptions,
-  type CameraSnapshotResult,
+import type {
+  CameraSnapshotOptions,
+  CameraSnapshotResult,
 } from './camera.js';
 
 /** Default minimum gap between Telegram photo sends (ms). */
 export const DEFAULT_CAMERA_SHARE_COOLDOWN_MS = 10_000;
+/** Default max age of an eye keyframe before we admit we have no current image. */
+export const DEFAULT_CAMERA_SHARE_MAX_AGE_MS = 30_000;
+
+const EYE_KEYFRAME_NAME = /^(?:motion-\d+|semantic-\d+)\.(?:jpg|jpeg|png|webp)$/i;
 
 let lastPhotoSendAt = 0;
 
@@ -196,6 +205,73 @@ async function defaultAnalyze(imagePath: string, env: NodeJS.ProcessEnv): Promis
   return String(resp?.choices?.[0]?.message?.content ?? '').trim();
 }
 
+function eyeKeyframeRoot(env: NodeJS.ProcessEnv): string {
+  const configured = env.BUDDY_SENSE_FRAME_DIR?.trim();
+  if (!configured) return path.join(homedir(), '.codebuddy', 'companion');
+  if (configured.startsWith('~/')) return path.join(homedir(), configured.slice(2));
+  return path.resolve(configured);
+}
+
+function maxKeyframeAgeMs(env: NodeJS.ProcessEnv): number {
+  const raw = Number(env.CODEBUDDY_CAMERA_SHARE_MAX_AGE_MS ?? DEFAULT_CAMERA_SHARE_MAX_AGE_MS);
+  if (!Number.isFinite(raw) || raw < 0) return DEFAULT_CAMERA_SHARE_MAX_AGE_MS;
+  return raw;
+}
+
+/**
+ * Pick the newest motion/semantic keyframe from the eye spool, if it is fresh.
+ * Never opens the webcam — the eye sidecar owns /dev/video0.
+ */
+export async function findRecentEyeKeyframe(options: {
+  env?: NodeJS.ProcessEnv;
+  now?: () => Date;
+  maxAgeMs?: number;
+  root?: string;
+} = {}): Promise<string | undefined> {
+  const env = options.env ?? process.env;
+  const root = options.root ?? eyeKeyframeRoot(env);
+  const nowMs = (options.now ?? (() => new Date()))().getTime();
+  const maxAgeMs = options.maxAgeMs ?? maxKeyframeAgeMs(env);
+  let names: string[];
+  try {
+    const entries = await readdir(root, { withFileTypes: true });
+    names = entries.filter((entry) => entry.isFile() && EYE_KEYFRAME_NAME.test(entry.name))
+      .map((entry) => entry.name);
+  } catch {
+    return undefined;
+  }
+  let best: { file: string; mtimeMs: number } | undefined;
+  for (const name of names) {
+    const candidate = path.join(root, name);
+    const safe = await safeCameraKeyframePath(candidate, { root });
+    if (!safe) continue;
+    let mtimeMs = 0;
+    try {
+      mtimeMs = (await stat(safe)).mtimeMs;
+    } catch {
+      continue;
+    }
+    if (nowMs - mtimeMs > maxAgeMs) continue;
+    if (!best || mtimeMs > best.mtimeMs) best = { file: safe, mtimeMs };
+  }
+  return best?.file;
+}
+
+async function defaultCaptureFromEye(
+  env: NodeJS.ProcessEnv,
+  now: () => Date,
+): Promise<CameraSnapshotResult> {
+  const recent = await findRecentEyeKeyframe({ env, now });
+  if (recent) {
+    return { success: true, path: recent, command: 'eye-keyframe' };
+  }
+  return {
+    success: false,
+    error: 'no recent eye keyframe',
+    command: 'eye-keyframe',
+  };
+}
+
 function wantsTelegramSend(
   heard: string,
   options: CameraShareOptions,
@@ -236,7 +312,8 @@ export async function maybeHandleCameraShareRequest(
   }
 
   try {
-    const capture = options.capture ?? captureCameraSnapshot;
+    const capture = options.capture
+      ?? ((_: CameraSnapshotOptions) => defaultCaptureFromEye(env, options.now ?? (() => new Date())));
     const snapshot = await capture({
       cwd: options.cwd ?? options.rootDir ?? process.cwd(),
       recordPercept: false,
