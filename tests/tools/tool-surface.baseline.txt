@@ -44,12 +44,14 @@ csv_preview
 deep_research
 delegate_agent
 dep_inspect
+deploy
 device_manage
 diagram
 diff_files
 discord
 discord_admin
 docker
+docs_search
 document
 edit_file
 env_doctor
@@ -97,6 +99,7 @@ kanban_list
 kanban_show
 kanban_unblock
 knowledge_add
+knowledge_graph
 knowledge_search
 kubernetes
 lead_scout_enrichment_plan

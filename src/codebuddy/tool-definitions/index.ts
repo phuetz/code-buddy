@@ -189,6 +189,9 @@ export {
   PLAN_TOOL,
   EXECUTE_CODE_TOOL,
   RUN_SCRIPT_TOOL,
+  DEPLOY_TOOL,
+  DOCS_SEARCH_TOOL,
+  KNOWLEDGE_GRAPH_TOOL,
   ADVANCED_TOOLS,
 } from './advanced-tools.js';
 
