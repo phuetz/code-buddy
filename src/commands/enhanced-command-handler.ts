@@ -102,7 +102,7 @@ import {
   // Team handler (Agent Teams multi-agent coordination)
   handleTeam,
   // Batch handler (CC13 — parallel task decomposition)
-  handleBatchCommand,
+  handleBatchSlashCommand,
   // Starter pack handler
   handleStarter,
   // Fast mode handler (Enterprise-aligned)
@@ -449,15 +449,7 @@ export class EnhancedCommandHandler {
     ['__TEAM__', (args) => handleTeam(args)],
 
     // CC13: Batch parallel task decomposition
-    ['__BATCH__', (args) => {
-      const result = handleBatchCommand(args.join(' '));
-      // handleBatchCommand is async, wrap in a sync-compatible result
-      return {
-        handled: true,
-        entry: { type: 'assistant' as const, content: 'Batch command initiated...', timestamp: new Date() },
-        asyncAction: result,
-      };
-    }],
+    ['__BATCH__', (args) => handleBatchSlashCommand(args)],
 
     // Commands previously handled inline in client-dispatcher
     ['__CLEAR_CHAT__', () => handleClearChat()],

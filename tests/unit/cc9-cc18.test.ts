@@ -623,6 +623,15 @@ describe('CC13: Batch Handlers', () => {
     const result = await handleBatchCommand('');
     expect(result).toContain('Usage');
   });
+
+  it('handleBatchSlashCommand awaits the plan instead of claiming the batch started', async () => {
+    const { handleBatchSlashCommand } = await import('../../src/commands/handlers/batch-handlers.js');
+    const result = await handleBatchSlashCommand(['create', 'src/title-case.js']);
+    expect(result.handled).toBe(true);
+    expect(result.entry?.content).toContain('plan only');
+    expect(result.entry?.content).not.toContain('Batch command initiated');
+    expect((result as { asyncAction?: unknown }).asyncAction).toBeUndefined();
+  });
 });
 
 // ============================================================================

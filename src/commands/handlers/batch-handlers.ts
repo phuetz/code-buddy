@@ -281,3 +281,20 @@ export async function handleBatchCommand(
 
   return `${planDisplay}\n\n${resultsDisplay}`;
 }
+
+/**
+ * Slash `/batch` entry: always await the plan (and optional spawn) and
+ * return that text. The TUI used to show "Batch command initiated..." while
+ * parking the real work on an `asyncAction` field nobody consumed.
+ */
+export async function handleBatchSlashCommand(
+  args: string[],
+  chatFn?: (prompt: string) => Promise<string>,
+  spawnFn?: (label: string, instruction: string) => Promise<BatchResult>,
+): Promise<{ handled: true; entry: { type: 'assistant'; content: string; timestamp: Date } }> {
+  const content = await handleBatchCommand(args.join(' '), chatFn, spawnFn);
+  return {
+    handled: true,
+    entry: { type: 'assistant', content, timestamp: new Date() },
+  };
+}

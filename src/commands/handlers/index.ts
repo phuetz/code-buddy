@@ -228,6 +228,7 @@ export {
 // Batch handlers (CC13 — parallel task decomposition)
 export {
   handleBatchCommand,
+  handleBatchSlashCommand,
   decomposeBatchGoal,
   executeBatchPlan,
   formatBatchPlan,
