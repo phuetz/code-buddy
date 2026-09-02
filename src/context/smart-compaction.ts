@@ -717,7 +717,7 @@ let compactionEngineInstance: SmartCompactionEngine | null = null;
 
 /** Default config used when the singleton is constructed without one. */
 const DEFAULT_COMPACTION_CONFIG: CompactionConfig = {
-  maxTokens: 32_000,
+  maxTokens: 128_000,
   provider: 'openai',
   channelType: 'cli',
   preserveSystem: true,

@@ -359,18 +359,45 @@ AssertionError: ContextManagerV2 injected synthetic role:system messages into a 
   - `tests/unit/context-manager-v2.test.ts tests/unit/context-manager-v3.test.ts tests/context-manager-v2.test.ts` : 95 passed (3 files)
   - `tests/context` : 55 passed, 1 failed (restant : trou 8)
   - `npx tsc --noEmit -p .` : exit code 0
-- **Commit** : [COMMIT_HASH_TROU_7]
+- **Commit** : `cd8135774`
 
 ### Trou 8
-- **Fichier de test** : 
+- **Fichier de test** : `tests/context/revue-gemini-32k-hard-cap.test.ts`
 - **Sortie ROUGE initiale** :
+```text
+ FAIL  tests/context/revue-gemini-32k-hard-cap.test.ts > Mission G1 — Trou 8 : limite 32K hard cap vs modèle 1M > getSmartCompactionEngine ne doit pas plafonner à 32 000 tokens un modèle à fenêtre 1M
+AssertionError: SmartCompactionEngine aggressively truncated context to 12897 tokens because of hardcoded 32k default cap: expected 12897 to be greater than 35000
+ ❯ tests/context/revue-gemini-32k-hard-cap.test.ts:35:7
+     33|       result.compactedTokens,
+     34|       `SmartCompactionEngine aggressively truncated context to ${resul…
+     35|     ).toBeGreaterThan(35_000);
+       |       ^
+     36|
+     37|     resetSmartCompactionEngine();
+```
 - **Analyse et correction** (`fichier:ligne`) :
+  - `src/context/smart-compaction.ts:720` : mise à niveau de `DEFAULT_COMPACTION_CONFIG.maxTokens` de 32 000 à 128 000 tokens dans `SmartCompactionEngine` pour ne pas brider artificiellement les modèles contemporains lors de l'appel par défaut sans configuration de `getSmartCompactionEngine()`. (Note : la règle documentée dans `CLAUDE.md` relative au plafond strict de 32K pour la troncature du prompt système dans `src/services/prompt-builder.ts` demeure intacte et inchangée).
+  - La partie 2 du test (mise à l'échelle du budget par défaut de `ContextManagerV2` selon la fenêtre du modèle déclaré) a été résolue par le correctif du Trou 3 (`src/context/context-manager-v2.ts:311-321`).
 - **Sortie VERT** :
+```text
+ RUN  v4.1.9 /home/patrice/DEV/cb-verif-d-2026-09-02
+
+ Test Files  1 passed (1)
+      Tests  2 passed (2)
+   Start at  20:54:45
+   Duration  1.36s (transform 891ms, setup 37ms, import 1.16s, tests 9ms, environment 0ms)
+```
 - **Vérification suite & tsc** :
-- **Commit** :
+  - `tests/context` : 56 passed (56 files, 647/647 tests)
+  - `tests/unit/context-manager-v2.test.ts tests/unit/context-manager-v3.test.ts tests/context-manager-v2.test.ts` : 95 passed (3 files)
+  - `tests/agent` : 197 passed (2617/2617 tests)
+  - `npx tsc --noEmit -p .` : exit code 0
+- **Commit** : `546a05a28`
 
 ---
-## 4. Synthèse et état final
-- **Tests contexte & régression** :
-- **`npx tsc --noEmit -p .`** :
-- **Ce qui reste ouvert** :
+## 4. Synthèse globale & Invariants préservés
+
+- **Trous 1 à 8 comblés** : 8 commits de correctifs `fix(context): ...` appliqués rigoureusement sans altérer les tests.
+- **Preuves complètes** : 100% des tests de `tests/context` (647 tests sur 56 suites), `tests/unit/context-manager-*` (95 tests), et `tests/agent` (2617 tests) sont au vert.
+- **TypeScript strict** : `npx tsc --noEmit -p .` = 0 vérifié après chaque commit.
+- **Règles d'intégrité respectées** : Aucun push, aucun accès aux dépôts interdits (`~/code-buddy`), aucun fichier personnel injecté, modifications minimales et ciblées au plus juste.
