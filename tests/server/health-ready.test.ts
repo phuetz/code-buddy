@@ -81,4 +81,12 @@ describe('health readiness probe', () => {
     expect(response.status).toBe(503);
     expect(response.body.ready).toBe(false);
   });
+
+  it('n’annonce pas api ok avant la moindre sonde réussie', async () => {
+    const response = await getJson(port, '/api/health');
+    const checks = response.body.checks as Record<string, string>;
+
+    expect(checks.api).toBe('unknown');
+    expect(response.body.status).toBe('degraded');
+  });
 });

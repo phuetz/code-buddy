@@ -17,7 +17,7 @@
 | D4 | Confirmé | Aucun abonné ne lançait l’agent ; une file bornée exécute maintenant `runAgentCompletion()` et la route ne répond 202 qu’après acceptation. |
 | D5 | Confirmé | Le `catch` envoyait `stop` puis `error` ; il émet maintenant uniquement l’événement terminal `error`. |
 | D6 | Confirmé | `criticalPassing` ignorait `grokApi`; la dernière sonde Grok participe désormais au 200/503 et à `ready`. |
-| D7 | À vérifier | — |
+| D7 | Confirmé | `checkApi()` assimilait configuration et joignabilité ; `checks.api` reprend désormais le heartbeat observé (`ok`, `stale`, `unknown`). |
 
 ## Cycles rouge → vert et vérifications
 
@@ -165,6 +165,49 @@ $ git diff --check
 EXIT_CODE=0
 ```
 
+### D7 — santé API inconnue sans sonde
+
+Rouge, avant toute sonde réussie :
+
+```text
+$ npx vitest run tests/server/health-ready.test.ts -t "n’annonce pas api ok"
+Test Files  1 failed (1)
+Tests  1 failed | 1 skipped (2)
+AssertionError: expected 'ok' to be 'unknown'
+EXIT_CODE=1
+```
+
+Vert, les contrats D6 et D7 ensemble :
+
+```text
+$ npx vitest run tests/server/health-ready.test.ts
+Test Files  1 passed (1)
+Tests  2 passed (2)
+$ npx eslint src/server/routes/health.ts tests/server/health-ready.test.ts
+EXIT_CODE=0
+$ git diff --check
+EXIT_CODE=0
+```
+
+## Vérification finale
+
+```text
+$ npx vitest run tests/server/webhooks-routes.test.ts tests/server/webhook-agent-queue.test.ts tests/server/sessions-routes-persistence.test.ts tests/server/memory-routes-persistence-error.test.ts tests/server/chat-stream-mid-error.test.ts tests/server/health-ready.test.ts
+Test Files  6 passed (6)
+Tests  9 passed (9)
+
+$ npm run typecheck
+> tsc --noEmit && npm run typecheck:darkstar-identity
+> tsc --project tsconfig.darkstar-identity.json
+EXIT_CODE=0
+
+$ npx eslint src/server/routes/webhooks.ts src/server/webhook-agent-queue.ts src/server/routes/sessions.ts src/memory/persistent-memory.ts src/server/routes/memory.ts src/server/routes/chat.ts src/server/routes/health.ts tests/server/webhooks-routes.test.ts tests/server/webhook-agent-queue.test.ts tests/server/sessions-routes-persistence.test.ts tests/server/memory-routes-persistence-error.test.ts tests/server/chat-stream-mid-error.test.ts tests/server/health-ready.test.ts
+EXIT_CODE=0
+
+$ git diff --check
+EXIT_CODE=0
+```
+
 ## Commits
 
 - D3 : `c59c9b20f` — `fix(server): rétablir les routes statiques des webhooks`
@@ -172,3 +215,5 @@ EXIT_CODE=0
 - D2 : `7dd02f9bd` — `fix(server): signaler l'échec de persistance mémoire`
 - D4 : `591fa6e05` — `fix(server): mettre les webhooks en file d'agent`
 - D5 : `8bba81019` — `fix(server): terminer honnêtement les flux en erreur`
+- D6 : `6a9d43c51` — `fix(server): refléter l'échec de la sonde de disponibilité`
+- D7 : commit portant la version finale de ce rapport — `fix(server): ne pas inventer la santé de l'API`
