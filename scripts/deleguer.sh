@@ -20,7 +20,10 @@
 #   local  ollama sur la machine        — aucun quota, aucun réseau
 #   agy    Gemini (Antigravity)         — abonnement AI Ultra ; ⚠️ PLAFOND DUR
 #                                         de ~305 s : découper les missions
+#   openrouter modèles :free (1000 req/j, OPENROUTER_MODELE)
 #   groq / cerebras paliers gratuits directs — GROQ_MODELE / CEREBRAS_MODELE
+#          ⚠️ groq : palier gratuit à ~8 000 jetons/requête → 413 avec l’agent complet (mesuré 02/09) ;
+#            réservé aux prompts courts sans outils. cerebras : OK (gpt-oss-120b, 60 000 de contexte).
 #   omniroute passerelle locale OmniRoute — des centaines de modèles, un endpoint ;
 #                                         OMNIROUTE_MODELE=<id> (défaut auto/best-free)
 #   oc     OpenCode Go (abonnement)     — 61 modèles, 5 lignées inédites
@@ -163,6 +166,20 @@ case "$MOTEUR" in
        --permission-mode "${CB_POSTURE:-dontAsk}" -p "$(cat "$CONSIGNE")") 2>&1 | tee "$LOG"
     ;;
 
+  openrouter)
+    # OpenRouter, modèles `:free` — 1000 requêtes/jour gratuites dès que le compte porte > 10 $
+    # de crédit (c'est le cas, deux clés). 17 modèles gratuits acceptent les appels d'outils au
+    # 02/09/2026 ; OPENROUTER_MODELE choisit (défaut nvidia/nemotron-3-ultra-550b-a55b:free, 1 M de
+    # contexte ; alternatives : z-ai/glm-5.2:free, google/gemma-4-31b-it:free,
+    # nvidia/nemotron-3-super-120b-a12b:free). ⚠️ un palier `:free` peut mourir en deux heures ;
+    # OpenRouter voit les prompts : rien de confidentiel.
+    OKEY=$(grep -E "^(export )?OPENROUTER_API_KEY=" "$HOME/.codebuddy/media.env" 2>/dev/null | head -1 | sed 's/^export //' | cut -d= -f2- | tr -d "'\"")
+    [ -n "$OKEY" ] || { echo "OPENROUTER_API_KEY introuvable dans ~/.codebuddy/media.env" >&2; exit 2; }
+    CB_SRC=${CB_SRC:-$HOME/code-buddy}; [ -f "$CB_SRC/src/index.ts" ] || CB_SRC=$HOME/code-buddy-vitrine
+    (cd "$DEPOT" && CODEBUDDY_PROVIDER=openrouter OPENROUTER_API_KEY="$OKEY" \
+       "$CB_SRC/node_modules/.bin/tsx" "$CB_SRC/src/index.ts" -m "${OPENROUTER_MODELE:-nvidia/nemotron-3-ultra-550b-a55b:free}" \
+       --permission-mode "${CB_POSTURE:-dontAsk}" -p "$(cat "$CONSIGNE")") 2>&1 | tee "$LOG"
+    ;;
   minimax)
     # OpenRouter, MiniMax. Défaut : m2.7:free (196 608 de contexte, 0 $).
     #
@@ -210,8 +227,10 @@ case "$MOTEUR" in
     PKEY=$(grep -E "^(export )?${UPPER}_API_KEY=" "$HOME/.codebuddy/media.env" 2>/dev/null | head -1 | sed 's/^export //' | cut -d= -f2- | tr -d "'\"")
     [ -n "$PKEY" ] || { echo "${UPPER}_API_KEY introuvable dans ~/.codebuddy/media.env" >&2; exit 2; }
     CB_SRC=${CB_SRC:-$HOME/code-buddy}; [ -f "$CB_SRC/src/index.ts" ] || CB_SRC=$HOME/code-buddy-vitrine
-    if [ "$MOTEUR" = groq ]; then PMODEL=${GROQ_MODELE:-qwen/qwen3.8-27b}; else PMODEL=${CEREBRAS_MODELE:-gpt-oss-120b}; fi
-    (cd "$DEPOT" && env "CODEBUDDY_PROVIDER=$MOTEUR" "${UPPER}_API_KEY=$PKEY" \
+    if [ "$MOTEUR" = groq ]; then PMODEL=${GROQ_MODELE:-qwen/qwen3.8-27b}; PCTX=${GROQ_CONTEXTE:-24000}; else PMODEL=${CEREBRAS_MODELE:-gpt-oss-120b}; PCTX=${CEREBRAS_CONTEXTE:-60000}; fi
+    # Les paliers gratuits plafonnent la TAILLE d'une requête (Groq : 413 « Request too large »
+    # avec le prompt système complet) : CODEBUDDY_MAX_CONTEXT borne le budget du prompt.
+    (cd "$DEPOT" && env "CODEBUDDY_PROVIDER=$MOTEUR" "${UPPER}_API_KEY=$PKEY" "CODEBUDDY_MAX_CONTEXT=$PCTX" \
        "$CB_SRC/node_modules/.bin/tsx" "$CB_SRC/src/index.ts" -m "$PMODEL" \
        --permission-mode "${CB_POSTURE:-dontAsk}" -p "$(cat "$CONSIGNE")") 2>&1 | tee "$LOG"
     ;;
