@@ -44,6 +44,15 @@ Cowork à 3 018, balayage d'installation neuve à 103/103 commandes.
   reconnaît toute authentification ; complétions alignées sur `buddy` ; `speak --out`.
 - **Connaissance** : la mémoire collective est injectée par pertinence sur la question, pas
   par récence ; `research` simple conserve ses URL ; un conseil à un siège s'explique.
+- **Fin de journée** : « Lisa, qu'est-ce que tu vois ? » sur Telegram et à la voix
+  (`src/companion/camera-share.ts` — photo uniquement vers le chat d'alerte configuré,
+  description par le modèle vision local, les octets image ne quittent pas la machine) ; les
+  widgets générés atteignent enfin Telegram en image ; mémoire persistante (magasin illisible
+  refusé au lieu d'être écrasé, restauration vérifiée avant de vider l'archive, clé réellement
+  écrite après réconciliation) ; contexte (la requête courante n'est plus tronquée en silence
+  mais refusée explicitement, compaction hors limite refusée, statistiques alignées sur ce qui
+  est réellement envoyé, intégrité des segments à la restauration) ; un alias vers un outil
+  absent est signalé et la table d'alias est sous invariant.
 
 ### Ce qui change pour qui installe
 
