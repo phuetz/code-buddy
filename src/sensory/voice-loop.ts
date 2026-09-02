@@ -20,7 +20,7 @@
 import { spawn } from 'child_process';
 import { createHash } from 'crypto';
 import { existsSync } from 'fs';
-import { readFile, writeFile } from 'fs/promises';
+import { readFile, unlink, writeFile } from 'fs/promises';
 import { homedir, tmpdir } from 'os';
 import { join } from 'path';
 import { logger } from '../utils/logger.js';
@@ -63,7 +63,7 @@ import {
 } from './voice-stream.js';
 import type { TtsCache } from './tts-cache.js';
 import { resolveUserName } from '../companion/user-name.js';
-import { normalizeWavFile, Pcm16WavStreamGain } from '../voice/tts-volume.js';
+import { normalizePcm16Wav, normalizeWavFile, Pcm16WavStreamGain } from '../voice/tts-volume.js';
 import { conditionPcm16Wav, Pcm16WavStreamEdges } from '../voice/pcm-edges.js';
 import {
   resolveElevenLabsCacheVoice,
@@ -2179,11 +2179,78 @@ function waitForPlayerDrain(
 }
 
 /**
- * Pocket and Voicebox expose WAV response streams. Pipe the selected one into a
- * stdin-capable player so the first PCM frame is heard while Pocket is still
- * generating the rest, instead of calling `arrayBuffer()` and waiting for the
- * complete clip. Any setup/runtime failure returns false and the caller uses
- * the established temporary-WAV/Piper fallback.
+ * Already-paid audio for an ElevenLabs sentence: the permanent library first
+ * (6 400+ phrases synthesized once in Lisa's real voice), then the TTS cache.
+ * Returns a throwaway WAV copy the caller plays and unlinks, or null to open
+ * the (billed) network stream. Best-effort and never-throws — an unavailable
+ * library or cache must never delay or break speaking.
+ */
+async function lookupPaidElevenLabsWav(
+  text: string,
+  cacheVoice: string,
+): Promise<string | null> {
+  try {
+    const { getVoiceLibrary } = await import('./elevenlabs-library.js');
+    const paid = getVoiceLibrary().copyForPlayback(text);
+    if (paid) {
+      logger.info('[voice] paid ElevenLabs library hit (stream path)');
+      return paid;
+    }
+  } catch {
+    /* best-effort */
+  }
+  if (process.env.CODEBUDDY_TTS_CACHE === 'false') return null;
+  try {
+    const { getTtsCache } = await import('./tts-cache.js');
+    const hit = getTtsCache().lookup(text, cacheVoice);
+    if (hit) logger.info('[voice] tts cache hit (stream path)');
+    return hit;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Persist a completed streamed ElevenLabs clip into the TTS cache (same WAV
+ * shape as the blocking path: 24 kHz PCM16 container + file-level RMS
+ * normalization), so the NEXT occurrence of this phrase plays from disk for
+ * free instead of being re-billed. Fire-and-forget; failures only log.
+ */
+async function storeElevenLabsStreamInTtsCache(
+  text: string,
+  cacheVoice: string,
+  pcm: Buffer,
+  frozenFactor?: number,
+): Promise<void> {
+  if (process.env.CODEBUDDY_TTS_CACHE === 'false') return;
+  if (pcm.length < 2) return;
+  try {
+    const { pcm16Mono24kToWav } = await import('../voice/local-tts.js');
+    const wav = normalizePcm16Wav(pcm16Mono24kToWav(pcm), process.env, frozenFactor);
+    const tmp = join(tmpdir(), `cb-voice-elstream-${process.pid}-${Date.now()}.wav`);
+    await writeFile(tmp, wav, { mode: 0o600 });
+    try {
+      const { getTtsCache } = await import('./tts-cache.js');
+      getTtsCache().store(text, cacheVoice, tmp);
+      logger.info('[voice] tts cache store (stream path)');
+    } finally {
+      await unlink(tmp).catch(() => undefined);
+    }
+  } catch (err) {
+    logger.debug(
+      `[voice] elevenlabs stream cache store failed: ${err instanceof Error ? err.message : String(err)}`
+    );
+  }
+}
+
+/**
+ * Pocket and Voicebox expose WAV response streams; ElevenLabs exposes a raw
+ * PCM `/stream` endpoint that `openElevenLabsAudioStream` wraps in a streaming
+ * WAV header. Pipe the selected one into a stdin-capable player so the first
+ * PCM frame is heard while the engine is still generating the rest, instead of
+ * calling `arrayBuffer()` and waiting for the complete clip. Any setup/runtime
+ * failure returns false and the caller uses the established temporary-WAV
+ * fallback (which itself falls back Pocket/Piper — never silence).
  */
 function makeDefaultStreamSpeak(
   playerPromise: Promise<VoiceAudioPlayer | null> = resolveVoiceAudioPlayer(),
@@ -2191,8 +2258,10 @@ function makeDefaultStreamSpeak(
 ): StreamSpeakFn | undefined {
   const streamEnabled = engine === 'voicebox'
     ? process.env.CODEBUDDY_VOICEBOX_AUDIO_STREAM !== 'false'
-    : process.env.CODEBUDDY_POCKET_AUDIO_STREAM !== 'false';
-  if ((engine !== 'pocket' && engine !== 'voicebox') || !streamEnabled) {
+    : engine === 'elevenlabs'
+      ? process.env.CODEBUDDY_ELEVENLABS_AUDIO_STREAM !== 'false'
+      : process.env.CODEBUDDY_POCKET_AUDIO_STREAM !== 'false';
+  if ((engine !== 'pocket' && engine !== 'voicebox' && engine !== 'elevenlabs') || !streamEnabled) {
     return undefined;
   }
 
@@ -2212,30 +2281,44 @@ function makeDefaultStreamSpeak(
     const cacheVoice = opts.delivery && engine === 'voicebox'
       ? `${baseCacheVoice}:${voiceRendererDeliveryInstruction(opts.delivery)}`
       : baseCacheVoice;
-    const cachedBackchannel = await lookupInstantBackchannelWav(
-      text,
-      process.env,
-      undefined,
-      cacheVoice,
-    );
-    if (cachedBackchannel) {
+    // ElevenLabs is billed per character: a phrase already paid for — in the
+    // 6 400+ entry permanent library or in the TTS cache — must NEVER reopen
+    // the network stream. Local engines keep the narrower backchannel-only
+    // lookup (a fresh local synth is free and streams faster than a file copy).
+    const cachedWav = engine === 'elevenlabs'
+      ? await lookupPaidElevenLabsWav(text, cacheVoice)
+      : await lookupInstantBackchannelWav(
+          text,
+          process.env,
+          undefined,
+          cacheVoice,
+        );
+    if (cachedWav) {
       try {
         // The player starts reading a ready local WAV immediately: no HTTP,
         // model queue, or synthesis step remains on this acknowledgement.
         opts.onFirstAudio?.();
-        await defaultPlay(cachedBackchannel, { signal, alreadyNormalized: true }, playerPromise);
-        logger.info('[voice] instant backchannel cache hit');
+        await defaultPlay(
+          cachedWav,
+          {
+            signal,
+            alreadyNormalized: true,
+            ...(opts.prependInterSentenceSilence ? { prependInterSentenceSilence: true } : {}),
+          },
+          playerPromise,
+        );
+        if (engine !== 'elevenlabs') logger.info('[voice] instant backchannel cache hit');
         return !signal?.aborted;
       } finally {
         try {
-          const { unlink } = await import('node:fs/promises');
-          await unlink(cachedBackchannel);
+          await unlink(cachedWav);
         } catch {
           /* throwaway cache copy */
         }
       }
     }
 
+    const preparedText = text;
     const stream = engine === 'voicebox'
       ? await (async () => {
           const { openVoiceboxAudioStream } = await import('../voice/voicebox-tts.js');
@@ -2246,10 +2329,27 @@ function makeDefaultStreamSpeak(
               : {}),
           });
         })()
-      : await (async () => {
-          const { openPocketAudioStream } = await import('../voice/local-tts.js');
-          return openPocketAudioStream(text, process.env, { signal });
-        })();
+      : engine === 'elevenlabs'
+        ? await (async () => {
+            const { openElevenLabsAudioStream } = await import('../voice/local-tts.js');
+            return openElevenLabsAudioStream(text, process.env, {
+              ...(signal ? { signal } : {}),
+              // Every streamed character was billed — write the completed clip
+              // back to the TTS cache so repeating the phrase costs zero.
+              onPcmComplete: (pcm) => {
+                void storeElevenLabsStreamInTtsCache(
+                  preparedText,
+                  cacheVoice,
+                  pcm,
+                  opts.ttsNormalizationFactor,
+                );
+              },
+            });
+          })()
+        : await (async () => {
+            const { openPocketAudioStream } = await import('../voice/local-tts.js');
+            return openPocketAudioStream(text, process.env, { signal });
+          })();
     if (!stream || signal?.aborted) return false;
 
     const child = spawn(player.cmd, player.stdinArgs, { stdio: ['pipe', 'ignore', 'ignore'] });
