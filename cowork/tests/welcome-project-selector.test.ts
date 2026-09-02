@@ -29,4 +29,10 @@ describe('welcome project selector', () => {
     expect(main).toContain("ipcMain.handle('dialog.selectDirectory'");
     expect(main).toContain("properties: ['openDirectory']");
   });
+
+  it('persists the onboarding folder as defaultWorkdir, not a dropped key', () => {
+    const onboarding = fs.readFileSync(onboardingPath, 'utf8');
+    expect(onboarding).toContain('defaultWorkdir: folder');
+    expect(onboarding).not.toContain('defaultWorkspacePath');
+  });
 });

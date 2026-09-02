@@ -153,8 +153,8 @@ export function OnboardingWizard({
       const folder = await api();
       if (folder) {
         await window.electronAPI?.config?.save?.({
-          defaultWorkspacePath: folder,
-        } as Record<string, unknown>);
+          defaultWorkdir: folder,
+        });
       }
     } catch {
       /* ignore */
