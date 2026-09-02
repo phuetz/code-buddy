@@ -748,16 +748,19 @@ export function NewShell() {
 
       {/* Primary area */}
       <div className="flex-1 min-w-0 min-h-0 relative">
-        {/* Home greets when Chat has no session; DockWorkspace stays mounted
-            (but hidden) so an active session isn't torn down when peeking. */}
+        {/* Home owns the only empty-chat composer. DockWorkspace stays mounted
+            while an active session exists so peeking at another view does not
+            tear that session down, but it is not mounted before then. */}
         {showHome && (
           <div className="absolute inset-0">
             <HomeView />
           </div>
         )}
-        <div className={`absolute inset-0 ${primaryView === 'chat' && !showHome ? '' : 'hidden'}`}>
-          <DockWorkspace />
-        </div>
+        {activeSessionId && (
+          <div className={`absolute inset-0 ${primaryView === 'chat' ? '' : 'hidden'}`}>
+            <DockWorkspace />
+          </div>
+        )}
         {primaryView === 'plan' && <PlanPanel />}
         {primaryView === 'activity' && <ActivityPane />}
         {primaryView === 'workspace' && <FileActivityPanel open onClose={backToChat} />}
