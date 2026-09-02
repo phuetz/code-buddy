@@ -120,7 +120,10 @@ async function ensureGitRepository(cwd: string, runGit: ChangelogGitRunner): Pro
     if (error instanceof GitCommandError && error.code === 'ENOENT') {
       throw new Error('Git est introuvable ou inaccessible sur cette machine.');
     }
-    throw new Error(`Ce dossier n’est pas un dépôt Git : ${cwd}`);
+    throw new Error(
+      `Ce dossier n’est pas un dépôt Git : ${cwd}. ` +
+        'La commande `buddy changelog` nécessite un checkout Git ; une installation npm pack n’inclut pas `.git`.',
+    );
   }
 }
 

@@ -104,7 +104,7 @@
     "autonomy:lab": "tsx scripts/autonomy-lab/run.ts",
     "validate": "npm run lint && npm run typecheck && npm test",
     "prepublishOnly": "npm run clean && npm run build",
-    "prepack": "node scripts/strip-sourcemaps.mjs && node scripts/write-runtime-manifest.mjs --verify",
+    "prepack": "npm run build && node scripts/strip-sourcemaps.mjs && node scripts/write-runtime-manifest.mjs",
     "release": "semantic-release",
     "release:dry": "semantic-release --dry-run --no-ci",
     "install:bun": "bun install",

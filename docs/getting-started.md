@@ -120,6 +120,11 @@ Code Buddy includes standalone CLI utilities for cost tracking, changelog genera
 | `buddy explain`     | One-shot repository explanation report (conventions, hotspots, risks) as Markdown or self-contained HTML | `--out <f.md\|.html>`, `--depth <quick\|deep>`, `--html` |
 | `buddy dev explain` | Summarise repository conventions, architecture, critical paths, and workflows from a fresh repo profile                        | `buddy dev explain`                                                                             |
 
+`buddy changelog` reads the local Git history. It must be run from a Git checkout;
+an installation npm pack does not include the `.git` directory. From
+an npm installation, the command exits with an explicit “Ce dossier n’est pas
+un dépôt Git” message rather than pretending to generate release notes.
+
 ## In-Chat Context & Code Intelligence: @file Mentions and LSP Tools
 
 ### Explicit `@file` Mentions
