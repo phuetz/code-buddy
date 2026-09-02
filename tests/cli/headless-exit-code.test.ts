@@ -71,6 +71,10 @@ function runCliAgainstSuccessfulProvider(port: number, options: {
   inheritLogLevel?: boolean;
   logLevel?: string;
   nodeEnv?: string;
+  homeDir?: string;
+  prompt?: string;
+  persistent?: boolean;
+  timeline?: boolean;
   quiet?: boolean;
   responseContent?: string;
 } = {}): Promise<{
@@ -90,7 +94,7 @@ function runCliAgainstSuccessfulProvider(port: number, options: {
     }
     args.push(
       '--prompt',
-      'Return HEADLESS_JSON_CONTRACT_OK exactly.',
+      options.prompt ?? 'Return HEADLESS_JSON_CONTRACT_OK exactly.',
       '--api-key',
       'test-key',
       '--base-url',
@@ -100,10 +104,12 @@ function runCliAgainstSuccessfulProvider(port: number, options: {
       '--max-tool-rounds',
       '1',
       '--no-self-heal',
-      '--ephemeral',
       '--output-format',
       'json',
     );
+    if (options.persistent !== true) {
+      args.splice(args.length - 2, 0, '--ephemeral');
+    }
     if (options.quiet !== false) {
       args.splice(args.length - 2, 0, '--quiet');
     }
@@ -119,6 +125,15 @@ function runCliAgainstSuccessfulProvider(port: number, options: {
         CODEBUDDY_DISABLE_MCP: 'true',
         CODEBUDDY_HEADLESS: 'true',
         CODEBUDDY_REQUEST_TIMEOUT_MS: '5000',
+        ...(options.homeDir
+          ? {
+            HOME: options.homeDir,
+            USERPROFILE: options.homeDir,
+            CODEBUDDY_SESSIONS_DIR: path.join(options.homeDir, '.codebuddy', 'sessions'),
+            CODEBUDDY_RUNS_DIR: path.join(options.homeDir, '.codebuddy', 'runs'),
+          }
+          : {}),
+        ...(options.timeline ? { CODEBUDDY_TIMELINE: 'true' } : {}),
         ...(options.logLevel
           ? { LOG_LEVEL: options.logLevel }
           : options.inheritLogLevel === false
@@ -324,6 +339,61 @@ describe('headless CLI exit codes', () => {
       fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     }
   }, 90_000);
+
+  it('persists a session, run, and timeline for non-ephemeral headless turns', async () => {
+    const server = http.createServer((req, res) => {
+      req.resume();
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({
+        id: 'chatcmpl-headless-persistence-contract',
+        object: 'chat.completion',
+        created: Math.floor(Date.now() / 1000),
+        model: 'qa-mock-model',
+        choices: [{
+          index: 0,
+          message: { role: 'assistant', content: 'HEADLESS_PERSISTENCE_OK' },
+          finish_reason: 'stop',
+        }],
+        usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+      }));
+    });
+
+    await new Promise<void>((resolve, reject) => {
+      server.once('error', reject);
+      server.listen(0, '127.0.0.1', () => resolve());
+    });
+
+    const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'codebuddy-headless-persistence-'));
+    try {
+      const address = server.address();
+      if (!address || typeof address === 'string') {
+        throw new Error('Expected TCP server address');
+      }
+
+      for (const prompt of ['first persistent turn', 'second persistent turn']) {
+        const result = await runCliAgainstSuccessfulProvider(address.port, {
+          homeDir,
+          prompt,
+          persistent: true,
+          timeline: true,
+        });
+        expect(result.exitCode, result.stderr).toBe(0);
+        expect(JSON.parse(result.stdout).result).toBe('HEADLESS_PERSISTENCE_OK');
+      }
+
+      const sessionsDir = path.join(homeDir, '.codebuddy', 'sessions');
+      const runsDir = path.join(homeDir, '.codebuddy', 'runs');
+      const timelinesDir = path.join(homeDir, '.codebuddy', 'timelines');
+      expect(fs.readdirSync(sessionsDir).some((entry) => entry.endsWith('.json'))).toBe(true);
+      expect(fs.readdirSync(runsDir).some((entry) => entry.startsWith('run_'))).toBe(true);
+      const timelineFiles = fs.readdirSync(timelinesDir).filter((entry) => entry.endsWith('.jsonl'));
+      expect(timelineFiles.length).toBeGreaterThanOrEqual(2);
+      expect(timelineFiles.every((entry) => fs.readFileSync(path.join(timelinesDir, entry), 'utf8').trim())).toBe(true);
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+      fs.rmSync(homeDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+    }
+  }, 120_000);
 
   it('returns non-zero when the provider failure is rendered as an assistant error', async () => {
     const server = http.createServer((req, res) => {

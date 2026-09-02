@@ -15,6 +15,8 @@ import { globalAgent as httpsGlobalAgent } from 'node:https';
 import type { ChatCompletionMessageParam } from "openai/resources/chat";
 import type { SecurityMode } from "./security/security-modes.js";
 import type { CustomAgentConfig } from "./agent/custom/custom-agent-loader.js";
+import type { CodeBuddyAgent } from "./agent/codebuddy-agent.js";
+import type { RunStore } from "./observability/run-store.js";
 
 import { fileURLToPath } from 'url';
 import {
@@ -1030,6 +1032,11 @@ async function processPromptHeadless(
 ): Promise<number> {
   const previousDisableMCP = process.env.CODEBUDDY_DISABLE_MCP;
   const previousHeadless = process.env.CODEBUDDY_HEADLESS;
+  let agent: CodeBuddyAgent | undefined;
+  let interactionLogger: import('./logging/interaction-logger.js').InteractionLogger | null = null;
+  let runStore: RunStore | undefined;
+  let runId: string | undefined;
+  let runStatus: 'completed' | 'failed' = 'failed';
   // Headless defaults MCP OFF (startup cost / determinism), but respect an
   // explicit opt-in so `CODEBUDDY_DISABLE_MCP=false buddy -p …` can use MCP
   // servers (e.g. the Code Explorer / code-explorer bridge, or the benchmark's
@@ -1041,8 +1048,26 @@ async function processPromptHeadless(
     const customAgentConfig = await loadCustomAgentForCli(agentName, false);
     const modelToUse = customAgentConfig?.model ?? model;
     const CodeBuddyAgent = await lazyImport.CodeBuddyAgent();
-    const agent = new CodeBuddyAgent(apiKey, baseURL, modelToUse, maxToolRounds);
+    agent = new CodeBuddyAgent(apiKey, baseURL, modelToUse, maxToolRounds);
     await applyActiveLlmFailover(agent);
+
+    // A headless prompt is a real session unless --ephemeral was selected.
+    // The timeline hook is installed by the agent constructor and resolves the
+    // current session lazily at turn completion, so the session must exist
+    // before the first message is processed.
+    const sessionStore = agent.getSessionStore();
+    if (!sessionStore.isEphemeral()) {
+      const sessionName = prompt.replace(/\s+/gu, ' ').trim().slice(0, 80) || 'Headless session';
+      const session = await sessionStore.createSession(sessionName, modelToUse);
+      const { RunStore: RunStoreClass } = await import('./observability/run-store.js');
+      runStore = RunStoreClass.getInstance();
+      runId = runStore.startRun('headless prompt', {
+        channel: 'terminal',
+        sessionId: session.id,
+        tags: ['headless', modelToUse || 'unknown'],
+      });
+      agent.setRunId(runId);
+    }
 
     await agent.systemPromptReady;
     // When MCP is opted in for this headless run, wait for the servers to finish
@@ -1074,7 +1099,6 @@ async function processPromptHeadless(
     confirmationService.setSessionFlag("allOperations", true);
 
     // Initialize interaction logger for headless session tracking
-    let interactionLogger: import('./logging/interaction-logger.js').InteractionLogger | null = null;
     try {
       const { getInteractionLogger } = await import('./logging/interaction-logger.js');
       const il = getInteractionLogger();
@@ -1089,6 +1113,9 @@ async function processPromptHeadless(
 
     // Process the user message
     const chatEntries = await agent.processUserMessage(prompt, { surface: 'cli' });
+    if (!sessionStore.isEphemeral()) {
+      await agent.saveCurrentSession();
+    }
 
     // WS3-T1 — session-end flush (handoff + lesson candidates). Awaited with
     // a hard cap so headless runs keep their continuity write without ever
@@ -1198,6 +1225,7 @@ async function processPromptHeadless(
       });
     }
     const exitCode = proseToolCall ? 3 : resolveHeadlessResultExitCode(resultText);
+    runStatus = exitCode === 0 ? 'completed' : 'failed';
 
     // Gather cost and model info from the agent
     const sessionCost = agent.getSessionCost();
@@ -1254,6 +1282,22 @@ async function processPromptHeadless(
     }
     return 1;
   } finally {
+    if (interactionLogger) {
+      try { interactionLogger.endSession(); } catch (e) { logger.debug('Failed to end headless interaction logger session', { error: String(e) }); }
+    }
+    if (agent) {
+      try { agent.dispose({ skipSessionLearning: true }); } catch (e) { logger.debug('Headless agent cleanup skipped', { error: String(e) }); }
+    }
+    if (runStore && runId) {
+      try {
+        runStore.endRun(runId, runStatus);
+        runStore.dispose();
+      } catch (e) { logger.debug('Headless run cleanup skipped', { error: String(e) }); }
+    }
+    try {
+      const { resetMCPClient } = await import('./mcp/mcp-client.js');
+      await resetMCPClient();
+    } catch (e) { logger.debug('Headless MCP cleanup skipped', { error: String(e) }); }
     if (previousDisableMCP === undefined) {
       delete process.env.CODEBUDDY_DISABLE_MCP;
     } else {
