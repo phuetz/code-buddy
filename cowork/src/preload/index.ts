@@ -2105,7 +2105,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Projects (Claude Cowork parity)
   project: {
-    list: (): Promise<{ projects: Project[] }> => ipcRenderer.invoke('project.list'),
+    list: (): Promise<Project[]> => ipcRenderer.invoke('project.list'),
     get: (id: string): Promise<Project | null> => ipcRenderer.invoke('project.get', id),
     create: (input: ProjectCreateInput): Promise<Project> =>
       ipcRenderer.invoke('project.create', input),
@@ -6756,7 +6756,7 @@ declare global {
         install: () => void;
       };
       project: {
-        list: () => Promise<{ projects: Project[] }>;
+        list: () => Promise<Project[]>;
         get: (id: string) => Promise<Project | null>;
         create: (input: ProjectCreateInput) => Promise<Project>;
         update: (id: string, updates: ProjectUpdateInput) => Promise<Project | null>;

@@ -60,6 +60,12 @@ describe('Project evolution IPC', () => {
     );
   });
 
+  it('returns the project list as a bare array', async () => {
+    const result = await call<unknown>('project.list');
+
+    expect(result).toEqual([]);
+  });
+
   it('registers and serves the persistent proposal list', async () => {
     const result = await call<{ proposals: ProjectEvolutionProposal[] }>(
       'project.evolution.list',

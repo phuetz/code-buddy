@@ -33,8 +33,8 @@ export const ProjectSelector: React.FC = () => {
   useEffect(() => {
     const api = window.electronAPI;
     if (!api?.project) return;
-    api.project.list().then((result) => {
-      setProjects(result.projects);
+    api.project.list().then((projects) => {
+      setProjects(projects);
     }).catch(() => {});
     api.project.getActive().then((project) => {
       if (project) setActiveProjectId(project.id);

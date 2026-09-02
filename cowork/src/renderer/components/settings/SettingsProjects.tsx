@@ -74,7 +74,7 @@ export function SettingsProjects() {
         window.electronAPI.project.list(),
         window.electronAPI.project.getActive(),
       ]);
-      setProjects(listResult.projects || []);
+      setProjects(listResult || []);
       setActiveProjectId(activeResult?.id || null);
     } catch (error) {
       setNotice(error instanceof Error ? error.message : t('projects.loadFailed', 'Failed to load projects'));
