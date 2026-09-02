@@ -13,10 +13,11 @@
 
 import { EvolutionaryArchive } from './evolutionary-archive.js';
 import { resolveAutonomy, type Autonomy } from './engine.js';
+import { PendingProposalStore } from './proposal-store.js';
 import { validateToolProposal } from './tool-gate.js';
 import { LiveToolMutator, type ToolMutatorPort } from './tool-skill-mutator.js';
 import { toProposerView, type ToolProposer } from './tool-proposer.js';
-import type { ToolBenchmarkScenario, ToolGateOutcome } from './tool-types.js';
+import type { ToolBenchmarkScenario, ToolGateOutcome, ToolProposal } from './tool-types.js';
 
 export interface ToolCycleResult {
   kind: 'tool_improvement_cycle';
@@ -36,6 +37,9 @@ export interface ToolImprovementEngineOptions {
   archive?: EvolutionaryArchive;
   autonomy?: Autonomy;
   now?: () => Date;
+  /** Workspace root for pending propose-only candidates (default cwd). */
+  workDir?: string;
+  proposalStore?: PendingProposalStore;
 }
 
 export class ToolImprovementEngine {
@@ -45,6 +49,7 @@ export class ToolImprovementEngine {
   private readonly archive: EvolutionaryArchive;
   private readonly autonomy: Autonomy;
   private readonly now: () => Date;
+  private readonly proposals: PendingProposalStore;
   /** Scenario ids already satisfied this run (coverage is per-scenario, not per tool name). */
   private readonly covered = new Set<string>();
 
@@ -52,9 +57,10 @@ export class ToolImprovementEngine {
     this.scenarios = options.scenarios;
     this.proposer = options.proposer;
     this.mutator = options.mutator ?? new LiveToolMutator();
-    this.archive = options.archive ?? new EvolutionaryArchive();
+    this.archive = options.archive ?? new EvolutionaryArchive({ workDir: options.workDir });
     this.autonomy = options.autonomy ?? resolveAutonomy();
     this.now = options.now ?? (() => new Date());
+    this.proposals = options.proposalStore ?? new PendingProposalStore({ workDir: options.workDir });
   }
 
   /** Run exactly one tool-improvement cycle. */
@@ -66,6 +72,16 @@ export class ToolImprovementEngine {
       // Coverage is per-scenario: once a tool has satisfied this scenario's gate,
       // don't re-author it (even if the model would pick a different name).
       if (this.covered.has(scenario.id)) continue;
+
+      if (this.autonomy === 'auto-apply') {
+        const pending = this.proposals.loadTool(scenario.id);
+        if (pending) {
+          const appliedPending = await this.finishCycle(base, scenario, pending.proposal, true);
+          if (appliedPending.applied) this.proposals.remove('tool', scenario.id);
+          return appliedPending;
+        }
+      }
+
       const proposal = await this.proposer.propose(toProposerView(scenario));
       if (!proposal) continue;
       // A tool with this exact name already exists — skip (avoid dup-register).
@@ -74,32 +90,7 @@ export class ToolImprovementEngine {
         continue;
       }
 
-      const gate = await validateToolProposal(proposal, scenario, this.mutator, {
-        keepOnAccept: this.autonomy === 'auto-apply',
-      });
-      const applied = gate.accepted && !!gate.appliedRef;
-
-      if (applied) {
-        this.covered.add(scenario.id);
-        this.archive.append({
-          proposalId: proposal.id,
-          kind: 'tool',
-          targetScenarioId: scenario.id,
-          experienceId: proposal.experienceId,
-          delta: 1,
-          scoreAfter: gate.visiblePassed + gate.heldOutPassed,
-          appliedRef: gate.appliedRef,
-        });
-      }
-
-      return {
-        ...base,
-        selectedScenarioId: scenario.id,
-        proposalId: proposal.id,
-        gate,
-        applied,
-        notes: gate.reasons,
-      };
+      return this.finishCycle(base, scenario, proposal, this.autonomy === 'auto-apply');
     }
 
     return {
@@ -126,5 +117,46 @@ export class ToolImprovementEngine {
 
   status(): { autonomy: Autonomy; scenarios: number; archive: ReturnType<EvolutionaryArchive['summary']> } {
     return { autonomy: this.autonomy, scenarios: this.scenarios.length, archive: this.archive.summary() };
+  }
+
+  private async finishCycle(
+    base: { kind: 'tool_improvement_cycle'; startedAt: string; autonomy: Autonomy },
+    scenario: ToolBenchmarkScenario,
+    proposal: ToolProposal,
+    keepOnAccept: boolean,
+  ): Promise<ToolCycleResult> {
+    const gate = await validateToolProposal(proposal, scenario, this.mutator, { keepOnAccept });
+    const applied = gate.accepted && !!gate.appliedRef;
+
+    if (gate.accepted && !keepOnAccept) {
+      this.proposals.saveTool({
+        scenarioId: scenario.id,
+        acceptedAt: this.now().toISOString(),
+        proposal,
+        gate,
+      });
+    }
+
+    if (applied) {
+      this.covered.add(scenario.id);
+      this.archive.append({
+        proposalId: proposal.id,
+        kind: 'tool',
+        targetScenarioId: scenario.id,
+        experienceId: proposal.experienceId,
+        delta: 1,
+        scoreAfter: gate.visiblePassed + gate.heldOutPassed,
+        appliedRef: gate.appliedRef,
+      });
+    }
+
+    return {
+      ...base,
+      selectedScenarioId: scenario.id,
+      proposalId: proposal.id,
+      gate,
+      applied,
+      notes: gate.reasons,
+    };
   }
 }
