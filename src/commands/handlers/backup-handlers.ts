@@ -5,7 +5,15 @@
  * Local backup management for `.codebuddy/` configuration and workspace data.
  */
 
-import { existsSync, mkdirSync, readdirSync, statSync, readFileSync, writeFileSync } from 'fs';
+import {
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  readdirSync,
+  statSync,
+  readFileSync,
+  writeFileSync,
+} from 'fs';
 import { join, basename, dirname, resolve, relative, isAbsolute, sep, win32 } from 'path';
 import { homedir } from 'os';
 import { createHash } from 'crypto';
@@ -315,6 +323,17 @@ async function handleBackupRestore(args: string[]): Promise<CommandHandlerResult
       destinations.set(manifestFile.path, dest);
     }
 
+    for (const [archivePath, dest] of destinations) {
+      const safetyError = getRestorePathSafetyError(destRoot, dest);
+      if (safetyError) {
+        return {
+          handled: true,
+          exitCode: 1,
+          response: `Cannot restore ${fullPath}: unsafe destination for ${archivePath}: ${safetyError}`,
+        };
+      }
+    }
+
     const restored: string[] = [];
     for (const manifestFile of manifest.files) {
       const archiveFile = archiveFiles.find((file) => file.path === manifestFile.path);
@@ -328,6 +347,14 @@ async function handleBackupRestore(args: string[]): Promise<CommandHandlerResult
       const content = Buffer.from(archiveFile.content, 'base64');
       const dest = destinations.get(manifestFile.path)!;
       mkdirSync(dirname(dest), { recursive: true });
+      const safetyError = getRestorePathSafetyError(destRoot, dest);
+      if (safetyError) {
+        return {
+          handled: true,
+          exitCode: 1,
+          response: `Cannot restore ${fullPath}: unsafe destination for ${manifestFile.path}: ${safetyError}`,
+        };
+      }
       writeFileSync(dest, content);
       const reread = readFileSync(dest);
       const expectedChecksum = fileChecksum(content);
@@ -380,6 +407,27 @@ function isInsideDestRoot(destRoot: string, candidate: string): boolean {
     !rel.startsWith(`..${sep}`) &&
     !isAbsolute(rel)
   );
+}
+
+/** Reject symlinks in the destination path before any archive bytes are written. */
+function getRestorePathSafetyError(destRoot: string, candidate: string): string | null {
+  const root = resolve(destRoot);
+  const dest = resolve(candidate);
+  if (!isInsideDestRoot(root, dest)) return 'path escapes destination';
+
+  const relativePath = relative(root, dest);
+  const segments = relativePath === '' ? [] : relativePath.split(sep);
+  let current = root;
+  for (let index = -1; index < segments.length; index++) {
+    if (index >= 0) current = join(current, segments[index]!);
+    const stat = lstatSync(current, { throwIfNoEntry: false });
+    if (!stat) continue;
+    if (stat.isSymbolicLink()) return `symbolic link is forbidden: ${current}`;
+    if (index < segments.length - 1 && !stat.isDirectory()) {
+      return `path component is not a directory: ${current}`;
+    }
+  }
+  return null;
 }
 
 /**

@@ -56,4 +56,31 @@ describe('Revue G6 - Trou 5 : Archive de sauvegarde qui écrit ailleurs via syml
     expect(result.exitCode).toBe(1);
     expect(fs.readFileSync(outsideTarget, 'utf8')).toBe('ORIGINAL_SECRET_DATA');
   });
+
+  it('refuse aussi un lien symbolique dans un répertoire parent de la destination', async () => {
+    const outsideDir = path.join(workspace, 'outside-rules');
+    fs.mkdirSync(outsideDir);
+    fs.symlinkSync(outsideDir, path.join(workspace, '.codebuddy', 'rules'));
+
+    const payload = Buffer.from('blocked-parent-symlink');
+    const checksum = createHash('sha256').update(payload).digest('hex').slice(0, 16);
+    const archivePath = path.join(workspace, 'backup-parent-symlink.json');
+    fs.writeFileSync(
+      archivePath,
+      JSON.stringify({
+        manifest: {
+          version: '1.0.0',
+          createdAt: new Date().toISOString(),
+          files: [{ path: 'rules/policy.md', size: payload.length, checksum }],
+          flags: { onlyConfig: true, includeWorkspace: false },
+        },
+        files: [{ path: 'rules/policy.md', content: payload.toString('base64') }],
+      }),
+    );
+
+    const result = await handleBackup(`restore ${archivePath} --confirm`);
+
+    expect(result.exitCode).toBe(1);
+    expect(fs.existsSync(path.join(outsideDir, 'policy.md'))).toBe(false);
+  });
 });
