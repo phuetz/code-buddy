@@ -1481,7 +1481,14 @@ export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => v
     }
     const durationReady = (capturedSpeechMs(payload) ?? 0) >= DEFAULT_VOICE_BARGEIN_MIN_SPEECH_MS;
     const rms = payloadRms(payload);
-    const referenceSample = payloadNoiseFloorRms(payload) ?? rms;
+    const noiseFloorRms = payloadNoiseFloorRms(payload);
+    const referenceSample = noiseFloorRms ?? rms;
+    // The VAD's calibrated floor is already a leakage measurement. Use it at once when the
+    // speech-start sample clears the margin; otherwise collect the first 300 ms before deciding.
+    if (rms !== undefined && noiseFloorRms !== undefined
+      && exceedsVoiceLeakageMargin(rms, noiseFloorRms, resolveVoiceBargeInMarginDb(env))) {
+      return true;
+    }
     if (timing.afterPlaybackStartMs <= VOICE_BARGEIN_LEAKAGE_REFERENCE_MS) {
       if (referenceSample !== undefined) leakageSamples.push(referenceSample);
       return durationReady;
@@ -1489,7 +1496,7 @@ export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => v
     if (durationReady) return true;
     const leakageRms = leakageSamples.length > 0
       ? leakageSamples.reduce((sum, sample) => sum + sample, 0) / leakageSamples.length
-      : payloadNoiseFloorRms(payload);
+      : noiseFloorRms;
     if (rms === undefined || leakageRms === undefined) return false;
     return exceedsVoiceLeakageMargin(rms, leakageRms, resolveVoiceBargeInMarginDb(env));
   };

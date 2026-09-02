@@ -97,7 +97,7 @@ describe('CONV2 — adaptive leakage reference', () => {
       await waitFor(() => expect(handlerStarted).toBe(true));
       await waitFor(() => expect(playbackStartedAt).toBeGreaterThan(0));
 
-      speechStart({ startedAtMs: playbackStartedAt + 100, rms: 0.02, noiseFloorRms: 0.01 });
+      speechStart({ startedAtMs: playbackStartedAt + 100, rms: 0.015, noiseFloorRms: 0.01 });
       speechStart({ startedAtMs: playbackStartedAt + 400, rms: 0.015 });
       await vi.waitFor(() => expect(stoppedAt).toBe(0), { timeout: 50, interval: 5 });
 
@@ -105,8 +105,54 @@ describe('CONV2 — adaptive leakage reference', () => {
       await waitFor(() => expect(stoppedAt).toBeGreaterThan(0));
       expect(exceedsVoiceLeakageMargin(0.015, 0.01, 6)).toBe(false);
       expect(exceedsVoiceLeakageMargin(0.035, 0.01, 6)).toBe(true);
-      expect(exceedsVoiceLeakageMargin(0.035, 0.02, 6)).toBe(false);
+      expect(exceedsVoiceLeakageMargin(0.025, 0.015, 6)).toBe(false);
       expect(resolveVoiceBargeInMarginDb({ CODEBUDDY_SENSORY_BARGE_IN_MARGIN_DB: '9' })).toBe(9);
+    } finally {
+      release?.();
+      unwire();
+      endSpeaking(Date.now());
+    }
+  });
+
+  it('cuts a high-energy speech_start immediately when the calibrated VAD floor is available', async () => {
+    let playbackStartedAt = 0;
+    let stoppedAt = 0;
+    let handlerStarted = false;
+    let release!: () => void;
+    const streamSpeak = async (_text: string, options?: { signal?: AbortSignal }): Promise<boolean> => {
+      playbackStartedAt = Date.now();
+      await new Promise<void>((resolve) => {
+        release = resolve;
+        options?.signal?.addEventListener('abort', () => {
+          stoppedAt = performance.now();
+          resolve();
+        }, { once: true });
+      });
+      return false;
+    };
+    const voiceReply = makeVoiceReply({
+      streamFn: async function* () {
+        yield 'Réponse en cours.';
+      },
+      streamSpeak,
+      avatarEnabled: false,
+    });
+    const unwire = wireSpeechReaction({
+      cwd: process.cwd(),
+      debounceMs: 0,
+      env: process.env,
+      onHeard: async (text, context) => {
+        handlerStarted = true;
+        await voiceReply(text, context);
+      },
+      onBargeInStart: (_payload, turnId) => voiceReply.interrupt(turnId),
+    });
+    try {
+      transcriptFinal('Lisa, je parle vraiment');
+      await waitFor(() => expect(handlerStarted).toBe(true));
+      await waitFor(() => expect(playbackStartedAt).toBeGreaterThan(0));
+      speechStart({ startedAtMs: playbackStartedAt + 100, rms: 0.03, noiseFloorRms: 0.01 });
+      await waitFor(() => expect(stoppedAt).toBeGreaterThan(0));
     } finally {
       release?.();
       unwire();
