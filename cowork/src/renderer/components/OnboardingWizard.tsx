@@ -144,17 +144,11 @@ export function OnboardingWizard({
   };
 
   const pickWorkspaceFolder = async () => {
-    // We use the file picker as a folder picker fallback — the user picks
-    // any file inside the desired folder and we save the parent directory.
-    const api = window.electronAPI?.selectFiles;
+    const api = window.electronAPI?.selectDirectory;
     if (!api) return;
     try {
-      const paths = await api();
-      if (paths && paths.length > 0) {
-        const first = paths[0];
-        // Strip the filename to keep the parent folder
-        const sep = first.includes('\\') ? '\\' : '/';
-        const folder = first.substring(0, first.lastIndexOf(sep)) || first;
+      const folder = await api();
+      if (folder) {
         await window.electronAPI?.config?.save?.({
           defaultWorkspacePath: folder,
         } as Record<string, unknown>);

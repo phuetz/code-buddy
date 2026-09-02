@@ -112,9 +112,9 @@ export const ProjectSelector: React.FC = () => {
   const handleBrowse = useCallback(async () => {
     const api = window.electronAPI;
     if (!api) return;
-    const paths = await api.selectFiles?.();
-    if (paths && paths.length > 0) {
-      setNewWorkspacePath(paths[0]);
+    const selectedPath = await api.selectDirectory?.();
+    if (selectedPath) {
+      setNewWorkspacePath(selectedPath);
     }
   }, []);
 

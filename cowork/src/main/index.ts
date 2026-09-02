@@ -3643,6 +3643,30 @@ ipcMain.handle('dialog.selectFiles', async () => {
   return result.filePaths;
 });
 
+ipcMain.handle('dialog.selectDirectory', async () => {
+  const result = await dialog.showOpenDialog({
+    properties: ['openDirectory'],
+    title: 'Select Directory',
+  });
+
+  if (result.canceled || result.filePaths.length === 0) {
+    return null;
+  }
+
+  const selectedPath = result.filePaths[0];
+  try {
+    if (!fs.statSync(selectedPath).isDirectory()) {
+      logWarn('[dialog.selectDirectory] Refusing a path that is not a directory:', selectedPath);
+      return null;
+    }
+  } catch (error) {
+    logWarn('[dialog.selectDirectory] Cannot inspect selected path:', selectedPath, error);
+    return null;
+  }
+
+  return selectedPath;
+});
+
 // Config IPC handlers
 ipcMain.handle('config.get', () => {
   try {

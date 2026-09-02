@@ -9,7 +9,7 @@
  */
 
 import { v4 as uuidv4 } from 'uuid';
-import { existsSync, writeFileSync } from 'fs';
+import { existsSync, statSync, writeFileSync } from 'fs';
 import { isAbsolute, normalize } from 'path';
 import { log, logError, logWarn } from '../utils/logger';
 import type { DatabaseInstance, ProjectRow } from '../db/database';
@@ -95,7 +95,16 @@ function normalizeWorkspacePath(value: unknown): string | undefined {
   if (workspacePath.includes('\0') || !isAbsolute(workspacePath)) {
     throw new RangeError('workspacePath must be an absolute path without null bytes');
   }
-  return normalize(workspacePath);
+  const normalized = normalize(workspacePath);
+  try {
+    if (!statSync(normalized).isDirectory()) {
+      throw new RangeError('workspacePath must reference an existing directory');
+    }
+  } catch (error) {
+    if (error instanceof RangeError) throw error;
+    throw new RangeError('workspacePath must reference an existing directory');
+  }
+  return normalized;
 }
 
 function normalizeMemoryConfig(input?: ProjectMemoryConfig): ProjectMemoryConfig {
