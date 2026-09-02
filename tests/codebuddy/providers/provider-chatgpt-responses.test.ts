@@ -510,6 +510,22 @@ describe('parseSseStream — Codex SSE → OpenAI ChatCompletionChunk', () => {
     await expect(drain()).rejects.toThrow(/ChatGPT Responses/);
   });
 
+  it('flushes and processes the final SSE event when the body has no trailing blank line', async () => {
+    const stream = makeSseStream([
+      'data: {"type":"response.output_text.delta","delta":"Hello"}\n\n',
+      'data: {"type":"response.completed","response":{"usage":{"input_tokens":1,"output_tokens":1,"total_tokens":2}}}',
+    ]);
+
+    const chunks = [];
+    for await (const chunk of parseSseStream(stream, 'gpt-5.5')) {
+      chunks.push(chunk);
+    }
+
+    expect(chunks[0]?.choices[0]?.delta?.content).toBe('Hello');
+    expect(chunks.at(-1)?.choices[0]?.finish_reason).toBe('stop');
+    expect(chunks.at(-1)?.usage).toMatchObject({ total_tokens: 2 });
+  });
+
   it('ignores unknown event types silently (response.in_progress, etc.)', async () => {
     const stream = makeSseStream([
       'data: {"type":"response.in_progress"}\n\n',

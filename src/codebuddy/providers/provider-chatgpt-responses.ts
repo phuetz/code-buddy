@@ -1042,9 +1042,18 @@ export async function* parseSseStream(
         if (idleTimer) clearTimeout(idleTimer);
       }
       const { value, done } = readResult;
-      if (done) break;
-
-      buffer += decoder.decode(value, { stream: true });
+      if (done) {
+        // TextDecoder keeps an incomplete UTF-8 sequence until its final
+        // decode call. Flush it before processing the last SSE event.
+        buffer += decoder.decode();
+        if (buffer.length === 0) break;
+        // SSE normally uses a blank line to terminate an event. A server may
+        // close immediately after the last data line, so make the remainder
+        // visible to the same parser below.
+        buffer += '\n\n';
+      } else {
+        buffer += decoder.decode(value, { stream: true });
+      }
 
       // Process complete SSE events. Each event is delimited by `\n\n`,
       // with each line prefixed by `data: ` (or `event:`, which we ignore).
@@ -1258,6 +1267,8 @@ export async function* parseSseStream(
         // Other events (response.created, response.in_progress,
         // response.reasoning_text.delta, etc.) are ignored.
       }
+
+      if (done) break;
 
     }
 
