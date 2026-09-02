@@ -96,3 +96,54 @@ Tests  28 passed (28)
 
 `tsc --noEmit -p tsconfig.json` : exit 0  
 `eslint` ciblé : exit 0
+
+### 4. Appairage — jumeaux D2/D3/D4
+
+**Jumeaux :** l'allowlist persistée n'était pas rechargée par `checkSender` au redémarrage ; les entrées mal typées étaient fusionnées ; `loadPairing()` avalait l'échec ; un expéditeur bloqué n'avait aucun message.
+
+**Correctif :** chargement lazy de l'allowlist sur le chemin live ; validation d'entrée + remplacement (pas fusion) ; IPC `loadPairing()` propage l'erreur ; `getPairingMessage` + handler partagé répondent au blocage sans renvoyer le code.
+
+**Rouge :** 5 tests (live reload, entrée mal typée, reload-replace, message bloqué, handler silencieux).
+
+**Vert :**
+
+```text
+node node_modules/vitest/vitest.mjs run tests/channels/dm-pairing.test.ts tests/channels/dm-pairing-integration.test.ts tests/commands/channel-ai-handler.test.ts
+Test Files  3 passed (3)
+Tests  108 passed (108)
+
+cd cowork && node ../node_modules/vitest/vitest.mjs run tests/channels-ipc.test.ts
+Test Files  1 passed (1)
+Tests  12 passed (12)
+```
+
+`tsc --noEmit -p tsconfig.json` : exit 0  
+`eslint` ciblé (fichiers racine) : exit 0 (warnings préexistants, 0 erreur)
+
+### 5. File d'envoi — jumeaux D1/D7
+
+**Jumeaux :** `background-tasks.ts` ignorait `{ success, sent, failed }` ; Telegram notifiait un échec de transcription avant le garde d'appairage.
+
+**Correctif :** `notifyTaskEvent` journalise un warn avec le statut agrégé ; `processAllowedMessages` n'appelle `maybeTranscribeVoice` qu'après pairing + scoped auth.
+
+**Rouge :**
+
+```text
+FAIL  … does not notify a transcription failure before pairing (jumeau D7)
+FAIL  … warns when sendToUser reports a failed aggregate (jumeau D1)
+```
+
+**Vert :**
+
+```text
+node node_modules/vitest/vitest.mjs run tests/tasks/background-tasks.test.ts tests/channels/telegram.test.ts tests/channels/channels.test.ts
+Test Files  3 passed (3)
+Tests  93 passed (93)
+```
+
+`tsc --noEmit -p tsconfig.json` : exit 0  
+`eslint` ciblé : exit 0 (warnings préexistants, 0 erreur)
+
+## Commits
+
+Cinq commits `fix(reminders|companion|gateway|dm-pairing|channels)` sur `fix/repar-jumeaux-b-2026-09-02` (voir `git log`). `docs/FABLE5-CODEX-COORDINATION.md` n'a pas été modifié. `VERIF-A-LIRE.md` et `node_modules/` restent hors périmètre.

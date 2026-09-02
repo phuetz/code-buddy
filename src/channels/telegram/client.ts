@@ -621,18 +621,12 @@ export class TelegramChannel extends BaseChannel {
       message.raw = messages;
       if (!message.content.trim()) message.content = `Analyse ces ${message.attachments.length} photos.`;
     }
-    // Voice note → text: transcribe locally (faster-whisper, $0, offline) so you
-    // can TALK to the bot — the agent then sees a normal text message.
-    await this.maybeTranscribeVoice(message);
-    const parsed = this.parseCommand(message);
+    const gated = this.parseCommand(message);
+    gated.sessionKey = this.scopeSessionKey(getSessionKey(gated));
 
-    // Attach session key for session isolation
-    parsed.sessionKey = this.scopeSessionKey(getSessionKey(parsed));
-
-    // DM pairing check: gate unapproved DM senders
-    const pairingStatus = await checkDMPairing(parsed);
+    // DM pairing check: gate unapproved DM senders before any user-visible side effect.
+    const pairingStatus = await checkDMPairing(gated);
     if (!pairingStatus.approved) {
-      // Respond with pairing code and instructions
       const { getDMPairing } = await import('../dm-pairing.js');
       const pairingMessage = getDMPairing().getPairingMessage(pairingStatus);
       if (pairingMessage) {
@@ -655,6 +649,12 @@ export class TelegramChannel extends BaseChannel {
         return;
       }
     }
+
+    // Voice note → text only after pairing/auth, so a failed transcription never
+    // notifies an unapproved sender.
+    await this.maybeTranscribeVoice(message);
+    const parsed = this.parseCommand(message);
+    parsed.sessionKey = this.scopeSessionKey(getSessionKey(parsed));
 
     // Route enhanced commands — but let `council`/`conseil` fall through to the
     // normal message path so the channel AI handler can convene the multi-LLM

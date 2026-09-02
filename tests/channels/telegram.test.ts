@@ -560,5 +560,53 @@ describe('TelegramChannel', () => {
       expect(messageSpy.mock.calls[0][0].content).toBe('[transcription vocale échouée]');
       expect(mockFetch.mock.calls.some((call) => String(call[0]).includes('sendMessage'))).toBe(true);
     });
+
+    it("does not notify a transcription failure before pairing (jumeau D7)", async () => {
+      const { getDMPairing, resetDMPairing } = await import('../../src/channels/dm-pairing.js');
+      resetDMPairing();
+      getDMPairing({
+        enabled: true,
+        pairingChannels: ['telegram'],
+        allowlistPath: undefined,
+      });
+      const messageSpy = jest.fn();
+      channel.on('message', messageSpy);
+      mockFetch.mockImplementation(async (url: string | URL) => {
+        const href = String(url);
+        if (href.includes('sendMessage')) {
+          return {
+            ok: true,
+            json: async () => ({ ok: true, result: { message_id: 78 } }),
+          };
+        }
+        return {
+          ok: false,
+          status: 500,
+          json: async () => ({ ok: false, description: 'download failed', error_code: 500 }),
+        };
+      });
+
+      try {
+        await channel.handleWebhook({
+          update_id: 10,
+          message: {
+            message_id: 10,
+            date: Math.floor(Date.now() / 1000),
+            chat: { id: 42, type: 'private' },
+            from: { id: 99, is_bot: false, first_name: 'Stranger' },
+            voice: { file_id: 'voice-2', file_unique_id: 'v2', duration: 3 },
+          },
+        });
+
+        expect(messageSpy).not.toHaveBeenCalled();
+        const sent = mockFetch.mock.calls
+          .filter((call) => String(call[0]).includes('sendMessage'))
+          .map((call) => String(call[1]?.body ?? call[0]));
+        expect(sent.some((body) => /transcri/i.test(body))).toBe(false);
+        expect(sent.some((body) => /pair/i.test(body))).toBe(true);
+      } finally {
+        resetDMPairing();
+      }
+    });
   });
 });

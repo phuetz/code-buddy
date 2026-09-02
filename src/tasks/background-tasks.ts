@@ -3,6 +3,7 @@ import path from 'path';
 import os from 'os';
 import { EventEmitter } from 'events';
 import { spawn, ChildProcess } from 'child_process';
+import { logger } from '../utils/logger.js';
 
 export type TaskStatus = 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
 export type TaskPriority = 'low' | 'normal' | 'high';
@@ -83,14 +84,30 @@ export class BackgroundTaskManager extends EventEmitter {
       const icon = event === 'completed' ? '✅' : '❌';
       const content = `${icon} Task **${task.id}**: ${event}\n${task.result?.output?.slice(0, 500) || task.result?.error || ''}`;
 
-      await manager.sendToUser(
+      const result = await manager.sendToUser(
         (channelType ?? task.notifyChannel) as import('../channels/index.js').ChannelType,
         channelId ?? 'default',
         content,
         event === 'failed' ? 'high' : 'normal'
       );
-    } catch {
-      // Notification delivery is best-effort
+      if (!result.success) {
+        logger.warn(
+          `[background-tasks] channel notification did not complete for task ${task.id} (${event})`,
+          {
+            success: result.success,
+            sent: result.sent,
+            failed: result.failed,
+            queued: result.queued,
+            error: result.error,
+          }
+        );
+      }
+    } catch (err) {
+      logger.warn(
+        `[background-tasks] channel notification threw for task ${task.id} (${event}): ${
+          err instanceof Error ? err.message : String(err)
+        }`
+      );
     }
   }
 
