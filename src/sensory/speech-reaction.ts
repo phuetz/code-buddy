@@ -1456,6 +1456,11 @@ export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => v
     return undefined;
   };
 
+  const payloadNoiseFloorRms = (payload: Record<string, unknown>): number | undefined => {
+    const value = payload.noiseFloorRms;
+    return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : undefined;
+  };
+
   /**
    * Measure the playback leakage reference from the first 300 ms of reported mic energy.
    * A missing reference fails closed; the independent 250 ms duration path remains available.
@@ -1476,13 +1481,16 @@ export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => v
     }
     const durationReady = (capturedSpeechMs(payload) ?? 0) >= DEFAULT_VOICE_BARGEIN_MIN_SPEECH_MS;
     const rms = payloadRms(payload);
+    const referenceSample = payloadNoiseFloorRms(payload) ?? rms;
     if (timing.afterPlaybackStartMs <= VOICE_BARGEIN_LEAKAGE_REFERENCE_MS) {
-      if (rms !== undefined) leakageSamples.push(rms);
+      if (referenceSample !== undefined) leakageSamples.push(referenceSample);
       return durationReady;
     }
     if (durationReady) return true;
-    if (rms === undefined || leakageSamples.length === 0) return false;
-    const leakageRms = leakageSamples.reduce((sum, sample) => sum + sample, 0) / leakageSamples.length;
+    const leakageRms = leakageSamples.length > 0
+      ? leakageSamples.reduce((sum, sample) => sum + sample, 0) / leakageSamples.length
+      : payloadNoiseFloorRms(payload);
+    if (rms === undefined || leakageRms === undefined) return false;
     return exceedsVoiceLeakageMargin(rms, leakageRms, resolveVoiceBargeInMarginDb(env));
   };
   type SpeechJob = {
