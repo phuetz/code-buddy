@@ -74,6 +74,38 @@ describe('skills exchange install CLI lifecycle', () => {
       expect(result.error, result.stderr).toBeUndefined();
       expect(result.status, result.stderr).toBe(0);
       expect(JSON.parse(result.stdout)).toMatchObject({ name: 'imported-authored-lifecycle-demo' });
+
+      const deleted = spawnSync(process.execPath, [
+        tsxCli,
+        path.join(repoRoot, 'src', 'index.ts'),
+        'skills',
+        'delete',
+        'imported-authored-lifecycle-demo',
+        '--approved-by',
+        'R17',
+        '--json',
+      ], {
+        cwd: repoRoot,
+        encoding: 'utf8',
+        env: {
+          ...process.env,
+          HOME: home,
+          USERPROFILE: home,
+          CODEBUDDY_DISABLE_MCP: 'true',
+          LOG_LEVEL: 'error',
+          NO_COLOR: '1',
+        },
+        stdio: ['ignore', 'pipe', 'pipe'],
+        timeout: 5000,
+        windowsHide: true,
+      });
+      expect(deleted.error, deleted.stderr).toBeUndefined();
+      expect(deleted.status, deleted.stderr).toBe(0);
+      expect(JSON.parse(deleted.stdout)).toMatchObject({
+        name: 'imported-authored-lifecycle-demo',
+        removed: true,
+      });
+      expect(fs.existsSync(path.join(home, '.codebuddy', 'skills', 'imported-authored-lifecycle-demo'))).toBe(false);
     } finally {
       process.chdir(previousCwd);
       if (previousHome === undefined) delete process.env.HOME;

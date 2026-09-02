@@ -916,6 +916,14 @@ export function registerSkillsCommands(program: Command): void {
     .action(async (dir: string, opts: { json?: boolean; trust?: boolean }) => {
       const { installSkill } = await import('../../skills/skill-exchange.js');
       const result = await installSkill(expandHome(dir), { trust: opts.trust === true });
+      // Keep the exchange install visible to `skills delete`, which consumes
+      // the Skills Hub lockfile in a subsequent CLI process.
+      const { getSkillsHub } = await import('../../skills/hub.js');
+      getSkillsHub().registerLocalSkillFile(
+        result.name,
+        path.join(result.path, 'SKILL.md'),
+        'local',
+      );
       // `installSkill` reloads the registry so the package is immediately
       // visible. The CLI is a one-shot process, so close the reload watchers
       // before returning to avoid keeping the command alive indefinitely.
