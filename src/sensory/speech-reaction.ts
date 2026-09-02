@@ -82,6 +82,8 @@ export interface SpeechReactionOptions {
   incompleteTurnHoldMs?: number;
   cwd?: string;
   now?: () => number;
+  /** Environment snapshot for the opt-in speech-start barge-in gate. */
+  env?: NodeJS.ProcessEnv;
   /** Action hook for the transcript (e.g. trigger an agent turn). */
   onHeard?: (text: string, context?: VoiceTurnContext) => void | Promise<void>;
   /**
@@ -103,6 +105,8 @@ export interface SpeechReactionOptions {
   onSpeechPartial?: (partial: PartialVoiceTranscript) => void | Promise<void>;
   /** Interrupt the active think/speak turn when an explicit barge-in transcript arrives. */
   onBargeIn?: (text: string, interruptedTurnId?: string) => void;
+  /** Interrupt the active spoken turn directly from an acoustic speech_start event. */
+  onBargeInStart?: (payload: Record<string, unknown>, interruptedTurnId?: string) => void;
   /**
    * Human-like response gate. The percept is ALWAYS recorded (observation/memory stay
    * continuous); `onHeard` only fires when this returns `respond: true`. Omit → respond to
@@ -181,6 +185,38 @@ export function isBargeInTranscript(
 }
 
 export const DEFAULT_VOICE_BARGEIN_MIN_MS = 500;
+export const DEFAULT_VOICE_BARGEIN_MIN_SPEECH_MS = 250;
+export const DEFAULT_VOICE_BARGEIN_MARGIN_DB = 6;
+export const VOICE_BARGEIN_LEAKAGE_REFERENCE_MS = 300;
+
+export function voiceBargeInEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
+  return env.CODEBUDDY_SENSORY_BARGE_IN?.trim().toLowerCase() === 'true';
+}
+
+/** Speech-start has no transcript yet; a sustained acoustic segment is enough to cut. */
+export function shouldTriggerVoiceBargeInOnSpeechStart(
+  payload: Record<string, unknown>,
+): boolean {
+  return (capturedSpeechMs(payload) ?? 0) >= DEFAULT_VOICE_BARGEIN_MIN_SPEECH_MS;
+}
+
+export function resolveVoiceBargeInMarginDb(env: NodeJS.ProcessEnv = process.env): number {
+  const configured = Number(env.CODEBUDDY_SENSORY_BARGE_IN_MARGIN_DB);
+  if (!Number.isFinite(configured) || configured < 0) return DEFAULT_VOICE_BARGEIN_MARGIN_DB;
+  return Math.min(60, configured);
+}
+
+/** True when the current microphone energy clears the adaptive leakage margin. */
+export function exceedsVoiceLeakageMargin(
+  rms: number,
+  leakageRms: number,
+  marginDb: number = DEFAULT_VOICE_BARGEIN_MARGIN_DB,
+): boolean {
+  if (!Number.isFinite(rms) || rms <= 0 || !Number.isFinite(leakageRms) || leakageRms <= 0) {
+    return false;
+  }
+  return 20 * Math.log10(rms / leakageRms) >= marginDb;
+}
 
 export function resolveVoiceBargeInMinMs(env: NodeJS.ProcessEnv = process.env): number {
   const configured = Number(env.CODEBUDDY_VOICE_BARGEIN_MIN_MS);
@@ -1388,6 +1424,7 @@ export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => v
   const debounceMs = options.debounceMs ?? resolveSpeechDebounceMs();
   const incompleteTurnHoldMs = options.incompleteTurnHoldMs ?? resolveIncompleteTurnHoldMs();
   const now = options.now ?? (() => Date.now());
+  const env = options.env ?? process.env;
   const transcribe = options.transcriber ?? transcribeWavRaw;
   const turnCoordinator = getVoiceTurnCoordinator();
   let lastAt = Number.NEGATIVE_INFINITY;
@@ -1403,6 +1440,51 @@ export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => v
   let pendingSpeechStartedAtMs: number | undefined;
   let pendingSpeechTurnId: string | undefined;
   let bargedSpeechTurnId: string | undefined;
+  let leakagePlaybackStartedAtMs: number | undefined;
+  let leakageSamples: number[] = [];
+
+  const resetLeakageReference = (playbackStartedAtMs?: number): void => {
+    leakagePlaybackStartedAtMs = playbackStartedAtMs;
+    leakageSamples = [];
+  };
+
+  const payloadRms = (payload: Record<string, unknown>): number | undefined => {
+    for (const key of ['avgRms', 'rms', 'peakRms']) {
+      const value = payload[key];
+      if (typeof value === 'number' && Number.isFinite(value) && value > 0) return value;
+    }
+    return undefined;
+  };
+
+  /**
+   * Measure the playback leakage reference from the first 300 ms of reported mic energy.
+   * A missing reference fails closed; the independent 250 ms duration path remains available.
+   */
+  const shouldTriggerAcousticBargeIn = (
+    payload: Record<string, unknown>,
+    speechStartedAtMs: number | undefined,
+  ): boolean => {
+    if (!voiceBargeInEnabled(env) || speechStartedAtMs === undefined) return false;
+    const timing = measureVoiceResumeTiming(speechStartedAtMs);
+    if (timing?.kind !== 'during_playback') {
+      resetLeakageReference();
+      return false;
+    }
+    const playbackStartedAtMs = speechStartedAtMs - timing.afterPlaybackStartMs;
+    if (leakagePlaybackStartedAtMs !== playbackStartedAtMs) {
+      resetLeakageReference(playbackStartedAtMs);
+    }
+    const durationReady = (capturedSpeechMs(payload) ?? 0) >= DEFAULT_VOICE_BARGEIN_MIN_SPEECH_MS;
+    const rms = payloadRms(payload);
+    if (timing.afterPlaybackStartMs <= VOICE_BARGEIN_LEAKAGE_REFERENCE_MS) {
+      if (rms !== undefined) leakageSamples.push(rms);
+      return durationReady;
+    }
+    if (durationReady) return true;
+    if (rms === undefined || leakageSamples.length === 0) return false;
+    const leakageRms = leakageSamples.reduce((sum, sample) => sum + sample, 0) / leakageSamples.length;
+    return exceedsVoiceLeakageMargin(rms, leakageRms, resolveVoiceBargeInMarginDb(env));
+  };
   type SpeechJob = {
     p: ReturnType<typeof perceptionOf>;
     wav: string;
@@ -2004,6 +2086,29 @@ export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => v
       turnCoordinator.transition(pendingSpeechTurnId, 'listening', {
         aecActive: payload.aecActive === true,
       });
+      const speechStartedAtMs = pendingSpeechStartedAtMs ?? now();
+      const playbackActive = measureVoiceResumeTiming(speechStartedAtMs)?.kind === 'during_playback';
+      if (
+        inFlight
+        && playbackActive
+        && voiceBargeInEnabled(env)
+        && (
+          shouldTriggerVoiceBargeInOnSpeechStart(payload)
+          || shouldTriggerAcousticBargeIn(payload, speechStartedAtMs)
+        )
+        && (pendingSpeechTurnId === undefined || bargedSpeechTurnId !== pendingSpeechTurnId)
+      ) {
+        bargedSpeechTurnId = pendingSpeechTurnId;
+        try {
+          if (options.onBargeInStart) {
+            options.onBargeInStart(payload, activeTurnId);
+          } else {
+            options.onBargeIn?.('', activeTurnId);
+          }
+        } catch {
+          /* interruption is best-effort */
+        }
+      }
       if (options.onSpeechStart) {
         void Promise.resolve().then(() => options.onSpeechStart!(payload)).catch((error) => {
           logger.debug('[speech] predictive warmup skipped', {
@@ -2018,15 +2123,20 @@ export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => v
       const payload = (p.payload as Record<string, unknown> | undefined) ?? {};
       const text = typeof payload.text === 'string' ? payload.text.trim() : '';
       if (!text) return;
+      const acousticBargeIn = shouldTriggerAcousticBargeIn(payload, pendingSpeechStartedAtMs);
       if (
         inFlight &&
-        options.onBargeIn &&
-        shouldTriggerVoiceBargeIn(text, payload) &&
+        (options.onBargeIn || options.onBargeInStart) &&
+        (shouldTriggerVoiceBargeIn(text, payload, env) || acousticBargeIn) &&
         (pendingSpeechTurnId === undefined || bargedSpeechTurnId !== pendingSpeechTurnId)
       ) {
         if (pendingSpeechTurnId !== undefined) bargedSpeechTurnId = pendingSpeechTurnId;
         try {
-          options.onBargeIn(text, activeTurnId);
+          if (acousticBargeIn && options.onBargeInStart) {
+            options.onBargeInStart(payload, activeTurnId);
+          } else {
+            options.onBargeIn?.(text, activeTurnId);
+          }
         } catch {
           /* interruption is best-effort */
         }
@@ -2105,15 +2215,20 @@ export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => v
       }
       if (inFlight) {
         const payload = (p.payload as Record<string, unknown> | undefined) ?? {};
+        const acousticBargeIn = shouldTriggerAcousticBargeIn(payload, speechStartedAtMs);
         if (
-          options.onBargeIn &&
-          shouldTriggerVoiceBargeIn(text, payload) &&
+          (options.onBargeIn || options.onBargeInStart) &&
+          (shouldTriggerVoiceBargeIn(text, payload, env) || acousticBargeIn) &&
           (turnId === undefined || bargedSpeechTurnId !== turnId)
         ) {
           if (turnId !== undefined) bargedSpeechTurnId = turnId;
           logger.info(`[speech] barge-in → ${text}`);
           try {
-            options.onBargeIn(text, activeTurnId);
+            if (acousticBargeIn && options.onBargeInStart) {
+              options.onBargeInStart(payload, activeTurnId);
+            } else {
+              options.onBargeIn?.(text, activeTurnId);
+            }
           } catch {
             /* interruption is best-effort; still queue the new utterance */
           }
