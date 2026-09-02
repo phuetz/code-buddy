@@ -25,6 +25,7 @@ import {
 } from './types.js';
 import { logger } from '../utils/logger.js';
 import { hashArchivedMessages, isContextZoomEnabled, SegmentArchive, SegmentIntegrityError } from './segment-archive.js';
+import { repairToolCallPairs } from './transcript-repair.js';
 
 /**
  * Configuration for the enhanced compression engine.
@@ -251,6 +252,8 @@ export class EnhancedContextCompressor {
     if (systemMsgs.length > 0) {
       compressed = [...systemMsgs, ...compressed];
     }
+
+    compressed = repairToolCallPairs(compressed);
 
     return this.createResult(
       compressed,

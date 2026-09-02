@@ -81,15 +81,56 @@ AssertionError: ContextManagerV3 emitted orphan tool_result call_exec_42: expect
   - `tests/agent` : 2617 passed (197 files)
   - `tests/context` : 48 passed, 7 failed (restants : trous 2 à 8)
   - `npx tsc --noEmit -p .` : exit code 0
-- **Commit** : [COMMIT_HASH_TROU_1]
+- **Commit** : `a889e97ac`
 
 ### Trou 2
-- **Fichier de test** : 
+- **Fichier de test** : `tests/context/revue-gemini-lost-tool-call.test.ts`
 - **Sortie ROUGE initiale** :
+```text
+ FAIL  tests/context/revue-gemini-lost-tool-call.test.ts > Mission G1 — Trou 2 : compaction qui perd un tool_call sans son résultat > EnhancedContextCompressor.hardTruncate ne doit jamais conserver un assistant tool_calls dont le tool_result a été tronqué
+AssertionError: Compaction preserved tool_call "call_deploy_42" but dropped its corresponding tool_result, creating an invalid LLM transcript: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ tests/context/revue-gemini-lost-tool-call.test.ts:61:11
+     59|           hasResult,
+     60|           `Compaction preserved tool_call "${call.id}" but dropped its…
+     61|         ).toBe(true);
+       |           ^
+     62|       }
+     63|     }
+
+ FAIL  tests/context/revue-gemini-lost-tool-call.test.ts > Mission G1 — Trou 2 : compaction qui perd un tool_call sans son résultat > EnhancedContextCompressor avec multi-tool ne doit pas conserver un tool_call partiel sans son résultat
+AssertionError: Tool result for call_beta_2 must not be dropped while assistant tool_call is kept: expected undefined to be defined
+ ❯ tests/context/revue-gemini-lost-tool-call.test.ts:123:109
+    121|       m => m.role === 'tool' && (m as { tool_call_id?: string }).tool_…
+    122|     );
+    123|     expect(betaResult, 'Tool result for call_beta_2 must not be droppe…
+       |                                                                                                             ^
+    124|   });
+    125| });
+```
 - **Analyse et correction** (`fichier:ligne`) :
+  - `src/context/enhanced-compression.ts:28` : import de `repairToolCallPairs`.
+  - `src/context/enhanced-compression.ts:256` : appel de `repairToolCallPairs(compressed)` dans `EnhancedContextCompressor.compress` pour garantir la réparation post-compaction (synthèse de résultat pour les tool_calls orphelins).
 - **Sortie VERT** :
+```text
+ RUN  v4.1.9 /home/patrice/DEV/cb-verif-d-2026-09-02
+
+ Test Files  1 passed (1)
+      Tests  2 passed (2)
+   Start at  20:40:18
+   Duration  640ms (transform 326ms, setup 26ms, import 417ms, tests 106ms, environment 0ms)
+```
 - **Vérification suite & tsc** :
-- **Commit** :
+  - `tests/unit/context-manager-v2.test.ts tests/unit/context-manager-v3.test.ts tests/context-manager-v2.test.ts` : 95 passed (3 files)
+  - `tests/context` : 50 passed, 6 failed (restants : trous 3 à 8)
+  - `npx tsc --noEmit -p .` : exit code 0
+- **Commit** : [COMMIT_HASH_TROU_2]
 
 ### Trou 3
 - **Fichier de test** : 
