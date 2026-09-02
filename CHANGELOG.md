@@ -6,6 +6,36 @@
 d'environnement, le comportement est identique à celui de la 1.8.0. Le passage à 2.0.0 marque
 un changement de nature, pas d'interface.
 
+### Le robot n'entend plus sa propre voix — nuit du 2 au 3 septembre 2026
+
+Diagnostic sur la machine : une conversation sur deux était Lisa qui se répondait à elle-même.
+Le démon audio choisissait la source « echo-cancel » et l'annonçait au cerveau, qui coupait
+alors toute sa garde demi-duplex en faisant confiance à une annulation d'écho partielle ; le
+résidu était transcrit mot pour mot et pris pour l'humain (`reason=engaged`). En parallèle,
+le seuil de mouvement de l'œil (0,02) était sous le bruit du capteur dans le noir (0,03) :
+un « mouvement » toutes les 8 s, un cliché noir décrit par le modèle de vision toutes les 8 s.
+
+- **Garde demi-duplex** indépendante de l'AEC (`CODEBUDDY_SENSORY_AEC_TRUST=true` pour l'opt-in)
+  et **filtre « c'est ma propre phrase »** : anneau des dernières phrases envoyées au TTS,
+  fenêtre 90 s, recouvrement ≥ 60 % des mots → transcription ignorée (`dropped own echo`).
+- **Fenêtre d'engagement** : une question ambiante ne vaut plus une adresse directe ; l'accueil
+  caméra passe par le chef d'orchestre, respecte la politique Maison et ne parle jamais
+  par-dessus une phrase en cours ; réapparition < 5 min = même épisode (plus de « encore toi »).
+- **Œil** : plancher de bruit adaptatif (score = fraction de pixels changés sur image floutée,
+  seuil `max(BUDDY_VISION_MOTION, 2,5 × plancher)`), porte d'obscurité `BUDDY_VISION_MIN_LUMA`,
+  `BUDDY_VISION_PERSON_LOST_SECS` ; cerveau : clichés sombres ignorés, au plus
+  `CODEBUDDY_VISION_MAX_ANALYSES_PER_MIN` analyses, percepts sombres jamais promus en mémoire.
+- **Conversation (opt-in)** : fin de tour plus courte, aperçus de transcription, backchannel
+  local annulable, réflexe « pardon ? » sous 0,55 de confiance (CONV1) ; barge-in acoustique
+  avec anti-fuite adaptatif et reprise après interruption (CONV2) ; tampon de gigue (VOIX4).
+- **Trous prouvés par revue Gemini puis fermés** : 8 en mémoire/compagnon (photo caméra
+  envoyée au mauvais chat, sauvegardes concurrentes fusionnées sous verrou, rappel one-shot,
+  préférences épinglées, état relationnel borné…), 8 en sécurité (outil pair hors workspace,
+  restauration via symlink, alias d'allowlist, signature de paquet, origine wildcard, fuite de
+  prompt de session, script de skill non scanné, IBAN formaté), 5 + 7 points CLI/Cowork.
+
+Suite complète : 36 154 tests verts (1 862 fichiers).
+
 ### Fiabilité mesurée par exécution — 2 septembre 2026
 
 Une journée de chasse au motif « annoncer un succès sans l'avoir accompli », puis un audit
