@@ -76,6 +76,8 @@ const EDIT_TOOLS = new Set([
   'remind',
   // Bounded local stores: same class as a file edit under acceptEdits.
   'replace_memory',
+  'remember',
+  'memory_propose',
 ]);
 
 const DESTRUCTIVE_TOOLS = new Set([
