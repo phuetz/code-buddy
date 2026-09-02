@@ -62,6 +62,7 @@ const SCRIPT_EXTENSIONS = new Set([
   '.cmd',
   '.cjs',
   '.ex',
+  '.exs',
   '.go',
   '.js',
   '.lua',

