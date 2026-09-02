@@ -27,7 +27,7 @@ const SKIP_DIRS = new Set(['.git', 'index-cache', '.archive', 'node_modules', '.
 export const IMPORTED_PREFIX = 'imported-';
 
 export interface ImportOptions {
-  /** Tier dir to install under. Default ~/.codebuddy/skills/managed. */
+  /** Tier dir to install under. Default ~/.codebuddy/skills. */
   destRoot?: string;
   /** Provenance label written to frontmatter (e.g. "hermes"). */
   source?: string;
@@ -63,7 +63,7 @@ export interface ImportReport {
 }
 
 function defaultDestRoot(): string {
-  return path.join(os.homedir(), '.codebuddy', 'skills', 'managed');
+  return path.join(os.homedir(), '.codebuddy', 'skills');
 }
 
 /** Recursively find skill directories (those containing a SKILL.md). Skips operational dirs. */
@@ -229,7 +229,7 @@ function copySupportDirs(srcDir: string, destDir: string): void {
 }
 
 /** Import skills from a directory. Pure-ish: writes nothing when dryRun. */
-export function importSkills(sourceDir: string, options: ImportOptions = {}): ImportReport {
+export async function importSkills(sourceDir: string, options: ImportOptions = {}): Promise<ImportReport> {
   const destRoot = options.destRoot ?? defaultDestRoot();
   const source = options.source ?? 'import';
   const dryRun = options.dryRun ?? false;
@@ -328,14 +328,12 @@ export function importSkills(sourceDir: string, options: ImportOptions = {}): Im
   }
 
   if (!dryRun && report.imported.length > 0) {
-    void (async () => {
-      try {
-        const { getSkillRegistry } = await import('./registry.js');
-        await getSkillRegistry().reloadAll();
-      } catch (err) {
-        logger.debug(`skill reload after import failed: ${err instanceof Error ? err.message : String(err)}`);
-      }
-    })();
+    try {
+      const { getSkillRegistry } = await import('./registry.js');
+      await getSkillRegistry().reloadAll();
+    } catch (err) {
+      logger.warn(`skill reload after import failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
   }
 
   return report;

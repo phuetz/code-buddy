@@ -12,6 +12,7 @@ const processSpies = vi.hoisted(() => ({
   spawn: vi.fn(),
   spawnSync: vi.fn(),
 }));
+const reloadAllMock = vi.hoisted(() => vi.fn<() => Promise<void>>(() => Promise.resolve()));
 vi.mock('../../src/security/skill-scanner.js', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../src/security/skill-scanner.js')>();
   return { ...actual, scanSkillFirewall: firewallMock };
@@ -20,6 +21,9 @@ vi.mock('child_process', async (importOriginal) => {
   const actual = await importOriginal<typeof import('child_process')>();
   return { ...actual, ...processSpies };
 });
+vi.mock('../../src/skills/registry.js', () => ({
+  getSkillRegistry: () => ({ reloadAll: reloadAllMock }),
+}));
 
 import { registerSkillsCommands } from '../../src/commands/skills-cli/index.js';
 import {
@@ -89,6 +93,7 @@ function writeManifest(packageDir: string, manifest: ExchangeManifest): void {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  reloadAllMock.mockImplementation(() => Promise.resolve());
   originalHome = process.env.HOME;
   originalUserProfile = process.env.USERPROFILE;
   originalCwd = process.cwd();
@@ -169,34 +174,34 @@ describe('skill exchange export', () => {
 });
 
 describe('skill exchange fail-closed install', () => {
-  it('refuses an invalid signature before installation', () => {
+  it('refuses an invalid signature before installation', async () => {
     const packageDir = exportDemo();
     const manifest = readManifest(packageDir);
     const first = manifest.signature[0] === 'A' ? 'B' : 'A';
     writeManifest(packageDir, { ...manifest, signature: `${first}${manifest.signature.slice(1)}` });
     useHome(installerHome);
 
-    expect(() => installSkill(packageDir, { trust: true, destRoot: destination })).toThrow(/signature/i);
+    await expect(installSkill(packageDir, { trust: true, destRoot: destination })).rejects.toThrow(/signature/i);
     expect(fs.existsSync(destination)).toBe(false);
   });
 
-  it('refuses a file altered after signing', () => {
+  it('refuses a file altered after signing', async () => {
     const packageDir = exportDemo();
     fs.appendFileSync(path.join(packageDir, 'SKILL.md'), 'tampered', 'utf-8');
     useHome(installerHome);
 
-    expect(() => installSkill(packageDir, { trust: true, destRoot: destination })).toThrow(/SHA-256 mismatch/i);
+    await expect(installSkill(packageDir, { trust: true, destRoot: destination })).rejects.toThrow(/SHA-256 mismatch/i);
   });
 
-  it('refuses an unsigned extra file', () => {
+  it('refuses an unsigned extra file', async () => {
     const packageDir = exportDemo();
     fs.writeFileSync(path.join(packageDir, 'unsigned.txt'), 'not covered by the signature', 'utf-8');
     useHome(installerHome);
 
-    expect(() => installSkill(packageDir, { trust: true, destRoot: destination })).toThrow(/unsigned files/i);
+    await expect(installSkill(packageDir, { trust: true, destRoot: destination })).rejects.toThrow(/unsigned files/i);
   });
 
-  it('refuses a firewall quarantine verdict', () => {
+  it('refuses a firewall quarantine verdict', async () => {
     const packageDir = exportDemo();
     firewallMock.mockReturnValue({
       quarantineRequired: true,
@@ -205,45 +210,45 @@ describe('skill exchange fail-closed install', () => {
     });
     useHome(installerHome);
 
-    expect(() => installSkill(packageDir, { trust: true, destRoot: destination })).toThrow(/firewall refused/i);
+    await expect(installSkill(packageDir, { trust: true, destRoot: destination })).rejects.toThrow(/firewall refused/i);
   });
 
-  it('requires explicit TOFU, stores the key with --trust, then accepts the same author', () => {
+  it('requires explicit TOFU, stores the key with --trust, then accepts the same author', async () => {
     const packageDir = exportDemo();
     useHome(installerHome);
 
-    expect(() => installSkill(packageDir, { destRoot: destination })).toThrow(/Unknown exchange author/);
-    const first = installSkill(packageDir, { trust: true, destRoot: destination });
+    await expect(installSkill(packageDir, { destRoot: destination })).rejects.toThrow(/Unknown exchange author/);
+    const first = await installSkill(packageDir, { trust: true, destRoot: destination });
     expect(first.trustedOnFirstUse).toBe(true);
     const store = JSON.parse(
       fs.readFileSync(path.join(installerHome, '.codebuddy', 'skill-signing', 'trusted-keys.json'), 'utf-8'),
     ) as { keys: Array<{ id: string }> };
     expect(store.keys.map((key) => key.id)).toContain(first.author);
 
-    const second = installSkill(packageDir, { destRoot: destination });
+    const second = await installSkill(packageDir, { destRoot: destination });
     expect(second.trustedOnFirstUse).toBe(false);
     const installed = fs.readFileSync(path.join(destination, 'imported-authored-demo', 'SKILL.md'), 'utf-8');
     expect(installed).toContain('exchange: true');
     expect(installed).toContain(`author: ${first.author}`);
   });
 
-  it('refuses to overwrite a non-exchange skill collision', () => {
+  it('refuses to overwrite a non-exchange skill collision', async () => {
     const packageDir = exportDemo();
     const collision = path.join(destination, 'imported-authored-demo');
     fs.mkdirSync(collision, { recursive: true });
     fs.writeFileSync(collision + '/SKILL.md', '---\nname: imported-authored-demo\ndescription: local\n---\n\nlocal\n');
     useHome(installerHome);
 
-    expect(() => installSkill(packageDir, { trust: true, destRoot: destination })).toThrow(/non-exchange skill/i);
+    await expect(installSkill(packageDir, { trust: true, destRoot: destination })).rejects.toThrow(/non-exchange skill/i);
   });
 
-  it('records verify, refusal, and install events in the local JSONL audit trail', () => {
+  it('records verify, refusal, and install events in the local JSONL audit trail', async () => {
     const packageDir = exportDemo();
     useHome(installerHome);
 
     verifySkill(packageDir);
-    expect(() => installSkill(packageDir, { destRoot: destination })).toThrow(/Unknown exchange author/);
-    installSkill(packageDir, { trust: true, destRoot: destination });
+    await expect(installSkill(packageDir, { destRoot: destination })).rejects.toThrow(/Unknown exchange author/);
+    await installSkill(packageDir, { trust: true, destRoot: destination });
 
     const entries = fs.readFileSync(
       path.join(installerHome, '.codebuddy', 'skill-exchange-log.jsonl'),
@@ -255,12 +260,12 @@ describe('skill exchange fail-closed install', () => {
 });
 
 describe('skill exchange never executes package scripts', () => {
-  it('does not spawn a process during export, verify, or install', () => {
+  it('does not spawn a process during export, verify, or install', async () => {
     const packageDir = exportDemo();
     useHome(installerHome);
 
     verifySkill(packageDir);
-    installSkill(packageDir, { trust: true, destRoot: destination });
+    await installSkill(packageDir, { trust: true, destRoot: destination });
 
     expect(processSpies.spawn).not.toHaveBeenCalled();
     expect(processSpies.spawnSync).not.toHaveBeenCalled();
@@ -287,7 +292,7 @@ describe('buddy skills exchange CLI', () => {
 });
 
 describe('skill exchange hardening (post-review)', () => {
-  it('refuses packages containing non-scannable files (.sh, .py, extensionless)', () => {
+  it('refuses packages containing non-scannable files (.sh, .py, extensionless)', async () => {
     useHome(authorHome);
     const dir = writeAuthoredSkill();
     fs.writeFileSync(path.join(dir, 'scripts', 'setup.sh'), '#!/bin/sh\necho nope\n', 'utf-8');
@@ -295,14 +300,14 @@ describe('skill exchange hardening (post-review)', () => {
     const packageDir = path.join(output, 'authored-demo');
 
     useHome(installerHome);
-    expect(() => installSkill(packageDir, { trust: true, destRoot: destination })).toThrow(/non-scannable/i);
+    await expect(installSkill(packageDir, { trust: true, destRoot: destination })).rejects.toThrow(/non-scannable/i);
     expect(fs.existsSync(path.join(destination, 'imported-authored-demo'))).toBe(false);
   });
 
-  it('refuses a cross-author overwrite of an installed exchange skill', () => {
+  it('refuses a cross-author overwrite of an installed exchange skill', async () => {
     const packageA = exportDemo();
     useHome(installerHome);
-    installSkill(packageA, { trust: true, destRoot: destination });
+    await installSkill(packageA, { trust: true, destRoot: destination });
 
     const authorBHome = path.join(tempRoot, 'author-b-home');
     fs.mkdirSync(authorBHome, { recursive: true });
@@ -312,41 +317,65 @@ describe('skill exchange hardening (post-review)', () => {
     exportSkill('authored-demo', outputB);
 
     useHome(installerHome);
-    expect(() =>
+    await expect(
       installSkill(path.join(outputB, 'authored-demo'), { trust: true, destRoot: destination }),
-    ).toThrow(/cross-author overwrite/i);
+    ).rejects.toThrow(/cross-author overwrite/i);
   });
 
-  it('refuses a version downgrade from the same author but accepts an upgrade', () => {
+  it('refuses a version downgrade from the same author but accepts an upgrade', async () => {
     useHome(authorHome);
     writeAuthoredSkill('authored-demo', '1.2.3');
     exportSkill('authored-demo', output);
     useHome(installerHome);
-    installSkill(path.join(output, 'authored-demo'), { trust: true, destRoot: destination });
+    await installSkill(path.join(output, 'authored-demo'), { trust: true, destRoot: destination });
 
     useHome(authorHome);
     writeAuthoredSkill('authored-demo', '1.0.0');
     exportSkill('authored-demo', output);
     useHome(installerHome);
-    expect(() =>
+    await expect(
       installSkill(path.join(output, 'authored-demo'), { trust: true, destRoot: destination }),
-    ).toThrow(/version downgrade/i);
+    ).rejects.toThrow(/version downgrade/i);
 
     useHome(authorHome);
     writeAuthoredSkill('authored-demo', '1.3.0');
     exportSkill('authored-demo', output);
     useHome(installerHome);
-    const upgraded = installSkill(path.join(output, 'authored-demo'), { destRoot: destination });
+    const upgraded = await installSkill(path.join(output, 'authored-demo'), { destRoot: destination });
     expect(upgraded.version).toBe('1.3.0');
   });
 
-  it('installs one level under the skills root by default so the registry can discover it', () => {
+  it('installs one level under the skills root by default so the registry can discover it', async () => {
     const packageDir = exportDemo();
     useHome(installerHome);
-    const result = installSkill(packageDir, { trust: true });
+    const result = await installSkill(packageDir, { trust: true });
     expect(result.path).toBe(
       path.join(installerHome, '.codebuddy', 'skills', 'imported-authored-demo'),
     );
     expect(fs.existsSync(path.join(result.path, 'SKILL.md'))).toBe(true);
+  });
+
+  it('waits for the registry reload before resolving installation', async () => {
+    const packageDir = exportDemo();
+    useHome(installerHome);
+    let release: () => void = () => {};
+    const reload = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    reloadAllMock.mockImplementationOnce(() => reload);
+
+    const pending = installSkill(packageDir, { trust: true, destRoot: destination }) as unknown as Promise<{ name: string }>;
+    expect(pending).toBeInstanceOf(Promise);
+    let settled = false;
+    void pending.then(() => {
+      settled = true;
+    });
+    await Promise.resolve();
+    expect(settled).toBe(false);
+
+    release();
+    const result = await pending;
+    expect(result.name).toBe('imported-authored-demo');
+    expect(reloadAllMock).toHaveBeenCalledTimes(1);
   });
 });

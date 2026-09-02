@@ -1,10 +1,22 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { Command } from 'commander';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import { randomUUID } from 'crypto';
-import { importSkills, findSkillDirs, IMPORTED_PREFIX } from '../../src/skills/skill-importer.js';
+import {
+  importSkills,
+  findSkillDirs,
+  IMPORTED_PREFIX,
+  type ImportReport,
+} from '../../src/skills/skill-importer.js';
 import { parseSkillFile } from '../../src/skills/parser.js';
+import { registerSkillsCommands } from '../../src/commands/skills-cli/index.js';
+
+const reloadAllMock = vi.hoisted(() => vi.fn<() => Promise<void>>(() => Promise.resolve()));
+vi.mock('../../src/skills/registry.js', () => ({
+  getSkillRegistry: () => ({ reloadAll: reloadAllMock }),
+}));
 
 function tmp(): string {
   return path.join(os.tmpdir(), `cb-import-${randomUUID()}`);
@@ -40,6 +52,8 @@ let src: string;
 let dest: string;
 
 beforeEach(() => {
+  reloadAllMock.mockClear();
+  reloadAllMock.mockImplementation(() => Promise.resolve());
   src = tmp();
   dest = tmp();
 });
@@ -54,13 +68,81 @@ describe('skill-importer — discovery', () => {
     const dirs = findSkillDirs(src).map((d) => path.relative(src, d).split(path.sep).join('/')).sort();
     expect(dirs).toEqual(['dev/git-helper', 'mlops/inference/vllm']);
   });
+
+  it('installs by default directly under the managed skills root', async () => {
+    const home = tmp();
+    const originalHome = process.env.HOME;
+    process.env.HOME = home;
+    try {
+      writeSkill(path.join(src, 'git-helper'), BENIGN_FM, BENIGN_BODY);
+
+      const report = await importSkills(src, { source: 'test' });
+
+      expect(report.imported).toHaveLength(1);
+      expect(fs.existsSync(path.join(home, '.codebuddy', 'skills', 'imported-git-helper', 'SKILL.md'))).toBe(true);
+      expect(fs.existsSync(path.join(home, '.codebuddy', 'skills', 'managed', 'imported-git-helper'))).toBe(false);
+    } finally {
+      if (originalHome === undefined) delete process.env.HOME;
+      else process.env.HOME = originalHome;
+      fs.rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  it('waits for the registry reload before resolving', async () => {
+    let release: () => void = () => {};
+    const reload = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    reloadAllMock.mockImplementationOnce(() => reload);
+    writeSkill(path.join(src, 'git-helper'), BENIGN_FM, BENIGN_BODY);
+
+    const pending = importSkills(src, { destRoot: dest, source: 'test' }) as unknown as Promise<ImportReport>;
+    expect(pending).toBeInstanceOf(Promise);
+    let settled = false;
+    void pending.then(() => {
+      settled = true;
+    });
+    await Promise.resolve();
+    expect(settled).toBe(false);
+
+    release();
+    const report = await pending;
+    expect(report.imported).toHaveLength(1);
+    expect(reloadAllMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('lists imported skills from both the current and legacy managed roots', async () => {
+    const home = tmp();
+    const originalHome = process.env.HOME;
+    process.env.HOME = home;
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    try {
+      writeSkill(path.join(home, '.codebuddy', 'skills', 'imported-current'), BENIGN_FM, BENIGN_BODY);
+      writeSkill(path.join(home, '.codebuddy', 'skills', 'managed', 'imported-legacy'), BENIGN_FM, BENIGN_BODY);
+
+      const program = new Command();
+      program.exitOverride();
+      registerSkillsCommands(program);
+      await program.parseAsync(['node', 'buddy', 'skills', 'imported', '--json']);
+
+      const listed = JSON.parse(logSpy.mock.calls.map((call) => call.join(' ')).join('\n')) as {
+        imported: Array<{ name: string }>;
+      };
+      expect(listed.imported.map((skill) => skill.name).sort()).toEqual(['imported-current', 'imported-legacy']);
+    } finally {
+      logSpy.mockRestore();
+      if (originalHome === undefined) delete process.env.HOME;
+      else process.env.HOME = originalHome;
+      fs.rmSync(home, { recursive: true, force: true });
+    }
+  });
 });
 
 describe('skill-importer — firewall gate (headline safety)', () => {
-  it('QUARANTINES a malicious skill and installs a benign one', () => {
+  it('QUARANTINES a malicious skill and installs a benign one', async () => {
     writeSkill(path.join(src, 'good', 'git-helper'), BENIGN_FM, BENIGN_BODY);
     writeSkill(path.join(src, 'bad', 'evil'), 'name: evil\ndescription: "helper"\nversion: 1.0.0', EVIL_BODY);
-    const report = importSkills(src, { destRoot: dest, source: 'test' });
+    const report = await importSkills(src, { destRoot: dest, source: 'test' });
     expect(report.imported.map((s) => s.name)).toEqual(['imported-git-helper']);
     expect(report.quarantined.map((s) => path.basename(s.sourcePath))).toContain('evil');
     // benign installed, malicious NOT installed
@@ -68,18 +150,18 @@ describe('skill-importer — firewall gate (headline safety)', () => {
     expect(fs.existsSync(path.join(dest, 'imported-evil'))).toBe(false);
   });
 
-  it('dry-run writes nothing', () => {
+  it('dry-run writes nothing', async () => {
     writeSkill(path.join(src, 'git-helper'), BENIGN_FM, BENIGN_BODY);
-    const report = importSkills(src, { destRoot: dest, dryRun: true });
+    const report = await importSkills(src, { destRoot: dest, dryRun: true });
     expect(report.imported).toHaveLength(1);
     expect(fs.existsSync(dest)).toBe(false);
   });
 });
 
 describe('skill-importer — remap makes imported skills discoverable + provenance', () => {
-  it('populates top-level tags + nativeEngine.triggers from metadata.hermes.tags, with provenance', () => {
+  it('populates top-level tags + nativeEngine.triggers from metadata.hermes.tags, with provenance', async () => {
     writeSkill(path.join(src, 'git-helper'), BENIGN_FM, BENIGN_BODY);
-    importSkills(src, { destRoot: dest, source: 'hermes' });
+    await importSkills(src, { destRoot: dest, source: 'hermes' });
     const installed = fs.readFileSync(path.join(dest, 'imported-git-helper', 'SKILL.md'), 'utf-8');
     const skill = parseSkillFile(installed, path.join(dest, 'imported-git-helper', 'SKILL.md'), 'managed');
     expect(skill.metadata.name).toBe('imported-git-helper');
@@ -92,14 +174,14 @@ describe('skill-importer — remap makes imported skills discoverable + provenan
 });
 
 describe('skill-importer — source-agnostic remap (OpenClaw + generic)', () => {
-  it('OpenClaw-style skill (no tags) gets triggers from name+description and requires from bins', () => {
+  it('OpenClaw-style skill (no tags) gets triggers from name+description and requires from bins', async () => {
     // OpenClaw: name + description + metadata.openclaw.{emoji, requires.bins}; NO tags.
     writeSkill(
       path.join(src, 'diagram-maker'),
       'name: diagram-maker\ndescription: "Create excalidraw diagrams and architecture flowcharts."\nmetadata:\n  openclaw:\n    emoji: "🧭"\n    requires:\n      bins: [node]',
       '# Diagram Maker\nCreate diagrams as artifacts.',
     );
-    importSkills(src, { destRoot: dest, source: 'openclaw' });
+    await importSkills(src, { destRoot: dest, source: 'openclaw' });
     const installed = fs.readFileSync(path.join(dest, 'imported-diagram-maker', 'SKILL.md'), 'utf-8');
     const skill = parseSkillFile(installed, path.join(dest, 'imported-diagram-maker', 'SKILL.md'), 'managed');
     const triggers = skill.metadata.nativeEngine?.triggers ?? [];
@@ -110,9 +192,9 @@ describe('skill-importer — source-agnostic remap (OpenClaw + generic)', () => 
     expect(skill.metadata.source).toBe('openclaw');
   });
 
-  it('hoists tags from any metadata.<source>.tags', () => {
+  it('hoists tags from any metadata.<source>.tags', async () => {
     writeSkill(path.join(src, 'thing'), 'name: thing\ndescription: "x."\nmetadata:\n  custom:\n    tags: [Alpha, Beta]', '# Thing');
-    importSkills(src, { destRoot: dest });
+    await importSkills(src, { destRoot: dest });
     const skill = parseSkillFile(
       fs.readFileSync(path.join(dest, 'imported-thing', 'SKILL.md'), 'utf-8'),
       path.join(dest, 'imported-thing', 'SKILL.md'),
@@ -123,30 +205,30 @@ describe('skill-importer — source-agnostic remap (OpenClaw + generic)', () => 
 });
 
 describe('skill-importer — support files + conflicts', () => {
-  it('copies support dirs and skips a conflict unless overwrite', () => {
+  it('copies support dirs and skips a conflict unless overwrite', async () => {
     writeSkill(path.join(src, 'git-helper'), BENIGN_FM, BENIGN_BODY, { 'scripts/helper.sh': 'echo hello\n', 'references/notes.md': '# notes' });
-    importSkills(src, { destRoot: dest, source: 'hermes' });
+    await importSkills(src, { destRoot: dest, source: 'hermes' });
     expect(fs.existsSync(path.join(dest, 'imported-git-helper', 'scripts', 'helper.sh'))).toBe(true);
     expect(fs.existsSync(path.join(dest, 'imported-git-helper', 'references', 'notes.md'))).toBe(true);
 
     // re-import → conflict (skipped)
-    const again = importSkills(src, { destRoot: dest, source: 'hermes' });
+    const again = await importSkills(src, { destRoot: dest, source: 'hermes' });
     expect(again.imported).toHaveLength(0);
     expect(again.skipped.some((s) => s.reason.includes('conflict'))).toBe(true);
 
     // with overwrite → re-imported
-    const forced = importSkills(src, { destRoot: dest, source: 'hermes', overwrite: true });
+    const forced = await importSkills(src, { destRoot: dest, source: 'hermes', overwrite: true });
     expect(forced.imported).toHaveLength(1);
   });
 });
 
 describe('skill-importer — distinct same-named sources (no silent loss)', () => {
-  it('disambiguates two different skills sharing a frontmatter name — both survive', () => {
+  it('disambiguates two different skills sharing a frontmatter name — both survive', async () => {
     // Two DISTINCT skills in different category dirs, same `name: deploy`.
     writeSkill(path.join(src, 'aws', 'deploy'), 'name: deploy\ndescription: "Deploy to AWS."\nversion: 1.0.0', '# AWS deploy\nUse the aws cli.');
     writeSkill(path.join(src, 'gcp', 'deploy'), 'name: deploy\ndescription: "Deploy to GCP."\nversion: 1.0.0', '# GCP deploy\nUse gcloud.');
 
-    const report = importSkills(src, { destRoot: dest, source: 'test' });
+    const report = await importSkills(src, { destRoot: dest, source: 'test' });
 
     expect(report.imported).toHaveLength(2); // neither dropped as a "conflict"
     const names = report.imported.map((i) => i.name).sort();
@@ -160,24 +242,24 @@ describe('skill-importer — distinct same-named sources (no silent loss)', () =
     expect(bodies.some((b) => b.includes('gcloud'))).toBe(true);
   });
 
-  it('is idempotent: re-importing the same distinct sources produces the same slugs (no leak)', () => {
+  it('is idempotent: re-importing the same distinct sources produces the same slugs (no leak)', async () => {
     writeSkill(path.join(src, 'aws', 'deploy'), 'name: deploy\ndescription: "AWS."\nversion: 1.0.0', '# AWS');
     writeSkill(path.join(src, 'gcp', 'deploy'), 'name: deploy\ndescription: "GCP."\nversion: 1.0.0', '# GCP');
 
-    const first = importSkills(src, { destRoot: dest, source: 'test' });
+    const first = await importSkills(src, { destRoot: dest, source: 'test' });
     expect(first.imported).toHaveLength(2);
     const firstNames = first.imported.map((i) => i.name).sort();
 
-    const second = importSkills(src, { destRoot: dest, source: 'test' });
+    const second = await importSkills(src, { destRoot: dest, source: 'test' });
     expect(second.imported).toHaveLength(0); // all already there
     expect(second.skipped.filter((s) => s.reason.includes('conflict'))).toHaveLength(2);
     // No new/leaked dest dirs — exactly the same two slugs.
     expect(fs.readdirSync(dest).filter((d) => d.startsWith(IMPORTED_PREFIX)).sort()).toEqual(firstNames);
   });
 
-  it('keeps the bare slug when the name is unique (common case unchanged)', () => {
+  it('keeps the bare slug when the name is unique (common case unchanged)', async () => {
     writeSkill(path.join(src, 'dev', 'git-helper'), BENIGN_FM, BENIGN_BODY);
-    const report = importSkills(src, { destRoot: dest, source: 'test' });
+    const report = await importSkills(src, { destRoot: dest, source: 'test' });
     expect(report.imported).toHaveLength(1);
     expect(report.imported[0]!.name).toBe(`${IMPORTED_PREFIX}git-helper`); // no hash suffix
   });

@@ -541,7 +541,7 @@ function writeExchangeProvenance(skillFile: string, name: string, author: string
 }
 
 /** Verify and install a signed skill package under the managed imported namespace. */
-export function installSkill(dir: string, options: InstallSkillOptions = {}): InstallSkillResult {
+export async function installSkill(dir: string, options: InstallSkillOptions = {}): Promise<InstallSkillResult> {
   assertExchangeEnabled();
   try {
     const validation = validatePackage(dir);
@@ -621,16 +621,14 @@ export function installSkill(dir: string, options: InstallSkillOptions = {}): In
     };
     appendAudit({ action: 'install', at: installedAt, author: manifest.author, name, version: manifest.version });
     logger.info('Signed exchange skill installed', { author: manifest.author, name, version: manifest.version });
-    void (async () => {
-      try {
-        const { getSkillRegistry } = await import('./registry.js');
-        await getSkillRegistry().reloadAll();
-      } catch (error) {
-        logger.debug('Skill reload after exchange installation failed', {
-          error: error instanceof Error ? error.message : String(error),
-        });
-      }
-    })();
+    try {
+      const { getSkillRegistry } = await import('./registry.js');
+      await getSkillRegistry().reloadAll();
+    } catch (error) {
+      logger.warn('Skill reload after exchange installation failed', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
     return result;
   } catch (error) {
     throw refusal('install', error);

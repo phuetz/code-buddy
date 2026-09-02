@@ -114,6 +114,7 @@ export function resolveSourceDir(source: SkillSource): string {
     }
   } catch (err) {
     logger.warn(`skill source "${source.name}": git fetch failed — ${err instanceof Error ? err.message : String(err)}`);
+    throw err;
   }
   return dir;
 }

@@ -31,6 +31,7 @@ import type { Command } from 'commander';
 import os from 'os';
 import path from 'path';
 import type { InstalledSkillStatus } from '../../skills/hub.js';
+import { logger } from '../../utils/logger.js';
 
 interface SkillDoctorIssue {
   commands: string[];
@@ -817,7 +818,7 @@ export function registerSkillsCommands(program: Command): void {
         console.log(`Directory not found: ${dir}`);
         return;
       }
-      const report = importSkills(dir, {
+      const report = await importSkills(dir, {
         source: label,
         dryRun: opts.apply !== true,
         includeReview: opts.includeReview === true,
@@ -847,11 +848,16 @@ export function registerSkillsCommands(program: Command): void {
     .action(async (opts: { json?: boolean }) => {
       const fs = await import('fs');
       const { parseSkillFile } = await import('../../skills/parser.js');
-      const root = path.join(os.homedir(), '.codebuddy', 'skills', 'managed');
+      const roots = [
+        path.join(os.homedir(), '.codebuddy', 'skills'),
+        path.join(os.homedir(), '.codebuddy', 'skills', 'managed'),
+      ];
       const items: Array<{ name: string; pinned: boolean; source?: string }> = [];
-      if (fs.existsSync(root)) {
+      const seen = new Set<string>();
+      for (const root of roots) {
+        if (!fs.existsSync(root)) continue;
         for (const e of fs.readdirSync(root, { withFileTypes: true })) {
-          if (!e.isDirectory() || !e.name.startsWith('imported-')) continue;
+          if (!e.isDirectory() || !e.name.startsWith('imported-') || seen.has(e.name)) continue;
           const md = path.join(root, e.name, 'SKILL.md');
           if (!fs.existsSync(md)) continue;
           let pinned = false;
@@ -860,7 +866,12 @@ export function registerSkillsCommands(program: Command): void {
             const sk = parseSkillFile(fs.readFileSync(md, 'utf-8'), md, 'managed');
             pinned = sk.metadata.pinned === true;
             source = sk.metadata.source;
-          } catch { /* ignore */ }
+          } catch (error) {
+            logger.warn(`Failed to read imported skill "${e.name}"`, {
+              error: error instanceof Error ? error.message : String(error),
+            });
+          }
+          seen.add(e.name);
           items.push({ name: e.name, pinned, ...(source ? { source } : {}) });
         }
       }
@@ -900,7 +911,7 @@ export function registerSkillsCommands(program: Command): void {
     .option('--json', 'output JSON')
     .action(async (dir: string, opts: { json?: boolean; trust?: boolean }) => {
       const { installSkill } = await import('../../skills/skill-exchange.js');
-      const result = installSkill(expandHome(dir), { trust: opts.trust === true });
+      const result = await installSkill(expandHome(dir), { trust: opts.trust === true });
       if (opts.json) {
         console.log(JSON.stringify(result, null, 2));
         return;
