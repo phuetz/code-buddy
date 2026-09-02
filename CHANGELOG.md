@@ -74,6 +74,19 @@ Cowork à 3 018, balayage d'installation neuve à 103/103 commandes.
   processus. Les tests n'écrivent plus dans le vrai dossier utilisateur (garde-fou `tests/security/test-home-isolation`).
 - **Robot sous charge** : la voix hachait quand des travaux de fond saturaient les cœurs ; les services du robot reçoivent le
   poids CPU maximal (drop-ins systemd, hors dépôt) — mesuré : 0 trou ≥ 250 ms sous saturation des 24 cœurs.
+- **Seconde vague de jumeaux (vérification VD → R33 → R34)** : la restauration de sauvegarde refuse un chemin qui sort du dossier
+  cible (traversée `..`) ; appels d'outil en prose détectés aussi en YAML ; `remember`/`memory_propose` approuvés sous `acceptEdits` ;
+  scripts Perl, Lua et Go scannés à l'import ; `speak --format ogg` réellement en OGG ; Lemonade et OmniRoute sondés comme les autres
+  runtimes locaux ; `dev fix-ci`/`explain` libèrent le plan ; `/readyz` sonde le fournisseur configuré quel qu'il soit ; toute clé
+  fournisseur acceptée par l'IDE, MCP, json-rpc et skills ; clés de mémoire automatique conservées entières ; segments de contexte
+  vérifiés par hachage à la restauration ; `context_expand` caché du RAG tant que le zoom est désactivé ; un profil utilisateur corrompu
+  est refusé ; « aucun fait » distingué de « extraction impossible » ; mémoire collective injectée aux tours suivants ; cartes de
+  permissions du compagnon cliquables ; fixtures e2e ONNX vides remplacées par un skip explicite.
+- **CLI installée depuis `npm pack` dans un conteneur propre (E14)** : `sharp` chargé paresseusement (le premier `buddy -p` mourait),
+  `backup restore --confirm` déclaré, message d'erreur sans chemin personnel, `skills list` distingue un hub vide des skills embarqués.
+- **Boucles agentiques exécutées sur un dépôt jouet (E15)** : `buddy loop` et `buddy goal` réparent réellement (tests rouges → verts,
+  commits) ; `/batch` attend le résultat au lieu d'annoncer un lancement ; `flow` échoue sur une étape qui n'a émis que du balisage
+  d'outil non exécuté ; `think` et les agents multi-modèles respectent `GROK_MODEL` ; délai du juge de `goal` configurable.
 
 ### Ce qui change pour qui installe
 
