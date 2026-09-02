@@ -101,14 +101,15 @@ function collectMainClientEventHandlers(): Set<string> {
   const sourceFile = parseSource(mainPath);
   const handled = new Set<string>();
 
+  function visitHandler(node: ts.Node): void {
+    if (ts.isCaseClause(node) && ts.isStringLiteral(node.expression)) {
+      handled.add(node.expression.text);
+    }
+    ts.forEachChild(node, visitHandler);
+  }
+
   function visit(node: ts.Node): void {
     if (ts.isFunctionDeclaration(node) && node.name?.text === 'handleClientEvent') {
-      function visitHandler(child: ts.Node): void {
-        if (ts.isCaseClause(child) && ts.isStringLiteral(child.expression)) {
-          handled.add(child.expression.text);
-        }
-        ts.forEachChild(child, visitHandler);
-      }
       visitHandler(node);
       return;
     }

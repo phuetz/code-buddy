@@ -20,12 +20,13 @@
  * - Forwards abort to the underlying adapter
  */
 import type { BrowserWindow } from 'electron';
+import type { Message, TraceStep } from '../../renderer/types';
+import { sendToRenderer } from '../ipc-main-bridge';
 import { log, logError } from '../utils/logger';
 import {
   CodeBuddyAdapter,
   type CodeBuddyMessage,
 } from './codebuddy-adapter';
-import { getMainWindow } from '../window-management';
 
 // ---------------------------------------------------------------------------
 // Payload shapes — mirror what the renderer already expects from agent-runner
@@ -38,7 +39,7 @@ interface SessionStatusPayload {
 
 interface StreamPartialPayload {
   sessionId: string;
-  content: string | undefined;
+  delta: string;
 }
 
 interface StreamMessagePayload {
@@ -59,7 +60,7 @@ interface TraceStepPayload {
 
 interface SessionContextInfoPayload {
   sessionId: string;
-  tokenCount: number | undefined;
+  contextWindow: number;
 }
 
 interface ErrorPayload {
@@ -73,11 +74,10 @@ interface ErrorPayload {
 
 export class SessionBridge {
   private adapter: CodeBuddyAdapter;
-  private initialWindow: BrowserWindow;
+  private eventSequence = 0;
 
-  constructor(adapter: CodeBuddyAdapter, mainWindow: BrowserWindow) {
+  constructor(adapter: CodeBuddyAdapter, _mainWindow: BrowserWindow) {
     this.adapter = adapter;
-    this.initialWindow = mainWindow;
   }
 
   /**
@@ -105,7 +105,7 @@ export class SessionBridge {
         switch (event.type) {
           case 'content': {
             fullContent += event.content ?? '';
-            this.sendStreamPartial({ sessionId, content: event.content });
+            this.sendStreamPartial({ sessionId, delta: event.content ?? '' });
             break;
           }
 
@@ -128,16 +128,18 @@ export class SessionBridge {
             // tool_stream carries incremental tool output — surface as a
             // partial so the user sees streaming tool activity.
             if (event.content) {
-              this.sendStreamPartial({ sessionId, content: event.content });
+              this.sendStreamPartial({ sessionId, delta: event.content });
             }
             break;
           }
 
           case 'token_count': {
-            this.sendSessionContextInfo({
-              sessionId,
-              tokenCount: event.tokenCount,
-            });
+            if (event.tokenCount !== undefined) {
+              this.sendSessionContextInfo({
+                sessionId,
+                contextWindow: event.tokenCount,
+              });
+            }
             break;
           }
 
@@ -190,39 +192,51 @@ export class SessionBridge {
 
   // ---- IPC helpers -----------------------------------------------------------
 
-  private send(channel: string, data: unknown): void {
-    // Résoudre la fenêtre à chaque événement : elle peut être recréée pendant
-    // une session longue. Le paramètre historique reste un repli compatible.
-    const mainWindow = getMainWindow();
-    const target = mainWindow && !mainWindow.isDestroyed()
-      ? mainWindow
-      : this.initialWindow.isDestroyed()
-        ? null
-        : this.initialWindow;
-    target?.webContents.send(channel, data);
+  private nextEventId(kind: string, sessionId: string): string {
+    this.eventSequence += 1;
+    return `session-bridge-${kind}-${sessionId}-${this.eventSequence}`;
   }
 
   private sendSessionStatus(payload: SessionStatusPayload): void {
-    this.send('session.status', payload);
+    sendToRenderer({ type: 'session.status', payload });
   }
 
   private sendStreamPartial(payload: StreamPartialPayload): void {
-    this.send('stream.partial', payload);
+    sendToRenderer({ type: 'stream.partial', payload });
   }
 
   private sendStreamMessage(payload: StreamMessagePayload): void {
-    this.send('stream.message', payload);
+    const message: Message = {
+      id: this.nextEventId('message', payload.sessionId),
+      sessionId: payload.sessionId,
+      role: payload.role,
+      content: [{ type: 'text', text: payload.content }],
+      timestamp: Date.now(),
+    };
+    sendToRenderer({
+      type: 'stream.message',
+      payload: { sessionId: payload.sessionId, message },
+    });
   }
 
   private sendTraceStep(payload: TraceStepPayload): void {
-    this.send('trace.step', payload);
+    const step: TraceStep = {
+      id: this.nextEventId('trace', payload.sessionId),
+      type: payload.step.type,
+      status: payload.step.status,
+      title: payload.step.tool,
+      content: payload.step.input,
+      toolName: payload.step.tool,
+      timestamp: Date.now(),
+    };
+    sendToRenderer({ type: 'trace.step', payload: { sessionId: payload.sessionId, step } });
   }
 
   private sendSessionContextInfo(payload: SessionContextInfoPayload): void {
-    this.send('session.contextInfo', payload);
+    sendToRenderer({ type: 'session.contextInfo', payload });
   }
 
   private sendError(payload: ErrorPayload): void {
-    this.send('error', payload);
+    sendToRenderer({ type: 'error', payload });
   }
 }
