@@ -6,6 +6,7 @@ import { wireSemanticVisionReaction } from '../../src/sensory/semantic-vision-re
 import { createResponseDecider } from '../../src/sensory/respond-decider.js';
 import { getGlobalEventBus } from '../../src/events/event-bus.js';
 import { recordCompanionPercept } from '../../src/companion/percepts.js';
+import { CompanionConductor, _resetConductorForTests } from '../../src/companion/orchestrator.js';
 
 let tmp: string;
 const tick = () => new Promise((r) => setTimeout(r, 60));
@@ -54,9 +55,11 @@ function personIdentified(name: string, similarity = 0.7): void {
 }
 
 beforeEach(async () => {
+  _resetConductorForTests();
   tmp = await mkdtemp(path.join(os.tmpdir(), 'greet-'));
 });
 afterEach(async () => {
+  _resetConductorForTests();
   await rm(tmp, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   delete process.env.CODEBUDDY_SENSORY_GREET;
   delete process.env.CODEBUDDY_SENSORY_GREET_LLM;
@@ -95,7 +98,8 @@ describe('arrival greeting — the robot notices and engages when someone arrive
     const greet = vi.fn(async () => {});
     const onEngage = vi.fn();
     let clock = 1000;
-    const unwire = wireSemanticVisionReaction({ greet, onEngage, now: () => clock, cwd: tmp });
+    const conductor = new CompanionConductor(45_000, () => clock);
+    const unwire = wireSemanticVisionReaction({ greet, onEngage, now: () => clock, conductor, cwd: tmp });
     try {
       personEntered();
       await waitForCalls(greet, 1);
@@ -158,10 +162,12 @@ describe('arrival greeting — the robot notices and engages when someone arrive
     expect((await decider.decide('il fait beau aujourd’hui')).respond).toBe(false);
 
     const greet = vi.fn(async () => {});
+    const conductor = new CompanionConductor(45_000, () => clock);
     const unwire = wireSemanticVisionReaction({
       greet,
       onEngage: () => decider.markEngaged('arrival'), // exactly how server/index.ts wires it
       now: () => clock,
+      conductor,
       cwd: tmp,
     });
     try {
@@ -198,7 +204,14 @@ describe('arrival greeting — the robot notices and engages when someone arrive
     const greet1 = vi.fn(async () => {});
     const llmChat = vi.fn(async () => 'Tiens, te revoilà — content de te voir.');
     let clock = 1000;
-    const unwire1 = wireSemanticVisionReaction({ greet: greet1, llmChat, now: () => clock, cwd: tmp });
+    const conductor1 = new CompanionConductor(45_000, () => clock);
+    const unwire1 = wireSemanticVisionReaction({
+      greet: greet1,
+      llmChat,
+      now: () => clock,
+      conductor: conductor1,
+      cwd: tmp,
+    });
     try {
       personEntered();
       await waitForCalls(greet1, 1);
@@ -213,7 +226,14 @@ describe('arrival greeting — the robot notices and engages when someone arrive
     const greet2 = vi.fn(async () => {});
     const nullChat = vi.fn(async () => null);
     clock += 200_000; // fresh temp cwd anyway; new wiring has its own cooldown clock
-    const unwire2 = wireSemanticVisionReaction({ greet: greet2, llmChat: nullChat, now: () => clock, cwd: tmp });
+    const conductor2 = new CompanionConductor(45_000, () => clock);
+    const unwire2 = wireSemanticVisionReaction({
+      greet: greet2,
+      llmChat: nullChat,
+      now: () => clock,
+      conductor: conductor2,
+      cwd: tmp,
+    });
     try {
       personEntered();
       await waitForCalls(greet2, 1);
