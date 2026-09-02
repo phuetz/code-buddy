@@ -1626,7 +1626,7 @@ export async function startServer(userConfig: Partial<ServerConfig> = {}): Promi
                     return;
                   }
                   // Snooze a pending reminder ("dans 10 minutes" / "plus tard") before anything else.
-                  const snoozed = rem.snoozePending(t, Date.now());
+                  const snoozed = await rem.snoozePending(t, Date.now());
                   if (snoozed) {
                     const mins = Math.max(1, Math.round(snoozed.delayMs / 60_000));
                     await sayCanonical(`D'accord, je te le rappelle dans ${mins} minute${mins > 1 ? 's' : ''}.`);

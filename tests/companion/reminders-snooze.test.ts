@@ -61,17 +61,32 @@ describe('parseSnooze', () => {
 });
 
 describe('snoozePending / isSnoozeCommand', () => {
-  it('does nothing when no reminder is pending', () => {
-    expect(snoozePending('dans 10 minutes', 1000)).toBeNull();
+  it('does nothing when no reminder is pending', async () => {
+    expect(await snoozePending('dans 10 minutes', 1000)).toBeNull();
     expect(isSnoozeCommand('dans 10 minutes', 1000)).toBe(false);
   });
-  it('defers the pending reminder, closing its ack and scheduling a re-announce', () => {
+  it('defers the pending reminder, closing its ack and scheduling a re-announce', async () => {
     openAck({ id: 'r1', label: 'médicaments' }, 1000);
     expect(isSnoozeCommand('dans 15 minutes', 1000)).toBe(true);
-    const res = snoozePending('dans 15 minutes', 1000);
+    const res = await snoozePending('dans 15 minutes', 1000);
     expect(res).toMatchObject({ id: 'r1', label: 'médicaments', delayMs: 15 * 60_000 });
     expect(pendingAcks(1000)).toHaveLength(0); // ack closed → no re-nag/missed
     expect(dueSnoozes(1000 + 15 * 60_000)).toEqual([{ id: 'r1', label: 'médicaments' }]); // due later
+  });
+
+  it('does not announce a snooze when the durable write failed (D6)', async () => {
+    const { mkdir } = await import('node:fs/promises');
+    await mkdir(dir, { recursive: true });
+    await mkdir(process.env.CODEBUDDY_REMINDER_SNOOZE_FILE!);
+    openAck({ id: 'r1', label: 'médicaments' }, 1000);
+
+    const res = await snoozePending('dans 10 minutes', 1000);
+    expect(res).toBeNull();
+    expect(pendingAcks(1000)).toHaveLength(1);
+
+    resetSnoozes();
+    await loadSnoozes();
+    expect(dueSnoozes(1000 + 10 * 60_000)).toHaveLength(0);
   });
 });
 

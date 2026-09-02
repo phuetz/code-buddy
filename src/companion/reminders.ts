@@ -377,11 +377,11 @@ function pendingAcksFile(): string {
  * remove the store directory (tests, a tear-down) wait for them first — on
  * Windows an unfinished write leaves the directory ENOTEMPTY.
  */
-const pendingWrites = new Set<Promise<void>>();
-function trackWrite(write: Promise<void>): Promise<void> {
+const pendingWrites = new Set<Promise<unknown>>();
+function trackWrite(write: Promise<unknown>): Promise<void> {
   pendingWrites.add(write);
   void write.finally(() => pendingWrites.delete(write));
-  return write;
+  return write.then(() => undefined);
 }
 export async function whenRemindersPersisted(): Promise<void> {
   while (pendingWrites.size > 0) {
@@ -922,15 +922,17 @@ function snoozesFile(): string {
 function saveSnoozes(): Promise<void> {
   return trackWrite(saveSnoozesNow());
 }
-async function saveSnoozesNow(): Promise<void> {
+async function saveSnoozesNow(): Promise<boolean> {
   try {
     const file = snoozesFile();
     await mkdir(join(file, '..'), { recursive: true });
     await writeFile(file, JSON.stringify([...snoozes.values()]), 'utf8');
+    return true;
   } catch (err) {
     logger.warn(
       `[reminders] could not persist snoozes: ${err instanceof Error ? err.message : String(err)}`
     );
+    return false;
   }
 }
 
@@ -979,17 +981,25 @@ export function resetSnoozes(): void {
 /**
  * If `text` is a snooze AND a reminder is currently pending its ack, defer that reminder: close its
  * ack and schedule a re-announce. Returns the deferral (for the spoken confirmation) or null.
+ * The durable snooze write happens BEFORE closeAck; a failed write leaves the ack open and
+ * returns null so the voice path does not promise a later reminder.
  */
-export function snoozePending(
+export async function snoozePending(
   text: string,
   nowMs: number
-): { id: string; label: string; delayMs: number } | null {
+): Promise<{ id: string; label: string; delayMs: number } | null> {
   const delayMs = parseSnooze(text);
   if (delayMs == null) return null;
   const target = pendingAcks(nowMs)[0]; // most-recently-fired pending
   if (!target) return null;
+  snoozes.set(target.id, { id: target.id, label: target.label, fireAt: nowMs + delayMs });
+  const persisted = await saveSnoozesNow();
+  if (!persisted) {
+    snoozes.delete(target.id);
+    logger.warn(`[reminders] snooze not durable for ${target.id}; leaving ack open`);
+    return null;
+  }
   closeAck(target.id);
-  snoozeReminder(target.id, target.label, nowMs + delayMs);
   return { id: target.id, label: target.label, delayMs };
 }
 
