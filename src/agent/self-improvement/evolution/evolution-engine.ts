@@ -379,6 +379,22 @@ export async function runEvolutionCycle(opts: EvolutionCycleOptions): Promise<Ev
     }
   }
 
+  if (!mutated) {
+    try {
+      git(['branch', '-D', branch], basePath);
+    } catch {
+      /* ignore */
+    }
+    return {
+      variantId,
+      branch,
+      mutated: false,
+      report: { score: 0, passedAll: false, regressions: [], components: [] },
+      beatsBaseline: false,
+      kept: false,
+    };
+  }
+
   // 4. score (Phase C reject + Phase A/B fitness in an isolated worktree).
   const scored = await scoreBranchInWorktree(branch, {
     basePath,
@@ -547,4 +563,15 @@ export async function runEvolutionRound(opts: EvolutionRoundOptions): Promise<Ev
   const pool = Array.from({ length: poolSize }, () => worker());
   await Promise.all(pool);
   return results.sort((a, b) => b.report.score - a.report.score);
+}
+
+/** Human-readable wrap-up after a round. Distinguishes "nothing mutated" from "nothing beat baseline". */
+export function formatEvolveRoundSummary(results: EvolutionCycleResult[]): string {
+  const produced = results.filter((r) => r.mutated);
+  if (produced.length === 0) return 'Aucune variante produite.';
+  const winner = produced.filter((r) => r.beatsBaseline).sort((a, b) => b.report.score - a.report.score)[0];
+  if (!winner) {
+    return 'No candidate beat the baseline. Try more rounds, a sharper goal, or a stronger --model.';
+  }
+  return `Best: ${winner.variantId} (fitness ${winner.report.score.toFixed(3)}). Review: \`buddy evolve review ${winner.variantId}\`; keep: \`buddy evolve keep ${winner.variantId} --confirm\`.`;
 }
