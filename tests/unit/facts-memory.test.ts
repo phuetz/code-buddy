@@ -54,6 +54,13 @@ describe('FactsMemoryService', () => {
       await expect(service.extractFacts('Nothing memorable')).resolves.toEqual([]);
     });
 
+    it('throws FactsExtractionError instead of returning [] when no LLM client is available', async () => {
+      const service = new FactsMemoryService();
+      const failure = await service.extractFacts('Some conversation').catch((err: unknown) => err);
+      expect(failure).toBeInstanceOf(FactsExtractionError);
+      expect((failure as Error).message).toMatch(/extraction impossible|not available/i);
+    });
+
     it('throws FactsExtractionError instead of returning [] when generation fails', async () => {
       const mockClient = new CodeBuddyClient('key', 'model', 'url');
       vi.spyOn(mockClient, 'chat').mockRejectedValue(new Error('provider down'));

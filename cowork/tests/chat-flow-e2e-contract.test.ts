@@ -32,7 +32,9 @@ describe('chat-flow e2e proof contract', () => {
     const offenders: string[] = [];
     for (const name of files) {
       const source = fs.readFileSync(path.join(e2eDir, name), 'utf8');
-      if (source.includes("writeFileSync(modelPath, '')")) {
+      if (
+        /writeFileSync\(\s*modelPath\s*,\s*(?:''|""|Buffer\.alloc\(\s*0\s*\))/u.test(source)
+      ) {
         offenders.push(name);
       }
     }
