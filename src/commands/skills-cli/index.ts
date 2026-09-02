@@ -28,6 +28,7 @@
  */
 
 import type { Command } from 'commander';
+import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import type { InstalledSkillStatus } from '../../skills/hub.js';
@@ -130,6 +131,28 @@ function buildSkillListHealth(
   };
 }
 
+/** Count SKILL.md packages and `.skill.md` files in the bundled skills directory. */
+export function countBundledSkillEntries(dir: string): number {
+  if (!dir || !fs.existsSync(dir)) {
+    return 0;
+  }
+  let count = 0;
+  let entries: fs.Dirent[];
+  try {
+    entries = fs.readdirSync(dir, { withFileTypes: true });
+  } catch {
+    return 0;
+  }
+  for (const entry of entries) {
+    if (entry.isFile() && (entry.name.endsWith('.skill.md') || entry.name === 'SKILL.md')) {
+      count += 1;
+    } else if (entry.isDirectory() && fs.existsSync(path.join(dir, entry.name, 'SKILL.md'))) {
+      count += 1;
+    }
+  }
+  return count;
+}
+
 export function registerSkillsCommands(program: Command): void {
   const skills = program
     .command('skills')
@@ -153,7 +176,22 @@ export function registerSkillsCommands(program: Command): void {
         return;
       }
       if (shown.length === 0) {
-        console.log(all.length === 0 ? 'No skills installed.' : 'No enabled skills (use --all to see disabled).');
+        if (all.length === 0) {
+          const { getBundledSkillsPath } = await import('../../skills/index.js');
+          const bundledDir = getBundledSkillsPath();
+          const bundledCount = countBundledSkillEntries(bundledDir);
+          if (bundledCount > 0) {
+            console.log('No hub-installed skills.');
+            console.log(
+              `${bundledCount} bundled skill(s) shipped with the package are still available to the agent.`,
+            );
+            console.log('Install more with: buddy hub search');
+            return;
+          }
+          console.log('No skills installed from the hub.');
+          return;
+        }
+        console.log('No enabled skills (use --all to see disabled).');
         return;
       }
       const counts = opts.all
