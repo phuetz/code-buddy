@@ -1068,8 +1068,14 @@ export class PersistentMemoryManager extends EventEmitter {
     let content: string;
     try {
       content = await fs.readFile(archivePath, "utf-8");
-    } catch {
-      return [];
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException)?.code === 'ENOENT') return [];
+      const reason = err instanceof Error ? err.message : String(err);
+      logger.warn(`[persistent-memory] ${scope} memory archive is unreadable: ${reason}`);
+      throw new MemoryPersistenceError(
+        scope,
+        `${scope} memory archive is unreadable (${reason}); it is not empty`,
+      );
     }
     const entries: Array<ArchivedMemory & { lineIndex: number }> = [];
     let forgottenAt = "";
