@@ -130,15 +130,49 @@ AssertionError: Tool result for call_beta_2 must not be dropped while assistant 
   - `tests/unit/context-manager-v2.test.ts tests/unit/context-manager-v3.test.ts tests/context-manager-v2.test.ts` : 95 passed (3 files)
   - `tests/context` : 50 passed, 6 failed (restants : trous 3 à 8)
   - `npx tsc --noEmit -p .` : exit code 0
-- **Commit** : [COMMIT_HASH_TROU_2]
+- **Commit** : `1cbaca13e`
 
 ### Trou 3
-- **Fichier de test** : 
+- **Fichier de test** : `tests/context/revue-gemini-wrong-model-budget.test.ts`
 - **Sortie ROUGE initiale** :
+```text
+ FAIL  tests/context/revue-gemini-wrong-model-budget.test.ts > Mission G1 — Trou 3 : budget compté sur le mauvais modèle > ContextManagerV2.updateConfig doit aligner maxContextTokens sur la fenêtre du nouveau modèle
+AssertionError: effectiveLimit remains stuck at 120627 instead of scaling to 1M model window: expected 120627 to be greater than 500000
+ ❯ tests/context/revue-gemini-wrong-model-budget.test.ts:30:7
+     28|       manager.effectiveLimit,
+     29|       `effectiveLimit remains stuck at ${manager.effectiveLimit} inste…
+     30|     ).toBeGreaterThan(500_000);
+       |       ^
+     31|
+     32|     manager.dispose();
+
+ FAIL  tests/context/revue-gemini-wrong-model-budget.test.ts > Mission G1 — Trou 3 : budget compté sur le mauvais modèle > ContextManagerV3.updateConfig doit recalculer la limite de contexte lors du changement de modèle
+AssertionError: ContextManagerV3.getStats maxTokens remains stuck at 8192 instead of 1M: expected 8192 to be greater than 500000
+ ❯ tests/context/revue-gemini-wrong-model-budget.test.ts:48:7
+     46|       stats.maxTokens,
+     47|       `ContextManagerV3.getStats maxTokens remains stuck at ${stats.ma…
+     48|     ).toBeGreaterThan(500_000);
+       |       ^
+     49|
+     50|     manager.dispose();
+```
 - **Analyse et correction** (`fichier:ligne`) :
+  - `src/context/context-manager-v2.ts:311,1273` : dans le constructeur et dans `updateConfig`, lorsque `model` est spécifié et `maxContextTokens` non fourni, aligner `maxContextTokens`, `responseReserveTokens` et `autoCompactThreshold` sur la fenêtre déclarée du modèle (`getModelToolConfig(model).contextWindow`), et réinstancier `enhancedCompressor` avec le nouveau `tokenCounter`.
+  - `src/context/context-manager-v3.ts:56,72` : dans le constructeur et dans `updateConfig`, recalculer `maxContextTokens` et `responseReserveTokens` selon `getModelToolConfig(model).contextWindow`.
 - **Sortie VERT** :
+```text
+ RUN  v4.1.9 /home/patrice/DEV/cb-verif-d-2026-09-02
+
+ Test Files  1 passed (1)
+      Tests  2 passed (2)
+   Start at  20:41:49
+   Duration  708ms (transform 453ms, setup 23ms, import 580ms, tests 6ms, environment 0ms)
+```
 - **Vérification suite & tsc** :
-- **Commit** :
+  - `tests/unit/context-manager-v2.test.ts tests/unit/context-manager-v3.test.ts tests/context-manager-v2.test.ts` : 95 passed (3 files)
+  - `tests/context` : 51 passed, 5 failed (restants : trous 4 à 8)
+  - `npx tsc --noEmit -p .` : exit code 0
+- **Commit** : [COMMIT_HASH_TROU_3]
 
 ### Trou 4
 - **Fichier de test** : 

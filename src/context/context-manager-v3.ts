@@ -52,14 +52,16 @@ export class ContextManagerV3 {
    * @param config - Optional partial configuration to override defaults.
    */
   constructor(config: Partial<ContextManagerConfig> = {}) {
-    const tableWindow = config.model ? getModelToolConfig(config.model).contextWindow : undefined;
-    this.config = {
-      ...ContextManagerV3.DEFAULT_CONFIG,
-      ...(tableWindow !== undefined && config.maxContextTokens === undefined
-        ? { maxContextTokens: tableWindow }
-        : {}),
-      ...config,
-    };
+    this.config = { ...ContextManagerV3.DEFAULT_CONFIG, ...config };
+    if (config.model && config.maxContextTokens === undefined) {
+      const toolConfig = getModelToolConfig(config.model);
+      if (toolConfig.contextWindow) {
+        this.config.maxContextTokens = toolConfig.contextWindow;
+        if (config.responseReserveTokens === undefined) {
+          this.config.responseReserveTokens = Math.min(4096, Math.floor(toolConfig.contextWindow * 0.125));
+        }
+      }
+    }
     this.tokenCounter = createTokenCounter(this.config.model);
     this.compressor = new ContextCompressor(this.tokenCounter);
   }
@@ -74,6 +76,15 @@ export class ContextManagerV3 {
     this.config = { ...this.config, ...config };
     // Re-init token counter if model changed
     if (config.model) {
+      if (config.maxContextTokens === undefined) {
+        const toolConfig = getModelToolConfig(config.model);
+        if (toolConfig.contextWindow) {
+          this.config.maxContextTokens = toolConfig.contextWindow;
+          if (config.responseReserveTokens === undefined) {
+            this.config.responseReserveTokens = Math.min(4096, Math.floor(toolConfig.contextWindow * 0.125));
+          }
+        }
+      }
       this.tokenCounter.dispose();
       this.tokenCounter = createTokenCounter(config.model);
       this.compressor = new ContextCompressor(this.tokenCounter);

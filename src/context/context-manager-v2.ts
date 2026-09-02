@@ -315,6 +315,18 @@ export class ContextManagerV2 {
     segmentArchive: SegmentArchive = new SegmentArchive(),
   ) {
     this.config = { ...ContextManagerV2.DEFAULT_CONFIG, ...config };
+    if (config.model && config.maxContextTokens === undefined) {
+      const toolConfig = getModelToolConfig(config.model);
+      if (toolConfig.contextWindow) {
+        this.config.maxContextTokens = toolConfig.contextWindow;
+        if (config.responseReserveTokens === undefined) {
+          this.config.responseReserveTokens = Math.floor(toolConfig.contextWindow * 0.125);
+        }
+        if (config.autoCompactThreshold === undefined) {
+          this.config.autoCompactThreshold = Math.min(200_000, toolConfig.contextWindow);
+        }
+      }
+    }
     this.tokenCounter = createTokenCounter(this.config.model);
     this.sessionId = `session-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     this.segmentArchive = segmentArchive;
@@ -1266,7 +1278,26 @@ export class ContextManagerV2 {
   updateConfig(config: Partial<ContextManagerConfig>): void {
     this.config = { ...this.config, ...config };
     if (config.model) {
+      if (config.maxContextTokens === undefined) {
+        const toolConfig = getModelToolConfig(config.model);
+        if (toolConfig.contextWindow) {
+          this.config.maxContextTokens = toolConfig.contextWindow;
+          if (config.responseReserveTokens === undefined) {
+            this.config.responseReserveTokens = Math.floor(toolConfig.contextWindow * 0.125);
+          }
+          if (config.autoCompactThreshold === undefined) {
+            this.config.autoCompactThreshold = Math.min(200_000, toolConfig.contextWindow);
+          }
+        }
+      }
       this.tokenCounter = createTokenCounter(config.model);
+      if (this.config.enableEnhancedCompression) {
+        this.enhancedCompressor = new EnhancedContextCompressor(
+          this.tokenCounter,
+          this.config.enhancedCompressionConfig,
+          this.segmentArchive,
+        );
+      }
       // The stats cache is keyed only by message shape (length/content/tool
       // calls), not the tokenizer — so a model swap that keeps the same
       // messages would otherwise return a stale count from the OLD tokenizer.
