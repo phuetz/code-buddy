@@ -1308,9 +1308,8 @@ describe('AgentExecutor', () => {
     });
 
     it('should handle empty/missing assistant content gracefully', async () => {
-      // Phase D: streaming flow returns accumulated message; an empty content
-      // is handled by runTurnLoop's "Using tools to help you..." fallback.
-      // Test that we still get an entry (no crash) with no content from the LLM.
+      // Empty provider reply without tools is an honest failure, not a
+      // fabricated "Using tools to help you..." assistant message.
       (deps.client.chatStream as jest.Mock).mockImplementationOnce(async function* () {
         // No content delta at all
       });
@@ -1328,8 +1327,10 @@ describe('AgentExecutor', () => {
 
       const entries = await executor.processUserMessage('Hello', history, messages);
 
-      // Should produce at least one entry (no crash)
+      const joined = entries.map((entry) => entry.content).join('\n');
       expect(entries.length).toBeGreaterThanOrEqual(1);
+      expect(joined).toMatch(/réponse vide du fournisseur/i);
+      expect(joined).not.toContain('Using tools to help you');
     });
 
     it('should handle tool execution failure', async () => {
@@ -2850,8 +2851,8 @@ describe('AgentExecutor', () => {
     });
 
     it('should handle null content in assistant message', async () => {
-      // Streaming flow: getAccumulatedMessage returns null content; runTurnLoop
-      // applies a fallback "Using tools to help you..." when content is empty.
+      // Null provider content without tools is an honest failure, not a
+      // fabricated assistant placeholder.
       (deps.client.chatStream as jest.Mock).mockImplementationOnce(async function* () {
         // No content
       });
@@ -2869,9 +2870,8 @@ describe('AgentExecutor', () => {
 
       const entries = await executor.processUserMessage('Hello', history, messages);
 
-      // Should use fallback content
       expect(entries.length).toBe(1);
-      expect(entries[0].content).toBeDefined();
+      expect(entries[0].content).toMatch(/réponse vide du fournisseur/i);
     });
 
     it('should handle tool returning no output', async () => {

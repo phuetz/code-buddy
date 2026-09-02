@@ -1640,8 +1640,13 @@ export class AgentExecutor {
             yield { type: "content", content: `${rawStreamedContent}\n` };
           }
         }
-        const synthesizedToolFallback = !rawStreamedContent;
-        if (!rawStreamedContent) rawStreamedContent = "Using tools to help you...";
+        // The "Using tools..." placeholder is only legitimate when this turn
+        // actually carries tool_calls. An empty provider reply without tools
+        // must not be rewritten into a plausible assistant message.
+        const synthesizedToolFallback = !rawStreamedContent.trim() && hasToolCalls;
+        if (synthesizedToolFallback) {
+          rawStreamedContent = "Using tools to help you...";
+        }
         const sanitizedContent = sanitizeAssistantOutput(rawStreamedContent);
         const guardedContent = relationshipSafety
           ? guardRelationshipReply(sanitizedContent)
@@ -1658,6 +1663,29 @@ export class AgentExecutor {
             issues: guardedContent.issues,
           });
         }
+
+        // D1: empty provider response (no tools, no length truncation).
+        // Retry is bounded and opt-in via CODEBUDDY_MAX_EMPTY_RETRIES, including
+        // the first turn. Exhaustion throws so the caller and transcript get an
+        // honest failure — never an empty or fabricated assistant message.
+        if (!hasToolCalls && !content.trim() && streamFinishReason !== 'length') {
+          if (!abortController?.signal.aborted && emptyRetries < maxEmptyRetries) {
+            emptyRetries++;
+            logger.warn('[agent-executor] empty provider response, retrying', {
+              attempt: emptyRetries,
+              max: maxEmptyRetries,
+            });
+            messages.push({
+              role: 'user',
+              content: toolRounds > 0
+                ? 'Your last response was empty. Use the results of the tool calls you just made to continue the task and produce your answer.'
+                : 'Your last response was empty. Please produce your answer now.',
+            });
+            continue;
+          }
+          throw new Error('réponse vide du fournisseur');
+        }
+
         if (
           (relationshipSafety || guardGenerativeSelfInspection) &&
           content &&
@@ -1669,7 +1697,7 @@ export class AgentExecutor {
           yield { type: 'content', content: `${content}\n\n` };
         }
 
-        const persistedAssistantContent = synthesizedToolFallback && hasToolCalls
+        const persistedAssistantContent = synthesizedToolFallback
           ? null
           : content;
         const assistantEntry: ChatEntry = {
@@ -2294,27 +2322,8 @@ export class AgentExecutor {
               });
               continue;
             }
-            // (2) Post-tool empty response: the model went silent after running
-            // tools. Nudge it to use the results and continue, bounded.
-            if (
-              streamedContentRaw.length === 0 &&
-              streamFinishReason !== 'length' &&
-              toolRounds > 0 &&
-              emptyRetries < maxEmptyRetries
-            ) {
-              emptyRetries++;
-              logger.debug('[agent-executor] empty-response re-prompt', {
-                attempt: emptyRetries,
-                max: maxEmptyRetries,
-              });
-              messages.push({
-                role: 'user',
-                content:
-                  'Your last response was empty. Use the results of the tool calls you just made ' +
-                  'to continue the task and produce your answer.',
-              });
-              continue;
-            }
+            // Post-tool empty responses are handled before persist (D1) so an
+            // empty assistant message is never written to the transcript.
           }
 
           // Companion hosts own the canonical commit boundary: voice,
