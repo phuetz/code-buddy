@@ -509,18 +509,27 @@ export class EnhancedContextCompressor {
   private hardTruncate(messages: CodeBuddyMessage[], tokenLimit: number): CodeBuddyMessage[] {
     const result: CodeBuddyMessage[] = [];
     let currentTokens = 0;
+    const lastUser = [...messages].reverse().find((message) => message.role === 'user');
+    const lastUserTokens = lastUser ? this.countTokens([lastUser]) : 0;
 
-    // Process from most recent backwards
+    // Process from most recent backwards, but never drop the current request.
     for (let i = messages.length - 1; i >= 0; i--) {
       const msg = messages[i];
       if (!msg) continue;
+      if (lastUser && msg === lastUser) {
+        result.unshift(msg);
+        currentTokens += lastUserTokens;
+        continue;
+      }
       const msgTokens = this.countTokens([msg]);
       if (currentTokens + msgTokens <= tokenLimit) {
         result.unshift(msg);
         currentTokens += msgTokens;
-      } else {
-        break;
       }
+    }
+
+    if (lastUser && !result.includes(lastUser)) {
+      result.push(lastUser);
     }
 
     return result;

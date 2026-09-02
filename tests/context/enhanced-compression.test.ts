@@ -64,4 +64,34 @@ describe('EnhancedContextCompressor', () => {
     ]);
     expect(result.messages.slice(0, 3).every(message => message.role === 'system')).toBe(true);
   });
+
+  it('keeps the current user request through hard truncation', () => {
+    const compressor = new EnhancedContextCompressor(createTokenCounter('gpt-4'), {
+      enableArchiving: false,
+      slidingWindow: {
+        windowSize: 2,
+        overlapSize: 0,
+        summarizeOldMessages: false,
+      },
+    });
+    const lastUser: CodeBuddyMessage = {
+      role: 'user',
+      content: 'LATEST_REQUEST please keep this exact question',
+    };
+    const messages: CodeBuddyMessage[] = [
+      { role: 'system', content: 'base' },
+    ];
+    for (let index = 0; index < 30; index++) {
+      messages.push({
+        role: index % 2 === 0 ? 'user' : 'assistant',
+        content: `turn ${index}: ${'z'.repeat(240)}`,
+      });
+    }
+    messages.push(lastUser);
+
+    const result = compressor.compress(messages, 80);
+    expect(result.messages.some((message) => (
+      message.role === 'user' && message.content === lastUser.content
+    ))).toBe(true);
+  });
 });
