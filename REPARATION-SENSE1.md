@@ -228,21 +228,54 @@ Implémentation : expiration des pistes par temps monotone avec `BUDDY_VISION_PE
 
 ### Commit
 
-Prévu : `fix(vision): add presence episode hysteresis`.
+`2f66e2cf3` — `fix(vision): add presence episode hysteresis`.
 
 ## Correctif 5 — garde-fous du cerveau visuel
 
 ### Test rouge
 
-_À compléter._
+Commande :
+
+```text
+npx vitest run tests/sensory/vision-reaction.test.ts -t "skips a motion keyframe|caps ten motion events"
+```
+
+Sortie rouge utile :
+
+```text
+FAIL ... > skips a motion keyframe whose payload reports darkness
+AssertionError: expected 1 to be +0
+- 0
++ 1
+
+FAIL ... > caps ten motion events in ten seconds to four analyses
+AssertionError: expected 10 to be less than or equal to 4
+Test Files  1 failed (1)
+Tests  2 failed | 11 skipped (13)
+EXIT_CODE=1
+```
 
 ### Test vert
 
-_À compléter._
+Commandes et sorties :
+
+```text
+npx vitest run tests/sensory/vision-reaction.test.ts -t "skips a motion keyframe|caps ten motion events"
+Test Files  1 passed (1)
+Tests  2 passed | 11 skipped (13)
+EXIT_CODE=0
+
+npx vitest run tests/sensory/vision-reaction.test.ts
+Test Files  1 passed (1)
+Tests  13 passed (13)
+EXIT_CODE=0
+```
+
+Implémentation : rejet immédiat et journalisé des charges utiles `meanLuma < 12`; fenêtre glissante de 60 s comptant les appels réels à l'analyseur et plafonnée par `CODEBUDDY_VISION_MAX_ANALYSES_PER_MIN=4`; les appels refusés journalisent la cause.
 
 ### Commit
 
-_À compléter._
+Prévu : `fix(vision): bound dark-frame analyses`.
 
 ## Vérifications finales
 

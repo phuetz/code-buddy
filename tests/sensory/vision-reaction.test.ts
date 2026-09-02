@@ -106,6 +106,61 @@ describe('vision reaction — motion → camera_analyze (debounced)', () => {
     }
   });
 
+  it('skips a motion keyframe whose payload reports darkness', async () => {
+    let calls = 0;
+    const info = vi.spyOn(logger, 'info');
+    const unwire = wireVisionReaction({
+      analyzer: {
+        analyze: async () => {
+          calls += 1;
+          return { success: false };
+        },
+      },
+      debounceMs: 0,
+    });
+    try {
+      motion({ score: 0.4, meanLuma: 11.9 });
+      await tick();
+      expect(calls).toBe(0);
+      expect(info).toHaveBeenCalledWith('[vision] motion skipped (dark frame meanLuma=11.9)');
+    } finally {
+      unwire();
+      info.mockRestore();
+    }
+  });
+
+  it('caps ten motion events in ten seconds to four analyses', async () => {
+    const previousLimit = process.env.CODEBUDDY_VISION_MAX_ANALYSES_PER_MIN;
+    process.env.CODEBUDDY_VISION_MAX_ANALYSES_PER_MIN = '4';
+    let calls = 0;
+    let clock = 1_000;
+    const info = vi.spyOn(logger, 'info');
+    const unwire = wireVisionReaction({
+      analyzer: {
+        analyze: async () => {
+          calls += 1;
+          return { success: false };
+        },
+      },
+      debounceMs: 0,
+      now: () => clock,
+    });
+    try {
+      for (let index = 0; index < 10; index += 1) {
+        motion({ score: 0.4, meanLuma: 80 });
+        await tick();
+        clock += 1_000;
+      }
+      expect(calls).toBeLessThanOrEqual(4);
+      expect(info).toHaveBeenCalledWith('[vision] motion skipped (analysis rate limit 4/min)');
+    } finally {
+      unwire();
+      info.mockRestore();
+      if (previousLimit === undefined) delete process.env.CODEBUDDY_VISION_MAX_ANALYSES_PER_MIN;
+      else process.env.CODEBUDDY_VISION_MAX_ANALYSES_PER_MIN = previousLimit;
+    }
+  });
+
   it('falls back to the safe debounce when the environment value is invalid', async () => {
     const tmp = await mkdtemp(path.join(os.tmpdir(), 'vision-invalid-debounce-'));
     const previousDebounce = process.env.CODEBUDDY_VISION_DEBOUNCE_MS;
