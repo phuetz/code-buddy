@@ -195,6 +195,8 @@ export interface CodeBuddyResponse {
   model?: string;
   /** True when the provider stopped at an output-token ceiling. */
   truncated?: boolean;
+  /** False when the caller requested search but the provider could not honor it. */
+  searchHonored?: boolean;
   choices: Array<{
     message: {
       role: string;

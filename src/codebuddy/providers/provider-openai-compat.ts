@@ -70,6 +70,10 @@ interface ChatRequestPayloadStreaming extends Omit<ChatCompletionCreateParamsStr
   chat_template_kwargs?: { enable_thinking: boolean };
 }
 
+type SearchAwareChatCompletionChunk = ChatCompletionChunk & {
+  searchHonored?: boolean;
+};
+
 type ReasoningCompatiblePayload = {
   model: string;
   temperature?: number | null;
@@ -619,13 +623,21 @@ export class OpenAICompatProvider implements Provider {
     }
 
     if (this.isXaiProvider()) {
-      logger.debug('Skipping deprecated search_parameters for xAI provider', {
-        source: 'OpenAICompatProvider',
-      });
+      logger.warn(
+        'xAI search_parameters is unsupported; returning response without search (sans recherche)',
+        {
+          source: 'OpenAICompatProvider',
+          searchHonored: false,
+        },
+      );
       return false;
     }
 
     return true;
+  }
+
+  private isSearchOmittedForXai(searchParams?: SearchParameters): boolean {
+    return this.isXaiProvider() && Boolean(searchParams?.mode && searchParams.mode !== 'off');
   }
 
   private getOllamaReasoningEffort(model: string): string | undefined {
@@ -661,7 +673,10 @@ export class OpenAICompatProvider implements Provider {
     );
   }
 
-  private *nonStreamingResponseToChunks(response: CodeBuddyResponse): Generator<ChatCompletionChunk, void, unknown> {
+  private *nonStreamingResponseToChunks(
+    response: CodeBuddyResponse,
+    searchOmitted = false,
+  ): Generator<ChatCompletionChunk, void, unknown> {
     const created = Math.floor(Date.now() / 1000);
 
     for (const [index, choice] of response.choices.entries()) {
@@ -691,7 +706,8 @@ export class OpenAICompatProvider implements Provider {
           finish_reason: choice.finish_reason as ChatCompletionChunk.Choice['finish_reason'],
         }],
         ...(response.usage ? { usage: response.usage } : {}),
-      } as ChatCompletionChunk;
+        ...(searchOmitted ? { searchHonored: false } : {}),
+      } as SearchAwareChatCompletionChunk;
     }
   }
 
@@ -817,6 +833,7 @@ export class OpenAICompatProvider implements Provider {
 
       const searchOpts = opts.searchOptions || searchOptions;
       const searchParameters = searchOpts?.search_parameters;
+      const searchOmitted = this.isSearchOmittedForXai(searchParameters);
       if (this.shouldIncludeSearchParameters(searchParameters)) {
         requestPayload.search_parameters = searchParameters;
       }
@@ -923,10 +940,12 @@ export class OpenAICompatProvider implements Provider {
             },
             finish_reason: 'stop',
           }],
+          ...(searchOmitted ? { searchHonored: false } : {}),
         };
       }
 
-      return await performCall(finalMessages);
+      const response = await performCall(finalMessages);
+      return searchOmitted ? { ...response, searchHonored: false } : response;
     } catch (error: unknown) {
       if (error instanceof CircuitOpenError) {
         throw error;
@@ -995,6 +1014,7 @@ export class OpenAICompatProvider implements Provider {
 
       const searchOpts = opts.searchOptions || searchOptions;
       const searchParameters = searchOpts?.search_parameters;
+      const searchOmitted = this.isSearchOmittedForXai(searchParameters);
       const searchParams = this.shouldIncludeSearchParameters(searchParameters)
         ? { search_parameters: searchParameters }
         : {};
@@ -1037,7 +1057,7 @@ export class OpenAICompatProvider implements Provider {
           logger.debug('Streaming request returned a non-streaming chat response; adapting it to chunks', {
             source: 'OpenAICompatProvider',
           });
-          yield* this.nonStreamingResponseToChunks(stream);
+          yield* this.nonStreamingResponseToChunks(stream, searchOmitted);
           return;
         }
 
@@ -1052,7 +1072,7 @@ export class OpenAICompatProvider implements Provider {
       let yieldedChunks = 0;
       for await (const chunk of stream) {
         yieldedChunks++;
-        yield chunk;
+        yield searchOmitted ? { ...chunk, searchHonored: false } as SearchAwareChatCompletionChunk : chunk;
       }
 
       if (yieldedChunks === 0) {
@@ -1060,7 +1080,7 @@ export class OpenAICompatProvider implements Provider {
           source: 'OpenAICompatProvider',
         });
         const response = await this.chat(messages, tools, opts, searchOptions);
-        yield* this.nonStreamingResponseToChunks(response);
+        yield* this.nonStreamingResponseToChunks(response, searchOmitted);
       }
     } catch (error: unknown) {
       if (error instanceof CircuitOpenError) {

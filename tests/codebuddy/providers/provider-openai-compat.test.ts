@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const providerMocks = vi.hoisted(() => ({
   create: vi.fn(),
@@ -28,6 +28,7 @@ vi.mock('../../../src/agent/extended-thinking.js', () => ({
 }));
 
 import { OpenAICompatProvider } from '../../../src/codebuddy/providers/provider-openai-compat.js';
+import { logger } from '../../../src/utils/logger.js';
 
 function createProvider(
   baseURL = 'https://api.x.ai/v1',
@@ -66,7 +67,43 @@ beforeEach(() => {
   providerMocks.getModelInfo.mockReset().mockReturnValue({ provider: 'xai' });
 });
 
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
 describe('OpenAICompatProvider request payloads', () => {
+  it('warns and marks an xAI response when requested search is not honored', async () => {
+    const warnSpy = vi.spyOn(logger, 'warn');
+    providerMocks.create.mockResolvedValueOnce(successResponse());
+
+    const response = await createProvider().chat(
+      [{ role: 'user', content: 'What is the latest news?' }],
+      [],
+      { searchOptions: { search_parameters: { mode: 'auto' } } },
+    );
+
+    const payload = providerMocks.create.mock.calls[0]?.[0] as Record<string, unknown>;
+    expect(payload.search_parameters).toBeUndefined();
+    expect(response.searchHonored).toBe(false);
+    expect(warnSpy.mock.calls.some(([message]) => String(message).includes('without search'))).toBe(true);
+  });
+
+  it('marks streamed xAI chunks as without search', async () => {
+    providerMocks.create.mockResolvedValueOnce(successStream());
+
+    const chunks = [];
+    for await (const chunk of createProvider().chatStream(
+      [{ role: 'user', content: 'What is the latest news?' }],
+      [],
+      { searchOptions: { search_parameters: { mode: 'auto' } } },
+    )) {
+      chunks.push(chunk as typeof chunk & { searchHonored?: boolean });
+    }
+
+    expect(chunks).toHaveLength(1);
+    expect(chunks[0]?.searchHonored).toBe(false);
+  });
+
   it('omits tools and tool_choice from non-streaming requests without tools', async () => {
     providerMocks.create.mockResolvedValueOnce(successResponse());
 
