@@ -916,6 +916,11 @@ export function registerSkillsCommands(program: Command): void {
     .action(async (dir: string, opts: { json?: boolean; trust?: boolean }) => {
       const { installSkill } = await import('../../skills/skill-exchange.js');
       const result = await installSkill(expandHome(dir), { trust: opts.trust === true });
+      // `installSkill` reloads the registry so the package is immediately
+      // visible. The CLI is a one-shot process, so close the reload watchers
+      // before returning to avoid keeping the command alive indefinitely.
+      const { getSkillRegistry } = await import('../../skills/registry.js');
+      getSkillRegistry().stopWatching();
       if (opts.json) {
         console.log(JSON.stringify(result, null, 2));
         return;
