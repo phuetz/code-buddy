@@ -19,7 +19,7 @@ export function registerSpeakCommand(program: Command): void {
     .option("--language <lang>", "Language for Pocket or Voicebox")
     .option("--list-voices", "List available voices")
     .option("--speed <speed>", "Speaking speed (0.25-4.0)", "1.0")
-    .option("--format <format>", "Output format (wav, mp3)", "wav")
+    .option("--format <format>", "Output format (wav, ogg, mp3)", "wav")
     .option("--out <file>", "Save synthesized audio to this file instead of playing it")
     .option("--url <url>", "AudioReader API URL", "http://localhost:8000")
     .option("--voicebox-url <url>", "Voicebox API URL (defaults to CODEBUDDY_VOICEBOX_URL)")
@@ -103,20 +103,31 @@ export function registerSpeakCommand(program: Command): void {
         process.exit(1);
       }
 
+      const requestedFormat = (opts.format || 'wav').trim().toLowerCase();
+      const supportedFormats = new Set(['wav', 'ogg', 'mp3']);
+      if (!supportedFormats.has(requestedFormat)) {
+        console.error(`Unsupported --format '${opts.format}'. Supported: wav, ogg, mp3.`);
+        process.exit(1);
+      }
+
       const result = await provider.synthesize(text, {
         voice: opts.voice,
         rate: parseFloat(opts.speed),
-        format: opts.format as 'wav' | 'mp3',
+        format: requestedFormat === 'ogg' ? 'wav' : requestedFormat as 'wav' | 'mp3',
       });
 
       const { execSync } = await import("child_process");
-      const { writeFileSync, unlinkSync } = await import("fs");
+      const { mkdirSync, writeFileSync, unlinkSync } = await import("fs");
       const { tmpdir } = await import("os");
-      const { join } = await import("path");
+      const { dirname, extname, join } = await import("path");
 
       if (opts.out) {
-        writeFileSync(opts.out, result.audio);
-        console.log(`Audio saved to: ${opts.out}`);
+        mkdirSync(dirname(opts.out), { recursive: true });
+        const outputPath = extname(opts.out)
+          ? opts.out
+          : `${opts.out}.${requestedFormat}`;
+        writeFileSync(outputPath, result.audio);
+        console.log(`Audio saved to: ${outputPath} (${requestedFormat})`);
         return;
       }
 
