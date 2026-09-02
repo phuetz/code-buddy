@@ -22,6 +22,7 @@ import { createTokenCounter, estimateImageUrlTokens, TokenCounter } from './toke
 import { logger } from '../utils/logger.js';
 import { getModelToolConfig } from '../config/model-tools.js';
 import { RunStore } from '../observability/run-store.js';
+import { repairToolCallPairs } from './transcript-repair.js';
 import {
   EnhancedContextCompressor,
   EnhancedCompressionConfig,
@@ -622,23 +623,37 @@ export class ContextManagerV2 {
     this.rejectIfCurrentRequestExceedsBudget(messages);
     // Delegate to pluggable context engine if registered (Native Engine v2026.3.7)
     if (this.contextEngine) {
+      // Helper to restore any dropped system messages and ensure valid tool pairs
+      const finalizeEngineMessages = (assembled: CodeBuddyMessage[]): CodeBuddyMessage[] => {
+        let output = assembled;
+        const originalSystem = messages.filter(m => m.role === 'system');
+        const existingSystemContents = new Set(output.filter(m => m.role === 'system').map(m => m.content));
+        const missingSystem = originalSystem.filter(m => !existingSystemContents.has(m.content));
+        if (missingSystem.length > 0) {
+          output = [...missingSystem, ...output];
+        }
+        output = repairToolCallPairs(output);
+        this.assertLastUserPreserved(messages, output);
+        this.assertFitsTokenLimit(output);
+        this.lastTokenCount = this.countTokens(output);
+        return output;
+      };
+
       // ownsCompaction: engine controls compaction — skip built-in auto-compact,
       // delegate directly to engine.assemble() (Native Engine v2026.3.13-1)
       if (this.contextEngine.ownsCompaction) {
         const result = this.contextEngine.assemble(messages, this.effectiveLimit);
-        this.assertLastUserPreserved(messages, result.messages);
-        this.assertFitsTokenLimit(result.messages);
-        this.lastTokenCount = this.countTokens(result.messages);
-        return result.messages;
+        return finalizeEngineMessages(result.messages);
       }
 
       // Non-owning engine: run built-in compaction first, then assemble
       const compacted = this.prepareMessagesRaw(messages);
       const result = this.contextEngine.assemble(compacted, this.effectiveLimit);
-      this.assertLastUserPreserved(messages, result.messages);
-      this.assertFitsTokenLimit(result.messages);
-      this.lastTokenCount = this.countTokens(result.messages);
-      return result.messages;
+      const finalized = finalizeEngineMessages(result.messages);
+      this.assertLastUserPreserved(messages, finalized);
+      this.assertFitsTokenLimit(finalized);
+      this.lastTokenCount = this.countTokens(finalized);
+      return finalized;
     }
 
     // Default pipeline (no engine registered)

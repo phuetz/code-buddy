@@ -205,15 +205,55 @@ AssertionError: expected function to throw an error, but it didn't
   - `tests/unit/context-manager-v2.test.ts tests/unit/context-manager-v3.test.ts tests/context-manager-v2.test.ts` : 95 passed (3 files)
   - `tests/context` : 52 passed, 4 failed (restants : trous 5 à 8)
   - `npx tsc --noEmit -p .` : exit code 0
-- **Commit** : [COMMIT_HASH_TROU_4]
+- **Commit** : `7e90ca3ea`
 
 ### Trou 5
-- **Fichier de test** : 
+- **Fichier de test** : `tests/context/revue-gemini-owns-compaction-bypass.test.ts`
 - **Sortie ROUGE initiale** :
+```text
+ FAIL  tests/context/revue-gemini-owns-compaction-bypass.test.ts > Mission G1 — Trou 5 : ownsCompaction et moteur de plugin court-circuitant les gardes > prepareMessages doit refuser un assemblage où ownsCompaction a supprimé les consignes système
+AssertionError: System prompt must be preserved even when plugin engine owns compaction: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ tests/context/revue-gemini-owns-compaction-bypass.test.ts:67:98
+     65|     const prepared = manager.prepareMessages(messages);
+     66|     const hasSystem = prepared.some(m => m.role === 'system');
+     67|     expect(hasSystem, 'System prompt must be preserved even when plugi…
+       |                                                                                                  ^
+     68|
+     69|     manager.dispose();
+
+ FAIL  tests/context/revue-gemini-owns-compaction-bypass.test.ts > Mission G1 — Trou 5 : ownsCompaction et moteur de plugin court-circuitant les gardes > prepareMessages doit vérifier assertFitsTokenLimit pour un moteur non-owning
+AssertionError: expected function to throw an error, but it didn't
+ ❯ tests/context/revue-gemini-owns-compaction-bypass.test.ts:90:53
+     88|     // ACTUELLEMENT : la garde assertFitsTokenLimit n'est appelée QUE …
+     89|     // et pas du tout dans la branche non-owning (lignes 617-621) !
+     90|     expect(() => manager.prepareMessages(messages)).toThrow(ContextCom…
+       |                                                     ^
+     91|
+     92|     manager.dispose();
+```
 - **Analyse et correction** (`fichier:ligne`) :
+  - `src/context/context-manager-v2.ts:25,620-645` : import de `repairToolCallPairs` et ajout d'un finaliseur `finalizeEngineMessages` pour les assemblages retournés par les moteurs de contexte (qu'ils soient `ownsCompaction: true` ou `ownsCompaction: false`). Il réinjecte les prompts système manquants issus de l'original, répare les paires d'outils (`repairToolCallPairs`), vérifie `assertLastUserPreserved`, applique `assertFitsTokenLimit` (qui manquait dans la branche non-owning) et met à jour `lastTokenCount`.
 - **Sortie VERT** :
+```text
+ RUN  v4.1.9 /home/patrice/DEV/cb-verif-d-2026-09-02
+
+ Test Files  1 passed (1)
+      Tests  2 passed (2)
+   Start at  20:45:32
+   Duration  739ms (transform 400ms, setup 30ms, import 511ms, tests 112ms, environment 0ms)
+```
 - **Vérification suite & tsc** :
-- **Commit** :
+  - `tests/unit/context-manager-v2.test.ts tests/unit/context-manager-v3.test.ts tests/context-manager-v2.test.ts` : 95 passed (3 files)
+  - `tests/context` : 53 passed, 3 failed (restants : trous 6 à 8)
+  - `npx tsc --noEmit -p .` : exit code 0
+- **Commit** : [COMMIT_HASH_TROU_5]
 
 ### Trou 6
 - **Fichier de test** : 
