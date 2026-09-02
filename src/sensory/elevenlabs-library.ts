@@ -17,6 +17,7 @@
  * @module sensory/elevenlabs-library
  */
 import { spawnSync } from 'child_process';
+import { createHash } from 'crypto';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
@@ -213,4 +214,133 @@ export function getVoiceLibrary(): ElevenLabsVoiceLibrary {
 /** Reset the shared instance (tests only). */
 export function resetVoiceLibrary(): void {
   shared = null;
+}
+
+/** A voice descriptor that identifies a paid ElevenLabs rendition. */
+export function isPaidElevenLabsVoice(voice: string | undefined): boolean {
+  return Boolean(voice?.trim().toLowerCase().startsWith('elevenlabs:'));
+}
+
+/** How long a lock file may sit before it is treated as abandoned by a dead writer. */
+const LOCK_STALE_MS = 10_000;
+
+/**
+ * Take an exclusive lock on the shared index, run `fn`, release.
+ *
+ * The index is read by three products (MySoulmate, the phone assistant, the robot)
+ * and one of them updates it with a naive read-modify-write. A lock cannot fix that
+ * writer from here, but it keeps OUR window closed and lets concurrent robot turns
+ * queue instead of racing. Returns false when the lock could not be taken — the
+ * caller then simply skips publishing, which costs a future re-synthesis and
+ * nothing else.
+ */
+function withIndexLock(lockPath: string, fn: () => void): boolean {
+  let fd: number | undefined;
+  try {
+    try {
+      fd = fs.openSync(lockPath, 'wx');
+    } catch {
+      // A lock left behind by a killed process must not block the library forever.
+      const age = Date.now() - fs.statSync(lockPath).mtimeMs;
+      if (age < LOCK_STALE_MS) return false;
+      fs.unlinkSync(lockPath);
+      fd = fs.openSync(lockPath, 'wx');
+    }
+    fn();
+    return true;
+  } catch {
+    return false;
+  } finally {
+    if (fd !== undefined) {
+      try {
+        fs.closeSync(fd);
+      } catch {
+        /* already closed */
+      }
+    }
+    try {
+      fs.unlinkSync(lockPath);
+    } catch {
+      /* someone else cleaned it */
+    }
+  }
+}
+
+/**
+ * Publish a freshly PAID rendition into the shared library, so the other products
+ * get it for free.
+ *
+ * Doctrine (Patrice, 2026-08-16): a phrase in Lisa's ElevenLabs voice is a
+ * cross-product asset, paid once and reused everywhere. Until now Code Buddy only
+ * READ this library: everything the robot paid for landed in its private TTS cache
+ * — which also evicts — and MySoulmate and the phone assistant never saw it.
+ *
+ * Append-only and conservative by design:
+ * - an existing phrase is never overwritten (the reader takes the first entry, and
+ *   those files were paid for);
+ * - the index is written to a temp file and renamed, so a concurrent reader never
+ *   sees a half-written 6 000-entry JSON;
+ * - the text is stored whitespace-collapsed but CASE-PRESERVED, because MySoulmate's
+ *   own lookup is case-sensitive — lowercasing here would hide the entry from it;
+ * - every failure is swallowed: publishing is a bonus, never a reason to break speech.
+ *
+ * @returns the stored file path, or null when nothing was published.
+ */
+export function publishToVoiceLibrary(
+  text: string,
+  voice: string | undefined,
+  srcFile: string,
+  dir: string = process.env.CODEBUDDY_TTS_LIBRARY_DIR ??
+    path.join(os.homedir(), '.codebuddy', 'tts-elevenlabs-permanent'),
+): string | null {
+  if (process.env.CODEBUDDY_TTS_LIBRARY_PUBLISH === 'off') return null;
+  if (!isPaidElevenLabsVoice(voice)) return null;
+  const canonical = text?.trim().replace(/\s+/g, ' ');
+  if (!canonical) return null;
+
+  const indexPath = path.join(dir, 'index.json');
+  let published: string | null = null;
+
+  const ok = withIndexLock(path.join(dir, 'index.lock'), () => {
+    fs.mkdirSync(dir, { recursive: true });
+    let parsed: { voice?: string; count?: number; entries?: RawEntry[] } = {};
+    try {
+      parsed = JSON.parse(fs.readFileSync(indexPath, 'utf8')) as typeof parsed;
+    } catch {
+      /* first write, or an unreadable index we must not clobber blindly */
+      if (fs.existsSync(indexPath)) throw new Error('index unreadable — refusing to overwrite');
+    }
+    const entries = Array.isArray(parsed.entries) ? parsed.entries : [];
+    const wanted = normalizePhrase(canonical);
+    if (entries.some((e) => e?.text && normalizePhrase(e.text) === wanted)) return;
+
+    // Hash the full phrase, not a prefix: the library's own naming truncates to the
+    // first 16 characters of text, which would collide across similar openers.
+    const key = createHash('sha256').update(`${wanted}\u0000${voice}`).digest('hex').slice(0, 32);
+    const file = `${key}${path.extname(srcFile).toLowerCase() || '.wav'}`;
+    const dest = path.join(dir, file);
+    if (!fs.existsSync(dest)) {
+      const tmp = `${dest}.${process.pid}.tmp`;
+      fs.copyFileSync(srcFile, tmp);
+      if (fs.statSync(tmp).size <= 0) {
+        fs.unlinkSync(tmp);
+        throw new Error('refusing to publish an empty rendition');
+      }
+      fs.renameSync(tmp, dest);
+    }
+
+    entries.push({ key, text: canonical, voice, file });
+    const next = { ...parsed, voice: parsed.voice ?? voice, count: entries.length, entries };
+    const tmpIndex = `${indexPath}.${process.pid}.tmp`;
+    fs.writeFileSync(tmpIndex, JSON.stringify(next, null, 1));
+    fs.renameSync(tmpIndex, indexPath);
+    published = dest;
+  });
+
+  if (!ok) return null;
+  if (published) {
+    logger.info(`[voice-library] published a paid phrase for every product to reuse`);
+    shared = null; // the in-process index must see it on the next lookup
+  }
+  return published;
 }
