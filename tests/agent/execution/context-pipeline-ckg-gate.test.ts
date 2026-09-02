@@ -34,7 +34,10 @@ vi.mock('../../../src/memory/collective-knowledge-graph.js', () => ({
   }),
 }));
 
-import { injectInitialContext } from '../../../src/agent/execution/context-pipeline.js';
+import {
+  injectInitialContext,
+  injectNextRoundContext,
+} from '../../../src/agent/execution/context-pipeline.js';
 
 const ctxLevel: ContextInjectionLevel = {
   workspace: false,
@@ -95,5 +98,39 @@ describe('injectInitialContext — CODEBUDDY_COLLECTIVE_MEMORY gate', () => {
       '<collective_knowledge>',
     );
     expect(messages.map((m) => String(m.content ?? '')).join('\n')).toContain('CB20_MARKER');
+  });
+});
+
+describe('injectNextRoundContext — collective memory path', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    formatCollectiveContextMock.mockClear();
+  });
+
+  const nextDeps = {
+    message: 'continue routing the vocal agent',
+    cwd: '/tmp/ckg-gate',
+    queryComplexity: 'complex' as const,
+    collectiveGraph: true,
+  };
+
+  it('does not inject CKG on later rounds when the env flag is unset', async () => {
+    vi.stubEnv('CODEBUDDY_COLLECTIVE_MEMORY', '');
+    const messages: CodeBuddyMessage[] = [];
+    await injectNextRoundContext(messages, nextDeps);
+    expect(formatCollectiveContextMock).not.toHaveBeenCalled();
+    expect(messages.map((m) => String(m.content ?? '')).join('\n')).not.toContain(
+      '<collective_knowledge>',
+    );
+  });
+
+  it('injects CKG on later rounds when the flag is exactly "true"', async () => {
+    vi.stubEnv('CODEBUDDY_COLLECTIVE_MEMORY', 'true');
+    const messages: CodeBuddyMessage[] = [];
+    await injectNextRoundContext(messages, nextDeps);
+    expect(formatCollectiveContextMock).toHaveBeenCalledTimes(1);
+    expect(messages.map((m) => String(m.content ?? '')).join('\n')).toContain(
+      '<collective_knowledge>',
+    );
   });
 });

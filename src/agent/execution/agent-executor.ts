@@ -1434,6 +1434,7 @@ export class AgentExecutor {
               introspectionText: introspectionTextForTurn,
               cwd: turnCwd,
               queryComplexity,
+              collectiveGraph: ctxLevel.collectiveGraph,
               isolatedSharedHost,
             });
 
