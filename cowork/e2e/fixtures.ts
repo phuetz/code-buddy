@@ -30,7 +30,7 @@ export const test = base.extend<CoworkFixtures>({
     const electronApp = await electron.launch({
       executablePath: electronBinary,
       cwd: process.cwd(),
-      args: ['e2e/electron-main.cjs', '--lang=en-US'],
+      args: ['e2e/electron-main.cjs', '--lang=en-US', '--no-sandbox', '--disable-gpu'],
       env: {
         ...process.env,
         COWORK_E2E: '1',
