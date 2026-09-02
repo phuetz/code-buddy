@@ -26,9 +26,11 @@ import {
   normalizeOllamaBaseUrl,
   resolveLmStudioCredentials,
   resolveOllamaCredentials,
+  resolveVllmCredentials,
   resolveOpenAICredentials,
   shouldAllowEmptyLmStudioApiKey,
   shouldAllowEmptyOllamaApiKey,
+  shouldAllowEmptyVllmApiKey,
   shouldAllowEmptyAnthropicApiKey,
   shouldAllowEmptyGeminiApiKey,
   shouldUseAnthropicAuthToken,
@@ -490,6 +492,12 @@ const PROFILE_KEYS: ProviderProfileKey[] = [
   'gemini',
   'ollama',
   'lmstudio',
+  'grok',
+  'groq',
+  'together',
+  'fireworks',
+  'vllm',
+  'mistral',
   'custom:anthropic',
   'custom:openai',
   'custom:gemini',
@@ -515,7 +523,13 @@ function isProviderType(value: unknown): value is ProviderType {
     value === 'openai' ||
     value === 'gemini' ||
     value === 'ollama' ||
-    value === 'lmstudio'
+    value === 'lmstudio' ||
+    value === 'grok' ||
+    value === 'groq' ||
+    value === 'together' ||
+    value === 'fireworks' ||
+    value === 'vllm' ||
+    value === 'mistral'
   );
 }
 
@@ -571,8 +585,16 @@ function profileKeyToProvider(profileKey: ProviderProfileKey): {
   if (profileKey === 'custom:anthropic') {
     return { provider: 'custom', customProtocol: 'anthropic' };
   }
-  if (profileKey === 'openai') {
-    return { provider: 'openai', customProtocol: 'openai' };
+  if (
+    profileKey === 'openai' ||
+    profileKey === 'grok' ||
+    profileKey === 'groq' ||
+    profileKey === 'together' ||
+    profileKey === 'fireworks' ||
+    profileKey === 'vllm' ||
+    profileKey === 'mistral'
+  ) {
+    return { provider: profileKey, customProtocol: 'openai' };
   }
   if (profileKey === 'gemini') {
     return { provider: 'gemini', customProtocol: 'gemini' };
@@ -613,7 +635,17 @@ function normalizeCustomProtocol(
 }
 
 function defaultProtocolForProvider(provider: ProviderType): CustomProtocolType {
-  if (provider === 'openai' || provider === 'ollama' || provider === 'lmstudio') {
+  if (
+    provider === 'openai' ||
+    provider === 'ollama' ||
+    provider === 'lmstudio' ||
+    provider === 'grok' ||
+    provider === 'groq' ||
+    provider === 'together' ||
+    provider === 'fireworks' ||
+    provider === 'vllm' ||
+    provider === 'mistral'
+  ) {
     return 'openai';
   }
   if (provider === 'gemini') {
@@ -1630,7 +1662,9 @@ export class ConfigStore {
     model?: string;
   }): boolean {
     if (
-      (projection.provider === 'ollama' || projection.provider === 'lmstudio') &&
+      (projection.provider === 'ollama' ||
+        projection.provider === 'lmstudio' ||
+        projection.provider === 'vllm') &&
       !projection.model?.trim()
     ) {
       return false;
@@ -1675,6 +1709,15 @@ export class ConfigStore {
     ) {
       return true;
     }
+    if (
+      shouldAllowEmptyVllmApiKey({
+        provider: projection.provider,
+        customProtocol: projection.customProtocol,
+        baseUrl: projection.baseUrl,
+      })
+    ) {
+      return true;
+    }
     const protocol: CustomProtocolType = normalizeCustomProtocol(
       projection.customProtocol,
       defaultProtocolForProvider(projection.provider)
@@ -1697,7 +1740,14 @@ export class ConfigStore {
               apiKey: projection.apiKey ?? '',
               baseUrl: projection.baseUrl,
             })
-        : resolveOpenAICredentials({
+        : projection.provider === 'vllm'
+          ? resolveVllmCredentials({
+              provider: projection.provider,
+              customProtocol: protocol,
+              apiKey: projection.apiKey ?? '',
+              baseUrl: projection.baseUrl,
+            })
+          : resolveOpenAICredentials({
             provider: projection.provider,
             customProtocol: protocol,
             apiKey: projection.apiKey ?? '',
@@ -1782,6 +1832,12 @@ export class ConfigStore {
       projectedConfig.provider === 'openai' ||
       projectedConfig.provider === 'ollama' ||
       projectedConfig.provider === 'lmstudio' ||
+      projectedConfig.provider === 'grok' ||
+      projectedConfig.provider === 'groq' ||
+      projectedConfig.provider === 'together' ||
+      projectedConfig.provider === 'fireworks' ||
+      projectedConfig.provider === 'vllm' ||
+      projectedConfig.provider === 'mistral' ||
       (projectedConfig.provider === 'custom' && projectedConfig.customProtocol === 'openai');
     const useGemini =
       projectedConfig.provider === 'gemini' ||
@@ -1793,7 +1849,9 @@ export class ConfigStore {
           ? resolveOllamaCredentials(projectedConfig)
           : projectedConfig.provider === 'lmstudio'
             ? resolveLmStudioCredentials(projectedConfig)
-          : resolveOpenAICredentials(projectedConfig);
+            : projectedConfig.provider === 'vllm'
+              ? resolveVllmCredentials(projectedConfig)
+              : resolveOpenAICredentials(projectedConfig);
       if (resolvedOpenAI?.apiKey) {
         process.env.OPENAI_API_KEY = resolvedOpenAI.apiKey;
       }
