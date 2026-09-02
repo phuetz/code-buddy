@@ -24,6 +24,7 @@
 
 import type { ITool, IToolExecutionContext, IToolMetadata, ToolSchema } from './types.js';
 import type { ToolResult } from '../../types/index.js';
+import { logger } from '../../utils/logger.js';
 
 // ============================================================================
 // Alias map: canonical_name → legacy_name
@@ -135,7 +136,8 @@ class AliasITool implements ITool {
  * Given a list of registered tools, build alias ITool wrappers for each
  * entry in TOOL_ALIASES that points to an existing primary tool.
  *
- * Aliases that point to missing primaries are silently skipped.
+ * Aliases that point to missing primaries are skipped with a warning; the
+ * invariant test keeps the alias table honest against the built-in registry.
  */
 export function createAliasTools(primaryTools: ITool[]): ITool[] {
   const byName = new Map<string, ITool>(primaryTools.map(t => [t.name, t]));
@@ -143,7 +145,12 @@ export function createAliasTools(primaryTools: ITool[]): ITool[] {
 
   for (const [canonical, legacy] of Object.entries(TOOL_ALIASES)) {
     const primary = byName.get(legacy);
-    if (!primary) continue;
+    if (!primary) {
+      // An alias listed here but pointing nowhere is a promise the registry
+      // cannot keep: say it, instead of dropping it in silence (2026-09-02).
+      logger.warn(`Tool alias '${canonical}' skipped: primary tool '${legacy}' is not registered`);
+      continue;
+    }
     // Don't create an alias if the canonical name is already registered
     if (byName.has(canonical)) continue;
     aliases.push(new AliasITool(canonical, primary));
