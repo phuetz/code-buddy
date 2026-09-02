@@ -20,6 +20,7 @@ import { logger } from '../utils/logger.js';
 import {
   DEFAULT_ELEVENLABS_MODEL,
   requestElevenLabsSpeech,
+  requestElevenLabsSpeechStream,
 } from '../talk-mode/providers/elevenlabs-client.js';
 
 export const DEFAULT_ELEVENLABS_MONTHLY_CAP = 200_000;
@@ -335,6 +336,78 @@ export async function synthesizeElevenLabsPcm24k(
       `[elevenlabs-voice] synthèse indisponible; repli local (${error instanceof Error ? error.name : 'erreur'})`
     );
     return null;
+  }
+}
+
+/**
+ * Open the native ElevenLabs chunked PCM stream (`/stream?output_format=pcm_24000`).
+ *
+ * Resolves as soon as the response headers arrive, so the caller can pipe the
+ * first PCM frames to a player while ElevenLabs is still synthesizing — the
+ * fluidity counterpart of {@link synthesizeElevenLabsPcm24k}, under the SAME
+ * monthly character budget. Returns `null` for every failure (no key, cap
+ * reached, busy ledger, HTTP error, timeout) so callers immediately use the
+ * local engines instead.
+ *
+ * Budget semantics: the reservation is COMMITTED once the request is accepted
+ * (HTTP 200) because ElevenLabs bills the characters at generation start — a
+ * barge-in that cancels the body mid-way was still charged upstream, so the
+ * local ledger must reflect it. `timeoutMs` bounds the wait for the response
+ * HEAD only; the caller's `signal` keeps governing the body for its lifetime.
+ */
+export async function openElevenLabsPcm24kStream(
+  text: string,
+  voiceId: string,
+  env: NodeJS.ProcessEnv,
+  signal: AbortSignal | undefined,
+  options: ElevenLabsVoiceSynthesisOptions & { timeoutMs?: number } = {}
+): Promise<ReadableStream<Uint8Array> | null> {
+  const apiKey = env.ELEVENLABS_API_KEY?.trim();
+  if (!apiKey) {
+    logger.debug('[elevenlabs-voice] clé absente; repli sur la voix locale');
+    return null;
+  }
+  if (signal?.aborted) return null;
+
+  const now = options.now?.() ?? new Date();
+  const path = usagePath(env, options.usagePath);
+  const reservation = reserveBudget(
+    text.length,
+    resolveElevenLabsMonthlyCap(env),
+    path,
+    now
+  );
+  if (!reservation) return null;
+
+  // The head timeout must abort a hung connection, but must NOT abort the body
+  // after headers arrived — so it lives on a dedicated controller that also
+  // relays the caller's barge-in signal for the whole stream lifetime.
+  const controller = new AbortController();
+  const onCallerAbort = (): void => controller.abort();
+  signal?.addEventListener('abort', onCallerAbort, { once: true });
+  const timeoutMs = options.timeoutMs ?? DEFAULT_ELEVENLABS_TIMEOUT_MS;
+  const headTimer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await requestElevenLabsSpeechStream({
+      apiKey,
+      voiceId,
+      text,
+      modelId: env.CODEBUDDY_ELEVENLABS_MODEL?.trim() || DEFAULT_ELEVENLABS_MODEL,
+      outputFormat: ELEVENLABS_VOICE_OUTPUT_FORMAT,
+      signal: controller.signal,
+      ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {}),
+    });
+    reservation.commit();
+    return response.body;
+  } catch (error) {
+    signal?.removeEventListener('abort', onCallerAbort);
+    reservation.release();
+    logger.debug(
+      `[elevenlabs-voice] flux indisponible; repli local (${error instanceof Error ? error.name : 'erreur'})`
+    );
+    return null;
+  } finally {
+    clearTimeout(headTimer);
   }
 }
 
