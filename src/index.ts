@@ -1180,7 +1180,24 @@ async function processPromptHeadless(
     );
     const lastResponse = assistantMessages[assistantMessages.length - 1];
     const resultText = (lastResponse?.content as string) || '';
-    const exitCode = resolveHeadlessResultExitCode(resultText);
+    const { getBuiltinToolNames } = await import('./codebuddy/tools.js');
+    const executedToolNames = chatEntries
+      .filter((entry) => entry.type === 'tool_result' && entry.toolCall)
+      .map((entry) => entry.toolCall?.function.name)
+      .filter((toolName): toolName is string => Boolean(toolName));
+    const { findUnexecutedProseToolCall } = await import('./cli/headless-options.js');
+    const proseToolCall = findUnexecutedProseToolCall(
+      resultText,
+      getBuiltinToolNames(),
+      executedToolNames,
+    );
+    if (proseToolCall) {
+      logger.warn('le modèle a décrit un appel d’outil sans l’exécuter', {
+        toolName: proseToolCall.toolName,
+        line: proseToolCall.line,
+      });
+    }
+    const exitCode = proseToolCall ? 3 : resolveHeadlessResultExitCode(resultText);
 
     // Gather cost and model info from the agent
     const sessionCost = agent.getSessionCost();

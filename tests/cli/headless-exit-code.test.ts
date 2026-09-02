@@ -69,6 +69,10 @@ function runCliAgainstSuccessfulProvider(port: number, options: {
   directory?: string;
   disableTools?: boolean;
   inheritLogLevel?: boolean;
+  logLevel?: string;
+  nodeEnv?: string;
+  quiet?: boolean;
+  responseContent?: string;
 } = {}): Promise<{
   exitCode: number | null;
   stdout: string;
@@ -97,10 +101,12 @@ function runCliAgainstSuccessfulProvider(port: number, options: {
       '1',
       '--no-self-heal',
       '--ephemeral',
-      '--quiet',
       '--output-format',
       'json',
     );
+    if (options.quiet !== false) {
+      args.splice(args.length - 2, 0, '--quiet');
+    }
     if (options.disableTools ?? true) {
       args.splice(args.length - 2, 0, '--disabled-tools', '*');
     }
@@ -113,7 +119,12 @@ function runCliAgainstSuccessfulProvider(port: number, options: {
         CODEBUDDY_DISABLE_MCP: 'true',
         CODEBUDDY_HEADLESS: 'true',
         CODEBUDDY_REQUEST_TIMEOUT_MS: '5000',
-        ...(options.inheritLogLevel === false ? {} : { LOG_LEVEL: 'error' }),
+        ...(options.logLevel
+          ? { LOG_LEVEL: options.logLevel }
+          : options.inheritLogLevel === false
+            ? { LOG_LEVEL: undefined }
+            : { LOG_LEVEL: 'error' }),
+        ...(options.nodeEnv ? { NODE_ENV: options.nodeEnv } : {}),
         NO_COLOR: '1',
       },
       stdio: ['ignore', 'pipe', 'pipe'],
@@ -149,7 +160,7 @@ describe('headless CLI exit codes', () => {
             index: 0,
             message: {
               role: 'assistant',
-              content: 'HEADLESS_JSON_CONTRACT_OK',
+              content: options.responseContent ?? 'HEADLESS_JSON_CONTRACT_OK',
             },
             finish_reason: 'stop',
           },
@@ -338,6 +349,60 @@ describe('headless CLI exit codes', () => {
       const parsed = JSON.parse(result.stdout);
       expect(parsed.result).toContain('qa forced provider failure');
       expect(parsed.messages.at(-1).content).toContain('Sorry, I encountered an error:');
+    } finally {
+      await new Promise<void>(resolve => server.close(() => resolve()));
+    }
+  }, 90_000);
+
+  it('returns a dedicated non-zero code when a known tool call is only prose', async () => {
+    const server = http.createServer((req, res) => {
+      req.resume();
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({
+        id: 'chatcmpl-headless-prose-tool-call',
+        object: 'chat.completion',
+        created: Math.floor(Date.now() / 1000),
+        model: 'qa-mock-model',
+        choices: [
+          {
+            index: 0,
+            message: {
+              role: 'assistant',
+              content: 'create_file(path="hello.txt", content="bonjour")',
+            },
+            finish_reason: 'stop',
+          },
+        ],
+        usage: {
+          prompt_tokens: 1,
+          completion_tokens: 1,
+          total_tokens: 2,
+        },
+      }));
+    });
+
+    await new Promise<void>((resolve, reject) => {
+      server.once('error', reject);
+      server.listen(0, '127.0.0.1', () => resolve());
+    });
+
+    try {
+      const address = server.address();
+      if (!address || typeof address === 'string') {
+        throw new Error('Expected TCP server address');
+      }
+
+      const result = await runCliAgainstSuccessfulProvider(address.port, {
+        disableTools: true,
+        logLevel: 'warn',
+        nodeEnv: 'development',
+        quiet: false,
+        responseContent: 'create_file(path="hello.txt", content="bonjour")',
+      });
+
+      expect(result.exitCode).toBe(3);
+      expect(JSON.parse(result.stdout).result).toContain('create_file(');
+      expect(result.stderr).toContain('le modèle a décrit un appel d’outil sans l’exécuter');
     } finally {
       await new Promise<void>(resolve => server.close(() => resolve()));
     }
