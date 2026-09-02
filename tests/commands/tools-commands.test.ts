@@ -138,6 +138,17 @@ describe('Tools CLI commands', () => {
     consoleLogSpy.mockRestore();
   });
 
+  it('lists the default profile when no subcommand is given', async () => {
+    const program = createProgram();
+    registerToolsCommands(program);
+
+    await program.parseAsync(['node', 'test', 'tools']);
+
+    const output = getLogOutput();
+    expect(output).toContain('Tool profile: fleet.hermes.balanced');
+    expect(output).toContain('Inspected tools:');
+  });
+
   it('prints JSON for a Hermes-safe profile against selected tools', async () => {
     const program = createProgram();
     registerToolsCommands(program);
