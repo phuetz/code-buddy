@@ -202,6 +202,11 @@ export class PersistentMemoryManager extends EventEmitter {
   private config: MemoryConfig;
   private projectMemories: Map<string, Memory> = new Map();
   private userMemories: Map<string, Memory> = new Map();
+  /** Audit 2026-09-02 — garde anti-amnésie : scopes dont le chargement a
+   * échoué pour une raison AUTRE que l'absence du fichier. Tant qu'un scope
+   * est dégradé, saveMemories refuse la réécriture destructrice (il retente
+   * d'abord un load + fusion, RAM prioritaire). */
+  private degradedScopes: Set<MemoryScope> = new Set();
   private initialized: boolean = false;
   /**
    * Promise gate for concurrent initialize() callers (F31).
@@ -284,8 +289,17 @@ export class PersistentMemoryManager extends EventEmitter {
       for (const memory of parsed) {
         memories.set(memory.key, memory);
       }
-    } catch (_error) {
-      // File doesn't exist or can't be read, start fresh
+      this.degradedScopes.delete(scope);
+    } catch (error) {
+      // File doesn't exist -> start fresh (légitime). Toute AUTRE erreur
+      // (EACCES, EIO…) est transitoire : sans garde, la prochaine sauvegarde
+      // réécrirait le fichier entier depuis l'état vide — amnésie silencieuse.
+      if ((error as NodeJS.ErrnoException)?.code !== 'ENOENT') {
+        this.degradedScopes.add(scope);
+        logger.warn(
+          `[persistent-memory] could not load ${scope} memory (${(error as Error)?.message ?? String(error)}) — destructive saves are blocked until a successful reload`,
+        );
+      }
     }
   }
 
@@ -305,15 +319,17 @@ export class PersistentMemoryManager extends EventEmitter {
     let currentKey = "";
     let currentValue = "";
     let currentMeta: MemoryMeta | undefined;
+    let currentTags: string[] | undefined;
     let inMemoryBlock = false;
 
     const pushCurrent = () => {
       if (currentKey && currentValue) {
-        memories.push(this.createMemory(currentKey, currentValue.trim(), currentCategory, currentMeta));
+        memories.push(this.createMemory(currentKey, currentValue.trim(), currentCategory, currentMeta, currentTags));
       }
       currentKey = "";
       currentValue = "";
       currentMeta = undefined;
+      currentTags = undefined;
     };
 
     for (const line of lines) {
@@ -347,6 +363,19 @@ export class PersistentMemoryManager extends EventEmitter {
         continue;
       }
 
+      // Tags line written by saveMemories (`  Tags: a, b`). Audit 2026-09-02 :
+      // sans cette branche, la ligne était refondue dans la valeur au 1er
+      // reload puis détruite au 2e — `pinned` ne protégeait plus rien après
+      // un redémarrage.
+      const tagsMatch = line.match(/^ {2}Tags:\s*(.*)$/);
+      if (tagsMatch && inMemoryBlock && currentTags === undefined) {
+        currentTags = (tagsMatch[1] ?? "")
+          .split(",")
+          .map((t) => t.trim())
+          .filter((t) => t.length > 0);
+        continue;
+      }
+
       // Continue multi-line value
       if (inMemoryBlock && line.startsWith("  ")) {
         currentValue += "\n" + line.trim();
@@ -363,7 +392,7 @@ export class PersistentMemoryManager extends EventEmitter {
     return memories;
   }
 
-  private createMemory(key: string, value: string, category: MemoryCategory, meta?: MemoryMeta): Memory {
+  private createMemory(key: string, value: string, category: MemoryCategory, meta?: MemoryMeta, tags?: string[]): Memory {
     return {
       key,
       value,
@@ -372,6 +401,7 @@ export class PersistentMemoryManager extends EventEmitter {
       updatedAt: meta?.updatedAt ?? new Date(),
       ...(meta?.lastAccessedAt ? { lastAccessedAt: meta.lastAccessedAt } : {}),
       accessCount: meta?.accessCount ?? 0,
+      ...(tags && tags.length > 0 ? { tags } : {}),
     };
   }
 
@@ -1069,6 +1099,25 @@ export class PersistentMemoryManager extends EventEmitter {
       ? this.config.projectMemoryPath
       : this.config.userMemoryPath;
 
+    // Garde anti-amnésie (audit 2026-09-02) : si le dernier chargement a
+    // échoué autrement que par ENOENT, ce Map ne reflète PAS le fichier.
+    // On retente un load (fusion : les entrées en RAM, plus récentes,
+    // gagnent) ; si le fichier reste illisible, on refuse d'écraser —
+    // fail-closed, comme l'archive de l'oubli.
+    if (this.degradedScopes.has(scope)) {
+      const ramSnapshot = cloneMemoryMap(memories);
+      await this.loadMemories(scope);
+      if (this.degradedScopes.has(scope)) {
+        logger.warn(
+          `[persistent-memory] ${scope} memory file is still unreadable — skipping save to avoid overwriting history`,
+        );
+        return;
+      }
+      for (const [key, memory] of ramSnapshot) {
+        memories.set(key, memory);
+      }
+    }
+
     // Group by category
     const byCategory = new Map<MemoryCategory, Memory[]>();
     for (const memory of memories.values()) {
@@ -1099,7 +1148,16 @@ export class PersistentMemoryManager extends EventEmitter {
         content += `<!-- No memories in this category -->\n`;
       } else {
         for (const memory of categoryMemories) {
-          content += `- **${memory.key}**: ${memory.value}\n`;
+          // Audit 2026-09-02 : indenter les lignes de continuation (2 espaces)
+          // pour que le parseur (branche « line.startsWith('  ') ») les refonde
+          // dans la valeur au reload — sinon tout sauf la 1re ligne est perdu
+          // au redémarrage. Une ligne vide interne devient « deux espaces »
+          // pour ne pas terminer le bloc.
+          const [first = '', ...rest] = memory.value.split('\n');
+          content += `- **${memory.key}**: ${first}\n`;
+          for (const cont of rest) {
+            content += `  ${cont}\n`;
+          }
           if (memory.tags && memory.tags.length > 0) {
             content += `  Tags: ${memory.tags.join(", ")}\n`;
           }

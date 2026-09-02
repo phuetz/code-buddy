@@ -778,6 +778,8 @@ export class CodeBuddyClient {
     };
 
     for (const fallback of fallbackCandidates) {
+      // Audit 2026-09-02 (D5) : visible du catch — déclaré hors du try.
+      let yieldedFromThisFallback = false;
       try {
         logger.warn('Primary provider stream failed before first chunk; trying fallback provider', {
           source: 'CodeBuddyClient',
@@ -799,10 +801,15 @@ export class CodeBuddyClient {
           fallbackClient.setCircuitBreakerConfig(this.circuitBreakerConfig);
         }
 
+        // Audit 2026-09-02 (D5) : si CE secours échoue après avoir émis des
+        // chunks, passer au secours suivant rejouerait toute la réponse à la
+        // suite du préfixe déjà livré — réponse HYBRIDE de deux modèles sans
+        // erreur. Après émission, l'échec doit se propager.
         for await (const chunk of fallbackClient.chatStream(messages, tools, {
           ...fallbackOptsBase,
           model: fallback.model,
         }, searchOptions)) {
+          yieldedFromThisFallback = true;
           yield chunk;
         }
         recordRuntimeFallbackSuccess(fallback);
@@ -810,6 +817,16 @@ export class CodeBuddyClient {
       } catch (fallbackError) {
         if (opts.signal?.aborted) {
           throw createAbortError('Chat stream aborted by caller');
+        }
+        if (yieldedFromThisFallback) {
+          recordRuntimeFallbackFailure(fallback, fallbackError);
+          logger.warn('Fallback provider stream failed AFTER emitting chunks — propagating (a further fallback would duplicate content)', {
+            source: 'CodeBuddyClient',
+            fallbackProvider: fallback.provider,
+            fallbackModel: fallback.model,
+            error: fallbackError instanceof Error ? fallbackError.message : String(fallbackError),
+          });
+          throw fallbackError;
         }
         recordRuntimeFallbackFailure(fallback, fallbackError);
         logger.warn('Fallback provider stream failed', {

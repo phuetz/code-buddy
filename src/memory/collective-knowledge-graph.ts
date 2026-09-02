@@ -36,6 +36,7 @@ import {
   appendFileSync,
   closeSync,
   existsSync,
+  fstatSync,
   mkdirSync,
   openSync,
   readFileSync,
@@ -967,9 +968,33 @@ export class CollectiveKnowledgeGraph {
   private append(event: LedgerEvent): void {
     const dir = dirname(this.ledgerPath);
     if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+    // Audit 2026-09-02 : si un crash a laissé une queue de ligne déchirée
+    // (fichier ne finissant pas par '\n'), un append direct s'y souderait —
+    // la ligne déchirée ET ce nouvel événement deviendraient invalides. On
+    // isole en préfixant '\n' dans le MÊME write (l'atomicité O_APPEND par
+    // syscall est préservée). Pire cas en course : une ligne vide, ignorée
+    // par le parseur.
+    let needsLeadingNewline = false;
+    try {
+      if (existsSync(this.ledgerPath)) {
+        const fd = openSync(this.ledgerPath, 'r');
+        try {
+          const size = fstatSync(fd).size;
+          if (size > 0) {
+            const buf = Buffer.alloc(1);
+            readSync(fd, buf, 0, 1, size - 1);
+            needsLeadingNewline = buf[0] !== 0x0a;
+          }
+        } finally {
+          closeSync(fd);
+        }
+      }
+    } catch {
+      // Vérification best-effort : en échec, comportement historique.
+    }
     // One write() of the full JSON line + newline. O_APPEND is atomic per
     // syscall (the companion Rust engine must not split payload and '\n').
-    appendFileSync(this.ledgerPath, `${JSON.stringify(event)}\n`, 'utf8');
+    appendFileSync(this.ledgerPath, `${needsLeadingNewline ? '\n' : ''}${JSON.stringify(event)}\n`, 'utf8');
     // `load` is the single event-application path. This avoids double-applying a local
     // append while still picking up writes that another process raced in before ours.
     this.load();

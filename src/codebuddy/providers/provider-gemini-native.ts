@@ -479,7 +479,11 @@ export class GeminiNativeProvider implements Provider {
                   statusText: res.statusText,
                   errorBody: errorText?.substring(0, 500),
                 });
-                throw new Error(`${res.status} ${errorText || res.statusText}`);
+                // Audit 2026-09-02 (D8) : sans `.status`, RetryPredicates.llmApiError
+                // ne reconnaît jamais un 429/5xx Gemini — aucun retry/backoff.
+                const httpError = new Error(`${res.status} ${errorText || res.statusText}`);
+                (httpError as Error & { status?: number }).status = res.status;
+                throw httpError;
               }
 
               responseAbortControl = control;
@@ -842,7 +846,12 @@ export class GeminiNativeProvider implements Provider {
           try {
             yield JSON.parse(jsonStr);
           } catch {
-            // Skip malformed JSON lines
+            // Audit 2026-09-02 (D2) : ne plus jeter une ligne en silence — le
+            // trou dans la réponse était invisible, même en debug.
+            logger.warn('Gemini SSE: malformed data line dropped (possible content gap)', {
+              source: 'GeminiNativeProvider',
+              linePreview: jsonStr.slice(0, 120),
+            });
           }
         }
       }
@@ -855,7 +864,10 @@ export class GeminiNativeProvider implements Provider {
         try {
           yield JSON.parse(jsonStr);
         } catch {
-          // Skip malformed JSON
+          logger.warn('Gemini SSE: malformed trailing data dropped (possible content gap)', {
+            source: 'GeminiNativeProvider',
+            linePreview: jsonStr.slice(0, 120),
+          });
         }
       }
     }
@@ -874,6 +886,11 @@ export class GeminiNativeProvider implements Provider {
     const requestTimeoutMs =
       opts?.timeoutMs && opts.timeoutMs >= 1000 ? opts.timeoutMs : this.geminiRequestTimeoutMs;
     const requestControl = createLinkedRequestAbortControl(opts?.signal, requestTimeoutMs);
+    // Audit 2026-09-02 (D3/D1) : suivre ce qui a déjà été émis pour ne jamais
+    // rejouer la requête après émission (duplication silencieuse), et signaler
+    // une fin de stream sans finishReason (troncature possible).
+    let emittedChunks = 0;
+    let sawFinishReason = false;
 
     try {
       if (opts?.signal?.aborted) throw abortErrorForSignal(opts.signal);
@@ -936,6 +953,7 @@ export class GeminiNativeProvider implements Provider {
 
         for (const part of parts) {
           if (part.text) {
+            emittedChunks++;
             yield {
               id: `chatcmpl-gemini-${Date.now()}-${chunkIndex++}`,
               object: 'chat.completion.chunk' as const,
@@ -954,6 +972,7 @@ export class GeminiNativeProvider implements Provider {
 
           if (part.functionCall) {
             const fc = part.functionCall as { name: string; args?: Record<string, unknown> };
+            emittedChunks++;
             yield {
               id: `chatcmpl-gemini-${Date.now()}-${chunkIndex++}`,
               object: 'chat.completion.chunk' as const,
@@ -980,6 +999,7 @@ export class GeminiNativeProvider implements Provider {
 
         // Check for finish reason
         const finishReason = candidate.finishReason as string | undefined;
+        if (finishReason) sawFinishReason = true;
         if (finishReason && finishReason !== 'STOP') {
           // Map Gemini finish reasons to OpenAI format
           const finishMap: Record<string, string> = {
@@ -1023,6 +1043,16 @@ export class GeminiNativeProvider implements Provider {
         };
       }
 
+      // Audit 2026-09-02 (D1) : un stream fermé par le serveur sans aucun
+      // finishReason est très probablement tronqué — on termine quand même en
+      // 'stop' (compat consommateurs) mais on le dit au lieu de se taire.
+      if (!sawFinishReason) {
+        logger.warn('Gemini stream ended without a finishReason — response may be truncated', {
+          source: 'GeminiNativeProvider',
+          emittedChunks,
+        });
+      }
+
       // Final stop chunk
       yield {
         id: `chatcmpl-gemini-${Date.now()}-${chunkIndex}`,
@@ -1038,6 +1068,18 @@ export class GeminiNativeProvider implements Provider {
     } catch (error) {
       requestControl.dispose(true);
       if (opts?.signal?.aborted) throw abortErrorForSignal(opts.signal);
+      // Audit 2026-09-02 (D3) : après émission, le repli non-stream rejouerait
+      // TOUTE la réponse à la suite du préfixe déjà livré — contenu dupliqué
+      // présenté comme une seule réponse, et requête facturée deux fois. On ne
+      // replie que si rien n'a été émis ; sinon l'erreur remonte au client.
+      if (emittedChunks > 0) {
+        logger.warn('Gemini stream failed after chunks were emitted — propagating (no non-stream fallback, it would duplicate content)', {
+          source: 'GeminiNativeProvider',
+          emittedChunks,
+          error: error instanceof Error ? error.message : String(error),
+        });
+        throw error;
+      }
       logger.warn('Gemini streaming error, falling back to non-streaming', {
         source: 'GeminiNativeProvider',
         error: error instanceof Error ? error.message : String(error),

@@ -648,6 +648,46 @@ export const REMEMBER_TOOL: CodeBuddyTool = {
   },
 };
 
+// Audit 2026-09-02 : le prompt système (prompt-builder.ts) ordonne d'utiliser
+// memory_propose pour les faits inférés/ambigus et tool-selection-strategy.ts
+// le force-inclut — mais aucune définition LLM n'existait : la boucle « agent
+// propose, humain valide » était inerte. Le dispatch (MemoryProposeTool,
+// registry/memory-tools.ts) existait déjà.
+export const MEMORY_PROPOSE_TOOL: CodeBuddyTool = {
+  type: 'function',
+  function: {
+    name: 'memory_propose',
+    description:
+      'Propose a long-term memory candidate for human review. Use this instead of remember when the fact is inferred, ambiguous, or should not be silently injected into future prompts. The user approves with /memory accept <id>.',
+    parameters: {
+      type: 'object',
+      properties: {
+        key: { type: 'string', description: 'Short unique key for this memory candidate' },
+        value: { type: 'string', description: 'The information to be remembered if approved' },
+        scope: {
+          type: 'string',
+          enum: ['project', 'user'],
+          description: 'Scope for this memory (default: project)',
+        },
+        category: {
+          type: 'string',
+          enum: ['project', 'preferences', 'decisions', 'patterns', 'context', 'custom'],
+          description: 'Type of information being stored (default: context)',
+        },
+        confidence: {
+          type: 'number',
+          description: 'Confidence 0-1 that this inferred fact is correct',
+        },
+        rationale: {
+          type: 'string',
+          description: 'Why this fact was inferred and is worth keeping',
+        },
+      },
+      required: ['key', 'value'],
+    },
+  },
+};
+
 export const RECALL_TOOL: CodeBuddyTool = {
   type: 'function',
   function: {
@@ -1394,6 +1434,7 @@ export const AGENT_TOOLS: CodeBuddyTool[] = [
   DEVICE_MANAGE_TOOL,
   SPAWN_PARALLEL_AGENTS_TOOL,
   REMEMBER_TOOL,
+  MEMORY_PROPOSE_TOOL,
   RECALL_TOOL,
   FORGET_TOOL,
   RELATIONSHIP_CONTEXT_TOOL,

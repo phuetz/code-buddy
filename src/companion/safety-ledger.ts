@@ -1,4 +1,4 @@
-import { appendFile, mkdir, readFile, stat } from 'fs/promises';
+import { appendFile, mkdir, readFile, rename, stat } from 'fs/promises';
 import * as crypto from 'crypto';
 import * as path from 'path';
 
@@ -179,6 +179,17 @@ export async function recordCompanionSafetyEvent<TPayload extends Record<string,
   };
 
   await mkdir(path.dirname(ledgerPath), { recursive: true });
+  // Audit 2026-09-02 : rotation 1 Mio -> `.1` (même motif que reminder-log).
+  // Alimenté à chaque snapshot caméra sur un robot 24/7, ce ledger croissait
+  // sans borne et readSafetyEvents le reparse intégralement à chaque stats.
+  // Seule l'absence du fichier est ignorée ; un échec de rename remonte
+  // (sinon le journal continuerait de grossir après une rotation impossible).
+  try {
+    const info = await stat(ledgerPath);
+    if (info.size > 1024 * 1024) await rename(ledgerPath, `${ledgerPath}.1`);
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
+  }
   await appendFile(ledgerPath, `${JSON.stringify(event)}\n`, 'utf8');
   return event;
 }

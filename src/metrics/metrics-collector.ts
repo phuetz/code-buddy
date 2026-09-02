@@ -370,6 +370,7 @@ export class MetricsCollector extends EventEmitter {
   private gauges: Map<string, Gauge> = new Map();
   private histograms: Map<string, Histogram> = new Map();
   private exportInterval: NodeJS.Timeout | null = null;
+  private systemMetricsInterval: NodeJS.Timeout | null = null;
   private startTime: number = Date.now();
   private history: MetricsSnapshot[] = [];
   private initialized: boolean = false;
@@ -468,10 +469,14 @@ export class MetricsCollector extends EventEmitter {
       });
     }, this.config.exportInterval);
 
-    // Collect system metrics periodically
-    setInterval(() => {
+    // Collect system metrics periodically.
+    // Audit 2026-09-02 : timer stocké + unref + nettoyé par shutdown() —
+    // il était anonyme, maintenait l'event loop et fuyait à chaque cycle
+    // init/shutdown.
+    this.systemMetricsInterval = setInterval(() => {
       this.collectSystemMetrics();
     }, 10000); // Every 10 seconds
+    this.systemMetricsInterval.unref?.();
 
     this.initialized = true;
     this.emit('initialized');
@@ -771,6 +776,10 @@ export class MetricsCollector extends EventEmitter {
     if (this.exportInterval) {
       clearInterval(this.exportInterval);
       this.exportInterval = null;
+    }
+    if (this.systemMetricsInterval) {
+      clearInterval(this.systemMetricsInterval);
+      this.systemMetricsInterval = null;
     }
 
     // Final export
