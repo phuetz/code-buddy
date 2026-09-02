@@ -70,4 +70,22 @@ describe('R28 D2/D4 — un magasin persistant illisible n’est jamais vide', ()
     );
     expect(fs.readFileSync(userPath, 'utf8')).toBe(manualNotes);
   });
+
+  it('treats a blank memory file as a new empty store, not as corruption', async () => {
+    const userPath = path.join(dir, 'memory.md');
+    fs.writeFileSync(userPath, '  \n');
+    const manager = new PersistentMemoryManager({
+      projectMemoryPath: path.join(dir, 'project.md'),
+      userMemoryPath: userPath,
+      autoCapture: false,
+    });
+    await manager.initialize();
+
+    expect(manager.getContextForPrompt()).not.toMatch(/MEMORY STORE ERROR/i);
+    await expect(manager.remember('theme', 'sombre', { scope: 'user' })).resolves.toMatchObject({
+      status: 'stored',
+      key: 'theme',
+    });
+    expect(manager.recall('theme', 'user')).toBe('sombre');
+  });
 });
