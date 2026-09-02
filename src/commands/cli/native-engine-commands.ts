@@ -181,6 +181,8 @@ export function registerHubCommands(program: Command): void {
         console.log(`Uninstalled ${name}`);
       } else {
         console.log(`Skill not found: ${name}`);
+        process.exit(1);
+        return;
       }
     });
 

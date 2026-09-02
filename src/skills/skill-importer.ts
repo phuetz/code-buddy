@@ -346,6 +346,20 @@ export async function importSkills(sourceDir: string, options: ImportOptions = {
 
   if (!dryRun && report.imported.length > 0) {
     try {
+      // Custom destinations are used by library callers and tests; only the
+      // default user skills root belongs to the CLI-managed hub lockfile.
+      if (path.resolve(destRoot) === path.resolve(defaultDestRoot())) {
+        const { getSkillsHub } = await import('./hub.js');
+        const hub = getSkillsHub();
+        for (const imported of report.imported) {
+          hub.registerLocalSkillFile(
+            imported.name,
+            path.join(destRoot, imported.name, 'SKILL.md'),
+            'local',
+          );
+        }
+      }
+
       const { getSkillRegistry } = await import('./registry.js');
       await getSkillRegistry().reloadAll();
     } catch (err) {

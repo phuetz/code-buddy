@@ -1876,7 +1876,7 @@ export class SkillsHub extends EventEmitter {
     logger.info('Uninstalling skill', { name: skillName });
 
     // Remove skill directory
-    const skillDir = path.join(this.config.skillsDir, skillName);
+    const skillDir = path.dirname(installed.path);
     if (fs.existsSync(skillDir)) {
       fs.rmSync(skillDir, { recursive: true, force: true });
     }
