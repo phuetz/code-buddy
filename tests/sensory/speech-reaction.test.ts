@@ -124,7 +124,7 @@ describe('speech reaction — speech_end → STT → percept', () => {
     expect(shouldSuppressPlaybackCapture('echo_tail', 'distinct', false)).toBe(false);
   });
 
-  it('uses a partial transcript only for preparation and waits for the final before cognition', async () => {
+  it('uses repeated partial transcripts only for preparation and the final for cognition', async () => {
     const partials: Array<{ text: string; audioMs?: number; decodeMs?: number }> = [];
     const heard: string[] = [];
     const unwire = wireSpeechReaction({
@@ -139,10 +139,15 @@ describe('speech reaction — speech_end → STT → percept', () => {
     try {
       speechStart({ rms: 0.08 });
       transcriptPartial('cherche les actualités', { audioMs: 1200, decodeMs: 95 });
+      transcriptPartial('cherche les actualités en Europe', { audioMs: 2400, decodeMs: 91 });
       await waitFor(() => expect(partials).toEqual([{
         text: 'cherche les actualités',
         audioMs: 1200,
         decodeMs: 95,
+      }, {
+        text: 'cherche les actualités en Europe',
+        audioMs: 2400,
+        decodeMs: 91,
       }]));
       expect(heard).toEqual([]);
 
