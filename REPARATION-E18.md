@@ -11,7 +11,7 @@ Rapport initialisé avant toute inspection du dépôt, conformément à la missi
 | D7 | Test initial : `checkTtsProviders` n’était pas exposé ; diagnostic historique conseillait `edge-tts/espeak` | `doctor` sonde le lanceur Pocket (`pocket-tts`/`uvx`) et la présence de `ELEVENLABS_API_KEY`, avec conseil explicite | `npx vitest run tests/doctor/tts-guidance.test.ts` : 1/1 PASS ; `buddy speak --out` sans AudioReader : exit 1 + message clair, aucun WAV | `10ae7977f` |
 | D8 | Test documentaire rouge : la doc ne signalait pas la limite `.git` des installations npm pack | Message d’erreur explicite et documentation de la nécessité d’un checkout Git | Test ciblé 6/6 PASS ; commande avec `GIT_DIR=/dev/null` : message explicite, exit Commander 1 | `0130f30f5` |
 | D9 | Test registre/GitHub rouge : `--check` ne consultait pas npm, fabriquait la date avec `new Date()` et construisait encore `phuetz/grok-cli` | `--check` lit le nom/version de `package.json`, interroge le dist-tag npm réel avec timeout, refuse une réponse incomplète et corrige le dépôt GitHub | Test ciblé 14/14 PASS ; registre réel : `@phuetz/code-buddy` latest `1.6.1`, date `2026-06-25T13:14:01.864Z` ; CLI exit 0 et affiche ces valeurs | `6e910e76f` |
-| D10 | À établir | À faire | À faire | À faire |
+| D10 | Rouge historique non reproductible sur ce HEAD : `e077e4c4f` contient déjà la gestion d’erreur Fleet | Ajout d’une régression ciblée qui verrouille le message, le conseil `buddy server` et `process.exitCode = 1` | Test ciblé 8/8 PASS ; port local non utilisé : message exact et CLI exit 1 | À faire |
 | D11 | À établir | À faire | À faire | À faire |
 
 ## Défauts non réglés
@@ -21,6 +21,7 @@ Rapport initialisé avant toute inspection du dépôt, conformément à la missi
 - D7 réglé : diagnostic TTS aligné sur Pocket/ElevenLabs ; absence de moteur = message clair et exit 1.
 - D8 réglé côté commande et documentation ; commit dédié `0130f30f5`.
 - D9 réglé : `--check` ne fabrique plus de version/date et le dépôt/package sont ceux de Code Buddy.
+- D10 était déjà corrigé dans le HEAD E18 par `e077e4c4f` ; la régression ciblée et la preuve CLI sont ajoutées ici.
 
 ## Commandes, sorties et commits
 
@@ -192,3 +193,21 @@ exit 0
 La commande constate ici que la version locale est supérieure et ne conseille pas de rétrograder.
 
 Commit D9 : `6e910e76f` (`fix(update): check the npm registry for releases`).
+
+### D10 — `fleet status` sans serveur
+
+Rouge préalable : non reproductible sur le HEAD E18. La commande contenait déjà, dans `e077e4c4f`, le message `Lancez-le avec \`buddy server\`` et `process.exitCode = 1`. Une régression a donc été ajoutée sans inventer un échec historique absent de cet état du clone.
+
+Vert :
+
+```text
+$ npx vitest run tests/commands/fleet-commands.test.ts
+Test Files  1 passed (1)
+Tests       8 passed (8)
+
+$ LOG_LEVEL=error timeout 10s npx tsx src/index.ts fleet status --server-url http://127.0.0.1:39991
+Serveur Fleet indisponible sur http://127.0.0.1:39991 (fetch failed). Lancez-le avec `buddy server` puis réessayez.
+exit=1
+```
+
+Le port `39991` n’a pas été démarré ; aucun service existant n’a été arrêté ou modifié. Le contrôle verrouille ainsi le comportement demandé pour un serveur Fleet absent.

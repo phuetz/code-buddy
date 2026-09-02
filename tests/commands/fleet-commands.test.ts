@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { registerFleetCommands } from '../../src/commands/cli/fleet-commands.js';
 
 let consoleLogSpy: ReturnType<typeof vi.spyOn>;
+let consoleErrorSpy: ReturnType<typeof vi.spyOn>;
 
 function createProgram(): Command {
   const program = new Command();
@@ -22,10 +23,15 @@ function getLogOutput(): string {
 describe('Fleet CLI commands', () => {
   beforeEach(() => {
     consoleLogSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    process.exitCode = 0;
   });
 
   afterEach(() => {
     consoleLogSpy.mockRestore();
+    consoleErrorSpy.mockRestore();
+    vi.restoreAllMocks();
+    process.exitCode = 0;
   });
 
   it('prints JSON policy decisions for a dispatch profile', async () => {
@@ -222,5 +228,26 @@ describe('Fleet CLI commands', () => {
     } finally {
       fetchSpy.mockRestore();
     }
+  });
+
+  it('fails clearly and non-zero when fleet status has no server', async () => {
+    vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('fetch failed'));
+    const program = createProgram();
+    registerFleetCommands(program);
+
+    await program.parseAsync([
+      'node',
+      'test',
+      'fleet',
+      'status',
+      '--server-url',
+      'http://127.0.0.1:39991',
+    ]);
+
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      'Serveur Fleet indisponible sur http://127.0.0.1:39991 (fetch failed). ' +
+        'Lancez-le avec `buddy server` puis réessayez.',
+    );
+    expect(process.exitCode).toBe(1);
   });
 });
