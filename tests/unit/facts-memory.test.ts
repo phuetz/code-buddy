@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
-import { FactsMemoryService, Fact } from '../../src/memory/facts-memory.js';
+import { FactsMemoryService, Fact, FactsExtractionError } from '../../src/memory/facts-memory.js';
 import { CodeBuddyClient } from '../../src/codebuddy/client.js';
+import { logger } from '../../src/utils/logger.js';
 
 vi.mock('../../src/codebuddy/client.js', () => {
   return {
@@ -9,6 +10,10 @@ vi.mock('../../src/codebuddy/client.js', () => {
     }
   };
 });
+
+vi.mock('../../src/utils/logger.js', () => ({
+  logger: { info: vi.fn(), warn: vi.fn(), debug: vi.fn(), error: vi.fn() },
+}));
 
 describe('FactsMemoryService', () => {
   describe('extractFacts', () => {
@@ -34,6 +39,33 @@ describe('FactsMemoryService', () => {
       expect(facts.length).toBe(2);
       expect(facts[0].category).toBe('Projet');
       expect(facts[0].text).toBe('Uses TypeScript and ESM.');
+    });
+
+    it('returns an empty list when the model extracts no facts', async () => {
+      const mockClient = new CodeBuddyClient('key', 'model', 'url');
+      vi.spyOn(mockClient, 'chat').mockResolvedValue({
+        choices: [{
+          message: { role: 'assistant', content: '[]' },
+          finish_reason: 'stop'
+        }]
+      } as any);
+
+      const service = new FactsMemoryService(mockClient);
+      await expect(service.extractFacts('Nothing memorable')).resolves.toEqual([]);
+    });
+
+    it('throws FactsExtractionError instead of returning [] when generation fails', async () => {
+      const mockClient = new CodeBuddyClient('key', 'model', 'url');
+      vi.spyOn(mockClient, 'chat').mockRejectedValue(new Error('provider down'));
+
+      const service = new FactsMemoryService(mockClient);
+      const failure = await service.extractFacts('Some conversation').catch((err: unknown) => err);
+      expect(failure).toBeInstanceOf(FactsExtractionError);
+      expect((failure as Error).message).toMatch(/extraction impossible|provider down/i);
+      expect(logger.warn).toHaveBeenCalled();
+      expect(vi.mocked(logger.warn).mock.calls.some(
+        (call) => String(call[0]).includes('Failed to extract facts'),
+      )).toBe(true);
     });
   });
 

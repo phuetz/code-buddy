@@ -23,6 +23,16 @@ export const FactSchema = z.object({
 
 export type Fact = z.infer<typeof FactSchema>;
 
+export class FactsExtractionError extends Error {
+  constructor(message: string, options?: { cause?: unknown }) {
+    super(message);
+    this.name = 'FactsExtractionError';
+    if (options?.cause !== undefined) {
+      (this as Error & { cause?: unknown }).cause = options.cause;
+    }
+  }
+}
+
 export const ReconciliationActionSchema = z.object({
   action: z.enum(['ADD', 'UPDATE', 'DELETE', 'NONE']),
   targetIndex: z.number().optional(),
@@ -67,7 +77,7 @@ export class FactsMemoryService {
     const client = await this.getClient();
     if (!client) {
       logger.warn('[FactsMemory] LLM Client not available for fact extraction.');
-      return [];
+      throw new FactsExtractionError('Fact extraction impossible: LLM client not available');
     }
 
     const systemPrompt = `You are a structured fact extraction engine for an AI coding assistant.
@@ -110,9 +120,13 @@ Example:
           source: 'auto-captured',
           updatedAt: new Date()
         }));
-    } catch (error: any) {
-      logger.error(`[FactsMemory] Failed to extract facts: ${error.message}`);
-      return [];
+    } catch (error: unknown) {
+      if (error instanceof FactsExtractionError) {
+        throw error;
+      }
+      const message = error instanceof Error ? error.message : String(error);
+      logger.warn(`[FactsMemory] Failed to extract facts: ${message}`);
+      throw new FactsExtractionError(`Fact extraction impossible: ${message}`, { cause: error });
     }
   }
 
