@@ -17,6 +17,8 @@ Dernière consolidation : 2026-09-02, Europe/Paris. Ce fichier est la source de 
 
 ## Tableau de contrôle
 
+| P0 | Code Buddy — CONV2 : barge-in vocal robuste, anti-auto-déclenchement et reprise de phrase | **Codex (GPT-5) — VERTE / PASSATION le 02/09/2026** | Clone `/home/patrice/DEV/cb-conv-luna-2026-09-03`, branche `feat/conversation-luna-2026-09-03`, base annoncée `facea9864`, dernier commit fonctionnel/documentaire `52f71b69b`. Rapport `REPARATION-CONV2.md` créé avant inspection. | Vérifications : bancs CONV2 + 8 suites sensorielles, `202 passed`; `npx tsc --noEmit -p .` code 0; ESLint ciblé code 0; `npm run lint` code 0, 2466 avertissements existants. Aucun push, audio réel, rappel parlé, service systemd ou écriture hors clone. | Zone réservée : `src/sensory/`, `buddy-sense/src/senses/audio.rs`, tests sensoriels associés, `CLAUDE.md`, `REPARATION-CONV2.md`, et uniquement les fichiers nécessaires au câblage. `~/code-buddy` interdit en écriture. |
+
 | Priorité | Chantier | Propriétaire | État vérifié | Prochaine action sûre | Zone / garde-fou |
 |---|---|---|---|---|---|
 | P0 | Code Buddy — audit par EXÉCUTION RÉELLE (E1 auto-amélioration/skills, E2 recherche/CKG/council, E3 innovations CB2, E4 chemin quotidien) + N1–N4 « jamais actif » + balayage installation | **Fable 5 (pilotage) + sol/luna/grok/agy — FAIT le 02/09** | Rapports `~/DEV/cb-exec-{a,b,c,d}-2026-09-02/RAPPORT-EXEC-*.md`, `~/DEV/cb-never-*-2026-09-02/RAPPORT-NEVER-*.md`. 54+35+56 PASS ; 19+3+13+8 FAIL → tous en réparation (R5, R6, R9, R11, R13–R17). Balayage : 103/103. | Relire les rapports FAIL avant publication ; R17 (innovations CB2) en cours. | Clones réservés. |

@@ -135,8 +135,8 @@ exit code 0 — 0 erreur, 2466 avertissements préexistants du dépôt
 Branche : `feat/conversation-luna-2026-09-03`. Base annoncée : `facea9864`. Aucun push et aucune
 écriture dans `~/code-buddy`.
 
-Le tableau de `docs/FABLE5-CODEX-COORDINATION.md` sera clôturé avec le commit de documentation
-final et les vérifications ci-dessus avant passation.
+Le tableau de `docs/FABLE5-CODEX-COORDINATION.md` est clôturé avec le dernier commit
+fonctionnel/documentaire `52f71b69b` et les vérifications ci-dessus avant passation.
 
 ## Bilan
 
