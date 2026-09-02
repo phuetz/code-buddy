@@ -126,6 +126,52 @@ export const PROVIDERS: Record<string, ProviderInfo> = Object.fromEntries(
     }),
 );
 
+function firstEnvValue(keys: string[]): string | undefined {
+  for (const key of keys) {
+    const value = process.env[key]?.trim();
+    if (value) return value;
+  }
+  return undefined;
+}
+
+async function probeOpenAiCompatibleRuntime(baseUrl: string, timeoutMs = 800): Promise<boolean> {
+  const root = baseUrl.replace(/\/v1\/?$/, '').replace(/\/+$/, '');
+  if (!root) return false;
+  try {
+    const response = await fetch(`${root}/v1/models`, { signal: AbortSignal.timeout(timeoutMs) });
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
+
+export async function collectRuntimeActiveProviderIds(overrides: {
+  ollamaUrl?: string;
+  lmStudioUrl?: string;
+  vllmUrl?: string;
+} = {}): Promise<Set<string>> {
+  const lmStudioUrl = overrides.lmStudioUrl
+    ?? firstEnvValue(['LMSTUDIO_HOST', 'LM_STUDIO_HOST', 'LMSTUDIO_BASE_URL', 'LM_STUDIO_BASE_URL'])
+    ?? PROVIDERS.lmstudio?.baseURL
+    ?? 'http://localhost:1234/v1';
+  const vllmUrl = overrides.vllmUrl
+    ?? firstEnvValue(['VLLM_BASE_URL'])
+    ?? PROVIDERS.vllm?.baseURL
+    ?? 'http://localhost:8000/v1';
+
+  const [ollamaStatus, lmStudioOk, vllmOk] = await Promise.all([
+    fetchOllamaStatus(overrides.ollamaUrl ?? process.env.OLLAMA_HOST),
+    probeOpenAiCompatibleRuntime(lmStudioUrl),
+    probeOpenAiCompatibleRuntime(vllmUrl),
+  ]);
+
+  const active = new Set<string>();
+  if (ollamaStatus.reachable) active.add('ollama');
+  if (lmStudioOk) active.add('lmstudio');
+  if (vllmOk) active.add('vllm');
+  return active;
+}
+
 function getConfiguredProviders(): string[] {
   const configured: string[] = [];
 
@@ -199,9 +245,7 @@ export function createProviderCommand(): Command {
       const configured = getConfiguredProviders();
       const configuredPluginProviders = getConfiguredPluginNativeProviders();
       const current = resolveProviderCommandKey(getCurrentProvider()) || getCurrentProvider();
-      const runtimeActive = new Set<string>();
-      const ollamaStatus = await fetchOllamaStatus(process.env.OLLAMA_HOST);
-      if (ollamaStatus.reachable) runtimeActive.add('ollama');
+      const runtimeActive = await collectRuntimeActiveProviderIds();
 
       console.log(options.free ? '\nFree-tier AI Providers:\n' : '\nAvailable AI Providers:\n');
 
