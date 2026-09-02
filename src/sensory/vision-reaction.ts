@@ -57,6 +57,8 @@ export interface VisionReactionOptions {
 const DEFAULT_VISION_DEBOUNCE_MS = 8000;
 const DEFAULT_VISION_ALERT_COOLDOWN_MS = 300_000;
 const DEFAULT_VISION_ALERT_SIMILARITY = 0.6;
+export const DEFAULT_VISION_MIN_LUMA = 12;
+export const DEFAULT_VISION_MAX_ANALYSES_PER_MIN = 4;
 
 function configuredNumber(value: number | string | undefined): number {
   return typeof value === 'string' && !value.trim() ? Number.NaN : Number(value);
@@ -84,6 +86,17 @@ function resolveSimilarityThreshold(value: string | undefined): number {
     );
   }
   return DEFAULT_VISION_ALERT_SIMILARITY;
+}
+
+function resolveMaxAnalysesPerMinute(value: string | undefined): number {
+  const parsed = configuredNumber(value);
+  if (Number.isFinite(parsed) && parsed >= 0) return Math.min(60, Math.floor(parsed));
+  if (value !== undefined) {
+    logger.warn(
+      `[vision] invalid max analyses per minute ${JSON.stringify(value)}; using ${DEFAULT_VISION_MAX_ANALYSES_PER_MIN}`,
+    );
+  }
+  return DEFAULT_VISION_MAX_ANALYSES_PER_MIN;
 }
 
 export function shouldAllowVisionImageEndpoint(
@@ -165,15 +178,31 @@ export function wireVisionReaction(options: VisionReactionOptions = {}): () => v
     'alert cooldown',
   );
   const alertSimThreshold = resolveSimilarityThreshold(process.env.CODEBUDDY_VISION_ALERT_SIM);
+  const maxAnalysesPerMinute = resolveMaxAnalysesPerMinute(
+    process.env.CODEBUDDY_VISION_MAX_ANALYSES_PER_MIN,
+  );
   let lastAlertAt = Number.NEGATIVE_INFINITY;
   let lastAlertedDesc = '';
   let lastAt = Number.NEGATIVE_INFINITY;
   let inFlight = false;
   let disposed = false;
+  let analysisStarts: number[] = [];
 
   const id = bus.on('sensory:perception', (evt: BaseEvent) => {
     const p = perceptionOf(evt);
     if (p.modality !== 'vision' || p.kind !== 'motion') return;
+    const payload = (p.payload ?? {}) as {
+      imagePath?: string;
+      camera?: string;
+      meanLuma?: unknown;
+    };
+    const meanLuma = typeof payload.meanLuma === 'number' && Number.isFinite(payload.meanLuma)
+      ? payload.meanLuma
+      : undefined;
+    if (meanLuma !== undefined && meanLuma < DEFAULT_VISION_MIN_LUMA) {
+      logger.info(`[vision] motion skipped (dark frame meanLuma=${meanLuma})`);
+      return;
+    }
 
     const t = now();
     if (t - lastAt < debounceMs) {
@@ -181,10 +210,14 @@ export function wireVisionReaction(options: VisionReactionOptions = {}): () => v
       return;
     }
     if (inFlight) return; // a prior analyze() (VLM, 1–10s) is still running
+    analysisStarts = analysisStarts.filter(startedAt => t >= startedAt && t - startedAt < 60_000);
+    if (analysisStarts.length >= maxAnalysesPerMinute) {
+      logger.info(`[vision] motion skipped (analysis rate limit ${maxAnalysesPerMinute}/min)`);
+      return;
+    }
     lastAt = t;
     inFlight = true;
 
-    const payload = (p.payload ?? {}) as { imagePath?: string; camera?: string };
     void (async () => {
       try {
         const suppliedFrame = await safeCameraKeyframePath(payload.imagePath);
@@ -192,6 +225,7 @@ export function wireVisionReaction(options: VisionReactionOptions = {}): () => v
           logger.warn('[vision] rejected keyframe outside the configured camera spool');
           return;
         }
+        analysisStarts.push(t);
         const res = await analyzer.analyze(
           'Décris la scène en une phrase courte : objets génériques et situation notable. Ne transcris aucun texte/OCR, nom, adresse, téléphone, identifiant, secret ou visage reconnu.',
           suppliedFrame,

@@ -60,6 +60,16 @@ export const CAMERA_MESSAGES: Record<string, string[]> = {
 };
 
 const lastMsgIdx: Record<string, number> = {};
+export const DEFAULT_SENSORY_REGREET_MIN_MS = 300_000;
+
+export function resolveSensoryRegreetMinMs(env: NodeJS.ProcessEnv = process.env): number {
+  const raw = env.CODEBUDDY_SENSORY_REGREET_MIN_MS?.trim();
+  if (!raw) return DEFAULT_SENSORY_REGREET_MIN_MS;
+  const value = Number(raw);
+  return Number.isFinite(value) && value >= 0
+    ? Math.min(86_400_000, Math.floor(value))
+    : DEFAULT_SENSORY_REGREET_MIN_MS;
+}
 
 /** Pick a varied alert caption for `kind`, avoiding the consecutive repeat. Returns `kind` if unknown. */
 export function pickCameraMessage(kind: string, rng: () => number = Math.random): string {
@@ -91,10 +101,13 @@ export function wireSemanticVisionReaction(options: SemanticVisionOptions = {}):
   // presence that notices you. Cooldown'd so a person flickering in/out doesn't re-greet.
   const greetEnabled = process.env.CODEBUDDY_SENSORY_GREET === 'true';
   const greetCooldownMs = Number(process.env.CODEBUDDY_SENSORY_GREET_COOLDOWN_MS) || 60_000;
+  const regreetMinMs = resolveSensoryRegreetMinMs();
   const now = options.now ?? (() => Date.now());
   let lastGreetAt = Number.NEGATIVE_INFINITY;
   let awaitingIdentityGreeting = false;
   let recognizedUserPresent = false;
+  let lastLossAt = Number.NEGATIVE_INFINITY;
+  let suppressCurrentArrivalGreeting = false;
 
   const id = bus.on('sensory:perception', (evt: BaseEvent) => {
     const p = perceptionOf(evt);
@@ -116,10 +129,14 @@ export function wireSemanticVisionReaction(options: SemanticVisionOptions = {}):
       similarity?: unknown;
     };
     if (kind === 'person_entered') {
+      const enteredAt = now();
+      suppressCurrentArrivalGreeting = enteredAt - lastLossAt < regreetMinMs;
+      if (!suppressCurrentArrivalGreeting) lastLossAt = Number.NEGATIVE_INFINITY;
       recognizedUserPresent = false;
       options.onIdentityChange?.(false);
       awaitingIdentityGreeting = payload.identityPending === true;
     } else if (kind === 'person_lost' || kind === 'person_left') {
+      lastLossAt = now();
       recognizedUserPresent = false;
       awaitingIdentityGreeting = false;
       options.onIdentityChange?.(false);
@@ -206,7 +223,11 @@ export function wireSemanticVisionReaction(options: SemanticVisionOptions = {}):
       const greetFromAnonymousArrival =
         kind === 'person_entered' && payload.identityPending !== true;
       const greetFromIdentity = identityShouldOpenArrival;
-      if ((greetFromAnonymousArrival || greetFromIdentity) && greetEnabled) {
+      if (
+        (greetFromAnonymousArrival || greetFromIdentity)
+        && greetEnabled
+        && !suppressCurrentArrivalGreeting
+      ) {
         const t = now();
         if (t - lastGreetAt < greetCooldownMs) return;
         lastGreetAt = t;

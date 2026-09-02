@@ -16,6 +16,7 @@ let speakingUntilMs = 0;
 
 /** Echo tail after playback ends, ms (room reverberation + buffered audio). */
 export const DEFAULT_VOICE_ECHO_TAIL_MS = 1_200;
+export const SENSORY_AEC_TRUST_ENV = 'CODEBUDDY_SENSORY_AEC_TRUST';
 const configuredTailRaw = process.env.CODEBUDDY_SENSORY_ECHO_TAIL_MS?.trim();
 const configuredTailMs = configuredTailRaw ? Number(configuredTailRaw) : Number.NaN;
 const TAIL_MS = Number.isFinite(configuredTailMs) && configuredTailMs >= 0
@@ -24,7 +25,7 @@ const TAIL_MS = Number.isFinite(configuredTailMs) && configuredTailMs >= 0
 const MAX_PLAYBACK_INTERVALS = 8;
 const MAX_SPOKEN_REFERENCES = 8;
 const RESUME_WINDOW_MS = 5 * 60_000;
-const ECHO_REFERENCE_WINDOW_MS = 30_000;
+export const DEFAULT_OWN_ECHO_WINDOW_MS = 90_000;
 
 interface VoicePlaybackInterval {
   startedAtMs: number;
@@ -36,7 +37,7 @@ interface VoicePlaybackInterval {
 
 interface SpokenReference {
   normalized: string;
-  tokens: Set<string>;
+  tokens: string[];
   recordedAtMs: number;
 }
 
@@ -64,10 +65,23 @@ function finiteClock(value: number): boolean {
   return Number.isFinite(value) && value >= 0;
 }
 
+/**
+ * Treat the capture-side AEC flag as a half-duplex bypass only after an explicit
+ * operator opt-in. Merely advertising AEC is not evidence that loudspeaker echo
+ * was removed from the actual microphone signal.
+ */
+export function isSensoryAecTrusted(
+  aecActive: boolean,
+  env: NodeJS.ProcessEnv = process.env,
+): boolean {
+  return aecActive && env[SENSORY_AEC_TRUST_ENV]?.trim().toLowerCase() === 'true';
+}
+
 function normalizeSpokenText(value: string): string {
   return value
-    .normalize('NFKC')
+    .normalize('NFKD')
     .toLowerCase()
+    .replace(/\p{M}+/gu, '')
     .replace(/[^\p{L}\p{N}]+/gu, ' ')
     .replace(/\s+/g, ' ')
     .trim();
@@ -138,7 +152,7 @@ export async function withSpeakingGuard(play: () => Promise<void>): Promise<void
 }
 
 /**
- * Keep a short, memory-only fingerprint of what the loudspeaker is about to say.
+ * Keep a short, memory-only fingerprint of text sent to the loudspeaker TTS.
  * It is used solely to distinguish room echo from a genuinely new quick reply;
  * neither the original text nor the fingerprint is persisted by this module.
  */
@@ -147,13 +161,13 @@ export function noteSpokenText(text: string, now: number = Date.now()): void {
   if (!normalized || !finiteClock(now)) return;
   const bounded = normalized.slice(0, 1_000);
   for (let index = spokenReferences.length - 1; index >= 0; index--) {
-    if (now - spokenReferences[index]!.recordedAtMs > ECHO_REFERENCE_WINDOW_MS) {
+    if (now - spokenReferences[index]!.recordedAtMs > DEFAULT_OWN_ECHO_WINDOW_MS) {
       spokenReferences.splice(index, 1);
     }
   }
   spokenReferences.push({
     normalized: bounded,
-    tokens: new Set(bounded.split(' ').filter(Boolean)),
+    tokens: bounded.split(' ').filter(Boolean),
     recordedAtMs: now,
   });
   if (spokenReferences.length > MAX_SPOKEN_REFERENCES) {
@@ -170,24 +184,21 @@ export function classifyRecentVoiceEcho(
   if (!normalized || !finiteClock(atMs)) return 'unknown';
   const references = spokenReferences.filter(
     reference => atMs >= reference.recordedAtMs - 1_000
-      && atMs - reference.recordedAtMs <= ECHO_REFERENCE_WINDOW_MS,
+      && atMs - reference.recordedAtMs <= DEFAULT_OWN_ECHO_WINDOW_MS,
   );
   if (references.length === 0) return 'unknown';
 
-  const tokens = normalized.split(' ').filter(Boolean);
+  const transcriptTokens = new Set(normalized.split(' ').filter(Boolean));
   for (const reference of references) {
     if (
-      (normalized.length >= 4 && reference.normalized.includes(normalized))
-      || (reference.normalized.length >= 8 && normalized.includes(reference.normalized))
+      reference.normalized.includes(normalized)
+      || normalized.includes(reference.normalized)
     ) {
       return 'echo';
     }
-    if (tokens.length > 0) {
-      const overlap = tokens.filter(token => reference.tokens.has(token)).length;
-      const coverage = overlap / tokens.length;
-      if ((tokens.length <= 2 && coverage === 1) || (tokens.length >= 3 && coverage >= 0.75)) {
-        return 'echo';
-      }
+    if (reference.tokens.length > 0) {
+      const overlap = reference.tokens.filter(token => transcriptTokens.has(token)).length;
+      if (overlap / reference.tokens.length >= 0.6) return 'echo';
     }
   }
   return 'distinct';

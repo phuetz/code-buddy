@@ -23,6 +23,7 @@ import { getGlobalEventBus } from '../events/event-bus.js';
 import { logger } from '../utils/logger.js';
 import {
   classifyRecentVoiceEcho,
+  isSensoryAecTrusted,
   isSpeaking,
   measureVoiceResumeTiming,
 } from './voice-activity.js';
@@ -35,6 +36,7 @@ import {
   resolveParakeetModelDir,
   expandSpeechPath,
   type SpeechRecognitionEngine,
+  type SpeechTranscriptionPlan,
 } from './speech-engine-config.js';
 import { resolveUserName } from '../companion/user-name.js';
 import {
@@ -324,14 +326,14 @@ function realSpeechCapture(
   return { durationMs, rms };
 }
 
-/** Explicit wake/stop always works; AEC additionally permits sustained natural speech. */
+/** Explicit wake/stop always works; explicitly trusted AEC permits sustained natural speech. */
 export function shouldTriggerVoiceBargeIn(
   text: string,
   payload: Record<string, unknown> = {},
   env: NodeJS.ProcessEnv = process.env,
 ): boolean {
   if (isBargeInTranscript(text)) return true;
-  if (payload.aecActive !== true) return false;
+  if (!isSensoryAecTrusted(payload.aecActive === true, env)) return false;
   return (capturedSpeechMs(payload) ?? 0) >= resolveVoiceBargeInMinMs(env);
 }
 
@@ -1338,6 +1340,24 @@ async function transcribeWavWithSherpaRustRaw(wav: string): Promise<string> {
   );
 }
 
+const warnedSpeechFallbacks = new Set<string>();
+
+/** Log one configuration-level STT fallback once for the lifetime of this process. */
+export function warnSpeechFallbackOnce(
+  plan: SpeechTranscriptionPlan,
+  engine: SpeechRecognitionEngine,
+  hotwordCount: number,
+): void {
+  if (!plan.fallbackReason) return;
+  const key = plan.fallbackReason;
+  if (warnedSpeechFallbacks.has(key)) return;
+  warnedSpeechFallbacks.add(key);
+  logger.warn(
+    `[speech] STT fallback activated: requested=${plan.requestedEngine} effective=${engine} `
+    + `language=${plan.language} reason=${plan.fallbackReason} hotwords=${hotwordCount}`,
+  );
+}
+
 async function transcribeWavRaw(
   wav: string,
   engineOverride?: SpeechRecognitionEngine
@@ -1356,10 +1376,7 @@ async function transcribeWavRaw(
   }
   if (plan.fallbackReason) {
     const hotwordCount = splitSpeechPhrases(defaultSpeechHotwords()).length;
-    logger.warn(
-      `[speech] STT fallback activated: requested=${plan.requestedEngine} effective=${engine} `
-      + `language=${plan.language} reason=${plan.fallbackReason} hotwords=${hotwordCount}`
-    );
+    warnSpeechFallbackOnce(plan, engine, hotwordCount);
   }
   if (engine === 'faster-whisper') {
     return transcribeWavWithFasterWhisperRaw(wav);
@@ -1580,9 +1597,12 @@ export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => v
     const voiceResume = job.speechStartedAtMs !== undefined
       ? measureVoiceResumeTiming(job.speechStartedAtMs)
       : undefined;
-    const quickPostPlaybackResume = voiceResume?.kind === 'echo_tail';
     const aecActive = (job.p.payload as Record<string, unknown> | undefined)?.aecActive === true;
-    if (isSpeaking(t) && !quickPostPlaybackResume && !aecActive) {
+    const aecTrusted = isSensoryAecTrusted(aecActive);
+    // A turn that already barged in (CONV2) has stopped the playback: hear it. Otherwise the
+    // half-duplex guard only opens for an explicitly trusted AEC (SENSE1) — never on aecActive alone.
+    const bargedIn = job.turnId !== undefined && bargedSpeechTurnId === job.turnId;
+    if (isSpeaking(t) && !aecTrusted && !bargedIn) {
       void cleanupSpeechJob(job);
       return; // half-duplex: ignore the mic while the robot is speaking (+ echo tail)
     }
@@ -1799,6 +1819,16 @@ export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => v
           );
           return;
         }
+        if (classifyRecentVoiceEcho(text, captureStartedAtMs ?? transcribeStartMs) === 'echo') {
+          logger.info('[speech] dropped own echo');
+          turnCoordinator.transition(turnId, 'suppressed', {
+            suppressionReason: 'own_echo',
+            sttMs,
+            scene: 'assistant_playback',
+            sceneConfidence: 0.98,
+          });
+          return;
+        }
         const playbackCaptureKind = voiceResume?.kind === 'during_playback'
           || voiceResume?.kind === 'echo_tail'
           ? voiceResume.kind
@@ -1808,13 +1838,16 @@ export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => v
           : undefined;
         const explicitBargeIn = playbackCaptureKind
           ? shouldTriggerVoiceBargeIn(text, payload)
+            // A turn that already cut the playback acoustically (CONV2 speech_start barge-in)
+            // counts as an explicit interruption: the robot is no longer speaking over it.
+            || (job.turnId !== undefined && bargedSpeechTurnId === job.turnId)
           : false;
         const suppressPlaybackCapture = playbackCaptureKind && echoClassification
           ? shouldSuppressPlaybackCapture(
               playbackCaptureKind,
               echoClassification,
               explicitBargeIn,
-              payload.aecActive === true,
+              isSensoryAecTrusted(payload.aecActive === true),
             )
           : false;
         if (suppressPlaybackCapture && playbackCaptureKind && echoClassification) {
