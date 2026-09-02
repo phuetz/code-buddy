@@ -36,6 +36,7 @@ import {
   resolveParakeetModelDir,
   expandSpeechPath,
   type SpeechRecognitionEngine,
+  type SpeechTranscriptionPlan,
 } from './speech-engine-config.js';
 import { resolveUserName } from '../companion/user-name.js';
 import {
@@ -1292,6 +1293,24 @@ async function transcribeWavWithSherpaRustRaw(wav: string): Promise<string> {
   );
 }
 
+const warnedSpeechFallbacks = new Set<string>();
+
+/** Log one configuration-level STT fallback once for the lifetime of this process. */
+export function warnSpeechFallbackOnce(
+  plan: SpeechTranscriptionPlan,
+  engine: SpeechRecognitionEngine,
+  hotwordCount: number,
+): void {
+  if (!plan.fallbackReason) return;
+  const key = plan.fallbackReason;
+  if (warnedSpeechFallbacks.has(key)) return;
+  warnedSpeechFallbacks.add(key);
+  logger.warn(
+    `[speech] STT fallback activated: requested=${plan.requestedEngine} effective=${engine} `
+    + `language=${plan.language} reason=${plan.fallbackReason} hotwords=${hotwordCount}`,
+  );
+}
+
 async function transcribeWavRaw(
   wav: string,
   engineOverride?: SpeechRecognitionEngine
@@ -1310,10 +1329,7 @@ async function transcribeWavRaw(
   }
   if (plan.fallbackReason) {
     const hotwordCount = splitSpeechPhrases(defaultSpeechHotwords()).length;
-    logger.warn(
-      `[speech] STT fallback activated: requested=${plan.requestedEngine} effective=${engine} `
-      + `language=${plan.language} reason=${plan.fallbackReason} hotwords=${hotwordCount}`
-    );
+    warnSpeechFallbackOnce(plan, engine, hotwordCount);
   }
   if (engine === 'faster-whisper') {
     return transcribeWavWithFasterWhisperRaw(wav);

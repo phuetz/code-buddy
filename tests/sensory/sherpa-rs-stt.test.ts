@@ -1,11 +1,13 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { existsSync } from 'fs';
 import os from 'os';
 import path from 'path';
 import {
   resolveSpeechRecognitionEngine,
   transcribeWav,
+  warnSpeechFallbackOnce,
 } from '../../src/sensory/speech-reaction.js';
+import { logger } from '../../src/utils/logger.js';
 
 const ENV_KEYS = [
   'CODEBUDDY_SPEECH_ENGINE',
@@ -30,6 +32,26 @@ afterEach(() => {
 });
 
 describe('sherpa-rs STT engine selection', () => {
+  it('logs the same language-pin fallback only once per process', () => {
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+    const plan = {
+      requestedEngine: 'parakeet' as const,
+      effectiveEngine: 'faster-whisper' as const,
+      language: 'fr',
+      languagePinned: true,
+      fallbackEnabled: true,
+      fallbackReason: 'parakeet-language-pin-unsupported',
+    };
+    try {
+      warnSpeechFallbackOnce(plan, 'faster-whisper', 4);
+      warnSpeechFallbackOnce(plan, 'faster-whisper', 4);
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(warn.mock.calls[0]?.[0]).toContain('parakeet-language-pin-unsupported');
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
   it('maps the sherpa-rs aliases to the sherpa-rs engine', () => {
     for (const alias of ['sherpa-rs', 'sherpa-rust', 'rust', 'SHERPA-RS']) {
       setEnv({ CODEBUDDY_SPEECH_ENGINE: alias });

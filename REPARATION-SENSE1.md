@@ -275,7 +275,39 @@ Implémentation : rejet immédiat et journalisé des charges utiles `meanLuma < 
 
 ### Commit
 
-Prévu : `fix(vision): bound dark-frame analyses`.
+`26d52a975` — `fix(vision): bound dark-frame analyses`.
+
+## Bonus — journal STT de repli unique
+
+### Test rouge
+
+```text
+npx vitest run tests/sensory/sherpa-rs-stt.test.ts -t "logs the same language-pin fallback only once per process"
+TypeError: warnSpeechFallbackOnce is not a function
+Test Files  1 failed (1)
+Tests  1 failed | 3 skipped (4)
+EXIT_CODE=1
+```
+
+### Test vert
+
+```text
+npx vitest run tests/sensory/sherpa-rs-stt.test.ts -t "logs the same language-pin fallback only once per process"
+Test Files  1 passed (1)
+Tests  1 passed | 3 skipped (4)
+EXIT_CODE=0
+
+npx vitest run tests/sensory/sherpa-rs-stt.test.ts tests/sensory/speech-engine-config.test.ts
+Test Files  2 passed (2)
+Tests  8 passed | 1 skipped (9)
+EXIT_CODE=0
+```
+
+Le tuple de configuration du repli (`requested`, `effective`, langue, raison, nombre de hotwords) est mémorisé en processus; une répétition identique ne rejournalise pas l'avertissement.
+
+### Commit
+
+Prévu : `fix(sensory): log STT fallback once per process`.
 
 ## Vérifications finales
 
