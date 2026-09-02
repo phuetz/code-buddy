@@ -1,9 +1,9 @@
 import { randomUUID } from 'crypto';
 import fs from 'fs/promises';
 import path from 'path';
-import sharp from 'sharp';
 
 import { OcrTool } from './ocr-tool.js';
+import { loadSharp } from './load-sharp.js';
 
 export type VisionAnalysisSource = 'image' | 'browser_screenshot';
 
@@ -68,6 +68,7 @@ export async function analyzeVisionImage(
   }
 
   const stat = await fs.stat(imagePath);
+  const sharp = await loadSharp();
   const metadata = await sharp(imagePath).metadata();
   const stats = await sharp(imagePath).stats();
   const generatedAt = (options.now ?? (() => new Date()))().toISOString();
