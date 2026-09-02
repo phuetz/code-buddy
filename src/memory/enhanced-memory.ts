@@ -175,6 +175,7 @@ export class EnhancedMemory extends EventEmitter {
   private memories: Map<string, MemoryEntry> = new Map();
   private projects: Map<string, ProjectMemory> = new Map();
   private summaries: ConversationSummary[] = [];
+  private summariesLoadError: string | null = null;
   private userProfile: UserProfile | null = null;
   private currentProjectId: string | null = null;
   private decayIntervalId: ReturnType<typeof setInterval> | null = null;
@@ -393,9 +394,19 @@ export class EnhancedMemory extends EventEmitter {
 
     if (await fs.pathExists(summariesPath)) {
       try {
-        this.summaries = await fs.readJSON(summariesPath);
-      } catch {
+        const summaries: unknown = await fs.readJSON(summariesPath);
+        if (!Array.isArray(summaries)) {
+          throw new Error('expected a JSON array');
+        }
+        this.summaries = summaries as ConversationSummary[];
+        this.summariesLoadError = null;
+      } catch (err) {
         this.summaries = [];
+        this.summariesLoadError = err instanceof Error ? err.message : String(err);
+        logger.warn('Enhanced memory summaries are corrupt or unreadable', {
+          path: summariesPath,
+          error: this.summariesLoadError,
+        });
       }
     }
   }
@@ -417,13 +428,17 @@ export class EnhancedMemory extends EventEmitter {
         Array.from(this.memories.values()),
         { spaces: 2 }
       ),
-      // Save summaries
-      fs.writeJSON(
+    ];
+
+    // A corrupt summaries file is not an empty summary list. Keep it intact
+    // until it can be repaired or loaded explicitly.
+    if (!this.summariesLoadError) {
+      saveOperations.push(fs.writeJSON(
         path.join(this.dataDir, 'summaries.json'),
         this.summaries,
         { spaces: 2 }
-      ),
-    ];
+      ));
+    }
 
     // Save user profile if exists
     if (this.userProfile) {
@@ -929,6 +944,11 @@ export class EnhancedMemory extends EventEmitter {
     messageCount: number;
   }): Promise<ConversationSummary> {
     await this.ready;
+    if (this.summariesLoadError) {
+      throw new EnhancedMemoryInitializationError(
+        `Cannot store summary because summaries.json is corrupt or unreadable: ${this.summariesLoadError}`,
+      );
+    }
     const summary: ConversationSummary = {
       id: crypto.randomBytes(8).toString('hex'),
       sessionId: options.sessionId,
@@ -1055,6 +1075,9 @@ export class EnhancedMemory extends EventEmitter {
 
     // Add recent summaries
     if (options.includeRecentSummaries) {
+      if (this.summariesLoadError) {
+        parts.push(`\nRecent conversation summaries unavailable: summaries.json is corrupt or unreadable (${this.summariesLoadError}).`);
+      }
       const recentSummaries = this.summaries.slice(-3);
       if (recentSummaries.length > 0) {
         parts.push('\nRecent conversation context:');
