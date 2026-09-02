@@ -1519,7 +1519,10 @@ export class PersistentMemoryManager extends EventEmitter {
       }));
 
       // 2. Extract facts from the conversation turn
-      const extractedFacts = await service.extractFacts(`User: ${message}\nAssistant: ${response}`);
+      // Only user-authored text is eligible for durable facts. The assistant's
+      // response may contain hypotheses or hallucinations, so it must never
+      // become evidence for the persistent memory store.
+      const extractedFacts = await service.extractFacts(`User: ${message}`);
       if (extractedFacts.length === 0) return;
 
       // 3. Reconcile facts
@@ -1567,7 +1570,7 @@ export class PersistentMemoryManager extends EventEmitter {
       ];
 
       for (const pattern of projectPatterns) {
-        const match = message.match(pattern) || response.match(pattern);
+        const match = message.match(pattern);
         if (match) {
           await this.remember(`auto-${Date.now()}`, match[0], {
             category: "project",
@@ -1579,7 +1582,7 @@ export class PersistentMemoryManager extends EventEmitter {
       // Detect preferences
       const prefPatterns = [
         /(?:i |we )prefer ([^.]+)/i,
-        /(?:always |never )([^.]+)/i,
+        /(?:i |we )(?:(?:always|never) (?:use|choose|write|format|keep|avoid|run|work with) )([^.]+)/i,
         /use ([^.]+) (?:style|convention|format)/i,
       ];
 
@@ -1600,7 +1603,7 @@ export class PersistentMemoryManager extends EventEmitter {
       ];
 
       for (const pattern of decisionPatterns) {
-        const match = message.match(pattern) || response.match(pattern);
+        const match = message.match(pattern);
         if (match) {
           await this.remember(`decision-${Date.now()}`, match[0], {
             category: "decisions",

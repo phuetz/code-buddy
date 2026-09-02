@@ -90,6 +90,16 @@ Pour chaque trou : preuve rouge, diagnostic, correctif minimal, preuve verte, te
 - Vérifications : `npm run typecheck` — **exit 0** (racine + config GPU) ; ESLint ciblé avec `--quiet` — **exit 0** ; `git diff --check` — **exit 0**.
 - Commit : à compléter.
 
+### Trou 7 — fait auto-capturé faux
+
+- Test relu : `tests/memory/revue-gemini-autocapture.test.ts`.
+- Rouge (`npx vitest run tests/memory/revue-gemini-autocapture.test.ts`, exit 1) : **1 fichier, 2 tests rouges** — `I never said that` est enregistré en préférence ; une affirmation issue uniquement de la réponse (`Ruby on Rails`) est enregistrée en projet.
+- Diagnostic source lu : le repli regex cherchait les faits de projet dans `message || response` et acceptait toute phrase commençant par `always` ou `never`, y compris une dénégation conversationnelle.
+- Correctif : le fallback regex ne lit désormais que `message` pour les faits projet/décisions ; il ne fige donc jamais une affirmation produite uniquement par la réponse. La règle `always/never` exige un sujet utilisateur (`I/we`) et un verbe d'usage explicite (`use`, `write`, `format`, etc.), ce qui exclut les dénégations comme `I never said that`.
+- Vert et tests voisins : `npx vitest run tests/memory/revue-gemini-autocapture.test.ts tests/memory/auto-capture-extraction-failure.test.ts tests/memory/auto-capture-long-key.test.ts tests/memory/persistent-memory.test.ts tests/memory/remember-result-integrity.test.ts` — **5 fichiers, 24 tests passés**.
+- Vérifications : `npm run typecheck` — **exit 0** (racine + config GPU) ; ESLint ciblé avec `--quiet` — **exit 0** ; `git diff --check` — **exit 0**.
+- Commit : à compléter.
+
 ## Bilan final
 
 À compléter — dix lignes maximum.
