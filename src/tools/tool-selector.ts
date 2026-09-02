@@ -387,9 +387,12 @@ export class ToolSelector {
       }
     }
 
+    // Calculate effective upper bound so alwaysInclude does not starve high-scoring tools
+    const maxTotalTools = Math.max(maxTools, selectedToolNames.length + (maxTools <= 5 ? 1 : 5));
+
     // Then add high-scoring tools
     for (const [name, score] of sortedTools) {
-      if (selectedToolNames.length >= maxTools) break;
+      if (selectedToolNames.length >= maxTotalTools) break;
       if (score < effectiveMinScore && !alwaysInclude.includes(name)) continue;
       if (!selectedToolNames.includes(name)) {
         selectedToolNames.push(name);
