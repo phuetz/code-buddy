@@ -87,6 +87,17 @@ Cowork à 3 018, balayage d'installation neuve à 103/103 commandes.
 - **Boucles agentiques exécutées sur un dépôt jouet (E15)** : `buddy loop` et `buddy goal` réparent réellement (tests rouges → verts,
   commits) ; `/batch` attend le résultat au lieu d'annoncer un lancement ; `flow` échoue sur une étape qui n'a émis que du balisage
   d'outil non exécuté ; `think` et les agents multi-modèles respectent `GROK_MODEL` ; délai du juge de `goal` configurable.
+- **Troisième vague de jumeaux (VF/VG → R35/R37)** : appels d'outil en prose détectés en TOML ; scripts Rust, Elixir et R scannés ;
+  `speak` honore le format de réponse d'AudioReader ; `/readyz` nomme sa sonde `providerApi` et échoue fermé sans clé ; toute clé
+  fournisseur acceptée par MCP, OCR et suggestions de prompt ; `recoverContext` vérifie le hachage des archives ; assemblage non
+  propriétaire borné par la limite de tokens ; table des modèles appliquée dans le gestionnaire v3 ; `context_expand` absent de
+  `tools.ts` et de `TOOLS.md` sans zoom ; `flow` traite YAML, JSON et `name(...)` comme balisage non exécuté ; `GROK_MODEL` respecté
+  par les sous-agents, l'architecte, la réparation et la réflexion.
+- **Huit trous logiques de la gestion de contexte comblés** (revue Gemini 3.8 Flash puis correctifs) : plus de `tool_result` orphelin
+  après compaction v3, `tool_call` sans résultat réparé dans le compresseur enrichi, budget recalculé au changement de modèle,
+  `SegmentIntegrityError` sur discordance d'identifiant de segment, prompts système préservés et limite vérifiée pour les moteurs de
+  contexte tiers, contenus multimodaux comptés en v3, messages système multiples préservés sans injection indue, plafond du moteur de
+  compaction relevé pour les modèles à large contexte.
 
 ### Ce qui change pour qui installe
 
