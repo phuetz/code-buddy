@@ -74,6 +74,8 @@ const EDIT_TOOLS = new Set([
   'multi_edit',
   // `remind` writes only the bounded private reminders store, like an edit.
   'remind',
+  // Bounded local stores: same class as a file edit under acceptEdits.
+  'replace_memory',
 ]);
 
 const DESTRUCTIVE_TOOLS = new Set([

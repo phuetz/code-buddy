@@ -252,6 +252,15 @@ describe('PermissionModeManager — Phase T1', () => {
       });
     });
 
+    it('auto-approves replace_memory as a bounded local edit', () => {
+      const d = m.checkPermission('replace key', 'replace_memory');
+      expect(d).toEqual({
+        allowed: true,
+        prompted: false,
+        reason: 'Edit tool auto-approved in acceptEdits mode',
+      });
+    });
+
     it('prompts on destructive tools', () => {
       const d = m.checkPermission('any', 'bash');
       expect(d.allowed).toBe(true);
