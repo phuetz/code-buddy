@@ -221,6 +221,8 @@ export {
   EXPORT_TOOL,
   QR_TOOL,
   ARCHIVE_TOOL,
+  MARKDOWN_CONVERT_TOOL,
+  SCREEN_MEMORY_TOOL,
   MULTIMODAL_TOOLS,
 } from './multimodal-tools.js';
 

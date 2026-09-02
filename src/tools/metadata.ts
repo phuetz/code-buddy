@@ -1641,6 +1641,7 @@ export const TOOL_METADATA: ToolMetadata[] = [
     keywords: ['screen', 'memory', 'screenpipe', 'recall', 'what did i see', 'history', 'ocr', 'audio', 'transcript', 'said', 'heard'],
     priority: 5,
     description: 'Recall what was on screen / said / heard via a local screenpipe instance (read-only, redacted)',
+    fleetSafe: true,
   },
 
   // ---- 20 pre-authored tools (wired 2026-07-05) ----

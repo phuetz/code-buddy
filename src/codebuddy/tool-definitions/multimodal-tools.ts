@@ -1402,6 +1402,79 @@ export const ARCHIVE_TOOL: CodeBuddyTool = {
 /**
  * All multimodal tools as an array
  */
+export const MARKDOWN_CONVERT_TOOL: CodeBuddyTool = {
+  type: "function",
+  function: {
+    name: "markdown_convert",
+    description:
+      "Convert a document (PDF, Word, Excel, PowerPoint, HTML, CSV, JSON, XML, ZIP, EPub, image, audio, or a URL) to structured Markdown — keeps headings, lists and TABLES instead of flattening them. Requires MarkItDown (`pip install markitdown[all]`); falls back with install instructions when absent. Optional `output_path` writes the Markdown to a file instead of returning it inline.",
+    parameters: {
+      type: "object",
+      properties: {
+        source: {
+          type: "string",
+          description:
+            "Local file path, or an http(s)/YouTube URL. Handles PDF, DOCX, XLSX, PPTX, HTML, CSV, JSON, XML, ZIP, EPub, images (OCR) and audio (transcription).",
+        },
+        output_path: {
+          type: "string",
+          description:
+            "Write the Markdown to this file instead of returning it inline. Use it for long documents.",
+        },
+        max_chars: {
+          type: "number",
+          description: "Inline truncation budget (default 60000 characters).",
+        },
+      },
+      required: ["source"],
+    },
+  },
+};
+
+export const SCREEN_MEMORY_TOOL: CodeBuddyTool = {
+  type: "function",
+  function: {
+    name: "screen_memory",
+    description:
+      "Recall what was on the user's screen, said, or heard by querying a local screenpipe instance (24/7 screen+audio history). Read-only; results are secret/PII-redacted. Requires screenpipe running locally (SCREENPIPE_URL, default http://localhost:3030).",
+    parameters: {
+      type: "object",
+      properties: {
+        query: {
+          type: "string",
+          description: "Natural-language search over screen+audio history (omit for most recent).",
+        },
+        content_type: {
+          type: "string",
+          enum: ["all", "ocr", "audio", "ui"],
+          description: "all (default), ocr (screen text), audio (transcripts), or ui.",
+        },
+        limit: {
+          type: "number",
+          description: "Max results, 1–50 (default 10).",
+        },
+        app_name: {
+          type: "string",
+          description: "Filter by application name.",
+        },
+        window_name: {
+          type: "string",
+          description: "Filter by window title.",
+        },
+        start_time: {
+          type: "string",
+          description: "ISO-8601 start of time range.",
+        },
+        end_time: {
+          type: "string",
+          description: "ISO-8601 end of time range.",
+        },
+      },
+      required: [],
+    },
+  },
+};
+
 export const MULTIMODAL_TOOLS: CodeBuddyTool[] = [
   PDF_TOOL,
   AUDIO_TOOL,
@@ -1432,4 +1505,6 @@ export const MULTIMODAL_TOOLS: CodeBuddyTool[] = [
   EXPORT_TOOL,
   QR_TOOL,
   ARCHIVE_TOOL,
+  MARKDOWN_CONVERT_TOOL,
+  SCREEN_MEMORY_TOOL,
 ];

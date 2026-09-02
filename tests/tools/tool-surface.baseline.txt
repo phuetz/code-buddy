@@ -120,6 +120,7 @@ lsp_hover
 lsp_references
 lsp_rename
 lsp_symbols
+markdown_convert
 meeting_notes
 memory_propose
 mixture_of_agents
@@ -150,6 +151,7 @@ sbom_generate
 scaffold_app
 scan_secrets
 scan_vulnerabilities
+screen_memory
 screenshot
 search
 search_files
