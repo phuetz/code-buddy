@@ -20,9 +20,10 @@ export function registerSpeakCommand(program: Command): void {
     .option("--list-voices", "List available voices")
     .option("--speed <speed>", "Speaking speed (0.25-4.0)", "1.0")
     .option("--format <format>", "Output format (wav, mp3)", "wav")
+    .option("--out <file>", "Save synthesized audio to this file instead of playing it")
     .option("--url <url>", "AudioReader API URL", "http://localhost:8000")
     .option("--voicebox-url <url>", "Voicebox API URL (defaults to CODEBUDDY_VOICEBOX_URL)")
-    .action(async (textParts: string[], opts: { engine?: string; voice?: string; language?: string; listVoices?: boolean; speed: string; format: string; url: string; voiceboxUrl?: string }) => {
+    .action(async (textParts: string[], opts: { engine?: string; voice?: string; language?: string; listVoices?: boolean; speed: string; format: string; out?: string; url: string; voiceboxUrl?: string }) => {
       // Engine selection: explicit --engine wins, else CODEBUDDY_TTS_ENGINE, else audioreader.
       const engine = (opts.engine ?? process.env.CODEBUDDY_TTS_ENGINE ?? 'audioreader').trim().toLowerCase();
 
@@ -112,6 +113,12 @@ export function registerSpeakCommand(program: Command): void {
       const { writeFileSync, unlinkSync } = await import("fs");
       const { tmpdir } = await import("os");
       const { join } = await import("path");
+
+      if (opts.out) {
+        writeFileSync(opts.out, result.audio);
+        console.log(`Audio saved to: ${opts.out}`);
+        return;
+      }
 
       const tmpFile = join(tmpdir(), `codebuddy-speak-${Date.now()}.${result.format}`);
       writeFileSync(tmpFile, result.audio);
