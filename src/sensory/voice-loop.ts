@@ -2928,6 +2928,7 @@ export function makeVoiceReply(options: VoiceReplyOptions = {}): VoiceReplyHandl
   const visualConsent = new VisualConsentGate();
   const turnCoordinator = getVoiceTurnCoordinator();
   const env = options.env ?? process.env;
+  const interruptionContextEnabled = env.CODEBUDDY_SENSORY_BARGE_IN?.trim().toLowerCase() === 'true';
   const shortSegmentCache = new Map<string, Uint8Array>();
   let shortSegmentTempSequence = 0;
 
@@ -3518,12 +3519,14 @@ export function makeVoiceReply(options: VoiceReplyOptions = {}): VoiceReplyHandl
           });
           streamFallbackSegments = result.fallbackSegments ?? 0;
           if (signal.aborted) {
-            interruptedAtSentence = result.interruptedSentence ?? Math.max(1, result.sentences.length + 1);
-            pendingInterruption = {
-              interruptedTurnId: voiceTurnId,
-              phraseNumber: interruptedAtSentence,
-              spokenText: result.spoken,
-            };
+            if (interruptionContextEnabled) {
+              interruptedAtSentence = result.interruptedSentence ?? Math.max(1, result.sentences.length + 1);
+              pendingInterruption = {
+                interruptedTurnId: voiceTurnId,
+                phraseNumber: interruptedAtSentence,
+                spokenText: result.spoken,
+              };
+            }
             // Preserve only sentences whose playback completed before the
             // interruption. The partial in-flight segment is deliberately
             // absent from `result.spoken` and must not enter continuity.
@@ -3702,7 +3705,7 @@ export function makeVoiceReply(options: VoiceReplyOptions = {}): VoiceReplyHandl
       // If THIS turn was interrupted, hard-reset the half-duplex guard so the ear re-opens NOW
       // (barge-in), overriding the echo tail that withSpeakingGuard's finally just armed. Runs
       // last, so it wins the race against that endSpeaking(). Never re-arms after a normal turn.
-      if (signal.aborted) {
+      if (signal.aborted && interruptionContextEnabled) {
         interruptedAtSentence ??= 1;
         pendingInterruption ??= {
           interruptedTurnId: voiceTurnId,
