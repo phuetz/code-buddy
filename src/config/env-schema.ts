@@ -7,8 +7,8 @@
 
 import { hasCodexCredentials } from '../providers/codex-oauth.js';
 import {
-  getPluginNativeRuntimeProviderCatalog,
   getDirectRuntimeProviderCatalog,
+  getPluginNativeRuntimeProviderCatalog,
   isProviderConfigured,
 } from '../providers/provider-catalog.js';
 
@@ -2062,7 +2062,7 @@ export interface ValidationResult {
   errors: string[];
 }
 
-function hasActiveProvider(env: Record<string, string | undefined>): boolean {
+export function hasActiveProvider(env: Record<string, string | undefined> = process.env): boolean {
   const hasChatGptOAuth = Boolean(env.CODEBUDDY_CHATGPT_OAUTH?.trim())
     || (env === process.env && hasCodexCredentials());
   const entries = [
@@ -2070,6 +2070,20 @@ function hasActiveProvider(env: Record<string, string | undefined>): boolean {
     ...getPluginNativeRuntimeProviderCatalog(),
   ];
   return entries.some((entry) => isProviderConfigured(entry, env, hasChatGptOAuth));
+}
+
+export function resolveActiveProviderApiKey(
+  env: Record<string, string | undefined> = process.env,
+): string | undefined {
+  const grok = env.GROK_API_KEY?.trim();
+  if (grok) return grok;
+  for (const entry of getDirectRuntimeProviderCatalog()) {
+    for (const key of entry.apiKeyEnvKeys) {
+      const value = env[key]?.trim();
+      if (value) return value;
+    }
+  }
+  return undefined;
 }
 
 /**

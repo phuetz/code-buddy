@@ -163,14 +163,21 @@ describe('Application Factory', () => {
     });
 
     it('should fail validation without API key', () => {
-      const config: ApplicationConfig = {};
-
-      const result = validateConfig(config);
+      const result = validateConfig({}, {});
 
       expect(result.valid).toBe(false);
-      expect(result.errors).toContain(
-        'API key is required. Set GROK_API_KEY environment variable or use --api-key option.'
-      );
+      expect(result.errors.some((error) => error.includes('GROK_API_KEY'))).toBe(true);
+    });
+
+    it('accepts OpenAI authentication without GROK_API_KEY', () => {
+      delete process.env.GROK_API_KEY;
+      process.env.OPENAI_API_KEY = 'openai-test-key';
+
+      expect(loadApiKey()).toBe('openai-test-key');
+      expect(validateConfig({}, { OPENAI_API_KEY: 'openai-test-key' })).toEqual({
+        valid: true,
+        errors: [],
+      });
     });
   });
 

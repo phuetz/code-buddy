@@ -371,7 +371,6 @@ describe('getEnvSummary', () => {
 
   it('should include validation errors in output', () => {
     const summary = getEnvSummary({});
-    // GROK_API_KEY is required, so should show error
     expect(summary).toContain('Errors:');
     expect(summary).toContain('GROK_API_KEY');
   });
@@ -395,6 +394,7 @@ describe('getEnvSummary', () => {
     const summary = getEnvSummary({});
     const lines = summary.split('\n');
     const apiKeyLine = lines.find(l => l.includes('GROK_API_KEY') && !l.includes('Errors'));
+    expect(apiKeyLine).toBeDefined();
     expect(apiKeyLine).not.toContain('[required]');
   });
 });

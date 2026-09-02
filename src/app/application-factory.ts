@@ -11,6 +11,7 @@ import { getCredentialManager } from '../security/credential-manager.js';
 import { getCrashHandler } from '../errors/crash-handler.js';
 import { disposeAll } from '../utils/disposable.js';
 import { logger } from '../utils/logger.js';
+import { hasActiveProvider, resolveActiveProviderApiKey } from '../config/env-schema.js';
 import type { ApplicationConfig, CommandLineOptions } from './types.js';
 
 // ============================================================================
@@ -29,8 +30,8 @@ export function loadEnvironment(): void {
  * Priority: environment > secure credential storage > legacy settings
  */
 export function loadApiKey(): string | undefined {
-  // Check environment first
-  const envKey = process.env.GROK_API_KEY;
+  // Check environment first — any configured provider key is enough.
+  const envKey = resolveActiveProviderApiKey();
   if (envKey) return envKey;
 
   // Then secure credential manager
@@ -157,11 +158,16 @@ export function buildConfig(options: CommandLineOptions): ApplicationConfig {
 /**
  * Validate application configuration
  */
-export function validateConfig(config: ApplicationConfig): { valid: boolean; errors: string[] } {
+export function validateConfig(
+  config: ApplicationConfig,
+  env: Record<string, string | undefined> = process.env,
+): { valid: boolean; errors: string[] } {
   const errors: string[] = [];
 
-  if (!config.apiKey) {
-    errors.push('API key is required. Set GROK_API_KEY environment variable or use --api-key option.');
+  if (!config.apiKey && !hasActiveProvider(env)) {
+    errors.push(
+      'No AI provider is configured. Set ChatGPT OAuth or an API key such as GROK_API_KEY, or use --api-key.',
+    );
   }
 
   return {

@@ -685,9 +685,10 @@ export class InterpreterService extends EventEmitter {
   private async getLLMClient(): Promise<import('../codebuddy/client.js').CodeBuddyClient> {
     if (this.llmClient) return this.llmClient;
 
-    const apiKey = process.env.GROK_API_KEY;
+    const { resolveActiveProviderApiKey } = await import('../config/env-schema.js');
+    const apiKey = resolveActiveProviderApiKey();
     if (!apiKey) {
-      throw new Error('GROK_API_KEY environment variable is required for LLM calls. Set it with: export GROK_API_KEY=your-key');
+      throw new Error('No AI provider is configured. Set ChatGPT OAuth or an API key such as GROK_API_KEY.');
     }
 
     const { CodeBuddyClient } = await import('../codebuddy/client.js');
