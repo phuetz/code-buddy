@@ -53,6 +53,17 @@ Cowork à 3 018, balayage d'installation neuve à 103/103 commandes.
   mais refusée explicitement, compaction hors limite refusée, statistiques alignées sur ce qui
   est réellement envoyé, intégrité des segments à la restauration) ; un alias vers un outil
   absent est signalé et la table d'alias est sous invariant.
+- **Jumeaux fermés après vérification croisée** : la restauration de sauvegarde écrit enfin les
+  octets et relit leur hachage (elle n'écrivait jamais rien) ; un appel d'outil rendu en prose est
+  détecté en XML, JSON et ligne indentée ; `replace_memory` approuvé sous `acceptEdits` ; routes HTTP
+  `/api/fleet/*` testées ; LM Studio et vLLM sondés comme Ollama ; fabrique et interpréteur alignés sur
+  toute authentification fournisseur ; `speak --out` crée son dossier et honore `--format` ; scripts
+  Python et Ruby scannés à l'import de skills ; `dev run`/`dev pr` libèrent le plan ; `skills exchange`
+  rejette proprement ; tout payload structuré est rendu en widget ; `shadow run -d` ; `/readyz` expose
+  `grokApi`.
+- **Cowork essayé comme un inconnu sous Linux** : build Vite réparé (`homedir` non exporté), drapeaux
+  Electron passés par `buddy gui`, `better-sqlite3` reconstruit via electron-rebuild, plus de popup
+  Buffalo_S au premier message, cartes d'onboarding cliquables, documentation Linux alignée.
 
 ### Ce qui change pour qui installe
 
