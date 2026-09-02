@@ -24,6 +24,13 @@ function personEntered(): void {
   });
 }
 
+function personLost(): void {
+  getGlobalEventBus().emit('sensory:perception', {
+    source: 'test',
+    metadata: { modality: 'vision', kind: 'person_lost', payload: {} },
+  });
+}
+
 function identityPendingArrival(): void {
   getGlobalEventBus().emit('sensory:perception', {
     source: 'test',
@@ -53,6 +60,7 @@ afterEach(async () => {
   await rm(tmp, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   delete process.env.CODEBUDDY_SENSORY_GREET;
   delete process.env.CODEBUDDY_SENSORY_GREET_LLM;
+  delete process.env.CODEBUDDY_SENSORY_REGREET_MIN_MS;
   delete process.env.CODEBUDDY_USER_NAME;
 });
 
@@ -107,6 +115,28 @@ describe('arrival greeting — the robot notices and engages when someone arrive
       personEntered();
       await waitForCalls(greet, 2);
       expect(greet).toHaveBeenCalledTimes(2);
+    } finally {
+      unwire();
+    }
+  });
+
+  it('keeps a loss and reappearance inside five minutes in one greeting episode', async () => {
+    process.env.CODEBUDDY_SENSORY_GREET = 'true';
+    const greet = vi.fn(async () => {});
+    let clock = 1_000;
+    const unwire = wireSemanticVisionReaction({ greet, now: () => clock, cwd: tmp });
+    try {
+      personEntered();
+      await waitForCalls(greet, 1);
+
+      clock += 2_000;
+      personLost();
+      await tick();
+
+      clock += 120_000;
+      personEntered();
+      await tick();
+      expect(greet).toHaveBeenCalledTimes(1);
     } finally {
       unwire();
     }

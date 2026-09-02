@@ -172,21 +172,63 @@ Implémentation : score sur images 5×5 floutées = fraction des pixels dont `ab
 
 ### Commit
 
-Prévu : `fix(vision): reject dark sensor noise as motion`.
+`bf4c6a4ae` — `fix(vision): reject dark sensor noise as motion`.
 
 ## Correctif 4 — hystérésis de présence
 
 ### Test rouge
 
-_À compléter._
+Commandes et sorties rouges :
+
+```text
+cd buddy-vision
+python3 -m unittest test_watch.AnonymousMultiTrackerTests.test_total_detector_loss_is_delayed_and_reacquisition_keeps_episode
+TypeError: AnonymousMultiTracker.__init__() got an unexpected keyword argument 'lost_secs'
+Ran 1 test in 0.001s
+FAILED (errors=1)
+EXIT_CODE=1
+
+npx vitest run tests/sensory/arrival-greeting.test.ts -t "keeps a loss and reappearance inside five minutes in one greeting episode"
+AssertionError: expected "vi.fn()" to be called 1 times, but got 2 times
+Test Files  1 failed (1)
+Tests  1 failed | 6 skipped (7)
+EXIT_CODE=1
+```
+
+Le premier test exige une perte seulement après 20 s sans détection et conserve l'identifiant d'épisode lors d'une réacquisition. Le second reproduit entrée → perte 2 s plus tard → réapparition 120 s plus tard et prouve le double accueil actuel.
 
 ### Test vert
 
-_À compléter._
+Commandes et sorties :
+
+```text
+cd buddy-vision
+python3 -m unittest test_watch.AnonymousMultiTrackerTests.test_total_detector_loss_is_delayed_and_reacquisition_keeps_episode
+Ran 1 test in 0.000s
+OK
+EXIT_CODE=0
+
+npx vitest run tests/sensory/arrival-greeting.test.ts -t "keeps a loss and reappearance inside five minutes in one greeting episode"
+Test Files  1 passed (1)
+Tests  1 passed | 6 skipped (7)
+EXIT_CODE=0
+
+python3 -m unittest test_watch.py
+Ran 18 tests in 0.037s
+OK
+EXIT_CODE=0
+
+npx vitest run tests/sensory/arrival-greeting.test.ts
+Test Files  1 passed (1)
+Tests  7 passed (7)
+EXIT_CODE=0
+```
+
+Implémentation : expiration des pistes par temps monotone avec `BUDDY_VISION_PERSON_LOST_SECS=20` au lieu d'un nombre d'images dépendant du FPS; côté cerveau, `CODEBUDDY_SENSORY_REGREET_MIN_MS=300000` rattache la réapparition au même épisode, y compris si une identification locale suit l'entrée.
 
 ### Commit
 
-_À compléter._
+Prévu : `fix(vision): add presence episode hysteresis`.
 
 ## Correctif 5 — garde-fous du cerveau visuel
 

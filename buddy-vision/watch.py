@@ -297,27 +297,31 @@ class YoloPersonDetector:
 
 
 class PersonState:
-    """Face present/lost → person_entered / person_lost (absence grace period)."""
+    """Face present/lost → person_entered / person_lost after timed absence."""
 
-    def __init__(self, episode_prefix: str = EPISODE_SESSION):
+    def __init__(self, episode_prefix: str = EPISODE_SESSION, lost_secs: float | None = None):
         self.present = False
-        self.absent = 0
-        self.grace = int(os.environ.get("BUDDY_VISION_PERSON_GRACE", "8"))
+        self.lost_secs = max(
+            0.0,
+            lost_secs if lost_secs is not None
+            else float(os.environ.get("BUDDY_VISION_PERSON_LOST_SECS", "20")),
+        )
+        self.last_seen_at = None
         self.episode_prefix = episode_prefix
         self.episode_sequence = 0
         self.presence_episode_id = None
 
-    def update(self, face_present: bool):
+    def update(self, face_present: bool, at: float | None = None):
+        current = time.monotonic() if at is None else at
         if face_present:
-            self.absent = 0
+            self.last_seen_at = current
             if not self.present:
                 self.present = True
                 self.episode_sequence += 1
                 self.presence_episode_id = f"anon-{self.episode_prefix}-{self.episode_sequence}"
                 return ("person_entered", 200, self.presence_episode_id)
         elif self.present:
-            self.absent += 1
-            if self.absent >= self.grace:
+            if self.last_seen_at is not None and current - self.last_seen_at >= self.lost_secs:
                 self.present = False
                 presence_episode_id = self.presence_episode_id
                 self.presence_episode_id = None
@@ -382,13 +386,19 @@ class AnonymousMultiTracker:
         episode_prefix: str = EPISODE_SESSION,
         max_persons: int = MAX_PERSONS,
         grace: int | None = None,
+        lost_secs: float | None = None,
         iou_threshold: float = TRACK_IOU,
     ):
         self.episode_prefix = episode_prefix
         self.max_persons = min(8, max(1, int(max_persons)))
-        self.grace = max(1, grace if grace is not None else int(
-            os.environ.get("BUDDY_VISION_PERSON_GRACE", "8")
-        ))
+        # `grace` remains only as an explicit test/back-compat seam. Production
+        # defaults to elapsed time so camera FPS cannot shorten the hysteresis.
+        self.grace = max(1, int(grace)) if grace is not None else None
+        self.lost_secs = max(
+            0.0,
+            lost_secs if lost_secs is not None
+            else float(os.environ.get("BUDDY_VISION_PERSON_LOST_SECS", "20")),
+        )
         self.iou_threshold = min(0.9, max(0.05, float(iou_threshold)))
         self.episode_sequence = 0
         self.tracks = {}
@@ -398,7 +408,8 @@ class AnonymousMultiTracker:
         """Keep inference armed while a track is inside its loss grace."""
         return bool(self.tracks)
 
-    def update(self, raw_detections) -> dict:
+    def update(self, raw_detections, at: float | None = None) -> dict:
+        current = time.monotonic() if at is None else at
         detections = [
             detection
             for detection in (safe_detection(item) for item in (raw_detections or []))
@@ -431,6 +442,7 @@ class AnonymousMultiTracker:
                 **detection,
                 "episodeId": track["episodeId"],
                 "misses": 0,
+                "lastSeenAt": current,
             }
             next_tracks[refreshed["episodeId"]] = refreshed
 
@@ -440,7 +452,12 @@ class AnonymousMultiTracker:
                 continue
             self.episode_sequence += 1
             episode_id = f"anon-{self.episode_prefix}-{self.episode_sequence}"
-            track = {**detection, "episodeId": episode_id, "misses": 0}
+            track = {
+                **detection,
+                "episodeId": episode_id,
+                "misses": 0,
+                "lastSeenAt": current,
+            }
             next_tracks[episode_id] = track
             entered.append(track)
 
@@ -449,7 +466,12 @@ class AnonymousMultiTracker:
             if track_index in used_tracks:
                 continue
             missed = {**track, "misses": track["misses"] + 1}
-            if missed["misses"] >= self.grace or len(next_tracks) >= self.max_persons:
+            expired = (
+                missed["misses"] >= self.grace
+                if self.grace is not None
+                else current - missed["lastSeenAt"] >= self.lost_secs
+            )
+            if expired or len(next_tracks) >= self.max_persons:
                 lost.append(missed)
             else:
                 next_tracks[missed["episodeId"]] = missed

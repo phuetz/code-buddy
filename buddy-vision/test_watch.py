@@ -38,21 +38,20 @@ class NormalizedBoxTests(unittest.TestCase):
 
 class PersonStateTests(unittest.TestCase):
     def test_tracker_is_opaque_stable_for_one_presence_episode_and_then_rotates(self):
-        state = PersonState(episode_prefix="testscope")
-        state.grace = 2
+        state = PersonState(episode_prefix="testscope", lost_secs=20)
 
-        entered = state.update(True)
+        entered = state.update(True, at=0)
         self.assertEqual(entered, ("person_entered", 200, "anon-testscope-1"))
         self.assertEqual(state.presence_episode_id, "anon-testscope-1")
-        self.assertIsNone(state.update(True))
-        self.assertIsNone(state.update(False))
+        self.assertIsNone(state.update(True, at=1))
+        self.assertIsNone(state.update(False, at=2))
         self.assertEqual(
-            state.update(False),
+            state.update(False, at=21),
             ("person_lost", 120, "anon-testscope-1"),
         )
         self.assertIsNone(state.presence_episode_id)
         self.assertEqual(
-            state.update(True),
+            state.update(True, at=22),
             ("person_entered", 200, "anon-testscope-2"),
         )
 
@@ -95,14 +94,14 @@ class AnonymousMultiTrackerTests(unittest.TestCase):
 
     def test_total_detector_loss_is_delayed_and_reacquisition_keeps_episode(self):
         tracker = AnonymousMultiTracker(
-            episode_prefix="grace", max_persons=4, grace=2, iou_threshold=0.2
+            episode_prefix="grace", max_persons=4, lost_secs=20, iou_threshold=0.2
         )
-        episode_id = tracker.update([detection(0.3)])["visible"][0]["episodeId"]
-        self.assertEqual(tracker.update([])["lost"], [])
-        reacquired = tracker.update([detection(0.31)])
+        episode_id = tracker.update([detection(0.3)], at=0)["visible"][0]["episodeId"]
+        self.assertEqual(tracker.update([], at=2)["lost"], [])
+        reacquired = tracker.update([detection(0.31)], at=3)
         self.assertEqual(reacquired["visible"][0]["episodeId"], episode_id)
-        self.assertEqual(tracker.update([])["lost"], [])
-        lost = tracker.update([])
+        self.assertEqual(tracker.update([], at=22.9)["lost"], [])
+        lost = tracker.update([], at=23)
         self.assertEqual(lost["visible"], [])
         self.assertEqual(lost["lost"][0]["episodeId"], episode_id)
         self.assertFalse(tracker.present)
