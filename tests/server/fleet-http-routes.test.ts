@@ -7,6 +7,7 @@ import path from 'node:path';
 import type { AddressInfo } from 'node:net';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
+import { fleetWsOnlyHttpPaths } from '../../src/fleet/fleet-http-surface.js';
 import { makeTmpDir, removeTmpDir } from '../helpers/tmp.js';
 
 describe('Fleet HTTP routes', () => {
@@ -84,5 +85,23 @@ describe('Fleet HTTP routes', () => {
     expect(missingTool.status).toBe(404);
     const missingCkg = await fetch(`${baseUrl}/api/fleet/ckg`);
     expect(missingCkg.status).toBe(404);
+
+    const probed = fleetWsOnlyHttpPaths();
+    expect(probed).toEqual(expect.arrayContaining([
+      '/api/fleet/chat',
+      '/api/fleet/tool',
+      '/api/fleet/ckg',
+      '/api/fleet/ping',
+      '/api/fleet/echo',
+      '/api/fleet/dispatch',
+      '/api/fleet/chat-stream',
+      '/api/fleet/chat-session/start',
+      '/api/fleet/mission-exchange/describe',
+    ]));
+    expect(description.wsOnlyHttpPaths).toEqual(probed);
+    for (const route of probed) {
+      const response = await fetch(`${baseUrl}${route}`);
+      expect(response.status, `${route} must stay HTTP-404 until an HTTP wrapper exists`).toBe(404);
+    }
   });
 });
