@@ -27,6 +27,7 @@ const XML_TOOL_PATTERNS = [
   /<tool_call>\s*([A-Za-z_][A-Za-z0-9_.-]*)\b/gi,
 ];
 const JSON_TOOL_PATTERN = /\{\s*"(?:name|tool)"\s*:\s*"([A-Za-z_][A-Za-z0-9_.-]*)"/g;
+const YAML_TOOL_PATTERN = /(?:^|\n)\s*(?:name|tool|tool_name)\s*:\s*["']?([A-Za-z_][A-Za-z0-9_.-]*)["']?/g;
 
 function firstKnownUnexecuted(
   candidates: Iterable<{ toolName: string; line: string }>,
@@ -43,8 +44,9 @@ function firstKnownUnexecuted(
 /**
  * Detect a tool call that the model rendered as text instead of sending as a
  * structured call. Whole-line `name(...)`, indented lines, XML wrappers, and
- * JSON `{"name":"..."}` objects count; ordinary prose with parentheses must
- * not change the exit status.
+ * JSON `{"name":"..."}` objects, YAML `name:` / `tool:` mappings, fenced
+ * blocks, and Anthropic `<function_calls>` wrappers count; ordinary prose
+ * with parentheses must not change the exit status.
  */
 export function findUnexecutedProseToolCall(
   resultText: string,
@@ -85,7 +87,18 @@ export function findUnexecutedProseToolCall(
     if (!toolName) continue;
     jsonCandidates.push({ toolName, line: jsonMatch[0] });
   }
-  return firstKnownUnexecuted(jsonCandidates, known, executed);
+  const fromJson = firstKnownUnexecuted(jsonCandidates, known, executed);
+  if (fromJson) return fromJson;
+
+  const yamlCandidates: UnexecutedProseToolCall[] = [];
+  YAML_TOOL_PATTERN.lastIndex = 0;
+  let yamlMatch: RegExpExecArray | null;
+  while ((yamlMatch = YAML_TOOL_PATTERN.exec(resultText)) !== null) {
+    const toolName = yamlMatch[1];
+    if (!toolName) continue;
+    yamlCandidates.push({ toolName, line: yamlMatch[0] });
+  }
+  return firstKnownUnexecuted(yamlCandidates, known, executed);
 }
 
 export function resolveHeadlessTurnExitCode(

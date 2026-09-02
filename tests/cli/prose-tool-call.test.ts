@@ -57,4 +57,38 @@ describe('findUnexecutedProseToolCall', () => {
     expect(findUnexecutedProseToolCall(text, KNOWN, ['create_file'])).toBeNull();
     expect(resolveHeadlessTurnExitCode(text, KNOWN, ['create_file'])).toBe(0);
   });
+
+  it('detects a tool call inside a fenced markdown block', () => {
+    const text = [
+      'I will write the file now.',
+      '```',
+      'create_file(path="hello.txt", content="bonjour")',
+      '```',
+    ].join('\n');
+    expect(findUnexecutedProseToolCall(text, KNOWN, [])?.toolName).toBe('create_file');
+    expect(resolveHeadlessTurnExitCode(text, KNOWN, [])).toBe(3);
+  });
+
+  it('detects a YAML tool call', () => {
+    const text = [
+      'tool_call:',
+      '  name: create_file',
+      '  arguments:',
+      '    path: hello.txt',
+    ].join('\n');
+    expect(findUnexecutedProseToolCall(text, KNOWN, [])?.toolName).toBe('create_file');
+    expect(resolveHeadlessTurnExitCode(text, KNOWN, [])).toBe(3);
+  });
+
+  it('detects an Anthropic function_calls wrapper', () => {
+    const text = [
+      '<function_calls>',
+      '<invoke name="create_file">',
+      '<parameter name="path">hello.txt</parameter>',
+      '</invoke>',
+      '</function_calls>',
+    ].join('\n');
+    expect(findUnexecutedProseToolCall(text, KNOWN, [])?.toolName).toBe('create_file');
+    expect(resolveHeadlessTurnExitCode(text, KNOWN, [])).toBe(3);
+  });
 });
