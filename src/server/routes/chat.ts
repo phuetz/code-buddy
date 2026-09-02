@@ -586,23 +586,9 @@ async function handleOpenAIStreamingChat(
   } catch (error: unknown) {
     if (connection.disconnected || error instanceof SseClientDisconnectedError) return;
     const apiError = toProviderApiError(error);
-    const errorChunk = {
-      id: requestId,
-      object: 'chat.completion.chunk',
-      created,
-      model: modelName,
-      choices: [
-        {
-          index: 0,
-          delta: {},
-          finish_reason: 'stop',
-        },
-      ],
-    };
-
-    // Send error as a final chunk then an error event
+    // A provider failure is the sole terminal event. Never announce a normal
+    // `stop` first: OpenAI-compatible clients may stop reading at that point.
     if (connection.canWrite()) {
-      res.write(`data: ${JSON.stringify(errorChunk)}\n\n`);
       res.write(`data: ${JSON.stringify({
         error: {
           message: apiError.message,

@@ -15,7 +15,7 @@
 | D1 | Confirmé | Les quatre handlers mutaient après la dernière sauvegarde ; chaque mutation est désormais suivie de `saveSession()`. |
 | D2 | Confirmé | `saveMemories()` sautait l’écriture dégradée ; il lève désormais une erreur dédiée, traduite en 503, et `remember()` restaure sa Map. |
 | D4 | Confirmé | Aucun abonné ne lançait l’agent ; une file bornée exécute maintenant `runAgentCompletion()` et la route ne répond 202 qu’après acceptation. |
-| D5 | À vérifier | — |
+| D5 | Confirmé | Le `catch` envoyait `stop` puis `error` ; il émet maintenant uniquement l’événement terminal `error`. |
 | D6 | À vérifier | — |
 | D7 | À vérifier | — |
 
@@ -117,8 +117,33 @@ $ git diff --check
 EXIT_CODE=0
 ```
 
+### D5 — terminaison honnête du flux SSE
+
+Rouge, faux fournisseur cassé après le premier delta :
+
+```text
+$ npx vitest run tests/server/chat-stream-mid-error.test.ts
+Test Files  1 failed (1)
+Tests  1 failed (1)
+AssertionError: expected 3 events to have a length of 2
+EXIT_CODE=1
+```
+
+Vert, un delta puis un seul événement terminal `error` :
+
+```text
+$ npx vitest run tests/server/chat-stream-mid-error.test.ts
+Test Files  1 passed (1)
+Tests  1 passed (1)
+$ npx eslint src/server/routes/chat.ts tests/server/chat-stream-mid-error.test.ts
+EXIT_CODE=0
+$ git diff --check
+EXIT_CODE=0
+```
+
 ## Commits
 
 - D3 : `c59c9b20f` — `fix(server): rétablir les routes statiques des webhooks`
 - D1 : `aaa8e5ec7` — `fix(server): persister les écritures de session`
 - D2 : `7dd02f9bd` — `fix(server): signaler l'échec de persistance mémoire`
+- D4 : `591fa6e05` — `fix(server): mettre les webhooks en file d'agent`
