@@ -112,6 +112,11 @@ describe('scanForSecrets', () => {
       expect(out.matches.some((m) => m.kind === 'pii-iban')).toBe(true);
     });
 
+    it('rejects an IBAN-shaped value with an invalid MOD-97 checksum', () => {
+      const out = scanForSecrets('Test value: DE89370400440532013001');
+      expect(out.matches.some((m) => m.kind === 'pii-iban')).toBe(false);
+    });
+
     it('detects E.164 international phone numbers', () => {
       const out = scanForSecrets('Call me at +33 6 12 34 56 78 when you can.');
       expect(out.matches.some((m) => m.kind === 'pii-phone')).toBe(true);

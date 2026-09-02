@@ -10,7 +10,7 @@ describe('Revue G6 - Trou 7 : Lint de vie privée qui laisse passer un IBAN form
     // VULNÉRABILITÉ : La regex exige des groupes de 4 caractères strict (\s?[A-Z0-9]{4})
     // et ignore les formats bancaires réels (RIB 5+5+11)
     expect(result.hasSecrets).toBe(true);
-    expect(result.findings.some((f) => f.ruleId === 'pii-iban')).toBe(true);
+    expect(result.matches.some((match) => match.kind === 'pii-iban')).toBe(true);
   });
 
   it('doit détecter et masquer un IBAN en minuscules ou séparé par des tirets', () => {
