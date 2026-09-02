@@ -7,7 +7,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { EventEmitter } from 'events';
 import { spawn, spawnSync } from 'child_process';
-import { mkdtemp, rm } from 'fs/promises';
+import { mkdtemp, rm, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
 
@@ -42,7 +42,13 @@ function makeFakeSpawn(seen: string[][]): typeof spawn {
         child.stdout.emit('data', Buffer.from(JSON.stringify(PROBE_JSON)));
         child.emit('close', 0);
       } else {
-        child.emit('close', 0);
+        // Since R1 (2026-09-02) a render is only a success once its artefact exists:
+        // the fake ffmpeg must leave a non-empty file at its destination, like the real one.
+        const destination = args.at(-1);
+        const writes = destination && /\.(mp4|wav|mkv|mov)$/i.test(destination)
+          ? writeFile(destination, 'rendered').catch(() => undefined)
+          : Promise.resolve();
+        void writes.then(() => child.emit('close', 0));
       }
     });
     return child;
