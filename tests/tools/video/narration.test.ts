@@ -25,7 +25,13 @@ import {
 import { logger } from '../../../src/utils/logger.js';
 
 function makeSpawn(
-  opts: { piperCode?: number; piperWrites?: boolean; probeDur?: string; seen?: string[][] } = {}
+  opts: {
+    piperCode?: number;
+    piperWrites?: boolean;
+    elevenLabsWrites?: boolean;
+    probeDur?: string;
+    seen?: string[][];
+  } = {}
 ): typeof spawn {
   return ((cmd: string, args: string[]) => {
     opts.seen?.push([cmd, ...args]);
@@ -42,7 +48,7 @@ function makeSpawn(
     const isProbe = cmd.includes('ffprobe');
     const isFfmpeg = cmd.includes('ffmpeg');
     const isPiper = !isProbe && !isFfmpeg;
-    if (isFfmpeg) {
+    if (isFfmpeg && opts.elevenLabsWrites !== false) {
       const input = args[args.indexOf('-i') + 1]!;
       copyFileSync(input, args[args.length - 1]!);
     }
@@ -228,6 +234,29 @@ describe('synthesizeNarration (injected)', () => {
       });
     } finally {
       await rm(temporary, { recursive: true });
+    }
+  });
+
+  it('rejects ElevenLabs exit 0 when a stale WAV is left untouched', async () => {
+    const temporary = await mkdtemp(join(tmpdir(), 'narration-elevenlabs-stale-'));
+    try {
+      const outputPath = join(temporary, 'narration.wav');
+      await writeFile(outputPath, 'old elevenlabs wav');
+      const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(
+        new Response(Buffer.from('fake elevenlabs mp3'), { status: 200 }),
+      );
+
+      const result = await synthesizeNarration('Nouveau texte', outputPath, {
+        provider: 'elevenlabs',
+        fetchImpl: fetchMock,
+        spawn: makeSpawn({ elevenLabsWrites: false }),
+        env: { ELEVENLABS_API_KEY: 'direct-api-key' } as NodeJS.ProcessEnv,
+      });
+
+      expect(result).toBeNull();
+      expect(await readFile(outputPath, 'utf8')).toBe('old elevenlabs wav');
+    } finally {
+      await rm(temporary, { recursive: true, force: true });
     }
   });
 

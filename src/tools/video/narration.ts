@@ -422,14 +422,16 @@ async function synthesizeElevenLabsNarration(
       return true;
     }
 
-    const mp3Path = `${outPath}.elevenlabs.mp3`;
+    const temporaryBase = `${outPath}.${randomUUID()}`;
+    const mp3Path = `${temporaryBase}.elevenlabs.mp3`;
+    const temporaryPath = `${temporaryBase}.tmp.wav`;
     await writeFile(mp3Path, audio);
     try {
       const ffmpegBin = deps.ffmpegBin ?? env.CODEBUDDY_FFMPEG_BIN ?? 'ffmpeg';
       const { code, stderr } = await run(
         spawn,
         ffmpegBin,
-        buildElevenLabsWavArgs(mp3Path, outPath),
+        buildElevenLabsWavArgs(mp3Path, temporaryPath),
         timeoutMs,
       );
       if (code !== 0) {
@@ -438,9 +440,26 @@ async function synthesizeElevenLabsNarration(
         );
         return false;
       }
+      if (!(await isRegularNonEmptyFile(temporaryPath))) {
+        logger.warn('[narration] ElevenLabs conversion exited 0 but produced no non-empty WAV artifact');
+        return false;
+      }
+      if ((await probeDuration(spawn, deps.ffprobeBin ?? 'ffprobe', temporaryPath)) == null) {
+        logger.warn('[narration] could not probe ElevenLabs narration duration');
+        return false;
+      }
+      try {
+        await rename(temporaryPath, outPath);
+      } catch (error) {
+        logger.warn(
+          `[narration] could not install ElevenLabs narration: ${error instanceof Error ? error.message : String(error)}`,
+        );
+        return false;
+      }
       return true;
     } finally {
       await unlink(mp3Path).catch(() => undefined);
+      await removeTemporaryFile(temporaryPath);
     }
   } catch (error) {
     logger.warn(
