@@ -153,6 +153,60 @@ describe('speech reaction — speech_end → STT → percept', () => {
     }
   });
 
+  it('consumes an enabled LiveKit end-of-turn decision before holding an incomplete final', async () => {
+    vi.stubEnv('CODEBUDDY_SENSORY_TURN_DETECTOR', 'livekit');
+    const heard: string[] = [];
+    const turnDecisionProvider = vi.fn(() => ({
+      endOfTurn: true,
+      source: 'livekit-v1-mini',
+      probability: 0.91,
+      threshold: 0.285,
+    }));
+    const unwire = wireSpeechReaction({
+      debounceMs: 0,
+      incompleteTurnHoldMs: 1_000,
+      turnDecisionProvider,
+      onHeard: async (text) => {
+        heard.push(text);
+      },
+    });
+    try {
+      transcriptFinal('Je voudrais une pizza,');
+      await waitFor(() => expect(heard).toEqual(['Je voudrais une pizza,']));
+      expect(turnDecisionProvider).toHaveBeenCalledWith({
+        text: 'Je voudrais une pizza,',
+        payload: { text: 'Je voudrais une pizza,' },
+      });
+    } finally {
+      unwire();
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it('keeps the existing path cold when the LiveKit flag is absent', async () => {
+    vi.stubEnv('CODEBUDDY_SENSORY_TURN_DETECTOR', '');
+    const heard: string[] = [];
+    const turnDecisionProvider = vi.fn(() => ({
+      endOfTurn: false,
+      source: 'livekit-v1-mini',
+    }));
+    const unwire = wireSpeechReaction({
+      debounceMs: 0,
+      turnDecisionProvider,
+      onHeard: async (text) => {
+        heard.push(text);
+      },
+    });
+    try {
+      transcriptFinal('La chaîne existante reste inchangée.');
+      await waitFor(() => expect(heard).toEqual(['La chaîne existante reste inchangée.']));
+      expect(turnDecisionProvider).not.toHaveBeenCalled();
+    } finally {
+      unwire();
+      vi.unstubAllEnvs();
+    }
+  });
+
   it('starts predictive preparation on VAD open without hearing or responding', async () => {
     const starts: Array<Record<string, unknown>> = [];
     const heard: string[] = [];

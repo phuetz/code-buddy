@@ -45,6 +45,10 @@ import {
 import type { VoiceDeliveryProfile, VoiceTurnContext } from './voice-entrainment.js';
 import { getVoiceTurnCoordinator } from './voice-turn-coordinator.js';
 import { assessAudioScene, type AudioSceneAssessment } from './audio-scene.js';
+import {
+  resolveTurnDetectorDecision,
+  type TurnDecisionProvider,
+} from './turn-detector.js';
 
 // Re-exported for back-compat: callers + tests import these from speech-reaction.
 export { resolveSpeechRecognitionEngine };
@@ -101,6 +105,8 @@ export interface SpeechReactionOptions {
    * It must never trigger a reply, tool, memory write, or response decision.
    */
   onSpeechPartial?: (partial: PartialVoiceTranscript) => void | Promise<void>;
+  /** Optional raw-free LiveKit v1-mini decision supplied by the local ear bridge. */
+  turnDecisionProvider?: TurnDecisionProvider;
   /** Interrupt the active think/speak turn when an explicit barge-in transcript arrives. */
   onBargeIn?: (text: string, interruptedTurnId?: string) => void;
   /**
@@ -2069,12 +2075,26 @@ export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => v
         turnId = heldLiveTurn.turnId ?? turnId;
         heldLiveTurn = null;
       }
+      let turnDecision: ReturnType<typeof resolveTurnDetectorDecision>;
+      try {
+        turnDecision = resolveTurnDetectorDecision(
+          { text, payload: (p.payload as Record<string, unknown> | undefined) ?? {} },
+          options.turnDecisionProvider,
+        );
+      } catch (error) {
+        logger.warn(
+          `[speech] LiveKit turn decision unavailable: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
       // Smart Turn has already considered prosody and the complete audio. The
       // text heuristic is only a fail-open fallback for VAD-only sources.
       if (
-        !livePayload?.turnDetector &&
         incompleteTurnHoldMs > 0 &&
-        isLikelyIncompleteVoiceTurn(text)
+        (turnDecision?.endOfTurn === false || (
+          turnDecision?.endOfTurn !== true &&
+          !livePayload?.turnDetector &&
+          isLikelyIncompleteVoiceTurn(text)
+        ))
       ) {
         const timer = setTimeout(() => {
           const held = heldLiveTurn;
