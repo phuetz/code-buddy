@@ -230,3 +230,4 @@ docs/audits/**/evidence/
 
 # Artefact généré par `buddy --init` (importe CLAUDE.md) — ne pas versionner
 /CODEBUDDY.md
+.env.sauvegarde-*
