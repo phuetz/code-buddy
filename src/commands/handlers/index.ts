@@ -387,4 +387,4 @@ export {
   handleTimeline,
   handleKnowledgeGraph,
   handleApprovals,
-} from './slash-r5-handlers.js';
+} from './slash-session-handlers.js';
