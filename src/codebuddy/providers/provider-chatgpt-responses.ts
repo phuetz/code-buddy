@@ -128,7 +128,7 @@ function resolveCodexModel(
     configuredModel && isCodexServableModel(configuredModel)
       ? normalizeChatGptOAuthModel(configuredModel)
       : CHATGPT_OAUTH_DEFAULT_MODEL;
-  logger.debug(
+  logger.warn(
     `[chatgpt-responses] "${normalized}" is not served by the Codex backend; using "${target}". Set --model to override.`,
   );
   return target;
@@ -361,9 +361,11 @@ export class ChatGptResponsesProvider implements Provider {
     const toolCalls: CodeBuddyToolCall[] = [];
     let finishReason: string | undefined;
     let truncated = false;
+    let actualModel: string | undefined;
     let usage: CodeBuddyResponse['usage'];
 
     for await (const chunk of this.chatStream(messages, tools, opts)) {
+      actualModel = chunk.model;
       const delta = chunk.choices[0]?.delta;
       if (delta?.content) content += delta.content;
       if (delta?.tool_calls) {
@@ -406,6 +408,7 @@ export class ChatGptResponsesProvider implements Provider {
     }
 
     return {
+      model: actualModel ?? this.currentModel,
       choices: [{
         message: {
           role: 'assistant',

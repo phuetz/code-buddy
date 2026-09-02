@@ -24,6 +24,7 @@ import type { ChatGptAuth } from '../../../src/providers/codex-oauth.js';
 import type { ChatGptCodexModelCatalog } from '../../../src/providers/chatgpt-models.js';
 import type { CodeBuddyMessage, CodeBuddyTool } from '../../../src/codebuddy/client.js';
 import { reduceStreamChunk } from '../../../src/agent/streaming/message-reducer.js';
+import { logger } from '../../../src/utils/logger.js';
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -1147,7 +1148,9 @@ describe('ChatGptResponsesProvider — chatStream wiring', () => {
     // (this is what crashed: grok → 400, fallback gpt-5.2 → 400 → throw).
     provider.setModel('grok-code-fast-1');
 
+    const warnSpy = vi.spyOn(logger, 'warn');
     const out: string[] = [];
+    const renderedModels = new Set<string>();
     for await (const chunk of provider.chatStream(
       [{ role: 'user', content: 'fix the bug' } as CodeBuddyMessage],
       [],
@@ -1155,6 +1158,7 @@ describe('ChatGptResponsesProvider — chatStream wiring', () => {
     )) {
       const c = chunk.choices[0]?.delta?.content;
       if (c) out.push(c);
+      renderedModels.add(chunk.model);
     }
 
     // The grok slug was remapped to the configured gpt-5.5 BEFORE the request:
@@ -1163,6 +1167,11 @@ describe('ChatGptResponsesProvider — chatStream wiring', () => {
     const body = JSON.parse((fetchMock.mock.calls[0]![1] as RequestInit).body as string);
     expect(body.model).toBe('gpt-5.5');
     expect(out.join('')).toBe('OK');
+    expect(renderedModels).toEqual(new Set(['gpt-5.5']));
+    expect(warnSpy.mock.calls.some(([message]) => {
+      const text = String(message);
+      return text.includes('grok-code-fast-1') && text.includes('gpt-5.5');
+    })).toBe(true);
   });
 
   it('auto-fallback: skipped when caller pinned --model explicitly', async () => {
