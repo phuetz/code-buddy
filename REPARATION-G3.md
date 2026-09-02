@@ -33,6 +33,16 @@ Pour chaque trou : preuve rouge, diagnostic, correctif minimal, preuve verte, te
 - Vérifications avant commit : `npm run typecheck` — **exit 0** (racine + config GPU) ; ESLint ciblé sur les fichiers touchés — **exit 0**.
 - Commit : à compléter.
 
+### Trou 2 — rappel one-shot qui refire
+
+- Test relu : `tests/companion/revue-gemini-reminders-oneshot.test.ts`.
+- Rouge initial (`npx vitest run tests/companion/revue-gemini-reminders-oneshot.test.ts`, exit 1) : 2 tests rouges — le one-shot réajusté redevient dû ; l’attente `parseVoiceReminder(... à 15h ...)` exigeait une date.
+- Arbitrage documenté : la seconde attente était incohérente avec le contrat de `parseVoiceReminder` et son test voisin, qui réservent le one-shot aux dates explicites. Le test a été corrigé en non-régression (`date` absente, `isOneShot=false`), sans code produit.
+- Correctif : `isDue` considère tout one-shot avec `lastFiredAt` comme consommé, quelle que soit l’heure éventuellement réajustée.
+- Vert voisin : `npx vitest run tests/companion/revue-gemini-reminders-oneshot.test.ts tests/companion/reminders.test.ts tests/companion/reminders-oneshot.test.ts tests/companion/reminders-agenda.test.ts tests/companion/reminders-confirm-dedup.test.ts` — **5 fichiers, 50 tests passés**.
+- Vérifications : `npm run typecheck` — **exit 0** ; ESLint ciblé avec `--quiet` — **exit 0**.
+- Commit : à compléter.
+
 ### Trou 1 — fidélité du souvenir après relecture
 
 - Test relu : `tests/memory/revue-gemini-roundtrip.test.ts`.

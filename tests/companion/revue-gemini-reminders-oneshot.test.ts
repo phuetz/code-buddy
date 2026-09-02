@@ -45,13 +45,13 @@ describe('Revue G3 — Rappels : re-déclenchement indésirable d’un one-shot'
     expect(due).toBe(false);
   });
 
-  it('parseVoiceReminder crée un rappel récurrent infini pour une consigne pourtant ponctuelle ("rappelle-moi à 15h de couper le four")', () => {
+  it('parseVoiceReminder conserve le contrat récurrent pour une consigne sans date ("rappelle-moi à 15h de couper le four")', () => {
     const fixedNow = new Date('2026-07-03T10:00:00');
     const parsed = parseVoiceReminder('rappelle-moi à 15h de couper le four', fixedNow);
 
     expect(parsed).not.toBeNull();
-    // L'intention est clairement ponctuelle ("couper le four" n'est pas un traitement quotidien récurrent)
-    // En l'absence de date, il devient récurrent tous les jours
-    expect(parsed!.date).toBeDefined();
+    // Le contrat documenté réserve le one-shot aux expressions de date explicites.
+    expect(parsed!.date).toBeUndefined();
+    expect(isOneShot(parsed!)).toBe(false);
   });
 });

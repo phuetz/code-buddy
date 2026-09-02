@@ -224,6 +224,7 @@ export function isDue(r: Reminder, now: Date): boolean {
   const occ = new Date(now);
   occ.setHours(h, m, 0, 0);
   if (now < occ) return false; // not yet time today
+  if (isOneShot(r) && r.lastFiredAt) return false; // a dated occurrence is consumed permanently
   if (r.lastFiredAt) {
     const lf = new Date(r.lastFiredAt);
     if (sameDay(lf, occ) && lf >= occ) return false; // already fired this occurrence
