@@ -46,6 +46,11 @@ import {
 import type { VoiceDeliveryProfile, VoiceTurnContext } from './voice-entrainment.js';
 import { getVoiceTurnCoordinator } from './voice-turn-coordinator.js';
 import { assessAudioScene, type AudioSceneAssessment } from './audio-scene.js';
+import {
+  createConversationCueController,
+  type ConversationCueHandle,
+  type ConversationCuePlayer,
+} from './conversation-cues.js';
 
 // Re-exported for back-compat: callers + tests import these from speech-reaction.
 export { resolveSpeechRecognitionEngine };
@@ -104,6 +109,8 @@ export interface SpeechReactionOptions {
    * It must never trigger a reply, tool, memory write, or response decision.
    */
   onSpeechPartial?: (partial: PartialVoiceTranscript) => void | Promise<void>;
+  /** Local cached-cue player; never a TTS or model callback. */
+  onConversationCue?: ConversationCuePlayer;
   /** Interrupt the active think/speak turn when an explicit barge-in transcript arrives. */
   onBargeIn?: (text: string, interruptedTurnId?: string) => void;
   /**
@@ -1394,6 +1401,12 @@ export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => v
   const now = options.now ?? (() => Date.now());
   const transcribe = options.transcriber ?? transcribeWavRaw;
   const turnCoordinator = getVoiceTurnCoordinator();
+  const sensoryBackchannelEnabled =
+    env.CODEBUDDY_SENSORY_BACKCHANNEL === 'true' && Boolean(options.onConversationCue);
+  const conversationCues = createConversationCueController({
+    env,
+    ...(options.onConversationCue ? { player: options.onConversationCue } : {}),
+  });
   let lastAt = Number.NEGATIVE_INFINITY;
   let lastSttFailureReplyAt = Number.NEGATIVE_INFINITY;
   let sttFailureCount = 0;
@@ -1745,6 +1758,7 @@ export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => v
           `[speech] heard (${sttMs}ms STT, engine=${sttEngine}, model=${sttModel}, language=${sttLanguage}, hotwords=${hotwordsState}) → ${text}`
         );
 
+        let backchannel: ConversationCueHandle | null = null;
         const turnContext: VoiceTurnContext = {
           turnId,
           ...(finiteTimestamp(payload.audioMs) !== undefined
@@ -1755,6 +1769,9 @@ export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => v
             : {}),
           ...(captureStartedAtMs !== undefined ? { speechStartedAtMs: captureStartedAtMs } : {}),
           ...(captureEndedAtMs !== undefined ? { speechEndedAtMs: captureEndedAtMs } : {}),
+          ...(sensoryBackchannelEnabled
+            ? { onResponseAudioStart: () => backchannel?.cancel() }
+            : {}),
         };
         let acceptedForSemanticIngress = true;
         let responded = Boolean(options.onHeard);
@@ -1826,12 +1843,19 @@ export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => v
         }
 
         if (responded) {
+          if (sensoryBackchannelEnabled && decisionReason === 'addressed') {
+            backchannel = conversationCues.armBackchannel(turnId);
+          }
           turnCoordinator.transition(turnId, 'thinking', {
             decisionReason,
             decisionMs,
           });
           const actionStartMs = now();
-          await options.onHeard?.(text, turnContext);
+          try {
+            await options.onHeard?.(text, turnContext);
+          } finally {
+            backchannel?.cancel();
+          }
           actionMs = elapsedSince(actionStartMs, now);
           responseTiming = options.getResponseTiming?.();
           // The voice handler publishes the same fact through getResponseTiming or its
@@ -2186,6 +2210,7 @@ export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => v
 
   return () => {
     disposed = true;
+    conversationCues.dispose();
     if (heldLiveTurn) clearTimeout(heldLiveTurn.timer);
     heldLiveTurn = null;
     const abandonedSpeech = pendingSpeech;

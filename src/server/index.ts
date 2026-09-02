@@ -1430,6 +1430,7 @@ export async function startServer(userConfig: Partial<ServerConfig> = {}): Promi
             if (process.env.CODEBUDDY_SENSORY_SPEAK === 'true') {
               const {
                 makeVoiceReply,
+                playCachedConversationCue,
                 describeVoiceReadiness,
                 prewarmVoiceModel,
                 prewarmVoiceRuntime,
@@ -1795,6 +1796,9 @@ export async function startServer(userConfig: Partial<ServerConfig> = {}): Promi
                 },
                 getAttentionSnapshot: () => responseDecider.snapshot(),
               };
+              if (process.env.CODEBUDDY_SENSORY_BACKCHANNEL === 'true') {
+                wireOpts.onConversationCue = playCachedConversationCue;
+              }
               if (responsePolicy.gateEnabled) {
                 // Reuse the session decider shared with the vision greeting above, so a
                 // person-arrival greeting's open engagement window carries into this gate.

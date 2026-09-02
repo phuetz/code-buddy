@@ -117,6 +117,7 @@ import type {
 import { VisualConsentGate } from '../companion/visual-consent.js';
 import { getVoiceTurnCoordinator } from './voice-turn-coordinator.js';
 import { resolvePocketLanguage } from '../talk-mode/providers/pocket-tts.js';
+import type { ConversationCueRequest } from './conversation-cues.js';
 
 /** Derive relational prosody without changing the bare voice-loop default. */
 export function deriveSpokenDeliveryProfile(
@@ -2816,6 +2817,53 @@ export async function sayNow(
   return played;
 }
 
+let conversationCueTempSequence = 0;
+
+/**
+ * Play a pre-recorded repository WAV without invoking TTS. The source asset is
+ * copied to a throwaway attenuated WAV so playback never mutates the cache.
+ */
+export async function playCachedConversationCue(
+  cue: ConversationCueRequest,
+): Promise<boolean> {
+  if (cue.signal.aborted || !existsSync(cue.assetPath)) return false;
+  const factor = 10 ** (cue.gainDb / 20);
+  const tempPath = join(
+    tmpdir(),
+    `cb-conversation-cue-${process.pid}-${Date.now()}-${++conversationCueTempSequence}.wav`,
+  );
+  try {
+    const source = await readFile(cue.assetPath);
+    if (cue.signal.aborted) return false;
+    const attenuated = normalizePcm16Wav(source, process.env, factor);
+    if (attenuated.equals(source) && factor !== 1) {
+      logger.warn(`[voice] conversation cue is not a supported PCM16 WAV: ${cue.assetPath}`);
+      return false;
+    }
+    await writeFile(tempPath, attenuated, { mode: 0o600 });
+    if (cue.signal.aborted) return false;
+    await withSpeakingGuard(() => {
+      noteSpokenText(cue.text);
+      return defaultPlay(tempPath, {
+        signal: cue.signal,
+        alreadyNormalized: true,
+      });
+    });
+    return !cue.signal.aborted;
+  } catch (error) {
+    logger.warn(
+      `[voice] cached conversation cue failed: ${error instanceof Error ? error.message : String(error)}`,
+    );
+    return false;
+  } finally {
+    try {
+      await unlink(tempPath);
+    } catch {
+      /* no temporary cue was created, or cleanup can remain best-effort */
+    }
+  }
+}
+
 /**
  * An `onHeard` handler (callable as `(heard) => Promise<void>`) with an added `interrupt()`
  * method — the foundation of barge-in. It is a plain function so it drops into
@@ -2948,6 +2996,16 @@ export function makeVoiceReply(options: VoiceReplyOptions = {}): VoiceReplyHandl
     let firstSegmentMs: number | undefined;
     let firstAudioMs: number | undefined;
     let firstContentAudioMs: number | undefined;
+    let responseAudioStartSignalled = false;
+    const signalResponseAudioStart = (): void => {
+      if (responseAudioStartSignalled) return;
+      responseAudioStartSignalled = true;
+      try {
+        context?.onResponseAudioStart?.();
+      } catch {
+        /* cue cancellation must never alter response playback */
+      }
+    };
     let streamFallbackSegments = 0;
     let streamRouteRemote = false;
     let semanticCorrectionPromise: Promise<string> | undefined;
@@ -3160,6 +3218,7 @@ export function makeVoiceReply(options: VoiceReplyOptions = {}): VoiceReplyHandl
       const metadata = streamedWavMetadata.get(wav);
       if (metadata) noteSpokenText(metadata.text);
       if (firstAudioMs === undefined) firstAudioMs = Date.now() - startedAt;
+      signalResponseAudioStart();
       await publishAvatarBufferedWav(wav);
       markAvatarSpeechStarted();
       if (
@@ -3196,6 +3255,7 @@ export function makeVoiceReply(options: VoiceReplyOptions = {}): VoiceReplyHandl
                 },
                 onFirstAudio: () => {
                   if (firstAudioMs === undefined) firstAudioMs = Date.now() - startedAt;
+                  signalResponseAudioStart();
                   markAvatarSpeechStarted();
                   if (!isBackchannel && firstContentAudioMs === undefined) {
                     firstContentAudioMs = Date.now() - startedAt;

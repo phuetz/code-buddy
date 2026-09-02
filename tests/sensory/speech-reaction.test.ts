@@ -179,6 +179,60 @@ describe('speech reaction — speech_end → STT → percept', () => {
     }
   });
 
+  it('cancels an addressed sensory backchannel when the reply completes first', async () => {
+    const tmp = await mkdtemp(path.join(os.tmpdir(), 'speech-backchannel-cancel-'));
+    const cues: string[] = [];
+    const heard: string[] = [];
+    const unwire = wireSpeechReaction({
+      debounceMs: 0,
+      cwd: tmp,
+      env: { CODEBUDDY_SENSORY_BACKCHANNEL: 'true' },
+      shouldRespond: async () => ({ respond: true, reason: 'addressed' }),
+      onConversationCue: async (cue) => {
+        cues.push(cue.cue);
+        return true;
+      },
+      onHeard: async (text) => {
+        heard.push(text);
+      },
+    });
+    try {
+      transcriptFinal('Lisa, question rapide ?');
+      await waitFor(() => expect(heard).toEqual(['Lisa, question rapide ?']));
+      await new Promise((resolve) => setTimeout(resolve, 180));
+      expect(cues).toEqual([]);
+    } finally {
+      unwire();
+    }
+  });
+
+  it('arms the sensory backchannel only after the addressed gate accepts the turn', async () => {
+    const tmp = await mkdtemp(path.join(os.tmpdir(), 'speech-backchannel-addressed-'));
+    let releaseReply!: () => void;
+    const replyHeld = new Promise<void>((resolve) => {
+      releaseReply = resolve;
+    });
+    const cues: string[] = [];
+    const unwire = wireSpeechReaction({
+      debounceMs: 0,
+      cwd: tmp,
+      env: { CODEBUDDY_SENSORY_BACKCHANNEL: 'true' },
+      shouldRespond: async () => ({ respond: true, reason: 'addressed' }),
+      onConversationCue: async (cue) => {
+        cues.push(cue.cue);
+        return true;
+      },
+      onHeard: async () => replyHeld,
+    });
+    try {
+      transcriptFinal('Lisa, question plus longue ?');
+      await waitFor(() => expect(cues).toEqual(['mhm']));
+    } finally {
+      releaseReply();
+      unwire();
+    }
+  });
+
   it('starts the correlated background lane before the spoken turn releases its mouth lock', async () => {
     const tmp = await mkdtemp(path.join(os.tmpdir(), 'speech-background-lane-'));
     let releaseMouth!: () => void;

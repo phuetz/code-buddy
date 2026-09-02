@@ -134,6 +134,26 @@ describe('voice loop — readiness (fail-loud prereqs)', () => {
 });
 
 describe('voice loop — instant backchannel cache', () => {
+  it('signals response audio before handing the WAV to the player', async () => {
+    const events: string[] = [];
+    const reply = makeVoiceReply({
+      replyFn: async () => 'Réponse prête.',
+      synth: async () => '/tmp/response-ready.wav',
+      play: async () => {
+        events.push('play');
+      },
+    });
+
+    await reply('Question complète ?', {
+      turnId: 'turn-ready',
+      onResponseAudioStart: () => {
+        events.push('response-ready');
+      },
+    });
+
+    expect(events).toEqual(['response-ready', 'play']);
+  });
+
   it('uses the Pocket voice-specific cache for a prewarmed acknowledgement', async () => {
     const calls: Array<[string, string]> = [];
     const hit = await lookupInstantBackchannelWav(
