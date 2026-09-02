@@ -177,6 +177,7 @@ export class EnhancedMemory extends EventEmitter {
   private summaries: ConversationSummary[] = [];
   private summariesLoadError: string | null = null;
   private userProfile: UserProfile | null = null;
+  private userProfileLoadError: string | null = null;
   private currentProjectId: string | null = null;
   private decayIntervalId: ReturnType<typeof setInterval> | null = null;
   private dbRepository: MemoryRepository | null = null;
@@ -379,9 +380,19 @@ export class EnhancedMemory extends EventEmitter {
 
     if (await fs.pathExists(profilePath)) {
       try {
-        this.userProfile = await fs.readJSON(profilePath);
-      } catch {
+        const profile: unknown = await fs.readJSON(profilePath);
+        if (profile === null || typeof profile !== 'object' || Array.isArray(profile)) {
+          throw new Error('expected a JSON object');
+        }
+        this.userProfile = profile as UserProfile;
+        this.userProfileLoadError = null;
+      } catch (err) {
         this.userProfile = null;
+        this.userProfileLoadError = err instanceof Error ? err.message : String(err);
+        logger.warn('Enhanced memory user profile is corrupt or unreadable', {
+          path: profilePath,
+          error: this.userProfileLoadError,
+        });
       }
     }
   }
@@ -440,8 +451,9 @@ export class EnhancedMemory extends EventEmitter {
       ));
     }
 
-    // Save user profile if exists
-    if (this.userProfile) {
+    // A corrupt profile file is not an empty profile. Keep it intact
+    // until it can be repaired or loaded explicitly.
+    if (this.userProfile && !this.userProfileLoadError) {
       saveOperations.push(
         fs.writeJSON(
           path.join(this.dataDir, 'user-profile.json'),
@@ -991,6 +1003,11 @@ export class EnhancedMemory extends EventEmitter {
    */
   async updateUserProfile(updates: Partial<UserProfile>): Promise<UserProfile> {
     await this.ready;
+    if (this.userProfileLoadError) {
+      throw new EnhancedMemoryInitializationError(
+        `Cannot update user profile because user-profile.json is corrupt or unreadable: ${this.userProfileLoadError}`,
+      );
+    }
     if (!this.userProfile) {
       this.userProfile = {
         id: crypto.randomBytes(8).toString('hex'),
@@ -1027,6 +1044,11 @@ export class EnhancedMemory extends EventEmitter {
    * Get user profile
    */
   getUserProfile(): UserProfile | null {
+    if (this.userProfileLoadError) {
+      throw new EnhancedMemoryInitializationError(
+        `Cannot read user profile because user-profile.json is corrupt or unreadable: ${this.userProfileLoadError}`,
+      );
+    }
     return this.userProfile;
   }
 
@@ -1052,8 +1074,12 @@ export class EnhancedMemory extends EventEmitter {
     const parts: string[] = [];
 
     // Add user preferences
-    if (options.includePreferences && this.userProfile) {
-      parts.push(`User preferences:\n${JSON.stringify(this.userProfile.preferences, null, 2)}`);
+    if (options.includePreferences) {
+      if (this.userProfileLoadError) {
+        parts.push(`\nUser profile unavailable: user-profile.json is corrupt or unreadable (${this.userProfileLoadError}).`);
+      } else if (this.userProfile) {
+        parts.push(`User preferences:\n${JSON.stringify(this.userProfile.preferences, null, 2)}`);
+      }
     }
 
     // Add project context
