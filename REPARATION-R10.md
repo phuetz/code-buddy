@@ -51,3 +51,29 @@ Tests  37 passed (37)
 
 `node node_modules/typescript/bin/tsc --noEmit -p tsconfig.json` : exit 0  
 `node node_modules/eslint/bin/eslint.js src/companion/reminders.ts src/companion/reminder-runner.ts tests/companion/reminder-ack-persistence.test.ts tests/companion/reminders-snooze.test.ts` : exit 0
+
+### 2. Proactif — jumeaux D1/D8
+
+**Jumeaux :** `loadRelationshipState()` / `loadEventFollowUps()` avalaient JSON invalide comme un état vide ; `speakCanonicalVoiceInitiative()` journalisait le tour assistant avant le résultat du speaker.
+
+**Correctif :** ENOENT = défaut, le reste lève ; sauvegardes atomiques ; la trace vocale n'est écrite qu'après `speak !== false`.
+
+**Rouge :**
+
+```text
+FAIL  … does not treat a corrupt follow-up store as empty (jumeau D1)
+FAIL  … does not treat a corrupt relationship store as empty defaults (jumeau D1)
+FAIL  … does not journal a local initiative when the speaker reports failure (jumeau D8)
+Tests  3 failed | 23 passed (26)
+```
+
+**Vert :**
+
+```text
+node node_modules/vitest/vitest.mjs run tests/companion/relationship-state.test.ts tests/companion/event-followups.test.ts tests/conversation/voice-continuity.test.ts tests/companion/proactive-engine.test.ts tests/companion/presence-loop.test.ts
+Test Files  5 passed (5)
+Tests  64 passed (64)
+```
+
+`tsc --noEmit -p tsconfig.json` : exit 0  
+`eslint` ciblé : exit 0

@@ -1,11 +1,10 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {
   hasFutureCue,
   loadEventFollowUps,
-  saveEventFollowUps,
   addFollowUp,
   dueFollowUp,
   markFired,
@@ -64,6 +63,13 @@ describe('store + due-logic', () => {
     expect(dueFollowUp(NOW, p)?.id).toBe(fu.id);
     markFired(fu.id, NOW, p);
     expect(dueFollowUp(NOW, p)).toBeNull();
+  });
+
+  it('does not treat a corrupt follow-up store as empty (jumeau D1)', () => {
+    writeFileSync(p, '{this is not json');
+    expect(() => loadEventFollowUps(p)).toThrow();
+    writeFileSync(p, '{}');
+    expect(() => loadEventFollowUps(p)).toThrow();
   });
 });
 

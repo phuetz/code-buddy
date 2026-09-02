@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { mkdtempSync, rmSync, statSync } from 'node:fs';
+import { mkdtempSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {
@@ -35,7 +35,7 @@ describe('relationship-state pure helpers', () => {
     expect(markMilestonesUpTo([7, 30], 5)).toEqual([7, 30]); // nothing new reached
   });
 
-  it('load/save round-trips and tolerates a missing/garbage file', () => {
+  it('load/save round-trips and treats a missing file as empty defaults', () => {
     const dir = mkdtempSync(path.join(os.tmpdir(), 'rel-'));
     const p = path.join(dir, 's.json');
     try {
@@ -46,6 +46,19 @@ describe('relationship-state pure helpers', () => {
         expect(statSync(p).mode & 0o777).toBe(0o600);
         expect(statSync(dir).mode & 0o077).toBe(0);
       }
+    } finally {
+      rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+    }
+  });
+
+  it('does not treat a corrupt relationship store as empty defaults (jumeau D1)', () => {
+    const dir = mkdtempSync(path.join(os.tmpdir(), 'rel-bad-'));
+    const p = path.join(dir, 's.json');
+    try {
+      writeFileSync(p, '{this is not json');
+      expect(() => loadRelationshipState(p)).toThrow();
+      writeFileSync(p, '[]');
+      expect(() => loadRelationshipState(p)).toThrow();
     } finally {
       rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     }

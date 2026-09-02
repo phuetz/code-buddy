@@ -18,7 +18,7 @@
  *
  * @module companion/event-followups
  */
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs';
+import { readFileSync, writeFileSync, mkdirSync, renameSync, unlinkSync } from 'fs';
 import { homedir } from 'os';
 import { join, dirname } from 'path';
 import { randomBytes } from 'crypto';
@@ -76,24 +76,88 @@ function defaultStatePath(): string {
   );
 }
 
-export function loadEventFollowUps(statePath = defaultStatePath()): EventFollowUp[] {
-  try {
-    if (existsSync(statePath)) {
-      const data = JSON.parse(readFileSync(statePath, 'utf8'));
-      if (Array.isArray(data)) return data.filter((e) => e && typeof e.id === 'string');
-    }
-  } catch {
-    /* best effort */
-  }
-  return [];
+function isEventFollowUp(value: unknown): value is EventFollowUp {
+  if (!value || typeof value !== 'object') return false;
+  const entry = value as Record<string, unknown>;
+  return (
+    typeof entry.id === 'string' &&
+    typeof entry.event === 'string' &&
+    typeof entry.eventDayAt === 'number' &&
+    typeof entry.dueAt === 'number' &&
+    typeof entry.followUp === 'string' &&
+    typeof entry.createdAt === 'number' &&
+    (entry.firedAt === undefined || typeof entry.firedAt === 'number')
+  );
 }
 
-export function saveEventFollowUps(items: EventFollowUp[], statePath = defaultStatePath()): void {
+export function loadEventFollowUps(statePath = defaultStatePath()): EventFollowUp[] {
+  let raw: string;
+  try {
+    raw = readFileSync(statePath, 'utf8').trim();
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException)?.code === 'ENOENT') return [];
+    logger.warn(
+      `[event-followups] could not read store: ${err instanceof Error ? err.message : String(err)}`
+    );
+    throw err;
+  }
+  if (!raw) {
+    const msg = `[event-followups] store exists but is empty: ${statePath}`;
+    logger.warn(msg);
+    throw new Error(msg);
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (err) {
+    logger.warn(
+      `[event-followups] could not parse store: ${err instanceof Error ? err.message : String(err)}`
+    );
+    throw err;
+  }
+  if (!Array.isArray(parsed)) {
+    const msg = `[event-followups] store is not a list: ${statePath}`;
+    logger.warn(msg);
+    throw new Error(msg);
+  }
+  const items: EventFollowUp[] = [];
+  for (const entry of parsed) {
+    if (!isEventFollowUp(entry)) {
+      const msg = `[event-followups] store has an invalid entry: ${statePath}`;
+      logger.warn(msg);
+      throw new Error(msg);
+    }
+    items.push(entry);
+  }
+  return items;
+}
+
+export function saveEventFollowUps(items: EventFollowUp[], statePath = defaultStatePath()): boolean {
+  const temporaryPath = `${statePath}.${process.pid}.${Date.now()}.tmp`;
   try {
     mkdirSync(dirname(statePath), { recursive: true });
-    writeFileSync(statePath, JSON.stringify(items));
-  } catch {
-    /* best effort */
+    writeFileSync(temporaryPath, JSON.stringify(items));
+    try {
+      renameSync(temporaryPath, statePath);
+    } catch {
+      writeFileSync(statePath, JSON.stringify(items));
+      try {
+        unlinkSync(temporaryPath);
+      } catch {
+        /* already moved/removed */
+      }
+    }
+    return true;
+  } catch (err) {
+    try {
+      unlinkSync(temporaryPath);
+    } catch {
+      /* best effort cleanup */
+    }
+    logger.warn(
+      `[event-followups] could not persist store: ${err instanceof Error ? err.message : String(err)}`
+    );
+    return false;
   }
 }
 
@@ -109,7 +173,9 @@ export function addFollowUp(candidate: EventCandidate, nowMs: number, statePath 
     createdAt: nowMs,
   };
   items.push(followUp);
-  saveEventFollowUps(items, statePath);
+  if (!saveEventFollowUps(items, statePath)) {
+    throw new Error(`[event-followups] could not persist ${statePath}`);
+  }
   return followUp;
 }
 

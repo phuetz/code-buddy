@@ -74,37 +74,52 @@ function defaultStatePath(): string {
 }
 
 export function loadRelationshipState(statePath = defaultStatePath()): RelationshipState {
+  let raw: string;
   try {
-    if (existsSync(statePath)) {
-      const data = JSON.parse(readFileSync(statePath, 'utf8'));
-      const parsed: RelationshipState = {
-        firstSeenAt: typeof data.firstSeenAt === 'number' ? data.firstSeenAt : undefined,
-        lastPresentAt: typeof data.lastPresentAt === 'number' ? data.lastPresentAt : undefined,
-        celebratedMilestones: Array.isArray(data.celebratedMilestones)
-          ? data.celebratedMilestones.filter((n: unknown): n is number => typeof n === 'number')
-          : [],
-      };
-      // Richer relational fields — only surfaced when present, so an old file (and the shape-exact
-      // round-trip tests) round-trips identically. `personalityOf` supplies defaults on read.
-      if (typeof data.mood === 'number') parsed.mood = data.mood;
-      if (data.traits && typeof data.traits === 'object') {
-        const raw = data.traits as Record<string, unknown>;
-        const traits: Partial<RelationshipTraits> = {};
-        for (const k of ['warmth', 'humor', 'depth', 'energy'] as const) {
-          if (typeof raw[k] === 'number') traits[k] = raw[k] as number;
-        }
-        if (Object.keys(traits).length > 0) parsed.traits = traits;
-      }
-      if (typeof data.sessions === 'number') parsed.sessions = data.sessions;
-      return parsed;
+    raw = readFileSync(statePath, 'utf8').trim();
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException)?.code === 'ENOENT') {
+      return { celebratedMilestones: [] };
     }
-  } catch {
-    /* best effort */
+    throw err;
   }
-  return { celebratedMilestones: [] };
+  if (!raw) {
+    throw new Error(`[relationship] state exists but is empty: ${statePath}`);
+  }
+  const data: unknown = JSON.parse(raw);
+  if (!data || typeof data !== 'object' || Array.isArray(data)) {
+    throw new Error(`[relationship] state is not an object: ${statePath}`);
+  }
+  const record = data as Record<string, unknown>;
+  if (
+    record.celebratedMilestones !== undefined &&
+    !Array.isArray(record.celebratedMilestones)
+  ) {
+    throw new Error(`[relationship] celebratedMilestones is not a list: ${statePath}`);
+  }
+  const parsed: RelationshipState = {
+    firstSeenAt: typeof record.firstSeenAt === 'number' ? record.firstSeenAt : undefined,
+    lastPresentAt: typeof record.lastPresentAt === 'number' ? record.lastPresentAt : undefined,
+    celebratedMilestones: Array.isArray(record.celebratedMilestones)
+      ? record.celebratedMilestones.filter((n: unknown): n is number => typeof n === 'number')
+      : [],
+  };
+  // Richer relational fields — only surfaced when present, so an old file (and the shape-exact
+  // round-trip tests) round-trips identically. `personalityOf` supplies defaults on read.
+  if (typeof record.mood === 'number') parsed.mood = record.mood;
+  if (record.traits && typeof record.traits === 'object') {
+    const rawTraits = record.traits as Record<string, unknown>;
+    const traits: Partial<RelationshipTraits> = {};
+    for (const k of ['warmth', 'humor', 'depth', 'energy'] as const) {
+      if (typeof rawTraits[k] === 'number') traits[k] = rawTraits[k] as number;
+    }
+    if (Object.keys(traits).length > 0) parsed.traits = traits;
+  }
+  if (typeof record.sessions === 'number') parsed.sessions = record.sessions;
+  return parsed;
 }
 
-export function saveRelationshipState(state: RelationshipState, statePath = defaultStatePath()): void {
+export function saveRelationshipState(state: RelationshipState, statePath = defaultStatePath()): boolean {
   const temporaryPath = `${statePath}.${process.pid}.${Date.now()}.tmp`;
   try {
     mkdirSync(dirname(statePath), { recursive: true, mode: 0o700 });
@@ -127,13 +142,14 @@ export function saveRelationshipState(state: RelationshipState, statePath = defa
     } catch {
       /* chmod is advisory on some Windows filesystems */
     }
+    return true;
   } catch {
     try {
       if (existsSync(temporaryPath)) unlinkSync(temporaryPath);
     } catch {
       /* best effort cleanup */
     }
-    /* best effort */
+    return false;
   }
 }
 

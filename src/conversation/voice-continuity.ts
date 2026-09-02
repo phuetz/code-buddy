@@ -42,21 +42,23 @@ export function createCanonicalVoiceReplySpeaker(
   };
 }
 
-/** Record and mirror an unsolicited local sentence while it is spoken. */
+/** Speak an unsolicited local sentence, then journal it only if the mouth actually accepted it. */
 export async function speakCanonicalVoiceInitiative(
   content: string,
   speak: CanonicalVoiceSpeaker,
   bridge: CrossChannelConversationBridge = getCrossChannelConversationBridge(),
-): Promise<void> {
+): Promise<boolean> {
   const prepared = prepareSpeech(content);
-  if (!prepared) return;
+  if (!prepared) return false;
+  const spoken = await speak(prepared);
+  if (spoken === false) return false;
   const mirrored = bridge.recordVoiceTurn({ role: 'assistant', content: prepared });
   void mirrored.catch((error) => {
     logger.warn(
       `[voice-continuity] initiative mirror failed: ${error instanceof Error ? error.message : String(error)}`,
     );
   });
-  await speak(prepared);
+  return true;
 }
 
 /** Append a proactive sentence that has already been delivered on the target channel. */

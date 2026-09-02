@@ -303,11 +303,9 @@ async function defaultSay(text: string): Promise<boolean> {
       import('../sensory/voice-loop.js'),
       import('../conversation/voice-continuity.js'),
     ]);
-    let played = false;
-    await speakCanonicalVoiceInitiative(text, async (content) => {
-      played = await sayNow(content, { phoneDelivery: 'never' });
-    });
-    return played;
+    return speakCanonicalVoiceInitiative(text, (content) =>
+      sayNow(content, { phoneDelivery: 'never' }),
+    );
   } catch (err) {
     logger.warn(
       `[proactive] local say failed: ${err instanceof Error ? err.message : String(err)}`
