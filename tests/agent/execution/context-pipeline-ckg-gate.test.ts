@@ -133,4 +133,17 @@ describe('injectNextRoundContext — collective memory path', () => {
       '<collective_knowledge>',
     );
   });
+
+  it('still injects CKG on later rounds when the query is a self-inspection', async () => {
+    vi.stubEnv('CODEBUDDY_COLLECTIVE_MEMORY', 'true');
+    const messages: CodeBuddyMessage[] = [];
+    await injectNextRoundContext(messages, {
+      ...nextDeps,
+      message: 'qui es tu',
+    });
+    expect(formatCollectiveContextMock).toHaveBeenCalledTimes(1);
+    const joined = messages.map((m) => String(m.content ?? '')).join('\n');
+    expect(joined).toContain('<collective_knowledge>');
+    expect(joined).toContain('operational_self_inspection_contract');
+  });
 });

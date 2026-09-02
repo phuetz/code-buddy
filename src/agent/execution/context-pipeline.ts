@@ -428,6 +428,29 @@ export interface NextRoundContextDeps {
   isolatedSharedHost?: boolean;
 }
 
+/** Collective graph: same opt-in as round 0. Unset flag is an explicit no-op. */
+async function injectCollectiveGraphIfWanted(
+  preparedMessages: CodeBuddyMessage[],
+  deps: NextRoundContextDeps,
+): Promise<void> {
+  const collectiveWanted =
+    deps.collectiveGraph ?? getInjectionLevel(deps.queryComplexity).collectiveGraph;
+  if (
+    deps.isolatedSharedHost ||
+    !collectiveWanted ||
+    process.env.CODEBUDDY_COLLECTIVE_MEMORY !== 'true'
+  ) {
+    return;
+  }
+  try {
+    const { getCollectiveKnowledgeGraph } = await import('../../memory/collective-knowledge-graph.js');
+    const ckgBlock = await getCollectiveKnowledgeGraph().formatCollectiveContext(deps.message, 1_600);
+    if (ckgBlock) {
+      preparedMessages.push({ role: 'system', content: ckgBlock });
+    }
+  } catch { /* collective graph is optional */ }
+}
+
 /**
  * Phase 3 — Inject context for rounds ≥1: lessons + knowledge graph (only
  * when query is `complex`), todo suffix (always). Workspace context is NOT
@@ -444,6 +467,8 @@ export async function injectNextRoundContext(
     // The attested self-model was injected on round 0 and the following round
     // receives the root-confined tool observation. Do not re-open unrelated
     // workspace, lesson, user-model, KG, ICM, code-graph, docs, or todo sources.
+    // Collective memory stays opt-in on later rounds even here: skipping it
+    // dropped CODEBUDDY_COLLECTIVE_MEMORY=true for self-inspection follow-ups.
     preparedMessages.push({
       role: 'system',
       content:
@@ -452,6 +477,7 @@ export async function injectNextRoundContext(
         'Do not infer subjective consciousness; it remains not established.\n' +
         '</context>',
     });
+    await injectCollectiveGraphIfWanted(preparedMessages, deps);
     return;
   }
   if (deps.isolatedSharedHost) {
@@ -485,23 +511,7 @@ export async function injectNextRoundContext(
     } catch { /* optional */ }
   }
 
-  // Collective graph: same opt-in as round 0. The path without
-  // CODEBUDDY_COLLECTIVE_MEMORY=true is an explicit no-op (no import).
-  const collectiveWanted =
-    deps.collectiveGraph ?? getInjectionLevel(deps.queryComplexity).collectiveGraph;
-  if (
-    !deps.isolatedSharedHost &&
-    collectiveWanted &&
-    process.env.CODEBUDDY_COLLECTIVE_MEMORY === 'true'
-  ) {
-    try {
-      const { getCollectiveKnowledgeGraph } = await import('../../memory/collective-knowledge-graph.js');
-      const ckgBlock = await getCollectiveKnowledgeGraph().formatCollectiveContext(deps.message, 1_600);
-      if (ckgBlock) {
-        preparedMessages.push({ role: 'system', content: ckgBlock });
-      }
-    } catch { /* collective graph is optional */ }
-  }
+  await injectCollectiveGraphIfWanted(preparedMessages, deps);
 
   // Knowledge graph stays gated on complexity — it can be large and is
   // less universally relevant than lessons. Use the SAME smart formatter as
