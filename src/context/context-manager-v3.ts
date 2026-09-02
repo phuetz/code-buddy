@@ -51,7 +51,14 @@ export class ContextManagerV3 {
    * @param config - Optional partial configuration to override defaults.
    */
   constructor(config: Partial<ContextManagerConfig> = {}) {
-    this.config = { ...ContextManagerV3.DEFAULT_CONFIG, ...config };
+    const tableWindow = config.model ? getModelToolConfig(config.model).contextWindow : undefined;
+    this.config = {
+      ...ContextManagerV3.DEFAULT_CONFIG,
+      ...(tableWindow !== undefined && config.maxContextTokens === undefined
+        ? { maxContextTokens: tableWindow }
+        : {}),
+      ...config,
+    };
     this.tokenCounter = createTokenCounter(this.config.model);
     this.compressor = new ContextCompressor(this.tokenCounter);
   }
@@ -205,7 +212,7 @@ export class ContextManagerV3 {
     ));
     if (intact) return;
     throw new ContextCompactionError(
-      'CURRENT_REQUEST_EXCEEDS_BUDGET',
+      'CURRENT_REQUEST_DROPPED',
       this.countMessageTokens([lastUser]),
       effectiveLimit,
       'Current user request was dropped during context compaction. The request was not sent to the model.',
