@@ -62,6 +62,8 @@ function isFleetSafeTool(toolName: string): boolean {
 }
 
 const EDIT_TOOLS = new Set([
+  // File confirmations use this normalized sentinel for the editor path.
+  'edit',
   'str_replace_editor',
   'create_file',
   'write_file',

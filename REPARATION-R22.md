@@ -37,3 +37,31 @@ Tests  20 passed (20)
 ```
 
 Commit D2 : ce lot thématique.
+
+## D3 — posture `acceptEdits`
+
+Constat confirmé : `ConfirmationService` envoyait `edit` lors du premier check puis `Edit`.toLowerCase() lors du second, mais `PermissionModeManager.EDIT_TOOLS` ne contenait pas `edit`. Le chemin fichier arrivait donc à la confirmation interactive même sous `acceptEdits`; `bash` restait correctement dans la catégorie destructive.
+
+Correctif : les identités utilisées par les checks de permission sont normalisées (trim + minuscules) ; `edit`, le sentinelle du chemin fichier, est classé comme outil d’édition. Le test passe par `ConfirmationService.requestConfirmation(..., 'file')` pour `create_file` et `str_replace_editor`, puis vérifie que `bash` n’est pas auto-approuvé.
+
+Preuve rouge puis verte :
+
+```text
+$ npx vitest run tests/utils/confirmation-service.test.ts
+...
+FAIL ... auto-approves file edits but not bash commands
+AssertionError: create_file: expected false to be true
+Tests  1 failed | 31 passed (32)
+
+$ npx vitest run tests/utils/confirmation-service.test.ts
+...
+Test Files  1 passed (1)
+Tests  32 passed (32)
+
+$ npx vitest run tests/security/permission-modes.test.ts
+...
+Test Files  1 passed (1)
+Tests  46 passed (46)
+```
+
+Commit D3 : ce lot thématique.

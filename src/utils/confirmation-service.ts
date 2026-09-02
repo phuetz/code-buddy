@@ -48,6 +48,10 @@ export interface ConfirmationResult {
 
 export type ConfirmationOperationType = 'file' | 'bash' | 'tool';
 
+function normalizePermissionToolName(toolName: string): string {
+  return toolName.trim().toLowerCase();
+}
+
 /**
  * Execute a command safely using spawn with separate arguments
  * This prevents command injection attacks
@@ -331,11 +335,13 @@ export class ConfirmationService extends EventEmitter {
     // that `shell:safe` always evaluates to `allow`) would silently bypass a
     // restrictive mode. We only short-circuit to BLOCKED here; the permissive path
     // (mode allows) falls through unchanged, so normal UX is preserved.
-    const modeToolName = operationType === 'bash'
-      ? 'bash'
-      : operationType === 'tool'
-        ? options.toolName ?? options.operation
-        : 'edit';
+    const modeToolName = normalizePermissionToolName(
+      operationType === 'bash'
+        ? 'bash'
+        : operationType === 'tool'
+          ? options.toolName ?? options.operation
+          : 'edit',
+    );
     const permissionAction = operationType === 'bash' ? options.filename : options.operation;
     const earlyModeDecision = getPermissionModeManager().checkPermission(permissionAction, modeToolName);
     if (!isSelfImprovement && !earlyModeDecision.allowed) {
@@ -350,6 +356,7 @@ export class ConfirmationService extends EventEmitter {
       : operationType === 'tool'
         ? options.toolName ?? options.operation
         : 'Edit';
+    const normalizedToolName = normalizePermissionToolName(toolName);
     // Denials are evaluated before every convenience allow. Previously the
     // PolicyEngine's broad `shell:safe` allow returned before project deny
     // rules were even consulted.
@@ -379,7 +386,7 @@ export class ConfirmationService extends EventEmitter {
 
     // CC18: Check permission mode before other negotiable checks.
     const permMgr = getPermissionModeManager();
-    const modeDecision = permMgr.checkPermission(permissionAction, toolName.toLowerCase());
+    const modeDecision = permMgr.checkPermission(permissionAction, normalizedToolName);
     if (!modeDecision.allowed) {
       return this.auditGate('permission-mode', true, options, {
         confirmed: false,
