@@ -47,6 +47,13 @@ describe('gateway-prefixed models resolve to their open-weights family', () => {
     expect(getModelToolConfig('google/gemma-4-31b-it').contextWindow).toBe(262_144);
     expect(getModelToolConfig('deepseek/deepseek-v4-pro').contextWindow).toBe(1_024_000);
     expect(getModelToolConfig('openai/gpt-oss-120b').contextWindow).toBe(131_072);
+    expect(getModelToolConfig('openai/gpt-oss-20b').contextWindow).toBe(131_072);
+    expect(getModelToolConfig('gpt-oss-120b').contextWindow).toBe(131_072);
+    expect(getModelToolConfig('gpt-oss-20b').contextWindow).toBe(131_072);
+    expect(getModelToolConfig('groq/compound').contextWindow).toBe(128_000);
+    expect(getModelToolConfig('groq/compound-mini').contextWindow).toBe(128_000);
+    expect(getModelToolConfig('compound').contextWindow).toBe(128_000);
+    expect(getModelToolConfig('compound-mini').contextWindow).toBe(128_000);
     expect(getModelToolConfig('moonshotai/kimi-k2').contextWindow).toBe(131_072);
     expect(getModelToolConfig('moonshotai/kimi-k2.6').contextWindow).toBe(262_144);
   });

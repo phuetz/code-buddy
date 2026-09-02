@@ -517,7 +517,7 @@ export const ENV_SCHEMA: EnvVarDef[] = [
   {
     name: 'GROQ_MODEL',
     type: 'string',
-    default: 'llama-3.3-70b-versatile',
+    default: 'qwen/qwen3.8-27b',
     description: 'Default Groq model',
     category: 'provider',
   },
@@ -963,7 +963,7 @@ export const ENV_SCHEMA: EnvVarDef[] = [
   {
     name: 'CEREBRAS_MODEL',
     type: 'string',
-    default: 'zai-glm-4.7',
+    default: 'gpt-oss-120b',
     description: 'Cerebras default model',
     category: 'provider',
   },

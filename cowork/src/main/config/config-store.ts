@@ -355,7 +355,7 @@ const defaultProfiles: Record<ProviderProfileKey, ProviderProfile> = {
   groq: {
     apiKey: '',
     baseUrl: 'https://api.groq.com/openai/v1',
-    model: 'llama-3.3-70b-versatile',
+    model: 'qwen/qwen3.8-27b',
   },
   together: {
     apiKey: '',

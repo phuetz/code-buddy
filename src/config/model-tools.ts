@@ -387,6 +387,15 @@ const DEFAULT_MODEL_CONFIGS: ModelToolConfig[] = [
     patchFormat: 'search_replace',
   },
   {
+    model: 'compound*',
+    supportsReasoning: true,
+    supportsToolCalls: true,
+    supportsVision: false,
+    contextWindow: 128000,
+    maxOutputTokens: 8192,
+    patchFormat: 'search_replace',
+  },
+  {
     model: 'mistral-large*',
     supportsReasoning: false,
     supportsToolCalls: true,
