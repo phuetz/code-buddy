@@ -1253,6 +1253,13 @@ async function processPromptHeadless(
       }) + '\n');
     } else {
       // Default: json — structured output goes to stdout (pipeable).
+      const { autoWidget } = await import('./widgets/auto-widget.js');
+      const widget = await autoWidget(
+        resultText,
+        chatEntries
+          .filter((entry) => entry.type === 'tool_result')
+          .map((entry) => entry.toolResult ?? { output: entry.content }),
+      );
       cli.stdout(JSON.stringify({
         result: resultText,
         cost: {
@@ -1260,6 +1267,7 @@ async function processPromptHeadless(
         },
         model: usedModel,
         messages,
+        ...(widget.widgetHtml ? { widgetHtml: widget.widgetHtml } : {}),
       }));
     }
     return exitCode;

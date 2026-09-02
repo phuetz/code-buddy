@@ -11,6 +11,7 @@ import {
   listAuthoredWidgetRegistry,
   recordAuthoredWidgetUse,
   renderAuthoredWidgetForData,
+  renderWidgetDocument,
   renderWidgetForData,
   resolveWidgetSource,
   type WidgetTheme,
@@ -48,6 +49,35 @@ function safeResult(answer: string, candidate: WidgetCandidate | null = null): A
 
 function scriptFree(html: string | null): html is string {
   return typeof html === 'string' && html.trim().length > 0 && !/<\s*script\b/i.test(html);
+}
+
+function escapeHtml(value: string): string {
+  return value.replace(/[&<>"']/gu, (character) => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;',
+  })[character] ?? character);
+}
+
+function renderMarkdownTableWidget(
+  candidate: Extract<WidgetCandidate, { kind: 'table' }>,
+  theme?: WidgetTheme,
+): string {
+  const header = candidate.data.headers
+    .map((cell) => `<th scope="col">${escapeHtml(cell.label)}</th>`)
+    .join('');
+  const rows = candidate.data.rows
+    .map((row) => `<tr>${row.cells.map((cell) => `<td>${escapeHtml(cell.value)}</td>`).join('')}</tr>`)
+    .join('');
+  const fragment =
+    '<style>table{border-collapse:collapse;width:100%;font:14px system-ui,sans-serif}' +
+    'th,td{border:1px solid #cbd5e1;padding:7px 9px;text-align:left}' +
+    'th{background:#e2e8f0;font-weight:700}td{background:#fff}' +
+    'caption{text-align:left;font-weight:700;margin-bottom:8px}</style>' +
+    `<table><caption>Réponse structurée</caption><thead><tr>${header}</tr></thead><tbody>${rows}</tbody></table>`;
+  return renderWidgetDocument(fragment, theme);
 }
 
 /**
@@ -94,6 +124,13 @@ export async function autoWidget(
     // must never enter the automatic path (including through resolveOrGenerate).
     if (resolveWidgetSource(candidate.dataType, env) === 'authored') {
       return safeResult(answer, candidate);
+    }
+
+    // Markdown tables have no external data source or authored template. They
+    // are safe to render directly once the matcher has applied its length and
+    // three-row substantive-table gates.
+    if (candidate.kind === 'table') {
+      return { answer, widgetHtml: renderMarkdownTableWidget(candidate, deps.theme), candidate };
     }
 
     // LLM generation has its own explicit opt-in in addition to both base gates.

@@ -36,6 +36,16 @@ describe('detectWidgetable', () => {
   it('returns null for a short answer even when it has structured data', () => {
     expect(detectWidgetable('Trop court', [{ data: { type: 'sales', total: 42 } }])).toBeNull();
   });
+
+  it('uses 200 characters as the inclusive answer-length threshold', () => {
+    const table = '| A | B |\n| --- | --- |\n| 1 | 2 |\n| 3 | 4 |';
+    const exact = `${'x'.repeat(200 - table.length - 1)}\n${table}`;
+    const short = `${'x'.repeat(199 - table.length - 1)}\n${table}`;
+    expect(exact).toHaveLength(200);
+    expect(detectWidgetable(exact, [])?.dataType).toBe('table');
+    expect(short).toHaveLength(199);
+    expect(detectWidgetable(short, [])).toBeNull();
+  });
 });
 
 describe('matchAuthored', () => {

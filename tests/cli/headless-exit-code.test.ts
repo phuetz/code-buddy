@@ -75,6 +75,8 @@ function runCliAgainstSuccessfulProvider(port: number, options: {
   prompt?: string;
   persistent?: boolean;
   timeline?: boolean;
+  widgets?: boolean;
+  widgetsAuto?: boolean;
   quiet?: boolean;
   responseContent?: string;
 } = {}): Promise<{
@@ -134,6 +136,8 @@ function runCliAgainstSuccessfulProvider(port: number, options: {
           }
           : {}),
         ...(options.timeline ? { CODEBUDDY_TIMELINE: 'true' } : {}),
+        ...(options.widgets ? { CODEBUDDY_WIDGETS: 'true' } : {}),
+        ...(options.widgetsAuto ? { CODEBUDDY_WIDGETS_AUTO: 'true' } : {}),
         ...(options.logLevel
           ? { LOG_LEVEL: options.logLevel }
           : options.inheritLogLevel === false
@@ -394,6 +398,55 @@ describe('headless CLI exit codes', () => {
       fs.rmSync(homeDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     }
   }, 120_000);
+
+  it('attaches an automatic table widget to headless JSON at the 200-char gate', async () => {
+    const table = `${'Contexte de tableau. '.repeat(10)}\n\n` +
+      '| Nom | Score |\n| --- | ---: |\n| Alpha | 98 |\n| Beta | 91 |';
+    expect(table.length).toBeGreaterThanOrEqual(200);
+    const server = http.createServer((req, res) => {
+      req.resume();
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({
+        id: 'chatcmpl-headless-widget-contract',
+        object: 'chat.completion',
+        created: Math.floor(Date.now() / 1000),
+        model: 'qa-mock-model',
+        choices: [{
+          index: 0,
+          message: { role: 'assistant', content: table },
+          finish_reason: 'stop',
+        }],
+        usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+      }));
+    });
+
+    await new Promise<void>((resolve, reject) => {
+      server.once('error', reject);
+      server.listen(0, '127.0.0.1', () => resolve());
+    });
+
+    const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'codebuddy-headless-widget-'));
+    try {
+      const address = server.address();
+      if (!address || typeof address === 'string') {
+        throw new Error('Expected TCP server address');
+      }
+      const result = await runCliAgainstSuccessfulProvider(address.port, {
+        homeDir,
+        widgets: true,
+        widgetsAuto: true,
+      });
+
+      expect(result.exitCode, result.stderr).toBe(0);
+      const parsed = JSON.parse(result.stdout);
+      expect(parsed.result).toBe(table);
+      expect(parsed.widgetHtml).toContain('<table');
+      expect(parsed.widgetHtml).toContain('Alpha');
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+      fs.rmSync(homeDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+    }
+  }, 90_000);
 
   it('returns non-zero when the provider failure is rendered as an assistant error', async () => {
     const server = http.createServer((req, res) => {
