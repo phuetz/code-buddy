@@ -106,8 +106,18 @@ describe('autoWidget', () => {
     const generate = jest.fn(async () => '<!doctype html><html><body>generated</body></html>');
     const result = await autoWidget(answer, [{ data: { type: 'novel', value: 1 } }], { env, generate });
     expect(result.answer).toBe(answer);
-    expect(result.widgetHtml).toBeNull();
     expect(generate).not.toHaveBeenCalled();
+    expect(result.widgetHtml).toContain('novel');
+  });
+
+  it('renders structured payload kinds without WIDGETS_AUTOGEN', async () => {
+    const env = enabledEnv();
+    const generate = jest.fn();
+    const result = await autoWidget(answer, [{ data: { type: 'sales', total: 42 } }], { env, generate });
+    expect(generate).not.toHaveBeenCalled();
+    expect(result.widgetHtml).toContain('<table');
+    expect(result.widgetHtml).toContain('sales');
+    expect(result.widgetHtml).toContain('42');
   });
 
   it('never returns HTML containing a script', async () => {

@@ -6,7 +6,7 @@
  * @module widgets/auto-widget
  */
 import { logger } from '../utils/logger.js';
-import { resolveOrGenerate, type ResolveOrGenerateDeps } from './widget-engine.js';
+import { type ResolveOrGenerateDeps } from './widget-engine.js';
 import {
   listAuthoredWidgetRegistry,
   recordAuthoredWidgetUse,
@@ -80,6 +80,24 @@ function renderMarkdownTableWidget(
   return renderWidgetDocument(fragment, theme);
 }
 
+function renderStructuredPayloadWidget(
+  candidate: Extract<WidgetCandidate, { kind: 'payload' }>,
+  theme?: WidgetTheme,
+): string {
+  const record = candidate.data && typeof candidate.data === 'object' && !Array.isArray(candidate.data)
+    ? candidate.data as Record<string, unknown>
+    : { value: candidate.data };
+  const rows = Object.entries(record)
+    .map(([key, value]) => `<tr><th scope="row">${escapeHtml(key)}</th><td>${escapeHtml(String(value))}</td></tr>`)
+    .join('');
+  const fragment =
+    '<style>table{border-collapse:collapse;width:100%;font:14px system-ui,sans-serif}' +
+    'th,td{border:1px solid #cbd5e1;padding:7px 9px;text-align:left}' +
+    'th{background:#e2e8f0;font-weight:700}td{background:#fff}' +
+    `caption{text-align:left;font-weight:700;margin-bottom:8px}</style>` +
+    `<table><caption>${escapeHtml(candidate.dataType)}</caption><tbody>${rows}</tbody></table>`;
+  return renderWidgetDocument(fragment, theme);
+}
 /**
  * Detect and render at most one automatic widget. All failures are fail-open:
  * callers always receive the exact original answer and no exception.
@@ -126,27 +144,12 @@ export async function autoWidget(
       return safeResult(answer, candidate);
     }
 
-    // Markdown tables have no external data source or authored template. They
-    // are safe to render directly once the matcher has applied its length and
-    // three-row substantive-table gates.
+    // Structured kinds (tables and typed payloads) have deterministic renderers.
+    // They must not sit behind WIDGETS_AUTOGEN, which is only for LLM generation.
     if (candidate.kind === 'table') {
       return { answer, widgetHtml: renderMarkdownTableWidget(candidate, deps.theme), candidate };
     }
-
-    // LLM generation has its own explicit opt-in in addition to both base gates.
-    if (env.CODEBUDDY_WIDGETS_AUTOGEN !== 'true') return safeResult(answer, candidate);
-    const generate = deps.generate ?? ((data, generateDeps) => resolveOrGenerate(data, generateDeps));
-    const html = await generate(candidate.data, {
-      env,
-      ...(deps.theme ? { theme: deps.theme } : {}),
-      ...(deps.propose ? { propose: deps.propose } : {}),
-    });
-    if (!scriptFree(html)) return safeResult(answer, candidate);
-
-    // resolveOrGenerate persists a newly accepted proposal with dataTypes=[kind].
-    const generated = matchAuthoredWidget(candidate.dataType, listAuthoredWidgetRegistry(env));
-    if (generated) recordAuthoredWidgetUse(generated.kind, env, deps.now?.() ?? Date.now());
-    return { answer, widgetHtml: html, candidate };
+    return { answer, widgetHtml: renderStructuredPayloadWidget(candidate, deps.theme), candidate };
   } catch (error) {
     logger.debug('[auto-widget] pipeline failed; preserving text response', {
       dataType: candidate?.dataType,
