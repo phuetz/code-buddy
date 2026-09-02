@@ -54,6 +54,10 @@ import {
   type ConversationCueHandle,
   type ConversationCuePlayer,
 } from './conversation-cues.js';
+import {
+  resolveTurnDetectorDecision,
+  type TurnDecisionProvider,
+} from './turn-detector.js';
 
 // Re-exported for back-compat: callers + tests import these from speech-reaction.
 export { resolveSpeechRecognitionEngine };
@@ -116,6 +120,8 @@ export interface SpeechReactionOptions {
   onConversationCue?: ConversationCuePlayer;
   /** Stateless name/address probe for empty-final repair; must not invoke an LLM. */
   isAddressed?: (text: string) => boolean | Promise<boolean>;
+  /** Optional raw-free LiveKit v1-mini decision supplied by the local ear bridge. */
+  turnDecisionProvider?: TurnDecisionProvider;
   /** Interrupt the active think/speak turn when an explicit barge-in transcript arrives. */
   onBargeIn?: (text: string, interruptedTurnId?: string) => void;
   /** Interrupt the active spoken turn directly from an acoustic speech_start event. */
@@ -2316,6 +2322,17 @@ export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => v
         turnId = heldLiveTurn.turnId ?? turnId;
         heldLiveTurn = null;
       }
+      let turnDecision: ReturnType<typeof resolveTurnDetectorDecision>;
+      try {
+        turnDecision = resolveTurnDetectorDecision(
+          { text, payload: (p.payload as Record<string, unknown> | undefined) ?? {} },
+          options.turnDecisionProvider,
+        );
+      } catch (error) {
+        logger.warn(
+          `[speech] LiveKit turn decision unavailable: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
       // Smart Turn has already considered prosody and the complete audio. The
       // text heuristic is only a fail-open fallback for VAD-only sources.
       const conversationalEndSilenceMs = resolveConversationalTurnEndSilenceMs(text, env);
@@ -2324,9 +2341,14 @@ export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => v
         ? incompleteTurnHoldMs
         : Math.max(0, conversationalEndSilenceMs - endpointWaitMs);
       if (
-        !livePayload?.turnDetector &&
+        // CONV1 shortened the hold (conversational end-silence minus the endpoint already waited);
+        // PILE-C lets an opt-in turn detector decide before the text heuristic (fail-open).
         remainingIncompleteHoldMs > 0 &&
-        isLikelyIncompleteVoiceTurn(text)
+        (turnDecision?.endOfTurn === false || (
+          turnDecision?.endOfTurn !== true &&
+          !livePayload?.turnDetector &&
+          isLikelyIncompleteVoiceTurn(text)
+        ))
       ) {
         const timer = setTimeout(() => {
           const held = heldLiveTurn;
