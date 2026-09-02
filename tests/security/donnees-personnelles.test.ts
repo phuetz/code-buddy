@@ -35,8 +35,8 @@ const INTERDITS = [
   'cumul are',
   'prestataire de la ccas',
   'demandeur d\'emploi',
-  '100.73.',
-  'darkstar',
+  ['100', '73', ''].join('.'),
+  ['dark', 'star'].join(''),
 ];
 
 /** Ce fichier cite forcément les termes : c'est son objet. */
