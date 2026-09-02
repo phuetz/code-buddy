@@ -341,7 +341,8 @@ router.get(
       checks.provider.ready &&
       checks.database.ready &&
       checks.memory.ready &&
-      (checks.sensoryBridge?.ready ?? true);
+      (checks.sensoryBridge?.ready ?? true) &&
+      (checks.grokApi?.ready ?? true);
 
     const response = {
       ready: criticalPassing,
