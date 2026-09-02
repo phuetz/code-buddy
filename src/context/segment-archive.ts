@@ -161,6 +161,7 @@ export class SegmentArchive {
         .filter((record): record is ArchivedSegment => record !== null && record.sessionId === sessionId)
         .sort((left, right) => right.ts.localeCompare(left.ts));
     } catch (error) {
+      if (error instanceof SegmentIntegrityError) throw error;
       logger.warn('Failed to list context segment archive', {
         sessionId,
         error: error instanceof Error ? error.message : String(error),
@@ -180,6 +181,7 @@ export class SegmentArchive {
   private readRecord(filePath: string): ArchivedSegment | null {
     const parsed = JSON.parse(fs.readFileSync(filePath, 'utf8')) as unknown;
     if (!this.isArchivedSegment(parsed)) return null;
+    this.assertRecordIntegrity(parsed, parsed.segmentId);
     return parsed;
   }
 
