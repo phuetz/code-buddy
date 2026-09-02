@@ -1254,12 +1254,15 @@ async function processPromptHeadless(
     } else {
       // Default: json — structured output goes to stdout (pipeable).
       const { autoWidget } = await import('./widgets/auto-widget.js');
-      const widget = await autoWidget(
-        resultText,
-        chatEntries
-          .filter((entry) => entry.type === 'tool_result')
-          .map((entry) => entry.toolResult ?? { output: entry.content }),
-      );
+      const widgetPayloads = chatEntries
+        .filter((entry) => entry.type === 'tool_result')
+        .map((entry) => entry.toolResult ?? { output: entry.content });
+      const widget = await autoWidget(resultText, widgetPayloads);
+      const { detectWidgetable } = await import('./widgets/widget-matcher.js');
+      // `data` is a public structured-output field even when automatic HTML
+      // rendering is disabled. The matcher is pure and does not open the
+      // registry; typed payloads also bypass the table length gate.
+      const candidate = widget.candidate ?? detectWidgetable(resultText, widgetPayloads);
       cli.stdout(JSON.stringify({
         result: resultText,
         cost: {
@@ -1267,6 +1270,7 @@ async function processPromptHeadless(
         },
         model: usedModel,
         messages,
+        ...(candidate ? { data: candidate.data } : {}),
         ...(widget.widgetHtml ? { widgetHtml: widget.widgetHtml } : {}),
       }));
     }

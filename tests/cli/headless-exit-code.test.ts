@@ -440,6 +440,14 @@ describe('headless CLI exit codes', () => {
       expect(result.exitCode, result.stderr).toBe(0);
       const parsed = JSON.parse(result.stdout);
       expect(parsed.result).toBe(table);
+      expect(parsed.data).toMatchObject({
+        type: 'table',
+        headers: [{ label: 'Nom' }, { label: 'Score' }],
+        rows: [
+          { cells: [{ value: 'Alpha' }, { value: '98' }] },
+          { cells: [{ value: 'Beta' }, { value: '91' }] },
+        ],
+      });
       expect(parsed.widgetHtml).toContain('<table');
       expect(parsed.widgetHtml).toContain('Alpha');
     } finally {

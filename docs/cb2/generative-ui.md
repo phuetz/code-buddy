@@ -29,6 +29,18 @@ Cette troisième variable est désactivée par défaut. La génération réutili
 proposer existant, puis le gate fail-closed et la persistance
 `authored-<kind>/widget.html`; elle ne contourne jamais la validation authored.
 
+## Contrat JSON headless
+
+Avec `--output json` (ou `--output-format json`), la réponse expose le payload
+structuré détecté dans le champ optionnel `data`, par exemple
+`{ "type": "stock", "symbol": "AAPL", "price": 324.85 }`. Ce champ est
+indépendant du rendu HTML et reste disponible pour les consommateurs
+machine-à-machine, y compris quand la réponse texte est courte. Quand
+`CODEBUDDY_WIDGETS=true` et `CODEBUDDY_WIDGETS_AUTO=true`, le même objet peut
+également contenir le document complet `widgetHtml`. Le champ `widgetHtml` est
+absent lorsqu’aucun rendu automatique n’a été demandé ou lorsqu’aucun widget ne
+peut être rendu.
+
 ## Registre et sélection
 
 `meta.json` accepte désormais `dataTypes: string[]`, `usedCount` et
