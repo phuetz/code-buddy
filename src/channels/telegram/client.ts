@@ -36,6 +36,7 @@ import { TelegramProFormatter } from './pro-formatter.js';
 
 const TELEGRAM_API_BASE = 'https://api.telegram.org';
 const TELEGRAM_UPLOAD_LIMIT = 50 * 1024 * 1024;
+const VOICE_TRANSCRIPTION_FAILED = '[transcription vocale échouée]';
 
 /**
  * Telegram channel implementation
@@ -1038,6 +1039,19 @@ export class TelegramChannel extends BaseChannel {
    * this is what lets you *talk* to the bot. No-op (and never throws) when there
    * is already text, no audio attachment, or local Whisper isn't installed.
    */
+  private async markVoiceTranscriptionFailed(message: InboundMessage): Promise<void> {
+    message.content = VOICE_TRANSCRIPTION_FAILED;
+    const result = await this.send({
+      channelId: message.channel.id,
+      content: "Je n'ai pas pu transcrire ce message vocal. Envoie-le en texte, s'il te plaît.",
+    });
+    if (!result.success) {
+      logger.warn(
+        `[telegram] failed to notify user of voice transcription failure: ${result.error ?? 'unknown error'}`,
+      );
+    }
+  }
+
   private async maybeTranscribeVoice(message: InboundMessage): Promise<void> {
     if (message.content && message.content.trim()) return;
     const audio = message.attachments?.find((a) => a.type === 'voice' || a.type === 'audio');
@@ -1048,6 +1062,7 @@ export class TelegramChannel extends BaseChannel {
         logger.warn(
           '[telegram] voice note received but local Whisper is unavailable — install the ai-stack voice venv (faster-whisper) to enable speech',
         );
+        await this.markVoiceTranscriptionFailed(message);
         return;
       }
       const fileUrl = await this.getFileUrl(audio.url);
@@ -1065,6 +1080,8 @@ export class TelegramChannel extends BaseChannel {
           message.content = text.trim();
           message.contentType = 'text';
           logger.info(`[telegram] voice note transcribed → "${message.content.slice(0, 60)}…"`);
+        } else {
+          await this.markVoiceTranscriptionFailed(message);
         }
       } finally {
         await fs.unlink(tmp).catch(() => undefined);
@@ -1073,6 +1090,7 @@ export class TelegramChannel extends BaseChannel {
       logger.warn(
         `[telegram] voice transcription failed: ${err instanceof Error ? err.message : String(err)}`,
       );
+      await this.markVoiceTranscriptionFailed(message);
     }
   }
 

@@ -526,5 +526,39 @@ describe('TelegramChannel', () => {
       expect(message.attachments).toHaveLength(1);
       expect(message.attachments[0].type).toBe('location');
     });
+
+    it('D7: transcription vocale échouée transmet un contenu explicite et signale l\'utilisateur', async () => {
+      const messageSpy = jest.fn();
+      channel.on('message', messageSpy);
+      mockFetch.mockImplementation(async (url: string | URL) => {
+        const href = String(url);
+        if (href.includes('sendMessage')) {
+          return {
+            ok: true,
+            json: async () => ({ ok: true, result: { message_id: 77 } }),
+          };
+        }
+        return {
+          ok: false,
+          status: 500,
+          json: async () => ({ ok: false, description: 'download failed', error_code: 500 }),
+        };
+      });
+
+      await channel.handleWebhook({
+        update_id: 9,
+        message: {
+          message_id: 9,
+          date: Math.floor(Date.now() / 1000),
+          chat: { id: 42, type: 'private' },
+          from: { id: 1, is_bot: false, first_name: 'Test' },
+          voice: { file_id: 'voice-1', file_unique_id: 'v1', duration: 3 },
+        },
+      });
+
+      expect(messageSpy).toHaveBeenCalled();
+      expect(messageSpy.mock.calls[0][0].content).toBe('[transcription vocale échouée]');
+      expect(mockFetch.mock.calls.some((call) => String(call[0]).includes('sendMessage'))).toBe(true);
+    });
   });
 });
