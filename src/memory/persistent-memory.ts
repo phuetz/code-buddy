@@ -7,6 +7,7 @@ import { Fact, FactCategory, FactsExtractionError } from "./facts-memory.js";
 import { logger } from "../utils/logger.js";
 import { shouldWriteProjectRuntimeFiles } from "../utils/runtime-flags.js";
 import { decideForgets, type ForgetCandidate, type ForgettingConfig } from "./memory-forgetting.js";
+import { withSessionLock } from "../persistence/session-lock.js";
 
 function mapMemoryCategoryToFactCategory(cat: MemoryCategory): FactCategory {
   switch (cat) {
@@ -186,6 +187,47 @@ function cloneMemoryMap(memories: Map<string, Memory>): Map<string, Memory> {
   ]));
 }
 
+function memoryEquals(left: Memory | undefined, right: Memory | undefined): boolean {
+  if (!left || !right) return left === right;
+  const leftTags = left.tags ?? [];
+  const rightTags = right.tags ?? [];
+  return left.key === right.key
+    && left.value === right.value
+    && left.category === right.category
+    && left.createdAt.getTime() === right.createdAt.getTime()
+    && left.updatedAt.getTime() === right.updatedAt.getTime()
+    && left.lastAccessedAt?.getTime() === right.lastAccessedAt?.getTime()
+    && left.accessCount === right.accessCount
+    && leftTags.length === rightTags.length
+    && leftTags.every((tag, index) => tag === rightTags[index]);
+}
+
+function mergeMemoryMaps(
+  diskMemories: Map<string, Memory>,
+  localMemories: Map<string, Memory>,
+  persistedSnapshot: Map<string, Memory>,
+): Map<string, Memory> {
+  const merged = cloneMemoryMap(diskMemories);
+
+  // Apply only local additions/updates. Unchanged entries were loaded from
+  // the same snapshot and must not overwrite a newer process' changes.
+  for (const [key, memory] of localMemories) {
+    if (!memoryEquals(memory, persistedSnapshot.get(key))) {
+      merged.set(key, cloneMemoryMap(new Map([[key, memory]])).get(key)!);
+    }
+  }
+
+  // Propagate local deletions only when the disk entry is still the version
+  // this manager loaded. A concurrent update wins over a stale deletion.
+  for (const [key, persisted] of persistedSnapshot) {
+    if (!localMemories.has(key) && memoryEquals(merged.get(key), persisted)) {
+      merged.delete(key);
+    }
+  }
+
+  return merged;
+}
+
 const MEMORY_TEMPLATE = `# Code Buddy Memory
 
 This file stores persistent memory for the Code Buddy agent.
@@ -218,6 +260,8 @@ export class PersistentMemoryManager extends EventEmitter {
   private config: MemoryConfig;
   private projectMemories: Map<string, Memory> = new Map();
   private userMemories: Map<string, Memory> = new Map();
+  /** Last disk snapshot used to distinguish local changes from stale state. */
+  private persistedMemorySnapshots: Map<MemoryScope, Map<string, Memory>> = new Map();
   /** Audit 2026-09-02 — garde anti-amnésie : scopes dont le chargement a
    * échoué pour une raison AUTRE que l'absence du fichier. Tant qu'un scope
    * est dégradé, saveMemories refuse la réécriture destructrice (il retente
@@ -307,9 +351,11 @@ export class PersistentMemoryManager extends EventEmitter {
         throw new Error('non-canonical memory markdown contains no recoverable entries');
       }
 
+      memories.clear();
       for (const memory of parsed) {
         memories.set(memory.key, memory);
       }
+      this.persistedMemorySnapshots.set(scope, cloneMemoryMap(memories));
       this.degradedScopes.delete(scope);
     } catch (error) {
       // File doesn't exist -> start fresh (légitime). Toute AUTRE erreur
@@ -321,6 +367,8 @@ export class PersistentMemoryManager extends EventEmitter {
         logger.warn(
           `[persistent-memory] could not load ${scope} memory (${reason}) — destructive saves are blocked until a successful reload`,
         );
+      } else {
+        this.persistedMemorySnapshots.set(scope, new Map());
       }
     }
   }
@@ -1242,13 +1290,40 @@ export class PersistentMemoryManager extends EventEmitter {
       }
     }
 
-    // Group by category
-    const byCategory = new Map<MemoryCategory, Memory[]>();
-    for (const memory of memories.values()) {
-      const list = byCategory.get(memory.category) || [];
-      list.push(memory);
-      byCategory.set(memory.category, list);
-    }
+    await withSessionLock(filePath, async () => {
+      const diskMemories = new Map<string, Memory>();
+      try {
+        const diskContent = await fs.readFile(filePath, "utf-8");
+        const parsed = this.parseMemoryFile(diskContent);
+        if (
+          parsed.length === 0 &&
+          diskContent.trim() !== '' &&
+          !this.isCanonicalEmptyMemoryFile(diskContent)
+        ) {
+          throw new Error('non-canonical memory markdown contains no recoverable entries');
+        }
+        for (const memory of parsed) diskMemories.set(memory.key, memory);
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException)?.code !== 'ENOENT') {
+          throw new MemoryPersistenceError(
+            scope,
+            `could not reload ${scope} memory before save: ${(error as Error)?.message ?? String(error)}`,
+          );
+        }
+      }
+
+      const persistedSnapshot = this.persistedMemorySnapshots.get(scope) ?? new Map();
+      const mergedMemories = mergeMemoryMaps(diskMemories, memories, persistedSnapshot);
+      memories.clear();
+      for (const [key, memory] of mergedMemories) memories.set(key, memory);
+
+      // Group by category
+      const byCategory = new Map<MemoryCategory, Memory[]>();
+      for (const memory of memories.values()) {
+        const list = byCategory.get(memory.category) || [];
+        list.push(memory);
+        byCategory.set(memory.category, list);
+      }
 
     // Generate markdown
     let content = `# Code Buddy Memory\n\n`;
@@ -1321,8 +1396,16 @@ export class PersistentMemoryManager extends EventEmitter {
       // Ignored
     }
 
-    await fs.ensureDir(path.dirname(filePath));
-    await fs.writeFile(filePath, content);
+      await fs.ensureDir(path.dirname(filePath));
+      const temporaryPath = `${filePath}.tmp.${process.pid}.${Math.random().toString(36).slice(2)}`;
+      try {
+        await fs.writeFile(temporaryPath, content);
+        await fs.rename(temporaryPath, filePath);
+        this.persistedMemorySnapshots.set(scope, cloneMemoryMap(memories));
+      } finally {
+        await fs.remove(temporaryPath).catch(() => undefined);
+      }
+    });
   }
 
   /**

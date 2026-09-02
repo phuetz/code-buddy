@@ -33,6 +33,15 @@ Pour chaque trou : preuve rouge, diagnostic, correctif minimal, preuve verte, te
 - Vérifications avant commit : `npm run typecheck` — **exit 0** (racine + config GPU) ; ESLint ciblé sur les fichiers touchés — **exit 0**.
 - Commit : à compléter.
 
+### Trou 6 — course entre processus sur le fichier mémoire
+
+- Test relu : `tests/memory/revue-gemini-concurrency.test.ts`.
+- Rouge (`npx vitest run tests/memory/revue-gemini-concurrency.test.ts`, exit 1) : le second snapshot écrase le premier ; `valueA` vaut `null` au lieu de `Token de session critique`.
+- Correctif : `saveMemories` recharge le fichier sous `withSessionLock`, fusionne seulement les ajouts/modifications locales depuis le dernier snapshot, protège les suppressions contre un écrasement concurrent, puis écrit via fichier temporaire + renommage atomique. Le snapshot persisté est mis à jour uniquement après renommage réussi.
+- Vert ciblé : `npx vitest run tests/memory/revue-gemini-concurrency.test.ts tests/memory/persistent-memory.test.ts tests/memory/memory-manager.test.ts` — **2 fichiers trouvés, 17 tests passés** ; `tests/memory/memory-manager.test.ts` n’existe pas dans ce clone et a été ignoré par Vitest.
+- Vérifications : `npm run typecheck` — **exit 0** ; ESLint ciblé — **exit 0**, avec 2 avertissements `no-explicit-any` déjà présents dans le test rouge.
+- Commit : à compléter.
+
 ## Bilan final
 
 À compléter — dix lignes maximum.
