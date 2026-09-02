@@ -278,6 +278,17 @@ class AsyncQueue<T> {
     }
   }
 
+  /** Wait for the head item WITHOUT removing it (look-ahead), or `null` once closed/stopped. */
+  async peek(stop: () => boolean): Promise<T | null> {
+    while (true) {
+      if (stop()) return null;
+      const head = this.items[0];
+      if (head !== undefined) return head;
+      if (this.closed) return null;
+      await new Promise<void>((r) => this.waiters.push(r));
+    }
+  }
+
   /** Wait until `depth` queued items are ready, the queue closes, or the timeout expires. */
   async waitForDepth(depth: number, timeoutMs: number, stop: () => boolean): Promise<void> {
     if (depth <= 0 || timeoutMs <= 0) return;
@@ -451,6 +462,19 @@ export async function streamToSpeech(params: StreamToSpeechParams): Promise<Stre
           if (text === null) break;
           let didPlay = false;
           if (nativeStreamHealthy) {
+            // Look-ahead: while this sentence streams and plays, open the next one's
+            // stream (engines exposing `prefetch` only — ElevenLabs; Pocket is
+            // single-request), so the inter-sentence gap is the 280 ms breath and
+            // not a full TTS round trip. Fire-and-forget, never throws.
+            const prefetch = params.streamSpeak!.prefetch;
+            if (prefetch) {
+              const current = text;
+              void sentenceQ.peek(stop).then((next) => {
+                if (next !== null && next !== current && !stop() && nativeStreamHealthy) {
+                  prefetch(next, signal ? { signal } : {});
+                }
+              }).catch(() => undefined);
+            }
             try {
               didPlay = await params.streamSpeak!(text, {
                 ...(signal ? { signal } : {}),

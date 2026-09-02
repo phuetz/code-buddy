@@ -255,7 +255,16 @@ export interface StreamSpeakOptions extends VoiceStepOptions {
   onTtsNormalizationFactor?: (factor: number) => void;
 }
 /** Synthesize and play one text segment progressively; false requests the WAV fallback. */
-export type StreamSpeakFn = (text: string, opts?: StreamSpeakOptions) => Promise<boolean>;
+export type StreamSpeakFn = ((text: string, opts?: StreamSpeakOptions) => Promise<boolean>) & {
+  /**
+   * Optional look-ahead: open the network/billed stream of the NEXT segment while the
+   * current one is still playing, so the gap between two sentences is the 280 ms breath
+   * and not a full TTS round trip (measured at 1.3–1.4 s per sentence on 2026-09-02, the
+   * "voix hachée"). Only engines that accept concurrent requests expose it (ElevenLabs);
+   * Pocket is single-request and never does. Never throws; a stale prefetch is cancelled.
+   */
+  prefetch?: (text: string, opts?: { signal?: AbortSignal }) => void;
+};
 
 export interface VoiceReplyTiming {
   mode: 'streamed' | 'blocking' | 'silent' | 'interrupted' | 'failed';
@@ -2042,10 +2051,13 @@ function makeDefaultSynth(
         return { wav: wavPath, cacheable: true };
       }
       if (opts.signal?.aborted) throw new Error('TTS synthesis was interrupted');
+      // Degrade to the local engine below (Pocket by default, Piper on request)
+      // instead of throwing: the throw that lived here silenced the phrase
+      // outright whenever the ElevenLabs stream was refused — the "ne me parle
+      // plus" of 2026-09-02 — while the documented contract promises an
+      // automatic local fallback without interrupting speech.
       selectedEngine = resolveElevenLabsFallbackEngine(process.env);
-      if (selectedEngine === 'pocket') {
-        throw new Error('ElevenLabs and Pocket TTS synthesis failed');
-      }
+      logger.warn(`[voice] ElevenLabs synthesis failed — falling back to ${selectedEngine} for this phrase`);
     }
     if (selectedEngine === 'voicebox') {
       const { synthesizeVoiceboxWav } = await import('../voice/voicebox-tts.js');
@@ -2289,7 +2301,78 @@ function makeDefaultStreamSpeak(
 
   let turnFactor: number | undefined;
 
-  return async (text, opts = {}): Promise<boolean> => {
+  // Look-ahead slots (ElevenLabs only). A prefetched segment is either a paid
+  // WAV already copied from the library/cache, or an HTTP stream whose body is
+  // arriving while the previous sentence plays. Keyed by the prepared text so
+  // the later `streamSpeak(text)` call finds it; anything older than the TTL
+  // (a turn that was interrupted before reaching that sentence) is cancelled.
+  interface PrefetchedSegment {
+    ready: Promise<{ wav?: string; stream?: ReadableStream<Uint8Array> | null }>;
+    createdAt: number;
+    cancel: () => void;
+  }
+  const prefetched = new Map<string, PrefetchedSegment>();
+  const PREFETCH_TTL_MS = 45_000;
+  const purgeStalePrefetches = (): void => {
+    const now = Date.now();
+    for (const [key, entry] of prefetched) {
+      if (now - entry.createdAt > PREFETCH_TTL_MS) {
+        prefetched.delete(key);
+        entry.cancel();
+      }
+    }
+  };
+  const takePrefetched = (key: string): PrefetchedSegment | undefined => {
+    const entry = prefetched.get(key);
+    if (entry) prefetched.delete(key);
+    return entry;
+  };
+  const prefetch = (text: string, opts: { signal?: AbortSignal } = {}): void => {
+    if (engine !== 'elevenlabs' || opts.signal?.aborted) return;
+    const prepared = prepareSpeech(text);
+    if (!prepared || prefetched.has(prepared)) return;
+    purgeStalePrefetches();
+    const cacheVoice = resolveBaseCacheVoice(engine);
+    let cancelled = false;
+    let opened: ReadableStream<Uint8Array> | null = null;
+    let wavPath: string | undefined;
+    const entry: PrefetchedSegment = {
+      createdAt: Date.now(),
+      cancel: () => {
+        cancelled = true;
+        if (opened) void opened.cancel().catch(() => undefined);
+        if (wavPath) void unlink(wavPath).catch(() => undefined);
+      },
+      ready: (async () => {
+        const cached = await lookupPaidElevenLabsWav(prepared, cacheVoice);
+        if (cached) {
+          wavPath = cached;
+          return { wav: cached };
+        }
+        if (cancelled) return {};
+        const { openElevenLabsAudioStream } = await import('../voice/local-tts.js');
+        const stream = await openElevenLabsAudioStream(prepared, process.env, {
+          ...(opts.signal ? { signal: opts.signal } : {}),
+          onPcmComplete: (pcm) => {
+            void storeElevenLabsStreamInTtsCache(prepared, cacheVoice, pcm, turnFactor);
+          },
+        });
+        if (cancelled) {
+          if (stream) void stream.cancel().catch(() => undefined);
+          return {};
+        }
+        opened = stream;
+        return { stream };
+      })().catch(() => ({})),
+    };
+    prefetched.set(prepared, entry);
+    opts.signal?.addEventListener('abort', () => {
+      if (prefetched.get(prepared) === entry) prefetched.delete(prepared);
+      entry.cancel();
+    }, { once: true });
+  };
+
+  const speak = async (text: string, opts: StreamSpeakOptions = {}): Promise<boolean> => {
     const signal = opts.signal;
     if (signal?.aborted) return false;
     const player = await playerPromise;
@@ -2303,18 +2386,35 @@ function makeDefaultStreamSpeak(
     const cacheVoice = opts.delivery && engine === 'voicebox'
       ? `${baseCacheVoice}:${voiceRendererDeliveryInstruction(opts.delivery)}`
       : baseCacheVoice;
-    // ElevenLabs is billed per character: a phrase already paid for — in the
-    // 6 400+ entry permanent library or in the TTS cache — must NEVER reopen
-    // the network stream. Local engines keep the narrower backchannel-only
-    // lookup (a fresh local synth is free and streams faster than a file copy).
-    const cachedWav = engine === 'elevenlabs'
-      ? await lookupPaidElevenLabsWav(text, cacheVoice)
-      : await lookupInstantBackchannelWav(
-          text,
-          process.env,
-          undefined,
-          cacheVoice,
-        );
+    // A look-ahead opened for this exact sentence is consumed first: its paid
+    // copy or its already-arriving stream. A prefetch that failed to open falls
+    // through to the regular lookup + open below (one honest retry).
+    const lookahead = engine === 'elevenlabs' ? takePrefetched(text) : undefined;
+    const lookaheadReady = lookahead ? await lookahead.ready : undefined;
+    if (signal?.aborted) {
+      lookahead?.cancel();
+      return false;
+    }
+    let prefetchedStream: ReadableStream<Uint8Array> | null = null;
+    let cachedWav: string | null = null;
+    if (lookaheadReady?.wav) {
+      cachedWav = lookaheadReady.wav;
+    } else if (lookaheadReady?.stream) {
+      prefetchedStream = lookaheadReady.stream;
+    } else {
+      // ElevenLabs is billed per character: a phrase already paid for — in the
+      // 6 400+ entry permanent library or in the TTS cache — must NEVER reopen
+      // the network stream. Local engines keep the narrower backchannel-only
+      // lookup (a fresh local synth is free and streams faster than a file copy).
+      cachedWav = engine === 'elevenlabs'
+        ? await lookupPaidElevenLabsWav(text, cacheVoice)
+        : await lookupInstantBackchannelWav(
+            text,
+            process.env,
+            undefined,
+            cacheVoice,
+          );
+    }
     if (cachedWav) {
       try {
         // The player starts reading a ready local WAV immediately: no HTTP,
@@ -2341,7 +2441,7 @@ function makeDefaultStreamSpeak(
     }
 
     const preparedText = text;
-    const stream = engine === 'voicebox'
+    const stream = prefetchedStream ?? (engine === 'voicebox'
       ? await (async () => {
           const { openVoiceboxAudioStream } = await import('../voice/voicebox-tts.js');
           return openVoiceboxAudioStream(text, process.env, {
@@ -2371,7 +2471,7 @@ function makeDefaultStreamSpeak(
         : await (async () => {
             const { openPocketAudioStream } = await import('../voice/local-tts.js');
             return openPocketAudioStream(text, process.env, { signal });
-          })();
+          })());
     if (!stream || signal?.aborted) return false;
 
     const child = spawn(player.cmd, player.stdinArgs, { stdio: ['pipe', 'ignore', 'ignore'] });
@@ -2511,6 +2611,7 @@ function makeDefaultStreamSpeak(
       }
     }
   };
+  return engine === 'elevenlabs' ? Object.assign(speak, { prefetch }) : speak;
 }
 
 /** Default speak: play a WAV with the first available local player, blocking until done.
@@ -3064,6 +3165,11 @@ export function makeVoiceReply(options: VoiceReplyOptions = {}): VoiceReplyHandl
             }
           }
       : undefined;
+    // The look-ahead seam must survive the timing wrapper, or the pipeline
+    // below never sees it and every sentence pays a full round trip again.
+    if (timedStreamSpeak && nativeStreamSpeak?.prefetch) {
+      timedStreamSpeak.prefetch = nativeStreamSpeak.prefetch;
+    }
     const speakSemanticCorrection = async (): Promise<string> => {
       const pending = semanticCorrectionPromise;
       semanticCorrectionPromise = undefined;

@@ -215,45 +215,90 @@ function warnCapOnce(
   );
 }
 
-function reserveBudget(
+const LEDGER_LOCK_RETRY_MS = 25;
+
+/**
+ * Run `fn` under the ledger lock, retrying briefly while another writer holds
+ * it. The critical sections below are a read + a write of a tiny JSON file
+ * (milliseconds), so a short wait replaces the old fail-fast refusal.
+ */
+async function withLedgerLock<T>(
+  path: string,
+  now: Date,
+  attempts: number,
+  fn: () => T
+): Promise<{ ok: true; value: T } | { ok: false }> {
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    const lock = acquireLedgerLock(path, now);
+    if (lock) {
+      try {
+        return { ok: true, value: fn() };
+      } finally {
+        lock.release();
+      }
+    }
+    await new Promise((resolve) => setTimeout(resolve, LEDGER_LOCK_RETRY_MS));
+  }
+  return { ok: false };
+}
+
+/**
+ * Reserve `characters` against the monthly cap. The ledger lock is held ONLY
+ * while the counter is read and written — never across the network request.
+ * Until 2026-09-02 the lock lived for the whole HTTP head (up to 6 s): any
+ * overlapping synthesis in the same process (the next sentence's look-ahead, a
+ * Telegram voice note, a reminder) was refused as "compteur occupé" in
+ * `debug`, surfaced upstream as "budget, clé ou réseau", and the phrase fell
+ * to the local engine — or to silence. In-flight characters are tracked
+ * in-process so concurrent reservations still add up against the cap.
+ */
+async function reserveBudget(
   characters: number,
   cap: number,
   path: string,
   now: Date
-): BudgetReservation | null {
-  const lock = acquireLedgerLock(path, now);
-  if (!lock) {
-    logger.debug('[elevenlabs-voice] compteur occupé; repli sur la voix locale');
+): Promise<BudgetReservation | null> {
+  let refusal: string | null = null;
+  let reservationKey = '';
+  const reserved = await withLedgerLock(path, now, 8, () => {
+    const usage = loadCurrentUsage(path, now);
+    if (!usage) {
+      refusal = 'compteur indisponible';
+      return false;
+    }
+    reservationKey = `${path}:${usage.month}`;
+    if (unwritableLedgers.has(reservationKey)) {
+      refusal = 'compteur non inscriptible';
+      return false;
+    }
+    const inFlight = inFlightCharacters.get(reservationKey) ?? 0;
+    if (usage.characters + inFlight + characters > cap) {
+      warnCapOnce(path, usage, now);
+      refusal = 'plafond mensuel';
+      return false;
+    }
+    // Confirm the ledger is writable before spending any credit. This writes the
+    // same count, so failed HTTP syntheses are still never charged locally.
+    usage.updatedAt = now.toISOString();
+    if (!writeUsage(path, usage)) {
+      unwritableLedgers.add(reservationKey);
+      refusal = 'compteur non inscriptible';
+      return false;
+    }
+    inFlightCharacters.set(reservationKey, inFlight + characters);
+    return true;
+  });
+  if (!reserved.ok) {
+    logger.warn('[elevenlabs-voice] compteur verrouillé par un autre processus; repli sur la voix locale');
     return null;
   }
-  const usage = loadCurrentUsage(path, now);
-  if (!usage) {
-    lock.release();
-    logger.debug('[elevenlabs-voice] compteur indisponible; repli sur la voix locale');
-    return null;
-  }
-  const reservationKey = `${path}:${usage.month}`;
-  if (unwritableLedgers.has(reservationKey)) {
-    lock.release();
-    return null;
-  }
-  const inFlight = inFlightCharacters.get(reservationKey) ?? 0;
-  if (usage.characters + inFlight + characters > cap) {
-    warnCapOnce(path, usage, now);
-    lock.release();
-    return null;
-  }
-  // Confirm the ledger is writable before spending any credit. This writes the
-  // same count, so failed HTTP syntheses are still never charged locally.
-  usage.updatedAt = now.toISOString();
-  if (!writeUsage(path, usage)) {
-    unwritableLedgers.add(reservationKey);
-    lock.release();
-    logger.debug('[elevenlabs-voice] compteur non inscriptible; repli sur la voix locale');
+  if (!reserved.value) {
+    if (refusal !== 'plafond mensuel') {
+      logger.warn(`[elevenlabs-voice] ${refusal}; repli sur la voix locale`);
+    }
     return null;
   }
 
-  inFlightCharacters.set(reservationKey, inFlight + characters);
   let settled = false;
   const releaseInFlight = (): void => {
     const remaining = Math.max(
@@ -269,24 +314,27 @@ function reserveBudget(
       if (settled) return;
       settled = true;
       releaseInFlight();
-      lock.release();
     },
     commit: () => {
       if (settled) return;
       settled = true;
       releaseInFlight();
-      try {
+      // ElevenLabs billed these characters the moment the head arrived: the
+      // ledger must record them even if another writer is briefly busy.
+      void withLedgerLock(path, now, 40, () => {
         const latest = loadCurrentUsage(path, now);
         if (!latest) return;
         latest.characters += characters;
         latest.updatedAt = now.toISOString();
         if (!writeUsage(path, latest)) {
           unwritableLedgers.add(`${path}:${latest.month}`);
-          logger.debug('[elevenlabs-voice] écriture du compteur impossible');
+          logger.warn('[elevenlabs-voice] écriture du compteur impossible');
         }
-      } finally {
-        lock.release();
-      }
+      }).then((result) => {
+        if (!result.ok) {
+          logger.warn(`[elevenlabs-voice] compteur occupé trop longtemps: ${characters} caractères facturés non consignés`);
+        }
+      });
     },
   };
 }
@@ -310,7 +358,7 @@ export async function synthesizeElevenLabsPcm24k(
 
   const now = options.now?.() ?? new Date();
   const path = usagePath(env, options.usagePath);
-  const reservation = reserveBudget(
+  const reservation = await reserveBudget(
     text.length,
     resolveElevenLabsMonthlyCap(env),
     path,
@@ -371,7 +419,7 @@ export async function openElevenLabsPcm24kStream(
 
   const now = options.now?.() ?? new Date();
   const path = usagePath(env, options.usagePath);
-  const reservation = reserveBudget(
+  const reservation = await reserveBudget(
     text.length,
     resolveElevenLabsMonthlyCap(env),
     path,
@@ -402,9 +450,16 @@ export async function openElevenLabsPcm24kStream(
   } catch (error) {
     signal?.removeEventListener('abort', onCallerAbort);
     reservation.release();
-    logger.debug(
-      `[elevenlabs-voice] flux indisponible; repli local (${error instanceof Error ? error.name : 'erreur'})`
-    );
+    // The exact cause (HTTP status, head timeout, transport) is what an
+    // operator needs to act on; hiding it in `debug` left the robot mute with
+    // a generic "budget, clé ou réseau" upstream (2026-09-02). A barge-in is
+    // not a failure and stays quiet.
+    const detail = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
+    if (signal?.aborted) {
+      logger.debug(`[elevenlabs-voice] flux interrompu par l'appelant (${detail})`);
+    } else {
+      logger.warn(`[elevenlabs-voice] flux indisponible — ${detail}; repli local`);
+    }
     return null;
   } finally {
     clearTimeout(headTimer);

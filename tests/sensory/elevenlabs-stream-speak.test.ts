@@ -200,4 +200,54 @@ describe('makeDefaultStreamSpeak — ElevenLabs engine', () => {
     expect(await streamSpeak!('Une phrase sans réseau.')).toBe(false);
     expect(playerHarness.commands).toEqual([]);
   });
+
+  describe('look-ahead (prefetch) — inherits the engine harness above', () => {
+  it('prefetch(text) opens the billed stream ONCE and the later streamSpeak(text) reuses it', async () => {
+    const playerPromise = __voiceAudioPlayerTest.resolveVoiceAudioPlayer();
+    const streamSpeak = __voiceAudioPlayerTest.makeDefaultStreamSpeak(playerPromise, 'elevenlabs')!;
+    expect(typeof streamSpeak.prefetch).toBe('function');
+
+    streamSpeak.prefetch!('Phrase préchargée pendant la précédente.');
+    await new Promise((r) => setTimeout(r, 0));
+    expect(openElevenLabsAudioStream).toHaveBeenCalledTimes(1);
+
+    expect(await streamSpeak('Phrase préchargée pendant la précédente.')).toBe(true);
+    expect(openElevenLabsAudioStream).toHaveBeenCalledTimes(1);
+    const streamed = Buffer.concat(playerHarness.written);
+    expect(streamed.subarray(0, 4).toString('ascii')).toBe('RIFF');
+    expect(streamed.length).toBeGreaterThan(44);
+  });
+
+  it('a prefetched paid-library hit is played from disk and never opens the billed stream', async () => {
+    libraryCopy.mockReturnValue('/tmp/cb-test-library-prefetched.wav');
+    const playerPromise = __voiceAudioPlayerTest.resolveVoiceAudioPlayer();
+    const streamSpeak = __voiceAudioPlayerTest.makeDefaultStreamSpeak(playerPromise, 'elevenlabs')!;
+
+    streamSpeak.prefetch!('Oui je t’entends.');
+    await new Promise((r) => setTimeout(r, 0));
+    expect(await streamSpeak('Oui je t’entends.')).toBe(true);
+
+    expect(openElevenLabsAudioStream).not.toHaveBeenCalled();
+    expect(playerHarness.args[0]).toContain('/tmp/cb-test-library-prefetched.wav');
+  });
+
+  it('is not exposed for Pocket (single-request server)', () => {
+    const playerPromise = __voiceAudioPlayerTest.resolveVoiceAudioPlayer();
+    const streamSpeak = __voiceAudioPlayerTest.makeDefaultStreamSpeak(playerPromise, 'pocket');
+    expect(streamSpeak?.prefetch).toBeUndefined();
+  });
+
+  it('an aborted prefetch is dropped: the sentence is opened fresh when finally spoken', async () => {
+    const playerPromise = __voiceAudioPlayerTest.resolveVoiceAudioPlayer();
+    const streamSpeak = __voiceAudioPlayerTest.makeDefaultStreamSpeak(playerPromise, 'elevenlabs')!;
+    const controller = new AbortController();
+    streamSpeak.prefetch!('Phrase interrompue.', { signal: controller.signal });
+    await new Promise((r) => setTimeout(r, 0));
+    controller.abort();
+
+    expect(await streamSpeak('Phrase interrompue.')).toBe(true);
+    // One open for the cancelled look-ahead, one honest reopen for the real turn.
+    expect(openElevenLabsAudioStream).toHaveBeenCalledTimes(2);
+  });
+});
 });

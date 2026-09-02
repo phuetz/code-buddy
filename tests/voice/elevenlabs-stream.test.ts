@@ -165,6 +165,30 @@ describe('openElevenLabsPcm24kStream — budget contract', () => {
     expect(stream).toBeNull();
     expect(fetchImpl).not.toHaveBeenCalled();
   });
+  it('does NOT hold the ledger lock across the network: two overlapping openings both stream and both are charged', async () => {
+    // Until 2026-09-02 the lock lived for the whole HTTP head: the second overlapping
+    // sentence (look-ahead, Telegram note, reminder) was refused as "compteur occupé"
+    // and the robot went mute. The head is slow here on purpose.
+    const fetchImpl = vi.fn(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 120));
+      return new Response(bodyOf(...pcmChunks()), { status: 200 });
+    });
+    const first = 'Première phrase qui met du temps.';
+    const second = 'Deuxième phrase préchargée pendant la première.';
+    const [a, b] = await Promise.all([
+      openElevenLabsPcm24kStream(first, 'voice-1', env(), undefined,
+        { fetchImpl: fetchImpl as unknown as typeof fetch, usagePath: usagePath() }),
+      openElevenLabsPcm24kStream(second, 'voice-1', env(), undefined,
+        { fetchImpl: fetchImpl as unknown as typeof fetch, usagePath: usagePath() }),
+    ]);
+    expect(a).not.toBeNull();
+    expect(b).not.toBeNull();
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    const { readFileSync } = await import('node:fs');
+    const usage = JSON.parse(readFileSync(usagePath(), 'utf8')) as { characters: number };
+    expect(usage.characters).toBe(first.length + second.length);
+  });
+
 });
 
 describe('wrapPcm16Mono24kStreamAsWav — streaming WAV header + writeback', () => {
