@@ -58,6 +58,10 @@ interface DangerousPattern {
 
 const DANGEROUS_PATTERNS: DangerousPattern[] = [
   // Code execution
+  { pattern: /\b(?:curl|wget)\b[^|\n]*\|\s*(?:sh|bash|zsh)\b/i, severity: 'critical', description: 'Remote download piped directly to a shell', name: 'remote-download-pipe-shell', capability: 'shell' },
+  { pattern: /\bbash(?:\.exe)?\s+-c\b[^\n]*\bcurl\b/i, severity: 'critical', description: 'Shell command executes a downloaded curl payload', name: 'bash-curl-command', capability: 'shell' },
+  { pattern: /\bpowershell(?:\.exe)?\s+-c(?:ommand)?\b[^\n]*\biwr\b[^|\n]*\|\s*iex\b/i, severity: 'critical', description: 'PowerShell downloads and executes a remote payload', name: 'powershell-download-execute', capability: 'shell' },
+  { pattern: /\beval\s+\$\(\s*[^)]*\)/i, severity: 'critical', description: 'Dynamic evaluation of shell command substitution', name: 'eval-command-substitution', capability: 'shell' },
   { pattern: /\beval\s*\(/, severity: 'critical', description: 'Dynamic code execution via eval()', name: 'eval', capability: 'dynamic-code' },
   { pattern: /\bnew\s+Function\s*\(/, severity: 'critical', description: 'Dynamic function creation', name: 'new-function', capability: 'dynamic-code' },
   { pattern: /\bchild_process\b/, severity: 'high', description: 'Child process module usage', name: 'child_process', capability: 'shell' },
@@ -94,6 +98,15 @@ const DANGEROUS_PATTERNS: DangerousPattern[] = [
   { pattern: /`\$\{.*\}`/, severity: 'medium', description: 'Template literal with interpolation (potential injection)', name: 'template-injection', capability: 'shell' },
   { pattern: /\$\(.*\)/, severity: 'medium', description: 'Shell command substitution', name: 'shell-subst', capability: 'shell' },
 ];
+
+const SCRIPT_EXTENSIONS = new Set(['.bash', '.bat', '.cmd', '.cjs', '.js', '.mjs', '.ps1', '.sh', '.ts', '.zsh']);
+
+function isScannableSkillFile(fileName: string): boolean {
+  const lowerName = fileName.toLowerCase();
+  return lowerName.endsWith('.skill.md')
+    || lowerName === 'skill.md'
+    || SCRIPT_EXTENSIONS.has(path.extname(lowerName));
+}
 
 /**
  * Scan a single file for dangerous patterns.
@@ -140,7 +153,7 @@ export function scanFile(filePath: string): ScanResult {
 /**
  * Scan a directory of skill files recursively.
  */
-export function scanDirectory(dirPath: string): ScanResult[] {
+export function scanDirectory(dirPath: string, withinScripts = false): ScanResult[] {
   const results: ScanResult[] = [];
 
   if (!fs.existsSync(dirPath)) return results;
@@ -150,13 +163,8 @@ export function scanDirectory(dirPath: string): ScanResult[] {
     const fullPath = path.join(dirPath, entry.name);
 
     if (entry.isDirectory()) {
-      results.push(...scanDirectory(fullPath));
-    } else if (
-      entry.name.endsWith('.skill.md') ||
-      entry.name === 'SKILL.md' ||
-      entry.name.endsWith('.ts') ||
-      entry.name.endsWith('.js')
-    ) {
+      results.push(...scanDirectory(fullPath, withinScripts || entry.name.toLowerCase() === 'scripts'));
+    } else if (withinScripts || isScannableSkillFile(entry.name)) {
       const result = scanFile(fullPath);
       if (result.findings.length > 0) {
         results.push(result);
