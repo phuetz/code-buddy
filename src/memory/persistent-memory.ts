@@ -120,6 +120,13 @@ export class MemoryWriteRejectedError extends Error {
   }
 }
 
+export class MemoryPersistenceError extends Error {
+  constructor(readonly scope: MemoryScope) {
+    super(`${scope} memory store is unreadable; persistence was refused to protect existing data`);
+    this.name = 'MemoryPersistenceError';
+  }
+}
+
 function parsePositiveInt(value: string | undefined, fallback: number): number {
   if (!value) return fallback;
   const parsed = Number.parseInt(value, 10);
@@ -507,7 +514,15 @@ export class PersistentMemoryManager extends EventEmitter {
       throw err;
     }
 
-    await this.saveMemories(scope);
+    try {
+      await this.saveMemories(scope);
+    } catch (error) {
+      memories.clear();
+      for (const [memoryKey, memory] of previousMemories) {
+        memories.set(memoryKey, memory);
+      }
+      throw error;
+    }
 
     this.emit("memory:remembered", { key: normalizedKey, scope, category });
     return {
@@ -1111,7 +1126,7 @@ export class PersistentMemoryManager extends EventEmitter {
         logger.warn(
           `[persistent-memory] ${scope} memory file is still unreadable — skipping save to avoid overwriting history`,
         );
-        return;
+        throw new MemoryPersistenceError(scope);
       }
       for (const [key, memory] of ramSnapshot) {
         memories.set(key, memory);
