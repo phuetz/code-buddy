@@ -1,4 +1,5 @@
-import { appendFile, mkdir, readFile, writeFile } from 'fs/promises';
+import { appendFile, mkdir, readFile, rename, writeFile } from 'fs/promises';
+import { logger } from '../utils/logger.js';
 import * as path from 'path';
 import type { ChannelManager, ChannelType, ContentType } from '../channels/core.js';
 import { readSendMessageOutbox } from '../channels/send-message.js';
@@ -345,7 +346,9 @@ function sortChannels(channels: CompanionGatewayChannelConfig[]): CompanionGatew
 
 async function writeProfile(profile: CompanionGatewayProfile): Promise<void> {
   await mkdir(path.dirname(profile.storePath), { recursive: true });
-  await writeFile(profile.storePath, `${JSON.stringify(profile, null, 2)}\n`, 'utf8');
+  const tmp = `${profile.storePath}.tmp`;
+  await writeFile(tmp, `${JSON.stringify(profile, null, 2)}\n`, 'utf8');
+  await rename(tmp, profile.storePath);
 }
 
 export async function readCompanionGatewayProfile(
@@ -354,9 +357,18 @@ export async function readCompanionGatewayProfile(
   const fallback = emptyProfile(options);
   let raw: string;
   try {
-    raw = await readFile(fallback.storePath, 'utf8');
-  } catch {
-    return fallback;
+    raw = (await readFile(fallback.storePath, 'utf8')).trim();
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException)?.code === 'ENOENT') return fallback;
+    logger.warn(
+      `[companion-gateway] could not read profile: ${err instanceof Error ? err.message : String(err)}`,
+    );
+    throw err;
+  }
+  if (!raw) {
+    const msg = `[companion-gateway] profile exists but is empty: ${fallback.storePath}`;
+    logger.warn(msg);
+    throw new Error(msg);
   }
 
   try {
@@ -376,8 +388,11 @@ export async function readCompanionGatewayProfile(
       defaultMode,
       channels: sortChannels([...byChannel.values()]),
     };
-  } catch {
-    return fallback;
+  } catch (err) {
+    logger.warn(
+      `[companion-gateway] profile JSON is unreadable: ${err instanceof Error ? err.message : String(err)}`,
+    );
+    throw err;
   }
 }
 

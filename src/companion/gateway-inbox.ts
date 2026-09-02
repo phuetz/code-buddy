@@ -1,4 +1,5 @@
-import { mkdir, readFile, writeFile } from 'fs/promises';
+import { mkdir, readFile, rename, writeFile } from 'fs/promises';
+import { logger } from '../utils/logger.js';
 import * as path from 'path';
 import type { ChannelType, ContentType } from '../channels/core.js';
 import {
@@ -514,15 +515,31 @@ function parseItem(value: unknown): CompanionGatewayInboxItem | null {
 
 async function writeInbox(inbox: CompanionGatewayInbox): Promise<void> {
   await mkdir(path.dirname(inbox.storePath), { recursive: true });
-  await writeFile(inbox.storePath, `${JSON.stringify(withCounts(inbox), null, 2)}\n`, 'utf8');
+  const tmp = `${inbox.storePath}.tmp`;
+  await writeFile(tmp, `${JSON.stringify(withCounts(inbox), null, 2)}\n`, 'utf8');
+  await rename(tmp, inbox.storePath);
 }
 
 export async function readCompanionGatewayInbox(
   options: CompanionGatewayInboxOptions = {},
 ): Promise<CompanionGatewayInbox> {
   const fallback = emptyInbox(options);
+  let raw: string;
   try {
-    const raw = await readFile(fallback.storePath, 'utf8');
+    raw = (await readFile(fallback.storePath, 'utf8')).trim();
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException)?.code === 'ENOENT') return fallback;
+    logger.warn(
+      `[companion-gateway] could not read inbox: ${err instanceof Error ? err.message : String(err)}`,
+    );
+    throw err;
+  }
+  if (!raw) {
+    const msg = `[companion-gateway] inbox exists but is empty: ${fallback.storePath}`;
+    logger.warn(msg);
+    throw new Error(msg);
+  }
+  try {
     const parsed = JSON.parse(raw) as Partial<CompanionGatewayInbox>;
     const items = Array.isArray(parsed.items)
       ? parsed.items.map(parseItem).filter((item): item is CompanionGatewayInboxItem => Boolean(item))
@@ -532,8 +549,11 @@ export async function readCompanionGatewayInbox(
       generatedAt: typeof parsed.generatedAt === 'string' ? parsed.generatedAt : fallback.generatedAt,
       items,
     });
-  } catch {
-    return fallback;
+  } catch (err) {
+    logger.warn(
+      `[companion-gateway] inbox JSON is unreadable: ${err instanceof Error ? err.message : String(err)}`,
+    );
+    throw err;
   }
 }
 

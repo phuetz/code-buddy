@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm } from 'fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'fs/promises';
 import * as os from 'os';
 import * as path from 'path';
 import { ChannelManager, MockChannel } from '../src/channels/core.js';
@@ -17,7 +17,9 @@ import {
 import {
   draftCompanionGatewayOutboundReply,
   draftCompanionGatewayInboxItem,
+  getCompanionGatewayInboxPath,
   readCompanionGatewayInbox,
+  recordCompanionGatewayInboxItem,
   routeCompanionGatewayDraftToFleet,
   sendCompanionGatewayOutboundReply,
 } from '../src/companion/gateway-inbox.js';
@@ -849,5 +851,36 @@ describe('companion gateway', () => {
     const rawLog = await readFile(result.adminLogPath, 'utf8');
     expect(rawLog).toContain('admin-exec-stop-1');
     expect(rawLog).not.toContain('Final approved admin reply');
+  });
+
+  it('does not treat a corrupt gateway profile as empty defaults (D4)', async () => {
+    const profilePath = getCompanionGatewayProfilePath(tempDir);
+    await mkdir(path.dirname(profilePath), { recursive: true });
+    await writeFile(profilePath, '{this is not json', 'utf8');
+
+    await expect(readCompanionGatewayProfile({ cwd: tempDir })).rejects.toThrow();
+    await expect(
+      updateCompanionGatewayChannel('slack', { cwd: tempDir, enabled: true }),
+    ).rejects.toThrow();
+    expect(await readFile(profilePath, 'utf8')).toBe('{this is not json');
+  });
+
+  it('does not treat a corrupt gateway inbox as empty (D5)', async () => {
+    const inboxPath = getCompanionGatewayInboxPath(tempDir);
+    await mkdir(path.dirname(inboxPath), { recursive: true });
+    await writeFile(inboxPath, '{this is not json', 'utf8');
+
+    await expect(readCompanionGatewayInbox({ cwd: tempDir })).rejects.toThrow();
+    await expect(
+      recordCompanionGatewayInboxItem({
+        accepted: true,
+        channel: 'slack',
+        mode: 'assist',
+        text: 'hello',
+        senderId: 'u1',
+        sessionKey: 'companion:slack:u1',
+      }, { cwd: tempDir }),
+    ).rejects.toThrow();
+    expect(await readFile(inboxPath, 'utf8')).toBe('{this is not json');
   });
 });
