@@ -255,29 +255,46 @@ function pocketRequestSignal(timeoutMs: number, signal?: AbortSignal): AbortSign
  * them available; callers can pipe this body straight to a player and hear the
  * first audio chunk while synthesis is still running.
  */
+/**
+ * Report why the native stream is gone, then hand back `null`.
+ *
+ * Losing this stream is not cosmetic: the caller falls back to synthesizing one
+ * sentence at a time and the listener hears choppy, gap-ridden speech. The cause
+ * used to be logged at debug level — invisible in production — so a degraded
+ * voice arrived at the operator as an unexplained defect. It is rare and always
+ * consequential, so it warns.
+ */
+function pocketStreamUnavailable(reason: string): null {
+  logger.warn(
+    `[pocket-tts] native stream unavailable (${reason}) — falling back to per-sentence synthesis`
+  );
+  return null;
+}
+
 export async function openPocketAudioStream(
   text: string,
   env: NodeJS.ProcessEnv = process.env,
   options: { timeoutMs?: number; signal?: AbortSignal } = {}
 ): Promise<ReadableStream<Uint8Array> | null> {
   try {
+    // A deliberate opt-out is a choice, not a degradation — stay quiet for it.
     if (env.CODEBUDDY_POCKET_SERVER === 'false') return null;
     const serverUrl = resolvePocketServerUrl(env);
-    if (!(await ensurePocketServer(env))) return null;
+    if (!(await ensurePocketServer(env))) {
+      return pocketStreamUnavailable(`resident server unreachable at ${serverUrl}`);
+    }
     const response = await fetch(new URL('/tts', serverUrl), {
       method: 'POST',
       body: buildPocketRequestBody(text, env),
       signal: pocketRequestSignal(options.timeoutMs ?? 180_000, options.signal),
     });
-    if (!response.ok || !response.body) return null;
+    if (!response.ok) return pocketStreamUnavailable(`HTTP ${response.status}`);
+    if (!response.body) return pocketStreamUnavailable('response carried no body');
     return response.body;
   } catch (err) {
-    if (!options.signal?.aborted) {
-      logger.debug(
-        `[pocket-tts] resident stream failed: ${err instanceof Error ? err.message : String(err)}`
-      );
-    }
-    return null;
+    // A barge-in aborts on purpose: that is the user interrupting, not a failure.
+    if (options.signal?.aborted) return null;
+    return pocketStreamUnavailable(err instanceof Error ? err.message : String(err));
   }
 }
 
