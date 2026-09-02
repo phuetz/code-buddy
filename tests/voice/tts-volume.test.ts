@@ -301,3 +301,48 @@ describe('assistant TTS volume', () => {
     expect(output.equals(source)).toBe(true);
   });
 });
+
+/**
+ * A ceiling on the normalization gain protects against amplifying hiss. But when
+ * the gain a signal NEEDS exceeds that ceiling, the planner used to return
+ * `factor: 1` — no gain at all. The quieter the recording, the less help it got,
+ * which is exactly backwards: a whisper was left a whisper while a merely-soft
+ * clip was raised.
+ *
+ * Context: Patrice reported Lisa "presque inaudible" on 2026-09-02. Pocket's raw
+ * output measures −30.6 dB mean for a −18 dBFS target.
+ */
+describe('normalization gain ceiling', () => {
+  /** Voiced-looking speech: an envelope, sparse zero crossings, very quiet. */
+  function quietSpeech(amplitude: number, count = 24_000): number[] {
+    const out: number[] = [];
+    for (let i = 0; i < count; i += 1) {
+      const envelope = 0.4 + 0.6 * Math.abs(Math.sin((i / count) * Math.PI * 6));
+      out.push(Math.round(amplitude * envelope * Math.sin((i / 24_000) * 2 * Math.PI * 180)));
+    }
+    return out;
+  }
+
+  it('clamps to the ceiling instead of abandoning the boost entirely', () => {
+    // ~−40 dBFS: needs far more than the 12 dB ceiling to reach −18.
+    const wav = pcm16Wav(quietSpeech(Math.round(32_767 * 10 ** (-40 / 20))));
+    const before = __test.measurePcm16(wav.subarray(wav.indexOf(Buffer.from('data')) + 8));
+    const out = Buffer.from(normalizePcm16Wav(wav, {}));
+    const after = __test.measurePcm16(out.subarray(out.indexOf(Buffer.from('data')) + 8));
+
+    const appliedDb = 20 * Math.log10(after.rms / before.rms);
+    // It must lift the signal substantially, not leave it untouched.
+    expect(appliedDb).toBeGreaterThan(6);
+    // And never beyond the ceiling that protects against amplified hiss.
+    expect(appliedDb).toBeLessThanOrEqual(30.5);
+  });
+
+  it('still refuses to amplify something that is not speech', () => {
+    // Flat, dense zero crossings: hiss. Must stay untouched.
+    const hiss: number[] = [];
+    for (let i = 0; i < 24_000; i += 1) hiss.push(i % 2 === 0 ? 40 : -40);
+    const wav = pcm16Wav(hiss);
+    const out = Buffer.from(normalizePcm16Wav(wav, {}));
+    expect(samplesFrom(out)).toEqual(samplesFrom(wav));
+  });
+});
