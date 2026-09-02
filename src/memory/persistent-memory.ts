@@ -292,7 +292,9 @@ export class PersistentMemoryManager extends EventEmitter {
     try {
       const content = await fs.readFile(filePath, "utf-8");
       const parsed = this.parseMemoryFile(content);
-      if (parsed.length === 0 && !this.isCanonicalEmptyMemoryFile(content)) {
+      // Un fichier vide (0 octet ou blancs) n'a rien à protéger : magasin neuf,
+      // pas magasin corrompu (garde R28, alignée le 2026-09-02).
+      if (parsed.length === 0 && content.trim() !== '' && !this.isCanonicalEmptyMemoryFile(content)) {
         throw new Error('non-canonical memory markdown contains no recoverable entries');
       }
 

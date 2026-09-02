@@ -51,6 +51,7 @@ describe('tool surface (exposition ↔ dispatch)', () => {
       createInteractiveToolAdapters({
         includeWindowsTools: true,
         includeSelfImproveTools: true,
+        includeContextZoomTools: true,
       }).map((t) => t.name),
     );
     // ToolHandler.executeTool handles these before the registry lookup.
@@ -149,6 +150,7 @@ describe('tool surface (adapter + metadata ⇒ definition)', () => {
       createInteractiveToolAdapters({
         includeWindowsTools: true,
         includeSelfImproveTools: true,
+      includeContextZoomTools: true,
       }).map((t) => t.name),
     );
     names.add('edit_file');

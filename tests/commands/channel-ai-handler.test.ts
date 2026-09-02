@@ -809,18 +809,18 @@ describe('registerAIMessageHandler inbound roundtrip (GAP-7)', () => {
       order.push('telegram:delivered');
       return { success: true, timestamp: new Date() };
     });
-    const message = makeMessage('Que vois-tu ?', 'sess-cognitive', 'lisa-cognitive');
+    const message = makeMessage('Que penses-tu de cet objet rouge ?', 'sess-cognitive', 'lisa-cognitive');
 
     await manager.emit(message, { type: 'telegram', send });
 
     expect(hoisted.cognitiveBegin).toHaveBeenCalledWith(expect.objectContaining({
       channelType: 'telegram',
       messageId: message.id,
-      content: 'Que vois-tu ?',
+      content: 'Que penses-tu de cet objet rouge ?',
       egress: 'cloud',
     }));
     expect(hoisted.processUserMessage).toHaveBeenCalledWith(
-      'Que vois-tu ?',
+      'Que penses-tu de cet objet rouge ?',
       expect.objectContaining({
         surface: 'telegram',
         transientContext: expect.stringContaining('objet rouge détecté'),

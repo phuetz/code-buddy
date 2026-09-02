@@ -12,6 +12,7 @@
  */
 
 import type { CodeBuddyMessage } from '../../src/codebuddy/client';
+import { ContextCompactionError } from '../../src/context/context-manager-v2';
 
 import {
   ContextManagerV2,
@@ -422,10 +423,9 @@ describe('ContextManagerV2', () => {
         content: 'A'.repeat(100),
       }));
 
-      const prepared = smallManager.prepareMessages(messages);
-
-      // Should have been drastically reduced
-      expect(prepared.length).toBeLessThan(messages.length);
+      // R29 (2026-09-02) : la requête courante ne tient pas seule dans le budget,
+      // elle est refusée explicitement au lieu d'être tronquée en silence.
+      expect(() => smallManager.prepareMessages(messages)).toThrow(ContextCompactionError);
 
       smallManager.dispose();
     });
@@ -443,10 +443,9 @@ describe('ContextManagerV2', () => {
         content: 'A'.repeat(100),
       }));
 
-      const prepared = tinyManager.prepareMessages(messages);
-
-      // Should keep at least some messages
-      expect(prepared.length).toBeGreaterThan(0);
+      // R29 (2026-09-02) : la requête courante ne tient pas seule dans le budget,
+      // elle est refusée explicitement au lieu d'être tronquée en silence.
+      expect(() => tinyManager.prepareMessages(messages)).toThrow(ContextCompactionError);
 
       tinyManager.dispose();
     });
@@ -464,10 +463,9 @@ describe('ContextManagerV2', () => {
         { role: 'assistant', content: 'B'.repeat(500) },
       ];
 
-      const prepared = tinyManager.prepareMessages(messages);
-
-      // Messages should exist, possibly truncated
-      expect(prepared.length).toBeGreaterThan(0);
+      // R29 (2026-09-02) : la requête courante ne tient pas seule dans le budget,
+      // elle est refusée explicitement au lieu d'être tronquée en silence.
+      expect(() => tinyManager.prepareMessages(messages)).toThrow(ContextCompactionError);
 
       tinyManager.dispose();
     });
@@ -751,8 +749,8 @@ describe('ContextManagerV2', () => {
         recentMessagesCount: 5,
       });
 
-      const prepared = smallManager.prepareMessages(messages);
-      expect(prepared.length).toBeGreaterThan(0);
+      // R29 : refus explicite, pas de troncature silencieuse.
+      expect(() => smallManager.prepareMessages(messages)).toThrow(ContextCompactionError);
 
       smallManager.dispose();
     });
