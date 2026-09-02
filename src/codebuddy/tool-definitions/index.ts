@@ -144,6 +144,7 @@ export {
   WEB_FETCH_TOOL,
   WEB_SCRAPE_TOOL,
   WEB_EXTRACT_TOOL,
+  COMMUNITY_SEARCH_TOOL,
   WEB_TOOLS,
 } from './web-tools.js';
 

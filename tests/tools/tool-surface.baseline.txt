@@ -33,6 +33,7 @@ code_stats
 codebase_map
 codebase_replace
 comfy_recipe
+community_search
 computer_control
 context_expand
 create_file
