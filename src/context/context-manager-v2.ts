@@ -102,6 +102,7 @@ interface ConversationSummary {
 
 export type ContextCompactionFailureCode =
   | 'CURRENT_REQUEST_EXCEEDS_BUDGET'
+  | 'CURRENT_REQUEST_DROPPED'
   | 'COMPACTION_EXCEEDS_LIMIT';
 
 /**
@@ -137,6 +138,12 @@ export class ContextCompactionError extends Error {
         `Current user request exceeds the context budget ` +
         `(${tokens} tokens > ${limit} token limit). ` +
         `The request was not sent to the model because it cannot fit even alone.`
+      );
+    }
+    if (code === 'CURRENT_REQUEST_DROPPED') {
+      return (
+        `Current user request was dropped during context compaction. ` +
+        `The request was not sent to the model.`
       );
     }
     return (
@@ -616,8 +623,9 @@ export class ContextManagerV2 {
       // Non-owning engine: run built-in compaction first, then assemble
       const compacted = this.prepareMessagesRaw(messages);
       const result = this.contextEngine.assemble(compacted, this.effectiveLimit);
-      this.lastTokenCount = result.tokenCount;
       this.assertLastUserPreserved(messages, result.messages);
+      this.assertFitsTokenLimit(result.messages);
+      this.lastTokenCount = this.countTokens(result.messages);
       return result.messages;
     }
 
