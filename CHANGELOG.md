@@ -6,6 +6,45 @@
 d'environnement, le comportement est identique à celui de la 1.8.0. Le passage à 2.0.0 marque
 un changement de nature, pas d'interface.
 
+### Fiabilité mesurée par exécution — 2 septembre 2026
+
+Une journée de chasse au motif « annoncer un succès sans l'avoir accompli », puis un audit
+où chaque fonctionnalité a été **lancée pour de vrai** (4 lanes, 105 + 74 + 38 + 33
+invocations) et jugée sur l'artefact produit. Résultat : 17 lots de réparation intégrés,
+chacun avec un test qui rougissait avant le correctif ; suite complète à 35 836 tests verts,
+Cowork à 3 018, balayage d'installation neuve à 103/103 commandes.
+
+- **Voix du robot** : le verrou du compteur ElevenLabs restait pris pendant toute la requête
+  HTTP, refusait toute synthèse qui se chevauchait, et le repli WAV levait au lieu de passer
+  sur Pocket — la phrase était perdue. Verrou borné aux écritures, repli réel, diagnostic
+  précis, et préchargement de la phrase suivante (1,3 s de trou → 0,44 s, mesuré au sink).
+- **Contexte adapté au modèle servi** : nom nu sans préfixe passerelle, familles de poids
+  ouverts (Kimi, MiniMax, Nemotron, GLM, Gemma 4, DeepSeek V4…), découverte `/v1/models` pour
+  toute passerelle OpenAI-compatible ; `CODEBUDDY_MAX_CONTEXT` l'emporte partout.
+- **Ce qui n'avait jamais été actif** : la sélection RAG des outils n'ajoutait plus aucun outil
+  (`alwaysInclude` saturait le plafond) ; dix outils exécutables n'étaient jamais proposés au
+  modèle (`remind`, `markdown_convert`, `submit_plan`…) ; cinq commandes slash n'avaient pas
+  de handler ; dans Cowork, les connexions OAuth Gemini/Codex étaient bloquées par le preload,
+  les canaux App Studio V2 n'étaient pas exposés, `SessionBridge` poussait sur le mauvais
+  canal. Invariants ajoutés pour chacun.
+- **Succès annoncés sans accomplissement**, fermés avec leurs jumeaux : montage vidéo
+  (rendu « réussi » sans fichier, porte qualité qui passait sur un échec d'analyse, narration
+  qui validait un WAV ancien), compagnon (rappels écrasés par un magasin illisible, report
+  annoncé avant d'être durable, initiative « parlée » sans son), canaux (appairage confirmé
+  avant persistance, envoi « réussi » sans envoi, transcription vocale perdue), skills (import
+  dans un dossier invisible, échec git rendu comme « 0 skill », `curl | sh` non mis en
+  quarantaine, commande qui ne rendait pas la main, skills insupprimables), parole (échec STT
+  traité comme du silence, flux hybride amputé sans clôture, mémoire dupliquée).
+- **Auto-amélioration** : `CODEBUDDY_SELF_IMPROVE=true` appliquait au lieu de proposer ; les
+  propositions `propose-only` disparaissaient ; `lessons` réinventait ses identifiants ;
+  `evolve` enregistrait le baseline comme variante ; `capsule`/`forge` plantaient.
+- **Chemin quotidien** : un appel d'outil rendu en prose par un petit modèle n'est plus un
+  succès headless (exit 3) ; `remind` approuvé sous `acceptEdits` ; `buddy fleet
+  status|describe` ; Ollama vu comme actif par `provider list --free` ; `config validate`
+  reconnaît toute authentification ; complétions alignées sur `buddy` ; `speak --out`.
+- **Connaissance** : la mémoire collective est injectée par pertinence sur la question, pas
+  par récence ; `research` simple conserve ses URL ; un conseil à un siège s'explique.
+
 ### Ce qui change pour qui installe
 
 Le produit a été mesuré comme un inconnu l'installe : paquet construit, installé dans un dossier
@@ -1787,7 +1826,7 @@ followed.
 ### Added — A2A protocol POC (Niveau 1 → 3)
 
 - POC Niveau 1: Spoke registration via `POST /api/a2a/agents/register`
-  - heartbeat. Hub at Ministar Linux `100.98.18.76:3000`.
+  - heartbeat. Hub at Ministar Linux `203.0.113.10:3000`.
 - POC Niveau 2 (`6bf7349`): Cross-host task router forwarding to remote
   spokes via HTTP.
 - POC Niveau 3 (`677a146`): Skill-based routing dispatch on
