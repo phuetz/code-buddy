@@ -991,7 +991,12 @@ function createWindow() {
     minHeight: 600,
     backgroundColor: THEME.background,
     icon: (() => {
-      const windowIconName = isMac ? 'icon.icns' : isWindows ? 'icon.ico' : 'icon.png';
+      if (!isMac && !isWindows) {
+        return app.isPackaged
+          ? join(app.getAppPath(), 'dist/logo.png')
+          : join(__dirname, '../../public/logo.png');
+      }
+      const windowIconName = isMac ? 'icon.icns' : 'icon.ico';
       return app.isPackaged
         ? join(process.resourcesPath, windowIconName)
         : join(__dirname, `../../resources/${windowIconName}`);
