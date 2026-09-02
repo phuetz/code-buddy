@@ -32,7 +32,11 @@ import {
   parseCliPermissionMode,
 } from './cli/permission-mode-option.js';
 import { getRequestedProfile } from './cli/requested-profile.js';
-import { resolveHeadlessOutputFormat, resolveHeadlessResultExitCode } from './cli/headless-options.js';
+import {
+  findUnexecutedProseToolCall,
+  resolveHeadlessOutputFormat,
+  resolveHeadlessTurnExitCode,
+} from './cli/headless-options.js';
 import { resolveCliModelList } from './cli/model-listing.js';
 import {
   NO_PROVIDER_GUIDANCE,
@@ -1208,14 +1212,14 @@ async function processPromptHeadless(
     const lastResponse = assistantMessages[assistantMessages.length - 1];
     const resultText = (lastResponse?.content as string) || '';
     const { getBuiltinToolNames } = await import('./codebuddy/tools.js');
+    const knownToolNames = getBuiltinToolNames();
     const executedToolNames = chatEntries
       .filter((entry) => entry.type === 'tool_result' && entry.toolCall)
       .map((entry) => entry.toolCall?.function.name)
       .filter((toolName): toolName is string => Boolean(toolName));
-    const { findUnexecutedProseToolCall } = await import('./cli/headless-options.js');
     const proseToolCall = findUnexecutedProseToolCall(
       resultText,
-      getBuiltinToolNames(),
+      knownToolNames,
       executedToolNames,
     );
     if (proseToolCall) {
@@ -1224,7 +1228,11 @@ async function processPromptHeadless(
         line: proseToolCall.line,
       });
     }
-    const exitCode = proseToolCall ? 3 : resolveHeadlessResultExitCode(resultText);
+    const exitCode = resolveHeadlessTurnExitCode(
+      resultText,
+      knownToolNames,
+      executedToolNames,
+    );
     runStatus = exitCode === 0 ? 'completed' : 'failed';
 
     // Gather cost and model info from the agent
