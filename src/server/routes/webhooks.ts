@@ -12,7 +12,7 @@
  */
 
 import { Router, Request, Response } from 'express';
-import { asyncHandler } from '../middleware/index.js';
+import { ApiServerError, asyncHandler } from '../middleware/index.js';
 import { logger } from '../../utils/logger.js';
 
 const router = Router();
@@ -176,13 +176,21 @@ router.post('/:source', asyncHandler(async (req: Request, res: Response) => {
   const result = await manager.handleWebhook(source, headers, req.body);
 
   if (result.fired) {
-    logger.info(`Webhook from ${source} triggered: ${result.triggerId} (${result.eventType})`);
-    res.status(200).json({
-      status: 'triggered',
-      triggerId: result.triggerId,
-      eventType: result.eventType,
-      prompt: result.prompt,
-    });
+    try {
+      const { enqueueWebhookAgentRun } = await import('../webhook-agent-queue.js');
+      const accepted = enqueueWebhookAgentRun({
+        prompt: result.prompt || '',
+        source,
+        triggerId: result.triggerId,
+        eventType: result.eventType,
+      });
+      logger.info(`Webhook from ${source} accepted as agent run ${accepted.runId}`);
+      res.status(202).json({ status: 'accepted', runId: accepted.runId });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      logger.error(`Webhook from ${source} could not be queued: ${message}`);
+      throw ApiServerError.serviceUnavailable(`Webhook agent run was not queued: ${message}`);
+    }
   } else if (result.error) {
     logger.warn(`Webhook from ${source} failed: ${result.error}`);
     res.status(400).json({

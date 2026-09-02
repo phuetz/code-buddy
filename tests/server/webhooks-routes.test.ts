@@ -3,10 +3,11 @@ import type { AddressInfo } from 'net';
 import express from 'express';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { manager, triggers } = vi.hoisted(() => {
+const { enqueueWebhookAgentRun, manager, triggers } = vi.hoisted(() => {
   const triggerList: Array<Record<string, unknown>> = [];
   return {
     triggers: triggerList,
+    enqueueWebhookAgentRun: vi.fn(),
     manager: {
       load: vi.fn(async () => undefined),
       handleWebhook: vi.fn(async () => ({ fired: false, eventType: 'generic' })),
@@ -27,7 +28,12 @@ vi.mock('../../src/triggers/webhook-trigger.js', () => ({
   getWebhookTriggerManager: () => manager,
 }));
 
+vi.mock('../../src/server/webhook-agent-queue.js', () => ({
+  enqueueWebhookAgentRun,
+}));
+
 import { createWebhookRoutes } from '../../src/server/routes/webhooks.js';
+import { errorHandler } from '../../src/server/middleware/index.js';
 
 describe('webhook HTTP routes', () => {
   let server: Server;
@@ -37,6 +43,7 @@ describe('webhook HTTP routes', () => {
     const app = express();
     app.use(express.json());
     app.use('/api/webhooks', createWebhookRoutes());
+    app.use(errorHandler);
     server = createServer(app);
     await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
     const address = server.address() as AddressInfo;
@@ -46,6 +53,10 @@ describe('webhook HTTP routes', () => {
   beforeEach(() => {
     triggers.length = 0;
     vi.clearAllMocks();
+    enqueueWebhookAgentRun.mockReturnValue({
+      runId: 'webhook-run-r21',
+      acceptedAt: '2026-09-02T00:00:00.000Z',
+    });
   });
 
   afterAll(async () => {
@@ -74,5 +85,54 @@ describe('webhook HTTP routes', () => {
       name: 'R21 trigger',
       source: 'github',
     }));
+  });
+
+  it('POST /:source répond 202 avec un run seulement après mise en file', async () => {
+    manager.handleWebhook.mockResolvedValueOnce({
+      fired: true,
+      triggerId: 'trigger-r21',
+      eventType: 'push',
+      prompt: 'Review the push',
+    });
+
+    const response = await fetch(`${baseUrl}/api/webhooks/github`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-GitHub-Event': 'push' },
+      body: JSON.stringify({ ref: 'refs/heads/main' }),
+    });
+    const body = await response.json() as { status?: string; runId?: string };
+
+    expect(response.status).toBe(202);
+    expect(body).toEqual({ status: 'accepted', runId: 'webhook-run-r21' });
+    expect(enqueueWebhookAgentRun).toHaveBeenCalledWith({
+      prompt: 'Review the push',
+      source: 'github',
+      triggerId: 'trigger-r21',
+      eventType: 'push',
+    });
+  });
+
+  it('POST /:source propage une erreur si la mise en file échoue', async () => {
+    manager.handleWebhook.mockResolvedValueOnce({
+      fired: true,
+      triggerId: 'trigger-r21',
+      eventType: 'push',
+      prompt: 'Review the push',
+    });
+    enqueueWebhookAgentRun.mockImplementationOnce(() => {
+      throw new Error('queue full');
+    });
+
+    const response = await fetch(`${baseUrl}/api/webhooks/github`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{}',
+    });
+    const body = await response.json() as { code?: string; message?: string; runId?: string };
+
+    expect(response.status).toBe(503);
+    expect(body.code).toBe('SERVICE_UNAVAILABLE');
+    expect(body.message).toContain('queue full');
+    expect(body.runId).toBeUndefined();
   });
 });
