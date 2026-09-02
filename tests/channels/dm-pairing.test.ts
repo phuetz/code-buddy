@@ -15,6 +15,7 @@ import {
   type PairingStatus,
 } from '../../src/channels/dm-pairing.js';
 import type { InboundMessage, ChannelType } from '../../src/channels/index.js';
+import { logger } from '../../src/utils/logger.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -470,6 +471,58 @@ describe('DMPairingManager', () => {
       expect(leftovers).toEqual([]);
 
       pairing.dispose();
+    });
+  });
+
+  // =========================================================================
+  // Load — D4 (ENOENT = premier boot ; toute autre erreur est explicite)
+  // =========================================================================
+
+  describe('loadAllowlist D4', () => {
+    let allowlistDir: string;
+
+    beforeEach(async () => {
+      const tmpRoot = path.join(process.cwd(), 'tmp');
+      await fs.mkdir(tmpRoot, { recursive: true });
+      allowlistDir = await fs.mkdtemp(path.join(tmpRoot, 'r3-pairing-load-'));
+    });
+
+    afterEach(async () => {
+      await fs.rm(allowlistDir, { recursive: true, force: true });
+    });
+
+    it('D4: un allowlist corrompu ne démarre pas comme une liste vide', async () => {
+      const pairing = new DMPairingManager({
+        enabled: true,
+        pairingChannels: ['telegram'],
+        allowlistPath: allowlistDir,
+      });
+      await fs.writeFile(path.join(allowlistDir, 'telegram-allowFrom.json'), '{not-json');
+      const warnSpy = vi.spyOn(logger, 'warn');
+
+      await expect(pairing.loadAllowlist()).rejects.toThrow();
+      expect(warnSpy).toHaveBeenCalled();
+      expect(pairing.listApproved()).toEqual([]);
+
+      pairing.dispose();
+      warnSpy.mockRestore();
+    });
+
+    it('D4: ENOENT au premier démarrage n\'est pas une erreur', async () => {
+      const missingDir = path.join(allowlistDir, 'does-not-exist');
+      const pairing = new DMPairingManager({
+        enabled: true,
+        pairingChannels: ['telegram'],
+        allowlistPath: missingDir,
+      });
+      const warnSpy = vi.spyOn(logger, 'warn');
+
+      await expect(pairing.loadAllowlist()).resolves.toBeUndefined();
+      expect(warnSpy).not.toHaveBeenCalled();
+      expect(pairing.listApproved()).toEqual([]);
+
+      pairing.dispose();
+      warnSpy.mockRestore();
     });
   });
 });

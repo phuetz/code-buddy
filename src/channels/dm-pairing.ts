@@ -146,6 +146,10 @@ export const DEFAULT_DM_PAIRING_CONFIG: DMPairingConfig = {
   pairingMessage: 'This assistant requires pairing. Your code is: {code}\nAsk the owner to approve with: pairing approve {channel} {code}',
 };
 
+function isEnoent(err: unknown): boolean {
+  return typeof err === 'object' && err !== null && 'code' in err && (err as { code: unknown }).code === 'ENOENT';
+}
+
 // ============================================================================
 // DM Pairing Manager
 // ============================================================================
@@ -512,24 +516,60 @@ export class DMPairingManager extends EventEmitter {
   async loadAllowlist(): Promise<void> {
     if (!this.config.allowlistPath) return;
 
+    let files: string[];
     try {
-      const files = await fs.readdir(this.config.allowlistPath);
+      files = await fs.readdir(this.config.allowlistPath);
+    } catch (err) {
+      if (isEnoent(err)) return;
+      logger.warn('Failed to read DM pairing allowlist directory', {
+        path: this.config.allowlistPath,
+        error: err instanceof Error ? err.message : String(err),
+      });
+      throw err;
+    }
 
-      for (const file of files) {
-        if (file.endsWith('-allowFrom.json')) {
-          const filePath = path.join(this.config.allowlistPath, file);
-          const content = await fs.readFile(filePath, 'utf-8');
-          const senders = JSON.parse(content) as ApprovedSender[];
-
-          for (const sender of senders) {
-            sender.approvedAt = new Date(sender.approvedAt);
-            const key = this.makeAllowlistKey(sender.channelType, sender.senderId);
-            this.allowlist.set(key, sender);
-          }
-        }
+    const loaded = new Map<string, ApprovedSender>();
+    for (const file of files) {
+      if (!file.endsWith('-allowFrom.json')) continue;
+      const filePath = path.join(this.config.allowlistPath, file);
+      let content: string;
+      try {
+        content = await fs.readFile(filePath, 'utf-8');
+      } catch (err) {
+        if (isEnoent(err)) continue;
+        logger.warn('Failed to read DM pairing allowlist file', {
+          path: filePath,
+          error: err instanceof Error ? err.message : String(err),
+        });
+        throw err;
       }
-    } catch {
-      // Directory doesn't exist yet
+      let senders: ApprovedSender[];
+      try {
+        senders = JSON.parse(content) as ApprovedSender[];
+      } catch (err) {
+        logger.warn('Corrupt DM pairing allowlist file', {
+          path: filePath,
+          error: err instanceof Error ? err.message : String(err),
+        });
+        throw err;
+      }
+      if (!Array.isArray(senders)) {
+        const error = new Error(`Allowlist is not an array: ${filePath}`);
+        logger.warn('Corrupt DM pairing allowlist file', {
+          path: filePath,
+          error: error.message,
+        });
+        throw error;
+      }
+      for (const sender of senders) {
+        sender.approvedAt = new Date(sender.approvedAt);
+        const key = this.makeAllowlistKey(sender.channelType, sender.senderId);
+        loaded.set(key, sender);
+      }
+    }
+
+    for (const [key, sender] of loaded) {
+      this.allowlist.set(key, sender);
     }
   }
 
