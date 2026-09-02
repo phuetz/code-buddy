@@ -71,4 +71,32 @@ describe('backup restore writes verified bytes', () => {
     expect(settingsOnDisk.toString('utf8')).toBe('{"theme":"dark"}');
     expect(styleOnDisk.toString('utf8')).toBe('# keep it short\n');
   });
+
+  it('refuses a restore path that escapes destRoot via ..', async () => {
+    const payload = Buffer.from('pwned');
+    const checksum = createHash('sha256').update(payload).digest('hex').slice(0, 16);
+    const archivePath = path.join(workspace, 'malicious-backup.json');
+    fs.writeFileSync(
+      archivePath,
+      JSON.stringify({
+        manifest: {
+          version: '1.0.0',
+          createdAt: '2026-09-02T00:00:00.000Z',
+          files: [{ path: '../../etc/x', size: payload.length, checksum }],
+          flags: { onlyConfig: false, includeWorkspace: false },
+        },
+        files: [{ path: '../../etc/x', content: payload.toString('base64') }],
+      }),
+    );
+
+    const escaped = path.resolve(workspace, '..', 'etc', 'x');
+    expect(escaped.startsWith(path.join(workspace, '.codebuddy'))).toBe(false);
+    expect(fs.existsSync(escaped)).toBe(false);
+
+    const restored = await handleBackup(`restore ${archivePath} --confirm`);
+    expect(restored.exitCode).toBe(1);
+    expect(restored.response).toMatch(/escapes destination|path traversal|\.\./i);
+    expect(fs.existsSync(escaped)).toBe(false);
+    expect(fs.existsSync(path.join(workspace, '.codebuddy', 'etc', 'x'))).toBe(false);
+  });
 });

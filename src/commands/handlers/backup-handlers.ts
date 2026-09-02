@@ -6,7 +6,7 @@
  */
 
 import { existsSync, mkdirSync, readdirSync, statSync, readFileSync, writeFileSync } from 'fs';
-import { join, basename, dirname } from 'path';
+import { join, basename, dirname, resolve, relative, isAbsolute, sep, win32 } from 'path';
 import { homedir } from 'os';
 import { createHash } from 'crypto';
 import { logger } from '../../utils/logger.js';
@@ -299,8 +299,21 @@ async function handleBackupRestore(args: string[]): Promise<CommandHandlerResult
     }
 
     const archiveFiles = data.files as BackupArchiveFile[];
-    const destRoot = join(process.cwd(), '.codebuddy');
+    const destRoot = resolve(join(process.cwd(), '.codebuddy'));
     mkdirSync(destRoot, { recursive: true });
+
+    const destinations = new Map<string, string>();
+    for (const manifestFile of manifest.files) {
+      const dest = resolveRestoreDestination(destRoot, manifestFile.path);
+      if (!dest) {
+        return {
+          handled: true,
+          exitCode: 1,
+          response: `Cannot restore ${fullPath}: path escapes destination: ${manifestFile.path}`,
+        };
+      }
+      destinations.set(manifestFile.path, dest);
+    }
 
     const restored: string[] = [];
     for (const manifestFile of manifest.files) {
@@ -313,7 +326,7 @@ async function handleBackupRestore(args: string[]): Promise<CommandHandlerResult
         };
       }
       const content = Buffer.from(archiveFile.content, 'base64');
-      const dest = join(destRoot, manifestFile.path);
+      const dest = destinations.get(manifestFile.path)!;
       mkdirSync(dirname(dest), { recursive: true });
       writeFileSync(dest, content);
       const reread = readFileSync(dest);
@@ -357,6 +370,31 @@ interface CollectedFile {
 
 function fileChecksum(content: Buffer): string {
   return createHash('sha256').update(content).digest('hex').slice(0, 16);
+}
+
+/** True when `candidate` is destRoot itself or a file/dir under it. */
+function isInsideDestRoot(destRoot: string, candidate: string): boolean {
+  const rel = relative(destRoot, candidate);
+  return rel === '' || (
+    rel !== '..' &&
+    !rel.startsWith(`..${sep}`) &&
+    !isAbsolute(rel)
+  );
+}
+
+/**
+ * Resolve an archive entry against destRoot. Returns null when the path
+ * is absolute, contains a NUL, or walks outside destRoot after resolution
+ * (the `../../etc/x` class of restores).
+ */
+export function resolveRestoreDestination(destRoot: string, archivePath: string): string | null {
+  if (typeof archivePath !== 'string' || archivePath.length === 0) return null;
+  if (archivePath.includes('\0')) return null;
+  if (isAbsolute(archivePath) || win32.isAbsolute(archivePath)) return null;
+  const root = resolve(destRoot);
+  const dest = resolve(root, archivePath);
+  if (!isInsideDestRoot(root, dest)) return null;
+  return dest;
 }
 
 function verifyArchivePayloads(
