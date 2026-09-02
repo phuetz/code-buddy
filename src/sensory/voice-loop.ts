@@ -56,7 +56,7 @@ import {
 } from './voice-activity.js';
 import { prepareSpeech } from './speech-sanitizer.js';
 import { matchVoiceInteraction, VOICE_INTERACTION_PREWARM_PHRASES } from './voice-interactions.js';
-import { clockCompanionReply } from './voice-clock.js';
+import { clockCompanionReply, voiceClockPromptBlock } from './voice-clock.js';
 import {
   DEFAULT_SENTENCE_CAP,
   safeCommitLength,
@@ -1696,7 +1696,13 @@ async function prepareSpokenTurn(
   const cognitivePrompt = [cognitiveLease?.turnContext, cognitiveLease?.evidence]
     .filter(Boolean)
     .join('\n\n');
-  const systemPrompt = [basePrompt, characterBlock, augmentation, cognitivePrompt]
+  const systemPrompt = [
+    basePrompt,
+    characterBlock,
+    augmentation,
+    cognitivePrompt,
+    voiceClockPromptBlock(),
+  ]
     .filter(Boolean)
     .join('\n\n');
   return {
