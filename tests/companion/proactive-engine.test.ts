@@ -7,7 +7,7 @@
  * model, no network, no real home dir.
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { mkdtempSync, rmSync } from 'fs';
+import { mkdtempSync, rmSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import {
@@ -120,7 +120,7 @@ describe('runProactiveTick — end to end (injected delivery seams, no model)', 
 
   it('does nothing when the feature is off', async () => {
     delete process.env.CODEBUDDY_COMPANION_PROACTIVE;
-    const say = vi.fn(async () => {});
+    const say = vi.fn(async () => true);
     const line = await runProactiveTick({ now: () => NOW, say, telegramVoice: async () => true, statePath, relationshipStatePath: relPath, recentHearing: async () => [] });
     expect(line).toBeNull();
     expect(say).not.toHaveBeenCalled();
@@ -128,14 +128,14 @@ describe('runProactiveTick — end to end (injected delivery seams, no model)', 
 
   it('stays silent during quiet hours', async () => {
     const quiet = Date.parse('2026-07-02T23:30:00');
-    const line = await runProactiveTick({ now: () => quiet, statePath, relationshipStatePath: relPath, recentHearing: async () => [], present: async () => true, say: async () => {} });
+    const line = await runProactiveTick({ now: () => quiet, statePath, relationshipStatePath: relPath, recentHearing: async () => [], present: async () => true, say: async () => true });
     expect(line).toBeNull();
   });
 
   it('uses the household timezone for quiet hours instead of the host timezone', async () => {
     process.env.CODEBUDDY_TIMEZONE = 'Pacific/Auckland';
     const householdNight = Date.parse('2026-07-12T10:30:00.000Z'); // 22:30 in Auckland
-    const say = vi.fn(async () => {});
+    const say = vi.fn(async () => true);
     const line = await runProactiveTick({
       now: () => householdNight,
       statePath,
@@ -151,7 +151,7 @@ describe('runProactiveTick — end to end (injected delivery seams, no model)', 
   it('speaks aloud when present, and throttles the next immediate tick', async () => {
     // Tenure milestone at 30 days, present → spoken.
     saveRelationshipState({ firstSeenAt: NOW - 30 * DAY, lastPresentAt: NOW, celebratedMilestones: [7] }, relPath);
-    const say = vi.fn(async () => {});
+    const say = vi.fn(async () => true);
     const tg = vi.fn(async () => true);
     const line = await runProactiveTick({ now: () => NOW, present: async () => true, say, telegramVoice: tg, statePath, relationshipStatePath: relPath, recentHearing: async () => [] });
     expect(line).toContain('30');
@@ -170,7 +170,7 @@ describe('runProactiveTick — end to end (injected delivery seams, no model)', 
       { firstSeenAt: NOW - 30 * DAY, lastPresentAt: NOW, celebratedMilestones: [7] },
       relPath,
     );
-    const say = vi.fn(async () => undefined);
+    const say = vi.fn(async () => true);
     const line = await runProactiveTick({
       now: () => NOW,
       present: async () => true,
@@ -188,7 +188,7 @@ describe('runProactiveTick — end to end (injected delivery seams, no model)', 
   it('reaches the phone (Telegram voice) when away after an absence', async () => {
     // 3 days without a sighting → inactivity, absent → Telegram.
     saveRelationshipState({ firstSeenAt: NOW - 10 * DAY, lastPresentAt: NOW - 3 * DAY, celebratedMilestones: [7] }, relPath);
-    const say = vi.fn(async () => {});
+    const say = vi.fn(async () => true);
     const tg = vi.fn(async () => true);
     const line = await runProactiveTick({ now: () => NOW, present: async () => false, say, telegramVoice: tg, statePath, relationshipStatePath: relPath, recentHearing: async () => [] });
     expect(line).toContain('3');
@@ -271,7 +271,7 @@ describe('runProactiveTick — end to end (injected delivery seams, no model)', 
 
   it('yields to the conductor when present (another voice has the floor)', async () => {
     saveRelationshipState({ firstSeenAt: NOW - 30 * DAY, lastPresentAt: NOW, celebratedMilestones: [7] }, relPath);
-    const say = vi.fn(async () => {});
+    const say = vi.fn(async () => true);
     const line = await runProactiveTick({
       now: () => NOW,
       present: async () => true,
@@ -289,10 +289,71 @@ describe('runProactiveTick — end to end (injected delivery seams, no model)', 
 
   it('persists the cooldown anchor after sending', async () => {
     saveRelationshipState({ firstSeenAt: NOW - 30 * DAY, lastPresentAt: NOW, celebratedMilestones: [7] }, relPath);
-    await runProactiveTick({ now: () => NOW, present: async () => true, say: async () => {}, statePath, relationshipStatePath: relPath, recentHearing: async () => [] });
+    await runProactiveTick({ now: () => NOW, present: async () => true, say: async () => true, statePath, relationshipStatePath: relPath, recentHearing: async () => [] });
     const st = loadProactiveState(statePath);
     expect(st.lastSentAt).toBe(NOW);
     expect(st.recentLines.length).toBe(1);
+  });
+
+  it('does not return a line when the cooldown cursor cannot be persisted (D1)', async () => {
+    const blocked = join(tmp, 'blocked-as-file');
+    writeFileSync(blocked, 'x');
+    const unwritable = join(blocked, 'proactive-state.json');
+    saveRelationshipState(
+      { firstSeenAt: NOW - 30 * DAY, lastPresentAt: NOW, celebratedMilestones: [7] },
+      relPath,
+    );
+    const say = vi.fn(async () => true);
+    const line = await runProactiveTick({
+      now: () => NOW,
+      present: async () => true,
+      say,
+      telegramVoice: async () => true,
+      statePath: unwritable,
+      relationshipStatePath: relPath,
+      recentHearing: async () => [],
+    });
+    expect(line).toBeNull();
+    expect(say).toHaveBeenCalledTimes(1);
+    expect(loadProactiveState(unwritable).lastSentAt).toBeUndefined();
+  });
+
+  it('does not treat corrupt proactive state as never-sent (D1)', async () => {
+    writeFileSync(statePath, '{this is not json');
+    saveRelationshipState(
+      { firstSeenAt: NOW - 30 * DAY, lastPresentAt: NOW, celebratedMilestones: [7] },
+      relPath,
+    );
+    const say = vi.fn(async () => true);
+    const line = await runProactiveTick({
+      now: () => NOW,
+      present: async () => true,
+      say,
+      statePath,
+      relationshipStatePath: relPath,
+      recentHearing: async () => [],
+    });
+    expect(line).toBeNull();
+    expect(say).not.toHaveBeenCalled();
+  });
+
+  it('does not persist cooldown when local say reports failure (D8)', async () => {
+    saveRelationshipState(
+      { firstSeenAt: NOW - 30 * DAY, lastPresentAt: NOW, celebratedMilestones: [7] },
+      relPath,
+    );
+    const say = vi.fn(async () => false);
+    const line = await runProactiveTick({
+      now: () => NOW,
+      present: async () => true,
+      say,
+      statePath,
+      relationshipStatePath: relPath,
+      recentHearing: async () => [],
+    });
+    expect(line).toBeNull();
+    expect(say).toHaveBeenCalledTimes(1);
+    expect(loadProactiveState(statePath).lastSentAt).toBeUndefined();
   });
 });
 

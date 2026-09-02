@@ -15,7 +15,7 @@
  *
  * @module companion/proactive-engine
  */
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs';
+import { existsSync, readFileSync, writeFileSync, mkdirSync, renameSync } from 'fs';
 import { homedir } from 'os';
 import { join, dirname } from 'path';
 import { logger } from '../utils/logger.js';
@@ -180,34 +180,56 @@ function defaultProactiveStatePath(): string {
 }
 
 export function loadProactiveState(statePath = defaultProactiveStatePath()): ProactiveState {
+  if (!existsSync(statePath)) return { recentLines: [] };
+  let raw: string;
   try {
-    if (existsSync(statePath)) {
-      const data = JSON.parse(readFileSync(statePath, 'utf8'));
-      return {
-        lastSentAt: typeof data.lastSentAt === 'number' ? data.lastSentAt : undefined,
-        recentLines: Array.isArray(data.recentLines)
-          ? data.recentLines.filter((s: unknown): s is string => typeof s === 'string').slice(-8)
-          : [],
-      };
-    }
-  } catch {
-    /* best effort */
+    raw = readFileSync(statePath, 'utf8').trim();
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException)?.code === 'ENOENT') return { recentLines: [] };
+    logger.warn(
+      `[proactive] could not read state: ${err instanceof Error ? err.message : String(err)}`
+    );
+    throw err;
   }
-  return { recentLines: [] };
+  if (!raw) {
+    const msg = `[proactive] state exists but is empty: ${statePath}`;
+    logger.warn(msg);
+    throw new Error(msg);
+  }
+  try {
+    const data = JSON.parse(raw) as { lastSentAt?: unknown; recentLines?: unknown };
+    return {
+      lastSentAt: typeof data.lastSentAt === 'number' ? data.lastSentAt : undefined,
+      recentLines: Array.isArray(data.recentLines)
+        ? data.recentLines.filter((s: unknown): s is string => typeof s === 'string').slice(-8)
+        : [],
+    };
+  } catch (err) {
+    logger.warn(
+      `[proactive] could not parse state: ${err instanceof Error ? err.message : String(err)}`
+    );
+    throw err;
+  }
 }
 
 export function saveProactiveState(
   state: ProactiveState,
   statePath = defaultProactiveStatePath()
-): void {
+): boolean {
   try {
     mkdirSync(dirname(statePath), { recursive: true });
+    const tmp = `${statePath}.tmp`;
     writeFileSync(
-      statePath,
+      tmp,
       JSON.stringify({ ...state, recentLines: state.recentLines.slice(-8) })
     );
-  } catch {
-    /* best effort */
+    renameSync(tmp, statePath);
+    return true;
+  } catch (err) {
+    logger.warn(
+      `[proactive] could not persist state: ${err instanceof Error ? err.message : String(err)}`
+    );
+    return false;
   }
 }
 
@@ -235,8 +257,8 @@ export interface ProactiveDeps {
   now?: () => number;
   /** Someone is in front of the camera right now (→ speak vs Telegram). */
   present?: () => boolean | Promise<boolean>;
-  /** Deliver aloud (present). Default: sayNow (Piper). */
-  say?: (text: string) => Promise<void>;
+  /** Deliver aloud (present). Default: sayNow (Piper). True only when speech actually played. */
+  say?: (text: string) => Promise<boolean>;
   /** Deliver to the phone (absent). Default: sendTelegramVoice (falls back to text). */
   telegramVoice?: (text: string) => Promise<boolean>;
   /** Append an already-delivered remote initiative without echoing it. */
@@ -275,15 +297,23 @@ async function defaultRecentHearing(): Promise<string[]> {
   return readRecentDialogueHearing(6);
 }
 
-async function defaultSay(text: string): Promise<void> {
-  const [{ sayNow }, { speakCanonicalVoiceInitiative }] = await Promise.all([
-    import('../sensory/voice-loop.js'),
-    import('../conversation/voice-continuity.js'),
-  ]);
-  await speakCanonicalVoiceInitiative(
-    text,
-    (content) => sayNow(content, { phoneDelivery: 'never' }),
-  );
+async function defaultSay(text: string): Promise<boolean> {
+  try {
+    const [{ sayNow }, { speakCanonicalVoiceInitiative }] = await Promise.all([
+      import('../sensory/voice-loop.js'),
+      import('../conversation/voice-continuity.js'),
+    ]);
+    let played = false;
+    await speakCanonicalVoiceInitiative(text, async (content) => {
+      played = await sayNow(content, { phoneDelivery: 'never' });
+    });
+    return played;
+  } catch (err) {
+    logger.warn(
+      `[proactive] local say failed: ${err instanceof Error ? err.message : String(err)}`
+    );
+    return false;
+  }
 }
 
 async function defaultTelegramVoice(text: string): Promise<boolean> {
@@ -382,7 +412,9 @@ export async function runProactiveTick(deps: ProactiveDeps = {}): Promise<string
     }
     try {
       if (present) {
-        await (deps.say ?? defaultSay)(line);
+        if (!(await (deps.say ?? defaultSay)(line))) {
+          throw new Error('local proactive delivery was not accepted');
+        }
       } else {
         if (!(await (deps.telegramVoice ?? defaultTelegramVoice)(line))) {
           throw new Error('remote proactive delivery was not accepted');
@@ -399,10 +431,14 @@ export async function runProactiveTick(deps: ProactiveDeps = {}): Promise<string
     }
 
     // Persist throttle + per-occurrence locks so a trigger fires exactly once.
-    saveProactiveState(
+    const saved = saveProactiveState(
       { lastSentAt: now, recentLines: [...state.recentLines, line].slice(-8) },
       deps.statePath
     );
+    if (!saved) {
+      logger.warn('[proactive] cooldown cursor was not persisted; not treating the tick as sent');
+      return null;
+    }
     if (candidate.trigger === 'milestone') {
       rel.celebratedMilestones = markMilestonesUpTo(rel.celebratedMilestones, daysTogether);
       saveRelationshipState(rel, deps.relationshipStatePath);

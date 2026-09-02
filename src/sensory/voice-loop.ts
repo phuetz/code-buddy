@@ -2696,6 +2696,7 @@ export const __voiceAudioPlayerTest = {
  * Speak an arbitrary string aloud RIGHT NOW (proactively), not as a reply to something heard.
  * The missing primitive for reminders/announcements: synthesize → play → clean up.
  * Injectable synth/play for tests. Never-throws ($0 with local Pocket/Piper).
+ * Returns true only when the local player actually ran.
  */
 export async function sayNow(
   text: string,
@@ -2707,7 +2708,7 @@ export async function sayNow(
     /** `never` prevents a caller with its own bridge/notification from double-sending. */
     phoneDelivery?: 'env' | 'never';
   } = {}
-): Promise<void> {
+): Promise<boolean> {
   // Sanity gate before the speakers AND the phone push: strip leaked control tokens + foreign-script
   // contamination (a local model drifting into CJK the voice can't pronounce), stay silent if nothing
   // meaningful remains. Clean once so speech, Telegram voice, and logs all use the same text.
@@ -2716,7 +2717,7 @@ export async function sayNow(
     if ((text ?? '').trim()) {
       logger.info(`[voice] sayNow muted after sanitize inputChars=${(text ?? '').length}`);
     }
-    return;
+    return false;
   }
   // A persona-specific .onnx remains meaningful for the Piper fallback. Pocket uses its
   // own preset/clone selection from CODEBUDDY_POCKET_VOICE.
@@ -2730,6 +2731,7 @@ export async function sayNow(
     }
   }
   // 1. Home speakers (best-effort — a missing audio device must not block the phone push).
+  let played = false;
   try {
     const synth = options.synth ?? makeDefaultSynth(voice, options.rootDir);
     const play = options.play ?? defaultPlay;
@@ -2743,6 +2745,7 @@ export async function sayNow(
           alreadyNormalized: options.synth === undefined,
         });
       });
+      played = true;
       try {
         const { unlink } = await import('fs/promises');
         await unlink(wav);
@@ -2770,6 +2773,7 @@ export async function sayNow(
       );
     }
   }
+  return played;
 }
 
 /**

@@ -882,7 +882,7 @@ describe('sayNow — proactive speech (reminders/announcements)', () => {
         },
         play: async () => {},
       }),
-    ).resolves.toBeUndefined();
+    ).resolves.toBe(false);
   });
 });
 
