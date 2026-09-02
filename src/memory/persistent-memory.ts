@@ -121,8 +121,8 @@ export class MemoryWriteRejectedError extends Error {
 }
 
 export class MemoryPersistenceError extends Error {
-  constructor(readonly scope: MemoryScope) {
-    super(`${scope} memory store is unreadable; persistence was refused to protect existing data`);
+  constructor(readonly scope: MemoryScope, message?: string) {
+    super(message ?? `${scope} memory store is unreadable; persistence was refused to protect existing data`);
     this.name = 'MemoryPersistenceError';
   }
 }
@@ -968,6 +968,7 @@ export class PersistentMemoryManager extends EventEmitter {
         ...(entry.tags?.length ? { tags: entry.tags } : {}),
       });
       if (result.status === "stored" || result.status === "updated") {
+        await this.verifyPersistedMemory(s, result.key, entry.value);
         await this.removeArchiveLine(s, entry.lineIndex);
         this.emit("memory:restored", { key: entry.key, scope: s });
       }
@@ -975,6 +976,24 @@ export class PersistentMemoryManager extends EventEmitter {
       return { result, restored };
     }
     return null;
+  }
+
+  /** Re-read the live store before deleting the only archived copy. */
+  private async verifyPersistedMemory(scope: MemoryScope, key: string, expectedValue: string): Promise<void> {
+    const filePath = scope === 'project' ? this.config.projectMemoryPath : this.config.userMemoryPath;
+    try {
+      const content = await fs.readFile(filePath, 'utf-8');
+      const persisted = this.parseMemoryFile(content).find((memory) => memory.key === key);
+      if (persisted?.value === expectedValue) return;
+    } catch (err) {
+      logger.warn(
+        `[persistent-memory] restored memory verification failed (${scope}): ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+    throw new MemoryPersistenceError(
+      scope,
+      `Memory "${key}" was not durably persisted in the ${scope} store; archive left intact`,
+    );
   }
 
   /** Parse one scope's archive file into entries carrying their raw line index. */
