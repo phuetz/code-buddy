@@ -165,4 +165,62 @@ describe('Fleet CLI commands', () => {
     expect(output).toContain('fleet.hermes.review');
     expect(output).toContain('Policy: minimal / confirm');
   });
+
+  it('queries the configured server for status and describe', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.endsWith('/api/fleet/status')) {
+        return new Response(JSON.stringify({
+          status: 'ok',
+          connections: { total: 2, authenticated: 2, streaming: 0, totalBroadcastsDropped: 0 },
+        }), { status: 200, headers: { 'content-type': 'application/json' } });
+      }
+      return new Response(JSON.stringify({
+        hostname: 'fleet-test-peer',
+        pid: 1234,
+        methods: ['peer.describe', 'peer.ping'],
+        apiVersion: 'd.21',
+        role: 'main',
+        maxDepth: 3,
+      }), { status: 200, headers: { 'content-type': 'application/json' } });
+    });
+
+    try {
+      const program = createProgram();
+      registerFleetCommands(program);
+
+      await program.parseAsync([
+        'node',
+        'test',
+        'fleet',
+        'status',
+        '--server-url',
+        'http://127.0.0.1:3123',
+        '--json',
+      ]);
+      const status = JSON.parse(getLogOutput()) as { status: string; connections: { total: number } };
+      expect(status.status).toBe('ok');
+      expect(status.connections.total).toBe(2);
+
+      consoleLogSpy.mockClear();
+      await program.parseAsync([
+        'node',
+        'test',
+        'fleet',
+        'describe',
+        '--server-url',
+        'http://127.0.0.1:3123',
+        '--json',
+      ]);
+      const description = JSON.parse(getLogOutput()) as { hostname: string; methods: string[] };
+      expect(description.hostname).toBe('fleet-test-peer');
+      expect(description.methods).toContain('peer.describe');
+      expect(fetchSpy.mock.calls.map(([input]) => String(input))).toEqual([
+        'http://127.0.0.1:3123/api/fleet/status',
+        'http://127.0.0.1:3123/api/fleet/describe',
+      ]);
+    } finally {
+      fetchSpy.mockRestore();
+    }
+  });
 });

@@ -21,6 +21,63 @@ interface PolicyCommandOptions {
   json?: boolean;
 }
 
+interface FleetServerCommandOptions extends PolicyCommandOptions {
+  serverUrl?: string;
+  token?: string;
+}
+
+function resolveFleetServerUrl(serverUrl?: string): string {
+  const configured = serverUrl ?? process.env.CODEBUDDY_SERVER_URL;
+  if (configured?.trim()) return configured.trim().replace(/\/+$/, '');
+
+  const host = process.env.CODEBUDDY_SERVER_HOST ?? '127.0.0.1';
+  const port = process.env.CODEBUDDY_SERVER_PORT ?? process.env.PORT ?? '3000';
+  return `http://${host}:${port}`;
+}
+
+async function fetchFleetEndpoint(
+  endpoint: '/api/fleet/status' | '/api/fleet/describe',
+  options: FleetServerCommandOptions,
+): Promise<Record<string, unknown>> {
+  const baseUrl = resolveFleetServerUrl(options.serverUrl);
+  const token = options.token ?? process.env.CODEBUDDY_SERVER_TOKEN ?? process.env.CODEBUDDY_FLEET_TOKEN;
+
+  try {
+    const response = await fetch(`${baseUrl}${endpoint}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      signal: AbortSignal.timeout(5000),
+    });
+    const body = await response.text();
+    let payload: unknown;
+    try {
+      payload = body ? JSON.parse(body) : {};
+    } catch {
+      payload = { message: body };
+    }
+    if (!response.ok) {
+      const message = typeof payload === 'object' && payload !== null && 'error' in payload
+        ? String(payload.error)
+        : `HTTP ${response.status}`;
+      throw new Error(message);
+    }
+    if (typeof payload !== 'object' || payload === null || Array.isArray(payload)) {
+      throw new Error('Réponse JSON Fleet invalide');
+    }
+    return payload as Record<string, unknown>;
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    throw new Error(
+      `Serveur Fleet indisponible sur ${baseUrl} (${detail}). ` +
+        'Lancez-le avec `buddy server` puis réessayez.',
+    );
+  }
+}
+
+function printFleetServerError(error: unknown): void {
+  console.error(error instanceof Error ? error.message : String(error));
+  process.exitCode = 1;
+}
+
 function formatGroups(groups: string[]): string {
   return groups.length > 0 ? groups.join(', ') : 'none';
 }
@@ -33,6 +90,54 @@ export function registerFleetCommands(program: Command): void {
   const fleet = program
     .command('fleet')
     .description('Inspect Fleet routing, toolsets, and dispatch policy decisions');
+
+  fleet
+    .command('status')
+    .description('Show Fleet status from the configured Code Buddy server')
+    .option('--server-url <url>', 'Code Buddy server URL', process.env.CODEBUDDY_SERVER_URL)
+    .option('--token <token>', 'Bearer token for an authenticated server')
+    .option('--json', 'output JSON')
+    .action(async (options: FleetServerCommandOptions) => {
+      try {
+        const status = await fetchFleetEndpoint('/api/fleet/status', options);
+        if (options.json) {
+          console.log(JSON.stringify(status, null, 2));
+          return;
+        }
+        const connections = (status.connections ?? {}) as Record<string, unknown>;
+        console.log(`\nFleet server: ${String(status.status ?? 'unknown')}`);
+        console.log(`  WebSocket connections: ${String(connections.total ?? 0)}`);
+        console.log(`  Authenticated: ${String(connections.authenticated ?? 0)}`);
+        console.log(`  Streaming: ${String(connections.streaming ?? 0)}`);
+        console.log('');
+      } catch (error) {
+        printFleetServerError(error);
+      }
+    });
+
+  fleet
+    .command('describe')
+    .description('Describe the Fleet peer exposed by the configured server')
+    .option('--server-url <url>', 'Code Buddy server URL', process.env.CODEBUDDY_SERVER_URL)
+    .option('--token <token>', 'Bearer token for an authenticated server')
+    .option('--json', 'output JSON')
+    .action(async (options: FleetServerCommandOptions) => {
+      try {
+        const description = await fetchFleetEndpoint('/api/fleet/describe', options);
+        if (options.json) {
+          console.log(JSON.stringify(description, null, 2));
+          return;
+        }
+        console.log(`\nFleet peer: ${String(description.hostname ?? 'unknown')}`);
+        console.log(`  API version: ${String(description.apiVersion ?? 'unknown')}`);
+        console.log(`  Role: ${String(description.role ?? 'unknown')}`);
+        const methods = Array.isArray(description.methods) ? description.methods.join(', ') : 'none';
+        console.log(`  Methods: ${methods}`);
+        console.log('');
+      } catch (error) {
+        printFleetServerError(error);
+      }
+    });
 
   fleet
     .command('profiles')

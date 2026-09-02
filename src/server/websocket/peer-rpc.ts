@@ -39,6 +39,7 @@ import {
 } from './peer-method-registry.js';
 
 export {
+  getPeerMethodHandler,
   listPeerMethods,
   registerPeerMethod,
   unregisterPeerMethod,

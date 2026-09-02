@@ -64,6 +64,7 @@ import {
   wireCognitionBridge,
 } from './websocket/index.js';
 import { setupDesktopWebSocket, closeDesktopWebSocket } from './websocket/desktop-handler.js';
+import { getPeerMethodHandler } from './websocket/peer-rpc.js';
 import { startFleetHeartbeat, stopFleetHeartbeat } from '../fleet/heartbeat-broadcaster.js';
 import { startAutonomousTick, stopAutonomousTick } from '../fleet/autonomous-tick-broadcaster.js';
 import { startApiHeartbeatMonitor, stopApiHeartbeatMonitor } from './heartbeat-monitor.js';
@@ -279,6 +280,36 @@ function createApp(config: ServerConfig, cognitiveHub: CognitiveHub): Applicatio
   // network-reachable. All general agent/session/tool/workflow routes below are
   // direct-loopback only; otherwise remote chat could invoke tools indirectly.
   app.use(requireLocalAnonymousAccess);
+
+  // Read-only Fleet diagnostics for the CLI. These HTTP wrappers expose the
+  // same server state and peer description as the Gateway WebSocket methods.
+  app.get('/api/fleet/status', (_req, res) => {
+    res.json({
+      status: 'ok',
+      connections: getConnectionStats(),
+    });
+  });
+
+  app.get('/api/fleet/describe', async (_req, res) => {
+    const describe = getPeerMethodHandler('peer.describe');
+    if (!describe) {
+      res.status(503).json({ error: 'Fleet peer description is unavailable' });
+      return;
+    }
+    try {
+      const description = await describe({}, {
+        connectionId: 'http-fleet-cli',
+        scopes: ['peer:invoke'],
+        traceId: `http-fleet-${Date.now().toString(36)}`,
+        depth: 0,
+      });
+      res.json(description);
+    } catch (error) {
+      res.status(503).json({
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  });
 
   // CSRF protection for state-changing endpoints (POST/PUT/DELETE)
   // Applied AFTER A2A routes so they are never touched by CSRF middleware
