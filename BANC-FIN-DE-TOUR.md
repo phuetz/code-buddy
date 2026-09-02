@@ -259,8 +259,9 @@ le banc ne redistribue toutefois aucun poids dans Git.
 
 Le script reproductible est
 [benchmarks/turn-detector/bench_fr.py](benchmarks/turn-detector/bench_fr.py).
-Il synthétise avec Pocket TTS french_24l, voix estelle, puis resample chaque
-cas en PCM mono 16 kHz. Les 10 cas pause-* ont une première proposition avec
+Il fixe le seed de synthèse à 20260903 pour Python, NumPy et Torch, synthétise
+avec Pocket TTS french_24l, voix estelle, puis resample chaque cas en PCM mono
+16 kHz. Les 10 cas pause-* ont une première proposition avec
 prosodie non finale (…) et un silence numérique exact de 900, 950, 1000, 1050,
 1100, 1150, 1200, 1250, 1300 ou 1350 ms, puis la reprise ; les 10 cas
 complete-* n’ont pas de pause intra-phrase. Un silence terminal de 1200 ms
@@ -288,9 +289,9 @@ $ HF_HOME="$PWD/.turn-bench-cache-2026-09-03/hf" XDG_CACHE_HOME="$PWD/.turn-benc
 {
   "run": {
     "utterances": 20,
-    "wall_elapsed_ms": 3932.422,
-    "process_cpu_ms": 5442.428,
-    "one_core_cpu_pct": 138.399,
+    "wall_elapsed_ms": 3611.251,
+    "process_cpu_ms": 5182.038,
+    "one_core_cpu_pct": 143.497,
     "model": "turn-detector-v1-mini",
     "vad": "silero",
     "sample_rate": 16000,
@@ -298,6 +299,27 @@ $ HF_HOME="$PWD/.turn-bench-cache-2026-09-03/hf" XDG_CACHE_HOME="$PWD/.turn-benc
   }
 }
 ~~~
+
+Les deux synthèses finales ont aussi émis une fois l’avertissement non fatal
+suivant, puis ont terminé avec le code retour 0 :
+
+~~~text
+WARNING:pocket_tts.models.tts_model:Maximum generation length reached without EOS, this very often indicates an error.
+~~~
+
+Les fichiers ont été produits et les mêmes WAV/manifest ont été contrôlés sur
+les deux passages. Les hashes observés à chaque passage sont identiques :
+
+~~~console
+51d4b8fd09023bac8179c8f91679afb11be9ac7844607676606b519b1444d232  .turn-bench-artifacts-2026-09-03/manifest.json
+118fe831529aadbe95ba752c150584bb6f6cceffb99df5cd73dd87d28341036c  .turn-bench-artifacts-2026-09-03/pause-01.wav
+16f641d4572f37ef5e0ed57aabec2725bd900f7bb97265b8491faf7754d40690  .turn-bench-artifacts-2026-09-03/complete-07.wav
+~~~
+
+La génération des entrées est donc déterministe byte à byte. Les chronomètres
+d’inférence restent, par nature, variables d’un passage à l’autre ; le tableau
+ci-dessous donne le second passage et sépare ces latences des décisions et
+des taux de fausse coupe.
 
 ## Résultats finaux
 
@@ -309,25 +331,26 @@ l’inférence v1-mini pour un candidat.
 
 | Chaîne | Silence | Fausses coupes | Taux | Médiane délai complets | Médiane délai pauses | Médiane délai tous | Médiane VAD | Médiane EOT |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| Silero seul | 300 ms | 10/10 | 100 % | 408.271 ms | 379.688 ms | 402.833 ms | 27.084 ms | — |
-| Silero seul | 500 ms | 10/10 | 100 % | 600.271 ms | 572.646 ms | 594.833 ms | 25.406 ms | — |
-| Silero seul | 800 ms | 10/10 | 100 % | 888.271 ms | 864.667 ms | 883.229 ms | 22.541 ms | — |
-| v1-mini + Silero | 300 ms | 8/10 | 80 % | 425.419 ms | 399.834 ms | 422.928 ms | 27.084 ms | 16.624 ms |
-| v1-mini + Silero | 500 ms | 10/10 | 100 % | 620.696 ms | 591.549 ms | 612.188 ms | 25.406 ms | 18.057 ms |
-| v1-mini + Silero | 800 ms | 9/10 | 90 % | 905.041 ms | 885.204 ms | 899.829 ms | 22.541 ms | 16.233 ms |
+| Silero seul | 300 ms | 9/10 | 90 % | 393.333 ms | 381.542 ms | 389.958 ms | 29.817 ms | — |
+| Silero seul | 500 ms | 9/10 | 90 % | 591.938 ms | 581.875 ms | 584.417 ms | 22.100 ms | — |
+| Silero seul | 800 ms | 9/10 | 90 % | 879.938 ms | 869.875 ms | 872.417 ms | 21.015 ms | — |
+| v1-mini + Silero | 300 ms | 9/10 | 90 % | 413.646 ms | 398.725 ms | 409.970 ms | 29.817 ms | 19.443 ms |
+| v1-mini + Silero | 500 ms | 8/10 | 80 % | 608.931 ms | 601.155 ms | 603.364 ms | 22.100 ms | 16.145 ms |
+| v1-mini + Silero | 800 ms | 7/10 | 70 % | 900.158 ms | 895.717 ms | 899.233 ms | 21.015 ms | 19.226 ms |
 
 Le banc a donc mesuré 60 parcours VAD et 60 sondes v1-mini. Le temps global
-CPU est 5442.428 ms pour 3932.422 ms murales, soit 138.399 % d’un cœur
+CPU est 5182.038 ms pour 3611.251 ms murales, soit 143.497 % d’un cœur
 en équivalent parallèle ; la machine expose 24 CPU / 12 threads Torch. La
-latence EOT observée est de 16.233 à 18.057 ms en médiane, hors acquisition et
+latence EOT observée est de 16.145 à 19.443 ms en médiane, hors acquisition et
 STT.
 
 ## Conclusion de banc
 
-Sur cette voix Pocket TTS synthétique, le gain ressenti n’est **pas démontré
-comme suffisant** pour Lisa : la pile réduit de 20 points les fausses coupes à
-300 ms et de 10 points à 800 ms, mais ne réduit rien à 500 ms. Elle ajoute
-environ 20 ms de délai médian aux phrases complètes dans les trois réglages.
+Sur cette voix Pocket TTS synthétique, le gain ressenti reste **insuffisant
+pour activer par défaut** : à 300 ms la pile ne gagne rien (90 % contre 90 %),
+à 500 ms elle réduit les fausses coupes de 10 points (90 % → 80 %) et à 800 ms
+de 20 points (90 % → 70 %). Elle ajoute environ 17 à 26 ms de délai médian
+aux phrases complètes dans les trois réglages.
 Les pauses artificielles produisent aussi des probabilités v1-mini parfois
 élevées ; ce résultat ne doit pas être extrapolé à la prosodie humaine réelle.
 La pile doit donc rester opt-in et être recalibrée sur un futur corpus humain
@@ -369,5 +392,6 @@ Licence : **lue et synthétisée**, LiveKit Model License respectée dans le pla
 Intégration : **opt-in uniquement**, aucun service lancé et aucune API payante.
 Tests : **rouge puis vert** pour le faux service ; commit fonctionnel
 `8d0acf4f7` (`feat(sensory): add opt-in LiveKit turn decision`).
+Le correctif de déterminisme du banc est `d4b2a78d8`.
 Vérifications finales : test sensory 47/47, typecheck racine + GPU identity
 exit 0, ESLint ciblé exit 0 et `git diff --check` exit 0.
