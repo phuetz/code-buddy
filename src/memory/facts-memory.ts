@@ -197,8 +197,12 @@ Output the result strictly as a JSON array of transaction actions.`;
 
       return resultFacts;
     } catch (error: any) {
+      // Audit 2026-09-02 : ne PAS retourner currentFacts ici — le nouveau fait
+      // serait perdu alors que l'appelant annoncerait « Stored ». On propage :
+      // remember() et autoCapture() ont chacun un catch avec un repli
+      // d'écriture directe qui préserve le souvenir.
       logger.error(`[FactsMemory] Failed to reconcile facts: ${error.message}`);
-      return currentFacts;
+      throw error instanceof Error ? error : new Error(String(error));
     }
   }
 }

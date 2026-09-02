@@ -305,15 +305,17 @@ export class PersistentMemoryManager extends EventEmitter {
     let currentKey = "";
     let currentValue = "";
     let currentMeta: MemoryMeta | undefined;
+    let currentTags: string[] | undefined;
     let inMemoryBlock = false;
 
     const pushCurrent = () => {
       if (currentKey && currentValue) {
-        memories.push(this.createMemory(currentKey, currentValue.trim(), currentCategory, currentMeta));
+        memories.push(this.createMemory(currentKey, currentValue.trim(), currentCategory, currentMeta, currentTags));
       }
       currentKey = "";
       currentValue = "";
       currentMeta = undefined;
+      currentTags = undefined;
     };
 
     for (const line of lines) {
@@ -347,6 +349,19 @@ export class PersistentMemoryManager extends EventEmitter {
         continue;
       }
 
+      // Tags line written by saveMemories (`  Tags: a, b`). Audit 2026-09-02 :
+      // sans cette branche, la ligne était refondue dans la valeur au 1er
+      // reload puis détruite au 2e — `pinned` ne protégeait plus rien après
+      // un redémarrage.
+      const tagsMatch = line.match(/^ {2}Tags:\s*(.*)$/);
+      if (tagsMatch && inMemoryBlock && currentTags === undefined) {
+        currentTags = (tagsMatch[1] ?? "")
+          .split(",")
+          .map((t) => t.trim())
+          .filter((t) => t.length > 0);
+        continue;
+      }
+
       // Continue multi-line value
       if (inMemoryBlock && line.startsWith("  ")) {
         currentValue += "\n" + line.trim();
@@ -363,7 +378,7 @@ export class PersistentMemoryManager extends EventEmitter {
     return memories;
   }
 
-  private createMemory(key: string, value: string, category: MemoryCategory, meta?: MemoryMeta): Memory {
+  private createMemory(key: string, value: string, category: MemoryCategory, meta?: MemoryMeta, tags?: string[]): Memory {
     return {
       key,
       value,
@@ -372,6 +387,7 @@ export class PersistentMemoryManager extends EventEmitter {
       updatedAt: meta?.updatedAt ?? new Date(),
       ...(meta?.lastAccessedAt ? { lastAccessedAt: meta.lastAccessedAt } : {}),
       accessCount: meta?.accessCount ?? 0,
+      ...(tags && tags.length > 0 ? { tags } : {}),
     };
   }
 
@@ -1099,7 +1115,16 @@ export class PersistentMemoryManager extends EventEmitter {
         content += `<!-- No memories in this category -->\n`;
       } else {
         for (const memory of categoryMemories) {
-          content += `- **${memory.key}**: ${memory.value}\n`;
+          // Audit 2026-09-02 : indenter les lignes de continuation (2 espaces)
+          // pour que le parseur (branche « line.startsWith('  ') ») les refonde
+          // dans la valeur au reload — sinon tout sauf la 1re ligne est perdu
+          // au redémarrage. Une ligne vide interne devient « deux espaces »
+          // pour ne pas terminer le bloc.
+          const [first = '', ...rest] = memory.value.split('\n');
+          content += `- **${memory.key}**: ${first}\n`;
+          for (const cont of rest) {
+            content += `  ${cont}\n`;
+          }
           if (memory.tags && memory.tags.length > 0) {
             content += `  Tags: ${memory.tags.join(", ")}\n`;
           }
