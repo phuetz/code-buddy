@@ -64,6 +64,16 @@ Cowork à 3 018, balayage d'installation neuve à 103/103 commandes.
 - **Cowork essayé comme un inconnu sous Linux** : build Vite réparé (`homedir` non exporté), drapeaux
   Electron passés par `buddy gui`, `better-sqlite3` reconstruit via electron-rebuild, plus de popup
   Buffalo_S au premier message, cartes d'onboarding cliquables, documentation Linux alignée.
+- **Cowork, suite de l'audit « inconnu »** : un fournisseur local configuré (Ollama, LM Studio, vLLM) devient réellement le
+  fournisseur du moteur sans clé factice à inventer ; plus aucune adresse réseau privée câblée dans le code (garde-fou qui la
+  refuse) ; « Choose a folder » ouvre un dossier et refuse un fichier ; `project.list` rend un tableau ; un seul compositeur, tour
+  et wizard indépendants, la croix ferme le panneau et pas l'application ; le test e2e de chat parle à un vrai serveur local au
+  lieu d'injecter la réponse ; icône Linux et script de lancement corrigés.
+- **Le registre de skills ne tue plus le serveur** : `fs.watch` récursif remplacé par un watcher de racine et des watchers de
+  premier niveau avec gestion d'erreur ; un dossier qui apparaît puis disparaît dans `~/.codebuddy/skills` ne fait plus tomber le
+  processus. Les tests n'écrivent plus dans le vrai dossier utilisateur (garde-fou `tests/security/test-home-isolation`).
+- **Robot sous charge** : la voix hachait quand des travaux de fond saturaient les cœurs ; les services du robot reçoivent le
+  poids CPU maximal (drop-ins systemd, hors dépôt) — mesuré : 0 trou ≥ 250 ms sous saturation des 24 cœurs.
 
 ### Ce qui change pour qui installe
 
