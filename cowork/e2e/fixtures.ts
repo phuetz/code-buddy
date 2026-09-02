@@ -17,7 +17,7 @@ type CoworkFixtures = {
 };
 
 export const test = base.extend<CoworkFixtures>({
-  userDataDir: async (_, use) => {
+  userDataDir: async ({}, use) => {
     const tempDir = mkdtempSync(path.join(os.tmpdir(), 'cowork-e2e-'));
     await use(tempDir);
     rmSync(tempDir, { recursive: true, force: true });
