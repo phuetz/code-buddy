@@ -46,6 +46,19 @@ export interface ExecutionPlan {
   completedAt?: number;
 }
 
+/**
+ * True when the agent printed a tool call as text instead of executing it.
+ * The CLI flow agent is chat-only (`client.chat` with no tools), so this
+ * markup means the step did not actually create files or run commands.
+ */
+export function looksLikeUnexecutedToolMarkup(text: string): boolean {
+  return (
+    /<tool_call\b/i.test(text) ||
+    /<function\s*=/i.test(text) ||
+    /<(?:invoke|function|tool)\b[^>]*\bname\s*=/i.test(text)
+  );
+}
+
 /** Minimal agent interface for flow execution */
 export interface FlowAgent {
   name: string;
@@ -112,7 +125,10 @@ export class PlanningFlow extends EventEmitter {
       // Phase 1: Create plan
       this.emit('flow:phase', { phase: 'planning', goal });
       this.activePlan = await this.createPlan(goal);
-      this.emit('flow:plan_created', { plan: this.activePlan });
+      this.emit('flow:plan_created', {
+        plan: this.activePlan,
+        stepCount: this.activePlan.steps.length,
+      });
 
       // Phase 2: Execute steps
       this.emit('flow:phase', { phase: 'execution' });
@@ -298,6 +314,12 @@ Respond ONLY with the JSON object, no markdown fences.`;
       const context = this.buildStepContext(step);
       const result = await agent.run(context);
 
+      if (looksLikeUnexecutedToolMarkup(result)) {
+        throw new Error(
+          'Step result is an unexecuted tool call (chat-only agent cannot run tools)',
+        );
+      }
+
       step.status = PlanStepStatus.COMPLETED;
       step.result = result;
       step.duration = Date.now() - startTime;
@@ -306,6 +328,7 @@ Respond ONLY with the JSON object, no markdown fences.`;
         stepId: step.id,
         title: step.title,
         duration: step.duration,
+        status: step.status,
         resultPreview: result.substring(0, 200),
       });
     } catch (err) {

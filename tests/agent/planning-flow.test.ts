@@ -90,6 +90,26 @@ describe('PlanningFlow', () => {
     expect(plan.steps[1].status).toBe(PlanStepStatus.SKIPPED);
   });
 
+  it('does not complete a step that only emits unexecuted tool-call markup', async () => {
+    mockPlanLLM.mockResolvedValue(JSON.stringify({
+      steps: [
+        { id: 's1', title: 'Create file', description: 'write title-case.js', agentKey: 'swe', dependencies: [] },
+      ],
+    }));
+    (mockSWEAgent.run as ReturnType<typeof vi.fn>).mockResolvedValue(
+      '<tool_call>\n<function=Bash>\n<parameter=command>\nls\n</parameter>\n</function>\n</tool_call>',
+    );
+
+    const flow = new PlanningFlow(createConfig({ maxRetries: 0 }));
+    const result = await flow.execute('create src/title-case.js');
+
+    expect(result).toContain('1 failed');
+    expect(result).toMatch(/unexecuted tool call/i);
+    expect(flow.status).toBe(AgentStatus.ERROR);
+    expect(flow.succeeded).toBe(false);
+    expect(flow.plan!.steps[0]!.status).toBe(PlanStepStatus.FAILED);
+  });
+
   it('does not report an empty plan as a successful flow', async () => {
     mockPlanLLM.mockResolvedValue(JSON.stringify({ steps: [] }));
 

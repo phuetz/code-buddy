@@ -88,7 +88,10 @@ export function createFlowCommand(): Command {
             console.log(`  [${flow.getProgress()}%] Step: ${data.title}`);
           });
           flow.on('flow:step_complete', (data: any) => {
-            console.log(`  Done: ${data.title} (${data.status})`);
+            console.log(`  Done: ${data.title} (${data.status ?? 'completed'})`);
+          });
+          flow.on('flow:step_failed', (data: any) => {
+            console.log(`  Failed: ${data.stepId ?? ''} ${data.error ?? ''}`.trim());
           });
         }
 
