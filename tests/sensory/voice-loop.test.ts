@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { mkdtemp, rm, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
@@ -669,6 +669,85 @@ describe('voice loop — fast companion replies', () => {
     expect(fastCompanionReply('bonjour peux-tu auditer le micro ?')).toBeNull();
     expect(fastCompanionReply('cherche les erreurs dans les logs')).toBeNull();
     expect(fastCompanionReply('Lisa corrige le mode vocal')).toBeNull();
+  });
+});
+
+describe('voice loop — deterministic clock shortcuts', () => {
+  const savedTz = process.env.CODEBUDDY_TIMEZONE;
+  const savedFast = process.env.CODEBUDDY_SENSORY_FAST_REPLIES;
+
+  beforeEach(() => {
+    process.env.CODEBUDDY_TIMEZONE = 'Europe/Paris';
+    delete process.env.CODEBUDDY_SENSORY_FAST_REPLIES;
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-09-02T12:53:00.000Z'));
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    if (savedTz === undefined) delete process.env.CODEBUDDY_TIMEZONE;
+    else process.env.CODEBUDDY_TIMEZONE = savedTz;
+    if (savedFast === undefined) delete process.env.CODEBUDDY_SENSORY_FAST_REPLIES;
+    else process.env.CODEBUDDY_SENSORY_FAST_REPLIES = savedFast;
+  });
+
+  it.each([
+    'Lisa, quelle heure est-il ?',
+    'quelle heure est-il',
+    'quelle heure est il',
+    'quel heure est-il',
+    'quelle heure il est',
+    'il est quelle heure',
+    "c'est quelle heure",
+    "t'as l'heure",
+    "tu as l'heure",
+    "dis-moi l'heure",
+    "peux-tu me dire l'heure",
+    "l'heure qu'il est",
+  ])('answers the current time locally for %s', (heard) => {
+    expect(fastCompanionReply(heard)).toBe('Il est 14 h 53.');
+  });
+
+  it.each([
+    'quelle date',
+    'quelle date on est',
+    'on est quelle date',
+    "c'est quelle date",
+    'la date du jour',
+    'on est le combien',
+    "on est le combien aujourd'hui",
+  ])('answers the current date locally for %s', (heard) => {
+    expect(fastCompanionReply(heard)).toBe('Nous sommes mercredi 2 septembre 2026.');
+  });
+
+  it.each([
+    'on est quel jour',
+    'quel jour on est',
+    'quel jour sommes-nous',
+    "c'est quel jour",
+    'quel jour de la semaine',
+    "on est quel jour aujourd'hui",
+  ])('answers the current weekday locally for %s', (heard) => {
+    expect(fastCompanionReply(heard)).toBe('Nous sommes mercredi.');
+  });
+
+  it.each([
+    'rappelle-moi dans une heure',
+    'Lisa, rappelle-moi de sortir les poubelles à dix-neuf heures',
+    'à dix-neuf heures',
+    'dans une heure',
+    'à quelle heure est le train',
+    'quelle heure est le rendez-vous',
+    'il est tard ?',
+    'on est déjà en septembre ?',
+  ])('does not steal a reminder, schedule or indirect question: %s', (heard) => {
+    expect(fastCompanionReply(heard)).toBeNull();
+  });
+
+  it("keeps « à tout à l'heure » as a goodbye, not the wall clock", () => {
+    const reply = fastCompanionReply("à tout à l'heure");
+    expect(reply).toMatch(/tout à l['’]heure/i);
+    expect(reply).not.toMatch(/^Il est /);
   });
 });
 

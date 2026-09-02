@@ -56,6 +56,7 @@ import {
 } from './voice-activity.js';
 import { prepareSpeech } from './speech-sanitizer.js';
 import { matchVoiceInteraction, VOICE_INTERACTION_PREWARM_PHRASES } from './voice-interactions.js';
+import { clockCompanionReply } from './voice-clock.js';
 import {
   DEFAULT_SENTENCE_CAP,
   safeCommitLength,
@@ -745,6 +746,8 @@ export function fastCompanionReply(heard: string): string | null {
   ) {
     return "Plutôt bien. J'ai continué à préparer Code Buddy pour répondre plus vite.";
   }
+  const clock = clockCompanionReply(heard);
+  if (clock) return clock;
   return matchVoiceInteraction(heard);
 }
 

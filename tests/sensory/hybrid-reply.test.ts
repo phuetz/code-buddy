@@ -539,6 +539,34 @@ describe('hybrid reply — routing & memory', () => {
     expect(calls).toEqual([]);
   });
 
+  it('answers the current time locally without chitchat or agent', async () => {
+    const savedTz = process.env.CODEBUDDY_TIMEZONE;
+    process.env.CODEBUDDY_TIMEZONE = 'Europe/Paris';
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-09-02T12:53:00.000Z'));
+    const calls: string[] = [];
+    const reply = makeHybridReply({
+      prefetch: () => null,
+      jokes: () => null,
+      chitchat: async () => {
+        calls.push('chitchat');
+        return 'six heures quarante-sept';
+      },
+      agentReply: async () => {
+        calls.push('agent');
+        return 'agent';
+      },
+    });
+    try {
+      await expect(reply('Lisa, quelle heure est-il ?')).resolves.toBe('Il est 14 h 53.');
+      expect(calls).toEqual([]);
+    } finally {
+      vi.useRealTimers();
+      if (savedTz === undefined) delete process.env.CODEBUDDY_TIMEZONE;
+      else process.env.CODEBUDDY_TIMEZONE = savedTz;
+    }
+  });
+
   it('small talk goes to chitchat; a command goes to the grounded agent', async () => {
     const { reply, calls } = harness();
     expect(await reply('je t’aime')).toBe('chit(je t’aime)');
