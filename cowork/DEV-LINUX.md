@@ -11,15 +11,16 @@ development. This guide is the lighter loop.
 
 ```bash
 cd /path/to/code-buddy
-git clone https://github.com/phuetz/ai-providers.git ../ai-providers   # only if missing
-(cd ../ai-providers && npm install && npm run build)
+# Node.js >= 22 is required for Cowork (the root CLI still supports >= 18).
 npm install                                                            # root deps
 (cd cowork && npm install)                                             # cowork deps
 npx tsc -p .                                                           # compile core into ./dist/
 
-# Rebuild native modules for Electron's Node ABI (better-sqlite3, etc.).
-# Required after any `npm install` at the root that touches native deps.
-./cowork/node_modules/.bin/electron-rebuild --module-dir . --only better-sqlite3
+# Rebuild Cowork's better-sqlite3 for Electron's Node ABI.
+# Required after any `npm install` in cowork/ that touches native deps.
+# Do not pass npm's --runtime/--target/--disturl: npm 11 treats those as
+# unknown CLI config and rebuilds for Node instead of Electron.
+(cd cowork && npm run rebuild)
 ```
 
 If Cowork can't find `dist-electron/` after these steps, ensure the
@@ -36,10 +37,18 @@ in ~30 s without touching Python or sandbox agents.
 cd cowork
 npx vite build
 
-DISPLAY=:0 NODE_ENV=production \
+# Local X11 (typical desktop). Headless / no DISPLAY: wrap with xvfb-run -a
+# and do not point DISPLAY at another user's session.
+NODE_ENV=production \
   ./node_modules/electron/dist/electron \
   --no-sandbox --disable-gpu \
   ./dist-electron/main/index.js
+```
+
+`buddy gui` (from the repo root, after `npm run build`) passes `--no-sandbox --disable-gpu` on Linux. A headless smoke:
+
+```bash
+xvfb-run -a node dist/index.js gui
 ```
 
 Flags:
@@ -163,7 +172,7 @@ when chasing a UI bug.
 
 | Symptom | Cause | Fix |
 | ------- | ----- | --- |
-| `Cannot find package '@phuetz/ai-providers'` | sibling repo not cloned | clone + build it (commit `5757b197` inlined the package, so newer code-buddy doesn't need it) |
+| `Cannot find package '@phuetz/ai-providers'` | leftover import of the old sibling package | not required: commit `5757b197` inlined it under `src/providers/_shared/` |
 | `chrome-sandbox` SUID error | first `npm install` | use `--no-sandbox` flag |
 | Electron freezes on boot | xrdp without `--disable-gpu` | always set the flag in dev |
 | `prepare:python:all HTTP 504` | GitHub releases API rate limit | skip — use `npx vite build` instead of `npm run build` |

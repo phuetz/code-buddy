@@ -176,7 +176,7 @@ buddy gui                # launch (alias: buddy desktop)
 npm run dev:gui          # Vite + Electron from source
 ```
 
-- **Linux** (the primary dev target): see [`DEV-LINUX.md`](./DEV-LINUX.md) — build the renderer with `npx vite build` (~30 s) and boot Electron with `--no-sandbox --disable-gpu`.
+- **Linux** (the primary dev target): see [`DEV-LINUX.md`](./DEV-LINUX.md) — build the renderer with `npx vite build` (~30 s). Skip `npm run build` / `npm run build:gui` (that is the macOS/Windows packager). `buddy gui` passes `--no-sandbox --disable-gpu` on Linux; headless: `xvfb-run -a buddy gui`.
 - **macOS / Windows**: supported via Electron. `better-sqlite3` is a native module, rebuilt against Electron headers on `postinstall` (`npm run rebuild`).
 
 ---
