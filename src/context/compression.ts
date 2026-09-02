@@ -8,6 +8,7 @@
 import { CodeBuddyMessage } from '../codebuddy/client.js';
 import { TokenCounter } from './token-counter.js';
 import { CompressionResult } from './types.js';
+import { repairToolCallPairs } from './transcript-repair.js';
 
 /**
  * Options to control the compression process.
@@ -87,7 +88,7 @@ export class ContextCompressor {
     if (currentTokens <= tokenLimit) {
       return {
         compressed: true,
-        messages: currentSet,
+        messages: repairToolCallPairs(currentSet),
         tokensReduced: initialTokens - currentTokens,
         strategy: 'tool_truncation'
       };
@@ -132,7 +133,7 @@ export class ContextCompressor {
 
     return {
       compressed: true,
-      messages: currentSet,
+      messages: repairToolCallPairs(currentSet),
       tokensReduced: initialTokens - currentTokens,
       strategy: 'sliding_window'
     };
@@ -215,6 +216,6 @@ export class ContextCompressor {
         result.unshift(system);
     }
 
-    return result;
+    return repairToolCallPairs(result);
   }
 }

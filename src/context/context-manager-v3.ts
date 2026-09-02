@@ -19,6 +19,7 @@ import { ContextCompressor } from './compression.js';
 import { ContextManagerConfig, ContextStats, ContextWarning } from './types.js';
 import { logger } from '../utils/logger.js';
 import { ContextCompactionError, findLastUserMessage } from './context-manager-v2.js';
+import { repairToolCallPairs } from './transcript-repair.js';
 
 /**
  * Advanced manager for handling conversation context.
@@ -154,7 +155,7 @@ export class ContextManagerV3 {
     this.rejectIfCurrentRequestExceedsBudget(messages, effectiveLimit);
 
     if (stats.totalTokens <= effectiveLimit) {
-      return messages;
+      return repairToolCallPairs(messages);
     }
 
     logger.info(`Context limit exceeded (${stats.totalTokens} > ${effectiveLimit}). Compressing...`);
