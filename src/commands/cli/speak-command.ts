@@ -81,7 +81,7 @@ export function registerSpeakCommand(program: Command): void {
         });
         if (!(await provider.isAvailable())) {
           console.error("AudioReader is not running at " + opts.url);
-          console.error("Start it with: cd ~/claude/AudioReader && python main.py");
+          console.error("Start the AudioReader HTTP service (default http://localhost:8000), or use --engine pocket.");
           console.error("Tip: use `--engine pocket` for the on-CPU realtime voice, or `--engine voicebox` for the expressive GPU voice.");
           process.exit(1);
         }

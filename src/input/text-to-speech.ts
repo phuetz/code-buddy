@@ -152,7 +152,7 @@ export class TextToSpeechManager extends EventEmitter {
         });
         return { available: res.ok };
       } catch {
-        return { available: false, reason: 'AudioReader not running. Start it with: cd ~/claude/AudioReader && python main.py' };
+        return { available: false, reason: 'AudioReader not running. Start the AudioReader HTTP service (default http://localhost:8000).' };
       }
     }
 
