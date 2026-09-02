@@ -7,6 +7,10 @@ interface ShadowStatusOptions {
   directory?: string;
 }
 
+interface ShadowDirectoryOptions {
+  directory?: string;
+}
+
 export function createShadowCommand(): Command {
   const command = new Command('shadow')
     .description('Inspect or run speculative validation in the persistent shadow worktree');
@@ -29,8 +33,9 @@ export function createShadowCommand(): Command {
   command
     .command('run')
     .description('Validate the current working tree changes in the shadow worktree')
-    .action(async () => {
-      const result = await new ShadowWorkspace(process.cwd()).runWorkingTree();
+    .option('-d, --directory <dir>', 'repository directory to validate')
+    .action(async (options: ShadowDirectoryOptions) => {
+      const result = await new ShadowWorkspace(options.directory ?? process.cwd()).runWorkingTree();
       if (result.unavailable) {
         console.error(`Shadow unavailable: ${result.stdoutTail}`);
         process.exitCode = 2;
