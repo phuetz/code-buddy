@@ -14,6 +14,7 @@ export interface TTSConfig {
   volume?: string;
   pitch?: string;
   autoSpeak?: boolean;
+  format?: 'wav' | 'ogg' | 'mp3';
 }
 
 export interface TTSState {
@@ -63,6 +64,7 @@ export class TextToSpeechManager extends EventEmitter {
       volume: config.volume || '+0%',
       pitch: config.pitch || '+0Hz',
       autoSpeak: config.autoSpeak ?? false,
+      format: config.format,
     };
 
     this.state = {
@@ -412,6 +414,9 @@ export class TextToSpeechManager extends EventEmitter {
    */
   private async speakWithAudioReader(text: string): Promise<void> {
     const voice = this.config.voice || 'ff_siwis';
+    const format = this.config.format === 'ogg' || this.config.format === 'mp3'
+      ? this.config.format
+      : 'wav';
     const response = await fetch(`${this.audioreaderBaseURL}/v1/audio/speech`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -420,7 +425,7 @@ export class TextToSpeechManager extends EventEmitter {
         input: text,
         voice,
         speed: 1.0,
-        response_format: 'wav',
+        response_format: format,
       }),
     });
 
@@ -428,7 +433,7 @@ export class TextToSpeechManager extends EventEmitter {
       throw new Error(`AudioReader TTS error: ${response.status} ${await response.text()}`);
     }
 
-    const audioFile = path.join(this.tempDir, `tts_${Date.now()}.wav`);
+    const audioFile = path.join(this.tempDir, `tts_${Date.now()}.${format}`);
     const buffer = Buffer.from(await response.arrayBuffer());
     fs.writeFileSync(audioFile, buffer);
 
