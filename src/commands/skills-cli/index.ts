@@ -825,6 +825,10 @@ export function registerSkillsCommands(program: Command): void {
         overwrite: opts.overwrite === true,
         ...(opts.category ? { category: opts.category } : {}),
       });
+      if (opts.apply === true && report.imported.length > 0) {
+        const { getSkillRegistry } = await import('../../skills/registry.js');
+        getSkillRegistry().stopWatching();
+      }
       if (opts.json) {
         console.log(JSON.stringify({ source: label, report }, null, 2));
         return;
