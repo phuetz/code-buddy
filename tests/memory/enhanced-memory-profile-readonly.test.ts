@@ -75,4 +75,26 @@ describe('R34 — user-profile.json illisible n\'est pas un profil vide', () => 
     })).rejects.toThrow(/user-profile\.json.*corrupt|user-profile.*unreadable/i);
     expect(fs.readFileSync(profilePath, 'utf8')).toBe(corrupt);
   });
+
+  it.each([
+    { label: 'JSON null', body: 'null' },
+    { label: 'JSON array', body: '[]' },
+  ])('fails closed on $label instead of treating it as an empty profile', async ({ body }) => {
+    const dataDir = path.join(home, '.codebuddy', 'memory');
+    fs.mkdirSync(path.join(dataDir, 'projects'), { recursive: true });
+    fs.mkdirSync(path.join(dataDir, 'memories'), { recursive: true });
+    fs.writeFileSync(path.join(dataDir, 'memory-index.json'), '[]');
+    const profilePath = path.join(dataDir, 'user-profile.json');
+    fs.writeFileSync(profilePath, body);
+
+    memory = new EnhancedMemory({ useSQLite: false, embeddingEnabled: false });
+    await memory.recall({ query: 'anything' });
+
+    expect(fs.readFileSync(profilePath, 'utf8')).toBe(body);
+    expect(() => memory!.getUserProfile()).toThrow(/user-profile\.json.*corrupt|user-profile.*unreadable/i);
+    await expect(memory.updateUserProfile({
+      interests: ['ne doit pas ecraser'],
+    })).rejects.toThrow(/user-profile\.json.*corrupt|user-profile.*unreadable/i);
+    expect(fs.readFileSync(profilePath, 'utf8')).toBe(body);
+  });
 });
