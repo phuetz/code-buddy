@@ -46,4 +46,45 @@ Tests  75 passed (75)
 `npx tsc --noEmit -p tsconfig.json` exit 0  
 `npx eslint src/memory/collective-knowledge-graph.ts src/services/prompt-builder.ts src/agent/execution/context-pipeline.ts tests/memory/collective-knowledge-graph.test.ts tests/services/prompt-builder.test.ts` exit 0
 
+### 2. Council à un seul membre — FAIT
+
+**Sonde du pool résolu** (appel réel 0 €, `listActiveLlmModelPool`) :
+
+```
+CODEBUDDY_COUNCIL_POOL=full (default)
+CODEBUDDY_COUNCIL_TRIAGE=(unset)
+registry.all=5 primary=null
+  registry chatgpt model=gpt-5.6-sol local=false apiKey=yes cost=0
+  registry agy-cli ... apiKey=yes cost=0
+  registry ollama model=gemma4-moe-rag:latest local=true apiKey=yes cost=0
+  registry lemonade ... apiKey=yes cost=0
+  registry grok model=grok-4-latest local=false apiKey=yes cost=0.5
+pool=37 withApiKey=37
+  chatgpt (6): gpt-5.6-sol, gpt-5.6-terra, gpt-5.6-luna, gpt-5.5, gpt-5.4, gpt-5.4-mini
+  agy-cli (11): …
+  grok (5): grok-4-latest, grok-4-1-fast, grok-code-fast-1, grok-3-fast, grok-3-mini
+  ollama (10): gemma4-moe-rag:latest, … (plafond 10 locaux)
+  lemonade (5): …
+```
+
+**Cause.** Ce n’est pas un pool vide. L’audit a lancé `council --count 1 --models "chatgpt/gpt-5.6-sol"`. `--count 1` est un plafond documenté (défaut 3). En plus, le filtre `--models` comparait la chaîne entière `chatgpt/gpt-5.6-sol` au provider OU au modèle, donc **0 correspondance** → le filtre était ignoré (pool intact) → `pickDiverse` prenait le 1er classé (`gpt-5.4-mini`, bonus cheap + `fast`).
+
+**Correctif.** `matchCouncilCandidate` accepte `provider/model` et `provider:model`. Un conseil à 1 siège affiche pourquoi (`--count`, taille du pool, filtre).
+
+**Tests rouge → vert**
+
+```
+# avant
+expected [ 'gpt-5.4-mini' ] to deeply equal [ 'gpt-5.6-sol' ]
+describeCouncilPanel is not a function
+
+# après
+npx vitest run tests/council/council-engine.test.ts tests/commands/council-conductor.test.ts
+Test Files  2 passed (2)
+Tests  26 passed (26)
+```
+
+`npx tsc --noEmit -p tsconfig.json` exit 0  
+`npx eslint src/council/council-engine.ts src/council/types.ts src/commands/council.ts tests/council/council-engine.test.ts tests/commands/council-conductor.test.ts` exit 0
+
 ---

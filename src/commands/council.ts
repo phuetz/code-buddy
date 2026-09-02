@@ -92,6 +92,29 @@ async function loadDefaultPeers(opts: CouncilOptions): Promise<CouncilPeer[]> {
   }
 }
 
+/** Explain a 1-seat council so the user knows it is a cap/filter, not an empty pool. */
+export function describeCouncilPanel(
+  event: Extract<CouncilProgressEvent, { type: 'panel' }>,
+): string | null {
+  if (event.entries.length > 1) return null;
+  const pool = event.poolSize ?? event.entries.length;
+  const requested = event.requestedCount ?? event.entries.length;
+  const parts: string[] = [];
+  if (requested <= 1) parts.push(`plafond --count ${requested}`);
+  parts.push(`pool résolu : ${pool} modèle(s)`);
+  if (event.modelsFilter) {
+    parts.push(
+      event.modelsMatched
+        ? `filtre --models « ${event.modelsFilter} »`
+        : `filtre --models « ${event.modelsFilter} » sans correspondance (pool intact)`,
+    );
+  }
+  return (
+    `ℹ️  Conseil à ${event.entries.length} membre (${parts.join(' ; ')}). ` +
+    'Pour plusieurs IA : omettez --count 1 ou augmentez --count (défaut 3).'
+  );
+}
+
 function renderProgress(event: CouncilProgressEvent, out: Emit): void {
   switch (event.type) {
     case 'panel': {
@@ -105,6 +128,8 @@ function renderProgress(event: CouncilProgressEvent, out: Emit): void {
             .map((e) => `${e.model}${e.histWinRate > 0 ? ` (${Math.round(e.histWinRate * 100)}% hist)` : ''}`)
             .join(', '),
       );
+      const oneSeatNote = describeCouncilPanel(event);
+      if (oneSeatNote) out(oneSeatNote);
       if (event.explored) {
         out(`🎲 Exploration — ${event.explored} rejoint le panel pour étoffer son historique.`);
       }

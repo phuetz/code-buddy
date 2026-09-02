@@ -193,6 +193,14 @@ export type CouncilProgressEvent =
       peerCount: number;
       /** Model granted the ε-exploration seat this run, if any. */
       explored?: string;
+      /** Usable models after apiKey + --models filtering (before pickDiverse). */
+      poolSize?: number;
+      /** Requested seat count (`--count`, default 3). */
+      requestedCount?: number;
+      /** Raw `--models` filter, when set. */
+      modelsFilter?: string;
+      /** False when `--models` matched nothing and the full pool was kept. */
+      modelsMatched?: boolean;
     }
   | { type: 'conductor'; roles: string[] }
   | { type: 'fleet_no_peers' }

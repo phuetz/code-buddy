@@ -77,6 +77,36 @@ function sourceId(answer: CouncilAnswer): string {
   return answer.source.kind === 'local' ? answer.source.provider : answer.source.peerId;
 }
 
+/** Match `chatgpt`, `gpt-5.6-sol`, or `chatgpt/gpt-5.6-sol` / `chatgpt:gpt-5.6-sol`. */
+export function matchCouncilCandidate(
+  c: Pick<CouncilCandidate, 'provider' | 'model'>,
+  wanted: string,
+): boolean {
+  const w = wanted.trim().toLowerCase();
+  if (!w) return false;
+  const provider = c.provider.toLowerCase();
+  const model = c.model.toLowerCase();
+  if (provider.includes(w) || model.includes(w)) return true;
+  const sep = w.includes('/') ? '/' : w.includes(':') ? ':' : '';
+  if (!sep) return false;
+  const i = w.indexOf(sep);
+  const p = w.slice(0, i);
+  const m = w.slice(i + 1);
+  return Boolean(p && m && provider.includes(p) && model.includes(m));
+}
+
+export function filterCouncilCandidates(
+  candidates: CouncilCandidate[],
+  modelsList?: string,
+): { candidates: CouncilCandidate[]; matched: boolean; wanted: string[] } {
+  if (!modelsList) return { candidates, matched: false, wanted: [] };
+  const wanted = modelsList.split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
+  if (wanted.length === 0) return { candidates, matched: false, wanted };
+  const filtered = candidates.filter((c) => wanted.some((w) => matchCouncilCandidate(c, w)));
+  if (filtered.length === 0) return { candidates, matched: false, wanted };
+  return { candidates: filtered, matched: true, wanted };
+}
+
 function labelledConcat(answers: CouncilAnswer[]): string {
   return answers
     .map((a) => {
@@ -133,17 +163,12 @@ export async function runCouncilPipeline(
   }
 
   // 1. usable LLMs
-  let candidates = (await deps.loadRegistry()).filter((c) => c.apiKey);
-  if (candidates.length === 0) {
+  const usable = (await deps.loadRegistry()).filter((c) => c.apiKey);
+  if (usable.length === 0) {
     throw new CouncilError('no-candidates', 'no active LLMs detected');
   }
-  if (opts.models) {
-    const wanted = opts.models.split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
-    const filtered = candidates.filter((c) =>
-      wanted.some((w) => c.provider.toLowerCase().includes(w) || c.model.toLowerCase().includes(w)),
-    );
-    if (filtered.length) candidates = filtered;
-  }
+  const modelFilter = filterCouncilCandidates(usable, opts.models);
+  let candidates = modelFilter.candidates;
 
   // 2. capability routing × learned bias
   const taskType = (opts.taskType || inferTaskType(task)).toLowerCase();
@@ -191,6 +216,9 @@ export async function runCouncilPipeline(
     taskType,
     entries: picked.map((p) => ({ model: p.c.model, histWinRate: p.hist })),
     peerCount: peers.length,
+    poolSize: usable.length,
+    requestedCount: opts.count ?? 3,
+    ...(opts.models ? { modelsFilter: opts.models, modelsMatched: modelFilter.matched } : {}),
     ...(explored ? { explored } : {}),
   });
   if (plan.mode === 'collective') {

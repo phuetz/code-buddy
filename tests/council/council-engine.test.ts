@@ -489,6 +489,34 @@ describe('runCouncilPipeline', () => {
     });
     expect(aborted).toBe(true);
   });
+
+  it('honours provider/model --models instead of silently keeping the whole pool', async () => {
+    const candidates = [
+      candidate('chatgpt', 'gpt-5.4-mini'),
+      candidate('chatgpt', 'gpt-5.6-sol'),
+      candidate('ollama', 'qwen3:4b'),
+    ];
+    const clients = {
+      'gpt-5.4-mini': fakeClient('gpt-5.4-mini', { answer: 'Canberra from mini' }),
+      'gpt-5.6-sol': fakeClient('gpt-5.6-sol', { answer: 'Canberra from sol' }),
+      'qwen3:4b': fakeClient('qwen3:4b', { answer: 'Canberra from ollama' }),
+    };
+    const deps = makeDeps(candidates, clients);
+    const events: CouncilProgressEvent[] = [];
+
+    const result = await runCouncilPipeline(
+      'quelle est la capitale de l’Australie ?',
+      { count: 1, models: 'chatgpt/gpt-5.6-sol' },
+      deps,
+      (e) => events.push(e),
+    );
+
+    expect(result.answers.map((a) => a.displayName)).toEqual(['gpt-5.6-sol']);
+    const panel = events.find((e): e is Extract<CouncilProgressEvent, { type: 'panel' }> => e.type === 'panel');
+    expect(panel?.poolSize).toBe(3);
+    expect(panel?.requestedCount).toBe(1);
+    expect(panel?.modelsMatched).toBe(true);
+  });
 });
 
 describe('conductor role stability', () => {
