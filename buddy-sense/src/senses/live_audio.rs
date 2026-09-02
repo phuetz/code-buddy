@@ -44,6 +44,16 @@ pub const DEFAULT_MIC_THRESHOLD: f64 = 0.02;
 /// close to the 400 ms low-latency starting point used by mature realtime
 /// voice stacks, while retaining a little margin for French hesitations.
 pub const DEFAULT_MIC_ENDPOINT_MS: u64 = 420;
+
+/// Resolve the conversational end-silence endpoint. The new name is preferred,
+/// while the legacy microphone-specific knob remains a compatibility fallback.
+/// With neither variable set, the measured 420 ms default is unchanged.
+pub fn resolve_end_silence_ms(configured: Option<&str>, legacy: Option<&str>) -> u64 {
+    configured
+        .and_then(|value| value.trim().parse::<u64>().ok())
+        .or_else(|| legacy.and_then(|value| value.trim().parse::<u64>().ok()))
+        .unwrap_or(DEFAULT_MIC_ENDPOINT_MS)
+}
 /// Keep a tiny acoustic tail for the recognizer, but do not make STT decode the
 /// whole endpoint silence after the endpointer has already classified it.
 const STT_TAIL_PADDING_MS: u64 = 80;
@@ -1341,6 +1351,13 @@ mod tests {
     fn frames_of(level: i16, count: usize) -> Vec<Vec<i16>> {
         let n = frame_samples();
         (0..count).map(|_| vec![level; n]).collect()
+    }
+
+    #[test]
+    fn end_silence_env_preserves_the_measured_default_and_overrides_legacy_config() {
+        assert_eq!(resolve_end_silence_ms(None, None), DEFAULT_MIC_ENDPOINT_MS);
+        assert_eq!(resolve_end_silence_ms(Some("350"), Some("800")), 350);
+        assert_eq!(resolve_end_silence_ms(Some("invalid"), Some("640")), 640);
     }
 
     #[test]

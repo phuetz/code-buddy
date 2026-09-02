@@ -40,6 +40,7 @@ import { resolveUserName } from '../companion/user-name.js';
 import {
   isLikelyIncompleteVoiceTurn,
   joinVoiceTurnFragments,
+  resolveConversationalTurnEndSilenceMs,
   resolveIncompleteTurnHoldMs,
 } from './voice-turn-taking.js';
 import type { VoiceDeliveryProfile, VoiceTurnContext } from './voice-entrainment.js';
@@ -82,6 +83,8 @@ export interface SpeechReactionOptions {
   incompleteTurnHoldMs?: number;
   cwd?: string;
   now?: () => number;
+  /** Injectable environment for opt-in conversational policies. */
+  env?: NodeJS.ProcessEnv;
   /** Action hook for the transcript (e.g. trigger an agent turn). */
   onHeard?: (text: string, context?: VoiceTurnContext) => void | Promise<void>;
   /**
@@ -1385,8 +1388,9 @@ export async function transcribeWav(
 
 export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => void {
   const bus = getGlobalEventBus();
-  const debounceMs = options.debounceMs ?? resolveSpeechDebounceMs();
-  const incompleteTurnHoldMs = options.incompleteTurnHoldMs ?? resolveIncompleteTurnHoldMs();
+  const env = options.env ?? process.env;
+  const debounceMs = options.debounceMs ?? resolveSpeechDebounceMs(env);
+  const incompleteTurnHoldMs = options.incompleteTurnHoldMs ?? resolveIncompleteTurnHoldMs(env);
   const now = options.now ?? (() => Date.now());
   const transcribe = options.transcriber ?? transcribeWavRaw;
   const turnCoordinator = getVoiceTurnCoordinator();
@@ -2052,7 +2056,11 @@ export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => v
     // and carried in the payload — drive the same cognition with the text directly,
     // no WAV / no STT. Keyed on a synthetic id since there's no file to dedup on.
     if (p.kind === 'transcript_final') {
-      const livePayload = p.payload as { text?: string; turnDetector?: string } | undefined;
+      const livePayload = p.payload as {
+        text?: string;
+        turnDetector?: string;
+        endpointWaitMs?: number;
+      } | undefined;
       let speechStartedAtMs = finiteTimestamp(
         (p.payload as Record<string, unknown> | undefined)?.startedAtMs,
       ) ?? pendingSpeechStartedAtMs;
@@ -2071,9 +2079,14 @@ export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => v
       }
       // Smart Turn has already considered prosody and the complete audio. The
       // text heuristic is only a fail-open fallback for VAD-only sources.
+      const conversationalEndSilenceMs = resolveConversationalTurnEndSilenceMs(text, env);
+      const endpointWaitMs = finiteTimestamp(livePayload?.endpointWaitMs) ?? 0;
+      const remainingIncompleteHoldMs = conversationalEndSilenceMs === null
+        ? incompleteTurnHoldMs
+        : Math.max(0, conversationalEndSilenceMs - endpointWaitMs);
       if (
         !livePayload?.turnDetector &&
-        incompleteTurnHoldMs > 0 &&
+        remainingIncompleteHoldMs > 0 &&
         isLikelyIncompleteVoiceTurn(text)
       ) {
         const timer = setTimeout(() => {
@@ -2091,7 +2104,7 @@ export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => v
           };
           if (inFlight) queuePendingSpeech(job);
           else startSpeechJob(job);
-        }, incompleteTurnHoldMs);
+        }, remainingIncompleteHoldMs);
         heldLiveTurn = {
           p,
           text,
@@ -2100,7 +2113,9 @@ export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => v
           ...(speechStartedAtMs !== undefined ? { speechStartedAtMs } : {}),
           ...(turnId ? { turnId } : {}),
         };
-        logger.debug(`[speech] holding likely incomplete turn for ${incompleteTurnHoldMs}ms → ${text}`);
+        logger.debug(
+          `[speech] holding likely incomplete turn for ${remainingIncompleteHoldMs}ms → ${text}`,
+        );
         return;
       }
       if (inFlight) {

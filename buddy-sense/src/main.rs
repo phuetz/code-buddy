@@ -217,10 +217,12 @@ async fn main() {
             .ok()
             .and_then(|s| s.parse::<f64>().ok())
             .unwrap_or(senses::live_audio::DEFAULT_MIC_THRESHOLD);
-        let endpoint_ms = std::env::var("BUDDY_SENSE_MIC_ENDPOINT_MS")
-            .ok()
-            .and_then(|s| s.parse::<u64>().ok())
-            .unwrap_or(senses::live_audio::DEFAULT_MIC_ENDPOINT_MS);
+        let configured_end_silence = std::env::var("BUDDY_SENSE_END_SILENCE_MS").ok();
+        let legacy_endpoint = std::env::var("BUDDY_SENSE_MIC_ENDPOINT_MS").ok();
+        let endpoint_ms = senses::live_audio::resolve_end_silence_ms(
+            configured_end_silence.as_deref(),
+            legacy_endpoint.as_deref(),
+        );
         let adaptive = !matches!(
             std::env::var("BUDDY_SENSE_MIC_ADAPTIVE")
                 .unwrap_or_else(|_| "true".to_string())

@@ -404,6 +404,27 @@ describe('speech reaction — speech_end → STT → percept', () => {
     }
   });
 
+  it('adds only the missing silence up to 900 ms for a suspended opt-in turn', async () => {
+    const tmp = await mkdtemp(path.join(os.tmpdir(), 'speech-turn-target-'));
+    const heard: string[] = [];
+    const unwire = wireSpeechReaction({
+      debounceMs: 0,
+      cwd: tmp,
+      env: { CODEBUDDY_SENSORY_TURN_HEURISTIC: 'true' },
+      onHeard: async (text) => {
+        heard.push(text);
+      },
+    });
+    try {
+      transcriptFinal('Lisa, je pensais donc', { endpointWaitMs: 350 });
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      expect(heard).toEqual([]);
+      await waitFor(() => expect(heard).toEqual(['Lisa, je pensais donc']));
+    } finally {
+      unwire();
+    }
+  });
+
   it('trusts the audio-native Smart Turn decision instead of applying the text fallback twice', async () => {
     const tmp = await mkdtemp(path.join(os.tmpdir(), 'speech-smart-turn-'));
     const heard: string[] = [];
