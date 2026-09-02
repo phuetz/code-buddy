@@ -1125,6 +1125,31 @@ export async function registerAIMessageHandler(manager: import('../../channels/i
 
       const sessionKey = message.sessionKey || 'default-global';
 
+      // On-demand camera share (« qu'est-ce que tu vois ? ») — Telegram only.
+      // Photo goes exclusively to CODEBUDDY_SENSORY_ALERT_CHAT via sendTelegramAlert.
+      if (channel.type === 'telegram') {
+        try {
+          const { maybeHandleCameraShareRequest } = await import('../../companion/camera-share.js');
+          const share = await maybeHandleCameraShareRequest(message.content, {
+            surface: 'telegram',
+            inboundChatId: message.channel.id,
+            rootDir: process.cwd(),
+          });
+          if (share) {
+            await channel.send({
+              channelId: message.channel.id,
+              content: share.spokenReply,
+              replyTo: message.id,
+            });
+            return;
+          }
+        } catch (cameraShareErr) {
+          logger.warn('Camera share channel path failed', {
+            error: cameraShareErr instanceof Error ? cameraShareErr.message : String(cameraShareErr),
+          });
+        }
+      }
+
       // Lisa selfie on Telegram (photo of herself) — before the full agent turn.
       if (
         process.env.CODEBUDDY_LISA_SELFIE !== 'false' &&
