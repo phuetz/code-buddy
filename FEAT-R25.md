@@ -89,3 +89,36 @@ exit 0
 $ npx eslint src/companion/camera-share.ts src/commands/handlers/channel-handlers.ts tests/companion/camera-share.test.ts
 exit 0
 ```
+
+Commit Telegram : `3a9357352` `feat(companion): envoyer sur Telegram ce que voit la caméra`
+
+### Surface voix
+
+Rouge (câblage absent — « qu'est-ce que tu vois ? » tombait sur le consentement ambigu) :
+
+```text
+$ npx vitest run tests/sensory/camera-share-voice.test.ts
+FAIL  ... cameraShare to be called once, but got 0 times
+FAIL  ... expected 'pour le dire autrement, oui, je peux regarder. tu veux que j'ouvre la caméra...'
+      to contain 'je n'ai pas d'image en ce moment'
+Test Files  1 failed (1)
+Tests  4 failed | 1 passed (5)
+```
+
+Vert :
+
+```text
+$ npx vitest run tests/sensory/camera-share-voice.test.ts tests/sensory/voice-loop.test.ts tests/companion/camera-share.test.ts
+Test Files  3 passed (3)
+Tests  109 passed (109)
+
+$ npx vitest run tests/sensory/hybrid-reply.test.ts
+Test Files  1 passed (1)
+Tests  55 passed (55)
+
+$ npm run typecheck
+exit 0
+
+$ npx eslint src/sensory/voice-loop.ts src/sensory/hybrid-reply.ts src/companion/camera-share.ts tests/sensory/camera-share-voice.test.ts
+exit 0
+```

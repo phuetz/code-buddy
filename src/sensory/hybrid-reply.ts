@@ -729,6 +729,28 @@ export function makeHybridReply(options: HybridReplyOptions = {}): HybridReplyHa
           );
         }
       }
+      try {
+        const { maybeHandleCameraShareRequest } = await import(
+          '../companion/camera-share.js'
+        );
+        const share = await maybeHandleCameraShareRequest(heard, {
+          surface: 'voice',
+          rootDir: options.cwd ?? process.cwd(),
+        });
+        if (share) {
+          void evolveRelationshipFromUtterance(heard);
+          const line = guardBeforeMemory(share.spokenReply);
+          remember(heard, line);
+          logger.info(
+            `[voice-hybrid] camera-share success=${share.success} telegram=${share.telegramSent}`,
+          );
+          return line;
+        }
+      } catch (err) {
+        logger.warn(
+          `[voice-hybrid] camera-share skipped: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
       await evolveRelationshipFromUtterance(heard);
       await ensureDeps();
       const substantive = introspectionIntent !== null || classify(heard, recentHistory);

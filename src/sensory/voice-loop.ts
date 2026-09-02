@@ -110,6 +110,10 @@ import {
   isExplicitVisualGroundingRequest,
   type VisualGroundingFn,
 } from '../companion/visual-grounding.js';
+import type {
+  CameraShareOptions,
+  CameraShareResult,
+} from '../companion/camera-share.js';
 import { VisualConsentGate } from '../companion/visual-consent.js';
 import { getVoiceTurnCoordinator } from './voice-turn-coordinator.js';
 import { resolvePocketLanguage } from '../talk-mode/providers/pocket-tts.js';
@@ -366,6 +370,15 @@ export interface VoiceReplyOptions {
    * Injectable for tests or an alternate local camera bridge.
    */
   visualGrounding?: VisualGroundingFn;
+  /**
+   * On-demand room/camera share (« qu'est-ce que tu vois ? »). Runs before
+   * object-level visual grounding so a bare look does not ask for confirmation.
+   * Injectable for tests with a fake camera / fake Telegram client.
+   */
+  cameraShare?: (
+    heard: string,
+    options?: CameraShareOptions,
+  ) => Promise<CameraShareResult | null>;
 }
 
 export interface VoiceReadiness {
@@ -1743,6 +1756,24 @@ export async function defaultReply(
         `[voice] lisa-selfie skipped: ${err instanceof Error ? err.message : String(err)}`,
       );
     }
+  }
+  try {
+    const { maybeHandleCameraShareRequest } = await import('../companion/camera-share.js');
+    const share = await maybeHandleCameraShareRequest(heard, {
+      surface: 'voice',
+      rootDir: process.cwd(),
+    });
+    if (share) {
+      if (!replyOpts?.relationshipEvolutionHandled) void evolveRelationshipFromUtterance(heard);
+      logger.info(
+        `[voice] camera-share success=${share.success} telegram=${share.telegramSent}`,
+      );
+      return share.spokenReply;
+    }
+  } catch (err) {
+    logger.warn(
+      `[voice] camera-share skipped: ${err instanceof Error ? err.message : String(err)}`,
+    );
   }
   let cognitiveLease: VoiceCognitiveContextLease | undefined;
   try {
@@ -3218,51 +3249,83 @@ export function makeVoiceReply(options: VoiceReplyOptions = {}): VoiceReplyHandl
       }
     };
     try {
+      // ---- CAMERA SHARE: on-demand « qu'est-ce que tu vois ? » / « regarde » ----
+      // Must precede object-level visual grounding: a scene look is not an
+      // ambiguous consent prompt, and voice never sends a photo unless asked.
+      let visualReply: string | undefined;
+      try {
+        const cameraShare = options.cameraShare ?? (
+          async (utterance: string, shareOptions?: CameraShareOptions) => {
+            const { maybeHandleCameraShareRequest } = await import(
+              '../companion/camera-share.js'
+            );
+            return maybeHandleCameraShareRequest(utterance, shareOptions);
+          }
+        );
+        const share = await cameraShare(heard, {
+          surface: 'voice',
+          rootDir: options.rootDir ?? process.cwd(),
+          ...(options.env ? { env: options.env } : {}),
+        });
+        if (share) {
+          visualReply = share.spokenReply;
+          logger.info(
+            `[voice] camera-share success=${share.success} telegram=${share.telegramSent}`,
+          );
+        }
+      } catch (err) {
+        logger.warn(
+          `[voice] camera-share skipped: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+
       // ---- VISUAL GROUNDING: explicit one-shot camera request ----
       // This must precede both the stream and blocking reply functions. In
       // production those functions are the hybrid brain, whose first branch is
       // the phatic/prefetch shortcut and whose grounded branch depends on
       // SPEAK_ACT. Seeing is a perception capability, not an action-mode perk.
-      let visualReply: string | undefined;
-      let visualRequest = heard;
-      const consent = visualConsent.consume(heard);
-      if (consent.decision === 'confirmed') {
-        visualRequest = consent.utterance;
-      } else if (consent.decision === 'declined') {
-        visualReply = "D'accord, je n'ouvre pas la caméra.";
-      } else if (consent.decision === 'expired') {
-        visualReply =
-          "J'ai laissé expirer l'autorisation. Redis-moi simplement ce que tu veux me montrer.";
-      } else if (isAmbiguousVisualGroundingRequest(heard)) {
-        armedVisualConsent = visualConsent.request(heard);
-        visualReply =
-          "Oui, je peux regarder. Tu veux que j'ouvre la caméra juste le temps de prendre une image ?";
-      }
-      const shouldGroundVisual =
-        consent.decision === 'confirmed' ||
-        (visualReply === undefined && isExplicitVisualGroundingRequest(heard));
-      if (shouldGroundVisual) {
-        const visualStartedAt = Date.now();
-        try {
-          const result = await visualGrounding(visualRequest, {
-            cwd: options.rootDir ?? process.cwd(),
-            signal,
-          });
-          replyMs = Date.now() - visualStartedAt;
-          if (signal.aborted || result?.status === 'aborted') return;
-          visualReply = result?.response ||
-            "Je n'ai pas réussi à obtenir une observation visuelle fiable cette fois-ci.";
-          logger.info(
-            `[voice] explicit visual grounding status=${result?.status ?? 'unavailable'} ` +
-              `evidenceChars=${result?.evidence?.summary.length ?? 0}`,
-          );
-        } catch (error) {
-          replyMs = Date.now() - visualStartedAt;
-          logger.warn(
-            `[voice] explicit visual grounding failed: ${error instanceof Error ? error.message : String(error)}`,
-          );
+      // Skipped when camera-share already answered a scene-level look.
+      if (visualReply === undefined) {
+        let visualRequest = heard;
+        const consent = visualConsent.consume(heard);
+        if (consent.decision === 'confirmed') {
+          visualRequest = consent.utterance;
+        } else if (consent.decision === 'declined') {
+          visualReply = "D'accord, je n'ouvre pas la caméra.";
+        } else if (consent.decision === 'expired') {
           visualReply =
-            "Je n'ai pas réussi à obtenir une observation visuelle fiable cette fois-ci.";
+            "J'ai laissé expirer l'autorisation. Redis-moi simplement ce que tu veux me montrer.";
+        } else if (isAmbiguousVisualGroundingRequest(heard)) {
+          armedVisualConsent = visualConsent.request(heard);
+          visualReply =
+            "Oui, je peux regarder. Tu veux que j'ouvre la caméra juste le temps de prendre une image ?";
+        }
+        const shouldGroundVisual =
+          consent.decision === 'confirmed' ||
+          (visualReply === undefined && isExplicitVisualGroundingRequest(heard));
+        if (shouldGroundVisual) {
+          const visualStartedAt = Date.now();
+          try {
+            const result = await visualGrounding(visualRequest, {
+              cwd: options.rootDir ?? process.cwd(),
+              signal,
+            });
+            replyMs = Date.now() - visualStartedAt;
+            if (signal.aborted || result?.status === 'aborted') return;
+            visualReply = result?.response ||
+              "Je n'ai pas réussi à obtenir une observation visuelle fiable cette fois-ci.";
+            logger.info(
+              `[voice] explicit visual grounding status=${result?.status ?? 'unavailable'} ` +
+                `evidenceChars=${result?.evidence?.summary.length ?? 0}`,
+            );
+          } catch (error) {
+            replyMs = Date.now() - visualStartedAt;
+            logger.warn(
+              `[voice] explicit visual grounding failed: ${error instanceof Error ? error.message : String(error)}`,
+            );
+            visualReply =
+              "Je n'ai pas réussi à obtenir une observation visuelle fiable cette fois-ci.";
+          }
         }
       }
 
