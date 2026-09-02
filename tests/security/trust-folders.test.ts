@@ -1,7 +1,40 @@
 import * as path from 'path';
 import * as os from 'os';
 import * as fs from 'fs';
+import { fileURLToPath } from 'node:url';
+import { afterAll, beforeAll, vi } from 'vitest';
+
+const { isolatedHome } = vi.hoisted(() => ({
+  isolatedHome: `${process.cwd()}/.r32-trust-folders-home-${process.pid}`,
+}));
+
+vi.mock('os', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('os')>();
+  return { ...actual, homedir: () => isolatedHome };
+});
+
 import { TrustFolderManager } from '../../src/security/trust-folders.js';
+
+const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
+let isolatedHomeIsInsideRepo = false;
+
+beforeAll(() => {
+  const relativeHome = path.relative(repoRoot, isolatedHome);
+  if (
+    relativeHome === '..' ||
+    relativeHome.startsWith(`..${path.sep}`) ||
+    path.isAbsolute(relativeHome)
+  ) {
+    throw new Error(`Refusing to create a test home outside the repository: ${isolatedHome}`);
+  }
+  isolatedHomeIsInsideRepo = true;
+});
+
+afterAll(() => {
+  if (isolatedHomeIsInsideRepo) {
+    fs.rmSync(isolatedHome, { recursive: true, force: true, maxRetries: 10, retryDelay: 20 });
+  }
+});
 
 describe('TrustFolderManager', () => {
   let manager: TrustFolderManager;
@@ -106,7 +139,9 @@ describe('TrustFolderManager', () => {
     it('blocks a symlink under skills/ that escapes to a sensitive target', () => {
       // Defense against the classic prefix-check bypass: a symlink living inside
       // skills/ but resolving outside it must NOT be treated as a skills read.
-      const escapeRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'trust-escape-'));
+      const escapeParent = path.join(isolatedHome, 'test-tmp');
+      fs.mkdirSync(escapeParent, { recursive: true });
+      const escapeRoot = fs.mkdtempSync(path.join(escapeParent, 'trust-escape-'));
       const target = path.join(escapeRoot, 'secret.txt');
       fs.writeFileSync(target, 'top secret');
 
