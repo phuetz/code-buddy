@@ -9,6 +9,7 @@ import type {
 import { logger } from '../utils/logger.js';
 
 export type HomeInteractionSurface =
+  | 'arrival'
   | 'presence'
   | 'proactive-local'
   | 'proactive-remote'
@@ -102,7 +103,7 @@ export async function resolveCurrentHomeInteractionPolicy(
 
   // Modes that suppress a surface do not need a network/calendar lookup.
   const early = evaluateHomeInteractionPolicy({ mode: homeMode.mode, dayKind: 'unknown', surface });
-  if (!early.allowed || surface === 'idle') return early;
+  if (!early.allowed || surface === 'idle' || surface === 'arrival') return early;
 
   try {
     const holidayProvider = options.holidayProvider ?? new EtalabHolidayProvider({

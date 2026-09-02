@@ -29,6 +29,7 @@ export type VoiceSceneClass =
   | 'near_speech'
   | 'broadcast'
   | 'assistant_playback'
+  | 'assistant_echo'
   | 'noise'
   | 'unknown';
 

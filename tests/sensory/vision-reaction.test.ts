@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { mkdtemp, readFile } from 'fs/promises';
+import { mkdtemp, readFile, rm } from 'fs/promises';
 import os from 'os';
 import path from 'path';
 import {
@@ -84,6 +84,34 @@ describe('vision reaction — motion → camera_analyze (debounced)', () => {
     } finally {
       unwire();
       getGlobalEventBus().off(listenerId);
+    }
+  });
+
+  it('marks a nearly motionless scene with missing luma as non-salient', async () => {
+    const tmp = await mkdtemp(path.join(os.tmpdir(), 'vision-dark-'));
+    const described: Array<Record<string, unknown>> = [];
+    const listenerId = getGlobalEventBus().on('sensory:perception', (event) => {
+      const metadata = event.metadata as Record<string, unknown> | undefined;
+      if (metadata?.kind === 'scene_described') described.push(metadata);
+    });
+    const unwire = wireVisionReaction({
+      analyzer: { analyze: async () => ({ success: true, description: 'un ciel étoilé' }) },
+      debounceMs: 0,
+      cwd: tmp,
+    });
+    try {
+      motion({ motionScore: 0.03 });
+      await tick();
+
+      expect(described).toHaveLength(1);
+      expect(described[0]).toMatchObject({
+        salience: 64,
+        payload: { motionScore: 0.03 },
+      });
+    } finally {
+      unwire();
+      getGlobalEventBus().off(listenerId);
+      await rm(tmp, { recursive: true, force: true });
     }
   });
 

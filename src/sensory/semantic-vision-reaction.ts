@@ -12,6 +12,10 @@ import { logger } from '../utils/logger.js';
 import type { BaseEvent } from '../events/types.js';
 import { perceptionOf } from './reactions.js';
 import { sendTelegramAlert } from './alert.js';
+import { getCompanionConductor, type Conductor } from '../companion/orchestrator.js';
+import { resolveCurrentHomeInteractionPolicy } from '../companion/home-interaction-policy.js';
+import type { HomeModeStore } from '../life-rhythm/home-mode-store.js';
+import { isSpeaking } from './voice-activity.js';
 import {
   buildArrivalOpener,
   buildLlmArrivalOpener,
@@ -93,6 +97,10 @@ export interface SemanticVisionOptions {
   llmChat?: ArrivalChat;
   /** Local identity-presence hook. True only for CODEBUDDY_USER_NAME, compared case-insensitively. */
   onIdentityChange?: (recognizedUserPresent: boolean) => void;
+  /** Shared companion speech arbiter; injectable for deterministic tests. */
+  conductor?: Conductor;
+  /** Household posture store; injectable to isolate callers and tests. */
+  homeModeStore?: HomeModeStore;
 }
 
 export function wireSemanticVisionReaction(options: SemanticVisionOptions = {}): () => void {
@@ -103,6 +111,7 @@ export function wireSemanticVisionReaction(options: SemanticVisionOptions = {}):
   const greetCooldownMs = Number(process.env.CODEBUDDY_SENSORY_GREET_COOLDOWN_MS) || 60_000;
   const regreetMinMs = resolveSensoryRegreetMinMs();
   const now = options.now ?? (() => Date.now());
+  const conductor = options.conductor ?? getCompanionConductor();
   let lastGreetAt = Number.NEGATIVE_INFINITY;
   let awaitingIdentityGreeting = false;
   let recognizedUserPresent = false;
@@ -230,6 +239,21 @@ export function wireSemanticVisionReaction(options: SemanticVisionOptions = {}):
       ) {
         const t = now();
         if (t - lastGreetAt < greetCooldownMs) return;
+        const homePolicy = await resolveCurrentHomeInteractionPolicy('arrival', {
+          ...(options.homeModeStore ? { homeModeStore: options.homeModeStore } : {}),
+        });
+        if (!homePolicy.allowed) {
+          logger.info(`[vision] arrival greeting skipped by home policy: ${homePolicy.reason}`);
+          return;
+        }
+        if (isSpeaking(t)) {
+          logger.info('[vision] arrival greeting skipped: voice active');
+          return;
+        }
+        if (!conductor.claim('arrival')) {
+          logger.info('[vision] arrival greeting skipped: conductor gap');
+          return;
+        }
         lastGreetAt = t;
         try {
           const { getActivePersonaVoiceAsync } = await import('../personas/persona-manager.js');

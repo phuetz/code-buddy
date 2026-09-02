@@ -26,6 +26,7 @@ const MAX_PLAYBACK_INTERVALS = 8;
 const MAX_SPOKEN_REFERENCES = 8;
 const RESUME_WINDOW_MS = 5 * 60_000;
 export const DEFAULT_OWN_ECHO_WINDOW_MS = 90_000;
+const OWN_ECHO_MIN_COVERAGE = 0.6;
 
 interface VoicePlaybackInterval {
   startedAtMs: number;
@@ -187,18 +188,11 @@ export function classifyRecentVoiceEcho(
       && atMs - reference.recordedAtMs <= DEFAULT_OWN_ECHO_WINDOW_MS,
   );
   if (references.length === 0) return 'unknown';
-
   const transcriptTokens = new Set(normalized.split(' ').filter(Boolean));
-  for (const reference of references) {
-    if (
-      reference.normalized.includes(normalized)
-      || normalized.includes(reference.normalized)
-    ) {
-      return 'echo';
-    }
+  for (const reference of [...references].reverse()) {
     if (reference.tokens.length > 0) {
       const overlap = reference.tokens.filter(token => transcriptTokens.has(token)).length;
-      if (overlap / reference.tokens.length >= 0.6) return 'echo';
+      if (overlap / reference.tokens.length >= OWN_ECHO_MIN_COVERAGE) return 'echo';
     }
   }
   return 'distinct';
