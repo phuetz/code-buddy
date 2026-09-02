@@ -20,6 +20,15 @@ function mapMemoryCategoryToFactCategory(cat: MemoryCategory): FactCategory {
   }
 }
 
+export function parseReconciledFactText(text: string): { key: string; value: string } | null {
+  const colonIdx = text.indexOf(': ');
+  if (colonIdx <= 0) return null;
+  return {
+    key: text.substring(0, colonIdx).trim(),
+    value: text.substring(colonIdx + 2).trim(),
+  };
+}
+
 function mapFactCategoryToMemoryCategory(cat: FactCategory): MemoryCategory {
   switch (cat) {
     case 'Projet': return 'project';
@@ -511,10 +520,10 @@ export class PersistentMemoryManager extends EventEmitter {
         for (const fact of reconciledFacts) {
           let fKey = `fact-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
           let fValue = fact.text;
-          const colonIdx = fact.text.indexOf(': ');
-          if (colonIdx > 0) {
-            fKey = fact.text.substring(0, colonIdx).trim();
-            fValue = fact.text.substring(colonIdx + 2).trim();
+          const parsed = parseReconciledFactText(fact.text);
+          if (parsed) {
+            fKey = parsed.key;
+            fValue = parsed.value;
           }
 
           // The map was cleared above — prior metadata lives in previousMemories.
@@ -1402,11 +1411,10 @@ export class PersistentMemoryManager extends EventEmitter {
       for (const fact of reconciledFacts) {
         let key = `fact-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
         let value = fact.text;
-
-        const colonIdx = fact.text.indexOf(': ');
-        if (colonIdx > 0 && colonIdx < 50) {
-          key = fact.text.substring(0, colonIdx).trim();
-          value = fact.text.substring(colonIdx + 2).trim();
+        const parsed = parseReconciledFactText(fact.text);
+        if (parsed) {
+          key = parsed.key;
+          value = parsed.value;
         }
 
         const prior = priorProjectMemories.get(key);
