@@ -2,7 +2,9 @@
 
 La couche d’interface générative détecte au plus un candidat par réponse : un
 payload d’outil `data: { type: … }`, ou un tableau Markdown d’au moins trois
-lignes visibles (hors séparateur Markdown) et deux colonnes. Les réponses de moins de 200 caractères sont ignorées.
+lignes visibles (hors séparateur Markdown) et deux colonnes. Un payload
+structuré est détecté quelle que soit la longueur de la réponse texte ; le
+seuil de 200 caractères s’applique uniquement aux tableaux Markdown.
 Le texte original n’est jamais modifié ; le pipeline renvoie séparément un
 document HTML optionnel destiné au renderer inline existant.
 

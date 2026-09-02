@@ -69,6 +69,25 @@ describe('autoWidget', () => {
     expect(renderAuthored).toHaveBeenCalledTimes(1);
   });
 
+  it('renders a structured payload even when the answer is shorter than 200 characters', async () => {
+    const env = enabledEnv();
+    const data = {
+      type: 'stock',
+      symbol: 'AAPL',
+      price: 324.85,
+      currency: 'USD',
+    };
+    const renderCurated = jest.fn(() => '<!doctype html><html><body>AAPL</body></html>');
+    const shortAnswer = 'Apple (AAPL) : 324,85 USD';
+
+    const result = await autoWidget(shortAnswer, [{ data }], { env, renderCurated });
+
+    expect(result.answer).toBe(shortAnswer);
+    expect(result.candidate).toMatchObject({ kind: 'payload', dataType: 'stock', data });
+    expect(result.widgetHtml).toContain('AAPL');
+    expect(renderCurated).toHaveBeenCalledWith(data, env, undefined);
+  });
+
   it('increments authored usage stats after each successful auto render', async () => {
     const env = enabledEnv();
     keepMetrics(env);

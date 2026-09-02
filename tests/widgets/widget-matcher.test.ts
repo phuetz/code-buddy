@@ -33,8 +33,13 @@ describe('detectWidgetable', () => {
     expect(detectWidgetable(longText(' Aucun tableau ici.'), [])).toBeNull();
   });
 
-  it('returns null for a short answer even when it has structured data', () => {
-    expect(detectWidgetable('Trop court', [{ data: { type: 'sales', total: 42 } }])).toBeNull();
+  it('detects structured data regardless of answer length', () => {
+    const data = { type: 'sales', total: 42 };
+    expect(detectWidgetable('Trop court', [{ data }])).toEqual({
+      kind: 'payload',
+      dataType: 'sales',
+      data,
+    });
   });
 
   it('uses 200 characters as the inclusive answer-length threshold', () => {
