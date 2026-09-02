@@ -86,6 +86,21 @@ function isScannableSkillFile(fileName: string): boolean {
     || SCRIPT_EXTENSIONS.has(path.extname(lowerName));
 }
 
+function isExecutableOrShebang(filePath: string): boolean {
+  try {
+    if ((fs.statSync(filePath).mode & 0o111) !== 0) return true;
+    const fd = fs.openSync(filePath, 'r');
+    try {
+      const prefix = Buffer.alloc(2);
+      return fs.readSync(fd, prefix, 0, prefix.length, 0) === 2 && prefix.toString() === '#!';
+    } finally {
+      fs.closeSync(fd);
+    }
+  } catch {
+    return false;
+  }
+}
+
 const DANGEROUS_PATTERNS: DangerousPattern[] = [
   // Code execution
   { pattern: /\b(?:curl|wget)\b[^|\n]*\|\s*(?:sh|bash|zsh)\b/i, severity: 'critical', description: 'Remote download piped directly to a shell', name: 'remote-download-pipe-shell', capability: 'shell' },
@@ -185,7 +200,11 @@ export function scanDirectory(dirPath: string, withinScripts = false): ScanResul
 
     if (entry.isDirectory()) {
       results.push(...scanDirectory(fullPath, withinScripts || entry.name.toLowerCase() === 'scripts'));
-    } else if (withinScripts || isScannableSkillFile(entry.name)) {
+    } else if (
+      withinScripts
+      || isScannableSkillFile(entry.name)
+      || isExecutableOrShebang(fullPath)
+    ) {
       const result = scanFile(fullPath);
       if (result.findings.length > 0) {
         results.push(result);
