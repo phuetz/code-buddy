@@ -208,7 +208,12 @@ export async function startConfiguredChannels(
       const channel = await instantiateChannel(chConfig);
       if (channel) {
         manager.registerChannel(channel);
-        await channel.connect();
+        try {
+          await channel.connect();
+        } catch (connectErr) {
+          manager.unregisterChannel(channelType);
+          throw connectErr;
+        }
         result.registered.push(chConfig.type);
       }
     } catch (err) {

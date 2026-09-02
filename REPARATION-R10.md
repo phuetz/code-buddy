@@ -77,3 +77,22 @@ Tests  64 passed (64)
 
 `tsc --noEmit -p tsconfig.json` : exit 0  
 `eslint` ciblé : exit 0
+
+### 3. Passerelle — jumeaux D3/D4/D5/D7
+
+**Jumeaux :** `getChannel()` suffisait à marquer un adapter `ready`/`completed` même déconnecté ; un JSON valide mais incohérent (`[]`, `{}`, `channels: "bad"`, `items: [{}]`) était accepté.
+
+**Correctif :** le lifecycle et le start admin exigent `status.connected` ; `connect()` en échec désenregistre le canal ; profil/inbox valident l'objet racine, le tableau et chaque entrée.
+
+**Rouge :** 5 tests (lifecycle registered-but-disconnected, start completed, profil, inbox, unregister after connect failure).
+
+**Vert :**
+
+```text
+node node_modules/vitest/vitest.mjs run tests/companion-gateway.test.ts tests/server/channel-intake.test.ts
+Test Files  2 passed (2)
+Tests  28 passed (28)
+```
+
+`tsc --noEmit -p tsconfig.json` : exit 0  
+`eslint` ciblé : exit 0

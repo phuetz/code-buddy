@@ -373,19 +373,37 @@ export async function readCompanionGatewayProfile(
   }
 
   try {
-    const parsed = JSON.parse(raw) as Partial<CompanionGatewayProfile>;
-    const defaultMode = isMode(parsed.defaultMode) ? parsed.defaultMode : fallback.defaultMode;
-    const parsedChannels = Array.isArray(parsed.channels)
-      ? parsed.channels.map(item => parseChannel(item, defaultMode)).filter((item): item is CompanionGatewayChannelConfig => Boolean(item))
-      : [];
+    const parsed: unknown = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      const msg = `[companion-gateway] profile is not an object: ${fallback.storePath}`;
+      logger.warn(msg);
+      throw new Error(msg);
+    }
+    const record = parsed as Partial<CompanionGatewayProfile>;
+    const defaultMode = isMode(record.defaultMode) ? record.defaultMode : fallback.defaultMode;
+    if (!Array.isArray(record.channels)) {
+      const msg = `[companion-gateway] profile channels is not a list: ${fallback.storePath}`;
+      logger.warn(msg);
+      throw new Error(msg);
+    }
+    const parsedChannels: CompanionGatewayChannelConfig[] = [];
+    for (const item of record.channels) {
+      const channel = parseChannel(item, defaultMode);
+      if (!channel) {
+        const msg = `[companion-gateway] profile has an invalid channel: ${fallback.storePath}`;
+        logger.warn(msg);
+        throw new Error(msg);
+      }
+      parsedChannels.push(channel);
+    }
     const byChannel = new Map<string, CompanionGatewayChannelConfig>();
     for (const channel of fallback.channels) byChannel.set(channel.channel, channel);
     for (const channel of parsedChannels) byChannel.set(channel.channel, channel);
     return {
       schemaVersion: 1,
-      cwd: typeof parsed.cwd === 'string' ? parsed.cwd : fallback.cwd,
+      cwd: typeof record.cwd === 'string' ? record.cwd : fallback.cwd,
       storePath: fallback.storePath,
-      updatedAt: typeof parsed.updatedAt === 'string' ? parsed.updatedAt : fallback.updatedAt,
+      updatedAt: typeof record.updatedAt === 'string' ? record.updatedAt : fallback.updatedAt,
       defaultMode,
       channels: sortChannels([...byChannel.values()]),
     };
@@ -466,7 +484,7 @@ export async function buildCompanionGatewayLifecycleReport(
     const fleetDraftCount = items.filter(item => Boolean(item.draft?.fleet)).length;
     const replyDraftCount = items.filter(item => Boolean(item.draft?.fleet?.outboundReply)).length;
     const lastSendStatus = items.map(lastSendStatusFor).find(Boolean);
-    const adapterRunning = Boolean(manager.getChannel(channel.channel));
+    const adapterRunning = Boolean(manager.getChannel(channel.channel)?.getStatus().connected);
     const issues: string[] = [];
     if (channel.enabled && channel.mode !== 'observe' && !adapterRunning) {
       issues.push('adapter not running');
@@ -795,7 +813,7 @@ export async function buildCompanionGatewayAdminPlan(
 function runtimeSnapshot(
   manager: ChannelManager,
   channel: ChannelType,
-): CompanionGatewayAdminExecutionRecord['result']['runtimeBefore'] {
+): NonNullable<CompanionGatewayAdminExecutionRecord['result']['runtimeBefore']> {
   const registered = Boolean(manager.getChannel(channel));
   const status = manager.getStatus()[channel];
   return {
@@ -952,15 +970,17 @@ export async function executeCompanionGatewayAdminAction(
       }
     }
 
-    result.runtimeAfter = runtimeSnapshot(manager, input.channel);
-    if (
-      (input.action === 'start' || input.action === 'reconnect') &&
-      !(result.registered ?? []).includes(input.channel) &&
-      !result.error
-    ) {
-      result.error = (result.skipped ?? []).includes(input.channel)
-        ? `Channel ${input.channel} was skipped (not enabled in channels.json)`
-        : `Channel ${input.channel} adapter is not running`;
+    const runtimeAfter = runtimeSnapshot(manager, input.channel);
+    result.runtimeAfter = runtimeAfter;
+    if (input.action === 'start' || input.action === 'reconnect') {
+      if (!(result.registered ?? []).includes(input.channel) && !result.error) {
+        result.error = (result.skipped ?? []).includes(input.channel)
+          ? `Channel ${input.channel} was skipped (not enabled in channels.json)`
+          : `Channel ${input.channel} adapter is not running`;
+      }
+      if (!result.error && runtimeAfter.registered && runtimeAfter.connected !== true) {
+        result.error = `Channel ${input.channel} adapter is not connected`;
+      }
     }
     const failed = Boolean(result.error || result.failed?.length);
     const record: CompanionGatewayAdminExecutionRecord = {

@@ -957,4 +957,91 @@ describe('companion gateway', () => {
     });
     expect(ready.summary.readyChannelCount).toBe(1);
   });
+
+  it('does not report lifecycle ready for a registered but disconnected adapter (jumeau D7)', async () => {
+    await updateCompanionGatewayChannel('telegram', {
+      cwd: tempDir,
+      enabled: true,
+      mode: 'act',
+      allowOutbound: true,
+      now: new Date('2026-05-24T16:00:00.000Z'),
+    });
+    const manager = new ChannelManager();
+    manager.registerChannel(new MockChannel({ type: 'telegram', enabled: true }));
+    const report = await buildCompanionGatewayLifecycleReport({
+      cwd: tempDir,
+      now: new Date('2026-05-24T16:08:00.000Z'),
+      channelManager: manager,
+    });
+    const telegram = report.channels.find(channel => channel.channel === 'telegram');
+    expect(telegram?.state).toBe('needs_attention');
+    expect(telegram?.issues).toContain('adapter not running');
+    expect(report.summary.readyChannelCount).toBe(0);
+  });
+
+  it('marks start failed when the adapter is registered but not connected (jumeau D7)', async () => {
+    await updateCompanionGatewayChannel('telegram', {
+      cwd: tempDir,
+      enabled: true,
+      mode: 'act',
+      allowOutbound: true,
+      now: new Date('2026-05-24T18:20:00.000Z'),
+    });
+    const manager = new ChannelManager();
+    const result = await executeCompanionGatewayAdminAction({
+      action: 'start',
+      channel: 'telegram',
+      approvedBy: 'Patrice',
+      liveAdminConfirmed: true,
+    }, {
+      cwd: tempDir,
+      channelManager: manager,
+      createId: () => 'admin-exec-start-disconnected-1',
+      now: new Date('2026-05-24T18:21:00.000Z'),
+      startConfiguredChannels: async () => {
+        manager.registerChannel(new MockChannel({ type: 'telegram', enabled: true }));
+        return {
+          registered: ['telegram'],
+          skipped: [],
+          failed: [],
+          noConfig: false,
+        };
+      },
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.record.status).toBe('failed');
+    expect(manager.getChannel('telegram')?.getStatus().connected).not.toBe(true);
+  });
+
+  it('rejects a syntactically valid but incoherent gateway profile (jumeau D4)', async () => {
+    const profilePath = getCompanionGatewayProfilePath(tempDir);
+    await mkdir(path.dirname(profilePath), { recursive: true });
+
+    await writeFile(profilePath, '[]', 'utf8');
+    await expect(readCompanionGatewayProfile({ cwd: tempDir })).rejects.toThrow();
+
+    await writeFile(profilePath, '{}', 'utf8');
+    await expect(readCompanionGatewayProfile({ cwd: tempDir })).rejects.toThrow();
+
+    await writeFile(profilePath, JSON.stringify({ channels: 'bad' }), 'utf8');
+    await expect(readCompanionGatewayProfile({ cwd: tempDir })).rejects.toThrow();
+
+    await writeFile(profilePath, JSON.stringify({ channels: [{}] }), 'utf8');
+    await expect(readCompanionGatewayProfile({ cwd: tempDir })).rejects.toThrow();
+  });
+
+  it('rejects a syntactically valid but incoherent gateway inbox (jumeau D5)', async () => {
+    const inboxPath = getCompanionGatewayInboxPath(tempDir);
+    await mkdir(path.dirname(inboxPath), { recursive: true });
+
+    await writeFile(inboxPath, '[]', 'utf8');
+    await expect(readCompanionGatewayInbox({ cwd: tempDir })).rejects.toThrow();
+
+    await writeFile(inboxPath, '{}', 'utf8');
+    await expect(readCompanionGatewayInbox({ cwd: tempDir })).rejects.toThrow();
+
+    await writeFile(inboxPath, JSON.stringify({ items: [{}] }), 'utf8');
+    await expect(readCompanionGatewayInbox({ cwd: tempDir })).rejects.toThrow();
+  });
 });

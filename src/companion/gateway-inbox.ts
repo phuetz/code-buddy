@@ -540,13 +540,31 @@ export async function readCompanionGatewayInbox(
     throw new Error(msg);
   }
   try {
-    const parsed = JSON.parse(raw) as Partial<CompanionGatewayInbox>;
-    const items = Array.isArray(parsed.items)
-      ? parsed.items.map(parseItem).filter((item): item is CompanionGatewayInboxItem => Boolean(item))
-      : [];
+    const parsed: unknown = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      const msg = `[companion-gateway] inbox is not an object: ${fallback.storePath}`;
+      logger.warn(msg);
+      throw new Error(msg);
+    }
+    const record = parsed as Partial<CompanionGatewayInbox>;
+    if (!Array.isArray(record.items)) {
+      const msg = `[companion-gateway] inbox items is not a list: ${fallback.storePath}`;
+      logger.warn(msg);
+      throw new Error(msg);
+    }
+    const items: CompanionGatewayInboxItem[] = [];
+    for (const item of record.items) {
+      const parsedItem = parseItem(item);
+      if (!parsedItem) {
+        const msg = `[companion-gateway] inbox has an invalid item: ${fallback.storePath}`;
+        logger.warn(msg);
+        throw new Error(msg);
+      }
+      items.push(parsedItem);
+    }
     return withCounts({
       ...fallback,
-      generatedAt: typeof parsed.generatedAt === 'string' ? parsed.generatedAt : fallback.generatedAt,
+      generatedAt: typeof record.generatedAt === 'string' ? record.generatedAt : fallback.generatedAt,
       items,
     });
   } catch (err) {
