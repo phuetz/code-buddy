@@ -948,21 +948,26 @@ export function registerSkillsCommands(program: Command): void {
     .description('Show the local public key and trusted exchange author keys')
     .option('--json', 'output JSON')
     .action(async (opts: { json?: boolean }) => {
-      const exchangeModule = await import('../../skills/skill-exchange.js');
-      if (!exchangeModule.isSkillExchangeEnabled()) {
-        throw new Error(`Skill exchange is disabled; set ${exchangeModule.SKILL_EXCHANGE_ENV}=true to opt in`);
+      try {
+        const exchangeModule = await import('../../skills/skill-exchange.js');
+        if (!exchangeModule.isSkillExchangeEnabled()) {
+          throw new Error(`Skill exchange is disabled; set ${exchangeModule.SKILL_EXCHANGE_ENV}=true to opt in`);
+        }
+        const signing = await import('../../skills/skill-signing.js');
+        const local = { id: signing.getPublicKeyId(), publicKey: signing.getPublicKey() };
+        const trusted = exchangeModule.listTrustedKeys();
+        if (opts.json) {
+          console.log(JSON.stringify({ local, trusted }, null, 2));
+          return;
+        }
+        console.log(`Local public key (${local.id}):\n${local.publicKey.trim()}`);
+        console.log(trusted.length
+          ? `Trusted keys:\n${trusted.map((key) => `  ${key.id}  trusted ${key.trustedAt}`).join('\n')}`
+          : 'Trusted keys: none');
+      } catch (error) {
+        logger.error(`skills exchange keys failed: ${error instanceof Error ? error.message : String(error)}`);
+        process.exitCode = 1;
       }
-      const signing = await import('../../skills/skill-signing.js');
-      const local = { id: signing.getPublicKeyId(), publicKey: signing.getPublicKey() };
-      const trusted = exchangeModule.listTrustedKeys();
-      if (opts.json) {
-        console.log(JSON.stringify({ local, trusted }, null, 2));
-        return;
-      }
-      console.log(`Local public key (${local.id}):\n${local.publicKey.trim()}`);
-      console.log(trusted.length
-        ? `Trusted keys:\n${trusted.map((key) => `  ${key.id}  trusted ${key.trustedAt}`).join('\n')}`
-        : 'Trusted keys: none');
     });
 
   const sources = skills.command('sources').description('Manage skill sources (the import referential)');

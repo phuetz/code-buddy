@@ -319,7 +319,12 @@ export function addKnowledgeSubcommands(cmd: Command, depsFactory: () => Promise
     .description('Pull first-hand lessons/facts from an opted-in fleet peer')
     .option('--dry-run', 'Show entries that would be ingested without writing ledger or sync state', false)
     .action(async (peer: string, opts: { dryRun?: boolean }) => {
-      await runSync(peer, opts, await depsFactory());
+      try {
+        await runSync(peer, opts, await depsFactory());
+      } catch (error) {
+        logger.error(`research sync failed: ${error instanceof Error ? error.message : String(error)}`);
+        process.exitCode = 1;
+      }
     });
 
   cmd
