@@ -142,6 +142,13 @@ export interface MemoryConfig {
   useSQLite: boolean;
 }
 
+export class EnhancedMemoryInitializationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'EnhancedMemoryInitializationError';
+  }
+}
+
 const DEFAULT_CONFIG: MemoryConfig = {
   enabled: true,
   maxMemories: 10000,
@@ -176,6 +183,7 @@ export class EnhancedMemory extends EventEmitter {
   private bayesianQualifier = new BayesianQualifier();
   private disposed = false;
   private pendingDisposeSave: Promise<void> | null = null;
+  private initialized = false;
   /** Resolves when initialize() finished (dirs ensured, stores loaded). */
   private readonly ready: Promise<void>;
 
@@ -212,10 +220,19 @@ export class EnhancedMemory extends EventEmitter {
     // ensureDir (ENOENT) and loadMemories() could overwrite entries stored
     // before the load completed. Every async public method awaits `ready`.
     this.ready = this.initialize().catch((err) => {
+      const failure = err instanceof EnhancedMemoryInitializationError
+        ? err
+        : new EnhancedMemoryInitializationError(
+          `EnhancedMemory initialize failed: ${err instanceof Error ? err.message : String(err)}`,
+        );
       logger.warn('EnhancedMemory initialization failed — continuing best-effort', {
-        error: err instanceof Error ? err.message : String(err),
+        error: failure.message,
       });
+      throw failure;
     });
+    // Keep the rejection observable to every public awaiter without creating
+    // an unhandled rejection when construction itself is the last operation.
+    void this.ready.catch(() => undefined);
   }
 
   /** Await full initialization (dirs + persisted state loaded). */
@@ -253,6 +270,7 @@ export class EnhancedMemory extends EventEmitter {
       }
     }
 
+    this.initialized = true;
     if (this.disposed) return;
 
     // Start decay timer
@@ -298,12 +316,26 @@ export class EnhancedMemory extends EventEmitter {
 
     if (await fs.pathExists(indexPath)) {
       try {
-        const entries = await fs.readJSON(indexPath);
-        for (const entry of entries) {
-          this.memories.set(entry.id, entry);
+        const entries: unknown = await fs.readJSON(indexPath);
+        if (!Array.isArray(entries)) {
+          throw new Error('expected a JSON array');
         }
-      } catch {
-        // Start fresh
+        for (const entry of entries) {
+          if (!entry || typeof entry !== 'object' || typeof (entry as { id?: unknown }).id !== 'string') {
+            throw new Error('invalid memory entry');
+          }
+          const memoryEntry = entry as MemoryEntry;
+          this.memories.set(memoryEntry.id, memoryEntry);
+        }
+      } catch (err) {
+        const failure = new EnhancedMemoryInitializationError(
+          `Cannot load memory-index.json: ${err instanceof Error ? err.message : String(err)}`,
+        );
+        logger.warn('Enhanced memory index is corrupt or unreadable', {
+          path: indexPath,
+          error: failure.message,
+        });
+        throw failure;
       }
     }
   }
@@ -372,6 +404,11 @@ export class EnhancedMemory extends EventEmitter {
    * Save all data
    */
   private async saveAll(): Promise<void> {
+    if (!this.initialized) {
+      throw new EnhancedMemoryInitializationError(
+        'EnhancedMemory initialize did not complete; refusing to persist an unloaded store',
+      );
+    }
     // Save all data files in parallel for better performance
     const saveOperations: Promise<void>[] = [
       // Save memory index

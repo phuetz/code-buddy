@@ -213,7 +213,7 @@ export class PersistentMemoryManager extends EventEmitter {
    * échoué pour une raison AUTRE que l'absence du fichier. Tant qu'un scope
    * est dégradé, saveMemories refuse la réécriture destructrice (il retente
    * d'abord un load + fusion, RAM prioritaire). */
-  private degradedScopes: Set<MemoryScope> = new Set();
+  private degradedScopes: Map<MemoryScope, string> = new Map();
   private initialized: boolean = false;
   /**
    * Promise gate for concurrent initialize() callers (F31).
@@ -292,6 +292,9 @@ export class PersistentMemoryManager extends EventEmitter {
     try {
       const content = await fs.readFile(filePath, "utf-8");
       const parsed = this.parseMemoryFile(content);
+      if (parsed.length === 0 && !this.isCanonicalEmptyMemoryFile(content)) {
+        throw new Error('non-canonical memory markdown contains no recoverable entries');
+      }
 
       for (const memory of parsed) {
         memories.set(memory.key, memory);
@@ -302,12 +305,47 @@ export class PersistentMemoryManager extends EventEmitter {
       // (EACCES, EIO…) est transitoire : sans garde, la prochaine sauvegarde
       // réécrirait le fichier entier depuis l'état vide — amnésie silencieuse.
       if ((error as NodeJS.ErrnoException)?.code !== 'ENOENT') {
-        this.degradedScopes.add(scope);
+        const reason = (error as Error)?.message ?? String(error);
+        this.degradedScopes.set(scope, reason);
         logger.warn(
-          `[persistent-memory] could not load ${scope} memory (${(error as Error)?.message ?? String(error)}) — destructive saves are blocked until a successful reload`,
+          `[persistent-memory] could not load ${scope} memory (${reason}) — destructive saves are blocked until a successful reload`,
         );
       }
     }
+  }
+
+  /** Only the generated empty template is safe to treat as a new empty store. */
+  private isCanonicalEmptyMemoryFile(content: string): boolean {
+    const requiredCategories = [
+      'Project Context',
+      'User Preferences',
+      'Decisions',
+      'Patterns',
+      'Custom',
+    ];
+    const allowedCategories = [...requiredCategories, 'Context'];
+    const seenCategories = new Set<string>();
+    const allowedText = new Set([
+      '# Code Buddy Memory',
+      'This file stores persistent memory for the Code Buddy agent.',
+      'It is automatically managed but can be manually edited.',
+      '---',
+    ]);
+
+    for (const rawLine of content.split('\n')) {
+      const line = rawLine.trim();
+      if (!line || allowedText.has(line) || /^<!--.*-->$/.test(line) || /^\*Last updated: .*\*$/.test(line)) {
+        continue;
+      }
+      const category = /^## (.+)$/.exec(line)?.[1];
+      if (category && allowedCategories.includes(category)) {
+        seenCategories.add(category);
+        continue;
+      }
+      return false;
+    }
+
+    return requiredCategories.every((category) => seenCategories.has(category));
   }
 
   private parseMemoryFile(content: string): Memory[] {
@@ -567,6 +605,7 @@ export class PersistentMemoryManager extends EventEmitter {
     const memories = scope === 'project' ? this.projectMemories : this.userMemories;
     const normalizedKey = key.trim();
     const normalizedValue = value.trim();
+    this.assertScopeReadable(scope);
     const existing = memories.get(normalizedKey);
 
     if (!existing) {
@@ -728,6 +767,7 @@ export class PersistentMemoryManager extends EventEmitter {
    */
   recall(key: string, scope?: "project" | "user"): string | null {
     if (scope) {
+      this.assertScopeReadable(scope);
       const memories = scope === "project" ? this.projectMemories : this.userMemories;
       const memory = memories.get(key);
       if (memory) {
@@ -738,6 +778,8 @@ export class PersistentMemoryManager extends EventEmitter {
     }
 
     // Search both scopes, project first
+    this.assertScopeReadable('project');
+    this.assertScopeReadable('user');
     const projectHit = this.projectMemories.get(key);
     const memory = projectHit ?? this.userMemories.get(key);
 
@@ -805,10 +847,12 @@ export class PersistentMemoryManager extends EventEmitter {
   get(key: string, scope?: MemoryScope): (Memory & { scope: MemoryScope }) | undefined {
     const normalizedKey = key.trim();
     if (!scope || scope === "project") {
+      this.assertScopeReadable('project');
       const memory = this.projectMemories.get(normalizedKey);
       if (memory) return { ...memory, scope: "project" };
     }
     if (!scope || scope === "user") {
+      this.assertScopeReadable('user');
       const memory = this.userMemories.get(normalizedKey);
       if (memory) return { ...memory, scope: "user" };
     }
@@ -819,6 +863,7 @@ export class PersistentMemoryManager extends EventEmitter {
    * Forget something (remove from memory)
    */
   async forget(key: string, scope: "project" | "user" = "project"): Promise<boolean> {
+    this.assertScopeReadable(scope);
     const memories = scope === "project" ? this.projectMemories : this.userMemories;
     const deleted = memories.delete(key);
 
@@ -834,6 +879,8 @@ export class PersistentMemoryManager extends EventEmitter {
    * Get memories relevant to a query (simple keyword matching)
    */
   getRelevantMemories(query: string, limit: number = 5): Memory[] {
+    this.assertScopeReadable('project');
+    this.assertScopeReadable('user');
     const queryLower = query.toLowerCase();
     const queryWords = queryLower.split(/\s+/);
 
@@ -880,6 +927,7 @@ export class PersistentMemoryManager extends EventEmitter {
    * poking the private maps. Does NOT reinforce (unlike getRelevantMemories).
    */
   listMemories(scope: MemoryScope): Memory[] {
+    this.assertScopeReadable(scope);
     const memories = scope === "project" ? this.projectMemories : this.userMemories;
     return Array.from(memories.values()).map((m) => ({
       ...m,
@@ -898,6 +946,7 @@ export class PersistentMemoryManager extends EventEmitter {
     scope: MemoryScope,
     options: { now?: Date; config?: Partial<ForgettingConfig> } = {},
   ): Promise<{ forgotten: ForgetCandidate[] }> {
+    this.assertScopeReadable(scope);
     const memories = scope === "project" ? this.projectMemories : this.userMemories;
     const now = options.now ?? new Date();
     const candidates = decideForgets(memories.values(), now, options.config);
@@ -1098,6 +1147,12 @@ export class PersistentMemoryManager extends EventEmitter {
    * Get all memories for a category
    */
   getByCategory(category: MemoryCategory, scope?: "project" | "user"): Memory[] {
+    if (scope) {
+      this.assertScopeReadable(scope);
+    } else {
+      this.assertScopeReadable('project');
+      this.assertScopeReadable('user');
+    }
     const memories: Memory[] = [];
 
     if (!scope || scope === "project") {
@@ -1123,6 +1178,7 @@ export class PersistentMemoryManager extends EventEmitter {
    * Clear old memories
    */
   async forgetOlderThan(days: number, scope: "project" | "user" = "project"): Promise<number> {
+    this.assertScopeReadable(scope);
     const memories = scope === "project" ? this.projectMemories : this.userMemories;
     const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
     let count = 0;
@@ -1262,6 +1318,10 @@ export class PersistentMemoryManager extends EventEmitter {
   }
 
   getHermesSnapshotForPrompt(): string {
+    if (this.degradedScopes.size > 0) {
+      const details = Array.from(this.degradedScopes, ([scope, reason]) => `${scope}: ${reason}`).join('; ');
+      return `<memory-store-error>MEMORY STORE ERROR: ${details}. The affected store is unavailable, not empty; do not infer that memories are absent.</memory-store-error>`;
+    }
     const sections: string[] = [];
     const projectEntries = this.renderScopeEntries(this.projectMemories);
     const userEntries = this.renderScopeEntries(this.userMemories);
@@ -1424,6 +1484,12 @@ export class PersistentMemoryManager extends EventEmitter {
     limit = 10,
     scope?: "project" | "user"
   ): Array<Memory & { scope: "project" | "user" }> {
+    if (scope) {
+      this.assertScopeReadable(scope);
+    } else {
+      this.assertScopeReadable('project');
+      this.assertScopeReadable('user');
+    }
     const all: Array<Memory & { scope: "project" | "user" }> = [];
     if (!scope || scope === "project") {
       for (const m of this.projectMemories.values()) {
@@ -1444,6 +1510,12 @@ export class PersistentMemoryManager extends EventEmitter {
    * Format memories for display
    */
   formatMemories(scope?: "project" | "user"): string {
+    if (scope) {
+      this.assertScopeReadable(scope);
+    } else {
+      this.assertScopeReadable('project');
+      this.assertScopeReadable('user');
+    }
     let output = `\n🧠 Persistent Memory\n${"═".repeat(50)}\n\n`;
 
     const formatScope = (name: string, memories: Map<string, Memory>, memoryScope: MemoryScope) => {
@@ -1475,11 +1547,22 @@ export class PersistentMemoryManager extends EventEmitter {
   }
 
   getStats(): { project: number; user: number; total: number } {
+    this.assertScopeReadable('project');
+    this.assertScopeReadable('user');
     return {
       project: this.projectMemories.size,
       user: this.userMemories.size,
       total: this.projectMemories.size + this.userMemories.size,
     };
+  }
+
+  private assertScopeReadable(scope: MemoryScope): void {
+    const reason = this.degradedScopes.get(scope);
+    if (!reason) return;
+    throw new MemoryPersistenceError(
+      scope,
+      `${scope} memory store is unreadable or unavailable (${reason}); it is not an empty store`,
+    );
   }
 }
 
