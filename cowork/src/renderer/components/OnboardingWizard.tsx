@@ -47,6 +47,8 @@ type TestState = 'idle' | 'testing' | 'ok' | 'fail';
 interface OnboardingWizardProps {
   onClose: () => void;
   onOpenApiSettings: () => void;
+  /** Opens the companion panel from the step-3 permission cards. */
+  onOpenCompanion: () => void;
   /** True while the API settings modal is stacked on top of the wizard — the
    *  wizard suppresses its own keyboard shortcuts so Escape/arrows go to the
    *  modal, not the wizard underneath. */
@@ -64,6 +66,7 @@ const STEPS = [
 export function OnboardingWizard({
   onClose,
   onOpenApiSettings,
+  onOpenCompanion,
   apiSettingsOpen,
 }: OnboardingWizardProps) {
   const { t, i18n } = useTranslation();
@@ -572,15 +575,17 @@ export function OnboardingWizard({
                     ),
                   },
                 ].map(({ icon: Icon, testId, title, desc }) => (
-                  <div
+                  <button
+                    type="button"
                     key={testId}
-                    className="rounded-lg border border-border-subtle bg-surface/40 p-3"
+                    onClick={onOpenCompanion}
+                    className="rounded-lg border border-border-subtle bg-surface/40 p-3 text-left transition-colors hover:border-accent/40 hover:bg-surface-hover focus:outline-none focus:ring-2 focus:ring-accent/30"
                     data-testid={testId}
                   >
                     <Icon className="h-4 w-4 text-accent" />
                     <p className="mt-2 text-xs font-semibold text-text-primary">{title}</p>
                     <p className="mt-1 text-[11px] leading-4 text-text-muted">{desc}</p>
-                  </div>
+                  </button>
                 ))}
               </div>
             </div>

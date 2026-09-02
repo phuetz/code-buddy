@@ -580,6 +580,9 @@ function App() {
             // (and sees the now-connected status / can verify) after saving.
             setShowConfigModal(true);
           }}
+          onOpenCompanion={() => {
+            useAppStore.getState().setShowCompanionPanel(true);
+          }}
         />
       )}
 
