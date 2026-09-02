@@ -7,7 +7,7 @@
  */
 
 import type { ToolGroup } from './types.js';
-import { TOOL_ALIASES } from '../../tools/registry/tool-aliases.js';
+import { TOOL_ALIASES } from '../../tools/registry/tool-alias-map.js';
 import { TOOL_METADATA } from '../../tools/metadata.js';
 
 const FLEET_SAFE_TOOL_NAMES = new Set(
