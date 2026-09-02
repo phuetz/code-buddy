@@ -481,7 +481,7 @@ function App() {
           <Panel id="main" minSize={30}>
             <main className="h-full min-h-0 min-w-0 flex flex-col overflow-hidden bg-background relative">
               <div className={`absolute inset-0 z-0 ${showSettings ? 'hidden' : ''}`}>
-                {newShellEnabled ? <NewShell /> : <DockWorkspace />}
+                {newShellEnabled ? <NewShell onboardingActive={showOnboarding} /> : <DockWorkspace />}
               </div>
               {showSettings && (
                 <div className="absolute inset-0 z-10 bg-background">

@@ -567,7 +567,11 @@ function StudioView() {
   );
 }
 
-export function NewShell() {
+interface NewShellProps {
+  onboardingActive: boolean;
+}
+
+export function NewShell({ onboardingActive }: NewShellProps) {
   const primaryView = useAppStore((st) => st.primaryView);
   const setPrimaryView = useAppStore((st) => st.setPrimaryView);
   const setShowCommandPalette = useAppStore((st) => st.setShowCommandPalette);
@@ -784,7 +788,7 @@ export function NewShell() {
         </Suspense>
       </div>
       <ConversationHistoryDrawer />
-      <OnboardingTourHost />
+      <OnboardingTourHost onboardingActive={onboardingActive} />
     </div>
   );
 }
@@ -793,7 +797,7 @@ export function NewShell() {
  * OnboardingTourHost — shows the tour on FIRST launch (localStorage latch)
  * and whenever ⌘K « Visite guidée » flips the store flag.
  */
-function OnboardingTourHost() {
+function OnboardingTourHost({ onboardingActive }: { onboardingActive: boolean }) {
   const show = useAppStore((st) => st.showOnboardingTour);
   const setShow = useAppStore((st) => st.setShowOnboardingTour);
   useEffect(() => {
@@ -803,7 +807,7 @@ function OnboardingTourHost() {
   }, [setShow]);
   return (
     <OnboardingTour
-      open={show}
+      open={!onboardingActive && show}
       onClose={() => {
         localStorage.setItem('cowork.tourSeen', '1');
         setShow(false);
