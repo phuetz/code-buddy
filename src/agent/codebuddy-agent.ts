@@ -998,21 +998,25 @@ Look at the screenshot and find the element matching the user's intent. Output o
     // enabled=true. The /agents slash command can also instantiate it manually
     // at runtime. Wired via audit OpenClaw heritage findings (2026-05-02 — top 4).
     // V0.1: only instantiates the singleton (boot does NOT auto-run a workflow).
-    // Requires GROK_API_KEY env var; logs a warning and skips if absent.
-    import('../config/toml-config.js').then(({ getConfigManager }) => {
+    // Requires any configured provider API key; logs a warning and skips if absent.
+    import('../config/toml-config.js').then(async ({ getConfigManager }) => {
       const masCfg = getConfigManager().getConfig().multi_agent_system;
       if (!masCfg?.enabled) return;
-      const apiKey = process.env.GROK_API_KEY;
+      const { resolveActiveProviderApiKey } = await import('../config/env-schema.js');
+      const apiKey = resolveActiveProviderApiKey();
       if (!apiKey) {
-        logger.warn('MultiAgentSystem boot skipped: GROK_API_KEY not set');
+        logger.warn('MultiAgentSystem boot skipped: no API key set');
         return;
       }
-      import('../agent/multi-agent/multi-agent-system.js').then(({ getMultiAgentSystem }) => {
+      try {
+        const { getMultiAgentSystem } = await import('../agent/multi-agent/multi-agent-system.js');
         getMultiAgentSystem(apiKey, process.env.GROK_BASE_URL);
         logger.info('MultiAgentSystem auto-instantiated from TOML config', {
           default_strategy: masCfg.default_strategy ?? 'hierarchical',
         });
-      }).catch((e) => { logger.debug('MultiAgentSystem module load failed (optional)', { error: String(e) }); });
+      } catch (e) {
+        logger.debug('MultiAgentSystem module load failed (optional)', { error: String(e) });
+      }
     }).catch((e) => { logger.debug('Multi-agent system config check failed (optional)', { error: String(e) }); });
 
     // Boot-time auto-instantiate of EnhancedCoordinator + SessionRegistry

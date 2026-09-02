@@ -204,9 +204,10 @@ export class AdvancedHookRunner {
 
     try {
       const { CodeBuddyClient } = await import('../codebuddy/client.js');
-      const apiKey = process.env.GROK_API_KEY;
+      const { resolveActiveProviderApiKey } = await import('../config/env-schema.js');
+      const apiKey = resolveActiveProviderApiKey();
       if (!apiKey) {
-        logger.warn(`Prompt hook "${hook.name}": no GROK_API_KEY, allowing`, { source: 'AdvancedHookRunner' });
+        logger.warn(`Prompt hook "${hook.name}": no API key, allowing`, { source: 'AdvancedHookRunner' });
         return { action: 'allow', additionalContext: hook.prompt };
       }
 
@@ -234,9 +235,10 @@ export class AdvancedHookRunner {
   private async runAgentHook(hook: AdvancedHook, context: HookContext): Promise<HookDecision> {
     try {
       const { CodeBuddyClient } = await import('../codebuddy/client.js');
-      const apiKey = process.env.GROK_API_KEY;
+      const { resolveActiveProviderApiKey } = await import('../config/env-schema.js');
+      const apiKey = resolveActiveProviderApiKey();
       if (!apiKey) {
-        logger.warn(`Agent hook "${hook.name}": no GROK_API_KEY, allowing`, { source: 'AdvancedHookRunner' });
+        logger.warn(`Agent hook "${hook.name}": no API key, allowing`, { source: 'AdvancedHookRunner' });
         return { action: 'allow' };
       }
 

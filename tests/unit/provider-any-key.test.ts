@@ -9,6 +9,9 @@ const SOURCES = [
   new URL('../../src/mcp/mcp-server.ts', import.meta.url),
   new URL('../../src/tools/ocr-tool.ts', import.meta.url),
   new URL('../../src/agent/prompt-suggestions.ts', import.meta.url),
+  new URL('../../src/hooks/smart-hooks.ts', import.meta.url),
+  new URL('../../src/hooks/advanced-hooks.ts', import.meta.url),
+  new URL('../../src/agent/codebuddy-agent.ts', import.meta.url),
 ];
 
 describe('any configured provider key is enough', () => {

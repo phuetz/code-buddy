@@ -188,9 +188,10 @@ export class SmartHookRunner {
 
     try {
       const { CodeBuddyClient } = await import('../codebuddy/client.js');
-      const apiKey = process.env.GROK_API_KEY;
+      const { resolveActiveProviderApiKey } = await import('../config/env-schema.js');
+      const apiKey = resolveActiveProviderApiKey();
       if (!apiKey) {
-        logger.warn('No GROK_API_KEY set, prompt hook returning rendered prompt', { source: 'SmartHookRunner' });
+        logger.warn('No API key set, prompt hook returning rendered prompt', { source: 'SmartHookRunner' });
         return { ok: true, output: renderedPrompt };
       }
 
@@ -232,9 +233,10 @@ export class SmartHookRunner {
 
     try {
       const { CodeBuddyClient } = await import('../codebuddy/client.js');
-      const apiKey = process.env.GROK_API_KEY;
+      const { resolveActiveProviderApiKey } = await import('../config/env-schema.js');
+      const apiKey = resolveActiveProviderApiKey();
       if (!apiKey) {
-        logger.warn('No GROK_API_KEY set, agent hook returning rendered prompt', { source: 'SmartHookRunner' });
+        logger.warn('No API key set, agent hook returning rendered prompt', { source: 'SmartHookRunner' });
         return { ok: true, output: renderedPrompt };
       }
 
