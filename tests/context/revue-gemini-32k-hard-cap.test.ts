@@ -52,4 +52,36 @@ describe('Mission G1 — Trou 8 : limite 32K hard cap vs modèle 1M', () => {
 
     manager.dispose();
   });
+
+  it('getSmartCompactionEngine ne doit pas plafonner à 128 000 tokens un modèle à fenêtre 1M', async () => {
+    const previous = process.env.GROK_MODEL;
+    process.env.GROK_MODEL = 'gemini-2.5-flash';
+    resetSmartCompactionEngine();
+    try {
+      const engine = getSmartCompactionEngine();
+      expect(
+        engine.getConfig().maxTokens,
+        `DEFAULT_COMPACTION_CONFIG still caps a 1M model at ${engine.getConfig().maxTokens}`,
+      ).toBeGreaterThan(128_000);
+
+      const messages: Message[] = [
+        { role: 'user', content: 'Here is a large dataset that fits well within 1M context.' },
+      ];
+      for (let i = 0; i < 80; i++) {
+        messages.push({
+          role: i % 2 === 0 ? 'assistant' : 'user',
+          content: `Segment ${i}: ${'data '.repeat(2000)}`,
+        });
+      }
+      const { result } = await engine.compact(messages);
+      expect(
+        result.compactedTokens,
+        `SmartCompactionEngine truncated a 1M model to ${result.compactedTokens} tokens because of hardcoded 128k default cap`,
+      ).toBeGreaterThan(130_000);
+    } finally {
+      if (previous === undefined) delete process.env.GROK_MODEL;
+      else process.env.GROK_MODEL = previous;
+      resetSmartCompactionEngine();
+    }
+  });
 });

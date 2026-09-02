@@ -14,6 +14,7 @@ import { preserveToolPairs } from './tool-pair-preserver.js';
 import { wireCompactionProgress } from './progress-compaction-bridge.js';
 import { isFailedToolResultContent } from './enhanced-compression.js';
 import { estimateImageUrlTokens, textFromMessageContent } from './token-counter.js';
+import { getModelToolConfig } from '../config/model-tools.js';
 
 // ============================================================================
 // Types & Interfaces
@@ -720,18 +721,29 @@ export class SmartCompactionEngine extends EventEmitter {
 
 let compactionEngineInstance: SmartCompactionEngine | null = null;
 
+function resolveDefaultCompactionMaxTokens(): number {
+  const model = process.env.GROK_MODEL?.trim() || process.env.CODEBUDDY_MODEL?.trim();
+  if (model) {
+    const window = getModelToolConfig(model).contextWindow;
+    if (window && window > 0) return window;
+  }
+  return 128_000;
+}
+
 /** Default config used when the singleton is constructed without one. */
-const DEFAULT_COMPACTION_CONFIG: CompactionConfig = {
-  maxTokens: 128_000,
-  provider: 'openai',
-  channelType: 'cli',
-  preserveSystem: true,
-  preserveToolCalls: true,
-};
+function defaultCompactionConfig(): CompactionConfig {
+  return {
+    maxTokens: resolveDefaultCompactionMaxTokens(),
+    provider: 'openai',
+    channelType: 'cli',
+    preserveSystem: true,
+    preserveToolCalls: true,
+  };
+}
 
 export function getSmartCompactionEngine(config?: CompactionConfig): SmartCompactionEngine {
   if (!compactionEngineInstance) {
-    compactionEngineInstance = new SmartCompactionEngine(config ?? DEFAULT_COMPACTION_CONFIG);
+    compactionEngineInstance = new SmartCompactionEngine(config ?? defaultCompactionConfig());
     // Surface compaction as a progress task in any renderer (CLI / Cowork).
     wireCompactionProgress(compactionEngineInstance);
   } else if (config) {
