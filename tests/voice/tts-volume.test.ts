@@ -282,6 +282,19 @@ describe('assistant TTS volume', () => {
     expect(Math.max(...samplesFrom(output).map(Math.abs))).toBeCloseTo(2_000, -1);
   });
 
+  it('retains head buffer accumulation even when the factor is externally frozen', () => {
+    const source = pcm16Wav(Array.from({ length: 500 }, (_, index) => index % 2 ? 4_000 : -4_000));
+    const processor = new Pcm16WavStreamGain({}, 0.5);
+    const pushed = processor.push(source);
+    // Seul l'en-tête WAV est émis, les 500 échantillons audio sont retenus dans le head buffer
+    expect(pushed.slice(1).reduce((acc, part) => acc + part.length, 0)).toBe(0);
+    // Lors du flush ou libération, l'audio est transformé avec le gain gelé (0.5)
+    const flushed = processor.flush();
+    expect(flushed.length).toBeGreaterThan(0);
+    const totalOutput = Buffer.concat([...pushed, ...flushed]);
+    expect(Math.max(...samplesFrom(totalOutput).map(Math.abs))).toBeCloseTo(2_000, -1);
+  });
+
   it('soft-limits residual peaks even when the factor does not amplify', () => {
     const transformed = __test.transformPcm16(pcmPayload([32_767, -32_768]), 1);
 

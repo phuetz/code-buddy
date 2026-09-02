@@ -106,4 +106,24 @@ describe('voice loop — one audio player per turn', () => {
     expect(playerHarness.args[0]).toContain('/tmp/codebuddy-cached-backchannel.wav');
     expect(playerHarness.args[1]).toContain('pipe:0');
   });
+
+  it('configures explicit buffer margins on aplay stdinArgs (--buffer-time=300000)', async () => {
+    commandExists.mockImplementation(async (command: string) => command === 'aplay');
+    const player = await __voiceAudioPlayerTest.resolveVoiceAudioPlayer();
+    expect(player).not.toBeNull();
+    expect(player?.cmd).toBe('aplay');
+    expect(player?.stdinArgs).toContain('--buffer-time=300000');
+    expect(player?.stdinArgs).toEqual(['-q', '--buffer-time=300000', '-']);
+  });
+
+  it('configures realtime buffer arguments on ffplay stdinArgs (-infbuf and -buffer_size 300000)', async () => {
+    commandExists.mockImplementation(async (command: string) => command === 'ffplay');
+    const player = await __voiceAudioPlayerTest.resolveVoiceAudioPlayer();
+    expect(player).not.toBeNull();
+    expect(player?.cmd).toBe('ffplay');
+    expect(player?.stdinArgs).toContain('-infbuf');
+    expect(player?.stdinArgs).toContain('-buffer_size');
+    expect(player?.stdinArgs).toContain('300000');
+    expect(player?.stdinArgs).toContain('pipe:0');
+  });
 });
