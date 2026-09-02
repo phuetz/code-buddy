@@ -211,14 +211,14 @@ export function registerHubCommands(program: Command): void {
       const { getSkillsHub } = await import('../../skills/hub.js');
       const skillsHub = getSkillsHub();
       const installed = skillsHub.list();
+      const { getBundledSkillsPath } = await import('../../skills/index.js');
+      const { countBundledSkillEntries } = await import('../skills-cli/index.js');
+      const bundledCount = countBundledSkillEntries(getBundledSkillsPath());
       if (opts.json) {
-        console.log(JSON.stringify({ count: installed.length, skills: installed }, null, 2));
+        console.log(JSON.stringify({ count: installed.length, skills: installed, bundledCount }, null, 2));
         return;
       }
       if (installed.length === 0) {
-        const { getBundledSkillsPath } = await import('../../skills/index.js');
-        const { countBundledSkillEntries } = await import('../skills-cli/index.js');
-        const bundledCount = countBundledSkillEntries(getBundledSkillsPath());
         if (bundledCount > 0) {
           console.log('No hub-installed skills.');
           console.log(
