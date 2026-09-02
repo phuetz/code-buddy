@@ -864,7 +864,7 @@ export class ContextManagerV2 {
 
     // Strategy 3: Summarize old conversations
     if ((currentTokens > tokenLimit || shouldSoftSummarize) && this.config.enableSummarization) {
-      result = this.applySummarization(result);
+      result = this.applySummarization(result, hasOriginalSystem);
       currentTokens = this.countTokens(result);
     }
 
@@ -977,7 +977,10 @@ export class ContextManagerV2 {
    * Strategy 3: Summarize older messages
    * Based on Recursive Summarization (arxiv:2308.15022)
    */
-  private applySummarization(messages: CodeBuddyMessage[]): CodeBuddyMessage[] {
+  private applySummarization(
+    messages: CodeBuddyMessage[],
+    hasOriginalSystem: boolean = true,
+  ): CodeBuddyMessage[] {
     const keepRecent = Math.min(this.config.recentMessagesCount, messages.length);
 
     if (messages.length <= keepRecent) {
@@ -1008,9 +1011,10 @@ export class ContextManagerV2 {
       logger.debug(`Cleaned up ${removeCount} old summaries to prevent memory growth`);
     }
 
-    // Create summary message
+    // Keep the extractive summary, but do not invent a system role when the
+    // original transcript had none (same contract as applySlidingWindow).
     const summaryMessage: CodeBuddyMessage = {
-      role: 'system',
+      role: hasOriginalSystem ? 'system' : 'user',
       content: this.withSegmentMarker(
         `[Conversation Summary]\n${summaryContent}`,
         oldMessages,

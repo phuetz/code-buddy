@@ -69,4 +69,37 @@ describe('Mission G1 — Trou 7 : gestion défaillante des messages système', (
 
     manager.dispose();
   });
+
+  it('applySummarization ne doit pas injecter un message rôle system sans prompt système original', () => {
+    const manager = new ContextManagerV2({
+      maxContextTokens: 900,
+      responseReserveTokens: 50,
+      recentMessagesCount: 2,
+      enableSummarization: true,
+      enableEnhancedCompression: false,
+      model: 'gpt-4',
+    });
+
+    const messages: CodeBuddyMessage[] = [];
+    for (let i = 0; i < 20; i++) {
+      messages.push({
+        role: i % 2 === 0 ? 'user' : 'assistant',
+        content: `Turn ${i} short`,
+      });
+    }
+    messages.push({ role: 'user', content: 'LATEST_REQUEST finish up.' });
+
+    const prepared = manager.prepareMessages(messages);
+    const systemMessages = prepared.filter(m => m.role === 'system');
+    expect(
+      systemMessages.length,
+      'applySummarization injected a synthetic role:system summary into a system-less conversation',
+    ).toBe(0);
+    expect(
+      prepared.some(m => typeof m.content === 'string' && m.content.includes('[Conversation Summary]')),
+      'summarization did not run; the test must exercise applySummarization',
+    ).toBe(true);
+
+    manager.dispose();
+  });
 });

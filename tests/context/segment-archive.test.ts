@@ -159,7 +159,9 @@ describe('ContextManagerV2 context zoom wiring', () => {
     const contextManager = manager(archive);
 
     const compacted = contextManager.prepareMessages(messages);
-    const summary = compacted.find(message => message.role === 'system');
+    const summary = compacted.find(message =>
+      typeof message.content === 'string' && message.content.includes('[Conversation Summary]'),
+    );
 
     expect(summary?.content).toBe(
       '[Conversation Summary]\n' +
@@ -177,7 +179,9 @@ describe('ContextManagerV2 context zoom wiring', () => {
     const contextManager = manager(archive);
 
     const compacted = contextManager.prepareMessages(messages);
-    const summary = compacted.find(message => message.role === 'system');
+    const summary = compacted.find(message =>
+      typeof message.content === 'string' && message.content.includes('[Conversation Summary]'),
+    );
     expect(summary?.content).toMatch(/^\[segment:([a-f0-9]{16})\] \[Conversation Summary\]\n/);
 
     const segmentId = /^\[segment:([a-f0-9]{16})\]/.exec(String(summary?.content))?.[1];
