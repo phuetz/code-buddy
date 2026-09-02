@@ -15,6 +15,8 @@ const ENV_KEYS = [
   'LM_STUDIO_BASE_URL',
   'VLLM_BASE_URL',
   'OLLAMA_HOST',
+  'LEMONADE_HOST',
+  'OMNIROUTE_BASE_URL',
 ];
 
 function createModelsServer(): http.Server {
@@ -50,6 +52,8 @@ describe('provider list runtime probes', () => {
   let consoleLogSpy: ReturnType<typeof vi.spyOn>;
   let lmStudioServer: http.Server | undefined;
   let vllmServer: http.Server | undefined;
+  let lemonadeServer: http.Server | undefined;
+  let omnirouteServer: http.Server | undefined;
 
   beforeEach(() => {
     for (const key of ENV_KEYS) {
@@ -64,8 +68,12 @@ describe('provider list runtime probes', () => {
     consoleLogSpy.mockRestore();
     await closeServer(lmStudioServer);
     await closeServer(vllmServer);
+    await closeServer(lemonadeServer);
+    await closeServer(omnirouteServer);
     lmStudioServer = undefined;
     vllmServer = undefined;
+    lemonadeServer = undefined;
+    omnirouteServer = undefined;
     for (const key of ENV_KEYS) {
       if (previousEnv[key] === undefined) delete process.env[key];
       else process.env[key] = previousEnv[key];
@@ -86,5 +94,15 @@ describe('provider list runtime probes', () => {
     const vllmUrl = await listen(vllmServer, 0);
     const active = await collectRuntimeActiveProviderIds({ vllmUrl });
     expect(active.has('vllm')).toBe(true);
+  });
+
+  it('marks Lemonade and OmniRoute active when their local runtimes answer /v1/models', async () => {
+    lemonadeServer = createModelsServer();
+    omnirouteServer = createModelsServer();
+    const lemonadeUrl = await listen(lemonadeServer, 0);
+    const omnirouteUrl = await listen(omnirouteServer, 0);
+    const active = await collectRuntimeActiveProviderIds({ lemonadeUrl, omnirouteUrl });
+    expect(active.has('lemonade')).toBe(true);
+    expect(active.has('omniroute')).toBe(true);
   });
 });

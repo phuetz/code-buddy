@@ -149,6 +149,8 @@ export async function collectRuntimeActiveProviderIds(overrides: {
   ollamaUrl?: string;
   lmStudioUrl?: string;
   vllmUrl?: string;
+  lemonadeUrl?: string;
+  omnirouteUrl?: string;
 } = {}): Promise<Set<string>> {
   const lmStudioUrl = overrides.lmStudioUrl
     ?? firstEnvValue(['LMSTUDIO_HOST', 'LM_STUDIO_HOST', 'LMSTUDIO_BASE_URL', 'LM_STUDIO_BASE_URL'])
@@ -158,17 +160,29 @@ export async function collectRuntimeActiveProviderIds(overrides: {
     ?? firstEnvValue(['VLLM_BASE_URL'])
     ?? PROVIDERS.vllm?.baseURL
     ?? 'http://localhost:8000/v1';
+  const lemonadeUrl = overrides.lemonadeUrl
+    ?? firstEnvValue(['LEMONADE_HOST'])
+    ?? PROVIDERS.lemonade?.baseURL
+    ?? 'http://127.0.0.1:13305/api/v1';
+  const omnirouteUrl = overrides.omnirouteUrl
+    ?? firstEnvValue(['OMNIROUTE_BASE_URL'])
+    ?? PROVIDERS.omniroute?.baseURL
+    ?? 'http://localhost:20128/v1';
 
-  const [ollamaStatus, lmStudioOk, vllmOk] = await Promise.all([
+  const [ollamaStatus, lmStudioOk, vllmOk, lemonadeOk, omnirouteOk] = await Promise.all([
     fetchOllamaStatus(overrides.ollamaUrl ?? process.env.OLLAMA_HOST),
     probeOpenAiCompatibleRuntime(lmStudioUrl),
     probeOpenAiCompatibleRuntime(vllmUrl),
+    probeOpenAiCompatibleRuntime(lemonadeUrl),
+    probeOpenAiCompatibleRuntime(omnirouteUrl),
   ]);
 
   const active = new Set<string>();
   if (ollamaStatus.reachable) active.add('ollama');
   if (lmStudioOk) active.add('lmstudio');
   if (vllmOk) active.add('vllm');
+  if (lemonadeOk) active.add('lemonade');
+  if (omnirouteOk) active.add('omniroute');
   return active;
 }
 
