@@ -19,6 +19,7 @@ import {
   type RuntimeProviderId,
 } from '../providers/provider-catalog.js';
 import { buildModelInventory } from '../fleet/model-inventory.js';
+import { fetchOllamaStatus } from './ollama.js';
 
 interface ProviderInfo {
   name: string;
@@ -194,17 +195,20 @@ export function createProviderCommand(): Command {
     .alias('ls')
     .description('List available AI providers')
     .option('--free', 'List only providers with a free tier')
-    .action((options: { free?: boolean }) => {
+    .action(async (options: { free?: boolean }) => {
       const configured = getConfiguredProviders();
       const configuredPluginProviders = getConfiguredPluginNativeProviders();
       const current = resolveProviderCommandKey(getCurrentProvider()) || getCurrentProvider();
+      const runtimeActive = new Set<string>();
+      const ollamaStatus = await fetchOllamaStatus(process.env.OLLAMA_HOST);
+      if (ollamaStatus.reachable) runtimeActive.add('ollama');
 
       console.log(options.free ? '\nFree-tier AI Providers:\n' : '\nAvailable AI Providers:\n');
 
       for (const [key, info] of Object.entries(PROVIDERS)) {
         if (options.free && !info.freeTier) continue;
 
-        const isConfigured = configured.includes(key);
+        const isConfigured = configured.includes(key) || runtimeActive.has(info.providerId);
         const isCurrent = key === current;
         const status = isConfigured ? '✅' : '❌';
         const marker = isCurrent ? ' (active)' : '';

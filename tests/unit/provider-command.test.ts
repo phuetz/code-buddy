@@ -147,6 +147,29 @@ describe('Provider Command', () => {
       expect(output).not.toContain('Plugin-native providers');
     });
 
+    it('should mark the default Ollama runtime active when it is reachable', async () => {
+      const previousOllamaHost = process.env.OLLAMA_HOST;
+      delete process.env.OLLAMA_HOST;
+      const fetchSpy = jest.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+        const url = String(input);
+        const body = url.endsWith('/api/version')
+          ? { version: '0.12.0' }
+          : { models: [{ name: 'qwen3:4b-instruct' }] };
+        return new Response(JSON.stringify(body), { status: 200 });
+      });
+
+      try {
+        await run(['list', '--free']);
+        const output = consoleLogSpy.mock.calls.map((c) => c.join(' ')).join('\n');
+        expect(output).toContain('✅ 🆓 Ollama');
+        expect(fetchSpy).toHaveBeenCalled();
+      } finally {
+        fetchSpy.mockRestore();
+        if (previousOllamaHost === undefined) delete process.env.OLLAMA_HOST;
+        else process.env.OLLAMA_HOST = previousOllamaHost;
+      }
+    });
+
     it('should show environment variable names', async () => {
       await run(['list']);
 
