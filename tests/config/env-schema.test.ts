@@ -137,9 +137,9 @@ describe('ENV_SCHEMA', () => {
     }
   });
 
-  it('should mark GROK_API_KEY as required', () => {
+  it('should expose GROK_API_KEY as an optional provider credential', () => {
     const grokKey = ENV_SCHEMA.find(d => d.name === 'GROK_API_KEY');
-    expect(grokKey?.required).toBe(true);
+    expect(grokKey?.required).toBeUndefined();
   });
 });
 
@@ -194,6 +194,16 @@ describe('validateEnv', () => {
     const result = validateEnv(env);
     expect(result.valid).toBe(true);
     expect(result.errors).toHaveLength(0);
+  });
+
+  it('should accept any active provider authentication without requiring Grok', () => {
+    const openAiResult = validateEnv({ OPENAI_API_KEY: 'openai-test-key' });
+    expect(openAiResult.valid).toBe(true);
+    expect(openAiResult.errors).toHaveLength(0);
+
+    const chatGptResult = validateEnv({ CODEBUDDY_CHATGPT_OAUTH: 'connected' });
+    expect(chatGptResult.valid).toBe(true);
+    expect(chatGptResult.errors).toHaveLength(0);
   });
 
   it('should warn on invalid number type', () => {
@@ -378,15 +388,14 @@ describe('getEnvSummary', () => {
   it('should include legend', () => {
     const summary = getEnvSummary({});
     expect(summary).toContain('Legend:');
-    expect(summary).toContain('[required]');
+    expect(summary).toContain('at least one provider authentication');
   });
 
-  it('should show [required] tag for required variables', () => {
+  it('should not mark Grok as the sole required variable', () => {
     const summary = getEnvSummary({});
-    // GROK_API_KEY line should have [required]
     const lines = summary.split('\n');
     const apiKeyLine = lines.find(l => l.includes('GROK_API_KEY') && !l.includes('Errors'));
-    expect(apiKeyLine).toContain('[required]');
+    expect(apiKeyLine).not.toContain('[required]');
   });
 });
 

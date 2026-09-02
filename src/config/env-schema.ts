@@ -5,6 +5,13 @@
  * Provides validation, documentation, and a CLI summary.
  */
 
+import { hasCodexCredentials } from '../providers/codex-oauth.js';
+import {
+  getPluginNativeRuntimeProviderCatalog,
+  getDirectRuntimeProviderCatalog,
+  isProviderConfigured,
+} from '../providers/provider-catalog.js';
+
 export interface EnvVarDef {
   /** Environment variable name */
   name: string;
@@ -76,8 +83,7 @@ export const ENV_SCHEMA: EnvVarDef[] = [
   {
     name: 'GROK_API_KEY',
     type: 'string',
-    description: 'Primary API key (xAI / Grok)',
-    required: true,
+    description: 'xAI / Grok API key (one of several supported provider authentications)',
     sensitive: true,
     category: 'core',
   },
@@ -2056,6 +2062,16 @@ export interface ValidationResult {
   errors: string[];
 }
 
+function hasActiveProvider(env: Record<string, string | undefined>): boolean {
+  const hasChatGptOAuth = Boolean(env.CODEBUDDY_CHATGPT_OAUTH?.trim())
+    || (env === process.env && hasCodexCredentials());
+  const entries = [
+    ...getDirectRuntimeProviderCatalog(),
+    ...getPluginNativeRuntimeProviderCatalog(),
+  ];
+  return entries.some((entry) => isProviderConfigured(entry, env, hasChatGptOAuth));
+}
+
 /**
  * Validate the current `process.env` against the schema.
  *
@@ -2065,6 +2081,12 @@ export interface ValidationResult {
 export function validateEnv(env: Record<string, string | undefined> = process.env): ValidationResult {
   const errors: string[] = [];
   const warnings: string[] = [];
+
+  if (!hasActiveProvider(env)) {
+    errors.push(
+      'No AI provider is configured. Set ChatGPT OAuth or an API key such as GROK_API_KEY.',
+    );
+  }
 
   for (const def of ENV_SCHEMA) {
     const raw = env[def.name];
@@ -2228,7 +2250,7 @@ export function getEnvSummary(env: Record<string, string | undefined> = process.
     return v !== undefined && v !== '';
   }).length;
   lines.push(`${setCount}/${ENV_SCHEMA.length} variables set`);
-  lines.push(`Legend: * = set, [required] = must be configured`);
+  lines.push('Legend: * = set; validation requires at least one provider authentication');
 
   return lines.join('\n');
 }
