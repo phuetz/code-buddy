@@ -64,7 +64,7 @@ import {
 } from './voice-stream.js';
 import type { TtsCache } from './tts-cache.js';
 import { resolveUserName } from '../companion/user-name.js';
-import { normalizePcm16Wav, normalizeWavFile, Pcm16WavStreamGain } from '../voice/tts-volume.js';
+import { normalizePcm16Wav, normalizeWavFile, Pcm16WavStreamGain, probePcm16Wav } from '../voice/tts-volume.js';
 import { conditionPcm16Wav, Pcm16WavStreamEdges } from '../voice/pcm-edges.js';
 import {
   resolveElevenLabsCacheVoice,
@@ -548,6 +548,13 @@ export function voiceAudioPrebufferMs(env: NodeJS.ProcessEnv = process.env): num
   const configured = Number(env.CODEBUDDY_VOICE_AUDIO_PREBUFFER_MS);
   if (!Number.isFinite(configured)) return 400;
   return Math.max(0, Math.min(5_000, Math.floor(configured)));
+}
+
+/** Real-time network stream jitter buffer duration before writing to audio player stdin. */
+export function resolveVoiceJitterBufferMs(env: NodeJS.ProcessEnv = process.env): number {
+  const configured = Number(env.CODEBUDDY_VOICE_JITTER_BUFFER_MS);
+  if (!Number.isFinite(configured)) return 250;
+  return Math.max(0, Math.min(1_000, Math.floor(configured)));
 }
 
 /** Explicit true/false wins; otherwise latency buffers follow the resolved route. */
@@ -2540,9 +2547,27 @@ function makeDefaultStreamSpeak(
     const headTimeoutMs = Number.isFinite(configuredHeadTimeoutMs) && configuredHeadTimeoutMs > 0
       ? Math.max(50, Math.min(1_000, configuredHeadTimeoutMs))
       : 250;
-    const writePlayerParts = (parts: Buffer[]): boolean => {
+    const jitterBufferMs = resolveVoiceJitterBufferMs(process.env);
+    let jitterPrimed = jitterBufferMs <= 0;
+    let jitterQueue: Buffer[] = [];
+    let jitterAudioBytes = 0;
+    let detectedByteRate = 48_000;
+    let jitterReleaseTimer: NodeJS.Timeout | undefined;
+
+    const targetJitterBytes = (): number =>
+      Math.round((detectedByteRate * jitterBufferMs) / 1_000);
+
+    const flushJitterBuffer = (): boolean => {
+      if (jitterReleaseTimer) {
+        clearTimeout(jitterReleaseTimer);
+        jitterReleaseTimer = undefined;
+      }
+      jitterPrimed = true;
+      if (jitterQueue.length === 0) return true;
       let accepted = true;
-      for (const part of parts) {
+      const partsToWrite = jitterQueue;
+      jitterQueue = [];
+      for (const part of partsToWrite) {
         opts.onAudioChunk?.(part);
         accepted = stdin.write(part) && accepted;
       }
@@ -2551,6 +2576,55 @@ function makeDefaultStreamSpeak(
         opts.onFirstAudio?.();
       }
       return accepted;
+    };
+
+    const writePlayerParts = (parts: Buffer[]): boolean => {
+      if (jitterPrimed) {
+        let accepted = true;
+        for (const part of parts) {
+          opts.onAudioChunk?.(part);
+          accepted = stdin.write(part) && accepted;
+        }
+        if (!firstAudio && edges.hasOutputAudio()) {
+          firstAudio = true;
+          opts.onFirstAudio?.();
+        }
+        return accepted;
+      }
+
+      for (const part of parts) {
+        if (part.length === 0) continue;
+        if (part.length >= 12 && part.subarray(0, 4).toString('ascii') === 'RIFF') {
+          const probe = probePcm16Wav(part);
+          if (probe.status === 'ready') {
+            detectedByteRate = probe.layout.byteRate;
+            jitterAudioBytes += Math.max(0, part.length - probe.layout.dataOffset);
+          } else {
+            jitterAudioBytes += Math.max(0, part.length - 44);
+          }
+        } else {
+          jitterAudioBytes += part.length;
+        }
+        jitterQueue.push(part);
+      }
+
+      if (jitterAudioBytes >= targetJitterBytes()) {
+        return flushJitterBuffer();
+      }
+
+      if (!jitterReleaseTimer && jitterBufferMs > 0) {
+        jitterReleaseTimer = setTimeout(() => {
+          jitterReleaseTimer = undefined;
+          if (settled || signal?.aborted) return;
+          try {
+            flushJitterBuffer();
+          } catch {
+            /* best effort */
+          }
+        }, jitterBufferMs);
+      }
+
+      return true;
     };
     const writeGainParts = (parts: Buffer[]): boolean => {
       let accepted = true;
@@ -2570,6 +2644,7 @@ function makeDefaultStreamSpeak(
           // A slow/stalled HTTP body must not hold the look-ahead forever.
           // The small partial head is safe to write without awaiting backpressure.
           writeGainParts(gain.releaseHead());
+          flushJitterBuffer();
         } catch (err) {
           logger.debug(
             `[voice] streaming head release failed open: ${err instanceof Error ? err.message : String(err)}`
@@ -2623,8 +2698,11 @@ function makeDefaultStreamSpeak(
       }
       if (headReleaseTimer) clearTimeout(headReleaseTimer);
       headReleaseTimer = undefined;
+      if (jitterReleaseTimer) clearTimeout(jitterReleaseTimer);
+      jitterReleaseTimer = undefined;
       if (!writeGainParts(gain.flush())) await waitForPlayerDrain(child, stdin, signal);
       if (!writePlayerParts(edges.flush())) await waitForPlayerDrain(child, stdin, signal);
+      if (!flushJitterBuffer()) await waitForPlayerDrain(child, stdin, signal);
       if (!stdin.destroyed) stdin.end();
       await closed;
       return firstAudio && closedOk && !signal?.aborted;
@@ -2643,6 +2721,7 @@ function makeDefaultStreamSpeak(
     } finally {
       clearTimeout(killTimer);
       if (headReleaseTimer) clearTimeout(headReleaseTimer);
+      if (jitterReleaseTimer) clearTimeout(jitterReleaseTimer);
       signal?.removeEventListener('abort', onAbort);
       try {
         await reader.cancel();
@@ -2726,6 +2805,7 @@ async function defaultPlay(
 /** Narrow test seam for verifying the shared per-turn player contract. */
 export const __voiceAudioPlayerTest = {
   resolveVoiceAudioPlayer,
+  resolveVoiceJitterBufferMs,
   resolveBaseCacheVoice,
   makeDefaultSynth,
   makeDefaultStreamSpeak,
