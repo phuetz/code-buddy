@@ -526,6 +526,22 @@ describe('parseSseStream — Codex SSE → OpenAI ChatCompletionChunk', () => {
     expect(chunks.at(-1)?.usage).toMatchObject({ total_tokens: 2 });
   });
 
+  it('maps response.incomplete to a length finish with a truncation flag', async () => {
+    const stream = makeSseStream([
+      'data: {"type":"response.output_text.delta","delta":"partial"}\n\n',
+      'data: {"type":"response.incomplete","response":{"incomplete_details":{"reason":"max_output_tokens"}}}\n\n',
+    ]);
+
+    const chunks = [];
+    for await (const chunk of parseSseStream(stream, 'gpt-5.5')) {
+      chunks.push(chunk);
+    }
+
+    const terminal = chunks.at(-1);
+    expect(terminal?.choices[0]?.finish_reason).toBe('length');
+    expect((terminal as unknown as { truncated?: boolean }).truncated).toBe(true);
+  });
+
   it('ignores unknown event types silently (response.in_progress, etc.)', async () => {
     const stream = makeSseStream([
       'data: {"type":"response.in_progress"}\n\n',
@@ -691,6 +707,25 @@ function discoveredCatalog(): ChatGptCodexModelCatalog {
 }
 
 describe('ChatGptResponsesProvider — chatStream wiring', () => {
+  it('preserves response.incomplete as length and truncated in chat()', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(streamingResponse([
+      'data: {"type":"response.output_text.delta","delta":"partial"}\n\n',
+      'data: {"type":"response.incomplete","response":{"incomplete_details":{"reason":"max_output_tokens"}}}\n\n',
+    ]));
+    const provider = new ChatGptResponsesProvider({
+      authProvider: async () => authBundle(),
+      model: 'gpt-5.5',
+      defaultMaxTokens: 1_000,
+    });
+
+    const response = await provider.chat([
+      { role: 'user', content: 'Continue' } as CodeBuddyMessage,
+    ]);
+
+    expect(response.choices[0]?.finish_reason).toBe('length');
+    expect(response.truncated).toBe(true);
+  });
+
   it('surfaces Responses usage through non-streaming chat', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(streamingResponse([
       'data: {"type":"response.output_text.delta","delta":"done"}\n\n',

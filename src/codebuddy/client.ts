@@ -191,6 +191,10 @@ export interface CodeBuddyClientOptions {
 }
 
 export interface CodeBuddyResponse {
+  /** Model that actually produced the response, when the provider exposes it. */
+  model?: string;
+  /** True when the provider stopped at an output-token ceiling. */
+  truncated?: boolean;
   choices: Array<{
     message: {
       role: string;

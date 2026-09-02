@@ -360,6 +360,7 @@ export class ChatGptResponsesProvider implements Provider {
     let content = '';
     const toolCalls: CodeBuddyToolCall[] = [];
     let finishReason: string | undefined;
+    let truncated = false;
     let usage: CodeBuddyResponse['usage'];
 
     for await (const chunk of this.chatStream(messages, tools, opts)) {
@@ -383,6 +384,9 @@ export class ChatGptResponsesProvider implements Provider {
       }
       if (chunk.choices[0]?.finish_reason) {
         finishReason = chunk.choices[0].finish_reason;
+      }
+      if ((chunk as ChatCompletionChunk & { truncated?: boolean }).truncated) {
+        truncated = true;
       }
       if (chunk.usage) {
         const chunkUsage = chunk.usage as typeof chunk.usage & { cached_tokens?: number };
@@ -410,6 +414,7 @@ export class ChatGptResponsesProvider implements Provider {
         },
         finish_reason: finishReason,
       }],
+      ...(truncated ? { truncated: true } : {}),
       ...(usage ? { usage } : {}),
     };
   }
@@ -970,6 +975,10 @@ type DeltaWithReasoning = ChatCompletionChunk['choices'][0]['delta'] & {
   reasoning_content?: string;
 };
 
+type ResponsesChatCompletionChunk = ChatCompletionChunk & {
+  truncated?: boolean;
+};
+
 type ChunkUsage = NonNullable<ChatCompletionChunk['usage']> & {
   cached_tokens?: number;
 };
@@ -1003,7 +1012,8 @@ export async function* parseSseStream(
     delta: DeltaWithReasoning,
     finishReason?: string,
     usage?: ChunkUsage,
-  ): ChatCompletionChunk => ({
+    truncated?: boolean,
+  ): ResponsesChatCompletionChunk => ({
     id: `chatcmpl-codex-${chunkIndex++}`,
     object: 'chat.completion.chunk',
     created: Math.floor(Date.now() / 1000),
@@ -1013,6 +1023,7 @@ export async function* parseSseStream(
       delta: delta as ChatCompletionChunk['choices'][0]['delta'],
       finish_reason: (finishReason as ChatCompletionChunk['choices'][0]['finish_reason']) ?? null,
     }],
+    ...(truncated ? { truncated: true } : {}),
     ...(usage ? { usage } : {}),
   });
 
@@ -1093,6 +1104,7 @@ export async function* parseSseStream(
           };
           response?: {
             error?: { code?: string; message?: string };
+            incomplete_details?: { reason?: string };
             usage?: {
               input_tokens?: number;
               output_tokens?: number;
@@ -1254,6 +1266,16 @@ export async function* parseSseStream(
             };
           }
           yield makeChunk({}, 'stop', chunkUsage);
+          return;
+        }
+
+        if (type === 'response.incomplete') {
+          terminalEventSeen = true;
+          const reason = parsed.response?.incomplete_details?.reason ?? 'unknown';
+          logger.warn(
+            `[chatgpt-responses] Response incomplete (${reason}); marking output as truncated`,
+          );
+          yield makeChunk({}, 'length', undefined, true);
           return;
         }
 
