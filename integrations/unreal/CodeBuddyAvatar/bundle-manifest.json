@@ -11,13 +11,13 @@
     },
     {
       "path": "Config/DefaultCodeBuddyAvatar.ini",
-      "size": 379,
-      "sha256": "1784b47119e3d93589947d501307e63f5b84ba397cde69e416ee8dc9bd0f4dc2"
+      "size": 378,
+      "sha256": "0d39e7f7d2853110d758e103f58213f9847d922724f36c16845e780da2968277"
     },
     {
       "path": "README.md",
       "size": 5013,
-      "sha256": "0ba8c7444b96c3894510ae75b1d2cfb3ea062357487b972b77942c00241d5ae0"
+      "sha256": "4b396d5f45d6771fe7b284aeb7f774260244dc4b00aa3308d225839b94d0568d"
     },
     {
       "path": "Source/CodeBuddyAvatar/CodeBuddyAvatar.Build.cs",
@@ -46,8 +46,8 @@
     },
     {
       "path": "Source/CodeBuddyAvatar/Public/CodeBuddyAvatarSubsystem.h",
-      "size": 7871,
-      "sha256": "d07e24e1cee464fd429cc117e5eb3f595a5e82b550fa60cb11154a1f01858734"
+      "size": 7870,
+      "sha256": "4556aa902d16bb9a21e34d2e93678947b0af4bacd456219d0fddf41235f36f33"
     },
     {
       "path": "Source/CodeBuddyAvatar/Public/CodeBuddyAvatarTypes.h",

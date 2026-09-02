@@ -46,7 +46,7 @@ describe('Voicebox config', () => {
     expect(resolveVoiceboxBaseUrl({ CODEBUDDY_VOICEBOX_URL: 'http://user:pass@gpuNode:17493' }))
       .toBe('http://127.0.0.1:17493');
     expect(resolveVoiceboxBaseUrl({ CODEBUDDY_VOICEBOX_URL: 'http://gpuNode:17493/' }))
-      .toBe('http://gpuNode:17493');
+      .toBe('http://gpunode:17493');
   });
 
   it('bounds delivery instructions and validates renderer enums', () => {
@@ -99,7 +99,7 @@ describe('Voicebox synthesis', () => {
     );
     expect(stream).not.toBeNull();
     expect(requests).toHaveLength(2);
-    expect(requests[1]?.url).toBe('http://gpuNode:17493/generate/stream');
+    expect(requests[1]?.url).toBe('http://gpunode:17493/generate/stream');
     expect(requests[1]?.body).toMatchObject({
       profile_id: 'lisa-id',
       text: 'Bonjour Patrice.',

@@ -370,7 +370,7 @@ describe('Lisa conversation benchmark', () => {
 
     expect(output).toBe('Réponse déterministe.');
     expect(fetchImpl).toHaveBeenCalledWith(
-      'http://gpuNode.invalid:11434/api/chat',
+      'http://gpunode.invalid:11434/api/chat',
       expect.any(Object)
     );
   });

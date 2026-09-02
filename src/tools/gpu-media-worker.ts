@@ -119,12 +119,19 @@ export function validateGpuWorkerUrl(value: string): URL {
   if (url.protocol !== 'https:' && url.protocol !== 'http:') {
     throw new Error('GPU worker URL must use http or https');
   }
+  // Un nom de machine sans point (« gpunode ») ou un suffixe de réseau local
+  // (.local, .lan, .internal, .home.arpa) ne peut pas être classé : il est
+  // accepté comme privé. Seules les adresses publiques en clair sont refusées.
+  const localName =
+    !url.hostname.includes('.') ||
+    /\.(local|lan|internal|home\.arpa)$/u.test(url.hostname);
   if (
     url.protocol === 'http:' &&
     url.hostname !== 'localhost' &&
     url.hostname !== '::1' &&
     !isPrivateIpv4(url.hostname) &&
-    !url.hostname.endsWith('.ts.net')
+    !url.hostname.endsWith('.ts.net') &&
+    !localName
   ) {
     throw new Error('Unencrypted GPU worker URL must be loopback, private, or Tailscale');
   }

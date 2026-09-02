@@ -28,7 +28,7 @@ describe('gpu media worker contracts', () => {
   });
 
   it('allows private/Tailscale HTTP but rejects public clear-text endpoints', () => {
-    expect(validateGpuWorkerUrl('http://192.0.2.42:4310').hostname).toBe('192.0.2.42');
+    expect(validateGpuWorkerUrl('http://192.168.0.42:4310').hostname).toBe('192.168.0.42');
     expect(validateGpuWorkerUrl('http://gpuNode.tail-example.ts.net:4310').protocol).toBe('http:');
     expect(() => validateGpuWorkerUrl('http://example.com:4310')).toThrow(/Unencrypted/);
     expect(validateGpuWorkerUrl('https://gpu.example.com').protocol).toBe('https:');
@@ -104,7 +104,7 @@ describe('gpu media worker contracts', () => {
   it('submits a validated job without placing the token in the body', async () => {
     const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(jobResponse());
     const client = new GpuMediaWorkerClient(
-      { baseUrl: 'http://192.0.2.42:4310', token: 'secret-token' },
+      { baseUrl: 'http://192.168.0.42:4310', token: 'secret-token' },
       { fetch: fetchMock }
     );
 
@@ -163,7 +163,7 @@ describe('gpu media worker contracts', () => {
       )
     );
     const client = new GpuMediaWorkerClient(
-      { baseUrl: 'http://192.0.2.42:4310' },
+      { baseUrl: 'http://192.168.0.42:4310' },
       { fetch: fetchMock }
     );
     await expect(client.capabilities()).resolves.toMatchObject({
