@@ -153,7 +153,7 @@ function visibleComposer(appPage: Page) {
   ).first();
 }
 
-test('renders a chat reply from a local OpenAI-compatible server', async ({ appPage }) => {
+test('renders two consecutive chat replies from a local OpenAI-compatible server', async ({ appPage }) => {
   test.setTimeout(120_000);
   const localServer = await startLocalOpenAiServer();
 
@@ -174,6 +174,25 @@ test('renders a chat reply from a local OpenAI-compatible server', async ({ appP
       (request) => JSON.stringify(request.body).includes(initialPrompt),
     );
     expect(initialRequest?.url).toBe('/v1/chat/completions');
+
+    const followUpPrompt = 'Second local server chat proof';
+    const followUpReply = `LOCAL-OPENAI-E2E: ${followUpPrompt}`;
+    const followUpComposer = visibleComposer(appPage);
+    await expect(followUpComposer).toBeVisible({ timeout: 20_000 });
+    await followUpComposer.fill(followUpPrompt);
+    await followUpComposer.press('Enter');
+
+    await expect(appPage.getByText(followUpPrompt, { exact: true })).toBeVisible({ timeout: 15_000 });
+    await expect(appPage.getByText(followUpReply, { exact: false })).toBeVisible({ timeout: 30_000 });
+    await expect(appPage.getByText(initialReply, { exact: false })).toBeVisible();
+    await expect.poll(() => localServer.requests.filter(
+      (request) => JSON.stringify(request.body).includes(followUpPrompt),
+    ).length).toBeGreaterThan(0);
+
+    const screenshotPath = process.env.COWORK_E17_CHAT_SCREENSHOT?.trim();
+    if (screenshotPath) {
+      await appPage.screenshot({ path: screenshotPath, fullPage: true });
+    }
   } finally {
     await stopServer(localServer.server);
   }
