@@ -123,11 +123,38 @@ export function spokenPrefixContinuationGuidance(spokenPrefix?: string): string 
   );
 }
 
+/** Lower bound applied only when nothing is configured — a floor, not an override. */
+const DEFAULT_SUMMARY_MIN_TOKENS = 96;
+/** Ceiling for the automatic budget; a spoken reply longer than this is a monologue. */
+const SUMMARY_MAX_TOKENS = 512;
+
+/**
+ * Token budget for the spoken summary.
+ *
+ * `CODEBUDDY_VOICE_MAX_TOKENS` is an OPERATOR decision about how long the robot
+ * should talk, so an explicit value is honoured as the ceiling. It used to be
+ * merely a lower input to `Math.max(96, …, conversationTokenBudget(…))`, which
+ * meant a deliberate 48 became at least 96 and, on a long exchange, up to 512.
+ * Measured on Patrice's robot on 2026-09-02: he had set 48 and heard a 656-character
+ * answer delivered as fourteen separate phrases.
+ *
+ * Unset, the automatic budget keeps its previous behaviour exactly.
+ */
 function summaryMaxTokens(transcript: string, env: NodeJS.ProcessEnv = process.env): number {
-  const configured = Number(env.CODEBUDDY_VOICE_MAX_TOKENS);
-  const base = Number.isFinite(configured) ? Math.floor(configured) : 48;
-  return Math.max(96, Math.min(512, Math.max(base, conversationTokenBudget(transcript))));
+  const raw = env.CODEBUDDY_VOICE_MAX_TOKENS?.trim();
+  const configured = raw ? Number(raw) : NaN;
+  if (Number.isFinite(configured) && configured > 0) {
+    // Clamped only against absurd values; the operator's intent is respected.
+    return Math.max(16, Math.min(SUMMARY_MAX_TOKENS, Math.floor(configured)));
+  }
+  return Math.max(
+    DEFAULT_SUMMARY_MIN_TOKENS,
+    Math.min(SUMMARY_MAX_TOKENS, conversationTokenBudget(transcript)),
+  );
 }
+
+/** Exposed for tests: the budget rule is a user-visible contract. */
+export const __testSummaryMaxTokens = summaryMaxTokens;
 
 /** Skip the second LLM call only when the grounded agent respected the voice contract. */
 export function isAlreadySpeakableAgentResult(output: string): boolean {
