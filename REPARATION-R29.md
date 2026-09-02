@@ -140,6 +140,40 @@ Tests  1 passed (1)
 `tests/context/` après D4 : **43 passed, 602 passed**. `tsc --noEmit` exit 0.
 `eslint src/context/context-manager-v2.ts tests/context/force-cleanup-archive.test.ts` : exit 0.
 
+### D5 — intégrité des segments à la restauration
+
+Test rouge avant correctif (`tests/context/segment-integrity.test.ts`) :
+
+```text
+❯ tests/context/segment-integrity.test.ts (2 tests | 2 failed) 12ms
+     × refuses a shape-valid segment whose messages were altered on disk
+     × rewrites a corrupt existing file instead of treating its name as proof
+expected [Function] to throw an error
+expected undefined to deeply equal original messages
+Tests  2 failed (2)
+```
+
+Correctif : `hashArchivedMessages()` recalculé à `get()` ; `SegmentIntegrityError`
+si le hash ne correspond pas. `context_expand` renvoie `success: false` avec ce
+message, sans injecter le contenu. `archive()` réécrit un fichier existant
+corrompu au lieu de renvoyer l'identifiant.
+
+Test vert :
+
+```text
+npx vitest run tests/context/segment-integrity.test.ts tests/context/segment-archive.test.ts
+Test Files  2 passed (2)
+Tests  8 passed (8)
+```
+
+`tests/context/` après D5 : **44 passed, 604 passed**. `tsc --noEmit` exit 0.
+`eslint src/context/segment-archive.ts src/tools/context-expand-tool.ts tests/context/segment-integrity.test.ts` : exit 0.
+
 ## Bilan
 
-(à compléter en fin de mission)
+Cinq D confirmés vrais, cinq commits `fix(context): …` sur `fix/repar-context-2026-09-02`.
+Preuve : `vitest run tests/context/` **44 files / 604 tests** verts ; `tsc --noEmit` 0 ;
+eslint ciblé 0. Aucun LLM, aucun réseau. `transcript-repair` inchangé (ne droppe
+pas le `user`) ; l'exécuteur intercepte `ContextCompactionError` avant `chatStream`.
+Hors périmètre : compteur Enhanced vs `updateConfig`, `list()` qui masque les
+valides, snapshot périodique, `purgeLru`. Coordination FABLE5 non modifiée.

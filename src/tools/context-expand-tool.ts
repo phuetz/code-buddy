@@ -1,5 +1,10 @@
 import { countTokens } from '../context/token-counter.js';
-import { isContextZoomEnabled, SegmentArchive } from '../context/segment-archive.js';
+import {
+  isContextZoomEnabled,
+  SegmentArchive,
+  SegmentIntegrityError,
+  type ArchivedSegment,
+} from '../context/segment-archive.js';
 import type { ToolResult } from '../types/index.js';
 import type {
   ITool,
@@ -41,7 +46,15 @@ export class ContextExpandTool implements ITool {
       return { success: false, error: 'No current session is available for context expansion.' };
     }
 
-    const segment = this.archive.get(context.sessionId, segmentId);
+    let segment: ArchivedSegment | null;
+    try {
+      segment = this.archive.get(context.sessionId, segmentId);
+    } catch (error) {
+      if (error instanceof SegmentIntegrityError) {
+        return { success: false, error: error.message };
+      }
+      throw error;
+    }
     if (!segment) {
       return {
         success: false,

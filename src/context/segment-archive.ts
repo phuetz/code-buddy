@@ -9,6 +9,28 @@ const DEFAULT_MAX_MB = 200;
 const SUMMARY_PREVIEW_CHARS = 500;
 const SAFE_PATH_COMPONENT = /^[a-zA-Z0-9._-]+$/;
 
+export class SegmentIntegrityError extends Error {
+  readonly segmentId: string;
+
+  constructor(segmentId: string, message?: string) {
+    super(
+      message ??
+        `Context segment "${segmentId}" failed integrity check: ` +
+          'stored content hash does not match the identifier. ' +
+          'Refusing to inject unverified content.',
+    );
+    this.name = 'SegmentIntegrityError';
+    this.segmentId = segmentId;
+  }
+}
+
+export function hashArchivedMessages(messages: CodeBuddyMessage[]): string {
+  return createHash('sha256')
+    .update(JSON.stringify(messages))
+    .digest('hex')
+    .slice(0, 16);
+}
+
 export interface ArchivedSegment {
   segmentId: string;
   sessionId: string;
@@ -54,16 +76,13 @@ export class SegmentArchive {
       }
 
       const serializedMessages = JSON.stringify(messages);
-      const segmentId = createHash('sha256')
-        .update(serializedMessages)
-        .digest('hex')
-        .slice(0, 16);
+      const segmentId = hashArchivedMessages(messages);
       const sessionDirectory = this.sessionDirectory(sessionId);
       const destination = path.join(sessionDirectory, `${segmentId}.json`);
 
       fs.mkdirSync(sessionDirectory, { recursive: true, mode: 0o700 });
 
-      if (fs.existsSync(destination)) {
+      if (fs.existsSync(destination) && this.existingRecordIsReusable(destination, sessionId, segmentId)) {
         const now = new Date();
         fs.utimesSync(destination, now, now);
         this.purgeLru(sessionDirectory);
@@ -115,10 +134,12 @@ export class SegmentArchive {
       if (!record || record.sessionId !== sessionId || record.segmentId !== segmentId) {
         return null;
       }
+      this.assertRecordIntegrity(record, segmentId);
       const now = new Date();
       fs.utimesSync(filePath, now, now);
       return record;
     } catch (error) {
+      if (error instanceof SegmentIntegrityError) throw error;
       logger.warn('Failed to read context segment archive', {
         sessionId,
         segmentId,
@@ -173,6 +194,30 @@ export class SegmentArchive {
       typeof record.tokenEstimate === 'number' &&
       typeof record.summaryPreview === 'string'
     );
+  }
+
+  private existingRecordIsReusable(
+    destination: string,
+    sessionId: string,
+    segmentId: string,
+  ): boolean {
+    try {
+      const existing = this.readRecord(destination);
+      if (!existing || existing.sessionId !== sessionId || existing.segmentId !== segmentId) {
+        return false;
+      }
+      this.assertRecordIntegrity(existing, segmentId);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  private assertRecordIntegrity(record: ArchivedSegment, segmentId: string): void {
+    const contentHash = hashArchivedMessages(record.messages);
+    if (contentHash !== segmentId || contentHash !== record.segmentId) {
+      throw new SegmentIntegrityError(segmentId);
+    }
   }
 
   private maxBytes(): number {
