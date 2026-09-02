@@ -4,6 +4,9 @@
  *
  * Faux fournisseurs uniquement (générateurs collés). Aucun réseau, aucun LLM.
  */
+import { mkdtemp, rm } from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
 import { AgentExecutor, ExecutorDependencies, ExecutorConfig } from '../../../src/agent/execution/agent-executor';
 import type { ChatEntry, StreamingChunk } from '../../../src/agent/types';
 import type { CodeBuddyMessage } from '../../../src/codebuddy/client';
@@ -292,6 +295,48 @@ describe('R23 AgentExecutor — faux succès', () => {
       expect(entries.map((entry) => entry.content).join('\n')).not.toMatch(/réponse vide du fournisseur/i);
       expect(history.some((entry) => entry.truncated === true)).toBe(true);
       expect(entries.map((entry) => entry.content).join('\n')).toMatch(/tronquée/i);
+    });
+  });
+
+  describe('D4 — mention @fichier absente', () => {
+    it('prévient le modèle et l’utilisateur quand @fichier est introuvable', async () => {
+      const projectRoot = await mkdtemp(path.join(os.tmpdir(), 'agent-file-mention-missing-'));
+      try {
+        (deps.toolHandler.getWorkingDirectory as jest.Mock).mockReturnValue(projectRoot);
+        setupLLMFlow(deps, [{ content: 'Je l’ai lu.' }]);
+        const messages: CodeBuddyMessage[] = [
+          { role: 'system', content: 'Base system prompt' },
+          { role: 'user', content: 'Review @definitely-missing.ts' },
+        ];
+        const history: ChatEntry[] = [];
+
+        const chunks = await collectChunks(
+          executor.processUserMessageStream(
+            'Review @definitely-missing.ts',
+            history,
+            messages,
+            null,
+          ),
+        );
+
+        const providerMessages = (
+          (deps.client.chatStream as jest.Mock).mock.calls[0][0]
+        ) as CodeBuddyMessage[];
+        const modelNotice = providerMessages.find((turn) =>
+          typeof turn.content === 'string' && turn.content.includes('file_mention_notice'),
+        );
+        const text = visibleText(chunks);
+
+        expect(modelNotice?.content).toMatch(/definitely-missing\.ts/);
+        expect(text).toMatch(/definitely-missing\.ts/i);
+        expect(text).toMatch(/introuvable, ignoré/i);
+        expect(history.some((entry) => /introuvable, ignoré/i.test(entry.content))).toBe(true);
+        expect(providerMessages.some((turn) =>
+          typeof turn.content === 'string' && turn.content.includes('<file_contents>'),
+        )).toBe(false);
+      } finally {
+        await rm(projectRoot, { recursive: true, force: true });
+      }
     });
   });
 });

@@ -118,6 +118,7 @@ const FILE_MENTION_CANDIDATE_PATTERN = /(?:^|\s)@[^\s@]+/;
 interface PreprocessedUserMessage {
   message: string;
   fileMentionContextBlocks: CodeBuddyMessage[];
+  fileMentionUserNotices: string[];
 }
 
 const RELATIONSHIP_OUTBOUND_TOOLS = new Set([
@@ -818,7 +819,7 @@ export class AgentExecutor {
     // identity, and KG extraction persists project entities. None belongs in a
     // core-only technical self-inspection turn.
     if (readOnlySelfInspection) {
-      return { message, fileMentionContextBlocks: [] };
+      return { message, fileMentionContextBlocks: [], fileMentionUserNotices: [] };
     }
 
     // Avoid loading the sizeable mention parser (fs-extra, axios, child_process)
@@ -832,7 +833,10 @@ export class AgentExecutor {
     // Bare @path mentions are resolved independently from the heavier legacy
     // mention parser. They are turn-scoped context: the user's message remains
     // readable in history, while file contents do not persist into later turns.
-    const fileMentionPromise: Promise<CodeBuddyMessage[]> = FILE_MENTION_CANDIDATE_PATTERN.test(message)
+    const fileMentionPromise: Promise<{
+      blocks: CodeBuddyMessage[];
+      notices: string[];
+    }> = FILE_MENTION_CANDIDATE_PATTERN.test(message)
       ? import('../../context/file-mentions.js')
           .then(async ({ formatFileMentionContext, resolveFileMentions }) => {
             const resolution = await resolveFileMentions(message, { projectRoot });
@@ -840,6 +844,7 @@ export class AgentExecutor {
               role: 'system' as const,
               content: `<context type="file_mention" ephemeral="true">\n${formatFileMentionContext(file)}\n</context>`,
             }));
+            const notices: string[] = [];
 
             for (const ignored of resolution.issues) {
               logger.debug('File mention content was not injected', {
@@ -854,17 +859,31 @@ export class AgentExecutor {
                   '</context>',
                 ].join('\n'),
               });
+              if (ignored.reason === 'not-found') {
+                notices.push(`Fichier ${ignored.path} introuvable, ignoré.`);
+              }
             }
 
-            return blocks;
+            return { blocks, notices };
           })
           .catch((error: unknown) => {
+            const errorMessage = getErrorMessage(error);
             logger.debug('File mention resolution failed closed', {
-              error: getErrorMessage(error),
+              error: errorMessage,
             });
-            return [];
+            return {
+              blocks: [{
+                role: 'system' as const,
+                content: [
+                  '<context type="file_mention_notice" ephemeral="true">',
+                  `File mention resolution failed: ${errorMessage}`,
+                  '</context>',
+                ].join('\n'),
+              }],
+              notices: [`Mention de fichier ignorée : ${errorMessage}`],
+            };
           })
-      : Promise.resolve([]);
+      : Promise.resolve({ blocks: [], notices: [] });
 
     // Persona selection affects this turn's system prompt, so keep it on the
     // critical path, but load it concurrently with explicit mention expansion.
@@ -874,11 +893,13 @@ export class AgentExecutor {
           .then(({ getPersonaManager }) => getPersonaManager().autoSelectPersona({ message }))
           .catch(() => null);
 
-    const [mentionResult, , fileMentionContextBlocks] = await Promise.all([
+    const [mentionResult, , fileMentionResolution] = await Promise.all([
       mentionPromise,
       personaPromise,
       fileMentionPromise,
     ]);
+    const fileMentionContextBlocks = fileMentionResolution.blocks;
+    const fileMentionUserNotices = fileMentionResolution.notices;
 
     if (mentionResult && mentionResult.contextBlocks.length > 0) {
       message = mentionResult.cleanedMessage;
@@ -906,7 +927,7 @@ export class AgentExecutor {
       });
     }
 
-    return { message, fileMentionContextBlocks };
+    return { message, fileMentionContextBlocks, fileMentionUserNotices };
   }
 
   /**
@@ -1138,6 +1159,10 @@ export class AgentExecutor {
     );
     message = preprocessed.message;
     const fileMentionContextBlocks = preprocessed.fileMentionContextBlocks;
+    for (const notice of preprocessed.fileMentionUserNotices) {
+      history.push({ type: 'assistant', content: notice, timestamp: new Date() });
+      yield { type: 'content', content: `\n${notice}\n` };
+    }
     const jitContextBlocks: CodeBuddyMessage[] = [];
     // Query ranking should also follow the current utterance on transports that
     // embed history in `message`; keep the full composite only as user context
