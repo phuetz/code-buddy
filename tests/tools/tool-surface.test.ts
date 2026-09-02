@@ -81,4 +81,32 @@ describe('tool surface (exposition ↔ dispatch)', () => {
         `added: ${added.join(', ') || '(none)'}\nremoved: ${removed.join(', ') || '(none)'}`,
     ).toEqual({ added: [], removed: [] });
   });
+
+  // Audit 2026-09-02 — invariant inverse (famille « enregistré d'un côté,
+  // jamais consommé de l'autre ») : tout nom qu'un `alwaysInclude` de
+  // production force dans la sélection doit EXISTER dans la surface exposée.
+  // Le sélecteur (`tool-selector.ts`) ignore silencieusement un alwaysInclude
+  // absent de la toolMap — `apply_patch` (exigé par WritePolicy strict) et
+  // `memory_propose` (ordonné par le prompt système) sont restés inatteignables
+  // ainsi jusqu'à cet audit.
+  it('every production alwaysInclude name is actually exposed (alwaysInclude ⊆ exposed)', async () => {
+    const { DEFAULT_TOOL_SELECTION_CONFIG } = await import(
+      '../../src/agent/execution/tool-selection-strategy.js'
+    );
+    // Liste du profil « improve » d'agent-executor.ts (~1360) — dupliquée ici
+    // à dessein : si elle change là-bas sans exister ici, le test du baseline
+    // ne verra rien, celui-ci doit être mis à jour consciemment.
+    const improveProfile = ['self_describe', 'view_file', 'search', 'apply_patch', 'bash'];
+    const exposedSet = new Set(exposed);
+    // `edit_file` est dispatché par une branche spéciale (Morph), gaté env.
+    const wanted = [
+      ...new Set([...(DEFAULT_TOOL_SELECTION_CONFIG.alwaysInclude ?? []), ...improveProfile]),
+    ].filter((n) => n !== 'edit_file');
+    const missing = wanted.filter((n) => !exposedSet.has(n));
+    expect(
+      missing,
+      `Noms forcés par alwaysInclude mais ABSENTS de la surface exposée au LLM ` +
+        `(le sélecteur les ignore en silence) : ${missing.join(', ')}`,
+    ).toEqual([]);
+  });
 });

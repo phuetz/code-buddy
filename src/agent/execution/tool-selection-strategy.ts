@@ -105,7 +105,7 @@ export interface SelectionResult {
 /**
  * Default configuration for tool selection
  */
-const DEFAULT_CONFIG: ToolSelectionConfig = {
+export const DEFAULT_TOOL_SELECTION_CONFIG: ToolSelectionConfig = {
   useRAG: true,
   maxTools: 15,
   minScore: 0.5,
@@ -212,7 +212,7 @@ export class ToolSelectionStrategy {
    * @param config - Optional configuration overrides
    */
   constructor(config: Partial<ToolSelectionConfig> = {}) {
-    this.config = { ...DEFAULT_CONFIG, ...config };
+    this.config = { ...DEFAULT_TOOL_SELECTION_CONFIG, ...config };
   }
 
   /**

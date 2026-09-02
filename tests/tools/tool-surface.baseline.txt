@@ -1,6 +1,7 @@
 a2ui
 advisor
 app_server
+apply_patch
 archive
 ask_human
 ask_user_question
@@ -119,6 +120,7 @@ lsp_references
 lsp_rename
 lsp_symbols
 meeting_notes
+memory_propose
 mixture_of_agents
 multi_edit
 object_detect
