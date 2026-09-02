@@ -31,7 +31,7 @@ async function createAgent() {
 }
 
 /** Release one-shot resources used by commands that stream a plan. */
-async function disposePlanResources(agent: CodeBuddyAgent): Promise<void> {
+export async function disposePlanResources(agent: CodeBuddyAgent): Promise<void> {
   try {
     agent.dispose({ skipSessionLearning: true });
   } catch (error) {
@@ -128,20 +128,23 @@ Do NOT implement yet. Plan only.`;
       const agent = await createAgent();
       await agent.systemPromptReady;
 
-      const result = await runWorkflow(workflowType, objective, agent, {
-        nonInteractive: opts.yes,
-        writePolicyMode: policyMode,
-      });
+      try {
+        const result = await runWorkflow(workflowType, objective, agent, {
+          nonInteractive: opts.yes,
+          writePolicyMode: policyMode,
+        });
 
-      console.log(`\nRun ${result.runId}: ${result.status}`);
-      if (result.artifactPaths.length > 0) {
-        console.log('Artifacts:');
-        for (const p of result.artifactPaths) {
-          console.log(`  ${p}`);
+        console.log(`\nRun ${result.runId}: ${result.status}`);
+        if (result.artifactPaths.length > 0) {
+          console.log('Artifacts:');
+          for (const p of result.artifactPaths) {
+            console.log(`  ${p}`);
+          }
         }
+        console.log(`\nView run: buddy run show ${result.runId}`);
+      } finally {
+        await disposePlanResources(agent);
       }
-      console.log(`\nView run: buddy run show ${result.runId}`);
-      agent.dispose?.();
     });
 
   // ── buddy dev pr ───────────────────────────────────────────────
@@ -162,48 +165,50 @@ Do NOT implement yet. Plan only.`;
       const agent = await createAgent();
       await agent.systemPromptReady;
 
-      const result = await runWorkflow(workflowType, objective, agent, {
-        nonInteractive: opts.yes,
-        tags: ['pr'],
-      });
+      try {
+        const result = await runWorkflow(workflowType, objective, agent, {
+          nonInteractive: opts.yes,
+          tags: ['pr'],
+        });
 
-      if (result.status === 'completed') {
-        console.log('\n── PR Summary ──────────────────────────');
-        const prPrompt = `Based on what was just implemented, write a GitHub Pull Request description:
+        if (result.status === 'completed') {
+          console.log('\n── PR Summary ──────────────────────────');
+          const prPrompt = `Based on what was just implemented, write a GitHub Pull Request description:
 - Title (max 70 chars)
 - Summary (bullet points of what changed)
 - Test plan (what to verify)
 Keep it concise and professional.`;
 
-        for await (const chunk of agent.processUserMessageStream(prPrompt)) {
-          if (chunk.type === 'content' && chunk.content) {
-            process.stdout.write(chunk.content);
+          for await (const chunk of agent.processUserMessageStream(prPrompt)) {
+            if (chunk.type === 'content' && chunk.content) {
+              process.stdout.write(chunk.content);
+            }
+          }
+          console.log('');
+
+          // Generate full PR description using LLM
+          try {
+            const { GitHubIntegration } = await import('../../integrations/github-integration.js');
+            const gh = new GitHubIntegration();
+            const prDescription = await gh.generatePRDescriptionWithLLM(
+              undefined,
+              async (prompt: string) => {
+                let response = '';
+                for await (const chunk of agent.processUserMessageStream(prompt)) {
+                  if (chunk.type === 'content' && chunk.content) response += chunk.content;
+                }
+                return response;
+              },
+            );
+            console.log('\n── Full PR Description ─────────────────');
+            console.log(prDescription);
+          } catch {
+            // Non-critical: PR summary was already printed above
           }
         }
-        console.log('');
-
-        // Generate full PR description using LLM
-        try {
-          const { GitHubIntegration } = await import('../../integrations/github-integration.js');
-          const gh = new GitHubIntegration();
-          const prDescription = await gh.generatePRDescriptionWithLLM(
-            undefined,
-            async (prompt: string) => {
-              let response = '';
-              for await (const chunk of agent.processUserMessageStream(prompt)) {
-                if (chunk.type === 'content' && chunk.content) response += chunk.content;
-              }
-              return response;
-            },
-          );
-          console.log('\n── Full PR Description ─────────────────');
-          console.log(prDescription);
-        } catch {
-          // Non-critical: PR summary was already printed above
-        }
+      } finally {
+        await disposePlanResources(agent);
       }
-
-      agent.dispose?.();
     });
 
   // ── buddy dev fix-ci ───────────────────────────────────────────
