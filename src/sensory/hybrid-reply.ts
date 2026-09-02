@@ -61,6 +61,18 @@ import {
 import type { ConversationPlan } from '../conversation/types.js';
 import { classifyLisaIntrospection } from '../identity/lisa-introspection.js';
 
+const STREAM_FAILURE_CLOSURE = "Pardon, je n'ai pas réussi à finir ma réponse.";
+
+function completedStreamText(text: string): string {
+  const boundary = /[.!?…](?:\s|$)/gu;
+  let end = -1;
+  let match: RegExpExecArray | null;
+  while ((match = boundary.exec(text)) !== null) {
+    end = match.index + match[0].length;
+  }
+  return end >= 0 ? text.slice(0, end).trim() : '';
+}
+
 export {
   classifyLisaIntrospection,
   isLisaIntrospectionRequest,
@@ -457,6 +469,17 @@ export function makeHybridReply(options: HybridReplyOptions = {}): HybridReplyHa
 
   function remember(user: string, assistant: string): void {
     if (!assistant.trim()) return;
+    const previousUser = history.at(-2);
+    const previousAssistant = history.at(-1);
+    // A streamed shortcut is remembered before the voice loop knows whether its audio
+    // path will hold. If the immediate blocking retry wins, do not advance conversation
+    // memory a second time for the same user/assistant pair.
+    if (
+      previousUser?.role === 'user'
+      && previousAssistant?.role === 'assistant'
+      && norm(previousUser.content) === norm(user)
+      && norm(previousAssistant.content) === norm(assistant)
+    ) return;
     history.push({ role: 'user', content: user });
     history.push({ role: 'assistant', content: assistant });
     while (history.length > maxTurns * 2) history.shift();
@@ -886,8 +909,8 @@ export function makeHybridReply(options: HybridReplyOptions = {}): HybridReplyHa
       }
       const substantive = introspectionIntent !== null || classify(heard, recent);
       // Technical introspection stays on its deterministic whole-answer guard. Other grounded
-      // turns use the agent's text-delta stream when available; an absent/failed stream yields
-      // nothing so makeVoiceReply retains the proven blocking fallback.
+      // turns use the agent's text-delta stream when available; a failed stream with no
+      // complete sentence yields nothing so makeVoiceReply retains the proven blocking fallback.
       if (introspectionIntent !== null) return;
 
       await ensureDeps(true);
@@ -934,14 +957,36 @@ export function makeHybridReply(options: HybridReplyOptions = {}): HybridReplyHa
             .filter(Boolean)
             .join('\n\n');
           let full = '';
-          for await (const delta of agentStream(input, {
-            ...streamOptions,
-            introspectionText: heard,
-          })) {
-            if (replyOpts?.signal?.aborted) return;
-            if (typeof delta !== 'string' || delta.length === 0) continue;
-            full += delta;
-            yield delta;
+          try {
+            for await (const delta of agentStream(input, {
+              ...streamOptions,
+              introspectionText: heard,
+            })) {
+              if (replyOpts?.signal?.aborted) return;
+              if (typeof delta !== 'string' || delta.length === 0) continue;
+              full += delta;
+              yield delta;
+            }
+          } catch (error) {
+            // A complete sentence may already be in the speaker's queue. Do not restart
+            // the answer through the blocking route: close honestly and remember only this
+            // actually released part. With no complete sentence, the outer catch remains
+            // empty so makeVoiceReply can invoke the promised blocking fallback.
+            if (!replyOpts?.signal?.aborted) {
+              const spoken = guardBeforeMemory(completedStreamText(full));
+              if (spoken) {
+                yield STREAM_FAILURE_CLOSURE;
+                await evolveRelationshipFromUtterance(heard);
+                remember(heard, `${spoken} ${STREAM_FAILURE_CLOSURE}`);
+                logger.warn(
+                  `[voice-hybrid] agent stream interrupted after partial delivery: ${
+                    error instanceof Error ? error.message : String(error)
+                  }`,
+                );
+                return;
+              }
+            }
+            throw error;
           }
           if (replyOpts?.signal?.aborted) return;
           const completed = guardBeforeMemory(full.trim());
@@ -1004,12 +1049,34 @@ export function makeHybridReply(options: HybridReplyOptions = {}): HybridReplyHa
         const input = [preamble, prepared.systemGuidance, `Demande actuelle : ${heard}`]
           .filter(Boolean)
           .join('\n\n');
-        let completed = (await agentReply!(input, {
-          ...continuationOptions,
-          introspectionText: heard,
-        })).trim();
+        let completed = '';
+        try {
+          completed = (await agentReply!(input, {
+            ...continuationOptions,
+            introspectionText: heard,
+          })).trim();
+        } catch (error) {
+          if (!replyOpts?.signal?.aborted && spokenPrefix) {
+            yield STREAM_FAILURE_CLOSURE;
+            await evolveRelationshipFromUtterance(heard);
+            remember(heard, `${spokenPrefix} ${STREAM_FAILURE_CLOSURE}`);
+            logger.warn(
+              `[voice-hybrid] prefixed reply interrupted after prefix delivery: ${
+                error instanceof Error ? error.message : String(error)
+              }`,
+            );
+            return;
+          }
+          throw error;
+        }
         if (replyOpts?.signal?.aborted) return;
         completed = guardBeforeMemory(removeRepeatedPrefix(spokenPrefix, completed));
+        if (!completed) {
+          yield STREAM_FAILURE_CLOSURE;
+          await evolveRelationshipFromUtterance(heard);
+          remember(heard, `${spokenPrefix} ${STREAM_FAILURE_CLOSURE}`);
+          return;
+        }
         if (completed) yield completed;
 
         let correction = '';
@@ -1066,11 +1133,33 @@ export function makeHybridReply(options: HybridReplyOptions = {}): HybridReplyHa
           cognitiveEvidence = context.evidence || undefined;
         },
       };
-      for await (const delta of chitchatStream!(heard, recent, streamOptions)) {
-        if (replyOpts?.signal?.aborted) return;
-        if (typeof delta !== 'string' || delta.length === 0) continue;
-        full += delta;
-        if (!prefixBuffer) yield delta;
+      try {
+        for await (const delta of chitchatStream!(heard, recent, streamOptions)) {
+          if (replyOpts?.signal?.aborted) return;
+          if (typeof delta !== 'string' || delta.length === 0) continue;
+          full += delta;
+          if (!prefixBuffer) yield delta;
+        }
+      } catch (error) {
+        if (!replyOpts?.signal?.aborted) {
+          const spoken = guardBeforeMemory(
+            prefixBuffer
+              ? replyOpts?.spokenPrefix?.trim() ?? ''
+              : completedStreamText(full),
+          );
+          if (spoken) {
+            yield STREAM_FAILURE_CLOSURE;
+            await evolveRelationshipFromUtterance(heard);
+            remember(heard, `${spoken} ${STREAM_FAILURE_CLOSURE}`);
+            logger.warn(
+              `[voice-hybrid] chitchat stream interrupted after partial delivery: ${
+                error instanceof Error ? error.message : String(error)
+              }`,
+            );
+            return;
+          }
+        }
+        throw error;
       }
       let completed = full.trim();
       if (completed) {

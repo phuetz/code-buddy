@@ -25,6 +25,12 @@ import {
   noteSpokenText,
 } from '../../src/sensory/voice-activity.js';
 
+const voiceLoopHarness = vi.hoisted(() => ({
+  sayNow: vi.fn(async () => true),
+}));
+
+vi.mock('../../src/sensory/voice-loop.js', () => voiceLoopHarness);
+
 function speechEnd(wav?: string, payload: Record<string, unknown> = {}): void {
   getGlobalEventBus().emit('sensory:perception', {
     source: 'test',
@@ -53,6 +59,30 @@ function speechStart(payload: Record<string, unknown> = {}): void {
     source: 'test',
     metadata: { modality: 'audio', kind: 'speech_start', payload },
   });
+}
+
+function pcm16Wav(durationMs: number, amplitude = 0.1): Buffer {
+  const sampleRate = 16_000;
+  const samples = Math.floor(sampleRate * durationMs / 1_000);
+  const dataSize = samples * 2;
+  const wav = Buffer.alloc(44 + dataSize);
+  wav.write('RIFF', 0, 'ascii');
+  wav.writeUInt32LE(36 + dataSize, 4);
+  wav.write('WAVE', 8, 'ascii');
+  wav.write('fmt ', 12, 'ascii');
+  wav.writeUInt32LE(16, 16);
+  wav.writeUInt16LE(1, 20);
+  wav.writeUInt16LE(1, 22);
+  wav.writeUInt32LE(sampleRate, 24);
+  wav.writeUInt32LE(sampleRate * 2, 28);
+  wav.writeUInt16LE(2, 32);
+  wav.writeUInt16LE(16, 34);
+  wav.write('data', 36, 'ascii');
+  wav.writeUInt32LE(dataSize, 40);
+  for (let index = 0; index < samples; index += 1) {
+    wav.writeInt16LE(Math.round(32_767 * amplitude), 44 + index * 2);
+  }
+  return wav;
 }
 
 const SPEECH_WAIT_TIMEOUT_MS = 5_000;
@@ -554,6 +584,82 @@ describe('speech reaction — speech_end → STT → percept', () => {
     }
   });
 
+  it('distinguishes an STT error from silence and bounds its local recovery per window', async () => {
+    const tmp = await mkdtemp(path.join(os.tmpdir(), 'speech-stt-error-'));
+    const firstWav = path.join(tmp, 'first.wav');
+    const secondWav = path.join(tmp, 'second.wav');
+    await writeFile(firstWav, pcm16Wav(500));
+    await writeFile(secondWav, pcm16Wav(500));
+    voiceLoopHarness.sayNow.mockClear();
+    let clock = 1_000;
+    const unwire = wireSpeechReaction({
+      transcriber: async () => {
+        throw new Error('decoder unavailable');
+      },
+      onHeard: async () => {},
+      debounceMs: 0,
+      cwd: tmp,
+      now: () => clock,
+    });
+    try {
+      speechEnd(firstWav, { audioMs: 500, rmsOn: 0.02 });
+      const firstPercepts = await waitForPercept(
+        path.join(tmp, '.codebuddy', 'companion', 'percepts.jsonl'),
+        'Speech captured; STT failed',
+      );
+      const first = JSON.parse(firstPercepts.trim()) as {
+        payload: {
+          sttEmptyReason: string;
+          sttFailure: boolean;
+          sttFailureCount: number;
+        };
+      };
+      expect(first.payload).toMatchObject({
+        sttEmptyReason: 'error',
+        sttFailure: true,
+        sttFailureCount: 1,
+      });
+      expect(voiceLoopHarness.sayNow).toHaveBeenCalledWith(
+        "Pardon, je n'ai pas compris.",
+        { phoneDelivery: 'never' },
+      );
+
+      clock = 1_200;
+      speechEnd(secondWav, { audioMs: 500, rmsOn: 0.02 });
+      await waitFor(async () => {
+        const raw = await readFile(path.join(tmp, '.codebuddy', 'companion', 'percepts.jsonl'), 'utf8');
+        expect(raw.match(/Speech captured; STT failed/g)).toHaveLength(2);
+      });
+      expect(voiceLoopHarness.sayNow).toHaveBeenCalledTimes(1);
+    } finally {
+      unwire();
+    }
+  });
+
+  it('keeps a genuine empty transcript on the silence path', async () => {
+    const tmp = await mkdtemp(path.join(os.tmpdir(), 'speech-stt-empty-'));
+    const wav = path.join(tmp, 'silence.wav');
+    await writeFile(wav, pcm16Wav(500, 0));
+    voiceLoopHarness.sayNow.mockClear();
+    const unwire = wireSpeechReaction({
+      transcriber: async () => '',
+      onHeard: async () => {},
+      debounceMs: 0,
+      cwd: tmp,
+    });
+    try {
+      speechEnd(wav, { audioMs: 500, rmsOn: 0.02 });
+      const percepts = await waitForPercept(
+        path.join(tmp, '.codebuddy', 'companion', 'percepts.jsonl'),
+        'Speech captured; STT returned no text',
+      );
+      expect(percepts).toContain('"sttEmptyReason":"empty"');
+      expect(voiceLoopHarness.sayNow).not.toHaveBeenCalled();
+    } finally {
+      unwire();
+    }
+  });
+
   it('hands acoustic timing to the voice handler and journals only the raw-free delivery profile', async () => {
     const tmp = await mkdtemp(path.join(os.tmpdir(), 'speech-entrainment-'));
     let context: Record<string, unknown> | undefined;
@@ -673,6 +779,37 @@ describe('speech reaction — speech_end → STT → percept', () => {
       clock = 4500; // a real address arrives 3500ms after turn 1 began (past the 3000ms debounce)
       speechEnd('/tmp/real.wav'); // turn 2: addressed
       await waitFor(() => expect(heard).toEqual(['Buddy, quelle heure ?'])); // NOT swallowed by a stale echo re-stamp
+    } finally {
+      unwire();
+    }
+  });
+
+  it('does not arm the debounce when onHeard completes without speaking', async () => {
+    const tmp = await mkdtemp(path.join(os.tmpdir(), 'speech-silent-handler-'));
+    let clock = 1_000;
+    let sttCalls = 0;
+    let handlerCalls = 0;
+    const heard: string[] = [];
+    const unwire = wireSpeechReaction({
+      transcriber: async () => {
+        sttCalls += 1;
+        clock += 2_000;
+        return sttCalls === 1 ? 'commande silencieuse' : 'Buddy, tu es là ?';
+      },
+      debounceMs: 3_000,
+      cwd: tmp,
+      now: () => clock,
+      onHeard: async (text) => {
+        handlerCalls += 1;
+        if (handlerCalls > 1) heard.push(text);
+      },
+    });
+    try {
+      speechEnd('/tmp/silent-handler.wav');
+      await waitFor(() => expect(handlerCalls).toBe(1));
+      clock = 4_500;
+      speechEnd('/tmp/real-after-silent-handler.wav');
+      await waitFor(() => expect(heard).toEqual(['Buddy, tu es là ?']));
     } finally {
       unwire();
     }

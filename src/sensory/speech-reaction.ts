@@ -52,6 +52,14 @@ export type { SpeechRecognitionEngine };
 
 export type Transcriber = (wav: string) => Promise<string>;
 
+export interface SpeechSttFailure {
+  wav: string;
+  cause: string;
+  count: number;
+  durationMs?: number;
+  rms?: number;
+}
+
 export interface RecognizedVoiceTurn {
   turnId: string;
   text: string;
@@ -67,6 +75,8 @@ export interface PartialVoiceTranscript {
 export interface SpeechReactionOptions {
   /** Injectable STT (tests / custom). Default: faster-whisper via python ($0). */
   transcriber?: Transcriber;
+  /** Local recovery for a real capture whose STT failed; return true only if audio was emitted. */
+  onSpeechError?: (failure: SpeechSttFailure) => boolean | void | Promise<boolean | void>;
   debounceMs?: number;
   /** Maximum wait used only when a fast VAD final ends on an unfinished phrase. */
   incompleteTurnHoldMs?: number;
@@ -190,6 +200,81 @@ function capturedSpeechMs(payload: Record<string, unknown>): number | undefined 
     durations.push(endedAtMs - startedAtMs);
   }
   return durations.length > 0 ? Math.max(...durations) : undefined;
+}
+
+const MIN_STT_RECOVERY_AUDIO_MS = 200;
+const DEFAULT_SPEECH_NOISE_RMS = 0.02;
+const STT_FAILURE_REPLY = "Pardon, je n'ai pas compris.";
+
+interface PcmWavSignal {
+  durationMs: number;
+  rms: number;
+}
+
+/** Read only the small PCM signal facts needed to avoid speaking on a fake/empty WAV. */
+function readPcm16WavSignal(wav: string): PcmWavSignal | undefined {
+  try {
+    const source = readFileSync(expandSpeechPath(wav));
+    if (
+      source.length < 12
+      || source.toString('ascii', 0, 4) !== 'RIFF'
+      || source.toString('ascii', 8, 12) !== 'WAVE'
+    ) return undefined;
+
+    let channels = 0;
+    let sampleRate = 0;
+    let bitsPerSample = 0;
+    let dataOffset = -1;
+    let dataSize = 0;
+    for (let offset = 12; offset + 8 <= source.length;) {
+      const chunkSize = source.readUInt32LE(offset + 4);
+      const chunkStart = offset + 8;
+      const chunkEnd = Math.min(source.length, chunkStart + chunkSize);
+      const chunk = source.toString('ascii', offset, offset + 4);
+      if (chunk === 'fmt ' && chunkEnd - chunkStart >= 16) {
+        const format = source.readUInt16LE(chunkStart);
+        channels = source.readUInt16LE(chunkStart + 2);
+        sampleRate = source.readUInt32LE(chunkStart + 4);
+        bitsPerSample = source.readUInt16LE(chunkStart + 14);
+        if (format !== 1) return undefined;
+      } else if (chunk === 'data') {
+        dataOffset = chunkStart;
+        dataSize = chunkEnd - chunkStart;
+      }
+      const nextOffset = chunkStart + chunkSize + (chunkSize % 2);
+      if (nextOffset <= offset) break;
+      offset = nextOffset;
+    }
+    if (channels < 1 || sampleRate < 1 || bitsPerSample !== 16 || dataOffset < 0 || dataSize < 2) {
+      return undefined;
+    }
+    const sampleCount = Math.floor(dataSize / 2);
+    let squareSum = 0;
+    for (let index = 0; index < sampleCount; index += 1) {
+      const sample = source.readInt16LE(dataOffset + index * 2) / 32_768;
+      squareSum += sample * sample;
+    }
+    return {
+      durationMs: dataSize / (sampleRate * channels * 2) * 1_000,
+      rms: Math.sqrt(squareSum / sampleCount),
+    };
+  } catch {
+    return undefined;
+  }
+}
+
+function realSpeechCapture(
+  wav: string,
+  payload: Record<string, unknown>,
+): { durationMs: number; rms: number } | undefined {
+  if (!existsSync(expandSpeechPath(wav))) return undefined;
+  const measured = readPcm16WavSignal(wav);
+  if (!measured) return undefined;
+  const durationMs = measured.durationMs;
+  const rms = measured.rms;
+  const threshold = finiteTimestamp(payload.rmsOn) ?? DEFAULT_SPEECH_NOISE_RMS;
+  if (durationMs < MIN_STT_RECOVERY_AUDIO_MS || rms < threshold) return undefined;
+  return { durationMs, rms };
 }
 
 /** Explicit wake/stop always works; AEC additionally permits sustained natural speech. */
@@ -341,6 +426,7 @@ interface FasterWhisperWorkerMessage {
 
 interface PendingWorkerRequest {
   resolve: (text: string) => void;
+  reject: (error: Error) => void;
   timeout: ReturnType<typeof setTimeout>;
 }
 
@@ -362,6 +448,13 @@ let parakeetWorkerSeq = 0;
 // no python on the hot path. The python whisper/parakeet workers stay as fallback.
 let sherpaRustWorker: FasterWhisperWorker | null = null;
 let sherpaRustWorkerSeq = 0;
+
+class SpeechWorkerRequestError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'SpeechWorkerRequestError';
+  }
+}
 
 function defaultSpeechInitialPrompt(): string {
   return 'Transcription en français. Ne complète pas les silences.';
@@ -623,17 +716,17 @@ function parakeetWorkerKey(python: string, modelDir: string, numThreads: number)
   return JSON.stringify({ python, modelDir, numThreads });
 }
 
-function settlePending(worker: FasterWhisperWorker, text: string): void {
+function settlePending(worker: FasterWhisperWorker, error: Error): void {
   for (const pending of worker.pending.values()) {
     clearTimeout(pending.timeout);
-    pending.resolve(text);
+    pending.reject(error);
   }
   worker.pending.clear();
 }
 
 function disposeFasterWhisperWorker(worker: FasterWhisperWorker): void {
   if (fasterWhisperWorker === worker) fasterWhisperWorker = null;
-  settlePending(worker, '');
+  settlePending(worker, new SpeechWorkerRequestError('faster-whisper worker disposed'));
   worker.rl.close();
   worker.proc.stdin.destroy();
   worker.proc.kill();
@@ -641,7 +734,7 @@ function disposeFasterWhisperWorker(worker: FasterWhisperWorker): void {
 
 function disposeParakeetWorker(worker: FasterWhisperWorker): void {
   if (parakeetWorker === worker) parakeetWorker = null;
-  settlePending(worker, '');
+  settlePending(worker, new SpeechWorkerRequestError('Parakeet worker disposed'));
   worker.rl.close();
   worker.proc.stdin.destroy();
   worker.proc.kill();
@@ -698,14 +791,17 @@ async function createFasterWhisperWorker(
     clearTimeout(pending.timeout);
     if (message.error) {
       logger.warn(`[speech] STT worker request failed: ${message.error.slice(0, 300)}`);
-      pending.resolve('');
+      pending.reject(new SpeechWorkerRequestError(message.error.slice(0, 300)));
       return;
     }
     pending.resolve(message.text?.trim() || '');
   });
   proc.on('close', (code) => {
     if (fasterWhisperWorker === worker) fasterWhisperWorker = null;
-    settlePending(worker, '');
+    settlePending(
+      worker,
+      new SpeechWorkerRequestError(`faster-whisper worker closed (code=${code})`),
+    );
     if (!worker.readySettled) {
       rejectReady(new Error(`faster-whisper worker exited before ready (code=${code})`));
     }
@@ -715,7 +811,10 @@ async function createFasterWhisperWorker(
   });
   proc.on('error', (err) => {
     if (fasterWhisperWorker === worker) fasterWhisperWorker = null;
-    settlePending(worker, '');
+    settlePending(
+      worker,
+      worker.readySettled ? new SpeechWorkerRequestError(err.message) : err,
+    );
     if (!worker.readySettled) rejectReady(err);
   });
   fasterWhisperWorker = worker;
@@ -773,14 +872,14 @@ async function createParakeetWorker(
     clearTimeout(pending.timeout);
     if (message.error) {
       logger.warn(`[speech] Parakeet request failed: ${message.error.slice(0, 300)}`);
-      pending.resolve('');
+      pending.reject(new SpeechWorkerRequestError(message.error.slice(0, 300)));
       return;
     }
     pending.resolve(message.text?.trim() || '');
   });
   proc.on('close', (code) => {
     if (parakeetWorker === worker) parakeetWorker = null;
-    settlePending(worker, '');
+    settlePending(worker, new SpeechWorkerRequestError(`Parakeet worker closed (code=${code})`));
     if (!worker.readySettled) {
       rejectReady(new Error(`Parakeet worker exited before ready (code=${code})`));
     }
@@ -790,7 +889,7 @@ async function createParakeetWorker(
   });
   proc.on('error', (err) => {
     if (parakeetWorker === worker) parakeetWorker = null;
-    settlePending(worker, '');
+    settlePending(worker, worker.readySettled ? new SpeechWorkerRequestError(err.message) : err);
     if (!worker.readySettled) rejectReady(err);
   });
   parakeetWorker = worker;
@@ -848,20 +947,23 @@ async function transcribeWavWithWorker(
   await waitForWorkerReady(worker);
   const timeoutMs = numericEnv('CODEBUDDY_SPEECH_WORKER_TIMEOUT_MS', 20_000);
   const id = `speech-${Date.now()}-${++fasterWhisperWorkerSeq}`;
-  return new Promise<string>((resolve) => {
+  return new Promise<string>((resolve, reject) => {
     const timeout = setTimeout(() => {
       worker.pending.delete(id);
+      const error = new SpeechWorkerRequestError(
+        `faster-whisper worker request timed out after ${timeoutMs}ms`,
+      );
       logger.warn(`[speech] STT worker request timed out after ${timeoutMs}ms`);
       disposeFasterWhisperWorker(worker);
-      resolve('');
+      reject(error);
     }, timeoutMs);
-    worker.pending.set(id, { resolve, timeout });
+    worker.pending.set(id, { resolve, reject, timeout });
     try {
       worker.proc.stdin.write(`${JSON.stringify({ id, wav })}\n`);
     } catch (err) {
       worker.pending.delete(id);
       clearTimeout(timeout);
-      throw err;
+      reject(err instanceof Error ? err : new Error(String(err)));
     }
   });
 }
@@ -876,20 +978,23 @@ async function transcribeWavWithParakeetWorker(
   await waitForWorkerReady(worker);
   const timeoutMs = numericEnv('CODEBUDDY_SPEECH_WORKER_TIMEOUT_MS', 20_000);
   const id = `parakeet-${Date.now()}-${++parakeetWorkerSeq}`;
-  return new Promise<string>((resolve) => {
+  return new Promise<string>((resolve, reject) => {
     const timeout = setTimeout(() => {
       worker.pending.delete(id);
+      const error = new SpeechWorkerRequestError(
+        `Parakeet worker request timed out after ${timeoutMs}ms`,
+      );
       logger.warn(`[speech] Parakeet worker request timed out after ${timeoutMs}ms`);
       disposeParakeetWorker(worker);
-      resolve('');
+      reject(error);
     }, timeoutMs);
-    worker.pending.set(id, { resolve, timeout });
+    worker.pending.set(id, { resolve, reject, timeout });
     try {
       worker.proc.stdin.write(`${JSON.stringify({ id, wav })}\n`);
     } catch (err) {
       worker.pending.delete(id);
       clearTimeout(timeout);
-      throw err;
+      reject(err instanceof Error ? err : new Error(String(err)));
     }
   });
 }
@@ -912,7 +1017,7 @@ async function transcribeWavOneShot(
     'segs, _ = m.transcribe(sys.argv[1], **kwargs)',
     "print(' '.join(s.text for s in segs).strip())",
   ].join('\n');
-  return new Promise<string>((resolve) => {
+  return new Promise<string>((resolve, reject) => {
     // Capture stderr (was ignored) so an STT failure is LOUD in the journal, not silent.
     const proc = spawn(python, ['-c', py, wav], { stdio: ['ignore', 'pipe', 'pipe'] });
     let out = '';
@@ -920,10 +1025,13 @@ async function transcribeWavOneShot(
     proc.stdout.on('data', (d) => (out += String(d)));
     proc.stderr.on('data', (d) => (err += String(d)));
     proc.on('close', (code) => {
-      if ((code !== 0 || !out.trim()) && err.trim()) {
+      if (code !== 0) {
+        const cause = err.trim().slice(0, 300) || `process exited with code ${code}`;
         logger.warn(
-          `[speech] STT failed (python='${python}', exit=${code}): ${err.trim().slice(0, 300)}`
+          `[speech] STT failed (python='${python}', exit=${code}): ${cause}`
         );
+        reject(new Error(`faster-whisper STT failed: ${cause}`));
+        return;
       }
       resolve(out.trim());
     });
@@ -931,7 +1039,7 @@ async function transcribeWavOneShot(
       logger.warn(
         `[speech] STT spawn failed (python='${python}'): ${e instanceof Error ? e.message : String(e)}`
       );
-      resolve('');
+      reject(e instanceof Error ? e : new Error(String(e)));
     });
   });
 }
@@ -948,7 +1056,7 @@ async function transcribeWavParakeetOneShot(
     buildParakeetWorkerScript(modelDir, numThreads),
     'print(transcribe(sys.argv[1]))',
   ].join('\n');
-  return new Promise<string>((resolve) => {
+  return new Promise<string>((resolve, reject) => {
     const proc = spawn(python, ['-c', py, wav], { stdio: ['ignore', 'pipe', 'pipe'] });
     let out = '';
     let err = '';
@@ -960,10 +1068,13 @@ async function transcribeWavParakeetOneShot(
         .map((line) => line.trim())
         .filter(Boolean);
       const text = lines.filter((line) => !line.startsWith('{')).at(-1) || '';
-      if ((code !== 0 || !text) && err.trim()) {
+      if (code !== 0) {
+        const cause = err.trim().slice(0, 300) || `process exited with code ${code}`;
         logger.warn(
-          `[speech] Parakeet STT failed (python='${python}', exit=${code}): ${err.trim().slice(0, 300)}`
+          `[speech] Parakeet STT failed (python='${python}', exit=${code}): ${cause}`
         );
+        reject(new Error(`Parakeet STT failed: ${cause}`));
+        return;
       }
       resolve(text.trim());
     });
@@ -971,7 +1082,7 @@ async function transcribeWavParakeetOneShot(
       logger.warn(
         `[speech] Parakeet STT spawn failed (python='${python}'): ${e instanceof Error ? e.message : String(e)}`
       );
-      resolve('');
+      reject(e instanceof Error ? e : new Error(String(e)));
     });
   });
 }
@@ -989,6 +1100,7 @@ async function transcribeWavWithFasterWhisperRaw(wav: string): Promise<string> {
     try {
       return await transcribeWavWithWorker(wav, python, model, options);
     } catch (err) {
+      if (err instanceof SpeechWorkerRequestError) throw err;
       logger.warn(
         `[speech] STT worker unavailable, falling back to one-shot: ${err instanceof Error ? err.message : String(err)}`
       );
@@ -1009,6 +1121,7 @@ async function transcribeWavWithParakeetRaw(wav: string): Promise<string> {
     try {
       return await transcribeWavWithParakeetWorker(wav, python, modelDir, numThreads);
     } catch (err) {
+      if (err instanceof SpeechWorkerRequestError) throw err;
       logger.warn(
         `[speech] Parakeet worker unavailable, falling back to one-shot: ${err instanceof Error ? err.message : String(err)}`
       );
@@ -1024,7 +1137,7 @@ function sherpaRustWorkerKey(bin: string, modelDir: string, numThreads: number):
 
 function disposeSherpaRustWorker(worker: FasterWhisperWorker): void {
   if (sherpaRustWorker === worker) sherpaRustWorker = null;
-  settlePending(worker, '');
+  settlePending(worker, new SpeechWorkerRequestError('sherpa-rs worker disposed'));
   worker.rl.close();
   worker.proc.stdin.destroy();
   worker.proc.kill();
@@ -1090,14 +1203,14 @@ async function createSherpaRustWorker(
     clearTimeout(pending.timeout);
     if (message.error) {
       logger.warn(`[speech] sherpa-rs request failed: ${message.error.slice(0, 300)}`);
-      pending.resolve('');
+      pending.reject(new SpeechWorkerRequestError(message.error.slice(0, 300)));
       return;
     }
     pending.resolve(message.text?.trim() || '');
   });
   proc.on('close', (code) => {
     if (sherpaRustWorker === worker) sherpaRustWorker = null;
-    settlePending(worker, '');
+    settlePending(worker, new SpeechWorkerRequestError(`sherpa-rs worker closed (code=${code})`));
     if (!worker.readySettled) {
       rejectReady(new Error(`sherpa-rs worker exited before ready (code=${code})`));
     }
@@ -1109,7 +1222,7 @@ async function createSherpaRustWorker(
   });
   proc.on('error', (err) => {
     if (sherpaRustWorker === worker) sherpaRustWorker = null;
-    settlePending(worker, '');
+    settlePending(worker, worker.readySettled ? new SpeechWorkerRequestError(err.message) : err);
     if (!worker.readySettled) rejectReady(err);
   });
   sherpaRustWorker = worker;
@@ -1140,20 +1253,23 @@ async function transcribeWavWithSherpaRustWorker(
   await waitForWorkerReady(worker, numericEnv('CODEBUDDY_SPEECH_STT_READY_TIMEOUT_MS', 8_000));
   const timeoutMs = numericEnv('CODEBUDDY_SPEECH_WORKER_TIMEOUT_MS', 20_000);
   const id = `sherpa-rs-${Date.now()}-${++sherpaRustWorkerSeq}`;
-  return new Promise<string>((resolve) => {
+  return new Promise<string>((resolve, reject) => {
     const timeout = setTimeout(() => {
       worker.pending.delete(id);
+      const error = new SpeechWorkerRequestError(
+        `sherpa-rs worker request timed out after ${timeoutMs}ms`,
+      );
       logger.warn(`[speech] sherpa-rs worker request timed out after ${timeoutMs}ms`);
       disposeSherpaRustWorker(worker);
-      resolve('');
+      reject(error);
     }, timeoutMs);
-    worker.pending.set(id, { resolve, timeout });
+    worker.pending.set(id, { resolve, reject, timeout });
     try {
       worker.proc.stdin.write(`${JSON.stringify({ id, wav })}\n`);
     } catch (err) {
       worker.pending.delete(id);
       clearTimeout(timeout);
-      throw err;
+      reject(err instanceof Error ? err : new Error(String(err)));
     }
   });
 }
@@ -1275,6 +1391,9 @@ export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => v
   const transcribe = options.transcriber ?? transcribeWavRaw;
   const turnCoordinator = getVoiceTurnCoordinator();
   let lastAt = Number.NEGATIVE_INFINITY;
+  let lastSttFailureReplyAt = Number.NEGATIVE_INFINITY;
+  let sttFailureCount = 0;
+  const sttFailureReplyWindowMs = Math.max(debounceMs, DEFAULT_SPEECH_DEBOUNCE_MS);
   let inFlight = false;
   let activeWav: string | undefined;
   let activeTurnId: string | undefined;
@@ -1300,6 +1419,28 @@ export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => v
     speechStartedAtMs?: number;
     turnId?: string;
   } | null = null;
+
+  const speakSttFailure = async (failure: SpeechSttFailure): Promise<boolean> => {
+    if (options.onSpeechError) {
+      return (await options.onSpeechError(failure)) === true;
+    }
+    // The ordinary `onHeard` path may invoke an LLM. STT failures must use only the
+    // existing local speech path, and only when this wire is actually configured to speak.
+    if (!options.onHeard) return false;
+    try {
+      const { sayNow } = await import('./voice-loop.js');
+      return await sayNow(STT_FAILURE_REPLY, { phoneDelivery: 'never' });
+    } catch (error) {
+      logger.warn(
+        `[speech] local STT failure recovery failed: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      return false;
+    }
+  };
+
+  const heardHandler = options.onHeard as
+    | (NonNullable<SpeechReactionOptions['onHeard']> & { lastTiming?: { spoke?: boolean } })
+    | undefined;
 
   const cleanupSpeechJob = async (job: SpeechJob): Promise<void> => {
     // `presetText` identifies buddy-sense's WAV-free live path. Only the
@@ -1366,8 +1507,16 @@ export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => v
         // utterance in-process, so the transcript rides in the event payload — no
         // WAV, no STT here. Everything downstream (respond gate, onHeard, percept,
         // debounce/echo guard) is shared with the WAV path.
-        const rawText = job.presetText !== undefined ? job.presetText : await transcribe(job.wav);
-        const normalizedText = normalizeSpeechTranscript(rawText);
+        let rawText = '';
+        let sttFailure: Error | undefined;
+        try {
+          rawText = job.presetText !== undefined ? job.presetText : await transcribe(job.wav);
+        } catch (error) {
+          sttFailure = error instanceof Error ? error : new Error(String(error));
+        }
+        const normalizedText: NormalizedSpeechTranscript = sttFailure
+          ? { text: '' }
+          : normalizeSpeechTranscript(rawText);
         const text = normalizedText.text;
         const ingestMs = elapsedSince(transcribeStartMs, now);
         // On live `transcript_final`, the real decode happened upstream in
@@ -1422,6 +1571,67 @@ export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => v
           aecActive: payload.aecActive === true,
           captureSourceClass: payload.captureSourceClass,
         };
+        if (sttFailure) {
+          sttFailureCount += 1;
+          const cause = sttFailure.message.slice(0, 300) || sttFailure.name;
+          const signal = job.presetText === undefined
+            ? realSpeechCapture(job.wav, payload)
+            : undefined;
+          let recoverySpoke = false;
+          if (
+            signal
+            && now() - lastSttFailureReplyAt >= sttFailureReplyWindowMs
+          ) {
+            lastSttFailureReplyAt = now();
+            try {
+              recoverySpoke = await speakSttFailure({
+                wav: job.wav,
+                cause,
+                count: sttFailureCount,
+                durationMs: signal.durationMs,
+                rms: signal.rms,
+              });
+            } catch (error) {
+              logger.warn(
+                `[speech] STT failure recovery threw: ${error instanceof Error ? error.message : String(error)}`,
+              );
+            }
+          }
+          spoke = recoverySpoke;
+          turnCoordinator.transition(turnId, 'failed', {
+            errorCategory: 'stt',
+            sttMs,
+            spoke: recoverySpoke,
+          });
+          logger.warn(
+            `[speech] STT failed (#${sttFailureCount}): ${cause}`
+            + (signal ? `; local recovery spoke=${recoverySpoke}` : '; no real speech capture for local recovery'),
+          );
+          await recordCompanionPercept(
+            {
+              modality: 'hearing',
+              source: 'sensory_speech_reaction',
+              summary: 'Speech captured; STT failed',
+              confidence: 0.35,
+              payload: {
+                text: '',
+                wav: job.wav,
+                responded: recoverySpoke,
+                sttFailure: true,
+                sttEmpty: true,
+                sttEmptyReason: 'error',
+                sttFailureCause: cause,
+                sttFailureCount,
+                ...(recoverySpoke ? { sttFailureRecovery: STT_FAILURE_REPLY } : {}),
+                latency: latencyPayload,
+                capture: capturePayload,
+              },
+              tags: ['speech', 'stt', 'latency', 'error'],
+            },
+            options.cwd ? { cwd: options.cwd } : {},
+          );
+          return;
+        }
         if (!text) {
           turnCoordinator.transition(turnId, 'suppressed', {
             suppressionReason: normalizedText.filteredReason ?? 'stt-empty',
@@ -1620,9 +1830,9 @@ export function wireSpeechReaction(options: SpeechReactionOptions = {}): () => v
           await options.onHeard?.(text, turnContext);
           actionMs = elapsedSince(actionStartMs, now);
           responseTiming = options.getResponseTiming?.();
-          // Plain hooks historically imply speech; instrumented voice handlers report whether
-          // audio really started (empty/muted/failed replies must not arm a fake echo debounce).
-          spoke = responseTiming?.spoke ?? true;
+          // The voice handler publishes the same fact through getResponseTiming or its
+          // lastTiming property. An uninstrumented/no-op hook is not evidence of audio.
+          spoke = responseTiming?.spoke ?? heardHandler?.lastTiming?.spoke ?? false;
           if (!responseTiming) {
             turnCoordinator.transition(turnId, 'completed', {
               decisionReason,

@@ -720,6 +720,41 @@ describe('hybrid reply — routing & memory', () => {
     expect(calls.at(-1)).toContain('Je suis là. Raconte-moi.');
   });
 
+  it('closes a failed stream after a delivered sentence and remembers what was said', async () => {
+    const histories: HybridTurn[][] = [];
+    const reply = makeHybridReply({
+      fastReply: () => null,
+      prefetch: () => null,
+      jokes: () => null,
+      chitchat: async (_heard, history) => {
+        histories.push(history);
+        return 'Je reprends.';
+      },
+      chitchatStream: async function* () {
+        yield 'Première phrase complète. ';
+        throw new Error('provider dropped mid-stream');
+      },
+      agentReply: async () => 'unused',
+      classify: () => false,
+    });
+
+    const chunks: string[] = [];
+    for await (const chunk of reply.stream('parle-moi de ta journée')) chunks.push(chunk);
+
+    expect(chunks).toEqual([
+      'Première phrase complète. ',
+      "Pardon, je n'ai pas réussi à finir ma réponse.",
+    ]);
+    await reply('une autre question');
+    expect(histories[0]).toEqual([
+      { role: 'user', content: 'parle-moi de ta journée' },
+      {
+        role: 'assistant',
+        content: "Première phrase complète. Pardon, je n'ai pas réussi à finir ma réponse.",
+      },
+    ]);
+  });
+
   it('keeps substantive turns out of the chat stream so the real agent handles them', async () => {
     const calls: string[] = [];
     const reply = makeHybridReply({
@@ -747,16 +782,20 @@ describe('hybrid reply — routing & memory', () => {
 
   it('streams an instant shortcut and preserves it for an immediate blocking fallback', async () => {
     let jokeCalls = 0;
+    let groundedInput = '';
     const reply = makeHybridReply({
       fastReply: () => null,
       prefetch: () => null,
-      jokes: () => `blague-${++jokeCalls}`,
+      jokes: (heard) => heard.includes('blague') ? `blague-${++jokeCalls}` : null,
       chitchat: async () => 'blocking',
       chitchatStream: async function* () {
         yield 'should not stream';
       },
-      agentReply: async () => 'agent',
-      classify: () => false,
+      agentReply: async (input) => {
+        groundedInput = input;
+        return 'agent';
+      },
+      classify: (heard) => heard.startsWith('vérifie'),
     });
 
     const chunks: string[] = [];
@@ -764,6 +803,9 @@ describe('hybrid reply — routing & memory', () => {
     expect(chunks).toEqual(['blague-1']);
     expect(await reply('raconte une blague')).toBe('blague-1');
     expect(jokeCalls).toBe(1);
+
+    await reply('vérifie le contexte');
+    expect(groundedInput.match(/blague-1/g)).toHaveLength(1);
   });
 
   it('guards an instant shortcut before streaming it or retaining it in voice memory', async () => {

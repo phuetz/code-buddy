@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const workerHarness = vi.hoisted(() => {
   type Listener = (...args: unknown[]) => void;
-  type Response = 'timeout' | 'empty' | 'text';
+  type Response = 'timeout' | 'empty' | 'text' | 'error' | 'one-shot-error';
 
   class FakeEmitter {
     private readonly listeners = new Map<string, Listener[]>();
@@ -56,7 +56,9 @@ const workerHarness = vi.hoisted(() => {
         queueMicrotask(() => {
           stdout.reader?.emit(
             'line',
-            JSON.stringify({ id: request.id, text: response === 'text' ? 'bonjour' : '' })
+            response === 'error'
+              ? JSON.stringify({ id: request.id, error: 'decoder unavailable' })
+              : JSON.stringify({ id: request.id, text: response === 'text' ? 'bonjour' : '' }),
           );
         });
         return true;
@@ -71,6 +73,12 @@ const workerHarness = vi.hoisted(() => {
       kill: vi.fn(() => true),
     });
     processes.push(proc);
+    if (response === 'one-shot-error') {
+      queueMicrotask(() => {
+        stderr.emit('data', 'decoder unavailable');
+        proc.emit('close', 1);
+      });
+    }
     return proc;
   });
 
@@ -132,9 +140,10 @@ describe('speech reaction — persistent STT workers', () => {
     vi.useFakeTimers();
 
     const timedOut = transcribeWav('/tmp/first.wav', engine);
+    const timedOutAssertion = expect(timedOut).rejects.toThrow('timed out');
     await vi.runAllTimersAsync();
 
-    expect(await timedOut).toBe('');
+    await timedOutAssertion;
     expect(workerHarness.processes).toHaveLength(1);
     expect(workerHarness.processes[0]?.kill).toHaveBeenCalledOnce();
 
@@ -144,6 +153,23 @@ describe('speech reaction — persistent STT workers', () => {
     expect(await retried).toBe('bonjour');
     expect(workerHarness.spawn).toHaveBeenCalledTimes(2);
     expect(workerHarness.processes[1]?.command).toBe(command);
+  });
+
+  it('rejects a worker error instead of returning an empty transcript', async () => {
+    workerHarness.queueResponses('error');
+    const { transcribeWav } = await loadSpeechReaction();
+
+    await expect(transcribeWav('/tmp/failed.wav', 'faster-whisper'))
+      .rejects.toThrow('decoder unavailable');
+  });
+
+  it('rejects a non-zero one-shot STT process instead of returning its empty stdout', async () => {
+    vi.stubEnv('CODEBUDDY_SPEECH_WORKER', 'false');
+    workerHarness.queueResponses('one-shot-error');
+    const { transcribeWav } = await loadSpeechReaction();
+
+    await expect(transcribeWav('/tmp/failed-one-shot.wav', 'faster-whisper'))
+      .rejects.toThrow('faster-whisper STT failed');
   });
 
   it('routes an explicit French pin away from auto-detect-only Parakeet and propagates hotwords', async () => {
