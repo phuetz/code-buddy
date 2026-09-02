@@ -80,6 +80,16 @@ Pour chaque trou : preuve rouge, diagnostic, correctif minimal, preuve verte, te
 - Vérifications : `npm run typecheck` — **exit 0** (racine + config GPU) ; ESLint ciblé avec `--quiet` — **exit 0** ; `git diff --check` — **exit 0**.
 - Commit : à compléter.
 
+### Trou 5 — état relationnel sans borne
+
+- Test relu : `tests/companion/revue-gemini-relationship-state.test.ts`.
+- Rouge (`npx vitest run tests/companion/revue-gemini-relationship-state.test.ts`, exit 1) : **1 fichier, 2 tests rouges** — après 200 retrouvailles `personality.sessions` vaut 200 (attendu ≤ 100) ; `saveRelationshipState` relit `mood=500` (attendu ≤ 100), avant même les assertions sur `sessions=999999` et `traits.warmth=999`.
+- Diagnostic source lu : `recordReunion` incrémente sans plafond ; `saveRelationshipState` sérialise l'état brut, alors que `personalityOf` ne borne que la vue calculée et `loadRelationshipState` ne normalise pas les champs riches.
+- Correctif : ajout de `MAX_RELATIONSHIP_SESSIONS=100`, appliqué par `recordReunion` et `personalityOf`; `saveRelationshipState` et `loadRelationshipState` bornent les métriques `mood`, `traits` et `sessions` avant/après sérialisation, sans ajouter de champs riches aux anciens états.
+- Vert et tests voisins : `npx vitest run tests/companion/revue-gemini-relationship-state.test.ts tests/companion/relationship-state.test.ts tests/companion/relationship-mood.test.ts tests/companion/presence-loop.test.ts tests/companion/inner-life.test.ts` — **5 fichiers, 55 tests passés**.
+- Vérifications : `npm run typecheck` — **exit 0** (racine + config GPU) ; ESLint ciblé avec `--quiet` — **exit 0** ; `git diff --check` — **exit 0**.
+- Commit : à compléter.
+
 ## Bilan final
 
 À compléter — dix lignes maximum.
