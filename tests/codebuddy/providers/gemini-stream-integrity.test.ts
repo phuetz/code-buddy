@@ -11,6 +11,7 @@
  *    sans aucune trace. Attendu : au minimum un warn de troncature possible.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import type { ChatCompletionChunk } from 'openai/resources/chat';
 import { GeminiNativeProvider } from '../../../src/codebuddy/providers/provider-gemini-native.js';
 import { logger } from '../../../src/utils/logger.js';
 
@@ -131,5 +132,59 @@ describe('Gemini natif — intégrité du stream', () => {
     expect(r.content).toBe('Voici le début de la réponse');
     const warned = warnSpy.mock.calls.some((c) => String(c[0]).toLowerCase().includes('finishreason'));
     expect(warned).toBe(true);
+  });
+
+  it('D1 : émet un seul finish_reason honnête avant lequel le footer est livré', async () => {
+    fetchImpl = async () => sse(
+      textChunk('Réponse partielle'),
+      `data: ${JSON.stringify({
+        candidates: [{
+          finishReason: 'MAX_TOKENS',
+          groundingMetadata: {
+            groundingChunks: [{ web: { uri: 'https://example.test/source', title: 'Source' } }],
+          },
+        }],
+      })}\n\n`,
+    );
+
+    const emitted: ChatCompletionChunk[] = [];
+    for await (const chunk of makeProvider().chatStream([{ role: 'user', content: 'salut' }])) {
+      emitted.push(chunk);
+    }
+
+    const terminal = emitted.filter((chunk) => chunk.choices[0]?.finish_reason !== null);
+    expect(terminal).toHaveLength(1);
+    expect(terminal[0]?.choices[0]?.finish_reason).toBe('length');
+    const footerIndex = emitted.findIndex((chunk) => chunk.choices[0]?.delta?.content?.includes('**Sources:**'));
+    const terminalIndex = emitted.findIndex((chunk) => chunk.choices[0]?.finish_reason !== null);
+    expect(footerIndex).toBeGreaterThanOrEqual(0);
+    expect(footerIndex).toBeLessThan(terminalIndex);
+  });
+
+  it('D4 : échec définitif d’appel malformé → erreur explicite', async () => {
+    let calls = 0;
+    fetchImpl = async () => {
+      calls++;
+      return new Response(
+        JSON.stringify({ candidates: [{ finishReason: 'MALFORMED_FUNCTION_CALL' }] }),
+        { status: 200 },
+      );
+    };
+
+    await expect(makeProvider().chat([{ role: 'user', content: 'utilise un outil' }])).rejects.toThrow(
+      'Gemini malformed function call retries exhausted',
+    );
+    expect(calls).toBe(3);
+  });
+
+  it('D5 : candidat sans parts → erreur, sans réponse française inventée', async () => {
+    fetchImpl = async () => new Response(
+      JSON.stringify({ candidates: [{ content: { parts: [] }, finishReason: 'STOP' }] }),
+      { status: 200 },
+    );
+
+    await expect(makeProvider().chat([{ role: 'user', content: 'write code' }])).rejects.toThrow(
+      'Gemini returned empty content parts',
+    );
   });
 });

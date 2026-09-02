@@ -593,21 +593,7 @@ export class GeminiNativeProvider implements Provider {
           );
         }
 
-        return {
-          choices: [{
-            message: {
-              role: 'assistant',
-              content: 'I generated a malformed function call. Let me retry with the correct tool format. I need to use proper JSON arguments, not Python syntax.',
-              tool_calls: undefined,
-            },
-            finish_reason: 'stop',
-          }],
-          usage: {
-            prompt_tokens: data.usageMetadata?.promptTokenCount ?? 0,
-            completion_tokens: 0,
-            total_tokens: data.usageMetadata?.totalTokenCount ?? 0,
-          },
-        };
+        throw new Error('Gemini malformed function call retries exhausted');
       }
 
       if (!candidate || !candidate.content) {
@@ -622,26 +608,11 @@ export class GeminiNativeProvider implements Provider {
 
       // Handle empty content (Gemini may return content without parts for certain queries)
       if (!candidate.content.parts || candidate.content.parts.length === 0) {
-        logger.warn('Gemini returned empty content parts', {
+        logger.error('Gemini returned empty content parts', {
           source: 'GeminiNativeProvider',
           finishReason: candidate.finishReason,
         });
-        // Return a graceful response instead of throwing
-        return {
-          choices: [{
-            message: {
-              role: 'assistant',
-              content: "Je ne peux pas répondre à cette question. Il s'agit peut-être d'une requête nécessitant des données en temps réel (météo, actualités) auxquelles je n'ai pas accès, ou d'une question que le modèle ne peut pas traiter.",
-              tool_calls: undefined,
-            },
-            finish_reason: candidate.finishReason || 'stop',
-          }],
-          usage: {
-            prompt_tokens: data.usageMetadata?.promptTokenCount ?? 0,
-            completion_tokens: 0,
-            total_tokens: data.usageMetadata?.totalTokenCount ?? 0,
-          },
-        };
+        throw new Error('Gemini returned empty content parts');
       }
 
       const toolCalls: CodeBuddyToolCall[] = [];
@@ -891,6 +862,7 @@ export class GeminiNativeProvider implements Provider {
     // une fin de stream sans finishReason (troncature possible).
     let emittedChunks = 0;
     let sawFinishReason = false;
+    let terminalFinishReason: 'stop' | 'tool_calls' | 'length' | 'content_filter' | null | undefined;
 
     try {
       if (opts?.signal?.aborted) throw abortErrorForSignal(opts.signal);
@@ -943,11 +915,26 @@ export class GeminiNativeProvider implements Provider {
         if (!candidate) continue;
         // Grounding metadata typically arrives in the final chunk of the
         // stream — keep the latest non-empty payload around so we can
-        // emit the "Sources:" footer right before the stop chunk.
+        // emit the "Sources:" footer right before the terminal chunk.
         if (candidate.groundingMetadata) {
           lastGroundingMetadata = candidate.groundingMetadata;
         }
         const content = candidate.content as { parts?: Array<Record<string, unknown>> } | undefined;
+        const finishReason = candidate.finishReason as string | undefined;
+        if (finishReason) {
+          sawFinishReason = true;
+          // Keep one terminal reason for the final chunk. In particular, do
+          // not emit length/content_filter and then overwrite it with stop.
+          if (terminalFinishReason === undefined) {
+            const finishMap: Record<string, 'stop' | 'tool_calls' | 'length' | 'content_filter'> = {
+              'STOP': 'stop',
+              'MAX_TOKENS': 'length',
+              'SAFETY': 'content_filter',
+              'RECITATION': 'content_filter',
+            };
+            terminalFinishReason = finishMap[finishReason] || 'stop';
+          }
+        }
         const parts = content?.parts;
         if (!parts) continue;
 
@@ -997,33 +984,9 @@ export class GeminiNativeProvider implements Provider {
           }
         }
 
-        // Check for finish reason
-        const finishReason = candidate.finishReason as string | undefined;
-        if (finishReason) sawFinishReason = true;
-        if (finishReason && finishReason !== 'STOP') {
-          // Map Gemini finish reasons to OpenAI format
-          const finishMap: Record<string, string> = {
-            'STOP': 'stop',
-            'MAX_TOKENS': 'length',
-            'SAFETY': 'content_filter',
-            'RECITATION': 'content_filter',
-          };
-          const mappedReason = finishMap[finishReason] || 'stop';
-          yield {
-            id: `chatcmpl-gemini-${Date.now()}-${chunkIndex++}`,
-            object: 'chat.completion.chunk' as const,
-            created: Math.floor(Date.now() / 1000),
-            model,
-            choices: [{
-              index: 0,
-              delta: {},
-              finish_reason: mappedReason as 'stop' | 'tool_calls' | 'length' | 'content_filter' | null,
-            }],
-          };
-        }
       }
 
-      // Emit the Sources footer (if any) BEFORE the final stop chunk so
+      // Emit the Sources footer (if any) BEFORE the final terminal chunk so
       // it lands in the assistant content rather than after finish_reason.
       const groundingFooter = GeminiNativeProvider.formatGroundingFooter(lastGroundingMetadata);
       if (groundingFooter) {
@@ -1053,7 +1016,7 @@ export class GeminiNativeProvider implements Provider {
         });
       }
 
-      // Final stop chunk
+      // Final terminal chunk
       yield {
         id: `chatcmpl-gemini-${Date.now()}-${chunkIndex}`,
         object: 'chat.completion.chunk' as const,
@@ -1062,7 +1025,7 @@ export class GeminiNativeProvider implements Provider {
         choices: [{
           index: 0,
           delta: {},
-          finish_reason: 'stop',
+          finish_reason: terminalFinishReason ?? 'stop',
         }],
       };
     } catch (error) {

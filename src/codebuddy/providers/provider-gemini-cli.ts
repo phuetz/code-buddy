@@ -245,6 +245,7 @@ export class GeminiCliProvider implements Provider {
 
     let timedOut = false;
     let callerAborted = false;
+    let terminalError: Error | null = null;
     const timeout = setTimeout(() => {
       timedOut = true;
       logger.warn('[gemini-cli] stream timeout — sending SIGTERM');
@@ -288,6 +289,8 @@ export class GeminiCliProvider implements Provider {
           continue;
         }
 
+        if (terminalError) break;
+
         switch (event.type) {
           case 'init':
             // Session metadata — ignore for now.
@@ -320,6 +323,9 @@ export class GeminiCliProvider implements Provider {
               ? event.error
               : (event.error?.message ?? event.message ?? 'unknown stream error');
             logger.warn('[gemini-cli] stream warning', { msg });
+            terminalError = new Error(`gemini-cli: API error — ${msg}`);
+            killChild(child);
+            rl.close();
             break;
           }
           case 'result':
@@ -349,6 +355,7 @@ export class GeminiCliProvider implements Provider {
     }
 
     if (callerAborted && opts?.signal) throw abortErrorForSignal(opts.signal);
+    if (terminalError) throw terminalError;
     if (timedOut) {
       throw new Error(
         `gemini-cli: timeout after ${opts?.timeoutMs ?? this.requestTimeoutMs}ms`,
@@ -532,7 +539,7 @@ function spawnAndCollect(
 
     child.on('close', (code) => {
       if (settled) return;
-      if (killed && code !== 0) {
+      if (killed) {
         rejectOnce(
           new Error(
             stdoutBytes > STDOUT_BYTES_CAP
