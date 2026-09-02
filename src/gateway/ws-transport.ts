@@ -20,6 +20,9 @@ import type {
 import { DEFAULT_GATEWAY_CONFIG } from './types.js';
 import { logger } from '../utils/logger.js';
 import { SERVER_CONFIG } from '../config/constants.js';
+import { isOriginAllowed } from '../server/origin-check.js';
+
+export { isOriginAllowed } from '../server/origin-check.js';
 
 // ============================================================================
 // WebSocket Transport Configuration
@@ -86,25 +89,6 @@ interface WebSocketClient {
 // ============================================================================
 // Origin Validation (GHSA-5wcw-8jjv-m286)
 // ============================================================================
-
-/**
- * Check if an origin is allowed by a list of allowed origin patterns.
- * Supports wildcard patterns like `http://localhost:*`.
- */
-export function isOriginAllowed(origin: string, allowedOrigins: string[]): boolean {
-  if (!origin) return false;
-  for (const pattern of allowedOrigins) {
-    if (pattern === '*') return true;
-    if (pattern === origin) return true;
-    // Support wildcard patterns (e.g. http://localhost:*)
-    if (pattern.includes('*')) {
-      const escaped = pattern.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*');
-      const regex = new RegExp(`^${escaped}$`);
-      if (regex.test(origin)) return true;
-    }
-  }
-  return false;
-}
 
 // ============================================================================
 // WebSocket Gateway Server

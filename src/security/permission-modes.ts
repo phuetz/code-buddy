@@ -8,6 +8,7 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { logger } from '../utils/logger.js';
 import { TOOL_METADATA } from '../tools/metadata.js';
+import { TOOL_ALIASES } from '../tools/registry/tool-alias-map.js';
 import { SafeBinariesChecker } from './safe-binaries.js';
 
 // ============================================================================
@@ -87,6 +88,11 @@ const DESTRUCTIVE_TOOLS = new Set([
   'git_reset',
   'git_checkout',
 ]);
+
+function normalizeToolName(toolName: string): string {
+  const lower = toolName.toLowerCase();
+  return TOOL_ALIASES[lower] ?? lower;
+}
 
 // ============================================================================
 // Permission Mode Manager
@@ -197,7 +203,7 @@ export class PermissionModeManager {
       return { allowed: true, reason: 'Read-only tool allowed in plan mode', prompted: false };
     }
     if (
-      (toolName.toLowerCase() === 'bash' || toolName.toLowerCase() === 'shell_exec') &&
+      normalizeToolName(toolName) === 'bash' &&
       SafeBinariesChecker.getInstance().isSafeChain(action)
     ) {
       return {
@@ -246,15 +252,16 @@ export class PermissionModeManager {
    * Tool classification
    */
   isReadOnlyTool(toolName: string): boolean {
-    return READ_ONLY_TOOLS.has(toolName) || isFleetSafeTool(toolName);
+    const normalized = normalizeToolName(toolName);
+    return READ_ONLY_TOOLS.has(normalized) || isFleetSafeTool(normalized);
   }
 
   isEditTool(toolName: string): boolean {
-    return EDIT_TOOLS.has(toolName);
+    return EDIT_TOOLS.has(normalizeToolName(toolName));
   }
 
   isDestructiveTool(toolName: string): boolean {
-    return DESTRUCTIVE_TOOLS.has(toolName);
+    return DESTRUCTIVE_TOOLS.has(normalizeToolName(toolName));
   }
 
   /**

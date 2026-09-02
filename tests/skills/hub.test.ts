@@ -1277,11 +1277,13 @@ describe('SkillsHub signing & trusted keys', () => {
       expect(locked?.signature?.keyId).toBe('acme');
     });
 
-    it('records untrusted when the signer key is unknown', async () => {
+    it('rejects a supplied signature when the signer key is unknown', async () => {
       const kp = generateSkillSigningKeyPair('rogue');
       const signature = signSkillContent(VALID_SKILL_CONTENT, kp.privateKey, { keyId: 'rogue' });
-      const installed = await hub.installFromContent('test-skill', VALID_SKILL_CONTENT, 'hub', { signature });
-      expect(installed.signatureStatus).toBe('untrusted');
+      await expect(
+        hub.installFromContent('test-skill', VALID_SKILL_CONTENT, 'hub', { signature }),
+      ).rejects.toThrow(/untrusted/);
+      expect(existsSync(join(config.skillsDir, 'test-skill', 'SKILL.md'))).toBe(false);
     });
   });
 
