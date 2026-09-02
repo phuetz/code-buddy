@@ -28,6 +28,7 @@ const XML_TOOL_PATTERNS = [
 ];
 const JSON_TOOL_PATTERN = /\{\s*"(?:name|tool)"\s*:\s*"([A-Za-z_][A-Za-z0-9_.-]*)"/g;
 const YAML_TOOL_PATTERN = /(?:^|\n)\s*(?:name|tool|tool_name)\s*:\s*["']?([A-Za-z_][A-Za-z0-9_.-]*)["']?/g;
+const TOML_TOOL_PATTERN = /(?:^|\n)\s*(?:name|tool|tool_name)\s*=\s*["']([A-Za-z_][A-Za-z0-9_.-]*)["']/g;
 
 function firstKnownUnexecuted(
   candidates: Iterable<{ toolName: string; line: string }>,
@@ -44,9 +45,10 @@ function firstKnownUnexecuted(
 /**
  * Detect a tool call that the model rendered as text instead of sending as a
  * structured call. Whole-line `name(...)`, indented lines, XML wrappers, and
- * JSON `{"name":"..."}` objects, YAML `name:` / `tool:` mappings, fenced
- * blocks, and Anthropic `<function_calls>` wrappers count; ordinary prose
- * with parentheses must not change the exit status.
+ * JSON `{"name":"..."}` objects, YAML `name:` / `tool:` mappings, TOML
+ * `name = "create_file"` assignments, fenced blocks, and Anthropic
+ * `<function_calls>` wrappers count; ordinary prose with parentheses must
+ * not change the exit status.
  */
 export function findUnexecutedProseToolCall(
   resultText: string,
@@ -98,7 +100,18 @@ export function findUnexecutedProseToolCall(
     if (!toolName) continue;
     yamlCandidates.push({ toolName, line: yamlMatch[0] });
   }
-  return firstKnownUnexecuted(yamlCandidates, known, executed);
+  const fromYaml = firstKnownUnexecuted(yamlCandidates, known, executed);
+  if (fromYaml) return fromYaml;
+
+  const tomlCandidates: UnexecutedProseToolCall[] = [];
+  TOML_TOOL_PATTERN.lastIndex = 0;
+  let tomlMatch: RegExpExecArray | null;
+  while ((tomlMatch = TOML_TOOL_PATTERN.exec(resultText)) !== null) {
+    const toolName = tomlMatch[1];
+    if (!toolName) continue;
+    tomlCandidates.push({ toolName, line: tomlMatch[0] });
+  }
+  return firstKnownUnexecuted(tomlCandidates, known, executed);
 }
 
 export function resolveHeadlessTurnExitCode(
