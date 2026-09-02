@@ -5,8 +5,8 @@
  * Local backup management for `.codebuddy/` configuration and workspace data.
  */
 
-import { existsSync, mkdirSync, readdirSync, statSync, readFileSync } from 'fs';
-import { join, basename } from 'path';
+import { existsSync, mkdirSync, readdirSync, statSync, readFileSync, writeFileSync } from 'fs';
+import { join, basename, dirname } from 'path';
 import { homedir } from 'os';
 import { createHash } from 'crypto';
 import { logger } from '../../utils/logger.js';
@@ -123,7 +123,6 @@ async function handleBackupCreate(flags: string[]): Promise<CommandHandlerResult
     fileCount: files.length,
   };
 
-  const { writeFileSync } = await import('fs');
   writeFileSync(backupPath, JSON.stringify(backupData, null, 2));
 
   const totalSizeKB = Math.round(backupData.totalSize / 1024);
@@ -174,29 +173,9 @@ async function handleBackupVerify(args: string[]): Promise<CommandHandlerResult>
       };
     }
 
-    const archiveFiles = data.files as BackupArchiveFile[] | undefined;
-    if (manifest.files.length === 0 || !Array.isArray(archiveFiles) || archiveFiles.length === 0) {
-      throw new Error('archive is empty: no file payloads found');
-    }
-    if (archiveFiles.length !== manifest.files.length) {
-      throw new Error('archive payload does not match the manifest');
-    }
-    for (const manifestFile of manifest.files) {
-      const archiveFile = archiveFiles.find((file) => file.path === manifestFile.path);
-      if (!archiveFile || typeof archiveFile.content !== 'string') {
-        throw new Error(`archive payload is missing ${manifestFile.path}`);
-      }
-      const content = Buffer.from(archiveFile.content, 'base64');
-      if (content.toString('base64') !== archiveFile.content) {
-        throw new Error(`archive payload is not valid base64: ${manifestFile.path}`);
-      }
-      if (content.length !== manifestFile.size) {
-        throw new Error(`archive size mismatch: ${manifestFile.path}`);
-      }
-      const checksum = createHash('sha256').update(content).digest('hex').slice(0, 16);
-      if (checksum !== manifestFile.checksum) {
-        throw new Error(`archive checksum mismatch: ${manifestFile.path}`);
-      }
+    const payloadError = verifyArchivePayloads(manifest, data.files);
+    if (payloadError) {
+      throw new Error(payloadError);
     }
 
     return {
@@ -265,12 +244,13 @@ async function handleBackupList(args: string[] = []): Promise<CommandHandlerResu
  * Restore from a backup (with confirmation message)
  */
 async function handleBackupRestore(args: string[]): Promise<CommandHandlerResult> {
-  const filePath = args[0];
+  const confirm = args.includes('--confirm');
+  const filePath = args.find((arg) => arg !== '--confirm' && !arg.startsWith('--'));
   if (!filePath) {
     return {
       handled: true,
       exitCode: 1,
-      response: 'Usage: backup restore <file>',
+      response: 'Usage: backup restore <file> [--confirm]',
     };
   }
 
@@ -295,15 +275,66 @@ async function handleBackupRestore(args: string[]): Promise<CommandHandlerResult
       };
     }
 
+    if (!confirm) {
+      return {
+        handled: true,
+        response: [
+          `Ready to restore backup: ${basename(fullPath)}`,
+          `Created: ${manifest.createdAt}`,
+          `Files: ${manifest.files.length}`,
+          '',
+          'This will overwrite current .codebuddy/ configuration.',
+          'To confirm, run: backup restore <file> --confirm',
+        ].join('\n'),
+      };
+    }
+
+    const payloadError = verifyArchivePayloads(manifest, data.files);
+    if (payloadError) {
+      return {
+        handled: true,
+        exitCode: 1,
+        response: `Cannot restore ${fullPath}: ${payloadError}`,
+      };
+    }
+
+    const archiveFiles = data.files as BackupArchiveFile[];
+    const destRoot = join(process.cwd(), '.codebuddy');
+    mkdirSync(destRoot, { recursive: true });
+
+    const restored: string[] = [];
+    for (const manifestFile of manifest.files) {
+      const archiveFile = archiveFiles.find((file) => file.path === manifestFile.path);
+      if (!archiveFile) {
+        return {
+          handled: true,
+          exitCode: 1,
+          response: `Cannot restore ${fullPath}: archive payload is missing ${manifestFile.path}`,
+        };
+      }
+      const content = Buffer.from(archiveFile.content, 'base64');
+      const dest = join(destRoot, manifestFile.path);
+      mkdirSync(dirname(dest), { recursive: true });
+      writeFileSync(dest, content);
+      const reread = readFileSync(dest);
+      const expectedChecksum = fileChecksum(content);
+      const actualChecksum = fileChecksum(reread);
+      if (actualChecksum !== expectedChecksum || actualChecksum !== manifestFile.checksum) {
+        return {
+          handled: true,
+          exitCode: 1,
+          response: `Restore verification failed for ${manifestFile.path}: on-disk hash does not match the archive`,
+        };
+      }
+      restored.push(manifestFile.path);
+    }
+
     return {
       handled: true,
       response: [
-        `Ready to restore backup: ${basename(fullPath)}`,
-        `Created: ${manifest.createdAt}`,
-        `Files: ${manifest.files.length}`,
-        '',
-        'This will overwrite current .codebuddy/ configuration.',
-        'To confirm, run: backup restore <file> --confirm',
+        `Restored backup: ${basename(fullPath)}`,
+        `Files: ${restored.length}`,
+        `Verified: sha256 match for ${restored.length} file(s)`,
       ].join('\n'),
     };
   } catch (err) {
@@ -322,6 +353,40 @@ interface CollectedFile {
   size: number;
   checksum: string;
   content: Buffer;
+}
+
+function fileChecksum(content: Buffer): string {
+  return createHash('sha256').update(content).digest('hex').slice(0, 16);
+}
+
+function verifyArchivePayloads(
+  manifest: BackupManifest,
+  files: unknown,
+): string | null {
+  const archiveFiles = files as BackupArchiveFile[] | undefined;
+  if (manifest.files.length === 0 || !Array.isArray(archiveFiles) || archiveFiles.length === 0) {
+    return 'archive is empty: no file payloads found';
+  }
+  if (archiveFiles.length !== manifest.files.length) {
+    return 'archive payload does not match the manifest';
+  }
+  for (const manifestFile of manifest.files) {
+    const archiveFile = archiveFiles.find((file) => file.path === manifestFile.path);
+    if (!archiveFile || typeof archiveFile.content !== 'string') {
+      return `archive payload is missing ${manifestFile.path}`;
+    }
+    const content = Buffer.from(archiveFile.content, 'base64');
+    if (content.toString('base64') !== archiveFile.content) {
+      return `archive payload is not valid base64: ${manifestFile.path}`;
+    }
+    if (content.length !== manifestFile.size) {
+      return `archive size mismatch: ${manifestFile.path}`;
+    }
+    if (fileChecksum(content) !== manifestFile.checksum) {
+      return `archive checksum mismatch: ${manifestFile.path}`;
+    }
+  }
+  return null;
 }
 
 function collectFiles(
@@ -363,7 +428,7 @@ function collectFiles(
           if (stat.size > 1024 * 1024) continue;
 
           const content = readFileSync(fullPath);
-          const checksum = createHash('sha256').update(content).digest('hex').slice(0, 16);
+          const checksum = fileChecksum(content);
 
           results.push({
             relativePath,

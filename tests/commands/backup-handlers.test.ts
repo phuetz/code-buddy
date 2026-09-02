@@ -4,8 +4,8 @@
  * Phase 6: backup create/verify/list/restore
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { createHash } from 'node:crypto';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // Mock fs module
 vi.mock('fs', async (importOriginal) => {
