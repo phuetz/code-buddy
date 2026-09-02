@@ -20,6 +20,8 @@
 #   local  ollama sur la machine        — aucun quota, aucun réseau
 #   agy    Gemini (Antigravity)         — abonnement AI Ultra ; ⚠️ PLAFOND DUR
 #                                         de ~305 s : découper les missions
+#   omniroute passerelle locale OmniRoute — des centaines de modèles, un endpoint ;
+#                                         OMNIROUTE_MODELE=<id> (défaut auto/best-free)
 #   oc     OpenCode Go (abonnement)     — 61 modèles, 5 lignées inédites
 #                                         (kimi, minimax, deepseek, glm, qwen) ;
 #                                         choisir avec OC_MODELE=<id>
@@ -195,6 +197,22 @@ case "$MOTEUR" in
     # defaultModel périmé de ~/.codebuddy/user-settings.json (grok-code-fast-1) part vers NVIDIA → 404.
     (cd "$DEPOT" && CODEBUDDY_PROVIDER=nvidia NVIDIA_API_KEY="$NKEY" \
        "$CB_SRC/node_modules/.bin/tsx" "$CB_SRC/src/index.ts" -m "${NVIDIA_MODELE:-moonshotai/kimi-k3}" \
+       --permission-mode "${CB_POSTURE:-dontAsk}" -p "$(cat "$CONSIGNE")") 2>&1 | tee "$LOG"
+    ;;
+  omniroute)
+    # OmniRoute (passerelle locale MIT, `omniroute serve`, port 20128) : des centaines de modèles
+    # derrière UN endpoint OpenAI-compatible, avec cascade abonnement → clé → gratuit. Intégré à
+    # Code Buddy le 22/08 (fournisseur `omniroute`, catalogue des paliers gratuits importé) ; exposé
+    # ici comme moteur de flotte le 02/09. Modèle via OMNIROUTE_MODELE (défaut `auto/best-free`,
+    # `auto/best-coding`, ou un id précis du catalogue : `omniroute` route). La passerelle doit
+    # tourner : `cd ~/.codebuddy/omniroute-cwd && omniroute serve` (répertoire NEUTRE : OmniRoute
+    # charge le .env du cwd). Les fournisseurs sans clé rendent 429/401 : poser des clés gratuites
+    # dans OmniRoute pour que la cascade tienne. Prompts → fournisseurs tiers : rien de confidentiel.
+    OMNI_URL=${OMNIROUTE_BASE_URL:-http://127.0.0.1:20128/v1}
+    curl -s -m 5 "$OMNI_URL/models" >/dev/null 2>&1 || { echo "⛔ passerelle OmniRoute injoignable sur $OMNI_URL — lance : cd ~/.codebuddy/omniroute-cwd && omniroute serve" >&2; exit 2; }
+    CB_SRC=${CB_SRC:-$HOME/code-buddy}; [ -f "$CB_SRC/src/index.ts" ] || CB_SRC=$HOME/code-buddy-vitrine
+    (cd "$DEPOT" && CODEBUDDY_PROVIDER=omniroute OMNIROUTE_BASE_URL="$OMNI_URL" \
+       "$CB_SRC/node_modules/.bin/tsx" "$CB_SRC/src/index.ts" -m "${OMNIROUTE_MODELE:-auto/best-free}" \
        --permission-mode "${CB_POSTURE:-dontAsk}" -p "$(cat "$CONSIGNE")") 2>&1 | tee "$LOG"
     ;;
   oc)
