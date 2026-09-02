@@ -1,4 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { readFile } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
 import {
   BACKCHANNEL_GAIN_DB,
   BACKCHANNEL_START_DELAY_MS,
@@ -6,6 +8,7 @@ import {
   createConversationCueController,
   type ConversationCueRequest,
 } from '../../src/sensory/conversation-cues.js';
+import { normalizePcm16Wav, probePcm16Wav } from '../../src/voice/tts-volume.js';
 
 afterEach(() => {
   vi.useRealTimers();
@@ -97,5 +100,22 @@ describe('conversation cues — sensory backchannel', () => {
       atMs: 1_000,
     });
     expect(played[0]!.assetPath).toMatch(/assets\/voice\/conversation\/repair\.wav$/);
+  });
+
+  it('ships canonical PCM16 assets and can attenuate backchannels by 12 dB', async () => {
+    const asset = (file: string): string => fileURLToPath(
+      new URL(`../../assets/voice/conversation/${file}`, import.meta.url),
+    );
+    const [mhm, oui, repair] = await Promise.all([
+      readFile(asset('mhm.wav')),
+      readFile(asset('oui.wav')),
+      readFile(asset('repair.wav')),
+    ]);
+
+    for (const wav of [mhm, oui, repair]) {
+      expect(probePcm16Wav(wav).status).toBe('ready');
+    }
+    const attenuated = normalizePcm16Wav(mhm, {}, 10 ** (BACKCHANNEL_GAIN_DB / 20));
+    expect(attenuated.equals(mhm)).toBe(false);
   });
 });
