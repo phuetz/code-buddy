@@ -65,6 +65,7 @@ import {
 } from './websocket/index.js';
 import { setupDesktopWebSocket, closeDesktopWebSocket } from './websocket/desktop-handler.js';
 import { getPeerMethodHandler } from './websocket/peer-rpc.js';
+import { fleetHttpDescribeEnvelope } from '../fleet/fleet-http-surface.js';
 import { startFleetHeartbeat, stopFleetHeartbeat } from '../fleet/heartbeat-broadcaster.js';
 import { startAutonomousTick, stopAutonomousTick } from '../fleet/autonomous-tick-broadcaster.js';
 import { startApiHeartbeatMonitor, stopApiHeartbeatMonitor } from './heartbeat-monitor.js';
@@ -303,7 +304,11 @@ function createApp(config: ServerConfig, cognitiveHub: CognitiveHub): Applicatio
         traceId: `http-fleet-${Date.now().toString(36)}`,
         depth: 0,
       });
-      res.json(description);
+      res.json(fleetHttpDescribeEnvelope(
+        description && typeof description === 'object'
+          ? description as Record<string, unknown>
+          : { description },
+      ));
     } catch (error) {
       res.status(503).json({
         error: error instanceof Error ? error.message : String(error),

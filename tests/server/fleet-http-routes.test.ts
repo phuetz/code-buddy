@@ -65,5 +65,24 @@ describe('Fleet HTTP routes', () => {
         methods: expect.any(Array),
       }),
     );
+    expect(description.httpMethods).toEqual(['peer.describe']);
+    expect(Array.isArray(description.wsOnlyMethods)).toBe(true);
+    const methods = description.methods as string[];
+    const classified = new Set([
+      ...(description.httpMethods as string[]),
+      ...(description.wsOnlyMethods as string[]),
+    ]);
+    for (const method of methods) {
+      expect(classified.has(method), `${method} is neither HTTP-backed nor listed as WS-only`).toBe(
+        true,
+      );
+    }
+
+    const missingHttp = await fetch(`${baseUrl}/api/fleet/chat`);
+    expect(missingHttp.status).toBe(404);
+    const missingTool = await fetch(`${baseUrl}/api/fleet/tool`);
+    expect(missingTool.status).toBe(404);
+    const missingCkg = await fetch(`${baseUrl}/api/fleet/ckg`);
+    expect(missingCkg.status).toBe(404);
   });
 });
