@@ -87,6 +87,23 @@ import type {
   MissionStatus,
   SubTask,
 } from '../main/missions/mission-types';
+import type { Studio2Result } from '../main/studio2/archive-utils';
+import type {
+  DeployRequest,
+  DeployResult,
+  DeployTarget,
+} from '../main/studio2/deploy-service';
+import type {
+  ExportProjectRequest,
+  ExportProjectResult,
+  ImportFolderRequest,
+  ImportFolderResult,
+} from '../main/studio2/export-service';
+import type {
+  GitCommitResult,
+  GitLogEntry,
+  GitStatus,
+} from '../main/studio2/git-service';
 import type { VoiceBackgroundMissionInput } from '../shared/voice-background-mission';
 import type { LiveLauncherRunView, LiveLauncherStartInput } from '../shared/live-launcher-types';
 import type {
@@ -1338,6 +1355,42 @@ contextBridge.exposeInMainWorld('electronAPI', {
     github: {
       push: (request: { root: string; name?: string; private?: boolean }) =>
         ipcRenderer.invoke('studio.github.push', request),
+    },
+  },
+
+  // App Studio V2 deploy, archive, and Git operations.
+  studio2: {
+    deploy: {
+      run: (request: DeployRequest): Promise<Studio2Result<DeployResult>> =>
+        ipcRenderer.invoke('studio2.deploy.run', request),
+      detect: (target: Exclude<DeployTarget, 'zip'>): Promise<string | null> =>
+        ipcRenderer.invoke('studio2.deploy.detect', target),
+    },
+    export: {
+      project: (
+        request: ExportProjectRequest
+      ): Promise<Studio2Result<ExportProjectResult>> =>
+        ipcRenderer.invoke('studio2.export.project', request),
+      importFolder: (
+        request: ImportFolderRequest
+      ): Promise<Studio2Result<ImportFolderResult>> =>
+        ipcRenderer.invoke('studio2.import.folder', request),
+    },
+    git: {
+      init: (projectRoot: string): Promise<Studio2Result<{ initialized: boolean }>> =>
+        ipcRenderer.invoke('studio2.git.init', projectRoot),
+      status: (projectRoot: string): Promise<Studio2Result<GitStatus>> =>
+        ipcRenderer.invoke('studio2.git.status', projectRoot),
+      commit: (
+        projectRoot: string,
+        message: string
+      ): Promise<Studio2Result<GitCommitResult>> =>
+        ipcRenderer.invoke('studio2.git.commit', projectRoot, message),
+      log: (
+        projectRoot: string,
+        limit?: number
+      ): Promise<Studio2Result<GitLogEntry[]>> =>
+        ipcRenderer.invoke('studio2.git.log', projectRoot, limit),
     },
   },
 
@@ -6091,6 +6144,29 @@ declare global {
             name?: string;
             private?: boolean;
           }) => Promise<unknown>;
+        };
+      };
+      studio2: {
+        deploy: {
+          run: (request: DeployRequest) => Promise<Studio2Result<DeployResult>>;
+          detect: (target: Exclude<DeployTarget, 'zip'>) => Promise<string | null>;
+        };
+        export: {
+          project: (
+            request: ExportProjectRequest
+          ) => Promise<Studio2Result<ExportProjectResult>>;
+          importFolder: (
+            request: ImportFolderRequest
+          ) => Promise<Studio2Result<ImportFolderResult>>;
+        };
+        git: {
+          init: (projectRoot: string) => Promise<Studio2Result<{ initialized: boolean }>>;
+          status: (projectRoot: string) => Promise<Studio2Result<GitStatus>>;
+          commit: (
+            projectRoot: string,
+            message: string
+          ) => Promise<Studio2Result<GitCommitResult>>;
+          log: (projectRoot: string, limit?: number) => Promise<Studio2Result<GitLogEntry[]>>;
         };
       };
       checkpoint: {
