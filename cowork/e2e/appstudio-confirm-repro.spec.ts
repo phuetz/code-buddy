@@ -9,7 +9,7 @@
  *   REPRO_MODEL=qwen3.8:27b npx playwright test e2e/appstudio-confirm-repro.spec.ts --config=playwright.config.ts
  */
 import { _electron as electron, test, expect, type Page, type ElectronApplication } from '@playwright/test';
-import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import electronBinary from 'electron';
@@ -21,9 +21,7 @@ mkdirSync(SHOT_DIR, { recursive: true });
 
 async function launch(): Promise<{ app: ElectronApplication; page: Page; work: string }> {
   const userDataDir = mkdtempSync(path.join(os.tmpdir(), 'cowork-repro-'));
-  const modelPath = path.join(userDataDir, 'models', 'buffalo_s.onnx');
-  mkdirSync(path.dirname(modelPath), { recursive: true });
-  writeFileSync(modelPath, '');
+  // No Buffalo_S ONNX planted: empty files lie about install (BUFFALO_ONNX_FIXTURE_SKIP_REASON).
   const work = mkdtempSync(path.join(os.tmpdir(), 'appstudio-work-'));
 
   const app = await electron.launch({

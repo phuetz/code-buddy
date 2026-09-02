@@ -10,6 +10,14 @@ import electronBinary from 'electron';
 import os from 'node:os';
 import path from 'node:path';
 
+/**
+ * Intentionally no Buffalo_S ONNX in the shared e2e fixture.
+ * An empty file made `presence:has-model` lie (VD/R33 twin). A real ~13 MB
+ * model is not vendored. The install dialog is not auto-opened (84450e4d8).
+ */
+export const BUFFALO_ONNX_FIXTURE_SKIP_REASON =
+  'No Buffalo_S ONNX in e2e: empty files lie about install; a real 13MB model is not vendored. Dialog is not auto-opened.';
+
 type CoworkFixtures = {
   electronApp: ElectronApplication;
   appPage: Page;
@@ -17,6 +25,8 @@ type CoworkFixtures = {
 };
 
 export const test = base.extend<CoworkFixtures>({
+  // Playwright requires an object destructure here (`{}`), not `_`.
+  // eslint-disable-next-line no-empty-pattern -- fixture contract, see e2e-fixture-destructure.test.ts
   userDataDir: async ({}, use) => {
     const configuredRoot = process.env.COWORK_E2E_TMP_ROOT?.trim();
     const tempRoot = configuredRoot ? path.resolve(configuredRoot) : os.tmpdir();

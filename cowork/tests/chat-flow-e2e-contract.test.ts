@@ -22,5 +22,20 @@ describe('chat-flow e2e proof contract', () => {
 
     expect(source).not.toContain("writeFileSync(modelPath, '')");
     expect(source).toContain('COWORK_E2E_TMP_ROOT');
+    expect(source).toContain('BUFFALO_ONNX_FIXTURE_SKIP_REASON');
+    expect(source).toMatch(/empty files lie about install/i);
+  });
+
+  it('does not plant an empty Buffalo_S ONNX in any e2e spec', () => {
+    const e2eDir = path.resolve(process.cwd(), 'e2e');
+    const files = fs.readdirSync(e2eDir).filter((name) => name.endsWith('.ts') || name.endsWith('.cjs'));
+    const offenders: string[] = [];
+    for (const name of files) {
+      const source = fs.readFileSync(path.join(e2eDir, name), 'utf8');
+      if (source.includes("writeFileSync(modelPath, '')")) {
+        offenders.push(name);
+      }
+    }
+    expect(offenders).toEqual([]);
   });
 });

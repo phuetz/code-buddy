@@ -34,10 +34,7 @@ const PROMPT = [
 
 async function launch(): Promise<{ app: ElectronApplication; page: Page; work: string }> {
   const userDataDir = mkdtempSync(path.join(os.tmpdir(), 'cowork-capture-'));
-  // Pré-créer un faux modèle Buffalo_S pour supprimer la modale bloquante de reconnaissance faciale.
-  const modelPath = path.join(userDataDir, 'models', 'buffalo_s.onnx');
-  mkdirSync(path.dirname(modelPath), { recursive: true });
-  writeFileSync(modelPath, '');
+  // No Buffalo_S ONNX planted: empty files lie about install (BUFFALO_ONNX_FIXTURE_SKIP_REASON).
   const work = WORK_DIR || mkdtempSync(path.join(os.tmpdir(), 'appstudio-plisdor-'));
   mkdirSync(work, { recursive: true });
 
