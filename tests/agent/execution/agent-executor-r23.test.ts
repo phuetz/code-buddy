@@ -210,4 +210,51 @@ describe('R23 AgentExecutor — faux succès', () => {
       expect(entries.map((entry) => entry.content).join('\n')).not.toMatch(/réponse vide du fournisseur/i);
     });
   });
+
+  describe('D2 — retry après un fragment déjà rendu', () => {
+    function pipeVisibleDeltas(): void {
+      (deps.streamingHandler.accumulateChunk as jest.Mock).mockImplementation((chunk: {
+        choices?: Array<{ delta?: { content?: string } }>;
+      }) => {
+        const displayContent = chunk?.choices?.[0]?.delta?.content ?? '';
+        return {
+          displayContent,
+          rawContent: displayContent,
+          hasNewToolCalls: false,
+          shouldEmitTokenCount: false,
+        };
+      });
+    }
+
+    it('ne concatène pas le fragment abandonné avec la seconde tentative (casse au 2e delta)', async () => {
+      pipeVisibleDeltas();
+      (deps.client.chatStream as jest.Mock)
+        .mockImplementationOnce(async function* () {
+          yield { choices: [{ delta: { content: 'PREMIER_FRAGMENT' } }] };
+          throw Object.assign(new Error('service unavailable'), {
+            status: 503,
+            headers: { 'retry-after': '0' },
+          });
+        })
+        .mockImplementationOnce(async function* () {
+          yield { choices: [{ delta: { content: 'REPONSE_FINALE' } }] };
+        });
+      (deps.streamingHandler.getAccumulatedMessage as jest.Mock).mockReturnValue({
+        content: 'REPONSE_FINALE',
+        tool_calls: undefined,
+      });
+
+      const history: ChatEntry[] = [];
+      const chunks = await collectChunks(
+        executor.processUserMessageStream('Hello', history, [], null),
+      );
+      const text = visibleText(chunks);
+
+      expect(text).not.toContain('REPONSE_FINALE');
+      expect(text).not.toMatch(/PREMIER_FRAGMENT[\s\S]*REPONSE_FINALE/);
+      expect(text).toMatch(/hybride|fragment déjà rendu|interrompue/i);
+      expect(history.map((entry) => entry.content).join('\n')).not.toContain('REPONSE_FINALE');
+      expect(deps.client.chatStream).toHaveBeenCalledTimes(1);
+    });
+  });
 });

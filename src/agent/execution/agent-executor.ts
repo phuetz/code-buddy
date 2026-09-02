@@ -1512,6 +1512,7 @@ export class AgentExecutor {
         this.deps.streamingHandler.reset();
         let steeringRequestedDuringText = false;
         let streamObservedToolCalls = false;
+        let streamEmittedVisibleDelta = false;
 
         // Stall guard: some backends (ChatGPT/Codex OAuth observed) accept
         // the request then never send a byte — without a bound this loop
@@ -1535,8 +1536,15 @@ export class AgentExecutor {
           ...(abortController?.signal ? { signal: abortController.signal } : {}),
         })) {
           if (streamEvent.type === 'retry') {
-            // A fresh stream restarts from the beginning. Reset the accumulator
-            // so only the successful attempt is persisted in the transcript.
+            // A retry after bytes were already shown would concatenate the
+            // abandoned fragment with the new attempt (hybrid answer). Align
+            // with the mid-stream integrity rule: retry only when nothing
+            // visible has been yielded.
+            if (streamEmittedVisibleDelta) {
+              throw new Error(
+                'Réponse interrompue après un fragment déjà rendu ; retry refusé pour éviter une réponse hybride.',
+              );
+            }
             this.deps.streamingHandler.reset();
             streamObservedToolCalls = false;
             yield {
@@ -1560,6 +1568,7 @@ export class AgentExecutor {
 
           if (result.hasNewToolCalls && result.toolCalls) {
             streamObservedToolCalls = true;
+            streamEmittedVisibleDelta = true;
             yield {
               type: "tool_calls",
               toolCalls: relationshipSafety
@@ -1569,6 +1578,7 @@ export class AgentExecutor {
           }
 
           if (result.displayContent && !relationshipSafety && !guardGenerativeSelfInspection) {
+            streamEmittedVisibleDelta = true;
             yield { type: "content", content: result.displayContent };
           }
 
