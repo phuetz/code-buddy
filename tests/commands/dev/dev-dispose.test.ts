@@ -17,4 +17,14 @@ describe('dev plan resource disposal', () => {
     expect(runBlock).toContain('disposePlanResources(agent)');
     expect(prBlock).toContain('disposePlanResources(agent)');
   });
+
+  it('uses the same cleanup for fix-ci and explain', () => {
+    const source = readFileSync(new URL('../../../src/commands/dev/index.ts', import.meta.url), 'utf8');
+    const fixCiBlock = source.slice(source.indexOf(".command('fix-ci')"), source.indexOf(".command('issue"));
+    const explainBlock = source.slice(source.indexOf(".command('explain')"));
+    expect(fixCiBlock).toContain('disposePlanResources(agent)');
+    expect(fixCiBlock).not.toMatch(/agent\.dispose\?\.\(\)/);
+    expect(explainBlock).toContain('disposePlanResources(agent)');
+    expect(explainBlock).not.toMatch(/agent\.dispose\?\.\(\)/);
+  });
 });

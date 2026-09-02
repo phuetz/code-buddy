@@ -248,7 +248,7 @@ Keep it concise and professional.`;
           failure = await pipeline.fetchGitHubActionsLog(opts.run);
           if (!failure) {
             console.error(`Could not fetch failed job from run ${opts.run}. Is 'gh' installed and authenticated?`);
-            agent.dispose?.();
+            await disposePlanResources(agent);
             process.exit(1);
           }
         } else {
@@ -258,7 +258,7 @@ Keep it concise and professional.`;
             const fs = await import('fs');
             if (!fs.default.existsSync(opts.log)) {
               console.error(`Log file not found: ${opts.log}`);
-              agent.dispose?.();
+              await disposePlanResources(agent);
               process.exit(1);
             }
             logContent = fs.default.readFileSync(opts.log, 'utf-8');
@@ -270,7 +270,7 @@ Keep it concise and professional.`;
             logContent = Buffer.concat(chunks).toString('utf-8');
           } else {
             console.error('Auto-fix requires --run <id>, --log <file>, or piped CI output via stdin.');
-            agent.dispose?.();
+            await disposePlanResources(agent);
             process.exit(1);
           }
 
@@ -325,7 +325,7 @@ Keep it concise and professional.`;
           console.log(`\nPR created: ${result.prUrl}`);
         }
 
-        agent.dispose?.();
+        await disposePlanResources(agent);
         return;
       }
 
@@ -377,7 +377,7 @@ Repo context: ${profile.contextPack}`;
       });
 
       console.log(`\nRun ${result.runId}: ${result.status}`);
-      agent.dispose?.();
+      await disposePlanResources(agent);
     });
 
   // ── buddy dev issue ───────────────────────────────────────
@@ -413,7 +413,7 @@ Repo context: ${profile.contextPack}`;
         process.exit(1);
       }
 
-      agent.dispose?.();
+      await disposePlanResources(agent);
     });
 
   // ── buddy dev explain ──────────────────────────────────────────
@@ -466,6 +466,6 @@ Be concise — this is a quick orientation for a developer.`;
         }
       }
       console.log('');
-      agent.dispose?.();
+      await disposePlanResources(agent);
     });
 }
