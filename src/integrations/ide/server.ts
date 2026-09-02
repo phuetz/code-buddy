@@ -459,7 +459,8 @@ Return a focused replacement for the problematic range only.`,
       return this.codebuddyClient;
     }
 
-    const apiKey = process.env.GROK_API_KEY?.trim();
+    const { resolveActiveProviderApiKey } = await import('../../config/env-schema.js');
+    const apiKey = resolveActiveProviderApiKey();
     if (!apiKey) {
       return null;
     }
@@ -472,7 +473,7 @@ Return a focused replacement for the problematic range only.`,
   private async requireCodeBuddyClient(): Promise<IDEChatClient> {
     const client = await this.getCodeBuddyClient();
     if (!client) {
-      throw new Error('GROK_API_KEY is required for IDE AI features');
+      throw new Error('An AI provider API key is required for IDE AI features');
     }
     return client;
   }

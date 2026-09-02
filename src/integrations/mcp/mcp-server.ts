@@ -384,7 +384,8 @@ export class McpServer {
       },
       async (args) => {
         const { CodeBuddyClient } = await import('../../codebuddy/index.js');
-        const apiKey = process.env.GROK_API_KEY || '';
+        const { resolveActiveProviderApiKey } = await import('../../config/env-schema.js');
+        const apiKey = resolveActiveProviderApiKey() || '';
         const client = new CodeBuddyClient(apiKey);
 
         const userPrompt = args.context
@@ -412,7 +413,8 @@ export class McpServer {
       },
       async (args) => {
         const { CodeBuddyClient } = await import('../../codebuddy/index.js');
-        const apiKey = process.env.GROK_API_KEY || '';
+        const { resolveActiveProviderApiKey } = await import('../../config/env-schema.js');
+        const apiKey = resolveActiveProviderApiKey() || '';
         const client = new CodeBuddyClient(apiKey);
 
         const prompt = `Complete or modify this ${args.language} code${args.instruction ? ` (${args.instruction})` : ''}:
