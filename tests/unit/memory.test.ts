@@ -43,6 +43,14 @@ const {
   }),
 }));
 
+// The persistent memory file is written under a cross-process session lock (G3R, 2026-09-03).
+// This suite mocks the whole filesystem, so the lock must run the critical section directly.
+jest.mock('../../src/persistence/session-lock', () => ({
+  withSessionLock: async (_path: string, fn: () => Promise<unknown>) => fn(),
+}));
+
+const fakeDisk = new Map<string, string>();
+
 jest.mock('fs-extra', () => {
   const impl = {
   ensureDir: mockEnsureDir,
@@ -52,6 +60,20 @@ jest.mock('fs-extra', () => {
   writeFile: mockWriteFile,
   readFile: mockReadFile,
   readdir: mockReaddir,
+  // Atomic save (G3R): write to a sibling temp file, rename over the target, remove leftovers.
+  // The save re-reads the file to merge concurrent changes, so the fake disk must remember what
+  // was written — otherwise every save looks like an external wipe and unchanged entries vanish.
+  rename: jest.fn(async (from: string, to: string) => {
+    const content = fakeDisk.get(String(from));
+    if (content !== undefined) {
+      fakeDisk.set(String(to), content);
+      fakeDisk.delete(String(from));
+    }
+  }),
+  remove: jest.fn(async (target: string) => { fakeDisk.delete(String(target)); }),
+  appendFile: jest.fn(async (target: string, data: string) => {
+    fakeDisk.set(String(target), (fakeDisk.get(String(target)) ?? '') + String(data));
+  }),
 };
   return { ...impl, default: impl };
 });
@@ -1083,8 +1105,12 @@ describe('PersistentMemoryManager', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    fakeDisk.clear();
     mockPathExists.mockResolvedValue(false);
-    mockReadFile.mockResolvedValue('');
+    mockReadFile.mockImplementation(async (target: string) => fakeDisk.get(String(target)) ?? '');
+    mockWriteFile.mockImplementation(async (target: string, data: string) => {
+      fakeDisk.set(String(target), String(data));
+    });
 
     manager = new PersistentMemoryManager({
       projectMemoryPath: '/test/.codebuddy/CODEBUDDY_MEMORY.md',
